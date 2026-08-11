@@ -5,6 +5,7 @@
 xcuserdata/
 *.xcuserstate
 /research/
+/chat_exports/
 
 macos_sync_probe/.build/
 macos_sync_probe/build/
