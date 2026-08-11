@@ -48,7 +48,9 @@ stateDiagram-v2
     [*] --> validate_scope
     validate_scope --> assess_request_risk: 联系人与授权有效
     validate_scope --> failed: 无效或不确定
-    assess_request_risk --> build_retrieval_plan
+    assess_request_risk --> select_skill
+    select_skill --> load_skill
+    load_skill --> build_retrieval_plan
     build_retrieval_plan --> retrieve_context
     retrieve_context --> assemble_context
     assemble_context --> generate_candidates
@@ -65,9 +67,11 @@ stateDiagram-v2
 | --- | --- | --- | --- |
 | `validate_scope` | `owner_id`、`contact_id`、请求身份、幂等键 | 已验证的请求范围 | 确定性代码 |
 | `assess_request_risk` | 当前消息、确定性规则版本 | 风险类型、生成前核实提醒 | 确定性代码 |
-| `build_retrieval_plan` | 当前消息、允许的资料类型和时间范围 | 结构化查询计划 | 可调用模型；结果需校验 |
+| `select_skill` | 当前消息、近期对话、可用 Skill 目录、可选的用户指定 ID | 最多一个 Skill ID、版本、原因与置信度 | 用户指定时确定性校验；否则经 `ModelPort` 结构化选择 |
+| `load_skill` | 已验证范围、Skill ID 与不可变版本 | 完整 inline Skill 正文 | 只经 `SkillPort`；不接受文件路径 |
+| `build_retrieval_plan` | 当前消息、已加载 Skill、允许的资料类型和时间范围 | 结构化查询计划 | 可调用模型；结果需校验 |
 | `retrieve_context` | 已验证范围、查询计划、预算 | 带来源的命中列表 | 只经 `RetrievalPort` |
-| `assemble_context` | 五轨材料和 token 预算 | 有序、已截断上下文 | 确定性代码 |
+| `assemble_context` | 六轨材料和 token 预算 | 有序、已截断上下文 | 确定性代码 |
 | `generate_candidates` | 上下文、生成策略 | 1-3 条结构化候选 | 经 `ModelPort` |
 | `validate_candidates` | 候选、引用和请求风险 | 结构校验、引用校验、禁止动作检查 | 确定性代码 |
 | `persist_trace` | 计划、引用、模型元数据和候选 | `reply_request` 与 `reply_candidate` | 事务和幂等写入 |
@@ -82,7 +86,7 @@ stateDiagram-v2
   contact / message / confirmed_memory / reply_request / reply_candidate
 
 运行状态（LangGraph checkpoint store）
-  graph_run_id / current_node / retry metadata / interrupt metadata
+  graph_run_id / current_node / selected_skill_version_id / retry metadata / interrupt metadata
 ```
 
 - checkpoint 只保存恢复执行所需的最小引用和临时结果，优先保存业务对象 ID，不复制完整聊天正文。
@@ -101,6 +105,8 @@ stateDiagram-v2
 | `deny` | 切换微信会话、读取其他联系人、发送消息 | 不注册 Tool，或在执行层硬拒绝 |
 
 模型提出 Tool call 不等于获准执行。Permission policy、联系人范围和出站数据裁剪均由应用层确定性代码处理。
+
+v1 的 `load_skill` 是 LangGraph 节点调用的 `SkillPort`，不是暴露给模型的 Tool。教程中的通用 Agent Loop 需要 `load_skill` Tool 才能让模型自行触发加载；本图已有显式选择和加载节点，因此不额外引入开放式 Tool loop。未来 Workflow Skill 若需要 Tool，仍必须经过本节的 Permission policy。
 
 ## 6. 多模态输入与回复形态
 
@@ -165,7 +171,7 @@ v1 的实现是 PostgreSQL 全文/结构化检索。RAGFlow 若被评估，只�
 
 ## 10. 实施顺序
 
-1. 先定义领域类型、`ModelPort`、`RetrievalPort` 和合成测试；
+1. 先定义领域类型、`ModelPort`、`RetrievalPort`、`SkillPort` 和合成测试；
 2. 实现 PostgreSQL 可解释检索和无框架的确定性节点；
 3. 用 LangChain adapter 接一个模型，验证结构化候选输出；
 4. 用 LangGraph 串起首条回复图、幂等写入和失败恢复；

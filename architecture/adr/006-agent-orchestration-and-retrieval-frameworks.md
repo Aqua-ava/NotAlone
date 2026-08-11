@@ -18,6 +18,8 @@ NotAlone 需要工作流能力，但不需要把领域模型交给通用 Agent �
 ```text
 validate_scope
   -> assess_request_risk
+  -> select_skill
+  -> load_skill
   -> build_retrieval_plan
   -> retrieve_context
   -> assemble_context
@@ -27,7 +29,7 @@ validate_scope
   -> return_candidates
 ```
 
-LangGraph 只放在 `reply` 模块内部。领域对象和模块接口不得暴露 LangGraph State、checkpoint 或 message 类型。短文字回复走该有界图，不使用开放式自治循环。
+LangGraph 只放在 `reply` 模块内部。领域对象和模块接口不得暴露 LangGraph State、checkpoint 或 message 类型。短文字回复走该有界图，不使用开放式自治循环。`select_skill` 只看到当前范围内 Skill 的精简目录；`load_skill` 经 `SkillPort` 加载已验证的不可变版本，v1 不作为模型 Tool。
 
 ### 2. LangChain 是薄适配层
 
@@ -52,6 +54,10 @@ v1 的默认实现仍是 ADR-005 决定的 PostgreSQL 结构化/全文检索。R
 ### 6. Tool 采用确定性权限策略
 
 Tool 分为 `allow / ask / deny`。模型只可以提出调用请求；应用层负责参数、范围、出站数据和批准状态。外部聊天发送属于 `deny`，不得注册为可执行 Tool。未来需要用户批准的读取操作可以通过 LangGraph interrupt 暂停，但批准后也只能继续生成候选，不能自动发送。
+
+### 7. 回复 Skill 采用两级按需加载
+
+Skill 目录只包含 `name`、`description` 和 `when_to_use`，供 `select_skill` 在低上下文成本下选择；完整目标、步骤、禁忌和示例只在选中后由 `load_skill` 加载。用户显式选择优先，自动选择最多一个且必须保存原因、置信度和版本。Skill 是策略而非关系事实，不进入 `confirmed_memory`，也不能因一次候选被采用而静默创建或更新。
 
 ## 被否决的方案
 

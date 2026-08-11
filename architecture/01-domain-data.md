@@ -25,7 +25,9 @@
 | `memory_candidate` | 模型或规则从资料中提取的待采纳关系线索。 | 关联证据消息；不能被检索为已知事实。 |
 | `confirmed_memory` | 自动采纳或手动录入的共同事实、偏好、禁忌、关系资料。 | 关联一个或多个来源证据、采纳方式（auto/manual）、删除状态、分类、有效期与常驻标记（`carry`）。 |
 | `style_sample` | 用户明确同意保存的最终表达样本。 | 关联联系人及其产生的回复请求；不是普通候选回复。 |
-| `reply_request` | 一次当前消息和用户选择的回复目标。 | 固定所属联系人，并内嵌本次实际检索到的上下文快照（`retrieved_context`）。 |
+| `reply_skill` | 可按场景选择的聊天套路目录项。 | 属于 owner，可全局适用或限定一个联系人；只保存名称、简述、`when_to_use`、状态和当前版本。 |
+| `reply_skill_version` | 一次不可变的聊天套路正文。 | 保存目标、步骤、禁忌、示例和 `allowed_tools`；v1 只允许 `inline` 且 `allowed_tools` 为空。 |
+| `reply_request` | 一次当前消息和用户选择的回复目标。 | 固定所属联系人，内嵌本次实际检索到的上下文快照（`retrieved_context`），并记录实际使用的 `skill_version_id`、选择原因与置信度。 |
 | `reply_candidate` | 模型给出的可编辑候选回复及风险说明。 | 关联一次回复请求；不会自动发送。 |
 | `retrieved_context` | 本次回复实际使用的检索上下文快照（作为 `reply_request` 内嵌结构）。 | 含隔离键、检索条件（时间窗口、关键词、limit）、引用列表与排序分数，用于"为什么用了这些上下文"的回看。 |
 
@@ -44,6 +46,10 @@ conversation_binding
 reply_request（内嵌 retrieved_context 快照）
   -> reply_candidate
       -> style_sample（仅用户明确采纳时）
+
+reply_skill
+  -> reply_skill_version（发布后不可变）
+      -> reply_request（记录本次实际使用的版本）
 ```
 
 - `memory_candidate` 必须有 `pending`、`confirmed`、`rejected` 或 `invalidated` 等明确状态，且候选正文与证据范围可复核。
@@ -51,6 +57,9 @@ reply_request（内嵌 retrieved_context 快照）
 - `confirmed_memory` 保留候选来源链：记录从哪个 `memory_candidate` 采纳而来（`source_candidate_id`，手动创建时为空），同时保留来源证据列表；采纳后仍可回看候选证据与采纳方式。
 - `rejected`/`invalidated` 候选随其来源删除，或短期保留供用户复核后清除；不长期堆积，与来源级删除语义一致。
 - `style_sample` 只能由用户明确采用其最终回复后创建。用户选择某个候选不等于同意把它长期保存。
+- `reply_skill` 是回复策略，不是联系人事实或表达样本。一次候选被采用不得自动沉淀为 Skill；新增或修改 Skill 必须来自产品内置版本或用户明确编辑。
+- Skill 自动匹配只决定本次是否加载已存在版本，不得自动创建、改写或启用 Skill。`reply_request` 保存实际使用的 `skill_version_id` 与选择原因，保证历史可复现。
+- v1 每次最多加载一个 `reply_skill_version`。完整正文不得进入常驻提示词；只有目录摘要常驻于 Skill 选择调用，选中后才按版本加载正文。
 
 ## 资料分类与有效期（v1）
 

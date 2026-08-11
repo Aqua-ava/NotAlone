@@ -30,7 +30,7 @@ NotAlone 需要在生成候选回复前，从当前联系人的历史中找回�
 - `confirmed_memory` 以完整资料卡为检索单位；其分类、`valid_at` / `invalid_at`、采纳状态和来源证据均参与过滤或排序。
 - `message` 的命中单位是一条规范化消息。选中后只能在同一联系人下展开有限的相邻轮次或同一来源时间段，不使用固定 token 大小的任意 chunk。
 - 任何检索、展开和排序均不得跨 `owner_id + contact_id` 边界；`memory_candidate.pending` 不能作为已知事实进入生成上下文。
-- 近期对话、常驻卡和风格样本仍按 `02-core-flows.md` 的五轨规则组装，不因全文检索而把完整历史送入模型。
+- 回复 Skill、近期对话、常驻卡和风格样本仍按 `02-core-flows.md` 的六轨规则组装，不因全文检索而把完整历史送入模型；Skill 不属于 Retriever 的事实命中，由 `SkillPort` 单独按版本加载。
 
 ### 2. LLM 只提出可审计的查询与阅读计划
 
