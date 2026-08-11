@@ -28,6 +28,8 @@ NotAlone 是一个面向具体联系人的关系感知回复助手。架构的�
 8. [ADR-003：Mac 同步连续性与用户补录](adr/003-macos-sync-continuity-and-backfill.md)：不把未覆盖的手机聊天误判为完整历史；以锚点检测、用户手动补录解决缺口。
 9. [ADR-004：用户自行导出的微信单联系人历史文件](adr/004-user-managed-wechat-history-export.md)：仅接受用户手动生成的单联系人导出文件作为补录来源；禁止重签名、自动同步及 Agent 直接访问。
 10. [ADR-005：可解释检索与联系人知识视图](adr/005-explainable-retrieval-and-contact-knowledge-view.md)：v1 使用联系人范围内的全文检索、可审计的 LLM 查询规划和有界上下文扩展；向量检索只在量化漏检后作为补充评估。
+11. [06-agent-runtime.md](06-agent-runtime.md)：LangGraph 回复图、LangChain 适配层、Tool 权限、运行状态和 Retriever 边界。
+12. [ADR-006：Agent 编排与检索框架边界](adr/006-agent-orchestration-and-retrieval-frameworks.md)：固定唯一编排器、唯一业务事实库和 RAGFlow 的可选位置。
 
 ## 当前架构决策
 
@@ -41,6 +43,8 @@ NotAlone 是一个面向具体联系人的关系感知回复助手。架构的�
 - 生成回复的上下文按"五轨"组装：硬规则（代码层）+ 常驻卡（全局层与联系人 `carry` 条目）+ 按需检索 + 近期对话 + 风格样本；历史永不完整进入提示词。
 - v1 先使用联系人范围内的可解释结构化/全文检索：LLM 只提出可记录的检索词与阅读计划，程序执行过滤、命中和有界上下文扩展；只有出现可测量的长历史或同义表达漏检时，才评估 embedding、向量检索与重排。
 - 云端按模块化单体组织（`ingest`、`contacts`、`memory`、`retrieval`、`reply`、`jobs`、`gateway`、`sync_adapter`、`auth_device`），v1 客户端为 macOS 桌面应用，端侧负责采集/OCR/去重/展示与人工发送，云端负责解析/索引/生成/删除。
+- `reply` 内使用 LangGraph 作为唯一的候选回复工作流编排器；LangChain 只用于模型、结构化输出和 Tool adapter。领域对象不依赖两个框架，外部聊天发送永远不是 Tool。
+- PostgreSQL 是唯一业务事实库；LangGraph checkpoint 只保存最小运行状态。v1 检索仍由 PostgreSQL 实现，RAGFlow 当前只作参考，满足量化触发条件后才可在 `RetrievalPort` 后做 POC。
 - 云端服务落地前必须决定：认证与设备绑定方案（账号/令牌、设备注册、解绑清理）、云端数据加密与密钥管理。
 
 ## 文档状态

@@ -49,11 +49,17 @@ OCR、转写、时间线提取和长历史冲突检查是未来可选的后台�
 
 ```text
 用户选择联系人并输入当前文字消息
+  -> LangGraph 执行联系人/授权校验
+  -> 执行确定性请求风险预检并展示核实提醒
+  -> 生成可审计的检索计划并经 RetrievalPort 检索
   -> 组装五轨上下文（硬规则 + 常驻卡 + 按需检索 + 近期对话 + 风格样本）
   -> 显示本次将使用的上下文范围
   -> 生成 1-3 条 reply_candidate（每条带依据引用）
+  -> 校验候选结构、引用与禁止动作并持久化本次运行轨迹
   -> 用户选择、编辑、手动发送
 ```
+
+回复图固定为 `validate_scope -> assess_request_risk -> build_retrieval_plan -> retrieve_context -> assemble_context -> generate_candidates -> validate_candidates -> persist_trace -> return_candidates`。LangGraph 是该流程的唯一编排器；LangChain 只可出现在模型和 Tool 适配层。完整节点和状态边界见 `06-agent-runtime.md` 与 ADR-006。
 
 v1 的检索应可解释：先用联系人过滤，再用时间、关键词、资料类型、采纳状态和显式有效期排序。每个候选应能回看"本次用了哪些近期消息和已采纳资料"，但不必把完整历史给模型。
 
