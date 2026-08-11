@@ -1,0 +1,579 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* ProbeCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* ProbeCore.swift */; };
+		A10000000000000000000002 /* CaptureSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* CaptureSupport.swift */; };
+		A10000000000000000000003 /* MenuBarProbeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* MenuBarProbeApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		15472C0D301BA8BD00F2C36D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 15472BF6301BA8BB00F2C36D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 15472BFD301BA8BB00F2C36D;
+			remoteInfo = NotAloneSyncProbe;
+		};
+		15472C17301BA8BD00F2C36D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 15472BF6301BA8BB00F2C36D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 15472BFD301BA8BB00F2C36D;
+			remoteInfo = NotAloneSyncProbe;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* ProbeCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ProbeCore.swift; path = ../../Sources/NotAloneSyncCore/ProbeCore.swift; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000002 /* CaptureSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CaptureSupport.swift; path = ../../Sources/NotAloneSyncCore/CaptureSupport.swift; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000003 /* MenuBarProbeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MenuBarProbeApp.swift; path = ../../Sources/NotAloneSyncApp/MenuBarProbeApp.swift; sourceTree = SOURCE_ROOT; };
+		15472BFE301BA8BB00F2C36D /* NotAloneSyncProbe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NotAloneSyncProbe.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		15472C0C301BA8BD00F2C36D /* NotAloneSyncProbeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NotAloneSyncProbeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		15472C16301BA8BD00F2C36D /* NotAloneSyncProbeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NotAloneSyncProbeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		15472C00301BA8BB00F2C36D /* NotAloneSyncProbe */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = NotAloneSyncProbe;
+			sourceTree = "<group>";
+		};
+		15472C0F301BA8BD00F2C36D /* NotAloneSyncProbeTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = NotAloneSyncProbeTests;
+			sourceTree = "<group>";
+		};
+		15472C19301BA8BD00F2C36D /* NotAloneSyncProbeUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = NotAloneSyncProbeUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		15472BFB301BA8BB00F2C36D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		15472C09301BA8BD00F2C36D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		15472C13301BA8BD00F2C36D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		15472BF5301BA8BB00F2C36D = {
+			isa = PBXGroup;
+			children = (
+				A30000000000000000000001 /* 现有探针源码 */,
+				15472C00301BA8BB00F2C36D /* NotAloneSyncProbe */,
+				15472C0F301BA8BD00F2C36D /* NotAloneSyncProbeTests */,
+				15472C19301BA8BD00F2C36D /* NotAloneSyncProbeUITests */,
+				15472BFF301BA8BB00F2C36D /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		15472BFF301BA8BB00F2C36D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				15472BFE301BA8BB00F2C36D /* NotAloneSyncProbe.app */,
+				15472C0C301BA8BD00F2C36D /* NotAloneSyncProbeTests.xctest */,
+				15472C16301BA8BD00F2C36D /* NotAloneSyncProbeUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A30000000000000000000001 /* 现有探针源码 */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000001 /* ProbeCore.swift */,
+				A20000000000000000000002 /* CaptureSupport.swift */,
+				A20000000000000000000003 /* MenuBarProbeApp.swift */,
+			);
+			name = "现有探针源码";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		15472BFD301BA8BB00F2C36D /* NotAloneSyncProbe */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 15472C20301BA8BD00F2C36D /* Build configuration list for PBXNativeTarget "NotAloneSyncProbe" */;
+			buildPhases = (
+				15472BFA301BA8BB00F2C36D /* Sources */,
+				15472BFB301BA8BB00F2C36D /* Frameworks */,
+				15472BFC301BA8BB00F2C36D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				15472C00301BA8BB00F2C36D /* NotAloneSyncProbe */,
+			);
+			name = NotAloneSyncProbe;
+			packageProductDependencies = (
+			);
+			productName = NotAloneSyncProbe;
+			productReference = 15472BFE301BA8BB00F2C36D /* NotAloneSyncProbe.app */;
+			productType = "com.apple.product-type.application";
+		};
+		15472C0B301BA8BD00F2C36D /* NotAloneSyncProbeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 15472C23301BA8BD00F2C36D /* Build configuration list for PBXNativeTarget "NotAloneSyncProbeTests" */;
+			buildPhases = (
+				15472C08301BA8BD00F2C36D /* Sources */,
+				15472C09301BA8BD00F2C36D /* Frameworks */,
+				15472C0A301BA8BD00F2C36D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				15472C0E301BA8BD00F2C36D /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				15472C0F301BA8BD00F2C36D /* NotAloneSyncProbeTests */,
+			);
+			name = NotAloneSyncProbeTests;
+			packageProductDependencies = (
+			);
+			productName = NotAloneSyncProbeTests;
+			productReference = 15472C0C301BA8BD00F2C36D /* NotAloneSyncProbeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		15472C15301BA8BD00F2C36D /* NotAloneSyncProbeUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 15472C26301BA8BD00F2C36D /* Build configuration list for PBXNativeTarget "NotAloneSyncProbeUITests" */;
+			buildPhases = (
+				15472C12301BA8BD00F2C36D /* Sources */,
+				15472C13301BA8BD00F2C36D /* Frameworks */,
+				15472C14301BA8BD00F2C36D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				15472C18301BA8BD00F2C36D /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				15472C19301BA8BD00F2C36D /* NotAloneSyncProbeUITests */,
+			);
+			name = NotAloneSyncProbeUITests;
+			packageProductDependencies = (
+			);
+			productName = NotAloneSyncProbeUITests;
+			productReference = 15472C16301BA8BD00F2C36D /* NotAloneSyncProbeUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		15472BF6301BA8BB00F2C36D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					15472BFD301BA8BB00F2C36D = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					15472C0B301BA8BD00F2C36D = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 15472BFD301BA8BB00F2C36D;
+					};
+					15472C15301BA8BD00F2C36D = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 15472BFD301BA8BB00F2C36D;
+					};
+				};
+			};
+			buildConfigurationList = 15472BF9301BA8BB00F2C36D /* Build configuration list for PBXProject "NotAloneSyncProbe" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 15472BF5301BA8BB00F2C36D;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 15472BFF301BA8BB00F2C36D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				15472BFD301BA8BB00F2C36D /* NotAloneSyncProbe */,
+				15472C0B301BA8BD00F2C36D /* NotAloneSyncProbeTests */,
+				15472C15301BA8BD00F2C36D /* NotAloneSyncProbeUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		15472BFC301BA8BB00F2C36D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		15472C0A301BA8BD00F2C36D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		15472C14301BA8BD00F2C36D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		15472BFA301BA8BB00F2C36D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* ProbeCore.swift in Sources */,
+				A10000000000000000000002 /* CaptureSupport.swift in Sources */,
+				A10000000000000000000003 /* MenuBarProbeApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		15472C08301BA8BD00F2C36D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		15472C12301BA8BD00F2C36D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		15472C0E301BA8BD00F2C36D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 15472BFD301BA8BB00F2C36D /* NotAloneSyncProbe */;
+			targetProxy = 15472C0D301BA8BD00F2C36D /* PBXContainerItemProxy */;
+		};
+		15472C18301BA8BD00F2C36D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 15472BFD301BA8BB00F2C36D /* NotAloneSyncProbe */;
+			targetProxy = 15472C17301BA8BD00F2C36D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		15472C1E301BA8BD00F2C36D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = PT42KMK8WF;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		15472C1F301BA8BD00F2C36D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = PT42KMK8WF;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		15472C21301BA8BD00F2C36D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = NotAloneSyncProbe/NotAloneSyncProbe.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PT42KMK8WF;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ../../App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.javahello.notalone.NotAloneSyncProbe;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		15472C22301BA8BD00F2C36D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = NotAloneSyncProbe/NotAloneSyncProbe.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PT42KMK8WF;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ../../App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.javahello.notalone.NotAloneSyncProbe;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		15472C24301BA8BD00F2C36D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PT42KMK8WF;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.javahello.notalone.NotAloneSyncProbeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/NotAloneSyncProbe.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/NotAloneSyncProbe";
+			};
+			name = Debug;
+		};
+		15472C25301BA8BD00F2C36D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PT42KMK8WF;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.javahello.notalone.NotAloneSyncProbeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/NotAloneSyncProbe.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/NotAloneSyncProbe";
+			};
+			name = Release;
+		};
+		15472C27301BA8BD00F2C36D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PT42KMK8WF;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.javahello.notalone.NotAloneSyncProbeUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = NotAloneSyncProbe;
+			};
+			name = Debug;
+		};
+		15472C28301BA8BD00F2C36D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PT42KMK8WF;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.javahello.notalone.NotAloneSyncProbeUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = NotAloneSyncProbe;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		15472BF9301BA8BB00F2C36D /* Build configuration list for PBXProject "NotAloneSyncProbe" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				15472C1E301BA8BD00F2C36D /* Debug */,
+				15472C1F301BA8BD00F2C36D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		15472C20301BA8BD00F2C36D /* Build configuration list for PBXNativeTarget "NotAloneSyncProbe" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				15472C21301BA8BD00F2C36D /* Debug */,
+				15472C22301BA8BD00F2C36D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		15472C23301BA8BD00F2C36D /* Build configuration list for PBXNativeTarget "NotAloneSyncProbeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				15472C24301BA8BD00F2C36D /* Debug */,
+				15472C25301BA8BD00F2C36D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		15472C26301BA8BD00F2C36D /* Build configuration list for PBXNativeTarget "NotAloneSyncProbeUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				15472C27301BA8BD00F2C36D /* Debug */,
+				15472C28301BA8BD00F2C36D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 15472BF6301BA8BB00F2C36D /* Project object */;
+}

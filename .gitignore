@@ -1,0 +1,10 @@
+.DS_Store
+.idea/
+.gitnexus/
+.swiftpm/
+xcuserdata/
+*.xcuserstate
+/research/
+
+macos_sync_probe/.build/
+macos_sync_probe/build/
