@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "notalone"
+version = "0.1.0"
+description = "面向具体联系人的关系感知回复助手"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+
+[project.scripts]
+notalone-ingest-preview = "notalone.ingest.preview:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,2 @@
+{"id":{"local_id":101,"server_id_str":"server-101","talker":"wxid_synthetic_a"},"create_time":1786500000,"is_from_me":false,"kind":"text","sender":"合成联系人甲","sender_wxid":"wxid_synthetic_a","text":"匿名合成消息甲","time":"2026-08-12 10:00:00","time_iso":"2026-08-12T10:00:00+08:00"}
+{"id":{"local_id":102,"server_id_str":"server-102","talker":"wxid_synthetic_b"},"create_time":1786500060,"is_from_me":false,"kind":"text","sender":"合成联系人乙","sender_wxid":"wxid_synthetic_b","text":"匿名合成消息乙","time":"2026-08-12 10:01:00","time_iso":"2026-08-12T10:01:00+08:00"}

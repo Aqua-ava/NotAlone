@@ -12,6 +12,11 @@ xcuserdata/
 *.dump
 *.backup
 *.sql.tmp
+__pycache__/
+*.py[cod]
+*.egg-info/
+.coverage
+.pytest_cache/
 
 macos_sync_probe/.build/
 macos_sync_probe/build/
