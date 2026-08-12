@@ -157,6 +157,8 @@ v1 的实现是 PostgreSQL 全文/结构化检索。RAGFlow 若被评估，只�
 - 子 Agent 只返回带来源的结构化证据，结果先进入 `memory_candidate`；
 - 子 Agent、后台任务和回复图都不能直接向外部聊天渠道发送消息。
 
+后台任务不使用 LangGraph checkpoint，也不把 Todo/plan 当作业务状态。`background_task` 与 `background_task_step` 持久化在 PostgreSQL，由独立 Worker 进程按确定性模板、租约和幂等规则执行；只有 `extract_memory`、冲突检查等语义步骤通过 `ModelPort` 使用模型。最终 `verifying -> succeeded` 由代码校验器控制，具体见 ADR-007。
+
 ## 9. 失败与可观测性
 
 每次 graph run 至少记录：节点、开始/结束时间、重试次数、模型/检索器版本、Tool 决策、引用 ID、错误类型和出站数据类别。日志不默认保存完整聊天正文。

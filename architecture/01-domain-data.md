@@ -20,7 +20,8 @@
 | `conversation_binding` | 用户确认的桌面聊天会话与联系人的绑定。 | 保存聊天 App、账号范围、会话定位线索、绑定状态与最近验证时间；不能仅用昵称自动匹配。 |
 | `source_document` | 一次原始导入的文本、截图或语音原始引用。 | 属于一个联系人；保留来源定位、导入时间、删除状态。 |
 | `session_capture` | 前台会话同步中一次画面变化产生的端侧 OCR 来源记录。 | 已归属时显式冗余 `owner_id + contact_id` 并关联 `conversation_binding`；记录 `capture_mode`（live/user_backfill）与连续性状态；未归属时为仅含 `owner_id` 的临时态（见隔离与查询约束）。云端只保存最小化的文本来源与解析状态，默认不保留或上传原始视觉帧。 |
-| `background_task` | 公共后台任务抽象，取代独立的导入/删除/重建任务表。 | `type` 区分 import/delete/reindex；`scope` 声明作用域（account/contact/source）；记录状态、进度、失败原因、重试与关联来源。删除任务不得跨越隔离边界。 |
+| `background_task` | 一次完整的长时后台工作，取代独立的导入/删除/重建任务表。 | `type` 区分 import/delete/reindex；`scope` 声明作用域（account/contact/source）；状态为 `queued/running/verifying/succeeded/failed/cancelled`，记录总体进度、失败原因、重试与关联来源。删除任务不得跨越隔离边界。 |
+| `background_task_step` | `background_task` 下可恢复、可重试的固定执行步骤。 | 关联父任务并保存 `step_type`、顺序、状态、尝试次数、输入/输出业务引用、错误分类和 Worker 租约；不保存完整聊天正文。只用于确实需要逐步恢复或展示进度的长任务。 |
 | `message` | 统一的规范化文字消息。 | 显式冗余 `owner_id + contact_id`，并保存说话人、可用时间戳；来源字段（`source_document` 或 `session_capture`）仅用于定位与删除，不承担隔离过滤。 |
 | `memory_candidate` | 模型或规则从资料中提取的待采纳关系线索。 | 关联证据消息；不能被检索为已知事实。 |
 | `confirmed_memory` | 自动采纳或手动录入的共同事实、偏好、禁忌、关系资料。 | 关联一个或多个来源证据、采纳方式（auto/manual）、删除状态、分类、有效期与常驻标记（`carry`）。 |
@@ -50,7 +51,18 @@ reply_request（内嵌 retrieved_context 快照）
 reply_skill
   -> reply_skill_version（发布后不可变）
       -> reply_request（记录本次实际使用的版本）
+
+background_task
+  -> background_task_step（固定步骤、独立状态与重试）
 ```
+
+## 后台任务状态约束
+
+- `background_task` 表示用户看到的一次完整工作；`background_task_step` 表示其中一个可单独恢复的执行单元。短回复和单次轻量操作不得为了统一形式强行拆步骤。
+- v1 的步骤由任务类型对应的确定性模板创建，例如导入为 `parse -> normalize -> extract_memory -> index -> verify`；模型不得自由新增、删除、跳过或重排步骤。
+- Worker 领取步骤时写入 `worker_id`、`lease_expires_at` 和原子状态变更。同一时刻只允许一个有效租约；Worker 崩溃后，过期租约可被重新领取。
+- 步骤处理器必须使用幂等键，重复执行不得产生重复 `message`、`memory_candidate`、索引条目或删除副作用。
+- 父任务只有在所有业务步骤成功后才能进入 `verifying`；验证通过才进入 `succeeded`。验证失败必须进入 `failed` 或回到明确的可重试步骤，不能由进度百分比或模型结论直接宣布成功。
 
 - `memory_candidate` 必须有 `pending`、`confirmed`、`rejected` 或 `invalidated` 等明确状态，且候选正文与证据范围可复核。
 - `confirmed_memory` 的写入路径为全自动（见 ADR-002）：模型提取的记忆自动写入，必须带来源证据、标记 `auto`、可一键撤销；用户手动录入时标记 `manual`。模型不能未经来源证据直接写入。

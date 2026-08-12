@@ -7,9 +7,11 @@
 ```text
 用户手动选择联系人
   -> 创建 source_document 和 background_task（type=import）
-  -> 解析为规范化 message
-  -> 保存来源定位和任务状态
-  -> 异步提取 memory_candidate 并按规则自动采纳（带来源、标记 auto、可撤销）
+  -> 按固定模板创建 background_task_step
+  -> Worker 依次执行 parse、normalize、extract_memory、index
+  -> 进入 verifying，确定性检查来源、隔离、数量和索引一致性
+  -> 验证通过后任务 succeeded
+  -> 异步提取的 memory_candidate 按规则自动采纳（带来源、标记 auto、可撤销）
   -> 用户可随时查看、修正、撤销或删除已采纳资料
 ```
 
@@ -156,5 +158,22 @@ Skill 采用 s07 的 progressive disclosure 思路，但由有界图控制：`se
 ## 6. 后台任务边界
 
 后台任务只处理用户已经触发的资料：导入、解析、规范化、索引、候选提取、删除和重建。已启用的前台会话同步可在画面变化时运行本地 OCR 和去重，但它不是全局后台抓取。关系提取按 ADR-002 的调度策略异步执行：任务空闲时生成、跳过活跃或短暂会话、不与回复生成抢占额度。v1 可使用同一应用内的任务表和 worker；只有并发量、可靠重试或部署规模成为真实问题时，再引入独立队列和 worker 服务。
+
+`jobs` 的运行方式固定为“任务记录 + 步骤记录 + Worker”，完整约束见 ADR-007：
+
+```text
+API 创建 background_task 与固定 background_task_step
+  -> Worker 使用租约领取下一条可执行步骤
+  -> 普通处理器执行解析、规范化、索引或校验
+  -> 只有语义步骤经 ModelPort 调用 AI
+  -> Worker 原子更新步骤状态和业务引用
+  -> 全部业务步骤完成后进入 verifying
+  -> 确定性验证通过后标记 succeeded
+```
+
+- v1 不先引入 Airflow、Temporal 或独立消息队列；Worker 可以是同一代码库、同一云服务器上的独立 Python 进程，PostgreSQL 同时承担权威任务状态与领取协调。
+- 导入、级联删除和重建索引可拆为步骤；一次候选回复仍由 LangGraph 同步编排，前台 OCR 的单个轻量增量通常不创建步骤清单。
+- `background_task_step` 是持久化工作记录，不是 Agent prompt 或模型 Todo；步骤及依赖由代码模板确定。
+- AI 只返回某个语义步骤的结构化结果。Worker 和确定性校验器拥有状态迁移权，AI 不得领取任务、修改状态或宣布成功。
 
 不在 v1 实现：读取非前台聊天应用、全量后台同步所有会话、自动切换或滚动微信会话、自动发送、自治循环或为短文本回复强行调用多 Agent。

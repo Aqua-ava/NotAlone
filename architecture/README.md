@@ -30,6 +30,8 @@ NotAlone 是一个面向具体联系人的关系感知回复助手。架构的�
 10. [ADR-005：可解释检索与联系人知识视图](adr/005-explainable-retrieval-and-contact-knowledge-view.md)：v1 使用联系人范围内的全文检索、可审计的 LLM 查询规划和有界上下文扩展；向量检索只在量化漏检后作为补充评估。
 11. [06-agent-runtime.md](06-agent-runtime.md)：LangGraph 回复图、LangChain 适配层、Tool 权限、运行状态和 Retriever 边界。
 12. [ADR-006：Agent 编排与检索框架边界](adr/006-agent-orchestration-and-retrieval-frameworks.md)：固定唯一编排器、唯一业务事实库和 RAGFlow 的可选位置。
+13. [ADR-007：后台任务步骤与 Worker 执行边界](adr/007-background-task-steps-and-worker.md)：长任务采用固定步骤、Worker 租约、幂等重试和确定性最终验证。
+14. [NotAlone 整体架构图](notalone-system-architecture.drawio)：可在 draw.io 直接编辑的四页总图，覆盖系统、回复、后台任务与数据关系。
 
 ## 当前架构决策
 
@@ -45,6 +47,7 @@ NotAlone 是一个面向具体联系人的关系感知回复助手。架构的�
 - 云端按模块化单体组织（`ingest`、`contacts`、`memory`、`retrieval`、`skills`、`reply`、`jobs`、`gateway`、`sync_adapter`、`auth_device`），v1 客户端为 macOS 桌面应用，端侧负责采集/OCR/去重/展示与人工发送，云端负责解析/索引/生成/删除。
 - `reply` 内使用 LangGraph 作为唯一的候选回复工作流编排器；LangChain 只用于模型、结构化输出和 Tool adapter。领域对象不依赖两个框架，外部聊天发送永远不是 Tool。
 - PostgreSQL 是唯一业务事实库；LangGraph checkpoint 只保存最小运行状态。v1 检索仍由 PostgreSQL 实现，RAGFlow 当前只作参考，满足量化触发条件后才可在 `RetrievalPort` 后做 POC。
+- 长时导入、删除和重建任务采用 `background_task + background_task_step + Worker`；步骤由代码模板确定，AI 只参与语义步骤，最终成功由确定性验证决定。v1 Worker 是同仓库的独立 Python 进程，不预先引入完整工作流平台。
 - 云端服务落地前必须决定：认证与设备绑定方案（账号/令牌、设备注册、解绑清理）、云端数据加密与密钥管理。
 
 ## 文档状态
