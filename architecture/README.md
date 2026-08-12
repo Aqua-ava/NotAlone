@@ -31,7 +31,7 @@ NotAlone 是一个面向具体联系人的关系感知回复助手。架构的�
 11. [06-agent-runtime.md](06-agent-runtime.md)：LangGraph 回复图、LangChain 适配层、Tool 权限、运行状态和 Retriever 边界。
 12. [ADR-006：Agent 编排与检索框架边界](adr/006-agent-orchestration-and-retrieval-frameworks.md)：固定唯一编排器、唯一业务事实库和 RAGFlow 的可选位置。
 13. [ADR-007：后台任务步骤与 Worker 执行边界](adr/007-background-task-steps-and-worker.md)：长任务采用固定步骤、Worker 租约、幂等重试和确定性最终验证。
-14. [NotAlone 整体架构图](notalone-system-architecture.drawio)：可在 draw.io 直接编辑的四页总图，覆盖系统、回复、后台任务与数据关系。
+14. [NotAlone 整体架构图](notalone-system-architecture.drawio)：可在 draw.io 直接编辑的五页总图，分别覆盖系统总览、回复、后台任务、数据关系，以及删除与隐私边界。
 
 ## 当前架构决策
 
