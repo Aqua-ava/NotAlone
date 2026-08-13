@@ -60,6 +60,14 @@ class NormalizeDocumentTest(unittest.TestCase):
             original_text,
         )
 
+    def test_batch_repr_does_not_expose_private_payload(self) -> None:
+        batch = normalize_document(self.document)
+
+        representation = repr(batch)
+
+        self.assertNotIn("匿名合成消息一", representation)
+        self.assertNotIn("wxid_synthetic_contact", representation)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,7 +12,7 @@ from datetime import datetime
 # @dataclass 会根据下面声明的字段自动生成 __init__、__repr__ 和 __eq__。
 # frozen=True 表示对象创建后不能重新给字段赋值，避免预览结果被后续代码悄悄修改。
 # slots=True 表示对象只能拥有声明过的字段，同时减少内存占用和字段拼写错误。
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class ContactPreview:
     """从单联系人导出文件识别出的联系人。"""
 
@@ -24,7 +24,7 @@ class ContactPreview:
     display_name_variant_count: int
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class ImportPreview:
     """完成整份文件校验后的只读预览结果。"""
 
@@ -40,7 +40,7 @@ class ImportPreview:
     kind_counts: tuple[tuple[str, int], ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class NormalizedMessage:
     """一条通过校验、可交给持久化层的规范化消息。"""
 
@@ -56,7 +56,7 @@ class NormalizedMessage:
     raw_payload_json: str
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class ImportBatch:
     """一份单联系人 JSONL 完整校验后的规范化导入批次。"""
 

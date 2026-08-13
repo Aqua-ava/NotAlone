@@ -8,6 +8,9 @@ version = "0.1.0"
 description = "面向具体联系人的关系感知回复助手"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
+dependencies = [
+    "psycopg[binary]>=3.3.4,<4",
+]
 
 [project.scripts]
 notalone-ingest-preview = "notalone.ingest.preview:main"

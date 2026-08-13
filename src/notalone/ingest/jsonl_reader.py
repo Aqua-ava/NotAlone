@@ -15,7 +15,7 @@ from notalone.ingest.errors import ImportPreviewError
 
 
 # 读取成功后把路径、指纹和全部记录捆绑成一个不可变结果。
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class JsonlDocument:
     """完整读取并解析后的 JSONL 文档。"""
 
