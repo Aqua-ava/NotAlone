@@ -13,7 +13,7 @@ from notalone.ingest.errors import ImportPreviewError
 from notalone.ingest.preview import build_preview, format_preview, main
 
 
-FIXTURES_DIR = Path(__file__).parent / "fixtures"
+FIXTURES_DIR = Path(__file__).resolve().parents[2] / "fixtures"
 
 
 class ImportPreviewTest(unittest.TestCase):

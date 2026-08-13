@@ -1,4 +1,4 @@
-"""与输入格式和持久化实现解耦的导入预览数据结构。
+"""与输入格式和持久化实现解耦的导入数据结构。
 
 这些类只描述“校验成功后得到了什么”，不负责读取文件、校验字段或写数据库。
 """
@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 
 # @dataclass 会根据下面声明的字段自动生成 __init__、__repr__ 和 __eq__。
@@ -37,3 +38,35 @@ class ImportPreview:
     record_count: int
     # 形如 (("image", 9), ("text", 143)) 的不可变消息类型统计。
     kind_counts: tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizedMessage:
+    """一条通过校验、可交给持久化层的规范化消息。"""
+
+    external_local_id: int
+    external_server_id: str
+    external_talker: str
+    speaker: str
+    message_type: str
+    text_content: str
+    occurred_at: datetime
+    source_create_time: int
+    # 使用 JSON 字符串保存不可变快照，避免后续修改原始 record 影响待写入内容。
+    raw_payload_json: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImportBatch:
+    """一份单联系人 JSONL 完整校验后的规范化导入批次。"""
+
+    file_name: str
+    content_sha256: str
+    contact: ContactPreview
+    messages: tuple[NormalizedMessage, ...]
+
+    @property
+    def record_count(self) -> int:
+        """返回批次中的消息数量。"""
+
+        return len(self.messages)
