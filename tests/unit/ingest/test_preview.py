@@ -106,6 +106,14 @@ class ImportPreviewTest(unittest.TestCase):
         with self.assertRaisesRegex(ImportPreviewError, "id.talker"):
             build_preview(path)
 
+    def test_kind_with_surrounding_whitespace_is_rejected(self) -> None:
+        records = self._valid_records()
+        records[0]["kind"] = " text "
+        path = self._write_records(records)
+
+        with self.assertRaisesRegex(ImportPreviewError, "kind 不受支持"):
+            build_preview(path)
+
     def test_image_without_images_payload_is_rejected(self) -> None:
         records = self._valid_records()
         del records[1]["images"]
@@ -136,6 +144,16 @@ class ImportPreviewTest(unittest.TestCase):
         path = self._write_records(records)
 
         with self.assertRaisesRegex(ImportPreviewError, "多个 sender_wxid"):
+            build_preview(path)
+
+    def test_owner_sender_id_cannot_equal_contact_id(self) -> None:
+        records = self._valid_records()
+        for record in records:
+            if record["is_from_me"]:
+                record["sender_wxid"] = "wxid_synthetic_contact"
+        path = self._write_records(records)
+
+        with self.assertRaisesRegex(ImportPreviewError, "发送身份与联系人"):
             build_preview(path)
 
     def test_naive_time_is_rejected(self) -> None:

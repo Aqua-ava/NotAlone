@@ -186,9 +186,9 @@ def _validate_record(
     if type(record["is_from_me"]) is not bool:
         raise ImportPreviewError(f"第 {line_number} 行的 is_from_me 必须是布尔值。")
 
-    # helper 同时检查字符串类型、去掉首尾空白并拒绝空字符串。
-    kind = _non_empty_string(record["kind"])
-    if kind not in SUPPORTED_KINDS:
+    # 消息类型写入数据库枚举，必须精确匹配，不能静默接受首尾空白。
+    kind = record["kind"]
+    if not isinstance(kind, str) or kind not in SUPPORTED_KINDS:
         raise ImportPreviewError(f"第 {line_number} 行的 kind 不受支持。")
 
     # 这些字段内容可以不同，但 JSON 类型都必须是字符串。

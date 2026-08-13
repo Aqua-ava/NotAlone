@@ -1,0 +1,123 @@
+"""正式导入命令的 PostgreSQL 集成测试。"""
+
+from __future__ import annotations
+
+import contextlib
+import io
+import os
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+from uuid import uuid4
+
+import psycopg
+
+from notalone.ingest.import_command import main
+
+
+FIXTURES_DIR = Path(__file__).resolve().parents[2] / "fixtures"
+TEST_DATABASE_URL = os.environ.get(
+    "NOTALONE_TEST_DATABASE_URL",
+    "postgresql:///notalone_test",
+)
+
+
+class ImportCommandIntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        try:
+            with psycopg.connect(TEST_DATABASE_URL) as connection:
+                database_name = connection.execute(
+                    "SELECT current_database()"
+                ).fetchone()[0]
+        except psycopg.OperationalError as error:
+            raise unittest.SkipTest("本地 PostgreSQL 测试库不可用。") from error
+        if not database_name.endswith("_test"):
+            raise RuntimeError("集成测试只允许连接名称以 _test 结尾的数据库。")
+
+    def setUp(self) -> None:
+        self.owner_id = uuid4()
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "INSERT INTO public.owner (id, display_name) VALUES (%s, %s)",
+                (self.owner_id, "合成用户"),
+            )
+
+    def tearDown(self) -> None:
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            database_name = connection.execute(
+                "SELECT current_database()"
+            ).fetchone()[0]
+            if not database_name.endswith("_test"):
+                raise RuntimeError("拒绝清理非测试数据库。")
+            connection.execute(
+                "DELETE FROM public.owner WHERE id = %s",
+                (self.owner_id,),
+            )
+
+    def test_command_imports_and_outputs_only_non_sensitive_counts(self) -> None:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        arguments = [
+            str(FIXTURES_DIR / "valid_single_contact.jsonl"),
+            "--owner-id",
+            str(self.owner_id),
+            "--contact-id",
+            "wxid_synthetic_contact",
+        ]
+
+        with patch.dict(os.environ, {"NOTALONE_DATABASE_URL": TEST_DATABASE_URL}):
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                exit_code = main(arguments)
+
+        output = stdout.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr.getvalue(), "")
+        self.assertIn("导入完成", output)
+        self.assertIn("消息：6", output)
+        self.assertNotIn("匿名合成消息一", output)
+        self.assertNotIn("wxid_synthetic_contact", output)
+        self.assertNotIn(str(self.owner_id), output)
+        self.assertNotIn(TEST_DATABASE_URL, output)
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            message_count = connection.execute(
+                "SELECT count(*) FROM public.message WHERE owner_id = %s",
+                (self.owner_id,),
+            ).fetchone()[0]
+        self.assertEqual(message_count, 6)
+
+    def test_contact_mismatch_does_not_write_database(self) -> None:
+        stderr = io.StringIO()
+        arguments = [
+            str(FIXTURES_DIR / "valid_single_contact.jsonl"),
+            "--owner-id",
+            str(self.owner_id),
+            "--contact-id",
+            "wxid_other_contact",
+        ]
+
+        with patch.dict(os.environ, {"NOTALONE_DATABASE_URL": TEST_DATABASE_URL}):
+            with contextlib.redirect_stderr(stderr):
+                exit_code = main(arguments)
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("已确认联系人不一致", stderr.getvalue())
+        self.assertNotIn("wxid_other_contact", stderr.getvalue())
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            contact_count = connection.execute(
+                "SELECT count(*) FROM public.contact WHERE owner_id = %s",
+                (self.owner_id,),
+            ).fetchone()[0]
+            source_count = connection.execute(
+                "SELECT count(*) FROM public.source_document WHERE owner_id = %s",
+                (self.owner_id,),
+            ).fetchone()[0]
+            message_count = connection.execute(
+                "SELECT count(*) FROM public.message WHERE owner_id = %s",
+                (self.owner_id,),
+            ).fetchone()[0]
+        self.assertEqual((contact_count, source_count, message_count), (0, 0, 0))
+
+
+if __name__ == "__main__":
+    unittest.main()

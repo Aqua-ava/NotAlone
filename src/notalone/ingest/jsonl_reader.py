@@ -6,12 +6,19 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import os
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from notalone.ingest.errors import ImportPreviewError
+
+
+MAX_JSONL_BYTES = 64 * 1024 * 1024
+MAX_JSONL_RECORDS = 500_000
 
 
 # 读取成功后把路径、指纹和全部记录捆绑成一个不可变结果。
@@ -32,11 +39,27 @@ def read_jsonl(path: Path) -> JsonlDocument:
     参数 ``path`` 是待读取文件的路径。成功时返回 ``JsonlDocument``；读取、编码或
     任一行 JSON 失败时抛出 ``ImportPreviewError``。
     """
-    # 先读取原始 bytes，既便于严格按 UTF-8 解码，也能对原始文件计算稳定指纹。
+    # 通过已打开文件的元数据拒绝目录和设备文件，再最多读取“上限 + 1”字节。
+    # 这样即使路径在检查期间被替换，实际内存读取仍然有硬上限。
+    descriptor: int | None = None
     try:
-        content = path.read_bytes()
+        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+        flags |= getattr(os, "O_NONBLOCK", 0)
+        descriptor = os.open(path, flags)
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ImportPreviewError("指定路径必须是普通文件。")
+        with os.fdopen(descriptor, "rb") as file:
+            descriptor = None
+            content = file.read(MAX_JSONL_BYTES + 1)
+    except ImportPreviewError:
+        raise
     except OSError as error:
         raise ImportPreviewError("无法读取指定文件。") from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    if len(content) > MAX_JSONL_BYTES:
+        raise ImportPreviewError("文件超过 64 MiB 导入上限。")
 
     # JSONL 约定使用 UTF-8；不静默猜测其他编码，避免正文被错误解码后继续导入。
     try:
@@ -47,7 +70,11 @@ def read_jsonl(path: Path) -> JsonlDocument:
     # 先在内存中收集所有记录。只有整份文件都通过，函数最后才返回结果。
     records: list[dict[str, Any]] = []
     # enumerate 同时给出序号和值；start=1 让序号与编辑器中的实际行号一致。
-    for line_number, line in enumerate(text.splitlines(), start=1):
+    for line_number, line in enumerate(io.StringIO(text), start=1):
+        if line_number > MAX_JSONL_RECORDS:
+            raise ImportPreviewError(
+                f"消息记录超过 {MAX_JSONL_RECORDS} 条导入上限。"
+            )
         if not line.strip():
             raise ImportPreviewError(f"第 {line_number} 行为空行。")
         # json.loads 把当前行的 JSON 文本转换成 Python 对象。

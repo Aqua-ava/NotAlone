@@ -17,6 +17,7 @@ from notalone.ingest.models import ImportBatch
 from notalone.ingest.normalizer import normalize_document
 from notalone.persistence.postgres_repository import (
     ImportPersistenceError,
+    OverlappingSourceError,
     OwnerNotFoundError,
     PostgresIngestRepository,
     SourceStateConflictError,
@@ -45,17 +46,22 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
             raise RuntimeError("集成测试只允许连接名称以 _test 结尾的数据库。")
 
     def setUp(self) -> None:
-        with psycopg.connect(TEST_DATABASE_URL) as connection:
-            database_name = connection.execute("SELECT current_database()").fetchone()[0]
-            if not database_name.endswith("_test"):
-                raise RuntimeError("拒绝清理非测试数据库。")
-            connection.execute(
-                "TRUNCATE public.message, public.source_document, "
-                "public.contact, public.owner"
-            )
-
         self.repository = PostgresIngestRepository(TEST_DATABASE_URL)
         self.batch = self._load_batch()
+        self.owner_ids: set[UUID] = set()
+
+    def tearDown(self) -> None:
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            database_name = connection.execute(
+                "SELECT current_database()"
+            ).fetchone()[0]
+            if not database_name.endswith("_test"):
+                raise RuntimeError("拒绝清理非测试数据库。")
+            for owner_id in self.owner_ids:
+                connection.execute(
+                    "DELETE FROM public.owner WHERE id = %s",
+                    (owner_id,),
+                )
 
     def test_imports_contact_source_and_messages_in_one_transaction(self) -> None:
         owner_id = self._create_owner("合成用户甲")
@@ -67,9 +73,9 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
 
         self.assertEqual(result.outcome, "imported")
         self.assertEqual(result.message_count, 6)
-        self.assertEqual(self._count("contact"), 1)
-        self.assertEqual(self._count("source_document"), 1)
-        self.assertEqual(self._count("message"), 6)
+        self.assertEqual(self._count("contact", owner_id), 1)
+        self.assertEqual(self._count("source_document", owner_id), 1)
+        self.assertEqual(self._count("message", owner_id), 6)
         self.assertEqual(
             self._scalar(
                 "SELECT speaker FROM public.message "
@@ -89,8 +95,26 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(second.outcome, "already_imported")
         self.assertEqual(first.source_document_id, second.source_document_id)
         self.assertEqual(second.message_count, 6)
-        self.assertEqual(self._count("source_document"), 1)
-        self.assertEqual(self._count("message"), 6)
+        self.assertEqual(self._count("source_document", owner_id), 1)
+        self.assertEqual(self._count("message", owner_id), 6)
+
+    def test_different_file_with_existing_local_ids_is_rejected(self) -> None:
+        owner_id = self._create_owner("合成用户甲")
+        overlapping_batch = replace(
+            self.batch,
+            file_name="overlapping.jsonl",
+            content_sha256="b" * 64,
+        )
+        self.repository.import_document(owner_id=owner_id, document=self.batch)
+
+        with self.assertRaises(OverlappingSourceError):
+            self.repository.import_document(
+                owner_id=owner_id,
+                document=overlapping_batch,
+            )
+
+        self.assertEqual(self._count("source_document", owner_id), 1)
+        self.assertEqual(self._count("message", owner_id), 6)
 
     def test_concurrent_same_file_imports_only_one_source(self) -> None:
         owner_id = self._create_owner("合成用户甲")
@@ -109,8 +133,38 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
 
         self.assertEqual(outcomes.count("imported"), 1)
         self.assertEqual(outcomes.count("already_imported"), 3)
-        self.assertEqual(self._count("source_document"), 1)
-        self.assertEqual(self._count("message"), 6)
+        self.assertEqual(self._count("source_document", owner_id), 1)
+        self.assertEqual(self._count("message", owner_id), 6)
+
+    def test_concurrent_overlapping_files_import_only_one_source(self) -> None:
+        owner_id = self._create_owner("合成用户甲")
+        batches = (
+            self.batch,
+            replace(
+                self.batch,
+                file_name="overlapping.jsonl",
+                content_sha256="c" * 64,
+            ),
+        )
+        barrier = Barrier(2)
+
+        def import_batch(batch: ImportBatch) -> str:
+            barrier.wait()
+            try:
+                return self.repository.import_document(
+                    owner_id=owner_id,
+                    document=batch,
+                ).outcome
+            except OverlappingSourceError:
+                return "overlap"
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            outcomes = list(executor.map(import_batch, batches))
+
+        self.assertEqual(outcomes.count("imported"), 1)
+        self.assertEqual(outcomes.count("overlap"), 1)
+        self.assertEqual(self._count("source_document", owner_id), 1)
+        self.assertEqual(self._count("message", owner_id), 6)
 
     def test_existing_contact_display_name_is_not_overwritten(self) -> None:
         owner_id = self._create_owner("合成用户甲")
@@ -133,16 +187,17 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         )
 
     def test_missing_owner_leaves_all_tables_unchanged(self) -> None:
+        missing_owner_id = uuid4()
         with self.assertRaises(OwnerNotFoundError):
             self.repository.import_document(
-                owner_id=uuid4(),
+                owner_id=missing_owner_id,
                 document=self.batch,
             )
 
-        self.assertEqual(self._count("owner"), 0)
-        self.assertEqual(self._count("contact"), 0)
-        self.assertEqual(self._count("source_document"), 0)
-        self.assertEqual(self._count("message"), 0)
+        self.assertEqual(self._count("owner", missing_owner_id), 0)
+        self.assertEqual(self._count("contact", missing_owner_id), 0)
+        self.assertEqual(self._count("source_document", missing_owner_id), 0)
+        self.assertEqual(self._count("message", missing_owner_id), 0)
 
     def test_message_failure_rolls_back_contact_source_and_prior_messages(self) -> None:
         owner_id = self._create_owner("合成用户甲")
@@ -156,9 +211,29 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
             self.repository.import_document(owner_id=owner_id, document=invalid_batch)
 
         self.assertEqual(str(raised.exception), "数据库导入失败，未写入任何数据。")
-        self.assertEqual(self._count("contact"), 0)
-        self.assertEqual(self._count("source_document"), 0)
-        self.assertEqual(self._count("message"), 0)
+        self.assertEqual(self._count("contact", owner_id), 0)
+        self.assertEqual(self._count("source_document", owner_id), 0)
+        self.assertEqual(self._count("message", owner_id), 0)
+
+    def test_invalid_raw_payload_rolls_back_without_exposing_content(self) -> None:
+        owner_id = self._create_owner("合成用户甲")
+        invalid_message = replace(
+            self.batch.messages[0],
+            raw_payload_json='{"private":"不应出现在错误信息中",',
+        )
+        invalid_batch = replace(self.batch, messages=(invalid_message,))
+
+        with self.assertRaises(ImportPersistenceError) as raised:
+            self.repository.import_document(
+                owner_id=owner_id,
+                document=invalid_batch,
+            )
+
+        self.assertEqual(str(raised.exception), "数据库导入失败，未写入任何数据。")
+        self.assertNotIn("不应出现在错误信息中", str(raised.exception))
+        self.assertEqual(self._count("contact", owner_id), 0)
+        self.assertEqual(self._count("source_document", owner_id), 0)
+        self.assertEqual(self._count("message", owner_id), 0)
 
     def test_non_active_duplicate_source_requires_explicit_resolution(self) -> None:
         owner_id = self._create_owner("合成用户甲")
@@ -172,8 +247,8 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         with self.assertRaises(SourceStateConflictError):
             self.repository.import_document(owner_id=owner_id, document=self.batch)
 
-        self.assertEqual(self._count("source_document"), 1)
-        self.assertEqual(self._count("message"), 6)
+        self.assertEqual(self._count("source_document", owner_id), 1)
+        self.assertEqual(self._count("message", owner_id), 6)
 
     def test_same_contact_id_is_isolated_between_owners(self) -> None:
         first_owner = self._create_owner("合成用户甲")
@@ -182,8 +257,10 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.repository.import_document(owner_id=first_owner, document=self.batch)
         self.repository.import_document(owner_id=second_owner, document=self.batch)
 
-        self.assertEqual(self._count("contact"), 2)
-        self.assertEqual(self._count("source_document"), 2)
+        self.assertEqual(self._count("contact", first_owner), 1)
+        self.assertEqual(self._count("contact", second_owner), 1)
+        self.assertEqual(self._count("source_document", first_owner), 1)
+        self.assertEqual(self._count("source_document", second_owner), 1)
         self.assertEqual(
             self._scalar(
                 "SELECT count(*) FROM public.message WHERE owner_id = %s",
@@ -199,29 +276,49 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
             6,
         )
 
+    def test_overlap_unique_constraint_exists(self) -> None:
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            constraint = connection.execute(
+                """
+                SELECT pg_get_constraintdef(oid)
+                FROM pg_constraint
+                WHERE conrelid = 'public.message'::regclass
+                  AND conname = 'message_contact_external_local_id_unique'
+                """
+            ).fetchone()
+
+        self.assertIsNotNone(constraint)
+        self.assertEqual(
+            constraint[0],
+            "UNIQUE (owner_id, contact_id, external_local_id)",
+        )
+
     @staticmethod
     def _load_batch() -> ImportBatch:
         document = read_jsonl(FIXTURES_DIR / "valid_single_contact.jsonl")
         return normalize_document(document)
 
-    @staticmethod
-    def _create_owner(display_name: str) -> UUID:
+    def _create_owner(self, display_name: str) -> UUID:
         owner_id = uuid4()
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             connection.execute(
                 "INSERT INTO public.owner (id, display_name) VALUES (%s, %s)",
                 (owner_id, display_name),
             )
+        self.owner_ids.add(owner_id)
         return owner_id
 
     @staticmethod
-    def _count(table_name: str) -> int:
+    def _count(table_name: str, owner_id: UUID) -> int:
         allowed_tables = {"owner", "contact", "source_document", "message"}
         if table_name not in allowed_tables:
             raise ValueError("不允许查询未知表。")
+        owner_column = "id" if table_name == "owner" else "owner_id"
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             return connection.execute(
-                f"SELECT count(*) FROM public.{table_name}"
+                f"SELECT count(*) FROM public.{table_name} "
+                f"WHERE {owner_column} = %s",
+                (owner_id,),
             ).fetchone()[0]
 
     @staticmethod

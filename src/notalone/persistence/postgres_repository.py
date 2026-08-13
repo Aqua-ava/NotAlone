@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID
 
 import psycopg
-from psycopg.types.json import Jsonb
 
 from notalone.ingest.models import ImportBatch
 
@@ -23,6 +21,10 @@ class OwnerNotFoundError(ImportPersistenceError):
 
 class SourceStateConflictError(ImportPersistenceError):
     """同一来源已存在，但当前状态不允许直接重复导入。"""
+
+
+class OverlappingSourceError(ImportPersistenceError):
+    """不同来源与已入库消息发生重叠，需要用户先处理来源。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,12 +62,27 @@ class PostgresIngestRepository:
                     owner_id=owner_id,
                     document=document,
                 )
-        except (OwnerNotFoundError, SourceStateConflictError):
+        except (
+            OverlappingSourceError,
+            OwnerNotFoundError,
+            SourceStateConflictError,
+        ):
             raise
-        except psycopg.Error as error:
+        except psycopg.errors.UniqueViolation as error:
+            if (
+                error.diag.constraint_name
+                == "message_contact_external_local_id_unique"
+            ):
+                raise OverlappingSourceError(
+                    "文件与已导入来源包含重叠消息，未写入新来源。"
+                ) from None
             raise ImportPersistenceError(
                 "数据库导入失败，未写入任何数据。"
-            ) from error
+            ) from None
+        except psycopg.Error:
+            raise ImportPersistenceError(
+                "数据库导入失败，未写入任何数据。"
+            ) from None
 
     @staticmethod
     def _import_in_transaction(
@@ -94,6 +111,16 @@ class PostgresIngestRepository:
                 document.contact.display_name,
             ),
         )
+        # 同一联系人的导入按 contact 行串行化，避免两个不同文件同时绕过重叠检查。
+        connection.execute(
+            """
+            SELECT 1
+            FROM public.contact
+            WHERE owner_id = %s AND id = %s
+            FOR UPDATE
+            """,
+            (owner_id, document.contact.contact_id),
+        ).fetchone()
 
         source = connection.execute(
             """
@@ -147,6 +174,29 @@ class PostgresIngestRepository:
             )
 
         source_document_id = source[0]
+        external_local_ids = [
+            message.external_local_id for message in document.messages
+        ]
+        overlap = connection.execute(
+            """
+            SELECT 1
+            FROM public.message
+            WHERE owner_id = %s
+              AND contact_id = %s
+              AND external_local_id = ANY(%s::bigint[])
+            LIMIT 1
+            """,
+            (
+                owner_id,
+                document.contact.contact_id,
+                external_local_ids,
+            ),
+        ).fetchone()
+        if overlap is not None:
+            raise OverlappingSourceError(
+                "文件与已导入来源包含重叠消息，未写入新来源。"
+            )
+
         message_parameters = [
             (
                 owner_id,
@@ -160,7 +210,7 @@ class PostgresIngestRepository:
                 message.text_content,
                 message.occurred_at,
                 message.source_create_time,
-                Jsonb(json.loads(message.raw_payload_json)),
+                message.raw_payload_json,
             )
             for message in document.messages
         ]
@@ -183,7 +233,7 @@ class PostgresIngestRepository:
                 )
                 VALUES (
                     %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s::jsonb
                 )
                 """,
                 message_parameters,
