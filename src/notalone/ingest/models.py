@@ -66,19 +66,38 @@ class ImportPreview:
 
 
 @dataclass(frozen=True, slots=True, repr=False)
-class NormalizedMessage:
-    """一条通过校验、可交给持久化层的规范化消息。"""
+class WechatMessageMetadata:
+    """微信 JSONL 适配器为一条规范消息保留的来源证据。"""
 
     external_local_id: int
     external_server_id: str
     external_talker: str
+    source_create_time: int
+    raw_payload_json: str
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class NormalizedMessage:
+    """一条与具体输入渠道解耦的规范消息。"""
+
+    source_locator: str
     speaker: str
     message_type: str
     text_content: str
-    occurred_at: datetime
-    source_create_time: int
-    # 使用 JSON 字符串保存不可变快照，避免后续修改原始 record 影响待写入内容。
-    raw_payload_json: str
+    media_placeholder: str | None
+    occurred_at: datetime | None
+    wechat_metadata: WechatMessageMetadata | None
+
+    def __post_init__(self) -> None:
+        if not self.source_locator.strip():
+            raise ValueError("规范消息必须包含来源定位。")
+        has_text = bool(self.text_content.strip())
+        has_media_placeholder = bool(
+            self.media_placeholder is not None
+            and self.media_placeholder.strip()
+        )
+        if not has_text and not has_media_placeholder:
+            raise ValueError("规范消息必须包含正文或媒体占位。")
 
 
 @dataclass(frozen=True, slots=True, repr=False)

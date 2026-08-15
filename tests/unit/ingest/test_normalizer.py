@@ -37,15 +37,19 @@ class NormalizeDocumentTest(unittest.TestCase):
         batch = normalize_document(self.document)
         message = batch.messages[1]
 
-        self.assertEqual(message.external_local_id, 102)
-        self.assertEqual(message.external_server_id, "server-102")
-        self.assertEqual(message.external_talker, "wxid_synthetic_contact")
+        self.assertEqual(message.source_locator, "jsonl:2")
         self.assertEqual(message.message_type, "image")
-        self.assertEqual(message.text_content, "[图片]")
+        self.assertEqual(message.text_content, "")
+        self.assertEqual(message.media_placeholder, "[图片]")
         self.assertEqual(message.occurred_at.isoformat(), "2026-08-12T10:01:00+08:00")
-        self.assertEqual(message.source_create_time, 1786500060)
+        metadata = message.wechat_metadata
+        self.assertIsNotNone(metadata)
+        self.assertEqual(metadata.external_local_id, 102)
+        self.assertEqual(metadata.external_server_id, "server-102")
+        self.assertEqual(metadata.external_talker, "wxid_synthetic_contact")
+        self.assertEqual(metadata.source_create_time, 1786500060)
         self.assertEqual(
-            json.loads(message.raw_payload_json),
+            json.loads(metadata.raw_payload_json),
             self.document.records[1],
         )
 
@@ -55,8 +59,10 @@ class NormalizeDocumentTest(unittest.TestCase):
 
         self.document.records[0]["text"] = "修改后的合成正文"
 
+        metadata = batch.messages[0].wechat_metadata
+        self.assertIsNotNone(metadata)
         self.assertEqual(
-            json.loads(batch.messages[0].raw_payload_json)["text"],
+            json.loads(metadata.raw_payload_json)["text"],
             original_text,
         )
 

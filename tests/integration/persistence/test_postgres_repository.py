@@ -89,8 +89,10 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(self._count("message", owner_id), 6)
         self.assertEqual(
             self._scalar(
-                "SELECT speaker FROM public.message "
-                "WHERE owner_id = %s AND external_local_id = 102",
+                "SELECT m.speaker FROM public.message AS m "
+                "JOIN public.wechat_message_metadata AS wm "
+                "ON wm.message_id = m.id "
+                "WHERE m.owner_id = %s AND wm.external_local_id = 102",
                 (owner_id,),
             ),
             "user",
@@ -122,6 +124,64 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
             ),
             "新建合成联系人",
         )
+
+    def test_wechat_fields_are_stored_as_adapter_metadata(self) -> None:
+        owner_id = self._create_owner("合成用户甲")
+        contact_id = self._create_contact(owner_id, "已选合成联系人")
+
+        result = self.repository.import_document(
+            owner_id=owner_id,
+            document=self.batch,
+            confirmation=self._confirmation(contact_id),
+        )
+
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            stored = connection.execute(
+                """
+                SELECT
+                    m.source_locator,
+                    m.text_content,
+                    m.media_placeholder,
+                    wm.external_local_id,
+                    wm.external_server_id,
+                    wm.external_talker,
+                    wm.source_create_time,
+                    wm.raw_payload
+                FROM public.message AS m
+                JOIN public.wechat_message_metadata AS wm
+                  ON wm.message_id = m.id
+                WHERE m.source_document_id = %s
+                  AND m.source_locator = 'jsonl:2'
+                """,
+                (result.source_document_id,),
+            ).fetchone()
+            old_columns = connection.execute(
+                """
+                SELECT count(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'message'
+                  AND column_name IN (
+                      'external_local_id',
+                      'external_server_id',
+                      'external_talker',
+                      'source_create_time',
+                      'raw_payload'
+                  )
+                """
+            ).fetchone()[0]
+
+        self.assertEqual(stored[:7], (
+            "jsonl:2",
+            "",
+            "[图片]",
+            102,
+            "server-102",
+            "wxid_synthetic_contact",
+            1786500060,
+        ))
+        self.assertEqual(stored[7]["text"], "[图片]")
+        self.assertEqual(old_columns, 0)
 
     def test_same_file_is_idempotent(self) -> None:
         owner_id = self._create_owner("合成用户甲")
@@ -284,6 +344,7 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(self._count("import_confirmation", owner_id), 0)
         self.assertEqual(self._count("source_document", owner_id), 0)
         self.assertEqual(self._count("message", owner_id), 0)
+        self.assertEqual(self._count("wechat_message_metadata", owner_id), 0)
 
     def test_new_contact_is_rolled_back_when_message_import_fails(self) -> None:
         owner_id = self._create_owner("合成用户甲")
@@ -307,13 +368,19 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(self._count("import_confirmation", owner_id), 0)
         self.assertEqual(self._count("source_document", owner_id), 0)
         self.assertEqual(self._count("message", owner_id), 0)
+        self.assertEqual(self._count("wechat_message_metadata", owner_id), 0)
 
     def test_invalid_raw_payload_rolls_back_without_exposing_content(self) -> None:
         owner_id = self._create_owner("合成用户甲")
         contact_id = self._create_contact(owner_id, "已选合成联系人")
+        metadata = self.batch.messages[0].wechat_metadata
+        self.assertIsNotNone(metadata)
         invalid_message = replace(
             self.batch.messages[0],
-            raw_payload_json='{"private":"不应出现在错误信息中",',
+            wechat_metadata=replace(
+                metadata,
+                raw_payload_json='{"private":"不应出现在错误信息中",',
+            ),
         )
         invalid_batch = replace(self.batch, messages=(invalid_message,))
 
@@ -331,6 +398,7 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(self._count("import_confirmation", owner_id), 0)
         self.assertEqual(self._count("source_document", owner_id), 0)
         self.assertEqual(self._count("message", owner_id), 0)
+        self.assertEqual(self._count("wechat_message_metadata", owner_id), 0)
 
     def test_non_active_duplicate_source_requires_explicit_resolution(self) -> None:
         owner_id = self._create_owner("合成用户甲")
@@ -471,7 +539,7 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
                 """
                 SELECT pg_get_constraintdef(oid)
                 FROM pg_constraint
-                WHERE conrelid = 'public.message'::regclass
+                WHERE conrelid = 'public.wechat_message_metadata'::regclass
                   AND conname = 'message_contact_external_local_id_unique'
                 """
             ).fetchone()
@@ -528,6 +596,7 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
             "source_document",
             "import_confirmation",
             "message",
+            "wechat_message_metadata",
         }
         if table_name not in allowed_tables:
             raise ValueError("不允许查询未知表。")

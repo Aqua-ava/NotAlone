@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import psycopg
 
@@ -280,13 +280,18 @@ class PostgresIngestRepository:
                 confirmation_method,
             ),
         ).fetchone()[0]
+        wechat_metadata = tuple(
+            message.wechat_metadata for message in document.messages
+        )
+        if any(metadata is None for metadata in wechat_metadata):
+            raise ImportPersistenceError("微信导入批次缺少微信来源元数据。")
         external_local_ids = [
-            message.external_local_id for message in document.messages
+            metadata.external_local_id for metadata in wechat_metadata
         ]
         overlap = connection.execute(
             """
             SELECT 1
-            FROM public.message
+            FROM public.wechat_message_metadata
             WHERE owner_id = %s
               AND contact_id = %s
               AND external_local_id = ANY(%s::bigint[])
@@ -303,46 +308,84 @@ class PostgresIngestRepository:
                 "文件与已导入来源包含重叠消息，未写入新来源。"
             )
 
+        messages_with_ids = [
+            (uuid4(), message, metadata)
+            for message, metadata in zip(
+                document.messages,
+                wechat_metadata,
+                strict=True,
+            )
+        ]
         message_parameters = [
             (
+                message_id,
                 owner_id,
                 contact_id,
                 source_document_id,
-                message.external_local_id,
-                message.external_server_id,
-                message.external_talker,
+                message.source_locator,
                 message.speaker,
                 message.message_type,
                 message.text_content,
+                message.media_placeholder,
                 message.occurred_at,
-                message.source_create_time,
-                message.raw_payload_json,
             )
-            for message in document.messages
+            for message_id, message, _ in messages_with_ids
         ]
         with connection.cursor() as cursor:
             cursor.executemany(
                 """
                 INSERT INTO public.message (
+                    id,
+                    owner_id,
+                    contact_id,
+                    source_document_id,
+                    source_locator,
+                    speaker,
+                    message_type,
+                    text_content,
+                    media_placeholder,
+                    occurred_at
+                )
+                VALUES (
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s
+                )
+                """,
+                message_parameters,
+            )
+            metadata_parameters = [
+                (
+                    message_id,
+                    owner_id,
+                    contact_id,
+                    source_document_id,
+                    metadata.external_local_id,
+                    metadata.external_server_id,
+                    metadata.external_talker,
+                    metadata.source_create_time,
+                    metadata.raw_payload_json,
+                )
+                for message_id, _, metadata in messages_with_ids
+            ]
+            cursor.executemany(
+                """
+                INSERT INTO public.wechat_message_metadata (
+                    message_id,
                     owner_id,
                     contact_id,
                     source_document_id,
                     external_local_id,
                     external_server_id,
                     external_talker,
-                    speaker,
-                    message_type,
-                    text_content,
-                    occurred_at,
                     source_create_time,
                     raw_payload
                 )
                 VALUES (
-                    %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s::jsonb
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s::jsonb
                 )
                 """,
-                message_parameters,
+                metadata_parameters,
             )
 
         return ImportResult(
