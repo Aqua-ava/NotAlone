@@ -4,14 +4,17 @@
 
 ## 开始探索前
 
-按任务需要读取：
+先读 `architecture/README.md`，再按任务分支读取。下表普通文件均位于 `architecture/`，ADR 路径以该 README 的索引为准；完成条件是所有受影响的已采纳约束和 ADR 均已核对：
 
-- 根目录 `CONTEXT.md`（如果存在）
-- `architecture/README.md`
-- `architecture/` 中与任务相关的架构文档
-- `architecture/adr/` 中与任务相关的 ADR
+| 任务分支 | 必读材料 |
+| --- | --- |
+| 联系人、消息、来源、记忆或检索 | `01-domain-data.md`；涉及自动采纳或检索时再读 ADR-002/ADR-005 |
+| 导入、回复、删除或后台任务 | `02-core-flows.md`；涉及历史导入或 Worker 时再读 ADR-004/ADR-007 |
+| Mac 微信同步、OCR 或连续性 | `02-core-flows.md`、`03-privacy-and-deletion.md`、ADR-001、ADR-003 |
+| 隐私、外部模型、云端存储、连接器或部署 | `03-privacy-and-deletion.md`、`05-cloud-engineering.md` 及相关 ADR |
+| Agent、Tool、MCP、RAG 或编排框架 | `06-agent-runtime.md`、ADR-006 |
 
-如果 `CONTEXT.md` 不存在，继续当前任务，不需要预先创建。`domain-modeling` skill 会在领域术语需要正式整理时按需创建它。
+根目录 `CONTEXT.md` 如果存在，也要读取。缺失时继续当前任务；只在领域术语需要正式整理时使用 `domain-modeling` skill 创建。
 
 ## 文档权威边界
 
