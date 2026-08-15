@@ -17,6 +17,7 @@ from notalone.ingest.models import (
     ExistingContactSelection,
     ImportBatch,
     ImportConfirmationRequest,
+    NewContactSelection,
 )
 from notalone.ingest.normalizer import normalize_document
 from notalone.persistence.postgres_repository import (
@@ -93,6 +94,33 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
                 (owner_id,),
             ),
             "user",
+        )
+
+    def test_first_import_creates_contact_and_manual_confirmation(self) -> None:
+        owner_id = self._create_owner("合成用户甲")
+
+        result = self.repository.import_document(
+            owner_id=owner_id,
+            document=self.batch,
+            confirmation=ImportConfirmationRequest(
+                selection=NewContactSelection(display_name="新建合成联系人")
+            ),
+        )
+
+        self.assertEqual(result.outcome, "imported")
+        self.assertEqual(result.confirmation_method, "manual_create")
+        self.assertEqual(self._count("contact", owner_id), 1)
+        self.assertEqual(self._count("channel_identity", owner_id), 1)
+        self.assertEqual(self._count("import_confirmation", owner_id), 1)
+        self.assertEqual(self._count("source_document", owner_id), 1)
+        self.assertEqual(self._count("message", owner_id), 6)
+        self.assertEqual(
+            self._scalar(
+                "SELECT display_name FROM public.contact "
+                "WHERE owner_id = %s AND id = %s",
+                (owner_id, result.contact_id),
+            ),
+            "新建合成联系人",
         )
 
     def test_same_file_is_idempotent(self) -> None:
@@ -257,6 +285,29 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(self._count("source_document", owner_id), 0)
         self.assertEqual(self._count("message", owner_id), 0)
 
+    def test_new_contact_is_rolled_back_when_message_import_fails(self) -> None:
+        owner_id = self._create_owner("合成用户甲")
+        invalid_message = replace(self.batch.messages[1], speaker="invalid")
+        invalid_batch = replace(
+            self.batch,
+            messages=(self.batch.messages[0], invalid_message),
+        )
+
+        with self.assertRaises(ImportPersistenceError):
+            self.repository.import_document(
+                owner_id=owner_id,
+                document=invalid_batch,
+                confirmation=ImportConfirmationRequest(
+                    selection=NewContactSelection(display_name="新建合成联系人")
+                ),
+            )
+
+        self.assertEqual(self._count("contact", owner_id), 0)
+        self.assertEqual(self._count("channel_identity", owner_id), 0)
+        self.assertEqual(self._count("import_confirmation", owner_id), 0)
+        self.assertEqual(self._count("source_document", owner_id), 0)
+        self.assertEqual(self._count("message", owner_id), 0)
+
     def test_invalid_raw_payload_rolls_back_without_exposing_content(self) -> None:
         owner_id = self._create_owner("合成用户甲")
         contact_id = self._create_contact(owner_id, "已选合成联系人")
@@ -361,6 +412,28 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
                 confirmation=self._confirmation(second_contact_id),
             )
 
+        self.assertEqual(self._count("channel_identity", owner_id), 1)
+        self.assertEqual(self._count("source_document", owner_id), 1)
+
+    def test_existing_wechat_identity_prevents_creating_a_second_contact(self) -> None:
+        owner_id = self._create_owner("合成用户甲")
+        contact_id = self._create_contact(owner_id, "合成联系人甲")
+        self.repository.import_document(
+            owner_id=owner_id,
+            document=self.batch,
+            confirmation=self._confirmation(contact_id),
+        )
+
+        with self.assertRaises(ChannelIdentityConflictError):
+            self.repository.import_document(
+                owner_id=owner_id,
+                document=self.batch,
+                confirmation=ImportConfirmationRequest(
+                    selection=NewContactSelection(display_name="合成联系人乙")
+                ),
+            )
+
+        self.assertEqual(self._count("contact", owner_id), 1)
         self.assertEqual(self._count("channel_identity", owner_id), 1)
         self.assertEqual(self._count("source_document", owner_id), 1)
 

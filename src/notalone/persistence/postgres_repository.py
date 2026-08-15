@@ -8,7 +8,11 @@ from uuid import UUID
 
 import psycopg
 
-from notalone.ingest.models import ImportBatch, ImportConfirmationRequest
+from notalone.ingest.models import (
+    ExistingContactSelection,
+    ImportBatch,
+    ImportConfirmationRequest,
+)
 
 
 class ImportPersistenceError(RuntimeError):
@@ -122,18 +126,31 @@ class PostgresIngestRepository:
         if owner is None:
             raise OwnerNotFoundError("指定的 owner 不存在。")
 
-        contact_id = confirmation.selection.contact_id
-        contact = connection.execute(
-            """
-            SELECT 1
-            FROM public.contact
-            WHERE owner_id = %s AND id = %s
-            FOR UPDATE
-            """,
-            (owner_id, contact_id),
-        ).fetchone()
-        if contact is None:
-            raise ContactNotFoundError("选择的联系人不存在。")
+        selection = confirmation.selection
+        if isinstance(selection, ExistingContactSelection):
+            contact_id = selection.contact_id
+            contact = connection.execute(
+                """
+                SELECT 1
+                FROM public.contact
+                WHERE owner_id = %s AND id = %s
+                FOR UPDATE
+                """,
+                (owner_id, contact_id),
+            ).fetchone()
+            if contact is None:
+                raise ContactNotFoundError("选择的联系人不存在。")
+            confirmation_method = "manual_select"
+        else:
+            contact_id = connection.execute(
+                """
+                INSERT INTO public.contact (owner_id, display_name)
+                VALUES (%s, %s)
+                RETURNING id
+                """,
+                (owner_id, selection.display_name),
+            ).fetchone()[0]
+            confirmation_method = "manual_create"
 
         active_identity = connection.execute(
             """
@@ -252,10 +269,16 @@ class PostgresIngestRepository:
                 channel_identity_id,
                 method
             )
-            VALUES (%s, %s, %s, %s, 'manual_select')
+            VALUES (%s, %s, %s, %s, %s)
             RETURNING id
             """,
-            (owner_id, contact_id, source_document_id, channel_identity_id),
+            (
+                owner_id,
+                contact_id,
+                source_document_id,
+                channel_identity_id,
+                confirmation_method,
+            ),
         ).fetchone()[0]
         external_local_ids = [
             message.external_local_id for message in document.messages
@@ -327,7 +350,7 @@ class PostgresIngestRepository:
             channel_identity_id=channel_identity_id,
             source_document_id=source_document_id,
             confirmation_id=confirmation_id,
-            confirmation_method="manual_select",
+            confirmation_method=confirmation_method,
             outcome="imported",
             message_count=document.record_count,
         )

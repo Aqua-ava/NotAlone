@@ -4,7 +4,7 @@ Type: task
 
 Triage: ready-for-agent
 
-State: claimed
+State: resolved
 
 ## Problem
 
@@ -24,6 +24,22 @@ State: claimed
 - 首次导入支持创建或选择联系人，并保存最小确认记录。
 - 新来源与已确认渠道身份不一致时停止导入，不静默改绑。
 - 迁移、回滚、幂等和联系人隔离使用合成数据验证。
+
+## Answer
+
+已将内部联系人 UUID、微信渠道身份和展示名称分开。正式导入现在要求用户在
+`ExistingContactSelection` 与 `NewContactSelection` 中明确选择：前者写入 `manual_select`，
+后者在同一事务中创建联系人并写入 `manual_create`。渠道身份冲突会拒绝整批导入；消息写入
+失败时，新联系人、渠道身份、来源和确认记录会一起回滚。
+
+验证命令：
+
+```bash
+NOTALONE_TEST_DATABASE_URL=postgresql:///notalone_identity_test \
+  conda run -n NotAlone python -m unittest discover -s tests -v
+```
+
+结果为 52 项测试全部通过。测试仅使用合成夹具，没有读取或导入 `chat_exports/` 中的真实资料。
 
 ## Comments
 

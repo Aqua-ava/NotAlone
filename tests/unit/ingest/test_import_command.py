@@ -14,6 +14,7 @@ from notalone.ingest.import_command import import_file, main
 from notalone.ingest.models import (
     ExistingContactSelection,
     ImportConfirmationRequest,
+    NewContactSelection,
 )
 from notalone.persistence.postgres_repository import ImportResult
 
@@ -35,12 +36,18 @@ class FakeRepository:
     ) -> ImportResult:
         self.import_count += 1
         self.confirmation = confirmation
+        selected_contact_id = getattr(confirmation.selection, "contact_id", uuid4())
+        confirmation_method = (
+            "manual_select"
+            if isinstance(confirmation.selection, ExistingContactSelection)
+            else "manual_create"
+        )
         return ImportResult(
-            contact_id=confirmation.selection.contact_id,
+            contact_id=selected_contact_id,
             channel_identity_id=uuid4(),
             source_document_id=uuid4(),
             confirmation_id=uuid4(),
-            confirmation_method="manual_select",
+            confirmation_method=confirmation_method,
             outcome="imported",
             message_count=document.record_count,
         )
@@ -64,6 +71,25 @@ class ImportFileTest(unittest.TestCase):
         self.assertEqual(result.outcome, "imported")
         self.assertEqual(result.contact_id, contact_id)
         self.assertEqual(result.message_count, 6)
+        self.assertEqual(repository.import_count, 1)
+        self.assertIs(repository.confirmation, confirmation)
+
+    def test_imports_for_a_new_internal_contact(self) -> None:
+        repository = FakeRepository()
+        confirmation = ImportConfirmationRequest(
+            selection=NewContactSelection(display_name="新建合成联系人")
+        )
+
+        result = import_file(
+            path=FIXTURES_DIR / "valid_single_contact.jsonl",
+            owner_id=uuid4(),
+            confirmation=confirmation,
+            repository=repository,
+        )
+
+        self.assertEqual(result.outcome, "imported")
+        self.assertEqual(result.confirmation_method, "manual_create")
+        self.assertIsInstance(result.contact_id, type(uuid4()))
         self.assertEqual(repository.import_count, 1)
         self.assertIs(repository.confirmation, confirmation)
 

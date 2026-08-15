@@ -125,6 +125,48 @@ class ImportCommandIntegrationTest(unittest.TestCase):
             ).fetchone()[0]
         self.assertEqual((contact_count, source_count, message_count), (1, 0, 0))
 
+    def test_command_creates_contact_for_first_import(self) -> None:
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "DELETE FROM public.contact WHERE owner_id = %s",
+                (self.owner_id,),
+            )
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        arguments = [
+            str(FIXTURES_DIR / "valid_single_contact.jsonl"),
+            "--owner-id",
+            str(self.owner_id),
+            "--new-contact-name",
+            "首次导入合成联系人",
+        ]
+
+        with patch.dict(os.environ, {"NOTALONE_DATABASE_URL": TEST_DATABASE_URL}):
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                exit_code = main(arguments)
+
+        output = stdout.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr.getvalue(), "")
+        self.assertIn("导入完成", output)
+        self.assertNotIn("首次导入合成联系人", output)
+        self.assertNotIn("wxid_synthetic_contact", output)
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            imported = connection.execute(
+                """
+                SELECT c.display_name, ic.method, count(m.id)
+                FROM public.contact AS c
+                JOIN public.import_confirmation AS ic
+                  ON ic.owner_id = c.owner_id AND ic.contact_id = c.id
+                JOIN public.message AS m
+                  ON m.source_document_id = ic.source_document_id
+                WHERE c.owner_id = %s
+                GROUP BY c.display_name, ic.method
+                """,
+                (self.owner_id,),
+            ).fetchone()
+        self.assertEqual(imported, ("首次导入合成联系人", "manual_create", 6))
+
 
 if __name__ == "__main__":
     unittest.main()

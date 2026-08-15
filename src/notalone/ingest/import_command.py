@@ -15,6 +15,7 @@ from notalone.ingest.models import (
     ExistingContactSelection,
     ImportBatch,
     ImportConfirmationRequest,
+    NewContactSelection,
 )
 from notalone.ingest.normalizer import normalize_document
 from notalone.persistence.postgres_repository import (
@@ -35,6 +36,15 @@ def _parse_owner_id(value: str) -> UUID:
         return UUID(value)
     except ValueError:
         raise argparse.ArgumentTypeError("必须是有效 UUID。") from None
+
+
+def _parse_contact_name(value: str) -> str:
+    """解析新联系人展示名称；错误消息不回显原始输入。"""
+
+    display_name = value.strip()
+    if not display_name:
+        raise argparse.ArgumentTypeError("联系人名称不能为空。")
+    return display_name
 
 
 class IngestRepository(Protocol):
@@ -78,11 +88,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=_parse_owner_id,
         help="已存在的 NotAlone owner UUID",
     )
-    parser.add_argument(
+    contact_selection = parser.add_mutually_exclusive_group(required=True)
+    contact_selection.add_argument(
         "--contact-id",
-        required=True,
         type=_parse_owner_id,
         help="用户在预览后选择的 NotAlone 联系人 UUID",
+    )
+    contact_selection.add_argument(
+        "--new-contact-name",
+        type=_parse_contact_name,
+        help="用户在预览后确认的新联系人展示名称",
     )
     args = parser.parse_args(argv)
 
@@ -95,13 +110,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     repository = PostgresIngestRepository(database_url)
+    selection = (
+        ExistingContactSelection(contact_id=args.contact_id)
+        if args.contact_id is not None
+        else NewContactSelection(display_name=args.new_contact_name)
+    )
     try:
         result = import_file(
             path=args.path,
             owner_id=args.owner_id,
-            confirmation=ImportConfirmationRequest(
-                selection=ExistingContactSelection(contact_id=args.contact_id)
-            ),
+            confirmation=ImportConfirmationRequest(selection=selection),
             repository=repository,
         )
     except (

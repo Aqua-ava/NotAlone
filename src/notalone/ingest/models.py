@@ -33,10 +33,20 @@ class ExistingContactSelection:
 
 
 @dataclass(frozen=True, slots=True, repr=False)
+class NewContactSelection:
+    """用户为本次导入创建的新 NotAlone 联系人。"""
+
+    display_name: str
+
+
+ContactSelection = ExistingContactSelection | NewContactSelection
+
+
+@dataclass(frozen=True, slots=True, repr=False)
 class ImportConfirmationRequest:
     """正式导入前由用户明确完成的联系人选择。"""
 
-    selection: ExistingContactSelection
+    selection: ContactSelection
 
 
 @dataclass(frozen=True, slots=True, repr=False)
