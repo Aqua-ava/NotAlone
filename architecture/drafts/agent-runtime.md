@@ -1,4 +1,4 @@
-# Agent 编排与检索运行时
+# Agent 编排与检索运行时（草案）
 
 > 状态：草案。本文定义候选回复、未来 Tool 和长任务的运行时边界；不表示 LangGraph、LangChain 或 RAGFlow 已安装或可用。最终框架决策见 ADR-006。
 

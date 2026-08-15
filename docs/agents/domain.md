@@ -4,17 +4,25 @@
 
 ## 开始探索前
 
-先读 `architecture/README.md`，再按任务分支读取。下表普通文件均位于 `architecture/`，ADR 路径以该 README 的索引为准；完成条件是所有受影响的已采纳约束和 ADR 均已核对：
+先读 `architecture/README.md`，再按任务分支读取。现行规格位于 `architecture/current/`，草案位于 `architecture/drafts/`，ADR 路径以 README 的索引为准；完成条件是所有受影响的已采纳约束和 ADR 均已核对：
 
 | 任务分支 | 必读材料 |
 | --- | --- |
-| 联系人、消息、来源、记忆或检索 | `01-domain-data.md`；涉及自动采纳或检索时再读 ADR-002/ADR-005 |
-| 导入、回复、删除或后台任务 | `02-core-flows.md`；涉及历史导入或 Worker 时再读 ADR-004/ADR-007 |
-| Mac 微信同步、OCR 或连续性 | `02-core-flows.md`、`03-privacy-and-deletion.md`、ADR-001、ADR-003 |
-| 隐私、外部模型、云端存储、连接器或部署 | `03-privacy-and-deletion.md`、`05-cloud-engineering.md` 及相关 ADR |
-| Agent、Tool、MCP、RAG 或编排框架 | `06-agent-runtime.md`、ADR-006 |
+| 联系人、消息、来源、记忆或检索 | `current/domain-data.md`；涉及自动采纳或检索时再读 ADR-002/ADR-005 |
+| 导入、回复、删除或后台任务 | `current/core-flows.md`；涉及历史导入或 Worker 时再读 ADR-004/ADR-007 |
+| Mac 微信同步、OCR 或连续性 | `current/core-flows.md`、`current/privacy-deletion.md`、ADR-001、ADR-003 |
+| 隐私、外部模型、云端存储、连接器或部署 | `current/privacy-deletion.md`、`drafts/cloud-engineering.md` 及相关 ADR |
+| Agent、Tool、MCP、RAG 或编排框架 | `drafts/agent-runtime.md`、ADR-006 |
 
 根目录 `CONTEXT.md` 如果存在，也要读取。缺失时继续当前任务；只在领域术语需要正式整理时使用 `domain-modeling` skill 创建。
+
+## 记录路由
+
+- 新的领域术语写入根目录 `CONTEXT.md`，不包含实现细节。
+- 已采纳且当前实现必须遵守的规格写入 `architecture/current/`。
+- 尚未完全确认的实现设计写入 `architecture/drafts/`。
+- 难以逆转、原因不显然且存在真实取舍的决定写入 `architecture/adr/`。
+- 功能规格和代码整改写入 `.scratch/<feature-slug>/`；完成的评审过程由 Git 历史保存，不作为当前架构文档保留。
 
 ## 文档权威边界
 

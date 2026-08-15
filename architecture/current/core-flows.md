@@ -1,4 +1,4 @@
-# 核心流程
+# 现行核心流程
 
 > 状态：已采纳的流程边界；UI 形态和 API 路径尚未设计。
 
@@ -63,7 +63,7 @@ OCR、转写、时间线提取和长历史冲突检查是未来可选的后台�
   -> 用户选择、编辑、手动发送
 ```
 
-回复图固定为 `validate_scope -> assess_request_risk -> select_skill -> load_skill -> build_retrieval_plan -> retrieve_context -> assemble_context -> generate_candidates -> validate_candidates -> persist_trace -> return_candidates`。LangGraph 是该流程的唯一编排器；LangChain 只可出现在模型和 Tool 适配层。完整节点和状态边界见 `06-agent-runtime.md` 与 ADR-006。
+回复图固定为 `validate_scope -> assess_request_risk -> select_skill -> load_skill -> build_retrieval_plan -> retrieve_context -> assemble_context -> generate_candidates -> validate_candidates -> persist_trace -> return_candidates`。LangGraph 是该流程的唯一编排器；LangChain 只可出现在模型和 Tool 适配层。完整节点和状态边界见 `../drafts/agent-runtime.md` 与 ADR-006。
 
 v1 的检索应可解释：先用联系人过滤，再用时间、关键词、资料类型、采纳状态和显式有效期排序。每个候选应能回看"本次用了哪些近期消息和已采纳资料"，但不必把完整历史给模型。
 
@@ -87,7 +87,7 @@ v1 的检索应可解释：先用联系人过滤，再用时间、关键词、�
 1. **采纳状态**：`confirmed_memory` 优先于 `memory_candidate`；`pending` 候选仅用于展示线索，不进入生成上下文。
 2. **显式有效期**：`valid_at <= now <= invalid_at` 的资料优先；无有效期的资料视为长期有效，排在未过期之后、已过期之前。
 3. **时间**：资料创建或消息发送时间更近者优先。
-4. **资料类型**：共同事实与禁忌优先于偏好与一般备注（分类见 `01-domain-data.md`）。
+4. **资料类型**：共同事实与禁忌优先于偏好与一般备注（分类见 `domain-data.md`）。
 5. **关键词**：与当前消息的文本重叠或语义相关度更高者优先。
 
 ### 3.2 上下文预算（v1，写入生成接口入参约束）
