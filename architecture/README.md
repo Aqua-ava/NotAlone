@@ -18,20 +18,22 @@ NotAlone 是一个面向具体联系人的关系感知回复助手。架构的�
 
 ## 阅读顺序
 
-1. [01-domain-data.md](01-domain-data.md)：数据对象、隔离和来源规则。
-2. [02-core-flows.md](02-core-flows.md)：导入、回复、采纳和删除的端到端流程。
-3. [03-privacy-and-deletion.md](03-privacy-and-deletion.md)：模型调用、保留、删除和安全边界。
-4. [04-improvement-proposals.md](04-improvement-proposals.md)：多维评审的架构改进建议（H1-H8、M1-M21、A1-A5 已全部采纳并落地，剩余为具体供应商/加密/指标等实现前决策）。
-5. [05-cloud-engineering.md](05-cloud-engineering.md)：云端模块化单体划分、客户端形态与认证设备方案（草案）。
-6. [ADR-001：Mac 微信前台会话同步](adr/001-macos-wechat-active-session-sync.md)：渠道同步范围与授权边界。
-7. [ADR-002：关系提取与全自动采纳](adr/002-relationship-extraction-and-tiered-adoption.md)：全自动写入 + 发送环节把关 + 有效期字段。
-8. [ADR-003：Mac 同步连续性与用户补录](adr/003-macos-sync-continuity-and-backfill.md)：不把未覆盖的手机聊天误判为完整历史；以锚点检测、用户手动补录解决缺口。
-9. [ADR-004：用户自行导出的微信单联系人历史文件](adr/004-user-managed-wechat-history-export.md)：仅接受用户手动生成的单联系人导出文件作为补录来源；禁止重签名、自动同步及 Agent 直接访问。
-10. [ADR-005：可解释检索与联系人知识视图](adr/005-explainable-retrieval-and-contact-knowledge-view.md)：v1 使用联系人范围内的全文检索、可审计的 LLM 查询规划和有界上下文扩展；向量检索只在量化漏检后作为补充评估。
-11. [06-agent-runtime.md](06-agent-runtime.md)：LangGraph 回复图、LangChain 适配层、Tool 权限、运行状态和 Retriever 边界。
-12. [ADR-006：Agent 编排与检索框架边界](adr/006-agent-orchestration-and-retrieval-frameworks.md)：固定唯一编排器、唯一业务事实库和 RAGFlow 的可选位置。
-13. [ADR-007：后台任务步骤与 Worker 执行边界](adr/007-background-task-steps-and-worker.md)：长任务采用固定步骤、Worker 租约、幂等重试和确定性最终验证。
-14. [NotAlone 整体架构图](notalone-system-architecture.drawio)：可在 draw.io 直接编辑的五页总图，分别覆盖系统总览、回复、后台任务、数据关系，以及删除与隐私边界。
+1. [CONTEXT.md](../CONTEXT.md)：项目统一领域词汇；只定义概念，不记录实现。
+2. [01-domain-data.md](01-domain-data.md)：数据对象、隔离和来源规则。
+3. [02-core-flows.md](02-core-flows.md)：导入、回复、采纳和删除的端到端流程。
+4. [03-privacy-and-deletion.md](03-privacy-and-deletion.md)：模型调用、保留、删除和安全边界。
+5. [04-improvement-proposals.md](04-improvement-proposals.md)：多维评审的架构改进建议（H1-H8、M1-M21、A1-A5 已全部采纳并落地，剩余为具体供应商/加密/指标等实现前决策）。
+6. [05-cloud-engineering.md](05-cloud-engineering.md)：云端模块化单体划分、客户端形态与认证设备方案（草案）。
+7. [ADR-001：Mac 微信前台会话同步](adr/001-macos-wechat-active-session-sync.md)：渠道同步范围与授权边界。
+8. [ADR-002：关系提取与全自动采纳](adr/002-relationship-extraction-and-tiered-adoption.md)：全自动写入 + 发送环节把关 + 有效期字段。
+9. [ADR-003：Mac 同步连续性与用户补录](adr/003-macos-sync-continuity-and-backfill.md)：不把未覆盖的手机聊天误判为完整历史；以锚点检测、用户手动补录解决缺口。
+10. [ADR-004：用户自行导出的微信单联系人历史文件](adr/004-user-managed-wechat-history-export.md)：仅接受用户手动生成的单联系人导出文件作为补录来源；禁止重签名、自动同步及 Agent 直接访问。
+11. [ADR-005：可解释检索与联系人知识视图](adr/005-explainable-retrieval-and-contact-knowledge-view.md)：v1 使用联系人范围内的全文检索、可审计的 LLM 查询规划和有界上下文扩展；向量检索只在量化漏检后作为补充评估。
+12. [06-agent-runtime.md](06-agent-runtime.md)：LangGraph 回复图、LangChain 适配层、Tool 权限、运行状态和 Retriever 边界。
+13. [ADR-006：Agent 编排与检索框架边界](adr/006-agent-orchestration-and-retrieval-frameworks.md)：固定唯一编排器、唯一业务事实库和 RAGFlow 的可选位置。
+14. [ADR-007：后台任务步骤与 Worker 执行边界](adr/007-background-task-steps-and-worker.md)：长任务采用固定步骤、Worker 租约、幂等重试和确定性最终验证。
+15. [ADR-008：联系人身份与渠道身份分离](adr/008-separate-contact-and-channel-identity.md)：保留简单的单用户流程，同时避免把 NotAlone 联系人绑定到微信导出字段。
+16. [NotAlone 整体架构图](notalone-system-architecture.drawio)：可在 draw.io 直接编辑的五页总图，分别覆盖系统总览、回复、后台任务、数据关系，以及删除与隐私边界。
 
 ## 当前架构决策
 
@@ -40,6 +42,7 @@ NotAlone 是一个面向具体联系人的关系感知回复助手。架构的�
 - 当前不先拆微服务、独立向量数据库或自治 Agent Harness；这些是未来按实际负载和检索效果评估的扩展，不是当前架构前提。
 - 文字是唯一的检索与生成表示；截图和语音只作为 OCR/转写输入适配器。
 - 数据隔离键为 `owner_id + contact_id`；昵称和备注只能展示，不能作为稳定身份。
+- `contact_id` 由 NotAlone 创建，微信 `sender_wxid` 等外部标识只作为渠道身份或来源元数据；v1 不因此实现多账号或多渠道合并（见 ADR-008）。
 - 对用户已确认绑定的 Mac 微信一对一前台会话，可在同步开关开启时自动识别并增量同步可见消息；未绑定、匹配不确定、非前台或其他 App 一律不采集。
 - 模型自动提取并写入记忆，必须带来源证据、标记 `auto`、可一键撤销，不再设置人工确认门槛（见 ADR-002 全自动采纳）；外部消息永远由用户手动发送，安全保险在发送环节。
 - 生成回复的上下文按"六轨"组装：硬规则（代码层）+ 按需加载的回复 Skill + 常驻卡（全局层与联系人 `carry` 条目）+ 按需检索 + 近期对话 + 风格样本；Skill 只加载本次选中的不可变版本，历史永不完整进入提示词。
