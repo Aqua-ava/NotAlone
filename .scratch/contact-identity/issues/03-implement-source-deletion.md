@@ -43,11 +43,13 @@ TDD seam 为 `delete_source(...) -> SourceDeletionResult` 和 PostgreSQL schema 
 已新增 `PostgresSourceDeletionRepository.delete_source(...)`。它按 owner、contact 和来源 ID
 锁定删除范围，记录删除状态，清除当前已实现的消息、微信原始元数据和导入确认记录，执行
 零记录验证后才写入脱敏的 `deleted` 凭证。重复删除返回 `already_deleted`；错误只记录
-`storage_delete_failed`，原消息事务回滚并保持可重试。
+`storage_delete_failed`，原消息事务回滚并保持可重试。所有联系人范围 SQL 都显式携带
+`owner_id + contact_id`，不依赖全局来源 UUID 代替隔离过滤。
 
 迁移 `005_source_deletion_state.sql` 增加独立状态和数据库约束。`deleted` 来源必须清空文件名、
 SHA 和记录数并带删除时间；只修改状态会被数据库拒绝。删除后重新导入同一合成文件会产生新的
-来源 ID、确认记录和消息，不恢复旧来源。
+来源 ID、确认记录和消息，不恢复旧来源。首次删除和重复删除返回相同的
+`source_document_id + deleted_at` 最小凭证，不持久化文件名、SHA 或消息数量。
 
 验证命令：
 
@@ -62,3 +64,7 @@ NOTALONE_TEST_DATABASE_URL=postgresql:///notalone_identity_test \
 尚未实现的派生资料删除不在本任务范围。
 
 ## Comments
+
+- 2026-08-16：代码审查发现部分来源删除 SQL 没有显式携带 `owner_id + contact_id`，且重复删除
+  没有返回稳定的原删除凭证。本轮补齐隔离键并改用稳定的删除时间凭证，完整回归 62 项全部
+  通过，任务重新关闭。

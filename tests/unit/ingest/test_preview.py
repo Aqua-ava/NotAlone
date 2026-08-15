@@ -20,9 +20,16 @@ class ImportPreviewTest(unittest.TestCase):
     def test_valid_single_contact_preview(self) -> None:
         preview = build_preview(FIXTURES_DIR / "valid_single_contact.jsonl")
 
-        self.assertEqual(preview.contact.contact_id, "wxid_synthetic_contact")
-        self.assertEqual(preview.contact.display_name, "合成联系人")
-        self.assertEqual(preview.contact.display_name_variant_count, 2)
+        self.assertEqual(preview.channel_identity.channel, "wechat")
+        self.assertEqual(
+            preview.channel_identity.external_id,
+            "wxid_synthetic_contact",
+        )
+        self.assertEqual(preview.channel_identity.observed_name, "合成联系人")
+        self.assertEqual(
+            preview.channel_identity.observed_name_variant_count,
+            2,
+        )
         self.assertEqual(preview.record_count, 6)
         self.assertEqual(
             preview.kind_counts,
@@ -48,8 +55,8 @@ class ImportPreviewTest(unittest.TestCase):
         self.assertNotIn("匿名系统事件", output)
         self.assertNotIn(preview.file_name, output)
         self.assertNotIn(preview.content_sha256, output)
-        self.assertNotIn(preview.contact.contact_id, output)
-        self.assertNotIn(preview.contact.display_name, output)
+        self.assertNotIn(preview.channel_identity.external_id, output)
+        self.assertNotIn(preview.channel_identity.observed_name, output)
 
     def test_identifiers_require_explicit_output_flag(self) -> None:
         preview = build_preview(FIXTURES_DIR / "valid_single_contact.jsonl")
@@ -57,8 +64,8 @@ class ImportPreviewTest(unittest.TestCase):
         output = format_preview(preview, show_identifiers=True)
 
         self.assertIn(preview.file_name, output)
-        self.assertIn(preview.contact.contact_id, output)
-        self.assertIn(preview.contact.display_name, output)
+        self.assertIn(preview.channel_identity.external_id, output)
+        self.assertIn(preview.channel_identity.observed_name, output)
         self.assertNotIn(preview.content_sha256, output)
         self.assertNotIn("匿名合成消息一", output)
 

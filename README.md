@@ -34,12 +34,12 @@ notalone-ingest-preview --show-identifiers chat_exports/example.jsonl
 正式导入前，必须先运行预览并人工选择一个已有 NotAlone 联系人，或明确创建一个新联系人。
 数据库中还必须已经存在对应的 `owner`；命令不会从聊天记录推断或创建 owner。
 
-数据库连接串只通过环境变量提供，不写入仓库：
+数据库连接串和受控运行身份只通过环境变量提供，不写入仓库：
 
 ```bash
 export NOTALONE_DATABASE_URL='postgresql:///notalone_dev'
+export NOTALONE_OWNER_ID='00000000-0000-0000-0000-000000000000'
 notalone-ingest chat_exports/example.jsonl \
-  --owner-id '00000000-0000-0000-0000-000000000000' \
   --contact-id '11111111-1111-1111-1111-111111111111'
 ```
 
@@ -47,13 +47,13 @@ notalone-ingest chat_exports/example.jsonl \
 
 ```bash
 notalone-ingest chat_exports/example.jsonl \
-  --owner-id '00000000-0000-0000-0000-000000000000' \
   --new-contact-name '联系人展示名称'
 ```
 
 `--contact-id` 与 `--new-contact-name` 必须二选一。前者是 NotAlone 生成的内部联系人 UUID，
 不是微信 `sender_wxid`，并写入 `manual_select` 确认；后者创建内部联系人 UUID，并写入
 `manual_create` 确认。命令会再次完整校验文件，把识别出的微信身份与用户确认的联系人绑定。
+`NOTALONE_OWNER_ID` 由受控运行环境注入，不属于联系人确认参数。
 同一 `owner_id + contact_id + SHA-256` 的 active 来源重复执行时不会重复写入消息。联系人、
 渠道身份、来源、确认记录和全部消息在同一事务中写入，任何一步失败都会整体回滚。终端输出
 只包含导入状态和消息数量，不输出聊天正文、联系人 ID、owner ID、文件 SHA 或数据库连接串。

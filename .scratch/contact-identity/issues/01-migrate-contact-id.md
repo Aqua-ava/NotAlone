@@ -27,10 +27,15 @@ State: resolved
 
 ## Answer
 
-已将内部联系人 UUID、微信渠道身份和展示名称分开。正式导入现在要求用户在
+已将内部联系人 UUID、微信渠道身份和展示名称分开。预览使用
+`ChannelIdentityCandidate(channel, external_id, observed_name)` 表达微信渠道身份，不再生成或
+暴露含义错误的 `ContactPreview.contact_id`。正式导入现在要求用户在
 `ExistingContactSelection` 与 `NewContactSelection` 中明确选择：前者写入 `manual_select`，
 后者在同一事务中创建联系人并写入 `manual_create`。渠道身份冲突会拒绝整批导入；消息写入
 失败时，新联系人、渠道身份、来源和确认记录会一起回滚。
+
+CLI 从受控运行环境的 `NOTALONE_OWNER_ID` 获取 owner UUID，不再把 owner 作为联系人确认参数；
+缺失或格式错误时只返回不含原值的配置错误。
 
 验证命令：
 
@@ -39,9 +44,13 @@ NOTALONE_TEST_DATABASE_URL=postgresql:///notalone_identity_test \
   conda run -n NotAlone python -m unittest discover -s tests -v
 ```
 
-结果为 52 项测试全部通过。测试仅使用合成夹具，没有读取或导入 `chat_exports/` 中的真实资料。
+结果为 62 项测试全部通过。测试仅使用合成夹具，没有读取或导入 `chat_exports/` 中的真实资料。
 
 ## Comments
+
+- 2026-08-16：代码审查发现预览模型仍把微信渠道身份命名为 `ContactPreview.contact_id`，且 CLI
+  仍要求用户传入 owner UUID。本轮按既有 seam 修正领域模型和受控运行身份来源，完整回归
+  62 项全部通过，任务重新关闭。
 
 - 2026-08-16：完成首个 TDD 切片。正式导入现在要求选择既有内部联系人 UUID，并在同一
   事务中写入微信渠道身份、`manual_select` 确认、来源和消息；重复绑定或静默改绑会拒绝。

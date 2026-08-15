@@ -163,7 +163,7 @@ class PostgresIngestRepository:
             """,
             (owner_id, contact_id),
         ).fetchone()
-        external_id = document.contact.contact_id
+        external_id = document.channel_identity.external_id
         if active_identity is None:
             channel_identity_id = connection.execute(
                 """
@@ -181,7 +181,7 @@ class PostgresIngestRepository:
                     owner_id,
                     contact_id,
                     external_id,
-                    document.contact.display_name,
+                    document.channel_identity.observed_name,
                 ),
             ).fetchone()[0]
         else:
@@ -240,9 +240,11 @@ class PostgresIngestRepository:
                 """
                 SELECT id, channel_identity_id, method
                 FROM public.import_confirmation
-                WHERE source_document_id = %s
+                WHERE owner_id = %s
+                  AND contact_id = %s
+                  AND source_document_id = %s
                 """,
-                (source_document_id,),
+                (owner_id, contact_id, source_document_id),
             ).fetchone()
             if existing_confirmation is None:
                 raise ImportPersistenceError("无法确认重复来源的联系人确认记录。")

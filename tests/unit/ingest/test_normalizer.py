@@ -22,8 +22,11 @@ class NormalizeDocumentTest(unittest.TestCase):
 
         self.assertEqual(batch.file_name, "valid_single_contact.jsonl")
         self.assertEqual(batch.content_sha256, self.document.content_sha256)
-        self.assertEqual(batch.contact.contact_id, "wxid_synthetic_contact")
-        self.assertEqual(batch.contact.display_name, "合成联系人")
+        self.assertEqual(
+            batch.channel_identity.external_id,
+            "wxid_synthetic_contact",
+        )
+        self.assertEqual(batch.channel_identity.observed_name, "合成联系人")
         self.assertEqual(batch.record_count, 6)
 
     def test_maps_contact_user_and_system_speakers(self) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -27,7 +28,7 @@ class SourceDeletionResult:
 
     source_document_id: UUID
     outcome: Literal["deleted", "already_deleted"]
-    deleted_message_count: int
+    deleted_at: datetime
 
 
 class PostgresSourceDeletionRepository:
@@ -52,7 +53,7 @@ class PostgresSourceDeletionRepository:
             with psycopg.connect(self._database_url) as connection:
                 source = connection.execute(
                     """
-                    SELECT status
+                    SELECT status, deleted_at
                     FROM public.source_document
                     WHERE owner_id = %s AND contact_id = %s AND id = %s
                     FOR UPDATE
@@ -65,7 +66,7 @@ class PostgresSourceDeletionRepository:
                     return SourceDeletionResult(
                         source_document_id=source_document_id,
                         outcome="already_deleted",
-                        deleted_message_count=0,
+                        deleted_at=source[1],
                     )
 
                 connection.execute(
@@ -82,36 +83,56 @@ class PostgresSourceDeletionRepository:
                     """
                     UPDATE public.source_document
                     SET status = 'deleting'
-                    WHERE id = %s AND deletion_operation_id = %s
+                    WHERE owner_id = %s
+                      AND contact_id = %s
+                      AND id = %s
+                      AND deletion_operation_id = %s
                     """,
-                    (source_document_id, operation_id),
-                )
-                deleted_message_count = connection.execute(
-                    "SELECT count(*) FROM public.message WHERE source_document_id = %s",
-                    (source_document_id,),
-                ).fetchone()[0]
-                connection.execute(
-                    "DELETE FROM public.import_confirmation "
-                    "WHERE source_document_id = %s",
-                    (source_document_id,),
+                    (owner_id, contact_id, source_document_id, operation_id),
                 )
                 connection.execute(
-                    "DELETE FROM public.message WHERE source_document_id = %s",
-                    (source_document_id,),
+                    """
+                    DELETE FROM public.import_confirmation
+                    WHERE owner_id = %s
+                      AND contact_id = %s
+                      AND source_document_id = %s
+                    """,
+                    (owner_id, contact_id, source_document_id),
+                )
+                connection.execute(
+                    """
+                    DELETE FROM public.message
+                    WHERE owner_id = %s
+                      AND contact_id = %s
+                      AND source_document_id = %s
+                    """,
+                    (owner_id, contact_id, source_document_id),
                 )
                 remaining = connection.execute(
                     """
                     SELECT
                         (SELECT count(*) FROM public.message
-                         WHERE source_document_id = %s),
+                         WHERE owner_id = %s
+                           AND contact_id = %s
+                           AND source_document_id = %s),
                         (SELECT count(*) FROM public.wechat_message_metadata
-                         WHERE source_document_id = %s),
+                         WHERE owner_id = %s
+                           AND contact_id = %s
+                           AND source_document_id = %s),
                         (SELECT count(*) FROM public.import_confirmation
-                         WHERE source_document_id = %s)
+                         WHERE owner_id = %s
+                           AND contact_id = %s
+                           AND source_document_id = %s)
                     """,
                     (
+                        owner_id,
+                        contact_id,
                         source_document_id,
+                        owner_id,
+                        contact_id,
                         source_document_id,
+                        owner_id,
+                        contact_id,
                         source_document_id,
                     ),
                 ).fetchone()
@@ -119,7 +140,7 @@ class PostgresSourceDeletionRepository:
                     raise SourceDeletionVerificationError(
                         "来源删除后仍存在可检索数据。"
                     )
-                connection.execute(
+                deleted_receipt = connection.execute(
                     """
                     UPDATE public.source_document
                     SET status = 'deleted',
@@ -129,14 +150,22 @@ class PostgresSourceDeletionRepository:
                         deleted_at = now(),
                         deletion_operation_id = NULL,
                         deletion_error_code = NULL
-                    WHERE id = %s AND deletion_operation_id = %s
+                    WHERE owner_id = %s
+                      AND contact_id = %s
+                      AND id = %s
+                      AND deletion_operation_id = %s
+                    RETURNING deleted_at
                     """,
-                    (source_document_id, operation_id),
-                )
+                    (owner_id, contact_id, source_document_id, operation_id),
+                ).fetchone()
+                if deleted_receipt is None:
+                    raise SourceDeletionVerificationError(
+                        "无法写入来源删除凭证。"
+                    )
                 return SourceDeletionResult(
                     source_document_id=source_document_id,
                     outcome="deleted",
-                    deleted_message_count=deleted_message_count,
+                    deleted_at=deleted_receipt[0],
                 )
         except SourceNotFoundError:
             raise

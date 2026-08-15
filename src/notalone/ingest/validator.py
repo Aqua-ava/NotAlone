@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from notalone.ingest.errors import ImportPreviewError
-from notalone.ingest.models import ContactPreview
+from notalone.ingest.models import ChannelIdentityCandidate
 
 
 # frozenset 是不可修改的集合，适合保存运行期间不应改变的规则常量。
@@ -47,13 +47,13 @@ POSTGRES_BIGINT_MAX = 2**63 - 1
 
 def validate_records(
     records: tuple[dict[str, Any], ...],
-) -> tuple[ContactPreview, tuple[tuple[str, int], ...]]:
-    """校验所有记录并返回唯一联系人和消息类型统计。
+) -> tuple[ChannelIdentityCandidate, tuple[tuple[str, int], ...]]:
+    """校验所有记录并返回唯一渠道身份候选和消息类型统计。
 
     ``records`` 表示一个 tuple，其中每个元素都是 ``dict[str, Any]``；``...`` 表示
     可以有任意数量的字典。
 
-    返回值是一个二元 tuple：第一个元素是 ``ContactPreview``，第二个元素是消息类型
+    返回值是一个二元 tuple：第一个元素是 ``ChannelIdentityCandidate``，第二个元素是消息类型
     统计，例如 ``(("image", 9), ("text", 143))``。类型标注主要供编辑器、静态检查
     和读代码的人使用；函数实现仍需主动遵守这个返回契约。
     """
@@ -61,9 +61,9 @@ def validate_records(
     # 每读到一个 local_id 就加入集合；集合便于快速判断某个 ID 是否已经出现。
     local_ids: set[int] = set()
     # 每项是 (create_time, JSONL 行号, sender)，用来确定最新展示名称。
-    contact_names: list[tuple[int, int, str]] = []
+    observed_names: list[tuple[int, int, str]] = []
     # 收集对方消息中的 sender_wxid；最终集合大小必须恰好为 1。
-    contact_ids: set[str] = set()
+    contact_external_ids: set[str] = set()
     # 收集本人消息中的 sender_wxid，检查是否混入另一个微信账号的数据。
     owner_sender_ids: set[str] = set()
     # 收集 id.talker；整份单联系人导出也只能出现一个。
@@ -89,8 +89,8 @@ def validate_records(
                 )
             # false 是联系人发来的消息；true 是当前用户发出的消息。
             if record["is_from_me"] is False:
-                contact_ids.add(sender_id)
-                contact_names.append(
+                contact_external_ids.add(sender_id)
+                observed_names.append(
                     (record["create_time"], line_number, record["sender"].strip())
                 )
             else:
@@ -101,37 +101,38 @@ def validate_records(
         raise ImportPreviewError(
             f"文件包含 {len(talker_ids)} 个 id.talker，必须拆分后导入。"
         )
-    if not contact_ids:
+    if not contact_external_ids:
         raise ImportPreviewError("未找到可识别的联系人消息。")
-    if len(contact_ids) != 1:
+    if len(contact_external_ids) != 1:
         raise ImportPreviewError(
-            f"文件包含 {len(contact_ids)} 个联系人 sender_wxid，必须拆分后导入。"
+            f"文件包含 {len(contact_external_ids)} 个联系人 sender_wxid，必须拆分后导入。"
         )
 
     # 集合已经被证明只有一个元素：iter() 创建迭代器，next() 取出唯一值。
-    contact_id = next(iter(contact_ids))
+    contact_external_id = next(iter(contact_external_ids))
     talker_id = next(iter(talker_ids))
-    if talker_id != contact_id:
+    if talker_id != contact_external_id:
         raise ImportPreviewError("id.talker 与联系人 sender_wxid 不一致。")
     if len(owner_sender_ids) > 1:
         raise ImportPreviewError(
             "本人发送消息包含多个 sender_wxid，无法确认单一账号范围。"
         )
-    if contact_id in owner_sender_ids:
+    if contact_external_id in owner_sender_ids:
         raise ImportPreviewError("本人发送身份与联系人 sender_wxid 冲突。")
 
     # tuple 会依次比较各位置。max() 先选 create_time 最大者，时间相同时选行号最大者；
     # [2] 取三元组中的 sender。
-    display_name = max(contact_names)[2]
+    observed_name = max(observed_names)[2]
     # 集合推导式只保留不同昵称，len() 得到昵称变体数量。
-    display_name_variant_count = len({name for _, _, name in contact_names})
+    observed_name_variant_count = len({name for _, _, name in observed_names})
 
     # 返回恰好两个元素，与函数签名声明的返回类型一致。
     return (
-        ContactPreview(
-            contact_id=contact_id,
-            display_name=display_name,
-            display_name_variant_count=display_name_variant_count,
+        ChannelIdentityCandidate(
+            channel="wechat",
+            external_id=contact_external_id,
+            observed_name=observed_name,
+            observed_name_variant_count=observed_name_variant_count,
         ),
         # items() 产生 (kind, count)；sorted() 固定顺序；tuple() 使结果不可追加。
         tuple(sorted(kind_counts.items())),

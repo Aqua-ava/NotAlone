@@ -29,8 +29,8 @@ class ContactConfirmationError(ValueError):
     """文件联系人与用户确认的联系人不一致。"""
 
 
-def _parse_owner_id(value: str) -> UUID:
-    """解析 owner UUID；错误消息不回显原始输入。"""
+def _parse_uuid(value: str) -> UUID:
+    """解析 UUID；错误消息不回显原始输入。"""
 
     try:
         return UUID(value)
@@ -82,16 +82,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="导入微信单联系人 JSONL")
     parser.add_argument("path", type=Path, help="待导入的 JSONL 文件")
-    parser.add_argument(
-        "--owner-id",
-        required=True,
-        type=_parse_owner_id,
-        help="已存在的 NotAlone owner UUID",
-    )
     contact_selection = parser.add_mutually_exclusive_group(required=True)
     contact_selection.add_argument(
         "--contact-id",
-        type=_parse_owner_id,
+        type=_parse_uuid,
         help="用户在预览后选择的 NotAlone 联系人 UUID",
     )
     contact_selection.add_argument(
@@ -108,6 +102,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    owner_id_value = os.environ.get("NOTALONE_OWNER_ID", "").strip()
+    try:
+        owner_id = UUID(owner_id_value)
+    except ValueError:
+        print(
+            "导入配置错误：NOTALONE_OWNER_ID 缺失或不是有效 UUID。",
+            file=sys.stderr,
+        )
+        return 2
 
     repository = PostgresIngestRepository(database_url)
     selection = (
@@ -118,7 +121,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         result = import_file(
             path=args.path,
-            owner_id=args.owner_id,
+            owner_id=owner_id,
             confirmation=ImportConfirmationRequest(selection=selection),
             repository=repository,
         )

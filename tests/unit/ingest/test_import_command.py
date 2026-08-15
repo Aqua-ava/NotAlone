@@ -95,23 +95,28 @@ class ImportFileTest(unittest.TestCase):
 
 
 class ImportCommandTest(unittest.TestCase):
-    def test_invalid_owner_id_error_does_not_echo_input(self) -> None:
+    def test_invalid_runtime_owner_id_error_does_not_echo_input(self) -> None:
         stderr = io.StringIO()
         private_input = "private-owner-identifier"
         arguments = [
             str(FIXTURES_DIR / "valid_single_contact.jsonl"),
-            "--owner-id",
-            private_input,
             "--contact-id",
             str(uuid4()),
         ]
 
-        with contextlib.redirect_stderr(stderr):
-            with self.assertRaises(SystemExit) as raised:
-                main(arguments)
+        with patch.dict(
+            os.environ,
+            {
+                "NOTALONE_DATABASE_URL": "postgresql:///synthetic_test",
+                "NOTALONE_OWNER_ID": private_input,
+            },
+            clear=True,
+        ):
+            with contextlib.redirect_stderr(stderr):
+                exit_code = main(arguments)
 
-        self.assertEqual(raised.exception.code, 2)
-        self.assertIn("必须是有效 UUID", stderr.getvalue())
+        self.assertEqual(exit_code, 2)
+        self.assertIn("NOTALONE_OWNER_ID", stderr.getvalue())
         self.assertNotIn(private_input, stderr.getvalue())
 
     def test_missing_database_url_fails_without_showing_identifiers(self) -> None:
@@ -119,8 +124,6 @@ class ImportCommandTest(unittest.TestCase):
         stderr = io.StringIO()
         arguments = [
             str(FIXTURES_DIR / "valid_single_contact.jsonl"),
-            "--owner-id",
-            str(uuid4()),
             "--contact-id",
             str(uuid4()),
         ]

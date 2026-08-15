@@ -88,7 +88,7 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
         )
 
         self.assertEqual(result.outcome, "deleted")
-        self.assertEqual(result.deleted_message_count, 6)
+        self.assertIsNotNone(result.deleted_at)
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             source = connection.execute(
                 """
@@ -206,7 +206,8 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
 
         self.assertEqual(first.outcome, "deleted")
         self.assertEqual(second.outcome, "already_deleted")
-        self.assertEqual(second.deleted_message_count, 0)
+        self.assertEqual(second.source_document_id, first.source_document_id)
+        self.assertEqual(second.deleted_at, first.deleted_at)
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             state = connection.execute(
                 """

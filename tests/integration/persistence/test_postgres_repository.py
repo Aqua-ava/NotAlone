@@ -82,7 +82,10 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(result.outcome, "imported")
         self.assertEqual(result.contact_id, contact_id)
         self.assertEqual(result.confirmation_method, "manual_select")
-        self.assertNotEqual(str(result.channel_identity_id), self.batch.contact.contact_id)
+        self.assertNotEqual(
+            str(result.channel_identity_id),
+            self.batch.channel_identity.external_id,
+        )
         self.assertEqual(result.message_count, 6)
         self.assertEqual(self._count("contact", owner_id), 1)
         self.assertEqual(self._count("source_document", owner_id), 1)
@@ -520,9 +523,9 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         )
         changed_identity_batch = replace(
             self.batch,
-            contact=replace(
-                self.batch.contact,
-                contact_id="wxid_other_synthetic_contact",
+            channel_identity=replace(
+                self.batch.channel_identity,
+                external_id="wxid_other_synthetic_contact",
             ),
             file_name="other-synthetic.jsonl",
             content_sha256="c" * 64,

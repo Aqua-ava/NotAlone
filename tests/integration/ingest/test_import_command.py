@@ -66,13 +66,17 @@ class ImportCommandIntegrationTest(unittest.TestCase):
         stderr = io.StringIO()
         arguments = [
             str(FIXTURES_DIR / "valid_single_contact.jsonl"),
-            "--owner-id",
-            str(self.owner_id),
             "--contact-id",
             str(self.contact_id),
         ]
 
-        with patch.dict(os.environ, {"NOTALONE_DATABASE_URL": TEST_DATABASE_URL}):
+        with patch.dict(
+            os.environ,
+            {
+                "NOTALONE_DATABASE_URL": TEST_DATABASE_URL,
+                "NOTALONE_OWNER_ID": str(self.owner_id),
+            },
+        ):
             with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                 exit_code = main(arguments)
 
@@ -97,13 +101,17 @@ class ImportCommandIntegrationTest(unittest.TestCase):
         missing_contact_id = uuid4()
         arguments = [
             str(FIXTURES_DIR / "valid_single_contact.jsonl"),
-            "--owner-id",
-            str(self.owner_id),
             "--contact-id",
             str(missing_contact_id),
         ]
 
-        with patch.dict(os.environ, {"NOTALONE_DATABASE_URL": TEST_DATABASE_URL}):
+        with patch.dict(
+            os.environ,
+            {
+                "NOTALONE_DATABASE_URL": TEST_DATABASE_URL,
+                "NOTALONE_OWNER_ID": str(self.owner_id),
+            },
+        ):
             with contextlib.redirect_stderr(stderr):
                 exit_code = main(arguments)
 
@@ -135,13 +143,17 @@ class ImportCommandIntegrationTest(unittest.TestCase):
         stderr = io.StringIO()
         arguments = [
             str(FIXTURES_DIR / "valid_single_contact.jsonl"),
-            "--owner-id",
-            str(self.owner_id),
             "--new-contact-name",
             "首次导入合成联系人",
         ]
 
-        with patch.dict(os.environ, {"NOTALONE_DATABASE_URL": TEST_DATABASE_URL}):
+        with patch.dict(
+            os.environ,
+            {
+                "NOTALONE_DATABASE_URL": TEST_DATABASE_URL,
+                "NOTALONE_OWNER_ID": str(self.owner_id),
+            },
+        ):
             with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                 exit_code = main(arguments)
 
