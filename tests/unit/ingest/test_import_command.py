@@ -11,6 +11,10 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from notalone.ingest.import_command import import_file, main
+from notalone.ingest.models import (
+    ExistingContactSelection,
+    ImportConfirmationRequest,
+)
 from notalone.persistence.postgres_repository import ImportResult
 
 
@@ -20,43 +24,48 @@ FIXTURES_DIR = Path(__file__).resolve().parents[2] / "fixtures"
 class FakeRepository:
     def __init__(self) -> None:
         self.import_count = 0
+        self.confirmation: object | None = None
 
-    def import_document(self, *, owner_id: object, document: object) -> ImportResult:
+    def import_document(
+        self,
+        *,
+        owner_id: object,
+        document: object,
+        confirmation: object,
+    ) -> ImportResult:
         self.import_count += 1
+        self.confirmation = confirmation
         return ImportResult(
+            contact_id=confirmation.selection.contact_id,
+            channel_identity_id=uuid4(),
             source_document_id=uuid4(),
+            confirmation_id=uuid4(),
+            confirmation_method="manual_select",
             outcome="imported",
             message_count=document.record_count,
         )
 
 
 class ImportFileTest(unittest.TestCase):
-    def test_requires_exact_contact_confirmation_before_repository_write(self) -> None:
+    def test_imports_for_an_existing_internal_contact(self) -> None:
         repository = FakeRepository()
-
-        with self.assertRaisesRegex(ValueError, "已确认联系人不一致"):
-            import_file(
-                path=FIXTURES_DIR / "valid_single_contact.jsonl",
-                owner_id=uuid4(),
-                confirmed_contact_id="wxid_other_contact",
-                repository=repository,
-            )
-
-        self.assertEqual(repository.import_count, 0)
-
-    def test_imports_when_contact_confirmation_matches(self) -> None:
-        repository = FakeRepository()
+        contact_id = uuid4()
+        confirmation = ImportConfirmationRequest(
+            selection=ExistingContactSelection(contact_id=contact_id)
+        )
 
         result = import_file(
             path=FIXTURES_DIR / "valid_single_contact.jsonl",
             owner_id=uuid4(),
-            confirmed_contact_id="wxid_synthetic_contact",
+            confirmation=confirmation,
             repository=repository,
         )
 
         self.assertEqual(result.outcome, "imported")
+        self.assertEqual(result.contact_id, contact_id)
         self.assertEqual(result.message_count, 6)
         self.assertEqual(repository.import_count, 1)
+        self.assertIs(repository.confirmation, confirmation)
 
 
 class ImportCommandTest(unittest.TestCase):
@@ -68,7 +77,7 @@ class ImportCommandTest(unittest.TestCase):
             "--owner-id",
             private_input,
             "--contact-id",
-            "wxid_synthetic_contact",
+            str(uuid4()),
         ]
 
         with contextlib.redirect_stderr(stderr):
@@ -87,7 +96,7 @@ class ImportCommandTest(unittest.TestCase):
             "--owner-id",
             str(uuid4()),
             "--contact-id",
-            "wxid_synthetic_contact",
+            str(uuid4()),
         ]
 
         with patch.dict(os.environ, {}, clear=True):
@@ -97,5 +106,4 @@ class ImportCommandTest(unittest.TestCase):
         self.assertEqual(exit_code, 2)
         self.assertEqual(stdout.getvalue(), "")
         self.assertIn("NOTALONE_DATABASE_URL", stderr.getvalue())
-        self.assertNotIn("wxid_synthetic_contact", stderr.getvalue())
         self.assertNotIn("valid_single_contact.jsonl", stderr.getvalue())

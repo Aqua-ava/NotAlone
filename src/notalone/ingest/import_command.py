@@ -11,7 +11,11 @@ from uuid import UUID
 
 from notalone.ingest.errors import ImportPreviewError
 from notalone.ingest.jsonl_reader import read_jsonl
-from notalone.ingest.models import ImportBatch
+from notalone.ingest.models import (
+    ExistingContactSelection,
+    ImportBatch,
+    ImportConfirmationRequest,
+)
 from notalone.ingest.normalizer import normalize_document
 from notalone.persistence.postgres_repository import (
     ImportPersistenceError,
@@ -41,6 +45,7 @@ class IngestRepository(Protocol):
         *,
         owner_id: UUID,
         document: ImportBatch,
+        confirmation: ImportConfirmationRequest,
     ) -> ImportResult: ...
 
 
@@ -48,16 +53,18 @@ def import_file(
     *,
     path: Path,
     owner_id: UUID,
-    confirmed_contact_id: str,
+    confirmation: ImportConfirmationRequest,
     repository: IngestRepository,
 ) -> ImportResult:
     """校验、确认联系人后，把一份 JSONL 批次交给持久化层。"""
 
     document = read_jsonl(path)
     batch = normalize_document(document)
-    if batch.contact.contact_id != confirmed_contact_id:
-        raise ContactConfirmationError("已确认联系人不一致，未执行数据库写入。")
-    return repository.import_document(owner_id=owner_id, document=batch)
+    return repository.import_document(
+        owner_id=owner_id,
+        document=batch,
+        confirmation=confirmation,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -74,7 +81,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--contact-id",
         required=True,
-        help="用户在预览后确认的联系人 ID",
+        type=_parse_owner_id,
+        help="用户在预览后选择的 NotAlone 联系人 UUID",
     )
     args = parser.parse_args(argv)
 
@@ -91,7 +99,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = import_file(
             path=args.path,
             owner_id=args.owner_id,
-            confirmed_contact_id=args.contact_id,
+            confirmation=ImportConfirmationRequest(
+                selection=ExistingContactSelection(contact_id=args.contact_id)
+            ),
             repository=repository,
         )
     except (

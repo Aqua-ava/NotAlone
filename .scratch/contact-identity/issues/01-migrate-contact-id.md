@@ -4,7 +4,7 @@ Type: task
 
 Triage: ready-for-agent
 
-State: open
+State: claimed
 
 ## Problem
 
@@ -26,3 +26,8 @@ State: open
 - 迁移、回滚、幂等和联系人隔离使用合成数据验证。
 
 ## Comments
+
+- 2026-08-16：完成首个 TDD 切片。正式导入现在要求选择既有内部联系人 UUID，并在同一
+  事务中写入微信渠道身份、`manual_select` 确认、来源和消息；重复绑定或静默改绑会拒绝。
+  使用隔离数据库 `notalone_identity_test` 和合成夹具运行 47 项测试全部通过。尚未实现
+  首次导入时创建新联系人（`manual_create`），因此任务继续保持 `claimed`。

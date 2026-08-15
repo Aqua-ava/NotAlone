@@ -37,10 +37,16 @@ class ImportCommandIntegrationTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.owner_id = uuid4()
+        self.contact_id = uuid4()
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             connection.execute(
                 "INSERT INTO public.owner (id, display_name) VALUES (%s, %s)",
                 (self.owner_id, "合成用户"),
+            )
+            connection.execute(
+                "INSERT INTO public.contact (owner_id, id, display_name) "
+                "VALUES (%s, %s, %s)",
+                (self.owner_id, self.contact_id, "已选合成联系人"),
             )
 
     def tearDown(self) -> None:
@@ -63,7 +69,7 @@ class ImportCommandIntegrationTest(unittest.TestCase):
             "--owner-id",
             str(self.owner_id),
             "--contact-id",
-            "wxid_synthetic_contact",
+            str(self.contact_id),
         ]
 
         with patch.dict(os.environ, {"NOTALONE_DATABASE_URL": TEST_DATABASE_URL}):
@@ -86,14 +92,15 @@ class ImportCommandIntegrationTest(unittest.TestCase):
             ).fetchone()[0]
         self.assertEqual(message_count, 6)
 
-    def test_contact_mismatch_does_not_write_database(self) -> None:
+    def test_missing_selected_contact_does_not_write_import_data(self) -> None:
         stderr = io.StringIO()
+        missing_contact_id = uuid4()
         arguments = [
             str(FIXTURES_DIR / "valid_single_contact.jsonl"),
             "--owner-id",
             str(self.owner_id),
             "--contact-id",
-            "wxid_other_contact",
+            str(missing_contact_id),
         ]
 
         with patch.dict(os.environ, {"NOTALONE_DATABASE_URL": TEST_DATABASE_URL}):
@@ -101,8 +108,8 @@ class ImportCommandIntegrationTest(unittest.TestCase):
                 exit_code = main(arguments)
 
         self.assertEqual(exit_code, 1)
-        self.assertIn("已确认联系人不一致", stderr.getvalue())
-        self.assertNotIn("wxid_other_contact", stderr.getvalue())
+        self.assertIn("选择的联系人不存在", stderr.getvalue())
+        self.assertNotIn(str(missing_contact_id), stderr.getvalue())
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             contact_count = connection.execute(
                 "SELECT count(*) FROM public.contact WHERE owner_id = %s",
@@ -116,7 +123,7 @@ class ImportCommandIntegrationTest(unittest.TestCase):
                 "SELECT count(*) FROM public.message WHERE owner_id = %s",
                 (self.owner_id,),
             ).fetchone()[0]
-        self.assertEqual((contact_count, source_count, message_count), (0, 0, 0))
+        self.assertEqual((contact_count, source_count, message_count), (1, 0, 0))
 
 
 if __name__ == "__main__":

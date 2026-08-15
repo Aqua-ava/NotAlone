@@ -8,7 +8,7 @@ from uuid import UUID
 
 import psycopg
 
-from notalone.ingest.models import ImportBatch
+from notalone.ingest.models import ImportBatch, ImportConfirmationRequest
 
 
 class ImportPersistenceError(RuntimeError):
@@ -17,6 +17,14 @@ class ImportPersistenceError(RuntimeError):
 
 class OwnerNotFoundError(ImportPersistenceError):
     """指定的 NotAlone 用户不存在。"""
+
+
+class ContactNotFoundError(ImportPersistenceError):
+    """用户选择的 NotAlone 联系人不存在。"""
+
+
+class ChannelIdentityConflictError(ImportPersistenceError):
+    """微信渠道身份与已确认联系人绑定冲突。"""
 
 
 class SourceStateConflictError(ImportPersistenceError):
@@ -31,7 +39,11 @@ class OverlappingSourceError(ImportPersistenceError):
 class ImportResult:
     """一次数据库导入的非敏感结果。"""
 
+    contact_id: UUID
+    channel_identity_id: UUID
     source_document_id: UUID
+    confirmation_id: UUID
+    confirmation_method: Literal["manual_create", "manual_select"]
     outcome: Literal["imported", "already_imported"]
     message_count: int
 
@@ -51,6 +63,7 @@ class PostgresIngestRepository:
         *,
         owner_id: UUID,
         document: ImportBatch,
+        confirmation: ImportConfirmationRequest,
     ) -> ImportResult:
         """导入一个已规范化批次；重复 active 来源返回幂等结果。"""
 
@@ -61,14 +74,24 @@ class PostgresIngestRepository:
                     connection=connection,
                     owner_id=owner_id,
                     document=document,
+                    confirmation=confirmation,
                 )
         except (
+            ChannelIdentityConflictError,
+            ContactNotFoundError,
             OverlappingSourceError,
             OwnerNotFoundError,
             SourceStateConflictError,
         ):
             raise
         except psycopg.errors.UniqueViolation as error:
+            if error.diag.constraint_name in {
+                "channel_identity_active_contact_channel_unique",
+                "channel_identity_active_external_unique",
+            }:
+                raise ChannelIdentityConflictError(
+                    "微信渠道身份与已确认联系人冲突，未执行导入。"
+                ) from None
             if (
                 error.diag.constraint_name
                 == "message_contact_external_local_id_unique"
@@ -90,6 +113,7 @@ class PostgresIngestRepository:
         connection: psycopg.Connection[Any],
         owner_id: UUID,
         document: ImportBatch,
+        confirmation: ImportConfirmationRequest,
     ) -> ImportResult:
         owner = connection.execute(
             "SELECT 1 FROM public.owner WHERE id = %s FOR KEY SHARE",
@@ -98,29 +122,57 @@ class PostgresIngestRepository:
         if owner is None:
             raise OwnerNotFoundError("指定的 owner 不存在。")
 
-        # 只在联系人不存在时使用导出昵称，保留用户已经人工修正过的展示名称。
-        connection.execute(
-            """
-            INSERT INTO public.contact (owner_id, id, display_name)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (owner_id, id) DO NOTHING
-            """,
-            (
-                owner_id,
-                document.contact.contact_id,
-                document.contact.display_name,
-            ),
-        )
-        # 同一联系人的导入按 contact 行串行化，避免两个不同文件同时绕过重叠检查。
-        connection.execute(
+        contact_id = confirmation.selection.contact_id
+        contact = connection.execute(
             """
             SELECT 1
             FROM public.contact
             WHERE owner_id = %s AND id = %s
             FOR UPDATE
             """,
-            (owner_id, document.contact.contact_id),
+            (owner_id, contact_id),
         ).fetchone()
+        if contact is None:
+            raise ContactNotFoundError("选择的联系人不存在。")
+
+        active_identity = connection.execute(
+            """
+            SELECT id, external_id
+            FROM public.channel_identity
+            WHERE owner_id = %s
+              AND contact_id = %s
+              AND channel = 'wechat'
+              AND status = 'active'
+            """,
+            (owner_id, contact_id),
+        ).fetchone()
+        external_id = document.contact.contact_id
+        if active_identity is None:
+            channel_identity_id = connection.execute(
+                """
+                INSERT INTO public.channel_identity (
+                    owner_id,
+                    contact_id,
+                    channel,
+                    external_id,
+                    observed_name
+                )
+                VALUES (%s, %s, 'wechat', %s, %s)
+                RETURNING id
+                """,
+                (
+                    owner_id,
+                    contact_id,
+                    external_id,
+                    document.contact.display_name,
+                ),
+            ).fetchone()[0]
+        else:
+            channel_identity_id, existing_external_id = active_identity
+            if existing_external_id != external_id:
+                raise ChannelIdentityConflictError(
+                    "微信渠道身份与已确认联系人冲突，未执行导入。"
+                )
 
         source = connection.execute(
             """
@@ -138,7 +190,7 @@ class PostgresIngestRepository:
             """,
             (
                 owner_id,
-                document.contact.contact_id,
+                contact_id,
                 document.file_name,
                 document.content_sha256,
                 document.record_count,
@@ -156,7 +208,7 @@ class PostgresIngestRepository:
                 """,
                 (
                     owner_id,
-                    document.contact.contact_id,
+                    contact_id,
                     document.content_sha256,
                 ),
             ).fetchone()
@@ -167,13 +219,44 @@ class PostgresIngestRepository:
                 raise SourceStateConflictError(
                     "同一来源处于非 active 状态，需要先处理现有来源。"
                 )
+            existing_confirmation = connection.execute(
+                """
+                SELECT id, channel_identity_id, method
+                FROM public.import_confirmation
+                WHERE source_document_id = %s
+                """,
+                (source_document_id,),
+            ).fetchone()
+            if existing_confirmation is None:
+                raise ImportPersistenceError("无法确认重复来源的联系人确认记录。")
+            confirmation_id, existing_channel_identity_id, confirmation_method = (
+                existing_confirmation
+            )
             return ImportResult(
+                contact_id=contact_id,
+                channel_identity_id=existing_channel_identity_id,
                 source_document_id=source_document_id,
+                confirmation_id=confirmation_id,
+                confirmation_method=confirmation_method,
                 outcome="already_imported",
                 message_count=record_count,
             )
 
         source_document_id = source[0]
+        confirmation_id = connection.execute(
+            """
+            INSERT INTO public.import_confirmation (
+                owner_id,
+                contact_id,
+                source_document_id,
+                channel_identity_id,
+                method
+            )
+            VALUES (%s, %s, %s, %s, 'manual_select')
+            RETURNING id
+            """,
+            (owner_id, contact_id, source_document_id, channel_identity_id),
+        ).fetchone()[0]
         external_local_ids = [
             message.external_local_id for message in document.messages
         ]
@@ -188,7 +271,7 @@ class PostgresIngestRepository:
             """,
             (
                 owner_id,
-                document.contact.contact_id,
+                contact_id,
                 external_local_ids,
             ),
         ).fetchone()
@@ -200,7 +283,7 @@ class PostgresIngestRepository:
         message_parameters = [
             (
                 owner_id,
-                document.contact.contact_id,
+                contact_id,
                 source_document_id,
                 message.external_local_id,
                 message.external_server_id,
@@ -240,7 +323,11 @@ class PostgresIngestRepository:
             )
 
         return ImportResult(
+            contact_id=contact_id,
+            channel_identity_id=channel_identity_id,
             source_document_id=source_document_id,
+            confirmation_id=confirmation_id,
+            confirmation_method="manual_select",
             outcome="imported",
             message_count=document.record_count,
         )

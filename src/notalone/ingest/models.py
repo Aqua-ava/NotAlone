@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from uuid import UUID
 
 
 # @dataclass 会根据下面声明的字段自动生成 __init__、__repr__ 和 __eq__。
@@ -22,6 +23,20 @@ class ContactPreview:
     display_name: str
     # 同一 contact_id 在文件中出现过多少个不同的 sender 名称。
     display_name_variant_count: int
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class ExistingContactSelection:
+    """用户为本次导入选择的既有 NotAlone 联系人。"""
+
+    contact_id: UUID
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class ImportConfirmationRequest:
+    """正式导入前由用户明确完成的联系人选择。"""
+
+    selection: ExistingContactSelection
 
 
 @dataclass(frozen=True, slots=True, repr=False)
