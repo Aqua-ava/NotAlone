@@ -104,3 +104,17 @@ NotAlone 后续计划部署到服务器 `example.invalid`。数据库 schema、�
 3. 提交说明保持适中：既不能只有含糊的一句话，也不要堆砌实现细节；通常列出 3-5 条，每条说明一个完整事项。
 4. 每次提交只处理一个主题。提交前运行最小且相关的验证，并在提交说明中如实写明验证范围；未执行的测试不得声称通过。
 5. 自动提交仅限本地仓库。任何 `git push`、强制推送、创建远端分支或 Pull Request，都必须先取得用户明确同意。
+
+## Agent skills
+
+### Issue tracker
+
+任务和规格以本地 Markdown 文件保存在 `.scratch/`。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用五个默认 triage 标签表示任务的下一步处理状态。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+采用 single-context 文档布局；`architecture/` 记录当前设计探索与阶段性决策，使用时必须区分“草案”“已采纳”和“已废弃”状态。详见 `docs/agents/domain.md`。
