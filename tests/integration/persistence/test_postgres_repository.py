@@ -411,7 +411,12 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         )
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             connection.execute(
-                "UPDATE public.source_document SET status = 'deleted' WHERE id = %s",
+                """
+                UPDATE public.source_document
+                SET status = 'delete_failed',
+                    deletion_error_code = 'synthetic_failure'
+                WHERE id = %s
+                """,
                 (first.source_document_id,),
             )
 

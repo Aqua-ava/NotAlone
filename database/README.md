@@ -53,6 +53,18 @@ NotAlone 内部联系人。执行前必须确认数据范围和备份；本地�
 `wechat_message_metadata`，再从 `message` 删除这些微信专属列。整个搬迁位于一个事务中；
 任一步失败都会回滚到迁移前结构和数据。
 
+继续增加来源删除状态和最小删除凭证约束：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/005_source_deletion_state.sql
+```
+
+第五个迁移区分 `delete_requested`、`deleting`、`delete_failed` 和 `deleted`。只有文件名、
+SHA 和消息数量已经清空且写入删除时间时，数据库才允许状态为 `deleted`；只改状态会被约束拒绝。
+
 迁移仅建立数据结构，不读取 `chat_exports/`，也不导入真实聊天记录。
 
 首个迁移建立旧版 `owner`、`contact`、`source_document` 和 `message`，第三个迁移在空业务
@@ -62,6 +74,9 @@ NotAlone 内部联系人。执行前必须确认数据范围和备份；本地�
 删除的 `wechat_message_metadata`。同一用户与联系人下，一个微信 `external_local_id` 仍只能
 归属一个来源；不同 SHA 文件若包含重叠消息，正式导入会整批回滚，避免同一消息出现两个
 权威来源。
+
+来源删除完成后，`source_document` 只保留隔离键、内部来源 ID、来源类型、状态和删除时间。
+同一文件再次导入会创建新的来源与确认记录，不恢复旧来源内容。
 
 表和字段均通过 PostgreSQL `COMMENT ON` 保存中文说明。注释只描述通用数据契约，
 不得包含真实姓名、微信 ID、聊天正文或凭据。
