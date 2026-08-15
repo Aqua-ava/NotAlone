@@ -2,7 +2,7 @@
 
 Type: task
 
-Triage: needs-info
+Triage: ready-for-agent
 
 State: open
 
@@ -10,9 +10,13 @@ State: open
 
 `ContactPreview.contact_id`、`contact.id` 和消息的 `contact_id` 当前直接使用微信 `sender_wxid`，与 ADR-008 冲突。
 
-## Required decision
+## Resolved design
 
-在实施前确定内部 `contact_id` 的具体编码，以及现有数据库中已导入数据的迁移与回滚策略。不得从微信导出文件读取 `owner_id`。
+内部 `contact_id` 使用 NotAlone 生成的 UUID。当前没有真实数据入库，因此迁移只允许在不存在
+旧 `contact`、`source_document` 和 `message` 的数据库执行；发现旧数据即失败，不静默把
+`sender_wxid` 认作已确认的内部联系人。失败由迁移事务回滚；迁移成功并产生新格式数据后，
+回退依赖迁移前备份，不提供有损反向 SQL。完整 Interface、事务和测试 seam 见上级
+`spec.md`。
 
 ## Acceptance criteria
 
