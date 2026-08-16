@@ -12,10 +12,10 @@
 | `contacts` | 联系人、会话绑定、确认关系与隔离键的权威管理。 | 不做消息正文解析或模型调用。 |
 | `memory` | 原始资料、候选资料、已采纳关系资料、风格样本的分层存储与生命周期。 | 不直接调用外部模型；删除走 `jobs`。 |
 | `retrieval` | 定义 `RetrievalPort`，实现联系人范围内的 PostgreSQL 结构化/全文检索、排序、预算截断与引用记录；未来可隔离 RAGFlow adapter。 | 不跨联系人检索；不生成回复；外部 Retriever 不成为事实源。 |
-| `skills` | 定义 `SkillPort`，管理聊天套路目录、不可变版本、owner/contact 范围与两级加载。 | 不自动创建长期策略；不执行 Tool；不绕过 `reply` 选择流程。 |
-| `reply` | 在模块内部以 LangGraph 编排有界回复图，组装生成请求、调用 port、产出候选回复与风险说明。 | 不向领域层暴露框架类型；不检索未隔离上下文；不发送外部消息。 |
+| `skills` | 定义 `SkillPort`，管理聊天套路目录、不可变版本和 owner/contact 范围；供 `load_skill` Tool 或用户显式选择复用。 | 不自动创建长期策略；不拥有 Agent Loop；不绕过范围与版本校验。 |
+| `reply` | 以确定性外壳包围 LangChain `create_agent` 有界 Tool loop，注册只读 Tool、组装输入、校验并持久化候选。 | 不向领域层暴露框架类型；不检索未隔离上下文；不发送外部消息。 |
 | `jobs` | 导入、删除、重建索引等可重试后台任务；维护 `background_task`、固定步骤模板、Worker 租约、幂等执行与最终验证。 | 不做实时同步采集；不让模型控制步骤或状态；不混用 LangGraph checkpoint 作为任务状态。 |
-| `gateway` | 对外模型调用的唯一出入口：以 LangChain 或供应商 adapter 实现 `ModelPort`，裁剪请求、记录出站台账、校验供应商政策与硬失败。 | 不承载业务规则、联系人权限或存储业务资料。 |
+| `gateway` | 对外模型调用的唯一出入口：提供已批准的模型 adapter 与 `ModelPort`，裁剪请求、记录出站台账、校验供应商政策与硬失败。 | 不承载 Agent Loop、业务规则、联系人权限或存储业务资料。 |
 | `sync_adapter` | Mac 微信前台会话同步的适配层：变化检测、端侧 OCR 触发、归属校验、增量去重。 | 不作为独立回复管线；原始视觉帧不持久化。 |
 | `auth_device` | 认证、设备注册、令牌、解绑清理与设备级数据回收。 | 不参与联系人检索与生成。 |
 

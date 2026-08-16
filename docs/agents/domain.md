@@ -12,7 +12,7 @@
 | 导入、回复、删除或后台任务 | `current/core-flows.md`；涉及历史导入或 Worker 时再读 ADR-004/ADR-007 |
 | Mac 微信同步、OCR 或连续性 | `current/core-flows.md`、`current/privacy-deletion.md`、ADR-001、ADR-003 |
 | 隐私、外部模型、云端存储、连接器或部署 | `current/privacy-deletion.md`、`drafts/cloud-engineering.md` 及相关 ADR |
-| Agent、Tool、MCP、RAG 或编排框架 | `drafts/agent-runtime.md`、ADR-006 |
+| Agent、Tool、MCP、RAG 或编排框架 | `drafts/agent-runtime.md`、ADR-006、ADR-009 |
 
 根目录 `CONTEXT.md` 如果存在，也要读取。缺失时继续当前任务；只在领域术语需要正式整理时使用 `domain-modeling` skill 创建。
 
