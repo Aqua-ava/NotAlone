@@ -125,6 +125,19 @@ background_task
 5. **按请求自动选择**：每次候选回复根据当前消息、已确认表达方向和近期对话，从相关 `owner_preference` 与该联系人关系记忆中自动选择少量有效条目；用户不需要设置固定、排除或其他记忆模式。
 6. **修正与重建**：用户可以查看、修正或删除关系记忆。关系记忆、来源、有效期或分类变化后，联系人记忆目录和相关检索索引必须自动失效并重建。
 
+### 联系人记忆目录最小契约
+
+v1 逻辑上每位联系人只有一份当前 `contact_memory_index`。具体使用单表还是关联表留到实现时确定，但必须包含：
+
+- `owner_id + contact_id`：目录所属范围。
+- `built_from_memory_revision`：生成目录时对应的联系人记忆版本。
+- `status`、`created_at`、`updated_at`：目录是否可用及其生成时间。
+- `topics`：自动生成的主题目录；每项只含 `category`、一行 `topic_summary` 和对应的 `memory_ids`。
+
+每位联系人的关系记忆集合维护单调递增的 `memory_revision`。新增、修正、删除、重新分类或修改有效期时必须递增；只有 `status` 可用且 `built_from_memory_revision` 等于当前 `memory_revision` 的目录才能参与选择，否则立即停用并触发重建。
+
+`topic_summary` 只是检索提示，不是关系事实。命中主题后必须根据 `memory_ids` 重新读取 `confirmed_memory`，再次校验 `owner_id + contact_id`、状态和有效期，再决定是否进入本次回复上下文。`owner_preference` 由 owner 范围单独选择，不复制到每位联系人的目录中。
+
 ## 隔离与查询约束
 
 任何联系人范围对象都应至少含有：
