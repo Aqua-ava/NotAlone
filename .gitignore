@@ -17,6 +17,7 @@ __pycache__/
 *.egg-info/
 .coverage
 .pytest_cache/
+/.venv/
 
 macos_sync_probe/.build/
 macos_sync_probe/build/
