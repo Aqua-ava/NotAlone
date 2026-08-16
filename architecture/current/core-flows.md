@@ -149,9 +149,11 @@ v1 风格样本送入提示词但权重受限：最多 5 条、明确标注为�
 
 ### 3.7 回复 Skill 的两级加载
 
-Skill 采用 progressive disclosure：`create_agent` 只接收当前 owner/contact 可用版本的 `name + description + when_to_use` 精简目录。模型需要完整策略时调用只读 `load_skill(skill_id)` Tool；Tool handler 经 `SkillPort` 校验 ID、范围、状态和不可变版本后返回 inline 正文，不接受文件路径。
+Skill 采用 progressive disclosure：LangChain `create_agent` 组合 Deep Agents `SkillsMiddleware`，middleware 只从当前 owner/contact 的受控 discovery backend 发现已启用版本，并通过 NotAlone 定制提示词把 `name + description` 等精简目录放入模型上下文。模型需要完整策略时调用受控只读 `read_file(file_path, offset=0, limit=1000)`；该 Tool 只接受目录中已列出的 `SKILL.md` 虚拟路径，经 `SkillPort` 校验范围、状态和不可变版本后返回正文，不是通用文件系统读取。定制提示词不展示 `allowed-tools`，也不引导模型访问 supporting files 或执行脚本。
 
-用户显式选择 Skill 时，应用层通过同一个 `SkillPort` 校验并预加载，不要求模型再次调用 `load_skill`。自动模式可以不加载 Skill；加载成功时 UI 必须展示本次使用的名称和版本并允许用户关闭或更换。每次最多使用一个不可变版本；Skill 本身只提供 inline 策略，不含 Tool、子 Agent 或外部资源访问。
+用户显式选择 Skill 时，应用层通过同一个 `SkillPort` 校验并预加载，不要求模型再次调用 `read_file`。自动模式可以不加载 Skill；加载成功时 UI 必须展示本次使用的名称和版本并允许用户关闭或更换。每次最多使用一个不可变版本；Skill 本身只提供经校验的策略文本，其内容不能注册 Tool、MCP、Shell、文件写入、子 Agent 或外部资源访问。
+
+Skill 库管理不属于 Agent Loop。用户可以在独立入口创建、禁用、删除或从网络明确安装 Skill；安装和更新先校验并固化不可变版本，候选回复运行时只读取已经启用的版本。Skill 目录缓存必须绑定 `owner_id + contact_id + skill_library_revision`；任一项变化时，下一轮运行先清除旧目录、旧 Skill Tool 结果和包含旧 Skill 正文的摘要，或使用新的运行状态。采用 `SkillsMiddleware` 不等于采用完整 `create_deep_agent`，候选回复不启用 Deep Agents 的通用文件系统、Shell、Subagent 或长期任务 harness。
 
 消息检索和确认记忆检索 Tool 的模型参数只包含查询意图、limit 和允许的时间范围；已验证的 `owner_id + contact_id` 通过 runtime context 注入并传给 `RetrievalPort`，不能由模型提供或修改。返回携带引用标识、采纳状态、有效期、排序分数与检索器版本，用于复现与审计“本次为何返回这些结果”。
 
@@ -195,7 +197,7 @@ reply_to_message
 
 分析数月聊天、整理关系变化时间线或跨大量证据复核矛盾，不属于候选回复任务，也不能因用户打开聊天窗口或按下候选回复快捷键而自动开始。未来若提供关系分析任务，必须由用户从独立入口主动创建，明确联系人、时间范围和资料范围，并在独立界面展示进度与报告。
 
-第一阶段不实现关系分析任务，也不为其预先引入 Deep Agents。只有明确功能证明需要动态规划、大量中间材料、跨进程恢复或多个专业子 Agent 时，才比较普通 Worker、直接 LangGraph 与 Deep Agents；无论采用何种 runtime，结果都不能自动发送到外部聊天渠道。
+第一阶段不实现关系分析任务，也不为其预先引入完整 Deep Agents harness；候选回复使用独立的 `SkillsMiddleware` 不改变这条边界。只有明确功能证明需要动态规划、大量中间材料、跨进程恢复或多个专业子 Agent 时，才比较普通 Worker、直接 LangGraph 与完整 Deep Agents；无论采用何种 runtime，结果都不能自动发送到外部聊天渠道。
 
 ## 4. 表达样本沉淀
 

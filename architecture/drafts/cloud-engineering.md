@@ -12,7 +12,7 @@
 | `contacts` | 联系人、会话绑定、确认关系与隔离键的权威管理。 | 不做消息正文解析或模型调用。 |
 | `memory` | 原始资料、候选资料、已采纳关系资料、风格样本的分层存储与生命周期。 | 不直接调用外部模型；删除走 `jobs`。 |
 | `retrieval` | 定义 `RetrievalPort`，实现联系人范围内的 PostgreSQL 结构化/全文检索、排序、预算截断与引用记录；未来可隔离 RAGFlow adapter。 | 不跨联系人检索；不生成回复；外部 Retriever 不成为事实源。 |
-| `skills` | 定义 `SkillPort`，管理聊天套路目录、不可变版本和 owner/contact 范围；供 `load_skill` Tool 或用户显式选择复用。 | 不自动创建长期策略；不拥有 Agent Loop；不绕过范围与版本校验。 |
+| `skills` | 定义 `SkillPort`，管理 Skill 库目录、不可变版本和 owner/contact 范围；供 `SkillsMiddleware` 的受控 backend adapter 或用户显式选择复用。 | 不自动创建长期策略；不拥有 Agent Loop；不提供任意文件读取；不绕过范围与版本校验。 |
 | `reply` | 以确定性外壳包围 LangChain `create_agent` 有界 Tool loop，注册只读 Tool、组装输入、校验并持久化候选。 | 不向领域层暴露框架类型；不检索未隔离上下文；不发送外部消息。 |
 | `jobs` | 导入、删除、重建索引等可重试后台任务；维护 `background_task`、固定步骤模板、Worker 租约、幂等执行与最终验证。 | 不做实时同步采集；不让模型控制步骤或状态；不混用 LangGraph checkpoint 作为任务状态。 |
 | `gateway` | 对外模型调用的唯一出入口：提供已批准的模型 adapter 与 `ModelPort`，裁剪请求、记录出站台账、校验供应商政策与硬失败。 | 不承载 Agent Loop、业务规则、联系人权限或存储业务资料。 |

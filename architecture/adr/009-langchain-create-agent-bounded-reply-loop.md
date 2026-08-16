@@ -3,6 +3,7 @@
 > 状态：已采纳
 > 日期：2026-08-16
 > 修订：ADR-006 第 1、2、7 节及方案 A
+> 后续修订：第 3 节的 `load_skill` 实现和第 6 节的 Deep Agents 边界由 ADR-010 修订
 
 ## 背景
 
@@ -34,6 +35,8 @@ validate_scope
 
 ### 3. 核心只读 Tool 与授权外部 Tool
 
+> 当前 Skill 加载实现见 ADR-010；以下 `load_skill` 方案保留为本次决策的历史背景。
+
 - `load_skill(skill_id)`：读取当前可用目录中的一个不可变回复 Skill 版本；它是 Tool，被读取的 Skill 是策略内容，不是 Tool。
 - `search_contact_messages(query, ...)`：按需检索当前联系人的历史规范消息。
 - `search_confirmed_memories(query, ...)`：按需检索当前联系人的已采纳关系资料。
@@ -56,6 +59,8 @@ validate_scope
 联系人隔离、删除状态、只读 Tool、来源证据和禁止外部发送是不可变产品硬边界，必须由代码强制执行。模型/Tool 调用次数、单次返回数量、token、超时和重试次数是可配置运行预算；具体数值在实现和合成评估时确定，不写死为领域规则。Prompt 和 Tool description 只能提供软指引，不能代替执行层校验。
 
 ### 6. 当前候选回复不采用 Deep Agents
+
+> 本节由 ADR-010 修订：当前采用独立的 `SkillsMiddleware`，仍不采用完整 Deep Agents harness。
 
 Deep Agents 面向长周期、多步骤任务，默认围绕文件系统、上下文 offloading、计划和子 Agent 组织能力。当前候选回复所需的 Todo 与上下文压缩已经由 LangChain middleware 提供，不需要文件系统、子 Agent 或跨进程长期任务；引入完整 harness 会增加数据副本、权限面和删除复杂度。
 

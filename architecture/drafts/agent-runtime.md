@@ -12,8 +12,9 @@ flowchart LR
     API --> Scope["确定性校验与初始上下文"]
     Scope --> Agent["LangChain create_agent / LangGraph runtime"]
 
-    Agent --> SkillTool["load_skill Tool"]
-    SkillTool --> SkillPort["SkillPort"]
+    Agent --> SkillMiddleware["Deep Agents SkillsMiddleware"]
+    SkillMiddleware --> SkillRead["受控 read_file Tool / backend adapter"]
+    SkillRead --> SkillPort["SkillPort"]
     Agent --> SearchTools["消息 / 确认记忆检索 Tool"]
     SearchTools --> RetrievalPort["RetrievalPort"]
     RetrievalPort --> PgRetriever["PostgreSQL 可解释检索"]
@@ -56,7 +57,7 @@ flowchart TD
     Risk --> Context["assemble_initial_context"]
     Context --> Agent["create_agent 模型决策"]
     Agent -->|多步骤请求| Todo["write_todos Tool"]
-    Agent -->|需要策略| Skill["load_skill Tool"]
+    Agent -->|需要策略| Skill["SkillsMiddleware 目录 / 受控 read_file"]
     Agent -->|需要原始证据| Messages["search_contact_messages Tool"]
     Agent -->|需要关系资料| Memories["search_confirmed_memories Tool"]
     Agent -->|需要当前或外部事实| External["时间 / 日历 / 网络搜索 Tool"]
@@ -81,7 +82,7 @@ flowchart TD
 | `assemble_initial_context` | 当前消息、近期对话、常驻卡、可用 Skill 目录、运行配置 | 初始六轨上下文和 runtime context | 确定性代码 |
 | `create_agent bounded Tool loop` | 初始上下文、核心与授权外部只读 Tool、Todo/摘要 middleware、结构化输出 schema | Tool calls、Todo 进度、1-3 条候选或澄清需求 | 模型决策；执行层强制范围与预算 |
 | `write_todos` | 本次多步骤请求 | 可修正的步骤、状态与进度 | 模型 Tool；普通回复不强制调用，不写业务任务表 |
-| `load_skill` | 目录内 `skill_id`；已验证范围由 runtime 注入 | 一个不可变 inline Skill 版本 | 模型 Tool，经 `SkillPort` 校验 |
+| Skill 目录与 `read_file` | middleware 只见当前范围目录；Tool 使用 `file_path/offset/limit` 且只接受目录中的 `SKILL.md` 虚拟路径 | 一个不可变 Skill 版本 | `SkillsMiddleware` + 定制提示词 + 受控只读 Tool，经 `SkillPort` 校验 |
 | `search_contact_messages` | 查询意图、允许的 limit/时间范围 | 当前联系人内带来源的规范消息 | 模型 Tool，经 `RetrievalPort` 校验 |
 | `search_confirmed_memories` | 查询意图、允许的 limit/时间范围 | 当前联系人内带来源的已采纳资料 | 模型 Tool，经 `RetrievalPort` 校验 |
 | 时间 / 日历 / 网络搜索 | 时间范围或公开查询意图 | 当前时间、授权日历结果或公开搜索结果 | 只读 adapter；执行层强制授权与出站范围 |
@@ -98,11 +99,12 @@ flowchart TD
   contact / message / confirmed_memory / reply_request / reply_candidate
 
 运行状态（create_agent / LangGraph runtime）
-  run_id / messages / todos / summary / selected_skill_version_id / Tool call metadata / retry metadata
+  run_id / messages / todos / summary / selected_skill_version_id / skill_library_revision / Tool call metadata / retry metadata
 ```
 
 - v1 同步回复不以 checkpoint 为前提；若后续启用持久化，只保存恢复执行所需的最小引用和临时结果，优先保存业务对象 ID，不复制完整聊天正文。
 - 每次恢复必须重新执行范围、授权和删除状态校验；不能因旧 runtime state 绕过新权限。
+- `skills_metadata` 缓存绑定 `owner_id + contact_id + skill_library_revision`。联系人变化时使用新的线程/checkpoint namespace；Skill 安装、更新、禁用或删除时清除旧 metadata、旧 Skill Tool 结果和相关摘要，或创建新的运行状态。
 - `persist_trace` 使用 `reply_request_id + agent_run_id` 或等效幂等键，避免重试产生重复候选。
 - 删除来源或联系人时，`jobs` 同时失效相关运行记录；checkpoint 保留期不得长于对应业务资料。
 - `TodoListMiddleware` 始终可用，但只在多步骤请求中创建 Todo；Todo 可向 UI 输出精简进度，不作为 `background_task` 或长期关系资料。
@@ -120,7 +122,7 @@ flowchart TD
 
 模型提出 Tool call 不等于获准执行。Permission policy、联系人范围、数据状态、查询预算和出站数据裁剪均由应用层确定性代码处理。
 
-v1 向模型注册 `load_skill`、`search_contact_messages`、`search_confirmed_memories` 和 `get_current_time` 四个核心只读 Tool；经过用户授权和 adapter 配置后，再注册只读 `search_calendar` 与 `web_search`。`load_skill` Tool 经 `SkillPort` 读取策略内容；Skill 本身不是 Tool。两个联系人检索 Tool 经 `RetrievalPort` 执行，`owner_id + contact_id` 只从已验证的 runtime context 注入，不作为模型参数。日历 Tool 不创建、修改或删除日程；网络搜索不默认携带聊天正文、联系人身份或关系资料。具体调用次数、返回数量、token、超时和重试数是可调运行配置；联系人隔离、删除状态和禁止发送是不可调产品硬边界。
+v1 向模型注册受控 `read_file(file_path, offset=0, limit=1000)`、`search_contact_messages`、`search_confirmed_memories` 和 `get_current_time` 四个核心只读 Tool；经过用户授权和 adapter 配置后，再注册只读 `search_calendar` 与 `web_search`。Skill 目录由 `SkillsMiddleware` 和 NotAlone 定制提示词注入，`read_file` 只能经 `SkillPort` 读取本次目录列出的策略版本，不提供任意文件读取；Skill 本身不是 Tool。两个联系人检索 Tool 经 `RetrievalPort` 执行，`owner_id + contact_id` 只从已验证的 runtime context 注入，不作为模型参数。日历 Tool 不创建、修改或删除日程；网络搜索不默认携带聊天正文、联系人身份或关系资料。具体调用次数、返回数量、token、超时和重试数是可调运行配置；联系人隔离、删除状态和禁止发送是不可调产品硬边界。
 
 ## 6. 多模态输入与回复形态
 
@@ -209,7 +211,7 @@ v1 的实现是 PostgreSQL 全文/结构化检索。RAGFlow 若被评估，只�
 | S04 Hooks | 条件采用 | 只借鉴模型调用、Tool 调用、审计和指标的横切扩展点；出现多个适配器共享同一横切逻辑时再引入，不得绕过确定性外壳、事务或权限策略。 |
 | S05 TodoWrite | 直接采用 | `TodoListMiddleware` 始终可用；普通回复不创建 Todo，多步骤请求由模型调用 `write_todos` 并向浮动窗口输出精简进度。Todo 不是业务事实或后台任务状态。 |
 | S06 Subagent | 条件采用 | 仅在长历史冲突检查或证据复核确有收益时使用，且只能返回带来源的结构化证据。 |
-| S07 Skill Loading | 直接采用 | 模型从精简目录按需调用 `load_skill` Tool；每次最多一个不可变版本，Skill 是回复策略而不是 Tool 或关系事实。 |
+| S07 Skill Loading | 直接采用 | `create_agent` 组合 Deep Agents `SkillsMiddleware`；模型从精简目录按需使用受控 `read_file` 读取一个不可变版本，Skill 是回复策略而不是 Tool 或关系事实。 |
 | S08 Context Compact | 直接采用 | 使用 `SummarizationMiddleware` 按 token 或消息预算压缩较早运行消息并保留最近原文；摘要是可重建 runtime state，不是 PostgreSQL 关系记忆。 |
 | S09 Memory | 直接采用 | PostgreSQL 保存 `message`、`memory_candidate` 和 `confirmed_memory`；长期记忆带来源、采纳状态、有效期和删除路径。 |
 | S10 Task System | 条件采用 | 长导入、删除和重建需要跨请求恢复、依赖和可观测进度时，借鉴其持久化任务图；实际业务状态由 ADR-007 的 `background_task` 管理，不建立模型自治任务板。 |
@@ -226,7 +228,7 @@ v1 的实现是 PostgreSQL 全文/结构化检索。RAGFlow 若被评估，只�
 ## 11. 实施顺序
 
 1. 先定义领域类型、`ModelPort`、`RetrievalPort`、`SkillPort`、Tool 输入输出和合成测试；
-2. 实现 PostgreSQL 可解释检索、Skill 版本加载和确定性外壳；
-3. 用 LangChain `create_agent` 接一个模型，注册核心只读 Tool、`TodoListMiddleware` 与 `SummarizationMiddleware`，验证 Tool 循环、按需 Todo、上下文压缩、结构化候选输出和运行预算；
+2. 实现 PostgreSQL 可解释检索、Skill 库版本管理、scope-aware discovery backend adapter、定制 Skill 提示词、受控 `read_file` 和确定性外壳；
+3. 用 LangChain `create_agent` 接一个模型，组合 Deep Agents `SkillsMiddleware`、核心只读 Tool、`TodoListMiddleware` 与 `SummarizationMiddleware`，验证 Skill 渐进加载、缓存失效、Tool schema、按需 Todo、上下文压缩、结构化候选输出和运行预算；
 4. 只有出现复杂分支、跨进程暂停恢复或 durable execution 的已证明需求时，才直接编写 LangGraph `StateGraph`；
 5. 只有量化问题满足 ADR-005 与 ADR-006 条件后，才做 RAGFlow POC。
