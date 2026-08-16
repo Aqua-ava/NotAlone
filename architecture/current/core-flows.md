@@ -82,6 +82,10 @@ OCR、转写、时间线提取和长历史冲突检查是未来可选的后台�
 
 回复运行时固定为确定性外壳 `validate_scope -> assess_request_risk -> assemble_initial_context -> create_agent bounded Tool loop -> validate_agent_output -> persist_trace -> return_result`。内部循环使用 LangChain `create_agent`，并接受 LangGraph 作为底层 runtime；v1 不直接手写自定义 `StateGraph`。若以后出现明确的暂停恢复或复杂固定流程，可以把整个 `create_agent` 作为自定义图中的节点。完整边界见 `../drafts/agent-runtime.md`、ADR-006 与 ADR-009。
 
+每次生成由调用方提供联系人范围内的幂等 `request_key`。同键同输入的已完成请求直接返回原候选；同键不同输入明确报冲突；有效租约内正在执行时返回“处理中”；失败或租约过期后可以复用同一请求身份重试，不得产生第二份请求或重复候选。
+
+用户可以显式选择一条历史 `reply_candidate` 继续生成；系统为此创建新的 `reply_request`，并记录 `continued_from_candidate_id`。没有该显式选择时，不得按时间自动取“上一条”或“最新未发送”候选。前序候选必须与当前已验证的 `owner_id + contact_id` 一致。
+
 v1 的检索应可解释：先用联系人过滤，再用时间、关键词、资料类型、采纳状态和显式有效期排序。每个候选应能回看"本次用了哪些近期消息和已采纳资料"，但不必把完整历史给模型。
 
 每次候选回复任务都必须由用户确定表达方向：`rewrite_draft` 以用户已有草稿确定基础方向，并允许用户补充约束；`reply_to_message` 可以由用户直接输入方向，也可以在方向为空时请求模型提供建议。模型建议必须由用户选择或修改后确认，不能自动成为表达方向；确认前不得进入候选回复生成。系统随后在已验证的联系人范围内自动组装与该方向相关的回复上下文，用户不需要逐项选择材料。UI 必须允许用户查看实际选入项，并在重新生成前从本次上下文中移除不适用材料或补充遗漏材料；这类调整只作用于本次生成，不得静默修改长期关系资料。从本次上下文移除材料也不等于删除其来源或权威记录。
@@ -156,7 +160,7 @@ Skill 采用 progressive disclosure：LangChain `create_agent` 组合 Deep Agent
 
 用户显式选择 Skill 时，应用层通过同一个 `SkillPort` 校验并预加载，不要求模型再次调用 `read_file`。自动模式可以不加载 Skill；加载成功时 UI 必须展示本次使用的名称和版本并允许用户关闭或更换。每次最多使用一个不可变版本；Skill 本身只提供经校验的策略文本，其内容不能注册 Tool、MCP、Shell、文件写入、子 Agent 或外部资源访问。
 
-Skill 库管理不属于 Agent Loop。用户可以在独立入口创建、禁用、删除或从网络明确安装 Skill；安装和更新先校验并固化不可变版本，候选回复运行时只读取已经启用的版本。Skill 目录缓存必须绑定 `owner_id + contact_id + skill_library_revision`；任一项变化时，下一轮运行先清除旧目录、旧 Skill Tool 结果和包含旧 Skill 正文的摘要，或使用新的运行状态。采用 `SkillsMiddleware` 不等于采用完整 `create_deep_agent`，候选回复不启用 Deep Agents 的通用文件系统、Shell、Subagent 或长期任务 harness。
+Skill 库管理不属于 Agent Loop。用户可以在独立入口创建、禁用、删除或从网络明确安装 Skill；安装和更新先校验并固化不可变版本，候选回复运行时只读取已经启用的版本。同一 owner 的 Skill 名称唯一，库使用 owner 级 `skill_library_revision`；任一 Skill 安装、更新、启用、禁用或删除时都递增该 revision，并使该 owner 所有联系人范围的旧目录失效。Skill 目录缓存仍绑定 `owner_id + contact_id + skill_library_revision`；任一项变化时，下一轮运行先清除旧目录、旧 Skill Tool 结果和包含旧 Skill 正文的摘要，或使用新的运行状态。采用 `SkillsMiddleware` 不等于采用完整 `create_deep_agent`，候选回复不启用 Deep Agents 的通用文件系统、Shell、Subagent 或长期任务 harness。
 
 消息检索和确认记忆检索 Tool 的模型参数只包含查询意图、limit 和允许的时间范围；已验证的 `owner_id + contact_id` 通过 runtime context 注入并传给 `RetrievalPort`，不能由模型提供或修改。返回携带引用标识、采纳状态、有效期、排序分数与检索器版本，用于复现与审计“本次为何返回这些结果”。
 
@@ -212,7 +216,7 @@ reply_to_message
   -> 后续仅在该联系人范围内作为低权重风格参考
 ```
 
-产品不能从第三方聊天渠道自动获知发送结果，也不能把所有生成候选或复制动作自动归纳为长期偏好。
+前台同步可以在已验证且可见的绑定会话中，通过可靠 OCR 正向观察用户发出的消息；该观察可以作为后续“已观察到发送”的证据。但微信不在前台、同步暂停、消息不在可见区域或 OCR 不可靠时，系统没有发送回执，因此“未观察到”只能记为未知，不能推断用户没有发送。无论是否观察到发送，都不能把生成候选或复制动作自动归纳为长期偏好。
 
 ## 5. 删除与修正
 
