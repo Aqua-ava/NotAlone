@@ -52,8 +52,13 @@ flowchart LR
 ```mermaid
 flowchart TD
     Start([请求]) --> Scope["validate_scope"]
-    Scope -->|有效| Risk["assess_request_risk"]
+    Scope -->|有效| Direction{"表达方向已确认？"}
     Scope -->|无效或不确定| Failed([要求用户确认或失败])
+    Direction -->|否| DirectionContext["assemble_direction_context"]
+    DirectionContext --> Suggest["suggest_reply_directions"]
+    Suggest --> Confirm([用户选择或修改后确认])
+    Confirm --> Risk["assess_request_risk"]
+    Direction -->|是| Risk
     Risk --> Context["assemble_initial_context"]
     Context --> Agent["create_agent 模型决策"]
     Agent -->|多步骤请求| Todo["write_todos Tool"]
@@ -78,8 +83,10 @@ flowchart TD
 | 阶段 | 输入 | 输出 | 性质 |
 | --- | --- | --- | --- |
 | `validate_scope` | `owner_id`、`contact_id`、请求身份、幂等键 | 已验证的请求范围 | 确定性代码 |
+| `assemble_direction_context` | 当前待回复消息、少量近期对话、常驻卡和连续性状态 | 不含 Skill、按需检索或外部 Tool 结果的最小方向建议上下文 | 确定性代码 |
+| `suggest_reply_directions` | 最小方向建议上下文、结构化输出 schema | 未预选的表达方向建议 | 单次有界模型调用；不运行 Tool loop，不生成回复候选 |
 | `assess_request_risk` | 当前消息、确定性规则版本 | 风险类型、生成前核实提醒 | 确定性代码 |
-| `assemble_initial_context` | 当前消息、近期对话、常驻卡、可用 Skill 目录、运行配置 | 初始六轨上下文和 runtime context | 确定性代码 |
+| `assemble_initial_context` | 已确认表达方向、当前消息、近期对话、常驻卡、可用 Skill 目录、运行配置 | 初始六轨上下文和 runtime context | 确定性代码 |
 | `create_agent bounded Tool loop` | 初始上下文、核心与授权外部只读 Tool、Todo/摘要 middleware、结构化输出 schema | Tool calls、Todo 进度、1-3 条候选或澄清需求 | 模型决策；执行层强制范围与预算 |
 | `write_todos` | 本次多步骤请求 | 可修正的步骤、状态与进度 | 模型 Tool；普通回复不强制调用，不写业务任务表 |
 | Skill 目录与 `read_file` | middleware 只见当前范围目录；Tool 使用 `file_path/offset/limit` 且只接受目录中的 `SKILL.md` 虚拟路径 | 一个不可变 Skill 版本 | `SkillsMiddleware` + 定制提示词 + 受控只读 Tool，经 `SkillPort` 校验 |
