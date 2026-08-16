@@ -34,6 +34,7 @@
 8. [ADR-008：联系人身份与渠道身份分离](adr/008-separate-contact-and-channel-identity.md)
 9. [ADR-009：使用 LangChain create_agent 实现有界候选回复循环](adr/009-langchain-create-agent-bounded-reply-loop.md)
 10. [ADR-010：使用 Deep Agents SkillsMiddleware 加载回复 Skill](adr/010-deep-agents-skills-middleware.md)
+11. [ADR-011：关系记忆自动管理与主题目录渐进加载](adr/011-automatic-relationship-memory-index.md)
 
 ## 当前架构决策
 
@@ -41,6 +42,7 @@
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
 - 文字是统一的检索与生成表示；截图、语音和前台画面是输入适配器。
 - 生成只使用已选联系人下的有界上下文；模型提取的记忆必须带来源、标记 `auto` 且可撤销。
+- 关系记忆不设置固定常驻模式；系统自动维护联系人记忆目录，并按当前消息、表达方向和近期对话选择少量相关资料。
 - 候选回复只在应用内展示，最终由用户修改并亲自发送。
 
 ## 状态规则
