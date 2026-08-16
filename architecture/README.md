@@ -18,7 +18,7 @@
 
 1. 先读根目录 [`CONTEXT.md`](../CONTEXT.md)，使用统一领域语言。
 2. 按任务读取一份或多份现行规格：[`domain-data.md`](current/domain-data.md)、[`core-flows.md`](current/core-flows.md)、[`privacy-deletion.md`](current/privacy-deletion.md)。
-3. 只有涉及云端部署或回复运行时时，才读取对应草案：[`cloud-engineering.md`](drafts/cloud-engineering.md)、[`agent-runtime.md`](drafts/agent-runtime.md)。
+3. 只有涉及云端部署、回复运行时或真实表达质量时，才读取对应草案：[`cloud-engineering.md`](drafts/cloud-engineering.md)、[`agent-runtime.md`](drafts/agent-runtime.md)、[`authentic-expression.md`](drafts/authentic-expression.md)。
 4. 当现行规格或草案引用 ADR 时，再读取对应决策；复审既有决定时必须新增 ADR 修订或替代，不能覆盖历史原因。
 5. 整体关系可查看 [NotAlone 架构图](notalone-system-architecture.drawio)；架构图同样不代表运行时验证。
 
