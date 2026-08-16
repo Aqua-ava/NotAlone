@@ -12,6 +12,17 @@ conda activate NotAlone
 python -m pip install -e .
 ```
 
+## 候选回复纵切
+
+仓库现在包含内部开发用的候选回复纵切：调用者只经过
+`ReplyGenerator.generate(GenerateReply) -> ReplyOutcome`，`notalone.skills` 作为独立
+Module 提供联系人范围内的不可变策略目录；回复 adapter 使用 LangChain
+`create_agent` 和 Deep Agents `SkillsMiddleware` 按需读取至多一个 Skill。
+
+当前验证只使用合成数据、scripted fake model 和内存 adapter。尚未实现 PostgreSQL
+回复/Skill adapter、真实模型供应商、出站台账、产品 CLI 或 UI，因此这还不是可供真实
+联系人使用的端到端回复功能；代码不存在发送消息 Tool。
+
 ## 导入预览
 
 ```bash
