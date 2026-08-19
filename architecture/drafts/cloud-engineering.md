@@ -44,6 +44,16 @@ v1 的 API 与 Worker 属于同一个模块化单体代码库，但作为不同�
 - AI 输出必须经过 schema、联系人范围和来源引用校验后才能写入业务表；任务状态只能由 `jobs` 状态机修改。
 - 当 PostgreSQL 轮询、并发和可靠性出现可测量瓶颈时，才评估 Celery、Temporal 或独立队列，并保持现有任务契约不变。
 
+## v1 性能与并发优化基线
+
+v1 按单用户、单 API 实例和单 Worker 部署，先保证联系人隔离、事务、幂等、删除可验证和任务可恢复，再根据运行指标优化吞吐。PostgreSQL 同时承担权威业务存储和后台任务协调；Redis、持久化 Agent checkpoint 与独立消息队列不是 v1 前置依赖。
+
+- 联系人消息时间线按 `owner_id + contact_id + occurred_at + id` 查询和排序；分页实现优先使用 `occurred_at + id` 游标，不使用大 `OFFSET`。新增或调整索引必须对应实际 `SELECT`、`ORDER BY` 和 `EXPLAIN ANALYZE` 证据，不能按字段名称预先堆叠索引。
+- 同一 `owner_id + contact_id` 下的导入、删除和重建等长任务串行执行；不同联系人之间允许并行。Worker 通过 PostgreSQL 原子领取、短租约和幂等处理器避免重复副作用，不另设 Redis 分布式锁保存业务所有权。
+- 用户主动发起候选回复后，v1 以 5 秒内返回候选或明确可见进度为响应目标。分别记录范围校验、检索、Skill 加载、模型调用、结果校验和持久化耗时，先优化实际主耗时，不以增加缓存代替测量。
+- 只有多实例共享限流、热点可重建数据反复读取，或 PostgreSQL 任务领取出现可测量瓶颈时，才评估 Redis 或独立队列。Redis 若被采用，只保存可过期、可重建的辅助状态，不成为 `message`、`reply_request`、`reply_candidate`、`background_task` 或 `background_task_step` 的权威数据源。
+- 只有候选回复出现跨请求暂停恢复、Human-in-the-loop interrupt 或 durable execution 的明确需求时，才启用持久化 Agent checkpoint；运行状态不得替代 PostgreSQL 业务事实，恢复前仍需重新校验联系人范围、授权与删除状态。
+
 ## 认证与设备绑定（云端落地前置）
 
 云端服务落地前必须定义最小认证与设备绑定方案：
