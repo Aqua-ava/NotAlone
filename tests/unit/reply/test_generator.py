@@ -25,6 +25,7 @@ from notalone.reply.context import (
 from notalone.reply.runtime import ReplyRuntimeResult, RuntimeCandidate
 from notalone.reply.store import ValidatedReply
 from notalone.reply.errors import (
+    ReplyContextError,
     ReplyInvariantError,
     ReplyPersistenceError,
     ReplyRunError,
@@ -129,6 +130,22 @@ class ExplodingReplyRuntime:
         raise RuntimeError("private provider response")
 
 
+@dataclass
+class RecordingReplyContext:
+    prepared: PreparedReply
+    calls: int = 0
+
+    def build(
+        self,
+        *,
+        command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
+    ) -> PreparedReply:
+        del command, verified_scope
+        self.calls += 1
+        return self.prepared
+
+
 class ReplyGeneratorTest(unittest.TestCase):
     def _valid_case(self) -> tuple[GenerateReply, PreparedReply]:
         scope = ContactScope(owner_id=OWNER_ID, contact_id=CONTACT_ID)
@@ -208,6 +225,33 @@ class ReplyGeneratorTest(unittest.TestCase):
         self.assertEqual(result.context_receipt.evidence_ids, (MESSAGE_ID,))
         self.assertIs(runtime.received, prepared)
         self.assertIsNotNone(store.saved)
+
+    def test_injected_context_is_used_without_calling_store_prepare(self) -> None:
+        command, prepared = self._valid_case()
+        context = RecordingReplyContext(prepared=prepared)
+        store = ExplodingReplyStore(prepared=prepared, fail_during="prepare")
+        runtime = ScriptedReplyRuntime(
+            result=ReplyRuntimeResult(
+                candidates=(
+                    RuntimeCandidate(
+                        text="可以呀。",
+                        basis="回应合成消息",
+                        citation_ids=(MESSAGE_ID,),
+                        risk_notes=(),
+                    ),
+                ),
+                used_skill=None,
+            )
+        )
+
+        result = ReplyGenerator(
+            store=store,
+            runtime=runtime,
+            context=context,
+        ).generate(command, verified_scope=VERIFIED_SCOPE)
+
+        self.assertEqual(context.calls, 1)
+        self.assertEqual(result.candidates[0].text, "可以呀。")
 
     def test_rejects_cross_contact_preparation_before_model_run(self) -> None:
         scope = ContactScope(owner_id=OWNER_ID, contact_id=CONTACT_ID)
@@ -563,7 +607,7 @@ class ReplyGeneratorTest(unittest.TestCase):
         command, prepared = self._valid_case()
         store = ExplodingReplyStore(prepared=prepared, fail_during="prepare")
 
-        with self.assertRaises(ReplyPersistenceError) as caught:
+        with self.assertRaises(ReplyContextError) as caught:
             ReplyGenerator(
                 store=store,
                 runtime=ExplodingReplyRuntime(),

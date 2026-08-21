@@ -43,6 +43,7 @@ class RewriteDraft:
 
     draft_text: str
     user_instruction: str | None = None
+    include_relationship_context: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.draft_text, str) or not self.draft_text.strip():
@@ -52,6 +53,8 @@ class RewriteDraft:
             or not self.user_instruction.strip()
         ):
             raise ValueError("一次性改写要求不能为空字符串。")
+        if not isinstance(self.include_relationship_context, bool):
+            raise TypeError("是否使用联系人背景必须是布尔值。")
 
     def is_valid(self) -> bool:
         """供应用边界重复校验不可信输入。"""
@@ -66,6 +69,7 @@ class RewriteDraft:
                     and bool(self.user_instruction.strip())
                 )
             )
+            and isinstance(self.include_relationship_context, bool)
         )
 
 

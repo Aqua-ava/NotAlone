@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
-from notalone.reply.context import PreparedReply
+from notalone.reply.context import ReplyContext
 from notalone.reply.interface import SkillUse
 
 
@@ -31,4 +31,4 @@ class ReplyRuntimeResult:
 class ReplyRuntime(Protocol):
     """候选模型运行时 seam。"""
 
-    def generate(self, prepared: PreparedReply) -> ReplyRuntimeResult: ...
+    def generate(self, context: ReplyContext) -> ReplyRuntimeResult: ...

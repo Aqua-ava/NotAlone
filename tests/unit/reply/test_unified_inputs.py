@@ -231,6 +231,45 @@ class UnifiedReplyInputTest(unittest.TestCase):
 
         self.assertIsNone(runtime.received)
 
+    def test_explicit_rewrite_background_can_reach_runtime_once(self) -> None:
+        command, prepared = self._rewrite_command()
+        content = RewriteDraft(
+            draft_text=command.content.draft_text,
+            include_relationship_context=True,
+        )
+        command = GenerateReply(
+            idempotency_key=command.idempotency_key,
+            scope=command.scope,
+            conversation_binding_id=command.conversation_binding_id,
+            content=content,
+        )
+        prepared = PreparedReply(
+            reply_request_id=prepared.reply_request_id,
+            command=command,
+            scope=prepared.scope,
+            current_text=prepared.current_text,
+            direction=None,
+            evidence=prepared.evidence
+            + (
+                ContextEvidence(
+                    evidence_id=UUID("12121212-8888-8888-8888-888888888888"),
+                    kind="confirmed_memory",
+                    text="联系人喜欢旅行",
+                    scope=prepared.scope,
+                ),
+            ),
+            skill_library_revision=prepared.skill_library_revision,
+        )
+        runtime = RecordingReplyRuntime()
+
+        result = ReplyGenerator(
+            store=RecordingReplyStore(prepared=prepared),
+            runtime=runtime,
+        ).generate(command, verified_scope=self._verified_scope())
+
+        self.assertEqual(result.candidates[0].text, "我明天有空，晚点见。")
+        self.assertIsNotNone(runtime.received)
+
     def test_reply_rejects_scope_mismatch_before_context_or_runtime(self) -> None:
         command, prepared = self._rewrite_command()
         store = RecordingReplyStore(prepared=prepared)

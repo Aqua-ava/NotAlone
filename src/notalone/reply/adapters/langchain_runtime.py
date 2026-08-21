@@ -21,7 +21,7 @@ from langchain.tools import ToolRuntime, tool
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
 
-from notalone.reply.context import PreparedReply
+from notalone.reply.context import ReplyContext
 from notalone.reply.runtime import (
     ReplyRuntimeResult,
     RuntimeCandidate,
@@ -253,8 +253,12 @@ class LangChainReplyRuntime:
         self._model = model
         self._skill_port = skill_port
 
-    def generate(self, prepared: PreparedReply) -> ReplyRuntimeResult:
-        if prepared.has_relationship_memory_for_rewrite():
+    def generate(self, prepared: ReplyContext) -> ReplyRuntimeResult:
+        if (
+            prepared.has_relationship_memory_for_rewrite()
+            and isinstance(prepared.command.content, RewriteDraft)
+            and not prepared.command.content.include_relationship_context
+        ):
             raise ReplyInvariantError("当前改写不能使用长期关系资料。")
         try:
             catalog = self._skill_port.catalog(prepared.scope)
@@ -328,8 +332,12 @@ class LangChainReplyRuntime:
             raise ReplyRunError("候选回复框架运行失败。") from None
 
 
-def _request_text(prepared: PreparedReply) -> str:
-    if prepared.has_relationship_memory_for_rewrite():
+def _request_text(prepared: ReplyContext) -> str:
+    if (
+        prepared.has_relationship_memory_for_rewrite()
+        and isinstance(prepared.command.content, RewriteDraft)
+        and not prepared.command.content.include_relationship_context
+    ):
         raise ReplyInvariantError("当前改写不能使用长期关系资料。")
     if isinstance(prepared.command.content, ReplyToMessage):
         payload = {
@@ -346,6 +354,9 @@ def _request_text(prepared: PreparedReply) -> str:
             "input_mode": "rewrite_draft",
             "draft_text": prepared.command.content.draft_text,
             "user_instruction": prepared.command.content.user_instruction,
+            "include_relationship_context": (
+                prepared.command.content.include_relationship_context
+            ),
         }
     else:
         raise ReplyInvariantError("回复输入模式无效。")
@@ -357,6 +368,7 @@ def _request_text(prepared: PreparedReply) -> str:
         }
         for item in prepared.evidence
     ]
+    payload["risk_notes"] = list(prepared.risk_notes)
     return json.dumps(payload, ensure_ascii=False)
 
 

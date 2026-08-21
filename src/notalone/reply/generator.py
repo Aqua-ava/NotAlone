@@ -8,6 +8,8 @@ from notalone.reply.context import (
     ContextEvidence,
     PreparedReply,
     PreviousUnsentCandidate,
+    ReplyContextPort,
+    StoreBackedReplyContext,
 )
 from notalone.reply.runtime import (
     ReplyRuntime,
@@ -19,6 +21,7 @@ from notalone.reply.store import (
     ValidatedReply,
 )
 from notalone.reply.errors import (
+    ReplyContextError,
     ReplyError,
     ReplyInvariantError,
     ReplyPersistenceError,
@@ -40,11 +43,20 @@ from notalone.scopes import VerifiedConversationScope
 class ReplyGenerator:
     """通过一个深 Interface 隐藏范围、运行时和持久化细节。"""
 
-    __slots__ = ("_runtime", "_store")
+    __slots__ = ("_context", "_runtime", "_store")
 
-    def __init__(self, *, store: ReplyStore, runtime: ReplyRuntime) -> None:
+    def __init__(
+        self,
+        *,
+        store: ReplyStore,
+        runtime: ReplyRuntime,
+        context: ReplyContextPort | None = None,
+    ) -> None:
         self._store = store
         self._runtime = runtime
+        self._context = (
+            context if context is not None else StoreBackedReplyContext(store)
+        )
 
     def generate(
         self,
@@ -62,11 +74,14 @@ class ReplyGenerator:
             raise ReplyInvariantError("回复范围未通过会话验证。")
 
         try:
-            prepared = self._store.prepare(command)
+            prepared = self._context.build(
+                command=command,
+                verified_scope=verified_scope,
+            )
         except ReplyError:
             raise
         except Exception:
-            raise ReplyPersistenceError("候选回复准备失败。") from None
+            raise ReplyContextError("候选回复上下文准备失败。") from None
         try:
             self._validate_prepared(command, prepared)
         except ReplyError:
@@ -113,6 +128,11 @@ class ReplyGenerator:
             or not prepared.evidence
             or not isinstance(prepared.skill_library_revision, int)
             or prepared.skill_library_revision < 0
+            or not isinstance(prepared.risk_notes, tuple)
+            or any(
+                not isinstance(note, str) or not note.strip()
+                for note in prepared.risk_notes
+            )
         ):
             raise ReplyInvariantError("回复上下文快照结构无效。")
 
@@ -126,6 +146,9 @@ class ReplyGenerator:
                 or item.kind not in ("message", "confirmed_memory", "user_draft")
                 or not isinstance(item.text, str)
                 or not item.text.strip()
+                or not isinstance(item.source_ids, tuple)
+                or any(not isinstance(source_id, UUID) for source_id in item.source_ids)
+                or not isinstance(item.selection_reason, str)
             ):
                 raise ReplyInvariantError("回复依据超出范围或结构无效。")
             evidence_ids.add(item.evidence_id)
@@ -162,7 +185,10 @@ class ReplyGenerator:
             return
 
         if isinstance(command.content, RewriteDraft):
-            if prepared.has_relationship_memory_for_rewrite():
+            if (
+                prepared.has_relationship_memory_for_rewrite()
+                and not command.content.include_relationship_context
+            ):
                 raise ReplyInvariantError("当前改写不能使用长期关系资料。")
             draft_evidence = tuple(
                 item

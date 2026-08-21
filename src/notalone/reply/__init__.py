@@ -1,10 +1,18 @@
 """候选回复 Module 的公开入口。"""
 
 from notalone.reply.errors import (
+    ReplyContextError,
+    ReplyContextInvariantError,
     ReplyError,
     ReplyInvariantError,
     ReplyPersistenceError,
     ReplyRunError,
+)
+from notalone.reply.context import (
+    ContextEvidence,
+    ReplyContext,
+    ReplyContextPort,
+    RetrievalReplyContext,
 )
 from notalone.reply.generator import ReplyGenerator
 from notalone.reply.interface import (
@@ -25,10 +33,15 @@ from notalone.reply.interface import (
 __all__ = [
     "AutoSkill",
     "ConfirmedDirection",
+    "ContextEvidence",
     "ContextReceipt",
     "DirectionSource",
     "GenerateReply",
     "ReplyCandidate",
+    "ReplyContext",
+    "ReplyContextError",
+    "ReplyContextInvariantError",
+    "ReplyContextPort",
     "ReplyError",
     "ReplyGenerated",
     "ReplyGenerator",
@@ -37,6 +50,7 @@ __all__ = [
     "ReplyOutcome",
     "ReplyPersistenceError",
     "ReplyRunError",
+    "RetrievalReplyContext",
     "ReplyToMessage",
     "RewriteDraft",
     "SkillUse",

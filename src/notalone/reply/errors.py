@@ -9,6 +9,14 @@ class ReplyInvariantError(ReplyError):
     """内部 adapter 返回越界或不一致数据时 fail closed。"""
 
 
+class ReplyContextError(ReplyError):
+    """Context 无法形成可信的联系人范围上下文。"""
+
+
+class ReplyContextInvariantError(ReplyContextError):
+    """Context 输入或 Retrieval 结果越界时 fail closed。"""
+
+
 class ReplyRunError(ReplyError):
     """模型或 Tool 运行失败，公开文本不包含供应商响应。"""
 
