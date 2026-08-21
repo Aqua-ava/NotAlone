@@ -26,7 +26,9 @@ LangChain `create_agent` 和 Deep Agents `SkillsMiddleware` 按需读取至多�
 当前验证只使用合成数据、scripted fake model 和 PostgreSQL/内存 adapter。PostgreSQL
 SkillPort 已接入迁移 008，并按 owner/contact 范围只读当前 Skill 目录和不可变版本；真实模型
 供应商、出站台账、产品 CLI 或 UI 尚未实现，因此这还不是可供真实联系人使用的端到端回复
-功能；代码不存在发送消息 Tool。
+功能；代码不存在发送消息 Tool。PostgreSQL Retrieval 已接入消息查询，只读取当前联系人范围
+内 active 来源的规范化消息，支持关键词、目标消息优先和媒体占位；关系记忆的 PostgreSQL
+查询仍显式 fail closed，尚未建立 `confirmed_memory` schema。
 
 ReplyStore 当前收敛为请求/结果持久化边界：按已验证联系人范围和幂等键处理重放、冲突、
 处理中、失败重试、租约过期和用户显式继续候选。`ReplyGenerator` 必须显式注入
