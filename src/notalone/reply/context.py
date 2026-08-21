@@ -31,7 +31,12 @@ class ContextEvidence:
     """经范围校验后进入本次上下文的一项证据。"""
 
     evidence_id: UUID
-    kind: Literal["message", "confirmed_memory", "user_draft"]
+    kind: Literal[
+        "message",
+        "confirmed_memory",
+        "user_draft",
+        "continued_candidate",
+    ]
     text: str
     scope: ContactScope
     source_ids: tuple[UUID, ...] = ()
@@ -39,13 +44,21 @@ class ContextEvidence:
 
 
 @dataclass(frozen=True, slots=True, repr=False)
-class PreviousUnsentCandidate:
-    """同一已验证桌面会话中上一轮未发送候选的精简引用。"""
+class ContinuedReplyCandidate:
+    """用户明确选择后，允许进入新请求的历史候选引用。"""
 
     candidate_id: UUID
     scope: ContactScope
     conversation_binding_id: UUID
     text: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.candidate_id, UUID):
+            raise TypeError("候选标识必须是 UUID。")
+        if not isinstance(self.conversation_binding_id, UUID):
+            raise TypeError("会话绑定标识必须是 UUID。")
+        if not isinstance(self.text, str) or not self.text.strip():
+            raise ValueError("继续候选文本不能为空。")
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -59,7 +72,6 @@ class ReplyContext:
     direction: ConfirmedDirection | None
     evidence: tuple[ContextEvidence, ...]
     skill_library_revision: int
-    previous_unsent_candidates: tuple[PreviousUnsentCandidate, ...] = ()
     risk_notes: tuple[str, ...] = ()
 
     def has_relationship_memory_for_rewrite(self) -> bool:
@@ -71,10 +83,6 @@ class ReplyContext:
         )
 
 
-# 旧名称暂时保留给 Runtime/Store adapter；它与 ReplyContext 相同。
-PreparedReply = ReplyContext
-
-
 class ReplyContextPort(Protocol):
     """Reply 入口使用的上下文组装 seam。"""
 
@@ -83,32 +91,10 @@ class ReplyContextPort(Protocol):
         *,
         command: GenerateReply,
         verified_scope: VerifiedConversationScope,
+        reply_request_id: UUID | None = None,
+        continued_candidate: ContinuedReplyCandidate | None = None,
     ) -> ReplyContext:
         """在已验证联系人范围内形成上下文快照。"""
-
-
-class LegacyReplyPreparationPort(Protocol):
-    """Store.prepare 迁移期间的最小兼容接口。"""
-
-    def prepare(self, command: GenerateReply) -> ReplyContext: ...
-
-
-class StoreBackedReplyContext:
-    """兼容旧纵切的 Context adapter，计划在 04 中删除。"""
-
-    __slots__ = ("_store",)
-
-    def __init__(self, store: LegacyReplyPreparationPort) -> None:
-        self._store = store
-
-    def build(
-        self,
-        *,
-        command: GenerateReply,
-        verified_scope: VerifiedConversationScope,
-    ) -> ReplyContext:
-        del verified_scope
-        return self._store.prepare(command)
 
 
 class RetrievalReplyContext:
@@ -151,9 +137,20 @@ class RetrievalReplyContext:
         *,
         command: GenerateReply,
         verified_scope: VerifiedConversationScope,
+        reply_request_id: UUID | None = None,
+        continued_candidate: ContinuedReplyCandidate | None = None,
     ) -> ReplyContext:
         scope = self._validate_request(command, verified_scope)
-        reply_request_id = self._new_id()
+        request_id = (
+            self._new_id()
+            if reply_request_id is None
+            else self._validate_request_id(reply_request_id)
+        )
+        continuation = self._continuation_evidence(
+            command=command,
+            verified_scope=verified_scope,
+            candidate=continued_candidate,
+        )
 
         if isinstance(command.content, ReplyToMessage):
             messages = self._search_messages(
@@ -170,18 +167,20 @@ class RetrievalReplyContext:
                     "待回复消息未在当前联系人范围内找到。"
                 )
             memories = self._search_memories(scope=scope)
-            evidence = tuple(
+            evidence = list(
                 self._message_evidence(message, is_target=message is target[0])
                 for message in messages
-            ) + tuple(self._memory_evidence(memory) for memory in memories)
+            ) + [self._memory_evidence(memory) for memory in memories]
+            if continuation is not None:
+                evidence.append(continuation)
             self._validate_evidence(evidence, scope=scope)
             return ReplyContext(
-                reply_request_id=reply_request_id,
+                reply_request_id=request_id,
                 command=command,
                 scope=scope,
                 current_text=target[0].text,
                 direction=command.content.direction,
-                evidence=evidence,
+                evidence=tuple(evidence),
                 skill_library_revision=self._skill_library_revision,
                 risk_notes=self._risk_notes(command, target[0].text),
             )
@@ -203,9 +202,11 @@ class RetrievalReplyContext:
                     self._memory_evidence(memory)
                     for memory in self._search_memories(scope=scope)
                 )
+            if continuation is not None:
+                evidence.append(continuation)
             self._validate_evidence(evidence, scope=scope)
             return ReplyContext(
-                reply_request_id=reply_request_id,
+                reply_request_id=request_id,
                 command=command,
                 scope=scope,
                 current_text=command.content.draft_text,
@@ -292,6 +293,49 @@ class RetrievalReplyContext:
         if not isinstance(value, UUID):
             raise ReplyContextInvariantError("回复上下文标识结构无效。")
         return value
+
+    @staticmethod
+    def _validate_request_id(value: UUID) -> UUID:
+        if not isinstance(value, UUID):
+            raise ReplyContextInvariantError("回复请求标识结构无效。")
+        return value
+
+    @staticmethod
+    def _continuation_evidence(
+        *,
+        command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
+        candidate: ContinuedReplyCandidate | None,
+    ) -> ContextEvidence | None:
+        candidate_id = command.continued_from_candidate_id
+        if candidate_id is None and candidate is not None:
+            raise ReplyContextInvariantError(
+                "历史候选必须由用户显式选择。"
+            )
+        if candidate_id is not None and candidate is None:
+            raise ReplyContextInvariantError("显式继续候选未找到。")
+        if candidate is None:
+            return None
+        expected_scope = ContactScope(
+            verified_scope.owner_id,
+            verified_scope.contact_id,
+        )
+        if (
+            candidate.candidate_id != candidate_id
+            or candidate.scope != expected_scope
+            or candidate.conversation_binding_id
+            != verified_scope.conversation_binding_id
+        ):
+            raise ReplyContextInvariantError(
+                "历史候选超出当前联系人会话范围。"
+            )
+        return ContextEvidence(
+            evidence_id=candidate.candidate_id,
+            kind="continued_candidate",
+            text=candidate.text,
+            scope=expected_scope,
+            selection_reason="用户明确选择的历史候选。",
+        )
 
     @staticmethod
     def _validate_evidence(

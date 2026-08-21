@@ -27,6 +27,11 @@ LangChain `create_agent` 和 Deep Agents `SkillsMiddleware` 按需读取至多�
 回复/Skill adapter、真实模型供应商、出站台账、产品 CLI 或 UI，因此这还不是可供真实
 联系人使用的端到端回复功能；代码不存在发送消息 Tool。
 
+ReplyStore 当前收敛为请求/结果持久化边界：按已验证联系人范围和幂等键处理重放、冲突、
+处理中、失败重试、租约过期和用户显式继续候选。`ReplyGenerator` 必须显式注入
+`ReplyContext`；Store 不再准备上下文、不读取 Memory、不识别联系人，也不继承“上一轮
+未发送候选”。当前实现是进程内 adapter，PostgreSQL 持久化仍待后续任务。
+
 ## 导入预览
 
 ```bash

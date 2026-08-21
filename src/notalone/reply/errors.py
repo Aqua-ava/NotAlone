@@ -22,4 +22,20 @@ class ReplyRunError(ReplyError):
 
 
 class ReplyPersistenceError(ReplyError):
-    """准备或持久化失败，调用者不能使用本次候选。"""
+    """请求状态或候选持久化失败，调用者不能使用本次候选。"""
+
+
+class ReplyIdempotencyConflictError(ReplyPersistenceError):
+    """同一联系人范围的幂等键对应了不同请求输入。"""
+
+
+class ReplyInProgressError(ReplyPersistenceError):
+    """相同回复请求仍在有效租约内运行。"""
+
+
+class ReplyContinuationError(ReplyPersistenceError):
+    """用户选择的历史候选不属于当前已验证联系人会话。"""
+
+
+class ReplyStoreInvariantError(ReplyPersistenceError):
+    """ReplyStore 收到越界或不一致的持久化数据。"""

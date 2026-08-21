@@ -4,25 +4,22 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from notalone.reply.context import (
-    ContextEvidence,
-    PreparedReply,
-    PreviousUnsentCandidate,
-    ReplyContextPort,
-    StoreBackedReplyContext,
-)
+from notalone.reply.context import ContextEvidence, ReplyContext, ReplyContextPort
 from notalone.reply.runtime import (
     ReplyRuntime,
     ReplyRuntimeResult,
     RuntimeCandidate,
 )
 from notalone.reply.store import (
+    ReplyRequestState,
     ReplyStore,
+    ReplyStart,
     ValidatedReply,
 )
 from notalone.reply.errors import (
     ReplyContextError,
     ReplyError,
+    ReplyInProgressError,
     ReplyInvariantError,
     ReplyPersistenceError,
     ReplyRunError,
@@ -50,13 +47,13 @@ class ReplyGenerator:
         *,
         store: ReplyStore,
         runtime: ReplyRuntime,
-        context: ReplyContextPort | None = None,
+        context: ReplyContextPort,
     ) -> None:
+        if context is None:
+            raise TypeError("ReplyGenerator 必须显式注入 ReplyContext。")
         self._store = store
         self._runtime = runtime
-        self._context = (
-            context if context is not None else StoreBackedReplyContext(store)
-        )
+        self._context = context
 
     def generate(
         self,
@@ -69,136 +66,188 @@ class ReplyGenerator:
         if not (
             isinstance(command, GenerateReply)
             and isinstance(verified_scope, VerifiedConversationScope)
+            and command.has_valid_content()
             and command.matches_verified_scope(verified_scope)
         ):
             raise ReplyInvariantError("回复范围未通过会话验证。")
 
         try:
-            prepared = self._context.build(
+            started = self._store.start(command, verified_scope)
+        except ReplyError:
+            raise
+        except Exception:
+            raise ReplyPersistenceError("回复请求状态读取失败。") from None
+        if not isinstance(started, ReplyStart):
+            raise ReplyInvariantError("回复请求状态决定结构无效。")
+        if started.state is ReplyRequestState.REPLAYED:
+            if started.result is None:
+                raise ReplyInvariantError("已完成回复缺少可重放结果。")
+            return started.result
+        if started.state is ReplyRequestState.IN_PROGRESS:
+            raise ReplyInProgressError("相同回复请求正在处理中。")
+        if started.state is not ReplyRequestState.STARTED:
+            raise ReplyInvariantError("回复请求状态决定无效。")
+
+        request = started.request
+        try:
+            context = self._context.build(
                 command=command,
                 verified_scope=verified_scope,
+                reply_request_id=request.request_id,
+                continued_candidate=started.continued_candidate,
             )
         except ReplyError:
+            self._mark_failed(request, "context_failed")
             raise
         except Exception:
+            self._mark_failed(request, "context_failed")
             raise ReplyContextError("候选回复上下文准备失败。") from None
         try:
-            self._validate_prepared(command, prepared)
+            self._validate_context(command, context)
         except ReplyError:
+            self._mark_failed(request, "context_invariant_failed")
             raise
         except Exception:
+            self._mark_failed(request, "context_invariant_failed")
             raise ReplyInvariantError("回复准备结果结构无效。") from None
         try:
-            runtime_result = self._runtime.generate(prepared)
+            runtime_result = self._runtime.generate(context)
             self._validate_runtime_result(runtime_result)
         except ReplyError:
+            self._mark_failed(request, "runtime_failed")
             raise
         except Exception:
+            self._mark_failed(request, "runtime_failed")
             raise ReplyRunError("候选回复运行失败。") from None
-        evidence_ids = {item.evidence_id for item in prepared.evidence}
+        evidence_ids = {item.evidence_id for item in context.evidence}
         if any(
             not set(candidate.citation_ids) <= evidence_ids
             for candidate in runtime_result.candidates
         ):
+            self._mark_failed(request, "citation_invariant_failed")
             raise ReplyInvariantError("候选引用不属于本次上下文快照。")
         validated = ValidatedReply(
             candidates=runtime_result.candidates,
             used_skill=runtime_result.used_skill,
         )
         try:
-            persisted = self._store.save(prepared, validated)
-            self._validate_persisted(prepared, validated, persisted)
+            persisted = self._store.save(request, context, validated)
         except ReplyError:
+            self._mark_failed(request, "persistence_failed")
             raise
         except Exception:
+            self._mark_failed(request, "persistence_failed")
             raise ReplyPersistenceError("候选回复持久化失败。") from None
+        self._validate_persisted(context, validated, persisted)
         return persisted
 
+    def _mark_failed(self, request: object, reason: str) -> None:
+        try:
+            if hasattr(request, "request_id"):
+                self._store.fail(request, reason=reason)
+        except Exception:
+            pass
+
     @staticmethod
-    def _validate_prepared(command: GenerateReply, prepared: object) -> None:
-        if not isinstance(prepared, PreparedReply):
-            raise ReplyInvariantError("回复准备 adapter 返回了无效结果。")
-        if prepared.scope != command.scope or prepared.command != command:
-            raise ReplyInvariantError("回复准备结果超出本次联系人范围。")
+    def _validate_context(command: GenerateReply, context: object) -> None:
+        if not isinstance(context, ReplyContext):
+            raise ReplyInvariantError(
+                "回复上下文 adapter 返回了无效结果。"
+            )
+        if context.scope != command.scope or context.command != command:
+            raise ReplyInvariantError(
+                "回复上下文结果超出本次联系人范围。"
+            )
         if (
-            not isinstance(prepared.reply_request_id, UUID)
-            or not isinstance(prepared.current_text, str)
-            or not prepared.current_text.strip()
-            or not isinstance(prepared.evidence, tuple)
-            or not prepared.evidence
-            or not isinstance(prepared.skill_library_revision, int)
-            or prepared.skill_library_revision < 0
-            or not isinstance(prepared.risk_notes, tuple)
+            not isinstance(context.reply_request_id, UUID)
+            or not isinstance(context.current_text, str)
+            or not context.current_text.strip()
+            or not isinstance(context.evidence, tuple)
+            or not context.evidence
+            or not isinstance(context.skill_library_revision, int)
+            or context.skill_library_revision < 0
+            or not isinstance(context.risk_notes, tuple)
             or any(
                 not isinstance(note, str) or not note.strip()
-                for note in prepared.risk_notes
+                for note in context.risk_notes
             )
         ):
             raise ReplyInvariantError("回复上下文快照结构无效。")
 
         evidence_ids: set[UUID] = set()
-        for item in prepared.evidence:
+        for item in context.evidence:
             if (
                 not isinstance(item, ContextEvidence)
-                or item.scope != prepared.scope
+                or item.scope != context.scope
                 or not isinstance(item.evidence_id, UUID)
                 or item.evidence_id in evidence_ids
-                or item.kind not in ("message", "confirmed_memory", "user_draft")
+                or item.kind not in (
+                    "message",
+                    "confirmed_memory",
+                    "user_draft",
+                    "continued_candidate",
+                )
                 or not isinstance(item.text, str)
                 or not item.text.strip()
                 or not isinstance(item.source_ids, tuple)
-                or any(not isinstance(source_id, UUID) for source_id in item.source_ids)
+                or any(
+                    not isinstance(source_id, UUID)
+                    for source_id in item.source_ids
+                )
                 or not isinstance(item.selection_reason, str)
             ):
                 raise ReplyInvariantError("回复依据超出范围或结构无效。")
             evidence_ids.add(item.evidence_id)
 
-        if (
-            not isinstance(prepared.previous_unsent_candidates, tuple)
-            or len(prepared.previous_unsent_candidates) > 3
-            or any(
-                not isinstance(item, PreviousUnsentCandidate)
-                or item.scope != prepared.scope
-                or item.conversation_binding_id
-                != command.conversation_binding_id
-                or not isinstance(item.candidate_id, UUID)
-                or not isinstance(item.text, str)
-                or not item.text.strip()
-                for item in prepared.previous_unsent_candidates
-            )
+        continuation_evidence = tuple(
+            item for item in context.evidence if item.kind == "continued_candidate"
+        )
+        if command.continued_from_candidate_id is None:
+            if continuation_evidence:
+                raise ReplyInvariantError("历史候选必须由用户显式选择。")
+        elif (
+            len(continuation_evidence) != 1
+            or continuation_evidence[0].evidence_id
+            != command.continued_from_candidate_id
         ):
-            raise ReplyInvariantError("上一轮候选超出本次联系人或会话范围。")
+            raise ReplyInvariantError(
+                "显式继续候选与上下文快照不一致。"
+            )
 
         if isinstance(command.content, ReplyToMessage):
             target_evidence = tuple(
                 item
-                for item in prepared.evidence
+                for item in context.evidence
                 if item.evidence_id == command.content.target_message_id
             )
             if (
                 len(target_evidence) != 1
                 or target_evidence[0].kind != "message"
-                or target_evidence[0].text != prepared.current_text
-                or prepared.direction != command.content.direction
+                or target_evidence[0].text != context.current_text
+                or context.direction != command.content.direction
             ):
-                raise ReplyInvariantError("待回复消息或表达方向与请求不一致。")
+                raise ReplyInvariantError(
+                    "待回复消息或表达方向与请求不一致。"
+                )
             return
 
         if isinstance(command.content, RewriteDraft):
             if (
-                prepared.has_relationship_memory_for_rewrite()
+                context.has_relationship_memory_for_rewrite()
                 and not command.content.include_relationship_context
             ):
-                raise ReplyInvariantError("当前改写不能使用长期关系资料。")
+                raise ReplyInvariantError(
+                    "当前改写不能使用长期关系资料。"
+                )
             draft_evidence = tuple(
                 item
-                for item in prepared.evidence
+                for item in context.evidence
                 if item.kind == "user_draft"
                 and item.text == command.content.draft_text
             )
             if (
-                prepared.direction is not None
-                or prepared.current_text != command.content.draft_text
+                context.direction is not None
+                or context.current_text != command.content.draft_text
                 or len(draft_evidence) != 1
             ):
                 raise ReplyInvariantError("改写草稿与回复上下文不一致。")
@@ -246,14 +295,14 @@ class ReplyGenerator:
 
     @staticmethod
     def _validate_persisted(
-        prepared: object,
+        context: object,
         validated: ValidatedReply,
         persisted: object,
     ) -> None:
         if (
-            not isinstance(prepared, PreparedReply)
+            not isinstance(context, ReplyContext)
             or not isinstance(persisted, ReplyGenerated)
-            or persisted.reply_request_id != prepared.reply_request_id
+            or persisted.reply_request_id != context.reply_request_id
             or persisted.used_skill != validated.used_skill
             or not isinstance(persisted.candidates, tuple)
             or len(persisted.candidates) != len(validated.candidates)
@@ -278,7 +327,9 @@ class ReplyGenerator:
                 or saved.citation_ids != expected.citation_ids
                 or saved.risk_notes != expected.risk_notes
             ):
-                raise ReplyInvariantError("持久化候选与已校验结果不一致。")
+                raise ReplyInvariantError(
+                    "持久化候选与已校验结果不一致。"
+                )
             candidate_ids.add(saved.candidate_id)
             cited_ids.update(saved.citation_ids)
 

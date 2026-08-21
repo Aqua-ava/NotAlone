@@ -89,17 +89,25 @@ class GenerateReply:
     scope: ContactScope
     conversation_binding_id: UUID
     content: ReplyInput
+    continued_from_candidate_id: UUID | None = None
     skill: AutoSkill = AutoSkill()
 
     def has_valid_content(self) -> bool:
         """判断联合输入是否满足应用层的最小结构约束。"""
 
         if isinstance(self.content, ReplyToMessage):
-            return (
+            content_valid = (
                 isinstance(self.content.target_message_id, UUID)
                 and isinstance(self.content.direction, ConfirmedDirection)
             )
-        return isinstance(self.content, RewriteDraft) and self.content.is_valid()
+        else:
+            content_valid = (
+                isinstance(self.content, RewriteDraft) and self.content.is_valid()
+            )
+        return content_valid and (
+            self.continued_from_candidate_id is None
+            or isinstance(self.continued_from_candidate_id, UUID)
+        )
 
     def matches_verified_scope(self, scope: VerifiedConversationScope) -> bool:
         """判断请求声明的联系人和会话是否与已验证范围一致。"""

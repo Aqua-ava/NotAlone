@@ -1,13 +1,99 @@
-"""候选回复持久化的内部契约。"""
+"""候选回复请求和结果的持久化合同。"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Protocol
+import json
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta, timezone
+from enum import StrEnum
+from threading import RLock
+from typing import Callable, Protocol
+from uuid import UUID, uuid4
 
-from notalone.reply.context import PreparedReply
-from notalone.reply.interface import GenerateReply, ReplyGenerated, SkillUse
+from notalone.reply.context import (
+    ContextEvidence,
+    ContinuedReplyCandidate,
+    ReplyContext,
+)
+from notalone.reply.errors import (
+    ReplyContinuationError,
+    ReplyIdempotencyConflictError,
+    ReplyStoreInvariantError,
+)
+from notalone.reply.interface import (
+    ContextReceipt,
+    GenerateReply,
+    ReplyCandidate,
+    ReplyGenerated,
+    ReplyToMessage,
+    RewriteDraft,
+    SkillUse,
+)
 from notalone.reply.runtime import RuntimeCandidate
+from notalone.scopes import ContactScope, VerifiedConversationScope
+
+
+class ReplyRequestState(StrEnum):
+    """ReplyStore.start 对一次请求的决定。"""
+
+    STARTED = "started"
+    REPLAYED = "replayed"
+    IN_PROGRESS = "in_progress"
+
+
+class ReplyAttemptState(StrEnum):
+    """一个回复请求尝试的持久化状态。"""
+
+    RUNNING = "running"
+    FAILED = "failed"
+    EXPIRED = "expired"
+    COMPLETED = "completed"
+
+
+@dataclass(frozen=True, slots=True)
+class ReplyRequest:
+    """已领取一次运行租约的最小请求摘要。"""
+
+    request_id: UUID
+    idempotency_key: UUID
+    normalized_input: str
+    scope: ContactScope
+    conversation_binding_id: UUID
+    attempt: int
+    lease_expires_at: datetime
+    continued_from_candidate_id: UUID | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ReplyStart:
+    """ReplyStore 对开始请求的原子决定。"""
+
+    state: ReplyRequestState
+    request: ReplyRequest
+    result: ReplyGenerated | None = None
+    continued_candidate: ContinuedReplyCandidate | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ReplyAttempt:
+    """一次运行尝试的审计摘要，不保存底层异常正文。"""
+
+    number: int
+    state: ReplyAttemptState
+    started_at: datetime
+    lease_expires_at: datetime
+    failure_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StoredReplyRequest:
+    """用于重放和审计的最小回复请求快照。"""
+
+    request: ReplyRequest
+    state: ReplyAttemptState
+    attempts: tuple[ReplyAttempt, ...]
+    evidence: tuple[ContextEvidence, ...]
+    result: ReplyGenerated | None
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -19,16 +105,541 @@ class ValidatedReply:
 
 
 class ReplyStore(Protocol):
-    """当前纵切的持久化 seam。
+    """候选回复的持久化 seam。
 
-    ``prepare`` 暂时仍返回已组装的上下文；正式上下文模块落地后，持久化职责会
-    收窄为请求幂等、状态管理和候选结果保存。
+    Store 只接收外层已经验证的范围和 Context 结果。它不组装上下文、不调用
+    Runtime、不读写 Memory、不识别联系人，也不发送外部消息。
     """
 
-    def prepare(self, command: GenerateReply) -> PreparedReply: ...
+    def start(
+        self,
+        command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
+    ) -> ReplyStart: ...
 
     def save(
         self,
-        prepared: PreparedReply,
+        request: ReplyRequest,
+        context: ReplyContext,
         reply: ValidatedReply,
     ) -> ReplyGenerated: ...
+
+    def fail(self, request: ReplyRequest, *, reason: str) -> None: ...
+
+    def read(self, request_id: UUID, scope: ContactScope) -> StoredReplyRequest: ...
+
+
+@dataclass(slots=True)
+class _MutableReplyRecord:
+    request: ReplyRequest
+    state: ReplyAttemptState
+    attempts: list[ReplyAttempt]
+    evidence: tuple[ContextEvidence, ...] = ()
+    result: ReplyGenerated | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _StoredCandidate:
+    scope: ContactScope
+    conversation_binding_id: UUID
+    text: str
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class InMemoryReplyStore:
+    """用于当前纵切和单元测试的进程内 ReplyStore adapter。
+
+    锁内完成幂等判断、租约领取和结果写入，模拟未来 PostgreSQL adapter 需要提供的
+    原子边界。它只保存 Context 已选出的证据快照，不负责检索或联系人识别。
+    """
+
+    __slots__ = (
+        "_clock",
+        "_id_factory",
+        "_lease_duration",
+        "_lock",
+        "_records_by_key",
+        "_records_by_id",
+        "_candidates",
+    )
+
+    def __init__(
+        self,
+        *,
+        clock: Callable[[], datetime] = _utc_now,
+        id_factory: Callable[[], UUID] = uuid4,
+        lease_duration: timedelta = timedelta(seconds=30),
+    ) -> None:
+        if not callable(clock) or not callable(id_factory):
+            raise TypeError("ReplyStore 的时钟和标识生成器必须可调用。")
+        if (
+            not isinstance(lease_duration, timedelta)
+            or lease_duration <= timedelta(0)
+        ):
+            raise ValueError("回复运行租约必须是正时间段。")
+        self._clock = clock
+        self._id_factory = id_factory
+        self._lease_duration = lease_duration
+        self._lock = RLock()
+        self._records_by_key: dict[tuple[UUID, UUID, UUID], _MutableReplyRecord] = {}
+        self._records_by_id: dict[UUID, _MutableReplyRecord] = {}
+        self._candidates: dict[UUID, _StoredCandidate] = {}
+
+    def start(
+        self,
+        command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
+    ) -> ReplyStart:
+        self._validate_start_input(command, verified_scope)
+        normalized_input = _normalize_input(command)
+        key = (
+            verified_scope.owner_id,
+            verified_scope.contact_id,
+            command.idempotency_key,
+        )
+        with self._lock:
+            record = self._records_by_key.get(key)
+            if record is None:
+                continuation = self._resolve_continuation(command, verified_scope)
+                request = self._new_request(
+                    command=command,
+                    verified_scope=verified_scope,
+                    normalized_input=normalized_input,
+                    attempt=1,
+                )
+                started_at = self._now()
+                record = _MutableReplyRecord(
+                    request=request,
+                    state=ReplyAttemptState.RUNNING,
+                    attempts=[
+                        ReplyAttempt(
+                            number=1,
+                            state=ReplyAttemptState.RUNNING,
+                            started_at=started_at,
+                            lease_expires_at=request.lease_expires_at,
+                        )
+                    ],
+                )
+                self._records_by_key[key] = record
+                self._records_by_id[request.request_id] = record
+                return ReplyStart(
+                    state=ReplyRequestState.STARTED,
+                    request=request,
+                    continued_candidate=continuation,
+                )
+
+            self._ensure_same_request(record.request, command, normalized_input)
+            continuation = self._resolve_continuation(command, verified_scope)
+            now = self._now()
+            if record.state is ReplyAttemptState.COMPLETED:
+                return ReplyStart(
+                    state=ReplyRequestState.REPLAYED,
+                    request=record.request,
+                    result=record.result,
+                    continued_candidate=continuation,
+                )
+            if (
+                record.state is ReplyAttemptState.RUNNING
+                and now < record.request.lease_expires_at
+            ):
+                return ReplyStart(
+                    state=ReplyRequestState.IN_PROGRESS,
+                    request=record.request,
+                    continued_candidate=continuation,
+                )
+
+            previous = record.attempts[-1]
+            expired_state = (
+                ReplyAttemptState.EXPIRED
+                if record.state is ReplyAttemptState.RUNNING
+                else record.state
+            )
+            if previous.state is ReplyAttemptState.RUNNING:
+                record.attempts[-1] = replace(
+                    previous,
+                    state=expired_state,
+                    failure_reason=(
+                        "lease_expired"
+                        if expired_state is ReplyAttemptState.EXPIRED
+                        else previous.failure_reason
+                    ),
+                )
+            request = self._new_request(
+                command=command,
+                verified_scope=verified_scope,
+                normalized_input=normalized_input,
+                attempt=record.request.attempt + 1,
+                request_id=record.request.request_id,
+            )
+            record.request = request
+            record.state = ReplyAttemptState.RUNNING
+            record.result = None
+            record.evidence = ()
+            record.attempts.append(
+                ReplyAttempt(
+                    number=request.attempt,
+                    state=ReplyAttemptState.RUNNING,
+                    started_at=now,
+                    lease_expires_at=request.lease_expires_at,
+                )
+            )
+            return ReplyStart(
+                state=ReplyRequestState.STARTED,
+                request=request,
+                continued_candidate=continuation,
+            )
+
+    def save(
+        self,
+        request: ReplyRequest,
+        context: ReplyContext,
+        reply: ValidatedReply,
+    ) -> ReplyGenerated:
+        with self._lock:
+            record = self._record_for_request(request)
+            if record.state is ReplyAttemptState.COMPLETED:
+                if record.result is None:
+                    raise ReplyStoreInvariantError("已完成回复缺少结果。")
+                return record.result
+            if record.state is not ReplyAttemptState.RUNNING:
+                raise ReplyStoreInvariantError(
+                    "回复请求当前不允许保存结果。"
+                )
+            if self._now() >= request.lease_expires_at:
+                self._expire_record(record)
+                raise ReplyStoreInvariantError("回复请求租约已过期。")
+            self._validate_context(request, context)
+            self._validate_reply(reply)
+
+            candidates: list[ReplyCandidate] = []
+            for runtime_candidate in reply.candidates:
+                candidate_id = self._new_uuid()
+                if candidate_id in self._candidates:
+                    raise ReplyStoreInvariantError("候选标识发生冲突。")
+                candidates.append(
+                    ReplyCandidate(
+                        candidate_id=candidate_id,
+                        text=runtime_candidate.text,
+                        basis=runtime_candidate.basis,
+                        citation_ids=runtime_candidate.citation_ids,
+                        risk_notes=runtime_candidate.risk_notes,
+                    )
+                )
+            evidence_ids = tuple(
+                dict.fromkeys(
+                    evidence_id
+                    for candidate in candidates
+                    for evidence_id in candidate.citation_ids
+                )
+            )
+            result = ReplyGenerated(
+                reply_request_id=request.request_id,
+                candidates=tuple(candidates),
+                context_receipt=ContextReceipt(evidence_ids=evidence_ids),
+                used_skill=reply.used_skill,
+            )
+            record.evidence = tuple(context.evidence)
+            record.result = result
+            record.state = ReplyAttemptState.COMPLETED
+            record.attempts[-1] = replace(
+                record.attempts[-1],
+                state=ReplyAttemptState.COMPLETED,
+            )
+            for candidate in result.candidates:
+                self._candidates[candidate.candidate_id] = _StoredCandidate(
+                    scope=request.scope,
+                    conversation_binding_id=request.conversation_binding_id,
+                    text=candidate.text,
+                )
+            return result
+
+    def fail(self, request: ReplyRequest, *, reason: str) -> None:
+        with self._lock:
+            record = self._record_for_request(request)
+            if record.state is ReplyAttemptState.COMPLETED:
+                return
+            if record.state is not ReplyAttemptState.RUNNING:
+                return
+            if self._now() >= request.lease_expires_at:
+                self._expire_record(record)
+                return
+            failure_reason = _safe_failure_reason(reason)
+            record.state = ReplyAttemptState.FAILED
+            record.attempts[-1] = replace(
+                record.attempts[-1],
+                state=ReplyAttemptState.FAILED,
+                failure_reason=failure_reason,
+            )
+
+    def read(self, request_id: UUID, scope: ContactScope) -> StoredReplyRequest:
+        with self._lock:
+            if not isinstance(request_id, UUID) or not isinstance(scope, ContactScope):
+                raise ReplyStoreInvariantError("回复请求读取范围结构无效。")
+            record = self._records_by_id.get(request_id)
+            if record is None or record.request.scope != scope:
+                raise ReplyStoreInvariantError(
+                    "回复请求不属于当前联系人范围。"
+                )
+            return StoredReplyRequest(
+                request=record.request,
+                state=record.state,
+                attempts=tuple(record.attempts),
+                evidence=record.evidence,
+                result=record.result,
+            )
+
+    def _record_for_request(self, request: ReplyRequest) -> _MutableReplyRecord:
+        if not isinstance(request, ReplyRequest):
+            raise ReplyStoreInvariantError("回复请求租约结构无效。")
+        record = self._records_by_id.get(request.request_id)
+        if record is None or record.request != request:
+            raise ReplyStoreInvariantError("回复请求租约已失效。")
+        return record
+
+    def _resolve_continuation(
+        self,
+        command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
+    ) -> ContinuedReplyCandidate | None:
+        candidate_id = command.continued_from_candidate_id
+        if candidate_id is None:
+            return None
+        candidate = self._candidates.get(candidate_id)
+        expected_scope = ContactScope(
+            verified_scope.owner_id,
+            verified_scope.contact_id,
+        )
+        if (
+            candidate is None
+            or candidate.scope != expected_scope
+            or candidate.conversation_binding_id
+            != verified_scope.conversation_binding_id
+        ):
+            raise ReplyContinuationError(
+                "历史候选不属于当前已验证联系人会话。"
+            )
+        return ContinuedReplyCandidate(
+            candidate_id=candidate_id,
+            scope=candidate.scope,
+            conversation_binding_id=candidate.conversation_binding_id,
+            text=candidate.text,
+        )
+
+    def _new_request(
+        self,
+        *,
+        command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
+        normalized_input: str,
+        attempt: int,
+        request_id: UUID | None = None,
+    ) -> ReplyRequest:
+        return ReplyRequest(
+            request_id=request_id or self._new_uuid(),
+            idempotency_key=command.idempotency_key,
+            normalized_input=normalized_input,
+            scope=ContactScope(verified_scope.owner_id, verified_scope.contact_id),
+            conversation_binding_id=verified_scope.conversation_binding_id,
+            attempt=attempt,
+            lease_expires_at=self._now() + self._lease_duration,
+            continued_from_candidate_id=command.continued_from_candidate_id,
+        )
+
+    def _new_uuid(self) -> UUID:
+        try:
+            value = self._id_factory()
+        except Exception:
+            raise ReplyStoreInvariantError("ReplyStore 标识生成失败。") from None
+        if not isinstance(value, UUID):
+            raise ReplyStoreInvariantError("ReplyStore 标识结构无效。")
+        return value
+
+    def _now(self) -> datetime:
+        value = self._clock()
+        if not isinstance(value, datetime) or value.tzinfo is None:
+            raise ReplyStoreInvariantError(
+                "ReplyStore 时钟必须返回带时区时间。"
+            )
+        return value.astimezone(timezone.utc)
+
+    @staticmethod
+    def _validate_start_input(
+        command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
+    ) -> None:
+        if not (
+            isinstance(command, GenerateReply)
+            and isinstance(verified_scope, VerifiedConversationScope)
+            and isinstance(command.idempotency_key, UUID)
+            and command.has_valid_content()
+            and command.matches_verified_scope(verified_scope)
+        ):
+            raise ReplyStoreInvariantError("回复请求范围或输入结构无效。")
+
+    @staticmethod
+    def _ensure_same_request(
+        request: ReplyRequest,
+        command: GenerateReply,
+        normalized_input: str,
+    ) -> None:
+        if (
+            request.conversation_binding_id
+            != command.conversation_binding_id
+            or request.normalized_input != normalized_input
+        ):
+            raise ReplyIdempotencyConflictError(
+                "回复请求幂等键与输入不一致。"
+            )
+
+    def _validate_context(self, request: ReplyRequest, context: ReplyContext) -> None:
+        if not (
+            isinstance(context, ReplyContext)
+            and isinstance(context.command, GenerateReply)
+            and context.reply_request_id == request.request_id
+            and context.scope == request.scope
+            and context.command.scope == request.scope
+            and context.command.has_valid_content()
+            and context.command.idempotency_key == request.idempotency_key
+            and context.command.conversation_binding_id
+            == request.conversation_binding_id
+            and context.command.continued_from_candidate_id
+            == request.continued_from_candidate_id
+            and _normalize_input(context.command) == request.normalized_input
+            and isinstance(context.evidence, tuple)
+            and context.evidence
+            and all(
+                isinstance(item, ContextEvidence) and item.scope == request.scope
+                for item in context.evidence
+            )
+        ):
+            raise ReplyStoreInvariantError(
+                "回复上下文不属于当前持久化请求。"
+            )
+        evidence_ids: set[UUID] = set()
+        for item in context.evidence:
+            if (
+                item.kind
+                not in (
+                    "message",
+                    "confirmed_memory",
+                    "user_draft",
+                    "continued_candidate",
+                )
+                or not isinstance(item.evidence_id, UUID)
+                or item.evidence_id in evidence_ids
+                or not isinstance(item.text, str)
+                or not item.text.strip()
+                or not isinstance(item.source_ids, tuple)
+                or any(
+                    not isinstance(source_id, UUID)
+                    for source_id in item.source_ids
+                )
+                or not isinstance(item.selection_reason, str)
+            ):
+                raise ReplyStoreInvariantError("回复证据快照结构无效。")
+            evidence_ids.add(item.evidence_id)
+        continuation_evidence = tuple(
+            item for item in context.evidence if item.kind == "continued_candidate"
+        )
+        if request.continued_from_candidate_id is None:
+            if continuation_evidence:
+                raise ReplyStoreInvariantError(
+                    "历史候选必须由用户显式选择。"
+                )
+            return
+        candidate = self._candidates.get(request.continued_from_candidate_id)
+        if (
+            candidate is None
+            or len(continuation_evidence) != 1
+            or continuation_evidence[0].evidence_id
+            != request.continued_from_candidate_id
+            or continuation_evidence[0].text != candidate.text
+        ):
+            raise ReplyStoreInvariantError(
+                "继续候选快照与已保存候选不一致。"
+            )
+
+    @staticmethod
+    def _validate_reply(reply: ValidatedReply) -> None:
+        if not (
+            isinstance(reply, ValidatedReply)
+            and isinstance(reply.candidates, tuple)
+            and 1 <= len(reply.candidates) <= 3
+            and all(
+                isinstance(candidate, RuntimeCandidate)
+                for candidate in reply.candidates
+            )
+            and all(
+                isinstance(candidate.text, str)
+                and bool(candidate.text.strip())
+                and isinstance(candidate.basis, str)
+                and bool(candidate.basis.strip())
+                and isinstance(candidate.citation_ids, tuple)
+                and bool(candidate.citation_ids)
+                and all(isinstance(item, UUID) for item in candidate.citation_ids)
+                and isinstance(candidate.risk_notes, tuple)
+                and all(
+                    isinstance(note, str) and bool(note.strip())
+                    for note in candidate.risk_notes
+                )
+                for candidate in reply.candidates
+            )
+        ):
+            raise ReplyStoreInvariantError("回复结果结构无效。")
+
+    def _expire_record(self, record: _MutableReplyRecord) -> None:
+        if record.state is not ReplyAttemptState.RUNNING:
+            return
+        record.state = ReplyAttemptState.EXPIRED
+        record.attempts[-1] = replace(
+            record.attempts[-1],
+            state=ReplyAttemptState.EXPIRED,
+            failure_reason="lease_expired",
+        )
+
+
+def _normalize_input(command: GenerateReply) -> str:
+    content = command.content
+    if isinstance(content, ReplyToMessage):
+        payload = {
+            "mode": "reply_to_message",
+            "target_message_id": str(content.target_message_id),
+            "direction": content.direction.text.strip(),
+            "direction_source": content.direction.source.value,
+        }
+    elif isinstance(content, RewriteDraft):
+        payload = {
+            "mode": "rewrite_draft",
+            "draft_text": content.draft_text.strip(),
+            "user_instruction": (
+                content.user_instruction.strip()
+                if content.user_instruction is not None
+                else None
+            ),
+            "include_relationship_context": content.include_relationship_context,
+        }
+    else:
+        raise ReplyStoreInvariantError("回复输入模式无效。")
+    payload["continued_from_candidate_id"] = (
+        str(command.continued_from_candidate_id)
+        if command.continued_from_candidate_id is not None
+        else None
+    )
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _safe_failure_reason(reason: str) -> str:
+    if not isinstance(reason, str) or not reason.strip():
+        return "unknown_failure"
+    value = reason.strip()
+    if len(value) > 64 or any(char.isspace() for char in value):
+        return "unknown_failure"
+    return value

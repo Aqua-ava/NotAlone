@@ -345,9 +345,6 @@ def _request_text(prepared: ReplyContext) -> str:
             "current_text": prepared.current_text,
             "confirmed_direction": prepared.command.content.direction.text,
             "direction_source": prepared.command.content.direction.source.value,
-            "previous_unsent_candidates": list(
-                item.text for item in prepared.previous_unsent_candidates
-            ),
         }
     elif isinstance(prepared.command.content, RewriteDraft):
         payload = {

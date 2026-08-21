@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass, replace
+from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 from uuid import UUID
 
@@ -19,11 +20,15 @@ from notalone.reply import (
 )
 from notalone.reply.context import (
     ContextEvidence,
-    PreparedReply,
-    PreviousUnsentCandidate,
+    ReplyContext,
 )
 from notalone.reply.runtime import ReplyRuntimeResult, RuntimeCandidate
-from notalone.reply.store import ValidatedReply
+from notalone.reply.store import (
+    ReplyRequest,
+    ReplyRequestState,
+    ReplyStart,
+    ValidatedReply,
+)
 from notalone.reply.errors import (
     ReplyContextError,
     ReplyInvariantError,
@@ -51,88 +56,116 @@ UNKNOWN_EVIDENCE_ID = UUID("88888888-8888-8888-8888-888888888888")
 
 @dataclass
 class RecordingReplyStore:
-    prepared: PreparedReply
+    prepared: ReplyContext
     saved: ValidatedReply | None = None
 
-    def prepare(self, command: GenerateReply) -> PreparedReply:
-        del command
-        return self.prepared
+    def start(
+        self,
+        command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
+    ) -> ReplyStart:
+        request = ReplyRequest(
+            request_id=self.prepared.reply_request_id,
+            idempotency_key=command.idempotency_key,
+            normalized_input="synthetic-input",
+            scope=command.scope,
+            conversation_binding_id=verified_scope.conversation_binding_id,
+            attempt=1,
+            lease_expires_at=datetime.now(timezone.utc) + timedelta(minutes=1),
+            continued_from_candidate_id=command.continued_from_candidate_id,
+        )
+        return ReplyStart(state=ReplyRequestState.STARTED, request=request)
 
     def save(
         self,
-        prepared: PreparedReply,
+        request: ReplyRequest,
+        context: ReplyContext,
         reply: ValidatedReply,
     ) -> ReplyGenerated:
+        if request.request_id != context.reply_request_id:
+            raise AssertionError("unexpected synthetic request")
         self.saved = reply
-        candidate = reply.candidates[0]
         return ReplyGenerated(
-            reply_request_id=prepared.reply_request_id,
+            reply_request_id=context.reply_request_id,
             candidates=(
                 ReplyCandidate(
                     candidate_id=CANDIDATE_ID,
-                    text=candidate.text,
-                    basis=candidate.basis,
-                    citation_ids=candidate.citation_ids,
-                    risk_notes=candidate.risk_notes,
+                    text=reply.candidates[0].text,
+                    basis=reply.candidates[0].basis,
+                    citation_ids=reply.candidates[0].citation_ids,
+                    risk_notes=reply.candidates[0].risk_notes,
                 ),
             ),
             context_receipt=ContextReceipt(
-                evidence_ids=tuple(item.evidence_id for item in prepared.evidence),
+                evidence_ids=tuple(
+                    evidence_id
+                    for candidate in reply.candidates
+                    for evidence_id in candidate.citation_ids
+                ),
             ),
             used_skill=reply.used_skill,
         )
+
+    def fail(self, request: ReplyRequest, *, reason: str) -> None:
+        del request, reason
 
 
 @dataclass
 class CorruptingReplyStore(RecordingReplyStore):
     def save(
         self,
-        prepared: PreparedReply,
+        request: ReplyRequest,
+        context: ReplyContext,
         reply: ValidatedReply,
     ) -> ReplyGenerated:
-        persisted = super().save(prepared, reply)
+        persisted = super().save(request, context, reply)
         corrupted = replace(persisted.candidates[0], text="被 Store 篡改的候选")
         return replace(persisted, candidates=(corrupted,))
 
 
 @dataclass
 class ExplodingReplyStore(RecordingReplyStore):
-    fail_during: str = "prepare"
+    fail_during: str = "start"
 
-    def prepare(self, command: GenerateReply) -> PreparedReply:
-        if self.fail_during == "prepare":
+    def start(
+        self,
+        command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
+    ) -> ReplyStart:
+        if self.fail_during == "start":
             raise RuntimeError("postgresql://private-credential")
-        return super().prepare(command)
+        return super().start(command, verified_scope)
 
     def save(
         self,
-        prepared: PreparedReply,
+        request: ReplyRequest,
+        context: ReplyContext,
         reply: ValidatedReply,
     ) -> ReplyGenerated:
         if self.fail_during == "save":
             raise RuntimeError("private persisted candidate body")
-        return super().save(prepared, reply)
+        return super().save(request, context, reply)
 
 
 @dataclass
 class ScriptedReplyRuntime:
     result: ReplyRuntimeResult
-    received: PreparedReply | None = None
+    received: ReplyContext | None = None
 
-    def generate(self, prepared: PreparedReply) -> ReplyRuntimeResult:
+    def generate(self, prepared: ReplyContext) -> ReplyRuntimeResult:
         self.received = prepared
         return self.result
 
 
 class ExplodingReplyRuntime:
-    def generate(self, prepared: PreparedReply) -> ReplyRuntimeResult:
+    def generate(self, prepared: ReplyContext) -> ReplyRuntimeResult:
         del prepared
         raise RuntimeError("private provider response")
 
 
 @dataclass
 class RecordingReplyContext:
-    prepared: PreparedReply
+    prepared: ReplyContext
     calls: int = 0
 
     def build(
@@ -140,14 +173,29 @@ class RecordingReplyContext:
         *,
         command: GenerateReply,
         verified_scope: VerifiedConversationScope,
-    ) -> PreparedReply:
-        del command, verified_scope
+        reply_request_id: UUID | None = None,
+        continued_candidate: object | None = None,
+    ) -> ReplyContext:
+        del command, verified_scope, reply_request_id, continued_candidate
         self.calls += 1
         return self.prepared
 
 
 class ReplyGeneratorTest(unittest.TestCase):
-    def _valid_case(self) -> tuple[GenerateReply, PreparedReply]:
+    @staticmethod
+    def _generator(
+        *,
+        store: RecordingReplyStore,
+        runtime: object,
+        prepared: ReplyContext,
+    ) -> ReplyGenerator:
+        return ReplyGenerator(
+            store=store,
+            runtime=runtime,
+            context=RecordingReplyContext(prepared=prepared),
+        )
+
+    def _valid_case(self) -> tuple[GenerateReply, ReplyContext]:
         scope = ContactScope(owner_id=OWNER_ID, contact_id=CONTACT_ID)
         direction = ConfirmedDirection(
             text="自然地答应",
@@ -159,7 +207,7 @@ class ReplyGeneratorTest(unittest.TestCase):
             conversation_binding_id=BINDING_ID,
             content=ReplyToMessage(MESSAGE_ID, direction),
         )
-        return command, PreparedReply(
+        return command, ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
@@ -190,7 +238,7 @@ class ReplyGeneratorTest(unittest.TestCase):
             text="明天一起吃饭吗？",
             scope=scope,
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
@@ -214,7 +262,11 @@ class ReplyGeneratorTest(unittest.TestCase):
             )
         )
 
-        result = ReplyGenerator(store=store, runtime=runtime).generate(
+        result = self._generator(
+            store=store,
+            runtime=runtime,
+            prepared=prepared,
+        ).generate(
             command,
             verified_scope=VERIFIED_SCOPE,
         )
@@ -226,10 +278,10 @@ class ReplyGeneratorTest(unittest.TestCase):
         self.assertIs(runtime.received, prepared)
         self.assertIsNotNone(store.saved)
 
-    def test_injected_context_is_used_without_calling_store_prepare(self) -> None:
+    def test_explicit_context_is_used_without_store_preparation(self) -> None:
         command, prepared = self._valid_case()
         context = RecordingReplyContext(prepared=prepared)
-        store = ExplodingReplyStore(prepared=prepared, fail_during="prepare")
+        store = RecordingReplyStore(prepared=prepared)
         runtime = ScriptedReplyRuntime(
             result=ReplyRuntimeResult(
                 candidates=(
@@ -270,7 +322,7 @@ class ReplyGeneratorTest(unittest.TestCase):
             content=ReplyToMessage(MESSAGE_ID, direction),
         )
         malicious_command = replace(command, scope=other_scope)
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=malicious_command,
             scope=other_scope,
@@ -302,7 +354,11 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(
+            self._generator(
+                store=store,
+                runtime=runtime,
+                prepared=prepared,
+            ).generate(
                 command,
                 verified_scope=VERIFIED_SCOPE,
             )
@@ -326,7 +382,7 @@ class ReplyGeneratorTest(unittest.TestCase):
             conversation_binding_id=BINDING_ID,
             content=ReplyToMessage(MESSAGE_ID, direction),
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
@@ -358,7 +414,11 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(
+            self._generator(
+                store=store,
+                runtime=runtime,
+                prepared=prepared,
+            ).generate(
                 command,
                 verified_scope=VERIFIED_SCOPE,
             )
@@ -381,23 +441,24 @@ class ReplyGeneratorTest(unittest.TestCase):
             scope=scope,
             conversation_binding_id=BINDING_ID,
             content=ReplyToMessage(MESSAGE_ID, direction),
+            continued_from_candidate_id=CANDIDATE_ID,
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
             current_text="合成消息",
             direction=direction,
-            evidence=(ContextEvidence(MESSAGE_ID, "message", "合成消息", scope),),
-            skill_library_revision=1,
-            previous_unsent_candidates=(
-                PreviousUnsentCandidate(
-                    candidate_id=CANDIDATE_ID,
-                    scope=other_scope,
-                    conversation_binding_id=BINDING_ID,
-                    text="另一联系人的未发送候选",
+            evidence=(
+                ContextEvidence(MESSAGE_ID, "message", "合成消息", scope),
+                ContextEvidence(
+                    CANDIDATE_ID,
+                    "continued_candidate",
+                    "另一联系人的未发送候选",
+                    other_scope,
                 ),
             ),
+            skill_library_revision=1,
         )
         store = RecordingReplyStore(prepared=prepared)
         runtime = ScriptedReplyRuntime(
@@ -415,7 +476,11 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(
+            self._generator(
+                store=store,
+                runtime=runtime,
+                prepared=prepared,
+            ).generate(
                 command,
                 verified_scope=VERIFIED_SCOPE,
             )
@@ -435,7 +500,7 @@ class ReplyGeneratorTest(unittest.TestCase):
             conversation_binding_id=BINDING_ID,
             content=ReplyToMessage(MESSAGE_ID, direction),
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
@@ -467,7 +532,11 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(
+            self._generator(
+                store=store,
+                runtime=runtime,
+                prepared=prepared,
+            ).generate(
                 command,
                 verified_scope=VERIFIED_SCOPE,
             )
@@ -487,7 +556,7 @@ class ReplyGeneratorTest(unittest.TestCase):
             conversation_binding_id=BINDING_ID,
             content=ReplyToMessage(MESSAGE_ID, direction),
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
@@ -504,7 +573,11 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(
+            self._generator(
+                store=store,
+                runtime=runtime,
+                prepared=prepared,
+            ).generate(
                 command,
                 verified_scope=VERIFIED_SCOPE,
             )
@@ -523,7 +596,7 @@ class ReplyGeneratorTest(unittest.TestCase):
             conversation_binding_id=BINDING_ID,
             content=ReplyToMessage(MESSAGE_ID, direction),
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
@@ -548,7 +621,11 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(
+            self._generator(
+                store=store,
+                runtime=runtime,
+                prepared=prepared,
+            ).generate(
                 command,
                 verified_scope=VERIFIED_SCOPE,
             )
@@ -573,7 +650,11 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(
+            self._generator(
+                store=store,
+                runtime=runtime,
+                prepared=prepared,
+            ).generate(
                 command,
                 verified_scope=VERIFIED_SCOPE,
             )
@@ -598,19 +679,24 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(
+            self._generator(
+                store=store,
+                runtime=runtime,
+                prepared=prepared,
+            ).generate(
                 command,
                 verified_scope=VERIFIED_SCOPE,
             )
 
-    def test_hides_prepare_error_details(self) -> None:
+    def test_hides_store_start_error_details(self) -> None:
         command, prepared = self._valid_case()
-        store = ExplodingReplyStore(prepared=prepared, fail_during="prepare")
+        store = ExplodingReplyStore(prepared=prepared, fail_during="start")
 
-        with self.assertRaises(ReplyContextError) as caught:
+        with self.assertRaises(ReplyPersistenceError) as caught:
             ReplyGenerator(
                 store=store,
                 runtime=ExplodingReplyRuntime(),
+                context=RecordingReplyContext(prepared=prepared),
             ).generate(command, verified_scope=VERIFIED_SCOPE)
 
         self.assertNotIn("private-credential", str(caught.exception))
@@ -623,6 +709,7 @@ class ReplyGeneratorTest(unittest.TestCase):
             ReplyGenerator(
                 store=store,
                 runtime=ExplodingReplyRuntime(),
+                context=RecordingReplyContext(prepared=prepared),
             ).generate(command, verified_scope=VERIFIED_SCOPE)
 
         self.assertNotIn("private provider response", str(caught.exception))
@@ -646,7 +733,11 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyPersistenceError) as caught:
-            ReplyGenerator(store=store, runtime=runtime).generate(
+            self._generator(
+                store=store,
+                runtime=runtime,
+                prepared=prepared,
+            ).generate(
                 command,
                 verified_scope=VERIFIED_SCOPE,
             )

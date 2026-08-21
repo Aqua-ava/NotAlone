@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -27,11 +28,15 @@ from notalone.reply import (
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
 from notalone.reply.context import (
     ContextEvidence,
-    PreparedReply,
-    PreviousUnsentCandidate,
+    ReplyContext,
 )
 from notalone.reply.runtime import ReplyRuntimeResult
-from notalone.reply.store import ValidatedReply
+from notalone.reply.store import (
+    ReplyRequest,
+    ReplyRequestState,
+    ReplyStart,
+    ValidatedReply,
+)
 from notalone.reply.errors import ReplyInvariantError
 from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.skills import SkillCatalog, SkillCatalogEntry, SkillVersion
@@ -148,37 +153,78 @@ class EmptySkillPort:
 
 @dataclass
 class InMemoryReplyStore:
-    prepared: PreparedReply
+    prepared: ReplyContext
     saved: ValidatedReply | None = None
 
-    def prepare(self, command: GenerateReply) -> PreparedReply:
+    def start(
+        self,
+        command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
+    ) -> ReplyStart:
         if command != self.prepared.command:
             raise AssertionError("unexpected synthetic command")
-        return self.prepared
+        return ReplyStart(
+            state=ReplyRequestState.STARTED,
+            request=ReplyRequest(
+                request_id=self.prepared.reply_request_id,
+                idempotency_key=command.idempotency_key,
+                normalized_input="synthetic-input",
+                scope=self.prepared.scope,
+                conversation_binding_id=verified_scope.conversation_binding_id,
+                attempt=1,
+                lease_expires_at=datetime.now(timezone.utc) + timedelta(minutes=1),
+                continued_from_candidate_id=command.continued_from_candidate_id,
+            ),
+        )
 
     def save(
         self,
-        prepared: PreparedReply,
+        request: ReplyRequest,
+        context: ReplyContext,
         reply: ValidatedReply,
     ) -> ReplyGenerated:
+        if request.request_id != context.reply_request_id:
+            raise AssertionError("unexpected synthetic request")
         self.saved = reply
-        candidate = reply.candidates[0]
         return ReplyGenerated(
-            reply_request_id=prepared.reply_request_id,
+            reply_request_id=context.reply_request_id,
             candidates=(
                 ReplyCandidate(
                     candidate_id=CANDIDATE_ID,
-                    text=candidate.text,
-                    basis=candidate.basis,
-                    citation_ids=candidate.citation_ids,
-                    risk_notes=candidate.risk_notes,
+                    text=reply.candidates[0].text,
+                    basis=reply.candidates[0].basis,
+                    citation_ids=reply.candidates[0].citation_ids,
+                    risk_notes=reply.candidates[0].risk_notes,
                 ),
             ),
             context_receipt=ContextReceipt(
-                evidence_ids=tuple(item.evidence_id for item in prepared.evidence),
+                evidence_ids=tuple(
+                    evidence_id
+                    for candidate in reply.candidates
+                    for evidence_id in candidate.citation_ids
+                ),
             ),
             used_skill=reply.used_skill,
         )
+
+    def fail(self, request: ReplyRequest, *, reason: str) -> None:
+        del request, reason
+
+
+@dataclass
+class RecordingReplyContext:
+    prepared: ReplyContext
+
+    def build(
+        self,
+        *,
+        command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
+        reply_request_id: UUID | None = None,
+        continued_candidate: object | None = None,
+    ) -> ReplyContext:
+        del command, verified_scope, reply_request_id, continued_candidate
+        return self.prepared
 
 
 class LangChainVerticalSliceTest(unittest.TestCase):
@@ -238,7 +284,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             conversation_binding_id=BINDING_ID,
             content=content,
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
@@ -285,6 +331,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
                 model=model,
                 skill_port=EmptySkillPort(scope=scope, revision=4),
             ),
+            context=RecordingReplyContext(prepared=prepared),
         ).generate(command, verified_scope=VERIFIED_SCOPE)
 
         seen_context = "\n".join(
@@ -308,7 +355,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             conversation_binding_id=BINDING_ID,
             content=content,
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
@@ -355,6 +402,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
                 model=model,
                 skill_port=EmptySkillPort(scope=scope, revision=4),
             ),
+            context=RecordingReplyContext(prepared=prepared),
         ).generate(command, verified_scope=VERIFIED_SCOPE)
 
         seen_context = "\n".join(
@@ -379,7 +427,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             content=ReplyToMessage(MESSAGE_ID, direction),
             skill=AutoSkill(),
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
@@ -467,7 +515,11 @@ class LangChainVerticalSliceTest(unittest.TestCase):
         store = InMemoryReplyStore(prepared)
         runtime = LangChainReplyRuntime(model=model, skill_port=skill_port)
 
-        result = ReplyGenerator(store=store, runtime=runtime).generate(
+        result = ReplyGenerator(
+            store=store,
+            runtime=runtime,
+            context=RecordingReplyContext(prepared=prepared),
+        ).generate(
             command,
             verified_scope=VERIFIED_SCOPE,
         )
@@ -495,7 +547,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             content=ReplyToMessage(MESSAGE_ID, direction),
             skill=AutoSkill(),
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
@@ -560,6 +612,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             ReplyGenerator(
                 store=store,
                 runtime=LangChainReplyRuntime(model=model, skill_port=leaky_port),
+                context=RecordingReplyContext(prepared=prepared),
             ).generate(command, verified_scope=VERIFIED_SCOPE)
 
         seen_context = "\n".join(
@@ -584,7 +637,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             content=ReplyToMessage(MESSAGE_ID, direction),
             skill=AutoSkill(),
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
@@ -624,6 +677,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             ReplyGenerator(
                 store=store,
                 runtime=LangChainReplyRuntime(model=model, skill_port=leaky_port),
+                context=RecordingReplyContext(prepared=prepared),
             ).generate(command, verified_scope=VERIFIED_SCOPE)
 
         self.assertEqual(model.seen_calls, [])
@@ -642,7 +696,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             content=ReplyToMessage(MESSAGE_ID, direction),
             skill=AutoSkill(),
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
@@ -680,6 +734,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
                     model=model,
                     skill_port=self._two_skill_port(scope),
                 ),
+                context=RecordingReplyContext(prepared=prepared),
             ).generate(command, verified_scope=VERIFIED_SCOPE)
 
         seen_context = "\n".join(
@@ -691,7 +746,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
         self.assertNotIn("DIRECT_SECOND_BODY", seen_context)
         self.assertIsNone(store.saved)
 
-    def test_second_turn_gets_prior_candidate_without_prior_skill_trace(self) -> None:
+    def test_second_turn_uses_only_explicitly_continued_candidate(self) -> None:
         scope = ContactScope(OWNER_ID, CONTACT_ID)
         first_direction = ConfirmedDirection(
             text="自然地答应",
@@ -704,7 +759,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             content=ReplyToMessage(MESSAGE_ID, first_direction),
             skill=AutoSkill(),
         )
-        first_prepared = PreparedReply(
+        first_prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=first_command,
             scope=scope,
@@ -810,9 +865,11 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             ]
         )
         store = InMemoryReplyStore(first_prepared)
+        context = RecordingReplyContext(prepared=first_prepared)
         generator = ReplyGenerator(
             store=store,
             runtime=LangChainReplyRuntime(model=model, skill_port=skill_port),
+            context=context,
         )
 
         first_result = generator.generate(
@@ -827,24 +884,26 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             first_command,
             idempotency_key=SECOND_REQUEST_KEY,
             content=ReplyToMessage(MESSAGE_ID, second_direction),
+            continued_from_candidate_id=first_result.candidates[0].candidate_id,
         )
-        store.prepared = PreparedReply(
+        store.prepared = ReplyContext(
             reply_request_id=SECOND_REQUEST_ID,
             command=second_command,
             scope=scope,
             current_text="明天一起吃饭吗？",
             direction=second_direction,
-            evidence=first_prepared.evidence,
-            skill_library_revision=4,
-            previous_unsent_candidates=(
-                PreviousUnsentCandidate(
-                    candidate_id=first_result.candidates[0].candidate_id,
-                    scope=scope,
-                    conversation_binding_id=BINDING_ID,
-                    text=first_result.candidates[0].text,
+            evidence=first_prepared.evidence
+            + (
+                ContextEvidence(
+                    first_result.candidates[0].candidate_id,
+                    "continued_candidate",
+                    first_result.candidates[0].text,
+                    scope,
                 ),
             ),
+            skill_library_revision=4,
         )
+        context.prepared = store.prepared
 
         second_result = generator.generate(
             second_command,

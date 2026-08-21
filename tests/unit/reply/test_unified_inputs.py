@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from notalone.application import CandidateReplyFlow
@@ -18,10 +19,15 @@ from notalone.reply import (
     ReplyGenerator,
     RewriteDraft,
 )
-from notalone.reply.context import ContextEvidence, PreparedReply
+from notalone.reply.context import ContextEvidence, ReplyContext
 from notalone.reply.errors import ReplyInvariantError
 from notalone.reply.runtime import ReplyRuntimeResult, RuntimeCandidate
-from notalone.reply.store import ValidatedReply
+from notalone.reply.store import (
+    ReplyRequest,
+    ReplyRequestState,
+    ReplyStart,
+    ValidatedReply,
+)
 from notalone.scopes import ContactScope, VerifiedConversationScope
 
 
@@ -36,22 +42,41 @@ CANDIDATE_ID = UUID("11111111-7777-7777-7777-777777777777")
 
 @dataclass
 class RecordingReplyStore:
-    prepared: PreparedReply
+    prepared: ReplyContext
     saved: ValidatedReply | None = None
 
-    def prepare(self, command: GenerateReply) -> PreparedReply:
+    def start(
+        self,
+        command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
+    ) -> ReplyStart:
         if command != self.prepared.command:
             raise AssertionError("unexpected synthetic command")
-        return self.prepared
+        return ReplyStart(
+            state=ReplyRequestState.STARTED,
+            request=ReplyRequest(
+                request_id=self.prepared.reply_request_id,
+                idempotency_key=command.idempotency_key,
+                normalized_input="synthetic-input",
+                scope=self.prepared.scope,
+                conversation_binding_id=verified_scope.conversation_binding_id,
+                attempt=1,
+                lease_expires_at=datetime.now(timezone.utc) + timedelta(minutes=1),
+                continued_from_candidate_id=command.continued_from_candidate_id,
+            ),
+        )
 
     def save(
         self,
-        prepared: PreparedReply,
+        request: ReplyRequest,
+        context: ReplyContext,
         reply: ValidatedReply,
     ) -> ReplyGenerated:
+        if request.request_id != context.reply_request_id:
+            raise AssertionError("unexpected synthetic request")
         self.saved = reply
         return ReplyGenerated(
-            reply_request_id=prepared.reply_request_id,
+            reply_request_id=context.reply_request_id,
             candidates=tuple(
                 ReplyCandidate(
                     candidate_id=CANDIDATE_ID,
@@ -72,12 +97,15 @@ class RecordingReplyStore:
             used_skill=reply.used_skill,
         )
 
+    def fail(self, request: ReplyRequest, *, reason: str) -> None:
+        del request, reason
+
 
 @dataclass
 class RecordingReplyRuntime:
-    received: PreparedReply | None = None
+    received: ReplyContext | None = None
 
-    def generate(self, prepared: PreparedReply) -> ReplyRuntimeResult:
+    def generate(self, prepared: ReplyContext) -> ReplyRuntimeResult:
         self.received = prepared
         return ReplyRuntimeResult(
             candidates=(
@@ -92,12 +120,28 @@ class RecordingReplyRuntime:
         )
 
 
+@dataclass
+class RecordingReplyContext:
+    prepared: ReplyContext
+
+    def build(
+        self,
+        *,
+        command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
+        reply_request_id: UUID | None = None,
+        continued_candidate: object | None = None,
+    ) -> ReplyContext:
+        del command, verified_scope, reply_request_id, continued_candidate
+        return self.prepared
+
+
 class UnifiedReplyInputTest(unittest.TestCase):
     @staticmethod
     def _verified_scope() -> VerifiedConversationScope:
         return VerifiedConversationScope(OWNER_ID, CONTACT_ID, BINDING_ID)
 
-    def _rewrite_command(self) -> tuple[GenerateReply, PreparedReply]:
+    def _rewrite_command(self) -> tuple[GenerateReply, ReplyContext]:
         scope = ContactScope(OWNER_ID, CONTACT_ID)
         content = RewriteDraft(
             draft_text="我明天有空，晚点见",
@@ -109,7 +153,7 @@ class UnifiedReplyInputTest(unittest.TestCase):
             conversation_binding_id=BINDING_ID,
             content=content,
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
@@ -134,7 +178,11 @@ class UnifiedReplyInputTest(unittest.TestCase):
         store = RecordingReplyStore(prepared=prepared)
         runtime = RecordingReplyRuntime()
 
-        result = ReplyGenerator(store=store, runtime=runtime).generate(
+        result = ReplyGenerator(
+            store=store,
+            runtime=runtime,
+            context=RecordingReplyContext(prepared=prepared),
+        ).generate(
             command,
             verified_scope=self._verified_scope(),
         )
@@ -154,6 +202,7 @@ class UnifiedReplyInputTest(unittest.TestCase):
         ReplyGenerator(
             store=RecordingReplyStore(prepared=prepared),
             runtime=runtime,
+            context=RecordingReplyContext(prepared=prepared),
         ).generate(command, verified_scope=self._verified_scope())
 
         self.assertIsInstance(runtime.received.command.content, RewriteDraft)
@@ -171,7 +220,7 @@ class UnifiedReplyInputTest(unittest.TestCase):
             conversation_binding_id=BINDING_ID,
             content=content,
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=REQUEST_ID,
             command=command,
             scope=scope,
@@ -191,6 +240,7 @@ class UnifiedReplyInputTest(unittest.TestCase):
         result = ReplyGenerator(
             store=RecordingReplyStore(prepared=prepared),
             runtime=RecordingReplyRuntime(),
+            context=RecordingReplyContext(prepared=prepared),
         ).generate(command, verified_scope=self._verified_scope())
 
         self.assertEqual(result.candidates[0].citation_ids, (DRAFT_EVIDENCE_ID,))
@@ -204,7 +254,7 @@ class UnifiedReplyInputTest(unittest.TestCase):
             conversation_binding_id=command.conversation_binding_id,
             content=RewriteDraft(draft_text=command.content.draft_text),
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=prepared.reply_request_id,
             command=command,
             scope=prepared.scope,
@@ -227,6 +277,7 @@ class UnifiedReplyInputTest(unittest.TestCase):
             ReplyGenerator(
                 store=RecordingReplyStore(prepared=prepared),
                 runtime=runtime,
+                context=RecordingReplyContext(prepared=prepared),
             ).generate(command, verified_scope=self._verified_scope())
 
         self.assertIsNone(runtime.received)
@@ -243,7 +294,7 @@ class UnifiedReplyInputTest(unittest.TestCase):
             conversation_binding_id=command.conversation_binding_id,
             content=content,
         )
-        prepared = PreparedReply(
+        prepared = ReplyContext(
             reply_request_id=prepared.reply_request_id,
             command=command,
             scope=prepared.scope,
@@ -265,6 +316,7 @@ class UnifiedReplyInputTest(unittest.TestCase):
         result = ReplyGenerator(
             store=RecordingReplyStore(prepared=prepared),
             runtime=runtime,
+            context=RecordingReplyContext(prepared=prepared),
         ).generate(command, verified_scope=self._verified_scope())
 
         self.assertEqual(result.candidates[0].text, "我明天有空，晚点见。")
@@ -281,7 +333,11 @@ class UnifiedReplyInputTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(
+            ReplyGenerator(
+                store=store,
+                runtime=runtime,
+                context=RecordingReplyContext(prepared=prepared),
+            ).generate(
                 command,
                 verified_scope=wrong_scope,
             )
