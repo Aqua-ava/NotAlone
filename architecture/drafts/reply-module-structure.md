@@ -1,6 +1,6 @@
 # 候选回复模块结构草案
 
-> 状态：讨论中
+> 状态：已收束；正式决定见 ADR-012
 > 日期：2026-08-21
 >
 > 本文记录已经确认的模块关系，不代表对应模块都已经实现。未决定的内容继续留在后续讨论中，不提前固化为代码约束。
@@ -13,7 +13,7 @@ NotAlone 的候选回复由外层应用流程和 Reply 模块共同完成：
 UI / 快捷键
   -> 候选回复流程
        -> 验证联系人与会话绑定
-       -> Reply.generate(VerifiedReplyScope, ReplyInput)
+       -> Reply.generate(VerifiedConversationScope, ReplyInput)
             -> Context
             -> Runtime
             -> Store
@@ -93,7 +93,7 @@ Memory 负责关系记忆的创建、修正、失效、删除和联系人记忆�
 
 ## 5. 已确认但尚未实现
 
-- 外层候选回复流程和 `VerifiedReplyScope`。
+    - 外层候选回复流程和 `VerifiedConversationScope`。
 - `RewriteDraft` 公开输入类型。
 - 正式 Context、Retrieval 和 Memory 模块。
 - PostgreSQL ReplyStore 与 SkillPort。

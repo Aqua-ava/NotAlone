@@ -35,6 +35,7 @@
 9. [ADR-009：使用 LangChain create_agent 实现有界候选回复循环](adr/009-langchain-create-agent-bounded-reply-loop.md)
 10. [ADR-010：使用 Deep Agents SkillsMiddleware 加载回复 Skill](adr/010-deep-agents-skills-middleware.md)
 11. [ADR-011：关系记忆自动管理与主题目录渐进加载](adr/011-automatic-relationship-memory-index.md)
+12. [ADR-012：候选回复流程与内部模块边界](adr/012-reply-module-boundaries.md)
 
 ## 当前架构决策
 
