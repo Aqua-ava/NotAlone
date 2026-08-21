@@ -8,6 +8,11 @@ from uuid import UUID
 import psycopg
 from psycopg.rows import dict_row
 
+from notalone.memory import ConfirmedMemory, MemoryPort
+from notalone.persistence.memory_store import (
+    MemoryPersistenceError,
+    PostgresMemoryStore,
+)
 from notalone.retrieval.errors import RetrievalError, RetrievalInvariantError
 from notalone.retrieval.models import RetrievedMemory, RetrievedMessage
 from notalone.scopes import ContactScope
@@ -39,12 +44,22 @@ def _validate_limit(limit: int) -> None:
 class PostgresRetrieval:
     """按联系人范围只读检索规范化消息。"""
 
-    __slots__ = ("_database_url",)
+    __slots__ = ("_database_url", "_memory_store")
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        memory_store: MemoryPort | None = None,
+    ) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
         self._database_url = database_url
+        self._memory_store = (
+            memory_store
+            if memory_store is not None
+            else PostgresMemoryStore(database_url)
+        )
 
     def search_messages(
         self,
@@ -112,14 +127,40 @@ class PostgresRetrieval:
         query: str | None = None,
         limit: int = 20,
     ) -> tuple[RetrievedMemory, ...]:
-        """关系记忆尚未有 PostgreSQL schema 时显式 fail closed。"""
+        """返回当前联系人范围内 active 且有效的已确认记忆。"""
 
         self._validate_scope(scope)
         if query is not None and not isinstance(query, str):
             raise TypeError("关系记忆检索 query 必须是字符串或 None。")
         if not isinstance(limit, int) or not 1 <= limit <= 20:
             raise ValueError("检索 limit 超出模块预算。")
-        raise RetrievalError("关系记忆 PostgreSQL 检索尚未接入。")
+        try:
+            memories = self._memory_store.list_confirmed(scope)
+        except MemoryPersistenceError:
+            raise RetrievalError("关系记忆检索失败。") from None
+        except RetrievalError:
+            raise
+        except Exception:
+            raise RetrievalError("关系记忆检索失败。") from None
+        if not isinstance(memories, tuple) or any(
+            not isinstance(memory, ConfirmedMemory) or memory.scope != scope
+            for memory in memories
+        ):
+            raise RetrievalInvariantError("关系记忆检索结果超出联系人范围。")
+        tokens = _query_tokens(query)
+        return tuple(
+            RetrievedMemory(
+                memory_id=memory.memory_id,
+                scope=memory.scope,
+                text=memory.text,
+                category=memory.category.value,
+                source_ids=memory.source_ids,
+                adoption_method=memory.adoption_method.value,
+                revision=memory.revision,
+            )
+            for memory in memories
+            if not tokens or all(token in memory.text.lower() for token in tokens)
+        )[:limit]
 
     def _fetch_target(
         self,

@@ -8,6 +8,11 @@ from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
     PostgresConversationPort,
 )
+from notalone.persistence.memory_store import (
+    MemoryInvariantError,
+    MemoryPersistenceError,
+    PostgresMemoryStore,
+)
 from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.persistence.retrieval import PostgresRetrieval
 from notalone.persistence.skill_port import (
@@ -19,9 +24,12 @@ __all__ = [
     "ConversationBindingConflictError",
     "ConversationBindingNotFoundError",
     "ConversationBindingPersistenceError",
+    "MemoryInvariantError",
+    "MemoryPersistenceError",
     "PersistedConversationBinding",
     "PostgresConversationBindingRepository",
     "PostgresConversationPort",
+    "PostgresMemoryStore",
     "PostgresReplyStore",
     "PostgresRetrieval",
     "PostgresSkillPort",

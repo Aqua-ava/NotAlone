@@ -107,6 +107,19 @@ SHA 和消息数量已经清空且写入删除时间时，数据库才允许状�
 Skill 管理模块必须在同一事务中递增 owner revision；本迁移和只读 adapter 不提供安装、更新、
 启用、禁用、删除或网络读取能力。
 
+继续建立关系记忆候选和已确认记忆的持久化边界：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/009_memory_store.sql
+```
+
+第九个迁移建立 `memory_candidate` 和 `confirmed_memory`，保存联系人范围、分类、来源 UUID
+列表、候选来源链、采纳方式、状态、有效期和 revision。它不建立 `contact_memory_index`，
+不执行自动提取，也不把来源删除任务级联清理伪装成已完成。
+
 迁移仅建立数据结构，不读取 `chat_exports/`，也不导入真实聊天记录。
 
 首个迁移建立旧版 `owner`、`contact`、`source_document` 和 `message`，第三个迁移在空业务

@@ -320,13 +320,10 @@ class PostgresRetrievalTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.port.search_messages(scope=self._scope(), limit=0)
 
-    def test_memory_search_fails_closed_until_postgres_memory_schema_exists(self) -> None:
-        with self.assertRaises(RetrievalError) as raised:
-            self.port.search_confirmed_memories(scope=self._scope())
-
+    def test_memory_search_returns_empty_without_confirmed_memory(self) -> None:
         self.assertEqual(
-            str(raised.exception),
-            "关系记忆 PostgreSQL 检索尚未接入。",
+            self.port.search_confirmed_memories(scope=self._scope()),
+            (),
         )
 
     def test_database_failure_is_exposed_as_stable_retrieval_error(self) -> None:
