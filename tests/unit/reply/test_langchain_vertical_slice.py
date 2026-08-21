@@ -24,12 +24,13 @@ from notalone.reply import (
     ReplyToMessage,
 )
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
-from notalone.reply.contracts import (
+from notalone.reply.context import (
     ContextEvidence,
     PreparedReply,
     PreviousUnsentCandidate,
-    ValidatedReply,
 )
+from notalone.reply.runtime import ReplyRuntimeResult
+from notalone.reply.store import ValidatedReply
 from notalone.reply.errors import ReplyInvariantError
 from notalone.scopes import ContactScope
 from notalone.skills import SkillCatalog, SkillCatalogEntry, SkillVersion

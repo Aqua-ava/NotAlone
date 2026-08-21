@@ -17,14 +17,13 @@ from notalone.reply import (
     ReplyGenerator,
     ReplyToMessage,
 )
-from notalone.reply.contracts import (
+from notalone.reply.context import (
     ContextEvidence,
     PreparedReply,
     PreviousUnsentCandidate,
-    ReplyRuntimeResult,
-    RuntimeCandidate,
-    ValidatedReply,
 )
+from notalone.reply.runtime import ReplyRuntimeResult, RuntimeCandidate
+from notalone.reply.store import ValidatedReply
 from notalone.reply.errors import (
     ReplyInvariantError,
     ReplyPersistenceError,

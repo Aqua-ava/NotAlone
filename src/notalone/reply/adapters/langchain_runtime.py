@@ -21,8 +21,8 @@ from langchain.tools import ToolRuntime, tool
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
 
-from notalone.reply.contracts import (
-    PreparedReply,
+from notalone.reply.context import PreparedReply
+from notalone.reply.runtime import (
     ReplyRuntimeResult,
     RuntimeCandidate,
 )
