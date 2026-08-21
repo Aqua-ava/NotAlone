@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from uuid import UUID
 
-from notalone.scopes import ContactScope
+from notalone.scopes import ContactScope, VerifiedConversationScope
 
 
 class DirectionSource(StrEnum):
@@ -50,6 +50,17 @@ class GenerateReply:
     conversation_binding_id: UUID
     content: ReplyToMessage
     skill: AutoSkill = AutoSkill()
+
+    def matches_verified_scope(self, scope: VerifiedConversationScope) -> bool:
+        """判断请求声明的联系人和会话是否与已验证范围一致。"""
+
+        return (
+            isinstance(self.scope, ContactScope)
+            and isinstance(self.conversation_binding_id, UUID)
+            and self.scope.owner_id == scope.owner_id
+            and self.scope.contact_id == scope.contact_id
+            and self.conversation_binding_id == scope.conversation_binding_id
+        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -19,3 +19,21 @@ class ContactScope:
             UUID,
         ):
             raise TypeError("owner_id 和 contact_id 必须是 UUID。")
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedConversationScope:
+    """已经通过会话绑定验证的用户、联系人和会话范围。"""
+
+    owner_id: UUID
+    contact_id: UUID
+    conversation_binding_id: UUID
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.owner_id, UUID) or not isinstance(
+            self.contact_id,
+            UUID,
+        ) or not isinstance(self.conversation_binding_id, UUID):
+            raise TypeError(
+                "owner_id、contact_id 和 conversation_binding_id 必须是 UUID。",
+            )
