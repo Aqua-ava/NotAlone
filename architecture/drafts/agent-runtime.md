@@ -1,6 +1,53 @@
 # Agent 编排与检索运行时（草案）
 
-> 状态：草案。本文定义候选回复、未来 Tool 和长任务的运行时边界；不表示 LangGraph、LangChain 或 RAGFlow 已安装或可用。最终框架决策见 ADR-006 与 ADR-009。
+> 状态：草案。本文定义候选回复、未来 Tool 和长任务的运行时边界；不表示任一框架方案已经完成生产集成。现行已采纳决策仍见 ADR-006、ADR-009 和 ADR-010；下方第 0 节记录 2026-08-22 提出的 DeepSeek Harness 暂定方向，尚未替代这些 ADR。
+
+## 0. 2026-08-22 暂定运行时方向（未采纳）
+
+本节记录阶段性选型方向，不改变现行 ADR，也不代表已经完成框架 POC、真实模型调用或端到端验证。
+
+### 0.1 分层决定
+
+NotAlone 暂定把 DeepSeek Harness 作为通用 Agent Runtime，把 NotAlone 保留为业务插件和 Python 领域服务：
+
+```text
+DeepSeek Harness
+  Agent Loop / Tool / Skill / Context Compact / Subagent
+  Session / Permission / Hooks / MCP / Runtime
+
+TypeScript or JavaScript bridge plugin
+  verified scope injection
+  NotAlone Tool registration
+  candidate output bridge
+
+Python NotAlone service
+  contact binding and owner_id + contact_id isolation
+  RetrievalPort and relationship memory
+  source provenance, deletion and candidate validation
+
+PostgreSQL
+  authoritative business state
+```
+
+DeepSeek Harness 负责通用运行机制；NotAlone 不重新实现 Agent Loop、Tool 执行管线、Skill Loading、Context Compact 或 Subagent。原生 Harness 插件需要 TypeScript/JavaScript；现有 Python 业务可以通过薄桥接插件、受控 JSON-RPC/HTTP 服务或 Python MCP Server 接入。Python SDK 负责从外部进程驱动 Harness，不等同于同进程 Cordis 插件。
+
+### 0.2 NotAlone 不外包给 Harness 的边界
+
+- `owner_id + contact_id`、联系人确认和会话绑定必须由 NotAlone 确定性代码验证，不能由模型或 Harness Session 推断。
+- `message`、`memory_candidate`、`confirmed_memory`、`reply_candidate`、来源证据和删除状态继续由 PostgreSQL 管理；Harness Session、压缩摘要和 checkpoint 只是可重建运行状态。
+- NotAlone 通过受控只读 Tool 暴露 `search_contact_messages` 和 `search_confirmed_memories`；Tool handler 再次验证范围、来源状态、数量和删除状态。
+- 候选回复必须通过 NotAlone 的结构、引用和风险校验；外部聊天发送不注册为 Tool，最终消息仍由用户手动编辑和发送。
+
+### 0.3 采用前置验证
+
+新方案只有在合成数据 POC 通过后，才进入 ADR 复审：
+
+1. 两个联系人和两个 owner 的检索不会串库；模型不能通过 Tool 参数扩大范围。
+2. Harness Context Compact、Session resume 和 Skill Loading 不会恢复已删除来源或旧联系人范围。
+3. Python 领域服务与 TypeScript/JavaScript bridge 的失败、超时、重试和幂等行为可观察且不会产生未落库候选。
+4. 运行时默认不挂载 Shell、文件系统、网络搜索、Subagent 或外部发送能力；确需启用时逐项配置和审计。
+
+在上述验证完成并新增 ADR 前，ADR-009 的 LangChain `create_agent` 仍是当前已采纳的候选回复运行时决策；本节只是允许以 DeepSeek Harness 作为替代 Runtime 做隔离 POC。
 
 ## 1. 核心架构
 
