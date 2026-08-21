@@ -32,6 +32,10 @@ ReplyStore 当前收敛为请求/结果持久化边界：按已验证联系人�
 `ReplyContext`；Store 不再准备上下文、不读取 Memory、不识别联系人，也不继承“上一轮
 未发送候选”。当前实现是进程内 adapter，PostgreSQL 持久化仍待后续任务。
 
+已确认桌面会话绑定已经有 PostgreSQL 迁移 006 和持久化 `ConversationPort`：它按
+`owner_id + contact_id` 创建、读取和撤销绑定，并在进程重建后重新验证 active 绑定。当前
+真实桌面观察、OCR 和前台同步仍未接入；`ConversationObservation` 仍由上层适配器提供。
+
 ## 导入预览
 
 ```bash

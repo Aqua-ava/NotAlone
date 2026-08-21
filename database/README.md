@@ -65,6 +65,19 @@ NotAlone 内部联系人。执行前必须确认数据范围和备份；本地�
 第五个迁移区分 `delete_requested`、`deleting`、`delete_failed` 和 `deleted`。只有文件名、
 SHA 和消息数量已经清空且写入删除时间时，数据库才允许状态为 `deleted`；只改状态会被约束拒绝。
 
+继续建立已确认桌面会话的持久化绑定：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/006_conversation_binding.sql
+```
+
+第六个迁移保存稳定绑定 UUID、`owner_id + contact_id`、渠道账号范围、会话定位线索、状态和
+最近验证时间。定位线索不能使用昵称或聊天正文替代；绑定撤销后，验证适配器不会再返回
+`Ready`。迁移只建立表和约束，不读取桌面会话。
+
 迁移仅建立数据结构，不读取 `chat_exports/`，也不导入真实聊天记录。
 
 首个迁移建立旧版 `owner`、`contact`、`source_document` 和 `message`，第三个迁移在空业务
