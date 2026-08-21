@@ -8,6 +8,7 @@ from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
     PostgresConversationPort,
 )
+from notalone.persistence.reply_store import PostgresReplyStore
 
 __all__ = [
     "ConversationBindingConflictError",
@@ -16,4 +17,5 @@ __all__ = [
     "PersistedConversationBinding",
     "PostgresConversationBindingRepository",
     "PostgresConversationPort",
+    "PostgresReplyStore",
 ]

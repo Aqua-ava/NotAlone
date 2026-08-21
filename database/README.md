@@ -78,6 +78,20 @@ SHA 和消息数量已经清空且写入删除时间时，数据库才允许状�
 最近验证时间。定位线索不能使用昵称或聊天正文替代；绑定撤销后，验证适配器不会再返回
 `Ready`。迁移只建立表和约束，不读取桌面会话。
 
+继续建立候选回复的 PostgreSQL 持久化边界：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/007_reply_store.sql
+```
+
+第七个迁移保存已验证联系人范围内的 `reply_request`、运行尝试、上下文证据快照、候选、
+引用和实际使用的 Skill 版本摘要。幂等键只在 `owner_id + contact_id` 范围内生效；同一请求
+的候选和引用在同一事务中写入。迁移不实现 Context、Memory、Skill 目录或外部发送，也不预设
+来源删除对回复快照的清理级联。
+
 迁移仅建立数据结构，不读取 `chat_exports/`，也不导入真实聊天记录。
 
 首个迁移建立旧版 `owner`、`contact`、`source_document` 和 `message`，第三个迁移在空业务

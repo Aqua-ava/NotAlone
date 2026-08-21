@@ -23,14 +23,15 @@ LangChain `create_agent` 和 Deep Agents `SkillsMiddleware` 按需读取至多�
 调用 Reply 前必须由 `CandidateReplyFlow` 验证当前会话，并把
 `VerifiedConversationScope` 作为 `ReplyGenerator.generate(..., verified_scope=...)` 的必填证明。
 
-当前验证只使用合成数据、scripted fake model 和内存 adapter。尚未实现 PostgreSQL
-回复/Skill adapter、真实模型供应商、出站台账、产品 CLI 或 UI，因此这还不是可供真实
-联系人使用的端到端回复功能；代码不存在发送消息 Tool。
+当前验证只使用合成数据、scripted fake model 和 PostgreSQL/内存 adapter。尚未实现
+PostgreSQL Skill adapter、真实模型供应商、出站台账、产品 CLI 或 UI，因此这还不是可供
+真实联系人使用的端到端回复功能；代码不存在发送消息 Tool。
 
 ReplyStore 当前收敛为请求/结果持久化边界：按已验证联系人范围和幂等键处理重放、冲突、
 处理中、失败重试、租约过期和用户显式继续候选。`ReplyGenerator` 必须显式注入
 `ReplyContext`；Store 不再准备上下文、不读取 Memory、不识别联系人，也不继承“上一轮
-未发送候选”。当前实现是进程内 adapter，PostgreSQL 持久化仍待后续任务。
+未发送候选”。当前实现包含进程内 adapter 和 PostgreSQL adapter；后者只保存请求、上下文
+快照、候选、引用与 Skill 使用摘要，不准备上下文、不读取 Memory，也不发送外部消息。
 
 已确认桌面会话绑定已经有 PostgreSQL 迁移 006 和持久化 `ConversationPort`：它按
 `owner_id + contact_id` 创建、读取和撤销绑定，并在进程重建后重新验证 active 绑定。当前
