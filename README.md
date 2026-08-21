@@ -23,9 +23,10 @@ LangChain `create_agent` 和 Deep Agents `SkillsMiddleware` 按需读取至多�
 调用 Reply 前必须由 `CandidateReplyFlow` 验证当前会话，并把
 `VerifiedConversationScope` 作为 `ReplyGenerator.generate(..., verified_scope=...)` 的必填证明。
 
-当前验证只使用合成数据、scripted fake model 和 PostgreSQL/内存 adapter。尚未实现
-PostgreSQL Skill adapter、真实模型供应商、出站台账、产品 CLI 或 UI，因此这还不是可供
-真实联系人使用的端到端回复功能；代码不存在发送消息 Tool。
+当前验证只使用合成数据、scripted fake model 和 PostgreSQL/内存 adapter。PostgreSQL
+SkillPort 已接入迁移 008，并按 owner/contact 范围只读当前 Skill 目录和不可变版本；真实模型
+供应商、出站台账、产品 CLI 或 UI 尚未实现，因此这还不是可供真实联系人使用的端到端回复
+功能；代码不存在发送消息 Tool。
 
 ReplyStore 当前收敛为请求/结果持久化边界：按已验证联系人范围和幂等键处理重放、冲突、
 处理中、失败重试、租约过期和用户显式继续候选。`ReplyGenerator` 必须显式注入

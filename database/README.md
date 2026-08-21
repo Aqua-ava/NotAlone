@@ -92,6 +92,21 @@ SHA 和消息数量已经清空且写入删除时间时，数据库才允许状�
 的候选和引用在同一事务中写入。迁移不实现 Context、Memory、Skill 目录或外部发送，也不预设
 来源删除对回复快照的清理级联。
 
+继续建立只读 PostgreSQL SkillPort 的目录、版本和修订数据结构：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/008_skill_port.sql
+```
+
+第八个迁移建立 owner 级 `skill_library` 修订、`reply_skill` 目录项和
+`reply_skill_version` 不可变版本。SkillPort 只返回当前 owner 的全局 Skill 与当前联系人
+专属 Skill 的 active/current/enabled 版本；未知、跨范围、禁用、删除和旧版本统一安全失败。
+Skill 管理模块必须在同一事务中递增 owner revision；本迁移和只读 adapter 不提供安装、更新、
+启用、禁用、删除或网络读取能力。
+
 迁移仅建立数据结构，不读取 `chat_exports/`，也不导入真实聊天记录。
 
 首个迁移建立旧版 `owner`、`contact`、`source_document` 和 `message`，第三个迁移在空业务

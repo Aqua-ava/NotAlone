@@ -9,6 +9,10 @@ from notalone.persistence.conversation_repository import (
     PostgresConversationPort,
 )
 from notalone.persistence.reply_store import PostgresReplyStore
+from notalone.persistence.skill_port import (
+    PostgresSkillPort,
+    SkillPortPersistenceError,
+)
 
 __all__ = [
     "ConversationBindingConflictError",
@@ -18,4 +22,6 @@ __all__ = [
     "PostgresConversationBindingRepository",
     "PostgresConversationPort",
     "PostgresReplyStore",
+    "PostgresSkillPort",
+    "SkillPortPersistenceError",
 ]
