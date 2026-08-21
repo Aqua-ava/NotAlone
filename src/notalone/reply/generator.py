@@ -30,8 +30,11 @@ from notalone.reply.interface import (
     ReplyCandidate,
     ReplyGenerated,
     ReplyOutcome,
+    ReplyToMessage,
+    RewriteDraft,
     SkillUse,
 )
+from notalone.scopes import VerifiedConversationScope
 
 
 class ReplyGenerator:
@@ -43,8 +46,20 @@ class ReplyGenerator:
         self._store = store
         self._runtime = runtime
 
-    def generate(self, command: GenerateReply) -> ReplyOutcome:
-        """校验、生成并持久化候选；持久化成功前不返回。"""
+    def generate(
+        self,
+        command: GenerateReply,
+        *,
+        verified_scope: VerifiedConversationScope,
+    ) -> ReplyOutcome:
+        """在外层已验证范围内生成候选；持久化成功前不返回。"""
+
+        if not (
+            isinstance(command, GenerateReply)
+            and isinstance(verified_scope, VerifiedConversationScope)
+            and command.matches_verified_scope(verified_scope)
+        ):
+            raise ReplyInvariantError("回复范围未通过会话验证。")
 
         try:
             prepared = self._store.prepare(command)
@@ -108,7 +123,7 @@ class ReplyGenerator:
                 or item.scope != prepared.scope
                 or not isinstance(item.evidence_id, UUID)
                 or item.evidence_id in evidence_ids
-                or item.kind not in ("message", "confirmed_memory")
+                or item.kind not in ("message", "confirmed_memory", "user_draft")
                 or not isinstance(item.text, str)
                 or not item.text.strip()
             ):
@@ -131,18 +146,39 @@ class ReplyGenerator:
         ):
             raise ReplyInvariantError("上一轮候选超出本次联系人或会话范围。")
 
-        target_evidence = tuple(
-            item
-            for item in prepared.evidence
-            if item.evidence_id == command.content.target_message_id
-        )
-        if (
-            len(target_evidence) != 1
-            or target_evidence[0].kind != "message"
-            or target_evidence[0].text != prepared.current_text
-            or prepared.direction != command.content.direction
-        ):
-            raise ReplyInvariantError("待回复消息或表达方向与请求不一致。")
+        if isinstance(command.content, ReplyToMessage):
+            target_evidence = tuple(
+                item
+                for item in prepared.evidence
+                if item.evidence_id == command.content.target_message_id
+            )
+            if (
+                len(target_evidence) != 1
+                or target_evidence[0].kind != "message"
+                or target_evidence[0].text != prepared.current_text
+                or prepared.direction != command.content.direction
+            ):
+                raise ReplyInvariantError("待回复消息或表达方向与请求不一致。")
+            return
+
+        if isinstance(command.content, RewriteDraft):
+            if prepared.has_relationship_memory_for_rewrite():
+                raise ReplyInvariantError("当前改写不能使用长期关系资料。")
+            draft_evidence = tuple(
+                item
+                for item in prepared.evidence
+                if item.kind == "user_draft"
+                and item.text == command.content.draft_text
+            )
+            if (
+                prepared.direction is not None
+                or prepared.current_text != command.content.draft_text
+                or len(draft_evidence) != 1
+            ):
+                raise ReplyInvariantError("改写草稿与回复上下文不一致。")
+            return
+
+        raise ReplyInvariantError("回复输入模式无效。")
 
     @staticmethod
     def _validate_runtime_result(result: ReplyRuntimeResult) -> None:

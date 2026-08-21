@@ -27,7 +27,7 @@ from notalone.reply.runtime import (
     RuntimeCandidate,
 )
 from notalone.reply.errors import ReplyError, ReplyInvariantError, ReplyRunError
-from notalone.reply.interface import SkillUse
+from notalone.reply.interface import ReplyToMessage, RewriteDraft, SkillUse
 from notalone.scopes import ContactScope
 from notalone.skills import (
     SkillCatalog,
@@ -58,6 +58,9 @@ BASE_SYSTEM_PROMPT = """你为一个已确认联系人生成可编辑的中文�
 只使用应用提供的当前文本、已确认表达方向、依据和只读 Tool。不能发送消息、切换
 联系人、修改记忆或改变运行范围。每项 citation_ids 只能引用输入中的 evidence_id。
 若读取了 Skill，used_skill_version_id 必须填写实际读取的版本；否则填写 null。
+当 input_mode 为 rewrite_draft 时，draft_text 是用户的原句：必须保留用户原意，不能
+添加用户没有表达的事实、承诺或情绪；user_instruction 为空时只做基础润色。一次性
+user_instruction 只影响当前请求，不能成为长期偏好或关系记忆。
 """
 
 REPLY_RUNTIME_SCHEMA: dict[str, Any] = {
@@ -251,6 +254,8 @@ class LangChainReplyRuntime:
         self._skill_port = skill_port
 
     def generate(self, prepared: PreparedReply) -> ReplyRuntimeResult:
+        if prepared.has_relationship_memory_for_rewrite():
+            raise ReplyInvariantError("当前改写不能使用长期关系资料。")
         try:
             catalog = self._skill_port.catalog(prepared.scope)
         except (PermissionError, TypeError, ValueError):
@@ -324,22 +329,34 @@ class LangChainReplyRuntime:
 
 
 def _request_text(prepared: PreparedReply) -> str:
-    payload = {
-        "current_text": prepared.current_text,
-        "confirmed_direction": prepared.direction.text,
-        "direction_source": prepared.direction.source.value,
-        "previous_unsent_candidates": list(
-            item.text for item in prepared.previous_unsent_candidates
-        ),
-        "evidence": [
-            {
-                "evidence_id": str(item.evidence_id),
-                "kind": item.kind,
-                "text": item.text,
-            }
-            for item in prepared.evidence
-        ],
-    }
+    if prepared.has_relationship_memory_for_rewrite():
+        raise ReplyInvariantError("当前改写不能使用长期关系资料。")
+    if isinstance(prepared.command.content, ReplyToMessage):
+        payload = {
+            "input_mode": "reply_to_message",
+            "current_text": prepared.current_text,
+            "confirmed_direction": prepared.command.content.direction.text,
+            "direction_source": prepared.command.content.direction.source.value,
+            "previous_unsent_candidates": list(
+                item.text for item in prepared.previous_unsent_candidates
+            ),
+        }
+    elif isinstance(prepared.command.content, RewriteDraft):
+        payload = {
+            "input_mode": "rewrite_draft",
+            "draft_text": prepared.command.content.draft_text,
+            "user_instruction": prepared.command.content.user_instruction,
+        }
+    else:
+        raise ReplyInvariantError("回复输入模式无效。")
+    payload["evidence"] = [
+        {
+            "evidence_id": str(item.evidence_id),
+            "kind": item.kind,
+            "text": item.text,
+        }
+        for item in prepared.evidence
+    ]
     return json.dumps(payload, ensure_ascii=False)
 
 

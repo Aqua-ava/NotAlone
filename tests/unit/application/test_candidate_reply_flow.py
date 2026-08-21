@@ -49,15 +49,18 @@ class RecordingConversationPort:
 class RecordingReplyPort:
     outcome: ReplyOutcome = cast(ReplyOutcome, "合成候选")
     command: GenerateReply | None = None
+    verified_scope: VerifiedConversationScope | None = None
     calls: int = 0
 
     def generate(
         self,
         *,
         command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
     ) -> ReplyOutcome:
         self.calls += 1
         self.command = command
+        self.verified_scope = verified_scope
         return self.outcome
 
 
@@ -114,6 +117,7 @@ class CandidateReplyFlowTest(unittest.TestCase):
         self.assertEqual(result.verification.state, ConversationResolutionState.READY)
         self.assertEqual(result.reply, "合成候选")
         self.assertIs(reply.command, command)
+        self.assertEqual(reply.verified_scope, scope)
         self.assertEqual(reply.calls, 1)
 
     def test_ready_rejects_unverified_scope_type(self) -> None:

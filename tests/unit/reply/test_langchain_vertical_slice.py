@@ -22,6 +22,7 @@ from notalone.reply import (
     ReplyGenerated,
     ReplyGenerator,
     ReplyToMessage,
+    RewriteDraft,
 )
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
 from notalone.reply.context import (
@@ -32,7 +33,7 @@ from notalone.reply.context import (
 from notalone.reply.runtime import ReplyRuntimeResult
 from notalone.reply.store import ValidatedReply
 from notalone.reply.errors import ReplyInvariantError
-from notalone.scopes import ContactScope
+from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.skills import SkillCatalog, SkillCatalogEntry, SkillVersion
 
 
@@ -40,6 +41,11 @@ OWNER_ID = UUID("aaaaaaaa-1111-1111-1111-111111111111")
 CONTACT_ID = UUID("bbbbbbbb-2222-2222-2222-222222222222")
 OTHER_CONTACT_ID = UUID("bbbbbbbb-2222-2222-2222-333333333333")
 BINDING_ID = UUID("cccccccc-3333-3333-3333-333333333333")
+VERIFIED_SCOPE = VerifiedConversationScope(
+    OWNER_ID,
+    CONTACT_ID,
+    BINDING_ID,
+)
 MESSAGE_ID = UUID("dddddddd-4444-4444-4444-444444444444")
 REQUEST_KEY = UUID("eeeeeeee-5555-5555-5555-555555555555")
 REQUEST_ID = UUID("ffffffff-6666-6666-6666-666666666666")
@@ -126,6 +132,21 @@ class MultiSkillPort:
 
 
 @dataclass
+class EmptySkillPort:
+    scope: ContactScope
+    revision: int
+
+    def catalog(self, scope: ContactScope) -> SkillCatalog:
+        if scope != self.scope:
+            raise PermissionError("synthetic scope mismatch")
+        return SkillCatalog(scope=scope, revision=self.revision, entries=())
+
+    def load_version(self, scope: ContactScope, version_id: UUID) -> SkillVersion:
+        del scope, version_id
+        raise AssertionError("empty synthetic catalog cannot load a Skill")
+
+
+@dataclass
 class InMemoryReplyStore:
     prepared: PreparedReply
     saved: ValidatedReply | None = None
@@ -204,6 +225,146 @@ class LangChainVerticalSliceTest(unittest.TestCase):
                 ),
             },
         )
+
+    def test_rewrite_draft_reaches_runtime_as_one_time_input(self) -> None:
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        content = RewriteDraft(
+            draft_text="我明天有空，晚点见",
+            user_instruction="更自然一点",
+        )
+        command = GenerateReply(
+            idempotency_key=REQUEST_KEY,
+            scope=scope,
+            conversation_binding_id=BINDING_ID,
+            content=content,
+        )
+        prepared = PreparedReply(
+            reply_request_id=REQUEST_ID,
+            command=command,
+            scope=scope,
+            current_text=content.draft_text,
+            direction=None,
+            evidence=(
+                ContextEvidence(
+                    evidence_id=MESSAGE_ID,
+                    kind="user_draft",
+                    text=content.draft_text,
+                    scope=scope,
+                ),
+            ),
+            skill_library_revision=4,
+        )
+        model = ToolCallingFakeModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "ReplyRuntimeOutput",
+                            "args": {
+                                "candidates": [
+                                    {
+                                        "text": "我明天有空，晚点见。",
+                                        "basis": "保留原意并做基础润色",
+                                        "citation_ids": [str(MESSAGE_ID)],
+                                        "risk_notes": [],
+                                    },
+                                ],
+                                "used_skill_version_id": None,
+                            },
+                            "id": "rewrite-result",
+                        },
+                    ],
+                ),
+            ],
+        )
+
+        result = ReplyGenerator(
+            store=InMemoryReplyStore(prepared),
+            runtime=LangChainReplyRuntime(
+                model=model,
+                skill_port=EmptySkillPort(scope=scope, revision=4),
+            ),
+        ).generate(command, verified_scope=VERIFIED_SCOPE)
+
+        seen_context = "\n".join(
+            str(message.content)
+            for call in model.seen_calls
+            for message in call
+        )
+        self.assertEqual(result.candidates[0].text, "我明天有空，晚点见。")
+        self.assertIsNone(result.used_skill)
+        self.assertIn('"input_mode": "rewrite_draft"', seen_context)
+        self.assertIn(content.draft_text, seen_context)
+        self.assertIn(content.user_instruction, seen_context)
+        self.assertNotIn("send_message", model.bound_tool_names)
+
+    def test_default_rewrite_prompt_preserves_intent_and_only_polishes(self) -> None:
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        content = RewriteDraft(draft_text="我明天有空，晚点见")
+        command = GenerateReply(
+            idempotency_key=REQUEST_KEY,
+            scope=scope,
+            conversation_binding_id=BINDING_ID,
+            content=content,
+        )
+        prepared = PreparedReply(
+            reply_request_id=REQUEST_ID,
+            command=command,
+            scope=scope,
+            current_text=content.draft_text,
+            direction=None,
+            evidence=(
+                ContextEvidence(
+                    evidence_id=MESSAGE_ID,
+                    kind="user_draft",
+                    text=content.draft_text,
+                    scope=scope,
+                ),
+            ),
+            skill_library_revision=4,
+        )
+        model = ToolCallingFakeModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "ReplyRuntimeOutput",
+                            "args": {
+                                "candidates": [
+                                    {
+                                        "text": "我明天有空，晚点见。",
+                                        "basis": "基础润色",
+                                        "citation_ids": [str(MESSAGE_ID)],
+                                        "risk_notes": [],
+                                    },
+                                ],
+                                "used_skill_version_id": None,
+                            },
+                            "id": "rewrite-basic-polish-result",
+                        },
+                    ],
+                ),
+            ],
+        )
+
+        ReplyGenerator(
+            store=InMemoryReplyStore(prepared),
+            runtime=LangChainReplyRuntime(
+                model=model,
+                skill_port=EmptySkillPort(scope=scope, revision=4),
+            ),
+        ).generate(command, verified_scope=VERIFIED_SCOPE)
+
+        seen_context = "\n".join(
+            str(message.content)
+            for call in model.seen_calls
+            for message in call
+        )
+        self.assertIn("只做基础润色", seen_context)
+        self.assertIn("保留用户原意", seen_context)
+        self.assertIn('"user_instruction": null', seen_context)
 
     def test_generates_with_one_scoped_skill_without_expanding_tools(self) -> None:
         scope = ContactScope(OWNER_ID, CONTACT_ID)
@@ -306,7 +467,10 @@ class LangChainVerticalSliceTest(unittest.TestCase):
         store = InMemoryReplyStore(prepared)
         runtime = LangChainReplyRuntime(model=model, skill_port=skill_port)
 
-        result = ReplyGenerator(store=store, runtime=runtime).generate(command)
+        result = ReplyGenerator(store=store, runtime=runtime).generate(
+            command,
+            verified_scope=VERIFIED_SCOPE,
+        )
 
         self.assertEqual(result.candidates[0].text, "可以呀，明天见。")
         self.assertEqual(result.used_skill.version_id, VERSION_ID)
@@ -396,7 +560,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             ReplyGenerator(
                 store=store,
                 runtime=LangChainReplyRuntime(model=model, skill_port=leaky_port),
-            ).generate(command)
+            ).generate(command, verified_scope=VERIFIED_SCOPE)
 
         seen_context = "\n".join(
             str(message.content)
@@ -460,7 +624,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             ReplyGenerator(
                 store=store,
                 runtime=LangChainReplyRuntime(model=model, skill_port=leaky_port),
-            ).generate(command)
+            ).generate(command, verified_scope=VERIFIED_SCOPE)
 
         self.assertEqual(model.seen_calls, [])
         self.assertIsNone(store.saved)
@@ -516,7 +680,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
                     model=model,
                     skill_port=self._two_skill_port(scope),
                 ),
-            ).generate(command)
+            ).generate(command, verified_scope=VERIFIED_SCOPE)
 
         seen_context = "\n".join(
             str(message.content)
@@ -651,7 +815,10 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             runtime=LangChainReplyRuntime(model=model, skill_port=skill_port),
         )
 
-        first_result = generator.generate(first_command)
+        first_result = generator.generate(
+            first_command,
+            verified_scope=VERIFIED_SCOPE,
+        )
         second_direction = ConfirmedDirection(
             text="把上一条改得更直接",
             source=DirectionSource.DIRECT_INPUT,
@@ -679,7 +846,10 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             ),
         )
 
-        second_result = generator.generate(second_command)
+        second_result = generator.generate(
+            second_command,
+            verified_scope=VERIFIED_SCOPE,
+        )
 
         second_turn_context = "\n".join(
             str(message.content)

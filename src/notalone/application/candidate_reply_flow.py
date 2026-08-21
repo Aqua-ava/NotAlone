@@ -13,12 +13,10 @@ from notalone.conversation import (
     VerificationReason,
 )
 from notalone.reply import (
-    ConfirmedDirection,
     GenerateReply,
     ReplyOutcome,
-    ReplyToMessage,
 )
-from notalone.scopes import ContactScope
+from notalone.scopes import ContactScope, VerifiedConversationScope
 
 
 class ReplyPort(Protocol):
@@ -27,6 +25,7 @@ class ReplyPort(Protocol):
     def generate(
         self,
         command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
     ) -> ReplyOutcome:
         """在已验证范围内生成候选结果。"""
 
@@ -90,7 +89,10 @@ class CandidateReplyFlow:
             return self._rejected_result(VerificationReason.SCOPE_MISMATCH)
         return CandidateReplyFlowResult(
             verification=verification,
-            reply=reply.generate(command=command),
+            reply=reply.generate(
+                command=command,
+                verified_scope=verification.scope,
+            ),
         )
 
     @staticmethod
@@ -100,9 +102,7 @@ class CandidateReplyFlow:
             and isinstance(command.idempotency_key, UUID)
             and isinstance(command.scope, ContactScope)
             and isinstance(command.conversation_binding_id, UUID)
-            and isinstance(command.content, ReplyToMessage)
-            and isinstance(command.content.target_message_id, UUID)
-            and isinstance(command.content.direction, ConfirmedDirection)
+            and command.has_valid_content()
         )
 
     @staticmethod

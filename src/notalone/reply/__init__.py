@@ -16,7 +16,9 @@ from notalone.reply.interface import (
     ReplyCandidate,
     ReplyGenerated,
     ReplyOutcome,
+    ReplyInput,
     ReplyToMessage,
+    RewriteDraft,
     SkillUse,
 )
 
@@ -31,9 +33,11 @@ __all__ = [
     "ReplyGenerated",
     "ReplyGenerator",
     "ReplyInvariantError",
+    "ReplyInput",
     "ReplyOutcome",
     "ReplyPersistenceError",
     "ReplyRunError",
     "ReplyToMessage",
+    "RewriteDraft",
     "SkillUse",
 ]

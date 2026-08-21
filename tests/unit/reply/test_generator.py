@@ -29,13 +29,18 @@ from notalone.reply.errors import (
     ReplyPersistenceError,
     ReplyRunError,
 )
-from notalone.scopes import ContactScope
+from notalone.scopes import ContactScope, VerifiedConversationScope
 
 
 OWNER_ID = UUID("11111111-1111-1111-1111-111111111111")
 CONTACT_ID = UUID("22222222-2222-2222-2222-222222222222")
 OTHER_CONTACT_ID = UUID("22222222-2222-2222-2222-333333333333")
 BINDING_ID = UUID("33333333-3333-3333-3333-333333333333")
+VERIFIED_SCOPE = VerifiedConversationScope(
+    OWNER_ID,
+    CONTACT_ID,
+    BINDING_ID,
+)
 MESSAGE_ID = UUID("44444444-4444-4444-4444-444444444444")
 REQUEST_KEY = UUID("55555555-5555-5555-5555-555555555555")
 REQUEST_ID = UUID("66666666-6666-6666-6666-666666666666")
@@ -192,7 +197,10 @@ class ReplyGeneratorTest(unittest.TestCase):
             )
         )
 
-        result = ReplyGenerator(store=store, runtime=runtime).generate(command)
+        result = ReplyGenerator(store=store, runtime=runtime).generate(
+            command,
+            verified_scope=VERIFIED_SCOPE,
+        )
 
         self.assertIsInstance(result, ReplyGenerated)
         self.assertEqual(result.reply_request_id, REQUEST_ID)
@@ -250,7 +258,10 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(command)
+            ReplyGenerator(store=store, runtime=runtime).generate(
+                command,
+                verified_scope=VERIFIED_SCOPE,
+            )
 
         self.assertIsNone(runtime.received)
         self.assertIsNone(store.saved)
@@ -303,7 +314,10 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(command)
+            ReplyGenerator(store=store, runtime=runtime).generate(
+                command,
+                verified_scope=VERIFIED_SCOPE,
+            )
 
         self.assertIsNone(runtime.received)
         self.assertIsNone(store.saved)
@@ -357,7 +371,10 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(command)
+            ReplyGenerator(store=store, runtime=runtime).generate(
+                command,
+                verified_scope=VERIFIED_SCOPE,
+            )
 
         self.assertIsNone(runtime.received)
         self.assertIsNone(store.saved)
@@ -406,7 +423,10 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(command)
+            ReplyGenerator(store=store, runtime=runtime).generate(
+                command,
+                verified_scope=VERIFIED_SCOPE,
+            )
 
         self.assertIsNotNone(runtime.received)
         self.assertIsNone(store.saved)
@@ -440,7 +460,10 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(command)
+            ReplyGenerator(store=store, runtime=runtime).generate(
+                command,
+                verified_scope=VERIFIED_SCOPE,
+            )
 
         self.assertIsNone(store.saved)
 
@@ -481,7 +504,10 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(command)
+            ReplyGenerator(store=store, runtime=runtime).generate(
+                command,
+                verified_scope=VERIFIED_SCOPE,
+            )
 
         self.assertIsNone(store.saved)
 
@@ -503,7 +529,10 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(command)
+            ReplyGenerator(store=store, runtime=runtime).generate(
+                command,
+                verified_scope=VERIFIED_SCOPE,
+            )
 
         self.assertIsNone(store.saved)
 
@@ -525,7 +554,10 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyInvariantError):
-            ReplyGenerator(store=store, runtime=runtime).generate(command)
+            ReplyGenerator(store=store, runtime=runtime).generate(
+                command,
+                verified_scope=VERIFIED_SCOPE,
+            )
 
     def test_hides_prepare_error_details(self) -> None:
         command, prepared = self._valid_case()
@@ -535,7 +567,7 @@ class ReplyGeneratorTest(unittest.TestCase):
             ReplyGenerator(
                 store=store,
                 runtime=ExplodingReplyRuntime(),
-            ).generate(command)
+            ).generate(command, verified_scope=VERIFIED_SCOPE)
 
         self.assertNotIn("private-credential", str(caught.exception))
 
@@ -547,7 +579,7 @@ class ReplyGeneratorTest(unittest.TestCase):
             ReplyGenerator(
                 store=store,
                 runtime=ExplodingReplyRuntime(),
-            ).generate(command)
+            ).generate(command, verified_scope=VERIFIED_SCOPE)
 
         self.assertNotIn("private provider response", str(caught.exception))
         self.assertIsNone(store.saved)
@@ -570,7 +602,10 @@ class ReplyGeneratorTest(unittest.TestCase):
         )
 
         with self.assertRaises(ReplyPersistenceError) as caught:
-            ReplyGenerator(store=store, runtime=runtime).generate(command)
+            ReplyGenerator(store=store, runtime=runtime).generate(
+                command,
+                verified_scope=VERIFIED_SCOPE,
+            )
 
         self.assertNotIn("private persisted", str(caught.exception))
 

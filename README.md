@@ -15,9 +15,13 @@ python -m pip install -e .
 ## 候选回复纵切
 
 仓库现在包含内部开发用的候选回复纵切：调用者只经过
-`ReplyGenerator.generate(GenerateReply) -> ReplyOutcome`，`notalone.skills` 作为独立
-Module 提供联系人范围内的不可变策略目录；回复 adapter 使用 LangChain
-`create_agent` 和 Deep Agents `SkillsMiddleware` 按需读取至多一个 Skill。
+`ReplyGenerator.generate(GenerateReply) -> ReplyOutcome`，其中 `GenerateReply` 统一支持
+`ReplyToMessage`（目标消息 + 用户确认的表达方向）和 `RewriteDraft`（用户原句 + 可选的
+一次性改写要求）。改写要求只作用于当前请求；没有明确背景要求时不带入长期关系记忆。
+`notalone.skills` 作为独立 Module 提供联系人范围内的不可变策略目录；回复 adapter 使用
+LangChain `create_agent` 和 Deep Agents `SkillsMiddleware` 按需读取至多一个 Skill。
+调用 Reply 前必须由 `CandidateReplyFlow` 验证当前会话，并把
+`VerifiedConversationScope` 作为 `ReplyGenerator.generate(..., verified_scope=...)` 的必填证明。
 
 当前验证只使用合成数据、scripted fake model 和内存 adapter。尚未实现 PostgreSQL
 回复/Skill adapter、真实模型供应商、出站台账、产品 CLI 或 UI，因此这还不是可供真实
