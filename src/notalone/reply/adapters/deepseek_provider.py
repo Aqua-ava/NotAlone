@@ -13,6 +13,7 @@ DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
 DEFAULT_DEEPSEEK_TIMEOUT_SECONDS = 60.0
 _API_KEY_ENV_VAR = "NOTALONE_DEEPSEEK_API_KEY"
 _MODEL_ENV_VAR = "NOTALONE_DEEPSEEK_MODEL"
+_BASE_URL_ENV_VAR = "NOTALONE_DEEPSEEK_BASE_URL"
 
 
 def build_deepseek_model(
@@ -20,6 +21,7 @@ def build_deepseek_model(
     api_key: str | None = None,
     model_name: str | None = None,
     timeout_seconds: float | None = None,
+    base_url: str | None = None,
 ) -> BaseChatModel:
     """构造 DeepSeek 模型；默认模型只选支持结构化输出的 deepseek-chat。"""
 
@@ -46,10 +48,20 @@ def build_deepseek_model(
     if not isinstance(resolved_timeout, (int, float)) or resolved_timeout <= 0:
         raise ValueError("DeepSeek 调用超时必须是正数秒。")
 
+    resolved_base_url = (
+        base_url if base_url is not None else os.environ.get(_BASE_URL_ENV_VAR)
+    )
+    if resolved_base_url is not None and (
+        not isinstance(resolved_base_url, str) or not resolved_base_url.strip()
+    ):
+        raise ValueError("DeepSeek API 地址不能为空字符串。")
+
     options: dict[str, Any] = {
         "model": resolved_model,
         "api_key": resolved_key,
         "timeout": float(resolved_timeout),
         "max_retries": 2,
     }
+    if resolved_base_url is not None:
+        options["base_url"] = resolved_base_url
     return ChatDeepSeek(**options)

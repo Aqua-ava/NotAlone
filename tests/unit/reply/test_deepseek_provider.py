@@ -66,6 +66,36 @@ class BuildDeepSeekModelTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_deepseek_model(api_key="test-key", timeout_seconds=-5)
 
+    def test_explicit_base_url_overrides_default(self) -> None:
+        model = build_deepseek_model(
+            api_key="test-key", base_url="https://proxy.example.test/v1"
+        )
+
+        self.assertEqual(
+            model.model_dump()["openai_api_base"], "https://proxy.example.test/v1"
+        )
+
+    def test_default_base_url_stays_official(self) -> None:
+        model = build_deepseek_model(api_key="test-key")
+
+        self.assertIsNone(model.model_dump()["openai_api_base"])
+
+    def test_base_url_reads_from_environment(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {"NOTALONE_DEEPSEEK_BASE_URL": "https://env-proxy.example.test/v1"},
+        ):
+            model = build_deepseek_model(api_key="test-key")
+
+        self.assertEqual(
+            model.model_dump()["openai_api_base"],
+            "https://env-proxy.example.test/v1",
+        )
+
+    def test_blank_base_url_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            build_deepseek_model(api_key="test-key", base_url="  ")
+
 
 if __name__ == "__main__":
     unittest.main()
