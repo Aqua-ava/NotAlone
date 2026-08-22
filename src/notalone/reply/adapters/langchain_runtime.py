@@ -62,29 +62,47 @@ BASE_SYSTEM_PROMPT = """你为一个已确认联系人生成可编辑的中文�
 当 input_mode 为 rewrite_draft 时，draft_text 是用户的原句：必须保留用户原意，不能
 添加用户没有表达的事实、承诺或情绪；user_instruction 为空时只做基础润色。一次性
 user_instruction 只影响当前请求，不能成为长期偏好或关系记忆。
+
+输出格式是硬性要求：必须通过结构化输出工具调用返回 ReplyRuntimeOutput。
+candidates 必须是对象数组（1 到 3 个），每项都包含 text、basis、citation_ids、
+risk_notes 四个字段；禁止把 candidates 写成字符串数组或省略字段。
 """
 
 REPLY_RUNTIME_SCHEMA: dict[str, Any] = {
     "title": "ReplyRuntimeOutput",
-    "description": "NotAlone 内部候选回复结果",
+    "description": "NotAlone 内部候选回复结果；必须以结构化工具调用返回。",
     "type": "object",
     "additionalProperties": False,
     "properties": {
         "candidates": {
+            "description": (
+                "候选回复对象数组，1 到 3 项。每项必须是对象，"
+                "包含 text、basis、citation_ids、risk_notes 四个字段；"
+                "禁止使用字符串代替对象。"
+            ),
             "type": "array",
             "minItems": 1,
             "maxItems": 3,
             "items": {
                 "type": "object",
+                "description": "一条候选回复；必须包含全部四个字段。",
                 "additionalProperties": False,
                 "properties": {
-                    "text": {"type": "string"},
-                    "basis": {"type": "string"},
+                    "text": {
+                        "description": "候选回复正文，用户可编辑后亲自发送。",
+                        "type": "string",
+                    },
+                    "basis": {
+                        "description": "生成该候选的依据说明。",
+                        "type": "string",
+                    },
                     "citation_ids": {
+                        "description": "引用的证据 ID 数组；只能填输入中的 evidence_id，无引用时为空数组。",
                         "type": "array",
                         "items": {"type": "string", "format": "uuid"},
                     },
                     "risk_notes": {
+                        "description": "风险提示；无风险时为空数组。",
                         "type": "array",
                         "items": {"type": "string"},
                     },
@@ -93,10 +111,11 @@ REPLY_RUNTIME_SCHEMA: dict[str, Any] = {
             },
         },
         "used_skill_version_id": {
+            "description": "实际读取的 Skill 版本 ID；未读取 Skill 时为 null。",
             "anyOf": [
                 {"type": "string", "format": "uuid"},
                 {"type": "null"},
-            ]
+            ],
         },
     },
     "required": ["candidates", "used_skill_version_id"],

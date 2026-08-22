@@ -11,6 +11,8 @@ from langchain_deepseek import ChatDeepSeek
 
 DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
 DEFAULT_DEEPSEEK_TIMEOUT_SECONDS = 60.0
+# 结构化输出场景使用低温采样，降低候选回复格式漂移概率。
+DEFAULT_DEEPSEEK_TEMPERATURE = 0.1
 _API_KEY_ENV_VAR = "NOTALONE_DEEPSEEK_API_KEY"
 _MODEL_ENV_VAR = "NOTALONE_DEEPSEEK_MODEL"
 _BASE_URL_ENV_VAR = "NOTALONE_DEEPSEEK_BASE_URL"
@@ -61,6 +63,7 @@ def build_deepseek_model(
         "api_key": resolved_key,
         "timeout": float(resolved_timeout),
         "max_retries": 2,
+        "temperature": DEFAULT_DEEPSEEK_TEMPERATURE,
     }
     if resolved_base_url is not None:
         options["base_url"] = resolved_base_url

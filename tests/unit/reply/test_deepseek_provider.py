@@ -9,6 +9,7 @@ from langchain_deepseek import ChatDeepSeek
 
 from notalone.reply.adapters.deepseek_provider import (
     DEFAULT_DEEPSEEK_MODEL,
+    DEFAULT_DEEPSEEK_TEMPERATURE,
     DEFAULT_DEEPSEEK_TIMEOUT_SECONDS,
     build_deepseek_model,
 )
@@ -23,6 +24,7 @@ class BuildDeepSeekModelTest(unittest.TestCase):
         self.assertIsInstance(model, ChatDeepSeek)
         self.assertEqual(model.model_name, DEFAULT_DEEPSEEK_MODEL)
         self.assertEqual(model.request_timeout, DEFAULT_DEEPSEEK_TIMEOUT_SECONDS)
+        self.assertEqual(model.temperature, DEFAULT_DEEPSEEK_TEMPERATURE)
 
     def test_builds_model_with_custom_name_and_timeout(self) -> None:
         model = build_deepseek_model(
