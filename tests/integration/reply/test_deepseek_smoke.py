@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import os
 import unittest
+from uuid import uuid4
 
 from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
 from notalone.reply.context import ContextEvidence, ReplyContext
 from notalone.reply.generator import ReplyGenerator
-from notalone.reply.interface import GenerateReply, RewriteDraft
+from notalone.reply.interface import (
+    ContextReceipt,
+    GenerateReply,
+    ReplyCandidate,
+    ReplyGenerated,
+    RewriteDraft,
+)
 from notalone.scopes import ContactScope, VerifiedConversationScope
 
 from unit.reply.test_langchain_vertical_slice import (
@@ -26,6 +33,33 @@ from unit.reply.test_langchain_vertical_slice import (
 )
 
 _SKILL_REVISION = 4
+
+
+class AllCandidatesReplyStore(InMemoryReplyStore):
+    """真实模型可能返回多条候选；持久化回包必须保留全部候选。"""
+
+    def save(self, request, context, reply):  # noqa: ANN001
+        return ReplyGenerated(
+            reply_request_id=context.reply_request_id,
+            candidates=tuple(
+                ReplyCandidate(
+                    candidate_id=uuid4(),
+                    text=candidate.text,
+                    basis=candidate.basis,
+                    citation_ids=candidate.citation_ids,
+                    risk_notes=candidate.risk_notes,
+                )
+                for candidate in reply.candidates
+            ),
+            context_receipt=ContextReceipt(
+                evidence_ids=tuple(
+                    evidence_id
+                    for candidate in reply.candidates
+                    for evidence_id in candidate.citation_ids
+                ),
+            ),
+            used_skill=reply.used_skill,
+        )
 
 
 def _smoke_enabled() -> bool:
@@ -73,7 +107,7 @@ class DeepSeekSmokeTest(unittest.TestCase):
         )
 
         result = ReplyGenerator(
-            store=InMemoryReplyStore(prepared),
+            store=AllCandidatesReplyStore(prepared),
             runtime=LangChainReplyRuntime(
                 model=build_deepseek_model(),
                 skill_port=EmptySkillPort(
