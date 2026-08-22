@@ -25,6 +25,7 @@ from notalone.reply.context import ReplyContext
 from notalone.reply.runtime import (
     ReplyRuntimeResult,
     RuntimeCandidate,
+    RuntimeUsage,
 )
 from notalone.reply.errors import ReplyError, ReplyInvariantError, ReplyRunError
 from notalone.reply.interface import ReplyToMessage, RewriteDraft, SkillUse
@@ -247,10 +248,11 @@ def _create_read_file_tool(
 class LangChainReplyRuntime:
     """把框架 Agent Loop 封装成稳定的 ReplyRuntime。"""
 
-    __slots__ = ("_model", "_skill_port")
+    __slots__ = ("_model", "_model_name", "_skill_port")
 
     def __init__(self, *, model: BaseChatModel, skill_port: SkillPort) -> None:
         self._model = model
+        self._model_name = getattr(model, "model_name", None)
         self._skill_port = skill_port
 
     def generate(self, prepared: ReplyContext) -> ReplyRuntimeResult:
@@ -323,7 +325,7 @@ class LangChainReplyRuntime:
                 },
                 context=context,
             )
-            return _validated_result(state, budget)
+            return _validated_result(state, budget, self._model_name)
         except ReplyError:
             raise
         except (PermissionError, TypeError, ValueError, KeyError, AttributeError):
@@ -372,6 +374,7 @@ def _request_text(prepared: ReplyContext) -> str:
 def _validated_result(
     state: Mapping[str, Any],
     budget: SkillLoadBudget,
+    model_name: str | None,
 ) -> ReplyRuntimeResult:
     payload = state.get("structured_response")
     if not isinstance(payload, dict):
@@ -406,7 +409,40 @@ def _validated_result(
             version_id=loaded_skill.version_id,
             name=loaded_skill.name,
         )
-    return ReplyRuntimeResult(candidates=candidates, used_skill=used_skill)
+    usage = None
+    if isinstance(model_name, str) and model_name.strip():
+        input_tokens, output_tokens = _summed_usage(state.get("messages"))
+        usage = RuntimeUsage(
+            provider="deepseek",
+            model_name=model_name,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+    return ReplyRuntimeResult(
+        candidates=candidates, used_skill=used_skill, usage=usage
+    )
+
+
+def _summed_usage(messages: object) -> tuple[int | None, int | None]:
+    """跨多轮工具调用累计模型上报的用量；未上报时保持空。"""
+
+    if not isinstance(messages, (list, tuple)):
+        return None, None
+    input_total: int | None = None
+    output_total: int | None = None
+    for message in messages:
+        metadata = getattr(message, "usage_metadata", None)
+        if not isinstance(metadata, dict):
+            continue
+        reported_input = metadata.get("input_tokens")
+        reported_output = metadata.get("output_tokens")
+        if isinstance(reported_input, int):
+            input_total = reported_input if input_total is None else input_total + reported_input
+        if isinstance(reported_output, int):
+            output_total = (
+                reported_output if output_total is None else output_total + reported_output
+            )
+    return input_total, output_total
 
 
 def _runtime_candidate(item: object) -> RuntimeCandidate:

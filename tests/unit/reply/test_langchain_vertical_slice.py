@@ -68,6 +68,7 @@ DIRECT_SKILL_PATH = "/notalone/reply-skills/direct-reply/SKILL.md"
 class ToolCallingFakeModel(FakeMessagesListChatModel):
     bound_tool_names: list[str] = []
     seen_calls: list[list[BaseMessage]] = []
+    model_name: str = "fake-chat-model"
 
     def bind_tools(
         self,
@@ -271,6 +272,72 @@ class LangChainVerticalSliceTest(unittest.TestCase):
                 ),
             },
         )
+
+    def test_runtime_reports_usage_metadata_as_runtime_usage(self) -> None:
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        content = RewriteDraft(draft_text="我明天有空，晚点见")
+        command = GenerateReply(
+            idempotency_key=REQUEST_KEY,
+            scope=scope,
+            conversation_binding_id=BINDING_ID,
+            content=content,
+        )
+        prepared = ReplyContext(
+            reply_request_id=REQUEST_ID,
+            command=command,
+            scope=scope,
+            current_text=content.draft_text,
+            direction=None,
+            evidence=(
+                ContextEvidence(
+                    evidence_id=MESSAGE_ID,
+                    kind="user_draft",
+                    text=content.draft_text,
+                    scope=scope,
+                ),
+            ),
+            skill_library_revision=4,
+        )
+        model = ToolCallingFakeModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "ReplyRuntimeOutput",
+                            "args": {
+                                "candidates": [
+                                    {
+                                        "text": "我明天有空，晚点见。",
+                                        "basis": "保留原意润色",
+                                        "citation_ids": [str(MESSAGE_ID)],
+                                        "risk_notes": [],
+                                    }
+                                ],
+                                "used_skill_version_id": None,
+                            },
+                            "id": "usage-result",
+                        },
+                    ],
+                    usage_metadata={
+                        "input_tokens": 130,
+                        "output_tokens": 26,
+                        "total_tokens": 156,
+                    },
+                ),
+            ],
+        )
+
+        result = LangChainReplyRuntime(
+            model=model,
+            skill_port=EmptySkillPort(scope=scope, revision=4),
+        ).generate(prepared)
+
+        self.assertIsNotNone(result.usage)
+        self.assertEqual(result.usage.provider, "deepseek")
+        self.assertEqual(result.usage.model_name, "fake-chat-model")
+        self.assertEqual(result.usage.input_tokens, 130)
+        self.assertEqual(result.usage.output_tokens, 26)
 
     def test_rewrite_draft_reaches_runtime_as_one_time_input(self) -> None:
         scope = ContactScope(OWNER_ID, CONTACT_ID)

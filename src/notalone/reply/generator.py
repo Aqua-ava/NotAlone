@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+import time
+from datetime import datetime, timezone
+from uuid import UUID, uuid4
 
+from notalone.ledger.models import LedgerEntry, LedgerOutcome
+from notalone.ledger.ports import OutboundLedgerPort
 from notalone.reply.context import ContextEvidence, ReplyContext, ReplyContextPort
 from notalone.reply.runtime import (
     ReplyRuntime,
     ReplyRuntimeResult,
     RuntimeCandidate,
+    RuntimeUsage,
 )
 from notalone.reply.store import (
     ReplyRequestState,
@@ -40,7 +45,7 @@ from notalone.scopes import VerifiedConversationScope
 class ReplyGenerator:
     """通过一个深 Interface 隐藏范围、运行时和持久化细节。"""
 
-    __slots__ = ("_context", "_runtime", "_store")
+    __slots__ = ("_context", "_runtime", "_store", "_ledger")
 
     def __init__(
         self,
@@ -48,12 +53,14 @@ class ReplyGenerator:
         store: ReplyStore,
         runtime: ReplyRuntime,
         context: ReplyContextPort,
+        ledger: OutboundLedgerPort | None = None,
     ) -> None:
         if context is None:
             raise TypeError("ReplyGenerator 必须显式注入 ReplyContext。")
         self._store = store
         self._runtime = runtime
         self._context = context
+        self._ledger = ledger
 
     def generate(
         self,
@@ -110,21 +117,72 @@ class ReplyGenerator:
         except Exception:
             self._mark_failed(request, "context_invariant_failed")
             raise ReplyInvariantError("回复准备结果结构无效。") from None
+        started_ns = time.perf_counter()
+        called_at = datetime.now(timezone.utc)
         try:
             runtime_result = self._runtime.generate(context)
-            self._validate_runtime_result(runtime_result)
-        except ReplyError:
+        except ReplyRunError:
             self._mark_failed(request, "runtime_failed")
+            self._record_ledger(
+                command, LedgerOutcome.RUN_FAILED, None, started_ns, called_at
+            )
+            raise
+        except ReplyError:
+            # 运行时内部的结构化输出或不变量失败：外部调用已尝试但输出被拒。
+            self._mark_failed(request, "runtime_failed")
+            self._record_ledger(
+                command,
+                LedgerOutcome.REJECTED_BY_VALIDATION,
+                None,
+                started_ns,
+                called_at,
+            )
             raise
         except Exception:
             self._mark_failed(request, "runtime_failed")
+            self._record_ledger(
+                command, LedgerOutcome.RUN_FAILED, None, started_ns, called_at
+            )
             raise ReplyRunError("候选回复运行失败。") from None
+        runtime_latency_ms = int((time.perf_counter() - started_ns) * 1000)
+        try:
+            self._validate_runtime_result(runtime_result)
+        except ReplyError:
+            self._mark_failed(request, "runtime_failed")
+            self._record_ledger(
+                command,
+                LedgerOutcome.REJECTED_BY_VALIDATION,
+                runtime_result.usage,
+                started_ns,
+                called_at,
+                runtime_latency_ms,
+            )
+            raise
+        except Exception:
+            self._mark_failed(request, "runtime_failed")
+            self._record_ledger(
+                command,
+                LedgerOutcome.REJECTED_BY_VALIDATION,
+                runtime_result.usage,
+                started_ns,
+                called_at,
+                runtime_latency_ms,
+            )
+            raise ReplyInvariantError("候选回复校验失败。") from None
         evidence_ids = {item.evidence_id for item in context.evidence}
         if any(
             not set(candidate.citation_ids) <= evidence_ids
             for candidate in runtime_result.candidates
         ):
             self._mark_failed(request, "citation_invariant_failed")
+            self._record_ledger(
+                command,
+                LedgerOutcome.REJECTED_BY_VALIDATION,
+                runtime_result.usage,
+                started_ns,
+                called_at,
+                runtime_latency_ms,
+            )
             raise ReplyInvariantError("候选引用不属于本次上下文快照。")
         validated = ValidatedReply(
             candidates=runtime_result.candidates,
@@ -134,12 +192,69 @@ class ReplyGenerator:
             persisted = self._store.save(request, context, validated)
         except ReplyError:
             self._mark_failed(request, "persistence_failed")
+            # 外部调用本身已完成且通过校验；候选落库失败不改变调用结果。
+            self._record_ledger(
+                command,
+                LedgerOutcome.SUCCEEDED,
+                runtime_result.usage,
+                started_ns,
+                called_at,
+                runtime_latency_ms,
+            )
             raise
         except Exception:
             self._mark_failed(request, "persistence_failed")
+            self._record_ledger(
+                command,
+                LedgerOutcome.SUCCEEDED,
+                runtime_result.usage,
+                started_ns,
+                called_at,
+                runtime_latency_ms,
+            )
             raise ReplyPersistenceError("候选回复持久化失败。") from None
         self._validate_persisted(context, validated, persisted)
+        self._record_ledger(
+            command,
+            LedgerOutcome.SUCCEEDED,
+            runtime_result.usage,
+            started_ns,
+            called_at,
+            runtime_latency_ms,
+        )
         return persisted
+
+    def _record_ledger(
+        self,
+        command: GenerateReply,
+        outcome: LedgerOutcome,
+        usage: RuntimeUsage | None,
+        started_ns: float,
+        called_at: datetime,
+        latency_ms: int | None = None,
+    ) -> None:
+        """外部调用的最小操作记录；台账不可用时调用按失败处理。"""
+
+        if self._ledger is None:
+            return
+        if latency_ms is None:
+            latency_ms = int((time.perf_counter() - started_ns) * 1000)
+        entry = LedgerEntry(
+            entry_id=uuid4(),
+            owner_id=command.scope.owner_id,
+            contact_id=command.scope.contact_id,
+            provider=usage.provider if usage is not None else "unreported",
+            model_name=usage.model_name if usage is not None else "unreported",
+            input_tokens=usage.input_tokens if usage is not None else None,
+            output_tokens=usage.output_tokens if usage is not None else None,
+            latency_ms=latency_ms,
+            outcome=outcome,
+            called_at=called_at,
+        )
+        try:
+            self._ledger.record(entry)
+        except Exception:
+            raise ReplyRunError("出站台账记录失败。") from None
 
     def _mark_failed(self, request: object, reason: str) -> None:
         try:

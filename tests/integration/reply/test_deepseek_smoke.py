@@ -6,6 +6,10 @@ import os
 import unittest
 from uuid import uuid4
 
+import psycopg
+
+from notalone.ledger.models import LedgerOutcome
+from notalone.persistence import PostgresOutboundLedger
 from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
 from notalone.reply.context import ContextEvidence, ReplyContext
@@ -33,6 +37,11 @@ from unit.reply.test_langchain_vertical_slice import (
 )
 
 _SKILL_REVISION = 4
+
+TEST_DATABASE_URL = os.environ.get(
+    "NOTALONE_TEST_DATABASE_URL",
+    "postgresql:///notalone_test",
+)
 
 
 class AllCandidatesReplyStore(InMemoryReplyStore):
@@ -106,6 +115,8 @@ class DeepSeekSmokeTest(unittest.TestCase):
             skill_library_revision=_SKILL_REVISION,
         )
 
+        ledger = PostgresOutboundLedger(TEST_DATABASE_URL)
+        self.addCleanup(self._cleanup_ledger)
         result = ReplyGenerator(
             store=AllCandidatesReplyStore(prepared),
             runtime=LangChainReplyRuntime(
@@ -115,12 +126,31 @@ class DeepSeekSmokeTest(unittest.TestCase):
                 ),
             ),
             context=RecordingReplyContext(prepared=prepared),
+            ledger=ledger,
         ).generate(command, verified_scope=VERIFIED_SCOPE)
 
         self.assertTrue(result.candidates)
         for candidate in result.candidates:
             self.assertTrue(candidate.text.strip())
             self.assertTrue(candidate.basis.strip())
+
+        entries = ledger.list_by_owner(OWNER_ID)
+        self.assertEqual(len(entries), 1)
+        entry = entries[0]
+        self.assertEqual(entry.outcome, LedgerOutcome.SUCCEEDED)
+        self.assertEqual(entry.contact_id, CONTACT_ID)
+        self.assertTrue(entry.provider.strip())
+        self.assertTrue(entry.model_name.strip())
+        self.assertGreaterEqual(entry.latency_ms, 0)
+
+    @staticmethod
+    def _cleanup_ledger() -> None:
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "DELETE FROM public.outbound_ledger_entry WHERE owner_id = %s",
+                (OWNER_ID,),
+            )
+            connection.commit()
 
 
 if __name__ == "__main__":

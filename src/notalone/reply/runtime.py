@@ -21,11 +21,22 @@ class RuntimeCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class RuntimeUsage:
+    """模型运行时上报的外部调用用量与标识。"""
+
+    provider: str
+    model_name: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ReplyRuntimeResult:
     """框架 adapter 返回给确定性外壳的结果。"""
 
     candidates: tuple[RuntimeCandidate, ...]
     used_skill: SkillUse | None
+    usage: RuntimeUsage | None = None
 
 
 class ReplyRuntime(Protocol):

@@ -32,7 +32,7 @@
 
 ## Implementation Decisions
 
-1. **零新接缝**：模型对象经现有 `BaseChatModel` 参数注入现有运行时 adapter；`ReplyRuntime` Protocol、`ReplyGenerator` 外壳、`ReplyStore` 生命周期均不修改。
+1. **最小接缝扩展**：模型对象经现有 `BaseChatModel` 参数注入现有运行时 adapter；`ReplyGenerator` 外壳新增可选台账 port 注入，`ReplyRuntimeResult` 新增可选用量字段（均为向后兼容扩展，不注入时行为与既有完全一致）；`ReplyStore` 生命周期与领域对象不修改。
 2. **供应商构造**：新增 DeepSeek 模型构造入口，从环境变量读取凭据与模型名；凭据缺失或为空时构造即失败并给出可操作的错误信息。供应商包按 LangChain 官方 DeepSeek 集成接入，接入前按仓库规则核对当前锁定版本与官方文档。
 3. **模型选择**：默认模型名显式定义于配置常量，可经环境变量覆盖；模型名与版本记入台账。
 4. **出站台账**：新增台账 port 与 PostgreSQL 实现（跟随现有迁移序列），每次真实外部调用记录一条：时间、供应商标识、模型名、owner/contact 范围、输入与输出 token 数、延迟、结果状态（成功、运行失败、校验拒绝）。台账不含任何正文类文本；条目属于最小操作记录，联系人与来源删除时不作为派生资料级联清除，但范围字段保留以供审计。
