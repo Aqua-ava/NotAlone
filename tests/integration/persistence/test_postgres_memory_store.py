@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
@@ -303,6 +303,7 @@ class PostgresMemoryStoreTest(unittest.TestCase):
             scope=self._scope(),
             candidate_id=self.candidate_id,
         )
+        now = datetime.now(timezone.utc)
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             connection.execute(
                 """
@@ -311,8 +312,8 @@ class PostgresMemoryStoreTest(unittest.TestCase):
                 WHERE owner_id = %s AND contact_id = %s AND id = %s
                 """,
                 (
-                    datetime(2026, 8, 22, tzinfo=timezone.utc),
-                    datetime(2026, 8, 24, tzinfo=timezone.utc),
+                    now + timedelta(days=1),
+                    now + timedelta(days=3),
                     self.owner_id,
                     self.contact_id,
                     confirmed.memory_id,
@@ -331,8 +332,8 @@ class PostgresMemoryStoreTest(unittest.TestCase):
                 WHERE owner_id = %s AND contact_id = %s AND id = %s
                 """,
                 (
-                    datetime(2026, 8, 20, tzinfo=timezone.utc),
-                    datetime(2026, 8, 22, tzinfo=timezone.utc),
+                    now - timedelta(days=1),
+                    now + timedelta(days=1),
                     self.owner_id,
                     self.contact_id,
                     confirmed.memory_id,
