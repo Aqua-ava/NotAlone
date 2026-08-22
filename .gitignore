@@ -20,3 +20,5 @@ __pycache__/
 
 macos_sync_probe/.build/
 macos_sync_probe/build/
+.venv/
+uv.lock
