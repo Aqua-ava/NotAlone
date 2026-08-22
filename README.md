@@ -41,6 +41,10 @@ ReplyStore 当前收敛为请求/结果持久化边界：按已验证联系人�
 `owner_id + contact_id` 创建、读取和撤销绑定，并在进程重建后重新验证 active 绑定。当前
 真实桌面观察、OCR 和前台同步仍未接入；`ConversationObservation` 仍由上层适配器提供。
 
+外部模型调用的出站台账已有 PostgreSQL 迁移 010、台账 port 和进程内/PostgreSQL adapter：
+每条记录只含时间、供应商标识、模型名、联系人范围、用量与结果状态，不含正文，按 owner
+隔离查询，不随联系人或来源删除级联清除。真实模型供应商接入与台账接线尚未实现。
+
 ## 导入预览
 
 ```bash
