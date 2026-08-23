@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -210,8 +211,8 @@ def _time_matches(last_timestamp: int | None, time_text: str | None) -> bool | N
         moment = datetime.fromtimestamp(last_timestamp)
     except (OverflowError, OSError, ValueError):
         return None
-    if not any(character.isdigit() for character in normalized):
-        # “昨天”“星期一”这类相对时间无法在 v1 可靠比对。
+    if not re.search(r"\d{1,2}:\d{2}", normalized):
+        # “昨天”“8月20日”这类相对时间或纯日期无法在 v1 可靠比对。
         return None
     return moment.strftime("%H:%M") in normalized
 

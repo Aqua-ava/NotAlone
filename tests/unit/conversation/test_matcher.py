@@ -158,6 +158,22 @@ class MatchFrontSessionTest(unittest.TestCase):
         self.assertEqual(decision.kind, BindingMatchKind.NEEDS_SELECTION)
         self.assertEqual(decision.reason, BindingMatchReason.FIRST_BINDING_UNIQUE)
 
+    def test_absolute_date_text_is_not_treated_as_contradiction(self) -> None:
+        # “8月20日”这类纯日期含数字但不是时刻，不能用来反证候选。
+        candidate = _candidate("wxid_a", "姐姐", last_timestamp=_timestamp(19, 59))
+
+        decision = match_front_session(
+            evidence=FrontSessionEvidence(
+                display_name="姐姐",
+                last_time_text="8月20日",
+            ),
+            candidates=(candidate,),
+            stored_bindings=(),
+        )
+
+        self.assertEqual(decision.kind, BindingMatchKind.NEEDS_SELECTION)
+        self.assertEqual(decision.reason, BindingMatchReason.FIRST_BINDING_UNIQUE)
+
     def test_stored_binding_with_same_name_confirms_automatically(self) -> None:
         binding_id = uuid4()
         candidate = _candidate("wxid_a", "姐姐")
