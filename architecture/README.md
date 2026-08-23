@@ -38,6 +38,7 @@
 12. [ADR-012：候选回复流程与内部模块边界](adr/012-reply-module-boundaries.md)
 13. [ADR-013：Owner 渠道身份与首次导入初始化](adr/013-owner-channel-identity-initialization.md)
 14. [ADR-014：历史导入的记忆提取窗口与异步任务](adr/014-historical-memory-extraction-window.md)
+15. [ADR-015：后台任务与联系人记忆目录生命周期](adr/015-background-task-and-memory-index-lifecycle.md)
 
 ## 当前架构决策
 

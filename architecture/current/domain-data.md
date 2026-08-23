@@ -78,6 +78,8 @@ background_task
 - Worker 领取步骤时写入 `worker_id`、`lease_expires_at` 和原子状态变更。同一时刻只允许一个有效租约；Worker 崩溃后，过期租约可被重新领取。
 - 步骤处理器必须使用幂等键，重复执行不得产生重复 `message`、`memory_candidate`、索引条目或删除副作用。
 - 父任务只有在所有业务步骤成功后才能进入 `verifying`；验证通过才进入 `succeeded`。验证失败必须进入 `failed` 或回到明确的可重试步骤，不能由进度百分比或模型结论直接宣布成功。
+- 同一 `owner_id + contact_id` 的任务先串行；不同联系人未来可以并行。临时网络或模型错误最多自动重试 3 次，手动重试复用原任务并跳过已成功步骤。
+- 任务不提供 v1 用户取消入口；来源删除时停止相关未完成步骤。活动任务持续保留，终态任务保留 90 天后清理；任务记录只保存元数据和业务引用，不保存聊天正文或模型完整输入输出。
 
 - `memory_candidate` 必须有 `pending`、`confirmed`、`rejected` 或 `invalidated` 等明确状态，且候选正文与证据范围可复核。
 - `confirmed_memory` 的写入路径为全自动（见 ADR-002）：模型提取的记忆自动写入，必须带来源证据、标记 `auto`、可一键撤销；用户手动录入时标记 `manual`。模型不能未经来源证据直接写入。
@@ -125,7 +127,7 @@ background_task
 3. **近期对话压过旧记忆**：检索与组装时，近期 `message` 优先于旧记忆；新旧冲突时以近期对话为准，旧记忆自动降权。
 4. **联系人记忆目录**：系统从当前有效的 `confirmed_memory` 自动生成精简目录，主分类沿用 `common_fact`、`preference`、`taboo`、`recent_state`、`relationship_note`，子主题由系统自动整理。目录受严格预算约束，不包含全部记忆正文，也不成为新的事实源。
 5. **按请求自动选择**：每次候选回复根据当前消息、已确认表达方向和近期对话，从相关 `owner_preference` 与该联系人关系记忆中自动选择少量有效条目；用户不需要设置固定、排除或其他记忆模式。
-6. **修正与重建**：用户可以查看、修正或删除关系记忆。关系记忆、来源、有效期或分类变化后，联系人记忆目录和相关检索索引必须自动失效并重建。
+6. **修正与重建**：用户可以查看、修正或删除关系记忆。单条变化优先增量更新目录；批量变化、版本不一致或更新失败时合并为重建任务，旧目录在新目录验证成功前继续保留。
 
 ### 联系人记忆目录最小契约
 
@@ -135,8 +137,9 @@ v1 逻辑上每位联系人只有一份当前 `contact_memory_index`。具体使
 - `built_from_memory_revision`：生成目录时对应的联系人记忆版本。
 - `status`、`created_at`、`updated_at`：目录是否可用及其生成时间。
 - `topics`：自动生成的主题目录；每项只含 `category`、一行 `topic_summary` 和对应的 `memory_ids`。
+- 目录最多保留少量主题入口（v1 建议上限 20 个）；它不复制记忆正文，命中后按 `memory_ids` 重新读取事实。
 
-每位联系人的关系记忆集合维护单调递增的 `memory_revision`。新增、修正、删除、重新分类或修改有效期时必须递增；只有 `status` 可用且 `built_from_memory_revision` 等于当前 `memory_revision` 的目录才能参与选择，否则立即停用并触发重建。
+每位联系人的关系记忆集合维护单调递增的 `memory_revision`。新增、修正、删除、重新分类或修改有效期时必须递增；版本号只用于检测目录是否过期，不要求每次变化都立即完整重建。只有 `status` 可用且 `built_from_memory_revision` 等于当前 `memory_revision` 的目录才能参与选择，否则标记待更新并由合并后的任务处理。
 
 `topic_summary` 只是检索提示，不是关系事实。命中主题后必须根据 `memory_ids` 重新读取 `confirmed_memory`，再次校验 `owner_id + contact_id`、状态和有效期，再决定是否进入本次回复上下文。`owner_preference` 由 owner 范围单独选择，不复制到每位联系人的目录中。
 
