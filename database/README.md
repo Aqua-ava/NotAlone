@@ -120,15 +120,27 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 列表、候选来源链、采纳方式、状态、有效期和 revision。它不建立 `contact_memory_index`，
 不执行自动提取，也不把来源删除任务级联清理伪装成已完成。
 
+继续对齐微信消息类型和可循环复用的来源身份：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/014_import_message_identity.sql
+```
+
+第十四个迁移允许已明确适配的媒体消息类型写入规范消息，并将微信来源唯一键统一为
+`external_local_id + source_create_time`。未知类型仍由输入适配器拒绝，不直接进入规范消息。
+
 迁移仅建立数据结构，不读取 `chat_exports/`，也不导入真实聊天记录。
 
 首个迁移建立旧版 `owner`、`contact`、`source_document` 和 `message`，第三个迁移在空业务
 表上把 `contact.id` 改为 NotAlone 内部 UUID，并新增 `channel_identity` 和
 `import_confirmation`。微信 `sender_wxid` 保存在渠道身份中，不再充当 `contact.id`；
 第四个迁移让 `message` 只保留通用规范字段，原始单行 JSON 和微信 ID 保存在可随消息级联
-删除的 `wechat_message_metadata`。同一用户与联系人下，一个微信 `external_local_id` 仍只能
-归属一个来源；不同 SHA 文件若包含重叠消息，正式导入会整批回滚，避免同一消息出现两个
-权威来源。
+删除的 `wechat_message_metadata`。同一用户与联系人下，一个微信
+`external_local_id + source_create_time` 组合只能归属一个来源；不同 SHA 文件若包含重叠
+消息，正式导入会整批回滚，避免同一消息出现两个权威来源。
 
 来源删除完成后，`source_document` 只保留隔离键、内部来源 ID、来源类型、状态和删除时间。
 同一文件再次导入会创建新的来源与确认记录，不恢复旧来源内容。

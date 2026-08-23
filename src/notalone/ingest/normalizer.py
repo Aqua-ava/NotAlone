@@ -32,6 +32,17 @@ def normalize_document(document: JsonlDocument) -> ImportBatch:
     )
 
 
+# 这些类型的导出 text 本身是占位形态（如"[语音] 5.2s"、"\[位置] …"），
+# 直接作为媒体占位保存，不冒充正文。
+MEDIA_PLACEHOLDER_KINDS = frozenset(
+    {
+        "image", "sticker", "voice", "voip", "video", "channel_video",
+        "file", "link", "location", "miniprogram", "card", "red_packet",
+        "forward_chat", "app",
+    }
+)
+
+
 def _normalize_record(
     record: dict[str, Any], line_number: int
 ) -> NormalizedMessage:
@@ -46,7 +57,7 @@ def _normalize_record(
     else:
         speaker = "contact"
 
-    media_placeholder = record["text"] if kind in {"image", "sticker"} else None
+    media_placeholder = record["text"] if kind in MEDIA_PLACEHOLDER_KINDS else None
     text_content = "" if media_placeholder is not None else record["text"]
 
     return NormalizedMessage(

@@ -97,13 +97,22 @@ class ImportPreviewTest(unittest.TestCase):
         with self.assertRaisesRegex(ImportPreviewError, "包含 2 个 id.talker"):
             build_preview(FIXTURES_DIR / "mixed_contacts.jsonl")
 
-    def test_duplicate_local_id_is_rejected(self) -> None:
+    def test_duplicate_message_key_is_rejected(self) -> None:
         records = self._valid_records()
         records[1]["id"]["local_id"] = records[0]["id"]["local_id"]
+        records[1]["create_time"] = records[0]["create_time"]
         path = self._write_records(records)
 
-        with self.assertRaisesRegex(ImportPreviewError, "id.local_id 重复"):
+        with self.assertRaisesRegex(ImportPreviewError, "消息标识重复"):
             build_preview(path)
+
+    def test_reused_local_id_with_new_time_is_accepted(self) -> None:
+        records = self._valid_records()
+        records[1]["id"]["local_id"] = records[0]["id"]["local_id"]
+
+        path = self._write_records(records)
+
+        self.assertIsNotNone(build_preview(path))
 
     def test_talker_mismatch_is_rejected(self) -> None:
         records = self._valid_records()
@@ -121,12 +130,12 @@ class ImportPreviewTest(unittest.TestCase):
         with self.assertRaisesRegex(ImportPreviewError, "kind 不受支持"):
             build_preview(path)
 
-    def test_image_without_images_payload_is_rejected(self) -> None:
+    def test_unknown_kind_is_rejected(self) -> None:
         records = self._valid_records()
-        del records[1]["images"]
+        records[0]["kind"] = "unknown"
         path = self._write_records(records)
 
-        with self.assertRaisesRegex(ImportPreviewError, "必须包含 images"):
+        with self.assertRaisesRegex(ImportPreviewError, "kind 不受支持"):
             build_preview(path)
 
     def test_multiple_owner_sender_ids_are_rejected(self) -> None:
@@ -179,6 +188,14 @@ class ImportPreviewTest(unittest.TestCase):
         with self.assertRaisesRegex(ImportPreviewError, "create_time 与 time_iso 不一致"):
             build_preview(path)
 
+    def test_invalid_create_time_type_is_rejected(self) -> None:
+        records = self._valid_records()
+        records[0]["create_time"] = []
+        path = self._write_records(records)
+
+        with self.assertRaisesRegex(ImportPreviewError, "create_time 必须是整数"):
+            build_preview(path)
+
     def test_local_id_outside_bigint_is_rejected(self) -> None:
         records = self._valid_records()
         records[0]["id"]["local_id"] = 2**63
@@ -187,20 +204,26 @@ class ImportPreviewTest(unittest.TestCase):
         with self.assertRaisesRegex(ImportPreviewError, "超出 PostgreSQL bigint"):
             build_preview(path)
 
-    def test_empty_images_payload_is_rejected(self) -> None:
+    def test_missing_images_payload_is_accepted(self) -> None:
+        records = self._valid_records()
+        records[1].pop("images")
+        path = self._write_records(records)
+
+        self.assertIsNotNone(build_preview(path))
+
+    def test_empty_images_payload_is_accepted(self) -> None:
         records = self._valid_records()
         records[1]["images"] = []
         path = self._write_records(records)
 
-        with self.assertRaisesRegex(ImportPreviewError, "images 不能为空"):
-            build_preview(path)
+        self.assertIsNotNone(build_preview(path))
 
     def test_quote_payload_must_be_object(self) -> None:
         records = self._valid_records()
         records[3]["quote"] = "不应输出的合成引用"
         path = self._write_records(records)
 
-        with self.assertRaisesRegex(ImportPreviewError, "必须包含 quote"):
+        with self.assertRaisesRegex(ImportPreviewError, "quote 类型无效"):
             build_preview(path)
 
     def test_transfer_payload_must_be_object(self) -> None:
@@ -208,7 +231,7 @@ class ImportPreviewTest(unittest.TestCase):
         records[4]["transfer"] = "不应输出的合成转账"
         path = self._write_records(records)
 
-        with self.assertRaisesRegex(ImportPreviewError, "必须包含 transfer"):
+        with self.assertRaisesRegex(ImportPreviewError, "transfer 类型无效"):
             build_preview(path)
 
     def test_only_outbound_messages_are_rejected(self) -> None:

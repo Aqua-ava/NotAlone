@@ -96,10 +96,10 @@ class PostgresIngestRepository:
                 raise ChannelIdentityConflictError(
                     "微信渠道身份与已确认联系人冲突，未执行导入。"
                 ) from None
-            if (
-                error.diag.constraint_name
-                == "message_contact_external_local_id_unique"
-            ):
+            if error.diag.constraint_name in {
+                "message_contact_external_local_id_unique",
+                "wechat_message_metadata_contact_local_time_unique",
+            }:
                 raise OverlappingSourceError(
                     "文件与已导入来源包含重叠消息，未写入新来源。"
                 ) from None
@@ -290,19 +290,26 @@ class PostgresIngestRepository:
         external_local_ids = [
             metadata.external_local_id for metadata in wechat_metadata
         ]
+        source_create_times = [
+            metadata.source_create_time for metadata in wechat_metadata
+        ]
         overlap = connection.execute(
             """
             SELECT 1
-            FROM public.wechat_message_metadata
-            WHERE owner_id = %s
-              AND contact_id = %s
-              AND external_local_id = ANY(%s::bigint[])
+            FROM public.wechat_message_metadata AS existing
+            JOIN unnest(%s::bigint[], %s::bigint[])
+              AS incoming(external_local_id, source_create_time)
+              ON incoming.external_local_id = existing.external_local_id
+             AND incoming.source_create_time = existing.source_create_time
+            WHERE existing.owner_id = %s
+              AND existing.contact_id = %s
             LIMIT 1
             """,
             (
+                external_local_ids,
+                source_create_times,
                 owner_id,
                 contact_id,
-                external_local_ids,
             ),
         ).fetchone()
         if overlap is not None:

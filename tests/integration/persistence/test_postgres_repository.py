@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -186,6 +187,37 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(stored[7]["text"], "[图片]")
         self.assertEqual(old_columns, 0)
 
+    def test_known_media_placeholder_type_is_persisted(self) -> None:
+        owner_id = self._create_owner("合成用户甲")
+        contact_id = self._create_contact(owner_id, "已选合成联系人")
+        media_message = replace(
+            self.batch.messages[0],
+            message_type="voice",
+            text_content="",
+            media_placeholder="[语音] 5.2s",
+        )
+        media_batch = replace(
+            self.batch,
+            file_name="voice-placeholder.jsonl",
+            content_sha256="e" * 64,
+            messages=(media_message,),
+        )
+
+        self.repository.import_document(
+            owner_id=owner_id,
+            document=media_batch,
+            confirmation=self._confirmation(contact_id),
+        )
+
+        self.assertEqual(
+            self._scalar(
+                "SELECT message_type || ':' || media_placeholder "
+                "FROM public.message WHERE owner_id = %s",
+                (owner_id,),
+            ),
+            "voice:[语音] 5.2s",
+        )
+
     def test_same_file_is_idempotent(self) -> None:
         owner_id = self._create_owner("合成用户甲")
         contact_id = self._create_contact(owner_id, "已选合成联系人")
@@ -234,6 +266,28 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
 
         self.assertEqual(self._count("source_document", owner_id), 1)
         self.assertEqual(self._count("message", owner_id), 6)
+
+    def test_different_file_with_reused_local_id_and_new_time_is_imported(self) -> None:
+        owner_id = self._create_owner("合成用户甲")
+        contact_id = self._create_contact(owner_id, "已选合成联系人")
+        confirmation = self._confirmation(contact_id)
+        reused_batch = self._batch_with_reused_local_id()
+
+        self.repository.import_document(
+            owner_id=owner_id,
+            document=self.batch,
+            confirmation=confirmation,
+        )
+        result = self.repository.import_document(
+            owner_id=owner_id,
+            document=reused_batch,
+            confirmation=confirmation,
+        )
+
+        self.assertEqual(result.outcome, "imported")
+        self.assertEqual(result.message_count, 1)
+        self.assertEqual(self._count("source_document", owner_id), 2)
+        self.assertEqual(self._count("message", owner_id), 7)
 
     def test_concurrent_same_file_imports_only_one_source(self) -> None:
         owner_id = self._create_owner("合成用户甲")
@@ -548,14 +602,40 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
                 SELECT pg_get_constraintdef(oid)
                 FROM pg_constraint
                 WHERE conrelid = 'public.wechat_message_metadata'::regclass
-                  AND conname = 'message_contact_external_local_id_unique'
+                  AND conname = 'wechat_message_metadata_contact_local_time_unique'
                 """
             ).fetchone()
 
         self.assertIsNotNone(constraint)
         self.assertEqual(
             constraint[0],
-            "UNIQUE (owner_id, contact_id, external_local_id)",
+            "UNIQUE (owner_id, contact_id, external_local_id, source_create_time)",
+        )
+
+    def _batch_with_reused_local_id(self) -> ImportBatch:
+        first_metadata = self.batch.messages[0].wechat_metadata
+        reused_message = self.batch.messages[1]
+        reused_metadata = reused_message.wechat_metadata
+        self.assertIsNotNone(first_metadata)
+        self.assertIsNotNone(reused_metadata)
+
+        raw_payload = json.loads(reused_metadata.raw_payload_json)
+        raw_payload["id"]["local_id"] = first_metadata.external_local_id
+        updated_metadata = replace(
+            reused_metadata,
+            external_local_id=first_metadata.external_local_id,
+            raw_payload_json=json.dumps(
+                raw_payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+        )
+        return replace(
+            self.batch,
+            file_name="reused-local-id.jsonl",
+            content_sha256="d" * 64,
+            messages=(replace(reused_message, wechat_metadata=updated_metadata),),
         )
 
     @staticmethod

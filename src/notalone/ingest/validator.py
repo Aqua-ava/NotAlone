@@ -17,7 +17,12 @@ from notalone.ingest.models import ChannelIdentityCandidate
 # frozenset 是不可修改的集合，适合保存运行期间不应改变的规则常量。
 # 使用集合后，``kind in SUPPORTED_KINDS`` 可以直接判断某种消息是否受支持。
 SUPPORTED_KINDS = frozenset(
-    {"text", "quote", "image", "sticker", "transfer", "system"}
+    {
+        "text", "quote", "image", "sticker", "transfer", "system",
+        "voice", "voip", "video", "channel_video", "file", "link",
+        "location", "miniprogram", "card", "red_packet", "forward_chat",
+        "app",
+    }
 )
 # 每条 JSONL 记录必须具备的顶层字段。做集合差集即可一次找出所有缺失字段。
 REQUIRED_FIELDS = frozenset(
@@ -57,9 +62,9 @@ def validate_records(
     统计，例如 ``(("image", 9), ("text", 143))``。类型标注主要供编辑器、静态检查
     和读代码的人使用；函数实现仍需主动遵守这个返回契约。
     """
-    # set[int] 表示“元素都是 int 的集合”，右侧 set() 创建一个空集合。
-    # 每读到一个 local_id 就加入集合；集合便于快速判断某个 ID 是否已经出现。
-    local_ids: set[int] = set()
+    # 集合中的键由 local_id 和 create_time 组成，支持微信导出中的 local_id 循环复用。
+    # 微信导出的 local_id 会循环复用，文件内唯一键是 (local_id, create_time)。
+    message_keys: set[tuple[int, int]] = set()
     # 每项是 (create_time, JSONL 行号, sender)，用来确定最新展示名称。
     observed_names: list[tuple[int, int, str]] = []
     # 收集对方消息中的 sender_wxid；最终集合大小必须恰好为 1。
@@ -74,7 +79,7 @@ def validate_records(
     # enumerate 每轮返回 (序号, 元素)；start=1 让序号与 JSONL 实际行号一致。
     for line_number, record in enumerate(records, start=1):
         # 先检查当前记录本身，失败会抛异常并停止整份文件的预览。
-        _validate_record(record, line_number, local_ids)
+        _validate_record(record, line_number, message_keys)
         kind = record["kind"]
         # Counter 中尚不存在的键默认计数为 0，因此可以直接加 1。
         kind_counts[kind] += 1
@@ -140,12 +145,12 @@ def validate_records(
 
 
 def _validate_record(
-    record: dict[str, Any], line_number: int, local_ids: set[int]
+    record: dict[str, Any], line_number: int, message_keys: set[tuple[int, int]]
 ) -> None:
     """检查一条消息；合法时返回 ``None``，不合法时抛出异常。
 
-    ``local_ids`` 是外层创建并反复传入的同一个集合，所以当前记录能知道前面已经使用
-    过哪些 ``local_id``。
+    ``message_keys`` 是外层创建并反复传入的同一个集合，所以当前记录能知道前面已经
+    使用过哪些消息标识。
     """
     # 集合差集：必需字段 - 当前实际字段 = 缺失字段。
     missing = sorted(REQUIRED_FIELDS - record.keys())
@@ -169,10 +174,17 @@ def _validate_record(
     if type(local_id) is not int:
         raise ImportPreviewError(f"第 {line_number} 行的 id.local_id 必须是整数。")
     _validate_postgres_bigint(local_id, "id.local_id", line_number)
+
+    create_time = record["create_time"]
+    if type(create_time) is not int:
+        raise ImportPreviewError(f"第 {line_number} 行的 create_time 必须是整数。")
+    _validate_postgres_bigint(create_time, "create_time", line_number)
+
     # 先查重，再加入集合，供下一条记录继续检查。
-    if local_id in local_ids:
-        raise ImportPreviewError(f"第 {line_number} 行的 id.local_id 重复。")
-    local_ids.add(local_id)
+    message_key = (local_id, create_time)
+    if message_key in message_keys:
+        raise ImportPreviewError(f"第 {line_number} 行的消息标识重复。")
+    message_keys.add(message_key)
 
     # 两个字段使用同一规则，循环可以避免重复代码。
     for field in ("server_id_str", "talker"):
@@ -181,9 +193,6 @@ def _validate_record(
                 f"第 {line_number} 行的 id.{field} 必须是非空字符串。"
             )
 
-    if type(record["create_time"]) is not int:
-        raise ImportPreviewError(f"第 {line_number} 行的 create_time 必须是整数。")
-    _validate_postgres_bigint(record["create_time"], "create_time", line_number)
     if type(record["is_from_me"]) is not bool:
         raise ImportPreviewError(f"第 {line_number} 行的 is_from_me 必须是布尔值。")
 
@@ -221,14 +230,15 @@ def _validate_record(
     if optional_payload is not None:
         # 把 (字段名, 类型) 这个二元 tuple 拆到两个变量。
         field, expected_type = optional_payload
-        if field not in record or not isinstance(record[field], expected_type):
+        if field in record and not isinstance(record[field], expected_type):
             raise ImportPreviewError(
-                f"第 {line_number} 行的 {kind} 消息必须包含 {field}。"
+                f"第 {line_number} 行的 {kind} 消息的 {field} 类型无效。"
             )
     if kind == "image":
-        images = record["images"]
+        # 真实导出中附件路径可能缺失；占位文本已在 text 中，缺失不拒绝。
+        images = record.get("images")
         if not images:
-            raise ImportPreviewError(f"第 {line_number} 行的 images 不能为空。")
+            images = []
         # 只检查结构和 path 类型，不打开 path 指向的任何本地文件。
         for image in images:
             if not isinstance(image, dict):

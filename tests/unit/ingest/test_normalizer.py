@@ -56,6 +56,39 @@ class NormalizeDocumentTest(unittest.TestCase):
             self.document.records[1],
         )
 
+    def document_with_overrides(self, **overrides):
+        import dataclasses
+
+        record = {**self.document.records[0], **overrides}
+        return dataclasses.replace(
+            self.document, records=(record,)
+        )
+
+    def test_media_kinds_map_to_placeholder(self) -> None:
+        for kind, placeholder in (
+            ("voice", "[语音] 5.2s"),
+            ("voip", "[通话]"),
+            ("video", "[视频]"),
+            ("channel_video", "当前微信版本不支持展示该内容"),
+            ("file", "王力.pdf"),
+            ("link", "分享了一个位置链接"),
+            ("location", "[位置] 上海市"),
+            ("miniprogram", "[应用消息]"),
+            ("card", "[名片] 徐"),
+            ("red_packet", "恭喜发财"),
+            ("forward_chat", "转发的聊天记录"),
+            ("app", "一起买新鲜蔬果"),
+        ):
+            with self.subTest(kind=kind):
+                document = self.document_with_overrides(
+                    kind=kind, text=placeholder
+                )
+                batch = normalize_document(document)
+                message = batch.messages[0]
+                self.assertEqual(message.message_type, kind)
+                self.assertEqual(message.media_placeholder, placeholder)
+                self.assertEqual(message.text_content, "")
+
     def test_raw_payload_is_an_immutable_snapshot(self) -> None:
         batch = normalize_document(self.document)
         original_text = self.document.records[0]["text"]
