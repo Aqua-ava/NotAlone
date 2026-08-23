@@ -7,28 +7,20 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from notalone.memory.models import MemoryCategory
+from notalone.memory.models import (
+    FactSubject,
+    MemoryCategory,
+    MemoryTopic,
+)
 
-
-class FactSubject(StrEnum):
-    """一条提取事实的主体：谁的事。"""
-
-    SELF = "self"
-    CONTACT = "contact"
-    SHARED = "shared"
-
-
-class MemoryTopic(StrEnum):
-    """记忆的受控粗筛主题，只用于缩小裁决检索范围。"""
-
-    HEALTH = "health"
-    WORK = "work"
-    FAMILY = "family"
-    TRAVEL = "travel"
-    FINANCE = "finance"
-    STUDY = "study"
-    EMOTION = "emotion"
-    OTHER = "other"
+__all__ = [
+    "ExtractedFact",
+    "ExtractionWindow",
+    "FactSubject",
+    "MessageRef",
+    "MessageSender",
+    "MemoryTopic",
+]
 
 
 class MessageSender(StrEnum):

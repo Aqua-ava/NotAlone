@@ -72,3 +72,25 @@ class RetrievedMemory:
         if not isinstance(self.source_ids, tuple) or not self.source_ids:
             raise ValueError("关系记忆检索结果必须带来源引用。")
         _validate_source_ids(self.source_ids)
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievedOwnerMemory:
+    """只允许当前有效的 owner 级自我记忆命中。"""
+
+    memory_id: UUID
+    owner_id: UUID
+    text: str
+    category: str
+    topic: str
+    source_ids: tuple[UUID, ...]
+    adoption_method: str
+    revision: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.memory_id, UUID) or not isinstance(
+            self.owner_id, UUID
+        ):
+            raise ValueError("owner 记忆命中必须携带记忆与 owner ID。")
+        if not isinstance(self.text, str) or not self.text:
+            raise ValueError("owner 记忆命中文本不能为空。")

@@ -136,3 +136,73 @@ class ConfirmedMemory:
         if self.invalid_at is not None and current >= self.invalid_at:
             return False
         return True
+
+
+class MemoryTopic(StrEnum):
+    """记忆的受控粗筛主题，只用于缩小裁决检索范围。"""
+
+    HEALTH = "health"
+    WORK = "work"
+    FAMILY = "family"
+    TRAVEL = "travel"
+    FINANCE = "finance"
+    STUDY = "study"
+    EMOTION = "emotion"
+    OTHER = "other"
+
+
+class FactSubject(StrEnum):
+    """一条记忆事实的主体：谁的事。"""
+
+    SELF = "self"
+    CONTACT = "contact"
+    SHARED = "shared"
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerMemory:
+    """用户自身事实的长期记忆；按 owner 归属，不携带联系人范围。"""
+
+    memory_id: UUID
+    owner_id: UUID
+    text: str
+    category: MemoryCategory
+    topic: MemoryTopic
+    source_ids: tuple[UUID, ...]
+    adoption_method: AdoptionMethod
+    status: ConfirmedMemoryStatus
+    valid_at: datetime | None = None
+    invalid_at: datetime | None = None
+    revision: int = 1
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.memory_id, UUID) or not isinstance(
+            self.owner_id, UUID
+        ):
+            raise ValueError("owner 记忆必须携带记忆 ID 与 owner ID。")
+        if not isinstance(self.text, str) or not self.text.strip():
+            raise ValueError("owner 记忆文本不能为空。")
+        if not isinstance(self.category, MemoryCategory):
+            raise ValueError("owner 记忆分类必须使用既有五类。")
+        if not isinstance(self.topic, MemoryTopic):
+            raise ValueError("owner 记忆主题必须是受控主题。")
+        if (
+            not isinstance(self.source_ids, tuple)
+            or not self.source_ids
+            or any(not isinstance(item, UUID) for item in self.source_ids)
+        ):
+            raise ValueError("owner 记忆必须带至少一个来源引用。")
+        if not isinstance(self.adoption_method, AdoptionMethod):
+            raise ValueError("owner 记忆必须带采纳方式。")
+        if not isinstance(self.status, ConfirmedMemoryStatus):
+            raise ValueError("owner 记忆状态无效。")
+        if not isinstance(self.revision, int) or self.revision < 1:
+            raise ValueError("owner 记忆版本必须从 1 开始。")
+        for value, label in (
+            (self.valid_at, "生效时间"),
+            (self.invalid_at, "失效时间"),
+        ):
+            if value is not None and (
+                not isinstance(value, datetime) or value.tzinfo is None
+            ):
+                raise ValueError(f"owner 记忆{label}必须是带时区的 datetime。")

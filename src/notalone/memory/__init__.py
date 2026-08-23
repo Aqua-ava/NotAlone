@@ -2,6 +2,9 @@
 
 from notalone.memory.adapters import InMemoryMemoryStore
 from notalone.memory.models import (
+    FactSubject,
+    MemoryTopic,
+    OwnerMemory,
     AdoptionMethod,
     ConfirmedMemory,
     ConfirmedMemoryStatus,
@@ -12,6 +15,9 @@ from notalone.memory.models import (
 from notalone.memory.ports import MemoryPort
 
 __all__ = [
+    "FactSubject",
+    "MemoryTopic",
+    "OwnerMemory",
     "AdoptionMethod",
     "ConfirmedMemory",
     "ConfirmedMemoryStatus",

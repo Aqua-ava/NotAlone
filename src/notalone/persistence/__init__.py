@@ -13,6 +13,10 @@ from notalone.persistence.memory_store import (
     MemoryPersistenceError,
     PostgresMemoryStore,
 )
+from notalone.persistence.owner_memory_store import (
+    OwnerMemoryPersistenceError,
+    PostgresOwnerMemoryStore,
+)
 from notalone.persistence.outbound_ledger import (
     OutboundLedgerPersistenceError,
     PostgresOutboundLedger,
@@ -31,11 +35,13 @@ __all__ = [
     "MemoryInvariantError",
     "MemoryPersistenceError",
     "OutboundLedgerPersistenceError",
+    "OwnerMemoryPersistenceError",
     "PersistedConversationBinding",
     "PostgresConversationBindingRepository",
     "PostgresConversationPort",
     "PostgresMemoryStore",
     "PostgresOutboundLedger",
+    "PostgresOwnerMemoryStore",
     "PostgresReplyStore",
     "PostgresRetrieval",
     "PostgresSkillPort",

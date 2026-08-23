@@ -14,7 +14,12 @@ from notalone.persistence.memory_store import (
     PostgresMemoryStore,
 )
 from notalone.retrieval.errors import RetrievalError, RetrievalInvariantError
-from notalone.retrieval.models import RetrievedMemory, RetrievedMessage
+from notalone.retrieval.models import (
+    RetrievedMemory,
+    RetrievedMessage,
+    RetrievedOwnerMemory,
+)
+from notalone.memory.ports import OwnerMemoryPort
 from notalone.scopes import ContactScope
 
 
@@ -44,17 +49,19 @@ def _validate_limit(limit: int) -> None:
 class PostgresRetrieval:
     """按联系人范围只读检索规范化消息。"""
 
-    __slots__ = ("_database_url", "_memory_store")
+    __slots__ = ("_database_url", "_memory_store", "_owner_memory_store")
 
     def __init__(
         self,
         database_url: str,
         *,
         memory_store: MemoryPort | None = None,
+        owner_memory_store: OwnerMemoryPort | None = None,
     ) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
         self._database_url = database_url
+        self._owner_memory_store = owner_memory_store
         self._memory_store = (
             memory_store
             if memory_store is not None
@@ -154,6 +161,44 @@ class PostgresRetrieval:
                 scope=memory.scope,
                 text=memory.text,
                 category=memory.category.value,
+                source_ids=memory.source_ids,
+                adoption_method=memory.adoption_method.value,
+                revision=memory.revision,
+            )
+            for memory in memories
+            if not tokens or all(token in memory.text.lower() for token in tokens)
+        )[:limit]
+
+
+    def search_owner_memories(
+        self,
+        *,
+        owner_id,
+        query: str | None = None,
+        limit: int = 20,
+    ) -> tuple[RetrievedOwnerMemory, ...]:
+        """返回某位用户当前有效的 owner 级自我记忆。"""
+
+        if not isinstance(owner_id, UUID):
+            raise TypeError("owner 记忆检索必须携带 owner ID。")
+        if query is not None and not isinstance(query, str):
+            raise TypeError("owner 记忆检索 query 必须是字符串或 None。")
+        if not isinstance(limit, int) or not 1 <= limit <= 20:
+            raise ValueError("检索 limit 超出模块预算。")
+        if self._owner_memory_store is None:
+            raise RetrievalError("owner 记忆检索失败。")
+        try:
+            memories = self._owner_memory_store.list_active(owner_id)
+        except Exception:
+            raise RetrievalError("owner 记忆检索失败。") from None
+        tokens = _query_tokens(query)
+        return tuple(
+            RetrievedOwnerMemory(
+                memory_id=memory.memory_id,
+                owner_id=memory.owner_id,
+                text=memory.text,
+                category=memory.category.value,
+                topic=memory.topic.value,
                 source_ids=memory.source_ids,
                 adoption_method=memory.adoption_method.value,
                 revision=memory.revision,

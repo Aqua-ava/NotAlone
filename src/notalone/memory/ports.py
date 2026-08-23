@@ -6,6 +6,7 @@ from typing import Protocol
 from uuid import UUID
 
 from notalone.memory.models import (
+    OwnerMemory,
     AdoptionMethod,
     ConfirmedMemory,
     MemoryCandidate,
@@ -64,3 +65,19 @@ class MemoryPort(Protocol):
 
     def list_confirmed(self, scope: ContactScope) -> tuple[ConfirmedMemory, ...]:
         """返回指定联系人范围内当前有效的已确认记忆。"""
+
+
+class OwnerMemoryPort(Protocol):
+    """管理用户自身事实的 owner 级记忆边界。"""
+
+    def create(self, memory: OwnerMemory) -> OwnerMemory:
+        """保存一条带来源与主题的 owner 级记忆。"""
+
+    def list_active(self, owner_id: UUID) -> tuple[OwnerMemory, ...]:
+        """返回某位用户当前有效（active 且在有效期内）的 owner 级记忆。"""
+
+    def delete(self, owner_id: UUID, memory_id: UUID) -> OwnerMemory:
+        """软删除一条 owner 级记忆，保留文本指纹。"""
+
+    def deleted_texts(self, owner_id: UUID) -> tuple[str, ...]:
+        """返回该用户已软删除记忆的文本，用于阻止自动提取复活。"""
