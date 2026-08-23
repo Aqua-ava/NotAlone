@@ -44,6 +44,27 @@ class AdoptionMethod(StrEnum):
     MANUAL = "manual"
 
 
+class MemoryTopic(StrEnum):
+    """记忆的受控粗筛主题，只用于缩小裁决检索范围。"""
+
+    HEALTH = "health"
+    WORK = "work"
+    FAMILY = "family"
+    TRAVEL = "travel"
+    FINANCE = "finance"
+    STUDY = "study"
+    EMOTION = "emotion"
+    OTHER = "other"
+
+
+class FactSubject(StrEnum):
+    """一条记忆事实的主体：谁的事。"""
+
+    SELF = "self"
+    CONTACT = "contact"
+    SHARED = "shared"
+
+
 def _validate_source_ids(source_ids: tuple[UUID, ...]) -> None:
     if (
         not isinstance(source_ids, tuple)
@@ -69,7 +90,10 @@ class MemoryCandidate:
     text: str
     category: MemoryCategory
     source_ids: tuple[UUID, ...]
+    topic: MemoryTopic = MemoryTopic.OTHER
     status: MemoryCandidateStatus = MemoryCandidateStatus.PENDING
+    valid_at: datetime | None = None
+    invalid_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.candidate_id, UUID):
@@ -96,6 +120,7 @@ class ConfirmedMemory:
     source_ids: tuple[UUID, ...]
     source_candidate_id: UUID | None
     adoption_method: AdoptionMethod
+    topic: MemoryTopic = MemoryTopic.OTHER
     status: ConfirmedMemoryStatus = ConfirmedMemoryStatus.ACTIVE
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
@@ -138,25 +163,6 @@ class ConfirmedMemory:
         return True
 
 
-class MemoryTopic(StrEnum):
-    """记忆的受控粗筛主题，只用于缩小裁决检索范围。"""
-
-    HEALTH = "health"
-    WORK = "work"
-    FAMILY = "family"
-    TRAVEL = "travel"
-    FINANCE = "finance"
-    STUDY = "study"
-    EMOTION = "emotion"
-    OTHER = "other"
-
-
-class FactSubject(StrEnum):
-    """一条记忆事实的主体：谁的事。"""
-
-    SELF = "self"
-    CONTACT = "contact"
-    SHARED = "shared"
 
 
 @dataclass(frozen=True, slots=True)

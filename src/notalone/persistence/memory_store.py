@@ -11,6 +11,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from notalone.memory.models import (
+    MemoryTopic,
     AdoptionMethod,
     ConfirmedMemory,
     ConfirmedMemoryStatus,
@@ -39,8 +40,11 @@ _CANDIDATE_COLUMNS = """
     contact_id,
     text_content AS candidate_text,
     category AS candidate_category,
+    topic AS candidate_topic,
     source_ids AS candidate_source_ids,
-    status AS candidate_status
+    status AS candidate_status,
+    valid_at AS candidate_valid_at,
+    invalid_at AS candidate_invalid_at
 """
 
 _MEMORY_COLUMNS = """
@@ -49,6 +53,7 @@ _MEMORY_COLUMNS = """
     contact_id,
     text_content AS memory_text,
     category AS memory_category,
+    topic AS memory_topic,
     source_ids AS memory_source_ids,
     source_candidate_id,
     adoption_method,
@@ -95,9 +100,9 @@ class PostgresMemoryStore:
                     f"""
                     INSERT INTO public.memory_candidate (
                         id, owner_id, contact_id, text_content, category,
-                        source_ids, status
+                        topic, source_ids, status, valid_at, invalid_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING {_CANDIDATE_COLUMNS}
                     """,
                     (
@@ -106,8 +111,11 @@ class PostgresMemoryStore:
                         candidate.scope.contact_id,
                         candidate.text,
                         candidate.category.value,
+                        candidate.topic.value,
                         list(candidate.source_ids),
                         candidate.status.value,
+                        candidate.valid_at,
+                        candidate.invalid_at,
                     ),
                 ).fetchone()
                 if row is None:
@@ -177,9 +185,10 @@ class PostgresMemoryStore:
                     f"""
                     INSERT INTO public.confirmed_memory (
                         id, owner_id, contact_id, text_content, category,
-                        source_ids, source_candidate_id, adoption_method
+                        topic, source_ids, source_candidate_id, adoption_method,
+                        valid_at, invalid_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING {_MEMORY_COLUMNS}
                     """,
                     (
@@ -188,9 +197,12 @@ class PostgresMemoryStore:
                         scope.contact_id,
                         candidate_row["candidate_text"],
                         candidate_row["candidate_category"],
+                        candidate_row["candidate_topic"],
                         candidate_row["candidate_source_ids"],
                         candidate_id,
                         adoption_method.value,
+                        candidate_row["candidate_valid_at"],
+                        candidate_row["candidate_invalid_at"],
                     ),
                 ).fetchone()
                 if memory_row is None:
@@ -399,6 +411,27 @@ class PostgresMemoryStore:
             raise MemoryInvariantError(
                 "关系记忆数据库记录结构无效。"
             ) from None
+
+    def deleted_texts(self, scope: ContactScope) -> tuple[str, ...]:
+        """返回该联系人范围内已删除记忆的文本，用于阻止自动提取复活。"""
+
+        self._validate_scope(scope)
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(
+                    """
+                    SELECT text_content
+                    FROM public.confirmed_memory
+                    WHERE owner_id = %s AND contact_id = %s
+                      AND status = 'deleted'
+                    """,
+                    (scope.owner_id, scope.contact_id),
+                ).fetchall()
+        except Exception as error:
+            raise MemoryPersistenceError(
+                "关系记忆数据库操作失败。"
+            ) from error
+        return tuple(row["text_content"] for row in rows)
 
     def _transition_candidate(
         self,
@@ -614,8 +647,11 @@ class PostgresMemoryStore:
             scope=ContactScope(row["owner_id"], row["contact_id"]),
             text=row["candidate_text"],
             category=MemoryCategory(row["candidate_category"]),
+            topic=MemoryTopic(row["candidate_topic"]),
             source_ids=cls._source_ids(row["candidate_source_ids"]),
             status=MemoryCandidateStatus(row["candidate_status"]),
+            valid_at=row["candidate_valid_at"],
+            invalid_at=row["candidate_invalid_at"],
         )
 
     @classmethod
@@ -625,6 +661,7 @@ class PostgresMemoryStore:
             scope=ContactScope(row["owner_id"], row["contact_id"]),
             text=row["memory_text"],
             category=MemoryCategory(row["memory_category"]),
+            topic=MemoryTopic(row["memory_topic"]),
             source_ids=cls._source_ids(row["memory_source_ids"]),
             source_candidate_id=row["source_candidate_id"],
             adoption_method=AdoptionMethod(row["adoption_method"]),

@@ -66,6 +66,9 @@ class MemoryPort(Protocol):
     def list_confirmed(self, scope: ContactScope) -> tuple[ConfirmedMemory, ...]:
         """返回指定联系人范围内当前有效的已确认记忆。"""
 
+    def deleted_texts(self, scope: ContactScope) -> tuple[str, ...]:
+        """返回该联系人范围内已删除记忆的文本，用于阻止自动提取复活。"""
+
 
 class OwnerMemoryPort(Protocol):
     """管理用户自身事实的 owner 级记忆边界。"""

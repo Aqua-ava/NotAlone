@@ -17,6 +17,10 @@ from notalone.persistence.owner_memory_store import (
     OwnerMemoryPersistenceError,
     PostgresOwnerMemoryStore,
 )
+from notalone.persistence.watermark_store import (
+    PostgresWatermarkStore,
+    WatermarkPersistenceError,
+)
 from notalone.persistence.outbound_ledger import (
     OutboundLedgerPersistenceError,
     PostgresOutboundLedger,
@@ -45,5 +49,7 @@ __all__ = [
     "PostgresReplyStore",
     "PostgresRetrieval",
     "PostgresSkillPort",
+    "PostgresWatermarkStore",
     "SkillPortPersistenceError",
+    "WatermarkPersistenceError",
 ]
