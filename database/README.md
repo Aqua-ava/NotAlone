@@ -182,6 +182,19 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 第十八个迁移新增 `contact_memory_state` 和 `contact_memory_index`。目录最多保存 20 个分类/主题
 入口及 `confirmed_memory` UUID，不复制记忆正文；目录版本不一致时必须重建。
 
+继续保存 CLI 会话绑定的匹配证据：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/019_binding_cli_match_metadata.sql
+```
+
+第十九个迁移为 `conversation_binding` 增加 `display_name` 映射、`metadata_summary` 匹配证据摘要和
+`visual_fingerprint` 可选视觉指纹摘要。证据字段只用于定位当前会话与一次性确认，预览只保存摘要哈希，
+不保存原文；已有 active 绑定唯一性约束不变。
+
 任务终态清理使用：
 
 ```bash

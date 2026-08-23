@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Mapping
 from uuid import UUID, uuid4
 
 import psycopg
+from psycopg.types.json import Jsonb
 
 from notalone.conversation import (
     ConversationBinding,
@@ -32,6 +33,14 @@ class ConversationBindingConflictError(ConversationBindingPersistenceError):
     """会话定位标识已经绑定到其他有效会话。"""
 
 
+# 统一的绑定列清单，保证读写字段顺序一致。
+_BINDING_COLUMNS = (
+    "id, owner_id, contact_id, channel, account_scope, conversation_locator, "
+    "display_name, metadata_summary, visual_fingerprint, status, "
+    "last_verified_at, created_at, updated_at"
+)
+
+
 @dataclass(frozen=True, slots=True)
 class PersistedConversationBinding:
     """数据库中会话绑定的最小非聊天内容投影。"""
@@ -45,6 +54,9 @@ class PersistedConversationBinding:
     last_verified_at: datetime
     created_at: datetime
     updated_at: datetime
+    display_name: str | None = None
+    metadata_summary: Mapping[str, Any] | None = None
+    visual_fingerprint: str | None = None
 
     def as_domain(self) -> ConversationBinding:
         """转换成 ConversationPort 使用的最小绑定实体。"""
@@ -74,6 +86,9 @@ class PostgresConversationBindingRepository:
         channel: str,
         account_scope: str,
         conversation_locator: str,
+        display_name: str | None = None,
+        metadata_summary: Mapping[str, Any] | None = None,
+        visual_fingerprint: str | None = None,
         binding_id: UUID | None = None,
     ) -> PersistedConversationBinding:
         """创建一条已经由用户确认的会话绑定。"""
@@ -82,6 +97,10 @@ class PostgresConversationBindingRepository:
         self._validate_text(channel, "channel")
         self._validate_text(account_scope, "account_scope")
         self._validate_text(conversation_locator, "conversation_locator")
+        self._validate_optional_text(display_name, "display_name")
+        self._validate_optional_text(visual_fingerprint, "visual_fingerprint")
+        if metadata_summary is not None and not isinstance(metadata_summary, Mapping):
+            raise TypeError("metadata_summary 必须是键值映射或 None。")
         selected_binding_id = binding_id or uuid4()
         if not isinstance(selected_binding_id, UUID):
             raise TypeError("binding_id 必须是 UUID。")
@@ -94,19 +113,20 @@ class PostgresConversationBindingRepository:
                     contact_id=contact_id,
                 )
                 row = connection.execute(
-                    """
+                    f"""
                     INSERT INTO public.conversation_binding (
                         id,
                         owner_id,
                         contact_id,
                         channel,
                         account_scope,
-                        conversation_locator
+                        conversation_locator,
+                        display_name,
+                        metadata_summary,
+                        visual_fingerprint
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    RETURNING id, owner_id, contact_id, channel,
-                              account_scope, conversation_locator, status,
-                              last_verified_at, created_at, updated_at
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING {_BINDING_COLUMNS}
                     """,
                     (
                         selected_binding_id,
@@ -115,6 +135,9 @@ class PostgresConversationBindingRepository:
                         channel,
                         account_scope,
                         conversation_locator,
+                        display_name,
+                        None if metadata_summary is None else Jsonb(dict(metadata_summary)),
+                        visual_fingerprint,
                     ),
                 ).fetchone()
                 if row is None:
@@ -159,10 +182,8 @@ class PostgresConversationBindingRepository:
         try:
             with psycopg.connect(self._database_url) as connection:
                 row = connection.execute(
-                    """
-                    SELECT id, owner_id, contact_id, channel,
-                           account_scope, conversation_locator, status,
-                           last_verified_at, created_at, updated_at
+                    f"""
+                    SELECT {_BINDING_COLUMNS}
                     FROM public.conversation_binding
                     WHERE owner_id = %s AND contact_id = %s AND id = %s
                     """,
@@ -195,15 +216,13 @@ class PostgresConversationBindingRepository:
         try:
             with psycopg.connect(self._database_url) as connection:
                 row = connection.execute(
-                    """
+                    f"""
                     UPDATE public.conversation_binding
                     SET status = 'revoked',
                         revoked_at = COALESCE(revoked_at, now()),
                         updated_at = now()
                     WHERE owner_id = %s AND contact_id = %s AND id = %s
-                    RETURNING id, owner_id, contact_id, channel,
-                              account_scope, conversation_locator, status,
-                              last_verified_at, created_at, updated_at
+                    RETURNING {_BINDING_COLUMNS}
                     """,
                     (owner_id, contact_id, binding_id),
                 ).fetchone()
@@ -234,10 +253,8 @@ class PostgresConversationBindingRepository:
         try:
             with psycopg.connect(self._database_url) as connection:
                 row = connection.execute(
-                    """
-                    SELECT id, owner_id, contact_id, channel,
-                           account_scope, conversation_locator, status,
-                           last_verified_at, created_at, updated_at
+                    f"""
+                    SELECT {_BINDING_COLUMNS}
                     FROM public.conversation_binding
                     WHERE owner_id = %s AND id = %s
                     FOR UPDATE
@@ -250,13 +267,11 @@ class PostgresConversationBindingRepository:
                 if binding.status is ConversationBindingStatus.REVOKED:
                     return binding
                 refreshed = connection.execute(
-                    """
+                    f"""
                     UPDATE public.conversation_binding
                     SET last_verified_at = now(), updated_at = now()
                     WHERE owner_id = %s AND id = %s
-                    RETURNING id, owner_id, contact_id, channel,
-                              account_scope, conversation_locator, status,
-                              last_verified_at, created_at, updated_at
+                    RETURNING {_BINDING_COLUMNS}
                     """,
                     (owner_id, binding_id),
                 ).fetchone()
@@ -270,6 +285,142 @@ class PostgresConversationBindingRepository:
         except psycopg.Error:
             raise ConversationBindingPersistenceError(
                 "会话绑定验证读取失败。"
+            ) from None
+
+    def read_active_by_locator(
+        self,
+        *,
+        owner_id: UUID,
+        channel: str,
+        account_scope: str,
+        conversation_locator: str,
+    ) -> PersistedConversationBinding | None:
+        """按外部会话定位标识读取当前 owner 的 active 绑定。"""
+
+        if not isinstance(owner_id, UUID):
+            raise TypeError("owner_id 必须是 UUID。")
+        self._validate_text(channel, "channel")
+        self._validate_text(account_scope, "account_scope")
+        self._validate_text(conversation_locator, "conversation_locator")
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                row = connection.execute(
+                    f"""
+                    SELECT {_BINDING_COLUMNS}
+                    FROM public.conversation_binding
+                    WHERE owner_id = %s AND channel = %s
+                      AND account_scope = %s AND conversation_locator = %s
+                      AND status = 'active'
+                    """,
+                    (owner_id, channel, account_scope, conversation_locator),
+                ).fetchone()
+                if row is None:
+                    return None
+                return self._from_row(row)
+        except ConversationBindingPersistenceError:
+            raise
+        except psycopg.Error:
+            raise ConversationBindingPersistenceError(
+                "会话绑定定位读取失败。"
+            ) from None
+
+    def list_active_bindings(
+        self,
+        *,
+        owner_id: UUID,
+        channel: str | None = None,
+        account_scope: str | None = None,
+    ) -> tuple[PersistedConversationBinding, ...]:
+        """列出当前 owner 的 active 绑定，供匹配层投影为证据。"""
+
+        if not isinstance(owner_id, UUID):
+            raise TypeError("owner_id 必须是 UUID。")
+        if channel is not None:
+            self._validate_text(channel, "channel")
+        if account_scope is not None:
+            self._validate_text(account_scope, "account_scope")
+        clauses = ["owner_id = %s", "status = 'active'"]
+        parameters: list[object] = [owner_id]
+        if channel is not None:
+            clauses.append("channel = %s")
+            parameters.append(channel)
+        if account_scope is not None:
+            clauses.append("account_scope = %s")
+            parameters.append(account_scope)
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                rows = connection.execute(
+                    f"""
+                    SELECT {_BINDING_COLUMNS}
+                    FROM public.conversation_binding
+                    WHERE {' AND '.join(clauses)}
+                    ORDER BY updated_at DESC
+                    """,
+                    tuple(parameters),
+                ).fetchall()
+                return tuple(self._from_row(row) for row in rows)
+        except ConversationBindingPersistenceError:
+            raise
+        except psycopg.Error:
+            raise ConversationBindingPersistenceError(
+                "会话绑定列表读取失败。"
+            ) from None
+
+    def update_matching_metadata(
+        self,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        binding_id: UUID,
+        display_name: str | None = None,
+        metadata_summary: Mapping[str, Any] | None = None,
+        visual_fingerprint: str | None = None,
+    ) -> PersistedConversationBinding:
+        """用户确认后更新绑定的匹配证据；只更新传入的字段。"""
+
+        self._validate_scope(owner_id=owner_id, contact_id=contact_id)
+        if not isinstance(binding_id, UUID):
+            raise TypeError("binding_id 必须是 UUID。")
+        self._validate_optional_text(display_name, "display_name")
+        self._validate_optional_text(visual_fingerprint, "visual_fingerprint")
+        if metadata_summary is not None and not isinstance(metadata_summary, Mapping):
+            raise TypeError("metadata_summary 必须是键值映射或 None。")
+        if display_name is None and metadata_summary is None and visual_fingerprint is None:
+            raise ValueError("至少需要更新一个匹配证据字段。")
+
+        assignments: list[str] = []
+        parameters: list[object] = []
+        if display_name is not None:
+            assignments.append("display_name = %s")
+            parameters.append(display_name)
+        if metadata_summary is not None:
+            assignments.append("metadata_summary = %s")
+            parameters.append(Jsonb(dict(metadata_summary)))
+        if visual_fingerprint is not None:
+            assignments.append("visual_fingerprint = %s")
+            parameters.append(visual_fingerprint)
+        parameters.extend([owner_id, contact_id, binding_id])
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                row = connection.execute(
+                    f"""
+                    UPDATE public.conversation_binding
+                    SET {', '.join(assignments)}, updated_at = now()
+                    WHERE owner_id = %s AND contact_id = %s AND id = %s
+                    RETURNING {_BINDING_COLUMNS}
+                    """,
+                    tuple(parameters),
+                ).fetchone()
+                if row is None:
+                    raise ConversationBindingNotFoundError(
+                        "会话绑定不存在。"
+                    )
+                return self._from_row(row)
+        except ConversationBindingNotFoundError:
+            raise
+        except psycopg.Error:
+            raise ConversationBindingPersistenceError(
+                "会话绑定证据更新失败。"
             ) from None
 
     @staticmethod
@@ -304,6 +455,13 @@ class PostgresConversationBindingRepository:
             raise ValueError(f"{field_name} 不能为空。")
 
     @staticmethod
+    def _validate_optional_text(value: str | None, field_name: str) -> None:
+        if value is None:
+            return
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{field_name} 必须是非空字符串或 None。")
+
+    @staticmethod
     def _from_row(row: tuple[object, ...]) -> PersistedConversationBinding:
         (
             binding_id,
@@ -312,6 +470,9 @@ class PostgresConversationBindingRepository:
             channel,
             account_scope,
             conversation_locator,
+            display_name,
+            metadata_summary,
+            visual_fingerprint,
             status,
             last_verified_at,
             created_at,
@@ -339,6 +500,18 @@ class PostgresConversationBindingRepository:
             raise ConversationBindingPersistenceError(
                 "数据库返回的会话绑定字段无效。"
             )
+        if display_name is not None and not isinstance(display_name, str):
+            raise ConversationBindingPersistenceError(
+                "数据库返回的 display_name 无效。"
+            )
+        if metadata_summary is not None and not isinstance(metadata_summary, Mapping):
+            raise ConversationBindingPersistenceError(
+                "数据库返回的匹配证据摘要无效。"
+            )
+        if visual_fingerprint is not None and not isinstance(visual_fingerprint, str):
+            raise ConversationBindingPersistenceError(
+                "数据库返回的视觉指纹无效。"
+            )
         try:
             binding_status = ConversationBindingStatus(status)
         except ValueError as error:
@@ -355,6 +528,9 @@ class PostgresConversationBindingRepository:
             last_verified_at=last_verified_at,
             created_at=created_at,
             updated_at=updated_at,
+            display_name=display_name,
+            metadata_summary=metadata_summary,
+            visual_fingerprint=visual_fingerprint,
         )
 
 
