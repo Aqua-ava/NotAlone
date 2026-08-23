@@ -125,6 +125,28 @@ class PostgresOwnerMemoryStore:
             raise OwnerMemoryPersistenceError("owner 记忆不存在或已删除。")
         return _from_row(row)
 
+    def invalidate(self, owner_id: UUID, memory_id: UUID) -> OwnerMemory:
+        _validate_owner_id(owner_id)
+        try:
+            with self._connect() as connection:
+                row = connection.execute(
+                    f"""
+                    UPDATE public.owner_memory
+                    SET status = 'invalidated', updated_at = now()
+                    WHERE owner_id = %s AND id = %s
+                    RETURNING {_OWNER_MEMORY_COLUMNS}
+                    """,
+                    (owner_id, memory_id),
+                ).fetchone()
+                connection.commit()
+        except Exception as error:
+            raise OwnerMemoryPersistenceError(
+                _OWNER_MEMORY_UNAVAILABLE
+            ) from error
+        if row is None:
+            raise OwnerMemoryPersistenceError("owner 记忆不存在或已失效。")
+        return _from_row(row)
+
     def deleted_texts(self, owner_id: UUID) -> tuple[str, ...]:
         _validate_owner_id(owner_id)
         try:

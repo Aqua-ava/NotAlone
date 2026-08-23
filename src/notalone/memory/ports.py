@@ -82,5 +82,8 @@ class OwnerMemoryPort(Protocol):
     def delete(self, owner_id: UUID, memory_id: UUID) -> OwnerMemory:
         """软删除一条 owner 级记忆，保留文本指纹。"""
 
+    def invalidate(self, owner_id: UUID, memory_id: UUID) -> OwnerMemory:
+        """使一条 owner 级记忆失效（被新事实取代），不再进入检索。"""
+
     def deleted_texts(self, owner_id: UUID) -> tuple[str, ...]:
         """返回该用户已软删除记忆的文本，用于阻止自动提取复活。"""
