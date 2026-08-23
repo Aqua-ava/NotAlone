@@ -195,6 +195,21 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 `visual_fingerprint` 可选视觉指纹摘要。证据字段只用于定位当前会话与一次性确认，预览只保存摘要哈希，
 不保存原文；已有 active 绑定唯一性约束不变。
 
+继续保存本地微信 CLI 观察来源与联系人级水位：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/020_local_wechat_observation.sql
+```
+
+第二十个迁移新增 `local_wechat_observation` 和 `wechat_observation_cursor`。前者保存一次 CLI
+只读增量读取的来源元数据（CLI 版本、读取时间、水位区间、`live`/`cli_catchup` 模式和消息计数），
+不保存全量导出或消息正文；同一绑定同一水位区间的重复读取由唯一索引保证幂等。后者按
+`owner_id + contact_id` 独立保存成功返回的 local_id 与续传 cursor，水位只单调前移，
+首次读取没有水位、不使用非法的 `since_local_id=0`。联系人或绑定行删除时按来源级删除路径级联清理。
+
 任务终态清理使用：
 
 ```bash
