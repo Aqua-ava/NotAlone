@@ -68,11 +68,12 @@ def load_contact_messages(
         ).fetchall()
     messages = []
     for row in rows:
-        sender = (
-            MessageSender.CONTACT
-            if row["speaker"] == "contact"
-            else MessageSender.SELF
-        )
+        if row["speaker"] == "contact":
+            sender = MessageSender.CONTACT
+        elif row["speaker"] == "user":
+            sender = MessageSender.SELF
+        else:
+            continue
         text = row["text_content"] or row["media_placeholder"] or ""
         if not text.strip():
             continue
