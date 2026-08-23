@@ -170,6 +170,18 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 第十七个迁移把步骤租约字段命名为 `worker_id`，并保存任务使用的模型版本和确定性规则版本；
 仍不保存模型输入输出或聊天正文。
 
+继续建立联系人记忆 revision 和确定性目录：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/018_contact_memory_index.sql
+```
+
+第十八个迁移新增 `contact_memory_state` 和 `contact_memory_index`。目录最多保存 20 个分类/主题
+入口及 `confirmed_memory` UUID，不复制记忆正文；目录版本不一致时必须重建。
+
 迁移仅建立数据结构，不读取 `chat_exports/`，也不导入真实聊天记录。
 
 首个迁移建立旧版 `owner`、`contact`、`source_document` 和 `message`，第三个迁移在空业务

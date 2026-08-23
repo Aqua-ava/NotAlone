@@ -140,8 +140,9 @@ notalone-memory-list --contact-id '...'
 notalone-memory-delete --contact-id '...' --memory-id '...'
 ```
 
-列出命令只输出 memory_id、分类、主题、采纳标记与版本号，不输出记忆正文。人工确认
-待定候选、候选批量管理与记忆目录（ADR-011）尚未实现。
+列出命令只输出 memory_id、分类、主题、采纳标记与版本号，不输出记忆正文。联系人记忆目录已经
+由 Worker 的 `index -> verify` 步骤按确定性代码维护：只保存分类、主题提示和 memory_id 引用，
+最多 20 个主题，不复制记忆正文或产生新事实。人工确认待定候选和候选批量管理仍未实现。
 
 ## 测试
 

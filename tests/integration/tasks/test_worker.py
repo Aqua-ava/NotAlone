@@ -20,6 +20,9 @@ from notalone.memory_extraction.command import ExtractionRunStats
 from notalone.persistence.background_tasks import (
     PostgresBackgroundTaskRepository,
 )
+from notalone.persistence.contact_memory_index import (
+    PostgresContactMemoryIndexRepository,
+)
 from notalone.persistence.memory_store import PostgresMemoryStore
 from notalone.persistence.postgres_repository import PostgresIngestRepository
 from notalone.scopes import ContactScope
@@ -175,11 +178,13 @@ class BackgroundTaskWorkerTest(unittest.TestCase):
         runner: ScriptedExtractionRunner,
         *,
         lease_duration: timedelta = timedelta(seconds=30),
+        index_repository: PostgresContactMemoryIndexRepository | None = None,
     ) -> BackgroundTaskWorker:
         return BackgroundTaskWorker(
             repository=self.worker_repository,
             extraction_runner=runner,
             lease_duration=lease_duration,
+            index_repository=index_repository,
         )
 
     def test_worker_runs_steps_in_order_and_extracts_once(self) -> None:
@@ -331,6 +336,40 @@ class BackgroundTaskWorkerTest(unittest.TestCase):
             (self.owner_id, self.contact_id),
         )
         self.assertIsNotNone(watermark)
+
+    def test_worker_runs_index_and_verify_after_extraction(self) -> None:
+        task_id = self._import()
+        runner = ScriptedExtractionRunner(
+            [ExtractionRunStats(batches=1, processed_messages=5)]
+        )
+        index_repository = PostgresContactMemoryIndexRepository(
+            TEST_DATABASE_URL
+        )
+        worker = self._worker(
+            runner,
+            index_repository=index_repository,
+        )
+        worker_id = uuid4()
+        for _ in range(5):
+            result = worker.run_once(
+                owner_id=self.owner_id,
+                contact_id=self.contact_id,
+                worker_id=worker_id,
+            )
+
+        self.assertEqual(result.step_name.value, "verify")
+        self.assertEqual(result.outcome, WorkerRunOutcome.SUCCEEDED)
+        task = self.worker_repository.get_task(
+            owner_id=self.owner_id,
+            contact_id=self.contact_id,
+            task_id=task_id,
+        )
+        self.assertEqual(task.status.value, "succeeded")
+        self.assertTrue(
+            index_repository.get(
+                ContactScope(self.owner_id, self.contact_id)
+            ).is_current
+        )
 
     def test_three_failures_terminally_fail_and_manual_retry_reuses_task(self) -> None:
         task_id = self._import()

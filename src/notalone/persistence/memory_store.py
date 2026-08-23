@@ -222,6 +222,7 @@ class PostgresMemoryStore:
                     raise MemoryInvariantError(
                         "关系记忆候选状态更新失败。"
                     )
+                self._bump_memory_revision(connection, scope)
                 return self._memory_from_row(memory_row)
         except (LookupError, PermissionError, RuntimeError, MemoryPersistenceError):
             raise
@@ -287,6 +288,7 @@ class PostgresMemoryStore:
                 ).fetchone()
                 if updated is None:
                     raise MemoryInvariantError("关系记忆修正结果为空。")
+                self._bump_memory_revision(connection, scope)
                 return self._memory_from_row(updated)
         except (LookupError, PermissionError, RuntimeError, MemoryPersistenceError):
             raise
@@ -523,6 +525,7 @@ class PostgresMemoryStore:
                 ).fetchone()
                 if updated is None:
                     raise MemoryInvariantError("关系记忆状态更新为空。")
+                self._bump_memory_revision(connection, scope)
                 return self._memory_from_row(updated)
         except (LookupError, PermissionError, RuntimeError, MemoryPersistenceError):
             raise
@@ -606,6 +609,24 @@ class PostgresMemoryStore:
         ).fetchone()["source_count"]
         if available_count != len(unique_source_ids):
             raise PermissionError("关系记忆来源范围校验失败。")
+
+    @staticmethod
+    def _bump_memory_revision(
+        connection: Any,
+        scope: ContactScope,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO public.contact_memory_state (
+                owner_id, contact_id, memory_revision
+            ) VALUES (%s, %s, 1)
+            ON CONFLICT (owner_id, contact_id)
+            DO UPDATE SET
+                memory_revision = contact_memory_state.memory_revision + 1,
+                updated_at = now()
+            """,
+            (scope.owner_id, scope.contact_id),
+        )
 
     def _connect(self) -> Any:
         return psycopg.connect(self._database_url, row_factory=dict_row)

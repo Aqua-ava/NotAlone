@@ -27,6 +27,11 @@ from notalone.memory_extraction.runtime import MemoryExtractionRuntime
 from notalone.persistence.background_tasks import (
     PostgresBackgroundTaskRepository,
 )
+from notalone.persistence.contact_memory_index import (
+    ContactMemoryIndexError,
+    ContactMemoryIndexPersistenceError,
+    PostgresContactMemoryIndexRepository,
+)
 from notalone.persistence.memory_store import PostgresMemoryStore
 from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
 from notalone.persistence.outbound_ledger import PostgresOutboundLedger
@@ -164,6 +169,7 @@ class BackgroundTaskWorker:
 
     __slots__ = (
         "_extraction_runner",
+        "_index_repository",
         "_lease_duration",
         "_model_version",
         "_repository",
@@ -177,6 +183,7 @@ class BackgroundTaskWorker:
         extraction_runner: ExtractionTaskRunner,
         lease_duration: timedelta = timedelta(seconds=30),
         rule_version: str = "memory-extraction-v1",
+        index_repository: PostgresContactMemoryIndexRepository | None = None,
     ) -> None:
         if repository is None or extraction_runner is None:
             raise TypeError("Worker 必须显式注入任务仓储和提取执行器。")
@@ -184,6 +191,7 @@ class BackgroundTaskWorker:
             raise ValueError("Worker 租约必须是正时间段。")
         self._repository = repository
         self._extraction_runner = extraction_runner
+        self._index_repository = index_repository
         self._lease_duration = lease_duration
         self._model_version = getattr(extraction_runner, "model_version", None)
         self._rule_version = rule_version
@@ -197,11 +205,22 @@ class BackgroundTaskWorker:
     ) -> WorkerRunResult:
         """领取并执行一个支持的步骤；没有可领取步骤时返回 idle。"""
 
+        supported_steps = (
+            BackgroundTaskStepName.PARSE,
+            BackgroundTaskStepName.NORMALIZE,
+            BackgroundTaskStepName.EXTRACT_MEMORY,
+        )
+        if self._index_repository is not None:
+            supported_steps += (
+                BackgroundTaskStepName.INDEX,
+                BackgroundTaskStepName.VERIFY,
+            )
         claim = self._repository.claim_next_step(
             owner_id=owner_id,
             contact_id=contact_id,
             worker_id=worker_id,
             lease_duration=self._lease_duration,
+            supported_steps=supported_steps,
             model_version=self._model_version,
             rule_version=self._rule_version,
         )
@@ -222,6 +241,96 @@ class BackgroundTaskWorker:
                 task_id=claim.task_id,
                 step_name=claim.name,
                 processed_count=claim.message_count,
+                attempt_count=claim.attempt_count,
+            )
+
+        if claim.name is BackgroundTaskStepName.INDEX:
+            try:
+                result = self._index_repository.rebuild(
+                    ContactScope(claim.owner_id, claim.contact_id)
+                )
+            except ContactMemoryIndexPersistenceError:
+                return self._record_failure(
+                    claim,
+                    "index_rebuild_failed",
+                    retryable=True,
+                )
+            except ContactMemoryIndexError:
+                return self._record_failure(
+                    claim,
+                    "index_rebuild_failed",
+                    retryable=False,
+                )
+            except (TimeoutError, ConnectionError):
+                return self._record_failure(
+                    claim,
+                    "index_rebuild_failed",
+                    retryable=True,
+                )
+            except Exception:
+                return self._record_failure(
+                    claim,
+                    "index_rebuild_failed",
+                    retryable=False,
+                )
+            self._repository.complete_step(
+                claim,
+                processed_count=len(result.topics),
+                total_count=20,
+            )
+            return WorkerRunResult(
+                outcome=WorkerRunOutcome.SUCCEEDED,
+                task_id=claim.task_id,
+                step_name=claim.name,
+                processed_count=len(result.topics),
+                attempt_count=claim.attempt_count,
+            )
+
+        if claim.name is BackgroundTaskStepName.VERIFY:
+            try:
+                verification = self._index_repository.verify(
+                    ContactScope(claim.owner_id, claim.contact_id)
+                )
+            except ContactMemoryIndexPersistenceError:
+                return self._record_failure(
+                    claim,
+                    "index_verification_failed",
+                    retryable=True,
+                )
+            except ContactMemoryIndexError:
+                return self._record_failure(
+                    claim,
+                    "index_verification_failed",
+                    retryable=False,
+                )
+            except (TimeoutError, ConnectionError):
+                return self._record_failure(
+                    claim,
+                    "index_verification_failed",
+                    retryable=True,
+                )
+            except Exception:
+                return self._record_failure(
+                    claim,
+                    "index_verification_failed",
+                    retryable=False,
+                )
+            if not verification.valid:
+                return self._record_failure(
+                    claim,
+                    verification.error_code or "index_verification_failed",
+                    retryable=True,
+                )
+            self._repository.complete_step(
+                claim,
+                processed_count=verification.topics_count,
+                total_count=20,
+            )
+            return WorkerRunResult(
+                outcome=WorkerRunOutcome.SUCCEEDED,
+                task_id=claim.task_id,
+                step_name=claim.name,
+                processed_count=verification.topics_count,
                 attempt_count=claim.attempt_count,
             )
 
