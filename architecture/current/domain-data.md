@@ -18,12 +18,13 @@
 | `owner_channel_identity` | owner 在外部聊天渠道中的已验证身份。 | 通过 `owner_id` 关联；`external_id` 是渠道标识，不是 `owner_id`；同一 owner/channel v1 只保留一个 active 身份。 |
 | `owner_preference` | 用户（owner）自身的全局偏好、表达习惯与通用禁忌，跨联系人生效。 | 属于 owner，不绑定 `contact_id`；与联系人关系记忆一样按本次请求自动选择，不固定全量加载。 |
 | `contact` | 用户手动创建或选择的具体联系人。 | `contact_id` 是 NotAlone 创建的稳定内部身份；昵称、备注和渠道身份是可变或可重新确认的信息。 |
-| `conversation_binding` | 用户确认的桌面聊天会话与联系人的绑定。 | 保存聊天 App、账号范围、会话定位线索、绑定状态与最近验证时间；不能仅用昵称自动匹配。 |
+| `conversation_binding` | 用户确认的桌面聊天会话与联系人的绑定。 | 保存聊天 App、账号范围、外部会话定位标识、display name 映射、会话视觉指纹、绑定状态与最近验证时间；已建立且唯一的映射可自动切换，不能把 display name、视觉指纹或 `talker` 当作 `contact_id`。 |
 | `source_document` | 一次原始导入的文本、截图或语音原始引用。 | 属于一个联系人；保留来源定位、导入时间、导出器名称与版本（可获取时）、用户确认范围、确认时间、确认方式和删除状态。 |
-| `session_capture` | 前台会话同步中一次画面变化产生的端侧 OCR 来源记录。 | 已归属时显式冗余 `owner_id + contact_id` 并关联 `conversation_binding`；记录 `capture_mode`（live/user_backfill）与连续性状态；未归属时为仅含 `owner_id` 的临时态（见隔离与查询约束）。云端只保存最小化的文本来源与解析状态，默认不保留或上传原始视觉帧。 |
+| `session_capture` | 前台会话同步中一次画面变化产生的端侧视觉观察记录。 | 只用于前台状态、display name OCR 线索和会话视觉指纹；默认不保存原始视觉帧，也不作为 CLI 消息正文来源。未归属时为仅含 `owner_id` 的临时态。 |
+| `local_wechat_observation` | 本地微信 CLI 从一个外部会话读取的一次文字增量来源记录。 | 显式关联 `owner_id + contact_id + conversation_binding`，保存外部会话定位标识、CLI 版本、`local_id`/`cursor`、读取时间、`from_me`/sender 和 `capture_mode`（live/cli_catchup）；不保存全量导出文件。 |
 | `background_task` | 一次完整的长时后台工作，取代独立的导入/删除/重建任务表。 | `type` 区分 import/delete/reindex；`scope` 声明作用域（account/contact/source）；状态为 `queued/running/verifying/succeeded/failed/cancelled`，记录总体进度、失败原因、重试与关联来源。删除任务不得跨越隔离边界。 |
 | `background_task_step` | `background_task` 下可恢复、可重试的固定执行步骤。 | 关联父任务并保存 `step_type`、顺序、状态、尝试次数、输入/输出业务引用、错误分类和 Worker 租约；不保存完整聊天正文。只用于确实需要逐步恢复或展示进度的长任务。 |
-| `message` | 统一的规范化文字消息。 | 显式冗余 `owner_id + contact_id`，并保存说话人、正文或明确的媒体占位信息、可用时间戳；来源字段（`source_document` 或 `session_capture`）仅用于定位与删除，不承担隔离过滤。渠道专属字段不是所有消息的必填字段。 |
+| `message` | 统一的规范化文字消息。 | 显式冗余 `owner_id + contact_id`，并保存说话人、正文或明确的媒体占位信息、可用时间戳；来源字段（`source_document` 或 `local_wechat_observation`）仅用于定位与删除，不承担隔离过滤。渠道专属字段不是所有消息的必填字段。 |
 | `memory_candidate` | 模型或规则从资料中提取的待采纳关系线索。 | 关联证据消息；不能被检索为已知事实。 |
 | `confirmed_memory` | 自动采纳或手动录入的共同事实、偏好、禁忌、关系资料。 | 关联一个或多个来源证据、采纳方式（auto/manual）、删除状态、分类与有效期；不保存固定常驻模式。 |
 | `contact_memory_index` | 当前联系人有效关系记忆的精简主题目录。 | 按 `owner_id + contact_id` 隔离，由固定主分类和系统自动生成的子主题组成；是可重建投影，不是新的事实源。 |
@@ -44,7 +45,8 @@ source_document
               -> contact_memory_index（自动生成、可重建）
 
 conversation_binding
-  -> session_capture
+  -> session_capture（前台状态与 display name 线索）
+  -> local_wechat_observation
       -> message
 
 reply_request（内嵌 retrieved_context 快照）
@@ -67,7 +69,7 @@ background_task
 - 首次导入允许用户创建联系人或选择已有联系人，并保存 `source_document_id`、确认的 `contact_id`、确认时间和确认方式（`manual_create`/`manual_select`）。新来源与已有渠道身份不一致时必须停止导入并重新确认。
 - 一份来源只属于一位联系人。整份文件必须先完成确定性校验，再以一个事务写入联系人、来源和全部消息；损坏、混合联系人、群聊或绑定不一致时不得部分写入。
 - 同一文件重复提交时返回原导入结果，不重复写入。新文件与已有消息部分重叠时停止导入，不自动跳过、覆盖或合并；明确的增量导入需另行定义用户工作流。
-- 规范消息的共同字段是隔离键、说话人、正文或媒体占位信息、可用时间戳和来源定位。微信的 local/server id、talker 等字段保存在来源元数据中，不得成为 OCR、语音转写或手工文字的必填条件。
+- 规范消息的共同字段是隔离键、说话人、正文或媒体占位信息、可用时间戳和来源定位。微信的 local/server id、talker 等字段保存在来源元数据中；本地 CLI 消息可以使用它们做增量游标和去重，但不能替代 `contact_id`。
 - 有正文但缺少时间戳的记录可以导入并标记时间未知；只有明确媒体类型时可保存结构化占位信息；正文和媒体信息都缺失时拒绝该记录。系统不得编造时间或媒体内容。
 - 用户手动提交的原始 JSON 可以随来源保存用于复核，但不进入回复检索，也不默认发送给外部模型。重新解析必须产生可追踪的规范化版本，并明确使相关记忆和索引失效或重算，不能无记录地覆盖旧结果。
 
@@ -159,20 +161,20 @@ status
 
 `message` 必须显式冗余 `owner_id + contact_id`，不得仅通过 `source_document` 或 `session_capture` 间接推导；检索过滤必须基于 `message` 自身携带的隔离键，而不是依赖来源关联。
 
-`conversation_binding` 的创建和变更必须经用户确认。会话标题、OCR 文本或模型推断只能作为匹配线索；没有匹配或匹配不唯一时，不得将 `session_capture` 写入任何联系人。
+`conversation_binding` 的首次建立、display name 改名映射和头像变化必须经用户确认。已确认且唯一的 display name + 会话视觉指纹映射可以自动定位到外部 `talker`/`username`；没有匹配、重名无法区分或视觉指纹不一致时，必须暂停，不得把消息写入任何联系人。
 
-`session_capture` 是联系人范围对象中唯一允许不携带 `contact_id` 的豁免：它存在一个“未归属临时态”，此时仅含 `owner_id`、不含 `contact_id`。该状态只出现在采集后、归属确认前的短暂窗口内，必须满足以下规则：
+`session_capture` 是联系人范围对象中唯一允许不携带 `contact_id` 的豁免：它存在一个“未归属临时态”，此时仅含 `owner_id`、不含 `contact_id`。该状态只用于前台 display name 观察和归属判断，必须满足以下规则：
 
 - 未归属的 `session_capture` 不得产生任何 `message`，也不得参与检索。
-- 归属成功的 `session_capture` 必须冗余 `owner_id + contact_id` 并关联已确认的 `conversation_binding`，此后按联系人范围对象对待。
-- 归属失败（匹配不唯一、绑定失效、无法可靠区分说话人或消息顺序）时，该批次必须丢弃或标记未归属，且必须按临时数据在明确时间点清理，不能静默累积或降级为“默认属于某人”。
+- 归属成功的 `session_capture` 必须冗余 `owner_id + contact_id` 并关联已确认的 `conversation_binding`，此后只作为观察证据，不产生 CLI 消息正文。
+- 归属失败（匹配不唯一、绑定失效、display name 或头像不可读、视觉指纹不一致）时，该批次必须丢弃或标记未归属，且必须按临时数据在明确时间点清理，不能静默累积或降级为“默认属于某人”。
 
 ## 来源与删除语义
 
-- 每条 `message` 必须能定位到 `source_document` 中的原始片段或原始文件引用，或者定位到 `session_capture` 的已绑定会话、采集时间、OCR 片段与解析状态；后者不要求保存原始视觉帧。
+- 每条 `message` 必须能定位到 `source_document` 中的原始片段或原始文件引用，或者定位到 `local_wechat_observation` 的已绑定会话、CLI 版本、读取时间、外部消息 ID 与游标；本地 CLI 来源不要求保存全量导出文件。
 - 每条候选和已确认资料应保存支持它的消息或来源列表，不能只保存一个无法解释的摘要。
 - 删除一个 `source_document` 时，必须清除其规范化消息、仅由它支持的候选资料、索引和缓存。
-- 删除一个已归属的 `session_capture` 或解除其会话绑定时，必须按相同语义清除其规范化消息、派生候选资料、索引和缓存。
+- 删除一个已归属的 `session_capture` 或 `local_wechat_observation`，或解除其会话绑定时，必须按相同语义清除其规范化消息、派生候选资料、索引和缓存。
 - 未归属的 `session_capture` 不产生 `message` 或任何派生资料；其临时数据在归属确认超时或用户停止同步时一并清除。
 - 只由被删除来源支持的 `confirmed_memory` 无条件级联删除，不存在"默认"或"视情况"保留的口子。用户若想保留内容，唯一路径是主动执行"另存为不依赖该来源的手动资料"：该操作创建一条与来源无关的新 `confirmed_memory`（来源证据列表置空、候选来源链字段置空），并切断与原来源的依赖，此后原来源的删除不再影响它。
 - 去重后的 `message` 归属策略：一条 `message` 只归属一个权威来源（删除该来源即连带删除该消息），不在多个来源间共享引用。同一事实若在多个来源中出现，由候选提取层的证据合并处理，而不是让 `message` 层承担多来源引用。

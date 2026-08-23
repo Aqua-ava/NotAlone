@@ -39,12 +39,14 @@
 13. [ADR-013：Owner 渠道身份与首次导入初始化](adr/013-owner-channel-identity-initialization.md)
 14. [ADR-014：历史导入的记忆提取窗口与异步任务](adr/014-historical-memory-extraction-window.md)
 15. [ADR-015：后台任务与联系人记忆目录生命周期](adr/015-background-task-and-memory-index-lifecycle.md)
+16. [ADR-016：用本地微信 CLI 读取消息正文，OCR 只定位当前会话](adr/016-local-wechat-cli-observation.md)
 
 ## 当前架构决策
 
 - 采用云端模块化单体，PostgreSQL 是联系人、消息、关系资料、任务和删除状态的权威业务库。
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
-- 文字是统一的检索与生成表示；截图、语音和前台画面是输入适配器。
+- 文字是统一的检索与生成表示；前台 display name OCR、本地微信 CLI、截图和语音都是输入适配器。
+- Mac 前台同步由 display name OCR 和本地会话视觉指纹确认当前会话，由本地微信 CLI 提供联系人及我方的文字增量；CLI 的外部会话标识不能替代 `contact_id`。
 - 生成只使用已选联系人下的有界上下文；模型提取的记忆必须带来源、标记 `auto` 且可撤销。
 - 关系记忆不设置固定常驻模式；系统自动维护联系人记忆目录，并按当前消息、表达方向和近期对话选择少量相关资料。
 - 候选回复只在应用内展示，最终由用户修改并亲自发送。
