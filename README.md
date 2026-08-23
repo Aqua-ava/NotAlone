@@ -104,6 +104,32 @@ notalone-ingest chat_exports/example.jsonl \
 不同 SHA 文件若与该联系人已有来源复用 `id.local_id`，命令会拒绝整批导入；它不会
 自动合并或改写旧消息的权威来源。
 
+## 记忆提取与记忆管理
+
+导入完成后可对已确认联系人执行记忆提取（环境变量与导入命令一致）：
+
+```bash
+notalone-extract-memory --contact-id '11111111-1111-1111-1111-111111111111'
+```
+
+命令自动判断全量或增量：该联系人从未提取过则按分批窗口（默认 500 条，串行）滚动
+全部历史；已提取过则从水位只处理新增消息，中断后重跑自动跳过已提取部分。提取出的
+事实候选经证据契约校验、置信度门槛（低于 0.7 留待定候选）、删除指纹（删过的不自动
+复活）与写入裁决（同事件演变自动失效旧版本）后自动采纳，标记 `auto` 可撤销。提取与
+裁决的外部模型调用按三态写入出站台账。终端只输出统计数字，不输出正文或联系人标识。
+
+手动录入（标记 manual，支持联系人级与 owner 级自我记忆）、状态概览列出与软删除：
+
+```bash
+notalone-memory-add --contact-id '...' --category taboo --text '...'
+notalone-memory-add --category recent_state --text '我下周出差'   # owner 级
+notalone-memory-list --contact-id '...'
+notalone-memory-delete --contact-id '...' --memory-id '...'
+```
+
+列出命令只输出 memory_id、分类、主题、采纳标记与版本号，不输出记忆正文。人工确认
+待定候选、候选批量管理与记忆目录（ADR-011）尚未实现。
+
 ## 测试
 
 ```bash
