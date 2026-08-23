@@ -1,11 +1,11 @@
-# 04 — Worker 启动命令
+# 05 — Worker 启动命令
 
 **Triage:** ready-for-agent  
 **State:** resolved
 
 **What to build:** 提供 `notalone-task-worker` 命令，复用已有模型提取和 `BackgroundTaskWorker`，让用户可以指定一个联系人并串行执行该联系人最早的一个导入后台任务。
 
-**Blocked by:** 02, 03
+**Blocked by:** 02 — Worker 记忆提取；03 — 联系人记忆目录
 
 - [x] 启动前校验数据库、owner、联系人和模型配置。
 - [x] PostgreSQL 全局会话锁保证当前 v1 只有一个命令 Worker。
