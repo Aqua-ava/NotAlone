@@ -53,6 +53,7 @@ class FakeRepository:
             confirmation_method=confirmation_method,
             outcome="imported",
             message_count=document.record_count,
+            task_id=uuid4(),
             owner_id=uuid4(),
         )
 

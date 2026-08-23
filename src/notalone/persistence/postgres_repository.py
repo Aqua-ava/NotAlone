@@ -13,6 +13,9 @@ from notalone.ingest.models import (
     ImportBatch,
     ImportConfirmationRequest,
 )
+from notalone.persistence.background_tasks import (
+    PostgresBackgroundTaskRepository,
+)
 
 
 class ImportPersistenceError(RuntimeError):
@@ -58,6 +61,7 @@ class ImportResult:
     confirmation_method: Literal["manual_create", "manual_select"]
     outcome: Literal["imported", "already_imported"]
     message_count: int
+    task_id: UUID
     owner_id: UUID | None = None
 
 
@@ -272,6 +276,13 @@ class PostgresIngestRepository:
             confirmation_id, existing_channel_identity_id, confirmation_method = (
                 existing_confirmation
             )
+            task_id = PostgresIngestRepository._ensure_import_task(
+                connection=connection,
+                owner_id=owner_id,
+                contact_id=contact_id,
+                source_document_id=source_document_id,
+                message_count=record_count,
+            )
             return ImportResult(
                 contact_id=contact_id,
                 channel_identity_id=existing_channel_identity_id,
@@ -280,6 +291,7 @@ class PostgresIngestRepository:
                 confirmation_method=confirmation_method,
                 outcome="already_imported",
                 message_count=record_count,
+                task_id=task_id,
                 owner_id=owner_id,
             )
 
@@ -419,6 +431,13 @@ class PostgresIngestRepository:
                 metadata_parameters,
             )
 
+        task_id = PostgresIngestRepository._ensure_import_task(
+            connection=connection,
+            owner_id=owner_id,
+            contact_id=contact_id,
+            source_document_id=source_document_id,
+            message_count=document.record_count,
+        )
         return ImportResult(
             contact_id=contact_id,
             channel_identity_id=channel_identity_id,
@@ -427,8 +446,31 @@ class PostgresIngestRepository:
             confirmation_method=confirmation_method,
             outcome="imported",
             message_count=document.record_count,
+            task_id=task_id,
             owner_id=owner_id,
         )
+
+    @staticmethod
+    def _ensure_import_task(
+        *,
+        connection: psycopg.Connection[Any],
+        owner_id: UUID,
+        contact_id: UUID,
+        source_document_id: UUID,
+        message_count: int,
+    ) -> UUID:
+        try:
+            return PostgresBackgroundTaskRepository.create_import_task(
+                connection,
+                owner_id=owner_id,
+                contact_id=contact_id,
+                source_document_id=source_document_id,
+                message_count=message_count,
+            )
+        except RuntimeError:
+            raise ImportPersistenceError(
+                "数据库导入失败，未写入任何数据。"
+            ) from None
 
     @staticmethod
     def _resolve_owner(

@@ -144,6 +144,20 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 第十五个迁移新增 `owner_channel_identity`。它保存 owner 的外部渠道 ID、观察到的展示名称、
 验证状态和时间；它与联系人的 `channel_identity` 分开，不能用来替代 `owner_id`。
 
+继续建立导入后台任务和固定步骤：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/016_background_task.sql
+```
+
+第十六个迁移新增 `background_task` 和 `background_task_step`。导入事务会按
+`owner_id + contact_id + source_document_id` 创建唯一的 `import` 任务，并写入
+`parse`、`normalize`、`extract_memory`、`index`、`verify` 五个 pending 步骤。任务只保存
+范围、状态、计数、时间和错误分类，不保存聊天正文或模型完整输入输出。
+
 迁移仅建立数据结构，不读取 `chat_exports/`，也不导入真实聊天记录。
 
 首个迁移建立旧版 `owner`、`contact`、`source_document` 和 `message`，第三个迁移在空业务

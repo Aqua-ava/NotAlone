@@ -8,6 +8,11 @@ from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
     PostgresConversationPort,
 )
+from notalone.persistence.background_tasks import (
+    BackgroundTaskNotFoundError,
+    BackgroundTaskPersistenceError,
+    PostgresBackgroundTaskRepository,
+)
 from notalone.persistence.memory_store import (
     MemoryInvariantError,
     MemoryPersistenceError,
@@ -36,6 +41,8 @@ __all__ = [
     "ConversationBindingConflictError",
     "ConversationBindingNotFoundError",
     "ConversationBindingPersistenceError",
+    "BackgroundTaskNotFoundError",
+    "BackgroundTaskPersistenceError",
     "MemoryInvariantError",
     "MemoryPersistenceError",
     "OutboundLedgerPersistenceError",
@@ -43,6 +50,7 @@ __all__ = [
     "PersistedConversationBinding",
     "PostgresConversationBindingRepository",
     "PostgresConversationPort",
+    "PostgresBackgroundTaskRepository",
     "PostgresMemoryStore",
     "PostgresOutboundLedger",
     "PostgresOwnerMemoryStore",

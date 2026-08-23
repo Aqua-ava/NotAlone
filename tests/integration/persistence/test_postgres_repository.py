@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from threading import Barrier
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import psycopg
@@ -21,6 +22,13 @@ from notalone.ingest.models import (
     NewContactSelection,
 )
 from notalone.ingest.normalizer import normalize_document
+from notalone.persistence.background_tasks import (
+    BackgroundTaskStatus,
+    BackgroundTaskNotFoundError,
+    BackgroundTaskStepName,
+    BackgroundTaskStepStatus,
+    PostgresBackgroundTaskRepository,
+)
 from notalone.persistence.postgres_repository import (
     ChannelIdentityConflictError,
     ImportPersistenceError,
@@ -55,6 +63,7 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.repository = PostgresIngestRepository(TEST_DATABASE_URL)
+        self.task_repository = PostgresBackgroundTaskRepository(TEST_DATABASE_URL)
         self.batch = self._load_batch()
         self.owner_ids: set[UUID] = set()
 
@@ -89,6 +98,50 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
             self.batch.channel_identity.external_id,
         )
         self.assertEqual(result.message_count, 6)
+        task = self.task_repository.get_task(
+            owner_id=owner_id,
+            contact_id=contact_id,
+            task_id=result.task_id,
+        )
+        self.assertEqual(task.task_id, result.task_id)
+        self.assertEqual(task.owner_id, owner_id)
+        self.assertEqual(task.contact_id, contact_id)
+        self.assertEqual(task.source_document_id, result.source_document_id)
+        self.assertEqual(task.status, BackgroundTaskStatus.QUEUED)
+        self.assertEqual(task.current_step, BackgroundTaskStepName.PARSE)
+        self.assertEqual(task.message_count, 6)
+        sensitive_columns = self._scalar(
+            """
+            SELECT count(*)
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name IN ('background_task', 'background_task_step')
+              AND column_name IN (
+                  'text_content',
+                  'raw_payload',
+                  'model_input',
+                  'model_output',
+                  'prompt',
+                  'response'
+              )
+            """,
+            (),
+        )
+        self.assertEqual(sensitive_columns, 0)
+        self.assertEqual(
+            tuple(step.name for step in task.steps),
+            (
+                BackgroundTaskStepName.PARSE,
+                BackgroundTaskStepName.NORMALIZE,
+                BackgroundTaskStepName.EXTRACT_MEMORY,
+                BackgroundTaskStepName.INDEX,
+                BackgroundTaskStepName.VERIFY,
+            ),
+        )
+        self.assertEqual(
+            tuple(step.status for step in task.steps),
+            (BackgroundTaskStepStatus.PENDING,) * 5,
+        )
         self.assertEqual(self._count("contact", owner_id), 1)
         self.assertEqual(self._count("source_document", owner_id), 1)
         self.assertEqual(self._count("message", owner_id), 6)
@@ -239,9 +292,12 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(second.outcome, "already_imported")
         self.assertEqual(first.source_document_id, second.source_document_id)
         self.assertEqual(first.confirmation_id, second.confirmation_id)
+        self.assertEqual(first.task_id, second.task_id)
         self.assertEqual(second.message_count, 6)
         self.assertEqual(self._count("source_document", owner_id), 1)
         self.assertEqual(self._count("message", owner_id), 6)
+        self.assertEqual(self._count("background_task", owner_id), 1)
+        self.assertEqual(self._count("background_task_step", owner_id), 5)
 
     def test_different_file_with_existing_local_ids_is_rejected(self) -> None:
         owner_id = self._create_owner("合成用户甲")
@@ -312,6 +368,8 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(outcomes.count("already_imported"), 3)
         self.assertEqual(self._count("source_document", owner_id), 1)
         self.assertEqual(self._count("message", owner_id), 6)
+        self.assertEqual(self._count("background_task", owner_id), 1)
+        self.assertEqual(self._count("background_task_step", owner_id), 5)
 
     def test_concurrent_overlapping_files_import_only_one_source(self) -> None:
         owner_id = self._create_owner("合成用户甲")
@@ -403,6 +461,8 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(self._count("source_document", owner_id), 0)
         self.assertEqual(self._count("message", owner_id), 0)
         self.assertEqual(self._count("wechat_message_metadata", owner_id), 0)
+        self.assertEqual(self._count("background_task", owner_id), 0)
+        self.assertEqual(self._count("background_task_step", owner_id), 0)
 
     def test_new_contact_is_rolled_back_when_message_import_fails(self) -> None:
         owner_id = self._create_owner("合成用户甲")
@@ -427,6 +487,32 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(self._count("source_document", owner_id), 0)
         self.assertEqual(self._count("message", owner_id), 0)
         self.assertEqual(self._count("wechat_message_metadata", owner_id), 0)
+        self.assertEqual(self._count("background_task", owner_id), 0)
+        self.assertEqual(self._count("background_task_step", owner_id), 0)
+
+    def test_task_failure_rolls_back_the_whole_import_transaction(self) -> None:
+        owner_id = self._create_owner("合成用户甲")
+        contact_id = self._create_contact(owner_id, "已选合成联系人")
+
+        with patch(
+            "notalone.persistence.postgres_repository."
+            "PostgresBackgroundTaskRepository.create_import_task",
+            side_effect=RuntimeError("synthetic task failure"),
+        ):
+            with self.assertRaises(ImportPersistenceError):
+                self.repository.import_document(
+                    owner_id=owner_id,
+                    document=self.batch,
+                    confirmation=self._confirmation(contact_id),
+                )
+
+        self.assertEqual(self._count("channel_identity", owner_id), 0)
+        self.assertEqual(self._count("import_confirmation", owner_id), 0)
+        self.assertEqual(self._count("source_document", owner_id), 0)
+        self.assertEqual(self._count("message", owner_id), 0)
+        self.assertEqual(self._count("wechat_message_metadata", owner_id), 0)
+        self.assertEqual(self._count("background_task", owner_id), 0)
+        self.assertEqual(self._count("background_task_step", owner_id), 0)
 
     def test_invalid_raw_payload_rolls_back_without_exposing_content(self) -> None:
         owner_id = self._create_owner("合成用户甲")
@@ -498,7 +584,7 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self._create_contact(second_owner, "已选合成联系人", contact_id=contact_id)
         confirmation = self._confirmation(contact_id)
 
-        self.repository.import_document(
+        first_result = self.repository.import_document(
             owner_id=first_owner,
             document=self.batch,
             confirmation=confirmation,
@@ -510,7 +596,7 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
                 external_id="wxid_synthetic_owner_2",
             ),
         )
-        self.repository.import_document(
+        second_result = self.repository.import_document(
             owner_id=second_owner,
             document=second_batch,
             confirmation=confirmation,
@@ -520,6 +606,15 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(self._count("contact", second_owner), 1)
         self.assertEqual(self._count("source_document", first_owner), 1)
         self.assertEqual(self._count("source_document", second_owner), 1)
+        self.assertEqual(self._count("background_task", first_owner), 1)
+        self.assertEqual(self._count("background_task", second_owner), 1)
+        with self.assertRaises(BackgroundTaskNotFoundError):
+            self.task_repository.get_task(
+                owner_id=second_owner,
+                contact_id=contact_id,
+                task_id=first_result.task_id,
+            )
+        self.assertNotEqual(first_result.task_id, second_result.task_id)
         self.assertEqual(
             self._scalar(
                 "SELECT count(*) FROM public.message WHERE owner_id = %s",
@@ -735,16 +830,25 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
             "import_confirmation",
             "message",
             "wechat_message_metadata",
+            "background_task",
+            "background_task_step",
         }
         if table_name not in allowed_tables:
             raise ValueError("不允许查询未知表。")
-        owner_column = "id" if table_name == "owner" else "owner_id"
-        with psycopg.connect(TEST_DATABASE_URL) as connection:
-            return connection.execute(
+        if table_name == "background_task_step":
+            query = (
+                "SELECT count(*) FROM public.background_task_step AS step "
+                "JOIN public.background_task AS task ON task.id = step.task_id "
+                "WHERE task.owner_id = %s"
+            )
+        else:
+            owner_column = "id" if table_name == "owner" else "owner_id"
+            query = (
                 f"SELECT count(*) FROM public.{table_name} "
-                f"WHERE {owner_column} = %s",
-                (owner_id,),
-            ).fetchone()[0]
+                f"WHERE {owner_column} = %s"
+            )
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            return connection.execute(query, (owner_id,)).fetchone()[0]
 
     @staticmethod
     def _scalar(query: str, parameters: tuple[object, ...]) -> object:
