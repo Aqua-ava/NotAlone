@@ -15,6 +15,10 @@ from notalone.memory.models import (
     MemoryCategory,
     MemoryTopic,
 )
+from notalone.memory_extraction.adjudication import (
+    AdjudicationAction,
+    AdjudicationDecision,
+)
 from notalone.memory_extraction.adoption import (
     AdoptionStats,
     MemoryAdoption,
@@ -34,6 +38,16 @@ TEST_DATABASE_URL = os.environ.get(
     "NOTALONE_TEST_DATABASE_URL",
     "postgresql:///notalone_test",
 )
+
+
+class ReplaceWithFirstSimilar:
+    """合成裁决器：要求替换当前池中的第一条旧记忆。"""
+
+    def adjudicate(self, *, candidate_text, similar):
+        return AdjudicationDecision(
+            action=AdjudicationAction.UPDATE,
+            replaced_memory_id=similar[0].memory_id,
+        )
 
 
 class MemoryAdoptionTest(unittest.TestCase):
@@ -170,6 +184,35 @@ class MemoryAdoptionTest(unittest.TestCase):
         owner_memories = self.owner_store.list_active(self.owner_id)
         self.assertEqual(len(owner_memories), 1)
         self.assertEqual(owner_memories[0].text, "我下周出差")
+
+    def test_owner_memory_update_uses_persisted_memory_id(self) -> None:
+        adoption = MemoryAdoption(
+            memory_port=self.memory_store,
+            owner_memory_port=self.owner_store,
+            adjudication_runtime=ReplaceWithFirstSimilar(),
+        )
+
+        stats = adoption.adopt(
+            self.scope,
+            ExtractionOutcome(
+                accepted=(
+                    self._fact(
+                        subject=FactSubject.SELF,
+                        text="我下周去上海出差",
+                    ),
+                    self._fact(
+                        subject=FactSubject.SELF,
+                        text="我最近去上海出差",
+                    ),
+                )
+            ),
+        )
+
+        self.assertEqual(stats.adopted, 1)
+        self.assertEqual(stats.updated, 1)
+        owner_memories = self.owner_store.list_active(self.owner_id)
+        self.assertEqual(len(owner_memories), 1)
+        self.assertEqual(owner_memories[0].text, "我最近去上海出差")
 
     def test_low_confidence_stays_pending(self) -> None:
         stats = self.adoption.adopt(

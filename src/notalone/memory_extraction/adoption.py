@@ -11,6 +11,7 @@ from notalone.ledger.models import LedgerEntry, LedgerOutcome
 from notalone.ledger.ports import OutboundLedgerPort
 from notalone.memory.models import (
     AdoptionMethod,
+    ConfirmedMemory,
     ConfirmedMemoryStatus,
     MemoryCandidate,
     MemoryCandidateStatus,
@@ -123,13 +124,14 @@ class MemoryAdoption:
                 updated += 1
             else:
                 adopted += 1
-            if fact.subject is FactSubject.SELF:
+            persisted_memory = (
                 self._create_owner_memory(scope, fact)
-            else:
-                self._confirm_contact_memory(scope, fact)
+                if fact.subject is FactSubject.SELF
+                else self._confirm_contact_memory(scope, fact)
+            )
             pool.append(
                 _PoolItem(
-                    memory_id=uuid4(),
+                    memory_id=persisted_memory.memory_id,
                     text=fact.text,
                     category=fact.category,
                     topic=fact.topic,
@@ -281,10 +283,10 @@ class MemoryAdoption:
             )
         )
 
-    def _create_owner_memory(self, scope: ContactScope, fact) -> None:
+    def _create_owner_memory(self, scope: ContactScope, fact) -> OwnerMemory:
         if self._owner_memory_port is None:
             raise TypeError("self 主体事实需要注入 owner 级记忆 port。")
-        self._owner_memory_port.create(
+        return self._owner_memory_port.create(
             OwnerMemory(
                 memory_id=uuid4(),
                 owner_id=scope.owner_id,
@@ -299,7 +301,9 @@ class MemoryAdoption:
             )
         )
 
-    def _confirm_contact_memory(self, scope: ContactScope, fact) -> None:
+    def _confirm_contact_memory(
+        self, scope: ContactScope, fact
+    ) -> ConfirmedMemory:
         candidate = self._memory_port.create_candidate(
             MemoryCandidate(
                 candidate_id=uuid4(),
@@ -312,7 +316,7 @@ class MemoryAdoption:
                 invalid_at=fact.invalid_at,
             )
         )
-        self._memory_port.confirm(
+        return self._memory_port.confirm(
             scope=scope,
             candidate_id=candidate.candidate_id,
             adoption_method=AdoptionMethod.AUTO,
