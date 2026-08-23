@@ -27,5 +27,37 @@ NotAlone 是面向用户真实联系人的中文关系感知回复助手。产�
 
 ## Agent 工作流
 
+### 工作模式
+
+- **讨论模式**：用户在询问方案、解释、诊断、评审或状态时，先进行只读探索和分析，不进入实现阶段。
+- **实现模式**：用户明确要求实现功能、修复 Bug 或指定一个 ticket 时，进入实现阶段；当前 ticket 或 spec 范围内的普通文件编辑、测试和重构按流程连续完成，不为每个文件或测试单独询问。
+- **决策模式**：功能范围、用户意图、Module 的 Interface 或 Seam 不明确，或方案涉及删除/迁移数据、外部发送、正式环境、push、超出当前 spec/ticket，或测试失败要求改变方案时，暂停并询问用户。
+
+### 默认流程
+
+- 在工作目录中处理功能或架构工作时，先使用 `grill-with-docs` 明确问题、范围和决策。
+- 需要通过可运行答案确定状态、业务逻辑或界面时，使用 `prototype`；Module、Interface 或 Seam 的设计不清楚时，使用 `codebase-design`。这两个 skill 只在对应问题出现时进入，不是每个任务的固定阶段。
+- 多会话工作依次使用 `to-spec`、`to-tickets` 和 `implement`；单会话的小任务可以从 `grill-with-docs` 进入 `implement`。
+- `implement` 内部按已约定的 Seam 使用 `tdd`，完成后使用 `code-review`；每个 ticket 在独立上下文中完成，并报告实际变更、验证结果和剩余风险。
+- 原始外部请求先使用 `triage`；难以直接定位的故障先使用 `diagnosing-bugs`；目标过大且路径不清楚时先使用 `wayfinder`。
+
+### 执行边界
+
+- 在实现模式中，Agent 自动遵循上述流程并在阶段之间报告进度；普通实现不重复发起权限确认。
+- 只有进入决策模式时才暂停提问；一旦用户作出决策，继续当前流程，不把一次决策解释成对其他范围的授权。
 - 主 Agent 只在材料确有需要时调用专职子 Agent；短文字回复优先走单 Agent。子 Agent 只返回带来源的结构化证据，不得直接发送消息或改写用户确认事实。
 - 简单需求使用最小本地工具；只有标准化、可替换的边界确有价值时才使用 MCP。当前工作流没有证明需要时，不预先实现自治 Agent Harness、定时自动化或聊天渠道自动化。
+
+## Agent skills
+
+### Issue tracker
+
+本仓库使用 `.scratch/` 下的 Local Markdown 管理任务与规格。See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+本仓库使用默认的五个 triage 标签。See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+本仓库采用 single-context 布局，领域文档位于 `CONTEXT.md` 和 `architecture/`。See `docs/agents/domain.md`.
