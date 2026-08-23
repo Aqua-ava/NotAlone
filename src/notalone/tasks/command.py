@@ -55,6 +55,10 @@ class WorkerCommandResult:
 
     status: WorkerCommandStatus
     completed_steps: int = 0
+    last_step: BackgroundTaskStepName | None = None
+    processed_count: int = 0
+    attempt_count: int = 0
+    retry_count: int = 0
     error_code: str | None = None
 
 
@@ -73,6 +77,10 @@ def run_worker(
         return WorkerCommandResult(status=WorkerCommandStatus.BUSY)
 
     completed_steps = 0
+    last_step: BackgroundTaskStepName | None = None
+    processed_count = 0
+    attempt_count = 0
+    retry_count = 0
     try:
         while True:
             result = worker.run_once(
@@ -80,10 +88,17 @@ def run_worker(
                 contact_id=contact_id,
                 worker_id=worker_id,
             )
+            last_step = result.step_name
+            processed_count = result.processed_count
+            attempt_count = result.attempt_count
             if result.outcome is WorkerRunOutcome.IDLE:
                 return WorkerCommandResult(
                     status=WorkerCommandStatus.IDLE,
                     completed_steps=completed_steps,
+                    last_step=last_step,
+                    processed_count=processed_count,
+                    attempt_count=attempt_count,
+                    retry_count=retry_count,
                 )
             if result.outcome is WorkerRunOutcome.SUCCEEDED:
                 completed_steps += 1
@@ -91,14 +106,23 @@ def run_worker(
                     return WorkerCommandResult(
                         status=WorkerCommandStatus.SUCCEEDED,
                         completed_steps=completed_steps,
+                        last_step=last_step,
+                        processed_count=processed_count,
+                        attempt_count=attempt_count,
+                        retry_count=retry_count,
                     )
                 continue
             if result.outcome is WorkerRunOutcome.RETRYABLE:
+                retry_count += 1
                 sleep(_retry_backoff(result.attempt_count))
                 continue
             return WorkerCommandResult(
                 status=WorkerCommandStatus.FAILED,
                 completed_steps=completed_steps,
+                last_step=last_step,
+                processed_count=processed_count,
+                attempt_count=attempt_count,
+                retry_count=retry_count,
                 error_code=result.error_code,
             )
     finally:
@@ -162,6 +186,10 @@ def worker_main(argv: list[str] | None = None) -> int:
     output = [
         f"status={result.status.value}",
         f"steps={result.completed_steps}",
+        f"step={result.last_step.value if result.last_step else 'none'}",
+        f"processed={result.processed_count}",
+        f"attempts={result.attempt_count}",
+        f"retries={result.retry_count}",
     ]
     if result.error_code is not None:
         output.append(f"error={result.error_code}")

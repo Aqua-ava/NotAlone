@@ -87,6 +87,8 @@ class WorkerCommandTest(unittest.TestCase):
 
         self.assertEqual(result.status, WorkerCommandStatus.SUCCEEDED)
         self.assertEqual(worker.calls, len(tuple(BackgroundTaskStepName)))
+        self.assertEqual(result.last_step, BackgroundTaskStepName.VERIFY)
+        self.assertEqual(result.processed_count, 1)
         self.assertEqual(sleeps, [])
         release.assert_called_once()
 
@@ -141,6 +143,8 @@ class WorkerCommandTest(unittest.TestCase):
 
         self.assertEqual(result.status, WorkerCommandStatus.SUCCEEDED)
         self.assertEqual(sleeps, [1.0])
+        self.assertEqual(result.retry_count, 1)
+        self.assertEqual(result.last_step, BackgroundTaskStepName.VERIFY)
 
     def test_permanent_failure_returns_failed_without_retry(self) -> None:
         worker = FakeWorker(
@@ -168,6 +172,7 @@ class WorkerCommandTest(unittest.TestCase):
 
         self.assertEqual(result.status, WorkerCommandStatus.FAILED)
         self.assertEqual(result.error_code, "worker_step_failed")
+        self.assertEqual(result.last_step, BackgroundTaskStepName.EXTRACT_MEMORY)
         self.assertEqual(worker.calls, 1)
         self.assertEqual(sleeps, [])
 
