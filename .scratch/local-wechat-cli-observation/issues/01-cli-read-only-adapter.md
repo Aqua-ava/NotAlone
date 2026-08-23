@@ -2,7 +2,7 @@
 
 Type: task
 Triage: ready-for-agent
-State: open
+State: claimed
 Blocked by: None
 
 ## What to build
