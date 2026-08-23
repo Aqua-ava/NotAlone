@@ -18,9 +18,11 @@ from notalone.tasks.models import (
     BackgroundTaskType,
     ClaimedBackgroundTaskStep,
 )
+from notalone.persistence.locks import lock_contact_scope
 
 
 MAX_AUTOMATIC_ATTEMPTS = 3
+TERMINAL_TASK_RETENTION = timedelta(days=90)
 
 
 class BackgroundTaskPersistenceError(RuntimeError):
@@ -616,15 +618,48 @@ class PostgresBackgroundTaskRepository:
             task_id=task_id,
         )
 
+    def cleanup_terminal_tasks(
+        self,
+        *,
+        now: datetime | None = None,
+        retention: timedelta = TERMINAL_TASK_RETENTION,
+    ) -> int:
+        """清理超过留存期的终态任务及步骤，不触碰来源或记忆。"""
+
+        if now is None:
+            now = datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            raise ValueError("清理时间必须是带时区的 datetime。")
+        if not isinstance(retention, timedelta) or retention <= timedelta(0):
+            raise ValueError("任务留存期必须是正时间段。")
+        cutoff = now - retention
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                deleted = connection.execute(
+                    """
+                    DELETE FROM public.background_task
+                    WHERE status IN ('succeeded', 'failed', 'cancelled')
+                      AND COALESCE(finished_at, updated_at) < %s
+                    RETURNING id
+                    """,
+                    (cutoff,),
+                ).fetchall()
+                return len(deleted)
+        except psycopg.Error:
+            raise BackgroundTaskPersistenceError(
+                "后台任务留存清理失败。"
+            ) from None
+
     @staticmethod
     def _lock_scope(
         connection: psycopg.Connection[Any],
         owner_id: UUID,
         contact_id: UUID,
     ) -> None:
-        connection.execute(
-            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
-            (f"{owner_id}:{contact_id}",),
+        lock_contact_scope(
+            connection,
+            owner_id=owner_id,
+            contact_id=contact_id,
         )
 
     @staticmethod

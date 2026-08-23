@@ -138,11 +138,14 @@ notalone-memory-add --contact-id '...' --category taboo --text '...'
 notalone-memory-add --category recent_state --text '我下周出差'   # owner 级
 notalone-memory-list --contact-id '...'
 notalone-memory-delete --contact-id '...' --memory-id '...'
+notalone-task-cleanup
 ```
 
 列出命令只输出 memory_id、分类、主题、采纳标记与版本号，不输出记忆正文。联系人记忆目录已经
 由 Worker 的 `index -> verify` 步骤按确定性代码维护：只保存分类、主题提示和 memory_id 引用，
 最多 20 个主题，不复制记忆正文或产生新事实。人工确认待定候选和候选批量管理仍未实现。
+`notalone-task-cleanup` 默认只删除超过 90 天的终态任务元数据，不影响来源、消息、记忆或删除凭证；
+可以由本机已有维护调度调用。
 
 ## 测试
 

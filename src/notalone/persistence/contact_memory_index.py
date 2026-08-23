@@ -232,8 +232,6 @@ class PostgresContactMemoryIndexRepository:
                 )
         except ContactMemoryIndexError:
             raise
-        except ContactMemoryIndexError:
-            raise
         except psycopg.Error:
             raise ContactMemoryIndexPersistenceError(
                 "联系人记忆目录重建失败。"
@@ -314,8 +312,6 @@ class PostgresContactMemoryIndexRepository:
                 )
         except ContactMemoryIndexError:
             raise
-        except ContactMemoryIndexError:
-            raise
         except psycopg.Error:
             raise ContactMemoryIndexPersistenceError(
                 "联系人记忆目录增量更新失败。"
@@ -365,8 +361,6 @@ class PostgresContactMemoryIndexRepository:
                     ],
                     current_memory_revision=state["memory_revision"],
                 )
-        except ContactMemoryIndexError:
-            raise
         except ContactMemoryIndexError:
             raise
         except psycopg.Error:

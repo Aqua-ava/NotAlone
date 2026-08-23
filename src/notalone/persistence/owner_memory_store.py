@@ -16,6 +16,7 @@ from notalone.memory.models import (
     MemoryTopic,
     OwnerMemory,
 )
+from notalone.persistence.locks import lock_owner_scope
 
 
 _OWNER_MEMORY_UNAVAILABLE = "owner 记忆数据库操作失败。"
@@ -56,6 +57,7 @@ class PostgresOwnerMemoryStore:
             )
         try:
             with self._connect() as connection:
+                lock_owner_scope(connection, owner_id=memory.owner_id)
                 connection.execute(
                     """
                     INSERT INTO public.owner_memory (
@@ -107,6 +109,7 @@ class PostgresOwnerMemoryStore:
         _validate_owner_id(owner_id)
         try:
             with self._connect() as connection:
+                lock_owner_scope(connection, owner_id=owner_id)
                 row = connection.execute(
                     f"""
                     UPDATE public.owner_memory
@@ -129,6 +132,7 @@ class PostgresOwnerMemoryStore:
         _validate_owner_id(owner_id)
         try:
             with self._connect() as connection:
+                lock_owner_scope(connection, owner_id=owner_id)
                 row = connection.execute(
                     f"""
                     UPDATE public.owner_memory

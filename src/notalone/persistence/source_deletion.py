@@ -8,6 +8,9 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 import psycopg
+from psycopg.types.json import Jsonb
+
+from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 
 
 class SourceDeletionError(RuntimeError):
@@ -51,6 +54,12 @@ class PostgresSourceDeletionRepository:
         operation_id = uuid4()
         try:
             with psycopg.connect(self._database_url) as connection:
+                lock_contact_scope(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                )
+                lock_owner_scope(connection, owner_id=owner_id)
                 source = connection.execute(
                     """
                     SELECT status, deleted_at
@@ -90,37 +99,31 @@ class PostgresSourceDeletionRepository:
                     """,
                     (owner_id, contact_id, source_document_id, operation_id),
                 )
-                connection.execute(
-                    """
-                    UPDATE public.background_task_step AS step
-                    SET status = 'cancelled',
-                        worker_id = NULL,
-                        lease_expires_at = NULL,
-                        last_error_code = 'source_deleted',
-                        finished_at = now(),
-                        updated_at = now()
-                    FROM public.background_task AS task
-                    WHERE task.id = step.task_id
-                      AND task.owner_id = %s
-                      AND task.contact_id = %s
-                      AND task.source_document_id = %s
-                      AND step.status <> 'succeeded'
-                    """,
-                    (owner_id, contact_id, source_document_id),
+                self._cancel_background_task(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    source_document_id=source_document_id,
                 )
-                connection.execute(
-                    """
-                    UPDATE public.background_task
-                    SET status = 'cancelled',
-                        last_error_code = 'source_deleted',
-                        finished_at = now(),
-                        updated_at = now()
-                    WHERE owner_id = %s
-                      AND contact_id = %s
-                      AND source_document_id = %s
-                      AND status IN ('queued', 'running', 'verifying')
-                    """,
-                    (owner_id, contact_id, source_document_id),
+                source_message_ids = tuple(
+                    row[0]
+                    for row in connection.execute(
+                        """
+                        SELECT id
+                        FROM public.message
+                        WHERE owner_id = %s
+                          AND contact_id = %s
+                          AND source_document_id = %s
+                        """,
+                        (owner_id, contact_id, source_document_id),
+                    ).fetchall()
+                )
+                self._cleanup_derived_data(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    source_document_id=source_document_id,
+                    source_message_ids=source_message_ids,
                 )
                 connection.execute(
                     """
@@ -172,6 +175,42 @@ class PostgresSourceDeletionRepository:
                     raise SourceDeletionVerificationError(
                         "来源删除后仍存在可检索数据。"
                     )
+                derived_remaining = connection.execute(
+                    """
+                    SELECT
+                        (SELECT count(*)
+                         FROM public.confirmed_memory
+                         WHERE owner_id = %s
+                           AND contact_id = %s
+                           AND status = 'active'
+                           AND source_ids && %s::uuid[]),
+                        (SELECT count(*)
+                         FROM public.memory_candidate
+                         WHERE owner_id = %s
+                           AND contact_id = %s
+                           AND status IN ('pending', 'confirmed')
+                           AND source_ids && %s::uuid[]),
+                        (SELECT count(*)
+                         FROM public.owner_memory
+                         WHERE owner_id = %s
+                           AND status = 'active'
+                           AND source_ids && %s::uuid[])
+                    """,
+                    (
+                        owner_id,
+                        contact_id,
+                        [source_document_id, *source_message_ids],
+                        owner_id,
+                        contact_id,
+                        [source_document_id, *source_message_ids],
+                        owner_id,
+                        [source_document_id, *source_message_ids],
+                    ),
+                ).fetchone()
+                if derived_remaining != (0, 0, 0):
+                    raise SourceDeletionVerificationError(
+                        "来源删除后仍存在依赖该来源的关系资料。"
+                    )
                 deleted_receipt = connection.execute(
                     """
                     UPDATE public.source_document
@@ -215,6 +254,218 @@ class PostgresSourceDeletionRepository:
                 source_document_id=source_document_id,
             )
             raise SourceDeletionError("来源删除失败。") from None
+
+    @staticmethod
+    def _cancel_background_task(
+        connection: psycopg.Connection,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        source_document_id: UUID,
+    ) -> None:
+        connection.execute(
+            """
+            UPDATE public.background_task_step AS step
+            SET status = 'cancelled',
+                worker_id = NULL,
+                lease_expires_at = NULL,
+                last_error_code = 'source_deleted',
+                finished_at = now(),
+                updated_at = now()
+            FROM public.background_task AS task
+            WHERE task.id = step.task_id
+              AND task.owner_id = %s
+              AND task.contact_id = %s
+              AND task.source_document_id = %s
+              AND step.status <> 'succeeded'
+            """,
+            (owner_id, contact_id, source_document_id),
+        )
+        connection.execute(
+            """
+            UPDATE public.background_task
+            SET status = 'cancelled',
+                last_error_code = 'source_deleted',
+                finished_at = now(),
+                updated_at = now()
+            WHERE owner_id = %s
+              AND contact_id = %s
+              AND source_document_id = %s
+              AND status IN ('queued', 'running', 'verifying')
+            """,
+            (owner_id, contact_id, source_document_id),
+        )
+
+    @staticmethod
+    def _cleanup_derived_data(
+        connection: psycopg.Connection,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        source_document_id: UUID,
+        source_message_ids: tuple[UUID, ...],
+    ) -> None:
+        removed_ids = {source_document_id, *source_message_ids}
+        source_refs = [source_document_id, *source_message_ids]
+        deleted_memory_ids: list[UUID] = []
+        candidates = connection.execute(
+            """
+            SELECT id, source_ids
+            FROM public.memory_candidate
+            WHERE owner_id = %s
+              AND contact_id = %s
+              AND status IN ('pending', 'confirmed')
+              AND source_ids && %s::uuid[]
+            FOR UPDATE
+            """,
+            (owner_id, contact_id, source_refs),
+        ).fetchall()
+        for candidate_id, source_ids in candidates:
+            remaining_ids = [
+                source_id for source_id in source_ids if source_id not in removed_ids
+            ]
+            if remaining_ids:
+                connection.execute(
+                    """
+                    UPDATE public.memory_candidate
+                    SET source_ids = %s, updated_at = now()
+                    WHERE owner_id = %s AND contact_id = %s AND id = %s
+                    """,
+                    (remaining_ids, owner_id, contact_id, candidate_id),
+                )
+            else:
+                connection.execute(
+                    """
+                    UPDATE public.memory_candidate
+                    SET status = 'invalidated', updated_at = now()
+                    WHERE owner_id = %s AND contact_id = %s AND id = %s
+                    """,
+                    (owner_id, contact_id, candidate_id),
+                )
+
+        memories = connection.execute(
+            """
+            SELECT id, source_ids
+            FROM public.confirmed_memory
+            WHERE owner_id = %s
+              AND contact_id = %s
+              AND status = 'active'
+              AND source_ids && %s::uuid[]
+            FOR UPDATE
+            """,
+            (owner_id, contact_id, source_refs),
+        ).fetchall()
+        if memories:
+            for memory_id, source_ids in memories:
+                remaining_ids = [
+                    source_id
+                    for source_id in source_ids
+                    if source_id not in removed_ids
+                ]
+                if remaining_ids:
+                    connection.execute(
+                        """
+                        UPDATE public.confirmed_memory
+                        SET source_ids = %s,
+                            revision = revision + 1,
+                            updated_at = now()
+                        WHERE owner_id = %s AND contact_id = %s AND id = %s
+                        """,
+                        (remaining_ids, owner_id, contact_id, memory_id),
+                    )
+                else:
+                    deleted_memory_ids.append(memory_id)
+                    connection.execute(
+                        """
+                        UPDATE public.confirmed_memory
+                        SET status = 'deleted',
+                            invalid_at = COALESCE(invalid_at, now()),
+                            revision = revision + 1,
+                            updated_at = now()
+                        WHERE owner_id = %s AND contact_id = %s AND id = %s
+                        """,
+                        (owner_id, contact_id, memory_id),
+                    )
+            connection.execute(
+                """
+                INSERT INTO public.contact_memory_state (
+                    owner_id, contact_id, memory_revision
+                ) VALUES (%s, %s, 1)
+                ON CONFLICT (owner_id, contact_id)
+                DO UPDATE SET
+                    memory_revision = contact_memory_state.memory_revision + 1,
+                    updated_at = now()
+                """,
+                (owner_id, contact_id),
+            )
+        owner_memories = connection.execute(
+            """
+            SELECT id, source_ids
+            FROM public.owner_memory
+            WHERE owner_id = %s
+              AND status = 'active'
+              AND source_ids && %s::uuid[]
+            FOR UPDATE
+            """,
+            (owner_id, source_refs),
+        ).fetchall()
+        for memory_id, source_ids in owner_memories:
+            remaining_ids = [
+                source_id for source_id in source_ids if source_id not in removed_ids
+            ]
+            if remaining_ids:
+                connection.execute(
+                    """
+                    UPDATE public.owner_memory
+                    SET source_ids = %s,
+                        revision = revision + 1,
+                        updated_at = now()
+                    WHERE owner_id = %s AND id = %s
+                    """,
+                    (remaining_ids, owner_id, memory_id),
+                )
+            else:
+                connection.execute(
+                    """
+                    UPDATE public.owner_memory
+                    SET status = 'deleted',
+                        revision = revision + 1,
+                        updated_at = now()
+                    WHERE owner_id = %s AND id = %s
+                    """,
+                    (owner_id, memory_id),
+                )
+
+        index_row = connection.execute(
+            """
+            SELECT topics
+            FROM public.contact_memory_index
+            WHERE owner_id = %s AND contact_id = %s
+            FOR UPDATE
+            """,
+            (owner_id, contact_id),
+        ).fetchone()
+        if index_row is not None and memories:
+            removed_set = set(deleted_memory_ids)
+            topics = []
+            for topic in index_row[0]:
+                memory_ids = [
+                    memory_id
+                    for memory_id in topic["memory_ids"]
+                    if UUID(str(memory_id)) not in removed_set
+                ]
+                if memory_ids:
+                    topics.append({**topic, "memory_ids": memory_ids})
+            connection.execute(
+                """
+                UPDATE public.contact_memory_index
+                SET topics = %s,
+                    status = 'stale',
+                    updated_at = now()
+                WHERE owner_id = %s AND contact_id = %s
+                """,
+                (Jsonb(topics), owner_id, contact_id),
+            )
 
     def _record_failure(
         self,

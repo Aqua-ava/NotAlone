@@ -20,6 +20,7 @@ from notalone.memory.models import (
     MemoryCategory,
 )
 from notalone.scopes import ContactScope
+from notalone.persistence.locks import lock_contact_scope
 
 
 def _utc_now() -> datetime:
@@ -91,6 +92,11 @@ class PostgresMemoryStore:
             raise TypeError("关系记忆候选结构无效。")
         try:
             with self._connect() as connection:
+                lock_contact_scope(
+                    connection,
+                    owner_id=candidate.scope.owner_id,
+                    contact_id=candidate.scope.contact_id,
+                )
                 self._ensure_active_sources(
                     connection,
                     candidate.scope,
@@ -151,6 +157,11 @@ class PostgresMemoryStore:
             raise TypeError("关系记忆采纳方式无效。")
         try:
             with self._connect() as connection:
+                lock_contact_scope(
+                    connection,
+                    owner_id=scope.owner_id,
+                    contact_id=scope.contact_id,
+                )
                 candidate_row = self._candidate_for_update(
                     connection,
                     candidate_id,
@@ -253,6 +264,11 @@ class PostgresMemoryStore:
             raise TypeError("关系记忆分类无效。")
         try:
             with self._connect() as connection:
+                lock_contact_scope(
+                    connection,
+                    owner_id=scope.owner_id,
+                    contact_id=scope.contact_id,
+                )
                 memory_row = self._memory_for_update(connection, memory_id)
                 if memory_row is None:
                     raise LookupError("关系记忆不存在。")
@@ -447,6 +463,11 @@ class PostgresMemoryStore:
         self._validate_uuid(candidate_id, "candidate_id")
         try:
             with self._connect() as connection:
+                lock_contact_scope(
+                    connection,
+                    owner_id=scope.owner_id,
+                    contact_id=scope.contact_id,
+                )
                 row = self._candidate_for_update(connection, candidate_id)
                 if row is None:
                     raise LookupError("关系记忆候选不存在。")
@@ -497,6 +518,11 @@ class PostgresMemoryStore:
         now = self._now()
         try:
             with self._connect() as connection:
+                lock_contact_scope(
+                    connection,
+                    owner_id=scope.owner_id,
+                    contact_id=scope.contact_id,
+                )
                 row = self._memory_for_update(connection, memory_id)
                 if row is None:
                     raise LookupError("关系记忆不存在。")
