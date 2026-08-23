@@ -270,6 +270,35 @@ class PostgresObservationStoreTest(unittest.TestCase):
                 record_count=1,
             )
 
+    def test_empty_batch_at_current_watermark_is_not_an_error(self) -> None:
+        # live 轮询没有新消息时水位持平，不应报错也不倒退。
+        self._record(
+            self.contact_a,
+            self.binding_a.binding_id,
+            last_local_id=10,
+            locator="wxid_observation_a",
+        )
+
+        empty = self.store.record_batch(
+            owner_id=self.owner_id,
+            contact_id=self.contact_a,
+            binding_id=self.binding_a.binding_id,
+            mode=ObservationMode.LIVE,
+            cli_version="wechat-cli/0.1.0-test",
+            conversation_locator="wxid_observation_a",
+            since_local_id=10,
+            since_cursor="cursor-10",
+            last_local_id=10,
+            last_cursor="cursor-10",
+            record_count=0,
+        )
+
+        self.assertEqual(empty.record_count, 0)
+        cursor = self.store.read_cursor(
+            owner_id=self.owner_id, contact_id=self.contact_a
+        )
+        self.assertEqual(cursor.last_local_id, 10)
+
     def test_revoked_or_foreign_binding_is_rejected(self) -> None:
         bindings = PostgresConversationBindingRepository(TEST_DATABASE_URL)
         bindings.revoke_binding(

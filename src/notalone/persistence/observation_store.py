@@ -332,7 +332,7 @@ class PostgresObservationStore:
                 last_cursor = EXCLUDED.last_cursor,
                 updated_at = now()
             WHERE wechat_observation_cursor.last_local_id
-                < EXCLUDED.last_local_id
+                <= EXCLUDED.last_local_id
             RETURNING last_local_id
             """,
             (
@@ -345,6 +345,7 @@ class PostgresObservationStore:
             ),
         ).fetchone()
         if result is None:
+            # 持平（空批次）视为无害无操作；只有倒退才拒绝。
             raise ObservationWatermarkError("观察水位只能单调前移。")
 
     @staticmethod
