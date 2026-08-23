@@ -32,6 +32,7 @@ class ExtractionRunStats:
     """一次提取命令的聚合统计。"""
 
     batches: int = 0
+    processed_messages: int = 0
     extracted: int = 0
     adopted: int = 0
     updated: int = 0
@@ -57,7 +58,7 @@ def run_extraction(
     provider: str = "deepseek",
     model_name: str | None = None,
 ) -> ExtractionRunStats:
-    """按水位分批串行提取并采纳；每批后推进水位。"""
+    """按水位分批串行提取并采纳；失败批次停止本次运行。"""
 
     if watermark_message_id is not None:
         positions = [
@@ -78,10 +79,11 @@ def run_extraction(
     )
     flow = ExtractionFlow(runtime=runtime)
 
-    batches = extracted = adopted = updated = pending = 0
+    batches = processed_messages = extracted = adopted = updated = pending = 0
     duplicate = deleted = rejected = failed = 0
     for offset in range(0, len(pending_messages), batch_size):
         batch = pending_messages[offset : offset + batch_size]
+        processed_messages += len(batch)
         window = ExtractionWindow(
             owner_id=scope.owner_id,
             contact_id=scope.contact_id,
@@ -117,10 +119,12 @@ def run_extraction(
                 provider=provider,
                 model_name=model_name,
             )
-        if watermark_port is not None:
+            break
+        if outcome.failure_reason is None and watermark_port is not None:
             watermark_port.set(scope, batch[-1].message_id)
     return ExtractionRunStats(
         batches=batches,
+        processed_messages=processed_messages,
         extracted=extracted,
         adopted=adopted,
         updated=updated,

@@ -158,6 +158,18 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 `parse`、`normalize`、`extract_memory`、`index`、`verify` 五个 pending 步骤。任务只保存
 范围、状态、计数、时间和错误分类，不保存聊天正文或模型完整输入输出。
 
+继续建立 Worker 租约和版本元数据：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/017_worker_lease_metadata.sql
+```
+
+第十七个迁移把步骤租约字段命名为 `worker_id`，并保存任务使用的模型版本和确定性规则版本；
+仍不保存模型输入输出或聊天正文。
+
 迁移仅建立数据结构，不读取 `chat_exports/`，也不导入真实聊天记录。
 
 首个迁移建立旧版 `owner`、`contact`、`source_document` 和 `message`，第三个迁移在空业务

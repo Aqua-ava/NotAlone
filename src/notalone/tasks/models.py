@@ -72,6 +72,9 @@ class BackgroundTaskStep:
     total_count: int | None
     created_at: datetime
     updated_at: datetime
+    worker_id: UUID | None = None
+    lease_expires_at: datetime | None = None
+    last_error_code: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.step_id, UUID) or not isinstance(self.task_id, UUID):
@@ -84,6 +87,8 @@ class BackgroundTaskStep:
             raise ValueError("后台步骤计数无效。")
         if self.total_count is not None and self.total_count < 0:
             raise ValueError("后台步骤总数无效。")
+        if self.worker_id is not None and not isinstance(self.worker_id, UUID):
+            raise TypeError("后台步骤 worker_id 无效。")
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +106,10 @@ class BackgroundTask:
     created_at: datetime
     updated_at: datetime
     steps: tuple[BackgroundTaskStep, ...]
+    retry_count: int = 0
+    last_error_code: str | None = None
+    model_version: str | None = None
+    rule_version: str | None = None
 
     def __post_init__(self) -> None:
         ids = (
@@ -119,3 +128,21 @@ class BackgroundTask:
             raise TypeError("后台任务当前步骤无效。")
         if self.message_count < 0:
             raise ValueError("后台任务消息数量无效。")
+        if self.retry_count < 0:
+            raise ValueError("后台任务重试数量无效。")
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimedBackgroundTaskStep:
+    """Worker 获得的单个步骤租约，不携带聊天正文。"""
+
+    task_id: UUID
+    owner_id: UUID
+    contact_id: UUID
+    source_document_id: UUID
+    step_id: UUID
+    name: BackgroundTaskStepName
+    worker_id: UUID
+    attempt_count: int
+    message_count: int
+    lease_expires_at: datetime

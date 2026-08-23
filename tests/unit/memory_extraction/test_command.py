@@ -152,7 +152,7 @@ class RunExtractionTest(unittest.TestCase):
 
         self.assertEqual(stats.batches, 1)
 
-    def test_failed_batch_is_counted_and_watermark_still_advances(self) -> None:
+    def test_failed_batch_is_counted_without_advancing_watermark(self) -> None:
         messages = _messages(6)
 
         stats = run_extraction(
@@ -166,10 +166,10 @@ class RunExtractionTest(unittest.TestCase):
             batch_size=3,
         )
 
-        self.assertEqual(stats.batches, 2)
-        self.assertEqual(stats.failed_batches, 2)
+        self.assertEqual(stats.batches, 1)
+        self.assertEqual(stats.failed_batches, 1)
         self.assertEqual(stats.adopted, 0)
-        self.assertEqual(self.watermark.values[-1], messages[-1].message_id)
+        self.assertEqual(self.watermark.values, [])
 
 
 if __name__ == "__main__":

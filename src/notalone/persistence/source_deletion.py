@@ -92,6 +92,38 @@ class PostgresSourceDeletionRepository:
                 )
                 connection.execute(
                     """
+                    UPDATE public.background_task_step AS step
+                    SET status = 'cancelled',
+                        worker_id = NULL,
+                        lease_expires_at = NULL,
+                        last_error_code = 'source_deleted',
+                        finished_at = now(),
+                        updated_at = now()
+                    FROM public.background_task AS task
+                    WHERE task.id = step.task_id
+                      AND task.owner_id = %s
+                      AND task.contact_id = %s
+                      AND task.source_document_id = %s
+                      AND step.status <> 'succeeded'
+                    """,
+                    (owner_id, contact_id, source_document_id),
+                )
+                connection.execute(
+                    """
+                    UPDATE public.background_task
+                    SET status = 'cancelled',
+                        last_error_code = 'source_deleted',
+                        finished_at = now(),
+                        updated_at = now()
+                    WHERE owner_id = %s
+                      AND contact_id = %s
+                      AND source_document_id = %s
+                      AND status IN ('queued', 'running', 'verifying')
+                    """,
+                    (owner_id, contact_id, source_document_id),
+                )
+                connection.execute(
+                    """
                     DELETE FROM public.import_confirmation
                     WHERE owner_id = %s
                       AND contact_id = %s

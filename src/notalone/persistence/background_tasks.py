@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import Any, Iterable
 from uuid import UUID
 
 import psycopg
@@ -15,7 +16,11 @@ from notalone.tasks.models import (
     BackgroundTaskStepName,
     BackgroundTaskStepStatus,
     BackgroundTaskType,
+    ClaimedBackgroundTaskStep,
 )
+
+
+MAX_AUTOMATIC_ATTEMPTS = 3
 
 
 class BackgroundTaskPersistenceError(RuntimeError):
@@ -24,6 +29,14 @@ class BackgroundTaskPersistenceError(RuntimeError):
 
 class BackgroundTaskNotFoundError(BackgroundTaskPersistenceError):
     """指定联系人范围内不存在该后台任务。"""
+
+
+class BackgroundTaskLeaseError(BackgroundTaskPersistenceError):
+    """Worker 的步骤租约已失效或不属于当前 Worker。"""
+
+
+class BackgroundTaskStateError(BackgroundTaskPersistenceError):
+    """后台任务当前状态不允许该操作。"""
 
 
 class PostgresBackgroundTaskRepository:
@@ -133,6 +146,10 @@ class PostgresBackgroundTaskRepository:
                         task.status,
                         task.current_step,
                         task.message_count,
+                        task.retry_count,
+                        task.last_error_code,
+                        task.model_version,
+                        task.rule_version,
                         task.created_at,
                         task.updated_at,
                         step.id,
@@ -142,6 +159,9 @@ class PostgresBackgroundTaskRepository:
                         step.attempt_count,
                         step.processed_count,
                         step.total_count,
+                        step.worker_id,
+                        step.lease_expires_at,
+                        step.last_error_code,
                         step.created_at,
                         step.updated_at
                     FROM public.background_task AS task
@@ -165,19 +185,22 @@ class PostgresBackgroundTaskRepository:
         first = rows[0]
         steps = tuple(
             BackgroundTaskStep(
-                step_id=row[10],
+                step_id=row[14],
                 task_id=first[0],
-                name=BackgroundTaskStepName(row[11]),
-                order=row[12],
-                status=BackgroundTaskStepStatus(row[13]),
-                attempt_count=row[14],
-                processed_count=row[15],
-                total_count=row[16],
-                created_at=row[17],
-                updated_at=row[18],
+                name=BackgroundTaskStepName(row[15]),
+                order=row[16],
+                status=BackgroundTaskStepStatus(row[17]),
+                attempt_count=row[18],
+                processed_count=row[19],
+                total_count=row[20],
+                worker_id=row[21],
+                lease_expires_at=row[22],
+                last_error_code=row[23],
+                created_at=row[24],
+                updated_at=row[25],
             )
             for row in rows
-            if row[10] is not None
+            if row[14] is not None
         )
         return BackgroundTask(
             task_id=first[0],
@@ -188,7 +211,531 @@ class PostgresBackgroundTaskRepository:
             status=BackgroundTaskStatus(first[5]),
             current_step=BackgroundTaskStepName(first[6]),
             message_count=first[7],
-            created_at=first[8],
-            updated_at=first[9],
+            retry_count=first[8],
+            last_error_code=first[9],
+            model_version=first[10],
+            rule_version=first[11],
+            created_at=first[12],
+            updated_at=first[13],
             steps=steps,
         )
+
+    def claim_next_step(
+        self,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        worker_id: UUID,
+        lease_duration: timedelta,
+        supported_steps: Iterable[BackgroundTaskStepName] = (
+            BackgroundTaskStepName.PARSE,
+            BackgroundTaskStepName.NORMALIZE,
+            BackgroundTaskStepName.EXTRACT_MEMORY,
+        ),
+        model_version: str | None = None,
+        rule_version: str | None = None,
+    ) -> ClaimedBackgroundTaskStep | None:
+        """原子领取一个联系人范围内、顺序合法的步骤租约。"""
+
+        _validate_uuid(owner_id, "owner_id")
+        _validate_uuid(contact_id, "contact_id")
+        _validate_uuid(worker_id, "worker_id")
+        _validate_lease_duration(lease_duration)
+        step_names = tuple(
+            step.value
+            for step in supported_steps
+            if isinstance(step, BackgroundTaskStepName)
+        )
+        if not step_names:
+            return None
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                self._lock_scope(connection, owner_id, contact_id)
+                self._expire_leases(connection, owner_id, contact_id)
+                active = connection.execute(
+                    """
+                    SELECT 1
+                    FROM public.background_task_step AS step
+                    JOIN public.background_task AS task
+                      ON task.id = step.task_id
+                    JOIN public.source_document AS source
+                      ON source.id = task.source_document_id
+                    WHERE task.owner_id = %s
+                      AND task.contact_id = %s
+                      AND source.status = 'active'
+                      AND step.status = 'running'
+                      AND step.lease_expires_at > now()
+                    LIMIT 1
+                    """,
+                    (owner_id, contact_id),
+                ).fetchone()
+                if active is not None:
+                    return None
+                candidate = connection.execute(
+                    """
+                    SELECT
+                        step.id,
+                        task.id,
+                        task.owner_id,
+                        task.contact_id,
+                        task.source_document_id,
+                        step.step_name,
+                        step.attempt_count,
+                        task.message_count
+                    FROM public.background_task_step AS step
+                    JOIN public.background_task AS task
+                      ON task.id = step.task_id
+                    JOIN public.source_document AS source
+                      ON source.id = task.source_document_id
+                    WHERE task.owner_id = %s
+                      AND task.contact_id = %s
+                      AND source.status = 'active'
+                      AND task.status IN ('queued', 'running', 'verifying')
+                      AND step.status IN ('pending', 'retryable')
+                      AND step.step_name = ANY(%s::text[])
+                      AND (
+                          step.status = 'pending'
+                          OR step.attempt_count < %s
+                      )
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM public.background_task_step AS prior
+                          WHERE prior.task_id = step.task_id
+                            AND prior.step_order < step.step_order
+                            AND prior.status <> 'succeeded'
+                      )
+                    ORDER BY task.created_at, task.id, step.step_order
+                    LIMIT 1
+                    FOR UPDATE OF task, step
+                    """,
+                    (owner_id, contact_id, list(step_names), MAX_AUTOMATIC_ATTEMPTS),
+                ).fetchone()
+                if candidate is None:
+                    return None
+                next_attempt = candidate[6] + 1
+                lease_expires_at = connection.execute(
+                    """
+                    UPDATE public.background_task_step
+                    SET status = 'running',
+                        attempt_count = %s,
+                        worker_id = %s,
+                        lease_expires_at = now() + %s::interval,
+                        last_error_code = NULL,
+                        started_at = COALESCE(started_at, now()),
+                        updated_at = now()
+                    WHERE id = %s
+                    RETURNING lease_expires_at
+                    """,
+                    (
+                        next_attempt,
+                        worker_id,
+                        _as_postgres_interval(lease_duration),
+                        candidate[0],
+                    ),
+                ).fetchone()
+                if lease_expires_at is None:
+                    raise BackgroundTaskPersistenceError(
+                        "后台步骤租约写入失败。"
+                    )
+                task_status = (
+                    "verifying"
+                    if candidate[5] == BackgroundTaskStepName.VERIFY.value
+                    else "running"
+                )
+                connection.execute(
+                    """
+                    UPDATE public.background_task
+                    SET status = %s,
+                        current_step = %s,
+                        model_version = COALESCE(%s, model_version),
+                        rule_version = COALESCE(%s, rule_version),
+                        started_at = COALESCE(started_at, now()),
+                        updated_at = now()
+                    WHERE id = %s
+                    """,
+                    (
+                        task_status,
+                        candidate[5],
+                        model_version,
+                        rule_version,
+                        candidate[1],
+                    ),
+                )
+                return ClaimedBackgroundTaskStep(
+                    task_id=candidate[1],
+                    owner_id=candidate[2],
+                    contact_id=candidate[3],
+                    source_document_id=candidate[4],
+                    step_id=candidate[0],
+                    name=BackgroundTaskStepName(candidate[5]),
+                    worker_id=worker_id,
+                    attempt_count=next_attempt,
+                    message_count=candidate[7],
+                    lease_expires_at=lease_expires_at[0],
+                )
+        except BackgroundTaskPersistenceError:
+            raise
+        except psycopg.Error:
+            raise BackgroundTaskPersistenceError(
+                "后台步骤领取失败。"
+            ) from None
+
+    def complete_step(
+        self,
+        claim: ClaimedBackgroundTaskStep,
+        *,
+        processed_count: int,
+        total_count: int | None = None,
+    ) -> None:
+        """在有效租约内完成一步，并推进父任务到下一固定步骤。"""
+
+        _validate_count(processed_count, "processed_count")
+        if total_count is not None:
+            _validate_count(total_count, "total_count")
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                self._lock_scope(connection, claim.owner_id, claim.contact_id)
+                self._assert_valid_claim(connection, claim)
+                updated = connection.execute(
+                    """
+                    UPDATE public.background_task_step
+                    SET status = 'succeeded',
+                        processed_count = %s,
+                        total_count = COALESCE(%s, total_count),
+                        worker_id = NULL,
+                        lease_expires_at = NULL,
+                        finished_at = now(),
+                        updated_at = now()
+                    WHERE id = %s
+                    """,
+                    (processed_count, total_count, claim.step_id),
+                ).rowcount
+                if updated != 1:
+                    raise BackgroundTaskPersistenceError(
+                        "后台步骤完成状态写入失败。"
+                    )
+                next_step = connection.execute(
+                    """
+                    SELECT step_name
+                    FROM public.background_task_step
+                    WHERE task_id = %s AND status <> 'succeeded'
+                    ORDER BY step_order
+                    LIMIT 1
+                    """,
+                    (claim.task_id,),
+                ).fetchone()
+                if next_step is None:
+                    if claim.name is not BackgroundTaskStepName.VERIFY:
+                        raise BackgroundTaskStateError(
+                            "固定步骤缺少 verify。"
+                        )
+                    connection.execute(
+                        """
+                        UPDATE public.background_task
+                        SET status = 'succeeded',
+                            current_step = 'verify',
+                            finished_at = now(),
+                            updated_at = now()
+                        WHERE id = %s
+                        """,
+                        (claim.task_id,),
+                    )
+                else:
+                    next_status = (
+                        "verifying"
+                        if next_step[0] == BackgroundTaskStepName.VERIFY.value
+                        else "running"
+                    )
+                    connection.execute(
+                        """
+                        UPDATE public.background_task
+                        SET status = %s,
+                            current_step = %s,
+                            updated_at = now()
+                        WHERE id = %s
+                        """,
+                        (next_status, next_step[0], claim.task_id),
+                    )
+        except BackgroundTaskPersistenceError:
+            raise
+        except psycopg.Error:
+            raise BackgroundTaskPersistenceError(
+                "后台步骤完成失败。"
+            ) from None
+
+    def fail_step(
+        self,
+        claim: ClaimedBackgroundTaskStep,
+        *,
+        error_code: str,
+        retryable: bool,
+    ) -> BackgroundTaskStepStatus:
+        """记录稳定错误分类，并按自动重试上限决定下一状态。"""
+
+        _validate_error_code(error_code)
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                self._lock_scope(connection, claim.owner_id, claim.contact_id)
+                self._assert_valid_claim(connection, claim)
+                next_status = (
+                    BackgroundTaskStepStatus.RETRYABLE
+                    if retryable and claim.attempt_count < MAX_AUTOMATIC_ATTEMPTS
+                    else BackgroundTaskStepStatus.FAILED
+                )
+                connection.execute(
+                    """
+                    UPDATE public.background_task_step
+                    SET status = %s,
+                        worker_id = NULL,
+                        lease_expires_at = NULL,
+                        last_error_code = %s,
+                        updated_at = now()
+                    WHERE id = %s
+                    """,
+                    (next_status.value, error_code, claim.step_id),
+                )
+                task_status = (
+                    "running"
+                    if next_status is BackgroundTaskStepStatus.RETRYABLE
+                    else "failed"
+                )
+                connection.execute(
+                    """
+                    UPDATE public.background_task
+                    SET status = %s,
+                        retry_count = retry_count + 1,
+                        last_error_code = %s,
+                        finished_at = CASE
+                            WHEN %s = 'failed' THEN now()
+                            ELSE NULL
+                        END,
+                        updated_at = now()
+                    WHERE id = %s
+                    """,
+                    (task_status, error_code, task_status, claim.task_id),
+                )
+                return next_status
+        except BackgroundTaskPersistenceError:
+            raise
+        except psycopg.Error:
+            raise BackgroundTaskPersistenceError(
+                "后台步骤失败状态写入失败。"
+            ) from None
+
+    def retry_failed_task(
+        self,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        task_id: UUID,
+    ) -> BackgroundTask:
+        """复用失败任务身份，保留成功步骤并重置失败步骤的自动重试轮次。"""
+
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                self._lock_scope(connection, owner_id, contact_id)
+                task = connection.execute(
+                    """
+                    SELECT status
+                    FROM public.background_task
+                    WHERE id = %s AND owner_id = %s AND contact_id = %s
+                    FOR UPDATE
+                    """,
+                    (task_id, owner_id, contact_id),
+                ).fetchone()
+                if task is None:
+                    raise BackgroundTaskNotFoundError(
+                        "指定范围内不存在该后台任务。"
+                    )
+                if task[0] != BackgroundTaskStatus.FAILED.value:
+                    raise BackgroundTaskStateError(
+                        "只有 failed 任务可以手动重试。"
+                    )
+                connection.execute(
+                    """
+                    UPDATE public.background_task_step
+                    SET status = CASE
+                            WHEN status = 'failed' THEN 'retryable'
+                            ELSE status
+                        END,
+                        attempt_count = CASE
+                            WHEN status = 'failed' THEN 0
+                            ELSE attempt_count
+                        END,
+                        worker_id = NULL,
+                        lease_expires_at = NULL,
+                        last_error_code = CASE
+                            WHEN status = 'failed' THEN NULL
+                            ELSE last_error_code
+                        END,
+                        finished_at = CASE
+                            WHEN status = 'failed' THEN NULL
+                            ELSE finished_at
+                        END,
+                        updated_at = now()
+                    WHERE task_id = %s
+                    """,
+                    (task_id,),
+                )
+                next_step = connection.execute(
+                    """
+                    SELECT step_name
+                    FROM public.background_task_step
+                    WHERE task_id = %s AND status <> 'succeeded'
+                    ORDER BY step_order
+                    LIMIT 1
+                    """,
+                    (task_id,),
+                ).fetchone()
+                if next_step is None:
+                    raise BackgroundTaskStateError(
+                        "失败任务缺少可重试步骤。"
+                    )
+                connection.execute(
+                    """
+                    UPDATE public.background_task
+                    SET status = 'queued',
+                        current_step = %s,
+                        retry_count = retry_count + 1,
+                        last_error_code = NULL,
+                        finished_at = NULL,
+                        updated_at = now()
+                    WHERE id = %s
+                    """,
+                    (next_step[0], task_id),
+                )
+        except BackgroundTaskPersistenceError:
+            raise
+        except psycopg.Error:
+            raise BackgroundTaskPersistenceError(
+                "后台任务手动重试失败。"
+            ) from None
+        return self.get_task(
+            owner_id=owner_id,
+            contact_id=contact_id,
+            task_id=task_id,
+        )
+
+    @staticmethod
+    def _lock_scope(
+        connection: psycopg.Connection[Any],
+        owner_id: UUID,
+        contact_id: UUID,
+    ) -> None:
+        connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            (f"{owner_id}:{contact_id}",),
+        )
+
+    @staticmethod
+    def _expire_leases(
+        connection: psycopg.Connection[Any],
+        owner_id: UUID,
+        contact_id: UUID,
+    ) -> None:
+        connection.execute(
+            """
+            UPDATE public.background_task_step AS step
+            SET status = CASE
+                    WHEN step.attempt_count >= %s THEN 'failed'
+                    ELSE 'retryable'
+                END,
+                worker_id = NULL,
+                lease_expires_at = NULL,
+                last_error_code = 'lease_expired',
+                updated_at = now()
+            FROM public.background_task AS task
+            WHERE task.id = step.task_id
+              AND task.owner_id = %s
+              AND task.contact_id = %s
+              AND step.status = 'running'
+              AND step.lease_expires_at <= now()
+            """,
+            (MAX_AUTOMATIC_ATTEMPTS, owner_id, contact_id),
+        )
+        connection.execute(
+            """
+            UPDATE public.background_task AS task
+            SET status = 'failed',
+                last_error_code = 'lease_expired',
+                finished_at = now(),
+                updated_at = now()
+            WHERE task.owner_id = %s
+              AND task.contact_id = %s
+              AND task.status IN ('queued', 'running', 'verifying')
+              AND EXISTS (
+                  SELECT 1
+                  FROM public.background_task_step AS step
+                  WHERE step.task_id = task.id
+                    AND step.status = 'failed'
+                    AND step.last_error_code = 'lease_expired'
+              )
+            """,
+            (owner_id, contact_id),
+        )
+
+    @staticmethod
+    def _assert_valid_claim(
+        connection: psycopg.Connection[Any],
+        claim: ClaimedBackgroundTaskStep,
+    ) -> None:
+        row = connection.execute(
+            """
+            SELECT step.status, step.worker_id, step.lease_expires_at
+            FROM public.background_task_step AS step
+            JOIN public.background_task AS task ON task.id = step.task_id
+            JOIN public.source_document AS source
+              ON source.id = task.source_document_id
+            WHERE step.id = %s
+              AND step.task_id = %s
+              AND task.owner_id = %s
+              AND task.contact_id = %s
+              AND task.status IN ('queued', 'running', 'verifying')
+              AND source.status = 'active'
+            FOR UPDATE OF task, step
+            """,
+            (
+                claim.step_id,
+                claim.task_id,
+                claim.owner_id,
+                claim.contact_id,
+            ),
+        ).fetchone()
+        if row is None:
+            raise BackgroundTaskNotFoundError("指定范围内不存在该后台步骤。")
+        if (
+            row[0] != BackgroundTaskStepStatus.RUNNING.value
+            or row[1] != claim.worker_id
+            or row[2] is None
+            or row[2] <= datetime.now(timezone.utc)
+        ):
+            raise BackgroundTaskLeaseError("后台步骤租约已失效。")
+
+
+def _validate_uuid(value: UUID, label: str) -> None:
+    if not isinstance(value, UUID):
+        raise TypeError(f"{label} 必须是 UUID。")
+
+
+def _validate_lease_duration(value: timedelta) -> None:
+    if not isinstance(value, timedelta) or value <= timedelta(0):
+        raise ValueError("后台任务租约必须是正时间段。")
+
+
+def _validate_count(value: int, label: str) -> None:
+    if not isinstance(value, int) or value < 0:
+        raise ValueError(f"{label} 必须是非负整数。")
+
+
+def _validate_error_code(value: str) -> None:
+    if (
+        not isinstance(value, str)
+        or not 1 <= len(value) <= 64
+        or any(character.isspace() for character in value)
+    ):
+        raise ValueError("后台任务错误分类无效。")
+
+
+def _as_postgres_interval(value: timedelta) -> str:
+    seconds = value.total_seconds()
+    return f"{seconds:g} seconds"

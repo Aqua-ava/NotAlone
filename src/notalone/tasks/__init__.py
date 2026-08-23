@@ -8,6 +8,7 @@ from notalone.tasks.models import (
     BackgroundTaskStepName,
     BackgroundTaskStepStatus,
     BackgroundTaskType,
+    ClaimedBackgroundTaskStep,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "BackgroundTaskStepName",
     "BackgroundTaskStepStatus",
     "BackgroundTaskType",
+    "ClaimedBackgroundTaskStep",
 ]

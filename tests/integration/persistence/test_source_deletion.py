@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -16,6 +17,9 @@ from notalone.ingest.models import (
 )
 from notalone.ingest.normalizer import normalize_document
 from notalone.persistence.postgres_repository import PostgresIngestRepository
+from notalone.persistence.background_tasks import (
+    PostgresBackgroundTaskRepository,
+)
 from notalone.persistence.source_deletion import (
     PostgresSourceDeletionRepository,
     SourceDeletionError,
@@ -129,6 +133,41 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
         self.assertEqual(source[:4], ("deleted", None, None, 0))
         self.assertIsNotNone(source[4])
         self.assertEqual(remaining, (0, 0, 0, 0))
+
+    def test_delete_source_cancels_pending_worker_steps(self) -> None:
+        imported = self.ingest_repository.import_document(
+            owner_id=self.owner_id,
+            document=self.batch,
+            confirmation=ImportConfirmationRequest(
+                selection=ExistingContactSelection(contact_id=self.contact_id)
+            ),
+        )
+
+        self.deletion_repository.delete_source(
+            owner_id=self.owner_id,
+            contact_id=self.contact_id,
+            source_document_id=imported.source_document_id,
+        )
+
+        task_repository = PostgresBackgroundTaskRepository(TEST_DATABASE_URL)
+        task = task_repository.get_task(
+            owner_id=self.owner_id,
+            contact_id=self.contact_id,
+            task_id=imported.task_id,
+        )
+        self.assertEqual(task.status.value, "cancelled")
+        self.assertEqual(
+            tuple(step.status.value for step in task.steps),
+            ("cancelled",) * 5,
+        )
+        self.assertIsNone(
+            task_repository.claim_next_step(
+                owner_id=self.owner_id,
+                contact_id=self.contact_id,
+                worker_id=uuid4(),
+                lease_duration=timedelta(seconds=30),
+            )
+        )
 
     def test_delete_failure_is_recorded_without_losing_content(self) -> None:
         imported = self.ingest_repository.import_document(
