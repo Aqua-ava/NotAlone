@@ -17,6 +17,7 @@ env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
     -emit-module-path "${build_dir}/NotAloneSyncCore.swiftmodule" \
     "${probe_dir}/Sources/NotAloneSyncCore/ProbeCore.swift" \
     "${probe_dir}/Sources/NotAloneSyncCore/CaptureSupport.swift" \
+    "${probe_dir}/Sources/NotAloneSyncCore/SelectedSession.swift" \
     -framework AppKit \
     -framework ScreenCaptureKit \
     -framework Vision \

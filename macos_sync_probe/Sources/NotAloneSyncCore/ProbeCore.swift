@@ -103,6 +103,7 @@ public enum ProbeError: LocalizedError {
     case weChatNotFrontmost
     case weChatWindowNotFound
     case chatRegionNotFound
+    case selectedRowNotFound
     case imageDataUnavailable
     case screenCapturePermissionMissing
 
@@ -120,6 +121,8 @@ public enum ProbeError: LocalizedError {
             return "未找到可捕获的微信窗口。"
         case .chatRegionNotFound:
             return "无法确定微信聊天区与会话列表的分隔线，本轮不会进行 OCR。"
+        case .selectedRowNotFound:
+            return "无法确定左侧选中会话行，本轮不会定位当前会话。"
         case .imageDataUnavailable:
             return "无法读取当前截图的像素数据。"
         case .screenCapturePermissionMissing:
@@ -206,11 +209,54 @@ public enum CoreSelfTest {
               previewRect.height == 115 else {
             throw ProbeError.selfTestFailed("裁剪预览与 OCR 坐标对齐")
         }
+
+        // 左侧面板出现高亮行时应定位到选中会话行；无高亮时必须返回空。
+        guard let rowImage = syntheticWindowImage(dividerX: 72, selectedRowY: 90),
+              let row = SelectedSessionLocator.detectSelectedRow(in: rowImage, dividerX: 72) else {
+            throw ProbeError.selfTestFailed("选中会话行初次定位")
+        }
+        guard abs(row.rowRect.minY - 90) <= 2,
+              abs(row.rowRect.height - 30) <= 2,
+              abs(row.rowRect.width - 72) <= 3 else {
+            throw ProbeError.selfTestFailed(
+                "选中行几何 y=\(row.rowRect.minY), height=\(row.rowRect.height)"
+            )
+        }
+        for crop in [row.nameRect, row.timeRect, row.previewRect, row.avatarRect] {
+            guard crop.minX >= row.rowRect.minX,
+                  crop.minY >= row.rowRect.minY,
+                  crop.maxX <= row.rowRect.maxX,
+                  crop.maxY <= row.rowRect.maxY,
+                  crop.width > 0, crop.height > 0 else {
+                throw ProbeError.selfTestFailed("选中行裁剪区域越界")
+            }
+        }
+
+        guard let rowMovedImage = syntheticWindowImage(dividerX: 72, selectedRowY: 140),
+              let movedRow = SelectedSessionLocator.detectSelectedRow(in: rowMovedImage, dividerX: 72),
+              abs(movedRow.rowRect.minY - 140) <= 2 else {
+            throw ProbeError.selfTestFailed("选中行移动后重定位")
+        }
+
+        guard let rowlessImage = syntheticWindowImage(dividerX: 72),
+              SelectedSessionLocator.detectSelectedRow(in: rowlessImage, dividerX: 72) == nil else {
+            throw ProbeError.selfTestFailed("无高亮行时停止定位")
+        }
+
+        guard let headerCrop = SelectedSessionLocator.displayNameCrop(
+            in: firstImage,
+            region: firstRegion
+        ), abs(headerCrop.minX - 74) <= 3,
+              headerCrop.minY == 0,
+              abs(headerCrop.maxY - CGFloat(firstRegion.headerDividerY ?? -1)) <= 0.5 else {
+            throw ProbeError.selfTestFailed("顶部 display name 裁剪区")
+        }
     }
 
     private static func syntheticWindowImage(
         dividerX: Int?,
-        hasStrongerLowerEdge: Bool = false
+        hasStrongerLowerEdge: Bool = false,
+        selectedRowY: Int? = nil
     ) -> CGImage? {
         let width = 300
         let height = 200
@@ -231,6 +277,12 @@ public enum CoreSelfTest {
         if let dividerX {
             context.setFillColor(CGColor(red: 0.27, green: 0.27, blue: 0.27, alpha: 1))
             context.fill(CGRect(x: 0, y: 0, width: dividerX, height: height))
+            if let selectedRowY {
+                // 选中会话行的高亮带：亮度明显高于左侧面板背景。
+                // CGContext 纵坐标从底部向上，先换算成截图像素行。
+                context.setFillColor(CGColor(red: 0.40, green: 0.40, blue: 0.40, alpha: 1))
+                context.fill(CGRect(x: 0, y: height - selectedRowY - 30, width: dividerX, height: 30))
+            }
             context.setFillColor(CGColor(red: 0.20, green: 0.20, blue: 0.20, alpha: 1))
             context.fill(CGRect(x: dividerX, y: height - 30, width: width - dividerX, height: 30))
             context.fill(CGRect(x: dividerX, y: 0, width: width - dividerX, height: height - 145))

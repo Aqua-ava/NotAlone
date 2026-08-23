@@ -354,7 +354,8 @@ public enum ChatRegionDetector {
         score >= 8 && score >= backgroundScore + 5
     }
 
-    private static func luminancePixels(from image: CGImage) -> [UInt8]? {
+    // 供同包的选中会话定位器复用：把图片变成逐像素亮度数组。
+    static func luminancePixels(from image: CGImage) -> [UInt8]? {
         let width = image.width
         let height = image.height
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
@@ -396,8 +397,24 @@ public enum ChatRegionDetector {
     }
 
     private static func median(_ values: [Int]) -> Int {
+        medianOf(values)
+    }
+
+    // 供同包的选中会话定位器复用：计算整数序列的中位数。
+    static func medianOf(_ values: [Int]) -> Int {
         let sorted = values.sorted()
         return sorted[sorted.count / 2]
+    }
+}
+
+// 单次窗口捕获的完整结果。聊天区裁剪与选中会话定位必须使用同一帧图像。
+public struct WindowSnapshot {
+    public let windowImage: CGImage
+    public let region: DetectedChatRegion
+
+    public init(windowImage: CGImage, region: DetectedChatRegion) {
+        self.windowImage = windowImage
+        self.region = region
     }
 }
 
@@ -417,7 +434,7 @@ public final class WeChatCaptureProbe {
         fixedCrop = crop
     }
 
-    public func captureChatRegion() async throws -> CapturedChatRegion {
+    public func captureWindowSnapshot() async throws -> WindowSnapshot {
         // 第一层隐私门禁：微信不是前台，就完全不查询窗口、不截图。
         guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == weChatBundleIdentifier else {
             throw ProbeError.weChatNotFrontmost
@@ -475,6 +492,18 @@ public final class WeChatCaptureProbe {
             }
         }
 
+        return WindowSnapshot(windowImage: image, region: region)
+    }
+
+    public func captureChatRegion() async throws -> CapturedChatRegion {
+        try chatRegionCapture(from: await captureWindowSnapshot())
+    }
+
+    // 从已捕获的同一帧快照裁剪聊天区域，供与选中会话定位共享同一张窗口图像。
+    public func chatRegionCapture(from snapshot: WindowSnapshot) throws -> CapturedChatRegion {
+        let image = snapshot.windowImage
+        let region = snapshot.region
+
         guard let croppedImage = image.cropping(to: region.cropRect) else {
             throw ProbeError.invalidCrop
         }
@@ -482,6 +511,44 @@ public final class WeChatCaptureProbe {
             chatImage: croppedImage,
             previewImage: ChatRegionDetector.previewImage(for: image, region: region),
             detectedDividerX: region.dividerX
+        )
+    }
+
+    // 从同一帧窗口图像提取顶部 display name 与左侧选中会话行的最小元数据。
+    // 找不到选中行时抛出错误；上层应暂停本轮定位，不沿用旧联系人写入。
+    public func selectedSessionMetadata(from snapshot: WindowSnapshot) throws -> SelectedSessionMetadata {
+        let image = snapshot.windowImage
+        guard let dividerX = snapshot.region.dividerX else {
+            throw ProbeError.chatRegionNotFound
+        }
+        guard let row = SelectedSessionLocator.detectSelectedRow(
+            in: image,
+            dividerX: dividerX,
+            listBottom: snapshot.region.composerDividerY
+        ) else {
+            throw ProbeError.selectedRowNotFound
+        }
+
+        let displayName: String?
+        if let headerCrop = SelectedSessionLocator.displayNameCrop(in: image, region: snapshot.region),
+           let headerImage = image.cropping(to: headerCrop) {
+            displayName = try LocalOcr.recognizePlainText(headerImage)
+        } else {
+            displayName = nil
+        }
+
+        func cropText(_ rect: CGRect) throws -> String? {
+            guard let subImage = image.cropping(to: rect.integral) else {
+                return nil
+            }
+            return try LocalOcr.recognizePlainText(subImage)
+        }
+
+        return SelectedSessionMetadata(
+            displayName: displayName,
+            selectedRowName: try cropText(row.nameRect),
+            lastTimeText: try cropText(row.timeRect),
+            previewText: try cropText(row.previewRect)
         )
     }
 }
@@ -531,6 +598,26 @@ public enum LocalOcr {
                 return lhs.1.minX < rhs.1.minX
             }
             .map(\.0)
+    }
+
+    // 只拼接纯文本，不判断说话人；用于顶部标题和选中行元数据这类短区域。
+    public static func recognizePlainText(_ image: CGImage) throws -> String? {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["zh-Hans", "en-US"]
+        request.usesLanguageCorrection = false
+
+        let handler = VNImageRequestHandler(cgImage: image)
+        try handler.perform([request])
+
+        let texts = (request.results ?? []).compactMap { observation in
+            observation.topCandidates(1).first?.string
+        }
+        let joined = texts
+            .map(TextNormalizer.normalize)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        return joined.isEmpty ? nil : joined
     }
 }
 

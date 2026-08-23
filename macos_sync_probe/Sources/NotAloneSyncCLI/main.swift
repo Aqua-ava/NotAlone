@@ -9,17 +9,20 @@ private struct ProbeOptions {
     let watch: Bool
     let showText: Bool
     let selfTest: Bool
+    let session: Bool
 
     static let help = """
     用法：
       swift run notalone-sync-probe [--watch] [--interval seconds]
         [--crop x,y,width,height] [--show-text]
+      swift run notalone-sync-probe --session [--show-text]
 
     选项：
       --watch              持续观察前台微信窗口；默认只采集一次。
       --interval seconds   观察间隔，默认 1.0 秒，最小 0.5 秒。
       --crop value         相对微信窗口的聊天区域，默认 0.34,0.10,0.66,0.80。
-      --show-text          明确要求后才在终端显示 OCR 文本；默认只输出计数。
+      --show-text          明确要求后才在终端显示短预览等文本；默认只输出字段有无。
+      --session            只做一次选中会话定位，输出顶部 display name 和选中行元数据。
       --self-test          运行合成数据自检，不截取屏幕。
       --help               显示本说明。
 
@@ -33,6 +36,7 @@ private struct ProbeOptions {
         var watch = false
         var showText = false
         var selfTest = false
+        var session = false
         var index = 0
 
         while index < arguments.count {
@@ -46,6 +50,8 @@ private struct ProbeOptions {
                 showText = true
             case "--self-test":
                 selfTest = true
+            case "--session":
+                session = true
             case "--interval", "--crop":
                 index += 1
                 guard index < arguments.count else {
@@ -71,7 +77,8 @@ private struct ProbeOptions {
             intervalSeconds: intervalSeconds,
             watch: watch,
             showText: showText,
-            selfTest: selfTest
+            selfTest: selfTest,
+            session: session
         )
     }
 }
@@ -90,6 +97,24 @@ struct NotAloneSyncCLI {
             }
             guard CGPreflightScreenCaptureAccess() else {
                 throw ProbeError.screenCapturePermissionMissing
+            }
+
+            if options.session {
+                // 单次定位当前选中会话：输出匹配用元数据，不读取聊天区域正文。
+                let probe = WeChatCaptureProbe()
+                let snapshot = try await probe.captureWindowSnapshot()
+                let metadata = try probe.selectedSessionMetadata(from: snapshot)
+                print("微信在前台：是")
+                print("选中会话行：已定位")
+                print("顶部 display name：\(metadata.displayName ?? "未识别")")
+                print("选中行名字：\(metadata.selectedRowName ?? "未识别")")
+                print("最近时间：\(metadata.lastTimeText ?? "未识别")")
+                if options.showText {
+                    print("短预览：\(metadata.previewText ?? "未识别")")
+                } else {
+                    print("短预览：\(metadata.previewText == nil ? "未识别" : "已识别（--show-text 显示文本）")")
+                }
+                return
             }
 
             let probe = WeChatCaptureProbe(crop: options.crop)

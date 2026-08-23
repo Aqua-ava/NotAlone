@@ -91,9 +91,61 @@ final class ProbeCoreTests: XCTestCase {
         )
     }
 
+    func testSelectedRowDetectorFindsHighlightBand() {
+        let image = syntheticWindowImage(dividerX: 72, selectedRowY: 90)
+        let row = SelectedSessionLocator.detectSelectedRow(in: image, dividerX: 72)
+
+        XCTAssertNotNil(row)
+        XCTAssertEqual(Double(row?.rowRect.minY ?? 0), 90, accuracy: 2)
+        XCTAssertEqual(Double(row?.rowRect.height ?? 0), 30, accuracy: 2)
+        XCTAssertEqual(row?.rowRect.width, 72)
+    }
+
+    func testSelectedRowDetectorFollowsMovedHighlight() {
+        let image = syntheticWindowImage(dividerX: 72, selectedRowY: 140)
+        let row = SelectedSessionLocator.detectSelectedRow(in: image, dividerX: 72)
+
+        XCTAssertEqual(Double(row?.rowRect.minY ?? 0), 140, accuracy: 2)
+    }
+
+    func testSelectedRowDetectorReturnsNilWithoutHighlight() {
+        let image = syntheticWindowImage(dividerX: 72)
+        XCTAssertNil(SelectedSessionLocator.detectSelectedRow(in: image, dividerX: 72))
+    }
+
+    func testSelectedRowCropRectsStayInsideRow() {
+        let row = SelectedRowRegion(
+            rowRect: CGRect(x: 0, y: 90, width: 72, height: 30)
+        )
+
+        for crop in [row.nameRect, row.timeRect, row.previewRect, row.avatarRect] {
+            XCTAssertGreaterThanOrEqual(crop.minX, row.rowRect.minX)
+            XCTAssertGreaterThanOrEqual(crop.minY, row.rowRect.minY)
+            XCTAssertLessThanOrEqual(crop.maxX, row.rowRect.maxX)
+            XCTAssertLessThanOrEqual(crop.maxY, row.rowRect.maxY)
+            XCTAssertGreaterThan(crop.width, 0)
+            XCTAssertGreaterThan(crop.height, 0)
+        }
+        // 时间裁剪必须落在行的右上角，预览必须落在下半部分。
+        XCTAssertGreaterThan(row.timeRect.maxX, row.rowRect.midX)
+        XCTAssertGreaterThanOrEqual(row.previewRect.minY, row.rowRect.midY)
+    }
+
+    func testDisplayNameCropFollowsRegionBoundaries() {
+        let image = syntheticWindowImage(dividerX: 72)
+        let region = ChatRegionDetector.detect(in: image)!
+        let crop = SelectedSessionLocator.displayNameCrop(in: image, region: region)
+
+        XCTAssertEqual(Double(crop?.minX ?? 0), Double(region.dividerX ?? 0) + 2, accuracy: 3)
+        XCTAssertEqual(crop?.minY, 0)
+        XCTAssertEqual(Double(crop?.maxY ?? 0), Double(region.headerDividerY ?? 0), accuracy: 0.5)
+        XCTAssertLessThan(crop?.maxX ?? 0, CGFloat(image.width))
+    }
+
     private func syntheticWindowImage(
         dividerX: Int?,
-        hasStrongerLowerEdge: Bool = false
+        hasStrongerLowerEdge: Bool = false,
+        selectedRowY: Int? = nil
     ) -> CGImage {
         let width = 300
         let height = 200
@@ -113,6 +165,12 @@ final class ProbeCoreTests: XCTestCase {
         if let dividerX {
             context.setFillColor(CGColor(red: 0.27, green: 0.27, blue: 0.27, alpha: 1))
             context.fill(CGRect(x: 0, y: 0, width: dividerX, height: height))
+            if let selectedRowY {
+                // 选中会话行的高亮带：亮度明显高于左侧面板背景。
+                // CGContext 纵坐标从底部向上，先换算成截图像素行。
+                context.setFillColor(CGColor(red: 0.40, green: 0.40, blue: 0.40, alpha: 1))
+                context.fill(CGRect(x: 0, y: height - selectedRowY - 30, width: dividerX, height: 30))
+            }
             context.setFillColor(CGColor(red: 0.20, green: 0.20, blue: 0.20, alpha: 1))
             context.fill(CGRect(x: dividerX, y: height - 30, width: width - dividerX, height: 30))
             context.fill(CGRect(x: dividerX, y: 0, width: width - dividerX, height: 55))

@@ -154,7 +154,9 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
             defer { isCapturing = false }
             do {
                 // 这里内部会先确认微信确实是前台 App。
-                let capture = try await probe.captureChatRegion()
+                // 聊天区与选中会话元数据必须来自同一帧窗口图像。
+                let snapshot = try await probe.captureWindowSnapshot()
+                let capture = try probe.chatRegionCapture(from: snapshot)
                 let imageHash = try ImageHasher.hash(capture.chatImage)
                 guard imageHash != previousHash else {
                     statusItem.button?.title = "NotAlone: 微信画面未变化"
@@ -173,7 +175,17 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
                 // 只有 OCR 成功才记住画面哈希；失败时下一个周期会重试，而不会永久跳过静止画面。
                 previousHash = imageHash
                 let newLines = deduplicator.newLines(from: lines)
-                statusItem.button?.title = "NotAlone: 识别 \(lines.count) 行，新增 \(newLines.count) 行"
+
+                // 状态栏持续显示当前 display name 与同步状态；无法确定选中行时明确提示。
+                var statusPrefix = "NotAlone: 未定位到当前会话"
+                do {
+                    let metadata = try probe.selectedSessionMetadata(from: snapshot)
+                    let label = metadata.displayName ?? metadata.selectedRowName ?? "未命名会话"
+                    statusPrefix = "NotAlone: \(label)"
+                } catch ProbeError.selectedRowNotFound {
+                    statusPrefix = "NotAlone: 无法确定选中会话行"
+                }
+                statusItem.button?.title = "\(statusPrefix) · 识别 \(lines.count) 行，新增 \(newLines.count) 行"
             } catch ProbeError.weChatNotFrontmost {
                 // 用户切到其他 App 时不采集，也不保留那里的画面。
                 statusItem.button?.title = "NotAlone: 等待微信前台"
