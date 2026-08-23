@@ -21,11 +21,14 @@ def build_preview(path: Path) -> ImportPreview:
     # 第一步只负责读文件、计算指纹并逐行解析 JSON。
     document = read_jsonl(path)
     # 第二步校验每条记录和整份文件，返回候选联系人及消息类型统计。
-    channel_identity, kind_counts = validate_records(document.records)
+    owner_channel_identity, channel_identity, kind_counts = validate_records(
+        document.records
+    )
     # 使用关键字参数构造数据类，字段来源比按位置传参更清楚。
     return ImportPreview(
         file_name=document.path.name,
         content_sha256=document.content_sha256,
+        owner_channel_identity=owner_channel_identity,
         channel_identity=channel_identity,
         record_count=len(document.records),
         kind_counts=kind_counts,
@@ -44,18 +47,22 @@ def format_preview(preview: ImportPreview, *, show_identifiers: bool = False) ->
     kind_lines = "\n".join(
         f"  {kind}: {count}" for kind, count in preview.kind_counts
     )
-    # 只有调用方明确要求时，才把文件名、联系人 ID 和昵称放进输出。
+    # 只有调用方明确要求时，才把文件名、渠道身份和展示名称放进输出。
     if show_identifiers:
         identity_lines = [
             f"文件：{preview.file_name}",
-            f"微信渠道 ID：{preview.channel_identity.external_id}",
-            f"来源展示名称：{preview.channel_identity.observed_name}",
+            f"owner 微信渠道 ID：{preview.owner_channel_identity.external_id}",
+            f"owner 展示名称：{preview.owner_channel_identity.observed_name}",
+            f"联系人微信渠道 ID：{preview.channel_identity.external_id}",
+            f"联系人展示名称：{preview.channel_identity.observed_name}",
         ]
     else:
         identity_lines = [
             "文件：已选择（名称默认隐藏）",
-            "微信渠道 ID：已识别（默认隐藏）",
-            "来源展示名称：已识别（默认隐藏）",
+            "owner 微信渠道 ID：已识别（默认隐藏）",
+            "owner 展示名称：已识别（默认隐藏）",
+            "联系人微信渠道 ID：已识别（默认隐藏）",
+            "联系人展示名称：已识别（默认隐藏）",
         ]
     # identity_lines + [...] 先拼成一个字符串列表，再由 join 组成最终多行字符串。
     return "\n".join(
@@ -70,7 +77,7 @@ def format_preview(preview: ImportPreview, *, show_identifiers: bool = False) ->
             "  渠道身份候选: 1",
             "  来源文件: 1",
             f"  消息: {preview.record_count}",
-            "  owner: 不来自导出文件，正式导入时由应用账号提供",
+            "  owner: 已从本人消息识别，正式导入时需运行身份确认",
             "校验结果：通过",
             "数据库写入：未执行",
         ]

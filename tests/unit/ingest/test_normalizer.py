@@ -27,6 +27,11 @@ class NormalizeDocumentTest(unittest.TestCase):
             "wxid_synthetic_contact",
         )
         self.assertEqual(batch.channel_identity.observed_name, "合成联系人")
+        self.assertEqual(
+            batch.owner_channel_identity.external_id,
+            "wxid_synthetic_owner",
+        )
+        self.assertEqual(batch.owner_channel_identity.observed_name, "合成用户")
         self.assertEqual(batch.record_count, 6)
 
     def test_maps_contact_user_and_system_speakers(self) -> None:
@@ -61,7 +66,7 @@ class NormalizeDocumentTest(unittest.TestCase):
 
         record = {**self.document.records[0], **overrides}
         return dataclasses.replace(
-            self.document, records=(record,)
+            self.document, records=(record, self.document.records[1])
         )
 
     def test_media_kinds_map_to_placeholder(self) -> None:

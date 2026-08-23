@@ -51,6 +51,12 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
                 "VALUES (%s, %s, %s)",
                 (self.owner_id, self.contact_id, "合成删除联系人"),
             )
+            connection.execute(
+                "INSERT INTO public.owner_channel_identity "
+                "(owner_id, channel, external_id, observed_name) "
+                "VALUES (%s, 'wechat', %s, %s)",
+                (self.owner_id, "wxid_synthetic_owner", "合成删除用户"),
+            )
         self.ingest_repository = PostgresIngestRepository(TEST_DATABASE_URL)
         self.deletion_repository = PostgresSourceDeletionRepository(TEST_DATABASE_URL)
         self.batch = normalize_document(

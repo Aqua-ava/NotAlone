@@ -28,6 +28,16 @@ class ChannelIdentityCandidate:
 
 
 @dataclass(frozen=True, slots=True, repr=False)
+class OwnerChannelIdentityCandidate:
+    """从本人消息识别出的 owner 微信渠道身份候选。"""
+
+    channel: Literal["wechat"]
+    external_id: str
+    observed_name: str
+    observed_name_variant_count: int
+
+
+@dataclass(frozen=True, slots=True, repr=False)
 class ExistingContactSelection:
     """用户为本次导入选择的既有 NotAlone 联系人。"""
 
@@ -59,6 +69,8 @@ class ImportPreview:
     file_name: str
     # 对原始文件字节计算的 SHA-256；预览默认不把具体值输出到终端。
     content_sha256: str
+    # 从本人消息识别出的 owner 微信渠道身份，默认不在终端显示。
+    owner_channel_identity: OwnerChannelIdentityCandidate
     # 已识别、仍需人工核对的微信渠道身份候选。
     channel_identity: ChannelIdentityCandidate
     # JSONL 中通过校验的物理记录行数。
@@ -108,6 +120,7 @@ class ImportBatch:
 
     file_name: str
     content_sha256: str
+    owner_channel_identity: OwnerChannelIdentityCandidate
     channel_identity: ChannelIdentityCandidate
     messages: tuple[NormalizedMessage, ...]
 

@@ -50,7 +50,7 @@ class ImportPreviewTest(unittest.TestCase):
         output = format_preview(preview)
 
         self.assertIn("数据库写入：未执行", output)
-        self.assertIn("owner: 不来自导出文件", output)
+        self.assertIn("owner: 已从本人消息识别", output)
         self.assertNotIn("匿名合成消息一", output)
         self.assertNotIn("匿名系统事件", output)
         self.assertNotIn(preview.file_name, output)
@@ -96,6 +96,14 @@ class ImportPreviewTest(unittest.TestCase):
     def test_mixed_contacts_are_rejected(self) -> None:
         with self.assertRaisesRegex(ImportPreviewError, "包含 2 个 id.talker"):
             build_preview(FIXTURES_DIR / "mixed_contacts.jsonl")
+
+    def test_missing_owner_sender_id_is_rejected(self) -> None:
+        records = self._valid_records()
+        records = [record for record in records if record["is_from_me"] is False]
+        path = self._write_records(records)
+
+        with self.assertRaisesRegex(ImportPreviewError, "未找到可识别的 owner"):
+            build_preview(path)
 
     def test_duplicate_message_key_is_rejected(self) -> None:
         records = self._valid_records()

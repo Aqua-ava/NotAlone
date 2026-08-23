@@ -26,16 +26,19 @@ class FakeRepository:
     def __init__(self) -> None:
         self.import_count = 0
         self.confirmation: object | None = None
+        self.initialize_owner = False
 
     def import_document(
         self,
         *,
         owner_id: object,
+        initialize_owner: bool = False,
         document: object,
         confirmation: object,
     ) -> ImportResult:
         self.import_count += 1
         self.confirmation = confirmation
+        self.initialize_owner = initialize_owner
         selected_contact_id = getattr(confirmation.selection, "contact_id", uuid4())
         confirmation_method = (
             "manual_select"
@@ -50,6 +53,7 @@ class FakeRepository:
             confirmation_method=confirmation_method,
             outcome="imported",
             message_count=document.record_count,
+            owner_id=uuid4(),
         )
 
 
@@ -93,6 +97,23 @@ class ImportFileTest(unittest.TestCase):
         self.assertEqual(repository.import_count, 1)
         self.assertIs(repository.confirmation, confirmation)
 
+    def test_initializes_owner_as_an_explicit_import_action(self) -> None:
+        repository = FakeRepository()
+        confirmation = ImportConfirmationRequest(
+            selection=NewContactSelection(display_name="新建合成联系人")
+        )
+
+        result = import_file(
+            path=FIXTURES_DIR / "valid_single_contact.jsonl",
+            owner_id=None,
+            initialize_owner=True,
+            confirmation=confirmation,
+            repository=repository,
+        )
+
+        self.assertTrue(repository.initialize_owner)
+        self.assertIsNotNone(result.owner_id)
+
 
 class ImportCommandTest(unittest.TestCase):
     def test_invalid_runtime_owner_id_error_does_not_echo_input(self) -> None:
@@ -109,6 +130,7 @@ class ImportCommandTest(unittest.TestCase):
             {
                 "NOTALONE_DATABASE_URL": "postgresql:///synthetic_test",
                 "NOTALONE_OWNER_ID": private_input,
+                "NOTALONE_DISABLE_DOTENV": "1",
             },
             clear=True,
         ):
@@ -128,7 +150,11 @@ class ImportCommandTest(unittest.TestCase):
             str(uuid4()),
         ]
 
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(
+            os.environ,
+            {"NOTALONE_DISABLE_DOTENV": "1"},
+            clear=True,
+        ):
             with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                 exit_code = main(arguments)
 

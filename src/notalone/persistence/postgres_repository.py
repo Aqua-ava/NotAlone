@@ -23,6 +23,14 @@ class OwnerNotFoundError(ImportPersistenceError):
     """指定的 NotAlone 用户不存在。"""
 
 
+class OwnerChannelIdentityConflictError(ImportPersistenceError):
+    """owner 的微信渠道身份与已确认身份冲突。"""
+
+
+class OwnerChannelIdentityNotFoundError(ImportPersistenceError):
+    """owner 尚未完成微信渠道身份初始化。"""
+
+
 class ContactNotFoundError(ImportPersistenceError):
     """用户选择的 NotAlone 联系人不存在。"""
 
@@ -50,6 +58,7 @@ class ImportResult:
     confirmation_method: Literal["manual_create", "manual_select"]
     outcome: Literal["imported", "already_imported"]
     message_count: int
+    owner_id: UUID | None = None
 
 
 class PostgresIngestRepository:
@@ -65,7 +74,8 @@ class PostgresIngestRepository:
     def import_document(
         self,
         *,
-        owner_id: UUID,
+        owner_id: UUID | None,
+        initialize_owner: bool = False,
         document: ImportBatch,
         confirmation: ImportConfirmationRequest,
     ) -> ImportResult:
@@ -77,6 +87,7 @@ class PostgresIngestRepository:
                 return self._import_in_transaction(
                     connection=connection,
                     owner_id=owner_id,
+                    initialize_owner=initialize_owner,
                     document=document,
                     confirmation=confirmation,
                 )
@@ -84,6 +95,8 @@ class PostgresIngestRepository:
             ChannelIdentityConflictError,
             ContactNotFoundError,
             OverlappingSourceError,
+            OwnerChannelIdentityConflictError,
+            OwnerChannelIdentityNotFoundError,
             OwnerNotFoundError,
             SourceStateConflictError,
         ):
@@ -95,6 +108,13 @@ class PostgresIngestRepository:
             }:
                 raise ChannelIdentityConflictError(
                     "微信渠道身份与已确认联系人冲突，未执行导入。"
+                ) from None
+            if error.diag.constraint_name in {
+                "owner_channel_identity_active_owner_channel_unique",
+                "owner_channel_identity_active_external_unique",
+            }:
+                raise OwnerChannelIdentityConflictError(
+                    "owner 微信身份与已有绑定冲突，未执行导入。"
                 ) from None
             if error.diag.constraint_name in {
                 "message_contact_external_local_id_unique",
@@ -115,16 +135,17 @@ class PostgresIngestRepository:
     def _import_in_transaction(
         *,
         connection: psycopg.Connection[Any],
-        owner_id: UUID,
+        owner_id: UUID | None,
+        initialize_owner: bool,
         document: ImportBatch,
         confirmation: ImportConfirmationRequest,
     ) -> ImportResult:
-        owner = connection.execute(
-            "SELECT 1 FROM public.owner WHERE id = %s FOR KEY SHARE",
-            (owner_id,),
-        ).fetchone()
-        if owner is None:
-            raise OwnerNotFoundError("指定的 owner 不存在。")
+        owner_id = PostgresIngestRepository._resolve_owner(
+            connection=connection,
+            owner_id=owner_id,
+            initialize_owner=initialize_owner,
+            document=document,
+        )
 
         selection = confirmation.selection
         if isinstance(selection, ExistingContactSelection):
@@ -259,6 +280,7 @@ class PostgresIngestRepository:
                 confirmation_method=confirmation_method,
                 outcome="already_imported",
                 message_count=record_count,
+                owner_id=owner_id,
             )
 
         source_document_id = source[0]
@@ -405,4 +427,107 @@ class PostgresIngestRepository:
             confirmation_method=confirmation_method,
             outcome="imported",
             message_count=document.record_count,
+            owner_id=owner_id,
         )
+
+    @staticmethod
+    def _resolve_owner(
+        *,
+        connection: psycopg.Connection[Any],
+        owner_id: UUID | None,
+        initialize_owner: bool,
+        document: ImportBatch,
+    ) -> UUID:
+        """解析或显式初始化 owner，并校验其微信渠道身份。"""
+
+        external_id = document.owner_channel_identity.external_id
+        if owner_id is None and not initialize_owner:
+            raise OwnerNotFoundError("缺少受控运行身份。")
+        if owner_id is None:
+            existing = connection.execute(
+                """
+                SELECT owner_id
+                FROM public.owner_channel_identity
+                WHERE channel = 'wechat'
+                  AND external_id = %s
+                  AND status = 'active'
+                FOR KEY SHARE
+                """,
+                (external_id,),
+            ).fetchone()
+            if existing is not None:
+                owner_id = existing[0]
+            elif initialize_owner:
+                owner_id = uuid4()
+                connection.execute(
+                    """
+                    INSERT INTO public.owner (id, display_name)
+                    VALUES (%s, %s)
+                    """,
+                    (owner_id, document.owner_channel_identity.observed_name),
+                )
+            else:
+                raise OwnerNotFoundError("缺少受控运行身份。")
+        else:
+            owner = connection.execute(
+                "SELECT 1 FROM public.owner WHERE id = %s FOR KEY SHARE",
+                (owner_id,),
+            ).fetchone()
+            if owner is None:
+                raise OwnerNotFoundError("指定的 owner 不存在。")
+
+        active_identity = connection.execute(
+            """
+            SELECT external_id
+            FROM public.owner_channel_identity
+            WHERE owner_id = %s
+              AND channel = 'wechat'
+              AND status = 'active'
+            FOR UPDATE
+            """,
+            (owner_id,),
+        ).fetchone()
+        if active_identity is not None:
+            if active_identity[0] != external_id:
+                raise OwnerChannelIdentityConflictError(
+                    "owner 微信身份不一致，未执行导入。"
+                )
+            return owner_id
+
+        if not initialize_owner:
+            raise OwnerChannelIdentityNotFoundError(
+                "owner 尚未绑定微信身份，请首次导入时加 --initialize-owner。"
+            )
+
+        existing_external = connection.execute(
+            """
+            SELECT owner_id
+            FROM public.owner_channel_identity
+            WHERE channel = 'wechat'
+              AND external_id = %s
+              AND status = 'active'
+            FOR KEY SHARE
+            """,
+            (external_id,),
+        ).fetchone()
+        if existing_external is not None and existing_external[0] != owner_id:
+            raise OwnerChannelIdentityConflictError(
+                "微信身份已经绑定到其他 owner，未执行导入。"
+            )
+        connection.execute(
+            """
+            INSERT INTO public.owner_channel_identity (
+                owner_id,
+                channel,
+                external_id,
+                observed_name
+            )
+            VALUES (%s, 'wechat', %s, %s)
+            """,
+            (
+                owner_id,
+                external_id,
+                document.owner_channel_identity.observed_name,
+            ),
+        )
+        return owner_id

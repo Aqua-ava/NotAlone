@@ -25,6 +25,7 @@ from notalone.persistence.postgres_repository import (
     ChannelIdentityConflictError,
     ImportPersistenceError,
     OverlappingSourceError,
+    OwnerChannelIdentityConflictError,
     OwnerNotFoundError,
     PostgresIngestRepository,
     SourceStateConflictError,
@@ -489,7 +490,9 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
 
     def test_same_contact_id_is_isolated_between_owners(self) -> None:
         first_owner = self._create_owner("合成用户甲")
-        second_owner = self._create_owner("合成用户乙")
+        second_owner = self._create_owner(
+            "合成用户乙", external_id="wxid_synthetic_owner_2"
+        )
         contact_id = uuid4()
         self._create_contact(first_owner, "已选合成联系人", contact_id=contact_id)
         self._create_contact(second_owner, "已选合成联系人", contact_id=contact_id)
@@ -500,9 +503,16 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
             document=self.batch,
             confirmation=confirmation,
         )
+        second_batch = replace(
+            self.batch,
+            owner_channel_identity=replace(
+                self.batch.owner_channel_identity,
+                external_id="wxid_synthetic_owner_2",
+            ),
+        )
         self.repository.import_document(
             owner_id=second_owner,
-            document=self.batch,
+            document=second_batch,
             confirmation=confirmation,
         )
 
@@ -595,6 +605,28 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(self._count("channel_identity", owner_id), 1)
         self.assertEqual(self._count("source_document", owner_id), 1)
 
+    def test_owner_cannot_silently_switch_wechat_identity(self) -> None:
+        owner_id = self._create_owner("合成用户甲")
+        contact_id = self._create_contact(owner_id, "合成联系人甲")
+        changed_identity_batch = replace(
+            self.batch,
+            owner_channel_identity=replace(
+                self.batch.owner_channel_identity,
+                external_id="wxid_other_synthetic_owner",
+            ),
+            content_sha256="f" * 64,
+        )
+
+        with self.assertRaises(OwnerChannelIdentityConflictError):
+            self.repository.import_document(
+                owner_id=owner_id,
+                document=changed_identity_batch,
+                confirmation=self._confirmation(contact_id),
+            )
+
+        self.assertEqual(self._count("source_document", owner_id), 0)
+        self.assertEqual(self._count("message", owner_id), 0)
+
     def test_overlap_unique_constraint_exists(self) -> None:
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             constraint = connection.execute(
@@ -643,12 +675,30 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         document = read_jsonl(FIXTURES_DIR / "valid_single_contact.jsonl")
         return normalize_document(document)
 
-    def _create_owner(self, display_name: str) -> UUID:
+    def _create_owner(
+        self,
+        display_name: str,
+        *,
+        external_id: str = "wxid_synthetic_owner",
+    ) -> UUID:
+        return self._create_owner_with_identity(
+            display_name, external_id=external_id
+        )
+
+    def _create_owner_with_identity(
+        self, display_name: str, *, external_id: str
+    ) -> UUID:
         owner_id = uuid4()
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             connection.execute(
                 "INSERT INTO public.owner (id, display_name) VALUES (%s, %s)",
                 (owner_id, display_name),
+            )
+            connection.execute(
+                "INSERT INTO public.owner_channel_identity "
+                "(owner_id, channel, external_id, observed_name) "
+                "VALUES (%s, 'wechat', %s, %s)",
+                (owner_id, external_id, display_name),
             )
         self.owner_ids.add(owner_id)
         return owner_id

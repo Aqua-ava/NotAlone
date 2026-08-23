@@ -18,7 +18,7 @@ from notalone.ingest.validator import validate_records
 def normalize_document(document: JsonlDocument) -> ImportBatch:
     """完整校验文档并返回单联系人规范化导入批次。"""
 
-    channel_identity, _ = validate_records(document.records)
+    owner_channel_identity, channel_identity, _ = validate_records(document.records)
     messages = tuple(
         _normalize_record(record, line_number)
         for line_number, record in enumerate(document.records, start=1)
@@ -27,6 +27,7 @@ def normalize_document(document: JsonlDocument) -> ImportBatch:
     return ImportBatch(
         file_name=document.path.name,
         content_sha256=document.content_sha256,
+        owner_channel_identity=owner_channel_identity,
         channel_identity=channel_identity,
         messages=messages,
     )

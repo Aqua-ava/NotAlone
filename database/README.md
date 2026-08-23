@@ -132,6 +132,18 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 第十四个迁移允许已明确适配的媒体消息类型写入规范消息，并将微信来源唯一键统一为
 `external_local_id + source_create_time`。未知类型仍由输入适配器拒绝，不直接进入规范消息。
 
+继续保存 owner 的微信渠道身份：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/015_owner_channel_identity.sql
+```
+
+第十五个迁移新增 `owner_channel_identity`。它保存 owner 的外部渠道 ID、观察到的展示名称、
+验证状态和时间；它与联系人的 `channel_identity` 分开，不能用来替代 `owner_id`。
+
 迁移仅建立数据结构，不读取 `chat_exports/`，也不导入真实聊天记录。
 
 首个迁移建立旧版 `owner`、`contact`、`source_document` 和 `message`，第三个迁移在空业务

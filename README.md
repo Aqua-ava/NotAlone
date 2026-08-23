@@ -12,6 +12,9 @@ conda activate NotAlone
 python -m pip install -e .
 ```
 
+命令启动时会自动读取当前目录或上级项目目录中的 `.env`；已经存在的 shell 环境变量优先。
+`.env` 已被 Git 忽略，不应提交或分享。也可以用 `NOTALONE_ENV_FILE` 指定受控配置文件。
+
 ## 候选回复纵切
 
 仓库现在包含内部开发用的候选回复纵切：调用者只经过
@@ -61,7 +64,7 @@ DeepSeek 模型构造入口已实现：凭据只经 `NOTALONE_DEEPSEEK_API_KEY` 
 notalone-ingest-preview chat_exports/example.jsonl
 ```
 
-预览会校验完整文件、识别唯一联系人并统计消息类型。输入文件损坏、混有多个联系人或
+预览会校验完整文件、识别本人和唯一联系人并统计消息类型。输入文件损坏、混有多个联系人或
 消息字段不符合契约时，命令以非零状态退出；错误信息只包含行号和字段，不显示消息正文。
 单个 JSONL 文件上限为 64 MiB、消息记录上限为 500,000 条；超限文件会被拒绝处理。
 默认输出还会隐藏文件名、联系人 ID 和展示名称。需要在当前终端人工核对时，显式运行：
@@ -75,9 +78,10 @@ notalone-ingest-preview --show-identifiers chat_exports/example.jsonl
 ## 正式导入
 
 正式导入前，必须先运行预览并人工选择一个已有 NotAlone 联系人，或明确创建一个新联系人。
-数据库中还必须已经存在对应的 `owner`；命令不会从聊天记录推断或创建 owner。
+首次导入还必须显式初始化 owner；命令只从 `is_from_me=true` 的消息识别 owner 渠道身份，
+不会把微信 `sender_wxid` 直接当成 `owner_id`。
 
-数据库连接串和受控运行身份只通过环境变量提供，不写入仓库：
+已有 owner 的导入：
 
 ```bash
 export NOTALONE_DATABASE_URL='postgresql:///notalone_dev'
@@ -86,20 +90,22 @@ notalone-ingest chat_exports/example.jsonl \
   --contact-id '11111111-1111-1111-1111-111111111111'
 ```
 
-首次导入且还没有联系人时，改用：
+首次导入或显式恢复 owner 时，使用：
 
 ```bash
 notalone-ingest chat_exports/example.jsonl \
+  --initialize-owner \
   --new-contact-name '联系人展示名称'
 ```
 
 `--contact-id` 与 `--new-contact-name` 必须二选一。前者是 NotAlone 生成的内部联系人 UUID，
 不是微信 `sender_wxid`，并写入 `manual_select` 确认；后者创建内部联系人 UUID，并写入
-`manual_create` 确认。命令会再次完整校验文件，把识别出的微信身份与用户确认的联系人绑定。
-`NOTALONE_OWNER_ID` 由受控运行环境注入，不属于联系人确认参数。
+`manual_create` 确认。`--initialize-owner` 会在同一事务中创建或恢复 owner、保存 owner 微信
+渠道身份、绑定联系人并写入消息；如果本地配置没有 `NOTALONE_OWNER_ID`，成功后会把生成的 UUID
+原子写入受控 `.env`。后续导入不需要该参数，文件中的 owner `sender_wxid` 只用于一致性校验。
 同一 `owner_id + contact_id + SHA-256` 的 active 来源重复执行时不会重复写入消息。联系人、
-渠道身份、来源、确认记录和全部消息在同一事务中写入，任何一步失败都会整体回滚。终端输出
-只包含导入状态和消息数量，不输出聊天正文、联系人 ID、owner ID、文件 SHA 或数据库连接串。
+owner 渠道身份、来源、确认记录和全部消息在同一事务中写入，任何一步失败都会整体回滚。终端
+输出只包含导入状态和消息数量，不输出聊天正文、联系人 ID、owner ID、文件 SHA 或数据库连接串。
 
 不同 SHA 文件若与该联系人已有来源复用相同的 `(id.local_id, create_time)` 消息身份，命令会
 拒绝整批导入；仅复用 `id.local_id` 但来源时间不同的记录可以导入。命令不会自动合并或
@@ -113,11 +119,14 @@ notalone-ingest chat_exports/example.jsonl \
 notalone-extract-memory --contact-id '11111111-1111-1111-1111-111111111111'
 ```
 
-命令自动判断全量或增量：该联系人从未提取过则按分批窗口（默认 500 条，串行）滚动
-全部历史；已提取过则从水位只处理新增消息，中断后重跑自动跳过已提取部分。提取出的
+命令自动判断全量或增量：该联系人从未提取过则按分批窗口（默认 500 条，串行）处理
+本次导入的全部历史；已提取过则从水位只处理新增消息，中断后重跑自动跳过已提取部分。提取出的
 事实候选经证据契约校验、置信度门槛（低于 0.7 留待定候选）、删除指纹（删过的不自动
 复活）与写入裁决（同事件演变自动失效旧版本）后自动采纳，标记 `auto` 可撤销。提取与
 裁决的外部模型调用按三态写入出站台账。终端只输出统计数字，不输出正文或联系人标识。
+
+当前 `notalone-extract-memory` 仍是独立命令；导入后自动创建并运行后台 Worker 任务属于后续
+接线，目标流程和固定步骤见 ADR-014。
 
 手动录入（标记 manual，支持联系人级与 owner 级自我记忆）、状态概览列出与软删除：
 

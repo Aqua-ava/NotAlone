@@ -23,6 +23,7 @@ from notalone.persistence.postgres_repository import (
     ImportResult,
     PostgresIngestRepository,
 )
+from notalone.runtime_config import load_project_env, persist_owner_id
 
 
 class ContactConfirmationError(ValueError):
@@ -53,7 +54,8 @@ class IngestRepository(Protocol):
     def import_document(
         self,
         *,
-        owner_id: UUID,
+        owner_id: UUID | None,
+        initialize_owner: bool = False,
         document: ImportBatch,
         confirmation: ImportConfirmationRequest,
     ) -> ImportResult: ...
@@ -62,7 +64,8 @@ class IngestRepository(Protocol):
 def import_file(
     *,
     path: Path,
-    owner_id: UUID,
+    owner_id: UUID | None,
+    initialize_owner: bool = False,
     confirmation: ImportConfirmationRequest,
     repository: IngestRepository,
 ) -> ImportResult:
@@ -72,6 +75,7 @@ def import_file(
     batch = normalize_document(document)
     return repository.import_document(
         owner_id=owner_id,
+        initialize_owner=initialize_owner,
         document=batch,
         confirmation=confirmation,
     )
@@ -93,8 +97,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=_parse_contact_name,
         help="用户在预览后确认的新联系人展示名称",
     )
+    parser.add_argument(
+        "--initialize-owner",
+        action="store_true",
+        help="首次导入或显式恢复 owner 微信身份；成功后保存内部 owner UUID",
+    )
     args = parser.parse_args(argv)
 
+    env_path = load_project_env()
     database_url = os.environ.get("NOTALONE_DATABASE_URL", "").strip()
     if not database_url:
         print(
@@ -103,11 +113,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
     owner_id_value = os.environ.get("NOTALONE_OWNER_ID", "").strip()
-    try:
-        owner_id = UUID(owner_id_value)
-    except ValueError:
+    if owner_id_value:
+        try:
+            owner_id = UUID(owner_id_value)
+        except ValueError:
+            print(
+                "导入配置错误：NOTALONE_OWNER_ID 不是有效 UUID。",
+                file=sys.stderr,
+            )
+            return 2
+    elif args.initialize_owner:
+        owner_id = None
+    else:
         print(
-            "导入配置错误：NOTALONE_OWNER_ID 缺失或不是有效 UUID。",
+            "导入配置错误：缺少 NOTALONE_OWNER_ID；首次导入请加 --initialize-owner。",
             file=sys.stderr,
         )
         return 2
@@ -122,6 +141,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = import_file(
             path=args.path,
             owner_id=owner_id,
+            initialize_owner=args.initialize_owner,
             confirmation=ImportConfirmationRequest(selection=selection),
             repository=repository,
         )
@@ -132,6 +152,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     ) as error:
         print(f"导入失败：{error}", file=sys.stderr)
         return 1
+
+    if args.initialize_owner and not owner_id_value:
+        if result.owner_id is None:
+            print("导入完成，但未得到可保存的 owner UUID。", file=sys.stderr)
+            return 2
+        try:
+            persist_owner_id(result.owner_id, env_path)
+        except OSError:
+            print(
+                "导入完成，但 owner UUID 未能写入本地 .env。",
+                file=sys.stderr,
+            )
+            return 2
 
     if result.outcome == "already_imported":
         print(f"文件已导入；未重复写入。消息：{result.message_count}")

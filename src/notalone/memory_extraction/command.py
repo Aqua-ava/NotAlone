@@ -20,6 +20,7 @@ from notalone.memory.models import (
 from notalone.memory_extraction.adoption import AdoptionStats, MemoryAdoption
 from notalone.memory_extraction.flow import ExtractionFlow, ExtractionOutcome
 from notalone.memory_extraction.models import ExtractionWindow
+from notalone.runtime_config import load_project_env
 from notalone.scopes import ContactScope
 
 
@@ -165,6 +166,7 @@ def _fail(message: str) -> int:
 def extract_main(argv: list[str] | None = None) -> int:
     """提取命令入口：自动全量/增量，断点续跑，输出纯统计。"""
 
+    load_project_env()
     parser = argparse.ArgumentParser(
         prog="notalone-extract-memory",
         description="对已确认联系人执行记忆提取（自动全量或增量）。",
@@ -241,6 +243,7 @@ def extract_main(argv: list[str] | None = None) -> int:
 def memory_add_main(argv: list[str] | None = None) -> int:
     """手动录入记忆：标记 manual，支持联系人级与 owner 级。"""
 
+    load_project_env()
     parser = argparse.ArgumentParser(
         prog="notalone-memory-add", description="手动录入一条记忆（manual）。"
     )
@@ -321,6 +324,7 @@ def memory_add_main(argv: list[str] | None = None) -> int:
 def memory_list_main(argv: list[str] | None = None) -> int:
     """列出记忆：只输出状态、分类、主题与采纳标记，不输出正文。"""
 
+    load_project_env()
     parser = argparse.ArgumentParser(
         prog="notalone-memory-list", description="列出记忆的状态概览。"
     )
@@ -370,6 +374,7 @@ def memory_list_main(argv: list[str] | None = None) -> int:
 def memory_delete_main(argv: list[str] | None = None) -> int:
     """软删除一条记忆（保留删除指纹）。"""
 
+    load_project_env()
     parser = argparse.ArgumentParser(
         prog="notalone-memory-delete", description="软删除一条记忆。"
     )
