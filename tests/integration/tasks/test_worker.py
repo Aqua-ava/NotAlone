@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 import unittest
 from datetime import timedelta
 from pathlib import Path
@@ -22,6 +23,10 @@ from notalone.persistence.background_tasks import (
 )
 from notalone.persistence.contact_memory_index import (
     PostgresContactMemoryIndexRepository,
+)
+from notalone.persistence.locks import (
+    release_global_worker_lock,
+    try_acquire_global_worker_lock,
 )
 from notalone.persistence.memory_store import PostgresMemoryStore
 from notalone.persistence.postgres_repository import PostgresIngestRepository
@@ -112,6 +117,14 @@ class PermanentFailureRunner:
 
     def run(self, *, scope: ContactScope) -> ExtractionRunStats:  # noqa: ARG002
         raise ValueError("synthetic invalid worker output")
+
+
+class SlowExtractionRunner:
+    """模拟超过租约时长的模型提取。"""
+
+    def run(self, *, scope: ContactScope) -> ExtractionRunStats:  # noqa: ARG002
+        time.sleep(1.2)
+        return ExtractionRunStats(batches=1, processed_messages=6)
 
 
 class BackgroundTaskWorkerTest(unittest.TestCase):
@@ -275,6 +288,75 @@ class BackgroundTaskWorkerTest(unittest.TestCase):
         assert takeover is not None
         self.assertEqual(takeover.worker_id, second_worker)
         self.assertEqual(takeover.attempt_count, 2)
+
+    def test_global_worker_lock_is_exclusive_across_sessions(self) -> None:
+        with (
+            psycopg.connect(TEST_DATABASE_URL, autocommit=True) as first,
+            psycopg.connect(TEST_DATABASE_URL, autocommit=True) as second,
+        ):
+            self.assertTrue(try_acquire_global_worker_lock(first))
+            self.assertFalse(try_acquire_global_worker_lock(second))
+            release_global_worker_lock(first)
+            self.assertTrue(try_acquire_global_worker_lock(second))
+            release_global_worker_lock(second)
+
+    def test_step_lease_can_be_renewed_before_completion(self) -> None:
+        task_id = self._import()
+        worker_id = uuid4()
+        claim = self.worker_repository.claim_next_step(
+            owner_id=self.owner_id,
+            contact_id=self.contact_id,
+            worker_id=worker_id,
+            lease_duration=timedelta(seconds=1),
+        )
+        self.assertIsNotNone(claim)
+        assert claim is not None
+
+        renewed = self.worker_repository.renew_step_lease(
+            claim,
+            lease_duration=timedelta(minutes=1),
+        )
+
+        self.assertGreater(renewed, claim.lease_expires_at)
+        self.worker_repository.complete_step(
+            claim,
+            processed_count=claim.message_count,
+            total_count=claim.message_count,
+        )
+
+    def test_worker_renews_lease_while_extraction_runs(self) -> None:
+        task_id = self._import()
+        worker = self._worker(
+            SlowExtractionRunner(),
+            lease_duration=timedelta(seconds=1),
+        )
+        worker_id = uuid4()
+
+        worker.run_once(
+            owner_id=self.owner_id,
+            contact_id=self.contact_id,
+            worker_id=worker_id,
+        )
+        worker.run_once(
+            owner_id=self.owner_id,
+            contact_id=self.contact_id,
+            worker_id=worker_id,
+        )
+        extracted = worker.run_once(
+            owner_id=self.owner_id,
+            contact_id=self.contact_id,
+            worker_id=worker_id,
+        )
+
+        self.assertEqual(extracted.outcome, WorkerRunOutcome.SUCCEEDED)
+        self.assertEqual(
+            self.worker_repository.get_task(
+                owner_id=self.owner_id,
+                contact_id=self.contact_id,
+                task_id=task_id,
+            ).steps[2].status.value,
+            "succeeded",
+        )
 
     def test_postgres_runner_reuses_extraction_and_watermark_boundaries(self) -> None:
         task_id = self._import()

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
+from threading import Event, Thread
 from typing import Protocol
 from uuid import UUID
 
@@ -25,6 +26,8 @@ from notalone.memory_extraction.errors import (
 )
 from notalone.memory_extraction.runtime import MemoryExtractionRuntime
 from notalone.persistence.background_tasks import (
+    BackgroundTaskLeaseError,
+    BackgroundTaskPersistenceError,
     PostgresBackgroundTaskRepository,
 )
 from notalone.persistence.contact_memory_index import (
@@ -69,6 +72,70 @@ class WorkerRunResult:
     processed_count: int = 0
     attempt_count: int = 0
     error_code: str | None = None
+
+
+class _LeaseHeartbeat:
+    """在长步骤执行期间续期，避免模型调用占满租约。"""
+
+    __slots__ = (
+        "_claim",
+        "_error",
+        "_interval_seconds",
+        "_repository",
+        "_stop",
+        "_thread",
+    )
+
+    def __init__(
+        self,
+        repository: PostgresBackgroundTaskRepository,
+        claim: ClaimedBackgroundTaskStep,
+        lease_duration: timedelta,
+    ) -> None:
+        self._repository = repository
+        self._claim = claim
+        self._interval_seconds = min(
+            10.0,
+            max(0.05, lease_duration.total_seconds() / 3.0),
+        )
+        self._stop = Event()
+        self._thread: Thread | None = None
+        self._error: Exception | None = None
+
+    def __enter__(self) -> _LeaseHeartbeat:
+        self._thread = Thread(
+            target=self._run,
+            name="notalone-worker-lease-heartbeat",
+            daemon=True,
+        )
+        self._thread.start()
+        return self
+
+    def __exit__(self, exception_type, exception, traceback) -> bool:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join()
+        if exception_type is None:
+            self.raise_if_failed()
+        return False
+
+    def raise_if_failed(self) -> None:
+        if self._error is not None:
+            raise self._error
+
+    def _run(self) -> None:
+        while not self._stop.wait(self._interval_seconds):
+            try:
+                self._repository.renew_step_lease(
+                    self._claim,
+                    lease_duration=timedelta(
+                        seconds=self._interval_seconds * 3.0
+                    ),
+                )
+            except Exception as error:  # pragma: no cover - timing dependent
+                self._error = error
+                self._stop.set()
+                return
 
 
 class PostgresMemoryExtractionRunner:
@@ -335,9 +402,15 @@ class BackgroundTaskWorker:
             )
 
         try:
-            stats = self._extraction_runner.run(
-                scope=ContactScope(claim.owner_id, claim.contact_id)
-            )
+            with _LeaseHeartbeat(
+                self._repository,
+                claim,
+                self._lease_duration,
+            ) as heartbeat:
+                stats = self._extraction_runner.run(
+                    scope=ContactScope(claim.owner_id, claim.contact_id)
+                )
+                heartbeat.raise_if_failed()
         except Exception as error:
             error_code, retryable = _failure_info(error)
             return self._record_failure(
@@ -392,6 +465,11 @@ class BackgroundTaskWorker:
 
 
 def _failure_info(error: Exception) -> tuple[str, bool]:
+    if isinstance(
+        error,
+        (BackgroundTaskLeaseError, BackgroundTaskPersistenceError),
+    ):
+        return "temporary_failure", True
     if isinstance(error, ExtractionRuntimeError):
         return "memory_extraction_failed", True
     if isinstance(error, (TimeoutError, ConnectionError)):

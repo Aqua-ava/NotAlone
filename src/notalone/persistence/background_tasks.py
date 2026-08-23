@@ -465,6 +465,47 @@ class PostgresBackgroundTaskRepository:
                 "后台步骤完成失败。"
             ) from None
 
+    def renew_step_lease(
+        self,
+        claim: ClaimedBackgroundTaskStep,
+        *,
+        lease_duration: timedelta,
+    ) -> datetime:
+        """在当前有效租约内续期，并返回新的过期时间。"""
+
+        _validate_lease_duration(lease_duration)
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                self._lock_scope(connection, claim.owner_id, claim.contact_id)
+                self._assert_valid_claim(connection, claim)
+                row = connection.execute(
+                    """
+                    UPDATE public.background_task_step
+                    SET lease_expires_at = now() + %s::interval,
+                        updated_at = now()
+                    WHERE id = %s
+                      AND task_id = %s
+                      AND worker_id = %s
+                      AND status = 'running'
+                    RETURNING lease_expires_at
+                    """,
+                    (
+                        _as_postgres_interval(lease_duration),
+                        claim.step_id,
+                        claim.task_id,
+                        claim.worker_id,
+                    ),
+                ).fetchone()
+                if row is None:
+                    raise BackgroundTaskLeaseError("后台步骤租约续期失败。")
+                return row[0]
+        except BackgroundTaskPersistenceError:
+            raise
+        except psycopg.Error:
+            raise BackgroundTaskPersistenceError(
+                "后台步骤租约续期失败。"
+            ) from None
+
     def fail_step(
         self,
         claim: ClaimedBackgroundTaskStep,

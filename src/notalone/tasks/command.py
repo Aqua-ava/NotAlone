@@ -5,14 +5,178 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
+from dataclasses import dataclass
 from datetime import timedelta
+from enum import StrEnum
+from typing import Callable
+from uuid import UUID, uuid4
 
+import psycopg
+
+from notalone.memory_extraction.cli_support import contact_exists, owner_exists
 from notalone.persistence.background_tasks import (
     TERMINAL_TASK_RETENTION,
     BackgroundTaskPersistenceError,
     PostgresBackgroundTaskRepository,
 )
+from notalone.persistence.contact_memory_index import (
+    PostgresContactMemoryIndexRepository,
+)
+from notalone.persistence.locks import (
+    release_global_worker_lock,
+    try_acquire_global_worker_lock,
+)
 from notalone.runtime_config import load_project_env
+from notalone.tasks.models import BackgroundTaskStepName
+from notalone.tasks.worker import (
+    BackgroundTaskWorker,
+    PostgresMemoryExtractionRunner,
+    WorkerRunOutcome,
+)
+
+
+DEFAULT_WORKER_LEASE_DURATION = timedelta(seconds=30)
+WORKER_RETRY_BACKOFF_SECONDS = (1.0, 2.0, 4.0)
+
+
+class WorkerCommandStatus(StrEnum):
+    """一次 Worker 启动命令的非正文结果。"""
+
+    BUSY = "busy"
+    IDLE = "idle"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True, slots=True)
+class WorkerCommandResult:
+    """启动命令返回的非正文统计。"""
+
+    status: WorkerCommandStatus
+    completed_steps: int = 0
+    error_code: str | None = None
+
+
+def run_worker(
+    *,
+    worker: BackgroundTaskWorker,
+    lock_connection: psycopg.Connection,
+    owner_id: UUID,
+    contact_id: UUID,
+    worker_id: UUID,
+    sleep: Callable[[float], None] = time.sleep,
+) -> WorkerCommandResult:
+    """在一个全局锁内串行执行一个联系人任务。"""
+
+    if not try_acquire_global_worker_lock(lock_connection):
+        return WorkerCommandResult(status=WorkerCommandStatus.BUSY)
+
+    completed_steps = 0
+    try:
+        while True:
+            result = worker.run_once(
+                owner_id=owner_id,
+                contact_id=contact_id,
+                worker_id=worker_id,
+            )
+            if result.outcome is WorkerRunOutcome.IDLE:
+                return WorkerCommandResult(
+                    status=WorkerCommandStatus.IDLE,
+                    completed_steps=completed_steps,
+                )
+            if result.outcome is WorkerRunOutcome.SUCCEEDED:
+                completed_steps += 1
+                if result.step_name is BackgroundTaskStepName.VERIFY:
+                    return WorkerCommandResult(
+                        status=WorkerCommandStatus.SUCCEEDED,
+                        completed_steps=completed_steps,
+                    )
+                continue
+            if result.outcome is WorkerRunOutcome.RETRYABLE:
+                sleep(_retry_backoff(result.attempt_count))
+                continue
+            return WorkerCommandResult(
+                status=WorkerCommandStatus.FAILED,
+                completed_steps=completed_steps,
+                error_code=result.error_code,
+            )
+    finally:
+        release_global_worker_lock(lock_connection)
+
+
+def worker_main(argv: list[str] | None = None) -> int:
+    """启动一个全局串行 Worker，处理指定联系人最早的一个任务。"""
+
+    load_project_env()
+    parser = argparse.ArgumentParser(
+        prog="notalone-task-worker",
+        description="串行执行指定联系人最早的一个后台任务。",
+    )
+    parser.add_argument("--contact-id", required=True, type=UUID)
+    args = parser.parse_args(argv)
+
+    database_url = os.environ.get("NOTALONE_DATABASE_URL", "").strip()
+    owner_value = os.environ.get("NOTALONE_OWNER_ID", "").strip()
+    if not database_url:
+        return _fail("缺少 NOTALONE_DATABASE_URL 环境变量。")
+    if not owner_value:
+        return _fail("缺少 NOTALONE_OWNER_ID 环境变量。")
+    try:
+        owner_id = UUID(owner_value)
+    except ValueError:
+        return _fail("NOTALONE_OWNER_ID 不是合法 UUID。")
+
+    from notalone.scopes import ContactScope
+
+    scope = ContactScope(owner_id, args.contact_id)
+    try:
+        if not owner_exists(owner_id, database_url):
+            return _fail("Worker 准备失败：owner 不存在。")
+        if not contact_exists(scope, database_url):
+            return _fail("Worker 准备失败：联系人不存在。")
+        extraction_runner = PostgresMemoryExtractionRunner(database_url)
+        repository = PostgresBackgroundTaskRepository(database_url)
+        index_repository = PostgresContactMemoryIndexRepository(database_url)
+        worker = BackgroundTaskWorker(
+            repository=repository,
+            extraction_runner=extraction_runner,
+            lease_duration=DEFAULT_WORKER_LEASE_DURATION,
+            index_repository=index_repository,
+        )
+    except Exception:
+        return _fail("Worker 准备失败：数据库或模型配置不可用。")
+
+    try:
+        with psycopg.connect(database_url, autocommit=True) as lock_connection:
+            result = run_worker(
+                worker=worker,
+                lock_connection=lock_connection,
+                owner_id=owner_id,
+                contact_id=args.contact_id,
+                worker_id=uuid4(),
+            )
+    except Exception:
+        return _fail("Worker 执行失败。")
+
+    output = [
+        f"status={result.status.value}",
+        f"steps={result.completed_steps}",
+    ]
+    if result.error_code is not None:
+        output.append(f"error={result.error_code}")
+    print(" ".join(output))
+    return 1 if result.status is WorkerCommandStatus.FAILED else 0
+
+
+def _retry_backoff(attempt_count: int) -> float:
+    index = max(0, min(attempt_count - 1, len(WORKER_RETRY_BACKOFF_SECONDS) - 1))
+    return WORKER_RETRY_BACKOFF_SECONDS[index]
+
+
+def _fail(message: str) -> int:
+    print(message, file=sys.stderr)
+    return 2
 
 
 def _positive_days(value: str) -> int:
