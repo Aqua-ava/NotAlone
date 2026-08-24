@@ -586,6 +586,8 @@ class PostgresSkillLibraryTest(unittest.TestCase):
             "<svg><image href=\"file:///tmp/chat.png\" /></svg>\n",
             "<svg><image href=\"data:image/png;base64,synthetic\" /></svg>\n",
             "<svg><image href=\"&#x6a;avascript:alert(1)\" /></svg>\n",
+            '<svg:script xmlns:svg="http://www.w3.org/2000/svg">'
+            "alert(1)</svg:script>\n",
         )
         with TemporaryDirectory() as temporary_directory:
             for index, svg in enumerate(variants):

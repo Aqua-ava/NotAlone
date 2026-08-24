@@ -141,7 +141,7 @@ _NEGATED_POLICY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _UNSAFE_SVG_PATTERN = re.compile(
-    r"<\s*script\b|\bon[a-z]+\s*=|"
+    r"<\s*(?:[A-Za-z_][A-Za-z0-9_.-]*:)?script\b|\bon[a-z]+\s*=|"
     r"\b(?:href|xlink:href|src)\s*=\s*['\"]\s*(?:[a-z][a-z0-9+.-]*:|//)|"
     r"\burl\(\s*['\"]?(?:[a-z][a-z0-9+.-]*:|//)",
     re.I,
