@@ -23,7 +23,7 @@ from notalone.reply.interface import (
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
 
-from unit.reply.test_langchain_vertical_slice import (
+from tests.unit.reply.test_langchain_vertical_slice import (
     BINDING_ID,
     CONTACT_ID,
     EmptySkillPort,
