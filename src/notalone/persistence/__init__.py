@@ -56,6 +56,13 @@ from notalone.persistence.outbound_ledger import (
 )
 from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.persistence.retrieval import PostgresRetrieval
+from notalone.persistence.skill_library import (
+    PostgresSkillLibrary,
+    SkillLibraryManagementError,
+    SkillLibraryPersistenceError,
+    SkillNameConflictError,
+    SkillOwnerNotFoundError,
+)
 from notalone.persistence.skill_port import (
     PostgresSkillPort,
     SkillPortPersistenceError,
@@ -98,10 +105,15 @@ __all__ = [
     "PostgresOwnerMemoryStore",
     "PostgresReplyStore",
     "PostgresRetrieval",
+    "PostgresSkillLibrary",
     "PostgresSkillPort",
     "PostgresWatermarkStore",
     "IndexBuildResult",
     "IndexVerificationResult",
     "SkillPortPersistenceError",
+    "SkillLibraryManagementError",
+    "SkillLibraryPersistenceError",
+    "SkillNameConflictError",
+    "SkillOwnerNotFoundError",
     "WatermarkPersistenceError",
 ]

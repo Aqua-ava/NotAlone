@@ -14,6 +14,7 @@ dependencies = [
     "langchain-core==1.5.5",
     "langchain-deepseek==1.1.0",
     "langgraph==1.2.11",
+    "PyYAML>=6.0,<7",
     "psycopg[binary]>=3.3.4,<4",
 ]
 

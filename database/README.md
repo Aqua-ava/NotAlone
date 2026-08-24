@@ -224,6 +224,18 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 手动关闭期间的消息窗口，重新开启后任何联系人读到的窗口内消息都只前移水位、不写入。
 owner 删除时开关状态级联清理。
 
+继续建立 Skill Library 的辅助资源和校验结果：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/023_skill_library_resources.sql
+```
+
+第二十三个迁移保存版本级校验警告和 `references/assets` 的版本绑定内容。资源只能使用包内
+相对路径，删除版本时级联清理；Skill 管理适配器负责在完整校验后原子写入这些记录。
+
 任务终态清理使用：
 
 ```bash

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from hashlib import sha256
+from typing import Literal
 from uuid import UUID
 
 from notalone.scopes import ContactScope
@@ -19,6 +21,127 @@ def _validate_skill_name(name: str) -> None:
         or _SKILL_NAME_PATTERN.fullmatch(name) is None
     ):
         raise ValueError("Skill 名称必须是小写字母、数字和单连字符。")
+
+
+@dataclass(frozen=True, slots=True)
+class SkillPackageResource:
+    """已通过校验、绑定到 Skill 版本的本地辅助资源。"""
+
+    relative_path: str
+    resource_kind: Literal["reference", "asset"]
+    media_type: str
+    content: bytes
+    content_sha256: str
+
+    def __post_init__(self) -> None:
+        parts = self.relative_path.split("/") if isinstance(
+            self.relative_path,
+            str,
+        ) else ()
+        if (
+            not parts
+            or parts[0] not in ("references", "assets")
+            or any(not part or part in (".", "..") for part in parts)
+            or any("\\" in part for part in parts)
+        ):
+            raise ValueError("Skill 辅助资源路径无效。")
+        if self.resource_kind not in ("reference", "asset"):
+            raise ValueError("Skill 辅助资源类型无效。")
+        expected_kind = {
+            "references": "reference",
+            "assets": "asset",
+        }[parts[0]]
+        if self.resource_kind != expected_kind:
+            raise ValueError("Skill 辅助资源类型与路径不一致。")
+        if not isinstance(self.media_type, str) or not self.media_type.strip():
+            raise ValueError("Skill 辅助资源媒体类型不能为空。")
+        if not isinstance(self.content, bytes):
+            raise TypeError("Skill 辅助资源内容必须是 bytes。")
+        if (
+            not isinstance(self.content_sha256, str)
+            or self.content_sha256 != sha256(self.content).hexdigest()
+        ):
+            raise ValueError("Skill 辅助资源内容哈希无效。")
+
+
+@dataclass(frozen=True, slots=True)
+class SkillPackage:
+    """本地 Skill 包通过完整校验后的内存表示。"""
+
+    name: str
+    description: str
+    content: str
+    content_sha256: str
+    package_sha256: str
+    resources: tuple[SkillPackageResource, ...]
+    warnings: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        _validate_skill_name(self.name)
+        if not isinstance(self.description, str) or not self.description.strip():
+            raise ValueError("Skill 描述不能为空。")
+        if not isinstance(self.content, str) or not self.content.strip():
+            raise ValueError("Skill 正文不能为空。")
+        if self.content_sha256 != sha256(self.content.encode("utf-8")).hexdigest():
+            raise ValueError("Skill 正文内容哈希无效。")
+        if (
+            not isinstance(self.package_sha256, str)
+            or len(self.package_sha256) != 64
+            or re.fullmatch(r"[0-9a-f]{64}", self.package_sha256) is None
+        ):
+            raise ValueError("Skill 包内容哈希无效。")
+        if not isinstance(self.resources, tuple) or any(
+            not isinstance(resource, SkillPackageResource)
+            for resource in self.resources
+        ):
+            raise TypeError("Skill 辅助资源集合无效。")
+        paths = tuple(resource.relative_path for resource in self.resources)
+        if len(paths) != len(set(paths)):
+            raise ValueError("Skill 辅助资源路径重复。")
+        if not isinstance(self.warnings, tuple) or any(
+            not isinstance(warning, str) or not warning.strip()
+            for warning in self.warnings
+        ):
+            raise TypeError("Skill 校验警告无效。")
+
+
+@dataclass(frozen=True, slots=True)
+class SkillImportResult:
+    """Skill 首次发布后返回给管理入口的非正文结果。"""
+
+    owner_id: UUID
+    skill_id: UUID
+    version_id: UUID
+    name: str
+    version_number: int
+    revision: int
+    resource_paths: tuple[str, ...]
+    warnings: tuple[str, ...] = ()
+    status: Literal["active"] = "active"
+
+    def __post_init__(self) -> None:
+        if not all(
+            isinstance(value, UUID)
+            for value in (self.owner_id, self.skill_id, self.version_id)
+        ):
+            raise TypeError("Skill 导入结果标识必须是 UUID。")
+        _validate_skill_name(self.name)
+        if not isinstance(self.version_number, int) or self.version_number < 1:
+            raise ValueError("Skill 版本号无效。")
+        if not isinstance(self.revision, int) or self.revision < 1:
+            raise ValueError("Skill 目录修订号无效。")
+        if not isinstance(self.resource_paths, tuple) or any(
+            not isinstance(path, str) or not path.strip()
+            for path in self.resource_paths
+        ):
+            raise TypeError("Skill 资源路径结果无效。")
+        if len(self.resource_paths) != len(set(self.resource_paths)):
+            raise ValueError("Skill 资源路径结果重复。")
+        if not isinstance(self.warnings, tuple) or any(
+            not isinstance(warning, str) or not warning.strip()
+            for warning in self.warnings
+        ):
+            raise TypeError("Skill 导入警告无效。")
 
 
 @dataclass(frozen=True, slots=True)

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Protocol
 from uuid import UUID
 
 from notalone.scopes import ContactScope
-from notalone.skills.models import SkillCatalog, SkillVersion
+from notalone.skills.models import SkillCatalog, SkillImportResult, SkillVersion
 
 
 class SkillPort(Protocol):
@@ -19,3 +20,13 @@ class SkillPort(Protocol):
         scope: ContactScope,
         version_id: UUID,
     ) -> SkillVersion: ...
+
+
+class SkillLibraryManagementPort(Protocol):
+    """供用户明确操作的 Skill Library 管理入口。"""
+
+    def import_package(
+        self,
+        owner_id: UUID,
+        package_path: str | Path,
+    ) -> SkillImportResult: ...
