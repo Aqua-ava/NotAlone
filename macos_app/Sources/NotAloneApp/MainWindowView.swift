@@ -12,6 +12,14 @@ struct MainWindowView: View {
     // 候选出现时自动弹出一次；用户手动关闭后本会话不再自动弹出，
     // 同步保持暂停，直到用户再次打开确认入口。
     @State private var dismissBindingSheet = false
+    // 回复工作区输入
+    @State private var replyDirection = ""
+    @State private var rewriteDraft = ""
+    @State private var rewriteInstruction = ""
+    @State private var manualSkillVersion = ""
+    @State private var includeRelationshipContext = false
+    // 候选正文的会话内编辑内容（按 candidateId）
+    @State private var editedCandidateTexts: [String: String] = [:]
 
     var body: some View {
         NavigationSplitView {
@@ -339,6 +347,11 @@ struct MainWindowView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            Button("用于回复") {
+                model.selectedReplyMessageId = message.messageId
+            }
+            .font(.caption2)
+            .buttonStyle(.link)
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -445,17 +458,209 @@ struct MainWindowView: View {
     }
 
     private var replyPlaceholder: some View {
-        VStack {
-            Spacer()
-            Image(systemName: "square.and.pencil")
-                .font(.largeTitle)
-                .foregroundStyle(.tertiary)
-            Text("回复工作区将在后续版本提供")
-                .foregroundStyle(.secondary)
-            Spacer()
+        VStack(alignment: .leading, spacing: 10) {
+            Text("回复工作区")
+                .font(.headline)
+            Divider()
+            if model.selectedReplyMessageId == nil {
+                Text("选中一条消息后可针对它生成候选回复。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("已选中消息：回复将针对该消息生成。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let selectedReplyMessageId = model.selectedReplyMessageId {
+                replyToMessageSection(selectedReplyMessageId)
+            } else {
+                rewriteSection
+            }
+            Divider()
+            skillAndBasisSummary
+            candidatesSection
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationTitle("回复")
+    }
+
+    // 针对已选中消息：填写表达方向。
+    private func replyToMessageSection(_ messageId: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("表达方向（需要明确、自然）")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("例如：自然地答应，并保持轻松", text: $replyDirection)
+                .textFieldStyle(.roundedBorder)
+            TextField("指定 Skill 版本 ID（可选）", text: $manualSkillVersion)
+                .textFieldStyle(.roundedBorder)
+                .font(.caption)
+            Button("生成候选回复") {
+                model.generateReplyToMessage(
+                    direction: replyDirection,
+                    skillVersionId: manualSkillVersion.isEmpty ? nil : manualSkillVersion
+                )
+            }
+            .disabled(model.replyInFlight || replyDirection.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+        .padding(.vertical, 2)
+    }
+
+    // 用户原句 + 改写要求。
+    private var rewriteSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("自己的原句（可选改写要求）")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("输入想改写的原句", text: $rewriteDraft, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(2...4)
+            TextField("改写要求（可选）", text: $rewriteInstruction)
+                .textFieldStyle(.roundedBorder)
+            TextField("指定 Skill 版本 ID（可选）", text: $manualSkillVersion)
+                .textFieldStyle(.roundedBorder)
+                .font(.caption)
+            Toggle("结合联系人背景资料", isOn: $includeRelationshipContext)
+                .font(.caption)
+            Button("生成改写候选") {
+                model.generateRewrite(
+                    draftText: rewriteDraft,
+                    instruction: rewriteInstruction.isEmpty ? nil : rewriteInstruction,
+                    skillVersionId: manualSkillVersion.isEmpty ? nil : manualSkillVersion,
+                    includeRelationshipContext: includeRelationshipContext
+                )
+            }
+            .disabled(
+                model.replyInFlight
+                    || rewriteDraft.trimmingCharacters(in: .whitespaces).isEmpty
+            )
+        }
+        .padding(.vertical, 2)
+    }
+
+    // 本次使用的 Skill 与上下文依据摘要。
+    private var skillAndBasisSummary: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let skill = model.lastReplyUsedSkill {
+                Text("本次 Skill：\(skill.name)")
+                    .font(.caption)
+                if let reason = skill.selectionReason, !reason.isEmpty {
+                    Text("选择原因：\(reason)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if !model.lastReplyContextEvidence.isEmpty {
+                Text("上下文依据：\(model.lastReplyContextEvidence.count) 项")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if let error = model.replyError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    // 候选列表：可编辑、可复制；可基于历史候选继续生成。
+    private var candidatesSection: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 8) {
+                if model.replyInFlight {
+                    ProgressView("生成候选…")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                }
+                ForEach(model.replyCandidates) { candidate in
+                    candidateCard(candidate)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .frame(maxHeight: 320)
+    }
+
+    private func candidateCard(_ candidate: ReplyCandidate) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // 候选正文可编辑；编辑内容按候选 id 保留于本会话内存，
+            // 只影响复制与继续生成，不写回后端（改写/方向只约束本次生成）。
+            TextField("候选正文", text: editedTextBinding(for: candidate), axis: .vertical)
+                .font(.body)
+                .textFieldStyle(.plain)
+                .lineLimit(2...6)
+            if !candidate.basis.isEmpty {
+                Text("依据：\(candidate.basis)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if !candidate.riskNotes.isEmpty {
+                Text("注意：\(candidate.riskNotes.joined(separator: "；"))")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+            HStack {
+                Button("复制") {
+                    copyToPasteboard(currentText(of: candidate))
+                    model.lastOperationMessage = "已复制候选回复"
+                }
+                .font(.caption)
+                Button("基于此继续生成") {
+                    continueFrom(candidate)
+                }
+                .font(.caption)
+                Spacer()
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Color.secondary.opacity(0.06),
+            in: RoundedRectangle(cornerRadius: 8)
+        )
+    }
+
+    // 候选编辑文本按 candidateId 存储，避免 ForEach 复用视图时串值。
+    private func editedTextBinding(for candidate: ReplyCandidate) -> Binding<String> {
+        Binding(
+            get: {
+                editedCandidateTexts[candidate.candidateId] ?? candidate.text
+            },
+            set: { newValue in
+                editedCandidateTexts[candidate.candidateId] = newValue
+            }
+        )
+    }
+
+    private func currentText(of candidate: ReplyCandidate) -> String {
+        editedCandidateTexts[candidate.candidateId] ?? candidate.text
+    }
+
+    private func copyToPasteboard(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
+
+    private func continueFrom(_ candidate: ReplyCandidate) {
+        // 基于历史候选继续：显式携带候选 id 继续生成（系统不推断
+        // "最近未发送候选"；用户显式选择才继续）。
+        if model.selectedReplyMessageId != nil {
+            model.generateReplyToMessage(
+                direction: replyDirection,
+                continuedFromCandidateId: candidate.candidateId,
+                skillVersionId: manualSkillVersion.isEmpty ? nil : manualSkillVersion
+            )
+        } else {
+            model.generateRewrite(
+                draftText: rewriteDraft,
+                instruction: rewriteInstruction.isEmpty ? nil : rewriteInstruction,
+                continuedFromCandidateId: candidate.candidateId,
+                skillVersionId: manualSkillVersion.isEmpty ? nil : manualSkillVersion,
+                includeRelationshipContext: includeRelationshipContext
+            )
+        }
     }
 
     private var windowTitle: String {

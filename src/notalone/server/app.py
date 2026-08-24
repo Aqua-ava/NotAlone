@@ -22,6 +22,11 @@ from notalone.application.message_stream import (
     MessageStreamContactNotFound,
     StreamedMessage,
 )
+from notalone.application.reply_request import (
+    ReplyRequestInvalid,
+    parse_reply_request,
+)
+from notalone.application.reply_service import ReplyService
 from notalone.front_sync.sync_engine import (
     BindingCandidateView,
     BindingConfirmationError,
@@ -29,6 +34,7 @@ from notalone.front_sync.sync_engine import (
 )
 from notalone.persistence.contact_directory import PostgresContactDirectory
 from notalone.persistence.message_stream import PostgresMessageStream
+from notalone.reply.interface import ReplyGenerated
 from notalone.server.event_bus import EventBus, EventSubscription
 from notalone.server.sse import encode_sse_frame
 from notalone.server.sync_host import SyncControlPort
@@ -63,6 +69,7 @@ class BackendApp:
         "_events",
         "_message_stream",
         "_owner_id",
+        "_reply_service",
         "_sync_control",
         "_token",
     )
@@ -76,6 +83,7 @@ class BackendApp:
         token: str,
         sync_control: SyncControlPort | None = None,
         message_stream: MessageStream | None = None,
+        reply_service: ReplyService | None = None,
     ) -> None:
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
@@ -84,6 +92,7 @@ class BackendApp:
         self._contact_directory = contact_directory
         self._events = events
         self._message_stream = message_stream
+        self._reply_service = reply_service
         self._owner_id = owner_id
         self._sync_control = sync_control
         self._token = token
@@ -133,6 +142,11 @@ class BackendApp:
                 method=method_upper,
                 path=path_value,
                 query=urlsplit(path).query,
+            )
+        if path_value == "/api/reply/generate":
+            return self._handle_reply_generate(
+                method=method_upper,
+                body=request_body,
             )
         if path_value.startswith("/api/sync"):
             return self._handle_sync(
@@ -294,6 +308,51 @@ class BackendApp:
             )
         return _json_response(HTTPStatus.OK, _sync_status_payload(report))
 
+    def _handle_reply_generate(self, *, method: str, body: bytes) -> Response:
+        """处理候选回复生成请求；失败关闭且不回显请求正文。"""
+
+        if method != "POST":
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        service = self._reply_service
+        if service is None:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "reply_unavailable"}
+            )
+        try:
+            contact_id, request = parse_reply_request(body)
+        except ReplyRequestInvalid:
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "reply_request_invalid"}
+            )
+
+        try:
+            result = service.generate(
+                owner_id=self._owner_id,
+                contact_id=contact_id,
+                request=request,
+            )
+        except Exception:
+            # 生成/持久化阶段的基础设施异常：5xx，不用 409 伪装成冲突。
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "reply_generation_failed"},
+            )
+        if result.rejected:
+            return _json_response(
+                HTTPStatus.CONFLICT,
+                {
+                    "error": "reply_rejected",
+                    "reason": result.reason or "unknown",
+                },
+            )
+        reply = result.reply
+        if reply is None:
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "reply_generation_failed"},
+            )
+        return _json_response(HTTPStatus.OK, _reply_payload(reply))
+
     def open_sse(
         self,
         *,
@@ -431,6 +490,7 @@ def create_app(
     events: EventBus | None = None,
     sync_control: SyncControlPort | None = None,
     message_stream: MessageStream | None = None,
+    reply_service: ReplyService | None = None,
 ) -> BackendApp:
     """创建服务应用；未显式传 token 时在启动时生成随机 token。"""
 
@@ -441,6 +501,7 @@ def create_app(
         token=token or secrets.token_urlsafe(32),
         sync_control=sync_control,
         message_stream=message_stream or MessageStream(PostgresMessageStream(database_url)),
+        reply_service=reply_service,
     )
 
 
@@ -560,6 +621,42 @@ def _candidate_payload(candidate: BindingCandidateView) -> dict[str, object]:
         "username": candidate.username,
         "display_name": candidate.display_name,
         "last_timestamp": candidate.last_timestamp,
+    }
+
+
+def _reply_payload(reply: ReplyGenerated) -> dict[str, object]:
+    """把已持久化的候选回复投影为稳定 JSON；不含会话正文以外内容。"""
+
+    used_skill = None
+    if reply.used_skill is not None:
+        skill = reply.used_skill
+        used_skill = {
+            "skill_id": str(skill.skill_id),
+            "version_id": str(skill.version_id),
+            "name": skill.name,
+            "selection_method": skill.selection_method,
+            "selection_reason": skill.selection_reason,
+            "resource_paths": list(skill.resource_paths),
+            "load_state": skill.load_state,
+        }
+    return {
+        "reply_request_id": str(reply.reply_request_id),
+        "candidates": [
+            {
+                "candidate_id": str(candidate.candidate_id),
+                "text": candidate.text,
+                "basis": candidate.basis,
+                "citation_ids": [str(citation) for citation in candidate.citation_ids],
+                "risk_notes": list(candidate.risk_notes),
+            }
+            for candidate in reply.candidates
+        ],
+        "context_receipt": {
+            "evidence_ids": [
+                str(evidence) for evidence in reply.context_receipt.evidence_ids
+            ],
+        },
+        "used_skill": used_skill,
     }
 
 

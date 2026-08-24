@@ -22,6 +22,7 @@ from notalone.server.connection_info import (
 )
 from notalone.server.event_bus import EventBus
 from notalone.server.event_publisher import EventBusMessagePublisher
+from notalone.server.reply_wiring import build_reply_service
 from notalone.server.sync_host import SyncHost
 
 
@@ -62,6 +63,10 @@ def main(argv: list[str] | None = None) -> int:
         interval=args.sync_interval,
         events=events,
     )
+    reply_service = build_reply_service(
+        database_url=database_url,
+        owner_id=owner_id,
+    )
     server: BackendServer | None = None
     try:
         app = create_app(
@@ -69,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
             owner_id=owner_id,
             events=events,
             sync_control=sync_host,
+            reply_service=reply_service,
         )
         server = BackendServer(app, host=args.host, port=args.port)
         host, port = server.start()

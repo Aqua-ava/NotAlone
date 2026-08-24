@@ -28,7 +28,12 @@ from notalone.reply.runtime import (
     RuntimeUsage,
 )
 from notalone.reply.errors import ReplyError, ReplyInvariantError, ReplyRunError
-from notalone.reply.interface import ReplyToMessage, RewriteDraft, SkillUse
+from notalone.reply.interface import (
+    ReplyToMessage,
+    RewriteDraft,
+    SkillUse,
+    UserSkillChoice,
+)
 from notalone.scopes import ContactScope
 from notalone.skills import (
     SkillCatalog,
@@ -347,6 +352,37 @@ def _create_read_file_tool(
     return read_file
 
 
+def apply_user_skill_choice(
+    catalog: SkillCatalog,
+    selection: object,
+) -> SkillCatalog:
+    """用户手动指定 active 版本时锁定目录到该版本。
+
+    不匹配（版本不存在或超范围）时失败关闭为空目录。
+    """
+
+    if not isinstance(selection, UserSkillChoice):
+        return catalog
+    requested = selection.version_id
+    matched = tuple(
+        entry
+        for entry in catalog.entries
+        if entry.version_id == requested
+    )
+    if not matched:
+        # 版本不存在或不属于当前联系人范围：失败关闭为空目录。
+        return SkillCatalog(
+            scope=catalog.scope,
+            revision=catalog.revision,
+            entries=(),
+        )
+    return SkillCatalog(
+        scope=catalog.scope,
+        revision=catalog.revision,
+        entries=matched,
+    )
+
+
 class LangChainReplyRuntime:
     """把框架 Agent Loop 封装成稳定的 ReplyRuntime。"""
 
@@ -401,6 +437,7 @@ class LangChainReplyRuntime:
                 revision=prepared.skill_library_revision,
                 entries=(),
             )
+        catalog = apply_user_skill_choice(catalog, prepared.command.skill)
 
         try:
             entries = {entry.name: entry for entry in catalog.entries}

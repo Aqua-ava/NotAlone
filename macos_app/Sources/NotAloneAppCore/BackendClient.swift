@@ -8,6 +8,7 @@ public struct BackendClient: Sendable {
         case syncUnavailable
         case notFound
         case confirmRejected(reason: String)
+        case replyRejected(reason: String)
         case malformedResponse
         case transport
     }
@@ -78,6 +79,82 @@ public struct BackendClient: Sendable {
         }
         do {
             return try JSONDecoder.snakeCaseDecoder.decode(SyncStatus.self, from: bodyData)
+        } catch {
+            throw BackendError.malformedResponse
+        }
+    }
+
+    // 生成候选回复：reply_to_message（选中消息+表达方向）或
+    // rewrite_draft（用户原句+改写要求）。请求带幂等键，重放返回同一结果。
+    public func generateReply(
+        contactId: String,
+        idempotencyKey: String,
+        replyToMessage: (targetMessageId: String, direction: String)?,
+        rewriteDraft: (draftText: String, userInstruction: String?, includeContext: Bool)?,
+        continuedFromCandidateId: String? = nil,
+        skillVersionId: String? = nil
+    ) async throws -> ReplyGenerated {
+        var content: [String: Any]
+        if let replyToMessage {
+            content = [
+                "type": "reply_to_message",
+                "target_message_id": replyToMessage.targetMessageId,
+                "direction": replyToMessage.direction,
+                "direction_source": "direct_input",
+            ]
+        } else if let rewriteDraft {
+            content = [
+                "type": "rewrite_draft",
+                "draft_text": rewriteDraft.draftText,
+                "include_relationship_context": rewriteDraft.includeContext,
+            ]
+            if let userInstruction = rewriteDraft.userInstruction {
+                content["user_instruction"] = userInstruction
+            }
+        } else {
+            throw BackendError.malformedResponse
+        }
+        var payload: [String: Any] = [
+            "idempotency_key": idempotencyKey,
+            "contact_id": contactId,
+            "content": content,
+        ]
+        if let continuedFromCandidateId {
+            payload["continued_from_candidate_id"] = continuedFromCandidateId
+        }
+        if let skillVersionId, !skillVersionId.isEmpty {
+            payload["skill_version_id"] = skillVersionId
+        }
+        // 幂等键应每次生成唯一；调用方如传空由服务端拒绝。
+        guard let data = try? JSONSerialization.data(withJSONObject: payload) else {
+            throw BackendError.malformedResponse
+        }
+        guard let url = URL(string: "api/reply/generate", relativeTo: baseURL) else {
+            throw BackendError.malformedResponse
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = data
+        let (bodyData, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 503 {
+            throw BackendError.syncUnavailable
+        }
+        if status == 409 {
+            // 回复被业务拒绝：带出稳定 reason 码供界面展示原因。
+            let reason = (try? JSONDecoder.snakeCaseDecoder.decode(
+                RejectionEnvelope.self,
+                from: bodyData
+            ))?.reason ?? "unknown"
+            throw BackendError.replyRejected(reason: reason)
+        }
+        guard status == 200 else {
+            throw BackendError.badStatus(status)
+        }
+        do {
+            return try JSONDecoder.snakeCaseDecoder.decode(ReplyGenerated.self, from: bodyData)
         } catch {
             throw BackendError.malformedResponse
         }

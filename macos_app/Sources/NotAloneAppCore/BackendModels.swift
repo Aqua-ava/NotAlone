@@ -64,3 +64,35 @@ public struct QuotedMessage: Decodable, Equatable, Sendable {
     public let text: String
     public let targetMessageId: String?
 }
+
+// MARK: - 回复
+
+public struct ReplyGenerated: Decodable, Equatable, Sendable {
+    public let replyRequestId: String
+    public let candidates: [ReplyCandidate]
+    public let contextReceipt: ContextReceipt?
+    public let usedSkill: UsedSkill?
+
+    public struct ContextReceipt: Decodable, Equatable, Sendable {
+        public let evidenceIds: [String]
+    }
+
+    public struct UsedSkill: Decodable, Equatable, Sendable {
+        public let skillId: String
+        public let versionId: String
+        public let name: String
+        public let selectionMethod: String?
+        public let selectionReason: String?
+        public let loadState: String?
+    }
+}
+
+public struct ReplyCandidate: Decodable, Equatable, Sendable, Identifiable {
+    public let candidateId: String
+    public let text: String
+    public let basis: String
+    public let citationIds: [String]
+    public let riskNotes: [String]
+
+    public var id: String { candidateId }
+}

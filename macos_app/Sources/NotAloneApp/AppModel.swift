@@ -31,6 +31,14 @@ final class AppModel: ObservableObject {
         return contacts.first(where: { $0.contactId == selectedContactId })?.displayName
     }
 
+    // 当前选中消息（供回复工作区定位）；以 messageId 记录，切换联系人时清空。
+    @Published var selectedReplyMessageId: String?
+    @Published private(set) var replyInFlight = false
+    @Published var replyError: String?
+    @Published private(set) var replyCandidates: [ReplyCandidate] = []
+    @Published private(set) var lastReplyUsedSkill: ReplyGenerated.UsedSkill?
+    @Published private(set) var lastReplyContextEvidence: [String] = []
+
     enum MessageStreamState: Equatable {
         case idle
         case loadingFirstPage
@@ -76,6 +84,8 @@ final class AppModel: ObservableObject {
         messages = []
         knownMessageIds = []
         loadedBefore = nil
+        selectedReplyMessageId = nil
+        replyCandidates = []
         messageStreamState = .idle
         loadFirstMessagePage()
     }
@@ -203,6 +213,88 @@ final class AppModel: ObservableObject {
     func checkNow() {
         Task {
             await refreshStatus()
+        }
+    }
+
+    // MARK: - 回复工作区
+
+    // 生成候选回复（选中消息 + 表达方向）。
+    func generateReplyToMessage(
+        direction: String,
+        continuedFromCandidateId: String? = nil,
+        skillVersionId: String? = nil
+    ) {
+        guard let selectedReplyMessageId, let selectedContactId, let client else {
+            replyError = "请先选择一条消息"
+            return
+        }
+        generateReply(
+            replyRequest: {
+                try await client.generateReply(
+                    contactId: selectedContactId,
+                                        idempotencyKey: UUID().uuidString,
+                    replyToMessage: (
+                        targetMessageId: selectedReplyMessageId,
+                        direction: direction
+                    ),
+                    rewriteDraft: nil,
+                    continuedFromCandidateId: continuedFromCandidateId,
+                    skillVersionId: skillVersionId
+                )
+            }
+        )
+    }
+
+    // 生成候选回复（用户原句 + 改写要求）。
+    func generateRewrite(
+        draftText: String,
+        instruction: String?,
+        continuedFromCandidateId: String? = nil,
+        skillVersionId: String? = nil,
+        includeRelationshipContext: Bool = false
+    ) {
+        guard let selectedContactId, let client else {
+            replyError = "请先选择联系人"
+            return
+        }
+        generateReply(
+            replyRequest: {
+                try await client.generateReply(
+                    contactId: selectedContactId,
+                                        idempotencyKey: UUID().uuidString,
+                    replyToMessage: nil,
+                    rewriteDraft: (
+                        draftText: draftText,
+                        userInstruction: instruction,
+                        includeContext: includeRelationshipContext
+                    ),
+                    continuedFromCandidateId: continuedFromCandidateId,
+                    skillVersionId: skillVersionId
+                )
+            }
+        )
+    }
+
+    private func generateReply(
+        replyRequest: @escaping @MainActor () async throws -> ReplyGenerated
+    ) {
+        guard !replyInFlight, client != nil else {
+            replyError = "回复生成进行中或后端不可用"
+            return
+        }
+        replyInFlight = true
+        replyError = nil
+        Task {
+            defer { replyInFlight = false }
+            do {
+                let generated = try await replyRequest()
+                replyCandidates = generated.candidates
+                lastReplyUsedSkill = generated.usedSkill
+                lastReplyContextEvidence = generated.contextReceipt?.evidenceIds ?? []
+                lastOperationMessage = "已生成 \(generated.candidates.count) 个候选"
+            } catch {
+                replyError = Self.describe(error)
+            }
         }
     }
 
@@ -344,6 +436,8 @@ final class AppModel: ObservableObject {
                 return "请求的资源不存在"
             case .confirmRejected(let reason):
                 return "绑定确认被拒绝：\(reason)"
+            case .replyRejected(let reason):
+                return "回复被拒绝：\(Self.replyReasonLabel(reason))"
             case .malformedResponse:
                 return "后端响应格式异常"
             case .transport:
@@ -351,5 +445,32 @@ final class AppModel: ObservableObject {
             }
         }
         return error.localizedDescription
+    }
+
+    private static func replyReasonLabel(_ reason: String) -> String {
+        switch reason {
+        case "no_active_binding":
+            return "没有已验证的会话绑定"
+        case "binding_not_active":
+            return "会话绑定已失效"
+        case "scope_mismatch":
+            return "联系人范围与已验证会话不符"
+        case "invalid_reply_input":
+            return "回复请求内容无效"
+        case "binding_unconfirmed":
+            return "会话绑定尚未确认"
+        case "conversation_changed":
+            return "当前会话已变化"
+        case "ambiguous_binding":
+            return "会话绑定存在冲突"
+        case "binding_low_confidence":
+            return "会话绑定置信度不足"
+        case "binding_revoked":
+            return "会话绑定已撤销"
+        case "verification_unavailable":
+            return "会话验证暂时不可用"
+        default:
+            return reason
+        }
     }
 }

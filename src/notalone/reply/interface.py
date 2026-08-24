@@ -82,6 +82,16 @@ class AutoSkill:
 
 
 @dataclass(frozen=True, slots=True)
+class UserSkillChoice:
+    """用户手动指定一个 active 版本的 Skill；范围校验由加载层执行。"""
+
+    version_id: UUID
+
+
+SkillSelection: TypeAlias = AutoSkill | UserSkillChoice
+
+
+@dataclass(frozen=True, slots=True)
 class GenerateReply:
     """调用者提交给候选回复 Module 的唯一命令。"""
 
@@ -90,7 +100,7 @@ class GenerateReply:
     conversation_binding_id: UUID
     content: ReplyInput
     continued_from_candidate_id: UUID | None = None
-    skill: AutoSkill = AutoSkill()
+    skill: SkillSelection = AutoSkill()
 
     def has_valid_content(self) -> bool:
         """判断联合输入是否满足应用层的最小结构约束。"""
@@ -107,6 +117,12 @@ class GenerateReply:
         return content_valid and (
             self.continued_from_candidate_id is None
             or isinstance(self.continued_from_candidate_id, UUID)
+        ) and (
+            isinstance(self.skill, AutoSkill)
+            or (
+                isinstance(self.skill, UserSkillChoice)
+                and isinstance(self.skill.version_id, UUID)
+            )
         )
 
     def matches_verified_scope(self, scope: VerifiedConversationScope) -> bool:

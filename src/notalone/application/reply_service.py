@@ -1,0 +1,182 @@
+"""候选回复的共享应用层入口：会话验证、范围检查与生成编排。
+
+回复请求统一经此服务进入 Reply 模块：先按联系人在既有绑定目录里
+查 active 绑定（已绑定会话自动认出），再经会话验证端口确认范围，
+最后才调用 ReplyPort 生成候选。任一环节失败都返回稳定 reason，
+不触发任何外部发送能力。
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Callable, Protocol
+from uuid import UUID
+
+from notalone.conversation import (
+    ConversationPort,
+    ConversationResolution,
+    ConversationResolutionState,
+    VerificationReason,
+)
+from notalone.conversation.models import (
+    ConversationBinding,
+)
+from notalone.reply import GenerateReply, ReplyOutcome
+from notalone.reply.interface import (
+    AutoSkill,
+    ReplyToMessage,
+    RewriteDraft,
+    UserSkillChoice,
+)
+from notalone.scopes import ContactScope, VerifiedConversationScope
+
+
+class ReplyPort(Protocol):
+    """应用层调用 Reply 入口的框架无关边界。"""
+
+    def generate(
+        self,
+        command: GenerateReply,
+        verified_scope: VerifiedConversationScope,
+    ) -> ReplyOutcome: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ReplyServiceResult:
+    """回复请求的结果投影：拒绝时 reply 为 None、reason 为稳定码。"""
+
+    reply: ReplyOutcome | None
+    reason: str | None
+
+    @property
+    def rejected(self) -> bool:
+        return self.reply is None
+
+
+class ReplyService:
+    """按已验证会话范围编排候选回复的薄服务。"""
+
+    __slots__ = (
+        "_binding_lookup",
+        "_conversation_factory",
+        "_reply",
+    )
+
+    def __init__(
+        self,
+        *,
+        binding_lookup: Callable[[UUID, UUID], ConversationBinding | None],
+        conversation_factory: Callable[[ConversationBinding], ConversationPort],
+        reply: ReplyPort,
+    ) -> None:
+        self._binding_lookup = binding_lookup
+        self._conversation_factory = conversation_factory
+        self._reply = reply
+
+    def generate(
+        self,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        request: ReplyServiceRequest,
+    ) -> ReplyServiceResult:
+        """按绑定目录解析真实会话范围后生成候选。"""
+
+        if not isinstance(owner_id, UUID) or not isinstance(contact_id, UUID):
+            raise TypeError("owner_id 与 contact_id 必须是 UUID。")
+        if not isinstance(request, ReplyServiceRequest):
+            raise TypeError("request 必须是 ReplyServiceRequest。")
+
+        binding = self._binding_lookup(owner_id, contact_id)
+        if binding is None:
+            # list_active_bindings 只返回 active 绑定：无绑定即不可用。
+            return ReplyServiceResult(reply=None, reason="no_active_binding")
+
+        try:
+            command = request.build_command(
+                owner_id=owner_id,
+                contact_id=contact_id,
+                binding_id=binding.binding_id,
+            )
+        except (TypeError, ValueError):
+            return ReplyServiceResult(reply=None, reason="invalid_reply_input")
+        if command is None or not command.has_valid_content():
+            return ReplyServiceResult(reply=None, reason="invalid_reply_input")
+
+        conversation = self._conversation_factory(binding)
+        verification = conversation.verify_current()
+        if verification.state is not ConversationResolutionState.READY:
+            return ReplyServiceResult(
+                reply=None,
+                reason=_reason_for(verification),
+            )
+        if verification.scope is None:
+            return ReplyServiceResult(reply=None, reason="invalid_verification")
+        if not command.matches_verified_scope(verification.scope):
+            return ReplyServiceResult(reply=None, reason="scope_mismatch")
+        # 生成阶段的异常（含持久层/基础设施故障）不折叠为业务拒绝：
+        # 由调用方映射为 5xx，避免把服务端故障伪装成客户端冲突。
+        outcome = self._reply.generate(
+            command=command,
+            verified_scope=verification.scope,
+        )
+        if outcome is None:
+            return ReplyServiceResult(reply=None, reason="no_reply_outcome")
+        return ReplyServiceResult(reply=outcome, reason=None)
+
+
+@dataclass(frozen=True, slots=True)
+class ReplyServiceRequest:
+    """应用层回复请求：由解析器产出，绑定解析在服务层完成。"""
+
+    idempotency_key: UUID
+    content: ReplyToMessage | RewriteDraft
+    continued_from_candidate_id: UUID | None = None
+    skill_version_id: UUID | None = None
+
+    def build_command(
+        self,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        binding_id: UUID,
+    ) -> GenerateReply | None:
+        """按服务解析出的真实范围构造 GenerateReply。"""
+
+        if not isinstance(binding_id, UUID):
+            return None
+        skill: AutoSkill | UserSkillChoice = AutoSkill()
+        if self.skill_version_id is not None:
+            skill = UserSkillChoice(version_id=self.skill_version_id)
+        return GenerateReply(
+            idempotency_key=self.idempotency_key,
+            scope=ContactScope(owner_id=owner_id, contact_id=contact_id),
+            conversation_binding_id=binding_id,
+            content=self.content,
+            continued_from_candidate_id=self.continued_from_candidate_id,
+            skill=skill,
+        )
+
+
+def _reason_for(verification: ConversationResolution) -> str:
+    """把会话验证结果映射为稳定 reason 码。"""
+
+    reason = verification.reason
+    if reason is None:
+        return "not_verified"
+    mapping = {
+        VerificationReason.FIRST_BINDING: "binding_unconfirmed",
+        VerificationReason.CONVERSATION_CHANGED: "conversation_changed",
+        VerificationReason.AMBIGUOUS_MATCH: "ambiguous_binding",
+        VerificationReason.LOW_CONFIDENCE: "binding_low_confidence",
+        VerificationReason.NO_ACTIVE_BINDING: "no_active_binding",
+        VerificationReason.BINDING_REVOKED: "binding_revoked",
+        VerificationReason.MISSING_REPLY_INPUT: "missing_reply_input",
+        VerificationReason.INVALID_REPLY_INPUT: "invalid_reply_input",
+        VerificationReason.SCOPE_MISMATCH: "scope_mismatch",
+        VerificationReason.VERIFICATION_UNAVAILABLE: "verification_unavailable",
+        VerificationReason.INVALID_VERIFICATION_RESULT: "invalid_verification",
+    }
+    return mapping.get(reason, reason.value)
+
+    return lookup
