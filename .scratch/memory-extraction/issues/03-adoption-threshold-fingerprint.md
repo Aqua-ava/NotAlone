@@ -22,6 +22,7 @@
 - 迁移 012/013：memory_candidate 与 confirmed_memory 增加 topic 列，candidate 增加有效期两列并在确认时传递到 confirmed_memory；新增 memory_extraction_watermark 水位表与 PostgresWatermarkStore（get/set 断点续跑）。MemoryPort 补 deleted_texts 协议。
 - 集成测试 8 例：auto 采纳带主题、self 入 owner 级、低置信 pending、删除不复活、重复跳过、过期不检索、水位往返。
 - 验证：全量 224 例通过（1 例冒烟按凭据跳过）。
+- 2026-08-24 复核：`State` 已于收尾提交翻转为 `resolved`。集成测试现共 9 例（后增 1 例），全部通过；`python -m unittest discover -s tests` 全仓 469 例通过、2 例跳过（真实模型冒烟未配置凭据）。上文"集成测试 8 例"为当时口径，以此条为准。
 
 ## Answer
 
