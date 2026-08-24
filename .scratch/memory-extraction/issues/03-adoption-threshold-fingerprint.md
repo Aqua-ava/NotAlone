@@ -3,7 +3,7 @@
 **What to build:** 落库层闭环：通过校验的候选按主体分流（self 入 owner 级、contact/shared 入联系人级）经 MemoryPort 自动采纳标 `auto`；低置信（低于 0.7）候选以 pending 保留不自动入库；入库前查询删除指纹，用户删过的文本永不自动复活；提供消息水位记录以支撑断点重跑；返回提取统计。
 
 **Triage:** ready-for-agent
-**State:** open
+**State:** resolved
 **Blocked by:** 01（提取接缝与证据契约）、02（owner 级存储与删除指纹字段）
 
 - [x] 主体分流：self → owner 级，contact/shared → 联系人级，均标 `auto` 带来源
@@ -22,3 +22,11 @@
 - 迁移 012/013：memory_candidate 与 confirmed_memory 增加 topic 列，candidate 增加有效期两列并在确认时传递到 confirmed_memory；新增 memory_extraction_watermark 水位表与 PostgresWatermarkStore（get/set 断点续跑）。MemoryPort 补 deleted_texts 协议。
 - 集成测试 8 例：auto 采纳带主题、self 入 owner 级、低置信 pending、删除不复活、重复跳过、过期不检索、水位往返。
 - 验证：全量 224 例通过（1 例冒烟按凭据跳过）。
+
+## Answer
+
+该票已于 2026-08-23 实现并验证，但 `State` 字段当时未从 `open` 翻转为 `resolved`，导致 tracker 上出现唯一一张"open 却已完成"的 agent 票。
+
+1、实现证据：`src/notalone/memory_extraction/adoption.py`（`MemoryAdoption` 外壳、置信度门槛、删除指纹、重复抑制、统计）、迁移 012/013（topic、有效期、水位表与 PostgresWatermarkStore）、MemoryPort `deleted_texts` 协议、集成测试 8 例。
+2、收尾动作：仅把 `State` 置为 `resolved`，`Triage` 保持 `ready-for-agent` 与同族已解决票一致；未改动任何代码。
+3、验证：`python -m unittest discover -s tests` 全仓 469 例通过、2 例跳过（真实模型冒烟未配置）。

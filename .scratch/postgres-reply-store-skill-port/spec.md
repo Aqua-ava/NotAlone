@@ -1,9 +1,20 @@
 # PostgreSQL ReplyStore 与 SkillPort 已确认规格
 
+> 状态：已过期/被后续轨覆盖（superseded）。本目录不再单独开发。
+> 覆盖证据：PostgreSQL ReplyStore 由
+> [reply-module-flow/06](../../reply-module-flow/issues/06-postgres-reply-store.md)
+> 实现（`src/notalone/persistence/reply_store.py`）；PostgreSQL SkillPort 由
+> [reply-module-flow/07](../../reply-module-flow/issues/07-postgres-skill-port.md)
+> 实现（`src/notalone/persistence/skill_port.py`），随后
+> [skill-library](../../skill-library/spec.md) 在其上补齐管理接口、资源读取与生命周期；
+> 会话绑定由
+> [reply-module-flow/05](../../reply-module-flow/issues/05-persist-conversation-binding.md)
+> 与迁移 006 实现。以上均以代码与测试为准（`python -m unittest discover -s tests`）。
+
 Type: task
-State: open
-Triage: ready-for-agent
-Implementation: paused; do not modify or predefine the memory or reply-context Modules
+State: resolved
+Triage: wontfix
+Implementation: superseded — 能力已由 reply-module-flow 与 skill-library 各轨交付，本文件仅保留历史设计约束
 
 ## Problem Statement
 
