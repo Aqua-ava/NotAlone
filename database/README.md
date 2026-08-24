@@ -210,6 +210,20 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 `owner_id + contact_id` 独立保存成功返回的 local_id 与续传 cursor，水位只单调前移，
 首次读取没有水位、不使用非法的 `since_local_id=0`。联系人或绑定行删除时按来源级删除路径级联清理。
 
+继续保存前台同步开关状态：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/022_front_sync_state.sql
+```
+
+第二十二个迁移新增 `front_sync_state`，按 owner 保存用户手动开启/关闭的前台同步开关。
+应用异常重启后仍开启时，生命周期从联系人水位恢复读取；最近一次关闭与开启的时间戳共同界定
+手动关闭期间的消息窗口，重新开启后任何联系人读到的窗口内消息都只前移水位、不写入。
+owner 删除时开关状态级联清理。
+
 任务终态清理使用：
 
 ```bash

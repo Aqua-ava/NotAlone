@@ -110,7 +110,10 @@ class LocalWechatCli:
         cursor: str | None = None,
         limit: int | None = None,
     ) -> TailResult:
-        """读取一次会话文字增量；不传 cursor 表示首次读取。"""
+        """读取一次会话文字增量；不传 cursor 表示首次读取。
+
+        没有新消息时返回空结果而不是错误；调用方保持既有水位。
+        """
 
         talker = _require_text(talker, "talker")
         command = [self._executable, "tail", talker]
@@ -123,6 +126,13 @@ class LocalWechatCli:
         command.extend(["--jsonl", "--strict-read-only"])
         result = self._invoke(tuple(command))
         return _parse_tail_output(result.stdout, expected_talker=talker)
+
+    def version(self) -> str:
+        """读取 CLI 版本标识，用于观察来源元数据。"""
+
+        envelope = self._run_json((self._executable, "--version"))
+        data = _object_field(envelope, "data")
+        return _require_text(data.get("version"), "data.version")
 
     def _run_json(self, command: tuple[str, ...]) -> dict[str, Any]:
         result = self._invoke(command)
@@ -163,9 +173,11 @@ class LocalWechatCli:
 def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
     events: list[CliMessageEvent] = []
     cursor: str | None = None
+    last_local_id: int | None = None
     lines = [line for line in stdout.splitlines() if line.strip()]
     if not lines:
-        raise CliOutputError("cli_output_invalid", "微信 CLI 没有返回事件。")
+        # 轮询没有新消息是正常结果；调用方保持既有水位。
+        return TailResult(events=(), cursor=None, last_local_id=None)
     for line in lines:
         if not line.strip():
             continue
@@ -184,6 +196,8 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
         message_talker = _require_text(message_id.get("talker"), "message.id.talker")
         if message_talker != expected_talker:
             raise CliOutputError("cli_output_invalid", "微信 CLI 返回了其他会话的消息。")
+        if last_local_id is None or local_id > last_local_id:
+            last_local_id = local_id
         kind = _require_text(message.get("kind"), "message.kind")
         if kind != "text":
             continue
@@ -208,7 +222,11 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
                 time_iso=_optional_text(message.get("time_iso")),
             )
         )
-    return TailResult(events=tuple(events), cursor=cursor)
+    return TailResult(
+        events=tuple(events),
+        cursor=cursor,
+        last_local_id=last_local_id,
+    )
 
 
 def _parse_candidate(value: object) -> ChatCandidate:

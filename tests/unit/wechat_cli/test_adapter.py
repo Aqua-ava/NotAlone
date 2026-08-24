@@ -163,6 +163,7 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
         )
 
         self.assertEqual(result.cursor, "local_id:42")
+        self.assertEqual(result.last_local_id, 42)
         self.assertEqual(len(result.events), 1)
         self.assertEqual(result.events[0].message_id.local_id, 42)
         self.assertEqual(result.events[0].message_id.talker, "wxid_1")
@@ -205,6 +206,8 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
 
         self.assertEqual(result.events, ())
         self.assertEqual(result.cursor, "local_id:43")
+        # 非文字事件不进规范消息，但水位仍然前移。
+        self.assertEqual(result.last_local_id, 43)
 
     def test_sessions_preserves_matching_metadata(self) -> None:
         runner = RecordingRunner(
@@ -317,11 +320,15 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
         with self.assertRaises(CliOutputError):
             LocalWechatCli(runner=runner).tail("wxid_1")
 
-    def test_tail_rejects_blank_output(self) -> None:
+    def test_tail_without_new_events_returns_empty_result(self) -> None:
         runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=" \n\n"))
 
-        with self.assertRaises(CliOutputError):
-            LocalWechatCli(runner=runner).tail("wxid_1")
+        result = LocalWechatCli(runner=runner).tail("wxid_1")
+
+        # 轮询没有新消息是正常结果，不是输出损坏；水位保持不变。
+        self.assertEqual(result.events, ())
+        self.assertIsNone(result.cursor)
+        self.assertIsNone(result.last_local_id)
 
     def test_empty_cursor_is_rejected_before_command(self) -> None:
         runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=""))
@@ -330,6 +337,26 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
             LocalWechatCli(runner=runner).tail("wxid_1", cursor=" ")
 
         self.assertEqual(runner.calls, [])
+
+    def test_cli_version_is_read_from_envelope(self) -> None:
+        runner = RecordingRunner(
+            FakeCommandResult(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "ok": True,
+                        "tool": "version",
+                        "command": "version",
+                        "data": {"name": "wechat-cli", "version": "1.6.20"},
+                    }
+                ),
+            )
+        )
+
+        version = LocalWechatCli(runner=runner).version()
+
+        self.assertEqual(version, "1.6.20")
+        self.assertEqual(runner.calls[0], ("wechat-cli", "--version"))
 
     def test_cli_not_found_is_a_stable_error(self) -> None:
         runner = RaisingRunner(FileNotFoundError("/private/path/wechat-cli"))

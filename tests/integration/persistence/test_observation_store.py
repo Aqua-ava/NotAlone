@@ -1002,6 +1002,90 @@ class PostgresObservationStoreTest(unittest.TestCase):
         self.assertEqual(len(message_ids_b), 1)
         self.assertNotEqual(message_ids_a[0], message_ids_b[0])
 
+    def _message_count(self, contact_id) -> int:
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            return connection.execute(
+                """
+                SELECT count(*)
+                FROM public.message
+                WHERE owner_id = %s AND contact_id = %s
+                """,
+                (self.owner_id, contact_id),
+            ).fetchone()[0]
+
+    def test_record_batch_with_messages_is_atomic_and_idempotent(self) -> None:
+        messages = (
+            NormalizedMessage(
+                source_locator="cli:800",
+                speaker="contact",
+                message_type="text",
+                text_content="同事务合成消息",
+                media_placeholder=None,
+                occurred_at=None,
+                wechat_metadata=WechatMessageMetadata(
+                    external_local_id=800,
+                    external_server_id="server_800",
+                    external_talker="wxid_observation_a",
+                    source_create_time=8000,
+                    raw_payload_json='{"text":"同事务合成消息"}',
+                ),
+            ),
+        )
+
+        first = self.store.record_batch_with_messages(
+            owner_id=self.owner_id,
+            contact_id=self.contact_a,
+            binding_id=self.binding_a.binding_id,
+            mode=ObservationMode.LIVE,
+            cli_version="wechat-cli/0.1.0-test",
+            conversation_locator="wxid_observation_a",
+            last_local_id=800,
+            last_cursor="cursor-800",
+            record_count=1,
+            messages=messages,
+        )
+        self.assertEqual(len(first.message_ids), 1)
+        self.assertEqual(first.observation.record_count, 1)
+        self.assertEqual(self._message_count(self.contact_a), 1)
+
+        # 崩溃重试：同一批次与同一批消息不创建重复来源或重复消息。
+        retry = self.store.record_batch_with_messages(
+            owner_id=self.owner_id,
+            contact_id=self.contact_a,
+            binding_id=self.binding_a.binding_id,
+            mode=ObservationMode.LIVE,
+            cli_version="wechat-cli/0.1.0-test",
+            conversation_locator="wxid_observation_a",
+            last_local_id=800,
+            last_cursor="cursor-800",
+            record_count=1,
+            messages=messages,
+        )
+        self.assertEqual(retry.observation.observation_id, first.observation.observation_id)
+        self.assertEqual(retry.message_ids, first.message_ids)
+        self.assertEqual(self._message_count(self.contact_a), 1)
+
+    def test_record_batch_with_messages_empty_batch_still_advances(self) -> None:
+        observation = self.store.record_batch_with_messages(
+            owner_id=self.owner_id,
+            contact_id=self.contact_a,
+            binding_id=self.binding_a.binding_id,
+            mode=ObservationMode.CLI_CATCHUP,
+            cli_version="wechat-cli/0.1.0-test",
+            conversation_locator="wxid_observation_a",
+            last_local_id=900,
+            last_cursor="cursor-900",
+            record_count=0,
+            messages=(),
+        )
+
+        self.assertEqual(observation.message_ids, ())
+        cursor = self.store.read_cursor(
+            owner_id=self.owner_id, contact_id=self.contact_a
+        )
+        self.assertEqual(cursor.last_local_id, 900)
+        self.assertEqual(self._message_count(self.contact_a), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

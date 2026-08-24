@@ -54,7 +54,14 @@ class CliMessageEvent:
 
 @dataclass(frozen=True, slots=True)
 class TailResult:
-    """一次性 tail 读取结果和下一次读取所需的 cursor。"""
+    """一次性 tail 读取结果和下一次读取所需的 cursor。
+
+    轮询没有新消息时返回空结果：``events`` 为空且 ``cursor`` 与
+    ``last_local_id`` 均为 None，调用方保持既有水位不变。
+    ``last_local_id`` 统计批次内全部事件（含被跳过的非文字事件），
+    保证非文字消息也能前移增量水位。
+    """
 
     events: tuple[CliMessageEvent, ...]
     cursor: str | None
+    last_local_id: int | None = None
