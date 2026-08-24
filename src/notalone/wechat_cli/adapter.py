@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import json
+import queue
 import subprocess
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from notalone.wechat_cli.errors import CliCommandError, CliOutputError
+from notalone.wechat_cli.errors import CliAdapterError, CliCommandError, CliOutputError
 from notalone.wechat_cli.models import (
     ChatCandidate,
     ChatResolution,
     CliMessageEvent,
     MessageIdentifier,
+    TailFollowItem,
     TailResult,
 )
 
@@ -27,6 +30,7 @@ class CommandResult(Protocol):
 
 
 CommandRunner = Callable[[tuple[str, ...]], CommandResult]
+FollowProcessRunner = Callable[[tuple[str, ...]], object]
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +38,78 @@ class _SubprocessResult:
     returncode: int
     stdout: str
     stderr: str
+
+
+class TailFollowStream:
+    """可关闭的 ``tail --follow`` 只读流。"""
+
+    def __init__(self, process: object, *, expected_talker: str) -> None:
+        self._process = process
+        self._expected_talker = expected_talker
+        self._queue: queue.Queue[TailFollowItem | BaseException | None] = queue.Queue()
+        self._closed = False
+        self._lock = threading.Lock()
+        self._reader = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader.start()
+
+    @property
+    def closed(self) -> bool:
+        with self._lock:
+            return self._closed
+
+    def read(self, timeout: float | None = None) -> TailFollowItem | None:
+        try:
+            item = self._queue.get(timeout=timeout)
+        except queue.Empty:
+            return None
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+    def close(self) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+        terminate = getattr(self._process, "terminate", None)
+        if callable(terminate):
+            terminate()
+        wait = getattr(self._process, "wait", None)
+        if callable(wait):
+            try:
+                wait(timeout=1.0)
+            except (TimeoutError, subprocess.TimeoutExpired):
+                kill = getattr(self._process, "kill", None)
+                if callable(kill):
+                    kill()
+
+    def _read_loop(self) -> None:
+        try:
+            reader = getattr(self._process, "stdout", None)
+            if reader is None:
+                reader = self._process
+            while not self.closed:
+                line = reader.readline()
+                if not line:
+                    break
+                item = _parse_follow_line(
+                    line,
+                    expected_talker=self._expected_talker,
+                )
+                if item is not None:
+                    self._queue.put(item)
+            returncode = _poll_process(self._process)
+            if returncode not in (None, 0) and not self.closed:
+                self._queue.put(
+                    CliCommandError("cli_follow_failed", "微信 CLI 流进程异常退出。")
+                )
+        except CliAdapterError as error:
+            if not self.closed:
+                self._queue.put(error)
+        finally:
+            with self._lock:
+                self._closed = True
+            self._queue.put(None)
 
 
 class LocalWechatCli:
@@ -44,6 +120,7 @@ class LocalWechatCli:
         *,
         executable: str = "wechat-cli",
         runner: CommandRunner | None = None,
+        follow_runner: FollowProcessRunner | None = None,
         timeout_seconds: float = 30.0,
     ) -> None:
         if not executable.strip():
@@ -53,6 +130,14 @@ class LocalWechatCli:
         self._executable = executable
         self._timeout_seconds = timeout_seconds
         self._runner = runner or self._run_command
+        if follow_runner is not None:
+            self._follow_runner = follow_runner
+        elif runner is not None:
+            # 旧的命令 runner 只模拟一次性命令；适配器明确降级，避免
+            # 测试或其他调用方意外启动真实长进程。
+            self._follow_runner = self._unsupported_follow_runner
+        else:
+            self._follow_runner = self._run_follow_process
 
     def resolve_chat(
         self,
@@ -127,6 +212,27 @@ class LocalWechatCli:
         result = self._invoke(tuple(command))
         return _parse_tail_output(result.stdout, expected_talker=talker)
 
+    def tail_follow(
+        self,
+        talker: str,
+        *,
+        cursor: str | None = None,
+    ) -> TailFollowStream:
+        """启动单一会话的 ``tail --follow`` 流；调用方负责关闭。"""
+
+        talker = _require_text(talker, "talker")
+        command = [self._executable, "tail", talker]
+        if cursor is not None:
+            command.extend(["--cursor", _require_text(cursor, "cursor")])
+        command.extend(["--follow", "--jsonl", "--strict-read-only"])
+        try:
+            process = self._follow_runner(tuple(command))
+        except FileNotFoundError as error:
+            raise CliCommandError("cli_not_found", "微信 CLI 不可用。") from error
+        except subprocess.TimeoutExpired as error:
+            raise CliCommandError("cli_timeout", "微信 CLI 命令超时。") from error
+        return TailFollowStream(process, expected_talker=talker)
+
     def version(self) -> str:
         """读取 CLI 版本标识，用于观察来源元数据。"""
 
@@ -169,6 +275,23 @@ class LocalWechatCli:
             stderr=result.stderr,
         )
 
+    def _run_follow_process(self, command: tuple[str, ...]) -> object:
+        return subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
+        )
+
+    @staticmethod
+    def _unsupported_follow_runner(command: tuple[str, ...]) -> object:
+        del command
+        raise CliCommandError(
+            "cli_follow_unsupported",
+            "当前 CLI 适配器不提供 follow 流能力。",
+        )
+
 
 def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
     events: list[CliMessageEvent] = []
@@ -181,52 +304,73 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
     for line in lines:
         if not line.strip():
             continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError as error:
-            raise CliOutputError("cli_output_invalid", "微信 CLI 返回了无效事件。") from error
-        if not isinstance(event, dict) or event.get("type") != "message":
+        item = _parse_follow_line(line, expected_talker=expected_talker)
+        if item is None:
             raise CliOutputError("cli_output_invalid", "微信 CLI 返回了不支持的事件。")
-        cursor = _require_text(event.get("cursor"), "cursor")
-        message = _object_field(event, "message")
-        message_id = _object_field(message, "id")
-        local_id = message_id.get("local_id")
-        if isinstance(local_id, bool) or not isinstance(local_id, int) or local_id <= 0:
-            raise CliOutputError("cli_output_invalid", "微信 CLI 消息 ID 无效。")
-        message_talker = _require_text(message_id.get("talker"), "message.id.talker")
-        if message_talker != expected_talker:
-            raise CliOutputError("cli_output_invalid", "微信 CLI 返回了其他会话的消息。")
+        cursor = item.cursor
+        local_id = item.local_id
+        # 文字与非文字事件都参与水位推进，且只取最大值，防止乱序回退。
         if last_local_id is None or local_id > last_local_id:
             last_local_id = local_id
-        kind = _require_text(message.get("kind"), "message.kind")
-        if kind != "text":
+        if item.event is None:
+            # 非文字事件只前移水位，不产生可写消息。
             continue
-        text = _require_text(message.get("text"), "message.text")
-        is_from_me = message.get("is_from_me")
-        if not isinstance(is_from_me, bool):
-            raise CliOutputError("cli_output_invalid", "微信 CLI 说话人标记无效。")
-        events.append(
-            CliMessageEvent(
-                message_id=MessageIdentifier(
-                    local_id=local_id,
-                    talker=message_talker,
-                    server_id_str=_optional_text(message_id.get("server_id_str")),
-                ),
-                text=text,
-                kind=kind,
-                sender=_optional_text(message.get("sender")),
-                sender_wxid=_optional_text(message.get("sender_wxid")),
-                is_from_me=is_from_me,
-                create_time=_optional_int(message.get("create_time")),
-                time=_optional_text(message.get("time")),
-                time_iso=_optional_text(message.get("time_iso")),
-            )
-        )
+        events.append(item.event)
     return TailResult(
         events=tuple(events),
         cursor=cursor,
         last_local_id=last_local_id,
     )
+
+
+def _parse_follow_line(
+    line: str,
+    *,
+    expected_talker: str,
+) -> TailFollowItem | None:
+    try:
+        value = json.loads(line)
+    except json.JSONDecodeError as error:
+        raise CliOutputError("cli_output_invalid", "微信 CLI 返回了无效事件。") from error
+    if not isinstance(value, dict) or value.get("type") != "message":
+        return None
+    cursor = _require_text(value.get("cursor"), "cursor")
+    message = _object_field(value, "message")
+    message_id = _object_field(message, "id")
+    local_id = message_id.get("local_id")
+    if isinstance(local_id, bool) or not isinstance(local_id, int) or local_id <= 0:
+        raise CliOutputError("cli_output_invalid", "微信 CLI 消息 ID 无效。")
+    message_talker = _require_text(message_id.get("talker"), "message.id.talker")
+    if message_talker != expected_talker:
+        raise CliOutputError("cli_output_invalid", "微信 CLI 返回了其他会话的消息。")
+    kind = _require_text(message.get("kind"), "message.kind")
+    if kind != "text":
+        return TailFollowItem(cursor=cursor, local_id=local_id, event=None)
+    text = _require_text(message.get("text"), "message.text")
+    is_from_me = message.get("is_from_me")
+    if not isinstance(is_from_me, bool):
+        raise CliOutputError("cli_output_invalid", "微信 CLI 说话人标记无效。")
+    event = CliMessageEvent(
+        message_id=MessageIdentifier(
+            local_id=local_id,
+            talker=message_talker,
+            server_id_str=_optional_text(message_id.get("server_id_str")),
+        ),
+        text=text,
+        kind=kind,
+        sender=_optional_text(message.get("sender")),
+        sender_wxid=_optional_text(message.get("sender_wxid")),
+        is_from_me=is_from_me,
+        create_time=_optional_int(message.get("create_time")),
+        time=_optional_text(message.get("time")),
+        time_iso=_optional_text(message.get("time_iso")),
+    )
+    return TailFollowItem(cursor=cursor, local_id=local_id, event=event)
+
+
+def _poll_process(process: object) -> int | None:
+    poll = getattr(process, "poll", None)
+    return poll() if callable(poll) else None
 
 
 def _parse_candidate(value: object) -> ChatCandidate:

@@ -90,6 +90,19 @@ class RecordedObservationBatch:
 
     observation: PersistedObservation
     message_ids: tuple[UUID, ...]
+    created_message_ids: tuple[UUID | None, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _CliMessagesWrite:
+    """一批 CLI 消息按输入顺序对齐的写入结果。
+
+    ``created_message_ids`` 中重复复用的消息位置为 ``None``，
+    只表示"本次新建"；两元组长度始终与输入消息相同。
+    """
+
+    message_ids: tuple[UUID, ...]
+    created_message_ids: tuple[UUID | None, ...]
 
 
 def assert_binding_active(
@@ -307,7 +320,7 @@ class PostgresObservationStore:
                     owner_id=owner_id,
                     contact_id=contact_id,
                 )
-                message_ids = self._write_cli_messages(
+                write = self._write_cli_messages(
                     connection,
                     owner_id=owner_id,
                     contact_id=contact_id,
@@ -315,7 +328,7 @@ class PostgresObservationStore:
                     messages=messages,
                 )
                 connection.commit()
-                return message_ids
+                return write.message_ids
         except ObservationPersistenceError:
             raise
         except psycopg.Error:
@@ -393,7 +406,7 @@ class PostgresObservationStore:
                     owner_id=owner_id,
                     contact_id=contact_id,
                 )
-                message_ids = (
+                write = (
                     self._write_cli_messages(
                         connection,
                         owner_id=owner_id,
@@ -402,12 +415,15 @@ class PostgresObservationStore:
                         messages=messages,
                     )
                     if messages
-                    else ()
+                    else _CliMessagesWrite((), ())
                 )
                 connection.commit()
                 return RecordedObservationBatch(
                     observation=observation,
-                    message_ids=message_ids,
+                    message_ids=write.message_ids,
+                    created_message_ids=(
+                        write.created_message_ids if created else ()
+                    ),
                 )
         except ObservationPersistenceError:
             raise
@@ -602,7 +618,7 @@ class PostgresObservationStore:
         contact_id: UUID,
         observation_id: UUID,
         messages: tuple[NormalizedMessage, ...],
-    ) -> tuple[UUID, ...]:
+    ) -> _CliMessagesWrite:
         """在调用方事务内写入规范消息；调用前必须已锁定联系人范围。
 
         同一稳定消息身份 (owner_id, contact_id, external_local_id, source_create_time)
@@ -610,6 +626,7 @@ class PostgresObservationStore:
         """
 
         message_ids: list[UUID] = []
+        created_message_ids: list[UUID | None] = []
         for message in messages:
             if message.wechat_metadata is None:
                 raise ObservationPersistenceError(
@@ -681,6 +698,7 @@ class PostgresObservationStore:
                             metadata.raw_payload_json,
                         ),
                     )
+                created_message_ids.append(None)
             else:
                 # 新规范消息：写入 message + wechat_metadata + message_source_ref
                 message_id = uuid4()
@@ -754,8 +772,12 @@ class PostgresObservationStore:
                         metadata.raw_payload_json,
                     ),
                 )
+                created_message_ids.append(message_id)
             message_ids.append(message_id)
-        return tuple(message_ids)
+        return _CliMessagesWrite(
+            message_ids=tuple(message_ids),
+            created_message_ids=tuple(created_message_ids),
+        )
 
     @staticmethod
     def _advance_cursor(

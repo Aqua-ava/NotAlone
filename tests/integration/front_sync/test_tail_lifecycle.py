@@ -21,16 +21,21 @@ from notalone.front_sync import (
     FrontObserveOutcome,
     FrontSyncPhase,
     FrontSyncStatus,
+    MessageEventPublisher,
     TailLifecycle,
 )
+from notalone.server import EventBusMessagePublisher
+from notalone.server.event_bus import EventBus
+from notalone.server.event_models import EventType, MessageCreatedPayload
 from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
 )
 from notalone.persistence.front_sync_state import PostgresFrontSyncStateStore
 from notalone.persistence.observation_store import PostgresObservationStore
-from notalone.wechat_cli import LocalWechatCli
+from notalone.wechat_cli import CliCommandError, LocalWechatCli
 from tests.integration.front_sync.cli_fakes import (
     ScriptedCliRunner,
+    FollowScript,
     candidate_json as _candidate,
     tail_stdout as _tail_stdout,
 )
@@ -128,15 +133,22 @@ class TailLifecycleTest(unittest.TestCase):
                 (self.owner_id,),
             )
 
-    def _build_lifecycle(self) -> TailLifecycle:
+    def _build_lifecycle(
+        self,
+        *,
+        message_events: MessageEventPublisher | None = None,
+        follow_enabled: bool = False,
+    ) -> TailLifecycle:
         return TailLifecycle(
             owner_id=self.owner_id,
             channel=_CHANNEL,
             account_scope=_ACCOUNT,
-            cli=LocalWechatCli(runner=self.runner),
+            cli=LocalWechatCli(runner=self.runner, follow_runner=self.runner.follow),
             bindings=PostgresConversationBindingRepository(TEST_DATABASE_URL),
             observation_store=PostgresObservationStore(TEST_DATABASE_URL),
             sync_state=PostgresFrontSyncStateStore(TEST_DATABASE_URL),
+            message_events=message_events,
+            follow_enabled=follow_enabled,
             clock=lambda: self.now,
         )
 
@@ -203,6 +215,302 @@ class TailLifecycleTest(unittest.TestCase):
         self.assertEqual(self._watermark(self.contact_a), 10)
         self.assertEqual(self._last_observation_mode(self.contact_a), "live")
         self.assertEqual(self.runner.tail_calls, [(_TALKER_A, None)])
+
+    def test_follow_message_is_persisted_once_and_published(self) -> None:
+        self.runner.follow_scripts[_TALKER_A].append(
+            FollowScript(
+                stdout="\n".join(
+                    (
+                        _tail_stdout(
+                            _TALKER_A,
+                            [(10, "流式合成消息", False)],
+                        ),
+                        _tail_stdout(
+                            _TALKER_A,
+                            [(10, "流式合成消息", False)],
+                        ),
+                    )
+                )
+            )
+        )
+        event_bus = EventBus()
+        subscription = event_bus.subscribe(owner_id=self.owner_id)
+        self.lifecycle = self._build_lifecycle(
+            message_events=EventBusMessagePublisher(event_bus),
+            follow_enabled=True,
+        )
+
+        self._observe(_NAME_A)
+        self.assertEqual(self.lifecycle.poll(), 1)
+        self.assertEqual(self.lifecycle.poll(), 1)
+
+        event = subscription.read(timeout=0.1)
+        self.assertIsNotNone(event)
+        assert event is not None
+        self.assertEqual(event.event_type, EventType.MESSAGE_CREATED)
+        self.assertEqual(event.scope.owner_id, self.owner_id)
+        self.assertEqual(event.scope.contact_id, self.contact_a)
+        self.assertIsInstance(event.payload, MessageCreatedPayload)
+        self.assertEqual(self._message_count(self.contact_a), 1)
+        self.assertIsNone(subscription.read(timeout=0.01))
+        self.assertEqual(self.runner.follow_calls, [(_TALKER_A, None)])
+
+        self.lifecycle.disable_sync()
+        self.assertTrue(self.runner.follow_processes[0].terminated)
+        subscription.close()
+
+    def test_follow_stream_crash_backoffs_then_catches_up_and_resumes(
+        self,
+    ) -> None:
+        """流进程异常退出后进入退避，先用一次性 tail 补读，再重开流。"""
+        self.runner.follow_scripts[_TALKER_A].append(
+            FollowScript(
+                stdout=_tail_stdout(_TALKER_A, [(10, "崩溃前合成消息", False)]),
+                returncode=1,
+                stay_open=False,
+            )
+        )
+        self.lifecycle = self._build_lifecycle(follow_enabled=True)
+        self._observe(_NAME_A)
+
+        self.assertEqual(self.lifecycle.poll(), 1)
+        # 崩溃事件由后台读线程异步送达，轮询直到进入失败阶段。
+        for _ in range(100):
+            if self.lifecycle.status().phase is FrontSyncPhase.FAILED:
+                break
+            self.lifecycle.poll()
+        self.assertEqual(
+            self.lifecycle.status().failure_code, "cli_follow_failed"
+        )
+
+        # 退避窗口内的轮询不再调用 CLI。
+        calls_before = len(self.runner.follow_calls) + len(self.runner.tail_calls)
+        self.now += 0.5
+        self.lifecycle.poll()
+        self.assertEqual(
+            len(self.runner.follow_calls) + len(self.runner.tail_calls),
+            calls_before,
+        )
+
+        # 退避结束后：先从水位用一次性 tail 补读（cli_catchup），再重开流。
+        self.runner.tail_queues[_TALKER_A].append(
+            _tail_stdout(_TALKER_A, [(11, "崩溃期间合成消息", False)])
+        )
+        self.runner.follow_scripts[_TALKER_A].append(
+            FollowScript(
+                stdout=_tail_stdout(_TALKER_A, [(12, "恢复后流式消息", False)])
+            )
+        )
+        self.now += 60.0
+        self.assertEqual(self.lifecycle.poll(), 1)
+        self.assertEqual(self._last_observation_mode(self.contact_a), "cli_catchup")
+        self.assertEqual(self.lifecycle.poll(), 1)
+
+        self.assertEqual(self.lifecycle.status().phase, FrontSyncPhase.ACTIVE)
+        self.assertEqual(self._message_count(self.contact_a), 3)
+        self.assertEqual(self._watermark(self.contact_a), 12)
+        self.assertEqual(self._last_observation_mode(self.contact_a), "live")
+        self.assertEqual(
+            self.runner.tail_calls, [(_TALKER_A, "local_id:10")]
+        )
+        self.assertEqual(
+            self.runner.follow_calls,
+            [(_TALKER_A, None), (_TALKER_A, "local_id:11")],
+        )
+
+    def test_follow_unsupported_degrades_to_one_shot_polling(self) -> None:
+        """--follow 不可用时稳定降级回一次性 tail 轮询。"""
+        self.runner.follow_error = CliCommandError(
+            "cli_follow_unsupported", "当前 CLI 不提供 follow。"
+        )
+        self.lifecycle = self._build_lifecycle(follow_enabled=True)
+        self._observe(_NAME_A)
+        self.runner.tail_queues[_TALKER_A].append(
+            _tail_stdout(_TALKER_A, [(10, "降级后合成消息", False)])
+        )
+
+        self.assertEqual(self.lifecycle.poll(), 1)
+        self.assertEqual(self.lifecycle.status().phase, FrontSyncPhase.ACTIVE)
+        self.assertEqual(self.runner.follow_calls, [])
+        self.assertEqual(self.runner.tail_calls, [(_TALKER_A, None)])
+        self.assertEqual(self._message_count(self.contact_a), 1)
+
+        # 后续轮询继续走一次性读取，不再尝试 follow。
+        self.runner.tail_queues[_TALKER_A].append(
+            _tail_stdout(_TALKER_A, [(11, "继续轮询消息", False)])
+        )
+        self.assertEqual(self.lifecycle.poll(), 1)
+        self.assertEqual(self.runner.follow_calls, [])
+        self.assertEqual(
+            self.runner.tail_calls,
+            [(_TALKER_A, None), (_TALKER_A, "local_id:10")],
+        )
+
+    def test_follow_repeated_open_failure_degrades_to_polling(self) -> None:
+        """连续多次打开即失败的 CLI 达到阈值后永久降级回一次性轮询。"""
+        self.lifecycle = self._build_lifecycle(follow_enabled=True)
+        self._observe(_NAME_A)
+
+        for _ in range(3):
+            self.runner.follow_error = CliCommandError(
+                "cli_follow_failed", "CLI 无法建立 follow 流。"
+            )
+            self.now += 60.0
+            self.lifecycle.poll()
+        self.assertEqual(self.lifecycle.status().phase, FrontSyncPhase.ACTIVE)
+
+        # 降级后不再尝试 follow，一次性轮询正常入库。
+        self.runner.tail_queues[_TALKER_A].append(
+            _tail_stdout(_TALKER_A, [(10, "降级后合成消息", False)])
+        )
+        self.assertEqual(self.lifecycle.poll(), 1)
+        self.assertEqual(self.runner.follow_calls, [])
+        self.assertEqual(self._message_count(self.contact_a), 1)
+
+    def test_follow_repeated_crash_degrades_to_polling(self) -> None:
+        """打开后立即无事件退出的流连续三次后永久降级回一次性轮询。"""
+        for _ in range(3):
+            self.runner.follow_scripts[_TALKER_A].append(
+                FollowScript(returncode=1, stay_open=False)
+            )
+        self.lifecycle = self._build_lifecycle(follow_enabled=True)
+        self._observe(_NAME_A)
+
+        # 三轮每次推进时钟越过退避；崩溃事件异步到达，轮询会自然消费。
+        for _ in range(3):
+            self.now += 60.0
+            for _ in range(3):
+                self.lifecycle.poll()
+        self.assertTrue(self.lifecycle.status().phase is FrontSyncPhase.ACTIVE)
+        self.assertEqual(
+            self.runner.follow_calls, [(_TALKER_A, None)] * 3
+        )
+
+        # 降级后一次性轮询正常入库。
+        self.runner.tail_queues[_TALKER_A].append(
+            _tail_stdout(_TALKER_A, [(10, "降级后合成消息", False)])
+        )
+        self.assertEqual(self.lifecycle.poll(), 1)
+        self.assertEqual(self._message_count(self.contact_a), 1)
+
+    def test_follow_disabled_window_advances_watermark_without_writing(
+        self,
+    ) -> None:
+        """follow 流内手动关闭窗口的消息只前移水位，不写入。"""
+        self.lifecycle = self._build_lifecycle(follow_enabled=True)
+        self.runner.follow_scripts[_TALKER_A].append(
+            FollowScript(
+                stdout=_tail_stdout(
+                    _TALKER_A,
+                    [(10, "关闭前流式消息", False)],
+                    base_time=int(self.now),
+                )
+            )
+        )
+        self._observe(_NAME_A)
+        self.assertEqual(self.lifecycle.poll(), 1)
+        self.assertEqual(self._watermark(self.contact_a), 10)
+
+        self.now += 100.0
+        self.lifecycle.disable_sync()
+        self.now += 100.0
+        self.lifecycle.enable_sync()
+        self._observe(_NAME_A)
+
+        # 关闭窗口内的流式消息只前移水位，不写入：第一次轮询完成
+        # 空补读，第二次轮询打开 follow 流并过滤窗口内消息。
+        self.runner.follow_scripts[_TALKER_A].append(
+            FollowScript(
+                stdout=_tail_stdout(
+                    _TALKER_A,
+                    [(11, "关闭期间流式消息", False)],
+                    base_time=int(self.now) - 100,
+                )
+            )
+        )
+        self.assertEqual(self.lifecycle.poll(), 0)
+        self.assertEqual(self.lifecycle.poll(), 0)
+        self.assertEqual(self._message_count(self.contact_a), 1)
+        self.assertEqual(self._watermark(self.contact_a), 11)
+        self.assertEqual(
+            self.runner.follow_calls,
+            [(_TALKER_A, None), (_TALKER_A, "local_id:10")],
+        )
+        self.assertEqual(
+            self.runner.tail_calls, [(_TALKER_A, "local_id:10")]
+        )
+
+    def test_follow_switch_contact_stops_old_stream_and_starts_new(self) -> None:
+        """切换联系人时旧 follow 进程被关闭，新联系人启动自己的流。"""
+        self.lifecycle = self._build_lifecycle(follow_enabled=True)
+        self.runner.follow_scripts[_TALKER_A].append(
+            FollowScript(
+                stdout=_tail_stdout(_TALKER_A, [(10, "甲流式消息", False)])
+            )
+        )
+        self._observe(_NAME_A)
+        self.assertEqual(self.lifecycle.poll(), 1)
+
+        self.runner.follow_scripts[_TALKER_B].append(
+            FollowScript(
+                stdout=_tail_stdout(_TALKER_B, [(20, "乙流式消息", False)])
+            )
+        )
+        status_b = self._observe(_NAME_B)
+        self.assertEqual(self.lifecycle.poll(), 1)
+
+        self.assertEqual(status_b.active_contact_id, self.contact_b)
+        self.assertTrue(self.runner.follow_processes[0].terminated)
+        self.assertEqual(
+            self.runner.follow_calls, [(_TALKER_A, None), (_TALKER_B, None)]
+        )
+        self.assertEqual(self._watermark(self.contact_a), 10)
+        self.assertEqual(self._watermark(self.contact_b), 20)
+
+    def test_follow_switch_back_catches_up_before_resuming_stream(self) -> None:
+        """切回联系人先一次性补读（cli_catchup），再重开 follow 流。"""
+        self.lifecycle = self._build_lifecycle(follow_enabled=True)
+        self.runner.follow_scripts[_TALKER_A].append(
+            FollowScript(
+                stdout=_tail_stdout(_TALKER_A, [(10, "甲流式消息", False)])
+            )
+        )
+        self._observe(_NAME_A)
+        self.assertEqual(self.lifecycle.poll(), 1)
+
+        self.runner.follow_scripts[_TALKER_B].append(
+            FollowScript(
+                stdout=_tail_stdout(_TALKER_B, [(20, "乙流式消息", False)])
+            )
+        )
+        self._observe(_NAME_B)
+        self.assertEqual(self.lifecycle.poll(), 1)
+
+        # 切回甲：先用一次性 tail 从水位补读，再重开 follow 流。
+        self.runner.tail_queues[_TALKER_A].append(
+            _tail_stdout(_TALKER_A, [(11, "甲离开期间消息", False)])
+        )
+        self._observe(_NAME_A)
+        self.assertEqual(self.lifecycle.poll(), 1)
+        self.assertEqual(self._last_observation_mode(self.contact_a), "cli_catchup")
+
+        self.runner.follow_scripts[_TALKER_A].append(
+            FollowScript(
+                stdout=_tail_stdout(_TALKER_A, [(12, "甲流式续读", False)])
+            )
+        )
+        self.assertEqual(self.lifecycle.poll(), 1)
+        self.assertEqual(self._last_observation_mode(self.contact_a), "live")
+
+        self.assertEqual(
+            self.runner.follow_calls,
+            [(_TALKER_A, None), (_TALKER_B, None), (_TALKER_A, "local_id:11")],
+        )
+        self.assertEqual(
+            self.runner.tail_calls, [(_TALKER_A, "local_id:10")]
+        )
+        self.assertEqual(self._watermark(self.contact_a), 12)
+        self.assertEqual(self._message_count(self.contact_a), 3)
 
     def test_switch_a_b_a_isolates_cursors_and_marks_catchup(self) -> None:
         self.runner.tail_queues[_TALKER_A].append(

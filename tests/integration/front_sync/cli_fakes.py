@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from collections import defaultdict, deque
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -16,6 +17,53 @@ class FakeCommandResult:
     returncode: int
     stdout: str
     stderr: str = ""
+
+
+@dataclass(frozen=True)
+class FollowScript:
+    """一个 fake ``tail --follow`` 进程的输出与退出方式。"""
+
+    stdout: str = ""
+    returncode: int = 0
+    stay_open: bool = True
+
+
+class ScriptedFollowProcess:
+    """只消费合成 JSONL 的可关闭 fake 长进程。"""
+
+    def __init__(self, script: FollowScript) -> None:
+        self._lines = deque(
+            f"{line}\n" for line in script.stdout.splitlines() if line.strip()
+        )
+        self._returncode = script.returncode
+        self._stay_open = script.stay_open
+        self._finished = threading.Event()
+        self._lock = threading.Lock()
+        self.terminated = False
+
+    def readline(self) -> str:
+        with self._lock:
+            if self._lines:
+                return self._lines.popleft()
+            if not self._stay_open:
+                self._finished.set()
+                return ""
+        self._finished.wait(timeout=5)
+        return ""
+
+    def poll(self) -> int | None:
+        return self._returncode if self._finished.is_set() else None
+
+    def terminate(self) -> None:
+        self.terminated = True
+        self._finished.set()
+
+    def kill(self) -> None:
+        self.terminate()
+
+    def wait(self, timeout: float | None = None) -> int:
+        self._finished.wait(timeout=timeout)
+        return self._returncode
 
 
 def candidate_json(
@@ -74,6 +122,10 @@ class ScriptedCliRunner:
         self.tail_queues: dict[str, deque[str]] = defaultdict(deque)
         self.tail_calls: list[tuple[str, str | None]] = []
         self.tail_error: Exception | None = None
+        self.follow_scripts: dict[str, deque[FollowScript]] = defaultdict(deque)
+        self.follow_calls: list[tuple[str, str | None]] = []
+        self.follow_processes: list[ScriptedFollowProcess] = []
+        self.follow_error: Exception | None = None
         self.version_error: Exception | None = None
         self.version_calls = 0
 
@@ -129,3 +181,22 @@ class ScriptedCliRunner:
             stdout = queue.popleft() if queue else ""
             return FakeCommandResult(returncode=0, stdout=stdout)
         raise AssertionError(f"测试未预期的 CLI 命令：{subcommand}")
+
+    def follow(self, command: tuple[str, ...]) -> ScriptedFollowProcess:
+        """启动一个按 talker 排队的 fake follow 进程。"""
+
+        if self.follow_error is not None:
+            error, self.follow_error = self.follow_error, None
+            raise error
+        if command[1:3] != ("tail", command[2]) or "--follow" not in command:
+            raise AssertionError(f"测试未预期的 follow 命令：{command}")
+        talker = command[2]
+        cursor = None
+        if "--cursor" in command:
+            cursor = command[command.index("--cursor") + 1]
+        self.follow_calls.append((talker, cursor))
+        scripts = self.follow_scripts[talker]
+        script = scripts.popleft() if scripts else FollowScript()
+        process = ScriptedFollowProcess(script)
+        self.follow_processes.append(process)
+        return process

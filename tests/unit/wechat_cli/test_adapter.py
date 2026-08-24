@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import unittest
 from dataclasses import dataclass
 
@@ -38,7 +39,103 @@ class RaisingRunner:
         raise self.error
 
 
+class FollowProcess:
+    def __init__(self, lines: list[str], returncode: int = 0) -> None:
+        self._lines = iter(lines)
+        self._returncode = returncode
+        self.terminated = False
+        self._lock = threading.Lock()
+        self._finished = threading.Event()
+
+    def readline(self) -> str:
+        with self._lock:
+            try:
+                return next(self._lines)
+            except StopIteration:
+                pass
+        self._finished.wait(timeout=1)
+        return ""
+
+    def poll(self) -> int | None:
+        return self._returncode if self._finished.is_set() else None
+
+    def terminate(self) -> None:
+        self.terminated = True
+        self._finished.set()
+
+    def wait(self, timeout: float | None = None) -> int:
+        del timeout
+        return self._returncode
+
+
+class FollowRunner:
+    def __init__(self, process: FollowProcess) -> None:
+        self.process = process
+        self.calls: list[tuple[str, ...]] = []
+
+    def __call__(self, command: tuple[str, ...]) -> FollowProcess:
+        self.calls.append(command)
+        return self.process
+
+
 class LocalWechatCliAdapterTest(unittest.TestCase):
+    def test_tail_follow_streams_events_and_closes_process(self) -> None:
+        follow_runner = FollowRunner(
+            FollowProcess(
+                [
+                    json.dumps(
+                        {
+                            "type": "message",
+                            "cursor": "local_id:42",
+                            "message": {
+                                "id": {"local_id": 42, "talker": "wxid_1"},
+                                "kind": "text",
+                                "text": "流式合成消息",
+                                "is_from_me": False,
+                            },
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                ]
+            )
+        )
+        cli = LocalWechatCli(
+            runner=RecordingRunner(FakeCommandResult(returncode=0, stdout="")),
+            follow_runner=follow_runner,
+        )
+
+        stream = cli.tail_follow("wxid_1", cursor="local_id:41")
+        item = stream.read(timeout=1)
+
+        self.assertIsNotNone(item)
+        assert item is not None
+        self.assertEqual(item.cursor, "local_id:42")
+        self.assertEqual(item.local_id, 42)
+        self.assertIsNotNone(item.event)
+        assert item.event is not None
+        self.assertEqual(item.event.text, "流式合成消息")
+        self.assertIsNone(stream.read(timeout=0.01))
+        self.assertFalse(stream.closed)
+        stream.close()
+        self.assertTrue(stream.closed)
+        self.assertTrue(follow_runner.process.terminated)
+        self.assertEqual(
+            follow_runner.calls,
+            [
+                (
+                    "wechat-cli",
+                    "tail",
+                    "wxid_1",
+                    "--cursor",
+                    "local_id:41",
+                    "--follow",
+                    "--jsonl",
+                    "--strict-read-only",
+                )
+            ],
+        )
+
     def test_resolve_chat_preserves_candidates_without_exposing_raw_output(self) -> None:
         runner = RecordingRunner(
             FakeCommandResult(

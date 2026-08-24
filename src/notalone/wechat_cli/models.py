@@ -65,3 +65,12 @@ class TailResult:
     events: tuple[CliMessageEvent, ...]
     cursor: str | None
     last_local_id: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TailFollowItem:
+    """一次 ``tail --follow`` 输出的已校验增量事件。"""
+
+    cursor: str
+    local_id: int
+    event: CliMessageEvent | None

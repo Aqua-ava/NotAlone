@@ -5,6 +5,10 @@ from notalone.front_sync.probe_adapter import (
     MacosFrontSessionProbe,
     ProbeAdapterError,
 )
+from notalone.front_sync.event_publisher import (
+    MessageEventPublisher,
+    NullMessageEventPublisher,
+)
 from notalone.front_sync.sync_engine import (
     BindingCandidateView,
     BindingConfirmationError,
@@ -27,6 +31,8 @@ __all__ = [
     "FrontSyncCycleReport",
     "FrontSyncEngine",
     "FrontSyncEngineError",
+    "MessageEventPublisher",
+    "NullMessageEventPublisher",
     "FrontSyncPhase",
     "FrontSyncStatus",
     "MacosFrontSessionProbe",

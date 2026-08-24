@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from uuid import UUID
 
+from notalone.ingest.models import NormalizedMessage
 from notalone.conversation.matcher import (
     BindingMatchDecision,
     BindingMatchKind,
@@ -37,8 +38,18 @@ from notalone.persistence.observation_store import (
     ObservationPersistenceError,
     PostgresObservationStore,
 )
-from notalone.wechat_cli import CliAdapterError, LocalWechatCli
-from notalone.wechat_cli.models import ChatCandidate, CliMessageEvent
+from notalone.scopes import ContactScope
+from notalone.front_sync.event_publisher import (
+    MessageEventPublisher,
+    NullMessageEventPublisher,
+)
+from notalone.wechat_cli import (
+    CliAdapterError,
+    CliCommandError,
+    LocalWechatCli,
+    TailFollowStream,
+)
+from notalone.wechat_cli.models import ChatCandidate, CliMessageEvent, TailFollowItem
 from notalone.wechat_cli.normalizer import (
     CliNormalizationError,
     normalize_cli_events,
@@ -89,20 +100,24 @@ class _ActiveTailSession:
     since_cursor: str | None
     # 手动关闭窗口 (关闭时刻, 开启时刻) 的 epoch 秒；窗口内消息不写入。
     skip_window: tuple[float, float] | None = None
+    follow_stream: TailFollowStream | None = None
 
 
 _MAX_BACKOFF_SECONDS = 30.0
 _FAILURE_NORMALIZATION = "cli_normalization_failed"
 _FAILURE_PERSISTENCE = "observation_persistence_failed"
+# 连续 follow 失败且从未送达任何流事件时，达到阈值即永久降级一次性轮询；
+# 已送达过事件的流崩溃仍按"崩溃退避重启"处理，不累计降级。
+_FOLLOW_DEGRADE_FAILURE_LIMIT = 3
 # 名字精确匹配落空时，用最近会话列表做一次性选择的回退窗口。
 _FALLBACK_SESSION_LIMIT = 20
 
 
 class TailLifecycle:
-    """按前台观察驱动的一次性轮询式 tail 生命周期。
+    """按前台观察驱动的 follow 优先 tail 生命周期。
 
-    本类不启动后台线程；调用方在前台观察变化时调用
-    ``observe_front_session``，并按固定间隔调用 ``poll``。
+    调用方在前台观察变化时调用 ``observe_front_session``，持续调用
+    ``poll`` 消费常驻 follow 流；follow 不可用时退回一次性读取。
     """
 
     def __init__(
@@ -115,6 +130,8 @@ class TailLifecycle:
         bindings: PostgresConversationBindingRepository,
         observation_store: PostgresObservationStore,
         sync_state: PostgresFrontSyncStateStore,
+        message_events: MessageEventPublisher | None = None,
+        follow_enabled: bool = False,
         clock: Callable[[], float] = time.time,
     ) -> None:
         if not isinstance(owner_id, UUID):
@@ -123,6 +140,8 @@ class TailLifecycle:
             raise ValueError("channel 不能为空。")
         if not normalize_display_text(account_scope):
             raise ValueError("account_scope 不能为空。")
+        if not isinstance(follow_enabled, bool):
+            raise TypeError("follow_enabled 必须是 bool。")
         self._owner_id = owner_id
         self._channel = channel
         self._account_scope = account_scope
@@ -130,6 +149,10 @@ class TailLifecycle:
         self._bindings = bindings
         self._observation_store = observation_store
         self._sync_state = sync_state
+        self._message_events = message_events or NullMessageEventPublisher()
+        self._follow_enabled = follow_enabled
+        self._follow_supported = True
+        self._follow_failures = 0
         self._clock = clock
         self._session: _ActiveTailSession | None = None
         self._phase = FrontSyncPhase.SYNC_DISABLED
@@ -270,52 +293,170 @@ class TailLifecycle:
             return 0
         if self._phase is FrontSyncPhase.FAILED and not self._backoff_elapsed():
             return 0
+        if self._follow_enabled and self._follow_supported:
+            if (
+                session.next_mode is ObservationMode.CLI_CATCHUP
+                and session.follow_stream is None
+            ):
+                return self._poll_once(session)
+            return self._poll_follow(session)
+        return self._poll_once(session)
 
-        scope = session.binding.scope
-        locator = session.binding.conversation_locator
+    def _poll_follow(self, session: _ActiveTailSession) -> int:
+        if session.follow_stream is None:
+            try:
+                session.follow_stream = self._cli.tail_follow(
+                    session.binding.conversation_locator,
+                    cursor=session.since_cursor,
+                )
+            except CliCommandError as error:
+                if error.code == "cli_follow_unsupported":
+                    self._follow_supported = False
+                    return self._poll_once(session)
+                if self._follow_failure_escalates():
+                    return self._poll_once(session)
+                self._mark_failure(error.code)
+                return 0
+            except CliAdapterError as error:
+                if self._follow_failure_escalates():
+                    return self._poll_once(session)
+                self._mark_failure(error.code)
+                return 0
+
+        stream = session.follow_stream
+        assert stream is not None
         try:
-            result = self._cli.tail(locator, cursor=session.since_cursor)
+            item = stream.read(timeout=0.05)
+        except CliAdapterError as error:
+            stream.close()
+            session.follow_stream = None
+            if error.code == "cli_follow_unsupported":
+                self._follow_supported = False
+                return self._poll_once(session)
+            self._prepare_follow_restart(session)
+            if self._follow_failure_escalates():
+                self._recover_from_failure()
+                return self._poll_once(session)
+            self._mark_failure(error.code)
+            return 0
+        if item is None:
+            if stream.closed:
+                stream.close()
+                session.follow_stream = None
+                self._prepare_follow_restart(session)
+                if self._follow_failure_escalates():
+                    self._recover_from_failure()
+                    return self._poll_once(session)
+                self._mark_failure("cli_follow_failed")
+            return 0
+        # 送达过流事件说明 follow 能力可用；后续崩溃按重启处理。
+        self._follow_failures = 0
+        return self._record_follow_item(session, item)
+
+    def _poll_once(self, session: _ActiveTailSession) -> int:
+        try:
+            result = self._cli.tail(
+                session.binding.conversation_locator,
+                cursor=session.since_cursor,
+            )
         except CliAdapterError as error:
             self._mark_failure(error.code)
             return 0
-
         if result.last_local_id is None or result.cursor is None:
-            # 没有新消息：保持活跃状态与既有水位。
+            if session.next_mode is ObservationMode.CLI_CATCHUP:
+                session.next_mode = ObservationMode.LIVE
             self._recover_from_failure()
             return 0
-
-        # 手动关闭期间产生的消息窗口只前移水位，不写入消息；
-        # 过滤按消息原始时间对每个联系人独立生效。
         events = _outside_disabled_window(result.events, session.skip_window)
-
         try:
             messages = normalize_cli_events(events)
         except CliNormalizationError:
             self._mark_failure(_FAILURE_NORMALIZATION)
             return 0
+        return self._record_batch(
+            session,
+            last_local_id=result.last_local_id,
+            last_cursor=result.cursor,
+            messages=messages,
+        )
 
+    def _record_follow_item(
+        self,
+        session: _ActiveTailSession,
+        item: TailFollowItem,
+    ) -> int:
+        events = () if item.event is None else (item.event,)
+        events = _outside_disabled_window(events, session.skip_window)
         try:
-            self._observation_store.record_batch_with_messages(
+            messages = normalize_cli_events(events)
+        except CliNormalizationError:
+            self._prepare_follow_restart(session)
+            self._mark_failure(_FAILURE_NORMALIZATION)
+            self._close_follow_stream(session)
+            return 0
+        return self._record_batch(
+            session,
+            last_local_id=item.local_id,
+            last_cursor=item.cursor,
+            messages=messages,
+        )
+
+    def _record_batch(
+        self,
+        session: _ActiveTailSession,
+        *,
+        last_local_id: int,
+        last_cursor: str,
+        messages: tuple[NormalizedMessage, ...],
+    ) -> int:
+        scope = session.binding.scope
+        try:
+            batch = self._observation_store.record_batch_with_messages(
                 owner_id=self._owner_id,
                 contact_id=scope.contact_id,
                 binding_id=session.binding.binding_id,
                 mode=session.next_mode,
                 cli_version=self._require_cli_version(),
-                conversation_locator=locator,
+                conversation_locator=session.binding.conversation_locator,
                 since_local_id=session.since_local_id,
                 since_cursor=session.since_cursor,
-                last_local_id=result.last_local_id,
-                last_cursor=result.cursor,
+                last_local_id=last_local_id,
+                last_cursor=last_cursor,
                 record_count=len(messages),
                 messages=messages,
             )
         except (CliAdapterError, ObservationPersistenceError):
+            if session.follow_stream is not None:
+                self._prepare_follow_restart(session)
             self._mark_failure(_FAILURE_PERSISTENCE)
+            self._close_follow_stream(session)
             return 0
-
-        self._advance_session(session, result.last_local_id, result.cursor)
+        self._publish_message_events(
+            scope=scope,
+            messages=messages,
+            message_ids=batch.created_message_ids,
+        )
+        self._advance_session(session, last_local_id, last_cursor)
         self._recover_from_failure()
         return len(messages)
+
+    def _publish_message_events(
+        self,
+        *,
+        scope: ContactScope,
+        messages: tuple[NormalizedMessage, ...],
+        message_ids: tuple[UUID | None, ...],
+    ) -> None:
+        for message, message_id in zip(messages, message_ids):
+            if message_id is None:
+                continue
+            self._message_events.publish_message_created(
+                scope=scope,
+                occurred_at=(
+                    message.occurred_at or _datetime_from_clock(self._clock())
+                ),
+                message_id=message_id,
+            )
 
     def status(self) -> FrontSyncStatus:
         """返回当前阶段与活跃联系人；不携带会话内容。"""
@@ -350,6 +491,7 @@ class TailLifecycle:
                 self._failure_code = None
             return
 
+        self._close_session_stream()
         self._session = None
         cursor = self._observation_store.read_cursor(
             owner_id=self._owner_id,
@@ -377,12 +519,24 @@ class TailLifecycle:
     def _stop_session(self, phase: FrontSyncPhase) -> None:
         """停止当前读取任务；水位已随成功批次保存，无需额外写入。"""
 
+        self._close_session_stream()
         self._session = None
         self._phase = phase
         if phase is not FrontSyncPhase.FAILED:
             self._failure_code = None
             self._consecutive_failures = 0
             self._failed_at = None
+
+    def _close_session_stream(self) -> None:
+        session = self._session
+        if session is not None:
+            self._close_follow_stream(session)
+
+    @staticmethod
+    def _close_follow_stream(session: _ActiveTailSession) -> None:
+        if session.follow_stream is not None:
+            session.follow_stream.close()
+            session.follow_stream = None
 
     def _advance_session(
         self,
@@ -394,11 +548,31 @@ class TailLifecycle:
         session.since_cursor = last_cursor
         session.next_mode = ObservationMode.LIVE
 
+    @staticmethod
+    def _prepare_follow_restart(session: _ActiveTailSession) -> None:
+        session.next_mode = (
+            ObservationMode.CLI_CATCHUP
+            if session.since_cursor is not None
+            else ObservationMode.LIVE
+        )
+
     def _mark_failure(self, code: str) -> None:
         self._phase = FrontSyncPhase.FAILED
         self._failure_code = code
         self._consecutive_failures += 1
         self._failed_at = self._clock()
+
+    def _follow_failure_escalates(self) -> bool:
+        """连续 follow 失败达到阈值后永久降级回一次性轮询。
+
+        只在从未成功送达任何流事件时累计；已送达的崩溃按退避重启
+        处理，不影响本计数。
+        """
+        self._follow_failures += 1
+        if self._follow_failures >= _FOLLOW_DEGRADE_FAILURE_LIMIT:
+            self._follow_supported = False
+            return True
+        return False
 
     def _recover_from_failure(self) -> None:
         self._phase = FrontSyncPhase.ACTIVE

@@ -1045,6 +1045,7 @@ class PostgresObservationStoreTest(unittest.TestCase):
             messages=messages,
         )
         self.assertEqual(len(first.message_ids), 1)
+        self.assertEqual(first.created_message_ids, first.message_ids)
         self.assertEqual(first.observation.record_count, 1)
         self.assertEqual(self._message_count(self.contact_a), 1)
 
@@ -1063,6 +1064,7 @@ class PostgresObservationStoreTest(unittest.TestCase):
         )
         self.assertEqual(retry.observation.observation_id, first.observation.observation_id)
         self.assertEqual(retry.message_ids, first.message_ids)
+        self.assertEqual(retry.created_message_ids, ())
         self.assertEqual(self._message_count(self.contact_a), 1)
 
     def test_record_batch_with_messages_empty_batch_still_advances(self) -> None:
