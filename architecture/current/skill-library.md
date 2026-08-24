@@ -1,6 +1,8 @@
 # Skill Library（Skill 库）
 
-> 状态：已采纳的现行设计；管理模块、辅助资源存储和完整运行时能力尚未全部实现。
+> 状态：已采纳且已按本文件完成初版实现；管理接口、辅助资源持久化与运行时读取均已落地，测试见
+> [tests](../../tests/unit/skills)、[tests](../../tests/integration/persistence) 与
+> [tests](../../tests/unit/reply)，以 `python -m unittest discover -s tests` 的真实验证为准。
 > 日期：2026-08-24
 
 ## 1. 目标与范围
@@ -164,17 +166,18 @@ PostgreSQL 继续是 Skill 目录、版本、状态、资源元数据和删除�
 
 ## 9. 当前实现状态与完成条件
 
-仓库当前已经有 Skill 领域模型、只读 PostgreSQL SkillPort、目录修订和候选回复运行时 Adapter；对应实现见 [skills/models.py](../../src/notalone/skills/models.py)、[skill_port.py](../../src/notalone/persistence/skill_port.py)、[langchain_runtime.py](../../src/notalone/reply/adapters/langchain_runtime.py) 和 [008_skill_port.sql](../../database/migrations/008_skill_port.sql)。
+仓库已完成 Skill Library 初版实现：领域模型见 [skills/models.py](../../src/notalone/skills/models.py)，只读受控目录、版本与资源读取见 [skill_port.py](../../src/notalone/persistence/skill_port.py)，管理接口 import/update/enable/disable/rollback/delete/export/preview 见 [skill_library.py](../../src/notalone/persistence/skill_library.py)。运行时按需读取 SKILL.md 与受控 references/assets 的 Adapter 见 [langchain_runtime.py](../../src/notalone/reply/adapters/langchain_runtime.py)，试用执行器见 [skill_preview.py](../../src/notalone/reply/adapters/skill_preview.py)，运行记录与资源摘要见 [reply_store.py](../../src/notalone/persistence/reply_store.py) 和 [024_skill_run_record.sql](../../database/migrations/024_skill_run_record.sql)，包导入校验见 [008_skill_port.sql](../../database/migrations/008_skill_port.sql) 与 [023_skill_library_resources.sql](../../database/migrations/023_skill_library_resources.sql)。
 
-当前实现仍未完成本设计的管理接口、辅助资源持久化和资源运行时读取。因此本文档记录的是已采纳目标，不把架构设计当作已实现能力。
-
-完整实现前至少需要通过：
+初版实现已通过的完成条件：
 
 1. 正常 Skill 包、损坏 frontmatter、重复名称、路径遍历和符号链接测试；
 2. references/assets 的版本绑定、按需读取、大小预算和脚本拒绝测试；
-3. 两个 Owner、两个联系人的目录隔离和 revision 缓存失效测试；
+3. 两个 Owner、两个联系人的目录隔离和 revision 变更测试；
 4. 更新、回滚、停用、删除后正文与资源不可恢复测试；
 5. Skill 加载失败时无 Skill 回退、候选不发送消息和不写入长期资料测试。
+
+当前实现已完成本设计的管理接口、辅助资源持久化和资源运行时读取；架构文档记录的约束不代表
+实现范围之外的能力，网络安装、脚本执行和跨 Owner 共享仍不在初版范围内。
 
 ## 10. 不在本轮范围
 
