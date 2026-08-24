@@ -11,6 +11,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from notalone.skills import (
+    LocalSkillPackageReader,
     SkillImportResult,
     SkillLibraryManagementPort,
     SkillPackageValidationError,
@@ -37,17 +38,19 @@ class SkillLibraryPersistenceError(SkillLibraryManagementError):
 class PostgresSkillLibrary(SkillLibraryManagementPort):
     """在 PostgreSQL 中原子发布用户明确选择的本地 Skill 包。"""
 
-    __slots__ = ("_database_url", "_validator")
+    __slots__ = ("_database_url", "_reader", "_validator")
 
     def __init__(
         self,
         database_url: str,
         *,
+        reader: LocalSkillPackageReader | None = None,
         validator: SkillPackageValidator | None = None,
     ) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
         self._database_url = database_url
+        self._reader = reader or LocalSkillPackageReader()
         self._validator = validator or SkillPackageValidator()
 
     def import_package(
@@ -59,7 +62,8 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
 
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
-        package = self._validator.validate(package_path)
+        raw_package = self._reader.read(package_path)
+        package = self._validator.validate(raw_package)
         skill_id = uuid4()
         version_id = uuid4()
         try:

@@ -13,6 +13,7 @@ from psycopg.rows import dict_row
 
 from notalone.persistence.skill_library import (
     PostgresSkillLibrary,
+    SkillLibraryPersistenceError,
     SkillNameConflictError,
 )
 from notalone.persistence.skill_port import PostgresSkillPort
@@ -394,6 +395,7 @@ class PostgresSkillLibraryTest(unittest.TestCase):
         self.assertEqual(
             result.warnings,
             (
+                "Skill description 建议说明适用场景和使用时机。",
                 "Skill 正文较短，建议补充适用场景、步骤、"
                 "示例和边界。",
             ),
@@ -422,6 +424,161 @@ class PostgresSkillLibraryTest(unittest.TestCase):
         )
         self.assertEqual(catalog.entries, ())
         self.assertEqual(catalog.revision, 0)
+
+    def test_rejects_video_magic_hidden_in_static_asset_extension(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            package = Path(temporary_directory) / "disguised-video"
+            (package / "assets").mkdir(parents=True)
+            (package / "SKILL.md").write_text(
+                "---\n"
+                "name: disguised-video\n"
+                "description: 静态资源类型校验测试。\n"
+                "---\n\n"
+                "只接收清洗后的文字策略。\n"
+                "不保存原始教学媒体。\n"
+                "最终由用户确认回复。\n",
+                encoding="utf-8",
+            )
+            (package / "assets" / "lesson.png").write_bytes(
+                b"\x00\x00\x00\x18ftypmp42"
+            )
+
+            with self.assertRaises(SkillPackageValidationError) as caught:
+                self.library.import_package(self.owner_id, package)
+
+        self.assertEqual(caught.exception.code, "unsupported_resource_type")
+
+    def test_rejects_private_contact_text_without_export_json_shape(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            package = Path(temporary_directory) / "private-contact-text"
+            (package / "references").mkdir(parents=True)
+            (package / "SKILL.md").write_text(
+                "---\n"
+                "name: private-contact-text\n"
+                "description: 隐私边界校验测试。\n"
+                "---\n\n"
+                "只提供通用回复策略。\n"
+                "不保存个人资料。\n"
+                "由用户确认最终消息。\n",
+                encoding="utf-8",
+            )
+            (package / "references" / "contact.txt").write_text(
+                "联系人：张三\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(SkillPackageValidationError) as caught:
+                self.library.import_package(self.owner_id, package)
+
+        self.assertEqual(caught.exception.code, "private_export")
+
+    def test_rejects_active_svg_content(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            package = Path(temporary_directory) / "active-svg"
+            (package / "assets").mkdir(parents=True)
+            (package / "SKILL.md").write_text(
+                "---\n"
+                "name: active-svg\n"
+                "description: SVG 静态资源校验测试。\n"
+                "---\n\n"
+                "只接收静态模板。\n"
+                "不执行外部代码。\n"
+                "最终由用户确认回复。\n",
+                encoding="utf-8",
+            )
+            (package / "assets" / "icon.svg").write_text(
+                '<svg onload="alert(1)"></svg>\n',
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(SkillPackageValidationError) as caught:
+                self.library.import_package(self.owner_id, package)
+
+        self.assertEqual(caught.exception.code, "unsafe_instruction")
+
+    def test_database_failure_rolls_back_skill_version_and_resources(self) -> None:
+        trigger_name = f"block_skill_resource_{uuid4().hex}"
+        function_name = f"block_skill_resource_fn_{uuid4().hex}"
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                f"""
+                CREATE FUNCTION public.{function_name}()
+                RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    RAISE EXCEPTION 'synthetic skill resource failure';
+                END
+                $$
+                """
+            )
+            connection.execute(
+                f"""
+                CREATE TRIGGER {trigger_name}
+                BEFORE INSERT ON public.reply_skill_resource
+                FOR EACH ROW EXECUTE FUNCTION public.{function_name}()
+                """
+            )
+
+        try:
+            with TemporaryDirectory() as temporary_directory:
+                package = Path(temporary_directory) / "atomic-failure"
+                (package / "references").mkdir(parents=True)
+                (package / "SKILL.md").write_text(
+                    "---\n"
+                    "name: atomic-failure\n"
+                    "description: 原子发布失败回滚测试。\n"
+                    "---\n\n"
+                    "先校验完整 Skill 包。\n"
+                    "再在一个事务中发布。\n"
+                    "失败时不留下半成品。\n",
+                    encoding="utf-8",
+                )
+                (package / "references" / "rules.md").write_text(
+                    "只保存受控文字资料。\n",
+                    encoding="utf-8",
+                )
+
+                with self.assertRaises(SkillLibraryPersistenceError):
+                    self.library.import_package(self.owner_id, package)
+        finally:
+            with psycopg.connect(TEST_DATABASE_URL) as connection:
+                connection.execute(
+                    f"DROP TRIGGER {trigger_name} "
+                    "ON public.reply_skill_resource"
+                )
+                connection.execute(f"DROP FUNCTION public.{function_name}()")
+
+        with psycopg.connect(TEST_DATABASE_URL, row_factory=dict_row) as connection:
+            counts = connection.execute(
+                """
+                SELECT
+                    (SELECT count(*) FROM public.reply_skill
+                     WHERE owner_id = %s) AS skill_count,
+                    (SELECT count(*)
+                     FROM public.reply_skill_version AS version
+                     JOIN public.reply_skill AS skill
+                       ON skill.id = version.skill_id
+                     WHERE skill.owner_id = %s) AS version_count,
+                    (SELECT count(*)
+                     FROM public.reply_skill_resource AS resource
+                     JOIN public.reply_skill_version AS version
+                       ON version.id = resource.skill_version_id
+                     JOIN public.reply_skill AS skill
+                       ON skill.id = version.skill_id
+                     WHERE skill.owner_id = %s) AS resource_count,
+                    (SELECT revision FROM public.skill_library
+                     WHERE owner_id = %s) AS revision
+                """,
+                (self.owner_id, self.owner_id, self.owner_id, self.owner_id),
+            ).fetchone()
+        self.assertEqual(
+            counts,
+            {
+                "skill_count": 0,
+                "version_count": 0,
+                "resource_count": 0,
+                "revision": None,
+            },
+        )
 
     def test_rejects_skill_name_that_does_not_match_package_directory(self) -> None:
         with TemporaryDirectory() as temporary_directory:
@@ -489,6 +646,23 @@ class PostgresSkillLibraryTest(unittest.TestCase):
 
         self.assertEqual(result.status, "active")
         self.assertEqual(result.warnings, ())
+
+    def test_malformed_frontmatter_is_reported_as_safe_validation_error(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            package = Path(temporary_directory) / "malformed-frontmatter"
+            package.mkdir()
+            (package / "SKILL.md").write_text(
+                "---\n"
+                "[unhashable, key]: value\n"
+                "---\n\n"
+                "正文。\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(SkillPackageValidationError) as caught:
+                self.library.import_package(self.owner_id, package)
+
+        self.assertEqual(caught.exception.code, "invalid_frontmatter")
 
 
 if __name__ == "__main__":

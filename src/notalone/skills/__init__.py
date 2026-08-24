@@ -9,7 +9,13 @@ from notalone.skills.models import (
     SkillVersion,
     validate_skill_version,
 )
-from notalone.skills.package import SkillPackageValidationError, SkillPackageValidator
+from notalone.skills.package import (
+    RawSkillPackage,
+    RawSkillPackageResource,
+    SkillPackageValidationError,
+    SkillPackageValidator,
+)
+from notalone.skills.package_reader import LocalSkillPackageReader
 from notalone.skills.ports import SkillLibraryManagementPort, SkillPort
 
 __all__ = [
@@ -21,6 +27,9 @@ __all__ = [
     "SkillPackageResource",
     "SkillPackageValidationError",
     "SkillPackageValidator",
+    "LocalSkillPackageReader",
+    "RawSkillPackage",
+    "RawSkillPackageResource",
     "SkillPort",
     "SkillVersion",
     "validate_skill_version",

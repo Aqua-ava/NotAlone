@@ -1,14 +1,12 @@
-"""本地 Reply Skill 包的校验和规范化。"""
+"""本地 Reply Skill 包的解析、校验和规范化。"""
 
 from __future__ import annotations
 
 import hashlib
-import mimetypes
-import os
 import re
-import stat
-from pathlib import Path, PurePosixPath
-from typing import Any
+from dataclasses import dataclass
+from pathlib import PurePosixPath
+from typing import Any, Literal
 
 import yaml
 
@@ -86,16 +84,34 @@ _UNSUPPORTED_MEDIA_SUFFIXES = {
 _TEXT_SUFFIXES = _REFERENCE_SUFFIXES | {
     ".css",
     ".html",
+    ".svg",
     ".template",
     ".tmpl",
 }
+_IMAGE_SIGNATURES = {
+    ".gif": (b"GIF87a", b"GIF89a"),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".jpg": (b"\xff\xd8\xff",),
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".webp": (b"RIFF",),
+}
 _URL_PATTERN = re.compile(r"\bhttps?://", re.IGNORECASE)
-_PRIVATE_EXPORT_MARKERS = (
-    '"sender_wxid"',
-    '"external_local_id"',
-    '"external_talker"',
-    '"raw_payload"',
-    '"source_document_id"',
+_PRIVATE_EXPORT_KEY_PATTERN = re.compile(
+    r"['\"](?:sender_wxid|external_local_id|external_talker|"
+    r"raw_payload|source_document_id)['\"]\s*:",
+    re.IGNORECASE,
+)
+_PRIVATE_EXPORT_PATTERNS = (
+    re.compile(
+        r"(?:微信导出|微信聊天记录|聊天记录原文|原始聊天记录|"
+        r"联系人资料|联系人信息)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:姓名|微信号|手机号|手机号码|电话号码|联系人)\s*[:：]\s*"
+        r"(?![<{\[])[^\s,，;；]+",
+        re.IGNORECASE,
+    ),
 )
 _UNSAFE_INSTRUCTION_PATTERNS = (
     re.compile(
@@ -116,10 +132,51 @@ _UNSAFE_INSTRUCTION_PATTERNS = (
 )
 _NEGATION_PATTERN = re.compile(
     r"(?:不要|禁止|不能|不得|不可|不应|不可以|不会|不自动|避免|"
+    r"不处理|不包含|不记录|不保存|不读取|不采集|不导入|不上传|"
     r"仅供文本|只允许|do not|don't|must not|never|without|avoid|"
-    r"cannot|can't|won't)\s*$",
+    r"cannot|can't|won't)"
+    r"(?:\s*(?:包含|记录|保存|读取|采集|导入|上传|处理))?\s*$",
     re.IGNORECASE,
 )
+_NEGATED_POLICY_PATTERN = re.compile(
+    r"(?:不要|禁止|不能|不得|不可|不应|不可以|不会|不自动|避免|"
+    r"不处理|不包含|不记录|不保存|不读取|不采集|不导入|不上传|"
+    r"仅供文本|只允许|do not|don't|must not|never|without|avoid|"
+    r"cannot|can't|won't)",
+    re.IGNORECASE,
+)
+_UNSAFE_SVG_PATTERN = re.compile(r"<\s*script\b|\bon[a-z]+\s*=", re.I)
+_USAGE_HINTS = (
+    "适合",
+    "用于",
+    "使用",
+    "场景",
+    "需要",
+    "说明",
+    "策略",
+    "when",
+    "use",
+    "for",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class RawSkillPackageResource:
+    """文件读取层输出的未解析资源。"""
+
+    relative_path: str
+    resource_kind: Literal["reference", "asset"]
+    media_type: str
+    content: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class RawSkillPackage:
+    """文件读取层输出的未解析 Skill 包。"""
+
+    package_name: str
+    skill_document: bytes
+    resources: tuple[RawSkillPackageResource, ...]
 
 
 class SkillPackageValidationError(ValueError):
@@ -155,76 +212,66 @@ _UniqueKeyLoader.add_constructor(
 
 
 class SkillPackageValidator:
-    """把用户明确选择的本地目录转换为安全的 Skill 包值对象。"""
+    """把读取层的 Skill 包转换为安全、可持久化的值对象。"""
 
-    def validate(self, package_path: str | Path) -> SkillPackage:
-        root = self._package_root(package_path)
-        self._top_level_entries(root)
-        skill_path = root / "SKILL.md"
-        if not skill_path.exists():
+    def validate(self, package: RawSkillPackage) -> SkillPackage:
+        if not isinstance(package, RawSkillPackage):
             raise SkillPackageValidationError(
-                "missing_skill_file",
-                "缺少 SKILL.md。",
+                "invalid_package",
+                "Skill 包读取结果无效。",
             )
-        skill_bytes = self._read_file(skill_path, MAX_RESOURCE_BYTES)
+        if not isinstance(package.resources, tuple):
+            raise SkillPackageValidationError(
+                "invalid_package",
+                "Skill 包资源清单无效。",
+            )
         name, description, content = self._parse_skill_document(
-            skill_bytes,
-            package_name=root.name,
+            package.skill_document,
+            package_name=package.package_name,
         )
         self._validate_content_safety(description)
         self._validate_content_safety(content)
 
+        if len(package.resources) > MAX_RESOURCE_COUNT:
+            raise SkillPackageValidationError(
+                "resource_count_exceeded",
+                "辅助资源数量超过限制。",
+            )
+        for raw_resource in package.resources:
+            self._validate_resource_metadata(raw_resource)
+        resource_paths = tuple(
+            raw_resource.relative_path for raw_resource in package.resources
+        )
+        if len(resource_paths) != len(set(resource_paths)):
+            raise SkillPackageValidationError(
+                "duplicate_resource_path",
+                "辅助资源路径不能重复。",
+            )
         resources: list[SkillPackageResource] = []
         total_bytes = 0
-        for directory_name in sorted(_ALLOWED_TOP_LEVEL_DIRECTORIES):
-            directory = root / directory_name
-            if not directory.exists():
-                continue
-            for path in self._resource_files(directory, root):
-                relative_path = path.relative_to(root).as_posix()
-                resource_bytes = self._read_file(path, MAX_RESOURCE_BYTES)
-                total_bytes += len(resource_bytes)
-                if total_bytes > MAX_RESOURCE_TOTAL_BYTES:
-                    raise SkillPackageValidationError(
-                        "resource_budget_exceeded",
-                        "辅助资源总大小超过限制。",
-                    )
-                resource_kind = (
-                    "reference"
-                    if relative_path.startswith("references/")
-                    else "asset"
+        ordered_resources = tuple(
+            sorted(package.resources, key=lambda resource: resource.relative_path)
+        )
+        for raw_resource in ordered_resources:
+            resource_bytes = raw_resource.content
+            total_bytes += len(resource_bytes)
+            if total_bytes > MAX_RESOURCE_TOTAL_BYTES:
+                raise SkillPackageValidationError(
+                    "resource_budget_exceeded",
+                    "辅助资源总大小超过限制。",
                 )
-                media_type = self._media_type(path, resource_kind)
-                if path.suffix.lower() in _TEXT_SUFFIXES:
-                    try:
-                        text = resource_bytes.decode("utf-8")
-                    except UnicodeDecodeError:
-                        raise SkillPackageValidationError(
-                            "invalid_encoding",
-                            "文本辅助资源必须使用 UTF-8。",
-                        ) from None
-                    if "\x00" in text:
-                        raise SkillPackageValidationError(
-                            "invalid_text",
-                            "文本辅助资源包含无效内容。",
-                        )
-                    self._validate_content_safety(text)
-                if len(resources) >= MAX_RESOURCE_COUNT:
-                    raise SkillPackageValidationError(
-                        "resource_count_exceeded",
-                        "辅助资源数量超过限制。",
-                    )
-                resources.append(
-                    SkillPackageResource(
-                        relative_path=relative_path,
-                        resource_kind=resource_kind,
-                        media_type=media_type,
-                        content=resource_bytes,
-                        content_sha256=hashlib.sha256(resource_bytes).hexdigest(),
-                    )
+            self._validate_resource_content(raw_resource.relative_path, resource_bytes)
+            resources.append(
+                SkillPackageResource(
+                    relative_path=raw_resource.relative_path,
+                    resource_kind=raw_resource.resource_kind,
+                    media_type=raw_resource.media_type,
+                    content=resource_bytes,
+                    content_sha256=hashlib.sha256(resource_bytes).hexdigest(),
                 )
+            )
 
-        package_sha256 = self._package_hash(skill_bytes, resources)
+        package_sha256 = self._package_hash(package.skill_document, resources)
         return SkillPackage(
             name=name,
             description=description,
@@ -232,145 +279,154 @@ class SkillPackageValidator:
             content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
             package_sha256=package_sha256,
             resources=tuple(resources),
-            warnings=self._quality_warnings(content),
+            warnings=self._quality_warnings(description, content),
         )
 
-    @staticmethod
-    def _package_root(package_path: str | Path) -> Path:
-        if not isinstance(package_path, (str, Path)):
-            raise SkillPackageValidationError("invalid_package", "包路径无效。")
-        root = Path(package_path)
-        try:
-            if root.is_symlink() or not root.is_dir():
-                raise SkillPackageValidationError(
-                    "invalid_package",
-                    "包必须是本地目录。",
-                )
-            return root.resolve(strict=True)
-        except SkillPackageValidationError:
-            raise
-        except (OSError, RuntimeError):
-            raise SkillPackageValidationError(
-                "invalid_package",
-                "包目录无法读取。",
-            ) from None
-
-    @staticmethod
-    def _top_level_entries(root: Path) -> tuple[Path, ...]:
-        try:
-            entries = tuple(sorted(root.iterdir(), key=lambda path: path.name))
-        except OSError:
-            raise SkillPackageValidationError(
-                "invalid_package",
-                "包目录无法读取。",
-            ) from None
-        for entry in entries:
-            if entry.is_symlink():
-                raise SkillPackageValidationError(
-                    "symlink_not_allowed",
-                    "包不能包含符号链接。",
-                )
-            if entry.name == "SKILL.md":
-                if not entry.is_file():
-                    raise SkillPackageValidationError(
-                        "invalid_skill_file",
-                        "SKILL.md 必须是普通文件。",
-                    )
-                continue
-            if entry.is_dir() and entry.name in _ALLOWED_TOP_LEVEL_DIRECTORIES:
-                continue
-            raise SkillPackageValidationError(
-                "unsupported_entry",
-                "包包含不支持的文件或目录。",
-            )
-        return entries
-
     @classmethod
-    def _resource_files(cls, directory: Path, root: Path) -> tuple[Path, ...]:
-        files: list[Path] = []
-        try:
-            with os.scandir(directory) as scanner:
-                entries = sorted(scanner, key=lambda entry: entry.name)
-            for entry in entries:
-                path = Path(entry.path)
-                if entry.is_symlink():
-                    raise SkillPackageValidationError(
-                        "symlink_not_allowed",
-                        "包不能包含符号链接。",
-                    )
-                relative = path.relative_to(root).as_posix()
-                parts = PurePosixPath(relative).parts
-                if (
-                    not parts
-                    or any(part in ("", ".", "..") for part in parts)
-                    or any("\\" in part for part in parts)
-                    or any(part.startswith(".") for part in parts)
-                ):
-                    raise SkillPackageValidationError(
-                        "invalid_resource_path",
-                        "辅助资源路径无效。",
-                    )
-                if entry.is_dir(follow_symlinks=False):
-                    files.extend(cls._resource_files(path, root))
-                    continue
-                if not entry.is_file(follow_symlinks=False):
-                    raise SkillPackageValidationError(
-                        "invalid_resource_type",
-                        "辅助资源必须是普通文件。",
-                    )
-                if path.suffix.lower() in _UNSUPPORTED_MEDIA_SUFFIXES:
-                    raise SkillPackageValidationError(
-                        "unsupported_resource_type",
-                        "辅助资源类型不受支持。",
-                    )
-                allowed_suffixes = (
-                    _REFERENCE_SUFFIXES
-                    if parts[0] == "references"
-                    else _ASSET_SUFFIXES
-                )
-                if path.suffix.lower() not in allowed_suffixes:
-                    raise SkillPackageValidationError(
-                        "unsupported_resource_type",
-                        "辅助资源类型不受支持。",
-                    )
-                files.append(path)
-        except SkillPackageValidationError:
-            raise
-        except OSError:
+    def _validate_resource_metadata(
+        cls,
+        resource: RawSkillPackageResource,
+    ) -> None:
+        if not isinstance(resource, RawSkillPackageResource):
             raise SkillPackageValidationError(
                 "invalid_resource",
-                "辅助资源无法读取。",
-            ) from None
-        return tuple(files)
-
-    @staticmethod
-    def _read_file(path: Path, maximum_bytes: int) -> bytes:
-        try:
-            file_stat = path.stat()
-            if not stat.S_ISREG(file_stat.st_mode):
-                raise SkillPackageValidationError(
-                    "invalid_resource_type",
-                    "包文件必须是普通文件。",
-                )
-            if file_stat.st_size > maximum_bytes:
-                raise SkillPackageValidationError(
-                    "resource_size_exceeded",
-                    "Skill 文件大小超过限制。",
-                )
-            content = path.read_bytes()
-        except SkillPackageValidationError:
-            raise
-        except (OSError, ValueError):
+                "辅助资源记录无效。",
+            )
+        if not isinstance(resource.relative_path, str):
             raise SkillPackageValidationError(
-                "unreadable_file",
-                "Skill 文件无法读取。",
-            ) from None
-        if len(content) > maximum_bytes:
+                "invalid_resource_path",
+                "辅助资源路径无效。",
+            )
+        parts = PurePosixPath(resource.relative_path).parts
+        if (
+            not parts
+            or parts[0] not in _ALLOWED_TOP_LEVEL_DIRECTORIES
+            or any(part in ("", ".", "..") for part in parts)
+            or any("\\" in part for part in parts)
+            or any(part.startswith(".") for part in parts)
+            or resource.relative_path.startswith("/")
+            or resource.relative_path.endswith("/")
+            or "//" in resource.relative_path
+        ):
+            raise SkillPackageValidationError(
+                "invalid_resource_path",
+                "辅助资源路径无效。",
+            )
+        expected_kind = (
+            "reference" if parts[0] == "references" else "asset"
+        )
+        if resource.resource_kind != expected_kind:
+            raise SkillPackageValidationError(
+                "invalid_resource",
+                "辅助资源类型与路径不一致。",
+            )
+        suffix = PurePosixPath(resource.relative_path).suffix.lower()
+        if suffix in _UNSUPPORTED_MEDIA_SUFFIXES:
+            raise SkillPackageValidationError(
+                "unsupported_resource_type",
+                "辅助资源类型不受支持。",
+            )
+        allowed_suffixes = (
+            _REFERENCE_SUFFIXES
+            if expected_kind == "reference"
+            else _ASSET_SUFFIXES
+        )
+        if suffix not in allowed_suffixes:
+            raise SkillPackageValidationError(
+                "unsupported_resource_type",
+                "辅助资源类型不受支持。",
+            )
+        if not isinstance(resource.media_type, str) or not resource.media_type.strip():
+            raise SkillPackageValidationError(
+                "invalid_resource",
+                "辅助资源媒体类型无效。",
+            )
+        if not isinstance(resource.content, bytes):
+            raise SkillPackageValidationError(
+                "invalid_resource",
+                "辅助资源内容无效。",
+            )
+        if len(resource.content) > MAX_RESOURCE_BYTES:
             raise SkillPackageValidationError(
                 "resource_size_exceeded",
                 "Skill 文件大小超过限制。",
             )
-        return content
+
+    @classmethod
+    def _validate_resource_content(
+        cls,
+        relative_path: str,
+        resource_bytes: bytes,
+    ) -> None:
+        suffix = PurePosixPath(relative_path).suffix.lower()
+        if cls._is_forbidden_binary(resource_bytes):
+            raise SkillPackageValidationError(
+                "unsupported_resource_type",
+                "辅助资源类型不受支持。",
+            )
+        if suffix in _IMAGE_SIGNATURES:
+            expected_signatures = _IMAGE_SIGNATURES[suffix]
+            if suffix == ".webp":
+                valid_signature = (
+                    len(resource_bytes) >= 12
+                    and resource_bytes[:4] == b"RIFF"
+                    and resource_bytes[8:12] == b"WEBP"
+                )
+            else:
+                valid_signature = resource_bytes.startswith(expected_signatures)
+            if not valid_signature:
+                raise SkillPackageValidationError(
+                    "invalid_resource_content",
+                    "图片资源内容与文件类型不匹配。",
+                )
+        if suffix not in _TEXT_SUFFIXES:
+            return
+        try:
+            text = resource_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            raise SkillPackageValidationError(
+                "invalid_encoding",
+                "文本辅助资源必须使用 UTF-8。",
+            ) from None
+        if "\x00" in text:
+            raise SkillPackageValidationError(
+                "invalid_text",
+                "文本辅助资源包含无效内容。",
+            )
+        if suffix == ".svg" and _UNSAFE_SVG_PATTERN.search(text):
+            raise SkillPackageValidationError(
+                "unsafe_instruction",
+                "SVG 资源包含脚本或事件处理器。",
+            )
+        cls._validate_content_safety(text)
+
+    @staticmethod
+    def _is_forbidden_binary(content: bytes) -> bool:
+        if content.startswith(
+            (
+                b"PK\x03\x04",
+                b"PK\x05\x06",
+                b"PK\x07\x08",
+                b"7z\xbc\xaf\x27\x1c",
+                b"Rar!\x1a\x07",
+                b"\x1f\x8b",
+                b"BZh",
+                b"\xfd7zXZ\x00",
+                b"ID3",
+                b"OggS",
+                b"fLaC",
+                b"MThd",
+            )
+        ):
+            return True
+        if len(content) >= 8 and content[4:8] == b"ftyp":
+            return True
+        if content.startswith(b"\x1a\x45\xdf\xa3"):
+            return True
+        return content.startswith(b"RIFF") and len(content) >= 12 and content[8:12] in (
+            b"AVI ",
+            b"WAVE",
+        )
 
     @classmethod
     def _parse_skill_document(
@@ -379,6 +435,11 @@ class SkillPackageValidator:
         *,
         package_name: str,
     ) -> tuple[str, str, str]:
+        if not isinstance(raw, bytes) or not isinstance(package_name, str):
+            raise SkillPackageValidationError(
+                "invalid_package",
+                "SKILL.md 内容无效。",
+            )
         try:
             document = raw.decode("utf-8")
         except UnicodeDecodeError:
@@ -415,7 +476,7 @@ class SkillPackageValidator:
                 "".join(lines[1:closing_index]),
                 Loader=_UniqueKeyLoader,
             )
-        except yaml.YAMLError:
+        except (TypeError, ValueError, yaml.YAMLError):
             raise SkillPackageValidationError(
                 "invalid_frontmatter",
                 "SKILL.md frontmatter 无法解析。",
@@ -491,28 +552,40 @@ class SkillPackageValidator:
             tokens += max(1, (ascii_run + 3) // 4)
         return tokens
 
-    @staticmethod
-    def _validate_content_safety(content: str) -> None:
+    @classmethod
+    def _validate_content_safety(cls, content: str) -> None:
         if _URL_PATTERN.search(content):
             raise SkillPackageValidationError(
                 "external_url",
                 "Skill 包不能依赖外部 URL。",
             )
         compact = content.casefold()
-        if sum(
-            marker.casefold() in compact for marker in _PRIVATE_EXPORT_MARKERS
-        ) >= 2:
+        if (
+            len(_PRIVATE_EXPORT_KEY_PATTERN.findall(compact)) >= 2
+            and not _NEGATED_POLICY_PATTERN.search(compact)
+        ):
             raise SkillPackageValidationError(
                 "private_export",
                 "Skill 包不能包含联系人或聊天导出数据。",
             )
         for line in content.splitlines():
+            for pattern in _PRIVATE_EXPORT_PATTERNS:
+                match = pattern.search(line)
+                if match is None:
+                    continue
+                prefix = line[: match.start()].rstrip()
+                if cls._is_negated(prefix):
+                    continue
+                raise SkillPackageValidationError(
+                    "private_export",
+                    "Skill 包不能包含联系人或聊天导出数据。",
+                )
             for pattern in _UNSAFE_INSTRUCTION_PATTERNS:
                 match = pattern.search(line)
                 if match is None:
                     continue
                 prefix = line[: match.start()].rstrip()
-                if _NEGATION_PATTERN.search(prefix):
+                if cls._is_negated(prefix):
                     continue
                 raise SkillPackageValidationError(
                     "unsafe_instruction",
@@ -520,38 +593,28 @@ class SkillPackageValidator:
                 )
 
     @staticmethod
-    def _quality_warnings(content: str) -> tuple[str, ...]:
+    def _is_negated(prefix: str) -> bool:
+        return bool(
+            _NEGATION_PATTERN.search(prefix)
+            or _NEGATED_POLICY_PATTERN.search(prefix)
+        )
+
+    @staticmethod
+    def _quality_warnings(description: str, content: str) -> tuple[str, ...]:
+        warnings: list[str] = []
+        if not any(
+            hint.casefold() in description.casefold() for hint in _USAGE_HINTS
+        ):
+            warnings.append(
+                "Skill description 建议说明适用场景和使用时机。"
+            )
         non_empty_lines = tuple(line for line in content.splitlines() if line.strip())
         if len(non_empty_lines) < 3:
-            return (
+            warnings.append(
                 "Skill 正文较短，建议补充适用场景、步骤、"
                 "示例和边界。",
             )
-        return ()
-
-    @staticmethod
-    def _media_type(path: Path, resource_kind: str) -> str:
-        suffix = path.suffix.lower()
-        known_types = {
-            ".md": "text/markdown",
-            ".markdown": "text/markdown",
-            ".txt": "text/plain",
-            ".csv": "text/csv",
-            ".json": "application/json",
-            ".yaml": "application/yaml",
-            ".yml": "application/yaml",
-            ".xml": "application/xml",
-            ".template": "text/plain",
-            ".tmpl": "text/plain",
-        }
-        media_type = known_types.get(suffix) or mimetypes.guess_type(path.name)[0]
-        if media_type is None:
-            media_type = (
-                "application/octet-stream"
-                if resource_kind == "asset"
-                else "text/plain"
-            )
-        return media_type
+        return tuple(warnings)
 
     @staticmethod
     def _package_hash(
