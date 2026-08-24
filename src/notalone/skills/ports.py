@@ -9,6 +9,7 @@ from uuid import UUID
 from notalone.scopes import ContactScope
 from notalone.skills.models import (
     SkillCatalog,
+    SkillDeletionResult,
     SkillImportResult,
     SkillResource,
     SkillVersion,
@@ -60,3 +61,9 @@ class SkillLibraryManagementPort(Protocol):
         skill_id: UUID,
         version_id: UUID,
     ) -> SkillVersionResult: ...
+
+    def delete(
+        self,
+        owner_id: UUID,
+        skill_id: UUID,
+    ) -> SkillDeletionResult: ...

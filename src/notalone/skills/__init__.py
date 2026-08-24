@@ -3,6 +3,7 @@
 from notalone.skills.models import (
     SkillCatalog,
     SkillCatalogEntry,
+    SkillDeletionResult,
     SkillImportResult,
     SkillPackage,
     SkillPackageResource,
@@ -23,6 +24,7 @@ from notalone.skills.ports import SkillLibraryManagementPort, SkillPort
 __all__ = [
     "SkillCatalog",
     "SkillCatalogEntry",
+    "SkillDeletionResult",
     "SkillImportResult",
     "SkillLibraryManagementPort",
     "SkillPackage",

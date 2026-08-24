@@ -247,6 +247,32 @@ class SkillVersionResult:
 
 
 @dataclass(frozen=True, slots=True)
+class SkillDeletionResult:
+    """删除完成后保留的最小不可恢复删除凭证。"""
+
+    owner_id: UUID
+    skill_id: UUID
+    name: str
+    revision: int
+    deletion_operation_id: UUID | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.owner_id, UUID)
+            or not isinstance(self.skill_id, UUID)
+        ):
+            raise TypeError("Skill 删除凭证标识必须是 UUID。")
+        _validate_skill_name(self.name)
+        if not isinstance(self.revision, int) or self.revision < 1:
+            raise ValueError("Skill 目录修订号无效。")
+        if self.deletion_operation_id is not None and not isinstance(
+            self.deletion_operation_id,
+            UUID,
+        ):
+            raise TypeError("Skill 删除操作标识必须是 UUID。")
+
+
+@dataclass(frozen=True, slots=True)
 class SkillCatalogEntry:
     """目录扫描可见的不可变 Skill 版本元数据。"""
 

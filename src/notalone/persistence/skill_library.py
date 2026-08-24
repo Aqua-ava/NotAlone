@@ -12,6 +12,7 @@ from psycopg.types.json import Jsonb
 
 from notalone.skills import (
     LocalSkillPackageReader,
+    SkillDeletionResult,
     SkillImportResult,
     SkillLibraryManagementPort,
     SkillPackageValidationError,
@@ -396,6 +397,95 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                 f"Skill {operation}失败。"
             ) from None
         return result
+
+    def delete(
+        self,
+        owner_id: UUID,
+        skill_id: UUID,
+    ) -> SkillDeletionResult:
+        """清除 Skill 的全部版本正文、辅助资源、来源定位与内容哈希。
+
+        事务成功后只保留不含正文和资源内容的最小删除凭证。
+        """
+
+        if not isinstance(owner_id, UUID) or not isinstance(skill_id, UUID):
+            raise TypeError("Skill 删除标识必须是 UUID。")
+        operation_id = uuid4()
+        try:
+            with self._connect() as connection:
+                skill = connection.execute(
+                    """
+                    SELECT id, name, status, deletion_operation_id
+                    FROM public.reply_skill
+                    WHERE id = %s AND owner_id = %s
+                    FOR UPDATE
+                    """,
+                    (skill_id, owner_id),
+                ).fetchone()
+                if skill is None:
+                    raise SkillNotFoundError("Skill 删除失败：Skill 不存在。")
+                if skill["status"] == "deleted":
+                    revision = self._current_revision(connection, owner_id)
+                    return SkillDeletionResult(
+                        owner_id=owner_id,
+                        skill_id=skill_id,
+                        name=skill["name"],
+                        revision=revision,
+                        deletion_operation_id=skill["deletion_operation_id"],
+                    )
+                connection.execute(
+                    """
+                    UPDATE public.reply_skill_version
+                    SET content = NULL,
+                        content_sha256 = NULL,
+                        source_locator = NULL,
+                        validation_warnings = '[]'::jsonb,
+                        enabled = FALSE,
+                        is_current = FALSE,
+                        status = 'deleted',
+                        deleted_at = now()
+                    WHERE skill_id = %s AND status = 'active'
+                    """,
+                    (skill_id,),
+                )
+                connection.execute(
+                    """
+                    DELETE FROM public.reply_skill_resource
+                    WHERE skill_version_id IN (
+                        SELECT id
+                        FROM public.reply_skill_version
+                        WHERE skill_id = %s
+                    )
+                    """,
+                    (skill_id,),
+                )
+                connection.execute(
+                    """
+                    UPDATE public.reply_skill
+                    SET status = 'deleted',
+                        deleted_at = now(),
+                        deletion_operation_id = %s,
+                        deletion_error_code = NULL,
+                        updated_at = now()
+                    WHERE id = %s
+                    """,
+                    (operation_id, skill_id),
+                )
+                revision = self._increment_revision(connection, owner_id)
+        except (
+            SkillNotFoundError,
+            SkillLibraryPersistenceError,
+        ):
+            raise
+        except psycopg.Error:
+            raise SkillLibraryPersistenceError("Skill 删除失败。") from None
+        return SkillDeletionResult(
+            owner_id=owner_id,
+            skill_id=skill_id,
+            name=skill["name"],
+            revision=revision,
+            deletion_operation_id=operation_id,
+        )
 
     @staticmethod
     def _ensure_owner(connection: Any, owner_id: UUID) -> None:
