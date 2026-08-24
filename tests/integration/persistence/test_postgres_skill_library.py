@@ -439,8 +439,31 @@ class PostgresSkillLibraryTest(unittest.TestCase):
                 "最终由用户确认回复。\n",
                 encoding="utf-8",
             )
-            (package / "assets" / "lesson.png").write_bytes(
+            (package / "assets" / "lesson.svg").write_bytes(
                 b"\x00\x00\x00\x18ftypmp42"
+            )
+
+            with self.assertRaises(SkillPackageValidationError) as caught:
+                self.library.import_package(self.owner_id, package)
+
+        self.assertEqual(caught.exception.code, "unsupported_resource_type")
+
+    def test_rejects_raster_asset_that_could_contain_chat_privacy(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            package = Path(temporary_directory) / "raster-asset"
+            (package / "assets").mkdir(parents=True)
+            (package / "SKILL.md").write_text(
+                "---\n"
+                "name: raster-asset\n"
+                "description: 图片资源隐私边界测试。\n"
+                "---\n\n"
+                "只接收可检查的文字策略。\n"
+                "不保存联系人资料。\n"
+                "最终由用户确认回复。\n",
+                encoding="utf-8",
+            )
+            (package / "assets" / "chat.png").write_bytes(
+                b"\x89PNG\r\n\x1a\nsynthetic"
             )
 
             with self.assertRaises(SkillPackageValidationError) as caught:
@@ -495,6 +518,50 @@ class PostgresSkillLibraryTest(unittest.TestCase):
                 self.library.import_package(self.owner_id, package)
 
         self.assertEqual(caught.exception.code, "unsafe_instruction")
+
+    def test_rejects_external_svg_reference(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            package = Path(temporary_directory) / "external-svg"
+            (package / "assets").mkdir(parents=True)
+            (package / "SKILL.md").write_text(
+                "---\n"
+                "name: external-svg\n"
+                "description: SVG 外部引用校验测试。\n"
+                "---\n\n"
+                "只接收静态模板。\n"
+                "不读取外部资源。\n"
+                "最终由用户确认回复。\n",
+                encoding="utf-8",
+            )
+            (package / "assets" / "icon.svg").write_text(
+                '<svg><use href="//example.invalid/icon.svg" /></svg>\n',
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(SkillPackageValidationError) as caught:
+                self.library.import_package(self.owner_id, package)
+
+        self.assertEqual(caught.exception.code, "unsafe_instruction")
+
+    def test_rejects_private_json_even_when_text_prohibits_saving_it(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            package = Path(temporary_directory) / "private-json"
+            package.mkdir()
+            (package / "SKILL.md").write_text(
+                "---\n"
+                "name: private-json\n"
+                "description: 隐私字段校验测试。\n"
+                "---\n\n"
+                "不要保存聊天记录。\n"
+                '{"sender_wxid":"wxid-synthetic",'
+                '"external_talker":"synthetic"}\n',
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(SkillPackageValidationError) as caught:
+                self.library.import_package(self.owner_id, package)
+
+        self.assertEqual(caught.exception.code, "private_export")
 
     def test_database_failure_rolls_back_skill_version_and_resources(self) -> None:
         trigger_name = f"block_skill_resource_{uuid4().hex}"

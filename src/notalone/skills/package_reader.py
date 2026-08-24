@@ -20,6 +20,9 @@ from notalone.skills.package import (
     _UNSUPPORTED_MEDIA_SUFFIXES,
 )
 
+_NOFOLLOW_FLAG = getattr(os, "O_NOFOLLOW", 0)
+_DIRECTORY_FLAG = getattr(os, "O_DIRECTORY", 0)
+
 
 class LocalSkillPackageReader:
     """读取用户明确选择的本地目录，不解析或执行其内容。"""
@@ -33,7 +36,11 @@ class LocalSkillPackageReader:
                 "missing_skill_file",
                 "缺少 SKILL.md。",
             )
-        skill_document = self._read_file(skill_path, MAX_RESOURCE_BYTES)
+        skill_document = self._read_file(
+            root,
+            "SKILL.md",
+            MAX_RESOURCE_BYTES,
+        )
 
         resources: list[RawSkillPackageResource] = []
         total_bytes = 0
@@ -47,14 +54,18 @@ class LocalSkillPackageReader:
                         "resource_count_exceeded",
                         "辅助资源数量超过限制。",
                     )
-                resource_bytes = self._read_file(path, MAX_RESOURCE_BYTES)
+                relative_path = path.relative_to(root).as_posix()
+                resource_bytes = self._read_file(
+                    root,
+                    relative_path,
+                    MAX_RESOURCE_BYTES,
+                )
                 total_bytes += len(resource_bytes)
                 if total_bytes > MAX_RESOURCE_TOTAL_BYTES:
                     raise SkillPackageValidationError(
                         "resource_budget_exceeded",
                         "辅助资源总大小超过限制。",
                     )
-                relative_path = path.relative_to(root).as_posix()
                 resource_kind = (
                     "reference"
                     if relative_path.startswith("references/")
@@ -184,10 +195,17 @@ class LocalSkillPackageReader:
             ) from None
         return tuple(files)
 
-    @staticmethod
-    def _read_file(path: Path, maximum_bytes: int) -> bytes:
+    @classmethod
+    def _read_file(
+        cls,
+        root: Path,
+        relative_path: str,
+        maximum_bytes: int,
+    ) -> bytes:
+        file_descriptor = -1
         try:
-            file_stat = path.stat()
+            file_descriptor = cls._open_package_file(root, relative_path)
+            file_stat = os.fstat(file_descriptor)
             if not stat.S_ISREG(file_stat.st_mode):
                 raise SkillPackageValidationError(
                     "invalid_resource_type",
@@ -198,7 +216,9 @@ class LocalSkillPackageReader:
                     "resource_size_exceeded",
                     "Skill 文件大小超过限制。",
                 )
-            content = path.read_bytes()
+            with os.fdopen(file_descriptor, "rb") as stream:
+                file_descriptor = -1
+                content = stream.read(maximum_bytes + 1)
         except SkillPackageValidationError:
             raise
         except (OSError, ValueError):
@@ -206,12 +226,45 @@ class LocalSkillPackageReader:
                 "unreadable_file",
                 "Skill 文件无法读取。",
             ) from None
+        finally:
+            if file_descriptor >= 0:
+                os.close(file_descriptor)
         if len(content) > maximum_bytes:
             raise SkillPackageValidationError(
                 "resource_size_exceeded",
                 "Skill 文件大小超过限制。",
             )
         return content
+
+    @classmethod
+    def _open_package_file(cls, root: Path, relative_path: str) -> int:
+        parts = PurePosixPath(relative_path).parts
+        if not parts:
+            raise ValueError("empty relative path")
+        directory_descriptors: list[int] = []
+        try:
+            root_descriptor = os.open(
+                root,
+                os.O_RDONLY | _NOFOLLOW_FLAG | _DIRECTORY_FLAG,
+            )
+            directory_descriptors.append(root_descriptor)
+            current_descriptor = root_descriptor
+            for part in parts[:-1]:
+                next_descriptor = os.open(
+                    part,
+                    os.O_RDONLY | _NOFOLLOW_FLAG | _DIRECTORY_FLAG,
+                    dir_fd=current_descriptor,
+                )
+                directory_descriptors.append(next_descriptor)
+                current_descriptor = next_descriptor
+            return os.open(
+                parts[-1],
+                os.O_RDONLY | _NOFOLLOW_FLAG,
+                dir_fd=current_descriptor,
+            )
+        finally:
+            for descriptor in reversed(directory_descriptors):
+                os.close(descriptor)
 
     @staticmethod
     def _media_type(path: Path, resource_kind: str) -> str:

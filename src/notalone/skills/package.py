@@ -36,14 +36,9 @@ _REFERENCE_SUFFIXES = {
     ".yml",
 }
 _ASSET_SUFFIXES = _REFERENCE_SUFFIXES | {
-    ".gif",
-    ".jpeg",
-    ".jpg",
-    ".png",
     ".svg",
     ".template",
     ".tmpl",
-    ".webp",
 }
 _UNSUPPORTED_MEDIA_SUFFIXES = {
     ".7z",
@@ -87,13 +82,6 @@ _TEXT_SUFFIXES = _REFERENCE_SUFFIXES | {
     ".svg",
     ".template",
     ".tmpl",
-}
-_IMAGE_SIGNATURES = {
-    ".gif": (b"GIF87a", b"GIF89a"),
-    ".jpeg": (b"\xff\xd8\xff",),
-    ".jpg": (b"\xff\xd8\xff",),
-    ".png": (b"\x89PNG\r\n\x1a\n",),
-    ".webp": (b"RIFF",),
 }
 _URL_PATTERN = re.compile(r"\bhttps?://", re.IGNORECASE)
 _PRIVATE_EXPORT_KEY_PATTERN = re.compile(
@@ -145,7 +133,12 @@ _NEGATED_POLICY_PATTERN = re.compile(
     r"cannot|can't|won't)",
     re.IGNORECASE,
 )
-_UNSAFE_SVG_PATTERN = re.compile(r"<\s*script\b|\bon[a-z]+\s*=", re.I)
+_UNSAFE_SVG_PATTERN = re.compile(
+    r"<\s*script\b|\bon[a-z]+\s*=|"
+    r"\b(?:href|xlink:href|src)\s*=\s*['\"]\s*(?:https?:|//|"
+    r"javascript:)|\burl\(\s*['\"]?(?:https?:|//|javascript:)",
+    re.I,
+)
 _USAGE_HINTS = (
     "适合",
     "用于",
@@ -364,21 +357,6 @@ class SkillPackageValidator:
                 "unsupported_resource_type",
                 "辅助资源类型不受支持。",
             )
-        if suffix in _IMAGE_SIGNATURES:
-            expected_signatures = _IMAGE_SIGNATURES[suffix]
-            if suffix == ".webp":
-                valid_signature = (
-                    len(resource_bytes) >= 12
-                    and resource_bytes[:4] == b"RIFF"
-                    and resource_bytes[8:12] == b"WEBP"
-                )
-            else:
-                valid_signature = resource_bytes.startswith(expected_signatures)
-            if not valid_signature:
-                raise SkillPackageValidationError(
-                    "invalid_resource_content",
-                    "图片资源内容与文件类型不匹配。",
-                )
         if suffix not in _TEXT_SUFFIXES:
             return
         try:
@@ -562,7 +540,6 @@ class SkillPackageValidator:
         compact = content.casefold()
         if (
             len(_PRIVATE_EXPORT_KEY_PATTERN.findall(compact)) >= 2
-            and not _NEGATED_POLICY_PATTERN.search(compact)
         ):
             raise SkillPackageValidationError(
                 "private_export",
