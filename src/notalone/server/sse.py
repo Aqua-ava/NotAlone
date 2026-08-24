@@ -58,5 +58,9 @@ def _payload_data(event: BackendEvent) -> dict[str, object]:
 
 
 def _format_timestamp(value: datetime) -> str:
+    """转为秒级 UTC ISO8601；None 返回空串（调用方决定是否输出字段）。"""
+
+    if value is None:
+        return ""
     utc_value = value.astimezone(timezone.utc)
     return utc_value.isoformat(timespec="seconds").replace("+00:00", "Z")

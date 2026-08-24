@@ -20,6 +20,8 @@ from notalone.server.connection_info import (
     remove_backend_info,
     write_backend_info,
 )
+from notalone.server.event_bus import EventBus
+from notalone.server.event_publisher import EventBusMessagePublisher
 from notalone.server.sync_host import SyncHost
 
 
@@ -53,16 +55,19 @@ def main(argv: list[str] | None = None) -> int:
         print("已有后端实例在运行；请退出旧实例或直接连接既有服务。", file=sys.stderr)
         return 2
 
+    events = EventBus()
     sync_host = _build_sync_host(
         database_url=database_url,
         owner_id=owner_id,
         interval=args.sync_interval,
+        events=events,
     )
     server: BackendServer | None = None
     try:
         app = create_app(
             database_url=database_url,
             owner_id=owner_id,
+            events=events,
             sync_control=sync_host,
         )
         server = BackendServer(app, host=args.host, port=args.port)
@@ -119,6 +124,7 @@ def _build_sync_host(
     database_url: str,
     owner_id: UUID,
     interval: float,
+    events: EventBus,
 ) -> SyncHost | None:
     """有微信渠道身份时装配同步宿主；否则返回 None（同步不可用）。"""
 
@@ -132,6 +138,10 @@ def _build_sync_host(
         database_url=database_url,
         owner_id=owner_id,
         account_scope=account_scope,
+        # 消息写入即发布 message.created 事件，供界面消息流实时更新。
+        # 读取主路径仍保持一次性轮询（follow 待 Issue 04 真实冒烟通过）。
+        message_events=EventBusMessagePublisher(events),
+        follow_enabled=False,
     )
     return SyncHost(engine=engine, interval=interval)
 

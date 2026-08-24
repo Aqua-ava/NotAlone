@@ -39,3 +39,28 @@ public struct ContactDataStatus: Decodable, Equatable, Sendable {
 public struct ContactsResponse: Decodable, Equatable, Sendable {
     public let contacts: [ContactEntry]
 }
+
+// MARK: - 消息流
+
+public struct MessagePage: Decodable, Equatable, Sendable {
+    public let messages: [MessageEntry]
+    public let nextCursor: String?
+}
+
+public struct MessageEntry: Decodable, Equatable, Sendable, Identifiable {
+    public let messageId: String
+    public let speaker: String
+    public let messageType: String
+    public let text: String
+    public let mediaPlaceholder: String?
+    public let occurredAt: String?
+    public let quoted: QuotedMessage?
+
+    public var id: String { messageId }
+}
+
+// 引用消息：正文与被引用内容是两段不同证据；目标缺失时保持未解析。
+public struct QuotedMessage: Decodable, Equatable, Sendable {
+    public let text: String
+    public let targetMessageId: String?
+}

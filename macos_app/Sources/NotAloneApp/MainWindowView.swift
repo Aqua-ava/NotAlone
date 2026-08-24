@@ -6,12 +6,14 @@ import NotAloneAppCore
 // 联系人数据只来自后端当前 owner 的 API。
 struct MainWindowView: View {
     @EnvironmentObject private var model: AppModel
+    @State private var selectedContact: String?
+    @State private var scrollProxy: ScrollViewProxy?
 
     var body: some View {
         NavigationSplitView {
             sidebar
         } content: {
-            messageStreamPlaceholder
+            messageStreamView
         } detail: {
             replyPlaceholder
         }
@@ -28,14 +30,19 @@ struct MainWindowView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             backendStatusBanner
-            List(model.contacts) { contact in
+            List(model.contacts, selection: $selectedContact) { contact in
                 contactRow(contact)
+                    .tag(contact.contactId)
             }
             .listStyle(.inset)
             Divider()
             statusFooter
         }
         .navigationSplitViewColumnWidth(min: 240, ideal: 280)
+        .onChange(of: selectedContact) { _, newValue in
+            guard let newValue else { return }
+            model.selectContact(newValue)
+        }
     }
 
     private func contactRow(_ contact: ContactEntry) -> some View {
@@ -131,20 +138,206 @@ struct MainWindowView: View {
         }
     }
 
-    // MARK: - 中栏与右栏占位
+    // MARK: - 中栏消息流
 
-    private var messageStreamPlaceholder: some View {
-        VStack {
-            Spacer()
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.largeTitle)
-                .foregroundStyle(.tertiary)
-            Text("消息流将在后续版本提供")
+    @ViewBuilder
+    private var messageStreamView: some View {
+        if model.selectedContactId == nil {
+            VStack {
+                Spacer()
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.largeTitle)
+                    .foregroundStyle(.tertiary)
+                Text("选择联系人查看消息流")
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .navigationTitle("消息流")
+        } else {
+            messageList
+        }
+    }
+
+    private var messageList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 6) {
+                    if model.messageStreamState == .loadingFirstPage {
+                        ProgressView("加载消息…")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                    } else if case .failed(let message) = model.messageStreamState {
+                        Text("消息流加载失败：\(message)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding()
+                        Button("重试") { model.loadFirstMessagePage() }
+                            .padding()
+                    }
+                    if model.hasMoreMessages {
+                        Button("加载更早的消息") {
+                            model.loadMoreMessages()
+                        }
+                        .font(.caption)
+                        .buttonStyle(.link)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity)
+                    }
+                    ForEach(model.messages) { message in
+                        messageRow(message)
+                            .id(message.messageId)
+                    }
+                }
+                .padding(10)
+            }
+            .onAppear {
+                scrollProxy = proxy
+            }
+            .onChange(of: model.messages.first?.messageId) { _, newValue in
+                guard let newValue else { return }
+                // 只有头部增加新消息（SSE 追加/断线对账）时才滚到最新；
+                // 「加载更早的消息」向尾部扩展，不打扰当前视口。
+                withAnimation {
+                    proxy.scrollTo(newValue, anchor: .top)
+                }
+            }
+        }
+        .navigationTitle(model.selectedContactDisplayName ?? "消息流")
+    }
+
+    private func messageRow(_ message: MessageEntry) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(speakerLabel(message.speaker))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if let occurredAt = message.occurredAt {
+                    Text(displayTime(occurredAt))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            if let quoted = message.quoted {
+                quotedBlock(message, quoted: quoted)
+            }
+            if !message.text.isEmpty {
+                Text(message.text)
+                    .textSelection(.enabled)
+            } else if let placeholder = message.mediaPlaceholder {
+                HStack(spacing: 4) {
+                    Image(systemName: mediaIcon(message.messageType))
+                        .foregroundStyle(.secondary)
+                    Text(placeholder)
+                        .font(.callout)
+                        .italic()
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            message.speaker == "user"
+                ? Color.accentColor.opacity(0.06)
+                : Color.clear,
+            in: RoundedRectangle(cornerRadius: 8)
+        )
+    }
+
+    @ViewBuilder
+    private func quotedBlock(
+        _ message: MessageEntry,
+        quoted: QuotedMessage
+    ) -> some View {
+        if let targetId = quoted.targetMessageId,
+           model.messages.contains(where: { $0.messageId == targetId }) {
+            // 引用目标在已加载范围：点击可定位到目标消息。
+            Button {
+                withAnimation {
+                    scrollProxy?.scrollTo(targetId, anchor: .center)
+                }
+            } label: {
+                quotedLabel(quoted)
+            }
+            .buttonStyle(.plain)
+        } else {
+            quotedLabel(quoted)
+        }
+    }
+
+    private func quotedLabel(_ quoted: QuotedMessage) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Image(systemName: "quote.opening")
+                .font(.caption2)
                 .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(quoted.text)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                if quoted.targetMessageId == nil {
+                    Text("引用目标缺失：未解析引用")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+            }
             Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .navigationTitle("消息流")
+        .padding(6)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func speakerLabel(_ speaker: String) -> String {
+        switch speaker {
+        case "user":
+            return "我"
+        case "contact":
+            return "对方"
+        case "system":
+            return "系统"
+        default:
+            return speaker
+        }
+    }
+
+    private func mediaIcon(_ type: String) -> String {
+        switch type {
+        case "image":
+            return "photo"
+        case "sticker":
+            return "smiley"
+        case "voice", "voip":
+            return "waveform"
+        case "video", "channel_video":
+            return "video"
+        case "file":
+            return "doc"
+        case "transfer":
+            return "yensign.circle"
+        case "system":
+            return "info.circle"
+        default:
+            return "paperclip"
+        }
+    }
+
+    private func displayTime(_ iso: String) -> String {
+        // 契约：秒级 UTC（2027-01-15T08:00:01Z）。
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var date = formatter.date(from: iso)
+        if date == nil {
+            formatter.formatOptions = [.withInternetDateTime]
+            date = formatter.date(from: iso)
+        }
+        guard let date else {
+            return ""
+        }
+        let time = DateFormatter()
+        time.dateFormat = "MM-dd HH:mm"
+        return time.string(from: date)
     }
 
     private var replyPlaceholder: some View {

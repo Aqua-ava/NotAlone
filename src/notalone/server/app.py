@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 import secrets
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Mapping
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
 from notalone.application.contact_directory import (
@@ -16,11 +17,17 @@ from notalone.application.contact_directory import (
     ContactDirectoryError,
     ContactSummary,
 )
+from notalone.application.message_stream import (
+    MessageStream,
+    MessageStreamContactNotFound,
+    StreamedMessage,
+)
 from notalone.front_sync.sync_engine import (
     BindingCandidateView,
     FrontSyncCycleReport,
 )
 from notalone.persistence.contact_directory import PostgresContactDirectory
+from notalone.persistence.message_stream import PostgresMessageStream
 from notalone.server.event_bus import EventBus, EventSubscription
 from notalone.server.sse import encode_sse_frame
 from notalone.server.sync_host import SyncControlPort
@@ -50,7 +57,14 @@ class SseResponse:
 class BackendApp:
     """只提供本地 API 的无框架 HTTP 应用。"""
 
-    __slots__ = ("_contact_directory", "_events", "_owner_id", "_sync_control", "_token")
+    __slots__ = (
+        "_contact_directory",
+        "_events",
+        "_message_stream",
+        "_owner_id",
+        "_sync_control",
+        "_token",
+    )
 
     def __init__(
         self,
@@ -60,6 +74,7 @@ class BackendApp:
         owner_id: UUID,
         token: str,
         sync_control: SyncControlPort | None = None,
+        message_stream: MessageStream | None = None,
     ) -> None:
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
@@ -67,6 +82,7 @@ class BackendApp:
             raise ValueError("token 不能为空。")
         self._contact_directory = contact_directory
         self._events = events
+        self._message_stream = message_stream
         self._owner_id = owner_id
         self._sync_control = sync_control
         self._token = token
@@ -111,9 +127,78 @@ class BackendApp:
                 HTTPStatus.OK,
                 {"contacts": [_contact_payload(contact) for contact in contacts]},
             )
+        if path_value.startswith("/api/contacts/") and path_value.endswith("/messages"):
+            return self._handle_messages(
+                method=method_upper,
+                path=path_value,
+                query=urlsplit(path).query,
+            )
         if path_value.startswith("/api/sync"):
             return self._handle_sync(method=method_upper, path=path_value)
         return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+
+    def _handle_messages(self, *, method: str, path: str, query: str) -> Response:
+        """处理 /api/contacts/{contact_id}/messages：分页读取消息流。"""
+
+        if method != "GET":
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        stream = self._message_stream
+        prefix = "/api/contacts/"
+        suffix = "/messages"
+        contact_value = path[len(prefix):-len(suffix)]
+        try:
+            contact_id = UUID(contact_value)
+        except ValueError:
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "contact_not_found"})
+
+        parameters = _parse_query(query)
+        try:
+            limit = int(parameters.get("limit", "") or "50")
+        except ValueError:
+            limit = -1
+        before_value = parameters.get("before", "")
+        if before_value:
+            try:
+                before_message_id = UUID(before_value)
+            except ValueError:
+                return _json_response(
+                    HTTPStatus.BAD_REQUEST, {"error": "invalid_message_query"}
+                )
+        else:
+            before_message_id = None
+        try:
+            page = stream.page_messages(
+                owner_id=self._owner_id,
+                contact_id=contact_id,
+                limit=limit,
+                before_message_id=before_message_id,
+            )
+        except MessageStreamContactNotFound:
+            return _json_response(
+                HTTPStatus.NOT_FOUND, {"error": "contact_not_found"}
+            )
+        except (TypeError, ValueError):
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "invalid_message_query"}
+            )
+        except Exception:
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "message_stream_unavailable"},
+            )
+        return _json_response(
+            HTTPStatus.OK,
+            {
+                "messages": [
+                    _message_payload(message) for message in page.messages
+                ],
+                "next_cursor": (
+                    None
+                    if page.next_cursor is None
+                    else str(page.next_cursor)
+                ),
+            },
+        )
 
     def _handle_sync(self, *, method: str, path: str) -> Response:
         """处理同步控制端点；不做任何请求正文解析，失败关闭。"""
@@ -292,6 +377,7 @@ def create_app(
     token: str | None = None,
     events: EventBus | None = None,
     sync_control: SyncControlPort | None = None,
+    message_stream: MessageStream | None = None,
 ) -> BackendApp:
     """创建服务应用；未显式传 token 时在启动时生成随机 token。"""
 
@@ -301,6 +387,7 @@ def create_app(
         owner_id=owner_id,
         token=token or secrets.token_urlsafe(32),
         sync_control=sync_control,
+        message_stream=message_stream or MessageStream(PostgresMessageStream(database_url)),
     )
 
 
@@ -399,6 +486,53 @@ def _candidate_payload(candidate: BindingCandidateView) -> dict[str, object]:
         "display_name": candidate.display_name,
         "last_timestamp": candidate.last_timestamp,
     }
+
+
+def _message_payload(message: StreamedMessage) -> dict[str, object]:
+    """把消息流投影转为稳定 JSON；正文与媒体占位分开，不冒充。"""
+
+    quoted = None
+    if message.quoted is not None:
+        quoted = {
+            "text": message.quoted.text,
+            "target_message_id": (
+                None
+                if message.quoted.target_message_id is None
+                else str(message.quoted.target_message_id)
+            ),
+        }
+    return {
+        "message_id": str(message.message_id),
+        "speaker": message.speaker,
+        "message_type": message.message_type,
+        "text": message.text,
+        "media_placeholder": message.media_placeholder,
+        "occurred_at": _format_timestamp(message.occurred_at),
+        "quoted": quoted,
+    }
+
+
+def _format_timestamp(value: datetime | None) -> str | None:
+    """与 SSE 契约一致的秒级 UTC 时间戳；空值返回 None。"""
+
+    if value is None:
+        return None
+    utc_value = value.astimezone(timezone.utc)
+    return utc_value.isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _parse_query(query: str) -> dict[str, str]:
+    """解析查询字符串；支持 URL 解码与 '+'，重复键取最后一个。"""
+
+    result: dict[str, str] = {}
+    for key, values in parse_qs(
+        query,
+        keep_blank_values=True,
+        encoding="utf-8",
+    ).items():
+        if values:
+            result[key] = values[-1]
+    return result
 
 
 def _json_response(status: HTTPStatus, payload: object) -> Response:

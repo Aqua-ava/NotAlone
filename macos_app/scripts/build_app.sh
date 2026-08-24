@@ -24,6 +24,7 @@ env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
     "${app_dir}/Sources/NotAloneAppCore/BackendModels.swift" \
     "${app_dir}/Sources/NotAloneAppCore/BackendClient.swift" \
     "${app_dir}/Sources/NotAloneAppCore/BackendSupervisor.swift" \
+    "${app_dir}/Sources/NotAloneAppCore/SseEventClient.swift" \
     -framework AppKit \
     -framework Foundation \
     -Xlinker -install_name \

@@ -16,12 +16,38 @@ final class AppModel: ObservableObject {
     @Published private(set) var backendState: BackendState = .launching
     @Published private(set) var contacts: [ContactEntry] = []
     @Published private(set) var status: SyncStatus?
+    @Published private(set) var selectedContactId: String?
+    @Published private(set) var messages: [MessageEntry] = []
+    @Published private(set) var messageStreamState: MessageStreamState = .idle
     @Published var lastOperationMessage: String?
+
+    // 当前选中联系人是否还有更早的消息可加载（首屏后由游标决定）。
+    var hasMoreMessages: Bool {
+        messageStreamState == .loaded && loadedBefore != nil
+    }
+
+    var selectedContactDisplayName: String? {
+        guard let selectedContactId else { return nil }
+        return contacts.first(where: { $0.contactId == selectedContactId })?.displayName
+    }
+
+    enum MessageStreamState: Equatable {
+        case idle
+        case loadingFirstPage
+        case loadingMore
+        case loaded
+        case failed(String)
+    }
 
     private let supervisor = BackendSupervisor()
     private var client: BackendClient?
+    private var clientConnection: BackendConnection?
+    private var sseClient: SseEventClient?
     private var pollTask: Task<Void, Never>?
+    private var messageTask: Task<Void, Never>?
     private var isToggling = false
+    private var loadedBefore: String?
+    private var knownMessageIds: Set<String> = []
 
     private init() {}
 
@@ -35,7 +61,123 @@ final class AppModel: ObservableObject {
     func stop() {
         pollTask?.cancel()
         pollTask = nil
+        messageTask?.cancel()
+        messageTask = nil
+        sseClient?.stop()
+        sseClient = nil
         supervisor.terminate()
+    }
+
+    // MARK: - 消息流
+
+    func selectContact(_ contactId: String) {
+        guard contactId != selectedContactId else { return }
+        selectedContactId = contactId
+        messages = []
+        knownMessageIds = []
+        loadedBefore = nil
+        messageStreamState = .idle
+        loadFirstMessagePage()
+    }
+
+    func loadFirstMessagePage() {
+        guard let selectedContactId, let client else { return }
+        messageTask?.cancel()
+        messageTask = Task { [weak self] in
+            guard let self else { return }
+            self.messageStreamState = .loadingFirstPage
+            do {
+                let page = try await client.messages(contactId: selectedContactId, limit: 50)
+                self.messages = page.messages
+                self.knownMessageIds = Set(page.messages.map(\.messageId))
+                self.loadedBefore = page.nextCursor
+                self.messageStreamState = .loaded
+            } catch {
+                self.messageStreamState = .failed(Self.describe(error))
+            }
+        }
+    }
+
+    func loadMoreMessages() {
+        guard let selectedContactId, let client, hasMoreMessages, let loadedBefore else {
+            return
+        }
+        guard !(messageStreamState == .loadingMore) else { return }
+        messageTask?.cancel()
+        messageTask = Task { [weak self] in
+            guard let self else { return }
+            self.messageStreamState = .loadingMore
+            do {
+                let page = try await client.messages(
+                    contactId: selectedContactId,
+                    limit: 50,
+                    before: loadedBefore
+                )
+                let fresh = page.messages.filter { !self.knownMessageIds.contains($0.messageId) }
+                self.messages.append(contentsOf: fresh)
+                self.knownMessageIds.formUnion(fresh.map(\.messageId))
+                self.loadedBefore = page.nextCursor
+                self.messageStreamState = .loaded
+            } catch {
+                self.messageStreamState = .failed(Self.describe(error))
+            }
+        }
+    }
+
+    // 新消息事件到达（当前联系人范围内）时经消息流 API 拉到最新一页
+    // 并去重追加，保证界面不手动刷新也能实时更新。
+    private func appendNewMessages() {
+        fetchLatestAndMerge()
+    }
+
+    // 对账：拉取最新一页，只合并本次会话未见过的消息（断线窗口补拉）。
+    private func reconcileNewMessages() {
+        fetchLatestAndMerge()
+    }
+
+    // 拉取最新一页；只把当前会话未见过的消息合并到流头部。
+    private func fetchLatestAndMerge() {
+        guard let selectedContactId, let client else { return }
+        guard !(messageStreamState == .loadingFirstPage || messageStreamState == .loadingMore) else {
+            return
+        }
+        messageTask?.cancel()
+        messageTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let page = try await client.messages(contactId: selectedContactId, limit: 50)
+                let fresh = page.messages.filter { !self.knownMessageIds.contains($0.messageId) }
+                guard !fresh.isEmpty else { return }
+                self.messages = fresh + self.messages
+                self.knownMessageIds.formUnion(fresh.map(\.messageId))
+                self.loadedBefore = page.nextCursor
+            } catch {
+                // 合并失败不打断已有消息流；下一轮轮询或事件会重试。
+            }
+        }
+    }
+
+    private func startSseSubscription() {
+        guard sseClient == nil else { return }
+        guard let connection = clientConnection else { return }
+        let sse = SseEventClient(connection: connection) { [weak self] event in
+            guard let self else { return }
+            switch event {
+            case .messageCreated(let created):
+                await MainActor.run {
+                    guard created.contactId == self.selectedContactId else { return }
+                    self.appendNewMessages()
+                }
+            case .reconnected:
+                // message.created 不按 Last-Event-ID 回放：重连后对账，
+                // 拉取最新一页去重合并，弥补断线窗口内入库的消息。
+                await MainActor.run {
+                    self.reconcileNewMessages()
+                }
+            }
+        }
+        sseClient = sse
+        sse.start()
     }
 
     // MARK: - 用户操作
@@ -83,8 +225,7 @@ final class AppModel: ObservableObject {
         // 未启动或进程已退出时先探测既有后端：已有实例则复用连接，
         // 避免两个后端实例同时驱动同步（ADR-020 单实例约束）。
         if supervisor.isRunning, let connection = supervisor.connection {
-            client = BackendClient(connection: connection)
-            backendState = .running
+            attach(connection)
             return
         }
         guard let repoRoot = locateRepoRoot() else {
@@ -92,8 +233,7 @@ final class AppModel: ObservableObject {
             return
         }
         if let existing = await probeExistingBackend() {
-            client = BackendClient(connection: existing)
-            backendState = .running
+            attach(existing)
             return
         }
         guard let serverBin = EnvironmentLocator.locateServerBin() else {
@@ -103,10 +243,19 @@ final class AppModel: ObservableObject {
         backendState = .launching
         do {
             let connection = try await supervisor.launch(repoRoot: repoRoot, serverBin: serverBin)
-            client = BackendClient(connection: connection)
-            backendState = .running
+            attach(connection)
         } catch {
             backendState = .failed(supervisor.lastError ?? Self.describe(error))
+        }
+    }
+
+    private func attach(_ connection: BackendConnection) {
+        clientConnection = connection
+        client = BackendClient(connection: connection)
+        backendState = .running
+        startSseSubscription()
+        if selectedContactId != nil && messages.isEmpty {
+            loadFirstMessagePage()
         }
     }
 
@@ -166,6 +315,8 @@ final class AppModel: ObservableObject {
                 return "同步不可用（可能尚未初始化微信渠道身份）"
             case .badStatus(let code):
                 return "后端返回错误状态 \(code)"
+            case .notFound:
+                return "请求的资源不存在"
             case .malformedResponse:
                 return "后端响应格式异常"
             case .transport:
