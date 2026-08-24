@@ -156,13 +156,13 @@ v1 的检索应可解释：先用联系人过滤，再用时间、关键词、�
 
 v1 风格样本送入提示词但权重受限：最多 5 条、明确标注为“参考的表达样本”，不参与事实推断，不覆盖当前语境判断。若后续发现干扰生成，降为仅离线参考。
 
-### 3.7 回复 Skill 的两级加载
+### 3.7 回复 Skill 的渐进式加载
 
-Skill 采用 progressive disclosure：LangChain `create_agent` 组合 Deep Agents `SkillsMiddleware`，middleware 只从当前 owner/contact 的受控 discovery backend 发现已启用版本，并通过 NotAlone 定制提示词把 `name + description` 等精简目录放入模型上下文。模型需要完整策略时调用受控只读 `read_file(file_path, offset=0, limit=1000)`；该 Tool 只接受目录中已列出的 `SKILL.md` 虚拟路径，经 `SkillPort` 校验范围、状态和不可变版本后返回正文，不是通用文件系统读取。定制提示词不展示 `allowed-tools`，也不引导模型访问 supporting files 或执行脚本。
+Skill 采用 progressive disclosure：LangChain `create_agent` 组合 Deep Agents `SkillsMiddleware`，middleware 只从当前 owner/contact 的受控 discovery backend 发现已启用版本，并通过 NotAlone 定制提示词把 `name + description` 等精简目录放入模型上下文。模型需要完整策略时调用受控只读 `read_file(file_path, offset=0, limit=1000)`；该读取能力只接受目录中已列出的 `SKILL.md` 或允许的 Skill 辅助资源相对路径，经 `SkillPort` 校验范围、状态、不可变版本和目录修订后返回内容，不是通用文件系统读取。定制提示词不展示 `allowed-tools`，不允许脚本执行，也不允许外部 URL 下载。
 
-用户显式选择 Skill 时，应用层通过同一个 `SkillPort` 校验并预加载，不要求模型再次调用 `read_file`。自动模式可以不加载 Skill；加载成功时 UI 必须展示本次使用的名称和版本并允许用户关闭或更换。每次最多使用一个不可变版本；Skill 本身只提供经校验的策略文本，其内容不能注册 Tool、MCP、Shell、文件写入、子 Agent 或外部资源访问。
+用户显式选择 Skill 时，应用层通过同一个 `SkillPort` 校验并预加载，不要求模型再次调用 `read_file`。自动模式可以不加载 Skill；加载成功时 UI 必须展示本次使用的名称和版本并允许用户关闭或更换。每次最多使用一个不可变版本；Skill 及其辅助资源只提供经校验的策略文本或静态素材，其内容不能注册 Tool、MCP、Shell、文件写入、子 Agent 或外部资源访问。
 
-Skill 库管理不属于 Agent Loop。用户可以在独立入口创建、禁用、删除或从网络明确安装 Skill；安装和更新先校验并固化不可变版本，候选回复运行时只读取已经启用的版本。同一 owner 的 Skill 名称唯一，库使用 owner 级 `skill_library_revision`；任一 Skill 安装、更新、启用、禁用或删除时都递增该 revision，并使该 owner 所有联系人范围的旧目录失效。Skill 目录缓存仍绑定 `owner_id + contact_id + skill_library_revision`；任一项变化时，下一轮运行先清除旧目录、旧 Skill Tool 结果和包含旧 Skill 正文的摘要，或使用新的运行状态。采用 `SkillsMiddleware` 不等于采用完整 `create_deep_agent`，候选回复不启用 Deep Agents 的通用文件系统、Shell、Subagent 或长期任务 harness。
+Skill 库管理不属于 Agent Loop。v1 用户在独立入口明确导入本地 Skill 包；安装、更新、启用和停用先校验并固化不可变版本，候选回复运行时只读取已经启用的版本。同一 owner 的 Skill 名称唯一，库使用 owner 级 `skill_library_revision`；任一 Skill 导入、更新、启用、禁用或删除时都递增该 revision，并使该 owner 所有联系人范围的旧目录失效。Skill 目录缓存仍绑定 `owner_id + contact_id + skill_library_revision`；任一项变化时，下一轮运行先清除旧目录、旧 Skill Tool 结果、辅助资源结果和包含旧 Skill 正文的摘要，或使用新的运行状态。采用 `SkillsMiddleware` 不等于采用完整 `create_deep_agent`，候选回复不启用 Deep Agents 的通用文件系统、Shell、Subagent 或长期任务 harness。
 
 消息检索和确认记忆检索 Tool 的模型参数只包含查询意图、limit 和允许的时间范围；已验证的 `owner_id + contact_id` 通过 runtime context 注入并传给 `RetrievalPort`，不能由模型提供或修改。返回携带引用标识、采纳状态、有效期、排序分数与检索器版本，用于复现与审计“本次为何返回这些结果”。
 

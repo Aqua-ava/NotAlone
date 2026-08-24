@@ -3,6 +3,7 @@
 > 状态：已采纳
 > 日期：2026-08-16
 > 修订：ADR-009 第 3 节的 `load_skill` 实现和第 6 节的 Deep Agents 边界
+> 后续修订：ADR-019 修订 v1 supporting files 的范围；本 ADR 的单 Skill、只读读取、缓存和禁止扩权边界继续有效。
 
 ## 背景
 
