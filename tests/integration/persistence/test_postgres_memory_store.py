@@ -45,6 +45,15 @@ class PostgresMemoryStoreTest(unittest.TestCase):
                 has_table = connection.execute(
                     "SELECT to_regclass('public.memory_candidate')"
                 ).fetchone()[0]
+                manual_ok = connection.execute(
+                    """
+                    SELECT count(*)
+                    FROM pg_constraint
+                    WHERE conrelid = 'public.source_document'::regclass
+                      AND conname = 'source_document_source_type_check'
+                      AND pg_get_constraintdef(oid) LIKE '%manual%'
+                    """
+                ).fetchone()[0]
         except psycopg.OperationalError as error:
             raise unittest.SkipTest(
                 "本地 PostgreSQL 测试库不可用。"
@@ -56,6 +65,8 @@ class PostgresMemoryStoreTest(unittest.TestCase):
             )
         if has_table is None:
             raise unittest.SkipTest("测试库尚未应用 009 Memory 迁移。")
+        if manual_ok == 0:
+            raise unittest.SkipTest("测试库尚未应用 025 手动来源迁移。")
 
     def setUp(self) -> None:
         self.owner_id = uuid4()
@@ -188,6 +199,87 @@ class PostgresMemoryStoreTest(unittest.TestCase):
             candidate_id=candidate.candidate_id,
         )
         self.assertEqual(replayed.memory_id, confirmed.memory_id)
+
+    def test_list_pending_candidates_is_scope_filtered(self) -> None:
+        pending = self.store.create_candidate(self._candidate())
+        self.store.create_candidate(
+            self._candidate(
+                candidate_id=self.other_candidate_id,
+                scope=self._scope(self.other_contact_id),
+                source_ids=(self.other_contact_source_id,),
+                text="乙联系人的候选",
+            )
+        )
+        # 新增一个被丢弃的候选，验证只返回 pending。
+        rejected = self.store.create_candidate(
+            self._candidate(candidate_id=uuid4(), text="将被丢弃")
+        )
+        self.store.reject_candidate(
+            scope=self._scope(),
+            candidate_id=rejected.candidate_id,
+        )
+
+        listed = self.store.list_pending_candidates(scope=self._scope())
+
+        self.assertEqual(
+            [item.candidate_id for item in listed],
+            [pending.candidate_id],
+        )
+
+        other = self.store.list_pending_candidates(
+            scope=self._scope(self.other_contact_id)
+        )
+        self.assertEqual(
+            [item.candidate_id for item in other],
+            [self.other_candidate_id],
+        )
+
+    def test_manual_candidate_creates_source_and_confirms(self) -> None:
+        """手动录入：manual 来源 + 候选 + 确认后经检索可见。"""
+
+        candidate = self.store.create_manual_candidate(
+            self._candidate(candidate_id=uuid4(), text="手动录入的记忆")
+        )
+
+        self.assertEqual(candidate.status, MemoryCandidateStatus.PENDING)
+
+        confirmed = self.store.confirm(
+            scope=self._scope(),
+            candidate_id=candidate.candidate_id,
+            adoption_method=AdoptionMethod.MANUAL,
+        )
+        self.assertEqual(confirmed.text, "手动录入的记忆")
+        self.assertEqual(confirmed.adoption_method, AdoptionMethod.MANUAL)
+
+        # manual 来源是 active：确认后的记忆能通过检索过滤（有有效来源）。
+        found = self.retrieval.search_confirmed_memories(scope=self._scope())
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].text, "手动录入的记忆")
+
+    def test_discard_candidate_writes_deletion_fingerprint(self) -> None:
+        """丢弃候选：候选失效 + 删除指纹，同文本不再自动复活候选。"""
+
+        candidate = self.store.create_manual_candidate(
+            self._candidate(candidate_id=uuid4(), text="待丢弃的候选文本")
+        )
+        discarded = self.store.discard_candidate_with_fingerprint(
+            scope=self._scope(),
+            candidate_id=candidate.candidate_id,
+        )
+        self.assertEqual(
+            discarded.status, MemoryCandidateStatus.REJECTED
+        )
+
+        # 指纹已写入：deleted_texts 包含被丢弃文本。
+        self.assertEqual(
+            self.store.deleted_texts(self._scope()),
+            ("待丢弃的候选文本",),
+        )
+        # 列表不再包含该候选。
+        self.assertEqual(
+            self.store.list_pending_candidates(self._scope()),
+            (),
+        )
 
     def test_correction_invalidation_and_deletion_change_later_retrieval(self) -> None:
         self.store.create_candidate(self._candidate())

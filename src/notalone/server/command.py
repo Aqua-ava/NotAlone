@@ -67,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         database_url=database_url,
         owner_id=owner_id,
     )
+    memory_service = _build_memory_service(database_url)
     server: BackendServer | None = None
     try:
         app = create_app(
@@ -75,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
             events=events,
             sync_control=sync_host,
             reply_service=reply_service,
+            memory_service=memory_service,
         )
         server = BackendServer(app, host=args.host, port=args.port)
         host, port = server.start()
@@ -150,6 +152,21 @@ def _build_sync_host(
         follow_enabled=False,
     )
     return SyncHost(engine=engine, interval=interval)
+
+
+def _build_memory_service(database_url: str) -> MemoryService:
+    """装配记忆管理服务（联系人级 + owner 级）。"""
+
+    from notalone.application.memory_service import MemoryService
+    from notalone.persistence import (
+        PostgresMemoryStore,
+        PostgresOwnerMemoryStore,
+    )
+
+    return MemoryService(
+        contact_memory=PostgresMemoryStore(database_url),
+        owner_memory=PostgresOwnerMemoryStore(database_url),
+    )
 
 
 if __name__ == "__main__":

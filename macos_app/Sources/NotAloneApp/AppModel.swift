@@ -39,6 +39,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var lastReplyUsedSkill: ReplyGenerated.UsedSkill?
     @Published private(set) var lastReplyContextEvidence: [String] = []
 
+    // MARK: - 记忆管理
+    @Published private(set) var contactMemories: [MemoryEntry] = []
+    @Published private(set) var pendingMemoryCandidates: [MemoryCandidateEntry] = []
+    @Published private(set) var ownerMemories: [MemoryEntry] = []
+    @Published private(set) var memoryInFlight = false
+    @Published var memoryError: String?
+
     enum MessageStreamState: Equatable {
         case idle
         case loadingFirstPage
@@ -86,6 +93,8 @@ final class AppModel: ObservableObject {
         loadedBefore = nil
         selectedReplyMessageId = nil
         replyCandidates = []
+        contactMemories = []
+        pendingMemoryCandidates = []
         messageStreamState = .idle
         loadFirstMessagePage()
     }
@@ -320,6 +329,148 @@ final class AppModel: ObservableObject {
             } catch {
                 lastOperationMessage = "绑定确认失败：\(Self.describe(error))"
             }
+        }
+    }
+
+    // MARK: - 记忆管理
+
+    func loadMemories() {
+        guard let client else { return }
+        Task {
+            memoryInFlight = true
+            defer { memoryInFlight = false }
+            do {
+                if let selectedContactId {
+                    contactMemories = try await client.contactMemories(contactId: selectedContactId)
+                    pendingMemoryCandidates = try await client.pendingMemoryCandidates(
+                        contactId: selectedContactId
+                    )
+                }
+                ownerMemories = try await client.ownerMemories()
+                memoryError = nil
+            } catch {
+                memoryError = Self.describe(error)
+            }
+        }
+    }
+
+    func addManualMemory(
+        text: String,
+        category: String,
+        level: String
+    ) {
+        guard let client, let selectedContactId else {
+            memoryError = "请先选择联系人"
+            return
+        }
+        Task {
+            memoryInFlight = true
+            defer { memoryInFlight = false }
+            do {
+                if level == "owner" {
+                    _ = try await client.addManualOwnerMemory(text: text, category: category)
+                } else {
+                    _ = try await client.addManualContactMemory(
+                        contactId: selectedContactId,
+                        text: text,
+                        category: category
+                    )
+                }
+                lastOperationMessage = "已录入记忆"
+                await reloadAfterMutation()
+            } catch {
+                memoryError = Self.describe(error)
+            }
+        }
+    }
+
+    func confirmPendingCandidate(_ candidate: MemoryCandidateEntry) {
+        guard let client, let selectedContactId else { return }
+        Task {
+            memoryInFlight = true
+            defer { memoryInFlight = false }
+            do {
+                _ = try await client.confirmMemoryCandidate(
+                    contactId: selectedContactId,
+                    candidateId: candidate.candidateId
+                )
+                lastOperationMessage = "候选已确认为记忆"
+                await reloadAfterMutation()
+            } catch {
+                memoryError = Self.describe(error)
+            }
+        }
+    }
+
+    func discardPendingCandidate(_ candidate: MemoryCandidateEntry) {
+        guard let client, let selectedContactId else { return }
+        Task {
+            memoryInFlight = true
+            defer { memoryInFlight = false }
+            do {
+                try await client.discardMemoryCandidate(
+                    contactId: selectedContactId,
+                    candidateId: candidate.candidateId
+                )
+                lastOperationMessage = "候选已丢弃（计入删除指纹）"
+                await reloadAfterMutation()
+            } catch {
+                memoryError = Self.describe(error)
+            }
+        }
+    }
+
+    func deleteMemory(_ memory: MemoryEntry) {
+        guard let client else { return }
+        Task {
+            memoryInFlight = true
+            defer { memoryInFlight = false }
+            do {
+                if memory.level == "owner" {
+                    try await client.deleteOwnerMemory(memoryId: memory.memoryId)
+                } else if let selectedContactId {
+                    _ = try await client.deleteContactMemory(
+                        contactId: selectedContactId,
+                        memoryId: memory.memoryId
+                    )
+                }
+                lastOperationMessage = "记忆已删除（文本指纹保留）"
+                await reloadAfterMutation()
+            } catch {
+                memoryError = Self.describe(error)
+            }
+        }
+    }
+
+    func correctMemory(_ memory: MemoryEntry, newText: String) {
+        guard let client, let selectedContactId else { return }
+        Task {
+            memoryInFlight = true
+            defer { memoryInFlight = false }
+            do {
+                _ = try await client.correctMemory(
+                    contactId: selectedContactId,
+                    memoryId: memory.memoryId,
+                    text: newText
+                )
+                lastOperationMessage = "记忆已修正（版本演变）"
+                await reloadAfterMutation()
+            } catch {
+                memoryError = Self.describe(error)
+            }
+        }
+    }
+
+    private func reloadAfterMutation() async {
+        // 等一轮后再刷新列表，直接 reload 即可（读最新）。
+        if let selectedContactId, let client {
+            contactMemories = (try? await client.contactMemories(contactId: selectedContactId)) ?? []
+            pendingMemoryCandidates = (try? await client.pendingMemoryCandidates(
+                contactId: selectedContactId
+            )) ?? []
+        }
+        if let client {
+            ownerMemories = (try? await client.ownerMemories()) ?? []
         }
     }
 

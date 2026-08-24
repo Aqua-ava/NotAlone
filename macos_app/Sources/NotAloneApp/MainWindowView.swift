@@ -20,6 +20,33 @@ struct MainWindowView: View {
     @State private var includeRelationshipContext = false
     // 候选正文的会话内编辑内容（按 candidateId）
     @State private var editedCandidateTexts: [String: String] = [:]
+    // 右栏切换：0 = 回复工作区，1 = 记忆管理
+    @State private var detailTab = 0
+    // 记忆管理输入
+    @State private var newMemoryText = ""
+    @State private var newMemoryCategory = MemoryCategoryOption.preference.rawValue
+    // 记忆行内修正编辑状态（按 memoryId）
+    @State private var editingMemoryId: String?
+    @State private var editingMemoryText = ""
+
+    enum MemoryCategoryOption: String, CaseIterable, Identifiable {
+        case commonFact = "common_fact"
+        case preference = "preference"
+        case taboo = "taboo"
+        case recentState = "recent_state"
+        case relationshipNote = "relationship_note"
+
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .commonFact: return "一般事实"
+            case .preference: return "偏好"
+            case .taboo: return "禁忌"
+            case .recentState: return "近期状态"
+            case .relationshipNote: return "关系备注"
+            }
+        }
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -27,7 +54,23 @@ struct MainWindowView: View {
         } content: {
             messageStreamView
         } detail: {
-            replyPlaceholder
+            VStack(spacing: 0) {
+                Picker("右栏", selection: $detailTab) {
+                    Text("回复工作区").tag(0)
+                    Text("记忆管理").tag(1)
+                }
+                .pickerStyle(.segmented)
+                .padding(8)
+                Divider()
+                if detailTab == 0 {
+                    replyPlaceholder
+                } else {
+                    memoryManagementView
+                        .onAppear {
+                            model.loadMemories()
+                        }
+                }
+            }
         }
         .navigationTitle(windowTitle)
         .toolbar {
@@ -455,6 +498,198 @@ struct MainWindowView: View {
         let time = DateFormatter()
         time.dateFormat = "MM-dd HH:mm"
         return time.string(from: date)
+    }
+
+    private var memoryManagementView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("记忆管理")
+                    .font(.headline)
+                if let error = model.memoryError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                manualEntrySection
+                Divider()
+                pendingCandidatesSection
+                Divider()
+                contactMemoriesSection
+                Divider()
+                ownerMemoriesSection
+            }
+            .padding(12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    // 手动录入：文本 + 分类 + 级别（联系人级 / owner 级）。
+    private var manualEntrySection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("手动录入记忆")
+                .font(.subheadline.weight(.semibold))
+            TextField("记忆正文（例如：对方喜欢提前约时间）", text: $newMemoryText, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(2...4)
+            HStack {
+                Picker("分类", selection: $newMemoryCategory) {
+                    ForEach(MemoryCategoryOption.allCases) { option in
+                        Text(option.label).tag(option.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: 160)
+                Button("录入（联系人）") {
+                    model.addManualMemory(
+                        text: newMemoryText,
+                        category: newMemoryCategory,
+                        level: "contact"
+                    )
+                    newMemoryText = ""
+                }
+                .disabled(
+                    model.memoryInFlight
+                        || newMemoryText.trimmingCharacters(in: .whitespaces).isEmpty
+                )
+                Button("录入（自己）") {
+                    model.addManualMemory(
+                        text: newMemoryText,
+                        category: newMemoryCategory,
+                        level: "owner"
+                    )
+                    newMemoryText = ""
+                }
+                .disabled(
+                    model.memoryInFlight
+                        || newMemoryText.trimmingCharacters(in: .whitespaces).isEmpty
+                )
+                .help("录入一条关于自己的长期事实（owner 级）")
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    // 待处理候选：第一次人工处理（确认 / 丢弃）。
+    private var pendingCandidatesSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("待处理候选（低置信）")
+                .font(.subheadline.weight(.semibold))
+            if model.pendingMemoryCandidates.isEmpty {
+                Text("没有待处理候选。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(model.pendingMemoryCandidates) { candidate in
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(candidate.text)
+                            Text("分类：\(categoryLabel(candidate.category))")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("确认") {
+                            model.confirmPendingCandidate(candidate)
+                        }
+                        .font(.caption)
+                        Button("丢弃") {
+                            model.discardPendingCandidate(candidate)
+                        }
+                        .font(.caption)
+                    }
+                    .padding(8)
+                    .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                }
+            }
+        }
+    }
+
+    // 已确认的联系人级记忆。
+    private var contactMemoriesSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("联系人记忆")
+                .font(.subheadline.weight(.semibold))
+            if model.contactMemories.isEmpty {
+                Text("当前联系人还没有记忆。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(model.contactMemories) { memory in
+                    memoryRow(memory)
+                }
+            }
+        }
+    }
+
+    // owner 级记忆。
+    private var ownerMemoriesSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("关于自己的记忆")
+                .font(.subheadline.weight(.semibold))
+            if model.ownerMemories.isEmpty {
+                Text("还没有关于自己的记忆。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(model.ownerMemories) { memory in
+                    memoryRow(memory)
+                }
+            }
+        }
+    }
+
+    private func memoryRow(_ memory: MemoryEntry) -> some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                if editingMemoryId == memory.memoryId {
+                    TextField("修正后的记忆文本", text: $editingMemoryText, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(2...4)
+                    HStack {
+                        Button("保存修正") {
+                            model.correctMemory(memory, newText: editingMemoryText)
+                            editingMemoryId = nil
+                        }
+                        .font(.caption)
+                        .disabled(
+                            editingMemoryText.trimmingCharacters(in: .whitespaces).isEmpty
+                        )
+                        Button("取消") {
+                            editingMemoryId = nil
+                        }
+                        .font(.caption)
+                    }
+                } else {
+                    Text(memory.text)
+                    Text("\(categoryLabel(memory.category)) · \(adoptionLabel(memory.adoptionMethod)) · 修订 \(memory.revision ?? 1)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            if editingMemoryId != memory.memoryId {
+                Button("修正") {
+                    editingMemoryText = memory.text
+                    editingMemoryId = memory.memoryId
+                }
+                .font(.caption)
+                Button("删除") {
+                    model.deleteMemory(memory)
+                }
+                .font(.caption)
+            }
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func categoryLabel(_ raw: String) -> String {
+        MemoryCategoryOption(rawValue: raw)?.label ?? raw
+    }
+
+    private func adoptionLabel(_ raw: String) -> String {
+        raw == "manual" ? "手动" : "自动"
     }
 
     private var replyPlaceholder: some View {

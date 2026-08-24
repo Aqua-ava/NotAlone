@@ -27,6 +27,17 @@ from notalone.application.reply_request import (
     parse_reply_request,
 )
 from notalone.application.reply_service import ReplyService
+from notalone.application.memory_service import (
+    ManualMemoryEntry,
+    MemoryService,
+)
+from notalone.memory.models import (
+    ConfirmedMemory,
+    MemoryCandidate,
+    MemoryCategory,
+    MemoryTopic,
+    OwnerMemory,
+)
 from notalone.front_sync.sync_engine import (
     BindingCandidateView,
     BindingConfirmationError,
@@ -61,12 +72,17 @@ class SseResponse:
     subscription: EventSubscription
 
 
+class MemoryRequestInvalid(ValueError):
+    """记忆请求结构或契约无效；不携带请求内容细节。"""
+
+
 class BackendApp:
     """只提供本地 API 的无框架 HTTP 应用。"""
 
     __slots__ = (
         "_contact_directory",
         "_events",
+        "_memory_service",
         "_message_stream",
         "_owner_id",
         "_reply_service",
@@ -84,6 +100,7 @@ class BackendApp:
         sync_control: SyncControlPort | None = None,
         message_stream: MessageStream | None = None,
         reply_service: ReplyService | None = None,
+        memory_service: MemoryService | None = None,
     ) -> None:
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
@@ -91,6 +108,7 @@ class BackendApp:
             raise ValueError("token 不能为空。")
         self._contact_directory = contact_directory
         self._events = events
+        self._memory_service = memory_service
         self._message_stream = message_stream
         self._reply_service = reply_service
         self._owner_id = owner_id
@@ -146,6 +164,18 @@ class BackendApp:
         if path_value == "/api/reply/generate":
             return self._handle_reply_generate(
                 method=method_upper,
+                body=request_body,
+            )
+        if path_value.startswith("/api/memories") or (
+            path_value.startswith("/api/contacts/")
+            and (
+                "/memories" in path_value
+                or "/memory-candidates" in path_value
+            )
+        ):
+            return self._handle_memory(
+                method=method_upper,
+                path=path_value,
                 body=request_body,
             )
         if path_value.startswith("/api/sync"):
@@ -353,6 +383,160 @@ class BackendApp:
             )
         return _json_response(HTTPStatus.OK, _reply_payload(reply))
 
+    def _handle_memory(self, *, method: str, path: str, body: bytes) -> Response:
+        """处理记忆管理端点；失败关闭且不回显正文。"""
+
+        service = self._memory_service
+        if service is None:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "memory_unavailable"}
+            )
+        try:
+            return self._dispatch_memory(method=method, path=path, body=body)
+        except MemoryRequestInvalid:
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "memory_request_invalid"}
+            )
+
+    def _dispatch_memory(self, *, method: str, path: str, body: bytes) -> Response:
+        """按路径分发记忆管理请求。"""
+
+        owner_id = self._owner_id
+        service = self._memory_service
+
+        if method == "GET" and path == "/api/memories/owner":
+            return _json_response(
+                HTTPStatus.OK,
+                {
+                    "memories": [
+                        _owner_memory_payload(memory)
+                        for memory in service.list_owner_memories(owner_id=owner_id)
+                    ]
+                },
+            )
+        if method == "POST" and path == "/api/memories/manual-contact":
+            payload = _parse_memory_json(body)
+            contact_id = _uuid_or_raise(payload.get("contact_id"), "contact_id")
+            entry = _manual_entry_or_raise(payload)
+            memory = service.add_manual_contact_memory(
+                owner_id=owner_id,
+                contact_id=contact_id,
+                entry=ManualMemoryEntry(
+                    text=entry["text"],
+                    category=entry["category"],
+                    topic=entry["topic"],
+                ),
+            )
+            return _json_response(
+                HTTPStatus.OK, {"memory": _memory_payload(memory)}
+            )
+        if method == "POST" and path == "/api/memories/manual-owner":
+            payload = _parse_memory_json(body)
+            entry = _manual_entry_or_raise(payload)
+            memory = service.add_manual_owner_memory(
+                owner_id=owner_id,
+                entry=ManualMemoryEntry(
+                    text=entry["text"],
+                    category=entry["category"],
+                    topic=entry["topic"],
+                ),
+            )
+            return _json_response(
+                HTTPStatus.OK, {"memory": _owner_memory_payload(memory)}
+            )
+        if method == "POST" and path.startswith("/api/memories/owner/") \
+                and path.endswith("/delete"):
+            memory_id = _uuid_or_raise(_path_tail(path, "/api/memories/owner/", "/delete"), "memory_id")
+            memory = service.delete_owner_memory(
+                owner_id=owner_id, memory_id=memory_id
+            )
+            return _json_response(
+                HTTPStatus.OK, {"memory": _owner_memory_payload(memory)}
+            )
+
+        # 联系人级端点：/api/contacts/{contact_id}/...
+        parts = path.removeprefix("/api/contacts/").split("/")
+        if len(parts) < 2:
+            raise MemoryRequestInvalid()
+        contact_id = _uuid_or_raise(parts[0], "contact_id")
+        segment = parts[1]
+        if method == "GET" and segment == "memories" and len(parts) == 2:
+            return _json_response(
+                HTTPStatus.OK,
+                {
+                    "memories": [
+                        _memory_payload(memory)
+                        for memory in service.list_contact_memories(
+                            owner_id=owner_id, contact_id=contact_id
+                        )
+                    ]
+                },
+            )
+        if method == "GET" and segment == "memory-candidates" and len(parts) == 2:
+            return _json_response(
+                HTTPStatus.OK,
+                {
+                    "candidates": [
+                        _memory_candidate_payload(candidate)
+                        for candidate in service.list_pending(
+                            owner_id=owner_id, contact_id=contact_id
+                        )
+                    ]
+                },
+            )
+        if method == "POST" and segment == "memory-candidates" and len(parts) == 4:
+            candidate_id = _uuid_or_raise(parts[2], "candidate_id")
+            action = parts[3]
+            if action == "confirm":
+                memory = service.confirm_candidate(
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    candidate_id=candidate_id,
+                )
+                return _json_response(
+                    HTTPStatus.OK, {"memory": _memory_payload(memory)}
+                )
+            if action == "discard":
+                candidate = service.discard_candidate(
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    candidate_id=candidate_id,
+                )
+                return _json_response(
+                    HTTPStatus.OK, {"candidate_id": str(candidate.candidate_id)}
+                )
+            raise MemoryRequestInvalid()
+        if method == "POST" and segment == "memories" and len(parts) == 4:
+            memory_id = _uuid_or_raise(parts[2], "memory_id")
+            action = parts[3]
+            if action == "delete":
+                memory = service.delete_contact_memory(
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    memory_id=memory_id,
+                )
+                return _json_response(
+                    HTTPStatus.OK, {"memory": _memory_payload(memory)}
+                )
+            if action == "correct":
+                payload = _parse_memory_json(body)
+                text = payload.get("text")
+                if not isinstance(text, str) or not text.strip():
+                    raise MemoryRequestInvalid()
+                category = _optional_category(payload.get("category"))
+                memory = service.correct_memory(
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    memory_id=memory_id,
+                    text=text,
+                    category=category,
+                )
+                return _json_response(
+                    HTTPStatus.OK, {"memory": _memory_payload(memory)}
+                )
+            raise MemoryRequestInvalid()
+        raise MemoryRequestInvalid()
+
     def open_sse(
         self,
         *,
@@ -491,6 +675,7 @@ def create_app(
     sync_control: SyncControlPort | None = None,
     message_stream: MessageStream | None = None,
     reply_service: ReplyService | None = None,
+    memory_service: MemoryService | None = None,
 ) -> BackendApp:
     """创建服务应用；未显式传 token 时在启动时生成随机 token。"""
 
@@ -502,6 +687,7 @@ def create_app(
         sync_control=sync_control,
         message_stream=message_stream or MessageStream(PostgresMessageStream(database_url)),
         reply_service=reply_service,
+        memory_service=memory_service,
     )
 
 
@@ -719,3 +905,115 @@ def _json_response(status: HTTPStatus, payload: object) -> Response:
         },
         body=body,
     )
+
+
+# ----------------------------------------------------------------------
+# 记忆端点辅助
+# ----------------------------------------------------------------------
+
+
+def _parse_memory_json(body: bytes) -> dict[str, object]:
+    """解析记忆请求体；任何异常收敛为 MemoryRequestInvalid。"""
+
+    try:
+        payload = json.loads(body.decode("utf-8")) if body.strip() else None
+    except (UnicodeDecodeError, ValueError):
+        raise MemoryRequestInvalid() from None
+    if not isinstance(payload, dict):
+        raise MemoryRequestInvalid()
+    return payload
+
+
+def _uuid_or_raise(value: object, name: str) -> UUID:
+    if not isinstance(value, str):
+        raise MemoryRequestInvalid()
+    try:
+        return UUID(value)
+    except ValueError:
+        raise MemoryRequestInvalid() from None
+
+
+def _manual_entry_or_raise(payload: dict[str, object]) -> dict[str, object]:
+    """解析 {text, category, topic?}；校验失败抛 MemoryRequestInvalid。"""
+
+    text = payload.get("text")
+    if not isinstance(text, str) or not text.strip():
+        raise MemoryRequestInvalid()
+    category_value = payload.get("category")
+    if not isinstance(category_value, str):
+        raise MemoryRequestInvalid()
+    try:
+        category = MemoryCategory(category_value)
+    except ValueError:
+        raise MemoryRequestInvalid() from None
+    topic = MemoryTopic.OTHER
+    topic_value = payload.get("topic")
+    if topic_value is not None:
+        if not isinstance(topic_value, str):
+            raise MemoryRequestInvalid()
+        try:
+            topic = MemoryTopic(topic_value)
+        except ValueError:
+            raise MemoryRequestInvalid() from None
+    return {"text": text, "category": category, "topic": topic}
+
+
+def _optional_category(value: object) -> MemoryCategory | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise MemoryRequestInvalid()
+    try:
+        return MemoryCategory(value)
+    except ValueError:
+        raise MemoryRequestInvalid() from None
+
+
+def _path_tail(path: str, prefix: str, suffix: str) -> str:
+    return path[len(prefix): -len(suffix)] if path.endswith(suffix) else ""
+
+
+def _owner_memory_payload(memory: OwnerMemory) -> dict[str, object]:
+    return {
+        "memory_id": str(memory.memory_id),
+        "level": "owner",
+        "text": memory.text,
+        "category": memory.category.value,
+        "topic": memory.topic.value,
+        "adoption_method": memory.adoption_method.value,
+        "status": memory.status.value,
+        "valid_at": _iso_or_none(memory.valid_at),
+        "invalid_at": _iso_or_none(memory.invalid_at),
+    }
+
+
+def _memory_payload(memory: ConfirmedMemory) -> dict[str, object]:
+    return {
+        "memory_id": str(memory.memory_id),
+        "level": "contact",
+        "contact_id": str(memory.scope.contact_id),
+        "text": memory.text,
+        "category": memory.category.value,
+        "topic": memory.topic.value,
+        "adoption_method": memory.adoption_method.value,
+        "status": memory.status.value,
+        "revision": memory.revision,
+        "valid_at": _iso_or_none(memory.valid_at),
+        "invalid_at": _iso_or_none(memory.invalid_at),
+    }
+
+
+def _iso_or_none(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.isoformat()
+
+
+def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
+    return {
+        "candidate_id": str(candidate.candidate_id),
+        "text": candidate.text,
+        "category": candidate.category.value,
+        "topic": candidate.topic.value,
+        "status": candidate.status.value,
+    }

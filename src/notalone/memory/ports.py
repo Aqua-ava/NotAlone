@@ -22,6 +22,12 @@ class MemoryPort(Protocol):
     def create_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
         """保存一条带来源和联系人范围的待处理候选。"""
 
+    def create_manual_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
+        """为手动录入创建一条 manual 来源并保存候选（同一事务）。"""
+
+    def list_pending_candidates(self, scope: ContactScope) -> tuple[MemoryCandidate, ...]:
+        """返回联系人范围内所有尚未处理的候选。"""
+
     def confirm(
         self,
         *,
@@ -48,6 +54,14 @@ class MemoryPort(Protocol):
         candidate_id: UUID,
     ) -> MemoryCandidate:
         """拒绝一条尚未进入长期记忆的候选。"""
+
+    def discard_candidate_with_fingerprint(
+        self,
+        *,
+        scope: ContactScope,
+        candidate_id: UUID,
+    ) -> MemoryCandidate:
+        """拒绝候选并写入删除指纹，阻止同一文本自动复活。"""
 
     def invalidate_candidate(
         self,

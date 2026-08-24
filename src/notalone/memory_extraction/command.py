@@ -291,7 +291,8 @@ def memory_add_main(argv: list[str] | None = None) -> int:
         if not contact_exists(scope, database_url):
             return _fail("联系人不存在。")
         store = PostgresMemoryStore(database_url)
-        candidate = store.create_candidate(
+        # 手动录入不依赖提取来源：走 manual 来源 + 候选路径（迁移 025）。
+        candidate = store.create_manual_candidate(
             MemoryCandidate(
                 candidate_id=uuid4(),
                 scope=scope,

@@ -188,6 +188,120 @@ public struct BackendClient: Sendable {
         )
     }
 
+    // MARK: - 记忆
+
+    public func contactMemories(contactId: String) async throws -> [MemoryEntry] {
+        let response: MemoryListResponse = try await request(
+            path: "api/contacts/\(contactId)/memories",
+            method: "GET"
+        )
+        return response.memories
+    }
+
+    public func pendingMemoryCandidates(contactId: String) async throws -> [MemoryCandidateEntry] {
+        let response: MemoryCandidateListResponse = try await request(
+            path: "api/contacts/\(contactId)/memory-candidates",
+            method: "GET"
+        )
+        return response.candidates
+    }
+
+    public func ownerMemories() async throws -> [MemoryEntry] {
+        let response: MemoryListResponse = try await request(
+            path: "api/memories/owner",
+            method: "GET"
+        )
+        return response.memories
+    }
+
+    public func addManualContactMemory(
+        contactId: String,
+        text: String,
+        category: String,
+        topic: String = "other"
+    ) async throws -> MemoryEntry {
+        let payload: [String: Any] = [
+            "contact_id": contactId,
+            "text": text,
+            "category": category,
+            "topic": topic,
+        ]
+        let response: MemoryMutationResponse = try await requestWithBody(
+            path: "api/memories/manual-contact",
+            method: "POST",
+            body: payload
+        )
+        return response.memory
+    }
+
+    public func addManualOwnerMemory(
+        text: String,
+        category: String,
+        topic: String = "other"
+    ) async throws -> MemoryEntry {
+        let payload: [String: Any] = [
+            "text": text,
+            "category": category,
+            "topic": topic,
+        ]
+        let response: MemoryMutationResponse = try await requestWithBody(
+            path: "api/memories/manual-owner",
+            method: "POST",
+            body: payload
+        )
+        return response.memory
+    }
+
+    public func confirmMemoryCandidate(contactId: String, candidateId: String) async throws -> MemoryEntry {
+        let response: MemoryMutationResponse = try await request(
+            path: "api/contacts/\(contactId)/memory-candidates/\(candidateId)/confirm",
+            method: "POST"
+        )
+        return response.memory
+    }
+
+    public func discardMemoryCandidate(contactId: String, candidateId: String) async throws {
+        let _: MemoryDiscardResponse = try await requestWithBody(
+            path: "api/contacts/\(contactId)/memory-candidates/\(candidateId)/discard",
+            method: "POST",
+            body: [String: Any]()
+        )
+    }
+
+    public func correctMemory(
+        contactId: String,
+        memoryId: String,
+        text: String,
+        category: String? = nil
+    ) async throws -> MemoryEntry {
+        var payload: [String: Any] = ["text": text]
+        if let category {
+            payload["category"] = category
+        }
+        let response: MemoryMutationResponse = try await requestWithBody(
+            path: "api/contacts/\(contactId)/memories/\(memoryId)/correct",
+            method: "POST",
+            body: payload
+        )
+        return response.memory
+    }
+
+    public func deleteContactMemory(contactId: String, memoryId: String) async throws -> MemoryEntry {
+        let response: MemoryMutationResponse = try await request(
+            path: "api/contacts/\(contactId)/memories/\(memoryId)/delete",
+            method: "POST"
+        )
+        return response.memory
+    }
+
+    public func deleteOwnerMemory(memoryId: String) async throws {
+        let _: MemoryMutationResponse = try await requestWithBody(
+            path: "api/memories/owner/\(memoryId)/delete",
+            method: "POST",
+            body: [String: Any]()
+        )
+    }
+
     // MARK: - 内部
 
     private func request<T: Decodable>(
@@ -217,6 +331,48 @@ public struct BackendClient: Sendable {
         }
         if status == 404 {
             throw BackendError.notFound
+        }
+        guard status == 200 else {
+            throw BackendError.badStatus(status)
+        }
+        do {
+            return try JSONDecoder.snakeCaseDecoder.decode(T.self, from: data)
+        } catch {
+            throw BackendError.malformedResponse
+        }
+    }
+
+    // 带 JSON 请求体的请求；body 为 [String: Any] 字典。
+    private func requestWithBody<T: Decodable>(
+        path: String,
+        method: String,
+        body: [String: Any]
+    ) async throws -> T {
+        guard let url = URL(string: path, relativeTo: baseURL) else {
+            throw BackendError.malformedResponse
+        }
+        guard let bodyData = try? JSONSerialization.data(withJSONObject: body) else {
+            throw BackendError.malformedResponse
+        }
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = method
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = bodyData
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 503 {
+            throw BackendError.syncUnavailable
+        }
+        if status == 404 {
+            throw BackendError.notFound
+        }
+        if status == 409 {
+            let reason = (try? JSONDecoder.snakeCaseDecoder.decode(
+                RejectionEnvelope.self,
+                from: data
+            ))?.reason ?? "unknown"
+            throw BackendError.replyRejected(reason: reason)
         }
         guard status == 200 else {
             throw BackendError.badStatus(status)

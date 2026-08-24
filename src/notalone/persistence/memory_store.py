@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -120,6 +121,102 @@ class PostgresMemoryStore:
                         candidate.category.value,
                         candidate.topic.value,
                         list(candidate.source_ids),
+                        candidate.status.value,
+                        candidate.valid_at,
+                        candidate.invalid_at,
+                    ),
+                ).fetchone()
+                if row is None:
+                    raise MemoryInvariantError(
+                        "关系记忆候选写入结果为空。"
+                    )
+                return self._candidate_from_row(row)
+        except psycopg.errors.UniqueViolation:
+            raise ValueError("关系记忆候选标识重复。") from None
+        except MemoryPersistenceError:
+            raise
+        except psycopg.Error:
+            raise MemoryPersistenceError(
+                "关系记忆数据库操作失败。"
+            ) from None
+        except (KeyError, TypeError, ValueError):
+            raise MemoryInvariantError(
+                "关系记忆数据库记录结构无效。"
+            ) from None
+
+    def create_manual_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
+        """为手动录入创建一条 manual 来源并保存候选（同一事务）。
+
+        手动录入不依赖提取来源：这里以候选正文的 SHA-256 为指纹创建
+        一条 manual 类型来源记录，再按普通候选路径保存，保证后续
+        confirm 与检索过滤（仍要有有效来源）都能通过。
+        """
+
+        if not isinstance(candidate, MemoryCandidate):
+            raise TypeError("关系记忆候选结构无效。")
+        try:
+            digest = hashlib.sha256(
+                candidate.text.encode("utf-8")
+            ).hexdigest()
+            with self._connect() as connection:
+                lock_contact_scope(
+                    connection,
+                    owner_id=candidate.scope.owner_id,
+                    contact_id=candidate.scope.contact_id,
+                )
+                source_row = connection.execute(
+                    """
+                    INSERT INTO public.source_document (
+                        owner_id, contact_id, source_type, file_name,
+                        content_sha256, record_count
+                    )
+                    VALUES (%s, %s, 'manual', %s, %s, 1)
+                    ON CONFLICT (owner_id, contact_id, content_sha256)
+                    DO NOTHING
+                    RETURNING id
+                    """,
+                    (
+                        candidate.scope.owner_id,
+                        candidate.scope.contact_id,
+                        f"manual-{candidate.candidate_id}.jsonl",
+                        digest,
+                    ),
+                ).fetchone()
+                if source_row is None:
+                    source_row = connection.execute(
+                        """
+                        SELECT id
+                        FROM public.source_document
+                        WHERE owner_id = %s
+                          AND contact_id = %s
+                          AND content_sha256 = %s
+                        """,
+                        (
+                            candidate.scope.owner_id,
+                            candidate.scope.contact_id,
+                            digest,
+                        ),
+                    ).fetchone()
+                if source_row is None:
+                    raise MemoryInvariantError("手动来源创建结果为空。")
+                source_id = source_row["id"]
+                row = connection.execute(
+                    f"""
+                    INSERT INTO public.memory_candidate (
+                        id, owner_id, contact_id, text_content, category,
+                        topic, source_ids, status, valid_at, invalid_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING {_CANDIDATE_COLUMNS}
+                    """,
+                    (
+                        candidate.candidate_id,
+                        candidate.scope.owner_id,
+                        candidate.scope.contact_id,
+                        candidate.text,
+                        candidate.category.value,
+                        candidate.topic.value,
+                        [source_id],
                         candidate.status.value,
                         candidate.valid_at,
                         candidate.invalid_at,
@@ -348,6 +445,85 @@ class PostgresMemoryStore:
             error_message="当前关系记忆候选不能失效。",
         )
 
+    def discard_candidate_with_fingerprint(
+        self,
+        *,
+        scope: ContactScope,
+        candidate_id: UUID,
+    ) -> MemoryCandidate:
+        """拒绝候选并在同一事务写入删除指纹。
+
+        丢弃是不再想要的候选：除候选失效外，还要在 confirmed_memory
+        写入一条 deleted 指纹行（source_candidate_id 指向被拒候选），
+        使同一文本的自动提取不会再复活（adoption 检查 deleted_texts）。
+        手动录入不受限（不走该路径）。
+        """
+
+        self._validate_scope(scope)
+        self._validate_uuid(candidate_id, "candidate_id")
+        try:
+            with self._connect() as connection:
+                lock_contact_scope(
+                    connection,
+                    owner_id=scope.owner_id,
+                    contact_id=scope.contact_id,
+                )
+                row = self._candidate_for_update(connection, candidate_id)
+                if row is None:
+                    raise LookupError("关系记忆候选不存在。")
+                self._ensure_scope(row, scope)
+                if row["candidate_status"] != MemoryCandidateStatus.PENDING.value:
+                    raise RuntimeError("当前关系记忆候选不能丢弃。")
+                updated = connection.execute(
+                    f"""
+                    UPDATE public.memory_candidate
+                    SET status = 'rejected', updated_at = now()
+                    WHERE owner_id = %s AND contact_id = %s AND id = %s
+                    RETURNING {_CANDIDATE_COLUMNS}
+                    """,
+                    (scope.owner_id, scope.contact_id, candidate_id),
+                ).fetchone()
+                if updated is None:
+                    raise MemoryInvariantError(
+                        "关系记忆候选状态更新为空。"
+                    )
+                source_ids = self._source_ids(row["candidate_source_ids"])
+                # 删除指纹行：text 用于阻止自动复活，source_ids 指向候选来源，
+                # source_candidate_id 引用被拒候选（UNIQUE 允许）。
+                connection.execute(
+                    """
+                    INSERT INTO public.confirmed_memory (
+                        id, owner_id, contact_id, text_content, category,
+                        topic, source_ids, source_candidate_id, adoption_method,
+                        status, revision
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, 'auto', 'deleted', 1
+                    )
+                    """,
+                    (
+                        self._new_uuid(),
+                        scope.owner_id,
+                        scope.contact_id,
+                        row["candidate_text"],
+                        row["candidate_category"],
+                        row["candidate_topic"],
+                        list(source_ids),
+                        candidate_id,
+                    ),
+                )
+                return self._candidate_from_row(updated)
+        except (LookupError, PermissionError, RuntimeError, MemoryPersistenceError):
+            raise
+        except psycopg.Error:
+            raise MemoryPersistenceError(
+                "关系记忆数据库操作失败。"
+            ) from None
+        except (KeyError, TypeError, ValueError):
+            raise MemoryInvariantError(
+                "关系记忆数据库记录结构无效。"
+            ) from None
+
     def invalidate(self, *, scope: ContactScope, memory_id: UUID) -> ConfirmedMemory:
         """使记忆失效并保留审计状态。"""
 
@@ -423,6 +599,38 @@ class PostgresMemoryStore:
                     (scope.owner_id, scope.contact_id, current, current),
                 ).fetchall()
                 return tuple(self._memory_from_row(row) for row in rows)
+        except MemoryPersistenceError:
+            raise
+        except psycopg.Error:
+            raise MemoryPersistenceError(
+                "关系记忆数据库操作失败。"
+            ) from None
+        except (KeyError, TypeError, ValueError):
+            raise MemoryInvariantError(
+                "关系记忆数据库记录结构无效。"
+            ) from None
+
+    def list_pending_candidates(self, scope: ContactScope) -> tuple[MemoryCandidate, ...]:
+        """返回联系人范围内所有 pending 候选，供人工处理。"""
+
+        self._validate_scope(scope)
+        try:
+            with self._connect() as connection:
+                connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+                )
+                rows = connection.execute(
+                    f"""
+                    SELECT {_CANDIDATE_COLUMNS}
+                    FROM public.memory_candidate
+                    WHERE owner_id = %s
+                      AND contact_id = %s
+                      AND status = 'pending'
+                    ORDER BY created_at, id
+                    """,
+                    (scope.owner_id, scope.contact_id),
+                ).fetchall()
+                return tuple(self._candidate_from_row(row) for row in rows)
         except MemoryPersistenceError:
             raise
         except psycopg.Error:

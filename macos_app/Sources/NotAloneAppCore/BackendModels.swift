@@ -96,3 +96,47 @@ public struct ReplyCandidate: Decodable, Equatable, Sendable, Identifiable {
 
     public var id: String { candidateId }
 }
+
+// MARK: - 记忆
+
+public struct MemoryEntry: Decodable, Equatable, Sendable, Identifiable {
+    public let memoryId: String
+    public let level: String
+    public let contactId: String?
+    public let text: String
+    public let category: String
+    public let topic: String
+    public let adoptionMethod: String
+    public let status: String
+    public let revision: Int?
+    public let validAt: String?
+    public let invalidAt: String?
+
+    public var id: String { memoryId }
+}
+
+public struct MemoryCandidateEntry: Decodable, Equatable, Sendable, Identifiable {
+    public let candidateId: String
+    public let text: String
+    public let category: String
+    public let topic: String
+    public let status: String
+
+    public var id: String { candidateId }
+}
+
+public struct MemoryListResponse: Decodable, Sendable {
+    public let memories: [MemoryEntry]
+}
+
+public struct MemoryCandidateListResponse: Decodable, Sendable {
+    public let candidates: [MemoryCandidateEntry]
+}
+
+public struct MemoryMutationResponse: Decodable, Sendable {
+    public let memory: MemoryEntry
+}
+
+public struct MemoryDiscardResponse: Decodable, Sendable {
+    public let candidateId: String
+}
