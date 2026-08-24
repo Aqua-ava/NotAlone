@@ -27,6 +27,7 @@ notalone-memory-list = "notalone.memory_extraction.command:memory_list_main"
 notalone-memory-delete = "notalone.memory_extraction.command:memory_delete_main"
 notalone-task-cleanup = "notalone.tasks.command:cleanup_main"
 notalone-task-worker = "notalone.tasks.command:worker_main"
+notalone-front-sync = "notalone.front_sync.command:front_sync_main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

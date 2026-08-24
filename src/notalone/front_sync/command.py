@@ -1,0 +1,232 @@
+"""前台增量同步命令：开关、状态观察、一次性绑定确认与联系人列表。
+
+命令只输出状态、计数和展示名称，不输出消息正文；候选展示只包含
+display name、外部会话标识与最近活动时间。
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from uuid import UUID
+
+import psycopg
+
+from notalone.front_sync import (
+    MacosFrontSessionProbe,
+    TailLifecycle,
+)
+from notalone.front_sync.sync_engine import (
+    BindingConfirmationError,
+    FrontSyncCycleReport,
+    FrontSyncEngine,
+)
+from notalone.persistence.conversation_repository import (
+    PostgresConversationBindingRepository,
+)
+from notalone.persistence.front_sync_state import PostgresFrontSyncStateStore
+from notalone.persistence.observation_store import PostgresObservationStore
+from notalone.runtime_config import load_project_env
+from notalone.wechat_cli import LocalWechatCli
+
+
+_CHANNEL = "wechat"
+
+
+def render_report_lines(report: FrontSyncCycleReport) -> list[str]:
+    """把循环报告渲染为 key=value 行；不包含任何消息正文。"""
+
+    lines = [
+        f"sync={'enabled' if report.sync_enabled else 'disabled'}",
+        f"phase={report.phase.value}",
+        f"probe={'ok' if report.probe_available else 'unavailable'}",
+        f"wechat_front={'yes' if report.wechat_in_front else 'no'}",
+        f"cli={'ok' if report.cli_available else 'unavailable'}",
+    ]
+    if report.failure_code is not None:
+        lines.append(f"failure={report.failure_code}")
+    if report.active_contact_id is not None:
+        lines.append(f"contact_id={report.active_contact_id}")
+    if report.active_binding_display_name is not None:
+        lines.append(f"binding_display={report.active_binding_display_name}")
+    if report.decision_reason is not None:
+        lines.append(f"decision={report.decision_reason.value}")
+    lines.append(f"batch_messages={report.batch_message_count}")
+    for index, candidate in enumerate(report.candidates, start=1):
+        last_active = (
+            "unknown"
+            if candidate.last_timestamp is None
+            else str(candidate.last_timestamp)
+        )
+        lines.append(
+            f"candidate[{index}] username={candidate.username} "
+            f"display={candidate.display_name} last_active={last_active}"
+        )
+    return lines
+
+
+def front_sync_main(argv: list[str] | None = None) -> int:
+    """前台定位到消息入库的端到端接线入口。"""
+
+    load_project_env()
+    parser = argparse.ArgumentParser(
+        prog="notalone-front-sync",
+        description="前台增量同步：开关、状态观察与一次性绑定确认。",
+    )
+    subparsers = parser.add_subparsers(dest="action", required=True)
+    subparsers.add_parser(
+        "status", help="执行一次前台观察与增量读取，并输出同步状态。"
+    )
+    subparsers.add_parser("enable", help="手动开启前台增量同步。")
+    subparsers.add_parser("disable", help="手动关闭前台增量同步。")
+    confirm = subparsers.add_parser(
+        "confirm-binding", help="为当前前台会话完成一次性绑定选择。"
+    )
+    confirm.add_argument("--contact-id", required=True, type=UUID)
+    confirm.add_argument(
+        "--locator",
+        required=True,
+        help="status 输出中的候选 username（外部会话标识）。",
+    )
+    subparsers.add_parser(
+        "contacts", help="列出当前 owner 的联系人，便于绑定确认时选择。"
+    )
+    args = parser.parse_args(argv)
+
+    database_url = os.environ.get("NOTALONE_DATABASE_URL", "").strip()
+    owner_value = os.environ.get("NOTALONE_OWNER_ID", "").strip()
+    if not database_url:
+        return _fail("缺少 NOTALONE_DATABASE_URL 环境变量。")
+    if not owner_value:
+        return _fail("缺少 NOTALONE_OWNER_ID 环境变量。")
+    try:
+        owner_id = UUID(owner_value)
+    except ValueError:
+        return _fail("NOTALONE_OWNER_ID 不是合法 UUID。")
+
+    if args.action == "contacts":
+        try:
+            contacts = _list_contacts(database_url, owner_id)
+        except psycopg.Error:
+            return _fail("联系人列表读取失败。")
+        for contact_id, display_name in contacts:
+            print(f"contact_id={contact_id} display_name={display_name}")
+        return 0
+
+    account_scope = _owner_wechat_account_scope(database_url, owner_id)
+    if account_scope is None:
+        return _fail("owner 还没有微信渠道身份；请先完成一次正式导入初始化。")
+
+    engine = _build_engine(
+        database_url=database_url,
+        owner_id=owner_id,
+        account_scope=account_scope,
+    )
+
+    if args.action == "enable":
+        engine.enable_sync()
+        print("sync=enabled")
+        return 0
+    if args.action == "disable":
+        engine.disable_sync()
+        print("sync=disabled")
+        return 0
+    if args.action == "status":
+        report = engine.cycle()
+        for line in render_report_lines(report):
+            print(line)
+        return 0
+    if args.action == "confirm-binding":
+        try:
+            report = engine.confirm_binding(
+                contact_id=args.contact_id, locator=args.locator
+            )
+        except BindingConfirmationError as error:
+            return _fail(f"绑定确认失败：{error}")
+        except (ValueError, TypeError) as error:
+            return _fail(f"绑定确认失败：{error}")
+        for line in render_report_lines(report):
+            print(line)
+        return 0
+    return _fail("不支持的子命令。")
+
+
+def _build_engine(
+    *,
+    database_url: str,
+    owner_id: UUID,
+    account_scope: str,
+) -> FrontSyncEngine:
+    cli = LocalWechatCli(
+        executable=os.environ.get("NOTALONE_WECHAT_CLI", "").strip()
+        or "wechat-cli"
+    )
+    probe = MacosFrontSessionProbe(
+        executable=os.environ.get("NOTALONE_SYNC_PROBE", "").strip()
+        or "notalone-sync-probe"
+    )
+    bindings = PostgresConversationBindingRepository(database_url)
+    sync_state = PostgresFrontSyncStateStore(database_url)
+    lifecycle = TailLifecycle(
+        owner_id=owner_id,
+        channel=_CHANNEL,
+        account_scope=account_scope,
+        cli=cli,
+        bindings=bindings,
+        observation_store=PostgresObservationStore(database_url),
+        sync_state=sync_state,
+    )
+    return FrontSyncEngine(
+        owner_id=owner_id,
+        channel=_CHANNEL,
+        account_scope=account_scope,
+        probe=probe,
+        lifecycle=lifecycle,
+        bindings=bindings,
+        sync_state=sync_state,
+        cli=cli,
+    )
+
+
+def _owner_wechat_account_scope(database_url: str, owner_id: UUID) -> str | None:
+    """读取 owner 的 active 微信渠道身份作为账号范围。"""
+
+    with psycopg.connect(database_url) as connection:
+        row = connection.execute(
+            """
+            SELECT external_id
+            FROM public.owner_channel_identity
+            WHERE owner_id = %s AND channel = 'wechat' AND status = 'active'
+            LIMIT 1
+            """,
+            (owner_id,),
+        ).fetchone()
+    return None if row is None else row[0]
+
+
+def _list_contacts(
+    database_url: str, owner_id: UUID
+) -> tuple[tuple[UUID, str], ...]:
+    """列出 owner 的联系人与展示名称；展示名称只用于用户选择。"""
+
+    with psycopg.connect(database_url) as connection:
+        rows = connection.execute(
+            """
+            SELECT id, display_name
+            FROM public.contact
+            WHERE owner_id = %s
+            ORDER BY created_at, id
+            """,
+            (owner_id,),
+        ).fetchall()
+    return tuple((row[0], row[1]) for row in rows)
+
+
+def _fail(message: str) -> int:
+    print(message, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(front_sync_main())

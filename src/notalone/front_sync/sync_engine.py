@@ -1,0 +1,348 @@
+"""前台同步引擎：把定位证据、绑定确认与 tail 生命周期接成纵切。
+
+引擎不启动后台线程：调用方在每次前台观察时调用 ``cycle``，在一次性
+选择入口调用 ``confirm_binding``。所有报告字段都不携带消息正文；
+候选展示只包含 display name、外部会话标识和最近活动时间。
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Protocol
+from uuid import UUID
+
+from notalone.conversation.matcher import (
+    BindingMatchKind,
+    BindingMatchReason,
+    FrontSessionEvidence,
+    normalize_display_text,
+    summarize_evidence,
+)
+from notalone.front_sync.probe_adapter import (
+    FrontSessionProbeObservation,
+    ProbeAdapterError,
+)
+from notalone.front_sync.tail_lifecycle import (
+    FrontSyncPhase,
+    TailLifecycle,
+)
+from notalone.persistence.conversation_repository import (
+    ConversationBindingConflictError,
+    ConversationBindingNotFoundError,
+    ConversationBindingPersistenceError,
+    PostgresConversationBindingRepository,
+)
+from notalone.persistence.front_sync_state import PostgresFrontSyncStateStore
+from notalone.wechat_cli import CliAdapterError, LocalWechatCli
+from notalone.wechat_cli.models import ChatCandidate
+
+
+class FrontSessionProbePort(Protocol):
+    """前台定位的可替换边界；实现必须失败关闭。"""
+
+    def observe(self) -> FrontSessionProbeObservation:
+        """返回一次前台观察结果；不可用时抛出 ProbeAdapterError。"""
+
+
+class FrontSyncEngineError(RuntimeError):
+    """不泄漏会话内容或正文的引擎错误。"""
+
+    def __init__(self, code: str, message: str) -> None:
+        self.code = code
+        super().__init__(message)
+
+
+class BindingConfirmationError(FrontSyncEngineError):
+    """一次性绑定确认被拒绝；稳定原因见 ``code``。"""
+
+
+@dataclass(frozen=True, slots=True)
+class BindingCandidateView:
+    """供用户选择的候选最小投影；不含会话正文。"""
+
+    username: str
+    display_name: str
+    last_timestamp: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class FrontSyncCycleReport:
+    """一次观察+轮询循环的展示结果；不含消息正文。"""
+
+    sync_enabled: bool
+    phase: FrontSyncPhase
+    probe_available: bool
+    wechat_in_front: bool
+    cli_available: bool
+    failure_code: str | None
+    active_contact_id: UUID | None
+    active_binding_display_name: str | None
+    decision_reason: BindingMatchReason | None
+    candidates: tuple[BindingCandidateView, ...] = ()
+    batch_message_count: int = 0
+
+
+class FrontSyncEngine:
+    """前台定位 -> 绑定门禁 -> 增量读取的端到端编排。"""
+
+    __slots__ = (
+        "_owner_id",
+        "_channel",
+        "_account_scope",
+        "_probe",
+        "_lifecycle",
+        "_bindings",
+        "_sync_state",
+        "_cli",
+        "_cli_status",
+    )
+
+    def __init__(
+        self,
+        *,
+        owner_id: UUID,
+        channel: str,
+        account_scope: str,
+        probe: FrontSessionProbePort,
+        lifecycle: TailLifecycle,
+        bindings: PostgresConversationBindingRepository,
+        sync_state: PostgresFrontSyncStateStore,
+        cli: LocalWechatCli,
+    ) -> None:
+        if not isinstance(owner_id, UUID):
+            raise TypeError("owner_id 必须是 UUID。")
+        if not normalize_display_text(channel):
+            raise ValueError("channel 不能为空。")
+        if not normalize_display_text(account_scope):
+            raise ValueError("account_scope 不能为空。")
+        self._owner_id = owner_id
+        self._channel = channel
+        self._account_scope = account_scope
+        self._probe = probe
+        self._lifecycle = lifecycle
+        self._bindings = bindings
+        self._sync_state = sync_state
+        self._cli = cli
+        self._cli_status: tuple[bool, str | None] | None = None
+
+    # ------------------------------------------------------------------
+    # 同步开关
+    # ------------------------------------------------------------------
+
+    def enable_sync(self) -> None:
+        """用户手动开启前台同步。"""
+
+        self._lifecycle.enable_sync()
+
+    def disable_sync(self) -> None:
+        """用户手动关闭前台同步；立即停止读取。"""
+
+        self._lifecycle.disable_sync()
+
+    # ------------------------------------------------------------------
+    # 观察循环
+    # ------------------------------------------------------------------
+
+    def cycle(self) -> FrontSyncCycleReport:
+        """执行一次前台观察与增量读取，并汇总展示状态。"""
+
+        probe_available = True
+        wechat_in_front = False
+        probe_failure: str | None = None
+        decision = None
+        try:
+            observation = self._probe.observe()
+        except ProbeAdapterError as error:
+            probe_available = False
+            probe_failure = error.code
+            # 探针不可用无法证明微信在前台：按非前台停止读取。
+            self._lifecycle.observe_front_session(
+                wechat_in_front=False, evidence=None
+            )
+        else:
+            wechat_in_front = observation.wechat_in_front
+            outcome = self._lifecycle.observe_front_session(
+                wechat_in_front=wechat_in_front,
+                evidence=observation.evidence,
+            )
+            decision = outcome.decision
+
+        written = self._lifecycle.poll()
+        status = self._lifecycle.status()
+        cli_available, _ = self._cli_availability()
+        candidates = (
+            tuple(_candidate_view(item) for item in decision.candidates)
+            if decision is not None
+            and decision.kind is BindingMatchKind.NEEDS_SELECTION
+            else ()
+        )
+        return FrontSyncCycleReport(
+            sync_enabled=self._sync_state.read(owner_id=self._owner_id).enabled,
+            phase=status.phase,
+            probe_available=probe_available,
+            wechat_in_front=wechat_in_front,
+            cli_available=cli_available,
+            failure_code=probe_failure or status.failure_code,
+            active_contact_id=status.active_contact_id,
+            active_binding_display_name=status.active_binding_display_name,
+            decision_reason=decision.reason if decision is not None else None,
+            candidates=candidates,
+            batch_message_count=written,
+        )
+
+    # ------------------------------------------------------------------
+    # 一次性绑定确认
+    # ------------------------------------------------------------------
+
+    def confirm_binding(self, *, contact_id: UUID, locator: str) -> FrontSyncCycleReport:
+        """在当前前台会话上完成一次性绑定选择，然后立即读取一轮。
+
+        首次绑定与重名选择创建新绑定；改名确认只更新既有绑定的
+        display name 与证据摘要。确认前会重新观察，证据失效即拒绝。
+        """
+
+        if not isinstance(contact_id, UUID):
+            raise TypeError("contact_id 必须是 UUID。")
+        locator = normalize_display_text(locator)
+        if not locator:
+            raise ValueError("locator 不能为空。")
+
+        try:
+            observation = self._probe.observe()
+        except ProbeAdapterError as error:
+            raise BindingConfirmationError(
+                "probe_unavailable", "前台定位探针不可用，不能确认绑定。"
+            ) from error
+        evidence = observation.evidence
+        if not observation.wechat_in_front or evidence is None:
+            raise BindingConfirmationError(
+                "front_session_unavailable",
+                "微信不在前台或会话无法定位，不能确认绑定。",
+            )
+
+        outcome = self._lifecycle.observe_front_session(
+            wechat_in_front=True, evidence=evidence
+        )
+        decision = outcome.decision
+        if decision is None or decision.kind is not BindingMatchKind.NEEDS_SELECTION:
+            raise BindingConfirmationError(
+                "no_pending_selection", "当前会话没有待确认的一次性选择。"
+            )
+        candidate = next(
+            (item for item in decision.candidates if item.username == locator),
+            None,
+        )
+        if candidate is None:
+            raise BindingConfirmationError(
+                "candidate_not_found", "所选候选不在当前会话候选中。"
+            )
+
+        observed_name = normalize_display_text(evidence.display_name)
+        if decision.reason is BindingMatchReason.BINDING_NAME_CHANGED:
+            self._confirm_name_change(
+                contact_id=contact_id,
+                locator=locator,
+                observed_name=observed_name,
+                evidence=evidence,
+            )
+        else:
+            self._create_first_binding(
+                contact_id=contact_id,
+                locator=locator,
+                observed_name=observed_name,
+                evidence=evidence,
+            )
+        return self.cycle()
+
+    def _create_first_binding(
+        self,
+        *,
+        contact_id: UUID,
+        locator: str,
+        observed_name: str,
+        evidence: FrontSessionEvidence,
+    ) -> None:
+        try:
+            self._bindings.create_binding(
+                owner_id=self._owner_id,
+                contact_id=contact_id,
+                channel=self._channel,
+                account_scope=self._account_scope,
+                conversation_locator=locator,
+                display_name=observed_name or None,
+                metadata_summary=summarize_evidence(evidence),
+            )
+        except ConversationBindingConflictError as error:
+            raise BindingConfirmationError(
+                "binding_conflict", "该会话或联系人已有冲突的有效绑定。"
+            ) from error
+        except ConversationBindingNotFoundError as error:
+            raise BindingConfirmationError(
+                "contact_not_found", "指定的 owner/contact 范围不存在。"
+            ) from error
+        except ConversationBindingPersistenceError as error:
+            raise BindingConfirmationError(
+                "binding_persistence_failed", "绑定写入失败，未创建绑定。"
+            ) from error
+
+    def _confirm_name_change(
+        self,
+        *,
+        contact_id: UUID,
+        locator: str,
+        observed_name: str,
+        evidence: FrontSessionEvidence,
+    ) -> None:
+        binding = next(
+            (
+                stored
+                for stored in self._bindings.list_active_bindings(
+                    owner_id=self._owner_id,
+                    channel=self._channel,
+                    account_scope=self._account_scope,
+                )
+                if stored.conversation_locator == locator
+                and stored.scope.contact_id == contact_id
+            ),
+            None,
+        )
+        if binding is None:
+            raise BindingConfirmationError(
+                "binding_not_found", "未找到该联系人在此会话的有效绑定。"
+            )
+        try:
+            self._bindings.update_matching_metadata(
+                owner_id=self._owner_id,
+                contact_id=contact_id,
+                binding_id=binding.binding_id,
+                display_name=observed_name or None,
+                metadata_summary=summarize_evidence(evidence),
+            )
+        except ConversationBindingPersistenceError as error:
+            raise BindingConfirmationError(
+                "binding_persistence_failed", "绑定证据更新失败。"
+            ) from error
+
+    # ------------------------------------------------------------------
+    # CLI 可用性
+    # ------------------------------------------------------------------
+
+    def _cli_availability(self) -> tuple[bool, str | None]:
+        """每个进程生命周期内只探测一次 CLI 版本。"""
+
+        if self._cli_status is None:
+            try:
+                self._cli.version()
+            except CliAdapterError as error:
+                self._cli_status = (False, error.code)
+            else:
+                self._cli_status = (True, None)
+        return self._cli_status
+
+
+def _candidate_view(candidate: ChatCandidate) -> BindingCandidateView:
+    return BindingCandidateView(
+        username=candidate.username,
+        display_name=normalize_display_text(candidate.display_name),
+        last_timestamp=candidate.last_timestamp,
+    )

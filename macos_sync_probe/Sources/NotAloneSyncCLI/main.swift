@@ -10,12 +10,14 @@ private struct ProbeOptions {
     let showText: Bool
     let selfTest: Bool
     let session: Bool
+    let json: Bool
 
     static let help = """
     用法：
       swift run notalone-sync-probe [--watch] [--interval seconds]
         [--crop x,y,width,height] [--show-text]
       swift run notalone-sync-probe --session [--show-text]
+      swift run notalone-sync-probe --session --json
 
     选项：
       --watch              持续观察前台微信窗口；默认只采集一次。
@@ -23,6 +25,7 @@ private struct ProbeOptions {
       --crop value         相对微信窗口的聊天区域，默认 0.34,0.10,0.66,0.80。
       --show-text          明确要求后才在终端显示短预览等文本；默认只输出字段有无。
       --session            只做一次选中会话定位，输出顶部 display name 和选中行元数据。
+      --json               与 --session 配合输出机器可读 JSON，供本机同步驱动解析。
       --self-test          运行合成数据自检，不截取屏幕。
       --help               显示本说明。
 
@@ -37,6 +40,7 @@ private struct ProbeOptions {
         var showText = false
         var selfTest = false
         var session = false
+        var json = false
         var index = 0
 
         while index < arguments.count {
@@ -52,6 +56,8 @@ private struct ProbeOptions {
                 selfTest = true
             case "--session":
                 session = true
+            case "--json":
+                json = true
             case "--interval", "--crop":
                 index += 1
                 guard index < arguments.count else {
@@ -78,7 +84,8 @@ private struct ProbeOptions {
             watch: watch,
             showText: showText,
             selfTest: selfTest,
-            session: session
+            session: session,
+            json: json
         )
     }
 }
@@ -94,6 +101,14 @@ struct NotAloneSyncCLI {
                 try CoreSelfTest.run()
                 print("自检通过：动态聊天区域定位、文本规范化和内存去重逻辑正常。")
                 return
+            }
+
+            if options.session, options.json {
+                await printSessionJson()
+                return
+            }
+            if options.json {
+                throw ProbeError.invalidArguments("--json 只能与 --session 配合使用。\n\n\(ProbeOptions.help)")
             }
             guard CGPreflightScreenCaptureAccess() else {
                 throw ProbeError.screenCapturePermissionMissing
@@ -157,5 +172,50 @@ struct NotAloneSyncCLI {
         } catch {
             fputs("探针失败：\(error.localizedDescription)\n", stderr)
         }
+    }
+
+    // 机器可读的单次定位输出：同步驱动按 JSON 解析前台证据。
+    // 微信非前台或证据不可读都是正常的稳定状态，用 ok 结果表达；
+    // 只有权限缺失等环境错误才返回失败结果。
+    @MainActor
+    private static func printSessionJson() async {
+        guard CGPreflightScreenCaptureAccess() else {
+            printJsonLine([
+                "ok": false,
+                "error": "screen_capture_permission_missing",
+            ])
+            return
+        }
+
+        let probe = WeChatCaptureProbe()
+        do {
+            let snapshot = try await probe.captureWindowSnapshot()
+            do {
+                let metadata = try probe.selectedSessionMetadata(from: snapshot)
+                var object = metadata.jsonObject()
+                object["ok"] = true
+                object["wechat_in_front"] = true
+                printJsonLine(object)
+            } catch ProbeError.selectedRowNotFound, ProbeError.chatRegionNotFound {
+                // 选中行或聊天区暂时不可读：返回前台状态但不携带证据。
+                printJsonLine(["ok": true, "wechat_in_front": true])
+            }
+        } catch ProbeError.weChatNotFrontmost {
+            printJsonLine(["ok": true, "wechat_in_front": false])
+        } catch ProbeError.weChatWindowNotFound {
+            // 微信在前台但窗口不可见：同样按证据不可读处理。
+            printJsonLine(["ok": true, "wechat_in_front": true])
+        } catch {
+            printJsonLine(["ok": false, "error": "probe_failed"])
+        }
+    }
+
+    private static func printJsonLine(_ object: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+              let line = String(data: data, encoding: .utf8) else {
+            fputs("探针失败：无法生成 JSON 输出。\n", stderr)
+            return
+        }
+        print(line)
     }
 }

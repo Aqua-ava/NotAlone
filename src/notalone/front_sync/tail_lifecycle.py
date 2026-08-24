@@ -17,6 +17,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from notalone.conversation.matcher import (
+    BindingMatchDecision,
     BindingMatchKind,
     FrontSessionEvidence,
     StoredBindingEvidence,
@@ -62,6 +63,20 @@ class FrontSyncStatus:
     active_binding_id: UUID | None = None
     active_contact_id: UUID | None = None
     failure_code: str | None = None
+    active_binding_display_name: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FrontObserveOutcome:
+    """一次前台观察的稳定结论；携带绑定决策供一次性确认入口使用。
+
+    门禁在前（开关、前台、可读性）时 ``decision`` 为 None；
+    完成候选解析与匹配后无论是否确认都携带决策。
+    """
+
+    phase: FrontSyncPhase
+    decision: BindingMatchDecision | None = None
+    evidence: FrontSessionEvidence | None = None
 
 
 @dataclass(slots=True)
@@ -151,19 +166,21 @@ class TailLifecycle:
         *,
         wechat_in_front: bool,
         evidence: FrontSessionEvidence | None,
-    ) -> None:
+    ) -> FrontObserveOutcome:
         """根据前台证据切换读取任务；不确定时停止，不猜测联系人。"""
 
         if not self._sync_state.read(owner_id=self._owner_id).enabled:
             self._stop_session(FrontSyncPhase.SYNC_DISABLED)
-            return
+            return FrontObserveOutcome(phase=FrontSyncPhase.SYNC_DISABLED)
         if not wechat_in_front or evidence is None:
             self._stop_session(FrontSyncPhase.WAITING_FOREGROUND)
-            return
+            return FrontObserveOutcome(phase=FrontSyncPhase.WAITING_FOREGROUND)
         if not normalize_display_text(evidence.display_name):
             # display name 暂时不可读：跳过当前帧，不沿用旧联系人写入。
             self._stop_session(FrontSyncPhase.UNAVAILABLE)
-            return
+            return FrontObserveOutcome(
+                phase=FrontSyncPhase.UNAVAILABLE, evidence=evidence
+            )
 
         try:
             candidates = self._cli.resolve_chat(
@@ -173,7 +190,9 @@ class TailLifecycle:
         except CliAdapterError as error:
             self._stop_session(FrontSyncPhase.FAILED)
             self._mark_failure(error.code)
-            return
+            return FrontObserveOutcome(
+                phase=FrontSyncPhase.FAILED, evidence=evidence
+            )
 
         stored_bindings = self._bindings.list_active_bindings(
             owner_id=self._owner_id,
@@ -195,7 +214,11 @@ class TailLifecycle:
         if decision.kind is not BindingMatchKind.CONFIRMED:
             # 首次绑定、重名或证据矛盾都需要用户确认，期间不读取。
             self._stop_session(FrontSyncPhase.UNAVAILABLE)
-            return
+            return FrontObserveOutcome(
+                phase=FrontSyncPhase.UNAVAILABLE,
+                decision=decision,
+                evidence=evidence,
+            )
 
         confirmed = next(
             (
@@ -207,17 +230,27 @@ class TailLifecycle:
         )
         if confirmed is None:
             self._stop_session(FrontSyncPhase.UNAVAILABLE)
-            return
+            return FrontObserveOutcome(
+                phase=FrontSyncPhase.UNAVAILABLE,
+                decision=decision,
+                evidence=evidence,
+            )
         self._resume_binding(confirmed)
+        return FrontObserveOutcome(
+            phase=self._phase, decision=decision, evidence=evidence
+        )
 
-    def poll(self) -> None:
-        """执行当前联系人的一次增量读取；失败进入退避重试。"""
+    def poll(self) -> int:
+        """执行当前联系人的一次增量读取；返回本轮处理的规范消息数。
+
+        计数包含跨来源去重后复用既有规范消息的部分；失败进入退避重试。
+        """
 
         session = self._session
         if session is None:
-            return
+            return 0
         if self._phase is FrontSyncPhase.FAILED and not self._backoff_elapsed():
-            return
+            return 0
 
         scope = session.binding.scope
         locator = session.binding.conversation_locator
@@ -225,12 +258,12 @@ class TailLifecycle:
             result = self._cli.tail(locator, cursor=session.since_cursor)
         except CliAdapterError as error:
             self._mark_failure(error.code)
-            return
+            return 0
 
         if result.last_local_id is None or result.cursor is None:
             # 没有新消息：保持活跃状态与既有水位。
             self._recover_from_failure()
-            return
+            return 0
 
         # 手动关闭期间产生的消息窗口只前移水位，不写入消息；
         # 过滤按消息原始时间对每个联系人独立生效。
@@ -240,7 +273,7 @@ class TailLifecycle:
             messages = normalize_cli_events(events)
         except CliNormalizationError:
             self._mark_failure(_FAILURE_NORMALIZATION)
-            return
+            return 0
 
         try:
             self._observation_store.record_batch_with_messages(
@@ -259,10 +292,11 @@ class TailLifecycle:
             )
         except (CliAdapterError, ObservationPersistenceError):
             self._mark_failure(_FAILURE_PERSISTENCE)
-            return
+            return 0
 
         self._advance_session(session, result.last_local_id, result.cursor)
         self._recover_from_failure()
+        return len(messages)
 
     def status(self) -> FrontSyncStatus:
         """返回当前阶段与活跃联系人；不携带会话内容。"""
@@ -277,6 +311,9 @@ class TailLifecycle:
                 session.binding.scope.contact_id if session is not None else None
             ),
             failure_code=self._failure_code,
+            active_binding_display_name=(
+                session.binding.display_name if session is not None else None
+            ),
         )
 
     # ------------------------------------------------------------------

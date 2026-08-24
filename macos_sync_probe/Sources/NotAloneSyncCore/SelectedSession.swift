@@ -73,6 +73,29 @@ public struct SelectedSessionMetadata: Equatable {
         self.lastTimeText = lastTimeText
         self.previewText = previewText
     }
+
+    // 机器可读输出：供本机前台同步驱动解析，不面向人显示。
+    // 缺失字段用 JSON null 表达；预览文本只作为匹配证据传递，
+    // 驱动层只保存其摘要，不展示或持久化原文。
+    public func jsonObject() -> [String: Any] {
+        [
+            "display_name": displayName ?? NSNull(),
+            "selected_row_name": selectedRowName ?? NSNull(),
+            "last_time_text": lastTimeText ?? NSNull(),
+            "preview_text": previewText ?? NSNull(),
+        ]
+    }
+
+    public func jsonLine() throws -> String {
+        let data = try JSONSerialization.data(
+            withJSONObject: jsonObject(),
+            options: [.sortedKeys]
+        )
+        guard let line = String(data: data, encoding: .utf8) else {
+            throw ProbeError.imageDataUnavailable
+        }
+        return line
+    }
 }
 
 // 在左侧会话列表中寻找唯一的高亮选中行。只读取分隔线左侧面板，

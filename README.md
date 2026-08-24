@@ -41,8 +41,9 @@ ReplyStore 当前收敛为请求/结果持久化边界：按已验证联系人�
 快照、候选、引用与 Skill 使用摘要，不准备上下文、不读取 Memory，也不发送外部消息。
 
 已确认桌面会话绑定已经有 PostgreSQL 迁移 006 和持久化 `ConversationPort`：它按
-`owner_id + contact_id` 创建、读取和撤销绑定，并在进程重建后重新验证 active 绑定。当前
-真实桌面观察、OCR 和前台同步仍未接入；`ConversationObservation` 仍由上层适配器提供。
+`owner_id + contact_id` 创建、读取和撤销绑定，并在进程重建后重新验证 active 绑定。
+前台增量同步的端到端接线已经完成（见下文《前台增量同步》）；`ConversationObservation`
+仍由上层适配器提供，回复流程尚未直接消费前台同步的实时观察。
 
 外部模型调用的出站台账已完成接线：`ReplyGenerator` 可注入台账 port，真实调用的成功、
 运行失败与校验拒绝三种结果都会写入 PostgreSQL（迁移 010），记录时间、供应商标识、模型
@@ -57,6 +58,25 @@ DeepSeek 模型构造入口已实现：凭据只经 `NOTALONE_DEEPSEEK_API_KEY` 
 使用中转或代理服务时可用 `NOTALONE_DEEPSEEK_BASE_URL` 覆盖默认官方 API 地址。端到端
 真实冒烟已按凭据开关运行并通过（ECNU 网关 + ecnu-max），断言候选结构合法且台账有对应
 记录。
+
+## 前台增量同步
+
+前台定位到消息入库已经接成最小纵切：macOS 探针（`macos_sync_probe`）只判断微信是否在前台并识别顶部 display name 与左侧选中会话行的最小元数据；`wechat-cli` 只读读取当前绑定会话的文字增量，按稳定消息身份写入 `local_wechat_observation`、独立水位和规范化 `message`，与历史导入跨来源去重。
+
+```bash
+export NOTALONE_DATABASE_URL='postgresql:///notalone_dev'
+export NOTALONE_OWNER_ID='00000000-0000-0000-0000-000000000000'
+# 探针与 CLI 可执行文件默认取 notalone-sync-probe / wechat-cli，
+# 可用 NOTALONE_SYNC_PROBE / NOTALONE_WECHAT_CLI 覆盖。
+
+notalone-front-sync enable      # 用户手动开启前台增量同步
+notalone-front-sync contacts    # 列出联系人，供绑定确认时选择
+notalone-front-sync status      # 执行一次观察+增量读取，输出阶段、当前联系人、CLI 可用性与异常原因
+notalone-front-sync confirm-binding --contact-id '...' --locator 'wxid...'
+notalone-front-sync disable     # 手动关闭；关闭期间的消息重新开启后不补读
+```
+
+首次绑定、重名、改名或证据矛盾时，`status` 输出待选候选（display name、外部会话标识、最近活动时间），由用户用 `confirm-binding` 一次性选择；之后正常切换自动通过，不重复确认。输出只包含状态、计数、展示名称与候选标识，不包含消息正文；选中行短预览只用于匹配，绑定中只保存其 SHA-256 摘要。CLI 或探针不可用、微信非前台、群聊或元数据不一致时失败关闭，不退回 OCR 正文，也不把消息写入错误联系人。当前采用一次性 `tail` 轮询（规格允许的第一阶段形态），`--follow` 长进程评估尚未完成；真实微信冒烟需要屏幕录制授权并由用户手动操作。
 
 ## 导入预览
 

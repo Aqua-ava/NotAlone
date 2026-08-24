@@ -142,6 +142,39 @@ final class ProbeCoreTests: XCTestCase {
         XCTAssertLessThan(crop?.maxX ?? 0, CGFloat(image.width))
     }
 
+    func testSelectedSessionMetadataJsonCarriesEvidenceFields() throws {
+        let metadata = SelectedSessionMetadata(
+            displayName: "合成甲",
+            selectedRowName: "合成甲",
+            lastTimeText: "19:59",
+            previewText: "合成预览"
+        )
+
+        let object = metadata.jsonObject()
+
+        XCTAssertEqual(object["display_name"] as? String, "合成甲")
+        XCTAssertEqual(object["selected_row_name"] as? String, "合成甲")
+        XCTAssertEqual(object["last_time_text"] as? String, "19:59")
+        XCTAssertEqual(object["preview_text"] as? String, "合成预览")
+    }
+
+    func testSelectedSessionMetadataJsonUsesNullForMissingFields() throws {
+        let metadata = SelectedSessionMetadata(
+            displayName: nil,
+            selectedRowName: nil,
+            lastTimeText: nil,
+            previewText: nil
+        )
+
+        let line = try metadata.jsonLine()
+        let parsed = try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any]
+
+        XCTAssertNotNil(parsed)
+        for key in ["display_name", "selected_row_name", "last_time_text", "preview_text"] {
+            XCTAssertTrue(parsed?[key] is NSNull, "\(key) 缺失时应为 JSON null。")
+        }
+    }
+
     private func syntheticWindowImage(
         dividerX: Int?,
         hasStrongerLowerEdge: Bool = false,
