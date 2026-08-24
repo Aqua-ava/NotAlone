@@ -6,12 +6,17 @@ import Foundation
 import NotAloneSyncCore
 #endif
 
+// 菜单栏应用降级为轻量状态入口：不再每 3 秒拉起 notalone-front-sync
+// 子进程，改为查询常驻后端的 /api/sync/* HTTP 端点。屏幕录制权限
+// 已移交给主窗口应用（探针作为其后端子进程运行）；本应用保留的
+// OCR 调试窗口继续使用自己的权限。
+
 // AppKit 的回调都在主线程运行；菜单栏、定时器等界面对象必须在这里操作。
 @MainActor
 private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
     // 菜单栏中的 "NotAlone: ..." 状态文字；前台同步状态优先展示。
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    // 真正负责截取微信窗口的对象；获得权限后才创建。
+    // 真正负责截取微信窗口的对象；获得权限后才创建（仅调试窗口使用）。
     private var probe: WeChatCaptureProbe?
     // 每秒检查一次当前前台窗口，不主动操作或切换微信。
     private var timer: Timer?
@@ -32,20 +37,23 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
     // 最近一次 OCR 的计数摘要；只展示数量，不展示文本。
     private var lastOcrSummary = "尚未执行 OCR"
 
-    // ── 前台同步驱动 ──────────────────────────────────────────────────
-    // 仓库根目录与 notalone-front-sync 命令路径；任一缺失时同步功能不可用。
-    private var repoRoot: URL?
-    private var frontSyncPath: String?
-    // 上一次 status 循环的报告；标题与菜单从这里构建，不含消息正文。
-    private var syncReport: FrontSyncStatusReport?
-    private var contacts: [FrontSyncContactEntry] = []
-    private var isRunningSync = false
+    // ── 后端状态查询 ──────────────────────────────────────────────────
+    // 后端由主窗口应用拉起并写入握手文件；每次轮询重新读取，
+    // 以便后端重启后（新 token）能自动恢复连接。
+    private var backendClient: BackendStatusClient?
+    // 上一次查询到的同步报告；标题与菜单从这里构建，不含消息正文。
+    private var syncReport: SyncStatusJSON?
+    // 后端是否可连接；不可用时菜单栏只显示提示。
+    private var backendUnavailable = false
+    // 后端在运行但同步未就绪（503）；与"后端不可用"区分提示。
+    private var syncUnavailable = false
+    // 每 3 秒查询一次后端状态。
     private var syncTimer: Timer?
-    // 最近一次用户操作（开关/确认）的结果摘要；命令输出不含正文。
+    // 最近一次用户操作（开关/检查）的结果摘要；响应不含正文。
     private var lastOperationMessage: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        resolveFrontSyncPaths()
+        refreshBackendClient()
         rebuildMenu()
         updateSyncTitle()
         startMonitoringIfAuthorized()
@@ -58,82 +66,17 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
         syncTimer?.invalidate()
     }
 
-    // ── 前台同步：路径解析与命令执行 ────────────────────────────────────
+    // ── 后端连接：握手文件读取与客户端构建 ──────────────────────────────
 
-    private func resolveFrontSyncPaths() {
-        // App 包位于 <仓库>/macos_sync_probe/build/；向上三级得到仓库根。
-        let candidateRoot = Bundle.main.bundleURL
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        if FileManager.default.fileExists(
-            atPath: candidateRoot.appendingPathComponent("pyproject.toml").path
-        ) {
-            repoRoot = candidateRoot
-        }
-        if let override = ProcessInfo.processInfo.environment["NOTALONE_FRONT_SYNC"],
-           !override.isEmpty {
-            frontSyncPath = override
+    private func refreshBackendClient() {
+        guard let connection = BackendStatusClient.readConnection() else {
+            backendClient = nil
             return
         }
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let bases = [
-            "\(home)/miniconda3",
-            "\(home)/anaconda3",
-            "/opt/miniconda3",
-            "/opt/anaconda3",
-        ]
-        for base in bases {
-            let path = "\(base)/envs/NotAlone/bin/notalone-front-sync"
-            if FileManager.default.isExecutableFile(atPath: path) {
-                frontSyncPath = path
-                return
-            }
-        }
+        backendClient = BackendStatusClient(connection: connection)
     }
 
-    // 调用 notalone-front-sync；探针作为子进程运行，屏幕权限归于本 App。
-    private func runFrontSync(arguments: [String]) async -> (
-        exitCode: Int32, output: String, errorText: String
-    ) {
-        guard let frontSyncPath, let repoRoot else {
-            return (exitCode: -1, output: "", errorText: "同步接线不可用")
-        }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: frontSyncPath)
-        process.arguments = arguments
-        process.currentDirectoryURL = repoRoot
-        var environment = ProcessInfo.processInfo.environment
-        environment["NOTALONE_SYNC_PROBE"] = repoRoot
-            .appendingPathComponent("macos_sync_probe/build/cli/notalone-sync-probe")
-            .path
-        process.environment = environment
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
-        do {
-            try process.run()
-        } catch {
-            return (exitCode: -1, output: "", errorText: "命令启动失败")
-        }
-        return await withCheckedContinuation { continuation in
-            process.terminationHandler = { finished in
-                let outData = stdout.fileHandleForReading.readDataToEndOfFile()
-                let errData = stderr.fileHandleForReading.readDataToEndOfFile()
-                let outText = String(data: outData, encoding: .utf8) ?? ""
-                let errText = String(data: errData, encoding: .utf8) ?? ""
-                Task { @MainActor in
-                    continuation.resume(
-                        returning: (finished.terminationStatus, outText, errText)
-                    )
-                }
-            }
-        }
-    }
-
-    // ── 前台同步：循环与状态展示 ────────────────────────────────────────
-
+    // 每 3 秒查询后端；失败时后端不可用标记在标题中给出清晰提示。
     private func startSyncTimer() {
         guard syncTimer == nil else {
             return
@@ -154,20 +97,29 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func performSyncCycle() async {
-        guard !isRunningSync else {
+        refreshBackendClient()
+        guard let backendClient else {
+            backendUnavailable = true
+            syncUnavailable = false
+            syncReport = nil
+            updateSyncTitle()
+            rebuildMenu()
             return
         }
-        isRunningSync = true
-        defer { isRunningSync = false }
-        let result = await runFrontSync(arguments: ["status"])
-        let report = result.exitCode == 0
-            ? FrontSyncStatusReport.parse(statusOutput: result.output)
-            : nil
-        syncReport = report
-        // 有待选候选时才读取联系人列表，供一次性绑定确认菜单使用。
-        if let report, !report.candidates.isEmpty, contacts.isEmpty {
-            let contactResult = await runFrontSync(arguments: ["contacts"])
-            contacts = FrontSyncContactEntry.parseList(contactResult.output)
+        do {
+            syncReport = try await backendClient.status()
+            backendUnavailable = false
+            syncUnavailable = false
+        } catch let error as BackendStatusError where error == .syncUnavailable {
+            // 后端在运行，但同步尚未就绪（例如尚未初始化微信渠道身份）。
+            backendUnavailable = false
+            syncUnavailable = true
+            syncReport = nil
+        } catch {
+            // 连接或响应失败视为后端不可用；下一轮自动重试。
+            backendUnavailable = true
+            syncUnavailable = false
+            syncReport = nil
         }
         updateSyncTitle()
         rebuildMenu()
@@ -178,13 +130,13 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func syncMenuTitle() -> String {
-        guard CGPreflightScreenCaptureAccess() else {
-            return "NotAlone: 需要屏幕录制权限"
+        if backendUnavailable {
+            return "NotAlone: 后端不可用（请打开主窗口应用）"
+        }
+        if syncUnavailable {
+            return "NotAlone: 同步未就绪（请先完成一次正式导入）"
         }
         guard let report = syncReport else {
-            if frontSyncPath == nil || repoRoot == nil {
-                return "NotAlone: 同步接线不可用"
-            }
             return "NotAlone: 同步状态读取中"
         }
         if !report.syncEnabled {
@@ -192,9 +144,9 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
         }
         switch report.phase {
         case "active":
-            let name = report.bindingDisplay ?? "未知联系人"
-            return report.batchMessages > 0
-                ? "NotAlone: 同步·\(name)·本轮+\(report.batchMessages)"
+            let name = report.activeBindingDisplayName ?? "未知联系人"
+            return report.batchMessageCount > 0
+                ? "NotAlone: 同步·\(name)·本轮+\(report.batchMessageCount)"
                 : "NotAlone: 同步·\(name)"
         case "waiting_foreground":
             return "NotAlone: 等待微信前台"
@@ -204,7 +156,7 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
             if !report.candidates.isEmpty {
                 return "NotAlone: 待确认绑定(\(report.candidates.count) 候选)"
             }
-            return "NotAlone: 会话不可定位·\(unavailableReasonLabel(report.decision))"
+            return "NotAlone: 会话不可定位·\(unavailableReasonLabel(report.decisionReason))"
         default:
             return "NotAlone: 同步·\(report.phase)"
         }
@@ -250,52 +202,32 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         let syncEnabled = syncReport?.syncEnabled ?? false
+        let syncActionAvailable = !backendUnavailable && !syncUnavailable
         let toggleItem = menu.addItem(
             withTitle: syncEnabled ? "关闭前台同步" : "开启前台同步",
             action: #selector(toggleSync),
             keyEquivalent: ""
         )
         toggleItem.target = self
-        toggleItem.isEnabled = frontSyncPath != nil && repoRoot != nil
+        toggleItem.isEnabled = syncActionAvailable
         let checkItem = menu.addItem(
             withTitle: "立即检查一次",
-            action: #selector(syncTimerFired),
+            action: #selector(performCheck),
             keyEquivalent: ""
         )
         checkItem.target = self
-        checkItem.isEnabled = frontSyncPath != nil && repoRoot != nil
+        checkItem.isEnabled = syncActionAvailable
 
-        // 待确认绑定：候选 -> 联系人两级选择；点击即完成一次性确认。
+        // 待确认绑定：候选只会被展示；确认入口由主窗口应用提供。
         if let report = syncReport, !report.candidates.isEmpty {
             menu.addItem(.separator())
-            for candidate in report.candidates {
-                let candidateMenu = NSMenu()
-                if contacts.isEmpty {
-                    let emptyItem = NSMenuItem(title: "联系人列表读取中…", action: nil, keyEquivalent: "")
-                    emptyItem.isEnabled = false
-                    candidateMenu.addItem(emptyItem)
-                }
-                for contact in contacts {
-                    let item = NSMenuItem(
-                        title: "绑定到「\(contact.displayName)」",
-                        action: #selector(confirmBinding(_:)),
-                        keyEquivalent: ""
-                    )
-                    item.target = self
-                    item.representedObject = [
-                        "username": candidate.username,
-                        "contact_id": contact.contactId,
-                    ]
-                    candidateMenu.addItem(item)
-                }
-                let candidateItem = NSMenuItem(
-                    title: "确认绑定：\(candidate.displayName)",
-                    action: nil,
-                    keyEquivalent: ""
-                )
-                candidateItem.submenu = candidateMenu
-                menu.addItem(candidateItem)
-            }
+            let pendingItem = NSMenuItem(
+                title: "待确认绑定：\(report.candidates.count) 个候选（请在主窗口确认）",
+                action: nil,
+                keyEquivalent: ""
+            )
+            pendingItem.isEnabled = false
+            menu.addItem(pendingItem)
         }
 
         menu.addItem(.separator())
@@ -333,50 +265,59 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
-    // ── 前台同步：用户动作 ──────────────────────────────────────────────
+    // ── 同步开关与立即检查：全部经后端 API ──────────────────────────────
 
     @objc private func toggleSync() {
+        guard let backendClient else {
+            lastOperationMessage = "后端不可用"
+            rebuildMenu()
+            return
+        }
         let enable = !(syncReport?.syncEnabled ?? false)
         Task {
-            // 用户操作期间暂停后台循环，避免两个探针互相抢占。
-            isRunningSync = true
-            let result = await runFrontSync(arguments: [enable ? "enable" : "disable"])
-            isRunningSync = false
-            lastOperationMessage = result.exitCode == 0
-                ? (enable ? "已开启前台同步" : "已关闭前台同步")
-                : "开关失败：\(result.errorText.trimmingCharacters(in: .whitespacesAndNewlines))"
-            await performSyncCycle()
+            do {
+                let updated: SyncStatusJSON = enable
+                    ? try await backendClient.enable()
+                    : try await backendClient.disable()
+                syncReport = updated
+                backendUnavailable = false
+                syncUnavailable = false
+                lastOperationMessage = enable ? "已开启前台同步" : "已关闭前台同步"
+            } catch {
+                backendUnavailable = true
+                syncUnavailable = false
+                syncReport = nil
+                lastOperationMessage = "开关失败：后端不可用"
+            }
+            updateSyncTitle()
+            rebuildMenu()
         }
     }
 
-    @objc private func confirmBinding(_ sender: NSMenuItem) {
-        guard let selection = sender.representedObject as? [String: String],
-              let username = selection["username"],
-              let contactId = selection["contact_id"] else {
+    @objc private func performCheck() {
+        guard let backendClient else {
+            lastOperationMessage = "后端不可用"
+            rebuildMenu()
             return
         }
         Task {
-            // 确认期间暂停后台循环，避免两个探针互相抢占。
-            isRunningSync = true
-            let result = await runFrontSync(
-                arguments: [
-                    "confirm-binding",
-                    "--contact-id", contactId,
-                    "--locator", username,
-                ]
-            )
-            isRunningSync = false
-            if result.exitCode == 0 {
-                lastOperationMessage = "绑定确认成功"
-            } else {
-                let reason = result.errorText.trimmingCharacters(in: .whitespacesAndNewlines)
-                lastOperationMessage = reason.isEmpty ? "绑定确认失败" : reason
+            do {
+                syncReport = try await backendClient.check()
+                backendUnavailable = false
+                syncUnavailable = false
+                lastOperationMessage = "已检查一次"
+            } catch {
+                backendUnavailable = true
+                syncUnavailable = false
+                syncReport = nil
+                lastOperationMessage = "检查失败：后端不可用"
             }
-            await performSyncCycle()
+            updateSyncTitle()
+            rebuildMenu()
         }
     }
 
-    // ── 屏幕录制权限 ────────────────────────────────────────────────────
+    // ── 屏幕录制权限（调试窗口仍需要）───────────────────────────────────
 
     @discardableResult
     private func startMonitoringIfAuthorized() -> Bool {
@@ -585,4 +526,128 @@ struct NotAloneSyncProbeApp {
             application.run()
         }
     }
+}
+
+// ── 后端状态客户端（内联实现；JSON 契约由服务端契约测试钉住）──────────
+
+// /api/sync/status 的稳定 JSON 投影；字段与后端契约一一对应。
+@MainActor
+private struct SyncStatusJSON: Decodable {
+    let syncEnabled: Bool
+    let phase: String
+    let probeAvailable: Bool
+    let wechatInFront: Bool
+    let cliAvailable: Bool
+    let failureCode: String?
+    let activeContactId: String?
+    let activeBindingDisplayName: String?
+    let decisionReason: String?
+    let batchMessageCount: Int
+    let candidates: [CandidateJSON]
+
+    struct CandidateJSON: Decodable {
+        let username: String
+        let displayName: String
+        let lastTimestamp: Int?
+    }
+}
+
+// 只访问 127.0.0.1 后端的小型客户端；错误统一按"后端不可用"处理。
+@MainActor
+private struct BackendStatusClient {
+    private let baseURL: URL
+    private let token: String
+
+    init?(connection: BackendConnection) {
+        guard let baseURL = URL(string: "http://\(connection.address)") else {
+            return nil
+        }
+        self.baseURL = baseURL
+        self.token = connection.token
+    }
+
+    // 读取后端握手文件；文件缺失或格式无效时返回 nil（失败关闭）。
+    static func readConnection() -> BackendConnection? {
+        let path: String
+        if let override = ProcessInfo.processInfo.environment["NOTALONE_BACKEND_INFO"],
+           !override.isEmpty {
+            path = (override as NSString).expandingTildeInPath
+        } else {
+            path = (("~/.notalone/backend.info" as NSString)).expandingTildeInPath
+        }
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return nil
+        }
+        var address: String?
+        var token: String?
+        for line in text.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("address=") {
+                address = String(trimmed.dropFirst("address=".count))
+            } else if trimmed.hasPrefix("token=") {
+                token = String(trimmed.dropFirst("token=".count))
+            }
+        }
+        guard let address, let token, !address.isEmpty, !token.isEmpty else {
+            return nil
+        }
+        return BackendConnection(address: address, token: token)
+    }
+
+    func status() async throws -> SyncStatusJSON {
+        try await request(path: "/api/sync/status", method: "GET")
+    }
+
+    func enable() async throws -> SyncStatusJSON {
+        try await request(path: "/api/sync/enable", method: "POST")
+    }
+
+    func disable() async throws -> SyncStatusJSON {
+        try await request(path: "/api/sync/disable", method: "POST")
+    }
+
+    func check() async throws -> SyncStatusJSON {
+        try await request(path: "/api/sync/check", method: "POST")
+    }
+
+    private func request(path: String, method: String) async throws -> SyncStatusJSON {
+        guard let url = URL(string: path, relativeTo: baseURL) else {
+            throw BackendStatusError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw BackendStatusError.badStatus
+        }
+        switch http.statusCode {
+        case 200:
+            break
+        case 503:
+            // 后端在运行但同步未就绪（例如尚无微信渠道身份）。
+            throw BackendStatusError.syncUnavailable
+        default:
+            throw BackendStatusError.badStatus
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        do {
+            return try decoder.decode(SyncStatusJSON.self, from: data)
+        } catch {
+            throw BackendStatusError.malformedResponse
+        }
+    }
+}
+
+private enum BackendStatusError: Error {
+    case invalidURL
+    case syncUnavailable
+    case badStatus
+    case malformedResponse
+}
+
+private struct BackendConnection {
+    let address: String
+    let token: String
 }

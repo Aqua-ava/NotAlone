@@ -42,6 +42,14 @@ zsh scripts/build_cli.sh
 
 ## 菜单栏 App 验证
 
+菜单栏 App 已降级为轻量状态入口：不再每 3 秒拉起 `notalone-front-sync`
+子进程轮询，而是查询常驻后端（`notalone-server`）的 `/api/sync/*` HTTP
+端点；同步开关与“立即检查一次”同样经后端 API 生效。后端由主窗口应用
+拉起，连接信息经握手文件（`~/.notalone/backend.info`，可用
+`NOTALONE_BACKEND_INFO` 覆盖）发现；后端不可用时菜单栏标题给出清晰
+提示。绑定候选只在菜单中展示计数；确认入口由主窗口应用提供（本阶段
+仍可用 CLI `notalone-front-sync confirm-binding` 兜底）。
+
 命令行进程在当前 Codex 运行环境中无法稳定收到 ScreenCaptureKit 的截窗回调，不能作为真实采集验证的载体。真实权限验证应从 Xcode 启动已签名的独立 App：
 
 1. 在 Xcode 打开 `Xcode/NotAloneSyncProbe/NotAloneSyncProbe.xcodeproj`。

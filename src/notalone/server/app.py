@@ -16,9 +16,14 @@ from notalone.application.contact_directory import (
     ContactDirectoryError,
     ContactSummary,
 )
+from notalone.front_sync.sync_engine import (
+    BindingCandidateView,
+    FrontSyncCycleReport,
+)
 from notalone.persistence.contact_directory import PostgresContactDirectory
 from notalone.server.event_bus import EventBus, EventSubscription
 from notalone.server.sse import encode_sse_frame
+from notalone.server.sync_host import SyncControlPort
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +50,7 @@ class SseResponse:
 class BackendApp:
     """只提供本地 API 的无框架 HTTP 应用。"""
 
-    __slots__ = ("_contact_directory", "_events", "_owner_id", "_token")
+    __slots__ = ("_contact_directory", "_events", "_owner_id", "_sync_control", "_token")
 
     def __init__(
         self,
@@ -54,6 +59,7 @@ class BackendApp:
         events: EventBus,
         owner_id: UUID,
         token: str,
+        sync_control: SyncControlPort | None = None,
     ) -> None:
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
@@ -62,6 +68,7 @@ class BackendApp:
         self._contact_directory = contact_directory
         self._events = events
         self._owner_id = owner_id
+        self._sync_control = sync_control
         self._token = token
 
     @property
@@ -90,7 +97,9 @@ class BackendApp:
         request_headers = headers or {}
         if not self._authorized(request_headers):
             return _json_response(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
-        if method.upper() == "GET" and urlsplit(path).path == "/api/contacts":
+        method_upper = method.upper()
+        path_value = urlsplit(path).path
+        if method_upper == "GET" and path_value == "/api/contacts":
             try:
                 contacts = self._contact_directory.list_contacts(self._owner_id)
             except ContactDirectoryError:
@@ -102,7 +111,50 @@ class BackendApp:
                 HTTPStatus.OK,
                 {"contacts": [_contact_payload(contact) for contact in contacts]},
             )
+        if path_value.startswith("/api/sync"):
+            return self._handle_sync(method=method_upper, path=path_value)
         return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+
+    def _handle_sync(self, *, method: str, path: str) -> Response:
+        """处理同步控制端点；不做任何请求正文解析，失败关闭。"""
+
+        if path not in {
+            "/api/sync/status",
+            "/api/sync/enable",
+            "/api/sync/disable",
+            "/api/sync/check",
+        }:
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        sync = self._sync_control
+        if sync is None:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "sync_unavailable"}
+            )
+        if path == "/api/sync/status":
+            if method != "GET":
+                return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            report = sync.status()
+            if report is None:
+                return _json_response(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"error": "sync_status_unavailable"},
+                )
+            return _json_response(HTTPStatus.OK, _sync_status_payload(report))
+        if method != "POST":
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        try:
+            if path == "/api/sync/enable":
+                report = sync.enable()
+            elif path == "/api/sync/disable":
+                report = sync.disable()
+            else:
+                report = sync.check()
+        except Exception:
+            # 稳定错误码，不把引擎异常细节回显给界面。
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "sync_control_failed"}
+            )
+        return _json_response(HTTPStatus.OK, _sync_status_payload(report))
 
     def open_sse(
         self,
@@ -239,6 +291,7 @@ def create_app(
     owner_id: UUID,
     token: str | None = None,
     events: EventBus | None = None,
+    sync_control: SyncControlPort | None = None,
 ) -> BackendApp:
     """创建服务应用；未显式传 token 时在启动时生成随机 token。"""
 
@@ -247,6 +300,7 @@ def create_app(
         events=events or EventBus(),
         owner_id=owner_id,
         token=token or secrets.token_urlsafe(32),
+        sync_control=sync_control,
     )
 
 
@@ -314,6 +368,36 @@ def _contact_payload(contact: ContactSummary) -> dict[str, object]:
             "message_count": contact.data_status.message_count,
             "source_count": contact.data_status.source_count,
         },
+    }
+
+
+def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:
+    """把循环报告投影为状态 API 的稳定 JSON；不含任何消息正文。"""
+
+    return {
+        "sync_enabled": report.sync_enabled,
+        "phase": report.phase.value,
+        "probe_available": report.probe_available,
+        "wechat_in_front": report.wechat_in_front,
+        "cli_available": report.cli_available,
+        "failure_code": report.failure_code,
+        "active_contact_id": (
+            None if report.active_contact_id is None else str(report.active_contact_id)
+        ),
+        "active_binding_display_name": report.active_binding_display_name,
+        "decision_reason": (
+            None if report.decision_reason is None else report.decision_reason.value
+        ),
+        "batch_message_count": report.batch_message_count,
+        "candidates": [_candidate_payload(candidate) for candidate in report.candidates],
+    }
+
+
+def _candidate_payload(candidate: BindingCandidateView) -> dict[str, object]:
+    return {
+        "username": candidate.username,
+        "display_name": candidate.display_name,
+        "last_timestamp": candidate.last_timestamp,
     }
 
 

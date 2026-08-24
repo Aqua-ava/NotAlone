@@ -139,6 +139,11 @@ class FrontSyncEngine:
 
         self._lifecycle.disable_sync()
 
+    def sync_enabled(self) -> bool:
+        """读取当前同步开关；不触发探针或 CLI。"""
+
+        return self._sync_state.read(owner_id=self._owner_id).enabled
+
     # ------------------------------------------------------------------
     # 观察循环
     # ------------------------------------------------------------------

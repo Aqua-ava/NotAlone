@@ -11,32 +11,20 @@ import os
 import sys
 from uuid import UUID
 
-import psycopg
-
 from notalone.application.contact_directory import (
     ContactDirectory,
     ContactDirectoryError,
 )
-from notalone.front_sync import (
-    MacosFrontSessionProbe,
-    TailLifecycle,
+from notalone.front_sync.factory import (
+    build_front_sync_engine,
+    owner_wechat_account_scope,
 )
 from notalone.front_sync.sync_engine import (
     BindingConfirmationError,
     FrontSyncCycleReport,
-    FrontSyncEngine,
 )
-from notalone.persistence.conversation_repository import (
-    PostgresConversationBindingRepository,
-)
-from notalone.persistence.front_sync_state import PostgresFrontSyncStateStore
 from notalone.persistence.contact_directory import PostgresContactDirectory
-from notalone.persistence.observation_store import PostgresObservationStore
 from notalone.runtime_config import load_project_env
-from notalone.wechat_cli import LocalWechatCli
-
-
-_CHANNEL = "wechat"
 
 
 def render_report_lines(report: FrontSyncCycleReport) -> list[str]:
@@ -124,11 +112,11 @@ def front_sync_main(argv: list[str] | None = None) -> int:
             )
         return 0
 
-    account_scope = _owner_wechat_account_scope(database_url, owner_id)
+    account_scope = owner_wechat_account_scope(database_url=database_url, owner_id=owner_id)
     if account_scope is None:
         return _fail("owner 还没有微信渠道身份；请先完成一次正式导入初始化。")
 
-    engine = _build_engine(
+    engine = build_front_sync_engine(
         database_url=database_url,
         owner_id=owner_id,
         account_scope=account_scope,
@@ -160,59 +148,6 @@ def front_sync_main(argv: list[str] | None = None) -> int:
             print(line)
         return 0
     return _fail("不支持的子命令。")
-
-
-def _build_engine(
-    *,
-    database_url: str,
-    owner_id: UUID,
-    account_scope: str,
-) -> FrontSyncEngine:
-    cli = LocalWechatCli(
-        executable=os.environ.get("NOTALONE_WECHAT_CLI", "").strip()
-        or "wechat-cli"
-    )
-    probe = MacosFrontSessionProbe(
-        executable=os.environ.get("NOTALONE_SYNC_PROBE", "").strip()
-        or "notalone-sync-probe"
-    )
-    bindings = PostgresConversationBindingRepository(database_url)
-    sync_state = PostgresFrontSyncStateStore(database_url)
-    lifecycle = TailLifecycle(
-        owner_id=owner_id,
-        channel=_CHANNEL,
-        account_scope=account_scope,
-        cli=cli,
-        bindings=bindings,
-        observation_store=PostgresObservationStore(database_url),
-        sync_state=sync_state,
-    )
-    return FrontSyncEngine(
-        owner_id=owner_id,
-        channel=_CHANNEL,
-        account_scope=account_scope,
-        probe=probe,
-        lifecycle=lifecycle,
-        bindings=bindings,
-        sync_state=sync_state,
-        cli=cli,
-    )
-
-
-def _owner_wechat_account_scope(database_url: str, owner_id: UUID) -> str | None:
-    """读取 owner 的 active 微信渠道身份作为账号范围。"""
-
-    with psycopg.connect(database_url) as connection:
-        row = connection.execute(
-            """
-            SELECT external_id
-            FROM public.owner_channel_identity
-            WHERE owner_id = %s AND channel = 'wechat' AND status = 'active'
-            LIMIT 1
-            """,
-            (owner_id,),
-        ).fetchone()
-    return None if row is None else row[0]
 
 
 def _fail(message: str) -> int:
