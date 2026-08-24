@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import re
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any, Literal
+from urllib.parse import unquote
 
 import yaml
 
@@ -83,10 +85,15 @@ _TEXT_SUFFIXES = _REFERENCE_SUFFIXES | {
     ".template",
     ".tmpl",
 }
-_URL_PATTERN = re.compile(r"\bhttps?://", re.IGNORECASE)
+_URL_PATTERN = re.compile(
+    r"\b(?:https?|ftp|file|data|blob|javascript):|"
+    r"(?<![\w])//[^\s<>\"']+",
+    re.IGNORECASE,
+)
 _PRIVATE_EXPORT_KEY_PATTERN = re.compile(
-    r"['\"](?:sender_wxid|external_local_id|external_talker|"
-    r"raw_payload|source_document_id)['\"]\s*:",
+    r"(?<![A-Za-z0-9_])['\"]?(?:sender_wxid|external_local_id|"
+    r"external_talker|raw_payload|source_document_id)['\"]?"
+    r"(?:\s*:|(?![A-Za-z0-9_]))",
     re.IGNORECASE,
 )
 _PRIVATE_EXPORT_PATTERNS = (
@@ -135,8 +142,13 @@ _NEGATED_POLICY_PATTERN = re.compile(
 )
 _UNSAFE_SVG_PATTERN = re.compile(
     r"<\s*script\b|\bon[a-z]+\s*=|"
-    r"\b(?:href|xlink:href|src)\s*=\s*['\"]\s*(?:https?:|//|"
-    r"javascript:)|\burl\(\s*['\"]?(?:https?:|//|javascript:)",
+    r"\b(?:href|xlink:href|src)\s*=\s*['\"]\s*(?:[a-z][a-z0-9+.-]*:|//)|"
+    r"\burl\(\s*['\"]?(?:[a-z][a-z0-9+.-]*:|//)",
+    re.I,
+)
+_SVG_NAMESPACE_PATTERN = re.compile(
+    r"(\bxmlns(?::[A-Za-z][A-Za-z0-9_.-]*)?\s*=\s*['\"])"
+    r"https?://www\.w3\.org/(?:2000/svg|1999/xlink)(['\"])",
     re.I,
 )
 _USAGE_HINTS = (
@@ -371,12 +383,16 @@ class SkillPackageValidator:
                 "invalid_text",
                 "文本辅助资源包含无效内容。",
             )
-        if suffix == ".svg" and _UNSAFE_SVG_PATTERN.search(text):
-            raise SkillPackageValidationError(
-                "unsafe_instruction",
-                "SVG 资源包含脚本或事件处理器。",
-            )
-        cls._validate_content_safety(text)
+        scan_text = text
+        if suffix == ".svg":
+            scan_text = unquote(html.unescape(text))
+            scan_text = _SVG_NAMESPACE_PATTERN.sub(r"\1\2", scan_text)
+            if _UNSAFE_SVG_PATTERN.search(scan_text):
+                raise SkillPackageValidationError(
+                    "unsafe_instruction",
+                    "SVG 资源包含脚本或外部引用。",
+                )
+        cls._validate_content_safety(scan_text)
 
     @staticmethod
     def _is_forbidden_binary(content: bytes) -> bool:
@@ -538,9 +554,7 @@ class SkillPackageValidator:
                 "Skill 包不能依赖外部 URL。",
             )
         compact = content.casefold()
-        if (
-            len(_PRIVATE_EXPORT_KEY_PATTERN.findall(compact)) >= 2
-        ):
+        if _PRIVATE_EXPORT_KEY_PATTERN.search(compact):
             raise SkillPackageValidationError(
                 "private_export",
                 "Skill 包不能包含联系人或聊天导出数据。",

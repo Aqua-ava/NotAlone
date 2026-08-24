@@ -563,6 +563,79 @@ class PostgresSkillLibraryTest(unittest.TestCase):
 
         self.assertEqual(caught.exception.code, "private_export")
 
+    def test_rejects_single_private_export_field(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            package = Path(temporary_directory) / "private-field"
+            package.mkdir()
+            (package / "SKILL.md").write_text(
+                "---\n"
+                "name: private-field\n"
+                "description: 隐私字段校验测试。\n"
+                "---\n\n"
+                "raw_payload: synthetic chat export\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(SkillPackageValidationError) as caught:
+                self.library.import_package(self.owner_id, package)
+
+        self.assertEqual(caught.exception.code, "private_export")
+
+    def test_rejects_svg_file_data_and_encoded_script_references(self) -> None:
+        variants = (
+            "<svg><image href=\"file:///tmp/chat.png\" /></svg>\n",
+            "<svg><image href=\"data:image/png;base64,synthetic\" /></svg>\n",
+            "<svg><image href=\"&#x6a;avascript:alert(1)\" /></svg>\n",
+        )
+        with TemporaryDirectory() as temporary_directory:
+            for index, svg in enumerate(variants):
+                with self.subTest(index=index):
+                    package = Path(temporary_directory) / f"unsafe-svg-{index}"
+                    (package / "assets").mkdir(parents=True)
+                    (package / "SKILL.md").write_text(
+                        "---\n"
+                        f"name: unsafe-svg-{index}\n"
+                        "description: SVG 外部引用校验测试。\n"
+                        "---\n\n"
+                        "只接收静态模板。\n"
+                        "不读取外部资源。\n"
+                        "最终由用户确认回复。\n",
+                        encoding="utf-8",
+                    )
+                    (package / "assets" / "icon.svg").write_text(
+                        svg,
+                        encoding="utf-8",
+                    )
+
+                    with self.assertRaises(SkillPackageValidationError) as caught:
+                        self.library.import_package(self.owner_id, package)
+
+                    self.assertEqual(caught.exception.code, "unsafe_instruction")
+
+    def test_accepts_static_svg_with_standard_namespace(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            package = Path(temporary_directory) / "static-svg"
+            (package / "assets").mkdir(parents=True)
+            (package / "SKILL.md").write_text(
+                "---\n"
+                "name: static-svg\n"
+                "description: 静态 SVG 模板使用场景。\n"
+                "---\n\n"
+                "只读取静态模板。\n"
+                "不执行外部代码。\n"
+                "最终由用户确认回复。\n",
+                encoding="utf-8",
+            )
+            (package / "assets" / "icon.svg").write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg">'
+                '<path d="M0 0h1v1z" /></svg>\n',
+                encoding="utf-8",
+            )
+
+            result = self.library.import_package(self.owner_id, package)
+
+        self.assertEqual(result.resource_paths, ("assets/icon.svg",))
+
     def test_database_failure_rolls_back_skill_version_and_resources(self) -> None:
         trigger_name = f"block_skill_resource_{uuid4().hex}"
         function_name = f"block_skill_resource_fn_{uuid4().hex}"
