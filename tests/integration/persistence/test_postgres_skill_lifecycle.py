@@ -455,6 +455,54 @@ class PostgresSkillLifecycleTest(unittest.TestCase):
         )
         self.assertEqual(current.content, "第一版。\n")
 
+    def test_update_and_rollback_keep_catalog_consistent_with_description(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            first = self._package(
+                "description-sync",
+                content="第一版策略。\n",
+                description="第一版描述：先回应再给边界。",
+                temporary_directory=temporary_directory,
+            )
+            imported = self.library.import_package(self.owner_id, first)
+            second = self._package(
+                "description-sync",
+                content="第二版策略。\n",
+                description="第二版描述：用于更直接的场景。",
+                temporary_directory=temporary_directory,
+            )
+            updated = self.library.update_package(self.owner_id, second)
+
+            catalog = self.skill_port.catalog(self._scope())
+            self.assertEqual(len(catalog.entries), 1)
+            self.assertEqual(
+                catalog.entries[0].description,
+                "第二版描述：用于更直接的场景。",
+            )
+            self.skill_port.load_version(
+                self._scope(),
+                updated.version_id,
+            )
+
+            rolled = self.library.rollback(
+                self.owner_id,
+                updated.skill_id,
+                imported.version_id,
+            )
+
+        self.assertEqual(rolled.version_id, imported.version_id)
+        catalog = self.skill_port.catalog(self._scope())
+        self.assertEqual(len(catalog.entries), 1)
+        self.assertEqual(
+            catalog.entries[0].description,
+            "第一版描述：先回应再给边界。",
+        )
+        self.skill_port.load_version(
+            self._scope(),
+            imported.version_id,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

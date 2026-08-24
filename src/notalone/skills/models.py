@@ -147,7 +147,7 @@ class SkillImportResult:
 _RESOURCE_PATH_PREFIXES = ("references", "assets")
 
 
-def _validate_resource_relative_path(relative_path: str) -> tuple[str, ...]:
+def validate_resource_relative_path(relative_path: str) -> tuple[str, ...]:
     parts = relative_path.split("/") if isinstance(relative_path, str) else ()
     if (
         not parts
@@ -184,7 +184,7 @@ class SkillResource:
             or not isinstance(self.version_id, UUID)
         ):
             raise TypeError("Skill 资源归属和标识必须是 UUID。")
-        parts = _validate_resource_relative_path(self.relative_path)
+        parts = validate_resource_relative_path(self.relative_path)
         if self.resource_kind not in ("reference", "asset"):
             raise ValueError("Skill 辅助资源类型无效。")
         expected_kind = {
@@ -484,7 +484,7 @@ class SkillVersion:
         if len(self.resource_paths) != len(set(self.resource_paths)):
             raise ValueError("Skill 辅助资源路径清单重复。")
         for path in self.resource_paths:
-            _validate_resource_relative_path(path)
+            validate_resource_relative_path(path)
 
     def applies_to(self, scope: ContactScope) -> bool:
         return self.owner_id == scope.owner_id and self.contact_id in (

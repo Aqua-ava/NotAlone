@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 from uuid import UUID
 
@@ -15,13 +14,12 @@ from notalone.skills.models import (
     SkillCatalogEntry,
     SkillResource,
     SkillVersion,
-    _validate_resource_relative_path,
+    validate_resource_relative_path,
 )
 
 
 _SKILL_UNAVAILABLE = "Skill 不可用。"
 _RESOURCE_UNAVAILABLE = "Skill 资源不可用。"
-_SKILL_RESOURCE_PATH = re.compile(r"^(?:references|assets)/[^/][^\\]*$")
 
 
 class SkillPortPersistenceError(RuntimeError):
@@ -170,12 +168,10 @@ class PostgresSkillPort:
         self._validate_scope(scope)
         if not isinstance(version_id, UUID):
             raise TypeError("version_id 必须是 UUID。")
-        if not isinstance(relative_path, str) or _SKILL_RESOURCE_PATH.fullmatch(
-            relative_path
-        ) is None:
+        if not isinstance(relative_path, str):
             raise PermissionError(_RESOURCE_UNAVAILABLE)
         try:
-            _validate_resource_relative_path(relative_path)
+            validate_resource_relative_path(relative_path)
         except ValueError:
             raise PermissionError(_RESOURCE_UNAVAILABLE) from None
         try:

@@ -202,6 +202,15 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                     version_number=next_number,
                     version_id=version_id,
                 )
+                # 保持 reply_skill 与 current 版本描述一致，避免目录一致性守卫误报。
+                connection.execute(
+                    """
+                    UPDATE public.reply_skill
+                    SET description = %s, updated_at = now()
+                    WHERE id = %s
+                    """,
+                    (package.description, skill["id"]),
+                )
                 revision = self._increment_revision(connection, owner_id)
         except (
             SkillPackageValidationError,
@@ -248,22 +257,15 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
         try:
             with self._connect() as connection:
                 self._ensure_library_row(connection, owner_id)
-                skill = connection.execute(
-                    """
-                    SELECT id, status
-                    FROM public.reply_skill
-                    WHERE id = %s AND owner_id = %s
-                    FOR UPDATE
-                    """,
-                    (skill_id, owner_id),
-                ).fetchone()
-                if skill is None:
-                    raise SkillNotFoundError("Skill 回滚失败：Skill 不存在。")
-                if skill["status"] == "deleted":
-                    raise SkillDeletedError("Skill 回滚失败：Skill 已删除。")
+                skill = self._lock_skill(
+                    connection,
+                    owner_id=owner_id,
+                    skill_id=skill_id,
+                    operation="回滚",
+                )
                 target = connection.execute(
                     """
-                    SELECT version_number
+                    SELECT version_number, description
                     FROM public.reply_skill_version
                     WHERE id = %s AND skill_id = %s AND status = 'active'
                       AND content IS NOT NULL AND length(btrim(content)) > 0
@@ -315,10 +317,12 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                 connection.execute(
                     """
                     UPDATE public.reply_skill
-                    SET status = 'active', updated_at = now()
+                    SET status = 'active',
+                        description = %s,
+                        updated_at = now()
                     WHERE id = %s
                     """,
-                    (skill_id,),
+                    (target["description"], skill_id),
                 )
                 revision = self._increment_revision(connection, owner_id)
                 result = self._result(
@@ -353,23 +357,12 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
         try:
             with self._connect() as connection:
                 self._ensure_library_row(connection, owner_id)
-                skill = connection.execute(
-                    """
-                    SELECT id, status
-                    FROM public.reply_skill
-                    WHERE id = %s AND owner_id = %s
-                    FOR UPDATE
-                    """,
-                    (skill_id, owner_id),
-                ).fetchone()
-                if skill is None:
-                    raise SkillNotFoundError(
-                        f"Skill {operation}失败：Skill 不存在。",
-                    )
-                if skill["status"] == "deleted":
-                    raise SkillDeletedError(
-                        f"Skill {operation}失败：Skill 已删除。",
-                    )
+                skill = self._lock_skill(
+                    connection,
+                    owner_id=owner_id,
+                    skill_id=skill_id,
+                    operation=operation,
+                )
                 if skill["status"] != status:
                     connection.execute(
                         """
@@ -719,6 +712,31 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
             digest.update(bytes(resource["content"]))
             digest.update(b"\0")
         return digest.hexdigest()
+
+    @staticmethod
+    def _lock_skill(
+        connection: Any,
+        *,
+        owner_id: UUID,
+        skill_id: UUID,
+        operation: str,
+    ) -> Any:
+        """锁定并校验一个属于该 Owner 且未删除的 Skill 行。"""
+
+        skill = connection.execute(
+            """
+            SELECT id, name, status, deletion_operation_id
+            FROM public.reply_skill
+            WHERE id = %s AND owner_id = %s
+            FOR UPDATE
+            """,
+            (skill_id, owner_id),
+        ).fetchone()
+        if skill is None:
+            raise SkillNotFoundError(f"Skill {operation}失败：Skill 不存在。")
+        if skill["status"] == "deleted":
+            raise SkillDeletedError(f"Skill {operation}失败：Skill 已删除。")
+        return skill
 
     @staticmethod
     def _ensure_library_row(connection: Any, owner_id: UUID) -> None:
