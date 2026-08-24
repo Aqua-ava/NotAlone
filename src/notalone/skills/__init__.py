@@ -8,6 +8,7 @@ from notalone.skills.models import (
     SkillPackageResource,
     SkillResource,
     SkillVersion,
+    SkillVersionResult,
     validate_skill_version,
 )
 from notalone.skills.package import (
@@ -34,5 +35,6 @@ __all__ = [
     "SkillPort",
     "SkillResource",
     "SkillVersion",
+    "SkillVersionResult",
     "validate_skill_version",
 ]

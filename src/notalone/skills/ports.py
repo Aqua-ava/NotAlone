@@ -12,6 +12,7 @@ from notalone.skills.models import (
     SkillImportResult,
     SkillResource,
     SkillVersion,
+    SkillVersionResult,
 )
 
 
@@ -42,3 +43,20 @@ class SkillLibraryManagementPort(Protocol):
         owner_id: UUID,
         package_path: str | Path,
     ) -> SkillImportResult: ...
+
+    def update_package(
+        self,
+        owner_id: UUID,
+        package_path: str | Path,
+    ) -> SkillVersionResult: ...
+
+    def enable(self, owner_id: UUID, skill_id: UUID) -> SkillVersionResult: ...
+
+    def disable(self, owner_id: UUID, skill_id: UUID) -> SkillVersionResult: ...
+
+    def rollback(
+        self,
+        owner_id: UUID,
+        skill_id: UUID,
+        version_id: UUID,
+    ) -> SkillVersionResult: ...

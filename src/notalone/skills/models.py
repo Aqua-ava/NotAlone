@@ -220,6 +220,33 @@ class SkillResource:
 
 
 @dataclass(frozen=True, slots=True)
+class SkillVersionResult:
+    """更新、启用、停用或回滚后返回的最小非正文生命周期结果。"""
+
+    owner_id: UUID
+    skill_id: UUID
+    version_id: UUID
+    name: str
+    version_number: int
+    revision: int
+    status: Literal["active", "disabled"] = "active"
+
+    def __post_init__(self) -> None:
+        if not all(
+            isinstance(value, UUID)
+            for value in (self.owner_id, self.skill_id, self.version_id)
+        ):
+            raise TypeError("Skill 生命周期结果标识必须是 UUID。")
+        _validate_skill_name(self.name)
+        if not isinstance(self.version_number, int) or self.version_number < 1:
+            raise ValueError("Skill 版本号无效。")
+        if not isinstance(self.revision, int) or self.revision < 1:
+            raise ValueError("Skill 目录修订号无效。")
+        if self.status not in ("active", "disabled"):
+            raise ValueError("Skill 状态无效。")
+
+
+@dataclass(frozen=True, slots=True)
 class SkillCatalogEntry:
     """目录扫描可见的不可变 Skill 版本元数据。"""
 
