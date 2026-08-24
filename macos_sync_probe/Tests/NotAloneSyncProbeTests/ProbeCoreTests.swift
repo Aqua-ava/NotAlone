@@ -175,6 +175,92 @@ final class ProbeCoreTests: XCTestCase {
         }
     }
 
+    func testFrontSyncStatusReportParsesActiveCycle() {
+        let output = """
+        sync=enabled
+        phase=active
+        probe=ok
+        wechat_front=yes
+        cli=ok
+        contact_id=7F6F7796-5395-4C8F-BAE6-43EF606DF7CA
+        binding_display=合成甲
+        decision=confirmed_active_binding
+        batch_messages=3
+        """
+
+        let report = FrontSyncStatusReport.parse(statusOutput: output)
+
+        XCTAssertNotNil(report)
+        XCTAssertEqual(report?.syncEnabled, true)
+        XCTAssertEqual(report?.phase, "active")
+        XCTAssertEqual(report?.wechatInFront, true)
+        XCTAssertEqual(report?.cliAvailable, true)
+        XCTAssertEqual(report?.bindingDisplay, "合成甲")
+        XCTAssertEqual(report?.batchMessages, 3)
+        XCTAssertEqual(report?.candidates, [])
+    }
+
+    func testFrontSyncStatusReportParsesCandidatesWithEmojiDisplay() {
+        let output = """
+        sync=enabled
+        phase=unavailable
+        probe=ok
+        wechat_front=yes
+        cli=ok
+        decision=ambiguous_requires_selection
+        batch_messages=0
+        candidate[1] username=wxid_one display=FSM💕 cxk last_active=1787486383
+        candidate[2] username=wxid_two display=FSM💕 cxk last_active=unknown
+        """
+
+        let report = FrontSyncStatusReport.parse(statusOutput: output)
+
+        XCTAssertEqual(report?.candidates.count, 2)
+        XCTAssertEqual(report?.candidates.first?.username, "wxid_one")
+        XCTAssertEqual(report?.candidates.first?.displayName, "FSM💕 cxk")
+        XCTAssertEqual(report?.candidates.last?.username, "wxid_two")
+    }
+
+    func testFrontSyncStatusReportFailsClosedOnGarbageOutput() {
+        XCTAssertNil(FrontSyncStatusReport.parse(statusOutput: ""))
+        XCTAssertNil(FrontSyncStatusReport.parse(statusOutput: "探针失败：无法运行。"))
+        // 缺少必备字段（batch_messages）时失败关闭。
+        XCTAssertNil(FrontSyncStatusReport.parse(statusOutput: "sync=enabled\nphase=active"))
+    }
+
+    func testFrontSyncStatusReportParsesFailureCode() {
+        let output = """
+        sync=enabled
+        phase=failed
+        probe=ok
+        wechat_front=yes
+        cli=unavailable
+        failure=cli_not_found
+        batch_messages=0
+        """
+
+        let report = FrontSyncStatusReport.parse(statusOutput: output)
+
+        XCTAssertEqual(report?.phase, "failed")
+        XCTAssertEqual(report?.cliAvailable, false)
+        XCTAssertEqual(report?.failureCode, "cli_not_found")
+    }
+
+    func testContactListParserKeepsEmojiAndSpaces() {
+        let output = """
+        contact_id=7f6f7796-5395-4c8f-bae6-43ef606df7ca display_name=FSM💕 cxk
+        contact_id=11111111-1111-1111-1111-111111111111 display_name=合成乙
+         unrelated line
+        """
+
+        let entries = FrontSyncContactEntry.parseList(output)
+
+        XCTAssertEqual(entries.count, 2)
+        XCTAssertEqual(entries.first?.contactId, "7f6f7796-5395-4c8f-bae6-43ef606df7ca")
+        XCTAssertEqual(entries.first?.displayName, "FSM💕 cxk")
+        XCTAssertEqual(entries.last?.displayName, "合成乙")
+    }
+
     private func syntheticWindowImage(
         dividerX: Int?,
         hasStrongerLowerEdge: Bool = false,

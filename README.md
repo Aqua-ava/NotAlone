@@ -61,7 +61,10 @@ DeepSeek 模型构造入口已实现：凭据只经 `NOTALONE_DEEPSEEK_API_KEY` 
 
 ## 前台增量同步
 
-前台定位到消息入库已经接成最小纵切：macOS 探针（`macos_sync_probe`）只判断微信是否在前台并识别顶部 display name 与左侧选中会话行的最小元数据；`wechat-cli` 只读读取当前绑定会话的文字增量，按稳定消息身份写入 `local_wechat_observation`、独立水位和规范化 `message`，与历史导入跨来源去重。
+前台定位到消息入库已经接成最小纵切，并经真实微信冒烟验证：macOS 探针
+（`macos_sync_probe`）只判断微信是否在前台并识别顶部 display name 与左侧选中会话行的最小元数据；`wechat-cli` 只读读取当前绑定会话的文字增量，按稳定消息身份写入 `local_wechat_observation`、独立水位和规范化 `message`，与历史导入跨来源去重。日常使用推荐菜单栏入口：构建并打开 `macos_sync_probe/build/NotAloneSyncProbe.app`（`zsh macos_sync_probe/scripts/build_app.sh`），状态栏持续显示同步开关、阶段、当前联系人与异常原因，菜单提供开关与一次性绑定确认；屏幕录制权限只需授予该 App，稳定签名下重建不需要重新授权。
+
+命令行入口：
 
 ```bash
 export NOTALONE_DATABASE_URL='postgresql:///notalone_dev'
@@ -76,7 +79,7 @@ notalone-front-sync confirm-binding --contact-id '...' --locator 'wxid...'
 notalone-front-sync disable     # 手动关闭；关闭期间的消息重新开启后不补读
 ```
 
-首次绑定、重名、改名或证据矛盾时，`status` 输出待选候选（display name、外部会话标识、最近活动时间），由用户用 `confirm-binding` 一次性选择；之后正常切换自动通过，不重复确认。输出只包含状态、计数、展示名称与候选标识，不包含消息正文；选中行短预览只用于匹配，绑定中只保存其 SHA-256 摘要。CLI 或探针不可用、微信非前台、群聊或元数据不一致时失败关闭，不退回 OCR 正文，也不把消息写入错误联系人。当前采用一次性 `tail` 轮询（规格允许的第一阶段形态），`--follow` 长进程评估尚未完成；真实微信冒烟需要屏幕录制授权并由用户手动操作。
+首次绑定、重名、改名或证据矛盾时输出待选候选（display name、外部会话标识、最近活动时间），由用户一次性选择；OCR 把标题读变形（如表情符号）导致查询落空时，自动回退到最近会话列表供选择，已绑定会话可自动认出。之后正常切换自动通过，不重复确认。输出只包含状态、计数、展示名称与候选标识，不包含消息正文；选中行短预览只用于匹配，绑定中只保存其 SHA-256 摘要。CLI 或探针不可用、微信非前台、群聊或元数据不一致时失败关闭，不退回 OCR 正文，也不把消息写入错误联系人。当前采用一次性 `tail` 轮询（规格允许的第一阶段形态），`--follow` 长进程评估尚未完成。注意：本地库必须按顺序应用全部迁移（历史导入的旧库若缺 021 会拒绝观察消息入库）。
 
 ## 导入预览
 

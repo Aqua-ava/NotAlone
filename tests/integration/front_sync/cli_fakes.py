@@ -69,6 +69,8 @@ class ScriptedCliRunner:
 
     def __init__(self) -> None:
         self.candidates_by_query: dict[str, list[dict]] = {}
+        self.sessions_json: list[dict] = []
+        self.sessions_error: Exception | None = None
         self.tail_queues: dict[str, deque[str]] = defaultdict(deque)
         self.tail_calls: list[tuple[str, str | None]] = []
         self.tail_error: Exception | None = None
@@ -100,6 +102,17 @@ class ScriptedCliRunner:
                             "candidates": self.candidates_by_query.get(query, []),
                         },
                     },
+                    ensure_ascii=False,
+                ),
+            )
+        if subcommand == "sessions":
+            if self.sessions_error is not None:
+                error, self.sessions_error = self.sessions_error, None
+                raise error
+            return FakeCommandResult(
+                returncode=0,
+                stdout=json.dumps(
+                    {"ok": True, "data": {"sessions": self.sessions_json}},
                     ensure_ascii=False,
                 ),
             )

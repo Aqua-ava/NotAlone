@@ -38,6 +38,7 @@ class BindingMatchReason(StrEnum):
     BINDING_NAME_CHANGED = "binding_name_changed"
     FIRST_BINDING_UNIQUE = "first_binding_unique"
     AMBIGUOUS_REQUIRES_SELECTION = "ambiguous_requires_selection"
+    UNMATCHED_REQUIRES_SELECTION = "unmatched_requires_selection"
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,8 +95,14 @@ def match_front_session(
     evidence: FrontSessionEvidence,
     candidates: Sequence[ChatCandidate],
     stored_bindings: Sequence[StoredBindingEvidence],
+    recent_sessions: Sequence[ChatCandidate] = (),
 ) -> BindingMatchDecision:
-    """把前台证据与 CLI 候选、已有绑定比对，得到绑定决策。"""
+    """把前台证据与 CLI 候选、已有绑定比对，得到绑定决策。
+
+    ``recent_sessions`` 是名字精确匹配落空时的回退材料（最近会话列表）；
+    OCR 可能把标题中的表情符号等读变形，此时不静默放弃，而是用最近
+    会话认出已绑定会话或转一次性选择。
+    """
 
     observed_name = normalize_display_text(evidence.display_name)
     if not observed_name:
@@ -111,9 +118,11 @@ def match_front_session(
         and normalize_display_text(candidate.display_name) == observed_name
     )
     if not name_matched:
-        return BindingMatchDecision(
-            kind=BindingMatchKind.UNAVAILABLE,
-            reason=BindingMatchReason.NO_CANDIDATE,
+        return _match_without_name_match(
+            evidence=evidence,
+            observed_name=observed_name,
+            recent_sessions=recent_sessions,
+            stored_bindings=stored_bindings,
         )
 
     narrowed = tuple(
@@ -186,6 +195,73 @@ def summarize_evidence(evidence: FrontSessionEvidence) -> Mapping[str, Any]:
     if preview:
         summary["preview_digest"] = hashlib.sha256(preview.encode("utf-8")).hexdigest()
     return summary
+
+
+def _match_without_name_match(
+    *,
+    evidence: FrontSessionEvidence,
+    observed_name: str,
+    recent_sessions: Sequence[ChatCandidate],
+    stored_bindings: Sequence[StoredBindingEvidence],
+) -> BindingMatchDecision:
+    """观察名与任何候选都不相等时的回退匹配；仍不猜测联系人。
+
+    回退路径的前提是观察名已经不可靠（例如 OCR 读变形），选中行证据同样
+    来自 OCR，因此矛盾只用于收窄候选；全部矛盾时保留全部候选交给用户选择，
+    不静默停止。
+    """
+
+    fallback = tuple(
+        session
+        for session in recent_sessions
+        if session.chat_type == _PRIVATE_CHAT_TYPE
+    )
+    if not fallback:
+        return BindingMatchDecision(
+            kind=BindingMatchKind.UNAVAILABLE,
+            reason=BindingMatchReason.NO_CANDIDATE,
+        )
+
+    narrowed = tuple(
+        session
+        for session in fallback
+        if not _contradicts_evidence(session, evidence)
+    )
+    effective = narrowed or fallback
+
+    usernames = {session.username for session in effective}
+    binding = next(
+        (
+            stored
+            for stored in stored_bindings
+            if stored.conversation_locator in usernames
+        ),
+        None,
+    )
+    if binding is not None:
+        bound_sessions = tuple(
+            session
+            for session in effective
+            if session.username == binding.conversation_locator
+        )
+        if normalize_display_text(binding.display_name) == observed_name:
+            return BindingMatchDecision(
+                kind=BindingMatchKind.CONFIRMED,
+                reason=BindingMatchReason.CONFIRMED_ACTIVE_BINDING,
+                candidates=bound_sessions,
+                confirmed_binding_id=binding.binding_id,
+            )
+        return BindingMatchDecision(
+            kind=BindingMatchKind.NEEDS_SELECTION,
+            reason=BindingMatchReason.BINDING_NAME_CHANGED,
+            candidates=bound_sessions,
+        )
+
+    return BindingMatchDecision(
+        kind=BindingMatchKind.NEEDS_SELECTION,
+        reason=BindingMatchReason.UNMATCHED_REQUIRES_SELECTION,
+        candidates=effective,
+    )
 
 
 def _contradicts_evidence(

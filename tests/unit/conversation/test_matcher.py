@@ -252,6 +252,112 @@ class SummarizeEvidenceTest(unittest.TestCase):
 
         self.assertEqual(dict(summary), {})
 
+    # ------------------------------------------------------------------
+    # 名字失配回退：OCR 把标题读变形时不静默放弃，转最近会话定位/选择。
+    # ------------------------------------------------------------------
+
+    def test_distorted_name_with_recent_sessions_requires_selection(self) -> None:
+        decision = match_front_session(
+            evidence=FrontSessionEvidence(display_name="FSM~cxk"),
+            candidates=(),
+            stored_bindings=(),
+            recent_sessions=(
+                _candidate("wxid_one", "FSM💕cxk"),
+                _candidate("wxid_two", "合成乙"),
+            ),
+        )
+
+        self.assertEqual(decision.kind, BindingMatchKind.NEEDS_SELECTION)
+        self.assertEqual(
+            decision.reason, BindingMatchReason.UNMATCHED_REQUIRES_SELECTION
+        )
+        self.assertEqual(len(decision.candidates), 2)
+
+    def test_distorted_name_recovers_stored_binding_from_recent_sessions(
+        self,
+    ) -> None:
+        binding_id = uuid4()
+        decision = match_front_session(
+            evidence=FrontSessionEvidence(display_name="FSM~cxk"),
+            candidates=(),
+            stored_bindings=(
+                StoredBindingEvidence(
+                    binding_id=binding_id,
+                    conversation_locator="wxid_one",
+                    display_name="FSM~cxk",
+                ),
+            ),
+            recent_sessions=(_candidate("wxid_one", "FSM💕cxk"),),
+        )
+
+        # 绑定保存的是观察名；同一观察名再次出现时自动确认。
+        self.assertEqual(decision.kind, BindingMatchKind.CONFIRMED)
+        self.assertEqual(decision.confirmed_binding_id, binding_id)
+
+    def test_distorted_name_with_differing_stored_name_requires_reconfirm(
+        self,
+    ) -> None:
+        binding_id = uuid4()
+        decision = match_front_session(
+            evidence=FrontSessionEvidence(display_name="FSM~cxk"),
+            candidates=(),
+            stored_bindings=(
+                StoredBindingEvidence(
+                    binding_id=binding_id,
+                    conversation_locator="wxid_one",
+                    display_name="旧观察名",
+                ),
+            ),
+            recent_sessions=(_candidate("wxid_one", "FSM💕cxk"),),
+        )
+
+        self.assertEqual(decision.kind, BindingMatchKind.NEEDS_SELECTION)
+        self.assertEqual(decision.reason, BindingMatchReason.BINDING_NAME_CHANGED)
+
+    def test_distorted_name_without_recent_sessions_is_unavailable(self) -> None:
+        decision = match_front_session(
+            evidence=FrontSessionEvidence(display_name="FSM~cxk"),
+            candidates=(),
+            stored_bindings=(),
+            recent_sessions=(),
+        )
+
+        self.assertEqual(decision.kind, BindingMatchKind.UNAVAILABLE)
+        self.assertEqual(decision.reason, BindingMatchReason.NO_CANDIDATE)
+
+    def test_fallback_keeps_candidates_when_evidence_contradicts(self) -> None:
+        # 回退路径的观察证据同样来自 OCR，矛盾只收窄不清空。
+        decision = match_front_session(
+            evidence=FrontSessionEvidence(
+                display_name="FSM~cxk",
+                preview_text="完全不同的预览",
+            ),
+            candidates=(),
+            stored_bindings=(),
+            recent_sessions=(
+                _candidate("wxid_one", "FSM💕cxk", summary="一致的预览"),
+            ),
+        )
+
+        self.assertEqual(decision.kind, BindingMatchKind.NEEDS_SELECTION)
+        self.assertEqual(
+            decision.reason, BindingMatchReason.UNMATCHED_REQUIRES_SELECTION
+        )
+        self.assertEqual(len(decision.candidates), 1)
+
+    def test_fallback_ignores_group_sessions(self) -> None:
+        decision = match_front_session(
+            evidence=FrontSessionEvidence(display_name="FSM~cxk"),
+            candidates=(),
+            stored_bindings=(),
+            recent_sessions=(
+                _candidate("chatroom_one", "FSM~cxk", chat_type="group"),
+            ),
+        )
+
+        self.assertEqual(decision.kind, BindingMatchKind.UNAVAILABLE)
+        self.assertEqual(decision.reason, BindingMatchReason.NO_CANDIDATE)
+
 
 if __name__ == "__main__":
     unittest.main()

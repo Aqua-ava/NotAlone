@@ -38,7 +38,7 @@ from notalone.persistence.observation_store import (
     PostgresObservationStore,
 )
 from notalone.wechat_cli import CliAdapterError, LocalWechatCli
-from notalone.wechat_cli.models import CliMessageEvent
+from notalone.wechat_cli.models import ChatCandidate, CliMessageEvent
 from notalone.wechat_cli.normalizer import (
     CliNormalizationError,
     normalize_cli_events,
@@ -94,6 +94,8 @@ class _ActiveTailSession:
 _MAX_BACKOFF_SECONDS = 30.0
 _FAILURE_NORMALIZATION = "cli_normalization_failed"
 _FAILURE_PERSISTENCE = "observation_persistence_failed"
+# 名字精确匹配落空时，用最近会话列表做一次性选择的回退窗口。
+_FALLBACK_SESSION_LIMIT = 20
 
 
 class TailLifecycle:
@@ -194,6 +196,22 @@ class TailLifecycle:
                 phase=FrontSyncPhase.FAILED, evidence=evidence
             )
 
+        # OCR 可能把标题读变形导致查询落空；回退读最近会话，
+        # 由匹配层认出已绑定会话或转一次性选择，不静默放弃。
+        recent_sessions: tuple[ChatCandidate, ...] = ()
+        if not candidates:
+            try:
+                recent_sessions = self._cli.sessions(
+                    type_filter="private",
+                    limit=_FALLBACK_SESSION_LIMIT,
+                )
+            except CliAdapterError as error:
+                self._stop_session(FrontSyncPhase.FAILED)
+                self._mark_failure(error.code)
+                return FrontObserveOutcome(
+                    phase=FrontSyncPhase.FAILED, evidence=evidence
+                )
+
         stored_bindings = self._bindings.list_active_bindings(
             owner_id=self._owner_id,
             channel=self._channel,
@@ -210,6 +228,7 @@ class TailLifecycle:
                 )
                 for binding in stored_bindings
             ),
+            recent_sessions=recent_sessions,
         )
         if decision.kind is not BindingMatchKind.CONFIRMED:
             # 首次绑定、重名或证据矛盾都需要用户确认，期间不读取。

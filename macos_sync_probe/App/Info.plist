@@ -5,22 +5,22 @@
     <key>CFBundleDisplayName</key>
     <string>NotAlone 同步验证</string>
     <key>CFBundleExecutable</key>
-    <string>$(EXECUTABLE_NAME)</string>
+    <string>NotAloneSyncProbe</string>
     <key>CFBundleIdentifier</key>
-    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <string>com.notalone.sync-probe</string>
     <key>CFBundleName</key>
-    <string>$(PRODUCT_NAME)</string>
+    <string>NotAloneSyncProbe</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>$(MARKETING_VERSION)</string>
+    <string>1.0</string>
     <key>CFBundleVersion</key>
-    <string>$(CURRENT_PROJECT_VERSION)</string>
+    <string>1</string>
     <key>LSMinimumSystemVersion</key>
-    <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+    <string>15.0</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>NotAlone 仅在用户打开并停留于已绑定的微信会话时，本地读取可见聊天文字用于生成候选回复。</string>
+    <string>NotAlone 仅在微信处于前台时本地读取当前窗口的会话标题与选中行元数据，用于定位当前联系人；不保存截图，不上传任何内容。</string>
 </dict>
 </plist>

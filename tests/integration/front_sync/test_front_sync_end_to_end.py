@@ -348,6 +348,54 @@ class FrontSyncEndToEndTest(unittest.TestCase):
             report.decision_reason, BindingMatchReason.CONFIRMED_ACTIVE_BINDING
         )
 
+    def test_ocr_distorted_name_falls_back_to_recent_sessions(self) -> None:
+        # OCR 把标题读成变形名，resolve-chat 落空；回退最近会话转一次性选择。
+        distorted = "FSM~cxk"
+        self.runner.sessions_json = [_candidate(_TALKER_A, "FSM💕cxk")]
+        self._front(distorted)
+        self.runner.tail_queues[_TALKER_A].append(
+            _tail_stdout(_TALKER_A, [(10, "变形名合成消息", False)])
+        )
+
+        report = self.engine.cycle()
+
+        self.assertEqual(report.phase, FrontSyncPhase.UNAVAILABLE)
+        self.assertEqual(
+            report.decision_reason,
+            BindingMatchReason.UNMATCHED_REQUIRES_SELECTION,
+        )
+        self.assertEqual(
+            [(c.username, c.display_name) for c in report.candidates],
+            [(_TALKER_A, "FSM💕cxk")],
+        )
+        self.assertEqual(self._message_count(self.contact_a), 0)
+
+        report = self.engine.confirm_binding(
+            contact_id=self.contact_a, locator=_TALKER_A
+        )
+        self.assertEqual(report.phase, FrontSyncPhase.ACTIVE)
+        self.assertEqual(report.batch_message_count, 1)
+
+        # 绑定保存观察名；之后同一观察名自动确认，不再要求选择。
+        binding = self.bindings.read_active_by_locator(
+            owner_id=self.owner_id,
+            channel=_CHANNEL,
+            account_scope=_ACCOUNT,
+            conversation_locator=_TALKER_A,
+        )
+        self.assertIsNotNone(binding)
+        assert binding is not None
+        self.assertEqual(binding.display_name, distorted)
+
+        self.runner.tail_queues[_TALKER_A].append(
+            _tail_stdout(_TALKER_A, [(11, "变形名后续消息", False)])
+        )
+        report = self.engine.cycle()
+        self.assertEqual(
+            report.decision_reason, BindingMatchReason.CONFIRMED_ACTIVE_BINDING
+        )
+        self.assertEqual(self._message_count(self.contact_a), 2)
+
     def test_switch_a_b_a_isolates_scopes_and_reply_context(self) -> None:
         self._front(_NAME_A)
         self.runner.tail_queues[_TALKER_A].append(
