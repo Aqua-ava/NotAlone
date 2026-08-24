@@ -17,6 +17,8 @@ from notalone.application.contact_directory import (
     ContactSummary,
 )
 from notalone.persistence.contact_directory import PostgresContactDirectory
+from notalone.server.event_bus import EventBus, EventSubscription
+from notalone.server.sse import encode_sse_frame
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,15 +33,25 @@ class Response:
         return json.loads(self.body.decode("utf-8"))
 
 
+@dataclass(frozen=True, slots=True)
+class SseResponse:
+    """已经通过鉴权、等待事件订阅的 SSE 响应。"""
+
+    status_code: int
+    headers: Mapping[str, str]
+    subscription: EventSubscription
+
+
 class BackendApp:
     """只提供本地 API 的无框架 HTTP 应用。"""
 
-    __slots__ = ("_contact_directory", "_owner_id", "_token")
+    __slots__ = ("_contact_directory", "_events", "_owner_id", "_token")
 
     def __init__(
         self,
         *,
         contact_directory: ContactDirectory,
+        events: EventBus,
         owner_id: UUID,
         token: str,
     ) -> None:
@@ -48,6 +60,7 @@ class BackendApp:
         if not token:
             raise ValueError("token 不能为空。")
         self._contact_directory = contact_directory
+        self._events = events
         self._owner_id = owner_id
         self._token = token
 
@@ -56,6 +69,12 @@ class BackendApp:
         """返回供父进程交给界面的连接 token。"""
 
         return self._token
+
+    @property
+    def events(self) -> EventBus:
+        """返回供同步引擎和任务执行器发布事件的总线。"""
+
+        return self._events
 
     def handle(
         self,
@@ -84,6 +103,33 @@ class BackendApp:
                 {"contacts": [_contact_payload(contact) for contact in contacts]},
             )
         return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+
+    def open_sse(
+        self,
+        *,
+        path: str,
+        headers: Mapping[str, str] | None = None,
+    ) -> Response | SseResponse:
+        """打开一个经过 token 校验的 SSE 订阅。"""
+
+        request_headers = headers or {}
+        if not self._authorized(request_headers):
+            return _json_response(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+        if urlsplit(path).path != "/api/events":
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        last_event_id = _parse_last_event_id(request_headers)
+        return SseResponse(
+            status_code=int(HTTPStatus.OK),
+            headers={
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            },
+            subscription=self._events.subscribe(
+                owner_id=self._owner_id,
+                last_event_id=last_event_id,
+            ),
+        )
 
     def _authorized(self, headers: Mapping[str, str]) -> bool:
         authorization = _header_value(headers, "Authorization")
@@ -131,6 +177,16 @@ class BackendServer:
 
         class RequestHandler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
+                if urlsplit(self.path).path == "/api/events":
+                    response = app.open_sse(
+                        path=self.path,
+                        headers={key: value for key, value in self.headers.items()},
+                    )
+                    if isinstance(response, SseResponse):
+                        _serve_sse(self, response)
+                    else:
+                        _write_response(self, response)
+                    return
                 _serve_request(self, app)
 
             def do_POST(self) -> None:  # noqa: N802
@@ -157,6 +213,7 @@ class BackendServer:
         self._http_server = ThreadingHTTPServer(
             (self._host, self._port), RequestHandler
         )
+        self._http_server.daemon_threads = True
         address = self.address
         if address is None:
             raise RuntimeError("无法确认后端监听地址。")
@@ -169,6 +226,7 @@ class BackendServer:
         self._http_server.serve_forever()
 
     def shutdown(self) -> None:
+        self._app.events.close()
         if self._http_server is not None:
             self._http_server.shutdown()
             self._http_server.server_close()
@@ -180,11 +238,13 @@ def create_app(
     database_url: str,
     owner_id: UUID,
     token: str | None = None,
+    events: EventBus | None = None,
 ) -> BackendApp:
     """创建服务应用；未显式传 token 时在启动时生成随机 token。"""
 
     return BackendApp(
         contact_directory=ContactDirectory(PostgresContactDirectory(database_url)),
+        events=events or EventBus(),
         owner_id=owner_id,
         token=token or secrets.token_urlsafe(32),
     )
@@ -196,6 +256,10 @@ def _serve_request(handler: BaseHTTPRequestHandler, app: BackendApp) -> None:
         path=handler.path,
         headers={key: value for key, value in handler.headers.items()},
     )
+    _write_response(handler, response)
+
+
+def _write_response(handler: BaseHTTPRequestHandler, response: Response) -> None:
     handler.send_response(response.status_code)
     for key, value in response.headers.items():
         handler.send_header(key, value)
@@ -203,11 +267,43 @@ def _serve_request(handler: BaseHTTPRequestHandler, app: BackendApp) -> None:
     handler.wfile.write(response.body)
 
 
+def _serve_sse(handler: BaseHTTPRequestHandler, response: SseResponse) -> None:
+    handler.send_response(response.status_code)
+    for key, value in response.headers.items():
+        handler.send_header(key, value)
+    handler.end_headers()
+    try:
+        while True:
+            event = response.subscription.read(timeout=15.0)
+            if event is None:
+                if response.subscription.closed:
+                    break
+                handler.wfile.write(b": keep-alive\n\n")
+                handler.wfile.flush()
+                continue
+            handler.wfile.write(encode_sse_frame(event))
+            handler.wfile.flush()
+    except (BrokenPipeError, ConnectionResetError):
+        pass
+    finally:
+        response.subscription.close()
+
+
 def _header_value(headers: Mapping[str, str], name: str) -> str:
     for key, value in headers.items():
         if key.lower() == name.lower():
             return value.strip()
     return ""
+
+
+def _parse_last_event_id(headers: Mapping[str, str]) -> UUID | None:
+    value = _header_value(headers, "Last-Event-ID")
+    if not value:
+        return None
+    try:
+        return UUID(value)
+    except ValueError:
+        return None
 
 
 def _contact_payload(contact: ContactSummary) -> dict[str, object]:
