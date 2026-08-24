@@ -236,6 +236,21 @@ owner 删除时开关状态级联清理。
 第二十三个迁移保存版本级校验警告和 `references/assets` 的版本绑定内容。资源只能使用包内
 相对路径，删除版本时级联清理；Skill 管理适配器负责在完整校验后原子写入这些记录。
 
+继续保存候选回复实际使用的 Skill 选择与资源加载摘要：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/024_skill_run_record.sql
+```
+
+第二十四个迁移为 `reply_request` 增加 `skill_selection_method`、
+`skill_selection_reason`、`skill_load_state` 和 `skill_loaded_resources` 四列。
+它们只记录一次回复实际使用的 Skill 版本之外的非正文审计信息（选择方式、选择原因、
+加载状态和已读取的辅助资源路径），不保存 Skill 正文、完整 Prompt 或聊天原文；
+约束校验字段取值并禁止在没有 Skill 时填写选择元数据。
+
 任务终态清理使用：
 
 ```bash

@@ -806,6 +806,126 @@ class PostgresSkillLibraryTest(unittest.TestCase):
 
         self.assertEqual(caught.exception.code, "invalid_frontmatter")
 
+    def test_skill_port_loads_version_resource_paths_and_scoped_resource(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            package = Path(temporary_directory) / "resource-skill"
+            (package / "references").mkdir(parents=True)
+            (package / "assets").mkdir()
+            (package / "SKILL.md").write_text(
+                "---\n"
+                "name: resource-skill\n"
+                "description: 渐进式资源读取测试。\n"
+                "---\n\n"
+                "先读取 references 里的长案例。\n"
+                "再按需读取 assets 中的静态模板。\n"
+                "最终由用户确认回复。\n",
+                encoding="utf-8",
+            )
+            (package / "references" / "cases.md").write_text(
+                "长案例：先确认再给边界。\n",
+                encoding="utf-8",
+            )
+            (package / "assets" / "opening.txt").write_text(
+                "我理解你的意思，也想说明一下：\n",
+                encoding="utf-8",
+            )
+
+            result = self.library.import_package(self.owner_id, package)
+
+        scope = ContactScope(self.owner_id, self.contact_id)
+        loaded = self.skill_port.load_version(scope, result.version_id)
+        self.assertEqual(
+            loaded.resource_paths,
+            ("assets/opening.txt", "references/cases.md"),
+        )
+        case = self.skill_port.load_resource(
+            scope,
+            result.version_id,
+            "references/cases.md",
+        )
+        self.assertEqual(
+            case.content,
+            "长案例：先确认再给边界。\n".encode("utf-8"),
+        )
+        self.assertEqual(case.resource_kind, "reference")
+        self.assertEqual(case.media_type, "text/markdown")
+        self.assertEqual(case.skill_id, result.skill_id)
+        self.assertTrue(case.applies_to(scope))
+        opening = self.skill_port.load_resource(
+            scope,
+            result.version_id,
+            "assets/opening.txt",
+        )
+        self.assertEqual(
+            opening.content,
+            "我理解你的意思，也想说明一下：\n".encode("utf-8"),
+        )
+        self.assertEqual(opening.resource_kind, "asset")
+
+    def test_skill_port_rejects_out_of_scope_or_unknown_resource_identically(
+        self,
+    ) -> None:
+        other_owner_id = uuid4()
+        other_contact_id = uuid4()
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "INSERT INTO public.owner (id, display_name) VALUES (%s, %s)",
+                (other_owner_id, "另一合成 Skill 用户"),
+            )
+            connection.execute(
+                """
+                INSERT INTO public.contact (owner_id, id, display_name)
+                VALUES (%s, %s, %s)
+                """,
+                (other_owner_id, other_contact_id, "另一合成联系人"),
+            )
+        try:
+            with TemporaryDirectory() as temporary_directory:
+                package = Path(temporary_directory) / "isolated-skill"
+                (package / "references").mkdir(parents=True)
+                (package / "SKILL.md").write_text(
+                    "---\n"
+                    "name: isolated-skill\n"
+                    "description: 隔离读取测试。\n"
+                    "---\n\n"
+                    "只读取当前联系人的受控资源。\n",
+                    encoding="utf-8",
+                )
+                (package / "references" / "secret.md").write_text(
+                    "属于当前 Owner 的私有案例。\n",
+                    encoding="utf-8",
+                )
+                result = self.library.import_package(self.owner_id, package)
+
+            scope = ContactScope(self.owner_id, self.contact_id)
+            other_scope = ContactScope(other_owner_id, other_contact_id)
+            errors: list[str] = []
+            for scope_of_caller, path in (
+                (other_scope, "references/secret.md"),
+                (scope, "references/missing.md"),
+                (scope, "references/../secret.md"),
+                (scope, "SKILL.md"),
+                (scope, "/etc/passwd"),
+                (scope, "references/secret.md/../../etc/passwd"),
+            ):
+                with self.assertRaises(PermissionError) as caught:
+                    self.skill_port.load_resource(
+                        scope_of_caller,
+                        result.version_id,
+                        path,
+                    )
+                errors.append(str(caught.exception))
+            self.assertEqual(errors, ["Skill 资源不可用。"] * len(errors))
+            # 其他 Owner 也无法加载正文版本。
+            with self.assertRaises(PermissionError):
+                self.skill_port.load_version(other_scope, result.version_id)
+        finally:
+            with psycopg.connect(TEST_DATABASE_URL) as connection:
+                connection.execute(
+                    "DELETE FROM public.owner WHERE id = %s",
+                    (other_owner_id,),
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

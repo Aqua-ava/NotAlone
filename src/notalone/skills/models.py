@@ -144,6 +144,81 @@ class SkillImportResult:
             raise TypeError("Skill 导入警告无效。")
 
 
+_RESOURCE_PATH_PREFIXES = ("references", "assets")
+
+
+def _validate_resource_relative_path(relative_path: str) -> tuple[str, ...]:
+    parts = relative_path.split("/") if isinstance(relative_path, str) else ()
+    if (
+        not parts
+        or parts[0] not in _RESOURCE_PATH_PREFIXES
+        or any(not part or part in (".", "..") for part in parts)
+        or any("\\" in part for part in parts)
+    ):
+        raise ValueError("Skill 辅助资源路径无效。")
+    return tuple(parts)
+
+
+@dataclass(frozen=True, slots=True)
+class SkillResource:
+    """按已验证范围读取一个版本允许的受控辅助资源后的结果。"""
+
+    owner_id: UUID
+    contact_id: UUID | None
+    skill_id: UUID
+    version_id: UUID
+    relative_path: str
+    resource_kind: Literal["reference", "asset"]
+    media_type: str
+    content: bytes
+    content_sha256: str
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.owner_id, UUID)
+            or (
+                self.contact_id is not None
+                and not isinstance(self.contact_id, UUID)
+            )
+            or not isinstance(self.skill_id, UUID)
+            or not isinstance(self.version_id, UUID)
+        ):
+            raise TypeError("Skill 资源归属和标识必须是 UUID。")
+        parts = _validate_resource_relative_path(self.relative_path)
+        if self.resource_kind not in ("reference", "asset"):
+            raise ValueError("Skill 辅助资源类型无效。")
+        expected_kind = {
+            "references": "reference",
+            "assets": "asset",
+        }[parts[0]]
+        if self.resource_kind != expected_kind:
+            raise ValueError("Skill 辅助资源类型与路径不一致。")
+        if not isinstance(self.media_type, str) or not self.media_type.strip():
+            raise ValueError("Skill 辅助资源媒体类型不能为空。")
+        if not isinstance(self.content, bytes):
+            raise TypeError("Skill 辅助资源内容必须是 bytes。")
+        if (
+            not isinstance(self.content_sha256, str)
+            or self.content_sha256 != sha256(self.content).hexdigest()
+        ):
+            raise ValueError("Skill 辅助资源内容哈希无效。")
+
+    def applies_to(self, scope: ContactScope) -> bool:
+        return self.owner_id == scope.owner_id and self.contact_id in (
+            None,
+            scope.contact_id,
+        )
+
+    def matches(self, version: SkillVersion) -> bool:
+        return (
+            self.skill_id == version.skill_id
+            and self.version_id == version.version_id
+            and self.owner_id == version.owner_id
+            and self.contact_id == version.contact_id
+            and self.relative_path in version.resource_paths
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class SkillCatalogEntry:
     """目录扫描可见的不可变 Skill 版本元数据。"""
@@ -216,6 +291,7 @@ class SkillVersion:
     description: str
     content: str
     enabled: bool
+    resource_paths: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if (
@@ -237,6 +313,15 @@ class SkillVersion:
             or not isinstance(self.enabled, bool)
         ):
             raise ValueError("Skill 描述、正文或启用状态无效。")
+        if not isinstance(self.resource_paths, tuple) or any(
+            not isinstance(path, str) or not path.strip()
+            for path in self.resource_paths
+        ):
+            raise TypeError("Skill 辅助资源路径清单无效。")
+        if len(self.resource_paths) != len(set(self.resource_paths)):
+            raise ValueError("Skill 辅助资源路径清单重复。")
+        for path in self.resource_paths:
+            _validate_resource_relative_path(path)
 
     def applies_to(self, scope: ContactScope) -> bool:
         return self.owner_id == scope.owner_id and self.contact_id in (

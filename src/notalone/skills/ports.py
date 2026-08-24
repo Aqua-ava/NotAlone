@@ -7,11 +7,16 @@ from typing import Protocol
 from uuid import UUID
 
 from notalone.scopes import ContactScope
-from notalone.skills.models import SkillCatalog, SkillImportResult, SkillVersion
+from notalone.skills.models import (
+    SkillCatalog,
+    SkillImportResult,
+    SkillResource,
+    SkillVersion,
+)
 
 
 class SkillPort(Protocol):
-    """按已验证联系人范围读取策略目录和不可变版本。"""
+    """按已验证联系人范围读取策略目录、不可变版本和受控辅助资源。"""
 
     def catalog(self, scope: ContactScope) -> SkillCatalog: ...
 
@@ -20,6 +25,13 @@ class SkillPort(Protocol):
         scope: ContactScope,
         version_id: UUID,
     ) -> SkillVersion: ...
+
+    def load_resource(
+        self,
+        scope: ContactScope,
+        version_id: UUID,
+        relative_path: str,
+    ) -> SkillResource: ...
 
 
 class SkillLibraryManagementPort(Protocol):

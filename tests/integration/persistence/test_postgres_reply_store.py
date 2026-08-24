@@ -209,6 +209,9 @@ class PostgresReplyStoreTest(unittest.TestCase):
                 skill_id=UUID("aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa"),
                 version_id=UUID("bbbbbbbb-2222-2222-2222-bbbbbbbbbbbb"),
                 name="warm-reply",
+                selection_method="auto",
+                selection_reason="系统按目录推荐，本次回复实际读取。",
+                resource_paths=("references/examples.md",),
             ),
         )
 

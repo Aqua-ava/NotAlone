@@ -111,7 +111,11 @@ class PostgresReplyStore:
                               normalized_input, state, attempt,
                               lease_expires_at, continued_from_candidate_id,
                               context_snapshot, skill_library_revision,
-                              skill_id, skill_version_id, skill_name
+                              skill_id, skill_version_id, skill_name,
+                              skill_selection_method,
+                              skill_selection_reason,
+                              skill_load_state,
+                              skill_loaded_resources
                     """,
                     (
                         request_id,
@@ -154,7 +158,11 @@ class PostgresReplyStore:
                                normalized_input, state, attempt,
                                lease_expires_at, continued_from_candidate_id,
                                context_snapshot, skill_library_revision,
-                               skill_id, skill_version_id, skill_name
+                               skill_id, skill_version_id, skill_name,
+                               skill_selection_method,
+                               skill_selection_reason,
+                               skill_load_state,
+                               skill_loaded_resources
                         FROM public.reply_request
                         WHERE owner_id = %s
                           AND contact_id = %s
@@ -231,7 +239,12 @@ class PostgresReplyStore:
                                 context_snapshot = NULL,
                                 skill_library_revision = NULL,
                                 skill_id = NULL, skill_version_id = NULL,
-                                skill_name = NULL, updated_at = now()
+                                skill_name = NULL,
+                                skill_selection_method = NULL,
+                                skill_selection_reason = NULL,
+                                skill_load_state = NULL,
+                                skill_loaded_resources = NULL,
+                                updated_at = now()
                             WHERE id = %s
                             RETURNING id, owner_id, contact_id,
                                       conversation_binding_id,
@@ -240,7 +253,11 @@ class PostgresReplyStore:
                                       continued_from_candidate_id,
                                       context_snapshot,
                                       skill_library_revision, skill_id,
-                                      skill_version_id, skill_name
+                                      skill_version_id, skill_name,
+                                      skill_selection_method,
+                                      skill_selection_reason,
+                                      skill_load_state,
+                                      skill_loaded_resources
                             """,
                             (next_attempt, next_lease, request.request_id),
                         ).fetchone()
@@ -295,7 +312,11 @@ class PostgresReplyStore:
                            normalized_input, state, attempt,
                            lease_expires_at, continued_from_candidate_id,
                            context_snapshot, skill_library_revision,
-                           skill_id, skill_version_id, skill_name
+                           skill_id, skill_version_id, skill_name,
+                           skill_selection_method,
+                           skill_selection_reason,
+                           skill_load_state,
+                           skill_loaded_resources
                     FROM public.reply_request
                     WHERE id = %s
                     FOR UPDATE
@@ -370,9 +391,7 @@ class PostgresReplyStore:
                     )
                     self._insert_evidence(connection, request, context)
                     self._insert_candidates(connection, request, result)
-                    skill_id, version_id, skill_name = self._skill_columns(
-                        reply.used_skill,
-                    )
+                    skill_columns = self._skill_columns(reply.used_skill)
                     updated = connection.execute(
                         """
                         UPDATE public.reply_request
@@ -380,16 +399,29 @@ class PostgresReplyStore:
                             context_snapshot = %s,
                             skill_library_revision = %s,
                             skill_id = %s, skill_version_id = %s,
-                            skill_name = %s, updated_at = now()
+                            skill_name = %s,
+                            skill_selection_method = %s,
+                            skill_selection_reason = %s,
+                            skill_load_state = %s,
+                            skill_loaded_resources = %s,
+                            updated_at = now()
                         WHERE id = %s
                         RETURNING id
                         """,
                         (
                             Jsonb(self._context_snapshot(context)),
                             context.skill_library_revision,
-                            skill_id,
-                            version_id,
-                            skill_name,
+                            skill_columns["skill_id"],
+                            skill_columns["version_id"],
+                            skill_columns["name"],
+                            skill_columns["selection_method"],
+                            skill_columns["selection_reason"],
+                            skill_columns["load_state"],
+                            (
+                                Jsonb(skill_columns["loaded_resources"])
+                                if skill_columns["loaded_resources"] is not None
+                                else None
+                            ),
                             request.request_id,
                         ),
                     ).fetchone()
@@ -431,7 +463,11 @@ class PostgresReplyStore:
                            normalized_input, state, attempt,
                            lease_expires_at, continued_from_candidate_id,
                            context_snapshot, skill_library_revision,
-                           skill_id, skill_version_id, skill_name
+                           skill_id, skill_version_id, skill_name,
+                           skill_selection_method,
+                           skill_selection_reason,
+                           skill_load_state,
+                           skill_loaded_resources
                     FROM public.reply_request
                     WHERE id = %s
                     FOR UPDATE
@@ -507,7 +543,11 @@ class PostgresReplyStore:
                            normalized_input, state, attempt,
                            lease_expires_at, continued_from_candidate_id,
                            context_snapshot, skill_library_revision,
-                           skill_id, skill_version_id, skill_name
+                           skill_id, skill_version_id, skill_name,
+                           skill_selection_method,
+                           skill_selection_reason,
+                           skill_load_state,
+                           skill_loaded_resources
                     FROM public.reply_request
                     WHERE id = %s
                     FOR UPDATE
@@ -825,6 +865,15 @@ class PostgresReplyStore:
             and isinstance(reply.used_skill.version_id, UUID)
             and isinstance(reply.used_skill.name, str)
             and bool(reply.used_skill.name.strip())
+            and reply.used_skill.selection_method in ("auto", "user")
+            and isinstance(reply.used_skill.selection_reason, str)
+            and bool(reply.used_skill.selection_reason.strip())
+            and isinstance(reply.used_skill.resource_paths, tuple)
+            and all(
+                isinstance(path, str) and bool(path.strip())
+                for path in reply.used_skill.resource_paths
+            )
+            and reply.used_skill.load_state in ("loaded", "resource_failed")
         ):
             raise ReplyStoreInvariantError("Skill 使用摘要结构无效。")
 
@@ -862,10 +911,28 @@ class PostgresReplyStore:
     @staticmethod
     def _skill_columns(
         skill: SkillUse | None,
-    ) -> tuple[UUID | None, UUID | None, str | None]:
+    ) -> dict[str, Any]:
         if skill is None:
-            return None, None, None
-        return skill.skill_id, skill.version_id, skill.name
+            return {
+                "skill_id": None,
+                "version_id": None,
+                "name": None,
+                "selection_method": None,
+                "selection_reason": None,
+                "load_state": None,
+                "loaded_resources": None,
+            }
+        return {
+            "skill_id": skill.skill_id,
+            "version_id": skill.version_id,
+            "name": skill.name,
+            "selection_method": skill.selection_method,
+            "selection_reason": skill.selection_reason or None,
+            "load_state": skill.load_state,
+            "loaded_resources": (
+                list(skill.resource_paths) if skill.resource_paths else None
+            ),
+        }
 
     @staticmethod
     def _insert_evidence(
@@ -1033,6 +1100,19 @@ class PostgresReplyStore:
             raise ReplyStoreInvariantError("回复数组字段结构无效。")
         return tuple(value)
 
+    @staticmethod
+    def _read_resource_paths(value: Any) -> tuple[str, ...]:
+        if value is None:
+            return ()
+        if not isinstance(value, list) or any(
+            not isinstance(item, str) or not item.strip() for item in value
+        ):
+            raise ReplyStoreInvariantError("Skill 资源路径摘要结构无效。")
+        paths = tuple(value)
+        if len(paths) != len(set(paths)):
+            raise ReplyStoreInvariantError("Skill 资源路径摘要重复。")
+        return paths
+
     def _read_result(
         self,
         connection: Any,
@@ -1104,6 +1184,28 @@ class PostgresReplyStore:
                 skill_id=skill_id,
                 version_id=skill_version_id,
                 name=skill_name,
+                selection_method=(
+                    request_row["skill_selection_method"]
+                    if request_row.get("skill_selection_method") in ("auto", "user")
+                    else "auto"
+                ),
+                selection_reason=(
+                    request_row["skill_selection_reason"]
+                    if isinstance(
+                        request_row.get("skill_selection_reason"),
+                        str,
+                    )
+                    else ""
+                ),
+                resource_paths=self._read_resource_paths(
+                    request_row.get("skill_loaded_resources")
+                ),
+                load_state=(
+                    request_row["skill_load_state"]
+                    if request_row.get("skill_load_state")
+                    in ("loaded", "resource_failed")
+                    else "loaded"
+                ),
             )
         else:
             raise ReplyStoreInvariantError("Skill 使用摘要结构无效。")

@@ -130,11 +130,37 @@ class ContextReceipt:
 
 @dataclass(frozen=True, slots=True)
 class SkillUse:
-    """本次实际加载的不可变回复 Skill 版本。"""
+    """本次实际加载的不可变回复 Skill 版本与运行记录。"""
 
     skill_id: UUID
     version_id: UUID
     name: str
+    selection_method: Literal["auto", "user"] = "auto"
+    selection_reason: str = ""
+    resource_paths: tuple[str, ...] = ()
+    load_state: Literal["loaded", "resource_failed"] = "loaded"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.skill_id, UUID) or not isinstance(
+            self.version_id,
+            UUID,
+        ):
+            raise TypeError("Skill 使用摘要标识必须是 UUID。")
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError("Skill 名称不能为空。")
+        if self.selection_method not in ("auto", "user"):
+            raise ValueError("Skill 选择方式无效。")
+        if not isinstance(self.selection_reason, str):
+            raise TypeError("Skill 选择原因必须是字符串。")
+        if not isinstance(self.resource_paths, tuple) or any(
+            not isinstance(path, str) or not path.strip()
+            for path in self.resource_paths
+        ):
+            raise TypeError("Skill 资源路径摘要无效。")
+        if len(self.resource_paths) != len(set(self.resource_paths)):
+            raise ValueError("Skill 资源路径摘要重复。")
+        if self.load_state not in ("loaded", "resource_failed"):
+            raise ValueError("Skill 加载状态无效。")
 
 
 @dataclass(frozen=True, slots=True, repr=False)

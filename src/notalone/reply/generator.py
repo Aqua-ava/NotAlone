@@ -405,6 +405,17 @@ class ReplyGenerator:
             or not isinstance(result.used_skill.version_id, UUID)
             or not isinstance(result.used_skill.name, str)
             or not result.used_skill.name.strip()
+            or result.used_skill.selection_method not in ("auto", "user")
+            or not isinstance(result.used_skill.selection_reason, str)
+            or not result.used_skill.selection_reason.strip()
+            or not isinstance(result.used_skill.resource_paths, tuple)
+            or any(
+                not isinstance(path, str) or not path.strip()
+                for path in result.used_skill.resource_paths
+            )
+            or len(result.used_skill.resource_paths)
+            != len(set(result.used_skill.resource_paths))
+            or result.used_skill.load_state not in ("loaded", "resource_failed")
         ):
             raise ReplyInvariantError("模型返回了无效 Skill 记录。")
 

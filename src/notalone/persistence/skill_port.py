@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from uuid import UUID
 
@@ -9,10 +10,18 @@ import psycopg
 from psycopg.rows import dict_row
 
 from notalone.scopes import ContactScope
-from notalone.skills.models import SkillCatalog, SkillCatalogEntry, SkillVersion
+from notalone.skills.models import (
+    SkillCatalog,
+    SkillCatalogEntry,
+    SkillResource,
+    SkillVersion,
+    _validate_resource_relative_path,
+)
 
 
 _SKILL_UNAVAILABLE = "Skill 不可用。"
+_RESOURCE_UNAVAILABLE = "Skill 资源不可用。"
+_SKILL_RESOURCE_PATH = re.compile(r"^(?:references|assets)/[^/][^\\]*$")
 
 
 class SkillPortPersistenceError(RuntimeError):
@@ -20,7 +29,7 @@ class SkillPortPersistenceError(RuntimeError):
 
 
 class PostgresSkillPort:
-    """按已验证联系人范围只读 Skill 目录和当前不可变版本。"""
+    """按已验证联系人范围只读 Skill 目录、当前不可变版本和受控资源。"""
 
     __slots__ = ("_database_url",)
 
@@ -128,6 +137,10 @@ class PostgresSkillPort:
                 ).fetchone()
                 if row is None:
                     raise PermissionError(_SKILL_UNAVAILABLE)
+                resource_paths = self._version_resource_paths(
+                    connection,
+                    row["version_id"],
+                )
                 return SkillVersion(
                     owner_id=row["skill_owner_id"],
                     contact_id=row["skill_contact_id"],
@@ -137,6 +150,7 @@ class PostgresSkillPort:
                     description=row["version_description"],
                     content=row["version_content"],
                     enabled=row["version_enabled"],
+                    resource_paths=resource_paths,
                 )
         except PermissionError:
             raise
@@ -144,6 +158,111 @@ class PostgresSkillPort:
             raise SkillPortPersistenceError("Skill 正文读取失败。") from None
         except (TypeError, ValueError):
             raise PermissionError(_SKILL_UNAVAILABLE) from None
+
+    def load_resource(
+        self,
+        scope: ContactScope,
+        version_id: UUID,
+        relative_path: str,
+    ) -> SkillResource:
+        """在当前联系人范围内读取一个版本允许的受控辅助资源。"""
+
+        self._validate_scope(scope)
+        if not isinstance(version_id, UUID):
+            raise TypeError("version_id 必须是 UUID。")
+        if not isinstance(relative_path, str) or _SKILL_RESOURCE_PATH.fullmatch(
+            relative_path
+        ) is None:
+            raise PermissionError(_RESOURCE_UNAVAILABLE)
+        try:
+            _validate_resource_relative_path(relative_path)
+        except ValueError:
+            raise PermissionError(_RESOURCE_UNAVAILABLE) from None
+        try:
+            with self._connect() as connection:
+                connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+                )
+                version_row = connection.execute(
+                    """
+                    SELECT skill.id AS skill_id,
+                           skill.owner_id AS skill_owner_id,
+                           skill.contact_id AS skill_contact_id,
+                           version.id AS version_id
+                    FROM public.reply_skill AS skill
+                    JOIN public.reply_skill_version AS version
+                      ON version.skill_id = skill.id
+                    WHERE skill.owner_id = %s
+                      AND (
+                          skill.contact_id IS NULL
+                          OR skill.contact_id = %s
+                      )
+                      AND skill.status = 'active'
+                      AND version.id = %s
+                      AND version.status = 'active'
+                      AND version.enabled = TRUE
+                      AND version.is_current = TRUE
+                      AND version.content IS NOT NULL
+                      AND length(btrim(version.content)) > 0
+                      AND version.name = skill.name
+                    """,
+                    (scope.owner_id, scope.contact_id, version_id),
+                ).fetchone()
+                if version_row is None:
+                    raise PermissionError(_RESOURCE_UNAVAILABLE)
+                resource_paths = self._version_resource_paths(
+                    connection,
+                    version_id,
+                )
+                if relative_path not in resource_paths:
+                    raise PermissionError(_RESOURCE_UNAVAILABLE)
+                row = connection.execute(
+                    """
+                    SELECT resource_kind, media_type, content_sha256, content
+                    FROM public.reply_skill_resource
+                    WHERE skill_version_id = %s AND relative_path = %s
+                      AND resource_kind IN ('reference', 'asset')
+                      AND content IS NOT NULL
+                    """,
+                    (version_id, relative_path),
+                ).fetchone()
+                if row is None:
+                    raise PermissionError(_RESOURCE_UNAVAILABLE)
+                return SkillResource(
+                    owner_id=version_row["skill_owner_id"],
+                    contact_id=version_row["skill_contact_id"],
+                    skill_id=version_row["skill_id"],
+                    version_id=version_id,
+                    relative_path=relative_path,
+                    resource_kind=row["resource_kind"],
+                    media_type=row["media_type"],
+                    content=bytes(row["content"]),
+                    content_sha256=row["content_sha256"],
+                )
+        except PermissionError:
+            raise
+        except psycopg.Error:
+            raise SkillPortPersistenceError("Skill 资源读取失败。") from None
+        except (TypeError, ValueError):
+            raise SkillPortPersistenceError("Skill 资源读取失败。") from None
+
+    @staticmethod
+    def _version_resource_paths(
+        connection: Any,
+        version_id: UUID,
+    ) -> tuple[str, ...]:
+        rows = connection.execute(
+            """
+            SELECT relative_path
+            FROM public.reply_skill_resource
+            WHERE skill_version_id = %s
+              AND resource_kind IN ('reference', 'asset')
+              AND content IS NOT NULL
+            ORDER BY relative_path
+            """,
+            (version_id,),
+        ).fetchall()
+        return tuple(row["relative_path"] for row in rows)
 
     def _connect(self) -> Any:
         return psycopg.connect(self._database_url, row_factory=dict_row)
