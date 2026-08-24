@@ -1,12 +1,15 @@
 """独立的回复 Skill Module。"""
 
 from notalone.skills.models import (
+    PreviewCandidate,
     SkillCatalog,
     SkillCatalogEntry,
     SkillDeletionResult,
+    SkillExportResult,
     SkillImportResult,
     SkillPackage,
     SkillPackageResource,
+    SkillPreview,
     SkillResource,
     SkillVersion,
     SkillVersionResult,
@@ -22,9 +25,11 @@ from notalone.skills.package_reader import LocalSkillPackageReader
 from notalone.skills.ports import SkillLibraryManagementPort, SkillPort
 
 __all__ = [
+    "PreviewCandidate",
     "SkillCatalog",
     "SkillCatalogEntry",
     "SkillDeletionResult",
+    "SkillExportResult",
     "SkillImportResult",
     "SkillLibraryManagementPort",
     "SkillPackage",
@@ -35,6 +40,7 @@ __all__ = [
     "RawSkillPackage",
     "RawSkillPackageResource",
     "SkillPort",
+    "SkillPreview",
     "SkillResource",
     "SkillVersion",
     "SkillVersionResult",

@@ -10,7 +10,9 @@ from notalone.scopes import ContactScope
 from notalone.skills.models import (
     SkillCatalog,
     SkillDeletionResult,
+    SkillExportResult,
     SkillImportResult,
+    SkillPreview,
     SkillResource,
     SkillVersion,
     SkillVersionResult,
@@ -34,6 +36,18 @@ class SkillPort(Protocol):
         version_id: UUID,
         relative_path: str,
     ) -> SkillResource: ...
+
+
+class SkillPreviewEngine(Protocol):
+    """由应用层提供、在已验证范围内运行一次 Skill 试用的执行器。"""
+
+    def generate(
+        self,
+        *,
+        scope: ContactScope,
+        context: object,
+        catalog: SkillCatalog,
+    ) -> SkillPreview: ...
 
 
 class SkillLibraryManagementPort(Protocol):
@@ -67,3 +81,19 @@ class SkillLibraryManagementPort(Protocol):
         owner_id: UUID,
         skill_id: UUID,
     ) -> SkillDeletionResult: ...
+
+    def export_package(
+        self,
+        owner_id: UUID,
+        skill_id: UUID,
+        destination_path: str | Path,
+    ) -> SkillExportResult: ...
+
+    def preview(
+        self,
+        *,
+        scope: ContactScope,
+        skill_id: UUID,
+        context: object,
+        engine: SkillPreviewEngine,
+    ) -> SkillPreview: ...

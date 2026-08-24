@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -10,13 +12,19 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from notalone.scopes import ContactScope
 from notalone.skills import (
     LocalSkillPackageReader,
+    PreviewCandidate,
+    SkillCatalog,
+    SkillCatalogEntry,
     SkillDeletionResult,
+    SkillExportResult,
     SkillImportResult,
     SkillLibraryManagementPort,
     SkillPackageValidationError,
     SkillPackageValidator,
+    SkillPreview,
     SkillVersionResult,
 )
 
@@ -495,6 +503,222 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
         ).fetchone()
         if owner_row is None:
             raise SkillOwnerNotFoundError("Skill 导入失败：Owner 不存在。")
+
+    def export_package(
+        self,
+        owner_id: UUID,
+        skill_id: UUID,
+        destination_path: str | Path,
+    ) -> SkillExportResult:
+        """把当前版本的 Skill 包内容导出到用户指定的本地目录。"""
+
+        if not isinstance(owner_id, UUID) or not isinstance(skill_id, UUID):
+            raise TypeError("Skill 导出标识必须是 UUID。")
+        if not isinstance(destination_path, (str, Path)):
+            raise TypeError("Skill 导出目标路径必须是 str 或 Path。")
+        try:
+            with self._connect() as connection:
+                skill = connection.execute(
+                    """
+                    SELECT id, name
+                    FROM public.reply_skill
+                    WHERE id = %s AND owner_id = %s AND status <> 'deleted'
+                    """,
+                    (skill_id, owner_id),
+                ).fetchone()
+                if skill is None:
+                    raise SkillNotFoundError("Skill 导出失败：Skill 不存在。")
+                current = connection.execute(
+                    """
+                    SELECT id, version_number, name, description, content
+                    FROM public.reply_skill_version
+                    WHERE skill_id = %s AND is_current = TRUE
+                      AND status = 'active' AND content IS NOT NULL
+                      AND length(btrim(content)) > 0
+                    """,
+                    (skill_id,),
+                ).fetchone()
+                if current is None:
+                    raise SkillVersionNotFoundError(
+                        "Skill 导出失败：当前版本不可用。",
+                    )
+                resource_rows = connection.execute(
+                    """
+                    SELECT relative_path, content
+                    FROM public.reply_skill_resource
+                    WHERE skill_version_id = %s
+                    ORDER BY relative_path
+                    """,
+                    (current["id"],),
+                ).fetchall()
+        except (SkillNotFoundError, SkillVersionNotFoundError):
+            raise
+        except psycopg.Error:
+            raise SkillLibraryPersistenceError("Skill 导出失败。") from None
+
+        skill_bytes = self._serialize_skill_document(
+            current["name"],
+            current["description"],
+            current["content"],
+        )
+        destination = Path(destination_path)
+        try:
+            destination.mkdir(parents=True, exist_ok=True)
+            (destination / "SKILL.md").write_bytes(skill_bytes)
+            for resource in resource_rows:
+                target = destination / resource["relative_path"]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(bytes(resource["content"]))
+        except OSError:
+            raise SkillLibraryPersistenceError(
+                "Skill 导出失败。"
+            ) from None
+        return SkillExportResult(
+            owner_id=owner_id,
+            skill_id=skill_id,
+            name=current["name"],
+            version_number=current["version_number"],
+            resource_paths=tuple(
+                resource["relative_path"] for resource in resource_rows
+            ),
+            destination=str(destination),
+            package_sha256=self._exported_package_hash(
+                skill_bytes,
+                resource_rows,
+            ),
+        )
+
+    def preview(
+        self,
+        *,
+        scope: ContactScope,
+        skill_id: UUID,
+        context: object,
+        engine: Any,
+    ) -> SkillPreview:
+        """验证范围与 Skill 版本后，用指定的单 Skill 目录执行试用预览。"""
+
+        if not isinstance(scope, ContactScope):
+            raise TypeError("Skill 试用范围必须是 ContactScope。")
+        if not isinstance(skill_id, UUID):
+            raise TypeError("skill_id 必须是 UUID。")
+        if not callable(getattr(engine, "generate", None)):
+            raise TypeError("Skill 试用必须提供预览执行器。")
+        revision = 0
+        entry: SkillCatalogEntry | None = None
+        try:
+            with self._connect() as connection:
+                revision_row = connection.execute(
+                    "SELECT revision FROM public.skill_library WHERE owner_id = %s",
+                    (scope.owner_id,),
+                ).fetchone()
+                if revision_row is not None:
+                    revision = revision_row["revision"]
+                skill = connection.execute(
+                    """
+                    SELECT id, contact_id, status
+                    FROM public.reply_skill
+                    WHERE id = %s AND owner_id = %s AND status = 'active'
+                    """,
+                    (skill_id, scope.owner_id),
+                ).fetchone()
+                current = None
+                if skill is not None and (
+                    skill["contact_id"] is None
+                    or skill["contact_id"] == scope.contact_id
+                ):
+                    current = connection.execute(
+                        """
+                        SELECT id, name, description
+                        FROM public.reply_skill_version
+                        WHERE skill_id = %s AND is_current = TRUE
+                          AND status = 'active' AND enabled = TRUE
+                          AND content IS NOT NULL
+                          AND length(btrim(content)) > 0
+                          AND name = (
+                              SELECT name FROM public.reply_skill WHERE id = %s
+                          )
+                        """,
+                        (skill_id, skill_id),
+                    ).fetchone()
+                if skill is not None and current is not None:
+                    entry = SkillCatalogEntry(
+                        skill_id=skill_id,
+                        version_id=current["id"],
+                        name=current["name"],
+                        description=current["description"],
+                        owner_id=scope.owner_id,
+                        contact_id=skill["contact_id"],
+                    )
+        except psycopg.Error:
+            raise SkillLibraryPersistenceError("Skill 试用失败。") from None
+        if entry is None:
+            return self._no_skill_preview(
+                scope,
+                "该 Skill 不可用于本次试用。",
+            )
+        catalog = SkillCatalog(
+            scope=scope,
+            revision=revision,
+            entries=(entry,),
+        )
+        try:
+            preview = engine.generate(
+                scope=scope,
+                context=context,
+                catalog=catalog,
+            )
+        except Exception:
+            return self._no_skill_preview(
+                scope,
+                "Skill 试用执行失败。",
+            )
+        if not isinstance(preview, SkillPreview) or preview.scope != scope:
+            raise SkillLibraryPersistenceError("Skill 试用结果无效。")
+        return preview
+
+    @staticmethod
+    def _no_skill_preview(scope: ContactScope, reason: str) -> SkillPreview:
+        return SkillPreview(
+            scope=scope,
+            skill_id=None,
+            version_id=None,
+            name=None,
+            candidates=(),
+            selection_reason="未使用 Skill。",
+            resource_paths=(),
+            load_state="not_used",
+            fallback_reason=reason,
+        )
+
+    @staticmethod
+    def _serialize_skill_document(
+        name: str,
+        description: str,
+        content: str,
+    ) -> bytes:
+        return (
+            "---\n"
+            f"name: {name}\n"
+            f"description: {json.dumps(description, ensure_ascii=False)}\n"
+            "---\n\n"
+            f"{content}"
+        ).encode("utf-8")
+
+    @staticmethod
+    def _exported_package_hash(
+        skill_bytes: bytes,
+        resources: list[Any],
+    ) -> str:
+        digest = hashlib.sha256()
+        digest.update(b"SKILL.md\0")
+        digest.update(skill_bytes)
+        for resource in resources:
+            digest.update(resource["relative_path"].encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(bytes(resource["content"]))
+            digest.update(b"\0")
+        return digest.hexdigest()
 
     @staticmethod
     def _ensure_library_row(connection: Any, owner_id: UUID) -> None:

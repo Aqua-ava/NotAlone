@@ -273,6 +273,116 @@ class SkillDeletionResult:
 
 
 @dataclass(frozen=True, slots=True)
+class SkillExportResult:
+    """导出可移植 Skill 包后返回的非正文结果。"""
+
+    owner_id: UUID
+    skill_id: UUID
+    name: str
+    version_number: int
+    resource_paths: tuple[str, ...]
+    destination: str
+    package_sha256: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.owner_id, UUID) or not isinstance(
+            self.skill_id,
+            UUID,
+        ):
+            raise TypeError("Skill 导出结果标识必须是 UUID。")
+        _validate_skill_name(self.name)
+        if not isinstance(self.version_number, int) or self.version_number < 1:
+            raise ValueError("Skill 版本号无效。")
+        if not isinstance(self.resource_paths, tuple) or any(
+            not isinstance(path, str) or not path.strip()
+            for path in self.resource_paths
+        ):
+            raise TypeError("Skill 导出资源路径无效。")
+        if len(self.resource_paths) != len(set(self.resource_paths)):
+            raise ValueError("Skill 导出资源路径重复。")
+        if not isinstance(self.destination, str) or not self.destination.strip():
+            raise ValueError("Skill 导出目标路径不能为空。")
+        if (
+            not isinstance(self.package_sha256, str)
+            or re.fullmatch(r"[0-9a-f]{64}", self.package_sha256) is None
+        ):
+            raise ValueError("Skill 导出包哈希无效。")
+
+
+@dataclass(frozen=True, slots=True)
+class PreviewCandidate:
+    """试用预览中的一条可编辑候选回复，不落库。"""
+
+    text: str
+    basis: str
+    risk_notes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.text, str) or not self.text.strip():
+            raise ValueError("预览候选正文不能为空。")
+        if not isinstance(self.basis, str) or not self.basis.strip():
+            raise ValueError("预览候选依据不能为空。")
+        if not isinstance(self.risk_notes, tuple) or any(
+            not isinstance(note, str) or not note.strip()
+            for note in self.risk_notes
+        ):
+            raise TypeError("预览候选风险提示无效。")
+
+
+@dataclass(frozen=True, slots=True)
+class SkillPreview:
+    """在选定 Reply Task 上试用指定 Skill 的应用内候选预览。"""
+
+    scope: ContactScope
+    skill_id: UUID | None
+    version_id: UUID | None
+    name: str | None
+    candidates: tuple[PreviewCandidate, ...]
+    selection_reason: str
+    resource_paths: tuple[str, ...]
+    load_state: Literal["loaded", "resource_failed", "not_used"]
+    fallback_reason: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.scope, ContactScope):
+            raise TypeError("Skill 试用预览必须绑定联系人范围。")
+        if self.load_state == "not_used":
+            if (
+                self.skill_id is not None
+                or self.version_id is not None
+                or self.name is not None
+            ):
+                raise ValueError("Skill 无 Skill 预览状态不一致。")
+        else:
+            if (
+                not isinstance(self.skill_id, UUID)
+                or not isinstance(self.version_id, UUID)
+                or not isinstance(self.name, str)
+                or not self.name.strip()
+            ):
+                raise ValueError("Skill 试用预览 Skill 摘要无效。")
+            if not isinstance(self.candidates, tuple) or not self.candidates or any(
+                not isinstance(candidate, PreviewCandidate)
+                for candidate in self.candidates
+            ):
+                raise ValueError("Skill 试用预览必须包含候选。")
+        if not isinstance(self.candidates, tuple) or any(
+            not isinstance(candidate, PreviewCandidate)
+            for candidate in self.candidates
+        ):
+            raise TypeError("Skill 试用预览候选无效。")
+        if not isinstance(self.selection_reason, str) or not self.selection_reason:
+            raise ValueError("Skill 选择原因不能为空。")
+        if not isinstance(self.resource_paths, tuple) or any(
+            not isinstance(path, str) or not path.strip()
+            for path in self.resource_paths
+        ):
+            raise TypeError("Skill 预览资源路径无效。")
+        if not isinstance(self.fallback_reason, str):
+            raise TypeError("Skill 预览回退原因必须是字符串。")
+
+
+@dataclass(frozen=True, slots=True)
 class SkillCatalogEntry:
     """目录扫描可见的不可变 Skill 版本元数据。"""
 
