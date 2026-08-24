@@ -9,9 +9,13 @@
 from __future__ import annotations
 
 import threading
+from uuid import UUID
 from typing import Protocol
 
-from notalone.front_sync.sync_engine import FrontSyncCycleReport
+from notalone.front_sync.sync_engine import (
+    BindingConfirmationError,
+    FrontSyncCycleReport,
+)
 
 
 class SyncEnginePort(Protocol):
@@ -29,6 +33,14 @@ class SyncEnginePort(Protocol):
     def sync_enabled(self) -> bool:
         """读取当前同步开关（不触发探针或 CLI）。"""
 
+    def confirm_binding(
+        self,
+        *,
+        contact_id: UUID,
+        locator: str,
+    ) -> FrontSyncCycleReport:
+        """在当前前台会话上完成一次性绑定选择。"""
+
 
 class SyncControlPort(Protocol):
     """后端向 HTTP 应用层暴露的同步控制端口。"""
@@ -44,6 +56,14 @@ class SyncControlPort(Protocol):
 
     def check(self) -> FrontSyncCycleReport:
         """立即执行一轮并返回最新报告。"""
+
+    def confirm(
+        self,
+        *,
+        contact_id: UUID,
+        locator: str,
+    ) -> FrontSyncCycleReport:
+        """完成一次性绑定确认并立即执行一轮，返回最新报告。"""
 
 
 class SyncHost:
@@ -127,6 +147,26 @@ class SyncHost:
     def check(self) -> FrontSyncCycleReport:
         with self._lock:
             return self._run_cycle_locked()
+
+    def confirm(
+        self,
+        *,
+        contact_id: UUID,
+        locator: str,
+    ) -> FrontSyncCycleReport:
+        """完成一次性绑定确认；确认被拒绝时抛出 BindingConfirmationError。"""
+
+        if not isinstance(contact_id, UUID):
+            raise TypeError("contact_id 必须是 UUID。")
+        if not isinstance(locator, str) or not locator.strip():
+            raise ValueError("locator 不能为空。")
+        with self._lock:
+            report = self._engine.confirm_binding(
+                contact_id=contact_id,
+                locator=locator,
+            )
+            self._latest = report
+            return report
 
     # ------------------------------------------------------------------
     # 内部

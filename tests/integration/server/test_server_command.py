@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import json
 import signal
 import subprocess
 import sys
@@ -111,6 +112,49 @@ class ServerCommandProcessTest(unittest.TestCase):
             self.info_path.exists(),
             "SIGTERM 后握手文件应被清理。",
         )
+
+    def test_confirm_body_reaches_real_http_handler(self) -> None:
+        """真实 HTTP 请求体必须被读取；绑定确认对无身份 owner 失败关闭。"""
+
+        process = self._start_server()
+        try:
+            deadline = time.monotonic() + 15
+            while not self.info_path.exists():
+                if time.monotonic() > deadline:
+                    self.fail("握手文件未在 15 秒内写入。")
+                time.sleep(0.1)
+            address = next(
+                line.removeprefix("address=")
+                for line in self.info_path.read_text(encoding="utf-8").splitlines()
+                if line.startswith("address=")
+            )
+            token = next(
+                line.removeprefix("token=")
+                for line in self.info_path.read_text(encoding="utf-8").splitlines()
+                if line.startswith("token=")
+            )
+            body = json.dumps(
+                {"contact_id": str(uuid4()), "locator": "wxid_smoke"}
+            ).encode("utf-8")
+            request = urllib.request.Request(
+                f"http://{address}/api/sync/confirm",
+                data=body,
+                method="POST",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+            )
+            # 冒烟 owner 没有微信渠道身份：确认被同步不可用拒绝（503），
+            # 而不是"请求体无效"（400）——证明请求体真实到达 handler。
+            with self.assertRaises(urllib.error.HTTPError) as context:
+                urllib.request.urlopen(request, timeout=15)
+            self.assertEqual(context.exception.code, 503)
+        finally:
+            if process.poll() is None:
+                process.send_signal(signal.SIGTERM)
+                process.wait(timeout=10)
+        self.assertFalse(self.info_path.exists())
 
     def test_sync_requires_token_and_unavailable_without_identity(self) -> None:
         process = self._start_server()

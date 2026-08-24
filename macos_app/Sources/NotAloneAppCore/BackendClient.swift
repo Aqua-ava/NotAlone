@@ -7,8 +7,14 @@ public struct BackendClient: Sendable {
         case badStatus(Int)
         case syncUnavailable
         case notFound
+        case confirmRejected(reason: String)
         case malformedResponse
         case transport
+    }
+
+    private struct RejectionEnvelope: Decodable {
+        let error: String
+        let reason: String?
     }
 
     private let baseURL: URL
@@ -35,6 +41,46 @@ public struct BackendClient: Sendable {
 
     public func checkSync() async throws -> SyncStatus {
         try await request(path: "api/sync/check", method: "POST")
+    }
+
+    // 完成一次性绑定确认；被拒绝时抛出 confirmRejected(reason)。
+    public func confirmBinding(contactId: String, locator: String) async throws -> SyncStatus {
+        let payload = ["contact_id": contactId, "locator": locator]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload) else {
+            throw BackendError.malformedResponse
+        }
+        guard let url = URL(string: "api/sync/confirm", relativeTo: baseURL) else {
+            throw BackendError.malformedResponse
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = data
+        let (bodyData, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 503 {
+            throw BackendError.syncUnavailable
+        }
+        if status == 404 {
+            throw BackendError.notFound
+        }
+        if status == 409 {
+            // 绑定确认被拒绝：带出稳定 reason 码供界面展示。
+            let reason = (try? JSONDecoder.snakeCaseDecoder.decode(
+                RejectionEnvelope.self,
+                from: bodyData
+            ))?.reason ?? "unknown"
+            throw BackendError.confirmRejected(reason: reason)
+        }
+        guard status == 200 else {
+            throw BackendError.badStatus(status)
+        }
+        do {
+            return try JSONDecoder.snakeCaseDecoder.decode(SyncStatus.self, from: bodyData)
+        } catch {
+            throw BackendError.malformedResponse
+        }
     }
 
     // MARK: - 联系人列表

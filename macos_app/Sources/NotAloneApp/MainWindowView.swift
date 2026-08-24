@@ -8,6 +8,10 @@ struct MainWindowView: View {
     @EnvironmentObject private var model: AppModel
     @State private var selectedContact: String?
     @State private var scrollProxy: ScrollViewProxy?
+    @State private var selectedCandidate: BindingCandidate?
+    // 候选出现时自动弹出一次；用户手动关闭后本会话不再自动弹出，
+    // 同步保持暂停，直到用户再次打开确认入口。
+    @State private var dismissBindingSheet = false
 
     var body: some View {
         NavigationSplitView {
@@ -23,6 +27,106 @@ struct MainWindowView: View {
                 syncToggleButton
             }
         }
+        .sheet(isPresented: $showBindingConfirmation) {
+            bindingConfirmationSheet
+        }
+        .onChange(of: model.status?.candidates.isEmpty) { _, isEmpty in
+            guard isEmpty == false, !dismissBindingSheet else { return }
+            selectedCandidate = nil
+            showBindingConfirmation = true
+        }
+    }
+
+    @State private var showBindingConfirmation = false
+
+    // 有待确认候选绑定时弹出一次性选择列表；确认前同步保持暂停。
+    // 用户手动关闭后本会话不再自动弹出（dismissBindingSheet 标记），
+    // 确认后候选清空自动收起。
+    private var bindingConfirmationSheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(selectedCandidate == nil ? "确认绑定到哪位联系人？" : "为「\(selectedCandidate?.displayName ?? "")」选择联系人")
+                .font(.headline)
+            Text("同步已暂停；选择后才会写入绑定并恢复读取。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Divider()
+            if let candidate = selectedCandidate {
+                contactPicker(for: candidate)
+            } else if let candidates = model.status?.candidates, !candidates.isEmpty {
+                List(candidates, id: \.username) { candidate in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(candidate.displayName)
+                            Text(candidate.username)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if let timestamp = candidate.lastTimestamp {
+                            Text(shortTimestamp(timestamp))
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedCandidate = candidate
+                    }
+                }
+                .listStyle(.inset)
+            }
+            HStack {
+                if selectedCandidate != nil {
+                    Button("返回候选") {
+                        selectedCandidate = nil
+                    }
+                }
+                Spacer()
+                Button(selectedCandidate == nil ? "稍后处理" : "取消") {
+                    // 手动关闭不写入绑定；同步仍保持暂停，等待下次确认。
+                    selectedCandidate = nil
+                    dismissBindingSheet = true
+                    showBindingConfirmation = false
+                    model.lastOperationMessage = "未确认绑定，同步保持暂停"
+                }
+                .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 460, height: 360)
+    }
+
+    // 选中候选后展示联系人列表，避免按展示名猜测联系人（重名/不同名时安全）。
+    private func contactPicker(for candidate: BindingCandidate) -> some View {
+        List(model.contacts, id: \.contactId) { contact in
+            HStack {
+                Text(contact.displayName)
+                Spacer()
+                if contact.contactId == model.status?.activeContactId {
+                    badge("当前同步中", color: .green)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                model.confirmBinding(
+                    contactId: contact.contactId,
+                    locator: candidate.username,
+                    displayName: candidate.displayName
+                )
+                selectedCandidate = nil
+                // 确认成功后候选清空、sheet 收起；失败时状态刷新会保留候选。
+                dismissBindingSheet = false
+                showBindingConfirmation = false
+            }
+        }
+        .listStyle(.inset)
+    }
+
+    private func shortTimestamp(_ timestamp: Int) -> String {
+        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM-dd HH:mm"
+        return formatter.string(from: date)
     }
 
     // MARK: - 左栏

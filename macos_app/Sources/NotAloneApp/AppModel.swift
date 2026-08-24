@@ -206,6 +206,31 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // 一次性绑定确认：选择一个候选联系人写入绑定；确认后立即
+    // 刷新状态（引擎下一轮自动恢复同步读取）。
+    func confirmBinding(contactId: String, locator: String, displayName: String) {
+        guard !isToggling, let client else {
+            if isToggling {
+                lastOperationMessage = "上一个操作进行中，请稍候"
+            }
+            return
+        }
+        isToggling = true
+        Task {
+            defer { isToggling = false }
+            do {
+                let updated = try await client.confirmBinding(
+                    contactId: contactId,
+                    locator: locator
+                )
+                status = updated
+                lastOperationMessage = "已绑定「\(displayName)」，同步已恢复"
+            } catch {
+                lastOperationMessage = "绑定确认失败：\(Self.describe(error))"
+            }
+        }
+    }
+
     // MARK: - 轮询
 
     private func runPollLoop() async {
@@ -317,6 +342,8 @@ final class AppModel: ObservableObject {
                 return "后端返回错误状态 \(code)"
             case .notFound:
                 return "请求的资源不存在"
+            case .confirmRejected(let reason):
+                return "绑定确认被拒绝：\(reason)"
             case .malformedResponse:
                 return "后端响应格式异常"
             case .transport:

@@ -24,6 +24,7 @@ from notalone.application.message_stream import (
 )
 from notalone.front_sync.sync_engine import (
     BindingCandidateView,
+    BindingConfirmationError,
     FrontSyncCycleReport,
 )
 from notalone.persistence.contact_directory import PostgresContactDirectory
@@ -109,7 +110,7 @@ class BackendApp:
     ) -> Response:
         """处理一个请求；不把 token 或请求正文写入错误响应。"""
 
-        del body
+        request_body = bytes(body)
         request_headers = headers or {}
         if not self._authorized(request_headers):
             return _json_response(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
@@ -134,7 +135,11 @@ class BackendApp:
                 query=urlsplit(path).query,
             )
         if path_value.startswith("/api/sync"):
-            return self._handle_sync(method=method_upper, path=path_value)
+            return self._handle_sync(
+                method=method_upper,
+                path=path_value,
+                body=request_body,
+            )
         return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
 
     def _handle_messages(self, *, method: str, path: str, query: str) -> Response:
@@ -200,14 +205,15 @@ class BackendApp:
             },
         )
 
-    def _handle_sync(self, *, method: str, path: str) -> Response:
-        """处理同步控制端点；不做任何请求正文解析，失败关闭。"""
+    def _handle_sync(self, *, method: str, path: str, body: bytes) -> Response:
+        """处理同步控制端点；confirm 读取严格 JSON 请求体，失败关闭。"""
 
         if path not in {
             "/api/sync/status",
             "/api/sync/enable",
             "/api/sync/disable",
             "/api/sync/check",
+            "/api/sync/confirm",
         }:
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         sync = self._sync_control
@@ -227,6 +233,8 @@ class BackendApp:
             return _json_response(HTTPStatus.OK, _sync_status_payload(report))
         if method != "POST":
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        if path == "/api/sync/confirm":
+            return self._handle_sync_confirm(sync=sync, body=body)
         try:
             if path == "/api/sync/enable":
                 report = sync.enable()
@@ -238,6 +246,51 @@ class BackendApp:
             # 稳定错误码，不把引擎异常细节回显给界面。
             return _json_response(
                 HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "sync_control_failed"}
+            )
+        return _json_response(HTTPStatus.OK, _sync_status_payload(report))
+
+    def _handle_sync_confirm(
+        self,
+        *,
+        sync: SyncControlPort,
+        body: bytes,
+    ) -> Response:
+        """解析一次性绑定确认请求；参数缺失或冲突时失败关闭。"""
+
+        try:
+            payload = json.loads(body.decode("utf-8")) if body.strip() else {}
+        except (UnicodeDecodeError, ValueError):
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "binding_confirmation_invalid"}
+            )
+        if not isinstance(payload, dict):
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "binding_confirmation_invalid"}
+            )
+        contact_value = payload.get("contact_id")
+        locator = payload.get("locator")
+        if isinstance(contact_value, str):
+            try:
+                contact_id = UUID(contact_value)
+            except ValueError:
+                contact_id = None
+        else:
+            contact_id = None
+        if contact_id is None or not isinstance(locator, str) or not locator.strip():
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "binding_confirmation_invalid"}
+            )
+        try:
+            report = sync.confirm(contact_id=contact_id, locator=locator)
+        except BindingConfirmationError as error:
+            return _json_response(
+                HTTPStatus.CONFLICT,
+                {"error": "binding_confirmation_rejected", "reason": error.code},
+            )
+        except Exception:
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "binding_confirm_failed"},
             )
         return _json_response(HTTPStatus.OK, _sync_status_payload(report))
 
@@ -396,8 +449,30 @@ def _serve_request(handler: BaseHTTPRequestHandler, app: BackendApp) -> None:
         method=handler.command,
         path=handler.path,
         headers={key: value for key, value in handler.headers.items()},
+        body=_read_request_body(handler),
     )
     _write_response(handler, response)
+
+
+def _read_request_body(handler: BaseHTTPRequestHandler) -> bytes:
+    """按 Content-Length 读取请求体；缺失或无法解析时按空体处理。
+
+    只允许读取回环本地请求；Content-Length 异常（负数/超大）按空体
+    处理，避免无界读入。
+    """
+
+    try:
+        length = int(_header_value(handler.headers, "Content-Length"))
+    except (ValueError, TypeError):
+        return b""
+    if length < 0 or length > 1024 * 1024:
+        return b""
+    if length == 0:
+        return b""
+    try:
+        return handler.rfile.read(length) or b""
+    except (OSError, ConnectionError):
+        return b""
 
 
 def _write_response(handler: BaseHTTPRequestHandler, response: Response) -> None:

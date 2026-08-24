@@ -60,6 +60,8 @@ class ScriptedSyncControl:
         self.enable_calls = 0
         self.disable_calls = 0
         self.check_calls = 0
+        self.confirm_calls: list[tuple[str, str]] = []
+        self.confirm_error: Exception | None = None
 
     def status(self) -> FrontSyncCycleReport | None:
         self.status_calls += 1
@@ -77,6 +79,13 @@ class ScriptedSyncControl:
 
     def check(self) -> FrontSyncCycleReport:
         self.check_calls += 1
+        return self.next_report
+
+    def confirm(self, *, contact_id, locator) -> FrontSyncCycleReport:
+        self.confirm_calls.append((str(contact_id), locator))
+        if self.confirm_error is not None:
+            raise self.confirm_error
+        self.next_report = _report(enabled=True)
         return self.next_report
 
 
@@ -102,6 +111,7 @@ class SyncApiContractTest(unittest.TestCase):
             ("POST", "/api/sync/enable"),
             ("POST", "/api/sync/disable"),
             ("POST", "/api/sync/check"),
+            ("POST", "/api/sync/confirm"),
         ):
             with self.subTest(method=method, path=path):
                 missing = self.client.request(method, path)
@@ -209,6 +219,78 @@ class SyncApiContractTest(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
     # ------------------------------------------------------------------
+    # 绑定确认
+    # ------------------------------------------------------------------
+
+    def test_confirm_delegates_and_returns_fresh_status(self) -> None:
+        response = self.client.request(
+            "POST",
+            "/api/sync/confirm",
+            headers=self.headers,
+            body=(
+                '{"contact_id": "' + str(CONTACT_ID) + '",'
+                ' "locator": "wxid_candidate"}'
+            ).encode("utf-8"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self.sync.confirm_calls,
+            [(str(CONTACT_ID), "wxid_candidate")],
+        )
+        self.assertEqual(response.json()["sync_enabled"], True)
+
+    def test_confirm_rejects_invalid_request_body(self) -> None:
+        for body in (
+            b"not-json",
+            b"[]",
+            b"{}",
+            b'{"contact_id": "not-a-uuid", "locator": "wxid_candidate"}',
+            b'{"contact_id": "' + str(CONTACT_ID).encode("utf-8") + b'"}',
+            b'{"locator": "wxid_candidate"}',
+            b'{"contact_id": "' + str(CONTACT_ID).encode("utf-8") + b'", "locator": "  "}',
+        ):
+            with self.subTest(body=body):
+                response = self.client.request(
+                    "POST",
+                    "/api/sync/confirm",
+                    headers=self.headers,
+                    body=body,
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(
+                    response.json(), {"error": "binding_confirmation_invalid"}
+                )
+        self.assertEqual(self.sync.confirm_calls, [])
+
+    def test_confirm_rejection_is_reported_with_stable_code(self) -> None:
+        from notalone.front_sync.sync_engine import BindingConfirmationError
+
+        self.sync.confirm_error = BindingConfirmationError(
+            "no_pending_selection", "当前会话没有待确认的一次性选择。"
+        )
+        body = (
+            '{"contact_id": "' + str(CONTACT_ID) + '",'
+            ' "locator": "wxid_candidate"}'
+        ).encode("utf-8")
+
+        response = self.client.request(
+            "POST",
+            "/api/sync/confirm",
+            headers=self.headers,
+            body=body,
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json(),
+            {
+                "error": "binding_confirmation_rejected",
+                "reason": "no_pending_selection",
+            },
+        )
+
+    # ------------------------------------------------------------------
     # 无同步控制时
     # ------------------------------------------------------------------
 
@@ -224,6 +306,7 @@ class SyncApiContractTest(unittest.TestCase):
             ("POST", "/api/sync/enable"),
             ("POST", "/api/sync/disable"),
             ("POST", "/api/sync/check"),
+            ("POST", "/api/sync/confirm"),
         ):
             with self.subTest(method=method, path=path):
                 response = client.request(

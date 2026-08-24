@@ -20,6 +20,8 @@ class FakeEngine:
         self.cycle_calls = 0
         self.enable_calls = 0
         self.disable_calls = 0
+        self.confirm_calls: list[tuple[str, str]] = []
+        self.waits_for_selection = False
         self.wait_cycles = threading.Event()
 
     def sync_enabled(self) -> bool:
@@ -52,6 +54,20 @@ class FakeEngine:
     def disable_sync(self) -> None:
         self.disable_calls += 1
         self.enabled = False
+
+    def confirm_binding(self, *, contact_id, locator) -> FrontSyncCycleReport:
+        self.confirm_calls.append((str(contact_id), locator))
+        return FrontSyncCycleReport(
+            sync_enabled=self.enabled,
+            phase=FrontSyncPhase.ACTIVE,
+            probe_available=True,
+            wechat_in_front=True,
+            cli_available=True,
+            failure_code=None,
+            active_contact_id=contact_id,
+            active_binding_display_name="合成已绑定",
+            decision_reason=None,
+        )
 
 
 class SyncHostTest(unittest.TestCase):
@@ -153,6 +169,26 @@ class SyncHostTest(unittest.TestCase):
             SyncHost(engine=self.engine, interval=0)
         with self.assertRaises(ValueError):
             SyncHost(engine=self.engine, interval=-1.0)
+
+    def test_confirm_delegates_and_caches_report(self) -> None:
+        contact_id = uuid4()
+        self.engine.enabled = True
+
+        report = self.host.confirm(contact_id=contact_id, locator="wxid_front")
+
+        self.assertEqual(
+            self.engine.confirm_calls,
+            [(str(contact_id), "wxid_front")],
+        )
+        self.assertTrue(report.sync_enabled)
+        self.assertEqual(report.active_contact_id, contact_id)
+        self.assertEqual(self.host.status(), report)
+
+    def test_confirm_rejects_invalid_arguments(self) -> None:
+        with self.assertRaises(TypeError):
+            self.host.confirm(contact_id="not-uuid", locator="wxid_front")
+        with self.assertRaises(ValueError):
+            self.host.confirm(contact_id=uuid4(), locator="  ")
 
 
 class SyncHostTypingTest(unittest.TestCase):
