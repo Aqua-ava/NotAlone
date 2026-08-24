@@ -43,6 +43,8 @@
 17. [ADR-017：优先用选中会话元数据匹配当前微信会话](adr/017-selected-session-metadata-matching.md)
 18. [ADR-018：Worker 启动命令当前全局串行](adr/018-worker-command-global-serialization.md)
 19. [ADR-019：回复 Skill 的受控辅助资源](adr/019-controlled-reply-skill-resources.md)
+20. [ADR-020：常驻本地后端服务与事件驱动前台同步](adr/020-local-backend-service-and-event-driven-sync.md)
+21. [ADR-021：源码分发与双层首次配置](adr/021-source-distribution-and-first-run-setup.md)
 
 ## 当前架构决策
 
