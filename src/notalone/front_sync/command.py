@@ -13,6 +13,10 @@ from uuid import UUID
 
 import psycopg
 
+from notalone.application.contact_directory import (
+    ContactDirectory,
+    ContactDirectoryError,
+)
 from notalone.front_sync import (
     MacosFrontSessionProbe,
     TailLifecycle,
@@ -26,6 +30,7 @@ from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
 )
 from notalone.persistence.front_sync_state import PostgresFrontSyncStateStore
+from notalone.persistence.contact_directory import PostgresContactDirectory
 from notalone.persistence.observation_store import PostgresObservationStore
 from notalone.runtime_config import load_project_env
 from notalone.wechat_cli import LocalWechatCli
@@ -107,11 +112,16 @@ def front_sync_main(argv: list[str] | None = None) -> int:
 
     if args.action == "contacts":
         try:
-            contacts = _list_contacts(database_url, owner_id)
-        except psycopg.Error:
+            contacts = ContactDirectory(
+                PostgresContactDirectory(database_url)
+            ).list_contacts(owner_id)
+        except ContactDirectoryError:
             return _fail("联系人列表读取失败。")
-        for contact_id, display_name in contacts:
-            print(f"contact_id={contact_id} display_name={display_name}")
+        for contact in contacts:
+            print(
+                f"contact_id={contact.contact_id} "
+                f"display_name={contact.display_name}"
+            )
         return 0
 
     account_scope = _owner_wechat_account_scope(database_url, owner_id)
@@ -203,24 +213,6 @@ def _owner_wechat_account_scope(database_url: str, owner_id: UUID) -> str | None
             (owner_id,),
         ).fetchone()
     return None if row is None else row[0]
-
-
-def _list_contacts(
-    database_url: str, owner_id: UUID
-) -> tuple[tuple[UUID, str], ...]:
-    """列出 owner 的联系人与展示名称；展示名称只用于用户选择。"""
-
-    with psycopg.connect(database_url) as connection:
-        rows = connection.execute(
-            """
-            SELECT id, display_name
-            FROM public.contact
-            WHERE owner_id = %s
-            ORDER BY created_at, id
-            """,
-            (owner_id,),
-        ).fetchall()
-    return tuple((row[0], row[1]) for row in rows)
 
 
 def _fail(message: str) -> int:

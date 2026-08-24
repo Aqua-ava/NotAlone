@@ -8,6 +8,7 @@ from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
     PostgresConversationPort,
 )
+from notalone.persistence.contact_directory import PostgresContactDirectory
 from notalone.persistence.contact_memory_index import (
     ContactMemoryIndex,
     ContactMemoryIndexBuilder,
@@ -80,6 +81,7 @@ __all__ = [
     "ContactMemoryIndexStatus",
     "ContactMemoryIndexTopic",
     "ContactMemoryIndexValidationError",
+    "PostgresContactDirectory",
     "BackgroundTaskLeaseError",
     "BackgroundTaskNotFoundError",
     "BackgroundTaskPersistenceError",

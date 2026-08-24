@@ -6,6 +6,7 @@ import contextlib
 import io
 import os
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -101,6 +102,38 @@ class RenderReportLinesTest(unittest.TestCase):
 
 
 class FrontSyncMainGateTest(unittest.TestCase):
+    def test_contacts_uses_shared_contact_directory(self) -> None:
+        owner_id = uuid4()
+        contact_id = uuid4()
+        stdout = io.StringIO()
+        with patch.dict(
+            os.environ,
+            {
+                "NOTALONE_DISABLE_DOTENV": "1",
+                "NOTALONE_DATABASE_URL": "postgresql:///notalone_test",
+                "NOTALONE_OWNER_ID": str(owner_id),
+            },
+            clear=True,
+        ), patch(
+            "notalone.front_sync.command.PostgresContactDirectory"
+        ) as directory_type, contextlib.redirect_stdout(stdout):
+            directory_type.return_value.list_contacts.return_value = (
+                SimpleNamespace(
+                    contact_id=contact_id,
+                    display_name="合成联系人",
+                ),
+            )
+
+            exit_code = front_sync_main(["contacts"])
+
+        self.assertEqual(exit_code, 0)
+        directory_type.assert_called_once_with("postgresql:///notalone_test")
+        directory_type.return_value.list_contacts.assert_called_once_with(owner_id)
+        self.assertEqual(
+            stdout.getvalue().strip(),
+            f"contact_id={contact_id} display_name=合成联系人",
+        )
+
     def test_missing_database_url_fails_before_any_probe_call(self) -> None:
         stderr = io.StringIO()
         with patch.dict(
