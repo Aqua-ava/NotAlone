@@ -21,6 +21,7 @@ from notalone.memory.models import (
 )
 from notalone.scopes import ContactScope
 from notalone.persistence.locks import lock_contact_scope
+from notalone.persistence.message_sources import valid_source_ref_exists_sql
 
 
 def _utc_now() -> datetime:
@@ -403,15 +404,18 @@ class PostgresMemoryStore:
                           )
                           OR EXISTS (
                               SELECT 1
+                              FROM public.local_wechat_observation AS observation
+                              WHERE observation.owner_id = memory.owner_id
+                                AND observation.contact_id = memory.contact_id
+                                AND observation.id = ANY(memory.source_ids)
+                          )
+                          OR EXISTS (
+                              SELECT 1
                               FROM public.message AS message
-                              JOIN public.source_document AS source
-                                ON source.owner_id = message.owner_id
-                               AND source.contact_id = message.contact_id
-                               AND source.id = message.source_document_id
                               WHERE message.owner_id = memory.owner_id
                                 AND message.contact_id = memory.contact_id
                                 AND message.id = ANY(memory.source_ids)
-                                AND source.status = 'active'
+                                AND {valid_source_ref_exists_sql("message")}
                           )
                       )
                     ORDER BY memory.created_at, memory.id
@@ -602,7 +606,7 @@ class PostgresMemoryStore:
     ) -> None:
         unique_source_ids = tuple(dict.fromkeys(source_ids))
         available_count = connection.execute(
-            """
+            f"""
             SELECT count(*) AS source_count
             FROM (
                 SELECT source.id AS source_id
@@ -612,19 +616,24 @@ class PostgresMemoryStore:
                   AND source.status = 'active'
                   AND source.id = ANY(%s)
                 UNION
+                SELECT observation.id AS source_id
+                FROM public.local_wechat_observation AS observation
+                WHERE observation.owner_id = %s
+                  AND observation.contact_id = %s
+                  AND observation.id = ANY(%s)
+                UNION
                 SELECT message.id AS source_id
                 FROM public.message AS message
-                JOIN public.source_document AS source
-                  ON source.owner_id = message.owner_id
-                 AND source.contact_id = message.contact_id
-                 AND source.id = message.source_document_id
                 WHERE message.owner_id = %s
                   AND message.contact_id = %s
-                  AND source.status = 'active'
+                  AND {valid_source_ref_exists_sql("message")}
                   AND message.id = ANY(%s)
             ) AS available_sources
             """,
             (
+                scope.owner_id,
+                scope.contact_id,
+                list(unique_source_ids),
                 scope.owner_id,
                 scope.contact_id,
                 list(unique_source_ids),

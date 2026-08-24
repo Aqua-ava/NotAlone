@@ -197,35 +197,47 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
             stored = connection.execute(
                 """
                 SELECT
-                    m.source_locator,
+                    ref.source_locator,
                     m.text_content,
                     m.media_placeholder,
                     wm.external_local_id,
                     wm.external_server_id,
                     wm.external_talker,
                     wm.source_create_time,
-                    wm.raw_payload
+                    ref.raw_payload,
+                    ref.source_kind
                 FROM public.message AS m
+                JOIN public.message_source_ref AS ref
+                  ON ref.message_id = m.id
                 JOIN public.wechat_message_metadata AS wm
                   ON wm.message_id = m.id
-                WHERE m.source_document_id = %s
-                  AND m.source_locator = 'jsonl:2'
+                WHERE ref.source_document_id = %s
+                  AND ref.source_locator = 'jsonl:2'
                 """,
                 (result.source_document_id,),
             ).fetchone()
             old_columns = connection.execute(
                 """
-                SELECT count(*)
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = 'message'
-                  AND column_name IN (
-                      'external_local_id',
-                      'external_server_id',
-                      'external_talker',
-                      'source_create_time',
-                      'raw_payload'
-                  )
+                SELECT
+                    (SELECT count(*)
+                     FROM information_schema.columns
+                     WHERE table_schema = 'public'
+                       AND table_name = 'message'
+                       AND column_name IN (
+                           'external_local_id',
+                           'external_server_id',
+                           'external_talker',
+                           'source_create_time',
+                           'raw_payload',
+                           'source_document_id',
+                           'source_locator'
+                       ))
+                    +
+                    (SELECT count(*)
+                     FROM information_schema.columns
+                     WHERE table_schema = 'public'
+                       AND table_name = 'wechat_message_metadata'
+                       AND column_name IN ('raw_payload', 'source_document_id'))
                 """
             ).fetchone()[0]
 
@@ -239,6 +251,7 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
             1786500060,
         ))
         self.assertEqual(stored[7]["text"], "[图片]")
+        self.assertEqual(stored[8], "source_document")
         self.assertEqual(old_columns, 0)
 
     def test_known_media_placeholder_type_is_persisted(self) -> None:
@@ -461,6 +474,7 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(self._count("source_document", owner_id), 0)
         self.assertEqual(self._count("message", owner_id), 0)
         self.assertEqual(self._count("wechat_message_metadata", owner_id), 0)
+        self.assertEqual(self._count("message_source_ref", owner_id), 0)
         self.assertEqual(self._count("background_task", owner_id), 0)
         self.assertEqual(self._count("background_task_step", owner_id), 0)
 
@@ -487,6 +501,7 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(self._count("source_document", owner_id), 0)
         self.assertEqual(self._count("message", owner_id), 0)
         self.assertEqual(self._count("wechat_message_metadata", owner_id), 0)
+        self.assertEqual(self._count("message_source_ref", owner_id), 0)
         self.assertEqual(self._count("background_task", owner_id), 0)
         self.assertEqual(self._count("background_task_step", owner_id), 0)
 
@@ -510,6 +525,7 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(self._count("import_confirmation", owner_id), 0)
         self.assertEqual(self._count("source_document", owner_id), 0)
         self.assertEqual(self._count("message", owner_id), 0)
+        self.assertEqual(self._count("message_source_ref", owner_id), 0)
         self.assertEqual(self._count("wechat_message_metadata", owner_id), 0)
         self.assertEqual(self._count("background_task", owner_id), 0)
         self.assertEqual(self._count("background_task_step", owner_id), 0)
@@ -543,6 +559,7 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
         self.assertEqual(self._count("source_document", owner_id), 0)
         self.assertEqual(self._count("message", owner_id), 0)
         self.assertEqual(self._count("wechat_message_metadata", owner_id), 0)
+        self.assertEqual(self._count("message_source_ref", owner_id), 0)
 
     def test_non_active_duplicate_source_requires_explicit_resolution(self) -> None:
         owner_id = self._create_owner("合成用户甲")
@@ -724,20 +741,34 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
 
     def test_overlap_unique_constraint_exists(self) -> None:
         with psycopg.connect(TEST_DATABASE_URL) as connection:
-            constraint = connection.execute(
+            index_definition = connection.execute(
                 """
-                SELECT pg_get_constraintdef(oid)
-                FROM pg_constraint
-                WHERE conrelid = 'public.wechat_message_metadata'::regclass
-                  AND conname = 'wechat_message_metadata_contact_local_time_unique'
+                SELECT indexdef
+                FROM pg_indexes
+                WHERE schemaname = 'public'
+                  AND tablename = 'wechat_message_metadata'
+                  AND indexname = 'wechat_message_metadata_stable_identity_unique'
                 """
             ).fetchone()
+            ref_constraints = connection.execute(
+                """
+                SELECT count(*)
+                FROM pg_constraint
+                WHERE conrelid = 'public.message_source_ref'::regclass
+                  AND conname IN (
+                      'message_source_ref_document_locator_unique',
+                      'message_source_ref_observation_locator_unique'
+                  )
+                """
+            ).fetchone()[0]
 
-        self.assertIsNotNone(constraint)
-        self.assertEqual(
-            constraint[0],
-            "UNIQUE (owner_id, contact_id, external_local_id, source_create_time)",
+        self.assertIsNotNone(index_definition)
+        self.assertIn(
+            "(owner_id, contact_id, external_local_id, "
+            "COALESCE(source_create_time, ('-1'::integer)::bigint))",
+            index_definition[0],
         )
+        self.assertEqual(ref_constraints, 2)
 
     def _batch_with_reused_local_id(self) -> ImportBatch:
         first_metadata = self.batch.messages[0].wechat_metadata
@@ -829,6 +860,7 @@ class PostgresIngestRepositoryTest(unittest.TestCase):
             "source_document",
             "import_confirmation",
             "message",
+            "message_source_ref",
             "wechat_message_metadata",
             "background_task",
             "background_task_step",

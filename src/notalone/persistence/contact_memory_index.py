@@ -16,6 +16,7 @@ from psycopg.types.json import Jsonb
 
 from notalone.memory.models import MemoryCategory, MemoryTopic
 from notalone.scopes import ContactScope
+from notalone.persistence.message_sources import valid_source_ref_exists_sql
 
 
 MAX_INDEX_TOPICS = 20
@@ -531,7 +532,7 @@ class PostgresContactMemoryIndexRepository:
         scope: ContactScope,
     ) -> tuple[IndexMemoryRef, ...]:
         rows = connection.execute(
-            """
+            f"""
             SELECT memory.id, memory.category, memory.topic
             FROM public.confirmed_memory AS memory
             WHERE memory.owner_id = %s
@@ -550,15 +551,18 @@ class PostgresContactMemoryIndexRepository:
                   )
                   OR EXISTS (
                       SELECT 1
+                      FROM public.local_wechat_observation AS observation
+                      WHERE observation.owner_id = memory.owner_id
+                        AND observation.contact_id = memory.contact_id
+                        AND observation.id = ANY(memory.source_ids)
+                  )
+                  OR EXISTS (
+                      SELECT 1
                       FROM public.message AS message
-                      JOIN public.source_document AS source
-                        ON source.owner_id = message.owner_id
-                       AND source.contact_id = message.contact_id
-                       AND source.id = message.source_document_id
                       WHERE message.owner_id = memory.owner_id
                         AND message.contact_id = memory.contact_id
                         AND message.id = ANY(memory.source_ids)
-                        AND source.status = 'active'
+                        AND {valid_source_ref_exists_sql("message")}
                   )
               )
             ORDER BY memory.created_at, memory.id
@@ -581,7 +585,7 @@ class PostgresContactMemoryIndexRepository:
         memory_id: UUID,
     ) -> IndexMemoryRef | None:
         rows = connection.execute(
-            """
+            f"""
             SELECT memory.id, memory.category, memory.topic
             FROM public.confirmed_memory AS memory
             WHERE memory.owner_id = %s
@@ -600,15 +604,18 @@ class PostgresContactMemoryIndexRepository:
                   )
                   OR EXISTS (
                       SELECT 1
+                      FROM public.local_wechat_observation AS observation
+                      WHERE observation.owner_id = memory.owner_id
+                        AND observation.contact_id = memory.contact_id
+                        AND observation.id = ANY(memory.source_ids)
+                  )
+                  OR EXISTS (
+                      SELECT 1
                       FROM public.message AS message
-                      JOIN public.source_document AS source
-                        ON source.owner_id = message.owner_id
-                       AND source.contact_id = message.contact_id
-                       AND source.id = message.source_document_id
                       WHERE message.owner_id = memory.owner_id
                         AND message.contact_id = memory.contact_id
                         AND message.id = ANY(memory.source_ids)
-                        AND source.status = 'active'
+                        AND {valid_source_ref_exists_sql("message")}
                   )
               )
             """,

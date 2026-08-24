@@ -81,12 +81,18 @@ class ImportPreview:
 
 @dataclass(frozen=True, slots=True, repr=False)
 class WechatMessageMetadata:
-    """微信 JSONL 适配器为一条规范消息保留的来源证据。"""
+    """微信消息的稳定身份与原始证据。
+
+    身份字段随规范消息保存；``raw_payload_json`` 随来源引用
+    （``message_source_ref``）保存，同一消息可由多个来源引用共同支持。
+    导入来源始终提供 server_id 与 create_time；CLI 观察事件
+    允许两者缺失，缺失时按稳定身份键的未知时间参与去重。
+    """
 
     external_local_id: int
-    external_server_id: str
+    external_server_id: str | None
     external_talker: str
-    source_create_time: int
+    source_create_time: int | None
     raw_payload_json: str
 
 

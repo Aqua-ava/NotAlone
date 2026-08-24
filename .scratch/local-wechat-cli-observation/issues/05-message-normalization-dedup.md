@@ -2,7 +2,7 @@
 
 Type: task
 Triage: ready-for-agent
-State: open
+State: resolved
 Blocked by: 01, 04
 
 ## What to build
@@ -11,12 +11,12 @@ Blocked by: 01, 04
 
 ## Acceptance criteria
 
-- [ ] v1 只接受文字消息；媒体、群聊和未知类型明确跳过或返回稳定结果。
-- [ ] `owner_id + contact_id` 在写入前确定且不可由 CLI 参数覆盖。
-- [ ] 同一稳定消息 ID 只生成一个规范消息，可关联多个有效来源引用。
-- [ ] 缺失原始时间保留未知，不以读取时间冒充发生时间。
-- [ ] `is_from_me`/sender 映射为统一说话人；错误或缺失时 fail closed。
-- [ ] 删除一个来源只移除该来源引用；所有来源都删除后才清理消息和派生资料。
+- [x] v1 只接受文字消息；媒体、群聊和未知类型明确跳过或返回稳定结果。
+- [x] `owner_id + contact_id` 在写入前确定且不可由 CLI 参数覆盖。
+- [x] 同一稳定消息 ID 只生成一个规范消息，可关联多个有效来源引用。
+- [x] 缺失原始时间保留未知，不以读取时间冒充发生时间。
+- [x] `is_from_me`/sender 映射为统一说话人；错误或缺失时 fail closed。
+- [x] 删除一个来源只移除该来源引用；所有来源都删除后才清理消息和派生资料。
 
 ## Verification
 

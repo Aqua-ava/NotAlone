@@ -90,13 +90,21 @@ class WriteAdjudicationTest(unittest.TestCase):
             connection.execute(
                 """
                 INSERT INTO public.message (
-                    id, source_document_id, owner_id, contact_id,
-                    speaker, message_type, text_content, occurred_at,
-                    source_locator
-                ) VALUES (%s, %s, %s, %s, 'contact', 'text', '在减肥', now(),
-                          'synthetic-1')
+                    id, owner_id, contact_id,
+                    speaker, message_type, text_content, occurred_at
+                ) VALUES (%s, %s, %s, 'contact', 'text', '在减肥', now())
                 """,
-                (self.message_id, self.source_id, self.owner_id, self.contact_id),
+                (self.message_id, self.owner_id, self.contact_id),
+            )
+            connection.execute(
+                """
+                INSERT INTO public.message_source_ref (
+                    id, message_id, owner_id, contact_id,
+                    source_kind, source_document_id, source_locator, raw_payload
+                ) VALUES (gen_random_uuid(), %s, %s, %s,
+                          'source_document', %s, 'synthetic-1', '{}'::jsonb)
+                """,
+                (self.message_id, self.owner_id, self.contact_id, self.source_id),
             )
             connection.commit()
         self.memory_store = PostgresMemoryStore(TEST_DATABASE_URL)

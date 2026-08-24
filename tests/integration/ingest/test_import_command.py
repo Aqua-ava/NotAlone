@@ -173,12 +173,14 @@ class ImportCommandIntegrationTest(unittest.TestCase):
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             imported = connection.execute(
                 """
-                SELECT c.display_name, ic.method, count(m.id)
+                SELECT c.display_name, ic.method, count(DISTINCT m.id)
                 FROM public.contact AS c
                 JOIN public.import_confirmation AS ic
                   ON ic.owner_id = c.owner_id AND ic.contact_id = c.id
+                JOIN public.message_source_ref AS ref
+                  ON ref.source_document_id = ic.source_document_id
                 JOIN public.message AS m
-                  ON m.source_document_id = ic.source_document_id
+                  ON m.id = ref.message_id
                 WHERE c.owner_id = %s
                 GROUP BY c.display_name, ic.method
                 """,

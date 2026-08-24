@@ -15,6 +15,7 @@ from notalone.persistence import (
     PostgresOutboundLedger,
     PostgresWatermarkStore,
 )
+from notalone.persistence.message_sources import valid_source_ref_exists_sql
 from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from notalone.scopes import ContactScope
 
@@ -50,18 +51,16 @@ def load_contact_messages(
 
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
         rows = connection.execute(
-            """
+            f"""
             SELECT message.id AS message_id,
                    message.speaker,
                    message.text_content,
                    message.media_placeholder,
                    message.occurred_at
             FROM public.message AS message
-            JOIN public.source_document AS source
-              ON source.id = message.source_document_id
             WHERE message.owner_id = %s
               AND message.contact_id = %s
-              AND source.status = 'active'
+              AND {valid_source_ref_exists_sql("message")}
             ORDER BY message.occurred_at NULLS LAST, message.id
             """,
             (scope.owner_id, scope.contact_id),

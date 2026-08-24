@@ -11,10 +11,17 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import psycopg
 
+from notalone.ingest.models import NormalizedMessage
+from notalone.persistence.locks import lock_contact_scope
+from notalone.persistence.message_cleanup import (
+    cleanup_derived_data,
+    collect_orphan_message_ids,
+    delete_messages,
+)
 from notalone.scopes import ContactScope
 
 
@@ -75,6 +82,74 @@ class PersistedObservation:
     record_count: int
     since_local_id: int | None = None
     since_cursor: str | None = None
+
+
+def assert_binding_active(
+    connection: psycopg.Connection[Any],
+    *,
+    owner_id: UUID,
+    contact_id: UUID,
+    binding_id: UUID,
+) -> None:
+    """能记录观察的前提：绑定属于该范围且处于 active 状态。"""
+
+    row = connection.execute(
+        """
+        SELECT owner_id, contact_id, status
+        FROM public.conversation_binding
+        WHERE id = %s
+        FOR KEY SHARE
+        """,
+        (binding_id,),
+    ).fetchone()
+    if row is None or row[0] != owner_id or row[1] != contact_id:
+        raise ObservationNotFoundError("绑定不属于该联系人的有效范围。")
+    if row[2] != "active":
+        raise ObservationNotFoundError("绑定已撤销，不能记录观察来源。")
+
+
+def advance_observation_cursor(
+    connection: psycopg.Connection[Any],
+    *,
+    owner_id: UUID,
+    contact_id: UUID,
+    binding_id: UUID,
+    conversation_locator: str,
+    last_local_id: int,
+    last_cursor: str,
+) -> None:
+    """在同一事务内单调前移联系人水位；倒退时拒绝。"""
+
+    result = connection.execute(
+        """
+        INSERT INTO public.wechat_observation_cursor (
+            owner_id, contact_id, binding_id, conversation_locator,
+            last_local_id, last_cursor
+        )
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON CONFLICT (owner_id, contact_id)
+        DO UPDATE SET
+            binding_id = EXCLUDED.binding_id,
+            conversation_locator = EXCLUDED.conversation_locator,
+            last_local_id = EXCLUDED.last_local_id,
+            last_cursor = EXCLUDED.last_cursor,
+            updated_at = now()
+        WHERE wechat_observation_cursor.last_local_id
+            <= EXCLUDED.last_local_id
+        RETURNING last_local_id
+        """,
+        (
+            owner_id,
+            contact_id,
+            binding_id,
+            conversation_locator,
+            last_local_id,
+            last_cursor,
+        ),
+    ).fetchone()
+    if result is None:
+        # 持平（空批次）视为无害无操作；只有倒退才拒绝。
+        raise ObservationWatermarkError("观察水位只能单调前移。")
 
 
 _OBSERVATION_COLUMNS = (
@@ -171,7 +246,7 @@ class PostgresObservationStore:
 
         try:
             with self._connect() as connection:
-                self._assert_binding_active(
+                assert_binding_active(
                     connection,
                     owner_id=owner_id,
                     contact_id=contact_id,
@@ -243,16 +318,190 @@ class PostgresObservationStore:
                 )
                 connection.commit()
                 return self._from_row(inserted)
-        except (
-            ObservationNotFoundError,
-            ObservationPersistenceError,
-            ObservationWatermarkError,
-        ):
+        except ObservationPersistenceError:
             raise
         except psycopg.Error:
-            raise ObservationPersistenceError(
-                "观察来源写入失败，未移动水位。"
-            ) from None
+            raise ObservationPersistenceError("观察来源记录失败。") from None
+
+    def record_cli_messages(
+        self,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        observation_id: UUID,
+        messages: tuple[NormalizedMessage, ...],
+    ) -> tuple[UUID, ...]:
+        """将规范化的 CLI 消息写入数据库；跨来源去重复用既有规范消息。
+
+        同一稳定消息身份 (owner_id, contact_id, external_local_id, source_create_time)
+        只生成一个规范消息，可关联多个有效来源引用；缺失 create_time 的消息以 -1 参与去重。
+        """
+
+        self._validate_scope(owner_id=owner_id, contact_id=contact_id)
+        if not isinstance(observation_id, UUID):
+            raise TypeError("observation_id 必须是 UUID。")
+        if not messages:
+            return ()
+
+        try:
+            with self._connect() as connection:
+                lock_contact_scope(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                )
+                message_ids: list[UUID] = []
+                for message in messages:
+                    if message.wechat_metadata is None:
+                        raise ObservationPersistenceError(
+                            "CLI 消息缺少微信来源元数据。"
+                        )
+                    metadata = message.wechat_metadata
+                    # 稳定消息身份：(owner_id, contact_id, external_local_id, source_create_time)
+                    # 缺失 create_time 以 -1 参与去重
+                    stable_create_time = (
+                        metadata.source_create_time
+                        if metadata.source_create_time is not None
+                        else -1
+                    )
+                    existing_metadata = connection.execute(
+                        """
+                        SELECT message_id
+                        FROM public.wechat_message_metadata
+                        WHERE owner_id = %s
+                          AND contact_id = %s
+                          AND external_local_id = %s
+                          AND COALESCE(source_create_time, -1) = %s
+                        """,
+                        (
+                            owner_id,
+                            contact_id,
+                            metadata.external_local_id,
+                            stable_create_time,
+                        ),
+                    ).fetchone()
+
+                    if existing_metadata is not None:
+                        # 复用既有规范消息，只添加新的来源引用
+                        message_id = existing_metadata[0]
+                        # 检查是否已存在该 observation 的引用
+                        existing_ref = connection.execute(
+                            """
+                            SELECT 1
+                            FROM public.message_source_ref
+                            WHERE message_id = %s
+                              AND observation_id = %s
+                              AND source_locator = %s
+                            """,
+                            (
+                                message_id,
+                                observation_id,
+                                f"cli:{metadata.external_local_id}",
+                            ),
+                        ).fetchone()
+                        if existing_ref is None:
+                            connection.execute(
+                                """
+                                INSERT INTO public.message_source_ref (
+                                    message_id,
+                                    owner_id,
+                                    contact_id,
+                                    source_kind,
+                                    observation_id,
+                                    source_locator,
+                                    raw_payload
+                                )
+                                VALUES (%s, %s, %s, 'local_wechat_observation', %s, %s, %s::jsonb)
+                                """,
+                                (
+                                    message_id,
+                                    owner_id,
+                                    contact_id,
+                                    observation_id,
+                                    f"cli:{metadata.external_local_id}",
+                                    metadata.raw_payload_json,
+                                ),
+                            )
+                    else:
+                        # 新规范消息：写入 message + wechat_metadata + message_source_ref
+                        message_id = uuid4()
+                        connection.execute(
+                            """
+                            INSERT INTO public.message (
+                                id,
+                                owner_id,
+                                contact_id,
+                                speaker,
+                                message_type,
+                                text_content,
+                                media_placeholder,
+                                occurred_at
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                            """,
+                            (
+                                message_id,
+                                owner_id,
+                                contact_id,
+                                message.speaker,
+                                message.message_type,
+                                message.text_content,
+                                message.media_placeholder,
+                                message.occurred_at,
+                            ),
+                        )
+                        connection.execute(
+                            """
+                            INSERT INTO public.wechat_message_metadata (
+                                message_id,
+                                owner_id,
+                                contact_id,
+                                external_local_id,
+                                external_server_id,
+                                external_talker,
+                                source_create_time
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            """,
+                            (
+                                message_id,
+                                owner_id,
+                                contact_id,
+                                metadata.external_local_id,
+                                metadata.external_server_id,
+                                metadata.external_talker,
+                                metadata.source_create_time,
+                            ),
+                        )
+                        connection.execute(
+                            """
+                            INSERT INTO public.message_source_ref (
+                                message_id,
+                                owner_id,
+                                contact_id,
+                                source_kind,
+                                observation_id,
+                                source_locator,
+                                raw_payload
+                            )
+                            VALUES (%s, %s, %s, 'local_wechat_observation', %s, %s, %s::jsonb)
+                            """,
+                            (
+                                message_id,
+                                owner_id,
+                                contact_id,
+                                observation_id,
+                                f"cli:{metadata.external_local_id}",
+                                metadata.raw_payload_json,
+                            ),
+                        )
+                    message_ids.append(message_id)
+                connection.commit()
+                return tuple(message_ids)
+        except ObservationPersistenceError:
+            raise
+        except psycopg.Error:
+            raise ObservationPersistenceError("CLI 消息写入失败。") from None
 
     def delete_observation(
         self,
@@ -261,13 +510,35 @@ class PostgresObservationStore:
         contact_id: UUID,
         observation_id: UUID,
     ) -> None:
-        """按来源级删除路径移除一条观察来源；水位保持不动。"""
+        """按来源级删除路径移除一条观察来源及其消息引用；水位保持不动。
+
+        删除观察来源只移除其 message_source_ref 引用；
+        消息与派生资料仅在失去全部有效来源引用后清理。
+        """
 
         self._validate_scope(owner_id=owner_id, contact_id=contact_id)
         if not isinstance(observation_id, UUID):
             raise TypeError("observation_id 必须是 UUID。")
         try:
             with self._connect() as connection:
+                lock_contact_scope(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                )
+                observed_message_ids = tuple(
+                    row[0]
+                    for row in connection.execute(
+                        """
+                        SELECT message_id
+                        FROM public.message_source_ref
+                        WHERE owner_id = %s
+                          AND contact_id = %s
+                          AND observation_id = %s
+                        """,
+                        (owner_id, contact_id, observation_id),
+                    ).fetchall()
+                )
                 deleted = connection.execute(
                     """
                     DELETE FROM public.local_wechat_observation
@@ -278,33 +549,29 @@ class PostgresObservationStore:
                 ).fetchone()
                 if deleted is None:
                     raise ObservationNotFoundError("指定范围内不存在该观察来源。")
+                orphan_message_ids = collect_orphan_message_ids(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    candidate_message_ids=observed_message_ids,
+                )
+                cleanup_derived_data(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    removed_ids=set(orphan_message_ids),
+                )
+                delete_messages(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    message_ids=orphan_message_ids,
+                )
                 connection.commit()
         except ObservationNotFoundError:
             raise
         except psycopg.Error:
             raise ObservationPersistenceError("观察来源删除失败。") from None
-
-    @staticmethod
-    def _assert_binding_active(
-        connection: psycopg.Connection[Any],
-        *,
-        owner_id: UUID,
-        contact_id: UUID,
-        binding_id: UUID,
-    ) -> None:
-        row = connection.execute(
-            """
-            SELECT owner_id, contact_id, status
-            FROM public.conversation_binding
-            WHERE id = %s
-            FOR KEY SHARE
-            """,
-            (binding_id,),
-        ).fetchone()
-        if row is None or row[0] != owner_id or row[1] != contact_id:
-            raise ObservationNotFoundError("绑定不属于该联系人的有效范围。")
-        if row[2] != "active":
-            raise ObservationNotFoundError("绑定已撤销，不能记录观察来源。")
 
     @staticmethod
     def _advance_cursor(
@@ -317,36 +584,15 @@ class PostgresObservationStore:
         last_local_id: int,
         last_cursor: str,
     ) -> None:
-        result = connection.execute(
-            """
-            INSERT INTO public.wechat_observation_cursor (
-                owner_id, contact_id, binding_id, conversation_locator,
-                last_local_id, last_cursor
-            )
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (owner_id, contact_id)
-            DO UPDATE SET
-                binding_id = EXCLUDED.binding_id,
-                conversation_locator = EXCLUDED.conversation_locator,
-                last_local_id = EXCLUDED.last_local_id,
-                last_cursor = EXCLUDED.last_cursor,
-                updated_at = now()
-            WHERE wechat_observation_cursor.last_local_id
-                <= EXCLUDED.last_local_id
-            RETURNING last_local_id
-            """,
-            (
-                owner_id,
-                contact_id,
-                binding_id,
-                conversation_locator,
-                last_local_id,
-                last_cursor,
-            ),
-        ).fetchone()
-        if result is None:
-            # 持平（空批次）视为无害无操作；只有倒退才拒绝。
-            raise ObservationWatermarkError("观察水位只能单调前移。")
+        advance_observation_cursor(
+            connection,
+            owner_id=owner_id,
+            contact_id=contact_id,
+            binding_id=binding_id,
+            conversation_locator=conversation_locator,
+            last_local_id=last_local_id,
+            last_cursor=last_cursor,
+        )
 
     @staticmethod
     def _validate_scope(*, owner_id: UUID, contact_id: UUID) -> None:

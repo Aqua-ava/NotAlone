@@ -227,11 +227,30 @@ class PostgresRetrievalTest(unittest.TestCase):
         connection.execute(
             """
             INSERT INTO public.message (
-                id, owner_id, contact_id, source_document_id, source_locator,
+                id, owner_id, contact_id,
                 speaker, message_type, text_content, media_placeholder,
                 occurred_at
             )
-            VALUES (%s, %s, %s, %s, %s, 'contact', %s, %s, %s, %s)
+            VALUES (%s, %s, %s, 'contact', %s, %s, %s, %s)
+            """,
+            (
+                message_id,
+                owner_id or self.owner_id,
+                contact_id or self.contact_id,
+                "image" if media_placeholder else "text",
+                text,
+                media_placeholder,
+                occurred_at,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO public.message_source_ref (
+                id, message_id, owner_id, contact_id,
+                source_kind, source_document_id, source_locator, raw_payload
+            )
+            VALUES (gen_random_uuid(), %s, %s, %s, 'source_document', %s, %s,
+                    '{}'::jsonb)
             """,
             (
                 message_id,
@@ -239,10 +258,6 @@ class PostgresRetrievalTest(unittest.TestCase):
                 contact_id or self.contact_id,
                 source_id,
                 f"synthetic:{message_id}",
-                "image" if media_placeholder else "text",
-                text,
-                media_placeholder,
-                occurred_at,
             ),
         )
 

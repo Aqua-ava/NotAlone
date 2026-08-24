@@ -97,19 +97,32 @@ class RealExtractionSmokeTest(unittest.TestCase):
                 connection.execute(
                     """
                     INSERT INTO public.message (
-                        id, source_document_id, owner_id, contact_id,
-                        speaker, message_type, text_content, occurred_at,
-                        source_locator
-                    ) VALUES (%s, %s, %s, %s, %s, 'text', %s, %s, %s)
+                        id, owner_id, contact_id,
+                        speaker, message_type, text_content, occurred_at
+                    ) VALUES (%s, %s, %s, %s, 'text', %s, %s)
                     """,
                     (
                         message_id,
-                        self.source_id,
                         self.owner_id,
                         self.contact_id,
                         speaker,
                         text,
                         base + timedelta(minutes=index),
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO public.message_source_ref (
+                        id, message_id, owner_id, contact_id,
+                        source_kind, source_document_id, source_locator, raw_payload
+                    ) VALUES (gen_random_uuid(), %s, %s, %s,
+                              'source_document', %s, %s, '{}'::jsonb)
+                    """,
+                    (
+                        message_id,
+                        self.owner_id,
+                        self.contact_id,
+                        self.source_id,
                         f"smoke-{index}",
                     ),
                 )

@@ -13,6 +13,10 @@ from notalone.persistence.memory_store import (
     MemoryPersistenceError,
     PostgresMemoryStore,
 )
+from notalone.persistence.message_sources import (
+    valid_source_ids_sql,
+    valid_source_ref_exists_sql,
+)
 from notalone.retrieval.errors import RetrievalError, RetrievalInvariantError
 from notalone.retrieval.models import (
     RetrievedMemory,
@@ -219,18 +223,14 @@ class PostgresRetrieval:
             SELECT m.id AS message_id,
                    m.owner_id,
                    m.contact_id,
-                   m.source_document_id,
+                   {valid_source_ids_sql("m")} AS source_ids,
                    {_MESSAGE_TEXT_SQL} AS retrieved_text,
                    m.occurred_at
             FROM public.message AS m
-            JOIN public.source_document AS source
-              ON source.id = m.source_document_id
-             AND source.owner_id = m.owner_id
-             AND source.contact_id = m.contact_id
             WHERE m.owner_id = %s
               AND m.contact_id = %s
               AND m.id = %s
-              AND source.status = 'active'
+              AND {valid_source_ref_exists_sql("m")}
             """,
             (scope.owner_id, scope.contact_id, target_message_id),
         ).fetchone()
@@ -247,7 +247,7 @@ class PostgresRetrieval:
         conditions = [
             "m.owner_id = %s",
             "m.contact_id = %s",
-            "source.status = 'active'",
+            valid_source_ref_exists_sql("m"),
         ]
         parameters: list[Any] = [scope.owner_id, scope.contact_id]
         if excluded_message_id is not None:
@@ -265,14 +265,10 @@ class PostgresRetrieval:
                 SELECT m.id AS message_id,
                        m.owner_id,
                        m.contact_id,
-                       m.source_document_id,
+                       {valid_source_ids_sql("m")} AS source_ids,
                        {_MESSAGE_TEXT_SQL} AS retrieved_text,
                        m.occurred_at
                 FROM public.message AS m
-                JOIN public.source_document AS source
-                  ON source.id = m.source_document_id
-                 AND source.owner_id = m.owner_id
-                 AND source.contact_id = m.contact_id
                 WHERE {' AND '.join(conditions)}
                 ORDER BY m.occurred_at DESC NULLS LAST, m.id DESC
                 LIMIT %s
@@ -291,14 +287,18 @@ class PostgresRetrieval:
             or row["contact_id"] != scope.contact_id
         ):
             raise RetrievalInvariantError("消息检索结果超出联系人范围。")
-        source_id = row["source_document_id"]
-        if not isinstance(source_id, UUID):
+        source_ids = row["source_ids"]
+        if (
+            not isinstance(source_ids, list)
+            or not source_ids
+            or any(not isinstance(source_id, UUID) for source_id in source_ids)
+        ):
             raise RetrievalInvariantError("消息来源引用结构无效。")
         return RetrievedMessage(
             message_id=row["message_id"],
             scope=scope,
             text=row["retrieved_text"],
-            source_ids=(source_id,),
+            source_ids=tuple(source_ids),
             occurred_at=row["occurred_at"],
         )
 

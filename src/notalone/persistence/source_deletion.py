@@ -8,9 +8,13 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 import psycopg
-from psycopg.types.json import Jsonb
 
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
+from notalone.persistence.message_cleanup import (
+    cleanup_derived_data,
+    collect_orphan_message_ids,
+    delete_messages,
+)
 
 
 class SourceDeletionError(RuntimeError):
@@ -105,12 +109,13 @@ class PostgresSourceDeletionRepository:
                     contact_id=contact_id,
                     source_document_id=source_document_id,
                 )
+                # 删除来源只移除其引用；消息仅在失去全部有效引用后清理。
                 source_message_ids = tuple(
                     row[0]
                     for row in connection.execute(
                         """
-                        SELECT id
-                        FROM public.message
+                        SELECT message_id
+                        FROM public.message_source_ref
                         WHERE owner_id = %s
                           AND contact_id = %s
                           AND source_document_id = %s
@@ -118,12 +123,26 @@ class PostgresSourceDeletionRepository:
                         (owner_id, contact_id, source_document_id),
                     ).fetchall()
                 )
-                self._cleanup_derived_data(
+                connection.execute(
+                    """
+                    DELETE FROM public.message_source_ref
+                    WHERE owner_id = %s
+                      AND contact_id = %s
+                      AND source_document_id = %s
+                    """,
+                    (owner_id, contact_id, source_document_id),
+                )
+                orphan_message_ids = collect_orphan_message_ids(
                     connection,
                     owner_id=owner_id,
                     contact_id=contact_id,
-                    source_document_id=source_document_id,
-                    source_message_ids=source_message_ids,
+                    candidate_message_ids=source_message_ids,
+                )
+                cleanup_derived_data(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    removed_ids={source_document_id, *orphan_message_ids},
                 )
                 connection.execute(
                     """
@@ -134,26 +153,23 @@ class PostgresSourceDeletionRepository:
                     """,
                     (owner_id, contact_id, source_document_id),
                 )
-                connection.execute(
-                    """
-                    DELETE FROM public.message
-                    WHERE owner_id = %s
-                      AND contact_id = %s
-                      AND source_document_id = %s
-                    """,
-                    (owner_id, contact_id, source_document_id),
+                delete_messages(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    message_ids=orphan_message_ids,
                 )
                 remaining = connection.execute(
                     """
                     SELECT
-                        (SELECT count(*) FROM public.message
+                        (SELECT count(*) FROM public.message_source_ref
                          WHERE owner_id = %s
                            AND contact_id = %s
                            AND source_document_id = %s),
                         (SELECT count(*) FROM public.wechat_message_metadata
                          WHERE owner_id = %s
                            AND contact_id = %s
-                           AND source_document_id = %s),
+                           AND message_id = ANY(%s::uuid[])),
                         (SELECT count(*) FROM public.import_confirmation
                          WHERE owner_id = %s
                            AND contact_id = %s
@@ -165,7 +181,7 @@ class PostgresSourceDeletionRepository:
                         source_document_id,
                         owner_id,
                         contact_id,
-                        source_document_id,
+                        list(orphan_message_ids),
                         owner_id,
                         contact_id,
                         source_document_id,
@@ -199,12 +215,12 @@ class PostgresSourceDeletionRepository:
                     (
                         owner_id,
                         contact_id,
-                        [source_document_id, *source_message_ids],
+                        [source_document_id, *orphan_message_ids],
                         owner_id,
                         contact_id,
-                        [source_document_id, *source_message_ids],
+                        [source_document_id, *orphan_message_ids],
                         owner_id,
-                        [source_document_id, *source_message_ids],
+                        [source_document_id, *orphan_message_ids],
                     ),
                 ).fetchone()
                 if derived_remaining != (0, 0, 0):
@@ -295,177 +311,6 @@ class PostgresSourceDeletionRepository:
             """,
             (owner_id, contact_id, source_document_id),
         )
-
-    @staticmethod
-    def _cleanup_derived_data(
-        connection: psycopg.Connection,
-        *,
-        owner_id: UUID,
-        contact_id: UUID,
-        source_document_id: UUID,
-        source_message_ids: tuple[UUID, ...],
-    ) -> None:
-        removed_ids = {source_document_id, *source_message_ids}
-        source_refs = [source_document_id, *source_message_ids]
-        deleted_memory_ids: list[UUID] = []
-        candidates = connection.execute(
-            """
-            SELECT id, source_ids
-            FROM public.memory_candidate
-            WHERE owner_id = %s
-              AND contact_id = %s
-              AND status IN ('pending', 'confirmed')
-              AND source_ids && %s::uuid[]
-            FOR UPDATE
-            """,
-            (owner_id, contact_id, source_refs),
-        ).fetchall()
-        for candidate_id, source_ids in candidates:
-            remaining_ids = [
-                source_id for source_id in source_ids if source_id not in removed_ids
-            ]
-            if remaining_ids:
-                connection.execute(
-                    """
-                    UPDATE public.memory_candidate
-                    SET source_ids = %s, updated_at = now()
-                    WHERE owner_id = %s AND contact_id = %s AND id = %s
-                    """,
-                    (remaining_ids, owner_id, contact_id, candidate_id),
-                )
-            else:
-                connection.execute(
-                    """
-                    UPDATE public.memory_candidate
-                    SET status = 'invalidated', updated_at = now()
-                    WHERE owner_id = %s AND contact_id = %s AND id = %s
-                    """,
-                    (owner_id, contact_id, candidate_id),
-                )
-
-        memories = connection.execute(
-            """
-            SELECT id, source_ids
-            FROM public.confirmed_memory
-            WHERE owner_id = %s
-              AND contact_id = %s
-              AND status = 'active'
-              AND source_ids && %s::uuid[]
-            FOR UPDATE
-            """,
-            (owner_id, contact_id, source_refs),
-        ).fetchall()
-        if memories:
-            for memory_id, source_ids in memories:
-                remaining_ids = [
-                    source_id
-                    for source_id in source_ids
-                    if source_id not in removed_ids
-                ]
-                if remaining_ids:
-                    connection.execute(
-                        """
-                        UPDATE public.confirmed_memory
-                        SET source_ids = %s,
-                            revision = revision + 1,
-                            updated_at = now()
-                        WHERE owner_id = %s AND contact_id = %s AND id = %s
-                        """,
-                        (remaining_ids, owner_id, contact_id, memory_id),
-                    )
-                else:
-                    deleted_memory_ids.append(memory_id)
-                    connection.execute(
-                        """
-                        UPDATE public.confirmed_memory
-                        SET status = 'deleted',
-                            invalid_at = COALESCE(invalid_at, now()),
-                            revision = revision + 1,
-                            updated_at = now()
-                        WHERE owner_id = %s AND contact_id = %s AND id = %s
-                        """,
-                        (owner_id, contact_id, memory_id),
-                    )
-            connection.execute(
-                """
-                INSERT INTO public.contact_memory_state (
-                    owner_id, contact_id, memory_revision
-                ) VALUES (%s, %s, 1)
-                ON CONFLICT (owner_id, contact_id)
-                DO UPDATE SET
-                    memory_revision = contact_memory_state.memory_revision + 1,
-                    updated_at = now()
-                """,
-                (owner_id, contact_id),
-            )
-        owner_memories = connection.execute(
-            """
-            SELECT id, source_ids
-            FROM public.owner_memory
-            WHERE owner_id = %s
-              AND status = 'active'
-              AND source_ids && %s::uuid[]
-            FOR UPDATE
-            """,
-            (owner_id, source_refs),
-        ).fetchall()
-        for memory_id, source_ids in owner_memories:
-            remaining_ids = [
-                source_id for source_id in source_ids if source_id not in removed_ids
-            ]
-            if remaining_ids:
-                connection.execute(
-                    """
-                    UPDATE public.owner_memory
-                    SET source_ids = %s,
-                        revision = revision + 1,
-                        updated_at = now()
-                    WHERE owner_id = %s AND id = %s
-                    """,
-                    (remaining_ids, owner_id, memory_id),
-                )
-            else:
-                connection.execute(
-                    """
-                    UPDATE public.owner_memory
-                    SET status = 'deleted',
-                        revision = revision + 1,
-                        updated_at = now()
-                    WHERE owner_id = %s AND id = %s
-                    """,
-                    (owner_id, memory_id),
-                )
-
-        index_row = connection.execute(
-            """
-            SELECT topics
-            FROM public.contact_memory_index
-            WHERE owner_id = %s AND contact_id = %s
-            FOR UPDATE
-            """,
-            (owner_id, contact_id),
-        ).fetchone()
-        if index_row is not None and memories:
-            removed_set = set(deleted_memory_ids)
-            topics = []
-            for topic in index_row[0]:
-                memory_ids = [
-                    memory_id
-                    for memory_id in topic["memory_ids"]
-                    if UUID(str(memory_id)) not in removed_set
-                ]
-                if memory_ids:
-                    topics.append({**topic, "memory_ids": memory_ids})
-            connection.execute(
-                """
-                UPDATE public.contact_memory_index
-                SET topics = %s,
-                    status = 'stale',
-                    updated_at = now()
-                WHERE owner_id = %s AND contact_id = %s
-                """,
-                (Jsonb(topics), owner_id, contact_id),
-            )
 
     def _record_failure(
         self,

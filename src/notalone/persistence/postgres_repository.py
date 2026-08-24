@@ -123,6 +123,8 @@ class PostgresIngestRepository:
             if error.diag.constraint_name in {
                 "message_contact_external_local_id_unique",
                 "wechat_message_metadata_contact_local_time_unique",
+                "wechat_message_metadata_stable_identity_unique",
+                "message_source_ref_document_locator_unique",
             }:
                 raise OverlappingSourceError(
                     "文件与已导入来源包含重叠消息，未写入新来源。"
@@ -364,8 +366,6 @@ class PostgresIngestRepository:
                 message_id,
                 owner_id,
                 contact_id,
-                source_document_id,
-                message.source_locator,
                 message.speaker,
                 message.message_type,
                 message.text_content,
@@ -381,8 +381,6 @@ class PostgresIngestRepository:
                     id,
                     owner_id,
                     contact_id,
-                    source_document_id,
-                    source_locator,
                     speaker,
                     message_type,
                     text_content,
@@ -390,8 +388,8 @@ class PostgresIngestRepository:
                     occurred_at
                 )
                 VALUES (
-                    %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s
                 )
                 """,
                 message_parameters,
@@ -401,12 +399,10 @@ class PostgresIngestRepository:
                     message_id,
                     owner_id,
                     contact_id,
-                    source_document_id,
                     metadata.external_local_id,
                     metadata.external_server_id,
                     metadata.external_talker,
                     metadata.source_create_time,
-                    metadata.raw_payload_json,
                 )
                 for message_id, _, metadata in messages_with_ids
             ]
@@ -416,19 +412,46 @@ class PostgresIngestRepository:
                     message_id,
                     owner_id,
                     contact_id,
-                    source_document_id,
                     external_local_id,
                     external_server_id,
                     external_talker,
-                    source_create_time,
-                    raw_payload
+                    source_create_time
                 )
                 VALUES (
-                    %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s::jsonb
+                    %s, %s, %s, %s,
+                    %s, %s, %s
                 )
                 """,
                 metadata_parameters,
+            )
+            # 每条消息写一条导入来源引用；原始 JSON 作为来源证据随引用保存。
+            ref_parameters = [
+                (
+                    message_id,
+                    owner_id,
+                    contact_id,
+                    source_document_id,
+                    message.source_locator,
+                    metadata.raw_payload_json,
+                )
+                for message_id, message, metadata in messages_with_ids
+            ]
+            cursor.executemany(
+                """
+                INSERT INTO public.message_source_ref (
+                    message_id,
+                    owner_id,
+                    contact_id,
+                    source_kind,
+                    source_document_id,
+                    source_locator,
+                    raw_payload
+                )
+                VALUES (
+                    %s, %s, %s, 'source_document', %s, %s, %s::jsonb
+                )
+                """,
+                ref_parameters,
             )
 
         task_id = PostgresIngestRepository._ensure_import_task(

@@ -100,8 +100,17 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
             message_ids = tuple(
                 row[0]
                 for row in connection.execute(
-                    "SELECT id FROM public.message WHERE source_document_id = %s",
-                    (imported.source_document_id,),
+                    """
+                    SELECT message_id
+                    FROM public.message_source_ref
+                    WHERE owner_id = %s AND contact_id = %s
+                      AND source_document_id = %s
+                    """,
+                    (
+                        self.owner_id,
+                        self.contact_id,
+                        imported.source_document_id,
+                    ),
                 ).fetchall()
             )
 
@@ -127,19 +136,23 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
                 SELECT
                     (SELECT count(*) FROM public.message
                      WHERE owner_id = %s AND contact_id = %s
+                       AND id = ANY(%s::uuid[])),
+                    (SELECT count(*) FROM public.message_source_ref
+                     WHERE owner_id = %s AND contact_id = %s
                        AND source_document_id = %s),
-                    (SELECT count(*) FROM public.message WHERE id = ANY(%s::uuid[])),
                     (SELECT count(*) FROM public.wechat_message_metadata
-                     WHERE source_document_id = %s),
+                     WHERE message_id = ANY(%s::uuid[])),
                     (SELECT count(*) FROM public.import_confirmation
                      WHERE source_document_id = %s)
                 """,
                 (
                     self.owner_id,
                     self.contact_id,
+                    list(message_ids),
+                    self.owner_id,
+                    self.contact_id,
                     imported.source_document_id,
                     list(message_ids),
-                    imported.source_document_id,
                     imported.source_document_id,
                 ),
             ).fetchone()
@@ -193,9 +206,18 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
         )
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             message_id = connection.execute(
-                "SELECT id FROM public.message WHERE source_document_id = %s "
-                "ORDER BY id LIMIT 1",
-                (imported.source_document_id,),
+                """
+                SELECT message_id
+                FROM public.message_source_ref
+                WHERE owner_id = %s AND contact_id = %s
+                  AND source_document_id = %s
+                ORDER BY message_id LIMIT 1
+                """,
+                (
+                    self.owner_id,
+                    self.contact_id,
+                    imported.source_document_id,
+                ),
             ).fetchone()[0]
 
         memory_store = PostgresMemoryStore(TEST_DATABASE_URL)
@@ -249,9 +271,18 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
         second_message_id = uuid4()
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             first_message_id = connection.execute(
-                "SELECT id FROM public.message WHERE source_document_id = %s "
-                "ORDER BY id LIMIT 1",
-                (imported.source_document_id,),
+                """
+                SELECT message_id
+                FROM public.message_source_ref
+                WHERE owner_id = %s AND contact_id = %s
+                  AND source_document_id = %s
+                ORDER BY message_id LIMIT 1
+                """,
+                (
+                    self.owner_id,
+                    self.contact_id,
+                    imported.source_document_id,
+                ),
             ).fetchone()[0]
             connection.execute(
                 """
@@ -270,16 +301,30 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
             connection.execute(
                 """
                 INSERT INTO public.message (
-                    id, owner_id, contact_id, source_document_id,
-                    source_locator, speaker, message_type, text_content
-                ) VALUES (%s, %s, %s, %s, 'second:1', 'contact', 'text', %s)
+                    id, owner_id, contact_id,
+                    speaker, message_type, text_content
+                ) VALUES (%s, %s, %s, 'contact', 'text', %s)
+                """,
+                (
+                    second_message_id,
+                    self.owner_id,
+                    self.contact_id,
+                    "第二来源的合成消息",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO public.message_source_ref (
+                    id, message_id, owner_id, contact_id,
+                    source_kind, source_document_id, source_locator, raw_payload
+                ) VALUES (gen_random_uuid(), %s, %s, %s,
+                          'source_document', %s, 'second:1', '{}'::jsonb)
                 """,
                 (
                     second_message_id,
                     self.owner_id,
                     self.contact_id,
                     second_source_id,
-                    "第二来源的合成消息",
                 ),
             )
         scope = ContactScope(self.owner_id, self.contact_id)
@@ -311,6 +356,125 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
         self.assertEqual(tuple(stored[1]), (second_message_id,))
         self.assertEqual(len(memory_store.list_confirmed(scope)), 1)
 
+    def test_delete_source_removes_only_its_reference_until_all_sources_gone(self) -> None:
+        imported = self.ingest_repository.import_document(
+            owner_id=self.owner_id,
+            document=self.batch,
+            confirmation=ImportConfirmationRequest(
+                selection=ExistingContactSelection(contact_id=self.contact_id)
+            ),
+        )
+        second_source_id = uuid4()
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            message_id = connection.execute(
+                """
+                SELECT message_id
+                FROM public.message_source_ref
+                WHERE owner_id = %s AND contact_id = %s
+                  AND source_document_id = %s
+                ORDER BY message_id LIMIT 1
+                """,
+                (
+                    self.owner_id,
+                    self.contact_id,
+                    imported.source_document_id,
+                ),
+            ).fetchone()[0]
+            connection.execute(
+                """
+                INSERT INTO public.source_document (
+                    id, owner_id, contact_id, source_type, file_name,
+                    content_sha256, record_count, status
+                ) VALUES (%s, %s, %s, 'wechat_jsonl', 'dedup.jsonl', %s, 1, 'active')
+                """,
+                (
+                    second_source_id,
+                    self.owner_id,
+                    self.contact_id,
+                    "f" * 64,
+                ),
+            )
+            # 同一条规范消息的第二条来源引用：跨来源去重后的形态。
+            connection.execute(
+                """
+                INSERT INTO public.message_source_ref (
+                    id, message_id, owner_id, contact_id,
+                    source_kind, source_document_id, source_locator, raw_payload
+                ) VALUES (gen_random_uuid(), %s, %s, %s,
+                          'source_document', %s, 'dedup:1', '{}'::jsonb)
+                """,
+                (
+                    message_id,
+                    self.owner_id,
+                    self.contact_id,
+                    second_source_id,
+                ),
+            )
+        scope = ContactScope(self.owner_id, self.contact_id)
+        memory_store = PostgresMemoryStore(TEST_DATABASE_URL)
+        candidate = memory_store.create_candidate(
+            MemoryCandidate(
+                candidate_id=uuid4(),
+                scope=scope,
+                text="被两个来源共同支持的合成记忆",
+                category=MemoryCategory.COMMON_FACT,
+                source_ids=(message_id,),
+            )
+        )
+        memory = memory_store.confirm(scope=scope, candidate_id=candidate.candidate_id)
+
+        # 删除导入来源：只移除其引用，消息与派生资料保留。
+        self.deletion_repository.delete_source(
+            owner_id=self.owner_id,
+            contact_id=self.contact_id,
+            source_document_id=imported.source_document_id,
+        )
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            kept = connection.execute(
+                """
+                SELECT
+                    (SELECT count(*) FROM public.message WHERE id = %s),
+                    (SELECT count(*) FROM public.message_source_ref
+                     WHERE message_id = %s),
+                    (SELECT count(*) FROM public.wechat_message_metadata
+                     WHERE message_id = %s)
+                """,
+                (message_id, message_id, message_id),
+            ).fetchone()
+            stored_memory = connection.execute(
+                "SELECT status, source_ids FROM public.confirmed_memory "
+                "WHERE id = %s",
+                (memory.memory_id,),
+            ).fetchone()
+        self.assertEqual(kept, (1, 1, 1))
+        self.assertEqual(stored_memory[0], "active")
+        self.assertEqual(tuple(stored_memory[1]), (message_id,))
+
+        # 删除最后一个来源：消息、微信身份与派生资料全部清理。
+        self.deletion_repository.delete_source(
+            owner_id=self.owner_id,
+            contact_id=self.contact_id,
+            source_document_id=second_source_id,
+        )
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            cleaned = connection.execute(
+                """
+                SELECT
+                    (SELECT count(*) FROM public.message WHERE id = %s),
+                    (SELECT count(*) FROM public.message_source_ref
+                     WHERE message_id = %s),
+                    (SELECT count(*) FROM public.wechat_message_metadata
+                     WHERE message_id = %s)
+                """,
+                (message_id, message_id, message_id),
+            ).fetchone()
+            final_memory = connection.execute(
+                "SELECT status FROM public.confirmed_memory WHERE id = %s",
+                (memory.memory_id,),
+            ).fetchone()
+        self.assertEqual(cleaned, (0, 0, 0))
+        self.assertEqual(final_memory[0], "deleted")
+
     def test_delete_source_cleans_owner_memory_supported_by_source(self) -> None:
         imported = self.ingest_repository.import_document(
             owner_id=self.owner_id,
@@ -321,9 +485,18 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
         )
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             message_id = connection.execute(
-                "SELECT id FROM public.message WHERE source_document_id = %s "
-                "ORDER BY id LIMIT 1",
-                (imported.source_document_id,),
+                """
+                SELECT message_id
+                FROM public.message_source_ref
+                WHERE owner_id = %s AND contact_id = %s
+                  AND source_document_id = %s
+                ORDER BY message_id LIMIT 1
+                """,
+                (
+                    self.owner_id,
+                    self.contact_id,
+                    imported.source_document_id,
+                ),
             ).fetchone()[0]
         owner_store = PostgresOwnerMemoryStore(TEST_DATABASE_URL)
         memory = owner_store.create(
@@ -406,8 +579,17 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
                 (imported.source_document_id,),
             ).fetchone()
             message_count = connection.execute(
-                "SELECT count(*) FROM public.message WHERE source_document_id = %s",
-                (imported.source_document_id,),
+                """
+                SELECT count(*)
+                FROM public.message_source_ref
+                WHERE owner_id = %s AND contact_id = %s
+                  AND source_document_id = %s
+                """,
+                (
+                    self.owner_id,
+                    self.contact_id,
+                    imported.source_document_id,
+                ),
             ).fetchone()[0]
 
         self.assertEqual(source, ("delete_failed", "storage_delete_failed"))
@@ -441,12 +623,18 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
             state = connection.execute(
                 """
                 SELECT status,
-                       (SELECT count(*) FROM public.message
-                        WHERE source_document_id = %s)
+                       (SELECT count(*) FROM public.message_source_ref
+                        WHERE owner_id = %s AND contact_id = %s
+                          AND source_document_id = %s)
                 FROM public.source_document
                 WHERE id = %s
                 """,
-                (imported.source_document_id, imported.source_document_id),
+                (
+                    self.owner_id,
+                    self.contact_id,
+                    imported.source_document_id,
+                    imported.source_document_id,
+                ),
             ).fetchone()
         self.assertEqual(state, ("deleted", 0))
 
@@ -485,8 +673,17 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
                 (self.owner_id, self.contact_id),
             ).fetchall()
             message_count = connection.execute(
-                "SELECT count(*) FROM public.message WHERE source_document_id = %s",
-                (second.source_document_id,),
+                """
+                SELECT count(*)
+                FROM public.message_source_ref
+                WHERE owner_id = %s AND contact_id = %s
+                  AND source_document_id = %s
+                """,
+                (
+                    self.owner_id,
+                    self.contact_id,
+                    second.source_document_id,
+                ),
             ).fetchone()[0]
 
         self.assertEqual(set(sources), {
@@ -515,12 +712,18 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
             state = connection.execute(
                 """
                 SELECT status,
-                       (SELECT count(*) FROM public.message
-                        WHERE source_document_id = %s)
+                       (SELECT count(*) FROM public.message_source_ref
+                        WHERE owner_id = %s AND contact_id = %s
+                          AND source_document_id = %s)
                 FROM public.source_document
                 WHERE id = %s
                 """,
-                (imported.source_document_id, imported.source_document_id),
+                (
+                    self.owner_id,
+                    self.contact_id,
+                    imported.source_document_id,
+                    imported.source_document_id,
+                ),
             ).fetchone()
         self.assertEqual(state, ("active", 6))
 
