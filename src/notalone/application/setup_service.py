@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Protocol
 from uuid import UUID, uuid4
 
+from notalone.runtime_config import _writable_env_path
+
 
 class OwnerDirectory(Protocol):
     """owner 初始化所需的最小持久化边界。"""
@@ -59,6 +61,9 @@ class SetupService:
                 owner_id = getattr(owners[0], "owner_id", None)
             if owner_id is None:
                 raise RuntimeError("owner 初始化结果结构无效。")
+            # 既有 owner 也把 id 写入 .env：避免后端进程以 owner 未初始化
+            # 模式运行导致重启循环（AppModel 向导完成后会重启后端）。
+            self._persist_owner_id(owner_id)
             return {"owner_id": str(owner_id), "created": False}
         owner_id = uuid4()
         self._owner_directory.create_owner(owner_id, name)
@@ -109,10 +114,3 @@ class SetupService:
         return path
 
 
-def _writable_env_path() -> Path:
-    """项目根目录下的 .env（与 runtime_config 的路径策略一致）。"""
-
-    candidate = Path(__file__).resolve().parents[3] / ".env"
-    if candidate.exists():
-        return candidate
-    return Path(os.environ.get("NOTALONE_ENV_PATH", str(candidate)))

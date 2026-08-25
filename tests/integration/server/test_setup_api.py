@@ -181,6 +181,81 @@ class SetupApiContractTest(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {"error": "setup_unavailable"})
 
+    # ------------------------------------------------------------------
+    # owner 未初始化（首启向导场景）
+    # ------------------------------------------------------------------
+
+    def test_owner_uninitialized_blocks_non_setup_endpoints(self) -> None:
+        app = create_app(
+            database_url="postgresql:///notalone_test",
+            owner_id=None,
+            token="test-token",
+            setup_service=self.setup,  # type: ignore[arg-type]
+        )
+        client = InProcessClient(app)
+
+        for path in (
+            "/api/contacts",
+            "/api/contacts/22222222-2222-2222-2222-222222222222/messages",
+            "/api/memories",
+            "/api/imports",
+            "/api/tasks",
+            "/api/skills",
+            "/api/ledger/summary",
+            "/api/sync/status",
+        ):
+            with self.subTest(path=path):
+                response = client.get(
+                    path,
+                    headers={"Authorization": "Bearer test-token"},
+                )
+                self.assertEqual(response.status_code, 503)
+                self.assertEqual(
+                    response.json(), {"error": "owner_uninitialized"}
+                )
+
+    def test_owner_uninitialized_allows_setup_endpoints(self) -> None:
+        app = create_app(
+            database_url="postgresql:///notalone_test",
+            owner_id=None,
+            token="test-token",
+            setup_service=self.setup,  # type: ignore[arg-type]
+        )
+        client = InProcessClient(app)
+
+        status = client.get(
+            "/api/setup/status",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        self.assertEqual(status.status_code, 200)
+        self.assertIn("initialized", status.json())
+
+        initialize = client.request(
+            "POST",
+            "/api/setup/initialize",
+            headers={"Authorization": "Bearer test-token"},
+            body=json.dumps({"display_name": "我的关系助手"}).encode("utf-8"),
+        )
+        self.assertEqual(initialize.status_code, 200)
+        self.assertEqual(initialize.json()["created"], True)
+
+    def test_owner_uninitialized_allows_credentials_status(self) -> None:
+        app = create_app(
+            database_url="postgresql:///notalone_test",
+            owner_id=None,
+            token="test-token",
+            setup_service=self.setup,  # type: ignore[arg-type]
+        )
+        client = InProcessClient(app)
+
+        response = client.get(
+            "/api/settings/credentials",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("provider", response.json())
+        self.assertIn("configured", response.json())
+
 
 if __name__ == "__main__":
     unittest.main()

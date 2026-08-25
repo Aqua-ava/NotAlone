@@ -274,3 +274,31 @@ public struct CredentialsStatus: Decodable, Equatable, Sendable {
     public let provider: String
     public let configured: Bool
 }
+
+// MARK: - 首启向导
+
+public struct SetupStatus: Decodable, Equatable, Sendable {
+    public let initialized: Bool
+    public let ownerConfigured: Bool
+    public let credentialsConfigured: Bool
+
+    public init(
+        initialized: Bool,
+        ownerConfigured: Bool,
+        credentialsConfigured: Bool
+    ) {
+        self.initialized = initialized
+        self.ownerConfigured = ownerConfigured
+        self.credentialsConfigured = credentialsConfigured
+    }
+}
+
+public struct SetupInitializeResponse: Decodable, Equatable, Sendable {
+    public let ownerId: String
+    public let created: Bool
+}
+
+public struct SetupCredentialsResponse: Decodable, Equatable, Sendable {
+    public let provider: String
+    public let configured: Bool
+}

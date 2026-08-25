@@ -15,6 +15,36 @@ python -m pip install -e .
 命令启动时会自动读取当前目录或上级项目目录中的 `.env`；已经存在的 shell 环境变量优先。
 `.env` 已被 Git 忽略，不应提交或分享。也可以用 `NOTALONE_ENV_FILE` 指定受控配置文件。
 
+## 安装与首次配置
+
+NotAlone 以源码 + 安装脚本分发（ADR-021）。机器级安装只做环境准备，不读写任何密钥：
+
+```bash
+zsh scripts/install.sh
+```
+
+脚本按顺序完成：检查依赖（macOS / Homebrew / conda / PostgreSQL / swiftc）→ 创建
+`NotAlone` conda 环境并 `pip install -e .` → 启动本地 PostgreSQL 并创建 `notalone_dev`
+数据库 → 按文件名顺序应用 `database/migrations/*.sql` 全部迁移 → 生成仅含数据库连接的
+受控 `.env`（0600）→ 构建 macOS App 与前台同步探针。脚本可安全重复运行：已存在的环境、
+数据库、迁移与 `.env` 都会被跳过或保留，不会重复创建或破坏数据。
+
+用户级首次配置由 App 首启向导完成：打开 `macos_app/build/NotAloneApp.app` 后，向导引导
+填写模型凭据（DeepSeek API Key，可选，界面不回显）与初始化 owner。owner 初始化与导入命令
+的 `--initialize-owner` 共用同一张 owner 表与幂等语义；完成初始化后 App 自动重启后端进入
+主界面。凭据经受控 `.env`（0600）保存，界面只显示"是否已配置"。
+
+开源用户的最低环境要求（必须在本地自行准备）：
+
+- macOS（探针与 App 为原生应用）
+- 微信桌面版（前台增量同步的观察对象）
+- 自装 `wechat-cli`（读取当前绑定会话文字增量；可用 `NOTALONE_WECHAT_CLI` 指定路径）
+- PostgreSQL（本地库，安装脚本默认创建 `notalone_dev`）
+- Python 环境（脚本用 conda 创建 `NotAlone` 环境）
+- 屏幕录制权限（需授予构建出的 App；稳定签名下重建不需要重新授权）
+
+安装脚本失败时会给出引导与下一步建议；脚本可重跑，不会留下半初始化的数据库状态。
+
 ## 候选回复纵切
 
 仓库现在包含内部开发用的候选回复纵切：调用者只经过

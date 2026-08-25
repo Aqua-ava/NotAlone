@@ -70,6 +70,11 @@ class SetupServiceTest(unittest.TestCase):
         self.assertEqual(result["created"], False)
         self.assertEqual(result["owner_id"], str(OWNER_ID))
         self.assertEqual(self.directory.created, [])
+        # 既有 owner 也把 id 写入 .env：避免后端以未初始化模式重启循环。
+        self.assertIn(
+            f"NOTALONE_OWNER_ID={OWNER_ID}",
+            self.env_path.read_text(encoding="utf-8"),
+        )
 
     def test_initialize_rejects_empty_name(self) -> None:
         with self.assertRaises(ValueError):

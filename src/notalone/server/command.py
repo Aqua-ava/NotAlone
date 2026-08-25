@@ -13,6 +13,7 @@ from notalone.front_sync.factory import (
     build_front_sync_engine,
     owner_wechat_account_scope,
 )
+from notalone.application.setup_service import SetupService
 from notalone.runtime_config import load_project_env
 from notalone.server.app import BackendServer, create_app
 from notalone.server.connection_info import (
@@ -42,11 +43,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     database_url = os.environ.get("NOTALONE_DATABASE_URL", "").strip()
     owner_value = os.environ.get("NOTALONE_OWNER_ID", "").strip()
-    if not database_url or not owner_value:
-        print("缺少本地后端所需的数据库或 owner 配置。", file=sys.stderr)
+    if not database_url:
+        print("缺少本地后端所需的数据库配置。", file=sys.stderr)
         return 2
     try:
-        owner_id = UUID(owner_value)
+        owner_id = UUID(owner_value) if owner_value else None
     except ValueError:
         print("本地后端配置无效。", file=sys.stderr)
         return 2
@@ -57,15 +58,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     events = EventBus()
+    setup_service = _build_setup_service(database_url)
     sync_host = _build_sync_host(
         database_url=database_url,
         owner_id=owner_id,
         interval=args.sync_interval,
         events=events,
     )
-    reply_service = build_reply_service(
-        database_url=database_url,
-        owner_id=owner_id,
+    reply_service = (
+        build_reply_service(database_url=database_url, owner_id=owner_id)
+        if owner_id is not None
+        else None
     )
     memory_service = _build_memory_service(database_url)
     import_service = _build_import_service(database_url)
@@ -85,6 +88,7 @@ def main(argv: list[str] | None = None) -> int:
             task_host=task_host,
             skill_service=skill_service,
             ledger_service=ledger_service,
+            setup_service=setup_service,
         )
         server = BackendServer(app, host=args.host, port=args.port)
         host, port = server.start()
@@ -93,7 +97,12 @@ def main(argv: list[str] | None = None) -> int:
             sync_host.stop()
         print("本地后端配置无效。", file=sys.stderr)
         return 2
-    if sync_host is None:
+    if owner_id is None:
+        print(
+            "owner 尚未初始化；首启向导请使用 /api/setup 端点。",
+            file=sys.stderr,
+        )
+    if sync_host is None and owner_id is not None:
         print(
             "owner 还没有微信渠道身份；同步端点返回 sync_unavailable。",
             file=sys.stderr,
@@ -135,15 +144,31 @@ def _serve_until_stopped(server: BackendServer) -> None:
     server_thread.join()
 
 
+def _build_setup_service(database_url: str) -> SetupService | None:
+    """装配首启向导服务；owner 目录不可用时返回 None。"""
+
+    from notalone.application.setup_service import SetupService
+    from notalone.persistence.setup_owner_directory import (
+        PostgresOwnerDirectory,
+    )
+
+    try:
+        return SetupService(owner_directory=PostgresOwnerDirectory(database_url))
+    except Exception:
+        return None
+
+
 def _build_sync_host(
     *,
     database_url: str,
-    owner_id: UUID,
+    owner_id: UUID | None,
     interval: float,
     events: EventBus,
 ) -> SyncHost | None:
     """有微信渠道身份时装配同步宿主；否则返回 None（同步不可用）。"""
 
+    if owner_id is None:
+        return None
     account_scope = owner_wechat_account_scope(
         database_url=database_url,
         owner_id=owner_id,

@@ -99,6 +99,11 @@ struct MainWindowView: View {
         .sheet(isPresented: $showBindingConfirmation) {
             bindingConfirmationSheet
         }
+        .overlay {
+            if model.setupStatus?.initialized == false {
+                setupWizardView
+            }
+        }
         .onChange(of: model.status?.candidates.isEmpty) { _, isEmpty in
             guard isEmpty == false, !dismissBindingSheet else { return }
             selectedCandidate = nil
@@ -107,6 +112,63 @@ struct MainWindowView: View {
     }
 
     @State private var showBindingConfirmation = false
+    // 首启向导输入
+    @State private var setupDisplayName = ""
+    @State private var setupApiKey = ""
+
+    // 首启向导覆盖层：owner 未初始化时全屏展示，填写展示名称与模型凭据。
+    // 凭据不回显；提交后由 AppModel 重启后端进入正常业务模式。
+    private var setupWizardView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "person.crop.circle.badge.checkmark")
+                .font(.system(size: 44))
+                .foregroundStyle(.tint)
+            Text("欢迎使用 NotAlone")
+                .font(.largeTitle.weight(.semibold))
+            Text("先完成首次初始化：设置一个联系人展示名称，并填入模型凭据（可选，可稍后在设置页补充）。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 380)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("联系人展示名称")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextField("例如：小明", text: $setupDisplayName)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 380)
+                Text("模型凭据（DeepSeek API Key，可选）")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                SecureField("sk-…", text: $setupApiKey)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 380)
+            }
+            if let error = model.setupError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: 380)
+            }
+            if model.setupInFlight {
+                ProgressView("正在完成初始化…")
+            }
+            Button {
+                model.completeSetup(displayName: setupDisplayName, apiKey: setupApiKey)
+            } label: {
+                Text("完成初始化")
+                    .frame(minWidth: 120)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(
+                model.setupInFlight
+                    || setupDisplayName.trimmingCharacters(in: .whitespaces).isEmpty
+            )
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
 
     // 有待确认候选绑定时弹出一次性选择列表；确认前同步保持暂停。
     // 用户手动关闭后本会话不再自动弹出（dismissBindingSheet 标记），

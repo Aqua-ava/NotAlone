@@ -131,7 +131,7 @@ class BackendApp:
         *,
         contact_directory: ContactDirectory,
         events: EventBus,
-        owner_id: UUID,
+        owner_id: UUID | None,
         token: str,
         sync_control: SyncControlPort | None = None,
         message_stream: MessageStream | None = None,
@@ -143,7 +143,7 @@ class BackendApp:
         ledger_service: LedgerService | None = None,
         setup_service: SetupService | None = None,
     ) -> None:
-        if not isinstance(owner_id, UUID):
+        if owner_id is not None and not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
         if not token:
             raise ValueError("token 不能为空。")
@@ -189,6 +189,15 @@ class BackendApp:
             return _json_response(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
         method_upper = method.upper()
         path_value = urlsplit(path).path
+        if (
+            self._owner_id is None
+            and not path_value.startswith("/api/setup")
+            and path_value != "/api/settings/credentials"
+        ):
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "owner_uninitialized"},
+            )
         if method_upper == "GET" and path_value == "/api/contacts":
             try:
                 contacts = self._contact_directory.list_contacts(self._owner_id)
@@ -1085,7 +1094,7 @@ class BackendServer:
 def create_app(
     *,
     database_url: str,
-    owner_id: UUID,
+    owner_id: UUID | None,
     token: str | None = None,
     events: EventBus | None = None,
     sync_control: SyncControlPort | None = None,

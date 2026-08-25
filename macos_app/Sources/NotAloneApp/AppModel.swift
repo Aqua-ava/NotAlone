@@ -61,6 +61,12 @@ final class AppModel: ObservableObject {
     @Published var skillPreview: SkillPreview?
     @Published private(set) var credentialsStatus: CredentialsStatus?
 
+    // MARK: - 首启向导
+    // owner 未初始化时后端只开放 setup 端点；向导完成初始化后重启后端。
+    @Published private(set) var setupStatus: SetupStatus?
+    @Published private(set) var setupInFlight = false
+    @Published var setupError: String?
+
     enum MessageStreamState: Equatable {
         case idle
         case loadingFirstPage
@@ -682,13 +688,95 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - 首启向导
+
+    // 查询初始化状态；owner 未初始化时前端只展示向导，轮询不再刷新业务数据。
+    func checkSetupStatus() {
+        guard let client else { return }
+        Task {
+            do {
+                let status = try await client.setupStatus()
+                setupStatus = status
+                setupError = nil
+                if status.initialized {
+                    await proceedAfterSetupIfNeeded()
+                }
+            } catch {
+                setupError = Self.describe(error)
+            }
+        }
+    }
+
+    // owner 已存在：若后端进程仍以未初始化模式运行（读旧的 .env），重启
+    // 一次让 NOTALONE_OWNER_ID 生效；否则直接进入正常业务模式。
+    private func proceedAfterSetupIfNeeded() async {
+        guard let client else { return }
+        do {
+            _ = try await client.syncStatus()
+        } catch BackendClient.BackendError.ownerUninitialized {
+            await restartBackendIfNeeded()
+            return
+        } catch {
+            // 同步不可用（例如尚无渠道身份）不影响进入业务模式。
+        }
+        startSseSubscription()
+        if selectedContactId != nil && messages.isEmpty {
+            loadFirstMessagePage()
+        }
+    }
+
+    // 首启向导提交：写凭据（可留空跳过）→ 初始化 owner → 重启后端。
+    func completeSetup(displayName: String, apiKey: String) {
+        guard let client, !setupInFlight else { return }
+        setupInFlight = true
+        setupError = nil
+        Task {
+            defer { setupInFlight = false }
+            do {
+                let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmedKey.isEmpty {
+                    _ = try await client.writeCredentials(apiKey: trimmedKey)
+                }
+                let result = try await client.initializeOwner(displayName: displayName)
+                setupStatus = SetupStatus(
+                    initialized: true,
+                    ownerConfigured: true,
+                    credentialsConfigured: !trimmedKey.isEmpty
+                )
+                lastOperationMessage = result.created
+                    ? "已完成初始化，正在进入主界面…"
+                    : "已连接既有 owner，正在进入主界面…"
+                await restartBackendIfNeeded()
+            } catch {
+                setupError = Self.describe(error)
+            }
+        }
+    }
+
+    // owner 初始化写入 .env 后，后端进程需重启才能以已初始化模式运行。
+    // 必须先真正终止旧进程（否则 ensureBackendLaunched 会复用旧连接，
+    // 后端仍以 owner 未初始化模式运行，造成重启循环）。
+    private func restartBackendIfNeeded() async {
+        sseClient?.stop()
+        sseClient = nil
+        clientConnection = nil
+        client = nil
+        supervisor.terminate()
+        supervisor.waitForExit(timeout: 5)
+        backendState = .launching
+        await ensureBackendLaunched()
+    }
+
     // MARK: - 轮询
 
     private func runPollLoop() async {
         await ensureBackendLaunched()
         while !Task.isCancelled {
-            await refreshStatus()
-            await refreshContacts()
+            if setupStatus?.initialized != false {
+                // owner 已初始化（或状态未知）：正常轮询业务数据。
+                await refreshStatus()
+                await refreshContacts()
+            }
             if !supervisor.isRunning {
                 // 后端进程崩溃或退出后自动重启，保持"监管"语义。
                 await ensureBackendLaunched()
@@ -729,13 +817,16 @@ final class AppModel: ObservableObject {
         clientConnection = connection
         client = BackendClient(connection: connection)
         backendState = .running
-        startSseSubscription()
+        // owner 未初始化时同步/事件端点按设计 503；先查 setup 状态，
+        // 已初始化后才启动 SSE 订阅与业务数据加载。
+        checkSetupStatus()
         if selectedContactId != nil && messages.isEmpty {
             loadFirstMessagePage()
         }
     }
 
     // 握手文件指向的后端仍可连接时直接复用；连接失败视为无既有实例。
+    // owner 未初始化时 syncStatus 按设计 503，改用 setupStatus 探测。
     private func probeExistingBackend() async -> BackendConnection? {
         let infoPath = BackendConnection.infoPath()
         guard let recorded = try? BackendConnection.read(from: infoPath) else {
@@ -743,7 +834,7 @@ final class AppModel: ObservableObject {
         }
         let probe = BackendClient(connection: recorded)
         do {
-            _ = try await probe.syncStatus()
+            _ = try await probe.setupStatus()
             return recorded
         } catch {
             // 文件残留但后端已退出：交给 launch 重新拉起并覆盖握手文件。
@@ -775,6 +866,8 @@ final class AppModel: ObservableObject {
 
     private func refreshStatus() async {
         guard let client else { return }
+        // owner 未初始化时同步状态端点按设计返回 503，不视为后端故障。
+        guard setupStatus?.initialized != false else { return }
         do {
             status = try await client.syncStatus()
             // 上次失败后状态一恢复就回到 running，允许界面自动重连。
@@ -800,6 +893,8 @@ final class AppModel: ObservableObject {
     private static func describe(_ error: Error) -> String {
         if let backendError = error as? BackendClient.BackendError {
             switch backendError {
+            case .ownerUninitialized:
+                return "owner 尚未初始化（请完成首启向导）"
             case .syncUnavailable:
                 return "同步不可用（可能尚未初始化微信渠道身份）"
             case .badStatus(let code):

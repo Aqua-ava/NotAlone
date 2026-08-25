@@ -156,6 +156,64 @@ class ServerCommandProcessTest(unittest.TestCase):
                 process.wait(timeout=10)
         self.assertFalse(self.info_path.exists())
 
+    def test_owner_uninitialized_starts_for_setup(self) -> None:
+        """首启向导场景：无 owner 配置后端仍启动，setup 可用、业务 503。"""
+
+        env = dict(self.env)
+        env.pop("NOTALONE_OWNER_ID", None)
+        process = subprocess.Popen(
+            [sys.executable, "-m", "notalone.server.command", "--port", "0"],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            deadline = time.monotonic() + 15
+            while not self.info_path.exists():
+                if time.monotonic() > deadline:
+                    self.fail("握手文件未在 15 秒内写入。")
+                time.sleep(0.1)
+            address = next(
+                line.removeprefix("address=")
+                for line in self.info_path.read_text(encoding="utf-8").splitlines()
+                if line.startswith("address=")
+            )
+            token = next(
+                line.removeprefix("token=")
+                for line in self.info_path.read_text(encoding="utf-8").splitlines()
+                if line.startswith("token=")
+            )
+
+            # setup/status 可用并返回结构化的初始化状态（是否已初始化取决于
+            # 库内既有 owner；本测试只钉住端点可用与结构）。
+            setup_request = urllib.request.Request(
+                f"http://{address}/api/setup/status",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            with urllib.request.urlopen(setup_request, timeout=15) as response:
+                self.assertEqual(response.status, 200)
+                payload = json.loads(response.read().decode("utf-8"))
+                self.assertIn("initialized", payload)
+                self.assertIn("owner_configured", payload)
+                self.assertIn("credentials_configured", payload)
+
+            # 业务端点失败关闭为 owner_uninitialized。
+            contacts_request = urllib.request.Request(
+                f"http://{address}/api/contacts",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            with self.assertRaises(urllib.error.HTTPError) as context:
+                urllib.request.urlopen(contacts_request, timeout=15)
+            self.assertEqual(context.exception.code, 503)
+            body = json.loads(context.exception.read().decode("utf-8"))
+            self.assertEqual(body["error"], "owner_uninitialized")
+        finally:
+            if process.poll() is None:
+                process.send_signal(signal.SIGTERM)
+                process.wait(timeout=10)
+        self.assertFalse(self.info_path.exists())
+
     def test_sync_requires_token_and_unavailable_without_identity(self) -> None:
         process = self._start_server()
         try:

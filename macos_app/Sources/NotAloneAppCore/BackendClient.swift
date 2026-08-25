@@ -6,6 +6,7 @@ public struct BackendClient: Sendable {
     public enum BackendError: Error, Equatable {
         case badStatus(Int)
         case syncUnavailable
+        case ownerUninitialized
         case notFound
         case confirmRejected(reason: String)
         case replyRejected(reason: String)
@@ -412,6 +413,34 @@ public struct BackendClient: Sendable {
         )
     }
 
+    // MARK: - 首启向导
+
+    // 初始化状态：owner 是否已初始化、凭据是否已配置（不回显密钥）。
+    public func setupStatus() async throws -> SetupStatus {
+        try await request(
+            path: "api/setup/status",
+            method: "GET"
+        )
+    }
+
+    // 幂等初始化 owner：已存在时返回既有 owner（created=false）。
+    public func initializeOwner(displayName: String) async throws -> SetupInitializeResponse {
+        try await requestWithBody(
+            path: "api/setup/initialize",
+            method: "POST",
+            body: ["display_name": displayName]
+        )
+    }
+
+    // 写入模型凭据到受控 .env；服务端不回显密钥。
+    public func writeCredentials(apiKey: String) async throws -> SetupCredentialsResponse {
+        try await requestWithBody(
+            path: "api/setup/credentials",
+            method: "POST",
+            body: ["provider": "deepseek", "api_key": apiKey]
+        )
+    }
+
     // MARK: - 内部
 
     private func request<T: Decodable>(
@@ -437,7 +466,7 @@ public struct BackendClient: Sendable {
         let (data, response) = try await URLSession.shared.data(for: urlRequest)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 503 {
-            throw BackendError.syncUnavailable
+            throw Self.classifyUnavailable(data: data)
         }
         if status == 404 {
             throw BackendError.notFound
@@ -472,7 +501,7 @@ public struct BackendClient: Sendable {
         let (data, response) = try await URLSession.shared.data(for: urlRequest)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 503 {
-            throw BackendError.syncUnavailable
+            throw Self.classifyUnavailable(data: data)
         }
         if status == 404 {
             throw BackendError.notFound
@@ -500,5 +529,19 @@ extension JSONDecoder {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return decoder
+    }
+}
+
+private extension BackendClient {
+    // 503 统一映射为不可用；区分 owner 未初始化（首启向导）与同步不可用。
+    static func classifyUnavailable(data: Data) -> BackendError {
+        let errorCode = (try? JSONDecoder.snakeCaseDecoder.decode(
+            RejectionEnvelope.self,
+            from: data
+        ))?.error
+        if errorCode == "owner_uninitialized" {
+            return .ownerUninitialized
+        }
+        return .syncUnavailable
     }
 }
