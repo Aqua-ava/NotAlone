@@ -19,3 +19,4 @@ Type: task
 
 - 来源规格：`.scratch/native-app-backend/spec.md`。
 - 冒烟沿用仓库既有冒烟记录惯例（参照 `.scratch/local-wechat-cli-observation/smoke/`）。
+- 移交人工（2026-08-25）：本票为 `ready-for-human`，依赖真实微信前台环境，Agent 无法代跑。跟随同步链路（03/05 已接线）可验证；需人工在真实微信下实测清单五项的流稳定性、水位与失败关闭行为，并把结果与剩余风险写入本票 Answer。

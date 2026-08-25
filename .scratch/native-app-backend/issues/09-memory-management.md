@@ -3,7 +3,7 @@
 Type: task
 
 **Triage:** ready-for-agent
-**State:** claimed
+**State:** resolved
 
 **What to build:** 用户在管理页查看所选联系人的关系记忆列表（正文、分类、主题、采纳标记与有效期），手动录入、修正与删除记忆；低置信的 pending 候选第一次可以人工处理：确认走与自动采纳相同的落库裁决路径并标 `manual`，丢弃使候选失效并计入删除指纹。
 

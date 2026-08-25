@@ -18,3 +18,10 @@ Type: task
 ## Comments
 
 - 来源规格：`.scratch/native-app-backend/spec.md`。架构依据：ADR-021，修订 ADR-013。
+
+## 收尾记录（2026-08-25）
+
+- 本票仅后端首启向导骨架落地，未整体完成；此轮为会话中断后的收尾，剩余功能按用户决定暂缓不做。
+- 已完成并可工作（后端）：`application/setup_service.py`（owner 初始化幂等、凭据受控写入 0600 .env、初始化状态查询）与 `tests/unit/application/test_setup_service.py`、`tests/integration/server/test_setup_api.py`；`app.py` 接线 `/api/setup/{status,initialize,credentials}`，收尾时补齐缺失的 `_parse_setup_json`，契约测试与单测全绿。
+- 未完成（暂缓）：Swift 首启向导 UI（检测未初始化 → 全屏向导）、`scripts/install.sh` 安装脚本、README 最低环境要求声明。清单第一、二、四、五项均未交付。
+- 首启向导与导入 `--initialize-owner` 的同一事务语义/幂等（清单第三项）在后端 SetupService 已体现，但未与 Swift/CLI 入口核对，仍视为未完成。

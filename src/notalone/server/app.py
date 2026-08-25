@@ -31,6 +31,7 @@ from notalone.application.import_service import (
     ImportService,
     TaskHost,
 )
+from notalone.application.setup_service import SetupService
 from notalone.application.skill_service import (
     LedgerService,
     SkillImportRejected,
@@ -102,6 +103,10 @@ class SkillRequestInvalid(ValueError):
     """Skill 管理请求结构或契约无效；不携带请求内容细节。"""
 
 
+class SetupRequestInvalid(ValueError):
+    """首启向导请求结构或契约无效；不携带请求内容细节。"""
+
+
 class BackendApp:
     """只提供本地 API 的无框架 HTTP 应用。"""
 
@@ -114,6 +119,7 @@ class BackendApp:
         "_message_stream",
         "_owner_id",
         "_reply_service",
+        "_setup_service",
         "_skill_service",
         "_sync_control",
         "_task_host",
@@ -135,6 +141,7 @@ class BackendApp:
         task_host: TaskHost | None = None,
         skill_service: SkillService | None = None,
         ledger_service: LedgerService | None = None,
+        setup_service: SetupService | None = None,
     ) -> None:
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
@@ -148,6 +155,7 @@ class BackendApp:
         self._message_stream = message_stream
         self._reply_service = reply_service
         self._owner_id = owner_id
+        self._setup_service = setup_service
         self._skill_service = skill_service
         self._sync_control = sync_control
         self._task_host = task_host
@@ -245,6 +253,12 @@ class BackendApp:
                     "provider": "deepseek",
                     "configured": configured,
                 },
+            )
+        if path_value.startswith("/api/setup"):
+            return self._handle_setup(
+                method=method_upper,
+                path=path_value,
+                body=request_body,
             )
         if path_value.startswith("/api/sync"):
             return self._handle_sync(
@@ -754,6 +768,53 @@ class BackendApp:
 
         raise ImportTaskRequestInvalid()
 
+    def _handle_setup(self, *, method: str, path: str, body: bytes) -> Response:
+        """处理首启向导端点；失败关闭且不回显正文与密钥。"""
+
+        service = self._setup_service
+        if service is None:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "setup_unavailable"}
+            )
+        try:
+            if path == "/api/setup/status" and method == "GET":
+                return _json_response(HTTPStatus.OK, service.status())
+            if path == "/api/setup/initialize" and method == "POST":
+                payload = _parse_setup_json(body)
+                display_name = payload.get("display_name")
+                if not isinstance(display_name, str) or not display_name.strip():
+                    raise SetupRequestInvalid()
+                try:
+                    return _json_response(
+                        HTTPStatus.OK,
+                        service.initialize_owner(display_name=display_name),
+                    )
+                except ValueError:
+                    raise SetupRequestInvalid() from None
+            if path == "/api/setup/credentials" and method == "POST":
+                payload = _parse_setup_json(body)
+                provider = payload.get("provider")
+                api_key = payload.get("api_key")
+                if provider != "deepseek" or not isinstance(api_key, str) or not api_key.strip():
+                    raise SetupRequestInvalid()
+                try:
+                    return _json_response(
+                        HTTPStatus.OK,
+                        service.write_credentials(api_key=api_key),
+                    )
+                except ValueError:
+                    raise SetupRequestInvalid() from None
+            raise SetupRequestInvalid()
+        except SetupRequestInvalid:
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "setup_request_invalid"}
+            )
+        except Exception:
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "setup_operation_failed"},
+            )
+
     def _handle_ledger(self, *, method: str) -> Response:
         """处理台账概览端点；只投影元数据，不含正文。"""
 
@@ -1035,6 +1096,7 @@ def create_app(
     task_host: TaskHost | None = None,
     skill_service: SkillService | None = None,
     ledger_service: LedgerService | None = None,
+    setup_service: SetupService | None = None,
 ) -> BackendApp:
     """创建服务应用；未显式传 token 时在启动时生成随机 token。"""
 
@@ -1051,6 +1113,7 @@ def create_app(
         task_host=task_host,
         skill_service=skill_service,
         ledger_service=ledger_service,
+        setup_service=setup_service,
     )
 
 
@@ -1288,7 +1351,6 @@ def _parse_memory_json(body: bytes) -> dict[str, object]:
 
 
 def _parse_skill_json(body: bytes) -> dict[str, object]:
-    """解析 Skill 请求体；任何异常收敛为 SkillRequestInvalid。"""
 
     try:
         payload = json.loads(body.decode("utf-8")) if body.strip() else None
@@ -1296,6 +1358,18 @@ def _parse_skill_json(body: bytes) -> dict[str, object]:
         raise SkillRequestInvalid() from None
     if not isinstance(payload, dict):
         raise SkillRequestInvalid()
+    return payload
+
+
+def _parse_setup_json(body: bytes) -> dict[str, object]:
+    """解析首启向导请求体；任何异常收敛为 SetupRequestInvalid。"""
+
+    try:
+        payload = json.loads(body.decode("utf-8")) if body.strip() else None
+    except (UnicodeDecodeError, ValueError):
+        raise SetupRequestInvalid() from None
+    if not isinstance(payload, dict):
+        raise SetupRequestInvalid()
     return payload
 
 

@@ -3,7 +3,7 @@
 Type: task
 
 **Triage:** ready-for-agent
-**State:** open
+**State:** resolved
 
 **What to build:** 用户在管理页导入、启用、停用、回滚、删除回复 Skill，并预览其内容与辅助资源；设置页管理模型凭据、探针路径与同步参数，并可打开探针调试窗口（OCR 文本与裁剪预览）；出站台账统计概览可供核对。
 
