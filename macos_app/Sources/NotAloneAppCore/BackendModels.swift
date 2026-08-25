@@ -201,3 +201,76 @@ public struct TaskStatusResponse: Decodable, Equatable, Sendable {
 public struct TaskStartResponse: Decodable, Equatable, Sendable {
     public let status: String
 }
+
+// MARK: - Skill 管理
+
+public struct SkillEntry: Decodable, Equatable, Sendable, Identifiable {
+    public let skillId: String
+    public let name: String
+    public let description: String
+    public let status: String
+    public let contactId: String?
+    public let currentVersionId: String?
+    public let currentVersionNumber: Int?
+    public let enabled: Bool
+
+    public var id: String { skillId }
+}
+
+public struct SkillListResponse: Decodable, Sendable {
+    public let skills: [SkillEntry]
+}
+
+public struct SkillImportResponse: Decodable, Equatable, Sendable {
+    public let skillId: String
+    public let name: String
+    public let versionNumber: Int
+    public let revision: Int
+    public let warnings: [String]
+}
+
+public struct SkillLifecycleResponse: Decodable, Equatable, Sendable {
+    public let skillId: String
+    public let status: String?
+    public let versionNumber: Int?
+    public let deleted: Bool?
+    public let name: String?
+}
+
+public struct SkillPreview: Decodable, Equatable, Sendable {
+    public let skillId: String
+    public let name: String?
+    public let description: String
+    public let versionNumber: Int
+    public let document: String
+    public let resources: [String]
+}
+
+// MARK: - 台账概览
+
+public struct LedgerSummary: Decodable, Equatable, Sendable {
+    public let totalCalls: Int
+    public let providerCounts: [String: Int]
+    public let outcomeCounts: [String: Int]
+    public let totalInputTokens: Int
+    public let totalOutputTokens: Int
+    public let recent: [LedgerEntryView]
+}
+
+public struct LedgerEntryView: Decodable, Equatable, Sendable {
+    public let entryId: String
+    public let provider: String
+    public let modelName: String
+    public let inputTokens: Int?
+    public let outputTokens: Int?
+    public let latencyMs: Int?
+    public let outcome: String
+    public let calledAt: String
+}
+
+// MARK: - 设置
+
+public struct CredentialsStatus: Decodable, Equatable, Sendable {
+    public let provider: String
+    public let configured: Bool
+}

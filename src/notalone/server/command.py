@@ -70,6 +70,8 @@ def main(argv: list[str] | None = None) -> int:
     memory_service = _build_memory_service(database_url)
     import_service = _build_import_service(database_url)
     task_host = _build_task_host(database_url, events)
+    skill_service = _build_skill_service(database_url)
+    ledger_service = _build_ledger_service(database_url)
     server: BackendServer | None = None
     try:
         app = create_app(
@@ -81,6 +83,8 @@ def main(argv: list[str] | None = None) -> int:
             memory_service=memory_service,
             import_service=import_service,
             task_host=task_host,
+            skill_service=skill_service,
+            ledger_service=ledger_service,
         )
         server = BackendServer(app, host=args.host, port=args.port)
         host, port = server.start()
@@ -245,6 +249,32 @@ def _build_task_host(database_url: str, events: EventBus) -> TaskHost | None:
             lock_connection_builder=build_lock_connection,
             event_publisher=publish_progress,
         )
+    except Exception:
+        return None
+
+
+def _build_skill_service(database_url: str) -> SkillService | None:
+    """装配 Skill 管理服务；仓库不可用时返回 None。"""
+
+    from notalone.application.skill_service import SkillService
+    from notalone.persistence.skill_library import PostgresSkillLibrary
+
+    try:
+        return SkillService(
+            management=PostgresSkillLibrary(database_url)
+        )
+    except Exception:
+        return None
+
+
+def _build_ledger_service(database_url: str) -> LedgerService | None:
+    """装配出站台账概览服务；仓库不可用时返回 None。"""
+
+    from notalone.application.skill_service import LedgerService
+    from notalone.persistence.outbound_ledger import PostgresOutboundLedger
+
+    try:
+        return LedgerService(ledger=PostgresOutboundLedger(database_url))
     except Exception:
         return None
 

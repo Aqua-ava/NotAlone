@@ -84,6 +84,62 @@ class PostgresSkillLibraryTest(unittest.TestCase):
                 (self.owner_id,),
             )
 
+    def test_list_owner_skills_lists_skills_with_status(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            package = Path(temporary_directory) / "warm-reply"
+            (package).mkdir(parents=True)
+            (package / "SKILL.md").write_text(
+                "---\n"
+                "name: warm-reply\n"
+                "description: 适合温暖回应时使用。\n"
+                "---\n\n"
+                "先回应对方，再给出下一步。\n",
+                encoding="utf-8",
+            )
+            result = self.library.import_package(self.owner_id, package)
+
+        entries = self.library.list_owner_skills(self.owner_id)
+
+        self.assertEqual(len(entries), 1)
+        entry = entries[0]
+        self.assertEqual(entry.skill_id, result.skill_id)
+        self.assertEqual(entry.name, "warm-reply")
+        self.assertEqual(entry.description, "适合温暖回应时使用。")
+        self.assertEqual(entry.status, "active")
+        self.assertIsNone(entry.contact_id)
+        self.assertEqual(entry.current_version_id, result.version_id)
+        self.assertEqual(entry.current_version_number, 1)
+        self.assertTrue(entry.enabled)
+
+    def test_list_owner_skills_is_owner_isolated(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            package = Path(temporary_directory) / "calm-reply"
+            (package).mkdir(parents=True)
+            (package / "SKILL.md").write_text(
+                "---\n"
+                "name: calm-reply\n"
+                "description: 适合平静回应时使用。\n"
+                "---\n\n"
+                "先稳定对方情绪，再说明立场。\n",
+                encoding="utf-8",
+            )
+            self.library.import_package(self.owner_id, package)
+
+        other_owner_id = uuid4()
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "INSERT INTO public.owner (id, display_name) VALUES (%s, %s)",
+                (other_owner_id, "另一个 Skill 用户"),
+            )
+
+        other_entries = self.library.list_owner_skills(other_owner_id)
+        self.assertEqual(other_entries, ())
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "DELETE FROM public.owner WHERE id = %s",
+                (other_owner_id,),
+            )
+
     def test_imports_valid_local_package_as_active_owner_skill(self) -> None:
         with TemporaryDirectory() as temporary_directory:
             package = Path(temporary_directory) / "gentle-reply"

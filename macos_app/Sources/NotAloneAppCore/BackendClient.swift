@@ -349,6 +349,69 @@ public struct BackendClient: Sendable {
         )
     }
 
+    // MARK: - Skill 管理
+
+    public func skills() async throws -> [SkillEntry] {
+        let response: SkillListResponse = try await request(
+            path: "api/skills",
+            method: "GET"
+        )
+        return response.skills
+    }
+
+    public func importSkill(packagePath: String) async throws -> SkillImportResponse {
+        try await requestWithBody(
+            path: "api/skills/import",
+            method: "POST",
+            body: ["package_path": packagePath]
+        )
+    }
+
+    public func enableSkill(skillId: String) async throws -> SkillLifecycleResponse {
+        try await request(
+            path: "api/skills/\(skillId)/enable",
+            method: "POST"
+        )
+    }
+
+    public func disableSkill(skillId: String) async throws -> SkillLifecycleResponse {
+        try await request(
+            path: "api/skills/\(skillId)/disable",
+            method: "POST"
+        )
+    }
+
+    public func deleteSkill(skillId: String) async throws -> SkillLifecycleResponse {
+        try await request(
+            path: "api/skills/\(skillId)/delete",
+            method: "POST"
+        )
+    }
+
+    public func previewSkill(skillId: String) async throws -> SkillPreview {
+        try await request(
+            path: "api/skills/\(skillId)/preview",
+            method: "GET"
+        )
+    }
+
+    // MARK: - 台账概览
+
+    public func ledgerSummary() async throws -> LedgerSummary {
+        try await request(
+            path: "api/ledger/summary",
+            method: "GET"
+        )
+    }
+
+    // 凭据状态：只返回是否已配置，绝不回显密钥。
+    public func credentialsStatus() async throws -> CredentialsStatus {
+        try await request(
+            path: "api/settings/credentials",
+            method: "GET"
+        )
+    }
+
     // MARK: - 内部
 
     private func request<T: Decodable>(

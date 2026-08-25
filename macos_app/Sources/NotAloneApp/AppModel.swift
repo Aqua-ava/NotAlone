@@ -53,6 +53,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var importInFlight = false
     @Published var importError: String?
 
+    // MARK: - Skill 管理
+    @Published private(set) var skills: [SkillEntry] = []
+    @Published private(set) var ledgerSummary: LedgerSummary?
+    @Published private(set) var skillInFlight = false
+    @Published var skillError: String?
+    @Published var skillPreview: SkillPreview?
+    @Published private(set) var credentialsStatus: CredentialsStatus?
+
     enum MessageStreamState: Equatable {
         case idle
         case loadingFirstPage
@@ -579,6 +587,101 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Skill 管理
+
+    func loadSkills() {
+        guard let client else {
+            skillError = "后端不可用"
+            return
+        }
+        Task {
+            do {
+                skills = try await client.skills()
+                ledgerSummary = try await client.ledgerSummary()
+                credentialsStatus = try? await client.credentialsStatus()
+                skillError = nil
+            } catch {
+                skillError = Self.describe(error)
+            }
+        }
+    }
+
+    func importSkill(packagePath: String) {
+        guard let client else {
+            skillError = "后端不可用"
+            return
+        }
+        Task {
+            skillInFlight = true
+            defer { skillInFlight = false }
+            do {
+                let result = try await client.importSkill(packagePath: packagePath)
+                lastOperationMessage = "已导入 Skill「\(result.name)」v\(result.versionNumber)"
+                await reloadSkills()
+            } catch {
+                skillError = Self.describe(error)
+            }
+        }
+    }
+
+    func toggleSkill(_ skill: SkillEntry) {
+        guard let client else { return }
+        Task {
+            skillInFlight = true
+            defer { skillInFlight = false }
+            do {
+                if skill.enabled {
+                    _ = try await client.disableSkill(skillId: skill.skillId)
+                } else {
+                    _ = try await client.enableSkill(skillId: skill.skillId)
+                }
+                await reloadSkills()
+            } catch {
+                skillError = Self.describe(error)
+            }
+        }
+    }
+
+    func deleteSkill(_ skill: SkillEntry) {
+        guard let client else { return }
+        Task {
+            skillInFlight = true
+            defer { skillInFlight = false }
+            do {
+                _ = try await client.deleteSkill(skillId: skill.skillId)
+                lastOperationMessage = "已删除 Skill「\(skill.name)」"
+                await reloadSkills()
+            } catch {
+                skillError = Self.describe(error)
+            }
+        }
+    }
+
+    func previewSkill(_ skill: SkillEntry) {
+        guard let client else {
+            skillError = "后端不可用"
+            return
+        }
+        Task {
+            skillInFlight = true
+            defer { skillInFlight = false }
+            do {
+                let preview = try await client.previewSkill(skillId: skill.skillId)
+                skillPreview = preview
+                skillError = nil
+            } catch {
+                skillError = Self.describe(error)
+            }
+        }
+    }
+
+    private func reloadSkills() async {
+        if let client {
+            skills = (try? await client.skills()) ?? []
+            ledgerSummary = (try? await client.ledgerSummary()) ?? ledgerSummary
+        }
+    }
+
     // MARK: - 轮询
 
     private func runPollLoop() async {
@@ -655,6 +758,19 @@ final class AppModel: ObservableObject {
             anchor = executable
         }
         return EnvironmentLocator.locateRepoRoot(anchor: anchor)
+    }
+
+    // 探针可执行文件：仓库 macos_sync_probe 的构建产物（相对仓库定位）。
+    func probeExecutableURL() -> URL? {
+        guard let root = locateRepoRoot() else { return nil }
+        let candidate = root
+            .appendingPathComponent("macos_sync_probe")
+            .appendingPathComponent(".build")
+            .appendingPathComponent("debug")
+            .appendingPathComponent("notalone-sync-probe")
+        return FileManager.default.isExecutableFile(atPath: candidate.path)
+            ? candidate
+            : nil
     }
 
     private func refreshStatus() async {

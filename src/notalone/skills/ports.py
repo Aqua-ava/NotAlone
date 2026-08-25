@@ -12,6 +12,7 @@ from notalone.skills.models import (
     SkillDeletionResult,
     SkillExportResult,
     SkillImportResult,
+    SkillManagementEntry,
     SkillPreview,
     SkillResource,
     SkillVersion,
@@ -52,6 +53,9 @@ class SkillPreviewEngine(Protocol):
 
 class SkillLibraryManagementPort(Protocol):
     """供用户明确操作的 Skill Library 管理入口。"""
+
+    def list_owner_skills(self, owner_id: UUID) -> tuple[SkillManagementEntry, ...]:
+        """返回 owner 的全部 skill 管理视图（含 disabled/删除，不含资源内容）。"""
 
     def import_package(
         self,

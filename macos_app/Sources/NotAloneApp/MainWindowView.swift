@@ -32,6 +32,8 @@ struct MainWindowView: View {
     @State private var importPath = ""
     @State private var importTargetContact = ""
     @State private var newImportContactName = ""
+    // Skill 库输入
+    @State private var skillPackagePath = ""
 
     enum MemoryCategoryOption: String, CaseIterable, Identifiable {
         case commonFact = "common_fact"
@@ -63,6 +65,8 @@ struct MainWindowView: View {
                     Text("回复工作区").tag(0)
                     Text("记忆管理").tag(1)
                     Text("导入").tag(2)
+                    Text("Skill 库").tag(3)
+                    Text("设置").tag(4)
                 }
                 .pickerStyle(.segmented)
                 .padding(8)
@@ -74,8 +78,15 @@ struct MainWindowView: View {
                         .onAppear {
                             model.loadMemories()
                         }
-                } else {
+                } else if detailTab == 2 {
                     importView
+                } else if detailTab == 3 {
+                    skillLibraryView
+                        .onAppear {
+                            model.loadSkills()
+                        }
+                } else {
+                    settingsView
                 }
             }
         }
@@ -873,6 +884,256 @@ struct MainWindowView: View {
         case "verify": return "校验"
         case "claiming": return "等待执行"
         default: return raw
+        }
+    }
+
+    // Skill 库管理页：导入、启用/停用、删除与台账概览。
+    private var skillLibraryView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Skill 库")
+                    .font(.headline)
+                if let error = model.skillError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                skillImportSection
+                Divider()
+                skillListSection
+                Divider()
+                ledgerSection
+            }
+            .padding(12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var skillImportSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("导入 Skill 包")
+                .font(.subheadline.weight(.semibold))
+            HStack {
+                TextField("/path/to/skill-dir", text: $skillPackagePath)
+                    .textFieldStyle(.roundedBorder)
+                Button("选择…") {
+                    chooseSkillPackage()
+                }
+                Button("导入") {
+                    model.importSkill(packagePath: skillPackagePath)
+                }
+                .disabled(
+                    model.skillInFlight
+                        || skillPackagePath.trimmingCharacters(in: .whitespaces).isEmpty
+                )
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var skillListSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("已安装 Skill")
+                .font(.subheadline.weight(.semibold))
+            if model.skills.isEmpty {
+                Text("还没有 Skill。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(model.skills) { skill in
+                    skillRow(skill)
+                }
+            }
+        }
+    }
+
+    private func skillRow(_ skill: SkillEntry) -> some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(skill.name)
+                    .font(.callout.weight(.medium))
+                Text(skill.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("v\(skill.currentVersionNumber ?? 1) · \(skill.status)")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer()
+            Button("预览") {
+                model.previewSkill(skill)
+            }
+            .font(.caption)
+            Button(skill.enabled ? "停用" : "启用") {
+                model.toggleSkill(skill)
+            }
+            .font(.caption)
+            Button("删除") {
+                model.deleteSkill(skill)
+            }
+            .font(.caption)
+            .foregroundStyle(.red)
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+        .sheet(isPresented: skillPreviewBinding(for: skill)) {
+            skillPreviewSheet(skill)
+        }
+    }
+
+    // 预览 sheet 展示当前版本内容与资源清单（无联系人资料）。
+    private func skillPreviewBinding(for skill: SkillEntry) -> Binding<Bool> {
+        Binding(
+            get: { model.skillPreview?.skillId == skill.skillId },
+            set: { newValue in
+                if !newValue {
+                    model.skillPreview = nil
+                }
+            }
+        )
+    }
+
+    private func skillPreviewSheet(_ skill: SkillEntry) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("\(skill.name) v\(model.skillPreview?.versionNumber ?? 1)")
+                .font(.headline)
+            if let preview = model.skillPreview {
+                ScrollView {
+                    Text(preview.document)
+                        .font(.body.monospaced())
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Text("辅助资源：\(preview.resources.joined(separator: "、"))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            HStack {
+                Spacer()
+                Button("关闭") {
+                    model.skillPreview = nil
+                }
+                .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 520, height: 420)
+    }
+
+    // 出站台账概览：只含元数据，不含正文。
+    private var ledgerSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("出站台账概览")
+                .font(.subheadline.weight(.semibold))
+            if let summary = model.ledgerSummary {
+                Text("调用 \(summary.totalCalls) 次 · 输入 \(summary.totalInputTokens) tokens · 输出 \(summary.totalOutputTokens) tokens")
+                    .font(.caption)
+                Text("供应商：\(summary.providerCounts.map { "\($0.key):\($0.value)" }.joined(separator: " "))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("结果：\(summary.outcomeCounts.map { "\($0.key):\($0.value)" }.joined(separator: " "))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("暂无台账记录。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func chooseSkillPackage() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        if panel.runModal() == .OK, let url = panel.url {
+            skillPackagePath = url.path
+        }
+    }
+
+    // 设置页：模型凭据状态（不回显密钥）、探针调试窗口、同步参数说明。
+    private var settingsView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("设置")
+                    .font(.headline)
+                credentialsSection
+                Divider()
+                probeSection
+                Divider()
+                syncParametersSection
+            }
+            .padding(12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    // 模型凭据：只显示是否已配置，不回显任何密钥值。
+    private var credentialsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("模型凭据")
+                .font(.subheadline.weight(.semibold))
+            Text("DeepSeek API 密钥经环境变量配置；界面只显示配置状态，不显示密钥。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let status = model.credentialsStatus {
+                Text(status.configured ? "\(status.provider) 凭据：已配置" : "\(status.provider) 凭据：未配置（见首启向导）")
+                    .font(.caption)
+                    .foregroundStyle(status.configured ? Color.green : Color.orange)
+            } else {
+                Text("凭据状态：查询中…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    // 探针调试窗口：从设置页打开独立探针应用（OCR 文本与裁剪预览）。
+    private var probeSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("前台探针")
+                .font(.subheadline.weight(.semibold))
+            Text("探针独立运行，负责识别当前微信前台会话；调试窗口显示 OCR 文本与裁剪预览。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("打开探针调试窗口") {
+                openProbeDebugWindow()
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    // 同步参数：只读说明，参数由后端启动配置。
+    private var syncParametersSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("同步参数")
+                .font(.subheadline.weight(.semibold))
+            Text("同步心跳间隔由后端启动参数 --sync-interval 决定（默认 3 秒）；绑定确认与失败关闭语义见主窗口提示。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func openProbeDebugWindow() {
+        // 从仓库相对路径定位探针构建产物；找不到时提示（不阻塞）。
+        if let executable = model.probeExecutableURL() {
+            do {
+                try Process.run(executable, arguments: [])
+                model.lastOperationMessage = "已打开探针调试窗口"
+            } catch {
+                model.lastOperationMessage = "探针启动失败：\(error.localizedDescription)"
+            }
+        } else {
+            model.lastOperationMessage = "未找到探针可执行文件（先构建 macos_sync_probe）"
         }
     }
 

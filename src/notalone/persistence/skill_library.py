@@ -22,6 +22,7 @@ from notalone.skills import (
     SkillExportResult,
     SkillImportResult,
     SkillLibraryManagementPort,
+    SkillManagementEntry,
     SkillPackageValidationError,
     SkillPackageValidator,
     SkillPreview,
@@ -74,6 +75,108 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
         self._database_url = database_url
         self._reader = reader or LocalSkillPackageReader()
         self._validator = validator or SkillPackageValidator()
+
+    def list_owner_skills(self, owner_id: UUID) -> tuple[SkillManagementEntry, ...]:
+        """返回 owner 的全部 skill 管理视图（含 disabled/删除）。"""
+
+        if not isinstance(owner_id, UUID):
+            raise TypeError("owner_id 必须是 UUID。")
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(
+                    """
+                    SELECT skill.id AS skill_id,
+                           skill.name AS skill_name,
+                           skill.description AS skill_description,
+                           skill.contact_id AS skill_contact_id,
+                           skill.status AS skill_status,
+                           version.id AS current_version_id,
+                           version.version_number AS current_version_number,
+                           version.enabled AS current_enabled
+                    FROM public.reply_skill AS skill
+                    LEFT JOIN public.reply_skill_version AS version
+                      ON version.skill_id = skill.id
+                     AND version.is_current = TRUE
+                     AND version.status = 'active'
+                    WHERE skill.owner_id = %s
+                    ORDER BY skill.created_at, skill.id
+                    """,
+                    (owner_id,),
+                ).fetchall()
+        except psycopg.Error:
+            raise SkillLibraryPersistenceError(
+                "Skill 目录读取失败。"
+            ) from None
+        return tuple(
+            SkillManagementEntry(
+                skill_id=row["skill_id"],
+                name=row["skill_name"],
+                description=row["skill_description"],
+                status=row["skill_status"],
+                contact_id=row["skill_contact_id"],
+                current_version_id=row["current_version_id"],
+                current_version_number=row["current_version_number"],
+                enabled=bool(row["current_enabled"]),
+            )
+            for row in rows
+        )
+
+    def read_current_version(
+        self,
+        owner_id: UUID,
+        skill_id: UUID,
+    ) -> tuple[str, str, int, tuple[str, ...]]:
+        """返回当前版本投影（文档内容、描述、版本号、资源路径清单）。"""
+
+        if not isinstance(owner_id, UUID) or not isinstance(skill_id, UUID):
+            raise TypeError("Skill 读取标识必须是 UUID。")
+        try:
+            with self._connect() as connection:
+                skill = connection.execute(
+                    """
+                    SELECT id, name
+                    FROM public.reply_skill
+                    WHERE id = %s AND owner_id = %s AND status <> 'deleted'
+                    """,
+                    (skill_id, owner_id),
+                ).fetchone()
+                if skill is None:
+                    raise SkillNotFoundError("Skill 读取失败：Skill 不存在。")
+                current = connection.execute(
+                    """
+                    SELECT id, version_number, description, content
+                    FROM public.reply_skill_version
+                    WHERE skill_id = %s AND is_current = TRUE
+                      AND status = 'active' AND content IS NOT NULL
+                      AND length(btrim(content)) > 0
+                    """,
+                    (skill_id,),
+                ).fetchone()
+                if current is None:
+                    raise SkillVersionNotFoundError(
+                        "Skill 读取失败：当前版本不可用。"
+                    )
+                resources = connection.execute(
+                    """
+                    SELECT relative_path
+                    FROM public.reply_skill_resource
+                    WHERE skill_version_id = %s
+                    ORDER BY relative_path
+                    """,
+                    (current["id"],),
+                ).fetchall()
+        except (SkillNotFoundError, SkillVersionNotFoundError):
+            raise
+        except psycopg.Error:
+            raise SkillLibraryPersistenceError(
+                "Skill 读取失败。"
+            ) from None
+        return (
+            current["content"],
+            current["description"],
+            current["version_number"],
+            tuple(row["relative_path"] for row in resources),
+        )
 
     def import_package(
         self,

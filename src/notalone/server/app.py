@@ -31,9 +31,20 @@ from notalone.application.import_service import (
     ImportService,
     TaskHost,
 )
+from notalone.application.skill_service import (
+    LedgerService,
+    SkillImportRejected,
+    SkillService,
+)
 from notalone.ingest.errors import ImportPreviewError
 from notalone.ingest.import_command import ContactConfirmationError
 from notalone.persistence.postgres_repository import ImportPersistenceError
+from notalone.persistence.skill_library import (
+    SkillDeletedError,
+    SkillLibraryPersistenceError,
+    SkillNotFoundError,
+    SkillVersionNotFoundError,
+)
 from notalone.application.memory_service import (
     ManualMemoryEntry,
     MemoryService,
@@ -87,6 +98,10 @@ class ImportTaskRequestInvalid(ValueError):
     """导入或任务请求结构或契约无效；不携带请求内容细节。"""
 
 
+class SkillRequestInvalid(ValueError):
+    """Skill 管理请求结构或契约无效；不携带请求内容细节。"""
+
+
 class BackendApp:
     """只提供本地 API 的无框架 HTTP 应用。"""
 
@@ -94,10 +109,12 @@ class BackendApp:
         "_contact_directory",
         "_events",
         "_import_service",
+        "_ledger_service",
         "_memory_service",
         "_message_stream",
         "_owner_id",
         "_reply_service",
+        "_skill_service",
         "_sync_control",
         "_task_host",
         "_token",
@@ -116,6 +133,8 @@ class BackendApp:
         memory_service: MemoryService | None = None,
         import_service: ImportService | None = None,
         task_host: TaskHost | None = None,
+        skill_service: SkillService | None = None,
+        ledger_service: LedgerService | None = None,
     ) -> None:
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
@@ -124,10 +143,12 @@ class BackendApp:
         self._contact_directory = contact_directory
         self._events = events
         self._import_service = import_service
+        self._ledger_service = ledger_service
         self._memory_service = memory_service
         self._message_stream = message_stream
         self._reply_service = reply_service
         self._owner_id = owner_id
+        self._skill_service = skill_service
         self._sync_control = sync_control
         self._task_host = task_host
         self._token = token
@@ -201,6 +222,29 @@ class BackendApp:
                 path=path_value,
                 query=urlsplit(path).query,
                 body=request_body,
+            )
+        if path_value == "/api/ledger/summary":
+            return self._handle_ledger(method=method_upper)
+        if path_value.startswith("/api/skills"):
+            return self._handle_skill(
+                method=method_upper,
+                path=path_value,
+                body=request_body,
+            )
+        if path_value == "/api/settings/credentials":
+            if method_upper != "GET":
+                return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            import os
+
+            configured = bool(
+                os.environ.get("NOTALONE_DEEPSEEK_API_KEY", "").strip()
+            )
+            return _json_response(
+                HTTPStatus.OK,
+                {
+                    "provider": "deepseek",
+                    "configured": configured,
+                },
             )
         if path_value.startswith("/api/sync"):
             return self._handle_sync(
@@ -710,6 +754,144 @@ class BackendApp:
 
         raise ImportTaskRequestInvalid()
 
+    def _handle_ledger(self, *, method: str) -> Response:
+        """处理台账概览端点；只投影元数据，不含正文。"""
+
+        ledger = self._ledger_service
+        if method != "GET":
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        if ledger is None:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "ledger_unavailable"},
+            )
+        try:
+            return _json_response(
+                HTTPStatus.OK, ledger.summary(owner_id=self._owner_id)
+            )
+        except Exception:
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "ledger_summary_failed"},
+            )
+
+    def _handle_skill(self, *, method: str, path: str, body: bytes) -> Response:
+        """处理 Skill 管理端点；失败关闭且不回显正文。"""
+
+        owner_id = self._owner_id
+        skills = self._skill_service
+
+        if skills is None:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "skill_unavailable"}
+            )
+        try:
+            return self._dispatch_skill(
+                method=method, path=path, body=body
+            )
+        except SkillRequestInvalid:
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "skill_request_invalid"}
+            )
+        except SkillNotFoundError:
+            return _json_response(
+                HTTPStatus.NOT_FOUND,
+                {"error": "skill_not_found", "reason": "skill_not_found"},
+            )
+        except SkillDeletedError:
+            return _json_response(
+                HTTPStatus.CONFLICT,
+                {"error": "skill_deleted", "reason": "skill_deleted"},
+            )
+        except SkillVersionNotFoundError:
+            return _json_response(
+                HTTPStatus.NOT_FOUND,
+                {
+                    "error": "skill_version_not_found",
+                    "reason": "skill_version_not_found",
+                },
+            )
+        except SkillLibraryPersistenceError:
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "skill_persistence_failed"},
+            )
+
+    def _dispatch_skill(self, *, method: str, path: str, body: bytes) -> Response:
+        """按路径分发 Skill 管理请求。"""
+
+        owner_id = self._owner_id
+        skills = self._skill_service
+
+        if path == "/api/skills" and method == "GET":
+            return _json_response(
+                HTTPStatus.OK, skills.list(owner_id=owner_id)
+            )
+        if path == "/api/skills/import":
+            if method != "POST":
+                raise SkillRequestInvalid()
+            payload = _parse_skill_json(body)
+            package_path = payload.get("package_path")
+            if not isinstance(package_path, str) or not package_path.strip():
+                raise SkillRequestInvalid()
+            try:
+                result = skills.import_skill(
+                    owner_id=owner_id, package_path=package_path
+                )
+            except SkillImportRejected:
+                return _json_response(
+                    HTTPStatus.CONFLICT,
+                    {"error": "skill_import_rejected", "reason": "package_invalid"},
+                )
+            return _json_response(HTTPStatus.OK, result)
+
+        parts = path.removeprefix("/api/skills/").split("/")
+        if len(parts) != 2:
+            raise SkillRequestInvalid()
+        try:
+            skill_id = UUID(parts[0])
+        except ValueError:
+            raise SkillRequestInvalid() from None
+        action = parts[1]
+        if action == "preview":
+            if method != "GET":
+                raise SkillRequestInvalid()
+            return _json_response(
+                HTTPStatus.OK, skills.preview(owner_id=owner_id, skill_id=skill_id)
+            )
+        if method != "POST":
+            raise SkillRequestInvalid()
+        if action == "enable":
+            return _json_response(
+                HTTPStatus.OK, skills.enable(owner_id=owner_id, skill_id=skill_id)
+            )
+        if action == "disable":
+            return _json_response(
+                HTTPStatus.OK, skills.disable(owner_id=owner_id, skill_id=skill_id)
+            )
+        if action == "delete":
+            return _json_response(
+                HTTPStatus.OK, skills.delete(owner_id=owner_id, skill_id=skill_id)
+            )
+        if action == "rollback":
+            payload = _parse_skill_json(body)
+            version_value = payload.get("version_id")
+            if not isinstance(version_value, str):
+                raise SkillRequestInvalid()
+            try:
+                version_id = UUID(version_value)
+            except ValueError:
+                raise SkillRequestInvalid() from None
+            return _json_response(
+                HTTPStatus.OK,
+                skills.rollback(
+                    owner_id=owner_id,
+                    skill_id=skill_id,
+                    version_id=version_id,
+                ),
+            )
+        raise SkillRequestInvalid()
+
     def open_sse(
         self,
         *,
@@ -851,6 +1033,8 @@ def create_app(
     memory_service: MemoryService | None = None,
     import_service: ImportService | None = None,
     task_host: TaskHost | None = None,
+    skill_service: SkillService | None = None,
+    ledger_service: LedgerService | None = None,
 ) -> BackendApp:
     """创建服务应用；未显式传 token 时在启动时生成随机 token。"""
 
@@ -865,6 +1049,8 @@ def create_app(
         memory_service=memory_service,
         import_service=import_service,
         task_host=task_host,
+        skill_service=skill_service,
+        ledger_service=ledger_service,
     )
 
 
@@ -1098,6 +1284,18 @@ def _parse_memory_json(body: bytes) -> dict[str, object]:
         raise MemoryRequestInvalid() from None
     if not isinstance(payload, dict):
         raise MemoryRequestInvalid()
+    return payload
+
+
+def _parse_skill_json(body: bytes) -> dict[str, object]:
+    """解析 Skill 请求体；任何异常收敛为 SkillRequestInvalid。"""
+
+    try:
+        payload = json.loads(body.decode("utf-8")) if body.strip() else None
+    except (UnicodeDecodeError, ValueError):
+        raise SkillRequestInvalid() from None
+    if not isinstance(payload, dict):
+        raise SkillRequestInvalid()
     return payload
 
 

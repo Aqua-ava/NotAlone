@@ -383,6 +383,44 @@ class SkillPreview:
 
 
 @dataclass(frozen=True, slots=True)
+class SkillManagementEntry:
+    """管理页可见的 skill 状态投影（owner 级，不含资源内容）。"""
+
+    skill_id: UUID
+    name: str
+    description: str
+    status: str
+    contact_id: UUID | None
+    current_version_id: UUID | None
+    current_version_number: int | None
+    enabled: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.skill_id, UUID):
+            raise TypeError("Skill 管理标识必须是 UUID。")
+        _validate_skill_name(self.name)
+        if not isinstance(self.description, str) or not self.description.strip():
+            raise ValueError("Skill 描述不能为空。")
+        if self.status not in ("active", "disabled", "deleted"):
+            raise ValueError("Skill 状态无效。")
+        if self.contact_id is not None and not isinstance(self.contact_id, UUID):
+            raise TypeError("Skill 联系人归属标识必须是 UUID。")
+        if self.current_version_id is None:
+            if self.current_version_number is not None:
+                raise ValueError("无当前版本时版本号必须为空。")
+        else:
+            if not isinstance(self.current_version_id, UUID):
+                raise TypeError("Skill 当前版本标识必须是 UUID。")
+            if (
+                not isinstance(self.current_version_number, int)
+                or self.current_version_number < 1
+            ):
+                raise ValueError("Skill 当前版本号无效。")
+        if not isinstance(self.enabled, bool):
+            raise TypeError("Skill 启用状态必须是 bool。")
+
+
+@dataclass(frozen=True, slots=True)
 class SkillCatalogEntry:
     """目录扫描可见的不可变 Skill 版本元数据。"""
 
