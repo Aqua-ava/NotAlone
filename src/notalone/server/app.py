@@ -27,6 +27,13 @@ from notalone.application.reply_request import (
     parse_reply_request,
 )
 from notalone.application.reply_service import ReplyService
+from notalone.application.import_service import (
+    ImportService,
+    TaskHost,
+)
+from notalone.ingest.errors import ImportPreviewError
+from notalone.ingest.import_command import ContactConfirmationError
+from notalone.persistence.postgres_repository import ImportPersistenceError
 from notalone.application.memory_service import (
     ManualMemoryEntry,
     MemoryService,
@@ -76,17 +83,23 @@ class MemoryRequestInvalid(ValueError):
     """记忆请求结构或契约无效；不携带请求内容细节。"""
 
 
+class ImportTaskRequestInvalid(ValueError):
+    """导入或任务请求结构或契约无效；不携带请求内容细节。"""
+
+
 class BackendApp:
     """只提供本地 API 的无框架 HTTP 应用。"""
 
     __slots__ = (
         "_contact_directory",
         "_events",
+        "_import_service",
         "_memory_service",
         "_message_stream",
         "_owner_id",
         "_reply_service",
         "_sync_control",
+        "_task_host",
         "_token",
     )
 
@@ -101,6 +114,8 @@ class BackendApp:
         message_stream: MessageStream | None = None,
         reply_service: ReplyService | None = None,
         memory_service: MemoryService | None = None,
+        import_service: ImportService | None = None,
+        task_host: TaskHost | None = None,
     ) -> None:
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
@@ -108,11 +123,13 @@ class BackendApp:
             raise ValueError("token 不能为空。")
         self._contact_directory = contact_directory
         self._events = events
+        self._import_service = import_service
         self._memory_service = memory_service
         self._message_stream = message_stream
         self._reply_service = reply_service
         self._owner_id = owner_id
         self._sync_control = sync_control
+        self._task_host = task_host
         self._token = token
 
     @property
@@ -176,6 +193,13 @@ class BackendApp:
             return self._handle_memory(
                 method=method_upper,
                 path=path_value,
+                body=request_body,
+            )
+        if path_value.startswith("/api/imports") or path_value.startswith("/api/tasks"):
+            return self._handle_import_task(
+                method=method_upper,
+                path=path_value,
+                query=urlsplit(path).query,
                 body=request_body,
             )
         if path_value.startswith("/api/sync"):
@@ -537,6 +561,155 @@ class BackendApp:
             raise MemoryRequestInvalid()
         raise MemoryRequestInvalid()
 
+    def _handle_import_task(
+        self,
+        *,
+        method: str,
+        path: str,
+        query: str,
+        body: bytes,
+    ) -> Response:
+        """处理导入与任务触发端点；失败关闭且不回显正文。"""
+
+        # 服务装配缺失（数据库/模型配置故障）是服务端状态：503，
+        # 不把配置问题伪装成客户端请求错误。
+        needs_import = path.startswith("/api/imports")
+        needs_task = path.startswith("/api/tasks")
+        if (
+            (needs_import and self._import_service is None)
+            or (needs_task and self._task_host is None)
+        ):
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "import_task_unavailable"},
+            )
+        try:
+            return self._dispatch_import_task(
+                method=method, path=path, query=query, body=body
+            )
+        except ImportTaskRequestInvalid:
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "import_request_invalid"}
+            )
+
+    def _dispatch_import_task(
+        self,
+        *,
+        method: str,
+        path: str,
+        query: str,
+        body: bytes,
+    ) -> Response:
+        """按路径分发导入与任务请求。"""
+
+        owner_id = self._owner_id
+        import_service = self._import_service
+        task_host = self._task_host
+
+        if path == "/api/imports/preview":
+            if method != "POST" or import_service is None:
+                raise ImportTaskRequestInvalid()
+            payload = _parse_import_json(body)
+            path_value = payload.get("path")
+            if not isinstance(path_value, str) or not path_value.strip():
+                raise ImportTaskRequestInvalid()
+            try:
+                preview = import_service.preview(path=path_value)
+            except (FileNotFoundError, ImportPreviewError, OSError, PermissionError):
+                # 文件缺失、不可读或内容校验失败：统一 422 + 稳定码，
+                # 具体原因不进入响应（不泄露本机路径或文件内容）。
+                return _json_response(
+                    422,
+                    {
+                        "error": "import_preview_failed",
+                        "reason": "preview_failed",
+                    },
+                )
+            return _json_response(HTTPStatus.OK, preview)
+
+        if path == "/api/imports/commit":
+            if method != "POST" or import_service is None:
+                raise ImportTaskRequestInvalid()
+            payload = _parse_import_json(body)
+            path_value = payload.get("path")
+            if not isinstance(path_value, str) or not path_value.strip():
+                raise ImportTaskRequestInvalid()
+            contact_value = payload.get("contact_id")
+            new_name_value = payload.get("new_contact_name")
+            has_contact = bool(
+                isinstance(contact_value, str) and contact_value.strip()
+            )
+            has_new = bool(
+                isinstance(new_name_value, str) and new_name_value.strip()
+            )
+            if has_contact == has_new:
+                # 必须二选一；不能同时提供。
+                raise ImportTaskRequestInvalid()
+            from notalone.ingest.models import (
+                ExistingContactSelection,
+                NewContactSelection,
+            )
+
+            if has_contact:
+                try:
+                    contact_id = UUID(contact_value)
+                except ValueError:
+                    raise ImportTaskRequestInvalid() from None
+                selection = ExistingContactSelection(contact_id=contact_id)
+            else:
+                selection = NewContactSelection(display_name=new_name_value)
+            try:
+                result = import_service.commit(
+                    path=path_value,
+                    owner_id=owner_id,
+                    selection=selection,
+                )
+            except (
+                ImportPreviewError,
+                ContactConfirmationError,
+                ImportPersistenceError,
+            ):
+                # 业务拒绝（归属冲突/联系人缺失/校验失败）：409 + 稳定码。
+                return _json_response(
+                    HTTPStatus.CONFLICT,
+                    {"error": "import_commit_failed"},
+                )
+            return _json_response(HTTPStatus.OK, result)
+
+        if path == "/api/tasks/run":
+            if method != "POST" or task_host is None:
+                raise ImportTaskRequestInvalid()
+            payload = _parse_import_json(body)
+            contact_value = payload.get("contact_id")
+            if not isinstance(contact_value, str):
+                raise ImportTaskRequestInvalid()
+            try:
+                contact_id = UUID(contact_value)
+            except ValueError:
+                raise ImportTaskRequestInvalid() from None
+            return _json_response(
+                HTTPStatus.OK,
+                task_host.start(owner_id=owner_id, contact_id=contact_id),
+            )
+
+        if path == "/api/tasks/status":
+            if method != "GET" or task_host is None:
+                raise ImportTaskRequestInvalid()
+            query_pairs = parse_qs(query)
+            contact_values = query_pairs.get("contact_id", [])
+            if len(contact_values) != 1:
+                raise ImportTaskRequestInvalid()
+            try:
+                contact_id = UUID(contact_values[0])
+            except ValueError:
+                raise ImportTaskRequestInvalid() from None
+            return _json_response(
+                HTTPStatus.OK,
+                task_host.current(owner_id=owner_id, contact_id=contact_id),
+            )
+
+        raise ImportTaskRequestInvalid()
+
     def open_sse(
         self,
         *,
@@ -676,6 +849,8 @@ def create_app(
     message_stream: MessageStream | None = None,
     reply_service: ReplyService | None = None,
     memory_service: MemoryService | None = None,
+    import_service: ImportService | None = None,
+    task_host: TaskHost | None = None,
 ) -> BackendApp:
     """创建服务应用；未显式传 token 时在启动时生成随机 token。"""
 
@@ -688,6 +863,8 @@ def create_app(
         message_stream=message_stream or MessageStream(PostgresMessageStream(database_url)),
         reply_service=reply_service,
         memory_service=memory_service,
+        import_service=import_service,
+        task_host=task_host,
     )
 
 
@@ -921,6 +1098,18 @@ def _parse_memory_json(body: bytes) -> dict[str, object]:
         raise MemoryRequestInvalid() from None
     if not isinstance(payload, dict):
         raise MemoryRequestInvalid()
+    return payload
+
+
+def _parse_import_json(body: bytes) -> dict[str, object]:
+    """解析导入/任务请求体；任何异常收敛为 ImportTaskRequestInvalid。"""
+
+    try:
+        payload = json.loads(body.decode("utf-8")) if body.strip() else None
+    except (UnicodeDecodeError, ValueError):
+        raise ImportTaskRequestInvalid() from None
+    if not isinstance(payload, dict):
+        raise ImportTaskRequestInvalid()
     return payload
 
 

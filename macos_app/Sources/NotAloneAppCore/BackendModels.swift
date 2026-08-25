@@ -140,3 +140,64 @@ public struct MemoryMutationResponse: Decodable, Sendable {
 public struct MemoryDiscardResponse: Decodable, Sendable {
     public let candidateId: String
 }
+
+// MARK: - 导入
+
+public struct ChannelIdentityView: Decodable, Equatable, Sendable {
+    public let externalId: String
+    public let observedName: String
+}
+
+public struct ImportPreview: Decodable, Equatable, Sendable {
+    public let valid: Bool
+    public let fileName: String
+    public let recordCount: Int
+    public let kindCounts: [String: Int]
+    public let ownerChannelIdentity: ChannelIdentityView?
+    public let contactChannelIdentity: ChannelIdentityView?
+}
+
+public struct ImportCommitResult: Decodable, Equatable, Sendable {
+    public let importedCount: Int
+    public let skippedDuplicates: Int
+    public let contactId: String
+}
+
+// MARK: - 任务进度
+
+public struct TaskProgress: Decodable, Equatable, Sendable {
+    public let taskId: String
+    public let step: String
+    public let status: String
+    public let processedCount: Int
+    public let attemptCount: Int
+    public let retryCount: Int
+    public let errorCode: String?
+
+    public init(
+        taskId: String,
+        step: String,
+        status: String,
+        processedCount: Int,
+        attemptCount: Int,
+        retryCount: Int,
+        errorCode: String?
+    ) {
+        self.taskId = taskId
+        self.step = step
+        self.status = status
+        self.processedCount = processedCount
+        self.attemptCount = attemptCount
+        self.retryCount = retryCount
+        self.errorCode = errorCode
+    }
+}
+
+public struct TaskStatusResponse: Decodable, Equatable, Sendable {
+    public let status: String
+    public let progress: TaskProgress?
+}
+
+public struct TaskStartResponse: Decodable, Equatable, Sendable {
+    public let status: String
+}

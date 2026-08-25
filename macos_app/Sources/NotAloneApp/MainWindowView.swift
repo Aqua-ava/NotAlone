@@ -28,6 +28,10 @@ struct MainWindowView: View {
     // 记忆行内修正编辑状态（按 memoryId）
     @State private var editingMemoryId: String?
     @State private var editingMemoryText = ""
+    // 导入页输入
+    @State private var importPath = ""
+    @State private var importTargetContact = ""
+    @State private var newImportContactName = ""
 
     enum MemoryCategoryOption: String, CaseIterable, Identifiable {
         case commonFact = "common_fact"
@@ -58,17 +62,20 @@ struct MainWindowView: View {
                 Picker("右栏", selection: $detailTab) {
                     Text("回复工作区").tag(0)
                     Text("记忆管理").tag(1)
+                    Text("导入").tag(2)
                 }
                 .pickerStyle(.segmented)
                 .padding(8)
                 Divider()
                 if detailTab == 0 {
                     replyPlaceholder
-                } else {
+                } else if detailTab == 1 {
                     memoryManagementView
                         .onAppear {
                             model.loadMemories()
                         }
+                } else {
+                    importView
                 }
             }
         }
@@ -690,6 +697,183 @@ struct MainWindowView: View {
 
     private func adoptionLabel(_ raw: String) -> String {
         raw == "manual" ? "手动" : "自动"
+    }
+
+    // 导入页：选择 JSONL → 预览校验 → 选/建联系人 → 提交 → 触发任务。
+    private var importView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("历史导入")
+                    .font(.headline)
+                if let error = model.importError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                importPathSection
+                if let preview = model.importPreview {
+                    previewSummary(preview)
+                    importCommitSection
+                } else {
+                    Text("选择一份微信单联系人 JSONL 文件开始。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Divider()
+                taskSection
+            }
+            .padding(12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var importPathSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("文件路径")
+                .font(.subheadline.weight(.semibold))
+            HStack {
+                TextField("/path/to/chat.jsonl", text: $importPath)
+                    .textFieldStyle(.roundedBorder)
+                Button("选择…") {
+                    chooseImportFile()
+                }
+                Button("预览校验") {
+                    model.previewImport(path: importPath)
+                }
+                .disabled(
+                    model.importInFlight
+                        || importPath.trimmingCharacters(in: .whitespaces).isEmpty
+                )
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func previewSummary(_ preview: ImportPreview) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("校验通过：\(preview.fileName)")
+                .font(.subheadline.weight(.semibold))
+            Text("消息 \(preview.recordCount) 条；类型分布：\(kindSummary(preview))")
+                .font(.caption)
+            if let owner = preview.ownerChannelIdentity {
+                Text("本人：\(owner.observedName)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let contact = preview.contactChannelIdentity {
+                Text("联系人：\(contact.observedName)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var importCommitSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("导入到")
+                .font(.subheadline.weight(.semibold))
+            Picker("联系人", selection: $importTargetContact) {
+                ForEach(model.contacts) { contact in
+                    Text(contact.displayName).tag(contact.contactId)
+                }
+            }
+            .pickerStyle(.menu)
+            TextField("或新建联系人名称", text: $newImportContactName)
+                .textFieldStyle(.roundedBorder)
+            HStack {
+                Button("选择既有联系人导入") {
+                    model.commitImport(
+                        path: importPath,
+                        contactId: importTargetContact,
+                        newContactName: nil
+                    )
+                }
+                .disabled(model.importInFlight || importTargetContact.isEmpty)
+                Button("新建联系人导入") {
+                    model.commitImport(
+                        path: importPath,
+                        contactId: nil,
+                        newContactName: newImportContactName
+                    )
+                }
+                .disabled(
+                    model.importInFlight
+                        || newImportContactName.trimmingCharacters(in: .whitespaces).isEmpty
+                )
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    // 任务：触发当前联系人的记忆提取；进度展示（事件推送 + 轮询兜底）。
+    private var taskSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("记忆提取任务")
+                .font(.subheadline.weight(.semibold))
+            HStack {
+                Button("触发当前联系人任务") {
+                    model.startTask()
+                }
+                .disabled(model.selectedContactId == nil)
+                if let state = model.taskState {
+                    Text("状态：\(state)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if let progress = model.taskProgress {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("步骤：\(stepLabel(progress.step))")
+                        .font(.caption)
+                    Text("处理 \(progress.processedCount) · 尝试 \(progress.attemptCount) · 重试 \(progress.retryCount)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    if let errorCode = progress.errorCode, !errorCode.isEmpty {
+                        Text("失败分类：\(errorCode)")
+                            .font(.caption2)
+                            .foregroundStyle(.red)
+                    }
+                }
+                .padding(8)
+                .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func chooseImportFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        if panel.runModal() == .OK, let url = panel.url {
+            importPath = url.path
+            model.previewImport(path: url.path)
+        }
+    }
+
+    private func kindSummary(_ preview: ImportPreview) -> String {
+        preview.kindCounts
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key):\($0.value)" }
+            .joined(separator: " ")
+    }
+
+    private func stepLabel(_ raw: String) -> String {
+        switch raw {
+        case "parse": return "解析"
+        case "normalize": return "规范化"
+        case "extract_memory": return "提取记忆"
+        case "index": return "建立索引"
+        case "verify": return "校验"
+        case "claiming": return "等待执行"
+        default: return raw
+        }
     }
 
     private var replyPlaceholder: some View {

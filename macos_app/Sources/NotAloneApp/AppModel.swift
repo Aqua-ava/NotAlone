@@ -46,6 +46,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var memoryInFlight = false
     @Published var memoryError: String?
 
+    // MARK: - 导入与任务
+    @Published private(set) var importPreview: ImportPreview?
+    @Published private(set) var taskProgress: TaskProgress?
+    @Published private(set) var taskState: String?
+    @Published private(set) var importInFlight = false
+    @Published var importError: String?
+
     enum MessageStreamState: Equatable {
         case idle
         case loadingFirstPage
@@ -186,6 +193,23 @@ final class AppModel: ObservableObject {
                 await MainActor.run {
                     guard created.contactId == self.selectedContactId else { return }
                     self.appendNewMessages()
+                }
+            case .taskProgress(let progress):
+                await MainActor.run {
+                    // 与其他联系人的任务事件隔离：只接受当前视图联系人。
+                    guard progress.contactId == self.selectedContactId else { return }
+                    self.taskProgress = TaskProgress(
+                        taskId: progress.taskId,
+                        step: progress.step,
+                        status: progress.status,
+                        processedCount: progress.processedCount,
+                        attemptCount: progress.attemptCount,
+                        retryCount: progress.retryCount,
+                        errorCode: self.taskProgress?.errorCode
+                    )
+                    if progress.status != "running" {
+                        self.taskState = progress.status
+                    }
                 }
             case .reconnected:
                 // message.created 不按 Last-Event-ID 回放：重连后对账，
@@ -471,6 +495,87 @@ final class AppModel: ObservableObject {
         }
         if let client {
             ownerMemories = (try? await client.ownerMemories()) ?? []
+        }
+    }
+
+    // MARK: - 导入与任务
+
+    func previewImport(path: String) {
+        guard let client else {
+            importError = "后端不可用"
+            return
+        }
+        Task {
+            importInFlight = true
+            defer { importInFlight = false }
+            do {
+                importPreview = try await client.importPreview(path: path)
+                importError = nil
+            } catch {
+                importError = Self.describe(error)
+            }
+        }
+    }
+
+    func commitImport(path: String, contactId: String?, newContactName: String?) {
+        guard let client else {
+            importError = "后端不可用"
+            return
+        }
+        Task {
+            importInFlight = true
+            defer { importInFlight = false }
+            do {
+                _ = try await client.importCommit(
+                    path: path,
+                    contactId: contactId,
+                    newContactName: newContactName
+                )
+                importPreview = nil
+                importError = nil
+                lastOperationMessage = "导入完成"
+                await refreshContacts()
+            } catch {
+                importError = Self.describe(error)
+            }
+        }
+    }
+
+    func startTask() {
+        guard let client, let selectedContactId else {
+            importError = "请先选择联系人"
+            return
+        }
+        Task {
+            do {
+                let response = try await client.startTask(contactId: selectedContactId)
+                taskState = response.status
+                if response.status == "started" {
+                    await pollTaskStatus()
+                }
+            } catch {
+                importError = Self.describe(error)
+            }
+        }
+    }
+
+    private func pollTaskStatus() async {
+        guard let client, let selectedContactId else { return }
+        while !Task.isCancelled {
+            do {
+                let response = try await client.taskStatus(contactId: selectedContactId)
+                taskState = response.status
+                if let progress = response.progress {
+                    taskProgress = progress
+                }
+                if response.status != "running" {
+                    return
+                }
+            } catch {
+                importError = Self.describe(error)
+                return
+            }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
         }
     }
 

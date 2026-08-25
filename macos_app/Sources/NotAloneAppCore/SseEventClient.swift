@@ -1,8 +1,9 @@
 import Foundation
 
-// 订阅后端 /api/events 的 SSE 客户端。只解析 message.created 事件；
-// 事件不含消息正文，界面拿到 message_id 后再经消息流 API 取详情。
-// 断线自动按 Last-Event-ID 重连（服务端以当前状态为准语义）。
+// 订阅后端 /api/events 的 SSE 客户端。解析 message.created 与
+// task.progress 事件；事件不含消息正文，界面拿到 message_id 后再经
+// 消息流 API 取详情。断线自动按 Last-Event-ID 重连（服务端以当前
+// 状态为准语义）。
 public final class SseEventClient: @unchecked Sendable {
     public struct MessageCreated: Sendable {
         public let eventId: String
@@ -12,8 +13,22 @@ public final class SseEventClient: @unchecked Sendable {
         public let messageId: String
     }
 
+    public struct TaskProgress: Sendable {
+        public let eventId: String
+        public let ownerId: String
+        public let contactId: String
+        public let occurredAt: String
+        public let taskId: String
+        public let step: String
+        public let status: String
+        public let processedCount: Int
+        public let attemptCount: Int
+        public let retryCount: Int
+    }
+
     public enum Event: Sendable {
         case messageCreated(MessageCreated)
+        case taskProgress(TaskProgress)
         // 断线重连成功后的对账信号：调用方应重新拉取最新状态，
         // 因为 message.created 不按 Last-Event-ID 回放。
         case reconnected
@@ -79,8 +94,8 @@ public final class SseEventClient: @unchecked Sendable {
                 }
                 // SSE 帧按空行分隔；逐行累积，遇到空行时派发事件。
                 if line.isEmpty {
-                    if eventType == "message.created" {
-                        await dispatch(data: dataLines.joined(separator: "\n"))
+                    if eventType == "message.created" || eventType == "task.progress" {
+                        await dispatch(type: eventType, data: dataLines.joined(separator: "\n"))
                         if let eventId {
                             lastEventId = eventId
                         }
@@ -104,11 +119,19 @@ public final class SseEventClient: @unchecked Sendable {
         return false
     }
 
-    private func dispatch(data: String) async {
+    private func dispatch(type: String, data: String) async {
         guard let jsonData = data.data(using: .utf8) else { return }
         do {
             let envelope = try JSONDecoder.snakeCaseDecoder.decode(EventEnvelope.self, from: jsonData)
-            await onEvent(.messageCreated(envelope.messageCreated))
+            switch type {
+            case "message.created":
+                await onEvent(.messageCreated(envelope.messageCreated))
+            case "task.progress":
+                await onEvent(.taskProgress(envelope.taskProgress))
+            default:
+                // 未识别事件类型跳过；消息详情以消息流 API 为准。
+                break
+            }
         } catch {
             // 无法解析的事件跳过；消息详情以消息流 API 为准。
         }
@@ -125,6 +148,12 @@ private struct EventEnvelope: Decodable {
 
     struct Payload: Decodable {
         let messageId: String?
+        let taskId: String?
+        let step: String?
+        let status: String?
+        let processedCount: Int?
+        let attemptCount: Int?
+        let retryCount: Int?
     }
 
     var messageCreated: SseEventClient.MessageCreated {
@@ -134,6 +163,21 @@ private struct EventEnvelope: Decodable {
             contactId: contactId,
             occurredAt: occurredAt,
             messageId: payload.messageId ?? ""
+        )
+    }
+
+    var taskProgress: SseEventClient.TaskProgress {
+        SseEventClient.TaskProgress(
+            eventId: id,
+            ownerId: ownerId,
+            contactId: contactId,
+            occurredAt: occurredAt,
+            taskId: payload.taskId ?? "",
+            step: payload.step ?? "",
+            status: payload.status ?? "",
+            processedCount: payload.processedCount ?? 0,
+            attemptCount: payload.attemptCount ?? 0,
+            retryCount: payload.retryCount ?? 0
         )
     }
 }

@@ -68,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
         owner_id=owner_id,
     )
     memory_service = _build_memory_service(database_url)
+    import_service = _build_import_service(database_url)
+    task_host = _build_task_host(database_url, events)
     server: BackendServer | None = None
     try:
         app = create_app(
@@ -77,6 +79,8 @@ def main(argv: list[str] | None = None) -> int:
             sync_control=sync_host,
             reply_service=reply_service,
             memory_service=memory_service,
+            import_service=import_service,
+            task_host=task_host,
         )
         server = BackendServer(app, host=args.host, port=args.port)
         host, port = server.start()
@@ -167,6 +171,82 @@ def _build_memory_service(database_url: str) -> MemoryService:
         contact_memory=PostgresMemoryStore(database_url),
         owner_memory=PostgresOwnerMemoryStore(database_url),
     )
+
+
+def _build_import_service(database_url: str) -> ImportService | None:
+    """装配导入服务；仓库不可用时返回 None。"""
+
+    from notalone.application.import_service import ImportService
+    from notalone.persistence.postgres_repository import (
+        PostgresIngestRepository,
+    )
+
+    try:
+        return ImportService(repository=PostgresIngestRepository(database_url))
+    except Exception:
+        return None
+
+
+def _build_task_host(database_url: str, events: EventBus) -> TaskHost | None:
+    """装配进程内任务宿主；模型或数据库配置不可用时返回 None。"""
+
+    import psycopg
+
+    from notalone.application.import_service import TaskHost
+    from notalone.server.event_models import BackendEvent
+    from notalone.tasks.command import DEFAULT_WORKER_LEASE_DURATION
+    from notalone.tasks.worker import (
+        PostgresMemoryExtractionRunner,
+        BackgroundTaskWorker,
+    )
+    from notalone.persistence.background_tasks import (
+        PostgresBackgroundTaskRepository,
+    )
+    from notalone.persistence.contact_memory_index import (
+        PostgresContactMemoryIndexRepository,
+    )
+    from notalone.scopes import ContactScope
+
+    def build_worker() -> BackgroundTaskWorker:
+        return BackgroundTaskWorker(
+            repository=PostgresBackgroundTaskRepository(database_url),
+            extraction_runner=PostgresMemoryExtractionRunner(database_url),
+            lease_duration=DEFAULT_WORKER_LEASE_DURATION,
+            index_repository=PostgresContactMemoryIndexRepository(database_url),
+        )
+
+    def build_lock_connection():
+        return psycopg.connect(database_url, autocommit=True)
+
+    def publish_progress(update) -> None:
+        """把一次任务进度更新发布为 TASK_PROGRESS 事件。"""
+
+        from datetime import datetime, timezone
+
+        events.publish(
+            BackendEvent.task_progress(
+                scope=ContactScope(
+                    owner_id=update.owner_id,
+                    contact_id=update.contact_id,
+                ),
+                occurred_at=datetime.now(timezone.utc),
+                task_id=update.task_id,
+                step=update.step,
+                status=update.status,
+                processed_count=update.processed_count,
+                attempt_count=update.attempt_count,
+                retry_count=update.retry_count,
+            )
+        )
+
+    try:
+        return TaskHost(
+            worker_builder=build_worker,
+            lock_connection_builder=build_lock_connection,
+            event_publisher=publish_progress,
+        )
+    except Exception:
+        return None
 
 
 if __name__ == "__main__":

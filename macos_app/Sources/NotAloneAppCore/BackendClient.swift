@@ -302,6 +302,53 @@ public struct BackendClient: Sendable {
         )
     }
 
+    // MARK: - 导入
+
+    public func importPreview(path: String) async throws -> ImportPreview {
+        try await requestWithBody(
+            path: "api/imports/preview",
+            method: "POST",
+            body: ["path": path]
+        )
+    }
+
+    public func importCommit(
+        path: String,
+        contactId: String? = nil,
+        newContactName: String? = nil
+    ) async throws -> ImportCommitResult {
+        var payload: [String: Any] = ["path": path]
+        if let contactId {
+            payload["contact_id"] = contactId
+        }
+        if let newContactName {
+            payload["new_contact_name"] = newContactName
+        }
+        return try await requestWithBody(
+            path: "api/imports/commit",
+            method: "POST",
+            body: payload
+        )
+    }
+
+    // MARK: - 任务
+
+    public func startTask(contactId: String) async throws -> TaskStartResponse {
+        try await requestWithBody(
+            path: "api/tasks/run",
+            method: "POST",
+            body: ["contact_id": contactId]
+        )
+    }
+
+    public func taskStatus(contactId: String) async throws -> TaskStatusResponse {
+        try await request(
+            path: "api/tasks/status",
+            method: "GET",
+            queryItems: [URLQueryItem(name: "contact_id", value: contactId)]
+        )
+    }
+
     // MARK: - 内部
 
     private func request<T: Decodable>(

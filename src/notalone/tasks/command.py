@@ -70,8 +70,14 @@ def run_worker(
     contact_id: UUID,
     worker_id: UUID,
     sleep: Callable[[float], None] = time.sleep,
+    progress_callback: Callable[[WorkerRunResult, int], None] | None = None,
 ) -> WorkerCommandResult:
-    """在一个全局锁内串行执行一个联系人任务。"""
+    """在一个全局锁内串行执行一个联系人任务。
+
+    ``progress_callback(result, retry_count)`` 在每步结果产生后调用
+    一次（结果含步骤名与计数，附带截至当前的累计重试数），供进程内
+    宿主实时推送进度；CLI 调用方不传则保持原行为。
+    """
 
     if not try_acquire_global_worker_lock(lock_connection):
         return WorkerCommandResult(status=WorkerCommandStatus.BUSY)
@@ -91,6 +97,8 @@ def run_worker(
             last_step = result.step_name
             processed_count = result.processed_count
             attempt_count = result.attempt_count
+            if progress_callback is not None:
+                progress_callback(result, retry_count)
             if result.outcome is WorkerRunOutcome.IDLE:
                 return WorkerCommandResult(
                     status=WorkerCommandStatus.IDLE,
