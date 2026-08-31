@@ -25,5 +25,9 @@ let package = Package(
             name: "NotAloneApp",
             dependencies: ["NotAloneAppCore"]
         ),
+        .testTarget(
+            name: "NotAloneAppCoreTests",
+            dependencies: ["NotAloneAppCore"]
+        ),
     ]
 )

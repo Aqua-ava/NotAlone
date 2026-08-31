@@ -22,6 +22,7 @@ env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
     -emit-module-path "${module_dir}/NotAloneAppCore.swiftmodule" \
     "${app_dir}/Sources/NotAloneAppCore/BackendConnection.swift" \
     "${app_dir}/Sources/NotAloneAppCore/BackendModels.swift" \
+    "${app_dir}/Sources/NotAloneAppCore/FollowSmokeRefreshPolicy.swift" \
     "${app_dir}/Sources/NotAloneAppCore/BackendClient.swift" \
     "${app_dir}/Sources/NotAloneAppCore/BackendSupervisor.swift" \
     "${app_dir}/Sources/NotAloneAppCore/SseEventClient.swift" \

@@ -262,7 +262,14 @@ final class AppModel: ObservableObject {
 
     // 人工验证页使用的同步开关；仍然必须由用户点击，且不会隐式开始 follow。
     func setSyncEnabled(_ enabled: Bool) {
-        guard !isToggling, let client else { return }
+        guard !isToggling else {
+            followSmokeError = "上一个操作进行中，请稍候"
+            return
+        }
+        guard let client else {
+            followSmokeError = "后端正在连接，请稍候"
+            return
+        }
         if status?.syncEnabled == enabled {
             return
         }
@@ -275,7 +282,9 @@ final class AppModel: ObservableObject {
                     : try await client.disableSync()
                 status = updated
                 lastOperationMessage = enabled ? "已开启前台同步" : "已关闭前台同步"
-                await refreshFollowSmokeIfActive()
+                // 即使验证尚未开始，也要刷新页面上的初始状态；否则页面
+                // 可能在后端连接前出现，成功开启后仍会停留在加载状态。
+                await loadFollowSmoke(using: client)
             } catch {
                 followSmokeError = "同步开关失败：" + Self.describe(error)
             }
@@ -286,7 +295,9 @@ final class AppModel: ObservableObject {
 
     func loadFollowSmoke() {
         guard let client else {
-            followSmokeError = "后端不可用"
+            // 页面可能先于后端连接出现；连接建立后 attach() 会补读，
+            // 轮询也会在 followSmoke 仍为空时重试，不能把竞态误报成故障。
+            followSmokeError = nil
             return
         }
         Task {
@@ -295,8 +306,12 @@ final class AppModel: ObservableObject {
     }
 
     func startFollowSmoke() {
-        guard !followSmokeInFlight, let client else {
-            followSmokeError = "后端不可用"
+        guard !followSmokeInFlight else {
+            followSmokeError = "上一个操作进行中，请稍候"
+            return
+        }
+        guard let client else {
+            followSmokeError = "后端正在连接，请稍候"
             return
         }
         followSmokeInFlight = true
@@ -873,7 +888,7 @@ final class AppModel: ObservableObject {
                 // owner 已初始化（或状态未知）：正常轮询业务数据。
                 await refreshStatus()
                 await refreshContacts()
-                await refreshFollowSmokeIfActive()
+                await refreshFollowSmokeIfNeeded()
             }
             if !supervisor.isRunning {
                 // 后端进程崩溃或退出后自动重启，保持"监管"语义。
@@ -918,6 +933,9 @@ final class AppModel: ObservableObject {
         // owner 未初始化时同步/事件端点按设计 503；先查 setup 状态，
         // 已初始化后才启动 SSE 订阅与业务数据加载。
         checkSetupStatus()
+        // SwiftUI 的页面 onAppear 可能早于这里的后端握手；连接建立后
+        // 主动补读一次，避免首次读取失败后永久停在空状态。
+        loadFollowSmoke()
         if selectedContactId != nil && messages.isEmpty {
             loadFirstMessagePage()
         }
@@ -988,8 +1006,12 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func refreshFollowSmokeIfActive() async {
-        guard followSmoke?.active == true, let client else { return }
+    private func refreshFollowSmokeIfNeeded() async {
+        guard let client,
+              FollowSmokeRefreshPolicy.shouldRefresh(
+                  hasStatus: followSmoke != nil,
+                  isActive: followSmoke?.active
+              ) else { return }
         await loadFollowSmoke(using: client)
     }
 
