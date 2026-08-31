@@ -37,6 +37,8 @@ public final class BackendSupervisor: @unchecked Sendable {
     // 启动后端；等待握手行后返回连接信息。重复启动先收掉旧进程。
     public func launch(repoRoot: URL, serverBin: URL) async throws -> BackendConnection {
         terminate()
+        connection = nil
+        readBuffer.removeAll(keepingCapacity: true)
         lastExitCode = nil
         let pipe = stdout
 
@@ -57,26 +59,34 @@ public final class BackendSupervisor: @unchecked Sendable {
             self?.handleTermination(finished)
         }
 
-        do {
-            try process.run()
-        } catch {
-            lastError = "后端进程启动失败：\(error.localizedDescription)"
-            throw SuperviseError.launchFailed
-        }
-
-        // 读 stdout 直到出现 address= 行；15 秒超时失败关闭。
-        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            guard let self else { return }
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            self.readBuffer.append(data)
-            if let connection = self.parseConnection(from: self.readBuffer) {
-                handle.readabilityHandler = nil
-                self.resolve(connection)
-            }
-        }
         return try await withCheckedThrowingContinuation { continuation in
+            // 先登记 continuation，再安装读取回调并启动进程，避免后端
+            // 启动很快时回调先解析握手而把连接结果丢掉。
             state.withLock { $0.continuation = continuation }
+            // 读 stdout 直到出现 address= 行；15 秒超时失败关闭。
+            pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+                guard let self else { return }
+                let data = handle.availableData
+                guard !data.isEmpty else { return }
+                self.readBuffer.append(data)
+                if let connection = self.parseConnection(from: self.readBuffer) {
+                    handle.readabilityHandler = nil
+                    self.resolve(connection)
+                }
+            }
+            do {
+                try self.process.run()
+            } catch {
+                pipe.fileHandleForReading.readabilityHandler = nil
+                self.lastError = "后端进程启动失败：\(error.localizedDescription)"
+                let pending = self.state.withLock { state in
+                    let continuation = state.continuation
+                    state.continuation = nil
+                    return continuation
+                }
+                pending?.resume(throwing: SuperviseError.launchFailed)
+                return
+            }
             DispatchQueue.global().asyncAfter(deadline: .now() + 15) {
                 self.timeoutIfStillWaiting()
             }
@@ -108,20 +118,7 @@ public final class BackendSupervisor: @unchecked Sendable {
         guard let text = String(data: data, encoding: .utf8) else {
             return nil
         }
-        var address: String?
-        var token: String?
-        for line in text.split(separator: "\n") {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.hasPrefix("address=") {
-                address = String(trimmed.dropFirst("address=".count))
-            } else if trimmed.hasPrefix("token=") {
-                token = String(trimmed.dropFirst("token=".count))
-            }
-        }
-        guard let address, let token, !address.isEmpty, !token.isEmpty else {
-            return nil
-        }
-        return BackendConnection(address: address, token: token)
+        return BackendConnection.parseHandshake(text)
     }
 
     private func resolve(_ connection: BackendConnection) {
