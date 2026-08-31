@@ -3,6 +3,21 @@ import XCTest
 import NotAloneAppCore
 
 final class BackendConnectionTests: XCTestCase {
+    func testBackendEnvironmentIncludesUserLocalBinForUserInstalledCli() {
+        let basePath = "/usr/bin:/bin"
+        let environment = EnvironmentLocator.backendEnvironment(
+            base: ["PATH": basePath]
+        )
+        let userLocalBin = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".local/bin")
+            .path
+
+        XCTAssertEqual(
+            environment["PATH"],
+            "\(userLocalBin):\(basePath)"
+        )
+    }
+
     func testParsesServerHandshakeWrittenOnOneLine() {
         let connection = BackendConnection.parseHandshake(
             "address=127.0.0.1:54321 token=test-token\n"

@@ -45,7 +45,7 @@ public final class BackendSupervisor: @unchecked Sendable {
         process.executableURL = serverBin
         process.arguments = []
         process.currentDirectoryURL = repoRoot
-        var environment = ProcessInfo.processInfo.environment
+        var environment = EnvironmentLocator.backendEnvironment()
         // 探针作为后端子进程运行，路径合并进环境；缺失时后端探针不可用。
         let probePath = repoRoot
             .appendingPathComponent("macos_sync_probe/build/cli/notalone-sync-probe")
@@ -163,6 +163,28 @@ public final class BackendSupervisor: @unchecked Sendable {
 
 // 沿用菜单栏应用的 conda 环境路径探测经验；仓库根以 pyproject.toml 为准。
 public enum EnvironmentLocator {
+    /// 为后端补齐通过用户级安装器安装的本地 CLI 搜索路径。
+    ///
+    /// macOS 从 Finder/Launch Services 启动 App 时通常不会继承 shell 的
+    /// `~/.local/bin`，但后端默认按 PATH 查找 `wechat-cli`。只扩展子进程
+    /// 环境，不修改 App 或用户的全局环境变量。
+    public static func backendEnvironment(
+        base: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [String: String] {
+        var environment = base
+        let userLocalBin = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".local/bin")
+            .path
+        let path = environment["PATH"] ?? ""
+        let entries = path.split(separator: ":", omittingEmptySubsequences: false)
+            .map(String.init)
+        guard !entries.contains(userLocalBin) else {
+            return environment
+        }
+        environment["PATH"] = ([userLocalBin] + entries).joined(separator: ":")
+        return environment
+    }
+
     public static func locateServerBin() -> URL? {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let bases = [
