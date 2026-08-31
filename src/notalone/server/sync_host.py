@@ -67,6 +67,14 @@ class SyncEnginePort(Protocol):
     ) -> FrontSyncCycleReport:
         """在当前前台会话上完成一次性绑定选择。"""
 
+    def confirm_pending_binding(
+        self,
+        *,
+        contact_id: UUID,
+        locator: str,
+    ) -> FrontSyncCycleReport:
+        """消费最近一次微信前台观察产生的待确认绑定证据。"""
+
 
 class SyncControlPort(Protocol):
     """后端向 HTTP 应用层暴露的同步控制端口。"""
@@ -90,6 +98,14 @@ class SyncControlPort(Protocol):
         locator: str,
     ) -> FrontSyncCycleReport:
         """完成一次性绑定确认并立即执行一轮，返回最新报告。"""
+
+    def confirm_pending(
+        self,
+        *,
+        contact_id: UUID,
+        locator: str,
+    ) -> FrontSyncCycleReport:
+        """消费待确认绑定证据并立即执行一轮，返回最新报告。"""
 
 
 class SyncHost:
@@ -192,6 +208,26 @@ class SyncHost:
             raise ValueError("locator 不能为空。")
         with self._lock:
             report = self._engine.confirm_binding(
+                contact_id=contact_id,
+                locator=locator,
+            )
+            self._cache_report_locked(report)
+            return report
+
+    def confirm_pending(
+        self,
+        *,
+        contact_id: UUID,
+        locator: str,
+    ) -> FrontSyncCycleReport:
+        """消费最近一次前台候选；确认时不重新要求微信仍在前台。"""
+
+        if not isinstance(contact_id, UUID):
+            raise TypeError("contact_id 必须是 UUID。")
+        if not isinstance(locator, str) or not locator.strip():
+            raise ValueError("locator 不能为空。")
+        with self._lock:
+            report = self._engine.confirm_pending_binding(
                 contact_id=contact_id,
                 locator=locator,
             )

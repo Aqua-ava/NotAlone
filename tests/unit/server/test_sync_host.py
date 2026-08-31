@@ -25,6 +25,7 @@ class FakeEngine:
         self.enable_calls = 0
         self.disable_calls = 0
         self.confirm_calls: list[tuple[str, str]] = []
+        self.confirm_pending_calls: list[tuple[str, str]] = []
         self.waits_for_selection = False
         self.wait_cycles = threading.Event()
 
@@ -70,6 +71,20 @@ class FakeEngine:
             failure_code=None,
             active_contact_id=contact_id,
             active_binding_display_name="合成已绑定",
+            decision_reason=None,
+        )
+
+    def confirm_pending_binding(self, *, contact_id, locator) -> FrontSyncCycleReport:
+        self.confirm_pending_calls.append((str(contact_id), locator))
+        return FrontSyncCycleReport(
+            sync_enabled=self.enabled,
+            phase=FrontSyncPhase.WAITING_FOREGROUND,
+            probe_available=True,
+            wechat_in_front=False,
+            cli_available=True,
+            failure_code=None,
+            active_contact_id=None,
+            active_binding_display_name=None,
             decision_reason=None,
         )
 
@@ -202,6 +217,22 @@ class SyncHostTest(unittest.TestCase):
             self.host.confirm(contact_id="not-uuid", locator="wxid_front")
         with self.assertRaises(ValueError):
             self.host.confirm(contact_id=uuid4(), locator="  ")
+
+    def test_confirm_pending_delegates_and_caches_report(self) -> None:
+        contact_id = uuid4()
+        self.engine.enabled = True
+
+        report = self.host.confirm_pending(
+            contact_id=contact_id, locator="wxid_front"
+        )
+
+        self.assertEqual(
+            self.engine.confirm_pending_calls,
+            [(str(contact_id), "wxid_front")],
+        )
+        self.assertTrue(report.sync_enabled)
+        self.assertEqual(report.phase, FrontSyncPhase.WAITING_FOREGROUND)
+        self.assertEqual(self.host.status(), report)
 
     def test_keeps_latest_valid_foreground_observation_when_app_returns_front(self) -> None:
         contact_id = uuid4()

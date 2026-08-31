@@ -61,6 +61,7 @@ class ScriptedSyncControl:
         self.disable_calls = 0
         self.check_calls = 0
         self.confirm_calls: list[tuple[str, str]] = []
+        self.confirm_pending_calls: list[tuple[str, str]] = []
         self.confirm_error: Exception | None = None
 
     def status(self) -> FrontSyncCycleReport | None:
@@ -83,6 +84,13 @@ class ScriptedSyncControl:
 
     def confirm(self, *, contact_id, locator) -> FrontSyncCycleReport:
         self.confirm_calls.append((str(contact_id), locator))
+        if self.confirm_error is not None:
+            raise self.confirm_error
+        self.next_report = _report(enabled=True)
+        return self.next_report
+
+    def confirm_pending(self, *, contact_id, locator) -> FrontSyncCycleReport:
+        self.confirm_pending_calls.append((str(contact_id), locator))
         if self.confirm_error is not None:
             raise self.confirm_error
         self.next_report = _report(enabled=True)
@@ -112,6 +120,7 @@ class SyncApiContractTest(unittest.TestCase):
             ("POST", "/api/sync/disable"),
             ("POST", "/api/sync/check"),
             ("POST", "/api/sync/confirm"),
+            ("POST", "/api/sync/confirm-pending"),
         ):
             with self.subTest(method=method, path=path):
                 missing = self.client.request(method, path)
@@ -240,6 +249,24 @@ class SyncApiContractTest(unittest.TestCase):
         )
         self.assertEqual(response.json()["sync_enabled"], True)
 
+    def test_confirm_pending_delegates_and_returns_fresh_status(self) -> None:
+        response = self.client.request(
+            "POST",
+            "/api/sync/confirm-pending",
+            headers=self.headers,
+            body=(
+                '{"contact_id": "' + str(CONTACT_ID) + '",'
+                ' "locator": "wxid_candidate"}'
+            ).encode("utf-8"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self.sync.confirm_pending_calls,
+            [(str(CONTACT_ID), "wxid_candidate")],
+        )
+        self.assertEqual(response.json()["sync_enabled"], True)
+
     def test_confirm_rejects_invalid_request_body(self) -> None:
         for body in (
             b"not-json",
@@ -307,6 +334,7 @@ class SyncApiContractTest(unittest.TestCase):
             ("POST", "/api/sync/disable"),
             ("POST", "/api/sync/check"),
             ("POST", "/api/sync/confirm"),
+            ("POST", "/api/sync/confirm-pending"),
         ):
             with self.subTest(method=method, path=path):
                 response = client.request(

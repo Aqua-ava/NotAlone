@@ -432,6 +432,7 @@ class BackendApp:
             "/api/sync/disable",
             "/api/sync/check",
             "/api/sync/confirm",
+            "/api/sync/confirm-pending",
         }:
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         sync = self._sync_control
@@ -451,8 +452,12 @@ class BackendApp:
             return _json_response(HTTPStatus.OK, _sync_status_payload(report))
         if method != "POST":
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
-        if path == "/api/sync/confirm":
-            return self._handle_sync_confirm(sync=sync, body=body)
+        if path in {"/api/sync/confirm", "/api/sync/confirm-pending"}:
+            return self._handle_sync_confirm(
+                sync=sync,
+                body=body,
+                pending=path == "/api/sync/confirm-pending",
+            )
         try:
             if path == "/api/sync/enable":
                 report = sync.enable()
@@ -472,6 +477,7 @@ class BackendApp:
         *,
         sync: SyncControlPort,
         body: bytes,
+        pending: bool = False,
     ) -> Response:
         """解析一次性绑定确认请求；参数缺失或冲突时失败关闭。"""
 
@@ -499,7 +505,13 @@ class BackendApp:
                 HTTPStatus.BAD_REQUEST, {"error": "binding_confirmation_invalid"}
             )
         try:
-            report = sync.confirm(contact_id=contact_id, locator=locator)
+            if pending:
+                report = sync.confirm_pending(
+                    contact_id=contact_id,
+                    locator=locator,
+                )
+            else:
+                report = sync.confirm(contact_id=contact_id, locator=locator)
         except BindingConfirmationError as error:
             return _json_response(
                 HTTPStatus.CONFLICT,

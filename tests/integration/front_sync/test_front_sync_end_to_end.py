@@ -159,6 +159,7 @@ class FrontSyncEndToEndTest(unittest.TestCase):
             bindings=self.bindings,
             sync_state=self.sync_state,
             cli=self.cli,
+            clock=lambda: self.now,
         )
         self.engine.enable_sync()
 
@@ -261,10 +262,10 @@ class FrontSyncEndToEndTest(unittest.TestCase):
         self.assertEqual(self._message_count(self.contact_a), 0)
         self.assertEqual(self.runner.tail_calls, [])
 
+        # 选择之后立即读入首批消息。
         report = self.engine.confirm_binding(
             contact_id=self.contact_a, locator=_TALKER_A
         )
-
         self.assertEqual(report.phase, FrontSyncPhase.ACTIVE)
         self.assertEqual(report.active_contact_id, self.contact_a)
         self.assertEqual(
@@ -320,6 +321,61 @@ class FrontSyncEndToEndTest(unittest.TestCase):
                 ).fetchall()
             }
         self.assertEqual(speakers, {"contact", "user"})
+
+    def test_pending_binding_confirmation_survives_app_focus_change(self) -> None:
+        # 微信前台时已经得到候选；随后模拟绑定弹窗让 NotAlone 抢到焦点，
+        # 选择联系人仍应消费刚才捕获的待确认证据。
+        self._front(_NAME_A)
+        report = self.engine.cycle()
+
+        self.assertEqual(
+            report.decision_reason, BindingMatchReason.FIRST_BINDING_UNIQUE
+        )
+        self._away()
+        away_report = self.engine.cycle()
+        self.assertEqual(away_report.phase, FrontSyncPhase.WAITING_FOREGROUND)
+        self.assertEqual(
+            [(c.username, c.display_name) for c in away_report.candidates],
+            [(_TALKER_A, _NAME_A)],
+        )
+
+        confirmed = self.engine.confirm_pending_binding(
+            contact_id=self.contact_a,
+            locator=_TALKER_A,
+        )
+
+        self.assertEqual(confirmed.phase, FrontSyncPhase.WAITING_FOREGROUND)
+        binding = self.bindings.read_active_by_locator(
+            owner_id=self.owner_id,
+            channel=_CHANNEL,
+            account_scope=_ACCOUNT,
+            conversation_locator=_TALKER_A,
+        )
+        self.assertIsNotNone(binding)
+        self.assertEqual(self._message_count(self.contact_a), 0)
+        self.assertEqual(self.runner.tail_calls, [])
+
+    def test_pending_binding_confirmation_expires(self) -> None:
+        self._front(_NAME_A)
+        self.engine.cycle()
+        self.now += 61.0
+        self._away()
+
+        with self.assertRaises(BindingConfirmationError) as expired:
+            self.engine.confirm_pending_binding(
+                contact_id=self.contact_a,
+                locator=_TALKER_A,
+            )
+
+        self.assertEqual(expired.exception.code, "pending_selection_expired")
+        self.assertIsNone(
+            self.bindings.read_active_by_locator(
+                owner_id=self.owner_id,
+                channel=_CHANNEL,
+                account_scope=_ACCOUNT,
+                conversation_locator=_TALKER_A,
+            )
+        )
 
     def test_duplicate_names_require_one_time_selection(self) -> None:
         self.runner.candidates_by_query[_NAME_A] = [

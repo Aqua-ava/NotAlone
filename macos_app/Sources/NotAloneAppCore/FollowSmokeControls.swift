@@ -89,3 +89,13 @@ public enum FollowSmokeShortcutCatalog {
         entries.first(where: { $0.action == action })?.displayName
     }
 }
+
+public enum BindingConfirmationPresentationPolicy {
+    public static func shouldPresent(
+        hasCandidates: Bool,
+        appIsActive: Bool,
+        isDismissed: Bool
+    ) -> Bool {
+        hasCandidates && appIsActive && !isDismissed
+    }
+}

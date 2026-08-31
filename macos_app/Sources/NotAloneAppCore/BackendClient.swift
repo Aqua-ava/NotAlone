@@ -76,11 +76,33 @@ public struct BackendClient: Sendable {
 
     // 完成一次性绑定确认；被拒绝时抛出 confirmRejected(reason)。
     public func confirmBinding(contactId: String, locator: String) async throws -> SyncStatus {
+        try await confirmBindingRequest(
+            path: "api/sync/confirm",
+            contactId: contactId,
+            locator: locator
+        )
+    }
+
+    // 消费最近一次微信前台观察产生的待确认绑定证据；允许用户在 App
+    // 获得焦点后完成选择，不重新要求微信仍处于前台。
+    public func confirmPendingBinding(contactId: String, locator: String) async throws -> SyncStatus {
+        try await confirmBindingRequest(
+            path: "api/sync/confirm-pending",
+            contactId: contactId,
+            locator: locator
+        )
+    }
+
+    private func confirmBindingRequest(
+        path: String,
+        contactId: String,
+        locator: String
+    ) async throws -> SyncStatus {
         let payload = ["contact_id": contactId, "locator": locator]
         guard let data = try? JSONSerialization.data(withJSONObject: payload) else {
             throw BackendError.malformedResponse
         }
-        guard let url = URL(string: "api/sync/confirm", relativeTo: baseURL) else {
+        guard let url = URL(string: path, relativeTo: baseURL) else {
             throw BackendError.malformedResponse
         }
         var request = URLRequest(url: url)

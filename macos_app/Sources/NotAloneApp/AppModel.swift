@@ -500,6 +500,30 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // 处理同步后台已捕获的候选；不要求 NotAlone 失去焦点后再把微信切回前台。
+    func confirmPendingBinding(contactId: String, locator: String, displayName: String) {
+        guard !isToggling, let client else {
+            if isToggling {
+                lastOperationMessage = "上一个操作进行中，请稍候"
+            }
+            return
+        }
+        isToggling = true
+        Task {
+            defer { isToggling = false }
+            do {
+                let updated = try await client.confirmPendingBinding(
+                    contactId: contactId,
+                    locator: locator
+                )
+                status = updated
+                lastOperationMessage = "已绑定「\(displayName)」，同步已恢复"
+            } catch {
+                lastOperationMessage = "绑定确认失败：\(Self.describe(error))"
+            }
+        }
+    }
+
     // MARK: - 记忆管理
 
     func loadMemories() {

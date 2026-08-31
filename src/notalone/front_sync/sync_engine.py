@@ -1,17 +1,21 @@
 """前台同步引擎：把定位证据、绑定确认与 tail 生命周期接成纵切。
 
 引擎不启动后台线程：调用方在每次前台观察时调用 ``cycle``，在一次性
-选择入口调用 ``confirm_binding``。所有报告字段都不携带消息正文；
+选择入口调用严格的 ``confirm_binding`` 或短时证据确认的
+``confirm_pending_binding``。所有报告字段都不携带消息正文；
 候选展示只包含 display name、外部会话标识和最近活动时间。
 """
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
 from notalone.conversation.matcher import (
+    BindingMatchDecision,
     BindingMatchKind,
     BindingMatchReason,
     FrontSessionEvidence,
@@ -23,6 +27,7 @@ from notalone.front_sync.probe_adapter import (
     ProbeAdapterError,
 )
 from notalone.front_sync.tail_lifecycle import (
+    FrontObserveOutcome,
     FrontSyncPhase,
     FollowRuntimeStatus,
     TailLifecycle,
@@ -83,6 +88,18 @@ class FrontSyncCycleReport:
     batch_message_count: int = 0
 
 
+@dataclass(frozen=True, slots=True)
+class _PendingBindingSelection:
+    """最近一次需要用户选择的前台绑定证据；只存进程内短时状态。"""
+
+    observed_at: float
+    decision: BindingMatchDecision
+    evidence: FrontSessionEvidence
+
+
+_PENDING_BINDING_SELECTION_TTL_SECONDS = 60.0
+
+
 class FrontSyncEngine:
     """前台定位 -> 绑定门禁 -> 增量读取的端到端编排。"""
 
@@ -96,6 +113,8 @@ class FrontSyncEngine:
         "_sync_state",
         "_cli",
         "_cli_status",
+        "_pending_binding_selection",
+        "_clock",
     )
 
     def __init__(
@@ -109,6 +128,7 @@ class FrontSyncEngine:
         bindings: PostgresConversationBindingRepository,
         sync_state: PostgresFrontSyncStateStore,
         cli: LocalWechatCli,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
@@ -116,6 +136,8 @@ class FrontSyncEngine:
             raise ValueError("channel 不能为空。")
         if not normalize_display_text(account_scope):
             raise ValueError("account_scope 不能为空。")
+        if not callable(clock):
+            raise TypeError("clock 必须是可调用对象。")
         self._owner_id = owner_id
         self._channel = channel
         self._account_scope = account_scope
@@ -125,6 +147,8 @@ class FrontSyncEngine:
         self._sync_state = sync_state
         self._cli = cli
         self._cli_status: tuple[bool, str | None] | None = None
+        self._pending_binding_selection: _PendingBindingSelection | None = None
+        self._clock = clock
 
     # ------------------------------------------------------------------
     # 同步开关
@@ -195,15 +219,19 @@ class FrontSyncEngine:
                 evidence=observation.evidence,
             )
             decision = outcome.decision
+            self._remember_pending_selection(outcome)
 
         written = self._lifecycle.poll()
         status = self._lifecycle.status()
         cli_available, _ = self._cli_availability()
-        candidates = (
-            tuple(_candidate_view(item) for item in decision.candidates)
+        candidate_source = (
+            decision.candidates
             if decision is not None
             and decision.kind is BindingMatchKind.NEEDS_SELECTION
-            else ()
+            else self._pending_candidate_source()
+        )
+        candidates = (
+            tuple(_candidate_view(item) for item in candidate_source)
         )
         return FrontSyncCycleReport(
             sync_enabled=self._sync_state.read(owner_id=self._owner_id).enabled,
@@ -252,6 +280,7 @@ class FrontSyncEngine:
         outcome = self._lifecycle.observe_front_session(
             wechat_in_front=True, evidence=evidence
         )
+        self._remember_pending_selection(outcome)
         decision = outcome.decision
         if decision is None or decision.kind is not BindingMatchKind.NEEDS_SELECTION:
             raise BindingConfirmationError(
@@ -266,6 +295,93 @@ class FrontSyncEngine:
                 "candidate_not_found", "所选候选不在当前会话候选中。"
             )
 
+        self._apply_binding_confirmation(
+            contact_id=contact_id,
+            locator=locator,
+            decision=decision,
+            evidence=evidence,
+        )
+        self._pending_binding_selection = None
+        return self.cycle()
+
+    def confirm_pending_binding(
+        self, *, contact_id: UUID, locator: str
+    ) -> FrontSyncCycleReport:
+        """消费最近一次前台候选，即使确认操作让微信暂时离开前台。
+
+        候选证据只在进程内保留 60 秒，且仍然要求用户明确选择联系人；
+        不重新读取当前窗口，也不把候选变成自动绑定。
+        """
+
+        if not isinstance(contact_id, UUID):
+            raise TypeError("contact_id 必须是 UUID。")
+        locator = normalize_display_text(locator)
+        if not locator:
+            raise ValueError("locator 不能为空。")
+
+        pending = self._pending_binding_selection
+        if pending is None:
+            raise BindingConfirmationError(
+                "no_pending_selection", "当前没有可消费的待确认绑定证据。"
+            )
+        if self._clock() - pending.observed_at > _PENDING_BINDING_SELECTION_TTL_SECONDS:
+            self._pending_binding_selection = None
+            raise BindingConfirmationError(
+                "pending_selection_expired",
+                "待确认绑定证据已过期，请返回微信重新观察。",
+            )
+        if not any(
+            candidate.username == locator for candidate in pending.decision.candidates
+        ):
+            raise BindingConfirmationError(
+                "candidate_not_found", "所选候选不在待确认绑定证据中。"
+            )
+
+        self._apply_binding_confirmation(
+            contact_id=contact_id,
+            locator=locator,
+            decision=pending.decision,
+            evidence=pending.evidence,
+        )
+        self._pending_binding_selection = None
+        return self.cycle()
+
+    def _remember_pending_selection(self, outcome: FrontObserveOutcome) -> None:
+        """记录新的前台决策；离开微信时保留旧证据以完成显式确认。"""
+
+        decision = outcome.decision
+        if decision is None:
+            return
+        if (
+            decision.kind is BindingMatchKind.NEEDS_SELECTION
+            and outcome.evidence is not None
+        ):
+            self._pending_binding_selection = _PendingBindingSelection(
+                observed_at=self._clock(),
+                decision=decision,
+                evidence=outcome.evidence,
+            )
+            return
+        # 新的已确认或不可用决策覆盖旧的候选，避免把旧窗口用于确认。
+        self._pending_binding_selection = None
+
+    def _pending_candidate_source(self) -> tuple[ChatCandidate, ...]:
+        pending = self._pending_binding_selection
+        if pending is None:
+            return ()
+        if self._clock() - pending.observed_at > _PENDING_BINDING_SELECTION_TTL_SECONDS:
+            self._pending_binding_selection = None
+            return ()
+        return pending.decision.candidates
+
+    def _apply_binding_confirmation(
+        self,
+        *,
+        contact_id: UUID,
+        locator: str,
+        decision: BindingMatchDecision,
+        evidence: FrontSessionEvidence,
+    ) -> None:
         observed_name = normalize_display_text(evidence.display_name)
         if decision.reason is BindingMatchReason.BINDING_NAME_CHANGED:
             self._confirm_name_change(
@@ -281,7 +397,6 @@ class FrontSyncEngine:
                 observed_name=observed_name,
                 evidence=evidence,
             )
-        return self.cycle()
 
     def _create_first_binding(
         self,

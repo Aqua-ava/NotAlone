@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import NotAloneAppCore
 
@@ -9,8 +10,7 @@ struct MainWindowView: View {
     @State private var selectedContact: String?
     @State private var scrollProxy: ScrollViewProxy?
     @State private var selectedCandidate: BindingCandidate?
-    // 候选出现时自动弹出一次；用户手动关闭后本会话不再自动弹出，
-    // 同步保持暂停，直到用户再次打开确认入口。
+    // 用户手动关闭后本会话不再自动弹出；后台发现候选不会抢占微信焦点。
     @State private var dismissBindingSheet = false
     // 回复工作区输入
     @State private var replyDirection = ""
@@ -111,7 +111,15 @@ struct MainWindowView: View {
             }
         }
         .onChange(of: model.status?.candidates.isEmpty) { _, isEmpty in
-            guard isEmpty == false, !dismissBindingSheet else { return }
+            if isEmpty == true {
+                dismissBindingSheet = false
+                return
+            }
+            guard BindingConfirmationPresentationPolicy.shouldPresent(
+                hasCandidates: true,
+                appIsActive: NSApp.isActive,
+                isDismissed: dismissBindingSheet
+            ) else { return }
             selectedCandidate = nil
             showBindingConfirmation = true
         }
@@ -176,14 +184,14 @@ struct MainWindowView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    // 有待确认候选绑定时弹出一次性选择列表；确认前同步保持暂停。
+    // 用户主动处理待确认候选时展示一次性选择列表；确认前同步保持暂停。
     // 用户手动关闭后本会话不再自动弹出（dismissBindingSheet 标记），
     // 确认后候选清空自动收起。
     private var bindingConfirmationSheet: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(selectedCandidate == nil ? "确认绑定到哪位联系人？" : "为「\(selectedCandidate?.displayName ?? "")」选择联系人")
                 .font(.headline)
-            Text("同步已暂停；选择后才会写入绑定并恢复读取。")
+            Text("同步已暂停；候选来自最近一次微信前台观察，选择联系人后会完成绑定。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Divider()
@@ -245,7 +253,7 @@ struct MainWindowView: View {
             }
             .contentShape(Rectangle())
             .onTapGesture {
-                model.confirmBinding(
+                model.confirmPendingBinding(
                     contactId: contact.contactId,
                     locator: candidate.username,
                     displayName: candidate.displayName
@@ -1143,6 +1151,10 @@ struct MainWindowView: View {
                         .foregroundStyle(.red)
                 }
 
+                if let candidates = model.status?.candidates, !candidates.isEmpty {
+                    pendingBindingCard(candidates)
+                }
+
                 followSmokeControlCard
                 if let smoke = model.followSmoke {
                     followSmokeStatusCard(smoke)
@@ -1158,6 +1170,42 @@ struct MainWindowView: View {
             .padding(12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func pendingBindingCard(_ candidates: [BindingCandidate]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("发现待确认的微信会话", systemImage: "person.crop.circle.badge.questionmark")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.orange)
+            ForEach(candidates, id: \.username) { candidate in
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(candidate.displayName)
+                        Text(candidate.username)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if let timestamp = candidate.lastTimestamp {
+                        Text(shortTimestamp(timestamp))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            Text("候选来自最近一次微信前台观察；不会自动弹出窗口。切回 NotAlone 后主动处理，待确认证据 60 秒内有效。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("处理绑定确认") {
+                selectedCandidate = nil
+                dismissBindingSheet = false
+                showBindingConfirmation = true
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(10)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var followSmokeControlCard: some View {
