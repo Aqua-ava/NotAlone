@@ -78,6 +78,17 @@ class FrontSyncStatus:
 
 
 @dataclass(frozen=True, slots=True)
+class FollowRuntimeStatus:
+    """供人工验证页面展示的 follow 运行时最小投影。"""
+
+    enabled: bool
+    stream_active: bool
+    process_id: int | None = None
+    mode: str | None = None
+    watermark: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class FrontObserveOutcome:
     """一次前台观察的稳定结论；携带绑定决策供一次性确认入口使用。
 
@@ -181,6 +192,47 @@ class TailLifecycle:
             at=_datetime_from_clock(self._clock()),
         )
         self._stop_session(FrontSyncPhase.SYNC_DISABLED)
+
+    def set_follow_enabled(self, enabled: bool) -> None:
+        """切换人工验证用的 follow 优先策略，不改变同步开关。"""
+
+        if not isinstance(enabled, bool):
+            raise TypeError("enabled 必须是 bool。")
+        if self._follow_enabled == enabled:
+            return
+        self._follow_enabled = enabled
+        self._follow_supported = True
+        self._follow_failures = 0
+        if not enabled:
+            session = self._session
+            if session is not None:
+                self._close_follow_stream(session)
+                if self._phase is FrontSyncPhase.FAILED:
+                    self._recover_from_failure()
+
+    def interrupt_follow_stream(self) -> bool:
+        """只中断当前 follow 子进程，供人工验证恢复路径使用。"""
+
+        session = self._session
+        if session is None or session.follow_stream is None:
+            return False
+        self._close_follow_stream(session)
+        self._prepare_follow_restart(session)
+        self._mark_failure("cli_follow_failed")
+        return True
+
+    def follow_runtime_status(self) -> FollowRuntimeStatus:
+        """返回 follow 开关、流进程和联系人水位，不含消息正文。"""
+
+        session = self._session
+        stream = session.follow_stream if session is not None else None
+        return FollowRuntimeStatus(
+            enabled=self._follow_enabled,
+            stream_active=stream is not None and not stream.closed,
+            process_id=stream.process_id if stream is not None else None,
+            mode=(session.next_mode.value if session is not None else None),
+            watermark=(session.since_local_id if session is not None else None),
+        )
 
     # ------------------------------------------------------------------
     # 前台观察与轮询

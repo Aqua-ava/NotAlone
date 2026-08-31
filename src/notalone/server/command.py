@@ -23,6 +23,10 @@ from notalone.server.connection_info import (
 )
 from notalone.server.event_bus import EventBus
 from notalone.server.event_publisher import EventBusMessagePublisher
+from notalone.server.follow_smoke import (
+    FollowSmokeController,
+    PostgresFollowSmokeSnapshotReader,
+)
 from notalone.server.reply_wiring import build_reply_service
 from notalone.server.sync_host import SyncHost
 
@@ -65,6 +69,15 @@ def main(argv: list[str] | None = None) -> int:
         interval=args.sync_interval,
         events=events,
     )
+    follow_smoke = (
+        FollowSmokeController(
+            owner_id=owner_id,
+            host=sync_host,
+            snapshots=PostgresFollowSmokeSnapshotReader(database_url),
+        )
+        if owner_id is not None and sync_host is not None
+        else None
+    )
     reply_service = (
         build_reply_service(database_url=database_url, owner_id=owner_id)
         if owner_id is not None
@@ -89,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
             skill_service=skill_service,
             ledger_service=ledger_service,
             setup_service=setup_service,
+            follow_smoke=follow_smoke,
         )
         server = BackendServer(app, host=args.host, port=args.port)
         host, port = server.start()
@@ -180,7 +194,8 @@ def _build_sync_host(
         owner_id=owner_id,
         account_scope=account_scope,
         # 消息写入即发布 message.created 事件，供界面消息流实时更新。
-        # 读取主路径仍保持一次性轮询（follow 待 Issue 04 真实冒烟通过）。
+        # 读取主路径仍保持一次性轮询；只有 App 的人工验证页会显式切换
+        # 到 follow 优先模式，验证结束后恢复这里的默认策略。
         message_events=EventBusMessagePublisher(events),
         follow_enabled=False,
     )

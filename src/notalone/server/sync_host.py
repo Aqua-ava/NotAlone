@@ -16,6 +16,7 @@ from notalone.front_sync.sync_engine import (
     BindingConfirmationError,
     FrontSyncCycleReport,
 )
+from notalone.front_sync.tail_lifecycle import FollowRuntimeStatus
 
 
 class SyncEnginePort(Protocol):
@@ -32,6 +33,18 @@ class SyncEnginePort(Protocol):
 
     def sync_enabled(self) -> bool:
         """读取当前同步开关（不触发探针或 CLI）。"""
+
+    def enable_follow_smoke(self) -> FrontSyncCycleReport:
+        """启用人工验证用 follow 优先策略并立即运行一轮。"""
+
+    def disable_follow_smoke(self) -> FrontSyncCycleReport:
+        """关闭人工验证用 follow 优先策略并恢复轮询。"""
+
+    def interrupt_follow_stream(self) -> FrontSyncCycleReport:
+        """中断当前 follow 流并运行一轮恢复逻辑。"""
+
+    def follow_runtime_status(self) -> FollowRuntimeStatus:
+        """读取 follow 运行时最小状态。"""
 
     def confirm_binding(
         self,
@@ -77,6 +90,7 @@ class SyncHost:
 
     __slots__ = (
         "_engine",
+        "_follow_smoke_active",
         "_interval",
         "_lock",
         "_latest",
@@ -90,6 +104,7 @@ class SyncHost:
         if interval <= 0:
             raise ValueError("interval 必须大于零。")
         self._engine = engine
+        self._follow_smoke_active = False
         self._interval = float(interval)
         self._lock = threading.Lock()
         self._latest: FrontSyncCycleReport | None = None
@@ -168,6 +183,34 @@ class SyncHost:
             self._latest = report
             return report
 
+    def sync_enabled(self) -> bool:
+        with self._lock:
+            return self._engine.sync_enabled()
+
+    def enable_follow_smoke(self) -> FrontSyncCycleReport:
+        with self._lock:
+            report = self._engine.enable_follow_smoke()
+            self._follow_smoke_active = True
+            self._latest = report
+            return report
+
+    def disable_follow_smoke(self) -> FrontSyncCycleReport:
+        with self._lock:
+            report = self._engine.disable_follow_smoke()
+            self._follow_smoke_active = False
+            self._latest = report
+            return report
+
+    def interrupt_follow_stream(self) -> FrontSyncCycleReport:
+        with self._lock:
+            report = self._engine.interrupt_follow_stream()
+            self._latest = report
+            return report
+
+    def follow_runtime_status(self) -> FollowRuntimeStatus:
+        with self._lock:
+            return self._engine.follow_runtime_status()
+
     # ------------------------------------------------------------------
     # 内部
     # ------------------------------------------------------------------
@@ -176,7 +219,11 @@ class SyncHost:
         # 启动先播种一轮初始化报告；随后只在同步开启时按心跳循环。
         with self._lock:
             self._run_cycle_guarded()
-        while not self._stop_event.wait(self._interval):
+        while True:
+            with self._lock:
+                interval = 0.25 if self._follow_smoke_active else self._interval
+            if self._stop_event.wait(interval):
+                return
             with self._lock:
                 if self._engine.sync_enabled():
                     self._run_cycle_guarded()

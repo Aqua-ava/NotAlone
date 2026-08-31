@@ -20,7 +20,7 @@ struct MainWindowView: View {
     @State private var includeRelationshipContext = false
     // 候选正文的会话内编辑内容（按 candidateId）
     @State private var editedCandidateTexts: [String: String] = [:]
-    // 右栏切换：0 = 回复工作区，1 = 记忆管理
+    // 右栏切换：0 = 回复，1 = 记忆，2 = 导入，3 = Skill，4 = 设置，5 = 同步验证
     @State private var detailTab = 0
     // 记忆管理输入
     @State private var newMemoryText = ""
@@ -67,6 +67,7 @@ struct MainWindowView: View {
                     Text("导入").tag(2)
                     Text("Skill 库").tag(3)
                     Text("设置").tag(4)
+                    Text("同步验证").tag(5)
                 }
                 .pickerStyle(.segmented)
                 .padding(8)
@@ -85,8 +86,13 @@ struct MainWindowView: View {
                         .onAppear {
                             model.loadSkills()
                         }
-                } else {
+                } else if detailTab == 4 {
                     settingsView
+                } else {
+                    followSmokeView
+                        .onAppear {
+                            model.loadFollowSmoke()
+                        }
                 }
             }
         }
@@ -1114,6 +1120,293 @@ struct MainWindowView: View {
         panel.canChooseFiles = true
         if panel.runModal() == .OK, let url = panel.url {
             skillPackagePath = url.path
+        }
+    }
+
+    // MARK: - Follow 人工验证
+
+    // Issue 04 的产品入口：所有微信动作仍由用户完成，App 只驱动本地诊断
+    // 接缝并显示阶段、计数、水位和错误码，不显示聊天正文。
+    private var followSmokeView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("前台同步人工验证")
+                    .font(.headline)
+                Text("这是 Issue 04 的 App 内验证向导。你负责把微信置前、选择会话和产生测试消息；App 只记录本地元数据，不切换微信、不滚动会话、不发送消息。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let error = model.followSmokeError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                followSmokeControlCard
+                if let smoke = model.followSmoke {
+                    followSmokeStatusCard(smoke)
+                    if smoke.active {
+                        followSmokeActionCard(smoke)
+                    }
+                    followSmokeCheckpointsCard(smoke)
+                } else {
+                    ProgressView("正在读取验证状态…")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var followSmokeControlCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("开始前")
+                .font(.subheadline.weight(.semibold))
+            if model.status?.syncEnabled == true {
+                Label("正式前台同步已开启", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.caption)
+            } else {
+                Label("请先开启正式前台同步", systemImage: "exclamationmark.circle")
+                    .foregroundStyle(.orange)
+                    .font(.caption)
+                Button("开启前台同步") {
+                    model.setSyncEnabled(true)
+                }
+                .disabled(model.followSmokeInFlight)
+            }
+            Text("开始验证不会替你改变正式同步开关；结束验证会把读取策略恢复为默认轮询。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if model.followSmoke?.active != true {
+                Button("开始 Follow 验证") {
+                    model.startFollowSmoke()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(
+                    model.followSmokeInFlight
+                        || model.status?.syncEnabled != true
+                )
+            } else {
+                Button("结束验证并恢复轮询") {
+                    model.stopFollowSmoke()
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.followSmokeInFlight)
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func followSmokeStatusCard(_ smoke: FollowSmokeStatus) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("运行状态")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                if smoke.active {
+                    badge("验证中", color: .blue)
+                } else {
+                    badge("未开始", color: .secondary)
+                }
+            }
+            followSmokeInfoRow("同步阶段", value: followPhaseLabel(smoke.phase))
+            followSmokeInfoRow("微信前台", value: boolLabel(smoke.wechatInFront))
+            followSmokeInfoRow("探针 / CLI", value: boolLabel(smoke.probeAvailable) + " / " + boolLabel(smoke.cliAvailable))
+            followSmokeInfoRow("Follow 流", value: smoke.followStreamActive ? "运行中" : "未运行")
+            if let processId = smoke.followProcessId {
+                followSmokeInfoRow("Follow PID", value: String(processId))
+            }
+            followSmokeInfoRow("读取模式", value: smoke.followMode ?? "无")
+            followSmokeInfoRow("当前水位", value: smoke.followWatermark.map { String($0) } ?? "无")
+            followSmokeInfoRow("本轮新增", value: smoke.batchMessageCount.map { String($0) } ?? "无")
+            if let failure = smoke.failureCode {
+                followSmokeInfoRow("错误码", value: failure, color: .red)
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func followSmokeActionCard(_ smoke: FollowSmokeStatus) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("按人工动作记录")
+                .font(.subheadline.weight(.semibold))
+            Text("每次按钮只保存固定标签、联系人级计数、观察来源数、水位、最新模式和重复身份数。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("建议顺序：先记录基线；保持目标单聊在微信前台并记录前台准备；由你人工产生一条消息后记录实时到达；等待空闲后记录去重；需要异常验证时中断 Follow 流并等待恢复；最后再做后台、关闭/重开同步和最终记录。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                followCheckpointButton("记录基线", label: "baseline")
+                followCheckpointButton("记录前台准备", label: "before_follow")
+            }
+            HStack {
+                followCheckpointButton("记录实时到达", label: "after_live_message")
+                followCheckpointButton("记录空闲去重", label: "after_idle")
+            }
+            HStack {
+                Button("中断 Follow 流") {
+                    model.interruptFollowSmoke()
+                }
+                .disabled(model.followSmokeInFlight || !smoke.followStreamActive)
+                followCheckpointButton("记录异常恢复", label: "after_follow_restart")
+            }
+            HStack {
+                followCheckpointButton("记录微信后台", label: "wechat_background")
+                followCheckpointButton("记录重新开启后", label: "after_reenable")
+            }
+            HStack {
+                Button("手动关闭同步") {
+                    model.setSyncEnabled(false)
+                }
+                Button("手动重新开启同步") {
+                    model.setSyncEnabled(true)
+                }
+            }
+            .disabled(model.followSmokeInFlight)
+            Button("记录最终结果") {
+                model.checkpointFollowSmoke(label: "final")
+            }
+            .disabled(model.followSmokeInFlight)
+        }
+        .padding(10)
+        .background(Color.blue.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func followCheckpointButton(_ title: String, label: String) -> some View {
+        Button(title) {
+            model.checkpointFollowSmoke(label: label)
+        }
+        .disabled(model.followSmokeInFlight)
+    }
+
+    private func followSmokeCheckpointsCard(_ smoke: FollowSmokeStatus) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("已记录检查点")
+                .font(.subheadline.weight(.semibold))
+            followSmokeCheckpointRows(smoke.checkpoints)
+            followSmokeCurrentContactRows(smoke.contacts)
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private func followSmokeCheckpointRows(
+        _ checkpoints: [FollowSmokeCheckpoint]
+    ) -> some View {
+        if checkpoints.isEmpty {
+            Text("还没有检查点；开始验证后按人工动作逐项记录。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            ForEach(checkpoints) { checkpoint in
+                followSmokeCheckpointRow(checkpoint)
+            }
+        }
+    }
+
+    private func followSmokeCheckpointRow(
+        _ checkpoint: FollowSmokeCheckpoint
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(followCheckpointLabel(checkpoint.label))
+                    .font(.caption.weight(.medium))
+                Spacer()
+                Text(checkpoint.recordedAt)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            ForEach(checkpoint.contacts) { contact in
+                Text(followContactSummary(contact: contact))
+                    .font(.caption2)
+                    .foregroundStyle(contact.duplicateIdentities == 0 ? Color.secondary : Color.red)
+            }
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    @ViewBuilder
+    private func followSmokeCurrentContactRows(
+        _ contacts: [FollowSmokeContact]
+    ) -> some View {
+        if !contacts.isEmpty {
+            Divider()
+            Text("当前联系人元数据")
+                .font(.caption.weight(.medium))
+            ForEach(contacts) { contact in
+                Text(followContactSummary(contact: contact, includeBinding: true))
+                    .font(.caption2)
+                    .foregroundStyle(contact.duplicateIdentities == 0 ? Color.secondary : Color.red)
+            }
+        }
+    }
+
+    private func followContactSummary(
+        contact: FollowSmokeContact,
+        includeBinding: Bool = false
+    ) -> String {
+        let binding = includeBinding ? (contact.bound ? "已绑定" : "未绑定") + " · " : ""
+        let watermark = contact.watermark.map { String($0) } ?? "无"
+        return "联系人：" + binding
+            + "消息 " + String(contact.messageCount)
+            + " · 来源 " + String(contact.observationRefCount)
+            + " · 水位 " + watermark
+            + " · 模式 " + contact.latestMode
+            + " · 重复身份 " + String(contact.duplicateIdentities)
+    }
+
+    private func followSmokeInfoRow(
+        _ title: String,
+        value: String,
+        color: Color = .secondary
+    ) -> some View {
+        HStack {
+            Text(title)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .foregroundStyle(color)
+                .textSelection(.enabled)
+        }
+        .font(.caption)
+    }
+
+    private func boolLabel(_ value: Bool?) -> String {
+        guard let value else { return "未知" }
+        return value ? "是" : "否"
+    }
+
+    private func followPhaseLabel(_ raw: String?) -> String {
+        switch raw {
+        case "active": return "active（读取中）"
+        case "waiting_foreground": return "等待微信前台"
+        case "sync_disabled": return "同步已关闭"
+        case "unavailable": return "会话不可用"
+        case "failed": return "失败退避"
+        default: return raw ?? "未知"
+        }
+    }
+
+    private func followCheckpointLabel(_ raw: String) -> String {
+        switch raw {
+        case "baseline": return "基线"
+        case "before_follow": return "Follow 前"
+        case "after_live_message": return "实时到达后"
+        case "after_idle": return "空闲去重后"
+        case "after_follow_restart": return "异常恢复后"
+        case "wechat_background": return "微信后台"
+        case "after_reenable": return "重新开启后"
+        case "final": return "最终结果"
+        default: return raw
         }
     }
 

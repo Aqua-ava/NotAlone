@@ -3,7 +3,7 @@
 Type: task
 
 **Triage:** ready-for-human
-**State:** open
+**State:** claimed
 
 **What to build:** 在真实微信环境中确认 `tail --follow` 长进程稳定：消息到达近实时、不丢不重，切换与切回时水位正确推进，流进程异常后能恢复。这是一次只读验证冒烟；通过之前，一次性轮询仍是同步主路径，事件驱动不替换轮询。
 
@@ -19,4 +19,4 @@ Type: task
 
 - 来源规格：`.scratch/native-app-backend/spec.md`。
 - 冒烟沿用仓库既有冒烟记录惯例（参照 `.scratch/local-wechat-cli-observation/smoke/`）。
-- 移交人工（2026-08-25）：本票为 `ready-for-human`，依赖真实微信前台环境，Agent 无法代跑。跟随同步链路（03/05 已接线）可验证；需人工在真实微信下实测清单五项的流稳定性、水位与失败关闭行为，并把结果与剩余风险写入本票 Answer。
+- 2026-09-01：已把人工验证入口接入 macOS App 的“同步验证”页；页面通过本地后端诊断接口记录固定检查点、阶段、计数、水位和错误码，仍由用户手动操作微信。原 SH 向导保留为开发备用入口；本票真实微信清单尚未实测，完成后再补 Answer。

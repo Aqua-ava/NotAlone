@@ -10,6 +10,9 @@ public struct BackendClient: Sendable {
         case notFound
         case confirmRejected(reason: String)
         case replyRejected(reason: String)
+        case followSmokeUnavailable
+        case followSmokeRejected(reason: String)
+        case followSmokeRequestInvalid
         case malformedResponse
         case transport
     }
@@ -43,6 +46,32 @@ public struct BackendClient: Sendable {
 
     public func checkSync() async throws -> SyncStatus {
         try await request(path: "api/sync/check", method: "POST")
+    }
+
+    // MARK: - Follow 人工验证
+
+    public func followSmokeStatus() async throws -> FollowSmokeStatus {
+        try await followSmokeRequest(path: "api/sync/follow-smoke/status", method: "GET")
+    }
+
+    public func startFollowSmoke() async throws -> FollowSmokeStatus {
+        try await followSmokeRequest(path: "api/sync/follow-smoke/start", method: "POST")
+    }
+
+    public func stopFollowSmoke() async throws -> FollowSmokeStatus {
+        try await followSmokeRequest(path: "api/sync/follow-smoke/stop", method: "POST")
+    }
+
+    public func interruptFollowSmoke() async throws -> FollowSmokeStatus {
+        try await followSmokeRequest(path: "api/sync/follow-smoke/interrupt", method: "POST")
+    }
+
+    public func checkpointFollowSmoke(label: String) async throws -> FollowSmokeStatus {
+        try await followSmokeRequest(
+            path: "api/sync/follow-smoke/checkpoint",
+            method: "POST",
+            body: ["label": label]
+        )
     }
 
     // 完成一次性绑定确认；被拒绝时抛出 confirmRejected(reason)。
@@ -512,6 +541,52 @@ public struct BackendClient: Sendable {
                 from: data
             ))?.reason ?? "unknown"
             throw BackendError.replyRejected(reason: reason)
+        }
+        guard status == 200 else {
+            throw BackendError.badStatus(status)
+        }
+        do {
+            return try JSONDecoder.snakeCaseDecoder.decode(T.self, from: data)
+        } catch {
+            throw BackendError.malformedResponse
+        }
+    }
+
+    private func followSmokeRequest<T: Decodable>(
+        path: String,
+        method: String,
+        body: [String: Any]? = nil
+    ) async throws -> T {
+        guard let url = URL(string: path, relativeTo: baseURL) else {
+            throw BackendError.malformedResponse
+        }
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = method
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let body {
+            guard let bodyData = try? JSONSerialization.data(withJSONObject: body) else {
+                throw BackendError.malformedResponse
+            }
+            urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            urlRequest.httpBody = bodyData
+        }
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 503 {
+            throw BackendError.followSmokeUnavailable
+        }
+        if status == 404 {
+            throw BackendError.notFound
+        }
+        if status == 400 {
+            throw BackendError.followSmokeRequestInvalid
+        }
+        if status == 409 {
+            let reason = (try? JSONDecoder.snakeCaseDecoder.decode(
+                RejectionEnvelope.self,
+                from: data
+            ))?.reason ?? "unknown"
+            throw BackendError.followSmokeRejected(reason: reason)
         }
         guard status == 200 else {
             throw BackendError.badStatus(status)

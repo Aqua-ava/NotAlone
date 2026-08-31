@@ -20,6 +20,7 @@ from notalone.front_sync.tail_lifecycle import (
     FrontObserveOutcome,
     FrontSyncPhase,
     FrontSyncStatus,
+    FollowRuntimeStatus,
     TailLifecycle,
 )
 
@@ -35,6 +36,7 @@ __all__ = [
     "NullMessageEventPublisher",
     "FrontSyncPhase",
     "FrontSyncStatus",
+    "FollowRuntimeStatus",
     "MacosFrontSessionProbe",
     "ProbeAdapterError",
     "TailLifecycle",

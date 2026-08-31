@@ -66,6 +66,13 @@ from notalone.persistence.contact_directory import PostgresContactDirectory
 from notalone.persistence.message_stream import PostgresMessageStream
 from notalone.reply.interface import ReplyGenerated
 from notalone.server.event_bus import EventBus, EventSubscription
+from notalone.server.follow_smoke import (
+    FollowSmokeContactSnapshot,
+    FollowSmokeController,
+    FollowSmokeRejected,
+    FollowSmokeRequestInvalid,
+    FollowSmokeStatus,
+)
 from notalone.server.sse import encode_sse_frame
 from notalone.server.sync_host import SyncControlPort
 
@@ -113,6 +120,7 @@ class BackendApp:
     __slots__ = (
         "_contact_directory",
         "_events",
+        "_follow_smoke",
         "_import_service",
         "_ledger_service",
         "_memory_service",
@@ -134,6 +142,7 @@ class BackendApp:
         owner_id: UUID | None,
         token: str,
         sync_control: SyncControlPort | None = None,
+        follow_smoke: FollowSmokeController | None = None,
         message_stream: MessageStream | None = None,
         reply_service: ReplyService | None = None,
         memory_service: MemoryService | None = None,
@@ -149,6 +158,7 @@ class BackendApp:
             raise ValueError("token 不能为空。")
         self._contact_directory = contact_directory
         self._events = events
+        self._follow_smoke = follow_smoke
         self._import_service = import_service
         self._ledger_service = ledger_service
         self._memory_service = memory_service
@@ -269,6 +279,12 @@ class BackendApp:
                 path=path_value,
                 body=request_body,
             )
+        if path_value.startswith("/api/sync/follow-smoke"):
+            return self._handle_follow_smoke(
+                method=method_upper,
+                path=path_value,
+                body=request_body,
+            )
         if path_value.startswith("/api/sync"):
             return self._handle_sync(
                 method=method_upper,
@@ -276,6 +292,73 @@ class BackendApp:
                 body=request_body,
             )
         return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+
+    def _handle_follow_smoke(
+        self,
+        *,
+        method: str,
+        path: str,
+        body: bytes,
+    ) -> Response:
+        """处理 App 人工验证端点；只返回状态和检查点元数据。"""
+
+        paths = {
+            "/api/sync/follow-smoke/status": "status",
+            "/api/sync/follow-smoke/start": "start",
+            "/api/sync/follow-smoke/stop": "stop",
+            "/api/sync/follow-smoke/interrupt": "interrupt",
+            "/api/sync/follow-smoke/checkpoint": "checkpoint",
+        }
+        action = paths.get(path)
+        if action is None:
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        controller = self._follow_smoke
+        if controller is None:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "follow_smoke_unavailable"},
+            )
+        if action == "status":
+            if method != "GET":
+                return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            try:
+                return _json_response(
+                    HTTPStatus.OK,
+                    _follow_smoke_payload(controller.status()),
+                )
+            except Exception:
+                return _json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "follow_smoke_failed"},
+                )
+        if method != "POST":
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        try:
+            if action == "start":
+                result = controller.start()
+            elif action == "stop":
+                result = controller.stop()
+            elif action == "interrupt":
+                result = controller.interrupt()
+            else:
+                payload = _parse_follow_smoke_json(body)
+                result = controller.checkpoint(payload.get("label"))
+        except FollowSmokeRequestInvalid:
+            return _json_response(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "follow_smoke_request_invalid"},
+            )
+        except FollowSmokeRejected as error:
+            return _json_response(
+                HTTPStatus.CONFLICT,
+                {"error": "follow_smoke_rejected", "reason": error.code},
+            )
+        except Exception:
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "follow_smoke_failed"},
+            )
+        return _json_response(HTTPStatus.OK, _follow_smoke_payload(result))
 
     def _handle_messages(self, *, method: str, path: str, query: str) -> Response:
         """处理 /api/contacts/{contact_id}/messages：分页读取消息流。"""
@@ -1106,6 +1189,7 @@ def create_app(
     skill_service: SkillService | None = None,
     ledger_service: LedgerService | None = None,
     setup_service: SetupService | None = None,
+    follow_smoke: FollowSmokeController | None = None,
 ) -> BackendApp:
     """创建服务应用；未显式传 token 时在启动时生成随机 token。"""
 
@@ -1115,6 +1199,7 @@ def create_app(
         owner_id=owner_id,
         token=token or secrets.token_urlsafe(32),
         sync_control=sync_control,
+        follow_smoke=follow_smoke,
         message_stream=message_stream or MessageStream(PostgresMessageStream(database_url)),
         reply_service=reply_service,
         memory_service=memory_service,
@@ -1234,6 +1319,65 @@ def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:
         ),
         "batch_message_count": report.batch_message_count,
         "candidates": [_candidate_payload(candidate) for candidate in report.candidates],
+    }
+
+
+def _follow_smoke_payload(status: FollowSmokeStatus) -> dict[str, object]:
+    """把人工验证状态投影为只含元数据的稳定 JSON。"""
+
+    report = status.report
+    return {
+        "active": status.active,
+        "follow_enabled": status.runtime.enabled,
+        "follow_stream_active": status.runtime.stream_active,
+        "follow_process_id": status.runtime.process_id,
+        "follow_mode": status.runtime.mode,
+        "follow_watermark": status.runtime.watermark,
+        "sync_enabled": None if report is None else report.sync_enabled,
+        "phase": None if report is None else report.phase.value,
+        "probe_available": None if report is None else report.probe_available,
+        "wechat_in_front": None if report is None else report.wechat_in_front,
+        "cli_available": None if report is None else report.cli_available,
+        "failure_code": None if report is None else report.failure_code,
+        "active_contact_id": (
+            None
+            if report is None or report.active_contact_id is None
+            else str(report.active_contact_id)
+        ),
+        "active_binding_display_name": (
+            None if report is None else report.active_binding_display_name
+        ),
+        "batch_message_count": None if report is None else report.batch_message_count,
+        "contacts": [
+            _follow_smoke_contact_payload(contact) for contact in status.contacts
+        ],
+        "checkpoints": [
+            {
+                "label": checkpoint.label,
+                "recorded_at": _format_timestamp(checkpoint.recorded_at),
+                "contacts": [
+                    _follow_smoke_contact_payload(contact)
+                    for contact in checkpoint.contacts
+                ],
+            }
+            for checkpoint in status.checkpoints
+        ],
+    }
+
+
+def _follow_smoke_contact_payload(
+    contact: FollowSmokeContactSnapshot,
+) -> dict[str, object]:
+    """投影联系人级验证统计，不携带名称、正文或原始载荷。"""
+
+    return {
+        "contact_id": str(contact.contact_id),
+        "bound": contact.bound,
+        "message_count": contact.message_count,
+        "observation_ref_count": contact.observation_ref_count,
+        "watermark": contact.watermark,
+        "latest_mode": contact.latest_mode,
+        "duplicate_identities": contact.duplicate_identities,
     }
 
 
@@ -1391,6 +1535,18 @@ def _parse_import_json(body: bytes) -> dict[str, object]:
         raise ImportTaskRequestInvalid() from None
     if not isinstance(payload, dict):
         raise ImportTaskRequestInvalid()
+    return payload
+
+
+def _parse_follow_smoke_json(body: bytes) -> dict[str, object]:
+    """解析固定的人工验证请求体，不保留或回显未知内容。"""
+
+    try:
+        payload = json.loads(body.decode("utf-8")) if body.strip() else None
+    except (UnicodeDecodeError, ValueError):
+        raise FollowSmokeRequestInvalid() from None
+    if not isinstance(payload, dict):
+        raise FollowSmokeRequestInvalid()
     return payload
 
 

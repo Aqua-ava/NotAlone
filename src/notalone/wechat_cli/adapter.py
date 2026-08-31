@@ -57,6 +57,13 @@ class TailFollowStream:
         with self._lock:
             return self._closed
 
+    @property
+    def process_id(self) -> int | None:
+        """返回 follow 子进程 PID；不可用时返回 None。"""
+
+        value = getattr(self._process, "pid", None)
+        return value if isinstance(value, int) and value > 0 else None
+
     def read(self, timeout: float | None = None) -> TailFollowItem | None:
         try:
             item = self._queue.get(timeout=timeout)

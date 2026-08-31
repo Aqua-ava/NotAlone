@@ -16,6 +16,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var backendState: BackendState = .launching
     @Published private(set) var contacts: [ContactEntry] = []
     @Published private(set) var status: SyncStatus?
+    @Published private(set) var followSmoke: FollowSmokeStatus?
+    @Published private(set) var followSmokeInFlight = false
+    @Published var followSmokeError: String?
     @Published private(set) var selectedContactId: String?
     @Published private(set) var messages: [MessageEntry] = []
     @Published private(set) var messageStreamState: MessageStreamState = .idle
@@ -253,6 +256,100 @@ final class AppModel: ObservableObject {
                 lastOperationMessage = targetEnabled ? "已开启前台同步" : "已关闭前台同步"
             } catch {
                 lastOperationMessage = "开关失败：\(Self.describe(error))"
+            }
+        }
+    }
+
+    // 人工验证页使用的同步开关；仍然必须由用户点击，且不会隐式开始 follow。
+    func setSyncEnabled(_ enabled: Bool) {
+        guard !isToggling, let client else { return }
+        if status?.syncEnabled == enabled {
+            return
+        }
+        isToggling = true
+        Task {
+            defer { isToggling = false }
+            do {
+                let updated: SyncStatus = enabled
+                    ? try await client.enableSync()
+                    : try await client.disableSync()
+                status = updated
+                lastOperationMessage = enabled ? "已开启前台同步" : "已关闭前台同步"
+                await refreshFollowSmokeIfActive()
+            } catch {
+                followSmokeError = "同步开关失败：" + Self.describe(error)
+            }
+        }
+    }
+
+    // MARK: - Follow 人工验证
+
+    func loadFollowSmoke() {
+        guard let client else {
+            followSmokeError = "后端不可用"
+            return
+        }
+        Task {
+            await loadFollowSmoke(using: client)
+        }
+    }
+
+    func startFollowSmoke() {
+        guard !followSmokeInFlight, let client else {
+            followSmokeError = "后端不可用"
+            return
+        }
+        followSmokeInFlight = true
+        followSmokeError = nil
+        Task {
+            defer { followSmokeInFlight = false }
+            do {
+                followSmoke = try await client.startFollowSmoke()
+                lastOperationMessage = "已开始 Follow 人工验证"
+            } catch {
+                followSmokeError = Self.describe(error)
+            }
+        }
+    }
+
+    func stopFollowSmoke() {
+        guard !followSmokeInFlight, let client else { return }
+        followSmokeInFlight = true
+        Task {
+            defer { followSmokeInFlight = false }
+            do {
+                followSmoke = try await client.stopFollowSmoke()
+                lastOperationMessage = "验证已结束，已恢复轮询"
+            } catch {
+                followSmokeError = Self.describe(error)
+            }
+        }
+    }
+
+    func interruptFollowSmoke() {
+        guard !followSmokeInFlight, let client else { return }
+        followSmokeInFlight = true
+        Task {
+            defer { followSmokeInFlight = false }
+            do {
+                followSmoke = try await client.interruptFollowSmoke()
+                lastOperationMessage = "已请求中断 Follow 流，等待恢复状态"
+            } catch {
+                followSmokeError = Self.describe(error)
+            }
+        }
+    }
+
+    func checkpointFollowSmoke(label: String) {
+        guard !followSmokeInFlight, let client else { return }
+        followSmokeInFlight = true
+        Task {
+            defer { followSmokeInFlight = false }
+            do {
+                followSmoke = try await client.checkpointFollowSmoke(label: label)
+                lastOperationMessage = "已记录检查点：" + label
+            } catch {
+                followSmokeError = Self.describe(error)
             }
         }
     }
@@ -776,6 +873,7 @@ final class AppModel: ObservableObject {
                 // owner 已初始化（或状态未知）：正常轮询业务数据。
                 await refreshStatus()
                 await refreshContacts()
+                await refreshFollowSmokeIfActive()
             }
             if !supervisor.isRunning {
                 // 后端进程崩溃或退出后自动重启，保持"监管"语义。
@@ -890,6 +988,20 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func refreshFollowSmokeIfActive() async {
+        guard followSmoke?.active == true, let client else { return }
+        await loadFollowSmoke(using: client)
+    }
+
+    private func loadFollowSmoke(using client: BackendClient) async {
+        do {
+            followSmoke = try await client.followSmokeStatus()
+            followSmokeError = nil
+        } catch {
+            followSmokeError = Self.describe(error)
+        }
+    }
+
     private static func describe(_ error: Error) -> String {
         if let backendError = error as? BackendClient.BackendError {
             switch backendError {
@@ -905,6 +1017,12 @@ final class AppModel: ObservableObject {
                 return "绑定确认被拒绝：\(reason)"
             case .replyRejected(let reason):
                 return "回复被拒绝：\(Self.replyReasonLabel(reason))"
+            case .followSmokeUnavailable:
+                return "Follow 验证不可用（请确认后端已更新）"
+            case .followSmokeRejected(let reason):
+                return "Follow 验证被拒绝：\(Self.followSmokeReasonLabel(reason))"
+            case .followSmokeRequestInvalid:
+                return "Follow 验证请求无效"
             case .malformedResponse:
                 return "后端响应格式异常"
             case .transport:
@@ -936,6 +1054,17 @@ final class AppModel: ObservableObject {
             return "会话绑定已撤销"
         case "verification_unavailable":
             return "会话验证暂时不可用"
+        default:
+            return reason
+        }
+    }
+
+    private static func followSmokeReasonLabel(_ reason: String) -> String {
+        switch reason {
+        case "sync_disabled":
+            return "请先开启前台同步"
+        case "not_active":
+            return "验证尚未开始"
         default:
             return reason
         }

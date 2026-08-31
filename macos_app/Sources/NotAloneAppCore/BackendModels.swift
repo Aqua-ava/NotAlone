@@ -17,6 +17,48 @@ public struct SyncStatus: Decodable, Equatable, Sendable {
     public let candidates: [BindingCandidate]
 }
 
+// MARK: - Follow 人工验证
+
+public struct FollowSmokeStatus: Decodable, Equatable, Sendable {
+    public let active: Bool
+    public let followEnabled: Bool
+    public let followStreamActive: Bool
+    public let followProcessId: Int?
+    public let followMode: String?
+    public let followWatermark: Int?
+    public let syncEnabled: Bool?
+    public let phase: String?
+    public let probeAvailable: Bool?
+    public let wechatInFront: Bool?
+    public let cliAvailable: Bool?
+    public let failureCode: String?
+    public let activeContactId: String?
+    public let activeBindingDisplayName: String?
+    public let batchMessageCount: Int?
+    public let contacts: [FollowSmokeContact]
+    public let checkpoints: [FollowSmokeCheckpoint]
+}
+
+public struct FollowSmokeContact: Decodable, Equatable, Sendable, Identifiable {
+    public let contactId: String
+    public let bound: Bool
+    public let messageCount: Int
+    public let observationRefCount: Int
+    public let watermark: Int?
+    public let latestMode: String
+    public let duplicateIdentities: Int
+
+    public var id: String { contactId }
+}
+
+public struct FollowSmokeCheckpoint: Decodable, Equatable, Sendable, Identifiable {
+    public let label: String
+    public let recordedAt: String
+    public let contacts: [FollowSmokeContact]
+
+    public var id: String { "\(label)-\(recordedAt)" }
+}
+
 public struct BindingCandidate: Decodable, Equatable, Sendable {
     public let username: String
     public let displayName: String

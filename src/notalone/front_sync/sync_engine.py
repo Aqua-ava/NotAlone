@@ -24,6 +24,7 @@ from notalone.front_sync.probe_adapter import (
 )
 from notalone.front_sync.tail_lifecycle import (
     FrontSyncPhase,
+    FollowRuntimeStatus,
     TailLifecycle,
 )
 from notalone.persistence.conversation_repository import (
@@ -143,6 +144,29 @@ class FrontSyncEngine:
         """读取当前同步开关；不触发探针或 CLI。"""
 
         return self._sync_state.read(owner_id=self._owner_id).enabled
+
+    def enable_follow_smoke(self) -> FrontSyncCycleReport:
+        """启用人工验证用 follow 优先策略并立即执行一轮。"""
+
+        self._lifecycle.set_follow_enabled(True)
+        return self.cycle()
+
+    def disable_follow_smoke(self) -> FrontSyncCycleReport:
+        """关闭人工验证用 follow 优先策略，恢复一次性轮询。"""
+
+        self._lifecycle.set_follow_enabled(False)
+        return self.cycle()
+
+    def interrupt_follow_stream(self) -> FrontSyncCycleReport:
+        """中断当前 follow 流并立即返回恢复前的状态报告。"""
+
+        self._lifecycle.interrupt_follow_stream()
+        return self.cycle()
+
+    def follow_runtime_status(self) -> FollowRuntimeStatus:
+        """返回人工验证页面所需的 follow 运行时最小投影。"""
+
+        return self._lifecycle.follow_runtime_status()
 
     # ------------------------------------------------------------------
     # 观察循环
