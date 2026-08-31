@@ -1132,7 +1132,7 @@ struct MainWindowView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text("前台同步人工验证")
                     .font(.headline)
-                Text("这是 Issue 04 的 App 内验证向导。你负责把微信置前、选择会话和产生测试消息；App 只记录本地元数据，不切换微信、不滚动会话、不发送消息。")
+                Text("这是 Issue 04 的 App 内验证向导。开始后切到微信并保持目标会话可见；验证期间不需要切回此窗口，使用菜单栏 NotAlone 或全局快捷键记录检查点。App 只记录本地元数据，不切换微信、不滚动会话、不发送消息。")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1180,6 +1180,10 @@ struct MainWindowView: View {
             Text("开始验证不会替你改变正式同步开关；结束验证会把读取策略恢复为默认轮询。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Text("操作顺序：在这里点开始 → 切到微信。之后用菜单栏或快捷键操作；主窗口只用于查看结果。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if model.followSmoke?.active != true {
                 Button("开始 Follow 验证") {
                     model.startFollowSmoke()
@@ -1196,6 +1200,9 @@ struct MainWindowView: View {
                 .buttonStyle(.bordered)
                 .disabled(model.followSmokeInFlight)
             }
+            Text("快捷键：⌃⌥⇧S 开始，E 结束，I 中断；⌃⌥⇧1–8 记录检查点。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding(10)
         .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
@@ -1214,7 +1221,7 @@ struct MainWindowView: View {
                 }
             }
             followSmokeInfoRow("同步阶段", value: followPhaseLabel(smoke.phase))
-            followSmokeInfoRow("微信前台", value: boolLabel(smoke.wechatInFront))
+            followSmokeInfoRow("当前微信前台", value: boolLabel(smoke.wechatInFront))
             followSmokeInfoRow("探针 / CLI", value: boolLabel(smoke.probeAvailable) + " / " + boolLabel(smoke.cliAvailable))
             followSmokeInfoRow("Follow 流", value: smoke.followStreamActive ? "运行中" : "未运行")
             if let processId = smoke.followProcessId {
@@ -1223,6 +1230,20 @@ struct MainWindowView: View {
             followSmokeInfoRow("读取模式", value: smoke.followMode ?? "无")
             followSmokeInfoRow("当前水位", value: smoke.followWatermark.map { String($0) } ?? "无")
             followSmokeInfoRow("本轮新增", value: smoke.batchMessageCount.map { String($0) } ?? "无")
+            if let observation = smoke.lastValidObservation {
+                followSmokeInfoRow("最近有效观察", value: observation.observedAt)
+                followSmokeInfoRow(
+                    "有效联系人",
+                    value: observation.displayName ?? observation.contactId
+                )
+                followSmokeInfoRow(
+                    "有效水位 / 新增",
+                    value: (observation.watermark.map(String.init) ?? "无")
+                        + " / " + String(observation.batchMessageCount)
+                )
+            } else {
+                followSmokeInfoRow("最近有效观察", value: "暂无（等待微信前台）")
+            }
             if let failure = smoke.failureCode {
                 followSmokeInfoRow("错误码", value: failure, color: .red)
             }
@@ -1235,6 +1256,9 @@ struct MainWindowView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("按人工动作记录")
                 .font(.subheadline.weight(.semibold))
+            Text("微信保持前台时，优先使用菜单栏或全局快捷键；下面按钮是回到主窗口后的备用入口。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Text("每次按钮只保存固定标签、联系人级计数、观察来源数、水位、最新模式和重复身份数。")
                 .font(.caption)
                 .foregroundStyle(.secondary)

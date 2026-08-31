@@ -9,14 +9,27 @@
 from __future__ import annotations
 
 import threading
-from uuid import UUID
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Protocol
+from uuid import UUID
 
 from notalone.front_sync.sync_engine import (
     BindingConfirmationError,
     FrontSyncCycleReport,
 )
-from notalone.front_sync.tail_lifecycle import FollowRuntimeStatus
+from notalone.front_sync.tail_lifecycle import FrontSyncPhase, FollowRuntimeStatus
+
+
+@dataclass(frozen=True, slots=True)
+class LatestValidForegroundObservation:
+    """最近一次通过前台、定位和 CLI 门禁的最小验证投影。"""
+
+    observed_at: datetime
+    contact_id: UUID
+    display_name: str | None
+    watermark: int | None
+    batch_message_count: int
 
 
 class SyncEnginePort(Protocol):
@@ -94,6 +107,7 @@ class SyncHost:
         "_interval",
         "_lock",
         "_latest",
+        "_last_valid_observation",
         "_stop_event",
         "_thread",
     )
@@ -108,6 +122,7 @@ class SyncHost:
         self._interval = float(interval)
         self._lock = threading.Lock()
         self._latest: FrontSyncCycleReport | None = None
+        self._last_valid_observation: LatestValidForegroundObservation | None = None
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -180,7 +195,7 @@ class SyncHost:
                 contact_id=contact_id,
                 locator=locator,
             )
-            self._latest = report
+            self._cache_report_locked(report)
             return report
 
     def sync_enabled(self) -> bool:
@@ -189,27 +204,36 @@ class SyncHost:
 
     def enable_follow_smoke(self) -> FrontSyncCycleReport:
         with self._lock:
+            # 每轮验证只展示本轮的最近有效观测，避免把上一次验证的结果
+            # 误当成当前会话已经重新通过门禁。
+            self._last_valid_observation = None
             report = self._engine.enable_follow_smoke()
             self._follow_smoke_active = True
-            self._latest = report
+            self._cache_report_locked(report)
             return report
 
     def disable_follow_smoke(self) -> FrontSyncCycleReport:
         with self._lock:
             report = self._engine.disable_follow_smoke()
             self._follow_smoke_active = False
-            self._latest = report
+            self._cache_report_locked(report)
             return report
 
     def interrupt_follow_stream(self) -> FrontSyncCycleReport:
         with self._lock:
             report = self._engine.interrupt_follow_stream()
-            self._latest = report
+            self._cache_report_locked(report)
             return report
 
     def follow_runtime_status(self) -> FollowRuntimeStatus:
         with self._lock:
             return self._engine.follow_runtime_status()
+
+    def last_valid_observation(self) -> LatestValidForegroundObservation | None:
+        """读取最近一次有效前台观察；只返回元数据，不含消息正文。"""
+
+        with self._lock:
+            return self._last_valid_observation
 
     # ------------------------------------------------------------------
     # 内部
@@ -239,5 +263,28 @@ class SyncHost:
 
     def _run_cycle_locked(self) -> FrontSyncCycleReport:
         report = self._engine.cycle()
-        self._latest = report
+        self._cache_report_locked(report)
         return report
+
+    def _cache_report_locked(self, report: FrontSyncCycleReport) -> None:
+        """缓存当前报告，并在所有读取门禁通过时更新最近有效观测。"""
+
+        self._latest = report
+        if not (
+            report.sync_enabled
+            and report.phase is FrontSyncPhase.ACTIVE
+            and report.probe_available
+            and report.wechat_in_front
+            and report.cli_available
+            and report.failure_code is None
+            and report.active_contact_id is not None
+        ):
+            return
+        runtime = self._engine.follow_runtime_status()
+        self._last_valid_observation = LatestValidForegroundObservation(
+            observed_at=datetime.now(timezone.utc),
+            contact_id=report.active_contact_id,
+            display_name=report.active_binding_display_name,
+            watermark=runtime.watermark,
+            batch_message_count=report.batch_message_count,
+        )

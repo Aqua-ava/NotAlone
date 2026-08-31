@@ -9,7 +9,8 @@ from uuid import uuid4
 
 from notalone.front_sync import FrontSyncPhase
 from notalone.front_sync.sync_engine import FrontSyncCycleReport
-from notalone.server.sync_host import SyncHost
+from notalone.front_sync.tail_lifecycle import FollowRuntimeStatus
+from notalone.server.sync_host import LatestValidForegroundObservation, SyncHost
 
 
 class FakeEngine:
@@ -17,6 +18,9 @@ class FakeEngine:
 
     def __init__(self, *, enabled: bool = False) -> None:
         self.enabled = enabled
+        self.wechat_in_front = False
+        self.active_contact_id = None
+        self.active_binding_display_name = None
         self.cycle_calls = 0
         self.enable_calls = 0
         self.disable_calls = 0
@@ -39,11 +43,11 @@ class FakeEngine:
                 else FrontSyncPhase.SYNC_DISABLED
             ),
             probe_available=True,
-            wechat_in_front=False,
+            wechat_in_front=self.wechat_in_front,
             cli_available=True,
             failure_code=None,
-            active_contact_id=None,
-            active_binding_display_name=None,
+            active_contact_id=self.active_contact_id,
+            active_binding_display_name=self.active_binding_display_name,
             decision_reason=None,
         )
 
@@ -67,6 +71,15 @@ class FakeEngine:
             active_contact_id=contact_id,
             active_binding_display_name="合成已绑定",
             decision_reason=None,
+        )
+
+    def follow_runtime_status(self) -> FollowRuntimeStatus:
+        return FollowRuntimeStatus(
+            enabled=self.enabled,
+            stream_active=self.wechat_in_front,
+            process_id=4321 if self.wechat_in_front else None,
+            mode="live" if self.wechat_in_front else None,
+            watermark=41 if self.wechat_in_front else None,
         )
 
 
@@ -189,6 +202,30 @@ class SyncHostTest(unittest.TestCase):
             self.host.confirm(contact_id="not-uuid", locator="wxid_front")
         with self.assertRaises(ValueError):
             self.host.confirm(contact_id=uuid4(), locator="  ")
+
+    def test_keeps_latest_valid_foreground_observation_when_app_returns_front(self) -> None:
+        contact_id = uuid4()
+        self.engine.enabled = True
+        self.engine.wechat_in_front = True
+        self.engine.active_contact_id = contact_id
+        self.engine.active_binding_display_name = "合成已绑定"
+
+        self.host.check()
+        observation = self.host.last_valid_observation()
+
+        self.assertIsInstance(observation, LatestValidForegroundObservation)
+        self.assertEqual(observation.contact_id, contact_id)
+        self.assertEqual(observation.display_name, "合成已绑定")
+        self.assertEqual(observation.watermark, 41)
+
+        # 用户切回 NotAlone 查看状态后，当前报告会变成非微信前台，
+        # 但最近一次有效观测仍应保留，供人工验证页面展示。
+        self.engine.wechat_in_front = False
+        self.engine.active_contact_id = None
+        self.engine.active_binding_display_name = None
+        self.host.check()
+
+        self.assertEqual(self.host.last_valid_observation(), observation)
 
 
 class SyncHostTypingTest(unittest.TestCase):

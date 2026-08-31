@@ -17,6 +17,7 @@ from notalone.server.follow_smoke import (
     FollowSmokeController,
     FollowSmokeStatus,
 )
+from notalone.server.sync_host import LatestValidForegroundObservation
 from notalone.server.testing import InProcessClient
 
 
@@ -70,6 +71,13 @@ class FakeFollowSmokeHost:
         self.follow_enabled = False
         self.stream_active = False
         self.interrupt_calls = 0
+        self.latest_observation = LatestValidForegroundObservation(
+            observed_at=RECORDED_AT,
+            contact_id=CONTACT_ID,
+            display_name="合成联系人甲",
+            watermark=18,
+            batch_message_count=1,
+        )
 
     def sync_enabled(self) -> bool:
         return self.enabled
@@ -94,6 +102,9 @@ class FakeFollowSmokeHost:
 
     def follow_runtime_status(self) -> FollowRuntimeStatus:
         return _runtime(enabled=self.follow_enabled, stream=self.stream_active)
+
+    def last_valid_observation(self) -> LatestValidForegroundObservation | None:
+        return self.latest_observation
 
 
 class FakeSnapshotReader:
@@ -120,6 +131,7 @@ class FollowSmokeControllerTest(unittest.TestCase):
         self.assertTrue(result.runtime.enabled)
         self.assertTrue(result.runtime.stream_active)
         self.assertTrue(self.host.enabled)
+        self.assertEqual(result.last_valid_observation, self.host.latest_observation)
 
     def test_start_rejects_disabled_sync(self) -> None:
         host = FakeFollowSmokeHost(sync_enabled=False)
@@ -186,6 +198,16 @@ class FollowSmokeApiContractTest(unittest.TestCase):
         self.assertFalse(payload["follow_enabled"])
         self.assertEqual(payload["contacts"][0]["watermark"], 18)
         self.assertEqual(payload["contacts"][0]["duplicate_identities"], 0)
+        self.assertEqual(
+            payload["last_valid_observation"],
+            {
+                "observed_at": "2026-09-01T01:00:00Z",
+                "contact_id": str(CONTACT_ID),
+                "display_name": "合成联系人甲",
+                "watermark": 18,
+                "batch_message_count": 1,
+            },
+        )
         self.assertNotIn("text", response.body.decode("utf-8"))
         self.assertNotIn("content", response.body.decode("utf-8"))
 

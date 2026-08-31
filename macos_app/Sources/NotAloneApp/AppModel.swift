@@ -369,6 +369,24 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // 菜单栏与全局快捷键共用这一层路由；快捷键只调用已有人工验证
+    // API，不把窗口切到前台，也不对微信执行任何自动化操作。
+    func performFollowSmokeAction(_ action: FollowSmokeControlAction) {
+        switch action {
+        case .start:
+            startFollowSmoke()
+        case .stop:
+            stopFollowSmoke()
+        case .interrupt:
+            interruptFollowSmoke()
+        case .baseline, .beforeFollow, .afterLiveMessage, .afterIdle,
+             .afterFollowRestart, .wechatBackground, .afterReenable,
+             .finalResult:
+            guard let label = action.checkpointLabel else { return }
+            checkpointFollowSmoke(label: label)
+        }
+    }
+
     func checkNow() {
         Task {
             await refreshStatus()

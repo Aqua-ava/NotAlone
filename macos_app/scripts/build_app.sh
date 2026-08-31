@@ -23,6 +23,7 @@ env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
     "${app_dir}/Sources/NotAloneAppCore/BackendConnection.swift" \
     "${app_dir}/Sources/NotAloneAppCore/BackendModels.swift" \
     "${app_dir}/Sources/NotAloneAppCore/FollowSmokeRefreshPolicy.swift" \
+    "${app_dir}/Sources/NotAloneAppCore/FollowSmokeControls.swift" \
     "${app_dir}/Sources/NotAloneAppCore/BackendClient.swift" \
     "${app_dir}/Sources/NotAloneAppCore/BackendSupervisor.swift" \
     "${app_dir}/Sources/NotAloneAppCore/SseEventClient.swift" \
@@ -36,6 +37,7 @@ env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
     swiftc -parse-as-library \
     "${app_dir}/Sources/NotAloneApp/NotAloneApp.swift" \
     "${app_dir}/Sources/NotAloneApp/AppModel.swift" \
+    "${app_dir}/Sources/NotAloneApp/FollowVerificationControls.swift" \
     "${app_dir}/Sources/NotAloneApp/MainWindowView.swift" \
     -I "${module_dir}" \
     -L "${app_bundle}/Contents/Frameworks" \

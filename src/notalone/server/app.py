@@ -1348,6 +1348,21 @@ def _follow_smoke_payload(status: FollowSmokeStatus) -> dict[str, object]:
             None if report is None else report.active_binding_display_name
         ),
         "batch_message_count": None if report is None else report.batch_message_count,
+        "last_valid_observation": (
+            None
+            if status.last_valid_observation is None
+            else {
+                "observed_at": _format_timestamp(
+                    status.last_valid_observation.observed_at
+                ),
+                "contact_id": str(status.last_valid_observation.contact_id),
+                "display_name": status.last_valid_observation.display_name,
+                "watermark": status.last_valid_observation.watermark,
+                "batch_message_count": (
+                    status.last_valid_observation.batch_message_count
+                ),
+            }
+        ),
         "contacts": [
             _follow_smoke_contact_payload(contact) for contact in status.contacts
         ],

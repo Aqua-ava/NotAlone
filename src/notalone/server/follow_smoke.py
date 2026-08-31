@@ -17,6 +17,7 @@ import psycopg
 
 from notalone.front_sync.sync_engine import FrontSyncCycleReport
 from notalone.front_sync.tail_lifecycle import FollowRuntimeStatus
+from notalone.server.sync_host import LatestValidForegroundObservation
 
 
 FOLLOW_SMOKE_CHECKPOINT_LABELS = frozenset(
@@ -53,6 +54,9 @@ class FollowSmokeHostPort(Protocol):
 
     def follow_runtime_status(self) -> FollowRuntimeStatus:
         """读取 follow 运行时投影。"""
+
+    def last_valid_observation(self) -> LatestValidForegroundObservation | None:
+        """读取最近一次有效前台观察的元数据。"""
 
 
 class FollowSmokeSnapshotPort(Protocol):
@@ -117,6 +121,7 @@ class FollowSmokeStatus:
     active: bool
     runtime: FollowRuntimeStatus
     report: FrontSyncCycleReport | None
+    last_valid_observation: LatestValidForegroundObservation | None
     contacts: tuple[FollowSmokeContactSnapshot, ...]
     checkpoints: tuple[FollowSmokeCheckpoint, ...]
 
@@ -163,6 +168,7 @@ class FollowSmokeController:
             active=self._active,
             runtime=self._host.follow_runtime_status(),
             report=self._host.status(),
+            last_valid_observation=self._host.last_valid_observation(),
             contacts=self._snapshots.snapshot(owner_id=self._owner_id),
             checkpoints=tuple(self._checkpoints),
         )

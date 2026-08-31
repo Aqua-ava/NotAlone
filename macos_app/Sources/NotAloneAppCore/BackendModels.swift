@@ -35,8 +35,17 @@ public struct FollowSmokeStatus: Decodable, Equatable, Sendable {
     public let activeContactId: String?
     public let activeBindingDisplayName: String?
     public let batchMessageCount: Int?
+    public let lastValidObservation: LatestValidForegroundObservation?
     public let contacts: [FollowSmokeContact]
     public let checkpoints: [FollowSmokeCheckpoint]
+}
+
+public struct LatestValidForegroundObservation: Decodable, Equatable, Sendable {
+    public let observedAt: String
+    public let contactId: String
+    public let displayName: String?
+    public let watermark: Int?
+    public let batchMessageCount: Int
 }
 
 public struct FollowSmokeContact: Decodable, Equatable, Sendable, Identifiable {

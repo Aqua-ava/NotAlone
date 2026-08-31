@@ -18,13 +18,20 @@ struct NotAloneApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var followControls: FollowVerificationControls?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         AppModel.shared.start()
+        let controls = FollowVerificationControls(model: AppModel.shared)
+        followControls = controls
+        controls.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        followControls?.stop()
+        followControls = nil
         // 退出时一并收掉后端子进程。
         AppModel.shared.stop()
     }
