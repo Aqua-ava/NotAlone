@@ -46,6 +46,7 @@ from notalone.reply.interface import (
     ReplyToMessage,
     RewriteDraft,
     SkillUse,
+    UserSkillChoice,
 )
 
 __all__ = [
@@ -87,5 +88,6 @@ __all__ = [
     "ReplyToMessage",
     "RewriteDraft",
     "SkillUse",
+    "UserSkillChoice",
     "ValidatedReply",
 ]

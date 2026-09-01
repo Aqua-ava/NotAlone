@@ -57,6 +57,33 @@ class SkillModelsTest(unittest.TestCase):
             version,
         )
 
+    def test_catalog_keeps_lightweight_version_status_and_scene_metadata(self) -> None:
+        entry = SkillCatalogEntry(
+            SKILL_ID,
+            VERSION_ID,
+            "gentle-reply",
+            "温和回复",
+            OWNER_ID,
+            CONTACT_ID,
+            version_number=3,
+            applicable_scenes=("邀约", "需要边界"),
+        )
+
+        self.assertEqual(entry.version_number, 3)
+        self.assertEqual(entry.status, "active")
+        self.assertEqual(entry.applicable_scenes, ("邀约", "需要边界"))
+
+        with self.assertRaises(ValueError):
+            SkillCatalogEntry(
+                SKILL_ID,
+                VERSION_ID,
+                "gentle-reply",
+                "温和回复",
+                OWNER_ID,
+                CONTACT_ID,
+                status="disabled",
+            )
+
     def test_catalog_rejects_metadata_from_another_contact(self) -> None:
         scope = ContactScope(OWNER_ID, CONTACT_ID)
         entry = SkillCatalogEntry(

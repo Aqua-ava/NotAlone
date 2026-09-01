@@ -430,6 +430,9 @@ class SkillCatalogEntry:
     description: str
     owner_id: UUID
     contact_id: UUID | None
+    version_number: int = 1
+    status: Literal["active"] = "active"
+    applicable_scenes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.skill_id, UUID) or not isinstance(
@@ -445,6 +448,17 @@ class SkillCatalogEntry:
         _validate_skill_name(self.name)
         if not isinstance(self.description, str) or not self.description.strip():
             raise ValueError("Skill 描述不能为空。")
+        if not isinstance(self.version_number, int) or self.version_number < 1:
+            raise ValueError("Skill 目录版本号无效。")
+        if self.status != "active":
+            raise ValueError("Skill 目录只能暴露 active 版本。")
+        if not isinstance(self.applicable_scenes, tuple) or any(
+            not isinstance(scene, str) or not scene.strip()
+            for scene in self.applicable_scenes
+        ):
+            raise TypeError("Skill 适用场景元数据无效。")
+        if len(self.applicable_scenes) != len(set(self.applicable_scenes)):
+            raise ValueError("Skill 适用场景元数据重复。")
 
     def applies_to(self, scope: ContactScope) -> bool:
         return self.owner_id == scope.owner_id and self.contact_id in (

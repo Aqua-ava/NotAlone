@@ -725,7 +725,7 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                 ):
                     current = connection.execute(
                         """
-                        SELECT id, name, description
+                        SELECT id, version_number, name, description
                         FROM public.reply_skill_version
                         WHERE skill_id = %s AND is_current = TRUE
                           AND status = 'active' AND enabled = TRUE
@@ -745,6 +745,7 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                         description=current["description"],
                         owner_id=scope.owner_id,
                         contact_id=skill["contact_id"],
+                        version_number=current["version_number"],
                     )
         except psycopg.Error:
             raise SkillLibraryPersistenceError("Skill 试用失败。") from None

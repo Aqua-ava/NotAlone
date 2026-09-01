@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import unittest
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -26,6 +26,7 @@ from notalone.reply import (
     ReplyGenerated,
     ReplyGenerator,
     ReplyToMessage,
+    UserSkillChoice,
 )
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
 from notalone.reply.context import ContextEvidence, ReplyContext
@@ -165,6 +166,15 @@ class MultiSkillPort:
         if resource is None:
             raise PermissionError("synthetic resource missing")
         return resource
+
+
+@dataclass
+class CountingSkillPort(InMemorySkillPort):
+    catalog_calls: int = 0
+
+    def catalog(self, scope: ContactScope) -> SkillCatalog:
+        self.catalog_calls += 1
+        return super().catalog(scope)
 
 
 @dataclass
@@ -404,6 +414,63 @@ class SkillRuntimeResourceTest(unittest.TestCase):
         self.assertIn("长案例：先确认再给边界。", seen)
         self.assertNotIn("send_message", model.bound_tool_names)
 
+    def test_user_skill_choice_is_recorded_as_user_selection(self) -> None:
+        warm_entry = self._warm_entry()
+        port = InMemorySkillPort(
+            scope=self.scope,
+            catalog_value=SkillCatalog(self.scope, 4, (warm_entry,)),
+            version=self._warm_version(),
+            resources={},
+        )
+        command = replace(
+            self.command,
+            skill=UserSkillChoice(version_id=VERSION_ID),
+        )
+        prepared = replace(self.prepared, command=command)
+        model = ToolCallingFakeModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "read_file",
+                            "args": {"file_path": WARM_PATH},
+                            "id": "read-user-selected-skill",
+                        }
+                    ],
+                ),
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "ReplyRuntimeOutput",
+                            "args": {
+                                "candidates": [
+                                    {
+                                        "text": "可以呀，明天见。",
+                                        "basis": "用户选择的回复策略",
+                                        "citation_ids": [str(MESSAGE_ID)],
+                                        "risk_notes": [],
+                                    }
+                                ],
+                                "used_skill_version_id": str(VERSION_ID),
+                            },
+                            "id": "user-selected-result",
+                        }
+                    ],
+                ),
+            ]
+        )
+        result = ReplyGenerator(
+            store=InMemoryReplyStore(prepared),
+            runtime=LangChainReplyRuntime(model=model, skill_port=port),
+            context=RecordingReplyContext(prepared=prepared),
+        ).generate(command, verified_scope=VERIFIED_SCOPE)
+
+        self.assertIsNotNone(result.used_skill)
+        self.assertEqual(result.used_skill.selection_method, "user")
+        self.assertIn("用户明确选择", result.used_skill.selection_reason)
+
     def test_resource_before_skill_load_falls_back_to_no_skill(self) -> None:
         warm_entry = self._warm_entry()
         port = InMemorySkillPort(
@@ -537,10 +604,7 @@ class SkillRuntimeResourceTest(unittest.TestCase):
         result = self._generate(port, model)
 
         seen = self._seen_context(model)
-        self.assertIsNotNone(result.used_skill)
-        self.assertEqual(result.used_skill.version_id, VERSION_ID)
-        self.assertEqual(result.used_skill.resource_paths, ())
-        self.assertEqual(result.used_skill.load_state, "resource_failed")
+        self.assertIsNone(result.used_skill)
         self.assertNotIn("LEAKED_RESOURCE_SECRET", seen)
 
     def test_resource_of_a_second_skill_is_rejected(self) -> None:
@@ -780,6 +844,53 @@ class SkillRuntimeResourceTest(unittest.TestCase):
 
         self.assertIsNone(result.used_skill)
         self.assertEqual(result.candidates[0].text, "可以呀，明天见。")
+
+    def test_catalog_cache_reuses_only_the_same_scope_and_revision(self) -> None:
+        warm_entry = self._warm_entry()
+        port = CountingSkillPort(
+            scope=self.scope,
+            catalog_value=SkillCatalog(self.scope, 4, (warm_entry,)),
+            version=self._warm_version(),
+        )
+
+        def result_message(identifier: str) -> AIMessage:
+            return AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "ReplyRuntimeOutput",
+                        "args": {
+                            "candidates": [
+                                {
+                                    "text": "可以呀，明天见。",
+                                    "basis": "默认策略",
+                                    "citation_ids": [str(MESSAGE_ID)],
+                                    "risk_notes": [],
+                                }
+                            ],
+                            "used_skill_version_id": None,
+                        },
+                        "id": identifier,
+                    }
+                ],
+            )
+
+        model = ToolCallingFakeModel(
+            responses=[
+                result_message("cached-result-1"),
+                result_message("cached-result-2"),
+                result_message("revision-result"),
+            ]
+        )
+        runtime = LangChainReplyRuntime(model=model, skill_port=port)
+
+        runtime.generate(self.prepared)
+        runtime.generate(self.prepared)
+        self.assertEqual(port.catalog_calls, 1)
+
+        port.catalog_value = SkillCatalog(self.scope, 5, (warm_entry,))
+        runtime.generate(replace(self.prepared, skill_library_revision=5))
+        self.assertEqual(port.catalog_calls, 2)
 
 
 if __name__ == "__main__":

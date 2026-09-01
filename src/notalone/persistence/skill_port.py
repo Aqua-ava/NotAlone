@@ -61,6 +61,7 @@ class PostgresSkillPort:
                            skill.name AS skill_name,
                            skill.description AS skill_description,
                            version.id AS version_id,
+                           version.version_number AS version_number,
                            version.name AS version_name,
                            version.description AS version_description
                     FROM public.reply_skill AS skill
@@ -281,4 +282,5 @@ class PostgresSkillPort:
             description=row["version_description"],
             owner_id=row["skill_owner_id"],
             contact_id=row["skill_contact_id"],
+            version_number=row["version_number"],
         )

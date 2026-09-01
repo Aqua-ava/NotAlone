@@ -29,6 +29,7 @@ from notalone.reply.runtime import (
 )
 from notalone.reply.errors import ReplyError, ReplyInvariantError, ReplyRunError
 from notalone.reply.interface import (
+    AutoSkill,
     ReplyToMessage,
     RewriteDraft,
     SkillUse,
@@ -55,12 +56,46 @@ class SecondSkillLoadError(PermissionError):
     """一次回复试图读取当前已加载版本之外的第二个 Skill 版本。"""
 
 
+class SkillCatalogCache:
+    """只缓存绑定到联系人范围和 revision 的 Skill 轻量目录。"""
+
+    __slots__ = ("_scope", "_revision", "_catalog", "_lock")
+
+    def __init__(self) -> None:
+        self._scope: ContactScope | None = None
+        self._revision: int | None = None
+        self._catalog: SkillCatalog | None = None
+        self._lock = Lock()
+
+    def get(self, scope: ContactScope, revision: int) -> SkillCatalog | None:
+        with self._lock:
+            if self._scope == scope and self._revision == revision:
+                return self._catalog
+            return None
+
+    def put(self, catalog: SkillCatalog) -> None:
+        with self._lock:
+            self._scope = catalog.scope
+            self._revision = catalog.revision
+            self._catalog = catalog
+
+    def invalidate(self, scope: ContactScope | None = None) -> None:
+        with self._lock:
+            if scope is None or self._scope == scope:
+                self._scope = None
+                self._revision = None
+                self._catalog = None
+
+
 NOTALONE_SKILLS_PROMPT = """## Reply Skills
 
 {skills_locations}{skills_load_warnings}
 
 当前联系人可用的回复策略：
 {skills_list}
+
+如果 skill_selection.mode 为 user，优先遵守用户指定的版本；如果为 auto，最多选择一个
+目录中的 Skill，也可以不使用。任何选择都不能绕过下面的读取和联系人范围校验。
 
 仅在本次回复确有需要时调用 `read_file`，一次最多读取一个目录中列出的
 `SKILL.md`。读取一个 Skill 的 SKILL.md 后，如果该 Skill 明确列出了
@@ -143,8 +178,11 @@ REPLY_RUNTIME_SCHEMA: dict[str, Any] = {
 
 def _discovery_document(entry: SkillCatalogEntry) -> bytes:
     description = json.dumps(entry.description, ensure_ascii=False)
+    scenes = json.dumps(entry.applicable_scenes, ensure_ascii=False)
     return (
-        f"---\nname: {entry.name}\ndescription: {description}\n---\n"
+        f"---\nname: {entry.name}\ndescription: {description}\n"
+        f"version: {entry.version_number}\nstatus: {entry.status}\n"
+        f"applicable_scenes: {scenes}\n---\n"
     ).encode("utf-8")
 
 
@@ -452,6 +490,7 @@ class LangChainReplyRuntime:
         "_model_name",
         "_skill_port",
         "_retrieval",
+        "_catalog_cache",
     )
 
     def __init__(
@@ -460,14 +499,23 @@ class LangChainReplyRuntime:
         model: BaseChatModel,
         skill_port: SkillPort,
         retrieval: RetrievalPort | None = None,
+        catalog_cache: SkillCatalogCache | None = None,
     ) -> None:
         self._model = model
         self._model_name = getattr(model, "model_name", None)
         self._skill_port = skill_port
         self._retrieval = retrieval
+        self._catalog_cache = catalog_cache or SkillCatalogCache()
 
     def _discover_catalog(self, prepared: ReplyContext) -> SkillCatalog:
         """读取当前目录；读取或结构失败时安全退化为空目录（无 Skill）。"""
+
+        cached = self._catalog_cache.get(
+            prepared.scope,
+            prepared.skill_library_revision,
+        )
+        if cached is not None:
+            return cached
 
         try:
             catalog = self._skill_port.catalog(prepared.scope)
@@ -493,6 +541,8 @@ class LangChainReplyRuntime:
             raise ReplyInvariantError("Skill 目录结构无效。")
         if catalog.scope != prepared.scope:
             raise ReplyInvariantError("Skill 目录结构无效。")
+        if catalog.revision == prepared.skill_library_revision:
+            self._catalog_cache.put(catalog)
         return catalog
 
     def generate(self, prepared: ReplyContext) -> ReplyRuntimeResult:
@@ -574,6 +624,7 @@ class LangChainReplyRuntime:
                 budget,
                 self._model_name,
                 history=history,
+                selection=prepared.command.skill,
             )
         except ReplyError:
             raise
@@ -608,6 +659,13 @@ def _request_text(prepared: ReplyContext) -> str:
         }
     else:
         raise ReplyInvariantError("回复输入模式无效。")
+    if isinstance(prepared.command.skill, UserSkillChoice):
+        payload["skill_selection"] = {
+            "mode": "user",
+            "version_id": str(prepared.command.skill.version_id),
+        }
+    elif isinstance(prepared.command.skill, AutoSkill):
+        payload["skill_selection"] = {"mode": "auto"}
     payload["evidence"] = [
         {
             "evidence_id": str(item.evidence_id),
@@ -625,6 +683,7 @@ def _validated_result(
     budget: SkillLoadBudget,
     model_name: str | None,
     history: HistoryToolAccess | None = None,
+    selection: object | None = None,
 ) -> ReplyRuntimeResult:
     payload = state.get("structured_response")
     if not isinstance(payload, dict):
@@ -650,16 +709,34 @@ def _validated_result(
     loaded_entry = budget.loaded_entry
     loaded_skill = budget.loaded_skill
     loaded_version_id = loaded_entry.version_id if loaded_entry else None
-    if claimed_version_id != loaded_version_id:
+    if budget.load_state == "resource_failed":
+        # 资源失败时正文可能已经短暂进入本轮模型上下文，但整个 Skill
+        # 运行不算成功；允许模型声明已尝试的版本或明确回退为 null，
+        # 最终均按无 Skill 策略交给上层。
+        if claimed_version_id not in (None, loaded_version_id):
+            raise ReplyInvariantError("模型声明的 Skill 与实际读取版本不一致。")
+    elif claimed_version_id != loaded_version_id:
         raise ReplyInvariantError("模型声明的 Skill 与实际读取版本不一致。")
     used_skill = None
-    if loaded_entry is not None and loaded_skill is not None:
+    if (
+        budget.load_state == "loaded"
+        and loaded_entry is not None
+        and loaded_skill is not None
+    ):
+        if isinstance(selection, UserSkillChoice):
+            selection_method = "user"
+            selection_reason = "用户明确选择该版本，且本轮实际读取。"
+        elif isinstance(selection, AutoSkill):
+            selection_method = "auto"
+            selection_reason = "系统按当前联系人目录推荐，模型在本次回复中实际读取。"
+        else:
+            raise ReplyInvariantError("Skill 选择方式无效。")
         used_skill = SkillUse(
             skill_id=loaded_skill.skill_id,
             version_id=loaded_skill.version_id,
             name=loaded_skill.name,
-            selection_method="auto",
-            selection_reason="系统按当前联系人目录推荐，模型在本次回复中实际读取。",
+            selection_method=selection_method,
+            selection_reason=selection_reason,
             resource_paths=tuple(budget.loaded_resources),
             load_state=budget.load_state,
         )

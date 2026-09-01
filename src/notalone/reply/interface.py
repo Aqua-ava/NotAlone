@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 from uuid import UUID
 
 from notalone.scopes import ContactScope, VerifiedConversationScope
