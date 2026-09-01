@@ -39,4 +39,27 @@ env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
     -Xlinker "@executable_path" \
     -o "${build_dir}/notalone-sync-probe"
 
+# ScreenCaptureKit 的授权按代码签名身份记忆；后台探针必须和主 App
+# 使用同一台机器上的稳定证书签名，不能长期使用 swiftc 默认的 ad-hoc 签名。
+signing_identity=$(security find-identity -p codesigning -v 2>/dev/null \
+    | sed -n 's/^[[:space:]]*[0-9]*)[[:space:]]*[0-9A-F]* "\(.*\)".*/\1/p' \
+    | head -1)
+if [[ -n "${signing_identity}" ]]; then
+    codesign --force --sign "${signing_identity}" \
+        --identifier "com.notalone.sync-probe.core" \
+        "${build_dir}/libNotAloneSyncCore.dylib"
+    codesign --force --sign "${signing_identity}" \
+        --identifier "com.notalone.sync-probe.cli" \
+        "${build_dir}/notalone-sync-probe"
+    echo "签名身份：${signing_identity}"
+else
+    codesign --force --sign - \
+        --identifier "com.notalone.sync-probe.core" \
+        "${build_dir}/libNotAloneSyncCore.dylib"
+    codesign --force --sign - \
+        --identifier "com.notalone.sync-probe.cli" \
+        "${build_dir}/notalone-sync-probe"
+    echo "签名身份：ad-hoc（每次重建后需重新授权屏幕录制）"
+fi
+
 echo "已构建：${build_dir}/notalone-sync-probe"

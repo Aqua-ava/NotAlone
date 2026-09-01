@@ -53,7 +53,12 @@ class _SubprocessResult:
 class MacosFrontSessionProbe:
     """调用本机探针二进制的单次前台定位；不保存截图或正文。"""
 
-    __slots__ = ("_executable", "_runner", "_timeout_seconds")
+    __slots__ = (
+        "_executable",
+        "_runner",
+        "_timeout_seconds",
+        "_permission_blocked",
+    )
 
     def __init__(
         self,
@@ -69,9 +74,24 @@ class MacosFrontSessionProbe:
         self._executable = executable
         self._timeout_seconds = timeout_seconds
         self._runner = runner or self._run_command
+        # 权限失败不是普通的瞬时探针错误。macOS 可能在子进程每次
+        # 调用 ScreenCaptureKit 时重新弹窗；本进程内先熔断，避免后台
+        # 心跳把同一个授权请求重复触发。
+        self._permission_blocked = False
+
+    def reset_permission_gate(self) -> None:
+        """在用户明确完成授权后允许再次尝试一次探针。"""
+
+        self._permission_blocked = False
 
     def observe(self) -> FrontSessionProbeObservation:
         """读取一次前台定位结果；探针不可用时抛出稳定错误。"""
+
+        if self._permission_blocked:
+            raise ProbeAdapterError(
+                "screen_capture_permission_missing",
+                "未授予屏幕录制权限；等待用户授权后再重新检测。",
+            )
 
         command = (self._executable, "--session", "--json")
         try:
@@ -82,9 +102,13 @@ class MacosFrontSessionProbe:
             raise ProbeAdapterError("probe_timeout", "前台定位探针超时。") from error
 
         if result.returncode != 0:
-            raise ProbeAdapterError(
-                *self._failure_from_output(result.stdout, fallback="probe_failed")
+            code, message = self._failure_from_output(
+                result.stdout,
+                fallback="probe_failed",
             )
+            if code == "screen_capture_permission_missing":
+                self._permission_blocked = True
+            raise ProbeAdapterError(code, message)
         try:
             envelope = json.loads(result.stdout)
         except (TypeError, json.JSONDecodeError) as error:
@@ -96,9 +120,10 @@ class MacosFrontSessionProbe:
                 "probe_output_invalid", "前台定位探针返回了无效结果。"
             )
         if envelope.get("ok") is not True:
-            raise ProbeAdapterError(
-                *self._failure_from_envelope(envelope)
-            )
+            code, message = self._failure_from_envelope(envelope)
+            if code == "screen_capture_permission_missing":
+                self._permission_blocked = True
+            raise ProbeAdapterError(code, message)
         in_front = envelope.get("wechat_in_front")
         if not isinstance(in_front, bool):
             raise ProbeAdapterError(

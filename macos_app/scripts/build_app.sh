@@ -14,6 +14,10 @@ mkdir -p "${app_bundle}/Contents/Frameworks"
 mkdir -p "${module_dir}"
 mkdir -p "${module_cache_dir}"
 
+# 后端会直接启动这个 CLI 探针；每次构建主 App 时一并重建并签名，
+# 避免 App 使用旧的或 ad-hoc 身份不同的探针。
+zsh "${repo_root}/macos_sync_probe/scripts/build_cli.sh"
+
 env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
     swiftc -parse-as-library \
     -emit-library \

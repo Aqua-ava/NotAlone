@@ -91,6 +91,29 @@ class MacosFrontSessionProbeTest(unittest.TestCase):
             ).observe()
         self.assertEqual(caught.exception.code, "screen_capture_permission_missing")
 
+    def test_permission_failure_is_cached_until_explicit_reset(self) -> None:
+        stdout = json.dumps(
+            {"ok": False, "error": "screen_capture_permission_missing"}
+        )
+        calls: list[tuple[str, ...]] = []
+
+        def runner(command: tuple[str, ...]) -> FakeCommandResult:
+            calls.append(command)
+            return FakeCommandResult(returncode=0, stdout=stdout)
+
+        probe = self._probe(runner)
+        for _ in range(3):
+            with self.assertRaises(ProbeAdapterError) as caught:
+                probe.observe()
+            self.assertEqual(caught.exception.code, "screen_capture_permission_missing")
+
+        self.assertEqual(len(calls), 1)
+
+        probe.reset_permission_gate()
+        with self.assertRaises(ProbeAdapterError):
+            probe.observe()
+        self.assertEqual(len(calls), 2)
+
     def test_invalid_json_fails_closed(self) -> None:
         with self.assertRaises(ProbeAdapterError) as caught:
             self._probe(

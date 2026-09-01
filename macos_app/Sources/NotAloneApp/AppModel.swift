@@ -1063,13 +1063,14 @@ final class AppModel: ObservableObject {
         return EnvironmentLocator.locateRepoRoot(anchor: anchor)
     }
 
-    // 探针可执行文件：仓库 macos_sync_probe 的构建产物（相对仓库定位）。
+    // 探针可执行文件：与后端相同的已签名 CLI 构建产物；避免调试窗口
+    // 另启一个 .build/debug ad-hoc 二进制，产生第二个 macOS 授权主体。
     func probeExecutableURL() -> URL? {
         guard let root = locateRepoRoot() else { return nil }
         let candidate = root
             .appendingPathComponent("macos_sync_probe")
-            .appendingPathComponent(".build")
-            .appendingPathComponent("debug")
+            .appendingPathComponent("build")
+            .appendingPathComponent("cli")
             .appendingPathComponent("notalone-sync-probe")
         return FileManager.default.isExecutableFile(atPath: candidate.path)
             ? candidate
