@@ -42,6 +42,7 @@ class ObservationMode(StrEnum):
 
     LIVE = "live"
     CLI_CATCHUP = "cli_catchup"
+    CLI_BACKGROUND = "cli_background"
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +65,26 @@ class ObservationCursor:
             raise ObservationWatermarkError("水位 local_id 必须是正整数。")
         if not isinstance(self.last_cursor, str) or not self.last_cursor.strip():
             raise ObservationWatermarkError("水位 cursor 必须来自成功返回。")
+
+
+@dataclass(frozen=True, slots=True)
+class ObservationBaseline:
+    """一个绑定首次启用后台 CLI 读取时的时间基线。"""
+
+    scope: ContactScope
+    binding_id: UUID
+    conversation_locator: str
+    baseline_at: datetime
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.scope, ContactScope):
+            raise TypeError("baseline 必须携带联系人范围。")
+        if not isinstance(self.binding_id, UUID):
+            raise TypeError("binding_id 必须是 UUID。")
+        if not isinstance(self.conversation_locator, str) or not self.conversation_locator.strip():
+            raise ValueError("baseline 必须携带会话定位标识。")
+        if not isinstance(self.baseline_at, datetime):
+            raise TypeError("baseline_at 必须是 datetime。")
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +244,116 @@ class PostgresObservationStore:
             last_cursor=last_cursor,
             updated_at=updated_at,
         )
+
+    def ensure_baseline(
+        self,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        binding_id: UUID,
+        conversation_locator: str,
+        baseline_at: datetime,
+    ) -> datetime:
+        """创建或读取绑定 baseline；重复调用不会移动原始基线。"""
+
+        self._validate_scope(owner_id=owner_id, contact_id=contact_id)
+        if not isinstance(binding_id, UUID):
+            raise TypeError("binding_id 必须是 UUID。")
+        self._validate_text(conversation_locator, "conversation_locator")
+        if not isinstance(baseline_at, datetime):
+            raise TypeError("baseline_at 必须是 datetime。")
+        try:
+            with self._connect() as connection:
+                assert_binding_active(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    binding_id=binding_id,
+                )
+                inserted = connection.execute(
+                    """
+                    INSERT INTO public.wechat_observation_baseline (
+                        owner_id, contact_id, binding_id,
+                        conversation_locator, baseline_at
+                    )
+                    SELECT %s, %s, binding.id, %s, %s
+                    FROM public.conversation_binding AS binding
+                    WHERE binding.id = %s
+                      AND binding.owner_id = %s
+                      AND binding.contact_id = %s
+                      AND binding.status = 'active'
+                      AND binding.conversation_locator = %s
+                    ON CONFLICT (owner_id, contact_id, binding_id) DO NOTHING
+                    RETURNING baseline_at
+                    """,
+                    (
+                        owner_id,
+                        contact_id,
+                        conversation_locator,
+                        baseline_at,
+                        binding_id,
+                        owner_id,
+                        contact_id,
+                        conversation_locator,
+                    ),
+                ).fetchone()
+                if inserted is None:
+                    existing = connection.execute(
+                        """
+                        SELECT baseline_at
+                        FROM public.wechat_observation_baseline
+                        WHERE owner_id = %s
+                          AND contact_id = %s
+                          AND binding_id = %s
+                          AND conversation_locator = %s
+                        """,
+                        (owner_id, contact_id, binding_id, conversation_locator),
+                    ).fetchone()
+                    if existing is None:
+                        raise ObservationPersistenceError(
+                            "无法确认观察 baseline 写入结果。"
+                        )
+                    selected = existing[0]
+                else:
+                    selected = inserted[0]
+                connection.commit()
+        except ObservationPersistenceError:
+            raise
+        except psycopg.Error:
+            raise ObservationPersistenceError("观察 baseline 写入失败。") from None
+        if not isinstance(selected, datetime):
+            raise ObservationPersistenceError("数据库返回的 baseline 时间无效。")
+        return selected
+
+    def read_baseline(
+        self,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        binding_id: UUID,
+    ) -> datetime | None:
+        """读取绑定 baseline；未建立时返回 None。"""
+
+        self._validate_scope(owner_id=owner_id, contact_id=contact_id)
+        if not isinstance(binding_id, UUID):
+            raise TypeError("binding_id 必须是 UUID。")
+        try:
+            with self._connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT baseline_at
+                    FROM public.wechat_observation_baseline
+                    WHERE owner_id = %s AND contact_id = %s AND binding_id = %s
+                    """,
+                    (owner_id, contact_id, binding_id),
+                ).fetchone()
+        except psycopg.Error:
+            raise ObservationPersistenceError("观察 baseline 读取失败。") from None
+        if row is None:
+            return None
+        if not isinstance(row[0], datetime):
+            raise ObservationPersistenceError("数据库返回的 baseline 时间无效。")
+        return row[0]
 
     def record_batch(
         self,
@@ -518,7 +649,9 @@ class PostgresObservationStore:
         if not isinstance(binding_id, UUID):
             raise TypeError("binding_id 必须是 UUID。")
         if not isinstance(mode, ObservationMode):
-            raise ValueError("观察模式只能是 live 或 cli_catchup。")
+            raise ValueError(
+                "观察模式只能是 live、cli_catchup 或 cli_background。"
+            )
         self._validate_text(cli_version, "cli_version")
         self._validate_text(conversation_locator, "conversation_locator")
         self._validate_text(last_cursor, "last_cursor")

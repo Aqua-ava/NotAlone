@@ -7,10 +7,15 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 from uuid import UUID, uuid4
 
 from notalone.conversation.matcher import BindingMatchReason
 from notalone.front_sync import FrontSyncPhase
+from notalone.front_sync.cli_binding import (
+    CliBindingCandidateView,
+    CliBindingSelection,
+)
 from notalone.front_sync.sync_engine import (
     BindingCandidateView,
     FrontSyncCycleReport,
@@ -62,6 +67,16 @@ class ScriptedSyncControl:
         self.check_calls = 0
         self.confirm_calls: list[tuple[str, str]] = []
         self.confirm_pending_calls: list[tuple[str, str]] = []
+        self.cli_session_calls = 0
+        self.cli_sessions_result = (
+            CliBindingCandidateView(
+                username="wxid_batch",
+                display_name="批量联系人",
+                last_timestamp=1787486383,
+                bound_contact_id=None,
+            ),
+        )
+        self.cli_binding_calls: list[tuple[CliBindingSelection, ...]] = []
         self.confirm_error: Exception | None = None
 
     def status(self) -> FrontSyncCycleReport | None:
@@ -96,6 +111,15 @@ class ScriptedSyncControl:
         self.next_report = _report(enabled=True)
         return self.next_report
 
+    def cli_sessions(self):
+        self.cli_session_calls += 1
+        return self.cli_sessions_result
+
+    def confirm_cli_bindings(self, selections):
+        self.cli_binding_calls.append(tuple(selections))
+        self.next_report = _report(enabled=True)
+        return self.next_report
+
 
 class SyncApiContractTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -121,6 +145,8 @@ class SyncApiContractTest(unittest.TestCase):
             ("POST", "/api/sync/check"),
             ("POST", "/api/sync/confirm"),
             ("POST", "/api/sync/confirm-pending"),
+            ("GET", "/api/sync/cli-sessions"),
+            ("POST", "/api/sync/cli-bindings/confirm"),
         ):
             with self.subTest(method=method, path=path):
                 missing = self.client.request(method, path)
@@ -184,6 +210,34 @@ class SyncApiContractTest(unittest.TestCase):
         body = response.body.decode("utf-8")
         self.assertNotIn("text", body)
         self.assertNotIn("content", body)
+
+    def test_status_includes_independent_cli_and_foreground_channels(self) -> None:
+        self.sync.next_report = replace(
+            _report(),
+            sync_mode="cli_background",
+            cli_sync_phase="active",
+            cli_sync_mode="global_follow",
+            cli_stream_active=True,
+            cli_bound_count=7,
+            cli_pending_count=2,
+            cli_batch_message_count=4,
+            cli_failure_code=None,
+            foreground_phase="waiting_foreground",
+            foreground_failure_code=None,
+        )
+
+        response = self.client.get("/api/sync/status", headers=self.headers)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["sync_mode"], "cli_background")
+        self.assertEqual(payload["cli_sync_phase"], "active")
+        self.assertEqual(payload["cli_sync_mode"], "global_follow")
+        self.assertTrue(payload["cli_stream_active"])
+        self.assertEqual(payload["cli_bound_count"], 7)
+        self.assertEqual(payload["cli_pending_count"], 2)
+        self.assertEqual(payload["cli_batch_message_count"], 4)
+        self.assertEqual(payload["foreground_phase"], "waiting_foreground")
 
     def test_status_calls_port_once(self) -> None:
         self.client.get("/api/sync/status", headers=self.headers)
@@ -318,6 +372,81 @@ class SyncApiContractTest(unittest.TestCase):
         )
 
     # ------------------------------------------------------------------
+    # CLI 批量绑定
+    # ------------------------------------------------------------------
+
+    def test_cli_sessions_returns_metadata_only(self) -> None:
+        response = self.client.get(
+            "/api/sync/cli-sessions",
+            headers=self.headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "sessions": [
+                    {
+                        "username": "wxid_batch",
+                        "display_name": "批量联系人",
+                        "last_timestamp": 1787486383,
+                        "bound_contact_id": None,
+                    }
+                ]
+            },
+        )
+        self.assertEqual(self.sync.cli_session_calls, 1)
+        self.assertNotIn("text", response.body.decode("utf-8"))
+
+    def test_cli_batch_confirm_delegates_all_selections_once(self) -> None:
+        body = (
+            '{"selections": [{"locator": "wxid_batch", '
+            '"display_name": "我的联系人"}]}'
+        ).encode("utf-8")
+        response = self.client.request(
+            "POST",
+            "/api/sync/cli-bindings/confirm",
+            headers=self.headers,
+            body=body,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self.sync.cli_binding_calls,
+            [
+                (
+                    CliBindingSelection(
+                        locator="wxid_batch",
+                        display_name="我的联系人",
+                    ),
+                )
+            ],
+        )
+        self.assertEqual(response.json()["sync_enabled"], True)
+
+    def test_cli_batch_confirm_rejects_invalid_request(self) -> None:
+        for body in (
+            b"not-json",
+            b"{}",
+            b"[]",
+            b'{"selections": "wxid_batch"}',
+            b'{"selections": [{"locator": ""}]}',
+            b'{"selections": [{"locator": "wxid_batch", "contact_id": "bad"}]}',
+        ):
+            with self.subTest(body=body):
+                response = self.client.request(
+                    "POST",
+                    "/api/sync/cli-bindings/confirm",
+                    headers=self.headers,
+                    body=body,
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(
+                    response.json(), {"error": "cli_binding_request_invalid"}
+                )
+        self.assertEqual(self.sync.cli_binding_calls, [])
+
+    # ------------------------------------------------------------------
     # 无同步控制时
     # ------------------------------------------------------------------
 
@@ -335,6 +464,8 @@ class SyncApiContractTest(unittest.TestCase):
             ("POST", "/api/sync/check"),
             ("POST", "/api/sync/confirm"),
             ("POST", "/api/sync/confirm-pending"),
+            ("GET", "/api/sync/cli-sessions"),
+            ("POST", "/api/sync/cli-bindings/confirm"),
         ):
             with self.subTest(method=method, path=path):
                 response = client.request(

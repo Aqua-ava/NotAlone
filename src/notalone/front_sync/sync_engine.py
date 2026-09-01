@@ -86,6 +86,17 @@ class FrontSyncCycleReport:
     decision_reason: BindingMatchReason | None
     candidates: tuple[BindingCandidateView, ...] = ()
     batch_message_count: int = 0
+    # 新的双通道状态；旧前台引擎保留默认值，供兼容和人工验证使用。
+    sync_mode: str = "foreground"
+    cli_sync_phase: str = "disabled"
+    cli_sync_mode: str | None = None
+    cli_stream_active: bool = False
+    cli_bound_count: int = 0
+    cli_pending_count: int = 0
+    cli_batch_message_count: int = 0
+    cli_failure_code: str | None = None
+    foreground_phase: str = "sync_disabled"
+    foreground_failure_code: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,6 +174,11 @@ class FrontSyncEngine:
         """用户手动关闭前台同步；立即停止读取。"""
 
         self._lifecycle.disable_sync()
+
+    def close(self) -> None:
+        """关闭读取资源，但不修改持久化同步开关。"""
+
+        self._lifecycle.close()
 
     def sync_enabled(self) -> bool:
         """读取当前同步开关；不触发探针或 CLI。"""

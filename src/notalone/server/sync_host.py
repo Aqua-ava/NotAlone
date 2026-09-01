@@ -11,9 +11,14 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
 
+from notalone.front_sync.cli_binding import (
+    CliBindingCandidateView,
+    CliBindingSelection,
+)
 from notalone.front_sync.sync_engine import (
     BindingConfirmationError,
     FrontSyncCycleReport,
@@ -46,6 +51,18 @@ class SyncEnginePort(Protocol):
 
     def sync_enabled(self) -> bool:
         """读取当前同步开关（不触发探针或 CLI）。"""
+
+    def close(self) -> None:
+        """关闭进程内读取资源，但不修改持久化同步开关。"""
+
+    def list_cli_sessions(self) -> tuple[CliBindingCandidateView, ...]:
+        """读取 CLI 可见的私聊会话候选；不要求微信在前台。"""
+
+    def confirm_cli_bindings(
+        self,
+        selections: Sequence[CliBindingSelection],
+    ) -> FrontSyncCycleReport:
+        """一次性确认 CLI 私聊绑定并返回最新状态。"""
 
     def enable_follow_smoke(self) -> FrontSyncCycleReport:
         """启用人工验证用 follow 优先策略并立即运行一轮。"""
@@ -90,6 +107,15 @@ class SyncControlPort(Protocol):
 
     def check(self) -> FrontSyncCycleReport:
         """立即执行一轮并返回最新报告。"""
+
+    def cli_sessions(self) -> tuple[CliBindingCandidateView, ...]:
+        """读取 CLI 可见的私聊会话候选。"""
+
+    def confirm_cli_bindings(
+        self,
+        selections: Sequence[CliBindingSelection],
+    ) -> FrontSyncCycleReport:
+        """一次性确认 CLI 私聊绑定并返回最新状态。"""
 
     def confirm(
         self,
@@ -162,15 +188,18 @@ class SyncHost:
         thread.start()
 
     def stop(self) -> None:
-        """停止后台循环并等待线程退出；未启动时无操作。"""
+        """停止后台循环并关闭引擎读取资源；未启动时也会清理资源。"""
 
         with self._lock:
             thread = self._thread
             self._thread = None
-        if thread is None:
-            return
-        self._stop_event.set()
-        thread.join(timeout=max(self._interval * 2, 5.0))
+        if thread is not None:
+            self._stop_event.set()
+            thread.join(timeout=max(self._interval * 2, 5.0))
+        with self._lock:
+            close = getattr(self._engine, "close", None)
+            if callable(close):
+                close()
 
     # ------------------------------------------------------------------
     # 状态与控制端口
@@ -193,6 +222,19 @@ class SyncHost:
     def check(self) -> FrontSyncCycleReport:
         with self._lock:
             return self._run_cycle_locked()
+
+    def cli_sessions(self) -> tuple[CliBindingCandidateView, ...]:
+        with self._lock:
+            return self._engine.list_cli_sessions()
+
+    def confirm_cli_bindings(
+        self,
+        selections: Sequence[CliBindingSelection],
+    ) -> FrontSyncCycleReport:
+        with self._lock:
+            report = self._engine.confirm_cli_bindings(selections)
+            self._cache_report_locked(report)
+            return report
 
     def confirm(
         self,

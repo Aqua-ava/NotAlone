@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import psycopg
@@ -141,6 +142,32 @@ class PostgresObservationStoreTest(unittest.TestCase):
                 last_cursor="cursor-5",
                 record_count=3,
             )
+
+    def test_baseline_is_binding_scoped_and_does_not_move_on_retry(self) -> None:
+        baseline_at = datetime(2026, 9, 1, 10, 0, tzinfo=timezone.utc)
+        first = self.store.ensure_baseline(
+            owner_id=self.owner_id,
+            contact_id=self.contact_a,
+            binding_id=self.binding_a.binding_id,
+            conversation_locator="wxid_observation_a",
+            baseline_at=baseline_at,
+        )
+        retried = self.store.ensure_baseline(
+            owner_id=self.owner_id,
+            contact_id=self.contact_a,
+            binding_id=self.binding_a.binding_id,
+            conversation_locator="wxid_observation_a",
+            baseline_at=datetime(2026, 9, 1, 11, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(first, baseline_at)
+        self.assertEqual(retried, baseline_at)
+        recovered = PostgresObservationStore(TEST_DATABASE_URL).read_baseline(
+            owner_id=self.owner_id,
+            contact_id=self.contact_a,
+            binding_id=self.binding_a.binding_id,
+        )
+        self.assertEqual(recovered, baseline_at)
 
     def test_cursors_are_contact_scoped_and_survive_restart(self) -> None:
         self._record(

@@ -15,6 +15,17 @@ public struct SyncStatus: Decodable, Equatable, Sendable {
     public let decisionReason: String?
     public let batchMessageCount: Int
     public let candidates: [BindingCandidate]
+    // CLI 全量同步与前台 OCR 是两个独立通道；旧后端响应可以不带这些字段。
+    public let syncMode: String?
+    public let cliSyncPhase: String?
+    public let cliSyncMode: String?
+    public let cliStreamActive: Bool?
+    public let cliBoundCount: Int?
+    public let cliPendingCount: Int?
+    public let cliBatchMessageCount: Int?
+    public let cliFailureCode: String?
+    public let foregroundPhase: String?
+    public let foregroundFailureCode: String?
 }
 
 // MARK: - Follow 人工验证
@@ -72,6 +83,35 @@ public struct BindingCandidate: Decodable, Equatable, Sendable {
     public let username: String
     public let displayName: String
     public let lastTimestamp: Int?
+}
+
+public struct CliSessionCandidate: Decodable, Equatable, Sendable, Identifiable {
+    public let username: String
+    public let displayName: String
+    public let lastTimestamp: Int?
+    public let boundContactId: String?
+
+    public var id: String { username }
+}
+
+public struct CliSessionsResponse: Decodable, Equatable, Sendable {
+    public let sessions: [CliSessionCandidate]
+}
+
+public struct CliBindingSelection: Equatable, Sendable {
+    public let locator: String
+    public let contactId: String?
+    public let displayName: String?
+
+    public init(
+        locator: String,
+        contactId: String? = nil,
+        displayName: String? = nil
+    ) {
+        self.locator = locator
+        self.contactId = contactId
+        self.displayName = displayName
+    }
 }
 
 public struct ContactEntry: Decodable, Equatable, Sendable, Identifiable {

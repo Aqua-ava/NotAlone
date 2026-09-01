@@ -16,6 +16,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var backendState: BackendState = .launching
     @Published private(set) var contacts: [ContactEntry] = []
     @Published private(set) var status: SyncStatus?
+    @Published private(set) var cliSessions: [CliSessionCandidate] = []
+    @Published private(set) var cliSessionsInFlight = false
+    @Published var cliSessionsError: String?
+    @Published private(set) var cliBindingsInFlight = false
+    @Published var cliBindingError: String?
     @Published private(set) var followSmoke: FollowSmokeStatus?
     @Published private(set) var followSmokeInFlight = false
     @Published var followSmokeError: String?
@@ -253,7 +258,7 @@ final class AppModel: ObservableObject {
                     ? try await client.enableSync()
                     : try await client.disableSync()
                 status = updated
-                lastOperationMessage = targetEnabled ? "已开启前台同步" : "已关闭前台同步"
+                lastOperationMessage = targetEnabled ? "已开启 CLI 全量同步" : "已关闭 CLI 全量同步"
             } catch {
                 lastOperationMessage = "开关失败：\(Self.describe(error))"
             }
@@ -281,12 +286,60 @@ final class AppModel: ObservableObject {
                     ? try await client.enableSync()
                     : try await client.disableSync()
                 status = updated
-                lastOperationMessage = enabled ? "已开启前台同步" : "已关闭前台同步"
+                lastOperationMessage = enabled ? "已开启 CLI 全量同步" : "已关闭 CLI 全量同步"
                 // 即使验证尚未开始，也要刷新页面上的初始状态；否则页面
                 // 可能在后端连接前出现，成功开启后仍会停留在加载状态。
                 await loadFollowSmoke(using: client)
             } catch {
                 followSmokeError = "同步开关失败：" + Self.describe(error)
+            }
+        }
+    }
+
+    // MARK: - CLI 全量同步与批量绑定
+
+    func loadCliSessions() {
+        guard let client else {
+            cliSessionsError = nil
+            return
+        }
+        guard !cliSessionsInFlight else { return }
+        cliSessionsInFlight = true
+        cliSessionsError = nil
+        Task {
+            defer { cliSessionsInFlight = false }
+            do {
+                cliSessions = try await client.cliSessions()
+            } catch {
+                cliSessionsError = Self.describe(error)
+            }
+        }
+    }
+
+    func confirmCliBindings(_ selections: [CliBindingSelection]) {
+        guard !cliBindingsInFlight else {
+            cliBindingError = "上一个批量绑定操作进行中，请稍候"
+            return
+        }
+        guard let client else {
+            cliBindingError = "后端正在连接，请稍候"
+            return
+        }
+        guard !selections.isEmpty else {
+            cliBindingError = "请至少选择一个微信私聊会话"
+            return
+        }
+        cliBindingsInFlight = true
+        cliBindingError = nil
+        Task {
+            defer { cliBindingsInFlight = false }
+            do {
+                status = try await client.confirmCliBindings(selections: selections)
+                cliSessions = try await client.cliSessions()
+                contacts = try await client.contacts()
+                lastOperationMessage = "已完成所选微信私聊绑定"
+            } catch {
+                cliBindingError = Self.describe(error)
             }
         }
     }
@@ -977,6 +1030,7 @@ final class AppModel: ObservableObject {
         checkSetupStatus()
         // SwiftUI 的页面 onAppear 可能早于这里的后端握手；连接建立后
         // 主动补读一次，避免首次读取失败后永久停在空状态。
+        loadCliSessions()
         loadFollowSmoke()
         if selectedContactId != nil && messages.isEmpty {
             loadFirstMessagePage()
@@ -1079,6 +1133,10 @@ final class AppModel: ObservableObject {
                 return "请求的资源不存在"
             case .confirmRejected(let reason):
                 return "绑定确认被拒绝：\(reason)"
+            case .cliBindingRejected(let reason):
+                return "CLI 批量绑定被拒绝：\(reason)"
+            case .cliBindingRequestInvalid:
+                return "CLI 批量绑定请求无效"
             case .replyRejected(let reason):
                 return "回复被拒绝：\(Self.replyReasonLabel(reason))"
             case .followSmokeUnavailable:

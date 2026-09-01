@@ -10,7 +10,7 @@ import threading
 from uuid import UUID
 
 from notalone.front_sync.factory import (
-    build_front_sync_engine,
+    build_cli_full_sync_engine,
     owner_wechat_account_scope,
 )
 from notalone.application.setup_service import SetupService
@@ -189,15 +189,14 @@ def _build_sync_host(
     )
     if account_scope is None:
         return None
-    engine = build_front_sync_engine(
+    engine = build_cli_full_sync_engine(
         database_url=database_url,
         owner_id=owner_id,
         account_scope=account_scope,
         # 消息写入即发布 message.created 事件，供界面消息流实时更新。
-        # 读取主路径仍保持一次性轮询；只有 App 的人工验证页会显式切换
-        # 到 follow 优先模式，验证结束后恢复这里的默认策略。
+        # 正常主路径由全局 CLI 后台同步驱动；人工验证页仍可显式使用
+        # 旧的前台 Follow 兜底流程，不改变正式同步开关。
         message_events=EventBusMessagePublisher(events),
-        follow_enabled=False,
     )
     return SyncHost(engine=engine, interval=interval)
 

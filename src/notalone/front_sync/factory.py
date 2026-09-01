@@ -8,12 +8,17 @@ FrontSyncEngine 与 TailLifecycle 中。消息事件发布方与 follow 模式
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from typing import Callable
 from uuid import UUID
 
 import psycopg
 
 from notalone.front_sync import (
+    CliBindingCoordinator,
+    CliBackgroundSync,
+    CliFullSyncEngine,
+    ForegroundLocator,
     MacosFrontSessionProbe,
     TailLifecycle,
 )
@@ -79,6 +84,95 @@ def build_front_sync_engine(
         bindings=bindings,
         sync_state=sync_state,
         cli=cli,
+    )
+
+
+def build_cli_full_sync_engine(
+    *,
+    database_url: str,
+    owner_id: UUID,
+    account_scope: str,
+    cli_executable: str | None = None,
+    probe_executable: str | None = None,
+    message_events: MessageEventPublisher | None = None,
+    clock: Callable[[], datetime] | None = None,
+) -> CliFullSyncEngine:
+    """装配 CLI 后台全量同步与前台 OCR 定位双通道引擎。"""
+
+    cli = LocalWechatCli(
+        executable=cli_executable
+        or os.environ.get("NOTALONE_WECHAT_CLI", "").strip()
+        or "wechat-cli"
+    )
+    probe = MacosFrontSessionProbe(
+        executable=probe_executable
+        or os.environ.get("NOTALONE_SYNC_PROBE", "").strip()
+        or "notalone-sync-probe"
+    )
+    bindings = PostgresConversationBindingRepository(database_url)
+    observation_store = PostgresObservationStore(database_url)
+    sync_state = PostgresFrontSyncStateStore(database_url)
+
+    lifecycle = TailLifecycle(
+        owner_id=owner_id,
+        channel=CHANNEL,
+        account_scope=account_scope,
+        cli=cli,
+        bindings=bindings,
+        observation_store=observation_store,
+        sync_state=sync_state,
+        message_events=message_events,
+        follow_enabled=False,
+    )
+    fallback = FrontSyncEngine(
+        owner_id=owner_id,
+        channel=CHANNEL,
+        account_scope=account_scope,
+        probe=probe,
+        lifecycle=lifecycle,
+        bindings=bindings,
+        sync_state=sync_state,
+        cli=cli,
+    )
+    background = CliBackgroundSync(
+        owner_id=owner_id,
+        channel=CHANNEL,
+        account_scope=account_scope,
+        cli=cli,
+        bindings=bindings,
+        observation_store=observation_store,
+        sync_state=sync_state,
+        message_events=message_events,
+        clock=clock,
+    )
+    foreground = ForegroundLocator(
+        owner_id=owner_id,
+        channel=CHANNEL,
+        account_scope=account_scope,
+        probe=probe,
+        cli=cli,
+        bindings=bindings,
+    )
+    binding_coordinator = CliBindingCoordinator(
+        owner_id=owner_id,
+        channel=CHANNEL,
+        account_scope=account_scope,
+        cli=cli,
+        bindings=bindings,
+        batch_repository=bindings,
+        clock=clock,
+    )
+    return CliFullSyncEngine(
+        owner_id=owner_id,
+        channel=CHANNEL,
+        account_scope=account_scope,
+        cli=cli,
+        sync_state=sync_state,
+        background=background,
+        foreground=foreground,
+        binding_coordinator=binding_coordinator,
+        fallback=fallback,
+        clock=clock,
     )
 
 

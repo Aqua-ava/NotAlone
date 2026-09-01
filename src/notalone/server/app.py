@@ -40,6 +40,9 @@ from notalone.application.skill_service import (
 from notalone.ingest.errors import ImportPreviewError
 from notalone.ingest.import_command import ContactConfirmationError
 from notalone.persistence.postgres_repository import ImportPersistenceError
+from notalone.persistence.conversation_repository import (
+    ConversationBindingConflictError,
+)
 from notalone.persistence.skill_library import (
     SkillDeletedError,
     SkillLibraryPersistenceError,
@@ -61,6 +64,10 @@ from notalone.front_sync.sync_engine import (
     BindingCandidateView,
     BindingConfirmationError,
     FrontSyncCycleReport,
+)
+from notalone.front_sync.cli_binding import (
+    CliBindingCandidateView,
+    CliBindingSelection,
 )
 from notalone.persistence.contact_directory import PostgresContactDirectory
 from notalone.persistence.message_stream import PostgresMessageStream
@@ -433,6 +440,8 @@ class BackendApp:
             "/api/sync/check",
             "/api/sync/confirm",
             "/api/sync/confirm-pending",
+            "/api/sync/cli-sessions",
+            "/api/sync/cli-bindings/confirm",
         }:
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         sync = self._sync_control
@@ -450,8 +459,30 @@ class BackendApp:
                     {"error": "sync_status_unavailable"},
                 )
             return _json_response(HTTPStatus.OK, _sync_status_payload(report))
+        if path == "/api/sync/cli-sessions":
+            if method != "GET":
+                return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            list_sessions = getattr(sync, "cli_sessions", None)
+            if not callable(list_sessions):
+                return _json_response(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"error": "cli_sessions_unavailable"},
+                )
+            try:
+                sessions = list_sessions()
+            except Exception:
+                return _json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "cli_sessions_failed"},
+                )
+            return _json_response(
+                HTTPStatus.OK,
+                {"sessions": [_cli_session_payload(session) for session in sessions]},
+            )
         if method != "POST":
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        if path == "/api/sync/cli-bindings/confirm":
+            return self._handle_cli_bindings_confirm(sync=sync, body=body)
         if path in {"/api/sync/confirm", "/api/sync/confirm-pending"}:
             return self._handle_sync_confirm(
                 sync=sync,
@@ -469,6 +500,96 @@ class BackendApp:
             # 稳定错误码，不把引擎异常细节回显给界面。
             return _json_response(
                 HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "sync_control_failed"}
+            )
+        return _json_response(HTTPStatus.OK, _sync_status_payload(report))
+
+    def _handle_cli_bindings_confirm(
+        self,
+        *,
+        sync: SyncControlPort,
+        body: bytes,
+    ) -> Response:
+        """解析 CLI 私聊批量绑定；所有选择一次性提交且不回显会话正文。"""
+
+        try:
+            payload = json.loads(body.decode("utf-8")) if body.strip() else {}
+        except (UnicodeDecodeError, ValueError):
+            return _json_response(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "cli_binding_request_invalid"},
+            )
+        if not isinstance(payload, dict):
+            return _json_response(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "cli_binding_request_invalid"},
+            )
+        raw_selections = payload.get("selections")
+        if not isinstance(raw_selections, list) or len(raw_selections) > 5000:
+            return _json_response(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "cli_binding_request_invalid"},
+            )
+        selections: list[CliBindingSelection] = []
+        try:
+            for raw in raw_selections:
+                if not isinstance(raw, dict):
+                    raise ValueError
+                locator = raw.get("locator")
+                if not isinstance(locator, str) or not locator.strip():
+                    raise ValueError
+                contact_value = raw.get("contact_id")
+                if contact_value is None:
+                    contact_id = None
+                elif isinstance(contact_value, str):
+                    contact_id = UUID(contact_value)
+                else:
+                    raise ValueError
+                display_name = raw.get("display_name")
+                if display_name is not None and (
+                    not isinstance(display_name, str) or not display_name.strip()
+                ):
+                    raise ValueError
+                selections.append(
+                    CliBindingSelection(
+                        locator=locator,
+                        contact_id=contact_id,
+                        display_name=display_name,
+                    )
+                )
+        except (TypeError, ValueError):
+            return _json_response(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "cli_binding_request_invalid"},
+            )
+
+        confirm = getattr(sync, "confirm_cli_bindings", None)
+        if not callable(confirm):
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "cli_binding_unavailable"},
+            )
+        try:
+            report = confirm(tuple(selections))
+        except ConversationBindingConflictError:
+            return _json_response(
+                HTTPStatus.CONFLICT,
+                {"error": "cli_binding_rejected", "reason": "binding_conflict"},
+            )
+        except ValueError:
+            # CLI 列表可能在用户确认前变化；要求界面重新读取，不暴露定位细节。
+            return _json_response(
+                HTTPStatus.CONFLICT,
+                {"error": "cli_binding_rejected", "reason": "selection_stale"},
+            )
+        except TypeError:
+            return _json_response(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "cli_binding_request_invalid"},
+            )
+        except Exception:
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "cli_binding_failed"},
             )
         return _json_response(HTTPStatus.OK, _sync_status_payload(report))
 
@@ -1315,7 +1436,7 @@ def _contact_payload(contact: ContactSummary) -> dict[str, object]:
 def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:
     """把循环报告投影为状态 API 的稳定 JSON；不含任何消息正文。"""
 
-    return {
+    payload: dict[str, object] = {
         "sync_enabled": report.sync_enabled,
         "phase": report.phase.value,
         "probe_available": report.probe_available,
@@ -1331,6 +1452,33 @@ def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:
         ),
         "batch_message_count": report.batch_message_count,
         "candidates": [_candidate_payload(candidate) for candidate in report.candidates],
+    }
+    if report.sync_mode != "foreground":
+        payload.update(
+            {
+                "sync_mode": report.sync_mode,
+                "cli_sync_phase": report.cli_sync_phase,
+                "cli_sync_mode": report.cli_sync_mode,
+                "cli_stream_active": report.cli_stream_active,
+                "cli_bound_count": report.cli_bound_count,
+                "cli_pending_count": report.cli_pending_count,
+                "cli_batch_message_count": report.cli_batch_message_count,
+                "cli_failure_code": report.cli_failure_code,
+                "foreground_phase": report.foreground_phase,
+                "foreground_failure_code": report.foreground_failure_code,
+            }
+        )
+    return payload
+
+
+def _cli_session_payload(session: CliBindingCandidateView) -> dict[str, object]:
+    """把 CLI 私聊候选投影为不含消息正文的批量绑定 JSON。"""
+
+    return {
+        "username": session.username,
+        "display_name": session.display_name,
+        "last_timestamp": session.last_timestamp,
+        "bound_contact_id": session.bound_contact_id,
     }
 
 

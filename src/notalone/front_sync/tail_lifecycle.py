@@ -193,6 +193,11 @@ class TailLifecycle:
         )
         self._stop_session(FrontSyncPhase.SYNC_DISABLED)
 
+    def close(self) -> None:
+        """关闭读取资源，但不修改持久化同步开关。"""
+
+        self._stop_session(FrontSyncPhase.SYNC_DISABLED)
+
     def set_follow_enabled(self, enabled: bool) -> None:
         """切换人工验证用的 follow 优先策略，不改变同步开关。"""
 

@@ -100,6 +100,40 @@ class RenderReportLinesTest(unittest.TestCase):
         self.assertIn("failure=cli_not_found", rendered)
         self.assertIn("cli=unavailable", rendered)
 
+    def test_renders_independent_cli_and_foreground_status(self) -> None:
+        report = FrontSyncCycleReport(
+            sync_enabled=True,
+            phase=FrontSyncPhase.ACTIVE,
+            probe_available=False,
+            wechat_in_front=False,
+            cli_available=True,
+            failure_code=None,
+            active_contact_id=None,
+            active_binding_display_name=None,
+            decision_reason=None,
+            sync_mode="cli_background",
+            cli_sync_phase="active",
+            cli_sync_mode="global_follow",
+            cli_stream_active=True,
+            cli_bound_count=4,
+            cli_pending_count=1,
+            cli_batch_message_count=2,
+            foreground_phase="failed",
+            foreground_failure_code="screen_capture_permission_missing",
+        )
+
+        rendered = "\n".join(render_report_lines(report))
+
+        self.assertIn("sync_mode=cli_background", rendered)
+        self.assertIn("cli_mode=global_follow", rendered)
+        self.assertIn("cli_stream=active", rendered)
+        self.assertIn("cli_bound=4", rendered)
+        self.assertIn("foreground_phase=failed", rendered)
+        self.assertIn(
+            "foreground_failure=screen_capture_permission_missing",
+            rendered,
+        )
+
 
 class FrontSyncMainGateTest(unittest.TestCase):
     def test_contacts_uses_shared_contact_directory(self) -> None:

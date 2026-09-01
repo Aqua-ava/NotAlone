@@ -74,3 +74,15 @@ class TailFollowItem:
     cursor: str
     local_id: int
     event: CliMessageEvent | None
+
+
+@dataclass(frozen=True, slots=True)
+class CliSessionEvent:
+    """全局 sessions 事件的最小投影。
+
+    全局流只用于通知哪个外部会话定位标识发生变化，不携带会话标题、预览
+    或消息正文；正文必须由已确认绑定再调用一次性 ``tail`` 读取。
+    """
+
+    cursor: str
+    conversation_locator: str

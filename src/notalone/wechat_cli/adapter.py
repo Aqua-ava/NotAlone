@@ -14,6 +14,7 @@ from notalone.wechat_cli.errors import CliAdapterError, CliCommandError, CliOutp
 from notalone.wechat_cli.models import (
     ChatCandidate,
     ChatResolution,
+    CliSessionEvent,
     CliMessageEvent,
     MessageIdentifier,
     TailFollowItem,
@@ -119,6 +120,81 @@ class TailFollowStream:
             self._queue.put(None)
 
 
+class SessionEventStream:
+    """可关闭的全局 ``tail --mode sessions --follow`` 只读流。"""
+
+    def __init__(self, process: object) -> None:
+        self._process = process
+        self._queue: queue.Queue[CliSessionEvent | BaseException | None] = queue.Queue()
+        self._closed = False
+        self._lock = threading.Lock()
+        self._reader = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader.start()
+
+    @property
+    def closed(self) -> bool:
+        with self._lock:
+            return self._closed
+
+    @property
+    def process_id(self) -> int | None:
+        """返回全局流子进程 PID；不可用时返回 None。"""
+
+        value = getattr(self._process, "pid", None)
+        return value if isinstance(value, int) and value > 0 else None
+
+    def read(self, timeout: float | None = None) -> CliSessionEvent | None:
+        try:
+            item = self._queue.get(timeout=timeout)
+        except queue.Empty:
+            return None
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+    def close(self) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+        terminate = getattr(self._process, "terminate", None)
+        if callable(terminate):
+            terminate()
+        wait = getattr(self._process, "wait", None)
+        if callable(wait):
+            try:
+                wait(timeout=1.0)
+            except (TimeoutError, subprocess.TimeoutExpired):
+                kill = getattr(self._process, "kill", None)
+                if callable(kill):
+                    kill()
+
+    def _read_loop(self) -> None:
+        try:
+            reader = getattr(self._process, "stdout", None)
+            if reader is None:
+                reader = self._process
+            while not self.closed:
+                line = reader.readline()
+                if not line:
+                    break
+                event = _parse_session_line(line)
+                if event is not None:
+                    self._queue.put(event)
+            returncode = _poll_process(self._process)
+            if returncode not in (None, 0) and not self.closed:
+                self._queue.put(
+                    CliCommandError("cli_follow_failed", "微信 CLI 流进程异常退出。")
+                )
+        except CliAdapterError as error:
+            if not self.closed:
+                self._queue.put(error)
+        finally:
+            with self._lock:
+                self._closed = True
+            self._queue.put(None)
+
+
 class LocalWechatCli:
     """把 CLI 的进程和 JSONL 细节隐藏在一个小的只读接口后。"""
 
@@ -200,6 +276,7 @@ class LocalWechatCli:
         talker: str,
         *,
         cursor: str | None = None,
+        since_time: str | None = None,
         limit: int | None = None,
     ) -> TailResult:
         """读取一次会话文字增量；不传 cursor 表示首次读取。
@@ -208,9 +285,13 @@ class LocalWechatCli:
         """
 
         talker = _require_text(talker, "talker")
+        if cursor is not None and since_time is not None:
+            raise ValueError("cursor 与 since_time 不能同时提供。")
         command = [self._executable, "tail", talker]
         if cursor is not None:
             command.extend(["--cursor", _require_text(cursor, "cursor")])
+        if since_time is not None:
+            command.extend(["--since-time", _require_text(since_time, "since_time")])
         if limit is not None:
             if limit < 1:
                 raise ValueError("limit 必须大于零。")
@@ -239,6 +320,49 @@ class LocalWechatCli:
         except subprocess.TimeoutExpired as error:
             raise CliCommandError("cli_timeout", "微信 CLI 命令超时。") from error
         return TailFollowStream(process, expected_talker=talker)
+
+    def session_events_follow(
+        self,
+        *,
+        cursor: str | None = None,
+        scan_limit: int = 5000,
+        poll_interval: str = "3s",
+    ) -> SessionEventStream:
+        """启动唯一的全局会话事件流；调用方负责关闭。"""
+
+        if cursor is not None:
+            cursor = _require_text(cursor, "cursor")
+        if isinstance(scan_limit, bool) or not isinstance(scan_limit, int):
+            raise TypeError("scan_limit 必须是整数。")
+        if scan_limit < 1 or scan_limit > 5000:
+            raise ValueError("scan_limit 必须在 1 到 5000 之间。")
+        poll_interval = _require_text(poll_interval, "poll_interval")
+        command = [
+            self._executable,
+            "tail",
+        ]
+        if cursor is not None:
+            command.extend(["--cursor", cursor])
+        command.extend(
+            [
+                "--mode",
+                "sessions",
+                "--scan-limit",
+                str(scan_limit),
+                "--poll-interval",
+                poll_interval,
+                "--follow",
+                "--jsonl",
+                "--strict-read-only",
+            ]
+        )
+        try:
+            process = self._follow_runner(tuple(command))
+        except FileNotFoundError as error:
+            raise CliCommandError("cli_not_found", "微信 CLI 不可用。") from error
+        except subprocess.TimeoutExpired as error:
+            raise CliCommandError("cli_timeout", "微信 CLI 命令超时。") from error
+        return SessionEventStream(process)
 
     def version(self) -> str:
         """读取 CLI 版本标识，用于观察来源元数据。"""
@@ -373,6 +497,34 @@ def _parse_follow_line(
         time_iso=_optional_text(message.get("time_iso")),
     )
     return TailFollowItem(cursor=cursor, local_id=local_id, event=event)
+
+
+def _parse_session_line(line: str) -> CliSessionEvent | None:
+    """解析全局 sessions/unread 事件，不保留会话展示字段。"""
+
+    try:
+        value = json.loads(line)
+    except json.JSONDecodeError as error:
+        raise CliOutputError("cli_output_invalid", "微信 CLI 返回了无效事件。") from error
+    if not isinstance(value, dict) or value.get("type") not in {"session", "unread"}:
+        return None
+    cursor = _require_text(value.get("cursor"), "cursor")
+    candidates: list[object] = []
+    for field in ("session", "conversation", "data"):
+        nested = value.get(field)
+        if isinstance(nested, dict):
+            candidates.extend(
+                nested.get(name)
+                for name in ("username", "talker", "conversation_locator", "locator")
+            )
+    candidates.extend(value.get(name) for name in ("username", "talker", "conversation_locator"))
+    locator = next(
+        (item for item in candidates if isinstance(item, str) and item.strip()),
+        None,
+    )
+    if locator is None:
+        raise CliOutputError("cli_output_invalid", "微信 CLI 会话事件缺少定位标识。")
+    return CliSessionEvent(cursor=cursor, conversation_locator=locator)
 
 
 def _poll_process(process: object) -> int | None:

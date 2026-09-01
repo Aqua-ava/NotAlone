@@ -9,6 +9,8 @@ public struct BackendClient: Sendable {
         case ownerUninitialized
         case notFound
         case confirmRejected(reason: String)
+        case cliBindingRejected(reason: String)
+        case cliBindingRequestInvalid
         case replyRejected(reason: String)
         case followSmokeUnavailable
         case followSmokeRejected(reason: String)
@@ -46,6 +48,35 @@ public struct BackendClient: Sendable {
 
     public func checkSync() async throws -> SyncStatus {
         try await request(path: "api/sync/check", method: "POST")
+    }
+
+    // MARK: - CLI 全量同步
+
+    public func cliSessions() async throws -> [CliSessionCandidate] {
+        let response: CliSessionsResponse = try await request(
+            path: "api/sync/cli-sessions",
+            method: "GET"
+        )
+        return response.sessions
+    }
+
+    public func confirmCliBindings(
+        selections: [CliBindingSelection]
+    ) async throws -> SyncStatus {
+        let selectionPayload: [[String: Any]] = selections.map { selection in
+            var payload: [String: Any] = ["locator": selection.locator]
+            if let contactId = selection.contactId {
+                payload["contact_id"] = contactId
+            }
+            if let displayName = selection.displayName {
+                payload["display_name"] = displayName
+            }
+            return payload
+        }
+        return try await cliBindingRequest(
+            path: "api/sync/cli-bindings/confirm",
+            body: ["selections": selectionPayload]
+        )
     }
 
     // MARK: - Follow 人工验证
@@ -563,6 +594,49 @@ public struct BackendClient: Sendable {
                 from: data
             ))?.reason ?? "unknown"
             throw BackendError.replyRejected(reason: reason)
+        }
+        guard status == 200 else {
+            throw BackendError.badStatus(status)
+        }
+        do {
+            return try JSONDecoder.snakeCaseDecoder.decode(T.self, from: data)
+        } catch {
+            throw BackendError.malformedResponse
+        }
+    }
+
+    private func cliBindingRequest<T: Decodable>(
+        path: String,
+        body: [String: Any]
+    ) async throws -> T {
+        guard let url = URL(string: path, relativeTo: baseURL) else {
+            throw BackendError.malformedResponse
+        }
+        guard let bodyData = try? JSONSerialization.data(withJSONObject: body) else {
+            throw BackendError.malformedResponse
+        }
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = bodyData
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 503 {
+            throw Self.classifyUnavailable(data: data)
+        }
+        if status == 404 {
+            throw BackendError.notFound
+        }
+        if status == 400 {
+            throw BackendError.cliBindingRequestInvalid
+        }
+        if status == 409 {
+            let reason = (try? JSONDecoder.snakeCaseDecoder.decode(
+                RejectionEnvelope.self,
+                from: data
+            ))?.reason ?? "unknown"
+            throw BackendError.cliBindingRejected(reason: reason)
         }
         guard status == 200 else {
             throw BackendError.badStatus(status)

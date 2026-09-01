@@ -46,6 +46,7 @@
 20. [ADR-020：常驻本地后端服务与事件驱动前台同步](adr/020-local-backend-service-and-event-driven-sync.md)
 21. [ADR-021：源码分发与双层首次配置](adr/021-source-distribution-and-first-run-setup.md)
 22. [ADR-022：前台同步人工验证的独立控制面](adr/022-foreground-sync-verification-control-surface.md)
+23. [ADR-023：全局 CLI 增量同步与前台 OCR 定位分离](adr/023-global-cli-sync-and-ocr-foreground-locator.md)
 
 ## 当前架构决策
 

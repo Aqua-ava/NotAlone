@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from collections.abc import Sequence
 from typing import Any, Mapping
 from uuid import UUID, uuid4
 
@@ -31,6 +32,15 @@ class ConversationBindingNotFoundError(ConversationBindingPersistenceError):
 
 class ConversationBindingConflictError(ConversationBindingPersistenceError):
     """会话定位标识已经绑定到其他有效会话。"""
+
+
+@dataclass(frozen=True, slots=True)
+class CliBindingCreation:
+    """一次 CLI 批量确认中的联系人与会话绑定写入项。"""
+
+    conversation_locator: str
+    display_name: str
+    contact_id: UUID | None = None
 
 
 # 统一的绑定列清单，保证读写字段顺序一致。
@@ -365,6 +375,128 @@ class PostgresConversationBindingRepository:
             raise ConversationBindingPersistenceError(
                 "会话绑定列表读取失败。"
             ) from None
+
+    def create_cli_bindings_batch(
+        self,
+        *,
+        owner_id: UUID,
+        channel: str,
+        account_scope: str,
+        items: Sequence[CliBindingCreation],
+        baseline_at: datetime,
+    ) -> tuple[PersistedConversationBinding, ...]:
+        """在一个事务内创建 CLI 批量确认的联系人、绑定和 baseline。"""
+
+        if not isinstance(owner_id, UUID):
+            raise TypeError("owner_id 必须是 UUID。")
+        self._validate_text(channel, "channel")
+        self._validate_text(account_scope, "account_scope")
+        if not isinstance(items, Sequence) or isinstance(items, (str, bytes)):
+            raise TypeError("items 必须是序列。")
+        if not items:
+            return ()
+        if not isinstance(baseline_at, datetime):
+            raise TypeError("baseline_at 必须是 datetime。")
+        seen: set[str] = set()
+        for item in items:
+            if not isinstance(item, CliBindingCreation):
+                raise TypeError("CLI 批量绑定项结构无效。")
+            self._validate_text(item.conversation_locator, "conversation_locator")
+            self._validate_text(item.display_name, "display_name")
+            if item.conversation_locator in seen:
+                raise ValueError("CLI 批量绑定项不能重复会话定位标识。")
+            if item.contact_id is not None and not isinstance(item.contact_id, UUID):
+                raise TypeError("contact_id 必须是 UUID 或 None。")
+            seen.add(item.conversation_locator)
+
+        created: list[PersistedConversationBinding] = []
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                for item in items:
+                    contact_id = item.contact_id
+                    if contact_id is None:
+                        contact_id = connection.execute(
+                            """
+                            INSERT INTO public.contact (owner_id, display_name)
+                            VALUES (%s, %s)
+                            RETURNING id
+                            """,
+                            (owner_id, item.display_name),
+                        ).fetchone()[0]
+                    else:
+                        self._assert_contact_exists(
+                            connection=connection,
+                            owner_id=owner_id,
+                            contact_id=contact_id,
+                        )
+                    row = connection.execute(
+                        f"""
+                        INSERT INTO public.conversation_binding (
+                            id,
+                            owner_id,
+                            contact_id,
+                            channel,
+                            account_scope,
+                            conversation_locator,
+                            display_name
+                        )
+                        VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s)
+                        RETURNING {_BINDING_COLUMNS}
+                        """,
+                        (
+                            owner_id,
+                            contact_id,
+                            channel,
+                            account_scope,
+                            item.conversation_locator,
+                            item.display_name,
+                        ),
+                    ).fetchone()
+                    if row is None:
+                        raise ConversationBindingPersistenceError(
+                            "无法确认 CLI 批量绑定写入结果。"
+                        )
+                    binding = self._from_row(row)
+                    connection.execute(
+                        """
+                        INSERT INTO public.wechat_observation_baseline (
+                            owner_id, contact_id, binding_id,
+                            conversation_locator, baseline_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (
+                            owner_id,
+                            contact_id,
+                            binding.binding_id,
+                            item.conversation_locator,
+                            baseline_at,
+                        ),
+                    )
+                    created.append(binding)
+                connection.commit()
+        except (
+            ConversationBindingConflictError,
+            ConversationBindingNotFoundError,
+            ConversationBindingPersistenceError,
+        ):
+            raise
+        except psycopg.errors.UniqueViolation as error:
+            if error.diag.constraint_name in {
+                "conversation_binding_active_locator_unique",
+                "conversation_binding_pkey",
+            }:
+                raise ConversationBindingConflictError(
+                    "批量绑定存在会话冲突，未写入任何绑定。"
+                ) from None
+            raise ConversationBindingPersistenceError(
+                "CLI 批量绑定写入失败，未写入任何绑定。"
+            ) from None
+        except psycopg.Error:
+            raise ConversationBindingPersistenceError(
+                "CLI 批量绑定写入失败，未写入任何绑定。"
+            ) from None
+        return tuple(created)
 
     def update_matching_metadata(
         self,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import psycopg
@@ -16,10 +17,13 @@ from notalone.conversation import (
     VerificationReason,
 )
 from notalone.persistence.conversation_repository import (
+    CliBindingCreation,
+    ConversationBindingConflictError,
     ConversationBindingNotFoundError,
     PostgresConversationBindingRepository,
     PostgresConversationPort,
 )
+from notalone.persistence.observation_store import PostgresObservationStore
 
 
 TEST_DATABASE_URL = os.environ.get(
@@ -127,6 +131,88 @@ class PostgresConversationBindingTest(unittest.TestCase):
         self.assertEqual(recreated_result.state, ConversationResolutionState.READY)
         self.assertIsNotNone(stored.last_verified_at)
         self.assertGreaterEqual(stored.last_verified_at, before_verification)
+
+    def test_cli_batch_creates_contacts_bindings_and_baselines_in_one_transaction(
+        self,
+    ) -> None:
+        baseline_at = datetime(2026, 9, 1, 10, 0, tzinfo=timezone.utc)
+
+        created = self.repository.create_cli_bindings_batch(
+            owner_id=self.owner_id,
+            channel="wechat",
+            account_scope="synthetic-account",
+            items=(
+                CliBindingCreation(
+                    conversation_locator="synthetic-batch-existing",
+                    display_name="已有联系人绑定",
+                    contact_id=self.contact_id,
+                ),
+                CliBindingCreation(
+                    conversation_locator="synthetic-batch-new",
+                    display_name="批量新联系人",
+                ),
+            ),
+            baseline_at=baseline_at,
+        )
+
+        self.assertEqual(len(created), 2)
+        self.assertEqual(created[0].scope.contact_id, self.contact_id)
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            contact = connection.execute(
+                """
+                SELECT id
+                FROM public.contact
+                WHERE owner_id = %s AND display_name = %s
+                """,
+                (self.owner_id, "批量新联系人"),
+            ).fetchone()
+        self.assertIsNotNone(contact)
+        assert contact is not None
+        store = PostgresObservationStore(TEST_DATABASE_URL)
+        self.assertEqual(
+            store.read_baseline(
+                owner_id=self.owner_id,
+                contact_id=created[1].scope.contact_id,
+                binding_id=created[1].binding_id,
+            ),
+            baseline_at,
+        )
+
+    def test_cli_batch_conflict_rolls_back_new_contact_and_binding(self) -> None:
+        self.repository.create_binding(
+            owner_id=self.owner_id,
+            contact_id=self.contact_id,
+            channel="wechat",
+            account_scope="synthetic-account",
+            conversation_locator="synthetic-conversation-001",
+        )
+        with self.assertRaises(ConversationBindingConflictError):
+            self.repository.create_cli_bindings_batch(
+                owner_id=self.owner_id,
+                channel="wechat",
+                account_scope="synthetic-account",
+                items=(
+                    CliBindingCreation(
+                        conversation_locator="synthetic-conflict-new",
+                        display_name="不应留下的联系人",
+                    ),
+                    CliBindingCreation(
+                        conversation_locator="synthetic-conversation-001",
+                        display_name="冲突绑定",
+                    ),
+                ),
+                baseline_at=datetime(2026, 9, 1, 10, 0, tzinfo=timezone.utc),
+            )
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            self.assertIsNone(
+                connection.execute(
+                    """
+                    SELECT id FROM public.contact
+                    WHERE owner_id = %s AND display_name = %s
+                    """,
+                    (self.owner_id, "不应留下的联系人"),
+                ).fetchone()
+            )
 
     def test_revoked_binding_never_returns_ready_after_recreation(self) -> None:
         created = self.repository.create_binding(

@@ -89,10 +89,9 @@ DeepSeek 模型构造入口已实现：凭据只经 `NOTALONE_DEEPSEEK_API_KEY` 
 真实冒烟已按凭据开关运行并通过（ECNU 网关 + ecnu-max），断言候选结构合法且台账有对应
 记录。
 
-## 前台增量同步
+## 微信增量同步（CLI 后台 + 前台 OCR）
 
-前台定位到消息入库已经接成最小纵切，并经真实微信冒烟验证：macOS 探针
-（`macos_sync_probe`）只判断微信是否在前台并识别顶部 display name 与左侧选中会话行的最小元数据；`wechat-cli` 只读读取当前绑定会话的文字增量，按稳定消息身份写入 `local_wechat_observation`、独立水位和规范化 `message`，与历史导入跨来源去重。日常使用推荐菜单栏入口：构建并打开 `macos_sync_probe/build/NotAloneSyncProbe.app`（`zsh macos_sync_probe/scripts/build_app.sh`），状态栏持续显示同步开关、阶段、当前联系人与异常原因，菜单提供开关与一次性绑定确认；屏幕录制权限只需授予该 App，稳定签名下重建不需要重新授权。
+微信增量同步已经拆成两个独立通道：启动 App 后，在“同步管理”页读取 CLI 可见的一对一私聊，默认全选并由用户一次确认绑定；确认后的会话由一个全局 CLI 事件流发现变化，再按各联系人自己的 cursor 读取文字增量。前台 OCR/探针只负责定位当前微信联系人，无法识别前台时不影响 CLI 后台同步。原始视觉帧不保存，消息按稳定身份写入 `local_wechat_observation`、独立水位和规范化 `message`，与历史导入跨来源去重。
 
 命令行入口：
 
@@ -102,14 +101,14 @@ export NOTALONE_OWNER_ID='00000000-0000-0000-0000-000000000000'
 # 探针与 CLI 可执行文件默认取 notalone-sync-probe / wechat-cli，
 # 可用 NOTALONE_SYNC_PROBE / NOTALONE_WECHAT_CLI 覆盖。
 
-notalone-front-sync enable      # 用户手动开启前台增量同步
+notalone-front-sync enable      # 用户手动开启 CLI 后台增量同步
 notalone-front-sync contacts    # 列出联系人，供绑定确认时选择
-notalone-front-sync status      # 执行一次观察+增量读取，输出阶段、当前联系人、CLI 可用性与异常原因
+notalone-front-sync status      # 执行一次双通道检查，输出 CLI 后台与前台 OCR 状态
 notalone-front-sync confirm-binding --contact-id '...' --locator 'wxid...'
-notalone-front-sync disable     # 手动关闭；关闭期间的消息重新开启后不补读
+notalone-front-sync disable     # 手动关闭；关闭窗口内消息重新开启后只前移水位、不写入
 ```
 
-首次绑定、重名、改名或证据矛盾时输出待选候选（display name、外部会话标识、最近活动时间），由用户一次性选择；OCR 把标题读变形（如表情符号）导致查询落空时，自动回退到最近会话列表供选择，已绑定会话可自动认出。之后正常切换自动通过，不重复确认。输出只包含状态、计数、展示名称与候选标识，不包含消息正文；选中行短预览只用于匹配，绑定中只保存其 SHA-256 摘要。CLI 或探针不可用、微信非前台、群聊或元数据不一致时失败关闭，不退回 OCR 正文，也不把消息写入错误联系人。正式同步主路径仍采用一次性 `tail` 轮询（规格允许的第一阶段形态）；macOS App 的“同步验证”页可由用户显式开启临时 `--follow` 观察，验证结束后恢复轮询。注意：本地库必须按顺序应用全部迁移（历史导入的旧库若缺 021 会拒绝观察消息入库）。
+绑定确认只接受 CLI 返回的私聊会话定位标识，不用昵称猜测联系人；新会话默认创建本地联系人，已绑定会话不会静默改绑。输出只包含状态、计数、展示名称与候选标识，不包含消息正文。CLI 全局流不可用时会退化为有界一次性轮询，不启动每个联系人一个长进程；前台 OCR/探针不可用时仅标记前台定位失败。App 的“同步管理”页仍保留人工 Follow 验证作为兜底，验证结束后不改变正式 CLI 同步设计。手动关闭总开关期间不主动读取；重新开启时会跳过关闭窗口内的消息并前移水位。注意：本地库必须按顺序应用全部迁移；已有安装需要执行 `zsh scripts/install.sh` 以补应用 026 迁移。
 
 ## 导入预览
 

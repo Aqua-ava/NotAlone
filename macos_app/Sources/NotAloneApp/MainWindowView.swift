@@ -20,8 +20,11 @@ struct MainWindowView: View {
     @State private var includeRelationshipContext = false
     // 候选正文的会话内编辑内容（按 candidateId）
     @State private var editedCandidateTexts: [String: String] = [:]
-    // 右栏切换：0 = 回复，1 = 记忆，2 = 导入，3 = Skill，4 = 设置，5 = 同步验证
+    // 右栏切换：0 = 回复，1 = 记忆，2 = 导入，3 = Skill，4 = 设置，5 = 同步管理
     @State private var detailTab = 0
+    @State private var selectedCliLocators: Set<String> = []
+    @State private var cliDisplayNames: [String: String] = [:]
+    @State private var didInitializeCliSelection = false
     // 记忆管理输入
     @State private var newMemoryText = ""
     @State private var newMemoryCategory = MemoryCategoryOption.preference.rawValue
@@ -67,7 +70,7 @@ struct MainWindowView: View {
                     Text("导入").tag(2)
                     Text("Skill 库").tag(3)
                     Text("设置").tag(4)
-                    Text("同步验证").tag(5)
+                    Text("同步管理").tag(5)
                 }
                 .pickerStyle(.segmented)
                 .padding(8)
@@ -91,7 +94,9 @@ struct MainWindowView: View {
                 } else {
                     followSmokeView
                         .onAppear {
+                            model.loadCliSessions()
                             model.loadFollowSmoke()
+                            syncCliSelection(model.cliSessions)
                         }
                 }
             }
@@ -120,6 +125,9 @@ struct MainWindowView: View {
                 appIsActive: NSApp.isActive,
                 isDismissed: dismissBindingSheet
             ) else { return }
+            // 双通道模式下，CLI 私聊批量绑定页是唯一绑定入口；前台 OCR
+            // 只负责定位当前联系人，不应因候选变化弹出旧确认窗。
+            guard model.status?.syncMode != "cli_background" else { return }
             selectedCandidate = nil
             showBindingConfirmation = true
         }
@@ -345,7 +353,7 @@ struct MainWindowView: View {
         } label: {
             Image(systemName: model.status?.syncEnabled == true ? "pause.circle" : "play.circle")
         }
-        .help(model.status?.syncEnabled == true ? "关闭前台同步" : "开启前台同步")
+        .help(model.status?.syncEnabled == true ? "关闭 CLI 全量同步" : "开启 CLI 全量同步")
         .disabled(model.clientUnavailable)
     }
 
@@ -370,12 +378,26 @@ struct MainWindowView: View {
     }
 
     private var statusText: String {
+        if model.status?.syncMode == "cli_background" {
+            switch (model.status?.syncEnabled, model.status?.cliSyncPhase) {
+            case (false, _):
+                return "CLI 全量同步已关闭"
+            case (true, "active"):
+                return "CLI 后台同步中：已绑定 \(model.status?.cliBoundCount ?? 0) 个会话"
+            case (true, "degraded"):
+                return "CLI 后台同步降级轮询：已绑定 \(model.status?.cliBoundCount ?? 0) 个会话"
+            case (true, "waiting_bindings"):
+                return "等待批量绑定微信私聊会话"
+            default:
+                return "CLI 后台同步状态读取中"
+            }
+        }
         switch (model.status?.syncEnabled, model.status?.phase) {
         case (false, _):
             return "同步已关闭"
         case (true, "active"):
             let name = model.status?.activeBindingDisplayName ?? "未知联系人"
-            return "同步中：\(name)"
+            return "前台同步中：\(name)"
         case (true, "waiting_foreground"):
             return "等待微信前台"
         case (true, "failed"):
@@ -1138,6 +1160,8 @@ struct MainWindowView: View {
     private var followSmokeView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
+                cliBindingManagementCard
+                Divider()
                 Text("前台同步人工验证")
                     .font(.headline)
                 Text("这是 Issue 04 的 App 内验证向导。开始后切到微信并保持目标会话可见；验证期间不需要切回此窗口，使用菜单栏 NotAlone 或全局快捷键记录检查点。App 只记录本地元数据，不切换微信、不滚动会话、不发送消息。")
@@ -1151,7 +1175,9 @@ struct MainWindowView: View {
                         .foregroundStyle(.red)
                 }
 
-                if let candidates = model.status?.candidates, !candidates.isEmpty {
+                if model.status?.syncMode != "cli_background",
+                   let candidates = model.status?.candidates,
+                   !candidates.isEmpty {
                     pendingBindingCard(candidates)
                 }
 
@@ -1170,6 +1196,238 @@ struct MainWindowView: View {
             .padding(12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var cliBindingManagementCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("CLI 全量同步")
+                .font(.headline)
+            Text("首次绑定只处理 CLI 可见的一对一微信会话。默认全选，你可以取消后一次确认；确认后由 CLI 在后台同步，不要求微信保持前台。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Button("刷新微信私聊列表") {
+                    model.loadCliSessions()
+                }
+                .disabled(model.cliSessionsInFlight || model.cliBindingsInFlight)
+                if model.cliSessionsInFlight {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Spacer()
+                Text("已选 \(selectedCliCount) / \(unboundCliCount)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let error = model.cliSessionsError {
+                Text("读取 CLI 私聊列表失败：\(error)")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            if let error = model.cliBindingError {
+                Text("批量绑定失败：\(error)")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            if model.cliSessions.isEmpty {
+                Text("还没有读到 CLI 私聊会话；请确认微信 CLI 可用后刷新。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(model.cliSessions) { candidate in
+                        cliSessionRow(candidate)
+                    }
+                }
+                .padding(8)
+                .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+            }
+
+            Button("确认绑定所选会话") {
+                model.confirmCliBindings(selectedCliSelections())
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(
+                selectedCliCount == 0
+                    || model.cliSessionsInFlight
+                    || model.cliBindingsInFlight
+            )
+
+            if let status = model.status, status.syncMode == "cli_background" {
+                Divider()
+                Text("后台运行状态")
+                    .font(.subheadline.weight(.semibold))
+                syncInfoRow("CLI 阶段", value: cliSyncPhaseLabel(status.cliSyncPhase))
+                syncInfoRow("CLI 流", value: status.cliStreamActive == true ? "全局流运行中" : "有界轮询")
+                syncInfoRow("已绑定会话", value: String(status.cliBoundCount ?? 0))
+                syncInfoRow("本轮新增", value: String(status.cliBatchMessageCount ?? 0))
+                syncInfoRow("前台 OCR", value: foregroundPhaseLabel(status.foregroundPhase))
+                if let failure = status.cliFailureCode {
+                    syncInfoRow("CLI 错误码", value: failure, color: .red)
+                }
+                if let failure = status.foregroundFailureCode {
+                    syncInfoRow("前台错误码", value: failure, color: .orange)
+                }
+            }
+        }
+        .padding(10)
+        .background(Color.green.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        .onChange(of: model.cliSessions) { _, sessions in
+            syncCliSelection(sessions)
+        }
+    }
+
+    @ViewBuilder
+    private func cliSessionRow(_ candidate: CliSessionCandidate) -> some View {
+        if let boundContactId = candidate.boundContactId {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(candidate.displayName)
+                    Text("已绑定联系人：\(boundContactId)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if let timestamp = candidate.lastTimestamp {
+                    Text(shortTimestamp(timestamp))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle(isOn: cliSelectionBinding(for: candidate.username)) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(candidate.displayName)
+                        Text(candidate.username)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.checkbox)
+                if selectedCliLocators.contains(candidate.username) {
+                    TextField(
+                        "绑定后的联系人名称",
+                        text: cliDisplayNameBinding(for: candidate)
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .padding(.leading, 22)
+                }
+            }
+        }
+    }
+
+    private var unboundCliCount: Int {
+        model.cliSessions.reduce(into: 0) { count, candidate in
+            if candidate.boundContactId == nil { count += 1 }
+        }
+    }
+
+    private var selectedCliCount: Int {
+        model.cliSessions.reduce(into: 0) { count, candidate in
+            if candidate.boundContactId == nil && selectedCliLocators.contains(candidate.username) {
+                count += 1
+            }
+        }
+    }
+
+    private func syncCliSelection(_ sessions: [CliSessionCandidate]) {
+        let available = Set(
+            sessions
+                .filter { $0.boundContactId == nil }
+                .map(\.username)
+        )
+        if !didInitializeCliSelection {
+            // 页面首次出现时列表可能还没从后端返回；保留未初始化状态，
+            // 等首批私聊候选到达后再执行一次默认全选。
+            if !available.isEmpty {
+                selectedCliLocators = available
+                didInitializeCliSelection = true
+            }
+        } else {
+            selectedCliLocators.formIntersection(available)
+        }
+        for candidate in sessions where cliDisplayNames[candidate.username] == nil {
+            cliDisplayNames[candidate.username] = candidate.displayName
+        }
+    }
+
+    private func cliSelectionBinding(for username: String) -> Binding<Bool> {
+        Binding(
+            get: { selectedCliLocators.contains(username) },
+            set: { selected in
+                if selected {
+                    selectedCliLocators.insert(username)
+                } else {
+                    selectedCliLocators.remove(username)
+                }
+            }
+        )
+    }
+
+    private func cliDisplayNameBinding(for candidate: CliSessionCandidate) -> Binding<String> {
+        Binding(
+            get: { cliDisplayNames[candidate.username] ?? candidate.displayName },
+            set: { cliDisplayNames[candidate.username] = $0 }
+        )
+    }
+
+    private func selectedCliSelections() -> [CliBindingSelection] {
+        model.cliSessions.compactMap { candidate in
+            guard candidate.boundContactId == nil,
+                  selectedCliLocators.contains(candidate.username) else {
+                return nil
+            }
+            let name = (cliDisplayNames[candidate.username] ?? candidate.displayName)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return CliBindingSelection(
+                locator: candidate.username,
+                displayName: name.isEmpty ? candidate.displayName : name
+            )
+        }
+    }
+
+    private func syncInfoRow(
+        _ title: String,
+        value: String,
+        color: Color = .secondary
+    ) -> some View {
+        HStack {
+            Text(title)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .foregroundStyle(color)
+                .textSelection(.enabled)
+        }
+        .font(.caption)
+    }
+
+    private func cliSyncPhaseLabel(_ raw: String?) -> String {
+        switch raw {
+        case "active": return "运行中"
+        case "degraded": return "降级有界轮询"
+        case "waiting_bindings": return "等待绑定"
+        case "disabled": return "已关闭"
+        default: return raw ?? "未知"
+        }
+    }
+
+    private func foregroundPhaseLabel(_ raw: String?) -> String {
+        switch raw {
+        case "active": return "已定位当前微信联系人"
+        case "waiting_foreground": return "等待微信前台"
+        case "unavailable": return "当前联系人未解析"
+        case "failed": return "OCR/探针失败（不影响 CLI 后台）"
+        case "sync_disabled": return "未启用"
+        default: return raw ?? "未知"
+        }
     }
 
     private func pendingBindingCard(_ candidates: [BindingCandidate]) -> some View {
@@ -1213,19 +1471,19 @@ struct MainWindowView: View {
             Text("开始前")
                 .font(.subheadline.weight(.semibold))
             if model.status?.syncEnabled == true {
-                Label("正式前台同步已开启", systemImage: "checkmark.circle.fill")
+                Label("正式 CLI 全量同步已开启", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.caption)
             } else {
-                Label("请先开启正式前台同步", systemImage: "exclamationmark.circle")
+                Label("请先开启正式 CLI 全量同步", systemImage: "exclamationmark.circle")
                     .foregroundStyle(.orange)
                     .font(.caption)
-                Button("开启前台同步") {
+                Button("开启 CLI 全量同步") {
                     model.setSyncEnabled(true)
                 }
                 .disabled(model.followSmokeInFlight)
             }
-            Text("开始验证不会替你改变正式同步开关；结束验证会把读取策略恢复为默认轮询。")
+            Text("开始验证不会替你改变正式 CLI 同步开关；结束验证会把人工 Follow 兜底策略恢复为默认轮询。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text("操作顺序：在这里点开始 → 切到微信。之后用菜单栏或快捷键操作；主窗口只用于查看结果。")

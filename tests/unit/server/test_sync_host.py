@@ -26,6 +26,7 @@ class FakeEngine:
         self.disable_calls = 0
         self.confirm_calls: list[tuple[str, str]] = []
         self.confirm_pending_calls: list[tuple[str, str]] = []
+        self.close_calls = 0
         self.waits_for_selection = False
         self.wait_cycles = threading.Event()
 
@@ -59,6 +60,9 @@ class FakeEngine:
     def disable_sync(self) -> None:
         self.disable_calls += 1
         self.enabled = False
+
+    def close(self) -> None:
+        self.close_calls += 1
 
     def confirm_binding(self, *, contact_id, locator) -> FrontSyncCycleReport:
         self.confirm_calls.append((str(contact_id), locator))
@@ -191,6 +195,15 @@ class SyncHostTest(unittest.TestCase):
     def test_stop_without_start_is_safe(self) -> None:
         self.host.stop()
         self.host.stop()
+
+    def test_stop_closes_engine_resources_without_disabling_sync(self) -> None:
+        self.engine.enabled = True
+
+        self.host.check()
+        self.host.stop()
+
+        self.assertGreaterEqual(self.engine.close_calls, 1)
+        self.assertTrue(self.engine.enabled)
 
     def test_rejects_non_positive_interval(self) -> None:
         with self.assertRaises(ValueError):
