@@ -5,7 +5,7 @@
 **Blocked by:** 03 — Skill 必须嵌入已验证的 ReplyContext 和候选回复入口。
 
 **Status:** ready-for-agent
-**State:** open
+**State:** resolved
 **Triage:** ready-for-agent
 
 - [x] 目录只包含名称、描述、适用场景、状态和版本等轻量元数据，可以作为会话级稳定内容缓存。
@@ -26,5 +26,3 @@
 3. 脚本、任意路径、网络、Tool/MCP、自定义发送和管理接口不进入运行时；资源或版本加载失败、目录故障、revision 不一致时都不产生 `used_skill`，继续使用默认候选路径。
 
 验证：Skill 相关单元测试 26 个、LangChain Reply 纵切与统一输入测试 17 个通过；新增用户选择、目录缓存、轻量目录元数据和资源失败无 Skill 回退测试。未增加 Memory 写入、权限修改或外部发送能力。
-
-**State:** resolved

@@ -5,7 +5,7 @@
 **Blocked by:** 03 — 基础 ReplyContext 必须先提供当前任务和联系人范围。
 
 **Status:** ready-for-agent
-**State:** open
+**State:** resolved
 **Triage:** ready-for-agent
 
 - [x] 提供职责分离的相关性搜索和时间顺序查询能力，对照 TencentDB 的 `conversation_search` 与 `conversation_query`。
@@ -27,5 +27,3 @@
 4. 每轮最多 3 次历史 Tool 调用，限制 Top-K、窗口、token、单次超时和 PostgreSQL statement timeout；只保存 Tool 名称、状态、延迟和引用 ID，不保存 Tool 原始返回全文。
 
 验证：历史 Tool 单元测试 6 个、检索单元测试与 ReplyGenerator 合成测试共 31 个通过；PostgreSQL 消息检索集成测试通过；LangChain 同轮 Tool 证据测试通过。未增加外部发送能力，历史正文只在用户请求的当前运行中按需提供。
-
-**State:** resolved

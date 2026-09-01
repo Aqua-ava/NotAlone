@@ -5,7 +5,7 @@
 **Blocked by:** 01 — 关系记忆采纳规则；02 — L2 目录及其 revision/失效语义。
 
 **Status:** ready-for-agent
-**State:** claimed
+**State:** resolved
 **Triage:** ready-for-agent
 
 - [x] 候选回复使用当前 Message、有限的最近完整对话和当前联系人相关的有效 `confirmed_memory`。
@@ -25,5 +25,3 @@
 3. 关系记忆为空或基础检索失败时只降级为当前消息/近期消息；越权结果、坏版本或错误证据结构仍 fail-closed。新增 028 迁移保存 ReplyContext 证据元数据。
 
 验证：相关单元测试 41 个通过；ReplyStore/Reply flow/Contact Memory Index 集成测试 18 个通过；`python -m compileall -q src tests` 与 `git diff --check` 通过。上下文仅保存本轮最小证据元数据，未新增历史 L0 全量复制或发送能力。
-
-**State:** resolved

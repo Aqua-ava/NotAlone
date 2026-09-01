@@ -703,6 +703,23 @@ struct MainWindowView: View {
                             Text("分类：\(categoryLabel(candidate.category))")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                            if let confidence = candidate.confidence {
+                                Text("置信度：\(confidence, specifier: "%.0f%%")")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if let riskFlags = candidate.riskFlags,
+                               !riskFlags.isEmpty {
+                                Text("风险：\(riskFlags.joined(separator: "、"))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                            }
+                            if let sourceIds = candidate.sourceIds,
+                               !sourceIds.isEmpty {
+                                Text("来源：\(sourceIds.joined(separator: "、"))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         Spacer()
                         Button("确认") {
@@ -781,6 +798,23 @@ struct MainWindowView: View {
                     Text("\(categoryLabel(memory.category)) · \(adoptionLabel(memory.adoptionMethod)) · 修订 \(memory.revision ?? 1)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                    if let confidence = memory.confidence {
+                        Text("置信度：\(confidence, specifier: "%.0f%%")")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let riskFlags = memory.riskFlags,
+                       !riskFlags.isEmpty {
+                        Text("风险：\(riskFlags.joined(separator: "、"))")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
+                    if let sourceIds = memory.sourceIds,
+                       !sourceIds.isEmpty {
+                        Text("来源：\(sourceIds.joined(separator: "、"))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             Spacer()
@@ -1975,6 +2009,11 @@ struct MainWindowView: View {
                 Text("注意：\(candidate.riskNotes.joined(separator: "；"))")
                     .font(.caption2)
                     .foregroundStyle(.orange)
+            }
+            if !candidate.citationIds.isEmpty {
+                Text("引用：\(candidate.citationIds.joined(separator: "、"))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
             HStack {
                 Button("复制") {
