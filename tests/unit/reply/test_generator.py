@@ -23,7 +23,11 @@ from notalone.reply.context import (
     ReplyContext,
     ToolCallTrace,
 )
-from notalone.reply.runtime import ReplyRuntimeResult, RuntimeCandidate
+from notalone.reply.runtime import (
+    ReplyRuntimeResult,
+    RuntimeCandidate,
+    RuntimeUsage,
+)
 from notalone.reply.store import (
     ReplyRequest,
     ReplyRequestState,
@@ -184,6 +188,19 @@ class RecordingReplyContext:
         return self.prepared
 
 
+@dataclass
+class FreshnessRecordingContext(RecordingReplyContext):
+    freshness_calls: int = 0
+    fail_on_call: int | None = None
+
+    def validate_current(self, context: ReplyContext) -> None:
+        if context != self.prepared:
+            raise AssertionError("unexpected context for freshness validation")
+        self.freshness_calls += 1
+        if self.fail_on_call == self.freshness_calls:
+            raise ReplyInvariantError("合成来源已失效")
+
+
 class ReplyGeneratorTest(unittest.TestCase):
     @staticmethod
     def _generator(
@@ -307,6 +324,91 @@ class ReplyGeneratorTest(unittest.TestCase):
 
         self.assertEqual(context.calls, 1)
         self.assertEqual(result.candidates[0].text, "可以呀。")
+
+    def test_revalidates_context_before_and_after_runtime(self) -> None:
+        command, prepared = self._valid_case()
+        context = FreshnessRecordingContext(prepared=prepared)
+        store = RecordingReplyStore(prepared=prepared)
+        runtime = ScriptedReplyRuntime(
+            result=ReplyRuntimeResult(
+                candidates=(
+                    RuntimeCandidate(
+                        text="可以呀。",
+                        basis="回应当前消息",
+                        citation_ids=(MESSAGE_ID,),
+                        risk_notes=(),
+                    ),
+                ),
+                used_skill=None,
+            )
+        )
+
+        result = ReplyGenerator(
+            store=store,
+            runtime=runtime,
+            context=context,
+        ).generate(command, verified_scope=VERIFIED_SCOPE)
+
+        self.assertEqual(result.candidates[0].text, "可以呀。")
+        self.assertEqual(context.freshness_calls, 2)
+
+    def test_rejects_context_that_becomes_stale_after_model_run(self) -> None:
+        command, prepared = self._valid_case()
+        context = FreshnessRecordingContext(prepared=prepared, fail_on_call=2)
+        store = RecordingReplyStore(prepared=prepared)
+        runtime = ScriptedReplyRuntime(
+            result=ReplyRuntimeResult(
+                candidates=(
+                    RuntimeCandidate(
+                        text="不应展示",
+                        basis="来源已被删除",
+                        citation_ids=(MESSAGE_ID,),
+                        risk_notes=(),
+                    ),
+                ),
+                used_skill=None,
+            )
+        )
+
+        with self.assertRaises(ReplyInvariantError):
+            ReplyGenerator(
+                store=store,
+                runtime=runtime,
+                context=context,
+            ).generate(command, verified_scope=VERIFIED_SCOPE)
+
+        self.assertIsNone(store.saved)
+
+    def test_rejects_deleted_evidence_before_model_run(self) -> None:
+        command, prepared = self._valid_case()
+        deleted = replace(
+            prepared,
+            evidence=(replace(prepared.evidence[0], status="deleted"),),
+        )
+        store = RecordingReplyStore(prepared=deleted)
+        runtime = ScriptedReplyRuntime(
+            result=ReplyRuntimeResult(
+                candidates=(
+                    RuntimeCandidate(
+                        text="不应展示",
+                        basis="已删除依据",
+                        citation_ids=(MESSAGE_ID,),
+                        risk_notes=(),
+                    ),
+                ),
+                used_skill=None,
+            )
+        )
+
+        with self.assertRaises(ReplyInvariantError):
+            ReplyGenerator(
+                store=store,
+                runtime=runtime,
+                context=RecordingReplyContext(prepared=deleted),
+            ).generate(command, verified_scope=VERIFIED_SCOPE)
+
+        self.assertIsNone(runtime.received)
+        self.assertIsNone(store.saved)
 
     def test_tool_evidence_is_merged_into_the_same_reply_snapshot(self) -> None:
         command, prepared = self._valid_case()
@@ -687,6 +789,40 @@ class ReplyGeneratorTest(unittest.TestCase):
                 command,
                 verified_scope=VERIFIED_SCOPE,
             )
+
+        self.assertIsNone(store.saved)
+
+    def test_rejects_malformed_usage_without_leaking_attribute_error(self) -> None:
+        command, prepared = self._valid_case()
+        store = RecordingReplyStore(prepared=prepared)
+        runtime = ScriptedReplyRuntime(
+            result=ReplyRuntimeResult(
+                candidates=(
+                    RuntimeCandidate(
+                        text="可以呀。",
+                        basis="合成依据",
+                        citation_ids=(MESSAGE_ID,),
+                        risk_notes=(),
+                    ),
+                ),
+                used_skill=None,
+                usage=cast(
+                    Any,
+                    RuntimeUsage(
+                        provider="deepseek",
+                        model_name="deepseek-chat",
+                        input_tokens=-1,
+                    ),
+                ),
+            )
+        )
+
+        with self.assertRaises(ReplyInvariantError):
+            self._generator(
+                store=store,
+                runtime=runtime,
+                prepared=prepared,
+            ).generate(command, verified_scope=VERIFIED_SCOPE)
 
         self.assertIsNone(store.saved)
 

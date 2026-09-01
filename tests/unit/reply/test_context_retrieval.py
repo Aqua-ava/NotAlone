@@ -312,6 +312,126 @@ class ContextRetrievalTest(unittest.TestCase):
 
         self.assertEqual(result.risk_notes, ("请核实转账相关内容。",))
 
+    def test_current_validation_rejects_message_after_source_is_deleted(self) -> None:
+        retrieval = InMemoryRetrieval(
+            messages=(
+                RetrievedMessage(
+                    TARGET_MESSAGE_ID,
+                    self.scope,
+                    "当前消息",
+                    source_ids=(SOURCE_ID,),
+                ),
+            )
+        )
+        context = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+        )
+        result = context.build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        retrieval.messages = (
+            RetrievedMessage(
+                TARGET_MESSAGE_ID,
+                self.scope,
+                "当前消息",
+                source_ids=(SOURCE_ID,),
+                status="deleted",
+            ),
+        )
+
+        with self.assertRaises(ReplyContextInvariantError):
+            context.validate_current(result)
+
+    def test_current_validation_rejects_message_without_source(self) -> None:
+        retrieval = InMemoryRetrieval(
+            messages=(
+                RetrievedMessage(
+                    TARGET_MESSAGE_ID,
+                    self.scope,
+                    "当前消息",
+                ),
+            )
+        )
+        context = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+        )
+        result = context.build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        with self.assertRaises(ReplyContextInvariantError):
+            context.validate_current(result)
+
+    def test_current_validation_rejects_invalidated_memory(self) -> None:
+        retrieval = self._retrieval()
+        memory = retrieval.memory_store.list_confirmed(self.scope)[0]
+        context = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+        )
+        command = GenerateReply(
+            idempotency_key=UUID("eeeeeeee-ffff-0000-1111-222222222226"),
+            scope=self.scope,
+            conversation_binding_id=BINDING_ID,
+            content=RewriteDraft(
+                draft_text="我明天有空",
+                include_relationship_context=True,
+            ),
+        )
+        result = context.build(
+            command=command,
+            verified_scope=self.verified_scope,
+        )
+
+        retrieval.memory_store.invalidate(
+            scope=self.scope,
+            memory_id=memory.memory_id,
+        )
+
+        with self.assertRaises(ReplyContextInvariantError):
+            context.validate_current(result)
+
+    def test_current_validation_rechecks_memory_and_skill_revisions(self) -> None:
+        retrieval = self._retrieval()
+        memory = retrieval.memory_store.list_confirmed(self.scope)[0]
+        index = RecordingMemoryIndex((memory.memory_id,), revisions=(4, 4))
+        skill_revision = [7]
+        context = RetrievalReplyContext(
+            retrieval=retrieval,
+            memory_index=index,
+            skill_library_revision=7,
+            skill_revision_reader=lambda scope: skill_revision[0],
+            id_factory=iter(_ids()).__next__,
+        )
+        command = GenerateReply(
+            idempotency_key=UUID("eeeeeeee-ffff-0000-1111-222222222225"),
+            scope=self.scope,
+            conversation_binding_id=BINDING_ID,
+            content=RewriteDraft(
+                draft_text="我明天有空",
+                include_relationship_context=True,
+            ),
+        )
+        result = context.build(
+            command=command,
+            verified_scope=self.verified_scope,
+        )
+        context.validate_current(result)
+
+        index.revisions = (5, 4)
+        with self.assertRaises(ReplyContextInvariantError):
+            context.validate_current(result)
+
+        index.revisions = (4, 4)
+        skill_revision[0] = 8
+        with self.assertRaises(ReplyContextInvariantError):
+            context.validate_current(result)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -49,6 +49,10 @@ def build_reply_service(*, database_url: str, owner_id: UUID) -> ReplyService | 
         retrieval=retrieval,
         memory_index=PostgresContactMemoryIndexRepository(database_url),
         skill_library_revision=skill_revision,
+        skill_revision_reader=lambda scope: _skill_library_revision(
+            database_url,
+            scope.owner_id,
+        ),
     )
     generator = ReplyGenerator(
         store=PostgresReplyStore(database_url),

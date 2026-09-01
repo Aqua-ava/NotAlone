@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Literal, Protocol
 from uuid import UUID, uuid4
 
@@ -107,6 +107,13 @@ class ReplyContext:
         )
 
 
+class ReplyContextFreshnessPort(Protocol):
+    """重新确认快照中的依据和版本仍可用于本次生成的 seam。"""
+
+    def validate_current(self, context: ReplyContext) -> None:
+        """在模型调用前后验证当前联系人范围内的 live 状态。"""
+
+
 class ReplyContextPort(Protocol):
     """Reply 入口使用的上下文组装 seam。"""
 
@@ -154,6 +161,7 @@ class RetrievalReplyContext:
         "_memory_limit",
         "_memory_index",
         "_risk_hints",
+        "_skill_revision_reader",
     )
 
     def __init__(
@@ -166,6 +174,7 @@ class RetrievalReplyContext:
         memory_limit: int = 20,
         memory_index: ContactMemoryIndexPort | None = None,
         risk_hints: RiskHintPort | None = None,
+        skill_revision_reader: Callable[[ContactScope], int] | None = None,
     ) -> None:
         if not isinstance(skill_library_revision, int) or skill_library_revision < 0:
             raise ValueError("Skill 库修订号无效。")
@@ -180,6 +189,9 @@ class RetrievalReplyContext:
         self._memory_limit = memory_limit
         self._memory_index = memory_index
         self._risk_hints = risk_hints or DeterministicRiskHints()
+        if skill_revision_reader is not None and not callable(skill_revision_reader):
+            raise TypeError("Skill revision 读取器必须是 callable。")
+        self._skill_revision_reader = skill_revision_reader
 
     def build(
         self,
@@ -276,6 +288,143 @@ class RetrievalReplyContext:
             )
 
         raise ReplyContextInvariantError("回复输入模式无效。")
+
+    def validate_current(self, context: ReplyContext) -> None:
+        """在生成前后重新读取依据，阻止删除或 revision 变化后的旧快照继续生效。"""
+
+        if not isinstance(context, ReplyContext):
+            raise ReplyContextInvariantError("回复上下文快照结构无效。")
+        scope = context.scope
+        self._validate_evidence(context.evidence, scope=scope)
+
+        memory_revision, index_revision = self._version_snapshot(scope)
+        if context.memory_revision is not None and (
+            memory_revision is None
+            or memory_revision != context.memory_revision
+        ):
+            raise ReplyContextInvariantError("关系记忆 revision 已变化。")
+        if context.index_revision is not None and (
+            index_revision is None
+            or index_revision != context.index_revision
+        ):
+            raise ReplyContextInvariantError("关系记忆目录 revision 已变化。")
+
+        if self._skill_revision_reader is not None:
+            try:
+                current_skill_revision = self._skill_revision_reader(scope)
+            except Exception:
+                raise ReplyContextError("Skill revision 重新读取失败。") from None
+            if not isinstance(current_skill_revision, int) or current_skill_revision < 0:
+                raise ReplyContextInvariantError("Skill revision 结构无效。")
+            if current_skill_revision != context.skill_library_revision:
+                raise ReplyContextInvariantError("Skill revision 已变化。")
+
+        now = datetime.now(timezone.utc)
+        for item in context.evidence:
+            if item.kind == "message":
+                self._validate_current_message(item, now=now)
+            elif item.kind == "confirmed_memory":
+                self._validate_current_memory(item, now=now)
+
+    def _validate_current_message(
+        self,
+        evidence: ContextEvidence,
+        *,
+        now: datetime,
+    ) -> None:
+        if not evidence.source_ids:
+            raise ReplyContextInvariantError("回复消息依据缺少来源。")
+        try:
+            messages = self._retrieval.search_messages(
+                scope=evidence.scope,
+                target_message_id=evidence.evidence_id,
+                query=None,
+                limit=1,
+            )
+        except ReplyContextError:
+            raise
+        except Exception:
+            raise ReplyContextError("回复消息依据重新读取失败。") from None
+        if not isinstance(messages, tuple) or any(
+            not isinstance(message, RetrievedMessage)
+            or message.scope != evidence.scope
+            for message in messages
+        ):
+            raise ReplyContextInvariantError("回复消息依据超出联系人范围。")
+        matched = tuple(
+            message
+            for message in messages
+            if message.message_id == evidence.evidence_id
+        )
+        if len(matched) != 1:
+            raise ReplyContextInvariantError("回复消息依据已删除或不可用。")
+        message = matched[0]
+        if (
+            not self._is_current(message.status, message.valid_at, message.invalid_at, now)
+            or message.text != evidence.text
+            or set(message.source_ids) != set(evidence.source_ids)
+            or len(message.source_ids) != len(evidence.source_ids)
+            or message.valid_at != evidence.valid_at
+            or message.invalid_at != evidence.invalid_at
+            or message.status != evidence.status
+        ):
+            raise ReplyContextInvariantError("回复消息依据已失效或版本不一致。")
+
+    def _validate_current_memory(
+        self,
+        evidence: ContextEvidence,
+        *,
+        now: datetime,
+    ) -> None:
+        if not evidence.source_ids or evidence.revision is None:
+            raise ReplyContextInvariantError("关系记忆依据缺少来源或 revision。")
+        try:
+            memories = self._retrieval.search_confirmed_memories(
+                scope=evidence.scope,
+                query=None,
+                limit=1,
+                memory_ids=(evidence.evidence_id,),
+            )
+        except ReplyContextError:
+            raise
+        except Exception:
+            raise ReplyContextError("关系记忆依据重新读取失败。") from None
+        if not isinstance(memories, tuple) or any(
+            not isinstance(memory, RetrievedMemory)
+            or memory.scope != evidence.scope
+            for memory in memories
+        ):
+            raise ReplyContextInvariantError("关系记忆依据超出联系人范围。")
+        if len(memories) != 1:
+            raise ReplyContextInvariantError("关系记忆依据已删除或不可用。")
+        memory = memories[0]
+        if (
+            not self._is_current(memory.status, memory.valid_at, memory.invalid_at, now)
+            or memory.text != evidence.text
+            or set(memory.source_ids) != set(evidence.source_ids)
+            or len(memory.source_ids) != len(evidence.source_ids)
+            or memory.revision != evidence.revision
+            or memory.valid_at != evidence.valid_at
+            or memory.invalid_at != evidence.invalid_at
+            or memory.status != evidence.status
+        ):
+            raise ReplyContextInvariantError("关系记忆依据已失效或版本不一致。")
+
+    @staticmethod
+    def _is_current(
+        status: str,
+        valid_at: datetime | None,
+        invalid_at: datetime | None,
+        now: datetime,
+    ) -> bool:
+        try:
+            return (
+                status == "active"
+                and (valid_at is None or valid_at <= now)
+                and (invalid_at is None or now < invalid_at)
+            )
+        except TypeError:
+            return False
 
     @staticmethod
     def _validate_request(

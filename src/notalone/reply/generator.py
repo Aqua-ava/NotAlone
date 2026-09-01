@@ -117,6 +117,7 @@ class ReplyGenerator:
             raise ReplyContextError("候选回复上下文准备失败。") from None
         try:
             self._validate_context(command, context)
+            self._validate_current_context(context)
         except ReplyError:
             self._mark_failed(request, "context_invariant_failed")
             raise
@@ -151,6 +152,11 @@ class ReplyGenerator:
             )
             raise ReplyRunError("候选回复运行失败。") from None
         runtime_latency_ms = int((time.perf_counter() - started_ns) * 1000)
+        runtime_usage = (
+            runtime_result.usage
+            if isinstance(runtime_result, ReplyRuntimeResult)
+            else None
+        )
         try:
             self._validate_runtime_result(runtime_result)
             runtime_context = self._merge_runtime_context(
@@ -158,12 +164,13 @@ class ReplyGenerator:
                 runtime_result,
             )
             self._validate_context(command, runtime_context)
+            self._validate_current_context(runtime_context)
         except ReplyError:
             self._mark_failed(request, "runtime_failed")
             self._record_ledger(
                 command,
                 LedgerOutcome.REJECTED_BY_VALIDATION,
-                runtime_result.usage,
+                runtime_usage,
                 started_ns,
                 called_at,
                 runtime_latency_ms,
@@ -174,7 +181,7 @@ class ReplyGenerator:
             self._record_ledger(
                 command,
                 LedgerOutcome.REJECTED_BY_VALIDATION,
-                runtime_result.usage,
+                runtime_usage,
                 started_ns,
                 called_at,
                 runtime_latency_ms,
@@ -189,7 +196,7 @@ class ReplyGenerator:
             self._record_ledger(
                 command,
                 LedgerOutcome.REJECTED_BY_VALIDATION,
-                runtime_result.usage,
+                runtime_usage,
                 started_ns,
                 called_at,
                 runtime_latency_ms,
@@ -207,7 +214,7 @@ class ReplyGenerator:
             self._record_ledger(
                 command,
                 LedgerOutcome.SUCCEEDED,
-                runtime_result.usage,
+                runtime_usage,
                 started_ns,
                 called_at,
                 runtime_latency_ms,
@@ -218,7 +225,7 @@ class ReplyGenerator:
             self._record_ledger(
                 command,
                 LedgerOutcome.SUCCEEDED,
-                runtime_result.usage,
+                runtime_usage,
                 started_ns,
                 called_at,
                 runtime_latency_ms,
@@ -228,7 +235,7 @@ class ReplyGenerator:
         self._record_ledger(
             command,
             LedgerOutcome.SUCCEEDED,
-            runtime_result.usage,
+            runtime_usage,
             started_ns,
             called_at,
             runtime_latency_ms,
@@ -358,6 +365,7 @@ class ReplyGenerator:
                         or item.revision < 1
                     )
                 )
+                or not ReplyGenerator._valid_evidence_status(item)
             ):
                 raise ReplyInvariantError("回复依据超出范围或结构无效。")
             evidence_ids.add(item.evidence_id)
@@ -423,6 +431,31 @@ class ReplyGenerator:
             return
 
         raise ReplyInvariantError("回复输入模式无效。")
+
+    def _validate_current_context(self, context: ReplyContext) -> None:
+        """在模型调用前后重新验证快照中的 live 依据。"""
+
+        validator = getattr(self._context, "validate_current", None)
+        if not callable(validator):
+            return
+        try:
+            validator(context)
+        except ReplyError:
+            raise
+        except Exception:
+            raise ReplyContextError("回复依据重新验证失败。") from None
+
+    @staticmethod
+    def _valid_evidence_status(item: ContextEvidence) -> bool:
+        """只允许可解释的本轮证据状态进入模型和持久化边界。"""
+
+        allowed = {
+            "message": {"active"},
+            "confirmed_memory": {"active"},
+            "user_draft": {"active", "user_input"},
+            "continued_candidate": {"active", "candidate"},
+        }
+        return item.status in allowed.get(item.kind, set())
 
     @staticmethod
     def _merge_runtime_context(
@@ -490,6 +523,10 @@ class ReplyGenerator:
             tuple,
         ):
             raise ReplyInvariantError("模型返回了无效结果。")
+        if result.usage is not None and not ReplyGenerator._valid_usage(
+            result.usage
+        ):
+            raise ReplyInvariantError("模型用量记录结构无效。")
         if not isinstance(result.additional_evidence, tuple) or not isinstance(
             result.tool_calls,
             tuple,
@@ -555,6 +592,25 @@ class ReplyGenerator:
             or result.used_skill.load_state not in ("loaded", "resource_failed")
         ):
             raise ReplyInvariantError("模型返回了无效 Skill 记录。")
+
+    @staticmethod
+    def _valid_usage(usage: object) -> bool:
+        return (
+            isinstance(usage, RuntimeUsage)
+            and isinstance(usage.provider, str)
+            and bool(usage.provider.strip())
+            and isinstance(usage.model_name, str)
+            and bool(usage.model_name.strip())
+            and all(
+                value is None
+                or (
+                    isinstance(value, int)
+                    and not isinstance(value, bool)
+                    and value >= 0
+                )
+                for value in (usage.input_tokens, usage.output_tokens)
+            )
+        )
 
     @staticmethod
     def _validate_persisted(
