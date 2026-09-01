@@ -525,3 +525,50 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
         self.assertEqual(raised.exception.code, "cli_command_failed")
         self.assertNotIn("private", str(raised.exception))
         self.assertNotIn("message text", str(raised.exception))
+
+    def test_structured_invalid_argument_error_keeps_a_safe_specific_code(self) -> None:
+        runner = RecordingRunner(
+            FakeCommandResult(
+                returncode=1,
+                stdout=json.dumps(
+                    {
+                        "ok": False,
+                        "error": {
+                            "code": "invalid_argument",
+                            "message": "internal command details",
+                        },
+                    }
+                ),
+            )
+        )
+
+        with self.assertRaises(CliCommandError) as raised:
+            LocalWechatCli(runner=runner).tail("wxid_1", since_time="bad")
+
+        self.assertEqual(raised.exception.code, "cli_invalid_argument")
+        self.assertNotIn("internal command details", str(raised.exception))
+
+    def test_missing_key_error_is_reported_as_refresh_required(self) -> None:
+        runner = RecordingRunner(
+            FakeCommandResult(
+                returncode=1,
+                stdout=json.dumps(
+                    {
+                        "ok": False,
+                        "error": {
+                            "code": "tool_error",
+                            "message": (
+                                "strict_read_only: automatic key refresh is disabled "
+                                "(no enc_key; refresh wxkey key map)"
+                            ),
+                        },
+                    }
+                ),
+            )
+        )
+
+        with self.assertRaises(CliCommandError) as raised:
+            LocalWechatCli(runner=runner).tail("wxid_1", since_time="2026-09-01")
+
+        self.assertEqual(raised.exception.code, "cli_key_refresh_required")
+        self.assertNotIn("enc_key", str(raised.exception))

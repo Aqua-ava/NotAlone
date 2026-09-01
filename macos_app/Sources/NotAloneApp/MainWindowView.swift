@@ -1267,7 +1267,7 @@ struct MainWindowView: View {
                 syncInfoRow("本轮新增", value: String(status.cliBatchMessageCount ?? 0))
                 syncInfoRow("前台 OCR", value: foregroundPhaseLabel(status.foregroundPhase))
                 if let failure = status.cliFailureCode {
-                    syncInfoRow("CLI 错误码", value: failure, color: .red)
+                    syncInfoRow("CLI 错误", value: cliFailureLabel(failure), color: .red)
                 }
                 if let failure = status.foregroundFailureCode {
                     syncInfoRow("前台错误码", value: failure, color: .orange)
@@ -1416,6 +1416,17 @@ struct MainWindowView: View {
         case "waiting_bindings": return "等待绑定"
         case "disabled": return "已关闭"
         default: return raw ?? "未知"
+        }
+    }
+
+    private func cliFailureLabel(_ raw: String) -> String {
+        switch raw {
+        case "cli_key_refresh_required":
+            return "需要刷新本机微信读取密钥（运行 wxkey setup）"
+        case "cli_invalid_argument":
+            return "CLI 参数无效，请重启 NotAlone"
+        default:
+            return raw
         }
     }
 

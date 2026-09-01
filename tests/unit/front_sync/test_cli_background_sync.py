@@ -211,11 +211,7 @@ class CliBackgroundSyncTest(unittest.TestCase):
         self.assertIsNone(self.cli.tail_calls[0].get("cursor"))
         self.assertEqual(
             self.cli.tail_calls[0].get("since_time"),
-            str(
-                int(
-                    datetime(2026, 9, 1, 10, 0, tzinfo=timezone.utc).timestamp()
-                )
-            ),
+            "2026-09-01T10:00:00+00:00",
         )
         self.assertEqual(self.cli.tail_calls[2].get("cursor"), "local_id:10")
         self.assertNotIn("since_time", self.cli.tail_calls[2])

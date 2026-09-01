@@ -389,7 +389,7 @@ class LocalWechatCli:
         except subprocess.TimeoutExpired as error:
             raise CliCommandError("cli_timeout", "微信 CLI 命令超时。") from error
         if result.returncode != 0:
-            raise CliCommandError("cli_command_failed", "微信 CLI 命令执行失败。")
+            raise _command_failure(result)
         return result
 
     def _run_command(self, command: tuple[str, ...]) -> CommandResult:
@@ -422,6 +422,52 @@ class LocalWechatCli:
             "cli_follow_unsupported",
             "当前 CLI 适配器不提供 follow 流能力。",
         )
+
+
+def _command_failure(result: CommandResult) -> CliCommandError:
+    """把 CLI 的结构化失败转换成不泄漏正文的稳定错误。"""
+
+    code, message = _structured_error(result.stdout)
+    if code == "invalid_argument":
+        return CliCommandError("cli_invalid_argument", "微信 CLI 参数无效。")
+    if code == "tool_error" and _requires_key_refresh(message):
+        return CliCommandError(
+            "cli_key_refresh_required",
+            "微信 CLI 本机读取密钥需要刷新。",
+        )
+    return CliCommandError("cli_command_failed", "微信 CLI 命令执行失败。")
+
+
+def _structured_error(stdout: str) -> tuple[str | None, str | None]:
+    """读取失败 envelope 的类型字段，不把原始错误文本带出适配器。"""
+
+    try:
+        value = json.loads(stdout)
+    except (TypeError, json.JSONDecodeError):
+        return None, None
+    if not isinstance(value, dict) or value.get("ok") is not False:
+        return None, None
+    error = value.get("error")
+    if not isinstance(error, dict):
+        return None, None
+    code = error.get("code")
+    message = error.get("message")
+    return (
+        code if isinstance(code, str) else None,
+        message if isinstance(message, str) else None,
+    )
+
+
+def _requires_key_refresh(message: str | None) -> bool:
+    """识别 CLI 明确报告的只读密钥缺失，不匹配一般工具错误。"""
+
+    if message is None:
+        return False
+    normalized = message.casefold()
+    return (
+        "automatic key refresh is disabled" in normalized
+        and "enc_key" in normalized
+    )
 
 
 def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:

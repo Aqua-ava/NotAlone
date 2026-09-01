@@ -417,10 +417,10 @@ class CliBackgroundSync:
                     conversation_locator=binding.conversation_locator,
                     baseline_at=self._clock(),
                 )
-            # wechat-cli 的 since_time 接口接受 Unix 秒或 YYYY-MM-DD；不能
-            # 直接传数据库返回的 ISO 8601 时间，否则首轮每个绑定都会被 CLI
-            # 拒绝，表现为 cli_command_failed。
-            kwargs["since_time"] = str(int(baseline.timestamp()))
+            # wechat-cli 的命令行参数解析会把纯数字参数重新解释为 int64，
+            # 即使这里传入的是 Python 字符串，也会被 read_events 拒绝。
+            # ISO-8601 保留精确 baseline，同时保持 CLI 参数为字符串。
+            kwargs["since_time"] = baseline.isoformat()
         result: TailResult = self._cli.tail(
             binding.conversation_locator,
             **kwargs,
