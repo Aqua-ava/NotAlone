@@ -116,9 +116,24 @@ class CliFullSyncEngine:
         close_fallback = getattr(self._fallback, "close", None)
         if callable(close_fallback):
             close_fallback()
+        close_cli = getattr(self._cli, "close", None)
+        if callable(close_cli):
+            close_cli()
+
+    def cancel_pending_io(self) -> None:
+        """在同步线程退出前中断正在等待的 CLI 一次性命令。"""
+
+        close_cli = getattr(self._cli, "close", None)
+        if callable(close_cli):
+            close_cli()
 
     def sync_enabled(self) -> bool:
         return bool(self._sync_state.read(owner_id=self._owner_id).enabled)
+
+    def request_sync_check(self) -> None:
+        """让手动检查绕过安全对账的低频等待，但仍按固定预算读取。"""
+
+        self._background.request_safety_sweep()
 
     def cycle(self) -> FrontSyncCycleReport:
         enabled = self.sync_enabled()
@@ -187,6 +202,9 @@ class CliFullSyncEngine:
         """提交一次性批量绑定，然后返回双通道最新状态。"""
 
         self._binding_coordinator.confirm(selections)
+        # 新绑定不应等待下一次低频安全对账；仍由后台自己的 cursor、
+        # 初始 baseline 和固定批量上限决定实际读取范围。
+        self._background.request_safety_sweep()
         # 批量绑定在 NotAlone 界面完成，不应为了返回状态再次触发
         # 屏幕录制/OCR；沿用最近一次前台状态，后台通道立即刷新。
         enabled = self.sync_enabled()

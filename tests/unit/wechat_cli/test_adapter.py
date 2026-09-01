@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import threading
 import unittest
 from dataclasses import dataclass
+from unittest.mock import patch
 
 from notalone.wechat_cli import (
     CliCommandError,
@@ -78,7 +80,73 @@ class FollowRunner:
         return self.process
 
 
+class BlockingCommandProcess:
+    """可被 close() 终止的合成一次性命令进程。"""
+
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.released = threading.Event()
+        self.returncode: int | None = None
+        self.terminated = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        del args
+
+    def communicate(self, timeout: float | None = None):
+        self.started.set()
+        self.released.wait(timeout=timeout or 2)
+        return '{"ok": true, "data": {"version": "1.6.20"}}', ""
+
+    def poll(self) -> int | None:
+        return self.returncode
+
+    def terminate(self) -> None:
+        self.terminated = True
+        self.returncode = -15
+        self.released.set()
+
+    def wait(self, timeout: float | None = None) -> int:
+        if not self.released.wait(timeout=timeout):
+            raise subprocess.TimeoutExpired("wechat-cli", timeout)
+        assert self.returncode is not None
+        return self.returncode
+
+    def kill(self) -> None:
+        self.terminate()
+
+
 class LocalWechatCliAdapterTest(unittest.TestCase):
+    def test_close_terminates_inflight_one_shot_command(self) -> None:
+        process = BlockingCommandProcess()
+        cli = LocalWechatCli(timeout_seconds=30)
+        errors: list[Exception] = []
+
+        def run_version() -> None:
+            try:
+                cli.version()
+            except Exception as error:  # command is intentionally terminated
+                errors.append(error)
+
+        with patch(
+            "notalone.wechat_cli.adapter.subprocess.Popen",
+            return_value=process,
+        ):
+            thread = threading.Thread(target=run_version)
+            thread.start()
+            self.assertTrue(process.started.wait(timeout=1))
+            try:
+                cli.close()
+            finally:
+                process.terminate()
+            thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        self.assertTrue(process.terminated)
+        self.assertTrue(errors)
+
     def test_tail_follow_streams_events_and_closes_process(self) -> None:
         follow_runner = FollowRunner(
             FollowProcess(

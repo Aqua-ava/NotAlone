@@ -221,6 +221,8 @@ class LocalWechatCli:
             self._follow_runner = self._unsupported_follow_runner
         else:
             self._follow_runner = self._run_follow_process
+        self._process_lock = threading.Lock()
+        self._active_processes: set[object] = set()
 
     def resolve_chat(
         self,
@@ -371,6 +373,33 @@ class LocalWechatCli:
         data = _object_field(envelope, "data")
         return _require_text(data.get("version"), "data.version")
 
+    def close(self) -> None:
+        """终止正在执行的一次性命令；已完成命令不受影响。"""
+
+        with self._process_lock:
+            processes = tuple(self._active_processes)
+        for process in processes:
+            poll = getattr(process, "poll", None)
+            if not callable(poll) or poll() is not None:
+                continue
+            terminate = getattr(process, "terminate", None)
+            if callable(terminate):
+                terminate()
+        for process in processes:
+            wait = getattr(process, "wait", None)
+            if not callable(wait):
+                continue
+            try:
+                wait(timeout=1.0)
+            except (TimeoutError, subprocess.TimeoutExpired):
+                kill = getattr(process, "kill", None)
+                if callable(kill):
+                    kill()
+                try:
+                    wait(timeout=1.0)
+                except (TimeoutError, subprocess.TimeoutExpired):
+                    pass
+
     def _run_json(self, command: tuple[str, ...]) -> dict[str, Any]:
         result = self._invoke(command)
         try:
@@ -393,17 +422,28 @@ class LocalWechatCli:
         return result
 
     def _run_command(self, command: tuple[str, ...]) -> CommandResult:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            check=False,
-            text=True,
-            timeout=self._timeout_seconds,
-        )
+        with self._process_lock:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            self._active_processes.add(process)
+        try:
+            try:
+                stdout, stderr = process.communicate(timeout=self._timeout_seconds)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                stdout, stderr = process.communicate()
+                raise
+        finally:
+            with self._process_lock:
+                self._active_processes.discard(process)
         return _SubprocessResult(
-            returncode=result.returncode,
-            stdout=result.stdout,
-            stderr=result.stderr,
+            returncode=process.returncode,
+            stdout=stdout,
+            stderr=stderr,
         )
 
     def _run_follow_process(self, command: tuple[str, ...]) -> object:

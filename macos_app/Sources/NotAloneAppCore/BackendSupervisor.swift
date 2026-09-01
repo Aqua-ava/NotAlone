@@ -37,6 +37,7 @@ public final class BackendSupervisor: @unchecked Sendable {
     // 启动后端；等待握手行后返回连接信息。重复启动先收掉旧进程。
     public func launch(repoRoot: URL, serverBin: URL) async throws -> BackendConnection {
         terminate()
+        waitForExit(timeout: 5)
         connection = nil
         readBuffer.removeAll(keepingCapacity: true)
         lastExitCode = nil
@@ -51,6 +52,11 @@ public final class BackendSupervisor: @unchecked Sendable {
             .appendingPathComponent("macos_sync_probe/build/cli/notalone-sync-probe")
             .path
         environment["NOTALONE_SYNC_PROBE"] = probePath
+        // 使用随 App 构建的稳定副本，避免 Finder 启动时反复从 PATH
+        // 拉起 ad-hoc CLI，导致 macOS 将每个新子进程视为新的数据访问者。
+        if let cliPath = EnvironmentLocator.locateBundledCli(repoRoot: repoRoot) {
+            environment["NOTALONE_WECHAT_CLI"] = cliPath.path
+        }
         environment["PYTHONUNBUFFERED"] = "1"
         process.environment = environment
         process.standardOutput = stdout
@@ -183,6 +189,24 @@ public enum EnvironmentLocator {
         }
         environment["PATH"] = ([userLocalBin] + entries).joined(separator: ":")
         return environment
+    }
+
+    /// 查找随 App 构建的 CLI 副本；开发环境没有副本时返回 nil，
+    /// 后端继续按 PATH 使用用户自行安装的 CLI。
+    public static func locateBundledCli(repoRoot: URL) -> URL? {
+        let candidates = [
+            Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/wechat-cli"),
+            repoRoot.appendingPathComponent(
+                "macos_app/build/NotAloneApp.app/Contents/Helpers/wechat-cli"
+            ),
+        ]
+        var seen: Set<String> = []
+        for candidate in candidates where seen.insert(candidate.path).inserted {
+            if FileManager.default.isExecutableFile(atPath: candidate.path) {
+                return candidate
+            }
+        }
+        return nil
     }
 
     public static func locateServerBin() -> URL? {

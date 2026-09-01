@@ -111,6 +111,7 @@ final class AppModel: ObservableObject {
         sseClient?.stop()
         sseClient = nil
         supervisor.terminate()
+        supervisor.waitForExit(timeout: 5)
     }
 
     // MARK: - 消息流

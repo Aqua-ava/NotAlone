@@ -20,5 +20,7 @@
     <string>15.0</string>
     <key>NSScreenCaptureUsageDescription</key>
     <string>NotAlone 前台同步探针作为本应用的子进程运行，仅在微信处于前台时本地读取当前窗口的会话标题与选中行元数据，用于定位当前联系人；不保存截图，不上传任何内容。</string>
+    <key>NSAppDataUsageDescription</key>
+    <string>NotAlone 仅在你开启 CLI 全量同步后，通过本机只读 CLI 读取已绑定的微信会话数据，用于更新消息；不会发送消息或读取未绑定联系人。</string>
 </dict>
 </plist>

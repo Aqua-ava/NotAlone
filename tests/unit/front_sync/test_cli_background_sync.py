@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from notalone.front_sync.cli_sync import CliBackgroundSync
@@ -154,6 +154,7 @@ class CliBackgroundSyncTest(unittest.TestCase):
             ]
         )
         self.store = FakeObservationStore()
+        self.now = datetime(2026, 9, 1, 10, 0, tzinfo=timezone.utc)
         self.cli.tail_results["wxid_a"] = deque(
             [
                 TailResult(
@@ -174,7 +175,7 @@ class CliBackgroundSyncTest(unittest.TestCase):
             bindings=self.bindings,
             observation_store=self.store,
             sync_state=self.sync_state,
-            clock=lambda: datetime(2026, 9, 1, 10, 0, tzinfo=timezone.utc),
+            clock=lambda: self.now,
         )
 
     def test_one_global_stream_dispatches_only_bound_sessions(self) -> None:
@@ -238,6 +239,7 @@ class CliBackgroundSyncTest(unittest.TestCase):
         )
 
         # 模拟全局 sessions 流没有报告 wxid_a 的我方新消息。
+        self.now += timedelta(seconds=15)
         result = self.sync.cycle(enabled=True)
 
         self.assertEqual(
@@ -249,6 +251,17 @@ class CliBackgroundSyncTest(unittest.TestCase):
             self.store.cursors[(OWNER_ID, self.binding_a.contact_id)].last_local_id,
             11,
         )
+
+    def test_global_safety_sweep_is_not_repeated_on_every_heartbeat(self) -> None:
+        self.sync.cycle(enabled=True)
+        self.cli.tail_calls.clear()
+
+        # 后端心跳是 3 秒级；安全对账不能把每次心跳都变成一批 CLI
+        # 子进程，否则会持续触发 macOS 跨 App 数据访问门禁。
+        self.now += timedelta(seconds=1)
+        self.sync.cycle(enabled=True)
+
+        self.assertEqual(self.cli.tail_calls, [])
 
     def test_failed_binding_waits_for_next_round_instead_of_blocking_queue(self) -> None:
         original_tail = self.cli.tail
@@ -273,6 +286,7 @@ class CliBackgroundSyncTest(unittest.TestCase):
         self.assertEqual(first.status.failure_code, "cli_command_failed")
 
         self.cli.tail_calls.clear()
+        self.now += timedelta(seconds=15)
         second = self.sync.cycle(enabled=True)
 
         self.assertEqual(

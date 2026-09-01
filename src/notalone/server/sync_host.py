@@ -195,6 +195,11 @@ class SyncHost:
             self._thread = None
         if thread is not None:
             self._stop_event.set()
+            # 同步线程可能正阻塞在 CLI 一次性命令里；先调用一个只负责
+            # 终止 I/O 的可选钩子，再等待线程，避免退出时被命令超时拖住。
+            cancel = getattr(self._engine, "cancel_pending_io", None)
+            if callable(cancel):
+                cancel()
             thread.join(timeout=max(self._interval * 2, 5.0))
         with self._lock:
             close = getattr(self._engine, "close", None)
@@ -221,6 +226,11 @@ class SyncHost:
 
     def check(self) -> FrontSyncCycleReport:
         with self._lock:
+            # CLI 全量同步的安全对账是低频的；用户点击“立即检查”时
+            # 明确表达了要立刻执行一次，但仍由引擎保持固定批量上限。
+            request = getattr(self._engine, "request_sync_check", None)
+            if callable(request):
+                request()
             return self._run_cycle_locked()
 
     def cli_sessions(self) -> tuple[CliBindingCandidateView, ...]:

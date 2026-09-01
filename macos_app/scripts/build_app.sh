@@ -8,9 +8,11 @@ build_dir="${app_dir}/build"
 app_bundle="${build_dir}/NotAloneApp.app"
 module_dir="${build_dir}/modules"
 module_cache_dir="/private/tmp/notalone-app-module-cache"
+helpers_dir="${app_bundle}/Contents/Helpers"
 
 mkdir -p "${app_bundle}/Contents/MacOS"
 mkdir -p "${app_bundle}/Contents/Frameworks"
+mkdir -p "${helpers_dir}"
 mkdir -p "${module_dir}"
 mkdir -p "${module_cache_dir}"
 
@@ -54,16 +56,39 @@ env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
 
 cp "${app_dir}/App/Info.plist" "${app_bundle}/Contents/Info.plist"
 
+# 把用户已安装的 CLI 复制进 App，随后与主 App 使用同一个稳定的开发签名。
+# 这样后台不会在每轮安全对账时以 ad-hoc 身份创建新的跨 App 数据访问者。
+cli_source="$(command -v wechat-cli || true)"
+if [[ -n "${cli_source}" ]]; then
+    cli_source="${cli_source:A}"
+fi
+if [[ -n "${cli_source}" && -x "${cli_source}" ]]; then
+    cp "${cli_source}" "${helpers_dir}/wechat-cli"
+    chmod 755 "${helpers_dir}/wechat-cli"
+else
+    echo "警告：未找到 wechat-cli，App 将回退到后端 PATH。" >&2
+fi
+
 # 屏幕录制授权按签名身份记忆；优先用本机稳定证书，否则退回 ad-hoc。
 signing_identity=$(security find-identity -p codesigning -v 2>/dev/null \
     | sed -n 's/^[[:space:]]*[0-9]*)[[:space:]]*[0-9A-F]* "\(.*\)".*/\1/p' \
     | head -1)
 if [[ -n "${signing_identity}" ]]; then
+    if [[ -x "${helpers_dir}/wechat-cli" ]]; then
+        codesign --force --sign "${signing_identity}" \
+            --identifier "com.notalone.wechat-cli" \
+            "${helpers_dir}/wechat-cli"
+    fi
     codesign --force --deep --sign "${signing_identity}" \
         --identifier "com.notalone.app" \
         "${app_bundle}"
     echo "签名身份：${signing_identity}"
 else
+    if [[ -x "${helpers_dir}/wechat-cli" ]]; then
+        codesign --force --sign - \
+            --identifier "com.notalone.wechat-cli" \
+            "${helpers_dir}/wechat-cli"
+    fi
     codesign --force --deep --sign - \
         --identifier "com.notalone.app" \
         "${app_bundle}"

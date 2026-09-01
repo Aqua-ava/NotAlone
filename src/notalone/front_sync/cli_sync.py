@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
@@ -111,6 +111,8 @@ class SyncStatePort(Protocol):
 
 _MAX_EVENTS_PER_CYCLE = 128
 _MAX_BINDINGS_PER_CYCLE = 32
+_SAFETY_SWEEP_INTERVAL = timedelta(seconds=15)
+_SAFETY_SWEEP_BINDINGS_PER_CYCLE = 8
 
 
 class CliBackgroundSync:
@@ -131,6 +133,7 @@ class CliBackgroundSync:
         "_global_cursor",
         "_initial_scan_done",
         "_sweep_index",
+        "_last_sweep_at",
         "_pending_locators",
         "_pending_locator_set",
         "_failure_code",
@@ -169,6 +172,7 @@ class CliBackgroundSync:
         self._global_cursor: str | None = None
         self._initial_scan_done = False
         self._sweep_index = 0
+        self._last_sweep_at: datetime | None = None
         self._pending_locators: deque[str] = deque()
         self._pending_locator_set: set[str] = set()
         self._failure_code: str | None = None
@@ -242,19 +246,10 @@ class CliBackgroundSync:
             self._start_global_stream()
         if self._stream is not None:
             self._consume_global_events(by_locator)
-            if not self._initial_scan_done:
-                for binding in bindings:
-                    self._enqueue(binding.conversation_locator)
-                self._initial_scan_done = True
-            elif not self._pending_locators:
-                # sessions 事件流并不保证会为“我方发送”产生变化通知。
-                # 队列清空后按固定预算做安全轮询，仍使用各联系人的
-                # cursor，因此不会重复写入，也不会为每个联系人创建 Follow。
-                self._enqueue_round_robin(bindings)
+            self._enqueue_initial_or_safety_sweep(bindings)
         else:
             # 全局能力不可用时只做有界一次性轮询；不会创建长进程。
-            for binding in bindings:
-                self._enqueue(binding.conversation_locator)
+            self._enqueue_initial_or_safety_sweep(bindings)
 
         written = 0
         processed = 0
@@ -318,6 +313,7 @@ class CliBackgroundSync:
         self._close_stream()
         self._initial_scan_done = False
         self._sweep_index = 0
+        self._last_sweep_at = None
         self._failure_code = failure_code
         return CliSyncCycleResult(
             status=CliSyncStatus(
@@ -339,8 +335,14 @@ class CliBackgroundSync:
         self._pending_locator_set.clear()
         self._initial_scan_done = False
         self._sweep_index = 0
+        self._last_sweep_at = None
         self._stream_supported = True
         self._failure_code = None
+
+    def request_safety_sweep(self) -> None:
+        """让下一次空闲心跳立即执行一小批安全对账。"""
+
+        self._last_sweep_at = None
 
     def _active_bindings(self) -> tuple[object, ...]:
         source = self._bindings
@@ -388,12 +390,35 @@ class CliBackgroundSync:
         self._pending_locator_set.add(locator)
         self._pending_locators.append(locator)
 
+    def _enqueue_initial_or_safety_sweep(self, bindings: Sequence[object]) -> None:
+        if not self._initial_scan_done:
+            for binding in bindings:
+                self._enqueue(binding.conversation_locator)
+            self._initial_scan_done = True
+            # 初始化批次可能尚未在本轮全部处理完；从此刻开始计时，
+            # 避免初始化刚结束就立刻再发起一批安全 CLI 进程。
+            self._last_sweep_at = self._clock()
+            return
+        if self._pending_locators:
+            return
+        # sessions 事件流并不保证会为“我方发送”产生变化通知。
+        # 队列空闲后按低频、固定预算做安全轮询，仍使用各联系人的
+        # cursor，因此不会重复写入，也不会为每个联系人创建 Follow。
+        now = self._clock()
+        if (
+            self._last_sweep_at is not None
+            and now < self._last_sweep_at + _SAFETY_SWEEP_INTERVAL
+        ):
+            return
+        self._enqueue_round_robin(bindings)
+        self._last_sweep_at = now
+
     def _enqueue_round_robin(self, bindings: Sequence[object]) -> None:
         """为全局事件流增加一个有界的定期对账窗口。"""
 
         if not bindings:
             return
-        count = min(_MAX_BINDINGS_PER_CYCLE, len(bindings))
+        count = min(_SAFETY_SWEEP_BINDINGS_PER_CYCLE, len(bindings))
         start = self._sweep_index % len(bindings)
         for offset in range(count):
             binding = bindings[(start + offset) % len(bindings)]

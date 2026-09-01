@@ -29,6 +29,29 @@ final class BackendConnectionTests: XCTestCase {
         )
     }
 
+    func testLocatesBundledCliFromRepositoryBuildOutput() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("notalone-cli-root-\(UUID().uuidString)")
+        let helpers = root
+            .appendingPathComponent("macos_app/build/NotAloneApp.app/Contents/Helpers")
+        try FileManager.default.createDirectory(
+            at: helpers,
+            withIntermediateDirectories: true
+        )
+        let cli = helpers.appendingPathComponent("wechat-cli")
+        try Data("#!/bin/sh\n".utf8).write(to: cli)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: cli.path
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertEqual(
+            EnvironmentLocator.locateBundledCli(repoRoot: root),
+            cli
+        )
+    }
+
     func testSupervisorReceivesServerHandshakeFromStdout() async throws {
         let scriptURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("notalone-handshake-\(UUID().uuidString).sh")

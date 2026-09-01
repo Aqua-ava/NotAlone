@@ -42,6 +42,7 @@ class FakeState:
 class FakeBackground:
     def __init__(self) -> None:
         self.calls: list[bool] = []
+        self.safety_sweep_requests = 0
         self.result = CliSyncCycleResult(
             status=CliSyncStatus(
                 phase=CliSyncPhase.ACTIVE,
@@ -59,6 +60,9 @@ class FakeBackground:
 
     def close(self) -> None:
         pass
+
+    def request_safety_sweep(self) -> None:
+        self.safety_sweep_requests += 1
 
 
 class FakeForeground:
@@ -81,8 +85,14 @@ class FakeForeground:
 
 
 class FakeCli:
+    def __init__(self) -> None:
+        self.close_calls = 0
+
     def version(self) -> str:
         return "1.6.20-test"
+
+    def close(self) -> None:
+        self.close_calls += 1
 
 
 class FakeBindingCoordinator:
@@ -146,11 +156,12 @@ class CliFullSyncEngineTest(unittest.TestCase):
         self.background = FakeBackground()
         self.foreground = FakeForeground()
         self.bindings = FakeBindingCoordinator()
+        self.cli = FakeCli()
         self.engine = CliFullSyncEngine(
             owner_id=OWNER_ID,
             channel="wechat",
             account_scope="wx-account",
-            cli=FakeCli(),
+            cli=self.cli,
             sync_state=self.state,
             background=self.background,
             foreground=self.foreground,
@@ -180,6 +191,16 @@ class CliFullSyncEngineTest(unittest.TestCase):
         self.assertEqual(candidates[0].username, "wxid_a")
         self.assertEqual(len(self.bindings.confirmed), 1)
         self.assertEqual(self.foreground.calls, [])
+
+    def test_sync_check_requests_a_background_safety_sweep(self) -> None:
+        self.engine.request_sync_check()
+
+        self.assertEqual(self.background.safety_sweep_requests, 1)
+
+    def test_cancel_pending_io_closes_cli_without_closing_sync_state(self) -> None:
+        self.engine.cancel_pending_io()
+
+        self.assertEqual(self.cli.close_calls, 1)
 
 
 if __name__ == "__main__":

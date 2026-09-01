@@ -24,6 +24,8 @@ class FakeEngine:
         self.cycle_calls = 0
         self.enable_calls = 0
         self.disable_calls = 0
+        self.request_sync_check_calls = 0
+        self.cancel_pending_io_calls = 0
         self.confirm_calls: list[tuple[str, str]] = []
         self.confirm_pending_calls: list[tuple[str, str]] = []
         self.close_calls = 0
@@ -60,6 +62,12 @@ class FakeEngine:
     def disable_sync(self) -> None:
         self.disable_calls += 1
         self.enabled = False
+
+    def request_sync_check(self) -> None:
+        self.request_sync_check_calls += 1
+
+    def cancel_pending_io(self) -> None:
+        self.cancel_pending_io_calls += 1
 
     def close(self) -> None:
         self.close_calls += 1
@@ -121,6 +129,7 @@ class SyncHostTest(unittest.TestCase):
         second = self.host.check()
 
         self.assertEqual(self.engine.cycle_calls, 2)
+        self.assertEqual(self.engine.request_sync_check_calls, 2)
         self.assertTrue(first.sync_enabled)
         self.assertEqual(self.host.status(), second)
         self.assertEqual(self.host.status(), self.host.status())
@@ -183,6 +192,7 @@ class SyncHostTest(unittest.TestCase):
         self.host.stop()
 
         before = self.engine.cycle_calls
+        self.assertEqual(self.engine.cancel_pending_io_calls, 1)
         time.sleep(0.05)
         self.assertEqual(self.engine.cycle_calls, before)
 
