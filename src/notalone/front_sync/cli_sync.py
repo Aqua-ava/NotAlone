@@ -417,10 +417,15 @@ class CliBackgroundSync:
                     conversation_locator=binding.conversation_locator,
                     baseline_at=self._clock(),
                 )
-            # wechat-cli 的命令行参数解析会把纯数字参数重新解释为 int64，
-            # 即使这里传入的是 Python 字符串，也会被 read_events 拒绝。
-            # ISO-8601 保留精确 baseline，同时保持 CLI 参数为字符串。
-            kwargs["since_time"] = baseline.isoformat()
+            # wechat-cli 只接受本地时间布局（例如
+            # ``2026-09-01T15:04:05``），不接受带 ``+00:00`` 的 RFC3339
+            # 后缀；同时不能传纯数字，否则命令行解析会把它变成 int64。
+            # 先转成本机时区，再去掉时区后缀，保留到秒的精确 baseline。
+            kwargs["since_time"] = (
+                baseline.astimezone()
+                .replace(tzinfo=None)
+                .isoformat(timespec="seconds")
+            )
         result: TailResult = self._cli.tail(
             binding.conversation_locator,
             **kwargs,
