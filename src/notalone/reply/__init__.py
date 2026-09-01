@@ -19,6 +19,7 @@ from notalone.reply.context import (
     ReplyContext,
     ReplyContextPort,
     RetrievalReplyContext,
+    ToolCallTrace,
 )
 from notalone.reply.generator import ReplyGenerator
 from notalone.reply.store import (
@@ -51,6 +52,7 @@ __all__ = [
     "AutoSkill",
     "ConfirmedDirection",
     "ContextEvidence",
+    "ToolCallTrace",
     "ContactMemoryIndexPort",
     "ContextReceipt",
     "ContinuedReplyCandidate",

@@ -28,6 +28,8 @@ class RetrievedMessage:
     status: str = "active"
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
+    role: str = "unknown"
+    session_id: UUID | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.message_id, UUID):
@@ -44,6 +46,10 @@ class RetrievedMessage:
             raise TypeError("消息时间结构无效。")
         if not isinstance(self.status, str) or not self.status.strip():
             raise ValueError("消息状态不能为空。")
+        if self.role not in ("owner", "contact", "system", "unknown"):
+            raise ValueError("消息角色无效。")
+        if self.session_id is not None and not isinstance(self.session_id, UUID):
+            raise TypeError("消息会话标识结构无效。")
 
 
 @dataclass(frozen=True, slots=True, repr=False)

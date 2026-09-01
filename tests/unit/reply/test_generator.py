@@ -21,6 +21,7 @@ from notalone.reply import (
 from notalone.reply.context import (
     ContextEvidence,
     ReplyContext,
+    ToolCallTrace,
 )
 from notalone.reply.runtime import ReplyRuntimeResult, RuntimeCandidate
 from notalone.reply.store import (
@@ -58,6 +59,7 @@ UNKNOWN_EVIDENCE_ID = UUID("88888888-8888-8888-8888-888888888888")
 class RecordingReplyStore:
     prepared: ReplyContext
     saved: ValidatedReply | None = None
+    saved_context: ReplyContext | None = None
 
     def start(
         self,
@@ -85,6 +87,7 @@ class RecordingReplyStore:
         if request.request_id != context.reply_request_id:
             raise AssertionError("unexpected synthetic request")
         self.saved = reply
+        self.saved_context = context
         return ReplyGenerated(
             reply_request_id=context.reply_request_id,
             candidates=(
@@ -304,6 +307,61 @@ class ReplyGeneratorTest(unittest.TestCase):
 
         self.assertEqual(context.calls, 1)
         self.assertEqual(result.candidates[0].text, "可以呀。")
+
+    def test_tool_evidence_is_merged_into_the_same_reply_snapshot(self) -> None:
+        command, prepared = self._valid_case()
+        historical_id = UNKNOWN_EVIDENCE_ID
+        historical = ContextEvidence(
+            evidence_id=historical_id,
+            kind="message",
+            text="很久以前的合成历史",
+            scope=prepared.scope,
+            source_ids=(historical_id,),
+            selection_reason="本轮 conversation_search 命中。",
+        )
+        store = RecordingReplyStore(prepared=prepared)
+        runtime = ScriptedReplyRuntime(
+            result=ReplyRuntimeResult(
+                candidates=(
+                    RuntimeCandidate(
+                        text="记得那次安排，我们可以再确认一下。",
+                        basis="使用本轮搜索到的历史证据",
+                        citation_ids=(historical_id,),
+                        risk_notes=(),
+                    ),
+                ),
+                used_skill=None,
+                additional_evidence=(historical,),
+                tool_calls=(
+                    ToolCallTrace(
+                        tool_name="conversation_search",
+                        status="succeeded",
+                        evidence_ids=(historical_id,),
+                        latency_ms=1,
+                    ),
+                ),
+            )
+        )
+
+        result = self._generator(
+            store=store,
+            runtime=runtime,
+            prepared=prepared,
+        ).generate(command, verified_scope=VERIFIED_SCOPE)
+
+        self.assertEqual(
+            result.context_receipt.evidence_ids,
+            (historical_id,),
+        )
+        assert store.saved_context is not None
+        self.assertEqual(
+            tuple(item.evidence_id for item in store.saved_context.evidence),
+            (MESSAGE_ID, historical_id),
+        )
+        self.assertEqual(
+            store.saved_context.tool_calls[0].tool_name,
+            "conversation_search",
+        )
 
     def test_rejects_cross_contact_preparation_before_model_run(self) -> None:
         scope = ContactScope(owner_id=OWNER_ID, contact_id=CONTACT_ID)

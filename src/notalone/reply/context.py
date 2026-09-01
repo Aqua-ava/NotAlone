@@ -49,6 +49,22 @@ class ContextEvidence:
 
 
 @dataclass(frozen=True, slots=True, repr=False)
+class ToolCallTrace:
+    """本轮只读 Tool 的最小审计摘要，不保存 Tool 原始返回全文。"""
+
+    tool_name: str
+    status: Literal[
+        "succeeded",
+        "empty",
+        "failed",
+        "timeout",
+        "budget_exceeded",
+    ]
+    evidence_ids: tuple[UUID, ...] = ()
+    latency_ms: int | None = None
+
+
+@dataclass(frozen=True, slots=True, repr=False)
 class ContinuedReplyCandidate:
     """用户明确选择后，允许进入新请求的历史候选引用。"""
 
@@ -80,6 +96,7 @@ class ReplyContext:
     risk_notes: tuple[str, ...] = ()
     memory_revision: int | None = None
     index_revision: int | None = None
+    tool_calls: tuple[ToolCallTrace, ...] = ()
 
     def has_relationship_memory_for_rewrite(self) -> bool:
         """当前改写上下文是否包含长期关系记忆。"""

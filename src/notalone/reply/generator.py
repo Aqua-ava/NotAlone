@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from notalone.ledger.models import LedgerEntry, LedgerOutcome
 from notalone.ledger.ports import OutboundLedgerPort
-from notalone.reply.context import ContextEvidence, ReplyContext, ReplyContextPort
+from notalone.reply.context import (
+    ContextEvidence,
+    ReplyContext,
+    ReplyContextPort,
+    ToolCallTrace,
+)
 from notalone.reply.runtime import (
     ReplyRuntime,
     ReplyRuntimeResult,
@@ -39,7 +45,7 @@ from notalone.reply.interface import (
     RewriteDraft,
     SkillUse,
 )
-from notalone.scopes import VerifiedConversationScope
+from notalone.scopes import ContactScope, VerifiedConversationScope
 
 
 class ReplyGenerator:
@@ -147,6 +153,11 @@ class ReplyGenerator:
         runtime_latency_ms = int((time.perf_counter() - started_ns) * 1000)
         try:
             self._validate_runtime_result(runtime_result)
+            runtime_context = self._merge_runtime_context(
+                context,
+                runtime_result,
+            )
+            self._validate_context(command, runtime_context)
         except ReplyError:
             self._mark_failed(request, "runtime_failed")
             self._record_ledger(
@@ -169,7 +180,7 @@ class ReplyGenerator:
                 runtime_latency_ms,
             )
             raise ReplyInvariantError("候选回复校验失败。") from None
-        evidence_ids = {item.evidence_id for item in context.evidence}
+        evidence_ids = {item.evidence_id for item in runtime_context.evidence}
         if any(
             not set(candidate.citation_ids) <= evidence_ids
             for candidate in runtime_result.candidates
@@ -189,7 +200,7 @@ class ReplyGenerator:
             used_skill=runtime_result.used_skill,
         )
         try:
-            persisted = self._store.save(request, context, validated)
+            persisted = self._store.save(request, runtime_context, validated)
         except ReplyError:
             self._mark_failed(request, "persistence_failed")
             # 外部调用本身已完成且通过校验；候选落库失败不改变调用结果。
@@ -213,7 +224,7 @@ class ReplyGenerator:
                 runtime_latency_ms,
             )
             raise ReplyPersistenceError("候选回复持久化失败。") from None
-        self._validate_persisted(context, validated, persisted)
+        self._validate_persisted(runtime_context, validated, persisted)
         self._record_ledger(
             command,
             LedgerOutcome.SUCCEEDED,
@@ -286,6 +297,21 @@ class ReplyGenerator:
                 not isinstance(note, str) or not note.strip()
                 for note in context.risk_notes
             )
+            or (
+                context.memory_revision is not None
+                and (
+                    not isinstance(context.memory_revision, int)
+                    or context.memory_revision < 0
+                )
+            )
+            or (
+                context.index_revision is not None
+                and (
+                    not isinstance(context.index_revision, int)
+                    or context.index_revision < 0
+                )
+            )
+            or not isinstance(context.tool_calls, tuple)
         ):
             raise ReplyInvariantError("回复上下文快照结构无效。")
 
@@ -335,6 +361,12 @@ class ReplyGenerator:
             ):
                 raise ReplyInvariantError("回复依据超出范围或结构无效。")
             evidence_ids.add(item.evidence_id)
+
+        for trace in context.tool_calls:
+            if not ReplyGenerator._valid_tool_trace(trace):
+                raise ReplyInvariantError("回复 Tool 轨迹结构无效。")
+            if not set(trace.evidence_ids) <= evidence_ids:
+                raise ReplyInvariantError("回复 Tool 轨迹引用了未知证据。")
 
         continuation_evidence = tuple(
             item for item in context.evidence if item.kind == "continued_candidate"
@@ -393,12 +425,95 @@ class ReplyGenerator:
         raise ReplyInvariantError("回复输入模式无效。")
 
     @staticmethod
+    def _merge_runtime_context(
+        context: ReplyContext,
+        result: ReplyRuntimeResult,
+    ) -> ReplyContext:
+        if not isinstance(result.additional_evidence, tuple):
+            raise ReplyInvariantError("运行时附加证据结构无效。")
+        evidence_ids = {item.evidence_id for item in context.evidence}
+        additions: list[ContextEvidence] = []
+        for item in result.additional_evidence:
+            if (
+                not isinstance(item, ContextEvidence)
+                or item.kind != "message"
+                or item.scope != context.scope
+                or item.evidence_id in evidence_ids
+            ):
+                raise ReplyInvariantError("运行时附加证据超出本次范围。")
+            evidence_ids.add(item.evidence_id)
+            additions.append(item)
+        if not isinstance(result.tool_calls, tuple):
+            raise ReplyInvariantError("运行时 Tool 轨迹结构无效。")
+        for trace in result.tool_calls:
+            if not ReplyGenerator._valid_tool_trace(trace):
+                raise ReplyInvariantError("运行时 Tool 轨迹结构无效。")
+            if not set(trace.evidence_ids) <= evidence_ids:
+                raise ReplyInvariantError("运行时 Tool 轨迹引用了未知证据。")
+        return replace(
+            context,
+            evidence=context.evidence + tuple(additions),
+            tool_calls=context.tool_calls + result.tool_calls,
+        )
+
+    @staticmethod
+    def _valid_tool_trace(trace: object) -> bool:
+        return (
+            isinstance(trace, ToolCallTrace)
+            and isinstance(trace.tool_name, str)
+            and bool(trace.tool_name.strip())
+            and len(trace.tool_name) <= 64
+            and trace.status
+            in (
+                "succeeded",
+                "empty",
+                "failed",
+                "timeout",
+                "budget_exceeded",
+            )
+            and isinstance(trace.evidence_ids, tuple)
+            and len(trace.evidence_ids) == len(set(trace.evidence_ids))
+            and all(isinstance(item, UUID) for item in trace.evidence_ids)
+            and (
+                trace.latency_ms is None
+                or (
+                    isinstance(trace.latency_ms, int)
+                    and trace.latency_ms >= 0
+                )
+            )
+        )
+
+    @staticmethod
     def _validate_runtime_result(result: ReplyRuntimeResult) -> None:
         if not isinstance(result, ReplyRuntimeResult) or not isinstance(
             result.candidates,
             tuple,
         ):
             raise ReplyInvariantError("模型返回了无效结果。")
+        if not isinstance(result.additional_evidence, tuple) or not isinstance(
+            result.tool_calls,
+            tuple,
+        ):
+            raise ReplyInvariantError("模型返回了无效 Tool 结果。")
+        for item in result.additional_evidence:
+            if (
+                not isinstance(item, ContextEvidence)
+                or item.kind != "message"
+                or not isinstance(item.scope, ContactScope)
+                or not isinstance(item.evidence_id, UUID)
+                or not isinstance(item.text, str)
+                or not item.text.strip()
+                or not isinstance(item.source_ids, tuple)
+                or not item.source_ids
+                or any(
+                    not isinstance(source_id, UUID)
+                    for source_id in item.source_ids
+                )
+            ):
+                raise ReplyInvariantError("模型返回了无效 Tool 证据。")
+        for trace in result.tool_calls:
+            if not ReplyGenerator._valid_tool_trace(trace):
+                raise ReplyInvariantError("模型返回了无效 Tool 轨迹。")
         if not 1 <= len(result.candidates) <= 3:
             raise ReplyInvariantError("一次回复必须生成 1 到 3 条候选。")
         for candidate in result.candidates:

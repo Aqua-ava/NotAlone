@@ -14,6 +14,7 @@ from notalone.reply.context import (
     ContextEvidence,
     ContinuedReplyCandidate,
     ReplyContext,
+    ToolCallTrace,
 )
 from notalone.reply.errors import (
     ReplyContinuationError,
@@ -510,6 +511,21 @@ class InMemoryReplyStore:
             and _normalize_input(context.command) == request.normalized_input
             and isinstance(context.evidence, tuple)
             and context.evidence
+            and (
+                context.memory_revision is None
+                or (
+                    isinstance(context.memory_revision, int)
+                    and context.memory_revision >= 0
+                )
+            )
+            and (
+                context.index_revision is None
+                or (
+                    isinstance(context.index_revision, int)
+                    and context.index_revision >= 0
+                )
+            )
+            and isinstance(context.tool_calls, tuple)
             and all(
                 isinstance(item, ContextEvidence) and item.scope == request.scope
                 for item in context.evidence
@@ -563,6 +579,11 @@ class InMemoryReplyStore:
             ):
                 raise ReplyStoreInvariantError("回复证据快照结构无效。")
             evidence_ids.add(item.evidence_id)
+        for trace in context.tool_calls:
+            if not _valid_tool_call_trace(trace):
+                raise ReplyStoreInvariantError("回复 Tool 轨迹结构无效。")
+            if not set(trace.evidence_ids) <= evidence_ids:
+                raise ReplyStoreInvariantError("回复 Tool 轨迹引用了未知证据。")
         continuation_evidence = tuple(
             item for item in context.evidence if item.kind == "continued_candidate"
         )
@@ -665,3 +686,28 @@ def _safe_failure_reason(reason: str) -> str:
     if len(value) > 64 or any(char.isspace() for char in value):
         return "unknown_failure"
     return value
+
+
+def _valid_tool_call_trace(trace: object) -> bool:
+    return (
+        isinstance(trace, ToolCallTrace)
+        and isinstance(trace.tool_name, str)
+        and bool(trace.tool_name.strip())
+        and len(trace.tool_name) <= 64
+        and trace.status
+        in (
+            "succeeded",
+            "empty",
+            "failed",
+            "timeout",
+            "budget_exceeded",
+        )
+        and isinstance(trace.evidence_ids, tuple)
+        and len(trace.evidence_ids) == len(set(trace.evidence_ids))
+        and all(isinstance(item, UUID) for item in trace.evidence_ids)
+        and (
+            trace.latency_ms is None
+            or isinstance(trace.latency_ms, int)
+            and trace.latency_ms >= 0
+        )
+    )

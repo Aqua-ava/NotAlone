@@ -55,6 +55,7 @@ def build_reply_service(*, database_url: str, owner_id: UUID) -> ReplyService | 
         runtime=LangChainReplyRuntime(
             model=model,
             skill_port=PostgresSkillPort(database_url),
+            retrieval=retrieval,
         ),
         context=context,
         ledger=PostgresOutboundLedger(database_url),

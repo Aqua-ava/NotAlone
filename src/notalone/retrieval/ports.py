@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -19,8 +20,25 @@ class RetrievalPort(Protocol):
         target_message_id: UUID | None = None,
         query: str | None = None,
         limit: int = 50,
+        occurred_after: datetime | None = None,
+        occurred_before: datetime | None = None,
+        timeout_ms: int | None = None,
     ) -> tuple[RetrievedMessage, ...]:
         """查询指定联系人范围内的消息。"""
+
+    def query_messages(
+        self,
+        *,
+        scope: ContactScope,
+        anchor_message_id: UUID | None = None,
+        before: int = 3,
+        after: int = 3,
+        limit: int = 20,
+        occurred_after: datetime | None = None,
+        occurred_before: datetime | None = None,
+        timeout_ms: int | None = None,
+    ) -> tuple[RetrievedMessage, ...]:
+        """按时间顺序读取当前联系人范围内的有限消息窗口。"""
 
     def search_confirmed_memories(
         self,

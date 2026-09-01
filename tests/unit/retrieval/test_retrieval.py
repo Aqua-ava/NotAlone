@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from notalone.memory import InMemoryMemoryStore
@@ -15,6 +16,7 @@ CONTACT_ID = UUID("22222222-2222-2222-2222-222222222222")
 OTHER_CONTACT_ID = UUID("33333333-3333-3333-3333-333333333333")
 MESSAGE_ID = UUID("44444444-4444-4444-4444-444444444444")
 OTHER_MESSAGE_ID = UUID("55555555-5555-5555-5555-555555555555")
+SOURCE_ID = UUID("88888888-8888-8888-8888-888888888888")
 
 
 class RetrievalTest(unittest.TestCase):
@@ -63,6 +65,52 @@ class RetrievalTest(unittest.TestCase):
             tuple(item.message_id for item in results),
             (MESSAGE_ID, recent_id),
         )
+
+    def test_query_messages_returns_finite_chronological_window(self) -> None:
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        start = datetime(2026, 9, 1, 10, tzinfo=timezone.utc)
+        messages = tuple(
+            RetrievedMessage(
+                UUID(f"77777777-7777-7777-7777-{index:012d}"),
+                scope,
+                f"第 {index} 条合成消息",
+                source_ids=(SOURCE_ID,),
+                occurred_at=start + timedelta(minutes=index),
+            )
+            for index in range(5)
+        )
+        retrieval = InMemoryRetrieval(messages=messages)
+
+        results = retrieval.query_messages(
+            scope=scope,
+            anchor_message_id=messages[2].message_id,
+            before=1,
+            after=1,
+        )
+
+        self.assertEqual(
+            tuple(item.message_id for item in results),
+            tuple(message.message_id for message in messages[1:4]),
+        )
+
+    def test_query_messages_never_returns_another_contact(self) -> None:
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        other_scope = ContactScope(OWNER_ID, OTHER_CONTACT_ID)
+        retrieval = InMemoryRetrieval(
+            messages=(
+                RetrievedMessage(MESSAGE_ID, scope, "当前范围消息"),
+                RetrievedMessage(OTHER_MESSAGE_ID, other_scope, "越界消息"),
+            )
+        )
+
+        results = retrieval.query_messages(
+            scope=scope,
+            anchor_message_id=MESSAGE_ID,
+            before=5,
+            after=5,
+        )
+
+        self.assertEqual(tuple(item.text for item in results), ("当前范围消息",))
 
 
 if __name__ == "__main__":

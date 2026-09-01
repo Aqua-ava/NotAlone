@@ -273,6 +273,7 @@ class PostgresRetrievalTest(unittest.TestCase):
         )
         self.assertEqual(results[0].scope, self._scope())
         self.assertEqual(results[0].source_ids, (self.source_id,))
+        self.assertEqual(results[0].role, "contact")
 
         self.assertEqual(
             self.port.search_messages(scope=self._scope(), query="删除来源"),
@@ -321,6 +322,25 @@ class PostgresRetrievalTest(unittest.TestCase):
                 self.media_message_id,
             ),
         )
+
+    def test_query_messages_returns_bounded_chronological_window(self) -> None:
+        results = self.port.query_messages(
+            scope=self._scope(),
+            anchor_message_id=self.target_message_id,
+            before=2,
+            after=1,
+        )
+
+        self.assertEqual(
+            tuple(item.message_id for item in results),
+            (
+                self.media_message_id,
+                self.older_message_id,
+                self.target_message_id,
+                self.recent_message_id,
+            ),
+        )
+        self.assertTrue(all(item.scope == self._scope() for item in results))
 
     def test_media_placeholder_is_the_retrieved_text(self) -> None:
         results = self.port.search_messages(

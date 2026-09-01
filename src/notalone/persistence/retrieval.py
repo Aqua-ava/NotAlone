@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -50,6 +51,27 @@ def _validate_limit(limit: int) -> None:
         raise ValueError("检索 limit 超出模块预算。")
 
 
+def _validate_window(
+    occurred_after: datetime | None,
+    occurred_before: datetime | None,
+    timeout_ms: int | None,
+) -> None:
+    if occurred_after is not None and not isinstance(occurred_after, datetime):
+        raise TypeError("检索起始时间结构无效。")
+    if occurred_before is not None and not isinstance(occurred_before, datetime):
+        raise TypeError("检索结束时间结构无效。")
+    if (
+        occurred_after is not None
+        and occurred_before is not None
+        and occurred_before < occurred_after
+    ):
+        raise ValueError("检索时间范围无效。")
+    if timeout_ms is not None and (
+        not isinstance(timeout_ms, int) or not 1 <= timeout_ms <= 1500
+    ):
+        raise ValueError("检索超时时间超出模块预算。")
+
+
 class PostgresRetrieval:
     """按联系人范围只读检索规范化消息。"""
 
@@ -79,6 +101,9 @@ class PostgresRetrieval:
         target_message_id: UUID | None = None,
         query: str | None = None,
         limit: int = 50,
+        occurred_after: datetime | None = None,
+        occurred_before: datetime | None = None,
+        timeout_ms: int | None = None,
     ) -> tuple[RetrievedMessage, ...]:
         """返回当前联系人范围内来源有效的消息命中。"""
 
@@ -91,6 +116,7 @@ class PostgresRetrieval:
         if query is not None and not isinstance(query, str):
             raise TypeError("消息检索 query 必须是字符串或 None。")
         _validate_limit(limit)
+        _validate_window(occurred_after, occurred_before, timeout_ms)
         tokens = _query_tokens(query)
 
         try:
@@ -98,18 +124,23 @@ class PostgresRetrieval:
                 connection.execute(
                     "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
                 )
+                self._set_statement_timeout(connection, timeout_ms)
                 if target_message_id is None:
                     rows = self._fetch_messages(
                         connection,
                         scope=scope,
                         tokens=tokens,
                         limit=limit,
+                        occurred_after=occurred_after,
+                        occurred_before=occurred_before,
                     )
                 else:
                     target = self._fetch_target(
                         connection,
                         scope=scope,
                         target_message_id=target_message_id,
+                        occurred_after=occurred_after,
+                        occurred_before=occurred_before,
                     )
                     if target is None:
                         return ()
@@ -121,6 +152,8 @@ class PostgresRetrieval:
                             tokens=tokens,
                             limit=limit - 1,
                             excluded_message_id=target_message_id,
+                            occurred_after=occurred_after,
+                            occurred_before=occurred_before,
                         )
                     rows = (target, *related)
                 return tuple(self._message_from_row(row, scope) for row in rows)
@@ -228,22 +261,39 @@ class PostgresRetrieval:
         *,
         scope: ContactScope,
         target_message_id: UUID,
+        occurred_after: datetime | None = None,
+        occurred_before: datetime | None = None,
     ) -> dict[str, Any] | None:
+        conditions = [
+            "m.owner_id = %s",
+            "m.contact_id = %s",
+            "m.id = %s",
+            valid_source_ref_exists_sql("m"),
+        ]
+        parameters: list[Any] = [
+            scope.owner_id,
+            scope.contact_id,
+            target_message_id,
+        ]
+        if occurred_after is not None:
+            conditions.append("m.occurred_at >= %s")
+            parameters.append(occurred_after)
+        if occurred_before is not None:
+            conditions.append("m.occurred_at <= %s")
+            parameters.append(occurred_before)
         return connection.execute(
             f"""
             SELECT m.id AS message_id,
                    m.owner_id,
                    m.contact_id,
+                   m.speaker,
                    {valid_source_ids_sql("m")} AS source_ids,
                    {_MESSAGE_TEXT_SQL} AS retrieved_text,
                    m.occurred_at
             FROM public.message AS m
-            WHERE m.owner_id = %s
-              AND m.contact_id = %s
-              AND m.id = %s
-              AND {valid_source_ref_exists_sql("m")}
+            WHERE {' AND '.join(conditions)}
             """,
-            (scope.owner_id, scope.contact_id, target_message_id),
+            parameters,
         ).fetchone()
 
     def _fetch_messages(
@@ -254,6 +304,8 @@ class PostgresRetrieval:
         tokens: tuple[str, ...],
         limit: int,
         excluded_message_id: UUID | None = None,
+        occurred_after: datetime | None = None,
+        occurred_before: datetime | None = None,
     ) -> tuple[dict[str, Any], ...]:
         conditions = [
             "m.owner_id = %s",
@@ -269,6 +321,12 @@ class PostgresRetrieval:
                 f"position(lower(%s) in lower({_MESSAGE_TEXT_SQL})) > 0"
             )
             parameters.append(token)
+        if occurred_after is not None:
+            conditions.append("m.occurred_at >= %s")
+            parameters.append(occurred_after)
+        if occurred_before is not None:
+            conditions.append("m.occurred_at <= %s")
+            parameters.append(occurred_before)
         parameters.append(limit)
         return tuple(
             connection.execute(
@@ -276,12 +334,176 @@ class PostgresRetrieval:
                 SELECT m.id AS message_id,
                        m.owner_id,
                        m.contact_id,
+                       m.speaker,
                        {valid_source_ids_sql("m")} AS source_ids,
                        {_MESSAGE_TEXT_SQL} AS retrieved_text,
                        m.occurred_at
                 FROM public.message AS m
                 WHERE {' AND '.join(conditions)}
                 ORDER BY m.occurred_at DESC NULLS LAST, m.id DESC
+                LIMIT %s
+                """,
+                parameters,
+            ).fetchall()
+        )
+
+    def query_messages(
+        self,
+        *,
+        scope: ContactScope,
+        anchor_message_id: UUID | None = None,
+        before: int = 3,
+        after: int = 3,
+        limit: int = 20,
+        occurred_after: datetime | None = None,
+        occurred_before: datetime | None = None,
+        timeout_ms: int | None = None,
+    ) -> tuple[RetrievedMessage, ...]:
+        """按时间顺序读取当前联系人范围内的有限连续消息。"""
+
+        self._validate_scope(scope)
+        if anchor_message_id is not None and not isinstance(anchor_message_id, UUID):
+            raise TypeError("消息锚点必须是 UUID 或 None。")
+        if not isinstance(before, int) or not 0 <= before <= 10:
+            raise ValueError("消息查询前置窗口超出预算。")
+        if not isinstance(after, int) or not 0 <= after <= 10:
+            raise ValueError("消息查询后置窗口超出预算。")
+        if not isinstance(limit, int) or not 1 <= limit <= 20:
+            raise ValueError("消息查询 limit 超出模块预算。")
+        _validate_window(occurred_after, occurred_before, timeout_ms)
+
+        try:
+            with self._connect() as connection:
+                connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+                )
+                self._set_statement_timeout(connection, timeout_ms)
+                if anchor_message_id is None:
+                    rows = self._fetch_messages(
+                        connection,
+                        scope=scope,
+                        tokens=(),
+                        limit=limit,
+                        occurred_after=occurred_after,
+                        occurred_before=occurred_before,
+                    )
+                    return tuple(
+                        self._message_from_row(row, scope)
+                        for row in reversed(rows)
+                    )
+
+                anchor = self._fetch_target(
+                    connection,
+                    scope=scope,
+                    target_message_id=anchor_message_id,
+                    occurred_after=occurred_after,
+                    occurred_before=occurred_before,
+                )
+                if anchor is None:
+                    return ()
+                anchor_time = anchor["occurred_at"]
+                before_rows = self._fetch_adjacent(
+                    connection,
+                    scope=scope,
+                    anchor_message_id=anchor_message_id,
+                    anchor_time=anchor_time,
+                    direction="before",
+                    limit=before,
+                    occurred_after=occurred_after,
+                    occurred_before=occurred_before,
+                )
+                after_rows = self._fetch_adjacent(
+                    connection,
+                    scope=scope,
+                    anchor_message_id=anchor_message_id,
+                    anchor_time=anchor_time,
+                    direction="after",
+                    limit=after,
+                    occurred_after=occurred_after,
+                    occurred_before=occurred_before,
+                )
+                rows = (*reversed(before_rows), anchor, *after_rows)
+                return tuple(
+                    self._message_from_row(row, scope)
+                    for row in rows[:limit]
+                )
+        except RetrievalError:
+            raise
+        except psycopg.Error:
+            raise RetrievalError("消息顺序查询失败。") from None
+        except (KeyError, TypeError, ValueError):
+            raise RetrievalInvariantError("消息顺序查询结果结构无效。") from None
+
+    def _fetch_adjacent(
+        self,
+        connection: psycopg.Connection[Any],
+        *,
+        scope: ContactScope,
+        anchor_message_id: UUID,
+        anchor_time: datetime | None,
+        direction: str,
+        limit: int,
+        occurred_after: datetime | None,
+        occurred_before: datetime | None,
+    ) -> tuple[dict[str, Any], ...]:
+        if limit == 0:
+            return ()
+        conditions = [
+            "m.owner_id = %s",
+            "m.contact_id = %s",
+            "m.id <> %s",
+            valid_source_ref_exists_sql("m"),
+        ]
+        parameters: list[Any] = [
+            scope.owner_id,
+            scope.contact_id,
+            anchor_message_id,
+        ]
+        if anchor_time is None:
+            conditions.append("m.occurred_at IS NULL")
+            conditions.append(
+                "m.id < %s" if direction == "before" else "m.id > %s"
+            )
+            parameters.append(anchor_message_id)
+        elif direction == "before":
+            conditions.append(
+                "m.occurred_at IS NOT NULL AND "
+                "(m.occurred_at < %s OR "
+                "(m.occurred_at = %s AND m.id < %s))"
+            )
+            parameters.extend((anchor_time, anchor_time, anchor_message_id))
+        else:
+            conditions.append(
+                "(m.occurred_at IS NULL OR "
+                "(m.occurred_at > %s OR "
+                "(m.occurred_at = %s AND m.id > %s)))"
+            )
+            parameters.extend((anchor_time, anchor_time, anchor_message_id))
+        if occurred_after is not None:
+            conditions.append("m.occurred_at >= %s")
+            parameters.append(occurred_after)
+        if occurred_before is not None:
+            conditions.append("m.occurred_at <= %s")
+            parameters.append(occurred_before)
+        ordering = (
+            "m.occurred_at DESC NULLS LAST, m.id DESC"
+            if direction == "before"
+            else "m.occurred_at ASC NULLS LAST, m.id ASC"
+        )
+        parameters.append(limit)
+        return tuple(
+            connection.execute(
+                f"""
+                SELECT m.id AS message_id,
+                       m.owner_id,
+                       m.contact_id,
+                       m.speaker,
+                       {valid_source_ids_sql("m")} AS source_ids,
+                       {_MESSAGE_TEXT_SQL} AS retrieved_text,
+                       m.occurred_at
+                FROM public.message AS m
+                WHERE {' AND '.join(conditions)}
+                ORDER BY {ordering}
                 LIMIT %s
                 """,
                 parameters,
@@ -311,10 +533,23 @@ class PostgresRetrieval:
             text=row["retrieved_text"],
             source_ids=tuple(source_ids),
             occurred_at=row["occurred_at"],
+            role={
+                "user": "owner",
+                "contact": "contact",
+                "system": "system",
+            }.get(row.get("speaker"), "unknown"),
         )
 
     def _connect(self) -> Any:
         return psycopg.connect(self._database_url, row_factory=dict_row)
+
+    @staticmethod
+    def _set_statement_timeout(connection: Any, timeout_ms: int | None) -> None:
+        if timeout_ms is not None:
+            connection.execute(
+                "SELECT set_config('statement_timeout', %s, true)",
+                (f"{timeout_ms}ms",),
+            )
 
     @staticmethod
     def _validate_scope(scope: ContactScope) -> None:

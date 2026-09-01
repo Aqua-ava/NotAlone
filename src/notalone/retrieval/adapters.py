@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Iterable
 from uuid import UUID
 
@@ -31,6 +32,48 @@ def _validate_limit(limit: int, maximum: int) -> None:
         raise ValueError("检索 limit 超出模块预算。")
 
 
+def _validate_window(
+    occurred_after: datetime | None,
+    occurred_before: datetime | None,
+    timeout_ms: int | None,
+) -> None:
+    if occurred_after is not None and not isinstance(occurred_after, datetime):
+        raise TypeError("检索起始时间结构无效。")
+    if occurred_before is not None and not isinstance(occurred_before, datetime):
+        raise TypeError("检索结束时间结构无效。")
+    if (
+        occurred_after is not None
+        and occurred_before is not None
+        and occurred_before < occurred_after
+    ):
+        raise ValueError("检索时间范围无效。")
+    if timeout_ms is not None and (
+        not isinstance(timeout_ms, int) or not 1 <= timeout_ms <= 1500
+    ):
+        raise ValueError("检索超时时间超出模块预算。")
+
+
+def _in_time_window(
+    message: RetrievedMessage,
+    occurred_after: datetime | None,
+    occurred_before: datetime | None,
+) -> bool:
+    if message.occurred_at is None:
+        return occurred_after is None and occurred_before is None
+    return (
+        (occurred_after is None or message.occurred_at >= occurred_after)
+        and (occurred_before is None or message.occurred_at <= occurred_before)
+    )
+
+
+def _chronological_key(message: RetrievedMessage) -> tuple[bool, datetime, str]:
+    return (
+        message.occurred_at is None,
+        message.occurred_at or datetime.max,
+        str(message.message_id),
+    )
+
+
 @dataclass(slots=True)
 class InMemoryRetrieval:
     """用合成消息和 MemoryPort 模拟联系人范围检索。"""
@@ -56,12 +99,21 @@ class InMemoryRetrieval:
         target_message_id: UUID | None = None,
         query: str | None = None,
         limit: int = 50,
+        occurred_after: datetime | None = None,
+        occurred_before: datetime | None = None,
+        timeout_ms: int | None = None,
     ) -> tuple[RetrievedMessage, ...]:
         _validate_limit(limit, 50)
+        _validate_window(occurred_after, occurred_before, timeout_ms)
         if not isinstance(scope, ContactScope):
             raise TypeError("消息检索范围无效。")
 
-        scoped = tuple(message for message in self.messages if message.scope == scope)
+        scoped = tuple(
+            message
+            for message in self.messages
+            if message.scope == scope
+            and _in_time_window(message, occurred_after, occurred_before)
+        )
         if target_message_id is not None:
             target = tuple(
                 message
@@ -81,6 +133,53 @@ class InMemoryRetrieval:
         return tuple(
             message for message in scoped if _matches(message.text, query)
         )[:limit]
+
+    def query_messages(
+        self,
+        *,
+        scope: ContactScope,
+        anchor_message_id: UUID | None = None,
+        before: int = 3,
+        after: int = 3,
+        limit: int = 20,
+        occurred_after: datetime | None = None,
+        occurred_before: datetime | None = None,
+        timeout_ms: int | None = None,
+    ) -> tuple[RetrievedMessage, ...]:
+        _validate_limit(limit, 20)
+        _validate_window(occurred_after, occurred_before, timeout_ms)
+        if not isinstance(scope, ContactScope):
+            raise TypeError("消息查询范围无效。")
+        if anchor_message_id is not None and not isinstance(anchor_message_id, UUID):
+            raise TypeError("消息锚点必须是 UUID 或 None。")
+        if not isinstance(before, int) or not 0 <= before <= 10:
+            raise ValueError("消息查询前置窗口超出预算。")
+        if not isinstance(after, int) or not 0 <= after <= 10:
+            raise ValueError("消息查询后置窗口超出预算。")
+
+        scoped = sorted(
+            (
+                message
+                for message in self.messages
+                if message.scope == scope
+                and _in_time_window(message, occurred_after, occurred_before)
+            ),
+            key=_chronological_key,
+        )
+        if anchor_message_id is None:
+            return tuple(scoped[-limit:])
+        anchor_positions = [
+            index
+            for index, message in enumerate(scoped)
+            if message.message_id == anchor_message_id
+        ]
+        if len(anchor_positions) != 1:
+            return ()
+        anchor_index = anchor_positions[0]
+        start = max(0, anchor_index - before)
+        end = min(len(scoped), anchor_index + after + 1)
+        selected = scoped[start:end]
+        return tuple(selected[:limit])
 
     def search_confirmed_memories(
         self,

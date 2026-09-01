@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
-from notalone.reply.context import ReplyContext
+from notalone.reply.context import ContextEvidence, ReplyContext, ToolCallTrace
 from notalone.reply.interface import SkillUse
 
 
@@ -37,6 +37,8 @@ class ReplyRuntimeResult:
     candidates: tuple[RuntimeCandidate, ...]
     used_skill: SkillUse | None
     usage: RuntimeUsage | None = None
+    additional_evidence: tuple[ContextEvidence, ...] = ()
+    tool_calls: tuple[ToolCallTrace, ...] = ()
 
 
 class ReplyRuntime(Protocol):

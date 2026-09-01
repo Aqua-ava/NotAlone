@@ -15,6 +15,7 @@ from notalone.reply.context import (
     ContextEvidence,
     ContinuedReplyCandidate,
     ReplyContext,
+    ToolCallTrace,
 )
 from notalone.reply.errors import (
     ReplyContinuationError,
@@ -773,6 +774,7 @@ class PostgresReplyStore:
                 isinstance(note, str) and note.strip()
                 for note in context.risk_notes
             )
+            and isinstance(context.tool_calls, tuple)
         ):
             raise ReplyStoreInvariantError(
                 "回复上下文不属于当前持久化请求。"
@@ -824,6 +826,12 @@ class PostgresReplyStore:
             ):
                 raise ReplyStoreInvariantError("回复证据快照结构无效。")
             evidence_ids.add(item.evidence_id)
+
+        for trace in context.tool_calls:
+            if not _valid_tool_call_trace(trace):
+                raise ReplyStoreInvariantError("回复 Tool 轨迹结构无效。")
+            if not set(trace.evidence_ids) <= evidence_ids:
+                raise ReplyStoreInvariantError("回复 Tool 轨迹引用了未知证据。")
 
         continuation_evidence = tuple(
             item for item in context.evidence if item.kind == "continued_candidate"
@@ -932,6 +940,17 @@ class PostgresReplyStore:
             "skill_library_revision": context.skill_library_revision,
             "memory_revision": context.memory_revision,
             "index_revision": context.index_revision,
+            "tool_calls": [
+                {
+                    "tool_name": trace.tool_name,
+                    "status": trace.status,
+                    "evidence_ids": [
+                        str(evidence_id) for evidence_id in trace.evidence_ids
+                    ],
+                    "latency_ms": trace.latency_ms,
+                }
+                for trace in context.tool_calls
+            ],
             "evidence": [
                 {
                     "evidence_id": str(item.evidence_id),
@@ -1280,6 +1299,31 @@ class PostgresReplyStore:
             context_receipt=ContextReceipt(evidence_ids=tuple(evidence_ids)),
             used_skill=used_skill,
         )
+
+
+def _valid_tool_call_trace(trace: object) -> bool:
+    return (
+        isinstance(trace, ToolCallTrace)
+        and isinstance(trace.tool_name, str)
+        and bool(trace.tool_name.strip())
+        and len(trace.tool_name) <= 64
+        and trace.status
+        in (
+            "succeeded",
+            "empty",
+            "failed",
+            "timeout",
+            "budget_exceeded",
+        )
+        and isinstance(trace.evidence_ids, tuple)
+        and len(trace.evidence_ids) == len(set(trace.evidence_ids))
+        and all(isinstance(item, UUID) for item in trace.evidence_ids)
+        and (
+            trace.latency_ms is None
+            or isinstance(trace.latency_ms, int)
+            and trace.latency_ms >= 0
+        )
+    )
 
 
 __all__ = ["PostgresReplyStore"]
