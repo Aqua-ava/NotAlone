@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Callable, Literal, Protocol
 from uuid import UUID, uuid4
 
@@ -41,6 +42,10 @@ class ContextEvidence:
     scope: ContactScope
     source_ids: tuple[UUID, ...] = ()
     selection_reason: str = ""
+    status: str = "active"
+    valid_at: datetime | None = None
+    invalid_at: datetime | None = None
+    revision: int | None = None
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -73,6 +78,8 @@ class ReplyContext:
     evidence: tuple[ContextEvidence, ...]
     skill_library_revision: int
     risk_notes: tuple[str, ...] = ()
+    memory_revision: int | None = None
+    index_revision: int | None = None
 
     def has_relationship_memory_for_rewrite(self) -> bool:
         """当前改写上下文是否包含长期关系记忆。"""
@@ -108,6 +115,15 @@ class ContactMemoryIndexPort(Protocol):
         limit: int = 20,
     ) -> tuple[UUID, ...] | None:
         """返回当前目录定位到的 L1 ID；目录不可用时返回 None。"""
+
+    def current_memory_revision(self, scope: ContactScope) -> int | None:
+        """读取联系人当前 L1 revision，用于快照失效校验。"""
+
+    def revision_snapshot(
+        self,
+        scope: ContactScope,
+    ) -> tuple[int, int | None] | None:
+        """返回当前 L1 revision 与目录构建 revision。"""
 
 
 class RetrievalReplyContext:
@@ -182,7 +198,7 @@ class RetrievalReplyContext:
                 raise ReplyContextInvariantError(
                     "待回复消息未在当前联系人范围内找到。"
                 )
-            memories = self._search_memories(scope=scope)
+            memories = self._search_memories_or_empty(scope=scope)
             evidence = list(
                 self._message_evidence(message, is_target=message is target[0])
                 for message in messages
@@ -190,6 +206,7 @@ class RetrievalReplyContext:
             if continuation is not None:
                 evidence.append(continuation)
             self._validate_evidence(evidence, scope=scope)
+            memory_revision, index_revision = self._version_snapshot(scope)
             return ReplyContext(
                 reply_request_id=request_id,
                 command=command,
@@ -199,6 +216,8 @@ class RetrievalReplyContext:
                 evidence=tuple(evidence),
                 skill_library_revision=self._skill_library_revision,
                 risk_notes=self._risk_notes(command, target[0].text),
+                memory_revision=memory_revision,
+                index_revision=index_revision,
             )
 
         if isinstance(command.content, RewriteDraft):
@@ -211,16 +230,18 @@ class RetrievalReplyContext:
                     selection_reason=(
                         "用户原句是改写模式的唯一默认输入。"
                     ),
+                    status="user_input",
                 )
             ]
             if command.content.include_relationship_context:
                 evidence.extend(
                     self._memory_evidence(memory)
-                    for memory in self._search_memories(scope=scope)
+                    for memory in self._search_memories_or_empty(scope=scope)
                 )
             if continuation is not None:
                 evidence.append(continuation)
             self._validate_evidence(evidence, scope=scope)
+            memory_revision, index_revision = self._version_snapshot(scope)
             return ReplyContext(
                 reply_request_id=request_id,
                 command=command,
@@ -233,6 +254,8 @@ class RetrievalReplyContext:
                     command,
                     command.content.draft_text,
                 ),
+                memory_revision=memory_revision,
+                index_revision=index_revision,
             )
 
         raise ReplyContextInvariantError("回复输入模式无效。")
@@ -325,6 +348,44 @@ class RetrievalReplyContext:
             )
         return memories
 
+    def _search_memories_or_empty(
+        self,
+        *,
+        scope: ContactScope,
+        query: str | None = None,
+    ) -> tuple[RetrievedMemory, ...]:
+        """关系记忆缺失时安全降级，不阻断当前消息和近期对话。"""
+
+        try:
+            return self._search_memories(scope=scope, query=query)
+        except ReplyContextError:
+            return ()
+
+    def _version_snapshot(self, scope: ContactScope) -> tuple[int | None, int | None]:
+        if self._memory_index is None:
+            return (None, None)
+        snapshot_reader = getattr(self._memory_index, "revision_snapshot", None)
+        if not callable(snapshot_reader):
+            return (None, None)
+        try:
+            snapshot = snapshot_reader(scope)
+        except Exception:
+            return (None, None)
+        if snapshot is None:
+            return (None, None)
+        if (
+            not isinstance(snapshot, tuple)
+            or len(snapshot) != 2
+            or not isinstance(snapshot[0], int)
+            or snapshot[0] < 0
+            or (
+                snapshot[1] is not None
+                and (not isinstance(snapshot[1], int) or snapshot[1] < 0)
+            )
+        ):
+            raise ReplyContextInvariantError("记忆目录版本快照结构无效。")
+        return snapshot
+
     def _new_id(self) -> UUID:
         try:
             value = self._id_factory()
@@ -375,6 +436,7 @@ class RetrievalReplyContext:
             text=candidate.text,
             scope=expected_scope,
             selection_reason="用户明确选择的历史候选。",
+            status="candidate",
         )
 
     @staticmethod
@@ -395,6 +457,13 @@ class RetrievalReplyContext:
                 or not isinstance(item.source_ids, tuple)
                 or any(not isinstance(source_id, UUID) for source_id in item.source_ids)
                 or not isinstance(item.selection_reason, str)
+                or not isinstance(item.status, str)
+                or not item.status.strip()
+                or item.revision is not None
+                and (
+                    not isinstance(item.revision, int)
+                    or item.revision < 1
+                )
             ):
                 raise ReplyContextInvariantError("回复证据结构或范围无效。")
             evidence_ids.add(item.evidence_id)
@@ -440,6 +509,9 @@ class RetrievalReplyContext:
                 if is_target
                 else "同一联系人范围内的近期消息。"
             ),
+            status=message.status,
+            valid_at=message.valid_at,
+            invalid_at=message.invalid_at,
         )
 
     @staticmethod
@@ -451,4 +523,8 @@ class RetrievalReplyContext:
             scope=memory.scope,
             source_ids=memory.source_ids,
             selection_reason="已确认且当前有效的联系人关系记忆。",
+            status=memory.status,
+            valid_at=memory.valid_at,
+            invalid_at=memory.invalid_at,
+            revision=memory.revision,
         )

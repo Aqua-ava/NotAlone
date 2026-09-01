@@ -310,6 +310,28 @@ class ReplyGenerator:
                     for source_id in item.source_ids
                 )
                 or not isinstance(item.selection_reason, str)
+                or not isinstance(item.status, str)
+                or not item.status.strip()
+                or (
+                    item.valid_at is not None
+                    and not isinstance(item.valid_at, datetime)
+                )
+                or (
+                    item.invalid_at is not None
+                    and not isinstance(item.invalid_at, datetime)
+                )
+                or (
+                    item.valid_at is not None
+                    and item.invalid_at is not None
+                    and item.invalid_at < item.valid_at
+                )
+                or (
+                    item.revision is not None
+                    and (
+                        not isinstance(item.revision, int)
+                        or item.revision < 1
+                    )
+                )
             ):
                 raise ReplyInvariantError("回复依据超出范围或结构无效。")
             evidence_ids.add(item.evidence_id)

@@ -25,6 +25,9 @@ class RetrievedMessage:
     text: str
     source_ids: tuple[UUID, ...] = ()
     occurred_at: datetime | None = None
+    status: str = "active"
+    valid_at: datetime | None = None
+    invalid_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.message_id, UUID):
@@ -39,6 +42,8 @@ class RetrievedMessage:
             datetime,
         ):
             raise TypeError("消息时间结构无效。")
+        if not isinstance(self.status, str) or not self.status.strip():
+            raise ValueError("消息状态不能为空。")
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -52,6 +57,10 @@ class RetrievedMemory:
     source_ids: tuple[UUID, ...]
     adoption_method: str
     revision: int
+    topic: str = ""
+    status: str = "active"
+    valid_at: datetime | None = None
+    invalid_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.memory_id, UUID):
@@ -69,6 +78,10 @@ class RetrievedMemory:
             raise ValueError("关系记忆采纳方式不能为空。")
         if not isinstance(self.revision, int) or self.revision < 1:
             raise ValueError("关系记忆修订号无效。")
+        if not isinstance(self.topic, str):
+            raise TypeError("关系记忆主题结构无效。")
+        if not isinstance(self.status, str) or not self.status.strip():
+            raise ValueError("关系记忆状态不能为空。")
         if not isinstance(self.source_ids, tuple) or not self.source_ids:
             raise ValueError("关系记忆检索结果必须带来源引用。")
         _validate_source_ids(self.source_ids)

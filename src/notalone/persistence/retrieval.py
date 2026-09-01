@@ -174,6 +174,10 @@ class PostgresRetrieval:
                 source_ids=memory.source_ids,
                 adoption_method=memory.adoption_method.value,
                 revision=memory.revision,
+                topic=memory.topic.value,
+                status=memory.status.value,
+                valid_at=memory.valid_at,
+                invalid_at=memory.invalid_at,
             )
             for memory in memories
             if memory_ids is None or memory.memory_id in memory_ids

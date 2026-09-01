@@ -53,6 +53,7 @@ class RecordingRetrieval:
         self.messages = messages
         self.message_calls = 0
         self.memory_calls = 0
+        self.fail_memory = False
 
     def search_messages(self, **kwargs: object) -> tuple[RetrievedMessage, ...]:
         del kwargs
@@ -62,12 +63,19 @@ class RecordingRetrieval:
     def search_confirmed_memories(self, **kwargs: object) -> tuple[object, ...]:
         del kwargs
         self.memory_calls += 1
+        if self.fail_memory:
+            raise RuntimeError("synthetic memory retrieval failure")
         return ()
 
 
 class RecordingMemoryIndex:
-    def __init__(self, memory_ids: tuple[UUID, ...] | None) -> None:
+    def __init__(
+        self,
+        memory_ids: tuple[UUID, ...] | None,
+        revisions: tuple[int, int | None] | None = None,
+    ) -> None:
         self.memory_ids = memory_ids
+        self.revisions = revisions
         self.calls: list[tuple[ContactScope, str | None, int]] = []
 
     def locate_memory_ids(
@@ -79,6 +87,13 @@ class RecordingMemoryIndex:
     ) -> tuple[UUID, ...] | None:
         self.calls.append((scope, query, limit))
         return self.memory_ids
+
+    def revision_snapshot(
+        self,
+        scope: ContactScope,
+    ) -> tuple[int, int | None] | None:
+        del scope
+        return self.revisions
 
 
 class ContextRetrievalTest(unittest.TestCase):
@@ -158,7 +173,7 @@ class ContextRetrievalTest(unittest.TestCase):
     def test_current_l2_directory_narrows_l1_before_context_assembly(self) -> None:
         retrieval = self._retrieval()
         memory = retrieval.memory_store.list_confirmed(self.scope)[0]
-        index = RecordingMemoryIndex((memory.memory_id,))
+        index = RecordingMemoryIndex((memory.memory_id,), revisions=(4, 4))
 
         result = RetrievalReplyContext(
             retrieval=retrieval,
@@ -175,6 +190,35 @@ class ContextRetrievalTest(unittest.TestCase):
             (memory.memory_id,),
         )
         self.assertEqual(index.calls, [(self.scope, None, 20)])
+        self.assertEqual(result.memory_revision, 4)
+        self.assertEqual(result.index_revision, 4)
+
+    def test_memory_retrieval_failure_falls_back_to_messages(self) -> None:
+        retrieval = RecordingRetrieval(
+            messages=(
+                RetrievedMessage(
+                    TARGET_MESSAGE_ID,
+                    self.scope,
+                    "当前合成消息",
+                ),
+            )
+        )
+        retrieval.fail_memory = True
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            id_factory=iter(_ids()).__next__,
+        ).build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        self.assertEqual(result.current_text, "当前合成消息")
+        self.assertEqual(
+            tuple(item.kind for item in result.evidence),
+            ("message",),
+        )
 
     def test_rewrite_without_explicit_background_does_not_query_memory(self) -> None:
         retrieval = RecordingRetrieval()

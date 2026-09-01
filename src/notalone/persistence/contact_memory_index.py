@@ -266,6 +266,44 @@ class PostgresContactMemoryIndexRepository:
                     return tuple(result)
         return tuple(result)
 
+    def revision_snapshot(
+        self,
+        scope: ContactScope,
+    ) -> tuple[int, int | None]:
+        """读取当前 L1 revision 和已写入目录的 revision。"""
+
+        _validate_scope(scope)
+        try:
+            with self._connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT state.memory_revision AS current_memory_revision,
+                           index.built_from_memory_revision
+                    FROM public.contact_memory_state AS state
+                    LEFT JOIN public.contact_memory_index AS index
+                      ON index.owner_id = state.owner_id
+                     AND index.contact_id = state.contact_id
+                    WHERE state.owner_id = %s AND state.contact_id = %s
+                    """,
+                    (scope.owner_id, scope.contact_id),
+                ).fetchone()
+        except psycopg.Error:
+            raise ContactMemoryIndexPersistenceError(
+                "联系人记忆目录版本读取失败。"
+            ) from None
+        if row is None:
+            return (0, None)
+        return (
+            row["current_memory_revision"],
+            row["built_from_memory_revision"],
+        )
+
+    def current_memory_revision(self, scope: ContactScope) -> int | None:
+        """返回联系人当前 L1 revision；尚未建立状态时返回 None。"""
+
+        snapshot = self.revision_snapshot(scope)
+        return snapshot[0] if snapshot != (0, None) else None
+
     def rebuild(self, scope: ContactScope) -> IndexBuildResult:
         """在验证前只构造内存投影；写入失败时旧目录保持不变。"""
 

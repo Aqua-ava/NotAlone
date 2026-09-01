@@ -754,6 +754,20 @@ class PostgresReplyStore:
             and context.evidence
             and isinstance(context.skill_library_revision, int)
             and context.skill_library_revision >= 0
+            and (
+                context.memory_revision is None
+                or (
+                    isinstance(context.memory_revision, int)
+                    and context.memory_revision >= 0
+                )
+            )
+            and (
+                context.index_revision is None
+                or (
+                    isinstance(context.index_revision, int)
+                    and context.index_revision >= 0
+                )
+            )
             and isinstance(context.risk_notes, tuple)
             and all(
                 isinstance(note, str) and note.strip()
@@ -785,6 +799,28 @@ class PostgresReplyStore:
                     for source_id in item.source_ids
                 )
                 or not isinstance(item.selection_reason, str)
+                or not isinstance(item.status, str)
+                or not item.status.strip()
+                or (
+                    item.valid_at is not None
+                    and not isinstance(item.valid_at, datetime)
+                )
+                or (
+                    item.invalid_at is not None
+                    and not isinstance(item.invalid_at, datetime)
+                )
+                or (
+                    item.valid_at is not None
+                    and item.invalid_at is not None
+                    and item.invalid_at < item.valid_at
+                )
+                or (
+                    item.revision is not None
+                    and (
+                        not isinstance(item.revision, int)
+                        or item.revision < 1
+                    )
+                )
             ):
                 raise ReplyStoreInvariantError("回复证据快照结构无效。")
             evidence_ids.add(item.evidence_id)
@@ -894,6 +930,8 @@ class PostgresReplyStore:
             "direction": direction,
             "risk_notes": list(context.risk_notes),
             "skill_library_revision": context.skill_library_revision,
+            "memory_revision": context.memory_revision,
+            "index_revision": context.index_revision,
             "evidence": [
                 {
                     "evidence_id": str(item.evidence_id),
@@ -903,6 +941,18 @@ class PostgresReplyStore:
                         str(source_id) for source_id in item.source_ids
                     ],
                     "selection_reason": item.selection_reason,
+                    "status": item.status,
+                    "valid_at": (
+                        item.valid_at.isoformat()
+                        if item.valid_at is not None
+                        else None
+                    ),
+                    "invalid_at": (
+                        item.invalid_at.isoformat()
+                        if item.invalid_at is not None
+                        else None
+                    ),
+                    "revision": item.revision,
                 }
                 for item in context.evidence
             ],
@@ -946,9 +996,13 @@ class PostgresReplyStore:
                 INSERT INTO public.reply_context_evidence (
                     reply_request_id, evidence_id, owner_id, contact_id,
                     conversation_binding_id, ordinal, kind, evidence_text,
-                    source_ids, selection_reason
+                    source_ids, selection_reason, evidence_status,
+                    evidence_valid_at, evidence_invalid_at, evidence_revision
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s
+                )
                 """,
                 (
                     request.request_id,
@@ -961,6 +1015,10 @@ class PostgresReplyStore:
                     item.text,
                     Jsonb([str(source_id) for source_id in item.source_ids]),
                     item.selection_reason,
+                    item.status,
+                    item.valid_at,
+                    item.invalid_at,
+                    item.revision,
                 ),
             )
 
@@ -1049,7 +1107,8 @@ class PostgresReplyStore:
         rows = connection.execute(
             """
             SELECT evidence_id, owner_id, contact_id, kind, evidence_text,
-                   source_ids, selection_reason
+                   source_ids, selection_reason, evidence_status,
+                   evidence_valid_at, evidence_invalid_at, evidence_revision
             FROM public.reply_context_evidence
             WHERE reply_request_id = %s
               AND owner_id = %s
@@ -1070,6 +1129,10 @@ class PostgresReplyStore:
                         scope=ContactScope(row["owner_id"], row["contact_id"]),
                         source_ids=source_ids,
                         selection_reason=row["selection_reason"],
+                        status=row["evidence_status"],
+                        valid_at=row["evidence_valid_at"],
+                        invalid_at=row["evidence_invalid_at"],
+                        revision=row["evidence_revision"],
                     )
                 )
             except (KeyError, TypeError, ValueError):

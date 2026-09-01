@@ -109,7 +109,8 @@ fi
 # 让旧安装也拥有最新的同步和关系记忆采纳字段。
 for migration in \
     database/migrations/026_cli_background_sync.sql \
-    database/migrations/027_memory_adoption_provenance.sql; do
+    database/migrations/027_memory_adoption_provenance.sql \
+    database/migrations/028_reply_context_evidence_metadata.sql; do
     log "应用可重复增量迁移 $(basename "${migration}")…"
     psql --set ON_ERROR_STOP=1 --dbname "${database_name}" \
         --file "${migration}" \
