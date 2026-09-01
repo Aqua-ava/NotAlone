@@ -28,5 +28,10 @@ class RetrievalPort(Protocol):
         scope: ContactScope,
         query: str | None = None,
         limit: int = 20,
+        memory_ids: tuple[UUID, ...] | None = None,
     ) -> tuple[RetrievedMemory, ...]:
-        """查询指定联系人范围内当前有效的已确认关系记忆。"""
+        """查询指定联系人范围内当前有效的已确认关系记忆。
+
+        ``memory_ids`` 只接受来自 L2 目录的导航结果；返回值仍必须重新
+        从 L1 权威存储读取并完成状态、来源和范围校验。
+        """

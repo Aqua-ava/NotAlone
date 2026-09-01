@@ -191,6 +191,26 @@ class ContactMemoryIndexTest(unittest.TestCase):
             for memory_id in topic.memory_ids
         })
 
+    def test_l2_navigation_returns_only_current_directory_references(self) -> None:
+        memory_id = self._add_memory(number=1)
+        self.index_repository.rebuild(self.scope)
+
+        self.assertEqual(
+            self.index_repository.locate_memory_ids(self.scope),
+            (memory_id,),
+        )
+
+        self.memory_store.delete(scope=self.scope, memory_id=memory_id)
+        # 目录 revision 已落后，旧 L2 不能继续导航到已删除 L1。
+        self.assertIsNone(
+            self.index_repository.locate_memory_ids(self.scope)
+        )
+        self.index_repository.rebuild(self.scope)
+        self.assertEqual(
+            self.index_repository.locate_memory_ids(self.scope),
+            (),
+        )
+
     def test_failed_rebuild_keeps_previous_index(self) -> None:
         memory_id = self._add_memory(number=1)
         self.index_repository.rebuild(self.scope)

@@ -220,6 +220,52 @@ class PostgresContactMemoryIndexRepository:
                 "联系人记忆目录读取失败。"
             ) from None
 
+    def locate_memory_ids(
+        self,
+        scope: ContactScope,
+        *,
+        query: str | None = None,
+        limit: int = 20,
+    ) -> tuple[UUID, ...] | None:
+        """按当前 L2 主题目录定位 L1 ID，不把目录内容当作事实返回。"""
+
+        _validate_scope(scope)
+        if query is not None and not isinstance(query, str):
+            raise TypeError("目录查询 query 必须是字符串或 None。")
+        if not isinstance(limit, int) or not 1 <= limit <= 20:
+            raise ValueError("目录导航 limit 超出模块预算。")
+        current = self.get(scope)
+        if current is None or not current.is_current:
+            return None
+        tokens = tuple(
+            token.lower() for token in query.split() if token.strip()
+        ) if query else ()
+        selected_topics = (
+            current.topics
+            if not tokens
+            else tuple(
+                topic
+                for topic in current.topics
+                if all(
+                    token in (
+                        f"{topic.category.value} "
+                        f"{topic.topic.value} {topic.topic_summary}"
+                    ).lower()
+                    for token in tokens
+                )
+            )
+        )
+        result: list[UUID] = []
+        seen: set[UUID] = set()
+        for topic in selected_topics:
+            for memory_id in topic.memory_ids:
+                if memory_id not in seen:
+                    seen.add(memory_id)
+                    result.append(memory_id)
+                if len(result) >= limit:
+                    return tuple(result)
+        return tuple(result)
+
     def rebuild(self, scope: ContactScope) -> IndexBuildResult:
         """在验证前只构造内存投影；写入失败时旧目录保持不变。"""
 

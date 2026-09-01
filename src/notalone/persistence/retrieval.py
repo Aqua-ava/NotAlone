@@ -137,6 +137,7 @@ class PostgresRetrieval:
         scope: ContactScope,
         query: str | None = None,
         limit: int = 20,
+        memory_ids: tuple[UUID, ...] | None = None,
     ) -> tuple[RetrievedMemory, ...]:
         """返回当前联系人范围内 active 且有效的已确认记忆。"""
 
@@ -145,6 +146,11 @@ class PostgresRetrieval:
             raise TypeError("关系记忆检索 query 必须是字符串或 None。")
         if not isinstance(limit, int) or not 1 <= limit <= 20:
             raise ValueError("检索 limit 超出模块预算。")
+        if memory_ids is not None and (
+            not isinstance(memory_ids, tuple)
+            or any(not isinstance(memory_id, UUID) for memory_id in memory_ids)
+        ):
+            raise ValueError("关系记忆导航引用结构无效。")
         try:
             memories = self._memory_store.list_confirmed(scope)
         except MemoryPersistenceError:
@@ -170,6 +176,7 @@ class PostgresRetrieval:
                 revision=memory.revision,
             )
             for memory in memories
+            if memory_ids is None or memory.memory_id in memory_ids
             if not tokens or all(token in memory.text.lower() for token in tokens)
         )[:limit]
 

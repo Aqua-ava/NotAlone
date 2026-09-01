@@ -97,6 +97,19 @@ class ReplyContextPort(Protocol):
         """在已验证联系人范围内形成上下文快照。"""
 
 
+class ContactMemoryIndexPort(Protocol):
+    """只提供 L2 导航；L1 事实仍由 Retrieval 重新读取。"""
+
+    def locate_memory_ids(
+        self,
+        scope: ContactScope,
+        *,
+        query: str | None = None,
+        limit: int = 20,
+    ) -> tuple[UUID, ...] | None:
+        """返回当前目录定位到的 L1 ID；目录不可用时返回 None。"""
+
+
 class RetrievalReplyContext:
     """通过独立 Retrieval 选择本次 Reply 可见证据的实现。"""
 
@@ -106,6 +119,7 @@ class RetrievalReplyContext:
         "_id_factory",
         "_message_limit",
         "_memory_limit",
+        "_memory_index",
         "_risk_hints",
     )
 
@@ -117,6 +131,7 @@ class RetrievalReplyContext:
         id_factory: Callable[[], UUID] = uuid4,
         message_limit: int = 50,
         memory_limit: int = 20,
+        memory_index: ContactMemoryIndexPort | None = None,
         risk_hints: RiskHintPort | None = None,
     ) -> None:
         if not isinstance(skill_library_revision, int) or skill_library_revision < 0:
@@ -130,6 +145,7 @@ class RetrievalReplyContext:
         self._id_factory = id_factory
         self._message_limit = message_limit
         self._memory_limit = memory_limit
+        self._memory_index = memory_index
         self._risk_hints = risk_hints or DeterministicRiskHints()
 
     def build(
@@ -265,12 +281,36 @@ class RetrievalReplyContext:
         self,
         *,
         scope: ContactScope,
+        query: str | None = None,
     ) -> tuple[RetrievedMemory, ...]:
+        memory_ids: tuple[UUID, ...] | None = None
+        if self._memory_index is not None:
+            try:
+                located = self._memory_index.locate_memory_ids(
+                    scope,
+                    query=query,
+                    limit=self._memory_limit,
+                )
+            except ReplyContextInvariantError:
+                raise
+            except Exception:
+                located = None
+            if located is not None and (
+                not isinstance(located, tuple)
+                or any(not isinstance(memory_id, UUID) for memory_id in located)
+            ):
+                raise ReplyContextInvariantError("记忆目录导航结果结构无效。")
+            memory_ids = located
         try:
+            retrieval_kwargs: dict[str, object] = {
+                "scope": scope,
+                "query": query,
+                "limit": self._memory_limit,
+            }
+            if memory_ids is not None:
+                retrieval_kwargs["memory_ids"] = memory_ids
             memories = self._retrieval.search_confirmed_memories(
-                scope=scope,
-                query=None,
-                limit=self._memory_limit,
+                **retrieval_kwargs,
             )
         except RetrievalError:
             raise ReplyContextError("联系人关系记忆检索失败。") from None

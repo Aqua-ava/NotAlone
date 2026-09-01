@@ -65,6 +65,22 @@ class RecordingRetrieval:
         return ()
 
 
+class RecordingMemoryIndex:
+    def __init__(self, memory_ids: tuple[UUID, ...] | None) -> None:
+        self.memory_ids = memory_ids
+        self.calls: list[tuple[ContactScope, str | None, int]] = []
+
+    def locate_memory_ids(
+        self,
+        scope: ContactScope,
+        *,
+        query: str | None = None,
+        limit: int = 20,
+    ) -> tuple[UUID, ...] | None:
+        self.calls.append((scope, query, limit))
+        return self.memory_ids
+
+
 class ContextRetrievalTest(unittest.TestCase):
     def setUp(self) -> None:
         self.scope = ContactScope(OWNER_ID, CONTACT_ID)
@@ -138,6 +154,27 @@ class ContextRetrievalTest(unittest.TestCase):
         )
         self.assertTrue(all(item.scope == self.scope for item in result.evidence))
         self.assertEqual(result.skill_library_revision, 7)
+
+    def test_current_l2_directory_narrows_l1_before_context_assembly(self) -> None:
+        retrieval = self._retrieval()
+        memory = retrieval.memory_store.list_confirmed(self.scope)[0]
+        index = RecordingMemoryIndex((memory.memory_id,))
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            memory_index=index,
+            skill_library_revision=7,
+            id_factory=iter(_ids()).__next__,
+        ).build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        self.assertEqual(
+            tuple(item.evidence_id for item in result.evidence if item.kind == "confirmed_memory"),
+            (memory.memory_id,),
+        )
+        self.assertEqual(index.calls, [(self.scope, None, 20)])
 
     def test_rewrite_without_explicit_background_does_not_query_memory(self) -> None:
         retrieval = RecordingRetrieval()

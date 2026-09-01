@@ -20,6 +20,9 @@ from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
     PostgresConversationPort,
 )
+from notalone.persistence.contact_memory_index import (
+    PostgresContactMemoryIndexRepository,
+)
 from notalone.persistence.outbound_ledger import PostgresOutboundLedger
 from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.persistence.retrieval import PostgresRetrieval
@@ -44,6 +47,7 @@ def build_reply_service(*, database_url: str, owner_id: UUID) -> ReplyService | 
     retrieval = PostgresRetrieval(database_url)
     context = RetrievalReplyContext(
         retrieval=retrieval,
+        memory_index=PostgresContactMemoryIndexRepository(database_url),
         skill_library_revision=skill_revision,
     )
     generator = ReplyGenerator(

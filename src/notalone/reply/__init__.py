@@ -13,6 +13,7 @@ from notalone.reply.errors import (
     ReplyStoreInvariantError,
 )
 from notalone.reply.context import (
+    ContactMemoryIndexPort,
     ContextEvidence,
     ContinuedReplyCandidate,
     ReplyContext,
@@ -50,6 +51,7 @@ __all__ = [
     "AutoSkill",
     "ConfirmedDirection",
     "ContextEvidence",
+    "ContactMemoryIndexPort",
     "ContextReceipt",
     "ContinuedReplyCandidate",
     "DirectionSource",

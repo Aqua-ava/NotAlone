@@ -88,10 +88,16 @@ class InMemoryRetrieval:
         scope: ContactScope,
         query: str | None = None,
         limit: int = 20,
+        memory_ids: tuple[UUID, ...] | None = None,
     ) -> tuple[RetrievedMemory, ...]:
         _validate_limit(limit, 20)
         if not isinstance(scope, ContactScope):
             raise TypeError("关系记忆检索范围无效。")
+        if memory_ids is not None and (
+            not isinstance(memory_ids, tuple)
+            or any(not isinstance(memory_id, UUID) for memory_id in memory_ids)
+        ):
+            raise ValueError("关系记忆导航引用结构无效。")
         if self.memory_store is None:
             return ()
         memories = self.memory_store.list_confirmed(scope)
@@ -112,5 +118,6 @@ class InMemoryRetrieval:
                 revision=memory.revision,
             )
             for memory in memories
+            if memory_ids is None or memory.memory_id in memory_ids
             if _matches(memory.text, query)
         )[:limit]
