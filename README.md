@@ -75,6 +75,28 @@ ReplyStore 当前收敛为请求/结果持久化边界：按已验证联系人�
 前台增量同步的端到端接线已经完成（见下文《前台增量同步》）；`ConversationObservation`
 仍由上层适配器提供，回复流程尚未直接消费前台同步的实时观察。
 
+## 检索评测
+
+检索评测只使用合成联系人、消息和来源，不读取真实聊天，也不写入生产数据库。安装项目后可
+运行默认的内存契约评测：
+
+```bash
+notalone-retrieval-evaluate
+notalone-retrieval-evaluate --json
+```
+
+评测集覆盖同义表达、确切短语、时间条件、无结果、冲突和跨联系人隔离，并记录空结果率、降级率、
+Top-K 命中、引用纠错率、候选拒绝率、延迟、Token 和 Tool 次数。候选层没有提供匿名运行观察值时，
+引用纠错率和候选拒绝率显示为 `N/A`，不把未测量伪装成零风险。PostgreSQL SQL/全文路径的实际合成
+评测可运行：
+
+```bash
+python -m unittest tests.integration.persistence.test_retrieval_evaluation
+```
+
+向量候选当前不启用。只有持续的检索异常、真实反馈、provider 配置和隐私评审同时满足时，才允许
+进入后续向量补充决策；在此之前 SQL/全文路径仍是唯一生产检索路径。
+
 外部模型调用的出站台账已完成接线：`ReplyGenerator` 可注入台账 port，真实调用的成功、
 运行失败与校验拒绝三种结果都会写入 PostgreSQL（迁移 010），记录时间、供应商标识、模型
 名、联系人范围、token 用量、延迟与结果状态；运行时从模型响应的用量元数据累计 token，

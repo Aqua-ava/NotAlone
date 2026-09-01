@@ -29,6 +29,7 @@ notalone-task-cleanup = "notalone.tasks.command:cleanup_main"
 notalone-task-worker = "notalone.tasks.command:worker_main"
 notalone-front-sync = "notalone.front_sync.command:front_sync_main"
 notalone-server = "notalone.server.command:main"
+notalone-retrieval-evaluate = "notalone.retrieval.evaluation:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
