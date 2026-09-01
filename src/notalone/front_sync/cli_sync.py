@@ -1,9 +1,10 @@
 """已确认会话集合的 CLI 后台增量同步。
 
 这个模块与前台 OCR 定位完全分离：它只接收持久化的 active 绑定，使用一个
-全局 sessions 事件流发现变化，再用联系人自己的 cursor 读取正文。调用方
-只需要在每个后端心跳调用 ``cycle(enabled=...)``，不需要管理多个 follow
-进程或了解退避、baseline 和写入细节。
+全局 sessions 事件流发现变化，再用联系人自己的 cursor 读取正文；事件队列
+空闲后还会做有界安全对账，覆盖事件流可能漏报的我方发送。调用方只需要在
+每个后端心跳调用 ``cycle(enabled=...)``，不需要管理多个 follow 进程或了解
+退避、baseline 和写入细节。
 """
 
 from __future__ import annotations
@@ -129,6 +130,7 @@ class CliBackgroundSync:
         "_stream_supported",
         "_global_cursor",
         "_initial_scan_done",
+        "_sweep_index",
         "_pending_locators",
         "_pending_locator_set",
         "_failure_code",
@@ -166,6 +168,7 @@ class CliBackgroundSync:
         self._stream_supported = True
         self._global_cursor: str | None = None
         self._initial_scan_done = False
+        self._sweep_index = 0
         self._pending_locators: deque[str] = deque()
         self._pending_locator_set: set[str] = set()
         self._failure_code: str | None = None
@@ -243,6 +246,11 @@ class CliBackgroundSync:
                 for binding in bindings:
                     self._enqueue(binding.conversation_locator)
                 self._initial_scan_done = True
+            elif not self._pending_locators:
+                # sessions 事件流并不保证会为“我方发送”产生变化通知。
+                # 队列清空后按固定预算做安全轮询，仍使用各联系人的
+                # cursor，因此不会重复写入，也不会为每个联系人创建 Follow。
+                self._enqueue_round_robin(bindings)
         else:
             # 全局能力不可用时只做有界一次性轮询；不会创建长进程。
             for binding in bindings:
@@ -263,10 +271,11 @@ class CliBackgroundSync:
                 self._failure_code = "cli_normalization_failed"
             except CliAdapterError as error:
                 self._failure_code = error.code
-                self._enqueue(locator)
+                # 不在当前轮立刻回队；否则一个持续失败的会话会占满队列。
+                # 全局流的安全轮询或降级轮询会在后续心跳重试它。
             except ObservationPersistenceError:
                 self._failure_code = "observation_persistence_failed"
-                self._enqueue(locator)
+                # 与 CLI 错误相同，延后到后续有界轮询，保证其他联系人公平。
 
         if self._stream is not None:
             phase = (
@@ -308,6 +317,7 @@ class CliBackgroundSync:
         # 全局流；下一轮会从内存 cursor 重新建立单一流。
         self._close_stream()
         self._initial_scan_done = False
+        self._sweep_index = 0
         self._failure_code = failure_code
         return CliSyncCycleResult(
             status=CliSyncStatus(
@@ -328,6 +338,7 @@ class CliBackgroundSync:
         self._pending_locators.clear()
         self._pending_locator_set.clear()
         self._initial_scan_done = False
+        self._sweep_index = 0
         self._stream_supported = True
         self._failure_code = None
 
@@ -376,6 +387,18 @@ class CliBackgroundSync:
             return
         self._pending_locator_set.add(locator)
         self._pending_locators.append(locator)
+
+    def _enqueue_round_robin(self, bindings: Sequence[object]) -> None:
+        """为全局事件流增加一个有界的定期对账窗口。"""
+
+        if not bindings:
+            return
+        count = min(_MAX_BINDINGS_PER_CYCLE, len(bindings))
+        start = self._sweep_index % len(bindings)
+        for offset in range(count):
+            binding = bindings[(start + offset) % len(bindings)]
+            self._enqueue(binding.conversation_locator)
+        self._sweep_index = (start + count) % len(bindings)
 
     def _disabled_window(self) -> tuple[float, float] | None:
         if self._sync_state is None:

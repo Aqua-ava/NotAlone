@@ -221,6 +221,66 @@ class CliBackgroundSyncTest(unittest.TestCase):
         self.assertEqual(self.cli.tail_calls[2].get("cursor"), "local_id:10")
         self.assertNotIn("since_time", self.cli.tail_calls[2])
 
+    def test_global_stream_safety_sweep_reads_without_session_event(self) -> None:
+        self.sync.cycle(enabled=True)
+        self.cli.tail_calls.clear()
+        self.cli.tail_results["wxid_a"] = deque(
+            [
+                TailResult(
+                    events=(_message("wxid_a", 11, "我方发送后仍应同步"),),
+                    cursor="local_id:11",
+                    last_local_id=11,
+                )
+            ]
+        )
+        self.cli.tail_results["wxid_b"] = deque(
+            [TailResult(events=(), cursor=None, last_local_id=None)]
+        )
+
+        # 模拟全局 sessions 流没有报告 wxid_a 的我方新消息。
+        result = self.sync.cycle(enabled=True)
+
+        self.assertEqual(
+            [call["talker"] for call in self.cli.tail_calls],
+            ["wxid_a", "wxid_b"],
+        )
+        self.assertEqual(result.batch_message_count, 1)
+        self.assertEqual(
+            self.store.cursors[(OWNER_ID, self.binding_a.contact_id)].last_local_id,
+            11,
+        )
+
+    def test_failed_binding_waits_for_next_round_instead_of_blocking_queue(self) -> None:
+        original_tail = self.cli.tail
+        failed_once = True
+
+        def tail_with_one_failure(talker: str, **kwargs: object) -> TailResult:
+            nonlocal failed_once
+            if talker == "wxid_a" and failed_once:
+                failed_once = False
+                self.cli.tail_calls.append({"talker": talker, **kwargs})
+                raise CliCommandError("cli_command_failed", "合成失败")
+            return original_tail(talker, **kwargs)
+
+        self.cli.tail = tail_with_one_failure  # type: ignore[method-assign]
+
+        first = self.sync.cycle(enabled=True)
+
+        self.assertEqual(
+            [call["talker"] for call in self.cli.tail_calls],
+            ["wxid_a", "wxid_b"],
+        )
+        self.assertEqual(first.status.failure_code, "cli_command_failed")
+
+        self.cli.tail_calls.clear()
+        second = self.sync.cycle(enabled=True)
+
+        self.assertEqual(
+            [call["talker"] for call in self.cli.tail_calls],
+            ["wxid_a", "wxid_b"],
+        )
+        self.assertEqual(second.batch_message_count, 1)
+
     def test_manual_disabled_window_skips_messages_but_advances_cursor(self) -> None:
         self.sync.cycle(enabled=True)
         self.sync_state.disabled_at = datetime.fromtimestamp(

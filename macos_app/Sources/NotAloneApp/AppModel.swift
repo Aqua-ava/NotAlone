@@ -90,6 +90,7 @@ final class AppModel: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var messageTask: Task<Void, Never>?
     private var isToggling = false
+    private var isCheckingNow = false
     private var loadedBefore: String?
     private var knownMessageIds: Set<String> = []
 
@@ -441,8 +442,27 @@ final class AppModel: ObservableObject {
     }
 
     func checkNow() {
+        guard !isCheckingNow else {
+            lastOperationMessage = "检查进行中，请稍候"
+            return
+        }
+        guard let client else {
+            lastOperationMessage = "后端正在连接，请稍候"
+            return
+        }
+        isCheckingNow = true
         Task {
-            await refreshStatus()
+            defer { isCheckingNow = false }
+            do {
+                // 这里必须调用 POST /api/sync/check 才会真正驱动一次
+                // 后端 CLI cycle；只读 syncStatus 只会拿到旧报告。
+                status = try await client.checkSync()
+                await refreshContacts()
+                fetchLatestAndMerge()
+                lastOperationMessage = "已执行一次 CLI 同步检查"
+            } catch {
+                lastOperationMessage = "检查失败：\(Self.describe(error))"
+            }
         }
     }
 
