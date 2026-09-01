@@ -33,6 +33,11 @@ class InMemoryMemoryStore:
         self._candidates[candidate.candidate_id] = candidate
         return candidate
 
+    def create_manual_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
+        """保存一条由用户主动录入、随后可走确认流程的候选。"""
+
+        return self.create_candidate(candidate)
+
     def confirm(
         self,
         *,
@@ -57,6 +62,10 @@ class InMemoryMemoryStore:
             source_ids=candidate.source_ids,
             source_candidate_id=candidate.candidate_id,
             adoption_method=adoption_method,
+            confidence=candidate.confidence,
+            risk_flags=candidate.risk_flags,
+            valid_at=candidate.valid_at,
+            invalid_at=candidate.invalid_at,
         )
         self._candidates[candidate_id] = replace(
             candidate,
@@ -74,20 +83,31 @@ class InMemoryMemoryStore:
         text: str,
         category: MemoryCategory | None = None,
     ) -> ConfirmedMemory:
-        memory = self._memory(scope=scope, memory_id=memory_id)
+        memory = self._current_memory(scope=scope, memory_id=memory_id)
         if memory.status is not ConfirmedMemoryStatus.ACTIVE:
             raise RuntimeError("失效或删除的关系记忆不能直接修正。")
         if not isinstance(text, str) or not text.strip():
             raise ValueError("修正后的关系记忆不能为空。")
         if category is not None and not isinstance(category, MemoryCategory):
             raise TypeError("关系记忆分类无效。")
-        corrected = replace(
+        invalidated = replace(
             memory,
-            text=text,
-            category=category or memory.category,
+            status=ConfirmedMemoryStatus.INVALIDATED,
+            invalid_at=memory.invalid_at or datetime.now(timezone.utc),
             revision=memory.revision + 1,
         )
-        self._memories[memory_id] = corrected
+        corrected = replace(
+            memory,
+            memory_id=uuid4(),
+            text=text,
+            category=category or memory.category,
+            source_candidate_id=None,
+            adoption_method=AdoptionMethod.MANUAL,
+            revision=memory.revision + 1,
+            supersedes_memory_id=memory.memory_id,
+        )
+        self._memories[memory.memory_id] = invalidated
+        self._memories[corrected.memory_id] = corrected
         return corrected
 
     def reject_candidate(
@@ -117,7 +137,7 @@ class InMemoryMemoryStore:
         return invalidated
 
     def invalidate(self, *, scope: ContactScope, memory_id: UUID) -> ConfirmedMemory:
-        memory = self._memory(scope=scope, memory_id=memory_id)
+        memory = self._current_memory(scope=scope, memory_id=memory_id)
         if memory.status is ConfirmedMemoryStatus.DELETED:
             raise RuntimeError("已删除的关系记忆不能再次失效。")
         invalidated = replace(
@@ -126,18 +146,18 @@ class InMemoryMemoryStore:
             invalid_at=memory.invalid_at or datetime.now(timezone.utc),
             revision=memory.revision + 1,
         )
-        self._memories[memory_id] = invalidated
+        self._memories[memory.memory_id] = invalidated
         return invalidated
 
     def delete(self, *, scope: ContactScope, memory_id: UUID) -> ConfirmedMemory:
-        memory = self._memory(scope=scope, memory_id=memory_id)
+        memory = self._current_memory(scope=scope, memory_id=memory_id)
         deleted = replace(
             memory,
             status=ConfirmedMemoryStatus.DELETED,
             invalid_at=memory.invalid_at or datetime.now(timezone.utc),
             revision=memory.revision + 1,
         )
-        self._memories[memory_id] = deleted
+        self._memories[memory.memory_id] = deleted
         return deleted
 
     def list_confirmed(self, scope: ContactScope) -> tuple[ConfirmedMemory, ...]:
@@ -147,6 +167,33 @@ class InMemoryMemoryStore:
             memory
             for memory in self._memories.values()
             if memory.scope == scope and memory.is_retrievable()
+        )
+
+    def list_pending_candidates(
+        self,
+        scope: ContactScope,
+    ) -> tuple[MemoryCandidate, ...]:
+        """返回指定联系人范围内仍待处理的候选。"""
+
+        if not isinstance(scope, ContactScope):
+            raise TypeError("关系记忆查询范围无效。")
+        return tuple(
+            candidate
+            for candidate in self._candidates.values()
+            if candidate.scope == scope
+            and candidate.status is MemoryCandidateStatus.PENDING
+        )
+
+    def deleted_texts(self, scope: ContactScope) -> tuple[str, ...]:
+        """返回删除指纹，阻止自动提取复活相同记忆。"""
+
+        if not isinstance(scope, ContactScope):
+            raise TypeError("关系记忆查询范围无效。")
+        return tuple(
+            memory.text
+            for memory in self._memories.values()
+            if memory.scope == scope
+            and memory.status is ConfirmedMemoryStatus.DELETED
         )
 
     def _candidate(self, *, scope: ContactScope, candidate_id: UUID) -> MemoryCandidate:
@@ -164,3 +211,31 @@ class InMemoryMemoryStore:
         if memory.scope != scope:
             raise PermissionError("关系记忆范围校验失败。")
         return memory
+
+    def _current_memory(
+        self,
+        *,
+        scope: ContactScope,
+        memory_id: UUID,
+    ) -> ConfirmedMemory:
+        """解析旧版本 ID 到当前 active 版本，保留旧客户端的幂等性。"""
+
+        memory = self._memory(scope=scope, memory_id=memory_id)
+        visited: set[UUID] = set()
+        while memory.memory_id not in visited:
+            visited.add(memory.memory_id)
+            children = tuple(
+                candidate
+                for candidate in self._memories.values()
+                if candidate.scope == scope
+                and candidate.supersedes_memory_id == memory.memory_id
+            )
+            active_children = tuple(
+                candidate
+                for candidate in children
+                if candidate.status is ConfirmedMemoryStatus.ACTIVE
+            )
+            if not active_children:
+                return memory
+            memory = max(active_children, key=lambda item: item.revision)
+        raise RuntimeError("关系记忆版本链无效。")

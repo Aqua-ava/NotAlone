@@ -165,6 +165,10 @@ class PostgresMemoryStoreTest(unittest.TestCase):
         source_ids: tuple[UUID, ...] | None = None,
         text: str = "对方喜欢徒步",
         category: MemoryCategory = MemoryCategory.PREFERENCE,
+        confidence: float = 1.0,
+        risk_flags: tuple[str, ...] = (),
+        valid_at: datetime | None = None,
+        invalid_at: datetime | None = None,
     ) -> MemoryCandidate:
         return MemoryCandidate(
             candidate_id=candidate_id or self.candidate_id,
@@ -172,7 +176,64 @@ class PostgresMemoryStoreTest(unittest.TestCase):
             text=text,
             category=category,
             source_ids=source_ids or (self.source_id,),
+            confidence=confidence,
+            risk_flags=risk_flags,
+            valid_at=valid_at,
+            invalid_at=invalid_at,
         )
+
+    def test_candidate_and_confirmed_memory_keep_adoption_provenance(self) -> None:
+        valid_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        invalid_at = valid_at + timedelta(days=2)
+        candidate = self.store.create_candidate(
+            self._candidate(
+                confidence=0.86,
+                risk_flags=("low",),
+                valid_at=valid_at,
+                invalid_at=invalid_at,
+            )
+        )
+
+        self.assertEqual(candidate.confidence, 0.86)
+        self.assertEqual(candidate.risk_flags, ("low",))
+        self.assertEqual(candidate.valid_at, valid_at)
+
+        confirmed = self.store.confirm(
+            scope=self._scope(),
+            candidate_id=candidate.candidate_id,
+            adoption_method=AdoptionMethod.AUTO,
+        )
+        self.assertEqual(confirmed.confidence, 0.86)
+        self.assertEqual(confirmed.risk_flags, ("low",))
+        self.assertEqual(confirmed.source_candidate_id, candidate.candidate_id)
+        self.assertEqual(confirmed.invalid_at, invalid_at)
+
+    def test_correction_creates_a_version_and_keeps_old_audit_row(self) -> None:
+        candidate = self.store.create_candidate(self._candidate())
+        original = self.store.confirm(
+            scope=self._scope(), candidate_id=candidate.candidate_id
+        )
+
+        corrected = self.store.correct(
+            scope=self._scope(),
+            memory_id=original.memory_id,
+            text="对方最近喜欢城市徒步",
+        )
+
+        self.assertNotEqual(corrected.memory_id, original.memory_id)
+        self.assertEqual(corrected.supersedes_memory_id, original.memory_id)
+        self.assertEqual(corrected.adoption_method, AdoptionMethod.MANUAL)
+        self.assertEqual(corrected.revision, original.revision + 1)
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            row = connection.execute(
+                """
+                SELECT status, text_content, revision
+                FROM public.confirmed_memory
+                WHERE owner_id = %s AND contact_id = %s AND id = %s
+                """,
+                (self.owner_id, self.contact_id, original.memory_id),
+            ).fetchone()
+        self.assertEqual(row, ("invalidated", "对方喜欢徒步", 2))
 
     def test_pending_candidate_is_not_retrieved_until_confirmed(self) -> None:
         candidate = self.store.create_candidate(self._candidate())

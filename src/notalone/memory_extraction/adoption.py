@@ -34,6 +34,8 @@ from notalone.scopes import ContactScope
 
 DEFAULT_CONFIDENCE_THRESHOLD = 0.7
 DEFAULT_SIMILARITY_THRESHOLD = 0.2
+# 只有明确表示没有风险的事实才允许绕过人工确认；未知标签按风险处理。
+AUTO_ADOPTABLE_RISK_FLAGS = frozenset({"", "low", "low_risk", "none", "无", "低风险"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,7 +111,10 @@ class MemoryAdoption:
             if any(normalized == _normalize(item.text) for item in pool):
                 duplicate += 1
                 continue
-            if fact.confidence < self._threshold:
+            if self._pending_exists(scope, fact):
+                duplicate += 1
+                continue
+            if not self._can_auto_adopt(fact):
                 self._create_pending_candidate(scope, fact)
                 pending += 1
                 continue
@@ -258,15 +263,45 @@ class MemoryAdoption:
         ]
 
     def _deleted_texts(self, scope: ContactScope) -> set[str]:
+        deleted_texts = getattr(self._memory_port, "deleted_texts", None)
         texts = set(
-            _normalize(text) for text in self._memory_port.deleted_texts(scope)
-        )
+            _normalize(text) for text in deleted_texts(scope)
+        ) if callable(deleted_texts) else set()
         if self._owner_memory_port is not None:
+            owner_deleted_texts = getattr(
+                self._owner_memory_port,
+                "deleted_texts",
+                None,
+            )
             texts.update(
                 _normalize(text)
-                for text in self._owner_memory_port.deleted_texts(scope.owner_id)
-            )
+                for text in owner_deleted_texts(scope.owner_id)
+            ) if callable(owner_deleted_texts) else None
         return texts
+
+    def _can_auto_adopt(self, fact) -> bool:
+        return (
+            fact.confidence >= self._threshold
+            and all(
+                flag.strip().lower() in AUTO_ADOPTABLE_RISK_FLAGS
+                for flag in fact.risk_flags
+            )
+        )
+
+    def _pending_exists(self, scope: ContactScope, fact) -> bool:
+        list_pending = getattr(self._memory_port, "list_pending_candidates", None)
+        if not callable(list_pending):
+            return False
+        normalized = _normalize(fact.text)
+        source_ids = set(fact.source_message_ids)
+        return any(
+            candidate.scope == scope
+            and candidate.category is fact.category
+            and candidate.topic is fact.topic
+            and _normalize(candidate.text) == normalized
+            and set(candidate.source_ids) == source_ids
+            for candidate in list_pending(scope)
+        )
 
     def _create_pending_candidate(self, scope: ContactScope, fact) -> None:
         self._memory_port.create_candidate(
@@ -280,6 +315,8 @@ class MemoryAdoption:
                 status=MemoryCandidateStatus.PENDING,
                 valid_at=fact.valid_at,
                 invalid_at=fact.invalid_at,
+                confidence=fact.confidence,
+                risk_flags=fact.risk_flags,
             )
         )
 
@@ -298,6 +335,8 @@ class MemoryAdoption:
                 status=ConfirmedMemoryStatus.ACTIVE,
                 valid_at=fact.valid_at,
                 invalid_at=fact.invalid_at,
+                confidence=fact.confidence,
+                risk_flags=fact.risk_flags,
             )
         )
 
@@ -314,6 +353,8 @@ class MemoryAdoption:
                 topic=fact.topic,
                 valid_at=fact.valid_at,
                 invalid_at=fact.invalid_at,
+                confidence=fact.confidence,
+                risk_flags=fact.risk_flags,
             )
         )
         return self._memory_port.confirm(

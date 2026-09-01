@@ -27,6 +27,7 @@ class MemoryCandidateStatus(StrEnum):
     CONFIRMED = "confirmed"
     REJECTED = "rejected"
     INVALIDATED = "invalidated"
+    EXTRACT_FAILED = "extract_failed"
 
 
 class ConfirmedMemoryStatus(StrEnum):
@@ -94,6 +95,9 @@ class MemoryCandidate:
     status: MemoryCandidateStatus = MemoryCandidateStatus.PENDING
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
+    confidence: float = 1.0
+    risk_flags: tuple[str, ...] = ()
+    failure_reason: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.candidate_id, UUID):
@@ -107,6 +111,29 @@ class MemoryCandidate:
         _validate_source_ids(self.source_ids)
         if not isinstance(self.status, MemoryCandidateStatus):
             raise TypeError("关系记忆候选状态无效。")
+        if (
+            not isinstance(self.confidence, (int, float))
+            or not 0.0 <= float(self.confidence) <= 1.0
+        ):
+            raise ValueError("候选置信度必须在 0 到 1 之间。")
+        if not isinstance(self.risk_flags, tuple) or any(
+            not isinstance(flag, str) or not flag.strip()
+            for flag in self.risk_flags
+        ):
+            raise ValueError("候选风险标记必须是非空字符串元组。")
+        if self.failure_reason is not None and (
+            not isinstance(self.failure_reason, str)
+            or not self.failure_reason.strip()
+        ):
+            raise ValueError("候选失败原因必须是非空字符串。")
+        _validate_datetime(self.valid_at)
+        _validate_datetime(self.invalid_at)
+        if (
+            self.valid_at is not None
+            and self.invalid_at is not None
+            and self.invalid_at <= self.valid_at
+        ):
+            raise ValueError("候选失效时间必须晚于生效时间。")
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -125,6 +152,9 @@ class ConfirmedMemory:
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
     revision: int = 1
+    confidence: float = 1.0
+    risk_flags: tuple[str, ...] = ()
+    supersedes_memory_id: UUID | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.memory_id, UUID):
@@ -149,6 +179,21 @@ class ConfirmedMemory:
         _validate_datetime(self.invalid_at)
         if not isinstance(self.revision, int) or self.revision < 1:
             raise ValueError("关系记忆修订号必须是正整数。")
+        if (
+            not isinstance(self.confidence, (int, float))
+            or not 0.0 <= float(self.confidence) <= 1.0
+        ):
+            raise ValueError("关系记忆置信度必须在 0 到 1 之间。")
+        if not isinstance(self.risk_flags, tuple) or any(
+            not isinstance(flag, str) or not flag.strip()
+            for flag in self.risk_flags
+        ):
+            raise ValueError("关系记忆风险标记必须是非空字符串元组。")
+        if self.supersedes_memory_id is not None and not isinstance(
+            self.supersedes_memory_id,
+            UUID,
+        ):
+            raise TypeError("关系记忆版本链标识无效。")
 
     def is_retrievable(self, *, at: datetime | None = None) -> bool:
         """判断资料当前是否允许进入 Retrieval 结果。"""
@@ -180,6 +225,8 @@ class OwnerMemory:
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
     revision: int = 1
+    confidence: float = 1.0
+    risk_flags: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.memory_id, UUID) or not isinstance(
@@ -204,6 +251,16 @@ class OwnerMemory:
             raise ValueError("owner 记忆状态无效。")
         if not isinstance(self.revision, int) or self.revision < 1:
             raise ValueError("owner 记忆版本必须从 1 开始。")
+        if (
+            not isinstance(self.confidence, (int, float))
+            or not 0.0 <= float(self.confidence) <= 1.0
+        ):
+            raise ValueError("owner 记忆置信度必须在 0 到 1 之间。")
+        if not isinstance(self.risk_flags, tuple) or any(
+            not isinstance(flag, str) or not flag.strip()
+            for flag in self.risk_flags
+        ):
+            raise ValueError("owner 记忆风险标记必须是非空字符串元组。")
         for value, label in (
             (self.valid_at, "生效时间"),
             (self.invalid_at, "失效时间"),

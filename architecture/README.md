@@ -47,6 +47,7 @@
 21. [ADR-021：源码分发与双层首次配置](adr/021-source-distribution-and-first-run-setup.md)
 22. [ADR-022：前台同步人工验证的独立控制面](adr/022-foreground-sync-verification-control-surface.md)
 23. [ADR-023：全局 CLI 增量同步与前台 OCR 定位分离](adr/023-global-cli-sync-and-ocr-foreground-locator.md)
+24. [ADR-024：关系记忆风险门槛与版本化采纳](adr/024-memory-adoption-risk-gate-and-versioning.md)
 
 ## 当前架构决策
 

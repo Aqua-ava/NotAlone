@@ -32,7 +32,9 @@ _OWNER_MEMORY_COLUMNS = """
     status,
     valid_at,
     invalid_at,
-    revision
+    revision,
+    confidence,
+    risk_flags
 """
 
 
@@ -63,11 +65,12 @@ class PostgresOwnerMemoryStore:
                     INSERT INTO public.owner_memory (
                         id, owner_id, text_content, category, topic,
                         source_ids, adoption_method, status,
-                        valid_at, invalid_at, revision
+                        valid_at, invalid_at, revision, confidence, risk_flags
                     ) VALUES (
                         %(memory_id)s, %(owner_id)s, %(text)s, %(category)s,
                         %(topic)s, %(source_ids)s, %(adoption_method)s,
-                        %(status)s, %(valid_at)s, %(invalid_at)s, %(revision)s
+                        %(status)s, %(valid_at)s, %(invalid_at)s, %(revision)s,
+                        %(confidence)s, %(risk_flags)s
                     )
                     """,
                     _to_row(memory),
@@ -199,6 +202,8 @@ def _to_row(memory: OwnerMemory) -> dict[str, Any]:
         "valid_at": memory.valid_at,
         "invalid_at": memory.invalid_at,
         "revision": memory.revision,
+        "confidence": memory.confidence,
+        "risk_flags": list(memory.risk_flags),
     }
 
 
@@ -215,4 +220,6 @@ def _from_row(row: dict[str, Any]) -> OwnerMemory:
         valid_at=row["valid_at"],
         invalid_at=row["invalid_at"],
         revision=row["revision"],
+        confidence=row["confidence"],
+        risk_flags=tuple(row["risk_flags"] or ()),
     )

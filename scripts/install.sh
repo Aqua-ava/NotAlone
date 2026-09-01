@@ -106,11 +106,15 @@ else
 fi
 
 # 已有数据库会跳过首次建库迁移；这里补应用可重复的当前增量迁移，
-# 让旧安装也拥有 CLI 后台同步所需的观察模式约束与 baseline 表。
-log "应用可重复增量迁移 026_cli_background_sync.sql…"
-psql --set ON_ERROR_STOP=1 --dbname "${database_name}" \
-    --file "database/migrations/026_cli_background_sync.sql" \
-    >/dev/null || fail "增量迁移 026_cli_background_sync.sql 失败。"
+# 让旧安装也拥有最新的同步和关系记忆采纳字段。
+for migration in \
+    database/migrations/026_cli_background_sync.sql \
+    database/migrations/027_memory_adoption_provenance.sql; do
+    log "应用可重复增量迁移 $(basename "${migration}")…"
+    psql --set ON_ERROR_STOP=1 --dbname "${database_name}" \
+        --file "${migration}" \
+        >/dev/null || fail "增量迁移 ${migration} 失败。"
+done
 
 # ------------------------------------------------------------------
 # 4. 生成/校验 .env（不写任何密钥）

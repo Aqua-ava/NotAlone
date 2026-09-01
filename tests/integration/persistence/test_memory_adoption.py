@@ -11,6 +11,7 @@ import psycopg
 
 from notalone.memory.models import (
     AdoptionMethod,
+    MemoryCandidateStatus,
     MemoryCandidate,
     MemoryCategory,
     MemoryTopic,
@@ -237,6 +238,22 @@ class MemoryAdoptionTest(unittest.TestCase):
         self.assertEqual(stats.pending, 1)
         self.assertEqual(stats.adopted, 0)
         self.assertEqual(self.memory_store.list_confirmed(self.scope), ())
+
+    def test_sensitive_high_confidence_stays_pending_with_provenance(self) -> None:
+        stats = self.adoption.adopt(
+            self.scope,
+            ExtractionOutcome(
+                accepted=(self._fact(confidence=0.95, risk_flags=("health",)),)
+            ),
+        )
+
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(self.memory_store.list_confirmed(self.scope), ())
+        pending = self.memory_store.list_pending_candidates(self.scope)
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0].status, MemoryCandidateStatus.PENDING)
+        self.assertEqual(pending[0].confidence, 0.95)
+        self.assertEqual(pending[0].risk_flags, ("health",))
 
     def test_deleted_text_never_adopts_again(self) -> None:
         first = self.adoption.adopt(

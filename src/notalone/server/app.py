@@ -1783,6 +1783,10 @@ def _owner_memory_payload(memory: OwnerMemory) -> dict[str, object]:
         "topic": memory.topic.value,
         "adoption_method": memory.adoption_method.value,
         "status": memory.status.value,
+        "revision": memory.revision,
+        "source_ids": [str(source_id) for source_id in memory.source_ids],
+        "confidence": memory.confidence,
+        "risk_flags": list(memory.risk_flags),
         "valid_at": _iso_or_none(memory.valid_at),
         "invalid_at": _iso_or_none(memory.invalid_at),
     }
@@ -1799,6 +1803,14 @@ def _memory_payload(memory: ConfirmedMemory) -> dict[str, object]:
         "adoption_method": memory.adoption_method.value,
         "status": memory.status.value,
         "revision": memory.revision,
+        "source_ids": [str(source_id) for source_id in memory.source_ids],
+        "confidence": memory.confidence,
+        "risk_flags": list(memory.risk_flags),
+        "supersedes_memory_id": (
+            str(memory.supersedes_memory_id)
+            if memory.supersedes_memory_id is not None
+            else None
+        ),
         "valid_at": _iso_or_none(memory.valid_at),
         "invalid_at": _iso_or_none(memory.invalid_at),
     }
@@ -1817,4 +1829,10 @@ def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
         "category": candidate.category.value,
         "topic": candidate.topic.value,
         "status": candidate.status.value,
+        "source_ids": [str(source_id) for source_id in candidate.source_ids],
+        "confidence": candidate.confidence,
+        "risk_flags": list(candidate.risk_flags),
+        "failure_reason": candidate.failure_reason,
+        "valid_at": _iso_or_none(candidate.valid_at),
+        "invalid_at": _iso_or_none(candidate.invalid_at),
     }

@@ -47,7 +47,10 @@ _CANDIDATE_COLUMNS = """
     source_ids AS candidate_source_ids,
     status AS candidate_status,
     valid_at AS candidate_valid_at,
-    invalid_at AS candidate_invalid_at
+    invalid_at AS candidate_invalid_at,
+    confidence AS candidate_confidence,
+    risk_flags AS candidate_risk_flags,
+    failure_reason AS candidate_failure_reason
 """
 
 _MEMORY_COLUMNS = """
@@ -63,7 +66,10 @@ _MEMORY_COLUMNS = """
     status AS memory_status,
     valid_at,
     invalid_at,
-    revision
+    revision,
+    confidence AS memory_confidence,
+    risk_flags AS memory_risk_flags,
+    supersedes_memory_id
 """
 
 
@@ -108,9 +114,13 @@ class PostgresMemoryStore:
                     f"""
                     INSERT INTO public.memory_candidate (
                         id, owner_id, contact_id, text_content, category,
-                        topic, source_ids, status, valid_at, invalid_at
+                        topic, source_ids, status, valid_at, invalid_at,
+                        confidence, risk_flags, failure_reason
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s
+                    )
                     RETURNING {_CANDIDATE_COLUMNS}
                     """,
                     (
@@ -124,6 +134,9 @@ class PostgresMemoryStore:
                         candidate.status.value,
                         candidate.valid_at,
                         candidate.invalid_at,
+                        candidate.confidence,
+                        list(candidate.risk_flags),
+                        candidate.failure_reason,
                     ),
                 ).fetchone()
                 if row is None:
@@ -204,9 +217,13 @@ class PostgresMemoryStore:
                     f"""
                     INSERT INTO public.memory_candidate (
                         id, owner_id, contact_id, text_content, category,
-                        topic, source_ids, status, valid_at, invalid_at
+                        topic, source_ids, status, valid_at, invalid_at,
+                        confidence, risk_flags, failure_reason
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s
+                    )
                     RETURNING {_CANDIDATE_COLUMNS}
                     """,
                     (
@@ -220,6 +237,9 @@ class PostgresMemoryStore:
                         candidate.status.value,
                         candidate.valid_at,
                         candidate.invalid_at,
+                        candidate.confidence,
+                        list(candidate.risk_flags),
+                        candidate.failure_reason,
                     ),
                 ).fetchone()
                 if row is None:
@@ -295,9 +315,12 @@ class PostgresMemoryStore:
                     INSERT INTO public.confirmed_memory (
                         id, owner_id, contact_id, text_content, category,
                         topic, source_ids, source_candidate_id, adoption_method,
-                        valid_at, invalid_at
+                        valid_at, invalid_at, confidence, risk_flags
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s
+                    )
                     RETURNING {_MEMORY_COLUMNS}
                     """,
                     (
@@ -312,6 +335,8 @@ class PostgresMemoryStore:
                         adoption_method.value,
                         candidate_row["candidate_valid_at"],
                         candidate_row["candidate_invalid_at"],
+                        candidate_row["candidate_confidence"],
+                        candidate_row["candidate_risk_flags"],
                     ),
                 ).fetchone()
                 if memory_row is None:
@@ -382,26 +407,60 @@ class PostgresMemoryStore:
                     if category
                     else memory_row["memory_category"]
                 )
-                updated = connection.execute(
-                    f"""
+                source_ids = self._source_ids(memory_row["memory_source_ids"])
+                self._ensure_active_sources(connection, scope, source_ids)
+                next_revision = memory_row["revision"] + 1
+                invalidated = connection.execute(
+                    """
                     UPDATE public.confirmed_memory
-                    SET text_content = %s,
-                        category = %s,
-                        revision = revision + 1,
+                    SET status = 'invalidated',
+                        invalid_at = COALESCE(invalid_at, %s),
+                        revision = %s,
                         updated_at = now()
                     WHERE owner_id = %s AND contact_id = %s AND id = %s
+                    """,
+                    (
+                        self._now(),
+                        next_revision,
+                        scope.owner_id,
+                        scope.contact_id,
+                        memory_row["memory_id"],
+                    ),
+                ).rowcount
+                if invalidated != 1:
+                    raise MemoryInvariantError("原关系记忆失效更新失败。")
+                updated = connection.execute(
+                    f"""
+                    INSERT INTO public.confirmed_memory (
+                        id, owner_id, contact_id, text_content, category,
+                        topic, source_ids, source_candidate_id, adoption_method,
+                        status, valid_at, invalid_at, revision,
+                        confidence, risk_flags, supersedes_memory_id
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, NULL, 'manual', 'active',
+                        %s, %s, %s, %s, %s, %s
+                    )
                     RETURNING {_MEMORY_COLUMNS}
                     """,
                     (
-                        text,
-                        next_category,
+                        self._new_uuid(),
                         scope.owner_id,
                         scope.contact_id,
-                        memory_id,
+                        text,
+                        next_category,
+                        memory_row["memory_topic"],
+                        list(source_ids),
+                        memory_row["valid_at"],
+                        memory_row["invalid_at"],
+                        next_revision,
+                        memory_row["memory_confidence"],
+                        memory_row["memory_risk_flags"],
+                        memory_row["memory_id"],
                     ),
                 ).fetchone()
                 if updated is None:
-                    raise MemoryInvariantError("关系记忆修正结果为空。")
+                    raise MemoryInvariantError("关系记忆新版本写入结果为空。")
                 self._bump_memory_revision(connection, scope)
                 return self._memory_from_row(updated)
         except (LookupError, PermissionError, RuntimeError, MemoryPersistenceError):
@@ -758,7 +817,7 @@ class PostgresMemoryStore:
                         now,
                         scope.owner_id,
                         scope.contact_id,
-                        memory_id,
+                        row["memory_id"],
                     ),
                 ).fetchone()
                 if updated is None:
@@ -796,7 +855,7 @@ class PostgresMemoryStore:
         connection: psycopg.Connection[Any],
         memory_id: UUID,
     ) -> dict[str, Any] | None:
-        return connection.execute(
+        row = connection.execute(
             f"""
             SELECT {_MEMORY_COLUMNS}
             FROM public.confirmed_memory
@@ -805,6 +864,33 @@ class PostgresMemoryStore:
             """,
             (memory_id,),
         ).fetchone()
+        if row is None:
+            return None
+        visited: set[UUID] = set()
+        while row["memory_id"] not in visited:
+            visited.add(row["memory_id"])
+            child = connection.execute(
+                f"""
+                SELECT {_MEMORY_COLUMNS}
+                FROM public.confirmed_memory
+                WHERE owner_id = %s
+                  AND contact_id = %s
+                  AND supersedes_memory_id = %s
+                  AND status = 'active'
+                ORDER BY revision DESC, id DESC
+                LIMIT 1
+                FOR UPDATE
+                """,
+                (
+                    row["owner_id"],
+                    row["contact_id"],
+                    row["memory_id"],
+                ),
+            ).fetchone()
+            if child is None:
+                return row
+            row = child
+        raise MemoryInvariantError("关系记忆版本链无效。")
 
     @staticmethod
     def _ensure_active_sources(
@@ -916,6 +1002,9 @@ class PostgresMemoryStore:
             status=MemoryCandidateStatus(row["candidate_status"]),
             valid_at=row["candidate_valid_at"],
             invalid_at=row["candidate_invalid_at"],
+            confidence=row["candidate_confidence"],
+            risk_flags=tuple(row["candidate_risk_flags"] or ()),
+            failure_reason=row["candidate_failure_reason"],
         )
 
     @classmethod
@@ -933,6 +1022,9 @@ class PostgresMemoryStore:
             valid_at=row["valid_at"],
             invalid_at=row["invalid_at"],
             revision=row["revision"],
+            confidence=row["memory_confidence"],
+            risk_flags=tuple(row["memory_risk_flags"] or ()),
+            supersedes_memory_id=row["supersedes_memory_id"],
         )
 
     @staticmethod
