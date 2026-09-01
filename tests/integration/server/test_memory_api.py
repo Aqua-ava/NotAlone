@@ -151,6 +151,13 @@ class FakeOwnerMemory:
         )
 
 
+class FailingContactMemory(FakeContactMemory):
+    """模拟持久化层故障，验证 HTTP 层不会直接断开连接。"""
+
+    def list_confirmed(self, scope: ContactScope) -> tuple[ConfirmedMemory, ...]:
+        raise RuntimeError("synthetic persistence detail")
+
+
 def _build_service() -> tuple[MemoryService, FakeContactMemory, FakeOwnerMemory]:
     contact = FakeContactMemory()
     owner = FakeOwnerMemory()
@@ -438,6 +445,29 @@ class MemoryApiContractTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json(), {"error": "memory_unavailable"})
+
+    def test_memory_operation_failure_returns_stable_error(self) -> None:
+        service = MemoryService(
+            contact_memory=FailingContactMemory(),
+            owner_memory=FakeOwnerMemory(),
+        )
+        app = create_app(
+            database_url="postgresql:///notalone_test",
+            owner_id=OWNER_ID,
+            token="test-token",
+            memory_service=service,
+        )
+        client = InProcessClient(app)
+
+        response = client.get(
+            f"/api/contacts/{CONTACT_ID}/memories",
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json(), {"error": "memory_operation_failed"}
+        )
 
 
 if __name__ == "__main__":

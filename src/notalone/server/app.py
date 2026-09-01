@@ -704,6 +704,13 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.BAD_REQUEST, {"error": "memory_request_invalid"}
             )
+        except Exception:
+            # 持久化或领域层异常不能让真实 HTTP 连接直接断开；同时不把
+            # SQL、连接信息或记忆正文泄露给客户端。
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "memory_operation_failed"},
+            )
 
     def _dispatch_memory(self, *, method: str, path: str, body: bytes) -> Response:
         """按路径分发记忆管理请求。"""
