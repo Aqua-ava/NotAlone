@@ -339,6 +339,71 @@ class LangChainVerticalSliceTest(unittest.TestCase):
         self.assertEqual(result.usage.input_tokens, 130)
         self.assertEqual(result.usage.output_tokens, 26)
 
+    def test_runtime_accepts_string_null_for_unused_skill(self) -> None:
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        content = ReplyToMessage(
+            target_message_id=MESSAGE_ID,
+            direction=ConfirmedDirection(
+                text="自然地回应，保持简短友好",
+                source=DirectionSource.DIRECT_INPUT,
+            ),
+        )
+        command = GenerateReply(
+            idempotency_key=REQUEST_KEY,
+            scope=scope,
+            conversation_binding_id=BINDING_ID,
+            content=content,
+        )
+        prepared = ReplyContext(
+            reply_request_id=REQUEST_ID,
+            command=command,
+            scope=scope,
+            current_text="你好",
+            direction=content.direction,
+            evidence=(
+                ContextEvidence(
+                    evidence_id=MESSAGE_ID,
+                    kind="message",
+                    text="你好",
+                    scope=scope,
+                    source_ids=(MESSAGE_ID,),
+                ),
+            ),
+            skill_library_revision=4,
+        )
+        model = ToolCallingFakeModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "ReplyRuntimeOutput",
+                            "args": {
+                                "candidates": [
+                                    {
+                                        "text": "你好呀，最近怎么样？",
+                                        "basis": "回应当前消息",
+                                        "citation_ids": [str(MESSAGE_ID)],
+                                        "risk_notes": [],
+                                    },
+                                ],
+                                "used_skill_version_id": "null",
+                            },
+                            "id": "string-null-skill-result",
+                        },
+                    ],
+                ),
+            ],
+        )
+
+        result = LangChainReplyRuntime(
+            model=model,
+            skill_port=EmptySkillPort(scope=scope, revision=4),
+        ).generate(prepared)
+
+        self.assertIsNone(result.used_skill)
+        self.assertEqual(result.candidates[0].text, "你好呀，最近怎么样？")
+
     def test_rewrite_draft_reaches_runtime_as_one_time_input(self) -> None:
         scope = ContactScope(OWNER_ID, CONTACT_ID)
         content = RewriteDraft(

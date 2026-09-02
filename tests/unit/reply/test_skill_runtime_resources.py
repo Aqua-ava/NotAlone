@@ -414,6 +414,55 @@ class SkillRuntimeResourceTest(unittest.TestCase):
         self.assertIn("长案例：先确认再给边界。", seen)
         self.assertNotIn("send_message", model.bound_tool_names)
 
+    def test_loaded_skill_version_is_inferred_when_provider_returns_null(self) -> None:
+        warm_entry = self._warm_entry()
+        port = InMemorySkillPort(
+            scope=self.scope,
+            catalog_value=SkillCatalog(self.scope, 4, (warm_entry,)),
+            version=self._warm_version(),
+            resources={},
+        )
+        model = ToolCallingFakeModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "read_file",
+                            "args": {"file_path": WARM_PATH},
+                            "id": "read-skill-before-null-version",
+                        }
+                    ],
+                ),
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "ReplyRuntimeOutput",
+                            "args": {
+                                "candidates": [
+                                    {
+                                        "text": "可以呀，明天见。",
+                                        "basis": "结合已读取的回复策略",
+                                        "citation_ids": [str(MESSAGE_ID)],
+                                        "risk_notes": [],
+                                    }
+                                ],
+                                "used_skill_version_id": "null",
+                            },
+                            "id": "null-version-result",
+                        }
+                    ],
+                ),
+            ]
+        )
+
+        result = self._generate(port, model)
+
+        self.assertIsNotNone(result.used_skill)
+        self.assertEqual(result.used_skill.version_id, VERSION_ID)
+        self.assertEqual(result.used_skill.load_state, "loaded")
+
     def test_user_skill_choice_is_recorded_as_user_selection(self) -> None:
         warm_entry = self._warm_entry()
         port = InMemorySkillPort(
