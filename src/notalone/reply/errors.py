@@ -21,6 +21,14 @@ class ReplyRunError(ReplyError):
     """模型或 Tool 运行失败，公开文本不包含供应商响应。"""
 
 
+class ReplyTimeoutError(ReplyRunError):
+    """本次模型运行超过总时限，候选不可保存。"""
+
+
+class ReplyBudgetError(ReplyRunError):
+    """模型循环超过步骤预算，候选不可保存。"""
+
+
 class ReplyPersistenceError(ReplyError):
     """请求状态或候选持久化失败，调用者不能使用本次候选。"""
 

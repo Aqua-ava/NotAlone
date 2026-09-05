@@ -12,6 +12,8 @@ public struct BackendClient: Sendable {
         case cliBindingRejected(reason: String)
         case cliBindingRequestInvalid
         case replyRejected(reason: String)
+        case replyTimedOut
+        case replyBudgetExceeded
         case followSmokeUnavailable
         case followSmokeRejected(reason: String)
         case followSmokeRequestInvalid
@@ -216,12 +218,23 @@ public struct BackendClient: Sendable {
             throw BackendError.malformedResponse
         }
         var request = URLRequest(url: url)
+        // 后端模型运行上限为 20 秒，额外留出上下文读取、取消与持久化时间。
+        request.timeoutInterval = 45
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = data
         let (bodyData, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let errorCode = (try? JSONDecoder().decode(
+            RejectionEnvelope.self, from: bodyData
+        ))?.error
+        if status == 504 && errorCode == "reply_timeout" {
+            throw BackendError.replyTimedOut
+        }
+        if status == 502 && errorCode == "reply_budget_exceeded" {
+            throw BackendError.replyBudgetExceeded
+        }
         if status == 503 {
             throw BackendError.syncUnavailable
         }

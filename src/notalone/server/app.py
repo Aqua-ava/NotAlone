@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from notalone.reply.errors import ReplyBudgetError, ReplyTimeoutError
+
 import json
 import secrets
 from dataclasses import dataclass
@@ -667,6 +669,14 @@ class BackendApp:
                 owner_id=self._owner_id,
                 contact_id=contact_id,
                 request=request,
+            )
+        except ReplyTimeoutError:
+            return _json_response(
+                HTTPStatus.GATEWAY_TIMEOUT, {"error": "reply_timeout"}
+            )
+        except ReplyBudgetError:
+            return _json_response(
+                HTTPStatus.BAD_GATEWAY, {"error": "reply_budget_exceeded"}
             )
         except Exception:
             # 生成/持久化阶段的基础设施异常：5xx，不用 409 伪装成冲突。

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import hashlib
+import asyncio
 import unittest
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
@@ -96,6 +97,12 @@ class ToolCallingFakeModel(FakeMessagesListChatModel):
     ) -> Any:
         self.seen_calls.append(messages)
         return super()._generate(messages, stop, run_manager, **kwargs)
+
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+        # 异步模型调用仍经过同一合成行为，保留来源变更等测试注入。
+        return await asyncio.to_thread(
+            self._generate, messages, stop, run_manager, **kwargs,
+        )
 
 
 @dataclass

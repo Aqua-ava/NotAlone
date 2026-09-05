@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 import unittest
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
@@ -83,6 +84,12 @@ class HistoryToolFakeModel(FakeMessagesListChatModel):
     ) -> Any:
         self.seen_calls.append(messages)
         return super()._generate(messages, stop, run_manager, **kwargs)
+
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+        # 异步模型调用仍经过同一合成行为，保留来源变更等测试注入。
+        return await asyncio.to_thread(
+            self._generate, messages, stop, run_manager, **kwargs,
+        )
 
 
 class HistoryToolTest(unittest.TestCase):

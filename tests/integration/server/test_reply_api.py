@@ -107,6 +107,25 @@ def _build_service(*, binding_status=ConversationBindingStatus.ACTIVE, ready=Tru
 
 
 class ReplyApiContractTest(unittest.TestCase):
+    def test_runtime_limits_return_stable_errors(self):
+        from notalone.reply.errors import ReplyTimeoutError, ReplyBudgetError
+
+        for error, status, code in (
+            (ReplyTimeoutError, 504, "reply_timeout"),
+            (ReplyBudgetError, 502, "reply_budget_exceeded"),
+        ):
+            with self.subTest(code=code):
+                def fail(*args, **kwargs):
+                    raise error("合成内部异常，不应回显")
+
+                self.reply_port.generate = fail
+                response = self.client.request(
+                    "POST", "/api/reply/generate", headers=self.headers,
+                    body=self._reply_to_message_body().encode("utf-8"),
+                )
+                self.assertEqual(response.status_code, status)
+                self.assertEqual(response.json(), {"error": code})
+
     def setUp(self) -> None:
         self.service, self.reply_port = _build_service()
         self.app = create_app(

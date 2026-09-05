@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import asyncio
 import unittest
 from collections.abc import Sequence
 from dataclasses import replace
@@ -88,6 +89,12 @@ class ToolCallingFakeModel(FakeMessagesListChatModel):
     ) -> Any:
         self.seen_calls.append(messages)
         return super()._generate(messages, stop, run_manager, **kwargs)
+
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+        # 异步模型调用仍经过同一合成行为，保留来源变更等测试注入。
+        return await asyncio.to_thread(
+            self._generate, messages, stop, run_manager, **kwargs,
+        )
 
 
 class PostgresReplyFlowTest(unittest.TestCase):
@@ -574,6 +581,41 @@ class PostgresReplyFlowTest(unittest.TestCase):
             candidate_id,
             {item.evidence_id for item in stored.evidence},
         )
+
+    def test_continuation_timeout_is_recorded_and_same_request_can_retry(self):
+        from notalone.ledger.adapters import InMemoryOutboundLedger
+        from notalone.reply.errors import ReplyTimeoutError
+        from tests.unit.reply.test_runtime_limits import SlowModel
+
+        first = self.flow.execute(reply=self.generator, command=self._command())
+        command = replace(
+            self._command(), idempotency_key=uuid4(),
+            continued_from_candidate_id=first.reply.candidates[0].candidate_id,
+        )
+        model = SlowModel(responses=[AIMessage(content="合成迟到结果")])
+        ledger = InMemoryOutboundLedger()
+        generator = ReplyGenerator(
+            store=self.store, context=self.context, ledger=ledger,
+            runtime=LangChainReplyRuntime(
+                model=model, skill_port=PostgresSkillPort(TEST_DATABASE_URL),
+                timeout_seconds=0.05,
+            ),
+        )
+        with self.assertRaises(ReplyTimeoutError):
+            self.flow.execute(reply=generator, command=command)
+        self.assertTrue(model.cancelled)
+        self.assertEqual(
+            [entry.outcome.value for entry in ledger.list_by_owner(self.owner_id)],
+            ["run_failed"],
+        )
+        # 同一个幂等请求立即可重试，证明超时已退出 running；旧候选仍可继续。
+        retried = self.flow.execute(reply=self.generator, command=command)
+        stored = self.store.read(retried.reply.reply_request_id, self.scope)
+        self.assertEqual(
+            tuple(attempt.state.value for attempt in stored.attempts),
+            ("failed", "completed"),
+        )
+        self.assertEqual(len(stored.result.candidates), 1)
 
     def test_rewrite_draft_uses_same_flow_without_long_term_memory(self) -> None:
         request_key = uuid4()

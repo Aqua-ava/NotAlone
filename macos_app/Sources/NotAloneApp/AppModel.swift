@@ -1161,6 +1161,10 @@ final class AppModel: ObservableObject {
                 return "CLI 批量绑定请求无效"
             case .replyRejected(let reason):
                 return "回复被拒绝：\(Self.replyReasonLabel(reason))"
+            case .replyTimedOut:
+                return "回复生成超时，本次生成已停止。可以稍后重试。"
+            case .replyBudgetExceeded:
+                return "本次生成尝试过多，已停止。请调整表达方向后重试。"
             case .followSmokeUnavailable:
                 return "Follow 验证不可用（请确认后端已更新）"
             case .followSmokeRejected(let reason):

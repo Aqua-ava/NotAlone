@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from threading import Lock
@@ -20,6 +21,9 @@ from langchain.agents.structured_output import ToolStrategy
 from langchain.tools import ToolRuntime, tool
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
+from langgraph.errors import GraphRecursionError
+
+from notalone.reply.adapters.async_runner import run_with_timeout
 
 from notalone.reply.context import ReplyContext
 from notalone.reply.runtime import (
@@ -27,7 +31,9 @@ from notalone.reply.runtime import (
     RuntimeCandidate,
     RuntimeUsage,
 )
-from notalone.reply.errors import ReplyError, ReplyInvariantError, ReplyRunError
+from notalone.reply.errors import (
+    ReplyBudgetError, ReplyError, ReplyInvariantError, ReplyRunError, ReplyTimeoutError,
+)
 from notalone.reply.interface import (
     AutoSkill,
     ReplyToMessage,
@@ -491,6 +497,7 @@ class LangChainReplyRuntime:
         "_skill_port",
         "_retrieval",
         "_catalog_cache",
+        "_timeout_seconds",
     )
 
     def __init__(
@@ -500,7 +507,16 @@ class LangChainReplyRuntime:
         skill_port: SkillPort,
         retrieval: RetrievalPort | None = None,
         catalog_cache: SkillCatalogCache | None = None,
+        timeout_seconds: float = 20.0,
     ) -> None:
+        if (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, (int, float))
+            or not math.isfinite(timeout_seconds)
+            or not 0 < timeout_seconds <= 20
+        ):
+            raise ValueError("回复运行时限必须大于 0 且不超过 20 秒。")
+        self._timeout_seconds = timeout_seconds
         self._model = model
         self._model_name = getattr(model, "model_name", None)
         self._skill_port = skill_port
@@ -611,13 +627,17 @@ class LangChainReplyRuntime:
                 context_schema=ReplyRuntimeContext,
                 system_prompt=BASE_SYSTEM_PROMPT,
             )
-            state = graph.invoke(
-                {
-                    "messages": [
-                        {"role": "user", "content": _request_text(prepared)}
-                    ]
-                },
-                context=context,
+            state = run_with_timeout(
+                graph.ainvoke(
+                    {
+                        "messages": [
+                            {"role": "user", "content": _request_text(prepared)}
+                        ]
+                    },
+                    config={"recursion_limit": 12},
+                    context=context,
+                ),
+                seconds=self._timeout_seconds,
             )
             return _validated_result(
                 state,
@@ -626,6 +646,10 @@ class LangChainReplyRuntime:
                 history=history,
                 selection=prepared.command.skill,
             )
+        except TimeoutError:
+            raise ReplyTimeoutError("回复生成超时，本次生成已停止。") from None
+        except GraphRecursionError:
+            raise ReplyBudgetError("回复生成达到步骤上限，本次生成已停止。") from None
         except ReplyError:
             raise
         except (PermissionError, TypeError, ValueError, KeyError, AttributeError):
