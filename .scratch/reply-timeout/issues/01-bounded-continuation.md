@@ -36,6 +36,7 @@ Blocked by: none
 
 剩余风险与备注：
 
-- 本次验证期间 macOS 无障碍与屏幕录制授权被系统拒绝，桌面 UI 中文提示未做视觉确认；该映射经代码走查、Swift 构建与后端 504 契约端到端验证覆盖，可在下次打开 App 时人工确认。
-- 验证中观察到两次瞬时 500 `reply_generation_failed`：真实模型输出被运行时校验拒绝（台账记 `rejected_by_validation`）或模型调用失败（`run_failed`），均按既有通用 5xx 映射正确落库且可重试；非本 issue 范围。
+- 验证期间观察到两次瞬时 500 `reply_generation_failed`：真实模型输出被运行时校验拒绝（台账记 `rejected_by_validation`）或模型调用失败（`run_failed`），均按既有通用 5xx 映射正确落库且可重试；非本 issue 范围。
 - 全量测试运行中仍出现 unittest 的 `ResourceWarning: unclosed file`（`case.py:589`），全部测试通过，非本次改动引入。
+- 授权恢复后已完成桌面 UI 验证：模型端点注入本机挂起端点后，App 界面先进入「生成候选…」转圈，约 20 秒后转圈结束并显示中文提示「回复生成超时，本次生成已停止。可以稍后重试。」；同次请求落库 `reply_request`/`reply_attempt` 均为 failed、台账 `run_failed`（latency_ms=20072）。502 预算超限路径同样在 UI 确认：显示「本次生成尝试过多，已停止。请调整表达方向后重试。」且转圈结束。
+- 发现根因场景并另立任务：见 `.scratch/reply-timeout/issues/02-structured-output-loop.md`——本 issue 的原始复现（App 超时但后端仍 running）的触发源是模型对大历史联系人的回复反复不产出结构化输出而无限重试；本修复将其从无限挂起变为 4-6 秒内的明确失败与可重试，但正常生成在该场景下仍会以预算错误结束，需在后续任务中处理。
