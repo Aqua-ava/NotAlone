@@ -195,8 +195,20 @@ class HistoryToolTest(unittest.TestCase):
         self.assertEqual(payload["status"], "budget_exceeded")
         self.assertEqual(payload["messages"], [])
         self.assertTrue(payload["not_found_is_not_evidence"])
+        # 预算耗尽的返回必须带可操作的停止指令，否则模型会继续重试
+        # 历史检索并耗尽运行步骤上限（issue 02）。
+        self.assertIn("禁止再调用任何历史工具", payload["guidance"])
         self.assertEqual(len(access.tool_calls), 4)
         self.assertEqual(access.tool_calls[-1].status, "budget_exceeded")
+
+    def test_empty_search_returns_actionable_guidance(self) -> None:
+        access = self._access()
+
+        payload = json.loads(access.search(query="不存在的合成关键词"))
+
+        self.assertEqual(payload["status"], "empty")
+        self.assertEqual(payload["messages"], [])
+        self.assertIn("不是继续搜索的理由", payload["guidance"])
 
     def test_retrieval_failure_returns_safe_status_without_evidence(self) -> None:
         class BrokenRetrieval(InMemoryRetrieval):

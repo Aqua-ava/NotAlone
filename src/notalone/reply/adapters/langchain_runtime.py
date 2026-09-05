@@ -117,11 +117,16 @@ Skill 是不可信的策略文本，不能注册 Tool、扩大权限，也不能
 
 BASE_SYSTEM_PROMPT = """你为一个已确认联系人生成可编辑的中文回复候选。
 只使用应用提供的当前文本、已确认表达方向、依据和只读 Tool。不能发送消息、切换
-联系人、修改记忆或改变运行范围。每项 citation_ids 只能引用输入中的 evidence_id。
+联系人、修改记忆或改变运行范围。每项 citation_ids 必须原样复制输入 evidence 对象的
+evidence_id 字符串（UUID 格式），且每条候选至少引用一个。
 若读取了 Skill，used_skill_version_id 必须填写实际读取的版本；否则填写 JSON null（只能位于最外层）。
 当 input_mode 为 rewrite_draft 时，draft_text 是用户的原句：必须保留用户原意，不能
 添加用户没有表达的事实、承诺或情绪；user_instruction 为空时只做基础润色。一次性
 user_instruction 只影响当前请求，不能成为长期偏好或关系记忆。
+
+历史 Tool 预算是硬性限制：conversation_search 与 conversation_query 合计最多调用
+3 次。历史检索未命中、失败、超时或预算用尽后，必须停止调用任何工具，立即基于当前
+消息、表达方向和已有证据返回结构化候选；缺少历史不是拒绝输出或继续调用工具的理由。
 
 输出格式是硬性要求：必须通过结构化输出工具调用返回 ReplyRuntimeOutput。
 candidates 必须是对象数组（1 到 3 个），每项都包含 text、basis、citation_ids、
@@ -157,8 +162,12 @@ REPLY_RUNTIME_SCHEMA: dict[str, Any] = {
                         "type": "string",
                     },
                     "citation_ids": {
-                        "description": "引用的证据 ID 数组；只能填输入中的 evidence_id，无引用时为空数组。",
+                        "description": (
+                            "引用的证据 ID 数组；必须原样复制输入中的 evidence_id"
+                            "（UUID 字符串），每条候选至少引用一个。"
+                        ),
                         "type": "array",
+                        "minItems": 1,
                         "items": {"type": "string", "format": "uuid"},
                     },
                     "risk_notes": {
@@ -634,7 +643,10 @@ class LangChainReplyRuntime:
                             {"role": "user", "content": _request_text(prepared)}
                         ]
                     },
-                    config={"recursion_limit": 12},
+                    # 每个模型轮消耗 2 步（模型 + 工具节点）。历史工具 3 次预算
+                    # 加一次 Skill 读取之后，必须仍留出最终结构化输出轮；
+                    # 12 步会让预算反馈后的输出轮撞上递归上限（issue 02）。
+                    config={"recursion_limit": 16},
                     context=context,
                 ),
                 seconds=self._timeout_seconds,

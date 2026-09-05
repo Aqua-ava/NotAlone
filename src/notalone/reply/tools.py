@@ -25,6 +25,28 @@ MAX_QUERY_WINDOW = 10
 MAX_HISTORY_TIMEOUT_MS = 1500
 MAX_HISTORY_TOKEN_BUDGET = 2048
 
+# 非成功状态的 Tool 返回必须给模型可操作的下一步指令，
+# 否则模型会把未命中或预算耗尽当作重试信号，耗尽运行步骤上限。
+_STATUS_GUIDANCE: dict[str, str] = {
+    "empty": (
+        "未命中不代表消息不存在，也不是继续搜索的理由。不要重复相同或相近的查询；"
+        "如确需更多语境，最多再换一个明显不同的查询词，然后必须停止调用任何工具，"
+        "立即基于当前消息、表达方向和已有证据返回结构化候选。"
+    ),
+    "budget_exceeded": (
+        "历史检索调用预算已用尽。禁止再调用任何历史工具；"
+        "立即基于当前消息、表达方向和已有证据返回结构化候选。"
+    ),
+    "failed": (
+        "历史工具本次调用失败。不要依赖该结果，也不要反复重试；"
+        "基于已有证据直接返回结构化候选。"
+    ),
+    "timeout": (
+        "历史工具本次调用超时。不要等待或重试；"
+        "基于已有证据直接返回结构化候选。"
+    ),
+}
+
 
 def _parse_datetime(value: str | None) -> datetime | None:
     if value is None or not value.strip():
@@ -334,14 +356,15 @@ class HistoryToolAccess:
 
     @staticmethod
     def _status_result(status: str, reason: str) -> str:
-        return json.dumps(
-            {
-                "status": status,
-                "evidence_type": "raw_message_evidence",
-                "executable": False,
-                "not_found_is_not_evidence": True,
-                "reason": reason,
-                "messages": [],
-            },
-            ensure_ascii=False,
-        )
+        guidance = _STATUS_GUIDANCE.get(status)
+        payload: dict[str, Any] = {
+            "status": status,
+            "evidence_type": "raw_message_evidence",
+            "executable": False,
+            "not_found_is_not_evidence": True,
+            "reason": reason,
+            "messages": [],
+        }
+        if guidance is not None:
+            payload["guidance"] = guidance
+        return json.dumps(payload, ensure_ascii=False)

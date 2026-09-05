@@ -3,23 +3,53 @@
 import asyncio
 import time
 import unittest
+from typing import Any
 
-from langchain_core.messages import AIMessage
+from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from notalone.retrieval import InMemoryRetrieval
 
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
-from notalone.reply.errors import ReplyRunError
+from notalone.reply.errors import ReplyBudgetError, ReplyRunError
 from tests.unit.reply.test_langchain_vertical_slice import (
     EmptySkillPort,
+    MESSAGE_ID,
     ToolCallingFakeModel,
 )
 from tests.unit.reply.test_ledger_wiring import _make_command, _make_context
 
 
-class RepeatingModel(ToolCallingFakeModel):
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+# 运行时限为 recursion_limit=16；真实模型每轮输出唯一 id 的 AIMessage，
+# 每轮消耗 2 步（模型 + 工具节点），因此工具循环最多 8 个模型轮。
+MAX_MODEL_ROUNDS = 8
+
+
+class FreshRepeatingModel(ToolCallingFakeModel):
+    """每轮生成全新 AIMessage（唯一 id），模拟真实模型的追加式消息历史。"""
+
+    tool_call: dict[str, Any]
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
         if len(self.seen_calls) >= 40:
             raise RuntimeError("合成测试保险上限，防止旧实现无限循环")
-        return super()._generate(messages, stop, run_manager, **kwargs)
+        self.seen_calls.append(messages)
+        return ChatResult(
+            generations=[
+                ChatGeneration(
+                    message=AIMessage(
+                        content="",
+                        tool_calls=[{**self.tool_call, "id": f"synthetic-{len(self.seen_calls)}"}],
+                    )
+                )
+            ]
+        )
 
 
 class SlowModel(ToolCallingFakeModel):
@@ -37,16 +67,16 @@ class SlowModel(ToolCallingFakeModel):
 class RuntimeLimitsTest(unittest.TestCase):
     def test_repeated_tool_calls_stop_within_reply_budget(self):
         context = _make_context(_make_command())
-        model = RepeatingModel(responses=[AIMessage(content="", tool_calls=[{
-            "name": "read_file", "args": {"file_path": "/missing/SKILL.md"},
-            "id": "synthetic-repeat",
-        }])])
+        model = FreshRepeatingModel(
+            tool_call={"name": "read_file", "args": {"file_path": "/missing/SKILL.md"}},
+            responses=[AIMessage(content="")],
+        )
         runtime = LangChainReplyRuntime(
             model=model, skill_port=EmptySkillPort(context.scope, 4),
         )
         with self.assertRaises(ReplyRunError):
             runtime.generate(context)
-        self.assertLessEqual(len(model.seen_calls), 12)
+        self.assertLessEqual(len(model.seen_calls), MAX_MODEL_ROUNDS)
 
     def test_slow_model_is_cancelled_before_returning_timeout(self):
         context = _make_context(_make_command())
@@ -61,3 +91,66 @@ class RuntimeLimitsTest(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 1)
         self.assertTrue(model.cancelled)
         self.assertEqual(model.seen_calls, [])
+
+    def test_search_loop_still_outputs_after_budget_exhaustion(self):
+        """回归 issue 02：历史检索预算耗尽后必须仍能产出最终结构化候选。"""
+
+        context = _make_context(_make_command())
+        responses = [
+            AIMessage(content="", tool_calls=[{
+                "name": "read_file", "args": {"file_path": "/missing/SKILL.md"},
+                "id": "synthetic-skill-read",
+            }]),
+        ]
+        for index in range(5):
+            responses.append(AIMessage(content="", tool_calls=[{
+                "name": "conversation_search",
+                "args": {"query": f"合成查询词 {index}"},
+                "id": f"synthetic-search-{index}",
+            }]))
+        responses.append(AIMessage(content="", tool_calls=[{
+            "name": "ReplyRuntimeOutput",
+            "args": {
+                "candidates": [{
+                    "text": "基于已有证据的合成候选。",
+                    "basis": "历史检索未命中，使用当前文本与既有依据。",
+                    "citation_ids": [str(MESSAGE_ID)],
+                    "risk_notes": [],
+                }],
+                "used_skill_version_id": None,
+            },
+            "id": "synthetic-final-output",
+        }]))
+        model = ToolCallingFakeModel(responses=responses)
+        runtime = LangChainReplyRuntime(
+            model=model,
+            skill_port=EmptySkillPort(context.scope, 4),
+            retrieval=InMemoryRetrieval(),
+        )
+        result = runtime.generate(context)
+
+        self.assertEqual(len(model.seen_calls), 7)
+        self.assertEqual(len(result.candidates), 1)
+        self.assertEqual(result.candidates[0].text, "基于已有证据的合成候选。")
+        statuses = [trace.status for trace in result.tool_calls]
+        self.assertEqual(
+            statuses,
+            ["empty", "empty", "empty", "budget_exceeded", "budget_exceeded"],
+        )
+
+    def test_model_that_never_outputs_stays_bounded(self):
+        """历史检索无限重试仍必须在步骤上限内以预算错误收尾。"""
+
+        context = _make_context(_make_command())
+        model = FreshRepeatingModel(
+            tool_call={"name": "conversation_search", "args": {"query": "合成查询"}},
+            responses=[AIMessage(content="")],
+        )
+        runtime = LangChainReplyRuntime(
+            model=model,
+            skill_port=EmptySkillPort(context.scope, 4),
+            retrieval=InMemoryRetrieval(),
+        )
+        with self.assertRaises(ReplyBudgetError):
+            runtime.generate(context)
+        self.assertLessEqual(len(model.seen_calls), MAX_MODEL_ROUNDS)
