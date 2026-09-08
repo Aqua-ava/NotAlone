@@ -978,6 +978,12 @@ class CliBackgroundSync:
         if existing is not None:
             self._last_backfill_state = existing
 
+        # 暂停后仍会有正常后台心跳；不能因为失败状态不是 paused，
+        # 就在 _read_binding 的暂停判断之前把它重新写成 backfilling。
+        # 新的显式检查会带 trigger_at，届时由 retry_backfill 明确解除暂停。
+        if self._backfill_paused and trigger_at is None:
+            return existing
+
         if trigger_at is None and disabled_window is None:
             if existing is None:
                 return None

@@ -740,6 +740,31 @@ class CliBackgroundSyncTest(unittest.TestCase):
         self.assertEqual(resumed.status.backfill_total_contacts, 2)
         self.assertEqual(resumed.status.backfill_total_message_count, 1)
 
+    def test_paused_failed_backfill_does_not_reenter_running(self) -> None:
+        self.sync.cycle(enabled=True)
+        failed_contact = self.bindings[0].contact_id
+        self.backfill_store.states[(OWNER_ID, failed_contact)] = _BackfillState(
+            failed_contact,
+            "failed",
+            self.now,
+            failure_code="cli_command_failed",
+        )
+        self.sync.request_backfill_check()
+        self.sync.pause_backfill()
+        self.cli.tail_calls.clear()
+
+        result = self.sync.cycle(enabled=True)
+
+        self.assertEqual(
+            self.backfill_store.states[(OWNER_ID, failed_contact)].phase,
+            "failed",
+        )
+        self.assertNotIn(
+            "wxid_a",
+            [call["talker"] for call in self.cli.tail_calls],
+        )
+        self.assertEqual(result.status.backfill_phase, "failed")
+
     def test_global_stream_failure_falls_back_to_bounded_one_shot_reads(self) -> None:
         self.cli.session_events_follow = lambda **kwargs: (_ for _ in ()).throw(
             CliCommandError("cli_follow_unsupported", "不可用")
