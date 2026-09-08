@@ -404,6 +404,35 @@ class CliBackgroundSyncTest(unittest.TestCase):
             f"wxid_{index}" for index in range(1, 10)
         })
 
+    def test_backfill_check_does_not_requeue_completed_contacts(self) -> None:
+        bindings = [
+            FakeBinding(uuid4(), uuid4(), f"wxid_{index}", f"联系人{index}")
+            for index in range(33)
+        ]
+        cli = FakeCli(stream_events=[])
+        store = FakeObservationStore()
+        backfill_store = FakeBackfillStateStore()
+        sync = CliBackgroundSync(
+            owner_id=OWNER_ID,
+            channel="wechat",
+            account_scope="wx-account",
+            cli=cli,
+            bindings=bindings,
+            observation_store=store,
+            backfill_state=backfill_store,
+            sync_state=self.sync_state,
+            clock=lambda: self.now,
+        )
+
+        first = sync.cycle(enabled=True)
+        second = sync.cycle(enabled=True)
+
+        self.assertEqual(first.status.pending_count, 1)
+        self.assertEqual(second.status.pending_count, 0)
+        self.assertEqual(second.status.backfill_phase, "complete")
+        self.assertEqual(second.status.backfill_completed_contacts, 33)
+        self.assertEqual(len(cli.tail_calls), 33)
+
     def test_new_binding_uses_baseline_then_next_cycle_uses_contact_cursor(self) -> None:
         self.sync.cycle(enabled=True)
         self.cli.tail_results["wxid_a"] = deque(
@@ -709,6 +738,64 @@ class CliBackgroundSyncTest(unittest.TestCase):
         self.assertEqual(result.status.backfill_phase, "paused")
         self.assertEqual(self.cli.tail_calls, [])
 
+    def test_paused_backfill_still_reads_a_live_session_event(self) -> None:
+        self.sync.cycle(enabled=True)
+        self.sync.request_backfill_check()
+        self.sync.pause_backfill()
+        self.cli.tail_calls.clear()
+        self.cli.tail_results["wxid_a"] = deque(
+            [
+                TailResult(
+                    events=(_message("wxid_a", 11, "暂停补齐后实时消息"),),
+                    cursor="local_id:11",
+                    last_local_id=11,
+                    freshness_confirmed=True,
+                )
+            ]
+        )
+        assert self.cli.stream is not None
+        self.cli.stream.events.append(("session:live-after-pause", "wxid_a"))
+
+        result = self.sync.cycle(enabled=True)
+
+        self.assertEqual(result.batch_message_count, 1)
+        self.assertEqual(
+            self.store.cursors[(OWNER_ID, self.binding_a.contact_id)].last_local_id,
+            11,
+        )
+        self.assertEqual(
+            self.backfill_store.states[(OWNER_ID, self.binding_a.contact_id)].phase,
+            "paused",
+        )
+
+    def test_paused_backfill_still_reads_a_safety_sweep(self) -> None:
+        self.sync.cycle(enabled=True)
+        self.sync.request_backfill_check()
+        self.sync.pause_backfill()
+        self.cli.tail_calls.clear()
+        self.cli.tail_results["wxid_a"] = deque(
+            [
+                TailResult(
+                    events=(_message("wxid_a", 12, "暂停补齐后对账消息"),),
+                    cursor="local_id:12",
+                    last_local_id=12,
+                    freshness_confirmed=True,
+                )
+            ]
+        )
+
+        result = self.sync.cycle(enabled=True)
+
+        self.assertEqual(result.batch_message_count, 1)
+        self.assertEqual(
+            self.store.cursors[(OWNER_ID, self.binding_a.contact_id)].last_local_id,
+            12,
+        )
+        self.assertEqual(
+            self.backfill_store.states[(OWNER_ID, self.binding_a.contact_id)].phase,
+            "paused",
+        )
+
     def test_pause_then_retry_resumes_from_a_new_bounded_check(self) -> None:
         self.sync.cycle(enabled=True)
         self.sync.request_backfill_check()
@@ -718,7 +805,10 @@ class CliBackgroundSyncTest(unittest.TestCase):
         paused = self.sync.cycle(enabled=True)
 
         self.assertEqual(paused.status.backfill_phase, "paused")
-        self.assertEqual(self.cli.tail_calls, [])
+        self.assertEqual(
+            [call["talker"] for call in self.cli.tail_calls],
+            ["wxid_a", "wxid_b"],
+        )
 
         self.sync.retry_backfill()
         self.cli.tail_results["wxid_a"] = deque(
@@ -759,9 +849,9 @@ class CliBackgroundSyncTest(unittest.TestCase):
             self.backfill_store.states[(OWNER_ID, failed_contact)].phase,
             "failed",
         )
-        self.assertNotIn(
-            "wxid_a",
+        self.assertEqual(
             [call["talker"] for call in self.cli.tail_calls],
+            ["wxid_a", "wxid_b"],
         )
         self.assertEqual(result.status.backfill_phase, "failed")
 

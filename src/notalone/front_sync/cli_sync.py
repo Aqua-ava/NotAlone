@@ -203,6 +203,7 @@ class CliBackgroundSync:
         "_last_sweep_at",
         "_pending_locators",
         "_pending_locator_set",
+        "_live_pending_locators",
         "_failure_code",
         "_last_bound_count",
         "_cli_version",
@@ -249,6 +250,9 @@ class CliBackgroundSync:
         self._last_sweep_at: datetime | None = None
         self._pending_locators: deque[str] = deque()
         self._pending_locator_set: set[str] = set()
+        # 同一联系人可能同时有补齐任务和实时事件；实时事件优先读取，
+        # 但不能因此丢掉尚未完成的补齐任务。
+        self._live_pending_locators: set[str] = set()
         self._failure_code: str | None = None
         self._last_bound_count = 0
         self._cli_version: str | None = None
@@ -321,8 +325,12 @@ class CliBackgroundSync:
 
         by_locator = {binding.conversation_locator: binding for binding in bindings}
         if self._backfill_check_requested:
-            self._backfill_pending_locators.update(by_locator)
-        self._backfill_pending_locators.intersection_update(by_locator)
+            # 只有新请求才初始化整批联系人。大于单轮预算时，后续心跳
+            # 必须保留尚未处理的集合，不能把已完成联系人重新加入。
+            if not self._backfill_pending_locators:
+                self._backfill_pending_locators.update(by_locator)
+            else:
+                self._backfill_pending_locators.intersection_update(by_locator)
         for binding in bindings:
             try:
                 self._observation_store.ensure_baseline(
@@ -357,6 +365,8 @@ class CliBackgroundSync:
         while self._pending_locators and processed < _MAX_BINDINGS_PER_CYCLE:
             locator = self._pending_locators.popleft()
             self._pending_locator_set.discard(locator)
+            live_read = locator in self._live_pending_locators
+            self._live_pending_locators.discard(locator)
             binding = by_locator.get(locator)
             if binding is None:
                 continue
@@ -368,6 +378,7 @@ class CliBackgroundSync:
                     backfill_trigger_at=self._backfill_trigger_at
                     if self._backfill_check_requested
                     else None,
+                    live_read=live_read,
                 )
             except CliNormalizationError:
                 self._failure_code = "cli_normalization_failed"
@@ -466,6 +477,7 @@ class CliBackgroundSync:
         self._close_stream()
         self._pending_locators.clear()
         self._pending_locator_set.clear()
+        self._live_pending_locators.clear()
         self._initial_scan_done = False
         self._sweep_index = 0
         self._last_sweep_at = None
@@ -490,7 +502,7 @@ class CliBackgroundSync:
         self._last_sweep_at = None
 
     def pause_backfill(self) -> None:
-        """暂停补齐读取，保留每个联系人已经成功提交的进度。"""
+        """暂停补齐读取，但实时事件和安全对账仍可推进普通 cursor。"""
 
         store = self._backfill_state
         if store is None:
@@ -604,6 +616,10 @@ class CliBackgroundSync:
         stream = self._stream
         if stream is None:
             return
+        # 新建全局流时 cursor 为空，CLI 可能先输出一批当前会话快照；
+        # 这些事件由本轮初始化/补齐检查处理，不能在用户暂停补齐后
+        # 被误当成刚到达的实时事件。流已有水位后才把事件标为 live。
+        live_events = self._global_cursor is not None
         try:
             for _ in range(_MAX_EVENTS_PER_CYCLE):
                 event = stream.read(timeout=0.01)
@@ -611,13 +627,15 @@ class CliBackgroundSync:
                     break
                 self._global_cursor = event.cursor
                 if event.conversation_locator in by_locator:
-                    self._enqueue(event.conversation_locator)
+                    self._enqueue(event.conversation_locator, live=live_events)
         except CliAdapterError as error:
             self._failure_code = error.code
             self._close_stream()
             self._stream_supported = False
 
-    def _enqueue(self, locator: str) -> None:
+    def _enqueue(self, locator: str, *, live: bool = False) -> None:
+        if live:
+            self._live_pending_locators.add(locator)
         if locator in self._pending_locator_set:
             return
         self._pending_locator_set.add(locator)
@@ -656,11 +674,12 @@ class CliBackgroundSync:
         priority_contact_id: UUID | None,
     ) -> None:
         if not self._initial_scan_done:
+            live = not self._backfill_check_requested
             for binding in self._ordered_bindings(
                 bindings,
                 priority_contact_id=priority_contact_id,
             ):
-                self._enqueue(binding.conversation_locator)
+                self._enqueue(binding.conversation_locator, live=live)
             self._initial_scan_done = True
             # 初始化批次可能尚未在本轮全部处理完；从此刻开始计时，
             # 避免初始化刚结束就立刻再发起一批安全 CLI 进程。
@@ -671,7 +690,8 @@ class CliBackgroundSync:
                 bindings,
                 priority_contact_id=priority_contact_id,
             ):
-                self._enqueue(binding.conversation_locator)
+                if binding.conversation_locator in self._backfill_pending_locators:
+                    self._enqueue(binding.conversation_locator)
             self._last_sweep_at = self._clock()
             return
         if self._pending_locators:
@@ -723,7 +743,7 @@ class CliBackgroundSync:
         start = self._sweep_index % len(remaining)
         for offset in range(count):
             binding = remaining[(start + offset) % len(remaining)]
-            self._enqueue(binding.conversation_locator)
+            self._enqueue(binding.conversation_locator, live=True)
         self._sweep_index = (start + count) % len(remaining)
 
     @staticmethod
@@ -766,6 +786,7 @@ class CliBackgroundSync:
         *,
         disabled_window: tuple[float, float] | None,
         backfill_trigger_at: datetime | None,
+        live_read: bool,
     ) -> int:
         contact_id = binding.scope.contact_id
         backfill_state = self._prepare_backfill_state(
@@ -776,13 +797,16 @@ class CliBackgroundSync:
         backfill_phase = _backfill_phase_value(
             getattr(backfill_state, "phase", None)
         )
-        if self._backfill_paused and backfill_phase not in {
-            None,
-            BackfillPhase.COMPLETE.value,
-        }:
-            return 0
-        if backfill_phase == BackfillPhase.PAUSED.value:
-            return 0
+        backfill_suppressed = backfill_phase == BackfillPhase.PAUSED.value or (
+            self._backfill_paused
+            and backfill_phase not in {None, BackfillPhase.COMPLETE.value}
+        )
+        if backfill_suppressed:
+            if not live_read:
+                return 0
+            # “暂停补齐”不应关闭已开启的实时同步；这次读取只推进
+            # 普通联系人 cursor，不改变 paused/failed 的补齐生命周期。
+            backfill_state = None
         cursor = self._reconcile_cursor(binding)
         kwargs: dict[str, object] = {}
         if cursor is not None:
