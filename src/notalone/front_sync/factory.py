@@ -27,6 +27,7 @@ from notalone.front_sync.sync_engine import FrontSyncEngine
 from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
 )
+from notalone.persistence.backfill_state import PostgresBackfillStateStore
 from notalone.persistence.front_sync_state import PostgresFrontSyncStateStore
 from notalone.persistence.observation_store import PostgresObservationStore
 from notalone.wechat_cli import LocalWechatCli
@@ -141,6 +142,7 @@ def build_cli_full_sync_engine(
         cli=cli,
         bindings=bindings,
         observation_store=observation_store,
+        backfill_state=PostgresBackfillStateStore(database_url),
         sync_state=sync_state,
         message_events=message_events,
         clock=clock,

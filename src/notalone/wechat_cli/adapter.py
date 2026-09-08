@@ -512,31 +512,44 @@ def _requires_key_refresh(message: str | None) -> bool:
 
 def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
     events: list[CliMessageEvent] = []
-    cursor: str | None = None
     last_local_id: int | None = None
+    last_cursor: str | None = None
+    event_count = 0
+    non_text_count = 0
     lines = [line for line in stdout.splitlines() if line.strip()]
     if not lines:
         # 轮询没有新消息是正常结果；调用方保持既有水位。
-        return TailResult(events=(), cursor=None, last_local_id=None)
+        return TailResult(
+            events=(),
+            cursor=None,
+            last_local_id=None,
+            freshness_confirmed=False,
+        )
     for line in lines:
         if not line.strip():
             continue
         item = _parse_follow_line(line, expected_talker=expected_talker)
         if item is None:
             raise CliOutputError("cli_output_invalid", "微信 CLI 返回了不支持的事件。")
-        cursor = item.cursor
+        event_count += 1
         local_id = item.local_id
-        # 文字与非文字事件都参与水位推进，且只取最大值，防止乱序回退。
+        # 文字与非文字事件都参与水位推进；cursor 必须和选出的最大
+        # local_id 来自同一条事件，不能在 JSONL 乱序时取最后一行。
         if last_local_id is None or local_id > last_local_id:
             last_local_id = local_id
+            last_cursor = item.cursor
         if item.event is None:
             # 非文字事件只前移水位，不产生可写消息。
+            non_text_count += 1
             continue
         events.append(item.event)
     return TailResult(
         events=tuple(events),
-        cursor=cursor,
+        cursor=last_cursor,
         last_local_id=last_local_id,
+        event_count=event_count,
+        non_text_count=non_text_count,
+        freshness_confirmed=True,
     )
 
 

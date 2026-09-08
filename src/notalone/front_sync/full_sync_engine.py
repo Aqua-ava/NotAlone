@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Protocol
 from uuid import UUID
 
@@ -70,6 +70,7 @@ class CliFullSyncEngine:
         "_fallback",
         "_clock",
         "_cli_status",
+        "_cli_last_checked_at",
         "_last_foreground_status",
     )
 
@@ -100,10 +101,16 @@ class CliFullSyncEngine:
         self._fallback = fallback
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._cli_status: tuple[bool, str | None] | None = None
+        self._cli_last_checked_at: datetime | None = None
         self._last_foreground_status: ForegroundLocatorStatus | None = None
 
     def enable_sync(self) -> None:
         self._sync_state.enable(owner_id=self._owner_id, at=self._clock())
+        self._cli_status = None
+        self._cli_last_checked_at = None
+        request = getattr(self._background, "request_backfill_check", None)
+        if callable(request):
+            request()
 
     def disable_sync(self) -> None:
         self._sync_state.disable(owner_id=self._owner_id, at=self._clock())
@@ -133,13 +140,40 @@ class CliFullSyncEngine:
     def request_sync_check(self) -> None:
         """让手动检查绕过安全对账的低频等待，但仍按固定预算读取。"""
 
-        self._background.request_safety_sweep()
+        self._cli_status = None
+        self._cli_last_checked_at = None
+        request = getattr(self._background, "request_backfill_check", None)
+        if callable(request):
+            request()
+        else:
+            self._background.request_safety_sweep()
+
+    def pause_backfill(self) -> None:
+        """暂停后台补齐，不改变同步开关或前台定位状态。"""
+
+        pause = getattr(self._background, "pause_backfill", None)
+        if not callable(pause):
+            raise RuntimeError("后台补齐控制不可用。")
+        pause()
+
+    def retry_backfill(self) -> None:
+        """恢复后台补齐并从可靠位置重新检查。"""
+
+        self._cli_status = None
+        self._cli_last_checked_at = None
+        retry = getattr(self._background, "retry_backfill", None)
+        if not callable(retry):
+            raise RuntimeError("后台补齐控制不可用。")
+        retry()
 
     def cycle(self) -> FrontSyncCycleReport:
         enabled = self.sync_enabled()
-        background: CliSyncCycleResult = self._background.cycle(enabled=enabled)
         foreground: ForegroundLocatorStatus = self._foreground.observe(enabled=enabled)
         self._last_foreground_status = foreground
+        background: CliSyncCycleResult = self._background.cycle(
+            enabled=enabled,
+            priority_contact_id=foreground.active_contact_id,
+        )
         return self._build_report(
             enabled=enabled,
             background=background,
@@ -185,6 +219,21 @@ class CliFullSyncEngine:
             cli_pending_count=background.status.pending_count,
             cli_batch_message_count=background.batch_message_count,
             cli_failure_code=background.status.failure_code,
+            cli_backfill_phase=background.status.backfill_phase,
+            cli_backfill_contact_id=background.status.backfill_contact_id,
+            cli_backfill_message_count=background.status.backfill_message_count,
+            cli_backfill_non_text_count=background.status.backfill_non_text_count,
+            cli_backfill_last_cursor=background.status.backfill_last_cursor,
+            cli_backfill_failure_code=background.status.backfill_failure_code,
+            cli_backfill_total_contacts=background.status.backfill_total_contacts,
+            cli_backfill_completed_contacts=background.status.backfill_completed_contacts,
+            cli_backfill_succeeded_contacts=background.status.backfill_succeeded_contacts,
+            cli_backfill_skipped_contacts=background.status.backfill_skipped_contacts,
+            cli_backfill_failed_contacts=background.status.backfill_failed_contacts,
+            cli_backfill_incomplete_contacts=background.status.backfill_incomplete_contacts,
+            cli_backfill_pending_contacts=background.status.backfill_pending_contacts,
+            cli_backfill_total_message_count=background.status.backfill_total_message_count,
+            cli_backfill_total_non_text_count=background.status.backfill_total_non_text_count,
             foreground_phase=foreground.phase.value,
             foreground_failure_code=foreground.failure_code,
         )
@@ -204,11 +253,22 @@ class CliFullSyncEngine:
         self._binding_coordinator.confirm(selections)
         # 新绑定不应等待下一次低频安全对账；仍由后台自己的 cursor、
         # 初始 baseline 和固定批量上限决定实际读取范围。
-        self._background.request_safety_sweep()
+        request = getattr(self._background, "request_backfill_check", None)
+        if callable(request):
+            request()
+        else:
+            self._background.request_safety_sweep()
         # 批量绑定在 NotAlone 界面完成，不应为了返回状态再次触发
         # 屏幕录制/OCR；沿用最近一次前台状态，后台通道立即刷新。
         enabled = self.sync_enabled()
-        background = self._background.cycle(enabled=enabled)
+        background = self._background.cycle(
+            enabled=enabled,
+            priority_contact_id=(
+                None
+                if self._last_foreground_status is None
+                else self._last_foreground_status.active_contact_id
+            ),
+        )
         foreground = self._last_foreground_status or _unknown_foreground_status(enabled)
         return self._build_report(
             enabled=enabled,
@@ -244,13 +304,23 @@ class CliFullSyncEngine:
         )
 
     def _cli_availability(self) -> tuple[bool, str | None]:
-        if self._cli_status is None:
+        now = self._clock()
+        retry_unavailable = (
+            self._cli_status is not None
+            and not self._cli_status[0]
+            and (
+                self._cli_last_checked_at is None
+                or now >= self._cli_last_checked_at + timedelta(seconds=15)
+            )
+        )
+        if self._cli_status is None or retry_unavailable:
             try:
                 self._cli.version()
             except CliAdapterError as error:
                 self._cli_status = (False, error.code)
             else:
                 self._cli_status = (True, None)
+            self._cli_last_checked_at = now
         return self._cli_status
 
 

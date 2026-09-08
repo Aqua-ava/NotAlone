@@ -335,6 +335,7 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
         self.assertEqual(result.events[0].text, "合成消息")
         self.assertFalse(result.events[0].is_from_me)
         self.assertEqual(result.events[0].kind, "text")
+        self.assertTrue(result.freshness_confirmed)
         self.assertEqual(
             runner.calls[0],
             (
@@ -373,6 +374,42 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
         self.assertEqual(result.cursor, "local_id:43")
         # 非文字事件不进规范消息，但水位仍然前移。
         self.assertEqual(result.last_local_id, 43)
+        self.assertEqual(result.event_count, 1)
+        self.assertEqual(result.non_text_count, 1)
+        self.assertTrue(result.freshness_confirmed)
+
+    def test_tail_pairs_cursor_with_maximum_local_id_when_output_is_unordered(self) -> None:
+        def event(local_id: int, cursor: str) -> str:
+            return json.dumps(
+                {
+                    "type": "message",
+                    "cursor": cursor,
+                    "message": {
+                        "id": {"local_id": local_id, "talker": "wxid_1"},
+                        "kind": "text",
+                        "text": f"消息 {local_id}",
+                        "is_from_me": False,
+                    },
+                },
+                ensure_ascii=False,
+            )
+
+        runner = RecordingRunner(
+            FakeCommandResult(
+                returncode=0,
+                stdout="\n".join(
+                    [
+                        event(44, "local_id:44"),
+                        event(43, "local_id:43"),
+                    ]
+                ),
+            )
+        )
+
+        result = LocalWechatCli(runner=runner).tail("wxid_1")
+
+        self.assertEqual(result.last_local_id, 44)
+        self.assertEqual(result.cursor, "local_id:44")
 
     def test_sessions_preserves_matching_metadata(self) -> None:
         runner = RecordingRunner(
@@ -494,6 +531,7 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
         self.assertEqual(result.events, ())
         self.assertIsNone(result.cursor)
         self.assertIsNone(result.last_local_id)
+        self.assertFalse(result.freshness_confirmed)
 
     def test_empty_cursor_is_rejected_before_command(self) -> None:
         runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=""))

@@ -16,6 +16,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var backendState: BackendState = .launching
     @Published private(set) var contacts: [ContactEntry] = []
     @Published private(set) var status: SyncStatus?
+    @Published private(set) var backfillControlInFlight = false
     @Published private(set) var cliSessions: [CliSessionCandidate] = []
     @Published private(set) var cliSessionsInFlight = false
     @Published var cliSessionsError: String?
@@ -463,6 +464,48 @@ final class AppModel: ObservableObject {
                 lastOperationMessage = "已执行一次 CLI 同步检查"
             } catch {
                 lastOperationMessage = "检查失败：\(Self.describe(error))"
+            }
+        }
+    }
+
+    func pauseBackfill() {
+        guard !backfillControlInFlight else {
+            lastOperationMessage = "补齐控制进行中，请稍候"
+            return
+        }
+        guard let client else {
+            lastOperationMessage = "后端正在连接，请稍候"
+            return
+        }
+        backfillControlInFlight = true
+        Task {
+            defer { backfillControlInFlight = false }
+            do {
+                status = try await client.pauseBackfill()
+                lastOperationMessage = "已暂停 CLI 后台补齐；未完成状态会保留"
+            } catch {
+                lastOperationMessage = "暂停补齐失败：\(Self.describe(error))"
+            }
+        }
+    }
+
+    func retryBackfill() {
+        guard !backfillControlInFlight else {
+            lastOperationMessage = "补齐控制进行中，请稍候"
+            return
+        }
+        guard let client else {
+            lastOperationMessage = "后端正在连接，请稍候"
+            return
+        }
+        backfillControlInFlight = true
+        Task {
+            defer { backfillControlInFlight = false }
+            do {
+                status = try await client.retryBackfill()
+                lastOperationMessage = "已请求恢复 CLI 后台补齐"
+            } catch {
+                lastOperationMessage = "重试补齐失败：\(Self.describe(error))"
             }
         }
     }

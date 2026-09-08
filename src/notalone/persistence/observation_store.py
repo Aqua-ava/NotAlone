@@ -103,6 +103,9 @@ class PersistedObservation:
     record_count: int
     since_local_id: int | None = None
     since_cursor: str | None = None
+    event_count: int = 0
+    non_text_count: int = 0
+    is_reliable: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,7 +200,8 @@ def advance_observation_cursor(
 _OBSERVATION_COLUMNS = (
     "id, owner_id, contact_id, binding_id, mode, cli_version, "
     "conversation_locator, read_at, since_local_id, last_local_id, "
-    "since_cursor, last_cursor, record_count"
+    "since_cursor, last_cursor, record_count, event_count, non_text_count, "
+    "is_reliable"
 )
 
 
@@ -244,6 +248,121 @@ class PostgresObservationStore:
             last_cursor=last_cursor,
             updated_at=updated_at,
         )
+
+    def read_reliable_cursor(
+        self,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        binding_id: UUID,
+    ) -> ObservationCursor | None:
+        """读取该绑定最近一个成功提交的来源批次水位。"""
+
+        self._validate_scope(owner_id=owner_id, contact_id=contact_id)
+        if not isinstance(binding_id, UUID):
+            raise TypeError("binding_id 必须是 UUID。")
+        try:
+            with self._connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT conversation_locator, last_local_id, last_cursor, read_at
+                    FROM public.local_wechat_observation
+                    WHERE owner_id = %s
+                      AND contact_id = %s
+                      AND binding_id = %s
+                      AND is_reliable
+                    ORDER BY last_local_id DESC, read_at DESC, id DESC
+                    LIMIT 1
+                    """,
+                    (owner_id, contact_id, binding_id),
+                ).fetchone()
+        except psycopg.Error:
+            raise ObservationPersistenceError("可靠观察水位读取失败。") from None
+        if row is None:
+            return None
+        locator, last_local_id, last_cursor, updated_at = row
+        if not isinstance(locator, str) or not isinstance(last_cursor, str):
+            raise ObservationPersistenceError("数据库返回的可靠水位无效。")
+        return ObservationCursor(
+            scope=ContactScope(owner_id=owner_id, contact_id=contact_id),
+            binding_id=binding_id,
+            conversation_locator=locator,
+            last_local_id=last_local_id,
+            last_cursor=last_cursor,
+            updated_at=updated_at,
+        )
+
+    def rewind_cursor(
+        self,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        binding_id: UUID,
+        target: ObservationCursor | None,
+    ) -> None:
+        """把超前游标回退到可靠位置；没有可靠位置时回到 baseline。"""
+
+        self._validate_scope(owner_id=owner_id, contact_id=contact_id)
+        if not isinstance(binding_id, UUID):
+            raise TypeError("binding_id 必须是 UUID。")
+        if target is not None:
+            if not isinstance(target, ObservationCursor):
+                raise TypeError("target 必须是 ObservationCursor 或 None。")
+            if target.scope != ContactScope(owner_id=owner_id, contact_id=contact_id):
+                raise ObservationPersistenceError("可靠水位超出联系人范围。")
+            if target.binding_id != binding_id:
+                raise ObservationPersistenceError("可靠水位不属于当前绑定。")
+        try:
+            with self._connect() as connection:
+                assert_binding_active(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    binding_id=binding_id,
+                )
+                lock_contact_scope(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                )
+                if target is None:
+                    connection.execute(
+                        """
+                        DELETE FROM public.wechat_observation_cursor
+                        WHERE owner_id = %s AND contact_id = %s
+                        """,
+                        (owner_id, contact_id),
+                    )
+                else:
+                    connection.execute(
+                        """
+                        INSERT INTO public.wechat_observation_cursor (
+                            owner_id, contact_id, binding_id, conversation_locator,
+                            last_local_id, last_cursor
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (owner_id, contact_id)
+                        DO UPDATE SET
+                            binding_id = EXCLUDED.binding_id,
+                            conversation_locator = EXCLUDED.conversation_locator,
+                            last_local_id = EXCLUDED.last_local_id,
+                            last_cursor = EXCLUDED.last_cursor,
+                            updated_at = now()
+                        """,
+                        (
+                            owner_id,
+                            contact_id,
+                            binding_id,
+                            target.conversation_locator,
+                            target.last_local_id,
+                            target.last_cursor,
+                        ),
+                    )
+                connection.commit()
+        except ObservationPersistenceError:
+            raise
+        except psycopg.Error:
+            raise ObservationPersistenceError("观察水位回退失败。") from None
 
     def ensure_baseline(
         self,
@@ -369,6 +488,8 @@ class PostgresObservationStore:
         record_count: int,
         since_local_id: int | None = None,
         since_cursor: str | None = None,
+        event_count: int | None = None,
+        non_text_count: int = 0,
     ) -> PersistedObservation:
         """在同一事务写入来源并前移水位；同一批次重试保持幂等。"""
 
@@ -382,7 +503,10 @@ class PostgresObservationStore:
             record_count=record_count,
             since_local_id=since_local_id,
             since_cursor=since_cursor,
+            event_count=event_count,
+            non_text_count=non_text_count,
         )
+        event_count = record_count if event_count is None else event_count
         self._validate_scope(owner_id=owner_id, contact_id=contact_id)
 
         try:
@@ -406,6 +530,8 @@ class PostgresObservationStore:
                     since_cursor=since_cursor,
                     last_cursor=last_cursor,
                     record_count=record_count,
+                    event_count=event_count,
+                    non_text_count=non_text_count,
                 )
                 if created:
                     self._advance_cursor(
@@ -480,6 +606,8 @@ class PostgresObservationStore:
         messages: tuple[NormalizedMessage, ...],
         since_local_id: int | None = None,
         since_cursor: str | None = None,
+        event_count: int | None = None,
+        non_text_count: int = 0,
     ) -> RecordedObservationBatch:
         """在同一事务写入观察来源、前移水位并写入规范消息。
 
@@ -497,7 +625,10 @@ class PostgresObservationStore:
             record_count=record_count,
             since_local_id=since_local_id,
             since_cursor=since_cursor,
+            event_count=event_count,
+            non_text_count=non_text_count,
         )
+        event_count = record_count if event_count is None else event_count
         self._validate_scope(owner_id=owner_id, contact_id=contact_id)
 
         try:
@@ -521,17 +652,18 @@ class PostgresObservationStore:
                     since_cursor=since_cursor,
                     last_cursor=last_cursor,
                     record_count=record_count,
+                    event_count=event_count,
+                    non_text_count=non_text_count,
                 )
-                if created:
-                    self._advance_cursor(
-                        connection,
-                        owner_id=owner_id,
-                        contact_id=contact_id,
-                        binding_id=binding_id,
-                        conversation_locator=conversation_locator,
-                        last_local_id=last_local_id,
-                        last_cursor=last_cursor,
-                    )
+                self._advance_cursor_if_needed(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    binding_id=binding_id,
+                    conversation_locator=conversation_locator,
+                    last_local_id=last_local_id,
+                    last_cursor=last_cursor,
+                )
                 lock_contact_scope(
                     connection,
                     owner_id=owner_id,
@@ -643,6 +775,8 @@ class PostgresObservationStore:
         record_count: int,
         since_local_id: int | None,
         since_cursor: str | None,
+        event_count: int | None,
+        non_text_count: int,
     ) -> None:
         """观察批次写入前的共享参数校验；非法水位失败关闭。"""
 
@@ -659,6 +793,22 @@ class PostgresObservationStore:
             raise ObservationWatermarkError("成功水位 local_id 必须是正整数。")
         if not isinstance(record_count, int) or record_count < 0:
             raise ValueError("record_count 必须是非负整数。")
+        if event_count is not None and (
+            isinstance(event_count, bool)
+            or not isinstance(event_count, int)
+            or event_count < 0
+        ):
+            raise ValueError("event_count 必须是非负整数或 None。")
+        if event_count is not None and event_count < record_count:
+            raise ValueError("event_count 不能少于文字消息数。")
+        if (
+            isinstance(non_text_count, bool)
+            or not isinstance(non_text_count, int)
+            or non_text_count < 0
+        ):
+            raise ValueError("non_text_count 必须是非负整数。")
+        if event_count is not None and non_text_count > event_count:
+            raise ValueError("non_text_count 不能超过事件数。")
         if since_local_id is not None and (
             not isinstance(since_local_id, int) or since_local_id <= 0
         ):
@@ -686,6 +836,8 @@ class PostgresObservationStore:
         since_cursor: str | None,
         last_cursor: str,
         record_count: int,
+        event_count: int,
+        non_text_count: int,
     ) -> tuple[PersistedObservation, bool]:
         """幂等写入观察来源；返回来源与是否首次写入（决定是否前移水位）。"""
 
@@ -694,9 +846,10 @@ class PostgresObservationStore:
             INSERT INTO public.local_wechat_observation (
                 owner_id, contact_id, binding_id, mode, cli_version,
                 conversation_locator, since_local_id, last_local_id,
-                since_cursor, last_cursor, record_count
+                since_cursor, last_cursor, record_count,
+                event_count, non_text_count, is_reliable
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true)
             ON CONFLICT (owner_id, contact_id, binding_id, mode,
                          COALESCE(since_local_id, 0), last_local_id)
             DO NOTHING
@@ -714,6 +867,8 @@ class PostgresObservationStore:
                 since_cursor,
                 last_cursor,
                 record_count,
+                event_count,
+                non_text_count,
             ),
         ).fetchone()
         if inserted is None:
@@ -740,7 +895,20 @@ class PostgresObservationStore:
             ).fetchone()
             if existing is None:
                 raise ObservationPersistenceError("无法确认观察来源写入结果。")
-            return PostgresObservationStore._from_row(existing), False
+            updated = connection.execute(
+                f"""
+                UPDATE public.local_wechat_observation
+                SET event_count = %s,
+                    non_text_count = %s,
+                    is_reliable = true
+                WHERE id = %s
+                RETURNING {_OBSERVATION_COLUMNS}
+                """,
+                (event_count, non_text_count, existing[0]),
+            ).fetchone()
+            if updated is None:
+                raise ObservationPersistenceError("无法确认观察来源更新结果。")
+            return PostgresObservationStore._from_row(updated), False
         return PostgresObservationStore._from_row(inserted), True
 
     @staticmethod
@@ -934,6 +1102,39 @@ class PostgresObservationStore:
         )
 
     @staticmethod
+    def _advance_cursor_if_needed(
+        connection: psycopg.Connection[Any],
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        binding_id: UUID,
+        conversation_locator: str,
+        last_local_id: int,
+        last_cursor: str,
+    ) -> None:
+        """重试已存在批次时只在水位落后时前移，避免旧批次重试误报倒退。"""
+
+        current = connection.execute(
+            """
+            SELECT last_local_id
+            FROM public.wechat_observation_cursor
+            WHERE owner_id = %s AND contact_id = %s
+            """,
+            (owner_id, contact_id),
+        ).fetchone()
+        if current is not None and current[0] >= last_local_id:
+            return
+        advance_observation_cursor(
+            connection,
+            owner_id=owner_id,
+            contact_id=contact_id,
+            binding_id=binding_id,
+            conversation_locator=conversation_locator,
+            last_local_id=last_local_id,
+            last_cursor=last_cursor,
+        )
+
+    @staticmethod
     def _validate_scope(*, owner_id: UUID, contact_id: UUID) -> None:
         if not isinstance(owner_id, UUID) or not isinstance(contact_id, UUID):
             raise TypeError("owner_id 和 contact_id 必须是 UUID。")
@@ -959,6 +1160,9 @@ class PostgresObservationStore:
             since_cursor,
             last_cursor,
             record_count,
+            event_count,
+            non_text_count,
+            is_reliable,
         ) = row
         if not all(
             isinstance(value, UUID)
@@ -967,6 +1171,15 @@ class PostgresObservationStore:
             raise ObservationPersistenceError("数据库返回的观察范围无效。")
         if not isinstance(read_at, datetime):
             raise ObservationPersistenceError("数据库返回的读取时间无效。")
+        if not all(
+            isinstance(value, int) and not isinstance(value, bool) and value >= 0
+            for value in (record_count, event_count, non_text_count)
+        ):
+            raise ObservationPersistenceError("数据库返回的观察计数无效。")
+        if event_count < record_count or non_text_count > event_count:
+            raise ObservationPersistenceError("数据库返回的观察计数不一致。")
+        if not isinstance(is_reliable, bool):
+            raise ObservationPersistenceError("数据库返回的可靠性标记无效。")
         try:
             mode = ObservationMode(mode_text)
         except ValueError as error:
@@ -984,6 +1197,9 @@ class PostgresObservationStore:
             record_count=record_count,
             since_local_id=since_local_id,
             since_cursor=since_cursor,
+            event_count=event_count,
+            non_text_count=non_text_count,
+            is_reliable=is_reliable,
         )
 
     def _connect(self) -> psycopg.Connection[Any]:

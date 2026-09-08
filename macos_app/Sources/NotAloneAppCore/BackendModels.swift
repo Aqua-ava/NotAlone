@@ -24,6 +24,22 @@ public struct SyncStatus: Decodable, Equatable, Sendable {
     public let cliPendingCount: Int?
     public let cliBatchMessageCount: Int?
     public let cliFailureCode: String?
+    // 后台补齐只展示范围、阶段、计数和可靠游标等元数据，不回显聊天正文。
+    public let cliBackfillPhase: String?
+    public let cliBackfillContactId: String?
+    public let cliBackfillMessageCount: Int?
+    public let cliBackfillNonTextCount: Int?
+    public let cliBackfillLastCursor: String?
+    public let cliBackfillFailureCode: String?
+    public let cliBackfillTotalContacts: Int?
+    public let cliBackfillCompletedContacts: Int?
+    public let cliBackfillSucceededContacts: Int?
+    public let cliBackfillSkippedContacts: Int?
+    public let cliBackfillFailedContacts: Int?
+    public let cliBackfillIncompleteContacts: Int?
+    public let cliBackfillPendingContacts: Int?
+    public let cliBackfillTotalMessageCount: Int?
+    public let cliBackfillTotalNonTextCount: Int?
     public let foregroundPhase: String?
     public let foregroundFailureCode: String?
 }

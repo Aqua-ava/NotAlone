@@ -2,8 +2,8 @@
 
 同步只能由用户手动开启或关闭；开关状态必须跨应用重启保留，
 异常重启后仍开启时生命周期从联系人水位恢复读取。最近一次关闭
-与开启的时间戳共同界定手动关闭期间的消息窗口：重新开启后读到
-的该窗口内消息只前移水位、不写入，对每个联系人独立生效。
+与开启的时间戳共同界定手动关闭期间的消息窗口：关闭期间不读取；重新开启后
+该窗口只作为后台补齐的可检测缺口候选，对每个联系人独立生效。
 """
 
 from __future__ import annotations
@@ -87,7 +87,7 @@ class PostgresFrontSyncStateStore:
         owner_id: UUID,
         at: datetime | None = None,
     ) -> FrontSyncState:
-        """用户手动关闭同步；记录关闭时间，其后的消息窗口不被写入。"""
+        """用户手动关闭同步；记录关闭时间，关闭期间停止读取。"""
 
         return self._set_enabled(owner_id, enabled=False, at=at)
 

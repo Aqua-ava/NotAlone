@@ -65,6 +65,8 @@ class ScriptedSyncControl:
         self.enable_calls = 0
         self.disable_calls = 0
         self.check_calls = 0
+        self.pause_backfill_calls = 0
+        self.retry_backfill_calls = 0
         self.confirm_calls: list[tuple[str, str]] = []
         self.confirm_pending_calls: list[tuple[str, str]] = []
         self.cli_session_calls = 0
@@ -95,6 +97,24 @@ class ScriptedSyncControl:
 
     def check(self) -> FrontSyncCycleReport:
         self.check_calls += 1
+        return self.next_report
+
+    def pause_backfill(self) -> FrontSyncCycleReport:
+        self.pause_backfill_calls += 1
+        self.next_report = replace(
+            _report(),
+            sync_mode="cli_background",
+            cli_backfill_phase="paused",
+        )
+        return self.next_report
+
+    def retry_backfill(self) -> FrontSyncCycleReport:
+        self.retry_backfill_calls += 1
+        self.next_report = replace(
+            _report(),
+            sync_mode="cli_background",
+            cli_backfill_phase="backfilling",
+        )
         return self.next_report
 
     def confirm(self, *, contact_id, locator) -> FrontSyncCycleReport:
@@ -143,6 +163,8 @@ class SyncApiContractTest(unittest.TestCase):
             ("POST", "/api/sync/enable"),
             ("POST", "/api/sync/disable"),
             ("POST", "/api/sync/check"),
+            ("POST", "/api/sync/backfill/pause"),
+            ("POST", "/api/sync/backfill/retry"),
             ("POST", "/api/sync/confirm"),
             ("POST", "/api/sync/confirm-pending"),
             ("GET", "/api/sync/cli-sessions"),
@@ -238,6 +260,66 @@ class SyncApiContractTest(unittest.TestCase):
         self.assertEqual(payload["cli_pending_count"], 2)
         self.assertEqual(payload["cli_batch_message_count"], 4)
         self.assertEqual(payload["foreground_phase"], "waiting_foreground")
+
+    def test_status_includes_cli_backfill_metadata_without_message_body(self) -> None:
+        self.sync.next_report = replace(
+            _report(),
+            sync_mode="cli_background",
+            cli_backfill_phase="complete",
+            cli_backfill_contact_id=str(CONTACT_ID),
+            cli_backfill_message_count=3,
+            cli_backfill_non_text_count=1,
+            cli_backfill_last_cursor="local_id:12",
+            cli_backfill_failure_code=None,
+            cli_backfill_total_contacts=4,
+            cli_backfill_completed_contacts=2,
+            cli_backfill_succeeded_contacts=1,
+            cli_backfill_skipped_contacts=1,
+            cli_backfill_failed_contacts=1,
+            cli_backfill_incomplete_contacts=1,
+            cli_backfill_pending_contacts=2,
+            cli_backfill_total_message_count=8,
+            cli_backfill_total_non_text_count=3,
+        )
+
+        response = self.client.get("/api/sync/status", headers=self.headers)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["cli_backfill_phase"], "complete")
+        self.assertEqual(payload["cli_backfill_contact_id"], str(CONTACT_ID))
+        self.assertEqual(payload["cli_backfill_message_count"], 3)
+        self.assertEqual(payload["cli_backfill_non_text_count"], 1)
+        self.assertEqual(payload["cli_backfill_last_cursor"], "local_id:12")
+        self.assertEqual(payload["cli_backfill_total_contacts"], 4)
+        self.assertEqual(payload["cli_backfill_completed_contacts"], 2)
+        self.assertEqual(payload["cli_backfill_succeeded_contacts"], 1)
+        self.assertEqual(payload["cli_backfill_skipped_contacts"], 1)
+        self.assertEqual(payload["cli_backfill_failed_contacts"], 1)
+        self.assertEqual(payload["cli_backfill_incomplete_contacts"], 1)
+        self.assertEqual(payload["cli_backfill_pending_contacts"], 2)
+        self.assertEqual(payload["cli_backfill_total_message_count"], 8)
+        self.assertEqual(payload["cli_backfill_total_non_text_count"], 3)
+        self.assertNotIn("关闭期间消息", response.body.decode("utf-8"))
+
+    def test_backfill_pause_and_retry_control_lifecycle(self) -> None:
+        paused = self.client.request(
+            "POST",
+            "/api/sync/backfill/pause",
+            headers=self.headers,
+        )
+        retried = self.client.request(
+            "POST",
+            "/api/sync/backfill/retry",
+            headers=self.headers,
+        )
+
+        self.assertEqual(paused.status_code, 200)
+        self.assertEqual(paused.json()["cli_backfill_phase"], "paused")
+        self.assertEqual(retried.status_code, 200)
+        self.assertEqual(retried.json()["cli_backfill_phase"], "backfilling")
+        self.assertEqual(self.sync.pause_backfill_calls, 1)
+        self.assertEqual(self.sync.retry_backfill_calls, 1)
 
     def test_status_calls_port_once(self) -> None:
         self.client.get("/api/sync/status", headers=self.headers)
@@ -462,6 +544,8 @@ class SyncApiContractTest(unittest.TestCase):
             ("POST", "/api/sync/enable"),
             ("POST", "/api/sync/disable"),
             ("POST", "/api/sync/check"),
+            ("POST", "/api/sync/backfill/pause"),
+            ("POST", "/api/sync/backfill/retry"),
             ("POST", "/api/sync/confirm"),
             ("POST", "/api/sync/confirm-pending"),
             ("GET", "/api/sync/cli-sessions"),

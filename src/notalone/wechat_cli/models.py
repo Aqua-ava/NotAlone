@@ -65,6 +65,13 @@ class TailResult:
     events: tuple[CliMessageEvent, ...]
     cursor: str | None
     last_local_id: int | None = None
+    # 适配器保留所有已读事件的计数；``events`` 只包含可以规范化为
+    # 消息的文字事件，避免把媒体等非文字事件伪造成正文。
+    event_count: int | None = None
+    non_text_count: int = 0
+    # 没有完整水位的空输出不能证明来源已经追到当前；后台补齐会将其
+    # 标记为 incomplete，而不是把未知 freshness 当作完成。
+    freshness_confirmed: bool = False
 
 
 @dataclass(frozen=True, slots=True)

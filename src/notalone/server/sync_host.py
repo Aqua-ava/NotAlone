@@ -52,6 +52,15 @@ class SyncEnginePort(Protocol):
     def sync_enabled(self) -> bool:
         """读取当前同步开关（不触发探针或 CLI）。"""
 
+    def request_sync_check(self) -> None:
+        """请求一次有界后台同步检查。"""
+
+    def pause_backfill(self) -> None:
+        """暂停后台补齐。"""
+
+    def retry_backfill(self) -> None:
+        """恢复后台补齐。"""
+
     def close(self) -> None:
         """关闭进程内读取资源，但不修改持久化同步开关。"""
 
@@ -107,6 +116,12 @@ class SyncControlPort(Protocol):
 
     def check(self) -> FrontSyncCycleReport:
         """立即执行一轮并返回最新报告。"""
+
+    def pause_backfill(self) -> FrontSyncCycleReport:
+        """暂停后台补齐并返回最新报告。"""
+
+    def retry_backfill(self) -> FrontSyncCycleReport:
+        """恢复后台补齐并返回最新报告。"""
 
     def cli_sessions(self) -> tuple[CliBindingCandidateView, ...]:
         """读取 CLI 可见的私聊会话候选。"""
@@ -241,6 +256,22 @@ class SyncHost:
             request = getattr(self._engine, "request_sync_check", None)
             if callable(request):
                 request()
+            return self._run_cycle_locked()
+
+    def pause_backfill(self) -> FrontSyncCycleReport:
+        with self._engine_lock:
+            pause = getattr(self._engine, "pause_backfill", None)
+            if not callable(pause):
+                raise RuntimeError("后台补齐控制不可用。")
+            pause()
+            return self._run_cycle_locked()
+
+    def retry_backfill(self) -> FrontSyncCycleReport:
+        with self._engine_lock:
+            retry = getattr(self._engine, "retry_backfill", None)
+            if not callable(retry):
+                raise RuntimeError("后台补齐控制不可用。")
+            retry()
             return self._run_cycle_locked()
 
     def cli_sessions(self) -> tuple[CliBindingCandidateView, ...]:

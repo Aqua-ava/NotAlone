@@ -95,6 +95,21 @@ class FrontSyncCycleReport:
     cli_pending_count: int = 0
     cli_batch_message_count: int = 0
     cli_failure_code: str | None = None
+    cli_backfill_phase: str = "not_required"
+    cli_backfill_contact_id: UUID | None = None
+    cli_backfill_message_count: int = 0
+    cli_backfill_non_text_count: int = 0
+    cli_backfill_last_cursor: str | None = None
+    cli_backfill_failure_code: str | None = None
+    cli_backfill_total_contacts: int = 0
+    cli_backfill_completed_contacts: int = 0
+    cli_backfill_succeeded_contacts: int = 0
+    cli_backfill_skipped_contacts: int = 0
+    cli_backfill_failed_contacts: int = 0
+    cli_backfill_incomplete_contacts: int = 0
+    cli_backfill_pending_contacts: int = 0
+    cli_backfill_total_message_count: int = 0
+    cli_backfill_total_non_text_count: int = 0
     foreground_phase: str = "sync_disabled"
     foreground_failure_code: str | None = None
 

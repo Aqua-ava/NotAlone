@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from notalone.front_sync.cli_binding import CliBindingCandidateView, CliBindingSelection
@@ -16,6 +16,7 @@ from notalone.front_sync.cli_sync import (
 from notalone.front_sync.foreground_locator import ForegroundLocatorStatus
 from notalone.front_sync.sync_engine import FrontSyncCycleReport
 from notalone.front_sync.tail_lifecycle import FrontSyncPhase, FollowRuntimeStatus
+from notalone.wechat_cli import CliCommandError
 
 
 OWNER_ID = UUID("33333333-3333-3333-3333-333333333333")
@@ -54,8 +55,14 @@ class FakeBackground:
             batch_message_count=3,
         )
 
-    def cycle(self, *, enabled: bool) -> CliSyncCycleResult:
+    def cycle(
+        self,
+        *,
+        enabled: bool,
+        priority_contact_id: UUID | None = None,
+    ) -> CliSyncCycleResult:
         self.calls.append(enabled)
+        del priority_contact_id
         return self.result
 
     def close(self) -> None:
@@ -87,8 +94,12 @@ class FakeForeground:
 class FakeCli:
     def __init__(self) -> None:
         self.close_calls = 0
+        self.version_failures = 0
 
     def version(self) -> str:
+        if self.version_failures > 0:
+            self.version_failures -= 1
+            raise CliCommandError("cli_not_found", "合成 CLI 暂不可用")
         return "1.6.20-test"
 
     def close(self) -> None:
@@ -201,6 +212,34 @@ class CliFullSyncEngineTest(unittest.TestCase):
         self.engine.cancel_pending_io()
 
         self.assertEqual(self.cli.close_calls, 1)
+
+    def test_cli_availability_retries_after_a_temporary_failure(self) -> None:
+        from notalone.front_sync.full_sync_engine import CliFullSyncEngine
+
+        now = [datetime(2026, 9, 1, 10, 0, tzinfo=timezone.utc)]
+        cli = FakeCli()
+        cli.version_failures = 1
+        engine = CliFullSyncEngine(
+            owner_id=OWNER_ID,
+            channel="wechat",
+            account_scope="wx-account",
+            cli=cli,
+            sync_state=self.state,
+            background=FakeBackground(),
+            foreground=self.foreground,
+            binding_coordinator=self.bindings,
+            fallback=FakeFallback(),
+            clock=lambda: now[0],
+        )
+
+        unavailable = engine.cycle()
+        self.assertFalse(unavailable.cli_available)
+
+        now[0] += timedelta(seconds=15)
+        recovered = engine.cycle()
+
+        self.assertTrue(recovered.cli_available)
+        self.assertEqual(recovered.phase, FrontSyncPhase.ACTIVE)
 
 
 if __name__ == "__main__":

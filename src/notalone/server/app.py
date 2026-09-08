@@ -440,6 +440,8 @@ class BackendApp:
             "/api/sync/enable",
             "/api/sync/disable",
             "/api/sync/check",
+            "/api/sync/backfill/pause",
+            "/api/sync/backfill/retry",
             "/api/sync/confirm",
             "/api/sync/confirm-pending",
             "/api/sync/cli-sessions",
@@ -496,6 +498,10 @@ class BackendApp:
                 report = sync.enable()
             elif path == "/api/sync/disable":
                 report = sync.disable()
+            elif path == "/api/sync/backfill/pause":
+                report = sync.pause_backfill()
+            elif path == "/api/sync/backfill/retry":
+                report = sync.retry_backfill()
             else:
                 report = sync.check()
         except Exception:
@@ -1481,6 +1487,25 @@ def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:
                 "cli_pending_count": report.cli_pending_count,
                 "cli_batch_message_count": report.cli_batch_message_count,
                 "cli_failure_code": report.cli_failure_code,
+                "cli_backfill_phase": report.cli_backfill_phase,
+                "cli_backfill_contact_id": (
+                    None
+                    if report.cli_backfill_contact_id is None
+                    else str(report.cli_backfill_contact_id)
+                ),
+                "cli_backfill_message_count": report.cli_backfill_message_count,
+                "cli_backfill_non_text_count": report.cli_backfill_non_text_count,
+                "cli_backfill_last_cursor": report.cli_backfill_last_cursor,
+                "cli_backfill_failure_code": report.cli_backfill_failure_code,
+                "cli_backfill_total_contacts": report.cli_backfill_total_contacts,
+                "cli_backfill_completed_contacts": report.cli_backfill_completed_contacts,
+                "cli_backfill_succeeded_contacts": report.cli_backfill_succeeded_contacts,
+                "cli_backfill_skipped_contacts": report.cli_backfill_skipped_contacts,
+                "cli_backfill_failed_contacts": report.cli_backfill_failed_contacts,
+                "cli_backfill_incomplete_contacts": report.cli_backfill_incomplete_contacts,
+                "cli_backfill_pending_contacts": report.cli_backfill_pending_contacts,
+                "cli_backfill_total_message_count": report.cli_backfill_total_message_count,
+                "cli_backfill_total_non_text_count": report.cli_backfill_total_non_text_count,
                 "foreground_phase": report.foreground_phase,
                 "foreground_failure_code": report.foreground_failure_code,
             }

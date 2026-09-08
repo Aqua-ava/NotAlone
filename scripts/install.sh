@@ -110,7 +110,10 @@ fi
 for migration in \
     database/migrations/026_cli_background_sync.sql \
     database/migrations/027_memory_adoption_provenance.sql \
-    database/migrations/028_reply_context_evidence_metadata.sql; do
+    database/migrations/028_reply_context_evidence_metadata.sql \
+    database/migrations/029_cli_backfill_state.sql \
+    database/migrations/030_cli_observation_reliability_and_progress.sql \
+    database/migrations/031_cli_backfill_scheduler.sql; do
     log "应用可重复增量迁移 $(basename "${migration}")…"
     psql --set ON_ERROR_STOP=1 --dbname "${database_name}" \
         --file "${migration}" \

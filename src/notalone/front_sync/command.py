@@ -56,11 +56,29 @@ def render_report_lines(report: FrontSyncCycleReport) -> list[str]:
                 f"cli_bound={report.cli_bound_count}",
                 f"cli_pending={report.cli_pending_count}",
                 f"cli_batch_messages={report.cli_batch_message_count}",
+                f"cli_backfill_phase={report.cli_backfill_phase}",
+                "cli_backfill_contact="
+                f"{report.cli_backfill_contact_id or 'none'}",
+                f"cli_backfill_messages={report.cli_backfill_message_count}",
+                f"cli_backfill_non_text={report.cli_backfill_non_text_count}",
+                "cli_backfill_cursor="
+                f"{report.cli_backfill_last_cursor or 'none'}",
+                f"cli_backfill_total={report.cli_backfill_total_contacts}",
+                f"cli_backfill_completed={report.cli_backfill_completed_contacts}",
+                f"cli_backfill_succeeded={report.cli_backfill_succeeded_contacts}",
+                f"cli_backfill_skipped={report.cli_backfill_skipped_contacts}",
+                f"cli_backfill_failed={report.cli_backfill_failed_contacts}",
+                f"cli_backfill_incomplete={report.cli_backfill_incomplete_contacts}",
+                f"cli_backfill_pending={report.cli_backfill_pending_contacts}",
+                f"cli_backfill_total_messages={report.cli_backfill_total_message_count}",
+                f"cli_backfill_total_non_text={report.cli_backfill_total_non_text_count}",
                 f"foreground_phase={report.foreground_phase}",
             ]
         )
         if report.cli_failure_code is not None:
             lines.append(f"cli_failure={report.cli_failure_code}")
+        if report.cli_backfill_failure_code is not None:
+            lines.append(f"cli_backfill_failure={report.cli_backfill_failure_code}")
         if report.foreground_failure_code is not None:
             lines.append(f"foreground_failure={report.foreground_failure_code}")
     for index, candidate in enumerate(report.candidates, start=1):

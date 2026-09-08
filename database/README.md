@@ -205,7 +205,7 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 ```
 
 第二十个迁移新增 `local_wechat_observation` 和 `wechat_observation_cursor`。前者保存一次 CLI
-只读增量读取的来源元数据（CLI 版本、读取时间、水位区间、`live`/`cli_catchup` 模式和消息计数），
+只读增量读取的来源元数据（CLI 版本、读取时间、水位区间、`live`/`cli_catchup`/`cli_background` 模式和消息计数），
 不保存全量导出或消息正文；同一绑定同一水位区间的重复读取由唯一索引保证幂等。后者按
 `owner_id + contact_id` 独立保存成功返回的 local_id 与续传 cursor，水位只单调前移，
 首次读取没有水位、不使用非法的 `since_local_id=0`。联系人或绑定行删除时按来源级删除路径级联清理。
@@ -221,8 +221,8 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 
 第二十二个迁移新增 `front_sync_state`，按 owner 保存用户手动开启/关闭的前台同步开关。
 应用异常重启后仍开启时，生命周期从联系人水位恢复读取；最近一次关闭与开启的时间戳共同界定
-手动关闭期间的消息窗口，重新开启后任何联系人读到的窗口内消息都只前移水位、不写入。
-owner 删除时开关状态级联清理。
+手动关闭期间的消息窗口，关闭期间不读取，重新开启后把可检测缺口交给后台补齐。owner 删除时
+开关状态级联清理。
 
 继续建立 Skill Library 的辅助资源和校验结果：
 
@@ -250,6 +250,29 @@ owner 删除时开关状态级联清理。
 它们只记录一次回复实际使用的 Skill 版本之外的非正文审计信息（选择方式、选择原因、
 加载状态和已读取的辅助资源路径），不保存 Skill 正文、完整 Prompt 或聊天原文；
 约束校验字段取值并禁止在没有 Skill 时填写选择元数据。
+
+继续记录 CLI 后台补齐的可靠位置与覆盖状态：
+
+```bash
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/029_cli_backfill_state.sql
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/030_cli_observation_reliability_and_progress.sql
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/031_cli_backfill_scheduler.sql
+```
+
+第二十九个迁移新增 `cli_backfill_state`，按 owner、联系人和 active 绑定保存补齐触发、阶段、
+计数、可靠游标和失败原因等元数据，不保存聊天正文；绑定或联系人删除时级联清理。第三十个迁移
+把观察来源的事件总数、非文字计数和“来源、消息、游标同一事务提交”的可靠标记补入已有观察表，
+历史观察默认按不可靠位置恢复。第三十一个迁移增加可持久化的 `paused` 阶段；暂停、失败和无法
+确认完整都不能被当作覆盖完成，恢复由用户明确触发。
 
 任务终态清理使用：
 

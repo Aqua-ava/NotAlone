@@ -52,6 +52,14 @@ public struct BackendClient: Sendable {
         try await request(path: "api/sync/check", method: "POST")
     }
 
+    public func pauseBackfill() async throws -> SyncStatus {
+        try await request(path: "api/sync/backfill/pause", method: "POST")
+    }
+
+    public func retryBackfill() async throws -> SyncStatus {
+        try await request(path: "api/sync/backfill/retry", method: "POST")
+    }
+
     // MARK: - CLI 全量同步
 
     public func cliSessions() async throws -> [CliSessionCandidate] {

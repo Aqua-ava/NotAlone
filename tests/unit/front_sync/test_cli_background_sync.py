@@ -72,13 +72,17 @@ class FakeCli:
     def tail(self, talker: str, **kwargs) -> TailResult:
         self.tail_calls.append({"talker": talker, **kwargs})
         queue = self.tail_results.setdefault(talker, deque())
-        return queue.popleft() if queue else TailResult((), None, None)
+        return queue.popleft() if queue else TailResult(
+            (), None, None, freshness_confirmed=True
+        )
 
 
 class FakeObservationStore:
     def __init__(self) -> None:
         self.baselines: dict[tuple[UUID, UUID], datetime] = {}
         self.cursors: dict[tuple[UUID, UUID], object] = {}
+        self.reliable_cursors: dict[tuple[UUID, UUID], object] = {}
+        self.rewind_calls: list[dict[str, object]] = []
         self.recorded: list[dict[str, object]] = []
 
     def ensure_baseline(self, **kwargs):
@@ -91,6 +95,15 @@ class FakeObservationStore:
     def read_cursor(self, **kwargs):
         return self.cursors.get((kwargs["owner_id"], kwargs["contact_id"]))
 
+    def read_reliable_cursor(self, **kwargs):
+        return self.reliable_cursors.get((kwargs["owner_id"], kwargs["contact_id"]))
+
+    def rewind_cursor(self, **kwargs):
+        self.rewind_calls.append(kwargs)
+        key = (kwargs["owner_id"], kwargs["contact_id"])
+        target = kwargs.get("target")
+        self.cursors[key] = target
+
     def record_batch_with_messages(self, **kwargs):
         self.recorded.append(kwargs)
         from notalone.persistence.observation_store import RecordedObservationBatch
@@ -101,11 +114,148 @@ class FakeObservationStore:
             last_local_id=kwargs["last_local_id"],
             last_cursor=kwargs["last_cursor"],
         )
+        self.reliable_cursors[(kwargs["owner_id"], kwargs["contact_id"])] = self.cursors[
+            (kwargs["owner_id"], kwargs["contact_id"])
+        ]
         return RecordedObservationBatch(
             observation=None,  # type: ignore[arg-type]
             message_ids=(),
             created_message_ids=tuple(uuid4() for _ in kwargs["messages"]),
         )
+
+
+@dataclass(frozen=True)
+class _BackfillState:
+    contact_id: UUID
+    phase: str
+    trigger_at: datetime
+    message_count: int = 0
+    non_text_count: int = 0
+    last_cursor: str | None = None
+    failure_code: str | None = None
+
+    @property
+    def scope(self) -> ContactScope:
+        return ContactScope(owner_id=OWNER_ID, contact_id=self.contact_id)
+
+
+class FakeBackfillStateStore:
+    """按联系人保存合成的补齐状态，模拟持久化边界。"""
+
+    def __init__(self) -> None:
+        self.states: dict[tuple[UUID, UUID], _BackfillState] = {}
+
+    def read(self, **kwargs):
+        return self.states.get((kwargs["owner_id"], kwargs["contact_id"]))
+
+    def ensure_started(self, **kwargs):
+        key = (kwargs["owner_id"], kwargs["contact_id"])
+        current = self.states.get(key)
+        trigger_at = kwargs["trigger_at"]
+        if current is None:
+            current = _BackfillState(
+                kwargs["contact_id"], "gap_detected", trigger_at
+            )
+        elif current.phase == "paused":
+            pass
+        elif current.trigger_at != trigger_at:
+            current = _BackfillState(
+                kwargs["contact_id"], "gap_detected", trigger_at
+            )
+        elif current.phase == "failed":
+            current = _BackfillState(
+                kwargs["contact_id"], "gap_detected", trigger_at
+            )
+        self.states[key] = current
+        return current
+
+    def mark_running(self, **kwargs):
+        key = (kwargs["owner_id"], kwargs["contact_id"])
+        current = self.states[key]
+        current = _BackfillState(
+            current.contact_id,
+            "backfilling",
+            current.trigger_at,
+            current.message_count,
+            current.non_text_count,
+            current.last_cursor,
+        )
+        self.states[key] = current
+        return current
+
+    def mark_complete(self, **kwargs):
+        key = (kwargs["owner_id"], kwargs["contact_id"])
+        current = self.states[key]
+        current = _BackfillState(
+            current.contact_id,
+            "complete",
+            current.trigger_at,
+            kwargs["message_count"],
+            kwargs.get("non_text_count", 0),
+            kwargs.get("last_cursor"),
+        )
+        self.states[key] = current
+        return current
+
+    def mark_failed(self, **kwargs):
+        key = (kwargs["owner_id"], kwargs["contact_id"])
+        current = self.states[key]
+        current = _BackfillState(
+            current.contact_id,
+            "failed",
+            current.trigger_at,
+            current.message_count,
+            current.non_text_count,
+            current.last_cursor,
+            kwargs["failure_code"],
+        )
+        self.states[key] = current
+        return current
+
+    def list_active(self, **kwargs):
+        del kwargs
+        return tuple(self.states.values())
+
+    def mark_incomplete(self, **kwargs):
+        key = (kwargs["owner_id"], kwargs["contact_id"])
+        current = self.states[key]
+        current = _BackfillState(
+            current.contact_id,
+            "incomplete",
+            current.trigger_at,
+            current.message_count,
+            current.non_text_count,
+            current.last_cursor,
+            kwargs["failure_code"],
+        )
+        self.states[key] = current
+        return current
+
+    def mark_paused(self, **kwargs):
+        key = (kwargs["owner_id"], kwargs["contact_id"])
+        current = self.states[key]
+        current = _BackfillState(
+            current.contact_id,
+            "paused",
+            current.trigger_at,
+            current.message_count,
+            current.non_text_count,
+            current.last_cursor,
+            current.failure_code,
+        )
+        self.states[key] = current
+        return current
+
+    def mark_retry(self, **kwargs):
+        key = (kwargs["owner_id"], kwargs["contact_id"])
+        current = self.states[key]
+        current = _BackfillState(
+            current.contact_id,
+            "gap_detected",
+            kwargs["trigger_at"],
+        )
+        self.states[key] = current
+        return current
 
 
 class FakeSyncState:
@@ -154,6 +304,7 @@ class CliBackgroundSyncTest(unittest.TestCase):
             ]
         )
         self.store = FakeObservationStore()
+        self.backfill_store = FakeBackfillStateStore()
         self.now = datetime(2026, 9, 1, 10, 0, tzinfo=timezone.utc)
         self.cli.tail_results["wxid_a"] = deque(
             [
@@ -161,11 +312,19 @@ class CliBackgroundSyncTest(unittest.TestCase):
                     events=(_message("wxid_a", 10, "后台消息"),),
                     cursor="local_id:10",
                     last_local_id=10,
+                    freshness_confirmed=True,
                 )
             ]
         )
         self.cli.tail_results["wxid_b"] = deque(
-            [TailResult(events=(), cursor=None, last_local_id=None)]
+            [
+                TailResult(
+                    events=(),
+                    cursor=None,
+                    last_local_id=None,
+                    freshness_confirmed=True,
+                )
+            ]
         )
         self.sync = CliBackgroundSync(
             owner_id=OWNER_ID,
@@ -174,6 +333,7 @@ class CliBackgroundSyncTest(unittest.TestCase):
             cli=self.cli,
             bindings=self.bindings,
             observation_store=self.store,
+            backfill_state=self.backfill_store,
             sync_state=self.sync_state,
             clock=lambda: self.now,
         )
@@ -194,6 +354,56 @@ class CliBackgroundSyncTest(unittest.TestCase):
             ObservationMode.CLI_BACKGROUND,
         )
 
+    def test_current_contact_is_first_in_a_bounded_initial_queue(self) -> None:
+        result = self.sync.cycle(
+            enabled=True,
+            priority_contact_id=self.binding_b.contact_id,
+        )
+
+        self.assertEqual(
+            [call["talker"] for call in self.cli.tail_calls],
+            ["wxid_b", "wxid_a"],
+        )
+        self.assertEqual(result.status.bound_count, 2)
+        self.assertEqual(result.status.backfill_contact_id, self.binding_b.contact_id)
+
+    def test_round_robin_keeps_non_priority_contacts_progressing(self) -> None:
+        bindings = [
+            FakeBinding(uuid4(), uuid4(), f"wxid_{index}", f"联系人{index}")
+            for index in range(10)
+        ]
+        cli = FakeCli(stream_events=[])
+        store = FakeObservationStore()
+        backfill_store = FakeBackfillStateStore()
+        sync = CliBackgroundSync(
+            owner_id=OWNER_ID,
+            channel="wechat",
+            account_scope="wx-account",
+            cli=cli,
+            bindings=bindings,
+            observation_store=store,
+            backfill_state=backfill_store,
+            sync_state=self.sync_state,
+            clock=lambda: self.now,
+        )
+
+        sync.cycle(enabled=True, priority_contact_id=bindings[0].contact_id)
+        cli.tail_calls.clear()
+        self.now += timedelta(seconds=15)
+        sync.cycle(enabled=True, priority_contact_id=bindings[0].contact_id)
+        first_sweep = [call["talker"] for call in cli.tail_calls]
+        cli.tail_calls.clear()
+        self.now += timedelta(seconds=15)
+        sync.cycle(enabled=True, priority_contact_id=bindings[0].contact_id)
+        second_sweep = [call["talker"] for call in cli.tail_calls]
+
+        self.assertEqual(first_sweep[0], "wxid_0")
+        self.assertEqual(second_sweep[0], "wxid_0")
+        self.assertNotEqual(set(first_sweep[1:]), set(second_sweep[1:]))
+        self.assertEqual(set(first_sweep[1:]) | set(second_sweep[1:]), {
+            f"wxid_{index}" for index in range(1, 10)
+        })
+
     def test_new_binding_uses_baseline_then_next_cycle_uses_contact_cursor(self) -> None:
         self.sync.cycle(enabled=True)
         self.cli.tail_results["wxid_a"] = deque(
@@ -202,6 +412,7 @@ class CliBackgroundSyncTest(unittest.TestCase):
                     events=(_message("wxid_a", 11, "第二条"),),
                     cursor="local_id:11",
                     last_local_id=11,
+                    freshness_confirmed=True,
                 )
             ]
         )
@@ -231,11 +442,19 @@ class CliBackgroundSyncTest(unittest.TestCase):
                     events=(_message("wxid_a", 11, "我方发送后仍应同步"),),
                     cursor="local_id:11",
                     last_local_id=11,
+                    freshness_confirmed=True,
                 )
             ]
         )
         self.cli.tail_results["wxid_b"] = deque(
-            [TailResult(events=(), cursor=None, last_local_id=None)]
+            [
+                TailResult(
+                    events=(),
+                    cursor=None,
+                    last_local_id=None,
+                    freshness_confirmed=True,
+                )
+            ]
         )
 
         # 模拟全局 sessions 流没有报告 wxid_a 的我方新消息。
@@ -295,7 +514,7 @@ class CliBackgroundSyncTest(unittest.TestCase):
         )
         self.assertEqual(second.batch_message_count, 1)
 
-    def test_manual_disabled_window_skips_messages_but_advances_cursor(self) -> None:
+    def test_reopened_sync_backfills_messages_from_disabled_window(self) -> None:
         self.sync.cycle(enabled=True)
         self.sync_state.disabled_at = datetime.fromtimestamp(
             2_000_000_010,
@@ -311,6 +530,7 @@ class CliBackgroundSyncTest(unittest.TestCase):
                     events=(_message("wxid_a", 11, "关闭期间消息"),),
                     cursor="local_id:11",
                     last_local_id=11,
+                    freshness_confirmed=True,
                 )
             ]
         )
@@ -319,12 +539,206 @@ class CliBackgroundSyncTest(unittest.TestCase):
 
         result = self.sync.cycle(enabled=True)
 
-        self.assertEqual(result.batch_message_count, 0)
-        self.assertEqual(self.store.recorded[-1]["messages"], ())
+        self.assertEqual(result.batch_message_count, 1)
+        self.assertEqual(
+            self.store.recorded[-1]["messages"][0].text_content,
+            "关闭期间消息",
+        )
         self.assertEqual(
             self.store.cursors[(OWNER_ID, self.binding_a.contact_id)].last_local_id,
             11,
         )
+        self.assertEqual(result.status.backfill_phase, "complete")
+        self.assertEqual(result.status.backfill_contact_id, self.binding_a.contact_id)
+        self.assertEqual(result.status.backfill_message_count, 1)
+
+    def test_stale_cursor_rewinds_to_last_reliable_position_before_tail(self) -> None:
+        self.sync.cycle(enabled=True)
+        reliable = self.store.reliable_cursors[(OWNER_ID, self.binding_a.contact_id)]
+        self.store.cursors[(OWNER_ID, self.binding_a.contact_id)] = _Cursor(
+            binding_id=self.binding_a.binding_id,
+            conversation_locator="wxid_a",
+            last_local_id=20,
+            last_cursor="local_id:20",
+        )
+        self.cli.tail_results["wxid_a"] = deque(
+            [
+                TailResult(
+                    events=(_message("wxid_a", 11, "回放消息"),),
+                    cursor="local_id:11",
+                    last_local_id=11,
+                    freshness_confirmed=True,
+                )
+            ]
+        )
+        assert self.cli.stream is not None
+        self.cli.stream.events.append(("session:4", "wxid_a"))
+
+        result = self.sync.cycle(enabled=True)
+
+        self.assertEqual(result.batch_message_count, 1)
+        self.assertEqual(self.cli.tail_calls[-1].get("cursor"), "local_id:10")
+        self.assertEqual(self.store.rewind_calls[-1]["target"], reliable)
+        self.assertEqual(
+            self.store.recorded[-1]["since_cursor"],
+            "local_id:10",
+        )
+
+    def test_non_text_events_are_counted_without_becoming_text_messages(self) -> None:
+        self.sync.cycle(enabled=True)
+        self.cli.tail_results["wxid_a"] = deque(
+            [
+                TailResult(
+                    events=(_message("wxid_a", 12, "后续文字"),),
+                    cursor="local_id:12",
+                    last_local_id=12,
+                    event_count=2,
+                    non_text_count=1,
+                    freshness_confirmed=True,
+                )
+            ]
+        )
+        assert self.cli.stream is not None
+        self.cli.stream.events.append(("session:4", "wxid_a"))
+
+        result = self.sync.cycle(enabled=True)
+
+        recorded = self.store.recorded[-1]
+        self.assertEqual(recorded["event_count"], 2)
+        self.assertEqual(recorded["non_text_count"], 1)
+        self.assertEqual(len(recorded["messages"]), 1)
+        self.assertEqual(recorded["messages"][0].text_content, "后续文字")
+        self.assertEqual(result.batch_message_count, 1)
+        self.assertEqual(result.status.backfill_message_count, 1)
+
+    def test_backfill_failure_is_visible_and_not_complete(self) -> None:
+        self.sync.cycle(enabled=True)
+        self.sync_state.disabled_at = datetime.fromtimestamp(
+            2_000_000_010,
+            tz=timezone.utc,
+        )
+        self.sync_state.enabled_at = datetime.fromtimestamp(
+            2_000_000_012,
+            tz=timezone.utc,
+        )
+        self.cli.tail_results["wxid_a"] = deque(
+            [
+                TailResult(
+                    events=(_message("wxid_a", 11, "补齐失败消息"),),
+                    cursor="local_id:11",
+                    last_local_id=11,
+                    freshness_confirmed=True,
+                )
+            ]
+        )
+        original_tail = self.cli.tail
+
+        def fail_backfill_once(talker: str, **kwargs: object) -> TailResult:
+            if talker == "wxid_a":
+                self.cli.tail = original_tail  # type: ignore[method-assign]
+                raise CliCommandError("cli_command_failed", "合成失败")
+            return original_tail(talker, **kwargs)
+
+        self.cli.tail = fail_backfill_once  # type: ignore[method-assign]
+        assert self.cli.stream is not None
+        self.cli.stream.events.append(("session:4", "wxid_a"))
+
+        result = self.sync.cycle(enabled=True)
+
+        self.assertEqual(result.status.backfill_phase, "failed")
+        self.assertEqual(result.status.backfill_failure_code, "cli_command_failed")
+        self.assertNotEqual(result.status.backfill_phase, "complete")
+
+    def test_cli_unavailable_marks_backfill_incomplete(self) -> None:
+        original_tail = self.cli.tail
+
+        def unavailable_tail(talker: str, **kwargs: object) -> TailResult:
+            if talker == "wxid_a":
+                self.cli.tail_calls.append({"talker": talker, **kwargs})
+                raise CliCommandError("cli_not_found", "不可用")
+            return original_tail(talker, **kwargs)
+
+        self.cli.tail = unavailable_tail  # type: ignore[method-assign]
+
+        result = self.sync.cycle(enabled=True)
+
+        self.assertEqual(result.status.backfill_phase, "incomplete")
+        self.assertEqual(result.status.backfill_incomplete_contacts, 1)
+        self.assertEqual(result.status.backfill_failure_code, "cli_not_found")
+        self.assertNotEqual(result.status.backfill_phase, "complete")
+
+    def test_unknown_cli_freshness_marks_backfill_incomplete(self) -> None:
+        self.sync.cycle(enabled=True)
+        self.sync.request_backfill_check()
+        self.cli.tail_results["wxid_a"] = deque(
+            [TailResult(events=(), cursor=None, last_local_id=None)]
+        )
+        assert self.cli.stream is not None
+        self.cli.stream.events.append(("session:freshness", "wxid_a"))
+
+        result = self.sync.cycle(enabled=True)
+
+        self.assertEqual(result.status.backfill_phase, "incomplete")
+        self.assertEqual(result.status.backfill_incomplete_contacts, 1)
+        self.assertEqual(
+            result.status.backfill_failure_code,
+            "cli_freshness_unknown",
+        )
+        self.assertNotEqual(result.status.backfill_phase, "complete")
+
+    def test_paused_backfill_stays_paused_after_sync_restart(self) -> None:
+        self.sync.cycle(enabled=True)
+        self.sync.request_backfill_check()
+        self.sync.pause_backfill()
+
+        restarted = CliBackgroundSync(
+            owner_id=OWNER_ID,
+            channel="wechat",
+            account_scope="wx-account",
+            cli=self.cli,
+            bindings=self.bindings,
+            observation_store=self.store,
+            backfill_state=self.backfill_store,
+            sync_state=self.sync_state,
+            clock=lambda: self.now + timedelta(seconds=30),
+        )
+        self.cli.tail_calls.clear()
+
+        result = restarted.cycle(enabled=True)
+
+        self.assertEqual(result.status.backfill_phase, "paused")
+        self.assertEqual(self.cli.tail_calls, [])
+
+    def test_pause_then_retry_resumes_from_a_new_bounded_check(self) -> None:
+        self.sync.cycle(enabled=True)
+        self.sync.request_backfill_check()
+        self.sync.pause_backfill()
+        self.cli.tail_calls.clear()
+
+        paused = self.sync.cycle(enabled=True)
+
+        self.assertEqual(paused.status.backfill_phase, "paused")
+        self.assertEqual(self.cli.tail_calls, [])
+
+        self.sync.retry_backfill()
+        self.cli.tail_results["wxid_a"] = deque(
+            [
+                TailResult(
+                    events=(_message("wxid_a", 13, "重试后消息"),),
+                    cursor="local_id:13",
+                    last_local_id=13,
+                    freshness_confirmed=True,
+                )
+            ]
+        )
+        assert self.cli.stream is not None
+        self.cli.stream.events.append(("session:retry", "wxid_a"))
+
+        resumed = self.sync.cycle(enabled=True)
+
+        self.assertEqual(resumed.status.backfill_phase, "complete")
+        self.assertEqual(resumed.status.backfill_total_contacts, 2)
+        self.assertEqual(resumed.status.backfill_total_message_count, 1)
 
     def test_global_stream_failure_falls_back_to_bounded_one_shot_reads(self) -> None:
         self.cli.session_events_follow = lambda **kwargs: (_ for _ in ()).throw(

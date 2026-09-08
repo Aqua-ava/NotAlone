@@ -1094,6 +1094,67 @@ class PostgresObservationStoreTest(unittest.TestCase):
         self.assertEqual(retry.created_message_ids, ())
         self.assertEqual(self._message_count(self.contact_a), 1)
 
+    def test_reliable_cursor_can_rewind_after_latest_observation_is_removed(self) -> None:
+        first = self._record(
+            self.contact_a,
+            self.binding_a.binding_id,
+            last_local_id=10,
+            locator="wxid_observation_a",
+        )
+        second = self._record(
+            self.contact_a,
+            self.binding_a.binding_id,
+            since_local_id=10,
+            last_local_id=20,
+            locator="wxid_observation_a",
+        )
+
+        self.store.delete_observation(
+            owner_id=self.owner_id,
+            contact_id=self.contact_a,
+            observation_id=second.observation_id,
+        )
+
+        reliable = self.store.read_reliable_cursor(
+            owner_id=self.owner_id,
+            contact_id=self.contact_a,
+            binding_id=self.binding_a.binding_id,
+        )
+        self.assertIsNotNone(reliable)
+        self.assertEqual(reliable.last_local_id, first.last_local_id)
+
+        self.store.rewind_cursor(
+            owner_id=self.owner_id,
+            contact_id=self.contact_a,
+            binding_id=self.binding_a.binding_id,
+            target=reliable,
+        )
+        current = self.store.read_cursor(
+            owner_id=self.owner_id,
+            contact_id=self.contact_a,
+        )
+        self.assertIsNotNone(current)
+        self.assertEqual(current.last_local_id, 10)
+
+    def test_observation_records_event_and_non_text_counts(self) -> None:
+        observation = self.store.record_batch(
+            owner_id=self.owner_id,
+            contact_id=self.contact_a,
+            binding_id=self.binding_a.binding_id,
+            mode=ObservationMode.CLI_BACKGROUND,
+            cli_version="wechat-cli/0.1.0-test",
+            conversation_locator="wxid_observation_a",
+            last_local_id=30,
+            last_cursor="cursor-30",
+            record_count=1,
+            event_count=2,
+            non_text_count=1,
+        )
+
+        self.assertEqual(observation.event_count, 2)
+        self.assertEqual(observation.non_text_count, 1)
+        self.assertTrue(observation.is_reliable)
+
     def test_record_batch_with_messages_empty_batch_still_advances(self) -> None:
         observation = self.store.record_batch_with_messages(
             owner_id=self.owner_id,

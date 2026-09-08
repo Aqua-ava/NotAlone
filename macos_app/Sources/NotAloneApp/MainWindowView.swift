@@ -1307,11 +1307,98 @@ struct MainWindowView: View {
                     syncInfoRow("前台错误码", value: failure, color: .orange)
                 }
             }
+            backfillCoverageCard
         }
         .padding(10)
         .background(Color.green.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
         .onChange(of: model.cliSessions) { _, sessions in
             syncCliSelection(sessions)
+        }
+    }
+
+    @ViewBuilder
+    private var backfillCoverageCard: some View {
+        if let status = model.status, status.syncMode == "cli_background" {
+            VStack(alignment: .leading, spacing: 8) {
+                Divider()
+                Text("后台补齐覆盖")
+                    .font(.subheadline.weight(.semibold))
+                Text("补齐只读取已确认的一对一会话，并展示阶段、计数和可靠游标等元数据，不显示聊天正文。暂停、失败或无法确认完整性都不会标记为完成。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                syncInfoRow(
+                    "补齐阶段",
+                    value: BackfillStatusPresentation.phaseLabel(status.cliBackfillPhase),
+                    color: backfillPhaseColor(status.cliBackfillPhase)
+                )
+                syncInfoRow(
+                    "当前联系人",
+                    value: contactDisplayName(for: status.cliBackfillContactId)
+                )
+
+                if let progress = BackfillStatusPresentation.progress(
+                    completed: status.cliBackfillCompletedContacts,
+                    total: status.cliBackfillTotalContacts
+                ) {
+                    ProgressView(value: progress)
+                        .progressViewStyle(.linear)
+                    syncInfoRow(
+                        "联系人进度",
+                        value: "\(status.cliBackfillCompletedContacts ?? 0) / \(status.cliBackfillTotalContacts ?? 0)"
+                    )
+                } else {
+                    syncInfoRow("联系人进度", value: "暂无待处理会话")
+                }
+
+                syncInfoRow(
+                    "成功 / 跳过",
+                    value: "\(status.cliBackfillSucceededContacts ?? 0) / \(status.cliBackfillSkippedContacts ?? 0)"
+                )
+                syncInfoRow(
+                    "失败 / 无法确认",
+                    value: "\(status.cliBackfillFailedContacts ?? 0) / \(status.cliBackfillIncompleteContacts ?? 0)",
+                    color: (status.cliBackfillFailedContacts ?? 0) > 0
+                        || (status.cliBackfillIncompleteContacts ?? 0) > 0
+                        ? .orange
+                        : .secondary
+                )
+                syncInfoRow(
+                    "文本 / 非文字事件",
+                    value: "\(status.cliBackfillTotalMessageCount ?? 0) / \(status.cliBackfillTotalNonTextCount ?? 0)"
+                )
+                syncInfoRow(
+                    "当前批次",
+                    value: "\(status.cliBackfillMessageCount ?? 0) 条文本 · \(status.cliBackfillNonTextCount ?? 0) 个非文字事件"
+                )
+
+                if let cursor = status.cliBackfillLastCursor {
+                    syncInfoRow("最后可靠游标", value: cursor)
+                }
+                if let failure = status.cliBackfillFailureCode ?? status.cliFailureCode {
+                    syncInfoRow("最近原因", value: cliFailureLabel(failure), color: .orange)
+                }
+
+                HStack(spacing: 8) {
+                    if BackfillStatusPresentation.shouldOfferPause(status.cliBackfillPhase) {
+                        Button("暂停补齐") {
+                            model.pauseBackfill()
+                        }
+                    }
+                    if BackfillStatusPresentation.shouldOfferRetry(status.cliBackfillPhase) {
+                        Button(status.cliBackfillPhase == "paused" ? "恢复补齐" : "重试补齐") {
+                            model.retryBackfill()
+                        }
+                    }
+                    if model.backfillControlInFlight {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+                .font(.caption)
+                .disabled(model.clientUnavailable || model.backfillControlInFlight)
+            }
         }
     }
 
@@ -1443,6 +1530,22 @@ struct MainWindowView: View {
         .font(.caption)
     }
 
+    private func contactDisplayName(for contactId: String?) -> String {
+        guard let contactId, !contactId.isEmpty else { return "—" }
+        return model.contacts.first(where: { $0.contactId == contactId })?.displayName
+            ?? "未找到已确认联系人"
+    }
+
+    private func backfillPhaseColor(_ raw: String?) -> Color {
+        switch raw {
+        case "complete": return .green
+        case "gap_detected", "backfilling": return .blue
+        case "paused", "incomplete": return .orange
+        case "failed": return .red
+        default: return .secondary
+        }
+    }
+
     private func cliSyncPhaseLabel(_ raw: String?) -> String {
         switch raw {
         case "active": return "运行中"
@@ -1457,6 +1560,8 @@ struct MainWindowView: View {
         switch raw {
         case "cli_key_refresh_required":
             return "需要刷新本机微信读取密钥（运行 wxkey setup）"
+        case "cli_freshness_unknown":
+            return "CLI 未能确认已读取到最新位置"
         case "cli_invalid_argument":
             return "CLI 参数无效，请重启 NotAlone"
         default:

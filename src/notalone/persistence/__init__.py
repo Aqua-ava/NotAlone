@@ -29,6 +29,12 @@ from notalone.persistence.background_tasks import (
     BackgroundTaskStateError,
     PostgresBackgroundTaskRepository,
 )
+from notalone.persistence.backfill_state import (
+    BackfillPhase,
+    BackfillState,
+    BackfillStatePersistenceError,
+    PostgresBackfillStateStore,
+)
 from notalone.persistence.memory_store import (
     MemoryInvariantError,
     MemoryPersistenceError,
@@ -86,6 +92,9 @@ __all__ = [
     "BackgroundTaskNotFoundError",
     "BackgroundTaskPersistenceError",
     "BackgroundTaskStateError",
+    "BackfillPhase",
+    "BackfillState",
+    "BackfillStatePersistenceError",
     "MemoryInvariantError",
     "MemoryPersistenceError",
     "ObservationCursor",
@@ -101,6 +110,7 @@ __all__ = [
     "PostgresConversationPort",
     "PostgresContactMemoryIndexRepository",
     "PostgresBackgroundTaskRepository",
+    "PostgresBackfillStateStore",
     "PostgresMemoryStore",
     "PostgresObservationStore",
     "PostgresOutboundLedger",
