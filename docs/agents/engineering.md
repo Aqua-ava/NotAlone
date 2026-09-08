@@ -12,6 +12,7 @@
 
 - Python 产品代码使用 Conda 环境 `NotAlone`（Python 3.12）。开发、启动、安装依赖、运行 Python 命令或测试前先执行 `conda activate NotAlone`。
 - `macos_sync_probe/` 是 ScreenCaptureKit 与 Vision 的原生 Swift 探针，只验证前台同步能力，不承载领域、存储或回复生成逻辑。
+- 修改 macOS App/探针的权限、`Info.plist`、签名、打包或用户可见启动错误前，先读取并更新 [macOS App 权限与启动错误记录](../macos-app-permissions-and-errors.md)。
 
 ## 测试与验证
 

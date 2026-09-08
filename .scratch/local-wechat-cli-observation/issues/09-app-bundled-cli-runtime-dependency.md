@@ -5,6 +5,9 @@ Triage: ready-for-agent
 State: resolved
 Blocked by: none
 
+长期权限与启动错误台账：
+[macOS App 权限与启动错误记录](../../../docs/macos-app-permissions-and-errors.md)。
+
 ## What to fix
 
 修复 macOS App 启动 bundled `wechat-cli` 时找不到 `libWCDB.dylib`，导致全局
