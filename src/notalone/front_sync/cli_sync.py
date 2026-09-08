@@ -681,6 +681,10 @@ class CliBackgroundSync:
         )
         if priority is None or not self._pending_locators:
             return
+        # 队列可能在后台补齐初始化时已提前建立；把当前联系人提升到
+        # 队首时同步标记 live，否则暂停门禁仍会把这次读取跳过。
+        self._pending_locator_set.add(priority)
+        self._live_pending_locators.add(priority)
         if self._pending_locators[0] == priority:
             return
         self._pending_locators = deque(
@@ -751,7 +755,9 @@ class CliBackgroundSync:
             None,
         )
         if priority is not None:
-            self._enqueue(priority.conversation_locator)
+            # 当前联系人即使暂停了后台补齐，也必须保留实时读取路径；
+            # 否则安全对账会被暂停门禁直接跳过，遗漏我方发送的消息。
+            self._enqueue(priority.conversation_locator, live=True)
         remaining = tuple(binding for binding in bindings if binding is not priority)
         if not remaining:
             return
