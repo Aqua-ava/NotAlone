@@ -14,7 +14,8 @@ from typing import Any
 from uuid import UUID
 
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
 
 from notalone.reply import (
@@ -102,6 +103,74 @@ class ToolCallingFakeModel(FakeMessagesListChatModel):
         # 异步模型调用仍经过同一合成行为，保留来源变更等测试注入。
         return await asyncio.to_thread(
             self._generate, messages, stop, run_manager, **kwargs,
+        )
+
+
+class ResourceRetryModel(ToolCallingFakeModel):
+    """非法资源读取后重试；收到终止提示才输出候选。"""
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        del stop, run_manager, kwargs
+        self.seen_calls.append(messages)
+        last = messages[-1] if messages else None
+        last_content = str(last.content) if isinstance(last, ToolMessage) else ""
+        if "停止读取" in last_content:
+            return ChatResult(
+                generations=[
+                    ChatGeneration(
+                        message=AIMessage(
+                            content="",
+                            tool_calls=[
+                                {
+                                    "name": "ReplyRuntimeOutput",
+                                    "args": {
+                                        "candidates": [
+                                            {
+                                                "text": "先这样回复。",
+                                                "basis": "资源不可用，使用当前输入生成。",
+                                                "citation_ids": [str(MESSAGE_ID)],
+                                                "risk_notes": [],
+                                            }
+                                        ],
+                                        "used_skill_version_id": None,
+                                    },
+                                    "id": f"result-{len(self.seen_calls)}",
+                                }
+                            ],
+                        )
+                    )
+                ]
+            )
+        if not any(
+            isinstance(message, ToolMessage) for message in messages
+        ):
+            file_path = WARM_PATH
+        else:
+            file_path = (
+                "/notalone/reply-skills/warm-reply/references/"
+                f"missing-{len(self.seen_calls)}.md"
+            )
+        return ChatResult(
+            generations=[
+                ChatGeneration(
+                    message=AIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "read_file",
+                                "args": {"file_path": file_path},
+                                "id": f"read-{len(self.seen_calls)}",
+                            }
+                        ],
+                    )
+                )
+            ]
         )
 
 
@@ -420,6 +489,22 @@ class SkillRuntimeResourceTest(unittest.TestCase):
         seen = self._seen_context(model)
         self.assertIn("长案例：先确认再给边界。", seen)
         self.assertNotIn("send_message", model.bound_tool_names)
+
+    def test_invalid_resource_feedback_stops_model_retry_loop(self) -> None:
+        warm_entry = self._warm_entry()
+        port = InMemorySkillPort(
+            scope=self.scope,
+            catalog_value=SkillCatalog(self.scope, 4, (warm_entry,)),
+            version=self._warm_version(),
+            resources={},
+        )
+        model = ResourceRetryModel(responses=[])
+
+        result = self._generate(port, model)
+
+        self.assertEqual(result.candidates[0].text, "先这样回复。")
+        self.assertIsNone(result.used_skill)
+        self.assertLessEqual(len(model.seen_calls), 3)
 
     def test_loaded_skill_version_is_inferred_when_provider_returns_null(self) -> None:
         warm_entry = self._warm_entry()
