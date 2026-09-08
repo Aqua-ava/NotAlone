@@ -204,6 +204,7 @@ class CliBackgroundSync:
         "_pending_locators",
         "_pending_locator_set",
         "_live_pending_locators",
+        "_baseline_ready_bindings",
         "_failure_code",
         "_last_bound_count",
         "_cli_version",
@@ -253,6 +254,10 @@ class CliBackgroundSync:
         # 同一联系人可能同时有补齐任务和实时事件；实时事件优先读取，
         # 但不能因此丢掉尚未完成的补齐任务。
         self._live_pending_locators: set[str] = set()
+        # baseline 只需要在绑定首次出现或绑定定位发生变化时确认一次。
+        # 每个心跳重复执行 INSERT ... ON CONFLICT DO NOTHING 会为每个
+        # active 会话打开数据库连接，即使没有任何新消息也会持续制造事务。
+        self._baseline_ready_bindings: dict[UUID, str] = {}
         self._failure_code: str | None = None
         self._last_bound_count = 0
         self._cli_version: str | None = None
@@ -324,6 +329,14 @@ class CliBackgroundSync:
             )
 
         by_locator = {binding.conversation_locator: binding for binding in bindings}
+        active_binding_locators = {
+            binding.binding_id: binding.conversation_locator for binding in bindings
+        }
+        self._baseline_ready_bindings = {
+            binding_id: locator
+            for binding_id, locator in self._baseline_ready_bindings.items()
+            if active_binding_locators.get(binding_id) == locator
+        }
         if self._backfill_check_requested:
             # 只有新请求才初始化整批联系人。大于单轮预算时，后续心跳
             # 必须保留尚未处理的集合，不能把已完成联系人重新加入。
@@ -332,6 +345,11 @@ class CliBackgroundSync:
             else:
                 self._backfill_pending_locators.intersection_update(by_locator)
         for binding in bindings:
+            if (
+                self._baseline_ready_bindings.get(binding.binding_id)
+                == binding.conversation_locator
+            ):
+                continue
             try:
                 self._observation_store.ensure_baseline(
                     owner_id=self._owner_id,
@@ -339,6 +357,9 @@ class CliBackgroundSync:
                     binding_id=binding.binding_id,
                     conversation_locator=binding.conversation_locator,
                     baseline_at=self._clock(),
+                )
+                self._baseline_ready_bindings[binding.binding_id] = (
+                    binding.conversation_locator
                 )
             except ObservationPersistenceError:
                 self._failure_code = "baseline_unavailable"
@@ -793,6 +814,7 @@ class CliBackgroundSync:
             binding,
             disabled_window=disabled_window,
             trigger_at=backfill_trigger_at,
+            live_read=live_read,
         )
         backfill_phase = _backfill_phase_value(
             getattr(backfill_state, "phase", None)
@@ -986,6 +1008,7 @@ class CliBackgroundSync:
         *,
         disabled_window: tuple[float, float] | None,
         trigger_at: datetime | None,
+        live_read: bool,
     ) -> object | None:
         """为重启、重新开启或手动检查建立或恢复一次补齐状态。"""
 
@@ -1001,6 +1024,22 @@ class CliBackgroundSync:
         )
         if existing is not None:
             self._last_backfill_state = existing
+
+        # 实时事件和低频安全对账只负责推进普通 cursor，不应把一次已
+        # 失败、未完成或暂停的补齐任务重新打开。显式 retry/backfill
+        # check 会提供新的 trigger_at，仍然可以按用户意图恢复补齐。
+        if (
+            live_read
+            and trigger_at is None
+            and disabled_window is None
+            and _backfill_phase_value(getattr(existing, "phase", None))
+            in {
+                BackfillPhase.FAILED.value,
+                BackfillPhase.INCOMPLETE.value,
+                BackfillPhase.PAUSED.value,
+            }
+        ):
+            return None
 
         # 暂停后仍会有正常后台心跳；不能因为失败状态不是 paused，
         # 就在 _read_binding 的暂停判断之前把它重新写成 backfilling。

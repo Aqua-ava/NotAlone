@@ -28,6 +28,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var selectedContactId: String?
     @Published private(set) var messages: [MessageEntry] = []
     @Published private(set) var messageStreamState: MessageStreamState = .idle
+    @Published private(set) var lastMessageCheckAt: Date?
+    @Published private(set) var lastMessageCheckCount = 0
     @Published var lastOperationMessage: String?
 
     // 当前选中联系人是否还有更早的消息可加载（首屏后由游标决定）。
@@ -90,6 +92,7 @@ final class AppModel: ObservableObject {
     private var sseClient: SseEventClient?
     private var pollTask: Task<Void, Never>?
     private var messageTask: Task<Void, Never>?
+    private var messageRefreshTask: Task<Void, Never>?
     private var isToggling = false
     private var isCheckingNow = false
     private var loadedBefore: String?
@@ -109,6 +112,8 @@ final class AppModel: ObservableObject {
         pollTask = nil
         messageTask?.cancel()
         messageTask = nil
+        messageRefreshTask?.cancel()
+        messageRefreshTask = nil
         sseClient?.stop()
         sseClient = nil
         supervisor.terminate()
@@ -123,6 +128,8 @@ final class AppModel: ObservableObject {
         messages = []
         knownMessageIds = []
         loadedBefore = nil
+        lastMessageCheckAt = nil
+        lastMessageCheckCount = 0
         selectedReplyMessageId = nil
         replyCandidates = []
         contactMemories = []
@@ -192,16 +199,23 @@ final class AppModel: ObservableObject {
         guard !(messageStreamState == .loadingFirstPage || messageStreamState == .loadingMore) else {
             return
         }
-        messageTask?.cancel()
-        messageTask = Task { [weak self] in
+        guard messageRefreshTask == nil else { return }
+        messageRefreshTask = Task { [weak self] in
             guard let self else { return }
+            defer { self.messageRefreshTask = nil }
             do {
                 let page = try await client.messages(contactId: selectedContactId, limit: 50)
+                guard !Task.isCancelled, self.selectedContactId == selectedContactId else {
+                    return
+                }
                 let fresh = page.messages.filter { !self.knownMessageIds.contains($0.messageId) }
-                guard !fresh.isEmpty else { return }
-                self.messages = fresh + self.messages
-                self.knownMessageIds.formUnion(fresh.map(\.messageId))
+                if !fresh.isEmpty {
+                    self.messages = fresh + self.messages
+                    self.knownMessageIds.formUnion(fresh.map(\.messageId))
+                }
                 self.loadedBefore = page.nextCursor
+                self.lastMessageCheckAt = Date()
+                self.lastMessageCheckCount = fresh.count
             } catch {
                 // 合并失败不打断已有消息流；下一轮轮询或事件会重试。
             }
@@ -1047,6 +1061,11 @@ final class AppModel: ObservableObject {
                 // owner 已初始化（或状态未知）：正常轮询业务数据。
                 await refreshStatus()
                 await refreshContacts()
+                // SSE 是低延迟通道；选中会话再做 3 秒级最新一页对账，
+                // 覆盖 SSE 断线、事件遗漏或事件到达时首屏仍在加载的窗口。
+                if selectedContactId != nil {
+                    fetchLatestAndMerge()
+                }
                 await refreshFollowSmokeIfNeeded()
             }
             if !supervisor.isRunning {

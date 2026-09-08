@@ -368,6 +368,19 @@ struct MainWindowView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
+            if let checkedAt = model.lastMessageCheckAt {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                    Text("消息列表最近检查")
+                    Text(checkedAt, style: .time)
+                    if model.lastMessageCheckCount > 0 {
+                        Text("· 新增 " + String(model.lastMessageCheckCount) + " 条")
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            }
             Button("立即检查一次") {
                 model.checkNow()
             }
@@ -385,6 +398,10 @@ struct MainWindowView: View {
             case (true, "active"):
                 return "CLI 后台同步中：已绑定 \(model.status?.cliBoundCount ?? 0) 个会话"
             case (true, "degraded"):
+                if model.status?.cliStreamActive == true,
+                   model.status?.cliSyncMode == "global_follow" {
+                    return "CLI 后台同步中（全局流在线，部分读取失败）：已绑定 \(model.status?.cliBoundCount ?? 0) 个会话"
+                }
                 return "CLI 后台同步降级轮询：已绑定 \(model.status?.cliBoundCount ?? 0) 个会话"
             case (true, "waiting_bindings"):
                 return "等待批量绑定微信私聊会话"
@@ -1295,7 +1312,14 @@ struct MainWindowView: View {
                 Divider()
                 Text("后台运行状态")
                     .font(.subheadline.weight(.semibold))
-                syncInfoRow("CLI 阶段", value: cliSyncPhaseLabel(status.cliSyncPhase))
+                syncInfoRow(
+                    "CLI 阶段",
+                    value: cliSyncPhaseLabel(
+                        status.cliSyncPhase,
+                        streamActive: status.cliStreamActive == true,
+                        streamMode: status.cliSyncMode
+                    )
+                )
                 syncInfoRow("CLI 流", value: status.cliStreamActive == true ? "全局流运行中" : "有界轮询")
                 syncInfoRow("已绑定会话", value: String(status.cliBoundCount ?? 0))
                 syncInfoRow("本轮新增", value: String(status.cliBatchMessageCount ?? 0))
@@ -1546,10 +1570,18 @@ struct MainWindowView: View {
         }
     }
 
-    private func cliSyncPhaseLabel(_ raw: String?) -> String {
+    private func cliSyncPhaseLabel(
+        _ raw: String?,
+        streamActive: Bool = false,
+        streamMode: String? = nil
+    ) -> String {
         switch raw {
         case "active": return "运行中"
-        case "degraded": return "降级有界轮询"
+        case "degraded":
+            if streamActive, streamMode == "global_follow" {
+                return "全局流运行中（部分读取失败）"
+            }
+            return "降级有界轮询"
         case "waiting_bindings": return "等待绑定"
         case "disabled": return "已关闭"
         default: return raw ?? "未知"

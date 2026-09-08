@@ -80,12 +80,14 @@ class FakeCli:
 class FakeObservationStore:
     def __init__(self) -> None:
         self.baselines: dict[tuple[UUID, UUID], datetime] = {}
+        self.baseline_calls: list[dict[str, object]] = []
         self.cursors: dict[tuple[UUID, UUID], object] = {}
         self.reliable_cursors: dict[tuple[UUID, UUID], object] = {}
         self.rewind_calls: list[dict[str, object]] = []
         self.recorded: list[dict[str, object]] = []
 
     def ensure_baseline(self, **kwargs):
+        self.baseline_calls.append(kwargs)
         key = (kwargs["owner_id"], kwargs["contact_id"])
         return self.baselines.setdefault(key, kwargs["baseline_at"])
 
@@ -432,6 +434,15 @@ class CliBackgroundSyncTest(unittest.TestCase):
         self.assertEqual(second.status.backfill_phase, "complete")
         self.assertEqual(second.status.backfill_completed_contacts, 33)
         self.assertEqual(len(cli.tail_calls), 33)
+
+    def test_baseline_is_checked_once_per_binding_across_heartbeats(self) -> None:
+        self.sync.cycle(enabled=True)
+        self.sync.cycle(enabled=True)
+
+        self.assertEqual(
+            [call["conversation_locator"] for call in self.store.baseline_calls],
+            ["wxid_a", "wxid_b"],
+        )
 
     def test_new_binding_uses_baseline_then_next_cycle_uses_contact_cursor(self) -> None:
         self.sync.cycle(enabled=True)
@@ -854,6 +865,36 @@ class CliBackgroundSyncTest(unittest.TestCase):
             ["wxid_a", "wxid_b"],
         )
         self.assertEqual(result.status.backfill_phase, "failed")
+
+    def test_failed_backfill_state_is_not_reopened_by_a_live_read(self) -> None:
+        self.sync.cycle(enabled=True)
+        failed_contact = self.bindings[0].contact_id
+        self.backfill_store.states[(OWNER_ID, failed_contact)] = _BackfillState(
+            failed_contact,
+            "failed",
+            self.now,
+            failure_code="cli_command_failed",
+        )
+        self.cli.tail_results["wxid_a"] = deque(
+            [
+                TailResult(
+                    events=(_message("wxid_a", 11, "失败状态下的实时消息"),),
+                    cursor="local_id:11",
+                    last_local_id=11,
+                    freshness_confirmed=True,
+                )
+            ]
+        )
+        assert self.cli.stream is not None
+        self.cli.stream.events.append(("session:live-after-failure", "wxid_a"))
+
+        result = self.sync.cycle(enabled=True)
+
+        self.assertEqual(result.batch_message_count, 1)
+        self.assertEqual(
+            self.backfill_store.states[(OWNER_ID, failed_contact)].phase,
+            "failed",
+        )
 
     def test_global_stream_failure_falls_back_to_bounded_one_shot_reads(self) -> None:
         self.cli.session_events_follow = lambda **kwargs: (_ for _ in ()).throw(

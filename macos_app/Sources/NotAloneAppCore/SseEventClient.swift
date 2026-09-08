@@ -5,6 +5,9 @@ import Foundation
 // 消息流 API 取详情。断线自动按 Last-Event-ID 重连（服务端以当前
 // 状态为准语义）。
 public final class SseEventClient: @unchecked Sendable {
+    typealias LineStream = AsyncThrowingStream<String, Error>
+    typealias LineStreamProvider = @Sendable (URLRequest) async throws -> LineStream
+
     public struct MessageCreated: Sendable {
         public let eventId: String
         public let ownerId: String
@@ -36,11 +39,27 @@ public final class SseEventClient: @unchecked Sendable {
 
     private let connection: BackendConnection
     private let onEvent: @Sendable (Event) async -> Void
+    private let lineStreamProvider: LineStreamProvider
     private var task: Task<Void, Never>?
     private var lastEventId: String?
 
-    public init(connection: BackendConnection, onEvent: @escaping @Sendable (Event) async -> Void) {
+    public convenience init(connection: BackendConnection, onEvent: @escaping @Sendable (Event) async -> Void) {
+        self.init(
+            connection: connection,
+            lineStreamProvider: { request in
+                try await Self.urlSessionLineStream(request)
+            },
+            onEvent: onEvent
+        )
+    }
+
+    init(
+        connection: BackendConnection,
+        lineStreamProvider: @escaping LineStreamProvider,
+        onEvent: @escaping @Sendable (Event) async -> Void
+    ) {
         self.connection = connection
+        self.lineStreamProvider = lineStreamProvider
         self.onEvent = onEvent
     }
 
@@ -57,19 +76,19 @@ public final class SseEventClient: @unchecked Sendable {
     }
 
     private func run() async {
-        var first = true
+        var hasConnected = false
         while !Task.isCancelled {
-            let reconnected = await openAndRead()
-            if !first, reconnected {
+            let connected = await openAndRead()
+            if hasConnected, connected {
                 await onEvent(.reconnected)
             }
-            first = false
+            hasConnected = hasConnected || connected
             // 断线后短暂退避再重连。
             try? await Task.sleep(nanoseconds: 2_000_000_000)
         }
     }
 
-    /// 成功建立一次事件流返回 true；连接失败或流中断返回 false。
+    /// 成功建立一次事件流返回 true；连接建立失败返回 false。
     private func openAndRead() async -> Bool {
         guard let url = URL(string: "http://\(connection.address)")?
             .appendingPathComponent("api/events") else { return false }
@@ -80,15 +99,14 @@ public final class SseEventClient: @unchecked Sendable {
         if let lastEventId {
             request.setValue(lastEventId, forHTTPHeaderField: "Last-Event-ID")
         }
+        var connected = false
         do {
-            let (bytes, response) = try await URLSession.shared.bytes(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                return false
-            }
+            let lines = try await lineStreamProvider(request)
+            connected = true
             var eventId: String?
             var eventType = ""
             var dataLines: [String] = []
-            for try await line in bytes.lines {
+            for try await line in lines {
                 if Task.isCancelled {
                     return true
                 }
@@ -116,7 +134,31 @@ public final class SseEventClient: @unchecked Sendable {
         } catch {
             // 连接失败或流中断：回到 run() 重连。
         }
-        return false
+        // HTTP 连接已经成功打开后，即使服务器正常结束响应或读取期间
+        // 断流，也必须让 run() 发出重连对账信号；message.created 不回放。
+        return connected
+    }
+
+    private static func urlSessionLineStream(_ request: URLRequest) async throws -> LineStream {
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw InvalidSseResponseError()
+        }
+        return LineStream { continuation in
+            let producer = Task {
+                do {
+                    for try await line in bytes.lines {
+                        continuation.yield(line)
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in
+                producer.cancel()
+            }
+        }
     }
 
     private func dispatch(type: String, data: String) async {
@@ -137,6 +179,8 @@ public final class SseEventClient: @unchecked Sendable {
         }
     }
 }
+
+private struct InvalidSseResponseError: Error {}
 
 private struct EventEnvelope: Decodable {
     let id: String
