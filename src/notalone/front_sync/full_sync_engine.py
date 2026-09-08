@@ -72,6 +72,7 @@ class CliFullSyncEngine:
         "_cli_status",
         "_cli_last_checked_at",
         "_last_foreground_status",
+        "_priority_contact_id",
     )
 
     def __init__(
@@ -103,6 +104,7 @@ class CliFullSyncEngine:
         self._cli_status: tuple[bool, str | None] | None = None
         self._cli_last_checked_at: datetime | None = None
         self._last_foreground_status: ForegroundLocatorStatus | None = None
+        self._priority_contact_id: UUID | None = None
 
     def enable_sync(self) -> None:
         self._sync_state.enable(owner_id=self._owner_id, at=self._clock())
@@ -170,9 +172,14 @@ class CliFullSyncEngine:
         enabled = self.sync_enabled()
         foreground: ForegroundLocatorStatus = self._foreground.observe(enabled=enabled)
         self._last_foreground_status = foreground
+        priority_contact_id = (
+            self._priority_contact_id
+            if self._priority_contact_id is not None
+            else foreground.active_contact_id
+        )
         background: CliSyncCycleResult = self._background.cycle(
             enabled=enabled,
-            priority_contact_id=foreground.active_contact_id,
+            priority_contact_id=priority_contact_id,
         )
         return self._build_report(
             enabled=enabled,
@@ -238,6 +245,13 @@ class CliFullSyncEngine:
             foreground_failure_code=foreground.failure_code,
         )
         return report
+
+    def set_priority_contact(self, contact_id: UUID | None) -> None:
+        """设置当前应用查看联系人，供后台下一轮读取时优先处理。"""
+
+        if contact_id is not None and not isinstance(contact_id, UUID):
+            raise TypeError("contact_id 必须是 UUID 或 None。")
+        self._priority_contact_id = contact_id
 
     def list_cli_sessions(self) -> tuple[CliBindingCandidateView, ...]:
         """读取批量绑定预览；不要求微信在前台。"""

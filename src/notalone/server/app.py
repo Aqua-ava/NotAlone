@@ -440,6 +440,7 @@ class BackendApp:
             "/api/sync/enable",
             "/api/sync/disable",
             "/api/sync/check",
+            "/api/sync/priority",
             "/api/sync/backfill/pause",
             "/api/sync/backfill/retry",
             "/api/sync/confirm",
@@ -485,6 +486,8 @@ class BackendApp:
             )
         if method != "POST":
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        if path == "/api/sync/priority":
+            return self._handle_sync_priority(sync=sync, body=body)
         if path == "/api/sync/cli-bindings/confirm":
             return self._handle_cli_bindings_confirm(sync=sync, body=body)
         if path in {"/api/sync/confirm", "/api/sync/confirm-pending"}:
@@ -508,6 +511,61 @@ class BackendApp:
             # 稳定错误码，不把引擎异常细节回显给界面。
             return _json_response(
                 HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "sync_control_failed"}
+            )
+        return _json_response(HTTPStatus.OK, _sync_status_payload(report))
+
+    def _handle_sync_priority(
+        self,
+        *,
+        sync: SyncControlPort,
+        body: bytes,
+    ) -> Response:
+        """记录当前应用查看联系人，供后台下一轮读取时优先处理。"""
+
+        try:
+            payload = json.loads(body.decode("utf-8")) if body.strip() else {}
+        except (UnicodeDecodeError, ValueError):
+            return _json_response(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "sync_priority_request_invalid"},
+            )
+        if not isinstance(payload, dict) or "contact_id" not in payload:
+            return _json_response(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "sync_priority_request_invalid"},
+            )
+        raw_contact_id = payload["contact_id"]
+        if raw_contact_id is None:
+            contact_id = None
+        elif isinstance(raw_contact_id, str):
+            try:
+                contact_id = UUID(raw_contact_id)
+            except ValueError:
+                return _json_response(
+                    HTTPStatus.BAD_REQUEST,
+                    {"error": "sync_priority_request_invalid"},
+                )
+        else:
+            return _json_response(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "sync_priority_request_invalid"},
+            )
+        try:
+            report = sync.set_priority_contact(contact_id)
+        except (TypeError, ValueError):
+            return _json_response(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "sync_priority_request_invalid"},
+            )
+        except Exception:
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "sync_priority_failed"},
+            )
+        if report is None:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "sync_status_unavailable"},
             )
         return _json_response(HTTPStatus.OK, _sync_status_payload(report))
 

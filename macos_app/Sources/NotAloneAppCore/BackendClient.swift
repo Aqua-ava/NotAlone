@@ -52,6 +52,15 @@ public struct BackendClient: Sendable {
         try await request(path: "api/sync/check", method: "POST")
     }
 
+    // 告知后台当前 App 正在查看的联系人；只改变下一轮读取顺序。
+    public func setSyncPriority(contactId: String) async throws -> SyncStatus {
+        try await requestWithBody(
+            path: "api/sync/priority",
+            method: "POST",
+            body: ["contact_id": contactId]
+        )
+    }
+
     public func pauseBackfill() async throws -> SyncStatus {
         try await request(path: "api/sync/backfill/pause", method: "POST")
     }

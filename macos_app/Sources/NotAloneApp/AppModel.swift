@@ -93,6 +93,7 @@ final class AppModel: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var messageTask: Task<Void, Never>?
     private var messageRefreshTask: Task<Void, Never>?
+    private var priorityTask: Task<Void, Never>?
     private var isToggling = false
     private var isCheckingNow = false
     private var loadedBefore: String?
@@ -114,6 +115,8 @@ final class AppModel: ObservableObject {
         messageTask = nil
         messageRefreshTask?.cancel()
         messageRefreshTask = nil
+        priorityTask?.cancel()
+        priorityTask = nil
         sseClient?.stop()
         sseClient = nil
         supervisor.terminate()
@@ -135,6 +138,7 @@ final class AppModel: ObservableObject {
         contactMemories = []
         pendingMemoryCandidates = []
         messageStreamState = .idle
+        publishPriorityContact(contactId)
         loadFirstMessagePage()
     }
 
@@ -218,6 +222,18 @@ final class AppModel: ObservableObject {
                 self.lastMessageCheckCount = fresh.count
             } catch {
                 // 合并失败不打断已有消息流；下一轮轮询或事件会重试。
+            }
+        }
+    }
+
+    private func publishPriorityContact(_ contactId: String) {
+        priorityTask?.cancel()
+        guard let client else { return }
+        priorityTask = Task {
+            do {
+                _ = try await client.setSyncPriority(contactId: contactId)
+            } catch {
+                // 后台下一轮仍会重试；优先级提示失败不打断消息查看。
             }
         }
     }
@@ -1064,6 +1080,9 @@ final class AppModel: ObservableObject {
                 // SSE 是低延迟通道；选中会话再做 3 秒级最新一页对账，
                 // 覆盖 SSE 断线、事件遗漏或事件到达时首屏仍在加载的窗口。
                 if selectedContactId != nil {
+                    if let selectedContactId {
+                        publishPriorityContact(selectedContactId)
+                    }
                     fetchLatestAndMerge()
                 }
                 await refreshFollowSmokeIfNeeded()
@@ -1115,6 +1134,9 @@ final class AppModel: ObservableObject {
         // 主动补读一次，避免首次读取失败后永久停在空状态。
         loadCliSessions()
         loadFollowSmoke()
+        if let selectedContactId {
+            publishPriorityContact(selectedContactId)
+        }
         if selectedContactId != nil && messages.isEmpty {
             loadFirstMessagePage()
         }

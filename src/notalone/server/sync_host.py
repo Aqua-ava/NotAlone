@@ -55,6 +55,9 @@ class SyncEnginePort(Protocol):
     def request_sync_check(self) -> None:
         """请求一次有界后台同步检查。"""
 
+    def set_priority_contact(self, contact_id: UUID | None) -> None:
+        """设置当前应用查看联系人，供下一轮后台读取优先处理。"""
+
     def pause_backfill(self) -> None:
         """暂停后台补齐。"""
 
@@ -116,6 +119,11 @@ class SyncControlPort(Protocol):
 
     def check(self) -> FrontSyncCycleReport:
         """立即执行一轮并返回最新报告。"""
+
+    def set_priority_contact(
+        self, contact_id: UUID | None
+    ) -> FrontSyncCycleReport | None:
+        """更新当前应用查看联系人，供后台下一轮读取优先处理。"""
 
     def pause_backfill(self) -> FrontSyncCycleReport:
         """暂停后台补齐并返回最新报告。"""
@@ -257,6 +265,17 @@ class SyncHost:
             if callable(request):
                 request()
             return self._run_cycle_locked()
+
+    def set_priority_contact(
+        self, contact_id: UUID | None
+    ) -> FrontSyncCycleReport | None:
+        """更新应用查看联系人；不额外触发同步周期。"""
+
+        if contact_id is not None and not isinstance(contact_id, UUID):
+            raise TypeError("contact_id 必须是 UUID 或 None。")
+        with self._engine_lock:
+            self._engine.set_priority_contact(contact_id)
+            return self.status()
 
     def pause_backfill(self) -> FrontSyncCycleReport:
         with self._engine_lock:

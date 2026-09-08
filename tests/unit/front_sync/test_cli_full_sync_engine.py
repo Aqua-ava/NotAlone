@@ -43,6 +43,7 @@ class FakeState:
 class FakeBackground:
     def __init__(self) -> None:
         self.calls: list[bool] = []
+        self.priority_calls: list[UUID | None] = []
         self.safety_sweep_requests = 0
         self.result = CliSyncCycleResult(
             status=CliSyncStatus(
@@ -62,7 +63,7 @@ class FakeBackground:
         priority_contact_id: UUID | None = None,
     ) -> CliSyncCycleResult:
         self.calls.append(enabled)
-        del priority_contact_id
+        self.priority_calls.append(priority_contact_id)
         return self.result
 
     def close(self) -> None:
@@ -194,6 +195,13 @@ class CliFullSyncEngineTest(unittest.TestCase):
         self.assertEqual(report.foreground_failure_code, "screen_capture_permission_missing")
         self.assertEqual(self.background.calls, [True])
         self.assertEqual(self.foreground.calls, [True])
+
+    def test_selected_contact_is_prioritized_for_background_cycle(self) -> None:
+        self.engine.set_priority_contact(CONTACT_ID)
+
+        self.engine.cycle()
+
+        self.assertEqual(self.background.priority_calls, [CONTACT_ID])
 
     def test_batch_binding_is_exposed_without_using_foreground_probe(self) -> None:
         candidates = self.engine.list_cli_sessions()

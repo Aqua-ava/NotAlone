@@ -25,6 +25,7 @@ class FakeEngine:
         self.enable_calls = 0
         self.disable_calls = 0
         self.request_sync_check_calls = 0
+        self.priority_contact_calls: list[object] = []
         self.cancel_pending_io_calls = 0
         self.confirm_calls: list[tuple[str, str]] = []
         self.confirm_pending_calls: list[tuple[str, str]] = []
@@ -65,6 +66,9 @@ class FakeEngine:
 
     def request_sync_check(self) -> None:
         self.request_sync_check_calls += 1
+
+    def set_priority_contact(self, contact_id) -> None:
+        self.priority_contact_calls.append(contact_id)
 
     def cancel_pending_io(self) -> None:
         self.cancel_pending_io_calls += 1
@@ -147,6 +151,14 @@ class SyncHostTest(unittest.TestCase):
         self.assertTrue(first.sync_enabled)
         self.assertEqual(self.host.status(), second)
         self.assertEqual(self.host.status(), self.host.status())
+
+    def test_selected_contact_priority_is_forwarded_to_engine(self) -> None:
+        contact_id = uuid4()
+
+        result = self.host.set_priority_contact(contact_id)
+
+        self.assertEqual(self.engine.priority_contact_calls, [contact_id])
+        self.assertEqual(result, self.host.status())
 
     def test_status_is_none_before_any_cycle(self) -> None:
         self.assertIsNone(self.host.status())

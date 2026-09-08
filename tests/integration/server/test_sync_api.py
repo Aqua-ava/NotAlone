@@ -65,6 +65,7 @@ class ScriptedSyncControl:
         self.enable_calls = 0
         self.disable_calls = 0
         self.check_calls = 0
+        self.priority_contact_calls: list[UUID | None] = []
         self.pause_backfill_calls = 0
         self.retry_backfill_calls = 0
         self.confirm_calls: list[tuple[str, str]] = []
@@ -97,6 +98,10 @@ class ScriptedSyncControl:
 
     def check(self) -> FrontSyncCycleReport:
         self.check_calls += 1
+        return self.next_report
+
+    def set_priority_contact(self, contact_id: UUID | None) -> FrontSyncCycleReport:
+        self.priority_contact_calls.append(contact_id)
         return self.next_report
 
     def pause_backfill(self) -> FrontSyncCycleReport:
@@ -163,6 +168,7 @@ class SyncApiContractTest(unittest.TestCase):
             ("POST", "/api/sync/enable"),
             ("POST", "/api/sync/disable"),
             ("POST", "/api/sync/check"),
+            ("POST", "/api/sync/priority"),
             ("POST", "/api/sync/backfill/pause"),
             ("POST", "/api/sync/backfill/retry"),
             ("POST", "/api/sync/confirm"),
@@ -359,6 +365,35 @@ class SyncApiContractTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.sync.check_calls, 1)
 
+    def test_priority_contact_delegates(self) -> None:
+        contact_id = uuid4()
+        response = self.client.request(
+            "POST",
+            "/api/sync/priority",
+            headers=self.headers,
+            body=(
+                '{"contact_id": "' + str(contact_id) + '"}'
+            ).encode("utf-8"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.sync.priority_contact_calls, [contact_id])
+
+    def test_priority_contact_rejects_invalid_payload(self) -> None:
+        response = self.client.request(
+            "POST",
+            "/api/sync/priority",
+            headers=self.headers,
+            body=b'{"contact_id": "not-a-uuid"}',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json(),
+            {"error": "sync_priority_request_invalid"},
+        )
+        self.assertEqual(self.sync.priority_contact_calls, [])
+
     def test_sync_post_requires_post_method(self) -> None:
         response = self.client.get("/api/sync/enable", headers=self.headers)
         self.assertEqual(response.status_code, 404)
@@ -544,6 +579,7 @@ class SyncApiContractTest(unittest.TestCase):
             ("POST", "/api/sync/enable"),
             ("POST", "/api/sync/disable"),
             ("POST", "/api/sync/check"),
+            ("POST", "/api/sync/priority"),
             ("POST", "/api/sync/backfill/pause"),
             ("POST", "/api/sync/backfill/retry"),
             ("POST", "/api/sync/confirm"),
