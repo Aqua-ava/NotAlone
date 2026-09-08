@@ -57,6 +57,12 @@ public final class BackendSupervisor: @unchecked Sendable {
         if let cliPath = EnvironmentLocator.locateBundledCli(repoRoot: repoRoot) {
             environment["NOTALONE_WECHAT_CLI"] = cliPath.path
         }
+        if environment["WECHAT_CLI_WCDB_LIB"] == nil,
+           let libraryPath = EnvironmentLocator.locateBundledWechatCliRuntimeLibrary(
+               repoRoot: repoRoot
+           ) {
+            environment["WECHAT_CLI_WCDB_LIB"] = libraryPath.path
+        }
         environment["PYTHONUNBUFFERED"] = "1"
         process.environment = environment
         process.standardOutput = stdout
@@ -202,7 +208,31 @@ public enum EnvironmentLocator {
         ]
         var seen: Set<String> = []
         for candidate in candidates where seen.insert(candidate.path).inserted {
-            if FileManager.default.isExecutableFile(atPath: candidate.path) {
+            let runtimeLibrary = candidate
+                .deletingLastPathComponent()
+                .appendingPathComponent("libWCDB.dylib")
+            if FileManager.default.isExecutableFile(atPath: candidate.path),
+               FileManager.default.isReadableFile(atPath: runtimeLibrary.path) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
+    /// 查找随 App 构建的 wechat-cli 运行时动态库。
+    ///
+    /// wechat-cli 通过运行时加载 WCDB；仅复制可执行文件会让 App 启动的
+    /// CLI 立即退出。路径由后端显式传入，避免依赖 Finder 启动时的工作目录。
+    public static func locateBundledWechatCliRuntimeLibrary(repoRoot: URL) -> URL? {
+        let candidates = [
+            Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/libWCDB.dylib"),
+            repoRoot.appendingPathComponent(
+                "macos_app/build/NotAloneApp.app/Contents/Helpers/libWCDB.dylib"
+            ),
+        ]
+        var seen: Set<String> = []
+        for candidate in candidates where seen.insert(candidate.path).inserted {
+            if FileManager.default.isReadableFile(atPath: candidate.path) {
                 return candidate
             }
         }

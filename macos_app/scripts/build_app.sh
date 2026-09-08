@@ -56,15 +56,39 @@ env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
 
 cp "${app_dir}/App/Info.plist" "${app_bundle}/Contents/Info.plist"
 
-# 把用户已安装的 CLI 复制进 App，随后与主 App 使用同一个稳定的开发签名。
-# 这样后台不会在每轮安全对账时以 ad-hoc 身份创建新的跨 App 数据访问者。
+# 把用户已安装的 CLI 及其运行时动态库复制进 App，随后与主 App 使用同一个
+# 稳定的开发签名。只复制可执行文件会让 Finder 启动的 CLI 因找不到
+# libWCDB.dylib 立即退出；依赖缺失时不放入半可用的 bundled CLI，让后端
+# 回退到 PATH 中的用户安装版本。
 cli_source="$(command -v wechat-cli || true)"
 if [[ -n "${cli_source}" ]]; then
     cli_source="${cli_source:A}"
 fi
-if [[ -n "${cli_source}" && -x "${cli_source}" ]]; then
+wcdb_library_source="${WECHAT_CLI_WCDB_LIB:-}"
+if [[ -z "${wcdb_library_source}" && -n "${cli_source}" ]]; then
+    for candidate in \
+        "${cli_source:h}/libWCDB.dylib" \
+        "${cli_source:h:h}/share/wechat-cli/libWCDB.dylib" \
+        "${HOME}/.local/share/wechat-cli/libWCDB.dylib"; do
+        if [[ -f "${candidate}" ]]; then
+            wcdb_library_source="${candidate:A}"
+            break
+        fi
+    done
+fi
+
+# 这两个文件是脚本管理的构建产物；先去掉旧副本，避免本次找不到依赖时
+# 意外继续使用上一次构建留下的半可用 helper。
+rm -f -- "${helpers_dir}/wechat-cli" "${helpers_dir}/libWCDB.dylib"
+if [[ -n "${cli_source}" && -x "${cli_source}" \
+    && -n "${wcdb_library_source}" && -f "${wcdb_library_source}" ]]; then
     cp "${cli_source}" "${helpers_dir}/wechat-cli"
+    cp "${wcdb_library_source}" "${helpers_dir}/libWCDB.dylib"
     chmod 755 "${helpers_dir}/wechat-cli"
+    chmod 644 "${helpers_dir}/libWCDB.dylib"
+    echo "已打包 wechat-cli 运行时库：${wcdb_library_source}"
+elif [[ -n "${cli_source}" && -x "${cli_source}" ]]; then
+    echo "警告：未找到 libWCDB.dylib，不把 wechat-cli 放入 App；后端将回退到 PATH。" >&2
 else
     echo "警告：未找到 wechat-cli，App 将回退到后端 PATH。" >&2
 fi
@@ -79,6 +103,11 @@ if [[ -n "${signing_identity}" ]]; then
             --identifier "com.notalone.wechat-cli" \
             "${helpers_dir}/wechat-cli"
     fi
+    if [[ -f "${helpers_dir}/libWCDB.dylib" ]]; then
+        codesign --force --sign "${signing_identity}" \
+            --identifier "com.notalone.wechat-cli.wcdb" \
+            "${helpers_dir}/libWCDB.dylib"
+    fi
     codesign --force --deep --sign "${signing_identity}" \
         --identifier "com.notalone.app" \
         "${app_bundle}"
@@ -88,6 +117,11 @@ else
         codesign --force --sign - \
             --identifier "com.notalone.wechat-cli" \
             "${helpers_dir}/wechat-cli"
+    fi
+    if [[ -f "${helpers_dir}/libWCDB.dylib" ]]; then
+        codesign --force --sign - \
+            --identifier "com.notalone.wechat-cli.wcdb" \
+            "${helpers_dir}/libWCDB.dylib"
     fi
     codesign --force --deep --sign - \
         --identifier "com.notalone.app" \

@@ -39,7 +39,9 @@ final class BackendConnectionTests: XCTestCase {
             withIntermediateDirectories: true
         )
         let cli = helpers.appendingPathComponent("wechat-cli")
+        let library = helpers.appendingPathComponent("libWCDB.dylib")
         try Data("#!/bin/sh\n".utf8).write(to: cli)
+        try Data("synthetic dynamic library\n".utf8).write(to: library)
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o755],
             ofItemAtPath: cli.path
@@ -49,6 +51,51 @@ final class BackendConnectionTests: XCTestCase {
         XCTAssertEqual(
             EnvironmentLocator.locateBundledCli(repoRoot: root),
             cli
+        )
+    }
+
+    func testIgnoresBundledCliWhenItsRuntimeLibraryIsMissing() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("notalone-cli-incomplete-root-\(UUID().uuidString)")
+        let helpers = root
+            .appendingPathComponent("macos_app/build/NotAloneApp.app/Contents/Helpers")
+        try FileManager.default.createDirectory(
+            at: helpers,
+            withIntermediateDirectories: true
+        )
+        let cli = helpers.appendingPathComponent("wechat-cli")
+        try Data("#!/bin/sh\n".utf8).write(to: cli)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: cli.path
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertNil(EnvironmentLocator.locateBundledCli(repoRoot: root))
+    }
+
+    func testLocatesBundledWechatCliRuntimeLibraryFromRepositoryBuildOutput() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("notalone-cli-runtime-root-\(UUID().uuidString)")
+        let helpers = root
+            .appendingPathComponent("macos_app/build/NotAloneApp.app/Contents/Helpers")
+        try FileManager.default.createDirectory(
+            at: helpers,
+            withIntermediateDirectories: true
+        )
+        let cli = helpers.appendingPathComponent("wechat-cli")
+        let library = helpers.appendingPathComponent("libWCDB.dylib")
+        try Data("#!/bin/sh\n".utf8).write(to: cli)
+        try Data("synthetic dynamic library\n".utf8).write(to: library)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: cli.path
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertEqual(
+            EnvironmentLocator.locateBundledWechatCliRuntimeLibrary(repoRoot: root),
+            library
         )
     }
 
