@@ -147,8 +147,10 @@ class SyncHost:
         "_engine",
         "_follow_smoke_active",
         "_interval",
-        "_lock",
+        "_engine_lock",
+        "_state_lock",
         "_latest",
+        "_runtime_status",
         "_last_valid_observation",
         "_stop_event",
         "_thread",
@@ -162,8 +164,16 @@ class SyncHost:
         self._engine = engine
         self._follow_smoke_active = False
         self._interval = float(interval)
-        self._lock = threading.Lock()
+        # 同步周期会做 CLI、探针和数据库 I/O，可能持续数秒甚至更久。
+        # engine_lock 只保护不可并发的引擎调用；状态快照使用独立锁，
+        # 这样 /api/sync/status 不会因为一轮慢同步而超时。
+        self._engine_lock = threading.Lock()
+        self._state_lock = threading.Lock()
         self._latest: FrontSyncCycleReport | None = None
+        self._runtime_status = FollowRuntimeStatus(
+            enabled=False,
+            stream_active=False,
+        )
         self._last_valid_observation: LatestValidForegroundObservation | None = None
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -175,7 +185,7 @@ class SyncHost:
     def start(self) -> None:
         """启动后台循环线程；重复启动会抛出 RuntimeError。"""
 
-        with self._lock:
+        with self._state_lock:
             if self._thread is not None:
                 raise RuntimeError("同步宿主已经启动。")
             self._stop_event.clear()
@@ -190,7 +200,7 @@ class SyncHost:
     def stop(self) -> None:
         """停止后台循环并关闭引擎读取资源；未启动时也会清理资源。"""
 
-        with self._lock:
+        with self._state_lock:
             thread = self._thread
             self._thread = None
         if thread is not None:
@@ -201,7 +211,7 @@ class SyncHost:
             if callable(cancel):
                 cancel()
             thread.join(timeout=max(self._interval * 2, 5.0))
-        with self._lock:
+        with self._engine_lock:
             close = getattr(self._engine, "close", None)
             if callable(close):
                 close()
@@ -211,21 +221,21 @@ class SyncHost:
     # ------------------------------------------------------------------
 
     def status(self) -> FrontSyncCycleReport | None:
-        with self._lock:
+        with self._state_lock:
             return self._latest
 
     def enable(self) -> FrontSyncCycleReport:
-        with self._lock:
+        with self._engine_lock:
             self._engine.enable_sync()
             return self._run_cycle_locked()
 
     def disable(self) -> FrontSyncCycleReport:
-        with self._lock:
+        with self._engine_lock:
             self._engine.disable_sync()
             return self._run_cycle_locked()
 
     def check(self) -> FrontSyncCycleReport:
-        with self._lock:
+        with self._engine_lock:
             # CLI 全量同步的安全对账是低频的；用户点击“立即检查”时
             # 明确表达了要立刻执行一次，但仍由引擎保持固定批量上限。
             request = getattr(self._engine, "request_sync_check", None)
@@ -234,14 +244,14 @@ class SyncHost:
             return self._run_cycle_locked()
 
     def cli_sessions(self) -> tuple[CliBindingCandidateView, ...]:
-        with self._lock:
+        with self._engine_lock:
             return self._engine.list_cli_sessions()
 
     def confirm_cli_bindings(
         self,
         selections: Sequence[CliBindingSelection],
     ) -> FrontSyncCycleReport:
-        with self._lock:
+        with self._engine_lock:
             report = self._engine.confirm_cli_bindings(selections)
             self._cache_report_locked(report)
             return report
@@ -258,7 +268,7 @@ class SyncHost:
             raise TypeError("contact_id 必须是 UUID。")
         if not isinstance(locator, str) or not locator.strip():
             raise ValueError("locator 不能为空。")
-        with self._lock:
+        with self._engine_lock:
             report = self._engine.confirm_binding(
                 contact_id=contact_id,
                 locator=locator,
@@ -278,7 +288,7 @@ class SyncHost:
             raise TypeError("contact_id 必须是 UUID。")
         if not isinstance(locator, str) or not locator.strip():
             raise ValueError("locator 不能为空。")
-        with self._lock:
+        with self._engine_lock:
             report = self._engine.confirm_pending_binding(
                 contact_id=contact_id,
                 locator=locator,
@@ -287,40 +297,43 @@ class SyncHost:
             return report
 
     def sync_enabled(self) -> bool:
-        with self._lock:
+        with self._engine_lock:
             return self._engine.sync_enabled()
 
     def enable_follow_smoke(self) -> FrontSyncCycleReport:
-        with self._lock:
+        with self._engine_lock:
             # 每轮验证只展示本轮的最近有效观测，避免把上一次验证的结果
             # 误当成当前会话已经重新通过门禁。
-            self._last_valid_observation = None
+            with self._state_lock:
+                self._last_valid_observation = None
             report = self._engine.enable_follow_smoke()
-            self._follow_smoke_active = True
+            with self._state_lock:
+                self._follow_smoke_active = True
             self._cache_report_locked(report)
             return report
 
     def disable_follow_smoke(self) -> FrontSyncCycleReport:
-        with self._lock:
+        with self._engine_lock:
             report = self._engine.disable_follow_smoke()
-            self._follow_smoke_active = False
+            with self._state_lock:
+                self._follow_smoke_active = False
             self._cache_report_locked(report)
             return report
 
     def interrupt_follow_stream(self) -> FrontSyncCycleReport:
-        with self._lock:
+        with self._engine_lock:
             report = self._engine.interrupt_follow_stream()
             self._cache_report_locked(report)
             return report
 
     def follow_runtime_status(self) -> FollowRuntimeStatus:
-        with self._lock:
-            return self._engine.follow_runtime_status()
+        with self._state_lock:
+            return self._runtime_status
 
     def last_valid_observation(self) -> LatestValidForegroundObservation | None:
         """读取最近一次有效前台观察；只返回元数据，不含消息正文。"""
 
-        with self._lock:
+        with self._state_lock:
             return self._last_valid_observation
 
     # ------------------------------------------------------------------
@@ -329,14 +342,14 @@ class SyncHost:
 
     def _loop(self) -> None:
         # 启动先播种一轮初始化报告；随后只在同步开启时按心跳循环。
-        with self._lock:
+        with self._engine_lock:
             self._run_cycle_guarded()
         while True:
-            with self._lock:
+            with self._state_lock:
                 interval = 0.25 if self._follow_smoke_active else self._interval
             if self._stop_event.wait(interval):
                 return
-            with self._lock:
+            with self._engine_lock:
                 if self._engine.sync_enabled():
                     self._run_cycle_guarded()
 
@@ -357,22 +370,24 @@ class SyncHost:
     def _cache_report_locked(self, report: FrontSyncCycleReport) -> None:
         """缓存当前报告，并在所有读取门禁通过时更新最近有效观测。"""
 
-        self._latest = report
-        if not (
-            report.sync_enabled
-            and report.phase is FrontSyncPhase.ACTIVE
-            and report.probe_available
-            and report.wechat_in_front
-            and report.cli_available
-            and report.failure_code is None
-            and report.active_contact_id is not None
-        ):
-            return
         runtime = self._engine.follow_runtime_status()
-        self._last_valid_observation = LatestValidForegroundObservation(
-            observed_at=datetime.now(timezone.utc),
-            contact_id=report.active_contact_id,
-            display_name=report.active_binding_display_name,
-            watermark=runtime.watermark,
-            batch_message_count=report.batch_message_count,
-        )
+        with self._state_lock:
+            self._latest = report
+            self._runtime_status = runtime
+            if not (
+                report.sync_enabled
+                and report.phase is FrontSyncPhase.ACTIVE
+                and report.probe_available
+                and report.wechat_in_front
+                and report.cli_available
+                and report.failure_code is None
+                and report.active_contact_id is not None
+            ):
+                return
+            self._last_valid_observation = LatestValidForegroundObservation(
+                observed_at=datetime.now(timezone.utc),
+                contact_id=report.active_contact_id,
+                display_name=report.active_binding_display_name,
+                watermark=runtime.watermark,
+                batch_message_count=report.batch_message_count,
+            )

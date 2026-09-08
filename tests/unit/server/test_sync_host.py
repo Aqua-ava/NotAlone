@@ -110,6 +110,20 @@ class FakeEngine:
         )
 
 
+class BlockingCycleEngine(FakeEngine):
+    """在 cycle 内等待，用来验证状态读取不被慢同步周期拖住。"""
+
+    def __init__(self) -> None:
+        super().__init__(enabled=True)
+        self.cycle_started = threading.Event()
+        self.release_cycle = threading.Event()
+
+    def cycle(self) -> FrontSyncCycleReport:
+        self.cycle_started.set()
+        self.release_cycle.wait(timeout=2.0)
+        return super().cycle()
+
+
 class SyncHostTest(unittest.TestCase):
     def setUp(self) -> None:
         self.engine = FakeEngine()
@@ -136,6 +150,33 @@ class SyncHostTest(unittest.TestCase):
 
     def test_status_is_none_before_any_cycle(self) -> None:
         self.assertIsNone(self.host.status())
+
+    def test_status_and_follow_runtime_do_not_wait_for_blocked_cycle(self) -> None:
+        engine = BlockingCycleEngine()
+        host = SyncHost(engine=engine, interval=0.01)
+        host.start()
+        self.assertTrue(engine.cycle_started.wait(timeout=1.0))
+
+        status_result: list[FrontSyncCycleReport | None] = []
+        status_done = threading.Event()
+
+        def read_status() -> None:
+            status_result.append(host.status())
+            status_done.set()
+
+        status_thread = threading.Thread(target=read_status)
+        status_thread.start()
+        try:
+            self.assertTrue(
+                status_done.wait(timeout=0.2),
+                "状态 API 不应等待正在执行的同步周期",
+            )
+            self.assertEqual(status_result, [None])
+            self.assertFalse(host.follow_runtime_status().stream_active)
+        finally:
+            engine.release_cycle.set()
+            status_thread.join(timeout=1.0)
+            host.stop()
 
     def test_enable_delegates_and_returns_fresh_report(self) -> None:
         report = self.host.enable()
