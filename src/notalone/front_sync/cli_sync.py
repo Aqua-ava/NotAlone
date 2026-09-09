@@ -166,6 +166,7 @@ class SyncStatePort(Protocol):
 
 _MAX_EVENTS_PER_CYCLE = 128
 _MAX_BINDINGS_PER_CYCLE = 32
+_PRIORITY_READ_INTERVAL = timedelta(seconds=3)
 _SAFETY_SWEEP_INTERVAL = timedelta(seconds=15)
 _SAFETY_SWEEP_BINDINGS_PER_CYCLE = 8
 _INCOMPLETE_CLI_FAILURE_CODES = frozenset(
@@ -201,6 +202,8 @@ class CliBackgroundSync:
         "_initial_scan_done",
         "_sweep_index",
         "_last_sweep_at",
+        "_last_priority_read_at",
+        "_last_priority_locator",
         "_pending_locators",
         "_pending_locator_set",
         "_live_pending_locators",
@@ -249,6 +252,8 @@ class CliBackgroundSync:
         self._initial_scan_done = False
         self._sweep_index = 0
         self._last_sweep_at: datetime | None = None
+        self._last_priority_read_at: datetime | None = None
+        self._last_priority_locator: str | None = None
         self._pending_locators: deque[str] = deque()
         self._pending_locator_set: set[str] = set()
         # 同一联系人可能同时有补齐任务和实时事件；实时事件优先读取，
@@ -329,6 +334,12 @@ class CliBackgroundSync:
             )
 
         by_locator = {binding.conversation_locator: binding for binding in bindings}
+        priority_binding = self._priority_binding(bindings, priority_contact_id)
+        priority_locator = (
+            None
+            if priority_binding is None
+            else priority_binding.conversation_locator
+        )
         active_binding_locators = {
             binding.binding_id: binding.conversation_locator for binding in bindings
         }
@@ -367,7 +378,10 @@ class CliBackgroundSync:
         if self._stream is None and self._stream_supported:
             self._start_global_stream()
         if self._stream is not None:
-            self._consume_global_events(by_locator)
+            self._consume_global_events(
+                by_locator,
+                priority_locator=priority_locator,
+            )
             self._enqueue_initial_or_safety_sweep(
                 bindings,
                 priority_contact_id=priority_contact_id,
@@ -379,6 +393,9 @@ class CliBackgroundSync:
                 priority_contact_id=priority_contact_id,
             )
 
+        self._enqueue_priority_live_read(
+            priority_locator,
+        )
         self._prioritize_pending(priority_contact_id, bindings)
 
         written = 0
@@ -392,15 +409,23 @@ class CliBackgroundSync:
             if binding is None:
                 continue
             processed += 1
+            backfill_read = (
+                self._backfill_check_requested
+                and locator in self._backfill_pending_locators
+            )
             try:
                 written += self._read_binding(
                     binding,
                     disabled_window=disabled_window,
-                    backfill_trigger_at=self._backfill_trigger_at
-                    if self._backfill_check_requested
-                    else None,
+                    backfill_trigger_at=(
+                        self._backfill_trigger_at if backfill_read else None
+                    ),
                     live_read=live_read,
                 )
+                # 同一 locator 的补齐队列可以被本轮独立 live 请求升级；
+                # 只有确实带有 live 标记的读取才更新独立节奏。
+                if locator == priority_locator and live_read:
+                    self._last_priority_read_at = self._clock()
             except CliNormalizationError:
                 self._failure_code = "cli_normalization_failed"
             except CliAdapterError as error:
@@ -478,6 +503,8 @@ class CliBackgroundSync:
         self._initial_scan_done = False
         self._sweep_index = 0
         self._last_sweep_at = None
+        self._last_priority_read_at = None
+        self._last_priority_locator = None
         self._failure_code = failure_code
         return CliSyncCycleResult(
             status=CliSyncStatus(
@@ -502,6 +529,8 @@ class CliBackgroundSync:
         self._initial_scan_done = False
         self._sweep_index = 0
         self._last_sweep_at = None
+        self._last_priority_read_at = None
+        self._last_priority_locator = None
         self._stream_supported = True
         self._failure_code = None
 
@@ -633,7 +662,12 @@ class CliBackgroundSync:
             self._stream_supported = False
             self._stream = None
 
-    def _consume_global_events(self, by_locator: dict[str, object]) -> None:
+    def _consume_global_events(
+        self,
+        by_locator: dict[str, object],
+        *,
+        priority_locator: str | None,
+    ) -> None:
         stream = self._stream
         if stream is None:
             return
@@ -648,19 +682,47 @@ class CliBackgroundSync:
                     break
                 self._global_cursor = event.cursor
                 if event.conversation_locator in by_locator:
-                    self._enqueue(event.conversation_locator, live=live_events)
+                    if (
+                        event.conversation_locator == priority_locator
+                        and not self._priority_read_due(priority_locator)
+                    ):
+                        continue
+                    if live_events:
+                        self._enqueue_live(event.conversation_locator)
+                    else:
+                        self._enqueue(event.conversation_locator)
         except CliAdapterError as error:
             self._failure_code = error.code
             self._close_stream()
             self._stream_supported = False
 
-    def _enqueue(self, locator: str, *, live: bool = False) -> None:
-        if live:
-            self._live_pending_locators.add(locator)
+    def _enqueue(self, locator: str) -> None:
         if locator in self._pending_locator_set:
             return
         self._pending_locator_set.add(locator)
         self._pending_locators.append(locator)
+
+    def _enqueue_live(self, locator: str) -> None:
+        """把一次有界读取标记为 live；已排队的补齐项可被显式升级。"""
+
+        self._live_pending_locators.add(locator)
+        self._enqueue(locator)
+
+    @staticmethod
+    def _priority_binding(
+        bindings: Sequence[object],
+        priority_contact_id: UUID | None,
+    ) -> object | None:
+        if priority_contact_id is None:
+            return None
+        return next(
+            (
+                binding
+                for binding in bindings
+                if getattr(binding.scope, "contact_id", None) == priority_contact_id
+            ),
+            None,
+        )
 
     def _prioritize_pending(
         self,
@@ -669,22 +731,18 @@ class CliBackgroundSync:
     ) -> None:
         """把当前前台联系人移到已有事件队列的队首。"""
 
-        if priority_contact_id is None:
+        priority_binding = self._priority_binding(bindings, priority_contact_id)
+        if priority_binding is None or not self._pending_locators:
             return
-        priority = next(
-            (
-                binding.conversation_locator
-                for binding in bindings
-                if getattr(binding.scope, "contact_id", None) == priority_contact_id
-            ),
-            None,
-        )
-        if priority is None or not self._pending_locators:
+        priority = priority_binding.conversation_locator
+        if (
+            priority not in self._pending_locator_set
+            or not self._priority_read_due(priority)
+        ):
             return
         # 队列可能在后台补齐初始化时已提前建立；把当前联系人提升到
         # 队首时同步标记 live，否则暂停门禁仍会把这次读取跳过。
-        self._pending_locator_set.add(priority)
-        self._live_pending_locators.add(priority)
+        self._enqueue_live(priority)
         if self._pending_locators[0] == priority:
             return
         self._pending_locators = deque(
@@ -704,7 +762,10 @@ class CliBackgroundSync:
                 bindings,
                 priority_contact_id=priority_contact_id,
             ):
-                self._enqueue(binding.conversation_locator, live=live)
+                if live:
+                    self._enqueue_live(binding.conversation_locator)
+                else:
+                    self._enqueue(binding.conversation_locator)
             self._initial_scan_done = True
             # 初始化批次可能尚未在本轮全部处理完；从此刻开始计时，
             # 避免初始化刚结束就立刻再发起一批安全 CLI 进程。
@@ -736,6 +797,29 @@ class CliBackgroundSync:
         )
         self._last_sweep_at = now
 
+    def _priority_read_due(self, locator: str | None) -> bool:
+        if locator is None:
+            return False
+        if locator != self._last_priority_locator:
+            return True
+        last_read_at = self._last_priority_read_at
+        return last_read_at is None or self._clock() >= (
+            last_read_at + _PRIORITY_READ_INTERVAL
+        )
+
+    def _enqueue_priority_live_read(self, priority_locator: str | None) -> None:
+        """让当前联系人独立按三秒节奏进入 live 读取队列。"""
+
+        if priority_locator is None:
+            self._last_priority_read_at = None
+            self._last_priority_locator = None
+            return
+        if priority_locator != self._last_priority_locator:
+            self._last_priority_locator = priority_locator
+            self._last_priority_read_at = None
+        if self._priority_read_due(priority_locator):
+            self._enqueue_live(priority_locator)
+
     def _enqueue_round_robin(
         self,
         bindings: Sequence[object],
@@ -746,23 +830,19 @@ class CliBackgroundSync:
 
         if not bindings:
             return
-        priority = next(
-            (
-                binding
-                for binding in bindings
-                if getattr(binding.scope, "contact_id", None) == priority_contact_id
-            ),
-            None,
+        priority = self._priority_binding(bindings, priority_contact_id)
+        priority_due = priority is not None and self._priority_read_due(
+            priority.conversation_locator
         )
-        if priority is not None:
+        if priority_due:
             # 当前联系人即使暂停了后台补齐，也必须保留实时读取路径；
             # 否则安全对账会被暂停门禁直接跳过，遗漏我方发送的消息。
-            self._enqueue(priority.conversation_locator, live=True)
+            self._enqueue_live(priority.conversation_locator)
         remaining = tuple(binding for binding in bindings if binding is not priority)
         if not remaining:
             return
         count = min(
-            _SAFETY_SWEEP_BINDINGS_PER_CYCLE - (1 if priority is not None else 0),
+            _SAFETY_SWEEP_BINDINGS_PER_CYCLE - (1 if priority_due else 0),
             len(remaining),
         )
         if count <= 0:
@@ -770,7 +850,7 @@ class CliBackgroundSync:
         start = self._sweep_index % len(remaining)
         for offset in range(count):
             binding = remaining[(start + offset) % len(remaining)]
-            self._enqueue(binding.conversation_locator, live=True)
+            self._enqueue_live(binding.conversation_locator)
         self._sweep_index = (start + count) % len(remaining)
 
     @staticmethod

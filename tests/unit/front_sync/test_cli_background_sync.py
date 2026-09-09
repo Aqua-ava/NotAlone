@@ -897,6 +897,173 @@ class CliBackgroundSyncTest(unittest.TestCase):
             "paused",
         )
 
+    def test_priority_contact_is_polled_every_three_seconds_without_round_robin_wait(
+        self,
+    ) -> None:
+        bindings = [
+            FakeBinding(uuid4(), uuid4(), f"wxid_{index}", f"联系人{index}")
+            for index in range(10)
+        ]
+        cli = FakeCli(stream_events=[])
+        store = FakeObservationStore()
+        backfill_store = FakeBackfillStateStore()
+        sync = CliBackgroundSync(
+            owner_id=OWNER_ID,
+            channel="wechat",
+            account_scope="wx-account",
+            cli=cli,
+            bindings=bindings,
+            observation_store=store,
+            backfill_state=backfill_store,
+            sync_state=self.sync_state,
+            clock=lambda: self.now,
+        )
+
+        sync.cycle(enabled=True, priority_contact_id=bindings[0].contact_id)
+        cli.tail_calls.clear()
+
+        self.now += timedelta(seconds=2)
+        sync.cycle(enabled=True, priority_contact_id=bindings[0].contact_id)
+        self.assertEqual(cli.tail_calls, [])
+
+        self.now += timedelta(seconds=1)
+        cli.tail_results["wxid_0"] = deque(
+            [
+                TailResult(
+                    events=(_message("wxid_0", 14, "当前联系人三秒读取"),),
+                    cursor="local_id:14",
+                    last_local_id=14,
+                    freshness_confirmed=True,
+                )
+            ]
+        )
+        result = sync.cycle(
+            enabled=True,
+            priority_contact_id=bindings[0].contact_id,
+        )
+
+        self.assertEqual(result.batch_message_count, 1)
+        self.assertEqual(
+            [call["talker"] for call in cli.tail_calls],
+            ["wxid_0"],
+        )
+        self.assertEqual(
+            store.cursors[(OWNER_ID, bindings[0].contact_id)].last_local_id,
+            14,
+        )
+
+    def test_backfill_read_does_not_delay_next_priority_live_read(self) -> None:
+        bindings = [
+            FakeBinding(uuid4(), uuid4(), f"wxid_{index}", f"联系人{index}")
+            for index in range(2)
+        ]
+        cli = FakeCli(stream_events=[])
+        store = FakeObservationStore()
+        backfill_store = FakeBackfillStateStore()
+        priority = bindings[0]
+        sync = CliBackgroundSync(
+            owner_id=OWNER_ID,
+            channel="wechat",
+            account_scope="wx-account",
+            cli=cli,
+            bindings=bindings,
+            observation_store=store,
+            backfill_state=backfill_store,
+            sync_state=self.sync_state,
+            clock=lambda: self.now,
+        )
+
+        sync.cycle(enabled=True, priority_contact_id=priority.contact_id)
+        self.now += timedelta(seconds=2)
+        sync.request_backfill_check()
+        sync.cycle(enabled=True, priority_contact_id=priority.contact_id)
+        cli.tail_calls.clear()
+        cli.tail_results[priority.conversation_locator] = deque(
+            [
+                TailResult(
+                    events=(_message(priority.conversation_locator, 14, "live 到期"),),
+                    cursor="local_id:14",
+                    last_local_id=14,
+                    freshness_confirmed=True,
+                )
+            ]
+        )
+        self.now += timedelta(seconds=1)
+
+        result = sync.cycle(
+            enabled=True,
+            priority_contact_id=priority.contact_id,
+        )
+
+        self.assertEqual(result.batch_message_count, 1)
+        self.assertEqual(
+            [call["talker"] for call in cli.tail_calls],
+            [priority.conversation_locator],
+        )
+
+    def test_priority_live_read_does_not_reopen_completed_backfill_while_other_contacts_pending(
+        self,
+    ) -> None:
+        bindings = [
+            FakeBinding(uuid4(), uuid4(), f"wxid_{index}", f"联系人{index}")
+            for index in range(33)
+        ]
+        cli = FakeCli(stream_events=[])
+        store = FakeObservationStore()
+        backfill_store = FakeBackfillStateStore()
+        priority = bindings[-1]
+        sync = CliBackgroundSync(
+            owner_id=OWNER_ID,
+            channel="wechat",
+            account_scope="wx-account",
+            cli=cli,
+            bindings=bindings,
+            observation_store=store,
+            backfill_state=backfill_store,
+            sync_state=self.sync_state,
+            clock=lambda: self.now,
+        )
+
+        sync.cycle(
+            enabled=True,
+            priority_contact_id=priority.contact_id,
+        )
+        self.assertEqual(
+            backfill_store.states[(OWNER_ID, priority.contact_id)].phase,
+            "complete",
+        )
+        self.now += timedelta(seconds=3)
+        cli.tail_results[priority.conversation_locator] = deque(
+            [
+                TailResult(
+                    events=(
+                        _message(
+                            priority.conversation_locator,
+                            14,
+                            "生命周期保护",
+                        ),
+                    ),
+                    cursor="local_id:14",
+                    last_local_id=14,
+                    freshness_confirmed=True,
+                )
+            ]
+        )
+
+        result = sync.cycle(
+            enabled=True,
+            priority_contact_id=priority.contact_id,
+        )
+
+        self.assertEqual(result.batch_message_count, 1)
+        self.assertEqual(
+            store.cursors[(OWNER_ID, priority.contact_id)].last_local_id,
+            14,
+        )
+        priority_state = backfill_store.states[(OWNER_ID, priority.contact_id)]
+        self.assertEqual(priority_state.phase, "complete")
+        self.assertEqual(priority_state.message_count, 0)
+
     def test_pause_then_retry_resumes_from_a_new_bounded_check(self) -> None:
         self.sync.cycle(enabled=True)
         self.sync.request_backfill_check()
