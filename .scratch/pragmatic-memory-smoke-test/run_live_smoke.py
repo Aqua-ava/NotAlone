@@ -48,6 +48,24 @@ ENUMS = {
     "evidence_relation": {"direct", "supporting", "contradicts", "insufficient"},
 }
 
+MEMORY_CATEGORY_VALUES = {
+    "common_fact",
+    "preference",
+    "taboo",
+    "recent_state",
+    "relationship_note",
+}
+MEMORY_TOPIC_VALUES = {
+    "health",
+    "work",
+    "family",
+    "travel",
+    "finance",
+    "study",
+    "emotion",
+    "other",
+}
+
 
 INTERPRETATION_SCHEMA: dict[str, Any] = {
     "title": "PragmaticInterpretation",
@@ -107,8 +125,32 @@ BATCH_INTERPRETATION_SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "properties": INTERPRETATION_SCHEMA["properties"],
-                "required": INTERPRETATION_SCHEMA["required"],
+                "properties": {
+                    **INTERPRETATION_SCHEMA["properties"],
+                    "category": {
+                        "type": "string",
+                        "enum": sorted(MEMORY_CATEGORY_VALUES),
+                    },
+                    "subject": {
+                        "type": "string",
+                        "enum": ["self", "contact", "shared"],
+                    },
+                    "topic": {
+                        "type": "string",
+                        "enum": sorted(MEMORY_TOPIC_VALUES),
+                    },
+                    "risk_flags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": [
+                    *INTERPRETATION_SCHEMA["required"],
+                    "category",
+                    "subject",
+                    "topic",
+                    "risk_flags",
+                ],
             },
         }
     },

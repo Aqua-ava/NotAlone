@@ -16,7 +16,7 @@
 - 一个可双击打开的 `prototype.html`，用于手动推动状态变化；
 - 一个可选的真实模型冒烟脚本 `run_live_smoke.py`；
 - 一个限定单一联系人、单一上下文窗口的真实数据验证脚本 `run_real_contact.py`；
-- HTML 只使用合成中文；真实脚本只读已确认联系人范围，不写入记忆表、不发送聊天消息。
+- HTML 只使用合成中文；真实脚本默认只读已确认联系人范围，显式 `--write-pending` 才写入待确认候选，不发送聊天消息。
 
 本 prototype 不修改现有 `memory_candidate` schema、`MemoryAdoption` 或正式提取流程。现有 `.scratch/memory-extraction/spec.md` 与 ADR-024 继续作为正式链路约束；如果 prototype 证明新维度可行，再单独提出规格修订。
 
@@ -32,7 +32,7 @@
 
 使用 `deepseek-v4-flash` 是为了避免已经退役的 `deepseek-chat` 别名；使用 non-thinking 是因为温度在 thinking 模式下不生效。prototype 不下载模型权重，真实冒烟只在进程环境或项目 `.env` 显式设置 `NOTALONE_DEEPSEEK_API_KEY` 时运行。
 
-真实数据验证只读取 `owner_id + contact_id` 范围内的 active 消息，默认围绕 `--focus 贷款` 选取最多 80 条上下文，并只发起一次批量结构化调用；不会把整段历史上传。
+真实数据验证只读取 `owner_id + contact_id` 范围内的 active 消息，默认围绕 `--focus 贷款` 选取最多 80 条上下文，并只发起一次批量结构化调用；不会把整段历史上传。显式 `--write-pending` 时，合约通过且不是 `self` 主体的结果以 `pending` 写入 `memory_candidate`，供用户查看后确认。
 
 ## 解释输出
 
@@ -108,7 +108,7 @@ prototype 不把 `candidate` 自动提升为 `confirmed_memory`。这一步留�
 - 必须通过精确联系人名匹配到唯一联系人，匹配歧义直接停止；
 - 默认最多读取一个围绕 focus 的 80 条消息窗口，只做一次模型调用；
 - 只输出动作和受控字段统计，不输出真实原文、命题文本或凭据；
-- 只读数据库，不能写入记忆、台账或消息。
+- 默认只读数据库；只有 `--write-pending` 才写入 `pending memory_candidate`，不会写入 `confirmed_memory`、台账或消息。
 
 ## 明确不做
 

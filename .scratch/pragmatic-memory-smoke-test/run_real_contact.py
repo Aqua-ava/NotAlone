@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""对单一已确认联系人做一次真实聊天语用验证。
+"""对单一已确认联系人做一次真实聊天语用验证并可生成待确认候选。
 
 默认只取包含 ``--focus`` 的一条消息及其前后上下文，最多 80 条消息，
-避免把整段历史一次性发给模型。脚本只读 PostgreSQL，绝不写入记忆或台账。
+避免把整段历史一次性发给模型。默认只读 PostgreSQL；显式添加
+``--write-pending`` 后，才会把合约通过的结果写成 pending 候选。
 终端只输出统计和受控枚举，不输出聊天原文、命题文本或凭据。
 """
 
@@ -14,10 +15,18 @@ import os
 import sys
 from typing import Any
 from uuid import UUID
+from uuid import uuid4
 
 import psycopg
 
+from notalone.memory.models import (
+    MemoryCandidate,
+    MemoryCandidateStatus,
+    MemoryCategory,
+    MemoryTopic,
+)
 from notalone.memory_extraction.cli_support import load_contact_messages
+from notalone.persistence.memory_store import PostgresMemoryStore
 from notalone.runtime_config import load_project_env
 from notalone.scopes import ContactScope
 
@@ -27,6 +36,8 @@ from run_live_smoke import (
     _build_model,
     _tool_args,
     decide_memory_action,
+    MEMORY_CATEGORY_VALUES,
+    MEMORY_TOPIC_VALUES,
     validate_output,
 )
 
@@ -38,7 +49,8 @@ REAL_SYSTEM_PROMPT = """你是关系聊天中的语用解释器，不是记忆�
 寒暄、一次性细节和没有长期价值的闲聊返回空数组。
 严格区分事实陈述、未来计划、条件假设、吹牛/夸张、第三方引用、不确定表达、纠正/撤回和后续证据。
 必须结合整个窗口理解语气，不要把字面内容直接当成现实事实。
-每条命题都必须引用当前窗口中的 message_id，并在 alternatives 中保留合理的其他解释。
+每条命题都必须引用当前窗口中的 message_id，并在 alternatives 中保留合理的其他解释；还必须填写
+category、subject、topic、risk_flags。subject=self 的命题不能当作联系人的记忆。
 不要输出 memory action、confirmed_memory 或任何没有来源的命题；最终动作由外部确定性安全闸门决定。
 必须通过工具返回结构化结果。
 """
@@ -66,6 +78,11 @@ def _parse_args() -> argparse.Namespace:
         "--model",
         default=os.environ.get("NOTALONE_DEEPSEEK_MODEL") or MODEL_DEFAULT,
         help=f"模型名，默认 {MODEL_DEFAULT}。",
+    )
+    parser.add_argument(
+        "--write-pending",
+        action="store_true",
+        help="将通过安全闸门的结果写入 pending memory_candidate；默认只读。",
     )
     return parser.parse_args()
 
@@ -105,7 +122,57 @@ def _window_text(messages: tuple[Any, ...]) -> str:
     )
 
 
-def _run_window(model: Any, messages: tuple[Any, ...]) -> dict[str, Any]:
+def _validate_memory_output(output: Any, source_ids: set[str]) -> list[str]:
+    errors = validate_output(output, source_ids)
+    if not isinstance(output, dict):
+        return errors
+    if output.get("category") not in MEMORY_CATEGORY_VALUES:
+        errors.append("category 不在记忆分类枚举中")
+    if output.get("subject") not in {"self", "contact", "shared"}:
+        errors.append("subject 不在主体枚举中")
+    if output.get("topic") not in MEMORY_TOPIC_VALUES:
+        errors.append("topic 不在记忆主题枚举中")
+    risk_flags = output.get("risk_flags")
+    if not isinstance(risk_flags, list) or not all(
+        isinstance(flag, str) and flag.strip() for flag in risk_flags
+    ):
+        errors.append("risk_flags 必须是字符串数组")
+    for source_id in output.get("source_message_ids") or []:
+        try:
+            UUID(source_id)
+        except (TypeError, ValueError):
+            errors.append("source_message_ids 必须是 UUID")
+    return errors
+
+
+def _candidate_key(text: str, source_ids: tuple[UUID, ...]) -> tuple[str, frozenset[UUID]]:
+    return "".join(text.split()).lower(), frozenset(source_ids)
+
+
+def _candidate_from_output(
+    output: dict[str, Any],
+    scope: ContactScope,
+) -> MemoryCandidate:
+    return MemoryCandidate(
+        candidate_id=uuid4(),
+        scope=scope,
+        text=output["proposition"],
+        category=MemoryCategory(output["category"]),
+        topic=MemoryTopic(output["topic"]),
+        source_ids=tuple(UUID(source_id) for source_id in output["source_message_ids"]),
+        status=MemoryCandidateStatus.PENDING,
+        confidence=float(output["model_confidence"]),
+        risk_flags=tuple(output["risk_flags"]),
+    )
+
+
+def _run_window(
+    model: Any,
+    messages: tuple[Any, ...],
+    scope: ContactScope,
+    database_url: str,
+    write_pending: bool,
+) -> dict[str, Any]:
     source_ids = {str(message.message_id) for message in messages}
     texts = tuple(message.text for message in messages)
     bound = model.bind_tools([BATCH_INTERPRETATION_SCHEMA])
@@ -129,8 +196,35 @@ def _run_window(model: Any, messages: tuple[Any, ...]) -> dict[str, Any]:
     }
     blocked = 0
     hard_cue_guarded = 0
+    schema_valid = True
+    created = 0
+    duplicates = 0
+    skipped_self = 0
+    pending_store = PostgresMemoryStore(database_url) if write_pending else None
+    existing_keys: set[tuple[str, frozenset[UUID]]] = set()
+    if pending_store is not None:
+        existing_keys = {
+            _candidate_key(candidate.text, candidate.source_ids)
+            for candidate in pending_store.list_pending_candidates(scope)
+        }
     for interpretation in interpretations:
-        decision = decide_memory_action(interpretation, source_ids, texts)
+        errors = _validate_memory_output(interpretation, source_ids)
+        if errors:
+            schema_valid = False
+            decision = {
+                "action": "blocked",
+                "reason": "记忆候选结构不合约，停止写入。",
+                "safety_flags": errors,
+            }
+        elif interpretation["subject"] == "self":
+            skipped_self += 1
+            decision = {
+                "action": "blocked",
+                "reason": "subject=self 应进入 owner 级记忆，当前脚本只生成联系人候选。",
+                "safety_flags": ["subject:self_requires_owner_memory"],
+            }
+        else:
+            decision = decide_memory_action(interpretation, source_ids, texts)
         action = decision["action"]
         actions[action] += 1
         blocked += int(action == "blocked")
@@ -140,6 +234,15 @@ def _run_window(model: Any, messages: tuple[Any, ...]) -> dict[str, Any]:
                 value = interpretation.get(field)
                 if isinstance(value, str):
                     counter[value] += 1
+        if pending_store is not None and action in {"candidate", "plan_candidate", "pending"}:
+            candidate = _candidate_from_output(interpretation, scope)
+            key = _candidate_key(candidate.text, candidate.source_ids)
+            if key in existing_keys:
+                duplicates += 1
+            else:
+                pending_store.create_candidate(candidate)
+                existing_keys.add(key)
+                created += 1
     if "confirmed_memory" in actions:
         raise RuntimeError("安全闸门出现了 confirmed_memory，停止本次验证。")
     return {
@@ -148,10 +251,11 @@ def _run_window(model: Any, messages: tuple[Any, ...]) -> dict[str, Any]:
         "fields": {field: dict(sorted(counter.items())) for field, counter in fields.items()},
         "blocked": blocked,
         "hard_cue_guarded": hard_cue_guarded,
-        "schema_valid": all(
-            not validate_output(interpretation, source_ids)
-            for interpretation in interpretations
-        ),
+        "schema_valid": schema_valid,
+        "created": created,
+        "duplicates": duplicates,
+        "skipped_self": skipped_self,
+        "write_pending": write_pending,
     }
 
 
@@ -171,10 +275,17 @@ def main() -> int:
         messages = load_contact_messages(
             ContactScope(owner_id, contact_id), database_url
         )
+        scope = ContactScope(owner_id, contact_id)
         window = _select_window(messages, args.focus, args.window_size)
         print(f"[scope] single_contact=True total_messages={len(messages)} window_messages={len(window)}")
-        print(f"[scope] focus_match=True persistence=none model={args.model} thinking=disabled temperature=0.0")
-        result = _run_window(_build_model(api_key, args.model), window)
+        print(f"[scope] focus_match=True write_pending={args.write_pending} model={args.model} thinking=disabled temperature=0.0")
+        result = _run_window(
+            _build_model(api_key, args.model),
+            window,
+            scope,
+            database_url,
+            args.write_pending,
+        )
     except Exception as error:  # noqa: BLE001 - CLI must return a concise safe failure
         print(f"[stop] {type(error).__name__}: {error}")
         return 1
@@ -182,9 +293,13 @@ def main() -> int:
     print(f"[result] interpretations={result['interpretations']} schema_valid={result['schema_valid']}")
     print(f"[result] actions={result['actions']}")
     print(f"[result] blocked={result['blocked']} hard_cue_guarded={result['hard_cue_guarded']}")
+    print(f"[result] pending_created={result['created']} duplicates={result['duplicates']} self_skipped={result['skipped_self']}")
     for field, values in result["fields"].items():
         print(f"[field] {field}={values}")
-    print("[done] 仅完成读取和模型分析，没有写入数据库、记忆或聊天发送。")
+    if result["write_pending"]:
+        print("[done] 已写入 pending memory_candidate；没有写入 confirmed_memory，也没有发送聊天消息。")
+    else:
+        print("[done] 仅完成读取和模型分析，没有写入数据库、记忆或聊天发送。")
     return 0 if result["schema_valid"] and result["blocked"] == 0 else 1
 
 
