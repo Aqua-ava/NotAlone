@@ -25,6 +25,7 @@ class BuildDeepSeekModelTest(unittest.TestCase):
         self.assertEqual(model.model_name, DEFAULT_DEEPSEEK_MODEL)
         self.assertEqual(model.request_timeout, DEFAULT_DEEPSEEK_TIMEOUT_SECONDS)
         self.assertEqual(model.temperature, DEFAULT_DEEPSEEK_TEMPERATURE)
+        self.assertEqual(DEFAULT_DEEPSEEK_TEMPERATURE, 0.0)
 
     def test_builds_model_with_custom_name_and_timeout(self) -> None:
         model = build_deepseek_model(
