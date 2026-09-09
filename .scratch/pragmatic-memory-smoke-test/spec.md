@@ -15,13 +15,14 @@
 
 - 一个可双击打开的 `prototype.html`，用于手动推动状态变化；
 - 一个可选的真实模型冒烟脚本 `run_live_smoke.py`；
-- 合成中文对话，不读取联系人资料、不连接 PostgreSQL、不写入记忆表、不发送消息。
+- 一个限定单一联系人、单一上下文窗口的真实数据验证脚本 `run_real_contact.py`；
+- HTML 只使用合成中文；真实脚本只读已确认联系人范围，不写入记忆表、不发送聊天消息。
 
 本 prototype 不修改现有 `memory_candidate` schema、`MemoryAdoption` 或正式提取流程。现有 `.scratch/memory-extraction/spec.md` 与 ADR-024 继续作为正式链路约束；如果 prototype 证明新维度可行，再单独提出规格修订。
 
 ## 模型选择
 
-真实模型冒烟使用当前 DeepSeek API 的新模型名：
+合成冒烟和真实数据验证使用当前 DeepSeek API 的新模型名：
 
 - `model=deepseek-v4-flash`；
 - non-thinking：`extra_body={"thinking": {"type": "disabled"}}`；
@@ -30,6 +31,8 @@
 - 使用现有 `langchain-deepseek` 依赖和结构化 tool output。
 
 使用 `deepseek-v4-flash` 是为了避免已经退役的 `deepseek-chat` 别名；使用 non-thinking 是因为温度在 thinking 模式下不生效。prototype 不下载模型权重，真实冒烟只在进程环境或项目 `.env` 显式设置 `NOTALONE_DEEPSEEK_API_KEY` 时运行。
+
+真实数据验证只读取 `owner_id + contact_id` 范围内的 active 消息，默认围绕 `--focus 贷款` 选取最多 80 条上下文，并只发起一次批量结构化调用；不会把整段历史上传。
 
 ## 解释输出
 
@@ -100,9 +103,17 @@ prototype 不把 `candidate` 自动提升为 `confirmed_memory`。这一步留�
 - 即使模型把负例误判为 `asserted + literal + direct`，原文强语用信号仍必须阻止它变成 `candidate`；
 - 只输出合成案例和统计，不输出凭据。
 
+### run_real_contact.py
+
+- 必须通过精确联系人名匹配到唯一联系人，匹配歧义直接停止；
+- 默认最多读取一个围绕 focus 的 80 条消息窗口，只做一次模型调用；
+- 只输出动作和受控字段统计，不输出真实原文、命题文本或凭据；
+- 只读数据库，不能写入记忆、台账或消息。
+
 ## 明确不做
 
 - 不下载本地模型；
+- 不把真实联系人整段历史上传；
 - 不引入 Mem0、LangMem、NLI 模型或外部 benchmark 作为运行依赖；
 - 不修改数据库迁移；
 - 不改现有正式自动采纳策略；

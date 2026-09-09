@@ -95,6 +95,27 @@ INTERPRETATION_SCHEMA: dict[str, Any] = {
 }
 
 
+BATCH_INTERPRETATION_SCHEMA: dict[str, Any] = {
+    "title": "PragmaticInterpretationBatch",
+    "description": "从一个真实聊天上下文窗口中提取零条或多条带语用状态的候选命题。",
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "interpretations": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": INTERPRETATION_SCHEMA["properties"],
+                "required": INTERPRETATION_SCHEMA["required"],
+            },
+        }
+    },
+    "required": ["interpretations"],
+}
+
+
 CASES: tuple[dict[str, Any], ...] = (
     {
         "id": "fact",
