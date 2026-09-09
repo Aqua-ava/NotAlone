@@ -7,7 +7,11 @@ from uuid import uuid4
 
 from langchain_core.messages import AIMessage
 
-from notalone.memory_extraction.adapters import LangChainExtractionRuntime
+from notalone.memory_extraction.adapters import (
+    EXTRACTION_SCHEMA,
+    EXTRACTION_SYSTEM_PROMPT,
+    LangChainExtractionRuntime,
+)
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from tests.unit.memory_extraction.test_models import _window
 from tests.unit.memory_extraction.test_flow import _payload
@@ -51,6 +55,16 @@ class LangChainExtractionRuntimeTest(unittest.TestCase):
         with self.assertRaises(ExtractionRuntimeError):
             runtime.extract(_window((uuid4(),)))
 
+    def test_model_exception_is_mapped_to_runtime_failure(self) -> None:
+        class RaisingModel:
+            def bind_tools(self, tools):  # noqa: ARG002
+                raise RuntimeError("synthetic provider failure")
+
+        runtime = LangChainExtractionRuntime(model=RaisingModel())
+
+        with self.assertRaisesRegex(ExtractionRuntimeError, "模型调用失败"):
+            runtime.extract(_window((uuid4(),)))
+
     def test_prompt_marks_message_ids_and_senders(self) -> None:
         runtime = self._runtime(
             [_structured_response((_payload(uuid4()),))]
@@ -64,6 +78,46 @@ class LangChainExtractionRuntimeTest(unittest.TestCase):
         )
         self.assertIn("message_id=", seen)
         self.assertIn("sender=", seen)
+
+    def test_prompt_marks_target_and_context_messages(self) -> None:
+        target_id = uuid4()
+        context_id = uuid4()
+        window = _window((context_id, target_id))
+        window = window.__class__(
+            owner_id=window.owner_id,
+            contact_id=window.contact_id,
+            messages=window.messages,
+            target_message_ids=(target_id,),
+        )
+        runtime = self._runtime(
+            [_structured_response((_payload(target_id),))]
+        )
+
+        runtime.extract(window)
+
+        seen = "\n".join(
+            str(message.content)
+            for call in self.model.seen_calls
+            for message in call
+        )
+        self.assertIn("[target]", seen)
+        self.assertIn("[context]", seen)
+
+    def test_schema_requires_pragmatic_interpretation_fields(self) -> None:
+        required = set(
+            EXTRACTION_SCHEMA["properties"]["facts"]["items"]["required"]
+        )
+
+        self.assertTrue(
+            {
+                "speech_act",
+                "assertion_status",
+                "figurative_type",
+                "alternatives",
+                "interpretation_reason",
+            } <= required
+        )
+        self.assertIn("语用", EXTRACTION_SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":

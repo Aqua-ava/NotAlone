@@ -25,7 +25,13 @@ from notalone.memory_extraction.adoption import (
     MemoryAdoption,
 )
 from notalone.memory_extraction.flow import ExtractionOutcome
-from notalone.memory_extraction.models import ExtractedFact, FactSubject
+from notalone.memory_extraction.models import (
+    AssertionStatus,
+    ExtractedFact,
+    FactSubject,
+    FigurativeType,
+    SpeechAct,
+)
 from notalone.persistence import (
     PostgresMemoryStore,
     PostgresOwnerMemoryStore,
@@ -160,6 +166,10 @@ class MemoryAdoptionTest(unittest.TestCase):
             "risk_flags": (),
             "valid_at": None,
             "invalid_at": datetime.now(timezone.utc) + timedelta(days=7),
+            "speech_act": SpeechAct.ASSERTION,
+            "assertion_status": AssertionStatus.ASSERTED,
+            "figurative_type": FigurativeType.LITERAL,
+            "interpretation_reason": "合成消息以确定语气描述关系状态。",
         }
         fields.update(overrides)
         return ExtractedFact(**fields)

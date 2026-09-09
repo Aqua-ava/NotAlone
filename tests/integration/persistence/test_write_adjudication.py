@@ -128,7 +128,13 @@ class WriteAdjudicationTest(unittest.TestCase):
 
     def _fact(self, text, **overrides):
         from notalone.memory.models import MemoryCategory, MemoryTopic
-        from notalone.memory_extraction.models import ExtractedFact, FactSubject
+        from notalone.memory_extraction.models import (
+            AssertionStatus,
+            ExtractedFact,
+            FactSubject,
+            FigurativeType,
+            SpeechAct,
+        )
 
         fields = {
             "text": text,
@@ -140,6 +146,10 @@ class WriteAdjudicationTest(unittest.TestCase):
             "risk_flags": (),
             "valid_at": None,
             "invalid_at": datetime.now(timezone.utc) + timedelta(days=7),
+            "speech_act": SpeechAct.ASSERTION,
+            "assertion_status": AssertionStatus.ASSERTED,
+            "figurative_type": FigurativeType.LITERAL,
+            "interpretation_reason": "合成消息以确定语气描述关系状态。",
         }
         fields.update(overrides)
         return ExtractedFact(**fields)

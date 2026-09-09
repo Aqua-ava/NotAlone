@@ -29,6 +29,10 @@ from notalone.memory_extraction.adjudication import (
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.flow import ExtractionOutcome
 from notalone.memory_extraction.models import ExtractedFact, FactSubject
+from notalone.memory_extraction.pragmatics import (
+    MemoryDisposition,
+    PragmaticInterpreter,
+)
 from notalone.scopes import ContactScope
 
 
@@ -48,6 +52,7 @@ class AdoptionStats:
     skipped_duplicate: int = 0
     skipped_deleted: int = 0
     rejected_by_contract: int = 0
+    skipped_non_memory: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +73,7 @@ class MemoryAdoption:
         "_ledger",
         "_threshold",
         "_similarity_threshold",
+        "_pragmatic_interpreter",
     )
 
     def __init__(
@@ -79,6 +85,7 @@ class MemoryAdoption:
         ledger: OutboundLedgerPort | None = None,
         confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+        pragmatic_interpreter: PragmaticInterpreter | None = None,
     ) -> None:
         if memory_port is None:
             raise TypeError("必须显式注入联系人级记忆 port。")
@@ -90,6 +97,9 @@ class MemoryAdoption:
         self._ledger = ledger
         self._threshold = confidence_threshold
         self._similarity_threshold = similarity_threshold
+        self._pragmatic_interpreter = (
+            pragmatic_interpreter or PragmaticInterpreter()
+        )
 
     def adopt(self, scope: ContactScope, outcome: ExtractionOutcome) -> AdoptionStats:
         """按主体分流落库并返回统计；整体失败时不产生任何写入。"""
@@ -102,7 +112,16 @@ class MemoryAdoption:
         deleted = self._deleted_texts(scope)
 
         adopted = updated = pending = duplicate = deleted_skip = 0
+        skipped_non_memory = 0
         for fact in outcome.accepted:
+            pragmatic_decision = self._pragmatic_interpreter.interpret(fact)
+            if pragmatic_decision.disposition is MemoryDisposition.NONE:
+                skipped_non_memory += 1
+                continue
+            fact = self._pragmatic_interpreter.prepare_for_adoption(
+                fact,
+                decision=pragmatic_decision,
+            )
             normalized = _normalize(fact.text)
             if normalized in deleted:
                 deleted_skip += 1
@@ -114,7 +133,10 @@ class MemoryAdoption:
             if self._pending_exists(scope, fact):
                 duplicate += 1
                 continue
-            if not self._can_auto_adopt(fact):
+            if not self._can_auto_adopt(
+                fact,
+                pragmatic_decision=pragmatic_decision,
+            ):
                 self._create_pending_candidate(scope, fact)
                 pending += 1
                 continue
@@ -149,6 +171,7 @@ class MemoryAdoption:
             skipped_duplicate=duplicate,
             skipped_deleted=deleted_skip,
             rejected_by_contract=outcome.rejected_count,
+            skipped_non_memory=skipped_non_memory,
         )
 
     def _adjudicate(self, fact, similar, scope: ContactScope):
@@ -279,9 +302,16 @@ class MemoryAdoption:
             ) if callable(owner_deleted_texts) else None
         return texts
 
-    def _can_auto_adopt(self, fact) -> bool:
+    def _can_auto_adopt(
+        self,
+        fact,
+        *,
+        pragmatic_decision=None,
+    ) -> bool:
+        decision = pragmatic_decision or self._pragmatic_interpreter.interpret(fact)
         return (
-            fact.confidence >= self._threshold
+            decision.disposition is MemoryDisposition.CONFIRMABLE
+            and fact.confidence >= self._threshold
             and all(
                 flag.strip().lower() in AUTO_ADOPTABLE_RISK_FLAGS
                 for flag in fact.risk_flags

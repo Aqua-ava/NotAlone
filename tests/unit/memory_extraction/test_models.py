@@ -95,6 +95,41 @@ class ExtractionWindowTest(unittest.TestCase):
 
         self.assertEqual(window.message_id_set, set(ids))
 
+    def test_exposes_all_messages_as_targets_by_default(self) -> None:
+        ids = (uuid4(), uuid4())
+        window = _window(ids)
+
+        self.assertEqual(window.target_message_id_set, set(ids))
+
+    def test_rejects_target_outside_window(self) -> None:
+        ids = (uuid4(),)
+        with self.assertRaises(ValueError):
+            ExtractionWindow(
+                owner_id=uuid4(),
+                contact_id=uuid4(),
+                messages=(
+                    MessageRef(
+                        message_id=ids[0],
+                        text="合成消息",
+                        sender=MessageSender.CONTACT,
+                        occurred_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+                    ),
+                ),
+                target_message_ids=(uuid4(),),
+            )
+
+    def test_rejects_more_than_twenty_target_messages(self) -> None:
+        ids = tuple(uuid4() for _ in range(21))
+        window = _window(ids)
+
+        with self.assertRaises(ValueError):
+            ExtractionWindow(
+                owner_id=window.owner_id,
+                contact_id=window.contact_id,
+                messages=window.messages,
+                target_message_ids=ids,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

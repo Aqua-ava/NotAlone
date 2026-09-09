@@ -19,12 +19,18 @@ from notalone.memory.models import (
 )
 from notalone.memory_extraction.adoption import AdoptionStats, MemoryAdoption
 from notalone.memory_extraction.flow import ExtractionFlow, ExtractionOutcome
-from notalone.memory_extraction.models import ExtractionWindow
+from notalone.memory_extraction.models import (
+    ExtractionWindow,
+    MAX_TARGET_MESSAGES_PER_WINDOW,
+)
 from notalone.runtime_config import load_project_env
 from notalone.scopes import ContactScope
 
 
-EXTRACTION_BATCH_SIZE = 500
+EXTRACTION_BATCH_SIZE = MAX_TARGET_MESSAGES_PER_WINDOW
+MAX_CONTEXT_MESSAGES_PER_SIDE = 20
+EXTRACTION_CONTEXT_BEFORE = MAX_CONTEXT_MESSAGES_PER_SIDE
+EXTRACTION_CONTEXT_AFTER = MAX_CONTEXT_MESSAGES_PER_SIDE
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +47,7 @@ class ExtractionRunStats:
     skipped_deleted: int = 0
     rejected_by_contract: int = 0
     failed_batches: int = 0
+    skipped_non_memory: int = 0
 
 
 def run_extraction(
@@ -55,10 +62,36 @@ def run_extraction(
     ledger: OutboundLedgerPort | None = None,
     watermark_port=None,
     batch_size: int = EXTRACTION_BATCH_SIZE,
+    context_before: int = EXTRACTION_CONTEXT_BEFORE,
+    context_after: int = EXTRACTION_CONTEXT_AFTER,
     provider: str = "deepseek",
     model_name: str | None = None,
 ) -> ExtractionRunStats:
     """按水位分批串行提取并采纳；失败批次停止本次运行。"""
+
+    if (
+        not isinstance(batch_size, int)
+        or not 0 < batch_size <= EXTRACTION_BATCH_SIZE
+    ):
+        raise ValueError(
+            f"单次模型调用最多处理 {EXTRACTION_BATCH_SIZE} 条目标消息。"
+        )
+    if (
+        not isinstance(context_before, int)
+        or not 0 <= context_before <= MAX_CONTEXT_MESSAGES_PER_SIDE
+    ):
+        raise ValueError(
+            "前置上下文条数必须在 0 到 "
+            f"{MAX_CONTEXT_MESSAGES_PER_SIDE} 之间。"
+        )
+    if (
+        not isinstance(context_after, int)
+        or not 0 <= context_after <= MAX_CONTEXT_MESSAGES_PER_SIDE
+    ):
+        raise ValueError(
+            "后置上下文条数必须在 0 到 "
+            f"{MAX_CONTEXT_MESSAGES_PER_SIDE} 之间。"
+        )
 
     if watermark_message_id is not None:
         positions = [
@@ -81,13 +114,19 @@ def run_extraction(
 
     batches = processed_messages = extracted = adopted = updated = pending = 0
     duplicate = deleted = rejected = failed = 0
+    skipped_non_memory = 0
     for offset in range(0, len(pending_messages), batch_size):
         batch = pending_messages[offset : offset + batch_size]
         processed_messages += len(batch)
+        absolute_start = start + offset
+        absolute_end = absolute_start + len(batch)
+        context_start = max(0, absolute_start - context_before)
+        context_end = min(len(messages), absolute_end + context_after)
         window = ExtractionWindow(
             owner_id=scope.owner_id,
             contact_id=scope.contact_id,
-            messages=tuple(batch),
+            messages=tuple(messages[context_start:context_end]),
+            target_message_ids=tuple(message.message_id for message in batch),
         )
         started_ns = time.perf_counter()
         outcome: ExtractionOutcome = flow.run(window)
@@ -101,6 +140,7 @@ def run_extraction(
             duplicate += stats.skipped_duplicate
             deleted += stats.skipped_deleted
             rejected += stats.rejected_by_contract
+            skipped_non_memory += stats.skipped_non_memory
             _record_extraction_ledger(
                 ledger,
                 scope,
@@ -133,6 +173,7 @@ def run_extraction(
         skipped_deleted=deleted,
         rejected_by_contract=rejected,
         failed_batches=failed,
+        skipped_non_memory=skipped_non_memory,
     )
 
 
@@ -180,7 +221,10 @@ def extract_main(argv: list[str] | None = None) -> int:
         "--batch-size",
         type=int,
         default=EXTRACTION_BATCH_SIZE,
-        help="单批消息窗口上限（默认 500）。",
+        help=(
+            "单次模型调用的目标消息上限（默认 20）；"
+            "同一联系人前后各补充最多 20 条上下文。"
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -238,6 +282,7 @@ def extract_main(argv: list[str] | None = None) -> int:
         f" pending={stats.pending} duplicate={stats.skipped_duplicate}"
         f" deleted_skip={stats.skipped_deleted}"
         f" rejected={stats.rejected_by_contract}"
+        f" skipped_non_memory={stats.skipped_non_memory}"
         f" failed_batches={stats.failed_batches}"
     )
     return 0 if stats.failed_batches == 0 else 1

@@ -75,6 +75,11 @@ class FakeExtractionRuntime:
                 "risk_flags": [],
                 "valid_at": None,
                 "invalid_at": None,
+                "speech_act": "assertion",
+                "assertion_status": "asserted",
+                "figurative_type": "literal",
+                "alternatives": [],
+                "interpretation_reason": "消息明确描述了联系人的近期安排。",
             },
             {
                 "text": "联系人可能喜欢早起",
@@ -86,6 +91,11 @@ class FakeExtractionRuntime:
                 "risk_flags": [],
                 "valid_at": None,
                 "invalid_at": None,
+                "speech_act": "assertion",
+                "assertion_status": "hypothetical",
+                "figurative_type": "literal",
+                "alternatives": [],
+                "interpretation_reason": "消息使用了可能，不能视为确定事实。",
             },
             {
                 "text": "越界证据必须拒绝",
@@ -97,6 +107,11 @@ class FakeExtractionRuntime:
                 "risk_flags": [],
                 "valid_at": None,
                 "invalid_at": None,
+                "speech_act": "assertion",
+                "assertion_status": "asserted",
+                "figurative_type": "literal",
+                "alternatives": [],
+                "interpretation_reason": "证据 ID 不在当前窗口。",
             },
             {
                 "text": "结构错误必须拒绝",
@@ -108,6 +123,11 @@ class FakeExtractionRuntime:
                 "risk_flags": [],
                 "valid_at": None,
                 "invalid_at": None,
+                "speech_act": "assertion",
+                "assertion_status": "asserted",
+                "figurative_type": "literal",
+                "alternatives": [],
+                "interpretation_reason": "分类字段非法。",
             },
         )
 

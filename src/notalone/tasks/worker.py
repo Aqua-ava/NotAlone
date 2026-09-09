@@ -170,8 +170,13 @@ class PostgresMemoryExtractionRunner:
     ) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
-        if batch_size < 1:
-            raise ValueError("记忆提取批次大小必须为正整数。")
+        if (
+            not isinstance(batch_size, int)
+            or not 0 < batch_size <= EXTRACTION_BATCH_SIZE
+        ):
+            raise ValueError(
+                f"记忆提取批次大小必须在 1 到 {EXTRACTION_BATCH_SIZE} 之间。"
+            )
         self._database_url = database_url
         if runtime is None:
             from notalone.memory_extraction.adapters import (

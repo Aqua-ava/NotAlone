@@ -14,13 +14,20 @@ from notalone.memory.models import (
 )
 
 __all__ = [
+    "AssertionStatus",
     "ExtractedFact",
     "ExtractionWindow",
     "FactSubject",
+    "FigurativeType",
+    "MAX_TARGET_MESSAGES_PER_WINDOW",
     "MessageRef",
     "MessageSender",
     "MemoryTopic",
+    "SpeechAct",
 ]
+
+
+MAX_TARGET_MESSAGES_PER_WINDOW = 20
 
 
 class MessageSender(StrEnum):
@@ -28,6 +35,38 @@ class MessageSender(StrEnum):
 
     SELF = "self"
     CONTACT = "contact"
+
+
+class SpeechAct(StrEnum):
+    """消息在对话中执行的说话行为。"""
+
+    ASSERTION = "assertion"
+    PLAN = "plan"
+    QUESTION = "question"
+    REQUEST = "request"
+    REPORT = "report"
+    CORRECTION = "correction"
+    UNKNOWN = "unknown"
+
+
+class AssertionStatus(StrEnum):
+    """消息对其主张的承诺程度。"""
+
+    ASSERTED = "asserted"
+    HYPOTHETICAL = "hypothetical"
+    CONDITIONAL = "conditional"
+    REPORTED = "reported"
+    UNKNOWN = "unknown"
+
+
+class FigurativeType(StrEnum):
+    """消息是否使用玩笑、讽刺或夸张等非字面表达。"""
+
+    LITERAL = "literal"
+    JOKE = "joke"
+    SARCASM = "sarcasm"
+    HYPERBOLE = "hyperbole"
+    UNKNOWN = "unknown"
 
 
 def _validate_datetime(value: datetime | None, label: str) -> None:
@@ -39,7 +78,7 @@ def _validate_datetime(value: datetime | None, label: str) -> None:
 
 @dataclass(frozen=True, slots=True)
 class ExtractedFact:
-    """一条通过结构化提取产出、尚未落库的事实候选。"""
+    """一条带语用解释、尚未落库的关系记忆候选。"""
 
     text: str
     category: MemoryCategory
@@ -50,6 +89,11 @@ class ExtractedFact:
     risk_flags: tuple[str, ...] = ()
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
+    speech_act: SpeechAct = SpeechAct.UNKNOWN
+    assertion_status: AssertionStatus = AssertionStatus.UNKNOWN
+    figurative_type: FigurativeType = FigurativeType.UNKNOWN
+    alternatives: tuple[str, ...] = ()
+    interpretation_reason: str = ""
 
     def __post_init__(self) -> None:
         if not isinstance(self.text, str) or not self.text.strip():
@@ -75,6 +119,19 @@ class ExtractedFact:
             not isinstance(flag, str) or not flag.strip() for flag in self.risk_flags
         ):
             raise ValueError("风险标记必须是非空字符串元组。")
+        if not isinstance(self.speech_act, SpeechAct):
+            raise ValueError("说话行为必须使用受控枚举。")
+        if not isinstance(self.assertion_status, AssertionStatus):
+            raise ValueError("断言状态必须使用受控枚举。")
+        if not isinstance(self.figurative_type, FigurativeType):
+            raise ValueError("修辞状态必须使用受控枚举。")
+        if not isinstance(self.alternatives, tuple) or any(
+            not isinstance(item, str) or not item.strip()
+            for item in self.alternatives
+        ):
+            raise ValueError("备选解释必须是非空字符串元组。")
+        if not isinstance(self.interpretation_reason, str):
+            raise ValueError("语用判断依据必须是字符串。")
         _validate_datetime(self.valid_at, "生效时间")
         _validate_datetime(self.invalid_at, "失效时间")
         if (
@@ -111,6 +168,7 @@ class ExtractionWindow:
     owner_id: UUID
     contact_id: UUID
     messages: tuple[MessageRef, ...]
+    target_message_ids: tuple[UUID, ...] | None = None
 
     def __post_init__(self) -> None:
         if not self.messages:
@@ -118,7 +176,32 @@ class ExtractionWindow:
         times = [message.occurred_at for message in self.messages]
         if any(later < earlier for earlier, later in zip(times, times[1:])):
             raise ValueError("提取窗口必须按时间正序排列。")
+        if self.target_message_ids is not None:
+            if (
+                not isinstance(self.target_message_ids, tuple)
+                or not self.target_message_ids
+                or len(self.target_message_ids)
+                > MAX_TARGET_MESSAGES_PER_WINDOW
+                or any(
+                    not isinstance(item, UUID)
+                    for item in self.target_message_ids
+                )
+            ):
+                raise ValueError(
+                    "目标消息 ID 必须是 1 到 "
+                    f"{MAX_TARGET_MESSAGES_PER_WINDOW} 个 UUID。"
+                )
+            if not set(self.target_message_ids) <= self.message_id_set:
+                raise ValueError("目标消息必须属于提取窗口。")
 
     @property
     def message_id_set(self) -> set[UUID]:
         return {message.message_id for message in self.messages}
+
+    @property
+    def target_message_id_set(self) -> set[UUID]:
+        """返回本次需要提取的消息；未指定时兼容旧调用，全部视为目标。"""
+
+        if self.target_message_ids is None:
+            return self.message_id_set
+        return set(self.target_message_ids)

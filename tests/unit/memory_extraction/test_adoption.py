@@ -15,6 +15,11 @@ from notalone.memory import (
 from notalone.memory_extraction.adoption import MemoryAdoption
 from notalone.memory_extraction.flow import ExtractionOutcome
 from notalone.memory_extraction.models import ExtractedFact, FactSubject
+from notalone.memory_extraction.models import (
+    AssertionStatus,
+    FigurativeType,
+    SpeechAct,
+)
 from notalone.scopes import ContactScope
 
 
@@ -42,6 +47,10 @@ class MemoryAdoptionTest(unittest.TestCase):
             "risk_flags": (),
             "valid_at": datetime(2026, 9, 1, tzinfo=timezone.utc),
             "invalid_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
+            "speech_act": SpeechAct.ASSERTION,
+            "assertion_status": AssertionStatus.ASSERTED,
+            "figurative_type": FigurativeType.LITERAL,
+            "interpretation_reason": "消息以确定语气表达一个关系主张。",
         }
         values.update(overrides)
         return ExtractedFact(**values)
@@ -108,6 +117,38 @@ class MemoryAdoptionTest(unittest.TestCase):
             (corrected,),
         )
         self.assertEqual(corrected.revision, old.revision + 1)
+
+    def test_plan_stays_pending_even_with_high_confidence(self) -> None:
+        stats = self.adoption.adopt(
+            self.scope,
+            ExtractionOutcome(
+                accepted=(
+                    self._fact(
+                        speech_act=SpeechAct.PLAN,
+                        assertion_status=AssertionStatus.ASSERTED,
+                    ),
+                )
+            ),
+        )
+
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(self.store.list_confirmed(self.scope), ())
+        candidate = self.store.list_pending_candidates(self.scope)[0]
+        self.assertIn("pragmatic:plan", candidate.risk_flags)
+
+    def test_joke_is_not_saved_as_a_candidate(self) -> None:
+        stats = self.adoption.adopt(
+            self.scope,
+            ExtractionOutcome(
+                accepted=(
+                    self._fact(figurative_type=FigurativeType.JOKE),
+                )
+            ),
+        )
+
+        self.assertEqual(stats.pending, 0)
+        self.assertEqual(stats.skipped_non_memory, 1)
+        self.assertEqual(self.store.list_pending_candidates(self.scope), ())
 
 
 if __name__ == "__main__":

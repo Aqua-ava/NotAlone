@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.flow import ExtractionFlow, ExtractionOutcome
+from notalone.memory_extraction.models import ExtractionWindow
 from notalone.memory_extraction.runtime import ExtractionPayload
 from tests.unit.memory_extraction.test_models import _window
 
@@ -22,6 +23,11 @@ def _payload(message_id: object, **overrides: object) -> dict:
         "risk_flags": [],
         "valid_at": None,
         "invalid_at": None,
+        "speech_act": "assertion",
+        "assertion_status": "asserted",
+        "figurative_type": "literal",
+        "alternatives": [],
+        "interpretation_reason": "消息以确定语气表达一个关系主张。",
     }
     fields.update(overrides)
     return fields
@@ -115,6 +121,39 @@ class ExtractionFlowTest(unittest.TestCase):
         self.assertEqual(
             outcome.failure_reason, "模型未返回可解析的结构化事实。"
         )
+
+    def test_fact_must_reference_at_least_one_target_message(self) -> None:
+        target_id = uuid4()
+        context_id = uuid4()
+        window = _window((target_id, context_id))
+        window = ExtractionWindow(
+            owner_id=window.owner_id,
+            contact_id=window.contact_id,
+            messages=window.messages,
+            target_message_ids=(target_id,),
+        )
+
+        outcome = ExtractionFlow(
+            runtime=RecordingRuntime((_payload(context_id),))
+        ).run(window)
+
+        self.assertEqual(outcome.accepted, ())
+        self.assertEqual(outcome.rejected_count, 1)
+
+    def test_missing_or_empty_interpretation_fields_are_rejected(self) -> None:
+        message_id = uuid4()
+        missing = _payload(message_id)
+        del missing["speech_act"]
+        empty_reason = _payload(message_id, interpretation_reason="  ")
+        null_alternatives = _payload(message_id, alternatives=None)
+
+        outcome = self._run_flow(
+            RecordingRuntime((missing, empty_reason, null_alternatives)),
+            message_id,
+        )
+
+        self.assertEqual(outcome.accepted, ())
+        self.assertEqual(outcome.rejected_count, 3)
 
 
 if __name__ == "__main__":

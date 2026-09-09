@@ -49,6 +49,7 @@
 23. [ADR-023：全局 CLI 增量同步与前台 OCR 定位分离](adr/023-global-cli-sync-and-ocr-foreground-locator.md)
 24. [ADR-024：关系记忆风险门槛与版本化采纳](adr/024-memory-adoption-risk-gate-and-versioning.md)
 25. [ADR-025：CLI 后台同步自动补齐可检测缺口](adr/025-cli-background-sync-gap-backfill.md)
+26. [ADR-026：语用解释先于关系记忆采纳](adr/026-pragmatic-interpretation-before-memory-adoption.md)
 
 ## 当前架构决策
 

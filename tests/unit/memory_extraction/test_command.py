@@ -42,6 +42,15 @@ class FailingRuntime:
         raise ExtractionRuntimeError("模型未返回可解析的结构化事实。")
 
 
+class RecordingWindowRuntime(NullRuntime):
+    def __init__(self) -> None:
+        self.windows = []
+
+    def extract(self, window: object) -> tuple:
+        self.windows.append(window)
+        return ()
+
+
 class RecordingMemoryPort:
     def __init__(self) -> None:
         self.calls = []
@@ -170,6 +179,41 @@ class RunExtractionTest(unittest.TestCase):
         self.assertEqual(stats.failed_batches, 1)
         self.assertEqual(stats.adopted, 0)
         self.assertEqual(self.watermark.values, [])
+
+    def test_model_window_has_bounded_context_and_explicit_targets(self) -> None:
+        messages = _messages(45)
+        runtime = RecordingWindowRuntime()
+
+        stats = run_extraction(
+            scope=self.scope,
+            messages=messages,
+            watermark_message_id=None,
+            runtime=runtime,
+            memory_port=self.memory_port,
+            owner_memory_port=self.owner_port,
+            batch_size=20,
+        )
+
+        self.assertEqual(stats.batches, 3)
+        self.assertEqual(len(runtime.windows), 3)
+        for window in runtime.windows:
+            self.assertLessEqual(len(window.messages), 60)
+            self.assertGreaterEqual(len(window.target_message_ids), 1)
+            self.assertTrue(
+                window.target_message_id_set <= window.message_id_set
+            )
+
+    def test_context_side_cannot_exceed_twenty_messages(self) -> None:
+        with self.assertRaises(ValueError):
+            run_extraction(
+                scope=self.scope,
+                messages=_messages(1),
+                watermark_message_id=None,
+                runtime=NullRuntime(),
+                memory_port=self.memory_port,
+                owner_memory_port=self.owner_port,
+                context_before=21,
+            )
 
 
 if __name__ == "__main__":

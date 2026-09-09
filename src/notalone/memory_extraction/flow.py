@@ -9,10 +9,13 @@ from uuid import UUID
 from notalone.memory.models import MemoryCategory
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.models import (
+    AssertionStatus,
     ExtractedFact,
     ExtractionWindow,
     FactSubject,
+    FigurativeType,
     MemoryTopic,
+    SpeechAct,
 )
 from notalone.memory_extraction.runtime import MemoryExtractionRuntime
 
@@ -47,6 +50,7 @@ class ExtractionFlow:
             )
 
         window_ids = window.message_id_set
+        target_ids = window.target_message_id_set
         accepted: list[ExtractedFact] = []
         rejected = 0
         for payload in payloads:
@@ -55,7 +59,8 @@ class ExtractionFlow:
             except Exception:
                 rejected += 1
                 continue
-            if not set(fact.source_message_ids) <= window_ids:
+            source_ids = set(fact.source_message_ids)
+            if not source_ids <= window_ids or not source_ids & target_ids:
                 rejected += 1
                 continue
             accepted.append(fact)
@@ -65,6 +70,18 @@ class ExtractionFlow:
 
 
 def _to_fact(payload: dict) -> ExtractedFact:
+    risk_flags = payload["risk_flags"]
+    alternatives = payload["alternatives"]
+    interpretation_reason = payload["interpretation_reason"]
+    if not isinstance(risk_flags, list):
+        raise TypeError("风险标记必须是数组。")
+    if not isinstance(alternatives, list):
+        raise TypeError("备选解释必须是数组。")
+    if (
+        not isinstance(interpretation_reason, str)
+        or not interpretation_reason.strip()
+    ):
+        raise ValueError("语用判断依据不能为空。")
     return ExtractedFact(
         text=payload["text"],
         category=MemoryCategory(payload["category"]),
@@ -74,9 +91,14 @@ def _to_fact(payload: dict) -> ExtractedFact:
             _as_uuid(value) for value in payload["source_message_ids"]
         ),
         confidence=float(payload["confidence"]),
-        risk_flags=tuple(payload.get("risk_flags") or ()),
+        risk_flags=tuple(risk_flags),
         valid_at=_as_datetime(payload.get("valid_at")),
         invalid_at=_as_datetime(payload.get("invalid_at")),
+        speech_act=SpeechAct(payload["speech_act"]),
+        assertion_status=AssertionStatus(payload["assertion_status"]),
+        figurative_type=FigurativeType(payload["figurative_type"]),
+        alternatives=tuple(alternatives),
+        interpretation_reason=interpretation_reason,
     )
 
 
