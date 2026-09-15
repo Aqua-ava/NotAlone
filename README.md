@@ -241,3 +241,7 @@ python -m unittest discover -s tests -v
 PostgreSQL 集成测试默认使用本地 `notalone_test` 数据库，也可以通过
 `NOTALONE_TEST_DATABASE_URL` 指定其他名称以 `_test` 结尾的隔离测试库。每个用例使用
 随机 owner 并只清理自己的合成数据；测试拒绝连接名称不以 `_test` 结尾的数据库。
+
+## 项目官网
+
+官网静态代码位于 [website/](website/README.md)，包含产品演示和技术架构介绍。启动方式见目录说明。
