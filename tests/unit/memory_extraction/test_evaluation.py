@@ -1,8 +1,13 @@
 """从合成消息窗口观察最终去向，不写入记忆。"""
 import unittest
 
-from notalone.memory_extraction.evaluation import build_window, evaluate_case
-from notalone.memory_extraction.evaluation_cases import CASES
+from notalone.memory_extraction.evaluation import (
+    EvaluationResult,
+    build_window,
+    evaluate_case,
+    summarize,
+)
+from notalone.memory_extraction.evaluation_cases import CASES, EvaluationCase
 from notalone.memory_extraction.adapters import LangChainExtractionRuntime
 from tests.unit.memory_extraction.test_adapters import _structured_response
 from tests.unit.memory_extraction.test_flow import _payload
@@ -62,7 +67,101 @@ class EvaluationTest(unittest.TestCase):
         result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
         self.assertEqual(result.actual, 'none')
         self.assertEqual(result.rejected_count, 1)
+        self.assertEqual(result.error_kind, 'general')
         self.assertFalse(result.passed)
+
+    def test_false_fact_classification_for_auto_adopted_joke(self):
+        case = CASES_BY_NAME["反讽"]
+        window = build_window(case)
+        payload = _payload(window.messages[1].message_id)
+        model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
+        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        self.assertEqual(result.actual, 'auto')
+        self.assertEqual(result.error_kind, 'false_fact')
+
+    def test_wrong_subject_classification(self):
+        case = CASES_BY_NAME["主体归属：用户计划"]
+        window = build_window(case)
+        payload = _payload(window.messages[0].message_id)
+        payload.update(subject='contact', speech_act='plan')
+        model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
+        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        self.assertFalse(result.subject_ok)
+        self.assertEqual(result.error_kind, 'wrong_subject')
+
+    def test_subject_check_is_vacuous_without_candidate(self):
+        case = EvaluationCase(
+            name='合成空窗口', dimension='subject',
+            messages=(('contact', '好的。'),), targets=(0,),
+            expect='none', expect_subject='self',
+        )
+        window = build_window(case)
+        model = ToolCallingFakeModel(responses=[_structured_response(())])
+        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        self.assertEqual(result.actual, 'none')
+        self.assertTrue(result.subject_ok)
+        self.assertTrue(result.passed)
+
+    def test_text_fidelity_expectations(self):
+        base = dict(
+            dimension='paraphrase', messages=(('contact', '我不喝酒。'),),
+            targets=(0,), expect='auto',
+        )
+        passing = EvaluationCase(
+            name='保真通过', expect_text_contains=('不喝',), **base,
+        )
+        failing = EvaluationCase(
+            name='保真失败', expect_text_contains=('能喝',), **base,
+        )
+        excluded = EvaluationCase(
+            name='禁用词命中', expect_text_excludes=('能喝',), **base,
+        )
+        scenarios = (
+            (passing, True, '联系人不喝酒'),
+            (failing, False, '联系人不喝酒'),
+            (excluded, False, '联系人能喝酒'),
+        )
+        for case, text_ok, payload_text in scenarios:
+            with self.subTest(case=case.name):
+                window = build_window(case)
+                payload = _payload(window.messages[0].message_id, text=payload_text)
+                model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
+                result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+                self.assertEqual(result.text_ok, text_ok)
+                self.assertEqual(result.passed, text_ok)
+
+    def test_dimension_gate_summary(self):
+        def make(error_kind=None):
+            return EvaluationResult(
+                name='合成', dimension='subject', expected='auto', actual='auto',
+                passed=error_kind is None, subject_ok=error_kind != 'wrong_subject',
+                labels_ok=True, expected_subject=None, expected_labels=(),
+                facts=(), rejected_count=0, failure_reason=None,
+                text_ok=True, error_kind=error_kind,
+            )
+
+        under = summarize(tuple(make() for _ in range(14)))[0]
+        self.assertEqual((under.cases, under.meets_gate), (14, False))
+        with_one_general = summarize(
+            tuple(make() for _ in range(14)) + (make('general'),)
+        )[0]
+        self.assertEqual(
+            (with_one_general.cases, with_one_general.general_errors,
+             with_one_general.meets_gate),
+            (15, 1, True),
+        )
+        too_many_general = summarize(
+            tuple(make() for _ in range(13)) + tuple(make('general') for _ in range(2))
+        )[0]
+        self.assertFalse(too_many_general.meets_gate)
+        fake_fact = summarize(
+            tuple(make() for _ in range(14)) + (make('false_fact'),)
+        )[0]
+        self.assertFalse(fake_fact.meets_gate)
+        wrong_subject = summarize(
+            tuple(make() for _ in range(14)) + (make('wrong_subject'),)
+        )[0]
+        self.assertFalse(wrong_subject.meets_gate)
 
     def test_expected_labels_detect_reported_completed_action(self):
         case = CASES_BY_NAME["已发生行动"]

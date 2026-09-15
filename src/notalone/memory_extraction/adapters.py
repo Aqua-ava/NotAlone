@@ -25,25 +25,43 @@ EXTRACTION_SYSTEM_PROMPT = """你从一位联系人的聊天消息窗口中提�
 speech_act 取值：assertion=直接陈述本人或双方的事实、经历、状态、习惯，含"我已经…"
 "我平时…"；plan=尚待实现的打算；question=提问；request=请求或要求；report=转述第三方
 的话或内容；correction=更正或撤回此前说法；unknown=无法判断。第一人称完成事实属于
-assertion，不是 report。
+assertion，不是 report。speech_act 描述发送者正在做什么：陈述事实用 assertion，无论
+事实的主体是谁；只有转引别人的话或内容才用 report。尚未发生的日程、安排、约定、打算
+一律属于 plan，即使语气确定、时间已定，如“我下个月去大阪”“下个月有考试”“这周末得
+复习”；只有已经发生或当前持续的事实才用 assertion。
 assertion_status 取值：asserted=把内容当作已成立的事实；hypothetical=假设；
 conditional=条件；reported=转述；unknown=无法判断。
 figurative_type 取值：literal=按字面理解；joke=玩笑；sarcasm=反讽（字面褒义实为贬义或
 相反）；hyperbole=夸张（"累死了""饿死了"）；unknown=无法判断。
-示例：对方帮倒忙后说"你太厉害了，真是帮了我大忙"是 sarcasm；"累死了"是 hyperbole；
-"我妈让我…"是 report + reported；被点破的吹牛（"你又开始吹了"）标 figurative_type=unknown。
+category 只能取 common_fact、preference、taboo、recent_state、relationship_note 之一；
+topic 只能取 health、work、family、travel、finance、study、emotion、other 之一；不要把
+topic 的词（如 family、health、travel）填进 category。分类示例：习惯与口味用
+preference，禁忌用 taboo，共同经历用 common_fact，近况与未来安排用 recent_state，
+家人、朋友与关系动态用 relationship_note。
+示例：对方帮倒忙后说"你太厉害了，真是帮了我大忙"是 sarcasm；"你可真行，又给我添乱"
+"你可真会挑时候"这类挖苦抱怨也只表达情绪，是 sarcasm，不要提取其中的字面事实；
+"累死了"是 hyperbole；"我妈让我…"是 report + reported；被点破的吹牛（"你又开始吹了"）
+标 figurative_type=unknown。
+confidence 反映你对事实与标签的把握，而不是事实的重要性：语气确定、证据在 target
+消息里直接出现时应不低于 0.8；只有存在真实不确定时才低于 0.7。
 每条事实必须标注主体：这件事是谁的（self=用户本人，contact=联系人，shared=双方共同），
-消息的发送者标注是判断依据，不得把用户自己说的内容记成联系人的事。
+消息的发送者标注是判断依据，不得把用户自己说的内容记成联系人的事。用“我们”表达的
+双方共同经历、约定或计划，主体标为 shared，不要记成单方的事。只有两人的窗口里，
+未指明身份的“他/她/那个人”默认指联系人，不要按第三方处理，也不要为此填写
+alternatives；上下文里出现了其他第三方时才需要区分身份。
 只提取值得跨对话长期记住、或值得用户确认的主张；纯问题、寒暄（"吃了吗""在吗"）、
-纯表情或语气词、一次性安排的细节、纯玩笑和夸张、转发的外部内容、对第三方的情绪反应
-不要输出。计划、假设、条件、转述、纠正或无法判断的内容如果对关系理解有帮助，可以输出，
+纯表情或语气词、一次性安排的细节、纯玩笑和夸张、转发或引用外部内容（视频、文章、
+传闻）的命题、双方对外部信息的情绪反应、对第三方的情绪反应不要输出，如对方发来
+“熬夜致癌”的视频并说“吓死我了”，不要提取。计划、假设、条件、转述、纠正或无法判断的内容如果对关系理解有帮助，可以输出，
 但必须准确标注状态，不能写成确定事实。
 “我准备贷款30万加仓”应标记为计划或歧义，不得改写成“已经贷款30万”。
 媒体占位文本（如"[图片]""[语音]"）只能推断发送行为偏好，不得推测消息内容。
-只有标记为 target 的消息可以作为该候选的主证据；上下文消息只能辅助理解。每条事实的
-source_message_ids 只能填写输入中标注的 message_id，且至少包含一个 target 消息 ID。
+只有标记为 target 的消息可以作为该候选的主证据；上下文消息只能辅助理解，不要只凭
+上下文消息提取事实，候选必须由 target 消息直接支持。每条事实的 source_message_ids
+只能填写输入中标注的 message_id，且至少包含一个 target 消息 ID。
 alternatives 只在该表达可能不是字面事实、或存在实质歧义时填写少量其他解释；语气明确、
-证据直接时留空数组。interpretation_reason 只写一句面向用户的简短依据，不要输出模型
+证据直接时留空数组。如果 speech_act、assertion_status、figurative_type 与主体已经
+确定，不要再用 alternatives 复述与标签或主体判断矛盾的其他猜测。interpretation_reason 只写一句面向用户的简短依据，不要输出模型
 内部思考过程。
 """
 
@@ -69,7 +87,10 @@ EXTRACTION_SCHEMA: dict[str, Any] = {
                         "type": "string",
                     },
                     "category": {
-                        "description": "五类分类之一。",
+                        "description": (
+                            "五类分类之一：common_fact、preference、taboo、"
+                            "recent_state、relationship_note；不要填 topic 的词。"
+                        ),
                         "type": "string",
                         "enum": [item.value for item in MemoryCategory],
                     },
@@ -81,7 +102,10 @@ EXTRACTION_SCHEMA: dict[str, Any] = {
                         "enum": ["self", "contact", "shared"],
                     },
                     "topic": {
-                        "description": "受控主题，只用于缩小后续裁决范围。",
+                        "description": (
+                            "受控主题（health、work、family、travel、finance、"
+                            "study、emotion、other），只用于缩小后续裁决范围。"
+                        ),
                         "type": "string",
                         "enum": [item.value for item in MemoryTopic],
                     },

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import NAMESPACE_URL, uuid5
@@ -16,6 +17,12 @@ from notalone.memory_extraction.pragmatics import MemoryDisposition, PragmaticIn
 from notalone.memory_extraction.runtime import MemoryExtractionRuntime
 
 API_KEY_ENV = 'NOTALONE_EVALUATION_API_KEY'
+GATE_MIN_CASES = 15
+GATE_MAX_GENERAL_ERRORS = 1
+ERROR_FALSE_FACT = 'false_fact'
+ERROR_WRONG_SUBJECT = 'wrong_subject'
+ERROR_GENERAL = 'general'
+DESTINATION_ORDER = ('none', 'pending', 'auto')
 
 
 @dataclass(frozen=True)
@@ -27,11 +34,26 @@ class EvaluationResult:
     passed: bool
     subject_ok: bool
     labels_ok: bool
+    text_ok: bool
+    error_kind: str | None
     expected_subject: str | None
     expected_labels: tuple[tuple[str, str], ...]
     facts: tuple[dict, ...]
     rejected_count: int
     failure_reason: str | None
+
+
+@dataclass(frozen=True)
+class DimensionSummary:
+    """一个维度的达标签计数；放行还需要用户确认，工具只给数字。"""
+
+    dimension: str
+    cases: int
+    passed: int
+    false_facts: int
+    wrong_subjects: int
+    general_errors: int
+    meets_gate: bool
 
 
 def build_window(case: EvaluationCase) -> ExtractionWindow:
@@ -71,10 +93,9 @@ def evaluate_case(
         facts.append({**asdict(fact), 'destination': destination,
                       'pragmatic_disposition': decision.disposition.value,
                       'reasons': decision.reasons})
-    actual = max(destinations, key=('none', 'pending', 'auto').index, default='none')
-    subject_ok = case.expect_subject is None or (
-        bool(outcome.accepted)
-        and all(fact.subject.value == case.expect_subject for fact in outcome.accepted)
+    actual = max(destinations, key=DESTINATION_ORDER.index, default='none')
+    subject_ok = case.expect_subject is None or all(
+        fact.subject.value == case.expect_subject for fact in outcome.accepted
     )
     labels_ok = not case.expected_labels or (
         bool(facts) and all(
@@ -82,15 +103,81 @@ def evaluate_case(
             for fact in facts for label, expected in case.expected_labels
         )
     )
-    passed = (actual == case.expect and subject_ok and labels_ok
+    text_ok = _text_matches(case, facts)
+    passed = (actual == case.expect and subject_ok and labels_ok and text_ok
               and outcome.failure_reason is None and outcome.rejected_count == 0)
     return EvaluationResult(
         name=case.name, dimension=case.dimension, expected=case.expect,
         actual=actual, passed=passed, subject_ok=subject_ok, labels_ok=labels_ok,
+        text_ok=text_ok,
+        error_kind=_classify_error(
+            passed=passed, actual=actual, expected=case.expect,
+            subject_ok=subject_ok,
+        ),
         expected_subject=case.expect_subject, expected_labels=case.expected_labels,
         facts=tuple(facts), rejected_count=outcome.rejected_count,
         failure_reason=outcome.failure_reason,
     )
+
+
+def _text_matches(case: EvaluationCase, facts: list[dict]) -> bool:
+    """保真检查：禁用词不得出现；要求的语义标记至少出现在一条候选文本里。"""
+    texts = [str(fact.get('text', '')) for fact in facts]
+    if any(
+        forbidden in text
+        for text in texts
+        for forbidden in case.expect_text_excludes
+    ):
+        return False
+    return all(
+        any(required in text for text in texts)
+        for required in case.expect_text_contains
+    )
+
+
+def _classify_error(
+    *, passed: bool, actual: str, expected: str, subject_ok: bool,
+) -> str | None:
+    """给失败用例归类：假事优先，其次记错人，其余为一般错误。"""
+    if passed:
+        return None
+    if actual == 'auto' and expected != 'auto':
+        return ERROR_FALSE_FACT
+    if not subject_ok:
+        return ERROR_WRONG_SUBJECT
+    return ERROR_GENERAL
+
+
+def summarize(results: Sequence[EvaluationResult]) -> tuple[DimensionSummary, ...]:
+    """按维度汇总达标签计数，供放行记录使用。"""
+    grouped: dict[str, list[EvaluationResult]] = {}
+    for result in results:
+        grouped.setdefault(result.dimension, []).append(result)
+    summaries = []
+    for dimension in sorted(grouped):
+        items = grouped[dimension]
+        false_facts = sum(
+            result.error_kind == ERROR_FALSE_FACT for result in items
+        )
+        wrong_subjects = sum(
+            result.error_kind == ERROR_WRONG_SUBJECT for result in items
+        )
+        general_errors = sum(
+            result.error_kind == ERROR_GENERAL for result in items
+        )
+        meets_gate = (
+            len(items) >= GATE_MIN_CASES
+            and false_facts == 0
+            and wrong_subjects == 0
+            and general_errors <= GATE_MAX_GENERAL_ERRORS
+        )
+        summaries.append(DimensionSummary(
+            dimension=dimension, cases=len(items),
+            passed=sum(result.passed for result in items),
+            false_facts=false_facts, wrong_subjects=wrong_subjects,
+            general_errors=general_errors, meets_gate=meets_gate,
+        ))
+    return tuple(summaries)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -121,7 +208,11 @@ def main(argv: list[str] | None = None) -> int:
         results.append(result)
         print(json.dumps(asdict(result), ensure_ascii=False, default=str), flush=True)
     failures = [result.name for result in results if not result.passed]
-    print(json.dumps({'cases': len(results), 'failures': failures}, ensure_ascii=False))
+    print(json.dumps({
+        'cases': len(results),
+        'failures': failures,
+        'dimensions': [asdict(item) for item in summarize(results)],
+    }, ensure_ascii=False))
     return 1 if failures else 0
 
 
