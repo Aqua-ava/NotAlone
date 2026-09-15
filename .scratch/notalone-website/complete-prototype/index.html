@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="NotAlone 结合具体联系人的关系语境，陪你找到自己的表达。查看可编辑、有依据的候选回复体验。">
+<meta name="theme-color" content="#f1f4f6"><title>NotAlone — 陪你找到自己的表达</title>
+<link rel="stylesheet" href="style.css"><script src="app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#experience">跳到产品演示</a>
+<header><a class="brand" href="#">NotAlone<span class="brand-dot"></span></a><nav aria-label="主导航"><a href="#experience">体验</a><a href="#principles">理念</a><a href="#about">关于项目 <span>↗</span></a></nav></header>
+<main>
+<section class="hero" aria-labelledby="hero-title">
+<div class="hero-top"><span class="eyebrow"><i></i> 给每一次认真表达</span><span class="edition">A LITTLE HELP. A LOT OF YOU.</span></div>
+<div class="art"><span class="pencil p1">那些还没发出去的话</span><h1 id="hero-title"><img src="assets/logo.png" alt="NotAlone" width="1536" height="1024"></h1><span class="pencil p2">慢慢说，也没关系。<b>↗</b></span></div>
+<div class="hero-copy"><h2>不是替你回复，<br class="mobile-break">是陪你找到自己的表达。</h2><p>有些话，心里很清楚，却在输入框里停了很久。<br>让聊天语境成为参考，给想说的话，多一种说法。</p><a class="primary" href="#experience">把一句话，慢慢说好 <span>↓</span></a></div>
+<div class="hero-bottom"><span>为真实的关系，留一点思考的空间。</span><a href="#experience">向下探索 <span>↓</span></a><span>01 / THE EXPRESSION</span></div>
+</section>
+<section class="experience section" id="experience" aria-labelledby="experience-title">
+<div class="section-intro"><div><span class="eyebrow">02 / 一次表达的练习</span><h2 id="experience-title">想说的话，<br>从这里开始。</h2></div><p>先想清楚对谁说，再说清楚自己的意思。<br>试着选一句、改几个字，找到像你的那一种。</p></div>
+<div class="demo-tabs" role="group" aria-label="选择虚构演示场景"><button class="active" data-scene="0" aria-pressed="true">01 &nbsp; 隔了很久的回复</button><button data-scene="1" aria-pressed="false">02 &nbsp; 一次温和的拒绝</button><span>可交互演示 · 全部为虚构示例</span></div>
+<div class="workbench">
+<div class="window-bar"><div class="window-dots"><i></i><i></i><i></i></div><span>NotAlone / 表达工作台</span><span class="local-tag">示例体验</span></div>
+<div class="workspace">
+<aside class="context"><div class="contact"><div class="avatar">哲</div><div><strong>阿哲</strong><span>示例联系人 · 已确认</span></div><span class="verified" aria-label="已确认">✓</span></div><div class="context-label">最近的对话 <span>虚构记录</span></div><div class="chat"><span class="chat-time">周六 14:30</span><p id="incoming"></p><p class="outgoing" id="previous"></p><p id="latest"></p></div><div class="context-note"><span>↳</span><p>每段关系，都有自己的上下文。<br>本次只参考阿哲的示例资料。</p></div><div class="tiny-stamp">ONE PERSON.<br>ONE CONTEXT.</div></aside>
+<div class="reply-area"><div class="step-label"><span>01</span><label for="direction">这一次，你想怎么表达？</label></div><div id="direction" class="direction"></div><div class="direction-note">仅用于这一次表达</div><div class="step-label candidate-heading"><span>02</span><strong>选一个更像你的说法</strong><small>预设候选</small></div><div id="candidates" class="candidates"></div><details class="evidence"><summary>↳ 这些建议参考了什么？ <span>查看依据</span></summary><p id="evidence"></p><small>以上为预先编写的演示依据，不是模型对真实关系的判断。</small></details><div class="editor-heading"><label for="draft">最后，再加一点你自己。</label><span>可直接修改 ↓</span></div><textarea id="draft" rows="3" aria-describedby="copy-status"></textarea><div class="editor-bottom"><span id="copy-status" role="status">由你修改，复制后亲自发送。</span><button id="copy" class="primary">复制这句话 <span>↗</span></button></div></div>
+</div></div><div class="demo-caption"><span>关系语境 → 表达方向 → 候选与依据 → 由你决定</span><span>你的话，始终由你做主。</span></div>
+</section>
+<section class="principles section" id="principles"><span class="eyebrow">03 / 为真实表达而设计</span><div class="principle-heading"><h2>更合适的表达，<br>也应该<span>更像你。</span></h2><p>我们想留住的，是话语背后的那个人。</p></div><div class="principle-list"><article><span class="number">01</span><div><h3>记得语境，才接得住话。</h3><p>围绕你确认的联系人，参考相关对话和关系资料。<br>一句建议，从你们自己的故事里出发。</p></div><span class="symbol">⌁</span></article><article><span class="number">02</span><div><h3>有参考，也有自己的判断。</h3><p>候选附上依据，让你知道建议从何而来。<br>可以采纳，也可以改成你真正想说的话。</p></div><span class="symbol">※</span></article><article><span class="number">03</span><div><h3>把最后一步，留给自己。</h3><p>本次表达方向只作用于这一次回复。<br>最终消息由你修改、选择，并亲自发送。</p></div><span class="symbol">↗</span></article></div></section>
+<section class="closing" id="about"><span class="eyebrow">留给那句，迟迟没发出去的话</span><h2>话在手里，攥了很久，<br>还没放它<span>飞。</span></h2><p>也许，你只是需要一点时间，和一点帮助。</p><a href="#experience" class="text-link">再试着说一句 <span>↗</span></a><span class="closing-mark" aria-hidden="true">N.</span></section>
+</main>
+<footer><div class="footer-top"><a class="brand" href="#">NotAlone<span class="brand-dot"></span></a><p>陪你找到自己的表达。</p><a href="https://github.com/Madeleg/NotAlone" target="_blank" rel="noopener noreferrer">GitHub · 查看项目源码 ↗</a></div><div class="footer-bottom"><p>项目持续开发中 · 此页为官网交互原型，演示使用预设合成数据，不连接真实聊天或模型。</p><span>© 2026 NotAlone</span></div></footer>
+</body></html>
