@@ -12,4 +12,6 @@
 - [ ] 修复只用允许手段；全量既有用例回归通过
 - [ ] 新增与修复对应用例入库
 
-## Comments
+## Comments（收尾记录）
+
+- 2026-09-15 任务 01 基线（`docs/memory-extraction-evaluation-baseline.md`）挂到本票的失败项：吹牛被点破（去向正确，但另有 1 条被证据/字段外壳拒绝）、修辞反问（模型标 assertion / unknown / unknown，实际 pending，期望 none）。本票需先复现这两类，再修复；外壳拒绝不计通过。

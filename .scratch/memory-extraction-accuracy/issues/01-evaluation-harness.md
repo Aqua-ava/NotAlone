@@ -28,3 +28,9 @@
 - code-review 两轴：Spec 0 项；Standards 1 条非阻塞维护建议（测试用稳定名称取代用例索引），已修复。`git diff --check` 通过。
 
 数据影响：仅合成窗口发送到授权模型；不读取真实聊天、不连接数据库、不写入记忆，不改变自动采纳规则。未执行存储去重/写入裁决，未证明七维度达标或文本语义保真。
+
+## Comments（收尾复核）
+
+- 2026-09-15 独立验证：`python -m unittest discover -s tests` 798 项通过、3 项跳过；无凭据运行 `python -m notalone.memory_extraction.evaluation` 明确跳过并返回 2；mypy 对 evaluation.py、evaluation_cases.py、adoption.py 无问题；24 条用例名称与开发期脚本逐条一致，按 subject / truth_intent / time / reported 归类。
+- 基线 3 条失败已挂到任务 04（吹牛被点破、修辞反问）与任务 06（无标记转述）复现修复；开发期脚本 `.scratch/pragmatic-memory-smoke-test/score_extraction_intent.py` 已被仓库评测入口取代，保留待用户决定是否删除。
+

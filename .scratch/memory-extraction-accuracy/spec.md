@@ -66,6 +66,6 @@
 
 ## Further Notes
 
-- 已有工具：`.scratch/pragmatic-memory-smoke-test/score_extraction_intent.py`（24 条，覆盖部分维度）。
+- 评测入口已在任务 01 迁入仓库：`notalone.memory_extraction.evaluation`（24 条合成用例，按 subject / truth_intent / time / reported 归类；默认跳过，专用凭据 `NOTALONE_EVALUATION_API_KEY`）；开发期对分脚本 `.scratch/pragmatic-memory-smoke-test/score_extraction_intent.py` 已被取代。基线 21 通过、3 失败见 `docs/memory-extraction-evaluation-baseline.md`。
 - 本轮出口：7 个维度评测全绿（自动采纳路径上假事 0、记错人 0）；已修维度落回归用例；模型配置定案；下一轮任务票（待确认参与回复、放开门槛准则）写好。
 - 本轮不改变产品硬边界：联系人隔离、来源与删除路径、候选回复由用户手动发送。
