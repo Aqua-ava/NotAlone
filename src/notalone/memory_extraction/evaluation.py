@@ -35,6 +35,7 @@ class EvaluationResult:
     subject_ok: bool
     labels_ok: bool
     text_ok: bool
+    validity_ok: bool
     error_kind: str | None
     expected_subject: str | None
     expected_labels: tuple[tuple[str, str], ...]
@@ -104,12 +105,14 @@ def evaluate_case(
         )
     )
     text_ok = _text_matches(case, facts)
+    validity_ok = _validity_matches(case, facts)
     passed = (actual == case.expect and subject_ok and labels_ok and text_ok
+              and validity_ok
               and outcome.failure_reason is None and outcome.rejected_count == 0)
     return EvaluationResult(
         name=case.name, dimension=case.dimension, expected=case.expect,
         actual=actual, passed=passed, subject_ok=subject_ok, labels_ok=labels_ok,
-        text_ok=text_ok,
+        text_ok=text_ok, validity_ok=validity_ok,
         error_kind=_classify_error(
             passed=passed, actual=actual, expected=case.expect,
             subject_ok=subject_ok,
@@ -133,6 +136,24 @@ def _text_matches(case: EvaluationCase, facts: list[dict]) -> bool:
         any(required in text for text in texts)
         for required in case.expect_text_contains
     )
+
+
+def _validity_matches(case: EvaluationCase, facts: list[dict]) -> bool:
+    """有效期存在性检查：需要时间限定的事实要填对字段，其余不填。"""
+    values = {
+        'valid_at': [fact.get('valid_at') for fact in facts],
+        'invalid_at': [fact.get('invalid_at') for fact in facts],
+    }
+    for field, expectation in (
+        ('valid_at', case.expect_valid_at),
+        ('invalid_at', case.expect_invalid_at),
+    ):
+        if expectation is None:
+            continue
+        present = any(value is not None for value in values[field])
+        if present is not expectation:
+            return False
+    return True
 
 
 def _classify_error(

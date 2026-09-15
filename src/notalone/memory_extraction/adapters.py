@@ -58,6 +58,12 @@ alternatives；上下文里出现了其他第三方时才需要区分身份。
 但必须准确标注状态，不能写成确定事实。
 “我准备贷款30万加仓”应标记为计划或歧义，不得改写成“已经贷款30万”。
 媒体占位文本（如"[图片]""[语音]"）只能推断发送行为偏好，不得推测消息内容。
+窗口行里的 occurred_at 是消息时间，用来推算相对时间。valid_at 表示事实或安排的生效
+时间：未来计划、未来约定与有时效的状态必须填写 valid_at，按 occurred_at 推算带时区的
+ISO 8601 时间，例如“2026-10-01T09:00:00+08:00”，不能只写日期、不能留空；已经发生
+且没有明确时限的事实留空。
+invalid_at 只在消息明确指出未来失效时间时填写，格式相同。取消或撤回的记录为已发生
+的事实，不要用 valid_at、invalid_at 表达取消。
 只有标记为 target 的消息可以作为该候选的主证据；上下文消息只能辅助理解，不要只凭
 上下文消息提取事实，候选必须由 target 消息直接支持。每条事实的 source_message_ids
 只能填写输入中标注的 message_id，且至少包含一个 target 消息 ID。
@@ -132,11 +138,17 @@ EXTRACTION_SCHEMA: dict[str, Any] = {
                         "items": {"type": "string"},
                     },
                     "valid_at": {
-                        "description": "事实生效时间（ISO 8601），可为空。",
+                        "description": (
+                            "带时区的 ISO 8601 生效时间；未来计划与有时效状态按消息的 "
+                            "occurred_at 推算填写，已发生且无时限的事实为空。"
+                        ),
                         "anyOf": [{"type": "string"}, {"type": "null"}],
                     },
                     "invalid_at": {
-                        "description": "事实失效时间（ISO 8601），可为空。",
+                        "description": (
+                            "带时区的 ISO 8601 失效时间；只在消息明确给出结束、取消或"
+                            "失效时间时填写，可为空。"
+                        ),
                         "anyOf": [{"type": "string"}, {"type": "null"}],
                     },
                     "speech_act": {
@@ -244,6 +256,7 @@ def _window_text(window: ExtractionWindow) -> str:
         f"{index + 1}. "
         f"[{('target' if message.message_id in target_ids else 'context')}] "
         f"[message_id={message.message_id}] "
+        f"occurred_at={message.occurred_at.isoformat()} "
         f"sender={message.sender.value}: {message.text}"
         for index, message in enumerate(window.messages)
     ]

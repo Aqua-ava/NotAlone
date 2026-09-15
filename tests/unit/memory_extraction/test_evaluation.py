@@ -130,6 +130,31 @@ class EvaluationTest(unittest.TestCase):
                 self.assertEqual(result.text_ok, text_ok)
                 self.assertEqual(result.passed, text_ok)
 
+    def test_validity_field_expectations(self):
+        base = dict(
+            dimension='time', messages=(('contact', '我下周去北京。'),),
+            targets=(0,), expect='auto',
+        )
+        want_valid = EvaluationCase(name='应填生效时间', expect_valid_at=True, **base)
+        deny_valid = EvaluationCase(name='不应填生效时间', expect_valid_at=False, **base)
+        want_invalid = EvaluationCase(name='应填失效时间', expect_invalid_at=True, **base)
+        for case, validity_ok, payload_valid in (
+            (want_valid, True, '2026-09-22T09:00:00+08:00'),
+            (want_valid, False, None),
+            (deny_valid, True, None),
+            (deny_valid, False, '2026-09-22T09:00:00+08:00'),
+            (want_invalid, True, '2026-09-30T09:00:00+08:00'),
+            (want_invalid, False, None),
+        ):
+            with self.subTest(case=case.name, ok=validity_ok, value=payload_valid):
+                window = build_window(case)
+                overrides = {'valid_at': payload_valid} if case.expect_valid_at is not None else {'invalid_at': payload_valid}
+                payload = _payload(window.messages[0].message_id, **overrides)
+                model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
+                result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+                self.assertEqual(result.validity_ok, validity_ok)
+                self.assertEqual(result.passed, validity_ok)
+
     def test_dimension_gate_summary(self):
         def make(error_kind=None):
             return EvaluationResult(
@@ -137,7 +162,7 @@ class EvaluationTest(unittest.TestCase):
                 passed=error_kind is None, subject_ok=error_kind != 'wrong_subject',
                 labels_ok=True, expected_subject=None, expected_labels=(),
                 facts=(), rejected_count=0, failure_reason=None,
-                text_ok=True, error_kind=error_kind,
+                text_ok=True, validity_ok=True, error_kind=error_kind,
             )
 
         under = summarize(tuple(make() for _ in range(14)))[0]
