@@ -12,7 +12,24 @@ conda activate NotAlone
 python -m http.server 4174 --bind 127.0.0.1 --directory website
 ```
 
-访问 http://127.0.0.1:4174/ 。部署时仅需提供本目录静态文件；此任务未部署或推送。
+访问 http://127.0.0.1:4174/ 。
+
+## 部署与同步
+
+正式站点由 nginx 托管服务器 `example.invalid` 上的 `/var/www/notalone`，访问
+<http://example.invalid/>。nginx 站点配置为 `/etc/nginx/sites-available/notalone`
+（静态根目录 + 资源缓存 + gzip），已启用并随系统启动。
+
+在仓库根目录执行：
+
+```bash
+scripts/deploy_website.sh          # 同步一次
+scripts/deploy_website.sh watch    # 监听 website/ 改动并自动同步（需要 fswatch）
+```
+
+脚本用 `rsync -az --delete` 覆盖远端目录，剔除 `.DS_Store` 与 `README.md`。服务器与远端
+路径可用 `NOTALONE_WEB_HOST`、`NOTALONE_WEB_PATH` 覆盖。脚本只传输静态文件，不写入密钥、
+不重启服务；改动的引用路径必须保持相对路径，否则远端会 404。
 
 ## 页面内容
 
