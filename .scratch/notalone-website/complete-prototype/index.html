@@ -8,7 +8,7 @@
 </head>
 <body>
 <a class="skip" href="#experience">跳到产品演示</a>
-<header><a class="brand" href="#">NotAlone<span class="brand-dot"></span></a><nav aria-label="主导航"><a href="#experience">体验</a><a href="#principles">理念</a><a href="#about">关于项目 <span>↗</span></a></nav></header>
+<header><a class="brand" href="#">NotAlone<span class="brand-dot"></span></a><nav aria-label="主导航"><a href="#experience">体验</a><a href="#architecture">架构</a><a href="#principles">理念</a><a href="#about">关于项目 <span>↗</span></a></nav></header>
 <main>
 <section class="hero" aria-labelledby="hero-title">
 <div class="hero-top"><span class="eyebrow"><i></i> 给每一次认真表达</span><span class="edition">A LITTLE HELP. A LOT OF YOU.</span></div>
@@ -26,7 +26,16 @@
 <div class="reply-area"><div class="step-label"><span>01</span><strong id="input-heading">这一次，你想怎么表达？</strong></div><div id="original-block" class="original-block" hidden><span>你的原句</span><p id="original"></p></div><div id="direction-label" class="input-caption">表达方向</div><div id="direction" class="direction"></div><div class="direction-note">仅用于这一次表达</div><div class="step-label candidate-heading"><span>02</span><strong id="result-heading">选一个更像你的说法</strong><small>预设候选</small></div><div id="candidates" class="candidates"></div><details class="evidence"><summary>↳ 这些建议参考了什么？ <span>查看依据</span></summary><p id="evidence"></p><small>以上为预先编写的演示依据，不是模型对真实关系的判断。</small></details><div class="editor-heading"><label for="draft">最后，再加一点你自己。</label><span>可直接修改 ↓</span></div><textarea id="draft" rows="3" aria-describedby="copy-status"></textarea><div class="editor-bottom"><span id="copy-status" role="status">由你修改，复制后亲自发送。</span><button id="copy" class="primary">复制这句话 <span>↗</span></button></div></div>
 </div></div><div class="demo-caption"><span id="flow-caption">关系语境 → 表达方向 → 候选与依据 → 由你决定</span><span>你的话，始终由你做主。</span></div>
 </section>
-<section class="principles section" id="principles"><span class="eyebrow">03 / 为真实表达而设计</span><div class="principle-heading"><h2>更合适的表达，<br>也应该<span>更像你。</span></h2><p>我们想留住的，是话语背后的那个人。</p></div><div class="principle-list"><article><span class="number">01</span><div><h3>记得语境，才接得住话。</h3><p>围绕你确认的联系人，参考相关对话和关系资料。<br>一句建议，从你们自己的故事里出发。</p></div><span class="symbol">⌁</span></article><article><span class="number">02</span><div><h3>有参考，也有自己的判断。</h3><p>候选附上依据，让你知道建议从何而来。<br>可以采纳，也可以改成你真正想说的话。</p></div><span class="symbol">※</span></article><article><span class="number">03</span><div><h3>把最后一步，留给自己。</h3><p>本次表达方向只作用于这一次回复。<br>最终消息由你修改、选择，并亲自发送。</p></div><span class="symbol">↗</span></article></div></section>
+
+<section class="section architecture" id="architecture" aria-labelledby="architecture-title">
+<div class="section-intro"><div><span class="eyebrow">03 / 看见建议背后的过程</span><h2 id="architecture-title">一句建议，<br>是怎么来到你面前的？</h2></div><p>从资料的归属，到一次有依据的表达。<br>展开看看，各个模块如何一起工作。</p></div>
+<details class="architecture-disclosure" open><summary>技术架构 <span>展开 / 收起 ↕</span></summary>
+<div class="architecture-tabs" role="group" aria-label="选择技术架构视图"><button data-architecture="overview" aria-pressed="true">架构总览</button><button data-architecture="data" aria-pressed="false">资料如何进入</button><button data-architecture="reply" aria-pressed="false">一次回复如何生成</button></div>
+<div id="architecture-diagram" aria-live="polite"></div>
+<div class="architecture-detail" id="architecture-detail" role="status"></div>
+<div class="architecture-footnote">按当前模块职责绘制 · 简化连接关系，非部署或端到端验收证明。图中模型请求会跨出本机边界；最终消息由用户亲自发送。</div>
+</details></section>
+<section class="principles section" id="principles"><span class="eyebrow">04 / 为真实表达而设计</span><div class="principle-heading"><h2>更合适的表达，<br>也应该<span>更像你。</span></h2><p>我们想留住的，是话语背后的那个人。</p></div><div class="principle-list"><article><span class="number">01</span><div><h3>记得语境，才接得住话。</h3><p>围绕你确认的联系人，参考相关对话和关系资料。<br>一句建议，从你们自己的故事里出发。</p></div><span class="symbol">⌁</span></article><article><span class="number">02</span><div><h3>有参考，也有自己的判断。</h3><p>候选附上依据，让你知道建议从何而来。<br>可以采纳，也可以改成你真正想说的话。</p></div><span class="symbol">※</span></article><article><span class="number">03</span><div><h3>把最后一步，留给自己。</h3><p>本次表达方向只作用于这一次回复。<br>最终消息由你修改、选择，并亲自发送。</p></div><span class="symbol">↗</span></article></div></section>
 <section class="closing" id="about"><span class="eyebrow">留给那句，迟迟没发出去的话</span><h2>话在手里，攥了很久，<br>还没放它<span>飞。</span></h2><p>也许，你只是需要一点时间，和一点帮助。</p><a href="#experience" class="text-link">再试着说一句 <span>↗</span></a><span class="closing-mark" aria-hidden="true">N.</span></section>
 </main>
 <footer><div class="footer-top"><a class="brand" href="#">NotAlone<span class="brand-dot"></span></a><p>陪你找到自己的表达。</p><a href="https://github.com/Madeleg/NotAlone" target="_blank" rel="noopener noreferrer">GitHub · 查看项目源码 ↗</a></div><div class="footer-bottom"><p>项目持续开发中 · 此页为官网交互原型，演示使用预设合成数据，不连接真实聊天或模型。</p><span>© 2026 NotAlone</span></div></footer>

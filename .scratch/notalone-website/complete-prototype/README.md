@@ -35,3 +35,9 @@ python -m http.server 4173 --bind 127.0.0.1 --directory .scratch/notalone-websit
 按用户确认，将原先两个聊天场景改为「帮我回复」与「帮我改写」：前者从表达方向出发，后者展示原句、可选改写要求和改写后的候选。两者使用同一虚构联系人，突出输入方式的区别。
 
 验证：`node --check .scratch/notalone-website/complete-prototype/app.js`、`git diff --check` 通过；浏览器刷新后确认两种模式显示不同输入，改写候选选择更新编辑区，依据展开显示原句与改写要求。仍为预设合成演示，无新增数据处理或外部连接。
+
+## 技术架构展示（2026-09-15）
+
+新增架构总览、资料进入、回复生成三个视图，支持展开收起、切换与节点职责说明。以当前模块职责为依据，省略具体部署与错误路径；同步描述避免沿用旧 ADR 的逐会话进程连接。引用入口：src/notalone/server/app.py、server/sync_host.py、application/reply_service.py、reply/context.py、reply/generator.py，以及 architecture/current/core-flows.md 和 privacy-deletion.md。
+
+验证：node --check 与 git diff --check 通过；浏览器实看回复流程，验证三个视图和改写上下文节点说明。原 4173 服务空响应且占用端口，本次预览改用同一启动命令的 4174 端口。未验证移动端新架构布局。仅展示资料，不新增真实数据读取或外部模型调用；尚未部署。
