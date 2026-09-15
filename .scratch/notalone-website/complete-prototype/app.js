@@ -49,61 +49,37 @@ document.querySelector('#copy').addEventListener('click', async () => {
 });
 renderScene(0);
 
-// 技术架构展示的是模块职责；点击节点只更新本地说明。
-const architectureViews = {
-  overview: {
-    intro: '本机负责管理资料与编排流程，外部模型参与生成。点击任意模块，查看它接收什么、输出什么。',
-    groups: [
-      ['本机 · 交互入口', [['macOS 桌面端', '联系人 / 资料 / 回复工作台', '接收用户操作，通过 HTTP 请求本地后端；后端通过 SSE 推送状态与进度。候选返回界面后，由用户选择和修改。']]],
-      ['↓ HTTP 操作 · ↑ SSE 状态', [['本地后端', '身份验证与流程编排', '核对联系人与会话绑定，协调导入、任务、检索和回复模块。本地服务绑定 127.0.0.1。']]],
-      ['↓ 两条业务流程', [['资料处理与后台任务', '导入 → 消息 → 关系记忆', '将授权范围内的资料整理为规范消息，保留来源；后台任务提取关系记忆并维护目录。'], ['回复流程与上下文', '方向或原句 → 本次参考材料', '回复模式准备目标消息、表达方向和相关资料；改写模式默认以原句与本次要求为主。']]],
-      ['↕ 按联系人保存与查询', [['PostgreSQL', '来源 / 消息 / 记忆 / 任务 / 回复', '业务模块通过持久化适配器读取和保存资料。联系人范围的数据按 owner_id + contact_id 隔离，昵称不作为隔离键。']]],
-      ['↓ 回复上下文进入生成运行时', [['生成运行时', '按需读取 Skill · 有界检索', '运行时使用本次上下文，按需读取表达策略，并在允许的范围和预算内补充历史检索。'], ['外部模型服务', '请求 → 候选与引用', '接收本次请求选取的上下文并返回生成结果。模型调用跨出本机，不能宣称所有处理都在本地。']]],
-      ['↓ 返回后的处理', [['校验与保存', '检查引用 · 保存候选 · 记录台账', '生成模块校验结构、依据及有效性；回复存储保存结果，出站台账记录调用元数据。校验失败时返回失败状态。'], ['回到桌面端', '查看 → 修改 → 复制', '展示候选与依据，最终消息由用户亲自发送；不存在自动发送的下一跳。']]]
-    ]
-  },
-  data: {
-    intro: '资料准备是一条独立流程。规范消息与关系记忆分层保存，记忆仍然要能追溯到来源。',
-    groups: [
-      ['01 / 先明确归属', [['确认联系人', '选择联系人与会话绑定', '用户确认资料属于谁；一次历史导入只归属一位联系人，不能按昵称混合不同人的资料。']]],
-      ['↓ 两种资料入口', [['历史导入', '预览 → 用户确认 → 导入', '检查文件和单联系人范围后再正式导入，保留来源信息。'], ['授权增量同步', '已绑定会话的消息增量', '当前代码将 CLI 消息增量与前台定位分开处理；同步需要用户授权和绑定。此图不将其表述为任意聊天的自动读取能力。']]],
-      ['↓ 整理与保存', [['规范消息', '统一文字表示 · 去重 · 来源', '输入资料转换成可查询的规范消息；原始来源与规范消息分层保存，截图或媒体占位不会直接冒充已理解的正文。']]],
-      ['↓ 后台提取', [['关系记忆候选', '语用解释 · 来源 · 风险分流', '从消息中提取可能有长期价值的内容，保留来源并检查风险；一条消息不自动等同于长期偏好。']]],
-      ['↓ 按规则采纳与管理', [['关系记忆', '可查看、修正、失效与删除', '符合自动采纳条件的记忆标记 auto、可撤销，不能标成用户确认。用户也可管理关系资料。'], ['联系人记忆目录', '主题与引用 → 检索入口', '目录帮助定位有效记忆，不复制一份新的事实。记忆变化后维护目录，供后续回复按需查找。']]]
-    ]
-  },
-  reply: {
-    intro: '两种输入走同一个生成流程，但准备上下文的方式不同。原句改写不会默认加入长期关系记忆。',
-    groups: [
-      ['01 / 桌面端提交', [['帮我回复', '目标消息 + 表达方向', '用户选择要回复的消息，明确这次想表达什么。'], ['帮我改写', '用户原句 + 可选改写要求', '以已经写好的语句为起点；改写要求仅作用于本次请求。']]],
-      ['↓ 验证范围', [['会话与联系人验证', '有效绑定 → 已验证联系人范围', '验证失败时不进入模型生成；两种模式都必须映射到用户确认的联系人。']]],
-      ['↓ 准备本次上下文', [['回复上下文', '相关消息 / 关系资料 / 表达方向', '读取当前联系人下的目标消息和相关资料，为候选保留可追溯的证据。'], ['改写上下文', '默认原句 · 明确开启后补充背景', '用户原句是默认输入；只有明确开启关系背景时才加入关系资料，不静默扩展成长久的人格设定。']]],
-      ['↓ 运行时与外部模型协作', [['Skill 与受限检索', '按需选策略 · 按预算补资料', '模型可按需读取受控策略文本，以及允许的历史检索工具。工具结果回到生成上下文，调用受范围与预算限制。'], ['外部模型生成', '上下文 → 候选 + 依据引用', '模型生成结果不是直接发送的消息，还必须经过结构与依据校验。']]],
-      ['↓ 校验并返回', [['结果校验与持久化', '校验 → 保存 → 返回候选', '检查结果结构、引用和资料有效性，保存候选与上下文快照，并记录调用台账；异常时记录失败。'], ['用户完成表达', '选择 / 编辑 / 复制 / 亲自发送', '用户决定采用哪一句，修改后亲自发送到聊天渠道。复制不是发送，也不代表系统获得发送授权。']]]
-    ]
-  }
+// 总览图仅展示模块职责，不连接真实服务。
+const architectureNodes = {
+ desktop: ['macOS 桌面端', '确认联系人 · 管理资料 · 编辑候选', '通过 HTTP 向本地后端提交操作，通过 SSE 接收状态与进度；用户在桌面端查看和修改候选。'],
+ backend: ['本地后端', '联系人验证与流程编排', '核对已确认的联系人与有效会话绑定，再编排资料处理或回复流程。本地服务监听 127.0.0.1。'],
+ input: ['导入与授权同步', '历史资料 / 已绑定会话增量', '用户确认资料归属后导入历史，或授权同步已绑定会话。CLI 消息增量与前台定位分别处理。'],
+ messages: ['规范消息', '统一文字 · 去重 · 保留来源', '将资料整理为可查询的规范消息；来源和规范消息分层保存，未解析的媒体不会冒充正文。'],
+ memory: ['关系记忆', '后台提取 → 风险分流 → 目录', '后台任务提取带来源的记忆候选，按规则采纳并维护目录。自动采纳标记 auto、可撤销；关系资料可查看、修正和删除。'],
+ request: ['两种表达入口', '帮我回复 / 帮我改写', '帮我回复提交目标消息与表达方向；帮我改写提交用户原句与可选的一次性改写要求。两种模式均属于已确认联系人。'],
+ context: ['本次回复上下文', '按需检索消息与关系资料', '回复模式读取当前联系人相关资料；改写默认以原句为输入，明确开启关系背景后才补充关系记忆。'],
+ runtime: ['生成运行时', '按需读取 Skill · 有界检索', '运行时结合上下文、按需读取的表达策略和预算内检索结果调用模型。检索始终受联系人范围限制。'],
+ model: ['外部模型', '选定上下文 ⇄ 候选与引用', '本次模型请求会跨出本机边界，模型结果返回生成运行时。此图不代表全部处理都在本地。'],
+ check: ['校验与保存', '校验依据 · 保存候选 · 调用台账', '检查结果结构、引用和资料有效性，保存候选与上下文快照，记录调用元数据；失败时返回错误状态。'],
+ result: ['回到桌面端', '查看依据 → 修改 → 复制', '候选回到桌面端供用户选择、修改和复制。发送始终由用户亲自完成，不存在后台发送工具。'],
+ database: ['PostgreSQL', '来源 · 消息 · 记忆 · 任务 · 回复记录', '各业务模块通过持久化适配器共用数据库。联系人范围数据按 owner_id + contact_id 隔离；存储并非生成流程的一个顺序步骤。']
 };
-function renderArchitecture(key) {
-  const view = architectureViews[key];
-  document.querySelectorAll('[data-architecture]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.architecture === key)));
-  const diagram = document.querySelector('#architecture-diagram');
-  diagram.replaceChildren();
-  const intro = document.createElement('p'); intro.className = 'architecture-intro'; intro.textContent = view.intro; diagram.append(intro);
-  const detail = document.querySelector('#architecture-detail'); detail.textContent = '点选模块，查看职责与数据流向。';
-  view.groups.forEach(([label, nodes]) => {
-    const group = document.createElement('div'); group.className = 'architecture-group';
-    const caption = document.createElement('div'); caption.className = 'architecture-connector'; caption.textContent = label;
-    const row = document.createElement('div'); row.className = 'architecture-row';
-    nodes.forEach(([title, subtitle, description]) => {
-      const node = document.createElement('button'); node.type = 'button'; node.className = 'architecture-node'; node.setAttribute('aria-pressed', 'false');
-      if (title.includes('外部模型')) node.classList.add('external-node');
-      const heading = document.createElement('strong'); heading.textContent = title;
-      const text = document.createElement('span'); text.textContent = subtitle; node.append(heading, text);
-      node.addEventListener('click', () => { diagram.querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', String(button === node))); detail.textContent = title + '：' + description; });
-      row.append(node);
-    });
-    group.append(caption, row); diagram.append(group);
-  });
+const graph = document.querySelector('#architecture-diagram');
+function architectureNode(key, extra = '') {
+ const [title, subtitle] = architectureNodes[key];
+ return '<button type="button" class="map-node ' + extra + '" data-node="' + key + '" aria-pressed="false"><strong>' + title + '</strong><span>' + subtitle + '</span><i aria-hidden="true">↗</i></button>';
 }
-document.querySelectorAll('[data-architecture]').forEach(button => button.addEventListener('click', () => renderArchitecture(button.dataset.architecture)));
-renderArchitecture('overview');
+graph.innerHTML = '<div class="map-intro"><span class="map-kicker">SYSTEM / 01</span><p>资料成为语境，语境帮助表达。<br>一张图，看懂 NotAlone 如何工作。</p><span class="map-legend"><i></i> 本机模块 <b></b> 外部服务</span></div>' +
+ '<div class="map-top">' + architectureNode('desktop') + '<div class="map-wire">↓ HTTP 操作 &nbsp; · &nbsp; ↑ SSE 状态</div>' + architectureNode('backend', 'map-hub') + '</div>' +
+ '<div class="map-split" aria-hidden="true"><span>↓ 资料处理</span><span>↓ 回复请求</span></div>' +
+ '<div class="map-lanes"><div class="map-lane map-data"><div class="lane-title"><em>01</em><div><strong>准备关系资料</strong><span>让每一份资料，都有明确归属</span></div></div>' + architectureNode('input') + '<div class="map-wire">↓ 规范化</div>' + architectureNode('messages') + '<div class="map-wire">↓ 后台任务</div>' + architectureNode('memory') + '<div class="lane-note">消息与记忆分层保存<br>来源可追溯，资料可管理</div></div>' +
+ '<div class="map-bridge"><span>消息 / 记忆</span><b>→</b><span>按需检索</span></div>' +
+ '<div class="map-lane map-reply"><div class="lane-title"><em>02</em><div><strong>找到合适的表达</strong><span>从你的方向，或你已经写好的话出发</span></div></div>' + architectureNode('request') + '<div class="map-wire">↓ 准备材料</div>' + architectureNode('context') + '<div class="map-wire">↓ 本次上下文</div>' + architectureNode('runtime') + '<div class="model-roundtrip"><div class="model-wire">↓ 请求 &nbsp; ↑ 结果</div>' + architectureNode('model','map-external') + '</div><div class="map-wire">↓ 运行时返回结果</div>' + architectureNode('check') + '<div class="map-wire">↓ 返回候选</div>' + architectureNode('result') + '<div class="human-finish"><span>最后一步，留给你。</span><strong>亲自发送 ↗</strong></div></div></div>' +
+ '<div class="storage-wire">↕ 各业务模块通过持久化适配器读写 · 共用数据层</div><div class="map-storage">' + architectureNode('database') + '<span class="scope-tag">owner_id + contact_id<br>联系人范围隔离</span></div>';
+const architectureDetail = document.querySelector('#architecture-detail');
+architectureDetail.textContent = '点击任意模块，查看它的职责与数据流向。';
+graph.querySelectorAll('[data-node]').forEach(button => button.addEventListener('click', () => {
+ graph.querySelectorAll('[data-node]').forEach(node => node.setAttribute('aria-pressed', String(node === button)));
+ const [title, , description] = architectureNodes[button.dataset.node];
+ architectureDetail.textContent = title + '：' + description;
+}));

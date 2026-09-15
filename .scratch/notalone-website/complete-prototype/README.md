@@ -41,3 +41,9 @@ python -m http.server 4173 --bind 127.0.0.1 --directory .scratch/notalone-websit
 新增架构总览、资料进入、回复生成三个视图，支持展开收起、切换与节点职责说明。以当前模块职责为依据，省略具体部署与错误路径；同步描述避免沿用旧 ADR 的逐会话进程连接。引用入口：src/notalone/server/app.py、server/sync_host.py、application/reply_service.py、reply/context.py、reply/generator.py，以及 architecture/current/core-flows.md 和 privacy-deletion.md。
 
 验证：node --check 与 git diff --check 通过；浏览器实看回复流程，验证三个视图和改写上下文节点说明。原 4173 服务空响应且占用端口，本次预览改用同一启动命令的 4174 端口。未验证移动端新架构布局。仅展示资料，不新增真实数据读取或外部模型调用；尚未部署。
+
+## 单图整合（2026-09-15）
+
+按用户确认将三个视图合并为单张双栏架构图：顶部桌面端和后端，左侧资料准备，右侧回复生成，跨栏标注按需检索，底部共用数据库。外部模型使用暖色虚线框；节点仍可点击查看说明。新图替代三页签交互。
+
+验证：JavaScript 语法检查与 git diff --check 通过；浏览器确认不再显示页签、双栏渲染正常，点击上下文节点更新说明。仅更改官网展示，没有新增数据访问或模型调用；手机布局已提供 CSS 回落，本轮未实测。
