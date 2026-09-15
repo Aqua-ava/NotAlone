@@ -7,6 +7,9 @@ xcuserdata/
 /research/
 /chat_exports/
 .scratch/notalone-website/prototype/
+.scratch/local-wechat-cli-observation/smoke/diagnose.py
+.scratch/local-wechat-cli-observation/smoke/repro_ingest.py
+.scratch/**/smoke/*.log
 .env
 .env.*
 !.env.example
