@@ -19,6 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
+notalone-memory-evaluate = "notalone.memory_extraction.evaluation:main"
 notalone-ingest-preview = "notalone.ingest.preview:main"
 notalone-ingest = "notalone.ingest.import_command:main"
 notalone-extract-memory = "notalone.memory_extraction.command:extract_main"

@@ -120,6 +120,18 @@ python -m unittest tests.integration.persistence.test_retrieval_evaluation   # P
 
 评测覆盖同义表达、确切短语、时间条件、无结果、冲突和跨联系人隔离，记录空结果率、降级率、Top-K 命中、引用纠错率、候选拒绝率、延迟、Token 和 Tool 次数；没有匿名运行观察值时引用纠错率与候选拒绝率显示为 `N/A`。向量候选当前不启用；只有持续检索异常、真实反馈、provider 配置和隐私评审同时满足才进入后续决策，SQL/全文路径仍是唯一生产检索路径。
 
+### 记忆提取准确率评测
+
+```bash
+python -m notalone.memory_extraction.evaluation  # 默认跳过，退出码 2
+# 专用 NOTALONE_EVALUATION_API_KEY 由 shell 安全注入，不写入命令历史
+python -m notalone.memory_extraction.evaluation --dimension subject
+```
+
+评测不读取 `.env` 或真实聊天、不连接数据库、不写入记忆；仅显式提供专用凭据时发送仓库内合成用例。模型名和地址沿用 `NOTALONE_DEEPSEEK_MODEL`、`NOTALONE_DEEPSEEK_BASE_URL`。输出 JSON 行中的模型字段、最终 `auto/pending/none`、期望对比和失败汇总；退出码 0 为全通过，1 为存在失败。也支持重复 `--case` 按用例名选择。
+
+现有 24 条按 `subject`（主体）、`truth_intent`（真假与意图）、`time`（时间）、`reported`（转述）归类；后续票补齐七维度。`auto` 表示通过正式语用、置信度及风险门槛的路径，未执行存储去重或写入裁决。原型中的 `confirmable` 只是语用结果；贷款申请迁入后期望为 `pending`，并单独检查本人已发生事实标签。多个候选按最强去向比较，主体与可选标签要求所有候选符合；模型失败或外壳拒绝不能计为通过。当前检查不自动判定文本语义保真或取消行程是否改写正确，不能据此宣称维度达标。
+
 ## 测试
 
 ```bash

@@ -32,6 +32,7 @@ from notalone.memory_extraction.models import ExtractedFact, FactSubject
 from notalone.memory_extraction.pragmatics import (
     MemoryDisposition,
     PragmaticInterpreter,
+    PragmaticDecision,
 )
 from notalone.scopes import ContactScope
 
@@ -309,14 +310,8 @@ class MemoryAdoption:
         pragmatic_decision=None,
     ) -> bool:
         decision = pragmatic_decision or self._pragmatic_interpreter.interpret(fact)
-        return (
-            decision.disposition is MemoryDisposition.CONFIRMABLE
-            and fact.confidence >= self._threshold
-            and all(
-                flag.strip().lower() in AUTO_ADOPTABLE_RISK_FLAGS
-                for flag in fact.risk_flags
-            )
-        )
+        return can_auto_adopt(fact, decision, confidence_threshold=self._threshold)
+
 
     def _pending_exists(self, scope: ContactScope, fact) -> bool:
         list_pending = getattr(self._memory_port, "list_pending_candidates", None)
@@ -396,3 +391,20 @@ class MemoryAdoption:
 
 def _normalize(text: str) -> str:
     return "".join(text.split()).lower()
+
+
+def can_auto_adopt(
+    fact: ExtractedFact,
+    decision: PragmaticDecision,
+    *,
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+) -> bool:
+    """共享的无副作用采纳门槛；通过只代表可走自动采纳路径。"""
+    return (
+        decision.disposition is MemoryDisposition.CONFIRMABLE
+        and fact.confidence >= confidence_threshold
+        and all(
+            flag.strip().lower() in AUTO_ADOPTABLE_RISK_FLAGS
+            for flag in fact.risk_flags
+        )
+    )
