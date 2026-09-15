@@ -6,6 +6,7 @@ xcuserdata/
 *.xcuserstate
 /research/
 /chat_exports/
+.scratch/notalone-website/prototype/
 .env
 .env.*
 !.env.example
