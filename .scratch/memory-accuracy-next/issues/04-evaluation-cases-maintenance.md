@@ -4,7 +4,7 @@
 
 **Triage:** ready-for-agent
 **State:** open
-**Blocked by:** 01
+**Blocked by:** 无（01 已结）
 
 - [ ] 按维度拆分并保持 `CASES` 导出兼容
 - [ ] 期望去向不再使用裸字符串
