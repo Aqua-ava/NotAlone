@@ -4,7 +4,7 @@
 
 **Triage:** ready-for-agent
 **State:** open
-**Blocked by:** 无（建议先于模型对照）
+**Blocked by:** 无
 
 - [ ] 重写后全量 94 条用例至少三轮，安全项（假事/记错人）保持 0
 - [ ] 指代与转述维度的一般错误从每轮 3-5 条降到 ≤1

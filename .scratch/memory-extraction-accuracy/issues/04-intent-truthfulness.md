@@ -12,10 +12,6 @@
 - [x] 修复只用允许手段；全量既有用例回归通过
 - [x] 新增与修复对应用例入库
 
-## Comments（收尾记录）
-
-- 2026-09-15 任务 01 基线（`docs/memory-extraction-evaluation-baseline.md`）挂到本票的失败项：吹牛被点破（去向正确，但另有 1 条被证据/字段外壳拒绝）、修辞反问（模型标 assertion / unknown / unknown，实际 pending，期望 none）。本票需先复现这两类，再修复；外壳拒绝不计通过。
-
 ## Answer
 
 - 用例：真假与意图维度 17 条（15 条既有 + 新增"明确承诺""对第三方的情绪"），覆盖玩笑、反讽、夸张、吹牛、假设、条件承诺、修辞反问、情绪表达、疑问邀约与第一人称完成事实；转发内容用例在转述维度。真实模型 `ecnu-max` 连续两轮 17/17，假事 0、记错人 0、一般错误 0，达标签。
@@ -23,3 +19,9 @@
 - 吹牛被点破已复现为单条低置信度 `plan + unknown` 候选进待确认，不再有被外壳拒绝的候选（`category` 混填 `topic` 词的问题已在任务 03 修复）。
 - 全量 41 条回归：转述 4/4、时间 4/4、意图 17/17，主体 15/16（"用户被同事请托"偶发一般错误，仍达标签）；未改动自动采纳规则。
 - 验证命令：`python -m unittest discover -s tests/unit/memory_extraction`（53 项通过）；`python -m mypy --follow-imports=silent src/notalone/memory_extraction/adapters.py src/notalone/memory_extraction/evaluation_cases.py`（无问题）；本机评测凭据仅进程内注入。
+
+
+## Comments（收尾记录）
+
+- 2026-09-15 任务 01 基线（`docs/memory-extraction-evaluation-baseline.md`）挂到本票的失败项：吹牛被点破（去向正确，但另有 1 条被证据/字段外壳拒绝）、修辞反问（模型标 assertion / unknown / unknown，实际 pending，期望 none）。本票需先复现这两类，再修复；外壳拒绝不计通过。
+- 放行结论以任务 11 复核记录为准：多轮复核中该维度出现过 1 次情绪类假事，暂不放行；提示词示例中的用例原句已在复核中改写去除，改写后重跑该项仍偶发，属模型波动而非示例泄漏。

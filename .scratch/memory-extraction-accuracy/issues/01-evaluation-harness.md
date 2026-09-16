@@ -12,9 +12,6 @@
 - [x] 现有 24 条用例迁入并标注所属维度
 - [x] 不连接数据库、不写入记忆、不打印真实私人内容
 
-## Comments
-
-
 ## Answer
 
 已建立 `notalone.memory_extraction.evaluation` 及 CLI 入口、24 条分维度合成用例和默认跳过的独立真实模型冒烟。提取、字段/证据校验、语用分流及共享置信度/风险门槛复用正式实现；不写入存储。专用评测凭据隔离于日常运行凭据，默认不读取 `.env`。主体检查拒绝混入错误主体，贷款申请增加 assertion/asserted 标签检查。
@@ -33,4 +30,3 @@
 
 - 2026-09-15 独立验证：`python -m unittest discover -s tests` 798 项通过、3 项跳过；无凭据运行 `python -m notalone.memory_extraction.evaluation` 明确跳过并返回 2；mypy 对 evaluation.py、evaluation_cases.py、adoption.py 无问题；24 条用例名称与开发期脚本逐条一致，按 subject / truth_intent / time / reported 归类。
 - 基线 3 条失败已挂到任务 04（吹牛被点破、修辞反问）与任务 06（无标记转述）复现修复；开发期脚本 `.scratch/pragmatic-memory-smoke-test/score_extraction_intent.py` 已被仓库评测入口取代，保留待用户决定是否删除。
-
