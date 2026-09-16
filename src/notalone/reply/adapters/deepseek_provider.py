@@ -24,6 +24,7 @@ def build_deepseek_model(
     model_name: str | None = None,
     timeout_seconds: float | None = None,
     base_url: str | None = None,
+    extra_body: dict[str, Any] | None = None,
 ) -> BaseChatModel:
     """构造 DeepSeek 模型；默认模型只选支持结构化输出的 deepseek-chat。"""
 
@@ -58,6 +59,9 @@ def build_deepseek_model(
     ):
         raise ValueError("DeepSeek API 地址不能为空字符串。")
 
+    if extra_body is not None and not isinstance(extra_body, dict):
+        raise ValueError("extra_body 必须是字典或 None。")
+
     options: dict[str, Any] = {
         "model": resolved_model,
         "api_key": resolved_key,
@@ -67,4 +71,6 @@ def build_deepseek_model(
     }
     if resolved_base_url is not None:
         options["base_url"] = resolved_base_url
+    if extra_body is not None:
+        options["extra_body"] = extra_body
     return ChatDeepSeek(**options)

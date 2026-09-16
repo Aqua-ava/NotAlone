@@ -126,6 +126,7 @@ python -m unittest tests.integration.persistence.test_retrieval_evaluation   # P
 python -m notalone.memory_extraction.evaluation  # 默认跳过，退出码 2
 # 专用 NOTALONE_EVALUATION_API_KEY 由 shell 安全注入，不写入命令历史
 python -m notalone.memory_extraction.evaluation --dimension subject
+python -m notalone.memory_extraction.evaluation --thinking  # 同一模型的思考模式对照，默认关闭
 ```
 
 评测不读取 `.env` 或真实聊天、不连接数据库、不写入记忆；仅显式提供专用凭据时发送仓库内合成用例。模型名和地址沿用 `NOTALONE_DEEPSEEK_MODEL`、`NOTALONE_DEEPSEEK_BASE_URL`。输出 JSON 行中的模型字段、最终 `auto/pending/none`、期望对比和失败汇总；退出码 0 为全通过，1 为存在失败。也支持重复 `--case` 按用例名选择。

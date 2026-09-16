@@ -199,6 +199,15 @@ class EvaluationTest(unittest.TestCase):
         self.assertFalse(result.labels_ok)
         self.assertFalse(result.passed)
 
+    def test_thinking_flag_maps_to_extra_body(self):
+        from notalone.memory_extraction.evaluation import _model_options
+
+        self.assertEqual(
+            _model_options(thinking=True),
+            {"extra_body": {"thinking": {"type": "enabled"}}},
+        )
+        self.assertEqual(_model_options(thinking=False), {})
+
     def test_no_evaluation_credentials_skip_even_with_production_key(self):
         import contextlib
         import io

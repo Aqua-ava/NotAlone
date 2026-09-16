@@ -99,6 +99,22 @@ class BuildDeepSeekModelTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_deepseek_model(api_key="test-key", base_url="  ")
 
+    def test_extra_body_passthrough_for_thinking_mode(self) -> None:
+        model = build_deepseek_model(
+            api_key="test-key",
+            extra_body={"thinking": {"type": "enabled"}},
+        )
+
+        self.assertEqual(
+            model.model_dump()["extra_body"],
+            {"thinking": {"type": "enabled"}},
+        )
+
+    def test_no_extra_body_by_default(self) -> None:
+        model = build_deepseek_model(api_key="test-key")
+
+        self.assertIsNone(model.model_dump()["extra_body"])
+
 
 if __name__ == "__main__":
     unittest.main()

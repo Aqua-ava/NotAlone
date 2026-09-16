@@ -201,10 +201,18 @@ def summarize(results: Sequence[EvaluationResult]) -> tuple[DimensionSummary, ..
     return tuple(summaries)
 
 
+def _model_options(*, thinking: bool) -> dict:
+    """模型对照用选项：思考模式只在显式开启时注入，生产默认不变。"""
+    if thinking:
+        return {'extra_body': {'thinking': {'type': 'enabled'}}}
+    return {}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--case', action='append', default=[], help='按名称选择，可重复。')
     parser.add_argument('--dimension', action='append', default=[], help='按维度选择，可重复。')
+    parser.add_argument('--thinking', action='store_true', help='以同一模型开启思考模式对照。')
     args = parser.parse_args(argv)
     if not os.environ.get(API_KEY_ENV, '').strip():
         print(f'[skip] 未显式提供 {API_KEY_ENV}；未读取 .env、未发起网络请求。')
@@ -217,10 +225,14 @@ def main(argv: list[str] | None = None) -> int:
     from notalone.memory_extraction.adapters import LangChainExtractionRuntime
     from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 
-    model = build_deepseek_model(api_key=os.environ[API_KEY_ENV])
+    model = build_deepseek_model(
+        api_key=os.environ[API_KEY_ENV],
+        **_model_options(thinking=args.thinking),
+    )
     runtime = LangChainExtractionRuntime(model=model)
     print(json.dumps({
         'model': getattr(model, 'model_name', 'unreported'),
+        'thinking': bool(args.thinking),
         'cases': len(selected), 'synthetic_only': True,
     }, ensure_ascii=False), flush=True)
     results = []
