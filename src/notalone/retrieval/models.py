@@ -124,11 +124,46 @@ class RetrievedOwnerMemory:
     source_ids: tuple[UUID, ...]
     adoption_method: str
     revision: int
+    status: str = "active"
+    valid_at: datetime | None = None
+    invalid_at: datetime | None = None
+    confidence: float = 1.0
+    relevance_score: float | None = None
+    matched_terms: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.memory_id, UUID) or not isinstance(
             self.owner_id, UUID
         ):
             raise ValueError("owner 记忆命中必须携带记忆与 owner ID。")
-        if not isinstance(self.text, str) or not self.text:
+        if not isinstance(self.text, str) or not self.text.strip():
             raise ValueError("owner 记忆命中文本不能为空。")
+        if not isinstance(self.category, str) or not self.category.strip():
+            raise ValueError("owner 记忆分类不能为空。")
+        if not isinstance(self.topic, str):
+            raise ValueError("owner 记忆主题结构无效。")
+        if not isinstance(self.adoption_method, str) or not self.adoption_method.strip():
+            raise ValueError("owner 记忆采纳方式不能为空。")
+        if not isinstance(self.revision, int) or self.revision < 1:
+            raise ValueError("owner 记忆修订号无效。")
+        if not isinstance(self.status, str) or not self.status.strip():
+            raise ValueError("owner 记忆状态不能为空。")
+        if not isinstance(self.source_ids, tuple) or not self.source_ids:
+            raise ValueError("owner 记忆命中必须带来源引用。")
+        _validate_source_ids(self.source_ids)
+        if (
+            not isinstance(self.confidence, (int, float))
+            or isinstance(self.confidence, bool)
+            or not 0.0 <= float(self.confidence) <= 1.0
+        ):
+            raise ValueError("owner 记忆置信度必须在 0 到 1 之间。")
+        if self.relevance_score is not None and (
+            not isinstance(self.relevance_score, (int, float))
+            or isinstance(self.relevance_score, bool)
+            or not 0.0 <= float(self.relevance_score) <= 1.0
+        ):
+            raise ValueError("owner 记忆相关度必须在 0 到 1 之间。")
+        if not isinstance(self.matched_terms, tuple) or any(
+            not isinstance(term, str) or not term for term in self.matched_terms
+        ):
+            raise ValueError("owner 记忆命中词必须是非空字符串元组。")

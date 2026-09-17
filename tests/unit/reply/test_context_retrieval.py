@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from uuid import UUID
 
@@ -29,6 +29,7 @@ from notalone.retrieval import (
     InMemoryRetrieval,
     RetrievedMemory,
     RetrievedMessage,
+    RetrievedOwnerMemory,
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
 
@@ -55,12 +56,16 @@ class RecordingRetrieval:
         self,
         messages: tuple[RetrievedMessage, ...] = (),
         memories: tuple[RetrievedMemory, ...] = (),
+        owner_memories: tuple[RetrievedOwnerMemory, ...] = (),
     ) -> None:
         self.messages = messages
         self.memories = memories
+        self.owner_memories = owner_memories
         self.message_calls = 0
         self.memory_calls = 0
+        self.owner_calls = 0
         self.memory_queries: list[str | None] = []
+        self.owner_queries: list[str | None] = []
         self.fail_memory = False
 
     def search_messages(
@@ -105,12 +110,36 @@ class RecordingRetrieval:
         limit: int = 20,
         memory_ids: tuple[UUID, ...] | None = None,
     ) -> tuple[RetrievedMemory, ...]:
-        del scope, limit, memory_ids
+        del scope, limit
         self.memory_calls += 1
         self.memory_queries.append(query)
         if self.fail_memory:
             raise RuntimeError("synthetic memory retrieval failure")
-        return self.memories
+        return tuple(
+            memory
+            for memory in self.memories
+            if memory_ids is None or memory.memory_id in memory_ids
+        )
+
+    def search_owner_memories(
+        self,
+        *,
+        owner_id: UUID,
+        query: str | None = None,
+        limit: int = 20,
+        memory_ids: tuple[UUID, ...] | None = None,
+    ) -> tuple[RetrievedOwnerMemory, ...]:
+        del limit
+        self.owner_calls += 1
+        self.owner_queries.append(query)
+        if self.fail_memory:
+            raise RuntimeError("synthetic memory retrieval failure")
+        return tuple(
+            memory
+            for memory in self.owner_memories
+            if memory.owner_id == owner_id
+            and (memory_ids is None or memory.memory_id in memory_ids)
+        )
 
 
 class RecordingMemoryIndex:
@@ -289,6 +318,7 @@ class ContextRetrievalTest(unittest.TestCase):
 
         self.assertEqual(retrieval.message_calls, 0)
         self.assertEqual(retrieval.memory_calls, 0)
+        self.assertEqual(retrieval.owner_calls, 0)
         self.assertEqual(tuple(item.kind for item in result.evidence), ("user_draft",))
 
     def test_rewrite_can_opt_in_to_one_time_contact_background(self) -> None:
@@ -691,6 +721,298 @@ class ContextRetrievalTest(unittest.TestCase):
         self.assertIn("0.42", reason)
         self.assertIn("徒步", reason)
         self.assertIn("步", reason)
+
+    def _owner_memory(
+        self,
+        memory_id: UUID,
+        text: str,
+        *,
+        score: float,
+        matched_terms: tuple[str, ...] = (),
+    ) -> RetrievedOwnerMemory:
+        return RetrievedOwnerMemory(
+            memory_id=memory_id,
+            owner_id=OWNER_ID,
+            text=text,
+            category="preference",
+            topic="work",
+            source_ids=(SOURCE_ID,),
+            adoption_method="manual",
+            revision=1,
+            relevance_score=score,
+            matched_terms=matched_terms,
+        )
+
+    def _owner_retrieval(
+        self,
+        owner_memories: tuple[RetrievedOwnerMemory, ...],
+        *,
+        memories: tuple[RetrievedMemory, ...] = (),
+    ) -> RecordingRetrieval:
+        return RecordingRetrieval(
+            messages=(
+                RetrievedMessage(
+                    TARGET_MESSAGE_ID,
+                    self.scope,
+                    "周末一起去徒步吗？",
+                    source_ids=(SOURCE_ID,),
+                ),
+            ),
+            memories=memories,
+            owner_memories=owner_memories,
+        )
+
+    def test_owner_memory_follows_contact_memory_in_evidence(self) -> None:
+        retrieval = self._owner_retrieval(
+            (
+                self._owner_memory(
+                    UUID("10000000-0000-0000-0000-000000000030"),
+                    "我喜欢周末徒步",
+                    score=0.7,
+                    matched_terms=("周末", "徒步"),
+                ),
+            ),
+            memories=(
+                self._memory(
+                    UUID("10000000-0000-0000-0000-000000000031"),
+                    "对方喜欢徒步",
+                    score=0.8,
+                ),
+            ),
+        )
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            id_factory=iter(_ids()).__next__,
+        ).build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        self.assertEqual(
+            tuple(item.kind for item in result.evidence),
+            ("message", "confirmed_memory", "owner_memory"),
+        )
+        owner_evidence = next(
+            item
+            for item in result.evidence
+            if item.kind == "owner_memory"
+        )
+        self.assertEqual(owner_evidence.scope, self.scope)
+        self.assertIn("本人", owner_evidence.selection_reason)
+        self.assertEqual(retrieval.owner_queries, ["周末一起去徒步吗？"])
+
+    def test_owner_memory_uses_independent_item_budget(self) -> None:
+        retrieval = self._owner_retrieval(
+            tuple(
+                self._owner_memory(
+                    UUID(f"10000000-0000-0000-0000-00000000004{index}"),
+                    "我喜欢周末徒步",
+                    score=0.7,
+                )
+                for index in range(4)
+            ),
+        )
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            id_factory=iter(_ids()).__next__,
+        ).build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        self.assertEqual(
+            len([item for item in result.evidence if item.kind == "owner_memory"]),
+            3,
+        )
+
+    def test_owner_memory_uses_independent_char_budget(self) -> None:
+        retrieval = self._owner_retrieval(
+            (
+                self._owner_memory(
+                    UUID("10000000-0000-0000-0000-000000000050"),
+                    "甲" * 100,
+                    score=0.9,
+                ),
+                self._owner_memory(
+                    UUID("10000000-0000-0000-0000-000000000051"),
+                    "乙" * 100,
+                    score=0.8,
+                ),
+                self._owner_memory(
+                    UUID("10000000-0000-0000-0000-000000000052"),
+                    "丙" * 100,
+                    score=0.7,
+                ),
+            ),
+        )
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            id_factory=iter(_ids()).__next__,
+        ).build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        self.assertEqual(
+            len([item for item in result.evidence if item.kind == "owner_memory"]),
+            2,
+        )
+
+    def test_below_threshold_owner_memory_is_not_injected(self) -> None:
+        retrieval = self._owner_retrieval(
+            (
+                self._owner_memory(
+                    UUID("10000000-0000-0000-0000-000000000053"),
+                    "我喜欢周末徒步",
+                    score=0.1,
+                ),
+            ),
+        )
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            id_factory=iter(_ids()).__next__,
+        ).build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        self.assertEqual(
+            tuple(item.kind for item in result.evidence),
+            ("message",),
+        )
+
+    def test_rewrite_opt_in_injects_both_memory_kinds(self) -> None:
+        retrieval = self._owner_retrieval(
+            (
+                self._owner_memory(
+                    UUID("10000000-0000-0000-0000-000000000054"),
+                    "我喜欢周末徒步",
+                    score=0.7,
+                ),
+            ),
+            memories=(
+                self._memory(
+                    UUID("10000000-0000-0000-0000-000000000055"),
+                    "对方喜欢徒步",
+                    score=0.8,
+                ),
+            ),
+        )
+        command = GenerateReply(
+            idempotency_key=UUID("eeeeeeee-ffff-0000-1111-222222222228"),
+            scope=self.scope,
+            conversation_binding_id=BINDING_ID,
+            content=RewriteDraft(
+                draft_text="周末一起去徒步吗？",
+                include_relationship_context=True,
+            ),
+        )
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            id_factory=iter(_ids()).__next__,
+        ).build(command=command, verified_scope=self.verified_scope)
+
+        self.assertEqual(
+            tuple(item.kind for item in result.evidence),
+            ("user_draft", "confirmed_memory", "owner_memory"),
+        )
+
+    def test_contact_and_owner_budgets_do_not_share(self) -> None:
+        retrieval = self._owner_retrieval(
+            tuple(
+                self._owner_memory(
+                    UUID(f"10000000-0000-0000-0000-00000000006{index}"),
+                    "我喜欢周末徒步",
+                    score=0.7,
+                )
+                for index in range(3)
+            ),
+            memories=tuple(
+                self._memory(
+                    UUID(f"10000000-0000-0000-0000-00000000007{index}"),
+                    "对方喜欢徒步",
+                    score=0.8,
+                )
+                for index in range(6)
+            ),
+        )
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            id_factory=iter(_ids()).__next__,
+        ).build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        self.assertEqual(
+            len([item for item in result.evidence if item.kind == "confirmed_memory"]),
+            5,
+        )
+        self.assertEqual(
+            len([item for item in result.evidence if item.kind == "owner_memory"]),
+            3,
+        )
+
+    def test_current_validation_rejects_owner_memory_revision_change(self) -> None:
+        memory = self._owner_memory(
+            UUID("10000000-0000-0000-0000-000000000057"),
+            "我喜欢周末徒步",
+            score=0.7,
+        )
+        retrieval = self._owner_retrieval((memory,))
+        context = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            id_factory=iter(_ids()).__next__,
+        )
+        result = context.build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+        context.validate_current(result)
+
+        retrieval.owner_memories = (replace(memory, revision=2),)
+
+        with self.assertRaises(ReplyContextInvariantError):
+            context.validate_current(result)
+
+    def test_current_validation_rejects_deleted_owner_memory(self) -> None:
+        retrieval = self._owner_retrieval(
+            (
+                self._owner_memory(
+                    UUID("10000000-0000-0000-0000-000000000056"),
+                    "我喜欢周末徒步",
+                    score=0.7,
+                ),
+            ),
+        )
+        context = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            id_factory=iter(_ids()).__next__,
+        )
+        result = context.build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+        context.validate_current(result)
+
+        retrieval.owner_memories = ()
+
+        with self.assertRaises(ReplyContextInvariantError):
+            context.validate_current(result)
 
 
 if __name__ == "__main__":

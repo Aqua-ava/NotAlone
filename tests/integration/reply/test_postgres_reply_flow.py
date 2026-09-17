@@ -45,7 +45,11 @@ from notalone.reply import (
     RewriteDraft,
 )
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
-from notalone.retrieval import InMemoryRetrieval, RetrievedMessage
+from notalone.retrieval import (
+    InMemoryRetrieval,
+    RetrievedMessage,
+    RetrievedOwnerMemory,
+)
 from notalone.scopes import ContactScope
 
 
@@ -138,6 +142,7 @@ class PostgresReplyFlowTest(unittest.TestCase):
         self.recent_message_id = uuid4()
         self.source_id = uuid4()
         self.memory_candidate_id = uuid4()
+        self.owner_memory_id = uuid4()
         self.draft_evidence_id = uuid4()
         self.skill_id = uuid4()
         self.skill_version_id = uuid4()
@@ -221,6 +226,18 @@ class PostgresReplyFlowTest(unittest.TestCase):
             candidate_id=self.memory_candidate_id,
         )
         self.retrieval = InMemoryRetrieval(
+            owner_memories=(
+                RetrievedOwnerMemory(
+                    memory_id=self.owner_memory_id,
+                    owner_id=self.owner_id,
+                    text="我明天有空。",
+                    category="recent_state",
+                    topic="other",
+                    source_ids=(self.source_id,),
+                    adoption_method="manual",
+                    revision=1,
+                ),
+            ),
             messages=(
                 RetrievedMessage(
                     message_id=self.target_message_id,
@@ -355,6 +372,14 @@ class PostgresReplyFlowTest(unittest.TestCase):
         self.assertIn(
             self.memory.memory_id,
             {item.evidence_id for item in stored.evidence},
+        )
+        owner_evidence = {
+            item.evidence_id: item.kind
+            for item in stored.evidence
+        }
+        self.assertEqual(
+            owner_evidence.get(self.owner_memory_id),
+            "owner_memory",
         )
 
         calls_before_replay = len(self.model.seen_calls)

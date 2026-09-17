@@ -9,8 +9,12 @@ from uuid import UUID
 
 from notalone.memory import MemoryPort
 from notalone.retrieval.errors import RetrievalInvariantError
-from notalone.retrieval.models import RetrievedMemory, RetrievedMessage
-from notalone.retrieval.ranking import recall_memories
+from notalone.retrieval.models import (
+    RetrievedMemory,
+    RetrievedMessage,
+    RetrievedOwnerMemory,
+)
+from notalone.retrieval.ranking import recall_memories, recall_owner_memories
 from notalone.scopes import ContactScope
 
 
@@ -77,21 +81,29 @@ def _chronological_key(message: RetrievedMessage) -> tuple[bool, datetime, str]:
 
 @dataclass(slots=True)
 class InMemoryRetrieval:
-    """用合成消息和 MemoryPort 模拟联系人范围检索。"""
+    """用合成消息、MemoryPort 和本人记忆模拟范围检索。"""
 
     messages: tuple[RetrievedMessage, ...] = ()
     memory_store: MemoryPort | None = None
+    owner_memories: tuple[RetrievedOwnerMemory, ...] = ()
 
     def __init__(
         self,
         *,
         messages: Iterable[RetrievedMessage] = (),
         memory_store: MemoryPort | None = None,
+        owner_memories: Iterable[RetrievedOwnerMemory] = (),
     ) -> None:
         self.messages = tuple(messages)
         self.memory_store = memory_store
+        self.owner_memories = tuple(owner_memories)
         if any(not isinstance(message, RetrievedMessage) for message in self.messages):
             raise TypeError("合成消息检索数据结构无效。")
+        if any(
+            not isinstance(memory, RetrievedOwnerMemory)
+            for memory in self.owner_memories
+        ):
+            raise TypeError("合成 owner 记忆检索数据结构无效。")
 
     def search_messages(
         self,
@@ -181,6 +193,32 @@ class InMemoryRetrieval:
         end = min(len(scoped), anchor_index + after + 1)
         selected = scoped[start:end]
         return tuple(selected[:limit])
+
+    def search_owner_memories(
+        self,
+        *,
+        owner_id: UUID,
+        query: str | None = None,
+        limit: int = 20,
+        memory_ids: tuple[UUID, ...] | None = None,
+    ) -> tuple[RetrievedOwnerMemory, ...]:
+        _validate_limit(limit, 20)
+        if not isinstance(owner_id, UUID):
+            raise TypeError("owner 记忆检索必须携带 owner ID。")
+        if query is not None and not isinstance(query, str):
+            raise TypeError("owner 记忆检索 query 必须是字符串或 None。")
+        if memory_ids is not None and (
+            not isinstance(memory_ids, tuple)
+            or any(not isinstance(memory_id, UUID) for memory_id in memory_ids)
+        ):
+            raise ValueError("owner 记忆导航引用结构无效。")
+        scoped = tuple(
+            memory
+            for memory in self.owner_memories
+            if memory.owner_id == owner_id
+            and (memory_ids is None or memory.memory_id in memory_ids)
+        )
+        return recall_owner_memories(scoped, query=query, limit=limit)
 
     def search_confirmed_memories(
         self,

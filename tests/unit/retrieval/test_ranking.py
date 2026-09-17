@@ -12,9 +12,17 @@ from notalone.memory import (
     MemoryCandidate,
     MemoryCategory,
 )
-from notalone.retrieval import InMemoryRetrieval, RetrievedMemory
+from notalone.retrieval import (
+    InMemoryRetrieval,
+    RetrievedMemory,
+    RetrievedOwnerMemory,
+)
 from notalone.retrieval.lexical import build_query_tokens
-from notalone.retrieval.ranking import rank_memories, recall_memories
+from notalone.retrieval.ranking import (
+    rank_memories,
+    recall_memories,
+    recall_owner_memories,
+)
 from notalone.scopes import ContactScope
 
 
@@ -243,6 +251,133 @@ class RecallMemoriesTest(unittest.TestCase):
     def test_non_string_query_is_rejected(self) -> None:
         with self.assertRaises(TypeError):
             recall_memories((), query=123, limit=5)  # type: ignore[arg-type]
+
+
+def _owner_memory(
+    memory_id: str,
+    text: str,
+    *,
+    owner_id: UUID = OWNER_ID,
+    adoption_method: str = "manual",
+    confidence: float = 1.0,
+    valid_at: datetime | None = None,
+) -> RetrievedOwnerMemory:
+    return RetrievedOwnerMemory(
+        memory_id=UUID(memory_id),
+        owner_id=owner_id,
+        text=text,
+        category="preference",
+        topic="other",
+        source_ids=(SOURCE_ID,),
+        adoption_method=adoption_method,
+        revision=1,
+        confidence=confidence,
+        valid_at=valid_at,
+    )
+
+
+class OwnerRecallTest(unittest.TestCase):
+    def test_query_none_keeps_revalidation_semantics(self) -> None:
+        memories = (
+            _owner_memory("10000000-0000-0000-0000-000000000030", "我明天有空"),
+        )
+
+        recalled = recall_owner_memories(memories, query=None, limit=5)
+
+        self.assertEqual(recalled, memories)
+        self.assertTrue(all(memory.relevance_score is None for memory in recalled))
+
+    def test_query_without_tokens_returns_nothing(self) -> None:
+        memories = (
+            _owner_memory("10000000-0000-0000-0000-000000000031", "我明天有空"),
+        )
+
+        for query in ("", "   ", "😀"):
+            with self.subTest(query=query):
+                self.assertEqual(
+                    recall_owner_memories(memories, query=query, limit=5),
+                    (),
+                )
+
+    def test_query_scores_and_ranks_owner_memories(self) -> None:
+        work = _owner_memory("10000000-0000-0000-0000-000000000032", "我最近在忙项目")
+        hiking = _owner_memory("10000000-0000-0000-0000-000000000033", "我喜欢周末徒步")
+
+        recalled = recall_owner_memories((work, hiking), query=QUERY, limit=5)
+
+        self.assertEqual(recalled[0].memory_id, hiking.memory_id)
+        self.assertGreater(recalled[0].relevance_score or 0.0, 0.0)
+        self.assertEqual(recalled[1].relevance_score, 0.0)
+
+    def test_higher_confidence_wins_on_equal_relevance(self) -> None:
+        low = _owner_memory(
+            "10000000-0000-0000-0000-000000000034",
+            "我喜欢周末徒步",
+            confidence=0.6,
+        )
+        high = _owner_memory(
+            "10000000-0000-0000-0000-000000000035",
+            "我喜欢周末徒步",
+            confidence=0.9,
+        )
+
+        recalled = recall_owner_memories((low, high), query=QUERY, limit=5)
+
+        self.assertEqual(recalled[0].memory_id, high.memory_id)
+
+    def test_non_string_query_is_rejected(self) -> None:
+        with self.assertRaises(TypeError):
+            recall_owner_memories((), query=123, limit=5)  # type: ignore[arg-type]
+
+
+class InMemoryOwnerRecallTest(unittest.TestCase):
+    def _retrieval(self) -> InMemoryRetrieval:
+        return InMemoryRetrieval(
+            owner_memories=(
+                _owner_memory("30000000-0000-0000-0000-000000000011", "我明天有空"),
+                _owner_memory("30000000-0000-0000-0000-000000000012", "我最近在忙项目"),
+            ),
+        )
+
+    def test_query_returns_scored_owner_memory(self) -> None:
+        retrieval = self._retrieval()
+
+        results = retrieval.search_owner_memories(
+            owner_id=OWNER_ID,
+            query="明天一起吃饭吗？",
+        )
+
+        self.assertEqual(results[0].text, "我明天有空")
+        self.assertGreater(results[0].relevance_score or 0.0, 0.0)
+
+    def test_owner_isolation_and_memory_ids_filter(self) -> None:
+        retrieval = self._retrieval()
+
+        self.assertEqual(
+            retrieval.search_owner_memories(
+                owner_id=UUID("99999999-9999-9999-9999-999999999999"),
+                query="明天一起吃饭吗？",
+            ),
+            (),
+        )
+        filtered = retrieval.search_owner_memories(
+            owner_id=OWNER_ID,
+            query=None,
+            memory_ids=(UUID("30000000-0000-0000-0000-000000000012"),),
+        )
+        self.assertEqual(
+            tuple(memory.text for memory in filtered),
+            ("我最近在忙项目",),
+        )
+
+    def test_invalid_query_type_is_rejected(self) -> None:
+        retrieval = self._retrieval()
+
+        with self.assertRaises(TypeError):
+            retrieval.search_owner_memories(
+                owner_id=OWNER_ID,
+                query=123,  # type: ignore[arg-type]
+            )
 
 
 class InMemoryRecallTest(unittest.TestCase):

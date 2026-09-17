@@ -24,7 +24,7 @@ from notalone.retrieval.models import (
     RetrievedMessage,
     RetrievedOwnerMemory,
 )
-from notalone.retrieval.ranking import recall_memories
+from notalone.retrieval.ranking import recall_memories, recall_owner_memories
 from notalone.memory.ports import OwnerMemoryPort
 from notalone.scopes import ContactScope
 
@@ -218,15 +218,15 @@ class PostgresRetrieval:
         )
         return recall_memories(retrieved, query=query, limit=limit)
 
-
     def search_owner_memories(
         self,
         *,
-        owner_id,
+        owner_id: UUID,
         query: str | None = None,
         limit: int = 20,
+        memory_ids: tuple[UUID, ...] | None = None,
     ) -> tuple[RetrievedOwnerMemory, ...]:
-        """返回某位用户当前有效的 owner 级自我记忆。"""
+        """返回某位用户当前有效的本人记忆；query 提供时按同一评分器召回。"""
 
         if not isinstance(owner_id, UUID):
             raise TypeError("owner 记忆检索必须携带 owner ID。")
@@ -234,14 +234,22 @@ class PostgresRetrieval:
             raise TypeError("owner 记忆检索 query 必须是字符串或 None。")
         if not isinstance(limit, int) or not 1 <= limit <= 20:
             raise ValueError("检索 limit 超出模块预算。")
+        if memory_ids is not None and (
+            not isinstance(memory_ids, tuple)
+            or any(not isinstance(memory_id, UUID) for memory_id in memory_ids)
+        ):
+            raise ValueError("owner 记忆导航引用结构无效。")
         if self._owner_memory_store is None:
             raise RetrievalError("owner 记忆检索失败。")
         try:
             memories = self._owner_memory_store.list_active(owner_id)
         except Exception:
             raise RetrievalError("owner 记忆检索失败。") from None
-        tokens = _query_tokens(query)
-        return tuple(
+        if not isinstance(memories, tuple) or any(
+            memory.owner_id != owner_id for memory in memories
+        ):
+            raise RetrievalInvariantError("owner 记忆检索结果超出 owner 范围。")
+        retrieved = tuple(
             RetrievedOwnerMemory(
                 memory_id=memory.memory_id,
                 owner_id=memory.owner_id,
@@ -251,10 +259,15 @@ class PostgresRetrieval:
                 source_ids=memory.source_ids,
                 adoption_method=memory.adoption_method.value,
                 revision=memory.revision,
+                status=memory.status.value,
+                valid_at=memory.valid_at,
+                invalid_at=memory.invalid_at,
+                confidence=memory.confidence,
             )
             for memory in memories
-            if not tokens or all(token in memory.text.lower() for token in tokens)
-        )[:limit]
+            if memory_ids is None or memory.memory_id in memory_ids
+        )
+        return recall_owner_memories(retrieved, query=query, limit=limit)
 
     def _fetch_target(
         self,

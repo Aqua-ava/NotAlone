@@ -15,7 +15,11 @@ from notalone.retrieval.evaluation import (
 )
 from notalone.retrieval.errors import RetrievalError, RetrievalInvariantError
 from notalone.retrieval.feature_flags import RetrievalFeatureFlags
-from notalone.retrieval.models import RetrievedMemory, RetrievedMessage
+from notalone.retrieval.models import (
+    RetrievedMemory,
+    RetrievedMessage,
+    RetrievedOwnerMemory,
+)
 from notalone.retrieval.ports import RetrievalPort
 
 __all__ = [
@@ -25,6 +29,7 @@ __all__ = [
     "ReplyEvaluationObservation",
     "RetrievedMemory",
     "RetrievedMessage",
+    "RetrievedOwnerMemory",
     "RetrievalEvaluationCase",
     "RetrievalEvaluationMetrics",
     "RetrievalEvaluationObservation",

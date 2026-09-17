@@ -6,7 +6,11 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
-from notalone.retrieval.models import RetrievedMemory, RetrievedMessage
+from notalone.retrieval.models import (
+    RetrievedMemory,
+    RetrievedMessage,
+    RetrievedOwnerMemory,
+)
 from notalone.scopes import ContactScope
 
 
@@ -39,6 +43,16 @@ class RetrievalPort(Protocol):
         timeout_ms: int | None = None,
     ) -> tuple[RetrievedMessage, ...]:
         """按时间顺序读取当前联系人范围内的有限消息窗口。"""
+
+    def search_owner_memories(
+        self,
+        *,
+        owner_id: UUID,
+        query: str | None = None,
+        limit: int = 20,
+        memory_ids: tuple[UUID, ...] | None = None,
+    ) -> tuple[RetrievedOwnerMemory, ...]:
+        """查询某位用户当前有效的本人记忆；``memory_ids`` 只用于复验。"""
 
     def search_confirmed_memories(
         self,

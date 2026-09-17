@@ -130,6 +130,10 @@ evidence_id 字符串（UUID 格式），且每条候选至少引用一个。
 添加用户没有表达的事实、承诺或情绪；user_instruction 为空时只做基础润色。一次性
 user_instruction 只影响当前请求，不能成为长期偏好或关系记忆。
 
+依据中的 kind 表示证据类型：confirmed_memory 是关于联系人的已确认事实，
+owner_memory 是关于用户本人的已确认事实，两者不得混用或互相冒充；没有相关
+依据时不要编造事实。
+
 历史 Tool 预算是硬性限制：conversation_search 与 conversation_query 合计最多调用
 3 次。历史检索未命中、失败、超时或预算用尽后，必须停止调用任何工具，立即基于当前
 消息、表达方向和已有证据返回结构化候选；缺少历史不是拒绝输出或继续调用工具的理由。
@@ -578,11 +582,11 @@ class LangChainReplyRuntime:
 
     def generate(self, prepared: ReplyContext) -> ReplyRuntimeResult:
         if (
-            prepared.has_relationship_memory_for_rewrite()
+            prepared.has_long_term_memory_for_rewrite()
             and isinstance(prepared.command.content, RewriteDraft)
             and not prepared.command.content.include_relationship_context
         ):
-            raise ReplyInvariantError("当前改写不能使用长期关系资料。")
+            raise ReplyInvariantError("当前改写不能使用长期记忆资料。")
         catalog = self._discover_catalog(prepared)
         if catalog.revision != prepared.skill_library_revision:
             # 目录已过期：丢弃目录内容，继续走无 Skill 候选路径。
@@ -678,11 +682,11 @@ class LangChainReplyRuntime:
 
 def _request_text(prepared: ReplyContext) -> str:
     if (
-        prepared.has_relationship_memory_for_rewrite()
+        prepared.has_long_term_memory_for_rewrite()
         and isinstance(prepared.command.content, RewriteDraft)
         and not prepared.command.content.include_relationship_context
     ):
-        raise ReplyInvariantError("当前改写不能使用长期关系资料。")
+        raise ReplyInvariantError("当前改写不能使用长期记忆资料。")
     if isinstance(prepared.command.content, ReplyToMessage):
         payload = {
             "input_mode": "reply_to_message",

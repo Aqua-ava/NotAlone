@@ -541,6 +541,7 @@ class InMemoryReplyStore:
                 not in (
                     "message",
                     "confirmed_memory",
+                    "owner_memory",
                     "user_draft",
                     "continued_candidate",
                 )

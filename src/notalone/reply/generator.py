@@ -332,6 +332,7 @@ class ReplyGenerator:
                 or item.kind not in (
                     "message",
                     "confirmed_memory",
+                    "owner_memory",
                     "user_draft",
                     "continued_candidate",
                 )
@@ -410,11 +411,11 @@ class ReplyGenerator:
 
         if isinstance(command.content, RewriteDraft):
             if (
-                context.has_relationship_memory_for_rewrite()
+                context.has_long_term_memory_for_rewrite()
                 and not command.content.include_relationship_context
             ):
                 raise ReplyInvariantError(
-                    "当前改写不能使用长期关系资料。"
+                    "当前改写不能使用长期记忆资料。"
                 )
             draft_evidence = tuple(
                 item
@@ -452,6 +453,7 @@ class ReplyGenerator:
         allowed = {
             "message": {"active"},
             "confirmed_memory": {"active"},
+            "owner_memory": {"active"},
             "user_draft": {"active", "user_input"},
             "continued_candidate": {"active", "candidate"},
         }

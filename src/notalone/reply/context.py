@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Callable, Literal, Protocol
+from typing import Callable, Literal, Protocol, TypeVar
 from uuid import UUID, uuid4
 
 from notalone.reply.errors import (
@@ -23,6 +23,7 @@ from notalone.retrieval import (
     RetrievalPort,
     RetrievedMemory,
     RetrievedMessage,
+    RetrievedOwnerMemory,
 )
 from notalone.retrieval.lexical import RELEVANCE_THRESHOLD
 from notalone.scopes import ContactScope, VerifiedConversationScope
@@ -30,6 +31,21 @@ from notalone.scopes import ContactScope, VerifiedConversationScope
 
 CONTACT_MEMORY_LIMIT = 5
 CONTACT_MEMORY_CHAR_BUDGET = 600
+OWNER_MEMORY_LIMIT = 3
+OWNER_MEMORY_CHAR_BUDGET = 240
+
+
+class _ScoredMemory(Protocol):
+    """阈值与字符预算需要的最小记忆形状。"""
+
+    @property
+    def text(self) -> str: ...
+
+    @property
+    def relevance_score(self) -> float | None: ...
+
+
+_MemoryT = TypeVar("_MemoryT", bound=_ScoredMemory)
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -40,6 +56,7 @@ class ContextEvidence:
     kind: Literal[
         "message",
         "confirmed_memory",
+        "owner_memory",
         "user_draft",
         "continued_candidate",
     ]
@@ -103,12 +120,15 @@ class ReplyContext:
     index_revision: int | None = None
     tool_calls: tuple[ToolCallTrace, ...] = ()
 
-    def has_relationship_memory_for_rewrite(self) -> bool:
-        """当前改写上下文是否包含长期关系记忆。"""
+    def has_long_term_memory_for_rewrite(self) -> bool:
+        """当前改写上下文是否包含联系人关系记忆或本人记忆。"""
 
         return (
             isinstance(self.command.content, RewriteDraft)
-            and any(item.kind == "confirmed_memory" for item in self.evidence)
+            and any(
+                item.kind in ("confirmed_memory", "owner_memory")
+                for item in self.evidence
+            )
         )
 
 
@@ -153,6 +173,8 @@ class RetrievalReplyContext:
         "_message_limit",
         "_memory_limit",
         "_memory_char_budget",
+        "_owner_memory_limit",
+        "_owner_memory_char_budget",
         "_memory_index",
         "_risk_hints",
         "_skill_revision_reader",
@@ -167,6 +189,8 @@ class RetrievalReplyContext:
         message_limit: int = 50,
         memory_limit: int = CONTACT_MEMORY_LIMIT,
         memory_char_budget: int = CONTACT_MEMORY_CHAR_BUDGET,
+        owner_memory_limit: int = OWNER_MEMORY_LIMIT,
+        owner_memory_char_budget: int = OWNER_MEMORY_CHAR_BUDGET,
         memory_index: ContactMemoryIndexPort | None = None,
         risk_hints: RiskHintPort | None = None,
         skill_revision_reader: Callable[[ContactScope], int] | None = None,
@@ -182,12 +206,24 @@ class RetrievalReplyContext:
             or not 1 <= memory_char_budget <= 10000
         ):
             raise ValueError("关系记忆字符预算无效。")
+        if (
+            not isinstance(owner_memory_limit, int)
+            or not 1 <= owner_memory_limit <= 20
+        ):
+            raise ValueError("本人记忆上下文预算无效。")
+        if (
+            not isinstance(owner_memory_char_budget, int)
+            or not 1 <= owner_memory_char_budget <= 10000
+        ):
+            raise ValueError("本人记忆字符预算无效。")
         self._retrieval = retrieval
         self._skill_library_revision = skill_library_revision
         self._id_factory = id_factory
         self._message_limit = message_limit
         self._memory_limit = memory_limit
         self._memory_char_budget = memory_char_budget
+        self._owner_memory_limit = owner_memory_limit
+        self._owner_memory_char_budget = owner_memory_char_budget
         self._memory_index = memory_index
         self._risk_hints = risk_hints or DeterministicRiskHints()
         if skill_revision_reader is not None and not callable(skill_revision_reader):
@@ -232,10 +268,19 @@ class RetrievalReplyContext:
                 scope=scope,
                 query=target[0].text,
             )
+            owner_memories = self._search_owner_memories_or_empty(
+                scope=scope,
+                query=target[0].text,
+            )
             evidence = list(
                 self._message_evidence(message, is_target=message is target[0])
                 for message in messages
-            ) + [self._memory_evidence(memory) for memory in memories]
+            ) + [
+                self._memory_evidence(memory) for memory in memories
+            ] + [
+                self._owner_memory_evidence(memory, scope=scope)
+                for memory in owner_memories
+            ]
             if continuation is not None:
                 evidence.append(continuation)
             self._validate_evidence(evidence, scope=scope)
@@ -270,6 +315,13 @@ class RetrievalReplyContext:
                 evidence.extend(
                     self._memory_evidence(memory)
                     for memory in self._search_memories_or_empty(
+                        scope=scope,
+                        query=command.content.draft_text,
+                    )
+                )
+                evidence.extend(
+                    self._owner_memory_evidence(memory, scope=scope)
+                    for memory in self._search_owner_memories_or_empty(
                         scope=scope,
                         query=command.content.draft_text,
                     )
@@ -332,6 +384,8 @@ class RetrievalReplyContext:
                 self._validate_current_message(item, now=now)
             elif item.kind == "confirmed_memory":
                 self._validate_current_memory(item, now=now)
+            elif item.kind == "owner_memory":
+                self._validate_current_owner_memory(item, now=now)
 
     def _validate_current_message(
         self,
@@ -417,6 +471,46 @@ class RetrievalReplyContext:
         ):
             raise ReplyContextInvariantError("关系记忆依据已失效或版本不一致。")
 
+    def _validate_current_owner_memory(
+        self,
+        evidence: ContextEvidence,
+        *,
+        now: datetime,
+    ) -> None:
+        if not evidence.source_ids or evidence.revision is None:
+            raise ReplyContextInvariantError("本人记忆依据缺少来源或 revision。")
+        try:
+            memories = self._retrieval.search_owner_memories(
+                owner_id=evidence.scope.owner_id,
+                query=None,
+                limit=1,
+                memory_ids=(evidence.evidence_id,),
+            )
+        except ReplyContextError:
+            raise
+        except Exception:
+            raise ReplyContextError("本人记忆依据重新读取失败。") from None
+        if not isinstance(memories, tuple) or any(
+            not isinstance(memory, RetrievedOwnerMemory)
+            or memory.owner_id != evidence.scope.owner_id
+            for memory in memories
+        ):
+            raise ReplyContextInvariantError("本人记忆依据超出 owner 范围。")
+        if len(memories) != 1:
+            raise ReplyContextInvariantError("本人记忆依据已删除或不可用。")
+        memory = memories[0]
+        if (
+            not self._is_current(memory.status, memory.valid_at, memory.invalid_at, now)
+            or memory.text != evidence.text
+            or set(memory.source_ids) != set(evidence.source_ids)
+            or len(memory.source_ids) != len(evidence.source_ids)
+            or memory.revision != evidence.revision
+            or memory.valid_at != evidence.valid_at
+            or memory.invalid_at != evidence.invalid_at
+            or memory.status != evidence.status
+        ):
+            raise ReplyContextInvariantError("本人记忆依据已失效或版本不一致。")
+
     @staticmethod
     def _is_current(
         status: str,
@@ -496,24 +590,59 @@ class RetrievalReplyContext:
             raise ReplyContextInvariantError(
                 "关系记忆检索结果超出联系人范围。"
             )
-        return self._select_memories(memories)
+        return self._select_memories(
+            memories,
+            limit=self._memory_limit,
+            char_budget=self._memory_char_budget,
+        )
+
+    def _search_owner_memories(
+        self,
+        *,
+        scope: ContactScope,
+        query: str | None = None,
+    ) -> tuple[RetrievedOwnerMemory, ...]:
+        try:
+            memories = self._retrieval.search_owner_memories(
+                owner_id=scope.owner_id,
+                query=query,
+                limit=self._owner_memory_limit,
+            )
+        except RetrievalError:
+            raise ReplyContextError("本人记忆检索失败。") from None
+        except Exception:
+            raise ReplyContextError("本人记忆检索失败。") from None
+        if not isinstance(memories, tuple) or any(
+            not isinstance(memory, RetrievedOwnerMemory)
+            or memory.owner_id != scope.owner_id
+            for memory in memories
+        ):
+            raise ReplyContextInvariantError("本人记忆检索结果超出 owner 范围。")
+        return self._select_memories(
+            memories,
+            limit=self._owner_memory_limit,
+            char_budget=self._owner_memory_char_budget,
+        )
 
     def _select_memories(
         self,
-        memories: tuple[RetrievedMemory, ...],
-    ) -> tuple[RetrievedMemory, ...]:
+        memories: tuple[_MemoryT, ...],
+        *,
+        limit: int,
+        char_budget: int,
+    ) -> tuple[_MemoryT, ...]:
         """按相关性阈值与字符预算保留排序前缀，不截断单条正文。"""
 
-        selected: list[RetrievedMemory] = []
+        selected: list[_MemoryT] = []
         used_chars = 0
         for memory in memories:
             if memory.relevance_score is not None and (
                 memory.relevance_score < RELEVANCE_THRESHOLD
             ):
                 continue
-            if len(selected) >= self._memory_limit:
+            if len(selected) >= limit:
                 break
-            if used_chars + len(memory.text) > self._memory_char_budget:
+            if used_chars + len(memory.text) > char_budget:
                 break
             selected.append(memory)
             used_chars += len(memory.text)
@@ -529,6 +658,19 @@ class RetrievalReplyContext:
 
         try:
             return self._search_memories(scope=scope, query=query)
+        except ReplyContextError:
+            return ()
+
+    def _search_owner_memories_or_empty(
+        self,
+        *,
+        scope: ContactScope,
+        query: str | None = None,
+    ) -> tuple[RetrievedOwnerMemory, ...]:
+        """本人记忆缺失时安全降级，不阻断当前消息和近期对话。"""
+
+        try:
+            return self._search_owner_memories(scope=scope, query=query)
         except ReplyContextError:
             return ()
 
@@ -700,6 +842,33 @@ class RetrievalReplyContext:
             kind="confirmed_memory",
             text=memory.text,
             scope=memory.scope,
+            source_ids=memory.source_ids,
+            selection_reason=selection_reason,
+            status=memory.status,
+            valid_at=memory.valid_at,
+            invalid_at=memory.invalid_at,
+            revision=memory.revision,
+        )
+
+    @staticmethod
+    def _owner_memory_evidence(
+        memory: RetrievedOwnerMemory,
+        *,
+        scope: ContactScope,
+    ) -> ContextEvidence:
+        selection_reason = "已确认且当前有效的本人记忆。"
+        if memory.relevance_score is not None:
+            hits = "、".join(memory.matched_terms) or "无"
+            selection_reason = (
+                f"与当前正文相关度 {memory.relevance_score:.2f}；"
+                f"命中词 {hits}；排序按相关性优先；"
+                f"已确认且当前有效的本人记忆。"
+            )
+        return ContextEvidence(
+            evidence_id=memory.memory_id,
+            kind="owner_memory",
+            text=memory.text,
+            scope=scope,
             source_ids=memory.source_ids,
             selection_reason=selection_reason,
             status=memory.status,

@@ -156,6 +156,37 @@ class PostgresOwnerMemoryStoreTest(unittest.TestCase):
             self.retrieval.search_owner_memories(owner_id=self.owner_id), ()
         )
 
+    def test_retrieval_scores_owner_memories_with_query(self) -> None:
+        work = _owner_memory(self.owner_id, text="我最近在忙项目")
+        hiking = _owner_memory(self.owner_id, text="我喜欢周末徒步")
+        self.store.create(work)
+        self.store.create(hiking)
+
+        results = self.retrieval.search_owner_memories(
+            owner_id=self.owner_id,
+            query="周末一起去徒步吗？",
+        )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0].memory_id, hiking.memory_id)
+        self.assertGreater(results[0].relevance_score or 0.0, 0.0)
+        self.assertIn("徒步", results[0].matched_terms)
+        self.assertEqual(results[1].relevance_score, 0.0)
+
+    def test_retrieval_revalidation_without_query_has_no_score(self) -> None:
+        memory = _owner_memory(self.owner_id)
+        self.store.create(memory)
+
+        results = self.retrieval.search_owner_memories(
+            owner_id=self.owner_id,
+            query=None,
+            memory_ids=(memory.memory_id,),
+        )
+
+        self.assertEqual(len(results), 1)
+        self.assertIsNone(results[0].relevance_score)
+        self.assertEqual(results[0].matched_terms, ())
+
     def _create_other_owner(self):
         other_owner = uuid4()
         with psycopg.connect(TEST_DATABASE_URL) as connection:

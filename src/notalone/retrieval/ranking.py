@@ -3,13 +3,74 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime
+from uuid import UUID
 
 from notalone.retrieval.lexical import (
     LexicalToken,
     build_query_tokens,
     score_tokens,
 )
-from notalone.retrieval.models import RetrievedMemory
+from notalone.retrieval.models import RetrievedMemory, RetrievedOwnerMemory
+
+
+def recall_owner_memories(
+    memories: tuple[RetrievedOwnerMemory, ...],
+    *,
+    query: str | None,
+    limit: int,
+) -> tuple[RetrievedOwnerMemory, ...]:
+    """按 query 为 owner 记忆评分召回；query 为 None 时保持复验语义。"""
+
+    if not isinstance(memories, tuple) or any(
+        not isinstance(memory, RetrievedOwnerMemory) for memory in memories
+    ):
+        raise TypeError("owner 记忆候选必须是 RetrievedOwnerMemory 元组。")
+    if query is None:
+        return memories[:limit]
+    if not isinstance(query, str):
+        raise TypeError("owner 记忆检索 query 必须是字符串或 None。")
+    query_tokens = build_query_tokens(query)
+    if not query_tokens:
+        return ()
+    return rank_owner_memories(memories, query_tokens=query_tokens, limit=limit)
+
+
+def rank_owner_memories(
+    memories: tuple[RetrievedOwnerMemory, ...],
+    *,
+    query_tokens: tuple[LexicalToken, ...],
+    limit: int,
+) -> tuple[RetrievedOwnerMemory, ...]:
+    """写入 owner 记忆的相关性与命中词，并按同一词典序返回前 limit 条。"""
+
+    if not isinstance(memories, tuple) or any(
+        not isinstance(memory, RetrievedOwnerMemory) for memory in memories
+    ):
+        raise TypeError("owner 记忆候选必须是 RetrievedOwnerMemory 元组。")
+    if not isinstance(limit, int) or limit < 1:
+        raise ValueError("owner 记忆排序预算无效。")
+    scored = tuple(
+        replace(
+            memory,
+            relevance_score=result.score,
+            matched_terms=result.matched_terms,
+        )
+        for memory in memories
+        for result in (score_tokens(query_tokens, memory.text),)
+    )
+    return tuple(
+        sorted(
+            scored,
+            key=lambda memory: _memory_ranking_key(
+                memory.relevance_score,
+                memory.adoption_method,
+                memory.confidence,
+                memory.valid_at,
+                memory.memory_id,
+            ),
+        )[:limit]
+    )
 
 
 def recall_memories(
@@ -57,16 +118,32 @@ def rank_memories(
         for memory in memories
         for result in (score_tokens(query_tokens, memory.text),)
     )
-    return tuple(sorted(scored, key=_memory_ranking_key)[:limit])
+    return tuple(
+        sorted(
+            scored,
+            key=lambda memory: _memory_ranking_key(
+                memory.relevance_score,
+                memory.adoption_method,
+                memory.confidence,
+                memory.valid_at,
+                memory.memory_id,
+            ),
+        )[:limit]
+    )
 
 
-def _memory_ranking_key(memory: RetrievedMemory) -> tuple[object, ...]:
-    valid_at = memory.valid_at
+def _memory_ranking_key(
+    score: float | None,
+    adoption_method: str,
+    confidence: float,
+    valid_at: datetime | None,
+    memory_id: UUID,
+) -> tuple[object, ...]:
     return (
-        -(memory.relevance_score or 0.0),
-        memory.adoption_method != "manual",
-        -memory.confidence,
+        -(score or 0.0),
+        adoption_method != "manual",
+        -confidence,
         valid_at is None,
         -(valid_at.timestamp() if valid_at is not None else 0.0),
-        str(memory.memory_id),
+        str(memory_id),
     )

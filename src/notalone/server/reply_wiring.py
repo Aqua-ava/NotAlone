@@ -24,6 +24,7 @@ from notalone.persistence.contact_memory_index import (
     PostgresContactMemoryIndexRepository,
 )
 from notalone.persistence.outbound_ledger import PostgresOutboundLedger
+from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
 from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.persistence.retrieval import PostgresRetrieval
 from notalone.persistence.skill_port import PostgresSkillPort
@@ -44,7 +45,10 @@ def build_reply_service(*, database_url: str, owner_id: UUID) -> ReplyService | 
     except (ValueError, OSError):
         return None
     skill_revision = _skill_library_revision(database_url, owner_id)
-    retrieval = PostgresRetrieval(database_url)
+    retrieval = PostgresRetrieval(
+        database_url,
+        owner_memory_store=PostgresOwnerMemoryStore(database_url),
+    )
     context = RetrievalReplyContext(
         retrieval=retrieval,
         memory_index=PostgresContactMemoryIndexRepository(database_url),
