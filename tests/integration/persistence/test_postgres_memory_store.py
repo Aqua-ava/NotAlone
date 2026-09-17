@@ -261,6 +261,46 @@ class PostgresMemoryStoreTest(unittest.TestCase):
         )
         self.assertEqual(replayed.memory_id, confirmed.memory_id)
 
+    def test_memory_query_scores_and_orders_candidates(self) -> None:
+        hiking = self.store.create_candidate(
+            self._candidate(candidate_id=uuid4(), text="对方喜欢徒步")
+        )
+        work = self.store.create_candidate(
+            self._candidate(candidate_id=uuid4(), text="他最近在忙项目")
+        )
+        self.store.confirm(scope=self._scope(), candidate_id=hiking.candidate_id)
+        self.store.confirm(scope=self._scope(), candidate_id=work.candidate_id)
+
+        found = self.retrieval.search_confirmed_memories(
+            scope=self._scope(),
+            query="周末一起去徒步吗？",
+        )
+
+        self.assertEqual(len(found), 2)
+        self.assertEqual(found[0].text, "对方喜欢徒步")
+        self.assertGreater(found[0].relevance_score or 0.0, 0.0)
+        self.assertIn("徒步", found[0].matched_terms)
+        self.assertEqual(found[1].relevance_score, 0.0)
+
+    def test_memory_revalidation_without_query_has_no_score(self) -> None:
+        candidate = self.store.create_candidate(
+            self._candidate(candidate_id=uuid4())
+        )
+        confirmed = self.store.confirm(
+            scope=self._scope(),
+            candidate_id=candidate.candidate_id,
+        )
+
+        found = self.retrieval.search_confirmed_memories(
+            scope=self._scope(),
+            query=None,
+            memory_ids=(confirmed.memory_id,),
+        )
+
+        self.assertEqual(len(found), 1)
+        self.assertIsNone(found[0].relevance_score)
+        self.assertEqual(found[0].matched_terms, ())
+
     def test_list_pending_candidates_is_scope_filtered(self) -> None:
         pending = self.store.create_candidate(self._candidate())
         self.store.create_candidate(

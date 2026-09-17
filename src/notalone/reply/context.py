@@ -24,7 +24,12 @@ from notalone.retrieval import (
     RetrievedMemory,
     RetrievedMessage,
 )
+from notalone.retrieval.lexical import RELEVANCE_THRESHOLD
 from notalone.scopes import ContactScope, VerifiedConversationScope
+
+
+CONTACT_MEMORY_LIMIT = 5
+CONTACT_MEMORY_CHAR_BUDGET = 600
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -129,19 +134,7 @@ class ReplyContextPort(Protocol):
 
 
 class ContactMemoryIndexPort(Protocol):
-    """只提供 L2 导航；L1 事实仍由 Retrieval 重新读取。"""
-
-    def locate_memory_ids(
-        self,
-        scope: ContactScope,
-        *,
-        query: str | None = None,
-        limit: int = 20,
-    ) -> tuple[UUID, ...] | None:
-        """返回当前目录定位到的 L1 ID；目录不可用时返回 None。"""
-
-    def current_memory_revision(self, scope: ContactScope) -> int | None:
-        """读取联系人当前 L1 revision，用于快照失效校验。"""
+    """只提供 L1 版本快照；召回候选由 Retrieval 直接评分。"""
 
     def revision_snapshot(
         self,
@@ -159,6 +152,7 @@ class RetrievalReplyContext:
         "_id_factory",
         "_message_limit",
         "_memory_limit",
+        "_memory_char_budget",
         "_memory_index",
         "_risk_hints",
         "_skill_revision_reader",
@@ -171,7 +165,8 @@ class RetrievalReplyContext:
         skill_library_revision: int,
         id_factory: Callable[[], UUID] = uuid4,
         message_limit: int = 50,
-        memory_limit: int = 20,
+        memory_limit: int = CONTACT_MEMORY_LIMIT,
+        memory_char_budget: int = CONTACT_MEMORY_CHAR_BUDGET,
         memory_index: ContactMemoryIndexPort | None = None,
         risk_hints: RiskHintPort | None = None,
         skill_revision_reader: Callable[[ContactScope], int] | None = None,
@@ -182,11 +177,17 @@ class RetrievalReplyContext:
             raise ValueError("消息上下文预算无效。")
         if not isinstance(memory_limit, int) or not 1 <= memory_limit <= 20:
             raise ValueError("关系记忆上下文预算无效。")
+        if (
+            not isinstance(memory_char_budget, int)
+            or not 1 <= memory_char_budget <= 10000
+        ):
+            raise ValueError("关系记忆字符预算无效。")
         self._retrieval = retrieval
         self._skill_library_revision = skill_library_revision
         self._id_factory = id_factory
         self._message_limit = message_limit
         self._memory_limit = memory_limit
+        self._memory_char_budget = memory_char_budget
         self._memory_index = memory_index
         self._risk_hints = risk_hints or DeterministicRiskHints()
         if skill_revision_reader is not None and not callable(skill_revision_reader):
@@ -227,7 +228,10 @@ class RetrievalReplyContext:
                 raise ReplyContextInvariantError(
                     "待回复消息未在当前联系人范围内找到。"
                 )
-            memories = self._search_memories_or_empty(scope=scope)
+            memories = self._search_memories_or_empty(
+                scope=scope,
+                query=target[0].text,
+            )
             evidence = list(
                 self._message_evidence(message, is_target=message is target[0])
                 for message in messages
@@ -265,7 +269,10 @@ class RetrievalReplyContext:
             if command.content.include_relationship_context:
                 evidence.extend(
                     self._memory_evidence(memory)
-                    for memory in self._search_memories_or_empty(scope=scope)
+                    for memory in self._search_memories_or_empty(
+                        scope=scope,
+                        query=command.content.draft_text,
+                    )
                 )
             if continuation is not None:
                 evidence.append(continuation)
@@ -472,34 +479,11 @@ class RetrievalReplyContext:
         scope: ContactScope,
         query: str | None = None,
     ) -> tuple[RetrievedMemory, ...]:
-        memory_ids: tuple[UUID, ...] | None = None
-        if self._memory_index is not None:
-            try:
-                located = self._memory_index.locate_memory_ids(
-                    scope,
-                    query=query,
-                    limit=self._memory_limit,
-                )
-            except ReplyContextInvariantError:
-                raise
-            except Exception:
-                located = None
-            if located is not None and (
-                not isinstance(located, tuple)
-                or any(not isinstance(memory_id, UUID) for memory_id in located)
-            ):
-                raise ReplyContextInvariantError("记忆目录导航结果结构无效。")
-            memory_ids = located
         try:
-            retrieval_kwargs: dict[str, object] = {
-                "scope": scope,
-                "query": query,
-                "limit": self._memory_limit,
-            }
-            if memory_ids is not None:
-                retrieval_kwargs["memory_ids"] = memory_ids
             memories = self._retrieval.search_confirmed_memories(
-                **retrieval_kwargs,
+                scope=scope,
+                query=query,
+                limit=self._memory_limit,
             )
         except RetrievalError:
             raise ReplyContextError("联系人关系记忆检索失败。") from None
@@ -512,7 +496,28 @@ class RetrievalReplyContext:
             raise ReplyContextInvariantError(
                 "关系记忆检索结果超出联系人范围。"
             )
-        return memories
+        return self._select_memories(memories)
+
+    def _select_memories(
+        self,
+        memories: tuple[RetrievedMemory, ...],
+    ) -> tuple[RetrievedMemory, ...]:
+        """按相关性阈值与字符预算保留排序前缀，不截断单条正文。"""
+
+        selected: list[RetrievedMemory] = []
+        used_chars = 0
+        for memory in memories:
+            if memory.relevance_score is not None and (
+                memory.relevance_score < RELEVANCE_THRESHOLD
+            ):
+                continue
+            if len(selected) >= self._memory_limit:
+                break
+            if used_chars + len(memory.text) > self._memory_char_budget:
+                break
+            selected.append(memory)
+            used_chars += len(memory.text)
+        return tuple(selected)
 
     def _search_memories_or_empty(
         self,
@@ -682,13 +687,21 @@ class RetrievalReplyContext:
 
     @staticmethod
     def _memory_evidence(memory: RetrievedMemory) -> ContextEvidence:
+        selection_reason = "已确认且当前有效的联系人关系记忆。"
+        if memory.relevance_score is not None:
+            hits = "、".join(memory.matched_terms) or "无"
+            selection_reason = (
+                f"与当前正文相关度 {memory.relevance_score:.2f}；"
+                f"命中词 {hits}；排序按相关性优先；"
+                f"已确认且当前有效的联系人关系记忆。"
+            )
         return ContextEvidence(
             evidence_id=memory.memory_id,
             kind="confirmed_memory",
             text=memory.text,
             scope=memory.scope,
             source_ids=memory.source_ids,
-            selection_reason="已确认且当前有效的联系人关系记忆。",
+            selection_reason=selection_reason,
             status=memory.status,
             valid_at=memory.valid_at,
             invalid_at=memory.invalid_at,

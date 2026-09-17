@@ -67,6 +67,9 @@ class RetrievedMemory:
     status: str = "active"
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
+    confidence: float = 1.0
+    relevance_score: float | None = None
+    matched_terms: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.memory_id, UUID):
@@ -91,6 +94,22 @@ class RetrievedMemory:
         if not isinstance(self.source_ids, tuple) or not self.source_ids:
             raise ValueError("关系记忆检索结果必须带来源引用。")
         _validate_source_ids(self.source_ids)
+        if (
+            not isinstance(self.confidence, (int, float))
+            or isinstance(self.confidence, bool)
+            or not 0.0 <= float(self.confidence) <= 1.0
+        ):
+            raise ValueError("关系记忆置信度必须在 0 到 1 之间。")
+        if self.relevance_score is not None and (
+            not isinstance(self.relevance_score, (int, float))
+            or isinstance(self.relevance_score, bool)
+            or not 0.0 <= float(self.relevance_score) <= 1.0
+        ):
+            raise ValueError("关系记忆相关度必须在 0 到 1 之间。")
+        if not isinstance(self.matched_terms, tuple) or any(
+            not isinstance(term, str) or not term for term in self.matched_terms
+        ):
+            raise ValueError("关系记忆命中词必须是非空字符串元组。")
 
 
 @dataclass(frozen=True, slots=True)

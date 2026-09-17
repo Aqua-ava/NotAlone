@@ -211,7 +211,7 @@ class PostgresReplyFlowTest(unittest.TestCase):
             MemoryCandidate(
                 candidate_id=self.memory_candidate_id,
                 scope=self.scope,
-                text="对方喜欢提前约时间。",
+                text="对方喜欢提前约吃饭。",
                 category=MemoryCategory.PREFERENCE,
                 source_ids=(self.source_id,),
             )

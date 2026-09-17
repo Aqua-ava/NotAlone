@@ -10,6 +10,7 @@ from uuid import UUID
 from notalone.memory import MemoryPort
 from notalone.retrieval.errors import RetrievalInvariantError
 from notalone.retrieval.models import RetrievedMemory, RetrievedMessage
+from notalone.retrieval.ranking import recall_memories
 from notalone.scopes import ContactScope
 
 
@@ -192,6 +193,8 @@ class InMemoryRetrieval:
         _validate_limit(limit, 20)
         if not isinstance(scope, ContactScope):
             raise TypeError("关系记忆检索范围无效。")
+        if query is not None and not isinstance(query, str):
+            raise TypeError("关系记忆检索 query 必须是字符串或 None。")
         if memory_ids is not None and (
             not isinstance(memory_ids, tuple)
             or any(not isinstance(memory_id, UUID) for memory_id in memory_ids)
@@ -206,7 +209,7 @@ class InMemoryRetrieval:
             raise RetrievalInvariantError(
                 "关系记忆检索结果超出联系人范围。"
             )
-        return tuple(
+        retrieved = tuple(
             RetrievedMemory(
                 memory_id=memory.memory_id,
                 scope=memory.scope,
@@ -219,8 +222,9 @@ class InMemoryRetrieval:
                 status=memory.status.value,
                 valid_at=memory.valid_at,
                 invalid_at=memory.invalid_at,
+                confidence=memory.confidence,
             )
             for memory in memories
             if memory_ids is None or memory.memory_id in memory_ids
-            if _matches(memory.text, query)
-        )[:limit]
+        )
+        return recall_memories(retrieved, query=query, limit=limit)

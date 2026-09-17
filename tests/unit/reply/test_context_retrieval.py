@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from notalone.memory import (
@@ -26,6 +27,7 @@ from notalone.reply.interface import (
 )
 from notalone.retrieval import (
     InMemoryRetrieval,
+    RetrievedMemory,
     RetrievedMessage,
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
@@ -49,23 +51,66 @@ def _ids() -> list[UUID]:
 
 
 class RecordingRetrieval:
-    def __init__(self, messages: tuple[RetrievedMessage, ...] = ()) -> None:
+    def __init__(
+        self,
+        messages: tuple[RetrievedMessage, ...] = (),
+        memories: tuple[RetrievedMemory, ...] = (),
+    ) -> None:
         self.messages = messages
+        self.memories = memories
         self.message_calls = 0
         self.memory_calls = 0
+        self.memory_queries: list[str | None] = []
         self.fail_memory = False
 
-    def search_messages(self, **kwargs: object) -> tuple[RetrievedMessage, ...]:
-        del kwargs
+    def search_messages(
+        self,
+        *,
+        scope: ContactScope,
+        target_message_id: UUID | None = None,
+        query: str | None = None,
+        limit: int = 50,
+        occurred_after: datetime | None = None,
+        occurred_before: datetime | None = None,
+        timeout_ms: int | None = None,
+    ) -> tuple[RetrievedMessage, ...]:
+        del scope
+        del target_message_id, query, limit, occurred_after, occurred_before
+        del timeout_ms
         self.message_calls += 1
         return self.messages
 
-    def search_confirmed_memories(self, **kwargs: object) -> tuple[object, ...]:
-        del kwargs
+    def query_messages(
+        self,
+        *,
+        scope: ContactScope,
+        anchor_message_id: UUID | None = None,
+        before: int = 3,
+        after: int = 3,
+        limit: int = 20,
+        occurred_after: datetime | None = None,
+        occurred_before: datetime | None = None,
+        timeout_ms: int | None = None,
+    ) -> tuple[RetrievedMessage, ...]:
+        del scope
+        del anchor_message_id, before, after, limit
+        del occurred_after, occurred_before, timeout_ms
+        raise AssertionError("回复上下文不应调用消息顺序查询。")
+
+    def search_confirmed_memories(
+        self,
+        *,
+        scope: ContactScope,
+        query: str | None = None,
+        limit: int = 20,
+        memory_ids: tuple[UUID, ...] | None = None,
+    ) -> tuple[RetrievedMemory, ...]:
+        del scope, limit, memory_ids
         self.memory_calls += 1
+        self.memory_queries.append(query)
         if self.fail_memory:
             raise RuntimeError("synthetic memory retrieval failure")
-        return ()
+        return self.memories
 
 
 class RecordingMemoryIndex:
@@ -137,7 +182,7 @@ class ContextRetrievalTest(unittest.TestCase):
                 RetrievedMessage(
                     TARGET_MESSAGE_ID,
                     self.scope,
-                    "周末一起走走吗？",
+                    "周末一起去徒步吗？",
                 ),
                 RetrievedMessage(
                     UUID("ffffffff-0000-1111-2222-333333333333"),
@@ -162,7 +207,7 @@ class ContextRetrievalTest(unittest.TestCase):
         )
 
         self.assertIsInstance(result, ReplyContext)
-        self.assertEqual(result.current_text, "周末一起走走吗？")
+        self.assertEqual(result.current_text, "周末一起去徒步吗？")
         self.assertEqual(
             tuple(item.kind for item in result.evidence),
             ("message", "message", "confirmed_memory"),
@@ -170,7 +215,7 @@ class ContextRetrievalTest(unittest.TestCase):
         self.assertTrue(all(item.scope == self.scope for item in result.evidence))
         self.assertEqual(result.skill_library_revision, 7)
 
-    def test_current_l2_directory_narrows_l1_before_context_assembly(self) -> None:
+    def test_directory_only_provides_revision_snapshot(self) -> None:
         retrieval = self._retrieval()
         memory = retrieval.memory_store.list_confirmed(self.scope)[0]
         index = RecordingMemoryIndex((memory.memory_id,), revisions=(4, 4))
@@ -186,10 +231,14 @@ class ContextRetrievalTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            tuple(item.evidence_id for item in result.evidence if item.kind == "confirmed_memory"),
+            tuple(
+                item.evidence_id
+                for item in result.evidence
+                if item.kind == "confirmed_memory"
+            ),
             (memory.memory_id,),
         )
-        self.assertEqual(index.calls, [(self.scope, None, 20)])
+        self.assertEqual(index.calls, [])
         self.assertEqual(result.memory_revision, 4)
         self.assertEqual(result.index_revision, 4)
 
@@ -379,7 +428,7 @@ class ContextRetrievalTest(unittest.TestCase):
             scope=self.scope,
             conversation_binding_id=BINDING_ID,
             content=RewriteDraft(
-                draft_text="我明天有空",
+                draft_text="周末一起去徒步吗？",
                 include_relationship_context=True,
             ),
         )
@@ -413,7 +462,7 @@ class ContextRetrievalTest(unittest.TestCase):
             scope=self.scope,
             conversation_binding_id=BINDING_ID,
             content=RewriteDraft(
-                draft_text="我明天有空",
+                draft_text="周末一起去徒步吗？",
                 include_relationship_context=True,
             ),
         )
@@ -431,6 +480,217 @@ class ContextRetrievalTest(unittest.TestCase):
         skill_revision[0] = 8
         with self.assertRaises(ReplyContextInvariantError):
             context.validate_current(result)
+
+    def _memory(
+        self,
+        memory_id: UUID,
+        text: str,
+        *,
+        score: float,
+        matched_terms: tuple[str, ...] = (),
+        adoption_method: str = "auto",
+        confidence: float = 1.0,
+    ) -> RetrievedMemory:
+        return RetrievedMemory(
+            memory_id=memory_id,
+            scope=self.scope,
+            text=text,
+            category="preference",
+            source_ids=(SOURCE_ID,),
+            adoption_method=adoption_method,
+            revision=1,
+            confidence=confidence,
+            relevance_score=score,
+            matched_terms=matched_terms,
+        )
+
+    def test_memory_query_uses_pending_message_text(self) -> None:
+        retrieval = RecordingRetrieval(
+            messages=(
+                RetrievedMessage(
+                    TARGET_MESSAGE_ID,
+                    self.scope,
+                    "周末一起去徒步吗？",
+                ),
+            ),
+            memories=(
+                self._memory(
+                    UUID("10000000-0000-0000-0000-000000000010"),
+                    "对方喜欢徒步",
+                    score=0.8,
+                    matched_terms=("徒步",),
+                ),
+            ),
+        )
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            id_factory=iter(_ids()).__next__,
+        ).build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        self.assertEqual(retrieval.memory_queries, ["周末一起去徒步吗？"])
+        self.assertEqual(
+            tuple(item.kind for item in result.evidence),
+            ("message", "confirmed_memory"),
+        )
+
+    def test_rewrite_memory_query_uses_draft_text(self) -> None:
+        retrieval = RecordingRetrieval(
+            memories=(
+                self._memory(
+                    UUID("10000000-0000-0000-0000-000000000011"),
+                    "对方喜欢徒步",
+                    score=0.8,
+                ),
+            )
+        )
+        command = GenerateReply(
+            idempotency_key=UUID("eeeeeeee-ffff-0000-1111-222222222227"),
+            scope=self.scope,
+            conversation_binding_id=BINDING_ID,
+            content=RewriteDraft(
+                draft_text="周末一起去徒步吗？",
+                include_relationship_context=True,
+            ),
+        )
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            id_factory=iter(_ids()).__next__,
+        ).build(command=command, verified_scope=self.verified_scope)
+
+        self.assertEqual(retrieval.memory_queries, ["周末一起去徒步吗？"])
+        self.assertEqual(
+            tuple(item.kind for item in result.evidence),
+            ("user_draft", "confirmed_memory"),
+        )
+
+    def test_below_threshold_memory_is_not_injected(self) -> None:
+        retrieval = RecordingRetrieval(
+            messages=(
+                RetrievedMessage(TARGET_MESSAGE_ID, self.scope, "周末一起去徒步吗？"),
+            ),
+            memories=(
+                self._memory(
+                    UUID("10000000-0000-0000-0000-000000000012"),
+                    "对方喜欢徒步",
+                    score=0.1,
+                ),
+            ),
+        )
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            id_factory=iter(_ids()).__next__,
+        ).build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        self.assertEqual(
+            tuple(item.kind for item in result.evidence),
+            ("message",),
+        )
+
+    def test_memory_char_budget_stops_before_oversized_memory(self) -> None:
+        retrieval = RecordingRetrieval(
+            messages=(
+                RetrievedMessage(TARGET_MESSAGE_ID, self.scope, "周末一起去徒步吗？"),
+            ),
+            memories=(
+                self._memory(UUID("10000000-0000-0000-0000-000000000013"), "加" * 250, score=0.9),
+                self._memory(UUID("10000000-0000-0000-0000-000000000014"), "班" * 250, score=0.8),
+                self._memory(UUID("10000000-0000-0000-0000-000000000015"), "好" * 200, score=0.7),
+                self._memory(UUID("10000000-0000-0000-0000-000000000016"), "猫" * 10, score=0.6),
+            ),
+        )
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            memory_char_budget=600,
+            id_factory=iter(_ids()).__next__,
+        ).build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        self.assertEqual(
+            tuple(item.evidence_id for item in result.evidence if item.kind == "confirmed_memory"),
+            (
+                UUID("10000000-0000-0000-0000-000000000013"),
+                UUID("10000000-0000-0000-0000-000000000014"),
+            ),
+        )
+
+    def test_memory_limit_caps_selected_items(self) -> None:
+        retrieval = RecordingRetrieval(
+            messages=(
+                RetrievedMessage(TARGET_MESSAGE_ID, self.scope, "周末一起去徒步吗？"),
+            ),
+            memories=tuple(
+                self._memory(
+                    UUID(f"10000000-0000-0000-0000-00000000002{index}"),
+                    "对方喜欢徒步",
+                    score=0.9 - index * 0.1,
+                )
+                for index in range(3)
+            ),
+        )
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            memory_limit=2,
+            id_factory=iter(_ids()).__next__,
+        ).build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        self.assertEqual(
+            len([item for item in result.evidence if item.kind == "confirmed_memory"]),
+            2,
+        )
+
+    def test_selection_reason_records_score_and_matched_terms(self) -> None:
+        retrieval = RecordingRetrieval(
+            messages=(
+                RetrievedMessage(TARGET_MESSAGE_ID, self.scope, "周末一起去徒步吗？"),
+            ),
+            memories=(
+                self._memory(
+                    UUID("10000000-0000-0000-0000-000000000017"),
+                    "对方喜欢徒步",
+                    score=0.42,
+                    matched_terms=("徒步", "步"),
+                ),
+            ),
+        )
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            id_factory=iter(_ids()).__next__,
+        ).build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        reason = next(
+            item.selection_reason
+            for item in result.evidence
+            if item.kind == "confirmed_memory"
+        )
+        self.assertIn("0.42", reason)
+        self.assertIn("徒步", reason)
+        self.assertIn("步", reason)
 
 
 if __name__ == "__main__":

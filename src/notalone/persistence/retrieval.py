@@ -24,6 +24,7 @@ from notalone.retrieval.models import (
     RetrievedMessage,
     RetrievedOwnerMemory,
 )
+from notalone.retrieval.ranking import recall_memories
 from notalone.memory.ports import OwnerMemoryPort
 from notalone.scopes import ContactScope
 
@@ -197,8 +198,7 @@ class PostgresRetrieval:
             for memory in memories
         ):
             raise RetrievalInvariantError("关系记忆检索结果超出联系人范围。")
-        tokens = _query_tokens(query)
-        return tuple(
+        retrieved = tuple(
             RetrievedMemory(
                 memory_id=memory.memory_id,
                 scope=memory.scope,
@@ -211,11 +211,12 @@ class PostgresRetrieval:
                 status=memory.status.value,
                 valid_at=memory.valid_at,
                 invalid_at=memory.invalid_at,
+                confidence=memory.confidence,
             )
             for memory in memories
             if memory_ids is None or memory.memory_id in memory_ids
-            if not tokens or all(token in memory.text.lower() for token in tokens)
-        )[:limit]
+        )
+        return recall_memories(retrieved, query=query, limit=limit)
 
 
     def search_owner_memories(
