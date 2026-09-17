@@ -5,9 +5,15 @@ from __future__ import annotations
 import unittest
 from uuid import uuid4
 
-from notalone.memory_extraction.errors import ExtractionRuntimeError
+from notalone.memory_extraction.errors import (
+    ExtractionInvalidOutputError,
+    ExtractionRuntimeError,
+)
 from notalone.memory_extraction.flow import ExtractionFlow, ExtractionOutcome
-from notalone.memory_extraction.models import ExtractionWindow
+from notalone.memory_extraction.models import (
+    ExtractionFailureKind,
+    ExtractionWindow,
+)
 from notalone.memory_extraction.runtime import ExtractionPayload
 from tests.unit.memory_extraction.test_models import _window
 
@@ -45,7 +51,12 @@ class RecordingRuntime:
 
 class CrashingRuntime:
     def extract(self, window: object) -> ExtractionPayload:  # noqa: ARG002
-        raise ExtractionRuntimeError("模型未返回可解析的结构化事实。")
+        raise ExtractionRuntimeError("模型调用失败，未生成记忆。")
+
+
+class InvalidOutputRuntime:
+    def extract(self, window: object) -> ExtractionPayload:  # noqa: ARG002
+        raise ExtractionInvalidOutputError("模型未返回可解析的结构化事实。")
 
 
 class ExtractionFlowTest(unittest.TestCase):
@@ -119,7 +130,17 @@ class ExtractionFlowTest(unittest.TestCase):
 
         self.assertEqual(outcome.accepted, ())
         self.assertEqual(
-            outcome.failure_reason, "模型未返回可解析的结构化事实。"
+            outcome.failure_reason, "模型调用失败，未生成记忆。"
+        )
+        self.assertEqual(
+            outcome.failure_kind, ExtractionFailureKind.UNAVAILABLE
+        )
+
+    def test_invalid_output_is_tagged_for_skip_counting(self) -> None:
+        outcome = self._run_flow(InvalidOutputRuntime())
+
+        self.assertEqual(
+            outcome.failure_kind, ExtractionFailureKind.INVALID_OUTPUT
         )
 
     def test_fact_must_reference_at_least_one_target_message(self) -> None:

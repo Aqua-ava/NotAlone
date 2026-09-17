@@ -115,7 +115,8 @@ for migration in \
     database/migrations/030_cli_observation_reliability_and_progress.sql \
     database/migrations/031_cli_backfill_scheduler.sql \
     database/migrations/032_memory_candidate_subject.sql \
-    database/migrations/033_owner_memory_evidence_kind.sql; do
+    database/migrations/033_owner_memory_evidence_kind.sql \
+    database/migrations/034_extraction_failure_recovery.sql; do
     log "应用可重复增量迁移 $(basename "${migration}")…"
     psql --set ON_ERROR_STOP=1 --dbname "${database_name}" \
         --file "${migration}" \

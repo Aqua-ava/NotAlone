@@ -7,7 +7,10 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 
 from notalone.memory.models import MemoryCategory
-from notalone.memory_extraction.errors import ExtractionRuntimeError
+from notalone.memory_extraction.errors import (
+    ExtractionInvalidOutputError,
+    ExtractionRuntimeError,
+)
 from notalone.memory_extraction.models import (
     AssertionStatus,
     ExtractionWindow,
@@ -243,11 +246,11 @@ class LangChainExtractionRuntime:
             raise ExtractionRuntimeError("模型调用失败，未生成记忆。") from error
         tool_calls = getattr(message, "tool_calls", None)
         if not tool_calls:
-            raise ExtractionRuntimeError("模型未返回可解析的结构化事实。")
+            raise ExtractionInvalidOutputError("模型未返回可解析的结构化事实。")
         args = tool_calls[0].get("args")
         facts_payload = args.get("facts") if isinstance(args, dict) else None
         if not isinstance(facts_payload, list):
-            raise ExtractionRuntimeError("模型未返回可解析的结构化事实。")
+            raise ExtractionInvalidOutputError("模型未返回可解析的结构化事实。")
         return tuple(
             item if isinstance(item, dict) else {"_invalid": item}
             for item in facts_payload

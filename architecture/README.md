@@ -52,6 +52,7 @@
 26. [ADR-026：语用解释先于关系记忆采纳](adr/026-pragmatic-interpretation-before-memory-adoption.md)
 27. [ADR-027：记忆准确率评测门槛与待确认候选的参考边界](adr/027-memory-accuracy-evaluation-gate.md)
 28. [ADR-028：记忆召回第一期采用确定性中文词法评分](adr/028-lexical-memory-recall-phase-1.md)
+29. [ADR-029：提取失败的分类计数与批次跳过恢复](adr/029-extraction-failure-recovery.md)
 
 ## 当前架构决策
 

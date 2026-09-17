@@ -18,10 +18,16 @@ from notalone.memory.models import (
     MemoryTopic,
 )
 from notalone.memory_extraction.adoption import AdoptionStats, MemoryAdoption
+from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.flow import ExtractionFlow, ExtractionOutcome
 from notalone.memory_extraction.models import (
+    ExtractionFailureKind,
     ExtractionWindow,
     MAX_TARGET_MESSAGES_PER_WINDOW,
+)
+from notalone.memory_extraction.recovery import (
+    FailureRange,
+    record_batch_failure,
 )
 from notalone.runtime_config import load_project_env
 from notalone.scopes import ContactScope
@@ -47,7 +53,9 @@ class ExtractionRunStats:
     skipped_deleted: int = 0
     rejected_by_contract: int = 0
     failed_batches: int = 0
+    skipped_batches: int = 0
     skipped_non_memory: int = 0
+    skipped_ranges: tuple[FailureRange, ...] = ()
 
 
 def run_extraction(
@@ -67,7 +75,7 @@ def run_extraction(
     provider: str = "deepseek",
     model_name: str | None = None,
 ) -> ExtractionRunStats:
-    """按水位分批串行提取并采纳；失败批次停止本次运行。"""
+    """按水位分批串行提取并采纳；输出不可用的批次连续失败后跳过。"""
 
     if (
         not isinstance(batch_size, int)
@@ -113,8 +121,9 @@ def run_extraction(
     flow = ExtractionFlow(runtime=runtime)
 
     batches = processed_messages = extracted = adopted = updated = pending = 0
-    duplicate = deleted = rejected = failed = 0
+    duplicate = deleted = rejected = failed = skipped = 0
     skipped_non_memory = 0
+    skipped_ranges: list[FailureRange] = []
     for offset in range(0, len(pending_messages), batch_size):
         batch = pending_messages[offset : offset + batch_size]
         processed_messages += len(batch)
@@ -129,18 +138,30 @@ def run_extraction(
             target_message_ids=tuple(message.message_id for message in batch),
         )
         started_ns = time.perf_counter()
-        outcome: ExtractionOutcome = flow.run(window)
+        adoption_stats = AdoptionStats()
+        try:
+            outcome: ExtractionOutcome = flow.run(window)
+            if outcome.failure_reason is None:
+                adoption_stats = adoption.adopt(scope, outcome)
+        except ExtractionRuntimeError as error:
+            # 写入裁决等批次级模型调用失败：与提取失败同一策略，
+            # 分类后计数或停止，不让整轮无记录地中断。
+            outcome = ExtractionOutcome(
+                accepted=(),
+                rejected_count=0,
+                failure_reason=str(error),
+                failure_kind=error.failure_kind,
+            )
         batches += 1
         if outcome.failure_reason is None:
             extracted += len(outcome.accepted)
-            stats: AdoptionStats = adoption.adopt(scope, outcome)
-            adopted += stats.adopted
-            updated += stats.updated
-            pending += stats.pending
-            duplicate += stats.skipped_duplicate
-            deleted += stats.skipped_deleted
-            rejected += stats.rejected_by_contract
-            skipped_non_memory += stats.skipped_non_memory
+            adopted += adoption_stats.adopted
+            updated += adoption_stats.updated
+            pending += adoption_stats.pending
+            duplicate += adoption_stats.skipped_duplicate
+            deleted += adoption_stats.skipped_deleted
+            rejected += adoption_stats.rejected_by_contract
+            skipped_non_memory += adoption_stats.skipped_non_memory
             _record_extraction_ledger(
                 ledger,
                 scope,
@@ -149,19 +170,39 @@ def run_extraction(
                 provider=provider,
                 model_name=model_name,
             )
-        else:
-            failed += 1
-            _record_extraction_ledger(
-                ledger,
-                scope,
-                LedgerOutcome.RUN_FAILED,
-                started_ns,
-                provider=provider,
-                model_name=model_name,
+            if watermark_port is not None:
+                watermark_port.set(scope, batch[-1].message_id)
+            continue
+        _record_extraction_ledger(
+            ledger,
+            scope,
+            LedgerOutcome.RUN_FAILED,
+            started_ns,
+            provider=provider,
+            model_name=model_name,
+        )
+        if (
+            outcome.failure_kind is ExtractionFailureKind.INVALID_OUTPUT
+            and watermark_port is not None
+        ):
+            failure_range = FailureRange(
+                from_message_id=batch[0].message_id,
+                to_message_id=batch[-1].message_id,
+                code=outcome.failure_kind,
             )
-            break
-        if outcome.failure_reason is None and watermark_port is not None:
-            watermark_port.set(scope, batch[-1].message_id)
+            previous = watermark_port.get_failure(scope)
+            state, reached = record_batch_failure(
+                previous,
+                failure_range=failure_range,
+            )
+            if reached:
+                watermark_port.mark_skipped(scope, failure_range)
+                skipped += 1
+                skipped_ranges.append(failure_range)
+                continue
+            watermark_port.save_failure(scope, state)
+        failed += 1
+        break
     return ExtractionRunStats(
         batches=batches,
         processed_messages=processed_messages,
@@ -173,7 +214,9 @@ def run_extraction(
         skipped_deleted=deleted,
         rejected_by_contract=rejected,
         failed_batches=failed,
+        skipped_batches=skipped,
         skipped_non_memory=skipped_non_memory,
+        skipped_ranges=tuple(skipped_ranges),
     )
 
 
@@ -209,7 +252,7 @@ def _fail(message: str) -> int:
 
 
 def extract_main(argv: list[str] | None = None) -> int:
-    """提取命令入口：自动全量/增量，断点续跑，输出纯统计。"""
+    """提取命令入口：自动全量/增量，断点续跑，输出统计与跳过区间。"""
 
     load_project_env()
     parser = argparse.ArgumentParser(
@@ -284,7 +327,14 @@ def extract_main(argv: list[str] | None = None) -> int:
         f" rejected={stats.rejected_by_contract}"
         f" skipped_non_memory={stats.skipped_non_memory}"
         f" failed_batches={stats.failed_batches}"
+        f" skipped_batches={stats.skipped_batches}"
     )
+    for skipped_range in stats.skipped_ranges:
+        print(
+            f"skipped_range from={skipped_range.from_message_id}"
+            f" to={skipped_range.to_message_id}"
+            f" code={skipped_range.code.value}"
+        )
     return 0 if stats.failed_batches == 0 else 1
 
 

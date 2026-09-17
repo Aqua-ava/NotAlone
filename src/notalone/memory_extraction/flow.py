@@ -11,6 +11,7 @@ from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.models import (
     AssertionStatus,
     ExtractedFact,
+    ExtractionFailureKind,
     ExtractionWindow,
     FactSubject,
     FigurativeType,
@@ -27,6 +28,11 @@ class ExtractionOutcome:
     accepted: tuple[ExtractedFact, ...]
     rejected_count: int = 0
     failure_reason: str | None = None
+    failure_kind: ExtractionFailureKind | None = None
+
+    def __post_init__(self) -> None:
+        if (self.failure_reason is None) != (self.failure_kind is None):
+            raise ValueError("失败原因与失败分类必须同时出现或同时为空。")
 
 
 class ExtractionFlow:
@@ -47,6 +53,7 @@ class ExtractionFlow:
                 accepted=(),
                 rejected_count=0,
                 failure_reason=str(error),
+                failure_kind=error.failure_kind,
             )
 
         window_ids = window.message_id_set

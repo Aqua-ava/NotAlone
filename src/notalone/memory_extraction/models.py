@@ -16,6 +16,7 @@ from notalone.memory.models import (
 __all__ = [
     "AssertionStatus",
     "ExtractedFact",
+    "ExtractionFailureKind",
     "ExtractionWindow",
     "FactSubject",
     "FigurativeType",
@@ -35,6 +36,13 @@ class MessageSender(StrEnum):
 
     SELF = "self"
     CONTACT = "contact"
+
+
+class ExtractionFailureKind(StrEnum):
+    """批次级提取失败的分类；只有输出不可用才允许跳过。"""
+
+    UNAVAILABLE = "unavailable"
+    INVALID_OUTPUT = "invalid_output"
 
 
 class SpeechAct(StrEnum):

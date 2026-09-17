@@ -11,7 +11,10 @@ from notalone.memory_extraction.adjudication import (
     AdjudicationDecision,
     SimilarMemory,
 )
-from notalone.memory_extraction.errors import ExtractionRuntimeError
+from notalone.memory_extraction.errors import (
+    ExtractionInvalidOutputError,
+    ExtractionRuntimeError,
+)
 
 
 ADJUDICATION_SYSTEM_PROMPT = """你裁决一条新的记忆事实与已有相似记忆的关系，四选一：
@@ -54,26 +57,31 @@ class LangChainAdjudicationRuntime:
     def adjudicate(
         self, *, candidate_text: str, similar: tuple[SimilarMemory, ...]
     ) -> AdjudicationDecision:
-        bound = self._model.bind_tools([ADJUDICATION_SCHEMA])
-        message = bound.invoke(
-            [
-                {"role": "system", "content": ADJUDICATION_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": _adjudication_text(candidate_text, similar),
-                },
-            ]
-        )
+        try:
+            bound = self._model.bind_tools([ADJUDICATION_SCHEMA])
+            message = bound.invoke(
+                [
+                    {"role": "system", "content": ADJUDICATION_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": _adjudication_text(candidate_text, similar),
+                    },
+                ]
+            )
+        except ExtractionRuntimeError:
+            raise
+        except Exception as error:
+            raise ExtractionRuntimeError("裁决模型调用失败。") from error
         tool_calls = getattr(message, "tool_calls", None)
         if not tool_calls:
-            raise ExtractionRuntimeError("裁决模型未返回结构化结果。")
+            raise ExtractionInvalidOutputError("裁决模型未返回结构化结果。")
         args = tool_calls[0].get("args")
         if not isinstance(args, dict) or "action" not in args:
-            raise ExtractionRuntimeError("裁决模型未返回结构化结果。")
+            raise ExtractionInvalidOutputError("裁决模型未返回结构化结果。")
         try:
             action = AdjudicationAction(args["action"])
         except ValueError as error:
-            raise ExtractionRuntimeError("裁决动作非法。") from error
+            raise ExtractionInvalidOutputError("裁决动作非法。") from error
         replaced_raw = args.get("replaced_memory_id")
         replaced = None
         if replaced_raw is not None:
@@ -82,7 +90,7 @@ class LangChainAdjudicationRuntime:
             try:
                 replaced = UUID(str(replaced_raw))
             except ValueError as error:
-                raise ExtractionRuntimeError("被取代记忆 ID 非法。") from error
+                raise ExtractionInvalidOutputError("被取代记忆 ID 非法。") from error
         usage = getattr(message, "usage_metadata", None) or {}
         return AdjudicationDecision(
             action=action,
