@@ -120,6 +120,14 @@ python -m unittest tests.integration.persistence.test_retrieval_evaluation   # P
 
 评测覆盖同义表达、确切短语、时间条件、无结果、冲突和跨联系人隔离，记录空结果率、降级率、Top-K 命中、引用纠错率、候选拒绝率、延迟、Token 和 Tool 次数；没有匿名运行观察值时引用纠错率与候选拒绝率显示为 `N/A`。向量候选当前不启用；只有持续检索异常、真实反馈、provider 配置和隐私评审同时满足才进入后续决策，SQL/全文路径仍是唯一生产检索路径。
 
+### 记忆召回评测
+
+```bash
+python -m unittest tests.unit.retrieval.test_recall_evaluation
+```
+
+109 条合成中文用例覆盖直述、改写、无关拒绝、跨联系人隔离、失效与删除、双预算和排序七个维度；评测装配真实评分器与真实回复上下文组装，不连接数据库、不调用模型、不需要凭据，门槛作为常规测试断言。结果与常量标定见 [`docs/memory-recall-evaluation-baseline.md`](docs/memory-recall-evaluation-baseline.md)。
+
 ### 记忆提取准确率评测
 
 ```bash

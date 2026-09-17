@@ -1,5 +1,8 @@
 # NotAlone 记忆系统交接
 
+> 状态：下一阶段已完成（2026-09-17）。设计见 `architecture/adr/028-lexical-memory-recall-phase-1.md`，规格与工单见 `.scratch/memory-recall/`，评测基线见 `docs/memory-recall-evaluation-baseline.md`；六个工单全部 resolved，实现提交 `cd75e7f` 至 `90d7b2f`。
+> 仍未开展：待确认候选进入回复（ADR-027 后续纵切）、向量补充评估（ADR-005 第 5 节，需评测证据）。
+
 ## 当前目标
 
 继续改进 `/Users/local-user/learn/NotAlone` 的记忆系统。上一阶段已经完成一个正确性修复；下一阶段应设计并实现“按当前消息召回相关记忆”，先做可解释的中文词法召回，不直接上向量检索。
@@ -57,7 +60,7 @@
 - `research/tencentdb-agent-memory-context-retrieval.md`
 - `.scratch/pragmatic-memory-smoke-test/score_extraction_intent.py`（未跟踪）
 
-本次记忆修复尚未提交 Git。
+本次记忆修复已提交（`69593bb`）。
 
 ## 下一阶段：相关记忆召回
 
