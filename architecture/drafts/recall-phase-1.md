@@ -1,9 +1,9 @@
 # 记忆召回第一期设计草案
 
-> 状态：草案；正式决定见 ADR-028
+> 状态：已收束；正式决定见 ADR-028
 > 日期：2026-09-17
 >
-> 本文记录已经确认的第一期实现设计，不代表对应代码已经实现；实现完成后回填 `architecture/current/`。
+> 第一期已实现并由离线评测门槛放行（见 `docs/memory-recall-evaluation-baseline.md`），现行行为已回填 `architecture/current/`。遗留的向量补充评估条件保留在 ADR-005 第 5 节与 ADR-028 第 7 节。
 
 ## 1. 目标与边界
 
