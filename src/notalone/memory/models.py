@@ -92,6 +92,7 @@ class MemoryCandidate:
     category: MemoryCategory
     source_ids: tuple[UUID, ...]
     topic: MemoryTopic = MemoryTopic.OTHER
+    subject: FactSubject = FactSubject.CONTACT
     status: MemoryCandidateStatus = MemoryCandidateStatus.PENDING
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
@@ -108,6 +109,8 @@ class MemoryCandidate:
             raise ValueError("关系记忆候选正文不能为空。")
         if not isinstance(self.category, MemoryCategory):
             raise TypeError("关系记忆候选分类无效。")
+        if not isinstance(self.subject, FactSubject):
+            raise TypeError("关系记忆候选主体必须是 self/contact/shared。")
         _validate_source_ids(self.source_ids)
         if not isinstance(self.status, MemoryCandidateStatus):
             raise TypeError("关系记忆候选状态无效。")
@@ -222,6 +225,7 @@ class OwnerMemory:
     source_ids: tuple[UUID, ...]
     adoption_method: AdoptionMethod
     status: ConfirmedMemoryStatus
+    source_candidate_id: UUID | None = None
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
     revision: int = 1
@@ -249,6 +253,11 @@ class OwnerMemory:
             raise ValueError("owner 记忆必须带采纳方式。")
         if not isinstance(self.status, ConfirmedMemoryStatus):
             raise ValueError("owner 记忆状态无效。")
+        if self.source_candidate_id is not None and not isinstance(
+            self.source_candidate_id,
+            UUID,
+        ):
+            raise ValueError("owner 记忆来源候选标识无效。")
         if not isinstance(self.revision, int) or self.revision < 1:
             raise ValueError("owner 记忆版本必须从 1 开始。")
         if (

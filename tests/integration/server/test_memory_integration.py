@@ -14,7 +14,7 @@ from uuid import uuid4
 import psycopg
 
 from notalone.application.memory_service import MemoryService
-from notalone.memory.models import MemoryCandidate, MemoryCategory
+from notalone.memory.models import FactSubject, MemoryCandidate, MemoryCategory
 from notalone.persistence import (
     PostgresMemoryStore,
     PostgresOwnerMemoryStore,
@@ -208,6 +208,40 @@ class MemoryApiIntegrationTest(unittest.TestCase):
             headers=self.headers,
         )
         self.assertEqual(pending2.json()["candidates"], [])
+
+    def test_pending_self_candidate_confirms_to_owner_memory_idempotently(self) -> None:
+        store = PostgresMemoryStore(TEST_DATABASE_URL)
+        candidate = store.create_manual_candidate(
+            MemoryCandidate(
+                candidate_id=uuid4(),
+                scope=ContactScope(self.owner_id, self.contact_id),
+                text="我最近在减肥",
+                category=MemoryCategory.RECENT_STATE,
+                subject=FactSubject.SELF,
+                source_ids=(self.contact_id,),
+            )
+        )
+        path = (
+            f"/api/contacts/{self.contact_id}/memory-candidates/"
+            f"{candidate.candidate_id}/confirm"
+        )
+
+        first = self._post(path)
+        second = self._post(path)
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json()["memory"]["level"], "owner")
+        self.assertEqual(
+            first.json()["memory"]["memory_id"],
+            second.json()["memory"]["memory_id"],
+        )
+        self.assertEqual(
+            store.list_pending_candidates(
+                ContactScope(self.owner_id, self.contact_id)
+            ),
+            (),
+        )
 
     def test_owner_level_isolation_and_manual(self) -> None:
         own = self._post(

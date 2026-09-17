@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from notalone.application.memory_service import (
@@ -17,6 +18,16 @@ from notalone.memory.models import (
     MemoryCategory,
     MemoryTopic,
     OwnerMemory,
+)
+from notalone.memory.adapters import InMemoryMemoryStore
+from notalone.memory_extraction.adoption import MemoryAdoption
+from notalone.memory_extraction.flow import ExtractionOutcome
+from notalone.memory_extraction.models import (
+    AssertionStatus,
+    ExtractedFact,
+    FactSubject,
+    FigurativeType,
+    SpeechAct,
 )
 from notalone.scopes import ContactScope
 
@@ -52,6 +63,18 @@ class FakeContactMemory:
             candidate
             for candidate in self.candidates
             if candidate.status.value == "pending" and candidate.scope == scope
+        )
+
+    def get_candidate(
+        self,
+        *,
+        scope: ContactScope,
+        candidate_id: UUID,
+    ) -> MemoryCandidate:
+        return next(
+            candidate
+            for candidate in self.candidates
+            if candidate.scope == scope and candidate.candidate_id == candidate_id
         )
 
     def list_confirmed(self, scope: ContactScope) -> tuple[ConfirmedMemory, ...]:
@@ -144,6 +167,30 @@ class FakeOwnerMemory:
         self.memories.append(memory)
         return memory
 
+    def confirm_candidate(
+        self,
+        *,
+        candidate: MemoryCandidate,
+        adoption_method: AdoptionMethod = AdoptionMethod.MANUAL,
+    ) -> OwnerMemory:
+        memory = OwnerMemory(
+            memory_id=uuid4(),
+            owner_id=candidate.scope.owner_id,
+            text=candidate.text,
+            category=candidate.category,
+            topic=candidate.topic,
+            source_ids=candidate.source_ids,
+            source_candidate_id=candidate.candidate_id,
+            adoption_method=adoption_method,
+            status=ConfirmedMemoryStatus.ACTIVE,
+            valid_at=candidate.valid_at,
+            invalid_at=candidate.invalid_at,
+            confidence=candidate.confidence,
+            risk_flags=candidate.risk_flags,
+        )
+        self.memories.append(memory)
+        return memory
+
     def list_active(self, owner_id: UUID) -> tuple[OwnerMemory, ...]:
         return tuple(
             memory
@@ -195,16 +242,66 @@ class MemoryServiceTest(unittest.TestCase):
         self.assertEqual(result, (memory,))
 
     def test_confirms_pending_candidate_as_manual(self) -> None:
+        candidate = MemoryCandidate(
+            candidate_id=uuid4(),
+            scope=_scope(),
+            text="待确认联系人记忆",
+            category=MemoryCategory.PREFERENCE,
+            source_ids=(CONTACT_ID,),
+        )
+        self.contact.candidates.append(candidate)
+
         memory = self.service.confirm_candidate(
             owner_id=OWNER_ID,
             contact_id=CONTACT_ID,
-            candidate_id=uuid4(),
+            candidate_id=candidate.candidate_id,
         )
 
         self.assertEqual(memory.adoption_method, AdoptionMethod.MANUAL)
         scope, _, method = self.contact.confirm_calls[-1]
         self.assertEqual(scope, _scope())
         self.assertEqual(method, AdoptionMethod.MANUAL)
+
+    def test_confirms_pending_self_fact_as_owner_memory(self) -> None:
+        contact = InMemoryMemoryStore()
+        owner = FakeOwnerMemory()
+        adoption = MemoryAdoption(
+            memory_port=contact,
+            owner_memory_port=owner,
+        )
+        fact = ExtractedFact(
+            text="我最近在减肥",
+            category=MemoryCategory.RECENT_STATE,
+            subject=FactSubject.SELF,
+            topic=MemoryTopic.HEALTH,
+            source_message_ids=(uuid4(),),
+            confidence=0.3,
+            valid_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+            speech_act=SpeechAct.ASSERTION,
+            assertion_status=AssertionStatus.ASSERTED,
+            figurative_type=FigurativeType.LITERAL,
+        )
+        stats = adoption.adopt(
+            _scope(),
+            ExtractionOutcome(accepted=(fact,)),
+        )
+        candidate = contact.list_pending_candidates(_scope())[0]
+        service = MemoryService(
+            contact_memory=contact,
+            owner_memory=owner,
+        )
+
+        confirmed = service.confirm_candidate(
+            owner_id=OWNER_ID,
+            contact_id=CONTACT_ID,
+            candidate_id=candidate.candidate_id,
+        )
+
+        self.assertEqual(stats.pending, 1)
+        self.assertIsInstance(confirmed, OwnerMemory)
+        self.assertEqual(confirmed.text, fact.text)
+        self.assertEqual(contact.list_confirmed(_scope()), ())
+        self.assertEqual(owner.list_active(OWNER_ID), (confirmed,))
 
     def test_discards_pending_candidate(self) -> None:
         candidate_id = uuid4()

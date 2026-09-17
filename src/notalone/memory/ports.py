@@ -28,6 +28,14 @@ class MemoryPort(Protocol):
     def list_pending_candidates(self, scope: ContactScope) -> tuple[MemoryCandidate, ...]:
         """返回联系人范围内所有尚未处理的候选。"""
 
+    def get_candidate(
+        self,
+        *,
+        scope: ContactScope,
+        candidate_id: UUID,
+    ) -> MemoryCandidate:
+        """按联系人范围读取候选，包括已经处理的候选。"""
+
     def confirm(
         self,
         *,
@@ -89,6 +97,14 @@ class OwnerMemoryPort(Protocol):
 
     def create(self, memory: OwnerMemory) -> OwnerMemory:
         """保存一条带来源与主题的 owner 级记忆。"""
+
+    def confirm_candidate(
+        self,
+        *,
+        candidate: MemoryCandidate,
+        adoption_method: AdoptionMethod = AdoptionMethod.MANUAL,
+    ) -> OwnerMemory:
+        """原子确认 self 候选并写入 owner 级记忆。"""
 
     def list_active(self, owner_id: UUID) -> tuple[OwnerMemory, ...]:
         """返回某位用户当前有效（active 且在有效期内）的 owner 级记忆。"""

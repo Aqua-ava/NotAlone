@@ -720,6 +720,11 @@ struct MainWindowView: View {
                             Text("分类：\(categoryLabel(candidate.category))")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                            if let subject = candidate.subject {
+                                Text("主体：\(subjectLabel(subject))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                             if let confidence = candidate.confidence {
                                 Text("置信度：\(confidence, specifier: "%.0f%%")")
                                     .font(.caption2)
@@ -853,6 +858,15 @@ struct MainWindowView: View {
 
     private func categoryLabel(_ raw: String) -> String {
         MemoryCategoryOption(rawValue: raw)?.label ?? raw
+    }
+
+    private func subjectLabel(_ raw: String) -> String {
+        switch raw {
+        case "self": return "关于我"
+        case "contact": return "关于联系人"
+        case "shared": return "共同关系"
+        default: return raw
+        }
     }
 
     private func adoptionLabel(_ raw: String) -> String {

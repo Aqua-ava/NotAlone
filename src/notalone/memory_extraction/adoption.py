@@ -337,6 +337,7 @@ class MemoryAdoption:
                 category=fact.category,
                 source_ids=fact.source_message_ids,
                 topic=fact.topic,
+                subject=fact.subject,
                 status=MemoryCandidateStatus.PENDING,
                 valid_at=fact.valid_at,
                 invalid_at=fact.invalid_at,

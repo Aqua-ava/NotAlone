@@ -16,6 +16,7 @@ from notalone.memory.models import (
     AdoptionMethod,
     ConfirmedMemory,
     ConfirmedMemoryStatus,
+    FactSubject,
     MemoryCandidate,
     MemoryCandidateStatus,
     MemoryCategory,
@@ -44,6 +45,7 @@ _CANDIDATE_COLUMNS = """
     text_content AS candidate_text,
     category AS candidate_category,
     topic AS candidate_topic,
+    subject AS candidate_subject,
     source_ids AS candidate_source_ids,
     status AS candidate_status,
     valid_at AS candidate_valid_at,
@@ -114,12 +116,12 @@ class PostgresMemoryStore:
                     f"""
                     INSERT INTO public.memory_candidate (
                         id, owner_id, contact_id, text_content, category,
-                        topic, source_ids, status, valid_at, invalid_at,
+                        topic, subject, source_ids, status, valid_at, invalid_at,
                         confidence, risk_flags, failure_reason
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s
+                        %s, %s, %s, %s
                     )
                     RETURNING {_CANDIDATE_COLUMNS}
                     """,
@@ -130,6 +132,7 @@ class PostgresMemoryStore:
                         candidate.text,
                         candidate.category.value,
                         candidate.topic.value,
+                        candidate.subject.value,
                         list(candidate.source_ids),
                         candidate.status.value,
                         candidate.valid_at,
@@ -217,12 +220,12 @@ class PostgresMemoryStore:
                     f"""
                     INSERT INTO public.memory_candidate (
                         id, owner_id, contact_id, text_content, category,
-                        topic, source_ids, status, valid_at, invalid_at,
+                        topic, subject, source_ids, status, valid_at, invalid_at,
                         confidence, risk_flags, failure_reason
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s
+                        %s, %s, %s, %s
                     )
                     RETURNING {_CANDIDATE_COLUMNS}
                     """,
@@ -233,6 +236,7 @@ class PostgresMemoryStore:
                         candidate.text,
                         candidate.category.value,
                         candidate.topic.value,
+                        candidate.subject.value,
                         [source_id],
                         candidate.status.value,
                         candidate.valid_at,
@@ -259,6 +263,37 @@ class PostgresMemoryStore:
             raise MemoryInvariantError(
                 "关系记忆数据库记录结构无效。"
             ) from None
+
+    def get_candidate(
+        self,
+        *,
+        scope: ContactScope,
+        candidate_id: UUID,
+    ) -> MemoryCandidate:
+        """读取指定候选并强制校验联系人范围。"""
+
+        self._validate_scope(scope)
+        self._validate_uuid(candidate_id, "candidate_id")
+        try:
+            with self._connect() as connection:
+                row = connection.execute(
+                    f"""
+                    SELECT {_CANDIDATE_COLUMNS}
+                    FROM public.memory_candidate
+                    WHERE id = %s
+                    """,
+                    (candidate_id,),
+                ).fetchone()
+            if row is None:
+                raise LookupError("关系记忆候选不存在。")
+            self._ensure_scope(row, scope)
+            return self._candidate_from_row(row)
+        except (LookupError, PermissionError, MemoryPersistenceError):
+            raise
+        except psycopg.Error:
+            raise MemoryPersistenceError("关系记忆数据库操作失败。") from None
+        except (KeyError, TypeError, ValueError):
+            raise MemoryInvariantError("关系记忆数据库记录结构无效。") from None
 
     def confirm(
         self,
@@ -998,6 +1033,7 @@ class PostgresMemoryStore:
             text=row["candidate_text"],
             category=MemoryCategory(row["candidate_category"]),
             topic=MemoryTopic(row["candidate_topic"]),
+            subject=FactSubject(row["candidate_subject"]),
             source_ids=cls._source_ids(row["candidate_source_ids"]),
             status=MemoryCandidateStatus(row["candidate_status"]),
             valid_at=row["candidate_valid_at"],

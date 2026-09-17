@@ -75,6 +75,14 @@ class InMemoryMemoryStore:
         self._candidate_memory_ids[candidate_id] = memory.memory_id
         return memory
 
+    def get_candidate(
+        self,
+        *,
+        scope: ContactScope,
+        candidate_id: UUID,
+    ) -> MemoryCandidate:
+        return self._candidate(scope=scope, candidate_id=candidate_id)
+
     def correct(
         self,
         *,

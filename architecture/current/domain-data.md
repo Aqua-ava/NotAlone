@@ -25,7 +25,7 @@
 | `background_task` | 一次完整的长时后台工作，取代独立的导入/删除/重建任务表。 | `type` 区分 import/delete/reindex；`scope` 声明作用域（account/contact/source）；状态为 `queued/running/verifying/succeeded/failed/cancelled`，记录总体进度、失败原因、重试与关联来源。删除任务不得跨越隔离边界。 |
 | `background_task_step` | `background_task` 下可恢复、可重试的固定执行步骤。 | 关联父任务并保存 `step_type`、顺序、状态、尝试次数、输入/输出业务引用、错误分类和 Worker 租约；不保存完整聊天正文。只用于确实需要逐步恢复或展示进度的长任务。 |
 | `message` | 统一的规范化文字消息。 | 显式冗余 `owner_id + contact_id`，并保存说话人、正文或明确的媒体占位信息、可用时间戳；来源字段（`source_document` 或 `local_wechat_observation`）仅用于定位与删除，不承担隔离过滤。渠道专属字段不是所有消息的必填字段。 |
-| `memory_candidate` | 模型或规则从资料中提取的待采纳关系线索。 | 关联证据消息；不能被检索为已知事实。 |
+| `memory_candidate` | 模型或规则从资料中提取的待采纳关系线索。 | 关联证据消息并保留 `self/contact/shared` 主体；不能被检索为已知事实。 |
 | `confirmed_memory` | 自动采纳或手动录入的共同事实、偏好、禁忌、关系资料。 | 关联一个或多个来源证据、采纳方式（auto/manual）、删除状态、分类与有效期；不保存固定常驻模式。 |
 | `contact_memory_index` | 当前联系人有效关系记忆的精简主题目录。 | 按 `owner_id + contact_id` 隔离，由固定主分类和系统自动生成的子主题组成；是可重建投影，不是新的事实源。 |
 | `style_sample` | 用户明确同意保存的最终表达样本。 | 关联联系人及其产生的回复请求；不是普通候选回复。 |
@@ -84,7 +84,7 @@ background_task
 - 同一 `owner_id + contact_id` 的任务先串行；不同联系人未来可以并行。临时网络或模型错误最多自动重试 3 次，手动重试复用原任务并跳过已成功步骤。
 - 任务不提供 v1 用户取消入口；来源删除时停止相关未完成步骤。活动任务持续保留，终态任务保留 90 天后清理；任务记录只保存元数据和业务引用，不保存聊天正文或模型完整输入输出。
 
-- `memory_candidate` 必须有 `pending`、`confirmed`、`rejected` 或 `invalidated` 等明确状态，且候选正文与证据范围可复核。
+- `memory_candidate` 必须有 `pending`、`confirmed`、`rejected` 或 `invalidated` 等明确状态，且候选正文、`self/contact/shared` 主体与证据范围可复核；人工确认不得丢失主体，`self` 候选必须进入 owner 级记忆。
 - `confirmed_memory` 默认允许满足置信度和风险门槛的模型提取记忆自动写入（见 ADR-002、ADR-024）：必须带来源证据、标记 `auto`、可一键撤销；带敏感或未知风险标签的候选必须先留在 `pending`，用户手动录入或修正时标记 `manual`。模型不能未经来源证据直接写入。
 - `confirmed_memory` 保留候选来源链：记录从哪个 `memory_candidate` 采纳而来（`source_candidate_id`，手动创建时为空），同时保留来源证据列表；采纳后仍可回看候选证据与采纳方式。
 - 语用解释先于记忆采纳：模型必须在有限的同联系人窗口中结构化标记说话行为、断言状态和修辞状态；确定性规则只允许“确定、字面、非歧义陈述”进入自动采纳门，计划、假设、条件、转述、纠正和未知状态只能留在 `pending`，问题、玩笑、讽刺和夸张默认不生成长期候选（见 [语用解释规格](pragmatic-interpretation.md) 与 ADR-026）。

@@ -113,7 +113,8 @@ for migration in \
     database/migrations/028_reply_context_evidence_metadata.sql \
     database/migrations/029_cli_backfill_state.sql \
     database/migrations/030_cli_observation_reliability_and_progress.sql \
-    database/migrations/031_cli_backfill_scheduler.sql; do
+    database/migrations/031_cli_backfill_scheduler.sql \
+    database/migrations/032_memory_candidate_subject.sql; do
     log "应用可重复增量迁移 $(basename "${migration}")…"
     psql --set ON_ERROR_STOP=1 --dbname "${database_name}" \
         --file "${migration}" \

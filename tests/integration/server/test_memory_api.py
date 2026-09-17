@@ -15,6 +15,7 @@ from notalone.memory.models import (
     AdoptionMethod,
     ConfirmedMemory,
     ConfirmedMemoryStatus,
+    FactSubject,
     MemoryCandidate,
     MemoryCategory,
     MemoryTopic,
@@ -72,6 +73,18 @@ class FakeContactMemory:
             if candidate.scope == scope
         )
 
+    def get_candidate(
+        self,
+        *,
+        scope: ContactScope,
+        candidate_id: UUID,
+    ) -> MemoryCandidate:
+        return next(
+            candidate
+            for candidate in self.pending
+            if candidate.scope == scope and candidate.candidate_id == candidate_id
+        )
+
     def list_confirmed(self, scope: ContactScope) -> tuple[ConfirmedMemory, ...]:
         return tuple(
             memory
@@ -127,6 +140,26 @@ class FakeOwnerMemory:
         self.delete_calls: list[UUID] = []
 
     def create(self, memory: OwnerMemory) -> OwnerMemory:
+        self.memories.append(memory)
+        return memory
+
+    def confirm_candidate(
+        self,
+        *,
+        candidate: MemoryCandidate,
+        adoption_method: AdoptionMethod = AdoptionMethod.MANUAL,
+    ) -> OwnerMemory:
+        memory = OwnerMemory(
+            memory_id=uuid4(),
+            owner_id=candidate.scope.owner_id,
+            text=candidate.text,
+            category=candidate.category,
+            topic=candidate.topic,
+            source_ids=candidate.source_ids,
+            source_candidate_id=candidate.candidate_id,
+            adoption_method=adoption_method,
+            status=ConfirmedMemoryStatus.ACTIVE,
+        )
         self.memories.append(memory)
         return memory
 
@@ -233,6 +266,7 @@ class MemoryApiContractTest(unittest.TestCase):
         self.assertEqual(item["text"], "待确认的关系记忆候选")
         self.assertEqual(item["category"], "recent_state")
         self.assertEqual(item["status"], "pending")
+        self.assertEqual(item["subject"], "contact")
 
     def test_lists_owner_memories(self) -> None:
         memory = OwnerMemory(
@@ -266,6 +300,15 @@ class MemoryApiContractTest(unittest.TestCase):
 
     def test_confirms_pending_candidate(self) -> None:
         candidate_id = uuid4()
+        self.contact.pending.append(
+            MemoryCandidate(
+                candidate_id=candidate_id,
+                scope=_scope(),
+                text="待确认联系人记忆",
+                category=MemoryCategory.PREFERENCE,
+                source_ids=(CONTACT_ID,),
+            )
+        )
 
         response = self.client.request(
             "POST",
@@ -280,6 +323,36 @@ class MemoryApiContractTest(unittest.TestCase):
         )
         self.assertEqual(len(self.contact.confirm_calls), 1)
         self.assertEqual(self.contact.confirm_calls[0], candidate_id)
+
+    def test_confirms_pending_self_candidate_as_owner_memory(self) -> None:
+        candidate = MemoryCandidate(
+            candidate_id=uuid4(),
+            scope=_scope(),
+            text="我最近在减肥",
+            category=MemoryCategory.RECENT_STATE,
+            topic=MemoryTopic.HEALTH,
+            subject=FactSubject.SELF,
+            source_ids=(CONTACT_ID,),
+            confidence=0.3,
+        )
+        self.contact.pending.append(candidate)
+
+        response = self.client.request(
+            "POST",
+            f"/api/contacts/{CONTACT_ID}/memory-candidates/"
+            f"{candidate.candidate_id}/confirm",
+            headers=self.headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        memory = response.json()["memory"]
+        self.assertEqual(memory["level"], "owner")
+        self.assertEqual(memory["text"], candidate.text)
+        self.assertEqual(
+            memory["source_candidate_id"],
+            str(candidate.candidate_id),
+        )
+        self.assertEqual(self.contact.confirm_calls, [])
 
     def test_discards_pending_candidate(self) -> None:
         candidate_id = uuid4()

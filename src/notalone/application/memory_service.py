@@ -13,6 +13,7 @@ from uuid import UUID
 from notalone.memory.models import (
     AdoptionMethod,
     ConfirmedMemory,
+    FactSubject,
     MemoryCandidate,
     MemoryCategory,
     MemoryTopic,
@@ -86,9 +87,19 @@ class MemoryService:
         owner_id: UUID,
         contact_id: UUID,
         candidate_id: UUID,
-    ) -> ConfirmedMemory:
+    ) -> ConfirmedMemory | OwnerMemory:
+        scope = ContactScope(owner_id=owner_id, contact_id=contact_id)
+        candidate = self._contact_memory.get_candidate(
+            scope=scope,
+            candidate_id=candidate_id,
+        )
+        if candidate.subject is FactSubject.SELF:
+            return self._owner_memory.confirm_candidate(
+                candidate=candidate,
+                adoption_method=AdoptionMethod.MANUAL,
+            )
         return self._contact_memory.confirm(
-            scope=ContactScope(owner_id=owner_id, contact_id=contact_id),
+            scope=scope,
             candidate_id=candidate_id,
             adoption_method=AdoptionMethod.MANUAL,
         )

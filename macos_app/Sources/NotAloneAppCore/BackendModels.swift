@@ -231,6 +231,7 @@ public struct MemoryCandidateEntry: Decodable, Equatable, Sendable, Identifiable
     public let text: String
     public let category: String
     public let topic: String
+    public let subject: String?
     public let status: String
     public let sourceIds: [String]?
     public let confidence: Double?

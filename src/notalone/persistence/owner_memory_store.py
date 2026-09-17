@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import psycopg
 from psycopg.rows import dict_row
@@ -12,11 +12,15 @@ from psycopg.rows import dict_row
 from notalone.memory.models import (
     AdoptionMethod,
     ConfirmedMemoryStatus,
+    FactSubject,
+    MemoryCandidate,
+    MemoryCandidateStatus,
     MemoryCategory,
     MemoryTopic,
     OwnerMemory,
 )
-from notalone.persistence.locks import lock_owner_scope
+from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
+from notalone.scopes import ContactScope
 
 
 _OWNER_MEMORY_UNAVAILABLE = "owner 记忆数据库操作失败。"
@@ -34,7 +38,8 @@ _OWNER_MEMORY_COLUMNS = """
     invalid_at,
     revision,
     confidence,
-    risk_flags
+    risk_flags,
+    source_candidate_id
 """
 
 
@@ -65,12 +70,13 @@ class PostgresOwnerMemoryStore:
                     INSERT INTO public.owner_memory (
                         id, owner_id, text_content, category, topic,
                         source_ids, adoption_method, status,
-                        valid_at, invalid_at, revision, confidence, risk_flags
+                        valid_at, invalid_at, revision, confidence, risk_flags,
+                        source_candidate_id
                     ) VALUES (
                         %(memory_id)s, %(owner_id)s, %(text)s, %(category)s,
                         %(topic)s, %(source_ids)s, %(adoption_method)s,
                         %(status)s, %(valid_at)s, %(invalid_at)s, %(revision)s,
-                        %(confidence)s, %(risk_flags)s
+                        %(confidence)s, %(risk_flags)s, %(source_candidate_id)s
                     )
                     """,
                     _to_row(memory),
@@ -83,6 +89,119 @@ class PostgresOwnerMemoryStore:
                 _OWNER_MEMORY_UNAVAILABLE
             ) from error
         return memory
+
+    def confirm_candidate(
+        self,
+        *,
+        candidate: MemoryCandidate,
+        adoption_method: AdoptionMethod = AdoptionMethod.MANUAL,
+    ) -> OwnerMemory:
+        """原子确认 self 候选并把它写入 owner 级记忆。"""
+
+        if not isinstance(candidate, MemoryCandidate):
+            raise OwnerMemoryPersistenceError("owner 候选结构无效。")
+        if not isinstance(adoption_method, AdoptionMethod):
+            raise OwnerMemoryPersistenceError("owner 候选采纳方式无效。")
+        scope = candidate.scope
+        candidate_id = candidate.candidate_id
+        try:
+            with self._connect() as connection:
+                lock_owner_scope(connection, owner_id=scope.owner_id)
+                lock_contact_scope(
+                    connection,
+                    owner_id=scope.owner_id,
+                    contact_id=scope.contact_id,
+                )
+                candidate_row = connection.execute(
+                    """
+                    SELECT id, owner_id, contact_id, text_content, category,
+                           topic, subject, source_ids, status, valid_at,
+                           invalid_at, confidence, risk_flags
+                    FROM public.memory_candidate
+                    WHERE id = %s
+                    FOR UPDATE
+                    """,
+                    (candidate_id,),
+                ).fetchone()
+                if candidate_row is None:
+                    raise LookupError("关系记忆候选不存在。")
+                if (
+                    candidate_row["owner_id"] != scope.owner_id
+                    or candidate_row["contact_id"] != scope.contact_id
+                ):
+                    raise PermissionError("关系记忆范围校验失败。")
+                if FactSubject(candidate_row["subject"]) is not FactSubject.SELF:
+                    raise OwnerMemoryPersistenceError(
+                        "只有 self 主体候选可以确认到 owner 记忆。"
+                    )
+                status = MemoryCandidateStatus(candidate_row["status"])
+                if status is MemoryCandidateStatus.CONFIRMED:
+                    existing = connection.execute(
+                        f"""
+                        SELECT {_OWNER_MEMORY_COLUMNS}
+                        FROM public.owner_memory
+                        WHERE owner_id = %s AND source_candidate_id = %s
+                        """,
+                        (scope.owner_id, candidate_id),
+                    ).fetchone()
+                    if existing is None:
+                        raise OwnerMemoryPersistenceError(
+                            "已确认候选缺少对应 owner 记忆。"
+                        )
+                    return _from_row(existing)
+                if status is not MemoryCandidateStatus.PENDING:
+                    raise RuntimeError("关系记忆候选当前不可确认。")
+
+                memory = OwnerMemory(
+                    memory_id=uuid4(),
+                    owner_id=scope.owner_id,
+                    text=candidate_row["text_content"],
+                    category=MemoryCategory(candidate_row["category"]),
+                    topic=MemoryTopic(candidate_row["topic"]),
+                    source_ids=tuple(candidate_row["source_ids"]),
+                    source_candidate_id=candidate_id,
+                    adoption_method=adoption_method,
+                    status=ConfirmedMemoryStatus.ACTIVE,
+                    valid_at=candidate_row["valid_at"],
+                    invalid_at=candidate_row["invalid_at"],
+                    confidence=candidate_row["confidence"],
+                    risk_flags=tuple(candidate_row["risk_flags"] or ()),
+                )
+                row = connection.execute(
+                    f"""
+                    INSERT INTO public.owner_memory (
+                        id, owner_id, text_content, category, topic,
+                        source_ids, adoption_method, status, valid_at,
+                        invalid_at, revision, confidence, risk_flags,
+                        source_candidate_id
+                    ) VALUES (
+                        %(memory_id)s, %(owner_id)s, %(text)s, %(category)s,
+                        %(topic)s, %(source_ids)s, %(adoption_method)s,
+                        %(status)s, %(valid_at)s, %(invalid_at)s, %(revision)s,
+                        %(confidence)s, %(risk_flags)s, %(source_candidate_id)s
+                    )
+                    RETURNING {_OWNER_MEMORY_COLUMNS}
+                    """,
+                    _to_row(memory),
+                ).fetchone()
+                updated = connection.execute(
+                    """
+                    UPDATE public.memory_candidate
+                    SET status = 'confirmed', updated_at = now()
+                    WHERE owner_id = %s AND contact_id = %s AND id = %s
+                      AND status = 'pending'
+                    """,
+                    (scope.owner_id, scope.contact_id, candidate_id),
+                ).rowcount
+                if row is None or updated != 1:
+                    raise OwnerMemoryPersistenceError(
+                        "owner 候选确认结果无效。"
+                    )
+                return _from_row(row)
+        except (LookupError, PermissionError, RuntimeError, OwnerMemoryPersistenceError):
+            raise
+        except Exception as error:
+            raise OwnerMemoryPersistenceError(_OWNER_MEMORY_UNAVAILABLE) from error
 
     def list_active(self, owner_id: UUID) -> tuple[OwnerMemory, ...]:
         _validate_owner_id(owner_id)
@@ -204,6 +323,7 @@ def _to_row(memory: OwnerMemory) -> dict[str, Any]:
         "revision": memory.revision,
         "confidence": memory.confidence,
         "risk_flags": list(memory.risk_flags),
+        "source_candidate_id": memory.source_candidate_id,
     }
 
 
@@ -222,4 +342,5 @@ def _from_row(row: dict[str, Any]) -> OwnerMemory:
         revision=row["revision"],
         confidence=row["confidence"],
         risk_flags=tuple(row["risk_flags"] or ()),
+        source_candidate_id=row["source_candidate_id"],
     )

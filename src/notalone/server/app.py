@@ -882,7 +882,14 @@ class BackendApp:
                     candidate_id=candidate_id,
                 )
                 return _json_response(
-                    HTTPStatus.OK, {"memory": _memory_payload(memory)}
+                    HTTPStatus.OK,
+                    {
+                        "memory": (
+                            _owner_memory_payload(memory)
+                            if isinstance(memory, OwnerMemory)
+                            else _memory_payload(memory)
+                        )
+                    },
                 )
             if action == "discard":
                 candidate = service.discard_candidate(
@@ -1885,6 +1892,11 @@ def _owner_memory_payload(memory: OwnerMemory) -> dict[str, object]:
         "status": memory.status.value,
         "revision": memory.revision,
         "source_ids": [str(source_id) for source_id in memory.source_ids],
+        "source_candidate_id": (
+            str(memory.source_candidate_id)
+            if memory.source_candidate_id is not None
+            else None
+        ),
         "confidence": memory.confidence,
         "risk_flags": list(memory.risk_flags),
         "valid_at": _iso_or_none(memory.valid_at),
@@ -1928,6 +1940,7 @@ def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
         "text": candidate.text,
         "category": candidate.category.value,
         "topic": candidate.topic.value,
+        "subject": candidate.subject.value,
         "status": candidate.status.value,
         "source_ids": [str(source_id) for source_id in candidate.source_ids],
         "confidence": candidate.confidence,

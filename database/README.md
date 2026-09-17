@@ -266,13 +266,19 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
   --set ON_ERROR_STOP=1 \
   --dbname notalone_dev \
   --file database/migrations/031_cli_backfill_scheduler.sql
+/opt/homebrew/opt/postgresql@16/bin/psql \
+  --set ON_ERROR_STOP=1 \
+  --dbname notalone_dev \
+  --file database/migrations/032_memory_candidate_subject.sql
 ```
 
 第二十九个迁移新增 `cli_backfill_state`，按 owner、联系人和 active 绑定保存补齐触发、阶段、
 计数、可靠游标和失败原因等元数据，不保存聊天正文；绑定或联系人删除时级联清理。第三十个迁移
 把观察来源的事件总数、非文字计数和“来源、消息、游标同一事务提交”的可靠标记补入已有观察表，
 历史观察默认按不可靠位置恢复。第三十一个迁移增加可持久化的 `paused` 阶段；暂停、失败和无法
-确认完整都不能被当作覆盖完成，恢复由用户明确触发。
+确认完整都不能被当作覆盖完成，恢复由用户明确触发。第三十二个迁移让待确认候选持久化
+`self/contact/shared` 主体，并为 owner 记忆记录来源候选，保证 self 候选人工确认后进入
+owner 级记忆且重复确认保持幂等。
 
 任务终态清理使用：
 
