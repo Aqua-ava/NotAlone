@@ -131,6 +131,36 @@ class InMemoryMemoryStore:
         self._candidates[candidate_id] = rejected
         return rejected
 
+    def discard_candidate_with_fingerprint(
+        self,
+        *,
+        scope: ContactScope,
+        candidate_id: UUID,
+    ) -> MemoryCandidate:
+        """拒绝候选并写入删除指纹，阻止同一文本自动复活。
+
+        手动录入不走该路径。
+        """
+
+        candidate = self._candidate(scope=scope, candidate_id=candidate_id)
+        rejected = self.reject_candidate(
+            scope=scope,
+            candidate_id=candidate_id,
+        )
+        fingerprint = ConfirmedMemory(
+            memory_id=uuid4(),
+            scope=scope,
+            text=candidate.text,
+            category=candidate.category,
+            source_ids=candidate.source_ids,
+            source_candidate_id=candidate.candidate_id,
+            adoption_method=AdoptionMethod.AUTO,
+            topic=candidate.topic,
+            status=ConfirmedMemoryStatus.DELETED,
+        )
+        self._memories[fingerprint.memory_id] = fingerprint
+        return rejected
+
     def invalidate_candidate(
         self,
         *,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Iterable
 from uuid import UUID
 
@@ -212,10 +212,14 @@ class InMemoryRetrieval:
             or any(not isinstance(memory_id, UUID) for memory_id in memory_ids)
         ):
             raise ValueError("owner 记忆导航引用结构无效。")
+        now = datetime.now(timezone.utc)
         scoped = tuple(
             memory
             for memory in self.owner_memories
             if memory.owner_id == owner_id
+            and memory.status == "active"
+            and (memory.valid_at is None or memory.valid_at <= now)
+            and (memory.invalid_at is None or now < memory.invalid_at)
             and (memory_ids is None or memory.memory_id in memory_ids)
         )
         return recall_owner_memories(scoped, query=query, limit=limit)
