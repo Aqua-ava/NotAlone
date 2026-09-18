@@ -13,11 +13,25 @@ public struct BackendConnection: Equatable, Sendable {
     }
 
     public static func infoPath() -> URL {
-        if let override = ProcessInfo.processInfo.environment["NOTALONE_BACKEND_INFO"],
-           !override.isEmpty {
-            return URL(fileURLWithPath: override).standardizedFileURL
+        let override = ProcessInfo.processInfo.environment["NOTALONE_BACKEND_INFO"]
+        if let override, !override.isEmpty {
+            return URL(fileURLWithPath: expandedPath(override)).standardizedFileURL
         }
-        return URL(fileURLWithPath: "~/.notalone/backend.info").standardizedFileURL
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return URL(fileURLWithPath: expandedPath("~/.notalone/backend.info"))
+            .standardizedFileURL
+    }
+
+    private static func expandedPath(_ path: String) -> String {
+        // URL(fileURLWithPath:) 与 standardizedFileURL 都不展开 "~"，
+        // 也不带前导 "/" 的路径按当前工作目录解析：Finder 启动时
+        // CWD=/ 会把默认路径解析成 "/~/.notalone/backend.info"，握手
+        // 文件读取与"复用既有后端"探测整体失效。显式展开到用户主目录。
+        if path == "~" || path.hasPrefix("~/") {
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            return home + path.dropFirst()
+        }
+        return path
     }
 
     // 解析握手文本：既支持握手文件的分行格式，也支持后端 stdout

@@ -1124,6 +1124,14 @@ final class AppModel: ObservableObject {
     }
 
     private func attach(_ connection: BackendConnection) {
+        // 后端监听随机端口，每次重启地址和 token 都会变化；连接变了
+        // 必须重建 SSE 客户端，否则旧客户端会对已死端口无限重连，
+        // 实时事件静默失效（只剩 3 秒轮询）。
+        let connectionChanged = clientConnection != connection
+        if connectionChanged {
+            sseClient?.stop()
+            sseClient = nil
+        }
         clientConnection = connection
         client = BackendClient(connection: connection)
         backendState = .running

@@ -29,6 +29,66 @@ final class BackendConnectionTests: XCTestCase {
         )
     }
 
+    func testDefaultInfoPathExpandsTildeToHomeDirectory() {
+        // URL(fileURLWithPath:) 不展开 "~"，Finder 启动时 CWD=/ 会把
+        // 默认握手路径解析成 "/~/.notalone/backend.info"，导致复用
+        // 既有后端的探测与崩溃恢复整体失效。
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let expected = FileManager.default
+            .homeDirectoryForCurrentUser
+            .appendingPathComponent(".notalone/backend.info")
+            .standardizedFileURL
+
+        XCTAssertEqual(BackendConnection.infoPath(), expected)
+        XCTAssertEqual(BackendConnection.infoPath().path, "\(home)/.notalone/backend.info")
+    }
+
+    func testTildeOverrideInInfoPathEnvironmentIsExpanded() {
+        setenv("NOTALONE_BACKEND_INFO", "~/synthetic-backend.info", 1)
+        defer { unsetenv("NOTALONE_BACKEND_INFO") }
+
+        let path = BackendConnection.infoPath().path
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+
+        XCTAssertEqual(path, "\(home)/synthetic-backend.info")
+    }
+
+    func testConcurrentLaunchesShareOneHandshakeResult() async throws {
+        // 向导重启与轮询循环可能并发进入 launch；两次调用必须共享
+        // 同一次启动（同一个握手结果、只启动一个进程），而不是互相
+        // terminate 并覆盖对方的 continuation 造成永久挂起。
+        let scriptURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("notalone-handshake-\(UUID().uuidString).sh")
+        let script = "#!/bin/sh\nprintf 'address=127.0.0.1:54321 token=test-token\\n'\nsleep 5\n"
+        try Data(script.utf8).write(to: scriptURL)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: scriptURL.path
+        )
+        defer { try? FileManager.default.removeItem(at: scriptURL) }
+
+        let supervisor = BackendSupervisor()
+        defer {
+            supervisor.terminate()
+            supervisor.waitForExit(timeout: 1)
+        }
+
+        async let first: BackendConnection = supervisor.launch(
+            repoRoot: FileManager.default.temporaryDirectory,
+            serverBin: scriptURL
+        )
+        async let second: BackendConnection = supervisor.launch(
+            repoRoot: FileManager.default.temporaryDirectory,
+            serverBin: scriptURL
+        )
+        let firstResult = try await first
+        let secondResult = try await second
+        let expected = BackendConnection(address: "127.0.0.1:54321", token: "test-token")
+
+        XCTAssertEqual(firstResult, expected)
+        XCTAssertEqual(secondResult, expected)
+    }
+
     func testLocatesBundledCliFromRepositoryBuildOutput() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("notalone-cli-root-\(UUID().uuidString)")
