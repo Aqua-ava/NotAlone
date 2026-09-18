@@ -955,7 +955,19 @@ class CliBackgroundSync:
                 incomplete=_is_incomplete_cli_failure(error.code),
             )
             raise
-        if not result.freshness_confirmed:
+        # 真实适配器对"没有新消息"的一次性 tail 输出为空，且
+        # freshness_confirmed=False（wechat_cli/models.TailResult 契约）。
+        # 常规 live 轮询的空结果是正常稳态：保持既有水位直接返回 0。
+        # 只有带补齐语义的读取（无法证明已追到当前）或"有内容却缺
+        # 新鲜度证据"的可疑输出才判定 freshness 失败。
+        has_read_content = (
+            bool(result.events)
+            or result.last_local_id is not None
+            or result.cursor is not None
+        )
+        if not result.freshness_confirmed and (
+            has_read_content or backfill_state is not None
+        ):
             error = CliOutputError(
                 "cli_freshness_unknown",
                 "微信 CLI 无法确认读取结果已覆盖到当前水位。",

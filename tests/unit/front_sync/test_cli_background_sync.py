@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-from notalone.front_sync.cli_sync import CliBackgroundSync
+from notalone.front_sync.cli_sync import CliBackgroundSync, CliSyncPhase
 from notalone.persistence.observation_store import ObservationMode
 from notalone.scopes import ContactScope
 from notalone.wechat_cli import CliCommandError
@@ -688,6 +688,22 @@ class CliBackgroundSyncTest(unittest.TestCase):
         self.assertEqual(result.status.backfill_phase, "failed")
         self.assertEqual(result.status.backfill_failure_code, "cli_command_failed")
         self.assertNotEqual(result.status.backfill_phase, "complete")
+
+    def test_empty_live_poll_without_freshness_is_a_healthy_noop(self) -> None:
+        # 真实适配器对"没有新消息"的一次性 tail 输出为空，且
+        # freshness_confirmed=False；常规 live 轮询的空结果是正常稳态，
+        # 必须保持既有水位，不能当成 cli_freshness_unknown 失败。
+        self.sync.cycle(enabled=True)
+        self.cli.tail_results["wxid_a"] = deque(
+            [TailResult(events=(), cursor=None, last_local_id=None)]
+        )
+        assert self.cli.stream is not None
+        self.cli.stream.events.append(("session:5", "wxid_a"))
+
+        result = self.sync.cycle(enabled=True)
+
+        self.assertIsNone(result.status.failure_code)
+        self.assertEqual(result.status.phase, CliSyncPhase.ACTIVE)
 
     def test_cli_unavailable_marks_backfill_incomplete(self) -> None:
         original_tail = self.cli.tail
