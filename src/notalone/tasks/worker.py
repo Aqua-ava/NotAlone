@@ -303,11 +303,12 @@ class BackgroundTaskWorker:
             BackgroundTaskStepName.PARSE,
             BackgroundTaskStepName.NORMALIZE,
         }:
-            self._repository.complete_step(
+            if not self._complete_step(
                 claim,
                 processed_count=claim.message_count,
                 total_count=claim.message_count,
-            )
+            ):
+                return self._temporary_failure_result(claim)
             return WorkerRunResult(
                 outcome=WorkerRunOutcome.SUCCEEDED,
                 task_id=claim.task_id,
@@ -345,11 +346,12 @@ class BackgroundTaskWorker:
                     "index_rebuild_failed",
                     retryable=False,
                 )
-            self._repository.complete_step(
+            if not self._complete_step(
                 claim,
                 processed_count=len(result.topics),
                 total_count=20,
-            )
+            ):
+                return self._temporary_failure_result(claim)
             return WorkerRunResult(
                 outcome=WorkerRunOutcome.SUCCEEDED,
                 task_id=claim.task_id,
@@ -393,11 +395,12 @@ class BackgroundTaskWorker:
                     verification.error_code or "index_verification_failed",
                     retryable=True,
                 )
-            self._repository.complete_step(
+            if not self._complete_step(
                 claim,
                 processed_count=verification.topics_count,
                 total_count=20,
-            )
+            ):
+                return self._temporary_failure_result(claim)
             return WorkerRunResult(
                 outcome=WorkerRunOutcome.SUCCEEDED,
                 task_id=claim.task_id,
@@ -430,17 +433,49 @@ class BackgroundTaskWorker:
                 retryable=True,
             )
 
-        self._repository.complete_step(
+        if not self._complete_step(
             claim,
             processed_count=stats.processed_messages,
             total_count=claim.message_count,
-        )
+        ):
+            return self._temporary_failure_result(claim)
         return WorkerRunResult(
             outcome=WorkerRunOutcome.SUCCEEDED,
             task_id=claim.task_id,
             step_name=claim.name,
             processed_count=stats.processed_messages,
             attempt_count=claim.attempt_count,
+        )
+
+    def _complete_step(
+        self,
+        claim: ClaimedBackgroundTaskStep,
+        *,
+        processed_count: int,
+        total_count: int,
+    ) -> bool:
+        try:
+            self._repository.complete_step(
+                claim,
+                processed_count=processed_count,
+                total_count=total_count,
+            )
+        except BackgroundTaskPersistenceError:
+            # 与 _record_failure 相同：租约失效或任务被取消时不再
+            # 写完成状态，返回 False 让调用方按临时失败处理。
+            return False
+        return True
+
+    def _temporary_failure_result(
+        self,
+        claim: ClaimedBackgroundTaskStep,
+    ) -> WorkerRunResult:
+        return WorkerRunResult(
+            outcome=WorkerRunOutcome.RETRYABLE,
+            task_id=claim.task_id,
+            step_name=claim.name,
+            attempt_count=claim.attempt_count,
+            error_code="temporary_failure",
         )
 
     def _record_failure(
@@ -450,11 +485,18 @@ class BackgroundTaskWorker:
         *,
         retryable: bool,
     ) -> WorkerRunResult:
-        status = self._repository.fail_step(
-            claim,
-            error_code=error_code,
-            retryable=retryable,
-        )
+        try:
+            status = self._repository.fail_step(
+                claim,
+                error_code=error_code,
+                retryable=retryable,
+            )
+        except BackgroundTaskPersistenceError:
+            # 租约在步骤执行中失效、任务被来源删除取消或状态写入
+            # 暂时不可用时，失败状态已无法落库；按可重试的临时失败
+            # 返回，让 worker 循环存活，由租约收尸与下次认领决定
+            # 任务去向，而不是让异常逃逸 run_once 崩溃整个进程。
+            return self._temporary_failure_result(claim)
         outcome = (
             WorkerRunOutcome.RETRYABLE
             if status is BackgroundTaskStepStatus.RETRYABLE

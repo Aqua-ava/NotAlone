@@ -378,6 +378,48 @@ class BackgroundTaskWorkerTest(unittest.TestCase):
             "succeeded",
         )
 
+    def test_lease_loss_during_extraction_is_reported_not_raised(self) -> None:
+        # 租约在提取中失效（或任务被来源删除取消）时，fail_step 的
+        # 租约校验也会失败；这个失败必须折叠成 RETRYABLE 结果返回，
+        # 让 worker 循环存活，而不是把异常逃逸到 run_worker 崩溃退出。
+        task_id = self._import()
+
+        class LeaseExpiringRunner:
+            def run(self, *, scope: ContactScope) -> ExtractionRunStats:
+                del scope
+                with psycopg.connect(TEST_DATABASE_URL) as connection:
+                    connection.execute(
+                        """
+                        UPDATE public.background_task_step
+                        SET lease_expires_at = now() - interval '1 second'
+                        WHERE task_id = %s AND step_name = 'extract_memory'
+                        """,
+                        (task_id,),
+                    )
+                raise RuntimeError("提取过程中租约已失效")
+
+        worker = self._worker(LeaseExpiringRunner())  # type: ignore[arg-type]
+        worker_id = uuid4()
+        worker.run_once(
+            owner_id=self.owner_id,
+            contact_id=self.contact_id,
+            worker_id=worker_id,
+        )
+        worker.run_once(
+            owner_id=self.owner_id,
+            contact_id=self.contact_id,
+            worker_id=worker_id,
+        )
+        result = worker.run_once(
+            owner_id=self.owner_id,
+            contact_id=self.contact_id,
+            worker_id=worker_id,
+        )
+
+        self.assertEqual(result.step_name, "extract_memory")
+        self.assertEqual(result.outcome, WorkerRunOutcome.RETRYABLE)
+        self.assertEqual(result.error_code, "temporary_failure")
+
     def test_postgres_runner_reuses_extraction_and_watermark_boundaries(self) -> None:
         task_id = self._import()
         runner = PostgresMemoryExtractionRunner(
