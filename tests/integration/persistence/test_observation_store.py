@@ -10,6 +10,10 @@ from uuid import uuid4
 import psycopg
 
 from notalone.ingest.models import NormalizedMessage, WechatMessageMetadata
+from notalone.memory import FactSubject, MemoryCandidate, MemoryCategory
+from notalone.persistence.memory_store import PostgresMemoryStore
+from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
+from notalone.scopes import ContactScope
 from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
 )
@@ -443,6 +447,35 @@ class PostgresObservationStoreTest(unittest.TestCase):
                 ),
             ).fetchone()
         self.assertEqual(counts, (0, 0, 0))
+
+    def test_delete_observation_invalidates_direct_source_memories(self) -> None:
+        observation = self._record(
+            self.contact_a, self.binding_a.binding_id, last_local_id=10
+        )
+        scope = ContactScope(self.owner_id, self.contact_a)
+        memories = PostgresMemoryStore(TEST_DATABASE_URL)
+        owner_memories = PostgresOwnerMemoryStore(TEST_DATABASE_URL)
+        candidate = memories.create_candidate(MemoryCandidate(
+            candidate_id=uuid4(), scope=scope, text="直接引用观察来源的本人资料",
+            category=MemoryCategory.COMMON_FACT, subject=FactSubject.SELF,
+            source_ids=(observation.observation_id,),
+        ))
+        owner_memories.confirm_candidate(candidate=candidate)
+        pending = memories.create_candidate(MemoryCandidate(
+            candidate_id=uuid4(), scope=scope, text="待确认的观察来源资料",
+            category=MemoryCategory.PREFERENCE,
+            source_ids=(observation.observation_id,),
+        ))
+
+        self.store.delete_observation(
+            owner_id=self.owner_id, contact_id=self.contact_a,
+            observation_id=observation.observation_id,
+        )
+
+        self.assertEqual(owner_memories.list_active(self.owner_id), ())
+        self.assertEqual(memories.list_pending_candidates(scope), ())
+        with self.assertRaises(RuntimeError):
+            memories.confirm(scope=scope, candidate_id=pending.candidate_id)
 
     def test_delete_observation_keeps_message_supported_by_import_source(self) -> None:
         recorded = self._record(

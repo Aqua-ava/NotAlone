@@ -16,12 +16,13 @@ from uuid import UUID, uuid4
 import psycopg
 
 from notalone.ingest.models import NormalizedMessage
-from notalone.persistence.locks import lock_contact_scope
+from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.message_cleanup import (
     cleanup_derived_data,
     collect_orphan_message_ids,
     delete_messages,
 )
+from notalone.persistence.reply_cleanup import ReplyCleanupError, delete_source_replies
 from notalone.scopes import ContactScope
 
 
@@ -716,6 +717,7 @@ class PostgresObservationStore:
                     owner_id=owner_id,
                     contact_id=contact_id,
                 )
+                lock_owner_scope(connection, owner_id=owner_id)
                 observed_message_ids = tuple(
                     row[0]
                     for row in connection.execute(
@@ -745,11 +747,17 @@ class PostgresObservationStore:
                     contact_id=contact_id,
                     candidate_message_ids=observed_message_ids,
                 )
+                delete_source_replies(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    removed_ids={observation_id, *orphan_message_ids},
+                )
                 cleanup_derived_data(
                     connection,
                     owner_id=owner_id,
                     contact_id=contact_id,
-                    removed_ids=set(orphan_message_ids),
+                    removed_ids={observation_id, *orphan_message_ids},
                 )
                 delete_messages(
                     connection,
@@ -760,7 +768,7 @@ class PostgresObservationStore:
                 connection.commit()
         except ObservationNotFoundError:
             raise
-        except psycopg.Error:
+        except (psycopg.Error, ReplyCleanupError):
             raise ObservationPersistenceError("观察来源删除失败。") from None
 
     def _validate_batch_arguments(
