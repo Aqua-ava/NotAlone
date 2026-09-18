@@ -640,6 +640,14 @@ class PostgresObservationStore:
                     contact_id=contact_id,
                     binding_id=binding_id,
                 )
+                # 先拿联系人范围锁再动 cursor 行：rewind_cursor 的顺序
+                # 是 contact advisory → cursor 行锁；反过来（行锁 →
+                # advisory）会与跨进程的 rewind 互相等待形成锁环。
+                lock_contact_scope(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                )
                 observation, created = self._insert_observation(
                     connection,
                     owner_id=owner_id,
@@ -664,11 +672,6 @@ class PostgresObservationStore:
                     conversation_locator=conversation_locator,
                     last_local_id=last_local_id,
                     last_cursor=last_cursor,
-                )
-                lock_contact_scope(
-                    connection,
-                    owner_id=owner_id,
-                    contact_id=contact_id,
                 )
                 write = (
                     self._write_cli_messages(
