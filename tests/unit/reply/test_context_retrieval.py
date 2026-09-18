@@ -511,6 +511,40 @@ class ContextRetrievalTest(unittest.TestCase):
         with self.assertRaises(ReplyContextInvariantError):
             context.validate_current(result)
 
+    def test_build_stamps_current_skill_revision_when_reader_available(self) -> None:
+        # 装配层在进程启动后读取一次 revision，skill 库随后可能变化。
+        # build 必须盖章"当下"的 revision，而不是启动时的旧值；否则
+        # 任何 skill 变更都会让后续所有请求在 validate_current 失败。
+        retrieval = self._retrieval()
+        memory = retrieval.memory_store.list_confirmed(self.scope)[0]
+        index = RecordingMemoryIndex((memory.memory_id,), revisions=(4, 4))
+        skill_revision = [7]
+        context = RetrievalReplyContext(
+            retrieval=retrieval,
+            memory_index=index,
+            skill_library_revision=7,
+            skill_revision_reader=lambda scope: skill_revision[0],
+            id_factory=iter(_ids()).__next__,
+        )
+        skill_revision[0] = 8
+
+        command = GenerateReply(
+            idempotency_key=UUID("eeeeeeee-ffff-0000-1111-222222222226"),
+            scope=self.scope,
+            conversation_binding_id=BINDING_ID,
+            content=RewriteDraft(
+                draft_text="周末一起去徒步吗？",
+                include_relationship_context=True,
+            ),
+        )
+        built = context.build(
+            command=command,
+            verified_scope=self.verified_scope,
+        )
+
+        self.assertEqual(built.skill_library_revision, 8)
+        context.validate_current(built)
+
     def _memory(
         self,
         memory_id: UUID,

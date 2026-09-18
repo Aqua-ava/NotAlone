@@ -292,7 +292,7 @@ class RetrievalReplyContext:
                 current_text=target[0].text,
                 direction=command.content.direction,
                 evidence=tuple(evidence),
-                skill_library_revision=self._skill_library_revision,
+                skill_library_revision=self._current_skill_revision(scope),
                 risk_notes=self._risk_notes(command, target[0].text),
                 memory_revision=memory_revision,
                 index_revision=index_revision,
@@ -337,7 +337,7 @@ class RetrievalReplyContext:
                 current_text=command.content.draft_text,
                 direction=None,
                 evidence=tuple(evidence),
-                skill_library_revision=self._skill_library_revision,
+                skill_library_revision=self._current_skill_revision(scope),
                 risk_notes=self._risk_notes(
                     command,
                     command.content.draft_text,
@@ -347,6 +347,22 @@ class RetrievalReplyContext:
             )
 
         raise ReplyContextInvariantError("回复输入模式无效。")
+
+    def _current_skill_revision(self, scope: ContactScope) -> int:
+        """build 盖章"当下"的 skill 库修订号。
+
+        构造参数里的 revision 只是进程启动时的快照（或无 reader 时的
+        回退值）；装配层传入 reader 时必须现场读取，否则 skill 库在
+        进程启动后发生任何变更，都会让后续所有请求的
+        ``validate_current`` 永远失败。
+        """
+
+        if self._skill_revision_reader is None:
+            return self._skill_library_revision
+        revision = self._skill_revision_reader(scope)
+        if not isinstance(revision, int) or revision < 0:
+            raise ReplyContextInvariantError("Skill revision 结构无效。")
+        return revision
 
     def validate_current(self, context: ReplyContext) -> None:
         """在生成前后重新读取依据，阻止删除或 revision 变化后的旧快照继续生效。"""
