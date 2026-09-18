@@ -1,7 +1,7 @@
 # 回复生成租约与模型超时矛盾：长生成结果必然被丢弃
 
-Triage: needs-triage
-State: open
+Triage: wontfix
+State: resolved
 
 ## 问题
 
@@ -27,5 +27,13 @@ DeepSeek 响应超过 30s（工具调用/长回复场景常见）。
 3. start 时按请求预算动态计算租约。
 
 涉及回复存储生命周期契约与并发语义，需先定方案再实现。
+
+## Answer
+
+2026-09-18 核实为非 bug，不修。原判断遗漏了 runtime 级硬上限：`LangChainReplyRuntime` 构造校验 `0 < timeout_seconds <= 20`（现提取为 `MAX_GENERATION_TIMEOUT_SECONDS` 类常量），整个生成（含工具循环与结构化输出轮）被 `run_with_timeout` 包住；取消后 `future.result(timeout=seconds + 2)` 兜底，生成墙钟 ≈ ≤22s < 30s 租约。模型层 60s 超时和 2 次重试永远不会成为单次 generate 的墙钟上限。
+
+已补跨模块不变量测试 `test_default_reply_lease_exceeds_generation_cap_with_margin`（tests/unit/reply/test_runtime_limits.py）：默认租约必须大于生成时限上限 + 2s 余量。任一侧调整都会被该测试拦下并要求同步复核另一方。
+
+验证：`python -m unittest tests.unit.reply.test_runtime_limits` 通过。
 
 ## Comments

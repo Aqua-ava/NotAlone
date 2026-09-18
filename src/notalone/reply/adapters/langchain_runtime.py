@@ -510,6 +510,11 @@ def apply_user_skill_choice(
 class LangChainReplyRuntime:
     """把框架 Agent Loop 封装成稳定的 ReplyRuntime。"""
 
+    # 整个生成（含工具循环与结构化输出轮）被这一时限包住；回复请求
+    # 租约（PostgresReplyStore 默认 30s）必须大于它加取消等待余量，
+    # 否则长生成的候选会在 save 时被判租约过期丢弃。
+    MAX_GENERATION_TIMEOUT_SECONDS = 20.0
+
     __slots__ = (
         "_model",
         "_model_name",
@@ -526,13 +531,13 @@ class LangChainReplyRuntime:
         skill_port: SkillPort,
         retrieval: RetrievalPort | None = None,
         catalog_cache: SkillCatalogCache | None = None,
-        timeout_seconds: float = 20.0,
+        timeout_seconds: float = MAX_GENERATION_TIMEOUT_SECONDS,
     ) -> None:
         if (
             isinstance(timeout_seconds, bool)
             or not isinstance(timeout_seconds, (int, float))
             or not math.isfinite(timeout_seconds)
-            or not 0 < timeout_seconds <= 20
+            or not 0 < timeout_seconds <= self.MAX_GENERATION_TIMEOUT_SECONDS
         ):
             raise ValueError("回复运行时限必须大于 0 且不超过 20 秒。")
         self._timeout_seconds = timeout_seconds

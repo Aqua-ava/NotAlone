@@ -1,13 +1,16 @@
 """通过真实框架运行时验证生成预算，全部使用合成输入。"""
 
+import inspect
 import asyncio
 import time
 import unittest
+from datetime import timedelta
 from typing import Any
 
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.retrieval import InMemoryRetrieval
 
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
@@ -154,3 +157,18 @@ class RuntimeLimitsTest(unittest.TestCase):
         with self.assertRaises(ReplyBudgetError):
             runtime.generate(context)
         self.assertLessEqual(len(model.seen_calls), MAX_MODEL_ROUNDS)
+
+    def test_default_reply_lease_exceeds_generation_cap_with_margin(self) -> None:
+        """回复请求租约必须覆盖生成时限上限加取消等待余量。
+
+        生成整图被 runtime 时限（构造上限 20s）包住，取消后再等待
+        ``seconds + 2`` 秒兜底；租约小于它时，长生成虽已产出候选，
+        ``save`` 会判定租约过期并丢弃。调整任一侧都要同步复核另一方。
+        """
+
+        default_lease = inspect.signature(
+            PostgresReplyStore.__init__
+        ).parameters["lease_duration"].default
+        runtime_cap = LangChainReplyRuntime.MAX_GENERATION_TIMEOUT_SECONDS
+
+        self.assertGreater(default_lease, timedelta(seconds=runtime_cap + 2))
