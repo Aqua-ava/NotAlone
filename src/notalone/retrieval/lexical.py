@@ -55,9 +55,18 @@ def tokenize(text: str) -> tuple[LexicalToken, ...]:
 
 
 def build_query_tokens(query: str) -> tuple[LexicalToken, ...]:
-    """归一化后截取前 200 字符并去重，得到评分用的 token 序列。"""
+    """归一化后取头尾各半（合计 ≤ 200 字符）并去重，得到评分 token。
 
-    normalized = _normalize(query)[:MAX_QUERY_CHARS]
+    分词前的前缀截断会把长消息尾部的关键词整体丢掉，相关记忆的
+    覆盖率静默归零；改为头尾采样，两端的内容都参与评分。头尾之间
+    插入分隔符，避免在截断缝上拼接出伪 bigram。
+    """
+
+    normalized = _normalize(query)
+    if len(normalized) > MAX_QUERY_CHARS:
+        head = MAX_QUERY_CHARS // 2
+        tail = MAX_QUERY_CHARS - head
+        normalized = normalized[:head] + "\n" + normalized[-tail:]
     seen: set[str] = set()
     tokens: list[LexicalToken] = []
     for token in _tokenize_normalized(normalized):

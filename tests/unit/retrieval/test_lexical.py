@@ -145,17 +145,31 @@ class QueryTokensTest(unittest.TestCase):
             ),
         )
 
-    def test_query_is_truncated_to_max_chars(self) -> None:
+    def test_query_head_and_tail_are_kept_within_max_chars(self) -> None:
         tokens = build_query_tokens("好" * MAX_QUERY_CHARS + "猫")
 
-        self.assertEqual(
-            tokens,
-            (
-                LexicalToken("好", UNIGRAM_WEIGHT),
-                LexicalToken("好好", BIGRAM_WEIGHT),
-            ),
-        )
-        self.assertNotIn("猫", tuple(token.text for token in tokens))
+        texts = tuple(token.text for token in tokens)
+        # 头尾采样（合计仍 ≤ 200 字符）保住两端；尾部关键词不能再被
+        # 前缀截断整体丢弃。尾段内"好猫"是真实相邻 bigram。
+        self.assertIn("猫", texts)
+        self.assertIn("好", texts)
+        self.assertIn("好好", texts)
+
+    def test_head_tail_seam_does_not_create_false_bigram(self) -> None:
+        tokens = build_query_tokens("甲" + "乙" * MAX_QUERY_CHARS + "丙")
+
+        texts = tuple(token.text for token in tokens)
+        self.assertIn("甲", texts)
+        self.assertIn("丙", texts)
+        # 头尾之间插入分隔符，不把截断缝拼成伪 bigram。
+        self.assertNotIn("甲丙", texts)
+
+    def test_tail_keyword_survives_long_query_scoring(self) -> None:
+        query = "嗯" * MAX_QUERY_CHARS + "周末一起徒步"
+        result = score(query, "对方喜欢周末徒步")
+
+        self.assertGreater(result.score, RELEVANCE_THRESHOLD)
+        self.assertIn("徒步", result.matched_terms)
 
     def test_empty_query_has_no_tokens(self) -> None:
         self.assertEqual(build_query_tokens(""), ())

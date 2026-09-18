@@ -1,7 +1,7 @@
 # 词法召回 MAX_QUERY_CHARS 在分词前截断，长 query 尾部关键词静默归零
 
-Triage: needs-triage
-State: open
+Triage: wontfix
+State: resolved
 
 ## 问题
 
@@ -24,5 +24,13 @@ State: open
 3. 提高上限并记录失败模式到 `docs/memory-recall-evaluation-baseline.md`。
 
 注意 200 是基线文档标定常量，改动需同步评测基线。
+
+## Answer
+
+2026-09-18 修复：`build_query_tokens` 改为头尾各取一半（合计仍 ≤ 200 字符，`MAX_QUERY_CHARS` 数值不变），头尾之间插入分隔符避免在截断缝上拼接伪 bigram。原 `test_query_is_truncated_to_max_chars` 把"尾部丢弃"固化为预期，已更新为头尾采样契约；新增 `test_tail_keyword_survives_long_query_scoring`（原探针症状：得分 0.0 → 现在 > 0.15）与 `test_head_tail_seam_does_not_create_false_bigram`。
+
+已知取舍（已记入 `docs/memory-recall-evaluation-baseline.md` 变更记录）：超过 200 字符的 query 只保留头尾，中段关键词不参与评分。重跑 109 条召回评测，七维度门槛全部通过。
+
+验证：`python -m unittest tests.unit.retrieval.test_recall_evaluation` 及 retrieval 全部单测通过。
 
 ## Comments
