@@ -35,10 +35,22 @@ from notalone.persistence.contact_memory_index import (
     ContactMemoryIndexPersistenceError,
     PostgresContactMemoryIndexRepository,
 )
-from notalone.persistence.memory_store import PostgresMemoryStore
-from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
-from notalone.persistence.outbound_ledger import PostgresOutboundLedger
-from notalone.persistence.watermark_store import PostgresWatermarkStore
+from notalone.persistence.memory_store import (
+    MemoryPersistenceError,
+    PostgresMemoryStore,
+)
+from notalone.persistence.owner_memory_store import (
+    OwnerMemoryPersistenceError,
+    PostgresOwnerMemoryStore,
+)
+from notalone.persistence.outbound_ledger import (
+    OutboundLedgerPersistenceError,
+    PostgresOutboundLedger,
+)
+from notalone.persistence.watermark_store import (
+    PostgresWatermarkStore,
+    WatermarkPersistenceError,
+)
 from notalone.scopes import ContactScope
 from notalone.tasks.models import (
     BackgroundTaskStepName,
@@ -514,8 +526,18 @@ class BackgroundTaskWorker:
 def _failure_info(error: Exception) -> tuple[str, bool]:
     if isinstance(
         error,
-        (BackgroundTaskLeaseError, BackgroundTaskPersistenceError),
+        (
+            BackgroundTaskLeaseError,
+            BackgroundTaskPersistenceError,
+            MemoryPersistenceError,
+            OwnerMemoryPersistenceError,
+            OutboundLedgerPersistenceError,
+            WatermarkPersistenceError,
+        ),
     ):
+        # 持久层与任务层的暂时性故障（连接中断、锁等待、租约抖动）
+        # 必须可重试，否则一次数据库抖动就会把整个提取任务永久置为
+        # FAILED，自动重试上限形同虚设。
         return "temporary_failure", True
     if isinstance(error, ExtractionRuntimeError):
         return "memory_extraction_failed", True

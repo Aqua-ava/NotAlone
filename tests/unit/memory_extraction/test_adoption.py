@@ -13,6 +13,10 @@ from notalone.memory import (
     MemoryTopic,
 )
 from notalone.memory_extraction.adoption import MemoryAdoption
+from notalone.memory_extraction.adjudication import (
+    AdjudicationAction,
+    AdjudicationDecision,
+)
 from notalone.memory_extraction.flow import ExtractionOutcome
 from notalone.memory_extraction.models import ExtractedFact, FactSubject
 from notalone.memory_extraction.models import (
@@ -149,6 +153,51 @@ class MemoryAdoptionTest(unittest.TestCase):
         self.assertEqual(stats.pending, 0)
         self.assertEqual(stats.skipped_non_memory, 1)
         self.assertEqual(self.store.list_pending_candidates(self.scope), ())
+
+    def test_update_without_replaced_memory_stays_pending(self) -> None:
+        # 裁决判定"新事实取代旧记忆"但缺少有效被取代 id（结构化输出
+        # 丢字段或指向范围外）：不能静默按 ADD 落库，否则被取代的旧
+        # 记忆保持 active，与新事实并存。降级为待定候选，由用户确认。
+        stats = self.adoption.adopt(
+            self.scope,
+            ExtractionOutcome(accepted=(self._fact(confidence=0.3),)),
+        )
+        self.assertEqual(stats.pending, 1)
+        candidate_id = self.store.list_pending_candidates(self.scope)[0].candidate_id
+        self.store.confirm(scope=self.scope, candidate_id=candidate_id)
+        old = self.store.list_confirmed(self.scope)[0]
+
+        adoption = MemoryAdoption(
+            memory_port=self.store,
+            adjudication_runtime=UpdateWithoutReplacedIdRuntime(),
+        )
+        result = adoption.adopt(
+            self.scope,
+            ExtractionOutcome(
+                accepted=(self._fact(text="对方最近开始跑步锻炼"),)
+            ),
+        )
+
+        self.assertEqual(result.pending, 1)
+        self.assertEqual(result.adopted, 0)
+        self.assertEqual(result.updated, 0)
+        self.assertEqual(self.store.list_confirmed(self.scope), (old,))
+        pending = self.store.list_pending_candidates(self.scope)
+        self.assertEqual(
+            [candidate.text for candidate in pending],
+            ["对方最近开始跑步锻炼"],
+        )
+
+
+class UpdateWithoutReplacedIdRuntime:
+    """模拟结构化输出丢失 replaced_memory_id 字段的裁决。"""
+
+    def adjudicate(self, *, candidate_text: str, similar: tuple) -> AdjudicationDecision:
+        del candidate_text, similar
+        return AdjudicationDecision(
+            action=AdjudicationAction.UPDATE,
+            replaced_memory_id=None,
+        )
 
 
 if __name__ == "__main__":

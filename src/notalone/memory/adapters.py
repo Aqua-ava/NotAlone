@@ -59,6 +59,7 @@ class InMemoryMemoryStore:
             scope=scope,
             text=candidate.text,
             category=candidate.category,
+            topic=candidate.topic,
             source_ids=candidate.source_ids,
             source_candidate_id=candidate.candidate_id,
             adoption_method=adoption_method,

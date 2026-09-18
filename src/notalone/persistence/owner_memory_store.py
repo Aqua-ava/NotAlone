@@ -20,6 +20,7 @@ from notalone.memory.models import (
     OwnerMemory,
 )
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
+from notalone.persistence.message_sources import valid_source_ref_exists_sql
 from notalone.scopes import ContactScope
 
 
@@ -65,6 +66,16 @@ class PostgresOwnerMemoryStore:
         try:
             with self._connect() as connection:
                 lock_owner_scope(connection, owner_id=memory.owner_id)
+                if memory.adoption_method is AdoptionMethod.AUTO:
+                    # 自动采纳声称来自聊天证据，必须在写入时校验来源
+                    # 仍然有效，防止并发来源删除后留下引用已删消息的
+                    # 残留（删除清账不再能覆盖）。手动录入的来源是
+                    # 用户本人（owner 级伪引用），无需校验。
+                    _ensure_active_sources(
+                        connection,
+                        owner_id=memory.owner_id,
+                        source_ids=memory.source_ids,
+                    )
                 connection.execute(
                     """
                     INSERT INTO public.owner_memory (
@@ -83,6 +94,10 @@ class PostgresOwnerMemoryStore:
                 )
                 connection.commit()
         except OwnerMemoryPersistenceError:
+            raise
+        except PermissionError:
+            # 来源已被并发删除时不得创建引用已删消息的 owner 记忆；
+            # 该错误按批次失败交给上层恢复策略，不能折叠成数据库错误。
             raise
         except Exception as error:
             raise OwnerMemoryPersistenceError(
@@ -298,6 +313,57 @@ class PostgresOwnerMemoryStore:
 def _validate_owner_id(owner_id: UUID) -> None:
     if not isinstance(owner_id, UUID):
         raise OwnerMemoryPersistenceError("owner ID 无效。")
+
+
+def _ensure_active_sources(
+    connection: psycopg.Connection[Any],
+    *,
+    owner_id: UUID,
+    source_ids: tuple[UUID, ...],
+) -> None:
+    """校验 owner 记忆的来源引用在写入时仍然有效。
+
+    owner 级记忆按 owner 维度保存，但其证据来自某个联系人的观察与
+    消息；校验按 owner 范围（任一联系人）核对，防止并发来源删除
+    之后继续创建引用已删消息的记忆（删除清账不再能覆盖的残留）。
+    """
+
+    unique_source_ids = tuple(dict.fromkeys(source_ids))
+    if not unique_source_ids:
+        return
+    available_count = connection.execute(
+        f"""
+        SELECT count(*) AS source_count
+        FROM (
+            SELECT source.id AS source_id
+            FROM public.source_document AS source
+            WHERE source.owner_id = %s
+              AND source.status = 'active'
+              AND source.id = ANY(%s)
+            UNION
+            SELECT observation.id AS source_id
+            FROM public.local_wechat_observation AS observation
+            WHERE observation.owner_id = %s
+              AND observation.id = ANY(%s)
+            UNION
+            SELECT message.id AS source_id
+            FROM public.message AS message
+            WHERE message.owner_id = %s
+              AND {valid_source_ref_exists_sql("message")}
+              AND message.id = ANY(%s)
+        ) AS available_sources
+        """,
+        (
+            owner_id,
+            list(unique_source_ids),
+            owner_id,
+            list(unique_source_ids),
+            owner_id,
+            list(unique_source_ids),
+        ),
+    ).fetchone()["source_count"]
+    if available_count != len(unique_source_ids):
+        raise PermissionError("owner 记忆来源范围校验失败。")
 
 
 def _is_effective(memory: OwnerMemory, now: datetime) -> bool:

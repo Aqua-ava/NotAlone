@@ -63,6 +63,11 @@ class InvalidOutputRuntime:
         raise ExtractionInvalidOutputError("模型未返回可解析的结构化事实。")
 
 
+class UnavailableRuntime:
+    def extract(self, window: object) -> tuple:
+        raise ExtractionRuntimeError("模型调用失败，未生成记忆。")
+
+
 class ScriptedRuntime:
     """按序抛出预置失败或返回空候选。"""
 
@@ -432,7 +437,9 @@ class RunExtractionTest(unittest.TestCase):
         self.assertEqual(self.watermark.skips, [])
         self.assertIs(self.watermark.failure, previous)
 
-    def test_invalid_output_on_new_range_restarts_count(self) -> None:
+    def test_shifted_range_with_same_code_reaches_skip_threshold(self) -> None:
+        # 已计数的失败区间在 batch_size 或消息集合变化后端点漂移：
+        # 同分类仍连续计数并达阈值跳过，不再因端点漂移永远卡在重试。
         messages = _messages(6)
         self.watermark.failure = ExtractionFailureState(
             count=2,
@@ -455,12 +462,37 @@ class RunExtractionTest(unittest.TestCase):
         )
 
         self.assertEqual(stats.failed_batches, 1)
-        self.assertEqual(stats.skipped_batches, 0)
+        self.assertEqual(stats.skipped_batches, 1)
+        # 第一个坏批次达阈值被跳过；运行继续到第二个批次（新计数）失败后停止。
         self.assertEqual(self.watermark.failure.count, 1)
-        self.assertEqual(
-            self.watermark.failure.failure_range.from_message_id,
-            messages[0].message_id,
+        self.assertEqual(self.watermark.skips[-1].to_message_id, messages[2].message_id)
+
+    def test_unavailable_failure_does_not_count_or_skip(self) -> None:
+        messages = _messages(3)
+        self.watermark.failure = ExtractionFailureState(
+            count=2,
+            failure_range=FailureRange(
+                from_message_id=uuid4(),
+                to_message_id=uuid4(),
+                code=ExtractionFailureKind.UNAVAILABLE,
+            ),
         )
+
+        stats = run_extraction(
+            scope=self.scope,
+            messages=messages,
+            watermark_message_id=None,
+            runtime=UnavailableRuntime(),
+            memory_port=self.memory_port,
+            owner_memory_port=self.owner_port,
+            watermark_port=self.watermark,
+            batch_size=3,
+        )
+
+        self.assertEqual(stats.failed_batches, 1)
+        self.assertEqual(stats.skipped_batches, 0)
+        # 不可用属于环境问题：不参与计数，已有的 INVALID_OUTPUT 计数保留。
+        self.assertEqual(self.watermark.failure.count, 2)
 
     def _similar_memory(self) -> ConfirmedMemory:
         return ConfirmedMemory(

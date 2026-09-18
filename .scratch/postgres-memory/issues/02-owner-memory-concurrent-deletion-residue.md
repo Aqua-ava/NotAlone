@@ -1,7 +1,7 @@
 # 并发来源删除 × 提取 worker：owner 记忆创建绕过来源校验，留下引用已删消息的残留
 
-Triage: needs-triage
-State: open
+Triage: wontfix
+State: resolved
 
 ## 问题
 
@@ -32,5 +32,18 @@ CLI worker 正在提取某联系人时，用户经 server（`delete_source` / `d
 - 批次跳过恢复的连续计数只比较 `from_message_id`（`memory_extraction/command.py:184-203`、`recovery.py:64-71`）；批次边界变化后坏批次永不达阈值，提取卡在同一水位。
 - `_pending_exists` 要求 source 集完全相等（`adoption.py:316-329`）；相邻批次上下文重叠时同一事实产生重复 pending 候选。
 - 裁决返回 `update` 但缺 `replaced_memory_id` 时静默降级为 ADD（`adoption.py:150-158`），被取代的旧记忆保持 active，两条矛盾记忆并存。
+
+## Answer
+
+2026-09-18 主缺陷与四个低优先级项均已修复：
+
+1. **owner 记忆残留**：`PostgresOwnerMemoryStore.create` 在 owner 锁内对 `adoption_method=AUTO` 的写入校验来源引用仍有效（owner 范围任一联系人的 active source_document / local_wechat_observation / 带有效 source_ref 的 message），失败抛 `PermissionError`，批次按失败交给恢复策略；手动录入的"来源"是用户本人伪引用，无需校验。新增 `test_create_with_active_source_succeeds`、`test_create_rejects_sources_removed_by_deletion`（校验失败不留部分写入）。删除路径与并发写入的串行化由既有 contact→owner 锁序与删除清账校验兜底。
+2. **_failure_info 可重试分类**：`_failure_info` 把 `MemoryPersistenceError`/`OwnerMemoryPersistenceError`/`OutboundLedgerPersistenceError`/`WatermarkPersistenceError` 归入 `temporary_failure`（可重试），一次 DB 抖动不再把任务永久置为 FAILED。
+3. **恢复计数**：`record_batch_failure` 改为按失败分类（code）连续计数，不再按 from_message_id 匹配——batch_size 或消息集合变化导致的端点漂移不再让持续失败的坏批次永远达不到跳过阈值；跨批次误累加由"成功即清零"（watermark.set 清空计数）兜底。更新 `test_different_range_resets_count` 语义并新增端点漂移累积用例与 UNAVAILABLE 不计数用例。
+4. **UPDATE 缺 replaced_id 静默变 ADD**：`_adjudicate` 尾部的 `REJECTED_BY_VALIDATION → ADD` 降级删除，`adopt` 新增 UPDATE-无有效 replaced_id 分支 → 降级为待定候选（continue），被取代旧记忆保持 active 的矛盾并存不再发生。新增 `test_update_without_replaced_memory_stays_pending`；集成契约 `test_update_with_foreign_memory_id_falls_back_to_add` 更新为 `test_update_with_foreign_memory_id_stays_pending`。
+
+连带发现并修复：`InMemoryMemoryStore.confirm` 丢掉了 candidate 的 `topic`（落为默认 OTHER），与 PostgresMemoryStore（保留 `candidate_topic`）契约不一致，已补齐。
+
+验证：全量 949 个测试通过（原 935 + 新增回归）。
 
 ## Comments

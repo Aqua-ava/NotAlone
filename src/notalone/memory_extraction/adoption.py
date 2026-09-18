@@ -150,6 +150,14 @@ class MemoryAdoption:
             if action is AdjudicationAction.UPDATE and replaced_id is not None:
                 self._invalidate_replaced(scope, fact, replaced_id, pool)
                 updated += 1
+            elif action is AdjudicationAction.UPDATE:
+                # 裁决要求更新但缺少有效的被取代记忆（结构化输出丢字
+                # 段或指向范围外）：不能静默按 ADD 落库，否则被取代的
+                # 旧记忆保持 active，与新事实并存。降级为待定候选，
+                # 由用户确认。
+                self._create_pending_candidate(scope, fact)
+                pending += 1
+                continue
             else:
                 adopted += 1
             persisted_memory = (
@@ -212,8 +220,9 @@ class MemoryAdoption:
             input_tokens=decision.input_tokens,
             output_tokens=decision.output_tokens,
         )
-        if outcome is LedgerOutcome.REJECTED_BY_VALIDATION:
-            return AdjudicationAction.ADD, None
+        # 裁决要求更新但缺少有效被取代 id 时返回 (UPDATE, None)：
+        # adopt 会把它降级为待定候选，而不是静默按 ADD 落库让被取代
+        # 的旧记忆保持 active。
         return decision.action, decision_replaced
 
     def _similar_memories(self, fact, pool: list) -> list:

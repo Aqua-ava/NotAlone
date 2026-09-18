@@ -53,8 +53,11 @@ def record_batch_failure(
 ) -> tuple[ExtractionFailureState, bool]:
     """返回（新的计数状态, 是否达到跳过阈值）。
 
-    只有失败区间起点与上次相同才累加；区间变化重新从 1 计数，避免两个
-    不同坏批次互相累加。
+    只有同一失败分类才累加计数；分类变化重新从 1 计数。批次消息集合
+    变化（batch_size 调整、来源删除后排序漂移）会让同一坏批次的起止
+    消息漂移，按端点匹配会让持续失败的批次永远达不到阈值。跨批次的
+    误累积由"成功即清零"兜底：两次失败之间不可能有成功的批次推进
+    （失败即 break，水位只在成功或跳过时前进）。
     """
 
     if not isinstance(failure_range, FailureRange):
@@ -64,8 +67,7 @@ def record_batch_failure(
     count = (
         previous.count + 1
         if previous is not None
-        and previous.failure_range.from_message_id
-        == failure_range.from_message_id
+        and previous.failure_range.code is failure_range.code
         else 1
     )
     state = ExtractionFailureState(count=count, failure_range=failure_range)

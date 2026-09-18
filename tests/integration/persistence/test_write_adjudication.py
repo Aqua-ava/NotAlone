@@ -218,7 +218,7 @@ class WriteAdjudicationTest(unittest.TestCase):
         self.assertEqual(stats.adopted, 1)
         self.assertEqual(len(self.memory_store.list_confirmed(self.scope)), 2)
 
-    def test_update_with_foreign_memory_id_falls_back_to_add(self) -> None:
+    def test_update_with_foreign_memory_id_stays_pending(self) -> None:
         self._seed_memory("老王最近在减肥")
         adjudicator = ScriptedAdjudicator(
             [
@@ -234,9 +234,16 @@ class WriteAdjudicationTest(unittest.TestCase):
             ExtractionOutcome(accepted=(self._fact("老王最近开始增肌了"),)),
         )
 
-        self.assertEqual(stats.adopted, 1)
+        # 裁决指向范围外的记忆：不能静默按 ADD 落库，否则被取代的
+        # 旧记忆保持 active，与新事实并存；降级为待定候选由用户确认。
+        self.assertEqual(stats.adopted, 0)
         self.assertEqual(stats.updated, 0)
-        self.assertEqual(len(self.memory_store.list_confirmed(self.scope)), 2)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(len(self.memory_store.list_confirmed(self.scope)), 1)
+        self.assertEqual(
+            [candidate.text for candidate in self.memory_store.list_pending_candidates(self.scope)],
+            ["老王最近开始增肌了"],
+        )
 
     def test_adjudication_failure_propagates(self) -> None:
         self._seed_memory("老王最近在减肥")

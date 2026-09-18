@@ -31,6 +31,44 @@ TEST_DATABASE_URL = os.environ.get(
 )
 
 
+def _synthetic_source(owner_id) -> UUID:
+    """为指定 owner 建一条合成来源，返回其标识。
+
+    owner 级记忆必须携带真实存在的来源引用；auto 采纳路径的来源
+    校验由专用用例覆盖，这里为其余用例提供最小真实来源。
+    """
+
+    contact_id = uuid4()
+    source_id = uuid4()
+    with psycopg.connect(TEST_DATABASE_URL) as connection:
+        connection.execute(
+            """
+            INSERT INTO public.contact (owner_id, id, display_name)
+            VALUES (%s, %s, %s)
+            """,
+            (owner_id, contact_id, "来源合成联系人"),
+        )
+        connection.execute(
+            """
+            INSERT INTO public.source_document (
+                id, owner_id, contact_id, source_type, file_name,
+                content_sha256, record_count, status
+            ) VALUES (
+                %s, %s, %s, 'wechat_jsonl', 'synthetic-owner-source.jsonl',
+                %s, 1, 'active'
+            )
+            """,
+            (
+                source_id,
+                owner_id,
+                contact_id,
+                uuid4().hex * 2,
+            ),
+        )
+        connection.commit()
+    return source_id
+
+
 def _owner_memory(owner_id, **overrides):
     fields = {
         "memory_id": uuid4(),
@@ -38,7 +76,7 @@ def _owner_memory(owner_id, **overrides):
         "text": "我下周去上海出差",
         "category": MemoryCategory.RECENT_STATE,
         "topic": MemoryTopic.WORK,
-        "source_ids": (uuid4(),),
+        "source_ids": (_synthetic_source(owner_id),),
         "adoption_method": AdoptionMethod.AUTO,
         "status": ConfirmedMemoryStatus.ACTIVE,
         "valid_at": datetime.now(timezone.utc),
@@ -103,6 +141,36 @@ class PostgresOwnerMemoryStoreTest(unittest.TestCase):
         listed = self.store.list_active(self.owner_id)
 
         self.assertEqual(listed, (memory,))
+
+    def test_create_with_active_source_succeeds(self) -> None:
+        memory = _owner_memory(self.owner_id)
+
+        self.store.create(memory)
+
+        self.assertEqual(self.store.list_active(self.owner_id), (memory,))
+
+    def test_create_rejects_sources_removed_by_deletion(self) -> None:
+        source_id = _synthetic_source(self.owner_id)
+        memory = _owner_memory(
+            self.owner_id,
+            source_ids=(source_id, uuid4()),
+        )
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                """
+                UPDATE public.source_document
+                SET status = 'deleted', file_name = NULL,
+                    content_sha256 = NULL, record_count = 0, deleted_at = now()
+                WHERE id = %s
+                """,
+                (source_id,),
+            )
+            connection.commit()
+
+        with self.assertRaises(PermissionError):
+            self.store.create(memory)
+        # 校验失败不得留下部分写入。
+        self.assertEqual(self.store.list_active(self.owner_id), ())
 
     def test_owner_isolation(self) -> None:
         other_owner = self._create_other_owner()

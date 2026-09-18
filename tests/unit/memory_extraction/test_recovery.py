@@ -50,10 +50,28 @@ class RecordBatchFailureTest(unittest.TestCase):
     def test_different_range_resets_count(self) -> None:
         state = ExtractionFailureState(count=2, failure_range=_range())
 
-        state, skip = record_batch_failure(state, failure_range=_range())
+        other_code = FailureRange(
+            from_message_id=uuid4(),
+            to_message_id=uuid4(),
+            code=ExtractionFailureKind.UNAVAILABLE,
+        )
+        state, skip = record_batch_failure(state, failure_range=other_code)
 
+        # 只有同一失败分类才连续计数；不同分类重新从 1 计数。批次
+        # 边界本身不再参与判断：同一坏批次在 batch_size 或消息集合
+        # 变化后端点会漂移，按端点匹配会让持续失败的坏批次永远达
+        # 不到跳过阈值。跨批次误累加由"成功即清零"兜底（水位 set
+        # 会清空计数），两次失败之间必然没有成功的批次推进。
         self.assertEqual(state.count, 1)
         self.assertFalse(skip)
+
+    def test_shifted_batch_boundary_with_same_code_accumulates(self) -> None:
+        state = ExtractionFailureState(count=2, failure_range=_range())
+
+        state, skip = record_batch_failure(state, failure_range=_range())
+
+        self.assertEqual(state.count, 3)
+        self.assertTrue(skip)
 
     def test_threshold_is_configurable(self) -> None:
         failure_range = _range()
