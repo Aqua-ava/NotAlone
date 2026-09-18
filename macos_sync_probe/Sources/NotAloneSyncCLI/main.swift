@@ -161,6 +161,15 @@ struct NotAloneSyncCLI {
                     }
                 } catch ProbeError.weChatNotFrontmost {
                     print("[\(captureIndex)] 微信不在前台，未采集。")
+                } catch ProbeError.screenCapturePermissionMissing {
+                    // 权限缺失是环境级错误，重试没有意义；退出。
+                    fputs("屏幕录制权限缺失，停止采集。\n", stderr)
+                    exit(EXIT_FAILURE)
+                } catch {
+                    // 窗口不可见、聊天区布局瞬时不可读、OCR 瞬态失败都
+                    // 属于跳过本轮的稳定状态；watch 循环保持运行，不能
+                    // 被单次瞬态错误终止整个进程。
+                    print("[\(captureIndex)] 本轮未采集：\(error.localizedDescription)")
                 }
 
                 if options.watch {
@@ -168,9 +177,13 @@ struct NotAloneSyncCLI {
                 }
             } while options.watch
         } catch ProbeError.invalidArguments(let message) {
-            print(message)
+            // 参数错误必须走 stderr：--session --json 的 stdout 是
+            // 机器可读契约，任何多出来的文本都会让驱动解析失败。
+            fputs("\(message)\n", stderr)
+            exit(EXIT_FAILURE)
         } catch {
             fputs("探针失败：\(error.localizedDescription)\n", stderr)
+            exit(EXIT_FAILURE)
         }
     }
 
