@@ -50,18 +50,34 @@ class PostgresWatermarkStoreTest(unittest.TestCase):
             raise unittest.SkipTest("测试库尚未应用 034 提取失败恢复迁移。")
 
     def setUp(self) -> None:
-        self.scope = ContactScope(uuid4(), uuid4())
+        # 035 之后水位行按 (owner_id, contact_id) 外键级联于 contact；
+        # 测试必须使用真实存在的 owner 与联系人。
+        self.owner_id = uuid4()
+        self.contact_id = uuid4()
+        self.scope = ContactScope(self.owner_id, self.contact_id)
         self.store = PostgresWatermarkStore(TEST_DATABASE_URL)
-
-    def tearDown(self) -> None:
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             connection.execute(
-                """
-                DELETE FROM public.memory_extraction_watermark
-                WHERE owner_id = %s AND contact_id = %s
-                """,
-                (self.scope.owner_id, self.scope.contact_id),
+                "INSERT INTO public.owner (id, display_name) VALUES (%s, %s)",
+                (self.owner_id, "水位合成用户"),
             )
+            connection.execute(
+                """
+                INSERT INTO public.contact (owner_id, id, display_name)
+                VALUES (%s, %s, %s)
+                """,
+                (self.owner_id, self.contact_id, "水位合成联系人"),
+            )
+            connection.commit()
+        self.addCleanup(self._cleanup)
+
+    def _cleanup(self) -> None:
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "DELETE FROM public.owner WHERE id = %s",
+                (self.owner_id,),
+            )
+            connection.commit()
 
     @staticmethod
     def _range(from_id, to_id) -> FailureRange:
@@ -141,6 +157,29 @@ class PostgresWatermarkStoreTest(unittest.TestCase):
     def test_missing_row_reads_as_none(self) -> None:
         self.assertIsNone(self.store.get(self.scope))
         self.assertIsNone(self.store.get_failure(self.scope))
+
+    def test_watermark_row_cascades_with_owner_deletion(self) -> None:
+        # 级联契约（035）：owner 被删除后水位行必须随之消失，不能
+        # 留下无产品路径可清理的孤儿行。
+        self.store.set(self.scope, uuid4())
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            row = connection.execute(
+                """
+                SELECT 1 FROM public.memory_extraction_watermark
+                WHERE owner_id = %s AND contact_id = %s
+                """,
+                (self.owner_id, self.contact_id),
+            ).fetchone()
+        self.assertIsNotNone(row)
+
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "DELETE FROM public.owner WHERE id = %s",
+                (self.owner_id,),
+            )
+            connection.commit()
+
+        self.assertIsNone(self.store.get(self.scope))
 
 
 if __name__ == "__main__":

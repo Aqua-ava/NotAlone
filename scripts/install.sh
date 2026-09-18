@@ -38,6 +38,17 @@ psql_bin="$(command -v psql || true)"
 if [[ -z "${psql_bin}" ]]; then
     log "未找到 psql；尝试安装 PostgreSQL 16…"
     brew install postgresql@16 || fail "PostgreSQL 安装失败；可先执行 brew install postgresql@16 后重试。"
+    # postgresql@16 是 keg-only 公式：安装后不会把 psql/createdb 软链
+    # 到 brew 前缀 bin。把它的真实路径补进当前进程 PATH，否则后续
+    # 所有 psql 调用报 127，被误判为"无法连接"。
+    postgres_prefix="$(brew --prefix postgresql@16 2>/dev/null)"
+    if [[ -x "${postgres_prefix}/bin/psql" ]]; then
+        PATH="${postgres_prefix}/bin:${PATH}"
+        export PATH
+        psql_bin="$(command -v psql)"
+    else
+        fail "已安装 postgresql@16 但未找到其 psql 可执行文件；请手工安装后重试。"
+    fi
 fi
 command -v swiftc >/dev/null 2>&1 || fail "未找到 swiftc，请先安装 Xcode Command Line Tools：xcode-select --install"
 command -v codesign >/dev/null 2>&1 || fail "未找到 codesign（Xcode Command Line Tools 的一部分）。"
@@ -45,7 +56,10 @@ command -v codesign >/dev/null 2>&1 || fail "未找到 codesign（Xcode Command 
 # ------------------------------------------------------------------
 # 1. conda 环境与 Python 依赖
 # ------------------------------------------------------------------
-if conda env list | awk '{print $1}' | grep -qx "${env_name}"; then
+# 环境可能以自定义路径（conda create -p）注册，只按第一列匹配会漏检，
+# 导致重复 create 报 prefix already exists 且重跑永远失败。
+if conda env list | grep -E "^[[:space:]]*[^ ]*/${env_name}[[:space:]]" >/dev/null 2>&1 \
+    || conda env list | awk '{print $1}' | grep -qx "${env_name}"; then
     log "conda 环境 ${env_name} 已存在，跳过创建。"
 else
     log "创建 conda 环境 ${env_name}（Python 3.12）…"
@@ -73,8 +87,16 @@ if ! psql --dbname postgres -c "SELECT 1" >/dev/null 2>&1; then
     log "无法连接本地 PostgreSQL；尝试启动服务…"
     brew services start postgresql@16 >/dev/null 2>&1 \
         || fail "PostgreSQL 服务启动失败。请手工执行 brew services start postgresql@16。"
-    sleep 2
-    psql --dbname postgres -c "SELECT 1" >/dev/null 2>&1 \
+    # 全新首启包含 initdb，2 秒常常不够；按有界重试等待服务就绪。
+    connection_ready=0
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        if psql --dbname postgres -c "SELECT 1" >/dev/null 2>&1; then
+            connection_ready=1
+            break
+        fi
+        sleep 2
+    done
+    [[ "${connection_ready}" == "1" ]] \
         || fail "PostgreSQL 仍不可连接；请检查服务与认证配置。"
 fi
 
@@ -116,7 +138,8 @@ for migration in \
     database/migrations/031_cli_backfill_scheduler.sql \
     database/migrations/032_memory_candidate_subject.sql \
     database/migrations/033_owner_memory_evidence_kind.sql \
-    database/migrations/034_extraction_failure_recovery.sql; do
+    database/migrations/034_extraction_failure_recovery.sql \
+    database/migrations/035_extraction_watermark_cascade.sql; do
     log "应用可重复增量迁移 $(basename "${migration}")…"
     psql --set ON_ERROR_STOP=1 --dbname "${database_name}" \
         --file "${migration}" \
@@ -131,9 +154,12 @@ if [[ -f "${env_file}" ]]; then
     log ".env 已存在，保留既有配置；不会覆盖或回显密钥。"
 else
     log "创建受控 .env（0600；只含数据库连接，凭据与 owner 由首启向导填写）…"
-    cat > "${env_file}" <<EOF
+    # 先以受限权限创建文件再写入：直接 cat > 会按调用方 umask 落盘
+    # （通常 0644），存在短暂的全局可读窗口。
+    (umask 177 && cat > "${env_file}" <<EOF
 NOTALONE_DATABASE_URL=${database_url}
 EOF
+)
     chmod 600 "${env_file}"
     log "已在 ${env_file} 写入 NOTALONE_DATABASE_URL；凭据与 owner 请在 App 首启向导中配置。"
 fi

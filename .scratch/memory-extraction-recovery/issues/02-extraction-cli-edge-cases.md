@@ -13,7 +13,7 @@ State: open
 2. **memory_add/memory_list/memory_delete 三个 CLI 入口对非法 `NOTALONE_OWNER_ID` 直接裸 traceback**（`command.py:366,439,490`）：`UUID(owner_id)` 无 try/except，与 extract_main/worker_main 的友好报错不一致。
 3. **裁决失败路径丢失本批提取统计**（`memory_extraction/command.py:146-154`）：`adoption.adopt` 抛错时 outcome 被失败 outcome 整体替换，flow 已返回的 `rejected_count` 丢失、本批通过契约的 facts 不再计入 `extracted`。统计口径漂移，不影响数据正确性。
 4. **extract_main 的 `--batch-size 0/超 20` 未包装**（`command.py:319` → `run_extraction` 的 ValueError）：需 DB 与 key 就绪才可达，报错形态与 CLI 其他错误不一致。
-5. **install.sh 迁移幂等声明不覆盖"中途失败后重跑"**（`scripts/install.sh:94-106`）：以 `public.owner` 存在作为"已初始化"标记整体跳过迁移；全新安装若在 001-025 中途失败，重跑永久跳过剩余迁移只补 026-034 → 表缺失。026-034 自身的 ADD CONSTRAINT 均有守卫、重复执行安全。建议迁移前置一个按迁移记录的 applied 表或改为按 SQL 目录逐个 `IF NOT EXISTS` 守卫。
+5. **install.sh 迁移幂等声明不覆盖"中途失败后重跑"**（迁移执行段）：以 `public.owner` 存在作为"已初始化"标记整体跳过迁移；全新安装若在 001-025 中途失败，重跑永久跳过剩余迁移。注意增量清单是手工硬编码：新增迁移（036+）必须同步追加（035 已按此追加）。建议改为按迁移记录表逐个应用。
 6. **naive datetime 防御不一致**（`observation_store.ensure_baseline`、`conversation_repository.create_cli_bindings_batch`）：接受 naive datetime，写入 `timestamptz` 按数据库会话时区解释；构造函数允许注入 naive 时钟时 baseline 偏移一个本地 UTC 偏移量。仓库其他路径（`background_tasks.cleanup_terminal_tasks`、`memory_store._now`）明确拒绝 naive，此处防御不一致。
 7. **同批次重试会改写"不可变"来源行的统计计数**（`observation_store._insert_observation` 重试路径 `UPDATE event_count/non_text_count/is_reliable`）：批次身份键不含计数，同一键携带不同计数重试时历史统计被静默改写（`record_count` 不更新）。
 8. **naive `time_iso` → UTC 假设与 CLI 契约待核对**（`normalizer._occurred_at`，`test_naive_time_iso_is_interpreted_as_utc` 固化）：若真实 CLI 对缺 create_time 的事件输出无时区本地时间（微信场景 +08:00），发生时间整体偏移 8 小时。需要用真实 CLI 输出核对一次契约；若确认为本地时间需按中国偏移处理或拒绝。
@@ -21,5 +21,9 @@ State: open
 ## 为什么测试没抓到
 
 extract_main 空分支需真实 DB fixture；三个 memory CLI 入口无非法 env 用例；失败统计路径只断言 failed_batches/skip；安装脚本无自动化测试；naive 时钟夹具一律 aware；observation 重试测试传相同计数。
+
+## Answer
+
+2026-09-18 第三轮已修复：install.sh 的 keg-only `postgresql@16` 安装后 psql/createdb 不可达（安装后重解析并把公式 bin 补进 PATH）、`.env` 先以受限 umask 创建再写入、冷启动连接改为有界重试（10×2s）、conda 环境探测覆盖自定义路径注册；新增迁移 035 补齐 `memory_extraction_watermark` 对 contact 的外键级联（先清孤儿行——notalone_test 实际清理了 443 条孤儿——DO 块约束守卫，重复执行幂等验证通过），并同步追加进 install.sh 增量清单；watermark store 集成测试夹具改为真实 owner/contact 并新增级联回归测试。
 
 ## Comments
