@@ -98,7 +98,15 @@ class FakeObservationStore:
         return self.cursors.get((kwargs["owner_id"], kwargs["contact_id"]))
 
     def read_reliable_cursor(self, **kwargs):
-        return self.reliable_cursors.get((kwargs["owner_id"], kwargs["contact_id"]))
+        # 真实存储按 binding_id 过滤可靠游标；绑定重建后查不到旧观察。
+        cursor = self.reliable_cursors.get(
+            (kwargs["owner_id"], kwargs["contact_id"])
+        )
+        if cursor is not None and (
+            getattr(cursor, "binding_id", None) != kwargs.get("binding_id")
+        ):
+            return None
+        return cursor
 
     def rewind_cursor(self, **kwargs):
         self.rewind_calls.append(kwargs)
@@ -1168,6 +1176,88 @@ class CliBackgroundSyncTest(unittest.TestCase):
             self.backfill_store.states[(OWNER_ID, failed_contact)].phase,
             "failed",
         )
+
+    def test_failed_backfill_survives_sweep_when_disabled_window_present(self) -> None:
+        # disable→enable 之后关闭窗口在本进程生命周期恒存在；安全对账
+        # 不能因为它反复把失败补齐重置重试（旧状态会每轮
+        # GAP→BACKFILLING→失败/完成 震荡，审计计数不断被清零）。
+        clock_value = [self.now]
+        sync = CliBackgroundSync(
+            owner_id=OWNER_ID,
+            channel="wechat",
+            account_scope="wx-account",
+            cli=self.cli,
+            bindings=self.bindings,
+            observation_store=self.store,
+            backfill_state=self.backfill_store,
+            sync_state=self.sync_state,
+            clock=lambda: clock_value[0],
+        )
+        sync.cycle(enabled=True)
+        failed_contact = self.bindings[0].contact_id
+        self.backfill_store.states[(OWNER_ID, failed_contact)] = _BackfillState(
+            failed_contact,
+            "failed",
+            self.now,
+            failure_code="cli_command_failed",
+        )
+        self.sync_state.disabled_at = datetime.fromtimestamp(
+            2_000_000_010,
+            tz=timezone.utc,
+        )
+        self.sync_state.enabled_at = datetime.fromtimestamp(
+            2_000_000_012,
+            tz=timezone.utc,
+        )
+        clock_value[0] = self.now + timedelta(seconds=30)
+        self.cli.tail_calls.clear()
+
+        sync.cycle(enabled=True)
+
+        failed_state = self.backfill_store.states[
+            (OWNER_ID, failed_contact)
+        ]
+        self.assertEqual(failed_state.phase, "failed")
+        self.assertEqual(failed_state.failure_code, "cli_command_failed")
+        self.assertIn("wxid_a", [call["talker"] for call in self.cli.tail_calls])
+
+    def test_recreated_binding_keeps_cursor_for_same_locator(self) -> None:
+        # 撤销并重建绑定（新 binding_id）后，同一会话定位的既有游标
+        # 仍是真实观察位置：继续用它读取，不回退删除游标并跳到
+        # "现在"的 baseline，避免两个水位之间的消息成为永久空洞。
+        self.sync.cycle(enabled=True)
+        self.store.rewind_calls.clear()
+        reborn_binding = FakeBinding(
+            uuid4(),
+            self.binding_a.contact_id,
+            "wxid_a",
+            "甲",
+        )
+        restarted = CliBackgroundSync(
+            owner_id=OWNER_ID,
+            channel="wechat",
+            account_scope="wx-account",
+            cli=self.cli,
+            bindings=[reborn_binding],
+            observation_store=self.store,
+            backfill_state=self.backfill_store,
+            sync_state=self.sync_state,
+            clock=lambda: self.now + timedelta(seconds=30),
+        )
+        self.cli.tail_calls.clear()
+
+        restarted.cycle(enabled=True)
+
+        reborn_calls = [
+            call for call in self.cli.tail_calls if call["talker"] == "wxid_a"
+        ]
+        self.assertEqual(
+            len(reborn_calls),
+            1,
+        )
+        self.assertEqual(reborn_calls[-1].get("cursor"), "local_id:10")
+        self.assertNotIn("since_time", reborn_calls[-1])
+        self.assertEqual(self.store.rewind_calls, [])
 
     def test_global_stream_failure_falls_back_to_bounded_one_shot_reads(self) -> None:
         self.cli.session_events_follow = lambda **kwargs: (_ for _ in ()).throw(

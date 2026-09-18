@@ -115,6 +115,24 @@ class PostgresFrontSyncStateStoreTest(unittest.TestCase):
         self.assertTrue(enabled.enabled)
         self.assertEqual(enabled.disabled_at, again.disabled_at)
 
+    def test_repeat_enable_keeps_original_enabled_at(self) -> None:
+        first_enable = datetime(2026, 8, 24, 9, 0, tzinfo=timezone.utc)
+        self.store.enable(owner_id=self.owner_id, at=first_enable)
+        self.store.disable(owner_id=self.owner_id)
+        reopened_at = first_enable + timedelta(minutes=30)
+        reopened = self.store.enable(owner_id=self.owner_id, at=reopened_at)
+
+        again = self.store.enable(
+            owner_id=self.owner_id,
+            at=reopened_at + timedelta(minutes=10),
+        )
+
+        # 同步本已开启时重复开启不移动开启时间；否则关闭窗口会被
+        # 扩大到同步已开启的区间，旧前台引擎会永久过滤其中的消息。
+        self.assertTrue(again.enabled)
+        self.assertEqual(again.enabled_at, reopened_at)
+        self.assertEqual(again.disabled_at, reopened.disabled_at)
+
     def test_state_survives_restart_with_new_store_instance(self) -> None:
         self.store.enable(owner_id=self.owner_id)
 

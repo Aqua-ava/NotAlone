@@ -103,6 +103,25 @@ class PostgresFrontSyncStateStore:
             raise TypeError("开关时间必须是 datetime 或 None。")
         moment = "COALESCE(%s, now())"
         timestamp_column = "enabled_at" if enabled else "disabled_at"
+        if enabled:
+            # 同步本已开启时重复开启保持原开启时间；否则关闭窗口会被
+            # 扩大到同步已开启的区间，旧前台引擎会把该区间内的消息
+            # 当作关闭期间的消息永久过滤。
+            conflict_action = """
+                    SET enabled = EXCLUDED.enabled,
+                        enabled_at = CASE
+                            WHEN public.front_sync_state.enabled
+                            THEN public.front_sync_state.enabled_at
+                            ELSE COALESCE(EXCLUDED.enabled_at, now())
+                        END,
+                        updated_at = now()
+            """
+        else:
+            conflict_action = f"""
+                    SET enabled = EXCLUDED.enabled,
+                        {timestamp_column} = COALESCE(EXCLUDED.{timestamp_column}, now()),
+                        updated_at = now()
+            """
         try:
             with self._connect() as connection:
                 row = connection.execute(
@@ -112,9 +131,7 @@ class PostgresFrontSyncStateStore:
                     )
                     VALUES (%s, %s, {moment})
                     ON CONFLICT (owner_id) DO UPDATE
-                    SET enabled = EXCLUDED.enabled,
-                        {timestamp_column} = COALESCE(EXCLUDED.{timestamp_column}, now()),
-                        updated_at = now()
+                    {conflict_action}
                     RETURNING owner_id, enabled, enabled_at, disabled_at, updated_at
                     """,
                     (owner_id, enabled, at),

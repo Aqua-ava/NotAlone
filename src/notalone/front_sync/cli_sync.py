@@ -1081,6 +1081,16 @@ class CliBackgroundSync:
             # 游标行可能在清理或恢复过程中暂时缺失；已有可靠观察时
             # 仍从该位置继续，不回到 baseline 重读整段范围。
             return reliable
+        if reliable is None and (
+            getattr(cursor, "conversation_locator", None)
+            == getattr(binding, "conversation_locator", None)
+        ):
+            # 绑定可能被撤销后重建（新 binding_id 查不到旧可靠观察），
+            # 或可靠批次尚未产生；只要游标指向同一会话定位，它就是
+            # 真实的观察位置。保留它继续读取，避免回退到"现在"的
+            # baseline 造成两个水位之间的消息空洞，也保住水位证据。
+            # 消息身份去重保证重复读取不会产生重复行。
+            return cursor
         cursor_matches_binding = (
             getattr(cursor, "binding_id", None) == binding.binding_id
             and getattr(cursor, "conversation_locator", None)
@@ -1124,12 +1134,13 @@ class CliBackgroundSync:
             self._last_backfill_state = existing
 
         # 实时事件和低频安全对账只负责推进普通 cursor，不应把一次已
-        # 失败、未完成或暂停的补齐任务重新打开。显式 retry/backfill
-        # check 会提供新的 trigger_at，仍然可以按用户意图恢复补齐。
+        # 失败、未完成或暂停的补齐任务重新打开。重新开启产生的关闭
+        # 窗口也不例外：窗口在此后的每个心跳都存在，若允许它反复
+        # 重置失败补齐，状态会永远震荡。显式 retry/backfill check 会
+        # 提供新的 trigger_at，仍然可以按用户意图恢复补齐。
         if (
             live_read
             and trigger_at is None
-            and disabled_window is None
             and _backfill_phase_value(getattr(existing, "phase", None))
             in {
                 BackfillPhase.FAILED.value,

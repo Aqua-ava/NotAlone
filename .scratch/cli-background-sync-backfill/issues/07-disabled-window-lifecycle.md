@@ -1,7 +1,7 @@
 # 关闭窗口生命周期缺陷族：永不过期、重复 enable 非幂等、绑定重建丢水位
 
-Triage: needs-triage
-State: open
+Triage: wontfix
+State: resolved
 
 ## 背景
 
@@ -37,5 +37,15 @@ State: open
 1. 窗口语义改为"每次 disable→enable 只有一个有限窗口"（disable 后再次 disable 才延长）。
 2. `_set_enabled` 已 enabled 时保持原 enabled_at（幂等）。
 3. rewind 到 reliable=None 时保留 cursor 或改用旧 baseline 而非 now；或 reliable cursor 查询放宽到 contact 级证据。
+
+## Answer
+
+2026-09-18 三个缺陷均已修复（回归测试红→绿）：
+
+1. **失败补齐被窗口反复重置**：`_prepare_backfill_state` 的"不重开失败/未完成/暂停补齐"守卫去掉 `disabled_window is None` 条件——窗口此后恒存在，live/安全对账读取一律不再重开 FAILED/INCOMPLETE/PAUSED；显式 retry/backfill check（带 trigger_at）仍可按用户意图恢复。新增 `test_failed_backfill_survives_sweep_when_disabled_window_present`。
+2. **重复 enable 非幂等**：`PostgresFrontSyncStateStore._set_enabled` 的 enable 分支改为条件更新——旧行已 enabled 时保持原 `enabled_at`，不再扩大关闭窗口。新增集成测试 `test_repeat_enable_keeps_original_enabled_at`（重复 disable 移动 disabled_at 的既有契约保持）。
+3. **绑定重建丢水位**：`_reconcile_cursor` 在 reliable=None 且游标的 `conversation_locator` 与当前绑定一致时保留游标继续读取（同一会话定位的游标就是真实观察位置；消息身份去重保证重复读取不重复落库），不再回退删除游标并跳到"现在"的 baseline。单测 fake 的 `read_reliable_cursor` 补上 binding_id 过滤以模拟真实存储。新增 `test_recreated_binding_keeps_cursor_for_same_locator`。
+
+验证：tests/unit/front_sync 全部 + tests/integration/persistence 全部通过。
 
 ## Comments
