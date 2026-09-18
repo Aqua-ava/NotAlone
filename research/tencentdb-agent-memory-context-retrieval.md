@@ -22,13 +22,13 @@ TencentDB-Agent-Memory 的核心启发不是“把所有聊天变成向量”，
 
 这是基于 NotAlone 现有 ADR 的建议，不是 TencentDB 源码已经替 NotAlone 做出的决定。
 
-## 1. L0/M0 原始聊天记录与 `confirmed_memory`
+## 1. L0 原始聊天记录与 `confirmed_memory`
 
 ### 1.1 TencentDB 的 L0 是证据层，不是确认事实层
 
 TencentDB README 将长期记忆描述为 L0 Conversation → L1 Atom → L2 Scenario → L3 Persona：L0 是原始对话，L1 是从对话提取的事实、偏好、约束和事件，L2/L3 是更高层的场景和画像。源码侧，MemoryProxy 在每轮结束时通过 `/v3/conversation/add` 写入当前轮消息；录制器还会先剥离 harness 的额外数据，只保留真实 `user_query`，避免把系统注入内容写入 L0。来源：[README_CN](https://github.com/TencentCloud/TencentDB-Agent-Memory/blob/main/README_CN.md#L234-L244)、[`client.ts` 绝对路径](https://github.com/TencentCloud/TencentDB-Agent-Memory/blob/main/MemoryProxy/src/tdai/client.ts#L91)、[`recorder.ts` 绝对路径](https://github.com/TencentCloud/TencentDB-Agent-Memory/blob/main/MemoryProxy/src/tdai/recorder.ts#L5)。
 
-本文把问题中的 “M0” 理解为 NotAlone 的原始消息/证据层命名；TencentDB 当前公开接口使用的是 “L0 Conversation”，不是 `M0`。因此二者可作概念对照，但不能把 M0 当作 TencentDB 的正式层名。
+本文统一使用 TencentDB 的正式层名 “L0 Conversation” 表示原始聊天记录/证据层。NotAlone 的正式领域对象仍是规范消息及其来源证据，L0 只是本研究中与 TencentDB 对照的分层名称。
 
 ### 1.2 NotAlone 的 `confirmed_memory` 是有证据约束的业务事实
 
@@ -38,7 +38,7 @@ NotAlone 的权威链路是 `source_document/session_capture -> message -> memor
 
 | 层 | 作用 | 能否直接作为事实使用 |
 |---|---|---|
-| M0/L0 `message` | 原始或规范化聊天证据、说话人、时间、来源 | 只能作为证据和语境，不能自动等同于长期事实 |
+| L0 `message` | 原始或规范化聊天证据、说话人、时间、来源 | 只能作为证据和语境，不能自动等同于长期事实 |
 | `memory_candidate` | 从消息提炼、待审核或待自动采纳的候选 | `pending` 不可进入生成 |
 | `confirmed_memory` | 已通过 NotAlone 采纳契约的联系人事实 | 可以检索并进入上下文，但仍要带引用、状态、有效期 |
 | TencentDB L1 | 通用原子记忆层 | 可作为设计参照；不能替代 NotAlone 的联系人确认和来源语义 |
@@ -159,7 +159,7 @@ TencentDB 的 L2 Scene Navigation 体现了“索引先注入、正文后读取�
 | 模块 | 职责 | 不负责 |
 |---|---|---|
 | `scope` / identity | 验证 Owner、联系人、桌面会话绑定和授权 | 不让模型决定联系人 |
-| `record` | 保存 M0/L0 规范消息和来源 | 不把原文自动升级为事实 |
+| `record` | 保存 L0 规范消息和来源 | 不把原文自动升级为事实 |
 | `memory` | 管理 candidate/confirmed 生命周期、证据、有效期、删除 | 不按相似度直接确认 |
 | `retrieval` | 硬过滤、全文/向量候选、邻近展开、去重、预算和引用快照 | 不管理 Skill |
 | `skills` | 目录、版本、正文、references/assets、revision 和删除 | 不注册 Tool 或读取联系人数据库 |
@@ -207,7 +207,7 @@ ContextRetriever.retrieve(ReplyContextRequest)
 ## 证据边界与未决问题
 
 1. TencentDB 公开 README 和源码证明了 L0/L1/L2/L3、BM25/embedding/hybrid、渐进注入和工具调用方式；它们不证明 NotAlone 已集成 TencentDB，也不证明其后端检索质量适合关系回复。
-2. “M0”是本文为 NotAlone 原始消息层采用的对照称呼；TencentDB 正式接口称为 L0。
+2. 本文统一使用 TencentDB 的正式层名 “L0” 对照 NotAlone 的原始消息/证据层。
 3. NotAlone 当前架构已决定向量是后续补充路径，具体 PostgreSQL 中文全文方案、预算和评估数据仍需在实现前单独验证。
 4. 本记录没有修改代码、架构文档或配置；只新增本文件。
 
