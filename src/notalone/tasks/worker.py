@@ -9,6 +9,8 @@ from threading import Event, Thread
 from typing import Protocol
 from uuid import UUID
 
+import psycopg
+
 from notalone.ledger.ports import OutboundLedgerPort
 from notalone.memory.ports import MemoryPort, OwnerMemoryPort
 from notalone.memory_extraction.adjudication import AdjudicationRuntime
@@ -542,6 +544,11 @@ def _failure_info(error: Exception) -> tuple[str, bool]:
     if isinstance(error, ExtractionRuntimeError):
         return "memory_extraction_failed", True
     if isinstance(error, (TimeoutError, ConnectionError)):
+        return "temporary_failure", True
+    if isinstance(error, psycopg.OperationalError):
+        # psycopg 3 的 OperationalError 不是内建 ConnectionError 子类；
+        # load_contact_messages 等裸连接路径抛出的连接类故障同样按
+        # 临时失败重试，不能落进 worker_step_failed 不可重试。
         return "temporary_failure", True
     if isinstance(error, MemoryExtractionError):
         return "memory_extraction_failed", False

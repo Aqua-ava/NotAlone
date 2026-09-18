@@ -157,6 +157,22 @@ def match_front_session(
             for candidate in effective
             if candidate.username == binding.conversation_locator
         )
+        if len(bound_candidates) != len(effective):
+            bound_usernames = {
+                stored.conversation_locator
+                for stored in stored_bindings
+                if stored.conversation_locator in usernames
+            }
+            if len(bound_usernames) > 1:
+                # 多个同名候选各自已绑定：按列表顺序任意挑选会绕过
+                # "重名必须用户选择"的硬边界，把另一个同名会话的消息
+                # 读进错误联系人的范围。只有用户显式选择过的单一绑定
+                # 才能代表一次已消解的歧义。
+                return BindingMatchDecision(
+                    kind=BindingMatchKind.NEEDS_SELECTION,
+                    reason=BindingMatchReason.AMBIGUOUS_REQUIRES_SELECTION,
+                    candidates=effective,
+                )
         if normalize_display_text(binding.display_name) == observed_name:
             return BindingMatchDecision(
                 kind=BindingMatchKind.CONFIRMED,
@@ -244,6 +260,20 @@ def _match_without_name_match(
             for session in effective
             if session.username == binding.conversation_locator
         )
+        if len(bound_sessions) != len(effective):
+            bound_usernames = {
+                stored.conversation_locator
+                for stored in stored_bindings
+                if stored.conversation_locator in usernames
+            }
+            if len(bound_usernames) > 1:
+                # 回退路径同样不按列表顺序任意挑选：多个同名候选各自
+                # 绑定时必须交由用户选择。
+                return BindingMatchDecision(
+                    kind=BindingMatchKind.NEEDS_SELECTION,
+                    reason=BindingMatchReason.AMBIGUOUS_REQUIRES_SELECTION,
+                    candidates=effective,
+                )
         if normalize_display_text(binding.display_name) == observed_name:
             return BindingMatchDecision(
                 kind=BindingMatchKind.CONFIRMED,

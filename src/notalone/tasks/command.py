@@ -33,6 +33,7 @@ from notalone.tasks.worker import (
     BackgroundTaskWorker,
     PostgresMemoryExtractionRunner,
     WorkerRunOutcome,
+    WorkerRunResult,
 )
 
 

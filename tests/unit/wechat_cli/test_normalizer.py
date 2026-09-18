@@ -149,6 +149,25 @@ class NormalizeCliEventsTest(unittest.TestCase):
         with self.assertRaises(CliNormalizationError):
             normalize_cli_events([_event(), other])
 
+    def test_blank_first_talker_still_detects_mixed_batch(self) -> None:
+        # 首事件 talker 为空串时，同会话校验不能退化为恒真表达式：
+        # 后续其他会话的事件必须仍然触发失败关闭。
+        first = _event(
+            message_id=MessageIdentifier(
+                local_id=101,
+                talker="",
+            )
+        )
+        other = _event(
+            message_id=MessageIdentifier(
+                local_id=102,
+                talker="wxid_synthetic_other",
+            )
+        )
+
+        with self.assertRaises(CliNormalizationError):
+            normalize_cli_events([first, other])
+
     def test_missing_server_id_keeps_identity_without_server_id(self) -> None:
         event = _event(
             message_id=MessageIdentifier(

@@ -1,0 +1,25 @@
+# 提取链路与 CLI 边界遗留项（第二轮审查）
+
+Triage: needs-triage
+State: open
+
+## 背景
+
+2026-09-18 第二轮只读审查发现。同轮已修复：裸 `psycopg.OperationalError` 不可重试（`_failure_info` 增补）、`normalize_cli_events` 空 talker 恒真退化、`run_worker` 注解 NameError、前台会话多个同名候选各自绑定时的列表序静默确认（matcher 按"已绑定同名候选数 > 1 才要求选择"收紧，保留显式选择后单一绑定自动识别的既有集成契约；残余风险：单一绑定 + 其他同名未绑定会话仍自动归入绑定方，若前台切换到另一个同名会话会串数据，属既有集成契约接受的取舍）。以下为遗留项。
+
+## 遗留项
+
+1. **extract_main 对不存在的联系人静默成功**（`memory_extraction/command.py:295-302`）：不存在的 `--contact-id` → 空消息 → `batches=0 …` exit 0；失败文案暗示有联系人检查（对比 worker_main 有 `contact_exists`）。脚本化调用无法区分"没有消息"与"联系人不存在的误输入"。
+2. **memory_add/memory_list/memory_delete 三个 CLI 入口对非法 `NOTALONE_OWNER_ID` 直接裸 traceback**（`command.py:366,439,490`）：`UUID(owner_id)` 无 try/except，与 extract_main/worker_main 的友好报错不一致。
+3. **裁决失败路径丢失本批提取统计**（`memory_extraction/command.py:146-154`）：`adoption.adopt` 抛错时 outcome 被失败 outcome 整体替换，flow 已返回的 `rejected_count` 丢失、本批通过契约的 facts 不再计入 `extracted`。统计口径漂移，不影响数据正确性。
+4. **extract_main 的 `--batch-size 0/超 20` 未包装**（`command.py:319` → `run_extraction` 的 ValueError）：需 DB 与 key 就绪才可达，报错形态与 CLI 其他错误不一致。
+5. **install.sh 迁移幂等声明不覆盖"中途失败后重跑"**（`scripts/install.sh:94-106`）：以 `public.owner` 存在作为"已初始化"标记整体跳过迁移；全新安装若在 001-025 中途失败，重跑永久跳过剩余迁移只补 026-034 → 表缺失。026-034 自身的 ADD CONSTRAINT 均有守卫、重复执行安全。建议迁移前置一个按迁移记录的 applied 表或改为按 SQL 目录逐个 `IF NOT EXISTS` 守卫。
+6. **naive datetime 防御不一致**（`observation_store.ensure_baseline`、`conversation_repository.create_cli_bindings_batch`）：接受 naive datetime，写入 `timestamptz` 按数据库会话时区解释；构造函数允许注入 naive 时钟时 baseline 偏移一个本地 UTC 偏移量。仓库其他路径（`background_tasks.cleanup_terminal_tasks`、`memory_store._now`）明确拒绝 naive，此处防御不一致。
+7. **同批次重试会改写"不可变"来源行的统计计数**（`observation_store._insert_observation` 重试路径 `UPDATE event_count/non_text_count/is_reliable`）：批次身份键不含计数，同一键携带不同计数重试时历史统计被静默改写（`record_count` 不更新）。
+8. **naive `time_iso` → UTC 假设与 CLI 契约待核对**（`normalizer._occurred_at`，`test_naive_time_iso_is_interpreted_as_utc` 固化）：若真实 CLI 对缺 create_time 的事件输出无时区本地时间（微信场景 +08:00），发生时间整体偏移 8 小时。需要用真实 CLI 输出核对一次契约；若确认为本地时间需按中国偏移处理或拒绝。
+
+## 为什么测试没抓到
+
+extract_main 空分支需真实 DB fixture；三个 memory CLI 入口无非法 env 用例；失败统计路径只断言 failed_batches/skip；安装脚本无自动化测试；naive 时钟夹具一律 aware；observation 重试测试传相同计数。
+
+## Comments

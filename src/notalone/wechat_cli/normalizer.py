@@ -32,7 +32,10 @@ def normalize_cli_events(
     normalized: list[NormalizedMessage] = []
     expected_talker: str | None = None
     for event in events:
-        if event.message_id.talker != (expected_talker or event.message_id.talker):
+        if (
+            expected_talker is not None
+            and event.message_id.talker != expected_talker
+        ):
             raise CliNormalizationError("一次观察批次只能包含同一会话的消息。")
         expected_talker = event.message_id.talker
         if event.kind != "text":

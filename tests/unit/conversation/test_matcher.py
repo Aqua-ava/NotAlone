@@ -197,13 +197,109 @@ class MatchFrontSessionTest(unittest.TestCase):
         )
         self.assertEqual(decision.confirmed_binding_id, binding_id)
 
+    def test_duplicate_name_with_multiple_bound_candidates_requires_selection(
+        self,
+    ) -> None:
+        # 两个同名联系人都已绑定：观察名无法区分前台是哪一个会话，
+        # 按绑定列表顺序静默确认第一个可能把另一个同名会话的消息
+        # 读进错误联系人的范围（重名必须用户选择）。
+        first = _candidate("wxid_a", "姐姐")
+        second = _candidate("wxid_b", "姐姐")
+
+        decision = match_front_session(
+            evidence=FrontSessionEvidence(display_name="姐姐"),
+            candidates=(first, second),
+            stored_bindings=(
+                StoredBindingEvidence(
+                    binding_id=uuid4(),
+                    conversation_locator="wxid_a",
+                    display_name="姐姐",
+                ),
+                StoredBindingEvidence(
+                    binding_id=uuid4(),
+                    conversation_locator="wxid_b",
+                    display_name="姐姐",
+                ),
+            ),
+        )
+
+        self.assertEqual(decision.kind, BindingMatchKind.NEEDS_SELECTION)
+        self.assertEqual(
+            decision.reason,
+            BindingMatchReason.AMBIGUOUS_REQUIRES_SELECTION,
+        )
+        self.assertIsNone(decision.confirmed_binding_id)
+
+    def test_bound_candidate_auto_confirms_with_unbound_duplicate(self) -> None:
+        # 一个同名已绑定 + 一个同名未绑定：沿用既定契约——用户显式
+        # 选择过的单一绑定代表一次已消解的歧义，前台同名自动归入该
+        # 绑定；多个同名候选各自绑定时才必须选择。
+        first = _candidate("wxid_a", "姐姐")
+        second = _candidate("wxid_b", "姐姐")
+        binding_id = uuid4()
+
+        decision = match_front_session(
+            evidence=FrontSessionEvidence(display_name="姐姐"),
+            candidates=(first, second),
+            stored_bindings=(
+                StoredBindingEvidence(
+                    binding_id=binding_id,
+                    conversation_locator="wxid_a",
+                    display_name="姐姐",
+                ),
+            ),
+        )
+
+        self.assertEqual(decision.kind, BindingMatchKind.CONFIRMED)
+        self.assertEqual(
+            decision.reason,
+            BindingMatchReason.CONFIRMED_ACTIVE_BINDING,
+        )
+        self.assertEqual(decision.confirmed_binding_id, binding_id)
+
+    def test_evidence_narrowed_bound_candidate_still_confirms(self) -> None:
+        # 证据把同名候选收窄到唯一会话且该会话已绑定时，自动确认仍成立。
+        matching = _candidate(
+            "wxid_a",
+            "姐姐",
+            last_timestamp=_timestamp(19, 59),
+            summary="好的",
+        )
+        other = _candidate(
+            "wxid_b",
+            "姐姐",
+            last_timestamp=_timestamp(9, 30),
+            summary="明天见",
+        )
+        binding_id = uuid4()
+
+        decision = match_front_session(
+            evidence=FrontSessionEvidence(
+                display_name="姐姐",
+                last_time_text="19:59",
+                preview_text="好的",
+            ),
+            candidates=(matching, other),
+            stored_bindings=(
+                StoredBindingEvidence(
+                    binding_id=binding_id,
+                    conversation_locator="wxid_a",
+                    display_name="姐姐",
+                ),
+            ),
+        )
+
+        self.assertEqual(decision.kind, BindingMatchKind.CONFIRMED)
+        self.assertEqual(decision.confirmed_binding_id, binding_id)
+
     def test_renamed_binding_requires_one_time_reconfirmation(self) -> None:
+        # 唯一同名候选且已绑定时：改名只要求一次确认新旧映射。
         binding_id = uuid4()
         candidate = _candidate("wxid_a", "姐姐改名后")
 
         decision = match_front_session(
             evidence=FrontSessionEvidence(display_name="姐姐改名后"),
-            candidates=(candidate, _candidate("wxid_b", "姐姐改名后")),
+            candidates=(candidate,),
             stored_bindings=(
                 StoredBindingEvidence(
                     binding_id=binding_id,
@@ -215,6 +311,31 @@ class MatchFrontSessionTest(unittest.TestCase):
 
         self.assertEqual(decision.kind, BindingMatchKind.NEEDS_SELECTION)
         self.assertEqual(decision.reason, BindingMatchReason.BINDING_NAME_CHANGED)
+        self.assertEqual(decision.candidates, (candidate,))
+        self.assertIsNone(decision.confirmed_binding_id)
+
+    def test_renamed_binding_with_duplicate_names_requires_reconfirmation(self) -> None:
+        # 改名只要求确认新旧映射：候选名单按既有契约只展示已绑定会话，
+        # 用户确认一次新名字后恢复自动识别。
+        candidate = _candidate("wxid_a", "姐姐改名后")
+
+        decision = match_front_session(
+            evidence=FrontSessionEvidence(display_name="姐姐改名后"),
+            candidates=(candidate, _candidate("wxid_b", "姐姐改名后")),
+            stored_bindings=(
+                StoredBindingEvidence(
+                    binding_id=uuid4(),
+                    conversation_locator="wxid_a",
+                    display_name="姐姐",
+                ),
+            ),
+        )
+
+        self.assertEqual(decision.kind, BindingMatchKind.NEEDS_SELECTION)
+        self.assertEqual(
+            decision.reason,
+            BindingMatchReason.BINDING_NAME_CHANGED,
+        )
         self.assertEqual(decision.candidates, (candidate,))
         self.assertIsNone(decision.confirmed_binding_id)
 

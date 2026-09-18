@@ -9,13 +9,15 @@ import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
+import psycopg
+
 from notalone.tasks.command import (
     WorkerCommandStatus,
     run_worker,
     worker_main,
 )
 from notalone.tasks.models import BackgroundTaskStepName
-from notalone.tasks.worker import WorkerRunOutcome, WorkerRunResult
+from notalone.tasks.worker import WorkerRunOutcome, WorkerRunResult, _failure_info
 
 
 class FakeWorker:
@@ -205,6 +207,21 @@ class WorkerCommandTest(unittest.TestCase):
         self.assertEqual(exit_code, 2)
         self.assertIn("NOTALONE_DATABASE_URL", stderr.getvalue())
         self.assertNotIn(str(self.contact_id), stderr.getvalue())
+
+
+class FailureInfoTest(unittest.TestCase):
+    """失败分类必须把连接类数据库故障判为可重试。"""
+
+    def test_psycopg_operational_error_is_retryable(self) -> None:
+        # psycopg 3 的 OperationalError 不是内建 ConnectionError 子类；
+        # load_contact_messages 等裸连接路径的瞬断必须重试，不能把
+        # 任务永久置为 FAILED。
+        error_code, retryable = _failure_info(
+            psycopg.OperationalError("connection refused")
+        )
+
+        self.assertEqual(error_code, "temporary_failure")
+        self.assertTrue(retryable)
 
 
 if __name__ == "__main__":
