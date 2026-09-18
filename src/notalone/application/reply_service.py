@@ -178,5 +178,3 @@ def _reason_for(verification: ConversationResolution) -> str:
         VerificationReason.INVALID_VERIFICATION_RESULT: "invalid_verification",
     }
     return mapping.get(reason, reason.value)
-
-    return lookup

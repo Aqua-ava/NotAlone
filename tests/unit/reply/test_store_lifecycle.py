@@ -5,21 +5,25 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from notalone.reply.context import ContextEvidence, ReplyContext
 from notalone.reply.errors import (
     ReplyContinuationError,
     ReplyIdempotencyConflictError,
     ReplyRunError,
+    ReplyStoreInvariantError,
 )
 from notalone.reply.interface import (
+    AutoSkill,
     ConfirmedDirection,
     DirectionSource,
     GenerateReply,
     ReplyCandidate,
     ReplyGenerated,
     ReplyToMessage,
+    SkillSelection,
+    UserSkillChoice,
 )
 from notalone.reply.generator import ReplyGenerator
 from notalone.reply.runtime import ReplyRuntimeResult, RuntimeCandidate
@@ -146,7 +150,11 @@ class ReplyStoreLifecycleTest(unittest.TestCase):
         continued_from_candidate_id: UUID | None = None,
         binding_id: UUID = BINDING_ID,
         contact_id: UUID = CONTACT_ID,
+        skill: SkillSelection | None = None,
     ) -> GenerateReply:
+        kwargs: dict[str, object] = {}
+        if skill is not None:
+            kwargs["skill"] = skill
         return GenerateReply(
             idempotency_key=key,
             scope=ContactScope(OWNER_ID, contact_id),
@@ -159,6 +167,7 @@ class ReplyStoreLifecycleTest(unittest.TestCase):
                 ),
             ),
             continued_from_candidate_id=continued_from_candidate_id,
+            **kwargs,
         )
 
     def _context(
@@ -192,6 +201,60 @@ class ReplyStoreLifecycleTest(unittest.TestCase):
                     text=text,
                     basis="回应当前消息",
                     citation_ids=(MESSAGE_ID,),
+                    risk_notes=(),
+                ),
+            ),
+            used_skill=None,
+        )
+
+    def test_store_save_rejects_citation_outside_context_evidence(self) -> None:
+        # store 层防线必须与 PostgreSQL adapter 同契约：引用不存在
+        # 证据的候选不能被持久化（generator 之外的直接调用方也拦下）。
+        command = self._command()
+        started = self.store.start(command, self.verified_scope)
+        foreign_citation = uuid4()
+
+        with self.assertRaises(ReplyStoreInvariantError):
+            self.store.save(
+                started.request,
+                self._context(command, request_id=started.request.request_id),
+                self._reply_with_citation(foreign_citation),
+            )
+
+    def test_store_save_rejects_invalid_context_fields(self) -> None:
+        command = self._command()
+        started = self.store.start(command, self.verified_scope)
+        context = self._context(command, request_id=started.request.request_id)
+
+        with self.assertRaises(ReplyStoreInvariantError):
+            self.store.save(
+                started.request,
+                replace(context, current_text="   "),
+                self._reply(),
+            )
+
+        with self.assertRaises(ReplyStoreInvariantError):
+            self.store.save(
+                started.request,
+                replace(context, skill_library_revision=-1),
+                self._reply(),
+            )
+
+        with self.assertRaises(ReplyStoreInvariantError):
+            self.store.save(
+                started.request,
+                replace(context, risk_notes=("  ",)),
+                self._reply(),
+            )
+
+    @staticmethod
+    def _reply_with_citation(citation_id: UUID) -> ValidatedReply:
+        return ValidatedReply(
+            candidates=(
+                RuntimeCandidate(
+                    text="可以呀，明天见。",
+                    basis="回应当前消息",
+                    citation_ids=(citation_id,),
                     risk_notes=(),
                 ),
             ),
@@ -291,6 +354,34 @@ class ReplyStoreLifecycleTest(unittest.TestCase):
             self.store.read(first.request.request_id, self.scope).state,
             ReplyAttemptState.RUNNING,
         )
+
+    def test_same_key_with_different_skill_selection_is_conflict(self) -> None:
+        # 同一幂等键换用不同 Skill 是不同请求：必须冲突，而不是静默
+        # 重放旧选择（Auto 或另一版本）生成的候选。
+        self.store.start(self._command(), self.verified_scope)
+
+        with self.assertRaises(ReplyIdempotencyConflictError):
+            self.store.start(
+                self._command(skill=UserSkillChoice(version_id=uuid4())),
+                self.verified_scope,
+            )
+
+        user_first = uuid4()
+        self.store.start(
+            self._command(key=SECOND_REQUEST_KEY, skill=UserSkillChoice(version_id=user_first)),
+            self.verified_scope,
+        )
+        with self.assertRaises(ReplyIdempotencyConflictError):
+            self.store.start(
+                self._command(key=SECOND_REQUEST_KEY, skill=UserSkillChoice(version_id=uuid4())),
+                self.verified_scope,
+            )
+        # 相同 Skill 选择的重复请求仍然幂等重放。
+        replayed = self.store.start(
+            self._command(key=SECOND_REQUEST_KEY, skill=UserSkillChoice(version_id=user_first)),
+            self.verified_scope,
+        )
+        self.assertEqual(replayed.state, ReplyRequestState.IN_PROGRESS)
 
     def test_valid_lease_returns_in_progress_without_a_second_attempt(self) -> None:
         command = self._command()

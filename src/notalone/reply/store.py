@@ -29,6 +29,7 @@ from notalone.reply.interface import (
     ReplyToMessage,
     RewriteDraft,
     SkillUse,
+    UserSkillChoice,
 )
 from notalone.reply.runtime import RuntimeCandidate
 from notalone.scopes import ContactScope, VerifiedConversationScope
@@ -312,8 +313,8 @@ class InMemoryReplyStore:
             if self._now() >= request.lease_expires_at:
                 self._expire_record(record)
                 raise ReplyStoreInvariantError("回复请求租约已过期。")
-            self._validate_context(request, context)
-            self._validate_reply(reply)
+            context_evidence_ids = self._validate_context(request, context)
+            self._validate_reply(reply, evidence_ids=context_evidence_ids)
 
             candidates: list[ReplyCandidate] = []
             for runtime_candidate in reply.candidates:
@@ -495,7 +496,13 @@ class InMemoryReplyStore:
                 "回复请求幂等键与输入不一致。"
             )
 
-    def _validate_context(self, request: ReplyRequest, context: ReplyContext) -> None:
+    def _validate_context(
+        self,
+        request: ReplyRequest,
+        context: ReplyContext,
+    ) -> set[UUID]:
+        """校验上下文快照并返回证据标识集合；与 PostgreSQL adapter 同契约。"""
+
         if not (
             isinstance(context, ReplyContext)
             and isinstance(context.command, GenerateReply)
@@ -509,6 +516,15 @@ class InMemoryReplyStore:
             and context.command.continued_from_candidate_id
             == request.continued_from_candidate_id
             and _normalize_input(context.command) == request.normalized_input
+            and isinstance(context.current_text, str)
+            and bool(context.current_text.strip())
+            and isinstance(context.skill_library_revision, int)
+            and context.skill_library_revision >= 0
+            and isinstance(context.risk_notes, tuple)
+            and all(
+                isinstance(note, str) and note.strip()
+                for note in context.risk_notes
+            )
             and isinstance(context.evidence, tuple)
             and context.evidence
             and (
@@ -593,7 +609,7 @@ class InMemoryReplyStore:
                 raise ReplyStoreInvariantError(
                     "历史候选必须由用户显式选择。"
                 )
-            return
+            return evidence_ids
         candidate = self._candidates.get(request.continued_from_candidate_id)
         if (
             candidate is None
@@ -605,9 +621,14 @@ class InMemoryReplyStore:
             raise ReplyStoreInvariantError(
                 "继续候选快照与已保存候选不一致。"
             )
+        return evidence_ids
 
     @staticmethod
-    def _validate_reply(reply: ValidatedReply) -> None:
+    def _validate_reply(
+        reply: ValidatedReply,
+        *,
+        evidence_ids: set[UUID],
+    ) -> None:
         if not (
             isinstance(reply, ValidatedReply)
             and isinstance(reply.candidates, tuple)
@@ -616,7 +637,10 @@ class InMemoryReplyStore:
                 isinstance(candidate, RuntimeCandidate)
                 for candidate in reply.candidates
             )
-            and all(
+        ):
+            raise ReplyStoreInvariantError("回复结果结构无效。")
+        for candidate in reply.candidates:
+            if not (
                 isinstance(candidate.text, str)
                 and bool(candidate.text.strip())
                 and isinstance(candidate.basis, str)
@@ -624,15 +648,14 @@ class InMemoryReplyStore:
                 and isinstance(candidate.citation_ids, tuple)
                 and bool(candidate.citation_ids)
                 and all(isinstance(item, UUID) for item in candidate.citation_ids)
+                and set(candidate.citation_ids) <= evidence_ids
                 and isinstance(candidate.risk_notes, tuple)
                 and all(
                     isinstance(note, str) and bool(note.strip())
                     for note in candidate.risk_notes
                 )
-                for candidate in reply.candidates
-            )
-        ):
-            raise ReplyStoreInvariantError("回复结果结构无效。")
+            ):
+                raise ReplyStoreInvariantError("回复结果结构无效。")
 
     def _expire_record(self, record: _MutableReplyRecord) -> None:
         if record.state is not ReplyAttemptState.RUNNING:
@@ -671,6 +694,13 @@ def _normalize_input(command: GenerateReply) -> str:
         str(command.continued_from_candidate_id)
         if command.continued_from_candidate_id is not None
         else None
+    )
+    # Skill 选择决定生成路径，属于请求输入的一部分；同一幂等键换用
+    # 不同 Skill 必须冲突，不能静默重放旧选择生成的候选。
+    payload["skill"] = (
+        f"user_choice:{command.skill.version_id}"
+        if isinstance(command.skill, UserSkillChoice)
+        else "auto"
     )
     return json.dumps(
         payload,

@@ -130,14 +130,14 @@ class ReplyGenerator:
             runtime_result = self._runtime.generate(context)
         except ReplyRunError:
             self._mark_failed(request, "runtime_failed")
-            self._record_ledger(
+            self._record_failure_ledger(
                 command, LedgerOutcome.RUN_FAILED, None, started_ns, called_at
             )
             raise
         except ReplyError:
             # 运行时内部的结构化输出或不变量失败：外部调用已尝试但输出被拒。
             self._mark_failed(request, "runtime_failed")
-            self._record_ledger(
+            self._record_failure_ledger(
                 command,
                 LedgerOutcome.REJECTED_BY_VALIDATION,
                 None,
@@ -147,7 +147,7 @@ class ReplyGenerator:
             raise
         except Exception:
             self._mark_failed(request, "runtime_failed")
-            self._record_ledger(
+            self._record_failure_ledger(
                 command, LedgerOutcome.RUN_FAILED, None, started_ns, called_at
             )
             raise ReplyRunError("候选回复运行失败。") from None
@@ -167,7 +167,7 @@ class ReplyGenerator:
             self._validate_current_context(runtime_context)
         except ReplyError:
             self._mark_failed(request, "runtime_failed")
-            self._record_ledger(
+            self._record_failure_ledger(
                 command,
                 LedgerOutcome.REJECTED_BY_VALIDATION,
                 runtime_usage,
@@ -178,7 +178,7 @@ class ReplyGenerator:
             raise
         except Exception:
             self._mark_failed(request, "runtime_failed")
-            self._record_ledger(
+            self._record_failure_ledger(
                 command,
                 LedgerOutcome.REJECTED_BY_VALIDATION,
                 runtime_usage,
@@ -193,7 +193,7 @@ class ReplyGenerator:
             for candidate in runtime_result.candidates
         ):
             self._mark_failed(request, "citation_invariant_failed")
-            self._record_ledger(
+            self._record_failure_ledger(
                 command,
                 LedgerOutcome.REJECTED_BY_VALIDATION,
                 runtime_usage,
@@ -211,7 +211,7 @@ class ReplyGenerator:
         except ReplyError:
             self._mark_failed(request, "persistence_failed")
             # 外部调用本身已完成且通过校验；候选落库失败不改变调用结果。
-            self._record_ledger(
+            self._record_failure_ledger(
                 command,
                 LedgerOutcome.SUCCEEDED,
                 runtime_usage,
@@ -222,7 +222,7 @@ class ReplyGenerator:
             raise
         except Exception:
             self._mark_failed(request, "persistence_failed")
-            self._record_ledger(
+            self._record_failure_ledger(
                 command,
                 LedgerOutcome.SUCCEEDED,
                 runtime_usage,
@@ -273,6 +273,34 @@ class ReplyGenerator:
             self._ledger.record(entry)
         except Exception:
             raise ReplyRunError("出站台账记录失败。") from None
+
+    def _record_failure_ledger(
+        self,
+        command: GenerateReply,
+        outcome: LedgerOutcome,
+        usage: RuntimeUsage | None,
+        started_ns: float,
+        called_at: datetime,
+        latency_ms: int | None = None,
+    ) -> None:
+        """失败路径的台账记录：尽力而为，不替换原始错误。
+
+        失败路径已经 `_mark_failed` 并带着原始领域异常向上抛；台账
+        只是审计旁路，写入失败时吞掉，避免把 `ReplyPersistenceError`
+        等真实失败原因改写成 `ReplyRunError`，丢失错误分类。
+        """
+
+        try:
+            self._record_ledger(
+                command,
+                outcome,
+                usage,
+                started_ns,
+                called_at,
+                latency_ms,
+            )
+        except Exception:
+            pass
 
     def _mark_failed(self, request: object, reason: str) -> None:
         try:
