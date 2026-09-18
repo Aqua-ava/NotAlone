@@ -19,4 +19,8 @@ State: open
 
 无慢客户端/断连方式/超大请求体的针对性用例；`test_sync_host.py` 假引擎的 `sync_enabled` 从不抛错（该路径已补守卫，但对应回归测试见提交说明）。
 
+## Answer
+
+2026-09-18 已完成遗留项 1、3、5，并部分完成遗留项 2：HEAD 只写响应头；正整数 `Content-Length` 超过 1 MiB 时返回稳定 413，并以 100ms、最多 8 MiB 的有界排空兼顾正常上传客户端与只声明长度的慢客户端；SSE 写端增加 300 秒 socket 超时并统一收敛断连类 `OSError`；owner 未初始化时事件订阅返回 503。真实回环 HTTP 测试覆盖 HEAD、完整超限 body、仅声明超限长度但不发送 body，以及未初始化 owner。缺失/非法/负数 `Content-Length` 与 chunked 契约、遗留项 4（PID 复用/跨用户误判）尚未处理，本 ticket 保持 open。
+
 ## Comments

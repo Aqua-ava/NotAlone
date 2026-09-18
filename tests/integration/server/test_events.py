@@ -329,6 +329,104 @@ class EventStreamContractTest(unittest.TestCase):
             server.shutdown()
             thread.join(timeout=1)
 
+    def test_head_request_returns_headers_without_body(self) -> None:
+        # HEAD 响应按协议不携带 body；状态码维持与 GET 同一分支逻辑。
+        import http.client
+
+        server = BackendServer(self.app, port=0)
+        host, port = server.start()
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            connection = http.client.HTTPConnection(host, port, timeout=2)
+            connection.request("HEAD", "/api/contacts", headers=self.headers)
+            response = connection.getresponse()
+            self.assertIn(response.status, (200, 404))
+            self.assertEqual(response.read(), b"")
+            connection.close()
+        finally:
+            server.shutdown()
+            thread.join(timeout=1)
+
+    def test_oversized_body_returns_stable_413(self) -> None:
+        # 超限请求体必须能拿到稳定 413，而不是连接被无响应重置。
+        import http.client
+
+        server = BackendServer(self.app, port=0)
+        host, port = server.start()
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            connection = http.client.HTTPConnection(host, port, timeout=5)
+            oversized = b"x" * (1024 * 1024 + 16)
+            connection.request(
+                "POST",
+                "/api/memories/manual-owner",
+                body=oversized,
+                headers={
+                    **self.headers,
+                    "Content-Type": "application/json",
+                },
+            )
+            response = connection.getresponse()
+            self.assertEqual(response.status, 413)
+            self.assertEqual(
+                json.loads(response.read())["error"],
+                "request_body_too_large",
+            )
+            connection.close()
+        finally:
+            server.shutdown()
+            thread.join(timeout=1)
+
+    def test_oversized_declared_body_returns_413_without_waiting_for_body(self) -> None:
+        import http.client
+
+        server = BackendServer(self.app, port=0)
+        host, port = server.start()
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            connection = http.client.HTTPConnection(host, port, timeout=2)
+            connection.request(
+                "POST",
+                "/api/memories/manual-owner",
+                headers={
+                    **self.headers,
+                    "Content-Length": str(1024 * 1024 + 16),
+                    "Content-Type": "application/json",
+                },
+            )
+            response = connection.getresponse()
+            self.assertEqual(response.status, 413)
+            self.assertEqual(response.getheader("Connection"), "close")
+            self.assertEqual(
+                json.loads(response.read())["error"],
+                "request_body_too_large",
+            )
+            connection.close()
+        finally:
+            server.shutdown()
+            thread.join(timeout=1)
+
+    def test_open_sse_requires_initialized_owner(self) -> None:
+        # owner 未初始化时订阅会永久空挂（事件都带真实 owner）；与
+        # handle() 的 owner 门禁保持一致，返回稳定 503。
+        app = create_app(
+            database_url="postgresql:///notalone_test",
+            owner_id=None,
+            token="test-token",
+        )
+        response = app.open_sse(
+            path="/api/events",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            json.loads(response.body)["error"],
+            "owner_uninitialized",
+        )
+
     def _open_stream(self, *, last_event_id: str | None = None) -> InProcessSseStream:
         headers = dict(self.headers)
         if last_event_id is not None:

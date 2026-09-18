@@ -1307,6 +1307,13 @@ class BackendApp:
             return _json_response(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
         if urlsplit(path).path != "/api/events":
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        if self._owner_id is None:
+            # 业务事件都带真实 owner；未初始化时订阅会永久空挂，
+            # 因此这里与 handle() 的 owner 门禁保持一致。
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "owner_uninitialized"},
+            )
         last_event_id = _parse_last_event_id(request_headers)
         return SseResponse(
             status_code=int(HTTPStatus.OK),
@@ -1374,6 +1381,11 @@ class BackendServer:
         app = self._app
 
         class RequestHandler(BaseHTTPRequestHandler):
+            # 半开连接长时间阻塞会拖住线程与事件队列。
+            # 有界 socket 超时保证写失败最终被感知；SSE keep-alive
+            # 为 15 秒，连接超时保留分钟级余量。
+            timeout = 300
+
             def do_GET(self) -> None:  # noqa: N802
                 if urlsplit(self.path).path == "/api/events":
                     response = app.open_sse(
@@ -1469,34 +1481,78 @@ def create_app(
 
 
 def _serve_request(handler: BaseHTTPRequestHandler, app: BackendApp) -> None:
+    try:
+        body = _read_request_body(handler)
+    except _RequestBodyTooLarge:
+        # 短时、有界排空可降低正常客户端收到 RST 的概率；随后关闭连接。
+        handler.close_connection = True
+        _write_response(
+            handler,
+            _json_response(
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                {"error": "request_body_too_large"},
+                headers={"Connection": "close"},
+            ),
+        )
+        return
     response = app.handle(
         method=handler.command,
         path=handler.path,
         headers={key: value for key, value in handler.headers.items()},
-        body=_read_request_body(handler),
+        body=body,
     )
     _write_response(handler, response)
 
 
-def _read_request_body(handler: BaseHTTPRequestHandler) -> bytes:
-    """按 Content-Length 读取请求体；缺失或无法解析时按空体处理。
+class _RequestBodyTooLarge(Exception):
+    """Content-Length 超出上限：统一映射为稳定 413。"""
 
-    只允许读取回环本地请求；Content-Length 异常（负数/超大）按空体
-    处理，避免无界读入。
+
+def _read_request_body(handler: BaseHTTPRequestHandler) -> bytes:
+    """按 Content-Length 读取请求体；异常声明映射为稳定 413。
+
+    只允许读取回环本地请求。超过 1 MiB 时短时、有界排空已到达数据，
+    再返回 413 并关闭连接；这样不会被只声明长度却不发送 body 的客户端
+    长期挂住。
     """
 
     try:
         length = int(_header_value(handler.headers, "Content-Length"))
     except (ValueError, TypeError):
         return b""
-    if length < 0 or length > 1024 * 1024:
+    if length < 0:
         return b""
+    if length > 1024 * 1024:
+        _drain_available_body(handler, limit=length)
+        raise _RequestBodyTooLarge()
     if length == 0:
         return b""
     try:
         return handler.rfile.read(length) or b""
-    except (OSError, ConnectionError):
+    except OSError:
         return b""
+
+
+def _drain_available_body(
+    handler: BaseHTTPRequestHandler,
+    *,
+    limit: int,
+) -> None:
+    """以极短超时丢弃已到达的超限 body，最多读取 8 MiB。"""
+
+    remaining = min(limit, 8 * 1024 * 1024)
+    previous_timeout = handler.connection.gettimeout()
+    try:
+        handler.connection.settimeout(0.1)
+        while remaining > 0:
+            chunk = handler.rfile.read(min(65536, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+    except OSError:
+        return
+    finally:
+        handler.connection.settimeout(previous_timeout)
 
 
 def _write_response(handler: BaseHTTPRequestHandler, response: Response) -> None:
@@ -1504,6 +1560,9 @@ def _write_response(handler: BaseHTTPRequestHandler, response: Response) -> None
     for key, value in response.headers.items():
         handler.send_header(key, value)
     handler.end_headers()
+    if handler.command == "HEAD":
+        # HEAD 响应按协议不携带 body。
+        return
     handler.wfile.write(response.body)
 
 
@@ -1523,7 +1582,9 @@ def _serve_sse(handler: BaseHTTPRequestHandler, response: SseResponse) -> None:
                 continue
             handler.wfile.write(encode_sse_frame(event))
             handler.wfile.flush()
-    except (BrokenPipeError, ConnectionResetError):
+    except OSError:
+        # 客户端断开/超时是常态；其他断连方式也要静默收尾。
+        # 订阅在 finally 中统一关闭，不让 HTTP 线程以堆栈收场。
         pass
     finally:
         response.subscription.close()
@@ -1790,16 +1851,23 @@ def _parse_query(query: str) -> dict[str, str]:
     return result
 
 
-def _json_response(status: HTTPStatus, payload: object) -> Response:
+def _json_response(
+    status: HTTPStatus,
+    payload: object,
+    *,
+    headers: Mapping[str, str] | None = None,
+) -> Response:
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(
         "utf-8"
     )
+    merged = {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Length": str(len(body)),
+        **(headers or {}),
+    }
     return Response(
         status_code=int(status),
-        headers={
-            "Content-Type": "application/json; charset=utf-8",
-            "Content-Length": str(len(body)),
-        },
+        headers=merged,
         body=body,
     )
 
