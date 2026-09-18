@@ -26,4 +26,6 @@ extract_main 空分支需真实 DB fixture；三个 memory CLI 入口无非法 e
 
 2026-09-18 第三轮已修复：install.sh 的 keg-only `postgresql@16` 安装后 psql/createdb 不可达（安装后重解析并把公式 bin 补进 PATH）、`.env` 先以受限 umask 创建再写入、冷启动连接改为有界重试（10×2s）、conda 环境探测覆盖自定义路径注册；新增迁移 035 补齐 `memory_extraction_watermark` 对 contact 的外键级联（先清孤儿行——notalone_test 实际清理了 443 条孤儿——DO 块约束守卫，重复执行幂等验证通过），并同步追加进 install.sh 增量清单；watermark store 集成测试夹具改为真实 owner/contact 并新增级联回归测试。
 
+2026-09-18 本轮已修复遗留项 1、4：`extract_main` 在空消息成功分支前验证 `owner_id + contact_id`，不存在或越界时返回 1；`--batch-size` 在构造数据库和模型组件前限制为 1–20，并输出稳定中文错误。CLI seam 单元测试覆盖两个失败分支。其余遗留项尚未处理，本 ticket 保持 open。
+
 ## Comments

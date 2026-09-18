@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timedelta, timezone
+from io import StringIO
+from types import SimpleNamespace
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 from notalone.memory.models import (
@@ -12,7 +15,7 @@ from notalone.memory.models import (
     MemoryCategory,
     MemoryTopic,
 )
-from notalone.memory_extraction.command import run_extraction
+from notalone.memory_extraction.command import extract_main, run_extraction
 from notalone.memory_extraction.errors import (
     ExtractionInvalidOutputError,
     ExtractionRuntimeError,
@@ -555,6 +558,63 @@ class RunExtractionTest(unittest.TestCase):
         self.assertEqual(stats.skipped_batches, 0)
         self.assertIsNone(self.watermark.failure)
         self.assertEqual(self.watermark.values, [])
+
+
+class ExtractMainTest(unittest.TestCase):
+    def test_rejects_invalid_batch_size_before_runtime_setup(self) -> None:
+        output = StringIO()
+
+        with patch(
+            "notalone.memory_extraction.command.load_project_env"
+        ), patch("sys.stdout", output):
+            exit_code = extract_main(
+                ["--contact-id", str(CONTACT_ID), "--batch-size", "0"]
+            )
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("--batch-size 必须在 1 到 20 之间", output.getvalue())
+
+    def test_missing_contact_is_not_reported_as_empty_success(self) -> None:
+        output = StringIO()
+        environment = {
+            "NOTALONE_DATABASE_URL": "postgresql:///notalone_test",
+            "NOTALONE_OWNER_ID": str(OWNER_ID),
+        }
+
+        with patch(
+            "notalone.memory_extraction.command.load_project_env"
+        ), patch.dict("os.environ", environment, clear=True), patch(
+            "notalone.memory_extraction.cli_support.build_extraction_components",
+            return_value=SimpleNamespace(),
+        ), patch(
+            "notalone.memory_extraction.cli_support.contact_exists",
+            return_value=False,
+        ), patch("sys.stdout", output):
+            exit_code = extract_main(["--contact-id", str(CONTACT_ID)])
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("联系人不存在或不在当前用户范围内", output.getvalue())
+
+    def test_contact_lookup_failure_returns_stable_preparation_error(self) -> None:
+        output = StringIO()
+        environment = {
+            "NOTALONE_DATABASE_URL": "postgresql:///notalone_test",
+            "NOTALONE_OWNER_ID": str(OWNER_ID),
+        }
+
+        with patch(
+            "notalone.memory_extraction.command.load_project_env"
+        ), patch.dict("os.environ", environment, clear=True), patch(
+            "notalone.memory_extraction.cli_support.build_extraction_components",
+            return_value=SimpleNamespace(),
+        ), patch(
+            "notalone.memory_extraction.cli_support.contact_exists",
+            side_effect=RuntimeError("synthetic database outage"),
+        ), patch("sys.stdout", output):
+            exit_code = extract_main(["--contact-id", str(CONTACT_ID)])
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("记忆提取准备失败", output.getvalue())
 
 
 if __name__ == "__main__":

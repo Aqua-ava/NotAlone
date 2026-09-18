@@ -270,6 +270,10 @@ def extract_main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+    if not 0 < args.batch_size <= EXTRACTION_BATCH_SIZE:
+        return _fail(
+            f"--batch-size 必须在 1 到 {EXTRACTION_BATCH_SIZE} 之间。"
+        )
 
     database_url = os.environ.get("NOTALONE_DATABASE_URL", "").strip()
     owner_id = os.environ.get("NOTALONE_OWNER_ID", "").strip()
@@ -288,12 +292,18 @@ def extract_main(argv: list[str] | None = None) -> int:
     )
     from notalone.memory_extraction.cli_support import (
         build_extraction_components,
+        contact_exists,
         load_contact_messages,
     )
 
     scope = ContactScope(owner_uuid, args.contact_id)
     try:
         components = build_extraction_components(database_url)
+    except Exception:
+        return _fail("记忆提取准备失败：数据库不可用。")
+    try:
+        if not contact_exists(scope, database_url):
+            return _fail("联系人不存在或不在当前用户范围内。")
         messages = load_contact_messages(scope, database_url)
     except Exception:
         return _fail("记忆提取准备失败：数据库不可用或联系人不存在。")
