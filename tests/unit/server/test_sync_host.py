@@ -224,6 +224,33 @@ class SyncHostTest(unittest.TestCase):
         time.sleep(0.05)
         self.assertEqual(self.engine.cycle_calls, cycles_when_disabled)
 
+    def test_loop_survives_sync_enabled_read_failures(self) -> None:
+        # 开关读取（查库）瞬时失败只丢弃本轮，不能让心跳线程死亡：
+        # 线程死亡后 /api/sync/status 会永远返回崩溃前的旧报告。
+        self.engine.enabled = True
+        failures = {"count": 2}
+
+        original = self.engine.sync_enabled
+
+        def flaky_sync_enabled() -> bool:
+            if failures["count"] > 0:
+                failures["count"] -= 1
+                raise RuntimeError("synthetic persistence outage")
+            return original()
+
+        self.engine.sync_enabled = flaky_sync_enabled  # type: ignore[method-assign]
+        self.host.start()
+        try:
+            deadline = time.monotonic() + 2.0
+            while time.monotonic() < deadline:
+                if self.engine.cycle_calls >= 3 and failures["count"] == 0:
+                    break
+                time.sleep(0.02)
+            self.assertEqual(failures["count"], 0)
+            self.assertGreaterEqual(self.engine.cycle_calls, 3)
+        finally:
+            self.host.stop()
+
     def test_loop_only_seeds_when_disabled_from_start(self) -> None:
         self.host.start()
         time.sleep(0.05)

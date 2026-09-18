@@ -114,6 +114,7 @@ class TaskHost:
     __slots__ = (
         "_event_publisher",
         "_lock_connection_builder",
+        "_lock",
         "_progress",
         "_threads",
         "_worker_builder",
@@ -129,50 +130,56 @@ class TaskHost:
         self._worker_builder = worker_builder
         self._lock_connection_builder = lock_connection_builder
         self._event_publisher = event_publisher
+        # 多个 HTTP 线程与任务线程并发读写这两个 dict；必须持锁完成
+        # check-then-act，否则并发 start 会重复建线程、先结束的线程会
+        # 误删仍在运行线程的条目（current() 在运行中报 finished）。
+        self._lock = threading.RLock()
         self._threads: dict[UUID, threading.Thread] = {}
         self._progress: dict[UUID, dict[str, object]] = {}
 
     def start(self, *, owner_id: UUID, contact_id: UUID) -> dict[str, object]:
         """触发一个联系人任务；已有执行中线程时返回 busy。"""
 
-        existing = self._threads.get(contact_id)
-        if existing is not None and existing.is_alive():
-            return {"status": "busy"}
-        task_id = uuid4()
-        thread = threading.Thread(
-            target=self._run,
-            name=f"notalone-task-{contact_id}",
-            args=(owner_id, contact_id, task_id),
-            daemon=True,
-        )
-        self._threads[contact_id] = thread
-        self._set_progress(
-            contact_id,
-            {
-                "task_id": str(task_id),
-                "step": "claiming",
-                "status": "running",
-                "processed_count": 0,
-                "attempt_count": 0,
-                "retry_count": 0,
-            },
-        )
-        thread.start()
-        return {"status": "started"}
+        with self._lock:
+            existing = self._threads.get(contact_id)
+            if existing is not None and existing.is_alive():
+                return {"status": "busy"}
+            task_id = uuid4()
+            thread = threading.Thread(
+                target=self._run,
+                name=f"notalone-task-{contact_id}",
+                args=(owner_id, contact_id, task_id),
+                daemon=True,
+            )
+            self._threads[contact_id] = thread
+            self._set_progress(
+                contact_id,
+                {
+                    "task_id": str(task_id),
+                    "step": "claiming",
+                    "status": "running",
+                    "processed_count": 0,
+                    "attempt_count": 0,
+                    "retry_count": 0,
+                },
+            )
+            thread.start()
+            return {"status": "started"}
 
     def current(self, *, owner_id: UUID, contact_id: UUID) -> dict[str, object]:
         """返回当前进度快照；无任务时返回 idle。"""
 
-        thread = self._threads.get(contact_id)
-        if thread is not None and thread.is_alive():
-            return {
-                "status": "running",
-                "progress": self._progress.get(contact_id),
-            }
-        progress = self._progress.get(contact_id)
-        if progress is not None:
-            return {"status": "finished", "progress": progress}
-        return {"status": "idle", "progress": None}
+        with self._lock:
+            thread = self._threads.get(contact_id)
+            if thread is not None and thread.is_alive():
+                return {
+                    "status": "running",
+                    "progress": self._progress.get(contact_id),
+                }
+            progress = self._progress.get(contact_id)
+            if progress is not None:
+                return {"status": "finished", "progress": progress}
+            return {"status": "idle", "progress": None}
 
     def _run(
         self,
@@ -248,7 +255,11 @@ class TaskHost:
                 )
             )
         finally:
-            self._threads.pop(contact_id, None)
+            # 只清除自己的条目：并发触发的重复线程不能被先结束的一方误删。
+            current = threading.current_thread()
+            with self._lock:
+                if self._threads.get(contact_id) is current:
+                    self._threads.pop(contact_id, None)
 
     def _record(self, update: TaskProgressUpdate) -> None:
         self._set_progress(update.contact_id, update.as_payload())

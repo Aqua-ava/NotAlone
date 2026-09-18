@@ -400,7 +400,13 @@ class SyncHost:
             if self._stop_event.wait(interval):
                 return
             with self._engine_lock:
-                if self._engine.sync_enabled():
+                try:
+                    enabled = self._engine.sync_enabled()
+                except Exception:
+                    # 开关读取（查库）瞬时失败按关闭处理：本轮不执行
+                    # cycle，线程保持存活，下个心跳重试；不泄露细节。
+                    enabled = False
+                if enabled:
                     self._run_cycle_guarded()
 
     def _run_cycle_guarded(self) -> FrontSyncCycleReport | None:

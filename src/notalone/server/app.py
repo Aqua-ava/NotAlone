@@ -200,12 +200,40 @@ class BackendApp:
         headers: Mapping[str, str] | None = None,
         body: bytes = b"",
     ) -> Response:
-        """处理一个请求；不把 token 或请求正文写入错误响应。"""
+        """处理一个请求；不把 token 或请求正文写入错误响应。
+
+        已认证后的分发整体兜底：任何未预期异常（畸形输入触发的
+        ValueError/RecursionError、装配层错误等）返回稳定 500，不把
+        内部细节写进响应，也不让 HTTP 线程以无响应关闭收场。
+        """
 
         request_body = bytes(body)
         request_headers = headers or {}
         if not self._authorized(request_headers):
             return _json_response(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+        try:
+            return self._handle_authenticated(
+                method=method,
+                path=path,
+                headers=request_headers,
+                body=request_body,
+            )
+        except Exception:
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "internal_error"},
+            )
+
+    def _handle_authenticated(
+        self,
+        *,
+        method: str,
+        path: str,
+        headers: Mapping[str, str],
+        body: bytes,
+    ) -> Response:
+        request_body = bytes(body)
+        request_headers = headers
         method_upper = method.upper()
         path_value = urlsplit(path).path
         if (
@@ -1299,7 +1327,15 @@ class BackendApp:
             supplied = authorization.removeprefix("Bearer ")
         else:
             supplied = _header_value(headers, "X-NotAlone-Token")
-        return bool(supplied) and secrets.compare_digest(supplied, self._token)
+        if not supplied:
+            return False
+        try:
+            return secrets.compare_digest(supplied, self._token)
+        except TypeError:
+            # HTTP 头按 latin-1 解码，可能携带非 ASCII 字符；
+            # compare_digest 只接受 ASCII。无法比较的头一律按未认证
+            # 处理，得到稳定 401 而不是连接级崩溃。
+            return False
 
 
 class BackendServer:
