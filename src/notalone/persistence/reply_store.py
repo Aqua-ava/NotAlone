@@ -11,6 +11,8 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from notalone.persistence.locks import lock_owner_scope
+
 from notalone.reply.context import (
     ContextEvidence,
     ContinuedReplyCandidate,
@@ -93,6 +95,8 @@ class PostgresReplyStore:
         now = self._now()
         try:
             with self._connect() as connection:
+                # 与来源删除串行化领取、继续候选和结果写入，避免旧副本复活。
+                lock_owner_scope(connection, owner_id=verified_scope.owner_id)
                 request_id = self._new_uuid()
                 lease_expires_at = now + self._lease_duration
                 inserted = connection.execute(
@@ -306,6 +310,7 @@ class PostgresReplyStore:
             raise ReplyStoreInvariantError("回复请求租约结构无效。")
         try:
             with self._connect() as connection:
+                lock_owner_scope(connection, owner_id=request.scope.owner_id)
                 row = connection.execute(
                     """
                     SELECT id, owner_id, contact_id,

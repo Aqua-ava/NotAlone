@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -19,6 +21,7 @@ from notalone.ingest.normalizer import normalize_document
 from notalone.memory import (
     AdoptionMethod,
     ConfirmedMemoryStatus,
+    FactSubject,
     MemoryCandidate,
     MemoryCategory,
     MemoryTopic,
@@ -637,6 +640,70 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
                 ),
             ).fetchone()
         self.assertEqual(state, ("deleted", 0))
+
+    def test_owner_confirmation_and_source_deletion_do_not_deadlock(self) -> None:
+        imported = self.ingest_repository.import_document(
+            owner_id=self.owner_id,
+            document=self.batch,
+            confirmation=ImportConfirmationRequest(
+                selection=ExistingContactSelection(contact_id=self.contact_id)
+            ),
+        )
+        scope = ContactScope(self.owner_id, self.contact_id)
+        candidate = PostgresMemoryStore(TEST_DATABASE_URL).create_candidate(
+            MemoryCandidate(
+                candidate_id=uuid4(),
+                scope=scope,
+                text="并发确认与删除的合成本人记忆",
+                category=MemoryCategory.COMMON_FACT,
+                subject=FactSubject.SELF,
+                source_ids=(imported.source_document_id,),
+            )
+        )
+        owner_store = PostgresOwnerMemoryStore(TEST_DATABASE_URL)
+        with psycopg.connect(TEST_DATABASE_URL) as blocker:
+            blocker.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                (f"owner:{self.owner_id}",),
+            )
+            blocker_pid = blocker.execute("SELECT pg_backend_pid()").fetchone()[0]
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                try:
+                    confirmation = executor.submit(
+                        owner_store.confirm_candidate, candidate=candidate
+                    )
+                    waiting = self._wait_for_blocked_operations({blocker_pid}, 1)
+                    deletion = executor.submit(
+                        self.deletion_repository.delete_source,
+                        owner_id=self.owner_id,
+                        contact_id=self.contact_id,
+                        source_document_id=imported.source_document_id,
+                    )
+                    self._wait_for_blocked_operations({blocker_pid, *waiting}, 2)
+                finally:
+                    # 无论断言是否成功都释放屏障，避免工作线程挂住测试退出。
+                    blocker.commit()
+                confirmation.result(timeout=10)
+                self.assertEqual(deletion.result(timeout=10).outcome, "deleted")
+        self.assertEqual(owner_store.list_active(self.owner_id), ())
+
+    def _wait_for_blocked_operations(
+        self, blocker_pids: set[int], count: int
+    ) -> set[int]:
+        deadline = time.monotonic() + 5
+        with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as connection:
+            while time.monotonic() < deadline:
+                rows = connection.execute(
+                    """
+                    SELECT pid FROM pg_stat_activity
+                    WHERE pg_blocking_pids(pid) && %s::integer[]
+                    """,
+                    (list(blocker_pids),),
+                ).fetchall()
+                if len(rows) >= count:
+                    return {row[0] for row in rows}
+                time.sleep(0.01)
+        self.fail("并发操作未在限定时间内进入数据库锁等待。")
 
     def test_deleted_file_is_reimported_as_a_new_source(self) -> None:
         confirmation = ImportConfirmationRequest(

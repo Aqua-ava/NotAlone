@@ -1,4 +1,8 @@
-"""PostgreSQL 事务级领域锁。"""
+"""PostgreSQL 事务级领域锁。
+
+同一事务需要两种范围锁时，必须先取得 contact 锁，再取得 owner 锁。
+只持有 owner 锁的路径不得随后请求 contact 锁，避免与来源删除形成锁环。
+"""
 
 from __future__ import annotations
 

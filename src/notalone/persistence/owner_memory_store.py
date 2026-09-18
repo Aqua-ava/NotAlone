@@ -106,12 +106,12 @@ class PostgresOwnerMemoryStore:
         candidate_id = candidate.candidate_id
         try:
             with self._connect() as connection:
-                lock_owner_scope(connection, owner_id=scope.owner_id)
                 lock_contact_scope(
                     connection,
                     owner_id=scope.owner_id,
                     contact_id=scope.contact_id,
                 )
+                lock_owner_scope(connection, owner_id=scope.owner_id)
                 candidate_row = connection.execute(
                     """
                     SELECT id, owner_id, contact_id, text_content, category,

@@ -15,6 +15,7 @@ from notalone.persistence.message_cleanup import (
     collect_orphan_message_ids,
     delete_messages,
 )
+from notalone.persistence.reply_cleanup import ReplyCleanupError, delete_source_replies
 
 
 class SourceDeletionError(RuntimeError):
@@ -137,6 +138,12 @@ class PostgresSourceDeletionRepository:
                     owner_id=owner_id,
                     contact_id=contact_id,
                     candidate_message_ids=source_message_ids,
+                )
+                delete_source_replies(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    removed_ids={source_document_id, *orphan_message_ids},
                 )
                 cleanup_derived_data(
                     connection,
@@ -263,7 +270,7 @@ class PostgresSourceDeletionRepository:
                 source_document_id=source_document_id,
             )
             raise
-        except psycopg.Error:
+        except (psycopg.Error, ReplyCleanupError):
             self._record_failure(
                 owner_id=owner_id,
                 contact_id=contact_id,
