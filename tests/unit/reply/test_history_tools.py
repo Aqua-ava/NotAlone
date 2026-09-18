@@ -8,7 +8,7 @@ import unittest
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, BaseMessage
@@ -200,6 +200,38 @@ class HistoryToolTest(unittest.TestCase):
         self.assertIn("禁止再调用任何历史工具", payload["guidance"])
         self.assertEqual(len(access.tool_calls), 4)
         self.assertEqual(access.tool_calls[-1].status, "budget_exceeded")
+
+    def test_history_evidence_count_is_capped_independently_from_tokens(self) -> None:
+        base = datetime(2026, 9, 1, 12, tzinfo=timezone.utc)
+        messages = tuple(
+            RetrievedMessage(
+                message_id=uuid4(),
+                scope=self.scope,
+                text=f"{group} {index}",
+                source_ids=(SOURCE_ID,),
+                occurred_at=base + timedelta(minutes=offset),
+                role="contact",
+            )
+            for offset, (group, index) in enumerate(
+                (group, index)
+                for group in ("甲组", "乙组", "丙组")
+                for index in range(8)
+            )
+        )
+        access = HistoryToolAccess(
+            retrieval=InMemoryRetrieval(messages=messages),
+            scope=self.scope,
+            conversation_binding_id=BINDING_ID,
+        )
+
+        first = json.loads(access.search(query="甲组", top_k=8))
+        second = json.loads(access.search(query="乙组", top_k=8))
+        third = json.loads(access.search(query="丙组", top_k=8))
+
+        self.assertEqual(first["status"], "ok")
+        self.assertEqual(second["status"], "ok")
+        self.assertEqual(third["status"], "budget_exceeded")
+        self.assertEqual(len(access.evidence), 16)
 
     def test_empty_search_returns_actionable_guidance(self) -> None:
         access = self._access()

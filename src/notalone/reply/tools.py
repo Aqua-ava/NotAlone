@@ -24,7 +24,10 @@ MAX_SEARCH_RESULTS = 8
 MAX_QUERY_WINDOW = 10
 MAX_HISTORY_TIMEOUT_MS = 1500
 MAX_HISTORY_TOKEN_BUDGET = 2048
-
+# 进入证据的历史条数上限（与 token 预算独立）。
+# 运行时最多调用 3 次、每次最多返回 8 条；16 条上限会拒绝第三次大结果。
+# 此前把 token 预算 2048 当作条数上限比较，实际不可达。
+MAX_HISTORY_EVIDENCE_COUNT = 16
 # 非成功状态的 Tool 返回必须给模型可操作的下一步指令，
 # 否则模型会把未命中或预算耗尽当作重试信号，耗尽运行步骤上限。
 _STATUS_GUIDANCE: dict[str, str] = {
@@ -260,9 +263,8 @@ class HistoryToolAccess:
             self._finish_call(tool_name, "empty", (), started)
             return self._status_result("empty", "no_matching_history")
         estimated = sum(_estimate_tokens(item.text) for item in validated)
-        if (
-            self._token_count + estimated > MAX_HISTORY_TOKEN_BUDGET
-            or len(self._evidence) + len(validated) > MAX_HISTORY_TOKEN_BUDGET
+        if self._token_count + estimated > MAX_HISTORY_TOKEN_BUDGET or (
+            len(self._evidence) + len(validated) > MAX_HISTORY_EVIDENCE_COUNT
         ):
             self._finish_call(tool_name, "budget_exceeded", (), started)
             return self._status_result("budget_exceeded", "history_token_budget")
