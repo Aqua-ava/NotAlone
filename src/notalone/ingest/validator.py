@@ -232,6 +232,11 @@ def _validate_record(
         raise ImportPreviewError(f"第 {line_number} 行的 sender 不能为空。")
     if not record["time"].strip():
         raise ImportPreviewError(f"第 {line_number} 行的 time 不能为空。")
+    # 规范消息必须有正文或媒体占位；text 兼作媒体占位，空白 text
+    # 必须在这里按行号拒绝，否则校验通过后会在规范化阶段抛出
+    # 未处理的 ValueError，破坏"预览通过即可导入"的契约。
+    if not record["text"].strip():
+        raise ImportPreviewError(f"第 {line_number} 行的 text 不能为空。")
 
     # fromisoformat 把 ISO 字符串解析成 datetime；解析失败时转成安全业务异常。
     try:
