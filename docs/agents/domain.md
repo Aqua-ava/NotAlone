@@ -10,7 +10,7 @@
 | --- | --- |
 | 联系人、消息、来源、记忆或检索 | `current/domain-data.md`；涉及自动采纳或检索时再读 ADR-002/ADR-005 |
 | 导入、回复、删除或后台任务 | `current/core-flows.md`；涉及历史导入或 Worker 时再读 ADR-004/ADR-007 |
-| Mac 微信同步、OCR 或连续性 | `current/core-flows.md`、`current/privacy-deletion.md`、ADR-001、ADR-003 |
+| Mac 微信同步、OCR 或连续性 | `current/core-flows.md`、`current/privacy-deletion.md`、ADR-023、ADR-025、ADR-030；追溯旧视觉方案时再读 ADR-001、ADR-003 |
 | 隐私、外部模型、云端存储、连接器或部署 | `current/privacy-deletion.md`、`drafts/cloud-engineering.md` 及相关 ADR |
 | Agent、Tool、MCP、RAG 或编排框架 | `drafts/agent-runtime.md`、ADR-006、ADR-009 |
 

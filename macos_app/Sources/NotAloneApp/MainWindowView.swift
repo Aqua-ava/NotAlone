@@ -24,7 +24,6 @@ struct MainWindowView: View {
     @State private var detailTab = 0
     @State private var selectedCliLocators: Set<String> = []
     @State private var cliDisplayNames: [String: String] = [:]
-    @State private var didInitializeCliSelection = false
     // 记忆管理输入
     @State private var newMemoryText = ""
     @State private var newMemoryCategory = MemoryCategoryOption.preference.rawValue
@@ -353,7 +352,7 @@ struct MainWindowView: View {
         } label: {
             Image(systemName: model.status?.syncEnabled == true ? "pause.circle" : "play.circle")
         }
-        .help(model.status?.syncEnabled == true ? "关闭 CLI 全量同步" : "开启 CLI 全量同步")
+        .help(model.status?.syncEnabled == true ? "关闭 联系人后台同步" : "开启 联系人后台同步")
         .disabled(model.clientUnavailable)
     }
 
@@ -394,7 +393,7 @@ struct MainWindowView: View {
         if model.status?.syncMode == "cli_background" {
             switch (model.status?.syncEnabled, model.status?.cliSyncPhase) {
             case (false, _):
-                return "CLI 全量同步已关闭"
+                return "联系人后台同步已关闭"
             case (true, "active"):
                 return "CLI 后台同步中：已绑定 \(model.status?.cliBoundCount ?? 0) 个会话"
             case (true, "degraded"):
@@ -1265,9 +1264,9 @@ struct MainWindowView: View {
 
     private var cliBindingManagementCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("CLI 全量同步")
+            Text("已确认联系人的后台同步")
                 .font(.headline)
-            Text("首次绑定只处理 CLI 可见的一对一微信会话。默认全选，你可以取消后一次确认；确认后由 CLI 在后台同步，不要求微信保持前台。")
+            Text("请选择需要同步的一对一会话，首次不会预选。确认绑定并开启同步后，应用运行期间会在后台读取所选联系人的文字消息，不要求微信保持前台。关闭同步或退出应用即可停止；重新开启后会补齐绑定之后的可检测缺口。不会自动发送消息。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1303,6 +1302,19 @@ struct MainWindowView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
+                HStack {
+                    Button("全选当前未绑定会话") {
+                        selectedCliLocators = Set(model.cliSessions
+                            .filter { $0.boundContactId == nil }
+                            .map(\.username))
+                    }
+                    .disabled(unboundCliCount == 0)
+                    Button("清空选择") {
+                        selectedCliLocators.removeAll()
+                    }
+                    .disabled(selectedCliCount == 0)
+                }
+                .disabled(model.cliSessionsInFlight || model.cliBindingsInFlight)
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(model.cliSessions) { candidate in
                         cliSessionRow(candidate)
@@ -1502,16 +1514,8 @@ struct MainWindowView: View {
                 .filter { $0.boundContactId == nil }
                 .map(\.username)
         )
-        if !didInitializeCliSelection {
-            // 页面首次出现时列表可能还没从后端返回；保留未初始化状态，
-            // 等首批私聊候选到达后再执行一次默认全选。
-            if !available.isEmpty {
-                selectedCliLocators = available
-                didInitializeCliSelection = true
-            }
-        } else {
-            selectedCliLocators.formIntersection(available)
-        }
+        // 刷新只保留用户仍有效的选择，新增会话等待用户主动勾选。
+        selectedCliLocators.formIntersection(available)
         for candidate in sessions where cliDisplayNames[candidate.username] == nil {
             cliDisplayNames[candidate.username] = candidate.displayName
         }
@@ -1667,14 +1671,14 @@ struct MainWindowView: View {
             Text("开始前")
                 .font(.subheadline.weight(.semibold))
             if model.status?.syncEnabled == true {
-                Label("正式 CLI 全量同步已开启", systemImage: "checkmark.circle.fill")
+                Label("正式 联系人后台同步已开启", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.caption)
             } else {
-                Label("请先开启正式 CLI 全量同步", systemImage: "exclamationmark.circle")
+                Label("请先开启正式 联系人后台同步", systemImage: "exclamationmark.circle")
                     .foregroundStyle(.orange)
                     .font(.caption)
-                Button("开启 CLI 全量同步") {
+                Button("开启 联系人后台同步") {
                     model.setSyncEnabled(true)
                 }
                 .disabled(model.followSmokeInFlight)

@@ -164,7 +164,7 @@ status
 
 `message` 必须显式冗余 `owner_id + contact_id`，不得仅通过 `source_document` 或 `session_capture` 间接推导；检索过滤必须基于 `message` 自身携带的隔离键，而不是依赖来源关联。
 
-`conversation_binding` 的首次建立、display name 改名映射和备用视觉指纹变化必须经用户确认。已确认且唯一的 display name + 选中会话元数据映射可以自动定位到外部 `talker`/`username`；无法区分时才使用视觉指纹，仍没有唯一匹配时必须暂停，不得把消息写入任何联系人。
+`conversation_binding` 的首次建立、display name 改名映射和备用视觉指纹变化必须经用户确认。已确认且唯一的 display name + 选中会话元数据映射可以自动定位到外部 `talker`/`username`；无法区分时才使用视觉指纹，仍没有唯一匹配时必须暂停该次自动定位，不得据此猜测消息归属。CLI 后台读取独立依赖已确认的稳定绑定；前台定位失败不阻塞已有绑定的读取（ADR-030）。
 
 `session_capture` 是联系人范围对象中唯一允许不携带 `contact_id` 的豁免：它存在一个“未归属临时态”，此时仅含 `owner_id`、不含 `contact_id`。该状态只用于前台 display name 观察和归属判断，必须满足以下规则：
 

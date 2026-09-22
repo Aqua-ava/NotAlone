@@ -3,6 +3,8 @@
 > 状态：已采纳
 > 决策日期：2026-09-01
 
+> 后续修订：第 1 条默认全选由 [ADR-030](030-confirmed-contact-background-sync-consent.md) 改为首次默认不选；第 3 条关闭窗口永久跳过由 ADR-025 的重新开启后有界补齐替代。本文保留历史原因。
+
 ## 背景
 
 ADR-001 和 ADR-016 最初把消息读取限制在微信前台当前会话；这保证了读取范围最小，却让用户无法在微信和 NotAlone 之间切换操作。当前 CLI 版本已经提供无 talker 的 `tail/watch --mode sessions --follow --jsonl` 会话级事件流，可以在不读取其他会话正文的情况下通知哪些会话发生变化。
