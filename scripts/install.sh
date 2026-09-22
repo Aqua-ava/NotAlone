@@ -6,7 +6,7 @@
 # 初始化）由 App 首启向导完成，本脚本不读写密钥。
 #
 # 幂等：已初始化的环境再次运行不会重复建库/重建数据，只补充缺失的
-# 依赖、迁移与构建产物；迁移文件全部可重复执行。
+# 依赖、迁移与构建产物；迁移由版本记录保证重跑时不重复执行。
 #
 # 用法：zsh scripts/install.sh
 set -eu
@@ -111,40 +111,12 @@ else
 fi
 
 # ------------------------------------------------------------------
-# 3. 按顺序应用全部迁移
+# 3. 按版本记录应用尚未完成的迁移
 # ------------------------------------------------------------------
-# 以首个迁移建立的 public.owner 表为"已初始化"标记：已存在的库跳过
-# 迁移阶段，绝不重复创建或破坏既有数据（spec 幂等要求）。
-if psql --dbname "${database_name}" -tAc \
-        "SELECT to_regclass('public.owner')" | grep -q "owner"; then
-    log "数据库已初始化（public.owner 存在），跳过迁移阶段。"
-else
-    log "应用迁移（database/migrations/*.sql，按文件名顺序）…"
-    for migration in database/migrations/*.sql; do
-        log "  应用 $(basename "${migration}")"
-        psql --set ON_ERROR_STOP=1 --dbname "${database_name}" --file "${migration}" \
-            >/dev/null || fail "迁移 ${migration} 失败。"
-    done
-fi
-
-# 已有数据库会跳过首次建库迁移；这里补应用可重复的当前增量迁移，
-# 让旧安装也拥有最新的同步和关系记忆采纳字段。
-for migration in \
-    database/migrations/026_cli_background_sync.sql \
-    database/migrations/027_memory_adoption_provenance.sql \
-    database/migrations/028_reply_context_evidence_metadata.sql \
-    database/migrations/029_cli_backfill_state.sql \
-    database/migrations/030_cli_observation_reliability_and_progress.sql \
-    database/migrations/031_cli_backfill_scheduler.sql \
-    database/migrations/032_memory_candidate_subject.sql \
-    database/migrations/033_owner_memory_evidence_kind.sql \
-    database/migrations/034_extraction_failure_recovery.sql \
-    database/migrations/035_extraction_watermark_cascade.sql; do
-    log "应用可重复增量迁移 $(basename "${migration}")…"
-    psql --set ON_ERROR_STOP=1 --dbname "${database_name}" \
-        --file "${migration}" \
-        >/dev/null || fail "增量迁移 ${migration} 失败。"
-done
+log "检查版本记录并应用待执行迁移…"
+NOTALONE_DATABASE_URL="${database_url}" \
+    python -m notalone.database_migrations --migrations "${repo_root}/database/migrations" \
+    || fail "迁移未完成；请按错误提示与 database/README.md 处理，不要重放历史 SQL。"
 
 # ------------------------------------------------------------------
 # 4. 生成/校验 .env（不写任何密钥）

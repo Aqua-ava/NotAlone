@@ -23,7 +23,7 @@ NotAlone 是面向用户真实联系人的中文关系感知回复助手。用�
 zsh scripts/install.sh
 ```
 
-脚本按顺序完成：检查依赖（macOS / Homebrew / conda / PostgreSQL / swiftc）→ 创建 `NotAlone` conda 环境并 `pip install -e .` → 启动本地 PostgreSQL 并创建 `notalone_dev` → 按文件名顺序应用全部 `database/migrations/*.sql` → 生成只含数据库连接的受控 `.env`（0600）→ 构建 macOS App 与前台同步探针。已存在的环境、数据库、迁移与 `.env` 会被跳过或保留；失败时输出引导，不留下半初始化状态。
+脚本按顺序完成：检查依赖（macOS / Homebrew / conda / PostgreSQL / swiftc）→ 创建 `NotAlone` conda 环境并 `pip install -e .` → 启动本地 PostgreSQL 并创建 `notalone_dev` → 按版本记录应用尚未完成的 `database/migrations/*.sql` → 生成只含数据库连接的受控 `.env`（0600）→ 构建 macOS App 与前台同步探针。每个迁移与成功记录同事务提交，失败只回滚当前迁移，重跑从未完成版本继续；机器环境等此前已完成步骤会保留。无迁移记录的旧库会停止并提示核验，不会凭 `owner` 表猜测基线或重放历史 SQL，见 [数据库迁移说明](database/README.md)。
 
 用户级首次配置由 App 首启向导完成：
 

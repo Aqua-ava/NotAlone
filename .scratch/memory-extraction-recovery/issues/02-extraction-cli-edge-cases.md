@@ -29,3 +29,5 @@ extract_main 空分支需真实 DB fixture；三个 memory CLI 入口无非法 e
 2026-09-18 本轮已修复遗留项 1、4：`extract_main` 在空消息成功分支前验证 `owner_id + contact_id`，不存在或越界时返回 1；`--batch-size` 在构造数据库和模型组件前限制为 1–20，并输出稳定中文错误。CLI seam 单元测试覆盖两个失败分支。其余遗留项尚未处理，本 ticket 保持 open。
 
 ## Comments
+
+2026-09-22：遗留项 5 已在 `.scratch/migration-and-sync-boundary/issues/01-migration-runner.md` 完成。统一版本账本取代 owner 跳过判断与手工清单；10 项隔离迁移验收及全量 979 项测试运行通过（3 项真实模型测试跳过）。无记录旧库拒绝并提示核验，未迁移现有业务库。本票其他未完成项保持 open。

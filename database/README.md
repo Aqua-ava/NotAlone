@@ -1,6 +1,41 @@
 # 数据库迁移
 
-NotAlone 使用 PostgreSQL 作为权威业务库。迁移文件按文件名顺序执行，不允许只在图形客户端中手工修改正式表结构。
+NotAlone 使用 PostgreSQL 作为权威业务库。安装脚本统一调用逐版本迁移命令，不允许只在图形客户端中手工修改正式表结构。
+
+## 执行与恢复
+
+从仓库根目录执行；连接串由环境变量提供，命令不会读取 `.env`：
+
+```bash
+conda activate NotAlone
+export NOTALONE_DATABASE_URL='postgresql:///notalone_dev'
+python -m notalone.database_migrations --migrations database/migrations
+```
+
+- 迁移目录只接受受信任的仓库 SQL，按 `001_name.sql` 起连续编号，不接受重复版本。新变更增加新文件，已执行文件不得修改。
+- `public.notalone_schema_migration` 保存文件名、SHA-256 和执行时间。一个迁移的 SQL 与版本记录在同一事务提交；失败回滚当前版本，成功版本保留。中断后执行相同命令即可续跑。
+- 已记录版本的文件缺失、内容或顺序变化时拒绝执行。并发命令返回 `migration_busy`，连接中断后锁自动释放。
+- 历史 SQL 大多带最外层 `BEGIN;` / `COMMIT;`，命令去除该封装后统一管理事务；025 无封装也受同样保护。正文在动态 SQL 块内执行，额外事务控制会被 PostgreSQL 拒绝，不能提前提交。未来迁移沿用现有文件格式，不包含自行提交或必须在事务外执行的操作。
+- 本命令不保证跨多个版本整体回滚；已成功版本不会撤销。没有有损的反向迁移，业务库升级前仍需核验数据范围与备份。
+
+## 没有版本记录的旧库
+
+旧安装或曾手工执行 SQL 的库会返回 `legacy_database_untracked`，在创建账本或执行业务 SQL 前停止。仅凭 `owner` 存在无法区分完整安装和中断安装；当前命令不提供自动猜基线或强制跳过校验。
+
+接管旧库必须先核对已执行文件、系统目录结构、约束和历史回填结果，并确定备份与恢复方案。当前尚未提供自动接管入口；不要通过手写一批成功记录、重放 001–035 或删除业务库绕过检查。特别是 003 仅允许空业务表，021 会搬迁数据并删除旧列，不能通用重跑。
+
+## 隔离验证
+
+```bash
+conda activate NotAlone
+python -m unittest tests.integration.persistence.test_database_migrations -v
+```
+
+测试通过本机 PostgreSQL 创建随机名称且以 `_test` 结尾的专用库，只清理自己创建的库，不接触 `notalone_dev` 或共享测试库。需要本机用户拥有建库权限；用例覆盖全量仓库迁移、重复执行、失败恢复、历史校验、并发互斥和无记录旧库拒绝。
+
+## 历史迁移内容参考
+
+下列内容解释各迁移的作用；旧的逐文件命令已由上述统一入口替代，不能绕过版本账本单独执行。
 
 本地开发数据库：
 
@@ -10,96 +45,56 @@ NotAlone 使用 PostgreSQL 作为权威业务库。迁移文件按文件名顺�
 schema：public
 ```
 
-应用首个迁移：
+首个迁移：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/001_initial_ingest.sql
-```
+`database/migrations/001_initial_ingest.sql`
 
-已应用首个迁移的数据库继续执行：
+第二个迁移：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/002_reject_overlapping_messages.sql
-```
+`database/migrations/002_reject_overlapping_messages.sql`
 
-联系人、来源和消息表为空时，继续执行联系人身份分离迁移：
+联系人、来源和消息表为空时，对应联系人身份分离迁移：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/003_separate_contact_identity.sql
-```
+`database/migrations/003_separate_contact_identity.sql`
 
 第三个迁移会在旧联系人、来源或消息存在时拒绝执行，不会把旧微信标识静默转换为
 NotAlone 内部联系人。执行前必须确认数据范围和备份；本地空开发库可按全部迁移重建。
 
 联系人身份迁移完成后，继续把微信专属消息字段移出通用消息表：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/004_separate_wechat_message_metadata.sql
-```
+`database/migrations/004_separate_wechat_message_metadata.sql`
 
 第四个迁移会保留已有消息，把微信 local/server id、talker、来源时间和原始 JSON 搬到
 `wechat_message_metadata`，再从 `message` 删除这些微信专属列。整个搬迁位于一个事务中；
 任一步失败都会回滚到迁移前结构和数据。
 
-继续增加来源删除状态和最小删除凭证约束：
+增加来源删除状态和最小删除凭证约束：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/005_source_deletion_state.sql
-```
+`database/migrations/005_source_deletion_state.sql`
 
 第五个迁移区分 `delete_requested`、`deleting`、`delete_failed` 和 `deleted`。只有文件名、
 SHA 和消息数量已经清空且写入删除时间时，数据库才允许状态为 `deleted`；只改状态会被约束拒绝。
 
-继续建立已确认桌面会话的持久化绑定：
+建立已确认桌面会话的持久化绑定：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/006_conversation_binding.sql
-```
+`database/migrations/006_conversation_binding.sql`
 
 第六个迁移保存稳定绑定 UUID、`owner_id + contact_id`、渠道账号范围、会话定位线索、状态和
 最近验证时间。定位线索不能使用昵称或聊天正文替代；绑定撤销后，验证适配器不会再返回
 `Ready`。迁移只建立表和约束，不读取桌面会话。
 
-继续建立候选回复的 PostgreSQL 持久化边界：
+建立候选回复的 PostgreSQL 持久化边界：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/007_reply_store.sql
-```
+`database/migrations/007_reply_store.sql`
 
 第七个迁移保存已验证联系人范围内的 `reply_request`、运行尝试、上下文证据快照、候选、
 引用和实际使用的 Skill 版本摘要。幂等键只在 `owner_id + contact_id` 范围内生效；同一请求
 的候选和引用在同一事务中写入。迁移不实现 Context、Memory、Skill 目录或外部发送，也不预设
 来源删除对回复快照的清理级联。
 
-继续建立只读 PostgreSQL SkillPort 的目录、版本和修订数据结构：
+建立只读 PostgreSQL SkillPort 的目录、版本和修订数据结构：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/008_skill_port.sql
-```
+`database/migrations/008_skill_port.sql`
 
 第八个迁移建立 owner 级 `skill_library` 修订、`reply_skill` 目录项和
 `reply_skill_version` 不可变版本。SkillPort 只返回当前 owner 的全局 Skill 与当前联系人
@@ -107,102 +102,62 @@ SHA 和消息数量已经清空且写入删除时间时，数据库才允许状�
 Skill 管理模块必须在同一事务中递增 owner revision；本迁移和只读 adapter 不提供安装、更新、
 启用、禁用、删除或网络读取能力。
 
-继续建立关系记忆候选和已确认记忆的持久化边界：
+建立关系记忆候选和已确认记忆的持久化边界：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/009_memory_store.sql
-```
+`database/migrations/009_memory_store.sql`
 
 第九个迁移建立 `memory_candidate` 和 `confirmed_memory`，保存联系人范围、分类、来源 UUID
 列表、候选来源链、采纳方式、状态、有效期和 revision。它不建立 `contact_memory_index`，
 不执行自动提取，也不把来源删除任务级联清理伪装成已完成。
 
-继续对齐微信消息类型和可循环复用的来源身份：
+对齐微信消息类型和可循环复用的来源身份：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/014_import_message_identity.sql
-```
+`database/migrations/014_import_message_identity.sql`
 
 第十四个迁移允许已明确适配的媒体消息类型写入规范消息，并将微信来源唯一键统一为
 `external_local_id + source_create_time`。未知类型仍由输入适配器拒绝，不直接进入规范消息。
 
-继续保存 owner 的微信渠道身份：
+保存 owner 的微信渠道身份：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/015_owner_channel_identity.sql
-```
+`database/migrations/015_owner_channel_identity.sql`
 
 第十五个迁移新增 `owner_channel_identity`。它保存 owner 的外部渠道 ID、观察到的展示名称、
 验证状态和时间；它与联系人的 `channel_identity` 分开，不能用来替代 `owner_id`。
 
-继续建立导入后台任务和固定步骤：
+建立导入后台任务和固定步骤：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/016_background_task.sql
-```
+`database/migrations/016_background_task.sql`
 
 第十六个迁移新增 `background_task` 和 `background_task_step`。导入事务会按
 `owner_id + contact_id + source_document_id` 创建唯一的 `import` 任务，并写入
 `parse`、`normalize`、`extract_memory`、`index`、`verify` 五个 pending 步骤。任务只保存
 范围、状态、计数、时间和错误分类，不保存聊天正文或模型完整输入输出。
 
-继续建立 Worker 租约和版本元数据：
+建立 Worker 租约和版本元数据：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/017_worker_lease_metadata.sql
-```
+`database/migrations/017_worker_lease_metadata.sql`
 
 第十七个迁移把步骤租约字段命名为 `worker_id`，并保存任务使用的模型版本和确定性规则版本；
 仍不保存模型输入输出或聊天正文。
 
-继续建立联系人记忆 revision 和确定性目录：
+建立联系人记忆 revision 和确定性目录：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/018_contact_memory_index.sql
-```
+`database/migrations/018_contact_memory_index.sql`
 
 第十八个迁移新增 `contact_memory_state` 和 `contact_memory_index`。目录最多保存 20 个分类/主题
 入口及 `confirmed_memory` UUID，不复制记忆正文；目录版本不一致时必须重建。
 
-继续保存 CLI 会话绑定的匹配证据：
+保存 CLI 会话绑定的匹配证据：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/019_binding_cli_match_metadata.sql
-```
+`database/migrations/019_binding_cli_match_metadata.sql`
 
 第十九个迁移为 `conversation_binding` 增加 `display_name` 映射、`metadata_summary` 匹配证据摘要和
 `visual_fingerprint` 可选视觉指纹摘要。证据字段只用于定位当前会话与一次性确认，预览只保存摘要哈希，
 不保存原文；已有 active 绑定唯一性约束不变。
 
-继续保存本地微信 CLI 观察来源与联系人级水位：
+保存本地微信 CLI 观察来源与联系人级水位：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/020_local_wechat_observation.sql
-```
+`database/migrations/020_local_wechat_observation.sql`
 
 第二十个迁移新增 `local_wechat_observation` 和 `wechat_observation_cursor`。前者保存一次 CLI
 只读增量读取的来源元数据（CLI 版本、读取时间、水位区间、`live`/`cli_catchup`/`cli_background` 模式和消息计数），
@@ -210,40 +165,25 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 `owner_id + contact_id` 独立保存成功返回的 local_id 与续传 cursor，水位只单调前移，
 首次读取没有水位、不使用非法的 `since_local_id=0`。联系人或绑定行删除时按来源级删除路径级联清理。
 
-继续保存前台同步开关状态：
+保存前台同步开关状态：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/022_front_sync_state.sql
-```
+`database/migrations/022_front_sync_state.sql`
 
 第二十二个迁移新增 `front_sync_state`，按 owner 保存用户手动开启/关闭的前台同步开关。
 应用异常重启后仍开启时，生命周期从联系人水位恢复读取；最近一次关闭与开启的时间戳共同界定
 手动关闭期间的消息窗口，关闭期间不读取，重新开启后把可检测缺口交给后台补齐。owner 删除时
 开关状态级联清理。
 
-继续建立 Skill Library 的辅助资源和校验结果：
+建立 Skill Library 的辅助资源和校验结果：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/023_skill_library_resources.sql
-```
+`database/migrations/023_skill_library_resources.sql`
 
 第二十三个迁移保存版本级校验警告和 `references/assets` 的版本绑定内容。资源只能使用包内
 相对路径，删除版本时级联清理；Skill 管理适配器负责在完整校验后原子写入这些记录。
 
-继续保存候选回复实际使用的 Skill 选择与资源加载摘要：
+保存候选回复实际使用的 Skill 选择与资源加载摘要：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/024_skill_run_record.sql
-```
+`database/migrations/024_skill_run_record.sql`
 
 第二十四个迁移为 `reply_request` 增加 `skill_selection_method`、
 `skill_selection_reason`、`skill_load_state` 和 `skill_loaded_resources` 四列。
@@ -251,34 +191,14 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 加载状态和已读取的辅助资源路径），不保存 Skill 正文、完整 Prompt 或聊天原文；
 约束校验字段取值并禁止在没有 Skill 时填写选择元数据。
 
-继续记录 CLI 后台补齐的可靠位置与覆盖状态：
+记录 CLI 后台补齐的可靠位置与覆盖状态：
 
-```bash
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/029_cli_backfill_state.sql
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/030_cli_observation_reliability_and_progress.sql
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/031_cli_backfill_scheduler.sql
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/032_memory_candidate_subject.sql
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/033_owner_memory_evidence_kind.sql
-/opt/homebrew/opt/postgresql@16/bin/psql \
-  --set ON_ERROR_STOP=1 \
-  --dbname notalone_dev \
-  --file database/migrations/034_extraction_failure_recovery.sql
-```
+`database/migrations/029_cli_backfill_state.sql`
+`database/migrations/030_cli_observation_reliability_and_progress.sql`
+`database/migrations/031_cli_backfill_scheduler.sql`
+`database/migrations/032_memory_candidate_subject.sql`
+`database/migrations/033_owner_memory_evidence_kind.sql`
+`database/migrations/034_extraction_failure_recovery.sql`
 
 第二十九个迁移新增 `cli_backfill_state`，按 owner、联系人和 active 绑定保存补齐触发、阶段、
 计数、可靠游标和失败原因等元数据，不保存聊天正文；绑定或联系人删除时级联清理。第三十个迁移
@@ -299,7 +219,7 @@ notalone-task-cleanup
 
 默认只清理超过 90 天的终态任务和步骤元数据；活动任务、来源、消息、记忆和删除凭证不受影响。
 
-迁移仅建立数据结构，不读取 `chat_exports/`，也不导入真实聊天记录。
+迁移会调整结构及已有数据（例如 021 来源回填、035 清理孤儿水位），不读取 `chat_exports/` 或导入外部聊天。
 
 首个迁移建立旧版 `owner`、`contact`、`source_document` 和 `message`，第三个迁移在空业务
 表上把 `contact.id` 改为 NotAlone 内部 UUID，并新增 `channel_identity` 和
