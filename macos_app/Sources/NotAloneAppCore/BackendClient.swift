@@ -186,6 +186,20 @@ public struct BackendClient: Sendable {
         }
     }
 
+    public func importedSources(contactId: String) async throws -> [ImportedSource] {
+        struct Payload: Decodable { let sources: [ImportedSource] }
+        let result: Payload = try await request(path: "api/contacts/\(contactId)/sources", method: "GET")
+        return result.sources
+    }
+
+    public func deleteSource(contactId: String, sourceId: String) async throws -> SourceDeletionRequest {
+        try await request(path: "api/contacts/\(contactId)/sources/\(sourceId)", method: "DELETE")
+    }
+
+    public func replyEvidence(contactId: String, requestId: String) async throws -> ReplyEvidenceSnapshot {
+        try await request(path: "api/contacts/\(contactId)/replies/\(requestId)/evidence", method: "GET")
+    }
+
     // 生成候选回复：reply_to_message（选中消息+表达方向）或
     // rewrite_draft（用户原句+改写要求）。请求带幂等键，重放返回同一结果。
     public func generateReply(

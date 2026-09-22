@@ -88,6 +88,163 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
                 (self.owner_id,),
             )
 
+    def test_legacy_deleted_receipt_does_not_create_false_success_task(self) -> None:
+        from notalone.persistence.source_tasks import PostgresSourceTasks, SourceDeletionHistoryUnverified
+
+        imported = self.ingest_repository.import_document(
+            owner_id=self.owner_id, document=self.batch,
+            confirmation=ImportConfirmationRequest(selection=ExistingContactSelection(contact_id=self.contact_id)),
+        )
+        self.deletion_repository.delete_source(owner_id=self.owner_id, contact_id=self.contact_id,
+                                               source_document_id=imported.source_document_id)
+        sources = PostgresSourceTasks(TEST_DATABASE_URL)
+        with self.assertRaises(SourceDeletionHistoryUnverified):
+            sources.request_delete(self.owner_id, self.contact_id, imported.source_document_id)
+        row = sources.list_sources(self.owner_id, self.contact_id)[0]
+        self.assertIsNone(row["task_id"])
+        self.assertEqual(row["error_code"], "legacy_deletion_unverified")
+
+    def test_failed_delete_exposes_safe_reason_and_can_resume(self) -> None:
+        from notalone.persistence.source_tasks import PostgresSourceTasks
+        from notalone.tasks.models import BackgroundTaskStatus
+        from notalone.tasks.worker import BackgroundTaskWorker
+
+        imported = self.ingest_repository.import_document(
+            owner_id=self.owner_id, document=self.batch,
+            confirmation=ImportConfirmationRequest(selection=ExistingContactSelection(contact_id=self.contact_id)),
+        )
+        sources = PostgresSourceTasks(TEST_DATABASE_URL)
+        task_id = sources.request_delete(self.owner_id, self.contact_id, imported.source_document_id)
+        repository = PostgresBackgroundTaskRepository(TEST_DATABASE_URL)
+
+        class FailingDeletion:
+            def delete_source(self, **kwargs):
+                raise SourceDeletionError("合成底层详情不可返回")
+
+        worker = BackgroundTaskWorker(repository=repository, deletion_repository=FailingDeletion())
+        for _ in range(4):
+            worker.run_once(owner_id=self.owner_id, contact_id=self.contact_id, worker_id=uuid4())
+        task = repository.get_task(owner_id=self.owner_id, contact_id=self.contact_id, task_id=task_id)
+        self.assertEqual(task.status, BackgroundTaskStatus.FAILED)
+        row = sources.list_sources(self.owner_id, self.contact_id)[0]
+        self.assertEqual(row["error_code"], "source_delete_failed")
+        self.assertNotIn("底层", str(row))
+        repository.retry_failed_task(owner_id=self.owner_id, contact_id=self.contact_id, task_id=task_id)
+        resumed = BackgroundTaskWorker(repository=repository, deletion_repository=self.deletion_repository)
+        for _ in range(4):
+            resumed.run_once(owner_id=self.owner_id, contact_id=self.contact_id, worker_id=uuid4())
+        row = sources.list_sources(self.owner_id, self.contact_id)[0]
+        self.assertEqual(row["task_status"], "succeeded")
+        self.assertIsNone(row["error_code"])
+
+    def test_worker_resumes_after_delete_committed_before_step_receipt(self) -> None:
+        from notalone.persistence.source_tasks import PostgresSourceTasks
+        from notalone.tasks.models import BackgroundTaskStepName, BackgroundTaskStatus, DELETE_TASK_STEPS
+        from notalone.tasks.worker import BackgroundTaskWorker
+
+        imported = self.ingest_repository.import_document(
+            owner_id=self.owner_id, document=self.batch,
+            confirmation=ImportConfirmationRequest(selection=ExistingContactSelection(contact_id=self.contact_id)),
+        )
+        task_id = PostgresSourceTasks(TEST_DATABASE_URL).request_delete(
+            self.owner_id, self.contact_id, imported.source_document_id,
+        )
+        repository = PostgresBackgroundTaskRepository(TEST_DATABASE_URL)
+        worker_id = uuid4()
+        kwargs = dict(owner_id=self.owner_id, contact_id=self.contact_id, worker_id=worker_id,
+                      lease_duration=timedelta(seconds=30), supported_steps=tuple(name for _, name in DELETE_TASK_STEPS))
+        mark = repository.claim_next_step(**kwargs)
+        repository.complete_step(mark, processed_count=0)
+        interrupted = repository.claim_next_step(**kwargs)
+        self.assertEqual(interrupted.name, BackgroundTaskStepName.DELETE_DERIVED)
+        self.deletion_repository.delete_source(owner_id=self.owner_id, contact_id=self.contact_id,
+                                               source_document_id=imported.source_document_id)
+        # 模拟清理事务已提交，而 Worker 尚未写步骤完成便退出。
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute("UPDATE public.background_task_step SET lease_expires_at = now() - interval '1 second' WHERE id = %s",
+                               (interrupted.step_id,))
+        resumed = BackgroundTaskWorker(repository=repository, deletion_repository=self.deletion_repository)
+        for _ in range(5):
+            resumed.run_once(owner_id=self.owner_id, contact_id=self.contact_id, worker_id=uuid4())
+        task = repository.get_task(owner_id=self.owner_id, contact_id=self.contact_id, task_id=task_id)
+        self.assertEqual(task.status, BackgroundTaskStatus.SUCCEEDED)
+        self.assertEqual(task.steps[1].attempt_count, 2)
+        self.assertEqual(task_id, PostgresSourceTasks(TEST_DATABASE_URL).request_delete(
+            self.owner_id, self.contact_id, imported.source_document_id,
+        ))
+
+    def test_http_delete_is_durable_idempotent_and_scoped(self) -> None:
+        import time
+        from notalone.server.app import create_app
+        from notalone.server.testing import InProcessClient
+
+        imported = self.ingest_repository.import_document(
+            owner_id=self.owner_id, document=self.batch,
+            confirmation=ImportConfirmationRequest(selection=ExistingContactSelection(contact_id=self.contact_id)),
+        )
+        client = InProcessClient(create_app(database_url=TEST_DATABASE_URL, owner_id=self.owner_id, token="synthetic"))
+        headers = {"Authorization": "Bearer synthetic"}
+        path = f"/api/contacts/{self.contact_id}/sources"
+        listed = client.get(path, headers=headers)
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json()["sources"][0]["source_id"], str(imported.source_document_id))
+        target = f"{path}/{imported.source_document_id}"
+        foreign = target.replace(str(self.contact_id), str(uuid4()))
+        self.assertEqual(client.request("DELETE", foreign, headers=headers).status_code, 404)
+        first = client.request("DELETE", target, headers=headers)
+        self.assertEqual(first.status_code, 202)
+        repeated = client.request("DELETE", target, headers=headers)
+        self.assertEqual(first.json()["task_id"], repeated.json()["task_id"])
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            source = client.get(path, headers=headers).json()["sources"][0]
+            if source["task_status"] == "succeeded":
+                break
+            time.sleep(0.02)
+        self.assertEqual(source["task_status"], "succeeded", source)
+        self.assertEqual(source["status"], "deleted")
+        self.assertIsNone(source["file_name"])
+        restarted = InProcessClient(create_app(database_url=TEST_DATABASE_URL, owner_id=self.owner_id, token="synthetic"))
+        self.assertEqual(restarted.get(path, headers=headers).json()["sources"][0]["task_id"], first.json()["task_id"])
+
+    def test_delete_erases_rejected_candidate_and_old_memory_versions(self) -> None:
+        imported = self.ingest_repository.import_document(
+            owner_id=self.owner_id, document=self.batch,
+            confirmation=ImportConfirmationRequest(selection=ExistingContactSelection(contact_id=self.contact_id)),
+        )
+        candidate_id, old_id, new_id = uuid4(), uuid4(), uuid4()
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "INSERT INTO public.memory_candidate (id, owner_id, contact_id, text_content, category, source_ids, status) "
+                "VALUES (%s, %s, %s, '合成拒绝正文', 'preference', %s, 'rejected')",
+                (candidate_id, self.owner_id, self.contact_id, [imported.source_document_id]),
+            )
+            for memory_id, supersedes in ((old_id, None), (new_id, old_id)):
+                connection.execute(
+                    "INSERT INTO public.confirmed_memory (id, owner_id, contact_id, text_content, category, source_ids, "
+                    "status, adoption_method, supersedes_memory_id) "
+                    "VALUES (%s, %s, %s, '合成历史版本正文', 'preference', %s, 'invalidated', 'manual', %s)",
+                    (memory_id, self.owner_id, self.contact_id, [imported.source_document_id], supersedes),
+                )
+            connection.execute(
+                "INSERT INTO public.outbound_ledger_entry (id, owner_id, contact_id, provider, model_name, outcome, called_at) "
+                "VALUES (%s, %s, %s, 'synthetic', 'synthetic', 'succeeded', now())",
+                (uuid4(), self.owner_id, self.contact_id),
+            )
+        try:
+            self.deletion_repository.delete_source(owner_id=self.owner_id, contact_id=self.contact_id,
+                                                   source_document_id=imported.source_document_id)
+            with psycopg.connect(TEST_DATABASE_URL) as connection:
+                for table in ("memory_candidate", "confirmed_memory"):
+                    self.assertEqual(connection.execute(
+                        f"SELECT count(*) FROM public.{table} WHERE owner_id = %s", (self.owner_id,),
+                    ).fetchone()[0], 0)
+                self.assertEqual(connection.execute("SELECT count(*) FROM public.outbound_ledger_entry WHERE owner_id = %s",
+                                                    (self.owner_id,)).fetchone()[0], 1)
+        finally:
+            with psycopg.connect(TEST_DATABASE_URL) as connection:
+                connection.execute("DELETE FROM public.outbound_ledger_entry WHERE owner_id = %s", (self.owner_id,))
+
     def test_delete_source_removes_all_retrievable_content(self) -> None:
         imported = self.ingest_repository.import_document(
             owner_id=self.owner_id,
@@ -250,7 +407,7 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
                 "SELECT status FROM public.confirmed_memory WHERE id = %s",
                 (memory.memory_id,),
             ).fetchone()
-        self.assertEqual(stored_memory[0], "deleted")
+        self.assertIsNone(stored_memory)
         remaining_index = index_repository.get(
             ContactScope(self.owner_id, self.contact_id)
         )
@@ -473,7 +630,7 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
                 (memory.memory_id,),
             ).fetchone()
         self.assertEqual(cleaned, (0, 0, 0))
-        self.assertEqual(final_memory[0], "deleted")
+        self.assertIsNone(final_memory)
 
     def test_delete_source_cleans_owner_memory_supported_by_source(self) -> None:
         imported = self.ingest_repository.import_document(
@@ -523,7 +680,7 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
                 "SELECT status FROM public.owner_memory WHERE id = %s",
                 (memory.memory_id,),
             ).fetchone()
-        self.assertEqual(stored[0], "deleted")
+        self.assertIsNone(stored)
         self.assertEqual(owner_store.list_active(self.owner_id), ())
 
     def test_delete_failure_is_recorded_without_losing_content(self) -> None:

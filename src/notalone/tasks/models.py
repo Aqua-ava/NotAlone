@@ -12,6 +12,7 @@ class BackgroundTaskType(StrEnum):
     """后台任务的业务类型。"""
 
     IMPORT = "import"
+    DELETE = "delete"
 
 
 class BackgroundTaskStatus(StrEnum):
@@ -26,8 +27,13 @@ class BackgroundTaskStatus(StrEnum):
 
 
 class BackgroundTaskStepName(StrEnum):
-    """导入任务允许出现的固定步骤。"""
+    """导入与删除任务允许出现的固定步骤。"""
 
+    MARK_DELETED = "mark_deleted"
+    DELETE_DERIVED = "delete_derived"
+    DELETE_INDEX = "delete_index"
+    CLEAR_CACHE = "clear_cache"
+    VERIFY_NOT_RETRIEVABLE = "verify_not_retrievable"
     PARSE = "parse"
     NORMALIZE = "normalize"
     EXTRACT_MEMORY = "extract_memory"
@@ -56,6 +62,17 @@ IMPORT_TASK_STEPS: tuple[
     (BackgroundTaskStepName.INDEX, 4),
     (BackgroundTaskStepName.VERIFY, 5),
 )
+
+
+DELETE_TASK_STEPS = tuple(enumerate((
+    BackgroundTaskStepName.MARK_DELETED,
+    BackgroundTaskStepName.DELETE_DERIVED,
+    BackgroundTaskStepName.DELETE_INDEX,
+    BackgroundTaskStepName.CLEAR_CACHE,
+    BackgroundTaskStepName.VERIFY_NOT_RETRIEVABLE,
+), start=1))
+
+VERIFY_STEPS = (BackgroundTaskStepName.VERIFY, BackgroundTaskStepName.VERIFY_NOT_RETRIEVABLE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +110,7 @@ class BackgroundTaskStep:
 
 @dataclass(frozen=True, slots=True)
 class BackgroundTask:
-    """导入后台任务的非正文状态快照。"""
+    """联系人范围后台任务的非正文状态快照。"""
 
     task_id: UUID
     owner_id: UUID

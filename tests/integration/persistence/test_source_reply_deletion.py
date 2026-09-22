@@ -48,6 +48,21 @@ class SourceReplyDeletionTest(contract.ReplyDeletionContract):
         self.source_id = self.imported.source_document_id
         self.store = PostgresReplyStore(TEST_DATABASE_URL)
 
+    def test_http_evidence_disappears_after_source_deletion(self) -> None:
+        from notalone.server.app import create_app
+        from notalone.server.testing import InProcessClient
+
+        request, context, reply = self._prepare_reply()
+        self.store.save(request, context, reply)
+        client = InProcessClient(create_app(database_url=TEST_DATABASE_URL, owner_id=self.scope.owner_id, token="synthetic"))
+        path = f"/api/contacts/{self.scope.contact_id}/replies/{request.request_id}/evidence"
+        headers = {"Authorization": "Bearer synthetic"}
+        before = client.get(path, headers=headers)
+        self.assertEqual(before.status_code, 200)
+        self.assertEqual(before.json()["evidence"][0]["text"], self.message_text)
+        self._delete_source()
+        self.assertEqual(client.get(path, headers=headers).status_code, 404)
+
     def _delete_source(self) -> None:
         result = self.sources.deletion_repository.delete_source(
             owner_id=self.scope.owner_id,

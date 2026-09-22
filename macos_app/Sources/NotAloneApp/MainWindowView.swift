@@ -114,6 +114,10 @@ struct MainWindowView: View {
                 setupWizardView
             }
         }
+        .onChange(of: model.replyCandidates.map(\.candidateId)) { _, ids in
+            let currentIds = Set(ids)
+            editedCandidateTexts = editedCandidateTexts.filter { currentIds.contains($0.key) }
+        }
         .onChange(of: model.status?.candidates.isEmpty) { _, isEmpty in
             if isEmpty == true {
                 dismissBindingSheet = false
@@ -894,6 +898,8 @@ struct MainWindowView: View {
                 }
                 Divider()
                 taskSection
+                Divider()
+                ImportedSourcesView(model: model)
             }
             .padding(12)
         }
@@ -2116,10 +2122,25 @@ struct MainWindowView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            if !model.lastReplyContextEvidence.isEmpty {
-                Text("上下文依据：\(model.lastReplyContextEvidence.count) 项")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+            if model.replyEvidenceLoading {
+                ProgressView("读取本次依据…")
+            }
+            if let error = model.replyEvidenceError {
+                Text(error).font(.caption).foregroundStyle(.red)
+                Button("重试读取依据") { model.loadReplyEvidence() }
+            }
+            if !model.replyEvidence.isEmpty {
+                DisclosureGroup("本次上下文：\(model.replyEvidence.count) 项") {
+                    Text("以下是生成时的材料快照；标记为引用的材料被候选明确引用。")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(model.replyEvidence) { entry in
+                                ReplyEvidenceCard(entry: entry)
+                            }
+                        }
+                    }.frame(maxHeight: 220)
+                }
             }
             if let error = model.replyError {
                 Text(error)
@@ -2166,9 +2187,15 @@ struct MainWindowView: View {
                     .foregroundStyle(.orange)
             }
             if !candidate.citationIds.isEmpty {
-                Text("引用：\(candidate.citationIds.joined(separator: "、"))")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                DisclosureGroup("候选引用：\(candidate.citationIds.count) 项") {
+                    let entries = model.replyEvidence.filter { candidate.citationIds.contains($0.evidenceId) }
+                    ForEach(entries) { entry in ReplyEvidenceCard(entry: entry) }
+                    if entries.count < candidate.citationIds.count {
+                        Text("部分引用尚未读取，请查看上方依据读取状态。")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                .font(.caption)
             }
             HStack {
                 Button("复制") {

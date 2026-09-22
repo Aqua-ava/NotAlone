@@ -420,3 +420,73 @@ public struct SetupCredentialsResponse: Decodable, Equatable, Sendable {
     public let provider: String
     public let configured: Bool
 }
+
+// 已完成回复的实际上下文快照，不代表当前资料的最新状态。
+public struct ReplyEvidenceSnapshot: Decodable, Equatable, Sendable {
+    public let replyRequestId: String
+    public let evidence: [ReplyEvidence]
+}
+
+public struct ReplyEvidence: Decodable, Equatable, Identifiable, Sendable {
+    public let evidenceId: String
+    public let kind: String
+    public let text: String
+    public let selectionReason: String
+    public let snapshotStatus: String
+    public let cited: Bool
+    public var id: String { evidenceId }
+
+    public var kindLabel: String {
+        switch kind {
+        case "message": "聊天消息"
+        case "confirmed_memory": "关系资料"
+        case "owner_memory": "本人资料"
+        case "user_draft": "本次原句"
+        case "continued_candidate": "继续修改的候选"
+        default: "上下文材料"
+        }
+    }
+}
+
+public struct ImportedSource: Decodable, Identifiable, Sendable {
+    public let sourceId: String
+    public let fileName: String?
+    public let recordCount: Int
+    public let status: String
+    public let taskId: String?
+    public let taskStatus: String?
+    public let errorCode: String?
+    public let step: String?
+    public var id: String { sourceId }
+    public var deletionComplete: Bool { status == "deleted" && taskStatus == "succeeded" }
+    public var stepLabel: String {
+        switch step {
+        case "mark_deleted": "标记待删"
+        case "delete_derived": "清理聊天与派生资料"
+        case "delete_index": "核验索引清理"
+        case "clear_cache": "核验回复快照清理"
+        case "verify_not_retrievable": "验证不可检索"
+        default: "等待执行"
+        }
+    }
+    public var failureLabel: String? {
+        guard let errorCode, !deletionComplete else { return nil }
+        switch errorCode {
+        case "source_delete_failed", "storage_delete_failed": return "资料清理或结果核验失败，请继续删除重试。"
+        case "legacy_deletion_unverified": return "缺少可核验的删除任务，旧资料残留需单独核验。"
+        case "lease_expired": return "执行曾中断，任务租约已过期，请继续删除。"
+        default: return "任务未完成，请继续删除；若重复失败，请检查后端状态。"
+        }
+    }
+    public var statusLabel: String {
+        if deletionComplete { return "已删除" }
+        if status == "active" { return "已导入" }
+        if taskStatus == "failed" || status == "delete_failed" { return "删除未完成，可继续" }
+        return "删除待完成，可刷新或继续"
+    }
+}
+
+public struct SourceDeletionRequest: Decodable, Sendable {
+    public let taskId: String
+    public let status: String
+}

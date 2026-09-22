@@ -16,7 +16,7 @@ from notalone.tasks.command import (
     run_worker,
     worker_main,
 )
-from notalone.tasks.models import BackgroundTaskStepName
+from notalone.tasks.models import BackgroundTaskStepName, IMPORT_TASK_STEPS
 from notalone.tasks.worker import WorkerRunOutcome, WorkerRunResult, _failure_info
 
 
@@ -69,7 +69,7 @@ class WorkerCommandTest(unittest.TestCase):
                     step_name=step,
                     processed_count=1,
                 )
-                for step in BackgroundTaskStepName
+                for step, _ in IMPORT_TASK_STEPS
             ]
         )
         sleeps: list[float] = []
@@ -88,7 +88,7 @@ class WorkerCommandTest(unittest.TestCase):
             )
 
         self.assertEqual(result.status, WorkerCommandStatus.SUCCEEDED)
-        self.assertEqual(worker.calls, len(tuple(BackgroundTaskStepName)))
+        self.assertEqual(worker.calls, len(IMPORT_TASK_STEPS))
         self.assertEqual(result.last_step, BackgroundTaskStepName.VERIFY)
         self.assertEqual(result.processed_count, 1)
         self.assertEqual(sleeps, [])

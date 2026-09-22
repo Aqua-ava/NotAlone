@@ -10,6 +10,7 @@ import psycopg
 
 from notalone.tasks.models import (
     IMPORT_TASK_STEPS,
+    VERIFY_STEPS,
     BackgroundTask,
     BackgroundTaskStatus,
     BackgroundTaskStep,
@@ -264,7 +265,9 @@ class PostgresBackgroundTaskRepository:
                       ON source.id = task.source_document_id
                     WHERE task.owner_id = %s
                       AND task.contact_id = %s
-                      AND source.status = 'active'
+                      AND ((task.task_type = 'import' AND source.status = 'active')
+                   OR (task.task_type = 'delete' AND source.status IN
+                       ('delete_requested', 'deleting', 'delete_failed', 'deleted')))
                       AND step.status = 'running'
                       AND step.lease_expires_at > now()
                     LIMIT 1
@@ -291,7 +294,9 @@ class PostgresBackgroundTaskRepository:
                       ON source.id = task.source_document_id
                     WHERE task.owner_id = %s
                       AND task.contact_id = %s
-                      AND source.status = 'active'
+                      AND ((task.task_type = 'import' AND source.status = 'active')
+                   OR (task.task_type = 'delete' AND source.status IN
+                       ('delete_requested', 'deleting', 'delete_failed', 'deleted')))
                       AND task.status IN ('queued', 'running', 'verifying')
                       AND step.status IN ('pending', 'retryable')
                       AND step.step_name = ANY(%s::text[])
@@ -341,7 +346,7 @@ class PostgresBackgroundTaskRepository:
                     )
                 task_status = (
                     "verifying"
-                    if candidate[5] == BackgroundTaskStepName.VERIFY.value
+                    if candidate[5] in VERIFY_STEPS
                     else "running"
                 )
                 connection.execute(
@@ -427,7 +432,7 @@ class PostgresBackgroundTaskRepository:
                     (claim.task_id,),
                 ).fetchone()
                 if next_step is None:
-                    if claim.name is not BackgroundTaskStepName.VERIFY:
+                    if claim.name not in VERIFY_STEPS:
                         raise BackgroundTaskStateError(
                             "固定步骤缺少 verify。"
                         )
@@ -435,17 +440,18 @@ class PostgresBackgroundTaskRepository:
                         """
                         UPDATE public.background_task
                         SET status = 'succeeded',
-                            current_step = 'verify',
+                            last_error_code = NULL,
+                            current_step = %s,
                             finished_at = now(),
                             updated_at = now()
                         WHERE id = %s
                         """,
-                        (claim.task_id,),
+                        (claim.name.value, claim.task_id),
                     )
                 else:
                     next_status = (
                         "verifying"
-                        if next_step[0] == BackgroundTaskStepName.VERIFY.value
+                        if next_step[0] in VERIFY_STEPS
                         else "running"
                     )
                     connection.execute(
@@ -767,7 +773,9 @@ class PostgresBackgroundTaskRepository:
               AND task.owner_id = %s
               AND task.contact_id = %s
               AND task.status IN ('queued', 'running', 'verifying')
-              AND source.status = 'active'
+              AND ((task.task_type = 'import' AND source.status = 'active')
+                   OR (task.task_type = 'delete' AND source.status IN
+                       ('delete_requested', 'deleting', 'delete_failed', 'deleted')))
             FOR UPDATE OF task, step
             """,
             (

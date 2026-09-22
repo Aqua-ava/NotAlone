@@ -54,8 +54,10 @@ from notalone.persistence.watermark_store import (
     WatermarkPersistenceError,
 )
 from notalone.scopes import ContactScope
+from notalone.persistence.source_deletion import PostgresSourceDeletionRepository, SourceDeletionError
 from notalone.tasks.models import (
     BackgroundTaskStepName,
+    DELETE_TASK_STEPS,
     BackgroundTaskStepStatus,
     ClaimedBackgroundTaskStep,
 )
@@ -255,6 +257,7 @@ class BackgroundTaskWorker:
 
     __slots__ = (
         "_extraction_runner",
+        "_deletion_repository",
         "_index_repository",
         "_lease_duration",
         "_model_version",
@@ -266,17 +269,19 @@ class BackgroundTaskWorker:
         self,
         *,
         repository: PostgresBackgroundTaskRepository,
-        extraction_runner: ExtractionTaskRunner,
+        extraction_runner: ExtractionTaskRunner | None = None,
+        deletion_repository: PostgresSourceDeletionRepository | None = None,
         lease_duration: timedelta = timedelta(seconds=30),
         rule_version: str = "memory-extraction-v1",
         index_repository: PostgresContactMemoryIndexRepository | None = None,
     ) -> None:
-        if repository is None or extraction_runner is None:
-            raise TypeError("Worker 必须显式注入任务仓储和提取执行器。")
+        if repository is None or (extraction_runner is None and deletion_repository is None):
+            raise TypeError("Worker 必须注入任务仓储以及提取或删除执行器。")
         if lease_duration <= timedelta(0):
             raise ValueError("Worker 租约必须是正时间段。")
         self._repository = repository
         self._extraction_runner = extraction_runner
+        self._deletion_repository = deletion_repository
         self._index_repository = index_repository
         self._lease_duration = lease_duration
         self._model_version = getattr(extraction_runner, "model_version", None)
@@ -291,11 +296,15 @@ class BackgroundTaskWorker:
     ) -> WorkerRunResult:
         """领取并执行一个支持的步骤；没有可领取步骤时返回 idle。"""
 
-        supported_steps = (
-            BackgroundTaskStepName.PARSE,
-            BackgroundTaskStepName.NORMALIZE,
-            BackgroundTaskStepName.EXTRACT_MEMORY,
-        )
+        supported_steps = ()
+        if self._extraction_runner is not None:
+            supported_steps += (
+                BackgroundTaskStepName.PARSE,
+                BackgroundTaskStepName.NORMALIZE,
+                BackgroundTaskStepName.EXTRACT_MEMORY,
+            )
+        if self._deletion_repository is not None:
+            supported_steps += tuple(name for _, name in DELETE_TASK_STEPS)
         if self._index_repository is not None:
             supported_steps += (
                 BackgroundTaskStepName.INDEX,
@@ -308,10 +317,28 @@ class BackgroundTaskWorker:
             lease_duration=self._lease_duration,
             supported_steps=supported_steps,
             model_version=self._model_version,
-            rule_version=self._rule_version,
+            rule_version=self._rule_version if self._extraction_runner is not None else None,
         )
         if claim is None:
             return WorkerRunResult(outcome=WorkerRunOutcome.IDLE)
+
+        if claim.name in {name for _, name in DELETE_TASK_STEPS}:
+            try:
+                scope_args = dict(owner_id=claim.owner_id, contact_id=claim.contact_id,
+                                  source_document_id=claim.source_document_id)
+                if claim.name is BackgroundTaskStepName.DELETE_DERIVED:
+                    # 派生资料、索引与数据库快照在同一事务清除；后续步骤复核凭证。
+                    self._deletion_repository.delete_source(**scope_args)
+                elif claim.name is not BackgroundTaskStepName.MARK_DELETED:
+                    self._deletion_repository.verify_deleted(**scope_args)
+            except SourceDeletionError:
+                return self._record_failure(claim, "source_delete_failed", retryable=True)
+            if not self._complete_step(claim, processed_count=0, total_count=0):
+                return self._temporary_failure_result(claim)
+            return WorkerRunResult(
+                outcome=WorkerRunOutcome.SUCCEEDED, task_id=claim.task_id,
+                step_name=claim.name, attempt_count=claim.attempt_count,
+            )
 
         if claim.name in {
             BackgroundTaskStepName.PARSE,

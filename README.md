@@ -96,6 +96,14 @@ notalone-ingest chat_exports/example.jsonl \
 
 首次导入或显式恢复 owner 时使用 `--initialize-owner`：同一事务创建或恢复 owner、保存 owner 渠道身份并绑定联系人；成功后生成的 owner UUID 会写入受控 `.env`，后续导入不再需要。联系人、来源、确认记录与全部消息同事务写入，任一步失败整体回滚；同一 `owner_id + contact_id + SHA-256` 的 active 来源重复执行不重复写入，不同 SHA 文件复用相同 `(id.local_id, create_time)` 消息身份会拒绝整批导入。输出只含状态和消息数量，不含聊天正文与各类 ID。
 
+### 删除导入资料与查看回复依据
+
+导入页的“已导入的聊天资料”按当前联系人列出来源，可删除单份导入并查看后台步骤与结果。中断、失败或 Worker 忙时可“继续删除”；请求与结果保存到数据库，不依赖模型密钥。升级需先按[数据库迁移说明](database/README.md)应用 `036_source_deletion_tasks.sql`，本仓库修改不会自动迁移现有业务库。
+
+删除清除 NotAlone 中该来源及失去来源的聊天、记忆历史正文和回复快照；共享来源支持的资料保留。微信聊天、用户原始文件和不含正文的最小 AI 调用记录保留，外部模型副本须按供应商规则另行处理。联系人/账户整体删除不由此入口提供。缺少可核验删除任务的旧凭证（含任务已过期清理）不显示为本轮删除完成，历史正文残留需要单独核验。
+
+回复页可展开生成时实际保存的上下文正文、选入原因与候选引用；读取不重新检索，也不触发模型调用。HTTP 接口分别为 `GET /api/contacts/{contact_id}/sources`、`DELETE /api/contacts/{contact_id}/sources/{source_id}` 和 `GET /api/contacts/{contact_id}/replies/{reply_request_id}/evidence`，沿用回环服务 token 与 owner/contact 隔离。
+
 ### 记忆提取与管理
 
 ```bash

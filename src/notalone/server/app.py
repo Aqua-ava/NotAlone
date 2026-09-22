@@ -28,7 +28,15 @@ from notalone.application.reply_request import (
     ReplyRequestInvalid,
     parse_reply_request,
 )
+from notalone.application.source_service import SourceService
+from notalone.persistence.source_tasks import SourceDeletionHistoryUnverified
+from notalone.persistence.source_deletion import SourceDeletionError, SourceNotFoundError
+from notalone.persistence.background_tasks import BackgroundTaskPersistenceError
 from notalone.application.reply_service import ReplyService
+from notalone.application.reply_evidence import ReplyEvidenceService, ReplyEvidenceIncomplete
+from notalone.reply.errors import ReplyStoreInvariantError, ReplyPersistenceError
+from notalone.persistence.reply_store import PostgresReplyStore
+from notalone.scopes import ContactScope
 from notalone.application.import_service import (
     ImportService,
     TaskHost,
@@ -136,6 +144,8 @@ class BackendApp:
         "_message_stream",
         "_owner_id",
         "_reply_service",
+        "_reply_evidence",
+        "_source_service",
         "_setup_service",
         "_skill_service",
         "_sync_control",
@@ -154,6 +164,8 @@ class BackendApp:
         follow_smoke: FollowSmokeController | None = None,
         message_stream: MessageStream | None = None,
         reply_service: ReplyService | None = None,
+        reply_evidence: ReplyEvidenceService | None = None,
+        source_service: SourceService | None = None,
         memory_service: MemoryService | None = None,
         import_service: ImportService | None = None,
         task_host: TaskHost | None = None,
@@ -173,6 +185,8 @@ class BackendApp:
         self._memory_service = memory_service
         self._message_stream = message_stream
         self._reply_service = reply_service
+        self._reply_evidence = reply_evidence
+        self._source_service = source_service
         self._owner_id = owner_id
         self._setup_service = setup_service
         self._skill_service = skill_service
@@ -263,6 +277,10 @@ class BackendApp:
                 path=path_value,
                 query=urlsplit(path).query,
             )
+        if path_value.startswith("/api/contacts/") and path_value.endswith("/evidence"):
+            return self._handle_reply_evidence(method_upper, path_value)
+        if path_value.startswith("/api/contacts/") and "/sources" in path_value:
+            return self._handle_sources(method_upper, path_value)
         if path_value == "/api/reply/generate":
             return self._handle_reply_generate(
                 method=method_upper,
@@ -738,6 +756,55 @@ class BackendApp:
                 {"error": "binding_confirm_failed"},
             )
         return _json_response(HTTPStatus.OK, _sync_status_payload(report))
+
+    def _handle_sources(self, method: str, path: str) -> Response:
+        parts = path.strip("/").split("/")
+        is_list = len(parts) == 4 and method == "GET"
+        is_delete = len(parts) == 5 and method == "DELETE"
+        if len(parts) < 4 or parts[3] != "sources" or not (is_list or is_delete):
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        try:
+            contact_id = UUID(parts[2])
+            source_id = UUID(parts[4]) if is_delete else None
+        except ValueError:
+            return _json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid_scope"})
+        if self._source_service is None:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "sources_unavailable"})
+        try:
+            if is_list:
+                payload = {"sources": self._source_service.list_sources(self._owner_id, contact_id)}
+            else:
+                payload = self._source_service.delete(self._owner_id, contact_id, source_id)
+        except SourceNotFoundError:
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        except SourceDeletionHistoryUnverified:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "legacy_deletion_unverified"})
+        except (SourceDeletionError, BackgroundTaskPersistenceError):
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "source_state_unavailable"})
+        return _json_response(HTTPStatus.OK if is_list else HTTPStatus.ACCEPTED,
+                              payload, headers={"Cache-Control": "no-store"})
+
+    def _handle_reply_evidence(self, method: str, path: str) -> Response:
+        parts = path.strip("/").split("/")
+        if method != "GET" or len(parts) != 6 or parts[3] != "replies":
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        try:
+            contact_id, request_id = UUID(parts[2]), UUID(parts[4])
+        except ValueError:
+            return _json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid_scope"})
+        if self._reply_evidence is None:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "evidence_unavailable"})
+        try:
+            payload = self._reply_evidence.read(
+                request_id, ContactScope(self._owner_id, contact_id),
+            )
+        except ReplyStoreInvariantError:
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        except ReplyEvidenceIncomplete:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "reply_incomplete"})
+        except ReplyPersistenceError:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "evidence_unavailable"})
+        return _json_response(HTTPStatus.OK, payload, headers={"Cache-Control": "no-store"})
 
     def _handle_reply_generate(self, *, method: str, body: bytes) -> Response:
         """处理候选回复生成请求；失败关闭且不回显请求正文。"""
@@ -1452,6 +1519,8 @@ def create_app(
     sync_control: SyncControlPort | None = None,
     message_stream: MessageStream | None = None,
     reply_service: ReplyService | None = None,
+    reply_evidence: ReplyEvidenceService | None = None,
+    source_service: SourceService | None = None,
     memory_service: MemoryService | None = None,
     import_service: ImportService | None = None,
     task_host: TaskHost | None = None,
@@ -1471,6 +1540,8 @@ def create_app(
         follow_smoke=follow_smoke,
         message_stream=message_stream or MessageStream(PostgresMessageStream(database_url)),
         reply_service=reply_service,
+        reply_evidence=reply_evidence or ReplyEvidenceService(PostgresReplyStore(database_url)),
+        source_service=source_service or SourceService(database_url),
         memory_service=memory_service,
         import_service=import_service,
         task_host=task_host,

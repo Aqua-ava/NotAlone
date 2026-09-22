@@ -555,10 +555,10 @@ class PostgresReplyStore:
                            skill_load_state,
                            skill_loaded_resources
                     FROM public.reply_request
-                    WHERE id = %s
+                    WHERE id = %s AND owner_id = %s AND contact_id = %s
                     FOR UPDATE
                     """,
-                    (request_id,),
+                    (request_id, scope.owner_id, scope.contact_id),
                 ).fetchone()
                 if row is None:
                     raise ReplyStoreInvariantError(

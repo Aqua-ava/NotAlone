@@ -28,7 +28,7 @@ from notalone.persistence.locks import (
     try_acquire_global_worker_lock,
 )
 from notalone.runtime_config import load_project_env
-from notalone.tasks.models import BackgroundTaskStepName
+from notalone.tasks.models import BackgroundTaskStepName, VERIFY_STEPS
 from notalone.tasks.worker import (
     BackgroundTaskWorker,
     PostgresMemoryExtractionRunner,
@@ -111,7 +111,7 @@ def run_worker(
                 )
             if result.outcome is WorkerRunOutcome.SUCCEEDED:
                 completed_steps += 1
-                if result.step_name is BackgroundTaskStepName.VERIFY:
+                if result.step_name in VERIFY_STEPS:
                     return WorkerCommandResult(
                         status=WorkerCommandStatus.SUCCEEDED,
                         completed_steps=completed_steps,

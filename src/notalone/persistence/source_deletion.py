@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 
 import psycopg
 
+from notalone.persistence.source_memory_erasure import erase_source_memories
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.message_cleanup import (
     cleanup_derived_data,
@@ -104,7 +105,7 @@ class PostgresSourceDeletionRepository:
                     """,
                     (owner_id, contact_id, source_document_id, operation_id),
                 )
-                self._cancel_background_task(
+                self.cancel_import_tasks(
                     connection,
                     owner_id=owner_id,
                     contact_id=contact_id,
@@ -146,6 +147,12 @@ class PostgresSourceDeletionRepository:
                     removed_ids={source_document_id, *orphan_message_ids},
                 )
                 cleanup_derived_data(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    removed_ids={source_document_id, *orphan_message_ids},
+                )
+                erase_source_memories(
                     connection,
                     owner_id=owner_id,
                     contact_id=contact_id,
@@ -205,18 +212,15 @@ class PostgresSourceDeletionRepository:
                          FROM public.confirmed_memory
                          WHERE owner_id = %s
                            AND contact_id = %s
-                           AND status = 'active'
                            AND source_ids && %s::uuid[]),
                         (SELECT count(*)
                          FROM public.memory_candidate
                          WHERE owner_id = %s
                            AND contact_id = %s
-                           AND status IN ('pending', 'confirmed')
                            AND source_ids && %s::uuid[]),
                         (SELECT count(*)
                          FROM public.owner_memory
                          WHERE owner_id = %s
-                           AND status = 'active'
                            AND source_ids && %s::uuid[])
                     """,
                     (
@@ -278,8 +282,29 @@ class PostgresSourceDeletionRepository:
             )
             raise SourceDeletionError("来源删除失败。") from None
 
+    def verify_deleted(self, *, owner_id: UUID, contact_id: UUID, source_document_id: UUID) -> None:
+        """复核原子删除产生的最小凭证和来源引用，不把中间态当成功。"""
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                row = connection.execute(
+                    """
+                    SELECT status, file_name, content_sha256, record_count, deleted_at,
+                           EXISTS (SELECT 1 FROM public.message_source_ref AS ref
+                             WHERE ref.owner_id = source.owner_id AND ref.contact_id = source.contact_id
+                               AND ref.source_document_id = source.id)
+                    FROM public.source_document AS source
+                    WHERE owner_id = %s AND contact_id = %s AND id = %s
+                    """, (owner_id, contact_id, source_document_id),
+                ).fetchone()
+                if row is None:
+                    raise SourceNotFoundError("指定范围内不存在该来源。")
+                if row[:4] != ("deleted", None, None, 0) or row[4] is None or row[5]:
+                    raise SourceDeletionVerificationError("来源删除尚未验证完成。")
+        except psycopg.Error:
+            raise SourceDeletionError("删除结果验证失败。") from None
+
     @staticmethod
-    def _cancel_background_task(
+    def cancel_import_tasks(
         connection: psycopg.Connection,
         *,
         owner_id: UUID,
@@ -300,6 +325,7 @@ class PostgresSourceDeletionRepository:
               AND task.owner_id = %s
               AND task.contact_id = %s
               AND task.source_document_id = %s
+              AND task.task_type = 'import'
               AND step.status <> 'succeeded'
             """,
             (owner_id, contact_id, source_document_id),
@@ -314,6 +340,7 @@ class PostgresSourceDeletionRepository:
             WHERE owner_id = %s
               AND contact_id = %s
               AND source_document_id = %s
+              AND task_type = 'import'
               AND status IN ('queued', 'running', 'verifying')
             """,
             (owner_id, contact_id, source_document_id),

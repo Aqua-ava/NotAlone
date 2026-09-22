@@ -48,7 +48,18 @@ final class AppModel: ObservableObject {
     @Published var replyError: String?
     @Published private(set) var replyCandidates: [ReplyCandidate] = []
     @Published private(set) var lastReplyUsedSkill: ReplyGenerated.UsedSkill?
-    @Published private(set) var lastReplyContextEvidence: [String] = []
+    @Published private(set) var replyEvidence: [ReplyEvidence] = []
+    @Published private(set) var replyEvidenceError: String?
+    @Published private(set) var replyEvidenceLoading = false
+    @Published private(set) var importedSources: [ImportedSource] = []
+    @Published private(set) var sourceError: String?
+    @Published private(set) var sourceRequestInFlight = false
+    private var sourceTask: Task<Void, Never>?
+    private var sourceDeleteTask: Task<Void, Never>?
+    private var dataGenerationId = UUID()
+    private var replyGenerationId = UUID()
+    private var lastReplyRequestId: String?
+
 
     // MARK: - 记忆管理
     @Published private(set) var contactMemories: [MemoryEntry] = []
@@ -117,6 +128,8 @@ final class AppModel: ObservableObject {
         messageRefreshTask = nil
         priorityTask?.cancel()
         priorityTask = nil
+        sourceTask?.cancel()
+        sourceDeleteTask?.cancel()
         sseClient?.stop()
         sseClient = nil
         supervisor.terminate()
@@ -128,13 +141,27 @@ final class AppModel: ObservableObject {
     func selectContact(_ contactId: String) {
         guard contactId != selectedContactId else { return }
         selectedContactId = contactId
+        sourceDeleteTask?.cancel()
+        dataGenerationId = UUID()
+        sourceTask?.cancel()
+        importedSources = []
+        sourceError = nil
+        sourceRequestInFlight = false
         messages = []
         knownMessageIds = []
         loadedBefore = nil
         lastMessageCheckAt = nil
         lastMessageCheckCount = 0
         selectedReplyMessageId = nil
+        replyGenerationId = UUID()
+        replyInFlight = false
         replyCandidates = []
+        lastReplyUsedSkill = nil
+        lastReplyRequestId = nil
+        replyEvidence = []
+        replyEvidenceError = nil
+        replyEvidenceLoading = false
+        replyError = nil
         contactMemories = []
         pendingMemoryCandidates = []
         messageStreamState = .idle
@@ -150,6 +177,7 @@ final class AppModel: ObservableObject {
             self.messageStreamState = .loadingFirstPage
             do {
                 let page = try await client.messages(contactId: selectedContactId, limit: 50)
+                guard !Task.isCancelled, self.selectedContactId == selectedContactId else { return }
                 self.messages = page.messages
                 self.knownMessageIds = Set(page.messages.map(\.messageId))
                 self.loadedBefore = page.nextCursor
@@ -175,6 +203,7 @@ final class AppModel: ObservableObject {
                     limit: 50,
                     before: loadedBefore
                 )
+                guard !Task.isCancelled, self.selectedContactId == selectedContactId else { return }
                 let fresh = page.messages.filter { !self.knownMessageIds.contains($0.messageId) }
                 self.messages.append(contentsOf: fresh)
                 self.knownMessageIds.formUnion(fresh.map(\.messageId))
@@ -209,9 +238,7 @@ final class AppModel: ObservableObject {
             defer { self.messageRefreshTask = nil }
             do {
                 let page = try await client.messages(contactId: selectedContactId, limit: 50)
-                guard !Task.isCancelled, self.selectedContactId == selectedContactId else {
-                    return
-                }
+                guard !Task.isCancelled, self.selectedContactId == selectedContactId else { return }
                 let fresh = page.messages.filter { !self.knownMessageIds.contains($0.messageId) }
                 if !fresh.isEmpty {
                     self.messages = fresh + self.messages
@@ -602,24 +629,136 @@ final class AppModel: ObservableObject {
     private func generateReply(
         replyRequest: @escaping @MainActor () async throws -> ReplyGenerated
     ) {
-        guard !replyInFlight, client != nil else {
+        guard !replyInFlight, client != nil, let contactId = selectedContactId else {
             replyError = "回复生成进行中或后端不可用"
             return
         }
+        let generationId = UUID()
+        replyGenerationId = generationId
         replyInFlight = true
         replyError = nil
+        replyCandidates = []
+        replyEvidence = []
+        replyEvidenceError = nil
+        replyEvidenceLoading = false
+        lastReplyUsedSkill = nil
+        lastReplyRequestId = nil
         Task {
-            defer { replyInFlight = false }
+            defer {
+                if replyGenerationId == generationId { replyInFlight = false }
+            }
             do {
                 let generated = try await replyRequest()
+                guard selectedContactId == contactId, replyGenerationId == generationId else { return }
                 replyCandidates = generated.candidates
                 lastReplyUsedSkill = generated.usedSkill
-                lastReplyContextEvidence = generated.contextReceipt?.evidenceIds ?? []
+                lastReplyRequestId = generated.replyRequestId
                 lastOperationMessage = "已生成 \(generated.candidates.count) 个候选"
+                loadReplyEvidence()
             } catch {
+                guard selectedContactId == contactId, replyGenerationId == generationId else { return }
                 replyError = Self.describe(error)
             }
         }
+    }
+
+    func loadReplyEvidence() {
+        guard let client, let contactId = selectedContactId,
+              let requestId = lastReplyRequestId, !replyEvidenceLoading else { return }
+        let generationId = replyGenerationId
+        replyEvidenceLoading = true
+        replyEvidenceError = nil
+        Task {
+            defer {
+                if replyGenerationId == generationId { replyEvidenceLoading = false }
+            }
+            do {
+                let snapshot = try await client.replyEvidence(contactId: contactId, requestId: requestId)
+                guard selectedContactId == contactId, replyGenerationId == generationId,
+                      lastReplyRequestId == snapshot.replyRequestId else { return }
+                replyEvidence = snapshot.evidence
+            } catch {
+                guard selectedContactId == contactId, replyGenerationId == generationId else { return }
+                replyEvidenceError = "依据读取失败：\(Self.describe(error))"
+            }
+        }
+    }
+
+    func loadImportedSources() {
+        guard let client, let contactId = selectedContactId else { return }
+        sourceTask?.cancel()
+        sourceTask = Task {
+            do {
+                let sources = try await client.importedSources(contactId: contactId)
+                guard !Task.isCancelled, selectedContactId == contactId else { return }
+                let newlyDeleted = sources.contains { source in
+                    source.deletionComplete && importedSources.contains { $0.id == source.id && !$0.deletionComplete }
+                }
+                importedSources = sources
+                if newlyDeleted {
+                    clearSourceDerivedViews()
+                    loadFirstMessagePage()
+                }
+                sourceError = nil
+            } catch {
+                guard !Task.isCancelled, selectedContactId == contactId else { return }
+                sourceError = "来源状态读取失败，请刷新确认。"
+            }
+        }
+    }
+
+    func deleteImportedSource(_ source: ImportedSource) {
+        guard let client, let contactId = selectedContactId, !sourceRequestInFlight else { return }
+        sourceTask?.cancel()
+        sourceRequestInFlight = true
+        sourceError = nil
+        clearSourceDerivedViews()
+        sourceDeleteTask = Task {
+            defer {
+                if !Task.isCancelled, selectedContactId == contactId { sourceRequestInFlight = false }
+            }
+            do {
+                _ = try await client.deleteSource(contactId: contactId, sourceId: source.sourceId)
+                guard !Task.isCancelled, selectedContactId == contactId else { return }
+                lastOperationMessage = "已提交删除请求，正在确认结果"
+                for _ in 0..<30 {
+                    let sources = try await client.importedSources(contactId: contactId)
+                    guard !Task.isCancelled, selectedContactId == contactId else { return }
+                    importedSources = sources
+                    if let updated = sources.first(where: { $0.sourceId == source.sourceId }), updated.deletionComplete {
+                        clearSourceDerivedViews()
+                        loadFirstMessagePage()
+                        lastOperationMessage = "导入资料已删除；保留不含正文的 AI 调用记录"
+                        return
+                    }
+                    try await Task.sleep(for: .seconds(1))
+                }
+                lastOperationMessage = "删除尚未确认完成，可刷新状态或继续删除"
+            } catch {
+                guard !Task.isCancelled, selectedContactId == contactId else { return }
+                sourceError = "请求或状态读取失败。删除可能已提交，请刷新确认；未完成时可继续删除。"
+            }
+        }
+    }
+
+    private func clearSourceDerivedViews() {
+        dataGenerationId = UUID()
+        messageRefreshTask?.cancel()
+        replyGenerationId = UUID()
+        replyInFlight = false
+        replyCandidates = []
+        replyEvidence = []
+        replyEvidenceError = nil
+        replyEvidenceLoading = false
+        lastReplyRequestId = nil
+        lastReplyUsedSkill = nil
+        messageTask?.cancel()
+        messages = []
+        knownMessageIds = []
+        selectedReplyMessageId = nil
+        contactMemories = []
+        pendingMemoryCandidates = []
+        ownerMemories = []
     }
 
     // 一次性绑定确认：选择一个候选联系人写入绑定；确认后立即
@@ -675,19 +814,26 @@ final class AppModel: ObservableObject {
 
     func loadMemories() {
         guard let client else { return }
+        let contactId = selectedContactId
+        let generationId = dataGenerationId
         Task {
             memoryInFlight = true
             defer { memoryInFlight = false }
             do {
-                if let selectedContactId {
-                    contactMemories = try await client.contactMemories(contactId: selectedContactId)
-                    pendingMemoryCandidates = try await client.pendingMemoryCandidates(
-                        contactId: selectedContactId
-                    )
+                var confirmed: [MemoryEntry] = []
+                var pending: [MemoryCandidateEntry] = []
+                if let contactId {
+                    confirmed = try await client.contactMemories(contactId: contactId)
+                    pending = try await client.pendingMemoryCandidates(contactId: contactId)
                 }
-                ownerMemories = try await client.ownerMemories()
+                let own = try await client.ownerMemories()
+                guard selectedContactId == contactId, dataGenerationId == generationId else { return }
+                contactMemories = confirmed
+                pendingMemoryCandidates = pending
+                ownerMemories = own
                 memoryError = nil
             } catch {
+                guard selectedContactId == contactId, dataGenerationId == generationId else { return }
                 memoryError = Self.describe(error)
             }
         }
@@ -801,16 +947,7 @@ final class AppModel: ObservableObject {
     }
 
     private func reloadAfterMutation() async {
-        // 等一轮后再刷新列表，直接 reload 即可（读最新）。
-        if let selectedContactId, let client {
-            contactMemories = (try? await client.contactMemories(contactId: selectedContactId)) ?? []
-            pendingMemoryCandidates = (try? await client.pendingMemoryCandidates(
-                contactId: selectedContactId
-            )) ?? []
-        }
-        if let client {
-            ownerMemories = (try? await client.ownerMemories()) ?? []
-        }
+        loadMemories()
     }
 
     // MARK: - 导入与任务
@@ -849,6 +986,7 @@ final class AppModel: ObservableObject {
                 importPreview = nil
                 importError = nil
                 lastOperationMessage = "导入完成"
+                loadImportedSources()
                 await refreshContacts()
             } catch {
                 importError = Self.describe(error)
