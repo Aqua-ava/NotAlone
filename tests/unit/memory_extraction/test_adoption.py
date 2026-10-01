@@ -49,8 +49,8 @@ class MemoryAdoptionTest(unittest.TestCase):
             "source_message_ids": (SOURCE_ID,),
             "confidence": 0.92,
             "risk_flags": (),
-            "valid_at": datetime(2026, 9, 1, tzinfo=timezone.utc),
-            "invalid_at": datetime(2026, 10, 1, tzinfo=timezone.utc),
+            "valid_at": None,
+            "invalid_at": None,
             "speech_act": SpeechAct.ASSERTION,
             "assertion_status": AssertionStatus.ASSERTED,
             "figurative_type": FigurativeType.LITERAL,
@@ -63,7 +63,11 @@ class MemoryAdoptionTest(unittest.TestCase):
         stats = self.adoption.adopt(
             self.scope,
             ExtractionOutcome(
-                accepted=(self._fact(risk_flags=("health",)),)
+                accepted=(self._fact(
+                    risk_flags=("health",),
+                    valid_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+                    invalid_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+                ),)
             ),
         )
 
@@ -74,7 +78,14 @@ class MemoryAdoptionTest(unittest.TestCase):
         self.assertEqual(candidates[0].confidence, 0.92)
         self.assertEqual(candidates[0].risk_flags, ("health",))
         self.assertEqual(candidates[0].source_ids, (SOURCE_ID,))
-        self.assertEqual(candidates[0].valid_at.year, 2026)
+        self.assertEqual(
+            candidates[0].valid_at,
+            datetime(2026, 9, 1, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            candidates[0].invalid_at,
+            datetime(2026, 10, 1, tzinfo=timezone.utc),
+        )
 
     def test_low_risk_fact_is_auto_adopted_with_provenance(self) -> None:
         stats = self.adoption.adopt(

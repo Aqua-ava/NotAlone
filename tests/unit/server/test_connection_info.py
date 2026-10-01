@@ -49,9 +49,12 @@ class BackendInfoRoundTripTest(unittest.TestCase):
         self._env.start()
 
     def tearDown(self) -> None:
-        self._env.stop()
-        remove_backend_info()
-        self._temp_dir.cleanup()
+        # 仍在夹具环境中清理，避免恢复后误删外层后端的握手文件。
+        try:
+            remove_backend_info()
+        finally:
+            self._env.stop()
+            self._temp_dir.cleanup()
 
     def test_write_creates_0600_file_with_address_token_and_pid(self) -> None:
         write_backend_info(address="127.0.0.1:54567", token="secret-token")
