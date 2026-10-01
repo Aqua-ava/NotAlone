@@ -20,25 +20,29 @@ public final class BackendSupervisor: @unchecked Sendable {
         var connection: BackendConnection?
         var lastError: String?
         var lastExitCode: Int32?
+        var run: BackendRun?
+    }
+
+    // Foundation Process 每个实例只能启动一次；重启时进程与管道一同换代。
+    private final class BackendRun: @unchecked Sendable {
+        let process = Process()
+        let stdout = Pipe()
+        let stderr = Pipe()
     }
 
     private let state = Mutex(State())
     // 同一时刻只允许一次 launch：向导重启与轮询循环可能并发进入，
-    // 而共享的 Process/Pipe 实例会被第二次进入的 terminate() 杀掉
-    // 刚拉起的进程。后来者直接等待既有的 launch 结果。
+    // 后来者直接等待既有的 launch 结果，不终止刚拉起的进程。
     private struct LaunchFlight: Sendable {
         let id: UUID
         let task: Task<BackendConnection, any Error>
     }
 
     private let launchTask = Mutex<LaunchFlight?>(nil)
-    private let process = Process()
-    private let stdout = Pipe()
-    private let stderr = Pipe()
 
     /// 后端进程是否仍在运行。
     public var isRunning: Bool {
-        process.isRunning
+        state.withLock { $0.run }?.process.isRunning ?? false
     }
 
     /// 最近一次成功握手的连接信息。
@@ -92,12 +96,16 @@ public final class BackendSupervisor: @unchecked Sendable {
     ) async throws -> BackendConnection {
         terminate()
         waitForExit(timeout: 5)
+        let run = BackendRun()
+        let process = run.process
         state.withLock { state in
+            state.run = run
             state.connection = nil
+            state.lastError = nil
             state.lastExitCode = nil
             state.readBuffer.removeAll(keepingCapacity: true)
         }
-        let pipe = stdout
+        let pipe = run.stdout
 
         process.executableURL = serverBin
         process.arguments = []
@@ -121,10 +129,11 @@ public final class BackendSupervisor: @unchecked Sendable {
         }
         environment["PYTHONUNBUFFERED"] = "1"
         process.environment = environment
-        process.standardOutput = stdout
-        process.standardError = stderr
-        process.terminationHandler = { [weak self] finished in
-            self?.handleTermination(finished)
+        process.standardOutput = run.stdout
+        process.standardError = run.stderr
+        process.terminationHandler = { [weak self, weak run] finished in
+            guard let run else { return }
+            self?.handleTermination(finished, run: run)
         }
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -132,11 +141,12 @@ public final class BackendSupervisor: @unchecked Sendable {
             // 启动很快时回调先解析握手而把连接结果丢掉。
             state.withLock { $0.continuations.append(continuation) }
             // 读 stdout 直到出现 address= 行；15 秒超时失败关闭。
-            pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-                guard let self else { return }
+            pipe.fileHandleForReading.readabilityHandler = { [weak self, weak run] handle in
+                guard let self, let run else { return }
                 let data = handle.availableData
                 guard !data.isEmpty else { return }
                 let resolved: BackendConnection? = self.state.withLock { state in
+                    guard state.run === run else { return nil }
                     state.readBuffer.append(data)
                     guard
                         let text = String(data: state.readBuffer, encoding: .utf8)
@@ -147,34 +157,37 @@ public final class BackendSupervisor: @unchecked Sendable {
                 }
                 if let resolved {
                     handle.readabilityHandler = nil
-                    self.resolve(resolved)
+                    self.resolve(resolved, run: run)
                 }
             }
             do {
-                try self.process.run()
+                try process.run()
             } catch {
                 pipe.fileHandleForReading.readabilityHandler = nil
                 state.withLock {
+                    guard $0.run === run else { return }
                     $0.lastError = "后端进程启动失败：\(error.localizedDescription)"
                 }
-                self.failPending(with: SuperviseError.launchFailed)
+                self.failPending(with: SuperviseError.launchFailed, run: run)
                 return
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + 15) {
-                self.timeoutIfStillWaiting()
+                self.timeoutIfStillWaiting(run: run)
             }
         }
     }
 
     // 退出时收掉后端子进程；未启动时无操作。
     public func terminate() {
-        if process.isRunning {
-            process.terminate()
+        guard let run = state.withLock({ $0.run }) else { return }
+        if run.process.isRunning {
+            run.process.terminate()
         }
-        stdout.fileHandleForReading.readabilityHandler = nil
+        run.stdout.fileHandleForReading.readabilityHandler = nil
     }
 
     public func waitForExit(timeout: TimeInterval = 5) {
+        guard let process = state.withLock({ $0.run })?.process else { return }
         if !process.isRunning { return }
         let deadline = Date().addingTimeInterval(timeout)
         while process.isRunning && Date() < deadline {
@@ -187,50 +200,60 @@ public final class BackendSupervisor: @unchecked Sendable {
 
     // MARK: - 握手收尾
 
-    private func resolve(_ connection: BackendConnection) {
-        let pending = popPending()
-        state.withLock { state in
+    private func resolve(_ connection: BackendConnection, run: BackendRun) {
+        let pending = state.withLock { state in
+            guard state.run === run else {
+                return [CheckedContinuation<BackendConnection, Error>]()
+            }
             state.connection = connection
+            let pending = state.continuations
+            state.continuations = []
+            return pending
         }
         pending.forEach { $0.resume(returning: connection) }
     }
 
-    private func timeoutIfStillWaiting() {
-        let pending = popPending()
+    private func timeoutIfStillWaiting(run: BackendRun) {
+        let pending = popPending(run: run)
         guard !pending.isEmpty else { return }
         state.withLock {
+            guard $0.run === run else { return }
             $0.lastError = "等待后端握手信息超时。"
         }
         pending.forEach { $0.resume(throwing: SuperviseError.handshakeTimedOut) }
     }
 
-    private func failPending(with error: SuperviseError) {
-        let pending = popPending()
+    private func failPending(with error: SuperviseError, run: BackendRun) {
+        let pending = popPending(run: run)
         pending.forEach { $0.resume(throwing: error) }
     }
 
-    private func popPending() -> [CheckedContinuation<BackendConnection, Error>] {
+    private func popPending(run: BackendRun) -> [CheckedContinuation<BackendConnection, Error>] {
         state.withLock { state in
+            guard state.run === run else { return [] }
             let pending = state.continuations
             state.continuations = []
             return pending
         }
     }
 
-    private func handleTermination(_ finished: Process) {
-        stdout.fileHandleForReading.readabilityHandler = nil
+    private func handleTermination(_ finished: Process, run: BackendRun) {
+        run.stdout.fileHandleForReading.readabilityHandler = nil
         let status = finished.terminationStatus
-        let pending = popPending()
-        state.withLock {
-            $0.lastExitCode = status
-            $0.lastError = "后端进程意外退出（码 \(status)）。"
-        }
-        let message = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+        let message = String(data: run.stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !message.isEmpty {
-            state.withLock {
-                $0.lastError = "后端进程意外退出（码 \(status)）：\(message)"
+        let pending = state.withLock { state in
+            guard state.run === run else {
+                return [CheckedContinuation<BackendConnection, Error>]()
             }
+            state.connection = nil
+            state.lastExitCode = status
+            state.lastError = message.isEmpty
+                ? "后端进程意外退出（码 \(status)）。"
+                : "后端进程意外退出（码 \(status)）：\(message)"
+            let pending = state.continuations
+            state.continuations = []
+            return pending
         }
         pending.forEach { $0.resume(throwing: SuperviseError.exited(code: status)) }
     }

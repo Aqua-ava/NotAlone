@@ -21,31 +21,22 @@ mkdir -p "${module_cache_dir}"
 zsh "${repo_root}/macos_sync_probe/scripts/build_cli.sh"
 
 env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
-    swiftc -parse-as-library \
+    swiftc -swift-version 6 -parse-as-library \
     -emit-library \
     -emit-module \
     -module-name NotAloneAppCore \
     -emit-module-path "${module_dir}/NotAloneAppCore.swiftmodule" \
-    "${app_dir}/Sources/NotAloneAppCore/BackendConnection.swift" \
-    "${app_dir}/Sources/NotAloneAppCore/BackendModels.swift" \
-    "${app_dir}/Sources/NotAloneAppCore/FollowSmokeRefreshPolicy.swift" \
-    "${app_dir}/Sources/NotAloneAppCore/FollowSmokeControls.swift" \
-    "${app_dir}/Sources/NotAloneAppCore/BackfillStatusPresentation.swift" \
-    "${app_dir}/Sources/NotAloneAppCore/BackendClient.swift" \
-    "${app_dir}/Sources/NotAloneAppCore/BackendSupervisor.swift" \
-    "${app_dir}/Sources/NotAloneAppCore/SseEventClient.swift" \
+    "${app_dir}/Sources/NotAloneAppCore/"*.swift \
     -framework AppKit \
     -framework Foundation \
     -Xlinker -install_name \
     -Xlinker "@rpath/libNotAloneAppCore.dylib" \
     -o "${app_bundle}/Contents/Frameworks/libNotAloneAppCore.dylib"
 
+# 与 Swift Package 使用相同语言模式并收集整个目标，新增视图不会遗漏。
 env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
-    swiftc -parse-as-library \
-    "${app_dir}/Sources/NotAloneApp/NotAloneApp.swift" \
-    "${app_dir}/Sources/NotAloneApp/AppModel.swift" \
-    "${app_dir}/Sources/NotAloneApp/FollowVerificationControls.swift" \
-    "${app_dir}/Sources/NotAloneApp/MainWindowView.swift" \
+    swiftc -swift-version 6 -parse-as-library \
+    "${app_dir}/Sources/NotAloneApp/"*.swift \
     -I "${module_dir}" \
     -L "${app_bundle}/Contents/Frameworks" \
     -lNotAloneAppCore \
