@@ -80,10 +80,11 @@ class PostgresIngestRepository:
         *,
         owner_id: UUID | None,
         initialize_owner: bool = False,
+        initialize_first_owner_identity: bool = False,
         document: ImportBatch,
         confirmation: ImportConfirmationRequest,
     ) -> ImportResult:
-        """导入一个已规范化批次；重复 active 来源返回幂等结果。"""
+        """导入规范批次；重复 active 来源幂等，首次身份选项不能恢复撤销。"""
 
         try:
             # Psycopg 连接上下文在正常退出时提交，异常退出时先回滚再关闭连接。
@@ -92,6 +93,7 @@ class PostgresIngestRepository:
                     connection=connection,
                     owner_id=owner_id,
                     initialize_owner=initialize_owner,
+                    initialize_first_owner_identity=initialize_first_owner_identity,
                     document=document,
                     confirmation=confirmation,
                 )
@@ -143,6 +145,7 @@ class PostgresIngestRepository:
         connection: psycopg.Connection[Any],
         owner_id: UUID | None,
         initialize_owner: bool,
+        initialize_first_owner_identity: bool,
         document: ImportBatch,
         confirmation: ImportConfirmationRequest,
     ) -> ImportResult:
@@ -150,6 +153,7 @@ class PostgresIngestRepository:
             connection=connection,
             owner_id=owner_id,
             initialize_owner=initialize_owner,
+            initialize_first_owner_identity=initialize_first_owner_identity,
             document=document,
         )
 
@@ -501,6 +505,7 @@ class PostgresIngestRepository:
         connection: psycopg.Connection[Any],
         owner_id: UUID | None,
         initialize_owner: bool,
+        initialize_first_owner_identity: bool,
         document: ImportBatch,
     ) -> UUID:
         """解析或显式初始化 owner，并校验其微信渠道身份。"""
@@ -535,7 +540,10 @@ class PostgresIngestRepository:
                 raise OwnerNotFoundError("缺少受控运行身份。")
         else:
             owner = connection.execute(
-                "SELECT 1 FROM public.owner WHERE id = %s FOR KEY SHARE",
+                # 首次渠道身份初始化按 owner 串行，避免并发确认重复绑定。
+                "SELECT 1 FROM public.owner WHERE id = %s FOR UPDATE"
+                if initialize_first_owner_identity
+                else "SELECT 1 FROM public.owner WHERE id = %s FOR KEY SHARE",
                 (owner_id,),
             ).fetchone()
             if owner is None:
@@ -560,9 +568,23 @@ class PostgresIngestRepository:
             return owner_id
 
         if not initialize_owner:
-            raise OwnerChannelIdentityNotFoundError(
-                "owner 尚未绑定微信身份，请首次导入时加 --initialize-owner。"
-            )
+            if not initialize_first_owner_identity:
+                raise OwnerChannelIdentityNotFoundError(
+                    "owner 尚未绑定微信身份，请首次导入时加 --initialize-owner。"
+                )
+            previous_identity = connection.execute(
+                """
+                SELECT 1
+                FROM public.owner_channel_identity
+                WHERE owner_id = %s AND channel = 'wechat'
+                LIMIT 1
+                """,
+                (owner_id,),
+            ).fetchone()
+            if previous_identity is not None:
+                raise OwnerChannelIdentityNotFoundError(
+                    "owner 微信身份已撤销，请显式重新绑定后导入。"
+                )
 
         existing_external = connection.execute(
             """

@@ -58,18 +58,23 @@ class ImportService:
         owner_id: UUID,
         selection: ContactSelection,
     ) -> dict[str, object]:
-        """校验并确认联系人后正式导入；直接复用 CLI 同源 import_file。"""
+        """确认联系人后导入；首启 owner 仅可建立从未绑定过的渠道身份。"""
 
         result = import_file(
             path=Path(path),
             owner_id=owner_id,
+            initialize_first_owner_identity=True,
             confirmation=ImportConfirmationRequest(selection=selection),
             repository=self._repository,
         )
         return {
-            "imported_count": getattr(result, "imported_count", 0),
-            "skipped_duplicates": getattr(result, "skipped_duplicates", 0),
-            "contact_id": str(getattr(result, "contact_id", "")),
+            "imported_count": (
+                result.message_count if result.outcome == "imported" else 0
+            ),
+            "skipped_duplicates": (
+                result.message_count if result.outcome == "already_imported" else 0
+            ),
+            "contact_id": str(result.contact_id),
         }
 
 

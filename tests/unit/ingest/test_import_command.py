@@ -33,6 +33,7 @@ class FakeRepository:
         *,
         owner_id: object,
         initialize_owner: bool = False,
+        initialize_first_owner_identity: bool = False,
         document: object,
         confirmation: object,
     ) -> ImportResult:

@@ -16,6 +16,7 @@ from notalone.ingest.models import (
     ImportConfirmationRequest,
     NewContactSelection,
 )
+from notalone.persistence.postgres_repository import ImportResult
 from notalone.tasks.models import BackgroundTaskStepName
 from notalone.tasks.worker import WorkerRunOutcome
 
@@ -33,14 +34,25 @@ class FakeRepository:
         *,
         owner_id: UUID | None,
         initialize_owner: bool = False,
+        initialize_first_owner_identity: bool = False,
         document: ImportBatch,
         confirmation: ImportConfirmationRequest,
-    ) -> object:
+    ) -> ImportResult:
         self.calls.append((owner_id, document, confirmation))
-        return SimpleNamespace(
-            imported_count=7,
-            skipped_duplicates=2,
-            contact_id=str(CONTACT_ID),
+        return ImportResult(
+            contact_id=CONTACT_ID,
+            channel_identity_id=uuid4(),
+            source_document_id=uuid4(),
+            confirmation_id=uuid4(),
+            confirmation_method=(
+                "manual_select"
+                if isinstance(confirmation.selection, ExistingContactSelection)
+                else "manual_create"
+            ),
+            outcome="imported",
+            message_count=7,
+            task_id=uuid4(),
+            owner_id=owner_id,
         )
 
 
@@ -102,7 +114,7 @@ class ImportServiceTest(unittest.TestCase):
         )
 
         self.assertEqual(result["imported_count"], 7)
-        self.assertEqual(result["skipped_duplicates"], 2)
+        self.assertEqual(result["skipped_duplicates"], 0)
         self.assertEqual(result["contact_id"], str(CONTACT_ID))
         owner, _, confirmation = self.repository.calls[-1]
         self.assertEqual(owner, OWNER_ID)

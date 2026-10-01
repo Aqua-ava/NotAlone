@@ -56,6 +56,7 @@ class IngestRepository(Protocol):
         *,
         owner_id: UUID | None,
         initialize_owner: bool = False,
+        initialize_first_owner_identity: bool = False,
         document: ImportBatch,
         confirmation: ImportConfirmationRequest,
     ) -> ImportResult: ...
@@ -66,6 +67,7 @@ def import_file(
     path: Path,
     owner_id: UUID | None,
     initialize_owner: bool = False,
+    initialize_first_owner_identity: bool = False,
     confirmation: ImportConfirmationRequest,
     repository: IngestRepository,
 ) -> ImportResult:
@@ -76,6 +78,7 @@ def import_file(
     return repository.import_document(
         owner_id=owner_id,
         initialize_owner=initialize_owner,
+        initialize_first_owner_identity=initialize_first_owner_identity,
         document=batch,
         confirmation=confirmation,
     )
