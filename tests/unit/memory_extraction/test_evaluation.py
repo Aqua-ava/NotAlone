@@ -130,19 +130,32 @@ class EvaluationTest(unittest.TestCase):
                 self.assertEqual(result.text_ok, text_ok)
                 self.assertEqual(result.passed, text_ok)
 
+    def test_completed_cancellation_preserves_fact_without_live_plan(self):
+        case = CASES_BY_NAME["保真：取消见面"]
+        window = build_window(case)
+        payload = _payload(
+            window.messages[0].message_id,
+            text="原本约的周六见面取消了。",
+            subject="shared",
+        )
+        model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
+        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        self.assertEqual(result.actual, 'auto')
+        self.assertTrue(result.passed)
+
     def test_validity_field_expectations(self):
         base = dict(
-            dimension='time', messages=(('contact', '我下周去北京。'),),
+            dimension='time', messages=(('contact', '我从月初起就在北京。'),),
             targets=(0,), expect='auto',
         )
         want_valid = EvaluationCase(name='应填生效时间', expect_valid_at=True, **base)
         deny_valid = EvaluationCase(name='不应填生效时间', expect_valid_at=False, **base)
         want_invalid = EvaluationCase(name='应填失效时间', expect_invalid_at=True, **base)
         for case, validity_ok, payload_valid in (
-            (want_valid, True, '2026-09-22T09:00:00+08:00'),
+            (want_valid, True, '2026-09-01T09:00:00+08:00'),
             (want_valid, False, None),
             (deny_valid, True, None),
-            (deny_valid, False, '2026-09-22T09:00:00+08:00'),
+            (deny_valid, False, '2026-09-01T09:00:00+08:00'),
             (want_invalid, True, '2026-09-30T09:00:00+08:00'),
             (want_invalid, False, None),
         ):
@@ -154,6 +167,54 @@ class EvaluationTest(unittest.TestCase):
                 result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
                 self.assertEqual(result.validity_ok, validity_ok)
                 self.assertEqual(result.passed, validity_ok)
+
+    def test_explicit_period_checks_exact_dates_and_timezone_equivalence(self):
+        case = EvaluationCase(
+            name='合成当周临时状态', dimension='time',
+            messages=(('self', '本周临时值班，下周回原办公室。'),),
+            targets=(0,), expect='auto',
+            expect_valid_at_iso='2026-09-15T00:00:00+00:00',
+            expect_invalid_at_iso='2026-09-21T00:00:00+00:00',
+        )
+        window = build_window(case)
+        for start, end, correct in (
+            ('2026-09-15T00:00:00+00:00', '2026-09-21T00:00:00+00:00', True),
+            ('2026-09-15T08:00:00+08:00', '2026-09-21T08:00:00+08:00', True),
+            ('2026-09-14T00:00:00+00:00', '2026-09-21T00:00:00+00:00', False),
+            ('2026-09-15T00:00:00+00:00', '2026-09-22T00:00:00+00:00', False),
+        ):
+            with self.subTest(start=start, end=end):
+                payload = _payload(
+                    window.messages[0].message_id,
+                    subject='self', valid_at=start, invalid_at=end,
+                )
+                model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
+                result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+                self.assertEqual(result.validity_ok, correct)
+                self.assertEqual(result.passed, correct)
+
+    def test_exact_period_cannot_be_satisfied_by_one_of_two_facts(self):
+        case = EvaluationCase(
+            name='合成整组临时状态', dimension='time',
+            messages=(('self', '本周临时在北区办公室值班。'),),
+            targets=(0,), expect='auto',
+            expect_valid_at_iso='2026-09-15T00:00:00+00:00',
+            expect_invalid_at_iso='2026-09-21T00:00:00+00:00',
+        )
+        window = build_window(case)
+        dated = _payload(
+            window.messages[0].message_id, subject='self',
+            text='用户本周临时在北区办公室值班。',
+            valid_at='2026-09-15T00:00:00+00:00',
+            invalid_at='2026-09-21T00:00:00+00:00',
+        )
+        unbounded = {**dated, 'text': '用户在北区办公室值班。',
+                     'valid_at': None, 'invalid_at': None}
+        model = ToolCallingFakeModel(responses=[_structured_response((dated, unbounded))])
+        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        self.assertEqual(len(result.facts), 2)
+        self.assertFalse(result.validity_ok)
+        self.assertFalse(result.passed)
 
     def test_dimension_gate_summary(self):
         def make(error_kind=None):

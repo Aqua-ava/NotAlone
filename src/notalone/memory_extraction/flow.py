@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from uuid import UUID
 
@@ -70,6 +70,25 @@ class ExtractionFlow:
             if not source_ids <= window_ids or not source_ids & target_ids:
                 rejected += 1
                 continue
+            valid_at = fact.valid_at
+            if valid_at is not None:
+                source_times = tuple(
+                    message.occurred_at
+                    for message in window.messages
+                    if message.message_id in source_ids
+                )
+                temporal_risk: str | None = None
+                if any(occurred_at is None for occurred_at in source_times):
+                    temporal_risk = "pragmatic:unknown_source_time"
+                elif valid_at > max(source_times):
+                    temporal_risk = "pragmatic:future_validity"
+                if temporal_risk is not None:
+                    fact = replace(
+                        fact,
+                        risk_flags=tuple(dict.fromkeys((
+                            *fact.risk_flags, temporal_risk,
+                        ))),
+                    )
             accepted.append(fact)
         return ExtractionOutcome(
             accepted=tuple(accepted), rejected_count=rejected

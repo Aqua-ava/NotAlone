@@ -3,17 +3,25 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
+from datetime import datetime, timezone
 from uuid import uuid4
 
+from notalone.memory_extraction.adoption import can_auto_adopt
 from notalone.memory_extraction.errors import (
     ExtractionInvalidOutputError,
     ExtractionRuntimeError,
 )
 from notalone.memory_extraction.flow import ExtractionFlow, ExtractionOutcome
 from notalone.memory_extraction.models import (
+    AssertionStatus,
     ExtractionFailureKind,
     ExtractionWindow,
+    FactSubject,
+    FigurativeType,
+    SpeechAct,
 )
+from notalone.memory_extraction.pragmatics import PragmaticInterpreter
 from notalone.memory_extraction.runtime import ExtractionPayload
 from tests.unit.memory_extraction.test_models import _window
 
@@ -81,6 +89,123 @@ class ExtractionFlowTest(unittest.TestCase):
         self.assertEqual(fact.source_message_ids, (message_id,))
         self.assertEqual(outcome.rejected_count, 0)
         self.assertIsNone(outcome.failure_reason)
+
+    def test_future_validity_blocks_auto_adoption_despite_assertion_labels(
+        self,
+    ) -> None:
+        source_id, context_id = uuid4(), uuid4()
+        original = _window((source_id, context_id))
+        window = replace(
+            original,
+            messages=(
+                replace(
+                    original.messages[0],
+                    text="原本下周去北京，改到下个月。",
+                    occurred_at=datetime(2026, 9, 15, tzinfo=timezone.utc),
+                ),
+                replace(
+                    original.messages[1],
+                    text="今天聊的是另一件事。",
+                    occurred_at=datetime(2026, 10, 2, tzinfo=timezone.utc),
+                ),
+            ),
+            target_message_ids=(source_id,),
+        )
+        outcome = ExtractionFlow(runtime=RecordingRuntime((
+            _payload(
+                source_id,
+                text="联系人改在下个月去北京",
+                valid_at="2026-10-01T00:00:00+00:00",
+                risk_flags=["low"],
+            ),
+        ))).run(window)
+
+        self.assertEqual(outcome.rejected_count, 0)
+        self.assertEqual(len(outcome.accepted), 1)
+        fact = outcome.accepted[0]
+        decision = PragmaticInterpreter().interpret(fact)
+        self.assertFalse(can_auto_adopt(fact, decision))
+        self.assertEqual(fact.risk_flags, ("low", "pragmatic:future_validity"))
+        self.assertEqual(fact.text, "联系人改在下个月去北京")
+        self.assertEqual(fact.subject, FactSubject.CONTACT)
+        self.assertEqual(fact.speech_act, SpeechAct.ASSERTION)
+        self.assertEqual(fact.assertion_status, AssertionStatus.ASSERTED)
+        self.assertEqual(fact.figurative_type, FigurativeType.LITERAL)
+        self.assertEqual(fact.source_message_ids, (source_id,))
+        self.assertEqual(
+            fact.valid_at,
+            datetime(2026, 10, 1, tzinfo=timezone.utc),
+        )
+
+    def test_post_effective_evidence_does_not_block_auto_adoption(
+        self,
+    ) -> None:
+        planning_id, confirmation_id = uuid4(), uuid4()
+        original = _window((planning_id, confirmation_id))
+        window = replace(
+            original,
+            messages=(
+                replace(
+                    original.messages[0],
+                    text="原本下周去北京，改到下个月。",
+                    occurred_at=datetime(2026, 9, 15, tzinfo=timezone.utc),
+                ),
+                replace(
+                    original.messages[1],
+                    text="已经按改期安排到北京了。",
+                    occurred_at=datetime(2026, 10, 2, tzinfo=timezone.utc),
+                ),
+            ),
+            target_message_ids=(confirmation_id,),
+        )
+        outcome = ExtractionFlow(runtime=RecordingRuntime((
+            _payload(
+                confirmation_id,
+                text="联系人已按改期安排到北京",
+                source_message_ids=[str(planning_id), str(confirmation_id)],
+                valid_at="2026-10-01T00:00:00+00:00",
+                risk_flags=["low"],
+            ),
+        ))).run(window)
+
+        self.assertEqual(outcome.rejected_count, 0)
+        self.assertEqual(len(outcome.accepted), 1)
+        fact = outcome.accepted[0]
+        decision = PragmaticInterpreter().interpret(fact)
+        self.assertTrue(can_auto_adopt(fact, decision))
+        self.assertEqual(fact.risk_flags, ("low",))
+        self.assertEqual(
+            fact.source_message_ids,
+            (planning_id, confirmation_id),
+        )
+
+    def test_missing_source_time_blocks_only_facts_with_validity(self) -> None:
+        source_id = uuid4()
+        original = _window((source_id,))
+        window = replace(
+            original,
+            messages=(replace(original.messages[0], occurred_at=None),),
+        )
+        for valid_at, expected_auto, expected_flags in (
+            (None, True, ("low",)),
+            (
+                "2026-10-01T00:00:00+00:00",
+                False,
+                ("low", "pragmatic:unknown_source_time"),
+            ),
+        ):
+            with self.subTest(valid_at=valid_at):
+                outcome = ExtractionFlow(runtime=RecordingRuntime((
+                    _payload(source_id, valid_at=valid_at, risk_flags=["low"]),
+                ))).run(window)
+                self.assertEqual(outcome.rejected_count, 0)
+                self.assertEqual(len(outcome.accepted), 1)
+                fact = outcome.accepted[0]
+                decision = PragmaticInterpreter().interpret(fact)
+                self.assertEqual(can_auto_adopt(fact, decision), expected_auto)
+                self.assertEqual(fact.risk_flags, expected_flags)
+                self.assertEqual(fact.source_message_ids, (source_id,))
+                self.assertIsNone(window.messages[0].occurred_at)
 
     def test_facts_referencing_outside_window_are_rejected(self) -> None:
         valid_id = uuid4()

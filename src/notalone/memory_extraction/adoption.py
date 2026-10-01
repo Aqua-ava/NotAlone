@@ -386,6 +386,7 @@ class MemoryAdoption:
                 category=fact.category,
                 source_ids=fact.source_message_ids,
                 topic=fact.topic,
+                subject=fact.subject,
                 valid_at=fact.valid_at,
                 invalid_at=fact.invalid_at,
                 confidence=fact.confidence,

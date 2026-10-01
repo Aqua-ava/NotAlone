@@ -139,7 +139,7 @@ def _text_matches(case: EvaluationCase, facts: list[dict]) -> bool:
 
 
 def _validity_matches(case: EvaluationCase, facts: list[dict]) -> bool:
-    """有效期存在性检查：需要时间限定的事实要填对字段，其余不填。"""
+    """检查时间字段存在性，以及用例明确约定的带时区日期。"""
     values = {
         'valid_at': [fact.get('valid_at') for fact in facts],
         'invalid_at': [fact.get('invalid_at') for fact in facts],
@@ -152,6 +152,18 @@ def _validity_matches(case: EvaluationCase, facts: list[dict]) -> bool:
             continue
         present = any(value is not None for value in values[field])
         if present is not expectation:
+            return False
+    for field, expected_iso in (
+        ('valid_at', case.expect_valid_at_iso),
+        ('invalid_at', case.expect_invalid_at_iso),
+    ):
+        if expected_iso is None:
+            continue
+        expected = datetime.fromisoformat(expected_iso)
+        if expected.tzinfo is None:
+            raise ValueError('评测期望时间必须带时区。')
+        actual = values[field]
+        if not actual or any(value != expected for value in actual):
             return False
     return True
 

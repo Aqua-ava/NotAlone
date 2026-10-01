@@ -100,6 +100,35 @@ class MemoryAdoptionTest(unittest.TestCase):
         self.assertEqual(memory.risk_flags, ())
         self.assertEqual(memory.source_ids, (SOURCE_ID,))
 
+    def test_auto_adopted_shared_fact_keeps_candidate_subject(self) -> None:
+        stats = self.adoption.adopt(
+            self.scope,
+            ExtractionOutcome(
+                accepted=(self._fact(
+                    text="用户和联系人上周一起看了展览",
+                    category=MemoryCategory.COMMON_FACT,
+                    topic=MemoryTopic.OTHER,
+                    subject=FactSubject.SHARED,
+                ),),
+            ),
+        )
+
+        self.assertEqual(stats.adopted, 1)
+        memories = self.store.list_confirmed(self.scope)
+        self.assertEqual(len(memories), 1)
+        memory = memories[0]
+        self.assertEqual(memory.adoption_method, AdoptionMethod.AUTO)
+        self.assertEqual(memory.source_ids, (SOURCE_ID,))
+        candidate_id = memory.source_candidate_id
+        if candidate_id is None:
+            self.fail("自动采纳记忆必须保留来源候选。")
+        candidate = self.store.get_candidate(
+            scope=self.scope,
+            candidate_id=candidate_id,
+        )
+        self.assertEqual(candidate.subject, FactSubject.SHARED)
+        self.assertEqual(candidate.source_ids, (SOURCE_ID,))
+
     def test_repeating_same_pending_fact_is_idempotent(self) -> None:
         fact = self._fact(confidence=0.3)
         first = self.adoption.adopt(
