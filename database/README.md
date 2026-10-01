@@ -22,13 +22,39 @@ python -m notalone.database_migrations --migrations database/migrations
 
 旧安装或曾手工执行 SQL 的库会返回 `legacy_database_untracked`，在创建账本或执行业务 SQL 前停止。仅凭 `owner` 存在无法区分完整安装和中断安装；当前命令不提供自动猜基线或强制跳过校验。
 
-接管旧库必须先核对已执行文件、系统目录结构、约束和历史回填结果，并确定备份与恢复方案。当前尚未提供自动接管入口；不要通过手写一批成功记录、重放 001–035 或删除业务库绕过检查。特别是 003 仅允许空业务表，021 会搬迁数据并删除旧列，不能通用重跑。
+接管旧库必须先核对系统目录、约束、现存资料的来源与隔离契约，并确定备份与恢复方案。不要通过手写一批成功记录、重放 001–035 或删除业务库绕过检查。特别是 003 仅允许空业务表，021 会搬迁数据并删除旧列，不能通用重跑。当前提供下述受限的显式接管入口，不自动猜测其他历史版本。
+
+## 显式接管 035 旧库
+
+只支持 PostgreSQL 16、本机专用业务库，以及固定 001–035 文件清单对应的完整结构。唯一允许的结构差异是 `source_document_source_type_check` 仍只允许 `wechat_jsonl`；该差异在接管事务中补齐为 `wechat_jsonl/manual`。额外对象、其他结构或权限差异、无有效来源消息、跨范围引用、异常记忆证据及绑定/观察范围不一致均拒绝。
+
+默认命令只读核验目标库；参考结构在命令自己创建的空 `_test` 库执行固定前缀后生成，不在旧库重放历史 SQL：
+
+```bash
+python -m notalone.database_adoption --migrations database/migrations
+```
+
+用户明确批准升级及私人备份后，退出 App、停止同步/Worker 和其他目标库连接，保留总开关与暂停设置，再执行：
+
+```bash
+python -m notalone.database_adoption --migrations database/migrations \
+  --adopt --backup-dir "$HOME/.notalone/backups/legacy-035-20261001"
+python -m notalone.database_migrations --migrations database/migrations
+```
+
+- 接管与普通迁移共用 advisory lock；开始、锁表后、恢复核验后和提交前重新核对其他目标库连接，存在时拒绝接管，事务内锁住全部业务表阻止写入。目录复核使用新快照，期间已提交的新对象也会导致回滚。操作期间持续保持 App/Worker 停止。异常后不能在写入已恢复时直接覆盖旧备份，应先评估新资料。
+- 备份目录必须在仓库外、为空且权限 0700；`database.dump` 与 `verification.json` 为 0600。使用 PostgreSQL 16 的 `pg_dump` 导出一致快照，再以 `pg_restore --single-transaction --exit-on-error` 恢复到命令拥有的专用受限副本。连接凭据和底层错误不会回显。
+- 恢复副本与升级前的完整结构、全部业务表内容 SHA-256 比较通过后才接管；私人行只在本机进程中流式计算，不写日志、不进入模型。恢复副本含私人资料，不能作为合成行为测试库；核验后自动清理该副本，原备份继续保留。目录约束对 PostgreSQL 重建后的规范化输出比对，不依赖原始括号格式。
+- `notalone_schema_baseline` 单独记录 035 审计基线、固定文件清单及摘要、前后结构摘要、实际补齐 SQL 摘要和备份恢复凭证。补齐与基线在同一事务提交，业务内容摘要必须保持一致；基线不表示历史 SQL 曾成功执行，也不证明过去的聊天覆盖完整。
+- 接管创建空的 `notalone_schema_migration`。普通迁移先验证基线前缀文件未改变，再执行 036 及后续版本；账本只记录这些实际执行的 SQL。混入 001–035 假成功记录或丢失基线凭证都会拒绝继续。重复接管有效基线不再备份或补齐，重复迁移不重放成功版本。
+- 备份或接管失败时保留已生成的备份供检查；确认目标库仍未接管后，重试使用新的空受限目录。036 中断只回滚 036，可使用相同原始文件续跑。重新启动 App 前核验身份、资料、绑定和暂停状态均保留；升级不授权删除真实来源。
 
 ## 隔离验证
 
 ```bash
 conda activate NotAlone
-python -m unittest tests.integration.persistence.test_database_migrations -v
+python -m unittest tests.integration.persistence.test_database_migrations \
+  tests.integration.persistence.test_database_adoption -v
 ```
 
 测试通过本机 PostgreSQL 创建随机名称且以 `_test` 结尾的专用库，只清理自己创建的库，不接触 `notalone_dev` 或共享测试库。需要本机用户拥有建库权限；用例覆盖全量仓库迁移、重复执行、失败恢复、历史校验、并发互斥和无记录旧库拒绝。

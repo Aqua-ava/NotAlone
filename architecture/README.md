@@ -56,6 +56,7 @@
 30. [ADR-030：已确认联系人的后台同步与首次手动选择](adr/030-confirmed-contact-background-sync-consent.md)
 
 31. [ADR-031：来源删除保留不含正文的调用记录](adr/031-source-deletion-retains-minimal-ledger.md)
+32. [ADR-032：审计基线与实际迁移账本分开](adr/032-audited-legacy-schema-baseline.md)
 
 ## 当前架构决策
 

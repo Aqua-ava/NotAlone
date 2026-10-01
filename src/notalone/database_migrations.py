@@ -15,6 +15,8 @@ from uuid import uuid4
 import psycopg
 from psycopg import sql
 
+from notalone.database_baseline import BaselineError, baseline_offset
+
 
 class MigrationError(RuntimeError):
     """仅携带稳定错误码和不含业务内容的说明。"""
@@ -57,12 +59,17 @@ def migrate(database_url: str, directory: Path) -> tuple[str, ...]:
     migrations = _load_migrations(directory)
     applied: list[str] = []
     with psycopg.connect(database_url, autocommit=True) as connection:
+        connection.execute("SET search_path = pg_catalog, public")
         # 会话锁覆盖所有逐版本事务，连接关闭（包括进程中断）时自动释放。
         if not connection.execute(
-            "SELECT pg_try_advisory_lock(1852798049, 1)"
+            "SELECT pg_catalog.pg_try_advisory_lock(1852798049, 1)"
         ).fetchone()[0]:
             raise MigrationError("migration_busy：另一个迁移命令正在执行，请稍后重试。")
         connection.execute("SET lock_timeout = '10s'")
+        try:
+            offset = baseline_offset(connection, migrations)
+        except BaselineError as error:
+            raise MigrationError(str(error)) from None
         if connection.execute(
             "SELECT to_regclass('public.notalone_schema_migration')"
         ).fetchone()[0] is None:
@@ -90,14 +97,15 @@ def migrate(database_url: str, directory: Path) -> tuple[str, ...]:
             "SELECT name, checksum FROM public.notalone_schema_migration ORDER BY name"
         ).fetchall())
         expected_history = {
-            item.name: item.checksum for item in migrations[:len(completed)]
+            item.name: item.checksum
+            for item in migrations[offset:offset + len(completed)]
         }
         if completed != expected_history:
             raise MigrationError(
                 "migration_history_mismatch：已执行迁移缺失、内容改变或顺序不一致；"
                 "请恢复原始文件，新变更应增加新版本。"
             )
-        for migration in migrations:
+        for migration in migrations[offset:]:
             if migration.name in completed:
                 continue
             try:
