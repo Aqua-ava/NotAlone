@@ -729,7 +729,7 @@ struct MainWindowView: View {
                                     .foregroundStyle(.secondary)
                             }
                             if let confidence = candidate.confidence {
-                                Text("置信度：\(confidence, specifier: "%.0f%%")")
+                                Text("置信度：\(confidence * 100, specifier: "%.0f%%")")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -824,7 +824,7 @@ struct MainWindowView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     if let confidence = memory.confidence {
-                        Text("置信度：\(confidence, specifier: "%.0f%%")")
+                        Text("置信度：\(confidence * 100, specifier: "%.0f%%")")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -2203,7 +2203,7 @@ struct MainWindowView: View {
                     model.lastOperationMessage = "已复制候选回复"
                 }
                 .font(.caption)
-                Button("基于此继续生成") {
+                Button(currentText(of: candidate) == candidate.text ? "基于此继续生成" : "改写当前候选") {
                     continueFrom(candidate)
                 }
                 .font(.caption)
@@ -2243,7 +2243,20 @@ struct MainWindowView: View {
     private func continueFrom(_ candidate: ReplyCandidate) {
         // 基于历史候选继续：显式携带候选 id 继续生成（系统不推断
         // "最近未发送候选"；用户显式选择才继续）。
-        if model.selectedReplyMessageId != nil {
+        let editedText = currentText(of: candidate)
+        if editedText != candidate.text {
+            // 编辑后的正文作为本次草稿；历史候选仍保留原始快照。
+            let instruction = model.selectedReplyMessageId != nil
+                ? replyDirection : rewriteInstruction
+            model.generateRewrite(
+                draftText: editedText,
+                instruction: instruction.isEmpty ? nil : instruction,
+                continuedFromCandidateId: candidate.candidateId,
+                skillVersionId: manualSkillVersion.isEmpty ? nil : manualSkillVersion,
+                includeRelationshipContext: model.selectedReplyMessageId != nil
+                    || includeRelationshipContext
+            )
+        } else if model.selectedReplyMessageId != nil {
             model.generateReplyToMessage(
                 direction: replyDirection,
                 continuedFromCandidateId: candidate.candidateId,
