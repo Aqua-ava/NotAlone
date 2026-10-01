@@ -175,6 +175,7 @@ _INCOMPLETE_CLI_FAILURE_CODES = frozenset(
         "cli_not_found",
         "cli_timeout",
         "cli_key_refresh_required",
+        "cli_message_table_missing",
         "cli_freshness_unknown",
         "cli_follow_unsupported",
         "cli_follow_failed",

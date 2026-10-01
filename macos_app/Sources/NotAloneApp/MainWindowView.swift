@@ -1277,6 +1277,12 @@ struct MainWindowView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            if let status = model.status,
+               status.syncMode == "cli_background",
+               let failure = status.cliBackfillFailureCode ?? status.cliFailureCode {
+                syncInfoRow("最近读取问题", value: cliFailureLabel(failure), color: .orange)
+            }
+
             HStack {
                 Button("刷新微信私聊列表") {
                     model.loadCliSessions()
@@ -1618,6 +1624,8 @@ struct MainWindowView: View {
             return "需要刷新本机微信读取密钥（运行 wxkey setup）"
         case "cli_freshness_unknown":
             return "CLI 未能确认已读取到最新位置"
+        case "cli_message_table_missing":
+            return "CLI 未找到该会话的本地消息表，无法确认覆盖范围"
         case "cli_invalid_argument":
             return "CLI 参数无效，请重启 NotAlone"
         default:

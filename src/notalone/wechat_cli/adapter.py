@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import queue
+import re
 import subprocess
 import threading
 from collections.abc import Callable, Sequence
@@ -475,6 +476,11 @@ def _command_failure(result: CommandResult) -> CliCommandError:
             "cli_key_refresh_required",
             "微信 CLI 本机读取密钥需要刷新。",
         )
+    if code == "tool_error" and _message_table_missing(message):
+        return CliCommandError(
+            "cli_message_table_missing",
+            "CLI 未找到该会话的本地消息表，无法确认消息覆盖。",
+        )
     return CliCommandError("cli_command_failed", "微信 CLI 命令执行失败。")
 
 
@@ -507,6 +513,17 @@ def _requires_key_refresh(message: str | None) -> bool:
     return (
         "automatic key refresh is disabled" in normalized
         and "enc_key" in normalized
+    )
+
+
+def _message_table_missing(message: str | None) -> bool:
+    """只识别已验证 CLI 模板；表名留在适配器内，不当作空结果。"""
+
+    return (
+        message is not None
+        and re.fullmatch(
+            r"table \S+ not found in (?:\d+|opened) message shards", message
+        ) is not None
     )
 
 

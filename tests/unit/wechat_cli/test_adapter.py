@@ -678,3 +678,66 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, "cli_key_refresh_required")
         self.assertNotIn("enc_key", str(raised.exception))
+
+    def test_missing_message_table_reports_coverage_unavailable_safely(self) -> None:
+        runner = RecordingRunner(
+            FakeCommandResult(
+                returncode=1,
+                stdout=json.dumps(
+                    {
+                        "ok": False,
+                        "error": {
+                            "code": "tool_error",
+                            "message": (
+                                "table Msg_synthetic_private not found "
+                                "in 9 message shards"
+                            ),
+                        },
+                    }
+                ),
+                stderr="synthetic private database path",
+            )
+        )
+
+        with self.assertRaises(CliCommandError) as raised:
+            LocalWechatCli(runner=runner).tail(
+                "wxid_synthetic", since_time="2026-10-01T12:00:00"
+            )
+
+        self.assertEqual(raised.exception.code, "cli_message_table_missing")
+        self.assertNotIn("Msg_synthetic_private", str(raised.exception))
+        self.assertNotIn("database path", str(raised.exception))
+
+    def test_only_known_message_shard_errors_receive_missing_table_code(self) -> None:
+        cases = (
+            (
+                "tool_error",
+                "table Msg_synthetic not found in opened message shards",
+                "cli_message_table_missing",
+            ),
+            ("tool_error", "table contacts not found", "cli_command_failed"),
+            (
+                "tool_error",
+                "failed: table Msg_synthetic not found in 9 message shards",
+                "cli_command_failed",
+            ),
+            (
+                "unknown_error",
+                "table Msg_synthetic not found in 9 message shards",
+                "cli_command_failed",
+            ),
+        )
+        for code, message, expected in cases:
+            with self.subTest(code=code, message=message):
+                runner = RecordingRunner(
+                    FakeCommandResult(
+                        returncode=1,
+                        stdout=json.dumps(
+                            {"ok": False, "error": {"code": code, "message": message}}
+                        ),
+                    )
+                )
+                with self.assertRaises(CliCommandError) as raised:
+                    LocalWechatCli(runner=runner).tail("wxid_synthetic")
+                self.assertEqual(raised.exception.code, expected)
+                self.assertNotIn("Msg_synthetic", str(raised.exception))

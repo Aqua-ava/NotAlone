@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 from notalone.front_sync.cli_sync import CliBackgroundSync, CliSyncPhase
 from notalone.persistence.observation_store import ObservationMode
 from notalone.scopes import ContactScope
-from notalone.wechat_cli import CliCommandError
+from notalone.wechat_cli import CliCommandError, LocalWechatCli
 from notalone.wechat_cli.models import (
     CliMessageEvent,
     MessageIdentifier,
@@ -749,6 +751,56 @@ class CliBackgroundSyncTest(unittest.TestCase):
             "cli_freshness_unknown",
         )
         self.assertNotEqual(result.status.backfill_phase, "complete")
+
+    def test_missing_table_keeps_coverage_incomplete_and_other_contact_syncing(self) -> None:
+        original_tail = self.cli.tail
+        missing_table_cli = LocalWechatCli(
+            runner=lambda command: SimpleNamespace(
+                returncode=1,
+                stdout=json.dumps(
+                    {
+                        "ok": False,
+                        "error": {
+                            "code": "tool_error",
+                            "message": "table Msg_synthetic not found in 9 message shards",
+                        },
+                    }
+                ),
+                stderr="",
+            )
+        )
+
+        def scoped_tail(talker: str, **kwargs: object) -> TailResult:
+            if talker == "wxid_a":
+                self.cli.tail_calls.append({"talker": talker, **kwargs})
+                return missing_table_cli.tail(talker, **kwargs)
+            return original_tail(talker, **kwargs)
+
+        self.cli.tail = scoped_tail  # type: ignore[method-assign]
+        self.cli.tail_results["wxid_b"] = deque(
+            [
+                TailResult(
+                    events=(_message("wxid_b", 20, "乙的合成新消息"),),
+                    cursor="local_id:20",
+                    last_local_id=20,
+                    freshness_confirmed=True,
+                )
+            ]
+        )
+
+        result = self.sync.cycle(enabled=True)
+
+        self.assertEqual(result.status.backfill_phase, "incomplete")
+        self.assertEqual(result.status.backfill_incomplete_contacts, 1)
+        self.assertEqual(result.status.backfill_failed_contacts, 0)
+        self.assertEqual(
+            result.status.backfill_failure_code, "cli_message_table_missing"
+        )
+        self.assertEqual(result.batch_message_count, 1)
+        self.assertTrue(result.status.stream_active)
+        self.assertNotIn((OWNER_ID, self.binding_a.contact_id), self.store.cursors)
+        self.assertEqual(len(self.store.recorded), 1)
+        self.assertEqual(self.store.recorded[0]["contact_id"], self.binding_b.contact_id)
 
     def test_paused_backfill_stays_paused_after_sync_restart(self) -> None:
         self.sync.cycle(enabled=True)

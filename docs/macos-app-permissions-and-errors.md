@@ -95,6 +95,7 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 | `cli_timeout` | CLI 超时 | 微信是否可读、进程是否残留、当前操作是否超出超时边界 | 不要无限创建新的 CLI 子进程 |
 | `cli_output_invalid` | CLI 返回不符合 JSON/事件契约 | CLI 版本和输出协议 | 不要猜测或继续写入消息 |
 | `cli_key_refresh_required` | 本机 CLI 读取密钥需要刷新 | 按 CLI 自身的本机密钥刷新流程处理 | 不要在 NotAlone 中保存或回显密钥 |
+| `cli_message_table_missing` | CLI 能运行，但微信本地库找不到当前已绑定会话的消息表；覆盖范围无法确认 | 当前会话在本机微信的可用消息范围，后续实际消息事件或用户显式重试 | 不要据此声称没有消息、补齐成功；不推进游标、不改绑、不读取别的会话 |
 | `screen_capture_permission_missing` | P-02 未授权 | 系统设置中的屏幕与系统音频录制开关、实际签名主体 | 不要改成 Accessibility 或要求 Full Disk Access |
 | `probe_not_found` / `probe_timeout` / `probe_output_invalid` | 前台定位探针不可用、超时或输出损坏 | 探针路径、签名、探针自检和前台状态 | 不要猜测当前联系人，也不要把错误联系人写入数据库 |
 | `后端不可用` / `后端状态读取失败` | 本地 `notalone-server` 未启动、握手失败或 API 超时 | `~/.notalone/backend.info`、后端 PID、`127.0.0.1` API | 不要把后端连接问题误判为 macOS 权限问题 |
@@ -103,6 +104,14 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 | `Follow 流：未运行` | Follow 当前没有启动或已退出 | Follow 控制状态、CLI 可用性和用户是否启动人工验证 | 不要把状态文字当作消息发送失败，也不要自动发送消息 |
 
 适配层只向 UI 暴露稳定错误码和安全说明，不回显 CLI 原始输出、数据库路径、完整会话标识、聊天正文或凭据。相关实现：[CLI 错误定义](../src/notalone/wechat_cli/errors.py)、[前台探针适配器](../src/notalone/front_sync/probe_adapter.py)。
+
+2026-10-01 继续验收时，CLI 1.6.20 对一个可唯一解析的确认绑定连续返回
+`table <REDACTED> not found in 9 message shards`，该绑定无既有游标；
+同一 helper 读取一位已有游标的联系人正常。将明确的消息表缺失分类为
+`cli_message_table_missing`，补齐保持“无法确认完整性”，不解释成成功空结果。
+原始错误中的表名和会话标识不展示或保存，不请求额外权限。
+同步管理顶部复用同一安全说明展示“最近读取问题”，避免长会话列表
+遮挡覆盖异常；详细补齐卡片仍保留原有阶段、计数和用户控制。
 
 ### 已记录的启动崩溃：后端进程重启
 
