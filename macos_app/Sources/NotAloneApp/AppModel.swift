@@ -99,7 +99,8 @@ final class AppModel: ObservableObject {
 
     private let supervisor = BackendSupervisor()
     private var client: BackendClient?
-    private var clientConnection: BackendConnection?
+    private var backendAttachment = BackendAttachment()
+    private var clientConnection: BackendConnection? { backendAttachment.connection }
     private var sseClient: SseEventClient?
     private var pollTask: Task<Void, Never>?
     private var messageTask: Task<Void, Never>?
@@ -109,17 +110,21 @@ final class AppModel: ObservableObject {
     private var isCheckingNow = false
     private var loadedBefore: String?
     private var knownMessageIds: Set<String> = []
+    private var isStopping = false
 
     private init() {}
 
     func start() {
         guard pollTask == nil else { return }
+        isStopping = false
         pollTask = Task { [weak self] in
             await self?.runPollLoop()
         }
     }
 
-    func stop() {
+    func stop() async {
+        guard !isStopping else { return }
+        isStopping = true
         pollTask?.cancel()
         pollTask = nil
         messageTask?.cancel()
@@ -132,8 +137,15 @@ final class AppModel: ObservableObject {
         sourceDeleteTask?.cancel()
         sseClient?.stop()
         sseClient = nil
-        supervisor.terminate()
-        supervisor.waitForExit(timeout: 5)
+        do {
+            try await supervisor.shutdown(connection: backendAttachment.shutdownConnection)
+        } catch {
+            // 复用实例不能按 PID 猜测终止；失败留明确信号，不冒充已停读。
+            lastOperationMessage = "后端关闭未获确认，当前读取可能尚未停止。"
+            NSLog("NotAlone：后端关闭未获确认，当前读取可能尚未停止。")
+        }
+        backendAttachment = BackendAttachment()
+        client = nil
     }
 
     // MARK: - 消息流
@@ -1198,10 +1210,14 @@ final class AppModel: ObservableObject {
     private func restartBackendIfNeeded() async {
         sseClient?.stop()
         sseClient = nil
-        clientConnection = nil
+        do {
+            try await supervisor.shutdown(connection: backendAttachment.shutdownConnection)
+        } catch {
+            setupError = "后端关闭未获确认，请退出旧实例后重试。"
+            return
+        }
+        backendAttachment = BackendAttachment()
         client = nil
-        supervisor.terminate()
-        supervisor.waitForExit(timeout: 5)
         backendState = .launching
         await ensureBackendLaunched()
     }
@@ -1225,8 +1241,8 @@ final class AppModel: ObservableObject {
                 }
                 await refreshFollowSmokeIfNeeded()
             }
-            if !supervisor.isRunning {
-                // 后端进程崩溃或退出后自动重启，保持"监管"语义。
+            if clientConnection == nil || !supervisor.isRunning {
+                // 传输失联时恢复连接与 SSE；进程退出时探测既有实例或重新启动。
                 await ensureBackendLaunched()
             }
             try? await Task.sleep(nanoseconds: 3_000_000_000)
@@ -1234,6 +1250,7 @@ final class AppModel: ObservableObject {
     }
 
     private func ensureBackendLaunched() async {
+        guard !isStopping else { return }
         // 未启动或进程已退出时先探测既有后端：已有实例则复用连接，
         // 避免两个后端实例同时驱动同步（ADR-020 单实例约束）。
         if supervisor.isRunning, let connection = supervisor.connection {
@@ -1245,9 +1262,14 @@ final class AppModel: ObservableObject {
             return
         }
         if let existing = await probeExistingBackend() {
+            guard !isStopping else { return }
             attach(existing)
             return
         }
+        guard !isStopping else { return }
+        backendAttachment.disconnect()
+        sseClient?.stop()
+        sseClient = nil
         guard let serverBin = EnvironmentLocator.locateServerBin() else {
             backendState = .failed("未找到 conda 环境中的 notalone-server。")
             return
@@ -1255,6 +1277,10 @@ final class AppModel: ObservableObject {
         backendState = .launching
         do {
             let connection = try await supervisor.launch(repoRoot: repoRoot, serverBin: serverBin)
+            guard !isStopping else {
+                try? await supervisor.shutdown(connection: connection)
+                return
+            }
             attach(connection)
         } catch {
             backendState = .failed(supervisor.lastError ?? Self.describe(error))
@@ -1265,12 +1291,9 @@ final class AppModel: ObservableObject {
         // 后端监听随机端口，每次重启地址和 token 都会变化；连接变了
         // 必须重建 SSE 客户端，否则旧客户端会对已死端口无限重连，
         // 实时事件静默失效（只剩 3 秒轮询）。
-        let connectionChanged = clientConnection != connection
-        if connectionChanged {
-            sseClient?.stop()
-            sseClient = nil
-        }
-        clientConnection = connection
+        guard backendAttachment.attach(connection) else { return }
+        sseClient?.stop()
+        sseClient = nil
         client = BackendClient(connection: connection)
         backendState = .running
         // owner 未初始化时同步/事件端点按设计 503；先查 setup 状态，
@@ -1337,6 +1360,12 @@ final class AppModel: ObservableObject {
             // 上次失败后状态一恢复就回到 running，允许界面自动重连。
             backendState = .running
         } catch {
+            // 只在真实传输失联时重置初始化状态；业务 503/500 仍保留连接并重试。
+            if error is URLError || (error as? BackendClient.BackendError) == .transport {
+                backendAttachment.disconnect()
+                sseClient?.stop()
+                sseClient = nil
+            }
             if case .running = backendState {
                 backendState = .failed("后端状态读取失败：\(Self.describe(error))")
             } else if case .launching = backendState {

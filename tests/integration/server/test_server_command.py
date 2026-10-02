@@ -74,6 +74,41 @@ class ServerCommandProcessTest(unittest.TestCase):
             text=True,
         )
 
+    def test_authenticated_runtime_shutdown_exits_and_removes_info(self) -> None:
+        process = self._start_server()
+        try:
+            deadline = time.monotonic() + 15
+            while not self.info_path.exists():
+                if time.monotonic() > deadline:
+                    self.fail("握手文件未在 15 秒内写入。")
+                time.sleep(0.1)
+            fields = dict(
+                line.split("=", 1)
+                for line in self.info_path.read_text(encoding="utf-8").splitlines()
+            )
+            url = f"http://{fields['address']}/api/runtime/shutdown"
+            with self.assertRaises(urllib.error.HTTPError) as rejected:
+                urllib.request.urlopen(
+                    urllib.request.Request(url, method="POST"), timeout=5
+                )
+            self.assertEqual(rejected.exception.code, 401)
+            self.assertIsNone(process.poll())
+            request = urllib.request.Request(
+                url, method="POST",
+                headers={"Authorization": f"Bearer {fields['token']}"},
+            )
+            with urllib.request.urlopen(request, timeout=7) as response:
+                self.assertEqual(response.status, 200)
+                self.assertEqual(json.loads(response.read()), {"state": "stopped"})
+            self.assertEqual(process.wait(timeout=10), 0)
+            self.assertFalse(self.info_path.exists())
+        finally:
+            if process.poll() is None:
+                process.send_signal(signal.SIGTERM)
+                process.wait(timeout=10)
+
+            process.communicate(timeout=1)
+
     def test_writes_info_file_then_removes_on_sigterm(self) -> None:
         process = self._start_server()
         try:

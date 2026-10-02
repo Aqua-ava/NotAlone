@@ -152,6 +152,71 @@ class SyncHostTest(unittest.TestCase):
         self.assertEqual(self.host.status(), second)
         self.assertEqual(self.host.status(), self.host.status())
 
+    def test_stop_rejects_later_reads_without_changing_sync_preference(self) -> None:
+        self.engine.enabled = True
+        self.host.check()
+        self.host.stop()
+
+        with self.assertRaises(RuntimeError):
+            self.host.check()
+        with self.assertRaises(RuntimeError):
+            self.host.enable()
+        with self.assertRaises(RuntimeError):
+            self.host.cli_sessions()
+        self.assertEqual(self.engine.cycle_calls, 1)
+        self.assertEqual(self.engine.enable_calls, 0)
+        self.assertEqual(self.engine.close_calls, 1)
+        self.assertTrue(self.engine.enabled)
+
+    def test_shutdown_rejects_queued_check_before_engine_is_released(self) -> None:
+        engine = BlockingCycleEngine()
+        stop_started = threading.Event()
+        original_cancel = engine.cancel_pending_io
+
+        def cancel_io() -> None:
+            original_cancel()
+            stop_started.set()
+
+        engine.cancel_pending_io = cancel_io
+        host = SyncHost(engine=engine, interval=0.01)
+        host.start()
+        self.assertTrue(engine.cycle_started.wait(timeout=1))
+        check_started = threading.Event()
+        rejected = []
+
+        def queued_check() -> None:
+            check_started.set()
+            try:
+                host.check()
+            except RuntimeError:
+                rejected.append(True)
+
+        reader = threading.Thread(target=queued_check)
+        stopper = threading.Thread(target=host.stop)
+        reader.start()
+        self.assertTrue(check_started.wait(timeout=1))
+        stopper.start()
+        try:
+            self.assertTrue(stop_started.wait(timeout=1))
+            engine.release_cycle.set()
+            reader.join(timeout=1)
+            stopper.join(timeout=1)
+            self.assertFalse(reader.is_alive())
+            self.assertFalse(stopper.is_alive())
+            self.assertEqual(rejected, [True])
+            self.assertEqual(engine.cycle_calls, 1)
+            self.assertEqual(engine.close_calls, 1)
+            self.assertTrue(engine.enabled)
+            with self.assertRaises(RuntimeError):
+                host.start()
+            host.stop()
+            self.assertEqual(engine.close_calls, 1)
+        finally:
+            engine.release_cycle.set()
+            reader.join(timeout=1)
+            stopper.join(timeout=1)
+            host.stop()
+
     def test_selected_contact_priority_is_forwarded_to_engine(self) -> None:
         contact_id = uuid4()
 

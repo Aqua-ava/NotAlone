@@ -6,11 +6,12 @@ from notalone.reply.errors import ReplyBudgetError, ReplyTimeoutError
 
 import json
 import secrets
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Mapping
+from typing import Callable, Mapping
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
@@ -91,7 +92,7 @@ from notalone.server.follow_smoke import (
     FollowSmokeStatus,
 )
 from notalone.server.sse import encode_sse_frame
-from notalone.server.sync_host import SyncControlPort
+from notalone.server.sync_host import SyncControlPort, SyncHostStopped
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,6 +146,10 @@ class BackendApp:
         "_owner_id",
         "_reply_service",
         "_reply_evidence",
+        "_runtime_shutdown",
+        "_runtime_shutdown_lock",
+        "_runtime_stopping",
+        "_runtime_stopped",
         "_source_service",
         "_setup_service",
         "_skill_service",
@@ -172,6 +177,7 @@ class BackendApp:
         skill_service: SkillService | None = None,
         ledger_service: LedgerService | None = None,
         setup_service: SetupService | None = None,
+        runtime_shutdown: Callable[[], None] | None = None,
     ) -> None:
         if owner_id is not None and not isinstance(owner_id, UUID):
             raise TypeError("owner_id 必须是 UUID。")
@@ -186,6 +192,10 @@ class BackendApp:
         self._message_stream = message_stream
         self._reply_service = reply_service
         self._reply_evidence = reply_evidence
+        self._runtime_shutdown = runtime_shutdown
+        self._runtime_shutdown_lock = threading.Lock()
+        self._runtime_stopping = threading.Event()
+        self._runtime_stopped = threading.Event()
         self._source_service = source_service
         self._owner_id = owner_id
         self._setup_service = setup_service
@@ -232,6 +242,10 @@ class BackendApp:
                 headers=request_headers,
                 body=request_body,
             )
+        except SyncHostStopped:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_stopping"}
+            )
         except Exception:
             return _json_response(
                 HTTPStatus.INTERNAL_SERVER_ERROR,
@@ -250,6 +264,31 @@ class BackendApp:
         request_headers = headers
         method_upper = method.upper()
         path_value = urlsplit(path).path
+        if method_upper == "GET" and path_value == "/api/runtime/status":
+            state = (
+                "stopped" if self._runtime_stopped.is_set()
+                else "stopping" if self._runtime_stopping.is_set() else "running"
+            )
+            return _json_response(HTTPStatus.OK, {"state": state})
+        if method_upper == "POST" and path_value == "/api/runtime/shutdown":
+            if self._runtime_shutdown is None:
+                return _json_response(
+                    HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_unavailable"}
+                )
+            # 只关闭本次读取资源，不调用 disable，不修改持久同步偏好。
+            self._runtime_stopping.set()
+            with self._runtime_shutdown_lock:
+                if not self._runtime_stopped.is_set():
+                    self._runtime_shutdown()
+                    self._runtime_stopped.set()
+            return _json_response(HTTPStatus.OK, {"state": "stopped"})
+        if self._runtime_stopping.is_set() and not (
+            method_upper == "GET"
+            and path_value in {"/api/sync/status", "/api/setup/status"}
+        ):
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_stopping"}
+            )
         if (
             self._owner_id is None
             and not path_value.startswith("/api/setup")
@@ -1415,7 +1454,7 @@ class BackendApp:
 class BackendServer:
     """把 BackendApp 绑定到回环地址的真实 HTTP 适配器。"""
 
-    __slots__ = ("_app", "_host", "_port", "_http_server")
+    __slots__ = ("_app", "_host", "_port", "_http_server", "_shutdown_lock")
 
     def __init__(
         self,
@@ -1432,6 +1471,7 @@ class BackendServer:
         self._host = host
         self._port = port
         self._http_server: ThreadingHTTPServer | None = None
+        self._shutdown_lock = threading.Lock()
 
     @property
     def address(self) -> tuple[str, int] | None:
@@ -1446,6 +1486,7 @@ class BackendServer:
         if self._http_server is not None:
             raise RuntimeError("后端服务已经启动。")
         app = self._app
+        shutdown = self.request_shutdown
 
         class RequestHandler(BaseHTTPRequestHandler):
             # 半开连接长时间阻塞会拖住线程与事件队列。
@@ -1467,7 +1508,7 @@ class BackendServer:
                 _serve_request(self, app)
 
             def do_POST(self) -> None:  # noqa: N802
-                _serve_request(self, app)
+                _serve_request(self, app, shutdown_after_response=shutdown)
 
             def do_PUT(self) -> None:  # noqa: N802
                 _serve_request(self, app)
@@ -1503,11 +1544,20 @@ class BackendServer:
         self._http_server.serve_forever()
 
     def shutdown(self) -> None:
-        self._app.events.close()
-        if self._http_server is not None:
-            self._http_server.shutdown()
-            self._http_server.server_close()
-            self._http_server = None
+        # HTTP 关闭请求和 command finally 可以同时收尾；同一宿主只关闭一次。
+        with self._shutdown_lock:
+            self._app.events.close()
+            if self._http_server is not None:
+                self._http_server.shutdown()
+                self._http_server.server_close()
+                self._http_server = None
+
+    def request_shutdown(self) -> None:
+        """让 HTTP 线程或信号处理器请求收尾，不在调用线程重入关闭锁。"""
+
+        threading.Thread(
+            target=self.shutdown, name="notalone-runtime-shutdown", daemon=True
+        ).start()
 
 
 def create_app(
@@ -1528,6 +1578,7 @@ def create_app(
     ledger_service: LedgerService | None = None,
     setup_service: SetupService | None = None,
     follow_smoke: FollowSmokeController | None = None,
+    runtime_shutdown: Callable[[], None] | None = None,
 ) -> BackendApp:
     """创建服务应用；未显式传 token 时在启动时生成随机 token。"""
 
@@ -1548,10 +1599,16 @@ def create_app(
         skill_service=skill_service,
         ledger_service=ledger_service,
         setup_service=setup_service,
+        runtime_shutdown=runtime_shutdown,
     )
 
 
-def _serve_request(handler: BaseHTTPRequestHandler, app: BackendApp) -> None:
+def _serve_request(
+    handler: BaseHTTPRequestHandler,
+    app: BackendApp,
+    *,
+    shutdown_after_response: Callable[[], None] | None = None,
+) -> None:
     try:
         body = _read_request_body(handler)
     except _RequestBodyTooLarge:
@@ -1572,7 +1629,19 @@ def _serve_request(handler: BaseHTTPRequestHandler, app: BackendApp) -> None:
         headers={key: value for key, value in handler.headers.items()},
         body=body,
     )
-    _write_response(handler, response)
+    try:
+        _write_response(handler, response)
+        handler.wfile.flush()
+    finally:
+        if (
+            shutdown_after_response is not None
+            and handler.command == "POST"
+            and urlsplit(handler.path).path == "/api/runtime/shutdown"
+            and response.status_code == HTTPStatus.OK
+        ):
+            # 成功响应已在同步 stop 后产生；先发完响应再退出服务循环。
+            # 即使客户端提前断开也照常收尾，不遗留已停读的空宿主。
+            shutdown_after_response()
 
 
 class _RequestBodyTooLarge(Exception):

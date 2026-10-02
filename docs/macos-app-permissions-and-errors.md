@@ -32,7 +32,17 @@ NotAlone 的本地读取必须满足以下条件：
 >
 > NotAlone 仅在你开启 CLI 全量同步后，通过本机只读 CLI 读取已绑定的微信会话数据，用于更新消息；不会发送消息或读取未绑定联系人。
 
-这是正常的一次性授权入口，但在同一个稳定签名的构建中，不应随每轮同步、每个联系人或每次 CLI 子进程启动重复弹出。
+这是 macOS 的正常授权入口。Apple 说明默认 AppData 授权只在 App 保持打开时有效，退出后会重置；稳定签名不能使这种默认授权永久保存。参见 [WWDC23 隐私说明](https://developer.apple.com/videos/play/wwdc2023/10053/) 和 [NSAppDataUsageDescription](https://developer.apple.com/documentation/bundleresources/information-property-list/nsappdatausagedescription)。同一次 App 运行中反复出现弹窗仍需排查进程生命周期、重复读取和签名，不能据此扩大权限。
+
+2026-10-02 新诊断确认当前构建的 CLI 与动态库均完整且通过严格签名检查，不能沿用下述历史缺库结论。当前代码存在两项生命周期问题：复用既有后端时每轮轮询重复初始化会话列表；正常退出只管理自有子进程，复用后端继续读取。修复采用同连接初始化幂等和已认证回环 `POST /api/runtime/shutdown`，在当前同步读取正常停止后才确认成功；超时不得声称已停，不修改绑定或持久同步总开关，也不按 PID 猜测终止其他服务。
+
+关闭期间的新业务请求以及此前排队的引擎操作必须拒绝重新读取，关闭操作幂等；认证 `GET /api/runtime/status` 返回 `running`、`stopping` 或 `stopped`，后两者只保留关闭协议与缓存状态查询。传输失联只重置初始化状态，仍保留本次已验证运行时的连接凭据用于有界关闭，不根据握手文件的后续变化去关闭另一实例。
+
+嵌套签名改为动态库、helper、主 App 由内到外分别签名，分别保留各自 identifier；签名时不使用 `--deep`，验证时仍递归严格检查。Apple 明确指出 `--deep` 会把相同选项应用到全部嵌套代码，参见 [macOS 分发签名说明](https://developer.apple.com/documentation/xcode/creating-distribution-signed-code-for-the-mac/)。这些修复可用合成接缝与构建检查验证；同一次 App 运行授权后的真实读取仍须单独实机验收。
+
+2026-10-02 修复验证：最终 App 重建及 App／探针严格签名通过；Swift 33 项、隔离全量 Python 1,141 项 OK（3 项跳过），36 个迁移通过，本次 `_test` 库清理完成。Standards 初评 2 项、Spec 初评 3 项，修复后两轴复审均 0 剩余。用户亲自允许后，20 秒实机采样未见重复 sessions 初始化，App→后端仅一条链；正常退出后 App、后端、读取进程及握手文件均清理。最后重新打开新版并恢复原联系人和草稿。此窗口的同步状态为 active、全局流在线；部分历史补齐仍报告 `cli_message_table_missing`，不能因此说全部历史已完整，也不能以短时进程采样保证永久无弹窗。
+
+补充类型检查：三个后端源模块 `mypy` 当前报告 65 项；固定基线的影子文件对照同样 65 项，差分新增 0。测试及构建通过不替代未通过的静态类型检查，既有类型欠账仍保留。
 
 #### 已记录的历史错误
 
@@ -89,7 +99,7 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 
 | 用户看到的现象/错误码 | 含义 | 优先检查 | 不要做什么 |
 | --- | --- | --- | --- |
-| “想访问其他 App 的数据”反复弹出 | P-01 的访问进程反复失败或签名/打包不稳定 | `wechat-cli`、`libWCDB.dylib` 是否同时存在；签名是否稳定；只读流是否存活 | 不要让用户反复点击“允许”，不要要求 Full Disk Access |
+| “想访问其他 App 的数据”反复弹出 | 跨 App 运行的默认授权会重置；同次运行还可能有重复初始化、遗留后端或签名/打包问题 | 完整运行时、各嵌套 identifier、已认证连接初始化次数、退出停读及只读流是否存活 | 不要声称稳定签名等于永久授权，不要要求 Full Disk Access |
 | `cli_command_failed` / `tool_error` | CLI 已启动但命令失败 | 直接运行 `--version` 和只读 `tail`；查看是否缺动态库、CLI 版本不兼容或微信状态不可读 | 不要把原始 stderr、聊天正文或凭据显示到 UI/日志 |
 | `cli_not_found` | 找不到 CLI | bundled helper、`PATH`、`NOTALONE_WECHAT_CLI` | 不要静默换成未签名的临时构建 |
 | `cli_timeout` | CLI 超时 | 微信是否可读、进程是否残留、当前操作是否超出超时边界 | 不要无限创建新的 CLI 子进程 |
@@ -99,6 +109,7 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 | `screen_capture_permission_missing` | P-02 未授权 | 系统设置中的屏幕与系统音频录制开关、实际签名主体 | 不要改成 Accessibility 或要求 Full Disk Access |
 | `probe_not_found` / `probe_timeout` / `probe_output_invalid` | 前台定位探针不可用、超时或输出损坏 | 探针路径、签名、探针自检和前台状态 | 不要猜测当前联系人，也不要把错误联系人写入数据库 |
 | `后端不可用` / `后端状态读取失败` | 本地 `notalone-server` 未启动、握手失败或 API 超时 | `~/.notalone/backend.info`、后端 PID、`127.0.0.1` API | 不要把后端连接问题误判为 macOS 权限问题 |
+| `runtime_stopping` / `后端关闭未获确认` | 运行时正收尾，或未在有界时间内确认停读 | 同一已验证回环连接的运行状态、正常退出清理 | 不得把超时当已停，不得猜 PID 杀复用实例，不改持久同步总开关 |
 | `后端返回错误状态 500`（生成候选时） | 模型运行或 Skill 辅助资源读取失败；不是 macOS 权限弹窗 | 模型服务连通性、Skill 资源是否属于当前版本、是否出现重复 `read_file`；先重试候选生成 | 不要反复点击权限允许，不要回显模型原始错误，也不要因此发送消息 |
 | `回复生成超时` / `本次生成尝试过多` | 模型或只读 Tool 在本次有界运行内未完成 | 运行预算、模型响应、Skill 资源反馈和候选请求台账 | 不要把未完成请求当成已生成或已发送 |
 | `Follow 流：未运行` | Follow 当前没有启动或已退出 | Follow 控制状态、CLI 可用性和用户是否启动人工验证 | 不要把状态文字当作消息发送失败，也不要自动发送消息 |
@@ -154,7 +165,7 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 - [ ] 主 App 的 `Contents/Info.plist` 保留 P-01/P-02 两个说明键，文案和本文档一致。
 - [ ] `Contents/Helpers/wechat-cli` 存在且可执行。
 - [ ] `Contents/Helpers/libWCDB.dylib` 存在且可读。
-- [ ] helper、动态库和主 App 使用稳定签名；无稳定证书时明确标记为 ad-hoc。
+- [ ] 核心库、helper、运行时库和主 App 使用稳定签名，各自 identifier 分别为 `com.notalone.app.core`、`com.notalone.wechat-cli`、`com.notalone.wechat-cli.wcdb` 和 `com.notalone.app`；无稳定证书时明确标记为 ad-hoc。
 - [ ] 运行 `codesign --verify --deep --strict --verbose=2 macos_app/build/NotAloneApp.app`。
 
 ### 自动化检查
@@ -167,7 +178,7 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 
 ### 人工验收
 
-- [ ] 干净启动新构建的主 App：P-01 最多首次出现一次，不得按同步轮次重复出现。
+- [ ] 干净启动新构建的主 App并允许 P-01：同一次运行检查是否仍随同步轮次重复出现；退出后重新申请属于 macOS 默认授权期限，不据此宣称失败或永久授权。
 - [ ] P-01 授权后，只能看到已绑定范围的只读同步；不发送消息。
 - [ ] P-02 由用户明确点击请求，授权后用“重新检测权限”恢复，不重复弹窗。
 - [ ] 微信不在前台、会话无法定位或权限缺失时，系统应失败关闭，不猜测联系人。

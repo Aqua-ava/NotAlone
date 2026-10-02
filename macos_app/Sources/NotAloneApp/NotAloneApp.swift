@@ -17,8 +17,10 @@ struct NotAloneApp: App {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var followControls: FollowVerificationControls?
+    private var terminationInFlight = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -29,10 +31,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controls.start()
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !terminationInFlight else { return .terminateLater }
+        terminationInFlight = true
         followControls?.stop()
         followControls = nil
-        // 退出时一并收掉后端子进程。
-        AppModel.shared.stop()
+        // 给已认证后端有界时间正常停读，包括本 App 复用的运行时。
+        Task { @MainActor in
+            await AppModel.shared.stop()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 }

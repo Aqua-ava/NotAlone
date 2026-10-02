@@ -103,6 +103,7 @@ def main(argv: list[str] | None = None) -> int:
             ledger_service=ledger_service,
             setup_service=setup_service,
             follow_smoke=follow_smoke,
+            runtime_shutdown=(sync_host.stop if sync_host is not None else lambda: None),
         )
         server = BackendServer(app, host=args.host, port=args.port)
         host, port = server.start()
@@ -153,7 +154,7 @@ def _serve_until_stopped(server: BackendServer) -> None:
         daemon=True,
     )
     server_thread.start()
-    signal.signal(signal.SIGTERM, lambda _signum, _frame: server.shutdown())
+    signal.signal(signal.SIGTERM, lambda _signum, _frame: server.request_shutdown())
     # 主线程等待服务循环结束；SIGTERM 处理器调用 shutdown() 使其返回。
     server_thread.join()
 

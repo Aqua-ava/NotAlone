@@ -1,7 +1,6 @@
 import Foundation
 
-// 只访问 127.0.0.1 的本地后端 HTTP 客户端。Swift 端不做自动化测试，
-// JSON 契约由服务端契约测试钉住（见 spec Testing Decisions）。
+// 只访问本地后端；JSON 契约由服务端测试钉住，关闭接缝另验证认证与超时。
 public struct BackendClient: Sendable {
     public enum BackendError: Error, Equatable {
         case badStatus(Int)
@@ -32,6 +31,18 @@ public struct BackendClient: Sendable {
     public init(connection: BackendConnection) {
         baseURL = URL(string: "http://\(connection.address)")!
         token = connection.token
+    }
+
+    /// 关闭当前运行时读取；不改变持久同步总开关。成功须由后端确认 stop 已完成。
+    public func shutdownRuntime(timeout: TimeInterval = 7) async throws {
+        guard baseURL.host == "127.0.0.1", timeout > 0, timeout.isFinite else {
+            throw BackendError.transport
+        }
+        struct ShutdownResponse: Decodable { let state: String }
+        let response: ShutdownResponse = try await request(
+            path: "api/runtime/shutdown", method: "POST", timeout: timeout
+        )
+        guard response.state == "stopped" else { throw BackendError.malformedResponse }
     }
 
     // MARK: - 同步状态与控制
@@ -572,7 +583,8 @@ public struct BackendClient: Sendable {
     private func request<T: Decodable>(
         path: String,
         method: String,
-        queryItems: [URLQueryItem] = []
+        queryItems: [URLQueryItem] = [],
+        timeout: TimeInterval? = nil
     ) async throws -> T {
         guard var components = URLComponents(
             url: baseURL.appendingPathComponent(path),
@@ -587,6 +599,7 @@ public struct BackendClient: Sendable {
             throw BackendError.malformedResponse
         }
         var urlRequest = URLRequest(url: url)
+        if let timeout { urlRequest.timeoutInterval = timeout }
         urlRequest.httpMethod = method
         urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (data, response) = try await URLSession.shared.data(for: urlRequest)

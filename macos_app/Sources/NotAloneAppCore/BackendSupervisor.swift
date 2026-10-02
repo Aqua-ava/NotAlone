@@ -62,6 +62,26 @@ public final class BackendSupervisor: @unchecked Sendable {
 
     public init() {} // 显式公开：由主窗口应用持有并监管后端子进程。
 
+    /// 通过当前已验证的连接正常停读，适用于自有或复用后端。
+    /// 请求失败时只收掉本 supervisor 启动的 Process，并把失败交给调用者。
+    public func shutdown(
+        connection: BackendConnection?, timeout: TimeInterval = 7
+    ) async throws {
+        do {
+            if let connection {
+                try await BackendClient(connection: connection).shutdownRuntime(timeout: timeout)
+                waitForExit(timeout: 2)
+            } else {
+                terminate()
+                waitForExit(timeout: 2)
+            }
+        } catch {
+            terminate()
+            waitForExit(timeout: 2)
+            throw error
+        }
+    }
+
     /// 启动后端；等待握手行后返回连接信息。并发调用共享同一次启动。
     public func launch(
         repoRoot: URL,
@@ -116,8 +136,8 @@ public final class BackendSupervisor: @unchecked Sendable {
             .appendingPathComponent("macos_sync_probe/build/cli/notalone-sync-probe")
             .path
         environment["NOTALONE_SYNC_PROBE"] = probePath
-        // 使用随 App 构建的稳定副本，避免 Finder 启动时反复从 PATH
-        // 拉起 ad-hoc CLI，导致 macOS 将每个新子进程视为新的数据访问者。
+        // 使用随 App 构建的稳定副本，减少 Finder 启动时的路径与签名身份变化；
+        // AppData 默认授权的有效期仍由 macOS 管理。
         if let cliPath = EnvironmentLocator.locateBundledCli(repoRoot: repoRoot) {
             environment["NOTALONE_WECHAT_CLI"] = cliPath.path
         }

@@ -11,7 +11,8 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from typing import Protocol
 from uuid import UUID
 
@@ -157,6 +158,10 @@ class SyncControlPort(Protocol):
         """消费待确认绑定证据并立即执行一轮，返回最新报告。"""
 
 
+class SyncHostStopped(RuntimeError):
+    """运行时正在停止或已停止，不能重新触发读取。"""
+
+
 class SyncHost:
     """常驻同步宿主：后台线程按心跳驱动引擎循环，接口层操作受锁保护。
 
@@ -177,6 +182,7 @@ class SyncHost:
         "_last_valid_observation",
         "_stop_event",
         "_thread",
+        "_closed",
     )
 
     def __init__(self, *, engine: SyncEnginePort, interval: float = 3.0) -> None:
@@ -200,6 +206,7 @@ class SyncHost:
         self._last_valid_observation: LatestValidForegroundObservation | None = None
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        self._closed = False
 
     # ------------------------------------------------------------------
     # 生命周期
@@ -209,35 +216,38 @@ class SyncHost:
         """启动后台循环线程；重复启动会抛出 RuntimeError。"""
 
         with self._state_lock:
+            if self._stop_event.is_set():
+                raise SyncHostStopped("已停止的同步宿主不可重启。")
             if self._thread is not None:
                 raise RuntimeError("同步宿主已经启动。")
-            self._stop_event.clear()
             thread = threading.Thread(
                 target=self._loop,
                 name="notalone-front-sync-host",
                 daemon=True,
             )
             self._thread = thread
-        thread.start()
+            thread.start()
 
     def stop(self) -> None:
         """停止后台循环并关闭引擎读取资源；未启动时也会清理资源。"""
 
         with self._state_lock:
+            self._stop_event.set()
             thread = self._thread
             self._thread = None
+        # HTTP 手动检查也可能阻塞在 CLI 中；没有循环线程时同样取消 I/O。
+        cancel = getattr(self._engine, "cancel_pending_io", None)
+        if callable(cancel):
+            cancel()
         if thread is not None:
-            self._stop_event.set()
-            # 同步线程可能正阻塞在 CLI 一次性命令里；先调用一个只负责
-            # 终止 I/O 的可选钩子，再等待线程，避免退出时被命令超时拖住。
-            cancel = getattr(self._engine, "cancel_pending_io", None)
-            if callable(cancel):
-                cancel()
             thread.join(timeout=max(self._interval * 2, 5.0))
         with self._engine_lock:
+            if self._closed:
+                return
             close = getattr(self._engine, "close", None)
             if callable(close):
                 close()
+            self._closed = True
 
     # ------------------------------------------------------------------
     # 状态与控制端口
@@ -248,17 +258,17 @@ class SyncHost:
             return self._latest
 
     def enable(self) -> FrontSyncCycleReport:
-        with self._engine_lock:
+        with self._active_engine():
             self._engine.enable_sync()
             return self._run_cycle_locked()
 
     def disable(self) -> FrontSyncCycleReport:
-        with self._engine_lock:
+        with self._active_engine():
             self._engine.disable_sync()
             return self._run_cycle_locked()
 
     def check(self) -> FrontSyncCycleReport:
-        with self._engine_lock:
+        with self._active_engine():
             # CLI 全量同步的安全对账是低频的；用户点击“立即检查”时
             # 明确表达了要立刻执行一次，但仍由引擎保持固定批量上限。
             request = getattr(self._engine, "request_sync_check", None)
@@ -273,12 +283,12 @@ class SyncHost:
 
         if contact_id is not None and not isinstance(contact_id, UUID):
             raise TypeError("contact_id 必须是 UUID 或 None。")
-        with self._engine_lock:
+        with self._active_engine():
             self._engine.set_priority_contact(contact_id)
             return self.status()
 
     def pause_backfill(self) -> FrontSyncCycleReport:
-        with self._engine_lock:
+        with self._active_engine():
             pause = getattr(self._engine, "pause_backfill", None)
             if not callable(pause):
                 raise RuntimeError("后台补齐控制不可用。")
@@ -286,7 +296,7 @@ class SyncHost:
             return self._run_cycle_locked()
 
     def retry_backfill(self) -> FrontSyncCycleReport:
-        with self._engine_lock:
+        with self._active_engine():
             retry = getattr(self._engine, "retry_backfill", None)
             if not callable(retry):
                 raise RuntimeError("后台补齐控制不可用。")
@@ -294,14 +304,14 @@ class SyncHost:
             return self._run_cycle_locked()
 
     def cli_sessions(self) -> tuple[CliBindingCandidateView, ...]:
-        with self._engine_lock:
+        with self._active_engine():
             return self._engine.list_cli_sessions()
 
     def confirm_cli_bindings(
         self,
         selections: Sequence[CliBindingSelection],
     ) -> FrontSyncCycleReport:
-        with self._engine_lock:
+        with self._active_engine():
             report = self._engine.confirm_cli_bindings(selections)
             self._cache_report_locked(report)
             return report
@@ -318,7 +328,7 @@ class SyncHost:
             raise TypeError("contact_id 必须是 UUID。")
         if not isinstance(locator, str) or not locator.strip():
             raise ValueError("locator 不能为空。")
-        with self._engine_lock:
+        with self._active_engine():
             report = self._engine.confirm_binding(
                 contact_id=contact_id,
                 locator=locator,
@@ -338,7 +348,7 @@ class SyncHost:
             raise TypeError("contact_id 必须是 UUID。")
         if not isinstance(locator, str) or not locator.strip():
             raise ValueError("locator 不能为空。")
-        with self._engine_lock:
+        with self._active_engine():
             report = self._engine.confirm_pending_binding(
                 contact_id=contact_id,
                 locator=locator,
@@ -347,11 +357,11 @@ class SyncHost:
             return report
 
     def sync_enabled(self) -> bool:
-        with self._engine_lock:
+        with self._active_engine():
             return self._engine.sync_enabled()
 
     def enable_follow_smoke(self) -> FrontSyncCycleReport:
-        with self._engine_lock:
+        with self._active_engine():
             # 每轮验证只展示本轮的最近有效观测，避免把上一次验证的结果
             # 误当成当前会话已经重新通过门禁。
             with self._state_lock:
@@ -363,7 +373,7 @@ class SyncHost:
             return report
 
     def disable_follow_smoke(self) -> FrontSyncCycleReport:
-        with self._engine_lock:
+        with self._active_engine():
             report = self._engine.disable_follow_smoke()
             with self._state_lock:
                 self._follow_smoke_active = False
@@ -371,7 +381,7 @@ class SyncHost:
             return report
 
     def interrupt_follow_stream(self) -> FrontSyncCycleReport:
-        with self._engine_lock:
+        with self._active_engine():
             report = self._engine.interrupt_follow_stream()
             self._cache_report_locked(report)
             return report
@@ -390,9 +400,19 @@ class SyncHost:
     # 内部
     # ------------------------------------------------------------------
 
+    @contextmanager
+    def _active_engine(self) -> Iterator[None]:
+        # stop 先设事件；已排队的 API 获得同一锁后也不能重启读取。
+        with self._engine_lock:
+            if self._stop_event.is_set():
+                raise SyncHostStopped("同步宿主已停止。")
+            yield
+
     def _loop(self) -> None:
         # 启动先播种一轮初始化报告；随后只在同步开启时按心跳循环。
         with self._engine_lock:
+            if self._stop_event.is_set():
+                return
             self._run_cycle_guarded()
         while True:
             with self._state_lock:
@@ -400,6 +420,8 @@ class SyncHost:
             if self._stop_event.wait(interval):
                 return
             with self._engine_lock:
+                if self._stop_event.is_set():
+                    return
                 try:
                     enabled = self._engine.sync_enabled()
                 except Exception:

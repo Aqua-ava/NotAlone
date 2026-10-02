@@ -89,37 +89,30 @@ fi
 signing_identity=$(security find-identity -p codesigning -v 2>/dev/null \
     | sed -n 's/^[[:space:]]*[0-9]*)[[:space:]]*[0-9A-F]* "\(.*\)".*/\1/p' \
     | head -1)
-if [[ -n "${signing_identity}" ]]; then
-    if [[ -x "${helpers_dir}/wechat-cli" ]]; then
-        codesign --force --sign "${signing_identity}" \
-            --identifier "com.notalone.wechat-cli" \
-            "${helpers_dir}/wechat-cli"
-    fi
-    if [[ -f "${helpers_dir}/libWCDB.dylib" ]]; then
-        codesign --force --sign "${signing_identity}" \
-            --identifier "com.notalone.wechat-cli.wcdb" \
-            "${helpers_dir}/libWCDB.dylib"
-    fi
-    codesign --force --deep --sign "${signing_identity}" \
-        --identifier "com.notalone.app" \
-        "${app_bundle}"
-    echo "签名身份：${signing_identity}"
-else
-    if [[ -x "${helpers_dir}/wechat-cli" ]]; then
-        codesign --force --sign - \
-            --identifier "com.notalone.wechat-cli" \
-            "${helpers_dir}/wechat-cli"
-    fi
-    if [[ -f "${helpers_dir}/libWCDB.dylib" ]]; then
-        codesign --force --sign - \
-            --identifier "com.notalone.wechat-cli.wcdb" \
-            "${helpers_dir}/libWCDB.dylib"
-    fi
-    codesign --force --deep --sign - \
-        --identifier "com.notalone.app" \
-        "${app_bundle}"
+if [[ -z "${signing_identity}" ]]; then
+    signing_identity="-"
     echo "签名身份：ad-hoc（每次重建后需重新授权屏幕录制）"
+else
+    echo "签名身份：本机稳定证书"
 fi
+
+# 逐项由内到外签名；--deep 会把主 App 的 identifier 覆盖到嵌套代码。
+codesign --force --sign "${signing_identity}" \
+    --identifier "com.notalone.app.core" \
+    "${app_bundle}/Contents/Frameworks/libNotAloneAppCore.dylib"
+if [[ -f "${helpers_dir}/libWCDB.dylib" ]]; then
+    codesign --force --sign "${signing_identity}" \
+        --identifier "com.notalone.wechat-cli.wcdb" \
+        "${helpers_dir}/libWCDB.dylib"
+fi
+if [[ -x "${helpers_dir}/wechat-cli" ]]; then
+    codesign --force --sign "${signing_identity}" \
+        --identifier "com.notalone.wechat-cli" \
+        "${helpers_dir}/wechat-cli"
+fi
+codesign --force --sign "${signing_identity}" \
+    --identifier "com.notalone.app" \
+    "${app_bundle}"
 
 echo "已构建：${app_bundle}"
 echo "前置：仓库根 .env 需含 NOTALONE_DATABASE_URL 与 NOTALONE_OWNER_ID；"
