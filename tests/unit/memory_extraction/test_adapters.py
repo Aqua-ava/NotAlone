@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import unittest
+from collections.abc import Sequence
 from dataclasses import replace
+from typing import Any
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage
+from langchain_core.runnables import Runnable
 
 from notalone.memory_extraction.adapters import (
     EXTRACTION_SCHEMA,
@@ -17,6 +20,23 @@ from notalone.memory_extraction.errors import ExtractionRuntimeError
 from tests.unit.memory_extraction.test_models import _window
 from tests.unit.memory_extraction.test_flow import _payload
 from tests.unit.reply.test_langchain_vertical_slice import ToolCallingFakeModel
+
+
+class ExplicitToolChoiceModel(ToolCallingFakeModel):
+    """仅显式选择结果工具时返回合成结构化响应。"""
+
+    required_tool_name: str
+
+    def bind_tools(
+        self,
+        tools: Sequence[Any],
+        *,
+        tool_choice: str | None = None,
+        **kwargs: Any,
+    ) -> Runnable:
+        if tool_choice != self.required_tool_name:
+            return ToolCallingFakeModel(responses=[AIMessage(content="仅返回合成正文。")])
+        return super().bind_tools(tools, tool_choice=tool_choice, **kwargs)
 
 
 def _structured_response(payloads: tuple[dict, ...], call_id: str = "facts-1") -> AIMessage:
@@ -48,6 +68,18 @@ class LangChainExtractionRuntimeTest(unittest.TestCase):
 
         self.assertEqual(result, (payload,))
 
+    def test_explicit_result_tool_returns_facts_when_auto_would_return_only_text(self):
+        message_id = uuid4()
+        payload = _payload(message_id)
+        model = ExplicitToolChoiceModel(
+            responses=[_structured_response((payload,))],
+            required_tool_name="MemoryExtractionOutput",
+        )
+
+        result = LangChainExtractionRuntime(model=model).extract(_window((message_id,)))
+
+        self.assertEqual(result, (payload,))
+
     def test_unknown_source_time_is_explicit_and_does_not_break_model_input(self):
         first, second = uuid4(), uuid4()
         original = _window((first, second))
@@ -72,7 +104,7 @@ class LangChainExtractionRuntimeTest(unittest.TestCase):
 
     def test_model_exception_is_mapped_to_runtime_failure(self) -> None:
         class RaisingModel:
-            def bind_tools(self, tools):  # noqa: ARG002
+            def bind_tools(self, tools, **kwargs):  # noqa: ARG002
                 raise RuntimeError("synthetic provider failure")
 
         runtime = LangChainExtractionRuntime(model=RaisingModel())

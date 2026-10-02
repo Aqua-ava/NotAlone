@@ -91,9 +91,12 @@ class ReplicaExperimentTests(unittest.TestCase):
     def test_cli_preserves_frozen_inputs_and_all_arm_outputs(self):
         from notalone.memory_extraction.replica_cases import REPLICA_CASES
 
+        tool_choices = []
+
         class EmptyModel:
-            def bind_tools(self, schemas):
+            def bind_tools(self, schemas, **kwargs):
                 name = schemas[0]['title']
+                tool_choices.append((name, kwargs.get('tool_choice')))
                 key = 'narratives' if name == 'MemoryNarrativeOutput' else 'facts'
                 return SimpleNamespace(invoke=lambda messages: SimpleNamespace(
                     tool_calls=[{'name': name, 'args': {key: []}}],
@@ -112,6 +115,7 @@ class ReplicaExperimentTests(unittest.TestCase):
                                                '--split', 'development', '--repetitions', '1']), 0)
                         with self.assertRaises(FileExistsError):
                             main(['--output-dir', str(destination), '--split', 'development'])
+            self.assertIn(('MemoryExtractionOutput', 'MemoryExtractionOutput'), tool_choices)
             manifest = json.loads((destination / 'manifest.json').read_text())
             blinded = json.loads((destination / 'blinded.json').read_text())
             self.assertEqual(len(manifest['schedule']), 4)

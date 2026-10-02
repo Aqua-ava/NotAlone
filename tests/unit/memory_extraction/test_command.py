@@ -185,7 +185,7 @@ class TimedVerificationModel:
         self.response = response
         self.error = error
 
-    def bind_tools(self, tools):
+    def bind_tools(self, tools, **kwargs):
         return self
 
     def invoke(self, messages):
@@ -208,7 +208,7 @@ class FailingAdjudicationRuntime:
 class UnavailableVerificationModel:
     """外部核验供应商的合成替身，第一次调用不可用。"""
 
-    def bind_tools(self, tools):
+    def bind_tools(self, tools, **kwargs):
         return self
 
     def invoke(self, messages):

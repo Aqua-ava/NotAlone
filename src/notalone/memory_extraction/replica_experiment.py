@@ -135,8 +135,12 @@ class _ObservedModel:
         self.model = model
         self.calls: list[dict[str, Any]] = []
 
-    def bind_tools(self, schemas: list[dict[str, Any]]) -> _ObservedBound:
-        return _ObservedBound(self.model.bind_tools(schemas), schemas[0]['title'], self.calls)
+    def bind_tools(
+        self, schemas: list[dict[str, Any]], **kwargs: Any,
+    ) -> _ObservedBound:
+        return _ObservedBound(
+            self.model.bind_tools(schemas, **kwargs), schemas[0]['title'], self.calls,
+        )
 
 
 def _write_json(path: Path, value: Any) -> None:

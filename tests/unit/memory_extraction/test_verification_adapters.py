@@ -20,6 +20,7 @@ from notalone.memory_extraction.errors import (
 from notalone.memory_extraction.verification_adapters import (
     LangChainSourceVerificationRuntime,
 )
+from tests.unit.memory_extraction.test_adapters import ExplicitToolChoiceModel
 from tests.unit.memory_extraction.test_flow import RecordingRuntime, _payload
 from tests.unit.memory_extraction.test_models import _window
 from tests.unit.memory_extraction.verification_helpers import verification_result
@@ -40,6 +41,24 @@ def structured_verification(results: tuple[dict, ...]) -> AIMessage:
 
 class SourceVerificationAdapterTest(unittest.TestCase):
     """只在模型 I/O 边界使用 fake，不调用外部服务。"""
+
+    def test_explicit_result_tool_returns_verdict_when_auto_would_return_only_text(self):
+        message_id = uuid4()
+        window = _window((message_id,))
+        facts = ExtractionFlow(
+            runtime=RecordingRuntime((_payload(message_id),)),
+        ).run(window).accepted
+        result = verification_result(evidence=((message_id, window.messages[0].text),))
+        model = ExplicitToolChoiceModel(
+            responses=[structured_verification((result,))],
+            required_tool_name="SourceVerificationOutput",
+        )
+
+        output = LangChainSourceVerificationRuntime(model=model).verify(
+            window=window, facts=facts,
+        )
+
+        self.assertEqual(output, (result,))
 
     def test_verification_uses_same_bounded_window_and_records_actual_usage(self):
         target, context = uuid4(), uuid4()
@@ -105,6 +124,48 @@ class SourceVerificationAdapterTest(unittest.TestCase):
         self.assertEqual(candidate["speech_act"], base.speech_act.value)
         self.assertEqual(candidate["source_message_ids"], [str(message_id)])
 
+    def test_uncertain_and_unsupported_can_return_empty_evidence(self):
+        message_id = uuid4()
+        window = _window((message_id,))
+        facts = ExtractionFlow(
+            runtime=RecordingRuntime((_payload(message_id),)),
+        ).run(window).accepted
+        for verdict in ("uncertain", "unsupported"):
+            with self.subTest(verdict=verdict):
+                result = verification_result(
+                    verdict=verdict, issues=("meaning",), evidence=(),
+                )
+                model = ExplicitToolChoiceModel(
+                    responses=[structured_verification((result,))],
+                    required_tool_name="SourceVerificationOutput",
+                )
+
+                output = LangChainSourceVerificationRuntime(model=model).verify(
+                    window=window, facts=facts,
+                )
+
+                self.assertEqual(output, (result,))
+
+    def test_window_context_cannot_be_evidence_outside_candidate_sources(self):
+        target, context = uuid4(), uuid4()
+        window = replace(_window((context, target)), target_message_ids=(target,))
+        facts = ExtractionFlow(
+            runtime=RecordingRuntime((_payload(target),)),
+        ).run(window).accepted
+        result = verification_result(
+            verdict="uncertain", issues=("meaning",),
+            evidence=((context, window.messages[0].text),),
+        )
+        model = ExplicitToolChoiceModel(
+            responses=[structured_verification((result,))],
+            required_tool_name="SourceVerificationOutput",
+        )
+
+        with self.assertRaises(ExtractionInvalidOutputError):
+            LangChainSourceVerificationRuntime(model=model).verify(
+                window=window, facts=facts,
+            )
+
     def test_unavailable_model_records_failure_without_private_exception(self):
         message_id = uuid4()
         window = _window((message_id,))
@@ -116,7 +177,7 @@ class SourceVerificationAdapterTest(unittest.TestCase):
         class RaisingModel:
             model_name = "synthetic-unavailable-model"
 
-            def bind_tools(self, tools):
+            def bind_tools(self, tools, **kwargs):
                 raise RuntimeError("私人聊天正文可能在供应商异常中回显")
 
         runtime = LangChainSourceVerificationRuntime(model=RaisingModel(), ledger=ledger)

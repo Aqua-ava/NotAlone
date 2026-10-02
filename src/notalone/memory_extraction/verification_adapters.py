@@ -62,8 +62,12 @@ shared只用于双方共同主张；正文明确是双方共同经历而subject�
   正文虽有依据，标签却丢失第三人转述，应uncertain/pragmatics；report/reported才可继续核验。
 supported 表示主张各部分均被其来源明确支持，issues必须为空，evidence必须含
 该候选source_message_ids中的target消息的真实非空逐字片段。上下文只能辅助，
-不能独立制造主张。uncertain表示证据不足或歧义，必须给出受控issues；
-unsupported表示与原话矛盾或无支持，必须给出受控issues，拒绝该主张。证据片段不能作为充分语义
+不能独立制造主张。每条evidence的message_id只能取自该candidate.source_message_ids，
+不能引用窗口中的其他消息，即使它们有助于解释歧义、证据不足或反驳候选。
+uncertain表示证据不足或歧义，必须给出受控issues；
+unsupported表示与原话矛盾或无支持，必须给出受控issues，拒绝该主张。
+uncertain与unsupported均允许evidence=[]；没有合适的候选来源片段时留空，不强填证据。
+证据片段不能作为充分语义
 支持的替代：逐字片段存在也可能与候选含义相反。
 每条候选必须按candidate_index返回一次，不重复、不遗漏、不越界。
 只返回verdict、issues和evidence，不能改写候选、增加来源、改变主体或返回写入动作。
@@ -142,7 +146,10 @@ class LangChainSourceVerificationRuntime:
         called_at = datetime.now(timezone.utc)
         started = time.perf_counter()
         try:
-            bound = self._model.bind_tools([SOURCE_VERIFICATION_SCHEMA])
+            bound = self._model.bind_tools(
+                [SOURCE_VERIFICATION_SCHEMA],
+                tool_choice=SOURCE_VERIFICATION_SCHEMA["title"],
+            )
             message = bound.invoke([
                 {"role": "system", "content": SOURCE_VERIFICATION_SYSTEM_PROMPT},
                 {"role": "user", "content": _verification_text(window, facts)},

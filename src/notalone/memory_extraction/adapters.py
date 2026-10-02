@@ -259,7 +259,9 @@ class LangChainExtractionRuntime:
 
     def extract(self, window: ExtractionWindow) -> ExtractionPayload:
         try:
-            bound = self._model.bind_tools([EXTRACTION_SCHEMA])
+            bound = self._model.bind_tools(
+                [EXTRACTION_SCHEMA], tool_choice=EXTRACTION_SCHEMA["title"],
+            )
             message = bound.invoke(
                 [
                     {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
