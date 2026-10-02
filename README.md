@@ -165,6 +165,14 @@ python -m notalone.memory_extraction.evaluation --baseline  # 仅合成资料：
 未标注用例不能证明语义维度达标。同义正则是受控测试 oracle，未匹配结果仍需核对原文，不代表通用语义证明。
 `auto` 表示通过正式采纳门的路径，评测不执行存储去重或写入裁决；不能从有限合成结果推断真实聊天准确率。
 
+独立方法复刻实验提供现有方式、叙事后提取、来源时间精修和组合四条路径：
+
+```bash
+python -m notalone.memory_extraction.replica_experiment --split all --repetitions 2 --output-dir /tmp/new-synthetic-output
+```
+
+仍需显式专用评测凭据，只处理 24 个固定合成场景，不挂接生产或写入记忆。独占保留首次输出，隐藏方法后按中文 gold 逐项复核，语义、时间、漏提及调用成本分别评分；运行完成不等于语义达标。[2026-10-02 实验报告](docs/memory-method-replication-experiment-20261002.md)记录了局部收益和残留错误，当前没有替换默认提取。
+
 ## 测试
 
 ```bash
