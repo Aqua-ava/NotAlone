@@ -2074,6 +2074,7 @@ def _owner_memory_payload(memory: OwnerMemory) -> dict[str, object]:
         ),
         "confidence": memory.confidence,
         "risk_flags": list(memory.risk_flags),
+        "timing": memory.timing.to_payload(),
         "valid_at": _iso_or_none(memory.valid_at),
         "invalid_at": _iso_or_none(memory.invalid_at),
     }
@@ -2098,6 +2099,7 @@ def _memory_payload(memory: ConfirmedMemory) -> dict[str, object]:
             if memory.supersedes_memory_id is not None
             else None
         ),
+        "timing": memory.timing.to_payload(),
         "valid_at": _iso_or_none(memory.valid_at),
         "invalid_at": _iso_or_none(memory.invalid_at),
     }
@@ -2121,6 +2123,7 @@ def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
         "confidence": candidate.confidence,
         "risk_flags": list(candidate.risk_flags),
         "failure_reason": candidate.failure_reason,
+        "timing": candidate.timing.to_payload(),
         "valid_at": _iso_or_none(candidate.valid_at),
         "invalid_at": _iso_or_none(candidate.invalid_at),
     }

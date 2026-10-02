@@ -134,6 +134,12 @@ user_instruction 只影响当前请求，不能成为长期偏好或关系记忆
 owner_memory 是关于用户本人的已确认事实，两者不得混用或互相冒充；没有相关
 依据时不要编造事实。
 
+依据的 valid_at / invalid_at 是可引用资料的生效／失效时间；当前有效不证明
+历史状态现在仍然成立。历史行为应保留正文中的事件时间，不能写成刚发生或当前状态。
+timing.source_started_at / source_ended_at 是来源聊天的时间范围，不等于事件发生时间；
+timing.recorded_at 是记忆保存时间，不得冒充聊天时间或事件日期。时间为空或
+source_time_complete 为 false 时，明确保留未知或不完整，不猜日期。
+
 历史 Tool 预算是硬性限制：conversation_search 与 conversation_query 合计最多调用
 3 次。历史检索未命中、失败、超时或预算用尽后，必须停止调用任何工具，立即基于当前
 消息、表达方向和已有证据返回结构化候选；缺少历史不是拒绝输出或继续调用工具的理由。
@@ -686,6 +692,7 @@ class LangChainReplyRuntime:
 
 
 def _request_text(prepared: ReplyContext) -> str:
+    payload: dict[str, Any]
     if (
         prepared.has_long_term_memory_for_rewrite()
         and isinstance(prepared.command.content, RewriteDraft)
@@ -722,6 +729,11 @@ def _request_text(prepared: ReplyContext) -> str:
             "evidence_id": str(item.evidence_id),
             "kind": item.kind,
             "text": item.text,
+            "timing": item.timing.to_payload(),
+            "valid_at": item.valid_at.isoformat() if item.valid_at is not None else None,
+            "invalid_at": (
+                item.invalid_at.isoformat() if item.invalid_at is not None else None
+            ),
         }
         for item in prepared.evidence
     ]

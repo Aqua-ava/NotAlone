@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import unittest
+from dataclasses import replace
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from notalone.application.memory_service import MemoryService
@@ -21,6 +23,7 @@ from notalone.memory.models import (
     MemoryTopic,
     OwnerMemory,
 )
+from notalone.memory.timing import MemoryTiming
 from notalone.scopes import ContactScope
 from notalone.server.app import create_app
 from notalone.server.testing import InProcessClient
@@ -241,6 +244,54 @@ class MemoryApiContractTest(unittest.TestCase):
         self.assertEqual(item["category"], "preference")
         self.assertEqual(item["adoption_method"], "manual")
         self.assertEqual(item["status"], "active")
+
+    def test_legacy_memory_lists_explicitly_unknown_time(self) -> None:
+        self.contact.memories.append(_memory())
+        response = self.client.get(
+            f"/api/contacts/{CONTACT_ID}/memories", headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["memories"][0]["timing"], {
+            "recorded_at": None,
+            "source_started_at": None,
+            "source_ended_at": None,
+            "source_time_complete": False,
+        })
+
+    def test_all_memory_levels_expose_source_and_save_times_separately(self) -> None:
+        timing = MemoryTiming(
+            recorded_at=datetime(2026, 10, 2, tzinfo=timezone.utc),
+            source_started_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+            source_ended_at=datetime(2026, 9, 2, tzinfo=timezone.utc),
+            source_time_complete=False,
+        )
+        self.contact.memories.append(replace(_memory(), timing=timing))
+        self.contact.pending.append(MemoryCandidate(
+            candidate_id=uuid4(), scope=_scope(), text="合成多日期候选",
+            category=MemoryCategory.COMMON_FACT, source_ids=(CONTACT_ID,), timing=timing,
+        ))
+        self.owner.memories.append(OwnerMemory(
+            memory_id=uuid4(), owner_id=OWNER_ID, text="合成本人历史事实",
+            category=MemoryCategory.COMMON_FACT, topic=MemoryTopic.OTHER,
+            source_ids=(OWNER_ID,), adoption_method=AdoptionMethod.AUTO,
+            status=ConfirmedMemoryStatus.ACTIVE, timing=timing,
+        ))
+        for path, list_key in (
+            (f"/api/contacts/{CONTACT_ID}/memories", "memories"),
+            (f"/api/contacts/{CONTACT_ID}/memory-candidates", "candidates"),
+            ("/api/memories/owner", "memories"),
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path, headers=self.headers)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()[list_key][0]["timing"], {
+                    "recorded_at": "2026-10-02T00:00:00+00:00",
+                    "source_started_at": "2026-09-01T00:00:00+00:00",
+                    "source_ended_at": "2026-09-02T00:00:00+00:00",
+                    "source_time_complete": False,
+                })
+                self.assertIsNone(response.json()[list_key][0]["valid_at"])
+                self.assertIsNone(response.json()[list_key][0]["invalid_at"])
 
     def test_lists_pending_candidates(self) -> None:
         candidate = MemoryCandidate(

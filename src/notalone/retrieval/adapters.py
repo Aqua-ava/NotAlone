@@ -264,6 +264,7 @@ class InMemoryRetrieval:
                 status=memory.status.value,
                 valid_at=memory.valid_at,
                 invalid_at=memory.invalid_at,
+                timing=memory.timing,
                 confidence=memory.confidence,
             )
             for memory in memories

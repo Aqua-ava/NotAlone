@@ -137,17 +137,19 @@ class PostgresOwnerMemoryStoreTest(unittest.TestCase):
     def test_create_and_list_active(self) -> None:
         memory = _owner_memory(self.owner_id)
 
-        self.store.create(memory)
+        saved = self.store.create(memory)
         listed = self.store.list_active(self.owner_id)
 
-        self.assertEqual(listed, (memory,))
+        self.assertEqual(listed, (saved,))
+        self.assertEqual(saved.text, memory.text)
+        self.assertIsNotNone(saved.timing.recorded_at)
 
     def test_create_with_active_source_succeeds(self) -> None:
         memory = _owner_memory(self.owner_id)
 
-        self.store.create(memory)
+        saved = self.store.create(memory)
 
-        self.assertEqual(self.store.list_active(self.owner_id), (memory,))
+        self.assertEqual(self.store.list_active(self.owner_id), (saved,))
 
     def test_create_rejects_sources_removed_by_deletion(self) -> None:
         source_id = _synthetic_source(self.owner_id)
@@ -177,10 +179,10 @@ class PostgresOwnerMemoryStoreTest(unittest.TestCase):
         own = _owner_memory(self.owner_id)
         other = _owner_memory(other_owner)
 
-        self.store.create(own)
+        saved = self.store.create(own)
         self.store.create(other)
 
-        self.assertEqual(self.store.list_active(self.owner_id), (own,))
+        self.assertEqual(self.store.list_active(self.owner_id), (saved,))
 
     def test_delete_is_soft_and_keeps_fingerprint(self) -> None:
         memory = _owner_memory(self.owner_id)

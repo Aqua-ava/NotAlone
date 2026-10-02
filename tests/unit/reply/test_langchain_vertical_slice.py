@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 import asyncio
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
@@ -39,6 +40,7 @@ from notalone.reply.store import (
     ValidatedReply,
 )
 from notalone.reply.errors import ReplyInvariantError
+from notalone.memory.timing import MemoryTiming
 from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.skills import SkillCatalog, SkillCatalogEntry, SkillVersion
 
@@ -236,6 +238,105 @@ class RecordingReplyContext:
 
 
 class LangChainVerticalSliceTest(unittest.TestCase):
+    def test_memory_validity_reaches_the_actual_model_input(self) -> None:
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        content = RewriteDraft(
+            draft_text="说说之前的旅行",
+            include_relationship_context=True,
+        )
+        command = GenerateReply(
+            idempotency_key=REQUEST_KEY,
+            scope=scope,
+            conversation_binding_id=BINDING_ID,
+            content=content,
+        )
+        prepared = ReplyContext(
+            reply_request_id=REQUEST_ID,
+            command=command,
+            scope=scope,
+            current_text=content.draft_text,
+            direction=None,
+            evidence=(
+                ContextEvidence(
+                    evidence_id=MESSAGE_ID,
+                    kind="confirmed_memory",
+                    text="双方曾一起去北区旅行。",
+                    scope=scope,
+                    source_ids=(REQUEST_KEY,),
+                    valid_at=datetime(2025, 4, 1, tzinfo=timezone.utc),
+                    revision=1,
+                    timing=MemoryTiming(
+                        recorded_at=datetime(2026, 9, 5, tzinfo=timezone.utc),
+                        source_started_at=datetime(2025, 4, 2, tzinfo=timezone.utc),
+                        source_ended_at=datetime(2025, 4, 4, tzinfo=timezone.utc),
+                        source_time_complete=True,
+                    ),
+                ),
+                ContextEvidence(
+                    evidence_id=SECOND_REQUEST_ID,
+                    kind="owner_memory",
+                    text="用户喜欢徒步。",
+                    scope=scope,
+                    source_ids=(REQUEST_KEY,),
+                    revision=1,
+                ),
+            ),
+            skill_library_revision=4,
+        )
+        model = ToolCallingFakeModel(responses=[AIMessage(
+            content="",
+            tool_calls=[{
+                "name": "ReplyRuntimeOutput",
+                "args": {
+                    "candidates": [{
+                        "text": "上次一起去北区旅行挺开心的。",
+                        "basis": "已发生的旅行经历",
+                        "citation_ids": [str(MESSAGE_ID)],
+                        "risk_notes": [],
+                    }],
+                    "used_skill_version_id": None,
+                },
+                "id": "memory-time-result",
+            }],
+        )])
+
+        LangChainReplyRuntime(
+            model=model,
+            skill_port=EmptySkillPort(scope=scope, revision=4),
+        ).generate(prepared)
+
+        payload = next(
+            json.loads(message.content)
+            for call in model.seen_calls
+            for message in call
+            if message.type == "human"
+        )
+        self.assertEqual(
+            payload["evidence"][0]["valid_at"],
+            "2025-04-01T00:00:00+00:00",
+        )
+        self.assertIsNone(payload["evidence"][0]["invalid_at"])
+        self.assertEqual(payload["evidence"][0]["timing"], {
+            "recorded_at": "2026-09-05T00:00:00+00:00",
+            "source_started_at": "2025-04-02T00:00:00+00:00",
+            "source_ended_at": "2025-04-04T00:00:00+00:00",
+            "source_time_complete": True,
+        })
+        self.assertEqual(payload["evidence"][1]["timing"], {
+            "recorded_at": None,
+            "source_started_at": None,
+            "source_ended_at": None,
+            "source_time_complete": False,
+        })
+        self.assertIsNone(payload["evidence"][1]["valid_at"])
+        self.assertIsNone(payload["evidence"][1]["invalid_at"])
+        system_text = "\n".join(
+            str(message.content) for call in model.seen_calls for message in call
+            if message.type == "system"
+        )
+        self.assertIn("不等于事件发生时间", system_text)
+        self.assertIn("当前有效不证明", system_text)
+
     def _two_skill_port(self, scope: ContactScope) -> MultiSkillPort:
         warm_entry = SkillCatalogEntry(
             SKILL_ID,

@@ -12,6 +12,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from notalone.persistence.locks import lock_owner_scope
+from notalone.memory.timing import MemoryTiming
 
 from notalone.reply.context import (
     ContextEvidence,
@@ -573,7 +574,9 @@ class PostgresReplyStore:
                     request=request,
                     state=self._state_from_row(row),
                     attempts=self._read_attempts(connection, request_id),
-                    evidence=self._read_evidence(connection, request_id, scope),
+                    evidence=self._read_evidence(
+                        connection, request_id, scope, row["context_snapshot"],
+                    ),
                     result=(
                         self._read_result(connection, row)
                         if self._state_from_row(row)
@@ -978,6 +981,7 @@ class PostgresReplyStore:
                         else None
                     ),
                     "revision": item.revision,
+                    "timing": item.timing.to_payload(),
                 }
                 for item in context.evidence
             ],
@@ -1128,7 +1132,9 @@ class PostgresReplyStore:
         connection: Any,
         request_id: UUID,
         scope: ContactScope,
+        context_snapshot: object,
     ) -> tuple[ContextEvidence, ...]:
+        timings = PostgresReplyStore._snapshot_timings(context_snapshot, scope)
         rows = connection.execute(
             """
             SELECT evidence_id, owner_id, contact_id, kind, evidence_text,
@@ -1158,6 +1164,7 @@ class PostgresReplyStore:
                         valid_at=row["evidence_valid_at"],
                         invalid_at=row["evidence_invalid_at"],
                         revision=row["evidence_revision"],
+                        timing=timings.get(row["evidence_id"], MemoryTiming()),
                     )
                 )
             except (KeyError, TypeError, ValueError):
@@ -1165,6 +1172,41 @@ class PostgresReplyStore:
                     "回复证据数据结构无效。"
                 ) from None
         return tuple(evidence)
+
+    @staticmethod
+    def _snapshot_timings(
+        snapshot: object,
+        scope: ContactScope,
+    ) -> dict[UUID, MemoryTiming]:
+        """只从同范围的原回复快照恢复时间，不重新读取当前来源。"""
+        if snapshot is None:
+            return {}
+        if not isinstance(snapshot, dict):
+            raise ReplyStoreInvariantError("回复依据快照结构无效。")
+        items = snapshot.get("evidence", [])
+        if not isinstance(items, list):
+            raise ReplyStoreInvariantError("回复依据快照结构无效。")
+        if not items:
+            return {}
+        if snapshot.get("scope") != {
+            "owner_id": str(scope.owner_id), "contact_id": str(scope.contact_id),
+        }:
+            raise ReplyStoreInvariantError("回复依据快照不属于当前联系人范围。")
+        timings: dict[UUID, MemoryTiming] = {}
+        try:
+            for item in items:
+                if not isinstance(item, dict):
+                    raise ValueError("回复依据时间快照结构无效。")
+                raw_id = item["evidence_id"]
+                if not isinstance(raw_id, str):
+                    raise ValueError("回复依据时间快照标识无效。")
+                evidence_id = UUID(raw_id)
+                if evidence_id in timings:
+                    raise ValueError("回复依据时间快照标识重复。")
+                timings[evidence_id] = MemoryTiming.from_payload(item.get("timing"))
+        except (KeyError, TypeError, ValueError):
+            raise ReplyStoreInvariantError("回复依据时间快照结构无效。") from None
+        return timings
 
     @staticmethod
     def _read_uuid_array(value: Any) -> tuple[UUID, ...]:

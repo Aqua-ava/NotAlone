@@ -13,6 +13,7 @@ from notalone.memory.models import (
     MemoryCategory,
 )
 from notalone.memory.ports import MemoryPort
+from notalone.memory.timing import MemoryTiming
 
 __all__ = [
     "FactSubject",
@@ -26,4 +27,5 @@ __all__ = [
     "MemoryCandidateStatus",
     "MemoryCategory",
     "MemoryPort",
+    "MemoryTiming",
 ]

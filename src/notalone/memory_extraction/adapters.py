@@ -70,9 +70,11 @@ confidence 反映你对事实与标签的把握，而不是事实的重要性：
 只要与关系理解有关，就应当输出并标 hypothetical 或 conditional，不要省略。
 “我准备贷款30万加仓”应标记为计划或歧义，不得改写成“已经贷款30万”。
 媒体占位文本（如"[图片]""[语音]"）只能推断发送行为偏好，不得推测消息内容。
-窗口行里的 occurred_at 是消息时间，用来推算相对时间。valid_at 表示事实或安排的生效
-时间：未来计划、未来约定与有时效的状态必须填写 valid_at，按 occurred_at 推算带时区的
-ISO 8601 时间，例如“2026-10-01T09:00:00+08:00”，不能只写日期、不能留空；已经发生
+窗口行里的 occurred_at 是消息时间，用来推算相对时间。occurred_at=unknown 表示
+消息时间无法核实，不用当前时间或未引用上下文补出日期，也不据此推算相对日期。
+无法核实的日期留空。valid_at 表示事实或安排的生效时间：未来计划、未来约定与
+有时效的状态，在时间可核实时必须填写，按 occurred_at 推算带时区的 ISO 8601 时间，
+例如“2026-10-01T09:00:00+08:00”，不能只写日期；已经发生
 且没有明确时限的事实留空。当前临时状态的 valid_at 使用该状态证据的 occurred_at，
 这是观察时间，不得臆测更早的开始时间。临时状态的文本要带消息日期或明确期间，
 不要让跨期检索仍把消息中的“现在”“本周”理解成查询当天的现状。
@@ -278,7 +280,7 @@ def _window_text(window: ExtractionWindow) -> str:
         f"{index + 1}. "
         f"[{('target' if message.message_id in target_ids else 'context')}] "
         f"[message_id={message.message_id}] "
-        f"occurred_at={message.occurred_at.isoformat()} "
+        f"occurred_at={message.occurred_at.isoformat() if message.occurred_at else 'unknown'} "
         f"sender={message.sender.value}: {message.text}"
         for index, message in enumerate(window.messages)
     ]

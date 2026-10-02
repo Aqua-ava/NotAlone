@@ -30,6 +30,9 @@ class InMemoryMemoryStore:
             raise TypeError("关系记忆候选结构无效。")
         if candidate.candidate_id in self._candidates:
             raise ValueError("关系记忆候选标识重复。")
+        candidate = replace(candidate, timing=replace(
+            candidate.timing, recorded_at=datetime.now(timezone.utc),
+        ))
         self._candidates[candidate.candidate_id] = candidate
         return candidate
 
@@ -67,6 +70,7 @@ class InMemoryMemoryStore:
             risk_flags=candidate.risk_flags,
             valid_at=candidate.valid_at,
             invalid_at=candidate.invalid_at,
+            timing=replace(candidate.timing, recorded_at=datetime.now(timezone.utc)),
         )
         self._candidates[candidate_id] = replace(
             candidate,
@@ -114,6 +118,7 @@ class InMemoryMemoryStore:
             adoption_method=AdoptionMethod.MANUAL,
             revision=memory.revision + 1,
             supersedes_memory_id=memory.memory_id,
+            timing=replace(memory.timing, recorded_at=datetime.now(timezone.utc)),
         )
         self._memories[memory.memory_id] = invalidated
         self._memories[corrected.memory_id] = corrected

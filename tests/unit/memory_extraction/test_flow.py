@@ -8,6 +8,9 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from notalone.memory_extraction.adoption import can_auto_adopt
+from notalone.memory import InMemoryMemoryStore
+from notalone.memory_extraction.adoption import MemoryAdoption
+from notalone.scopes import ContactScope
 from notalone.memory_extraction.errors import (
     ExtractionInvalidOutputError,
     ExtractionRuntimeError,
@@ -89,6 +92,28 @@ class ExtractionFlowTest(unittest.TestCase):
         self.assertEqual(fact.source_message_ids, (message_id,))
         self.assertEqual(outcome.rejected_count, 0)
         self.assertIsNone(outcome.failure_reason)
+
+    def test_historical_memory_keeps_only_referenced_dates_after_adoption(self):
+        first, second, context = uuid4(), uuid4(), uuid4()
+        original = _window((first, second, context))
+        window = replace(original, messages=(
+            replace(original.messages[0], occurred_at=datetime(2024, 2, 1, tzinfo=timezone.utc)),
+            replace(original.messages[1], occurred_at=datetime(2024, 2, 3, tzinfo=timezone.utc)),
+            replace(original.messages[2], occurred_at=datetime(2026, 9, 15, tzinfo=timezone.utc)),
+        ), target_message_ids=(first, second))
+        outcome = ExtractionFlow(runtime=RecordingRuntime((
+            _payload(first, source_message_ids=[str(first), str(second)]),
+        ))).run(window)
+        store = InMemoryMemoryStore()
+        scope = ContactScope(window.owner_id, window.contact_id)
+        MemoryAdoption(memory_port=store).adopt(scope, outcome)
+        memory = store.list_confirmed(scope)[0]
+
+        self.assertEqual(memory.timing.source_started_at, datetime(2024, 2, 1, tzinfo=timezone.utc))
+        self.assertEqual(memory.timing.source_ended_at, datetime(2024, 2, 3, tzinfo=timezone.utc))
+        self.assertTrue(memory.timing.source_time_complete)
+        self.assertIsNotNone(memory.timing.recorded_at)
+        self.assertIsNone(memory.valid_at)
 
     def test_future_validity_blocks_auto_adoption_despite_assertion_labels(
         self,

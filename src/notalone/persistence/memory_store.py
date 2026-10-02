@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
@@ -24,6 +24,7 @@ from notalone.memory.models import (
 from notalone.scopes import ContactScope
 from notalone.persistence.locks import lock_contact_scope
 from notalone.persistence.message_sources import valid_source_ref_exists_sql
+from notalone.persistence.memory_timing import timed_memory_rows
 
 
 def _utc_now() -> datetime:
@@ -52,7 +53,8 @@ _CANDIDATE_COLUMNS = """
     invalid_at AS candidate_invalid_at,
     confidence AS candidate_confidence,
     risk_flags AS candidate_risk_flags,
-    failure_reason AS candidate_failure_reason
+    failure_reason AS candidate_failure_reason,
+    created_at AS recorded_at
 """
 
 _MEMORY_COLUMNS = """
@@ -71,7 +73,8 @@ _MEMORY_COLUMNS = """
     revision,
     confidence AS memory_confidence,
     risk_flags AS memory_risk_flags,
-    supersedes_memory_id
+    supersedes_memory_id,
+    created_at AS recorded_at
 """
 
 
@@ -146,7 +149,9 @@ class PostgresMemoryStore:
                     raise MemoryInvariantError(
                         "关系记忆候选写入结果为空。"
                     )
-                return self._candidate_from_row(row)
+                return self._candidate_from_row(
+                    self._timed_candidates(connection, [row])[0]
+                )
         except psycopg.errors.UniqueViolation:
             raise ValueError("关系记忆候选标识重复。") from None
         except MemoryPersistenceError:
@@ -250,7 +255,9 @@ class PostgresMemoryStore:
                     raise MemoryInvariantError(
                         "关系记忆候选写入结果为空。"
                     )
-                return self._candidate_from_row(row)
+                return self._candidate_from_row(
+                    self._timed_candidates(connection, [row])[0]
+                )
         except psycopg.errors.UniqueViolation:
             raise ValueError("关系记忆候选标识重复。") from None
         except MemoryPersistenceError:
@@ -284,10 +291,12 @@ class PostgresMemoryStore:
                     """,
                     (candidate_id,),
                 ).fetchone()
-            if row is None:
-                raise LookupError("关系记忆候选不存在。")
-            self._ensure_scope(row, scope)
-            return self._candidate_from_row(row)
+                if row is None:
+                    raise LookupError("关系记忆候选不存在。")
+                self._ensure_scope(row, scope)
+                return self._candidate_from_row(
+                    self._timed_candidates(connection, [row])[0]
+                )
         except (LookupError, PermissionError, MemoryPersistenceError):
             raise
         except psycopg.Error:
@@ -338,7 +347,9 @@ class PostgresMemoryStore:
                         raise MemoryInvariantError(
                             "已确认候选缺少对应关系记忆。"
                         )
-                    return self._memory_from_row(memory_row)
+                    return self._memory_from_row(
+                        self._timed_memories(connection, [memory_row])[0]
+                    )
                 if status is not MemoryCandidateStatus.PENDING:
                     raise RuntimeError("关系记忆候选当前不可确认。")
                 source_ids = self._source_ids(candidate_row["candidate_source_ids"])
@@ -392,7 +403,9 @@ class PostgresMemoryStore:
                         "关系记忆候选状态更新失败。"
                     )
                 self._bump_memory_revision(connection, scope)
-                return self._memory_from_row(memory_row)
+                return self._memory_from_row(
+                    self._timed_memories(connection, [memory_row])[0]
+                )
         except (LookupError, PermissionError, RuntimeError, MemoryPersistenceError):
             raise
         except psycopg.Error:
@@ -497,7 +510,9 @@ class PostgresMemoryStore:
                 if updated is None:
                     raise MemoryInvariantError("关系记忆新版本写入结果为空。")
                 self._bump_memory_revision(connection, scope)
-                return self._memory_from_row(updated)
+                return self._memory_from_row(
+                    self._timed_memories(connection, [updated])[0]
+                )
         except (LookupError, PermissionError, RuntimeError, MemoryPersistenceError):
             raise
         except psycopg.Error:
@@ -606,7 +621,9 @@ class PostgresMemoryStore:
                         candidate_id,
                     ),
                 )
-                return self._candidate_from_row(updated)
+                return self._candidate_from_row(
+                    self._timed_candidates(connection, [updated])[0]
+                )
         except (LookupError, PermissionError, RuntimeError, MemoryPersistenceError):
             raise
         except psycopg.Error:
@@ -692,7 +709,8 @@ class PostgresMemoryStore:
                     """,
                     (scope.owner_id, scope.contact_id, current, current),
                 ).fetchall()
-                return tuple(self._memory_from_row(row) for row in rows)
+                return tuple(self._memory_from_row(row)
+                             for row in self._timed_memories(connection, rows))
         except MemoryPersistenceError:
             raise
         except psycopg.Error:
@@ -724,7 +742,8 @@ class PostgresMemoryStore:
                     """,
                     (scope.owner_id, scope.contact_id),
                 ).fetchall()
-                return tuple(self._candidate_from_row(row) for row in rows)
+                return tuple(self._candidate_from_row(row)
+                             for row in self._timed_candidates(connection, rows))
         except MemoryPersistenceError:
             raise
         except psycopg.Error:
@@ -798,7 +817,9 @@ class PostgresMemoryStore:
                     raise MemoryInvariantError(
                         "关系记忆候选状态更新为空。"
                     )
-                return self._candidate_from_row(updated)
+                return self._candidate_from_row(
+                    self._timed_candidates(connection, [updated])[0]
+                )
         except (LookupError, PermissionError, RuntimeError, MemoryPersistenceError):
             raise
         except psycopg.Error:
@@ -858,7 +879,9 @@ class PostgresMemoryStore:
                 if updated is None:
                     raise MemoryInvariantError("关系记忆状态更新为空。")
                 self._bump_memory_revision(connection, scope)
-                return self._memory_from_row(updated)
+                return self._memory_from_row(
+                    self._timed_memories(connection, [updated])[0]
+                )
         except (LookupError, PermissionError, RuntimeError, MemoryPersistenceError):
             raise
         except psycopg.Error:
@@ -934,7 +957,7 @@ class PostgresMemoryStore:
         source_ids: tuple[UUID, ...],
     ) -> None:
         unique_source_ids = tuple(dict.fromkeys(source_ids))
-        available_count = connection.execute(
+        available = connection.execute(
             f"""
             SELECT count(*) AS source_count
             FROM (
@@ -970,7 +993,10 @@ class PostgresMemoryStore:
                 scope.contact_id,
                 list(unique_source_ids),
             ),
-        ).fetchone()["source_count"]
+        ).fetchone()
+        if available is None:
+            raise MemoryInvariantError("关系记忆来源校验结果为空。")
+        available_count = available["source_count"]
         if available_count != len(unique_source_ids):
             raise PermissionError("关系记忆来源范围校验失败。")
 
@@ -1041,6 +1067,7 @@ class PostgresMemoryStore:
             confidence=row["candidate_confidence"],
             risk_flags=tuple(row["candidate_risk_flags"] or ()),
             failure_reason=row["candidate_failure_reason"],
+            timing=row["timing"],
         )
 
     @classmethod
@@ -1061,7 +1088,20 @@ class PostgresMemoryStore:
             confidence=row["memory_confidence"],
             risk_flags=tuple(row["memory_risk_flags"] or ()),
             supersedes_memory_id=row["supersedes_memory_id"],
+            timing=row["timing"],
         )
+
+    @staticmethod
+    def _timed_candidates(
+        connection: psycopg.Connection[Any], rows: Sequence[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        return timed_memory_rows(connection, rows, source_ids_key="candidate_source_ids")
+
+    @staticmethod
+    def _timed_memories(
+        connection: psycopg.Connection[Any], rows: Sequence[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        return timed_memory_rows(connection, rows, source_ids_key="memory_source_ids")
 
     @staticmethod
     def _source_ids(value: Any) -> tuple[UUID, ...]:

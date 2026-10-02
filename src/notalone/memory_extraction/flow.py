@@ -7,6 +7,7 @@ from datetime import datetime
 from uuid import UUID
 
 from notalone.memory.models import MemoryCategory
+from notalone.memory.timing import MemoryTiming
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.models import (
     AssertionStatus,
@@ -70,17 +71,22 @@ class ExtractionFlow:
             if not source_ids <= window_ids or not source_ids & target_ids:
                 rejected += 1
                 continue
+            source_times = tuple(
+                message.occurred_at
+                for message in window.messages
+                if message.message_id in source_ids
+            )
+            fact = replace(
+                fact, timing=MemoryTiming.from_source_times(source_times),
+            )
             valid_at = fact.valid_at
             if valid_at is not None:
-                source_times = tuple(
-                    message.occurred_at
-                    for message in window.messages
-                    if message.message_id in source_ids
-                )
                 temporal_risk: str | None = None
                 if any(occurred_at is None for occurred_at in source_times):
                     temporal_risk = "pragmatic:unknown_source_time"
-                elif valid_at > max(source_times):
+                elif valid_at > max(
+                    value for value in source_times if value is not None
+                ):
                     temporal_risk = "pragmatic:future_validity"
                 if temporal_risk is not None:
                     fact = replace(

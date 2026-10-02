@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from uuid import UUID
 
+from notalone.memory.timing import MemoryTiming
 from notalone.scopes import ContactScope
 
 
@@ -99,6 +100,7 @@ class MemoryCandidate:
     confidence: float = 1.0
     risk_flags: tuple[str, ...] = ()
     failure_reason: str | None = None
+    timing: MemoryTiming = MemoryTiming()
 
     def __post_init__(self) -> None:
         if not isinstance(self.candidate_id, UUID):
@@ -131,6 +133,8 @@ class MemoryCandidate:
             raise ValueError("候选失败原因必须是非空字符串。")
         _validate_datetime(self.valid_at)
         _validate_datetime(self.invalid_at)
+        if not isinstance(self.timing, MemoryTiming):
+            raise TypeError("记忆候选时间信息无效。")
         if (
             self.valid_at is not None
             and self.invalid_at is not None
@@ -158,6 +162,7 @@ class ConfirmedMemory:
     confidence: float = 1.0
     risk_flags: tuple[str, ...] = ()
     supersedes_memory_id: UUID | None = None
+    timing: MemoryTiming = MemoryTiming()
 
     def __post_init__(self) -> None:
         if not isinstance(self.memory_id, UUID):
@@ -180,6 +185,8 @@ class ConfirmedMemory:
             raise TypeError("已确认关系记忆状态无效。")
         _validate_datetime(self.valid_at)
         _validate_datetime(self.invalid_at)
+        if not isinstance(self.timing, MemoryTiming):
+            raise TypeError("关系记忆时间信息无效。")
         if not isinstance(self.revision, int) or self.revision < 1:
             raise ValueError("关系记忆修订号必须是正整数。")
         if (
@@ -231,6 +238,7 @@ class OwnerMemory:
     revision: int = 1
     confidence: float = 1.0
     risk_flags: tuple[str, ...] = ()
+    timing: MemoryTiming = MemoryTiming()
 
     def __post_init__(self) -> None:
         if not isinstance(self.memory_id, UUID) or not isinstance(
@@ -239,6 +247,8 @@ class OwnerMemory:
             raise ValueError("owner 记忆必须携带记忆 ID 与 owner ID。")
         if not isinstance(self.text, str) or not self.text.strip():
             raise ValueError("owner 记忆文本不能为空。")
+        if not isinstance(self.timing, MemoryTiming):
+            raise TypeError("owner 记忆时间信息无效。")
         if not isinstance(self.category, MemoryCategory):
             raise ValueError("owner 记忆分类必须使用既有五类。")
         if not isinstance(self.topic, MemoryTopic):

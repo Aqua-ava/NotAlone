@@ -206,6 +206,25 @@ public struct ReplyCandidate: Decodable, Equatable, Sendable, Identifiable {
 
 // MARK: - 记忆
 
+public struct MemoryTimingEntry: Decodable, Equatable, Sendable {
+    public let recordedAt: String?
+    public let sourceStartedAt: String?
+    public let sourceEndedAt: String?
+    public let sourceTimeComplete: Bool
+
+    public init(
+        recordedAt: String? = nil,
+        sourceStartedAt: String? = nil,
+        sourceEndedAt: String? = nil,
+        sourceTimeComplete: Bool = false
+    ) {
+        self.recordedAt = recordedAt
+        self.sourceStartedAt = sourceStartedAt
+        self.sourceEndedAt = sourceEndedAt
+        self.sourceTimeComplete = sourceTimeComplete
+    }
+}
+
 public struct MemoryEntry: Decodable, Equatable, Sendable, Identifiable {
     public let memoryId: String
     public let level: String
@@ -222,6 +241,7 @@ public struct MemoryEntry: Decodable, Equatable, Sendable, Identifiable {
     public let supersedesMemoryId: String?
     public let validAt: String?
     public let invalidAt: String?
+    public let timing: MemoryTimingEntry?
 
     public var id: String { memoryId }
 }
@@ -239,6 +259,7 @@ public struct MemoryCandidateEntry: Decodable, Equatable, Sendable, Identifiable
     public let failureReason: String?
     public let validAt: String?
     public let invalidAt: String?
+    public let timing: MemoryTimingEntry?
 
     public var id: String { candidateId }
 }
@@ -434,6 +455,9 @@ public struct ReplyEvidence: Decodable, Equatable, Identifiable, Sendable {
     public let selectionReason: String
     public let snapshotStatus: String
     public let cited: Bool
+    public let timing: MemoryTimingEntry?
+    public let validAt: String?
+    public let invalidAt: String?
     public var id: String { evidenceId }
 
     public var kindLabel: String {

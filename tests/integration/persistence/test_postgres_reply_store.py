@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import os
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import psycopg
+from psycopg.types.json import Jsonb
 
 from notalone.reply.context import ContextEvidence, ReplyContext
 from notalone.reply.errors import (
@@ -32,6 +33,7 @@ from notalone.reply.store import (
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.persistence.reply_store import PostgresReplyStore
+from notalone.memory.timing import MemoryTiming
 
 
 TEST_DATABASE_URL = os.environ.get(
@@ -234,6 +236,131 @@ class PostgresReplyStoreTest(unittest.TestCase):
         self.assertEqual(stored.result, saved)
         self.assertEqual(replay.state, ReplyRequestState.REPLAYED)
         self.assertEqual(replay.result, saved)
+
+    def test_memory_source_times_are_preserved_in_reply_evidence_snapshot(self) -> None:
+        command = self._command()
+        started = self.store.start(command, self._verified_scope())
+        context = self._context(command, started.request.request_id)
+        timing = MemoryTiming(
+            recorded_at=datetime(2026, 8, 21, tzinfo=timezone.utc),
+            source_started_at=datetime(2025, 4, 2, tzinfo=timezone.utc),
+            source_ended_at=datetime(2025, 4, 4, tzinfo=timezone.utc),
+            source_time_complete=False,
+        )
+        context = replace(context, evidence=(replace(
+            context.evidence[0], kind="confirmed_memory", timing=timing,
+        ),))
+        saved = self.store.save(started.request, context, self._reply())
+
+        stored = PostgresReplyStore(TEST_DATABASE_URL).read(
+            saved.reply_request_id, command.scope,
+        )
+
+        self.assertEqual(stored.evidence[0].timing, timing)
+
+    def test_legacy_evidence_snapshot_without_time_stays_unknown(self) -> None:
+        command = self._command()
+        started = self.store.start(command, self._verified_scope())
+        context = self._context(command, started.request.request_id)
+        timing = MemoryTiming.from_source_times((
+            datetime(2025, 4, 2, tzinfo=timezone.utc),
+        ), recorded_at=datetime(2026, 8, 21, tzinfo=timezone.utc))
+        context = replace(context, evidence=(replace(
+            context.evidence[0], timing=timing,
+        ),))
+        saved = self.store.save(started.request, context, self._reply())
+        # 合成旧版本的历史快照：它没有保存任何时间元数据。
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "UPDATE public.reply_request "
+                "SET context_snapshot = jsonb_set(context_snapshot, '{evidence}', "
+                "jsonb_build_array((context_snapshot->'evidence'->0) - 'timing')) "
+                "WHERE id = %s AND owner_id = %s AND contact_id = %s",
+                (saved.reply_request_id, self.owner_id, self.contact_id),
+            )
+
+        stored = self.store.read(saved.reply_request_id, command.scope)
+
+        self.assertEqual(stored.evidence[0].timing, MemoryTiming())
+
+    def test_snapshot_time_must_match_evidence_id_and_scope(self) -> None:
+        command = self._command()
+        started = self.store.start(command, self._verified_scope())
+        context = self._context(command, started.request.request_id)
+        second_id = uuid4()
+        first_timing = MemoryTiming.from_source_times((
+            datetime(2025, 4, 2, tzinfo=timezone.utc),
+        ))
+        second_timing = MemoryTiming.from_source_times((
+            datetime(2025, 6, 3, tzinfo=timezone.utc),
+        ))
+        context = replace(context, evidence=(
+            replace(context.evidence[0], timing=first_timing),
+            replace(context.evidence[0], evidence_id=second_id, timing=second_timing),
+        ))
+        saved = self.store.save(started.request, context, self._reply())
+        reversed_snapshot = {
+            "scope": {
+                "owner_id": str(self.owner_id),
+                "contact_id": str(self.contact_id),
+            },
+            "evidence": [
+                {"evidence_id": str(second_id), "timing": second_timing.to_payload()},
+                {"evidence_id": str(MESSAGE_ID), "timing": first_timing.to_payload()},
+            ],
+        }
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "UPDATE public.reply_request SET context_snapshot = %s WHERE id = %s",
+                (Jsonb(reversed_snapshot), saved.reply_request_id),
+            )
+        stored = self.store.read(saved.reply_request_id, command.scope)
+        self.assertEqual(
+            tuple(item.timing for item in stored.evidence),
+            (first_timing, second_timing),
+        )
+
+        reversed_snapshot["scope"]["contact_id"] = str(self.other_contact_id)
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "UPDATE public.reply_request SET context_snapshot = %s WHERE id = %s",
+                (Jsonb(reversed_snapshot), saved.reply_request_id),
+            )
+        with self.assertRaises(ReplyStoreInvariantError):
+            self.store.read(saved.reply_request_id, command.scope)
+
+    def test_malformed_explicit_snapshot_time_is_rejected(self) -> None:
+        command = self._command()
+        started = self.store.start(command, self._verified_scope())
+        context = self._context(command, started.request.request_id)
+        saved = self.store.save(started.request, context, self._reply())
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "UPDATE public.reply_request SET context_snapshot = jsonb_set("
+                "context_snapshot, '{evidence,0,timing,recorded_at}', "
+                "to_jsonb('2026-09-05'::text)) WHERE id = %s",
+                (saved.reply_request_id,),
+            )
+
+        with self.assertRaises(ReplyStoreInvariantError):
+            self.store.read(saved.reply_request_id, command.scope)
+
+    def test_time_snapshot_with_invalid_evidence_identifier_is_rejected(self) -> None:
+        command = self._command()
+        started = self.store.start(command, self._verified_scope())
+        saved = self.store.save(
+            started.request, self._context(command, started.request.request_id),
+            self._reply(),
+        )
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute(
+                "UPDATE public.reply_request SET context_snapshot = jsonb_set("
+                "context_snapshot, '{evidence,0,evidence_id}', '7'::jsonb) WHERE id = %s",
+                (saved.reply_request_id,),
+            )
+
+        with self.assertRaises(ReplyStoreInvariantError):
+            self.store.read(saved.reply_request_id, command.scope)
 
     def test_same_key_conflict_and_valid_lease_are_atomic(self) -> None:
         command = self._command()

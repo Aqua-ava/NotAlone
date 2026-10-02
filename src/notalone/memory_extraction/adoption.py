@@ -352,6 +352,7 @@ class MemoryAdoption:
                 invalid_at=fact.invalid_at,
                 confidence=fact.confidence,
                 risk_flags=fact.risk_flags,
+                timing=fact.timing,
             )
         )
 
@@ -372,6 +373,7 @@ class MemoryAdoption:
                 invalid_at=fact.invalid_at,
                 confidence=fact.confidence,
                 risk_flags=fact.risk_flags,
+                timing=fact.timing,
             )
         )
 
@@ -391,6 +393,7 @@ class MemoryAdoption:
                 invalid_at=fact.invalid_at,
                 confidence=fact.confidence,
                 risk_flags=fact.risk_flags,
+                timing=fact.timing,
             )
         )
         return self._memory_port.confirm(

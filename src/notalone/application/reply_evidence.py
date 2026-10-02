@@ -34,6 +34,9 @@ class ReplyEvidenceService:
                     "selection_reason": entry.selection_reason,
                     "snapshot_status": entry.status,
                     "cited": entry.evidence_id in cited_ids,
+                    "timing": entry.timing.to_payload(),
+                    "valid_at": entry.valid_at.isoformat() if entry.valid_at else None,
+                    "invalid_at": entry.invalid_at.isoformat() if entry.invalid_at else None,
                 }
                 for entry in stored.evidence
             ],

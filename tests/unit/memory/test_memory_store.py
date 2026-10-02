@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
+from datetime import datetime, timezone
 from uuid import UUID
 
 from notalone.memory import (
@@ -11,6 +13,7 @@ from notalone.memory import (
     MemoryCandidate,
     MemoryCategory,
     MemoryCandidateStatus,
+    MemoryTiming,
 )
 from notalone.retrieval import InMemoryRetrieval
 from notalone.scopes import ContactScope
@@ -57,6 +60,22 @@ class MemoryStoreTest(unittest.TestCase):
             retrieval.search_confirmed_memories(scope=self.scope)[0].text,
             "对方喜欢徒步",
         )
+
+    def test_save_confirm_and_correct_use_their_own_time_without_changing_source_dates(self):
+        historical = datetime(2020, 3, 1, tzinfo=timezone.utc)
+        candidate = self.store.create_candidate(replace(
+            self._candidate(),
+            timing=MemoryTiming.from_source_times((historical,), recorded_at=historical),
+        ))
+        confirmed = self.store.confirm(scope=self.scope, candidate_id=CANDIDATE_ID)
+        corrected = self.store.correct(scope=self.scope, memory_id=confirmed.memory_id, text="合成历史资料修正")
+        for record in (candidate, confirmed, corrected):
+            self.assertEqual(record.timing.source_started_at, historical)
+            self.assertEqual(record.timing.source_ended_at, historical)
+            self.assertTrue(record.timing.source_time_complete)
+        self.assertGreater(candidate.timing.recorded_at, historical)
+        self.assertGreaterEqual(confirmed.timing.recorded_at, candidate.timing.recorded_at)
+        self.assertGreater(corrected.timing.recorded_at, confirmed.timing.recorded_at)
 
     def test_correction_invalidation_and_deletion_change_later_retrieval(self) -> None:
         self.store.create_candidate(self._candidate())

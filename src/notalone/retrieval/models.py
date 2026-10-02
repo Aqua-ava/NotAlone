@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
+from notalone.memory.timing import MemoryTiming
 from notalone.scopes import ContactScope
 
 
@@ -70,8 +71,11 @@ class RetrievedMemory:
     confidence: float = 1.0
     relevance_score: float | None = None
     matched_terms: tuple[str, ...] = ()
+    timing: MemoryTiming = MemoryTiming()
 
     def __post_init__(self) -> None:
+        if not isinstance(self.timing, MemoryTiming):
+            raise TypeError("关系记忆来源时间结构无效。")
         if not isinstance(self.memory_id, UUID):
             raise TypeError("关系记忆引用必须是 UUID。")
         if not isinstance(self.scope, ContactScope):
@@ -130,8 +134,11 @@ class RetrievedOwnerMemory:
     confidence: float = 1.0
     relevance_score: float | None = None
     matched_terms: tuple[str, ...] = ()
+    timing: MemoryTiming = MemoryTiming()
 
     def __post_init__(self) -> None:
+        if not isinstance(self.timing, MemoryTiming):
+            raise TypeError("本人记忆来源时间结构无效。")
         if not isinstance(self.memory_id, UUID) or not isinstance(
             self.owner_id, UUID
         ):

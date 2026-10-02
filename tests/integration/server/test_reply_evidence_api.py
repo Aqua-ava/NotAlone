@@ -1,9 +1,12 @@
 """通过 HTTP seam 验证实际回复快照的读取与联系人隔离。"""
 
 import unittest
+from dataclasses import replace
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from notalone.application.reply_evidence import ReplyEvidenceService
+from notalone.memory.timing import MemoryTiming
 from notalone.reply.context import ContextEvidence, ReplyContext
 from notalone.reply.interface import GenerateReply, RewriteDraft
 from notalone.reply.runtime import RuntimeCandidate
@@ -66,6 +69,33 @@ class ReplyEvidenceApiTest(unittest.TestCase):
         self.assertEqual([entry["cited"] for entry in entries], [True, False])
         self.assertEqual(entries[0]["selection_reason"], "本次用户原句")
         self.assertIn("no-store", response.headers["Cache-Control"])
+
+    def test_memory_snapshot_keeps_source_save_time_and_validity_separate(self):
+        memory = ContextEvidence(
+            uuid4(), "confirmed_memory", "合成历史事实", self.scope,
+            valid_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+            invalid_at=datetime(2026, 11, 1, tzinfo=timezone.utc),
+            timing=MemoryTiming(
+                recorded_at=datetime(2026, 10, 2, tzinfo=timezone.utc),
+                source_started_at=datetime(2025, 12, 31, tzinfo=timezone.utc),
+                source_ended_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                source_time_complete=True,
+            ),
+        )
+        self.context = replace(self.context, evidence=self.evidence + (memory,))
+        self.save()
+
+        response = self.read()
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["evidence"][2]
+        self.assertEqual(item["timing"], {
+            "recorded_at": "2026-10-02T00:00:00+00:00",
+            "source_started_at": "2025-12-31T00:00:00+00:00",
+            "source_ended_at": "2026-01-01T00:00:00+00:00",
+            "source_time_complete": True,
+        })
+        self.assertEqual(item["valid_at"], "2026-09-01T00:00:00+00:00")
+        self.assertEqual(item["invalid_at"], "2026-11-01T00:00:00+00:00")
 
     def test_other_contact_owner_and_missing_request_are_not_found(self):
         self.save()

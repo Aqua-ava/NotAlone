@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
@@ -21,6 +22,7 @@ from notalone.memory.models import (
 )
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.message_sources import valid_source_ref_exists_sql
+from notalone.persistence.memory_timing import timed_memory_rows
 from notalone.scopes import ContactScope
 
 
@@ -40,7 +42,8 @@ _OWNER_MEMORY_COLUMNS = """
     revision,
     confidence,
     risk_flags,
-    source_candidate_id
+    source_candidate_id,
+    created_at AS recorded_at
 """
 
 
@@ -76,8 +79,8 @@ class PostgresOwnerMemoryStore:
                         owner_id=memory.owner_id,
                         source_ids=memory.source_ids,
                     )
-                connection.execute(
-                    """
+                row = connection.execute(
+                    f"""
                     INSERT INTO public.owner_memory (
                         id, owner_id, text_content, category, topic,
                         source_ids, adoption_method, status,
@@ -88,10 +91,13 @@ class PostgresOwnerMemoryStore:
                         %(topic)s, %(source_ids)s, %(adoption_method)s,
                         %(status)s, %(valid_at)s, %(invalid_at)s, %(revision)s,
                         %(confidence)s, %(risk_flags)s, %(source_candidate_id)s
-                    )
+                    ) RETURNING {_OWNER_MEMORY_COLUMNS}
                     """,
                     _to_row(memory),
-                )
+                ).fetchone()
+                if row is None:
+                    raise OwnerMemoryPersistenceError("owner 记忆写入结果为空。")
+                memory = _from_row(_timed_rows(connection, [row])[0])
                 connection.commit()
         except OwnerMemoryPersistenceError:
             raise
@@ -163,7 +169,7 @@ class PostgresOwnerMemoryStore:
                         raise OwnerMemoryPersistenceError(
                             "已确认候选缺少对应 owner 记忆。"
                         )
-                    return _from_row(existing)
+                    return _from_row(_timed_rows(connection, [existing])[0])
                 if status is not MemoryCandidateStatus.PENDING:
                     raise RuntimeError("关系记忆候选当前不可确认。")
 
@@ -212,7 +218,7 @@ class PostgresOwnerMemoryStore:
                     raise OwnerMemoryPersistenceError(
                         "owner 候选确认结果无效。"
                     )
-                return _from_row(row)
+                return _from_row(_timed_rows(connection, [row])[0])
         except (LookupError, PermissionError, RuntimeError, OwnerMemoryPersistenceError):
             raise
         except Exception as error:
@@ -222,6 +228,9 @@ class PostgresOwnerMemoryStore:
         _validate_owner_id(owner_id)
         try:
             with self._connect() as connection:
+                connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+                )
                 rows = connection.execute(
                     f"""
                     SELECT {_OWNER_MEMORY_COLUMNS}
@@ -231,6 +240,7 @@ class PostgresOwnerMemoryStore:
                     """,
                     (owner_id,),
                 ).fetchall()
+                rows = _timed_rows(connection, rows)
         except Exception as error:
             raise OwnerMemoryPersistenceError(
                 _OWNER_MEMORY_UNAVAILABLE
@@ -256,6 +266,8 @@ class PostgresOwnerMemoryStore:
                     """,
                     (owner_id, memory_id),
                 ).fetchone()
+                if row is not None:
+                    row = _timed_rows(connection, [row])[0]
                 connection.commit()
         except Exception as error:
             raise OwnerMemoryPersistenceError(
@@ -279,6 +291,8 @@ class PostgresOwnerMemoryStore:
                     """,
                     (owner_id, memory_id),
                 ).fetchone()
+                if row is not None:
+                    row = _timed_rows(connection, [row])[0]
                 connection.commit()
         except Exception as error:
             raise OwnerMemoryPersistenceError(
@@ -331,7 +345,7 @@ def _ensure_active_sources(
     unique_source_ids = tuple(dict.fromkeys(source_ids))
     if not unique_source_ids:
         return
-    available_count = connection.execute(
+    available = connection.execute(
         f"""
         SELECT count(*) AS source_count
         FROM (
@@ -361,7 +375,10 @@ def _ensure_active_sources(
             owner_id,
             list(unique_source_ids),
         ),
-    ).fetchone()["source_count"]
+    ).fetchone()
+    if available is None:
+        raise OwnerMemoryPersistenceError("owner 记忆来源校验结果为空。")
+    available_count = available["source_count"]
     if available_count != len(unique_source_ids):
         raise PermissionError("owner 记忆来源范围校验失败。")
 
@@ -409,4 +426,13 @@ def _from_row(row: dict[str, Any]) -> OwnerMemory:
         confidence=row["confidence"],
         risk_flags=tuple(row["risk_flags"] or ()),
         source_candidate_id=row["source_candidate_id"],
+        timing=row["timing"],
+    )
+
+
+def _timed_rows(
+    connection: psycopg.Connection[Any], rows: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return timed_memory_rows(
+        connection, rows, source_ids_key="source_ids", contact_scoped=False,
     )

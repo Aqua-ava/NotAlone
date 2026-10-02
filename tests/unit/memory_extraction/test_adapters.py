@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage
@@ -46,6 +47,20 @@ class LangChainExtractionRuntimeTest(unittest.TestCase):
         result = runtime.extract(_window((message_id,)))
 
         self.assertEqual(result, (payload,))
+
+    def test_unknown_source_time_is_explicit_and_does_not_break_model_input(self):
+        first, second = uuid4(), uuid4()
+        original = _window((first, second))
+        window = replace(original, messages=(
+            replace(original.messages[0], occurred_at=None),
+            original.messages[1],
+        ))
+        runtime = self._runtime([_structured_response((_payload(first),))])
+
+        self.assertEqual(runtime.extract(window), (_payload(first),))
+        seen = "\n".join(str(message.content)
+                         for call in self.model.seen_calls for message in call)
+        self.assertIn("occurred_at=unknown", seen)
 
     def test_unparseable_response_raises_runtime_error(self) -> None:
         runtime = self._runtime(

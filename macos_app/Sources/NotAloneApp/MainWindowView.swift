@@ -723,6 +723,12 @@ struct MainWindowView: View {
                             Text("分类：\(categoryLabel(candidate.category))")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                            ForEach(MemoryTimePresentation.lines(
+                                timing: candidate.timing,
+                                validAt: candidate.validAt, invalidAt: candidate.invalidAt
+                            ), id: \.self) { line in
+                                Text(line).font(.caption2).foregroundStyle(.secondary)
+                            }
                             if let subject = candidate.subject {
                                 Text("主体：\(subjectLabel(subject))")
                                     .font(.caption2)
@@ -823,6 +829,12 @@ struct MainWindowView: View {
                     Text("\(categoryLabel(memory.category)) · \(adoptionLabel(memory.adoptionMethod)) · 修订 \(memory.revision ?? 1)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                    ForEach(MemoryTimePresentation.lines(
+                        timing: memory.timing, adoptionMethod: memory.adoptionMethod,
+                        validAt: memory.validAt, invalidAt: memory.invalidAt
+                    ), id: \.self) { line in
+                        Text(line).font(.caption2).foregroundStyle(.secondary)
+                    }
                     if let confidence = memory.confidence {
                         Text("置信度：\(confidence * 100, specifier: "%.0f%%")")
                             .font(.caption2)

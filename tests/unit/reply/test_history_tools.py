@@ -146,6 +146,13 @@ class HistoryToolTest(unittest.TestCase):
         self.assertEqual(message["role"], "contact")
         self.assertEqual(message["session_id"], str(BINDING_ID))
         self.assertEqual(message["source_ids"], [str(SOURCE_ID)])
+        self.assertEqual(message["occurred_at"], "2026-09-01T12:00:00+00:00")
+        self.assertEqual(
+            access.evidence[0].timing.source_started_at,
+            datetime(2026, 9, 1, 12, tzinfo=timezone.utc),
+        )
+        self.assertTrue(access.evidence[0].timing.source_time_complete)
+        self.assertIsNone(access.evidence[0].timing.recorded_at)
         self.assertEqual(
             tuple(item.evidence_id for item in access.evidence),
             (MESSAGE_IDS[0],),

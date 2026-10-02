@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from notalone.memory import (
@@ -13,6 +13,7 @@ from notalone.memory import (
     MemoryCandidate,
     MemoryCategory,
 )
+from notalone.memory.timing import MemoryTiming
 from notalone.reply.context import (
     ReplyContext,
     ReplyContextInvariantError,
@@ -171,6 +172,85 @@ class RecordingMemoryIndex:
 
 
 class ContextRetrievalTest(unittest.TestCase):
+    def test_contact_and_owner_memory_preserve_distinct_source_times(self) -> None:
+        source_time = datetime(2025, 4, 2, tzinfo=timezone.utc)
+        contact_timing = MemoryTiming.from_source_times(
+            (source_time,),
+            recorded_at=datetime(2026, 9, 5, tzinfo=timezone.utc),
+        )
+        owner_timing = MemoryTiming.from_source_times(
+            (source_time, None),
+            recorded_at=datetime(2026, 9, 7, tzinfo=timezone.utc),
+        )
+        retrieval = RecordingRetrieval(
+            messages=(RetrievedMessage(
+                TARGET_MESSAGE_ID, self.scope, "周末一起去徒步吗？",
+                source_ids=(SOURCE_ID,), occurred_at=source_time,
+            ),),
+            memories=(RetrievedMemory(
+                CANDIDATE_ID, self.scope, "对方喜欢徒步", "preference",
+                (SOURCE_ID,), "auto", 1, timing=contact_timing,
+            ),),
+            owner_memories=(RetrievedOwnerMemory(
+                _ids()[0], OWNER_ID, "我喜欢徒步", "preference", "sports",
+                (SOURCE_ID,), "manual", 1, timing=owner_timing,
+            ),),
+        )
+        context = RetrievalReplyContext(retrieval=retrieval, skill_library_revision=1)
+
+        result = context.build(
+            command=self._reply_command(), verified_scope=self.verified_scope,
+        )
+
+        self.assertEqual(result.evidence[1].timing, contact_timing)
+        self.assertEqual(result.evidence[2].timing, owner_timing)
+        self.assertEqual(result.evidence[0].timing.source_started_at, source_time)
+        self.assertIsNone(result.evidence[0].timing.recorded_at)
+
+    def test_current_validation_rejects_changed_source_dates(self) -> None:
+        source_time = datetime(2025, 4, 2, tzinfo=timezone.utc)
+        timing = MemoryTiming.from_source_times((source_time,))
+        changed = MemoryTiming.from_source_times((
+            datetime(2025, 4, 3, tzinfo=timezone.utc),
+        ))
+        for changed_kind in ("message", "confirmed_memory", "owner_memory"):
+            with self.subTest(kind=changed_kind):
+                retrieval = RecordingRetrieval(
+                    messages=(RetrievedMessage(
+                        TARGET_MESSAGE_ID, self.scope, "周末一起去徒步吗？",
+                        source_ids=(SOURCE_ID,), occurred_at=source_time,
+                    ),),
+                    memories=(RetrievedMemory(
+                        CANDIDATE_ID, self.scope, "对方喜欢徒步", "preference",
+                        (SOURCE_ID,), "auto", 1, timing=timing,
+                    ),),
+                    owner_memories=(RetrievedOwnerMemory(
+                        _ids()[0], OWNER_ID, "我喜欢徒步", "preference", "sports",
+                        (SOURCE_ID,), "manual", 1, timing=timing,
+                    ),),
+                )
+                context = RetrievalReplyContext(
+                    retrieval=retrieval, skill_library_revision=1,
+                )
+                result = context.build(
+                    command=self._reply_command(),
+                    verified_scope=self.verified_scope,
+                )
+                context.validate_current(result)
+                if changed_kind == "message":
+                    retrieval.messages = (replace(
+                        retrieval.messages[0], occurred_at=changed.source_started_at,
+                    ),)
+                elif changed_kind == "confirmed_memory":
+                    retrieval.memories = (replace(retrieval.memories[0], timing=changed),)
+                else:
+                    retrieval.owner_memories = (replace(
+                        retrieval.owner_memories[0], timing=changed,
+                    ),)
+
+                with self.assertRaises(ReplyContextInvariantError):
+                    context.validate_current(result)
+
     def setUp(self) -> None:
         self.scope = ContactScope(OWNER_ID, CONTACT_ID)
         self.verified_scope = VerifiedConversationScope(

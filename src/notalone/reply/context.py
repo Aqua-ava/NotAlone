@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Callable, Literal, Protocol, TypeVar
 from uuid import UUID, uuid4
 
+from notalone.memory.timing import MemoryTiming
 from notalone.reply.errors import (
     ReplyContextError,
     ReplyContextInvariantError,
@@ -68,6 +69,11 @@ class ContextEvidence:
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
     revision: int | None = None
+    timing: MemoryTiming = MemoryTiming()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.timing, MemoryTiming):
+            raise TypeError("回复依据时间结构无效。")
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -444,6 +450,7 @@ class RetrievalReplyContext:
             or message.valid_at != evidence.valid_at
             or message.invalid_at != evidence.invalid_at
             or message.status != evidence.status
+            or MemoryTiming.from_source_times((message.occurred_at,)) != evidence.timing
         ):
             raise ReplyContextInvariantError("回复消息依据已失效或版本不一致。")
 
@@ -484,6 +491,7 @@ class RetrievalReplyContext:
             or memory.valid_at != evidence.valid_at
             or memory.invalid_at != evidence.invalid_at
             or memory.status != evidence.status
+            or memory.timing != evidence.timing
         ):
             raise ReplyContextInvariantError("关系记忆依据已失效或版本不一致。")
 
@@ -524,6 +532,7 @@ class RetrievalReplyContext:
             or memory.valid_at != evidence.valid_at
             or memory.invalid_at != evidence.invalid_at
             or memory.status != evidence.status
+            or memory.timing != evidence.timing
         ):
             raise ReplyContextInvariantError("本人记忆依据已失效或版本不一致。")
 
@@ -841,6 +850,7 @@ class RetrievalReplyContext:
             status=message.status,
             valid_at=message.valid_at,
             invalid_at=message.invalid_at,
+            timing=MemoryTiming.from_source_times((message.occurred_at,)),
         )
 
     @staticmethod
@@ -864,6 +874,7 @@ class RetrievalReplyContext:
             valid_at=memory.valid_at,
             invalid_at=memory.invalid_at,
             revision=memory.revision,
+            timing=memory.timing,
         )
 
     @staticmethod
@@ -891,4 +902,5 @@ class RetrievalReplyContext:
             valid_at=memory.valid_at,
             invalid_at=memory.invalid_at,
             revision=memory.revision,
+            timing=memory.timing,
         )

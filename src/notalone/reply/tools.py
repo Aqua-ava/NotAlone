@@ -14,6 +14,7 @@ from typing import Any
 from uuid import UUID
 
 from notalone.reply.context import ContextEvidence, ToolCallTrace
+from notalone.memory.timing import MemoryTiming
 from notalone.reply.errors import ReplyContextError, ReplyContextInvariantError
 from notalone.retrieval import RetrievalError, RetrievalPort, RetrievedMessage
 from notalone.scopes import ContactScope
@@ -289,6 +290,7 @@ class HistoryToolAccess:
                         status=message.status,
                         valid_at=message.valid_at,
                         invalid_at=message.invalid_at,
+                        timing=MemoryTiming.from_source_times((message.occurred_at,)),
                     )
                 )
         self._token_count += estimated

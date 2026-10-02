@@ -12,6 +12,7 @@ from notalone.memory.models import (
     MemoryCategory,
     MemoryTopic,
 )
+from notalone.memory.timing import MemoryTiming
 
 __all__ = [
     "AssertionStatus",
@@ -102,6 +103,7 @@ class ExtractedFact:
     figurative_type: FigurativeType = FigurativeType.UNKNOWN
     alternatives: tuple[str, ...] = ()
     interpretation_reason: str = ""
+    timing: MemoryTiming = MemoryTiming()
 
     def __post_init__(self) -> None:
         if not isinstance(self.text, str) or not self.text.strip():
@@ -140,6 +142,8 @@ class ExtractedFact:
             raise ValueError("备选解释必须是非空字符串元组。")
         if not isinstance(self.interpretation_reason, str):
             raise ValueError("语用判断依据必须是字符串。")
+        if not isinstance(self.timing, MemoryTiming):
+            raise TypeError("提取事实时间信息无效。")
         _validate_datetime(self.valid_at, "生效时间")
         _validate_datetime(self.invalid_at, "失效时间")
         if (
@@ -157,7 +161,7 @@ class MessageRef:
     message_id: UUID
     text: str
     sender: MessageSender
-    occurred_at: datetime
+    occurred_at: datetime | None
 
     def __post_init__(self) -> None:
         if not isinstance(self.message_id, UUID):
@@ -181,7 +185,10 @@ class ExtractionWindow:
     def __post_init__(self) -> None:
         if not self.messages:
             raise ValueError("提取窗口必须包含至少一条消息。")
-        times = [message.occurred_at for message in self.messages]
+        times = [
+            message.occurred_at for message in self.messages
+            if message.occurred_at is not None
+        ]
         if any(later < earlier for earlier, later in zip(times, times[1:])):
             raise ValueError("提取窗口必须按时间正序排列。")
         if self.target_message_ids is not None:
