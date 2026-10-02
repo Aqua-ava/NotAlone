@@ -33,11 +33,25 @@ SOURCE_VERIFICATION_SYSTEM_PROMPT = """逐条比较记忆候选与同一联系�
 时间与语用限定，并识别把不相连话题拼成一条主张的错误。sender标明消息说话人；
 按完整原命题核对限定保真。不同原子事实可以拆分，但同一状态或安排的期间、条件
 不能缩窄或扩大；候选只是原文期间的一个子集，也不能因此判完整支持。
+否定归属必须保留被否定的那个人：先依据sender和相连问答固定原话的否定对象，再核对
+候选的对应人物。已说明归第三人所有，也不能把原来被否定的一方换成另一方；替换后的
+子句即使逻辑上也能成立，仍不是忠实保留原否定命题，应unsupported/subject或negation。
 valid_at和invalid_at必须由原话支持，提前截断或延长同一状态的结束时间均不受支持。
-第三人的事不能归给说话人，转述不能升级为本人事实，计划不能升级为已发生。
+第三人的事不能归给说话人，转述不能升级为本人事实。计划不能升级为已发生，
+已发生或当前状态也不能改成未来计划；省略回答应沿相连问题恢复物品、人物与事件阶段，
+原话没有打算就不能补打算。撤回或取消已经完成是一件已发生事实，不是计划取消。
+self表示用户或原文明确保留第三方称呼的用户亲友资料，contact表示联系人或其亲友资料；
+sender只是说话人，不必等于subject。第一人称我/我的回指该消息sender，
+回应中的你/你的回指另一方。亲友的事件在正文中必须保留亲友称呼及转述标签。
+shared只用于双方共同主张；正文明确是双方共同经历而subject只标一方，或原话只是
+一方状态却subject标双方，都不支持。讨论同一物品、询问进度或一方赠送物品不等于
+共同执行后续动作；原话没说维修者，就不能补出谁亲手修好。
 只使用当前输入文本，不恢复未提供的原生引用、其他聊天、身份或日期。
 先逐项审查正文、subject、期间/条件、valid_at/invalid_at、speech_act/assertion_status/figurative_type，
-不能只看正文和证据。所有项目都吻合才supported。正文忠实但标签把第三人转述或计划
+不能只看正文和证据。按各项分别核对，不能因其他项正确掩盖人物字段或事实阶段错误。
+确定的打算用plan，不因未发生就标hypothetical；hypothetical需原话是假设，conditional
+需原话有条件。明确转述的report和reported都须保留，不能只保留其中一个。
+所有项目都吻合才supported。正文忠实但标签把第三人转述或计划
 升级成确定本人事实，应uncertain并标pragmatics；日期字段没有充分支持也应uncertain并标time。
 下面是审稿原则示例，与实际输入没有身份或时间关联：
 - 原话“上周一至周五在甲地值班”，候选只留“上周一在甲地值班”，或invalid_at设到上周二，
@@ -220,13 +234,10 @@ def _verification_text(
             "text": fact.text, "subject": fact.subject.value,
             "category": fact.category.value, "topic": fact.topic.value,
             "source_message_ids": [str(value) for value in fact.source_message_ids],
-            "confidence": fact.confidence, "risk_flags": list(fact.risk_flags),
             "valid_at": fact.valid_at.isoformat() if fact.valid_at else None,
             "invalid_at": fact.invalid_at.isoformat() if fact.invalid_at else None,
             "speech_act": fact.speech_act.value,
             "assertion_status": fact.assertion_status.value,
             "figurative_type": fact.figurative_type.value,
-            "alternatives": list(fact.alternatives),
-            "interpretation_reason": fact.interpretation_reason,
         } for index, fact in enumerate(facts)],
     }, ensure_ascii=False)

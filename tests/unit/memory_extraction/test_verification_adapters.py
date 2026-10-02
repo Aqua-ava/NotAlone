@@ -82,6 +82,29 @@ class SourceVerificationAdapterTest(unittest.TestCase):
         self.assertNotIn("text", {field.name for field in fields(entry)})
         self.assertNotIn("不喝酒", repr(entry))
 
+    def test_candidate_self_assessment_is_not_exposed_as_source_evidence(self):
+        message_id = uuid4()
+        window = _window((message_id,))
+        base = ExtractionFlow(runtime=RecordingRuntime((_payload(message_id),))).run(window).accepted[0]
+        facts = (replace(
+            base, confidence=0.99, risk_flags=("low",),
+            alternatives=("模型自述的备选解释",),
+            interpretation_reason="模型自述保证正确的理由",
+        ),)
+        result = verification_result(evidence=((message_id, window.messages[0].text),))
+        model = ToolCallingFakeModel(responses=[structured_verification((result,))])
+
+        output = LangChainSourceVerificationRuntime(model=model).verify(window=window, facts=facts)
+
+        self.assertEqual(output, (result,))
+        request = json.loads(model.seen_calls[0][1].content)
+        candidate = request["candidates"][0]
+        for field in ("confidence", "risk_flags", "alternatives", "interpretation_reason"):
+            self.assertNotIn(field, candidate)
+        self.assertEqual(candidate["subject"], base.subject.value)
+        self.assertEqual(candidate["speech_act"], base.speech_act.value)
+        self.assertEqual(candidate["source_message_ids"], [str(message_id)])
+
     def test_unavailable_model_records_failure_without_private_exception(self):
         message_id = uuid4()
         window = _window((message_id,))

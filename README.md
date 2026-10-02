@@ -173,6 +173,8 @@ python -m notalone.memory_extraction.replica_experiment --split all --repetition
 
 仍需显式专用评测凭据，只处理 24 个固定合成场景，不挂接生产或写入记忆。独占保留首次输出，隐藏方法后按中文 gold 逐项复核，语义、时间、漏提及调用成本分别评分；运行完成不等于语义达标。[2026-10-02 实验报告](docs/memory-method-replication-experiment-20261002.md)记录了局部收益和残留错误，当前没有替换默认提取。
 
+主体与事实状态的后续迭代使用两组独立合成场景、固定正负候选及自然提取对照；保留较小的提示词修正，不引入叙事阶段或放宽采纳门槛。局部收益与未解决错判见 [第一轮迭代报告](docs/memory-subject-state-iteration-20261002.md)，真实聊天验收对照只保存在本机私有目录。
+
 ## 测试
 
 ```bash
