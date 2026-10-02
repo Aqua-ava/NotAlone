@@ -216,6 +216,61 @@ SEMANTIC_CHALLENGES: tuple[CandidateChallenge, ...] = (
         (CandidateVariant("用户在宁波博物馆担任讲解员，已工作三年。", subject="self"),),
         (CandidateVariant("联系人在宁波博物馆担任馆长，已工作五年。"),),
     ),
+    CandidateChallenge(
+        EvaluationCase("严格：报价判断与条件咨询", "condition",
+            (("contact", "你怎么看那家泥塑体验课的报价？"),
+             ("self", "我觉得两次课90元挺合适，不过报不报名还没决定。"),
+             ("self", "如果周末有空，我只去问场地是否能借工具。")),
+            (1, 2), "auto",
+            note="完全合成的关系资料：评价价格不等于报名意向；条件咨询不等于实际借用。"
+                 "有限 oracle 固定去向与空日期，不覆盖保守 pending、自然引用完整性或分类；"
+                 "受控 category 仍为 preference，不能据此证明模型改善。",
+            expected_claims=(
+                ClaimExpectation("self", "auto", (
+                    r"(?:用户)?(?:觉得|认为)(?:两次泥塑体验课90元|泥塑体验课两次90元)(?:挺)?合适[。]?",
+                    r"(?:用户)?(?:觉得|认为)(?:两次泥塑体验课90元|泥塑体验课两次90元)(?:挺)?合适[，,](?:但|不过)?(?:尚未|还没)决定(?:是否|要不要)报名(?:泥塑体验课)?[。]?",
+                ), (("speech_act", "assertion"), ("assertion_status", "asserted"))),
+                ClaimExpectation("self", "auto", (
+                    r"(?:用户)?(?:尚未|还没)决定(?:是否|要不要)报名(?:泥塑体验课)?[。]?",
+                    r"(?:用户)?(?:觉得|认为)(?:两次泥塑体验课90元|泥塑体验课两次90元)(?:挺)?合适[，,](?:但|不过)?(?:尚未|还没)决定(?:是否|要不要)报名(?:泥塑体验课)?[。]?",
+                ), (("speech_act", "assertion"), ("assertion_status", "asserted"))),
+                ClaimExpectation("self", "pending", (
+                    r"(?:用户)?(?:仅在周末有空时|只有周末有空才|如果周末有空才)(?:只)?(?:去)?(?:咨询|询问)场地(?:是否能|能否)借工具[。]?",
+                ), (("speech_act", "plan"), ("assertion_status", "conditional"))),
+            )),
+        (CandidateVariant("用户认为两次泥塑体验课90元合适。", subject="self", source_indices=(1,)),
+         CandidateVariant("用户尚未决定是否报名泥塑体验课。", subject="self", source_indices=(1,)),
+         CandidateVariant("用户仅在周末有空时去咨询场地是否能借工具。", subject="self",
+             source_indices=(2,), speech_act="plan", assertion_status="conditional")),
+        (CandidateVariant("用户已决定报名两次课90元的泥塑体验课。", subject="self", source_indices=(1,)),
+         CandidateVariant("用户周末一定去咨询场地是否能借工具。", subject="self", source_indices=(2,)),
+         CandidateVariant("用户周末将实际借用场地工具。", subject="self", source_indices=(2,))),
+    ),
+    CandidateChallenge(
+        EvaluationCase("严格：第三人历史经历与当前未知", "reported",
+            (("contact", "2024年暑假，我表弟曾在社区读书会负责活动主持。"),
+             ("self", "你表弟现在做什么工作？"),
+             ("contact", "现在他做什么工作，我不知道。")),
+            (0, 2), "auto",
+            note="完全合成：历史经历属于联系人的表弟；当前不知道是联系人明确自述的知识状态，"
+                 "不是模型证据不足。有限 oracle 固定拆分标签、去向与空日期；"
+                 "不覆盖忠实混合转述、自述的复合候选、保守 pending、自然引用完整性或分类。",
+            expected_claims=(
+                ClaimExpectation("contact", "pending", (
+                    r"(?:据联系人说[，,])?联系人的表弟(?:2024年暑假|在2024年暑假)(?:曾)?(?:在社区读书会负责活动主持|负责社区读书会的活动主持)[。]?",
+                ), (("speech_act", "report"), ("assertion_status", "reported"))),
+                ClaimExpectation("contact", "auto", (
+                    r"联系人(?:不知道|不清楚)(?:其表弟|自己的表弟|表弟)(?:目前|现在)(?:做什么工作|从事什么职业)[。]?",
+                ), (("speech_act", "assertion"), ("assertion_status", "asserted"))),
+            )),
+        (CandidateVariant("联系人的表弟2024年暑假曾在社区读书会负责活动主持。",
+             speech_act="report", assertion_status="reported"),
+         CandidateVariant("联系人不知道其表弟目前做什么工作。", source_indices=(2,))),
+        (CandidateVariant("联系人2024年暑假曾在社区读书会负责活动主持。"),
+         CandidateVariant("联系人的表弟2024年暑假曾在社区读书会负责活动主持。"),
+         CandidateVariant("联系人的表弟目前在社区读书会负责活动主持。"),
+         CandidateVariant("联系人不知道自己目前做什么工作。", source_indices=(2,))),
+    ),
 )
 
 SEMANTIC_CASES: tuple[EvaluationCase, ...] = tuple(

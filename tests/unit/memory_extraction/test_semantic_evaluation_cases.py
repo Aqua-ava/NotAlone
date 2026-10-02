@@ -1,5 +1,6 @@
 """有限严格 oracle 的合成正反候选通过公开评测入口验证。"""
 from dataclasses import replace
+from typing import Literal
 import unittest
 
 from notalone.memory_extraction.evaluation import build_window, evaluate_case, summarize
@@ -15,9 +16,10 @@ class SemanticEvaluationCasesTest(unittest.TestCase):
         self.assertGreaterEqual(len(SEMANTIC_CHALLENGES), 15)
         self.assertEqual(len({challenge.case.messages for challenge in SEMANTIC_CHALLENGES}),
                          len(SEMANTIC_CHALLENGES))
+        variants: tuple[tuple[Literal["good", "bad"], bool], ...] = (("good", True), ("bad", False))
         for challenge in SEMANTIC_CHALLENGES:
             window = build_window(challenge.case)
-            for variant, expected_pass in (("good", True), ("bad", False)):
+            for variant, expected_pass in variants:
                 with self.subTest(case=challenge.case.name, variant=variant):
                     result = evaluate_case(challenge.case, window, RecordingRuntime(
                         challenge_payloads(challenge, window, variant=variant)
@@ -49,8 +51,9 @@ class SemanticEvaluationCasesTest(unittest.TestCase):
             ("联系人平时偏爱红茶。", "联系人下周准备去厦门参加展会。"),
             ("用户在宁波博物馆从事讲解工作，已经工作3年了。",),
         )
-        self.assertEqual(len(paraphrases), len(SEMANTIC_CHALLENGES))
-        for challenge, texts in zip(SEMANTIC_CHALLENGES, paraphrases):
+        original_challenges = SEMANTIC_CHALLENGES[:15]
+        self.assertEqual(len(paraphrases), len(original_challenges))
+        for challenge, texts in zip(original_challenges, paraphrases):
             with self.subTest(case=challenge.case.name):
                 window = build_window(challenge.case)
                 payloads = challenge_payloads(challenge, window, variant="good")
@@ -88,7 +91,8 @@ class SemanticEvaluationCasesTest(unittest.TestCase):
                 self.assertEqual(appended.false_fact_count, 1)
 
     def test_markers_in_separate_candidates_do_not_recall_one_claim(self):
-        challenge = SEMANTIC_CHALLENGES[-1]
+        challenge = next(challenge for challenge in SEMANTIC_CHALLENGES
+                         if challenge.case.name == "严格：明确职业正向")
         window = build_window(challenge.case)
         payload = challenge_payloads(challenge, window, variant="good")[0]
         result = evaluate_case(challenge.case, window, RecordingRuntime((
@@ -98,6 +102,73 @@ class SemanticEvaluationCasesTest(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertEqual(result.claims_recalled, (False,))
         self.assertEqual(result.false_fact_count, 2)
+
+    def test_price_opinion_and_conditional_inquiry_do_not_become_enrollment(self):
+        challenge = next((challenge for challenge in SEMANTIC_CHALLENGES
+                          if challenge.case.name == "严格：报价判断与条件咨询"), None)
+        self.assertIsNotNone(challenge, "缺少报价判断与条件咨询的公开回归场景。")
+        assert challenge is not None
+        window = build_window(challenge.case)
+        opinion, undecided, inquiry = challenge_payloads(challenge, window, variant="good")
+        paraphrases = (
+            {**opinion, "text": "用户觉得泥塑体验课两次90元挺合适。"},
+            {**undecided, "text": "用户还没决定要不要报名泥塑体验课。"},
+            {**inquiry, "text": "用户只有周末有空才去询问场地能否借工具。"},
+        )
+        result = evaluate_case(challenge.case, window, RecordingRuntime(paraphrases), baseline=True)
+        self.assertTrue(result.passed)
+        self.assertEqual(result.claims_recalled, (True, True, True))
+        self.assertEqual(tuple(fact["destination"] for fact in result.facts),
+                         ("auto", "auto", "pending"))
+        compound = evaluate_case(challenge.case, window, RecordingRuntime((
+            {**opinion, "text": "用户认为两次泥塑体验课90元合适，但尚未决定是否报名。"},
+            inquiry,
+        )), baseline=True)
+        self.assertTrue(compound.passed)
+        self.assertEqual(compound.claims_recalled, (True, True, True))
+        for replacement, index in (
+            ({**opinion, "text": "用户认为两次泥塑体验课90元合适，并已决定报名。"}, 0),
+            ({**inquiry, "text": "用户周末一定去咨询场地是否能借工具。"}, 2),
+            ({**inquiry, "text": "用户仅在周末有空时去借用场地工具。"}, 2),
+        ):
+            with self.subTest(text=replacement["text"]):
+                payloads = [opinion, undecided, inquiry]
+                payloads[index] = replacement
+                bad = evaluate_case(challenge.case, window, RecordingRuntime(tuple(payloads)),
+                                    baseline=True)
+                self.assertFalse(bad.passed)
+                self.assertIn(index, bad.unmatched_candidates)
+
+    def test_third_party_history_and_speakers_known_unknown_keep_roles_and_labels(self):
+        challenge = next((challenge for challenge in SEMANTIC_CHALLENGES
+                          if challenge.case.name == "严格：第三人历史经历与当前未知"), None)
+        self.assertIsNotNone(challenge, "缺少第三人历史经历与当前未知的公开回归场景。")
+        assert challenge is not None
+        window = build_window(challenge.case)
+        history, unknown = challenge_payloads(challenge, window, variant="good")
+        result = evaluate_case(challenge.case, window, RecordingRuntime((
+            {**history, "text": "据联系人说，联系人的表弟2024年暑假曾负责社区读书会的活动主持。"},
+            {**unknown, "text": "联系人不清楚其表弟现在从事什么职业。"},
+        )), baseline=True)
+        self.assertTrue(result.passed)
+        self.assertEqual(result.claims_recalled, (True, True))
+        self.assertEqual(tuple(fact["destination"] for fact in result.facts), ("pending", "auto"))
+        for replacement, index in (
+            ({**history, "text": "联系人2024年暑假曾在社区读书会负责活动主持。"}, 0),
+            ({**history, "subject": "self"}, 0),
+            ({**history, "speech_act": "assertion", "assertion_status": "asserted"}, 0),
+            ({**history, "text": "联系人的表弟目前在社区读书会负责活动主持。"}, 0),
+            ({**history, "text": "联系人的表弟2024年暑假曾在社区读书会负责活动主持，目前也从事这份工作。"}, 0),
+            ({**unknown, "text": "联系人不知道自己目前做什么工作。"}, 1),
+            ({**unknown, "assertion_status": "unknown"}, 1),
+        ):
+            with self.subTest(candidate=replacement):
+                payloads = [history, unknown]
+                payloads[index] = replacement
+                bad = evaluate_case(challenge.case, window, RecordingRuntime(tuple(payloads)),
+                                    baseline=True)
+                self.assertFalse(bad.passed)
+                self.assertIn(index, bad.unmatched_candidates)
 
     def test_all_expected_claims_need_recall(self):
         challenge = SEMANTIC_CHALLENGES[12]
