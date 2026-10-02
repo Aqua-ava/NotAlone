@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-human
+Triage: ready-for-agent
 State: claimed
 Type: task
 Blocked by: none
@@ -46,3 +46,5 @@ Blocked by: none
 2026-10-03：以ff1c5ff为起点的四文档检查点并行两轴审阅完成：Standards确定违反0／气味0，Spec当前差异缺陷0／超范围0。root本轮54项离线前置检查与原返回4项重放通过，diff／任务状态检查通过；没有重复执行旧1145项全量或将旧结果称新生产验证。只保存任务四文档本地提交，私有原话、失败／Gold和业务资料不入Git。整体任务未完成，State保持claimed；下一路线所需决策不影响当前文档收尾。
 
 2026-10-03：目标续行后核实HEAD为c43246b、工作区干净、第二版关闭门仍false。只读配置与代码确认没有另一个现成provider；公开官方资料核到deepseek-v4-pro，但思考＋强制具名工具不兼容，不能把URL／模型覆盖称为可用。形成 `docs/memory-official-model-synthetic-pilot-proposal-20261003.md`：拟用Pro＋禁用思考、保留原E／V和门，只先比较2＋16次合成／匿名开发资料；新服务、配置、凭据条件及范围决定未满足，0新模型调用。实际同批、留出、有效修复和生产验证仍完整保留为后续要求，不把前置对照当成最终验收。研究文件被忽略且未强制入Git，原话／Gold／首失败不动；Triage继续ready-for-human、State claimed。
+
+2026-10-03：用户明确询问“为什么用官方的？不用吧”，决定不使用官方服务。取消新服务提案及待确认18次对照，不再等待官方试验批准；始终0官方模型调用，继续限定当前ECNU。旧R试验仍关闭，不能借取消新服务恢复其余量或循环调提示。原有效修复／同批／留出完整目标继续；Agent先只读核对现有公开E／V接缝内还有没有具备直接错误机制依据的候选，不为凑实验提出新路线。此时可继续归因，Triage回ready-for-agent，State仍claimed；尚未决定或启动下一轮模型实测，不表示新R轮次被批准。
