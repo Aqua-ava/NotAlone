@@ -126,6 +126,8 @@ notalone-task-cleanup                        # 删除超过 90 天的终态任�
 
 模型置信度表示模型对提取结果的把握，不等于实测准确率；来源支持也不证明现实真伪。旧记忆不自动重提取或补认证。
 
+生产记忆 CLI／Worker 的共享模型（提取、来源核验、写入裁决）开启既有思考模式；回复模型不变。配置的服务须支持 `thinking.type=enabled` 与结构化工具结果。本轮同批来源对照改善了错误自动采纳和事实覆盖，但仍有错误／歧义候选，且耗时明显增加；范围、残留与验证见 [语义与来源复测](docs/memory-source-scope-fidelity-20261002.md)。
+
 ### 检索评测
 
 只使用合成联系人、消息和来源，不读取真实聊天、不写生产库：
@@ -152,7 +154,7 @@ python -m unittest tests.unit.retrieval.test_recall_evaluation
 python -m notalone.memory_extraction.evaluation  # 默认跳过，退出码 2
 # 专用 NOTALONE_EVALUATION_API_KEY 由 shell 安全注入，不写入命令历史
 python -m notalone.memory_extraction.evaluation --dimension subject
-python -m notalone.memory_extraction.evaluation --thinking  # 同一模型的思考模式对照，默认关闭
+python -m notalone.memory_extraction.evaluation --thinking  # 与生产记忆相同模式；评测默认关闭，便于对照
 python -m notalone.memory_extraction.evaluation --baseline  # 仅合成资料：测原门槛潜在去向
 ```
 

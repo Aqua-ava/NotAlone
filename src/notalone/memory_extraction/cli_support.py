@@ -34,7 +34,7 @@ class ExtractionComponents:
 
 
 def build_extraction_components(database_url: str) -> ExtractionComponents:
-    model = build_deepseek_model()
+    model = build_deepseek_model(extra_body={"thinking": {"type": "enabled"}})
     return ExtractionComponents(
         model=model,
         model_name=getattr(model, "model_name", "deepseek"),
