@@ -641,6 +641,9 @@ struct MainWindowView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text("记忆管理")
                     .font(.headline)
+                Text("模型置信度表示模型对提取结果的把握，不代表实测准确率。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 if let error = model.memoryError {
                     Text(error)
                         .font(.caption)
@@ -709,7 +712,7 @@ struct MainWindowView: View {
     // 待处理候选：第一次人工处理（确认 / 丢弃）。
     private var pendingCandidatesSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("待处理候选（低置信）")
+            Text("待处理候选")
                 .font(.subheadline.weight(.semibold))
             if model.pendingMemoryCandidates.isEmpty {
                 Text("没有待处理候选。")
@@ -735,9 +738,10 @@ struct MainWindowView: View {
                                     .foregroundStyle(.secondary)
                             }
                             if let confidence = candidate.confidence {
-                                Text("置信度：\(confidence * 100, specifier: "%.0f%%")")
+                                Text("模型置信度：\(confidence * 100, specifier: "%.0f%%")")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
+                                    .help("模型对这条提取结果的把握，不代表实测准确率。")
                             }
                             if let riskFlags = candidate.riskFlags,
                                !riskFlags.isEmpty {
@@ -836,9 +840,10 @@ struct MainWindowView: View {
                         Text(line).font(.caption2).foregroundStyle(.secondary)
                     }
                     if let confidence = memory.confidence {
-                        Text("置信度：\(confidence * 100, specifier: "%.0f%%")")
+                        Text("模型置信度：\(confidence * 100, specifier: "%.0f%%")")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .help("模型对这条提取结果的把握，不代表实测准确率。")
                     }
                     if let riskFlags = memory.riskFlags,
                        !riskFlags.isEmpty {

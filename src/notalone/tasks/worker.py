@@ -27,6 +27,7 @@ from notalone.memory_extraction.errors import (
     MemoryExtractionError,
 )
 from notalone.memory_extraction.runtime import MemoryExtractionRuntime
+from notalone.memory_extraction.verification import SourceVerificationRuntime
 from notalone.persistence.background_tasks import (
     BackgroundTaskLeaseError,
     BackgroundTaskPersistenceError,
@@ -167,6 +168,7 @@ class PostgresMemoryExtractionRunner:
         "_owner_memory_port",
         "_provider",
         "_runtime",
+        "_verification_runtime",
         "_watermark_port",
     )
 
@@ -175,6 +177,7 @@ class PostgresMemoryExtractionRunner:
         database_url: str,
         *,
         runtime: MemoryExtractionRuntime | None = None,
+        verification_runtime: SourceVerificationRuntime | None = None,
         memory_port: MemoryPort | None = None,
         owner_memory_port: OwnerMemoryPort | None = None,
         adjudication_runtime: AdjudicationRuntime | None = None,
@@ -201,6 +204,9 @@ class PostgresMemoryExtractionRunner:
             from notalone.memory_extraction.cli_support import (
                 build_extraction_components,
             )
+            from notalone.memory_extraction.verification_adapters import (
+                LangChainSourceVerificationRuntime,
+            )
 
             components = build_extraction_components(database_url)
             runtime = LangChainExtractionRuntime(model=components.model)
@@ -212,9 +218,14 @@ class PostgresMemoryExtractionRunner:
                 model_name = components.model_name
             if ledger is None:
                 ledger = components.ledger
+            if verification_runtime is None:
+                verification_runtime = LangChainSourceVerificationRuntime(
+                    model=components.model, ledger=ledger, provider=provider,
+                )
             if watermark_port is None:
                 watermark_port = components.watermark
         self._runtime = runtime
+        self._verification_runtime = verification_runtime
         self._memory_port = memory_port or PostgresMemoryStore(database_url)
         self._owner_memory_port = owner_memory_port or PostgresOwnerMemoryStore(
             database_url
@@ -241,6 +252,7 @@ class PostgresMemoryExtractionRunner:
             messages=messages,
             watermark_message_id=self._watermark_port.get(scope),
             runtime=self._runtime,
+            verification_runtime=self._verification_runtime,
             memory_port=self._memory_port,
             owner_memory_port=self._owner_memory_port,
             adjudication_runtime=self._adjudication_runtime,

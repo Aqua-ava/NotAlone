@@ -10,21 +10,204 @@ from notalone.memory_extraction.evaluation import (
 from notalone.memory_extraction.evaluation_cases import CASES, EvaluationCase
 from notalone.memory_extraction.adapters import LangChainExtractionRuntime
 from tests.unit.memory_extraction.test_adapters import _structured_response
-from tests.unit.memory_extraction.test_flow import _payload
+from tests.unit.memory_extraction.test_flow import RecordingRuntime, _payload
 from tests.unit.reply.test_langchain_vertical_slice import ToolCallingFakeModel
 
 
 CASES_BY_NAME = {case.name: case for case in CASES}
 
 
+def baseline_evaluate(case, window, runtime):
+    return evaluate_case(case, window, runtime, baseline=True)
+
+
 class EvaluationTest(unittest.TestCase):
+    def test_correct_candidate_does_not_hide_extra_false_fact(self):
+        case = CASES_BY_NAME["保真：否定喝酒"]
+        window = build_window(case)
+        source = window.messages[0].message_id
+        result = baseline_evaluate(case, window, RecordingRuntime((
+            _payload(source, text="联系人不喝酒。"),
+            _payload(source, text="联系人每天喝半斤白酒。"),
+        )))
+        self.assertFalse(result.passed)
+        self.assertEqual(result.error_kind, "false_fact")
+
+    def test_auto_negation_reversal_is_false_fact(self):
+        case = CASES_BY_NAME["保真：否定喝酒"]
+        window = build_window(case)
+        result = baseline_evaluate(case, window, RecordingRuntime((
+            _payload(window.messages[0].message_id, text="联系人喝酒。"),
+        )))
+        self.assertEqual(result.error_kind, "false_fact")
+
+    def test_negation_reversal_cannot_meet_dimension_gate(self):
+        import re
+        from notalone.memory_extraction.evaluation_cases import ClaimExpectation
+        controls = (
+            "喜欢下棋", "住在杭州", "会弹钢琴", "爱喝红茶", "养了两只猫", "从事设计工作",
+            "早饭喝豆浆", "不吃香菜", "会游泳", "喜欢看小说", "每天跑步", "爱看电影",
+            "周末打羽毛球", "已读完活着",
+        )
+        results = []
+        for index, predicate in enumerate(controls):
+            text = f"联系人{predicate}。"
+            case = EvaluationCase(
+                name=f"独立对照{index}", dimension="paraphrase",
+                messages=(("contact", f"我{predicate}。"),), targets=(0,), expect="auto",
+                expected_claims=(ClaimExpectation("contact", "auto", (re.escape(text),)),),
+            )
+            window = build_window(case)
+            results.append(baseline_evaluate(case, window, RecordingRuntime((
+                _payload(window.messages[0].message_id, text=text),
+            ))))
+        control = CASES_BY_NAME["保真：否定喝酒"]
+        window = build_window(control)
+        results.append(baseline_evaluate(control, window, RecordingRuntime((
+            _payload(window.messages[0].message_id, text="联系人喝酒。"),
+        ))))
+        summary = summarize(results)[0]
+        self.assertEqual(summary.semantic_scenarios, 15)
+        self.assertEqual(summary.false_facts, 1)
+        self.assertFalse(summary.meets_gate)
+
+    def test_allowed_paraphrases_match_entire_single_candidate(self):
+        from notalone.memory_extraction.evaluation_cases import ClaimExpectation
+        case = EvaluationCase(
+            name="合成严格否定", dimension="paraphrase",
+            messages=(("contact", "我不喝酒。"),), targets=(0,), expect="auto",
+            expected_claims=(ClaimExpectation(
+                subject="contact", destination="auto",
+                text_patterns=(r"(?:联系人)?(?:不喝酒|不饮酒|滴酒不沾)[。]?",),
+            ),),
+        )
+        window = build_window(case)
+        for text, passed in (
+            ("联系人不饮酒。", True),
+            ("联系人不喝酒，每天喝半斤白酒。", False),
+        ):
+            with self.subTest(text=text):
+                result = baseline_evaluate(case, window, RecordingRuntime((
+                    _payload(window.messages[0].message_id, text=text),
+                )))
+                self.assertEqual(result.passed, passed)
+                self.assertEqual(result.error_kind, None if passed else "false_fact")
+
+    def test_wrong_subject_is_counted_independently_of_false_fact(self):
+        from notalone.memory_extraction.evaluation_cases import ClaimExpectation
+        case = EvaluationCase(
+            name="合成分别归属", dimension="subject",
+            messages=(("contact", "我住苏州，你住南京。"),), targets=(0,), expect="auto",
+            expected_claims=(
+                ClaimExpectation("contact", "auto", (r"(?:联系人|用户)住苏州。?",)),
+                ClaimExpectation("self", "auto", (r"(?:联系人|用户)住南京。?",)),
+            ),
+        )
+        window = build_window(case)
+        result = baseline_evaluate(case, window, RecordingRuntime((
+            _payload(window.messages[0].message_id, text="用户住苏州。", subject="self"),
+            _payload(window.messages[0].message_id, text="用户住南京。", subject="self"),
+        )))
+        self.assertEqual(result.false_fact_count, 1)
+        self.assertEqual(result.wrong_subject_count, 1)
+        summary = summarize((result,))[0]
+        self.assertEqual((summary.false_facts, summary.wrong_subjects), (1, 1))
+
+    def test_baseline_keeps_preexisting_unverified_risk(self):
+        case = CASES_BY_NAME["明确事实"]
+        window = build_window(case)
+        result = baseline_evaluate(case, window, RecordingRuntime((
+            _payload(window.messages[0].message_id, risk_flags=["semantic:unverified"]),
+        )))
+        self.assertEqual(result.actual, "pending")
+        self.assertFalse(result.verification_enabled)
+
+    def test_evaluation_cli_defaults_to_source_verification(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from notalone.memory_extraction.evaluation import main
+        case = CASES_BY_NAME["明确事实"]
+        window = build_window(case)
+        sample = baseline_evaluate(case, window, RecordingRuntime((
+            _payload(window.messages[0].message_id),
+        )))
+        with patch.dict("os.environ", {"NOTALONE_EVALUATION_API_KEY": "synthetic"}, clear=True):
+            with patch("notalone.reply.adapters.deepseek_provider.build_deepseek_model") as build:
+                build.return_value.model_name = "synthetic-model"
+                with patch("notalone.memory_extraction.adapters.LangChainExtractionRuntime"):
+                    with patch("notalone.memory_extraction.verification_adapters.LangChainSourceVerificationRuntime") as verifier:
+                        with patch("notalone.memory_extraction.evaluation.evaluate_case", return_value=sample) as evaluate:
+                            with contextlib.redirect_stdout(io.StringIO()):
+                                self.assertEqual(main(["--case", "明确事实"]), 0)
+                            self.assertIs(evaluate.call_args.kwargs["verification_runtime"], verifier.return_value)
+                            self.assertFalse(evaluate.call_args.kwargs["baseline"])
+                            verifier.assert_called_once_with(model=build.return_value)
+
+    def test_default_evaluation_keeps_unverified_facts_pending(self):
+        case = CASES_BY_NAME["保真：否定喝酒"]
+        window = build_window(case)
+        result = evaluate_case(case, window, RecordingRuntime((
+            _payload(window.messages[0].message_id, text="联系人不喝酒。"),
+        )))
+        self.assertEqual(result.actual, "pending")
+        self.assertIn("semantic:unverified", result.facts[0]["risk_flags"])
+        self.assertFalse(result.verification_enabled)
+        self.assertFalse(result.passed)
+
+    def test_verification_enabled_evaluation_uses_the_production_guard(self):
+        from notalone.memory_extraction.models import ExtractedFact, ExtractionWindow
+        class SupportingRuntime:
+            def verify(self, *, window: ExtractionWindow, facts: tuple[ExtractedFact, ...]):
+                return tuple({
+                    "candidate_index": index, "verdict": "supported", "issues": [],
+                    "evidence": [{"message_id": str(fact.source_message_ids[0]),
+                                  "quote": window.messages[0].text}],
+                } for index, fact in enumerate(facts))
+        case = CASES_BY_NAME["保真：否定喝酒"]
+        window = build_window(case)
+        result = evaluate_case(case, window, RecordingRuntime((
+            _payload(window.messages[0].message_id, text="联系人不饮酒。"),
+        )), verification_runtime=SupportingRuntime())
+        self.assertTrue(result.verification_enabled)
+        self.assertTrue(result.passed)
+        self.assertEqual(result.actual, "auto")
+
+    def test_time_mismatch_on_auto_candidate_is_a_false_fact(self):
+        from notalone.memory_extraction.evaluation_cases import ClaimExpectation
+        case = EvaluationCase(
+            "合成无时间边界事实", "time", (("contact", "我喜欢下棋。"),), (0,), "auto",
+            expected_claims=(ClaimExpectation("contact", "auto", (r"联系人喜欢下棋。?",)),),
+        )
+        window = build_window(case)
+        result = baseline_evaluate(case, window, RecordingRuntime((
+            _payload(window.messages[0].message_id, text="联系人喜欢下棋。",
+                     valid_at="2026-09-01T00:00:00+00:00"),
+        )))
+        self.assertTrue(result.text_ok)
+        self.assertFalse(result.validity_ok)
+        self.assertEqual(result.false_fact_count, 1)
+        self.assertEqual(result.error_kind, "false_fact")
+
+    def test_baseline_leaves_malformed_candidates_to_the_public_guard(self):
+        case = CASES_BY_NAME["明确事实"]
+        window = build_window(case)
+        result = baseline_evaluate(case, window, RecordingRuntime((
+            _payload(window.messages[0].message_id, risk_flags=None),
+            _payload(window.messages[0].message_id, risk_flags=["semantic:unverified"],
+                     source_message_ids=None),
+        )))
+        self.assertEqual(result.rejected_count, 2)
+        self.assertEqual(result.actual, "none")
+        self.assertFalse(result.passed)
+
     def test_literal_fact_with_risk_is_pending(self):
         case = CASES_BY_NAME["明确事实"]
         window = build_window(case)
         payload = _payload(window.messages[0].message_id)
         payload['risk_flags'] = ['financial']
         model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
-        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        result = baseline_evaluate(case, window, LangChainExtractionRuntime(model=model))
         self.assertEqual(result.actual, 'pending')
         self.assertFalse(result.passed)
 
@@ -33,7 +216,7 @@ class EvaluationTest(unittest.TestCase):
         case = CASES_BY_NAME["反讽"]
         window = build_window(case)
         model = ToolCallingFakeModel(responses=[AIMessage(content='无结构化输出')])
-        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        result = baseline_evaluate(case, window, LangChainExtractionRuntime(model=model))
         self.assertFalse(result.passed)
         self.assertIsNotNone(result.failure_reason)
 
@@ -44,7 +227,7 @@ class EvaluationTest(unittest.TestCase):
         first.update(subject='self', speech_act='plan')
         second = {**first, 'subject': 'contact'}
         model = ToolCallingFakeModel(responses=[_structured_response((first, second))])
-        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        result = baseline_evaluate(case, window, LangChainExtractionRuntime(model=model))
         self.assertEqual(result.actual, 'pending')
         self.assertFalse(result.subject_ok)
         self.assertFalse(result.passed)
@@ -56,7 +239,7 @@ class EvaluationTest(unittest.TestCase):
                 window = build_window(case)
                 payload = {**_payload(window.messages[0].message_id), **fields}
                 model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
-                result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+                result = baseline_evaluate(case, window, LangChainExtractionRuntime(model=model))
                 self.assertEqual(result.actual, 'pending')
 
     def test_context_only_evidence_is_rejected(self):
@@ -64,7 +247,7 @@ class EvaluationTest(unittest.TestCase):
         window = build_window(case)
         payload = _payload(window.messages[1].message_id)
         model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
-        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        result = baseline_evaluate(case, window, LangChainExtractionRuntime(model=model))
         self.assertEqual(result.actual, 'none')
         self.assertEqual(result.rejected_count, 1)
         self.assertEqual(result.error_kind, 'general')
@@ -75,7 +258,7 @@ class EvaluationTest(unittest.TestCase):
         window = build_window(case)
         payload = _payload(window.messages[1].message_id)
         model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
-        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        result = baseline_evaluate(case, window, LangChainExtractionRuntime(model=model))
         self.assertEqual(result.actual, 'auto')
         self.assertEqual(result.error_kind, 'false_fact')
 
@@ -85,7 +268,7 @@ class EvaluationTest(unittest.TestCase):
         payload = _payload(window.messages[0].message_id)
         payload.update(subject='contact', speech_act='plan')
         model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
-        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        result = baseline_evaluate(case, window, LangChainExtractionRuntime(model=model))
         self.assertFalse(result.subject_ok)
         self.assertEqual(result.error_kind, 'wrong_subject')
 
@@ -97,7 +280,7 @@ class EvaluationTest(unittest.TestCase):
         )
         window = build_window(case)
         model = ToolCallingFakeModel(responses=[_structured_response(())])
-        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        result = baseline_evaluate(case, window, LangChainExtractionRuntime(model=model))
         self.assertEqual(result.actual, 'none')
         self.assertTrue(result.subject_ok)
         self.assertTrue(result.passed)
@@ -126,7 +309,7 @@ class EvaluationTest(unittest.TestCase):
                 window = build_window(case)
                 payload = _payload(window.messages[0].message_id, text=payload_text)
                 model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
-                result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+                result = baseline_evaluate(case, window, LangChainExtractionRuntime(model=model))
                 self.assertEqual(result.text_ok, text_ok)
                 self.assertEqual(result.passed, text_ok)
 
@@ -139,7 +322,7 @@ class EvaluationTest(unittest.TestCase):
             subject="shared",
         )
         model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
-        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        result = baseline_evaluate(case, window, LangChainExtractionRuntime(model=model))
         self.assertEqual(result.actual, 'auto')
         self.assertTrue(result.passed)
 
@@ -164,7 +347,7 @@ class EvaluationTest(unittest.TestCase):
                 overrides = {'valid_at': payload_valid} if case.expect_valid_at is not None else {'invalid_at': payload_valid}
                 payload = _payload(window.messages[0].message_id, **overrides)
                 model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
-                result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+                result = baseline_evaluate(case, window, LangChainExtractionRuntime(model=model))
                 self.assertEqual(result.validity_ok, validity_ok)
                 self.assertEqual(result.passed, validity_ok)
 
@@ -189,7 +372,7 @@ class EvaluationTest(unittest.TestCase):
                     subject='self', valid_at=start, invalid_at=end,
                 )
                 model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
-                result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+                result = baseline_evaluate(case, window, LangChainExtractionRuntime(model=model))
                 self.assertEqual(result.validity_ok, correct)
                 self.assertEqual(result.passed, correct)
 
@@ -211,25 +394,26 @@ class EvaluationTest(unittest.TestCase):
         unbounded = {**dated, 'text': '用户在北区办公室值班。',
                      'valid_at': None, 'invalid_at': None}
         model = ToolCallingFakeModel(responses=[_structured_response((dated, unbounded))])
-        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        result = baseline_evaluate(case, window, LangChainExtractionRuntime(model=model))
         self.assertEqual(len(result.facts), 2)
         self.assertFalse(result.validity_ok)
         self.assertFalse(result.passed)
 
     def test_dimension_gate_summary(self):
-        def make(error_kind=None):
+        def make(index, error_kind=None):
             return EvaluationResult(
-                name='合成', dimension='subject', expected='auto', actual='auto',
+                name=f'合成{index}', dimension='subject', expected='auto', actual='auto',
                 passed=error_kind is None, subject_ok=error_kind != 'wrong_subject',
                 labels_ok=True, expected_subject=None, expected_labels=(),
                 facts=(), rejected_count=0, failure_reason=None,
                 text_ok=True, validity_ok=True, error_kind=error_kind,
+                semantic_annotated=True, semantic_case_id=f'场景{index}',
             )
 
-        under = summarize(tuple(make() for _ in range(14)))[0]
+        under = summarize(tuple(make(index) for index in range(14)))[0]
         self.assertEqual((under.cases, under.meets_gate), (14, False))
         with_one_general = summarize(
-            tuple(make() for _ in range(14)) + (make('general'),)
+            tuple(make(index) for index in range(14)) + (make(14, 'general'),)
         )[0]
         self.assertEqual(
             (with_one_general.cases, with_one_general.general_errors,
@@ -237,15 +421,15 @@ class EvaluationTest(unittest.TestCase):
             (15, 1, True),
         )
         too_many_general = summarize(
-            tuple(make() for _ in range(13)) + tuple(make('general') for _ in range(2))
+            tuple(make(index) for index in range(13)) + tuple(make(14, 'general') for _ in range(2))
         )[0]
         self.assertFalse(too_many_general.meets_gate)
         fake_fact = summarize(
-            tuple(make() for _ in range(14)) + (make('false_fact'),)
+            tuple(make(index) for index in range(14)) + (make(14, 'false_fact'),)
         )[0]
         self.assertFalse(fake_fact.meets_gate)
         wrong_subject = summarize(
-            tuple(make() for _ in range(14)) + (make('wrong_subject'),)
+            tuple(make(index) for index in range(14)) + (make(14, 'wrong_subject'),)
         )[0]
         self.assertFalse(wrong_subject.meets_gate)
 
@@ -255,7 +439,7 @@ class EvaluationTest(unittest.TestCase):
         payload = _payload(window.messages[0].message_id)
         payload.update(speech_act='report', assertion_status='reported')
         model = ToolCallingFakeModel(responses=[_structured_response((payload,))])
-        result = evaluate_case(case, window, LangChainExtractionRuntime(model=model))
+        result = baseline_evaluate(case, window, LangChainExtractionRuntime(model=model))
         self.assertEqual(result.actual, 'pending')
         self.assertFalse(result.labels_ok)
         self.assertFalse(result.passed)

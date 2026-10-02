@@ -27,6 +27,7 @@ from notalone.memory_extraction.models import (
 from notalone.memory_extraction.pragmatics import PragmaticInterpreter
 from notalone.memory_extraction.runtime import ExtractionPayload
 from tests.unit.memory_extraction.test_models import _window
+from tests.unit.memory_extraction.verification_helpers import SyntheticSupportingVerifier
 
 
 def _payload(message_id: object, **overrides: object) -> dict:
@@ -77,7 +78,9 @@ class ExtractionFlowTest(unittest.TestCase):
         self, runtime: object, message_id: object = None
     ) -> ExtractionOutcome:
         resolved_id = message_id if message_id is not None else uuid4()
-        return ExtractionFlow(runtime=runtime).run(_window((resolved_id,)))
+        return ExtractionFlow(
+            runtime=runtime, verification_runtime=SyntheticSupportingVerifier(),
+        ).run(_window((resolved_id,)))
 
     def test_valid_payload_passes_with_counts(self) -> None:
         message_id = uuid4()
@@ -101,9 +104,12 @@ class ExtractionFlowTest(unittest.TestCase):
             replace(original.messages[1], occurred_at=datetime(2024, 2, 3, tzinfo=timezone.utc)),
             replace(original.messages[2], occurred_at=datetime(2026, 9, 15, tzinfo=timezone.utc)),
         ), target_message_ids=(first, second))
-        outcome = ExtractionFlow(runtime=RecordingRuntime((
-            _payload(first, source_message_ids=[str(first), str(second)]),
-        ))).run(window)
+        outcome = ExtractionFlow(
+            verification_runtime=SyntheticSupportingVerifier(),
+            runtime=RecordingRuntime((
+                _payload(first, source_message_ids=[str(first), str(second)]),
+            )),
+        ).run(window)
         store = InMemoryMemoryStore()
         scope = ContactScope(window.owner_id, window.contact_id)
         MemoryAdoption(memory_port=store).adopt(scope, outcome)
@@ -136,14 +142,17 @@ class ExtractionFlowTest(unittest.TestCase):
             ),
             target_message_ids=(source_id,),
         )
-        outcome = ExtractionFlow(runtime=RecordingRuntime((
-            _payload(
-                source_id,
-                text="联系人改在下个月去北京",
-                valid_at="2026-10-01T00:00:00+00:00",
-                risk_flags=["low"],
-            ),
-        ))).run(window)
+        outcome = ExtractionFlow(
+            verification_runtime=SyntheticSupportingVerifier(),
+            runtime=RecordingRuntime((
+                _payload(
+                    source_id,
+                    text="联系人改在下个月去北京",
+                    valid_at="2026-10-01T00:00:00+00:00",
+                    risk_flags=["low"],
+                ),
+            )),
+        ).run(window)
 
         self.assertEqual(outcome.rejected_count, 0)
         self.assertEqual(len(outcome.accepted), 1)
@@ -183,15 +192,18 @@ class ExtractionFlowTest(unittest.TestCase):
             ),
             target_message_ids=(confirmation_id,),
         )
-        outcome = ExtractionFlow(runtime=RecordingRuntime((
-            _payload(
-                confirmation_id,
-                text="联系人已按改期安排到北京",
-                source_message_ids=[str(planning_id), str(confirmation_id)],
-                valid_at="2026-10-01T00:00:00+00:00",
-                risk_flags=["low"],
-            ),
-        ))).run(window)
+        outcome = ExtractionFlow(
+            verification_runtime=SyntheticSupportingVerifier(),
+            runtime=RecordingRuntime((
+                _payload(
+                    confirmation_id,
+                    text="联系人已按改期安排到北京",
+                    source_message_ids=[str(planning_id), str(confirmation_id)],
+                    valid_at="2026-10-01T00:00:00+00:00",
+                    risk_flags=["low"],
+                ),
+            )),
+        ).run(window)
 
         self.assertEqual(outcome.rejected_count, 0)
         self.assertEqual(len(outcome.accepted), 1)
@@ -220,9 +232,12 @@ class ExtractionFlowTest(unittest.TestCase):
             ),
         ):
             with self.subTest(valid_at=valid_at):
-                outcome = ExtractionFlow(runtime=RecordingRuntime((
-                    _payload(source_id, valid_at=valid_at, risk_flags=["low"]),
-                ))).run(window)
+                outcome = ExtractionFlow(
+                    verification_runtime=SyntheticSupportingVerifier(),
+                    runtime=RecordingRuntime((
+                        _payload(source_id, valid_at=valid_at, risk_flags=["low"]),
+                    )),
+                ).run(window)
                 self.assertEqual(outcome.rejected_count, 0)
                 self.assertEqual(len(outcome.accepted), 1)
                 fact = outcome.accepted[0]

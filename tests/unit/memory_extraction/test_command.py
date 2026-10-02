@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import unittest
+from contextlib import ExitStack
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
+from langchain_core.messages import AIMessage
+
+from notalone.ledger.adapters import InMemoryOutboundLedger
+from notalone.ledger.models import LedgerOutcome
+from notalone.memory.adapters import InMemoryMemoryStore
 from notalone.memory.models import (
     AdoptionMethod,
     ConfirmedMemory,
@@ -29,7 +36,16 @@ from notalone.memory_extraction.recovery import (
     ExtractionFailureState,
     FailureRange,
 )
+from notalone.memory_extraction.verification_adapters import (
+    LangChainSourceVerificationRuntime,
+)
 from notalone.scopes import ContactScope
+from tests.unit.memory_extraction.verification_helpers import (
+    FixedSourceVerifier,
+    SyntheticSupportingVerifier,
+    verification_result,
+)
+from tests.unit.reply.test_langchain_vertical_slice import ToolCallingFakeModel
 
 
 OWNER_ID = UUID("aaaaaaaa-1111-1111-1111-111111111111")
@@ -115,13 +131,68 @@ def _payload(message_id: UUID) -> dict:
 class PayloadRuntime:
     """按窗口目标消息返回一条可自动采纳的事实。"""
 
+    def __init__(self, **overrides: object) -> None:
+        self.overrides = overrides
+
     def extract(self, window) -> tuple:
         message_id = (
             window.target_message_ids[0]
             if window.target_message_ids
             else window.messages[0].message_id
         )
-        return (_payload(message_id),)
+        return ({**_payload(message_id), **self.overrides},)
+
+
+class SyntheticCallClock:
+    """确定性推进模型调用时间，不等待真实时钟。"""
+
+    def __init__(self) -> None:
+        self.origin = datetime(2026, 10, 2, tzinfo=timezone.utc)
+        self.elapsed_seconds = 0.0
+
+    def perf_counter(self) -> float:
+        return self.elapsed_seconds
+
+    def now(self, tz) -> datetime:
+        return self.origin + timedelta(seconds=self.elapsed_seconds)
+
+
+class TimedPayloadRuntime(PayloadRuntime):
+    """合成首次提取固定耗时，允许模拟供应商失败。"""
+
+    def __init__(self, clock: SyntheticCallClock, error: Exception | None = None) -> None:
+        super().__init__()
+        self.clock = clock
+        self.error = error
+
+    def extract(self, window) -> tuple:
+        self.clock.elapsed_seconds += 2.0
+        if self.error is not None:
+            raise self.error
+        return super().extract(window)
+
+
+class TimedVerificationModel:
+    """有独立耗时的外部模型替身，不执行真实模型请求。"""
+
+    model_name = "verification-fake"
+
+    def __init__(
+        self, clock: SyntheticCallClock, response: AIMessage,
+        error: Exception | None = None,
+    ) -> None:
+        self.clock = clock
+        self.response = response
+        self.error = error
+
+    def bind_tools(self, tools):
+        return self
+
+    def invoke(self, messages):
+        self.clock.elapsed_seconds += 5.0
+        if self.error is not None:
+            raise self.error
+        return self.response
 
 
 class FailingAdjudicationRuntime:
@@ -132,6 +203,16 @@ class FailingAdjudicationRuntime:
 
     def adjudicate(self, *, candidate_text, similar):
         raise self.error
+
+
+class UnavailableVerificationModel:
+    """外部核验供应商的合成替身，第一次调用不可用。"""
+
+    def bind_tools(self, tools):
+        return self
+
+    def invoke(self, messages):
+        raise TimeoutError("synthetic provider timeout")
 
 
 class RecordingMemoryPort:
@@ -217,6 +298,359 @@ class RunExtractionTest(unittest.TestCase):
         self.owner_port = RecordingOwnerPort()
         self.watermark = RecordingWatermark()
 
+    def test_ledger_keeps_extraction_and_verification_latency_and_start_separate(self) -> None:
+        messages = (replace(_messages(1)[0], text="我习惯直接打电话沟通"),)
+        clock = SyntheticCallClock()
+        ledger = InMemoryOutboundLedger()
+        store = InMemoryMemoryStore()
+        response = AIMessage(content="", tool_calls=[{
+            "name": "SourceVerificationOutput", "id": "verify-timing",
+            "args": {"results": [verification_result(
+                evidence=((messages[0].message_id, messages[0].text),),
+            )]},
+        }])
+        verifier = LangChainSourceVerificationRuntime(
+            model=TimedVerificationModel(clock, response), ledger=ledger,
+        )
+        with patch(
+            "notalone.memory_extraction.command.time.perf_counter",
+            side_effect=clock.perf_counter,
+        ), patch(
+            "notalone.memory_extraction.command.datetime",
+            SimpleNamespace(now=clock.now),
+        ), patch(
+            "notalone.memory_extraction.verification_adapters.datetime",
+            SimpleNamespace(now=clock.now),
+        ):
+            stats = run_extraction(
+                scope=self.scope,
+                messages=messages,
+                watermark_message_id=None,
+                runtime=TimedPayloadRuntime(clock),
+                verification_runtime=verifier,
+                memory_port=store,
+                owner_memory_port=self.owner_port,
+                ledger=ledger,
+                model_name="extraction-fake",
+            )
+
+        self.assertEqual(stats.adopted, 1)
+        entries = {entry.model_name: entry for entry in ledger.list_by_owner(OWNER_ID)}
+        self.assertEqual(set(entries), {"extraction-fake", "verification-fake"})
+        self.assertEqual(entries["extraction-fake"].latency_ms, 2000)
+        self.assertEqual(entries["extraction-fake"].called_at, clock.origin)
+        self.assertEqual(entries["verification-fake"].latency_ms, 5000)
+        self.assertEqual(
+            entries["verification-fake"].called_at,
+            clock.origin + timedelta(seconds=2),
+        )
+
+    def test_failed_stages_keep_initial_call_timing_and_own_outcome(self) -> None:
+        messages = (replace(_messages(1)[0], text="我习惯直接打电话沟通"),)
+        for stage, extraction_error, verification_error, initial_outcome, names in (
+            (
+                "extract", ExtractionRuntimeError("合成提取模型失败。"), None,
+                LedgerOutcome.RUN_FAILED, {"extraction-fake"},
+            ),
+            (
+                "verify", None, TimeoutError("synthetic verifier timeout"),
+                LedgerOutcome.SUCCEEDED, {"extraction-fake", "verification-fake"},
+            ),
+        ):
+            with self.subTest(stage=stage):
+                clock = SyntheticCallClock()
+                ledger = InMemoryOutboundLedger()
+                store = InMemoryMemoryStore()
+                watermark = RecordingWatermark()
+                response = AIMessage(content="", tool_calls=[{
+                    "name": "SourceVerificationOutput", "id": "verify-failure-timing",
+                    "args": {"results": [verification_result(
+                        evidence=((messages[0].message_id, messages[0].text),),
+                    )]},
+                }])
+                verifier = LangChainSourceVerificationRuntime(
+                    model=TimedVerificationModel(clock, response, verification_error),
+                    ledger=ledger,
+                )
+                with patch(
+                    "notalone.memory_extraction.command.time.perf_counter",
+                    side_effect=clock.perf_counter,
+                ), patch(
+                    "notalone.memory_extraction.command.datetime",
+                    SimpleNamespace(now=clock.now),
+                ), patch(
+                    "notalone.memory_extraction.verification_adapters.datetime",
+                    SimpleNamespace(now=clock.now),
+                ):
+                    stats = run_extraction(
+                        scope=self.scope,
+                        messages=messages,
+                        watermark_message_id=None,
+                        runtime=TimedPayloadRuntime(clock, extraction_error),
+                        verification_runtime=verifier,
+                        memory_port=store,
+                        owner_memory_port=self.owner_port,
+                        ledger=ledger,
+                        watermark_port=watermark,
+                        model_name="extraction-fake",
+                    )
+
+                self.assertEqual(stats.failed_batches, 1)
+                self.assertEqual(store.list_confirmed(self.scope), ())
+                self.assertEqual(store.list_pending_candidates(self.scope), ())
+                self.assertEqual(watermark.values, [])
+                entries = {entry.model_name: entry for entry in ledger.list_by_owner(OWNER_ID)}
+                self.assertEqual(set(entries), names)
+                self.assertEqual(entries["extraction-fake"].outcome, initial_outcome)
+                self.assertEqual(entries["extraction-fake"].latency_ms, 2000)
+                self.assertEqual(entries["extraction-fake"].called_at, clock.origin)
+                if stage == "verify":
+                    self.assertEqual(entries["verification-fake"].outcome, LedgerOutcome.RUN_FAILED)
+                    self.assertEqual(entries["verification-fake"].latency_ms, 5000)
+                    self.assertEqual(
+                        entries["verification-fake"].called_at,
+                        clock.origin + timedelta(seconds=2),
+                    )
+
+    def test_supported_candidate_keeps_auto_adoption_sources_and_watermark(self) -> None:
+        messages = (replace(_messages(1)[0], text="我习惯直接打电话沟通"),)
+        store = InMemoryMemoryStore()
+        ledger = InMemoryOutboundLedger()
+
+        stats = run_extraction(
+            scope=self.scope,
+            messages=messages,
+            watermark_message_id=None,
+            runtime=PayloadRuntime(),
+            verification_runtime=SyntheticSupportingVerifier(),
+            memory_port=store,
+            owner_memory_port=self.owner_port,
+            ledger=ledger,
+            watermark_port=self.watermark,
+        )
+
+        self.assertEqual(stats.adopted, 1)
+        memory, = store.list_confirmed(self.scope)
+        self.assertEqual(memory.text, "他习惯直接打电话沟通")
+        self.assertEqual(memory.adoption_method, AdoptionMethod.AUTO)
+        self.assertEqual(memory.source_ids, (messages[0].message_id,))
+        self.assertEqual(self.watermark.values, [messages[0].message_id])
+        entry, = ledger.list_by_owner(OWNER_ID)
+        self.assertEqual(entry.outcome, LedgerOutcome.SUCCEEDED)
+
+    def test_missing_verifier_retains_candidate_as_pending_with_risk(self) -> None:
+        messages = _messages(1)
+        store = InMemoryMemoryStore()
+
+        stats = run_extraction(
+            scope=self.scope,
+            messages=messages,
+            watermark_message_id=None,
+            runtime=PayloadRuntime(),
+            memory_port=store,
+            owner_memory_port=self.owner_port,
+            watermark_port=self.watermark,
+        )
+
+        self.assertEqual(stats.adopted, 0)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(store.list_confirmed(self.scope), ())
+        candidate, = store.list_pending_candidates(self.scope)
+        self.assertIn("semantic:unverified", candidate.risk_flags)
+        self.assertEqual(self.watermark.values, [messages[0].message_id])
+
+    def test_uncertain_verification_retains_original_candidate_as_pending(self) -> None:
+        messages = _messages(1)
+        store = InMemoryMemoryStore()
+        verifier = FixedSourceVerifier((verification_result(
+            verdict="uncertain", issues=("insufficient_evidence",),
+        ),))
+
+        stats = run_extraction(
+            scope=self.scope,
+            messages=messages,
+            watermark_message_id=None,
+            runtime=PayloadRuntime(),
+            verification_runtime=verifier,
+            memory_port=store,
+            owner_memory_port=self.owner_port,
+            watermark_port=self.watermark,
+        )
+
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(stats.failed_batches, 0)
+        self.assertEqual(store.list_confirmed(self.scope), ())
+        candidate, = store.list_pending_candidates(self.scope)
+        self.assertEqual(candidate.text, "他习惯直接打电话沟通")
+        self.assertEqual(candidate.source_ids, (messages[0].message_id,))
+        self.assertIn("semantic:insufficient_evidence", candidate.risk_flags)
+        self.assertEqual(self.watermark.values, [messages[0].message_id])
+
+    def test_all_unsupported_is_successful_rejection_and_advances_watermark(self) -> None:
+        messages = _messages(1)
+        store = InMemoryMemoryStore()
+        ledger = InMemoryOutboundLedger()
+        verifier = FixedSourceVerifier((verification_result(
+            verdict="unsupported", issues=("meaning",),
+        ),))
+
+        stats = run_extraction(
+            scope=self.scope,
+            messages=messages,
+            watermark_message_id=None,
+            runtime=PayloadRuntime(),
+            verification_runtime=verifier,
+            memory_port=store,
+            owner_memory_port=self.owner_port,
+            ledger=ledger,
+            watermark_port=self.watermark,
+        )
+
+        self.assertEqual(stats.failed_batches, 0)
+        self.assertEqual(stats.rejected_by_contract, 1)
+        self.assertEqual(stats.extracted, 0)
+        self.assertEqual(store.list_confirmed(self.scope), ())
+        self.assertEqual(store.list_pending_candidates(self.scope), ())
+        self.assertEqual(self.watermark.values, [messages[0].message_id])
+        entry, = ledger.list_by_owner(OWNER_ID)
+        self.assertEqual(entry.outcome, LedgerOutcome.SUCCEEDED)
+
+    def test_verification_failure_keeps_extraction_success_and_can_retry(self) -> None:
+        messages = (replace(_messages(1)[0], text="我习惯直接打电话沟通"),)
+        store = InMemoryMemoryStore()
+        ledger = InMemoryOutboundLedger()
+        kwargs = dict(
+            scope=self.scope,
+            messages=messages,
+            runtime=PayloadRuntime(),
+            memory_port=store,
+            owner_memory_port=self.owner_port,
+            ledger=ledger,
+            watermark_port=self.watermark,
+        )
+
+        failed = run_extraction(
+            **kwargs,
+            watermark_message_id=None,
+            verification_runtime=LangChainSourceVerificationRuntime(
+                model=UnavailableVerificationModel(), ledger=ledger,
+            ),
+        )
+
+        self.assertEqual(failed.failed_batches, 1)
+        self.assertEqual(store.list_confirmed(self.scope), ())
+        self.assertEqual(store.list_pending_candidates(self.scope), ())
+        self.assertEqual(self.watermark.values, [])
+        self.assertIsNone(self.watermark.failure)
+        self.assertEqual(self.watermark.skips, [])
+        self.assertCountEqual(
+            [entry.outcome for entry in ledger.list_by_owner(OWNER_ID)],
+            [LedgerOutcome.SUCCEEDED, LedgerOutcome.RUN_FAILED],
+        )
+
+        retry_model = ToolCallingFakeModel(responses=[
+            AIMessage(content="", tool_calls=[{
+                "name": "SourceVerificationOutput", "id": "verify-retry",
+                "args": {"results": [verification_result(
+                    evidence=((messages[0].message_id, messages[0].text),),
+                )]},
+            }]),
+        ])
+
+        retried = run_extraction(
+            **kwargs,
+            watermark_message_id=self.watermark.get(self.scope),
+            verification_runtime=LangChainSourceVerificationRuntime(
+                model=retry_model, ledger=ledger,
+            ),
+        )
+
+        self.assertEqual(retried.failed_batches, 0)
+        self.assertEqual(retried.adopted, 1)
+        self.assertEqual(len(store.list_confirmed(self.scope)), 1)
+        self.assertEqual(self.watermark.values, [messages[0].message_id])
+        self.assertCountEqual(
+            [entry.outcome for entry in ledger.list_by_owner(OWNER_ID)],
+            [LedgerOutcome.RUN_FAILED] + [LedgerOutcome.SUCCEEDED] * 3,
+        )
+
+    def test_invalid_verification_output_skips_visibly_after_three_failures(self) -> None:
+        messages = _messages(1)
+        store = InMemoryMemoryStore()
+        ledger = InMemoryOutboundLedger()
+        invalid_response = AIMessage(content="", tool_calls=[{
+            "name": "SourceVerificationOutput", "id": "verify-invalid",
+            "args": {"results": [verification_result(
+                evidence=((messages[0].message_id, "原文不存在的核验片段"),),
+            )]},
+        }])
+        verifier = LangChainSourceVerificationRuntime(
+            model=ToolCallingFakeModel(responses=[invalid_response] * 3),
+            ledger=ledger,
+        )
+
+        for attempt in (1, 2, 3):
+            stats = run_extraction(
+                scope=self.scope,
+                messages=messages,
+                watermark_message_id=self.watermark.get(self.scope),
+                runtime=PayloadRuntime(),
+                verification_runtime=verifier,
+                memory_port=store,
+                owner_memory_port=self.owner_port,
+                ledger=ledger,
+                watermark_port=self.watermark,
+            )
+            if attempt < 3:
+                self.assertEqual(stats.failed_batches, 1)
+                self.assertEqual(self.watermark.failure.count, attempt)
+                self.assertEqual(self.watermark.values, [])
+
+        self.assertEqual(stats.failed_batches, 0)
+        self.assertEqual(stats.skipped_batches, 1)
+        self.assertEqual(stats.skipped_ranges, (FailureRange(
+            from_message_id=messages[0].message_id,
+            to_message_id=messages[0].message_id,
+            code=ExtractionFailureKind.INVALID_OUTPUT,
+        ),))
+        self.assertEqual(self.watermark.values, [messages[0].message_id])
+        self.assertEqual(self.watermark.skips, list(stats.skipped_ranges))
+        self.assertIsNone(self.watermark.failure)
+        self.assertEqual(store.list_confirmed(self.scope), ())
+        self.assertEqual(store.list_pending_candidates(self.scope), ())
+        self.assertCountEqual(
+            [entry.outcome for entry in ledger.list_by_owner(OWNER_ID)],
+            [LedgerOutcome.REJECTED_BY_VALIDATION] * 3
+            + [LedgerOutcome.SUCCEEDED] * 3,
+        )
+
+    def test_supported_verification_keeps_existing_adoption_gates(self) -> None:
+        messages = _messages(1)
+        for overrides in (
+            {"confidence": 0.6},
+            {"risk_flags": ["health"]},
+            {"speech_act": "plan"},
+        ):
+            with self.subTest(overrides=overrides):
+                store = InMemoryMemoryStore()
+                stats = run_extraction(
+                    scope=self.scope,
+                    messages=messages,
+                    watermark_message_id=None,
+                    runtime=PayloadRuntime(**overrides),
+                    verification_runtime=SyntheticSupportingVerifier(),
+                    memory_port=store,
+                    owner_memory_port=self.owner_port,
+                )
+
+                self.assertEqual(stats.adopted, 0)
+                self.assertEqual(stats.pending, 1)
+                self.assertEqual(store.list_confirmed(self.scope), ())
+                candidate, = store.list_pending_candidates(self.scope)
+                self.assertEqual(candidate.text, "他习惯直接打电话沟通")
+                if "risk_flags" in overrides:
+                    self.assertIn("health", candidate.risk_flags)
+
     def test_full_run_batches_and_watermark(self) -> None:
         messages = _messages(7)
 
@@ -271,6 +705,7 @@ class RunExtractionTest(unittest.TestCase):
 
     def test_failed_batch_is_counted_without_advancing_watermark(self) -> None:
         messages = _messages(6)
+        ledger = InMemoryOutboundLedger()
 
         stats = run_extraction(
             scope=self.scope,
@@ -279,6 +714,7 @@ class RunExtractionTest(unittest.TestCase):
             runtime=FailingRuntime(),
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
+            ledger=ledger,
             watermark_port=self.watermark,
             batch_size=3,
         )
@@ -287,6 +723,8 @@ class RunExtractionTest(unittest.TestCase):
         self.assertEqual(stats.failed_batches, 1)
         self.assertEqual(stats.adopted, 0)
         self.assertEqual(self.watermark.values, [])
+        entry, = ledger.list_by_owner(OWNER_ID)
+        self.assertEqual(entry.outcome, LedgerOutcome.RUN_FAILED)
 
     def test_model_window_has_bounded_context_and_explicit_targets(self) -> None:
         messages = _messages(45)
@@ -517,6 +955,7 @@ class RunExtractionTest(unittest.TestCase):
             messages=messages,
             watermark_message_id=None,
             runtime=PayloadRuntime(),
+            verification_runtime=SyntheticSupportingVerifier(),
             memory_port=SimilarMemoryPort(self._similar_memory()),
             owner_memory_port=self.owner_port,
             adjudication_runtime=FailingAdjudicationRuntime(
@@ -539,17 +978,20 @@ class RunExtractionTest(unittest.TestCase):
 
     def test_adjudication_unavailable_never_counts(self) -> None:
         messages = _messages(3)
+        ledger = InMemoryOutboundLedger()
 
         stats = run_extraction(
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
             runtime=PayloadRuntime(),
+            verification_runtime=SyntheticSupportingVerifier(),
             memory_port=SimilarMemoryPort(self._similar_memory()),
             owner_memory_port=self.owner_port,
             adjudication_runtime=FailingAdjudicationRuntime(
                 ExtractionRuntimeError("裁决模型调用失败。")
             ),
+            ledger=ledger,
             watermark_port=self.watermark,
             batch_size=3,
         )
@@ -558,9 +1000,65 @@ class RunExtractionTest(unittest.TestCase):
         self.assertEqual(stats.skipped_batches, 0)
         self.assertIsNone(self.watermark.failure)
         self.assertEqual(self.watermark.values, [])
+        self.assertCountEqual(
+            [entry.outcome for entry in ledger.list_by_owner(OWNER_ID)],
+            [LedgerOutcome.RUN_FAILED, LedgerOutcome.SUCCEEDED],
+        )
 
 
 class ExtractMainTest(unittest.TestCase):
+    def test_default_cli_verification_rejects_reversed_claim_and_records_both_calls(self) -> None:
+        message = replace(_messages(1)[0], text="我不喝酒")
+        payload = {**_payload(message.message_id), "text": "他喜欢喝酒"}
+        model = ToolCallingFakeModel(responses=[
+            AIMessage(content="", tool_calls=[{
+                "name": "MemoryExtractionOutput", "id": "extract-1",
+                "args": {"facts": [payload]},
+            }]),
+            AIMessage(content="", tool_calls=[{
+                "name": "SourceVerificationOutput", "id": "verify-1",
+                "args": {"results": [verification_result(
+                    verdict="unsupported", issues=("negation",),
+                    evidence=((message.message_id, "不喝酒"),),
+                )]},
+            }]),
+        ])
+        store = InMemoryMemoryStore()
+        ledger = InMemoryOutboundLedger()
+        watermark = RecordingWatermark()
+        output = StringIO()
+        environment = {
+            "NOTALONE_DATABASE_URL": "postgresql:///synthetic_unused_test",
+            "NOTALONE_OWNER_ID": str(OWNER_ID),
+            "NOTALONE_DISABLE_DOTENV": "1",
+        }
+        support = "notalone.memory_extraction.cli_support."
+        boundaries = {
+            "build_deepseek_model": model,
+            "PostgresMemoryStore": store,
+            "PostgresOwnerMemoryStore": RecordingOwnerPort(),
+            "PostgresOutboundLedger": ledger,
+            "PostgresWatermarkStore": watermark,
+            "contact_exists": True,
+            "load_contact_messages": (message,),
+        }
+        with ExitStack() as stack:
+            stack.enter_context(patch.dict("os.environ", environment, clear=True))
+            stack.enter_context(patch("sys.stdout", output))
+            for name, value in boundaries.items():
+                stack.enter_context(patch(support + name, return_value=value))
+            exit_code = extract_main(["--contact-id", str(CONTACT_ID)])
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("extracted=0 adopted=0 updated=0 pending=0", output.getvalue())
+        self.assertEqual(store.list_confirmed(ContactScope(OWNER_ID, CONTACT_ID)), ())
+        self.assertEqual(store.list_pending_candidates(ContactScope(OWNER_ID, CONTACT_ID)), ())
+        self.assertEqual(watermark.values, [message.message_id])
+        self.assertEqual(
+            [entry.outcome for entry in ledger.list_by_owner(OWNER_ID)],
+            [LedgerOutcome.SUCCEEDED, LedgerOutcome.SUCCEEDED],
+        )
+
     def test_rejects_invalid_batch_size_before_runtime_setup(self) -> None:
         output = StringIO()
 

@@ -1,20 +1,23 @@
-"""合成记忆评测：复用正式链路，只计算去向，不访问存储。"""
+"""固定合成记忆评测：旧 120 条加严格 15 条，不访问存储或私人资料。"""
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import re
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from uuid import NAMESPACE_URL, uuid5
 
 from notalone.memory_extraction.adoption import can_auto_adopt
-from notalone.memory_extraction.evaluation_cases import CASES, EvaluationCase
+from notalone.memory_extraction.evaluation_cases import CASES, ClaimExpectation, EvaluationCase
 from notalone.memory_extraction.flow import ExtractionFlow
 from notalone.memory_extraction.models import ExtractionWindow, MessageRef, MessageSender
 from notalone.memory_extraction.pragmatics import MemoryDisposition, PragmaticInterpreter
-from notalone.memory_extraction.runtime import MemoryExtractionRuntime
+from notalone.memory_extraction.runtime import ExtractionPayload, MemoryExtractionRuntime
+from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
+from notalone.memory_extraction.verification import SourceVerificationRuntime
 
 API_KEY_ENV = 'NOTALONE_EVALUATION_API_KEY'
 GATE_MIN_CASES = 15
@@ -42,6 +45,15 @@ class EvaluationResult:
     facts: tuple[dict, ...]
     rejected_count: int
     failure_reason: str | None
+    semantic_annotated: bool = False
+    verification_enabled: bool = False
+    claims_recalled: tuple[bool, ...] = ()
+    unmatched_candidates: tuple[int, ...] = ()
+    false_fact_count: int = 0
+    wrong_subject_count: int = 0
+    error_kinds: tuple[str, ...] = ()
+    semantic_case_id: str | None = None
+    destination_ok: bool = True
 
 
 @dataclass(frozen=True)
@@ -55,6 +67,8 @@ class DimensionSummary:
     wrong_subjects: int
     general_errors: int
     meets_gate: bool
+    semantic_cases: int = 0
+    semantic_scenarios: int = 0
 
 
 def build_window(case: EvaluationCase) -> ExtractionWindow:
@@ -77,15 +91,50 @@ def build_window(case: EvaluationCase) -> ExtractionWindow:
     )
 
 
+@dataclass
+class _SyntheticBaselineRuntime:
+    """只记本轮原输出已有风险，baseline 不删除模型原有的降级标记。"""
+
+    runtime: MemoryExtractionRuntime
+    originally_unverified: set[tuple[str, str, tuple[str, ...]]] = field(default_factory=set)
+
+    def extract(self, window: ExtractionWindow) -> ExtractionPayload:
+        payloads = self.runtime.extract(window)
+        self.originally_unverified = {
+            _candidate_key(payload) for payload in payloads
+            if isinstance(payload.get("risk_flags"), list)
+            and "semantic:unverified" in payload["risk_flags"]
+        }
+        return payloads
+
+
+def _candidate_key(fact: dict) -> tuple[str, str, tuple[str, ...]]:
+    sources = fact.get("source_message_ids")
+    source_key = tuple(str(source) for source in sources) if isinstance(sources, (list, tuple)) else ()
+    return (str(fact.get("text")), str(fact.get("subject")), source_key)
+
+
 def evaluate_case(
     case: EvaluationCase, window: ExtractionWindow, runtime: MemoryExtractionRuntime,
+    *, verification_runtime: SourceVerificationRuntime | None = None,
+    baseline: bool = False,
 ) -> EvaluationResult:
     """消息窗口经正式外壳、语用与风险门槛到最终去向。"""
-    outcome = ExtractionFlow(runtime=runtime).run(window)
+    if baseline and verification_runtime is not None:
+        raise ValueError("baseline 不能同时启用来源核验。")
+    baseline_runtime = _SyntheticBaselineRuntime(runtime) if baseline else None
+    outcome = ExtractionFlow(
+        runtime=baseline_runtime or runtime, verification_runtime=verification_runtime,
+    ).run(window)
     interpreter = PragmaticInterpreter()
     facts = []
     destinations = []
     for fact in outcome.accepted:
+        if (baseline_runtime is not None
+                and _candidate_key(asdict(fact)) not in baseline_runtime.originally_unverified):
+            fact = replace(fact, risk_flags=tuple(
+                flag for flag in fact.risk_flags if flag != "semantic:unverified"
+            ))
         decision = interpreter.interpret(fact)
         destination = 'none'
         if decision.disposition is not MemoryDisposition.NONE:
@@ -106,25 +155,106 @@ def evaluate_case(
     )
     text_ok = _text_matches(case, facts)
     validity_ok = _validity_matches(case, facts)
-    passed = (actual == case.expect and subject_ok and labels_ok and text_ok
-              and validity_ok
+    claims_recalled: tuple[bool, ...] = ()
+    unmatched_candidates: tuple[int, ...] = ()
+    text_matches: tuple[tuple[int, ...], ...] = ()
+    destination_ok = actual == case.expect
+    if case.expected_claims is not None:
+        claims = case.expected_claims
+        text_matches = tuple(tuple(
+            index for index, claim in enumerate(claims)
+            if any(re.fullmatch(pattern, str(fact["text"]).strip())
+                   for pattern in claim.text_patterns)
+        ) for fact in facts)
+        text_ok = all(bool(matches) for matches in text_matches)
+        subject_ok = all(any(
+            fact["subject"] == claims[index].subject for index in matches
+        ) for fact, matches in zip(facts, text_matches))
+        labels_ok = all(any(
+            _claim_labels_match(claims[index], fact) for index in matches
+        ) for fact, matches in zip(facts, text_matches))
+        validity_ok = all(any(
+            _claim_validity_matches(claims[index], fact) for index in matches
+        ) for fact, matches in zip(facts, text_matches))
+        complete_matches = tuple(tuple(
+            index for index in matches
+            if fact["subject"] == claims[index].subject
+            and _claim_labels_match(claims[index], fact)
+            and _claim_validity_matches(claims[index], fact)
+            and fact["destination"] == claims[index].destination
+        ) for fact, matches in zip(facts, text_matches))
+        claims_recalled = tuple(
+            any(index in matches for matches in complete_matches)
+            for index in range(len(claims))
+        )
+        unmatched_candidates = tuple(
+            index for index, matches in enumerate(complete_matches) if not matches
+        )
+        destination_ok = destination_ok and all(any(
+            fact["destination"] == claims[index].destination for index in matches
+        ) for fact, matches in zip(facts, text_matches))
+    false_fact_count = sum(
+        fact["destination"] == "auto" and (
+            index in unmatched_candidates if case.expected_claims is not None
+            else case.expect != "auto" or not _text_matches(case, [fact])
+            or not _validity_matches(case, [fact])
+        ) for index, fact in enumerate(facts)
+    )
+    wrong_subject_count = 0
+    for index, candidate in enumerate(facts):
+        if case.expected_claims:
+            matching = text_matches[index]
+            expected_subjects = {
+                case.expected_claims[claim_index].subject for claim_index in matching
+            } if matching else {claim.subject for claim in case.expected_claims}
+            wrong_subject_count += candidate["subject"] not in expected_subjects
+        elif case.expected_claims is None and case.expect_subject is not None:
+            wrong_subject_count += candidate["subject"] != case.expect_subject
+    if case.expected_claims is not None:
+        subject_ok = wrong_subject_count == 0
+    passed = (destination_ok and subject_ok and labels_ok and text_ok
+              and validity_ok and all(claims_recalled)
               and outcome.failure_reason is None and outcome.rejected_count == 0)
+    error_kinds = tuple(kind for kind, present in (
+        (ERROR_FALSE_FACT, false_fact_count > 0),
+        (ERROR_WRONG_SUBJECT, wrong_subject_count > 0),
+        (ERROR_GENERAL, not passed and not false_fact_count and not wrong_subject_count),
+    ) if present)
     return EvaluationResult(
         name=case.name, dimension=case.dimension, expected=case.expect,
         actual=actual, passed=passed, subject_ok=subject_ok, labels_ok=labels_ok,
         text_ok=text_ok, validity_ok=validity_ok,
-        error_kind=_classify_error(
-            passed=passed, actual=actual, expected=case.expect,
-            subject_ok=subject_ok,
-        ),
+        error_kind=error_kinds[0] if error_kinds else None,
         expected_subject=case.expect_subject, expected_labels=case.expected_labels,
         facts=tuple(facts), rejected_count=outcome.rejected_count,
         failure_reason=outcome.failure_reason,
+        semantic_annotated=case.expected_claims is not None,
+        verification_enabled=verification_runtime is not None,
+        claims_recalled=claims_recalled, unmatched_candidates=unmatched_candidates,
+        false_fact_count=false_fact_count, wrong_subject_count=wrong_subject_count,
+        error_kinds=error_kinds, destination_ok=destination_ok,
+        semantic_case_id=(str(uuid5(NAMESPACE_URL, repr((case.messages, case.targets))))
+                          if case.expected_claims is not None else None),
     )
 
 
+def _claim_labels_match(claim: ClaimExpectation, fact: dict) -> bool:
+    return all(fact.get(label) == expected for label, expected in claim.expected_labels)
+
+
+def _claim_validity_matches(claim: ClaimExpectation, fact: dict) -> bool:
+    for field, expected_iso in (("valid_at", claim.valid_at_iso),
+                                ("invalid_at", claim.invalid_at_iso)):
+        expected = datetime.fromisoformat(expected_iso) if expected_iso else None
+        if expected is not None and expected.tzinfo is None:
+            raise ValueError("评测期望时间必须带时区。")
+        if fact.get(field) != expected:
+            return False
+    return True
+
+
 def _text_matches(case: EvaluationCase, facts: list[dict]) -> bool:
-    """保真检查：禁用词不得出现；要求的语义标记至少出现在一条候选文本里。"""
+    """旧去向兼容检查：每条候选都需保留要求标记，不构成完整语义证明。"""
     texts = [str(fact.get('text', '')) for fact in facts]
     if any(
         forbidden in text
@@ -133,7 +263,7 @@ def _text_matches(case: EvaluationCase, facts: list[dict]) -> bool:
     ):
         return False
     return all(
-        any(required in text for text in texts)
+        bool(texts) and all(required in text for text in texts)
         for required in case.expect_text_contains
     )
 
@@ -168,19 +298,6 @@ def _validity_matches(case: EvaluationCase, facts: list[dict]) -> bool:
     return True
 
 
-def _classify_error(
-    *, passed: bool, actual: str, expected: str, subject_ok: bool,
-) -> str | None:
-    """给失败用例归类：假事优先，其次记错人，其余为一般错误。"""
-    if passed:
-        return None
-    if actual == 'auto' and expected != 'auto':
-        return ERROR_FALSE_FACT
-    if not subject_ok:
-        return ERROR_WRONG_SUBJECT
-    return ERROR_GENERAL
-
-
 def summarize(results: Sequence[EvaluationResult]) -> tuple[DimensionSummary, ...]:
     """按维度汇总达标签计数，供放行记录使用。"""
     grouped: dict[str, list[EvaluationResult]] = {}
@@ -190,16 +307,22 @@ def summarize(results: Sequence[EvaluationResult]) -> tuple[DimensionSummary, ..
     for dimension in sorted(grouped):
         items = grouped[dimension]
         false_facts = sum(
-            result.error_kind == ERROR_FALSE_FACT for result in items
+            result.false_fact_count or int(result.error_kind == ERROR_FALSE_FACT)
+            for result in items
         )
         wrong_subjects = sum(
-            result.error_kind == ERROR_WRONG_SUBJECT for result in items
+            result.wrong_subject_count or int(result.error_kind == ERROR_WRONG_SUBJECT)
+            for result in items
         )
         general_errors = sum(
             result.error_kind == ERROR_GENERAL for result in items
         )
+        semantic_cases = sum(result.semantic_annotated for result in items)
+        semantic_scenarios = len({result.semantic_case_id for result in items
+                                  if result.semantic_case_id is not None})
         meets_gate = (
-            len(items) >= GATE_MIN_CASES
+            semantic_cases == len(items)
+            and semantic_scenarios >= GATE_MIN_CASES
             and false_facts == 0
             and wrong_subjects == 0
             and general_errors <= GATE_MAX_GENERAL_ERRORS
@@ -209,6 +332,7 @@ def summarize(results: Sequence[EvaluationResult]) -> tuple[DimensionSummary, ..
             passed=sum(result.passed for result in items),
             false_facts=false_facts, wrong_subjects=wrong_subjects,
             general_errors=general_errors, meets_gate=meets_gate,
+            semantic_cases=semantic_cases, semantic_scenarios=semantic_scenarios,
         ))
     return tuple(summaries)
 
@@ -224,17 +348,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--case', action='append', default=[], help='按名称选择，可重复。')
     parser.add_argument('--dimension', action='append', default=[], help='按维度选择，可重复。')
+    parser.add_argument('--baseline', action='store_true',
+                        help='只对固定合成集合计算未核验的潜在去向，不作为生产入口。')
     parser.add_argument('--thinking', action='store_true', help='以同一模型开启思考模式对照。')
     args = parser.parse_args(argv)
     if not os.environ.get(API_KEY_ENV, '').strip():
         print(f'[skip] 未显式提供 {API_KEY_ENV}；未读取 .env、未发起网络请求。')
         return 2
-    selected = [case for case in CASES
+    selected = [case for case in (*CASES, *SEMANTIC_CASES)
                 if (not args.case or case.name in args.case)
                 and (not args.dimension or case.dimension in args.dimension)]
     if not selected:
         parser.error('没有匹配的合成用例。')
     from notalone.memory_extraction.adapters import LangChainExtractionRuntime
+    from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime
     from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 
     model = build_deepseek_model(
@@ -242,14 +369,18 @@ def main(argv: list[str] | None = None) -> int:
         **_model_options(thinking=args.thinking),
     )
     runtime = LangChainExtractionRuntime(model=model)
+    verifier = None if args.baseline else LangChainSourceVerificationRuntime(model=model)
     print(json.dumps({
         'model': getattr(model, 'model_name', 'unreported'),
         'thinking': bool(args.thinking),
         'cases': len(selected), 'synthetic_only': True,
+        'baseline': bool(args.baseline), 'verification_enabled': verifier is not None,
+        'semantic_cases': sum(case.expected_claims is not None for case in selected),
     }, ensure_ascii=False), flush=True)
     results = []
     for case in selected:
-        result = evaluate_case(case, build_window(case), runtime)
+        result = evaluate_case(case, build_window(case), runtime,
+                               verification_runtime=verifier, baseline=bool(args.baseline))
         results.append(result)
         print(json.dumps(asdict(result), ensure_ascii=False, default=str), flush=True)
     failures = [result.name for result in results if not result.passed]

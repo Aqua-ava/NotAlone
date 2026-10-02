@@ -6,7 +6,7 @@ import argparse
 import os
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -29,6 +29,11 @@ from notalone.memory_extraction.recovery import (
     FailureRange,
     record_batch_failure,
 )
+from notalone.memory_extraction.runtime import (
+    ExtractionPayload,
+    MemoryExtractionRuntime,
+)
+from notalone.memory_extraction.verification import SourceVerificationRuntime
 from notalone.runtime_config import load_project_env
 from notalone.scopes import ContactScope
 
@@ -37,6 +42,27 @@ EXTRACTION_BATCH_SIZE = MAX_TARGET_MESSAGES_PER_WINDOW
 MAX_CONTEXT_MESSAGES_PER_SIDE = 20
 EXTRACTION_CONTEXT_BEFORE = MAX_CONTEXT_MESSAGES_PER_SIDE
 EXTRACTION_CONTEXT_AFTER = MAX_CONTEXT_MESSAGES_PER_SIDE
+
+
+@dataclass(slots=True)
+class _TimedExtractionRuntime:
+    """只测量首次提取调用，避免核验和采纳耗时重复进入其台账。"""
+
+    runtime: MemoryExtractionRuntime
+    called_at: datetime = field(init=False)
+    latency_ms: int = field(init=False)
+
+    def __post_init__(self) -> None:
+        if self.runtime is None:
+            raise TypeError("ExtractionFlow 必须显式注入运行时。")
+
+    def extract(self, window: ExtractionWindow) -> ExtractionPayload:
+        self.called_at = datetime.now(timezone.utc)
+        started = time.perf_counter()
+        try:
+            return self.runtime.extract(window)
+        finally:
+            self.latency_ms = max(0, int((time.perf_counter() - started) * 1000))
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +92,7 @@ def run_extraction(
     runtime,
     memory_port,
     owner_memory_port,
+    verification_runtime: SourceVerificationRuntime | None = None,
     adjudication_runtime=None,
     ledger: OutboundLedgerPort | None = None,
     watermark_port=None,
@@ -118,7 +145,10 @@ def run_extraction(
         adjudication_runtime=adjudication_runtime,
         ledger=ledger,
     )
-    flow = ExtractionFlow(runtime=runtime)
+    timed_runtime = _TimedExtractionRuntime(runtime)
+    flow = ExtractionFlow(
+        runtime=timed_runtime, verification_runtime=verification_runtime,
+    )
 
     batches = processed_messages = extracted = adopted = updated = pending = 0
     duplicate = deleted = rejected = failed = skipped = 0
@@ -137,10 +167,11 @@ def run_extraction(
             messages=tuple(messages[context_start:context_end]),
             target_message_ids=tuple(message.message_id for message in batch),
         )
-        started_ns = time.perf_counter()
         adoption_stats = AdoptionStats()
+        extraction_completed = False
         try:
             outcome: ExtractionOutcome = flow.run(window)
+            extraction_completed = outcome.extraction_completed
             if outcome.failure_reason is None:
                 adoption_stats = adoption.adopt(scope, outcome)
         except ExtractionRuntimeError as error:
@@ -151,8 +182,21 @@ def run_extraction(
                 rejected_count=0,
                 failure_reason=str(error),
                 failure_kind=error.failure_kind,
+                extraction_completed=extraction_completed,
             )
         batches += 1
+        _record_extraction_ledger(
+            ledger,
+            scope,
+            (
+                LedgerOutcome.SUCCEEDED
+                if outcome.extraction_completed else LedgerOutcome.RUN_FAILED
+            ),
+            latency_ms=timed_runtime.latency_ms,
+            called_at=timed_runtime.called_at,
+            provider=provider,
+            model_name=model_name,
+        )
         if outcome.failure_reason is None:
             extracted += len(outcome.accepted)
             adopted += adoption_stats.adopted
@@ -162,25 +206,9 @@ def run_extraction(
             deleted += adoption_stats.skipped_deleted
             rejected += adoption_stats.rejected_by_contract
             skipped_non_memory += adoption_stats.skipped_non_memory
-            _record_extraction_ledger(
-                ledger,
-                scope,
-                LedgerOutcome.SUCCEEDED,
-                started_ns,
-                provider=provider,
-                model_name=model_name,
-            )
             if watermark_port is not None:
                 watermark_port.set(scope, batch[-1].message_id)
             continue
-        _record_extraction_ledger(
-            ledger,
-            scope,
-            LedgerOutcome.RUN_FAILED,
-            started_ns,
-            provider=provider,
-            model_name=model_name,
-        )
         if (
             outcome.failure_kind is ExtractionFailureKind.INVALID_OUTPUT
             and watermark_port is not None
@@ -224,8 +252,9 @@ def _record_extraction_ledger(
     ledger: OutboundLedgerPort | None,
     scope: ContactScope,
     outcome: LedgerOutcome,
-    started_ns: float,
     *,
+    latency_ms: int,
+    called_at: datetime,
     provider: str,
     model_name: str | None,
 ) -> None:
@@ -239,9 +268,9 @@ def _record_extraction_ledger(
         model_name=model_name or "unreported",
         input_tokens=None,
         output_tokens=None,
-        latency_ms=int((time.perf_counter() - started_ns) * 1000),
+        latency_ms=latency_ms,
         outcome=outcome,
-        called_at=datetime.now(timezone.utc),
+        called_at=called_at,
     )
     ledger.record(entry)
 
@@ -295,6 +324,9 @@ def extract_main(argv: list[str] | None = None) -> int:
         contact_exists,
         load_contact_messages,
     )
+    from notalone.memory_extraction.verification_adapters import (
+        LangChainSourceVerificationRuntime,
+    )
 
     scope = ContactScope(owner_uuid, args.contact_id)
     try:
@@ -318,6 +350,9 @@ def extract_main(argv: list[str] | None = None) -> int:
         watermark_message_id=watermark_message_id,
         runtime=LangChainExtractionRuntime(
             model=components.model
+        ),
+        verification_runtime=LangChainSourceVerificationRuntime(
+            model=components.model, ledger=components.ledger,
         ),
         memory_port=components.memory_store,
         owner_memory_port=components.owner_store,

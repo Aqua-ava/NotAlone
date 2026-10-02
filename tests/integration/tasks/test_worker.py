@@ -36,6 +36,9 @@ from notalone.tasks.worker import (
     PostgresMemoryExtractionRunner,
     WorkerRunOutcome,
 )
+from tests.unit.memory_extraction.verification_helpers import (
+    SyntheticSupportingVerifier,
+)
 
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "fixtures"
@@ -425,6 +428,7 @@ class BackgroundTaskWorkerTest(unittest.TestCase):
         runner = PostgresMemoryExtractionRunner(
             TEST_DATABASE_URL,
             runtime=FakeExtractionRuntime(),
+            verification_runtime=SyntheticSupportingVerifier(),
             model_name="fake-memory-model",
         )
         worker = self._worker(runner)

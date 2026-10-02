@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
+from langchain_core.language_models import BaseChatModel
 import psycopg
 from psycopg.rows import dict_row
 
@@ -24,7 +25,7 @@ from notalone.scopes import ContactScope
 class ExtractionComponents:
     """一次提取命令需要的全部外部依赖。"""
 
-    model: object
+    model: BaseChatModel
     model_name: str
     memory_store: PostgresMemoryStore
     owner_store: PostgresOwnerMemoryStore

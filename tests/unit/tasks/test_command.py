@@ -6,18 +6,37 @@ import contextlib
 import io
 import os
 import unittest
+from dataclasses import replace
 from unittest.mock import patch
 from uuid import uuid4
 
 import psycopg
+from langchain_core.messages import AIMessage
 
+from notalone.ledger.adapters import InMemoryOutboundLedger
+from notalone.ledger.models import LedgerOutcome
+from notalone.memory.adapters import InMemoryMemoryStore
+from notalone.scopes import ContactScope
 from notalone.tasks.command import (
     WorkerCommandStatus,
     run_worker,
     worker_main,
 )
 from notalone.tasks.models import BackgroundTaskStepName, IMPORT_TASK_STEPS
-from notalone.tasks.worker import WorkerRunOutcome, WorkerRunResult, _failure_info
+from notalone.tasks.worker import (
+    PostgresMemoryExtractionRunner,
+    WorkerRunOutcome,
+    WorkerRunResult,
+    _failure_info,
+)
+from tests.unit.memory_extraction.test_command import (
+    RecordingOwnerPort,
+    RecordingWatermark,
+    _messages,
+    _payload,
+)
+from tests.unit.memory_extraction.verification_helpers import verification_result
+from tests.unit.reply.test_langchain_vertical_slice import ToolCallingFakeModel
 
 
 class FakeWorker:
@@ -222,6 +241,58 @@ class FailureInfoTest(unittest.TestCase):
 
         self.assertEqual(error_code, "temporary_failure")
         self.assertTrue(retryable)
+
+
+class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
+    """用合成模型和存储边界验证 Worker 的默认生产装配。"""
+
+    def test_default_runner_verification_rejects_unsupported_claim(self) -> None:
+        scope = ContactScope(uuid4(), uuid4())
+        message = replace(_messages(1)[0], text="我不喝酒")
+        payload = {**_payload(message.message_id), "text": "他喜欢喝酒"}
+        model = ToolCallingFakeModel(responses=[
+            AIMessage(content="", tool_calls=[{
+                "name": "MemoryExtractionOutput", "id": "extract-1",
+                "args": {"facts": [payload]},
+            }]),
+            AIMessage(content="", tool_calls=[{
+                "name": "SourceVerificationOutput", "id": "verify-1",
+                "args": {"results": [verification_result(
+                    verdict="unsupported", issues=("negation",),
+                    evidence=((message.message_id, "不喝酒"),),
+                )]},
+            }]),
+        ])
+        store = InMemoryMemoryStore()
+        ledger = InMemoryOutboundLedger()
+        watermark = RecordingWatermark()
+        with patch(
+            "notalone.memory_extraction.cli_support.build_deepseek_model",
+            return_value=model,
+        ), patch(
+            "notalone.memory_extraction.cli_support.load_contact_messages",
+            return_value=(message,),
+        ):
+            runner = PostgresMemoryExtractionRunner(
+                "postgresql:///synthetic_unused_test",
+                memory_port=store,
+                owner_memory_port=RecordingOwnerPort(),
+                ledger=ledger,
+                watermark_port=watermark,
+            )
+            stats = runner.run(scope=scope)
+
+        self.assertEqual(stats.failed_batches, 0)
+        self.assertEqual(stats.rejected_by_contract, 1)
+        self.assertEqual(stats.pending, 0)
+        self.assertEqual(store.list_confirmed(scope), ())
+        self.assertEqual(store.list_pending_candidates(scope), ())
+        self.assertEqual(watermark.values, [message.message_id])
+        self.assertEqual(runner.model_version, "fake-chat-model")
+        self.assertEqual(
+            [entry.outcome for entry in ledger.list_by_owner(scope.owner_id)],
+            [LedgerOutcome.SUCCEEDED, LedgerOutcome.SUCCEEDED],
+        )
 
 
 if __name__ == "__main__":

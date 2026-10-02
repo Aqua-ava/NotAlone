@@ -1,4 +1,4 @@
-"""记忆提取的确定性外壳：逐条解析、证据契约校验与整体失败语义。"""
+"""记忆提取的确定性外壳：逐条解析、来源语义核验与整体失败语义。"""
 
 from __future__ import annotations
 
@@ -19,7 +19,17 @@ from notalone.memory_extraction.models import (
     MemoryTopic,
     SpeechAct,
 )
+from notalone.memory_extraction.pragmatics import (
+    MemoryDisposition,
+    PragmaticInterpreter,
+)
 from notalone.memory_extraction.runtime import MemoryExtractionRuntime
+from notalone.memory_extraction.verification import (
+    MAX_SOURCE_VERIFICATION_CANDIDATES,
+    SourceVerificationRuntime,
+    SourceVerificationVerdict,
+    validate_source_verification,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +40,8 @@ class ExtractionOutcome:
     rejected_count: int = 0
     failure_reason: str | None = None
     failure_kind: ExtractionFailureKind | None = None
+    # 初始提取成功与后续来源核验成功分开，供各次调用独立记账。
+    extraction_completed: bool = False
 
     def __post_init__(self) -> None:
         if (self.failure_reason is None) != (self.failure_kind is None):
@@ -39,12 +51,18 @@ class ExtractionOutcome:
 class ExtractionFlow:
     """逐条解析并校验证据契约；非法候选拒绝，运行时失败转为明确结果。"""
 
-    __slots__ = ("_runtime",)
+    __slots__ = ("_runtime", "_verification_runtime")
 
-    def __init__(self, *, runtime: MemoryExtractionRuntime) -> None:
+    def __init__(
+        self,
+        *,
+        runtime: MemoryExtractionRuntime,
+        verification_runtime: SourceVerificationRuntime | None = None,
+    ) -> None:
         if runtime is None:
             raise TypeError("ExtractionFlow 必须显式注入运行时。")
         self._runtime = runtime
+        self._verification_runtime = verification_runtime
 
     def run(self, window: ExtractionWindow) -> ExtractionOutcome:
         try:
@@ -53,7 +71,11 @@ class ExtractionFlow:
             return ExtractionOutcome(
                 accepted=(),
                 rejected_count=0,
-                failure_reason=str(error),
+                failure_reason=(
+                    "模型未返回可解析的结构化事实。"
+                    if error.failure_kind is ExtractionFailureKind.INVALID_OUTPUT
+                    else "模型调用失败，未生成记忆。"
+                ),
                 failure_kind=error.failure_kind,
             )
 
@@ -96,8 +118,69 @@ class ExtractionFlow:
                         ))),
                     )
             accepted.append(fact)
+        interpreter = PragmaticInterpreter()
+        reviewable = tuple(
+            fact for fact in accepted
+            if interpreter.interpret(fact).disposition
+            is not MemoryDisposition.NONE
+        )
+        if len(reviewable) > MAX_SOURCE_VERIFICATION_CANDIDATES:
+            return ExtractionOutcome(
+                accepted=(), rejected_count=rejected,
+                failure_reason="来源核验候选超出单批预算，本批未写入记忆。",
+                failure_kind=ExtractionFailureKind.INVALID_OUTPUT,
+                extraction_completed=True,
+            )
+        if self._verification_runtime is None:
+            accepted = [
+                fact if interpreter.interpret(fact).disposition
+                is MemoryDisposition.NONE else replace(
+                    fact,
+                    risk_flags=tuple(dict.fromkeys((
+                        *fact.risk_flags, "semantic:unverified",
+                    ))),
+                )
+                for fact in accepted
+            ]
+        elif reviewable:
+            try:
+                payloads = self._verification_runtime.verify(
+                    window=window, facts=reviewable,
+                )
+                results = validate_source_verification(
+                    payloads, window=window, facts=reviewable,
+                )
+            except ExtractionRuntimeError as error:
+                return ExtractionOutcome(
+                    accepted=(), rejected_count=rejected,
+                    failure_reason="来源核验失败，本批未写入记忆。",
+                    failure_kind=error.failure_kind,
+                    extraction_completed=True,
+                )
+            unsupported_ids = {
+                id(reviewable[result.candidate_index])
+                for result in results
+                if result.verdict is SourceVerificationVerdict.UNSUPPORTED
+            }
+            uncertain_facts = {
+                id(reviewable[result.candidate_index]): replace(
+                    reviewable[result.candidate_index],
+                    risk_flags=tuple(dict.fromkeys((
+                        *reviewable[result.candidate_index].risk_flags,
+                        *(f"semantic:{issue.value}" for issue in result.issues),
+                    ))),
+                )
+                for result in results
+                if result.verdict is SourceVerificationVerdict.UNCERTAIN
+            }
+            accepted = [
+                uncertain_facts.get(id(fact), fact)
+                for fact in accepted if id(fact) not in unsupported_ids
+            ]
+            rejected += len(unsupported_ids)
         return ExtractionOutcome(
-            accepted=tuple(accepted), rejected_count=rejected
+            accepted=tuple(accepted), rejected_count=rejected,
+            extraction_completed=True,
         )
 
 

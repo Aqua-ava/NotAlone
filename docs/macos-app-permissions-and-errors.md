@@ -147,6 +147,9 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 
 ### 构建检查
 
+2026-10-02 来源语义核验验收重建只调整记忆置信度说明与待处理标题，沿用上述
+临时 helper 保全流程、现有 P-01/P-02 与稳定签名，不新增权限或改变绑定。
+
 - [ ] 只使用 `zsh macos_app/scripts/build_app.sh` 构建主 App。
 - [ ] 主 App 的 `Contents/Info.plist` 保留 P-01/P-02 两个说明键，文案和本文档一致。
 - [ ] `Contents/Helpers/wechat-cli` 存在且可执行。
