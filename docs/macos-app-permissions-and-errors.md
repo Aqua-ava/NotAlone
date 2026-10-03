@@ -1,7 +1,7 @@
 # macOS App 权限与启动错误记录
 
 状态：维护中  
-最后更新：2026-10-02
+最后更新：2026-10-03
 适用范围：`NotAloneApp.app`、`NotAloneSyncProbe.app`、`notalone-sync-probe` 和随主 App 打包的 `wechat-cli`
 
 这是一份长期维护的权限与错误台账。凡是新增系统权限、修改权限说明文字、替换 CLI/探针、调整签名或新增用户可见错误，都必须先更新本文档，再更新代码、构建脚本和回归验证。
@@ -109,12 +109,15 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 | `screen_capture_permission_missing` | P-02 未授权 | 系统设置中的屏幕与系统音频录制开关、实际签名主体 | 不要改成 Accessibility 或要求 Full Disk Access |
 | `probe_not_found` / `probe_timeout` / `probe_output_invalid` | 前台定位探针不可用、超时或输出损坏 | 探针路径、签名、探针自检和前台状态 | 不要猜测当前联系人，也不要把错误联系人写入数据库 |
 | `后端不可用` / `后端状态读取失败` | 本地 `notalone-server` 未启动、握手失败或 API 超时 | `~/.notalone/backend.info`、后端 PID、`127.0.0.1` API | 不要把后端连接问题误判为 macOS 权限问题 |
+| `无法连接后端`（握手地址无效） | 握手 address 不是合法的 `127.0.0.1:端口`，客户端在请求前安全拒绝 | 本机后端启动和握手格式；端口须在 1–65535 | 不回显地址或 token，不接受外部主机，不请求新权限 |
 | `runtime_stopping` / `后端关闭未获确认` | 运行时正收尾，或未在有界时间内确认停读 | 同一已验证回环连接的运行状态、正常退出清理 | 不得把超时当已停，不得猜 PID 杀复用实例，不改持久同步总开关 |
 | `后端返回错误状态 500`（生成候选时） | 模型运行或 Skill 辅助资源读取失败；不是 macOS 权限弹窗 | 模型服务连通性、Skill 资源是否属于当前版本、是否出现重复 `read_file`；先重试候选生成 | 不要反复点击权限允许，不要回显模型原始错误，也不要因此发送消息 |
 | `回复生成超时` / `本次生成尝试过多` | 模型或只读 Tool 在本次有界运行内未完成 | 运行预算、模型响应、Skill 资源反馈和候选请求台账 | 不要把未完成请求当成已生成或已发送 |
 | `Follow 流：未运行` | Follow 当前没有启动或已退出 | Follow 控制状态、CLI 可用性和用户是否启动人工验证 | 不要把状态文字当作消息发送失败，也不要自动发送消息 |
 
 适配层只向 UI 暴露稳定错误码和安全说明，不回显 CLI 原始输出、数据库路径、完整会话标识、聊天正文或凭据。相关实现：[CLI 错误定义](../src/notalone/wechat_cli/errors.py)、[前台探针适配器](../src/notalone/front_sync/probe_adapter.py)。
+
+2026-10-03 桌面连接修复范围：握手解析、普通 HTTP 客户端和 SSE 共用回环地址校验；直接构造非法连接也在请求前返回既有安全连接错误，避免强制解包崩溃。验证只使用合成握手、临时路径和合成本机服务；不读取真实 backend.info、不启动 App 或微信读取进程、不改变权限／签名，不替换当前 App。独立临时构建目录中的 Swift 37 项与真正 App 目标编译通过，Standards／Spec 两轴均 0；打包与实机集成不在本轮验证范围。详细红绿过程和命令见 [连接地址修复任务](../.scratch/native-app-backend/issues/17-validate-backend-connection.md)。
 
 2026-10-01 继续验收时，CLI 1.6.20 对一个可唯一解析的确认绑定连续返回
 `table <REDACTED> not found in 9 message shards`，该绑定无既有游标；

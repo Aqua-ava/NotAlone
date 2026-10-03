@@ -29,6 +29,39 @@ final class BackendConnectionTests: XCTestCase {
         )
     }
 
+    func testRejectsMalformedAndNonLoopbackHandshakeAddresses() {
+        let invalidAddresses = [
+            "[", "192.0.2.1:54321", "localhost:54321",
+            "127.0.0.1", "127.0.0.1:0", "127.0.0.1:65536",
+            "127.0.0.1:-1", "127.0.0.1:+80", "127.0.0.1:abc",
+            "127.0.0.1:54321/private", "127.0.0.1:54321?private=1",
+            "127.0.0.1:54321#private", "user@127.0.0.1:54321",
+            "127.0.0.1:54321@192.0.2.1:80",
+        ]
+        for address in invalidAddresses {
+            XCTAssertNil(
+                BackendConnection.parseHandshake("address=\(address) token=synthetic-token\n"),
+                "损坏或非回环的合成地址应被拒绝：\(address)"
+            )
+        }
+    }
+
+    func testReadsValidMultilineHandshakeAndRejectsDamagedFile() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("notalone-synthetic-connection-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: file) }
+        for port in [1, 54321, 65535] {
+            try Data("address=127.0.0.1:\(port)\ntoken=synthetic-token\npid=42\n".utf8)
+                .write(to: file)
+            XCTAssertEqual(
+                try BackendConnection.read(from: file),
+                BackendConnection(address: "127.0.0.1:\(port)", token: "synthetic-token")
+            )
+        }
+        try Data("address=[\ntoken=synthetic-token\n".utf8).write(to: file)
+        XCTAssertNil(try BackendConnection.read(from: file))
+    }
+
     func testDefaultInfoPathExpandsTildeToHomeDirectory() {
         // URL(fileURLWithPath:) 不展开 "~"，Finder 启动时 CWD=/ 会把
         // 默认握手路径解析成 "/~/.notalone/backend.info"，导致复用

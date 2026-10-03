@@ -90,7 +90,7 @@ public final class SseEventClient: @unchecked Sendable {
 
     /// 成功建立一次事件流返回 true；连接建立失败返回 false。
     private func openAndRead() async -> Bool {
-        guard let url = URL(string: "http://\(connection.address)")?
+        guard let url = connection.localBaseURL?
             .appendingPathComponent("api/events") else { return false }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"

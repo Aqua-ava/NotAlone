@@ -12,6 +12,23 @@ public struct BackendConnection: Equatable, Sendable {
         self.token = token
     }
 
+    // 握手只允许后端实际输出的 IPv4 回环地址和端口；按字段构造 URL，
+    // 不让 userinfo、路径或编码后的主机改变凭据发送目标。
+    var localBaseURL: URL? {
+        let fields = address.split(separator: ":", omittingEmptySubsequences: false)
+        guard fields.count == 2, fields[0] == "127.0.0.1",
+              !fields[1].isEmpty,
+              fields[1].utf8.allSatisfy({ $0 >= 48 && $0 <= 57 }),
+              let port = Int(fields[1]), (1...65535).contains(port) else {
+            return nil
+        }
+        var components = URLComponents()
+        components.scheme = "http"
+        components.host = "127.0.0.1"
+        components.port = port
+        return components.url
+    }
+
     public static func infoPath() -> URL {
         let override = ProcessInfo.processInfo.environment["NOTALONE_BACKEND_INFO"]
         if let override, !override.isEmpty {
@@ -51,7 +68,9 @@ public struct BackendConnection: Equatable, Sendable {
         guard let address, let token, !address.isEmpty, !token.isEmpty else {
             return nil
         }
-        return BackendConnection(address: address, token: token)
+        let connection = BackendConnection(address: address, token: token)
+        guard connection.localBaseURL != nil else { return nil }
+        return connection
     }
 
     public static func read(from path: URL) throws -> BackendConnection? {

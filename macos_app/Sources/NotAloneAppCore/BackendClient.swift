@@ -25,17 +25,17 @@ public struct BackendClient: Sendable {
         let reason: String?
     }
 
-    private let baseURL: URL
+    private let baseURL: URL?
     private let token: String
 
     public init(connection: BackendConnection) {
-        baseURL = URL(string: "http://\(connection.address)")!
+        baseURL = connection.localBaseURL
         token = connection.token
     }
 
     /// 关闭当前运行时读取；不改变持久同步总开关。成功须由后端确认 stop 已完成。
     public func shutdownRuntime(timeout: TimeInterval = 7) async throws {
-        guard baseURL.host == "127.0.0.1", timeout > 0, timeout.isFinite else {
+        guard timeout > 0, timeout.isFinite else {
             throw BackendError.transport
         }
         struct ShutdownResponse: Decodable { let state: String }
@@ -163,9 +163,7 @@ public struct BackendClient: Sendable {
         guard let data = try? JSONSerialization.data(withJSONObject: payload) else {
             throw BackendError.malformedResponse
         }
-        guard let url = URL(string: path, relativeTo: baseURL) else {
-            throw BackendError.malformedResponse
-        }
+        let url = try requestURL(path: path)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -256,9 +254,7 @@ public struct BackendClient: Sendable {
         guard let data = try? JSONSerialization.data(withJSONObject: payload) else {
             throw BackendError.malformedResponse
         }
-        guard let url = URL(string: "api/reply/generate", relativeTo: baseURL) else {
-            throw BackendError.malformedResponse
-        }
+        let url = try requestURL(path: "api/reply/generate")
         var request = URLRequest(url: url)
         // 后端模型运行上限为 20 秒，额外留出上下文读取、取消与持久化时间。
         request.timeoutInterval = 45
@@ -580,6 +576,14 @@ public struct BackendClient: Sendable {
 
     // MARK: - 内部
 
+    private func requestURL(path: String) throws -> URL {
+        guard let baseURL else { throw BackendError.transport }
+        guard let url = URL(string: path, relativeTo: baseURL) else {
+            throw BackendError.malformedResponse
+        }
+        return url.absoluteURL
+    }
+
     private func request<T: Decodable>(
         path: String,
         method: String,
@@ -587,7 +591,7 @@ public struct BackendClient: Sendable {
         timeout: TimeInterval? = nil
     ) async throws -> T {
         guard var components = URLComponents(
-            url: baseURL.appendingPathComponent(path),
+            url: try requestURL(path: path),
             resolvingAgainstBaseURL: false
         ) else {
             throw BackendError.malformedResponse
@@ -626,9 +630,7 @@ public struct BackendClient: Sendable {
         method: String,
         body: [String: Any]
     ) async throws -> T {
-        guard let url = URL(string: path, relativeTo: baseURL) else {
-            throw BackendError.malformedResponse
-        }
+        let url = try requestURL(path: path)
         guard let bodyData = try? JSONSerialization.data(withJSONObject: body) else {
             throw BackendError.malformedResponse
         }
@@ -666,9 +668,7 @@ public struct BackendClient: Sendable {
         path: String,
         body: [String: Any]
     ) async throws -> T {
-        guard let url = URL(string: path, relativeTo: baseURL) else {
-            throw BackendError.malformedResponse
-        }
+        let url = try requestURL(path: path)
         guard let bodyData = try? JSONSerialization.data(withJSONObject: body) else {
             throw BackendError.malformedResponse
         }
@@ -710,9 +710,7 @@ public struct BackendClient: Sendable {
         method: String,
         body: [String: Any]? = nil
     ) async throws -> T {
-        guard let url = URL(string: path, relativeTo: baseURL) else {
-            throw BackendError.malformedResponse
-        }
+        let url = try requestURL(path: path)
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = method
         urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
