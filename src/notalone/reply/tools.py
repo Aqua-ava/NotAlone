@@ -273,12 +273,11 @@ class HistoryToolAccess:
         evidence_ids: list[UUID] = []
         payload_messages: list[dict[str, Any]] = []
         for message in validated:
+            is_new_evidence = message.message_id not in self._known_message_ids
             self._known_message_ids.add(message.message_id)
             evidence_ids.append(message.message_id)
             payload_messages.append(self._message_payload(message))
-            if message.message_id not in {
-                item.evidence_id for item in self._evidence
-            }:
+            if is_new_evidence:
                 self._evidence.append(
                     ContextEvidence(
                         evidence_id=message.message_id,

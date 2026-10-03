@@ -185,6 +185,17 @@ python -m unittest discover -s tests -v
 
 测试只使用合成数据，不读取 `chat_exports/` 中的私人资料。PostgreSQL 集成测试默认使用本地 `notalone_test` 库，也可用 `NOTALONE_TEST_DATABASE_URL` 指定其他以 `_test` 结尾的隔离库；每个用例使用随机 owner 并只清理自己的合成数据，测试拒绝连接名称不以 `_test` 结尾的数据库。
 
+### 核心业务闭环验收
+
+```bash
+conda activate NotAlone
+NOTALONE_DISABLE_DOTENV=1 python -m unittest tests.integration.server.test_core_business_flow -v
+```
+
+此验收从公开回环 HTTP 入口串联“预览 → 确认联系人 → 导入 → 显式执行 Worker → 检索 → 候选与依据 → 同键重放 → 删除来源”。导入、固定任务步骤、记忆存储、PostgreSQL 检索和候选存储均使用真实模块，只有模型使用 scripted fake。用例自己创建、迁移并清理随机 `_test` 库，需要本机 PostgreSQL 和建库权限，不使用现有业务库或外部模型凭据。
+
+它验证核心接线、联系人隔离、来源依据、幂等和删除；不证明真实模型的语义质量或微信现场集成可用。导入完成仍需显式运行 Worker，自动触发、增量记忆任务接线和空表达方向的建议流程属于后续业务工作。
+
 ## 进一步阅读
 
 - [CONTEXT.md](CONTEXT.md)：统一领域词汇
