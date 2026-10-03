@@ -127,6 +127,37 @@ class PostgresBackgroundTaskRepository:
             )
         return task_id
 
+    def record_queued_reason(
+        self, *, owner_id: UUID, contact_id: UUID, task_id: UUID, error_code: str,
+    ) -> None:
+        """执行预检查失败只记录最小原因，不领取或改变步骤与重试预算。"""
+
+        if error_code not in {
+            "model_configuration_unavailable", "execution_resources_unavailable",
+        }:
+            raise ValueError("排队原因必须使用非正文错误分类。")
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                connection.execute(
+                    """
+                    UPDATE public.background_task AS task
+                    SET last_error_code = %s, updated_at = now()
+                    WHERE task.owner_id = %s AND task.contact_id = %s
+                      AND task.id = %s AND task.status = 'queued'
+                      AND task.task_type = 'import'
+                      AND EXISTS (
+                          SELECT 1 FROM public.source_document AS source
+                          WHERE source.id = task.source_document_id
+                            AND source.owner_id = task.owner_id
+                            AND source.contact_id = task.contact_id
+                            AND source.status = 'active'
+                      )
+                    """,
+                    (error_code, owner_id, contact_id, task_id),
+                )
+        except psycopg.Error:
+            raise BackgroundTaskPersistenceError("排队原因记录失败。") from None
+
     def get_task(
         self,
         *,
@@ -358,6 +389,7 @@ class PostgresBackgroundTaskRepository:
                     """
                     UPDATE public.background_task
                     SET status = %s,
+                        last_error_code = NULL,
                         current_step = %s,
                         model_version = COALESCE(%s, model_version),
                         rule_version = COALESCE(%s, rule_version),

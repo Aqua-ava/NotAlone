@@ -23,9 +23,13 @@ from notalone.ingest.import_command import (
 )
 from notalone.ingest.models import ContactSelection, ImportConfirmationRequest
 from notalone.ingest.preview import build_preview
-from notalone.tasks.command import run_worker
+from notalone.tasks.command import run_worker, WorkerCommandStatus
 from notalone.tasks.worker import BackgroundTaskWorker
 from notalone.application.model_priority import ModelPriorityControl, ModelWorkStopped
+from notalone.persistence.background_tasks import (
+    BackgroundTaskNotFoundError, PostgresBackgroundTaskRepository,
+)
+from notalone.tasks.models import BackgroundTaskStatus
 
 
 class ImportService:
@@ -114,12 +118,7 @@ ProgressEvent = Callable[[TaskProgressUpdate], None]
 
 
 class TaskHost:
-    """进程内全局串行任务执行宿主（ADR-018 全局串行）。
-
-    每个联系人最多一个执行中线程；与命令行 Worker 共用同一全局锁，
-    保证同一任务不会被两个执行者并发处理。任务触发始终由用户动作
-    发起，不引入定时器或无人值守调度。
-    """
+    """保留当前后端收到的任务唤醒，执行仍受全局锁与联系人租约保护。"""
 
     __slots__ = (
         "_event_publisher",
@@ -132,6 +131,9 @@ class TaskHost:
         "_stopped",
         "_stop_complete",
         "_connections",
+        "_pending",
+        "_active",
+        "_task_repository",
     )
 
     def __init__(
@@ -141,11 +143,13 @@ class TaskHost:
         lock_connection_builder: Callable[[], psycopg.Connection],
         event_publisher: ProgressEvent,
         model_priority: ModelPriorityControl | None = None,
+        task_repository: PostgresBackgroundTaskRepository | None = None,
     ) -> None:
         self._worker_builder = worker_builder
         self._lock_connection_builder = lock_connection_builder
         self._event_publisher = event_publisher
         self._model_priority = model_priority
+        self._task_repository = task_repository
         self._stopped = threading.Event()
         self._stop_complete = threading.Event()
         self._connections: dict[int, psycopg.Connection] = {}
@@ -155,6 +159,8 @@ class TaskHost:
         self._lock = threading.RLock()
         self._threads: dict[tuple[UUID, UUID], threading.Thread] = {}
         self._progress: dict[tuple[UUID, UUID], dict[str, object]] = {}
+        self._pending: dict[tuple[UUID, UUID], dict[UUID | None, bool]] = {}
+        self._active: dict[tuple[UUID, UUID], UUID | None] = {}
 
     def start(
         self, *, owner_id: UUID, contact_id: UUID, task_id: UUID | None = None,
@@ -168,26 +174,52 @@ class TaskHost:
             existing = self._threads.get(scope)
             if existing is not None and existing.is_alive():
                 return {"status": "busy"}
-            thread = threading.Thread(
-                target=self._run,
-                name=f"notalone-task-{contact_id}",
-                args=(owner_id, contact_id, task_id),
-                daemon=True,
-            )
-            self._threads[scope] = thread
-            self._set_progress(
-                scope,
-                {
-                    "task_id": str(task_id) if task_id is not None else None,
-                    "step": "claiming",
-                    "status": "running",
-                    "processed_count": 0,
-                    "attempt_count": 0,
-                    "retry_count": 0,
-                },
-            )
-            thread.start()
+            self._pending[scope] = {task_id: False}
+            self._launch(scope, task_id)
             return {"status": "started"}
+
+    def wake(
+        self, *, owner_id: UUID, contact_id: UUID, task_id: UUID,
+    ) -> dict[str, object]:
+        """导入提交后的可靠唤醒；合并同任务，不扫描其他持久队列。"""
+
+        with self._lock:
+            if self._stopped.is_set():
+                raise ModelWorkStopped("任务宿主正在停止。")
+            if self._task_repository is None:
+                raise RuntimeError("自动处理缺少持久任务状态仓储。")
+            scope = (owner_id, contact_id)
+            # 显式执行可能在锁忙后结束；同任务唤醒仍须保留可靠等待。
+            self._pending.setdefault(scope, {})[task_id] = True
+            if scope in self._active and self._active[scope] == task_id:
+                return {"status": "busy"}
+            existing = self._threads.get(scope)
+            if existing is not None and existing.is_alive():
+                return {"status": "queued"}
+            self._launch(scope, task_id)
+            return {"status": "started"}
+
+    def _launch(self, scope: tuple[UUID, UUID], task_id: UUID | None) -> None:
+        owner_id, contact_id = scope
+        thread = threading.Thread(
+            target=self._run,
+            name=f"notalone-task-{contact_id}",
+            args=(owner_id, contact_id),
+            daemon=True,
+        )
+        self._threads[scope] = thread
+        self._set_progress(
+            scope,
+            {
+                "task_id": str(task_id) if task_id is not None else None,
+                "step": "claiming",
+                "status": "running",
+                "processed_count": 0,
+                "attempt_count": 0,
+                "retry_count": 0,
+            },
+        )
+        thread.start()
 
     def stop(self, *, timeout: float = 4.0) -> None:
         """拒绝新工作并有界等待；无法中断的旧调用依靠原租约恢复。"""
@@ -228,12 +260,69 @@ class TaskHost:
                 return {"status": "finished", "progress": progress}
             return {"status": "idle", "progress": None}
 
-    def _run(
+    def _run(self, owner_id: UUID, contact_id: UUID) -> None:
+        scope = (owner_id, contact_id)
+        current = threading.current_thread()
+        try:
+            while not self._stopped.is_set():
+                with self._lock:
+                    pending = self._pending.get(scope, {})
+                    if not pending:
+                        # 与 wake 的登记共享锁，退出窗口不会吞掉新任务。
+                        self._pending.pop(scope, None)
+                        if self._threads.get(scope) is current:
+                            self._threads.pop(scope, None)
+                        return
+                    task_id = next(iter(pending))
+                    reliable = pending.pop(task_id)
+                    self._active[scope] = task_id
+                delay = 0.25
+                while not self._stopped.is_set():
+                    if reliable and task_id is not None:
+                        try:
+                            if not self._can_execute(scope, task_id):
+                                break
+                        except Exception:
+                            self._defer(scope, task_id, "execution_resources_unavailable")
+                            break
+                    status = self._execute(owner_id, contact_id, task_id)
+                    if not reliable or status not in {
+                        WorkerCommandStatus.BUSY, WorkerCommandStatus.IDLE,
+                    }:
+                        break
+                    if self._stopped.wait(delay):
+                        break
+                    delay = min(30.0, delay * 2)
+                with self._lock:
+                    self._active.pop(scope, None)
+        finally:
+            with self._lock:
+                if self._threads.get(scope) is current:
+                    self._active.pop(scope, None)
+                    self._threads.pop(scope, None)
+                if self._stopped.is_set():
+                    self._pending.pop(scope, None)
+
+    def _can_execute(self, scope: tuple[UUID, UUID], task_id: UUID) -> bool:
+        if self._task_repository is None:
+            return True
+        try:
+            task = self._task_repository.get_task(
+                owner_id=scope[0], contact_id=scope[1], task_id=task_id,
+            )
+        except BackgroundTaskNotFoundError:
+            return False
+        return task.status not in {
+            BackgroundTaskStatus.SUCCEEDED, BackgroundTaskStatus.FAILED,
+            BackgroundTaskStatus.CANCELLED,
+        }
+
+    def _execute(
         self,
         owner_id: UUID,
         contact_id: UUID,
         task_id: UUID | None,
-    ) -> None:
+    ) -> WorkerCommandStatus:
         """在全局锁内串行执行任务，每步经事件回调实时推送进度。"""
 
         current_task_id = task_id
@@ -265,12 +354,23 @@ class TaskHost:
         lock_connection = None
         try:
             if self._stopped.is_set():
-                return
-            worker = self._worker_builder()
-            lock_connection = self._lock_connection_builder()
+                return WorkerCommandStatus.STOPPED
+            try:
+                worker = self._worker_builder()
+            except ValueError:
+                self._defer((owner_id, contact_id), task_id, "model_configuration_unavailable")
+                return WorkerCommandStatus.FAILED
+            except Exception:
+                self._defer((owner_id, contact_id), task_id, "execution_resources_unavailable")
+                return WorkerCommandStatus.FAILED
+            try:
+                lock_connection = self._lock_connection_builder()
+            except Exception:
+                self._defer((owner_id, contact_id), task_id, "execution_resources_unavailable")
+                return WorkerCommandStatus.FAILED
             with self._lock:
                 if self._stopped.is_set():
-                    return
+                    return WorkerCommandStatus.STOPPED
                 self._connections[id(lock_connection)] = lock_connection
             result = run_worker(
                 worker=worker,
@@ -296,6 +396,7 @@ class TaskHost:
                     error_code="internal_error",
                 )
             )
+            return WorkerCommandStatus.FAILED
         else:
             self._record(
                 TaskProgressUpdate(
@@ -314,19 +415,36 @@ class TaskHost:
                     error_code=result.error_code,
                 )
             )
+            return result.status
         finally:
             try:
                 if lock_connection is not None:
                     lock_connection.close()
+            except Exception:
+                # 锁连接收尾异常不能丢失当前线程中的后续唤醒。
+                pass
             finally:
-                # 关闭错误也不能留下线程登记；旧线程仅能清除自己的条目。
-                current = threading.current_thread()
                 with self._lock:
                     if lock_connection is not None:
                         self._connections.pop(id(lock_connection), None)
-                    scope = (owner_id, contact_id)
-                    if self._threads.get(scope) is current:
-                        self._threads.pop(scope, None)
+
+    def _defer(
+        self, scope: tuple[UUID, UUID], task_id: UUID | None, error_code: str,
+    ) -> None:
+        if self._task_repository is not None and task_id is not None:
+            try:
+                self._task_repository.record_queued_reason(
+                    owner_id=scope[0], contact_id=scope[1], task_id=task_id,
+                    error_code=error_code,
+                )
+            except Exception:
+                # 数据库本身不可用时无法持久记录，仍不得误报模型执行失败。
+                pass
+        self._record(TaskProgressUpdate(
+            owner_id=scope[0], contact_id=scope[1], task_id=task_id,
+            step="claiming", status="queued", processed_count=0,
+            attempt_count=0, retry_count=0, error_code=error_code,
+        ))
 
     def _record(self, update: TaskProgressUpdate) -> None:
         self._set_progress((update.owner_id, update.contact_id), update.as_payload())

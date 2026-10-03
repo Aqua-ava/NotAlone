@@ -72,11 +72,25 @@ class ScriptedCoreModel(FakeMessagesListChatModel):
 
     bound_tool_names: list[str] = []
     seen_calls: list[list[BaseMessage]] = []
+    response_gates: dict[int, threading.Event] = {}
 
     def __init__(self) -> None:
         super().__init__(responses=[])
         self.bound_tool_names = []
         self.seen_calls = []
+        self.response_gates = {}
+
+    def pause_next_response(self) -> threading.Event:
+        """在实际模型入口等待夹具准备，尚不消耗脚本或调用序号。"""
+
+        gate = threading.Event()
+        self.response_gates[len(self.seen_calls)] = gate
+        return gate
+
+    def wait_for_response(self) -> None:
+        gate = self.response_gates.get(len(self.seen_calls))
+        if gate is not None and not gate.wait(60):
+            raise TimeoutError("合成模型响应未在时限内准备完成。")
 
     def bind_tools(
         self, tools: Sequence[Any], *, tool_choice: str | None = None,
@@ -95,6 +109,7 @@ class ScriptedCoreModel(FakeMessagesListChatModel):
         self, messages: list[BaseMessage], stop: list[str] | None = None,
         run_manager: Any = None, **kwargs: Any,
     ) -> Any:
+        self.wait_for_response()
         if len(self.seen_calls) >= len(self.responses):
             raise AssertionError("核心验收模型脚本已耗尽，禁止额外调用。")
         self.i = len(self.seen_calls)
@@ -197,6 +212,7 @@ class CoreBusinessFlowFixture:
         self.draft_evidence_id = uuid4()
         self.extraction_model = self.extraction_model_factory()
         self.reply_model = self.reply_model_factory()
+        self.addCleanup(self._release_response_gates)
         self.bindings = PostgresConversationBindingRepository(self.database_url)
         self.lock_connections: list[psycopg.Connection] = []
         self.addCleanup(self._close_lock_connections)
@@ -214,6 +230,11 @@ class CoreBusinessFlowFixture:
                 )
         self.backend = self._backend(self.owner_id)
         self.other_backend = self._backend(self.other_owner_id)
+
+    def _release_response_gates(self) -> None:
+        for model in (self.extraction_model, self.reply_model):
+            for gate in model.response_gates.values():
+                gate.set()
 
     def _close_lock_connections(self) -> None:
         for connection in self.lock_connections:
@@ -289,6 +310,7 @@ class CoreBusinessFlowFixture:
                 ),
                 lock_connection_builder=lock_connection, event_publisher=publish_progress,
                 model_priority=priority,
+                task_repository=PostgresBackgroundTaskRepository(self.database_url),
             ),
             memory_service=MemoryService(
                 contact_memory=PostgresMemoryStore(self.database_url),
@@ -346,7 +368,10 @@ class CoreBusinessFlowFixture:
         self.assertEqual(status, 200, payload)
         return payload
 
-    def _import(self, backend: HttpBackend, label: str, tea: str) -> dict[str, Any]:
+    def _import(
+        self, backend: HttpBackend, label: str, tea: str,
+        *, hold_model_response: bool = False,
+    ) -> dict[str, Any]:
         path = Path(self.temporary.name) / f"synthetic-{label}.jsonl"
         owner_external = f"wxid_synthetic_{backend.token}"
         contact_external = f"wxid_synthetic_{uuid4().hex}"
@@ -375,6 +400,11 @@ class CoreBusinessFlowFixture:
         self.assertEqual(self._get(backend, "/api/contacts")["contacts"], before)
         status, rejected = backend.request("/api/imports/commit", {"path": str(path)})
         self.assertEqual(status, 400, rejected)
+        # 提交前先封住外部模型入口；真实导入、Worker 和存储仍照常执行。
+        response_gate = self.extraction_model.pause_next_response()
+        stream = None if hold_model_response else backend.events()
+        if stream is not None:
+            self.addCleanup(stream.close)
         status, imported = backend.request("/api/imports/commit", {
             "path": str(path), "new_contact_name": f"合成联系人{label}",
         })
@@ -385,8 +415,9 @@ class CoreBusinessFlowFixture:
         source = self._get(backend, f"/api/contacts/{contact_id}/sources")["sources"][0]
         self.assertEqual(len(messages), 3)
         self.assertEqual(source["status"], "active")
-        self.assertEqual(self._get(backend, f"/api/tasks/status?contact_id={contact_id}"),
-                         {"status": "idle", "progress": None})
+        task = self._get(backend, f"/api/tasks/status?contact_id={contact_id}"
+                        f"&task_id={imported['task_id']}")
+        self.assertIn(task["status"], {"queued", "running"}, task)
         self.assertEqual(self._get(backend, f"/api/contacts/{contact_id}/memories")["memories"], [])
         fact_message = next(item for item in messages if "我平时喜欢" in item["text"])
         target = next(item for item in messages if "一起聊聊" in item["text"])
@@ -414,32 +445,59 @@ class CoreBusinessFlowFixture:
                               "quote": f"我平时喜欢{tea}。"}],
             }]}),
         ])
-        return {"contact_id": contact_id, "task_id": imported["task_id"],
-                "source": source, "messages": messages,
-                "target": target, "fact_message": fact_message, "tea": tea}
+        result = {"contact_id": contact_id, "task_id": imported["task_id"],
+                  "source": source, "messages": messages, "target": target,
+                  "fact_message": fact_message, "tea": tea,
+                  "model_response_gate": response_gate}
+        if not hold_model_response:
+            response_gate.set()
+            try:
+                result["event_steps"] = self._read_import_events(backend, result, stream)
+            finally:
+                stream.close()
+            self._wait_finished(backend, contact_id)
+        return result
+
+    def _start_import_worker(
+        self, backend: HttpBackend, imported: dict[str, Any],
+    ) -> tuple[int, dict[str, Any]]:
+        """保留公开手动入口，允许与导入已经触发的原任务重合。"""
+
+        response = backend.request("/api/tasks/run", {
+            "contact_id": imported["contact_id"], "task_id": imported["task_id"],
+        })
+        self.assertEqual(response[0], 200, response)
+        self.assertIn(response[1]["status"], {"started", "busy"}, response)
+        imported["model_response_gate"].set()
+        return response
+
+    def _read_import_events(
+        self, backend: HttpBackend, imported: dict[str, Any], stream: Any,
+    ) -> list[str]:
+        self.assertEqual(stream.status, 200)
+        steps = []
+        while len(steps) < 5:
+            line = stream.readline()
+            self.assertTrue(line, "HTTP SSE 在五步完成前结束。")
+            if not line.startswith(b"data: "):
+                continue
+            event = json.loads(line.removeprefix(b"data: "))
+            if event["contact_id"] != imported["contact_id"]:
+                continue
+            self.assertEqual(event["owner_id"], str(backend.owner_id))
+            progress = event["payload"]
+            self.assertEqual(event["type"], "task.progress")
+            self.assertEqual(progress["task_id"], imported["task_id"])
+            self.assertEqual(progress["status"], "succeeded", progress)
+            steps.append(progress["step"])
+        self.assertEqual(steps, ["parse", "normalize", "extract_memory", "index", "verify"])
+        return steps
 
     def _run_import(self, backend: HttpBackend, imported: dict[str, Any]) -> None:
         contact_id = imported["contact_id"]
-        with backend.events() as stream:
-            self.assertEqual(stream.status, 200)
-            status, started = backend.request("/api/tasks/run", {"contact_id": contact_id})
-            self.assertEqual((status, started), (200, {"status": "started"}))
-            steps = []
-            while len(steps) < 5:
-                line = stream.readline()
-                self.assertTrue(line, "HTTP SSE 在五步完成前结束。")
-                if not line.startswith(b"data: "):
-                    continue
-                event = json.loads(line.removeprefix(b"data: "))
-                if event["contact_id"] != contact_id:
-                    continue
-                self.assertEqual(event["owner_id"], str(backend.owner_id))
-                progress = event["payload"]
-                self.assertEqual(event["type"], "task.progress")
-                self.assertEqual(progress["status"], "succeeded", progress)
-                steps.append(progress["step"])
-            self.assertEqual(steps, ["parse", "normalize", "extract_memory", "index", "verify"])
         self._wait_finished(backend, contact_id)
+        self.assertEqual(imported["event_steps"],
+                         ["parse", "normalize", "extract_memory", "index", "verify"])
         memories = self._get(backend, f"/api/contacts/{contact_id}/memories")["memories"]
         self.assertEqual(len(memories), 1)
         self.assertEqual(memories[0]["text"], f"联系人喜欢{imported['tea']}。")
@@ -455,7 +513,7 @@ class CoreBusinessFlowFixture:
                 self.assertEqual(state["progress"]["status"], "succeeded", state)
                 return
             time.sleep(0.02)
-        self.fail("显式启动的导入 Worker 未在时限内完成。")
+        self.fail("导入 Worker 未在时限内完成。")
 
     def _reply(self, backend: HttpBackend, imported: dict[str, Any]) -> tuple[dict, dict]:
         self.reply_model.responses.extend([

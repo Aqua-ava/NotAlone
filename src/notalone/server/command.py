@@ -254,7 +254,7 @@ def _build_task_host(
     database_url: str, events: EventBus,
     *, model_priority: ModelPriorityControl | None = None,
 ) -> TaskHost | None:
-    """装配进程内任务宿主；模型或数据库配置不可用时返回 None。"""
+    """装配任务宿主；执行前再检查模型与资源，不提前领取持久任务。"""
 
     import psycopg
 
@@ -345,6 +345,7 @@ def _build_task_host(
             lock_connection_builder=build_lock_connection,
             event_publisher=publish_progress,
             model_priority=model_priority,
+            task_repository=PostgresBackgroundTaskRepository(database_url),
         )
     except Exception:
         return None

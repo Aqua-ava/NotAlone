@@ -1149,6 +1149,8 @@ class BackendApp:
         import_service = self._import_service
         task_host = self._task_host
         task_service = self._task_service
+        if owner_id is None:
+            raise ImportTaskRequestInvalid()
 
         if path == "/api/imports/preview":
             if method != "POST" or import_service is None:
@@ -1218,6 +1220,27 @@ class BackendApp:
                     HTTPStatus.CONFLICT,
                     {"error": "import_commit_failed"},
                 )
+            task_identity: tuple[UUID, UUID] | None = None
+            should_defer = task_host is None
+            try:
+                task_identity = (
+                    UUID(str(result["contact_id"])), UUID(str(result["task_id"])),
+                )
+                if task_host is not None:
+                    task_host.wake(
+                        owner_id=owner_id, contact_id=task_identity[0],
+                        task_id=task_identity[1],
+                    )
+            except Exception:
+                # 消息已经提交，后台执行不可用不能改变导入结果。
+                should_defer = True
+            if should_defer and task_service is not None and task_identity is not None:
+                try:
+                    task_service.defer(
+                        owner_id=owner_id, contact_id=task_identity[0], task_id=task_identity[1],
+                    )
+                except Exception:
+                    pass
             return _json_response(HTTPStatus.OK, result)
 
         if path in {"/api/tasks/run", "/api/tasks/retry"}:
