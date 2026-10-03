@@ -1,0 +1,189 @@
+{
+  "kind": "synthetic_smoke_only",
+  "health": {
+    "status": "healthy",
+    "database": "connected",
+    "db_acquire_ms": 1.7,
+    "db_pool_waiting": 0,
+    "db_pool_in_use": 0,
+    "db_pool_max": 100,
+    "db_pool_idle": 5
+  },
+  "bank_id": "notalone-experiment-5a970dca01f941fb030affad1f726db8",
+  "scope": {
+    "owner_id": "132ee386-f04c-4ef5-89e0-a064d675fb82",
+    "contact_id": "89ec537f-9dea-42bc-b196-ff04f8ec5e93"
+  },
+  "bank_config": {
+    "bank_id": "notalone-experiment-5a970dca01f941fb030affad1f726db8",
+    "config": {
+      "mcp_enabled_tools": null,
+      "observation_scope_limits": null,
+      "recall_include_chunks": true,
+      "recall_budget_max": 2000,
+      "retain_structured_chunk_size": null,
+      "recall_budget_adaptive_mid": 0.075,
+      "disposition_literalism": null,
+      "store_document_text": true,
+      "consolidation_source_facts_max_tokens_per_observation": 256,
+      "disposition_skepticism": null,
+      "consolidation_max_memories_per_round": 100,
+      "enable_observations": false,
+      "entities_allow_free_form": true,
+      "enable_graph_retrieval": true,
+      "recall_chunks_max_tokens": 1000,
+      "knowledge_page_default_trigger": null,
+      "enable_text_search": true,
+      "consolidation_llm_parallelism": 4,
+      "retain_custom_instructions": null,
+      "llm_gemini_safety_settings": null,
+      "consolidation_source_facts_max_tokens": 4096,
+      "recall_budget_min": 20,
+      "memory_defense": null,
+      "max_observations_per_scope": -1,
+      "enable_reranking": true,
+      "retain_strategies": null,
+      "enable_temporal_retrieval": true,
+      "consolidation_strategies": null,
+      "recall_budget_fixed_high": 1000,
+      "mental_model_min_refresh_interval_seconds": 0,
+      "recall_budget_fixed_mid": 300,
+      "entity_labels": null,
+      "disposition_empathy": null,
+      "reflect_default_options": null,
+      "consolidation_llm_batch_size": 8,
+      "recall_max_tokens": 2048,
+      "retain_chunk_batch_size": 100,
+      "observations_mission": null,
+      "reflect_mission": null,
+      "audit_log_enabled": false,
+      "reflect_source_facts_max_tokens": -1,
+      "recall_budget_adaptive_high": 0.25,
+      "retain_max_attachments_per_chunk": 8,
+      "recall_budget_fixed_low": 100,
+      "recall_budget_function": "fixed",
+      "retain_default_strategy": null,
+      "retain_mission": null,
+      "recall_budget_adaptive_low": 0.025,
+      "enable_auto_consolidation": false,
+      "retain_chunk_size": 3000,
+      "retain_extraction_mode": "chunks"
+    },
+    "overrides": {
+      "retain_extraction_mode": "chunks",
+      "enable_auto_consolidation": false
+    }
+  },
+  "initial_empty_bank": {
+    "items": [],
+    "total": 0,
+    "limit": 1,
+    "offset": 0
+  },
+  "initial_mental_models": {
+    "items": [],
+    "total": 0,
+    "limit": 100,
+    "offset": 0
+  },
+  "fixture": [
+    {
+      "content": "对方乳糖不耐受",
+      "document_id": "memory-c98a7a11-fe92-432a-98aa-91a90cb6b71d",
+      "timestamp": "unset",
+      "update_mode": "replace",
+      "metadata": {
+        "local_memory_id": "c98a7a11-fe92-432a-98aa-91a90cb6b71d",
+        "owner_id": "132ee386-f04c-4ef5-89e0-a064d675fb82",
+        "contact_id": "89ec537f-9dea-42bc-b196-ff04f8ec5e93",
+        "layer": "confirmed_memory",
+        "revision": "1"
+      }
+    },
+    {
+      "content": "对方喜欢周末爬山",
+      "document_id": "memory-080c7439-369a-4110-a5e7-6ee7407b0416",
+      "timestamp": "unset",
+      "update_mode": "replace",
+      "metadata": {
+        "local_memory_id": "080c7439-369a-4110-a5e7-6ee7407b0416",
+        "owner_id": "132ee386-f04c-4ef5-89e0-a064d675fb82",
+        "contact_id": "89ec537f-9dea-42bc-b196-ff04f8ec5e93",
+        "layer": "confirmed_memory",
+        "revision": "1"
+      }
+    },
+    {
+      "content": "对方喜欢读科幻小说",
+      "document_id": "memory-dd59bfd3-3f63-45c4-9f8a-d85f7df1aadf",
+      "timestamp": "unset",
+      "update_mode": "replace",
+      "metadata": {
+        "local_memory_id": "dd59bfd3-3f63-45c4-9f8a-d85f7df1aadf",
+        "owner_id": "132ee386-f04c-4ef5-89e0-a064d675fb82",
+        "contact_id": "89ec537f-9dea-42bc-b196-ff04f8ec5e93",
+        "layer": "confirmed_memory",
+        "revision": "1"
+      }
+    }
+  ],
+  "retain": {
+    "success": true,
+    "bank_id": "notalone-experiment-5a970dca01f941fb030affad1f726db8",
+    "items_count": 3,
+    "async": false,
+    "operation_id": null,
+    "operation_ids": null,
+    "usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "cached_tokens": 0,
+      "thoughts_tokens": 0
+    }
+  },
+  "query": "牛奶喝完肚子难受，晚餐能换一道吗",
+  "tau_B": 0.003,
+  "tau_status": "临时 smoke 阈值，尚未独立校准",
+  "score_field": "scores.reranker（HTTP归一化值）",
+  "full_elapsed_ms": 54.616999987047166,
+  "baseline_selected": [],
+  "selected": [
+    {
+      "memory_id": "c98a7a11-fe92-432a-98aa-91a90cb6b71d",
+      "text": "对方乳糖不耐受",
+      "revision": 1,
+      "source_ids": [
+        "a9b80d08-1d3b-473b-946e-f6822c627034"
+      ]
+    }
+  ],
+  "diagnostics": {
+    "status": "success",
+    "candidates": 2,
+    "selected_ids": [
+      "c98a7a11-fe92-432a-98aa-91a90cb6b71d"
+    ],
+    "rejected": [
+      [
+        "a7a5e97c-8581-4b5f-a182-819411c400ca",
+        "below_tau"
+      ]
+    ],
+    "error": "",
+    "scores": [
+      [
+        "235a0faa-5ab3-4d3f-a2fb-c2f1d796cd23",
+        0.006614051633841779,
+        0.006614051633841779
+      ],
+      [
+        "a7a5e97c-8581-4b5f-a182-819411c400ca",
+        0.00020062562850694238,
+        0.00020062562850694238
+      ]
+    ],
+    "service_diagnostics": "2026-10-04 01:30:15,333 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 牛奶喝完肚子难受,晚餐能换一道吗...\n2026-10-04 01:30:15,384 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-15333-faa461] Query: '牛奶喝完肚子难受,晚餐能换一道吗...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.010s\n  [2] Parallel retrieval (1 fact_types): semantic=2(0.000s), bm25=0(0.000s), graph=0(0.000s), temporal_extraction=0.001s | store=0.006s in 0.007s\n  [3] RRF merge: 2 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 2 candidates scored in 0.032s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 2 results\n  [6] Token filtering: 2 results, 15/4096 tokens in 0.000s\n  [phases] reranking=32ms, generate_query_embedding=10ms, parallel_retrieval=7ms, entity_build=2ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=51ms of 51ms\n  [phases:subsets] store_recall=6ms, retrieval_store_recall=6ms, retrieval_temporal_extraction=1ms, semaphore_wait=0ms\n[RECALL notalone-15333-faa461] Complete: 2 facts (15 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=2 | 0.051s\n"
+  },
+  "pass": true
+}

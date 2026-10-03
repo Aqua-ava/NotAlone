@@ -1,0 +1,22 @@
+{
+  "source_sha": "f7dd3f4fd7420f7beec60c32c965e5e5cf7be066",
+  "versions": {
+    "hindsight-api-slim": "0.10.2",
+    "sentence-transformers": "5.7.0",
+    "transformers": "5.12.1",
+    "torch": "2.13.0",
+    "pg0-embedded": "0.15.0",
+    "toktok-rs": "0.1.3"
+  },
+  "embedding": {
+    "model": "BAAI/bge-small-zh-v1.5",
+    "sha": "7999e1d3359715c523056ef9478215996d62a620"
+  },
+  "reranker": {
+    "model": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+    "sha": "1427fd652930e4ba29e8149678df786c240d8825"
+  },
+  "base_url": "http://127.0.0.1:18888",
+  "database": "独立 pg0 PostgreSQL，127.0.0.1:18543/postgres",
+  "inference": "CPU/local/offline"
+}
