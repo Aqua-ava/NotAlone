@@ -1,10 +1,10 @@
 # Hindsight 本机记忆召回对照实验
 
 > Triage: ready-for-agent
-> State: open
+> State: resolved
 > 日期：2026-10-04
 > 来源：Hindsight 一手资料与源码调研、NotAlone 代码核验，以及用户在 grill-with-docs 中确认的选择。
-> 状态：实验规格已确认；尚未实现、启动 Hindsight 或完成对照实验。本文不证明接入可用或召回收益。
+> 状态：隔离实验与正式对照已完成，结论为未达到接入门槛；完整 P95 超过 1 秒。生产路径未启用 Hindsight。
 
 ## 已确认的选择
 
@@ -189,4 +189,13 @@ Hindsight 调研锁定源码：`f7dd3f4fd7420f7beec60c32c965e5e5cf7be066`。以�
 - [重排分值转换与部分超时](https://github.com/vectorize-io/hindsight/blob/f7dd3f4fd7420f7beec60c32c965e5e5cf7be066/hindsight-api-slim/hindsight_api/engine/search/reranking.py#L407)说明字段非空不能单独证明重排完成。
 - [官方 observations](https://hindsight.vectorize.io/developer/observations)与[mental models](https://hindsight.vectorize.io/developer/mental-models)用于理解后续方向，本轮不评估。不能把 observation 的证据数量当作用户确认或事实正确概率。
 
-本轮不新增实现 tickets。按仓库工作流，需先展示任务粒度和依赖，用户认可后再发布任务。
+用户认可任务粒度和依赖后，已发布并完成四张任务：01 合成词法基线、02 本机真实服务、03 生命周期与隔离、04 独立校准和正式对照。
+
+## 执行完成记录
+
+- [正式报告](../../experiments/hindsight/COMPARISON.md)与逐查询证据已保存。A/B 各完成 103 次完整尝试，B 包含 100 次真实 HTTP 和 3 次无 token 跳过，失败和超时均为 0。
+- 最终中文改写宏 Recall@5 为 A 1.67%、B 15.00%，提高 13.33 个百分点；95 条质量组无关注入为 15/95→12/95。范围、状态、来源、预算、重复及权威字段违规为 0。
+- B 完整预热 P95 为 1,782.96 ms，未达到已确认的 1,000 ms 上限。保留失败结论，不用最终组回调参数；完成实验不等于批准生产接入。
+- 修复合法空 metadata 的候选拒绝后，真实 smoke 与 27 项生命周期复验通过。首轮 19/30 次 dev 失败及正式配置、数据、模型和源码摘要完整保留。
+- 全部 697 项单元测试、13 个实验模块 mypy 通过；[Standards/Spec 两轴审查](../../experiments/hindsight/review.md)完成。Standards 无硬性违规，2 处可选重复代码建议不阻塞结项；Spec 无偏差。
+- [收尾证据](../../experiments/hindsight/finalization.json)确认本实验 API/pg0 停止、独立数据库目录移除、两个端口关闭。保留公开模型和独立 venv 缓存；只处理新建合成资料，业务数据与默认配置未修改。

@@ -42,10 +42,16 @@ smoke 使用临时 `tau_B=0.003`，仅验证低词面重合正例、无关候选
 
 `stop` 只停止本实验 API 与独立 pg0，保留数据库/模型，便于生命周期和重启验证。完成整轮实验后，先停止服务，再通过 pg0 的独立实例 drop 清除本任务数据库；只清理 `notalone-hindsight-f7dd3f4` 与上述 runtime 目录。无需也不得操作业务数据库或其他 pg0 实例。公开模型缓存可以一并清除或保留，说明中应记录选择。
 
-当前服务暂保留供任务 03/04 使用。smoke 原始结果在 [smoke-result.json](smoke-result.json)，包含合成 UUID 和 document 映射；版本证据在 [runtime-manifest.json](runtime-manifest.json)。这些资料可以提交；完整安装缓存、数据库与进程日志不提交。
+本轮收尾后服务已停止，独立数据库目录已移除；公开模型和 venv 缓存保留。smoke 原始结果在 [smoke-result.json](smoke-result.json)，包含合成 UUID 和 document 映射；版本证据在 [runtime-manifest.json](runtime-manifest.json)。完整安装缓存、数据库与进程日志不提交。再次执行 `start` 会在相同隔离路径建立空库，不恢复旧实验 bank。
 
-## 验证和限制
+## 02 smoke 的验证和限制（历史记录）
 
 已运行真实源码服务的 retain → recall → 本地复验 → Context.build → validate_current。现有词法 A 在本 smoke 正例为空，B 选入「对方乳糖不耐受」；单次耗时仅是 smoke 数字。尚未运行独立校准集或最终评测，不承诺泛化收益。本任务测试覆盖语义过门、低分拒绝、多 chunk 去重、旧 revision 拒绝与排序、同次 HTTP 诊断及云端/其他 bank 拒绝；超时用外部 HTTP 替身验证确定性拒绝，真实部分超时故障留待生命周期任务。
 
 本机 Docker Desktop 已开启，但服务实际采用原生 venv + pg0，没有启动实验容器；Docker 状态不证明本服务以容器运行。磁盘持久化、备份残留及正式环境删除效果不在本次 smoke 证明范围内。
+
+## 当前完整结果与清理
+
+正式对照、独立校准与生命周期验证现已完成，见 [COMPARISON.md](COMPARISON.md)。当前配置的覆盖和整体无关注入达到规格门槛，完整 P95 1,782.96 ms 未达到 1,000 ms；生产未接入。
+
+最终执行 `PYTHONPATH=src python -m notalone.experiments.hindsight_runtime stop`，再核对 pg0 实例名 `notalone-hindsight-f7dd3f4`、端口 18543、独立 `database` 路径及 stopped 状态后调用 `Pg0.drop(force=True)`。已确认数据库目录与 service.pid 不存在、18888/18543 均无监听；额外 formatter venv 也已删除。[finalization.json](finalization.json)保存实际证据。模型、独立 venv 和纯合成 service.log 留在 `/tmp/notalone-hindsight-runtime-f7dd3f4`，不操作业务库、其他 pg0 实例或共享 Docker。

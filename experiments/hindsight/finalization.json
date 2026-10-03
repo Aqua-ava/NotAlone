@@ -1,0 +1,46 @@
+{
+  "completed_at": "2026-10-03T18:25:16.094643+00:00",
+  "database": {
+    "instance_name": "notalone-hindsight-f7dd3f4",
+    "port": 18543,
+    "data_dir": "/tmp/notalone-hindsight-runtime-f7dd3f4/database",
+    "stopped_before_drop": true,
+    "database_directory_absent": true
+  },
+  "api_port_18888_closed": true,
+  "database_port_18543_closed": true,
+  "service_pid_file_absent": true,
+  "formatter_temporary_environment_absent": true,
+  "preserved_public_runtime_directories": [
+    "/tmp/notalone-hindsight-runtime-f7dd3f4/models",
+    "/tmp/notalone-hindsight-runtime-f7dd3f4/venv"
+  ],
+  "preserved_synthetic_log": "/tmp/notalone-hindsight-runtime-f7dd3f4/service.log",
+  "scope": "仅本实验资源；不操作业务库、其他pg0实例或共享Docker。",
+  "limitation": "逻辑删除与目录移除不证明WAL历史、备份或介质物理擦除。",
+  "checks": {
+    "all_unit_tests": {
+      "passed": 697,
+      "elapsed_seconds": 5.716,
+      "command": "NOTALONE_DISABLE_DOTENV=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=src python -m unittest discover -s tests/unit -t ."
+    },
+    "mypy": {
+      "source_files": 13,
+      "result": "no issues found",
+      "command": "PYTHONPATH=src python -m mypy src/notalone/experiments --follow-imports=silent"
+    },
+    "standards_review": {
+      "hard_breaches": 0,
+      "optional_judgements": 2
+    },
+    "spec_review": {
+      "findings": 0
+    },
+    "review_base": "481cc3f016cdae6bac5b28acfd9076317c49be71",
+    "review_head": "50a9a16daf9507907f33930e0924a1e9d260b1cb"
+  },
+  "connection_probe": {
+    "18888": "ConnectionRefusedError",
+    "18543": "ConnectionRefusedError"
+  }
+}

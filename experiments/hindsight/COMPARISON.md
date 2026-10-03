@@ -97,4 +97,6 @@ PYTHONPATH=src python -m mypy src/notalone/experiments --follow-imports=silent
 
 实际通过 36 个完整实验测试、66 个原有词法/召回/Context 回归，13 个实验源码模块 mypy 和 `git diff --check` 通过。最小 red→green 验证 dev 门的真实 Context 结果、超时保留分母、nullable metadata 不猜身份；分位数测试包含 6 个 1,500 ms 失败，不能以成功快样本替代全部 P95。
 
-清理只读取本轮 owned manifest，核对四个精确 bank 和当前 internal_id 未被另一轮替换；首轮和正式轮均已验证删除后各活动表计数及作用域索引归零，见 [正式清理证据](comparison-v2-r2/cleanup.json)。原始证据保留在 Git，API/pg0 和独立 runtime 最终停止与清理由主 Agent 收尾。Standards/Spec 两轴与全仓回归由主 Agent 统一执行；本文不提前声明已通过。
+清理只读取本轮 owned manifest，核对四个精确 bank 和当前 internal_id 未被另一轮替换；首轮和正式轮均已验证删除后各活动表计数及作用域索引归零，见 [正式清理证据](comparison-v2-r2/cleanup.json)。原始证据保留在 Git。最终 API/pg0 已停止，独立数据库目录已移除，18888/18543 关闭、service.pid 不存在，额外 formatter venv 已删除；保留公开模型、独立 venv 缓存和纯合成 service.log。[收尾证据](finalization.json)记录实际检查，目录移除仍不证明介质物理擦除。
+
+根收尾执行 `NOTALONE_DISABLE_DOTENV=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=src python -m unittest discover -s tests/unit -t .`，697 项单元测试通过；`PYTHONPATH=src python -m mypy src/notalone/experiments --follow-imports=silent` 对 13 个模块通过。未连接业务库，也未把全仓单元测试称为产品渠道端到端验证。[两轴审查](review.md)完成：Standards 无硬性违规、2 处可选重复逻辑建议；Spec 无偏差。任务执行已完成，接入结论仍为未达到门槛。
