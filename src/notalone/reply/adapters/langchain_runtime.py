@@ -25,7 +25,7 @@ from langgraph.errors import GraphRecursionError
 
 from notalone.reply.adapters.async_runner import run_with_timeout
 
-from notalone.reply.context import ReplyContext
+from notalone.reply.context import ReplyContext, allows_history
 from notalone.reply.runtime import (
     ReplyRuntimeResult,
     RuntimeCandidate,
@@ -592,12 +592,8 @@ class LangChainReplyRuntime:
         return catalog
 
     def generate(self, prepared: ReplyContext) -> ReplyRuntimeResult:
-        if (
-            prepared.has_long_term_memory_for_rewrite()
-            and isinstance(prepared.command.content, RewriteDraft)
-            and not prepared.command.content.include_relationship_context
-        ):
-            raise ReplyInvariantError("当前改写不能使用长期记忆资料。")
+        if prepared.has_unauthorized_history():
+            raise ReplyInvariantError("当前改写不能使用历史资料。")
         catalog = self._discover_catalog(prepared)
         if catalog.revision != prepared.skill_library_revision:
             # 目录已过期：丢弃目录内容，继续走无 Skill 候选路径。
@@ -624,7 +620,7 @@ class LangChainReplyRuntime:
                     entries=entries,
                 )
             ]
-            if self._retrieval is not None:
+            if self._retrieval is not None and allows_history(prepared.command):
                 history = HistoryToolAccess(
                     retrieval=self._retrieval,
                     scope=prepared.scope,
@@ -693,12 +689,8 @@ class LangChainReplyRuntime:
 
 def _request_text(prepared: ReplyContext) -> str:
     payload: dict[str, Any]
-    if (
-        prepared.has_long_term_memory_for_rewrite()
-        and isinstance(prepared.command.content, RewriteDraft)
-        and not prepared.command.content.include_relationship_context
-    ):
-        raise ReplyInvariantError("当前改写不能使用长期记忆资料。")
+    if prepared.has_unauthorized_history():
+        raise ReplyInvariantError("当前改写不能使用历史资料。")
     if isinstance(prepared.command.content, ReplyToMessage):
         payload = {
             "input_mode": "reply_to_message",

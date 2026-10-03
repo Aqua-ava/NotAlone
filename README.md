@@ -104,6 +104,8 @@ notalone-ingest chat_exports/example.jsonl \
 
 回复页可展开生成时实际保存的上下文正文、选入原因与候选引用；读取不重新检索，也不触发模型调用。HTTP 接口分别为 `GET /api/contacts/{contact_id}/sources`、`DELETE /api/contacts/{contact_id}/sources/{source_id}` 和 `GET /api/contacts/{contact_id}/replies/{reply_request_id}/evidence`，沿用回环服务 token 与 owner/contact 隔离。
 
+普通草稿润色使用本次草稿、指令、受控 Skill 和用户明确选择的续写候选，模型默认不能调用历史检索工具或引用历史消息与记忆。明确设置 `include_relationship_context=true` 后，才允许在已确认联系人范围内检索背景资料；正常回复消息保留该范围内的有界检索能力。
+
 ### 记忆提取与管理
 
 ```bash

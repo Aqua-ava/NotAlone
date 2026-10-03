@@ -36,6 +36,15 @@ OWNER_MEMORY_LIMIT = 3
 OWNER_MEMORY_CHAR_BUDGET = 240
 
 
+def allows_history(command: GenerateReply) -> bool:
+    """回复消息可用历史；草稿润色只有本次明确要求背景时才可用。"""
+
+    return isinstance(command.content, ReplyToMessage) or (
+        isinstance(command.content, RewriteDraft)
+        and command.content.include_relationship_context
+    )
+
+
 class _ScoredMemory(Protocol):
     """阈值与字符预算需要的最小记忆形状。"""
 
@@ -126,13 +135,13 @@ class ReplyContext:
     index_revision: int | None = None
     tool_calls: tuple[ToolCallTrace, ...] = ()
 
-    def has_long_term_memory_for_rewrite(self) -> bool:
-        """当前改写上下文是否包含联系人关系记忆或本人记忆。"""
+    def has_unauthorized_history(self) -> bool:
+        """草稿和显式继续候选之外的历史证据是否超出本次请求权限。"""
 
         return (
-            isinstance(self.command.content, RewriteDraft)
+            not allows_history(self.command)
             and any(
-                item.kind in ("confirmed_memory", "owner_memory")
+                item.kind in ("message", "confirmed_memory", "owner_memory")
                 for item in self.evidence
             )
         )
@@ -317,7 +326,7 @@ class RetrievalReplyContext:
                     status="user_input",
                 )
             ]
-            if command.content.include_relationship_context:
+            if allows_history(command):
                 evidence.extend(
                     self._memory_evidence(memory)
                     for memory in self._search_memories_or_empty(
@@ -375,6 +384,8 @@ class RetrievalReplyContext:
 
         if not isinstance(context, ReplyContext):
             raise ReplyContextInvariantError("回复上下文快照结构无效。")
+        if context.has_unauthorized_history():
+            raise ReplyContextInvariantError("当前改写不能使用历史资料。")
         scope = context.scope
         self._validate_evidence(context.evidence, scope=scope)
 

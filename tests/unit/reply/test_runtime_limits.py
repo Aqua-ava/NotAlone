@@ -4,6 +4,7 @@ import inspect
 import asyncio
 import time
 import unittest
+from dataclasses import replace
 from datetime import timedelta
 from typing import Any
 
@@ -98,7 +99,10 @@ class RuntimeLimitsTest(unittest.TestCase):
     def test_search_loop_still_outputs_after_budget_exhaustion(self):
         """回归 issue 02：历史检索预算耗尽后必须仍能产出最终结构化候选。"""
 
-        context = _make_context(_make_command())
+        command = _make_command()
+        context = _make_context(replace(
+            command, content=replace(command.content, include_relationship_context=True),
+        ))
         responses = [
             AIMessage(content="", tool_calls=[{
                 "name": "read_file", "args": {"file_path": "/missing/SKILL.md"},
@@ -144,7 +148,10 @@ class RuntimeLimitsTest(unittest.TestCase):
     def test_model_that_never_outputs_stays_bounded(self):
         """历史检索无限重试仍必须在步骤上限内以预算错误收尾。"""
 
-        context = _make_context(_make_command())
+        command = _make_command()
+        context = _make_context(replace(
+            command, content=replace(command.content, include_relationship_context=True),
+        ))
         model = FreshRepeatingModel(
             tool_call={"name": "conversation_search", "args": {"query": "合成查询"}},
             responses=[AIMessage(content="")],

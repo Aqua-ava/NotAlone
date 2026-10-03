@@ -438,12 +438,9 @@ class ReplyGenerator:
             return
 
         if isinstance(command.content, RewriteDraft):
-            if (
-                context.has_long_term_memory_for_rewrite()
-                and not command.content.include_relationship_context
-            ):
+            if context.has_unauthorized_history():
                 raise ReplyInvariantError(
-                    "当前改写不能使用长期记忆资料。"
+                    "当前改写不能使用历史资料。"
                 )
             draft_evidence = tuple(
                 item
