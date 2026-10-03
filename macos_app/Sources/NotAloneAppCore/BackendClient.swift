@@ -2,7 +2,7 @@ import Foundation
 
 // 只访问本地后端；JSON 契约由服务端测试钉住，关闭接缝另验证认证与超时。
 public struct BackendClient: Sendable {
-    public enum BackendError: Error, Equatable {
+    public enum BackendError: LocalizedError, Equatable {
         case badStatus(Int)
         case syncUnavailable
         case ownerUninitialized
@@ -10,6 +10,7 @@ public struct BackendClient: Sendable {
         case confirmRejected(reason: String)
         case cliBindingRejected(reason: String)
         case cliBindingRequestInvalid
+        case importCommitFailed
         case replyRejected(reason: String)
         case replyTimedOut
         case replyBudgetExceeded
@@ -18,6 +19,15 @@ public struct BackendClient: Sendable {
         case followSmokeRequestInvalid
         case malformedResponse
         case transport
+
+        public var errorDescription: String? {
+            switch self {
+            case .importCommitFailed:
+                return "聊天资料导入失败，请核对文件和联系人后重试。"
+            default:
+                return nil
+            }
+        }
     }
 
     private struct RejectionEnvelope: Decodable {
@@ -648,11 +658,14 @@ public struct BackendClient: Sendable {
             throw BackendError.notFound
         }
         if status == 409 {
-            let reason = (try? JSONDecoder.snakeCaseDecoder.decode(
+            let rejection = try? JSONDecoder.snakeCaseDecoder.decode(
                 RejectionEnvelope.self,
                 from: data
-            ))?.reason ?? "unknown"
-            throw BackendError.replyRejected(reason: reason)
+            )
+            if path == "api/imports/commit", rejection?.error == "import_commit_failed" {
+                throw BackendError.importCommitFailed
+            }
+            throw BackendError.badStatus(status)
         }
         guard status == 200 else {
             throw BackendError.badStatus(status)

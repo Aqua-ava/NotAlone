@@ -1418,6 +1418,8 @@ final class AppModel: ObservableObject {
                 return "CLI 批量绑定被拒绝：\(reason)"
             case .cliBindingRequestInvalid:
                 return "CLI 批量绑定请求无效"
+            case .importCommitFailed:
+                return backendError.localizedDescription
             case .replyRejected(let reason):
                 return "回复被拒绝：\(Self.replyReasonLabel(reason))"
             case .replyTimedOut:
