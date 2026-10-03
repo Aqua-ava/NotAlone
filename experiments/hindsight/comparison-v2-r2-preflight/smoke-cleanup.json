@@ -1,0 +1,60 @@
+{
+  "after": {
+    "counts": {
+      "async_operations": 0,
+      "attachments": 0,
+      "banks": 0,
+      "chunks": 0,
+      "documents": 0,
+      "entities": 0,
+      "invalidated_memory_units": 0,
+      "memory_units": 0,
+      "mental_models": 0,
+      "observation_history": 0
+    },
+    "indexes": [],
+    "internal_id": "719e7f9a-1e9a-4aa6-9d02-4a87cef547e2",
+    "profile": []
+  },
+  "bank": "notalone-experiment-60dc61722d591415f68b5b2ac7da31ef",
+  "before": {
+    "counts": {
+      "async_operations": 0,
+      "attachments": 0,
+      "banks": 1,
+      "chunks": 3,
+      "documents": 3,
+      "entities": 0,
+      "invalidated_memory_units": 0,
+      "memory_units": 3,
+      "mental_models": 0,
+      "observation_history": 0
+    },
+    "indexes": [
+      {
+        "indexdef": "CREATE INDEX idx_mu_emb_expr_719e7f9a1e9a4aa6 ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'experience'::text) AND (bank_id = 'notalone-experiment-60dc61722d591415f68b5b2ac7da31ef'::text))",
+        "indexname": "idx_mu_emb_expr_719e7f9a1e9a4aa6"
+      },
+      {
+        "indexdef": "CREATE INDEX idx_mu_emb_obsv_719e7f9a1e9a4aa6 ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'observation'::text) AND (bank_id = 'notalone-experiment-60dc61722d591415f68b5b2ac7da31ef'::text))",
+        "indexname": "idx_mu_emb_obsv_719e7f9a1e9a4aa6"
+      },
+      {
+        "indexdef": "CREATE INDEX idx_mu_emb_worl_719e7f9a1e9a4aa6 ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'world'::text) AND (bank_id = 'notalone-experiment-60dc61722d591415f68b5b2ac7da31ef'::text))",
+        "indexname": "idx_mu_emb_worl_719e7f9a1e9a4aa6"
+      }
+    ],
+    "internal_id": "719e7f9a-1e9a-4aa6-9d02-4a87cef547e2",
+    "profile": [
+      {
+        "bank_id": "notalone-experiment-60dc61722d591415f68b5b2ac7da31ef",
+        "internal_id": "719e7f9a-1e9a-4aa6-9d02-4a87cef547e2"
+      }
+    ]
+  },
+  "response": {
+    "deleted_count": 6,
+    "message": "Bank 'notalone-experiment-60dc61722d591415f68b5b2ac7da31ef' and all associated data deleted successfully",
+    "success": true
+  }
+}

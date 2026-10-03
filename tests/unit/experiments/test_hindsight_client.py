@@ -64,6 +64,20 @@ class HindsightHttpTest(unittest.TestCase):
         self.assertTrue(result.rerank_complete)
         self.assertEqual(result.hits[0].reranker, 0.006)
 
+    def test_optional_null_metadata_is_unmapped_instead_of_inferred_from_document(
+        self,
+    ) -> None:
+        self.response["results"].append(
+            {**self.response["results"][0], "id": "unmapped", "metadata": None}
+        )
+        self.diagnostic = self.diagnostic.replace("1 candidates", "2 candidates")
+        result = self.client.recall(
+            bank_id="notalone-experiment-synthetic", query="合成查询"
+        )
+        self.assertEqual(result.hits[0].metadata, {"local_memory_id": "id"})
+        self.assertEqual(result.hits[1].metadata, {})
+        self.assertEqual(result.hits[1].document_id, "memory-id")
+
     def test_partial_timeout_is_failure_even_when_scores_exist(self) -> None:
         self.diagnostic = (
             "Reranking: Reranker exhausted its budget after scoring 1/2 candidates; ranking the remainder by RRF order\n"

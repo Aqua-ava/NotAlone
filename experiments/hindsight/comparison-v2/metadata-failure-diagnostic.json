@@ -1,0 +1,2075 @@
+{
+  "explanation": "独立dev阶段发现graph候选metadata=null；此请求仅定位响应结构，不作为正式分母/收益/时延。",
+  "provenance_before_client_fix": {
+    "code_commit_at_run": "5fc4938ddc7a501f1b9b99b1dbb4762172ee45a4",
+    "new_modules_are_included_by_file_hash": true,
+    "participating_file_sha256": {
+      "src/notalone/experiments/__init__.py": "80b02f60939b528d927814bf8b2e41d3af5a832c58e41a6cf11dda18a2dc751a",
+      "src/notalone/experiments/hindsight_adapter.py": "eac965b7bf9bdef3ae8c66ad6439b7a664b4c3f9aa75506fed85bd106f5a80cb",
+      "src/notalone/experiments/hindsight_baseline.py": "738d2f9442356be5161ba4d324bea9b8b2cc8409c79653fde8e35fa555adb2bd",
+      "src/notalone/experiments/hindsight_calibration.py": "f4ae2e6d5eadc05665a0dc8ead66acf52445e24ae411052ad0a268aa7dbb90c3",
+      "src/notalone/experiments/hindsight_client.py": "0170e73d2ed24b5b181d4e212d7a16cdbeafc9334e6274a419270a7ee1f7c366",
+      "src/notalone/experiments/hindsight_comparison.py": "e0327badcf4468b2b3c41d259f11223de883b17239f059658a3014b2c9daab3e",
+      "src/notalone/experiments/hindsight_comparison_io.py": "77ba2e3c1faad19ded4032222d7e2c51b4ec6646bc0fa3f93ba892fe22b62803",
+      "src/notalone/experiments/hindsight_dataset.py": "752a5d2764f4a258663d9d9a0a0a2a1d05fc8ffbe70574aba9b67321229028e1",
+      "src/notalone/experiments/hindsight_lifecycle.py": "886ae0c27f1a3c0d0a935327bb62d80df1f193a00d009691b7f8e3b3c10a2401",
+      "src/notalone/experiments/hindsight_lifecycle_db.py": "9637122b379eeca4020575bfee413c326a7e6a6de09944b10743303d61d2031a",
+      "src/notalone/experiments/hindsight_metrics.py": "5b7ef63969b1749c5c2e22ed5cf20e069292fa9b987652b996a5451831d4b83e",
+      "src/notalone/experiments/hindsight_runtime.py": "d5fcc856b17b0c8738a79c05b36b7e47db62797a6071d8ce8f397b625e4dda55",
+      "src/notalone/experiments/hindsight_smoke.py": "dda32776798ea717ceb13155a2dcfbc990c7e0519be9f3938f4fef21d14aa31f",
+      "src/notalone/memory/__init__.py": "053b017cea4e6161fd4e391589936fe0418476f51af696ab953bc07fcaa61d4d",
+      "src/notalone/memory/adapters.py": "d5318b84d03fe7d02ffdd0e8ccc2ee3d4c6fb098703c5788df858460d515221e",
+      "src/notalone/memory/models.py": "fe24105d973bffcba53cd410b286f0390b9b5e2d79dc60fe51c23dbbb4e86c31",
+      "src/notalone/memory/ports.py": "f825cf280bf6d5a100af17eb54285533b4249c34101b0be06c7704094a255df2",
+      "src/notalone/memory/timing.py": "d788315f07226b0a86783b505272a7118cdd12bcb0894915f2e6a32194f9a376",
+      "src/notalone/reply/__init__.py": "f54f72a35c5f168fdc4652e9295cc54bb1a00b07f4d59d87882ee8d635fd740d",
+      "src/notalone/reply/context.py": "c64a2e5409bc8360bf8b89e23539ebcd8979e38ff400ba6a9ef65f856f66d692",
+      "src/notalone/reply/errors.py": "25b1657f167a3353ee3b953a236c66b5e51a25d84aff2d5bd679f384d6b5edb4",
+      "src/notalone/reply/generator.py": "b9914b96bc2e8ea6b1bf3e7b815d7f837bda8c434a4e10b3e9e556d20cf84de3",
+      "src/notalone/reply/interface.py": "ccf1b08496577cfa553a473a0b44b8840a962ccd6ab507de366abbe6a04f05f2",
+      "src/notalone/reply/risk.py": "04a9cf0efd2ebc329b85d850e3afc7ba315734538edf5ebff312b0417bc0f591",
+      "src/notalone/reply/runtime.py": "ebd77016824466ee5b165527c526997582df1a76b50bca1600f9745f4d1d2ffe",
+      "src/notalone/reply/store.py": "0006722274eb3aa57d19eaa263199a5e0df4999772a8b561b7b04066097b5186",
+      "src/notalone/reply/tools.py": "f8af2a460a6d2b8f773aca28f7ef39fecb8963590d1af6e1723c4bc48691d9e7",
+      "src/notalone/retrieval/__init__.py": "805af588fd920e0dc811c9ce643a1ed2687d960d84594ce2a5024a7ec88310e3",
+      "src/notalone/retrieval/adapters.py": "bbc0394d3db84da22bd36cb1ac2834dc3fe36f76ed6382960e67d157c37a54ab",
+      "src/notalone/retrieval/errors.py": "bbcd2c09f6ef87f538f48a040c42d0bda7f58f64c3b1d90d2c5be84c79b0d4db",
+      "src/notalone/retrieval/evaluation.py": "e1d9b57c9d301ea47b694fa886252a03ec3e3905cd669f765914f53dd6540794",
+      "src/notalone/retrieval/feature_flags.py": "dce7f9f864fdd3700b6b97987ba1546f888a46ed334bc19ae1534a53f0713db0",
+      "src/notalone/retrieval/lexical.py": "93ec53f0a40db5200ba673898d9461015c21a6879ca0bcaa55ebfe4d9105b233",
+      "src/notalone/retrieval/models.py": "b93ebf56f5e0cb13ecfa95aeace99004aac468c9534007f5cb88e79b133cf9d3",
+      "src/notalone/retrieval/ports.py": "8ae7491fd8c5c12ba8f5092b0edc054db9e7d3a2fb9a566d6e0fdf10bff59b3f",
+      "src/notalone/retrieval/ranking.py": "fc051c60af45dd29376029f72485fd7a1219f40d0f590e491475d8fe6c648173",
+      "src/notalone/retrieval/recall_cases.py": "310f6102e8d0f0c1a0d971fc22436b6fa346ae1cfb462aa932f5e8bfe52b1c03",
+      "src/notalone/retrieval/recall_evaluation.py": "a730fdefe803eca5cfcd19cb2b9bbc208fd1c8c3eae706dca55b994c723760eb",
+      "src/notalone/scopes.py": "91cee703569e5f6d025f44a412742d0f8ec207f9d0466df25528a010471de076"
+    },
+    "participating_status": [
+      "?? src/notalone/experiments/hindsight_calibration.py",
+      "?? src/notalone/experiments/hindsight_comparison.py",
+      "?? src/notalone/experiments/hindsight_comparison_io.py"
+    ],
+    "participating_tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "query_id": "dev-garden-paraphrase-1",
+  "raw_response": {
+    "chunks": null,
+    "entities": null,
+    "results": [
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-9d995553-a5c5-5aa5-88bc-3074b38cda25_0",
+        "context": "",
+        "document_id": "memory-9d995553-a5c5-5aa5-88bc-3074b38cda25",
+        "entities": null,
+        "id": "e35b27f9-cce2-4cd5-8fec-ff08dfa972f5",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "9d995553-a5c5-5aa5-88bc-3074b38cda25",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "544e500c-288e-5069-a842-331e719f68b5"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.001533638973929482,
+          "keyword": null,
+          "reranker": 0.001533638973929482,
+          "semantic": 0.4640666246414218
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人种的薄荷土干后再浇水，不能天天浇。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-ccb0e77a-113a-5a54-8557-1c5a4a91baaa_0",
+        "context": "",
+        "document_id": "memory-ccb0e77a-113a-5a54-8557-1c5a4a91baaa",
+        "entities": null,
+        "id": "9d90bad9-dc97-44b4-91bb-2c70ab4c42b0",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "ccb0e77a-113a-5a54-8557-1c5a4a91baaa",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "35215d4c-df36-5c3b-82db-46e65e5073a1"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.0002708525725606038,
+          "keyword": null,
+          "reranker": 0.0002708525725606038,
+          "semantic": 0.3405844176163928
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人下水前希望教练在场，不能独自练习。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-ebf85cc1-b716-58cf-821c-3419ec571bd0_0",
+        "context": "",
+        "document_id": "memory-ebf85cc1-b716-58cf-821c-3419ec571bd0",
+        "entities": null,
+        "id": "5beb26b8-08f6-4d51-abe7-f1915a8bedb0",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "ebf85cc1-b716-58cf-821c-3419ec571bd0",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "63289b9e-178e-52f9-8a39-e0f355fb7988"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.0002540381716341181,
+          "keyword": null,
+          "reranker": 0.0002540381716341181,
+          "semantic": 0.4214703142643005
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人泳池资料中记录了毛巾收纳袋。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-32d7266b-2860-5f6c-a2bc-b6998708911e_0",
+        "context": "",
+        "document_id": "memory-32d7266b-2860-5f6c-a2bc-b6998708911e",
+        "entities": null,
+        "id": "52356b91-b995-411c-aa62-93934bc66311",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "32d7266b-2860-5f6c-a2bc-b6998708911e",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "ea8a2aa7-b052-5684-9421-564881bb3e36"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.0002459559788663519,
+          "keyword": null,
+          "reranker": 0.0002459559788663519,
+          "semantic": 0.5622930526733438
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人整理园艺资料时记录了空花盆收纳位置。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-3ac28f58-682f-592c-b8a4-86d5e9033a14_0",
+        "context": "",
+        "document_id": "memory-3ac28f58-682f-592c-b8a4-86d5e9033a14",
+        "entities": null,
+        "id": "6b15f5f2-22ee-4693-83fb-9d3b3c0d7fd0",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "3ac28f58-682f-592c-b8a4-86d5e9033a14",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "c822d565-e349-54fc-9e65-d5b227422abe"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.0002348826246908515,
+          "keyword": null,
+          "reranker": 0.0002348826246908515,
+          "semantic": 0.357309481937259
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人泳池资料中记录了朋友的深水资格证。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-d4451978-6738-590a-8d23-d0a19554c4af_0",
+        "context": "",
+        "document_id": "memory-d4451978-6738-590a-8d23-d0a19554c4af",
+        "entities": null,
+        "id": "e707132f-a1b1-42c5-9a09-3754964e5d15",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "d4451978-6738-590a-8d23-d0a19554c4af",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "fed41de0-0b62-5325-8c69-9a0957348ba0"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00023064654296983146,
+          "keyword": null,
+          "reranker": 0.00023064654296983146,
+          "semantic": 0.4608426964785284
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人整理园艺资料时记录了花架的尺寸。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-33a66e76-7287-5103-a481-c2f08ffcfc3c_0",
+        "context": "",
+        "document_id": "memory-33a66e76-7287-5103-a481-c2f08ffcfc3c",
+        "entities": null,
+        "id": "bae6ea29-aad0-4e68-bf78-8ad4f6f4bc08",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "33a66e76-7287-5103-a481-c2f08ffcfc3c",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "272e8e34-3e73-5ca3-b92d-9a92f8303df0"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00019637466675846745,
+          "keyword": null,
+          "reranker": 0.00019637466675846745,
+          "semantic": 0.3791483342647579
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人整理园艺资料时记录了园艺书出版年份。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-a86d6ed0-9310-52b4-a98a-df3d3d804345_0",
+        "context": "",
+        "document_id": "memory-a86d6ed0-9310-52b4-a98a-df3d3d804345",
+        "entities": null,
+        "id": "9e97a0ce-f44e-4f51-bfbf-b9405c04efd8",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "a86d6ed0-9310-52b4-a98a-df3d3d804345",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "f890cf49-c39a-55e5-9cad-c00ddd1e9c12"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00018245130817981877,
+          "keyword": null,
+          "reranker": 0.00018245130817981877,
+          "semantic": 0.3801387548446682
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人泳池资料中记录了会籍卡片材料。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-55b407d4-1940-562c-a9f0-36592ac35631_0",
+        "context": "",
+        "document_id": "memory-55b407d4-1940-562c-a9f0-36592ac35631",
+        "entities": null,
+        "id": "6ee9b495-9722-4f99-8058-7aa42b827322",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "55b407d4-1940-562c-a9f0-36592ac35631",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "eae6909e-ff94-5308-a5d6-36877495dc2e"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.0001818574819981592,
+          "keyword": null,
+          "reranker": 0.0001818574819981592,
+          "semantic": 0.415606471241485
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人整理园艺资料时记录了园艺社通讯地址。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-9dc5d629-c3c4-5684-a540-bf1f33e31a10_0",
+        "context": "",
+        "document_id": "memory-9dc5d629-c3c4-5684-a540-bf1f33e31a10",
+        "entities": null,
+        "id": "13d6f826-39e3-498b-ab17-2bb5669b48ee",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "9dc5d629-c3c4-5684-a540-bf1f33e31a10",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "cc29eebd-a03d-5d41-92bd-94a30432fd2a"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.0001703413204261178,
+          "keyword": null,
+          "reranker": 0.0001703413204261178,
+          "semantic": 0.35281019525588786
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人棋类资料里记下了图书馆借阅规则。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-17cc1e57-dba0-5139-a56b-0ed866e6a2d9_0",
+        "context": "",
+        "document_id": "memory-17cc1e57-dba0-5139-a56b-0ed866e6a2d9",
+        "entities": null,
+        "id": "44119051-4628-4e3c-a5d5-362176936688",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "17cc1e57-dba0-5139-a56b-0ed866e6a2d9",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "ce86f8ca-2528-5420-a677-255579cb2ec3"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.000170133870910929,
+          "keyword": null,
+          "reranker": 0.000170133870910929,
+          "semantic": 0.38007525324373537
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人泳池资料中记录了停车场入口。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-8128c992-40be-53ea-a877-55091877ca5c_0",
+        "context": "",
+        "document_id": "memory-8128c992-40be-53ea-a877-55091877ca5c",
+        "entities": null,
+        "id": "ea9f46da-b36e-4245-90fd-2187197268ab",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "8128c992-40be-53ea-a877-55091877ca5c",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "a46c88a4-fba6-5c5c-9072-e8598206946d"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.0001678774941771588,
+          "keyword": null,
+          "reranker": 0.0001678774941771588,
+          "semantic": 0.4177429577997873
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人泳池资料中记录了水质公告模板。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-11431350-f4ee-55fc-aa72-166097637719_0",
+        "context": "",
+        "document_id": "memory-11431350-f4ee-55fc-aa72-166097637719",
+        "entities": null,
+        "id": "8a6f01aa-f7e7-491e-b4e2-52ea09db37b6",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "11431350-f4ee-55fc-aa72-166097637719",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "e93733cb-11bf-5626-9774-532c05e1b971"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00014958059303409111,
+          "keyword": null,
+          "reranker": 0.00014958059303409111,
+          "semantic": 0.5052790346908003
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人整理园艺资料时记录了阳台窗帘尺寸。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-23f98333-af9f-5283-9a19-784776d3c0ef_0",
+        "context": "",
+        "document_id": "memory-23f98333-af9f-5283-9a19-784776d3c0ef",
+        "entities": null,
+        "id": "84508070-d745-44ea-a1b6-83875f2b12c1",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "23f98333-af9f-5283-9a19-784776d3c0ef",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "a71d7ee2-334b-57d3-ad6b-5f80f0dda0db"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00014081244574510934,
+          "keyword": null,
+          "reranker": 0.00014081244574510934,
+          "semantic": 0.3782118188269037
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人泳池资料中记录了场馆建筑年份。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-21067dde-6da0-5721-976e-2c604ab1fe0f_0",
+        "context": "",
+        "document_id": "memory-21067dde-6da0-5721-976e-2c604ab1fe0f",
+        "entities": null,
+        "id": "0bb5ba95-50f4-404e-9f57-29ff5d7adeab",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "21067dde-6da0-5721-976e-2c604ab1fe0f",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "b14ba330-f833-5ca1-9ecf-f74589e7807e"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00013430906259659118,
+          "keyword": null,
+          "reranker": 0.00013430906259659118,
+          "semantic": 0.35715518679084624
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人泳池资料中记录了泳池商店电话。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-2bdba5c3-dfdc-5f8e-941e-64e706936618_0",
+        "context": "",
+        "document_id": "memory-2bdba5c3-dfdc-5f8e-941e-64e706936618",
+        "entities": null,
+        "id": "a1821e05-ac8b-4b71-9f31-0d0f8b793047",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "2bdba5c3-dfdc-5f8e-941e-64e706936618",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "df8747db-2882-554f-9ed3-d7093e23341a"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00012606195540062822,
+          "keyword": null,
+          "reranker": 0.00012606195540062822,
+          "semantic": 0.5010850281493393
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人整理园艺资料时记录了旧水壶容量。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-b7f83687-862a-51ef-8f69-7ec52c1e9875_0",
+        "context": "",
+        "document_id": "memory-b7f83687-862a-51ef-8f69-7ec52c1e9875",
+        "entities": null,
+        "id": "04a74c95-2260-45e1-8924-abde688c18c6",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "b7f83687-862a-51ef-8f69-7ec52c1e9875",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "7bf7a809-3c6e-5dcf-9559-01faead039b4"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.0001248827454818849,
+          "keyword": null,
+          "reranker": 0.0001248827454818849,
+          "semantic": 0.35219900038230423
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人泳池资料中记录了救生圈存放编号。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-d9dd1950-0a12-54e1-b955-64a2e32a9600_0",
+        "context": "",
+        "document_id": "memory-d9dd1950-0a12-54e1-b955-64a2e32a9600",
+        "entities": null,
+        "id": "88afb1fa-bad8-4983-b6cb-944ff96f24cd",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "d9dd1950-0a12-54e1-b955-64a2e32a9600",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "2bd573e8-b189-5d71-a8ec-bd0c0d68892e"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00012227179035707788,
+          "keyword": null,
+          "reranker": 0.00012227179035707788,
+          "semantic": 0.5389578663681676
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人整理园艺资料时记录了花盆底盘颜色。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-5d8fd29f-7e8d-5b40-807b-f129caf65c05_0",
+        "context": "",
+        "document_id": "memory-5d8fd29f-7e8d-5b40-807b-f129caf65c05",
+        "entities": null,
+        "id": "2f3c08e7-6025-4023-a16e-2da1b8ab932b",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "5d8fd29f-7e8d-5b40-807b-f129caf65c05",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "a6e94659-4989-57b4-bdd4-5909af19d21f"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00012181118408511497,
+          "keyword": null,
+          "reranker": 0.00012181118408511497,
+          "semantic": 0.3254577517509484
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人棋类资料里记下了棋社海报设计。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-1f113033-0047-5a62-97b3-189c7eca520d_0",
+        "context": "",
+        "document_id": "memory-1f113033-0047-5a62-97b3-189c7eca520d",
+        "entities": null,
+        "id": "200e8d65-0935-4fd9-bf93-cca4ab51037e",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "1f113033-0047-5a62-97b3-189c7eca520d",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "cbb4637f-6920-5db2-bacb-629cc085ced0"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00012146159832554026,
+          "keyword": null,
+          "reranker": 0.00012146159832554026,
+          "semantic": 0.3886748187944191
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人泳池资料中记录了旧泳镜发票。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-2cd9126b-81a9-57a9-9c42-7be7bcd4b33a_0",
+        "context": "",
+        "document_id": "memory-2cd9126b-81a9-57a9-9c42-7be7bcd4b33a",
+        "entities": null,
+        "id": "ea96c8c2-db58-4aba-a84c-2cacdb278818",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "2cd9126b-81a9-57a9-9c42-7be7bcd4b33a",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "b75c1219-e77f-5510-9d24-f82c2ee8ddd7"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00011828813969365458,
+          "keyword": null,
+          "reranker": 0.00011828813969365458,
+          "semantic": 0.4067784194218178
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人整理园艺资料时记录了铲子的手柄材料。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-f4ef4a90-5a3c-5d0a-868e-df144394ef1d_0",
+        "context": "",
+        "document_id": "memory-f4ef4a90-5a3c-5d0a-868e-df144394ef1d",
+        "entities": null,
+        "id": "f229eb20-7353-464b-b02e-a571f18c2437",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "f4ef4a90-5a3c-5d0a-868e-df144394ef1d",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "83fb742c-ac8a-5cef-ae62-39b6bfa8def0"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00011719057869487995,
+          "keyword": null,
+          "reranker": 0.00011719057869487995,
+          "semantic": 0.46386385394767005
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人整理园艺资料时记录了邻居的仙人掌照片。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-bdaf2581-dcc0-59d7-9afa-37600893a6cb_0",
+        "context": "",
+        "document_id": "memory-bdaf2581-dcc0-59d7-9afa-37600893a6cb",
+        "entities": null,
+        "id": "3f7a7a4d-32ff-470d-af0a-43b718e8e6d8",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "bdaf2581-dcc0-59d7-9afa-37600893a6cb",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "021b796a-07c9-5f3d-8447-d0a47fe25066"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00011531408336678623,
+          "keyword": null,
+          "reranker": 0.00011531408336678623,
+          "semantic": 0.37007245421409873
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人棋类资料里记下了棋桌维修记录。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-b11132e7-7385-546a-8ace-bdc5793454c3_0",
+        "context": "",
+        "document_id": "memory-b11132e7-7385-546a-8ace-bdc5793454c3",
+        "entities": null,
+        "id": "b36d2e2c-b547-4cd3-8813-2010cc6ece19",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "b11132e7-7385-546a-8ace-bdc5793454c3",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "11fc9ef7-bf3d-574e-a326-f4004d838c45"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00011480182398951772,
+          "keyword": null,
+          "reranker": 0.00011480182398951772,
+          "semantic": 0.3145929574966453
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人学游泳时害怕深水，先在浅水区练习。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-a697a41e-012d-5c80-813c-ee981513caab_0",
+        "context": "",
+        "document_id": "memory-a697a41e-012d-5c80-813c-ee981513caab",
+        "entities": null,
+        "id": "5c1d28f8-6c57-43cc-9311-780233908286",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "a697a41e-012d-5c80-813c-ee981513caab",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "6e46675c-7ca5-5d7c-8ae4-661095fc4e08"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00010330051478752568,
+          "keyword": null,
+          "reranker": 0.00010330051478752568,
+          "semantic": 0.33546655408539694
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人泳池资料中记录了海报印刷尺寸。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-301bb56c-445c-5fa5-ac3c-9be973eecddd_0",
+        "context": "",
+        "document_id": "memory-301bb56c-445c-5fa5-ac3c-9be973eecddd",
+        "entities": null,
+        "id": "43958f66-eb0f-4446-8875-9625d65fef7b",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "301bb56c-445c-5fa5-ac3c-9be973eecddd",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "900c4299-b9d2-510c-9921-5035811d15ce"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 0.00010291666662734335,
+          "keyword": null,
+          "reranker": 0.00010291666662734335,
+          "semantic": 0.3011749803319633
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人看展喜欢先看文字说明再看作品。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-bbf499c7-0f7b-50f6-8a79-4f981c3cb49c_0",
+        "context": "",
+        "document_id": "memory-bbf499c7-0f7b-50f6-8a79-4f981c3cb49c",
+        "entities": null,
+        "id": "48017de9-f6cf-4736-abc6-328393de3fe3",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "bbf499c7-0f7b-50f6-8a79-4f981c3cb49c",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "916aaa86-1871-5d23-990b-12a169a3e694"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 9.969845734726926e-05,
+          "keyword": null,
+          "reranker": 9.969845734726926e-05,
+          "semantic": 0.33316269515419283
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人棋类资料里记下了棋馆客服电话。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-4899b1b3-8ead-55f6-bd8f-560c30af897f_0",
+        "context": "",
+        "document_id": "memory-4899b1b3-8ead-55f6-bd8f-560c30af897f",
+        "entities": null,
+        "id": "ec87a9ce-7839-474d-9e85-3e7b7c9e93c0",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "4899b1b3-8ead-55f6-bd8f-560c30af897f",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "8087b1ba-5005-5e8e-acb8-2f9dd6073411"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 9.947586121944189e-05,
+          "keyword": null,
+          "reranker": 9.947586121944189e-05,
+          "semantic": 0.3648012578487423
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人展览资料中记录了明信片寄送记录。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-59ac1173-265d-531d-922b-b8b78f739ab7_0",
+        "context": "",
+        "document_id": "memory-59ac1173-265d-531d-922b-b8b78f739ab7",
+        "entities": null,
+        "id": "4c63dd9c-f7e9-4542-92d0-917ab476f2c0",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "59ac1173-265d-531d-922b-b8b78f739ab7",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "0602f6ca-c4ae-55b2-8e51-a2abdc083f64"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 9.863726506287888e-05,
+          "keyword": null,
+          "reranker": 9.863726506287888e-05,
+          "semantic": 0.3298464018014915
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人泳池资料中记录了更衣柜锁型号。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-093716bf-5ac2-5719-8c56-e3ce0aeed2f7_0",
+        "context": "",
+        "document_id": "memory-093716bf-5ac2-5719-8c56-e3ce0aeed2f7",
+        "entities": null,
+        "id": "c4d09fd7-bc19-4e51-83d4-9a39d6c1e54f",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "093716bf-5ac2-5719-8c56-e3ce0aeed2f7",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "8151b6ec-47d5-5440-abd9-2095f5abcc56"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 9.773283111260267e-05,
+          "keyword": null,
+          "reranker": 9.773283111260267e-05,
+          "semantic": 0.33177120468273213
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人展览资料中记录了朋友的集章册。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-cc290316-e00f-5379-9ad1-3a5d441ca61a_0",
+        "context": "",
+        "document_id": "memory-cc290316-e00f-5379-9ad1-3a5d441ca61a",
+        "entities": null,
+        "id": "54803b8c-461e-448a-961c-a4c4d4ca2929",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "cc290316-e00f-5379-9ad1-3a5d441ca61a",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "bf57169a-fe73-595e-a536-273b125c254d"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 9.602308663232157e-05,
+          "keyword": null,
+          "reranker": 9.602308663232157e-05,
+          "semantic": 0.47202700209778636
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人整理园艺资料时记录了园艺店营业时间。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-7ef0c1ac-1376-52c2-bb8a-551d505a0d83_0",
+        "context": "",
+        "document_id": "memory-7ef0c1ac-1376-52c2-bb8a-551d505a0d83",
+        "entities": null,
+        "id": "7020c01e-c911-4e91-8cbc-60330f5a77fa",
+        "mentioned_at": null,
+        "metadata": null,
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 8.793059469177142e-05,
+          "keyword": null,
+          "reranker": 8.793059469177142e-05,
+          "semantic": null
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人展览资料中记录了艺术书出版年份。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-19117789-a7ac-529b-801e-b9a791cae0ea_0",
+        "context": "",
+        "document_id": "memory-19117789-a7ac-529b-801e-b9a791cae0ea",
+        "entities": null,
+        "id": "0b77afd3-2be1-48ee-a8d7-136c8e6f9d9d",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "19117789-a7ac-529b-801e-b9a791cae0ea",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "44fa1ea1-278b-58a0-8142-27bf2ff4994a"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 8.720994023823568e-05,
+          "keyword": null,
+          "reranker": 8.720994023823568e-05,
+          "semantic": 0.43173577974652
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人种的薄荷需要见光。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-280f3d88-2238-5c5a-8725-d70dd81b074d_0",
+        "context": "",
+        "document_id": "memory-280f3d88-2238-5c5a-8725-d70dd81b074d",
+        "entities": null,
+        "id": "1c364b9e-f300-4a94-b42f-337b46cab1fa",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "280f3d88-2238-5c5a-8725-d70dd81b074d",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "da46f08d-f9ae-522d-908e-8b70834ca06b"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 8.528727317805252e-05,
+          "keyword": null,
+          "reranker": 8.528727317805252e-05,
+          "semantic": 0.3234902217084308
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人摄影笔记记录了打印店电话。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-06b27b03-431a-50a8-b665-db4aa0160702_0",
+        "context": "",
+        "document_id": "memory-06b27b03-431a-50a8-b665-db4aa0160702",
+        "entities": null,
+        "id": "067facf2-2d39-4ad7-b8fe-b81a2bc9737b",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "06b27b03-431a-50a8-b665-db4aa0160702",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "e626ba66-7cca-5174-b0ac-d685c0070008"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 8.378268944116894e-05,
+          "keyword": null,
+          "reranker": 8.378268944116894e-05,
+          "semantic": 0.31921741240180257
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人展览资料中记录了展馆商店电话。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-fbe4aae0-bfa9-5780-bdb4-977c02105b41_0",
+        "context": "",
+        "document_id": "memory-fbe4aae0-bfa9-5780-bdb4-977c02105b41",
+        "entities": null,
+        "id": "935a7ff7-e113-423e-b94b-a4cdd61413f3",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "fbe4aae0-bfa9-5780-bdb4-977c02105b41",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "c53c857f-f083-5310-b667-6476335e5e03"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 8.328014684365116e-05,
+          "keyword": null,
+          "reranker": 8.328014684365116e-05,
+          "semantic": 0.327530920505526
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人展览资料中记录了展架维修联系人。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-b29ad37a-fae9-5134-92ae-ac63f26b0246_0",
+        "context": "",
+        "document_id": "memory-b29ad37a-fae9-5134-92ae-ac63f26b0246",
+        "entities": null,
+        "id": "ae4ac245-aa52-4fbe-8a21-4cf19c142c02",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "b29ad37a-fae9-5134-92ae-ac63f26b0246",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "5204b98f-d794-5d82-9dfc-15cf1b58a749"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 8.305142710263382e-05,
+          "keyword": null,
+          "reranker": 8.305142710263382e-05,
+          "semantic": 0.3487559764835826
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人棋类资料里记下了棋钟购买发票。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-04b502a4-5095-567d-afeb-23b274b058b1_0",
+        "context": "",
+        "document_id": "memory-04b502a4-5095-567d-afeb-23b274b058b1",
+        "entities": null,
+        "id": "bfeb3e6d-fac1-4f27-a5d1-48216ac3b144",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "04b502a4-5095-567d-afeb-23b274b058b1",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "540b0f0e-5046-50f6-9b00-728cb6d06c3a"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 8.288899380766786e-05,
+          "keyword": null,
+          "reranker": 8.288899380766786e-05,
+          "semantic": 0.36810945678409746
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人泳池资料中记录了泳帽颜色。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-e51daa54-bad3-507a-89b4-36ccd3c18d13_0",
+        "context": "",
+        "document_id": "memory-e51daa54-bad3-507a-89b4-36ccd3c18d13",
+        "entities": null,
+        "id": "bdf43508-c0d4-4688-9e0b-fe1963bcd16d",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "e51daa54-bad3-507a-89b4-36ccd3c18d13",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "9bd92ee9-3b84-523d-aef9-3430486c69c3"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 8.136935370211428e-05,
+          "keyword": null,
+          "reranker": 8.136935370211428e-05,
+          "semantic": 0.3028755368516174
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人泳池资料中记录了同事的自由泳比赛。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-4deed8d2-50a8-5dc7-8b28-c5efa9878e04_0",
+        "context": "",
+        "document_id": "memory-4deed8d2-50a8-5dc7-8b28-c5efa9878e04",
+        "entities": null,
+        "id": "119bcff8-7dec-4e0c-8125-20dacab50965",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "4deed8d2-50a8-5dc7-8b28-c5efa9878e04",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "f4c80133-6fc0-5b36-9dbf-0a46e8dd090a"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 8.07080101383133e-05,
+          "keyword": null,
+          "reranker": 8.07080101383133e-05,
+          "semantic": 0.34625700116157776
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人摄影笔记记录了证件照规格。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-3c21f488-a69d-5afb-9c52-19563fc42406_0",
+        "context": "",
+        "document_id": "memory-3c21f488-a69d-5afb-9c52-19563fc42406",
+        "entities": null,
+        "id": "74bb84fe-528d-4796-a0c9-93fb06a20e84",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "3c21f488-a69d-5afb-9c52-19563fc42406",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "4ea40dfc-d9a2-53f2-8029-d30176bf5f40"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 8.046831931540654e-05,
+          "keyword": null,
+          "reranker": 8.046831931540654e-05,
+          "semantic": 0.4288002210140367
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人整理园艺资料时记录了去年花展门票。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-f514b508-0665-596f-9c26-c3611ff4ef29_0",
+        "context": "",
+        "document_id": "memory-f514b508-0665-596f-9c26-c3611ff4ef29",
+        "entities": null,
+        "id": "b1499208-1fd7-4e51-8496-c1d134b69d6e",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "f514b508-0665-596f-9c26-c3611ff4ef29",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "2c9a710f-bb5a-5693-8de2-d892786dab2a"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 7.774875235622389e-05,
+          "keyword": null,
+          "reranker": 7.774875235622389e-05,
+          "semantic": 0.392233752741442
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人摄影笔记记录了三脚架收纳位置。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-bba84f5f-e7c3-5db1-82bc-c486e9bda8ae_0",
+        "context": "",
+        "document_id": "memory-bba84f5f-e7c3-5db1-82bc-c486e9bda8ae",
+        "entities": null,
+        "id": "50da8517-52ca-4bb5-ab07-aba5fdeadf5a",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "bba84f5f-e7c3-5db1-82bc-c486e9bda8ae",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "cacafa55-b487-57f2-a8ba-d6e6e0d88ff2"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 7.615896037980475e-05,
+          "keyword": null,
+          "reranker": 7.615896037980475e-05,
+          "semantic": 0.31354703387898464
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人展览资料中记录了寄存柜编号规则。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-44550556-6e2d-5d1f-9c31-4b271ff02b91_0",
+        "context": "",
+        "document_id": "memory-44550556-6e2d-5d1f-9c31-4b271ff02b91",
+        "entities": null,
+        "id": "510556d6-b744-4f16-9e28-c95b332afba2",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "44550556-6e2d-5d1f-9c31-4b271ff02b91",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "e58b3f3f-34f6-542e-85fb-81282e0c8ca7"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 7.575868838353534e-05,
+          "keyword": null,
+          "reranker": 7.575868838353534e-05,
+          "semantic": 0.47335174520920265
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人整理园艺资料时记录了朋友的兰花品种。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-967796ef-0862-506c-9138-dc6a41dd480a_0",
+        "context": "",
+        "document_id": "memory-967796ef-0862-506c-9138-dc6a41dd480a",
+        "entities": null,
+        "id": "9463a0e3-6249-431b-b7be-dd996744b8db",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "967796ef-0862-506c-9138-dc6a41dd480a",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "85a52250-2b6e-5a82-a280-8ffffe04f093"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 7.573831841534968e-05,
+          "keyword": null,
+          "reranker": 7.573831841534968e-05,
+          "semantic": 0.37452434745576135
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人棋类资料里记下了纪念棋子包装材料。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-4cc508c6-08f1-520c-b439-28898083d0b5_0",
+        "context": "",
+        "document_id": "memory-4cc508c6-08f1-520c-b439-28898083d0b5",
+        "entities": null,
+        "id": "c21cb9d9-275a-4c55-a591-4e5614992ad2",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "4cc508c6-08f1-520c-b439-28898083d0b5",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "5c537626-df74-5f54-9d9e-997027a16839"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 7.549725726645911e-05,
+          "keyword": null,
+          "reranker": 7.549725726645911e-05,
+          "semantic": 0.4011491478174425
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人展览资料中记录了纪念袋收纳位置。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-0d519848-04c3-5994-816c-67a6f8842517_0",
+        "context": "",
+        "document_id": "memory-0d519848-04c3-5994-816c-67a6f8842517",
+        "entities": null,
+        "id": "b4eb6937-8320-4ab0-82bd-ad88467f7a4a",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "0d519848-04c3-5994-816c-67a6f8842517",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "d7ac3b8e-0543-5cab-afb7-509a33c2de3b"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 7.36260864684299e-05,
+          "keyword": null,
+          "reranker": 7.36260864684299e-05,
+          "semantic": 0.3932625289715851
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人整理园艺资料时记录了标签纸的价格。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-4ce94391-58f9-5719-b65b-d21290bf78f4_0",
+        "context": "",
+        "document_id": "memory-4ce94391-58f9-5719-b65b-d21290bf78f4",
+        "entities": null,
+        "id": "44c83f8d-66fe-4765-8897-fb6188d8748c",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "4ce94391-58f9-5719-b65b-d21290bf78f4",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "0296d7e2-402a-5908-b70d-8d1e4f09bc4f"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 6.889512922868485e-05,
+          "keyword": null,
+          "reranker": 6.889512922868485e-05,
+          "semantic": 0.3543873938552978
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人展览资料中记录了过去的闭馆通知。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-d528775e-2f1c-515a-8e0b-b5f1c72cd360_0",
+        "context": "",
+        "document_id": "memory-d528775e-2f1c-515a-8e0b-b5f1c72cd360",
+        "entities": null,
+        "id": "6c42b938-6d8a-422e-a510-839950666519",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "d528775e-2f1c-515a-8e0b-b5f1c72cd360",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "abe0aa3b-1ab0-5ebf-80e6-c2f24808fe7c"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 6.826964056740009e-05,
+          "keyword": null,
+          "reranker": 6.826964056740009e-05,
+          "semantic": 0.3447624650455996
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人棋类资料里记下了棋子收纳袋尺寸。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-cdcfbbde-8f96-534c-a946-16c90dc4f126_0",
+        "context": "",
+        "document_id": "memory-cdcfbbde-8f96-534c-a946-16c90dc4f126",
+        "entities": null,
+        "id": "70aad39b-6a81-4ce2-a4ed-33ca8f3c381e",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "cdcfbbde-8f96-534c-a946-16c90dc4f126",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "5bf25853-259b-5112-84f1-246211b9483e"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 6.766705701504674e-05,
+          "keyword": null,
+          "reranker": 6.766705701504674e-05,
+          "semantic": 0.3211326492507851
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人摄影笔记记录了摄影书封面设计。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-5d5f5173-0ee5-5a45-abdf-35044abc048a_0",
+        "context": "",
+        "document_id": "memory-5d5f5173-0ee5-5a45-abdf-35044abc048a",
+        "entities": null,
+        "id": "a439a0b2-f612-448e-8138-4e133df7ec7b",
+        "mentioned_at": null,
+        "metadata": null,
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 6.735693856265733e-05,
+          "keyword": null,
+          "reranker": 6.735693856265733e-05,
+          "semantic": null
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人展览资料中记录了展览网站域名。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-ba84f12a-d5b4-5a65-9726-260a66b8405a_0",
+        "context": "",
+        "document_id": "memory-ba84f12a-d5b4-5a65-9726-260a66b8405a",
+        "entities": null,
+        "id": "0040208e-aba3-46b4-ae21-eb9582e163d2",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "ba84f12a-d5b4-5a65-9726-260a66b8405a",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "a4104725-abe7-5e00-9466-07496c261c27"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 6.553840666571024e-05,
+          "keyword": null,
+          "reranker": 6.553840666571024e-05,
+          "semantic": 0.3234711289405845
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人展览资料中记录了旧展览海报尺寸。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-0c1c2127-f3e6-5261-9128-3a863d2649a0_0",
+        "context": "",
+        "document_id": "memory-0c1c2127-f3e6-5261-9128-3a863d2649a0",
+        "entities": null,
+        "id": "a88ca1ee-7265-4e9c-b462-735a92d92dc3",
+        "mentioned_at": null,
+        "metadata": null,
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 6.257006157876454e-05,
+          "keyword": null,
+          "reranker": 6.257006157876454e-05,
+          "semantic": null
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人展览资料中记录了同事的团体订票。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-05324fd7-e832-5fd9-9551-61041a251d1d_0",
+        "context": "",
+        "document_id": "memory-05324fd7-e832-5fd9-9551-61041a251d1d",
+        "entities": null,
+        "id": "d034eb0c-8531-46e4-8fe6-80ca20f007b1",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "05324fd7-e832-5fd9-9551-61041a251d1d",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "34b322c6-3f22-5b98-80c6-49252bcab37b"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 6.209660836331462e-05,
+          "keyword": null,
+          "reranker": 6.209660836331462e-05,
+          "semantic": 0.30764522002012906
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人拍鸟时希望保留距离，不惊扰动物。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-86281cfb-d933-5428-9bbe-cd0b7ebc95d2_0",
+        "context": "",
+        "document_id": "memory-86281cfb-d933-5428-9bbe-cd0b7ebc95d2",
+        "entities": null,
+        "id": "63ac30cc-429f-438e-9465-de1b666998a6",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "86281cfb-d933-5428-9bbe-cd0b7ebc95d2",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "df22279b-cce2-52aa-a650-548b2ab0fd46"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 6.150004602674451e-05,
+          "keyword": null,
+          "reranker": 6.150004602674451e-05,
+          "semantic": 0.35407277071909793
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人棋类资料里记下了棋盘盒颜色。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-80db5c1c-1e4f-59e4-8ec2-b59896faa2a2_0",
+        "context": "",
+        "document_id": "memory-80db5c1c-1e4f-59e4-8ec2-b59896faa2a2",
+        "entities": null,
+        "id": "99681913-f39e-4bdb-829c-2c50f1540865",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "80db5c1c-1e4f-59e4-8ec2-b59896faa2a2",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "4cc6379d-4afd-531b-a432-90f004ce3dc2"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 6.0948724456182266e-05,
+          "keyword": null,
+          "reranker": 6.0948724456182266e-05,
+          "semantic": 0.30855591944193417
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人棋类资料里记下了会员卡有效年份。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-6eb32b52-3283-5a38-8f33-c0878914efbd_0",
+        "context": "",
+        "document_id": "memory-6eb32b52-3283-5a38-8f33-c0878914efbd",
+        "entities": null,
+        "id": "bcbd6453-0d40-44db-9a22-1c200b4f03ca",
+        "mentioned_at": null,
+        "metadata": null,
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 5.641502269646512e-05,
+          "keyword": null,
+          "reranker": 5.641502269646512e-05,
+          "semantic": null
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人摄影笔记记录了同事的合影编号。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-2b8b95d6-9671-5298-838c-bca23570ed0f_0",
+        "context": "",
+        "document_id": "memory-2b8b95d6-9671-5298-838c-bca23570ed0f",
+        "entities": null,
+        "id": "d65b09cb-e4d7-4d70-919a-82fc54ac5a61",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "2b8b95d6-9671-5298-838c-bca23570ed0f",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "715abcad-daeb-5184-ba49-10a3744be78f"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 5.618646659074916e-05,
+          "keyword": null,
+          "reranker": 5.618646659074916e-05,
+          "semantic": 0.348333319922288
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人摄影笔记记录了相机包颜色。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-d2f29286-be42-545e-8608-bc6059df7d6b_0",
+        "context": "",
+        "document_id": "memory-d2f29286-be42-545e-8608-bc6059df7d6b",
+        "entities": null,
+        "id": "e38c6a31-c6c2-4ee9-8a91-6ce60e569e18",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "d2f29286-be42-545e-8608-bc6059df7d6b",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "dd1170ec-0073-5ea0-a1a9-9452daaefd62"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 5.610256852028803e-05,
+          "keyword": null,
+          "reranker": 5.610256852028803e-05,
+          "semantic": 0.308225374923629
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人展览资料中记录了门票印刷颜色。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-0306982c-43a1-5611-9620-5d5733199f9e_0",
+        "context": "",
+        "document_id": "memory-0306982c-43a1-5611-9620-5d5733199f9e",
+        "entities": null,
+        "id": "2433cd55-7973-4796-843e-855b462ccf14",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "0306982c-43a1-5611-9620-5d5733199f9e",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "c58e80ed-f4ce-5cb9-a5a0-90010fc3ef14"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 5.480689262116514e-05,
+          "keyword": null,
+          "reranker": 5.480689262116514e-05,
+          "semantic": 0.39097627997398654
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人展览资料中记录了包装纸材质。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-c3506bbf-d5df-5ce5-89e7-412d566c1706_0",
+        "context": "",
+        "document_id": "memory-c3506bbf-d5df-5ce5-89e7-412d566c1706",
+        "entities": null,
+        "id": "1ed75ce6-df0b-4c7f-ab2f-1f65c5191307",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "c3506bbf-d5df-5ce5-89e7-412d566c1706",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "24d7c6d5-0dc8-51b4-a625-73a8c1138d57"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 5.4599896717207104e-05,
+          "keyword": null,
+          "reranker": 5.4599896717207104e-05,
+          "semantic": 0.3949424263800644
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人摄影笔记记录了胶卷盒收藏位置。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-d4f28d7e-5b8c-5189-b6ac-7c928b755d23_0",
+        "context": "",
+        "document_id": "memory-d4f28d7e-5b8c-5189-b6ac-7c928b755d23",
+        "entities": null,
+        "id": "c423cbd7-161e-4314-bee1-55bf79103184",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "d4f28d7e-5b8c-5189-b6ac-7c928b755d23",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "50291cc5-dd2e-5e26-a008-c8b3a37fb8cb"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 5.425945059398641e-05,
+          "keyword": null,
+          "reranker": 5.425945059398641e-05,
+          "semantic": 0.3605505442947481
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人摄影笔记记录了相册封面尺寸。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-2fe624f6-40f6-5987-beda-e64bc7e80834_0",
+        "context": "",
+        "document_id": "memory-2fe624f6-40f6-5987-beda-e64bc7e80834",
+        "entities": null,
+        "id": "102ddb6f-24c1-429b-a422-f575406c4c8a",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "2fe624f6-40f6-5987-beda-e64bc7e80834",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "5754db9d-d618-5ec8-9ade-df0d828c39d0"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 5.1260486451498895e-05,
+          "keyword": null,
+          "reranker": 5.1260486451498895e-05,
+          "semantic": 0.3098906463319454
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人拍鸟时会用长焦镜头，不使用闪光灯。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-204d535c-bbb2-59e7-9258-e78aea7fac19_0",
+        "context": "",
+        "document_id": "memory-204d535c-bbb2-59e7-9258-e78aea7fac19",
+        "entities": null,
+        "id": "709026f7-ae11-4cc0-b3e9-77971e30f485",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "204d535c-bbb2-59e7-9258-e78aea7fac19",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "2cc488a1-43eb-5684-a30b-b505e54f4b32"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 5.037055972308094e-05,
+          "keyword": null,
+          "reranker": 5.037055972308094e-05,
+          "semantic": 0.3403400487011716
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人摄影笔记记录了旧相机购买年份。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-3558cf11-790f-5ba0-a085-bc1d7ba47146_0",
+        "context": "",
+        "document_id": "memory-3558cf11-790f-5ba0-a085-bc1d7ba47146",
+        "entities": null,
+        "id": "f3b2f303-906f-4886-88a0-b8dc0fc8a899",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "3558cf11-790f-5ba0-a085-bc1d7ba47146",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "d444fad0-508f-5d58-aae3-55c5db8048a2"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 5.034318738973925e-05,
+          "keyword": null,
+          "reranker": 5.034318738973925e-05,
+          "semantic": 0.347195020150842
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人摄影笔记记录了室内人像背景纸。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-864af5eb-578e-5d7a-891b-af29cf575c34_0",
+        "context": "",
+        "document_id": "memory-864af5eb-578e-5d7a-891b-af29cf575c34",
+        "entities": null,
+        "id": "42c6e023-340f-4611-a723-f710b9e30c73",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "864af5eb-578e-5d7a-891b-af29cf575c34",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "d4c26314-69ca-53d3-9dac-89b9202e26b6"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 4.734531150094696e-05,
+          "keyword": null,
+          "reranker": 4.734531150094696e-05,
+          "semantic": 0.3009482980904934
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人棋类资料里记下了同事的快棋报名。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-e29f80b8-6d71-5be0-9e15-890a2fc92e9b_0",
+        "context": "",
+        "document_id": "memory-e29f80b8-6d71-5be0-9e15-890a2fc92e9b",
+        "entities": null,
+        "id": "b8934394-afb2-44d3-96ef-8eb2009c9526",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "e29f80b8-6d71-5be0-9e15-890a2fc92e9b",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "9b58dc5a-f5b1-5383-810e-086e39247368"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 4.6721379139825135e-05,
+          "keyword": null,
+          "reranker": 4.6721379139825135e-05,
+          "semantic": 0.3432132508285797
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人棋类资料里记下了旧赛事座位号。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-5732a0c9-9b9e-53aa-bbb6-8931c163c39f_0",
+        "context": "",
+        "document_id": "memory-5732a0c9-9b9e-53aa-bbb6-8931c163c39f",
+        "entities": null,
+        "id": "bd818f03-cf0e-40c4-b050-1890f0acb05c",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "5732a0c9-9b9e-53aa-bbb6-8931c163c39f",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "e4eae43c-974e-5b6f-ae83-c21a8ac55acc"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 4.666594120722226e-05,
+          "keyword": null,
+          "reranker": 4.666594120722226e-05,
+          "semantic": 0.3473584651947046
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人摄影笔记记录了镜头布的价格。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-c43feace-3b2d-516f-ba0d-f33eda16ee92_0",
+        "context": "",
+        "document_id": "memory-c43feace-3b2d-516f-ba0d-f33eda16ee92",
+        "entities": null,
+        "id": "34c43899-2f58-4036-b544-abaf2e2d67ee",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "c43feace-3b2d-516f-ba0d-f33eda16ee92",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "c4a1c880-5ae0-5b3b-88c9-0f4c3f11512b"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 4.559649645533588e-05,
+          "keyword": null,
+          "reranker": 4.559649645533588e-05,
+          "semantic": 0.3602919602655139
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人摄影笔记记录了展览开幕时间。",
+        "type": "world"
+      },
+      {
+        "attachments": null,
+        "chunk_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202_memory-47387583-52bc-5388-9fa2-a178a2814d0a_0",
+        "context": "",
+        "document_id": "memory-47387583-52bc-5388-9fa2-a178a2814d0a",
+        "entities": null,
+        "id": "22c230d7-d817-4157-a69e-e8bb809ea70d",
+        "mentioned_at": null,
+        "metadata": {
+          "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+          "layer": "confirmed_memory",
+          "local_memory_id": "47387583-52bc-5388-9fa2-a178a2814d0a",
+          "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee",
+          "revision": "1",
+          "source_ids": "6ef38fde-43e1-5f24-adb6-2edfc19fcb65"
+        },
+        "occurred_end": null,
+        "occurred_start": null,
+        "scores": {
+          "final": 4.0251570904231914e-05,
+          "keyword": null,
+          "reranker": 4.0251570904231914e-05,
+          "semantic": 0.3010293008123994
+        },
+        "source_fact_ids": null,
+        "tags": [],
+        "text": "联系人摄影笔记记录了朋友的闪光灯品牌。",
+        "type": "world"
+      }
+    ],
+    "source_facts": null,
+    "source_facts_truncated": null,
+    "trace": null
+  },
+  "request": {
+    "budget": "low",
+    "max_tokens": 4096,
+    "query": "帮你照料阳台那盆香草，放哪里、多久补水？",
+    "query_timestamp": "2026-10-04T00:00:00Z",
+    "types": [
+      "world"
+    ]
+  }
+}

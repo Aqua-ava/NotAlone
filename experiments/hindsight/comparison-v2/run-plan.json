@@ -1,0 +1,823 @@
+{
+  "dataset_hashes": {
+    "dataset-manifest.json": "f9ec17f43726dd88f6ae14da3eb2251a50ad6df44c14b793cd4d63ab25ed8858",
+    "dataset.json": "839635b01004c3d060f45aa9339c7a47493f2b0aa292ef479a5a1dcc16b01a57",
+    "gold.json": "d5e7d27dd2d9ea1335e719a68e88a7f5c8745c1875939ba5165520b2064a88c9"
+  },
+  "dataset_id": "hindsight-synthetic-v2",
+  "formal_attempts_per_arm": 103,
+  "formal_order": [
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-coffee-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-coffee-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-coffee-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-coffee-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-hiking-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-hiking-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-hiking-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-hiking-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-meeting-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-meeting-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-meeting-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-meeting-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-train-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-train-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-train-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-train-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-movie-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-movie-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-movie-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-movie-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-meal-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-meal-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-meal-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-meal-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-gift-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-gift-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-gift-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-gift-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-car-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-car-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-car-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-car-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-cat-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-cat-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-cat-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-cat-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-exam-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-exam-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-exam-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-exam-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-move-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-move-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-move-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-move-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-cook-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-cook-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-cook-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-cook-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-run-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-run-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-run-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-run-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-hair-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-hair-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-hair-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-hair-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-concert-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-concert-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-concert-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-concert-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-feedback-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-feedback-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-feedback-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-feedback-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-father-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-father-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-father-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-father-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-hotel-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-hotel-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-hotel-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-hotel-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-birthday-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-birthday-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-birthday-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-birthday-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-video-paraphrase-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-video-paraphrase-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-video-paraphrase-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-video-direct"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-empty-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-empty-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-empty-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-empty-4"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-empty-5"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-empty-6"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-empty-7"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-empty-8"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-empty-9"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-empty-10"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-topic-1"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-topic-2"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-topic-3"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-topic-4"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-topic-5"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-isolation"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-deleted"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-invalidated"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-expired"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-future"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-budget-contact"
+    },
+    {
+      "arms": [
+        "B",
+        "A"
+      ],
+      "query_id": "final-owner-meal"
+    },
+    {
+      "arms": [
+        "A",
+        "B"
+      ],
+      "query_id": "final-owner-budget"
+    }
+  ],
+  "initial_banks": {
+    "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a": {
+      "counts": {
+        "async_operations": 0,
+        "attachments": 0,
+        "banks": 0,
+        "chunks": 0,
+        "documents": 0,
+        "entities": 0,
+        "invalidated_memory_units": 0,
+        "memory_units": 0,
+        "mental_models": 0,
+        "observation_history": 0
+      },
+      "indexes": [],
+      "internal_id": null,
+      "profile": []
+    },
+    "notalone-experiment-28892dc5b73d95fca850b48dc9953202": {
+      "counts": {
+        "async_operations": 0,
+        "attachments": 0,
+        "banks": 0,
+        "chunks": 0,
+        "documents": 0,
+        "entities": 0,
+        "invalidated_memory_units": 0,
+        "memory_units": 0,
+        "mental_models": 0,
+        "observation_history": 0
+      },
+      "indexes": [],
+      "internal_id": null,
+      "profile": []
+    },
+    "notalone-experiment-5399faeaaceead5f8376604d5027d2bb": {
+      "counts": {
+        "async_operations": 0,
+        "attachments": 0,
+        "banks": 0,
+        "chunks": 0,
+        "documents": 0,
+        "entities": 0,
+        "invalidated_memory_units": 0,
+        "memory_units": 0,
+        "mental_models": 0,
+        "observation_history": 0
+      },
+      "indexes": [],
+      "internal_id": null,
+      "profile": []
+    },
+    "notalone-experiment-e502bd5b1c4e5ebec959fb61e1e7a6d7": {
+      "counts": {
+        "async_operations": 0,
+        "attachments": 0,
+        "banks": 0,
+        "chunks": 0,
+        "documents": 0,
+        "entities": 0,
+        "invalidated_memory_units": 0,
+        "memory_units": 0,
+        "mental_models": 0,
+        "observation_history": 0
+      },
+      "indexes": [],
+      "internal_id": null,
+      "profile": []
+    }
+  },
+  "latency_boundary": "evaluate_query: 从 Port 装配/Context.build 至 validate_current 完成，含真实HTTP；逐ID额外审计另报，不含模型加载/建索引/生成。",
+  "recorded_before_calibration_at": "2026-10-03T18:00:12.968990+00:00",
+  "source_rule": "仅本机、新建公开合成数据；不读取业务.env/数据库/真实聊天。",
+  "stability_query_ids": [
+    "final-coffee-paraphrase-1",
+    "final-meeting-direct",
+    "final-topic-2"
+  ],
+  "stability_repetitions_per_arm": 3,
+  "warmup_query_ids": [
+    "final-budget-contact",
+    "final-coffee-direct",
+    "final-empty-1",
+    "final-isolation",
+    "final-deleted",
+    "final-owner-meal",
+    "final-owner-budget",
+    "final-coffee-paraphrase-1",
+    "final-topic-1"
+  ],
+  "warmup_repetitions_per_arm": 1
+}

@@ -236,6 +236,10 @@ class HindsightHttpClient:
             raise HindsightFailure("recall 包含非 world 或无效结果。")
         scores = item.get("scores")
         metadata = item.get("metadata")
+        # graph 扩展结果允许 metadata=null；保留为空映射，由适配器
+        # 逐候选明确拒绝。不得从 document_id 猜测本地身份。
+        if metadata is None:
+            metadata = {}
         if (
             not isinstance(scores, dict)
             or not isinstance(metadata, dict)
