@@ -11,12 +11,21 @@ from pathlib import Path
 from typing import Mapping, Protocol
 from urllib.parse import quote, urlparse
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
+from urllib.error import HTTPError
 
 from notalone.scopes import ContactScope
 
 
 class HindsightFailure(RuntimeError):
     """实验失败，不能作为 B 的成功空结果。"""
+
+
+class HindsightHttpFailure(HindsightFailure):
+    """保留 HTTP 状态，区分删除完成后的 404 与服务故障。"""
+
+    def __init__(self, message: str, status: int) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -77,6 +86,7 @@ class HindsightHttpClient:
         max_tokens: int = 4096,
         budget: str = "low",
         query_timestamp: str = "2026-10-04T00:00:00Z",
+        allowed_bank_ids: frozenset[str] | None = None,
     ) -> None:
         parsed = urlparse(base_url)
         if (
@@ -95,6 +105,7 @@ class HindsightHttpClient:
         self.max_tokens = max_tokens
         self.budget = budget
         self.query_timestamp = query_timestamp
+        self.allowed_bank_ids = allowed_bank_ids
         self._opener = build_opener(ProxyHandler({}), _NoRedirect())
 
     def request(
@@ -104,6 +115,15 @@ class HindsightHttpClient:
             r"^/v1/default/banks/notalone-experiment-[a-z0-9-]+(?:/|$)", path
         ) and path not in ("/health", "/health/ready"):
             raise ValueError("实验客户端只允许 bank 和健康检查 API。")
+        if path.startswith("/v1/default/banks/"):
+            bank_id = path.removeprefix("/v1/default/banks/").split("/", 1)[0]
+            if (
+                self.allowed_bank_ids is not None
+                and bank_id not in self.allowed_bank_ids
+            ):
+                raise ValueError("bank 不在本轮合成实验 allowlist 中。")
+            if method == "DELETE" and self.allowed_bank_ids is None:
+                raise ValueError("删除须明确本轮合成 bank allowlist。")
         payload = (
             None if body is None else json.dumps(body, ensure_ascii=False).encode()
         )
@@ -116,6 +136,10 @@ class HindsightHttpClient:
         try:
             with self._opener.open(request, timeout=self.timeout) as response:
                 decoded = json.loads(response.read())
+        except HTTPError as exc:
+            raise HindsightHttpFailure(
+                f"HTTP {method} 请求失败：{exc.code}", exc.code
+            ) from exc
         except Exception as exc:
             raise HindsightFailure(
                 f"HTTP {method} 请求失败：{type(exc).__name__}"
@@ -153,6 +177,18 @@ class HindsightHttpClient:
             "POST", self.bank_path(bank_id) + "/memories", {"items": items}
         )
 
+    def delete_document(self, *, bank_id: str, document_id: str) -> dict[str, object]:
+        path = self.bank_path(bank_id) + "/documents/" + quote(document_id, safe="")
+        try:
+            return self.request("DELETE", path)
+        except HindsightHttpFailure as exc:
+            if exc.status != 404:
+                raise
+            return {"already_absent": True, "http_status": 404}
+
+    def delete_bank(self, bank_id: str) -> dict[str, object]:
+        return self.request("DELETE", self.bank_path(bank_id))
+
     def recall(self, *, bank_id: str, query: str) -> RecallBatch:
         try:
             offset = self.log_path.stat().st_size
@@ -181,8 +217,8 @@ class HindsightHttpClient:
             r"\[4\] Reranking \[cross-encoder\]: (\d+) candidates scored", diagnostics
         )
         completes = re.findall(r"\[RECALL ([a-zA-Z0-9-]+)\] Complete:", diagnostics)
-        if items and (
-            len(finished) != 1 or len(completes) != 1 or int(finished[0]) < len(items)
+        if len(completes) != 1 or (
+            items and (len(finished) != 1 or int(finished[0]) < len(items))
         ):
             raise HindsightFailure("无法证明本次真实重排已完成。")
         if re.search(

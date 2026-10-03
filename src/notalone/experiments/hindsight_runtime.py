@@ -7,6 +7,7 @@ import json
 import os
 import signal
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -184,10 +185,33 @@ def start(runtime: Path) -> None:
 def stop(runtime: Path) -> None:
     pidfile = runtime / "service.pid"
     if pidfile.exists():
-        try:
-            os.kill(int(pidfile.read_text()), signal.SIGTERM)
-        except ProcessLookupError:
-            pass
+        pid = int(pidfile.read_text())
+        if pid <= 1:
+            raise RuntimeError("实验 PID 无效，拒绝停止或停数据库。")
+        process = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True
+        )
+        if process.returncode == 0:
+            command = process.stdout.strip().split()
+            expected = [
+                str(runtime / "venv/bin/python"),
+                str(runtime / "venv/bin/hindsight-api"),
+            ]
+            if command[:2] != expected:
+                raise RuntimeError("PID 不属于本实验 API，拒绝停止或停数据库。")
+            os.kill(pid, signal.SIGTERM)
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                status = subprocess.run(
+                    ["ps", "-p", str(pid), "-o", "stat="],
+                    capture_output=True,
+                    text=True,
+                )
+                if status.returncode != 0 or status.stdout.strip().startswith("Z"):
+                    break
+                time.sleep(0.1)
+            else:
+                raise RuntimeError("实验 API 未停止，保留 PID 与数据库供核查。")
         pidfile.unlink()
     print(run_external(runtime, database_code(runtime, "stop")))
 
