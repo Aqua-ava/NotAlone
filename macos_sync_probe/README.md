@@ -50,6 +50,12 @@ zsh scripts/build_cli.sh
 提示。绑定候选只在菜单中展示计数；确认入口由主窗口应用提供（本阶段
 仍可用 CLI `notalone-front-sync confirm-binding` 兜底）。
 
+自动状态查询仍每 3 秒触发，同一连接同时最多一个请求；上一轮未结束时
+跳过本轮，不积累等待任务。每轮检查握手，后端换代、握手缺失或退出时取消
+旧查询并忽略其晚返回结果。状态 GET 的请求与资源超时均为 5 秒，超时沿用
+“后端不可用”提示，下一轮可重试；手动开关和“立即检查一次”保留原等待方式，
+其结果不会被更早的自动查询覆盖。此查询只访问本机后端，不采集消息正文。
+
 命令行进程在当前 Codex 运行环境中无法稳定收到 ScreenCaptureKit 的截窗回调，不能作为真实采集验证的载体。真实权限验证应从 Xcode 启动已签名的独立 App：
 
 1. 在 Xcode 打开 `Xcode/NotAloneSyncProbe/NotAloneSyncProbe.xcodeproj`。

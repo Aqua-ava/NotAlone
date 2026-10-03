@@ -49,6 +49,9 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
     private var syncUnavailable = false
     // 每 3 秒查询一次后端状态。
     private var syncTimer: Timer?
+    // 初次与定时查询共用 Core 资格；仅保存当前自动查询以便取消。
+    private var syncPolling = BackendStatusPolling()
+    private var syncPollingTask: Task<Void, Never>?
     // 最近一次用户操作（开关/检查）的结果摘要；响应不含正文。
     private var lastOperationMessage: String?
 
@@ -62,18 +65,33 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         // 退出菜单栏 App 后立刻停止后续检查。
+        syncPolling.stop()
+        cancelSyncRequest()
         timer?.invalidate()
         syncTimer?.invalidate()
+        syncTimer = nil
     }
 
     // ── 后端连接：握手文件读取与客户端构建 ──────────────────────────────
 
     private func refreshBackendClient() {
-        guard let connection = BackendStatusClient.readConnection() else {
+        let connection = BackendStatusClient.readConnection()
+        let changed = syncPolling.connect(connection)
+        if changed {
+            cancelSyncRequest()
+        }
+        guard let connection else {
             backendClient = nil
             return
         }
-        backendClient = BackendStatusClient(connection: connection)
+        if changed || backendClient == nil {
+            backendClient = BackendStatusClient(connection: connection)
+        }
+    }
+
+    private func cancelSyncRequest() {
+        syncPollingTask?.cancel()
+        syncPollingTask = nil
     }
 
     // 每 3 秒查询后端；失败时后端不可用标记在标题中给出清晰提示。
@@ -89,14 +107,16 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
             repeats: true
         )
         syncTimer?.tolerance = 0.5
-        Task { await performSyncCycle() }
+        performSyncCycle()
     }
 
     @objc private func syncTimerFired() {
-        Task { await performSyncCycle() }
+        performSyncCycle()
     }
 
-    private func performSyncCycle() async {
+    private func performSyncCycle() {
+        guard syncTimer != nil else { return }
+        // 在主线程同步探测连接并领取资格，未获资格时不创建等待 Task。
         refreshBackendClient()
         guard let backendClient else {
             backendUnavailable = true
@@ -106,16 +126,37 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
             rebuildMenu()
             return
         }
+        guard let request = syncPolling.begin() else { return }
+        syncPollingTask = Task { [weak self] in
+            guard let self else { return }
+            await performSyncRequest(backendClient, request: request)
+        }
+    }
+
+    private func performSyncRequest(
+        _ backendClient: BackendStatusClient,
+        request: BackendStatusPolling.Request
+    ) async {
+        defer {
+            // 旧任务收尾不能清除新任务或释放它的请求资格。
+            if syncPolling.finish(request) {
+                syncPollingTask = nil
+            }
+        }
         do {
-            syncReport = try await backendClient.status()
+            let report = try await backendClient.status()
+            guard syncPolling.isCurrent(request) else { return }
+            syncReport = report
             backendUnavailable = false
             syncUnavailable = false
         } catch let error as BackendStatusError where error == .syncUnavailable {
+            guard syncPolling.isCurrent(request) else { return }
             // 后端在运行，但同步尚未就绪（例如尚未初始化微信渠道身份）。
             backendUnavailable = false
             syncUnavailable = true
             syncReport = nil
         } catch {
+            guard syncPolling.isCurrent(request) else { return }
             // 连接或响应失败视为后端不可用；下一轮自动重试。
             backendUnavailable = true
             syncUnavailable = false
@@ -268,7 +309,7 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
     // ── 同步开关与立即检查：全部经后端 API ──────────────────────────────
 
     @objc private func toggleSync() {
-        guard let backendClient else {
+        guard let backendClient, let scope = syncPolling.currentScope else {
             lastOperationMessage = "后端不可用"
             rebuildMenu()
             return
@@ -279,11 +320,13 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
                 let updated: SyncStatusJSON = enable
                     ? try await backendClient.enable()
                     : try await backendClient.disable()
+                guard prepareToApplyManualResult(in: scope) else { return }
                 syncReport = updated
                 backendUnavailable = false
                 syncUnavailable = false
                 lastOperationMessage = enable ? "已开启前台同步" : "已关闭前台同步"
             } catch {
+                guard prepareToApplyManualResult(in: scope) else { return }
                 backendUnavailable = true
                 syncUnavailable = false
                 syncReport = nil
@@ -295,18 +338,21 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func performCheck() {
-        guard let backendClient else {
+        guard let backendClient, let scope = syncPolling.currentScope else {
             lastOperationMessage = "后端不可用"
             rebuildMenu()
             return
         }
         Task {
             do {
-                syncReport = try await backendClient.check()
+                let updated = try await backendClient.check()
+                guard prepareToApplyManualResult(in: scope) else { return }
+                syncReport = updated
                 backendUnavailable = false
                 syncUnavailable = false
                 lastOperationMessage = "已检查一次"
             } catch {
+                guard prepareToApplyManualResult(in: scope) else { return }
                 backendUnavailable = true
                 syncUnavailable = false
                 syncReport = nil
@@ -315,6 +361,15 @@ private final class ProbeAppDelegate: NSObject, NSApplicationDelegate {
             updateSyncTitle()
             rebuildMenu()
         }
+    }
+
+    private func prepareToApplyManualResult(in scope: BackendStatusPolling.Scope) -> Bool {
+        // 先拒绝已退出或已换连接的操作，避免取消另一连接的新轮询。
+        guard syncPolling.currentScope == scope else { return false }
+        refreshBackendClient()
+        guard syncPolling.invalidateRequest(in: scope) else { return false }
+        cancelSyncRequest()
+        return true
     }
 
     // ── 屏幕录制权限（调试窗口仍需要）───────────────────────────────────
@@ -557,6 +612,13 @@ private struct SyncStatusJSON: Decodable {
 private struct BackendStatusClient {
     private let baseURL: URL
     private let token: String
+    // 自动状态查询有界；手动 POST 仍使用原来的 shared 等待方式。
+    private static let statusSession: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 5
+        configuration.timeoutIntervalForResource = 5
+        return URLSession(configuration: configuration)
+    }()
 
     init?(connection: BackendConnection) {
         guard let baseURL = URL(string: "http://\(connection.address)") else {
@@ -595,7 +657,7 @@ private struct BackendStatusClient {
     }
 
     func status() async throws -> SyncStatusJSON {
-        try await request(path: "/api/sync/status", method: "GET")
+        try await request(path: "/api/sync/status", method: "GET", session: Self.statusSession)
     }
 
     func enable() async throws -> SyncStatusJSON {
@@ -610,14 +672,18 @@ private struct BackendStatusClient {
         try await request(path: "/api/sync/check", method: "POST")
     }
 
-    private func request(path: String, method: String) async throws -> SyncStatusJSON {
+    private func request(
+        path: String,
+        method: String,
+        session: URLSession = .shared
+    ) async throws -> SyncStatusJSON {
         guard let url = URL(string: path, relativeTo: baseURL) else {
             throw BackendStatusError.invalidURL
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw BackendStatusError.badStatus
         }
@@ -647,7 +713,4 @@ private enum BackendStatusError: Error {
     case malformedResponse
 }
 
-private struct BackendConnection {
-    let address: String
-    let token: String
-}
+private typealias BackendConnection = BackendStatusPolling.Connection

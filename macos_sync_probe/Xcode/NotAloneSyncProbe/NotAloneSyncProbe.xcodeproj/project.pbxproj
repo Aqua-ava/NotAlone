@@ -10,6 +10,7 @@
 		A10000000000000000000001 /* ProbeCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* ProbeCore.swift */; };
 		A10000000000000000000002 /* CaptureSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* CaptureSupport.swift */; };
 		A10000000000000000000004 /* SelectedSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* SelectedSession.swift */; };
+		A10000000000000000000005 /* BackendStatusPolling.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* BackendStatusPolling.swift */; };
 		A10000000000000000000003 /* MenuBarProbeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* MenuBarProbeApp.swift */; };
 /* End PBXBuildFile section */
 
@@ -34,6 +35,7 @@
 		A20000000000000000000001 /* ProbeCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ProbeCore.swift; path = ../../Sources/NotAloneSyncCore/ProbeCore.swift; sourceTree = SOURCE_ROOT; };
 		A20000000000000000000002 /* CaptureSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CaptureSupport.swift; path = ../../Sources/NotAloneSyncCore/CaptureSupport.swift; sourceTree = SOURCE_ROOT; };
 		A20000000000000000000004 /* SelectedSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SelectedSession.swift; path = ../../Sources/NotAloneSyncCore/SelectedSession.swift; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000005 /* BackendStatusPolling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BackendStatusPolling.swift; path = ../../Sources/NotAloneSyncCore/BackendStatusPolling.swift; sourceTree = SOURCE_ROOT; };
 		A20000000000000000000003 /* MenuBarProbeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MenuBarProbeApp.swift; path = ../../Sources/NotAloneSyncApp/MenuBarProbeApp.swift; sourceTree = SOURCE_ROOT; };
 		15472BFE301BA8BB00F2C36D /* NotAloneSyncProbe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NotAloneSyncProbe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		15472C0C301BA8BD00F2C36D /* NotAloneSyncProbeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NotAloneSyncProbeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -110,6 +112,7 @@
 				A20000000000000000000001 /* ProbeCore.swift */,
 				A20000000000000000000002 /* CaptureSupport.swift */,
 				A20000000000000000000004 /* SelectedSession.swift */,
+				A20000000000000000000005 /* BackendStatusPolling.swift */,
 				A20000000000000000000003 /* MenuBarProbeApp.swift */,
 			);
 			name = "现有探针源码";
@@ -262,6 +265,7 @@
 				A10000000000000000000001 /* ProbeCore.swift in Sources */,
 				A10000000000000000000002 /* CaptureSupport.swift in Sources */,
 				A10000000000000000000004 /* SelectedSession.swift in Sources */,
+				A10000000000000000000005 /* BackendStatusPolling.swift in Sources */,
 				A10000000000000000000003 /* MenuBarProbeApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
