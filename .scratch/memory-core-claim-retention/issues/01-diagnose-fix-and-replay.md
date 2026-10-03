@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-human
+Triage: ready-for-agent
 State: claimed
 Type: task
 Blocked by: none
@@ -80,3 +80,7 @@ Blocked by: none
 2026-10-03：以b11b20f为固定点的本轮三文档两轴终审通过：Standards确定违反0／气味0，Spec阻断0／统计错误0／范围越界0；14字段措辞与最终命令说明已补核。root八项报告SHA／相对链接／状态／权限／关闭门／预算及后阶段检查通过；原修前SHA凭证与评审探针失败保留，修后另核。只保存本任务本地中文提交，关闭收尾0新API／DB，不将文档或匿名测试通过当成原实际有效修复，不做远端Git；任务仍ready-for-agent／claimed。
 
 2026-10-03：续行核实HEAD4359a3e、工作区干净、原实际严格6/12和单叶关闭门不变，上一goal turn为有限对照／归因／提交的具体进展，整体仍未完成。两位只读explorer核对现公开Seam可表达正确结果但不能补漏或修正文，未找到直接对应旧六损失且可立即启动的现spec新配置；不把来源／日期副缺口替代核心目标，不把未测组合都称已失败。旧叙事8开发窗×2 B共16运行位置，0个保存首阶段正文／来源包，无法开展逐主张因果配对，污染及修复方向未知，不重跑旧试验。形成 `docs/memory-frozen-claim-annotation-proposal-20261003.md`：复用原叙事首结果，标注阶段只返回索引＋原12元字段，代码保持正文／来源；拟三臂共享首次叙事并逐门3／56／84／56总199对照，仍现ECNU。此新Interface／职责未获批准、未实施，0新模型调用；需按workflow及spec边界用户决定，Triage改ready-for-human、State仍claimed。只读缺证审计、具体提案的文档验证／两轴审阅／本地提交继续，原Gold、已关闭试验及全部实际／留出验收要求不改。
+
+2026-10-03：提案经文档最小核对21/21、Standards34/34与Spec最终tip审阅后保存为64b4f8c；用户现明确回复“同意”。本提案范围回写spec，Triage回到ready-for-agent、State保持claimed。仓库外新实验目录为 `~/.notalone/audits/memory-frozen-claim-annotation-experiment-20261003/`，human-approval-v1绑定原提案SHA da3cb3aa9fcc53b0a16137d9b2bb342e66e0211ec5655ae276b817c793f72db8、scope与新199预算。原批准版本由64b4f8c保留；目录和文件0700／0600。开始沿已认可extract／Flow接缝以合成red→green实现冻结首包和标注Adapter，再冻结编排与独立审计。本轮尚无模型调用，不写业务或水位，原失败门／已关闭预算不重开，接口许可不当准确性收益。
+
+2026-10-03：用户批准的正文冻结标注私有实现已红→绿，root独立Adapter17、runner20运行（19独立方法／1继承重复）及分析helper3全通过，六文件函数体类型检查通过。预检的审批和最终冻结缺口、离线来源隔离均已修；初红与初类型6错误保持。两轴预审后原计划SHA62da8243…冻结，匿名3调用4/4通过；开发24臂／8共享N、55调用／台账／预约，1可改写E空对象协议失败不补跑，完整分母保持。raw先冻结再V，全44Fact／16N审后原／可改写／冻结严格8／4／8（各18）、旧保护8／5／7（各12）；冻结坏auto确定4／歧义1，44supported和46逐字quote不当准确性证明。开发gate全部false、实际dry在凭据／factory前被拒，累计58/199，余141不授权重启、调参或后阶段；实际／留出0、旧6/12保持，业务／水位／默认路径／官方直连0。结果见docs/memory-frozen-claim-annotation-result-20261003.md，当前继续文档验证／两轴收尾／任务专属提交，整体未完成，ready-for-agent／claimed不变。只读一手调研及scope核对后，先在原完整Fact text说明单叶范围做0API表达可行性与旧试验差异核对；没有renderer或utterance存储、新预算／新模型调用许可，不复刻完整复制训练方法的名义来开试验。
