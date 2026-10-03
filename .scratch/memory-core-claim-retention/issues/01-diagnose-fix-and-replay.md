@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-human
+Triage: ready-for-agent
 State: claimed
 Type: task
 Blocked by: none
@@ -112,3 +112,8 @@ Blocked by: none
 2026-10-03：用户“好的继续”批准下一轮本机验证及有限方案准备。原合成E／V首捕获安全断言已重放red（两条第三人auto），热茶正控制通过；没有字段丢失或确定性门绕过。历史知识规则已经单独试过，恢复原知识text叶不是新方法，九项V检查也已有失败；当前只准备V隐藏E三语用标签、来源独立判断及确定性不一致降级的私有方案。0新联网／凭据／业务／默认／产品源码，所有旧预算继续关闭；新具体[V-only提案](../../../docs/memory-source-pragmatics-pilot-proposal-20261003.md)尚未批准，不声称已补知识漏项。两位explorer首宽rg意外见旧仓库少量合成留出行已披露并停读，不能泛称所有agents留出读取0；私有actual／held值未读取，不使用暴露内容。任务仍ready-for-agent／claimed，本轮准备验证、两轴收尾与本地提交继续完成，整体验收保持。
 
 2026-10-03：本机准备完成，见[记录](../../../docs/memory-source-pragmatics-local-preparation-20261003.md)。14项不同控制全绿、5文件mypy／AST、root1文件mypy／AST和2种SDK合成凭据仅绑定通过；原两方法捕获仍安全red／热茶green。人工正确source仅证明pending／pending／auto连接，同错source仍auto的反例保留；隐私嵌套投影与旧V提示细化边界缺口均首失败后局部修正，不称真实模型改善。root101指纹及110项权限核对通过，首次历史类型源码对比误用保留后修正核对路由。新API0、真实凭据读取／业务／默认／产品源码变更0，实际必需6/12及可选2/6不变，旧预算关闭。新V协议与独立8次只针对错放行，具体联合方案无法孤立证明隐藏的因果收益，也不补E知识漏提；普通核实由Agent完成。Triage改ready-for-human、State仍claimed、Blocked by none，只待这一次具体范围决定；当前文档核验、两轴终审及任务专属本地提交连续完成，整体任务未完成。
+
+2026-10-03：用户在获知“最多8次、仅现ECNU的匿名对照；效果由Agent核实，确认的是新协议与预算范围”后回复“是的”，批准0846e3b中[有限提案](../../../docs/memory-source-pragmatics-pilot-proposal-20261003.md)（SHA14f9f71543ce8b600a549107a842cf7ea2f8908737463776ef8266caf5dc9bc0）。独立新目录上限8次V、E／R0，固定A／B原14候选与8位置，只有匿名阶段；旧预算关闭。先完成私有委托／编排的相关TDD、类型／AST、仅绑定、独立参考及两轴预检，授权／输入／代码／规则／配置／版本完整冻结后才读取现ECNU凭据及唯一运行。Triage回ready-for-agent、State claimed；不读actual／held、不写业务／水位／旧五条、不改默认／发布，整体任务仍未完成。
+
+
+2026-10-03：来源语用有限试验闭账，见[结果](../../../docs/memory-source-pragmatics-pilot-result-20261003.md)。用户新授权8次V全部完成，唯一session18583 exit0、8预约／ledger，E／R0、失败／未运行0、余0，所有旧余额仍闭。18项不同控制、worker/root各4文件mypy／AST、2种SDK仅绑定、4份请求边界捕获后冻结103指纹；初漏19依赖及并行HEAD守卫拒绝已保留并修正冻结路由。24raw先独审冻结SHA5a10e831…再解锁全审SHAd93ea5c6…；root分立核对一致。source标签4/12、负例要求0/4、同次bad-auto原4／source4、合法正例等价支持保护8/8→4/8、新语义降级4。原14输入全24未改，四B-source最终risk经原Flow新增semantic:pragmatics，名义pending仍pending不能算等价保护；每臂核心正文／来源／日期及E标签正确8/12。192机械组与8捕获0API重放通过，96精确读取路径字节未变；SDK总22,701tokens，HTTP／金额未知，不混作新样本。采用门失败，模型独立来源仍同错而非确定性程序丢字段；J没有新E也仍漏，真实必需6/12及可选2/6保持。不采用、不发布、不补跑，不读actual／private held或写业务／水位／旧五条／产品／默认。Triage继续ready-for-agent、State claimed、Blocked by none，只准本机归因及方案准备／收尾，新协议、调用和实际复测未授权，整体有效修复未完成。完成本轮文档最小验证、两轴终审和任务专属本地提交。
