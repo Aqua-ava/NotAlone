@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-human
+Triage: ready-for-agent
 State: claimed
 Type: task
 Blocked by: none
@@ -96,3 +96,7 @@ Blocked by: none
 2026-10-03：来源复制计划有限试验匿名门失败并关闭。25条人工预期组装对应12种计划，68项不同unittest、12文件mypy／AST、3项SDK仅绑定及两轴预审通过后，冻结计划SHA0cc850ec…。唯一匿名session53629终态exit0，1完整位置、2 E/V invoke／预约／台账、失败／空0；raw先冻SHA4ae2ba…后揭V，全审SHAb5465e…确认必需raw与最终严格3/4，三条准确、缺联系人不知道朋友当前报酬。三份引用逐字真实且意义完整，pending2／auto1仅评测去向，坏auto、误拒、不必要降级及extras均0。捕获运行闭环SHA20135c…通过，无伪造V或新调用；root失败门SHAbc94c1…、关闭收据SHAaa89ab…，累计2/114、余112关闭，开发dry预期BudgetRejected且预约不增，后三阶段未启动、actual／held只核字节未解码。报告见[本轮结果](../../../docs/memory-source-copy-plan-result-20261003.md)。服务reported9,817tokens，HTTP／账单未知，只用既有ECNU、不用官方key／直连；业务／水位／默认路径未改，历史实际6/12及2/6不变。首次本机凭证写作错误保留后0API纠正；不补跑或循环调本配置。当前继续结果文档核对、两轴终审及任务专属本地提交，整体修复未完成，仍ready-for-agent／claimed。
 
 2026-10-03：用户询问下一步及是否需本人验收，获知明确原话由Agent核验后回复“好的，你来吧”。root在已认可extract接缝三次重放首次公开E均红，定位为原话已到达但首包漏生成，3计划→3Fact无丢条；合法人工计划注入可完整组装，只是正控制。两位只读explorer核规则／历史同窗及33份E的system/schema投影，确认知识说明换叶主要重复已测规则；旧匿名4/4与copy3/4差异不构成单变量因果证据，未读取内部思考、actual／held或凭据。新候选为单target独立提取、保留全部同窗context，区别于旧group单E；产品batch_size=1会重新裁context，不直接切换。私有原型3个不同公开extract／Flow检查及相关mypy／AST通过，首次placeholder红／测试格式错误／类型查找路径错误保留；0新API／业务写入，所有已关闭预算不动。具体[20次匿名对照提案](../../../docs/memory-single-target-omission-pilot-proposal-20261003.md)改变target标注与调用量，需新范围决定；Triage改ready-for-human、State仍claimed。普通文档核对、两轴审阅及任务专属本地提交继续完成，不把“你来吧”补写为已同意新预算，不把原型／诊断称实际准确率修复。
+
+2026-10-03：用户收到上述具体20次匿名对照范围问题后，确认下一步由Agent承担，现回复“继续吧”。批准9bbd88b中的原提案SHA56995f6b…，新私有目录memory-single-target-omission-pilot-20261003的人类批准凭证SHA17b4bce6…绑定批准文档／固定10位置／20invoke，所有旧预算继续关闭。Triage回到ready-for-agent，State保持claimed；Agent继续本机编排、原接缝相关验证／SDK只绑定／两轴预检与冻结后唯一匿名运行，raw先审后V，所有输出／失败完整计分，不改默认／Gold或业务。只用现ECNU，不用官方key；此pilot不授权开发／实际／留出，整体修复仍未完成。
+
+2026-10-03：上述pilot已结束并关闭，见[单目标匿名结果](../../../docs/memory-single-target-omission-pilot-result-20261003.md)。9项不同unittest、7文件类型／AST、2种原Tool SDK只绑定及两轴预检后冻结；唯一session78059终态exit0，固定10位置、19invoke／预约／无正文台账，失败0、合法空E1、零保留2、未运行0，余1关闭。首raw全审SHA7e98ac64…先冻结，再揭V，全审SHA3ba05d30…：13raw正文准确、12完整合法，12最终保留准确；原／候选最终均6/8，候选知识状态1/2、原正例保护5/6，1岗位被E附带历史缺源污染，原V正确拒绝。坏auto、完整合法误拒、不必要降级0，必要来源语义契约缺陷1，严格覆盖无收益，六门字段失败、不采用。独立闭环SHA2d7838d4…核900机械条目／10原Flow捕获重放；root失败门SHA9963be05…核315字节指纹及权限后闭账，均0新API。仅现ECNU ecnu-max，SDKreported70,085tokens，HTTP／账单未知；未改生产／业务／水位／旧五条，actual／held未解码，旧2/114仍关闭，实际6/12及2/6不变。所有后续阶段false，无补跑／调参／增臂。整体修复未完成，仍ready-for-agent／claimed／Blocked by none；当前完成结果文档的最小验证、两轴终审及任务专属本地提交。
