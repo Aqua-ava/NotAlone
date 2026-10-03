@@ -27,6 +27,8 @@
 
 ## Implementation Decisions
 
+- 2026-10-04用户“继续下一步吧”继续上轮失败后的本机归因、原接缝可运行准备及具体方案。仍0新模型调用，不把续行当新协议／24预算批准。先重放首错误与正控制、冻结四假设，排除已观察的显式提示矛盾、E三标签动态泄露和确定性传播错误；模型人物混淆仅为待实测假设。沿现verify／原四键／Flow接缝，以完整原产品V为基线追加临时人物及定位证据，仅`supported＋third_party＋E assertion/asserted`新增`uncertain/pragmatics`，不改14值／业务字段或升级候选，不把mixed／unclear一律降级。失败source三标签方案未采用；该新方案相对旧source非单变量，相对同期原V也为提示／结构／guard联合检验。[本机记录](../../docs/memory-party-guard-local-preparation-20261004.md)及[24次V-only具体提案](../../docs/memory-party-guard-pilot-proposal-20261004.md)先完成本机相关控制、独立参考与两轴审阅，具体联网范围再决定。旧知识规则／text单叶及R补漏已有失败，本轮不重新包装或声称修复E未知状态遗漏；所有旧余额关闭。
+
 - 2026-10-03用户明确回复“是的”，批准0846e3b版本的[来源语用V-only提案](../../docs/memory-source-pragmatics-pilot-proposal-20261003.md)（SHA14f9f71543ce8b600a549107a842cf7ea2f8908737463776ef8266caf5dc9bc0）。仅旧四条匿名合成原话及r1／r2首次原E各三候选A／B，原V对照隐藏E标签＋来源独立标签＋确定性比较联合核验，按提案固定8位置、新独立上限8次V、E／R0；不重提候选、不改原14值、不回退。先相关TDD／类型／AST、SDK合成凭据仅绑定、独立参考及两轴预检，全部冻结后唯一运行，raw先独审冻结再揭编译／Flow，负4正8及每臂12完整机会计分，判败关闭不补跑。只用现ECNU、不用官方key、不读真实／留出、不写业务或改默认，不能补E知识漏提或把错误pending算正确记忆，通过也不授权后阶段。
 
 - 2026-10-03用户在获知“知识状态规则、转述漏核、本机验证后准备有限对照”之后回复“好的继续”，继续本机归因及具体方案准备。旧知识text规则和逐字段V已有失败证据，不重抄为新机制；准备隐藏E三个语用标签、V独立给来源标签、代码不一致只降级的私有可行性，沿现verify／Flow接缝，0新联网及业务／默认变更。[新的8次V-only提案](../../docs/memory-source-pragmatics-pilot-proposal-20261003.md)只针对错误自动放行，未批准新wire联网或发布，不复用任何旧余额，不把它当E漏提修复。
@@ -76,6 +78,8 @@
 全历史生产重提取、批量采纳／删除、放宽安全门、业务 schema 迁移、回复／同步／App 权限改版、新供应商、外部聊天发送、后台自动化、正式部署、push 和 PR。
 
 ## Further Notes
+
+2026-10-04[人物核验本机准备](../../docs/memory-party-guard-local-preparation-20261004.md)完成：9worker＋4root不同契约控制、worker3文件mypy／AST、root首4文件mypy／AST及格式后root1文件mypy／4AST通过；原缺陷captured重放仍red，未制造模型修复证据。来源quote合法可只定位对象、错contact及mixed／unclear仍auto的反例保留；正确report的Fact与decision风险分层比较，不把仍pending当无损保护。独立C1—C4参考与root114指纹／196私有权限核对通过，所有首失败与修正保留；16明确依赖非全import闭包，早期mypy忽略缓存与产品源码变化分开。新API／真实SDK／key／业务／默认／产品源码0；知识状态未补提，实际必需6/12及可选2/6保持。[24次匿名具体提案](../../docs/memory-party-guard-pilot-proposal-20261004.md)仍未授权，旧预算关闭，task ready-for-human／claimed，只待新协议及有限调用范围，普通核验继续由Agent负责；整体spec未完成。
 
 2026-10-03用户“好的继续”对应的[本机准备](../../docs/memory-source-pragmatics-local-preparation-20261003.md)完成：14项私有控制、5文件mypy／AST、root1文件mypy／AST和2种SDK合成凭据仅绑定通过，0新API／真实凭据／业务／产品默认变更。原捕获两项仍安全red与热茶green，人工来源标签不能称实际模型修复；同错source仍auto的反例保留。已有知识规则试验不能包装成新修复；新的[8次V-only有限方案](../../docs/memory-source-pragmatics-pilot-proposal-20261003.md)只验证隐藏标签、来源独立标注及确定性比较联合方案能否减少错放行，不改变E，也不完成覆盖目标。具体新协议和8预算待决定，所有旧余额关闭；任务claimed、整体验收及实际6/12／可选2/6保持。
 

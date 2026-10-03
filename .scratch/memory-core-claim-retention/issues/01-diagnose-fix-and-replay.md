@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-agent
+Triage: ready-for-human
 State: claimed
 Type: task
 Blocked by: none
@@ -16,6 +16,12 @@ Blocked by: none
 - 相关检查、隔离全量、两轴评审、本地中文提交完成；无远端 Git。
 
 ## Comments
+
+2026-10-04：当前四文档与限定私有实现／证据两轴终审完成。Standards硬规范0、非阻塞原四键测试转换重复气味1；Spec当前缺失／scope creep／实现错误均0，整体有效修复／实际同批／最终留出仍未完成。收据SHA67ec2ca8…／300cd863…分别保留，无审查模型调用或测试复跑。任务链接／引用SHA／状态及暂存diff最小核验后保存仅本任务四文档的中文本地提交；不提交私有材料、不捎并行macOS或reply工作、不做远端Git。新24次仍待用户具体决定、旧预算关闭、State claimed，实际6/12及可选2/6保持。
+
+2026-10-04：本机准备完成，见[记录](../../../docs/memory-party-guard-local-preparation-20261004.md)。原安全断言仍red／热茶green；9worker＋4root不同人工契约控制、worker3文件mypy／AST及root首4文件mypy／AST通过，格式后root1文件mypy／4AST和4控制通过，首失败均保留。完整原V11键／system前缀保持，六键补充覆盖旧输出限制；唯一third_party assertion/asserted降级、错contact＋对象quote及mixed／unclear仍auto的反例保留。C1—C4独立参考通过，C4无来源完成体先保留再修正，未知日期不造。root114不同字节指纹／196私有权限核对通过，worker明确16依赖并非全部import闭包，scripted次数不是模型样本；早期mypy可能更新忽略缓存，最终禁缓存。0新API／SDK／真实凭据／actual-private held／业务／默认／产品源码／远端Git；知识E漏项及实际6/12／可选2/6不变。新的[24次匿名V-only提案](../../../docs/memory-party-guard-pilot-proposal-20261004.md)具体范围待决定，Triage转ready-for-human、State claimed、Blocked by none；所有旧预算关闭，继续两轴终审和任务专属本地提交，不把整体目标标完成。
+
+2026-10-04：用户“继续下一步吧”只续行本机归因与具体准备。独立捕获反馈重复red，root另重放原两错auto及热茶正控制，0新模型调用；按单轴缩到单候选／单source只证明程序传播，不推断缩小LLM输入仍错。已读实际请求没有E三标签动态泄露或允许第三人错标的显式提示矛盾，模型人物判断为待测假设。完整原产品V追加临时人物／片段与窄guard的私有原型走同verify／原4键／Flow接缝；失败source未采用，新方案非相对它的单因比较。历史知识说明与R补漏不能重包，E知识状态未修复。新的[24次匿名V-only提案](../../../docs/memory-party-guard-pilot-proposal-20261004.md)仅准备，尚无协议／预算调用许可，所有旧余额关闭；任务ready-for-agent／claimed继续本机TDD、参考核对、相关验证、两轴收尾和本地提交，实际6/12及可选2/6不变。
 
 2026-10-02：用户在明确下一步归因、修复和同批复测后回复“好的继续”，scope 与已有公开测试接缝已认可。root 发布一张无依赖完整纵切任务；无需重新拆分或询问普通实现权限。
 
