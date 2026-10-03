@@ -26,15 +26,16 @@ final class AppModel: ObservableObject {
     @Published private(set) var followSmokeInFlight = false
     @Published var followSmokeError: String?
     @Published private(set) var selectedContactId: String?
-    @Published private(set) var messages: [MessageEntry] = []
-    @Published private(set) var messageStreamState: MessageStreamState = .idle
+    @Published private var messagePagination = MessagePagination()
+    var messages: [MessageEntry] { messagePagination.messages }
+    var messageStreamState: MessageStreamState { messagePagination.state }
     @Published private(set) var lastMessageCheckAt: Date?
     @Published private(set) var lastMessageCheckCount = 0
     @Published var lastOperationMessage: String?
 
     // 当前选中联系人是否还有更早的消息可加载（首屏后由游标决定）。
     var hasMoreMessages: Bool {
-        messageStreamState == .loaded && loadedBefore != nil
+        messagePagination.hasMoreMessages
     }
 
     var selectedContactDisplayName: String? {
@@ -89,13 +90,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var setupInFlight = false
     @Published var setupError: String?
 
-    enum MessageStreamState: Equatable {
-        case idle
-        case loadingFirstPage
-        case loadingMore
-        case loaded
-        case failed(String)
-    }
+    typealias MessageStreamState = MessagePagination.State
 
     private let supervisor = BackendSupervisor()
     private var client: BackendClient?
@@ -105,12 +100,9 @@ final class AppModel: ObservableObject {
     private var sseClient: SseEventClient?
     private var pollTask: Task<Void, Never>?
     private var messageTask: Task<Void, Never>?
-    private var messageRefreshTask: Task<Void, Never>?
     private var priorityTask: Task<Void, Never>?
     private var isToggling = false
     private var isCheckingNow = false
-    private var loadedBefore: String?
-    private var knownMessageIds: Set<String> = []
     private var isStopping = false
 
     private init() {}
@@ -126,13 +118,10 @@ final class AppModel: ObservableObject {
     func stop() async {
         guard !isStopping else { return }
         isStopping = true
+        invalidateMessageRequests()
         setupRecovery.connect(nil)
         pollTask?.cancel()
         pollTask = nil
-        messageTask?.cancel()
-        messageTask = nil
-        messageRefreshTask?.cancel()
-        messageRefreshTask = nil
         priorityTask?.cancel()
         priorityTask = nil
         sourceTask?.cancel()
@@ -161,11 +150,7 @@ final class AppModel: ObservableObject {
         importedSources = []
         sourceError = nil
         sourceRequestInFlight = false
-        messages = []
-        knownMessageIds = []
-        loadedBefore = nil
-        lastMessageCheckAt = nil
-        lastMessageCheckCount = 0
+        resetMessagePagination()
         selectedReplyMessageId = nil
         replyGenerationId = UUID()
         replyInFlight = false
@@ -178,93 +163,77 @@ final class AppModel: ObservableObject {
         replyError = nil
         contactMemories = []
         pendingMemoryCandidates = []
-        messageStreamState = .idle
         publishPriorityContact(contactId)
         loadFirstMessagePage()
     }
 
     func loadFirstMessagePage() {
-        guard let selectedContactId, let client else { return }
-        messageTask?.cancel()
-        messageTask = Task { [weak self] in
-            guard let self else { return }
-            self.messageStreamState = .loadingFirstPage
-            do {
-                let page = try await client.messages(contactId: selectedContactId, limit: 50)
-                guard !Task.isCancelled, self.selectedContactId == selectedContactId else { return }
-                self.messages = page.messages
-                self.knownMessageIds = Set(page.messages.map(\.messageId))
-                self.loadedBefore = page.nextCursor
-                self.messageStreamState = .loaded
-            } catch {
-                self.messageStreamState = .failed(Self.describe(error))
-            }
-        }
+        guard !isStopping, !sourceRequestInFlight,
+              selectedContactId != nil, client != nil, clientConnection != nil else { return }
+        resetMessagePagination()
+        startMessageRead(.firstPage)
     }
 
     func loadMoreMessages() {
-        guard let selectedContactId, let client, hasMoreMessages, let loadedBefore else {
-            return
-        }
-        guard !(messageStreamState == .loadingMore) else { return }
-        messageTask?.cancel()
-        messageTask = Task { [weak self] in
-            guard let self else { return }
-            self.messageStreamState = .loadingMore
-            do {
-                let page = try await client.messages(
-                    contactId: selectedContactId,
-                    limit: 50,
-                    before: loadedBefore
-                )
-                guard !Task.isCancelled, self.selectedContactId == selectedContactId else { return }
-                let fresh = page.messages.filter { !self.knownMessageIds.contains($0.messageId) }
-                self.messages.append(contentsOf: fresh)
-                self.knownMessageIds.formUnion(fresh.map(\.messageId))
-                self.loadedBefore = page.nextCursor
-                self.messageStreamState = .loaded
-            } catch {
-                self.messageStreamState = .failed(Self.describe(error))
-            }
-        }
+        startMessageRead(.history)
     }
 
-    // 新消息事件到达（当前联系人范围内）时经消息流 API 拉到最新一页
-    // 并去重追加，保证界面不手动刷新也能实时更新。
+    // 新消息事件与轮询共享有界对账，只有接续旧区间后才展示新增消息。
     private func appendNewMessages() {
         fetchLatestAndMerge()
     }
 
-    // 对账：拉取最新一页，只合并本次会话未见过的消息（断线窗口补拉）。
+    // SSE 不回放断线窗口消息，重连后对账已有显示区间。
     private func reconcileNewMessages() {
         fetchLatestAndMerge()
     }
 
-    // 拉取最新一页；只把当前会话未见过的消息合并到流头部。
     private func fetchLatestAndMerge() {
-        guard let selectedContactId, let client else { return }
-        guard !(messageStreamState == .loadingFirstPage || messageStreamState == .loadingMore) else {
-            return
-        }
-        guard messageRefreshTask == nil else { return }
-        messageRefreshTask = Task { [weak self] in
+        startMessageRead(.reconcile)
+    }
+
+    private func startMessageRead(_ action: MessagePagination.Action) {
+        guard !isStopping, !sourceRequestInFlight, clientConnection != nil,
+              let client, let request = messagePagination.begin(action) else { return }
+        messageTask = Task { [weak self] in
             guard let self else { return }
-            defer { self.messageRefreshTask = nil }
-            do {
-                let page = try await client.messages(contactId: selectedContactId, limit: 50)
-                guard !Task.isCancelled, self.selectedContactId == selectedContactId else { return }
-                let fresh = page.messages.filter { !self.knownMessageIds.contains($0.messageId) }
-                if !fresh.isEmpty {
-                    self.messages = fresh + self.messages
-                    self.knownMessageIds.formUnion(fresh.map(\.messageId))
+            var current = request
+            while !Task.isCancelled {
+                do {
+                    let page = try await client.messages(
+                        contactId: current.contactId,
+                        limit: current.limit,
+                        before: current.before
+                    )
+                    guard !Task.isCancelled,
+                          let completed = self.messagePagination.complete(current, page: page) else { return }
+                    if let count = completed.reconciledCount {
+                        self.lastMessageCheckAt = Date()
+                        self.lastMessageCheckCount = count
+                    }
+                    guard let next = completed.nextRequest else { return }
+                    current = next
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    _ = self.messagePagination.fail(current, description: Self.describe(error))
+                    return
                 }
-                self.loadedBefore = page.nextCursor
-                self.lastMessageCheckAt = Date()
-                self.lastMessageCheckCount = fresh.count
-            } catch {
-                // 合并失败不打断已有消息流；下一轮轮询或事件会重试。
             }
         }
+    }
+
+    private func invalidateMessageRequests() {
+        messageTask?.cancel()
+        messageTask = nil
+        messagePagination.invalidateRequests()
+    }
+
+    private func resetMessagePagination() {
+        messageTask?.cancel()
+        messageTask = nil
+        messagePagination.reset(contactId: selectedContactId)
+        lastMessageCheckAt = nil
+        lastMessageCheckCount = 0
     }
 
     private func publishPriorityContact(_ contactId: String) {
@@ -309,7 +278,7 @@ final class AppModel: ObservableObject {
                 }
             case .reconnected:
                 // message.created 不按 Last-Event-ID 回放：重连后对账，
-                // 拉取最新一页去重合并，弥补断线窗口内入库的消息。
+                // 分页补到已有区间，弥补断线窗口内入库的消息。
                 await MainActor.run {
                     self.reconcileNewMessages()
                 }
@@ -741,6 +710,7 @@ final class AppModel: ObservableObject {
                     importedSources = sources
                     if let updated = sources.first(where: { $0.sourceId == source.sourceId }), updated.deletionComplete {
                         clearSourceDerivedViews()
+                        sourceRequestInFlight = false
                         loadFirstMessagePage()
                         lastOperationMessage = "导入资料已删除；保留不含正文的 AI 调用记录"
                         return
@@ -757,7 +727,7 @@ final class AppModel: ObservableObject {
 
     private func clearSourceDerivedViews() {
         dataGenerationId = UUID()
-        messageRefreshTask?.cancel()
+        resetMessagePagination()
         replyGenerationId = UUID()
         replyInFlight = false
         replyCandidates = []
@@ -766,9 +736,6 @@ final class AppModel: ObservableObject {
         replyEvidenceLoading = false
         lastReplyRequestId = nil
         lastReplyUsedSkill = nil
-        messageTask?.cancel()
-        messages = []
-        knownMessageIds = []
         selectedReplyMessageId = nil
         contactMemories = []
         pendingMemoryCandidates = []
@@ -1228,6 +1195,7 @@ final class AppModel: ObservableObject {
     // 后端仍以 owner 未初始化模式运行，造成重启循环）。
     private func restartBackendIfNeeded(after request: SetupRecovery.Request) async {
         guard !isStopping, setupRecovery.isCurrent(request) else { return }
+        invalidateMessageRequests()
         sseClient?.stop()
         sseClient = nil
         do {
@@ -1238,6 +1206,7 @@ final class AppModel: ObservableObject {
             return
         }
         guard !isStopping, setupRecovery.isCurrent(request) else { return }
+        invalidateMessageRequests()
         backendAttachment = BackendAttachment()
         setupRecovery.connect(nil)
         setupStatus = nil
@@ -1257,7 +1226,7 @@ final class AppModel: ObservableObject {
                 // owner 已初始化（或状态未知）：正常轮询业务数据。
                 await refreshStatus()
                 await refreshContacts()
-                // SSE 是低延迟通道；选中会话再做 3 秒级最新一页对账，
+                // SSE 是低延迟通道；选中会话再做 3 秒级有界分页对账，
                 // 覆盖 SSE 断线、事件遗漏或事件到达时首屏仍在加载的窗口。
                 if selectedContactId != nil {
                     if let selectedContactId {
@@ -1293,7 +1262,9 @@ final class AppModel: ObservableObject {
             return
         }
         guard !isStopping else { return }
+        invalidateMessageRequests()
         backendAttachment.disconnect()
+        client = nil
         setupRecovery.connect(nil)
         setupStatus = nil
         sseClient?.stop()
@@ -1320,6 +1291,7 @@ final class AppModel: ObservableObject {
         // 必须重建 SSE 客户端，否则旧客户端会对已死端口无限重连，
         // 实时事件静默失效（只剩 3 秒轮询）。
         guard !isStopping, backendAttachment.attach(connection) else { return }
+        invalidateMessageRequests()
         setupRecovery.connect(connection)
         setupStatus = nil
         setupError = nil
@@ -1383,17 +1355,22 @@ final class AppModel: ObservableObject {
     }
 
     private func refreshStatus() async {
-        guard let client else { return }
+        guard let client, let connection = clientConnection else { return }
         // owner 未初始化时同步状态端点按设计返回 503，不视为后端故障。
         guard setupStatus?.initialized != false else { return }
         do {
-            status = try await client.syncStatus()
+            let refreshed = try await client.syncStatus()
+            guard !isStopping, clientConnection == connection else { return }
+            status = refreshed
             // 上次失败后状态一恢复就回到 running，允许界面自动重连。
             backendState = .running
         } catch {
+            guard !isStopping, clientConnection == connection else { return }
             // 只在真实传输失联时重置初始化状态；业务 503/500 仍保留连接并重试。
             if error is URLError || (error as? BackendClient.BackendError) == .transport {
+                invalidateMessageRequests()
                 backendAttachment.disconnect()
+                self.client = nil
                 setupRecovery.connect(nil)
                 setupStatus = nil
                 sseClient?.stop()

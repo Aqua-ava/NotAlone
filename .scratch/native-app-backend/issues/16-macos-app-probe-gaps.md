@@ -14,7 +14,7 @@ State: open
 3. **置信度按百分数格式化恒显示 0%/1%**（`MainWindowView.swift:729,824`）：后端 confidence 是 0–1，`%.0f` 直接当百分数。改为 `%.0f%%` 前先乘 100 或 `%.1f` 比例展示。
 4. **SSE task.progress 用上一个任务的 errorCode 回填新任务**（`AppModel.swift:256-264`）：后端 TaskProgressPayload 不含 error_code（`sse.py:48-56`），建议后端补字段或前端在新任务开始时清空。
 5. **`BackendClient.init` 对握手地址强制解包**（`BackendClient.swift:33`）：`URL(string:)!` 对用户可写、可能被篡改的握手文件崩溃；对齐 `SseEventClient` 的可选绑定。
-6. **断线对账只补拉最新 50 条**（`AppModel.fetchLatestAndMerge`）：突发 >50 条时中间消息静默丢失且 `knownMessageIds` 记忆导致后续不补；需按页推进补齐到已知水位。
+6. **断线对账只补拉最新 50 条且覆盖历史游标**（`AppModel.fetchLatestAndMerge`）：两次成功刷新间新增 >50 条时，桌面列表中间区间未自动读取；最新页游标覆盖历史进度，手动翻页可能乱序或反复读取。数据库消息仍可分页取得，`knownMessageIds` 没把未读消息标为已知；需按页补到已显示区间，并分别管理历史与对账游标。
 7. **attach 时 `checkSetupStatus` 单次失败 → SSE 永不启动且无重试**（`AppModel.swift:995-1009`）。
 8. **Info.plist 声明无效键 `NSAppDataUsageDescription`**：非 Apple 认可的 usage key，属误导性死配置。
 9. **`build_app.sh` 未指定 `-swift-version 6`**：打包产物与 `swift build` 的语言模式/并发检查强度不一致。
@@ -40,3 +40,5 @@ App target 无自动化测试（Package.swift 只覆盖 NotAloneAppCore）；竞
 - 2026-10-03：第 5 项已由 [连接地址修复任务](17-validate-backend-connection.md) 完成：共享回环校验、去掉初始化强制解包、非法公开请求安全失败；合成 Swift 37 项、App 目标编译及两轴审查通过。未替换运行中的 App，打包和真实微信集成未验证；本汇总仍有其他遗留项，保持 open。
 - 2026-10-03：第 2 项已由 [导入错误分类任务](18-import-error-classification.md) 完成：已知提交失败显示固定导入说明，未知／非法冲突保持普通状态错误，真实回复拒绝和导入成功保持原行为。新增 7 项、完整 Swift 44 项、App 目标编译与两轴审查通过；仅修复桌面客户端与合成测试，不变更后端导入或记忆流程。
 - 2026-10-03：第 7 项已由 [初始化恢复任务](19-recover-setup-subscription.md) 修复：未知初始化状态在既有轮询中重试，进行中或状态已知时不重复查询；换连接、失联和退出后旧查询与异步续程失效。同连接 attach 幂等和关闭凭据语义保留。新增 9 项、完整 Swift 53 项通过，Standards／Spec 最终均 0；真实 App 事件订阅未端到端验收。
+- 2026-10-03：第 6 项重新核验并收窄为桌面展示与分页状态缺陷，不称为数据库丢消息。用户已确认 [消息分页任务](20-message-pagination-continuity.md) 的公开接缝、每轮 10 页／累计 20 页预算及停止重载方式，进入独立实现；记忆实验、CLI 同步与后端协议保持本轮排除。
+- 2026-10-03：第 6 项分页实现与验证完成：Core 统一首屏、历史和对账状态，接续后一次展示新增区间，历史游标独立；预算／异常游标停止、失败续读及晚返回结果均有合成覆盖。10 项分页回归、完整 Swift 63 项与 App 目标编译通过；缓冲仅在端侧内存，未替换运行中 App，真实集成尚未验收。最终双轴审查与本地提交记录见 [消息分页任务](20-message-pagination-continuity.md)，本汇总仍保持 open。
