@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-human
+Triage: ready-for-agent
 State: claimed
 Type: task
 Blocked by: none
@@ -16,6 +16,10 @@ Blocked by: none
 - 相关检查、隔离全量、两轴评审、本地中文提交完成；无远端 Git。
 
 ## Comments
+
+2026-10-04：[24次人物匿名对照结果](../../../docs/memory-party-guard-pilot-result-20261004.md)已关闭：阶段1完整通过才开阶段2，24V全部返回／台账／预约对应，E／R、运行／结构失败及未运行0。原／新坏auto6／0，正14/14完整保护，人物18/20；C4两轮把共同参与mixed误判contact，阶段2及整体门失败，不因安全pending或充分quote改Gold。raw先独审冻结再揭compiled／Flow，Fact与代码推导decision风险分层，原14／未知日期保持。worker11＋root6控制、类型与AST、SDK仅绑定、228SHA／7版本及两轴预检通过；运行／落盘失败统计修正和全部首失败保留。原J未补提，实际6/12及可选2/6保持，0actual／held／业务／默认／产品源码变更。24预算余额0、导入前真实闭账拒绝；State claimed、Triage ready-for-agent仅继续本机归因／具体方案，不开放新模型试验。当前三文档最小核验及两轴终审通过；真实mypy选项与C4误判方向文案已修，最终硬问题／阻塞0、可选气味1，终审SHA b3c88e0a…／7cb708b7…保留。按工程规则保存任务专属本地提交，无远端Git；整体spec未完成。
+
+2026-10-04：用户明确“同意24次匿名对照”，批准d460b16的[具体提案](../../../docs/memory-party-guard-pilot-proposal-20261004.md)，原提案SHA95bfb4f0…保留。新独立目录／24上限仅匿名V，8先运行并由Agent原话全审，全部过门才准后16；原14／scope／sender／target／日期不改、E／R0。先相关TDD／类型／真实SDK合成凭据只绑定、独立参考／两轴预检与完整冻结，再唯一运行；raw先审后编译／Flow，失败和未运行分母不删，判败余额关闭，无公开invoke重试或调参。Triage回ready-for-agent、State claimed、Blocked by none；只现ECNU、不用官方key，不读actual／private held、不写业务或默认，不把C2给定候选核验称E补漏。旧预算仍关闭，整体有效修复及实际6/12／可选2/6保持未完成。
 
 2026-10-04：当前四文档与限定私有实现／证据两轴终审完成。Standards硬规范0、非阻塞原四键测试转换重复气味1；Spec当前缺失／scope creep／实现错误均0，整体有效修复／实际同批／最终留出仍未完成。收据SHA67ec2ca8…／300cd863…分别保留，无审查模型调用或测试复跑。任务链接／引用SHA／状态及暂存diff最小核验后保存仅本任务四文档的中文本地提交；不提交私有材料、不捎并行macOS或reply工作、不做远端Git。新24次仍待用户具体决定、旧预算关闭、State claimed，实际6/12及可选2/6保持。
 
