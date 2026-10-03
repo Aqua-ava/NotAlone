@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-agent
+Triage: ready-for-human
 State: claimed
 Type: task
 Blocked by: none
@@ -84,3 +84,9 @@ Blocked by: none
 2026-10-03：提案经文档最小核对21/21、Standards34/34与Spec最终tip审阅后保存为64b4f8c；用户现明确回复“同意”。本提案范围回写spec，Triage回到ready-for-agent、State保持claimed。仓库外新实验目录为 `~/.notalone/audits/memory-frozen-claim-annotation-experiment-20261003/`，human-approval-v1绑定原提案SHA da3cb3aa9fcc53b0a16137d9b2bb342e66e0211ec5655ae276b817c793f72db8、scope与新199预算。原批准版本由64b4f8c保留；目录和文件0700／0600。开始沿已认可extract／Flow接缝以合成red→green实现冻结首包和标注Adapter，再冻结编排与独立审计。本轮尚无模型调用，不写业务或水位，原失败门／已关闭预算不重开，接口许可不当准确性收益。
 
 2026-10-03：用户批准的正文冻结标注私有实现已红→绿，root独立Adapter17、runner20运行（19独立方法／1继承重复）及分析helper3全通过，六文件函数体类型检查通过。预检的审批和最终冻结缺口、离线来源隔离均已修；初红与初类型6错误保持。两轴预审后原计划SHA62da8243…冻结，匿名3调用4/4通过；开发24臂／8共享N、55调用／台账／预约，1可改写E空对象协议失败不补跑，完整分母保持。raw先冻结再V，全44Fact／16N审后原／可改写／冻结严格8／4／8（各18）、旧保护8／5／7（各12）；冻结坏auto确定4／歧义1，44supported和46逐字quote不当准确性证明。开发gate全部false、实际dry在凭据／factory前被拒，累计58/199，余141不授权重启、调参或后阶段；实际／留出0、旧6/12保持，业务／水位／默认路径／官方直连0。结果见docs/memory-frozen-claim-annotation-result-20261003.md，当前继续文档验证／两轴收尾／任务专属提交，整体未完成，ready-for-agent／claimed不变。只读一手调研及scope核对后，先在原完整Fact text说明单叶范围做0API表达可行性与旧试验差异核对；没有renderer或utterance存储、新预算／新模型调用许可，不复刻完整复制训练方法的名义来开试验。
+
+2026-10-03：上轮关闭报告经root21项文档／证据核对与Standards／Spec收尾后保存为49c4411；只修正起始0调用的时态，整体仍未完成。新增0API差异审查确认“优先原词”大部分重复已测规则；其窄偏好未单测，但没有足够新机制据此再开模型轮次。原14Fact能表达完整语义，人工预期例不是可靠生成或准确率。
+
+2026-10-03：形成待决[来源复制计划提案](../../../docs/memory-source-copy-plan-proposal-20261003.md)。拟单E返回原12元字段及copy_plan，程序从同窗片段、有界角色前缀与明确来源时间附注装配原14Fact，原V／Flow／采纳不变。此限制不同于锁定自由生成的N，但借字拼词、人物／关系／期间错误仍可能；不称论文完整复现或已禁止全部扩写。当前只有人工设计审查，未实现Adapter／renderer、无新预算或模型调用，actual／held不解码。新内部Tool及正文职责超出已批准spec，拟2／32／48／32总114一次有限对照，不借旧余额；原Gold和全部正例／坏auto门保持，P0需另完成全开发必需与旧保护／匿名语义，当前10种人工例不冒充全门。Triage改ready-for-human、State仍claimed，待该具体Interface与有限试验决定；普通文档核对、两轴审阅与本地提交继续完成，未批准前不实施或联网。
+
+2026-10-03：用户再次明确不要使用DeepSeek官方key。此限制持续有效，提案明确只用既有ECNU ecnu-max，不直连或回退官方；ECNU不可用按失败关闭，不切凭据。本轮仅本机只读设计审查，未读取凭据或新增模型调用。
