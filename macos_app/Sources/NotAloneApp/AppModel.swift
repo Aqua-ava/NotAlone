@@ -100,6 +100,7 @@ final class AppModel: ObservableObject {
     private let supervisor = BackendSupervisor()
     private var client: BackendClient?
     private var backendAttachment = BackendAttachment()
+    private var setupRecovery = SetupRecovery()
     private var clientConnection: BackendConnection? { backendAttachment.connection }
     private var sseClient: SseEventClient?
     private var pollTask: Task<Void, Never>?
@@ -125,6 +126,7 @@ final class AppModel: ObservableObject {
     func stop() async {
         guard !isStopping else { return }
         isStopping = true
+        setupRecovery.connect(nil)
         pollTask?.cancel()
         pollTask = nil
         messageTask?.cancel()
@@ -1143,16 +1145,19 @@ final class AppModel: ObservableObject {
 
     // 查询初始化状态；owner 未初始化时前端只展示向导，轮询不再刷新业务数据。
     func checkSetupStatus() {
-        guard let client else { return }
+        guard !isStopping, let client, let request = setupRecovery.beginQuery() else { return }
         Task {
+            guard !isStopping, setupRecovery.isCurrent(request) else { return }
             do {
                 let status = try await client.setupStatus()
+                guard !isStopping, setupRecovery.finish(request, status: status) else { return }
                 setupStatus = status
                 setupError = nil
                 if status.initialized {
-                    await proceedAfterSetupIfNeeded()
+                    await proceedAfterSetupIfNeeded(using: client, after: request)
                 }
             } catch {
+                guard !isStopping, setupRecovery.finish(request, status: nil) else { return }
                 setupError = Self.describe(error)
             }
         }
@@ -1160,16 +1165,22 @@ final class AppModel: ObservableObject {
 
     // owner 已存在：若后端进程仍以未初始化模式运行（读旧的 .env），重启
     // 一次让 NOTALONE_OWNER_ID 生效；否则直接进入正常业务模式。
-    private func proceedAfterSetupIfNeeded() async {
-        guard let client else { return }
+    private func proceedAfterSetupIfNeeded(
+        using client: BackendClient,
+        after request: SetupRecovery.Request
+    ) async {
+        guard !isStopping, setupRecovery.isCurrent(request) else { return }
         do {
             _ = try await client.syncStatus()
         } catch BackendClient.BackendError.ownerUninitialized {
-            await restartBackendIfNeeded()
+            guard !isStopping, setupRecovery.isCurrent(request) else { return }
+            await restartBackendIfNeeded(after: request)
             return
         } catch {
             // 同步不可用（例如尚无渠道身份）不影响进入业务模式。
         }
+        // syncStatus 等待期间可能已换连接或退出，旧结果不得启动当前订阅。
+        guard !isStopping, setupRecovery.isCurrent(request) else { return }
         startSseSubscription()
         if selectedContactId != nil && messages.isEmpty {
             loadFirstMessagePage()
@@ -1178,27 +1189,35 @@ final class AppModel: ObservableObject {
 
     // 首启向导提交：写凭据（可留空跳过）→ 初始化 owner → 重启后端。
     func completeSetup(displayName: String, apiKey: String) {
-        guard let client, !setupInFlight else { return }
+        guard !isStopping, let client, !setupInFlight,
+              let request = setupRecovery.beginSetup() else { return }
         setupInFlight = true
         setupError = nil
         Task {
             defer { setupInFlight = false }
+            guard !isStopping, setupRecovery.isCurrent(request) else { return }
             do {
                 let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmedKey.isEmpty {
                     _ = try await client.writeCredentials(apiKey: trimmedKey)
+                    guard !isStopping, setupRecovery.isCurrent(request) else { return }
                 }
                 let result = try await client.initializeOwner(displayName: displayName)
-                setupStatus = SetupStatus(
+                let initialized = SetupStatus(
                     initialized: true,
                     ownerConfigured: true,
                     credentialsConfigured: !trimmedKey.isEmpty
                 )
+                guard !isStopping, setupRecovery.finish(request, status: initialized) else {
+                    return
+                }
+                setupStatus = initialized
                 lastOperationMessage = result.created
                     ? "已完成初始化，正在进入主界面…"
                     : "已连接既有 owner，正在进入主界面…"
-                await restartBackendIfNeeded()
+                await restartBackendIfNeeded(after: request)
             } catch {
+                guard !isStopping, setupRecovery.finish(request, status: nil) else { return }
                 setupError = Self.describe(error)
             }
         }
@@ -1207,16 +1226,21 @@ final class AppModel: ObservableObject {
     // owner 初始化写入 .env 后，后端进程需重启才能以已初始化模式运行。
     // 必须先真正终止旧进程（否则 ensureBackendLaunched 会复用旧连接，
     // 后端仍以 owner 未初始化模式运行，造成重启循环）。
-    private func restartBackendIfNeeded() async {
+    private func restartBackendIfNeeded(after request: SetupRecovery.Request) async {
+        guard !isStopping, setupRecovery.isCurrent(request) else { return }
         sseClient?.stop()
         sseClient = nil
         do {
-            try await supervisor.shutdown(connection: backendAttachment.shutdownConnection)
+            try await supervisor.shutdown(connection: request.connection)
         } catch {
+            guard !isStopping, setupRecovery.isCurrent(request) else { return }
             setupError = "后端关闭未获确认，请退出旧实例后重试。"
             return
         }
+        guard !isStopping, setupRecovery.isCurrent(request) else { return }
         backendAttachment = BackendAttachment()
+        setupRecovery.connect(nil)
+        setupStatus = nil
         client = nil
         backendState = .launching
         await ensureBackendLaunched()
@@ -1227,6 +1251,8 @@ final class AppModel: ObservableObject {
     private func runPollLoop() async {
         await ensureBackendLaunched()
         while !Task.isCancelled {
+            // 未查明初始化状态时按既有节奏重试；进行中或已查明时由 Core 跳过。
+            checkSetupStatus()
             if setupStatus?.initialized != false {
                 // owner 已初始化（或状态未知）：正常轮询业务数据。
                 await refreshStatus()
@@ -1268,6 +1294,8 @@ final class AppModel: ObservableObject {
         }
         guard !isStopping else { return }
         backendAttachment.disconnect()
+        setupRecovery.connect(nil)
+        setupStatus = nil
         sseClient?.stop()
         sseClient = nil
         guard let serverBin = EnvironmentLocator.locateServerBin() else {
@@ -1291,7 +1319,10 @@ final class AppModel: ObservableObject {
         // 后端监听随机端口，每次重启地址和 token 都会变化；连接变了
         // 必须重建 SSE 客户端，否则旧客户端会对已死端口无限重连，
         // 实时事件静默失效（只剩 3 秒轮询）。
-        guard backendAttachment.attach(connection) else { return }
+        guard !isStopping, backendAttachment.attach(connection) else { return }
+        setupRecovery.connect(connection)
+        setupStatus = nil
+        setupError = nil
         sseClient?.stop()
         sseClient = nil
         client = BackendClient(connection: connection)
@@ -1363,6 +1394,8 @@ final class AppModel: ObservableObject {
             // 只在真实传输失联时重置初始化状态；业务 503/500 仍保留连接并重试。
             if error is URLError || (error as? BackendClient.BackendError) == .transport {
                 backendAttachment.disconnect()
+                setupRecovery.connect(nil)
+                setupStatus = nil
                 sseClient?.stop()
                 sseClient = nil
             }
