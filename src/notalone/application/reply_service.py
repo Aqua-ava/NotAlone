@@ -37,6 +37,7 @@ class ReplyPort(Protocol):
     def generate(
         self,
         command: GenerateReply,
+        *,
         verified_scope: VerifiedConversationScope,
     ) -> ReplyOutcome: ...
 

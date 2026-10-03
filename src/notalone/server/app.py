@@ -48,6 +48,7 @@ from notalone.application.import_service import (
     TaskHost,
 )
 from notalone.application.task_service import TaskService
+from notalone.application.model_priority import ModelWorkStopped
 from notalone.application.setup_service import SetupService
 from notalone.application.skill_service import (
     LedgerService,
@@ -225,6 +226,19 @@ class BackendApp:
 
         return self._events
 
+    def shutdown_runtime(self) -> None:
+        """HTTP、信号与公开服务器关闭共用同一次资源收尾。"""
+
+        self._runtime_stopping.set()
+        with self._runtime_shutdown_lock:
+            if self._runtime_stopped.is_set():
+                return
+            if self._runtime_shutdown is not None:
+                self._runtime_shutdown()
+            if self._task_host is not None:
+                self._task_host.stop()
+            self._runtime_stopped.set()
+
     def handle(
         self,
         *,
@@ -251,7 +265,7 @@ class BackendApp:
                 headers=request_headers,
                 body=request_body,
             )
-        except SyncHostStopped:
+        except (SyncHostStopped, ModelWorkStopped):
             return _json_response(
                 HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_stopping"}
             )
@@ -285,11 +299,7 @@ class BackendApp:
                     HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_unavailable"}
                 )
             # 只关闭本次读取资源，不调用 disable，不修改持久同步偏好。
-            self._runtime_stopping.set()
-            with self._runtime_shutdown_lock:
-                if not self._runtime_stopped.is_set():
-                    self._runtime_shutdown()
-                    self._runtime_stopped.set()
+            self.shutdown_runtime()
             return _json_response(HTTPStatus.OK, {"state": "stopped"})
         if self._runtime_stopping.is_set() and not (
             method_upper == "GET"
@@ -876,6 +886,10 @@ class BackendApp:
                 owner_id=self._owner_id,
                 contact_id=contact_id,
                 request=request,
+            )
+        except ModelWorkStopped:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_stopping"}
             )
         except ReplyTimeoutError:
             return _json_response(
@@ -1609,6 +1623,7 @@ class BackendServer:
     def shutdown(self) -> None:
         # HTTP 关闭请求和 command finally 可以同时收尾；同一宿主只关闭一次。
         with self._shutdown_lock:
+            self._app.shutdown_runtime()
             self._app.events.close()
             if self._http_server is not None:
                 self._http_server.shutdown()

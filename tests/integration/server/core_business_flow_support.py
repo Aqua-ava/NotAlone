@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from uuid import UUID, uuid4
@@ -30,7 +31,12 @@ from langchain_core.runnables import Runnable
 
 from notalone.application.import_service import ImportService, TaskHost
 from notalone.application.memory_service import MemoryService
+from notalone.application.model_priority import (
+    ModelPriorityControl, PriorityAdjudicationRuntime, PriorityExtractionRuntime,
+    PriorityReplyPort, PriorityVerificationRuntime,
+)
 from notalone.application.reply_service import ReplyService
+from notalone.application.skill_service import LedgerService
 from notalone.conversation.models import ConversationObservation
 from notalone.memory_extraction.adapters import LangChainExtractionRuntime
 from notalone.memory_extraction.adjudication_adapters import LangChainAdjudicationRuntime
@@ -125,7 +131,7 @@ class HttpBackend:
 
     def request(
         self, path: str, body: dict[str, Any] | None = None,
-        *, method: str | None = None,
+        *, method: str | None = None, timeout: float = 10,
     ) -> tuple[int, dict[str, Any]]:
         request = Request(
             self.base_url + path,
@@ -137,7 +143,7 @@ class HttpBackend:
             },
         )
         try:
-            response = urlopen(request, timeout=10)
+            response = urlopen(request, timeout=timeout)
         except HTTPError as error:
             response = error
         with response:
@@ -154,6 +160,8 @@ class CoreBusinessFlowFixture:
     """数据库只负责迁移与夹具；所有业务结果均从公开 HTTP 观察。"""
 
     reply_model_factory = ScriptedCoreModel
+    extraction_model_factory = ScriptedCoreModel
+    production_model_wiring = False
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -187,7 +195,7 @@ class CoreBusinessFlowFixture:
     def setUp(self) -> None:
         self.owner_id, self.other_owner_id = uuid4(), uuid4()
         self.draft_evidence_id = uuid4()
-        self.extraction_model = ScriptedCoreModel()
+        self.extraction_model = self.extraction_model_factory()
         self.reply_model = self.reply_model_factory()
         self.bindings = PostgresConversationBindingRepository(self.database_url)
         self.lock_connections: list[psycopg.Connection] = []
@@ -212,7 +220,10 @@ class CoreBusinessFlowFixture:
             connection.close()
 
     def _backend(self, owner_id: UUID) -> HttpBackend:
+        if self.production_model_wiring:
+            return self._production_backend(owner_id)
         events = EventBus()
+        priority = ModelPriorityControl()
         retrieval = PostgresRetrieval(
             self.database_url,
             owner_memory_store=PostgresOwnerMemoryStore(self.database_url),
@@ -220,11 +231,15 @@ class CoreBusinessFlowFixture:
         ledger = PostgresOutboundLedger(self.database_url)
         extraction = PostgresMemoryExtractionRunner(
             self.database_url,
-            runtime=LangChainExtractionRuntime(model=self.extraction_model),
-            verification_runtime=LangChainSourceVerificationRuntime(
-                model=self.extraction_model, ledger=ledger, provider="synthetic",
+            runtime=PriorityExtractionRuntime(
+                LangChainExtractionRuntime(model=self.extraction_model), priority,
             ),
-            adjudication_runtime=LangChainAdjudicationRuntime(model=self.extraction_model),
+            verification_runtime=PriorityVerificationRuntime(LangChainSourceVerificationRuntime(
+                model=self.extraction_model, ledger=ledger, provider="synthetic",
+            ), priority),
+            adjudication_runtime=PriorityAdjudicationRuntime(
+                LangChainAdjudicationRuntime(model=self.extraction_model), priority,
+            ),
             ledger=ledger, provider="synthetic", model_name="scripted-core-test",
         )
 
@@ -270,8 +285,10 @@ class CoreBusinessFlowFixture:
                     repository=PostgresBackgroundTaskRepository(self.database_url),
                     extraction_runner=extraction,
                     index_repository=PostgresContactMemoryIndexRepository(self.database_url),
+                    model_priority=priority,
                 ),
                 lock_connection_builder=lock_connection, event_publisher=publish_progress,
+                model_priority=priority,
             ),
             memory_service=MemoryService(
                 contact_memory=PostgresMemoryStore(self.database_url),
@@ -283,8 +300,43 @@ class CoreBusinessFlowFixture:
                     self.database_url, owner_id=owner_id,
                     observation=ConversationObservation.confirmed(binding.binding_id),
                 ),
-                reply=generator,
+                reply=PriorityReplyPort(generator, priority),
             ),
+            runtime_shutdown=priority.stop,
+        ), owner_id)
+        self.addCleanup(backend.close)
+        return backend
+
+    def _production_backend(self, owner_id: UUID) -> HttpBackend:
+        """装配实际 server builders，仅在外部模型构造边界替换。"""
+
+        from notalone.server.command import _build_task_host
+        from notalone.server.reply_wiring import build_reply_service
+
+        priority, events = ModelPriorityControl(), EventBus()
+        extraction_patch = patch(
+            "notalone.memory_extraction.cli_support.build_deepseek_model",
+            return_value=self.extraction_model,
+        )
+        extraction_patch.start()
+        self.addCleanup(extraction_patch.stop)
+        task_host = _build_task_host(self.database_url, events, model_priority=priority)
+        with patch("notalone.server.reply_wiring.build_deepseek_model",
+                   return_value=self.reply_model):
+            reply_service = build_reply_service(
+                database_url=self.database_url, owner_id=owner_id, model_priority=priority,
+            )
+        backend = HttpBackend(create_app(
+            database_url=self.database_url, owner_id=owner_id,
+            token=f"synthetic-core-{owner_id}", events=events,
+            import_service=ImportService(repository=PostgresIngestRepository(self.database_url)),
+            task_host=task_host, reply_service=reply_service,
+            ledger_service=LedgerService(ledger=PostgresOutboundLedger(self.database_url)),
+            memory_service=MemoryService(
+                contact_memory=PostgresMemoryStore(self.database_url),
+                owner_memory=PostgresOwnerMemoryStore(self.database_url),
+            ),
+            runtime_shutdown=priority.stop,
         ), owner_id)
         self.addCleanup(backend.close)
         return backend
@@ -362,7 +414,8 @@ class CoreBusinessFlowFixture:
                               "quote": f"我平时喜欢{tea}。"}],
             }]}),
         ])
-        return {"contact_id": contact_id, "source": source, "messages": messages,
+        return {"contact_id": contact_id, "task_id": imported["task_id"],
+                "source": source, "messages": messages,
                 "target": target, "fact_message": fact_message, "tea": tea}
 
     def _run_import(self, backend: HttpBackend, imported: dict[str, Any]) -> None:

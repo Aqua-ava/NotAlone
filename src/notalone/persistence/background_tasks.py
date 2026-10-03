@@ -517,6 +517,41 @@ class PostgresBackgroundTaskRepository:
                 "后台步骤租约续期失败。"
             ) from None
 
+    def check_step_lease(self, claim: ClaimedBackgroundTaskStep) -> None:
+        """模型调用前后复验原步骤、来源与租约，不改变步骤状态。"""
+
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                self._lock_scope(connection, claim.owner_id, claim.contact_id)
+                self._assert_valid_claim(connection, claim)
+        except BackgroundTaskPersistenceError:
+            raise
+        except psycopg.Error:
+            raise BackgroundTaskPersistenceError("后台步骤租约检查失败。") from None
+
+    def pause_step(self, claim: ClaimedBackgroundTaskStep) -> bool:
+        """协作停止只返还本次尝试；原租约到期后仍由原恢复路径领取。"""
+
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                self._lock_scope(connection, claim.owner_id, claim.contact_id)
+                self._assert_valid_claim(connection, claim)
+                updated = connection.execute(
+                    """
+                    UPDATE public.background_task_step
+                    SET attempt_count = attempt_count - 1, updated_at = now()
+                    WHERE id = %s AND task_id = %s AND worker_id = %s
+                      AND status = 'running' AND attempt_count = %s
+                      AND attempt_count > 0
+                    """,
+                    (claim.step_id, claim.task_id, claim.worker_id, claim.attempt_count),
+                )
+                return updated.rowcount == 1
+        except BackgroundTaskPersistenceError:
+            raise
+        except psycopg.Error:
+            raise BackgroundTaskPersistenceError("后台步骤停止记账失败。") from None
+
     def fail_step(
         self,
         claim: ClaimedBackgroundTaskStep,

@@ -9,10 +9,13 @@
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 from uuid import UUID, uuid4
+
+import psycopg
 
 from notalone.ingest.import_command import (
     IngestRepository,
@@ -22,6 +25,7 @@ from notalone.ingest.models import ContactSelection, ImportConfirmationRequest
 from notalone.ingest.preview import build_preview
 from notalone.tasks.command import run_worker
 from notalone.tasks.worker import BackgroundTaskWorker
+from notalone.application.model_priority import ModelPriorityControl, ModelWorkStopped
 
 
 class ImportService:
@@ -124,18 +128,27 @@ class TaskHost:
         "_progress",
         "_threads",
         "_worker_builder",
+        "_model_priority",
+        "_stopped",
+        "_stop_complete",
+        "_connections",
     )
 
     def __init__(
         self,
         *,
         worker_builder: Callable[[], BackgroundTaskWorker],
-        lock_connection_builder: Callable[[], object],
+        lock_connection_builder: Callable[[], psycopg.Connection],
         event_publisher: ProgressEvent,
+        model_priority: ModelPriorityControl | None = None,
     ) -> None:
         self._worker_builder = worker_builder
         self._lock_connection_builder = lock_connection_builder
         self._event_publisher = event_publisher
+        self._model_priority = model_priority
+        self._stopped = threading.Event()
+        self._stop_complete = threading.Event()
+        self._connections: dict[int, psycopg.Connection] = {}
         # 多个 HTTP 线程与任务线程并发读写这两个 dict；必须持锁完成
         # check-then-act，否则并发 start 会重复建线程、先结束的线程会
         # 误删仍在运行线程的条目（current() 在运行中报 finished）。
@@ -149,6 +162,8 @@ class TaskHost:
         """触发一个联系人任务；已有执行中线程时返回 busy。"""
 
         with self._lock:
+            if self._stopped.is_set():
+                raise ModelWorkStopped("任务宿主正在停止。")
             scope = (owner_id, contact_id)
             existing = self._threads.get(scope)
             if existing is not None and existing.is_alive():
@@ -173,6 +188,29 @@ class TaskHost:
             )
             thread.start()
             return {"status": "started"}
+
+    def stop(self, *, timeout: float = 4.0) -> None:
+        """拒绝新工作并有界等待；无法中断的旧调用依靠原租约恢复。"""
+
+        self._stopped.set()
+        if self._model_priority is not None:
+            self._model_priority.stop()
+        if self._stop_complete.is_set():
+            return
+        deadline = time.monotonic() + min(4.0, max(0.0, timeout))
+        with self._lock:
+            threads = tuple(self._threads.values())
+        for thread in threads:
+            if thread is not threading.current_thread():
+                thread.join(timeout=max(0.0, deadline - time.monotonic()))
+        # 模型可能仍在调用中；会话锁不能跟随不可中断调用无限占用。
+        with self._lock:
+            connections = tuple(self._connections.values())
+        for connection in connections:
+            connection.close()
+            with self._lock:
+                self._connections.pop(id(connection), None)
+        self._stop_complete.set()
 
     def current(self, *, owner_id: UUID, contact_id: UUID) -> dict[str, object]:
         """返回当前进度快照；无任务时返回 idle。"""
@@ -224,9 +262,16 @@ class TaskHost:
                 )
             )
 
+        lock_connection = None
         try:
+            if self._stopped.is_set():
+                return
             worker = self._worker_builder()
             lock_connection = self._lock_connection_builder()
+            with self._lock:
+                if self._stopped.is_set():
+                    return
+                self._connections[id(lock_connection)] = lock_connection
             result = run_worker(
                 worker=worker,
                 lock_connection=lock_connection,
@@ -235,6 +280,7 @@ class TaskHost:
                 worker_id=uuid4(),
                 task_id=task_id,
                 progress_callback=on_progress,
+                stop_event=self._stopped,
             )
         except Exception:
             self._record(
@@ -269,12 +315,18 @@ class TaskHost:
                 )
             )
         finally:
-            # 只清除自己的条目：并发触发的重复线程不能被先结束的一方误删。
-            current = threading.current_thread()
-            with self._lock:
-                scope = (owner_id, contact_id)
-                if self._threads.get(scope) is current:
-                    self._threads.pop(scope, None)
+            try:
+                if lock_connection is not None:
+                    lock_connection.close()
+            finally:
+                # 关闭错误也不能留下线程登记；旧线程仅能清除自己的条目。
+                current = threading.current_thread()
+                with self._lock:
+                    if lock_connection is not None:
+                        self._connections.pop(id(lock_connection), None)
+                    scope = (owner_id, contact_id)
+                    if self._threads.get(scope) is current:
+                        self._threads.pop(scope, None)
 
     def _record(self, update: TaskProgressUpdate) -> None:
         self._set_progress((update.owner_id, update.contact_id), update.as_payload())

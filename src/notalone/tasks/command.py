@@ -9,6 +9,7 @@ import time
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
+from threading import Event
 from typing import Callable
 from uuid import UUID, uuid4
 
@@ -51,6 +52,7 @@ class WorkerCommandStatus(StrEnum):
     IDLE = "idle"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    STOPPED = "stopped"
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +80,7 @@ def run_worker(
     retry_repository: PostgresBackgroundTaskRepository | None = None,
     sleep: Callable[[float], None] = time.sleep,
     progress_callback: Callable[[WorkerRunResult, int], None] | None = None,
+    stop_event: Event | None = None,
 ) -> WorkerCommandResult:
     """在一个全局锁内串行执行一个联系人任务。
 
@@ -90,6 +93,8 @@ def run_worker(
 
     if retry_repository is not None and task_id is None:
         raise ValueError("恢复任务必须明确指定 task_id。")
+    if stop_event is not None and stop_event.is_set():
+        return WorkerCommandResult(status=WorkerCommandStatus.STOPPED, task_id=task_id)
     if not try_acquire_global_worker_lock(lock_connection):
         return WorkerCommandResult(status=WorkerCommandStatus.BUSY)
 
@@ -107,6 +112,13 @@ def run_worker(
                 owner_id=owner_id, contact_id=contact_id, task_id=task_id,
             )
         while True:
+            if stop_event is not None and stop_event.is_set():
+                return WorkerCommandResult(
+                    status=WorkerCommandStatus.STOPPED, completed_steps=completed_steps,
+                    last_step=last_step, processed_count=processed_count,
+                    attempt_count=attempt_count, retry_count=retry_count,
+                    task_id=current_task_id,
+                )
             result = worker.run_once(
                 owner_id=owner_id,
                 contact_id=contact_id,
@@ -119,6 +131,13 @@ def run_worker(
             attempt_count = result.attempt_count
             if progress_callback is not None:
                 progress_callback(result, retry_count)
+            if result.outcome is WorkerRunOutcome.STOPPED:
+                return WorkerCommandResult(
+                    status=WorkerCommandStatus.STOPPED, completed_steps=completed_steps,
+                    last_step=last_step, processed_count=processed_count,
+                    attempt_count=attempt_count, retry_count=retry_count,
+                    task_id=current_task_id,
+                )
             if result.outcome is WorkerRunOutcome.IDLE:
                 return WorkerCommandResult(
                     status=WorkerCommandStatus.IDLE,
@@ -144,7 +163,10 @@ def run_worker(
                 continue
             if result.outcome is WorkerRunOutcome.RETRYABLE:
                 retry_count += 1
-                sleep(_retry_backoff(result.attempt_count))
+                if stop_event is None:
+                    sleep(_retry_backoff(result.attempt_count))
+                else:
+                    stop_event.wait(_retry_backoff(result.attempt_count))
                 continue
             return WorkerCommandResult(
                 status=WorkerCommandStatus.FAILED,
@@ -157,7 +179,8 @@ def run_worker(
                 task_id=current_task_id,
             )
     finally:
-        release_global_worker_lock(lock_connection)
+        if not getattr(lock_connection, "closed", False):
+            release_global_worker_lock(lock_connection)
 
 
 def worker_main(argv: list[str] | None = None) -> int:
