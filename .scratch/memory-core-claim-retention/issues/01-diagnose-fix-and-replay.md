@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-agent
+Triage: ready-for-human
 State: claimed
 Type: task
 Blocked by: none
@@ -100,3 +100,7 @@ Blocked by: none
 2026-10-03：用户收到上述具体20次匿名对照范围问题后，确认下一步由Agent承担，现回复“继续吧”。批准9bbd88b中的原提案SHA56995f6b…，新私有目录memory-single-target-omission-pilot-20261003的人类批准凭证SHA17b4bce6…绑定批准文档／固定10位置／20invoke，所有旧预算继续关闭。Triage回到ready-for-agent，State保持claimed；Agent继续本机编排、原接缝相关验证／SDK只绑定／两轴预检与冻结后唯一匿名运行，raw先审后V，所有输出／失败完整计分，不改默认／Gold或业务。只用现ECNU，不用官方key；此pilot不授权开发／实际／留出，整体修复仍未完成。
 
 2026-10-03：上述pilot已结束并关闭，见[单目标匿名结果](../../../docs/memory-single-target-omission-pilot-result-20261003.md)。9项不同unittest、7文件类型／AST、2种原Tool SDK只绑定及两轴预检后冻结；唯一session78059终态exit0，固定10位置、19invoke／预约／无正文台账，失败0、合法空E1、零保留2、未运行0，余1关闭。首raw全审SHA7e98ac64…先冻结，再揭V，全审SHA3ba05d30…：13raw正文准确、12完整合法，12最终保留准确；原／候选最终均6/8，候选知识状态1/2、原正例保护5/6，1岗位被E附带历史缺源污染，原V正确拒绝。坏auto、完整合法误拒、不必要降级0，必要来源语义契约缺陷1，严格覆盖无收益，六门字段失败、不采用。独立闭环SHA2d7838d4…核900机械条目／10原Flow捕获重放；root失败门SHA9963be05…核315字节指纹及权限后闭账，均0新API。仅现ECNU ecnu-max，SDKreported70,085tokens，HTTP／账单未知；未改生产／业务／水位／旧五条，actual／held未解码，旧2/114仍关闭，实际6/12及2/6不变。所有后续阶段false，无补跑／调参／增臂。整体修复未完成，仍ready-for-agent／claimed／Blocked by none；当前完成结果文档的最小验证、两轴终审及任务专属本地提交。
+
+2026-10-03：上述失败已两轴审查及本地64070f9保存。用户现回复“好继续”，仅批准独立事实与漏项核对的本机原型及新有限方案准备。原E／Flow与捕获V重放两个应记主张保留断言均红，首反馈SHAde0edebb…；原V拒绝复合缺源正确，不能放松。只读explorer核旧R、分组、复制与逐条已有失败职责后，原型采用临时逐target原话片段去向＋声明source片段，一次E、原14出口／system／Flow／V不变；错误skip及复合候选可机械通过的反例必须保留，不称模型改善。新[8次匿名提案](../../../docs/memory-atomic-coverage-pilot-proposal-20261003.md)仅准备，尚无新预算／模型调用，所有旧余额关闭。任务仍ready-for-agent／claimed，当前连续完成本机纵切、相关验证、结果核对、两轴审阅与任务专属本地提交。
+
+2026-10-03：本机原型完成，见[本机结果](../../../docs/memory-atomic-coverage-local-prototype-20261003.md)。12原型＋7独立不同unittest、2文件mypy／AST通过；原两捕获缺陷仍红，人工4条只证明可表达，未知日期／风险／原14值不改，无实际V则不能auto。机械完整覆盖不能判断skip语义、隐藏必要source或原子性；反例均保留，原V仍正确拒绝复合岗位。独审发现总raw上限缺口已红绿修正，新60总raw比原60reviewable严格，重复evidence负担及全部结构损失须未来实测。worker收据SHA8ab12fdd…、独审SHAf5c1bd8a…、root49字节指纹／权限核对SHAff586c8c…，0API／真实SDK／凭据／actual-held／业务写，旧预算关闭、实际6/12及2/6不变。新的[8次匿名提案](../../../docs/memory-atomic-coverage-pilot-proposal-20261003.md)具体准备完，尚未批准联网或实现真实模型委托／runner；Triage改ready-for-human、State仍claimed、Blocked by none，只待该具体范围决定。结果文档最小验证、两轴终审与任务专属本地提交连续完成，不将整体目标或实际验收标成完成。
