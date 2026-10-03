@@ -32,7 +32,12 @@ from notalone.application.reply_request import (
 from notalone.application.source_service import SourceService
 from notalone.persistence.source_tasks import SourceDeletionHistoryUnverified
 from notalone.persistence.source_deletion import SourceDeletionError, SourceNotFoundError
-from notalone.persistence.background_tasks import BackgroundTaskPersistenceError
+from notalone.persistence.background_tasks import (
+    BackgroundTaskNotFoundError,
+    BackgroundTaskPersistenceError,
+    BackgroundTaskStateError,
+    PostgresBackgroundTaskRepository,
+)
 from notalone.application.reply_service import ReplyService
 from notalone.application.reply_evidence import ReplyEvidenceService, ReplyEvidenceIncomplete
 from notalone.reply.errors import ReplyStoreInvariantError, ReplyPersistenceError
@@ -42,6 +47,7 @@ from notalone.application.import_service import (
     ImportService,
     TaskHost,
 )
+from notalone.application.task_service import TaskService
 from notalone.application.setup_service import SetupService
 from notalone.application.skill_service import (
     LedgerService,
@@ -155,6 +161,7 @@ class BackendApp:
         "_skill_service",
         "_sync_control",
         "_task_host",
+        "_task_service",
         "_token",
     )
 
@@ -174,6 +181,7 @@ class BackendApp:
         memory_service: MemoryService | None = None,
         import_service: ImportService | None = None,
         task_host: TaskHost | None = None,
+        task_service: TaskService | None = None,
         skill_service: SkillService | None = None,
         ledger_service: LedgerService | None = None,
         setup_service: SetupService | None = None,
@@ -202,6 +210,7 @@ class BackendApp:
         self._skill_service = skill_service
         self._sync_control = sync_control
         self._task_host = task_host
+        self._task_service = task_service
         self._token = token
 
     @property
@@ -1079,10 +1088,15 @@ class BackendApp:
         # 服务装配缺失（数据库/模型配置故障）是服务端状态：503，
         # 不把配置问题伪装成客户端请求错误。
         needs_import = path.startswith("/api/imports")
-        needs_task = path.startswith("/api/tasks")
+        needs_host = path == "/api/tasks/run" or (
+            path == "/api/tasks/status"
+            and "task_id" not in parse_qs(query, keep_blank_values=True)
+        )
+        needs_task = path.startswith("/api/tasks") and not needs_host
         if (
             (needs_import and self._import_service is None)
-            or (needs_task and self._task_host is None)
+            or (needs_host and self._task_host is None)
+            or (needs_task and self._task_service is None)
         ):
             return _json_response(
                 HTTPStatus.SERVICE_UNAVAILABLE,
@@ -1095,6 +1109,16 @@ class BackendApp:
         except ImportTaskRequestInvalid:
             return _json_response(
                 HTTPStatus.BAD_REQUEST, {"error": "import_request_invalid"}
+            )
+        except BackgroundTaskNotFoundError:
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "task_not_found"})
+        except BackgroundTaskStateError:
+            return _json_response(
+                HTTPStatus.CONFLICT, {"error": "task_retry_conflict"},
+            )
+        except BackgroundTaskPersistenceError:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "task_unavailable"},
             )
 
     def _dispatch_import_task(
@@ -1110,6 +1134,7 @@ class BackendApp:
         owner_id = self._owner_id
         import_service = self._import_service
         task_host = self._task_host
+        task_service = self._task_service
 
         if path == "/api/imports/preview":
             if method != "POST" or import_service is None:
@@ -1181,8 +1206,8 @@ class BackendApp:
                 )
             return _json_response(HTTPStatus.OK, result)
 
-        if path == "/api/tasks/run":
-            if method != "POST" or task_host is None:
+        if path in {"/api/tasks/run", "/api/tasks/retry"}:
+            if method != "POST":
                 raise ImportTaskRequestInvalid()
             payload = _parse_import_json(body)
             contact_value = payload.get("contact_id")
@@ -1192,15 +1217,40 @@ class BackendApp:
                 contact_id = UUID(contact_value)
             except ValueError:
                 raise ImportTaskRequestInvalid() from None
+            task_id = None
+            if "task_id" in payload:
+                task_value = payload["task_id"]
+                if not isinstance(task_value, str):
+                    raise ImportTaskRequestInvalid()
+                try:
+                    task_id = UUID(task_value)
+                except ValueError:
+                    raise ImportTaskRequestInvalid() from None
+            if path == "/api/tasks/retry":
+                if task_id is None or task_service is None:
+                    raise ImportTaskRequestInvalid()
+                return _json_response(HTTPStatus.OK, task_service.retry(
+                    owner_id=owner_id, contact_id=contact_id, task_id=task_id,
+                ))
+            if task_host is None:
+                raise ImportTaskRequestInvalid()
+            start_args = dict(owner_id=owner_id, contact_id=contact_id)
+            if task_id is not None:
+                if task_service is None:
+                    raise ImportTaskRequestInvalid()
+                task_service.status(
+                    owner_id=owner_id, contact_id=contact_id, task_id=task_id,
+                )
+                start_args["task_id"] = task_id
             return _json_response(
                 HTTPStatus.OK,
-                task_host.start(owner_id=owner_id, contact_id=contact_id),
+                task_host.start(**start_args),
             )
 
         if path == "/api/tasks/status":
-            if method != "GET" or task_host is None:
+            if method != "GET":
                 raise ImportTaskRequestInvalid()
-            query_pairs = parse_qs(query)
+            query_pairs = parse_qs(query, keep_blank_values=True)
             contact_values = query_pairs.get("contact_id", [])
             if len(contact_values) != 1:
                 raise ImportTaskRequestInvalid()
@@ -1208,6 +1258,19 @@ class BackendApp:
                 contact_id = UUID(contact_values[0])
             except ValueError:
                 raise ImportTaskRequestInvalid() from None
+            if "task_id" in query_pairs:
+                task_values = query_pairs["task_id"]
+                if len(task_values) != 1 or task_service is None:
+                    raise ImportTaskRequestInvalid()
+                try:
+                    task_id = UUID(task_values[0])
+                except ValueError:
+                    raise ImportTaskRequestInvalid() from None
+                return _json_response(HTTPStatus.OK, task_service.status(
+                    owner_id=owner_id, contact_id=contact_id, task_id=task_id,
+                ))
+            if task_host is None:
+                raise ImportTaskRequestInvalid()
             return _json_response(
                 HTTPStatus.OK,
                 task_host.current(owner_id=owner_id, contact_id=contact_id),
@@ -1574,6 +1637,7 @@ def create_app(
     memory_service: MemoryService | None = None,
     import_service: ImportService | None = None,
     task_host: TaskHost | None = None,
+    task_service: TaskService | None = None,
     skill_service: SkillService | None = None,
     ledger_service: LedgerService | None = None,
     setup_service: SetupService | None = None,
@@ -1596,6 +1660,9 @@ def create_app(
         memory_service=memory_service,
         import_service=import_service,
         task_host=task_host,
+        task_service=task_service or TaskService(
+            repository=PostgresBackgroundTaskRepository(database_url),
+        ),
         skill_service=skill_service,
         ledger_service=ledger_service,
         setup_service=setup_service,

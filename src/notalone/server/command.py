@@ -249,6 +249,7 @@ def _build_task_host(database_url: str, events: EventBus) -> TaskHost | None:
     from notalone.persistence.contact_memory_index import (
         PostgresContactMemoryIndexRepository,
     )
+    from notalone.persistence.source_deletion import PostgresSourceDeletionRepository
     from notalone.scopes import ContactScope
 
     def build_worker() -> BackgroundTaskWorker:
@@ -257,6 +258,7 @@ def _build_task_host(database_url: str, events: EventBus) -> TaskHost | None:
             extraction_runner=PostgresMemoryExtractionRunner(database_url),
             lease_duration=DEFAULT_WORKER_LEASE_DURATION,
             index_repository=PostgresContactMemoryIndexRepository(database_url),
+            deletion_repository=PostgresSourceDeletionRepository(database_url),
         )
 
     def build_lock_connection():

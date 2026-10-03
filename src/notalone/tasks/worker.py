@@ -305,6 +305,7 @@ class BackgroundTaskWorker:
         owner_id: UUID,
         contact_id: UUID,
         worker_id: UUID,
+        task_id: UUID | None = None,
     ) -> WorkerRunResult:
         """领取并执行一个支持的步骤；没有可领取步骤时返回 idle。"""
 
@@ -330,6 +331,7 @@ class BackgroundTaskWorker:
             supported_steps=supported_steps,
             model_version=self._model_version,
             rule_version=self._rule_version if self._extraction_runner is not None else None,
+            task_id=task_id,
         )
         if claim is None:
             return WorkerRunResult(outcome=WorkerRunOutcome.IDLE)

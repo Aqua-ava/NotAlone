@@ -109,6 +109,7 @@ notalone-ingest chat_exports/example.jsonl \
 ```bash
 notalone-extract-memory --contact-id '...'   # 自动全量/增量；中断重跑跳过已提取部分
 notalone-task-worker --contact-id '...'      # 处理一个后台任务：parse → normalize → extract_memory → index → verify
+notalone-task-worker --contact-id '...' --retry-task-id '...'  # 显式恢复失败原任务并执行
 notalone-memory-add --contact-id '...' --category taboo --text '...'
 notalone-memory-add --category recent_state --text '我下周出差'   # owner 级自我记忆
 notalone-memory-list --contact-id '...'
@@ -117,6 +118,10 @@ notalone-task-cleanup                        # 删除超过 90 天的终态任�
 ```
 
 提取候选先经证据契约与逐条来源语义核验：支持才继续原采纳门，证据不足留待确认，无支持拒绝，未核验不能自动入库。核验不改写正文、主体、来源或有效期；返回片段必须是候选来源中的真实原文，并包含主消息。之后仍执行置信度与风险门槛（低于 0.7 或带敏感/未知风险留待定）、删除指纹和写入裁决，达标者自动采纳、标记 `auto` 并可撤销。生产 CLI／Worker 默认用既有模型每窗口至多增加一次核验，单批最多 60 条；提取与核验各有无正文台账。网络或模型不可用时不推进该批水位；非法结构输出按 ADR-029 连续三次后记录可见跳过并推进，未跳过前不推进。Worker 模型或网络暂时失败最多自动重试 3 次并续期步骤租约，进程中断后重跑从未完成步骤继续，无任务时输出 `status=idle`。`index -> verify` 按确定性代码维护联系人记忆目录（分类、主题提示和 memory_id 引用，最多 20 个主题），不复制正文。手动录入标记 `manual`，支持联系人级与 owner 级。所有命令输出只含状态、计数和元数据，不含聊天正文或模型完整输入输出。目标流程见 ADR-014、ADR-015、ADR-018、ADR-033。
+
+导入 HTTP 提交返回原 `task_id`。自动重试耗尽后，使用 `GET /api/tasks/status?contact_id=...&task_id=...` 查询数据库中的状态与步骤；重启后仍可读取。`POST /api/tasks/retry` 明确提供 `contact_id + task_id`，将失败原任务恢复为 queued，随后 `POST /api/tasks/run` 提供相同范围与 `task_id` 执行。恢复保留成功步骤，指定执行不会领取该联系人的其他任务；来源进入删除流程后不能恢复导入任务。CLI 恢复在配置预检查和全局锁成功后执行，忙时不修改任务。步骤 `attempt_count` 表示当前重试轮次的尝试数，手动恢复后重新获得最多三次自动尝试；任务 `retry_count` 累计失败和手动恢复次数，不代表累计模型调用数。
+
+默认启动继续领取最早可执行任务；显式恢复按原任务领取的局部例外见 [ADR-034](architecture/adr/034-explicit-failed-task-recovery-selection.md)，全局串行锁和预检查不变。
 
 记忆管理页中的候选、联系人记忆和本人记忆均展示来源聊天时间、保存／录入时间，
 以及存在的生效／失效时间。来源跨多条消息时显示日期范围，缺失或无法核实的时间

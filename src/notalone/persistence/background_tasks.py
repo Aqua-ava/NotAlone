@@ -229,6 +229,7 @@ class PostgresBackgroundTaskRepository:
         owner_id: UUID,
         contact_id: UUID,
         worker_id: UUID,
+        task_id: UUID | None = None,
         lease_duration: timedelta,
         supported_steps: Iterable[BackgroundTaskStepName] = (
             BackgroundTaskStepName.PARSE,
@@ -243,6 +244,8 @@ class PostgresBackgroundTaskRepository:
         _validate_uuid(owner_id, "owner_id")
         _validate_uuid(contact_id, "contact_id")
         _validate_uuid(worker_id, "worker_id")
+        if task_id is not None:
+            _validate_uuid(task_id, "task_id")
         _validate_lease_duration(lease_duration)
         step_names = tuple(
             step.value
@@ -298,6 +301,7 @@ class PostgresBackgroundTaskRepository:
                    OR (task.task_type = 'delete' AND source.status IN
                        ('delete_requested', 'deleting', 'delete_failed', 'deleted')))
                       AND task.status IN ('queued', 'running', 'verifying')
+                      AND (%s::uuid IS NULL OR task.id = %s)
                       AND step.status IN ('pending', 'retryable')
                       AND step.step_name = ANY(%s::text[])
                       AND (
@@ -315,7 +319,8 @@ class PostgresBackgroundTaskRepository:
                     LIMIT 1
                     FOR UPDATE OF task, step
                     """,
-                    (owner_id, contact_id, list(step_names), MAX_AUTOMATIC_ATTEMPTS),
+                    (owner_id, contact_id, task_id, task_id,
+                     list(step_names), MAX_AUTOMATIC_ATTEMPTS),
                 ).fetchone()
                 if candidate is None:
                     return None
@@ -585,10 +590,14 @@ class PostgresBackgroundTaskRepository:
                 self._lock_scope(connection, owner_id, contact_id)
                 task = connection.execute(
                     """
-                    SELECT status
-                    FROM public.background_task
-                    WHERE id = %s AND owner_id = %s AND contact_id = %s
-                    FOR UPDATE
+                    SELECT task.status, task.task_type, source.status
+                    FROM public.background_task AS task
+                    JOIN public.source_document AS source
+                      ON source.id = task.source_document_id
+                     AND source.owner_id = task.owner_id
+                     AND source.contact_id = task.contact_id
+                    WHERE task.id = %s AND task.owner_id = %s AND task.contact_id = %s
+                    FOR UPDATE OF task, source
                     """,
                     (task_id, owner_id, contact_id),
                 ).fetchone()
@@ -600,6 +609,15 @@ class PostgresBackgroundTaskRepository:
                     raise BackgroundTaskStateError(
                         "只有 failed 任务可以手动重试。"
                     )
+                source_allowed = (
+                    task[1] == BackgroundTaskType.IMPORT.value and task[2] == "active"
+                ) or (
+                    task[1] == BackgroundTaskType.DELETE.value and task[2] in {
+                        "delete_requested", "deleting", "delete_failed", "deleted",
+                    }
+                )
+                if not source_allowed:
+                    raise BackgroundTaskStateError("来源当前状态不允许恢复该任务。")
                 connection.execute(
                     """
                     UPDATE public.background_task_step

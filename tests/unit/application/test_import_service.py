@@ -59,13 +59,15 @@ class FakeRepository:
 class FakeWorker:
     def __init__(self, sequence: list[WorkerRunOutcome]) -> None:
         self._sequence = sequence
+        self.task_id = uuid4()
         self.calls: list[tuple[UUID, UUID, UUID]] = []
 
-    def run_once(self, *, owner_id, contact_id, worker_id):
+    def run_once(self, *, owner_id, contact_id, worker_id, task_id=None):
         self.calls.append((owner_id, contact_id, worker_id))
         outcome = self._sequence.pop(0)
         return SimpleNamespace(
             outcome=outcome,
+            task_id=task_id or self.task_id,
             step_name=BackgroundTaskStepName.EXTRACT_MEMORY,
             processed_count=3,
             attempt_count=1,

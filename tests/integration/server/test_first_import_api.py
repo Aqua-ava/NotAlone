@@ -193,6 +193,7 @@ class FirstImportApiIntegrationTest(unittest.TestCase):
             repeated,
             {
                 "contact_id": first["contact_id"],
+                "task_id": first["task_id"],
                 "imported_count": 0,
                 "skipped_duplicates": 6,
             },

@@ -18,11 +18,14 @@ from notalone.memory_extraction.cli_support import contact_exists, owner_exists
 from notalone.persistence.background_tasks import (
     TERMINAL_TASK_RETENTION,
     BackgroundTaskPersistenceError,
+    BackgroundTaskNotFoundError,
+    BackgroundTaskStateError,
     PostgresBackgroundTaskRepository,
 )
 from notalone.persistence.contact_memory_index import (
     PostgresContactMemoryIndexRepository,
 )
+from notalone.persistence.source_deletion import PostgresSourceDeletionRepository
 from notalone.persistence.locks import (
     release_global_worker_lock,
     try_acquire_global_worker_lock,
@@ -61,6 +64,7 @@ class WorkerCommandResult:
     attempt_count: int = 0
     retry_count: int = 0
     error_code: str | None = None
+    task_id: UUID | None = None
 
 
 def run_worker(
@@ -70,6 +74,8 @@ def run_worker(
     owner_id: UUID,
     contact_id: UUID,
     worker_id: UUID,
+    task_id: UUID | None = None,
+    retry_repository: PostgresBackgroundTaskRepository | None = None,
     sleep: Callable[[float], None] = time.sleep,
     progress_callback: Callable[[WorkerRunResult, int], None] | None = None,
 ) -> WorkerCommandResult:
@@ -78,8 +84,12 @@ def run_worker(
     ``progress_callback(result, retry_count)`` 在每步结果产生后调用
     一次（结果含步骤名与计数，附带截至当前的累计重试数），供进程内
     宿主实时推送进度；CLI 调用方不传则保持原行为。
+    指定 ``task_id`` 时只领取原任务；``retry_repository`` 只用于在
+    已取得全局锁后显式恢复该失败任务，不自动恢复其他任务。
     """
 
+    if retry_repository is not None and task_id is None:
+        raise ValueError("恢复任务必须明确指定 task_id。")
     if not try_acquire_global_worker_lock(lock_connection):
         return WorkerCommandResult(status=WorkerCommandStatus.BUSY)
 
@@ -88,13 +98,22 @@ def run_worker(
     processed_count = 0
     attempt_count = 0
     retry_count = 0
+    current_task_id = task_id
     try:
+        if retry_repository is not None:
+            # CLI 完成配置预检查且拿到全局锁后，才改变失败原任务状态。
+            assert task_id is not None
+            retry_repository.retry_failed_task(
+                owner_id=owner_id, contact_id=contact_id, task_id=task_id,
+            )
         while True:
             result = worker.run_once(
                 owner_id=owner_id,
                 contact_id=contact_id,
                 worker_id=worker_id,
+                task_id=current_task_id,
             )
+            current_task_id = result.task_id or current_task_id
             last_step = result.step_name
             processed_count = result.processed_count
             attempt_count = result.attempt_count
@@ -108,6 +127,7 @@ def run_worker(
                     processed_count=processed_count,
                     attempt_count=attempt_count,
                     retry_count=retry_count,
+                    task_id=current_task_id,
                 )
             if result.outcome is WorkerRunOutcome.SUCCEEDED:
                 completed_steps += 1
@@ -119,6 +139,7 @@ def run_worker(
                         processed_count=processed_count,
                         attempt_count=attempt_count,
                         retry_count=retry_count,
+                        task_id=current_task_id,
                     )
                 continue
             if result.outcome is WorkerRunOutcome.RETRYABLE:
@@ -133,6 +154,7 @@ def run_worker(
                 attempt_count=attempt_count,
                 retry_count=retry_count,
                 error_code=result.error_code,
+                task_id=current_task_id,
             )
     finally:
         release_global_worker_lock(lock_connection)
@@ -147,6 +169,10 @@ def worker_main(argv: list[str] | None = None) -> int:
         description="串行执行指定联系人最早的一个后台任务。",
     )
     parser.add_argument("--contact-id", required=True, type=UUID)
+    parser.add_argument(
+        "--retry-task-id", type=UUID,
+        help="显式恢复同联系人已失败的原任务并继续执行。",
+    )
     args = parser.parse_args(argv)
 
     database_url = os.environ.get("NOTALONE_DATABASE_URL", "").strip()
@@ -176,6 +202,7 @@ def worker_main(argv: list[str] | None = None) -> int:
             extraction_runner=extraction_runner,
             lease_duration=DEFAULT_WORKER_LEASE_DURATION,
             index_repository=index_repository,
+            deletion_repository=PostgresSourceDeletionRepository(database_url),
         )
     except Exception:
         return _fail("Worker 准备失败：数据库或模型配置不可用。")
@@ -188,7 +215,15 @@ def worker_main(argv: list[str] | None = None) -> int:
                 owner_id=owner_id,
                 contact_id=args.contact_id,
                 worker_id=uuid4(),
+                task_id=args.retry_task_id,
+                retry_repository=(
+                    repository if args.retry_task_id is not None else None
+                ),
             )
+    except BackgroundTaskNotFoundError:
+        return _fail("Worker 恢复被拒绝：task_not_found。")
+    except BackgroundTaskStateError:
+        return _fail("Worker 恢复被拒绝：task_retry_conflict。")
     except Exception:
         return _fail("Worker 执行失败。")
 

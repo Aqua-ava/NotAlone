@@ -75,6 +75,7 @@ class ImportService:
                 result.message_count if result.outcome == "already_imported" else 0
             ),
             "contact_id": str(result.contact_id),
+            "task_id": str(result.task_id),
         }
 
 
@@ -83,7 +84,7 @@ class ImportService:
 class TaskProgressUpdate:
     owner_id: UUID
     contact_id: UUID
-    task_id: UUID
+    task_id: UUID | None
     step: str
     status: str
     processed_count: int
@@ -93,7 +94,7 @@ class TaskProgressUpdate:
 
     def as_payload(self) -> dict[str, object]:
         payload: dict[str, object] = {
-            "task_id": str(self.task_id),
+            "task_id": str(self.task_id) if self.task_id is not None else None,
             "step": self.step,
             "status": self.status,
             "processed_count": self.processed_count,
@@ -139,28 +140,30 @@ class TaskHost:
         # check-then-act，否则并发 start 会重复建线程、先结束的线程会
         # 误删仍在运行线程的条目（current() 在运行中报 finished）。
         self._lock = threading.RLock()
-        self._threads: dict[UUID, threading.Thread] = {}
-        self._progress: dict[UUID, dict[str, object]] = {}
+        self._threads: dict[tuple[UUID, UUID], threading.Thread] = {}
+        self._progress: dict[tuple[UUID, UUID], dict[str, object]] = {}
 
-    def start(self, *, owner_id: UUID, contact_id: UUID) -> dict[str, object]:
+    def start(
+        self, *, owner_id: UUID, contact_id: UUID, task_id: UUID | None = None,
+    ) -> dict[str, object]:
         """触发一个联系人任务；已有执行中线程时返回 busy。"""
 
         with self._lock:
-            existing = self._threads.get(contact_id)
+            scope = (owner_id, contact_id)
+            existing = self._threads.get(scope)
             if existing is not None and existing.is_alive():
                 return {"status": "busy"}
-            task_id = uuid4()
             thread = threading.Thread(
                 target=self._run,
                 name=f"notalone-task-{contact_id}",
                 args=(owner_id, contact_id, task_id),
                 daemon=True,
             )
-            self._threads[contact_id] = thread
+            self._threads[scope] = thread
             self._set_progress(
-                contact_id,
+                scope,
                 {
-                    "task_id": str(task_id),
+                    "task_id": str(task_id) if task_id is not None else None,
                     "step": "claiming",
                     "status": "running",
                     "processed_count": 0,
@@ -175,13 +178,14 @@ class TaskHost:
         """返回当前进度快照；无任务时返回 idle。"""
 
         with self._lock:
-            thread = self._threads.get(contact_id)
+            scope = (owner_id, contact_id)
+            thread = self._threads.get(scope)
             if thread is not None and thread.is_alive():
                 return {
                     "status": "running",
-                    "progress": self._progress.get(contact_id),
+                    "progress": self._progress.get(scope),
                 }
-            progress = self._progress.get(contact_id)
+            progress = self._progress.get(scope)
             if progress is not None:
                 return {"status": "finished", "progress": progress}
             return {"status": "idle", "progress": None}
@@ -190,16 +194,20 @@ class TaskHost:
         self,
         owner_id: UUID,
         contact_id: UUID,
-        task_id: UUID,
+        task_id: UUID | None,
     ) -> None:
         """在全局锁内串行执行任务，每步经事件回调实时推送进度。"""
 
+        current_task_id = task_id
+
         def on_progress(result, retry_count: int) -> None:
+            nonlocal current_task_id
+            current_task_id = result.task_id or current_task_id
             self._record(
                 TaskProgressUpdate(
                     owner_id=owner_id,
                     contact_id=contact_id,
-                    task_id=task_id,
+                    task_id=current_task_id,
                     step=(
                         result.step_name.value
                         if result.step_name is not None
@@ -224,7 +232,8 @@ class TaskHost:
                 lock_connection=lock_connection,
                 owner_id=owner_id,
                 contact_id=contact_id,
-                worker_id=task_id,
+                worker_id=uuid4(),
+                task_id=task_id,
                 progress_callback=on_progress,
             )
         except Exception:
@@ -232,7 +241,7 @@ class TaskHost:
                 TaskProgressUpdate(
                     owner_id=owner_id,
                     contact_id=contact_id,
-                    task_id=task_id,
+                    task_id=current_task_id,
                     step="unknown",
                     status="failed",
                     processed_count=0,
@@ -246,7 +255,7 @@ class TaskHost:
                 TaskProgressUpdate(
                     owner_id=owner_id,
                     contact_id=contact_id,
-                    task_id=task_id,
+                    task_id=result.task_id or current_task_id,
                     step=(
                         result.last_step.value
                         if result.last_step is not None
@@ -263,16 +272,22 @@ class TaskHost:
             # 只清除自己的条目：并发触发的重复线程不能被先结束的一方误删。
             current = threading.current_thread()
             with self._lock:
-                if self._threads.get(contact_id) is current:
-                    self._threads.pop(contact_id, None)
+                scope = (owner_id, contact_id)
+                if self._threads.get(scope) is current:
+                    self._threads.pop(scope, None)
 
     def _record(self, update: TaskProgressUpdate) -> None:
-        self._set_progress(update.contact_id, update.as_payload())
+        self._set_progress((update.owner_id, update.contact_id), update.as_payload())
+        if update.task_id is None:
+            return
         try:
             self._event_publisher(update)
         except Exception:
             # 事件通道失败不影响任务执行本身。
             pass
 
-    def _set_progress(self, contact_id: UUID, progress: dict[str, object]) -> None:
-        self._progress[contact_id] = progress
+    def _set_progress(
+        self, scope: tuple[UUID, UUID], progress: dict[str, object],
+    ) -> None:
+        with self._lock:
+            self._progress[scope] = progress
