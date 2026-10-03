@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-human
+Triage: ready-for-agent
 State: claimed
 Type: task
 Blocked by: none
@@ -90,3 +90,7 @@ Blocked by: none
 2026-10-03：形成待决[来源复制计划提案](../../../docs/memory-source-copy-plan-proposal-20261003.md)。拟单E返回原12元字段及copy_plan，程序从同窗片段、有界角色前缀与明确来源时间附注装配原14Fact，原V／Flow／采纳不变。此限制不同于锁定自由生成的N，但借字拼词、人物／关系／期间错误仍可能；不称论文完整复现或已禁止全部扩写。当前只有人工设计审查，未实现Adapter／renderer、无新预算或模型调用，actual／held不解码。新内部Tool及正文职责超出已批准spec，拟2／32／48／32总114一次有限对照，不借旧余额；原Gold和全部正例／坏auto门保持，P0需另完成全开发必需与旧保护／匿名语义，当前10种人工例不冒充全门。Triage改ready-for-human、State仍claimed，待该具体Interface与有限试验决定；普通文档核对、两轴审阅与本地提交继续完成，未批准前不实施或联网。
 
 2026-10-03：用户再次明确不要使用DeepSeek官方key。此限制持续有效，提案明确只用既有ECNU ecnu-max，不直连或回退官方；ECNU不可用按失败关闭，不切凭据。本轮仅本机只读设计审查，未读取凭据或新增模型调用。
+
+2026-10-03：用户明确回复“同意这次有限试验”，批准40bb3e3中来源复制计划的Interface及2／32／48／32最多114invoke。新私有目录memory-source-copy-plan-experiment-20261003的人类批准凭证SHA32a33e69a6f02a9ed7a25abf388c214eb68311a415826180d7b31cbd7ba758fe绑定原提案0ee17ce…和唯一范围，旧预算不重开。先用本机0API原型核全dev9、旧12保护及匿名4的完整语义可表达性，相关red→green／类型／SDK只绑定／两轴预检通过并冻结后才联网；原始计划与全部输出按门保留、判败关闭，不改Gold。Triage回到ready-for-agent、State保持claimed，开始私有实现，实际／留出尚未解码，业务／水位／默认路径不写，不用官方key。
+
+2026-10-03：来源复制计划有限试验匿名门失败并关闭。25条人工预期组装对应12种计划，68项不同unittest、12文件mypy／AST、3项SDK仅绑定及两轴预审通过后，冻结计划SHA0cc850ec…。唯一匿名session53629终态exit0，1完整位置、2 E/V invoke／预约／台账、失败／空0；raw先冻SHA4ae2ba…后揭V，全审SHAb5465e…确认必需raw与最终严格3/4，三条准确、缺联系人不知道朋友当前报酬。三份引用逐字真实且意义完整，pending2／auto1仅评测去向，坏auto、误拒、不必要降级及extras均0。捕获运行闭环SHA20135c…通过，无伪造V或新调用；root失败门SHAbc94c1…、关闭收据SHAaa89ab…，累计2/114、余112关闭，开发dry预期BudgetRejected且预约不增，后三阶段未启动、actual／held只核字节未解码。报告见[本轮结果](../../../docs/memory-source-copy-plan-result-20261003.md)。服务reported9,817tokens，HTTP／账单未知，只用既有ECNU、不用官方key／直连；业务／水位／默认路径未改，历史实际6/12及2/6不变。首次本机凭证写作错误保留后0API纠正；不补跑或循环调本配置。当前继续结果文档核对、两轴终审及任务专属本地提交，整体修复未完成，仍ready-for-agent／claimed。
