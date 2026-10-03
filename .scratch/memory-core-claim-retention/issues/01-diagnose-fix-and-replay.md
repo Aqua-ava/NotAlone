@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-agent
+Triage: ready-for-human
 State: claimed
 Type: task
 Blocked by: none
@@ -16,6 +16,14 @@ Blocked by: none
 - 相关检查、隔离全量、两轴评审、本地中文提交完成；无远端 Git。
 
 ## Comments
+
+2026-10-04：v3增量终审及独立参考已冻结：Standards新增硬规范／阻断0、原可选气味1保留，SHA fa47c316…；Spec当前缺失／scope creep／错误阻断0，SHA 0af14710…，明确保留首类别/话题核对不足及D7误标。原3方法／12人工给定正控制、3文件类型／AST通过，目标语义改善仍未实测；首反例、首草案、首审不覆盖。最终文档只补收据SHA和完成元数据，最小核对后仅本任务本地提交。48次尚未批准、旧预算闭账、0新模型/业务/默认/远端Git；ready-for-human／claimed，整体未完成。
+
+2026-10-04：上述首审后补核类别/话题与本人共同完成的语用，发现新合成v2准备缺口，初正确判断不得扩大成完整类别语义正确。首输入、参考和两轴收据不改；v3仅修category/topic及D7 assertion/asserted/auto，原话／人物／scope IDs／subject／日期／风险保持，去向6auto／6pending。原3个契约控制换v3路径后重跑通过，3文件类型／AST通过，不算额外模型/测试样本。独立Spec及Standards已核此增量，最终收据待当前cached文档核对后独占保存；全程0新模型、业务、默认或旧预算改动。实际与E漏提目标仍未完成，48次仍待具体联网范围决定。
+
+2026-10-04：本轮本机准备与四文档两轴终审完成。Standards硬规范／阻断0、可选重复测试helper气味1，SHA a7397c80…；Spec当前缺失／scope creep／实现错误0，SHA 79198570…，独立冻结D1—D12逐条判断支持v2（5auto／7pending）。初scope漏列自造D材料，首记录保留后补充范围说明fdf5fded…，没有授予新外部调用或真实资料。原症状仍2红，所有本机绿检查只说明接缝兼容；新48预算未批准，整体未完成、ready-for-human／claimed不变。收据／链接／统计和最终元数据增量核对后按工程规则保存仅本任务四文档的本地中文提交，不做远端Git。
+
+2026-10-04：用户“好的，把这个设为目标继续弄”启动持续目标并继续本机准备。[本机记录](../../../docs/memory-party-participants-local-preparation-20261004.md)确认两C4原始返回已错、完整输入未遗漏、程序不改错正确分类；三个假设预记录，模型偏重主要人物的因果尚未实测。原／候选提示重放旧响应各2症状断言红、20个已知给定机会保留，3本机契约控制／3文件类型与AST通过；首9类型声明错误及首反馈保留，0新API、SDK真实构造或业务／默认改动。私有提示单叶准备和12条合成开发样本完成，不改schema／guard或旧参考；旧24及所有余额仍关闭，actual／private held未读，E漏提和实际6/12／2/6未改善。新的[4／20／24最多48次匿名对照](../../../docs/memory-party-participants-prompt-pilot-proposal-20261004.md)只准备，按workflow“实际实现需要超出当前spec或ticket”待该新预算具体决定；日常核验由Agent负责。State仍claimed、Blocked by none，Triage ready-for-human仅待新联网范围，当前文档验证／两轴审阅／本地提交继续完成，不标整体完成。
 
 2026-10-04：[24次人物匿名对照结果](../../../docs/memory-party-guard-pilot-result-20261004.md)已关闭：阶段1完整通过才开阶段2，24V全部返回／台账／预约对应，E／R、运行／结构失败及未运行0。原／新坏auto6／0，正14/14完整保护，人物18/20；C4两轮把共同参与mixed误判contact，阶段2及整体门失败，不因安全pending或充分quote改Gold。raw先独审冻结再揭compiled／Flow，Fact与代码推导decision风险分层，原14／未知日期保持。worker11＋root6控制、类型与AST、SDK仅绑定、228SHA／7版本及两轴预检通过；运行／落盘失败统计修正和全部首失败保留。原J未补提，实际6/12及可选2/6保持，0actual／held／业务／默认／产品源码变更。24预算余额0、导入前真实闭账拒绝；State claimed、Triage ready-for-agent仅继续本机归因／具体方案，不开放新模型试验。当前三文档最小核验及两轴终审通过；真实mypy选项与C4误判方向文案已修，最终硬问题／阻塞0、可选气味1，终审SHA b3c88e0a…／7cb708b7…保留。按工程规则保存任务专属本地提交，无远端Git；整体spec未完成。
 
