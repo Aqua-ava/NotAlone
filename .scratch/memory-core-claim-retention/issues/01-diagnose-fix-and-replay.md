@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-human
+Triage: ready-for-agent
 State: claimed
 Type: task
 Blocked by: none
@@ -104,3 +104,7 @@ Blocked by: none
 2026-10-03：上述失败已两轴审查及本地64070f9保存。用户现回复“好继续”，仅批准独立事实与漏项核对的本机原型及新有限方案准备。原E／Flow与捕获V重放两个应记主张保留断言均红，首反馈SHAde0edebb…；原V拒绝复合缺源正确，不能放松。只读explorer核旧R、分组、复制与逐条已有失败职责后，原型采用临时逐target原话片段去向＋声明source片段，一次E、原14出口／system／Flow／V不变；错误skip及复合候选可机械通过的反例必须保留，不称模型改善。新[8次匿名提案](../../../docs/memory-atomic-coverage-pilot-proposal-20261003.md)仅准备，尚无新预算／模型调用，所有旧余额关闭。任务仍ready-for-agent／claimed，当前连续完成本机纵切、相关验证、结果核对、两轴审阅与任务专属本地提交。
 
 2026-10-03：本机原型完成，见[本机结果](../../../docs/memory-atomic-coverage-local-prototype-20261003.md)。12原型＋7独立不同unittest、2文件mypy／AST通过；原两捕获缺陷仍红，人工4条只证明可表达，未知日期／风险／原14值不改，无实际V则不能auto。机械完整覆盖不能判断skip语义、隐藏必要source或原子性；反例均保留，原V仍正确拒绝复合岗位。独审发现总raw上限缺口已红绿修正，新60总raw比原60reviewable严格，重复evidence负担及全部结构损失须未来实测。worker收据SHA8ab12fdd…、独审SHAf5c1bd8a…、root49字节指纹／权限核对SHAff586c8c…，0API／真实SDK／凭据／actual-held／业务写，旧预算关闭、实际6/12及2/6不变。新的[8次匿名提案](../../../docs/memory-atomic-coverage-pilot-proposal-20261003.md)具体准备完，尚未批准联网或实现真实模型委托／runner；Triage改ready-for-human、State仍claimed、Blocked by none，只待该具体范围决定。结果文档最小验证、两轴终审与任务专属本地提交连续完成，不将整体目标或实际验收标成完成。
+
+2026-10-03：用户在本机原型完成、本地提交993312b和具体最多8次匿名对照问题后回复“继续”，批准联合输出与原E/V各两轮的唯一匿名试验。Triage回ready-for-agent，State保持claimed；旧预算仍关闭。先完成私有真实SDK绑定委托与编排、相关TDD／类型、合成凭据只绑定和两轴预检，再完整冻结后运行；未冻结不读真实凭据或构造可出站模型。不读真实／留出、不写业务／水位／旧五条、不改默认，整体目标未完成。
+
+2026-10-03：上述8次对照已完成并判败闭账，见[结果](../../../docs/memory-atomic-coverage-pilot-result-20261003.md)。11项编排不同unittest、6文件类型／AST、root两文件类型／AST、三Tool SDK仅绑定及两轴预检后冻结70依赖；唯一session71858 exit0、四位置、8invoke／预约／台账，失败／空／未运行0、余0。首raw独审SHA017f59b3…冻结后再揭V，全审SHAfd921940…确认原／联合完整raw与最终4/8／6/8、正文均6/8、知识均0/2。局部收益来自第一轮第三人标签；原V放过两错标签形成评测坏auto2，联合坏auto0、原全部正确raw保护4/4，第二轮持平。联合未知报酬两轮均E skip not_reusable、未进入V候选，两项关闭后捕获重放预期红、0新调用，四覆盖门失败，不采用或发布。40组机械核查和root171指纹／权限核对不当模型样本；SDK报告32,527tokens，HTTP／账单未知。仍只用ECNU、不用官方key，未读真实／留出值或写业务／水位／旧五条、未改产品源码／默认，实际6/12及2/6不变。任务仍ready-for-agent／claimed／Blocked by none；继续完成本轮文档最小验证、两轴收尾与任务专属本地提交，不把整体有效修复标成完成。新协议或新调用需先形成具体方案决定，旧预算禁止复开。
