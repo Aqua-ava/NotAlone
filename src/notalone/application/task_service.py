@@ -26,6 +26,15 @@ class TaskService:
         )
         return {"task_id": str(task.task_id), "status": task.status.value}
 
+    def defer(
+        self, *, owner_id: UUID, contact_id: UUID, task_id: UUID,
+        error_code: str = "execution_resources_unavailable",
+    ) -> None:
+        self._repository.record_queued_reason(
+            owner_id=owner_id, contact_id=contact_id, task_id=task_id,
+            error_code=error_code,
+        )
+
 
 def _task_payload(task: BackgroundTask) -> dict[str, object]:
     return {

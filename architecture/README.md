@@ -59,6 +59,7 @@
 32. [ADR-032：审计基线与实际迁移账本分开](adr/032-audited-legacy-schema-baseline.md)
 33. [ADR-033：记忆采纳前核验来源语义支持](adr/033-source-semantic-verification-before-adoption.md)
 34. [ADR-034：显式失败任务恢复按原任务领取](adr/034-explicit-failed-task-recovery-selection.md)
+35. [ADR-035：导入触发原记忆任务并让前台回复优先](adr/035-import-triggered-memory-work-and-reply-priority.md)
 
 ## 当前架构决策
 

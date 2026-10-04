@@ -48,6 +48,7 @@ from notalone.application.import_service import (
     TaskHost,
 )
 from notalone.application.task_service import TaskService
+from notalone.application.model_priority import ModelWorkStopped
 from notalone.application.setup_service import SetupService
 from notalone.application.skill_service import (
     LedgerService,
@@ -225,6 +226,19 @@ class BackendApp:
 
         return self._events
 
+    def shutdown_runtime(self) -> None:
+        """HTTP、信号与公开服务器关闭共用同一次资源收尾。"""
+
+        self._runtime_stopping.set()
+        with self._runtime_shutdown_lock:
+            if self._runtime_stopped.is_set():
+                return
+            if self._runtime_shutdown is not None:
+                self._runtime_shutdown()
+            if self._task_host is not None:
+                self._task_host.stop()
+            self._runtime_stopped.set()
+
     def handle(
         self,
         *,
@@ -251,7 +265,7 @@ class BackendApp:
                 headers=request_headers,
                 body=request_body,
             )
-        except SyncHostStopped:
+        except (SyncHostStopped, ModelWorkStopped):
             return _json_response(
                 HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_stopping"}
             )
@@ -285,11 +299,7 @@ class BackendApp:
                     HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_unavailable"}
                 )
             # 只关闭本次读取资源，不调用 disable，不修改持久同步偏好。
-            self._runtime_stopping.set()
-            with self._runtime_shutdown_lock:
-                if not self._runtime_stopped.is_set():
-                    self._runtime_shutdown()
-                    self._runtime_stopped.set()
+            self.shutdown_runtime()
             return _json_response(HTTPStatus.OK, {"state": "stopped"})
         if self._runtime_stopping.is_set() and not (
             method_upper == "GET"
@@ -877,6 +887,10 @@ class BackendApp:
                 contact_id=contact_id,
                 request=request,
             )
+        except ModelWorkStopped:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_stopping"}
+            )
         except ReplyTimeoutError:
             return _json_response(
                 HTTPStatus.GATEWAY_TIMEOUT, {"error": "reply_timeout"}
@@ -1135,6 +1149,8 @@ class BackendApp:
         import_service = self._import_service
         task_host = self._task_host
         task_service = self._task_service
+        if owner_id is None:
+            raise ImportTaskRequestInvalid()
 
         if path == "/api/imports/preview":
             if method != "POST" or import_service is None:
@@ -1204,6 +1220,27 @@ class BackendApp:
                     HTTPStatus.CONFLICT,
                     {"error": "import_commit_failed"},
                 )
+            task_identity: tuple[UUID, UUID] | None = None
+            should_defer = task_host is None
+            try:
+                task_identity = (
+                    UUID(str(result["contact_id"])), UUID(str(result["task_id"])),
+                )
+                if task_host is not None:
+                    task_host.wake(
+                        owner_id=owner_id, contact_id=task_identity[0],
+                        task_id=task_identity[1],
+                    )
+            except Exception:
+                # 消息已经提交，后台执行不可用不能改变导入结果。
+                should_defer = True
+            if should_defer and task_service is not None and task_identity is not None:
+                try:
+                    task_service.defer(
+                        owner_id=owner_id, contact_id=task_identity[0], task_id=task_identity[1],
+                    )
+                except Exception:
+                    pass
             return _json_response(HTTPStatus.OK, result)
 
         if path in {"/api/tasks/run", "/api/tasks/retry"}:
@@ -1609,6 +1646,7 @@ class BackendServer:
     def shutdown(self) -> None:
         # HTTP 关闭请求和 command finally 可以同时收尾；同一宿主只关闭一次。
         with self._shutdown_lock:
+            self._app.shutdown_runtime()
             self._app.events.close()
             if self._http_server is not None:
                 self._http_server.shutdown()

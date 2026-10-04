@@ -7,6 +7,7 @@ import os
 import signal
 import sys
 import threading
+import time
 from uuid import UUID
 
 from notalone.front_sync.factory import (
@@ -14,6 +15,11 @@ from notalone.front_sync.factory import (
     owner_wechat_account_scope,
 )
 from notalone.application.setup_service import SetupService
+from notalone.application.model_priority import (
+    AccountedExtractionRunner, MemoryCallAccounting,
+    ModelPriorityControl, PriorityAdjudicationRuntime, PriorityExtractionRuntime,
+    PriorityVerificationRuntime,
+)
 from notalone.runtime_config import load_project_env
 from notalone.server.app import BackendServer, create_app
 from notalone.server.connection_info import (
@@ -62,6 +68,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     events = EventBus()
+    model_priority = ModelPriorityControl()
     setup_service = _build_setup_service(database_url)
     sync_host = _build_sync_host(
         database_url=database_url,
@@ -79,16 +86,31 @@ def main(argv: list[str] | None = None) -> int:
         else None
     )
     reply_service = (
-        build_reply_service(database_url=database_url, owner_id=owner_id)
+        build_reply_service(
+            database_url=database_url, owner_id=owner_id, model_priority=model_priority,
+        )
         if owner_id is not None
         else None
     )
     memory_service = _build_memory_service(database_url)
     import_service = _build_import_service(database_url)
-    task_host = _build_task_host(database_url, events)
+    task_host = _build_task_host(database_url, events, model_priority=model_priority)
     skill_service = _build_skill_service(database_url)
     ledger_service = _build_ledger_service(database_url)
     server: BackendServer | None = None
+
+    def stop_runtime() -> None:
+        # 共享一个等待预算；同步收尾与任务收尾不能依次各等一轮。
+        model_priority.stop()
+        deadline = time.monotonic() + 4.0
+        sync_thread = None
+        if sync_host is not None:
+            sync_thread = threading.Thread(target=sync_host.stop, daemon=True)
+            sync_thread.start()
+        if task_host is not None:
+            task_host.stop(timeout=max(0.0, deadline - time.monotonic()))
+        if sync_thread is not None:
+            sync_thread.join(timeout=max(0.0, deadline - time.monotonic()))
     try:
         app = create_app(
             database_url=database_url,
@@ -103,13 +125,12 @@ def main(argv: list[str] | None = None) -> int:
             ledger_service=ledger_service,
             setup_service=setup_service,
             follow_smoke=follow_smoke,
-            runtime_shutdown=(sync_host.stop if sync_host is not None else lambda: None),
+            runtime_shutdown=stop_runtime,
         )
         server = BackendServer(app, host=args.host, port=args.port)
         host, port = server.start()
     except (TypeError, ValueError):
-        if sync_host is not None:
-            sync_host.stop()
+        stop_runtime()
         print("本地后端配置无效。", file=sys.stderr)
         return 2
     if owner_id is None:
@@ -133,8 +154,6 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         return 0
     finally:
-        if sync_host is not None:
-            sync_host.stop()
         remove_backend_info()
         server.shutdown()
 
@@ -231,8 +250,11 @@ def _build_import_service(database_url: str) -> ImportService | None:
         return None
 
 
-def _build_task_host(database_url: str, events: EventBus) -> TaskHost | None:
-    """装配进程内任务宿主；模型或数据库配置不可用时返回 None。"""
+def _build_task_host(
+    database_url: str, events: EventBus,
+    *, model_priority: ModelPriorityControl | None = None,
+) -> TaskHost | None:
+    """装配任务宿主；执行前再检查模型与资源，不提前领取持久任务。"""
 
     import psycopg
 
@@ -240,6 +262,7 @@ def _build_task_host(database_url: str, events: EventBus) -> TaskHost | None:
     from notalone.server.event_models import BackendEvent
     from notalone.tasks.command import DEFAULT_WORKER_LEASE_DURATION
     from notalone.tasks.worker import (
+        ExtractionTaskRunner,
         PostgresMemoryExtractionRunner,
         BackgroundTaskWorker,
     )
@@ -251,14 +274,45 @@ def _build_task_host(database_url: str, events: EventBus) -> TaskHost | None:
     )
     from notalone.persistence.source_deletion import PostgresSourceDeletionRepository
     from notalone.scopes import ContactScope
+    from notalone.memory_extraction.adapters import LangChainExtractionRuntime
+    from notalone.memory_extraction.adjudication_adapters import LangChainAdjudicationRuntime
+    from notalone.memory_extraction.cli_support import build_extraction_components
+    from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime
 
     def build_worker() -> BackgroundTaskWorker:
+        extraction: ExtractionTaskRunner
+        if model_priority is None:
+            extraction = PostgresMemoryExtractionRunner(database_url)
+        else:
+            components = build_extraction_components(database_url)
+            accounting = MemoryCallAccounting(
+                components.ledger, model_name=components.model_name,
+            )
+            extraction = AccountedExtractionRunner(PostgresMemoryExtractionRunner(
+                database_url,
+                runtime=PriorityExtractionRuntime(
+                    LangChainExtractionRuntime(model=components.model), model_priority,
+                    accounting=accounting,
+                ),
+                verification_runtime=PriorityVerificationRuntime(
+                    LangChainSourceVerificationRuntime(
+                        model=components.model, ledger=components.ledger, provider="deepseek",
+                    ), model_priority,
+                ),
+                adjudication_runtime=PriorityAdjudicationRuntime(
+                    LangChainAdjudicationRuntime(model=components.model), model_priority,
+                    accounting=accounting,
+                ),
+                ledger=components.ledger, watermark_port=components.watermark,
+                model_name=components.model_name,
+            ), accounting)
         return BackgroundTaskWorker(
             repository=PostgresBackgroundTaskRepository(database_url),
-            extraction_runner=PostgresMemoryExtractionRunner(database_url),
+            extraction_runner=extraction,
             lease_duration=DEFAULT_WORKER_LEASE_DURATION,
             index_repository=PostgresContactMemoryIndexRepository(database_url),
             deletion_repository=PostgresSourceDeletionRepository(database_url),
+            model_priority=model_priority,
         )
 
     def build_lock_connection():
@@ -290,6 +344,8 @@ def _build_task_host(database_url: str, events: EventBus) -> TaskHost | None:
             worker_builder=build_worker,
             lock_connection_builder=build_lock_connection,
             event_publisher=publish_progress,
+            model_priority=model_priority,
+            task_repository=PostgresBackgroundTaskRepository(database_url),
         )
     except Exception:
         return None
