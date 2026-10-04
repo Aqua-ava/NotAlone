@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from notalone.ledger.adapters import InMemoryOutboundLedger
@@ -74,6 +74,36 @@ class InMemoryOutboundLedgerTest(unittest.TestCase):
         self.ledger.record(earlier)
 
         self.assertEqual(self.ledger.list_by_owner(owner_id), (earlier, later))
+
+
+    def test_recent_window_and_summary_aggregate_without_full_scan(self) -> None:
+        owner_id = uuid4()
+        base = datetime(2026, 8, 22, 10, 0, 0, tzinfo=timezone.utc)
+        for index in range(5):
+            self.ledger.record(_make_entry(
+                owner_id,
+                uuid4(),
+                called_at=base + timedelta(minutes=index),
+                input_tokens=10,
+                output_tokens=5,
+            ))
+
+        window = self.ledger.list_by_owner(owner_id, limit=2)
+        summary = self.ledger.summarize_by_owner(owner_id)
+
+        self.assertEqual(len(window), 2)
+        self.assertEqual(
+            [entry.called_at for entry in window],
+            [base + timedelta(minutes=3), base + timedelta(minutes=4)],
+        )
+        self.assertEqual(summary.total_calls, 5)
+        self.assertEqual(summary.total_input_tokens, 50)
+        self.assertEqual(summary.total_output_tokens, 25)
+        self.assertEqual(sum(summary.provider_counts.values()), 5)
+
+    def test_invalid_window_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self.ledger.list_by_owner(uuid4(), limit=0)
 
 
 class LedgerEntryValidationTest(unittest.TestCase):

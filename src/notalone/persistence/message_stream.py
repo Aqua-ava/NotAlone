@@ -118,6 +118,11 @@ class PostgresMessageStream:
                         WHERE payload.message_id = m.id
                           AND payload.owner_id = m.owner_id
                           AND payload.contact_id = m.contact_id
+                        -- 同一消息可能有多条来源引用：优先带引用正文的记录，
+                        -- 再按 id 稳定排序，避免返回结果随行序变化。
+                        ORDER BY (
+                            payload.raw_payload -> 'quote' ->> 'text'
+                        ) IS NULL, payload.id
                         LIMIT 1
                     ) AS quote_ref ON quote_ref.quoted_server_id IS NOT NULL
                     LEFT JOIN public.wechat_message_metadata AS target_meta

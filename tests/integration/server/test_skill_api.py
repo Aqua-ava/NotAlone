@@ -115,9 +115,31 @@ class FakeSkillService:
 
 
 class FakeLedger:
-    """与 PostgresOutboundLedger 同形的最小 fake：只提供 list_by_owner。"""
+    """与 PostgresOutboundLedger 同形的最小 fake：窗口查询 + 存储侧聚合。"""
 
-    def list_by_owner(self, owner_id: UUID) -> tuple[object, ...]:
+    def summarize_by_owner(self, owner_id: UUID) -> object:
+        from types import SimpleNamespace
+
+        entries = self.list_by_owner(owner_id)
+        return SimpleNamespace(
+            total_calls=len(entries),
+            provider_counts={"deepseek": len(entries)},
+            outcome_counts={"succeeded": len(entries)},
+            total_input_tokens=sum(
+                entry.input_tokens or 0 for entry in entries
+            ),
+            total_output_tokens=sum(
+                entry.output_tokens or 0 for entry in entries
+            ),
+        )
+
+    def list_by_owner(
+        self,
+        owner_id: UUID,
+        *,
+        limit: int | None = None,
+    ) -> tuple[object, ...]:
+        del limit
         from datetime import datetime, timezone
 
         from notalone.ledger.models import LedgerOutcome

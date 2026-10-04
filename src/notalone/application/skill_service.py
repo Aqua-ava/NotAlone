@@ -201,10 +201,22 @@ class SkillService:
         }
 
 
-class LedgerQuery(Protocol):
-    """出站台账的最小查询边界（与 OutboundLedgerPort.list_by_owner 一致）。"""
+# 概览明细只展示最近若干条；聚合在存储侧完成，窗口给足余量。
+LEDGER_RECENT_WINDOW = 200
+LEDGER_RECENT_DISPLAY = 10
 
-    def list_by_owner(self, owner_id: UUID) -> tuple: ...
+
+class LedgerQuery(Protocol):
+    """出站台账的最小查询边界（与 OutboundLedgerPort 一致）。"""
+
+    def list_by_owner(
+        self,
+        owner_id: UUID,
+        *,
+        limit: int | None = None,
+    ) -> tuple: ...
+
+    def summarize_by_owner(self, owner_id: UUID) -> object: ...
 
 
 class LedgerService:
@@ -218,22 +230,15 @@ class LedgerService:
     def summary(self, *, owner_id: UUID) -> dict[str, object]:
         from notalone.ledger.models import LedgerOutcome
 
-        entries = self._ledger.list_by_owner(owner_id)
-        provider_counts: dict[str, int] = {}
-        outcome_counts: dict[str, int] = {}
-        total_input = 0
-        total_output = 0
-        for entry in entries:
-            provider_counts[entry.provider] = (
-                provider_counts.get(entry.provider, 0) + 1
-            )
-            outcome_counts[entry.outcome.value] = (
-                outcome_counts.get(entry.outcome.value, 0) + 1
-            )
-            if entry.input_tokens is not None:
-                total_input += entry.input_tokens
-            if entry.output_tokens is not None:
-                total_output += entry.output_tokens
+        # 计数与 token 合计在存储侧聚合；只取最近窗口用于明细列表。
+        summary = self._ledger.summarize_by_owner(owner_id)
+        provider_counts = dict(getattr(summary, "provider_counts", {}) or {})
+        outcome_counts = dict(getattr(summary, "outcome_counts", {}) or {})
+        total_input = int(getattr(summary, "total_input_tokens", 0) or 0)
+        total_output = int(getattr(summary, "total_output_tokens", 0) or 0)
+        entries = self._ledger.list_by_owner(
+            owner_id, limit=LEDGER_RECENT_WINDOW,
+        )
         recent = [
             {
                 "entry_id": str(entry.entry_id),
@@ -246,10 +251,10 @@ class LedgerService:
                 "outcome": entry.outcome.value,
                 "called_at": entry.called_at.isoformat(),
             }
-            for entry in entries[-10:]
+            for entry in entries[-LEDGER_RECENT_DISPLAY:]
         ]
         return {
-            "total_calls": len(entries),
+            "total_calls": int(getattr(summary, "total_calls", 0) or 0),
             "provider_counts": provider_counts,
             "outcome_counts": outcome_counts,
             "total_input_tokens": total_input,
