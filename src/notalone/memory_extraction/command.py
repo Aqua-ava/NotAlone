@@ -169,9 +169,11 @@ def run_extraction(
         )
         adoption_stats = AdoptionStats()
         extraction_completed = False
+        batch_extracted = 0
         try:
             outcome: ExtractionOutcome = flow.run(window)
             extraction_completed = outcome.extraction_completed
+            batch_extracted = len(outcome.accepted)
             if outcome.failure_reason is None:
                 adoption_stats = adoption.adopt(scope, outcome)
         except ExtractionRuntimeError as error:
@@ -201,7 +203,7 @@ def run_extraction(
             model_name=model_name,
         )
         if outcome.failure_reason is None:
-            extracted += len(outcome.accepted)
+            extracted += batch_extracted
             adopted += adoption_stats.adopted
             updated += adoption_stats.updated
             pending += adoption_stats.pending
@@ -212,8 +214,9 @@ def run_extraction(
             if watermark_port is not None:
                 watermark_port.set(scope, batch[-1].message_id)
             continue
-        # 失败批次里已经由 flow 判定为契约拒绝的候选仍要计数，
+        # 失败批次里已经通过提取或已被判定为契约拒绝的候选仍要计数，
         # 这样采纳阶段失败不会让本批统计凭空归零。
+        extracted += batch_extracted
         rejected += outcome.rejected_count
         if (
             outcome.failure_kind is ExtractionFailureKind.INVALID_OUTPUT

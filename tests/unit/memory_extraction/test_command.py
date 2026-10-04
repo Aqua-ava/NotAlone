@@ -1197,5 +1197,59 @@ class OwnerIdAndAdoptionFailureTest(unittest.TestCase):
         self.assertEqual(stats.rejected_by_contract, 1)
 
 
+class AdoptionFailureStatsTest(unittest.TestCase):
+    """采纳阶段失败时，本批已通过提取与拒绝的候选都要留在统计里。"""
+
+    def test_failed_adoption_keeps_passed_and_rejected_counts(self) -> None:
+        messages = _messages(2)
+
+        class TwoCandidateRuntime:
+            def extract(self, window) -> tuple:
+                return tuple(
+                    _payload(message_id)
+                    for message_id in window.target_message_ids
+                )
+
+        verifier = FixedSourceVerifier((
+            verification_result(evidence=(
+                (messages[0].message_id, messages[0].text),
+            )),
+            verification_result(
+                candidate_index=1,
+                verdict="unsupported", issues=("meaning",),
+            ),
+        ))
+
+        class FailingAdoption:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def adopt(self, scope, outcome):
+                raise ExtractionRuntimeError(
+                    "合成写入裁决失败", ExtractionFailureKind.UNAVAILABLE,
+                )
+
+        with patch(
+            "notalone.memory_extraction.command.MemoryAdoption", FailingAdoption
+        ):
+            stats = run_extraction(
+                scope=ContactScope(OWNER_ID, CONTACT_ID),
+                messages=messages,
+                watermark_message_id=None,
+                runtime=TwoCandidateRuntime(),
+                verification_runtime=verifier,
+                memory_port=InMemoryMemoryStore(),
+                owner_memory_port=RecordingOwnerPort(),
+                ledger=InMemoryOutboundLedger(),
+                watermark_port=RecordingWatermark(),
+                batch_size=20,
+            )
+
+        self.assertEqual(stats.batches, 1)
+        self.assertEqual(stats.failed_batches, 1)
+        self.assertEqual(stats.extracted, 1)
+        self.assertEqual(stats.rejected_by_contract, 1)
+
+
 if __name__ == "__main__":
     unittest.main()
