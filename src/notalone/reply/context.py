@@ -724,7 +724,9 @@ class RetrievalReplyContext:
         try:
             snapshot = snapshot_reader(scope)
         except Exception:
-            return (None, None)
+            # 与校验阶段保持一致：读不到 revision 就不能当成“没有变化”，
+            # 否则瞬时故障会让本轮缺少粗粒度 tripwire。
+            raise ReplyContextError("关系记忆 revision 读取失败。") from None
         if snapshot is None:
             return (None, None)
         if (

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 import asyncio
 import unittest
 from collections.abc import Sequence
@@ -144,7 +145,8 @@ class HistoryToolTest(unittest.TestCase):
         message = payload["messages"][0]
         self.assertEqual(message["message_id"], str(MESSAGE_IDS[0]))
         self.assertEqual(message["role"], "contact")
-        self.assertEqual(message["session_id"], str(BINDING_ID))
+        # 检索层没有给出会话标识时如实为 null，不能伪造成当前绑定会话。
+        self.assertIsNone(message["session_id"])
         self.assertEqual(message["source_ids"], [str(SOURCE_ID)])
         self.assertEqual(message["occurred_at"], "2026-09-01T12:00:00+00:00")
         self.assertEqual(
@@ -158,6 +160,43 @@ class HistoryToolTest(unittest.TestCase):
             (MESSAGE_IDS[0],),
         )
         self.assertEqual(access.tool_calls[0].status, "succeeded")
+
+    def test_future_invalid_at_is_still_current(self) -> None:
+        access = self._access()
+        base = RetrievedMessage(
+            message_id=MESSAGE_IDS[0],
+            scope=self.scope,
+            text="下周搬家的安排还在",
+            source_ids=(SOURCE_ID,),
+            occurred_at=datetime(2026, 9, 1, 12, tzinfo=timezone.utc),
+            role="contact",
+        )
+        future = replace(
+            base,
+            invalid_at=datetime(2030, 1, 1, tzinfo=timezone.utc),
+        )
+        past = replace(
+            base,
+            invalid_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(access._validate_messages((future,)), (future,))
+        with self.assertRaises(ReplyContextInvariantError):
+            access._validate_messages((past,))
+
+    def test_message_payload_passes_through_real_session_id(self) -> None:
+        access = self._access()
+        message = RetrievedMessage(
+            message_id=MESSAGE_IDS[0],
+            scope=self.scope,
+            text="很久以前我们讨论过旅行计划",
+            source_ids=(SOURCE_ID,),
+            occurred_at=datetime(2026, 9, 1, 12, tzinfo=timezone.utc),
+            role="contact",
+            session_id=BINDING_ID,
+        )
+        payload = access._message_payload(message)
+        self.assertEqual(payload["session_id"], str(BINDING_ID))
 
     def test_query_requires_session_and_reads_only_after_search_anchor(self) -> None:
         access = self._access()

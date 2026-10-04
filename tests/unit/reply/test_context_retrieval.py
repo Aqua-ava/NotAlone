@@ -16,6 +16,7 @@ from notalone.memory import (
 from notalone.memory.timing import MemoryTiming
 from notalone.reply.context import (
     ReplyContext,
+    ReplyContextError,
     ReplyContextInvariantError,
     RetrievalReplyContext,
 )
@@ -323,6 +324,30 @@ class ContextRetrievalTest(unittest.TestCase):
         )
         self.assertTrue(all(item.scope == self.scope for item in result.evidence))
         self.assertEqual(result.skill_library_revision, 7)
+
+    def test_revision_snapshot_failure_fails_closed(self) -> None:
+        retrieval = self._retrieval()
+        memory = retrieval.memory_store.list_confirmed(self.scope)[0]
+        index = RecordingMemoryIndex((memory.memory_id,), revisions=(4, 4))
+
+        def failing_snapshot(scope):
+            del scope
+            raise RuntimeError("synthetic revision outage")
+
+        index.revision_snapshot = failing_snapshot  # type: ignore[method-assign]
+        context = RetrievalReplyContext(
+            retrieval=retrieval,
+            memory_index=index,
+            skill_library_revision=7,
+            id_factory=iter(_ids()).__next__,
+        )
+
+        # 读不到 revision 不能当成“没有变化”，否则瞬时故障会让本轮缺少 tripwire。
+        with self.assertRaises(ReplyContextError):
+            context.build(
+                command=self._reply_command(),
+                verified_scope=self.verified_scope,
+            )
 
     def test_directory_only_provides_revision_snapshot(self) -> None:
         retrieval = self._retrieval()
