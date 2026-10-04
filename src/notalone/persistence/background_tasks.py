@@ -10,6 +10,7 @@ import psycopg
 
 from notalone.tasks.models import (
     IMPORT_TASK_STEPS,
+    OBSERVATION_TASK_STEPS,
     VERIFY_STEPS,
     BackgroundTask,
     BackgroundTaskStatus,
@@ -107,24 +108,131 @@ class PostgresBackgroundTaskRepository:
             raise RuntimeError("无法确认导入任务状态。")
 
         task_id = task[0]
-        with connection.cursor() as cursor:
-            cursor.executemany(
+        _insert_task_steps(
+            connection,
+            task_id=task_id,
+            steps=IMPORT_TASK_STEPS,
+            total_count=message_count,
+        )
+        return task_id
+
+    @staticmethod
+    def create_observation_task(
+        connection: psycopg.Connection[Any],
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        message_count: int = 0,
+    ) -> UUID:
+        """创建或重新排队联系人级 observation 任务。
+
+        观察任务不绑定 ``source_document``。运行中任务只保留一次唤醒，
+        终态任务在新的观察到达时重置固定步骤，复用同一个任务身份。
+        调用方必须在观察来源提交成功后调用本方法。
+        """
+
+        _validate_count(message_count, "message_count")
+        # 与 Worker 领取及历史任务创建使用同一联系人锁，避免两个观察批次
+        # 同时看到“无任务”后各自插入一个联系人级 observation 任务。
+        PostgresBackgroundTaskRepository._lock_scope(
+            connection,
+            owner_id,
+            contact_id,
+        )
+        active_binding = connection.execute(
+            """
+            SELECT 1
+            FROM public.conversation_binding
+            WHERE owner_id = %s AND contact_id = %s AND status = 'active'
+            LIMIT 1
+            FOR KEY SHARE
+            """,
+            (owner_id, contact_id),
+        ).fetchone()
+        if active_binding is None:
+            raise BackgroundTaskStateError("联系人没有可用的已确认绑定。")
+
+        existing = connection.execute(
+            """
+            SELECT id, status
+            FROM public.background_task
+            WHERE owner_id = %s AND contact_id = %s
+              AND task_type = 'observation'
+            FOR UPDATE
+            """,
+            (owner_id, contact_id),
+        ).fetchone()
+        if existing is None:
+            task = connection.execute(
                 """
-                INSERT INTO public.background_task_step (
-                    task_id,
-                    step_name,
-                    step_order,
-                    status,
-                    total_count
+                INSERT INTO public.background_task (
+                    owner_id, contact_id, source_document_id,
+                    task_type, status, current_step, message_count
                 )
-                VALUES (%s, %s, %s, 'pending', %s)
-                ON CONFLICT (task_id, step_name) DO NOTHING
+                VALUES (%s, %s, NULL, 'observation', 'queued',
+                        'extract_memory', %s)
+                RETURNING id
                 """,
-                [
-                    (task_id, step_name, step_order, message_count)
-                    for step_name, step_order in IMPORT_TASK_STEPS
-                ],
+                (owner_id, contact_id, message_count),
+            ).fetchone()
+            if task is None:
+                raise BackgroundTaskPersistenceError("观察任务创建失败。")
+            task_id = task[0]
+            _insert_task_steps(
+                connection,
+                task_id=task_id,
+                steps=OBSERVATION_TASK_STEPS,
+                total_count=message_count,
             )
+            return task_id
+
+        task_id, status = existing
+        if status in {"succeeded", "failed", "cancelled"}:
+            connection.execute(
+                """
+                UPDATE public.background_task
+                SET status = 'queued', current_step = 'extract_memory',
+                    message_count = %s, retry_count = 0,
+                    last_error_code = NULL, started_at = NULL,
+                    finished_at = NULL, observation_pending = false,
+                    updated_at = now()
+                WHERE id = %s
+                """,
+                (message_count, task_id),
+            )
+            connection.execute(
+                """
+                UPDATE public.background_task_step
+                SET status = 'pending', attempt_count = 0,
+                    processed_count = 0, total_count = %s,
+                    worker_id = NULL, lease_expires_at = NULL,
+                    last_error_code = NULL, started_at = NULL,
+                    finished_at = NULL, updated_at = now()
+                WHERE task_id = %s
+                """,
+                (message_count, task_id),
+            )
+        else:
+            # queued/running/verifying 只登记最新的非正文计数，不重置租约。
+            connection.execute(
+                """
+                UPDATE public.background_task
+                SET message_count = GREATEST(message_count, %s),
+                    observation_pending = CASE
+                        WHEN status IN ('running', 'verifying') THEN true
+                        ELSE observation_pending
+                    END,
+                    updated_at = now()
+                WHERE id = %s
+                """,
+                (message_count, task_id),
+            )
+        _insert_task_steps(
+            connection,
+            task_id=task_id,
+            steps=OBSERVATION_TASK_STEPS,
+            total_count=message_count,
+        )
         return task_id
 
     def record_queued_reason(
@@ -295,13 +403,20 @@ class PostgresBackgroundTaskRepository:
                     FROM public.background_task_step AS step
                     JOIN public.background_task AS task
                       ON task.id = step.task_id
-                    JOIN public.source_document AS source
+                    LEFT JOIN public.source_document AS source
                       ON source.id = task.source_document_id
                     WHERE task.owner_id = %s
                       AND task.contact_id = %s
                       AND ((task.task_type = 'import' AND source.status = 'active')
                    OR (task.task_type = 'delete' AND source.status IN
-                       ('delete_requested', 'deleting', 'delete_failed', 'deleted')))
+                       ('delete_requested', 'deleting', 'delete_failed', 'deleted'))
+                   OR (task.task_type = 'observation' AND EXISTS (
+                       SELECT 1
+                       FROM public.conversation_binding AS binding
+                       WHERE binding.owner_id = task.owner_id
+                         AND binding.contact_id = task.contact_id
+                         AND binding.status = 'active'
+                   )))
                       AND step.status = 'running'
                       AND step.lease_expires_at > now()
                     LIMIT 1
@@ -324,13 +439,20 @@ class PostgresBackgroundTaskRepository:
                     FROM public.background_task_step AS step
                     JOIN public.background_task AS task
                       ON task.id = step.task_id
-                    JOIN public.source_document AS source
+                    LEFT JOIN public.source_document AS source
                       ON source.id = task.source_document_id
                     WHERE task.owner_id = %s
                       AND task.contact_id = %s
                       AND ((task.task_type = 'import' AND source.status = 'active')
                    OR (task.task_type = 'delete' AND source.status IN
-                       ('delete_requested', 'deleting', 'delete_failed', 'deleted')))
+                       ('delete_requested', 'deleting', 'delete_failed', 'deleted'))
+                   OR (task.task_type = 'observation' AND EXISTS (
+                       SELECT 1
+                       FROM public.conversation_binding AS binding
+                       WHERE binding.owner_id = task.owner_id
+                         AND binding.contact_id = task.contact_id
+                         AND binding.status = 'active'
+                   )))
                       AND task.status IN ('queued', 'running', 'verifying')
                       AND (%s::uuid IS NULL OR task.id = %s)
                       AND step.status IN ('pending', 'retryable')
@@ -473,17 +595,50 @@ class PostgresBackgroundTaskRepository:
                         raise BackgroundTaskStateError(
                             "固定步骤缺少 verify。"
                         )
+                    observation_pending = connection.execute(
+                        """
+                        SELECT task_type = 'observation' AND observation_pending
+                        FROM public.background_task
+                        WHERE id = %s
+                        FOR UPDATE
+                        """,
+                        (claim.task_id,),
+                    ).fetchone()
+                    if observation_pending is None:
+                        raise BackgroundTaskNotFoundError("指定范围内不存在该后台任务。")
+                    requeue_observation = bool(observation_pending[0])
+                    if requeue_observation:
+                        connection.execute(
+                            """
+                            UPDATE public.background_task_step
+                            SET status = 'pending', attempt_count = 0,
+                                processed_count = 0, worker_id = NULL,
+                                lease_expires_at = NULL, last_error_code = NULL,
+                                started_at = NULL, finished_at = NULL,
+                                updated_at = now()
+                            WHERE task_id = %s
+                            """,
+                            (claim.task_id,),
+                        )
                     connection.execute(
                         """
                         UPDATE public.background_task
-                        SET status = 'succeeded',
+                        SET status = CASE WHEN %s THEN 'queued' ELSE 'succeeded' END,
                             last_error_code = NULL,
-                            current_step = %s,
-                            finished_at = now(),
+                            current_step = CASE WHEN %s
+                                THEN 'extract_memory' ELSE %s END,
+                            observation_pending = false,
+                            finished_at = CASE WHEN %s THEN NULL ELSE now() END,
                             updated_at = now()
                         WHERE id = %s
                         """,
-                        (claim.name.value, claim.task_id),
+                        (
+                            requeue_observation,
+                            requeue_observation,
+                            claim.name.value,
+                            requeue_observation,
+                            claim.task_id,
+                        ),
                     )
                 else:
                     next_status = (
@@ -657,14 +812,21 @@ class PostgresBackgroundTaskRepository:
                 self._lock_scope(connection, owner_id, contact_id)
                 task = connection.execute(
                     """
-                    SELECT task.status, task.task_type, source.status
+                    SELECT task.status, task.task_type, source.status,
+                           EXISTS (
+                               SELECT 1
+                               FROM public.conversation_binding AS binding
+                               WHERE binding.owner_id = task.owner_id
+                                 AND binding.contact_id = task.contact_id
+                                 AND binding.status = 'active'
+                           )
                     FROM public.background_task AS task
-                    JOIN public.source_document AS source
+                    LEFT JOIN public.source_document AS source
                       ON source.id = task.source_document_id
                      AND source.owner_id = task.owner_id
                      AND source.contact_id = task.contact_id
                     WHERE task.id = %s AND task.owner_id = %s AND task.contact_id = %s
-                    FOR UPDATE OF task, source
+                    FOR UPDATE OF task
                     """,
                     (task_id, owner_id, contact_id),
                 ).fetchone()
@@ -682,6 +844,8 @@ class PostgresBackgroundTaskRepository:
                     task[1] == BackgroundTaskType.DELETE.value and task[2] in {
                         "delete_requested", "deleting", "delete_failed", "deleted",
                     }
+                ) or (
+                    task[1] == BackgroundTaskType.OBSERVATION.value and task[3]
                 )
                 if not source_allowed:
                     raise BackgroundTaskStateError("来源当前状态不允许恢复该任务。")
@@ -851,7 +1015,7 @@ class PostgresBackgroundTaskRepository:
             SELECT step.status, step.worker_id, step.lease_expires_at
             FROM public.background_task_step AS step
             JOIN public.background_task AS task ON task.id = step.task_id
-            JOIN public.source_document AS source
+            LEFT JOIN public.source_document AS source
               ON source.id = task.source_document_id
             WHERE step.id = %s
               AND step.task_id = %s
@@ -860,7 +1024,14 @@ class PostgresBackgroundTaskRepository:
               AND task.status IN ('queued', 'running', 'verifying')
               AND ((task.task_type = 'import' AND source.status = 'active')
                    OR (task.task_type = 'delete' AND source.status IN
-                       ('delete_requested', 'deleting', 'delete_failed', 'deleted')))
+                       ('delete_requested', 'deleting', 'delete_failed', 'deleted'))
+                   OR (task.task_type = 'observation' AND EXISTS (
+                       SELECT 1
+                       FROM public.conversation_binding AS binding
+                       WHERE binding.owner_id = task.owner_id
+                         AND binding.contact_id = task.contact_id
+                         AND binding.status = 'active'
+                   )))
             FOR UPDATE OF task, step
             """,
             (
@@ -884,6 +1055,31 @@ class PostgresBackgroundTaskRepository:
 def _validate_uuid(value: UUID, label: str) -> None:
     if not isinstance(value, UUID):
         raise TypeError(f"{label} 必须是 UUID。")
+
+
+def _insert_task_steps(
+    connection: psycopg.Connection[Any],
+    *,
+    task_id: UUID,
+    steps: Iterable[tuple[BackgroundTaskStepName, int]],
+    total_count: int,
+) -> None:
+    """幂等写入固定任务步骤模板。"""
+
+    with connection.cursor() as cursor:
+        cursor.executemany(
+            """
+            INSERT INTO public.background_task_step (
+                task_id, step_name, step_order, status, total_count
+            )
+            VALUES (%s, %s, %s, 'pending', %s)
+            ON CONFLICT (task_id, step_name) DO NOTHING
+            """,
+            [
+                (task_id, step_name, step_order, total_count)
+                for step_name, step_order in steps
+            ],
+        )
 
 
 def _validate_lease_duration(value: timedelta) -> None:

@@ -13,6 +13,7 @@ class BackgroundTaskType(StrEnum):
 
     IMPORT = "import"
     DELETE = "delete"
+    OBSERVATION = "observation"
 
 
 class BackgroundTaskStatus(StrEnum):
@@ -27,7 +28,7 @@ class BackgroundTaskStatus(StrEnum):
 
 
 class BackgroundTaskStepName(StrEnum):
-    """导入与删除任务允许出现的固定步骤。"""
+    """导入、观察与删除任务允许出现的固定步骤。"""
 
     MARK_DELETED = "mark_deleted"
     DELETE_DERIVED = "delete_derived"
@@ -61,6 +62,15 @@ IMPORT_TASK_STEPS: tuple[
     (BackgroundTaskStepName.EXTRACT_MEMORY, 3),
     (BackgroundTaskStepName.INDEX, 4),
     (BackgroundTaskStepName.VERIFY, 5),
+)
+
+OBSERVATION_TASK_STEPS: tuple[
+    tuple[BackgroundTaskStepName, int],
+    ...,
+] = (
+    (BackgroundTaskStepName.EXTRACT_MEMORY, 1),
+    (BackgroundTaskStepName.INDEX, 2),
+    (BackgroundTaskStepName.VERIFY, 3),
 )
 
 
@@ -115,7 +125,7 @@ class BackgroundTask:
     task_id: UUID
     owner_id: UUID
     contact_id: UUID
-    source_document_id: UUID
+    source_document_id: UUID | None
     task_type: BackgroundTaskType
     status: BackgroundTaskStatus
     current_step: BackgroundTaskStepName
@@ -129,16 +139,16 @@ class BackgroundTask:
     rule_version: str | None = None
 
     def __post_init__(self) -> None:
-        ids = (
-            self.task_id,
-            self.owner_id,
-            self.contact_id,
-            self.source_document_id,
-        )
+        ids = (self.task_id, self.owner_id, self.contact_id)
         if any(not isinstance(value, UUID) for value in ids):
             raise TypeError("后台任务范围必须使用内部 UUID。")
         if not isinstance(self.task_type, BackgroundTaskType):
             raise TypeError("后台任务类型无效。")
+        if self.task_type is BackgroundTaskType.OBSERVATION:
+            if self.source_document_id is not None:
+                raise ValueError("观察任务不能绑定 source_document_id。")
+        elif not isinstance(self.source_document_id, UUID):
+            raise TypeError("导入或删除任务必须绑定 source_document_id。")
         if not isinstance(self.status, BackgroundTaskStatus):
             raise TypeError("后台任务状态无效。")
         if not isinstance(self.current_step, BackgroundTaskStepName):
@@ -156,7 +166,7 @@ class ClaimedBackgroundTaskStep:
     task_id: UUID
     owner_id: UUID
     contact_id: UUID
-    source_document_id: UUID
+    source_document_id: UUID | None
     step_id: UUID
     name: BackgroundTaskStepName
     worker_id: UUID

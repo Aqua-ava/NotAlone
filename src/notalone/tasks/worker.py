@@ -354,6 +354,12 @@ class BackgroundTaskWorker:
             return self._stopped_result(claim)
 
         if claim.name in {name for _, name in DELETE_TASK_STEPS}:
+            if self._deletion_repository is None or claim.source_document_id is None:
+                return self._record_failure(
+                    claim,
+                    "source_delete_failed",
+                    retryable=False,
+                )
             try:
                 scope_args = dict(owner_id=claim.owner_id, contact_id=claim.contact_id,
                                   source_document_id=claim.source_document_id)
