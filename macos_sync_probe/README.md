@@ -40,6 +40,15 @@ zsh scripts/build_cli.sh
 
 `build/` 已被本目录忽略，不会进入版本控制。
 
+## `--session --json` 输出契约
+
+`notalone-sync-probe --session --json` 把结果写成一行 JSON 信封，**无论成功、权限缺失还是定位失败都以退出码 0 结束**；调用方必须读 `ok` 字段，而不是退出码：
+
+- `ok=true`：`wechat_in_front` 等字段有效；
+- `ok=false`：`error_code` 给出稳定分类（如 `screen_capture_permission_missing`、`wechat_not_frontmost`、`selected_row_not_found`、`probe_failed`），`message` 给出面向用户的说明。
+
+Python 侧的探针适配器（`src/notalone/front_sync/probe_adapter.py`）就是这样判定的：先解析 stdout，再检查 `ok`，因此权限缺失与定位失败也能带着结构化原因返回给调用方。不带 `--json` 的纯文本模式仍按命令行惯例返回非零退出码。
+
 ## 菜单栏 App 验证
 
 菜单栏 App 已降级为轻量状态入口：不再每 3 秒拉起 `notalone-front-sync`

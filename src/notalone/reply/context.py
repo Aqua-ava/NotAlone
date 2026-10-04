@@ -34,6 +34,9 @@ CONTACT_MEMORY_LIMIT = 5
 CONTACT_MEMORY_CHAR_BUDGET = 600
 OWNER_MEMORY_LIMIT = 3
 OWNER_MEMORY_CHAR_BUDGET = 240
+# 回复链路的取数查询都要有界：数值与历史 Tool 的默认超时保持一致，
+# 避免连接池或慢查询把整次生成挂住。
+RETRIEVAL_TIMEOUT_MS = 500
 
 
 def allows_history(command: GenerateReply) -> bool:
@@ -434,6 +437,7 @@ class RetrievalReplyContext:
                 target_message_id=evidence.evidence_id,
                 query=None,
                 limit=1,
+                timeout_ms=RETRIEVAL_TIMEOUT_MS,
             )
         except ReplyContextError:
             raise
@@ -589,6 +593,7 @@ class RetrievalReplyContext:
                 target_message_id=target_message_id,
                 query=None,
                 limit=self._message_limit,
+                timeout_ms=RETRIEVAL_TIMEOUT_MS,
             )
         except RetrievalError:
             raise ReplyContextError("联系人消息检索失败。") from None
