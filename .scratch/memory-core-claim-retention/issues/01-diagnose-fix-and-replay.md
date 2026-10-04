@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-human
+Triage: ready-for-agent
 State: claimed
 Type: task
 Blocked by: none
@@ -135,3 +135,7 @@ Blocked by: none
 
 
 2026-10-03：来源语用有限试验闭账，见[结果](../../../docs/memory-source-pragmatics-pilot-result-20261003.md)。用户新授权8次V全部完成，唯一session18583 exit0、8预约／ledger，E／R0、失败／未运行0、余0，所有旧余额仍闭。18项不同控制、worker/root各4文件mypy／AST、2种SDK仅绑定、4份请求边界捕获后冻结103指纹；初漏19依赖及并行HEAD守卫拒绝已保留并修正冻结路由。24raw先独审冻结SHA5a10e831…再解锁全审SHAd93ea5c6…；root分立核对一致。source标签4/12、负例要求0/4、同次bad-auto原4／source4、合法正例等价支持保护8/8→4/8、新语义降级4。原14输入全24未改，四B-source最终risk经原Flow新增semantic:pragmatics，名义pending仍pending不能算等价保护；每臂核心正文／来源／日期及E标签正确8/12。192机械组与8捕获0API重放通过，96精确读取路径字节未变；SDK总22,701tokens，HTTP／金额未知，不混作新样本。采用门失败，模型独立来源仍同错而非确定性程序丢字段；J没有新E也仍漏，真实必需6/12及可选2/6保持。不采用、不发布、不补跑，不读actual／private held或写业务／水位／旧五条／产品／默认。Triage继续ready-for-agent、State claimed、Blocked by none，只准本机归因及方案准备／收尾，新协议、调用和实际复测未授权，整体有效修复未完成。完成本轮文档最小验证、两轴终审和任务专属本地提交。
+
+2026-10-04：用户在获知旧24闭账、新最多48次（4／20／24）、仅ECNU且核验由Agent完成后明确回复“同意”，批准b077e50中的直接参与者提示单叶提案（原SHA aa313409…）。新的独立目录memory-party-participants-pilot-20261004绑定该答复与原提案；只准已知匿名A/B/C及12条手工合成D，E/R0，不读actual／held、不写业务／水位／旧五条或改默认。先完成新固定编排的TDD、SDK合成凭据仅绑定、独立参考和两轴预检；完整材料冻结后唯一启动4次，raw独审冻结后揭compiled／Flow，全部过门才继续20、24。任阶段判败／无明确收益关闭余量，不复开旧预算、调参或补跑。State仍claimed、Blocked by none，整体验收未完成；普通验证和修正在该具体范围内连续推进，不重复请求同一授权。
+
+2026-10-04：阶段1已按冻结v2计划完成4次公开V调用（4/4位置、失败0、业务写入0），raw独审先通过：候选人物`mixed`为2/2、目标证据为2/2，基线两次均出现旧`contact`方向。full审计发现第1次候选新增`semantic:pragmatics`并由`uncertain/pragmatics`造成不必要降级，完整Fact无降级仅1/2，阶段门失败；余44次已关闭，阶段2／3未启动，无重试、调参或默认变更。结果见[阶段1结果](../../../docs/memory-party-participants-prompt-pilot-result-20261004.md)，原始收据在私有目录保存；本次不能称整体语义准确率修复或授权真实资料复测。
