@@ -4,6 +4,7 @@ Triage: ready-for-human
 State: claimed
 Type: task
 Blocked by: none
+> 阻塞说明：模型侧确认在当前环境不可执行。仓库 `.env` 只有 `NOTALONE_DEEPSEEK_*`（官方 DeepSeek 凭据），用户已明确禁止使用官方 key；本轮也没有现成的 ECNU 凭据可用，而读取并使用凭据发起联网调用需要用户逐次明确授权。因此该任务的模型对照项等待用户提供可用凭据并明确批准后重启，不是 Agent 可自行推进的事项。
 
 按 [spec](../spec.md) 逐条归因未正确保留的必需主张，建立真实红反馈，在现有公开接缝完成有效修复、同批复测与本地提交。
 
@@ -153,3 +154,5 @@ Blocked by: none
 2026-10-04：用户在获知“只改来源核验提示一小段、不加`described_party`字段、本地0次联网”的范围后批准，遂把该提示叶并入产品默认。改动只有`verification_adapters.py`的`SOURCE_VERIFICATION_SYSTEM_PROMPT`一段（新SHA256 `d93ca1d6062842bf33349ec3c340ee37fd126f86a7d62b51e50b09b603cb638f`），schema、Flow、采纳门和窄guard未改。按先红后绿：改动前两条提示契约测试失败（提示未写明“完全被支持的转述不得仅因report/reported判uncertain”，也未保留“标记被丢掉仍须uncertain”），改后新增5项全过；三条流程测试始终守住`supported`不加`semantic:*`且仍`pending`、`uncertain`加`semantic:pragmatics`、`unsupported`拒收。全量单元720项通过；`mypy src/notalone/memory_extraction`仅剩`command.py:504`一处既有无关错误（`git stash`核对改动前同样存在）；`git diff --check`通过。改动与证据记在[来源核验提示转述支持单叶](../../../docs/memory-verification-report-support-leaf-20261004.md)。限制如实保留：本地只证明提示语义与产品后处理，未证明模型行为；试点数字来自带`described_party`的变体提示，不等于产品提示成绩。真实模型匿名对照仍需另批预算，整体修复仍未完成；State保持claimed，下一步状态为ready-for-human（待真实对照范围决定）。
 
 2026-10-04：本轮改动完成两轴只读审查。Standards轴发现2条硬性违规，都在结果文档的验证数字上：全量单测裸命令`unittest discover -s tests/unit`（不加`-t .`）实际为715项加1个既有顶层包导入错误，只有`-t .`才是720项通过；“新测试文件mypy通过”未注明需要`--ignore-missing-imports`（默认单文件调用会报5个`import-untyped`，未改动的同类测试文件同样如此）。另有1条待定级项：文档未说明新段落与既有“标签丢失或升级仍须uncertain”句子的分工。可选建议3条（重复覆盖、断言句式脆弱、未用导入）。Spec轴结论为**产品代码零扩张**：与`HEAD`逐字节比对只有6行插入，schema/Flow/pragmatics/采纳门/其他提示段落均未改，全仓无`described_party`产品字段；红绿由审查方在`/tmp`影子副本独立复现（改动前2红3绿、改动后5项全过）；三条verdict行为与`flow.py`、`pragmatics.py`一致；试点数字与本地证据分层如实，未冒充产品成绩。已按审查修正：验证段改为逐条可复现命令，补记新段落与既有句子的分工、产品版与试点叶少一句`PragmaticInterpreter`说明的文本差异、以及提示句式断言的脆弱面；删除未用导入并补`issues=[]`断言；测试文件SHA更新为`ffa18a3386de2fe4641ab509bc0ab4d4234c6e7e782279c9658bc1ea3dbae25e`。审查未发现代码、隐私、业务写入或联网问题；真实模型对照仍是未完成项。
+
+2026-10-04：用户要求“全部收尾”，遂核对剩余可执行性。仓库 `.env` 只含 `NOTALONE_DEEPSEEK_API_KEY`／`BASE_URL`／`MODEL`／`NOTALONE_OWNER_ID`／`NOTALONE_DATABASE_URL` 五个键名，没有 ECNU 条目；用户此前明确“不要使用 DeepSeek 官方 key”，而历次匿名对照都要求逐次明确批准后才能读取凭据并联一次网。因此**模型侧确认在当前环境不可执行**：不是预算未批，而是可用凭据缺失且官方 key 被禁止，Agent 不得自行读取或回退。已在任务头部记录该阻塞说明。本轮不含任何本地可继续推进的项：授权范围内的提示改动、红绿测试、隔离全量、两轴审查与本地提交（`ddfa1f7`、`28d93d6`）均已完成，任务整体目标（必需主张完整保留的模型侧证据）不能在无凭据条件下达成，故 `State` 保持 `claimed`，不再自行降级或宣称修复完成。若日后恢复：用户提供可用 ECNU 凭据并明确批准一次匿名对照，即可按既有模式重启；若决定不再投入，可把本任务按“提示侧已定稿、模型侧不再验证”改为 `wontfix` 并保留全部证据。
