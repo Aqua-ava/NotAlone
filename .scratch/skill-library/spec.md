@@ -1,7 +1,7 @@
 # Skill Library（Skill 库）规格
 
 Type: task
-State: open
+State: resolved
 Triage: ready-for-agent
 
 ## Problem Statement
@@ -231,3 +231,8 @@ Skill Library 分为两个接口面：
 - 该功能适合按多会话实现：先建立包校验和不可变发布，再建立资源存储与运行时读取，最后补齐管理展示、导出和试用。
 - 实现任何随版本变化的 LangChain、Deep Agents 或 LangGraph 接口前，必须先核对官方文档、项目锁定版本和实际安装版本；文档证明接口约定，代码和测试才证明集成可用。
 - 发布本规格不代表管理接口、辅助资源链路或真实 Skill 导入已经实现。
+
+## Comments
+
+- 2026-10-04：收尾核验后关闭。5 张 issue 均已 resolved；管理端口与实现（`skills/ports.py`、`persistence/skill_library.py`）、包校验与隐私检查（`skills/package.py`、`package_reader.py`）、服务端 Skill API（`server/app.py`）、运行期使用记录（`reply/interface.py`、迁移 024）均可核对，单测 `tests/unit/skills` 8 项与 `tests/unit/reply` 128 项通过。spec 文本里“仍需实现”的段落已过期。
+- 2026-10-04：如实保留三处非阻塞缺口，不在本规格内继续：①运行时辅助资源没有“单次加载预算／超限不截断”的实现与测试（`reply/adapters/langchain_runtime.py` 只记 `loaded_resources` 与 `load_state`，资源全文返回），其额度与超限行为需要用户先给数值；②500 行／5000 token／1MB／4MB 预算只有实现、无单测；③桌面 App 无回滚入口、服务端无 update/export 端点。①如需落地，建议另立任务并明确是否修订 ADR-019。

@@ -1,6 +1,6 @@
 # 检索层性能与结构缺口（第二轮审查）
 
-Triage: needs-triage
+Triage: ready-for-agent
 State: open
 
 ## 背景
@@ -22,3 +22,8 @@ State: open
 性能改动必须先建立基线测量（见 engineering.md 性能分支：先测量再修改）；涉及检索契约需对照 `docs/agents/domain.md` 的检索领域文档。
 
 ## Comments
+
+## Comments
+
+- 2026-10-04：收尾核验后保持 `open`。三处缺口经只读复核**全部仍然存在**：①`persistence/retrieval.py` 每 token 一个 `position(lower(...) in lower(...)) > 0` 不可索引谓词，36 个迁移里没有任何 `tsvector`／`gin` 索引；②`persistence/message_stream.py` 的 `LEFT JOIN LATERAL (... LIMIT 1)` 仍无 `ORDER BY`，没有“优先带 quote payload”的偏好；③`persistence/outbound_ledger.py` 的 `list_by_owner` 仍无 LIMIT／时间窗，调用方只取末尾 10 条却在内存里拉全量。
+- 2026-10-04：两处订正与限制：①`statement_timeout` 并非完全不生效——应用主路径经 `reply/tools.py` 默认传 500ms，只有检索适配器的默认值是 `None`；②本票引用的“engineering.md 性能分支”不存在（该文档只有 32 行），因此“先做基线测量”目前没有书面口径，需要先补测量方法再改实现；③缺口 2、3 改变用户可见契约（引用视图偏好、台账分页／保留），需要用户先定语义。`Triage` 由 `needs-triage` 改为 `ready-for-agent`，但上述测量口径与契约决定仍需用户输入。

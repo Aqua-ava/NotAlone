@@ -1,7 +1,7 @@
 # 候选回复应用流程与 Reply 三模块规格
 
 Type: task
-State: open
+State: resolved
 Triage: ready-for-agent
 Implementation: not-started; split into implementation tickets before coding
 
@@ -191,3 +191,7 @@ Reply 内部的次级 seam 是统一的 Reply 入口。它接收 `VerifiedConver
 - 已确认：Store 保存请求和候选的价值在于幂等、重放、失败恢复、审计和依据追踪，但不保存完整聊天历史或承担上下文选择。
 - 当前代码差异：现有合成纵切仍有过渡性的上下文准备合同和“上一轮未发送候选”路径；实现本规格时必须按新的显式继续和 Context/Store 边界修正，不能把旧行为当成最终设计。
 - 下一步建议：先运行 `to-tickets`，将本规格拆成应用流程、公开输入/Context、Retrieval/Memory seam、Store 收敛和持久化/集成验证等独立任务，再进入实现。
+
+## Comments
+
+- 2026-10-04：收尾核验后关闭。8 张 issue 全 resolved，spec 的“Current Implementation Gap”6 项逐条已有实现与覆盖：过渡性 `prepare` 已删除、`VerifiedConversationScope` 与三态流程（`application/candidate_reply_flow.py`）、两种输入（`reply/interface.py`）、Store 幂等／重放／冲突／租约／显式继续（`reply/store.py`）均有对应单测，`tests/unit/reply` 128 项与 `tests/unit/application` 49 项通过。头部的 `Implementation: not-started` 字段是拆分任务前的历史状态，已不再成立。
