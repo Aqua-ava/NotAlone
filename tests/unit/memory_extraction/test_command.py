@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from collections.abc import Callable
 from contextlib import ExitStack
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -22,7 +23,13 @@ from notalone.memory.models import (
     MemoryCategory,
     MemoryTopic,
 )
-from notalone.memory_extraction.command import extract_main, run_extraction
+from notalone.memory_extraction.command import (
+    extract_main,
+    memory_add_main,
+    memory_delete_main,
+    memory_list_main,
+    run_extraction,
+)
 from notalone.memory_extraction.errors import (
     ExtractionInvalidOutputError,
     ExtractionRuntimeError,
@@ -1113,6 +1120,81 @@ class ExtractMainTest(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         self.assertIn("记忆提取准备失败", output.getvalue())
+
+
+class OwnerIdAndAdoptionFailureTest(unittest.TestCase):
+    """非法 owner 配置与写入裁决失败时的稳定错误、统计保真。"""
+
+    def test_invalid_owner_id_returns_error_instead_of_traceback(self) -> None:
+        entries: tuple[tuple[str, Callable[[list[str] | None], int], list[str]], ...] = (
+            (
+                "memory-add",
+                memory_add_main,
+                ["--text", "合成记忆", "--category", "common_fact"],
+            ),
+            ("memory-list", memory_list_main, []),
+            (
+                "memory-delete",
+                memory_delete_main,
+                ["--memory-id", str(uuid4()), "--owner"],
+            ),
+        )
+        for label, entry, arguments in entries:
+            with self.subTest(entry=label):
+                output = StringIO()
+                environment = {
+                    "NOTALONE_DATABASE_URL": "postgresql:///notalone_test",
+                    "NOTALONE_OWNER_ID": "not-a-uuid",
+                }
+                with patch(
+                    "notalone.memory_extraction.command.load_project_env"
+                ), patch.dict("os.environ", environment, clear=True), patch(
+                    "sys.stdout", output
+                ):
+                    exit_code = entry(arguments)
+
+                printed = output.getvalue()
+                self.assertEqual(exit_code, 1)
+                self.assertIn("NOTALONE_OWNER_ID", printed)
+                self.assertIn("UUID", printed)
+                self.assertNotIn("Traceback", printed)
+
+    def test_adoption_failure_keeps_batch_extraction_stats(self) -> None:
+        messages = _messages(1)
+        store = InMemoryMemoryStore()
+        ledger = InMemoryOutboundLedger()
+        verifier = FixedSourceVerifier((verification_result(
+            verdict="unsupported", issues=("meaning",),
+        ),))
+
+        class FailingAdoption:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def adopt(self, scope, outcome):
+                raise ExtractionRuntimeError(
+                    "合成写入裁决失败", ExtractionFailureKind.UNAVAILABLE,
+                )
+
+        with patch(
+            "notalone.memory_extraction.command.MemoryAdoption", FailingAdoption
+        ):
+            stats = run_extraction(
+                scope=ContactScope(OWNER_ID, CONTACT_ID),
+                messages=messages,
+                watermark_message_id=None,
+                runtime=PayloadRuntime(),
+                verification_runtime=verifier,
+                memory_port=store,
+                owner_memory_port=RecordingOwnerPort(),
+                ledger=ledger,
+                watermark_port=RecordingWatermark(),
+            )
+
+        self.assertEqual(stats.batches, 1)
+        self.assertEqual(stats.failed_batches, 1)
+        self.assertEqual(stats.extracted, 0)
+        self.assertEqual(stats.rejected_by_contract, 1)
 
 
 if __name__ == "__main__":

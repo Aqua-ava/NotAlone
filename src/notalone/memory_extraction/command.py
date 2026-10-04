@@ -176,10 +176,13 @@ def run_extraction(
                 adoption_stats = adoption.adopt(scope, outcome)
         except ExtractionRuntimeError as error:
             # 写入裁决等批次级模型调用失败：与提取失败同一策略，
-            # 分类后计数或停止，不让整轮无记录地中断。
+            # 分类后计数或停止，不让整轮无记录地中断。失败发生在采纳
+            # 阶段，必须保留 flow 已给出的本批统计，不能用一个空 outcome
+            # 覆盖掉已通过的提取与拒绝计数。
+            preserved_rejections = outcome.rejected_count
             outcome = ExtractionOutcome(
                 accepted=(),
-                rejected_count=0,
+                rejected_count=preserved_rejections,
                 failure_reason=str(error),
                 failure_kind=error.failure_kind,
                 extraction_completed=extraction_completed,
@@ -209,6 +212,9 @@ def run_extraction(
             if watermark_port is not None:
                 watermark_port.set(scope, batch[-1].message_id)
             continue
+        # 失败批次里已经由 flow 判定为契约拒绝的候选仍要计数，
+        # 这样采纳阶段失败不会让本批统计凭空归零。
+        rejected += outcome.rejected_count
         if (
             outcome.failure_kind is ExtractionFailureKind.INVALID_OUTPUT
             and watermark_port is not None
@@ -280,6 +286,19 @@ def _fail(message: str) -> int:
     return 1
 
 
+class OwnerConfigError(ValueError):
+    """owner 环境变量不可用；入口负责转成稳定退出码与文案。"""
+
+
+def _owner_uuid_from_env(owner_id: str) -> UUID:
+    """解析已确认的 owner 配置；非法值给出稳定错误而不是裸 traceback。"""
+
+    try:
+        return UUID(owner_id)
+    except ValueError:
+        raise OwnerConfigError("NOTALONE_OWNER_ID 不是合法 UUID。") from None
+
+
 def extract_main(argv: list[str] | None = None) -> int:
     """提取命令入口：自动全量/增量，断点续跑，输出统计与跳过区间。"""
 
@@ -311,9 +330,9 @@ def extract_main(argv: list[str] | None = None) -> int:
     if not owner_id:
         return _fail("缺少 NOTALONE_OWNER_ID 环境变量。")
     try:
-        owner_uuid = UUID(owner_id)
-    except ValueError:
-        return _fail("NOTALONE_OWNER_ID 不是合法 UUID。")
+        owner_uuid = _owner_uuid_from_env(owner_id)
+    except OwnerConfigError as error:
+        return _fail(str(error))
 
     from notalone.memory_extraction.adapters import LangChainExtractionRuntime
     from notalone.memory_extraction.adjudication_adapters import (
@@ -408,7 +427,10 @@ def memory_add_main(argv: list[str] | None = None) -> int:
     owner_id = os.environ.get("NOTALONE_OWNER_ID", "").strip()
     if not database_url or not owner_id:
         return _fail("缺少 NOTALONE_DATABASE_URL 或 NOTALONE_OWNER_ID。")
-    owner_uuid = UUID(owner_id)
+    try:
+        owner_uuid = _owner_uuid_from_env(owner_id)
+    except OwnerConfigError as error:
+        return _fail(str(error))
 
     from notalone.memory.models import (
         ConfirmedMemoryStatus,
@@ -481,7 +503,10 @@ def memory_list_main(argv: list[str] | None = None) -> int:
     owner_id = os.environ.get("NOTALONE_OWNER_ID", "").strip()
     if not database_url or not owner_id:
         return _fail("缺少 NOTALONE_DATABASE_URL 或 NOTALONE_OWNER_ID。")
-    owner_uuid = UUID(owner_id)
+    try:
+        owner_uuid = _owner_uuid_from_env(owner_id)
+    except OwnerConfigError as error:
+        return _fail(str(error))
 
     from notalone.persistence import (
         PostgresMemoryStore,
@@ -501,16 +526,16 @@ def memory_list_main(argv: list[str] | None = None) -> int:
             )
         print(f"total={len(memories)}")
     elif args.owner:
-        memories = PostgresOwnerMemoryStore(database_url).list_active(owner_uuid)
-        for memory in memories:
+        owner_memories = PostgresOwnerMemoryStore(database_url).list_active(owner_uuid)
+        for owner_memory in owner_memories:
             print(
-                f"memory_id={memory.memory_id}"
-                f" category={memory.category.value}"
-                f" topic={memory.topic.value}"
-                f" adoption={memory.adoption_method.value}"
-                f" revision={memory.revision}"
+                f"memory_id={owner_memory.memory_id}"
+                f" category={owner_memory.category.value}"
+                f" topic={owner_memory.topic.value}"
+                f" adoption={owner_memory.adoption_method.value}"
+                f" revision={owner_memory.revision}"
             )
-        print(f"total={len(memories)}")
+        print(f"total={len(owner_memories)}")
     else:
         return _fail("需要 --contact-id 或 --owner 之一。")
     return 0
@@ -532,7 +557,10 @@ def memory_delete_main(argv: list[str] | None = None) -> int:
     owner_id = os.environ.get("NOTALONE_OWNER_ID", "").strip()
     if not database_url or not owner_id:
         return _fail("缺少 NOTALONE_DATABASE_URL 或 NOTALONE_OWNER_ID。")
-    owner_uuid = UUID(owner_id)
+    try:
+        owner_uuid = _owner_uuid_from_env(owner_id)
+    except OwnerConfigError as error:
+        return _fail(str(error))
 
     from notalone.persistence import (
         PostgresMemoryStore,
