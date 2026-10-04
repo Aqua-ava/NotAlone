@@ -1,7 +1,7 @@
 # 后端 HTTP 层结构化缺口（第二轮审查遗留项）
 
-Triage: needs-triage
-State: open
+Triage: ready-for-agent
+State: resolved
 
 ## 背景
 

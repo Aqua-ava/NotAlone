@@ -1,6 +1,6 @@
 # 回复链路语义缺口（第二轮审查遗留项）
 
-Triage: needs-triage
+Triage: ready-for-human
 State: open
 
 ## 背景

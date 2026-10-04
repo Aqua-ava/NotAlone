@@ -1,7 +1,7 @@
 # macOS App 与前台探针遗留项（第三轮审查）
 
-Triage: needs-triage
-State: open
+Triage: ready-for-agent
+State: resolved
 
 ## 背景
 

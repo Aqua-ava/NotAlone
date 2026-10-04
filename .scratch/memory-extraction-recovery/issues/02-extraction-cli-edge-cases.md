@@ -1,7 +1,7 @@
 # 提取链路与 CLI 边界遗留项（第二轮审查）
 
-Triage: needs-triage
-State: open
+Triage: ready-for-agent
+State: resolved
 
 ## 背景
 
