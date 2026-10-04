@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-agent
+Triage: ready-for-human
 State: claimed
 Type: task
 Blocked by: none
@@ -143,3 +143,7 @@ Blocked by: none
 2026-10-04：阶段1失败后的本机诊断已完成，见仓库外私有`semantic-diagnosis-v1.json`。相同C4候选V-input字节级同SHA，但ECNU一次返回`uncertain/pragmatics`、一次返回`supported`；固定捕获响应离线重跑真实Flow确认，verdict才是Fact风险差异，quote末尾标点不是直接原因。现有Flow保持fail-closed，不在本地强制把uncertain改成supported。形成新的[语义稳定性有限对照提案](../../../docs/memory-party-semantic-stability-pilot-proposal-20261004.md)：只澄清report/reported与人物集合独立判断，最多8次、4／4分阶段，仅现有ECNU、匿名C4、无官方key／真实资料／业务写入；尚未批准联网，旧48次余额不复开。
 
 2026-10-04：用户回复“批准”后，按新提案完成独立8次匿名对照，结果见[语义稳定性结果](../../../docs/memory-party-semantic-stability-pilot-result-20261004.md)。预检通过；候选两阶段合计`mixed 4/4`、目标证据4/4、完整Fact无新增semantic风险4/4、`report/reported`保持pending，基线4次仍为旧`contact`错误，坏auto与业务写入0。阶段2四次返回后收尾触发预算类累计slot检查，停止收据保留，未重试或增加第9次；8/8已审计并闭账，所有旧余额不复开。结果支持该提示叶在匿名C4上的局部改善，但不切产品默认、不读真实／留出、不授权发布；下一步若进入产品或真实同批范围需另行决定。
+
+2026-10-04：用户在获知“只改来源核验提示一小段、不加`described_party`字段、本地0次联网”的范围后批准，遂把该提示叶并入产品默认。改动只有`verification_adapters.py`的`SOURCE_VERIFICATION_SYSTEM_PROMPT`一段（新SHA256 `d93ca1d6062842bf33349ec3c340ee37fd126f86a7d62b51e50b09b603cb638f`），schema、Flow、采纳门和窄guard未改。按先红后绿：改动前两条提示契约测试失败（提示未写明“完全被支持的转述不得仅因report/reported判uncertain”，也未保留“标记被丢掉仍须uncertain”），改后新增5项全过；三条流程测试始终守住`supported`不加`semantic:*`且仍`pending`、`uncertain`加`semantic:pragmatics`、`unsupported`拒收。全量单元720项通过；`mypy src/notalone/memory_extraction`仅剩`command.py:504`一处既有无关错误（`git stash`核对改动前同样存在）；`git diff --check`通过。改动与证据记在[来源核验提示转述支持单叶](../../../docs/memory-verification-report-support-leaf-20261004.md)。限制如实保留：本地只证明提示语义与产品后处理，未证明模型行为；试点数字来自带`described_party`的变体提示，不等于产品提示成绩。真实模型匿名对照仍需另批预算，整体修复仍未完成；State保持claimed，下一步状态为ready-for-human（待真实对照范围决定）。
+
+2026-10-04：本轮改动完成两轴只读审查。Standards轴发现2条硬性违规，都在结果文档的验证数字上：全量单测裸命令`unittest discover -s tests/unit`（不加`-t .`）实际为715项加1个既有顶层包导入错误，只有`-t .`才是720项通过；“新测试文件mypy通过”未注明需要`--ignore-missing-imports`（默认单文件调用会报5个`import-untyped`，未改动的同类测试文件同样如此）。另有1条待定级项：文档未说明新段落与既有“标签丢失或升级仍须uncertain”句子的分工。可选建议3条（重复覆盖、断言句式脆弱、未用导入）。Spec轴结论为**产品代码零扩张**：与`HEAD`逐字节比对只有6行插入，schema/Flow/pragmatics/采纳门/其他提示段落均未改，全仓无`described_party`产品字段；红绿由审查方在`/tmp`影子副本独立复现（改动前2红3绿、改动后5项全过）；三条verdict行为与`flow.py`、`pragmatics.py`一致；试点数字与本地证据分层如实，未冒充产品成绩。已按审查修正：验证段改为逐条可复现命令，补记新段落与既有句子的分工、产品版与试点叶少一句`PragmaticInterpreter`说明的文本差异、以及提示句式断言的脆弱面；删除未用导入并补`issues=[]`断言；测试文件SHA更新为`ffa18a3386de2fe4641ab509bc0ab4d4234c6e7e782279c9658bc1ea3dbae25e`。审查未发现代码、隐私、业务写入或联网问题；真实模型对照仍是未完成项。
