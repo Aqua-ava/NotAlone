@@ -1,0 +1,22 @@
+{
+  "runtime_dir": "/tmp/notalone-pgvector-memory-recall-run-20261004-v3",
+  "db_name": "notalone-pgvector-memory-recall",
+  "db_port": 18553,
+  "db_url": "postgresql://127.0.0.1:18553/postgres",
+  "database_path": "/tmp/notalone-pgvector-memory-recall-run-20261004-v3/database",
+  "pg0_version": "0.15.0",
+  "psycopg_version": "2.9.11",
+  "psycopg_driver": "psycopg2",
+  "vector_extension": {
+    "name": "vector",
+    "version": "0.8.5"
+  },
+  "embedding": {
+    "model_id": "BAAI/bge-small-zh-v1.5",
+    "model_revision": "7999e1d3359715c523056ef9478215996d62a620",
+    "dimensions": 512,
+    "normalize": true
+  },
+  "data_hash": "74884a5de503b4c1396f2b0bf23995c21110625272b410eb2235b00d93bd2a2c",
+  "precondition_error": null
+}

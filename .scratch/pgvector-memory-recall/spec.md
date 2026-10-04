@@ -1,7 +1,7 @@
 # 原 PostgreSQL＋pgvector 记忆召回隔离评估
 
 > Triage: ready-for-agent
-> State: open
+> State: resolved
 > 日期：2026-10-04
 > 来源：用户确认“只参考 Hindsight，不接入 Hindsight”，以及 Hindsight 合成对照后的下一步决定。
 
@@ -53,3 +53,5 @@ NotAlone 当前正式路径以联系人范围内的中文词法检索为主。Hi
 ## Comments
 
 - 2026-10-04：用户要求按工作流程推进；规格阶段保持“只参考、不接入产品”的边界。
+- 2026-10-04：4 张实现任务全部 resolved，实验完成。最终结论为**未达到门槛**：中文改写 Recall@5 从 1.67% 提升到 26.39%，改写与质量组无关注入同时增加（质量组 15/95 → 36/95），P95 33.14 ms 通过 1,000 ms 门槛；跨 owner/contact、deleted、invalidated、过期和旧 revision 注入为零。收尾时修正了阈值候选网格取用 final 相似度的隔离违规（改为只用 dev 候选分值）并重跑，结果与报告在 `experiments/pgvector/REPORT.md`、`experiments/pgvector/runs/native-v3/result.json`。
+- 2026-10-04：结论不批准生产接入；不修改迁移、依赖、`PostgresRetrieval`、`reply_wiring` 或 feature flag。
