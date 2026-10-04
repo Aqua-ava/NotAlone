@@ -27,3 +27,5 @@ State: open
 
 - 2026-10-04：收尾核验后保持 `open`。三处缺口经只读复核**全部仍然存在**：①`persistence/retrieval.py` 每 token 一个 `position(lower(...) in lower(...)) > 0` 不可索引谓词，36 个迁移里没有任何 `tsvector`／`gin` 索引；②`persistence/message_stream.py` 的 `LEFT JOIN LATERAL (... LIMIT 1)` 仍无 `ORDER BY`，没有“优先带 quote payload”的偏好；③`persistence/outbound_ledger.py` 的 `list_by_owner` 仍无 LIMIT／时间窗，调用方只取末尾 10 条却在内存里拉全量。
 - 2026-10-04：两处订正与限制：①`statement_timeout` 并非完全不生效——应用主路径经 `reply/tools.py` 默认传 500ms，只有检索适配器的默认值是 `None`；②本票引用的“engineering.md 性能分支”不存在（该文档只有 32 行），因此“先做基线测量”目前没有书面口径，需要先补测量方法再改实现；③缺口 2、3 改变用户可见契约（引用视图偏好、台账分页／保留），需要用户先定语义。`Triage` 由 `needs-triage` 改为 `ready-for-agent`，但上述测量口径与契约决定仍需用户输入。
+
+- 2026-10-04：缺口 2（引用视图）已修：`persistence/message_stream.py` 的 `LEFT JOIN LATERAL (...)` 增加确定性排序（优先带引用正文的记录，再按 id），同一消息的引用视图不再随行序变化。缺口 3（台账）已收口：概览改为 SQL 侧聚合，`list_by_owner` 支持窗口，整表不再进内存；HTTP 字段与展示条数不变。缺口 1（词法谓词与全文索引）保持 open：它需要先有测量口径与索引方案，属于新的实现任务。测量口径建议按“同联系人 N 条消息、固定查询集、预热后取 P50/P95、先测后改”的方式记录在票内，再决定加 GIN／全文索引还是改查询形状。
