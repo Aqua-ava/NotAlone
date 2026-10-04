@@ -1678,6 +1678,18 @@ def _serve_request(
 ) -> None:
     try:
         body = _read_request_body(handler)
+    except _RequestLengthInvalid:
+        # 畸形长度不能猜成空体继续处理，否则同一请求会得到不同结果。
+        handler.close_connection = True
+        _write_response(
+            handler,
+            _json_response(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "request_length_invalid"},
+                headers={"Connection": "close"},
+            ),
+        )
+        return
     except _RequestBodyTooLarge:
         # 短时、有界排空可降低正常客户端收到 RST 的概率；随后关闭连接。
         handler.close_connection = True
@@ -1715,6 +1727,10 @@ class _RequestBodyTooLarge(Exception):
     """Content-Length 超出上限：统一映射为稳定 413。"""
 
 
+class _RequestLengthInvalid(Exception):
+    """Content-Length 存在但不是合法的非负整数：映射为稳定 400。"""
+
+
 def _read_request_body(handler: BaseHTTPRequestHandler) -> bytes:
     """按 Content-Length 读取请求体；异常声明映射为稳定 413。
 
@@ -1723,12 +1739,16 @@ def _read_request_body(handler: BaseHTTPRequestHandler) -> bytes:
     长期挂住。
     """
 
+    raw_length = _header_value(handler.headers, "Content-Length")
+    if raw_length is None or not str(raw_length).strip():
+        # 没有声明长度：按空请求体处理，交给应用层做参数校验。
+        return b""
     try:
-        length = int(_header_value(handler.headers, "Content-Length"))
+        length = int(str(raw_length).strip())
     except (ValueError, TypeError):
-        return b""
+        raise _RequestLengthInvalid() from None
     if length < 0:
-        return b""
+        raise _RequestLengthInvalid()
     if length > 1024 * 1024:
         _drain_available_body(handler, limit=length)
         raise _RequestBodyTooLarge()

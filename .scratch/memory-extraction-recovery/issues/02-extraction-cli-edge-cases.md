@@ -31,3 +31,7 @@ extract_main 空分支需真实 DB fixture；三个 memory CLI 入口无非法 e
 ## Comments
 
 2026-09-22：遗留项 5 已在 `.scratch/migration-and-sync-boundary/issues/01-migration-runner.md` 完成。统一版本账本取代 owner 跳过判断与手工清单；10 项隔离迁移验收及全量 979 项测试运行通过（3 项真实模型测试跳过）。无记录旧库拒绝并提示核验，未迁移现有业务库。本票其他未完成项保持 open。
+
+- 2026-10-04：收尾分类并关闭。8 条遗留项中 5 条已由后续提交修好（不存在的联系人不再静默 exit 0、三个入口的非法 `NOTALONE_OWNER_ID` 不再裸 traceback、`--batch-size` 提前校验、`install.sh` 改用统一迁移命令、裁决失败保留本批统计），均带单测；`tests/unit/memory_extraction` 178 项、全量单元 733 项通过。
+- 2026-10-04：第 6 条（naive datetime 防御不一致）已修：`observation_store.ensure_baseline` 与 `ObservationBaseline`、`conversation_repository.create_cli_bindings_batch` 统一为“必须是带时区的 datetime”，与 `background_tasks`／`memory_store` 口径一致；新增 `tests/unit/persistence/test_naive_datetime_guards.py` 用假 DSN 证明校验发生在连接之前。
+- 2026-10-04：仍留在票面、需要真实数据或产品决定的两条如实保留：①`--batch-size` 之外的批次重试语义与 `record_count` 统计口径（需要真实微信 CLI 数据分布）；②CLI naive 时间戳按本机时区换算还是直接拒绝（属外部 CLI 契约选择）。两者都不阻塞本票关闭，已在上文标注为限制。

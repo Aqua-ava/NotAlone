@@ -409,6 +409,33 @@ class EventStreamContractTest(unittest.TestCase):
             server.shutdown()
             thread.join(timeout=1)
 
+    def test_malformed_content_length_returns_stable_400(self) -> None:
+        # 无效长度不能被当成空请求体继续处理，否则同一请求会有两种结果。
+        import http.client
+
+        server = BackendServer(self.app, port=0)
+        host, port = server.start()
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            for heading in ("not-a-number", "-1"):
+                with self.subTest(content_length=heading):
+                    connection = http.client.HTTPConnection(host, port, timeout=2)
+                    connection.putrequest("POST", "/api/memories/manual-owner")
+                    connection.putheader("Content-Length", heading)
+                    connection.endheaders()
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 400)
+                    self.assertEqual(response.getheader("Connection"), "close")
+                    self.assertEqual(
+                        json.loads(response.read())["error"],
+                        "request_length_invalid",
+                    )
+                    connection.close()
+        finally:
+            server.shutdown()
+            thread.join(timeout=1)
+
     def test_open_sse_requires_initialized_owner(self) -> None:
         # owner 未初始化时订阅会永久空挂（事件都带真实 owner）；与
         # handle() 的 owner 门禁保持一致，返回稳定 503。

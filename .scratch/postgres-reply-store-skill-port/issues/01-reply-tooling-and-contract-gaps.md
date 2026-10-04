@@ -25,3 +25,6 @@ State: open
 2026-09-18 已修复遗留项 3：历史 Tool 新增与 2048 token 预算独立的 16 条证据上限；在最多 3 次、每次最多 8 条的现行调用预算下，第三次大结果会在进入证据前拒绝。合成测试用三组各 8 条的不重叠短消息证明该上限可实际触发且不会污染已有 16 条证据。其余遗留项尚未处理，本 ticket 保持 open。
 
 ## Comments
+
+- 2026-10-04：收尾分类。6 条遗留项中 3 条已修好：证据条数上限已独立成 16 条常量、`_mark_failed` 不再静默吞异常（新增 logger warning 与 `assertLogs` 测试）、`skill_preview` 的版本／资源读取已钉扎构造 scope；`statement_timeout` 这条也已在回复链路补齐（`reply/context.py` 与 `retrieval/evaluation.py` 现在显式传 500ms，并与历史 Tool 默认一致，附假连接单测）。本机在临时 `_test` 库上跑通持久化 288 项、服务端 149 项、回复 6 项集成测试。
+- 2026-10-04：剩下 3 条需要产品决定，保持 open：①`HistoryTool` 把跨会话消息统一标注当前绑定 `session_id`——是透传真实会话还是限制检索范围，会改变模型可见的证据元数据；②未来 `invalid_at` 在消息层被整体判死与 context 的 `now < invalid_at` 语义冲突，需要定契约（消息表当前不产出该字段）；③`_version_snapshot` 读取异常 fail-open 与校验阶段 fail-closed 不对称，属可用性 vs 全量拒绝的取舍。三条都不是缺陷修复，改前需要用户确认语义。
