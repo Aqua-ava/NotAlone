@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -46,6 +47,9 @@ from notalone.reply.interface import (
     SkillUse,
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
+
+
+logger = logging.getLogger(__name__)
 
 
 class ReplyGenerator:
@@ -307,7 +311,11 @@ class ReplyGenerator:
             if hasattr(request, "request_id"):
                 self._store.fail(request, reason=reason)
         except Exception:
-            pass
+            # 标记失败本身不能改变请求结果；但不能静默吞掉，
+            # 否则请求会停到租约过期，且没有任何可观测线索。
+            logger.warning(
+                "回复请求标记失败时存储调用出错", exc_info=True,
+            )
 
     @staticmethod
     def _validate_context(command: GenerateReply, context: object) -> None:

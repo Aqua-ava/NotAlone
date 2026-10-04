@@ -118,6 +118,14 @@ class RecordingReplyStore:
 
 
 @dataclass
+class FailingFailReplyStore(RecordingReplyStore):
+    """fail() 自身出错，用于验证标记失败不会静默。"""
+
+    def fail(self, request: ReplyRequest, *, reason: str) -> None:
+        raise RuntimeError("synthetic fail() outage")
+
+
+@dataclass
 class CorruptingReplyStore(RecordingReplyStore):
     def save(
         self,
@@ -881,6 +889,22 @@ class ReplyGeneratorTest(unittest.TestCase):
                 command,
                 verified_scope=VERIFIED_SCOPE,
             )
+
+    def test_store_failure_marking_emits_warning_without_changing_error(self) -> None:
+        command, prepared = self._valid_case()
+        store = FailingFailReplyStore(prepared=prepared)
+        runtime = ExplodingReplyRuntime()
+
+        with self.assertLogs("notalone.reply.generator", level="WARNING") as logs:
+            with self.assertRaises(ReplyRunError) as caught:
+                ReplyGenerator(
+                    store=store,
+                    runtime=runtime,
+                    context=RecordingReplyContext(prepared=prepared),
+                ).generate(command, verified_scope=VERIFIED_SCOPE)
+
+        self.assertIn("标记失败", "\n".join(logs.output))
+        self.assertNotIn("private provider response", str(caught.exception))
 
     def test_hides_store_start_error_details(self) -> None:
         command, prepared = self._valid_case()

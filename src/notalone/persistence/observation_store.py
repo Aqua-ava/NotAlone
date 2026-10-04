@@ -84,8 +84,8 @@ class ObservationBaseline:
             raise TypeError("binding_id 必须是 UUID。")
         if not isinstance(self.conversation_locator, str) or not self.conversation_locator.strip():
             raise ValueError("baseline 必须携带会话定位标识。")
-        if not isinstance(self.baseline_at, datetime):
-            raise TypeError("baseline_at 必须是 datetime。")
+        if not isinstance(self.baseline_at, datetime) or self.baseline_at.tzinfo is None:
+            raise TypeError("baseline_at 必须是带时区的 datetime。")
 
 
 @dataclass(frozen=True, slots=True)
@@ -380,8 +380,8 @@ class PostgresObservationStore:
         if not isinstance(binding_id, UUID):
             raise TypeError("binding_id 必须是 UUID。")
         self._validate_text(conversation_locator, "conversation_locator")
-        if not isinstance(baseline_at, datetime):
-            raise TypeError("baseline_at 必须是 datetime。")
+        if not isinstance(baseline_at, datetime) or baseline_at.tzinfo is None:
+            raise TypeError("baseline_at 必须是带时区的 datetime。")
         try:
             with self._connect() as connection:
                 assert_binding_active(
