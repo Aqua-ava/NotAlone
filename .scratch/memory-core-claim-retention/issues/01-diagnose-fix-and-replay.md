@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-human
+Triage: ready-for-agent
 State: claimed
 Type: task
 Blocked by: none
@@ -141,3 +141,5 @@ Blocked by: none
 2026-10-04：阶段1已按冻结v2计划完成4次公开V调用（4/4位置、失败0、业务写入0），raw独审先通过：候选人物`mixed`为2/2、目标证据为2/2，基线两次均出现旧`contact`方向。full审计发现第1次候选新增`semantic:pragmatics`并由`uncertain/pragmatics`造成不必要降级，完整Fact无降级仅1/2，阶段门失败；余44次已关闭，阶段2／3未启动，无重试、调参或默认变更。结果见[阶段1结果](../../../docs/memory-party-participants-prompt-pilot-result-20261004.md)，原始收据在私有目录保存；本次不能称整体语义准确率修复或授权真实资料复测。
 
 2026-10-04：阶段1失败后的本机诊断已完成，见仓库外私有`semantic-diagnosis-v1.json`。相同C4候选V-input字节级同SHA，但ECNU一次返回`uncertain/pragmatics`、一次返回`supported`；固定捕获响应离线重跑真实Flow确认，verdict才是Fact风险差异，quote末尾标点不是直接原因。现有Flow保持fail-closed，不在本地强制把uncertain改成supported。形成新的[语义稳定性有限对照提案](../../../docs/memory-party-semantic-stability-pilot-proposal-20261004.md)：只澄清report/reported与人物集合独立判断，最多8次、4／4分阶段，仅现有ECNU、匿名C4、无官方key／真实资料／业务写入；尚未批准联网，旧48次余额不复开。
+
+2026-10-04：用户回复“批准”后，按新提案完成独立8次匿名对照，结果见[语义稳定性结果](../../../docs/memory-party-semantic-stability-pilot-result-20261004.md)。预检通过；候选两阶段合计`mixed 4/4`、目标证据4/4、完整Fact无新增semantic风险4/4、`report/reported`保持pending，基线4次仍为旧`contact`错误，坏auto与业务写入0。阶段2四次返回后收尾触发预算类累计slot检查，停止收据保留，未重试或增加第9次；8/8已审计并闭账，所有旧余额不复开。结果支持该提示叶在匿名C4上的局部改善，但不切产品默认、不读真实／留出、不授权发布；下一步若进入产品或真实同批范围需另行决定。
