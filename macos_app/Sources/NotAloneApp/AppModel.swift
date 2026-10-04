@@ -82,6 +82,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var skillInFlight = false
     @Published var skillError: String?
     @Published var skillPreview: SkillPreview?
+    // 回滚：先看版本历史，再二次确认目标版本。
+    @Published var skillVersions: [SkillVersionEntry] = []
+    @Published var skillVersionsFor: SkillEntry?
+    @Published var skillVersionInFlight = false
     @Published private(set) var credentialsStatus: CredentialsStatus?
 
     // MARK: - 首启向导
@@ -1095,6 +1099,54 @@ final class AppModel: ObservableObject {
                 let preview = try await client.previewSkill(skillId: skill.skillId)
                 skillPreview = preview
                 skillError = nil
+            } catch {
+                skillError = Self.describe(error)
+            }
+        }
+    }
+
+    func loadSkillVersions(_ skill: SkillEntry) {
+        guard let client else {
+            skillError = "后端不可用"
+            return
+        }
+        Task {
+            skillVersionsFor = skill
+            skillVersionInFlight = true
+            defer { skillVersionInFlight = false }
+            do {
+                skillVersions = try await client.skillVersions(skillId: skill.skillId)
+                skillError = nil
+            } catch {
+                skillVersions = []
+                skillError = Self.describe(error)
+            }
+        }
+    }
+
+    func dismissSkillVersions() {
+        skillVersionsFor = nil
+        skillVersions = []
+    }
+
+    func rollbackSkill(_ skill: SkillEntry, to version: SkillVersionEntry) {
+        guard let client else {
+            skillError = "后端不可用"
+            return
+        }
+        Task {
+            skillVersionInFlight = true
+            defer { skillVersionInFlight = false }
+            do {
+                _ = try await client.rollbackSkill(
+                    skillId: skill.skillId,
+                    versionId: version.versionId
+                )
+                lastOperationMessage =
+                    "已把 Skill「\(skill.name)」回滚到第 \(version.versionNumber) 版"
+                skillError = nil
+                dismissSkillVersions()
+                await reloadSkills()
             } catch {
                 skillError = Self.describe(error)
             }

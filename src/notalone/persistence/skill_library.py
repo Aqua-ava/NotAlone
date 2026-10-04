@@ -23,6 +23,7 @@ from notalone.skills import (
     SkillImportResult,
     SkillLibraryManagementPort,
     SkillManagementEntry,
+    SkillVersionEntry,
     SkillPackageValidationError,
     SkillPackageValidator,
     SkillPreview,
@@ -343,6 +344,51 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
         """停用一个 Owner 全局 Skill，使其不再进入运行目录。"""
 
         return self._set_skill_status(owner_id, skill_id, "disabled")
+
+    def list_versions(
+        self,
+        owner_id: UUID,
+        skill_id: UUID,
+    ) -> tuple[SkillVersionEntry, ...]:
+        """返回该 skill 的历史版本（新到旧），不含正文。"""
+
+        if not isinstance(owner_id, UUID) or not isinstance(skill_id, UUID):
+            raise TypeError("Skill 版本查询标识必须是 UUID。")
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(
+                    """
+                    SELECT version.id AS version_id,
+                           version.version_number,
+                           version.name,
+                           version.description,
+                           version.is_current,
+                           version.enabled,
+                           version.created_at
+                    FROM public.reply_skill_version AS version
+                    JOIN public.reply_skill AS skill
+                      ON skill.id = version.skill_id
+                    WHERE skill.owner_id = %s
+                      AND version.skill_id = %s
+                      AND version.status = 'active'
+                    ORDER BY version.version_number DESC
+                    """,
+                    (owner_id, skill_id),
+                ).fetchall()
+        except psycopg.Error:
+            raise SkillLibraryPersistenceError("Skill 版本读取失败。") from None
+        return tuple(
+            SkillVersionEntry(
+                version_id=row["version_id"],
+                version_number=row["version_number"],
+                name=row["name"],
+                description=row["description"],
+                is_current=bool(row["is_current"]),
+                enabled=bool(row["enabled"]),
+                created_at=row["created_at"],
+            )
+            for row in rows
+        )
 
     def rollback(
         self,

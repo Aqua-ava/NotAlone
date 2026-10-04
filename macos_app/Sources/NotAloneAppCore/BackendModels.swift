@@ -376,6 +376,22 @@ public struct SkillLifecycleResponse: Decodable, Equatable, Sendable {
     public let name: String?
 }
 
+public struct SkillVersionEntry: Decodable, Equatable, Sendable, Identifiable {
+    public let versionId: String
+    public let versionNumber: Int
+    public let name: String
+    public let description: String
+    public let isCurrent: Bool
+    public let enabled: Bool
+    public let createdAt: String
+
+    public var id: String { versionId }
+}
+
+public struct SkillVersionsResponse: Decodable, Sendable {
+    public let versions: [SkillVersionEntry]
+}
+
 public struct SkillPreview: Decodable, Equatable, Sendable {
     public let skillId: String
     public let name: String?

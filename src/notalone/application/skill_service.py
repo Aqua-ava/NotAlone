@@ -18,6 +18,7 @@ from notalone.skills.models import (
     SkillImportResult,
     SkillManagementEntry,
     SkillVersionResult,
+    SkillVersionEntry,
 )
 
 
@@ -25,6 +26,12 @@ class SkillManagement(Protocol):
     """复用既有 Skill Library 管理端口的最小边界。"""
 
     def list_owner_skills(self, owner_id: UUID) -> tuple[SkillManagementEntry, ...]: ...
+
+    def list_versions(
+        self,
+        owner_id: UUID,
+        skill_id: UUID,
+    ) -> tuple[SkillVersionEntry, ...]: ...
 
     def read_current_version(
         self,
@@ -132,6 +139,29 @@ class SkillService:
     def disable(self, *, owner_id: UUID, skill_id: UUID) -> dict[str, object]:
         result = self._management.disable(owner_id, skill_id)
         return {"skill_id": str(result.skill_id), "status": result.status}
+
+    def versions(
+        self,
+        *,
+        owner_id: UUID,
+        skill_id: UUID,
+    ) -> dict[str, object]:
+        """返回可回滚的历史版本清单（新到旧，不含正文）。"""
+
+        return {
+            "versions": [
+                {
+                    "version_id": str(entry.version_id),
+                    "version_number": entry.version_number,
+                    "name": entry.name,
+                    "description": entry.description,
+                    "is_current": entry.is_current,
+                    "enabled": entry.enabled,
+                    "created_at": entry.created_at.isoformat(),
+                }
+                for entry in self._management.list_versions(owner_id, skill_id)
+            ]
+        }
 
     def rollback(
         self,

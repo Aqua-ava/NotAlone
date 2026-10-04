@@ -1430,6 +1430,12 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.OK, skills.preview(owner_id=owner_id, skill_id=skill_id)
             )
+        if action == "versions":
+            if method != "GET":
+                raise SkillRequestInvalid()
+            return _json_response(
+                HTTPStatus.OK, skills.versions(owner_id=owner_id, skill_id=skill_id)
+            )
         if method != "POST":
             raise SkillRequestInvalid()
         if action == "enable":

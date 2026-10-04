@@ -532,6 +532,25 @@ public struct BackendClient: Sendable {
         )
     }
 
+    public func skillVersions(skillId: String) async throws -> [SkillVersionEntry] {
+        let response: SkillVersionsResponse = try await request(
+            path: "api/skills/\(skillId)/versions",
+            method: "GET"
+        )
+        return response.versions
+    }
+
+    public func rollbackSkill(
+        skillId: String,
+        versionId: String
+    ) async throws -> SkillLifecycleResponse {
+        try await requestWithBody(
+            path: "api/skills/\(skillId)/rollback",
+            method: "POST",
+            body: ["version_id": versionId]
+        )
+    }
+
     public func previewSkill(skillId: String) async throws -> SkillPreview {
         try await request(
             path: "api/skills/\(skillId)/preview",

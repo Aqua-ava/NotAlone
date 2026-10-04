@@ -18,6 +18,8 @@ struct MainWindowView: View {
     @State private var rewriteInstruction = ""
     @State private var manualSkillVersion = ""
     @State private var includeRelationshipContext = false
+    // 待二次确认的回滚目标（Skill 版本历史）
+    @State private var pendingRollbackVersion: SkillVersionEntry?
     // 候选正文的会话内编辑内容（按 candidateId）
     @State private var editedCandidateTexts: [String: String] = [:]
     // 右栏切换：0 = 回复，1 = 记忆，2 = 导入，3 = Skill，4 = 设置，5 = 同步管理
@@ -1150,6 +1152,10 @@ struct MainWindowView: View {
                 model.previewSkill(skill)
             }
             .font(.caption)
+            Button("版本") {
+                model.loadSkillVersions(skill)
+            }
+            .font(.caption)
             Button(skill.enabled ? "停用" : "启用") {
                 model.toggleSkill(skill)
             }
@@ -1165,6 +1171,104 @@ struct MainWindowView: View {
         .sheet(isPresented: skillPreviewBinding(for: skill)) {
             skillPreviewSheet(skill)
         }
+        .sheet(isPresented: skillVersionsBinding(for: skill)) {
+            skillVersionsSheet(skill)
+        }
+    }
+
+    // 版本历史 sheet：列出历史版本，当前版本标记；回滚需要二次确认。
+    private func skillVersionsBinding(for skill: SkillEntry) -> Binding<Bool> {
+        Binding(
+            get: { model.skillVersionsFor?.skillId == skill.skillId },
+            set: { newValue in
+                if !newValue {
+                    model.dismissSkillVersions()
+                }
+            }
+        )
+    }
+
+    private func skillVersionsSheet(_ skill: SkillEntry) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("\(skill.name) 的版本历史")
+                .font(.headline)
+            if model.skillVersions.isEmpty {
+                Text("没有可回滚的历史版本。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(model.skillVersions) { version in
+                            skillVersionRow(skill, version: version)
+                        }
+                    }
+                }
+            }
+            if let error = model.skillError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            HStack {
+                Spacer()
+                Button("关闭") {
+                    model.dismissSkillVersions()
+                }
+            }
+        }
+        .padding(16)
+        .frame(minWidth: 420, minHeight: 240)
+        .confirmationDialog(
+            "确认回滚？",
+            isPresented: Binding(
+                get: { pendingRollbackVersion != nil },
+                set: { newValue in
+                    if !newValue { pendingRollbackVersion = nil }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let target = pendingRollbackVersion {
+                Button("回滚到第 \(target.versionNumber) 版", role: .destructive) {
+                    model.rollbackSkill(skill, to: target)
+                    pendingRollbackVersion = nil
+                }
+            }
+            Button("取消", role: .cancel) {
+                pendingRollbackVersion = nil
+            }
+        } message: {
+            Text("回滚后当前版本会被替换为所选版本，历史版本仍然保留。")
+        }
+    }
+
+    private func skillVersionRow(
+        _ skill: SkillEntry,
+        version: SkillVersionEntry
+    ) -> some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("v\(version.versionNumber)\(version.isCurrent ? "（当前）" : "")")
+                    .font(.callout.weight(.medium))
+                Text(version.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(version.createdAt)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer()
+            if !version.isCurrent {
+                Button("回滚到此版本") {
+                    pendingRollbackVersion = version
+                }
+                .font(.caption)
+                .disabled(model.skillVersionInFlight)
+            }
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
     }
 
     // 预览 sheet 展示当前版本内容与资源清单（无联系人资料）。
