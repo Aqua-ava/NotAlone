@@ -65,10 +65,49 @@ class SemanticEvaluationCasesTest(unittest.TestCase):
 
     def test_original_cases_are_preserved_and_coverage_is_explicit(self):
         from notalone.memory_extraction.evaluation_cases import CASES
-        self.assertEqual(len(CASES), 120)
+        self.assertEqual(len(CASES), 123)
         self.assertEqual(sum(case.expected_claims is not None for case in CASES), 20)
         self.assertTrue(all(challenge.case.expected_claims is not None
                             for challenge in SEMANTIC_CHALLENGES))
+
+    def test_short_lived_cases_require_an_expiry_and_long_lived_ones_forbid_it(self):
+        """短期类型必须带失效时间，长期事实必须留空，两类都要有用例固定。"""
+
+        from notalone.memory_extraction.evaluation_cases import CASES
+        by_name = {case.name: case for case in CASES}
+        for name in ("短期：次日日程", "短期：当天瞬时状态", "临时借住", "出差中"):
+            with self.subTest(name=name):
+                case = by_name[name]
+                self.assertEqual(case.dimension, "time")
+                self.assertIs(case.expect_valid_at, True)
+                self.assertIs(case.expect_invalid_at, True)
+        for name in ("长期：稳定习惯留空有效期", "固定习惯", "上个月旅行"):
+            with self.subTest(name=name):
+                case = by_name[name]
+                self.assertEqual(case.dimension, "time")
+                self.assertIs(case.expect_invalid_at, False)
+
+    def test_time_cases_do_not_reuse_the_prompt_example_sentences_verbatim(self):
+        """用例句子不得与提示词内联举例逐字重复，否则分不清泛化规则与示例记忆。"""
+
+        from notalone.memory_extraction.adapters import EXTRACTION_SYSTEM_PROMPT
+        from notalone.memory_extraction.evaluation_cases import CASES
+        by_name = {case.name: case for case in CASES}
+        transient = by_name["短期：当天瞬时状态"]
+        long_lived = by_name["长期：稳定习惯留空有效期"]
+        self.assertEqual(len(transient.messages), 1)
+        self.assertEqual(len(long_lived.messages), 1)
+        transient_text = transient.messages[0][1]
+        long_lived_text = long_lived.messages[0][1]
+        # 瞬时状态不得复述提示词里的"还没吃饭"举例，长期事实保持留空口径。
+        self.assertNotIn("还没吃饭", transient_text)
+        self.assertNotIn(transient_text.rstrip("。"), EXTRACTION_SYSTEM_PROMPT)
+        self.assertNotIn(long_lived_text.rstrip("。"), EXTRACTION_SYSTEM_PROMPT)
+        self.assertTrue(transient.note)
+        self.assertTrue(long_lived.note)
+        # 两条用例仍必须可判别：瞬时状态给失效时间，长期事实留空。
+        self.assertIs(transient.expect_invalid_at, True)
+        self.assertIs(long_lived.expect_invalid_at, False)
 
     def test_faithful_complete_compound_recalls_each_allowed_claim(self):
         for challenge, text in (
@@ -193,7 +232,7 @@ class SemanticEvaluationCasesTest(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertEqual(result.false_fact_count, 1)
 
-    def test_unannotated_and_repeated_scenarios_do_not_meet_semantic_gate(self):
+    def test_semantic_coverage_is_reported_separately_from_the_gate(self):
         challenge = SEMANTIC_CHALLENGES[0]
         results = []
         for index in range(15):
@@ -203,13 +242,19 @@ class SemanticEvaluationCasesTest(unittest.TestCase):
                 challenge_payloads(challenge, window, variant="good")
             ), baseline=True))
         summary = summarize(results)[0]
+        # 达标签按 ADR-027 第 2 条；标注覆盖只作为单独字段如实报告：
+        # 同一个来源场景重复 15 次时 scenarios=1，但不再把门槛压成永假。
+        self.assertEqual(summary.cases, 15)
         self.assertEqual(summary.semantic_cases, 15)
         self.assertEqual(summary.semantic_scenarios, 1)
-        self.assertFalse(summary.meets_gate)
+        self.assertEqual((summary.false_facts, summary.wrong_subjects), (0, 0))
+        self.assertTrue(summary.meets_gate)
         unlabeled = tuple(replace(result, semantic_annotated=False, semantic_case_id=None)
                           for result in results)
-        self.assertEqual(summarize(unlabeled)[0].semantic_cases, 0)
-        self.assertFalse(summarize(unlabeled)[0].meets_gate)
+        unlabeled_summary = summarize(unlabeled)[0]
+        self.assertEqual(unlabeled_summary.semantic_cases, 0)
+        self.assertEqual(unlabeled_summary.semantic_scenarios, 0)
+        self.assertTrue(unlabeled_summary.meets_gate)
 
 
 if __name__ == "__main__":

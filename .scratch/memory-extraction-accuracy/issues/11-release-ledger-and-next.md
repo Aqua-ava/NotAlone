@@ -76,3 +76,31 @@
 - 放行建议（需用户确认，一次一类）：新增放行"真假与意图""时间与时效"（连续两轮 0 假事 0 记错人、一般错误 ≤1）；"转述与本人"两轮干净但此前多轮波动（12-15/15），建议再攒两轮；"指代消解"未达标签，维持不放行；"主体""改写保真""媒体占位"维持放行。
 - 提示词压缩尝试失败已回滚，记录见 `.scratch/memory-accuracy-next/issues/01-prompt-consolidation.md`。
 - 新增下一轮票 05：短期时效记忆自动过期（用户提出"过两天没意义的信息带时间节点"）。
+
+## 复核修订（2026-10-05 短期时效口径）
+
+- 用户口径（票 05，2026-10-05 确认）：短期信息仍入库，但必须带可推算的失效时间，到期后自动退出检索与回复；临时状态、当天／次日日程与短期安排必须带有效期；「还没吃饭」这类瞬时状态仍可入库但有效期不超过当天；只有真正长期有效的事实才留空。原口径「invalid_at 只在消息明确限定结束日期或期间时填写」作废。
+- 修改范围只在提取口径与用例：`memory_extraction/adapters.py` 的提示词 `invalid_at` 段与 `EXTRACTION_SCHEMA` 两个时间字段 description 改为同一口径（含时区：以来源 `occurred_at` 自带 UTC 偏移推算"当天／次日／本周"；来源缺失、naive 或无法核实时不推算、留空）；`evaluation_cases.py` 时间维度新增「短期：次日日程」「短期：当天瞬时状态」「长期：稳定习惯留空有效期」三条，并把「临时借住」「出差中」补成必须填失效时间，用例总数 120 → 123。
+- 未修改：`can_auto_adopt`、0.7 置信度门槛、风险白名单、语用与核验规则、输出协议字段与检索层有效期语义（半开区间）零改动；`adoption.py` 本轮无 diff。
+- 有意不做的确定性兜底：「按固定天数给近期状态套过期时间」的后处理本轮不新增。旧口径已明确拒绝统一固定天数，且这属产品决定。重新评估的触发条件：真实模型评测显示短期类型 `invalid_at` 遵守率低（例如时间维度用例通过率低于达标签），或出现新的真实找错样本证明短期记忆仍在永久保留。
+- 本轮未做模型评测：真实模型遵守率尚未验证，需要另批 `NOTALONE_EVALUATION_API_KEY` 评测预算批准后运行 `notalone-memory-evaluate --dimension time`。本记录不宣称模型已遵守新口径。
+- 验证命令（Conda `NotAlone`，`NOTALONE_DISABLE_DOTENV=1`）：`python -m unittest tests.unit.memory_extraction.test_expiry_prompt_contract tests.unit.memory_extraction.test_semantic_evaluation_cases tests.unit.reply.test_context_retrieval`（50 项通过，含本轮新增 10 项）；`python -m unittest discover -s tests/unit/memory_extraction -t .`（187 项通过）；`python -m unittest discover -s tests/unit/reply -t .`（134 项通过）；`python -m unittest discover -s tests/unit/retrieval -t .`（87 项通过）；`python -m mypy src/notalone/memory_extraction src/notalone/reply/context.py`（25 文件 0 问题）；`python -m unittest discover -s tests/unit -t .` 最终一轮 **838 项全部通过**。中间轮次曾出现 `tests.unit.experiments.test_memory_claim_retention_v2`（缺 `.scratch/.../run_comparison_v2.py`）与 `tests.unit.retrieval.test_pending_candidate_recall` 的失败，均属并行任务在同一工作区的未完成改动，与本轮文件无关，随后由该任务补齐后全绿；本记录不把这两项算作本轮结果。
+- 新用例的可判别性用合成候选离线验证过：短期用例在 `invalid_at` 留空时 `validity_ok=False`、在填了可推算失效时间时通过；长期用例在补了失效时间时 `validity_ok=False`、留空时通过。这只证明评测口径能区分输出，不代表真实模型行为。
+- 数据影响：只新增／修改合成用例与提示词文本；未连接数据库、未写入记忆、未读取真实聊天或 `.env`、未执行 `git push`。
+- 剩余风险：短期边界（"这两天""这几天"）仍靠模型推算，是否有统一的行为未验证；`valid_at` 继续不参与自动采纳判断，短期事实若给出未来 `valid_at` 仍按既有 `pragmatic:future_validity` 进待确认。
+
+## 复核修订（2026-10-05 两轴审查修复）
+
+- 提示词歧义：原句"只写日期或只写'明天'而没有结束点的日程，取该日当地时间的当天结束（次日零点）"里的"该日"既可读成 `occurred_at` 当天，也可读成日程所指的明天。已改为"取该日程所指日期的次日零点（当地）；这里的日期基准是日程本身的日期，不是 occurred_at 当天，所以'明天'的日程在明天结束前仍然有效"，瞬时状态改为"不得晚于 occurred_at 当天结束"；`EXTRACTION_SCHEMA` 的 `valid_at` / `invalid_at` description 同步为同一口径。按 TDD 先在 `tests/unit/memory_extraction/test_expiry_prompt_contract.py` 固定新表述并断言旧歧义表述不再出现，再改实现。
+- 用例去特判：`evaluation_cases.py` 的「短期：当天瞬时状态」原句"我还没吃饭，等下再说。"逐字复用了提示词内联举例"还没吃饭"，已换成不同措辞的瞬时状态"我手机快没电了，回头再说。"；提示词举例本身未改。`tests/unit/memory_extraction/test_semantic_evaluation_cases.py` 新增断言：该句不得出现在提示词里，且瞬时状态必须给失效时间、长期事实必须留空；用例总数仍为 123，`invalid_at` 期望成对断言未改。
+- 文档口径：`architecture/current/domain-data.md` 把"必须按来源时间推算并填写 `invalid_at`""禁止默认永久保留"标注为**提取侧要求**，并新增实现状态条目说明模型遵守率尚未实测、当前没有确定性兜底；用户口径（短期信息必须带可推算有效期、只有真正长期有效的事实才留空）保留。
+- 本轮仍未做模型评测，未读取 `.env` 或真实聊天；验证命令与结果见下方"两轴审查修复的运行记录"。
+
+### 两轴审查修复的运行记录
+
+- `python -m unittest tests.unit.memory_extraction.test_expiry_prompt_contract tests.unit.memory_extraction.test_semantic_evaluation_cases`：24 项通过（改实现前先红 5 项）。
+- `python -m unittest discover -s tests/unit/memory_extraction -t .`：192 项通过。
+- `python -m mypy src/notalone/memory_extraction`：25 个文件 0 问题（文件数含并行任务新增的 `dimensions.py`，本轮文件本身无告警）。
+- 全量 `python -m unittest discover -s tests/unit -t .`：主工作区当前存在并行任务的未提交改动，全量与 `memory_extraction` 子集都会带出与本轮无关的失败（`test_dimensions.py`、`test_adoption.py`、`test_flow.py` 与 `test_memory_claim_retention_v2.py` 等）；把 HEAD（27cc8dd）源码与测试叠加本轮差异后，在独立工作树里 `memory_extraction` 子集 192 项通过、全量 752 项通过（基线 738 项 + 本轮新增 14 项）。
+- 离线可判别性：新瞬时状态用例在填了可推算失效时间时 `validity_ok=True`、留空时 `validity_ok=False`；长期用例相反。只证明评测口径能区分输出，不代表真实模型行为。
+
