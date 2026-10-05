@@ -149,19 +149,46 @@ class DimensionRelease:
         return key is not None and key.value in self.released
 
     @classmethod
+    def resolve(cls, value: "DimensionRelease | None") -> "DimensionRelease":
+        """把可选的注入值解析成放行表；``None`` 表示按环境与台账默认值。
+
+        生产装配只允许传 ``None``（测试可显式注入放行表）；这样"忘记传参"
+        永远不会变成"全部放行"。
+        """
+
+        if value is None:
+            return cls.from_environment()
+        if not isinstance(value, DimensionRelease):
+            raise TypeError("维度放行表必须是 DimensionRelease。")
+        return value
+
+    @classmethod
     def from_environment(
-        cls, environ: Mapping[str, str] | None = None
+        cls,
+        environ: Mapping[str, str] | None = None,
+        *,
+        default: "DimensionRelease | None" = None,
     ) -> "DimensionRelease":
-        """读取运维开关；只有显式 ``=0`` 才关闭按维度放行门。"""
+        """以编译期默认放行表为起点，再读取运维开关。
+
+        :data:`DEFAULT_DIMENSION_RELEASE` 是放行台账的唯一权威默认值：放行
+        某个维度＝按台账流程修改它并经评审提交；本方法只在其上处理运维回退，
+        只有显式 ``=0`` 才关闭按维度放行门。``default`` 仅供测试注入。
+        """
 
         values = os.environ if environ is None else environ
+        base = DEFAULT_DIMENSION_RELEASE if default is None else default
+        if not isinstance(base, DimensionRelease):
+            raise TypeError("默认放行表必须是 DimensionRelease。")
         gate_enabled = (
             values.get(DIMENSION_GATE_VARIABLE, "").strip() != "0"
         )
-        return cls(gate_enabled=gate_enabled)
+        return cls(allowed=base.allowed, gate_enabled=gate_enabled)
 
 
 #: 默认放行表：空集。任何维度未放行都走既有待确认路径。
 DEFAULT_DIMENSION_RELEASE = DimensionRelease()
 #: 运维回退：不再按维度收紧，等价于启用本门之前的自动采纳行为。
+#: 注意 ``allowed`` 故意留空——生效的放行集由 :attr:`DimensionRelease.released`
+#: 在门关闭时返回全集；只读 ``allowed`` 会误判成"什么都不放行"。
 RELEASE_ALL_DIMENSIONS = DimensionRelease(gate_enabled=False)

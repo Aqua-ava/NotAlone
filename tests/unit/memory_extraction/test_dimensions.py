@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timezone
+from unittest import mock
 
+from notalone.memory_extraction import dimensions
 from notalone.memory_extraction.dimensions import (
     DEFAULT_DIMENSION_RELEASE,
     RELEASE_ALL_DIMENSIONS,
@@ -12,6 +14,8 @@ from notalone.memory_extraction.dimensions import (
     MemoryDimension,
     dimension_key,
 )
+from notalone.memory_extraction.evaluation_cases import CASES
+from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
 from notalone.memory_extraction.models import (
     AssertionStatus,
     FactSubject,
@@ -158,6 +162,21 @@ class DimensionKeyTest(unittest.TestCase):
 class DimensionReleaseTest(unittest.TestCase):
     """默认空表、显式放行与运维回退开关。"""
 
+    def test_runtime_keys_cover_every_evaluatable_dimension(self) -> None:
+        """运行时键与评测维度串必须对齐；例外只能显式登记。"""
+
+        evaluation_dimensions = {
+            case.dimension for case in (*CASES, *SEMANTIC_CASES)
+        }
+        runtime_keys = {item.value for item in MemoryDimension}
+
+        # 只允许评测专用、运行时不可推导的两个维度作为例外。
+        self.assertEqual(
+            evaluation_dimensions - runtime_keys,
+            {"condition", "quantity"},
+        )
+        self.assertEqual(runtime_keys - evaluation_dimensions, set())
+
     def test_default_release_table_is_empty_and_gate_is_on(self) -> None:
         for release in (DEFAULT_DIMENSION_RELEASE, DimensionRelease()):
             with self.subTest(release=release):
@@ -246,6 +265,43 @@ class DimensionReleaseTest(unittest.TestCase):
         self.assertFalse(release.allows(synthetic_fact(
             valid_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
         )))
+
+    def test_from_environment_starts_from_the_compiled_release_table(self) -> None:
+        """放行台账改的正是这个默认值：改完必须真的生效。"""
+
+        with mock.patch.object(
+            dimensions,
+            "DEFAULT_DIMENSION_RELEASE",
+            DimensionRelease(("subject",)),
+        ):
+            release = DimensionRelease.from_environment({})
+
+        self.assertEqual(release.released, frozenset({"subject"}))
+        self.assertTrue(release.gate_enabled)
+        self.assertTrue(release.allows(synthetic_fact()))
+        self.assertFalse(release.allows(synthetic_fact(
+            valid_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+        )))
+
+    def test_gate_switch_still_overrides_the_compiled_release_table(self) -> None:
+        with mock.patch.object(
+            dimensions,
+            "DEFAULT_DIMENSION_RELEASE",
+            DimensionRelease(("subject",)),
+        ):
+            release = DimensionRelease.from_environment(
+                {"NOTALONE_MEMORY_DIMENSION_GATE": "0"}
+            )
+
+        self.assertFalse(release.gate_enabled)
+        self.assertEqual(
+            release.released,
+            frozenset(dimension.value for dimension in MemoryDimension),
+        )
+
+    def test_environment_default_must_be_a_release_table(self) -> None:
+        with self.assertRaises(TypeError):
+            DimensionRelease.from_environment({}, default="subject")
 
 
 if __name__ == "__main__":

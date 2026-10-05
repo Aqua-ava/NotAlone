@@ -38,15 +38,23 @@ ADR-027）的边界声明直接冲突；同时实现勘察发现 `summarize().me
    来源字段。这四个维度**即使日后评测达标也不可能被放行**，不得用兜底规则
    假装可推导。该结论写入代码注释、放行台账与 ADR，作为后续补字段的立项依据。
 4. **默认放行表为空**：`DEFAULT_DIMENSION_RELEASE` 是空集，未验证维度不因本
-   ADR 获得任何自动采纳能力。构造参数 `dimension_release` 可注入放行表供测试
-   使用；生产装配（`run_extraction` 与 Worker 调用点）沿用默认值。
+   ADR 获得任何自动采纳能力。该常量是**放行的唯一权威默认值**：按台账放行某个
+   维度＝修改它并经评审提交；运行时由 `DimensionRelease.from_environment()`
+   在读运维开关前先取它的 `allowed`，因此"改常量"确实生效（有端到端测试断言；
+   曾有一版实现只回传开关、丢掉 `allowed`，导致台账写的放行步骤空转，已修）。
+   构造参数 `dimension_release` 是**测试接缝**：生产装配（`server`／`tasks` 的
+   runner 与 Worker 调用点）一律传 `None`，由 `DimensionRelease.resolve()` 解析成
+   "台账默认值＋运维开关"，所以"忘记传参"永远不会等于"全部放行"；
+   `RELEASE_ALL_DIMENSIONS` 只出现在测试与验收夹具里，并有测试断言默认构造仍收紧。
 5. **运维级回退开关**：`NOTALONE_MEMORY_DIMENSION_GATE` 只有显式 `=0` 才关闭
    门，关闭后不按维度收紧，恢复本门启用前的行为。未设置、空值与其他值都保持
    门开启（fail-closed）。回退不改代码、可测。
 6. **评测门槛对齐 ADR-027 第 2 条**：`summarize().meets_gate` 判定为
    "用例数 ≥15、假事 0、记错人 0、一般错误 ≤1"；语义标注覆盖保留为**单独报告
-   字段**（`semantic_cases`／`semantic_scenarios`／`semantic_gate_cases`），不再
-   参与判定。达到门槛只是放行的必要条件，仍需用户逐类批准。
+   字段**（`semantic_cases`／`semantic_scenarios`），不再参与判定。达到门槛只是
+   放行的必要条件：当前用例集的语义标注覆盖很低，"达标签"可能只是计数结果，
+   所以放行还必须同时满足"该维度的运行时键可推导"与"语义标注覆盖足够或有独立
+   人工复核记录"，并经用户逐类批准。
 7. **放行台账**：新增 `docs/memory-adoption-dimension-release-ledger.md` 记录
    当前放行表（空集）、放行所需证据与批准步骤、以及回退方式；代码默认值必须与
    台账一致，并用测试断言默认放行表为空。

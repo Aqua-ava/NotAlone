@@ -27,7 +27,6 @@ from notalone.memory_extraction.adjudication import (
     similarity,
 )
 from notalone.memory_extraction.dimensions import (
-    DEFAULT_DIMENSION_RELEASE,
     DimensionRelease,
 )
 from notalone.memory_extraction.errors import ExtractionRuntimeError
@@ -98,10 +97,8 @@ class MemoryAdoption:
             raise TypeError("必须显式注入联系人级记忆 port。")
         if not 0.0 < confidence_threshold <= 1.0:
             raise ValueError("置信度门槛必须在 0 到 1 之间。")
-        if dimension_release is None:
-            dimension_release = DimensionRelease.from_environment()
-        elif not isinstance(dimension_release, DimensionRelease):
-            raise TypeError("维度放行表必须是 DimensionRelease。")
+        # None 表示沿用台账默认放行表与运维开关（ADR-036），不是"全部放行"。
+        dimension_release = DimensionRelease.resolve(dimension_release)
         self._memory_port = memory_port
         self._owner_memory_port = owner_memory_port
         self._adjudication_runtime = adjudication_runtime
@@ -145,7 +142,7 @@ class MemoryAdoption:
             if self._pending_exists(scope, fact):
                 duplicate += 1
                 continue
-            if not self._can_auto_adopt(
+            if not self._passes_all_adoption_gates(
                 fact,
                 pragmatic_decision=pragmatic_decision,
             ):
@@ -323,7 +320,7 @@ class MemoryAdoption:
             ) if callable(owner_deleted_texts) else None
         return texts
 
-    def _can_auto_adopt(
+    def _passes_all_adoption_gates(
         self,
         fact,
         *,
@@ -436,7 +433,7 @@ def can_auto_adopt(
     这里只判定原有三道合取项（语用 CONFIRMABLE、置信度、风险白名单），
     供评测工具报告"若放行该维度"的理想去向。实际采纳还要再过
     :class:`~notalone.memory_extraction.dimensions.DimensionRelease`
-    这一道独立的维度放行项，见 :meth:`MemoryAdoption._can_auto_adopt`。
+    这一道独立的维度放行项，见 :meth:`MemoryAdoption._passes_all_adoption_gates`。
     """
     return (
         decision.disposition is MemoryDisposition.CONFIRMABLE

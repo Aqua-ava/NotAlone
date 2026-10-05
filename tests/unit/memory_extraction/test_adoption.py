@@ -19,6 +19,7 @@ from notalone.memory_extraction.adjudication import (
     AdjudicationAction,
     AdjudicationDecision,
 )
+from notalone.memory_extraction import dimensions
 from notalone.memory_extraction.dimensions import (
     DEFAULT_DIMENSION_RELEASE,
     RELEASE_ALL_DIMENSIONS,
@@ -316,6 +317,23 @@ class DimensionReleaseGateTest(unittest.TestCase):
         memories = self.store.list_confirmed(self.scope)
         self.assertEqual(len(memories), 1)
         self.assertEqual(memories[0].adoption_method, AdoptionMethod.AUTO)
+
+    def test_editing_the_compiled_release_table_actually_releases(self) -> None:
+        """放行台账的权威步骤就是改 DEFAULT_DIMENSION_RELEASE：必须端到端生效。"""
+
+        with patch.dict(os.environ, {}, clear=True), patch.object(
+            dimensions,
+            "DEFAULT_DIMENSION_RELEASE",
+            DimensionRelease(("subject",)),
+        ):
+            stats = self._adoption().adopt(
+                self.scope,
+                ExtractionOutcome(accepted=(_fact(),)),
+            )
+
+        self.assertEqual(stats.adopted, 1)
+        self.assertEqual(stats.pending, 0)
+        self.assertEqual(len(self.store.list_confirmed(self.scope)), 1)
 
     def test_releasing_one_dimension_does_not_release_another(self) -> None:
         adoption = self._adoption(DimensionRelease(("time",)))

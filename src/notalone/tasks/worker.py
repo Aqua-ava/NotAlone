@@ -200,10 +200,7 @@ class PostgresMemoryExtractionRunner:
                 f"记忆提取批次大小必须在 1 到 {EXTRACTION_BATCH_SIZE} 之间。"
             )
         # None 表示沿用运维开关与默认空放行表（ADR-036），不是"全部放行"。
-        if dimension_release is None:
-            dimension_release = DimensionRelease.from_environment()
-        elif not isinstance(dimension_release, DimensionRelease):
-            raise TypeError("维度放行表必须是 DimensionRelease。")
+        dimension_release = DimensionRelease.resolve(dimension_release)
         self._dimension_release = dimension_release
         self._database_url = database_url
         if runtime is None:

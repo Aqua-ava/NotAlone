@@ -76,7 +76,6 @@ class DimensionSummary:
     meets_gate: bool
     semantic_cases: int = 0
     semantic_scenarios: int = 0
-    semantic_gate_cases: int = GATE_MIN_CASES
 
 
 def build_window(case: EvaluationCase) -> ExtractionWindow:
