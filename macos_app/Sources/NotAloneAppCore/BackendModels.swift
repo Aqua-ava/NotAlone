@@ -469,7 +469,9 @@ public struct ReplyEvidence: Decodable, Equatable, Identifiable, Sendable {
     public let kind: String
     public let text: String
     public let selectionReason: String
-    public let snapshotStatus: String
+    // 生成时的状态是可选的：缺失或未知状态不能被当成「已确认」，具体判定见
+    // ReplyEvidencePresentationPolicy（fail-closed）。
+    public let snapshotStatus: String?
     public let cited: Bool
     public let timing: MemoryTimingEntry?
     public let validAt: String?
@@ -483,7 +485,17 @@ public struct ReplyEvidence: Decodable, Equatable, Identifiable, Sendable {
         case "owner_memory": "本人资料"
         case "user_draft": "本次原句"
         case "continued_candidate": "继续修改的候选"
-        default: "上下文材料"
+        // 该标签只描述材料类别，不构成未确认标注；候选一律走未确认标题。
+        case "pending_candidate": "待确认候选"
+        default: ReplyEvidencePresentationPolicy.fallbackKindLabel
+        }
+    }
+
+    /// 只有已确认的聊天消息、关系资料和本人资料才展示来源与有效期时间行。
+    public var showsMemoryTiming: Bool {
+        switch kind {
+        case "message", "confirmed_memory", "owner_memory": true
+        default: false
         }
     }
 }

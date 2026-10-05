@@ -65,6 +65,9 @@ final class AppModel: ObservableObject {
     // MARK: - 记忆管理
     @Published private(set) var contactMemories: [MemoryEntry] = []
     @Published private(set) var pendingMemoryCandidates: [MemoryCandidateEntry] = []
+    // 区分「本次会话真的读到过候选列表」和「空列表」：没有读到过就不拿它
+    // 当否证（既不展示旧数据，也不隐藏后端仍返回的未确认依据）。
+    @Published private(set) var pendingCandidatesLoaded = false
     @Published private(set) var ownerMemories: [MemoryEntry] = []
     @Published private(set) var memoryInFlight = false
     @Published var memoryError: String?
@@ -167,6 +170,7 @@ final class AppModel: ObservableObject {
         replyError = nil
         contactMemories = []
         pendingMemoryCandidates = []
+        pendingCandidatesLoaded = false
         publishPriorityContact(contactId)
         loadFirstMessagePage()
     }
@@ -664,11 +668,27 @@ final class AppModel: ObservableObject {
                 guard selectedContactId == contactId, replyGenerationId == generationId,
                       lastReplyRequestId == snapshot.replyRequestId else { return }
                 replyEvidence = snapshot.evidence
+                // 未确认候选的现值只以后端为准：快照里出现未确认候选时，
+                // 同时重读待确认列表，否决或确认过的候选不再靠旧数据呈现。
+                if snapshot.evidence.contains(where: { $0.kind == "pending_candidate" }) {
+                    await reloadPendingCandidates(client: client, contactId: contactId)
+                }
             } catch {
                 guard selectedContactId == contactId, replyGenerationId == generationId else { return }
                 replyEvidenceError = "依据读取失败：\(Self.describe(error))"
             }
         }
+    }
+
+    // 重读待确认候选列表，供回复依据卡片判定「该候选是否仍未确认」。
+    private func reloadPendingCandidates(client: BackendClient, contactId: String) async {
+        guard let candidates = try? await client.pendingMemoryCandidates(contactId: contactId) else {
+            // 读不到就不把空列表当否证：保持未加载状态，不缓存也不臆测。
+            return
+        }
+        guard selectedContactId == contactId else { return }
+        pendingMemoryCandidates = candidates
+        pendingCandidatesLoaded = true
     }
 
     func loadImportedSources() {
@@ -743,6 +763,7 @@ final class AppModel: ObservableObject {
         selectedReplyMessageId = nil
         contactMemories = []
         pendingMemoryCandidates = []
+        pendingCandidatesLoaded = false
         ownerMemories = []
     }
 
@@ -815,6 +836,8 @@ final class AppModel: ObservableObject {
                 guard selectedContactId == contactId, dataGenerationId == generationId else { return }
                 contactMemories = confirmed
                 pendingMemoryCandidates = pending
+                // 读到过列表（哪怕为空）才算已知：空列表不能和「读失败」混为一谈。
+                pendingCandidatesLoaded = contactId != nil
                 ownerMemories = own
                 memoryError = nil
             } catch {
@@ -856,6 +879,7 @@ final class AppModel: ObservableObject {
 
     func confirmPendingCandidate(_ candidate: MemoryCandidateEntry) {
         guard let client, let selectedContactId else { return }
+        guard isStillPending(candidate) else { return }
         Task {
             memoryInFlight = true
             defer { memoryInFlight = false }
@@ -865,7 +889,7 @@ final class AppModel: ObservableObject {
                     candidateId: candidate.candidateId
                 )
                 lastOperationMessage = "候选已确认为记忆"
-                await reloadAfterMutation()
+                await invalidateCandidateReplyEvidence(candidateId: candidate.candidateId)
             } catch {
                 memoryError = Self.describe(error)
             }
@@ -874,6 +898,7 @@ final class AppModel: ObservableObject {
 
     func discardPendingCandidate(_ candidate: MemoryCandidateEntry) {
         guard let client, let selectedContactId else { return }
+        guard isStillPending(candidate) else { return }
         Task {
             memoryInFlight = true
             defer { memoryInFlight = false }
@@ -883,11 +908,17 @@ final class AppModel: ObservableObject {
                     candidateId: candidate.candidateId
                 )
                 lastOperationMessage = "候选已丢弃（计入删除指纹）"
-                await reloadAfterMutation()
+                await invalidateCandidateReplyEvidence(candidateId: candidate.candidateId)
             } catch {
                 memoryError = Self.describe(error)
             }
         }
+    }
+
+    // 列表刷新后，已处理过的候选行会消失；重复提交不再打后端。
+    private func isStillPending(_ candidate: MemoryCandidateEntry) -> Bool {
+        !pendingCandidatesLoaded
+            || pendingMemoryCandidates.contains { $0.candidateId == candidate.candidateId }
     }
 
     func deleteMemory(_ memory: MemoryEntry) {
@@ -933,6 +964,17 @@ final class AppModel: ObservableObject {
 
     private func reloadAfterMutation() async {
         loadMemories()
+    }
+
+    // 用户处理完一个候选（确认或否决）后，立刻撤下它的未确认回复依据，
+    // 再重新读取：后端已保证不再返回，界面不得继续用旧快照展示。
+    private func invalidateCandidateReplyEvidence(candidateId: String) async {
+        replyEvidence.removeAll { entry in
+            entry.kind == "pending_candidate" && entry.evidenceId == candidateId
+        }
+        pendingMemoryCandidates.removeAll { $0.candidateId == candidateId }
+        await reloadAfterMutation()
+        loadReplyEvidence()
     }
 
     // MARK: - 导入与任务

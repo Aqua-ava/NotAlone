@@ -2265,7 +2265,11 @@ struct MainWindowView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 8) {
                             ForEach(model.replyEvidence) { entry in
-                                ReplyEvidenceCard(entry: entry)
+                                ReplyEvidenceCard(
+                                    entry: entry,
+                                    pendingCandidates: model.pendingMemoryCandidates,
+                                    candidatesLoaded: model.pendingCandidatesLoaded
+                                )
                             }
                         }
                     }.frame(maxHeight: 220)
@@ -2318,7 +2322,13 @@ struct MainWindowView: View {
             if !candidate.citationIds.isEmpty {
                 DisclosureGroup("候选引用：\(candidate.citationIds.count) 项") {
                     let entries = model.replyEvidence.filter { candidate.citationIds.contains($0.evidenceId) }
-                    ForEach(entries) { entry in ReplyEvidenceCard(entry: entry) }
+                    ForEach(entries) { entry in
+                        ReplyEvidenceCard(
+                            entry: entry,
+                            pendingCandidates: model.pendingMemoryCandidates,
+                            candidatesLoaded: model.pendingCandidatesLoaded
+                        )
+                    }
                     if entries.count < candidate.citationIds.count {
                         Text("部分引用尚未读取，请查看上方依据读取状态。")
                             .font(.caption2).foregroundStyle(.secondary)
