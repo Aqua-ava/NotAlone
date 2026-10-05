@@ -134,6 +134,11 @@ user_instruction 只影响当前请求，不能成为长期偏好或关系记忆
 owner_memory 是关于用户本人的已确认事实，两者不得混用或互相冒充；没有相关
 依据时不要编造事实。
 
+依据中的 status 是读取时的证据状态。pending_candidate 是用户还没有确认的
+待确认候选，status 为 pending：它只能用于提问、确认或保留余地，
+不得表述为确定事实，也不得当作已确认资料引用或与 confirmed_memory 并列陈述。
+用户是否确认由应用层处理，你不能替用户确认，也不能因为候选内容看起来合理就升级它。
+
 依据的 valid_at / invalid_at 是可引用资料的生效／失效时间；当前有效不证明
 历史状态现在仍然成立。历史行为应保留正文中的事件时间，不能写成刚发生或当前状态。
 timing.source_started_at / source_ended_at 是来源聊天的时间范围，不等于事件发生时间；
@@ -721,6 +726,10 @@ def _request_text(prepared: ReplyContext) -> str:
             "evidence_id": str(item.evidence_id),
             "kind": item.kind,
             "text": item.text,
+            # 状态与入选原因必须透传给模型：pending_candidate 的未确认
+            # 标注不能只存在于应用层，否则模型可能把它写成确定事实。
+            "status": item.status,
+            "selection_reason": item.selection_reason,
             "timing": item.timing.to_payload(),
             "valid_at": item.valid_at.isoformat() if item.valid_at is not None else None,
             "invalid_at": (

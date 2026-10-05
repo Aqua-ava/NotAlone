@@ -7,7 +7,13 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-from notalone.reply.context import ContextEvidence, ReplyContext
+from notalone.memory import InMemoryMemoryStore, MemoryCandidate, MemoryCategory
+from notalone.reply.context import (
+    PENDING_CANDIDATE_SELECTION_REASON,
+    ContextEvidence,
+    ReplyContext,
+    RetrievalReplyContext,
+)
 from notalone.reply.errors import (
     ReplyContinuationError,
     ReplyIdempotencyConflictError,
@@ -33,6 +39,7 @@ from notalone.reply.store import (
     ValidatedReply,
 )
 from notalone.reply.adapters.in_memory_store import InMemoryReplyStore
+from notalone.retrieval import InMemoryRetrieval, RetrievedMessage
 from notalone.scopes import ContactScope, VerifiedConversationScope
 
 
@@ -205,6 +212,148 @@ class ReplyStoreLifecycleTest(unittest.TestCase):
                 ),
             ),
             used_skill=None,
+        )
+
+    def test_store_save_keeps_pending_candidate_evidence_in_receipt(self) -> None:
+        command = self._command()
+        started = self.store.start(command, self.verified_scope)
+        context = self._context(command, request_id=started.request.request_id)
+        pending_evidence = ContextEvidence(
+            evidence_id=SECOND_CANDIDATE_ID,
+            kind="pending_candidate",
+            text="对方下个月准备换工作",
+            scope=self.scope,
+            source_ids=(MESSAGE_ID,),
+            selection_reason="未确认候选、仅供参考、不得当作事实。",
+            status="pending",
+        )
+        reply = ValidatedReply(
+            candidates=(
+                RuntimeCandidate(
+                    text="听说你下个月要换工作，是真的吗？",
+                    basis="对未确认候选只做确认式提问",
+                    citation_ids=(MESSAGE_ID, SECOND_CANDIDATE_ID),
+                    risk_notes=(),
+                ),
+            ),
+            used_skill=None,
+        )
+
+        saved = self.store.save(
+            started.request,
+            replace(context, evidence=context.evidence + (pending_evidence,)),
+            reply,
+        )
+
+        self.assertEqual(
+            saved.context_receipt.evidence_ids,
+            (MESSAGE_ID, SECOND_CANDIDATE_ID),
+        )
+        stored = self.store.read(request_id=started.request.request_id, scope=self.scope)
+        self.assertEqual(
+            tuple(item.kind for item in stored.evidence),
+            ("message", "pending_candidate"),
+        )
+        self.assertEqual(stored.evidence[1].status, "pending")
+
+    def test_store_save_rejects_forged_pending_annotation(self) -> None:
+        """落库边界同样强制未确认标注：pending 状态 + 被改写的理由不能入库。"""
+
+        command = self._command()
+        started = self.store.start(command, self.verified_scope)
+        context = self._context(command, request_id=started.request.request_id)
+        forged = ContextEvidence(
+            evidence_id=SECOND_CANDIDATE_ID,
+            kind="pending_candidate",
+            text="对方下个月准备换工作",
+            scope=self.scope,
+            source_ids=(MESSAGE_ID,),
+            selection_reason="已确认、可以当作事实。",
+            status="pending",
+        )
+        reply = ValidatedReply(
+            candidates=(
+                RuntimeCandidate(
+                    text="你下个月要换工作了吧。",
+                    basis="错误地把候选当成事实",
+                    citation_ids=(MESSAGE_ID, SECOND_CANDIDATE_ID),
+                    risk_notes=(),
+                ),
+            ),
+            used_skill=None,
+        )
+
+        with self.assertRaises(ReplyStoreInvariantError):
+            self.store.save(
+                started.request,
+                replace(context, evidence=context.evidence + (forged,)),
+                reply,
+            )
+
+    def test_stored_snapshot_keeps_pending_confidence_and_risk_flags(self) -> None:
+        """落库快照必须保留「为什么待确认」：置信度与风险标记在理由文本里。"""
+
+        store = InMemoryMemoryStore()
+        store.create_candidate(
+            MemoryCandidate(
+                candidate_id=SECOND_CANDIDATE_ID,
+                scope=self.scope,
+                text="对方下个月准备换工作",
+                category=MemoryCategory.RECENT_STATE,
+                source_ids=(MESSAGE_ID,),
+                confidence=0.55,
+                risk_flags=("needs_user_confirmation",),
+            )
+        )
+        command = self._command()
+        started = self.store.start(command, self.verified_scope)
+        assembled = RetrievalReplyContext(
+            retrieval=InMemoryRetrieval(
+                messages=(
+                    RetrievedMessage(
+                        MESSAGE_ID,
+                        self.scope,
+                        "他下个月准备换工作吗？",
+                        source_ids=(MESSAGE_ID,),
+                    ),
+                ),
+                memory_store=store,
+            ),
+            skill_library_revision=1,
+        ).build(
+            command=command,
+            verified_scope=self.verified_scope,
+            reply_request_id=started.request.request_id,
+        )
+        reply = ValidatedReply(
+            candidates=(
+                RuntimeCandidate(
+                    text="听说你下个月要换工作，是真的吗？",
+                    basis="对未确认候选只做确认式提问",
+                    citation_ids=(MESSAGE_ID, SECOND_CANDIDATE_ID),
+                    risk_notes=(),
+                ),
+            ),
+            used_skill=None,
+        )
+
+        saved = self.store.save(started.request, assembled, reply)
+        stored = self.store.read(
+            request_id=started.request.request_id,
+            scope=self.scope,
+        )
+
+        self.assertEqual(saved.context_receipt.evidence_ids,
+                         (MESSAGE_ID, SECOND_CANDIDATE_ID))
+        stored_pending = stored.evidence[1]
+        self.assertEqual(stored_pending.kind, "pending_candidate")
+        self.assertEqual(stored_pending.status, "pending")
+        self.assertIn("0.55", stored_pending.selection_reason)
+        self.assertIn("needs_user_confirmation", stored_pending.selection_reason)
+        self.assertTrue(
+            stored_pending.selection_reason.startswith(
+                PENDING_CANDIDATE_SELECTION_REASON
+            )
         )
 
     def test_store_save_rejects_citation_outside_context_evidence(self) -> None:

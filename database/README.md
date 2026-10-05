@@ -225,6 +225,9 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 `database/migrations/032_memory_candidate_subject.sql`
 `database/migrations/033_owner_memory_evidence_kind.sql`
 `database/migrations/034_extraction_failure_recovery.sql`
+`database/migrations/035_extraction_watermark_cascade.sql`
+`database/migrations/036_source_deletion_tasks.sql`
+`database/migrations/037_pending_candidate_evidence_kind.sql`
 
 第二十九个迁移新增 `cli_backfill_state`，按 owner、联系人和 active 绑定保存补齐触发、阶段、
 计数、可靠游标和失败原因等元数据，不保存聊天正文；绑定或联系人删除时级联清理。第三十个迁移
@@ -235,7 +238,14 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 owner 级记忆且重复确认保持幂等。第三十三个迁移放宽回复证据表的 `kind` 约束，允许
 `owner_memory` 作为独立证据类型进入回复上下文快照。第三十四个迁移为提取水位增加失败
 恢复状态：同一失败区间的连续计数、达阈值后跳过的最近区间记录；水位在首次成功推进前
-允许为空。
+允许为空。第三十五个迁移先清理孤儿水位，再给 `memory_extraction_watermark` 补上随
+owner 与联系人级联删除的外键，与 `contact_memory_state`／`contact_memory_index` 的
+级联契约对齐。第三十六个迁移给来源删除任务放宽 `background_task` 的任务类型与步骤
+约束，允许 `delete` 类型复用固定的删除步骤（标记删除、清理派生数据、清理索引、清缓存、
+确认不可检索）。第三十七个迁移放宽回复证据表的 `kind` 约束，允许 `pending_candidate`
+作为独立证据类型进入回复上下文快照：它只能带强制未确认标注作为参考，不得当作确定事实，
+也不得混入已确认记忆集合；该 SQL 列表与 `src/notalone/reply/context.py` 的
+`EVIDENCE_KINDS` 保持一致。
 
 任务终态清理使用：
 

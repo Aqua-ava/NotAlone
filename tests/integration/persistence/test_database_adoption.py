@@ -139,13 +139,19 @@ class DatabaseAdoptionTest(unittest.TestCase):
             self.assertEqual(connection.execute(
                 "SELECT count(*) FROM public.notalone_schema_migration"
             ).fetchone()[0], 0)
-        self.assertEqual(migrate(self.url, MIGRATIONS), ("036_source_deletion_tasks.sql",))
+        self.assertEqual(migrate(self.url, MIGRATIONS), (
+            "036_source_deletion_tasks.sql",
+            "037_pending_candidate_evidence_kind.sql",
+        ))
         self.assertEqual(migrate(self.url, MIGRATIONS), ())
         self.assertFalse(adopt_legacy_database(self.url, MIGRATIONS, self.backup).adopted)
         with psycopg.connect(self.url) as connection:
             self.assertEqual(connection.execute(
                 "SELECT name FROM public.notalone_schema_migration"
-            ).fetchall(), [("036_source_deletion_tasks.sql",)])
+            ).fetchall(), [
+                ("036_source_deletion_tasks.sql",),
+                ("037_pending_candidate_evidence_kind.sql",),
+            ])
 
     def test_full_035_needs_no_repair_and_preserves_ids_pause_and_message_evidence(self) -> None:
         owner, contact, binding, document, message = self._seed_scope()

@@ -19,6 +19,7 @@ from notalone.retrieval.models import (
     RetrievedMemory,
     RetrievedMessage,
     RetrievedOwnerMemory,
+    RetrievedPendingCandidate,
 )
 from notalone.retrieval.ports import RetrievalPort
 
@@ -30,6 +31,7 @@ __all__ = [
     "RetrievedMemory",
     "RetrievedMessage",
     "RetrievedOwnerMemory",
+    "RetrievedPendingCandidate",
     "RetrievalEvaluationCase",
     "RetrievalEvaluationMetrics",
     "RetrievalEvaluationObservation",

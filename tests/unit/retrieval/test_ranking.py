@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import unittest
 from datetime import datetime, timezone
 from uuid import UUID
@@ -10,18 +11,23 @@ from notalone.memory import (
     AdoptionMethod,
     InMemoryMemoryStore,
     MemoryCandidate,
+    MemoryCandidateStatus,
     MemoryCategory,
 )
 from notalone.retrieval import (
     InMemoryRetrieval,
     RetrievedMemory,
     RetrievedOwnerMemory,
+    RetrievedPendingCandidate,
 )
 from notalone.retrieval.lexical import build_query_tokens
 from notalone.retrieval.ranking import (
+    _memory_ranking_key,
     rank_memories,
+    rank_pending_candidates,
     recall_memories,
     recall_owner_memories,
+    recall_pending_candidates,
 )
 from notalone.scopes import ContactScope
 
@@ -378,6 +384,96 @@ class InMemoryOwnerRecallTest(unittest.TestCase):
                 owner_id=OWNER_ID,
                 query=123,  # type: ignore[arg-type]
             )
+
+
+def _pending(
+    candidate_id: str,
+    text: str,
+    *,
+    confidence: float = 1.0,
+    valid_at: datetime | None = None,
+) -> RetrievedPendingCandidate:
+    return RetrievedPendingCandidate(
+        candidate_id=UUID(candidate_id),
+        scope=SCOPE,
+        text=text,
+        category="preference",
+        source_ids=(SOURCE_ID,),
+        confidence=confidence,
+        valid_at=valid_at,
+    )
+
+
+class PendingCandidateRankingTest(unittest.TestCase):
+    """待确认候选排序不再冒充采纳方式（ADR-035 审查修复）。"""
+
+    def test_ranking_key_takes_an_explicit_manual_adoption_flag(self) -> None:
+        parameters = inspect.signature(_memory_ranking_key).parameters
+
+        self.assertIn("manual_adoption", parameters)
+        self.assertNotIn("adoption_method", parameters)
+
+    def test_status_is_the_memory_lifecycle_enum(self) -> None:
+        candidate = _pending("20000000-0000-0000-0000-000000000001", "对方准备换工作")
+
+        self.assertIs(candidate.status, MemoryCandidateStatus.PENDING)
+
+    def test_equal_score_candidates_sort_by_confidence(self) -> None:
+        low = _pending(
+            "20000000-0000-0000-0000-000000000002",
+            "对方喜欢徒步",
+            confidence=0.30,
+        )
+        high = _pending(
+            "20000000-0000-0000-0000-000000000003",
+            "对方喜欢徒步",
+            confidence=0.90,
+        )
+
+        ranked = rank_pending_candidates(
+            (low, high),
+            query_tokens=build_query_tokens(QUERY),
+            limit=5,
+        )
+
+        self.assertEqual(
+            tuple(candidate.candidate_id for candidate in ranked),
+            (high.candidate_id, low.candidate_id),
+        )
+
+    def test_query_none_keeps_revalidation_semantics(self) -> None:
+        candidates = (
+            _pending("20000000-0000-0000-0000-000000000004", "对方准备换工作"),
+            _pending("20000000-0000-0000-0000-000000000005", "对方正在考虑养猫"),
+        )
+
+        recalled = recall_pending_candidates(candidates, query=None, limit=1)
+
+        self.assertEqual(recalled, (candidates[0],))
+        self.assertIsNone(recalled[0].relevance_score)
+
+    def test_timestamp_and_identifier_break_ties_deterministically(self) -> None:
+        valid_at = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        first = _pending(
+            "20000000-0000-0000-0000-000000000006",
+            "对方喜欢徒步",
+            valid_at=valid_at,
+        )
+        undated = _pending(
+            "20000000-0000-0000-0000-000000000007",
+            "对方喜欢徒步",
+        )
+
+        ranked = rank_pending_candidates(
+            (undated, first),
+            query_tokens=build_query_tokens(QUERY),
+            limit=5,
+        )
+
+        self.assertEqual(
+            tuple(candidate.candidate_id for candidate in ranked),
+            (first.candidate_id, undated.candidate_id),
+        )
 
 
 class InMemoryRecallTest(unittest.TestCase):

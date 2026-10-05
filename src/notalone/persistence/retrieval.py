@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
 import psycopg
 from psycopg.rows import dict_row
 
-from notalone.memory import ConfirmedMemory, MemoryPort
+from notalone.memory import (
+    ConfirmedMemory,
+    MemoryCandidate,
+    MemoryPort,
+)
 from notalone.persistence.memory_store import (
     MemoryPersistenceError,
     PostgresMemoryStore,
@@ -23,8 +27,14 @@ from notalone.retrieval.models import (
     RetrievedMemory,
     RetrievedMessage,
     RetrievedOwnerMemory,
+    RetrievedPendingCandidate,
 )
-from notalone.retrieval.ranking import recall_memories, recall_owner_memories
+from notalone.retrieval.pending import select_current_pending_candidates
+from notalone.retrieval.ranking import (
+    recall_memories,
+    recall_owner_memories,
+    recall_pending_candidates,
+)
 from notalone.memory.ports import OwnerMemoryPort
 from notalone.scopes import ContactScope
 
@@ -218,6 +228,148 @@ class PostgresRetrieval:
             if memory_ids is None or memory.memory_id in memory_ids
         )
         return recall_memories(retrieved, query=query, limit=limit)
+
+    def search_pending_candidates(
+        self,
+        *,
+        scope: ContactScope,
+        query: str | None = None,
+        limit: int = 3,
+        candidate_ids: tuple[UUID, ...] | None = None,
+    ) -> tuple[RetrievedPendingCandidate, ...]:
+        """返回当前联系人范围内仍待确认、来源可用的候选。
+
+        这条轨独立于已确认记忆集合：已确认、已否决、已失效、超出有效期或
+        来源不可用的候选一律返回空，避免把未确认内容当成资料引用。
+        """
+
+        self._validate_scope(scope)
+        if query is not None and not isinstance(query, str):
+            raise TypeError("待确认候选检索 query 必须是字符串或 None。")
+        if not isinstance(limit, int) or not 1 <= limit <= 20:
+            raise ValueError("检索 limit 超出模块预算。")
+        if candidate_ids is not None and (
+            not isinstance(candidate_ids, tuple)
+            or any(
+                not isinstance(candidate_id, UUID)
+                for candidate_id in candidate_ids
+            )
+        ):
+            raise ValueError("待确认候选复验引用结构无效。")
+        try:
+            candidates = self._memory_store.list_pending_candidates(scope)
+        except MemoryPersistenceError:
+            raise RetrievalError("待确认候选检索失败。") from None
+        except RetrievalError:
+            raise
+        except Exception:
+            raise RetrievalError("待确认候选检索失败。") from None
+        if not isinstance(candidates, tuple) or any(
+            not isinstance(candidate, MemoryCandidate)
+            or candidate.scope != scope
+            for candidate in candidates
+        ):
+            raise RetrievalInvariantError("待确认候选检索结果超出联系人范围。")
+        now = datetime.now(timezone.utc)
+        # 与内存适配器共用同一份「pending + 范围 + 有效期 + 来源可用」谓词；
+        # store 侧 SQL 仍是权威路径，来源核验失败必须让整条轨失败。
+        scoped = select_current_pending_candidates(
+            candidates,
+            scope=scope,
+            now=now,
+            candidate_ids=candidate_ids,
+            available_source_ids=lambda source_ids: self._available_source_ids(
+                scope=scope,
+                source_ids=source_ids,
+            ),
+        )
+        retrieved = tuple(
+            self._pending_candidate_from(candidate) for candidate in scoped
+        )
+        return recall_pending_candidates(retrieved, query=query, limit=limit)
+
+    def _available_source_ids(
+        self,
+        *,
+        scope: ContactScope,
+        source_ids: tuple[UUID, ...],
+    ) -> frozenset[UUID]:
+        """复用已确认记忆的来源口径：文档须 active，观察与消息须仍存在。"""
+
+        if not source_ids:
+            return frozenset()
+        try:
+            with self._connect() as connection:
+                connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+                )
+                rows = connection.execute(
+                    f"""
+                    SELECT requested.source_id
+                    FROM unnest(%s::uuid[]) AS requested(source_id)
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM public.source_document AS source
+                        WHERE source.owner_id = %s
+                          AND source.contact_id = %s
+                          AND source.id = requested.source_id
+                          AND source.status = 'active'
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                        FROM public.local_wechat_observation AS observation
+                        WHERE observation.owner_id = %s
+                          AND observation.contact_id = %s
+                          AND observation.id = requested.source_id
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                        FROM public.message AS message
+                        WHERE message.owner_id = %s
+                          AND message.contact_id = %s
+                          AND message.id = requested.source_id
+                          AND {valid_source_ref_exists_sql("message")}
+                    )
+                    """,
+                    (
+                        list(source_ids),
+                        scope.owner_id,
+                        scope.contact_id,
+                        scope.owner_id,
+                        scope.contact_id,
+                        scope.owner_id,
+                        scope.contact_id,
+                    ),
+                ).fetchall()
+        except psycopg.Error:
+            raise RetrievalError("待确认候选来源核验失败。") from None
+        except (KeyError, TypeError, ValueError):
+            raise RetrievalInvariantError(
+                "待确认候选来源核验结果结构无效。"
+            ) from None
+        return frozenset(
+            row["source_id"] for row in rows if isinstance(row["source_id"], UUID)
+        )
+
+    @staticmethod
+    def _pending_candidate_from(
+        candidate: MemoryCandidate,
+    ) -> RetrievedPendingCandidate:
+        return RetrievedPendingCandidate(
+            candidate_id=candidate.candidate_id,
+            scope=candidate.scope,
+            text=candidate.text,
+            category=candidate.category.value,
+            source_ids=candidate.source_ids,
+            topic=candidate.topic.value,
+            subject=candidate.subject.value,
+            status=candidate.status,
+            confidence=candidate.confidence,
+            risk_flags=candidate.risk_flags,
+            valid_at=candidate.valid_at,
+            invalid_at=candidate.invalid_at,
+            timing=candidate.timing,
+        )
 
     def search_owner_memories(
         self,

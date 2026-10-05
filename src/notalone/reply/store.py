@@ -13,8 +13,10 @@ from uuid import UUID, uuid4
 from notalone.reply.context import (
     ContextEvidence,
     ContinuedReplyCandidate,
+    EVIDENCE_KINDS,
     ReplyContext,
     ToolCallTrace,
+    evidence_contract_is_valid,
 )
 from notalone.reply.errors import (
     ReplyContinuationError,
@@ -553,14 +555,7 @@ class InMemoryReplyStore:
         evidence_ids: set[UUID] = set()
         for item in context.evidence:
             if (
-                item.kind
-                not in (
-                    "message",
-                    "confirmed_memory",
-                    "owner_memory",
-                    "user_draft",
-                    "continued_candidate",
-                )
+                item.kind not in EVIDENCE_KINDS
                 or not isinstance(item.evidence_id, UUID)
                 or item.evidence_id in evidence_ids
                 or not isinstance(item.text, str)
@@ -573,6 +568,11 @@ class InMemoryReplyStore:
                 or not isinstance(item.selection_reason, str)
                 or not isinstance(item.status, str)
                 or not item.status.strip()
+                or not evidence_contract_is_valid(
+                    kind=item.kind,
+                    status=item.status,
+                    selection_reason=item.selection_reason,
+                )
                 or (
                     item.valid_at is not None
                     and not isinstance(item.valid_at, datetime)
