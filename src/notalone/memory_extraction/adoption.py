@@ -26,6 +26,10 @@ from notalone.memory_extraction.adjudication import (
     SimilarMemory,
     similarity,
 )
+from notalone.memory_extraction.dimensions import (
+    DEFAULT_DIMENSION_RELEASE,
+    DimensionRelease,
+)
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.flow import ExtractionOutcome
 from notalone.memory_extraction.models import ExtractedFact, FactSubject
@@ -75,6 +79,7 @@ class MemoryAdoption:
         "_threshold",
         "_similarity_threshold",
         "_pragmatic_interpreter",
+        "_dimension_release",
     )
 
     def __init__(
@@ -87,11 +92,16 @@ class MemoryAdoption:
         confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
         pragmatic_interpreter: PragmaticInterpreter | None = None,
+        dimension_release: DimensionRelease | None = None,
     ) -> None:
         if memory_port is None:
             raise TypeError("必须显式注入联系人级记忆 port。")
         if not 0.0 < confidence_threshold <= 1.0:
             raise ValueError("置信度门槛必须在 0 到 1 之间。")
+        if dimension_release is None:
+            dimension_release = DimensionRelease.from_environment()
+        elif not isinstance(dimension_release, DimensionRelease):
+            raise TypeError("维度放行表必须是 DimensionRelease。")
         self._memory_port = memory_port
         self._owner_memory_port = owner_memory_port
         self._adjudication_runtime = adjudication_runtime
@@ -101,6 +111,7 @@ class MemoryAdoption:
         self._pragmatic_interpreter = (
             pragmatic_interpreter or PragmaticInterpreter()
         )
+        self._dimension_release = dimension_release
 
     def adopt(self, scope: ContactScope, outcome: ExtractionOutcome) -> AdoptionStats:
         """按主体分流落库并返回统计；整体失败时不产生任何写入。"""
@@ -318,8 +329,16 @@ class MemoryAdoption:
         *,
         pragmatic_decision=None,
     ) -> bool:
+        """四道合取项：语用、置信度、风险白名单，以及维度放行。
+
+        前三项的判定仍由 :func:`can_auto_adopt` 负责，语义不变；维度放行
+        是独立的第四项，默认空放行表下任何维度都安静待确认（ADR-036）。
+        """
+
         decision = pragmatic_decision or self._pragmatic_interpreter.interpret(fact)
-        return can_auto_adopt(fact, decision, confidence_threshold=self._threshold)
+        return can_auto_adopt(
+            fact, decision, confidence_threshold=self._threshold
+        ) and self._dimension_release.allows(fact)
 
 
     def _pending_exists(self, scope: ContactScope, fact) -> bool:
@@ -413,7 +432,13 @@ def can_auto_adopt(
     *,
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
 ) -> bool:
-    """共享的无副作用采纳门槛；通过只代表可走自动采纳路径。"""
+    """共享的无副作用采纳门槛；通过只代表可走自动采纳路径。
+
+    这里只判定原有三道合取项（语用 CONFIRMABLE、置信度、风险白名单），
+    供评测工具报告"若放行该维度"的理想去向。实际采纳还要再过
+    :class:`~notalone.memory_extraction.dimensions.DimensionRelease`
+    这一道独立的维度放行项，见 :meth:`MemoryAdoption._can_auto_adopt`。
+    """
     return (
         decision.disposition is MemoryDisposition.CONFIRMABLE
         and fact.confidence >= confidence_threshold

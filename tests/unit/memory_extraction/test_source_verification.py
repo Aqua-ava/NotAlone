@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from notalone.memory import InMemoryMemoryStore
 from notalone.memory_extraction.adoption import MemoryAdoption
+from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
 from notalone.memory_extraction.flow import ExtractionFlow
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.models import ExtractionFailureKind
@@ -38,7 +39,9 @@ class SourceVerificationFlowTest(unittest.TestCase):
         store = InMemoryMemoryStore()
         scope = ContactScope(window.owner_id, window.contact_id)
 
-        stats = MemoryAdoption(memory_port=store).adopt(scope, outcome)
+        stats = MemoryAdoption(
+            memory_port=store, dimension_release=RELEASE_ALL_DIMENSIONS,
+        ).adopt(scope, outcome)
 
         self.assertEqual(store.list_confirmed(scope), ())
         self.assertEqual(stats.pending, 1)
@@ -65,7 +68,9 @@ class SourceVerificationFlowTest(unittest.TestCase):
         store = InMemoryMemoryStore()
         scope = ContactScope(window.owner_id, window.contact_id)
 
-        stats = MemoryAdoption(memory_port=store).adopt(scope, outcome)
+        stats = MemoryAdoption(
+            memory_port=store, dimension_release=RELEASE_ALL_DIMENSIONS,
+        ).adopt(scope, outcome)
 
         self.assertEqual(store.list_confirmed(scope), ())
         self.assertEqual(store.list_pending_candidates(scope), ())
@@ -89,7 +94,9 @@ class SourceVerificationFlowTest(unittest.TestCase):
         store = InMemoryMemoryStore()
         scope = ContactScope(window.owner_id, window.contact_id)
 
-        stats = MemoryAdoption(memory_port=store).adopt(scope, outcome)
+        stats = MemoryAdoption(
+            memory_port=store, dimension_release=RELEASE_ALL_DIMENSIONS,
+        ).adopt(scope, outcome)
 
         self.assertEqual(store.list_confirmed(scope), ())
         self.assertEqual(stats.pending, 1)
@@ -148,7 +155,9 @@ class SourceVerificationFlowTest(unittest.TestCase):
                 store = InMemoryMemoryStore()
                 scope = ContactScope(window.owner_id, window.contact_id)
 
-                MemoryAdoption(memory_port=store).adopt(scope, outcome)
+                MemoryAdoption(
+            memory_port=store, dimension_release=RELEASE_ALL_DIMENSIONS,
+        ).adopt(scope, outcome)
 
                 self.assertEqual(outcome.accepted, ())
                 self.assertEqual(outcome.failure_kind, ExtractionFailureKind.INVALID_OUTPUT)
@@ -207,7 +216,9 @@ class SourceVerificationFlowTest(unittest.TestCase):
                 store = InMemoryMemoryStore()
                 scope = ContactScope(window.owner_id, window.contact_id)
 
-                stats = MemoryAdoption(memory_port=store).adopt(scope, outcome)
+                stats = MemoryAdoption(
+            memory_port=store, dimension_release=RELEASE_ALL_DIMENSIONS,
+        ).adopt(scope, outcome)
 
                 self.assertEqual(stats.adopted, int(expected_auto))
                 self.assertEqual(stats.pending, int(not expected_auto))
@@ -253,7 +264,9 @@ class SourceVerificationFlowTest(unittest.TestCase):
         store = InMemoryMemoryStore()
         scope = ContactScope(window.owner_id, window.contact_id)
 
-        stats = MemoryAdoption(memory_port=store).adopt(scope, outcome)
+        stats = MemoryAdoption(
+            memory_port=store, dimension_release=RELEASE_ALL_DIMENSIONS,
+        ).adopt(scope, outcome)
 
         self.assertEqual(stats.rejected_by_contract, 1)
         self.assertEqual(stats.skipped_non_memory, 1)
@@ -276,7 +289,9 @@ class SourceVerificationFlowTest(unittest.TestCase):
         store = InMemoryMemoryStore()
         scope = ContactScope(window.owner_id, window.contact_id)
 
-        stats = MemoryAdoption(memory_port=store).adopt(scope, outcome)
+        stats = MemoryAdoption(
+            memory_port=store, dimension_release=RELEASE_ALL_DIMENSIONS,
+        ).adopt(scope, outcome)
 
         self.assertEqual(stats.skipped_non_memory, 1)
         self.assertEqual(verifier.calls, [])
@@ -297,7 +312,9 @@ class SourceVerificationFlowTest(unittest.TestCase):
         store = InMemoryMemoryStore()
         scope = ContactScope(window.owner_id, window.contact_id)
 
-        MemoryAdoption(memory_port=store).adopt(scope, outcome)
+        MemoryAdoption(
+            memory_port=store, dimension_release=RELEASE_ALL_DIMENSIONS,
+        ).adopt(scope, outcome)
 
         self.assertEqual(outcome.failure_kind, ExtractionFailureKind.UNAVAILABLE)
         self.assertTrue(outcome.extraction_completed)

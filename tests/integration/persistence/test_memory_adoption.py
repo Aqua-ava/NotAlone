@@ -24,6 +24,7 @@ from notalone.memory_extraction.adoption import (
     AdoptionStats,
     MemoryAdoption,
 )
+from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
 from notalone.memory_extraction.flow import ExtractionOutcome
 from notalone.memory_extraction.models import (
     AssertionStatus,
@@ -141,9 +142,12 @@ class MemoryAdoptionTest(unittest.TestCase):
         self.memory_store = PostgresMemoryStore(TEST_DATABASE_URL)
         self.owner_store = PostgresOwnerMemoryStore(TEST_DATABASE_URL)
         self.watermark = PostgresWatermarkStore(TEST_DATABASE_URL)
+        # 本类验证原有三道门槛与持久化行为，显式放行全部维度；
+        # 默认收紧（空放行表）由 tests/unit 的 test_adoption 覆盖。
         self.adoption = MemoryAdoption(
             memory_port=self.memory_store,
             owner_memory_port=self.owner_store,
+            dimension_release=RELEASE_ALL_DIMENSIONS,
         )
         self.addCleanup(self._cleanup)
 
@@ -215,6 +219,7 @@ class MemoryAdoptionTest(unittest.TestCase):
             memory_port=self.memory_store,
             owner_memory_port=self.owner_store,
             adjudication_runtime=ReplaceWithFirstSimilar(),
+            dimension_release=RELEASE_ALL_DIMENSIONS,
         )
 
         stats = adoption.adopt(

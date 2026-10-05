@@ -52,6 +52,7 @@ python -m pip install -e .
 | `NOTALONE_DEEPSEEK_MODEL` | 覆盖模型名，默认 `deepseek-chat`（支持工具调用与结构化输出） |
 | `NOTALONE_DEEPSEEK_BASE_URL` | 覆盖默认官方 API 地址（中转或代理服务） |
 | `NOTALONE_TEST_DATABASE_URL` | 隔离测试库，名称必须以 `_test` 结尾 |
+| `NOTALONE_MEMORY_DIMENSION_GATE` | 记忆按维度放行开关；只有显式 `0` 才关闭，关闭后恢复"通过原有三道门槛即自动采纳"（见 ADR-036） |
 
 `.env` 已被 Git 忽略，不应提交或分享。
 
@@ -121,6 +122,8 @@ notalone-task-cleanup                        # 删除超过 90 天的终态任�
 
 提取候选先经证据契约与逐条来源语义核验：支持才继续原采纳门，证据不足留待确认，无支持拒绝，未核验不能自动入库。核验不改写正文、主体、来源或有效期；返回片段必须是候选来源中的真实原文，并包含主消息。之后仍执行置信度与风险门槛（低于 0.7 或带敏感/未知风险留待定）、删除指纹和写入裁决，达标者自动采纳、标记 `auto` 并可撤销。生产 CLI／Worker 默认用既有模型每窗口至多增加一次核验，单批最多 60 条；提取与核验各有无正文台账。网络或模型不可用时不推进该批水位；非法结构输出按 ADR-029 连续三次后记录可见跳过并推进，未跳过前不推进。Worker 模型或网络暂时失败最多自动重试 3 次并续期步骤租约，进程中断后重跑从未完成步骤继续，无任务时输出 `status=idle`。`index -> verify` 按确定性代码维护联系人记忆目录（分类、主题提示和 memory_id 引用，最多 20 个主题），不复制正文。手动录入标记 `manual`，支持联系人级与 owner 级。所有命令输出只含状态、计数和元数据，不含聊天正文或模型完整输入输出。目标流程见 ADR-014、ADR-015、ADR-018、ADR-033。
 
+自动采纳在原有三道门槛之上再叠加一道**按维度放行**（ADR-036）：一条候选还要落到已放行的维度键才会自动写入，无法明确判定维度键的候选一律视为未放行。**默认放行表为空**，因此当前所有通过原有门槛的候选都进入待确认、不新增自动采纳；放行某一类需要该维度本轮评测达标签并由用户逐类批准，记录在 [记忆维度自动采纳放行台账](docs/memory-adoption-dimension-release-ledger.md)。当前 `paraphrase`、`reference`、`media`、`reported` 四个维度缺少必要结构化字段、无法从既有提取结果推导，即使达标也不能放行。运维回退设 `NOTALONE_MEMORY_DIMENSION_GATE=0`，恢复本门启用前的行为。
+
 导入 HTTP 提交返回原 `task_id`。自动重试耗尽后，使用 `GET /api/tasks/status?contact_id=...&task_id=...` 查询数据库中的状态与步骤；重启后仍可读取。`POST /api/tasks/retry` 明确提供 `contact_id + task_id`，将失败原任务恢复为 queued，随后 `POST /api/tasks/run` 提供相同范围与 `task_id` 执行。恢复保留成功步骤，指定执行不会领取该联系人的其他任务；来源进入删除流程后不能恢复导入任务。CLI 恢复在配置预检查和全局锁成功后执行，忙时不修改任务。步骤 `attempt_count` 表示当前重试轮次的尝试数，手动恢复后重新获得最多三次自动尝试；任务 `retry_count` 累计失败和手动恢复次数，不代表累计模型调用数。
 
 默认启动继续领取最早可执行任务；显式恢复按原任务领取的局部例外见 [ADR-034](architecture/adr/034-explicit-failed-task-recovery-selection.md)，全局串行锁和预检查不变。
@@ -170,9 +173,11 @@ python -m notalone.memory_extraction.evaluation --baseline  # 仅合成资料：
 保留旧 120 条七维度用例，另有 15 个独立来源场景的逐命题挑战，其中 6 个为预留变体。
 默认评测同时走来源核验，`--baseline` 只对固定仓库合成集合测未经核验的潜在去向，不提供生产绕过入口。
 逐候选完整对照允许命题、主体、限定、时间与去向，并检查每条期望命题召回；正确输出不能覆盖额外错误。
-自动无支持主张计安全错误，记错人独立计数。旧集合仅部分有严格命题标注，汇总显式列出语义覆盖；
-未标注用例不能证明语义维度达标。同义正则是受控测试 oracle，未匹配结果仍需核对原文，不代表通用语义证明。
-`auto` 表示通过正式采纳门的路径，评测不执行存储去重或写入裁决；不能从有限合成结果推断真实聊天准确率。
+自动无支持主张计安全错误，记错人独立计数。汇总的达标签按 ADR-027 第 2 条判定：该维度用例数 ≥15、假事 0、记错人 0、一般错误 ≤1；
+语义标注覆盖（`semantic_cases`／`semantic_scenarios`）作为单独字段如实报告，不参与达标签判定，未标注用例不能证明语义维度达标。
+达到门槛只是放行某一维度的必要条件，仍需用户逐类批准并记入 [放行台账](docs/memory-adoption-dimension-release-ledger.md)（见 ADR-036）。
+同义正则是受控测试 oracle，未匹配结果仍需核对原文，不代表通用语义证明。
+`auto` 表示通过正式采纳门的路径，评测不执行存储去重或写入裁决，也不叠加运行时的维度放行门（否则未放行维度永远无法积累放行证据）；不能从有限合成结果推断真实聊天准确率。
 
 独立方法复刻实验提供现有方式、叙事后提取、来源时间精修和组合四条路径：
 
@@ -207,5 +212,6 @@ NOTALONE_DISABLE_DOTENV=1 python -m unittest tests.integration.server.test_core_
 
 - [CONTEXT.md](CONTEXT.md)：统一领域词汇
 - [architecture/](architecture/README.md)：现行规格、设计草案与 ADR 索引
+- [记忆维度自动采纳放行台账](docs/memory-adoption-dimension-release-ledger.md)：当前放行表、放行证据与回退步骤
 - [docs/agents/](docs/agents/)：工程、领域与任务工作流
 - [website/](website/README.md)：产品官网（本地预览与部署）

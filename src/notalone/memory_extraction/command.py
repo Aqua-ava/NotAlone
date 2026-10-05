@@ -18,6 +18,7 @@ from notalone.memory.models import (
     MemoryTopic,
 )
 from notalone.memory_extraction.adoption import AdoptionStats, MemoryAdoption
+from notalone.memory_extraction.dimensions import DimensionRelease
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.flow import ExtractionFlow, ExtractionOutcome
 from notalone.memory_extraction.models import (
@@ -101,6 +102,7 @@ def run_extraction(
     context_after: int = EXTRACTION_CONTEXT_AFTER,
     provider: str = "deepseek",
     model_name: str | None = None,
+    dimension_release: DimensionRelease | None = None,
 ) -> ExtractionRunStats:
     """按水位分批串行提取并采纳；输出不可用的批次连续失败后跳过。"""
 
@@ -144,6 +146,7 @@ def run_extraction(
         owner_memory_port=owner_memory_port,
         adjudication_runtime=adjudication_runtime,
         ledger=ledger,
+        dimension_release=dimension_release,
     )
     timed_runtime = _TimedExtractionRuntime(runtime)
     flow = ExtractionFlow(

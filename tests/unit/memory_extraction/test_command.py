@@ -30,6 +30,7 @@ from notalone.memory_extraction.command import (
     memory_list_main,
     run_extraction,
 )
+from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
 from notalone.memory_extraction.errors import (
     ExtractionInvalidOutputError,
     ExtractionRuntimeError,
@@ -304,6 +305,9 @@ class RunExtractionTest(unittest.TestCase):
         self.memory_port = RecordingMemoryPort()
         self.owner_port = RecordingOwnerPort()
         self.watermark = RecordingWatermark()
+        # 本类验证原有三道门槛与批次统计，显式放行全部维度；
+        # 默认收紧（空放行表）由 test_adoption 单独覆盖。
+        self.dimension_release = RELEASE_ALL_DIMENSIONS
 
     def test_ledger_keeps_extraction_and_verification_latency_and_start_separate(self) -> None:
         messages = (replace(_messages(1)[0], text="我习惯直接打电话沟通"),)
@@ -339,6 +343,7 @@ class RunExtractionTest(unittest.TestCase):
                 owner_memory_port=self.owner_port,
                 ledger=ledger,
                 model_name="extraction-fake",
+                dimension_release=self.dimension_release,
             )
 
         self.assertEqual(stats.adopted, 1)
@@ -434,6 +439,7 @@ class RunExtractionTest(unittest.TestCase):
             owner_memory_port=self.owner_port,
             ledger=ledger,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
         )
 
         self.assertEqual(stats.adopted, 1)
@@ -457,6 +463,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=store,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
         )
 
         self.assertEqual(stats.adopted, 0)
@@ -482,6 +489,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=store,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
         )
 
         self.assertEqual(stats.pending, 1)
@@ -511,6 +519,7 @@ class RunExtractionTest(unittest.TestCase):
             owner_memory_port=self.owner_port,
             ledger=ledger,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
         )
 
         self.assertEqual(stats.failed_batches, 0)
@@ -534,6 +543,7 @@ class RunExtractionTest(unittest.TestCase):
             owner_memory_port=self.owner_port,
             ledger=ledger,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
         )
 
         failed = run_extraction(
@@ -607,6 +617,7 @@ class RunExtractionTest(unittest.TestCase):
                 owner_memory_port=self.owner_port,
                 ledger=ledger,
                 watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             )
             if attempt < 3:
                 self.assertEqual(stats.failed_batches, 1)
@@ -669,6 +680,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -688,6 +700,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -705,6 +718,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -723,6 +737,7 @@ class RunExtractionTest(unittest.TestCase):
             owner_memory_port=self.owner_port,
             ledger=ledger,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -779,6 +794,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -823,6 +839,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -875,6 +892,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -906,6 +924,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -934,6 +953,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -969,6 +989,7 @@ class RunExtractionTest(unittest.TestCase):
                 ExtractionInvalidOutputError("裁决模型未返回结构化结果。")
             ),
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -1000,6 +1021,7 @@ class RunExtractionTest(unittest.TestCase):
             ),
             ledger=ledger,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 

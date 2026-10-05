@@ -10,6 +10,7 @@ from uuid import uuid4
 from notalone.memory_extraction.adoption import can_auto_adopt
 from notalone.memory import InMemoryMemoryStore
 from notalone.memory_extraction.adoption import MemoryAdoption
+from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
 from notalone.scopes import ContactScope
 from notalone.memory_extraction.errors import (
     ExtractionInvalidOutputError,
@@ -112,7 +113,10 @@ class ExtractionFlowTest(unittest.TestCase):
         ).run(window)
         store = InMemoryMemoryStore()
         scope = ContactScope(window.owner_id, window.contact_id)
-        MemoryAdoption(memory_port=store).adopt(scope, outcome)
+        MemoryAdoption(
+            memory_port=store,
+            dimension_release=RELEASE_ALL_DIMENSIONS,
+        ).adopt(scope, outcome)
         memory = store.list_confirmed(scope)[0]
 
         self.assertEqual(memory.timing.source_started_at, datetime(2024, 2, 1, tzinfo=timezone.utc))

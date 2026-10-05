@@ -22,6 +22,7 @@ from notalone.memory_extraction.command import (
     ExtractionRunStats,
     run_extraction,
 )
+from notalone.memory_extraction.dimensions import DimensionRelease
 from notalone.memory_extraction.errors import (
     ExtractionRuntimeError,
     MemoryExtractionError,
@@ -162,6 +163,7 @@ class PostgresMemoryExtractionRunner:
         "_adjudication_runtime",
         "_batch_size",
         "_database_url",
+        "_dimension_release",
         "_ledger",
         "_memory_port",
         "_model_name",
@@ -186,6 +188,7 @@ class PostgresMemoryExtractionRunner:
         batch_size: int = EXTRACTION_BATCH_SIZE,
         provider: str = "deepseek",
         model_name: str | None = None,
+        dimension_release: DimensionRelease | None = None,
     ) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
@@ -196,6 +199,12 @@ class PostgresMemoryExtractionRunner:
             raise ValueError(
                 f"记忆提取批次大小必须在 1 到 {EXTRACTION_BATCH_SIZE} 之间。"
             )
+        # None 表示沿用运维开关与默认空放行表（ADR-036），不是"全部放行"。
+        if dimension_release is None:
+            dimension_release = DimensionRelease.from_environment()
+        elif not isinstance(dimension_release, DimensionRelease):
+            raise TypeError("维度放行表必须是 DimensionRelease。")
+        self._dimension_release = dimension_release
         self._database_url = database_url
         if runtime is None:
             from notalone.memory_extraction.adapters import (
@@ -261,6 +270,7 @@ class PostgresMemoryExtractionRunner:
             batch_size=self._batch_size,
             provider=self._provider,
             model_name=self._model_name,
+            dimension_release=self._dimension_release,
         )
 
 

@@ -59,6 +59,8 @@
 32. [ADR-032：审计基线与实际迁移账本分开](adr/032-audited-legacy-schema-baseline.md)
 33. [ADR-033：记忆采纳前核验来源语义支持](adr/033-source-semantic-verification-before-adoption.md)
 34. [ADR-034：显式失败任务恢复按原任务领取](adr/034-explicit-failed-task-recovery-selection.md)
+35. [ADR-035：待确认候选作为强制标注的未确认参考进入回复](adr/035-pending-candidate-unconfirmed-reply-reference.md)
+36. [ADR-036：按维度放行自动采纳](adr/036-per-dimension-adoption-release.md)
 
 ## 当前架构决策
 
@@ -67,7 +69,9 @@
 - 文字是统一的检索与生成表示；前台 display name OCR、本地微信 CLI、截图和语音都是输入适配器。
 - Mac 前台 OCR 由 display name 和左侧选中会话元数据优先定位当前会话，头像视觉指纹只作备用；CLI 独立同步用户主动选择并确认的联系人及我方文字增量，首次不预选会话。CLI 的外部会话标识不能替代 `contact_id`，同步范围与停止/恢复规则见 ADR-030。
 - 生成只使用已选联系人及用户本人范围内的有界上下文；模型提取的记忆必须带来源、标记 `auto` 且可撤销。
+- 自动采纳在原有语用、置信度与风险门槛之上再叠加一道按维度放行：默认放行表为空，未放行的维度安静待确认；放行某一类需要本轮评测达标签与用户逐类批准，运维回退见 `NOTALONE_MEMORY_DIMENSION_GATE`（见 ADR-036、[放行台账](../docs/memory-adoption-dimension-release-ledger.md)）。
 - 关系记忆与本人记忆不设置固定常驻模式；记忆召回第一期按当前正文做确定性中文词法评分，使用独立双预算和相关性阈值；联系人记忆目录只保留版本复验职责。
+- 待确认候选可以参与候选回复，但只能用独立证据类型和独立预算、带强制「未确认」标注作为参考，不得写成确定事实，也不进入已确认记忆集合；用户否决后永久不再参与（见 ADR-035）。
 - 候选回复只在应用内展示，最终由用户修改并亲自发送。
 
 ## 状态规则
