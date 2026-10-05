@@ -34,6 +34,7 @@ from notalone.application.reply_service import ReplyService
 from notalone.conversation.models import ConversationObservation
 from notalone.memory_extraction.adapters import LangChainExtractionRuntime
 from notalone.memory_extraction.adjudication_adapters import LangChainAdjudicationRuntime
+from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
 from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime
 from notalone.persistence.background_tasks import PostgresBackgroundTaskRepository
 from notalone.persistence.contact_memory_index import PostgresContactMemoryIndexRepository
@@ -226,6 +227,10 @@ class CoreBusinessFlowFixture:
             ),
             adjudication_runtime=LangChainAdjudicationRuntime(model=self.extraction_model),
             ledger=ledger, provider="synthetic", model_name="scripted-core-test",
+            # 本验收只替换模型边界、保留真实采纳链路，因此显式放行全部维度；
+            # 默认收紧（空放行表、未放行维度安静待确认）由
+            # tests/unit/memory_extraction/test_adoption.py 单独覆盖。
+            dimension_release=RELEASE_ALL_DIMENSIONS,
         )
 
         def lock_connection():

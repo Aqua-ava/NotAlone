@@ -340,7 +340,6 @@ class MemoryAdoption:
             fact, decision, confidence_threshold=self._threshold
         ) and self._dimension_release.allows(fact)
 
-
     def _pending_exists(self, scope: ContactScope, fact) -> bool:
         list_pending = getattr(self._memory_port, "list_pending_candidates", None)
         if not callable(list_pending):

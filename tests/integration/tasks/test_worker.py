@@ -18,6 +18,7 @@ from notalone.ingest.models import (
 )
 from notalone.ingest.normalizer import normalize_document
 from notalone.memory_extraction.command import ExtractionRunStats
+from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
 from notalone.persistence.background_tasks import (
     PostgresBackgroundTaskRepository,
 )
@@ -430,6 +431,9 @@ class BackgroundTaskWorkerTest(unittest.TestCase):
             runtime=FakeExtractionRuntime(),
             verification_runtime=SyntheticSupportingVerifier(),
             model_name="fake-memory-model",
+            # 本用例验证 runner 复用的提取与水位边界，显式放行全部维度；
+            # 默认收紧（空放行表）由 tests/unit 的 test_adoption 覆盖。
+            dimension_release=RELEASE_ALL_DIMENSIONS,
         )
         worker = self._worker(runner)
         worker_id = uuid4()

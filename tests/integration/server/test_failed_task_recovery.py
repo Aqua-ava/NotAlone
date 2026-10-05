@@ -24,6 +24,7 @@ from psycopg import sql
 
 from notalone.application.import_service import ImportService, TaskHost
 from notalone.memory_extraction.adapters import LangChainExtractionRuntime
+from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
 from notalone.persistence.background_tasks import PostgresBackgroundTaskRepository
 from notalone.persistence.contact_memory_index import PostgresContactMemoryIndexRepository
 from notalone.persistence.postgres_repository import PostgresIngestRepository
@@ -111,6 +112,9 @@ class FailedTaskRecoveryHttpTest(unittest.TestCase):
         extraction = PostgresMemoryExtractionRunner(
             self.database_url, runtime=LangChainExtractionRuntime(model=self.model),
             provider="synthetic", model_name="scripted-recovery-test",
+            # 本用例只替换模型边界、保留真实采纳链路，因此显式放行全部维度；
+            # 默认收紧（空放行表）由 tests/unit/memory_extraction/test_adoption.py 覆盖。
+            dimension_release=RELEASE_ALL_DIMENSIONS,
         )
         backend = HttpBackend(create_app(
             database_url=self.database_url, owner_id=owner_id,

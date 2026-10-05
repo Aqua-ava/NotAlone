@@ -34,9 +34,10 @@
   ``reported`` 断言状态重叠，而运行时没有独立的转述来源字段，因此不
   单独放行；带 ``assertion_status = reported`` 的候选一律返回 ``None``。
 
-放行表默认**空集**（:data:`DEFAULT_DIMENSION_RELEASE`），并且
-``NOTALONE_MEMORY_DIMENSION_GATE=1`` 才启用这道门；关闭门等于恢复
-"通过原有三道门槛即自动采纳"的行为，见 :data:`RELEASE_ALL_DIMENSIONS`。
+放行表默认**空集**（:data:`DEFAULT_DIMENSION_RELEASE`），因此未放行维度一律
+安静待确认；运维回退把 ``NOTALONE_MEMORY_DIMENSION_GATE`` 显式设为 ``0``，
+关闭这道门即恢复"通过原有三道门槛即自动采纳"的行为，见
+:data:`RELEASE_ALL_DIMENSIONS`。
 """
 
 from __future__ import annotations
@@ -45,6 +46,7 @@ import os
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import cast
 
 from notalone.memory.models import FactSubject
 from notalone.memory_extraction.models import (
@@ -121,10 +123,14 @@ class DimensionRelease:
     def __post_init__(self) -> None:
         if type(self.gate_enabled) is not bool:
             raise TypeError("维度放行开关必须是 bool。")
-        if not isinstance(self.allowed, frozenset):
-            object.__setattr__(self, "allowed", frozenset(self.allowed))
+        # 构造参数允许直接写 ("subject",) 这类可迭代对象，便于测试与放行台账；
+        # 规范化只做一次，之后 frozen dataclass 里的 `allowed` 恒为 frozenset。
+        allowed = self.allowed
+        if not isinstance(allowed, frozenset):
+            allowed = frozenset(cast(Iterable[str], allowed))
+            object.__setattr__(self, "allowed", allowed)
         known = {item.value for item in MemoryDimension}
-        unknown = sorted(set(self.allowed) - known)
+        unknown = sorted(allowed - known)
         if unknown:
             raise ValueError(f"未知记忆维度：{unknown}。")
 
