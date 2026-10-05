@@ -18,7 +18,6 @@ from notalone.memory import (
 )
 from notalone.persistence import PostgresMemoryStore, PostgresRetrieval
 from notalone.reply.context import (
-    PENDING_CANDIDATE_SELECTION_REASON,
     ContextEvidence,
     ReplyContext,
     ReplyContextInvariantError,

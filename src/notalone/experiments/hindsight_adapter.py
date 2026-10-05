@@ -20,6 +20,7 @@ from notalone.retrieval.models import (
     RetrievedMemory,
     RetrievedMessage,
     RetrievedOwnerMemory,
+    RetrievedPendingCandidate,
 )
 from notalone.retrieval.ports import RetrievalPort
 from notalone.scopes import ContactScope
@@ -157,6 +158,23 @@ class HindsightRetrieval:
     ) -> tuple[RetrievedOwnerMemory, ...]:
         return self.local.search_owner_memories(
             owner_id=owner_id, query=query, limit=limit, memory_ids=memory_ids
+        )
+
+    def search_pending_candidates(
+        self,
+        *,
+        scope: ContactScope,
+        query: str | None = None,
+        limit: int = 3,
+        candidate_ids: tuple[UUID, ...] | None = None,
+    ) -> tuple[RetrievedPendingCandidate, ...]:
+        """待确认候选轨不属于 Hindsight 导航，直接委托底层权威 Port。"""
+
+        return self.local.search_pending_candidates(
+            scope=scope,
+            query=query,
+            limit=limit,
+            candidate_ids=candidate_ids,
         )
 
     def search_messages(

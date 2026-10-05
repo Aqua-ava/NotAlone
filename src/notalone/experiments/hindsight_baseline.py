@@ -50,6 +50,7 @@ from notalone.retrieval.models import (
     RetrievedMemory,
     RetrievedMessage,
     RetrievedOwnerMemory,
+    RetrievedPendingCandidate,
 )
 from notalone.retrieval.ports import RetrievalPort
 from notalone.scopes import ContactScope, VerifiedConversationScope
@@ -161,6 +162,23 @@ class _ObservedRetrieval:
                 query=query,
                 limit=limit,
                 memory_ids=memory_ids,
+            )
+        )
+
+    def search_pending_candidates(
+        self,
+        *,
+        scope: ContactScope,
+        query: str | None = None,
+        limit: int = 3,
+        candidate_ids: tuple[UUID, ...] | None = None,
+    ) -> tuple[RetrievedPendingCandidate, ...]:
+        return self._run(
+            lambda: self.delegate.search_pending_candidates(
+                scope=scope,
+                query=query,
+                limit=limit,
+                candidate_ids=candidate_ids,
             )
         )
 

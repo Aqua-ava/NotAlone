@@ -17,6 +17,7 @@ from notalone.retrieval.models import (
     RetrievedMemory,
     RetrievedMessage,
     RetrievedOwnerMemory,
+    RetrievedPendingCandidate,
 )
 from notalone.retrieval.ports import RetrievalPort
 from notalone.scopes import ContactScope
@@ -213,6 +214,23 @@ class PgVectorCandidateRetrieval:
             query=query,
             limit=limit,
             memory_ids=memory_ids,
+        )
+
+    def search_pending_candidates(
+        self,
+        *,
+        scope: ContactScope,
+        query: str | None = None,
+        limit: int = 3,
+        candidate_ids: tuple[UUID, ...] | None = None,
+    ) -> tuple[RetrievedPendingCandidate, ...]:
+        """向量导航不覆盖待确认候选轨：直接委托本地权威 Port。"""
+
+        return self.local.search_pending_candidates(
+            scope=scope,
+            query=query,
+            limit=limit,
+            candidate_ids=candidate_ids,
         )
 
     def search_messages(
