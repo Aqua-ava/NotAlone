@@ -14,6 +14,7 @@
 ## Comments
 
 - 2026-10-06：按批准提案启动 `time` + `truth_intent` 匿名合成评测，计划 44 条／88 次调用。第 3 条 `time` 用例出现首个 `false_fact`；现有 runner 未自动早停，人工停止时在途请求又完成，最终仅记录 24 条／39 次，随后关闭剩余预算。`time` 已出现假事，`truth_intent` 仅完成 19/20，故本轮是协议偏差下的未完成结果，不产生任何放行证据；详见[结果记录](../../../docs/memory-dimension-release-time-truth-intent-result-20261006.md)。不补跑、不改默认空放行表；如要再评测，需先修 runner、重新预注册并另批预算。
+- 2026-10-06：已在本机修复 runner 的可选 `--stop-on-safety-error` 早停开关，并新增 2 项离线契约测试；937→939 项单元测试通过。修复只用于未来新预注册版本，本轮剩余 49 次不重用，未重新联网。
 
 - 2026-10-06：基于档 A 归因形成新的[`time`／`truth_intent` 评测提案](../../../docs/memory-dimension-release-time-truth-intent-proposal-20261006.md)。本机 dry-run 核对 44 条用例、最多 88 次调用；提案未获预算批准前不读凭据、不联网、不修改放行表。
 

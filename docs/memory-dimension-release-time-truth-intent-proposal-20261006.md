@@ -13,7 +13,7 @@
 ## 固定范围与预算
 
 评测入口继续使用 `.scratch/memory-accuracy-next/release-eval/run_tier_a.py` 的
-合成隔离 runner，显式选择两个维度：
+合成隔离 runner，并显式启用 `--stop-on-safety-error`，选择两个维度：
 
 | 维度 | 用例数 | 说明 |
 | --- | ---: | --- |

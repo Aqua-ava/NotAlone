@@ -110,6 +110,16 @@ def prepare_output(output_dir: pathlib.Path) -> pathlib.Path:
     return run_dir
 
 
+def safety_stop_reason(result) -> str | None:
+    """返回预注册安全早停原因；没有假事或记错人时继续。"""
+
+    if result.false_fact_count:
+        return "检测到 false_fact，按预注册规则停止剩余调用。"
+    if result.wrong_subject_count:
+        return "检测到 wrong_subject，按预注册规则停止剩余调用。"
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", required=True,
@@ -120,6 +130,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="可重复；默认 subject 与 paraphrase。")
     parser.add_argument("--dry-run", action="store_true",
                         help="只列出用例与预算，不读凭据、不联网。")
+    parser.add_argument(
+        "--stop-on-safety-error", action="store_true",
+        help="首个假事或记错人结果后停止剩余调用。",
+    )
     args = parser.parse_args(argv)
 
     dimensions = tuple(args.dimension) or DEFAULT_DIMENSIONS
@@ -198,6 +212,11 @@ def main(argv: list[str] | None = None) -> int:
                 "dimension": case.dimension, "passed": result.passed,
                 "error_kind": result.error_kind, "calls": counting.calls,
             }, ensure_ascii=False), flush=True)
+            if args.stop_on_safety_error:
+                safety_stop = safety_stop_reason(result)
+                if safety_stop is not None:
+                    stopped = safety_stop
+                    break
 
     summaries = summarize(results)
     agg = {
