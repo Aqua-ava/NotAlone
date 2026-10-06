@@ -212,7 +212,7 @@ def main(argv: list[str] | None = None) -> int:
         }
         write_private(output_dir / "repeatability-summary.json", summary)
         print(encode(summary), flush=True)
-    return 0
+    return 1 if stopped == "evidence_write_failed" else 0
 
 
 if __name__ == "__main__":
