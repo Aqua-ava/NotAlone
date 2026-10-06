@@ -135,8 +135,8 @@ class DatabaseMigrationCommandTest(unittest.TestCase):
         result = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(result.returncode, 0, result.stderr)
         applied = json.loads(result.stdout)["applied"]
-        self.assertEqual(len(applied), 37)
-        self.assertEqual(applied[-1], "037_pending_candidate_evidence_kind.sql")
+        self.assertEqual(len(applied), 38)
+        self.assertEqual(applied[-1], "038_memory_candidate_interpretation.sql")
         repeated = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout)["applied"], [])

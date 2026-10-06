@@ -52,6 +52,21 @@ def _memory(contact_id: UUID = CONTACT_ID) -> ConfirmedMemory:
     )
 
 
+def _candidate(contact_id: UUID = CONTACT_ID, **overrides) -> MemoryCandidate:
+    values = {
+        "candidate_id": uuid4(),
+        "scope": _scope(contact_id),
+        "text": "对方喜欢提前约时间。",
+        "category": MemoryCategory.PREFERENCE,
+        "topic": MemoryTopic.OTHER,
+        "source_ids": (contact_id,),
+        "alternatives": ("也可能只是近期安排",),
+        "interpretation_reason": "消息表达的是稳定偏好。",
+    }
+    values.update(overrides)
+    return MemoryCandidate(**values)
+
+
 class FakeContactMemory:
     """记录调用并返回合成结果的记忆端口 fake。"""
 
@@ -318,6 +333,31 @@ class MemoryApiContractTest(unittest.TestCase):
         self.assertEqual(item["category"], "recent_state")
         self.assertEqual(item["status"], "pending")
         self.assertEqual(item["subject"], "contact")
+
+    def test_pending_candidate_exposes_interpretation_details_without_empty_shells(self) -> None:
+        explained = _candidate()
+        plain = _candidate(
+            alternatives=(),
+            interpretation_reason="",
+        )
+        self.contact.pending.extend((explained, plain))
+
+        response = self.client.get(
+            f"/api/contacts/{CONTACT_ID}/memory-candidates",
+            headers=self.headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        by_id = {
+            item["candidate_id"]: item
+            for item in response.json()["candidates"]
+        }
+        explained_payload = by_id[str(explained.candidate_id)]
+        self.assertEqual(explained_payload["alternatives"], ["也可能只是近期安排"])
+        self.assertEqual(explained_payload["interpretation_reason"], "消息表达的是稳定偏好。")
+        plain_payload = by_id[str(plain.candidate_id)]
+        self.assertNotIn("alternatives", plain_payload)
+        self.assertNotIn("interpretation_reason", plain_payload)
 
     def test_lists_owner_memories(self) -> None:
         memory = OwnerMemory(

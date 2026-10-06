@@ -99,6 +99,8 @@ class MemoryCandidate:
     invalid_at: datetime | None = None
     confidence: float = 1.0
     risk_flags: tuple[str, ...] = ()
+    alternatives: tuple[str, ...] = ()
+    interpretation_reason: str = ""
     failure_reason: str | None = None
     timing: MemoryTiming = MemoryTiming()
 
@@ -126,6 +128,13 @@ class MemoryCandidate:
             for flag in self.risk_flags
         ):
             raise ValueError("候选风险标记必须是非空字符串元组。")
+        if not isinstance(self.alternatives, tuple) or any(
+            not isinstance(item, str) or not item.strip()
+            for item in self.alternatives
+        ):
+            raise ValueError("候选备选解释必须是非空字符串元组。")
+        if not isinstance(self.interpretation_reason, str):
+            raise ValueError("候选语用判断依据必须是字符串。")
         if self.failure_reason is not None and (
             not isinstance(self.failure_reason, str)
             or not self.failure_reason.strip()

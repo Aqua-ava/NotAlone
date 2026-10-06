@@ -2274,7 +2274,7 @@ def _iso_or_none(value: datetime | None) -> str | None:
 
 
 def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "candidate_id": str(candidate.candidate_id),
         "text": candidate.text,
         "category": candidate.category.value,
@@ -2289,3 +2289,8 @@ def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
         "valid_at": _iso_or_none(candidate.valid_at),
         "invalid_at": _iso_or_none(candidate.invalid_at),
     }
+    if candidate.alternatives:
+        payload["alternatives"] = list(candidate.alternatives)
+    if candidate.interpretation_reason.strip():
+        payload["interpretation_reason"] = candidate.interpretation_reason
+    return payload

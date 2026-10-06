@@ -751,6 +751,14 @@ struct MainWindowView: View {
                                     .font(.caption2)
                                     .foregroundStyle(.orange)
                             }
+                            ForEach(
+                                ReplyEvidencePresentationPolicy.interpretationLines(for: candidate),
+                                id: \.self
+                            ) { line in
+                                Text(line)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                             if let sourceIds = candidate.sourceIds,
                                !sourceIds.isEmpty {
                                 Text("来源：\(sourceIds.joined(separator: "、"))")

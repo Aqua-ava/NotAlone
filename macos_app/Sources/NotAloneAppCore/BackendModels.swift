@@ -257,6 +257,8 @@ public struct MemoryCandidateEntry: Decodable, Equatable, Sendable, Identifiable
     public let confidence: Double?
     public let riskFlags: [String]?
     public let failureReason: String?
+    public let alternatives: [String]?
+    public let interpretationReason: String?
     public let validAt: String?
     public let invalidAt: String?
     public let timing: MemoryTimingEntry?

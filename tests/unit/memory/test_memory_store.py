@@ -120,6 +120,29 @@ class MemoryStoreTest(unittest.TestCase):
         candidate = self.store.create_candidate(self._candidate())
         self.assertEqual(candidate.status, MemoryCandidateStatus.PENDING)
 
+    def test_candidate_keeps_interpretation_explanations_through_lifecycle(self) -> None:
+        candidate = self.store.create_candidate(replace(
+            self._candidate(),
+            alternatives=("也可能是临时安排", "也可能只是转述"),
+            interpretation_reason="消息使用了将来时，且没有明确完成事实。",
+        ))
+
+        self.assertEqual(candidate.alternatives, ("也可能是临时安排", "也可能只是转述"))
+        self.assertEqual(candidate.interpretation_reason, "消息使用了将来时，且没有明确完成事实。")
+
+        confirmed = self.store.confirm(
+            scope=self.scope,
+            candidate_id=candidate.candidate_id,
+        )
+        stored_candidate = self.store.get_candidate(
+            scope=self.scope,
+            candidate_id=candidate.candidate_id,
+        )
+        self.assertEqual(stored_candidate.status, MemoryCandidateStatus.CONFIRMED)
+        self.assertEqual(stored_candidate.alternatives, candidate.alternatives)
+        self.assertEqual(stored_candidate.interpretation_reason, candidate.interpretation_reason)
+        self.assertEqual(confirmed.text, candidate.text)
+
     def test_candidate_can_be_rejected_or_invalidated_before_confirmation(self) -> None:
         rejected = self.store.create_candidate(self._candidate())
         rejected = self.store.reject_candidate(

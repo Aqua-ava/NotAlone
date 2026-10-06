@@ -53,6 +53,8 @@ _CANDIDATE_COLUMNS = """
     invalid_at AS candidate_invalid_at,
     confidence AS candidate_confidence,
     risk_flags AS candidate_risk_flags,
+    alternatives AS candidate_alternatives,
+    interpretation_reason AS candidate_interpretation_reason,
     failure_reason AS candidate_failure_reason,
     created_at AS recorded_at
 """
@@ -120,11 +122,12 @@ class PostgresMemoryStore:
                     INSERT INTO public.memory_candidate (
                         id, owner_id, contact_id, text_content, category,
                         topic, subject, source_ids, status, valid_at, invalid_at,
-                        confidence, risk_flags, failure_reason
+                        confidence, risk_flags, alternatives,
+                        interpretation_reason, failure_reason
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s
                     )
                     RETURNING {_CANDIDATE_COLUMNS}
                     """,
@@ -142,6 +145,8 @@ class PostgresMemoryStore:
                         candidate.invalid_at,
                         candidate.confidence,
                         list(candidate.risk_flags),
+                        list(candidate.alternatives),
+                        candidate.interpretation_reason or None,
                         candidate.failure_reason,
                     ),
                 ).fetchone()
@@ -226,11 +231,12 @@ class PostgresMemoryStore:
                     INSERT INTO public.memory_candidate (
                         id, owner_id, contact_id, text_content, category,
                         topic, subject, source_ids, status, valid_at, invalid_at,
-                        confidence, risk_flags, failure_reason
+                        confidence, risk_flags, alternatives,
+                        interpretation_reason, failure_reason
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s
                     )
                     RETURNING {_CANDIDATE_COLUMNS}
                     """,
@@ -248,6 +254,8 @@ class PostgresMemoryStore:
                         candidate.invalid_at,
                         candidate.confidence,
                         list(candidate.risk_flags),
+                        list(candidate.alternatives),
+                        candidate.interpretation_reason or None,
                         candidate.failure_reason,
                     ),
                 ).fetchone()
@@ -1066,6 +1074,8 @@ class PostgresMemoryStore:
             invalid_at=row["candidate_invalid_at"],
             confidence=row["candidate_confidence"],
             risk_flags=tuple(row["candidate_risk_flags"] or ()),
+            alternatives=tuple(row["candidate_alternatives"] or ()),
+            interpretation_reason=row["candidate_interpretation_reason"] or "",
             failure_reason=row["candidate_failure_reason"],
             timing=row["timing"],
         )

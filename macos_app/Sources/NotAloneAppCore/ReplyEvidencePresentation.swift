@@ -16,6 +16,9 @@ public enum ReplyEvidencePresentationPolicy {
     public static let fallbackKindLabel = "上下文材料"
     /// 未确认候选的固定标注，视觉与已确认依据区分。
     public static let unconfirmedBadge = "未确认 · 仅供参考"
+    private static let maxReasonCharacters = 240
+    private static let maxAlternativeCharacters = 160
+    private static let maxAlternatives = 3
 
     public static func pendingReference(
         for entry: ReplyEvidence,
@@ -121,7 +124,35 @@ public enum ReplyEvidencePresentationPolicy {
         if let riskFlags = candidate.riskFlags, !riskFlags.isEmpty {
             lines.append("风险标记：" + riskFlags.joined(separator: "、"))
         }
+        lines.append(contentsOf: interpretationLines(for: candidate))
         return lines
+    }
+
+    /// 展示模型自述的判断依据与备选解释；缺失、空值和超长内容均安全降级。
+    public static func interpretationLines(for candidate: MemoryCandidateEntry) -> [String] {
+        var lines: [String] = []
+        if let reason = candidate.interpretationReason {
+            let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                lines.append("判断依据：" + bounded(trimmed, limit: maxReasonCharacters))
+            }
+        }
+        if let alternatives = candidate.alternatives {
+            let values = alternatives
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .prefix(maxAlternatives)
+                .map { bounded($0, limit: maxAlternativeCharacters) }
+            if !values.isEmpty {
+                lines.append("备选解释：" + values.joined(separator: "；"))
+            }
+        }
+        return lines
+    }
+
+    private static func bounded(_ value: String, limit: Int) -> String {
+        guard value.count > limit else { return value }
+        return String(value.prefix(max(limit - 1, 0))) + "…"
     }
 
     private static func selectionReasonLine(_ reason: String) -> [String] {

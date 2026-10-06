@@ -228,6 +228,7 @@ Skill 管理模块必须在同一事务中递增 owner revision；本迁移和�
 `database/migrations/035_extraction_watermark_cascade.sql`
 `database/migrations/036_source_deletion_tasks.sql`
 `database/migrations/037_pending_candidate_evidence_kind.sql`
+`database/migrations/038_memory_candidate_interpretation.sql`
 
 第二十九个迁移新增 `cli_backfill_state`，按 owner、联系人和 active 绑定保存补齐触发、阶段、
 计数、可靠游标和失败原因等元数据，不保存聊天正文；绑定或联系人删除时级联清理。第三十个迁移

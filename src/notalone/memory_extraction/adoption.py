@@ -367,6 +367,8 @@ class MemoryAdoption:
                 invalid_at=fact.invalid_at,
                 confidence=fact.confidence,
                 risk_flags=fact.risk_flags,
+                alternatives=fact.alternatives,
+                interpretation_reason=fact.interpretation_reason,
                 timing=fact.timing,
             )
         )
@@ -408,6 +410,8 @@ class MemoryAdoption:
                 invalid_at=fact.invalid_at,
                 confidence=fact.confidence,
                 risk_flags=fact.risk_flags,
+                alternatives=fact.alternatives,
+                interpretation_reason=fact.interpretation_reason,
                 timing=fact.timing,
             )
         )

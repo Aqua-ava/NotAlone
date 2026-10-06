@@ -11,6 +11,7 @@ from uuid import UUID
 from notalone.memory import (
     AdoptionMethod,
     InMemoryMemoryStore,
+    MemoryCandidate,
     MemoryCategory,
     MemoryTopic,
 )
@@ -62,6 +63,16 @@ def _fact(**overrides: object) -> ExtractedFact:
     return ExtractedFact(**values)
 
 
+class RecordingMemoryStore(InMemoryMemoryStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.created: list[MemoryCandidate] = []
+
+    def create_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
+        self.created.append(candidate)
+        return super().create_candidate(candidate)
+
+
 class MemoryAdoptionTest(unittest.TestCase):
     """只通过 MemoryAdoption 和 MemoryPort 验证可观察生命周期。
 
@@ -86,6 +97,8 @@ class MemoryAdoptionTest(unittest.TestCase):
             ExtractionOutcome(
                 accepted=(self._fact(
                     risk_flags=("health",),
+                    alternatives=("也可能是短期尝试",),
+                    interpretation_reason="消息说明了近期行为，但没有说明是否长期保持。",
                     valid_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
                     invalid_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
                 ),)
@@ -97,7 +110,12 @@ class MemoryAdoptionTest(unittest.TestCase):
         candidates = self.store.list_pending_candidates(self.scope)
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].confidence, 0.92)
-        self.assertEqual(candidates[0].risk_flags, ("health",))
+        self.assertEqual(candidates[0].risk_flags, ("health", "pragmatic:ambiguous"))
+        self.assertEqual(candidates[0].alternatives, ("也可能是短期尝试",))
+        self.assertEqual(
+            candidates[0].interpretation_reason,
+            "消息说明了近期行为，但没有说明是否长期保持。",
+        )
         self.assertEqual(candidates[0].source_ids, (SOURCE_ID,))
         self.assertEqual(
             candidates[0].valid_at,
@@ -120,6 +138,22 @@ class MemoryAdoptionTest(unittest.TestCase):
         self.assertEqual(memory.confidence, 0.92)
         self.assertEqual(memory.risk_flags, ())
         self.assertEqual(memory.source_ids, (SOURCE_ID,))
+
+    def test_auto_adoption_keeps_interpretation_details_on_candidate(self) -> None:
+        fact = self._fact(
+            interpretation_reason="消息表达近期行为，但没有说明是否长期保持。",
+        )
+        store = RecordingMemoryStore()
+        adoption = MemoryAdoption(
+            memory_port=store,
+            dimension_release=RELEASE_ALL_DIMENSIONS,
+        )
+        stats = adoption.adopt(self.scope, ExtractionOutcome(accepted=(fact,)))
+
+        self.assertEqual(stats.adopted, 1)
+        created = store.created[0]
+        self.assertEqual(created.alternatives, ())
+        self.assertEqual(created.interpretation_reason, fact.interpretation_reason)
 
     def test_auto_adopted_shared_fact_keeps_candidate_subject(self) -> None:
         stats = self.adoption.adopt(

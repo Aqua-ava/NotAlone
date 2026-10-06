@@ -36,7 +36,9 @@ final class ReplyEvidencePresentationPolicyTests: XCTestCase {
         candidateId: String = "evidence-1",
         status: String = "pending",
         confidence: Double? = nil,
-        riskFlags: [String]? = nil
+        riskFlags: [String]? = nil,
+        alternatives: [String]? = nil,
+        interpretationReason: String? = nil
     ) throws -> MemoryCandidateEntry {
         var jsonObject: [String: Any] = [
             "candidate_id": candidateId,
@@ -47,6 +49,8 @@ final class ReplyEvidencePresentationPolicyTests: XCTestCase {
         ]
         if let confidence { jsonObject["confidence"] = confidence }
         if let riskFlags { jsonObject["risk_flags"] = riskFlags }
+        if let alternatives { jsonObject["alternatives"] = alternatives }
+        if let interpretationReason { jsonObject["interpretation_reason"] = interpretationReason }
         return try decoder.decode(
             MemoryCandidateEntry.self,
             from: JSONSerialization.data(withJSONObject: jsonObject)
@@ -114,6 +118,52 @@ final class ReplyEvidencePresentationPolicyTests: XCTestCase {
 
         XCTAssertTrue(result.detailLines.contains { $0.contains("42%") }, result.detailLines.description)
         XCTAssertTrue(result.detailLines.contains { $0 == "风险标记：敏感、证据不足" }, result.detailLines.description)
+    }
+
+    func testPendingCandidateShowsInterpretationReasonAndAlternatives() throws {
+        let entry = try evidence(kind: "pending_candidate", status: "pending")
+        let result = presentation(
+            entry,
+            candidates: [try candidate(
+                alternatives: ["也可能只是近期安排", "也可能是转述"],
+                interpretationReason: "消息使用了将来时，且没有明确完成事实。"
+            )]
+        )
+
+        XCTAssertTrue(
+            result.detailLines.contains("判断依据：消息使用了将来时，且没有明确完成事实。"),
+            result.detailLines.description
+        )
+        XCTAssertTrue(
+            result.detailLines.contains("备选解释：也可能只是近期安排；也可能是转述"),
+            result.detailLines.description
+        )
+    }
+
+    func testMissingOrEmptyInterpretationDetailsAreNotShown() throws {
+        let entry = try evidence(kind: "pending_candidate", status: "pending")
+        let result = presentation(
+            entry,
+            candidates: [try candidate(alternatives: [], interpretationReason: "")]
+        )
+
+        XCTAssertFalse(result.detailLines.contains { $0.hasPrefix("判断依据：") })
+        XCTAssertFalse(result.detailLines.contains { $0.hasPrefix("备选解释：") })
+    }
+
+    func testInterpretationDetailsAreBoundedBeforePresentation() throws {
+        let entry = try evidence(kind: "pending_candidate", status: "pending")
+        let result = presentation(
+            entry,
+            candidates: [try candidate(
+                alternatives: [String(repeating: "甲", count: 400)],
+                interpretationReason: String(repeating: "乙", count: 600)
+            )]
+        )
+
+        XCTAssertTrue(result.detailLines.contains { $0.hasPrefix("判断依据：") })
+        XCTAssertTrue(result.detailLines.contains { $0.hasSuffix("…") })
+        XCTAssertLessThanOrEqual(result.detailLines.joined().count, 700)
     }
 
     func testPendingCandidateWithoutCandidateDetailsStillFailsClosedToUnknownText() throws {
