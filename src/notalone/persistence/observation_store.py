@@ -16,15 +16,18 @@ from uuid import UUID, uuid4
 import psycopg
 
 from notalone.ingest.models import NormalizedMessage
+from notalone.persistence.extraction_trace import erase_source_traces
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.message_cleanup import (
     cleanup_derived_data,
     collect_orphan_message_ids,
     delete_messages,
 )
-from notalone.persistence.reply_cleanup import ReplyCleanupError, delete_source_replies
+from notalone.persistence.reply_cleanup import (
+    ReplyCleanupError,
+    delete_source_replies,
+)
 from notalone.scopes import ContactScope
-
 
 class ObservationPersistenceError(RuntimeError):
     """不暴露 SQL、连接信息或会话内容的观察持久化错误。"""
@@ -733,6 +736,9 @@ class PostgresObservationStore:
                         """,
                         (owner_id, contact_id, observation_id),
                     ).fetchall()
+                )
+                erase_source_traces(
+                    connection, owner_id=owner_id, removed_ids={observation_id}
                 )
                 deleted = connection.execute(
                     """

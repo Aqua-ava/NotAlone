@@ -16,13 +16,14 @@ from langchain_core.messages import AIMessage
 from notalone.ledger.adapters import InMemoryOutboundLedger
 from notalone.ledger.models import LedgerOutcome
 from notalone.memory.adapters import InMemoryMemoryStore
+from notalone.memory_trace.adapters import InMemoryTraceStore
 from notalone.scopes import ContactScope
 from notalone.tasks.command import (
     WorkerCommandStatus,
     run_worker,
     worker_main,
 )
-from notalone.tasks.models import BackgroundTaskStepName, IMPORT_TASK_STEPS
+from notalone.tasks.models import IMPORT_TASK_STEPS, BackgroundTaskStepName
 from notalone.tasks.worker import (
     PostgresMemoryExtractionRunner,
     WorkerRunOutcome,
@@ -35,9 +36,10 @@ from tests.unit.memory_extraction.test_command import (
     _messages,
     _payload,
 )
-from tests.unit.memory_extraction.verification_helpers import verification_result
+from tests.unit.memory_extraction.verification_helpers import (
+    verification_result,
+)
 from tests.unit.reply.test_langchain_vertical_slice import ToolCallingFakeModel
-
 
 class FakeWorker:
     def __init__(self, results: list[WorkerRunResult]) -> None:
@@ -279,6 +281,7 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
                 owner_memory_port=RecordingOwnerPort(),
                 ledger=ledger,
                 watermark_port=watermark,
+                trace_store=InMemoryTraceStore(),
             )
             stats = runner.run(scope=scope)
 
@@ -326,6 +329,7 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
                 owner_memory_port=RecordingOwnerPort(),
                 ledger=InMemoryOutboundLedger(),
                 watermark_port=RecordingWatermark(),
+                trace_store=InMemoryTraceStore(),
             )
             stats = runner.run(scope=scope)
 
@@ -371,6 +375,7 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
                 owner_memory_port=RecordingOwnerPort(),
                 ledger=InMemoryOutboundLedger(),
                 watermark_port=RecordingWatermark(),
+                trace_store=InMemoryTraceStore(),
                 dimension_release=DimensionRelease(("subject",)),
             )
             stats = runner.run(scope=scope)

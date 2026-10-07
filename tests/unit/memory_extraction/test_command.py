@@ -47,6 +47,7 @@ from notalone.memory_extraction.recovery import (
 from notalone.memory_extraction.verification_adapters import (
     LangChainSourceVerificationRuntime,
 )
+from notalone.memory_trace.adapters import InMemoryTraceStore
 from notalone.scopes import ContactScope
 from tests.unit.memory_extraction.verification_helpers import (
     FixedSourceVerifier,
@@ -54,7 +55,6 @@ from tests.unit.memory_extraction.verification_helpers import (
     verification_result,
 )
 from tests.unit.reply.test_langchain_vertical_slice import ToolCallingFakeModel
-
 
 OWNER_ID = UUID("aaaaaaaa-1111-1111-1111-111111111111")
 CONTACT_ID = UUID("bbbbbbbb-2222-2222-2222-222222222222")
@@ -334,6 +334,7 @@ class RunExtractionTest(unittest.TestCase):
             SimpleNamespace(now=clock.now),
         ):
             stats = run_extraction(
+                trace_store=InMemoryTraceStore(),
                 scope=self.scope,
                 messages=messages,
                 watermark_message_id=None,
@@ -395,6 +396,7 @@ class RunExtractionTest(unittest.TestCase):
                     SimpleNamespace(now=clock.now),
                 ):
                     stats = run_extraction(
+                        trace_store=InMemoryTraceStore(),
                         scope=self.scope,
                         messages=messages,
                         watermark_message_id=None,
@@ -430,6 +432,7 @@ class RunExtractionTest(unittest.TestCase):
         ledger = InMemoryOutboundLedger()
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -456,6 +459,7 @@ class RunExtractionTest(unittest.TestCase):
         store = InMemoryMemoryStore()
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -481,6 +485,7 @@ class RunExtractionTest(unittest.TestCase):
         ),))
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -510,6 +515,7 @@ class RunExtractionTest(unittest.TestCase):
         ),))
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -547,10 +553,12 @@ class RunExtractionTest(unittest.TestCase):
         )
 
         failed = run_extraction(
+            trace_store=InMemoryTraceStore(),
             **kwargs,
             watermark_message_id=None,
             verification_runtime=LangChainSourceVerificationRuntime(
-                model=UnavailableVerificationModel(), ledger=ledger,
+                model=UnavailableVerificationModel(),
+                ledger=ledger,
             ),
         )
 
@@ -575,10 +583,12 @@ class RunExtractionTest(unittest.TestCase):
         ])
 
         retried = run_extraction(
+            trace_store=InMemoryTraceStore(),
             **kwargs,
             watermark_message_id=self.watermark.get(self.scope),
             verification_runtime=LangChainSourceVerificationRuntime(
-                model=retry_model, ledger=ledger,
+                model=retry_model,
+                ledger=ledger,
             ),
         )
 
@@ -608,6 +618,7 @@ class RunExtractionTest(unittest.TestCase):
 
         for attempt in (1, 2, 3):
             stats = run_extraction(
+                trace_store=InMemoryTraceStore(),
                 scope=self.scope,
                 messages=messages,
                 watermark_message_id=self.watermark.get(self.scope),
@@ -617,7 +628,7 @@ class RunExtractionTest(unittest.TestCase):
                 owner_memory_port=self.owner_port,
                 ledger=ledger,
                 watermark_port=self.watermark,
-            dimension_release=self.dimension_release,
+                dimension_release=self.dimension_release,
             )
             if attempt < 3:
                 self.assertEqual(stats.failed_batches, 1)
@@ -652,6 +663,7 @@ class RunExtractionTest(unittest.TestCase):
             with self.subTest(overrides=overrides):
                 store = InMemoryMemoryStore()
                 stats = run_extraction(
+                    trace_store=InMemoryTraceStore(),
                     scope=self.scope,
                     messages=messages,
                     watermark_message_id=None,
@@ -673,6 +685,7 @@ class RunExtractionTest(unittest.TestCase):
         messages = _messages(7)
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -693,6 +706,7 @@ class RunExtractionTest(unittest.TestCase):
         messages = _messages(7)
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=messages[4].message_id,
@@ -711,6 +725,7 @@ class RunExtractionTest(unittest.TestCase):
         messages = _messages(3)
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=uuid4(),
@@ -729,6 +744,7 @@ class RunExtractionTest(unittest.TestCase):
         ledger = InMemoryOutboundLedger()
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -753,6 +769,7 @@ class RunExtractionTest(unittest.TestCase):
         runtime = RecordingWindowRuntime()
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -774,6 +791,7 @@ class RunExtractionTest(unittest.TestCase):
     def test_context_side_cannot_exceed_twenty_messages(self) -> None:
         with self.assertRaises(ValueError):
             run_extraction(
+                trace_store=InMemoryTraceStore(),
                 scope=self.scope,
                 messages=_messages(1),
                 watermark_message_id=None,
@@ -787,6 +805,7 @@ class RunExtractionTest(unittest.TestCase):
         messages = _messages(6)
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -832,6 +851,7 @@ class RunExtractionTest(unittest.TestCase):
         )
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -885,6 +905,7 @@ class RunExtractionTest(unittest.TestCase):
         self.watermark.failure = previous
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -917,6 +938,7 @@ class RunExtractionTest(unittest.TestCase):
         )
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -946,6 +968,7 @@ class RunExtractionTest(unittest.TestCase):
         )
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -978,6 +1001,7 @@ class RunExtractionTest(unittest.TestCase):
         messages = _messages(3)
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -1009,6 +1033,7 @@ class RunExtractionTest(unittest.TestCase):
         ledger = InMemoryOutboundLedger()
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -1068,6 +1093,7 @@ class ExtractMainTest(unittest.TestCase):
             "PostgresOwnerMemoryStore": RecordingOwnerPort(),
             "PostgresOutboundLedger": ledger,
             "PostgresWatermarkStore": watermark,
+            "PostgresExtractionTraceStore": InMemoryTraceStore(),
             "contact_exists": True,
             "load_contact_messages": (message,),
         }
@@ -1202,6 +1228,7 @@ class OwnerIdAndAdoptionFailureTest(unittest.TestCase):
             "notalone.memory_extraction.command.MemoryAdoption", FailingAdoption
         ):
             stats = run_extraction(
+                trace_store=InMemoryTraceStore(),
                 scope=ContactScope(OWNER_ID, CONTACT_ID),
                 messages=messages,
                 watermark_message_id=None,
@@ -1255,6 +1282,7 @@ class AdoptionFailureStatsTest(unittest.TestCase):
             "notalone.memory_extraction.command.MemoryAdoption", FailingAdoption
         ):
             stats = run_extraction(
+                trace_store=InMemoryTraceStore(),
                 scope=ContactScope(OWNER_ID, CONTACT_ID),
                 messages=messages,
                 watermark_message_id=None,

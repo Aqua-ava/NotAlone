@@ -44,6 +44,72 @@ class PostgresWatermarkStore:
             raise WatermarkPersistenceError("提取水位读取失败。") from error
         return row[0] if row else None
 
+    @property
+    def database_url(self) -> str:
+        """追踪与水位同事务接缝只接受同一个数据库。"""
+        return self._database_url
+
+    def finish_in_transaction(
+        self,
+        connection: psycopg.Connection[Any],
+        scope: ContactScope,
+        *,
+        last_message_id: UUID | None = None,
+        failure_state: ExtractionFailureState | None = None,
+        skipped_range: FailureRange | None = None,
+    ) -> None:
+        """由追踪存储持有事务；此方法绝不自行提交。"""
+        if skipped_range is not None:
+            last_message_id = skipped_range.to_message_id
+        if last_message_id is not None:
+            connection.execute(
+                """
+                INSERT INTO public.memory_extraction_watermark
+                    (owner_id,contact_id,last_message_id)
+                VALUES (%s,%s,%s)
+                ON CONFLICT (owner_id,contact_id) DO UPDATE SET
+                    last_message_id=EXCLUDED.last_message_id, failure_count=0,
+                    failure_code=NULL,failed_from_id=NULL,failed_to_id=NULL,updated_at=now()
+            """,
+                (scope.owner_id, scope.contact_id, last_message_id),
+            )
+            if skipped_range is not None:
+                connection.execute(
+                    """
+                    UPDATE public.memory_extraction_watermark SET
+                      last_skipped_from_id=%s,last_skipped_to_id=%s,last_skipped_code=%s,
+                      last_skipped_at=now() WHERE owner_id=%s AND contact_id=%s
+                """,
+                    (
+                        skipped_range.from_message_id,
+                        skipped_range.to_message_id,
+                        skipped_range.code.value,
+                        scope.owner_id,
+                        scope.contact_id,
+                    ),
+                )
+        elif failure_state is not None:
+            failed = failure_state.failure_range
+            connection.execute(
+                """
+                INSERT INTO public.memory_extraction_watermark
+                    (owner_id,contact_id,failure_count,failure_code,failed_from_id,failed_to_id)
+                VALUES (%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (owner_id,contact_id) DO UPDATE SET
+                    failure_count=EXCLUDED.failure_count,failure_code=EXCLUDED.failure_code,
+                    failed_from_id=EXCLUDED.failed_from_id,failed_to_id=EXCLUDED.failed_to_id,
+                    updated_at=now()
+            """,
+                (
+                    scope.owner_id,
+                    scope.contact_id,
+                    failure_state.count,
+                    failed.code.value,
+                    failed.from_message_id,
+                    failed.to_message_id,
+                ),
+            )
+
     def set(self, scope: ContactScope, last_message_id: UUID) -> None:
         """成功推进水位，同时清除正在计数的失败区间。"""
 

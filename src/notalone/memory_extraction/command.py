@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
 from notalone.ledger.models import LedgerEntry, LedgerOutcome
@@ -22,9 +25,9 @@ from notalone.memory_extraction.dimensions import DimensionRelease
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.flow import ExtractionFlow, ExtractionOutcome
 from notalone.memory_extraction.models import (
+    MAX_TARGET_MESSAGES_PER_WINDOW,
     ExtractionFailureKind,
     ExtractionWindow,
-    MAX_TARGET_MESSAGES_PER_WINDOW,
 )
 from notalone.memory_extraction.recovery import (
     FailureRange,
@@ -35,9 +38,15 @@ from notalone.memory_extraction.runtime import (
     MemoryExtractionRuntime,
 )
 from notalone.memory_extraction.verification import SourceVerificationRuntime
+from notalone.memory_trace import (
+    TracePort,
+    TraceSession,
+    TraceWriteError,
+    snapshot,
+)
+from notalone.memory_trace.context import event_payload, record_ledger_call
 from notalone.runtime_config import load_project_env
 from notalone.scopes import ContactScope
-
 
 EXTRACTION_BATCH_SIZE = MAX_TARGET_MESSAGES_PER_WINDOW
 MAX_CONTEXT_MESSAGES_PER_SIDE = 20
@@ -103,6 +112,8 @@ def run_extraction(
     provider: str = "deepseek",
     model_name: str | None = None,
     dimension_release: DimensionRelease | None = None,
+    trace_store: TracePort | None = None,
+    selection_receipts: tuple[dict[str, Any], ...] = (),
 ) -> ExtractionRunStats:
     """按水位分批串行提取并采纳；输出不可用的批次连续失败后跳过。"""
 
@@ -141,6 +152,24 @@ def run_extraction(
         start = 0
     pending_messages = messages[start:]
 
+    if trace_store is None:
+        from notalone.memory.adapters import InMemoryMemoryStore
+        from notalone.memory_trace.adapters import InMemoryTraceStore
+        from notalone.persistence.extraction_trace import (
+            PostgresExtractionTraceStore,
+        )
+        from notalone.persistence.memory_store import PostgresMemoryStore
+
+        if isinstance(memory_port, PostgresMemoryStore):
+            trace_store = PostgresExtractionTraceStore(
+                memory_port.database_url
+            )
+        elif isinstance(memory_port, InMemoryMemoryStore):
+            trace_store = InMemoryTraceStore()
+        else:
+            raise TraceWriteError("trace_configuration")
+    run_id = uuid4()
+    previous_watermark = watermark_message_id
     adoption = MemoryAdoption(
         memory_port=memory_port,
         owner_memory_port=owner_memory_port,
@@ -157,7 +186,49 @@ def run_extraction(
     duplicate = deleted = rejected = failed = skipped = 0
     skipped_non_memory = 0
     skipped_ranges: list[FailureRange] = []
+    if not pending_messages:
+        versions = _trace_versions()
+        trace_id = trace_store.begin(
+            scope,
+            run_id=run_id,
+            batch_key=hashlib.sha256(
+                f"empty:{previous_watermark}".encode()
+            ).hexdigest(),
+            payload=event_payload(
+                {
+                    "messages": [],
+                    "target_count": 0,
+                    "target_message_ids": [],
+                    "context_before_count": 0,
+                    "context_after_count": 0,
+                    "watermark_before": snapshot(previous_watermark),
+                    "watermark_planned": snapshot(previous_watermark),
+                    "selection_receipts": selection_receipts,
+                    "versions": versions,
+                }
+            ),
+        )
+        with TraceSession(
+            trace_store, scope, trace_id, versions=versions
+        ) as trace:
+            trace.complete(
+                status="skipped",
+                payload={
+                    "reason": (
+                        "up_to_date" if messages else "no_eligible_messages"
+                    ),
+                    "not_executed": [
+                        "extraction",
+                        "verification",
+                        "adoption",
+                        "write",
+                    ],
+                    "watermark_after": snapshot(previous_watermark),
+                    "watermark_commit": "not_advanced",
+                },
+            )
     for offset in range(0, len(pending_messages), batch_size):
+        window_started_at = datetime.now(timezone.utc)
         batch = pending_messages[offset : offset + batch_size]
         processed_messages += len(batch)
         absolute_start = start + offset
@@ -170,79 +241,216 @@ def run_extraction(
             messages=tuple(messages[context_start:context_end]),
             target_message_ids=tuple(message.message_id for message in batch),
         )
-        adoption_stats = AdoptionStats()
-        extraction_completed = False
-        batch_extracted = 0
-        try:
-            outcome: ExtractionOutcome = flow.run(window)
-            extraction_completed = outcome.extraction_completed
-            batch_extracted = len(outcome.accepted)
-            if outcome.failure_reason is None:
-                adoption_stats = adoption.adopt(scope, outcome)
-        except ExtractionRuntimeError as error:
-            # 写入裁决等批次级模型调用失败：与提取失败同一策略，
-            # 分类后计数或停止，不让整轮无记录地中断。失败发生在采纳
-            # 阶段，必须保留 flow 已给出的本批统计，不能用一个空 outcome
-            # 覆盖掉已通过的提取与拒绝计数。
-            preserved_rejections = outcome.rejected_count
-            outcome = ExtractionOutcome(
-                accepted=(),
-                rejected_count=preserved_rejections,
-                failure_reason=str(error),
-                failure_kind=error.failure_kind,
-                extraction_completed=extraction_completed,
-            )
-        batches += 1
-        _record_extraction_ledger(
-            ledger,
-            scope,
-            (
-                LedgerOutcome.SUCCEEDED
-                if outcome.extraction_completed else LedgerOutcome.RUN_FAILED
+        window_payload = {
+            "messages": [
+                {
+                    **snapshot(message),
+                    "role": (
+                        "target"
+                        if message.message_id in window.target_message_id_set
+                        else (
+                            "context_before"
+                            if context_start + index < absolute_start
+                            else "context_after"
+                        )
+                    ),
+                }
+                for index, message in enumerate(window.messages)
+            ],
+            "target_count": len(batch),
+            "context_before_count": absolute_start - context_start,
+            "context_after_count": context_end - absolute_end,
+            "target_message_ids": snapshot(window.target_message_ids),
+            "watermark_before": snapshot(previous_watermark),
+            "watermark_planned": str(batch[-1].message_id),
+            "configuration": {
+                "batch_size": batch_size,
+                "context_before": context_before,
+                "context_after": context_after,
+                "provider": provider,
+                "model_name": model_name or "unreported",
+            },
+            "sources_status": (
+                "recorded"
+                if all(
+                    message.source_snapshots
+                    and all(
+                        item.get("processing_status") == "recorded"
+                        for item in message.source_snapshots
+                    )
+                    for message in window.messages
+                )
+                else "processing_missing"
             ),
-            latency_ms=timed_runtime.latency_ms,
-            called_at=timed_runtime.called_at,
-            provider=provider,
-            model_name=model_name,
+            "versions": _trace_versions(),
+            "selection_receipts": selection_receipts,
+        }
+        batch_key = hashlib.sha256(
+            "|".join(str(message.message_id) for message in batch).encode()
+        ).hexdigest()
+        trace_id = trace_store.begin(
+            scope,
+            run_id=run_id,
+            batch_key=batch_key,
+            payload=event_payload(
+                window_payload,
+                started_at=window_started_at,
+                rule_version=str(window_payload["versions"]["command"]),
+            ),
         )
-        if outcome.failure_reason is None:
-            extracted += batch_extracted
-            adopted += adoption_stats.adopted
-            updated += adoption_stats.updated
-            pending += adoption_stats.pending
-            duplicate += adoption_stats.skipped_duplicate
-            deleted += adoption_stats.skipped_deleted
-            rejected += adoption_stats.rejected_by_contract
-            skipped_non_memory += adoption_stats.skipped_non_memory
-            if watermark_port is not None:
-                watermark_port.set(scope, batch[-1].message_id)
-            continue
-        # 失败批次里已经通过提取或已被判定为契约拒绝的候选仍要计数，
-        # 这样采纳阶段失败不会让本批统计凭空归零。
-        extracted += batch_extracted
-        rejected += outcome.rejected_count
-        if (
-            outcome.failure_kind is ExtractionFailureKind.INVALID_OUTPUT
-            and watermark_port is not None
-        ):
-            failure_range = FailureRange(
-                from_message_id=batch[0].message_id,
-                to_message_id=batch[-1].message_id,
-                code=outcome.failure_kind,
+        with TraceSession(
+            trace_store, scope, trace_id, versions=window_payload["versions"]
+        ) as trace:
+            adoption_stats = AdoptionStats()
+            extraction_completed = False
+            batch_extracted = 0
+            try:
+                outcome: ExtractionOutcome = flow.run(window)
+                extraction_completed = outcome.extraction_completed
+                batch_extracted = len(outcome.accepted)
+                if outcome.failure_reason is None:
+                    adoption_stats = adoption.adopt(scope, outcome)
+            except ExtractionRuntimeError as error:
+                # 写入裁决等批次级模型调用失败：与提取失败同一策略，
+                # 分类后计数或停止，不让整轮无记录地中断。失败发生在采纳
+                # 阶段，必须保留 flow 已给出的本批统计，不能用一个空 outcome
+                # 覆盖掉已通过的提取与拒绝计数。
+                preserved_rejections = outcome.rejected_count
+                outcome = ExtractionOutcome(
+                    accepted=(),
+                    rejected_count=preserved_rejections,
+                    failure_reason=str(error),
+                    failure_kind=error.failure_kind,
+                    extraction_completed=extraction_completed,
+                )
+            batches += 1
+            _record_extraction_ledger(
+                ledger,
+                scope,
+                (
+                    LedgerOutcome.SUCCEEDED
+                    if outcome.extraction_completed
+                    else LedgerOutcome.RUN_FAILED
+                ),
+                latency_ms=timed_runtime.latency_ms,
+                called_at=timed_runtime.called_at,
+                provider=provider,
+                model_name=model_name,
             )
-            previous = watermark_port.get_failure(scope)
-            state, reached = record_batch_failure(
-                previous,
-                failure_range=failure_range,
-            )
-            if reached:
-                watermark_port.mark_skipped(scope, failure_range)
-                skipped += 1
-                skipped_ranges.append(failure_range)
+            if outcome.failure_reason is None:
+                extracted += batch_extracted
+                adopted += adoption_stats.adopted
+                updated += adoption_stats.updated
+                pending += adoption_stats.pending
+                duplicate += adoption_stats.skipped_duplicate
+                deleted += adoption_stats.skipped_deleted
+                rejected += adoption_stats.rejected_by_contract
+                skipped_non_memory += adoption_stats.skipped_non_memory
+                trace.complete(
+                    status="succeeded",
+                    payload={
+                        "extracted": batch_extracted,
+                        "adoption": snapshot(adoption_stats),
+                        "watermark_before": snapshot(previous_watermark),
+                        "watermark_planned": str(batch[-1].message_id),
+                        "watermark_after": (
+                            str(batch[-1].message_id)
+                            if watermark_port is not None
+                            else None
+                        ),
+                        "watermark_commit": (
+                            "committed_with_trace"
+                            if watermark_port is not None
+                            else "not_configured"
+                        ),
+                    },
+                    watermark_port=watermark_port,
+                    watermark_message_id=batch[-1].message_id,
+                )
+                previous_watermark = batch[-1].message_id
                 continue
-            watermark_port.save_failure(scope, state)
-        failed += 1
-        break
+            # 失败批次里已经通过提取或已被判定为契约拒绝的候选仍要计数，
+            # 这样采纳阶段失败不会让本批统计凭空归零。
+            extracted += batch_extracted
+            rejected += outcome.rejected_count
+            if (
+                outcome.failure_kind is ExtractionFailureKind.INVALID_OUTPUT
+                and watermark_port is not None
+            ):
+                failure_range = FailureRange(
+                    from_message_id=batch[0].message_id,
+                    to_message_id=batch[-1].message_id,
+                    code=outcome.failure_kind,
+                )
+                previous = watermark_port.get_failure(scope)
+                state, reached = record_batch_failure(
+                    previous,
+                    failure_range=failure_range,
+                )
+                if reached:
+                    trace.complete(
+                        status="skipped",
+                        payload={
+                            "failure_kind": outcome.failure_kind.value,
+                            "failure_count": state.count,
+                            "extracted": batch_extracted,
+                            "rejected": outcome.rejected_count,
+                            "watermark_before": snapshot(previous_watermark),
+                            "watermark_after": str(batch[-1].message_id),
+                            "watermark_commit": "committed_with_trace",
+                            "skipped_range": snapshot(failure_range),
+                            "not_executed": [
+                                "remaining_adoption",
+                                "remaining_write",
+                            ],
+                        },
+                        watermark_port=watermark_port,
+                        skipped_range=failure_range,
+                    )
+                    previous_watermark = batch[-1].message_id
+                    skipped += 1
+                    skipped_ranges.append(failure_range)
+                    continue
+                trace.complete(
+                    status="model_failed",
+                    payload={
+                        "failure_kind": outcome.failure_kind.value,
+                        "failure_count": state.count,
+                        "extracted": batch_extracted,
+                        "rejected": outcome.rejected_count,
+                        "watermark_before": snapshot(previous_watermark),
+                        "watermark_after": snapshot(previous_watermark),
+                        "watermark_commit": "not_advanced",
+                        "not_executed": [
+                            "remaining_adoption",
+                            "remaining_write",
+                        ],
+                    },
+                    watermark_port=watermark_port,
+                    failure_state=state,
+                )
+            else:
+                trace.complete(
+                    status="model_failed",
+                    payload={
+                        "failure_kind": (
+                            outcome.failure_kind.value
+                            if outcome.failure_kind
+                            else None
+                        ),
+                        "extracted": batch_extracted,
+                        "rejected": outcome.rejected_count,
+                        "watermark_before": snapshot(previous_watermark),
+                        "watermark_after": snapshot(previous_watermark),
+                        "watermark_commit": "not_advanced",
+                        "not_executed": [
+                            "remaining_adoption",
+                            "remaining_write",
+                        ],
+                    },
+                )
+            failed += 1
+            break
     return ExtractionRunStats(
         batches=batches,
         processed_messages=processed_messages,
@@ -258,6 +466,39 @@ def run_extraction(
         skipped_non_memory=skipped_non_memory,
         skipped_ranges=tuple(skipped_ranges),
     )
+
+
+def _trace_versions() -> dict[str, str | int]:
+    """记录实际执行代码版本，不能用发布版本推测尚未提交的规则。"""
+    directory = Path(__file__).parent
+    return {
+        "trace_schema": 1,
+        **{
+            name: hashlib.sha256(
+                (directory / f"{name}.py").read_bytes()
+            ).hexdigest()
+            for name in (
+                "command",
+                "flow",
+                "adoption",
+                "pragmatics",
+                "dimensions",
+                "verification",
+                "adjudication",
+                "cli_support",
+                "models",
+                "adapters",
+                "adjudication_adapters",
+                "verification_adapters",
+            )
+        },
+        "transport": hashlib.sha256(
+            (directory.parent / "memory_trace" / "transport.py").read_bytes()
+        ).hexdigest(),
+        "memory_timing": hashlib.sha256(
+            (directory.parent / "memory" / "timing.py").read_bytes()
+        ).hexdigest(),
+    }
 
 
 def _record_extraction_ledger(
@@ -284,7 +525,9 @@ def _record_extraction_ledger(
         outcome=outcome,
         called_at=called_at,
     )
+    started_at = datetime.now(timezone.utc)
     ledger.record(entry)
+    record_ledger_call("extraction", entry, started_at=started_at)
 
 
 def _fail(message: str) -> int:
@@ -361,23 +604,21 @@ def extract_main(argv: list[str] | None = None) -> int:
     try:
         if not contact_exists(scope, database_url):
             return _fail("联系人不存在或不在当前用户范围内。")
-        messages = load_contact_messages(scope, database_url)
+        selection_receipts: list[dict[str, Any]] = []
+        messages = load_contact_messages(
+            scope, database_url, selection_receipts=selection_receipts
+        )
     except Exception:
         return _fail("记忆提取准备失败：数据库不可用或联系人不存在。")
-    if not messages:
-        print("batches=0 extracted=0 adopted=0 updated=0 pending=0")
-        return 0
-
     watermark_message_id = components.watermark.get(scope)
     stats = run_extraction(
         scope=scope,
         messages=messages,
         watermark_message_id=watermark_message_id,
-        runtime=LangChainExtractionRuntime(
-            model=components.model
-        ),
+        runtime=LangChainExtractionRuntime(model=components.model),
         verification_runtime=LangChainSourceVerificationRuntime(
-            model=components.model, ledger=components.ledger,
+            model=components.model,
+            ledger=components.ledger,
         ),
         memory_port=components.memory_store,
         owner_memory_port=components.owner_store,
@@ -388,6 +629,8 @@ def extract_main(argv: list[str] | None = None) -> int:
         watermark_port=components.watermark,
         batch_size=args.batch_size,
         model_name=components.model_name,
+        trace_store=components.trace_store,
+        selection_receipts=tuple(selection_receipts),
     )
     print(
         f"batches={stats.batches} extracted={stats.extracted}"

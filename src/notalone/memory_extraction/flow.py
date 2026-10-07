@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import datetime
-from uuid import UUID
+from datetime import datetime, timezone
+from uuid import UUID, uuid4
 
 from notalone.memory.models import MemoryCategory
 from notalone.memory.timing import MemoryTiming
@@ -30,6 +30,7 @@ from notalone.memory_extraction.verification import (
     SourceVerificationVerdict,
     validate_source_verification,
 )
+from notalone.memory_trace.context import current_trace, record, snapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +43,7 @@ class ExtractionOutcome:
     failure_kind: ExtractionFailureKind | None = None
     # 初始提取成功与后续来源核验成功分开，供各次调用独立记账。
     extraction_completed: bool = False
+    candidate_trace_ids: tuple[UUID, ...] = ()
 
     def __post_init__(self) -> None:
         if (self.failure_reason is None) != (self.failure_kind is None):
@@ -65,41 +67,136 @@ class ExtractionFlow:
         self._verification_runtime = verification_runtime
 
     def run(self, window: ExtractionWindow) -> ExtractionOutcome:
+        record(
+            "extraction_input",
+            {"window": window, "capture_layer": "runtime_interface"},
+        )
+        extraction_started_at = datetime.now(timezone.utc)
         try:
             payloads = self._runtime.extract(window)
         except ExtractionRuntimeError as error:
+            record(
+                "extraction_failure",
+                {
+                    "failure_kind": error.failure_kind,
+                    "response_status": "not_obtained_or_invalid",
+                    "not_executed": [
+                        "parse",
+                        "verification",
+                        "adoption",
+                        "write",
+                    ],
+                },
+                started_at=extraction_started_at,
+                status="failed",
+            )
             return ExtractionOutcome(
                 accepted=(),
                 rejected_count=0,
                 failure_reason=(
                     "模型未返回可解析的结构化事实。"
-                    if error.failure_kind is ExtractionFailureKind.INVALID_OUTPUT
+                    if error.failure_kind
+                    is ExtractionFailureKind.INVALID_OUTPUT
                     else "模型调用失败，未生成记忆。"
                 ),
                 failure_kind=error.failure_kind,
             )
 
+        raw_trace_ids = tuple(uuid4() for _ in payloads)
+        trace = current_trace()
+        extraction_call_id = trace.calls.get("extraction") if trace else None
+        record(
+            "extraction_return",
+            {
+                "payloads": payloads,
+                "candidate_trace_ids": raw_trace_ids,
+                "capture_layer": "runtime_interface",
+            },
+            started_at=extraction_started_at,
+            status="returned",
+            call_id=extraction_call_id,
+        )
+        for index, payload in enumerate(payloads):
+            record(
+                "candidate_raw",
+                {"index": index, "fields": payload},
+                candidate_trace_id=raw_trace_ids[index],
+                call_id=extraction_call_id,
+            )
         window_ids = window.message_id_set
         target_ids = window.target_message_id_set
         accepted: list[ExtractedFact] = []
+        trace_ids: dict[int, UUID] = {}
         rejected = 0
-        for payload in payloads:
+        for index, payload in enumerate(payloads):
+            candidate_trace_id = raw_trace_ids[index]
+            parse_started_at = datetime.now(timezone.utc)
             try:
                 fact = _to_fact(payload)
-            except Exception:
+            except Exception as error:
+                record(
+                    "parse",
+                    {
+                        "status": "rejected",
+                        "error_code": type(error).__name__,
+                        "error_detail": str(error),
+                        "disposition": "structure_rejected",
+                        "not_executed": [
+                            "source_contract",
+                            "timing",
+                            "verification",
+                            "adoption",
+                            "write",
+                        ],
+                    },
+                    candidate_trace_id=candidate_trace_id,
+                    started_at=parse_started_at,
+                    status="rejected",
+                )
                 rejected += 1
                 continue
+            record(
+                "parse",
+                {"status": "accepted", "before": payload, "after": fact},
+                candidate_trace_id=candidate_trace_id,
+                started_at=parse_started_at,
+                status="accepted",
+            )
+            source_started_at = datetime.now(timezone.utc)
             source_ids = set(fact.source_message_ids)
-            if not source_ids <= window_ids or not source_ids & target_ids:
+            source_valid = source_ids <= window_ids and bool(
+                source_ids & target_ids
+            )
+            record(
+                "source_contract",
+                {
+                    "within_window": source_ids <= window_ids,
+                    "references_target": bool(source_ids & target_ids),
+                    "passed": source_valid,
+                    "disposition": None if source_valid else "source_rejected",
+                    "not_executed": (
+                        []
+                        if source_valid
+                        else ["timing", "verification", "adoption", "write"]
+                    ),
+                },
+                candidate_trace_id=candidate_trace_id,
+                started_at=source_started_at,
+                status="passed" if source_valid else "rejected",
+            )
+            if not source_valid:
                 rejected += 1
                 continue
+            timing_started_at = datetime.now(timezone.utc)
             source_times = tuple(
                 message.occurred_at
                 for message in window.messages
                 if message.message_id in source_ids
             )
+            before = fact
             fact = replace(
-                fact, timing=MemoryTiming.from_source_times(source_times),
+                fact,
+                timing=MemoryTiming.from_source_times(source_times),
             )
             valid_at = fact.valid_at
             if valid_at is not None:
@@ -113,46 +210,137 @@ class ExtractionFlow:
                 if temporal_risk is not None:
                     fact = replace(
                         fact,
-                        risk_flags=tuple(dict.fromkeys((
-                            *fact.risk_flags, temporal_risk,
-                        ))),
+                        risk_flags=tuple(
+                            dict.fromkeys(
+                                (
+                                    *fact.risk_flags,
+                                    temporal_risk,
+                                )
+                            )
+                        ),
                     )
+            record(
+                "timing",
+                {
+                    "before": before,
+                    "after": fact,
+                    "source_times": source_times,
+                },
+                candidate_trace_id=candidate_trace_id,
+                started_at=timing_started_at,
+            )
             accepted.append(fact)
+            trace_ids[id(fact)] = candidate_trace_id
         interpreter = PragmaticInterpreter()
+        for fact in accepted:
+            pragmatic_started_at = datetime.now(timezone.utc)
+            decision = interpreter.interpret(fact)
+            record(
+                "pragmatics",
+                {
+                    "input": fact,
+                    "decision": decision,
+                    "phase": "before_verification",
+                },
+                candidate_trace_id=trace_ids[id(fact)],
+                started_at=pragmatic_started_at,
+            )
         reviewable = tuple(
-            fact for fact in accepted
+            fact
+            for fact in accepted
             if interpreter.interpret(fact).disposition
             is not MemoryDisposition.NONE
         )
         if len(reviewable) > MAX_SOURCE_VERIFICATION_CANDIDATES:
+            record(
+                "verification",
+                {
+                    "status": "budget_rejected",
+                    "count": len(reviewable),
+                    "budget": MAX_SOURCE_VERIFICATION_CANDIDATES,
+                },
+            )
             return ExtractionOutcome(
-                accepted=(), rejected_count=rejected,
+                accepted=(),
+                rejected_count=rejected,
                 failure_reason="来源核验候选超出单批预算，本批未写入记忆。",
                 failure_kind=ExtractionFailureKind.INVALID_OUTPUT,
                 extraction_completed=True,
             )
         if self._verification_runtime is None:
-            accepted = [
-                fact if interpreter.interpret(fact).disposition
-                is MemoryDisposition.NONE else replace(
-                    fact,
-                    risk_flags=tuple(dict.fromkeys((
-                        *fact.risk_flags, "semantic:unverified",
-                    ))),
+            adjusted = []
+            for fact in accepted:
+                changed = (
+                    fact
+                    if interpreter.interpret(fact).disposition
+                    is MemoryDisposition.NONE
+                    else replace(
+                        fact,
+                        risk_flags=tuple(
+                            dict.fromkeys(
+                                (*fact.risk_flags, "semantic:unverified")
+                            )
+                        ),
+                    )
                 )
-                for fact in accepted
-            ]
+                trace_ids[id(changed)] = trace_ids[id(fact)]
+                record(
+                    "verification",
+                    {
+                        "status": "not_configured",
+                        "before": fact,
+                        "after": changed,
+                    },
+                    candidate_trace_id=trace_ids[id(fact)],
+                )
+                adjusted.append(changed)
+            accepted = adjusted
         elif reviewable:
+            trace = current_trace()
+            if trace is not None:
+                trace.verification_candidate_ids = tuple(
+                    trace_ids[id(fact)] for fact in reviewable
+                )
+            record(
+                "verification_input",
+                {
+                    "window": window,
+                    "facts": reviewable,
+                    "candidate_trace_ids": [
+                        trace_ids[id(fact)] for fact in reviewable
+                    ],
+                },
+            )
             try:
+                verification_started_at = datetime.now(timezone.utc)
                 payloads = self._verification_runtime.verify(
-                    window=window, facts=reviewable,
+                    window=window,
+                    facts=reviewable,
+                )
+                record(
+                    "verification_return",
+                    {"payloads": payloads},
+                    started_at=verification_started_at,
+                    status="returned",
+                    call_id=trace.calls.get("verification") if trace else None,
                 )
                 results = validate_source_verification(
-                    payloads, window=window, facts=reviewable,
+                    payloads,
+                    window=window,
+                    facts=reviewable,
                 )
             except ExtractionRuntimeError as error:
+                record(
+                    "verification_contract",
+                    {
+                        "passed": False,
+                        "failure_kind": error.failure_kind,
+                        "not_executed": ["adoption", "write"],
+                    },
+                )
                 return ExtractionOutcome(
-                    accepted=(), rejected_count=rejected,
+                    accepted=(),
+                    rejected_count=rejected,
                     failure_reason="来源核验失败，本批未写入记忆。",
                     failure_kind=error.failure_kind,
                     extraction_completed=True,
@@ -165,22 +353,62 @@ class ExtractionFlow:
             uncertain_facts = {
                 id(reviewable[result.candidate_index]): replace(
                     reviewable[result.candidate_index],
-                    risk_flags=tuple(dict.fromkeys((
-                        *reviewable[result.candidate_index].risk_flags,
-                        *(f"semantic:{issue.value}" for issue in result.issues),
-                    ))),
+                    risk_flags=tuple(
+                        dict.fromkeys(
+                            (
+                                *reviewable[result.candidate_index].risk_flags,
+                                *(
+                                    f"semantic:{issue.value}"
+                                    for issue in result.issues
+                                ),
+                            )
+                        )
+                    ),
                 )
                 for result in results
                 if result.verdict is SourceVerificationVerdict.UNCERTAIN
             }
+            for result in results:
+                original = reviewable[result.candidate_index]
+                changed = uncertain_facts.get(id(original), original)
+                trace_ids[id(changed)] = trace_ids[id(original)]
+                record(
+                    "verification",
+                    {
+                        "status": "validated",
+                        "result": result,
+                        "before": original,
+                        "after": changed,
+                        "evidence_contract": "passed",
+                        "disposition": (
+                            "unsupported_rejected"
+                            if id(original) in unsupported_ids
+                            else "continue"
+                        ),
+                    },
+                    candidate_trace_id=trace_ids[id(original)],
+                )
             accepted = [
                 uncertain_facts.get(id(fact), fact)
-                for fact in accepted if id(fact) not in unsupported_ids
+                for fact in accepted
+                if id(fact) not in unsupported_ids
             ]
             rejected += len(unsupported_ids)
+        else:
+            record(
+                "verification",
+                {
+                    "status": "not_executed",
+                    "reason": "no_reviewable_candidates",
+                },
+            )
         return ExtractionOutcome(
-            accepted=tuple(accepted), rejected_count=rejected,
+            accepted=tuple(accepted),
+            rejected_count=rejected,
             extraction_completed=True,
+            candidate_trace_ids=tuple(
+                trace_ids[id(fact)] for fact in accepted
+            ),
         )
 
 

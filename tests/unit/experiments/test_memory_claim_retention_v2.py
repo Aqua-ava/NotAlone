@@ -27,12 +27,13 @@ import importlib.util
 import io
 import json
 import os
-from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
-from types import ModuleType
 import unittest
+from pathlib import Path
+from types import ModuleType
 from unittest import mock
 
 REPO = Path(__file__).resolve().parents[3]
@@ -107,6 +108,47 @@ class RunnerBackedTest(unittest.TestCase):
                 f"runner 守卫失效：脚本缺失时不应进入 setUpClass（{RUNNER_PATH}）"
             )
         cls.runner = _load_runner()
+
+
+class FrozenRunnerBackedTest(RunnerBackedTest):
+    """在临时目录核验冻结源码，当前产品提示正文仍须匹配历史计划。"""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        temporary = tempfile.TemporaryDirectory(
+            prefix="notalone-frozen-adapter-"
+        )
+        cls.addClassCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        git_dir = subprocess.run(
+            ["git", "rev-parse", "--absolute-git-dir"],
+            cwd=REPO,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        (root / ".git").write_text(f"gitdir: {git_dir}\n", encoding="utf-8")
+        plan = _plan()
+        candidate = plan["scope"]["arms_detail"]["candidate"]
+        source = subprocess.run(
+            [
+                "git",
+                "show",
+                f"{candidate['take_from']['commit']}:{candidate['prompt_file_path']}",
+            ],
+            cwd=REPO,
+            check=True,
+            capture_output=True,
+        ).stdout
+        fixture = root / candidate["prompt_file_path"]
+        fixture.parent.mkdir(parents=True)
+        fixture.write_bytes(source)
+        for original in (RUNNER_PATH, PREPARE_PATH):
+            target = root / original.relative_to(REPO)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(original, target)
+        cls.runner.REPO = root
 
 
 def _baseline_prompt_text() -> str:
@@ -364,8 +406,8 @@ class ScheduleRotationTest(RunnerBackedTest):
         self.assertEqual({entry["repeat"] for entry in phase2}, {"r3", "r4"})
 
 
-class ArmPromptHashTest(RunnerBackedTest):
-    """两臂提示的 SHA 必须与当前仓库、git 历史提交一致。"""
+class ArmPromptHashTest(FrozenRunnerBackedTest):
+    """冻结文件 SHA 与历史提交一致，当前提示正文保持既有冻结值。"""
 
     def test_candidate_prompt_body_sha_matches_the_current_repository(self) -> None:
         plan = _plan()
@@ -379,7 +421,11 @@ class ArmPromptHashTest(RunnerBackedTest):
         plan = _plan()
         recorded = plan["scope"]["arms_detail"]["candidate"]["prompt_file_sha256"]
         self.assertEqual(
-            hashlib.sha256(VERIFICATION_ADAPTERS.read_bytes()).hexdigest(),
+            hashlib.sha256(
+                (
+                    self.runner.REPO / self.runner.PROMPT_SOURCE_PATH
+                ).read_bytes()
+            ).hexdigest(),
             recorded,
         )
         self.assertEqual(
@@ -837,7 +883,7 @@ class BudgetCountTest(RunnerBackedTest):
             self.runner.assert_within_budget(plan, attempted_invokes=17)
 
 
-class DryRunCredentialTest(RunnerBackedTest):
+class DryRunCredentialTest(FrozenRunnerBackedTest):
     """dry-run 必须在读凭据之前返回，且不写任何真实运行记录。"""
 
     def test_dry_run_never_reads_credentials(self) -> None:
@@ -998,7 +1044,9 @@ class SyntheticCredentialBindingTest(RunnerBackedTest):
         cls.addClassCleanup(sys.path.remove, str(REPO / "src"))
 
     def _model(self):
-        from notalone.reply.adapters.deepseek_provider import build_deepseek_model
+        from notalone.reply.adapters.deepseek_provider import (
+            build_deepseek_model,
+        )
 
         return build_deepseek_model(
             api_key=SYNTHETIC_KEY,
@@ -1087,8 +1135,25 @@ class SyntheticCredentialBindingTest(RunnerBackedTest):
             "首次绑定必须显式钉扎 tool_choice",
         )
         product_source = VERIFICATION_ADAPTERS.read_text(encoding="utf-8")
-        self.assertIn("tool_choice=SOURCE_VERIFICATION_SCHEMA[\"title\"]",
-                      product_source)
+        product_tree = ast.parse(product_source)
+        traced_calls = [
+            node
+            for node in ast.walk(product_tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "invoke_traced_model"
+        ]
+        self.assertEqual(len(traced_calls), 1)
+        options = next(
+            keyword.value
+            for keyword in traced_calls[0].keywords
+            if keyword.arg == "tool_options"
+        )
+        self.assertEqual(ast.literal_eval(options.keys[0]), "tool_choice")
+        self.assertEqual(
+            ast.unparse(options.values[0]),
+            "SOURCE_VERIFICATION_SCHEMA['title']",
+        )
 
 
 class RunnerSourceBoundaryTest(RunnerBackedTest):

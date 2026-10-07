@@ -2,20 +2,27 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 from uuid import UUID
 
-from langchain_core.language_models import BaseChatModel
 import psycopg
+from langchain_core.language_models import BaseChatModel
 from psycopg.rows import dict_row
 
 from notalone.memory_extraction.models import MessageRef, MessageSender
+from notalone.memory_trace.context import event_payload, snapshot
+from notalone.memory_trace.transport import build_trace_http_client
 from notalone.persistence import (
     PostgresMemoryStore,
-    PostgresOwnerMemoryStore,
     PostgresOutboundLedger,
+    PostgresOwnerMemoryStore,
     PostgresWatermarkStore,
 )
+from notalone.persistence.extraction_trace import PostgresExtractionTraceStore
 from notalone.persistence.message_sources import valid_source_ref_exists_sql
 from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from notalone.scopes import ContactScope
@@ -31,10 +38,14 @@ class ExtractionComponents:
     owner_store: PostgresOwnerMemoryStore
     ledger: PostgresOutboundLedger
     watermark: PostgresWatermarkStore
+    trace_store: PostgresExtractionTraceStore
 
 
 def build_extraction_components(database_url: str) -> ExtractionComponents:
-    model = build_deepseek_model(extra_body={"thinking": {"type": "enabled"}})
+    model = build_deepseek_model(
+        extra_body={"thinking": {"type": "enabled"}},
+        http_client=build_trace_http_client(),
+    )
     return ExtractionComponents(
         model=model,
         model_name=getattr(model, "model_name", "deepseek"),
@@ -42,11 +53,15 @@ def build_extraction_components(database_url: str) -> ExtractionComponents:
         owner_store=PostgresOwnerMemoryStore(database_url),
         ledger=PostgresOutboundLedger(database_url),
         watermark=PostgresWatermarkStore(database_url),
+        trace_store=PostgresExtractionTraceStore(database_url),
     )
 
 
 def load_contact_messages(
-    scope: ContactScope, database_url: str
+    scope: ContactScope,
+    database_url: str,
+    *,
+    selection_receipts: list[dict[str, Any]] | None = None,
 ) -> tuple[MessageRef, ...]:
     """按时间正序读取联系人范围内 active 来源的消息。"""
 
@@ -57,7 +72,15 @@ def load_contact_messages(
                    message.speaker,
                    message.text_content,
                    message.media_placeholder,
-                   message.occurred_at
+                   message.occurred_at,
+                   COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                       'source_ref_id', ref.id, 'source_id', COALESCE(ref.source_document_id,ref.observation_id),
+                       'source_kind', ref.source_kind, 'locator', ref.source_locator,
+                       'capture_layer', 'legacy_projection', 'raw_payload', ref.raw_payload,
+                       'processing_status', 'missing', 'source_recorded_at', ref.created_at
+                   ) ORDER BY ref.created_at,ref.id) FROM public.message_source_ref AS ref
+                   WHERE ref.message_id=message.id AND ref.owner_id=message.owner_id
+                     AND ref.contact_id=message.contact_id), '[]'::jsonb) AS source_snapshots
             FROM public.message AS message
             WHERE message.owner_id = %s
               AND message.contact_id = %s
@@ -67,18 +90,50 @@ def load_contact_messages(
             (scope.owner_id, scope.contact_id),
         ).fetchall()
     messages = []
-    for row in rows:
+    rule_version = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    for index, row in enumerate(rows):
+        started_at = datetime.now(timezone.utc)
+        text = row["text_content"] or row["media_placeholder"] or ""
+        occurred = row["occurred_at"]
+        reason = "selected"
         if row["speaker"] == "contact":
             sender = MessageSender.CONTACT
         elif row["speaker"] == "user":
             sender = MessageSender.SELF
         else:
-            continue
-        text = row["text_content"] or row["media_placeholder"] or ""
-        if not text.strip():
-            continue
-        occurred = row["occurred_at"]
-        if occurred is None:
+            sender = None
+            reason = "unsupported_sender"
+        if reason == "selected" and not text.strip():
+            reason = "empty_text"
+        if reason == "selected" and occurred is None:
+            reason = "missing_occurred_at"
+        if selection_receipts is not None:
+            selection_receipts.append(
+                event_payload(
+                    {
+                        "message_id": str(row["message_id"]),
+                        "read_position": index,
+                        "speaker": row["speaker"],
+                        "included": reason == "selected",
+                        "reason": reason,
+                        "sender": sender.value if sender else None,
+                        "text_field": (
+                            "text_content"
+                            if row["text_content"]
+                            else "media_placeholder"
+                        ),
+                        "occurred_at": snapshot(occurred),
+                        "source_ref_ids": [
+                            item["source_ref_id"]
+                            for item in row["source_snapshots"]
+                        ],
+                    },
+                    started_at=started_at,
+                    rule_version=rule_version,
+                    status="selected" if reason == "selected" else "filtered",
+                )
+            )
+        if reason != "selected" or sender is None:
             continue
         messages.append(
             MessageRef(
@@ -86,6 +141,14 @@ def load_contact_messages(
                 text=text,
                 sender=sender,
                 occurred_at=occurred,
+                source_snapshots=tuple(row["source_snapshots"]),
+                message_snapshot={
+                    "capture_layer": "normalized_message_row",
+                    "speaker": row["speaker"],
+                    "text_content": row["text_content"],
+                    "media_placeholder": row["media_placeholder"],
+                    "occurred_at": snapshot(occurred),
+                },
             )
         )
     return tuple(messages)

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
 from threading import Event, Thread
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 import psycopg
@@ -29,6 +29,7 @@ from notalone.memory_extraction.errors import (
 )
 from notalone.memory_extraction.runtime import MemoryExtractionRuntime
 from notalone.memory_extraction.verification import SourceVerificationRuntime
+from notalone.memory_trace import TracePort, TraceWriteError
 from notalone.persistence.background_tasks import (
     BackgroundTaskLeaseError,
     BackgroundTaskPersistenceError,
@@ -43,27 +44,29 @@ from notalone.persistence.memory_store import (
     MemoryPersistenceError,
     PostgresMemoryStore,
 )
+from notalone.persistence.outbound_ledger import (
+    OutboundLedgerPersistenceError,
+    PostgresOutboundLedger,
+)
 from notalone.persistence.owner_memory_store import (
     OwnerMemoryPersistenceError,
     PostgresOwnerMemoryStore,
 )
-from notalone.persistence.outbound_ledger import (
-    OutboundLedgerPersistenceError,
-    PostgresOutboundLedger,
+from notalone.persistence.source_deletion import (
+    PostgresSourceDeletionRepository,
+    SourceDeletionError,
 )
 from notalone.persistence.watermark_store import (
     PostgresWatermarkStore,
     WatermarkPersistenceError,
 )
 from notalone.scopes import ContactScope
-from notalone.persistence.source_deletion import PostgresSourceDeletionRepository, SourceDeletionError
 from notalone.tasks.models import (
-    BackgroundTaskStepName,
     DELETE_TASK_STEPS,
+    BackgroundTaskStepName,
     BackgroundTaskStepStatus,
     ClaimedBackgroundTaskStep,
 )
-
 
 class ExtractionTaskRunner(Protocol):
     """Worker 调用的记忆提取执行 seam。"""
@@ -172,6 +175,7 @@ class PostgresMemoryExtractionRunner:
         "_runtime",
         "_verification_runtime",
         "_watermark_port",
+        "_trace_store",
     )
 
     def __init__(
@@ -189,6 +193,7 @@ class PostgresMemoryExtractionRunner:
         provider: str = "deepseek",
         model_name: str | None = None,
         dimension_release: DimensionRelease | None = None,
+        trace_store: TracePort | None = None,
     ) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
@@ -242,17 +247,29 @@ class PostgresMemoryExtractionRunner:
         self._batch_size = batch_size
         self._provider = provider
         self._model_name = model_name or "unreported"
+        from notalone.persistence.extraction_trace import (
+            PostgresExtractionTraceStore,
+        )
+
+        self._trace_store = (
+            trace_store
+            if trace_store is not None
+            else PostgresExtractionTraceStore(database_url)
+        )
 
     @property
     def model_version(self) -> str:
         return self._model_name
 
     def run(self, *, scope: ContactScope) -> ExtractionRunStats:
-        from notalone.memory_extraction.cli_support import load_contact_messages
+        from notalone.memory_extraction.cli_support import (
+            load_contact_messages,
+        )
 
-        messages = load_contact_messages(scope, self._database_url)
-        if not messages:
-            return ExtractionRunStats()
+        selection_receipts: list[dict[str, Any]] = []
+        messages = load_contact_messages(
+            scope, self._database_url, selection_receipts=selection_receipts
+        )
         return run_extraction(
             scope=scope,
             messages=messages,
@@ -268,6 +285,8 @@ class PostgresMemoryExtractionRunner:
             provider=self._provider,
             model_name=self._model_name,
             dimension_release=self._dimension_release,
+            trace_store=self._trace_store,
+            selection_receipts=tuple(selection_receipts),
         )
 
 
@@ -574,6 +593,8 @@ class BackgroundTaskWorker:
 
 
 def _failure_info(error: Exception) -> tuple[str, bool]:
+    if isinstance(error, TraceWriteError):
+        return "trace_write_failed", True
     if isinstance(
         error,
         (

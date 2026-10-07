@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 from notalone.memory.models import (
@@ -162,6 +163,9 @@ class MessageRef:
     text: str
     sender: MessageSender
     occurred_at: datetime | None
+    # 早于提取保存的来源处理快照；空集合表示真实缺口，不补造原始记录。
+    source_snapshots: tuple[dict[str, Any], ...] = ()
+    message_snapshot: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.message_id, UUID):

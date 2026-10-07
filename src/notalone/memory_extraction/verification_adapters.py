@@ -23,7 +23,9 @@ from notalone.memory_extraction.verification import (
     SourceVerificationVerdict,
     validate_source_verification,
 )
-
+from notalone.memory_trace import TraceWriteError
+from notalone.memory_trace.context import record_ledger_call
+from notalone.memory_trace.transport import invoke_traced_model
 
 SOURCE_VERIFICATION_SYSTEM_PROMPT = """逐条比较记忆候选与同一联系人窗口中的原话，
 只判断候选是否忠实保留原话，不证明现实世界真假；这不是只判断某个子句在逻辑上是否成立。
@@ -152,14 +154,26 @@ class LangChainSourceVerificationRuntime:
         called_at = datetime.now(timezone.utc)
         started = time.perf_counter()
         try:
-            bound = self._model.bind_tools(
-                [SOURCE_VERIFICATION_SCHEMA],
-                tool_choice=SOURCE_VERIFICATION_SCHEMA["title"],
+            message = invoke_traced_model(
+                self._model,
+                purpose="verification",
+                schema=SOURCE_VERIFICATION_SCHEMA,
+                tool_options={
+                    "tool_choice": SOURCE_VERIFICATION_SCHEMA["title"]
+                },
+                messages=[
+                    {
+                        "role": "system",
+                        "content": SOURCE_VERIFICATION_SYSTEM_PROMPT,
+                    },
+                    {
+                        "role": "user",
+                        "content": _verification_text(window, facts),
+                    },
+                ],
             )
-            message = bound.invoke([
-                {"role": "system", "content": SOURCE_VERIFICATION_SYSTEM_PROMPT},
-                {"role": "user", "content": _verification_text(window, facts)},
-            ])
+        except TraceWriteError:
+            raise
         except Exception:
             self._record_call(
                 window, called_at, started, LedgerOutcome.RUN_FAILED,
@@ -193,19 +207,34 @@ class LangChainSourceVerificationRuntime:
         raw_metadata = getattr(message, "response_metadata", None)
         usage = raw_usage if isinstance(raw_usage, dict) else {}
         metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
-        model_name = next((value for value in (
-            metadata.get("model_name"), metadata.get("model"),
-            getattr(self._model, "model_name", None),
-            getattr(self._model, "model", None),
-        ) if isinstance(value, str) and value.strip()), "unreported")
-        self._ledger.record(LedgerEntry(
-            entry_id=uuid4(), owner_id=window.owner_id, contact_id=window.contact_id,
-            provider=self._provider, model_name=model_name,
+        model_name = next(
+            (
+                value
+                for value in (
+                    metadata.get("model_name"),
+                    metadata.get("model"),
+                    getattr(self._model, "model_name", None),
+                    getattr(self._model, "model", None),
+                )
+                if isinstance(value, str) and value.strip()
+            ),
+            "unreported",
+        )
+        entry = LedgerEntry(
+            entry_id=uuid4(),
+            owner_id=window.owner_id,
+            contact_id=window.contact_id,
+            provider=self._provider,
+            model_name=model_name,
             input_tokens=_token_count(usage.get("input_tokens")),
             output_tokens=_token_count(usage.get("output_tokens")),
             latency_ms=max(0, int((time.perf_counter() - started) * 1000)),
-            outcome=outcome, called_at=called_at,
-        ))
+            outcome=outcome,
+            called_at=called_at,
+        )
+        started_at = datetime.now(timezone.utc)
+        self._ledger.record(entry)
+        record_ledger_call("verification", entry, started_at=started_at)
 
 
 def _token_count(value: object) -> int | None:

@@ -19,7 +19,8 @@ from notalone.memory_extraction.models import (
     SpeechAct,
 )
 from notalone.memory_extraction.runtime import ExtractionPayload
-
+from notalone.memory_trace import TraceWriteError
+from notalone.memory_trace.transport import invoke_traced_model
 
 EXTRACTION_SYSTEM_PROMPT = """你从一位联系人的聊天消息窗口中提取值得复核的关系主张。
 先做语用解释，再决定是否输出：必须结合上下文理解语气，区分事实、计划、假设、转述、
@@ -276,19 +277,22 @@ class LangChainExtractionRuntime:
 
     def extract(self, window: ExtractionWindow) -> ExtractionPayload:
         try:
-            bound = self._model.bind_tools(
-                [EXTRACTION_SCHEMA], tool_choice=EXTRACTION_SCHEMA["title"],
-            )
-            message = bound.invoke(
-                [
+            message = invoke_traced_model(
+                self._model,
+                purpose="extraction",
+                schema=EXTRACTION_SCHEMA,
+                tool_options={"tool_choice": EXTRACTION_SCHEMA["title"]},
+                messages=[
                     {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
                     {"role": "user", "content": _window_text(window)},
-                ]
+                ],
             )
-        except ExtractionRuntimeError:
+        except (ExtractionRuntimeError, TraceWriteError):
             raise
         except Exception as error:
-            raise ExtractionRuntimeError("模型调用失败，未生成记忆。") from error
+            raise ExtractionRuntimeError(
+                "模型调用失败，未生成记忆。"
+            ) from None
         tool_calls = getattr(message, "tool_calls", None)
         if not tool_calls:
             raise ExtractionInvalidOutputError("模型未返回可解析的结构化事实。")

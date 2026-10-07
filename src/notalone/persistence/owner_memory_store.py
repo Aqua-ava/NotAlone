@@ -21,10 +21,9 @@ from notalone.memory.models import (
     OwnerMemory,
 )
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
-from notalone.persistence.message_sources import valid_source_ref_exists_sql
 from notalone.persistence.memory_timing import timed_memory_rows
+from notalone.persistence.message_sources import valid_source_ref_exists_sql
 from notalone.scopes import ContactScope
-
 
 _OWNER_MEMORY_UNAVAILABLE = "owner 记忆数据库操作失败。"
 
@@ -257,6 +256,16 @@ class PostgresOwnerMemoryStore:
         try:
             with self._connect() as connection:
                 lock_owner_scope(connection, owner_id=owner_id)
+                from notalone.persistence.extraction_trace import (
+                    erase_record_traces,
+                )
+
+                erase_record_traces(
+                    connection,
+                    owner_id=owner_id,
+                    record_kind="owner_memory",
+                    record_id=memory_id,
+                )
                 row = connection.execute(
                     f"""
                     UPDATE public.owner_memory

@@ -9,15 +9,18 @@ from uuid import UUID, uuid4
 
 import psycopg
 
-from notalone.persistence.source_memory_erasure import erase_source_memories
+from notalone.persistence.extraction_trace import erase_source_traces
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.message_cleanup import (
     cleanup_derived_data,
     collect_orphan_message_ids,
     delete_messages,
 )
-from notalone.persistence.reply_cleanup import ReplyCleanupError, delete_source_replies
-
+from notalone.persistence.reply_cleanup import (
+    ReplyCleanupError,
+    delete_source_replies,
+)
+from notalone.persistence.source_memory_erasure import erase_source_memories
 
 class SourceDeletionError(RuntimeError):
     """不暴露 SQL 或私密内容的来源删除错误。"""
@@ -110,6 +113,11 @@ class PostgresSourceDeletionRepository:
                     owner_id=owner_id,
                     contact_id=contact_id,
                     source_document_id=source_document_id,
+                )
+                erase_source_traces(
+                    connection,
+                    owner_id=owner_id,
+                    removed_ids={source_document_id},
                 )
                 # 删除来源只移除其引用；消息仅在失去全部有效引用后清理。
                 source_message_ids = tuple(

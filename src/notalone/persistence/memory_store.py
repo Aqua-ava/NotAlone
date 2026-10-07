@@ -12,7 +12,6 @@ import psycopg
 from psycopg.rows import dict_row
 
 from notalone.memory.models import (
-    MemoryTopic,
     AdoptionMethod,
     ConfirmedMemory,
     ConfirmedMemoryStatus,
@@ -20,12 +19,13 @@ from notalone.memory.models import (
     MemoryCandidate,
     MemoryCandidateStatus,
     MemoryCategory,
+    MemoryTopic,
 )
-from notalone.scopes import ContactScope
-from notalone.persistence.locks import lock_contact_scope
-from notalone.persistence.message_sources import valid_source_ref_exists_sql
+from notalone.persistence.extraction_trace import erase_record_traces
+from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.memory_timing import timed_memory_rows
-
+from notalone.persistence.message_sources import valid_source_ref_exists_sql
+from notalone.scopes import ContactScope
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -99,6 +99,11 @@ class PostgresMemoryStore:
         self._database_url = database_url
         self._clock = clock
         self._id_factory = id_factory
+
+    @property
+    def database_url(self) -> str:
+        """供同一数据库内的提取追踪装配使用。"""
+        return self._database_url
 
     def create_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
         """保存一条带来源和联系人范围的候选。"""
@@ -591,6 +596,13 @@ class PostgresMemoryStore:
                 self._ensure_scope(row, scope)
                 if row["candidate_status"] != MemoryCandidateStatus.PENDING.value:
                     raise RuntimeError("当前关系记忆候选不能丢弃。")
+                lock_owner_scope(connection, owner_id=scope.owner_id)
+                erase_record_traces(
+                    connection,
+                    owner_id=scope.owner_id,
+                    record_kind="candidate",
+                    record_id=candidate_id,
+                )
                 updated = connection.execute(
                     f"""
                     UPDATE public.memory_candidate
@@ -862,6 +874,14 @@ class PostgresMemoryStore:
                 if row is None:
                     raise LookupError("关系记忆不存在。")
                 self._ensure_scope(row, scope)
+                if next_status is ConfirmedMemoryStatus.DELETED:
+                    lock_owner_scope(connection, owner_id=scope.owner_id)
+                    erase_record_traces(
+                        connection,
+                        owner_id=scope.owner_id,
+                        record_kind="contact_memory",
+                        record_id=memory_id,
+                    )
                 if reject_deleted and row["memory_status"] == (
                     ConfirmedMemoryStatus.DELETED.value
                 ):
