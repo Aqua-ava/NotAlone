@@ -44,11 +44,13 @@ zsh scripts/build_cli.sh
 
 菜单栏 App 已降级为轻量状态入口：不再每 3 秒拉起 `notalone-front-sync`
 子进程轮询，而是查询常驻后端（`notalone-server`）的 `/api/sync/*` HTTP
-端点；同步开关与“立即检查一次”同样经后端 API 生效。后端由主窗口应用
-拉起，连接信息经握手文件（`~/.notalone/backend.info`，可用
+端点；同步开关与“立即检查一次”同样经后端 API 生效。旧 Swift 主窗口已退役，
+当前调试需要在仓库根目录激活 `NotAlone` conda 环境后手动运行
+`notalone-server`；关闭调试时在该终端按 Ctrl-C 停止后台，退出菜单栏程序
+不代替停止这个独立后台。连接信息经握手文件（`~/.notalone/backend.info`，可用
 `NOTALONE_BACKEND_INFO` 覆盖）发现；后端不可用时菜单栏标题给出清晰
-提示。绑定候选只在菜单中展示计数；确认入口由主窗口应用提供（本阶段
-仍可用 CLI `notalone-front-sync confirm-binding` 兜底）。
+提示。绑定候选只在菜单中展示计数；当前确认入口使用 CLI
+`notalone-front-sync confirm-binding`，新主界面后续另行设计。
 
 自动状态查询仍每 3 秒触发，同一连接同时最多一个请求；上一轮未结束时
 跳过本轮，不积累等待任务。每轮检查握手，后端换代、握手缺失或退出时取消
