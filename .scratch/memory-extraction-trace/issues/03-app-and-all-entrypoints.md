@@ -1,6 +1,6 @@
 # 03：在 App 查看全过程并接通所有默认提取入口
 
-Triage: ready-for-agent
+Triage: needs-info
 State: claimed
 Blocked by: 01, 02
 
@@ -22,6 +22,8 @@ Blocked by: 01, 02
 2026-10-07：依赖 01 的追踪与 02 的原始来源处理，才能在 App 声称展示新输入的完整链路。不会为展示效果调用真实模型或重提取旧记忆。
 
 2026-10-08：开始交付所有共同后端范围；ADR-039 已退役 Swift 主界面，新 React 界面由后续设计任务处理。本任务 App 验收保持待办，后端实现不修改旧界面或新建前端。
+
+2026-10-08：共同后端范围已完成并通过独立复验。待用户选择本次先交付后端、由新前端接入界面，还是本次补最小 React 查看页；尚未收到该范围问题的答复。依[工作流决策模式](../../../docs/agents/workflow.md)的“功能范围或用户意图不明确”，本任务转为 `Triage: needs-info`，保持 `State: claimed` 和 App 验收待办；不静默改写原规格或宣称全规格完成。
 
 
 ## Answer
@@ -76,6 +78,14 @@ Blocked by: 01, 02
 - 与上节相同完整 7 模块 HTTP 命令：83 通过，日志 `/tmp/notalone-trace03-review-fix-http-validation.log`，5 个自建库清理后残留 0。最后删除关联收口后重跑本任务公开 HTTP／CLI 模块，22 通过，日志 `/tmp/notalone-trace03-review-fix-final-http-validation.log`，1 个自建库清理后残留 0。未重复与最后改动无关的完整套件。
 - 25 个无既有诊断的生产文件 mypy 通过，日志 `/tmp/notalone-trace03-review-fix-clean-type.log`。冻结 de6 integration 与当前 8 个既有诊断文件逐项对比，均 196 项（app 59、server command 5、Worker 9、CLI adapter 3、postgres_repository 11、observation_store 16、tail_lifecycle 2、cli_sync 91），0 新增／0 消失；日志 `/tmp/notalone-trace03-review-fix-existing-type-baseline.log` 与 `/tmp/notalone-trace03-review-fix-existing-type-current.log`。没有宣称全仓类型零错误。
 - Python 格式整理核对 AST 等价，`git diff --check` 通过；本轮父基点为上述 de6，最终本地提交 SHA／clean／integration 祖先证据由主任务固定交接记录补充。
+
+### 集成复验与收尾
+
+2026-10-08：后端交付固定提交 `1a71b2b3142cadcac223f4b1ae86320295c9148c` 已快进合入 `codex/memory-extraction-trace`。独立 Standards 复验确认 1 项硬规范问题和 2 项维护判断均解决，剩余 0；独立 Spec 复验确认 5 项后端问题均解决，剩余后端问题 0，另有 1 项已知 App 范围缺口。共享输入关联的最终整理另经 10 项公开 SDK／内存、PostgreSQL、HTTP／CLI 回归与 3 个生产文件类型检查通过；没有重复与该小改动无关的完整套件。
+
+已核对上述 949 项单元、204 项数据库、83 项 HTTP，以及最后 51 项来源链、22 项 HTTP／CLI 和 10 项公开回归的实际验证日志。变更文档的本地链接及 39 个 ADR、43 个迁移编号唯一性检查通过。迁移校验值未改，所有正文测试资料为合成；任务创建回执已用于精确清理 `notalone_memory_trace_be5912528896_test`，清理后残留为 0，各 HTTP 夹具自建库同样已清理。私人库未迁移，旧历史未重提取，未调用真实模型／微信，没有 push 或 PR。
+
+01／02 保持 resolved；03 的 App 查看与刷新尚未完成，原 User Story 21 和验收范围保留，等待已提出的范围选择。
 
 ### 独立复验与输入关联维护收口
 
