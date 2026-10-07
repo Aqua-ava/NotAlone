@@ -26,6 +26,7 @@ class FakeImportService:
         self.preview_calls: list[str] = []
         self.commit_calls: list[tuple[str, object]] = []
         self.invalid_path = False
+        self.task_id = uuid4()
 
     def preview(self, *, path: str) -> dict[str, object]:
         self.preview_calls.append(path)
@@ -52,6 +53,7 @@ class FakeImportService:
             "imported_count": 5,
             "skipped_duplicates": 0,
             "contact_id": str(CONTACT_ID),
+            "task_id": str(self.task_id),
         }
 
 
@@ -74,6 +76,9 @@ class FakeTaskService:
         self.run_calls.append(contact_id)
         if self.busy:
             return {"status": "busy"}
+        return {"status": "started"}
+
+    def wake(self, *, owner_id: UUID, contact_id: UUID, task_id: UUID) -> dict[str, object]:
         return {"status": "started"}
 
     def current(self, *, owner_id: UUID, contact_id: UUID) -> dict[str, object]:

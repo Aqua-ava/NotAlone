@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import nullcontext
 from datetime import timedelta
 from enum import StrEnum
 from threading import Event, Thread
@@ -10,6 +11,8 @@ from typing import Any, Protocol
 from uuid import UUID
 
 import psycopg
+
+from notalone.application.model_priority import ModelPriorityControl, ModelWorkStopped
 
 from notalone.ledger.ports import OutboundLedgerPort
 from notalone.memory.ports import MemoryPort, OwnerMemoryPort
@@ -81,6 +84,7 @@ class WorkerRunOutcome(StrEnum):
     SUCCEEDED = "succeeded"
     RETRYABLE = "retryable"
     FAILED = "failed"
+    STOPPED = "stopped"
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +109,7 @@ class _LeaseHeartbeat:
         "_repository",
         "_stop",
         "_thread",
+        "_external_stop",
     )
 
     def __init__(
@@ -112,6 +117,7 @@ class _LeaseHeartbeat:
         repository: PostgresBackgroundTaskRepository,
         claim: ClaimedBackgroundTaskStep,
         lease_duration: timedelta,
+        stop_event: Event | None = None,
     ) -> None:
         self._repository = repository
         self._claim = claim
@@ -120,6 +126,7 @@ class _LeaseHeartbeat:
             max(0.05, lease_duration.total_seconds() / 3.0),
         )
         self._stop = Event()
+        self._external_stop = stop_event
         self._thread: Thread | None = None
         self._error: Exception | None = None
 
@@ -146,6 +153,8 @@ class _LeaseHeartbeat:
 
     def _run(self) -> None:
         while not self._stop.wait(self._interval_seconds):
+            if self._external_stop is not None and self._external_stop.is_set():
+                return
             try:
                 self._repository.renew_step_lease(
                     self._claim,
@@ -301,6 +310,7 @@ class BackgroundTaskWorker:
         "_model_version",
         "_repository",
         "_rule_version",
+        "_model_priority",
     )
 
     def __init__(
@@ -312,6 +322,7 @@ class BackgroundTaskWorker:
         lease_duration: timedelta = timedelta(seconds=30),
         rule_version: str = "memory-extraction-v1",
         index_repository: PostgresContactMemoryIndexRepository | None = None,
+        model_priority: ModelPriorityControl | None = None,
     ) -> None:
         if repository is None or (extraction_runner is None and deletion_repository is None):
             raise TypeError("Worker 必须注入任务仓储以及提取或删除执行器。")
@@ -324,6 +335,7 @@ class BackgroundTaskWorker:
         self._lease_duration = lease_duration
         self._model_version = getattr(extraction_runner, "model_version", None)
         self._rule_version = rule_version
+        self._model_priority = model_priority
 
     def run_once(
         self,
@@ -334,6 +346,9 @@ class BackgroundTaskWorker:
         task_id: UUID | None = None,
     ) -> WorkerRunResult:
         """领取并执行一个支持的步骤；没有可领取步骤时返回 idle。"""
+
+        if self._stopping():
+            return WorkerRunResult(outcome=WorkerRunOutcome.STOPPED)
 
         supported_steps = ()
         if self._extraction_runner is not None:
@@ -361,6 +376,8 @@ class BackgroundTaskWorker:
         )
         if claim is None:
             return WorkerRunResult(outcome=WorkerRunOutcome.IDLE)
+        if self._stopping():
+            return self._stopped_result(claim)
 
         if claim.name in {name for _, name in DELETE_TASK_STEPS}:
             try:
@@ -491,15 +508,23 @@ class BackgroundTaskWorker:
             )
 
         try:
-            with _LeaseHeartbeat(
+            guard = (
+                self._model_priority.background_scope(
+                    lambda: self._repository.check_step_lease(claim),
+                ) if self._model_priority is not None else nullcontext()
+            )
+            with guard, _LeaseHeartbeat(
                 self._repository,
                 claim,
                 self._lease_duration,
+                self._model_priority.stop_event if self._model_priority is not None else None,
             ) as heartbeat:
                 stats = self._extraction_runner.run(
                     scope=ContactScope(claim.owner_id, claim.contact_id)
                 )
                 heartbeat.raise_if_failed()
+        except ModelWorkStopped:
+            return self._stopped_result(claim)
         except Exception as error:
             error_code, retryable = _failure_info(error)
             return self._record_failure(
@@ -513,6 +538,8 @@ class BackgroundTaskWorker:
                 "memory_extraction_failed",
                 retryable=True,
             )
+        if self._stopping():
+            return self._stopped_result(claim)
 
         if not self._complete_step(
             claim,
@@ -535,6 +562,8 @@ class BackgroundTaskWorker:
         processed_count: int,
         total_count: int,
     ) -> bool:
+        if self._stopping():
+            return False
         try:
             self._repository.complete_step(
                 claim,
@@ -551,12 +580,30 @@ class BackgroundTaskWorker:
         self,
         claim: ClaimedBackgroundTaskStep,
     ) -> WorkerRunResult:
+        if self._stopping():
+            return self._stopped_result(claim)
         return WorkerRunResult(
             outcome=WorkerRunOutcome.RETRYABLE,
             task_id=claim.task_id,
             step_name=claim.name,
             attempt_count=claim.attempt_count,
             error_code="temporary_failure",
+        )
+
+    def _stopping(self) -> bool:
+        return self._model_priority is not None and self._model_priority.stop_event.is_set()
+
+    def _stopped_result(self, claim: ClaimedBackgroundTaskStep) -> WorkerRunResult:
+        attempts = claim.attempt_count
+        try:
+            if self._repository.pause_step(claim):
+                attempts -= 1
+        except BackgroundTaskPersistenceError:
+            # 来源删除或租约已失效时不复活旧工作；恢复仍由数据库决定。
+            pass
+        return WorkerRunResult(
+            outcome=WorkerRunOutcome.STOPPED, task_id=claim.task_id,
+            step_name=claim.name, attempt_count=max(0, attempts),
         )
 
     def _record_failure(
@@ -577,6 +624,13 @@ class BackgroundTaskWorker:
             # 暂时不可用时，失败状态已无法落库；按可重试的临时失败
             # 返回，让 worker 循环存活，由租约收尸与下次认领决定
             # 任务去向，而不是让异常逃逸 run_once 崩溃整个进程。
+            if self._stopping():
+                # 已知失败的记账暂不可用时不能当协作停止退款。
+                return WorkerRunResult(
+                    outcome=WorkerRunOutcome.STOPPED, task_id=claim.task_id,
+                    step_name=claim.name, attempt_count=claim.attempt_count,
+                    error_code=error_code,
+                )
             return self._temporary_failure_result(claim)
         outcome = (
             WorkerRunOutcome.RETRYABLE

@@ -98,6 +98,13 @@ class FailedTaskRecoveryHttpTest(unittest.TestCase):
                     (owner_id,),
                 )
         self.backend = self._backend(self.owner_id)
+        # 无模型宿主的真实 HTTP 服务只准备旧队列，恢复由当前宿主显式执行。
+        self.queued_backend = HttpBackend(create_app(
+            database_url=self.database_url, owner_id=self.owner_id,
+            token=f"synthetic-queued-{self.owner_id}",
+            import_service=ImportService(repository=PostgresIngestRepository(self.database_url)),
+        ), self.owner_id)
+        self.addCleanup(self.queued_backend.close)
 
     def _close_connections(self) -> None:
         for connection in self.lock_connections:
@@ -129,12 +136,15 @@ class FailedTaskRecoveryHttpTest(unittest.TestCase):
                 ),
                 lock_connection_builder=lock_connection,
                 event_publisher=lambda update: None,
+                task_repository=PostgresBackgroundTaskRepository(self.database_url),
             ),
         ), owner_id)
         self.addCleanup(backend.close)
         return backend
 
-    def _import(self, *, contact_id: str | None = None) -> dict[str, Any]:
+    def _import(
+        self, *, contact_id: str | None = None, backend: HttpBackend | None = None,
+    ) -> dict[str, Any]:
         locator = (self.contact_locators[contact_id] if contact_id else
                    f"wxid_synthetic_{uuid4().hex}")
         nonce = uuid4().hex
@@ -160,7 +170,9 @@ class FailedTaskRecoveryHttpTest(unittest.TestCase):
             payload["new_contact_name"] = "恢复测试合成联系人"
         else:
             payload["contact_id"] = contact_id
-        status, imported = self.backend.request("/api/imports/commit", payload)
+        status, imported = (backend or self.queued_backend).request(
+            "/api/imports/commit", payload,
+        )
         self.assertEqual(status, 200, imported)
         self.contact_locators[imported["contact_id"]] = locator
         imported["path"] = str(path)
@@ -183,18 +195,30 @@ class FailedTaskRecoveryHttpTest(unittest.TestCase):
         self.fail(f"任务未达到预期状态 {expected}：{task}")
 
     def _fail_import(self) -> dict[str, Any]:
-        imported = self._import()
+        imported = self._import(backend=self.backend)
         self.assertIn("task_id", imported, "导入提交必须返回原后台任务身份。")
         status, started = self.backend.request("/api/tasks/run", {
             "contact_id": imported["contact_id"], "task_id": imported["task_id"],
         })
-        self.assertEqual((status, started), (200, {"status": "started"}))
+        self.assertEqual(status, 200, started)
+        self.assertIn(started["status"], {"started", "busy"})
         failed = self._wait(imported, "failed")
         self.assertEqual(failed["retry_count"], 3)
         self.assertEqual([(step["name"], step["status"], step["attempt_count"])
                           for step in failed["steps"][:3]],
                          [("parse", "succeeded", 1), ("normalize", "succeeded", 1),
                           ("extract_memory", "failed", 3)])
+        # 持久失败先于宿主线程收尾；确保下一次恢复确实可以取得执行范围。
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            status, host = self.backend.request(
+                f"/api/tasks/status?contact_id={imported['contact_id']}",
+            )
+            self.assertEqual(status, 200, host)
+            if host["status"] == "finished":
+                break
+            time.sleep(0.02)
+        self.assertEqual(host["status"], "finished", host)
         return imported
 
     def test_http_recovers_original_failed_task_and_skips_successful_steps(self) -> None:
