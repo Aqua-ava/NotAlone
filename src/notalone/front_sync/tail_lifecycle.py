@@ -44,7 +44,8 @@ from notalone.persistence.observation_store import (
 )
 from notalone.persistence.source_processing import SourceProcessingWriteError
 from notalone.scopes import ContactScope
-from notalone.source_processing.models import ProcessingRecord, execution
+from notalone.source_processing.models import ProcessingRecord
+from notalone.source_processing.rule_capture import capture_execution
 from notalone.wechat_cli import (
     CliAdapterError,
     CliCommandError,
@@ -759,7 +760,7 @@ def _select_events(
 
     started_at = datetime.now(timezone.utc)
     selected_events = _outside_disabled_window(read_events, window)
-    filtering = execution(started_at, __file__, status="filtered")
+    filtering = capture_execution(started_at, __file__, status="filtered")
     return selected_events, _disabled_window_records(
         read_events, selected_events, window=window, filtering=filtering
     )

@@ -23,7 +23,8 @@ from notalone.persistence.source_processing import (
     save_processing_batch,
 )
 from notalone.scopes import ContactScope
-from notalone.source_processing.models import ProcessingRecord, execution
+from notalone.source_processing.models import ProcessingRecord
+from notalone.source_processing.rule_capture import capture_execution
 
 
 class ImportPersistenceError(RuntimeError):
@@ -571,7 +572,7 @@ class PostgresIngestRepository:
                 ),
                 "source_ref_added": not reused,
                 "dedup_rule": "active_source_sha256_reuse_else_reject_overlapping_message",
-                "execution": execution(
+                "execution": capture_execution(
                     started_at, __file__, status="prepared_for_commit"
                 ),
             }

@@ -32,7 +32,8 @@ from notalone.persistence.source_processing import (
     save_processing_batch,
 )
 from notalone.scopes import ContactScope
-from notalone.source_processing.models import ProcessingRecord, execution
+from notalone.source_processing.models import ProcessingRecord
+from notalone.source_processing.rule_capture import capture_execution
 
 
 class ObservationPersistenceError(RuntimeError):
@@ -1291,7 +1292,7 @@ class PostgresObservationStore:
                         "source_create_time": stable_create_time,
                     },
                     "dedup_rule": "stable_local_id_and_create_time_or_minus_one",
-                    "execution": execution(
+                    "execution": capture_execution(
                         started_at, __file__, status="prepared_for_commit"
                     ),
                 }

@@ -27,7 +27,8 @@ from notalone.persistence.postgres_repository import (
 from notalone.persistence.source_processing import SourceProcessingWriteError
 from notalone.runtime_config import load_project_env, persist_owner_id
 from notalone.scopes import ContactScope
-from notalone.source_processing.models import ProcessingRecord, execution
+from notalone.source_processing.models import ProcessingRecord
+from notalone.source_processing.rule_capture import capture_execution
 
 
 class ContactConfirmationError(ValueError):
@@ -107,7 +108,7 @@ def import_file(
                 "parsed": None,
                 "locator": "document",
                 "stage": "import_persistence",
-                "import_persistence": execution(
+                "import_persistence": capture_execution(
                     started_at, __file__, status="failed"
                 ),
                 "error_code": "import_rejected",

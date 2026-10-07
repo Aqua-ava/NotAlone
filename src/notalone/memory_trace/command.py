@@ -55,7 +55,7 @@ def _main(resource: str, argv: list[str] | None) -> int:
     finding.add_argument(
         "record_kind",
         choices=(
-            ("candidate", "contact_memory", "owner_memory")
+            ("message", "candidate", "contact_memory", "owner_memory")
             if resource == "memory-traces"
             else (
                 "message",

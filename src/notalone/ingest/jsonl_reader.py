@@ -16,7 +16,8 @@ from pathlib import Path
 from typing import Any
 
 from notalone.ingest.errors import ImportPreviewError
-from notalone.source_processing.models import ProcessingRecord, execution
+from notalone.source_processing.models import ProcessingRecord
+from notalone.source_processing.rule_capture import capture_execution
 
 MAX_JSONL_BYTES = 64 * 1024 * 1024
 MAX_JSONL_RECORDS = 500_000
@@ -75,7 +76,7 @@ def read_jsonl(path: Path) -> JsonlDocument:
             "read",
             "file_size_limit",
         )
-    reading = execution(read_started_at, __file__)
+    reading = capture_execution(read_started_at, __file__)
 
     # JSONL 约定使用 UTF-8；不静默猜测其他编码，避免正文被错误解码后继续导入。
     decode_started_at = datetime.now(timezone.utc)
@@ -142,7 +143,7 @@ def read_jsonl(path: Path) -> JsonlDocument:
                     "record_text": line,
                     "parsed": record,
                     "read": reading,
-                    "parse": execution(started_at, __file__),
+                    "parse": capture_execution(started_at, __file__),
                 },
             )
         )
@@ -184,7 +185,7 @@ def _reader_error(
             "parsed": None,
             "locator": locator,
             "stage": stage,
-            stage: execution(started_at, __file__, status="failed"),
+            stage: capture_execution(started_at, __file__, status="failed"),
             "error_code": error_code,
             "outcome": "input_rejected",
         },

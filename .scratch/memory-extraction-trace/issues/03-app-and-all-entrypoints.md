@@ -30,7 +30,7 @@ Blocked by: 01, 02
 
 ### 后端能力
 
-- 新 `TraceService` 统一验证已确认的 owner/contact，默认 `create_app` 注入 PostgreSQL 提取与来源处理查询 Adapter；无需构建模型或配置模型凭据。HTTP 支持两类批次列表、详情、反查与手动删除，联系人的列表使用 `limit=1..500` 和 `before=next_before`，按时间＋批次 UUID 稳定继续读取更旧批次；游标范围同样验证。候选／联系人记忆／本人记忆以及 message／source_ref／source_document／local_wechat_observation 使用各自公开反查入口。不存在与越界统一 404，所有追踪类响应（含 401/400/404/500/503 与请求前置错误）no-store，不回显正文、SQL、密钥或凭据。
+- 新 `TraceService` 统一验证已确认的 owner/contact，默认 `create_app` 注入 PostgreSQL 提取与来源处理查询 Adapter；无需构建模型或配置模型凭据。HTTP 支持两类批次列表、详情、反查与手动删除，联系人的列表使用 `limit=1..500` 和 `before=next_before`，按时间＋批次 UUID 稳定继续读取更旧批次；游标范围同样验证。提取追踪提供 message／candidate／contact_memory／owner_memory 查询；来源处理提供 message／source_ref／source_document／local_wechat_observation 查询，两个批次资源保持区分。不存在与越界统一 404，所有追踪类响应（含 401/400/404/500/503 与请求前置错误）no-store，不回显正文、SQL、密钥或凭据。
 - `notalone-memory-trace`、`notalone-source-trace` 注册为显式联系人 CLI，提供 list／show／find／delete；show 是用户主动查看完整敏感资料，普通提取／Worker 输出仍无正文。旧资料保留真实 `not_recorded`；手输联系人与 owner 资料 `not_applicable`，从模型候选人工确认的记忆仍能反查原提取批次。手删追踪保留权威记忆，来源处理记录删除清除相关提取复制体，原有正文墓碑与来源／联系人／账户删除边界继续生效。
 - `extract_main`、PostgreSQL Runner 与 HTTP 自动／人工原任务默认记录，HTTP 的 priority E/V/A 在 Runner 实际线程中建立 TraceSession；只读查询不调用模型。CLI 增量同步仍只导入来源／消息，本任务没有新增自动提取调度。HTTP 来源处理记录故障安全返回 `source_processing_write_failed`；直接提取 CLI 将独立追踪故障输出为 `trace_write_failed` 和未知提交回执，停止本批而不进入非法模型输出预算。
 - 迁移 `042` 增加停止／范围失效／guard 持久故障状态及无正文 `memory_extraction_trace_call`。实际 provider 发送／返回事实先于正文捕获记到调用观察中，正常 E/V/A 与停止／晚返回关联实际台账 ID；收到但未采用的结果显示 `received/returned + not_adopted`。正常台账 I/O 前预留相同 ID，提交回执丢失仅记 `unknown`，不另造 ID 补账。V 已自行写台账后被许可／来源复验丢弃只更新最小关联，不重复记账。删除来源后可以补无正文关联，不能恢复请求／响应／原聊天正文。
@@ -54,3 +54,25 @@ Blocked by: 01, 02
 - `python -m mypy --no-incremental --cache-dir /dev/null --follow-imports=silent --ignore-missing-imports`：本任务 16 个无既有诊断的生产文件通过。基线 `2401dc4` 与当前 app／server command／Worker 三文件均 73 项既有诊断（59／5／9），逐项信息相同、0 新增；其余五个既有诊断文件也与基点逐项比较，两侧均 123 项（adapter 3、postgres_repository 11、observation_store 16、tail_lifecycle 2、cli_sync 91）、0 新增。没有宣称全仓 mypy 通过。
 - `python -m unittest tests.integration.server.test_memory_trace_api tests.integration.server.test_import_auto_flow tests.integration.server.test_model_priority_lifecycle tests.integration.server.test_core_business_flow tests.integration.server.test_first_import_api tests.integration.server.test_import_task_api tests.integration.server.test_failed_task_recovery -q`：81 项通过，其中本任务公开 HTTP／CLI 20 项；回环连接关闭时仍有既有 `ConnectionResetError` 诊断，无正文，测试成功。五个自建合成测试库清理后残留 0。
 - Python 文件整理、`git diff --check` 通过。后端提交 `6af8e989447cc92f89c23b8c40cb46bfbff05227`，父基点 `2401dc472a4c8de3960eafcb6ffa1ebf13c7debd`；交付前合入最新本地集成 tip，交付说明另作本地提交。最终固定 SHA 与 clean／祖先证据由主任务交付记录补充。
+
+### 两轴评审后的共同后端修复
+
+2026-10-08：从 clean `de6c9da005dc0c4812bf22775c98e3cf2b8f9f61` 统一修复 Spec 的 2 项 P1／3 项 P2 和 Standards 的 1 项明确违规／1 项已采纳维护建议。没有修改 What to build 或 App 验收，`State: claimed` 与未完成勾选保持；后续独立复验由主任务安排。
+
+1. 手输本人记忆：公开 `memory_add_main → run_extraction → query/delete` 原先在零／非零候选的 `memory_pool` 阶段报 `TraceWriteError`。保留原始版本中的 `source_ids`，只把明确的手输 owner UUID 归属哨兵排除出物理来源依赖，自身 `memory_id` 始终保留；其他模型／真实来源继续校验。两类批次成功并推进水位，删除本人资料清除两批副本。生产 HTTP 自动非零提取、默认 priority 工厂＋真实已安装 SDK／本地 HTTP transport 的零候选提取另有公开覆盖；未增加资料编辑产品接口或改变 owner 记忆范围。
+2. 已删历史快照：公开读取先缓存同一规范消息的 legacy A／B 两个来源，再通过来源删除接缝删除 A。原测试未阻断旧缓存；现在 begin 在同一范围锁和事务内核对每份实际缓存的消息、source/ref、范围、存活与原始投影，再保存窗口，删除后的 A 在模型调用前失败且不推进水位。重新读取保留活 B 的完整原文，旧处理链仍标 missing，删除 B 仍清除批次。既有来源处理记录手删后的缓存拒绝回归保持。
+3. 消息正查：公开 `/memory-traces/records/message/{id}` 原先返回 400，现经查询服务、默认 HTTP 和 CLI 返回实际使用该消息的提取批次；目标、仅上下文、零候选和失败批次均覆盖。跨 owner／contact 与不存在统一 404/no-store，来源处理与提取批次分别返回。迁移 043 加入 message 输入关联及 input/save/invalidate 操作；输入关联不冒充业务写入回执。043 前已有真实窗口可直接查询，清正文前只保留其无正文消息标识，之后显示 deleted；早已清除且无关联的历史仍 not_recorded，不重建正文。
+4. 失效部分提交：联系人 UPDATE 的旧记忆已经实际失效、write_result 追踪失败时，原查询缺少旧行回执。现在联系人和 SELF／owner 两条持久分支都先登记 invalidate 计划与真实 ID；查询／retry reconciliation 核对权威 invalidated 状态，返回 committed、当前状态及明确的非历史重建标记。两条公开故障路径及重试都通过，重复运行保持仅一条新 active 记忆。实际失效前业务故障时旧行仍 active，只报告 unknown；不能因旧行存在就伪报失效提交。逐条事务、模型裁决语义和采纳门槛不变。
+5. 安全导入校验：公开 import→处理追踪原先只有统一 `input_invalid`。六类同一行输入现区分 sender 身份缺失、必填字段缺失、时间格式、时区、时间一致性和字段类型；保存稳定 `error_code`、具体 `fields`、规则标识 `rule`、实际阶段和行定位。失败记录不含 exception.message、校验前正文、无效时间原值或未验证原始资料。文件级身份／范围与其他字段规则也提供对应的安全类别和字段。
+6. 规则摘要适配边界：`source_processing.models.execution` 移除文件读取与当前时刻读取，只接收摘要和实际时刻构造纯快照。小型 `source_processing.rule_capture` 文件 Adapter 在真实 parse／normalize／筛选／持久化边界逐次取得当时文件 SHA-256 与结束时刻，不永久缓存版本；导入、CLI／前台同步公开回归保持时间语义。公开导入记录进一步核对真实规则文件摘要。
+7. 失败状态共享：合成与 PostgreSQL Adapter 共用 `memory_trace.status.failure_status` 纯映射；追踪失败、停止、来源／租约失效、guard 持久故障和普通业务故障仍由既有公开失败／晚返回路径验证，没有新增镜像私有函数测试。
+
+### 本轮验证与数据影响
+
+沿用本任务 Conda、明确源码路径、关闭 dotenv／凭据与非回环网络的包装器。043 仅应用主任务固定 `notalone_memory_trace_be5912528896_test`；HTTP 夹具在新建随机 `_test` 库逐次应用完整迁移并自行清理，报告残留 0。039–042 已应用迁移内容和校验值未改，未迁移私人库、读取 `.env`／凭据、执行真实微信／模型、push／远端分支／PR。新增长期留存资料只是既有受范围批次的无正文消息／写入操作标识和安全规则定位；正文仍按原删除路径清除。
+
+- 全部 unit：949 通过，日志 `/tmp/notalone-trace03-review-fix-unit-validation.log`。
+- 与上节相同完整 14 模块 PG 命令：204 通过；最后旧窗口删除关联改动后再次运行该相关命令，204 通过，日志 `/tmp/notalone-trace03-review-fix-pg-validation.log`。新增来源／提取链 51 项也单独通过，日志 `/tmp/notalone-trace03-review-fix-final-chain-validation.log`。
+- 与上节相同完整 7 模块 HTTP 命令：83 通过，日志 `/tmp/notalone-trace03-review-fix-http-validation.log`，5 个自建库清理后残留 0。最后删除关联收口后重跑本任务公开 HTTP／CLI 模块，22 通过，日志 `/tmp/notalone-trace03-review-fix-final-http-validation.log`，1 个自建库清理后残留 0。未重复与最后改动无关的完整套件。
+- 25 个无既有诊断的生产文件 mypy 通过，日志 `/tmp/notalone-trace03-review-fix-clean-type.log`。冻结 de6 integration 与当前 8 个既有诊断文件逐项对比，均 196 项（app 59、server command 5、Worker 9、CLI adapter 3、postgres_repository 11、observation_store 16、tail_lifecycle 2、cli_sync 91），0 新增／0 消失；日志 `/tmp/notalone-trace03-review-fix-existing-type-baseline.log` 与 `/tmp/notalone-trace03-review-fix-existing-type-current.log`。没有宣称全仓类型零错误。
+- Python 格式整理核对 AST 等价，`git diff --check` 通过；本轮父基点为上述 de6，最终本地提交 SHA／clean／integration 祖先证据由主任务固定交接记录补充。

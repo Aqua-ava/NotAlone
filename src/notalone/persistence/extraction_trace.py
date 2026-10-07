@@ -11,6 +11,7 @@ from psycopg.types.json import Jsonb
 
 from notalone.memory_trace.context import event_payload, snapshot
 from notalone.memory_trace.ports import TraceWriteError
+from notalone.memory_trace.status import failure_status
 from notalone.memory_trace.views import candidate_summaries
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.scopes import ContactScope
@@ -70,6 +71,15 @@ class PostgresExtractionTraceStore:
                     trace_id,
                     stage="window",
                     payload=payload,
+                    links=tuple(
+                        {
+                            "record_kind": "message",
+                            "record_id": item["message_id"],
+                            "commit_status": "committed",
+                            "operation": "input",
+                        }
+                        for item in payload["messages"]
+                    ),
                     dependency_ids=self._resolve_dependencies(
                         connection,
                         scope.owner_id,
@@ -77,7 +87,7 @@ class PostgresExtractionTraceStore:
                             UUID(item["message_id"])
                             for item in payload["messages"]
                         )
-                        + self._processing_dependencies(
+                        + self._snapshot_dependencies(
                             connection, scope, payload
                         ),
                     ),
@@ -86,7 +96,7 @@ class PostgresExtractionTraceStore:
                     with connection.cursor(row_factory=dict_row) as cursor:
                         links = cursor.execute(
                             (
-                                "SELECT candidate_trace_id,record_kind,record_id,commit_status "
+                                "SELECT candidate_trace_id,record_kind,record_id,commit_status,operation "
                                 "FROM public.memory_extraction_trace_link WHERE trace_id=%s AND "
                                 "owner_id=%s AND contact_id=%s"
                             ),
@@ -112,16 +122,54 @@ class PostgresExtractionTraceStore:
         return trace_id
 
     @staticmethod
-    def _processing_dependencies(
+    def _snapshot_dependencies(
         connection: psycopg.Connection,
         scope: ContactScope,
         payload: dict[str, Any],
     ) -> tuple[UUID, ...]:
-        """锁内复验被复制的来源处理正文，拒绝手动删除后的旧读取缓存。"""
+        """锁内复验实际缓存的消息、来源/ref 与处理正文，不恢复已删副本。"""
 
         dependencies = []
         for message in payload["messages"]:
+            present = connection.execute(
+                "SELECT id FROM public.message WHERE id=%s AND owner_id=%s AND contact_id=%s",
+                (message["message_id"], scope.owner_id, scope.contact_id),
+            ).fetchone()
+            if present is None:
+                raise TraceWriteError("message_dependency")
             for source in message.get("source_snapshots", ()):
+                live = connection.execute(
+                    """
+                    SELECT COALESCE(ref.source_document_id,ref.observation_id)
+                    FROM public.message_source_ref AS ref
+                    LEFT JOIN public.source_document AS document ON document.id=ref.source_document_id
+                        AND document.owner_id=ref.owner_id AND document.contact_id=ref.contact_id
+                    LEFT JOIN public.local_wechat_observation AS observation ON observation.id=ref.observation_id
+                        AND observation.owner_id=ref.owner_id AND observation.contact_id=ref.contact_id
+                    WHERE ref.id=%s AND ref.owner_id=%s AND ref.contact_id=%s AND ref.message_id=%s
+                        AND ref.source_kind=%s AND COALESCE(ref.source_document_id,ref.observation_id)=%s
+                        AND ref.raw_payload IS NOT DISTINCT FROM %s::jsonb
+                        AND ref.source_locator IS NOT DISTINCT FROM %s
+                        AND (document.status='active' OR observation.id IS NOT NULL)
+                    """,
+                    (
+                        source["source_ref_id"],
+                        scope.owner_id,
+                        scope.contact_id,
+                        message["message_id"],
+                        source["source_kind"],
+                        source["source_id"],
+                        (
+                            Jsonb(source["raw_payload"])
+                            if source.get("raw_payload") is not None
+                            else None
+                        ),
+                        source.get("locator"),
+                    ),
+                ).fetchone()
+                if live is None:
+                    raise TraceWriteError("source_snapshot_dependency")
+                dependencies.append(live[0])
                 record = source.get("processing_record")
                 if record is None or record.get("payload") is None:
                     continue
@@ -256,7 +304,7 @@ class PostgresExtractionTraceStore:
             connection.execute(
                 (
                     "INSERT INTO public.memory_extraction_trace_link "
-                    "(trace_id,owner_id,contact_id,candidate_trace_id,record_kind,record_id,commit_status) VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (trace_id,record_kind,record_id) DO UPDATE SET commit_status=EXCLUDED.commit_status"
+                    "(trace_id,owner_id,contact_id,candidate_trace_id,record_kind,record_id,commit_status,operation) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (trace_id,record_kind,record_id) DO UPDATE SET commit_status=EXCLUDED.commit_status,operation=EXCLUDED.operation"
                 ),
                 (
                     trace_id,
@@ -266,6 +314,7 @@ class PostgresExtractionTraceStore:
                     link["record_kind"],
                     UUID(str(link["record_id"])),
                     link["commit_status"],
+                    link.get("operation", "save"),
                 ),
             )
         for source_id in dependency_ids:
@@ -346,16 +395,7 @@ class PostgresExtractionTraceStore:
                     "'running'"
                 ),
                 (
-                    (
-                        "trace_failed"
-                        if error_code == "trace_write_failed"
-                        else {
-                            "model_work_stopped": "stopped",
-                            "background_task_lease_invalidated": "scope_invalidated",
-                            "background_task_scope_invalidated": "scope_invalidated",
-                            "background_task_guard_failed": "scope_guard_failed",
-                        }.get(error_code, "business_failed")
-                    ),
+                    failure_status(error_code),
                     stage,
                     error_code,
                     trace_id,
@@ -465,7 +505,7 @@ class PostgresExtractionTraceStore:
                 ).fetchall()
                 links = connection.execute(
                     (
-                        "SELECT candidate_trace_id,record_kind,record_id,commit_status "
+                        "SELECT candidate_trace_id,record_kind,record_id,commit_status,operation "
                         "FROM public.memory_extraction_trace_link WHERE trace_id=%s AND "
                         "owner_id=%s AND contact_id=%s ORDER BY record_kind,record_id"
                     ),
@@ -519,6 +559,9 @@ class PostgresExtractionTraceStore:
         }
         for link in links:
             kind = link["record_kind"]
+            if kind == "message":
+                continue
+            operation = link["operation"]
             clause = " AND contact_id=%s" if kind != "owner_memory" else ""
             parameters = (
                 (scope.owner_id, link["record_id"], scope.contact_id)
@@ -531,12 +574,19 @@ class PostgresExtractionTraceStore:
             ).fetchone()
             if link["commit_status"] != "committed":
                 link["commit_status"] = (
-                    "committed" if row is not None else "unknown"
+                    "committed"
+                    if row is not None
+                    and (
+                        operation != "invalidate"
+                        or row["status"] == "invalidated"
+                    )
+                    else "unknown"
                 )
             receipts.append(
                 {
                     "record_kind": kind,
                     "record_id": str(link["record_id"]),
+                    "operation": operation,
                     "commit_status": link["commit_status"],
                     "current_record_status": (
                         row["status"] if row else "not_present"
@@ -560,6 +610,7 @@ class PostgresExtractionTraceStore:
                             "record_kind": target_kind,
                             "record_id": str(memory["id"]),
                             "source_candidate_id": str(link["record_id"]),
+                            "operation": "save",
                             "commit_status": "committed",
                             "current_record_status": memory["status"],
                             "observed_after_failure": observed_after_failure,
@@ -573,7 +624,12 @@ class PostgresExtractionTraceStore:
     def find_record(
         self, scope: ContactScope, record_kind: str, record_id: UUID
     ) -> dict[str, Any]:
-        if record_kind not in {"candidate", "contact_memory", "owner_memory"}:
+        if record_kind not in {
+            "message",
+            "candidate",
+            "contact_memory",
+            "owner_memory",
+        }:
             raise ValueError("追踪记录类型无效。")
         try:
             with psycopg.connect(
@@ -584,7 +640,12 @@ class PostgresExtractionTraceStore:
                 )
                 candidate_id = None
                 origin = None
-                if record_kind == "contact_memory":
+                if record_kind == "message":
+                    origin = connection.execute(
+                        "SELECT id FROM public.message WHERE owner_id=%s AND contact_id=%s AND id=%s",
+                        (scope.owner_id, scope.contact_id, record_id),
+                    ).fetchone()
+                elif record_kind == "contact_memory":
                     origin = connection.execute(
                         (
                             "SELECT source_candidate_id,source_ids,adoption_method FROM "
@@ -635,11 +696,16 @@ class PostgresExtractionTraceStore:
                 rows = connection.execute(
                     (
                         "SELECT DISTINCT trace.* FROM public.memory_extraction_trace AS "
-                        "trace JOIN public.memory_extraction_trace_link AS link USING "
-                        "(trace_id,owner_id,contact_id) WHERE link.owner_id=%s AND "
-                        "link.contact_id=%s AND ((link.record_kind=%s AND "
+                        "trace LEFT JOIN public.memory_extraction_trace_link AS link USING "
+                        "(trace_id,owner_id,contact_id) WHERE trace.owner_id=%s AND "
+                        "trace.contact_id=%s AND ((link.record_kind=%s AND "
                         "link.record_id=%s) OR (link.record_kind='candidate' AND "
-                        "link.record_id=%s)) ORDER BY trace.started_at DESC"
+                        "link.record_id=%s) OR (%s='message' AND EXISTS ("
+                        "SELECT 1 FROM public.memory_extraction_trace_event AS event "
+                        "WHERE event.trace_id=trace.trace_id AND event.owner_id=trace.owner_id "
+                        "AND event.contact_id=trace.contact_id AND event.stage='window' "
+                        "AND event.payload->'messages' @> %s::jsonb))) "
+                        "ORDER BY trace.started_at DESC,trace.trace_id DESC"
                     ),
                     (
                         scope.owner_id,
@@ -647,6 +713,8 @@ class PostgresExtractionTraceStore:
                         record_kind,
                         record_id,
                         candidate_id,
+                        record_kind,
+                        Jsonb([{"message_id": str(record_id)}]),
                     ),
                 ).fetchall()
                 manual_only = bool(
@@ -658,6 +726,7 @@ class PostgresExtractionTraceStore:
                 )
                 if (
                     not manual_only
+                    and record_kind != "message"
                     and not rows
                     and origin
                     and origin["source_ids"]
@@ -732,6 +801,23 @@ def erase_trace_bodies(
 ) -> None:
     if not trace_ids:
         return
+    # 旧批次只从实际保存的 window 留下消息标识，清正文后仍可说明已删缺口。
+    connection.execute(
+        """
+        INSERT INTO public.memory_extraction_trace_link
+            (trace_id,owner_id,contact_id,record_kind,record_id,commit_status,operation)
+        SELECT DISTINCT event.trace_id,event.owner_id,event.contact_id,'message',
+            (message->>'message_id')::uuid,'committed','input'
+        FROM public.memory_extraction_trace_event AS event
+        CROSS JOIN LATERAL jsonb_array_elements(CASE
+            WHEN jsonb_typeof(event.payload->'messages')='array' THEN event.payload->'messages'
+            ELSE '[]'::jsonb END) AS message
+        WHERE event.owner_id=%s AND event.trace_id=ANY(%s::uuid[]) AND event.stage='window'
+            AND message->>'message_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        ON CONFLICT DO NOTHING
+        """,
+        (owner_id, list(trace_ids)),
+    )
     connection.execute(
         (
             "DELETE FROM public.memory_extraction_trace_event WHERE "

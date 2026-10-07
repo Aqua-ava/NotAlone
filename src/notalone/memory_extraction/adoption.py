@@ -74,6 +74,7 @@ class _PoolItem:
     topic: MemoryTopic
     source_ids: tuple[UUID, ...] = ()
     version: object = None
+    dependency_ids: tuple[UUID, ...] = ()
 
 
 class MemoryAdoption:
@@ -141,7 +142,7 @@ class MemoryAdoption:
                 dict.fromkeys(
                     source
                     for item in (*contact_pool, *owner_pool)
-                    for source in (item.memory_id, *item.source_ids)
+                    for source in item.dependency_ids
                 )
             ),
             started_at=pool_started_at,
@@ -370,6 +371,10 @@ class MemoryAdoption:
                     topic=fact.topic,
                     source_ids=fact.source_message_ids,
                     version=persisted_memory,
+                    dependency_ids=(
+                        persisted_memory.memory_id,
+                        *fact.source_message_ids,
+                    ),
                 )
             )
             record(
@@ -495,6 +500,15 @@ class MemoryAdoption:
         previous = next(
             (item for item in pool if item.memory_id == replaced_id), None
         )
+        link = {
+            "record_kind": (
+                "owner_memory"
+                if fact.subject is FactSubject.SELF
+                else "contact_memory"
+            ),
+            "record_id": replaced_id,
+            "operation": "invalidate",
+        }
         record(
             "write_plan",
             {
@@ -502,6 +516,7 @@ class MemoryAdoption:
                 "previous": previous,
                 "memory_id": replaced_id,
             },
+            links=({**link, "commit_status": "planned"},),
         )
         write_started_at = datetime.now(timezone.utc)
         result: object = None
@@ -524,6 +539,7 @@ class MemoryAdoption:
             },
             started_at=write_started_at,
             status="committed",
+            links=({**link, "commit_status": "committed"},),
         )
         pool[:] = [item for item in pool if item.memory_id != replaced_id]
 
@@ -570,6 +586,7 @@ class MemoryAdoption:
                 topic=memory.topic,
                 source_ids=memory.source_ids,
                 version=memory,
+                dependency_ids=(memory.memory_id, *memory.source_ids),
             )
             for memory in self._memory_port.list_confirmed(scope)
         ]
@@ -577,6 +594,7 @@ class MemoryAdoption:
     def _owner_pool(self, owner_id: UUID) -> list:
         if self._owner_memory_port is None:
             return []
+        # 手输 source_ids 的 owner_id 表示归属；自身 memory_id 仍是正文删除依赖。
         return [
             _PoolItem(
                 memory_id=memory.memory_id,
@@ -585,6 +603,16 @@ class MemoryAdoption:
                 topic=memory.topic,
                 source_ids=memory.source_ids,
                 version=memory,
+                dependency_ids=(
+                    memory.memory_id,
+                    *(
+                        ()
+                        if memory.adoption_method is AdoptionMethod.MANUAL
+                        and memory.source_candidate_id is None
+                        and memory.source_ids == (owner_id,)
+                        else memory.source_ids
+                    ),
+                ),
             )
             for memory in self._owner_memory_port.list_active(owner_id)
         ]

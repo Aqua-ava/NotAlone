@@ -118,6 +118,10 @@ class SourceProcessingTraceTest(unittest.TestCase):
     def test_confirmed_import_reveals_exact_record_and_actual_conversions(
         self,
     ):
+        import hashlib
+
+        from notalone.ingest import jsonl_reader, normalizer
+
         records = self.records()
         lines = [
             "  " + json.dumps(records[0], ensure_ascii=False) + "  \r\n",
@@ -158,7 +162,11 @@ class SourceProcessingTraceTest(unittest.TestCase):
             self.assertLessEqual(
                 datetime.fromisoformat(execution["finished_at"]), after
             )
-            self.assertTrue(execution["rule_version"])
+            rule = jsonl_reader if stage == "parse" else normalizer
+            self.assertEqual(
+                execution["rule_version"],
+                hashlib.sha256(Path(rule.__file__).read_bytes()).hexdigest(),
+            )
 
     def test_imported_record_is_connected_to_actual_extraction_window(self):
         from notalone.memory_extraction.cli_support import (
@@ -615,6 +623,88 @@ class SourceProcessingTraceTest(unittest.TestCase):
             "不得存储的合成损坏正文", json.dumps(detail, ensure_ascii=False)
         )
         self.assertNotIn("合成原话", json.dumps(detail, ensure_ascii=False))
+
+    def test_import_validation_trace_distinguishes_safe_field_and_rule(self):
+        from notalone.ingest.errors import ImportPreviewError
+
+        cases = (
+            (
+                "sender_wxid",
+                None,
+                "sender_identity_missing",
+                ["sender_wxid"],
+                "sender_identity",
+            ),
+            (
+                "time_iso",
+                None,
+                "required_field_missing",
+                ["time_iso"],
+                "required_fields",
+            ),
+            (
+                "time_iso",
+                "私密无效时间片段",
+                "timestamp_invalid",
+                ["time_iso"],
+                "iso_timestamp",
+            ),
+            (
+                "time_iso",
+                "2026-08-12T10:00:00",
+                "timestamp_timezone_missing",
+                ["time_iso"],
+                "timestamp_timezone",
+            ),
+            (
+                "time_iso",
+                "2026-08-12T10:00:01+08:00",
+                "timestamp_inconsistent",
+                ["create_time", "time_iso"],
+                "timestamp_match",
+            ),
+            (
+                "time_iso",
+                17,
+                "field_type_invalid",
+                ["time_iso"],
+                "string_field",
+            ),
+        )
+        for field, value, code, fields, rule in cases:
+            with self.subTest(code=code):
+                records = self.records()
+                records[0]["text"] = "绝不持久化的校验前合成正文"
+                if value is None:
+                    records[0].pop(field)
+                else:
+                    records[0][field] = value
+                with self.assertRaises(ImportPreviewError):
+                    self.import_lines(
+                        [
+                            json.dumps(row, ensure_ascii=False) + "\n"
+                            for row in records
+                        ]
+                    )
+                batch = self.processing.list_batches(self.scope)[0]
+                detail = self.processing.get_batch(
+                    self.scope, batch["batch_id"]
+                )
+                failure = detail["records"][0]
+                self.assertEqual(failure["locator"], "jsonl:1")
+                payload = failure["payload"]
+                self.assertEqual(
+                    payload["stage"], "validate_scope_and_records"
+                )
+                self.assertEqual(payload["error_code"], code)
+                self.assertEqual(payload["fields"], fields)
+                self.assertEqual(payload["rule"], "jsonl.validation." + rule)
+                self.assertEqual(payload["validation"]["status"], "failed")
+                self.assertIsNone(payload["record_text"])
+                self.assertIsNone(payload["parsed"])
+                self.assertNotIn("绝不持久化的校验前合成正文", str(detail))
+                self.assertNotIn("私密无效时间片段", str(detail))
+                self.assertNotIn("message", payload)
 
     def test_observation_deletion_clears_record_without_destroying_other_source(
         self,

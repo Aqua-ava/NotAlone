@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from notalone.memory_trace.context import snapshot
+from notalone.memory_trace.status import failure_status
 from notalone.memory_trace.views import candidate_summaries
 from notalone.scopes import ContactScope
 
@@ -46,7 +47,21 @@ class InMemoryTraceStore:
             "links": [],
             "calls": [],
         }
-        self.append(scope, trace_id, stage="window", payload=payload)
+        self.append(
+            scope,
+            trace_id,
+            stage="window",
+            payload=payload,
+            links=tuple(
+                {
+                    "record_kind": "message",
+                    "record_id": item["message_id"],
+                    "commit_status": "committed",
+                    "operation": "input",
+                }
+                for item in payload.get("messages", ())
+            ),
+        )
         return trace_id
 
     def append(
@@ -127,16 +142,7 @@ class InMemoryTraceStore:
         row = self._row(scope, trace_id)
         if row["status"] == "running":
             row.update(
-                status=(
-                    "trace_failed"
-                    if error_code == "trace_write_failed"
-                    else {
-                        "model_work_stopped": "stopped",
-                        "background_task_lease_invalidated": "scope_invalidated",
-                        "background_task_scope_invalidated": "scope_invalidated",
-                        "background_task_guard_failed": "scope_guard_failed",
-                    }.get(error_code, "business_failed")
-                ),
+                status=failure_status(error_code),
                 failure_stage=stage,
                 error_code=error_code,
             )

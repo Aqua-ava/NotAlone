@@ -19,7 +19,13 @@ class ImportPreviewError(ValueError):
     """
 
     def __init__(
-        self, message: str, *, details: dict[str, Any] | None = None
+        self,
+        message: str,
+        *,
+        details: dict[str, Any] | None = None,
+        error_code: str = "input_invalid",
+        fields: tuple[str, ...] = (),
+        rule: str = "unspecified",
     ) -> None:
         super().__init__(message)
         line = re.search(r"第 (\d+) 行", message)
@@ -30,7 +36,9 @@ class ImportPreviewError(ValueError):
             "capture_status": "withheld_unverified_input",
             "stage": "validation",
             "locator": f"jsonl:{line.group(1)}" if line else "document",
-            "error_code": "input_invalid",
+            "error_code": error_code,
+            "fields": list(fields),
+            "rule": "jsonl.validation." + rule,
             "failed_at": datetime.now(timezone.utc).isoformat(),
             "outcome": "input_rejected",
         }

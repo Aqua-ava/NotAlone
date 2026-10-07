@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -37,17 +35,19 @@ class ProcessingRecord:
 
 
 def execution(
-    started_at: datetime, rule_path: str, *, status: str = "succeeded"
+    started_at: datetime,
+    *,
+    finished_at: datetime,
+    rule_version: str,
+    status: str = "succeeded",
 ) -> dict[str, Any]:
-    """在执行结束时记录真实时刻与当时规则文件摘要。"""
+    """用执行边界提供的实际时刻和摘要构造纯快照。"""
 
     return {
         "started_at": started_at.isoformat(),
-        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "finished_at": finished_at.isoformat(),
         "status": status,
-        "rule_version": hashlib.sha256(
-            Path(rule_path).read_bytes()
-        ).hexdigest(),
+        "rule_version": rule_version,
     }
 
 

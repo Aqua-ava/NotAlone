@@ -125,14 +125,17 @@ notalone-memory-trace --contact-id '...' list --limit 100
 notalone-memory-trace --contact-id '...' list --before '...'  # 使用上一页 next_before
 notalone-memory-trace --contact-id '...' show '...'           # 主动查看完整敏感正文
 notalone-memory-trace --contact-id '...' find contact_memory '...'
+notalone-memory-trace --contact-id '...' find message '...'   # 正查使用该消息的提取批次
 notalone-memory-trace --contact-id '...' delete '...'
 notalone-source-trace --contact-id '...' find message '...'
 notalone-source-trace --contact-id '...' show '...'
 ```
 
-查询／删除只需要既有 `NOTALONE_OWNER_ID`、`NOTALONE_DATABASE_URL` 与已确认联系人，不构建模型。HTTP 沿用本地服务 token 和固定 owner：`GET /api/contacts/{contact_id}/memory-traces`、`GET/DELETE /api/contacts/{contact_id}/memory-traces/{trace_id}`、`GET /api/contacts/{contact_id}/memory-traces/records/{candidate|contact_memory|owner_memory}/{record_id}`；来源处理使用同一路径中的 `source-processing-traces` 和 `message|source_ref|source_document|local_wechat_observation`。列表支持 `limit=1..500` 与 `before={next_before}`，按时间和批次 UUID 稳定翻页；游标必须属于当前联系人。所有追踪响应（包括失败）均为 `Cache-Control: no-store`，越界／不存在统一 404，不返回错误正文或数据库凭据。
+查询／删除只需要既有 `NOTALONE_OWNER_ID`、`NOTALONE_DATABASE_URL` 与已确认联系人，不构建模型。HTTP 沿用本地服务 token 和固定 owner：`GET /api/contacts/{contact_id}/memory-traces`、`GET/DELETE /api/contacts/{contact_id}/memory-traces/{trace_id}`、`GET /api/contacts/{contact_id}/memory-traces/records/{message|candidate|contact_memory|owner_memory}/{record_id}`；来源处理使用同一路径中的 `source-processing-traces` 和 `message|source_ref|source_document|local_wechat_observation`。消息可以正查实际使用它的提取批次，包括仅作上下文、零候选和失败的批次；来源处理批次另行返回。列表支持 `limit=1..500` 与 `before={next_before}`，按时间和批次 UUID 稳定翻页；游标必须属于当前联系人。所有追踪响应（包括失败）均为 `Cache-Control: no-store`，越界／不存在统一 404，不返回错误正文或数据库凭据。
 
-追踪写入失败停止本批，返回安全的 `trace_write_failed`，不累积模型非法输出预算、不推进水位；保留已提交部分和提交回执未知状态。HTTP 导入来源记录故障返回 `source_processing_write_failed`。任务进度／SSE 只发布 `error_code` 等元数据，外层执行 `finished` 后应查原 `task_id` 的持久状态。追踪与失败状态同时不可写时，运行仍明确返回 `trace_write_failed` 和 `failure_state_commit=unknown`，结束本次执行；不宣称任务失败已落库、不返还原 attempt。停止、来源／租约失效、guard 存储故障分别记录；旧调用晚返回仍保留一次无正文调用台账和 `calls` 关联，已删正文不恢复。数据库迁移更新至 `042`；本轮仅在合成 `_test` 库验证，没有迁移私人库或调用真实模型／微信。完整后端已验证，App 查看入口随 ADR-039 后续新界面接入，当前未实现。
+追踪写入失败停止本批，返回安全的 `trace_write_failed`，不累积模型非法输出预算、不推进水位；保留已提交部分和提交回执未知状态。HTTP 导入来源记录故障返回 `source_processing_write_failed`。任务进度／SSE 只发布 `error_code` 等元数据，外层执行 `finished` 后应查原 `task_id` 的持久状态。追踪与失败状态同时不可写时，运行仍明确返回 `trace_write_failed` 和 `failure_state_commit=unknown`，结束本次执行；不宣称任务失败已落库、不返还原 attempt。停止、来源／租约失效、guard 存储故障分别记录；旧调用晚返回仍保留一次无正文调用台账和 `calls` 关联，已删正文不恢复。数据库迁移更新至 `043`；本轮仅在合成 `_test` 库验证，没有迁移私人库或调用真实模型／微信。完整后端已验证，App 查看入口随 ADR-039 后续新界面接入，当前未实现。
+
+手输本人资料的 owner 标识只表示归属，追踪以资料自身 ID 保留删除依赖；既有资料不会阻断下一次提取。实际缓存的每份来源／引用在保存窗口前复验，已删除的原始快照即使规范消息由另一来源保留也不能复活。旧记忆 UPDATE 的失效计划和权威状态关联到同一记录，区分已失效提交与尚待核对；校验失败追踪保存稳定的 `error_code`、`fields`、`rule` 与实际定位，不复制校验前正文或无效时间原值。
 
 自动采纳在原有三道门槛之上再叠加一道**按维度放行**（ADR-036）：一条候选还要落到已放行的维度键才会自动写入，无法明确判定维度键的候选一律视为未放行。**默认放行表为空**，因此当前所有通过原有门槛的候选都进入待确认、不新增自动采纳；放行某一类需要该维度本轮评测达标签并由用户逐类批准，记录在 [记忆维度自动采纳放行台账](docs/memory-adoption-dimension-release-ledger.md)。当前 `paraphrase`、`reference`、`media`、`reported` 四个维度缺少必要结构化字段、无法从既有提取结果推导，即使达标也不能放行。运维回退设 `NOTALONE_MEMORY_DIMENSION_GATE=0`，恢复本门启用前的行为。
 

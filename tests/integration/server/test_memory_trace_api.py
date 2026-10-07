@@ -160,6 +160,15 @@ class MemoryTraceApiTest(CoreBusinessFlowFixture, unittest.TestCase):
     def test_default_http_priority_factory_captures_real_sdk_for_zero_candidates(
         self,
     ):
+        status, manual = self.backend.request(
+            "/api/memories/manual-owner",
+            {
+                "text": "SDK 提取前手输的本人资料",
+                "category": "common_fact",
+                "topic": "other",
+            },
+        )
+        self.assertEqual(status, 200)
         observed = []
 
         def local_http(request):
@@ -259,6 +268,164 @@ class MemoryTraceApiTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(
             self._get(self.backend, prefix + "/memories")["memories"], []
         )
+        pool = next(
+            event["payload"]
+            for event in detail["events"]
+            if event["stage"] == "memory_pool"
+        )
+        self.assertEqual(
+            pool["owner_pool"][0]["memory_id"], manual["memory"]["memory_id"]
+        )
+        found = self._get(
+            self.backend,
+            prefix
+            + "/memory-traces/records/message/"
+            + imported["fact_message"]["message_id"],
+        )
+        self.assertEqual(found["batches"][0]["trace_id"], detail["trace_id"])
+        window = next(
+            event["payload"]
+            for event in detail["events"]
+            if event["stage"] == "window"
+        )
+        self.assertEqual(
+            PostgresWatermarkStore(self.database_url).get(
+                ContactScope(self.owner_id, UUID(imported["contact_id"]))
+            ),
+            UUID(window["watermark_planned"]),
+        )
+        self.assertEqual(
+            self.backend.request(
+                "/api/memories/owner/"
+                + manual["memory"]["memory_id"]
+                + "/delete",
+                {},
+            )[0],
+            200,
+        )
+        deleted = self._get(
+            self.backend, prefix + "/memory-traces/" + detail["trace_id"]
+        )
+        self.assertEqual(deleted["status"], "deleted")
+        self.assertEqual(deleted["events"], [])
+
+    def test_manual_owner_before_automatic_nonempty_extraction_is_deletable(
+        self,
+    ):
+        status, manual = self.backend.request(
+            "/api/memories/manual-owner",
+            {
+                "text": "自动提取前的本人手输合成资料",
+                "category": "common_fact",
+                "topic": "other",
+            },
+        )
+        self.assertEqual(status, 200)
+        imported = self._import_auto(self.backend, "本人资料后提取", "茉莉茶")
+        self._wait_task(self.backend, imported, "succeeded")
+        prefix = f"/api/contacts/{imported['contact_id']}"
+        found = self._get(
+            self.backend,
+            prefix
+            + "/memory-traces/records/message/"
+            + imported["fact_message"]["message_id"],
+        )
+        detail = self._get(
+            self.backend,
+            prefix + "/memory-traces/" + found["batches"][0]["trace_id"],
+        )
+        self.assertEqual(detail["status"], "succeeded")
+        self.assertEqual(
+            len(self._get(self.backend, prefix + "/memories")["memories"]), 1
+        )
+        self.assertIn("自动提取前的本人手输合成资料", str(detail))
+        self.assertEqual(
+            self.backend.request(
+                "/api/memories/owner/"
+                + manual["memory"]["memory_id"]
+                + "/delete",
+                {},
+            )[0],
+            200,
+        )
+        deleted = self._get(
+            self.backend, prefix + "/memory-traces/" + detail["trace_id"]
+        )
+        self.assertEqual(deleted["status"], "deleted")
+        self.assertNotIn("自动提取前的本人手输合成资料", str(deleted))
+        self.assertEqual(
+            len(self._get(self.backend, prefix + "/memories")["memories"]), 1
+        )
+
+    def test_message_lookup_is_public_scoped_and_keeps_failed_batches(self):
+        remove_fault = self._install_fault(
+            "memory_extraction_trace_event", stage="model_response"
+        )
+        imported = self._import_auto(self.backend, "消息正查", "茉莉茶")
+        self._wait_task(self.backend, imported, "failed")
+        remove_fault()
+        prefix = f"/api/contacts/{imported['contact_id']}"
+        message_id = imported["fact_message"]["message_id"]
+        path = prefix + "/memory-traces/records/message/" + message_id
+        found = self._get(self.backend, path)
+        self.assertEqual(found["availability"], "recorded")
+        self.assertEqual(found["batches"][0]["status"], "trace_failed")
+        processing = self._get(
+            self.backend,
+            prefix + "/source-processing-traces/records/message/" + message_id,
+        )
+        self.assertIn("batch_id", processing["batches"][0])
+        self.assertIn("trace_id", found["batches"][0])
+        env = {
+            "NOTALONE_DATABASE_URL": self.database_url,
+            "NOTALONE_OWNER_ID": str(self.owner_id),
+            "NOTALONE_DISABLE_DOTENV": "1",
+        }
+        with patch.dict("os.environ", env), redirect_stdout(
+            StringIO()
+        ) as output:
+            self.assertEqual(
+                memory_trace_main(
+                    [
+                        "--contact-id",
+                        imported["contact_id"],
+                        "find",
+                        "message",
+                        message_id,
+                    ]
+                ),
+                0,
+            )
+        self.assertEqual(
+            json.loads(output.getvalue())["batches"][0]["trace_id"],
+            found["batches"][0]["trace_id"],
+        )
+        other = self._import_auto(self.backend, "消息另一范围", "绿茶")
+        self._wait_task(self.backend, other, "succeeded")
+        for backend, query in (
+            (self.other_backend, path),
+            (
+                self.backend,
+                path.replace(imported["contact_id"], other["contact_id"]),
+            ),
+            (self.backend, path.replace(message_id, str(uuid4()))),
+        ):
+            with self.subTest(query=query):
+                with self.assertRaises(HTTPError) as caught:
+                    urlopen(
+                        Request(
+                            backend.base_url + query,
+                            headers={
+                                "Authorization": f"Bearer {backend.token}"
+                            },
+                        )
+                    )
+                with caught.exception as response:
+                    self.assertEqual(response.status, 404)
+                    self.assertEqual(
+                        response.headers["Cache-Control"], "no-store"
+                    )
+                    self.assertEqual(response.read(), b'{"error":"not_found"}')
 
     def test_cross_scope_and_missing_records_return_same_no_store_not_found(
         self,

@@ -15,9 +15,9 @@ from typing import Iterable
 from notalone.ingest.models import NormalizedMessage, WechatMessageMetadata
 from notalone.source_processing.models import (
     ProcessingRecord,
-    execution,
     message_snapshot,
 )
+from notalone.source_processing.rule_capture import capture_execution
 from notalone.wechat_cli.models import CliMessageEvent
 
 
@@ -66,7 +66,7 @@ def normalize_cli_events(
                                 "kind": event.kind,
                             },
                             "outcome": "non_text_filtered",
-                            "normalize": execution(
+                            "normalize": capture_execution(
                                 started_at, __file__, status="filtered"
                             ),
                             "filter_rule": "text_only",
@@ -88,7 +88,7 @@ def normalize_cli_events(
                 processing_receipts.append(
                     record.with_fields(
                         outcome="empty_text_filtered",
-                        normalize=execution(
+                        normalize=capture_execution(
                             started_at, __file__, status="filtered"
                         ),
                         filter_rule="nonblank_text",
@@ -114,7 +114,7 @@ def normalize_cli_events(
                     "record_text": None,
                     "parsed": None,
                     "stage": "normalize",
-                    "normalize": execution(
+                    "normalize": capture_execution(
                         started_at, __file__, status="failed"
                     ),
                     "error_code": "invalid_message_time",
@@ -138,7 +138,7 @@ def normalize_cli_events(
         )
         record = record.with_fields(
             converted=message_snapshot(message),
-            normalize=execution(started_at, __file__),
+            normalize=capture_execution(started_at, __file__),
             outcome="normalized",
             transformations={
                 "speaker": {

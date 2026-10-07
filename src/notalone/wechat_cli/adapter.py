@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
-from notalone.source_processing.models import ProcessingRecord, execution
+from notalone.source_processing.models import ProcessingRecord
+from notalone.source_processing.rule_capture import capture_execution
 from notalone.wechat_cli.errors import (
     CliAdapterError,
     CliCommandError,
@@ -689,7 +690,9 @@ def _parse_follow_line(
                         "kind": kind,
                     },
                 },
-                "parse": execution(started_at, __file__, status="filtered"),
+                "parse": capture_execution(
+                    started_at, __file__, status="filtered"
+                ),
                 "outcome": "non_text_filtered",
                 "filter_rule": "text_only",
             },
@@ -725,7 +728,7 @@ def _parse_follow_line(
                 "input_position": input_position,
                 "record_text": line,
                 "parsed": value,
-                "parse": execution(started_at, __file__),
+                "parse": capture_execution(started_at, __file__),
             },
         ),
     )
@@ -748,7 +751,7 @@ def _parse_failure_record(
             "parsed": None,
             "capture_status": "withheld_unverified_input",
             "stage": "parse",
-            "parse": execution(started_at, __file__, status="failed"),
+            "parse": capture_execution(started_at, __file__, status="failed"),
             "error_code": code,
             "outcome": "input_rejected",
         },

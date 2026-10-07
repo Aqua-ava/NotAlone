@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import os
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
+from io import StringIO
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import psycopg
 
 from notalone.memory_extraction.cli_support import load_contact_messages
-from notalone.memory_extraction.command import run_extraction
+from notalone.memory_extraction.command import memory_add_main, run_extraction
 from notalone.persistence.extraction_trace import PostgresExtractionTraceStore
 from notalone.persistence.memory_store import PostgresMemoryStore
 from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
@@ -231,6 +234,226 @@ class ExtractionTraceTest(unittest.TestCase):
         with self.assertRaises(LookupError):
             self.traces.get_batch(alien, detail["trace_id"])
 
+    def test_manual_owner_memory_keeps_its_delete_dependency_without_blocking_batches(
+        self,
+    ):
+        with patch.dict(
+            "os.environ",
+            {
+                "NOTALONE_OWNER_ID": str(self.scope.owner_id),
+                "NOTALONE_DATABASE_URL": DATABASE_URL,
+                "NOTALONE_DISABLE_DOTENV": "1",
+            },
+        ), redirect_stdout(StringIO()):
+            self.assertEqual(
+                memory_add_main(
+                    [
+                        "--category",
+                        "common_fact",
+                        "--text",
+                        "手输本人资料仍可删除",
+                    ]
+                ),
+                0,
+            )
+        manual = self.owner_memory.list_active(self.scope.owner_id)[0]
+        for payloads in ((), (_payload(self.message_ids[0]),)):
+            with self.subTest(zero=not payloads):
+                self.run_batch(payloads)
+                self.assertEqual(
+                    self.watermark.get(self.scope), self.message_ids[-1]
+                )
+                detail = self.traces.get_batch(
+                    self.scope,
+                    self.traces.list_batches(self.scope)[0]["trace_id"],
+                )
+                self.assertEqual(detail["status"], "succeeded")
+                pool = next(
+                    event["payload"]
+                    for event in detail["events"]
+                    if event["stage"] == "memory_pool"
+                )
+                self.assertEqual(
+                    pool["owner_pool"][0]["version"]["source_ids"],
+                    [str(self.scope.owner_id)],
+                )
+        batches = self.traces.list_batches(self.scope)
+        self.owner_memory.delete(self.scope.owner_id, manual.memory_id)
+        for batch in batches:
+            detail = self.traces.get_batch(self.scope, batch["trace_id"])
+            self.assertEqual(detail["status"], "deleted")
+            self.assertEqual(detail["events"], [])
+            self.assertNotIn("手输本人资料仍可删除", str(detail))
+
+    def test_deleted_legacy_snapshot_cannot_reappear_when_another_source_keeps_message(
+        self,
+    ):
+        from notalone.memory_trace import TraceWriteError
+        from notalone.persistence.source_deletion import (
+            PostgresSourceDeletionRepository,
+        )
+
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute(
+                "UPDATE public.message_source_ref SET raw_payload=%s WHERE message_id=%s",
+                (
+                    psycopg.types.json.Jsonb(
+                        {"original": "已删历史 A 的独有原文"}
+                    ),
+                    self.message_ids[0],
+                ),
+            )
+            connection.execute(
+                "INSERT INTO public.message_source_ref (message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) VALUES (%s,%s,%s,'source_document',%s,'shared-B',%s)",
+                (
+                    self.message_ids[0],
+                    self.scope.owner_id,
+                    self.scope.contact_id,
+                    self.source_ids[1],
+                    psycopg.types.json.Jsonb(
+                        {"original": "仍存活的历史 B 原文"}
+                    ),
+                ),
+            )
+        cached = load_contact_messages(self.scope, DATABASE_URL)
+        self.assertEqual(len(cached[0].source_snapshots), 2)
+        deletion = PostgresSourceDeletionRepository(DATABASE_URL)
+        deletion.delete_source(
+            owner_id=self.scope.owner_id,
+            contact_id=self.scope.contact_id,
+            source_document_id=self.source_ids[0],
+        )
+
+        class RecordingRuntime(FixedRuntime):
+            calls = 0
+
+            def extract(self, window):
+                self.calls += 1
+                return super().extract(window)
+
+        runtime = RecordingRuntime(())
+        with self.assertRaises(TraceWriteError):
+            run_extraction(
+                scope=self.scope,
+                messages=cached,
+                watermark_message_id=None,
+                runtime=runtime,
+                memory_port=self.memory,
+                owner_memory_port=self.owner_memory,
+                watermark_port=self.watermark,
+                trace_store=self.traces,
+            )
+        self.assertEqual(runtime.calls, 0)
+        self.assertIsNone(self.watermark.get(self.scope))
+        self.assertEqual(self.traces.list_batches(self.scope), ())
+        fresh = load_contact_messages(self.scope, DATABASE_URL)
+        self.assertEqual(len(fresh[0].source_snapshots), 1)
+        run_extraction(
+            scope=self.scope,
+            messages=fresh,
+            watermark_message_id=None,
+            runtime=runtime,
+            memory_port=self.memory,
+            owner_memory_port=self.owner_memory,
+            watermark_port=self.watermark,
+            trace_store=self.traces,
+        )
+        detail = self.traces.get_batch(
+            self.scope, self.traces.list_batches(self.scope)[0]["trace_id"]
+        )
+        self.assertNotIn("已删历史 A 的独有原文", str(detail))
+        self.assertIn("仍存活的历史 B 原文", str(detail))
+        window = next(
+            event["payload"]
+            for event in detail["events"]
+            if event["stage"] == "window"
+        )
+        self.assertEqual(window["sources_status"], "processing_missing")
+        deletion.delete_source(
+            owner_id=self.scope.owner_id,
+            contact_id=self.scope.contact_id,
+            source_document_id=self.source_ids[1],
+        )
+        self.assertEqual(
+            self.traces.get_batch(self.scope, detail["trace_id"])["status"],
+            "deleted",
+        )
+
+    def test_message_lookup_includes_context_zero_and_failed_batches(self):
+        from notalone.memory_trace import TraceWriteError
+
+        for trace_store in (self.traces, FailingTraceStore("memory_pool")):
+            options = dict(
+                scope=self.scope,
+                messages=self.messages,
+                watermark_message_id=self.message_ids[0],
+                runtime=FixedRuntime(()),
+                memory_port=self.memory,
+                owner_memory_port=self.owner_memory,
+                trace_store=trace_store,
+            )
+            if trace_store is self.traces:
+                run_extraction(**options)
+            else:
+                with self.assertRaises(TraceWriteError):
+                    run_extraction(**options)
+        for message_id in self.message_ids:
+            with self.subTest(message_id=message_id):
+                found = self.traces.find_record(
+                    self.scope, "message", message_id
+                )
+                self.assertEqual(found["availability"], "recorded")
+                self.assertEqual(
+                    {row["status"] for row in found["batches"]},
+                    {"succeeded", "trace_failed"},
+                )
+                for batch in found["batches"]:
+                    detail = self.traces.get_batch(
+                        self.scope, batch["trace_id"]
+                    )
+                    self.assertEqual(detail["candidates"], [])
+                    window = detail["events"][0]["payload"]
+                    self.assertEqual(window["context_before_count"], 1)
+                    self.assertEqual(window["target_count"], 1)
+        alien = ContactScope(self.scope.owner_id, uuid4())
+        self.assertFalse(
+            self.traces.find_record(alien, "message", self.message_ids[0])[
+                "record_exists"
+            ]
+        )
+        for batch in self.traces.list_batches(self.scope):
+            self.traces.delete_batch(self.scope, batch["trace_id"])
+        self.assertEqual(
+            self.traces.find_record(
+                self.scope, "message", self.message_ids[0]
+            )["availability"],
+            "deleted",
+        )
+
+    def test_message_lookup_can_read_prior_window_without_new_input_link(self):
+        self.run_batch(())
+        trace_id = self.traces.list_batches(self.scope)[0]["trace_id"]
+        # 模拟 043 前的既存批次，仅有真实 window，没有新增 input 标识关联。
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute(
+                "DELETE FROM public.memory_extraction_trace_link WHERE trace_id=%s AND record_kind='message'",
+                (trace_id,),
+            )
+        found = self.traces.find_record(
+            self.scope, "message", self.message_ids[0]
+        )
+        self.assertEqual(found["availability"], "recorded")
+        self.assertEqual(found["batches"][0]["trace_id"], trace_id)
+        self.traces.delete_batch(self.scope, trace_id)
+        deleted = self.traces.find_record(
+            self.scope, "message", self.message_ids[0]
+        )
+        self.assertEqual(deleted["availability"], "deleted")
+        self.assertEqual(deleted["batches"][0]["trace_id"], trace_id)
+        self.assertEqual(
+            self.traces.get_batch(self.scope, trace_id)["events"], []
+        )
+
     def test_deleting_context_source_erases_trace_but_keeps_independent_candidate(
         self,
     ):
@@ -425,6 +648,212 @@ class ExtractionTraceTest(unittest.TestCase):
         )
         self.assertEqual(
             len(self.memory.list_pending_candidates(self.scope)), 1
+        )
+
+    def test_committed_invalidation_is_reconciled_after_receipt_fault_and_retry(
+        self,
+    ):
+        from notalone.memory_extraction.adjudication import (
+            AdjudicationAction,
+            AdjudicationDecision,
+        )
+        from notalone.memory_extraction.dimensions import (
+            RELEASE_ALL_DIMENSIONS,
+        )
+        from notalone.memory_trace import TraceWriteError
+        from tests.unit.memory_extraction.verification_helpers import (
+            SyntheticSupportingVerifier,
+        )
+
+        class LostInvalidationReceipt(PostgresExtractionTraceStore):
+            def append(store, *args, stage, payload, **kwargs):
+                if (
+                    stage == "write_result"
+                    and payload.get("operation") == "invalidate"
+                ):
+                    raise RuntimeError("合成失效回执写入故障")
+                return super().append(
+                    *args, stage=stage, payload=payload, **kwargs
+                )
+
+        for subject, kind in (
+            ("contact", "contact_memory"),
+            ("self", "owner_memory"),
+        ):
+            with self.subTest(subject=subject):
+                if subject == "self":
+                    with psycopg.connect(DATABASE_URL) as connection:
+                        connection.execute(
+                            "UPDATE public.message SET speaker='user' WHERE owner_id=%s AND contact_id=%s",
+                            (self.scope.owner_id, self.scope.contact_id),
+                        )
+                    self.messages = load_contact_messages(
+                        self.scope, DATABASE_URL
+                    )
+                options = dict(
+                    scope=self.scope,
+                    memory_port=self.memory,
+                    owner_memory_port=self.owner_memory,
+                    verification_runtime=SyntheticSupportingVerifier(),
+                    dimension_release=RELEASE_ALL_DIMENSIONS,
+                )
+                initial = {**_payload(self.message_ids[0]), "subject": subject}
+                run_extraction(
+                    messages=(self.messages[0],),
+                    watermark_message_id=None,
+                    runtime=FixedRuntime((initial,)),
+                    trace_store=self.traces,
+                    **options,
+                )
+                old = (
+                    self.memory.list_confirmed(self.scope)
+                    if subject == "contact"
+                    else self.owner_memory.list_active(self.scope.owner_id)
+                )[0]
+
+                class UpdateRuntime:
+                    def adjudicate(runtime, *, candidate_text, similar):
+                        return AdjudicationDecision(
+                            AdjudicationAction.UPDATE, old.memory_id
+                        )
+
+                newer = {
+                    **initial,
+                    "text": "他现在习惯直接打电话沟通",
+                    "source_message_ids": [str(self.message_ids[1])],
+                }
+                with self.assertRaises(TraceWriteError):
+                    run_extraction(
+                        messages=(self.messages[1],),
+                        watermark_message_id=None,
+                        runtime=FixedRuntime((newer,)),
+                        trace_store=LostInvalidationReceipt(DATABASE_URL),
+                        adjudication_runtime=UpdateRuntime(),
+                        **options,
+                    )
+                detail = self.traces.get_batch(
+                    self.scope,
+                    self.traces.list_batches(self.scope)[0]["trace_id"],
+                )
+                self.assertEqual(detail["status"], "trace_failed")
+                receipts = [
+                    row
+                    for row in detail["write_receipts"]
+                    if row["record_kind"] == kind
+                    and row["record_id"] == str(old.memory_id)
+                ]
+                self.assertEqual(len(receipts), 1)
+                self.assertEqual(receipts[0]["operation"], "invalidate")
+                self.assertEqual(receipts[0]["commit_status"], "committed")
+                self.assertEqual(
+                    receipts[0]["current_record_status"], "invalidated"
+                )
+                self.assertTrue(receipts[0]["observed_after_failure"])
+                self.assertFalse(
+                    receipts[0]["historical_return_reconstructed"]
+                )
+                run_extraction(
+                    messages=(self.messages[1],),
+                    watermark_message_id=None,
+                    runtime=FixedRuntime((newer,)),
+                    trace_store=self.traces,
+                    **options,
+                )
+                retry = self.traces.get_batch(
+                    self.scope,
+                    self.traces.list_batches(self.scope)[0]["trace_id"],
+                )
+                reconciliation = next(
+                    event["payload"]
+                    for event in retry["events"]
+                    if event["stage"] == "recovery_reconciliation"
+                )
+                self.assertEqual(
+                    reconciliation["previous_trace_id"], detail["trace_id"]
+                )
+                self.assertEqual(reconciliation["receipts"], receipts)
+                stats = run_extraction(
+                    messages=(self.messages[1],),
+                    watermark_message_id=None,
+                    runtime=FixedRuntime((newer,)),
+                    trace_store=self.traces,
+                    **options,
+                )
+                self.assertEqual(stats.skipped_duplicate, 1)
+                active = (
+                    self.memory.list_confirmed(self.scope)
+                    if subject == "contact"
+                    else self.owner_memory.list_active(self.scope.owner_id)
+                )
+                self.assertEqual(len(active), 1)
+                self.assertNotEqual(active[0].memory_id, old.memory_id)
+
+    def test_invalidation_plan_does_not_claim_commit_just_because_old_row_exists(
+        self,
+    ):
+        from notalone.memory_extraction.adjudication import (
+            AdjudicationAction,
+            AdjudicationDecision,
+        )
+        from notalone.memory_extraction.dimensions import (
+            RELEASE_ALL_DIMENSIONS,
+        )
+        from tests.unit.memory_extraction.verification_helpers import (
+            SyntheticSupportingVerifier,
+        )
+
+        options = dict(
+            scope=self.scope,
+            owner_memory_port=self.owner_memory,
+            trace_store=self.traces,
+            verification_runtime=SyntheticSupportingVerifier(),
+            dimension_release=RELEASE_ALL_DIMENSIONS,
+        )
+        run_extraction(
+            messages=(self.messages[0],),
+            watermark_message_id=None,
+            runtime=FixedRuntime((_payload(self.message_ids[0]),)),
+            memory_port=self.memory,
+            **options,
+        )
+        old = self.memory.list_confirmed(self.scope)[0]
+
+        class UpdateRuntime:
+            def adjudicate(runtime, *, candidate_text, similar):
+                return AdjudicationDecision(
+                    AdjudicationAction.UPDATE, old.memory_id
+                )
+
+        class RejectInvalidation(PostgresMemoryStore):
+            def invalidate(store, *, scope, memory_id):
+                raise RuntimeError("合成失效前业务故障")
+
+        newer = {
+            **_payload(self.message_ids[1]),
+            "text": "他现在习惯直接打电话沟通",
+        }
+        with self.assertRaises(RuntimeError):
+            run_extraction(
+                messages=(self.messages[1],),
+                watermark_message_id=None,
+                runtime=FixedRuntime((newer,)),
+                memory_port=RejectInvalidation(DATABASE_URL),
+                adjudication_runtime=UpdateRuntime(),
+                **options,
+            )
+        detail = self.traces.get_batch(
+            self.scope, self.traces.list_batches(self.scope)[0]["trace_id"]
+        )
+        receipt = next(
+            row
+            for row in detail["write_receipts"]
+            if row["record_id"] == str(old.memory_id)
+        )
+        self.assertEqual(receipt["operation"], "invalidate")
+        self.assertEqual(receipt["commit_status"], "unknown")
+        self.assertEqual(receipt["current_record_status"], "active")
+        self.assertEqual(
+            self.memory.list_confirmed(self.scope)[0].memory_id, old.memory_id
         )
 
     def test_source_of_old_memory_used_by_update_erases_trace_even_outside_new_window(

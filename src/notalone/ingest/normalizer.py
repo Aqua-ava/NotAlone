@@ -17,9 +17,9 @@ from notalone.ingest.models import (
 from notalone.ingest.validator import validate_records
 from notalone.source_processing.models import (
     ProcessingRecord,
-    execution,
     message_snapshot,
 )
+from notalone.source_processing.rule_capture import capture_execution
 
 
 def normalize_document(document: JsonlDocument) -> ImportBatch:
@@ -33,14 +33,14 @@ def normalize_document(document: JsonlDocument) -> ImportBatch:
     except ImportPreviewError as error:
         error.details.update(
             stage="validate_scope_and_records",
-            validation=execution(
+            validation=capture_execution(
                 validation_started_at,
                 validate_records.__code__.co_filename,
                 status="failed",
             ),
         )
         raise
-    validation = execution(
+    validation = capture_execution(
         validation_started_at, validate_records.__code__.co_filename
     )
     messages = []
@@ -68,7 +68,7 @@ def normalize_document(document: JsonlDocument) -> ImportBatch:
         captured = captured.with_fields(
             converted=message_snapshot(message),
             validation=validation,
-            normalize=execution(started_at, __file__),
+            normalize=capture_execution(started_at, __file__),
             transformations={
                 "speaker": {
                     "rule": "system_else_is_from_me",
