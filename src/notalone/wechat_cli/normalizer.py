@@ -1,7 +1,7 @@
 """把 CLI 文字事件规范化为与历史导入共享的规范消息。
 
 v1 只接受文字事件；媒体、群聊和未知类型在适配器层已明确跳过。
-规范化是纯函数：不读取时间、不猜测说话人、不携带联系人范围；
+规范消息不猜测说话人、不携带联系人范围；执行时间只写入来源处理收据；
 ``owner_id + contact_id`` 由写入路径在写入前确定，CLI 参数不能覆盖。
 """
 
@@ -23,6 +23,12 @@ from notalone.wechat_cli.models import CliMessageEvent
 
 class CliNormalizationError(RuntimeError):
     """CLI 事件无法规范化为稳定消息时的失败关闭错误。"""
+
+    code = "cli_normalization_failed"
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.failure_record: ProcessingRecord | None = None
 
 
 def normalize_cli_events(
@@ -97,7 +103,25 @@ def normalize_cli_events(
         if not isinstance(event.is_from_me, bool):
             # 说话人标记缺失或类型错误时失败关闭，不猜测发送方。
             raise CliNormalizationError("CLI 消息说话人标记无效。")
-        message = _normalize_event(event)
+        try:
+            message = _normalize_event(event)
+        except CliNormalizationError as error:
+            error.failure_record = ProcessingRecord.capture(
+                f"cli:{event.message_id.local_id}",
+                {
+                    "capture_layer": "metadata_only",
+                    "capture_status": "withheld_invalid_input",
+                    "record_text": None,
+                    "parsed": None,
+                    "stage": "normalize",
+                    "normalize": execution(
+                        started_at, __file__, status="failed"
+                    ),
+                    "error_code": "invalid_message_time",
+                    "outcome": "input_rejected",
+                },
+            )
+            raise
         record = event.processing_record or ProcessingRecord.capture(
             message.source_locator,
             {
@@ -194,17 +218,13 @@ def _occurred_at(event: CliMessageEvent) -> datetime | None:
     if event.create_time is not None:
         try:
             return datetime.fromtimestamp(event.create_time, tz=timezone.utc)
-        except (OverflowError, OSError, ValueError) as error:
-            raise CliNormalizationError(
-                "CLI 消息原始时间无法解析。"
-            ) from error
+        except (OverflowError, OSError, ValueError):
+            raise CliNormalizationError("CLI 消息原始时间无法解析。") from None
     if event.time_iso is not None:
         try:
             parsed = datetime.fromisoformat(event.time_iso)
-        except ValueError as error:
-            raise CliNormalizationError(
-                "CLI 消息原始时间无法解析。"
-            ) from error
+        except ValueError:
+            raise CliNormalizationError("CLI 消息原始时间无法解析。") from None
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=timezone.utc)
         return parsed

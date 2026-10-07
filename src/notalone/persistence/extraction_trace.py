@@ -668,7 +668,11 @@ def erase_trace_bodies(
 
 
 def erase_source_traces(
-    connection: psycopg.Connection, *, owner_id: UUID, removed_ids: set[UUID]
+    connection: psycopg.Connection,
+    *,
+    owner_id: UUID,
+    removed_ids: set[UUID],
+    reason: str = "source_deleted",
 ) -> None:
     """删除来源的同一事务内清除包含它的整份追踪，覆盖其他联系人的本人记忆。"""
     rows = connection.execute(
@@ -683,7 +687,7 @@ def erase_source_traces(
         connection,
         owner_id=owner_id,
         trace_ids=tuple(row[0] for row in rows),
-        reason="source_deleted",
+        reason=reason,
     )
 
 

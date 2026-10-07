@@ -105,18 +105,22 @@ class TailFollowStream:
             reader = getattr(self._process, "stdout", None)
             if reader is None:
                 reader = self._process
+            line_number = 0
             while not self.closed:
                 line = reader.readline()
                 if not line:
                     break
+                line_number += 1
                 started_at = datetime.now(timezone.utc)
                 try:
                     item = _parse_follow_line(
-                        line, expected_talker=self._expected_talker
+                        line,
+                        expected_talker=self._expected_talker,
+                        input_position=line_number,
                     )
                 except CliOutputError as error:
                     error.failure_record = _parse_failure_record(
-                        started_at, "cli_event:unlocated", error.code
+                        started_at, f"cli_event:{line_number}", error.code
                     )
                     raise
                 if item is not None:
@@ -581,8 +585,8 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
     event_count = 0
     non_text_count = 0
     filtered_records: list[ProcessingRecord] = []
-    lines = [line for line in stdout.splitlines(keepends=True) if line.strip()]
-    if not lines:
+    lines = stdout.splitlines(keepends=True)
+    if not any(line.strip() for line in lines):
         # 轮询没有新消息是正常结果；调用方保持既有水位。
         return TailResult(
             events=(),
@@ -590,7 +594,7 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
             last_local_id=None,
             freshness_confirmed=False,
         )
-    for position, line in enumerate(lines):
+    for position, line in enumerate(lines, start=1):
         if not line.strip():
             continue
         started_at = datetime.now(timezone.utc)
@@ -600,7 +604,7 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
             )
         except CliOutputError as error:
             error.failure_record = _parse_failure_record(
-                started_at, f"cli_event:{position + 1}", error.code
+                started_at, f"cli_event:{position}", error.code
             )
             raise
         if item is None:
@@ -608,7 +612,7 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
                 "cli_output_invalid", "微信 CLI 返回了不支持的事件。"
             )
             unsupported_error.failure_record = _parse_failure_record(
-                started_at, f"cli_event:{position + 1}", unsupported_error.code
+                started_at, f"cli_event:{position}", unsupported_error.code
             )
             raise unsupported_error
         event_count += 1

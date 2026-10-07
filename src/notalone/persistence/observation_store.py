@@ -1,6 +1,6 @@
 """本地微信 CLI 观察来源与联系人级 cursor 的 PostgreSQL 持久化。
 
-只保存一次只读增量读取的来源元数据与水位，不保存消息正文。
+观察来源保留元数据与水位；已确认文字的规范消息和来源处理收据分层保存。
 首次读取没有水位；水位只随成功返回的 cursor/local_id 单调前移，
 同一批次重试幂等，不重复创建来源或移动水位。
 """
@@ -618,6 +618,35 @@ class PostgresObservationStore:
                     owner_id=owner_id,
                     contact_id=contact_id,
                 )
+                records = tuple(
+                    message.processing_record
+                    for message in messages
+                    if message.processing_record is not None
+                )
+                if records:
+                    source = connection.execute(
+                        "SELECT binding_id, conversation_locator FROM public.local_wechat_observation WHERE id=%s AND owner_id=%s AND contact_id=%s",
+                        (observation_id, owner_id, contact_id),
+                    ).fetchone()
+                    if source is None:
+                        raise ObservationPersistenceError(
+                            "观察来源不在已确认范围内。"
+                        )
+                    assert_binding_active(
+                        connection,
+                        owner_id=owner_id,
+                        contact_id=contact_id,
+                        binding_id=source[0],
+                        conversation_locator=source[1],
+                    )
+                    if any(
+                        message.wechat_metadata is None
+                        or message.wechat_metadata.external_talker != source[1]
+                        for message in messages
+                    ):
+                        raise ObservationPersistenceError(
+                            "消息会话与已确认观察范围不一致。"
+                        )
                 write = self._write_cli_messages(
                     connection,
                     owner_id=owner_id,
@@ -625,6 +654,19 @@ class PostgresObservationStore:
                     observation_id=observation_id,
                     messages=messages,
                 )
+                if records:
+                    save_processing_batch(
+                        connection,
+                        scope=ContactScope(owner_id, contact_id),
+                        source_kind="local_wechat_observation",
+                        source_id=observation_id,
+                        records=records,
+                        receipts={
+                            receipt["capture_record_id"]
+                            or receipt["locator"]: receipt
+                            for receipt in write.processing_receipts
+                        },
+                    )
                 connection.commit()
                 return write.message_ids
         except ObservationPersistenceError:
@@ -751,7 +793,8 @@ class PostgresObservationStore:
                         source_id=observation.observation_id,
                         records=records,
                         receipts={
-                            receipt["locator"]: receipt
+                            receipt["capture_record_id"]
+                            or receipt["locator"]: receipt
                             for receipt in write.processing_receipts
                         },
                     )
@@ -1221,9 +1264,18 @@ class PostgresObservationStore:
                     message.source_locator,
                 ),
             ).fetchone()
+            if ref is None:
+                raise ObservationPersistenceError(
+                    "无法确认 CLI 消息来源引用。"
+                )
             processing_receipts.append(
                 {
                     "locator": message.source_locator,
+                    "capture_record_id": (
+                        str(message.processing_record.record_id)
+                        if message.processing_record is not None
+                        else None
+                    ),
                     "message_id": message_id,
                     "source_ref_id": ref[0],
                     "outcome": (

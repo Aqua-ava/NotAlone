@@ -990,20 +990,7 @@ class CliBackgroundSync:
                 **kwargs,
             )
         except CliAdapterError as error:
-            if error.failure_record is not None:
-                record_failure = getattr(
-                    self._observation_store, "record_input_failure", None
-                )
-                if callable(record_failure):
-                    record_failure(
-                        owner_id=self._owner_id,
-                        contact_id=contact_id,
-                        binding_id=getattr(binding, "binding_id"),
-                        conversation_locator=getattr(
-                            binding, "conversation_locator"
-                        ),
-                        record=error.failure_record,
-                    )
+            self._record_input_failure(binding, error, backfill_state)
             self._fail_backfill(
                 binding,
                 error.code,
@@ -1065,7 +1052,8 @@ class CliBackgroundSync:
             messages = normalize_cli_events(
                 result.events, processing_receipts=processing_receipts
             )
-        except CliNormalizationError:
+        except CliNormalizationError as error:
+            self._record_input_failure(binding, error, backfill_state)
             self._fail_backfill(
                 binding, "cli_normalization_failed", backfill_state
             )
@@ -1121,6 +1109,11 @@ class CliBackgroundSync:
                 binding, "observation_persistence_failed", backfill_state
             )
             raise
+        except SourceProcessingWriteError:
+            self._fail_backfill(
+                binding, "source_processing_write_failed", backfill_state
+            )
+            raise
         if backfill_state is not None:
             self._complete_backfill(
                 binding,
@@ -1135,6 +1128,38 @@ class CliBackgroundSync:
             message_ids=getattr(batch, "created_message_ids", ()),
         )
         return len(messages)
+
+    def _record_input_failure(
+        self,
+        binding: object,
+        error: CliAdapterError | CliNormalizationError,
+        backfill_state: object | None,
+    ) -> None:
+        """已验证绑定的失败只保存无正文定位；存储故障保留明确失败状态。"""
+
+        record_failure = getattr(
+            self._observation_store, "record_input_failure", None
+        )
+        if error.failure_record is None or not callable(record_failure):
+            return
+        try:
+            record_failure(
+                owner_id=self._owner_id,
+                contact_id=getattr(binding, "scope").contact_id,
+                binding_id=getattr(binding, "binding_id"),
+                conversation_locator=getattr(binding, "conversation_locator"),
+                record=error.failure_record,
+            )
+        except SourceProcessingWriteError:
+            self._fail_backfill(
+                binding, "source_processing_write_failed", backfill_state
+            )
+            raise
+        except ObservationPersistenceError:
+            self._fail_backfill(
+                binding, "observation_persistence_failed", backfill_state
+            )
+            raise
 
     def _reconcile_cursor(self, binding: object) -> object | None:
         """在读取前确认联系人游标没有超过最后可靠观察批次。"""

@@ -78,7 +78,10 @@ def load_contact_messages(
                        'source_kind', ref.source_kind, 'locator', ref.source_locator,
                        'capture_layer', COALESCE(processing.payload->>'capture_layer', 'legacy_projection'),
                        'raw_payload', ref.raw_payload,
-                       'processing_status', COALESCE(processing.status, 'missing'),
+                       'processing_status', CASE
+                           WHEN processing.status='recorded'
+                             AND processing.payload->>'capture_layer'='parsed_only' THEN 'partial'
+                           ELSE COALESCE(processing.status, 'missing') END,
                        'processing_record', CASE WHEN processing.record_id IS NULL THEN NULL
                            ELSE to_jsonb(processing) END,
                        'source_recorded_at', ref.created_at

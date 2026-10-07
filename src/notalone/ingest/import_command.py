@@ -5,8 +5,9 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Protocol, Sequence
+from typing import Any, Protocol, Sequence
 from uuid import UUID
 
 from notalone.ingest.errors import ImportPreviewError
@@ -26,7 +27,7 @@ from notalone.persistence.postgres_repository import (
 from notalone.persistence.source_processing import SourceProcessingWriteError
 from notalone.runtime_config import load_project_env, persist_owner_id
 from notalone.scopes import ContactScope
-from notalone.source_processing.models import ProcessingRecord
+from notalone.source_processing.models import ProcessingRecord, execution
 
 
 class ContactConfirmationError(ValueError):
@@ -80,28 +81,60 @@ def import_file(
         document = read_jsonl(path)
         batch = normalize_document(document)
     except ImportPreviewError as error:
-        record_failure = getattr(repository, "record_input_failure", None)
-        if (
-            owner_id is not None
-            and isinstance(confirmation.selection, ExistingContactSelection)
-            and callable(record_failure)
-        ):
-            record_failure(
-                scope=ContactScope(
-                    owner_id, confirmation.selection.contact_id
-                ),
-                record=ProcessingRecord.capture(
-                    error.details["locator"], error.details
-                ),
-            )
+        _record_input_failure(
+            repository, owner_id, confirmation, error.details
+        )
         raise
-    return repository.import_document(
-        owner_id=owner_id,
-        initialize_owner=initialize_owner,
-        initialize_first_owner_identity=initialize_first_owner_identity,
-        document=batch,
-        confirmation=confirmation,
-    )
+    started_at = datetime.now(timezone.utc)
+    try:
+        return repository.import_document(
+            owner_id=owner_id,
+            initialize_owner=initialize_owner,
+            initialize_first_owner_identity=initialize_first_owner_identity,
+            document=batch,
+            confirmation=confirmation,
+        )
+    except ImportPersistenceError as error:
+        _record_input_failure(
+            repository,
+            owner_id,
+            confirmation,
+            {
+                "capture_layer": "metadata_only",
+                "capture_status": "withheld_rejected_input",
+                "record_text": None,
+                "parsed": None,
+                "locator": "document",
+                "stage": "import_persistence",
+                "import_persistence": execution(
+                    started_at, __file__, status="failed"
+                ),
+                "error_code": "import_rejected",
+                "error_category": type(error).__name__,
+                "outcome": "input_rejected",
+            },
+        )
+        raise
+
+
+def _record_input_failure(
+    repository: IngestRepository,
+    owner_id: UUID | None,
+    confirmation: ImportConfirmationRequest,
+    details: dict[str, Any],
+) -> None:
+    """只能关联到既有确认联系人；未验证范围不持久化输入或假定位。"""
+
+    record_failure = getattr(repository, "record_input_failure", None)
+    if (
+        owner_id is not None
+        and isinstance(confirmation.selection, ExistingContactSelection)
+        and callable(record_failure)
+    ):
+        record_failure(
+            scope=ContactScope(owner_id, confirmation.selection.contact_id),
+            record=ProcessingRecord.capture(details["locator"], details),
+        )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

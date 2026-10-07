@@ -37,6 +37,13 @@ def save_processing_batch(
 
     batch_id = uuid4()
     try:
+        for record in records:
+            deleted_capture = connection.execute(
+                "SELECT 1 FROM public.source_processing_capture_tombstone WHERE owner_id=%s AND contact_id=%s AND capture_record_id=%s",
+                (scope.owner_id, scope.contact_id, record.record_id),
+            ).fetchone()
+            if deleted_capture is not None:
+                raise SourceProcessingWriteError()
         connection.execute(
             "INSERT INTO public.source_processing_batch (batch_id, owner_id, contact_id, source_kind, source_id, status) VALUES (%s, %s, %s, %s, %s, %s)",
             (
@@ -49,7 +56,9 @@ def save_processing_batch(
             ),
         )
         for position, record in enumerate(records):
-            receipt = receipts.get(record.locator, {})
+            receipt = receipts.get(
+                str(record.record_id), receipts.get(record.locator, {})
+            )
             payload = record.payload()
             outcome = receipt.get(
                 "outcome", payload.get("outcome", "filtered")
@@ -141,12 +150,17 @@ class PostgresSourceProcessingStore:
         }.get(record_kind)
         if column is None:
             raise ValueError("不支持的来源处理关联类型。")
+        source_kind_filter = (
+            f" AND batch.source_kind='{record_kind}'"
+            if record_kind in {"source_document", "local_wechat_observation"}
+            else ""
+        )
         try:
             with psycopg.connect(
                 self.database_url, row_factory=dict_row
             ) as connection:
                 rows = connection.execute(
-                    f"SELECT DISTINCT batch.* FROM public.source_processing_batch AS batch JOIN public.source_processing_record AS record USING (batch_id, owner_id, contact_id) WHERE batch.owner_id=%s AND batch.contact_id=%s AND {column}=%s ORDER BY batch.recorded_at DESC, batch.batch_id",
+                    f"SELECT DISTINCT batch.* FROM public.source_processing_batch AS batch JOIN public.source_processing_record AS record USING (batch_id, owner_id, contact_id) WHERE batch.owner_id=%s AND batch.contact_id=%s AND {column}=%s{source_kind_filter} ORDER BY batch.recorded_at DESC, batch.batch_id",
                     (scope.owner_id, scope.contact_id, record_id),
                 ).fetchall()
         except psycopg.Error:
@@ -186,6 +200,7 @@ class PostgresSourceProcessingStore:
                         connection,
                         owner_id=scope.owner_id,
                         removed_ids={row[0]},
+                        reason="source_processing_deleted",
                     )
         except psycopg.Error:
             raise RuntimeError("来源处理记录删除失败。") from None
@@ -197,6 +212,10 @@ def erase_processing_batches(
     scope: ContactScope,
     batch_ids: list[Any],
 ) -> None:
+    connection.execute(
+        "INSERT INTO public.source_processing_capture_tombstone (owner_id,contact_id,capture_record_id) SELECT owner_id,contact_id,(payload->>'capture_record_id')::uuid FROM public.source_processing_record WHERE owner_id=%s AND contact_id=%s AND batch_id=ANY(%s::uuid[]) AND payload->>'capture_record_id' IS NOT NULL ON CONFLICT DO NOTHING",
+        (scope.owner_id, scope.contact_id, batch_ids),
+    )
     connection.execute(
         "UPDATE public.source_processing_record SET payload=NULL, locator=NULL, outcome='deleted' WHERE owner_id=%s AND contact_id=%s AND batch_id=ANY(%s::uuid[])",
         (scope.owner_id, scope.contact_id, batch_ids),

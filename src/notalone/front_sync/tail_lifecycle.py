@@ -42,6 +42,7 @@ from notalone.persistence.observation_store import (
     ObservationPersistenceError,
     PostgresObservationStore,
 )
+from notalone.persistence.source_processing import SourceProcessingWriteError
 from notalone.scopes import ContactScope
 from notalone.source_processing.models import ProcessingRecord, execution
 from notalone.wechat_cli import (
@@ -397,6 +398,10 @@ class TailLifecycle:
         except CliAdapterError as error:
             stream.close()
             session.follow_stream = None
+            failure_code = self._read_failure_code(session, error)
+            if failure_code != error.code:
+                self._mark_failure(failure_code)
+                return 0
             if error.code == "cli_follow_unsupported":
                 self._follow_supported = False
                 return self._poll_once(session)
@@ -427,21 +432,23 @@ class TailLifecycle:
                 cursor=session.since_cursor,
             )
         except CliAdapterError as error:
-            self._mark_failure(error.code)
+            self._mark_failure(self._read_failure_code(session, error))
             return 0
         if result.last_local_id is None or result.cursor is None:
             if session.next_mode is ObservationMode.CLI_CATCHUP:
                 session.next_mode = ObservationMode.LIVE
             self._recover_from_failure()
             return 0
-        events = _outside_disabled_window(result.events, session.skip_window)
+        events, filtered_records = _select_events(
+            result.events, session.skip_window
+        )
         try:
             processing_receipts: list[ProcessingRecord] = []
             messages = normalize_cli_events(
                 events, processing_receipts=processing_receipts
             )
-        except CliNormalizationError:
-            self._mark_failure(_FAILURE_NORMALIZATION)
+        except CliNormalizationError as error:
+            self._mark_failure(self._read_failure_code(session, error))
             return 0
         return self._record_batch(
             session,
@@ -452,7 +459,7 @@ class TailLifecycle:
                 (
                     *processing_receipts,
                     *result.filtered_records,
-                    *_disabled_window_records(result.events, events),
+                    *filtered_records,
                 )
             ),
             event_count=result.event_count,
@@ -465,16 +472,15 @@ class TailLifecycle:
         item: TailFollowItem,
     ) -> int:
         events = () if item.event is None else (item.event,)
-        read_events = events
-        events = _outside_disabled_window(events, session.skip_window)
+        events, filtered_records = _select_events(events, session.skip_window)
         try:
             processing_receipts: list[ProcessingRecord] = []
             messages = normalize_cli_events(
                 events, processing_receipts=processing_receipts
             )
-        except CliNormalizationError:
+        except CliNormalizationError as error:
             self._prepare_follow_restart(session)
-            self._mark_failure(_FAILURE_NORMALIZATION)
+            self._mark_failure(self._read_failure_code(session, error))
             self._close_follow_stream(session)
             return 0
         return self._record_batch(
@@ -488,7 +494,7 @@ class TailLifecycle:
                 if item.event is None and item.processing_record is not None
                 else ()
             )
-            + _disabled_window_records(read_events, events),
+            + filtered_records,
             event_count=1,
             non_text_count=int(item.event is None),
         )
@@ -523,10 +529,18 @@ class TailLifecycle:
                 event_count=event_count,
                 non_text_count=non_text_count,
             )
-        except (CliAdapterError, ObservationPersistenceError):
+        except (
+            CliAdapterError,
+            ObservationPersistenceError,
+            SourceProcessingWriteError,
+        ) as error:
             if session.follow_stream is not None:
                 self._prepare_follow_restart(session)
-            self._mark_failure(_FAILURE_PERSISTENCE)
+            self._mark_failure(
+                "source_processing_write_failed"
+                if isinstance(error, SourceProcessingWriteError)
+                else _FAILURE_PERSISTENCE
+            )
             self._close_follow_stream(session)
             return 0
         self._publish_message_events(
@@ -537,6 +551,31 @@ class TailLifecycle:
         self._advance_session(session, last_local_id, last_cursor)
         self._recover_from_failure()
         return len(messages)
+
+    def _read_failure_code(
+        self,
+        session: _ActiveTailSession,
+        error: CliAdapterError | CliNormalizationError,
+    ) -> str:
+        """已确认读取的损坏输入只保存安全定位；记录写入失败也关闭本轮。"""
+
+        record_failure = getattr(
+            self._observation_store, "record_input_failure", None
+        )
+        if error.failure_record is not None and callable(record_failure):
+            try:
+                record_failure(
+                    owner_id=self._owner_id,
+                    contact_id=session.binding.scope.contact_id,
+                    binding_id=session.binding.binding_id,
+                    conversation_locator=session.binding.conversation_locator,
+                    record=error.failure_record,
+                )
+            except SourceProcessingWriteError:
+                return "source_processing_write_failed"
+            except ObservationPersistenceError:
+                return _FAILURE_PERSISTENCE
+        return error.code
 
     def _publish_message_events(
         self,
@@ -712,9 +751,26 @@ def _ordered_processing_records(
     )
 
 
+def _select_events(
+    read_events: tuple[CliMessageEvent, ...],
+    window: tuple[float, float] | None,
+) -> tuple[tuple[CliMessageEvent, ...], tuple[ProcessingRecord, ...]]:
+    """在真正筛选时捕获时间；跳过正文只留判断所需的定位和时间。"""
+
+    started_at = datetime.now(timezone.utc)
+    selected_events = _outside_disabled_window(read_events, window)
+    filtering = execution(started_at, __file__, status="filtered")
+    return selected_events, _disabled_window_records(
+        read_events, selected_events, window=window, filtering=filtering
+    )
+
+
 def _disabled_window_records(
     read_events: tuple[CliMessageEvent, ...],
     selected_events: tuple[CliMessageEvent, ...],
+    *,
+    window: tuple[float, float] | None,
+    filtering: dict[str, object],
 ) -> tuple[ProcessingRecord, ...]:
     """旧前台验证的关闭窗口仅保存筛选定位，不保留已跳过的正文。"""
 
@@ -722,12 +778,18 @@ def _disabled_window_records(
     selected = {id(event) for event in selected_events}
     for event in read_events:
         if id(event) not in selected:
-            started_at = datetime.now(timezone.utc)
             records.append(
                 ProcessingRecord.capture(
                     f"cli:{event.message_id.local_id}",
                     {
                         "capture_layer": "metadata_only",
+                        "input_position": (
+                            event.processing_record.payload().get(
+                                "input_position"
+                            )
+                            if event.processing_record is not None
+                            else None
+                        ),
                         "record_text": None,
                         "parsed": {
                             "id": {
@@ -737,9 +799,12 @@ def _disabled_window_records(
                         },
                         "outcome": "disabled_window_filtered",
                         "filter_rule": "outside_disabled_window",
-                        "filter": execution(
-                            started_at, __file__, status="filtered"
-                        ),
+                        "filter_input": {
+                            "create_time": event.create_time,
+                            "time_iso": event.time_iso,
+                            "disabled_window": window,
+                        },
+                        "filter": filtering,
                     },
                 )
             )

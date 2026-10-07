@@ -16,14 +16,27 @@ from notalone.ingest.models import (
     OwnerChannelIdentityCandidate,
 )
 
-
 # frozenset 是不可修改的集合，适合保存运行期间不应改变的规则常量。
 # 使用集合后，``kind in SUPPORTED_KINDS`` 可以直接判断某种消息是否受支持。
 SUPPORTED_KINDS = frozenset(
     {
-        "text", "quote", "image", "sticker", "transfer", "system",
-        "voice", "voip", "video", "channel_video", "file", "link",
-        "location", "miniprogram", "card", "red_packet", "forward_chat",
+        "text",
+        "quote",
+        "image",
+        "sticker",
+        "transfer",
+        "system",
+        "voice",
+        "voip",
+        "video",
+        "channel_video",
+        "file",
+        "link",
+        "location",
+        "miniprogram",
+        "card",
+        "red_packet",
+        "forward_chat",
         "app",
     }
 )
@@ -103,12 +116,20 @@ def validate_records(
             if record["is_from_me"] is False:
                 contact_external_ids.add(sender_id)
                 observed_names.append(
-                    (record["create_time"], line_number, record["sender"].strip())
+                    (
+                        record["create_time"],
+                        line_number,
+                        record["sender"].strip(),
+                    )
                 )
             else:
                 owner_sender_ids.add(sender_id)
                 observed_owner_names.append(
-                    (record["create_time"], line_number, record["sender"].strip())
+                    (
+                        record["create_time"],
+                        line_number,
+                        record["sender"].strip(),
+                    )
                 )
 
     # 每条记录自身都合法后，再检查整份文件的身份是否一致。
@@ -167,7 +188,9 @@ def validate_records(
 
 
 def _validate_record(
-    record: dict[str, Any], line_number: int, message_keys: set[tuple[int, int]]
+    record: dict[str, Any],
+    line_number: int,
+    message_keys: set[tuple[int, int]],
 ) -> None:
     """检查一条消息；合法时返回 ``None``，不合法时抛出异常。
 
@@ -194,12 +217,16 @@ def _validate_record(
     local_id = message_id["local_id"]
     # bool 是 int 的子类；使用 type(...) is int 可以拒绝 True/False 冒充 ID。
     if type(local_id) is not int:
-        raise ImportPreviewError(f"第 {line_number} 行的 id.local_id 必须是整数。")
+        raise ImportPreviewError(
+            f"第 {line_number} 行的 id.local_id 必须是整数。"
+        )
     _validate_postgres_bigint(local_id, "id.local_id", line_number)
 
     create_time = record["create_time"]
     if type(create_time) is not int:
-        raise ImportPreviewError(f"第 {line_number} 行的 create_time 必须是整数。")
+        raise ImportPreviewError(
+            f"第 {line_number} 行的 create_time 必须是整数。"
+        )
     _validate_postgres_bigint(create_time, "create_time", line_number)
 
     # 先查重，再加入集合，供下一条记录继续检查。
@@ -216,7 +243,9 @@ def _validate_record(
             )
 
     if type(record["is_from_me"]) is not bool:
-        raise ImportPreviewError(f"第 {line_number} 行的 is_from_me 必须是布尔值。")
+        raise ImportPreviewError(
+            f"第 {line_number} 行的 is_from_me 必须是布尔值。"
+        )
 
     # 消息类型写入数据库枚举，必须精确匹配，不能静默接受首尾空白。
     kind = record["kind"]
@@ -226,7 +255,9 @@ def _validate_record(
     # 这些字段内容可以不同，但 JSON 类型都必须是字符串。
     for field in ("sender", "text", "time", "time_iso"):
         if not isinstance(record[field], str):
-            raise ImportPreviewError(f"第 {line_number} 行的 {field} 必须是字符串。")
+            raise ImportPreviewError(
+                f"第 {line_number} 行的 {field} 必须是字符串。"
+            )
 
     if not record["sender"].strip():
         raise ImportPreviewError(f"第 {line_number} 行的 sender 不能为空。")
@@ -241,12 +272,14 @@ def _validate_record(
     # fromisoformat 把 ISO 字符串解析成 datetime；解析失败时转成安全业务异常。
     try:
         occurred_at = datetime.fromisoformat(record["time_iso"])
-    except ValueError as error:
+    except ValueError:
         raise ImportPreviewError(
             f"第 {line_number} 行的 time_iso 不是有效 ISO 时间。"
-        ) from error
+        ) from None
     if occurred_at.tzinfo is None:
-        raise ImportPreviewError(f"第 {line_number} 行的 time_iso 必须包含时区。")
+        raise ImportPreviewError(
+            f"第 {line_number} 行的 time_iso 必须包含时区。"
+        )
     if occurred_at.timestamp() != record["create_time"]:
         raise ImportPreviewError(
             f"第 {line_number} 行的 create_time 与 time_iso 不一致。"
@@ -286,7 +319,9 @@ def _non_empty_string(value: object) -> str | None:
     return stripped or None
 
 
-def _validate_postgres_bigint(value: int, field: str, line_number: int) -> None:
+def _validate_postgres_bigint(
+    value: int, field: str, line_number: int
+) -> None:
     """确认整数能写入 PostgreSQL bigint，并在错误中指出字段和行号。"""
     if not POSTGRES_BIGINT_MIN <= value <= POSTGRES_BIGINT_MAX:
         raise ImportPreviewError(
