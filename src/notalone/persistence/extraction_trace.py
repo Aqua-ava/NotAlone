@@ -9,7 +9,11 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from notalone.memory_trace.context import event_payload, snapshot
+from notalone.memory_trace.context import (
+    event_payload,
+    message_input_links,
+    snapshot,
+)
 from notalone.memory_trace.ports import TraceWriteError
 from notalone.memory_trace.status import failure_status
 from notalone.memory_trace.views import candidate_summaries
@@ -71,15 +75,7 @@ class PostgresExtractionTraceStore:
                     trace_id,
                     stage="window",
                     payload=payload,
-                    links=tuple(
-                        {
-                            "record_kind": "message",
-                            "record_id": item["message_id"],
-                            "commit_status": "committed",
-                            "operation": "input",
-                        }
-                        for item in payload["messages"]
-                    ),
+                    links=message_input_links(payload["messages"]),
                     dependency_ids=self._resolve_dependencies(
                         connection,
                         scope.owner_id,

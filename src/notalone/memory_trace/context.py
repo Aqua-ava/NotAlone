@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, fields, is_dataclass
 from datetime import datetime, timezone
@@ -15,6 +16,21 @@ from notalone.ledger.models import LedgerEntry, LedgerOutcome
 from notalone.ledger.ports import OutboundLedgerPort
 from notalone.memory_trace.ports import TracePort, TraceWriteError
 from notalone.scopes import ContactScope
+
+
+def message_input_links(
+    messages: Iterable[dict[str, Any]],
+) -> tuple[dict[str, Any], ...]:
+    """按实际窗口次序构造无正文输入关联，保留原始标识类型。"""
+    return tuple(
+        {
+            "record_kind": "message",
+            "record_id": item["message_id"],
+            "commit_status": "committed",
+            "operation": "input",
+        }
+        for item in messages
+    )
 
 
 def snapshot(value: Any) -> Any:

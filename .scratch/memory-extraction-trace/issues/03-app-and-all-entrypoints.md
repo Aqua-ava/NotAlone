@@ -76,3 +76,12 @@ Blocked by: 01, 02
 - 与上节相同完整 7 模块 HTTP 命令：83 通过，日志 `/tmp/notalone-trace03-review-fix-http-validation.log`，5 个自建库清理后残留 0。最后删除关联收口后重跑本任务公开 HTTP／CLI 模块，22 通过，日志 `/tmp/notalone-trace03-review-fix-final-http-validation.log`，1 个自建库清理后残留 0。未重复与最后改动无关的完整套件。
 - 25 个无既有诊断的生产文件 mypy 通过，日志 `/tmp/notalone-trace03-review-fix-clean-type.log`。冻结 de6 integration 与当前 8 个既有诊断文件逐项对比，均 196 项（app 59、server command 5、Worker 9、CLI adapter 3、postgres_repository 11、observation_store 16、tail_lifecycle 2、cli_sync 91），0 新增／0 消失；日志 `/tmp/notalone-trace03-review-fix-existing-type-baseline.log` 与 `/tmp/notalone-trace03-review-fix-existing-type-current.log`。没有宣称全仓类型零错误。
 - Python 格式整理核对 AST 等价，`git diff --check` 通过；本轮父基点为上述 de6，最终本地提交 SHA／clean／integration 祖先证据由主任务固定交接记录补充。
+
+### 独立复验与输入关联维护收口
+
+2026-10-08：独立复验 `de6 → 6bee961ea2cb5705d27221eee4134715a811c02e` 确认 Spec 原五项均解决、剩余／新增后端问题 0；Standards 原两项解决、硬违规 0。App 待决策单独保留，`State: claimed` 与未完成验收不变。
+
+主任务采纳 Standards 新增的一项可选维护建议：合成／PostgreSQL Adapter 原先分别构造相同的消息 input 关联，现共用 `memory_trace.context.message_input_links` 小型纯构造函数。字段顺序、值类型、消息次序、`operation=input`、两 Adapter 原有 messages 必需／缺省行为完全不变；未新增抽象层、迁移、捕获内容或镜像 helper 测试。
+
+- 最小公开回归 10 项通过：现有 5 项 SDK／InMemory 提取与查询、3 项 PostgreSQL 消息查询／旧窗口删除／上下文删除、2 项默认 HTTP／CLI 消息查询及追踪／来源处理删除。日志 `/tmp/notalone-trace03-input-link-recheck-validation.log`，本次自建 1 个 `_test` 库清理后残留 0。
+- 涉及的 context／adapters／persistence extraction_trace 三个生产文件 mypy 通过，日志 `/tmp/notalone-trace03-input-link-recheck-type.log`；格式与 `git diff --check` 通过。沿用关闭凭据／dotenv／非回环网络的合成环境，数据处理边界不变；未重复无关完整套件。

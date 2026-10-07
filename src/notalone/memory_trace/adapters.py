@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from notalone.memory_trace.context import snapshot
+from notalone.memory_trace.context import message_input_links, snapshot
 from notalone.memory_trace.status import failure_status
 from notalone.memory_trace.views import candidate_summaries
 from notalone.scopes import ContactScope
@@ -52,15 +52,7 @@ class InMemoryTraceStore:
             trace_id,
             stage="window",
             payload=payload,
-            links=tuple(
-                {
-                    "record_kind": "message",
-                    "record_id": item["message_id"],
-                    "commit_status": "committed",
-                    "operation": "input",
-                }
-                for item in payload.get("messages", ())
-            ),
+            links=message_input_links(payload.get("messages", ())),
         )
         return trace_id
 
