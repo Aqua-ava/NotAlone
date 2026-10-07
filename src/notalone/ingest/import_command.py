@@ -95,13 +95,14 @@ def import_file(
             confirmation=confirmation,
         )
     except ImportPersistenceError as error:
+        commit_unknown = type(error) is ImportPersistenceError
         _record_input_failure(
             repository,
             owner_id,
             confirmation,
             {
                 "capture_layer": "metadata_only",
-                "capture_status": "withheld_rejected_input",
+                "capture_status": "withheld_failed_attempt",
                 "record_text": None,
                 "parsed": None,
                 "locator": "document",
@@ -111,7 +112,14 @@ def import_file(
                 ),
                 "error_code": "import_rejected",
                 "error_category": type(error).__name__,
-                "outcome": "input_rejected",
+                "outcome": (
+                    "import_outcome_unknown"
+                    if commit_unknown
+                    else "input_rejected"
+                ),
+                "business_commit_status": (
+                    "unknown" if commit_unknown else "not_committed"
+                ),
             },
         )
         raise

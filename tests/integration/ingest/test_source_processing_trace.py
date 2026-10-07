@@ -1519,6 +1519,63 @@ class SourceProcessingTraceTest(unittest.TestCase):
             )
         )
 
+    def test_lost_import_receipt_keeps_unknown_commit_and_actual_saved_messages(
+        self,
+    ):
+        from notalone.memory_extraction.cli_support import (
+            load_contact_messages,
+        )
+        from notalone.persistence.postgres_repository import (
+            ImportPersistenceError,
+        )
+
+        actual_repository = self.repository
+
+        class LostReceiptRepository:
+            def import_document(self, **arguments):
+                actual_repository.import_document(**arguments)
+                raise ImportPersistenceError("合成导入回执丢失。")
+
+            def record_input_failure(self, **arguments):
+                actual_repository.record_input_failure(**arguments)
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "synthetic.jsonl"
+            path.write_text(
+                "".join(
+                    json.dumps(record, ensure_ascii=False) + "\n"
+                    for record in self.records()
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(ImportPersistenceError):
+                import_file(
+                    path=path,
+                    owner_id=self.scope.owner_id,
+                    confirmation=self.confirmation,
+                    repository=LostReceiptRepository(),
+                )
+        batches = self.processing.list_batches(self.scope)
+        failed = self.processing.get_batch(
+            self.scope,
+            next(
+                batch["batch_id"]
+                for batch in batches
+                if batch["status"] == "failed"
+            ),
+        )
+        self.assertEqual(
+            failed["records"][0]["outcome"], "import_outcome_unknown"
+        )
+        self.assertEqual(
+            failed["records"][0]["payload"]["business_commit_status"],
+            "unknown",
+        )
+        self.assertEqual(
+            len(load_contact_messages(self.scope, DATABASE_URL)), 2
+        )
+        self.assertNotIn("合成原话", json.dumps(failed, ensure_ascii=False))
+
 
 if __name__ == "__main__":
     unittest.main()

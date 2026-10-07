@@ -810,9 +810,12 @@ class PostgresSourceDeletionRepositoryTest(unittest.TestCase):
             source_document_id=first.source_document_id,
         )
 
+        # 用户重导入重新读取原文件；不把删除前的捕获缓存冒充新读取。
         second = self.ingest_repository.import_document(
             owner_id=self.owner_id,
-            document=self.batch,
+            document=normalize_document(
+                read_jsonl(FIXTURES_DIR / "valid_single_contact.jsonl")
+            ),
             confirmation=confirmation,
         )
 
