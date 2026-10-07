@@ -63,9 +63,11 @@
 36. [ADR-036：按维度放行自动采纳](adr/036-per-dimension-adoption-release.md)
 37. [ADR-037：默认保存记忆提取的完整过程](adr/037-complete-memory-extraction-trace.md)
 38. [ADR-038：导入触发原记忆任务并让前台回复优先](adr/038-import-triggered-memory-work-and-reply-priority.md)
+39. [ADR-039：退役 Swift 主界面，重新设计共享前端](adr/039-retire-swift-main-interface.md)
 
 ## 当前架构决策
 
+- 旧 Swift 主界面已按 ADR-039 退役；后续共享前端采用 TypeScript + React，本轮只有清理，没有新桌面界面。Python 后台与 Mac 原生探针保留。
 - 采用云端模块化单体，PostgreSQL 是联系人、消息、关系资料、任务和删除状态的权威业务库。
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
 - 文字是统一的检索与生成表示；前台 display name OCR、本地微信 CLI、截图和语音都是输入适配器。

@@ -1,10 +1,12 @@
 # macOS App 权限与启动错误记录
 
 状态：维护中  
-最后更新：2026-10-04
+最后更新：2026-10-08
 适用范围：`NotAloneApp.app`、`NotAloneSyncProbe.app`、`notalone-sync-probe` 和随主 App 打包的 `wechat-cli`
 
 这是一份长期维护的权限与错误台账。凡是新增系统权限、修改权限说明文字、替换 CLI/探针、调整签名或新增用户可见错误，都必须先更新本文档，再更新代码、构建脚本和回归验证。
+
+2026-10-08：旧 Swift 主窗口及其构建入口已按 ADR-039 退役，新 UI 尚未实现。本文中 `NotAloneApp.app`、`macos_app/` 和主 App 的权限／签名验收属于历史记录，不再是当前操作入口；独立原生探针仍保留。未来桌面宿主需重新记录权限归属和实际验收，不能直接继承旧 App 的验证结论。本次只删除源码与旧构建调用，不停止正在运行的程序、不修改 TCC、不删除本机旧构建产物或私人数据。
 
 ## 1. 产品边界
 
@@ -17,7 +19,7 @@ NotAlone 的本地读取必须满足以下条件：
 
 ## 2. 当前权限清单
 
-当前正式路径只有两类 macOS 权限申请。其他权限不应被 NotAlone 主动申请。
+历史主 App 记录了 P-01/P-02 两类权限；当前保留的独立探针使用 P-02。新主界面未实现，主 App 的权限配置路径已删除，不能照此构建。其他权限不应被 NotAlone 主动申请。
 
 | 编号 | 权限 | 触发目标 | 配置位置 | 触发时机 | 允许后能做什么 |
 | --- | --- | --- | --- | --- | --- |
@@ -169,7 +171,7 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 构建后核验完整 helper 与签名，避免打包脚本移除旧副本后失去可用运行时。
 此操作只保留既有二进制，不复制微信数据、密钥或配置，也不更改全局 PATH。
 
-### 构建检查
+### 旧主 App 构建检查（历史，入口已删除）
 
 2026-10-02 来源语义核验验收重建只调整记忆置信度说明与待处理标题，沿用上述
 临时 helper 保全流程、现有 P-01/P-02 与稳定签名，不新增权限或改变绑定。
@@ -181,15 +183,13 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 - [ ] 核心库、helper、运行时库和主 App 使用稳定签名，各自 identifier 分别为 `com.notalone.app.core`、`com.notalone.wechat-cli`、`com.notalone.wechat-cli.wcdb` 和 `com.notalone.app`；无稳定证书时明确标记为 ad-hoc。
 - [ ] 运行 `codesign --verify --deep --strict --verbose=2 macos_app/build/NotAloneApp.app`。
 
-### 自动化检查
+### 当前自动化检查
 
-- [ ] `swift test -q`（`macos_app`）。
 - [ ] `swift test -q`（`macos_sync_probe`）。
-- [ ] `conda run --no-capture-output -n NotAlone python -m unittest discover -s tests -q`。
+- [ ] `conda activate NotAlone` 后运行相关 Python 合成测试。
 - [ ] `git diff --check`。
-- [ ] 使用 bundled CLI 运行一次只读 `tail --mode sessions --follow --jsonl --strict-read-only`，确认进程不会立即退出。
 
-### 人工验收
+### 旧主 App 人工验收（历史，新宿主需重新验证）
 
 - [ ] 干净启动新构建的主 App并允许 P-01：同一次运行检查是否仍随同步轮次重复出现；退出后重新申请属于 macOS 默认授权期限，不据此宣称失败或永久授权。
 - [ ] P-01 授权后，只能看到已绑定范围的只读同步；不发送消息。
@@ -213,7 +213,7 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 - 本文档的权限清单和错误对照表；
 - 对应 `Info.plist`、entitlements 和构建/签名脚本；
 - 自动化回归测试；
-- `macos_app/README.md` 或 `macos_sync_probe/README.md` 的用户操作说明；
+- 当前桌面宿主的 README（实现后）或 `macos_sync_probe/README.md` 的用户操作说明；
 - 对应 `.scratch/` 任务文件及验证结果。
 
 未经上述记录和验证，不得把新的系统权限申请直接交给用户处理。

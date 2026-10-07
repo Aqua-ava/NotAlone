@@ -2,17 +2,19 @@
 
 NotAlone 是面向用户真实联系人的中文关系感知回复助手。用户确认联系人与桌面会话后，导入历史聊天或开启已确认联系人的后台增量同步；系统检索同一联系人的关系资料并生成候选回复，由用户选择、修改并亲自发送，产品不会代发消息。
 
-仓库当前可运行的路径：微信单联系人 JSONL 只读预览、联系人确认后的 PostgreSQL 正式导入、CLI 后台增量同步（前台 OCR 只负责定位当前会话）、记忆提取与管理、检索评测，以及本地 macOS App 中的候选回复纵切。候选只在应用内展示，代码中不存在发送消息 Tool；验证以合成数据、scripted fake model 和本地适配器为主，真实 DeepSeek 冒烟需显式配置凭据后运行。
+仓库当前保留的路径：微信单联系人 JSONL 只读预览、联系人确认后的 PostgreSQL 正式导入、CLI 后台增量同步（前台 OCR 只负责定位当前会话）、记忆提取与管理、检索评测，以及 Python 本地后台的候选回复接口。代码中不存在发送消息 Tool；验证以合成数据、scripted fake model 和本地适配器为主，真实 DeepSeek 冒烟需显式配置凭据后运行。
+
+旧 Swift 主界面 `macos_app/` 已删除。后续前端采用 TypeScript + React，UI 将重新设计；当前没有替代主窗口、图形首启向导或 React 脚手架。Python 后台和 `macos_sync_probe/` 的 Mac 原生截图、OCR、会话定位能力保留，Windows 微信适配尚未实现，见 [ADR-039](architecture/adr/039-retire-swift-main-interface.md)。
 
 ## 环境要求
 
 需要自行准备：
 
-- macOS 15+ 与 Xcode 16.4 / Swift 6（App 和探针是原生应用）
+- macOS 15+ 与 Xcode 16.4 / Swift 6（用于保留的原生探针）
 - 微信桌面版，以及自装 `wechat-cli`
 - PostgreSQL（安装脚本默认创建本地库 `notalone_dev`）
 - conda（安装脚本创建 Python 3.12 的 `NotAlone` 环境）
-- 屏幕录制权限，授予构建出的 App；稳定签名下重建不需要重新授权
+- 屏幕录制权限，授予实际执行定位的探针；权限归属与签名说明见 [权限记录](docs/macos-app-permissions-and-errors.md)
 - DeepSeek API Key（可选；未配置时真实模型入口失败关闭）
 
 ## 安装与首次配置
@@ -23,15 +25,9 @@ NotAlone 是面向用户真实联系人的中文关系感知回复助手。用�
 zsh scripts/install.sh
 ```
 
-脚本按顺序完成：检查依赖（macOS / Homebrew / conda / PostgreSQL / swiftc）→ 创建 `NotAlone` conda 环境并 `pip install -e .` → 启动本地 PostgreSQL 并创建 `notalone_dev` → 按版本记录应用尚未完成的 `database/migrations/*.sql` → 生成只含数据库连接的受控 `.env`（0600）→ 构建 macOS App 与前台同步探针。每个迁移与成功记录同事务提交，失败只回滚当前迁移，重跑从未完成版本继续；机器环境等此前已完成步骤会保留。无迁移记录的旧库会停止并提示核验，不会凭 `owner` 表猜测基线或重放历史 SQL，见 [数据库迁移说明](database/README.md)。
+脚本按顺序完成：检查依赖（macOS / Homebrew / conda / PostgreSQL / swiftc）→ 创建 `NotAlone` conda 环境并 `pip install -e .` → 启动本地 PostgreSQL 并创建 `notalone_dev` → 按版本记录应用尚未完成的 `database/migrations/*.sql` → 生成只含数据库连接的受控 `.env`（0600）→ 构建前台同步探针。每个迁移与成功记录同事务提交，失败只回滚当前迁移，重跑从未完成版本继续；机器环境等此前已完成步骤会保留。无迁移记录的旧库会停止并提示核验，不会凭 `owner` 表猜测基线或重放历史 SQL，见 [数据库迁移说明](database/README.md)。
 
-用户级首次配置由 App 首启向导完成：
-
-```bash
-open macos_app/build/NotAloneApp.app
-```
-
-向导引导填写模型凭据（界面不回显）并初始化 owner；owner 初始化与导入命令的 `--initialize-owner` 共用同一张 owner 表和幂等语义，完成后 App 自动重启后端进入主界面。App 的构建、权限与启动错误见 [macos_app/README.md](macos_app/README.md)。
+图形首启向导随旧主界面退役，当前首次初始化沿用下文历史导入的 `--initialize-owner`；模型凭据通过本地受控 `.env` 或环境变量提供。安装脚本不填写密钥，也不启动真实微信读取。探针的独立构建与调试见 [macos_sync_probe/README.md](macos_sync_probe/README.md)。
 
 Python 命令必须在 conda 环境 `NotAlone` 中运行；命令启动时自动读取当前或上级目录的 `.env`，已有 shell 环境变量优先：
 
@@ -62,7 +58,7 @@ python -m pip install -e .
 
 同步分为两个独立通道：CLI 后台按各联系人自己的 cursor 读取文字增量；前台 OCR/探针只定位当前微信联系人，失败不影响 CLI 后台同步。原始视觉帧不保存，消息按稳定身份写入并与历史导入跨来源去重。
 
-首次在 App 的同步管理页手动勾选联系人（默认不选，也可主动全选当前未绑定列表），最终确认绑定后再开启总开关。刷新列表不会自动选中新会话。应用退出或开关关闭时停止读取；重新开启后只对仍有效的已确认绑定补齐 baseline 之后的可检测缺口，不读取未确认会话正文。
+当前通过下列 CLI 入口列出会话，再由用户逐一确认绑定后开启总开关；没有图形同步管理页，不会自动授权新增会话。关闭总开关或退出后端运行时停止读取；重新开启后只对仍有效的已确认绑定补齐 baseline 之后的可检测缺口，不读取未确认会话正文。新桌面宿主仍须落实退出停读规则。
 
 ```bash
 export NOTALONE_DATABASE_URL='postgresql:///notalone_dev'
@@ -99,11 +95,11 @@ notalone-ingest chat_exports/example.jsonl \
 
 ### 删除导入资料与查看回复依据
 
-导入页的“已导入的聊天资料”按当前联系人列出来源，可删除单份导入并查看后台步骤与结果。中断、失败或 Worker 忙时可“继续删除”；请求与结果保存到数据库，不依赖模型密钥。升级需先按[数据库迁移说明](database/README.md)应用 `036_source_deletion_tasks.sql`，本仓库修改不会自动迁移现有业务库。
+本地后端按已确认联系人列出导入来源，支持删除单份导入并查询后台步骤与结果；中断、失败或 Worker 忙时可重新请求继续删除。请求与结果保存到数据库，不依赖模型密钥，当前通过 HTTP 接口使用这些能力。升级需先按[数据库迁移说明](database/README.md)应用 `036_source_deletion_tasks.sql`，本仓库修改不会自动迁移现有业务库。
 
 删除清除 NotAlone 中该来源及失去来源的聊天、记忆历史正文和回复快照；共享来源支持的资料保留。微信聊天、用户原始文件和不含正文的最小 AI 调用记录保留，外部模型副本须按供应商规则另行处理。联系人/账户整体删除不由此入口提供。缺少可核验删除任务的旧凭证（含任务已过期清理）不显示为本轮删除完成，历史正文残留需要单独核验。
 
-回复页可展开生成时实际保存的上下文正文、选入原因与候选引用；读取不重新检索，也不触发模型调用。HTTP 接口分别为 `GET /api/contacts/{contact_id}/sources`、`DELETE /api/contacts/{contact_id}/sources/{source_id}` 和 `GET /api/contacts/{contact_id}/replies/{reply_request_id}/evidence`，沿用回环服务 token 与 owner/contact 隔离。
+后台依据接口返回生成时实际保存的上下文正文、选入原因与候选引用；读取不重新检索，也不触发模型调用。HTTP 接口分别为 `GET /api/contacts/{contact_id}/sources`、`DELETE /api/contacts/{contact_id}/sources/{source_id}` 和 `GET /api/contacts/{contact_id}/replies/{reply_request_id}/evidence`，沿用回环服务 token 与 owner/contact 隔离。
 
 普通草稿润色使用本次草稿、指令、受控 Skill 和用户明确选择的续写候选，模型默认不能调用历史检索工具或引用历史消息与记忆。明确设置 `include_relationship_context=true` 后，才允许在已确认联系人范围内检索背景资料；正常回复消息保留该范围内的有界检索能力。
 
@@ -134,9 +130,9 @@ notalone-task-cleanup                        # 删除超过 90 天的终态任�
 
 `POST /api/runtime/shutdown` 和服务器公开关闭共用停止协议：拒绝新工作、唤醒许可等待者，等待收尾最多 5 秒。不能中断的旧调用返回后丢弃结果，不把未完成任务标为成功；成功步骤保留，原租约到期后可按原任务显式继续。协作停止在有效来源与租约内返还本次尝试，真实模型失败仍计入三次预算；来源或租约已失效、进程被强制结束、停止记账不可用时不保证返还。调用许可与锁连接统一收尾，已发生的调用仍保留无正文台账。行为约束见 [ADR-038](architecture/adr/038-import-triggered-memory-work-and-reply-priority.md)，合成 HTTP 验收覆盖上述范围，不代表外部模型或正式部署已验收。
 
-记忆管理页中的候选、联系人记忆和本人记忆均展示来源聊天时间、保存／录入时间，
-以及存在的生效／失效时间。来源跨多条消息时显示日期范围，缺失或无法核实的时间
-明确标为未知或不完整；历史已完成操作也保留来源日期。已有资料直接从原来源取得
+后台记忆接口为候选、联系人记忆和本人记忆返回来源聊天时间、保存／录入时间，
+以及存在的生效／失效时间。来源跨多条消息时返回日期范围，缺失或无法核实的时间
+保留未知或不完整状态；历史已完成操作也保留来源日期。已有资料直接从原来源取得
 时间，无需重新提取。来源日期表示当时说过，不代表事件恰在当天发生，也不保证旧状态
 今天仍成立。候选回复同时读取这些时间，并保存到本次依据快照供回看。
 

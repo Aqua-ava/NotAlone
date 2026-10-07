@@ -2,8 +2,8 @@
 # NotAlone 机器级安装脚本（ADR-021）。
 #
 # 只负责机器级事务：安装 Python 依赖、创建本地数据库、按顺序应用全部
-# 迁移、构建 Swift App 与探针。首次配置的用户级事务（模型凭据、owner
-# 初始化）由 App 首启向导完成，本脚本不读写密钥。
+# 迁移、构建 Mac 原生探针。旧 Swift 主界面已退役，新 UI 后续单独设计；
+# 用户级配置沿用现有 CLI 与受控配置路径，本脚本不读写密钥。
 #
 # 幂等：已初始化的环境再次运行不会重复建库/重建数据，只补充缺失的
 # 依赖、迁移与构建产物；迁移由版本记录保证重跑时不重复执行。
@@ -125,7 +125,7 @@ env_file="${repo_root}/.env"
 if [[ -f "${env_file}" ]]; then
     log ".env 已存在，保留既有配置；不会覆盖或回显密钥。"
 else
-    log "创建受控 .env（0600；只含数据库连接，凭据与 owner 由首启向导填写）…"
+    log "创建受控 .env（0600；只含数据库连接，凭据与 owner 另行配置）…"
     # 先以受限权限创建文件再写入：直接 cat > 会按调用方 umask 落盘
     # （通常 0644），存在短暂的全局可读窗口。
     (umask 177 && cat > "${env_file}" <<EOF
@@ -133,14 +133,12 @@ NOTALONE_DATABASE_URL=${database_url}
 EOF
 )
     chmod 600 "${env_file}"
-    log "已在 ${env_file} 写入 NOTALONE_DATABASE_URL；凭据与 owner 请在 App 首启向导中配置。"
+    log "已在 ${env_file} 写入 NOTALONE_DATABASE_URL；首次初始化与凭据配置请参阅 README。"
 fi
 
 # ------------------------------------------------------------------
-# 5. 构建 Swift App 与探针
+# 5. 构建 Mac 原生探针
 # ------------------------------------------------------------------
-log "构建 macOS App…"
-zsh macos_app/scripts/build_app.sh || fail "macOS App 构建失败。"
 log "构建前台同步探针（CLI）…"
 zsh macos_sync_probe/scripts/build_cli.sh || fail "探针构建失败。"
 
@@ -150,8 +148,7 @@ zsh macos_sync_probe/scripts/build_cli.sh || fail "探针构建失败。"
 print
 print "──────────────────────────────────────────────────────────"
 print "[install] 完成。"
-print "[install] 下一步（用户级首次配置）请打开 NotAlone App："
-print "[install]   open ${repo_root}/macos_app/build/NotAloneApp.app"
-print "[install] 首启向导会引导：填写模型凭据 → 初始化 owner。"
-print "[install] 已知前置：需要微信桌面版、自装 wechat-cli、屏幕录制权限（见 README）。"
+print "[install] Python 后台、数据库与 Mac 原生探针已准备。"
+print "[install] 旧 Swift 主界面已退役，新 UI 尚未实现；当前 CLI 使用与首次初始化见 README。"
+print "[install] 已知前置：需要微信桌面版、自装 wechat-cli、探针屏幕录制权限（见 README）。"
 print "──────────────────────────────────────────────────────────"
