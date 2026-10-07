@@ -1,8 +1,8 @@
 # 记忆提取完整追踪
 
-> 状态：已采纳的追溯要求，**完整追踪尚未实现**。
+> 状态：PostgreSQL 全过程记录、默认提取装配和受范围查询／删除已实现并经合成公开入口验证；**App 查看界面待 ADR-039 后续新前端接入**。
 > 确认日期：2026-10-07。范围与留存决策见 [ADR-037](../adr/037-complete-memory-extraction-trace.md)。
-> 本文按当前代码列出需要记录的全过程；记录结构、物理存储、事务接缝和查询入口仍需在实现规格中确定。本次只形成文档，不执行历史重提取或修改现有记忆。
+> 实现状态更新：2026-10-08。迁移 `039`–`042` 与下方代码证据落实后端契约，不补造历史记录，不执行真实私人库迁移或历史重提取。实际捕获缺口继续明确标注。
 
 ## 要解决的问题
 
@@ -48,7 +48,7 @@ flowchart TD
 - **输出**：可定位的原始记录快照与解析结果，能够连接到下一步的规范消息。
 - **边界**：只保存本次链路涉及的已授权原始记录，不因追踪读取其他会话或复制无关文件内容。原始视觉帧继续遵守端侧内存处理边界；OCR/转写保存实际文字结果、已有合法来源定位及处理记录，不因本要求新增视觉帧持久化。
 
-原始输入与已经解析的投影必须区分。当前手动导入的 `raw_payload` 是已解析 JSON 的重序列化，CLI 的 `raw_payload` 是消息事件的字段投影；它们都不能被描述为原文件字节或完整 CLI 返回。新增记录必须注明实际捕获层级。若旧来源缺少更早的输入，只能显示缺失，不能补造原始记录。
+原始输入与已经解析的投影必须区分。旧版手动导入的 `raw_payload` 是已解析 JSON 的重序列化，旧版 CLI 的 `raw_payload` 是消息事件的字段投影；它们都不能被描述为原文件字节或完整 CLI 返回。新入口另外保存相关原始 JSONL 行／CLI 事件及当时解析与规范化记录；只有已解析输入的兼容入口明确标为 `parsed_only`。若旧来源缺少更早的输入，只能显示缺失，不能补造原始记录。
 
 ### 1. 解析、规范化与消息保存
 
@@ -217,21 +217,22 @@ flowchart TD
 
 用户删除单条候选或记忆时，其派生内容继续按现行删除规则清理，追踪中的正文快照和解释也纳入清理，不能从记录里静默恢复已删除的资料。
 
-## 当前代码证据与缺口
+## 当前后端实现与缺口
 
-下表用于说明为何需要补记录，不表示上述要求已经落地。后续代码变化后应重新核验。
+下表区分已保存的实际处理与不能复原的历史／外部信息。验证使用合成资料，不证明真实模型、真实微信或新 App 界面已经验收。
 
-| 当前环节 | 代码证据 | 现有能力与追溯缺口 |
+| 当前环节 | 代码证据 | 已实现行为与边界 |
 | --- | --- | --- |
-| 历史导入 | [导入命令](../../src/notalone/ingest/import_command.py)、[JSONL 读取](../../src/notalone/ingest/jsonl_reader.py)、[字段校验](../../src/notalone/ingest/validator.py)、[导入规范化](../../src/notalone/ingest/normalizer.py)、[来源持久化](../../src/notalone/persistence/postgres_repository.py) | 保存 `jsonl:行号` 和逐消息已解析 JSON，未保存原文件字节布局或逐步转换记录；文件内部重复或与既有消息重叠当前拒绝，不能统一说成逐条合并。 |
-| CLI 增量 | [CLI 适配器](../../src/notalone/wechat_cli/adapter.py)、[CLI 规范化](../../src/notalone/wechat_cli/normalizer.py)、[观察持久化](../../src/notalone/persistence/observation_store.py) | 文字正文与 `cli:local_id`、事件字段投影和观察范围有保存；重复消息复用并增补来源引用。非文字事件仅计数/推进游标，缺少逐项原输入与理由，不能复原完整 CLI 输出。 |
-| 原处理时间 | [导入命令](../../src/notalone/ingest/import_command.py)、[Worker](../../src/notalone/tasks/worker.py) | 当前解析/规范化在同步导入时发生，后台 `parse / normalize` 只是步骤完成记账；这些步骤时间不能代替原处理时间。 |
-| 消息读取与窗口 | [读取支持](../../src/notalone/memory_extraction/cli_support.py)、[批次命令](../../src/notalone/memory_extraction/command.py) | 按范围、水位和配置选取消息；缺少持久化的确切窗口/阶段链。 |
-| 提取调用 | [模型适配器](../../src/notalone/memory_extraction/adapters.py) | 用系统提示词和带目标/上下文标记的窗口调用模型；没有完整请求/原始响应持久化契约。 |
-| 解析、时间与核验 | [提取流程](../../src/notalone/memory_extraction/flow.py)、[核验适配器](../../src/notalone/memory_extraction/verification_adapters.py) | 有来源校验和核验处理；被拒内容、程序字段变化及核验正文未形成完整永久链。 |
-| 采纳与裁决 | [采纳流程](../../src/notalone/memory_extraction/adoption.py)、[裁决适配器](../../src/notalone/memory_extraction/adjudication_adapters.py) | 有确定性门槛和 ADD/UPDATE/NOOP；没有每条规则输入/输出与全部动作记录。 |
-| 业务写入 | [记忆存储](../../src/notalone/persistence/memory_store.py) | 保留业务记录与来源，逐条事务可能留下部分结果；不能代替完整过程记录。 |
-| 调用台账 | [台账模型](../../src/notalone/ledger/models.py)、[台账存储](../../src/notalone/persistence/outbound_ledger.py) | 最小元数据有用途；不包含完整聊天、请求、响应或逐候选过程。 |
+| 历史导入 | [导入命令](../../src/notalone/ingest/import_command.py)、[来源处理存储](../../src/notalone/persistence/source_processing.py) | 保存相关原始行、实际解析／校验／规范化输入输出及映射，来源与消息在同一事务提交；导入仍拒绝文件内重复或既有重叠，不改为合并。 |
+| CLI 增量 | [CLI 适配器](../../src/notalone/wechat_cli/adapter.py)、[观察持久化](../../src/notalone/persistence/observation_store.py)、[来源处理存储](../../src/notalone/persistence/source_processing.py) | 保存实际事件、转换与去重决定、消息／来源引用映射；非文字／未知事件标明过滤原因。只处理已授权记录，不复制整段 CLI 输出；增量入口不新增提取调度。 |
+| 原处理时间 | [导入命令](../../src/notalone/ingest/import_command.py)、[Worker](../../src/notalone/tasks/worker.py) | 原处理记录连接到提取使用的快照，保留实际处理时间与版本；后台 `parse / normalize` 步骤记账仍不是原解析时间。 |
+| 消息读取与窗口 | [读取支持](../../src/notalone/memory_extraction/cli_support.py)、[批次命令](../../src/notalone/memory_extraction/command.py) | 保存实际水位、消息版本、排除规则、20 + 20 + 20 窗口、顺序与 target 标记；没有重新读取扩大范围。 |
+| 模型调用 | [捕获边界](../../src/notalone/memory_trace/transport.py)、[生产组装](../../src/notalone/memory_extraction/cli_support.py) | 分别保存 E/V/A 的提示词、schema、参数与原始返回；真实 SDK HTTP hooks 保存最终序列化正文、供应商返回及可观察重试，不保存鉴权头。未进入该 transport 的适配器标为 `not_observable`。 |
+| 解析、时间与核验 | [提取流程](../../src/notalone/memory_extraction/flow.py)、[核验适配器](../../src/notalone/memory_extraction/verification_adapters.py) | 原始响应先保存，再记结构解析、来源契约、字段变化与逐候选核验，包含拒绝、失败与未执行结果。 |
+| 采纳与裁决 | [采纳流程](../../src/notalone/memory_extraction/adoption.py)、[裁决适配器](../../src/notalone/memory_extraction/adjudication_adapters.py) | 保存稳定候选标识、语用分流、删除指纹、重复、门槛、shortlist 与 ADD/UPDATE/NOOP；不改变默认空放行表、提示词或预算。 |
+| 业务写入 | [追踪存储](../../src/notalone/persistence/extraction_trace.py)、[记忆存储](../../src/notalone/persistence/memory_store.py) | 保存写入意图、返回／权威记录回执与部分提交；结束记录和水位同事务提交。回执丢失显示未知／待核对，不假称回滚。 |
+| 调用台账 | [上下文与补账](../../src/notalone/memory_trace/context.py)、[最小关联迁移](../../database/migrations/042_extraction_trace_call_receipts.sql) | 正常、停止和来源删除后的实际调用关联同一 `call_id`／台账 ID，区分 received／returned／unavailable 与 consumed／not_adopted；提交回执未知不另造补账。不保存正文，正文删除后只保留最小关联。 |
+| 查询与删除 | [查询服务](../../src/notalone/application/trace_service.py)、[HTTP](../../src/notalone/server/app.py)、[CLI](../../src/notalone/memory_trace/command.py) | 默认查询装配不需要模型；授权批次列表稳定分页、详情和候选／记忆／消息反查，区分已删、未记录及手输不适用，人工确认模型候选仍可反查。所有 HTTP 追踪响应 no-store，越界／不存在统一 404。App 界面尚未实现。 |
 
 规范化还有以下当前差异，需要按实际输入与版本记录，不能统一写成“清洗了一下”：
 
@@ -253,4 +254,4 @@ flowchart TD
 6. 跨 owner/contact 查询被拒；删除一条仅作为上下文的来源仍清除受影响追踪；旧记忆来源、重试快照、缓存及导出副本也被清除，最小台账无正文。
 7. 零候选、超时、重试、进程中断、来源已删、手动删除追踪和历史缺失分别展示真实状态；不会伪造完成、内在推理、加密或历史复现能力。
 
-下一份实现规格需要确定原始处理记录的捕获位置、存储/schema、可靠写入与业务事务的关联、删除依赖索引、重试幂等接缝以及查询接口，并据此建立集成验证。本文件未选择具体日志框架或新增 Agent 编排。
+后端实施与验收记录见 `.scratch/memory-extraction-trace/issues/01-extraction-trace.md`、`02-source-processing-trace.md`、`03-app-and-all-entrypoints.md`。公开 HTTP 验收覆盖默认 priority 装配、原行到记忆反查、零候选、停止／晚响应、来源删除、故障恢复与翻页；真实已安装 SDK 的本地 HTTP transport 另验证 E/V/A、tools、thinking 与可观察重试。两个验证层分别提供证据，不据此宣称真实外部服务集成完成。App 验收随新前端接入，当前任务保持未完成 UI 状态。

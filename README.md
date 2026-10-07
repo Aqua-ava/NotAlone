@@ -116,7 +116,23 @@ notalone-memory-delete --contact-id '...' --memory-id '...'
 notalone-task-cleanup                        # 删除超过 90 天的终态任务元数据
 ```
 
-提取候选先经证据契约与逐条来源语义核验：支持才继续原采纳门，证据不足留待确认，无支持拒绝，未核验不能自动入库。核验不改写正文、主体、来源或有效期；返回片段必须是候选来源中的真实原文，并包含主消息。之后仍执行置信度与风险门槛（低于 0.7 或带敏感/未知风险留待定）、按维度放行（ADR-036：默认放行表为空，只有已放行维度才自动采纳，其余安静待确认）、删除指纹和写入裁决，全部通过才自动采纳、标记 `auto` 并可撤销；`NOTALONE_MEMORY_DIMENSION_GATE=0` 可回退按维度放行。生产 CLI／Worker 默认用既有模型每窗口至多增加一次核验，单批最多 60 条；提取与核验各有无正文台账。网络或模型不可用时不推进该批水位；非法结构输出按 ADR-029 连续三次后记录可见跳过并推进，未跳过前不推进。Worker 模型或网络暂时失败最多自动重试 3 次并续期步骤租约，进程中断后重跑从未完成步骤继续，无任务时输出 `status=idle`。`index -> verify` 按确定性代码维护联系人记忆目录（分类、主题提示和 memory_id 引用，最多 20 个主题），不复制正文。手动录入标记 `manual`，支持联系人级与 owner 级。所有命令输出只含状态、计数和元数据，不含聊天正文或模型完整输入输出。目标流程见 ADR-014、ADR-015、ADR-018、ADR-033、ADR-036。
+提取候选先经证据契约与逐条来源语义核验：支持才继续原采纳门，证据不足留待确认，无支持拒绝，未核验不能自动入库。核验不改写正文、主体、来源或有效期；返回片段必须是候选来源中的真实原文，并包含主消息。之后仍执行置信度与风险门槛（低于 0.7 或带敏感/未知风险留待定）、按维度放行（ADR-036：默认放行表为空，只有已放行维度才自动采纳，其余安静待确认）、删除指纹和写入裁决，全部通过才自动采纳、标记 `auto` 并可撤销；`NOTALONE_MEMORY_DIMENSION_GATE=0` 可回退按维度放行。生产 CLI／Worker 默认用既有模型每窗口至多增加一次核验，单批最多 60 条；提取与核验各有无正文台账。网络或模型不可用时不推进该批水位；非法结构输出按 ADR-029 连续三次后记录可见跳过并推进，未跳过前不推进。Worker 模型或网络暂时失败最多自动重试 3 次并续期步骤租约，进程中断后重跑从未完成步骤继续，无任务时输出 `status=idle`。`index -> verify` 按确定性代码维护联系人记忆目录（分类、主题提示和 memory_id 引用，最多 20 个主题），不复制正文。手动录入标记 `manual`，支持联系人级与 owner 级。普通运行命令输出只含状态、计数和元数据；下面的追踪查看命令由用户主动读取完整敏感资料。目标流程见 ADR-014、ADR-015、ADR-018、ADR-033、ADR-036。
+
+实际提取默认把全过程写入 PostgreSQL：原始来源处理记录、消息读取与窗口、提取／核验／裁决的实际输入和原始返回、逐候选规则及写入结果。生产 CLI、任务 Worker 和 HTTP 原任务使用相同记录链；CLI 增量同步仍只保存来源与消息，不新增自动提取调度。含正文追踪没有自动到期时间，保留到手动删除或来源删除；90 天任务清理不清追踪。来源删除会清除受影响整份追踪的正文，手动删除追踪保留权威消息／记忆。旧数据缺失显示 `not_recorded`，手输资料显示 `not_applicable`，从模型候选人工确认的记忆仍关联原批次。不能观察到供应商 HTTP 载荷的适配器明确显示 `not_observable`；不会用应用输入冒充最终 HTTP 请求。
+
+```bash
+notalone-memory-trace --contact-id '...' list --limit 100
+notalone-memory-trace --contact-id '...' list --before '...'  # 使用上一页 next_before
+notalone-memory-trace --contact-id '...' show '...'           # 主动查看完整敏感正文
+notalone-memory-trace --contact-id '...' find contact_memory '...'
+notalone-memory-trace --contact-id '...' delete '...'
+notalone-source-trace --contact-id '...' find message '...'
+notalone-source-trace --contact-id '...' show '...'
+```
+
+查询／删除只需要既有 `NOTALONE_OWNER_ID`、`NOTALONE_DATABASE_URL` 与已确认联系人，不构建模型。HTTP 沿用本地服务 token 和固定 owner：`GET /api/contacts/{contact_id}/memory-traces`、`GET/DELETE /api/contacts/{contact_id}/memory-traces/{trace_id}`、`GET /api/contacts/{contact_id}/memory-traces/records/{candidate|contact_memory|owner_memory}/{record_id}`；来源处理使用同一路径中的 `source-processing-traces` 和 `message|source_ref|source_document|local_wechat_observation`。列表支持 `limit=1..500` 与 `before={next_before}`，按时间和批次 UUID 稳定翻页；游标必须属于当前联系人。所有追踪响应（包括失败）均为 `Cache-Control: no-store`，越界／不存在统一 404，不返回错误正文或数据库凭据。
+
+追踪写入失败停止本批，返回安全的 `trace_write_failed`，不累积模型非法输出预算、不推进水位；保留已提交部分和提交回执未知状态。HTTP 导入来源记录故障返回 `source_processing_write_failed`。任务进度／SSE 只发布 `error_code` 等元数据，外层执行 `finished` 后应查原 `task_id` 的持久状态。追踪与失败状态同时不可写时，运行仍明确返回 `trace_write_failed` 和 `failure_state_commit=unknown`，结束本次执行；不宣称任务失败已落库、不返还原 attempt。停止、来源／租约失效、guard 存储故障分别记录；旧调用晚返回仍保留一次无正文调用台账和 `calls` 关联，已删正文不恢复。数据库迁移更新至 `042`；本轮仅在合成 `_test` 库验证，没有迁移私人库或调用真实模型／微信。完整后端已验证，App 查看入口随 ADR-039 后续新界面接入，当前未实现。
 
 自动采纳在原有三道门槛之上再叠加一道**按维度放行**（ADR-036）：一条候选还要落到已放行的维度键才会自动写入，无法明确判定维度键的候选一律视为未放行。**默认放行表为空**，因此当前所有通过原有门槛的候选都进入待确认、不新增自动采纳；放行某一类需要该维度本轮评测达标签并由用户逐类批准，记录在 [记忆维度自动采纳放行台账](docs/memory-adoption-dimension-release-ledger.md)。当前 `paraphrase`、`reference`、`media`、`reported` 四个维度缺少必要结构化字段、无法从既有提取结果推导，即使达标也不能放行。运维回退设 `NOTALONE_MEMORY_DIMENSION_GATE=0`，恢复本门启用前的行为。
 
@@ -128,7 +144,7 @@ notalone-task-cleanup                        # 删除超过 90 天的终态任�
 
 本地后端中的候选回复优先于尚未开始的后台提取、来源核验与写入裁决调用。已开始的一次适配器调用（包括 SDK 内部重试）结束后，等待回复先执行；整次回复完成前暂停后续后台模型调用。等待发生在候选请求租约与 20 秒生成计时之前，独立 CLI Worker 保留原行为。
 
-`POST /api/runtime/shutdown` 和服务器公开关闭共用停止协议：拒绝新工作、唤醒许可等待者，等待收尾最多 5 秒。不能中断的旧调用返回后丢弃结果，不把未完成任务标为成功；成功步骤保留，原租约到期后可按原任务显式继续。协作停止在有效来源与租约内返还本次尝试，真实模型失败仍计入三次预算；来源或租约已失效、进程被强制结束、停止记账不可用时不保证返还。调用许可与锁连接统一收尾，已发生的调用仍保留无正文台账。行为约束见 [ADR-038](architecture/adr/038-import-triggered-memory-work-and-reply-priority.md)，合成 HTTP 验收覆盖上述范围，不代表外部模型或正式部署已验收。
+`POST /api/runtime/shutdown` 和服务器公开关闭共用停止协议：拒绝新工作、唤醒许可等待者，当前实现共享 4 秒收尾预算。不能中断的旧调用返回后丢弃结果，不把未完成任务标为成功；成功步骤保留，原租约到期后可按原任务显式继续。协作停止在有效来源与租约内返还本次尝试，真实模型失败仍计入三次预算；来源或租约已失效、进程被强制结束、停止记账不可用时不保证返还。调用许可与锁连接统一收尾，已发生的调用仍保留无正文台账。行为约束见 [ADR-038](architecture/adr/038-import-triggered-memory-work-and-reply-priority.md)，合成 HTTP 验收覆盖上述范围，不代表外部模型或正式部署已验收。
 
 后台记忆接口为候选、联系人记忆和本人记忆返回来源聊天时间、保存／录入时间，
 以及存在的生效／失效时间。来源跨多条消息时返回日期范围，缺失或无法核实的时间
