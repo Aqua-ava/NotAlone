@@ -5,12 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 from contextvars import ContextVar, Token
-from dataclasses import fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
+from notalone.ledger.models import LedgerEntry, LedgerOutcome
+from notalone.ledger.ports import OutboundLedgerPort
 from notalone.memory_trace.ports import TracePort, TraceWriteError
 from notalone.scopes import ContactScope
 
@@ -77,6 +79,39 @@ def current_trace() -> TraceSession | None:
     return _CURRENT.get()
 
 
+@dataclass
+class CallObservation:
+    """仅保留可观察调用事实；不缓存请求或响应正文。"""
+
+    call_id: UUID
+    purpose: str
+    called_at: datetime
+    finished_at: datetime | None = None
+    invoked: bool = False
+    response_status: str = "unavailable"
+    provider_attempts: int = 0
+    request_capture_failed: bool = False
+    ledger_entry: LedgerEntry | None = None
+    ledger_commit_status: str = "unknown"
+    disposition: str = "consumed"
+
+    def receipt(self) -> dict[str, Any]:
+        assert self.ledger_entry is not None
+        return snapshot(
+            {
+                "call_id": self.call_id,
+                "purpose": self.purpose,
+                "called_at": self.called_at,
+                "finished_at": self.finished_at,
+                "response_status": self.response_status,
+                "provider_attempts": self.provider_attempts,
+                "ledger_entry_id": self.ledger_entry.entry_id,
+                "ledger_commit_status": self.ledger_commit_status,
+                "disposition": self.disposition,
+            }
+        )
+
+
 class TraceSession:
     """绑定单一联系人和批次，所有故障立即停止后续处理。"""
 
@@ -87,6 +122,9 @@ class TraceSession:
         trace_id: UUID,
         *,
         versions: dict[str, str | int] | None = None,
+        ledger: OutboundLedgerPort | None = None,
+        provider: str = "deepseek",
+        model_name: str | None = None,
     ) -> None:
         self.store = store
         self.scope = scope
@@ -97,6 +135,10 @@ class TraceSession:
         self.candidate_trace_id: UUID | None = None
         self.transport_attempt = 0
         self.calls: dict[str, UUID] = {}
+        self.observations: dict[UUID, CallObservation] = {}
+        self.ledger = ledger
+        self.provider = provider
+        self.model_name = model_name or "unreported"
         self.verification_candidate_ids: tuple[UUID, ...] = ()
         self.versions = versions or {}
         self._token: Token[TraceSession | None] | None = None
@@ -108,23 +150,127 @@ class TraceSession:
     def __exit__(
         self, kind: Any, error: Any, traceback: Any
     ) -> Literal[False]:
+        cleanup_failure = None
         if error is not None:
+            cleanup_failure = self._account_unconsumed()
+            error = cleanup_failure or error
+            from notalone.application.model_priority import ModelWorkStopped
+            from notalone.persistence.background_tasks import (
+                BackgroundTaskLeaseError,
+                BackgroundTaskNotFoundError,
+                BackgroundTaskPersistenceError,
+            )
+
+            if isinstance(error, TraceWriteError):
+                error_code = "trace_write_failed"
+            elif isinstance(error, ModelWorkStopped):
+                error_code = "model_work_stopped"
+            elif isinstance(error, BackgroundTaskLeaseError):
+                error_code = "background_task_lease_invalidated"
+            elif isinstance(error, BackgroundTaskNotFoundError):
+                error_code = "background_task_scope_invalidated"
+            elif isinstance(error, BackgroundTaskPersistenceError):
+                error_code = "background_task_guard_failed"
+            else:
+                error_code = "business_write_failed"
             try:
                 self.store.mark_failed(
                     self.scope,
                     self.trace_id,
                     stage=self.stage,
-                    error_code=(
-                        "trace_write_failed"
-                        if isinstance(error, TraceWriteError)
-                        else "business_write_failed"
-                    ),
+                    error_code=error_code,
                 )
             except Exception:
                 pass
         if self._token is not None:
             _CURRENT.reset(self._token)
+        if cleanup_failure is not None:
+            raise cleanup_failure from None
         return False
+
+    def _account_unconsumed(self) -> TraceWriteError | None:
+        """独立故障／停止时补实际调用；正文删除后只写最小关联。"""
+        if self.ledger is None:
+            return None
+        failure = None
+        for call in self.observations.values():
+            if not call.invoked or call.ledger_entry is not None:
+                continue
+            if (
+                call.request_capture_failed
+                and call.provider_attempts == 1
+                and call.response_status == "unavailable"
+            ):
+                # 首个供应商请求 hook 在发送前失败，不能冒充实际外发。
+                continue
+            call.disposition = "not_adopted"
+            finished = call.finished_at or datetime.now(timezone.utc)
+            call.ledger_entry = LedgerEntry(
+                entry_id=uuid4(),
+                owner_id=self.scope.owner_id,
+                contact_id=self.scope.contact_id,
+                provider=self.provider,
+                model_name=self.model_name,
+                input_tokens=None,
+                output_tokens=None,
+                latency_ms=max(
+                    0, int((finished - call.called_at).total_seconds() * 1000)
+                ),
+                outcome=LedgerOutcome.RUN_FAILED,
+                called_at=call.called_at,
+            )
+            try:
+                self.ledger.record(call.ledger_entry)
+                call.ledger_commit_status = "committed"
+            except Exception:
+                # 回执未知不能重造另一个 ID 补账；也不掩盖原停止／追踪故障。
+                pass
+            try:
+                self.store.record_call(
+                    self.scope, self.trace_id, receipt=call.receipt()
+                )
+            except Exception:
+                self.stage = "call_receipt"
+                failure = TraceWriteError(self.stage, self.trace_id)
+        return failure
+
+    def reserve_ledger(self, purpose: str, entry: LedgerEntry) -> None:
+        """台账 I/O 前保留同一 ID，回执丢失时不另造补账。"""
+        call_id = self.calls.get(purpose)
+        call = self.observations.get(call_id) if call_id is not None else None
+        if call is not None:
+            call.ledger_entry = entry
+            call.ledger_commit_status = "unknown"
+
+    def persist_ledger(self, purpose: str, *, committed: bool) -> None:
+        call_id = self.calls.get(purpose)
+        call = self.observations.get(call_id) if call_id is not None else None
+        if call is not None:
+            if committed:
+                call.ledger_commit_status = "committed"
+            try:
+                self.store.record_call(
+                    self.scope, self.trace_id, receipt=call.receipt()
+                )
+            except Exception:
+                self.stage = "call_receipt"
+                self.failure = TraceWriteError("call_receipt", self.trace_id)
+                raise self.failure from None
+
+    def link_ledger(self, purpose: str, entry: LedgerEntry) -> None:
+        self.reserve_ledger(purpose, entry)
+        self.persist_ledger(purpose, committed=True)
+
+    def discard_call(self, purpose: str) -> None:
+        """许可／来源复验丢弃已返回结果，已有台账只更新无正文关联。"""
+        call_id = self.calls.get(purpose)
+        call = self.observations.get(call_id) if call_id is not None else None
+        if call is not None:
+            call.disposition = "not_adopted"
+            if call.ledger_entry is not None:
+                self.persist_ledger(
+                    purpose, committed=call.ledger_commit_status == "committed"
+                )
 
     def record(
         self,
@@ -228,6 +374,7 @@ def record_ledger_call(
     """关联既有最小台账的实际标识，不把正文复制进台账。"""
     trace = current_trace()
     if trace is not None:
+        trace.link_ledger(purpose, entry)
         trace.record(
             "ledger_call",
             {"purpose": purpose, "entry": entry, "commit_status": "committed"},
@@ -236,3 +383,23 @@ def record_ledger_call(
             status="committed",
             rule_module="transport",
         )
+
+
+def record_ledger_entry(
+    purpose: str,
+    ledger: OutboundLedgerPort,
+    entry: LedgerEntry,
+    *,
+    started_at: datetime,
+) -> None:
+    """沿原台账写入一次；提交回执未知时只保存该 ID 的最小关联。"""
+    trace = current_trace()
+    if trace is not None:
+        trace.reserve_ledger(purpose, entry)
+    try:
+        ledger.record(entry)
+    except Exception:
+        if trace is not None:
+            trace.persist_ledger(purpose, committed=False)
+        raise
+    record_ledger_call(purpose, entry, started_at=started_at)

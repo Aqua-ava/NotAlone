@@ -349,7 +349,12 @@ class PostgresExtractionTraceStore:
                     (
                         "trace_failed"
                         if error_code == "trace_write_failed"
-                        else "business_failed"
+                        else {
+                            "model_work_stopped": "stopped",
+                            "background_task_lease_invalidated": "scope_invalidated",
+                            "background_task_scope_invalidated": "scope_invalidated",
+                            "background_task_guard_failed": "scope_guard_failed",
+                        }.get(error_code, "business_failed")
                     ),
                     stage,
                     error_code,
@@ -367,8 +372,37 @@ class PostgresExtractionTraceStore:
                 (trace_id, scope.owner_id, scope.contact_id),
             )
 
+    def record_call(
+        self, scope: ContactScope, trace_id: UUID, *, receipt: dict[str, Any]
+    ) -> None:
+        try:
+            with psycopg.connect(self.database_url) as connection:
+                connection.execute(
+                    "INSERT INTO public.memory_extraction_trace_call (call_id,trace_id,owner_id,contact_id,purpose,called_at,finished_at,response_status,provider_attempts,ledger_entry_id,ledger_commit_status,disposition) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (call_id) DO UPDATE SET ledger_commit_status=EXCLUDED.ledger_commit_status,disposition=EXCLUDED.disposition",
+                    (
+                        receipt["call_id"],
+                        trace_id,
+                        scope.owner_id,
+                        scope.contact_id,
+                        receipt["purpose"],
+                        receipt["called_at"],
+                        receipt["finished_at"],
+                        receipt["response_status"],
+                        receipt["provider_attempts"],
+                        receipt["ledger_entry_id"],
+                        receipt["ledger_commit_status"],
+                        receipt["disposition"],
+                    ),
+                )
+        except psycopg.Error:
+            raise TraceWriteError("call_receipt", trace_id) from None
+
     def list_batches(
-        self, scope: ContactScope, *, limit: int = 100
+        self,
+        scope: ContactScope,
+        *,
+        limit: int = 100,
+        before: UUID | str | None = None,
     ) -> tuple[dict[str, Any], ...]:
         if not 0 < limit <= 500:
             raise ValueError("查询数量必须在 1 到 500 之间。")
@@ -376,12 +410,28 @@ class PostgresExtractionTraceStore:
             with psycopg.connect(
                 self.database_url, row_factory=dict_row
             ) as connection:
-                rows = connection.execute(
-                    (
-                        "SELECT * FROM public.memory_extraction_trace WHERE owner_id=%s "
-                        "AND contact_id=%s ORDER BY started_at DESC LIMIT %s"
+                cursor = None
+                if before is not None:
+                    cursor = connection.execute(
+                        "SELECT started_at,trace_id FROM public.memory_extraction_trace WHERE trace_id=%s AND owner_id=%s AND contact_id=%s",
+                        (before, scope.owner_id, scope.contact_id),
+                    ).fetchone()
+                    if cursor is None:
+                        raise LookupError("指定范围不存在该分页游标。")
+                clause = " AND (started_at,trace_id)<(%s,%s)" if cursor else ""
+                parameters = (
+                    scope.owner_id,
+                    scope.contact_id,
+                    *(
+                        (cursor["started_at"], cursor["trace_id"])
+                        if cursor
+                        else ()
                     ),
-                    (scope.owner_id, scope.contact_id, limit),
+                    limit,
+                )
+                rows = connection.execute(
+                    f"SELECT * FROM public.memory_extraction_trace WHERE owner_id=%s AND contact_id=%s{clause} ORDER BY started_at DESC,trace_id DESC LIMIT %s",
+                    parameters,
                 ).fetchall()
         except psycopg.Error:
             raise RuntimeError("记忆提取追踪读取失败。") from None
@@ -426,8 +476,19 @@ class PostgresExtractionTraceStore:
                     scope,
                     links,
                     observed_after_failure=row["status"]
-                    in {"trace_failed", "business_failed", "model_failed"},
+                    in {
+                        "trace_failed",
+                        "business_failed",
+                        "model_failed",
+                        "stopped",
+                        "scope_invalidated",
+                        "scope_guard_failed",
+                    },
                 )
+                calls = connection.execute(
+                    "SELECT call_id,purpose,called_at,finished_at,response_status,provider_attempts,ledger_entry_id,ledger_commit_status,disposition FROM public.memory_extraction_trace_call WHERE trace_id=%s AND owner_id=%s AND contact_id=%s ORDER BY called_at,call_id",
+                    (trace_id, scope.owner_id, scope.contact_id),
+                ).fetchall()
         except psycopg.Error:
             raise RuntimeError("记忆提取追踪读取失败。") from None
         return snapshot(
@@ -437,6 +498,7 @@ class PostgresExtractionTraceStore:
                 "links": links,
                 "write_receipts": receipts,
                 "candidates": candidate_summaries(events),
+                "calls": calls,
             }
         )
 
@@ -525,7 +587,7 @@ class PostgresExtractionTraceStore:
                 if record_kind == "contact_memory":
                     origin = connection.execute(
                         (
-                            "SELECT source_candidate_id,source_ids FROM "
+                            "SELECT source_candidate_id,source_ids,adoption_method FROM "
                             "public.confirmed_memory WHERE owner_id=%s AND contact_id=%s AND "
                             "id=%s"
                         ),
@@ -537,13 +599,27 @@ class PostgresExtractionTraceStore:
                 elif record_kind == "owner_memory":
                     origin = connection.execute(
                         (
-                            "SELECT memory.source_candidate_id,memory.source_ids FROM "
-                            "public.owner_memory AS memory JOIN public.memory_candidate AS "
+                            "SELECT memory.source_candidate_id,memory.source_ids,memory.adoption_method FROM "
+                            "public.owner_memory AS memory LEFT JOIN public.memory_candidate AS "
                             "candidate ON candidate.id=memory.source_candidate_id AND "
                             "candidate.owner_id=memory.owner_id WHERE memory.owner_id=%s AND "
-                            "candidate.contact_id=%s AND memory.id=%s"
+                            "memory.id=%s AND (candidate.contact_id=%s OR EXISTS ("
+                            "SELECT 1 FROM public.source_document AS source WHERE "
+                            "source.owner_id=memory.owner_id AND source.contact_id=%s "
+                            "AND source.id=ANY(memory.source_ids)) OR EXISTS ("
+                            "SELECT 1 FROM public.message AS message WHERE "
+                            "message.owner_id=memory.owner_id AND message.contact_id=%s "
+                            "AND message.id=ANY(memory.source_ids)) OR ("
+                            "memory.source_candidate_id IS NULL AND memory.adoption_method='manual' "
+                            "AND memory.source_ids=ARRAY[memory.owner_id]))"
                         ),
-                        (scope.owner_id, scope.contact_id, record_id),
+                        (
+                            scope.owner_id,
+                            record_id,
+                            scope.contact_id,
+                            scope.contact_id,
+                            scope.contact_id,
+                        ),
                     ).fetchone()
                     candidate_id = (
                         origin["source_candidate_id"] if origin else None
@@ -573,8 +649,19 @@ class PostgresExtractionTraceStore:
                         candidate_id,
                     ),
                 ).fetchall()
-                manual_only = False
-                if not rows and origin and origin["source_ids"]:
+                manual_only = bool(
+                    record_kind == "owner_memory"
+                    and origin
+                    and origin["source_candidate_id"] is None
+                    and origin["adoption_method"] == "manual"
+                    and origin["source_ids"] == [scope.owner_id]
+                )
+                if (
+                    not manual_only
+                    and not rows
+                    and origin
+                    and origin["source_ids"]
+                ):
                     sources = connection.execute(
                         (
                             "SELECT id FROM public.source_document WHERE owner_id=%s AND "
@@ -605,6 +692,7 @@ class PostgresExtractionTraceStore:
                     )
                 ),
                 "batches": rows,
+                "record_exists": bool(rows or origin),
             }
         )
 

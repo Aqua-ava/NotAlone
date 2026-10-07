@@ -8,6 +8,7 @@ from uuid import UUID
 
 import httpx
 
+from notalone.ledger.adapters import InMemoryOutboundLedger
 from notalone.memory.adapters import InMemoryMemoryStore
 from notalone.memory_extraction.adapters import LangChainExtractionRuntime
 from notalone.memory_extraction.command import run_extraction
@@ -20,6 +21,80 @@ from tests.unit.memory_extraction.test_command import _messages, _payload
 
 
 class TraceTransportTest(unittest.TestCase):
+    def test_committed_ledger_with_lost_receipt_is_never_recorded_twice(self):
+        class ReceiptLostLedger(InMemoryOutboundLedger):
+            def record(self, entry):
+                super().record(entry)
+                raise RuntimeError("合成提交回执丢失")
+
+        ledger = ReceiptLostLedger()
+        traces = InMemoryTraceStore()
+        scope = ContactScope(
+            UUID("aaaaaaaa-1111-1111-1111-111111111111"),
+            UUID("bbbbbbbb-2222-2222-2222-222222222222"),
+        )
+
+        def synthetic_http(request):
+            return httpx.Response(
+                200,
+                json={
+                    "id": "synthetic-ack-loss",
+                    "object": "chat.completion",
+                    "created": 1,
+                    "model": "deepseek-chat",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": "",
+                                "tool_calls": [
+                                    {
+                                        "id": "synthetic-zero",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "MemoryExtractionOutput",
+                                            "arguments": '{"facts":[]}',
+                                        },
+                                    }
+                                ],
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ],
+                },
+            )
+
+        with build_trace_http_client(
+            transport=httpx.MockTransport(synthetic_http)
+        ) as client:
+            model = build_deepseek_model(
+                api_key="synthetic-secret",
+                base_url="http://127.0.0.1/v1",
+                http_client=client,
+            )
+            with self.assertRaises(RuntimeError):
+                run_extraction(
+                    scope=scope,
+                    messages=_messages(1),
+                    watermark_message_id=None,
+                    runtime=LangChainExtractionRuntime(model=model),
+                    memory_port=InMemoryMemoryStore(),
+                    owner_memory_port=None,
+                    trace_store=traces,
+                    ledger=ledger,
+                )
+        entries = ledger.list_by_owner(scope.owner_id)
+        self.assertEqual(len(entries), 1)
+        detail = traces.get_batch(
+            scope, traces.list_batches(scope)[0]["trace_id"]
+        )
+        self.assertEqual(len(detail["calls"]), 1)
+        self.assertEqual(
+            detail["calls"][0]["ledger_entry_id"], str(entries[0].entry_id)
+        )
+        self.assertEqual(detail["calls"][0]["ledger_commit_status"], "unknown")
+
     def test_final_sdk_request_and_response_preserve_raw_serialization_and_tools(
         self,
     ):
@@ -120,6 +195,7 @@ class TraceTransportTest(unittest.TestCase):
                         return super().append(*args, stage=stage, **kwargs)
 
                 observed = []
+                ledger = InMemoryOutboundLedger()
 
                 def synthetic_http(request):
                     observed.append(request.content)
@@ -166,9 +242,28 @@ class TraceTransportTest(unittest.TestCase):
                             memory_port=InMemoryMemoryStore(),
                             owner_memory_port=None,
                             trace_store=traces,
+                            ledger=ledger,
                             watermark_port=watermark,
                         )
                 self.assertEqual(len(observed), expected_sends)
+                entries = ledger.list_by_owner(scope.owner_id)
+                self.assertEqual(len(entries), expected_sends)
+                calls = traces.get_batch(
+                    scope, traces.list_batches(scope)[0]["trace_id"]
+                )["calls"]
+                self.assertEqual(len(calls), expected_sends)
+                if expected_sends:
+                    self.assertEqual(
+                        calls[0]["ledger_entry_id"], str(entries[0].entry_id)
+                    )
+                    self.assertEqual(
+                        calls[0]["response_status"],
+                        (
+                            "received"
+                            if failing_stage == "provider_response"
+                            else "returned"
+                        ),
+                    )
                 self.assertEqual(watermark.values, [])
                 self.assertIsNone(watermark.get_failure(scope))
                 self.assertEqual(

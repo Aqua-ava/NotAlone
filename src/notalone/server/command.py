@@ -342,6 +342,8 @@ def _build_task_host(
                 processed_count=update.processed_count,
                 attempt_count=update.attempt_count,
                 retry_count=update.retry_count,
+                error_code=update.error_code,
+                failure_state_commit=update.failure_state_commit,
             )
         )
 

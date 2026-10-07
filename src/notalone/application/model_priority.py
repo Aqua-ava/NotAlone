@@ -19,6 +19,7 @@ from notalone.memory_extraction.adjudication import (
 from notalone.memory_extraction.models import ExtractedFact, ExtractionWindow
 from notalone.memory_extraction.runtime import ExtractionPayload, MemoryExtractionRuntime
 from notalone.memory_extraction.verification import SourceVerificationRuntime
+from notalone.memory_trace.context import current_trace
 from notalone.persistence.background_tasks import BackgroundTaskPersistenceError
 from notalone.reply.interface import GenerateReply, ReplyOutcome
 from notalone.scopes import ContactScope, VerifiedConversationScope
@@ -139,26 +140,30 @@ class MemoryCallAccounting:
     def run_scope(self, scope: ContactScope) -> Iterator[None]:
         self._run.scope = scope
         self._run.extraction_record = None
+        self._run.extraction_trace = None
         try:
             yield
         except (ModelWorkStopped, BackgroundTaskPersistenceError):
             # 只控制/guard 中断会绕过原 E 台账；水位错误发生在原台账之后。
             entry = self._run.extraction_record
-            if entry is not None:
+            if entry is not None and self._run.extraction_trace is None:
                 self._ledger.record(entry)
             raise
         finally:
             del self._run.scope
             del self._run.extraction_record
+            del self._run.extraction_trace
 
     def extraction_started(self) -> None:
         self._run.extraction_record = None
+        self._run.extraction_trace = current_trace()
 
     def extraction_returned(self, called_at: datetime, latency_ms: int) -> None:
         self._run.extraction_record = self._entry(called_at, latency_ms)
 
     def record_discarded(self, called_at: datetime, latency_ms: int) -> None:
-        self._ledger.record(self._entry(called_at, latency_ms))
+        if current_trace() is None:
+            self._ledger.record(self._entry(called_at, latency_ms))
 
     def _entry(self, called_at: datetime, latency_ms: int) -> LedgerEntry:
         scope = self._run.scope
@@ -221,10 +226,18 @@ class PriorityVerificationRuntime:
     def verify(
         self, *, window: ExtractionWindow, facts: tuple[ExtractedFact, ...],
     ) -> tuple[dict[str, Any], ...]:
-        with self._control.background_call():
-            result = self._runtime.verify(window=window, facts=facts)
-        self._control.wait_for_foreground()
-        return result
+        returned = False
+        try:
+            with self._control.background_call():
+                result = self._runtime.verify(window=window, facts=facts)
+                returned = True
+            self._control.wait_for_foreground()
+            return result
+        except (ModelWorkStopped, BackgroundTaskPersistenceError):
+            trace = current_trace()
+            if returned and trace is not None:
+                trace.discard_call("verification")
+            raise
 
 
 class PriorityAdjudicationRuntime:

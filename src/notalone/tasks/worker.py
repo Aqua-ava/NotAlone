@@ -97,6 +97,7 @@ class WorkerRunResult:
     processed_count: int = 0
     attempt_count: int = 0
     error_code: str | None = None
+    failure_state_commit: str | None = None
 
 
 class _LeaseHeartbeat:
@@ -624,6 +625,20 @@ class BackgroundTaskWorker:
             # 暂时不可用时，失败状态已无法落库；按可重试的临时失败
             # 返回，让 worker 循环存活，由租约收尸与下次认领决定
             # 任务去向，而不是让异常逃逸 run_once 崩溃整个进程。
+            if error_code == "trace_write_failed":
+                # 主追踪故障必须向运行状态暴露；失败状态的提交回执未知。
+                return WorkerRunResult(
+                    outcome=(
+                        WorkerRunOutcome.STOPPED
+                        if self._stopping()
+                        else WorkerRunOutcome.RETRYABLE
+                    ),
+                    task_id=claim.task_id,
+                    step_name=claim.name,
+                    attempt_count=claim.attempt_count,
+                    error_code=error_code,
+                    failure_state_commit="unknown",
+                )
             if self._stopping():
                 # 已知失败的记账暂不可用时不能当协作停止退款。
                 return WorkerRunResult(
@@ -643,6 +658,9 @@ class BackgroundTaskWorker:
             step_name=claim.name,
             attempt_count=claim.attempt_count,
             error_code=error_code,
+            failure_state_commit=(
+                "committed" if error_code == "trace_write_failed" else None
+            ),
         )
 
 

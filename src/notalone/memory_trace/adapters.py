@@ -44,6 +44,7 @@ class InMemoryTraceStore:
             "started_at": datetime.now(timezone.utc).isoformat(),
             "events": [],
             "links": [],
+            "calls": [],
         }
         self.append(scope, trace_id, stage="window", payload=payload)
         return trace_id
@@ -129,11 +130,26 @@ class InMemoryTraceStore:
                 status=(
                     "trace_failed"
                     if error_code == "trace_write_failed"
-                    else "business_failed"
+                    else {
+                        "model_work_stopped": "stopped",
+                        "background_task_lease_invalidated": "scope_invalidated",
+                        "background_task_scope_invalidated": "scope_invalidated",
+                        "background_task_guard_failed": "scope_guard_failed",
+                    }.get(error_code, "business_failed")
                 ),
                 failure_stage=stage,
                 error_code=error_code,
             )
+
+    def record_call(
+        self, scope: ContactScope, trace_id: UUID, *, receipt: dict[str, Any]
+    ) -> None:
+        row = self._row(scope, trace_id)
+        for call in row["calls"]:
+            if call["call_id"] == receipt["call_id"]:
+                call.update(snapshot(receipt))
+                return
+        row["calls"].append(snapshot(receipt))
 
     def _row(
         self, scope: ContactScope, trace_id: UUID | str
@@ -144,18 +160,35 @@ class InMemoryTraceStore:
         return row
 
     def list_batches(
-        self, scope: ContactScope, *, limit: int = 100
+        self,
+        scope: ContactScope,
+        *,
+        limit: int = 100,
+        before: UUID | str | None = None,
     ) -> tuple[dict[str, Any], ...]:
+        if not 0 < limit <= 500:
+            raise ValueError("查询数量必须在 1 到 500 之间。")
+        cursor = self._row(scope, before) if before is not None else None
+        rows = sorted(
+            self._batches.values(),
+            key=lambda row: (row["started_at"], row["trace_id"]),
+            reverse=True,
+        )
         return tuple(
             snapshot(
                 {
                     key: value
                     for key, value in row.items()
-                    if key not in {"scope", "events", "links"}
+                    if key not in {"scope", "events", "links", "calls"}
                 }
             )
-            for row in reversed(list(self._batches.values()))
+            for row in rows
             if row["scope"] == scope
+            and (
+                cursor is None
+                or (row["started_at"], row["trace_id"])
+                < (cursor["started_at"], cursor["trace_id"])
+            )
         )[:limit]
 
     def get_batch(

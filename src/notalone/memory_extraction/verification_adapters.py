@@ -24,7 +24,7 @@ from notalone.memory_extraction.verification import (
     validate_source_verification,
 )
 from notalone.memory_trace import TraceWriteError
-from notalone.memory_trace.context import record_ledger_call
+from notalone.memory_trace.context import record_ledger_entry
 from notalone.memory_trace.transport import invoke_traced_model
 
 SOURCE_VERIFICATION_SYSTEM_PROMPT = """逐条比较记忆候选与同一联系人窗口中的原话，
@@ -233,8 +233,9 @@ class LangChainSourceVerificationRuntime:
             called_at=called_at,
         )
         started_at = datetime.now(timezone.utc)
-        self._ledger.record(entry)
-        record_ledger_call("verification", entry, started_at=started_at)
+        record_ledger_entry(
+            "verification", self._ledger, entry, started_at=started_at
+        )
 
 
 def _token_count(value: object) -> int | None:

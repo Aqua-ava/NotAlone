@@ -66,8 +66,18 @@ class TracePort(Protocol):
         error_code: str,
     ) -> None: ...
 
+    def record_call(
+        self, scope: ContactScope, trace_id: UUID, *, receipt: dict[str, Any]
+    ) -> None:
+        """独立无正文关联；可在停止／失败／正文删除后补记实际调用。"""
+        ...
+
     def list_batches(
-        self, scope: ContactScope, *, limit: int = 100
+        self,
+        scope: ContactScope,
+        *,
+        limit: int = 100,
+        before: UUID | str | None = None,
     ) -> tuple[dict[str, Any], ...]: ...
 
     def get_batch(

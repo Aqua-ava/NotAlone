@@ -39,10 +39,11 @@ from notalone.memory_extraction.pragmatics import (
     PragmaticDecision,
     PragmaticInterpreter,
 )
+from notalone.memory_trace import TraceWriteError
 from notalone.memory_trace.context import (
     current_trace,
     record,
-    record_ledger_call,
+    record_ledger_entry,
 )
 from notalone.scopes import ContactScope
 
@@ -119,7 +120,7 @@ class MemoryAdoption:
         self._dimension_release = dimension_release
 
     def adopt(self, scope: ContactScope, outcome: ExtractionOutcome) -> AdoptionStats:
-        """按主体分流落库并返回统计；整体失败时不产生任何写入。"""
+        """按主体逐条采纳；晚发生故障可保留此前已提交的结果。"""
 
         if outcome.failure_reason is not None:
             return AdoptionStats(rejected_by_contract=outcome.rejected_count)
@@ -552,10 +553,13 @@ class MemoryAdoption:
         )
         started_at = datetime.now(timezone.utc)
         try:
-            self._ledger.record(entry)
+            record_ledger_entry(
+                "adjudication", self._ledger, entry, started_at=started_at
+            )
+        except TraceWriteError:
+            raise
         except Exception as error:
             raise ExtractionRuntimeError("出站台账记录失败。") from error
-        record_ledger_call("adjudication", entry, started_at=started_at)
 
     def _contact_pool(self, scope: ContactScope) -> list:
         return [

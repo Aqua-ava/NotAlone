@@ -99,7 +99,11 @@ class PostgresSourceProcessingStore:
         self.database_url = database_url
 
     def list_batches(
-        self, scope: ContactScope, *, limit: int = 100
+        self,
+        scope: ContactScope,
+        *,
+        limit: int = 100,
+        before: UUID | str | None = None,
     ) -> tuple[dict[str, Any], ...]:
         if not 0 < limit <= 500:
             raise ValueError("查询数量必须在 1 到 500 之间。")
@@ -107,9 +111,30 @@ class PostgresSourceProcessingStore:
             with psycopg.connect(
                 self.database_url, row_factory=dict_row
             ) as connection:
+                cursor = None
+                if before is not None:
+                    cursor = connection.execute(
+                        "SELECT recorded_at,batch_id FROM public.source_processing_batch WHERE batch_id=%s AND owner_id=%s AND contact_id=%s",
+                        (before, scope.owner_id, scope.contact_id),
+                    ).fetchone()
+                    if cursor is None:
+                        raise LookupError("指定范围不存在该分页游标。")
+                clause = (
+                    " AND (recorded_at,batch_id)<(%s,%s)" if cursor else ""
+                )
+                parameters = (
+                    scope.owner_id,
+                    scope.contact_id,
+                    *(
+                        (cursor["recorded_at"], cursor["batch_id"])
+                        if cursor
+                        else ()
+                    ),
+                    limit,
+                )
                 rows = connection.execute(
-                    "SELECT * FROM public.source_processing_batch WHERE owner_id=%s AND contact_id=%s ORDER BY recorded_at DESC, batch_id LIMIT %s",
-                    (scope.owner_id, scope.contact_id, limit),
+                    f"SELECT * FROM public.source_processing_batch WHERE owner_id=%s AND contact_id=%s{clause} ORDER BY recorded_at DESC,batch_id DESC LIMIT %s",
+                    parameters,
                 ).fetchall()
         except psycopg.Error:
             raise RuntimeError("来源处理记录读取失败。") from None
@@ -163,6 +188,19 @@ class PostgresSourceProcessingStore:
                     f"SELECT DISTINCT batch.* FROM public.source_processing_batch AS batch JOIN public.source_processing_record AS record USING (batch_id, owner_id, contact_id) WHERE batch.owner_id=%s AND batch.contact_id=%s AND {column}=%s{source_kind_filter} ORDER BY batch.recorded_at DESC, batch.batch_id",
                     (scope.owner_id, scope.contact_id, record_id),
                 ).fetchall()
+                record_exists = bool(rows)
+                if not record_exists:
+                    table = {
+                        "message": "message",
+                        "source_ref": "message_source_ref",
+                        "source_document": "source_document",
+                        "local_wechat_observation": "local_wechat_observation",
+                    }[record_kind]
+                    exists = connection.execute(
+                        f"SELECT 1 FROM public.{table} WHERE owner_id=%s AND contact_id=%s AND id=%s",
+                        (scope.owner_id, scope.contact_id, record_id),
+                    ).fetchone()
+                    record_exists = exists is not None
         except psycopg.Error:
             raise RuntimeError("来源处理记录读取失败。") from None
         return snapshot(
@@ -173,6 +211,7 @@ class PostgresSourceProcessingStore:
                     else "deleted" if rows else "not_recorded"
                 ),
                 "batches": rows,
+                "record_exists": record_exists,
             }
         )
 

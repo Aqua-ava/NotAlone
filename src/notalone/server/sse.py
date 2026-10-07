@@ -14,9 +14,11 @@ from notalone.server.event_models import (
 
 
 def encode_sse_frame(event: BackendEvent) -> bytes:
-    """把领域事件编码为 Swift 侧稳定解析的 SSE 帧。"""
+    """把领域事件编码为界面侧稳定解析的 SSE 帧。"""
 
-    body = json.dumps(event_payload(event), ensure_ascii=False, separators=(",", ":"))
+    body = json.dumps(
+        event_payload(event), ensure_ascii=False, separators=(",", ":")
+    )
     return (
         f"id: {event.event_id}\n"
         f"event: {event.event_type.value}\n"
@@ -53,6 +55,8 @@ def _payload_data(event: BackendEvent) -> dict[str, object]:
             "processed_count": payload.processed_count,
             "attempt_count": payload.attempt_count,
             "retry_count": payload.retry_count,
+            "error_code": payload.error_code,
+            "failure_state_commit": payload.failure_state_commit,
         }
     raise TypeError("不支持的事件 payload。")
 

@@ -11,7 +11,11 @@ from uuid import uuid4
 
 import httpx
 
-from notalone.memory_trace.context import current_trace, snapshot
+from notalone.memory_trace.context import (
+    CallObservation,
+    current_trace,
+    snapshot,
+)
 from notalone.memory_trace.ports import TraceWriteError
 
 
@@ -38,10 +42,12 @@ def _body_snapshot(content: bytes) -> dict[str, Any]:
 
 def _request_hook(request: httpx.Request) -> None:
     trace = current_trace()
-    if trace is None:
+    if trace is None or trace.call_id is None:
         return
     try:
         trace.transport_attempt += 1
+        call = trace.observations[trace.call_id]
+        call.provider_attempts = trace.transport_attempt
         trace.record(
             "provider_request",
             {
@@ -57,14 +63,18 @@ def _request_hook(request: httpx.Request) -> None:
             },
         )
     except TraceWriteError:
+        call.request_capture_failed = True
         raise _TraceTransportAbort() from None
 
 
 def _response_hook(response: httpx.Response) -> None:
     trace = current_trace()
-    if trace is None:
+    if trace is None or trace.call_id is None:
         return
     try:
+        call = trace.observations[trace.call_id]
+        call.response_status = "received"
+        call.finished_at = datetime.now(timezone.utc)
         trace.record(
             "provider_response",
             {
@@ -105,6 +115,8 @@ def invoke_traced_model(
     previous_call = trace.call_id
     trace.call_id = uuid4()
     trace.calls[purpose] = trace.call_id
+    call = CallObservation(trace.call_id, purpose, datetime.now(timezone.utc))
+    trace.observations[trace.call_id] = call
     trace.transport_attempt = 0
     parameters = {
         name: getattr(model, name)
@@ -155,6 +167,7 @@ def invoke_traced_model(
         )
         started_at = datetime.now(timezone.utc)
         try:
+            call.invoked = True
             message = model.bind_tools([schema], **options).invoke(messages)
         except _TraceTransportAbort:
             raise trace.failure or TraceWriteError(
@@ -163,6 +176,7 @@ def invoke_traced_model(
         except TraceWriteError:
             raise
         except Exception as error:
+            call.finished_at = datetime.now(timezone.utc)
             trace.record(
                 "model_failure",
                 {
@@ -179,6 +193,8 @@ def invoke_traced_model(
                 status="failed",
             )
             raise
+        call.response_status = "returned"
+        call.finished_at = datetime.now(timezone.utc)
         trace.record(
             "model_response",
             {

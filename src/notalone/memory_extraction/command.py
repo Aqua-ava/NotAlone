@@ -44,7 +44,7 @@ from notalone.memory_trace import (
     TraceWriteError,
     snapshot,
 )
-from notalone.memory_trace.context import event_payload, record_ledger_call
+from notalone.memory_trace.context import event_payload, record_ledger_entry
 from notalone.runtime_config import load_project_env
 from notalone.scopes import ContactScope
 
@@ -72,7 +72,9 @@ class _TimedExtractionRuntime:
         try:
             return self.runtime.extract(window)
         finally:
-            self.latency_ms = max(0, int((time.perf_counter() - started) * 1000))
+            self.latency_ms = max(
+                0, int((time.perf_counter() - started) * 1000)
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,7 +181,8 @@ def run_extraction(
     )
     timed_runtime = _TimedExtractionRuntime(runtime)
     flow = ExtractionFlow(
-        runtime=timed_runtime, verification_runtime=verification_runtime,
+        runtime=timed_runtime,
+        verification_runtime=verification_runtime,
     )
 
     batches = processed_messages = extracted = adopted = updated = pending = 0
@@ -299,7 +302,13 @@ def run_extraction(
             ),
         )
         with TraceSession(
-            trace_store, scope, trace_id, versions=window_payload["versions"]
+            trace_store,
+            scope,
+            trace_id,
+            versions=window_payload["versions"],
+            ledger=ledger,
+            provider=provider,
+            model_name=model_name,
         ) as trace:
             adoption_stats = AdoptionStats()
             extraction_completed = False
@@ -526,8 +535,7 @@ def _record_extraction_ledger(
         called_at=called_at,
     )
     started_at = datetime.now(timezone.utc)
-    ledger.record(entry)
-    record_ledger_call("extraction", entry, started_at=started_at)
+    record_ledger_entry("extraction", ledger, entry, started_at=started_at)
 
 
 def _fail(message: str) -> int:
@@ -549,6 +557,17 @@ def _owner_uuid_from_env(owner_id: str) -> UUID:
 
 
 def extract_main(argv: list[str] | None = None) -> int:
+    """默认记录全部执行；故障只打印安全状态与查询标识。"""
+    try:
+        return _extract_main(argv)
+    except TraceWriteError as error:
+        print(
+            f"trace_write_failed stage={error.stage} trace_id={error.trace_id} commit_outcome={error.commit_outcome}"
+        )
+        return 1
+
+
+def _extract_main(argv: list[str] | None = None) -> int:
     """提取命令入口：自动全量/增量，断点续跑，输出统计与跳过区间。"""
 
     load_project_env()
@@ -651,7 +670,6 @@ def extract_main(argv: list[str] | None = None) -> int:
     return 0 if stats.failed_batches == 0 else 1
 
 
-
 def memory_add_main(argv: list[str] | None = None) -> int:
     """手动录入记忆：标记 manual，支持联系人级与 owner 级。"""
 
@@ -666,7 +684,8 @@ def memory_add_main(argv: list[str] | None = None) -> int:
         choices=[item.value for item in MemoryCategory],
     )
     parser.add_argument(
-        "--topic", default="other",
+        "--topic",
+        default="other",
         choices=[item.value for item in MemoryTopic],
     )
     parser.add_argument("--contact-id", type=UUID, default=None)
@@ -775,7 +794,9 @@ def memory_list_main(argv: list[str] | None = None) -> int:
             )
         print(f"total={len(memories)}")
     elif args.owner:
-        owner_memories = PostgresOwnerMemoryStore(database_url).list_active(owner_uuid)
+        owner_memories = PostgresOwnerMemoryStore(database_url).list_active(
+            owner_uuid
+        )
         for owner_memory in owner_memories:
             print(
                 f"memory_id={owner_memory.memory_id}"
