@@ -76,6 +76,9 @@ class PostgresExtractionTraceStore:
                         tuple(
                             UUID(item["message_id"])
                             for item in payload["messages"]
+                        )
+                        + self._processing_dependencies(
+                            connection, scope, payload
                         ),
                     ),
                 )
@@ -107,6 +110,35 @@ class PostgresExtractionTraceStore:
         except Exception:
             raise TraceWriteError("window", trace_id) from None
         return trace_id
+
+    @staticmethod
+    def _processing_dependencies(
+        connection: psycopg.Connection,
+        scope: ContactScope,
+        payload: dict[str, Any],
+    ) -> tuple[UUID, ...]:
+        """锁内复验被复制的来源处理正文，拒绝手动删除后的旧读取缓存。"""
+
+        dependencies = []
+        for message in payload["messages"]:
+            for source in message.get("source_snapshots", ()):
+                record = source.get("processing_record")
+                if record is None or record.get("payload") is None:
+                    continue
+                row = connection.execute(
+                    "SELECT record.batch_id FROM public.source_processing_record AS record JOIN public.source_processing_batch AS batch USING (batch_id,owner_id,contact_id) WHERE record.record_id=%s AND record.owner_id=%s AND record.contact_id=%s AND record.message_id=%s AND record.source_ref_id=%s AND batch.status='recorded' AND record.payload IS NOT NULL",
+                    (
+                        record["record_id"],
+                        scope.owner_id,
+                        scope.contact_id,
+                        message["message_id"],
+                        source["source_ref_id"],
+                    ),
+                ).fetchone()
+                if row is None:
+                    raise TraceWriteError("source_processing_dependency")
+                dependencies.append(row[0])
+        return tuple(dict.fromkeys(dependencies))
 
     def append(
         self,
@@ -162,8 +194,9 @@ class PostgresExtractionTraceStore:
             UNION SELECT id FROM public.confirmed_memory WHERE owner_id=%s AND id=ANY(%s::uuid[]) AND status <> 'deleted'
             UNION SELECT id FROM public.owner_memory WHERE owner_id=%s AND id=ANY(%s::uuid[]) AND status <> 'deleted'
             UNION SELECT id FROM public.memory_candidate WHERE owner_id=%s AND id=ANY(%s::uuid[]) AND status='pending'
+            UNION SELECT batch_id FROM public.source_processing_batch WHERE owner_id=%s AND batch_id=ANY(%s::uuid[]) AND status='recorded'
         """,
-            tuple(value for _ in range(6) for value in (owner_id, list(ids))),
+            tuple(value for _ in range(7) for value in (owner_id, list(ids))),
         ).fetchall()
         if {row[0] for row in existing} != set(ids):
             raise TraceWriteError("source_dependency")

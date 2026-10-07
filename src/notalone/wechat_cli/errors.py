@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from notalone.source_processing.models import ProcessingRecord
+
 
 class CliAdapterError(RuntimeError):
     """不泄露 CLI 输出、路径、会话标识或聊天正文的适配器错误。"""
 
     def __init__(self, code: str, message: str) -> None:
         self.code = code
+        self.failure_record: ProcessingRecord | None = None
         super().__init__(message)
 
 

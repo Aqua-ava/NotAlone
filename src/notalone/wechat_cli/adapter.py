@@ -9,14 +9,20 @@ import subprocess
 import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Protocol
 
-from notalone.wechat_cli.errors import CliAdapterError, CliCommandError, CliOutputError
+from notalone.source_processing.models import ProcessingRecord, execution
+from notalone.wechat_cli.errors import (
+    CliAdapterError,
+    CliCommandError,
+    CliOutputError,
+)
 from notalone.wechat_cli.models import (
     ChatCandidate,
     ChatResolution,
-    CliSessionEvent,
     CliMessageEvent,
+    CliSessionEvent,
     MessageIdentifier,
     TailFollowItem,
     TailResult,
@@ -48,7 +54,9 @@ class TailFollowStream:
     def __init__(self, process: object, *, expected_talker: str) -> None:
         self._process = process
         self._expected_talker = expected_talker
-        self._queue: queue.Queue[TailFollowItem | BaseException | None] = queue.Queue()
+        self._queue: queue.Queue[TailFollowItem | BaseException | None] = (
+            queue.Queue()
+        )
         self._closed = False
         self._lock = threading.Lock()
         self._reader = threading.Thread(target=self._read_loop, daemon=True)
@@ -101,16 +109,24 @@ class TailFollowStream:
                 line = reader.readline()
                 if not line:
                     break
-                item = _parse_follow_line(
-                    line,
-                    expected_talker=self._expected_talker,
-                )
+                started_at = datetime.now(timezone.utc)
+                try:
+                    item = _parse_follow_line(
+                        line, expected_talker=self._expected_talker
+                    )
+                except CliOutputError as error:
+                    error.failure_record = _parse_failure_record(
+                        started_at, "cli_event:unlocated", error.code
+                    )
+                    raise
                 if item is not None:
                     self._queue.put(item)
             returncode = _poll_process(self._process)
             if returncode not in (None, 0) and not self.closed:
                 self._queue.put(
-                    CliCommandError("cli_follow_failed", "微信 CLI 流进程异常退出。")
+                    CliCommandError(
+                        "cli_follow_failed", "微信 CLI 流进程异常退出。"
+                    )
                 )
         except CliAdapterError as error:
             if not self.closed:
@@ -126,7 +142,9 @@ class SessionEventStream:
 
     def __init__(self, process: object) -> None:
         self._process = process
-        self._queue: queue.Queue[CliSessionEvent | BaseException | None] = queue.Queue()
+        self._queue: queue.Queue[CliSessionEvent | BaseException | None] = (
+            queue.Queue()
+        )
         self._closed = False
         self._lock = threading.Lock()
         self._reader = threading.Thread(target=self._read_loop, daemon=True)
@@ -185,7 +203,9 @@ class SessionEventStream:
             returncode = _poll_process(self._process)
             if returncode not in (None, 0) and not self.closed:
                 self._queue.put(
-                    CliCommandError("cli_follow_failed", "微信 CLI 流进程异常退出。")
+                    CliCommandError(
+                        "cli_follow_failed", "微信 CLI 流进程异常退出。"
+                    )
                 )
         except CliAdapterError as error:
             if not self.closed:
@@ -236,7 +256,9 @@ class LocalWechatCli:
         query = _require_text(query, "query")
         command = [self._executable, "resolve-chat", query]
         if type_filter is not None:
-            command.extend(["--type-filter", _require_text(type_filter, "type_filter")])
+            command.extend(
+                ["--type-filter", _require_text(type_filter, "type_filter")]
+            )
         command.append("--strict-read-only")
         envelope = self._run_json(tuple(command))
         data = _object_field(envelope, "data")
@@ -245,7 +267,9 @@ class LocalWechatCli:
             raise CliOutputError("cli_output_invalid", "CLI 候选列表无效。")
         return ChatResolution(
             query=query,
-            candidates=tuple(_parse_candidate(item) for item in raw_candidates),
+            candidates=tuple(
+                _parse_candidate(item) for item in raw_candidates
+            ),
         )
 
     def sessions(
@@ -261,7 +285,9 @@ class LocalWechatCli:
         if keyword is not None:
             command.extend(["--keyword", _require_text(keyword, "keyword")])
         if type_filter is not None:
-            command.extend(["--type-filter", _require_text(type_filter, "type_filter")])
+            command.extend(
+                ["--type-filter", _require_text(type_filter, "type_filter")]
+            )
         if limit is not None:
             if limit < 1:
                 raise ValueError("limit 必须大于零。")
@@ -294,7 +320,9 @@ class LocalWechatCli:
         if cursor is not None:
             command.extend(["--cursor", _require_text(cursor, "cursor")])
         if since_time is not None:
-            command.extend(["--since-time", _require_text(since_time, "since_time")])
+            command.extend(
+                ["--since-time", _require_text(since_time, "since_time")]
+            )
         if limit is not None:
             if limit < 1:
                 raise ValueError("limit 必须大于零。")
@@ -319,9 +347,13 @@ class LocalWechatCli:
         try:
             process = self._follow_runner(tuple(command))
         except FileNotFoundError as error:
-            raise CliCommandError("cli_not_found", "微信 CLI 不可用。") from error
+            raise CliCommandError(
+                "cli_not_found", "微信 CLI 不可用。"
+            ) from error
         except subprocess.TimeoutExpired as error:
-            raise CliCommandError("cli_timeout", "微信 CLI 命令超时。") from error
+            raise CliCommandError(
+                "cli_timeout", "微信 CLI 命令超时。"
+            ) from error
         return TailFollowStream(process, expected_talker=talker)
 
     def session_events_follow(
@@ -362,9 +394,13 @@ class LocalWechatCli:
         try:
             process = self._follow_runner(tuple(command))
         except FileNotFoundError as error:
-            raise CliCommandError("cli_not_found", "微信 CLI 不可用。") from error
+            raise CliCommandError(
+                "cli_not_found", "微信 CLI 不可用。"
+            ) from error
         except subprocess.TimeoutExpired as error:
-            raise CliCommandError("cli_timeout", "微信 CLI 命令超时。") from error
+            raise CliCommandError(
+                "cli_timeout", "微信 CLI 命令超时。"
+            ) from error
         return SessionEventStream(process)
 
     def version(self) -> str:
@@ -406,18 +442,26 @@ class LocalWechatCli:
         try:
             value = json.loads(result.stdout)
         except (TypeError, json.JSONDecodeError) as error:
-            raise CliOutputError("cli_output_invalid", "微信 CLI 返回了无效 JSON。") from error
+            raise CliOutputError(
+                "cli_output_invalid", "微信 CLI 返回了无效 JSON。"
+            ) from error
         if not isinstance(value, dict) or value.get("ok") is not True:
-            raise CliOutputError("cli_output_invalid", "微信 CLI 返回了失败结果。")
+            raise CliOutputError(
+                "cli_output_invalid", "微信 CLI 返回了失败结果。"
+            )
         return value
 
     def _invoke(self, command: tuple[str, ...]) -> CommandResult:
         try:
             result = self._runner(command)
         except FileNotFoundError as error:
-            raise CliCommandError("cli_not_found", "微信 CLI 不可用。") from error
+            raise CliCommandError(
+                "cli_not_found", "微信 CLI 不可用。"
+            ) from error
         except subprocess.TimeoutExpired as error:
-            raise CliCommandError("cli_timeout", "微信 CLI 命令超时。") from error
+            raise CliCommandError(
+                "cli_timeout", "微信 CLI 命令超时。"
+            ) from error
         if result.returncode != 0:
             raise _command_failure(result)
         return result
@@ -433,7 +477,9 @@ class LocalWechatCli:
             self._active_processes.add(process)
         try:
             try:
-                stdout, stderr = process.communicate(timeout=self._timeout_seconds)
+                stdout, stderr = process.communicate(
+                    timeout=self._timeout_seconds
+                )
             except subprocess.TimeoutExpired:
                 process.kill()
                 stdout, stderr = process.communicate()
@@ -523,7 +569,8 @@ def _message_table_missing(message: str | None) -> bool:
         message is not None
         and re.fullmatch(
             r"table \S+ not found in (?:\d+|opened) message shards", message
-        ) is not None
+        )
+        is not None
     )
 
 
@@ -533,7 +580,8 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
     last_cursor: str | None = None
     event_count = 0
     non_text_count = 0
-    lines = [line for line in stdout.splitlines() if line.strip()]
+    filtered_records: list[ProcessingRecord] = []
+    lines = [line for line in stdout.splitlines(keepends=True) if line.strip()]
     if not lines:
         # 轮询没有新消息是正常结果；调用方保持既有水位。
         return TailResult(
@@ -542,12 +590,27 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
             last_local_id=None,
             freshness_confirmed=False,
         )
-    for line in lines:
+    for position, line in enumerate(lines):
         if not line.strip():
             continue
-        item = _parse_follow_line(line, expected_talker=expected_talker)
+        started_at = datetime.now(timezone.utc)
+        try:
+            item = _parse_follow_line(
+                line, expected_talker=expected_talker, input_position=position
+            )
+        except CliOutputError as error:
+            error.failure_record = _parse_failure_record(
+                started_at, f"cli_event:{position + 1}", error.code
+            )
+            raise
         if item is None:
-            raise CliOutputError("cli_output_invalid", "微信 CLI 返回了不支持的事件。")
+            unsupported_error = CliOutputError(
+                "cli_output_invalid", "微信 CLI 返回了不支持的事件。"
+            )
+            unsupported_error.failure_record = _parse_failure_record(
+                started_at, f"cli_event:{position + 1}", unsupported_error.code
+            )
+            raise unsupported_error
         event_count += 1
         local_id = item.local_id
         # 文字与非文字事件都参与水位推进；cursor 必须和选出的最大
@@ -558,6 +621,8 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
         if item.event is None:
             # 非文字事件只前移水位，不产生可写消息。
             non_text_count += 1
+            if item.processing_record is not None:
+                filtered_records.append(item.processing_record)
             continue
         events.append(item.event)
     return TailResult(
@@ -567,6 +632,7 @@ def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
         event_count=event_count,
         non_text_count=non_text_count,
         freshness_confirmed=True,
+        filtered_records=tuple(filtered_records),
     )
 
 
@@ -574,25 +640,62 @@ def _parse_follow_line(
     line: str,
     *,
     expected_talker: str,
+    input_position: int | None = None,
 ) -> TailFollowItem | None:
+    started_at = datetime.now(timezone.utc)
     try:
         value = json.loads(line)
     except json.JSONDecodeError as error:
-        raise CliOutputError("cli_output_invalid", "微信 CLI 返回了无效事件。") from error
+        raise CliOutputError(
+            "cli_output_invalid", "微信 CLI 返回了无效事件。"
+        ) from None
     if not isinstance(value, dict) or value.get("type") != "message":
         return None
     cursor = _require_text(value.get("cursor"), "cursor")
     message = _object_field(value, "message")
     message_id = _object_field(message, "id")
     local_id = message_id.get("local_id")
-    if isinstance(local_id, bool) or not isinstance(local_id, int) or local_id <= 0:
+    if (
+        isinstance(local_id, bool)
+        or not isinstance(local_id, int)
+        or local_id <= 0
+    ):
         raise CliOutputError("cli_output_invalid", "微信 CLI 消息 ID 无效。")
-    message_talker = _require_text(message_id.get("talker"), "message.id.talker")
+    message_talker = _require_text(
+        message_id.get("talker"), "message.id.talker"
+    )
     if message_talker != expected_talker:
-        raise CliOutputError("cli_output_invalid", "微信 CLI 返回了其他会话的消息。")
+        raise CliOutputError(
+            "cli_output_invalid", "微信 CLI 返回了其他会话的消息。"
+        )
     kind = _require_text(message.get("kind"), "message.kind")
     if kind != "text":
-        return TailFollowItem(cursor=cursor, local_id=local_id, event=None)
+        # 不保存媒体原行或未知载荷，只保留定位和实际筛选结果。
+        record = ProcessingRecord.capture(
+            f"cli:{local_id}",
+            {
+                "capture_layer": "metadata_only",
+                "input_position": input_position,
+                "record_text": None,
+                "parsed": {
+                    "type": "message",
+                    "cursor": cursor,
+                    "message": {
+                        "id": {"local_id": local_id, "talker": message_talker},
+                        "kind": kind,
+                    },
+                },
+                "parse": execution(started_at, __file__, status="filtered"),
+                "outcome": "non_text_filtered",
+                "filter_rule": "text_only",
+            },
+        )
+        return TailFollowItem(
+            cursor=cursor,
+            local_id=local_id,
+            event=None,
+            processing_record=record,
+        )
     text = _require_text(message.get("text"), "message.text")
     is_from_me = message.get("is_from_me")
     if not isinstance(is_from_me, bool):
@@ -611,8 +714,41 @@ def _parse_follow_line(
         create_time=_optional_int(message.get("create_time")),
         time=_optional_text(message.get("time")),
         time_iso=_optional_text(message.get("time_iso")),
+        processing_record=ProcessingRecord.capture(
+            f"cli:{local_id}",
+            {
+                "capture_layer": "cli_event_text",
+                "input_position": input_position,
+                "record_text": line,
+                "parsed": value,
+                "parse": execution(started_at, __file__),
+            },
+        ),
     )
-    return TailFollowItem(cursor=cursor, local_id=local_id, event=event)
+    return TailFollowItem(
+        cursor=cursor,
+        local_id=local_id,
+        event=event,
+        processing_record=event.processing_record,
+    )
+
+
+def _parse_failure_record(
+    started_at: datetime, locator: str, code: str
+) -> ProcessingRecord:
+    return ProcessingRecord.capture(
+        locator,
+        {
+            "capture_layer": "metadata_only",
+            "record_text": None,
+            "parsed": None,
+            "capture_status": "withheld_unverified_input",
+            "stage": "parse",
+            "parse": execution(started_at, __file__, status="failed"),
+            "error_code": code,
+            "outcome": "input_rejected",
+        },
+    )
 
 
 def _parse_session_line(line: str) -> CliSessionEvent | None:
@@ -621,8 +757,13 @@ def _parse_session_line(line: str) -> CliSessionEvent | None:
     try:
         value = json.loads(line)
     except json.JSONDecodeError as error:
-        raise CliOutputError("cli_output_invalid", "微信 CLI 返回了无效事件。") from error
-    if not isinstance(value, dict) or value.get("type") not in {"session", "unread"}:
+        raise CliOutputError(
+            "cli_output_invalid", "微信 CLI 返回了无效事件。"
+        ) from error
+    if not isinstance(value, dict) or value.get("type") not in {
+        "session",
+        "unread",
+    }:
         return None
     cursor = _require_text(value.get("cursor"), "cursor")
     candidates: list[object] = []
@@ -631,15 +772,29 @@ def _parse_session_line(line: str) -> CliSessionEvent | None:
         if isinstance(nested, dict):
             candidates.extend(
                 nested.get(name)
-                for name in ("username", "talker", "conversation_locator", "locator")
+                for name in (
+                    "username",
+                    "talker",
+                    "conversation_locator",
+                    "locator",
+                )
             )
-    candidates.extend(value.get(name) for name in ("username", "talker", "conversation_locator"))
+    candidates.extend(
+        value.get(name)
+        for name in ("username", "talker", "conversation_locator")
+    )
     locator = next(
-        (item for item in candidates if isinstance(item, str) and item.strip()),
+        (
+            item
+            for item in candidates
+            if isinstance(item, str) and item.strip()
+        ),
         None,
     )
     if locator is None:
-        raise CliOutputError("cli_output_invalid", "微信 CLI 会话事件缺少定位标识。")
+        raise CliOutputError(
+            "cli_output_invalid", "微信 CLI 会话事件缺少定位标识。"
+        )
     return CliSessionEvent(cursor=cursor, conversation_locator=locator)
 
 
@@ -653,26 +808,34 @@ def _parse_candidate(value: object) -> ChatCandidate:
         raise CliOutputError("cli_output_invalid", "微信 CLI 会话候选无效。")
     return ChatCandidate(
         username=_require_text(value.get("username"), "candidate.username"),
-        display_name=_require_text(value.get("display_name"), "candidate.display_name"),
+        display_name=_require_text(
+            value.get("display_name"), "candidate.display_name"
+        ),
         match=_optional_text(value.get("match")),
         chat_type=_require_text(value.get("chat_type"), "candidate.chat_type"),
         last_timestamp=_optional_int(value.get("last_timestamp")),
         sort_timestamp=_optional_int(value.get("sort_timestamp")),
         source=_optional_text(value.get("source")),
         summary=_optional_text(value.get("summary")),
-        last_sender_display_name=_optional_text(value.get("last_sender_display_name")),
+        last_sender_display_name=_optional_text(
+            value.get("last_sender_display_name")
+        ),
     )
 
 
 def _object_field(value: object, field: str) -> dict[str, Any]:
     if not isinstance(value, dict) or not isinstance(value.get(field), dict):
-        raise CliOutputError("cli_output_invalid", f"微信 CLI 字段 {field} 无效。")
+        raise CliOutputError(
+            "cli_output_invalid", f"微信 CLI 字段 {field} 无效。"
+        )
     return value[field]
 
 
 def _require_text(value: object, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
-        raise CliOutputError("cli_output_invalid", f"微信 CLI 字段 {field} 无效。")
+        raise CliOutputError(
+            "cli_output_invalid", f"微信 CLI 字段 {field} 无效。"
+        )
     return value
 
 

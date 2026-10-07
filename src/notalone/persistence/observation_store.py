@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
@@ -27,7 +27,13 @@ from notalone.persistence.reply_cleanup import (
     ReplyCleanupError,
     delete_source_replies,
 )
+from notalone.persistence.source_processing import (
+    erase_source_processing,
+    save_processing_batch,
+)
 from notalone.scopes import ContactScope
+from notalone.source_processing.models import ProcessingRecord, execution
+
 
 class ObservationPersistenceError(RuntimeError):
     """不暴露 SQL、连接信息或会话内容的观察持久化错误。"""
@@ -67,7 +73,10 @@ class ObservationCursor:
             raise TypeError("binding_id 必须是 UUID。")
         if not isinstance(self.last_local_id, int) or self.last_local_id <= 0:
             raise ObservationWatermarkError("水位 local_id 必须是正整数。")
-        if not isinstance(self.last_cursor, str) or not self.last_cursor.strip():
+        if (
+            not isinstance(self.last_cursor, str)
+            or not self.last_cursor.strip()
+        ):
             raise ObservationWatermarkError("水位 cursor 必须来自成功返回。")
 
 
@@ -85,9 +94,15 @@ class ObservationBaseline:
             raise TypeError("baseline 必须携带联系人范围。")
         if not isinstance(self.binding_id, UUID):
             raise TypeError("binding_id 必须是 UUID。")
-        if not isinstance(self.conversation_locator, str) or not self.conversation_locator.strip():
+        if (
+            not isinstance(self.conversation_locator, str)
+            or not self.conversation_locator.strip()
+        ):
             raise ValueError("baseline 必须携带会话定位标识。")
-        if not isinstance(self.baseline_at, datetime) or self.baseline_at.tzinfo is None:
+        if (
+            not isinstance(self.baseline_at, datetime)
+            or self.baseline_at.tzinfo is None
+        ):
             raise TypeError("baseline_at 必须是带时区的 datetime。")
 
 
@@ -131,6 +146,7 @@ class _CliMessagesWrite:
 
     message_ids: tuple[UUID, ...]
     created_message_ids: tuple[UUID | None, ...]
+    processing_receipts: tuple[dict[str, Any], ...] = ()
 
 
 def assert_binding_active(
@@ -139,12 +155,13 @@ def assert_binding_active(
     owner_id: UUID,
     contact_id: UUID,
     binding_id: UUID,
+    conversation_locator: str | None = None,
 ) -> None:
     """能记录观察的前提：绑定属于该范围且处于 active 状态。"""
 
     row = connection.execute(
         """
-        SELECT owner_id, contact_id, status
+        SELECT owner_id, contact_id, status, conversation_locator
         FROM public.conversation_binding
         WHERE id = %s
         FOR KEY SHARE
@@ -155,6 +172,8 @@ def assert_binding_active(
         raise ObservationNotFoundError("绑定不属于该联系人的有效范围。")
     if row[2] != "active":
         raise ObservationNotFoundError("绑定已撤销，不能记录观察来源。")
+    if conversation_locator is not None and row[3] != conversation_locator:
+        raise ObservationNotFoundError("观察会话与已确认绑定不一致。")
 
 
 def advance_observation_cursor(
@@ -281,7 +300,9 @@ class PostgresObservationStore:
                     (owner_id, contact_id, binding_id),
                 ).fetchone()
         except psycopg.Error:
-            raise ObservationPersistenceError("可靠观察水位读取失败。") from None
+            raise ObservationPersistenceError(
+                "可靠观察水位读取失败。"
+            ) from None
         if row is None:
             return None
         locator, last_local_id, last_cursor, updated_at = row
@@ -312,7 +333,9 @@ class PostgresObservationStore:
         if target is not None:
             if not isinstance(target, ObservationCursor):
                 raise TypeError("target 必须是 ObservationCursor 或 None。")
-            if target.scope != ContactScope(owner_id=owner_id, contact_id=contact_id):
+            if target.scope != ContactScope(
+                owner_id=owner_id, contact_id=contact_id
+            ):
                 raise ObservationPersistenceError("可靠水位超出联系人范围。")
             if target.binding_id != binding_id:
                 raise ObservationPersistenceError("可靠水位不属于当前绑定。")
@@ -430,7 +453,12 @@ class PostgresObservationStore:
                           AND binding_id = %s
                           AND conversation_locator = %s
                         """,
-                        (owner_id, contact_id, binding_id, conversation_locator),
+                        (
+                            owner_id,
+                            contact_id,
+                            binding_id,
+                            conversation_locator,
+                        ),
                     ).fetchone()
                     if existing is None:
                         raise ObservationPersistenceError(
@@ -443,9 +471,13 @@ class PostgresObservationStore:
         except ObservationPersistenceError:
             raise
         except psycopg.Error:
-            raise ObservationPersistenceError("观察 baseline 写入失败。") from None
+            raise ObservationPersistenceError(
+                "观察 baseline 写入失败。"
+            ) from None
         if not isinstance(selected, datetime):
-            raise ObservationPersistenceError("数据库返回的 baseline 时间无效。")
+            raise ObservationPersistenceError(
+                "数据库返回的 baseline 时间无效。"
+            )
         return selected
 
     def read_baseline(
@@ -471,11 +503,15 @@ class PostgresObservationStore:
                     (owner_id, contact_id, binding_id),
                 ).fetchone()
         except psycopg.Error:
-            raise ObservationPersistenceError("观察 baseline 读取失败。") from None
+            raise ObservationPersistenceError(
+                "观察 baseline 读取失败。"
+            ) from None
         if row is None:
             return None
         if not isinstance(row[0], datetime):
-            raise ObservationPersistenceError("数据库返回的 baseline 时间无效。")
+            raise ObservationPersistenceError(
+                "数据库返回的 baseline 时间无效。"
+            )
         return row[0]
 
     def record_batch(
@@ -520,6 +556,7 @@ class PostgresObservationStore:
                     owner_id=owner_id,
                     contact_id=contact_id,
                     binding_id=binding_id,
+                    conversation_locator=conversation_locator,
                 )
                 observation, created = self._insert_observation(
                     connection,
@@ -612,6 +649,7 @@ class PostgresObservationStore:
         since_cursor: str | None = None,
         event_count: int | None = None,
         non_text_count: int = 0,
+        processing_records: tuple[ProcessingRecord, ...] | None = None,
     ) -> RecordedObservationBatch:
         """在同一事务写入观察来源、前移水位并写入规范消息。
 
@@ -634,6 +672,14 @@ class PostgresObservationStore:
         )
         event_count = record_count if event_count is None else event_count
         self._validate_scope(owner_id=owner_id, contact_id=contact_id)
+        if any(
+            message.wechat_metadata is None
+            or message.wechat_metadata.external_talker != conversation_locator
+            for message in messages
+        ):
+            raise ObservationPersistenceError(
+                "消息会话与已确认观察范围不一致。"
+            )
 
         try:
             with self._connect() as connection:
@@ -642,6 +688,7 @@ class PostgresObservationStore:
                     owner_id=owner_id,
                     contact_id=contact_id,
                     binding_id=binding_id,
+                    conversation_locator=conversation_locator,
                 )
                 # 先拿联系人范围锁再动 cursor 行：rewind_cursor 的顺序
                 # 是 contact advisory → cursor 行锁；反过来（行锁 →
@@ -687,6 +734,27 @@ class PostgresObservationStore:
                     if messages
                     else _CliMessagesWrite((), ())
                 )
+                records = (
+                    processing_records
+                    if processing_records is not None
+                    else tuple(
+                        message.processing_record
+                        for message in messages
+                        if message.processing_record is not None
+                    )
+                )
+                if records:
+                    save_processing_batch(
+                        connection,
+                        scope=ContactScope(owner_id, contact_id),
+                        source_kind="local_wechat_observation",
+                        source_id=observation.observation_id,
+                        records=records,
+                        receipts={
+                            receipt["locator"]: receipt
+                            for receipt in write.processing_receipts
+                        },
+                    )
                 connection.commit()
                 return RecordedObservationBatch(
                     observation=observation,
@@ -699,6 +767,43 @@ class PostgresObservationStore:
             raise
         except psycopg.Error:
             raise ObservationPersistenceError("观察批次写入失败。") from None
+
+    def record_input_failure(
+        self,
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        binding_id: UUID,
+        conversation_locator: str,
+        record: ProcessingRecord,
+    ) -> None:
+        """已确认绑定的损坏输入只保存真实、无正文失败定位。"""
+
+        try:
+            with self._connect() as connection:
+                lock_contact_scope(
+                    connection, owner_id=owner_id, contact_id=contact_id
+                )
+                assert_binding_active(
+                    connection,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                    binding_id=binding_id,
+                    conversation_locator=conversation_locator,
+                )
+                save_processing_batch(
+                    connection,
+                    scope=ContactScope(owner_id, contact_id),
+                    source_kind="local_wechat_observation",
+                    source_id=None,
+                    records=(record,),
+                    receipts={},
+                    status="failed",
+                )
+        except psycopg.Error:
+            raise ObservationPersistenceError(
+                "观察失败记录写入失败。"
+            ) from None
 
     def delete_observation(
         self,
@@ -740,6 +845,11 @@ class PostgresObservationStore:
                 erase_source_traces(
                     connection, owner_id=owner_id, removed_ids={observation_id}
                 )
+                erase_source_processing(
+                    connection,
+                    scope=ContactScope(owner_id, contact_id),
+                    source_id=observation_id,
+                )
                 deleted = connection.execute(
                     """
                     DELETE FROM public.local_wechat_observation
@@ -749,7 +859,9 @@ class PostgresObservationStore:
                     (owner_id, contact_id, observation_id),
                 ).fetchone()
                 if deleted is None:
-                    raise ObservationNotFoundError("指定范围内不存在该观察来源。")
+                    raise ObservationNotFoundError(
+                        "指定范围内不存在该观察来源。"
+                    )
                 orphan_message_ids = collect_orphan_message_ids(
                     connection,
                     owner_id=owner_id,
@@ -830,7 +942,9 @@ class PostgresObservationStore:
             not isinstance(since_local_id, int) or since_local_id <= 0
         ):
             # 首次读取不传起始值；绝不允许非法的 since_local_id=0。
-            raise ObservationWatermarkError("起始 local_id 必须是正整数或为空。")
+            raise ObservationWatermarkError(
+                "起始 local_id 必须是正整数或为空。"
+            )
         if since_local_id is not None and since_local_id > last_local_id:
             raise ObservationWatermarkError("起始水位不能晚于成功水位。")
         if since_local_id is None and since_cursor is not None:
@@ -945,7 +1059,10 @@ class PostgresObservationStore:
 
         message_ids: list[UUID] = []
         created_message_ids: list[UUID | None] = []
+        processing_receipts: list[dict[str, Any]] = []
         for message in messages:
+            started_at = datetime.now(timezone.utc)
+            ref_added = False
             if message.wechat_metadata is None:
                 raise ObservationPersistenceError(
                     "CLI 消息缺少微信来源元数据。"
@@ -994,6 +1111,7 @@ class PostgresObservationStore:
                     ),
                 ).fetchone()
                 if existing_ref is None:
+                    ref_added = True
                     connection.execute(
                         """
                         INSERT INTO public.message_source_ref (
@@ -1018,6 +1136,7 @@ class PostgresObservationStore:
                     )
                 created_message_ids.append(None)
             else:
+                ref_added = True
                 # 新规范消息：写入 message + wechat_metadata + message_source_ref
                 message_id = uuid4()
                 connection.execute(
@@ -1092,9 +1211,43 @@ class PostgresObservationStore:
                 )
                 created_message_ids.append(message_id)
             message_ids.append(message_id)
+            ref = connection.execute(
+                "SELECT id FROM public.message_source_ref WHERE owner_id=%s AND contact_id=%s AND message_id=%s AND observation_id=%s AND source_locator=%s",
+                (
+                    owner_id,
+                    contact_id,
+                    message_id,
+                    observation_id,
+                    message.source_locator,
+                ),
+            ).fetchone()
+            processing_receipts.append(
+                {
+                    "locator": message.source_locator,
+                    "message_id": message_id,
+                    "source_ref_id": ref[0],
+                    "outcome": (
+                        "message_reused"
+                        if existing_metadata is not None
+                        else "message_created"
+                    ),
+                    "source_ref_added": ref_added,
+                    "dedup_key": {
+                        "owner_id": str(owner_id),
+                        "contact_id": str(contact_id),
+                        "external_local_id": metadata.external_local_id,
+                        "source_create_time": stable_create_time,
+                    },
+                    "dedup_rule": "stable_local_id_and_create_time_or_minus_one",
+                    "execution": execution(
+                        started_at, __file__, status="prepared_for_commit"
+                    ),
+                }
+            )
         return _CliMessagesWrite(
             message_ids=tuple(message_ids),
             created_message_ids=tuple(created_message_ids),
+            processing_receipts=tuple(processing_receipts),
         )
 
     @staticmethod
@@ -1189,7 +1342,9 @@ class PostgresObservationStore:
         if not isinstance(read_at, datetime):
             raise ObservationPersistenceError("数据库返回的读取时间无效。")
         if not all(
-            isinstance(value, int) and not isinstance(value, bool) and value >= 0
+            isinstance(value, int)
+            and not isinstance(value, bool)
+            and value >= 0
             for value in (record_count, event_count, non_text_count)
         ):
             raise ObservationPersistenceError("数据库返回的观察计数无效。")
@@ -1200,7 +1355,9 @@ class PostgresObservationStore:
         try:
             mode = ObservationMode(mode_text)
         except ValueError as error:
-            raise ObservationPersistenceError("数据库返回的观察模式无效。") from error
+            raise ObservationPersistenceError(
+                "数据库返回的观察模式无效。"
+            ) from error
         return PersistedObservation(
             observation_id=observation_id,
             scope=ContactScope(owner_id=owner_id, contact_id=contact_id),

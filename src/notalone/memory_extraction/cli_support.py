@@ -76,9 +76,20 @@ def load_contact_messages(
                    COALESCE((SELECT jsonb_agg(jsonb_build_object(
                        'source_ref_id', ref.id, 'source_id', COALESCE(ref.source_document_id,ref.observation_id),
                        'source_kind', ref.source_kind, 'locator', ref.source_locator,
-                       'capture_layer', 'legacy_projection', 'raw_payload', ref.raw_payload,
-                       'processing_status', 'missing', 'source_recorded_at', ref.created_at
+                       'capture_layer', COALESCE(processing.payload->>'capture_layer', 'legacy_projection'),
+                       'raw_payload', ref.raw_payload,
+                       'processing_status', COALESCE(processing.status, 'missing'),
+                       'processing_record', CASE WHEN processing.record_id IS NULL THEN NULL
+                           ELSE to_jsonb(processing) END,
+                       'source_recorded_at', ref.created_at
                    ) ORDER BY ref.created_at,ref.id) FROM public.message_source_ref AS ref
+                   LEFT JOIN LATERAL (
+                       SELECT record.*,batch.status FROM public.source_processing_record AS record
+                       JOIN public.source_processing_batch AS batch USING (batch_id,owner_id,contact_id)
+                       WHERE record.source_ref_id=ref.id AND record.owner_id=ref.owner_id
+                         AND record.contact_id=ref.contact_id
+                       ORDER BY batch.recorded_at DESC,batch.batch_id DESC LIMIT 1
+                   ) AS processing ON true
                    WHERE ref.message_id=message.id AND ref.owner_id=message.owner_id
                      AND ref.contact_id=message.contact_id), '[]'::jsonb) AS source_snapshots
             FROM public.message AS message

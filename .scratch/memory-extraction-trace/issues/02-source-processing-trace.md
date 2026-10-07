@@ -1,7 +1,7 @@
 # 02：从新原始聊天到规范消息的完整来源处理链
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Blocked by: 01
 
 ## What to build

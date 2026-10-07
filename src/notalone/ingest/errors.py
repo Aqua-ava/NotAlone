@@ -6,6 +6,10 @@
 
 from __future__ import annotations
 
+import re
+from datetime import datetime, timezone
+from typing import Any
+
 
 class ImportPreviewError(ValueError):
     """可安全展示、且不包含消息正文的导入错误。
@@ -13,3 +17,20 @@ class ImportPreviewError(ValueError):
     继承 ``ValueError`` 表示输入内容不符合约定。抛出这个异常时，消息只能包含行号、
     字段名和错误类别，不能拼接原始 JSON 或聊天正文。
     """
+
+    def __init__(
+        self, message: str, *, details: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(message)
+        line = re.search(r"第 (\d+) 行", message)
+        self.details = details or {
+            "capture_layer": "metadata_only",
+            "record_text": None,
+            "parsed": None,
+            "capture_status": "withheld_unverified_input",
+            "stage": "validation",
+            "locator": f"jsonl:{line.group(1)}" if line else "document",
+            "error_code": "input_invalid",
+            "failed_at": datetime.now(timezone.utc).isoformat(),
+            "outcome": "input_rejected",
+        }

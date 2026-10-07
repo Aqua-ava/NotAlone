@@ -23,7 +23,10 @@ from notalone.persistence.postgres_repository import (
     ImportResult,
     PostgresIngestRepository,
 )
+from notalone.persistence.source_processing import SourceProcessingWriteError
 from notalone.runtime_config import load_project_env, persist_owner_id
+from notalone.scopes import ContactScope
+from notalone.source_processing.models import ProcessingRecord
 
 
 class ContactConfirmationError(ValueError):
@@ -73,8 +76,25 @@ def import_file(
 ) -> ImportResult:
     """校验、确认联系人后，把一份 JSONL 批次交给持久化层。"""
 
-    document = read_jsonl(path)
-    batch = normalize_document(document)
+    try:
+        document = read_jsonl(path)
+        batch = normalize_document(document)
+    except ImportPreviewError as error:
+        record_failure = getattr(repository, "record_input_failure", None)
+        if (
+            owner_id is not None
+            and isinstance(confirmation.selection, ExistingContactSelection)
+            and callable(record_failure)
+        ):
+            record_failure(
+                scope=ContactScope(
+                    owner_id, confirmation.selection.contact_id
+                ),
+                record=ProcessingRecord.capture(
+                    error.details["locator"], error.details
+                ),
+            )
+        raise
     return repository.import_document(
         owner_id=owner_id,
         initialize_owner=initialize_owner,
@@ -152,6 +172,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ContactConfirmationError,
         ImportPreviewError,
         ImportPersistenceError,
+        SourceProcessingWriteError,
     ) as error:
         print(f"导入失败：{error}", file=sys.stderr)
         return 1
