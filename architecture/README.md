@@ -62,6 +62,7 @@
 35. [ADR-035：待确认候选作为强制标注的未确认参考进入回复](adr/035-pending-candidate-unconfirmed-reply-reference.md)
 36. [ADR-036：按维度放行自动采纳](adr/036-per-dimension-adoption-release.md)
 37. [ADR-037：默认保存记忆提取的完整过程](adr/037-complete-memory-extraction-trace.md)
+38. [ADR-038：导入触发原记忆任务并让前台回复优先](adr/038-import-triggered-memory-work-and-reply-priority.md)
 
 ## 当前架构决策
 

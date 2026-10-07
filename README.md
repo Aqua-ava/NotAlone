@@ -124,9 +124,15 @@ notalone-task-cleanup                        # 删除超过 90 天的终态任�
 
 自动采纳在原有三道门槛之上再叠加一道**按维度放行**（ADR-036）：一条候选还要落到已放行的维度键才会自动写入，无法明确判定维度键的候选一律视为未放行。**默认放行表为空**，因此当前所有通过原有门槛的候选都进入待确认、不新增自动采纳；放行某一类需要该维度本轮评测达标签并由用户逐类批准，记录在 [记忆维度自动采纳放行台账](docs/memory-adoption-dimension-release-ledger.md)。当前 `paraphrase`、`reference`、`media`、`reported` 四个维度缺少必要结构化字段、无法从既有提取结果推导，即使达标也不能放行。运维回退设 `NOTALONE_MEMORY_DIMENSION_GATE=0`，恢复本门启用前的行为。
 
-导入 HTTP 提交返回原 `task_id`。自动重试耗尽后，使用 `GET /api/tasks/status?contact_id=...&task_id=...` 查询数据库中的状态与步骤；重启后仍可读取。`POST /api/tasks/retry` 明确提供 `contact_id + task_id`，将失败原任务恢复为 queued，随后 `POST /api/tasks/run` 提供相同范围与 `task_id` 执行。恢复保留成功步骤，指定执行不会领取该联系人的其他任务；来源进入删除流程后不能恢复导入任务。CLI 恢复在配置预检查和全局锁成功后执行，忙时不修改任务。步骤 `attempt_count` 表示当前重试轮次的尝试数，手动恢复后重新获得最多三次自动尝试；任务 `retry_count` 累计失败和手动恢复次数，不代表累计模型调用数。
+导入 HTTP 提交返回原 `task_id`，消息提交后立即可用；本后端随后自动处理这次原任务，无需另外启动。重复提交复用原任务，同一任务唤醒合并；Worker 全局锁忙时持续退避等待，间隔最多 30 秒，关闭结束等待。自动处理不扫描较早的其他任务或重启前的队列，也不自动重做成功、失败或取消终态。指定任务只限定调度，提取仍使用该联系人的有效消息、既有水位和窗口；不是按单一来源独立提取。
+
+使用 `GET /api/tasks/status?contact_id=...&task_id=...` 查询数据库中的状态与步骤，重启后仍可读取。模型配置或执行资源不足时不领取步骤，任务保持 queued，`error_code` 分别为 `model_configuration_unavailable` 或 `execution_resources_unavailable`，不包含正文；修复后显式 `POST /api/tasks/run` 提供 `contact_id + task_id` 执行。模型失败不回滚已导入消息；自动重试耗尽后，`POST /api/tasks/retry` 明确提供相同范围，将失败原任务恢复为 queued，再显式 run。恢复保留成功步骤，指定执行不会领取其他任务；来源进入删除流程后不能恢复导入任务。CLI 默认仍领取指定联系人最早的一个任务，显式恢复在配置预检查和全局锁成功后执行，忙时不修改任务。步骤 `attempt_count` 表示当前重试轮次的尝试数，手动恢复后重新获得最多三次自动尝试；任务 `retry_count` 累计失败和手动恢复次数，不代表累计模型调用数。
 
 默认启动继续领取最早可执行任务；显式恢复按原任务领取的局部例外见 [ADR-034](architecture/adr/034-explicit-failed-task-recovery-selection.md)，全局串行锁和预检查不变。
+
+本地后端中的候选回复优先于尚未开始的后台提取、来源核验与写入裁决调用。已开始的一次适配器调用（包括 SDK 内部重试）结束后，等待回复先执行；整次回复完成前暂停后续后台模型调用。等待发生在候选请求租约与 20 秒生成计时之前，独立 CLI Worker 保留原行为。
+
+`POST /api/runtime/shutdown` 和服务器公开关闭共用停止协议：拒绝新工作、唤醒许可等待者，等待收尾最多 5 秒。不能中断的旧调用返回后丢弃结果，不把未完成任务标为成功；成功步骤保留，原租约到期后可按原任务显式继续。协作停止在有效来源与租约内返还本次尝试，真实模型失败仍计入三次预算；来源或租约已失效、进程被强制结束、停止记账不可用时不保证返还。调用许可与锁连接统一收尾，已发生的调用仍保留无正文台账。行为约束见 [ADR-038](architecture/adr/038-import-triggered-memory-work-and-reply-priority.md)，合成 HTTP 验收覆盖上述范围，不代表外部模型或正式部署已验收。
 
 记忆管理页中的候选、联系人记忆和本人记忆均展示来源聊天时间、保存／录入时间，
 以及存在的生效／失效时间。来源跨多条消息时显示日期范围，缺失或无法核实的时间
@@ -201,12 +207,12 @@ python -m unittest discover -s tests -v
 
 ```bash
 conda activate NotAlone
-NOTALONE_DISABLE_DOTENV=1 python -m unittest tests.integration.server.test_core_business_flow -v
+NOTALONE_DISABLE_DOTENV=1 python -m unittest tests.integration.server.test_import_auto_flow tests.integration.server.test_core_business_flow -v
 ```
 
-此验收从公开回环 HTTP 入口串联“预览 → 确认联系人 → 导入 → 显式执行 Worker → 检索 → 候选与依据 → 同键重放 → 删除来源”。导入、固定任务步骤、记忆存储、PostgreSQL 检索和候选存储均使用真实模块，只有模型使用 scripted fake。用例自己创建、迁移并清理随机 `_test` 库，需要本机 PostgreSQL 和建库权限，不使用现有业务库或外部模型凭据。
+此验收从公开回环 HTTP 入口串联“预览 → 确认联系人 → 导入 → 自动处理原任务 → 检索 → 候选与依据 → 同键重放 → 删除来源”，并通过公开 shutdown 验证关闭边界。导入、生产 Worker 装配、固定任务步骤、记忆存储、PostgreSQL 检索和候选存储均使用真实模块，只有模型使用 scripted fake。用例在提交之前准备模型脚本与 Event，自建、迁移并清理随机 `_test` 库，需要本机 PostgreSQL 和建库权限，不使用现有业务库或外部模型凭据。
 
-它验证核心接线、联系人隔离、来源依据、幂等和删除；不证明真实模型的语义质量或微信现场集成可用。导入完成仍需显式运行 Worker，自动触发、增量记忆任务接线和空表达方向的建议流程属于后续业务工作。
+它验证核心接线、联系人隔离、来源依据、幂等、失败恢复、锁忙等待、旧队列边界与删除；不证明真实模型的语义质量或微信现场集成可用。增量记忆任务接线和空表达方向的建议流程属于后续业务工作。
 
 ## 进一步阅读
 

@@ -12,6 +12,7 @@ from uuid import UUID
 import psycopg
 
 from notalone.application.reply_service import ReplyService
+from notalone.application.model_priority import ModelPriorityControl, PriorityReplyPort
 from notalone.conversation.models import (
     ConversationBinding,
     ConversationObservation,
@@ -34,7 +35,10 @@ from notalone.reply.context import RetrievalReplyContext
 from notalone.reply.generator import ReplyGenerator
 
 
-def build_reply_service(*, database_url: str, owner_id: UUID) -> ReplyService | None:
+def build_reply_service(
+    *, database_url: str, owner_id: UUID,
+    model_priority: ModelPriorityControl | None = None,
+) -> ReplyService | None:
     """有 active 绑定且模型凭据可用时装配回复服务；否则返回 None。
 
     回复端点不可用时返回 503 reply_unavailable。
@@ -75,7 +79,7 @@ def build_reply_service(*, database_url: str, owner_id: UUID) -> ReplyService | 
             owner_id=owner_id,
             observation=ConversationObservation.confirmed(binding.binding_id),
         ),
-        reply=generator,
+        reply=(PriorityReplyPort(generator, model_priority) if model_priority is not None else generator),
     )
 
 
