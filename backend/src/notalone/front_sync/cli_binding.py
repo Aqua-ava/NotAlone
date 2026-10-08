@@ -10,6 +10,7 @@ from uuid import UUID
 
 from notalone.persistence.conversation_repository import (
     CliBindingCreation,
+    ConversationBindingNotFoundError,
     PersistedConversationBinding,
     PostgresConversationBindingRepository,
 )
@@ -34,6 +35,7 @@ class CliBindingSelection:
     locator: str
     contact_id: UUID | None = None
     display_name: str | None = None
+    observed_display_name: str | None = None
 
 
 class CliSessionSourcePort(Protocol):
@@ -47,6 +49,16 @@ class CliSessionSourcePort(Protocol):
 
 
 class CliBindingBatchRepositoryPort(Protocol):
+    def read_binding(
+        self, *, owner_id: UUID, contact_id: UUID, binding_id: UUID,
+    ) -> PersistedConversationBinding:
+        """按完整内部身份读取绑定。"""
+
+    def revoke_binding(
+        self, *, owner_id: UUID, contact_id: UUID, binding_id: UUID,
+    ) -> PersistedConversationBinding:
+        """幂等撤销完整内部身份范围的绑定。"""
+
     def create_cli_bindings_batch(
         self,
         *,
@@ -138,6 +150,11 @@ class CliBindingCoordinator:
                 or not selection.display_name.strip()
             ):
                 raise ValueError("display_name 必须是非空字符串或 None。")
+            if selection.observed_display_name is not None and (
+                not isinstance(selection.observed_display_name, str)
+                or not selection.observed_display_name.strip()
+            ):
+                raise ValueError("observed_display_name 必须是非空字符串或 None。")
             seen.add(locator)
             normalized.append(
                 CliBindingSelection(
@@ -148,6 +165,7 @@ class CliBindingCoordinator:
                         if selection.display_name is not None
                         else None
                     ),
+                    observed_display_name=selection.observed_display_name,
                 )
             )
 
@@ -162,6 +180,11 @@ class CliBindingCoordinator:
             candidate = candidates.get(selection.locator)
             if candidate is None:
                 raise ValueError("所选会话不在当前 CLI 私聊列表中。")
+            if (
+                selection.observed_display_name is not None
+                and selection.observed_display_name != candidate.display_name
+            ):
+                raise ValueError("所选会话显示名已经变化，须重新核对。")
             existing = active.get(selection.locator)
             if existing is not None:
                 if (
@@ -187,11 +210,33 @@ class CliBindingCoordinator:
             baseline_at=self._clock(),
         )
 
+    def list_bindings(self) -> tuple[PersistedConversationBinding, ...]:
+        """列出当前运行范围的 active 绑定，包括 CLI 列表消失的会话。"""
+
+        return self._active_bindings()
+
+    def revoke_binding(
+        self, *, contact_id: UUID, binding_id: UUID,
+    ) -> PersistedConversationBinding:
+        """按固定运行范围撤销；调用方须持有同步循环的同一互斥锁。"""
+
+        binding = self._batch_repository.read_binding(
+            owner_id=self._owner_id, contact_id=contact_id, binding_id=binding_id,
+        )
+        if (
+            binding.channel != self._channel
+            or binding.account_scope != self._account_scope
+        ):
+            raise ConversationBindingNotFoundError("会话绑定不在当前运行范围。")
+        return self._batch_repository.revoke_binding(
+            owner_id=self._owner_id, contact_id=contact_id, binding_id=binding_id,
+        )
+
     def _private_sessions(self) -> tuple[ChatCandidate, ...]:
         sessions = self._cli.sessions(type_filter="private", limit=5000)
         return tuple(candidate for candidate in sessions if candidate.chat_type == "private")
 
-    def _active_bindings(self) -> tuple[object, ...]:
+    def _active_bindings(self) -> tuple[PersistedConversationBinding, ...]:
         return tuple(
             self._bindings.list_active_bindings(
                 owner_id=self._owner_id,

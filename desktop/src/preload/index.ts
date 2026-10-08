@@ -4,6 +4,7 @@ import { createBackendBridge } from './backend';
 import { createSetupBridge } from './setup';
 import { createStartupBridge } from './startup';
 import { createContactSessionBridge } from './contact-session';
+import { createBindingConsentBridge } from './binding-consent';
 import type { DesktopSettings } from '../shared/desktop-bridge';
 
 const bridge: AppBridge = {
@@ -11,6 +12,7 @@ const bridge: AppBridge = {
   setup: createSetupBridge(),
   startup: createStartupBridge(),
   contacts: createContactSessionBridge(),
+  bindings: createBindingConsentBridge(),
   openManager: () => ipcRenderer.invoke('window:open-manager'),
   openHelper: () => ipcRenderer.invoke('window:open-helper'),
   hideWindow: () => ipcRenderer.invoke('window:hide'),

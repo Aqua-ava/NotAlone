@@ -1,0 +1,22 @@
+.bindings-page { display: grid; gap: 18px; font-size: 12px; color: #647575; }
+.bindings-explanation, .bindings-section { padding: 20px; background: #fffdf8d9; border: 1px solid #c8d4cf; border-radius: 5px; }
+.bindings-page h2 { margin: 0; font-weight: 500; font-size: 15px; color: #355f7c; }
+.bindings-page h3 { color: #355f7c; font-size: 14px; }
+.bindings-page p { line-height: 1.9; margin: 10px 0; }
+.bindings-toolbar { display: flex; gap: 16px; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.binding-row { display: flex; gap: 18px; align-items: center; justify-content: space-between; padding: 15px 0; border-top: 1px solid #dce2d9; }
+.binding-row b { font-size: 13px; font-weight: 500; color: #426b80; }
+.binding-row code { display: block; margin-top: 6px; color: #737e80; overflow-wrap: anywhere; }
+.binding-row small { color: #7b8580; overflow-wrap: anywhere; }
+.binding-choice { display: flex; align-items: center; gap: 10px; min-width: 160px; }
+.binding-choice input { accent-color: #6590a5; }
+.binding-row select { width: min(100%, 440px); padding: 8px; color: #4b6c7d; background: #fffef8; border: 1px solid #cbd4cb; border-radius: 4px; }
+.binding-row > div { min-width: 0; }
+.binding-row > button { flex-shrink: 0; }
+.bindings-submit { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 18px; }
+.binding-warning, .bindings-page [role="alert"] { color: #98594b; }
+.binding-dialog-backdrop { position: fixed; inset: 0; z-index: 30; background: #53676b66; display: grid; place-items: center; padding: 25px; }
+.binding-dialog { width: min(540px, 100%); max-height: 85vh; overflow: auto; padding: 25px; background: #fffcf3; border: 1px solid #a8bdc2; border-radius: 7px; box-shadow: 0 15px 50px #314c5a44; }
+.binding-dialog b { display: block; color: #426b80; margin-top: 18px; }
+.binding-dialog code { display: block; margin-top: 6px; overflow-wrap: anywhere; }
+@media (max-width: 1000px) { .binding-row { flex-wrap: wrap; } .binding-row select { width: 100%; } }
