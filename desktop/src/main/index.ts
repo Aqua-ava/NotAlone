@@ -5,6 +5,7 @@ import { AppWindows } from './windows';
 import { BackendHost } from './backend/host';
 import { installBackendBridge } from './backend/bridge';
 import { installQuitLifecycle } from './backend/quit';
+import { installDesktopControls } from './desktop-controls';
 
 app.setName('NotAlone');
 const selectedDataPath = app.commandLine.getSwitchValue('user-data-dir');
@@ -29,6 +30,8 @@ void app.whenReady().then(async () => {
   installBackendBridge(windows, backend, () => app.quit());
   installQuitLifecycle(backend, windows);
   void backend.connect();
+  const desktopControls = installDesktopControls(windows);
+  app.on('will-quit', () => desktopControls.dispose());
   let quitting = false;
   const openWindow = (role: 'manager' | 'helper') => {
     void windows.open(role).catch(() => {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Icon } from './icons';
 import { managerPages, type ManagerPage } from './pages';
+import { DesktopControls, HelperPinControl, ShortcutWarning } from './DesktopControls';
 import logo from './assets/logo.png';
 import './style.css';
 import { BackendBadge, BackendConnectionNote, useBackendState } from './backend-status';
@@ -40,6 +41,7 @@ function App() {
     </section>
     <footer className="ime-footer">
       <span>由你修改并亲自发送</span>
+      <HelperPinControl />
       <button disabled><Icon name="copy" size={13} />复制</button>
       <button className="copy-hide" disabled>复制并收起</button>
     </footer>
@@ -61,9 +63,11 @@ function App() {
         <div><BackendBadge state={backend} />
           <button className="button primary" onClick={() => void operate(window.notalone.openHelper)}><Icon name="write" size={15} />打开输入小窗</button></div>
       </header>
+      <ShortcutWarning />
       <main className="manager-content">
         <div className="manager-title"><h1>{currentPage.title}</h1><p>{currentPage.description}</p></div>
         <BackendConnectionNote state={backend} />
+        {page === 'config' && <DesktopControls />}
         <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
           <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>
