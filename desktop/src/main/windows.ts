@@ -118,9 +118,9 @@ export class AppWindows {
     const window = new BrowserWindow({
       title: manager ? 'NotAlone · 管理后台' : 'NotAlone · 输入小窗',
       width: manager ? 1080 : 680,
-      height: manager ? 740 : 300,
+      height: manager ? 740 : 520,
       minWidth: manager ? 800 : 680,
-      minHeight: manager ? 580 : 300,
+      minHeight: manager ? 580 : 520,
       resizable: manager,
       frame: manager,
       alwaysOnTop: !manager && this.helperPinned,
