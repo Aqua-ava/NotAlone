@@ -38,6 +38,34 @@ test('管理后台和输入小窗可独立打开、关闭隐藏并恢复，退�
   await expect.poll(() => appProcess.exitCode).toBe(0);
 });
 
+test('原生菜单整体隐藏后仅恢复所选窗口，不展开另一窗口', async ({ runningApp: { app } }) => {
+  const manager = await app.firstWindow();
+  const helperOpened = app.waitForEvent('window');
+  await manager.getByRole('button', { name: '打开输入小窗' }).click();
+  const helper = await helperOpened;
+  await expect.poll(() => visible(app, manager)).toBe(true);
+  await expect.poll(() => visible(app, helper)).toBe(true);
+
+  await selectMenu(app, 'NotAlone', '隐藏 NotAlone');
+  await expect.poll(() => app.evaluate(({ app }) => app.isHidden())).toBe(true);
+  await selectMenu(app, '窗口', '输入小窗');
+  await expect.poll(() => app.evaluate(({ app }) => app.isHidden())).toBe(false);
+  await expect.poll(() => visible(app, helper)).toBe(true);
+  await attachWindowState(app, '只恢复输入小窗');
+  await expect.poll(() => visible(app, manager)).toBe(false);
+
+  await selectMenu(app, '窗口', '管理后台');
+  await expect.poll(() => visible(app, manager)).toBe(true);
+  await selectMenu(app, 'NotAlone', '隐藏 NotAlone');
+  await expect.poll(() => app.evaluate(({ app }) => app.isHidden())).toBe(true);
+  await selectMenu(app, '窗口', '管理后台');
+  await expect.poll(() => app.evaluate(({ app }) => app.isHidden())).toBe(false);
+  await expect.poll(() => visible(app, manager)).toBe(true);
+  await attachWindowState(app, '只恢复管理后台');
+  await expect.poll(() => visible(app, helper)).toBe(false);
+  expect(app.windows()).toHaveLength(2);
+});
+
 test('界面显示品牌资源和真实未就绪状态，不提供假联系人、候选或复制结果', async ({ runningApp: { app } }) => {
   const manager = await app.firstWindow();
   await expect(manager.getByRole('img', { name: 'NotAlone', exact: true })).toBeVisible();
@@ -47,7 +75,7 @@ test('界面显示品牌资源和真实未就绪状态，不提供假联系人�
   for (const page of ['历史导入', '关系资料', '同步设置', '应用配置']) {
     await manager.getByRole('button', { name: page, exact: true }).click();
     await expect(manager.getByRole('heading', { name: page, exact: true })).toBeVisible();
-    await expect(manager.getByRole('status')).toContainText('尚未连接');
+    await expect(manager.getByRole('status').filter({ hasText: '尚未连接' })).toBeVisible();
   }
   await manager.getByRole('button', { name: '历史导入', exact: true }).click();
   await expect(manager.getByRole('button', { name: '选择历史文件' })).toBeDisabled();
@@ -63,4 +91,14 @@ test('界面显示品牌资源和真实未就绪状态，不提供假联系人�
 
 async function visible(app: ElectronApplication, page: Page): Promise<boolean> {
   return (await app.browserWindow(page)).evaluate((window) => window.isVisible());
+}
+
+async function attachWindowState(app: ElectronApplication, name: string): Promise<void> {
+  const state = await app.evaluate(({ app, BrowserWindow }) => ({
+    appHidden: app.isHidden(),
+    windows: BrowserWindow.getAllWindows().map((window) => ({
+      id: window.id, title: window.getTitle(), visible: window.isVisible(), minimized: window.isMinimized(),
+    })),
+  }));
+  await test.info().attach(name, { body: JSON.stringify(state, null, 2), contentType: 'application/json' });
 }

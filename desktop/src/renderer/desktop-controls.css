@@ -1,0 +1,11 @@
+.desktop-controls { padding: 22px; margin-bottom: 26px; border: 1px solid #d5cbb9; border-radius: 4px 7px 5px 3px; background: #fffdf7; }
+.desktop-controls h2 { font-size: 15px; font-weight: 500; margin-bottom: 18px; color: #496e88; }
+.desktop-controls label { display: block; font-size: 12px; margin-bottom: 8px; }
+.desktop-controls input { font: inherit; color: inherit; width: 270px; padding: 8px 10px; border: 1px solid #c6cfcd; border-radius: 3px; background: #fffdf6; }
+.shortcut-edit { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.desktop-controls p { margin-top: 12px; color: #707980; font-size: 12px; line-height: 1.8; }
+.desktop-controls [role="alert"] { color: #99594e; }
+.shortcut-warning { color: #99594e; font-size: 12px; margin: 16px 38px 0; }
+.helper-pin[aria-pressed="true"] { color: #245f91; background: #dce9ee; }
+.ime-footer .helper-pin { padding: 4px; }
+.helper-desktop-error { position: fixed; bottom: 8px; left: 12px; right: 12px; z-index: 1; padding: 6px 8px; border: 1px solid #d5cbb9; background: #fff9ed; -webkit-app-region: no-drag; }

@@ -11,6 +11,8 @@ const pages: Record<WindowRole, string> = {
 export class AppWindows {
   private readonly windows = new Map<WindowRole, HostedWindow>();
   private quitting = false;
+  private helperPinned = false;
+  private helperToggle: Promise<void> = Promise.resolve();
 
   constructor(private readonly appSession: Session) {}
 
@@ -30,12 +32,43 @@ export class AppWindows {
     await hosted.ready;
     const window = hosted.window;
     if (this.quitting || window.isDestroyed()) return;
+    if (app.isHidden()) {
+      // app.show 会恢复整体隐藏前的窗口，先明确隐藏非目标窗口。
+      for (const { window: other } of this.windows.values()) {
+        if (other !== window && !other.isDestroyed()) other.hide();
+      }
+      app.show();
+    }
     if (window.isMinimized()) window.restore();
     window.show();
     window.focus();
   }
 
   prepareToQuit(): void { this.quitting = true; }
+
+  toggleHelper(): Promise<void> {
+    // 连续按键按顺序处理，加载中的小窗也只能有一个。
+    this.helperToggle = this.helperToggle.catch(() => {}).then(async () => {
+      if (this.quitting) return;
+      const hosted = this.windows.get('helper');
+      const window = hosted?.window;
+      if (!window || hosted.failed || window.isDestroyed() || !window.isVisible()
+        || window.isMinimized() || app.isHidden()) await this.open('helper');
+      else window.hide();
+    });
+    return this.helperToggle;
+  }
+
+  setHelperPinned(pinned: boolean): void {
+    const window = this.windows.get('helper')?.window;
+    if (window && !window.isDestroyed()) window.setAlwaysOnTop(pinned);
+    this.helperPinned = pinned;
+  }
+
+  isHelperPinned(): boolean {
+    const window = this.windows.get('helper')?.window;
+    return window && !window.isDestroyed() ? window.isAlwaysOnTop() : this.helperPinned;
+  }
 
   validateCaller(event: IpcMainInvokeEvent, args: unknown[]): BrowserWindow {
     const entry = [...this.windows.entries()].find(([, item]) => item.window.webContents === event.sender);
@@ -82,6 +115,7 @@ export class AppWindows {
       minHeight: manager ? 580 : 216,
       resizable: manager,
       frame: manager,
+      alwaysOnTop: !manager && this.helperPinned,
       show: false,
       backgroundColor: manager ? '#f3eee3' : '#fff9ed',
       webPreferences: {
