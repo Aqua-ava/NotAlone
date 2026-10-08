@@ -66,6 +66,8 @@ from notalone.persistence.postgres_repository import (
 )
 from notalone.persistence.conversation_repository import (
     ConversationBindingConflictError,
+    ConversationBindingNotFoundError,
+    PersistedConversationBinding,
 )
 from notalone.persistence.skill_library import (
     SkillDeletedError,
@@ -105,7 +107,7 @@ from notalone.server.follow_smoke import (
     FollowSmokeStatus,
 )
 from notalone.server.sse import encode_sse_frame
-from notalone.server.sync_host import SyncControlPort, SyncHostStopped
+from notalone.server.sync_host import SyncControlPort, SyncHostBusy, SyncHostStopped
 
 
 @dataclass(frozen=True, slots=True)
@@ -556,6 +558,8 @@ class BackendApp:
             "/api/sync/confirm",
             "/api/sync/confirm-pending",
             "/api/sync/cli-sessions",
+            "/api/sync/cli-bindings",
+            "/api/sync/cli-bindings/revoke",
             "/api/sync/cli-bindings/confirm",
         }:
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
@@ -594,12 +598,28 @@ class BackendApp:
                 HTTPStatus.OK,
                 {"sessions": [_cli_session_payload(session) for session in sessions]},
             )
+        if path == "/api/sync/cli-bindings":
+            if method != "GET":
+                return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            try:
+                bindings = sync.cli_bindings()
+            except Exception:
+                return _json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "cli_bindings_failed"},
+                )
+            return _json_response(
+                HTTPStatus.OK,
+                {"bindings": [_cli_binding_payload(binding) for binding in bindings]},
+            )
         if method != "POST":
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         if path == "/api/sync/priority":
             return self._handle_sync_priority(sync=sync, body=body)
         if path == "/api/sync/cli-bindings/confirm":
             return self._handle_cli_bindings_confirm(sync=sync, body=body)
+        if path == "/api/sync/cli-bindings/revoke":
+            return self._handle_cli_binding_revoke(sync=sync, body=body)
         if path in {"/api/sync/confirm", "/api/sync/confirm-pending"}:
             return self._handle_sync_confirm(
                 sync=sync,
@@ -623,6 +643,47 @@ class BackendApp:
                 HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "sync_control_failed"}
             )
         return _json_response(HTTPStatus.OK, _sync_status_payload(report))
+
+    def _handle_cli_binding_revoke(
+        self, *, sync: SyncControlPort, body: bytes,
+    ) -> Response:
+        """撤销读取授权，保留既有绑定记录和历史资料。"""
+
+        try:
+            payload = json.loads(body.decode("utf-8"))
+            if (
+                not isinstance(payload, dict)
+                or set(payload) != {"contact_id", "binding_id"}
+            ):
+                raise ValueError
+            if not all(isinstance(payload[key], str) for key in payload):
+                raise ValueError
+            contact_id = UUID(payload["contact_id"])
+            binding_id = UUID(payload["binding_id"])
+        except (UnicodeDecodeError, TypeError, ValueError):
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "cli_binding_revoke_invalid"},
+            )
+        try:
+            binding = sync.revoke_cli_binding(
+                contact_id=contact_id, binding_id=binding_id,
+            )
+        except ConversationBindingNotFoundError:
+            return _json_response(
+                HTTPStatus.NOT_FOUND, {"error": "cli_binding_not_found"},
+            )
+        except SyncHostBusy:
+            return _json_response(
+                HTTPStatus.CONFLICT, {"error": "cli_binding_revoke_busy"},
+            )
+        except SyncHostStopped:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "runtime_stopped"})
+        except Exception:
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "cli_binding_revoke_failed"},
+            )
+        return _json_response(HTTPStatus.OK, _cli_binding_payload(binding))
 
     def _handle_sync_priority(
         self,
@@ -725,11 +786,18 @@ class BackendApp:
                     not isinstance(display_name, str) or not display_name.strip()
                 ):
                     raise ValueError
+                observed_display_name = raw.get("observed_display_name")
+                if observed_display_name is not None and (
+                    not isinstance(observed_display_name, str)
+                    or not observed_display_name.strip()
+                ):
+                    raise ValueError
                 selections.append(
                     CliBindingSelection(
                         locator=locator,
                         contact_id=contact_id,
                         display_name=display_name,
+                        observed_display_name=observed_display_name,
                     )
                 )
         except (TypeError, ValueError):
@@ -1979,6 +2047,18 @@ def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:
             }
         )
     return payload
+
+
+def _cli_binding_payload(binding: PersistedConversationBinding) -> dict[str, object]:
+    """授权目录只暴露稳定身份和展示字段，不暴露原始定位证据。"""
+
+    return {
+        "binding_id": str(binding.binding_id),
+        "contact_id": str(binding.scope.contact_id),
+        "conversation_locator": binding.conversation_locator,
+        "display_name": binding.display_name,
+        "status": binding.status.value,
+    }
 
 
 def _cli_session_payload(session: CliBindingCandidateView) -> dict[str, object]:

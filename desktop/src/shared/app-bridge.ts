@@ -5,7 +5,9 @@ import type { SetupBridge } from './setup-bridge';
 import type { StartupBridge } from './startup-bridge';
 import type { ContactSessionBridge } from './contact-session-bridge';
 import type { ImportBridge } from './import-bridge';
+import type { BindingConsentBridge } from './binding-consent-bridge';
 
 export type AppBridge = WindowBridge & DesktopBridge & {
-  backend: BackendBridge; setup: SetupBridge; startup: StartupBridge; contacts: ContactSessionBridge; imports: ImportBridge;
+  backend: BackendBridge; setup: SetupBridge; startup: StartupBridge;
+  contacts: ContactSessionBridge; imports: ImportBridge; bindings: BindingConsentBridge;
 };

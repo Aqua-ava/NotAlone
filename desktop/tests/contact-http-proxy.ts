@@ -5,6 +5,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 export class ContactHttpProxy {
   readonly server: Server;
   holdContacts = false;
+  readonly holdBindingPaths = new Set<string>();
   failRuntimeStatus = false;
   heldCount = 0;
   private readonly held: Array<(failure: boolean) => void> = [];
@@ -25,7 +26,7 @@ export class ContactHttpProxy {
             response.writeHead(failure ? 503 : result.statusCode ?? 500, { 'Content-Type': 'application/json' });
             response.end(failure ? '{"error":"synthetic_transport_unavailable"}' : Buffer.concat(chunks));
           };
-          if (this.holdContacts && incoming.url === this.heldEndpoint) { this.held.push(deliver); this.heldCount++; }
+          if ((this.holdContacts && incoming.url === this.heldEndpoint) || this.holdBindingPaths.has(incoming.url ?? '')) { this.held.push(deliver); this.heldCount++; }
           else deliver(false);
         });
       });
