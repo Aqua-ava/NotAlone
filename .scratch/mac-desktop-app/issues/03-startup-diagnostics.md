@@ -1,7 +1,7 @@
 # 03：本机环境诊断与启动恢复
 
 Type: task
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: 02
 Spec: ../spec.md
@@ -14,10 +14,10 @@ Finder 启动时找到配置的 Python/项目环境；缺环境、数据库或�
 
 ## 验收条件
 
-- [ ] 不依赖预先激活的终端或 Finder 工作目录，非秘密启动配置可核验和修正。
-- [ ] Python/后端包缺失、数据库不可用、schema 或基线不足有安全诊断及重试；不自动迁移、重建或删除业务数据。
-- [ ] 重试不重复启动进程，迟到的成功与失败不覆盖新连接；以隔离环境进行公开 App 操作测试。
-- [ ] 主进程保存资格区分没有运行时与原目标已认证停读；失联或查询超时不允许绕过准备协议保存路径，未确认不另启。schema 校验覆盖启动及 setup 必需列，目录不可访问返回准确原因。
+- [x] 不依赖预先激活的终端或 Finder 工作目录，非秘密启动配置可核验和修正。
+- [x] Python/后端包缺失、数据库不可用、schema 或基线不足有安全诊断及重试；不自动迁移、重建或删除业务数据。
+- [x] 重试不重复启动进程，迟到的成功与失败不覆盖新连接；以隔离环境进行公开 App 操作测试。
+- [x] 主进程保存资格区分没有运行时与原目标已认证停读；失联或查询超时不允许绕过准备协议保存路径，未确认不另启。schema 校验覆盖启动及 setup 必需列，目录不可访问返回准确原因。
 
 ## 测试与范围
 
@@ -26,6 +26,33 @@ Finder 启动时找到配置的 Python/项目环境；缺环境、数据库或�
 - 补齐轻量只读 schema/迁移就绪诊断入口：复用基线和账本校验，检查必要 schema 元数据；不执行既有写库迁移命令或接管工具、不创建参考库、不查询联系人/消息正文。缺基线、漂移、待迁移或连接失败分别返回安全状态，App 提供恢复说明；不新增业务表。使用实际 App 操作与隔离数据库验证只读及恢复行为。
 - 按仓库工作流读取相关领域及工程约束，完成最小相关检查、Standards/Spec 两轴评审和只含本任务改动的本地提交。
 - 不提交私人资料或凭据，不发送外部聊天消息；远端 Git 操作需另有用户明确同意。
+
+## Answer
+
+已实现六项非秘密绝对路径的核验、修正与保存，以及 Python/项目/依赖、数据库、必要 schema 元数据和既有基线/账本的只读诊断。首次连接、既有服务复用、首启后的受控 restart/reload 都通过同一机器 gate；诊断有界取消并等待子进程退场，迟到结果不能启动后端或覆盖新状态。实际 App 在工作目录 `/`、受限 PATH 和空 Conda 变量下恢复启动，证明不依赖交互式终端环境；这项证据不代表真实 Finder 双击已验收。
+
+保存资格由主进程实际持有的目标、自有未收尾子进程及待启动任务决定。首次确实没有实例可以修正路径；原目标失联仍须使用原 `prepareConfiguration()` 认证停读并确认退场。停读失败不保存、不另起，成功进入可编辑 disconnected 且不自动连接。保存与连接串行，实际文件写入和 rename 前再核验资格；renderer 仅接收具名资格布尔，不获得 target/token 或通用请求能力。
+
+初审三项 Spec 问题均以公开 App/真实 HTTP/隔离 PostgreSQL red → green 修复：原后端仍运行时断开状态不再放行保存；缺 `owner.created_at` 准确阻止启动，测试准备恢复列后可重试并读取实际首启状态；项目目录不可访问返回 `project_unavailable`，真实源码/包缺失仍返回 `backend_package_missing`。六路径键与基础校验已共用，加载可默认、保存要求全字段的差异保留。正式 05 停读/JSON 与 06 联系人接线均保留。
+
+修复固定基点为合并正式联系人集成 `e88423b68c025de24d491e077cf79172fca298ee` 后的 `38b0cbaf18b999f49c3b7055cede820db4afa648`，代码候选为 `0cdd4ca881946e9fa462aae139d14e40e0a1c151`。主 Agent 增量两轴复核为 Spec 0、Standards 源码硬违规 0 / smell 0；原重复问题解决。剩余 P3 错误表已逐字对齐实际完整提示；记录前另合入纯任务 16 范围文档 `1f64cab24d26c2aacec85ee7cb744aec0a180d9e`，不改变已验源码。本次收口只修改任务记录与台账，不改源码、重跑测试或重建包。
+
+实际验证按阶段记录，合并前结果不作为最终合并产物的证明：
+
+| 阶段 | 实际命令或范围 | 结果 |
+| --- | --- | --- |
+| 初始候选 Python | 诊断及迁移相关 `unittest` | 18/18（7.672s） |
+| 修复后、合并 06 前源码 | `npm test -- --output=artifacts/startup-review-source` | 76/76（4.7m） |
+| 最终合并源码 | `npm run typecheck`、`npm run build`；保存/失联/退出 guard、`contact-*.spec.ts`；合并窗口 smoke | 类型及构建通过；guard 6/6（25.6s）、联系人 11/11（50.6s）、合并窗口 3/3（4.8s） |
+| 合并 06 前签名包 | 机器诊断/路径/窗口/原生命周期 | 27/27（1.7m），仅作合并前证据 |
+| 最终合并签名包 | `npm run package` 后指定 `NOTALONE_TEST_APP_EXECUTABLE`；机器/首启 gate、联系人、首启恢复/窗口/原生命周期三组 | 11/11（53.6s）+ 11/11（52.0s）+ 11/11（47.5s）= 33/33 |
+| 修复后 Python 公开只读入口 | Conda `NotAlone` 中，`PYTHONPATH="$PWD/src" NOTALONE_DISABLE_DOTENV=1 python -m unittest tests.integration.persistence.test_startup_diagnostics -v` | 9/9（4.626s）；核验模块来自本工作树 `backend/src` |
+
+最终包严格 `codesign --verify --deep --strict` 通过，为 arm64 ad-hoc、仅 allow-jit、ATS 任意传输 false。文档收口的本轮辅助 `node /tmp/notalone-app-context.p9MPie/validate-tickets.mjs` 及 `git diff --check` 均通过，二十张字段/依赖/DAG/相对链接有效；不以任务校验替代上述实际 App/HTTP/PG 证据。完整命令、原 red/green 日志和恢复截图保留在本工作树 `desktop/artifacts/startup-validation.txt`、`startup-review-validation.txt` 及对应验证目录，最终包位于 `desktop/out/NotAlone-darwin-arm64/NotAlone.app`，均不提交，等待主 Agent 保存。
+
+诊断生产入口只读必要结构、基线及账本，不运行迁移/adoption、不创建参考数据库、不查询联系人或聊天正文；自动验收的建库、迁移及缺列/漂移准备仅限本轮随机新建 `_test` 库和合成资料。env/info/userData/模型/CLI/probe 全部隔离，未读取私人配置、业务库、微信或调用模型。末次只检查进程 cwd 与 PostgreSQL 元数据：本工作树 App/后端进程、本轮测试库及诊断角色均为零；只由夹具清理自己拥有的资源。
+
+保留早期广组 42 项的两项 `adoption_writers_present` 和串行旧库接管组 24 项的另一项同码失败；限定同一用例三次独立复跑通过，但瞬时原因仍未证实，未修改接管代码，也不据此排除回归。真实 Finder 双击、系统全局键、微信/原生 helper 权限及模型渠道仍未实机验收；helper 诊断仅核验文件与执行权限，未使用 CGEvent 或更改 TCC。签名包是本地 ad-hoc 验证，尚无 Developer ID/公证验收。
 
 ## Comments
 
