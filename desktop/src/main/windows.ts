@@ -32,8 +32,14 @@ export class AppWindows {
     await hosted.ready;
     const window = hosted.window;
     if (this.quitting || window.isDestroyed()) return;
+    if (app.isHidden()) {
+      // app.show 会恢复整体隐藏前的窗口，先明确隐藏非目标窗口。
+      for (const { window: other } of this.windows.values()) {
+        if (other !== window && !other.isDestroyed()) other.hide();
+      }
+      app.show();
+    }
     if (window.isMinimized()) window.restore();
-    if (app.isHidden()) app.show();
     window.show();
     window.focus();
   }

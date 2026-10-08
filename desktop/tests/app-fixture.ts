@@ -32,6 +32,8 @@ export async function selectMenu(app: ElectronApplication, menu: string, item: s
     const entry = Menu.getApplicationMenu()?.items.find((entry) => entry.label === labels.menu)
       ?.submenu?.items.find((entry) => entry.label === labels.item);
     if (!entry || !entry.enabled) throw new Error('公开菜单操作不可用');
-    entry.click();
+    // macOS 的 hide role 由 Cocoa 执行，MenuItem.click 不会路由该默认动作。
+    if (entry.role === 'hide') Menu.sendActionToFirstResponder('hide:');
+    else entry.click();
   }, { menu, item });
 }
