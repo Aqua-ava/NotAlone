@@ -2,7 +2,9 @@
 
 Electron + React/TypeScript 的本机 Mac App，当前完成管理后台与横向输入小窗。两个窗口独立打开，关闭时隐藏，可从原生“窗口”菜单恢复；“NotAlone → 退出 NotAlone”明确退出。小窗标题区域可拖动。
 
-此阶段尚未连接 Python 后端，页面如实显示“尚未连接”，联系人、导入、资料、同步、生成和候选复制均未就绪。不会启动 Python、访问业务库、默认握手或 `.env`，也不运行微信 CLI/探针、不申请系统权限。全局快捷键、菜单栏状态入口与业务能力由后续任务接入，不能将本阶段的窗口验收视为业务集成可用。
+主进程认证连接本机 Python 后端，并在两个窗口显示真实连接状态。重复启动只恢复已有 App；关闭窗口继续隐藏，明确退出先阻止新业务，再通过原已验证连接确认停读。连接或退出失败保留安全说明和重试入口。联系人、导入、资料、同步管理、生成和候选复制仍未接线，不能把连接成功当作业务闭环可用。
+
+后端生产启动会沿用本人身份和已确认同步范围；连接测试使用独立握手、配置与 userData，不访问业务库、模型或微信。主进程才持有认证 token，渲染层只收到具名操作和非秘密状态。
 
 ## 本机运行与构建
 
@@ -22,6 +24,8 @@ npm run package
 
 ## 实际 App 自动化
 
+包含真实 Python 宿主的测试需先激活 Conda `NotAlone`。测试使用当前工作树的 `backend/src`，隔离 dotenv 的读取和写回、握手、owner、模型、CLI/探针和 App 配置；真实 `BackendServer` 生命周期场景没有业务调用，数据库 URL 指向本轮命名为 `_test` 的不可用回环端口，不连接已有数据库。业务 PostgreSQL 验收由后续任务使用真正隔离库完成。
+
 使用 Playwright 的 experimental Electron 支持，在真实窗口上操作公开按钮和原生关闭/菜单。测试使用独立随机用户数据目录并正常回收进程；不读取 React 私有状态，不访问已有业务数据。构建源码资源与打包 App 共用同一行为测试：
 
 ```bash
@@ -30,14 +34,31 @@ NOTALONE_TEST_APP_EXECUTABLE="$PWD/out/NotAlone-darwin-arm64/NotAlone.app/Conten
   npx playwright test tests/windows.spec.ts --output=artifacts/packaged
 ```
 
-窗口测试验证双窗口打开、关闭隐藏、互相恢复、菜单恢复、退出回收，以及随包 logo 加载和真实未就绪状态。`npm test` 还通过隔离构建副本的入口资源缺失，验证安全中文说明和公开菜单重试；不修改签名包。截图在 `test-results/` 或指定 `artifacts/` 目录中，均不提交。它不证明后端握手、联系人隔离、快捷键、剪贴板、权限或退出停读已验收。
+窗口测试验证双窗口打开、关闭隐藏、互相恢复、菜单恢复、退出回收，以及随包 logo 加载和真实未就绪状态。后端测试通过公开 App 操作和本机 HTTP 核验单实例、受控启动/复用、认证、断线重试、握手非法或变化、迟到状态、退出失败/超时与恢复；包含实际 `notalone.server.command` 和 `BackendServer` 的启动/停读场景。入口资源故障只修改隔离构建副本，不损坏签名包。截图在 `test-results/` 或指定 `artifacts/` 目录中，均不提交。这些验收不证明联系人隔离、快捷键、剪贴板、权限或真实微信渠道可用。
+
+## 非秘密启动配置与退出
+
+主进程读取当前 userData 中的 `backend-launch.json`。本阶段没有配置编辑 UI，后续环境诊断会负责选择、检查和保存路径。缺配置时仍可认证复用合法的既有本机握手；无已验证后端则显示“尚未连接”。启动配置只允许以下绝对路径，Python 和项目目录必须同时提供：
+
+```json
+{
+  "pythonExecutable": "/绝对路径/Conda环境/bin/python",
+  "projectDirectory": "/绝对路径/NotAlone",
+  "envFilePath": "/绝对路径/受控配置.env",
+  "backendInfoPath": "/绝对路径/backend.info"
+}
+```
+
+可选的 `envFilePath` 默认使用所选项目根目录 `.env`；`backendInfoPath` 默认使用 `~/.notalone/backend.info`。显式环境变量 `NOTALONE_ENV_FILE` / `NOTALONE_BACKEND_INFO` 优先用于受控运行与测试。启动固定调用已核验的绝对解释器及 `-m notalone.server.command`，从所选项目的 `backend/src` 加载代码，不依赖 Finder 的 PATH、工作目录或其他 checkout 的 editable install。
+
+握手必须是当前用户拥有、没有组/其他用户访问权限的普通文件，拒绝符号链接、重复字段和非法 `127.0.0.1:1–65535` 地址。HTTP 不跟随重定向，不向界面转发原始错误、stdout/stderr 或 token。认证 POST 返回 `state: stopped` 后可以退出；响应未确认时只向原连接查询状态。断线、超时和子进程消失都不能代替停读确认。退出失败会打开管理后台并保留“重试停读并退出”；不启动新读取，不改持久同步开关。只回收本 App 创建并仍持有身份的子进程，不根据握手 PID 杀复用实例。
 
 ## 工程边界
 
 | 目录 | 职责 |
 | --- | --- |
-| `src/main/` | 窗口、原生菜单、当前 App 生命周期和本地资源路由；后端生命周期尚未接入 |
-| `src/preload/` | 只暴露打开管理后台、打开小窗、隐藏调用方窗口三个具名操作 |
+| `src/main/` | 窗口、菜单、资源与单实例；`backend/` 独立管理启动、握手、认证 HTTP、连接与退出状态 |
+| `src/preload/` | 具名窗口和后端桥接，不暴露通用 IPC、URL 请求或认证信息 |
 | `src/renderer/` | React 界面、交互与展示状态 |
 | `src/shared/` | 跨进程桥接类型 |
 | `tests/` | 实际 Electron App 公开行为自动化 |

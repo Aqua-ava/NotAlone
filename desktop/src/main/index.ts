@@ -2,11 +2,18 @@ import { app, dialog, ipcMain, Menu, protocol, session } from 'electron';
 import path from 'node:path';
 import { installResources } from './resources';
 import { AppWindows } from './windows';
+import { BackendHost } from './backend/host';
+import { installBackendBridge } from './backend/bridge';
+import { installQuitLifecycle } from './backend/quit';
 
 app.setName('NotAlone');
 const selectedDataPath = app.commandLine.getSwitchValue('user-data-dir');
 app.setPath('userData', selectedDataPath && path.isAbsolute(selectedDataPath)
   ? selectedDataPath : path.join(app.getPath('appData'), 'NotAloneDesktop'));
+// 后来实例只唤回原窗口，不接受它的 argv、环境或工作目录作为运行配置。
+if (!app.requestSingleInstanceLock()) app.exit(0);
+let restoreManager: (() => void) | undefined;
+app.on('second-instance', () => restoreManager?.());
 protocol.registerSchemesAsPrivileged([
   { scheme: 'notalone', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
@@ -18,13 +25,18 @@ void app.whenReady().then(async () => {
   const appSession = session.fromPartition('notalone-app');
   installResources(appSession);
   const windows = new AppWindows(appSession);
+  const backend = new BackendHost(app.getPath('userData'));
+  installBackendBridge(windows, backend, () => app.quit());
+  installQuitLifecycle(backend, windows);
+  void backend.connect();
   let quitting = false;
   const openWindow = (role: 'manager' | 'helper') => {
     void windows.open(role).catch(() => {
       if (!quitting) dialog.showErrorBox('NotAlone', '窗口暂时无法打开，请从“窗口”菜单重试。');
     });
   };
-  app.on('before-quit', () => { quitting = true; windows.prepareToQuit(); });
+  restoreManager = () => openWindow('manager');
+  app.on('will-quit', () => { quitting = true; });
   app.on('activate', () => openWindow('manager'));
 
   ipcMain.handle('window:open-manager', (event, ...args: unknown[]) => {

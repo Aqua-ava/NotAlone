@@ -1,5 +1,5 @@
-import type { WindowBridge } from '../shared/window-bridge';
+import type { AppBridge } from '../shared/app-bridge';
 
 declare global {
-  interface Window { notalone: WindowBridge; }
+  interface Window { notalone: AppBridge; }
 }

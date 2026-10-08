@@ -65,7 +65,7 @@
 
 ## 当前架构决策
 
-- 旧 Swift 主界面已按 ADR-036 退役；共享前端使用 TypeScript + React，由 ADR-037 的 Electron 双窗口宿主承载。当前只完成窗口、品牌外观和本机打包，业务尚未接线；Python 后台与 Mac 原生探针保留。
+- 旧 Swift 主界面已按 ADR-036 退役；共享前端使用 TypeScript + React，由 ADR-037 的 Electron 双窗口宿主承载。当前完成窗口、品牌外观、本机打包及认证后端连接/退出停读，业务页面尚未接线；Python 后台与 Mac 原生探针保留。
 - 采用云端模块化单体，PostgreSQL 是联系人、消息、关系资料、任务和删除状态的权威业务库。
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
 - 文字是统一的检索与生成表示；前台 display name OCR、本地微信 CLI、截图和语音都是输入适配器。

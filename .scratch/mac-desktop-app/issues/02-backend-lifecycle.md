@@ -1,7 +1,7 @@
 # 02：后端连接与认证退出停读
 
 Type: task
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: 01
 Spec: ../spec.md
@@ -30,3 +30,5 @@ App 启动或复用经验证的本机 Python 后端，显示真实连接状态�
 
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
 - 2026-10-08：核对真实 HTTP 行为后，停读以同一已验证连接的认证 POST 200 `state: stopped` 响应确认；该响应发完后服务立即收尾，不新增 close/ack 端点，也不强求随后 GET 可达。POST 未确认而原连接仍可达时用认证 GET 恢复；响应丢失且连接关闭时显示未确认，不凭进程或断线认定成功。公开测试接缝与用户行为保持不变。
+- 2026-10-08：任务 02 在独立工作树 `mac-app-02-backend/NotAlone` 开始，固定评审基点为 `2d560b6886bd257896d89a763f92e92e1881199c`。按已批准的实际 App 操作及后端 HTTP 接缝逐条 red → green；本轮只提交候选并保持 claimed，由主 Agent 统一安排两轴评审。
+- 2026-10-08：候选实现新增独立主进程后端宿主、认证传输、具名桥接与退出状态机，沿用真实后端已确认的 POST/GET 契约。认证复用、单实例、实际宿主启动、断线重试、参数限制与失败启动后的恢复均记录先 red 后 green；握手更换及迟到响应不会覆盖已验证目标。最小相关检查通过：`npm run typecheck`；源码 `npm test` 26 项；`npm run package`；打包 App 的 `tests/backend*.spec.ts tests/windows.spec.ts` 25 项；当前工作树 Python shutdown 单测 4 项；`codesign --verify --deep --strict`。实际 App + 真实 BackendServer 验证使用独立握手、env、userData、无 owner 和不可用 `_test` 数据库地址，不调用业务库、微信或模型。任务仍 claimed，待主 Agent 的 Standards/Spec 评审后填写 Answer。

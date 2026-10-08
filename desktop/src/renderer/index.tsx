@@ -4,11 +4,13 @@ import { Icon } from './icons';
 import { managerPages, type ManagerPage } from './pages';
 import logo from './assets/logo.png';
 import './style.css';
+import { BackendBadge, BackendConnectionNote, useBackendState } from './backend-status';
 
 const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
 
 function App() {
+  const backend = useBackendState();
   const [error, setError] = useState('');
   const [page, setPage] = useState<ManagerPage>('contacts');
   async function operate(operation: () => Promise<void>) {
@@ -32,7 +34,7 @@ function App() {
       <textarea aria-label="草稿" rows={1} placeholder="连接完成并确认联系人后，就可以写下你的意思…" disabled />
       <button className="generate-button" aria-label="生成候选" title="生成候选" disabled><Icon name="sparkle" size={18} /></button>
     </div>
-    <p className="ime-status" role="status">尚未连接，暂时无法生成候选。</p>
+    <BackendBadge state={backend} compact />
     <section className="horizontal-candidates" aria-label="候选回复">
       <p>暂无候选</p><small>准备好你的意思，再选择合适的表达。</small>
     </section>
@@ -56,13 +58,12 @@ function App() {
     <div className="admin-workspace">
       <header className="admin-topbar">
         <span>管理后台 <i>／</i> {currentPage.title}</span>
-        <div><span className="connection-status" role="status"><span className="status-dot" />尚未连接</span>
+        <div><BackendBadge state={backend} />
           <button className="button primary" onClick={() => void operate(window.notalone.openHelper)}><Icon name="write" size={15} />打开输入小窗</button></div>
       </header>
       <main className="manager-content">
         <div className="manager-title"><h1>{currentPage.title}</h1><p>{currentPage.description}</p></div>
-        <section className="connection-note" aria-label="连接状态"><Icon name="config" size={20} /><div>
-          <b>本机服务尚未连接</b><p>联系人、资料与生成暂时不可用。</p></div></section>
+        <BackendConnectionNote state={backend} />
         <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
           <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>

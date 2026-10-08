@@ -37,6 +37,14 @@ export class AppWindows {
 
   prepareToQuit(): void { this.quitting = true; }
 
+  publish(channel: string, value: unknown): void {
+    for (const [role, hosted] of this.windows) {
+      if (!hosted.failed && !hosted.window.isDestroyed() && hosted.window.webContents.getURL() === pages[role]) {
+        hosted.window.webContents.send(channel, value);
+      }
+    }
+  }
+
   validateCaller(event: IpcMainInvokeEvent, args: unknown[]): BrowserWindow {
     const entry = [...this.windows.entries()].find(([, item]) => item.window.webContents === event.sender);
     const role = entry?.[0];
