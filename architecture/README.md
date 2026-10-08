@@ -61,10 +61,11 @@
 34. [ADR-034：显式失败任务恢复按原任务领取](adr/034-explicit-failed-task-recovery-selection.md)
 35. [ADR-035：导入触发原记忆任务并让前台回复优先](adr/035-import-triggered-memory-work-and-reply-priority.md)
 36. [ADR-036：退役 Swift 主界面，重新设计共享前端](adr/036-retire-swift-main-interface.md)
+37. [ADR-037：Electron 双窗口桌面宿主](adr/037-electron-dual-window-host.md)
 
 ## 当前架构决策
 
-- 旧 Swift 主界面已按 ADR-036 退役；后续共享前端采用 TypeScript + React，本轮只有清理，没有新桌面界面。Python 后台与 Mac 原生探针保留。
+- 旧 Swift 主界面已按 ADR-036 退役；共享前端使用 TypeScript + React，由 ADR-037 的 Electron 双窗口宿主承载。当前只完成窗口、品牌外观和本机打包，业务尚未接线；Python 后台与 Mac 原生探针保留。
 - 采用云端模块化单体，PostgreSQL 是联系人、消息、关系资料、任务和删除状态的权威业务库。
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
 - 文字是统一的检索与生成表示；前台 display name OCR、本地微信 CLI、截图和语音都是输入适配器。

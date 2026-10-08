@@ -2,9 +2,23 @@
 
 状态：维护中  
 最后更新：2026-10-08
-适用范围：`NotAloneApp.app`、`NotAloneSyncProbe.app`、`notalone-sync-probe` 和随主 App 打包的 `wechat-cli`
+适用范围：新 Electron `NotAlone.app`、历史 `NotAloneApp.app`、`NotAloneSyncProbe.app`、`notalone-sync-probe` 和历史主 App 打包的 `wechat-cli`
 
 这是一份长期维护的权限与错误台账。凡是新增系统权限、修改权限说明文字、替换 CLI/探针、调整签名或新增用户可见错误，都必须先更新本文档，再更新代码、构建脚本和回归验证。
+
+2026-10-08 新 Electron 宿主窗口阶段：`desktop/` 使用 Electron + React/TypeScript，已打包为 `desktop/out/NotAlone-darwin-arm64/NotAlone.app`，新 bundle id 为 `com.notalone.desktop`，与历史 App 区分。只加载随包的界面和 logo，不携带/运行 Python、微信 CLI 或原生探针，不读取默认握手、业务库、`.env`、联系人或模型凭据，不申请 P-01/P-02 或其他系统权限。窗口关闭只隐藏，原生“窗口”菜单可恢复；明确退出仅回收当前 Electron 进程。后端连接和认证停读由后续任务完成，本阶段不能宣称已验证业务停读。
+
+构建先核对锁定依赖与实际运行版本，再用 `@electron/packager` 生成本机 App；不覆盖旧 App/探针，不修改 TCC。初期采用本机 ad-hoc 签名，只验证包完整性和运行，不宣称稳定权限、Developer ID 分发或公证。自动化使用随机临时用户数据目录和真实窗口，完成后正常退出并只清理本轮资源。若资源或窗口操作失败，界面只显示固定中文说明，不显示路径、异常栈或环境变量。
+
+窗口资源加载失败时，销毁加载失败的窗口，使用同一窗口角色显示固定中文说明“窗口暂时无法打开，请从‘窗口’菜单重试。”；再次从菜单打开会重新加载随包资源。错误页没有业务操作和可执行脚本，也不能调用窗口桥接。若连安全说明窗口也无法创建，则使用固定中文原生错误提示，不展示底层异常。
+
+本机签名不查询或使用现有用户证书/配置描述文件，明确使用 `identity: '-'`，关闭证书查找、profile 嵌入和自动权限扩展；仅保留 Electron JIT 所需的 `com.apple.security.cs.allow-jit`，不带相机、麦克风、蓝牙、定位或照片库 entitlement。本机 ad-hoc 构建关闭 Hardened Runtime，不用于分发或公证；渲染层的进程沙箱、context isolation 与权限拒绝仍开启。品牌图原件随界面打包；构建时由 `sips` / `iconutil` 生成保持比例的图标，不修改原件。
+
+Electron 44.7.0 原始 `Info.plist` 自带英文的相机、麦克风、音频采集和蓝牙用途说明，以及允许任意传输的 ATS 设置。本阶段没有这些能力，打包在签名前移除相应说明键并关闭 `NSAllowsArbitraryLoads`，不把框架默认项当成产品权限声明。原生框架签名由打包器按由内到外的顺序执行，不使用 `--deep` 签名；`--deep` 只用于最终严格验证。
+
+2026-10-08 窗口阶段实机验证：macOS 15.7.5 / arm64，Electron 44.7.0、React 19.3.0、TypeScript 7.0.2、Playwright 1.64.0，依赖精确锁定。`npm run typecheck` 通过；`npm test` 的 3 项真实 App 行为测试通过（双窗口、品牌与未就绪状态、入口资源缺失后的安全说明及重试）；打包 App 的 2 项窗口/品牌测试通过。`npm run package` 和 `codesign --verify --deep --strict --verbose=2` 通过，实际签名为 ad-hoc、identifier 为 `com.notalone.desktop`，仅含 `allow-jit`；实际 `Info.plist` 无系统权限用途说明，ATS 任意传输关闭。当前产物经 LaunchServices 独立启动，原生操作可打开及收起小窗，Cmd+Q 后本轮 App 进程和独立临时目录均已回收。没有读取业务数据、申请权限、改变 TCC 或触碰历史 App/探针。
+
+窗口阶段两轴评审：Standards 初评 2 项（窗口加载失败提示与测试生命周期重复），修复后复核 0 剩余；Spec 初评与复核均 0 项。资源错误页及菜单重试已用实际 App 公开行为接缝验证，不以内部模块替身代替。
 
 2026-10-08：旧 Swift 主窗口及其构建入口已按 ADR-036 退役，新 UI 尚未实现。本文中 `NotAloneApp.app`、`macos_app/` 和主 App 的权限／签名验收属于历史记录，不再是当前操作入口；独立原生探针仍保留。未来桌面宿主需重新记录权限归属和实际验收，不能直接继承旧 App 的验证结论。本次只删除源码与旧构建调用，不停止正在运行的程序、不修改 TCC、不删除本机旧构建产物或私人数据。
 
@@ -29,7 +43,7 @@ NotAlone 的本地读取必须满足以下条件：
 
 ## 2. 当前权限清单
 
-历史主 App 记录了 P-01/P-02 两类权限；当前保留的独立探针使用 P-02。新主界面未实现，主 App 的权限配置路径已删除，不能照此构建。其他权限不应被 NotAlone 主动申请。
+历史主 App 记录了 P-01/P-02 两类权限；当前保留的独立探针使用 P-02。新 Electron 主界面只实现窗口，没有系统权限能力；历史主 App 的权限配置路径已删除，不能照此构建。其他权限不应被 NotAlone 主动申请。
 
 | 编号 | 权限 | 触发目标 | 配置位置 | 触发时机 | 允许后能做什么 |
 | --- | --- | --- | --- | --- | --- |

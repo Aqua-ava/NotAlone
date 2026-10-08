@@ -1,0 +1,31 @@
+{
+  "name": "notalone-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NotAlone 本机桌面端",
+  "main": "dist/main/index.cjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "start": "npm run build && electron .",
+    "test": "npm run build && playwright test",
+    "test:app": "npm run build && playwright test tests/windows.spec.ts",
+    "package": "npm run build && node scripts/package.mjs"
+  },
+  "engines": { "node": ">=22.12.0" },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "@playwright/test": "1.64.0",
+    "@types/node": "26.6.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "electron": "44.7.0",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2",
+    "vite": "8.3.3"
+  }
+}
