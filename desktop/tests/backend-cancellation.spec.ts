@@ -11,15 +11,17 @@ const test = backendTest.extend<{ syntheticProject: string }>({
     await cp(path.resolve('../backend/src'), path.join(project, 'backend/src'), {
       recursive: true, filter: (source) => !source.includes('__pycache__'),
     });
+    await cp(path.resolve('../backend/database/migrations'), path.join(project, 'backend/database/migrations'), { recursive: true });
     await writeFile(path.join(project, 'backend/src/notalone/server/command.py'), await readFile(path.resolve('tests/fixtures/backend-command.py')));
     await use(project);
   },
   appEnvironment: async ({ backend }, use) => {
     await rm(backend.infoPath);
-    await use({ NOTALONE_BACKEND_INFO: backend.infoPath,
+    await use({ NOTALONE_BACKEND_INFO: backend.infoPath, NOTALONE_DATABASE_URL: backend.database_url,
       NOTALONE_ENV_FILE: path.join(backend.directory, 'synthetic.env'),
       NOTALONE_TEST_START_MARKER: path.join(backend.directory, 'startup-marker') });
   },
+  launchConfiguration: [undefined, { option: true }],
 });
 
 test('连接初始化中明确退出，不再启动新的后端子进程', async ({ runningApp: { app, appProcess, userData }, backend, syntheticProject }) => {
@@ -42,7 +44,7 @@ test('连接初始化中明确退出，不再启动新的后端子进程', async
 const startedTest = test.extend({
   appEnvironment: async ({ backend }, use) => {
     await rm(backend.infoPath);
-    await use({ NOTALONE_BACKEND_INFO: backend.infoPath,
+    await use({ NOTALONE_BACKEND_INFO: backend.infoPath, NOTALONE_DATABASE_URL: backend.database_url,
       NOTALONE_ENV_FILE: path.join(backend.directory, 'synthetic.env'),
       NOTALONE_TEST_START_MARKER: path.join(backend.directory, 'startup-marker'),
       NOTALONE_TEST_START_RELEASE: path.join(backend.directory, 'startup-release'),

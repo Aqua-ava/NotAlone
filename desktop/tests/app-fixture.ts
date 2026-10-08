@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 type RunningApp = { app: ElectronApplication; appProcess: ChildProcess; userData: string };
-type AppOptions = { appEnvironment: NodeJS.ProcessEnv; launchConfiguration: object | undefined };
+type AppOptions = { appEnvironment: NodeJS.ProcessEnv; launchConfiguration: object | undefined; appWorkingDirectory: string | undefined };
 
 export function isolatedAppEnvironment(userData: string, overrides: NodeJS.ProcessEnv = {}): Record<string, string> {
   const environment = {
@@ -24,13 +24,15 @@ export const test = base.extend<AppOptions & { runningApp: RunningApp; appDirect
   appDirectory: [path.resolve('.'), { option: true }],
   appEnvironment: [{}, { option: true }],
   launchConfiguration: [undefined, { option: true }],
-  runningApp: async ({ appDirectory, appEnvironment, launchConfiguration }, use) => {
+  appWorkingDirectory: [undefined, { option: true }],
+  runningApp: async ({ appDirectory, appEnvironment, launchConfiguration, appWorkingDirectory }, use) => {
     const userData = await mkdtemp(path.join(tmpdir(), 'notalone-app-'));
     let app: ElectronApplication | undefined;
     let appProcess: ChildProcess | undefined;
     try {
       if (launchConfiguration) await writeFile(path.join(userData, 'backend-launch.json'), JSON.stringify(launchConfiguration));
       app = await electron.launch({
+        cwd: appWorkingDirectory,
         executablePath: process.env.NOTALONE_TEST_APP_EXECUTABLE,
         args: [...(process.env.NOTALONE_TEST_APP_EXECUTABLE ? [] : [appDirectory]), `--user-data-dir=${userData}`],
         env: isolatedAppEnvironment(userData, appEnvironment),

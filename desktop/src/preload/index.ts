@@ -2,11 +2,13 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type { AppBridge } from '../shared/app-bridge';
 import { createBackendBridge } from './backend';
 import { createSetupBridge } from './setup';
+import { createStartupBridge } from './startup';
 import type { DesktopSettings } from '../shared/desktop-bridge';
 
 const bridge: AppBridge = {
   backend: createBackendBridge(),
   setup: createSetupBridge(),
+  startup: createStartupBridge(),
   openManager: () => ipcRenderer.invoke('window:open-manager'),
   openHelper: () => ipcRenderer.invoke('window:open-helper'),
   hideWindow: () => ipcRenderer.invoke('window:hide'),

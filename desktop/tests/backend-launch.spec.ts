@@ -11,8 +11,8 @@ const test = backendTest.extend({
       NOTALONE_BACKEND_INFO: backend.infoPath,
       NOTALONE_ENV_FILE: path.join(backend.directory, 'synthetic.env'),
       PATH: '/usr/bin:/bin', CONDA_PREFIX: '', CONDA_DEFAULT_ENV: '', PYTHONPATH: '/synthetic/unavailable',
-      // owner 未初始化且没有业务调用；若意外连接，隔离的不可用端口也不会触及业务库。
-      NOTALONE_DATABASE_URL: `postgresql://127.0.0.1:1/notalone_${path.basename(backend.directory).replaceAll('-', '_')}_test`,
+      // 机器 gate 使用本轮已显式迁移的随机测试库；owner 未初始化且没有业务调用。
+      NOTALONE_DATABASE_URL: backend.database_url,
     });
   },
   launchConfiguration: [{

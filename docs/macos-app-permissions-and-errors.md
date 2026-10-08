@@ -16,6 +16,10 @@
 
 这是一份长期维护的权限与错误台账。凡是新增系统权限、修改权限说明文字、替换 CLI/探针、调整签名或新增用户可见错误，都必须先更新本文档，再更新代码、构建脚本和回归验证。
 
+任务 03 的机器诊断只使用用户配置的绝对 Python、项目、配置文件、握手文件和 helper 路径；不申请系统权限，不运行 helper、不读取聊天正文。只读入口使用有界数据库连接及 READ ONLY 事务，只核对必要系统目录、审计基线与迁移账本，不能执行迁移或接管，也不创建参考库。机器就绪与本人身份、模型首启分别展示。安全错误分类为 `launch_unconfigured`、`configuration_invalid`、`python_unavailable`、`python_version_unsupported`、`backend_package_missing`、`project_unavailable`、`env_path_unavailable`、`info_path_unavailable`、`database_unconfigured`、`database_unavailable`、`baseline_missing`、`baseline_invalid`、`migration_history_mismatch`、`migration_pending`、`schema_incomplete`、`migration_files_invalid`、`diagnostic_timeout`、`diagnostic_failed`；不展示数据库连接串、凭据或底层 stderr。用户可在管理后台修正非秘密路径并重新检查，既有业务库升级仍需明确授权。连接后必须先明确认证停读同一目标并等待退场，失败保留原目标且禁止保存新路径或另起后端。启动配置拒绝符号链接、非普通文件和超过 8 KiB 的内容，FIFO 不阻塞连接或退出。
+
+任务 03 候选验证（已合正式 05）：类型检查、完整源码 App 72 项、联合诊断/首启 App 28 项、Python 只读入口及迁移 18 项均通过；签名包机器诊断/窗口/关键生命周期 23 项、首启/复用重启/明确重载 4 项通过。本机打包与严格签名校验通过，实际为 `com.notalone.desktop` ad-hoc，只含 `allow-jit`，ATS 任意传输为 false。机器诊断场景的 App 使用 `/` 工作目录、受限 PATH 和空 Conda/PYTHONPATH 输入，仍以明确绝对解释器及当前工作树 `backend/src` 执行真实只读入口。所有数据库/配置/握手/模型/CLI/探针均隔离；本工作树 App 进程、03 前缀测试库与诊断测试角色最终均为零。只读入口在无业务表读取或写入权限、无建库权限的角色下通过 ready 验证，不能据此宣称完整资料审计。真实 Finder 双击、全局按键、微信 helper/权限和模型渠道仍未验收，未使用 CGEvent 或改变 TCC。旧库接管组的早期间歇失败及限定观测结果如实保留在任务 Comments，不纳入通过结论。
+
 2026-10-08 新 Electron 宿主窗口阶段：`desktop/` 使用 Electron + React/TypeScript，已打包为 `desktop/out/NotAlone-darwin-arm64/NotAlone.app`，新 bundle id 为 `com.notalone.desktop`，与历史 App 区分。只加载随包的界面和 logo，不携带/运行 Python、微信 CLI 或原生探针，不读取默认握手、业务库、`.env`、联系人或模型凭据，不申请 P-01/P-02 或其他系统权限。窗口关闭只隐藏，原生“窗口”菜单可恢复；明确退出仅回收当前 Electron 进程。后端连接和认证停读由后续任务完成，本阶段不能宣称已验证业务停读。
 
 构建先核对锁定依赖与实际运行版本，再用 `@electron/packager` 生成本机 App；不覆盖旧 App/探针，不修改 TCC。初期采用本机 ad-hoc 签名，只验证包完整性和运行，不宣称稳定权限、Developer ID 分发或公证。自动化使用随机临时用户数据目录和真实窗口，完成后正常退出并只清理本轮资源。若资源或窗口操作失败，界面只显示固定中文说明，不显示路径、异常栈或环境变量。
@@ -165,7 +169,28 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 | `聊天资料导入失败，请核对文件和联系人后重试。` / `import_commit_failed` | 导入提交端点返回已知业务失败，不能显示为回复拒绝 | 用户主动选择的文件和联系人、后端导入状态 | 不回显响应原文、文件路径或数据库错误，不因此修改绑定或请求额外权限 |
 | `消息暂时无法接续，请重新加载。` | 桌面对账无法与旧显示区间衔接，或分页游标异常；不是数据库丢消息的证明 | 在当前联系人重新加载消息列表，核对本机后端状态 | 不无限扫描历史、不回显正文或游标，不扩大联系人范围或请求额外权限 |
 | `runtime_stopping` / `后端关闭未获确认` | 运行时正收尾，或未在有界时间内确认停读 | 同一已验证回环连接的运行状态、正常退出清理 | 不得把超时当已停，不得猜 PID 杀复用实例，不改持久同步总开关 |
-| `backend_launch_unconfigured` / `本机服务尚未连接` | 尚未配置可核验的绝对 Python 和项目目录，也没有已验证的既有握手 | 本机启动配置，后续机器环境诊断入口 | 不依赖 Finder 的交互式 PATH，不自动扫描私人配置 |
+| `launch_unconfigured` / `尚未配置本机启动路径。` | 缺少选定 Python 或项目 | 应用配置中的非秘密绝对路径 | 不绕过机器门禁复用握手 |
+| `configuration_invalid` / `本机启动路径配置无效。` | 启动文件或路径格式不符合受限契约 | 六项路径及普通文件要求 | 不展示原始 JSON 或异常 |
+| `python_unavailable` / `Python 可执行文件不可用。` | 选定 Python 不存在或不可执行 | Conda NotAlone 的绝对解释器路径 | 不要求先从终端激活 App |
+| `python_version_unsupported` / `Python 版本不兼容。` | 实际解释器不是 Python 3.12 | 所选环境版本 | 不替换系统 Python |
+| `backend_package_missing` / `后端包或必要依赖缺失。` | 项目入口、Python 包或必要依赖不可用 | 所选项目源码与 Conda 环境 | 不依赖其他 checkout 的 editable install |
+| `project_unavailable` / `项目目录不可用。` | 项目不是可核验的目录 | 包含 backend 的绝对目录 | 不自动扫描私人目录 |
+| `env_path_unavailable` / `本机配置文件路径不可用。` | 配置路径或父目录不可用 | 用户选定配置文件 | 不回显配置内容或凭据 |
+| `info_path_unavailable` / `后端握手文件路径不可用。` | 握手路径或父目录不可用 | 用户选定握手文件 | 不创建未验证的第二个后端 |
+| `database_unconfigured` / `数据库尚未配置。` | 没有受控数据库连接配置 | 选定配置中的 NOTALONE_DATABASE_URL | 不自动建库 |
+| `database_unavailable` / `数据库暂时不可连接。` | 连接或访问失败 | 本机 PostgreSQL、受控配置与权限 | 不回显连接串或底层异常 |
+| `baseline_missing` / `既有数据库缺少受管基线或迁移账本。` | 已有结构未受管 | 独立核验、备份与接管方案 | 不猜基线或自动接管 |
+| `baseline_invalid` / `数据库审计基线无效。` | 基线对象或凭证不可核验 | 审计凭证与受控恢复方案 | 不读取伪装成基线的业务 view |
+| `migration_history_mismatch` / `数据库迁移账本或基线发生漂移。` | 原文件或实际账本不匹配 | 原始迁移文件与真实记录 | 不补写假历史记录绕过检查 |
+| `migration_pending` / `数据库尚有待迁移版本。` | 空库或存在未执行版本 | 数据范围、备份及独立迁移授权 | 不自动执行迁移 |
+| `schema_incomplete` / `数据库必要结构不完整。` | 必要表或列元数据缺失 | 必要结构与恢复方案 | 不把账本当作结构就绪 |
+| `migration_files_invalid` / `项目迁移文件不可核验。` | 文件不连续、无效或不可读 | 所选项目的受信任原始文件 | 不执行未知 SQL |
+| `diagnostic_timeout` / `机器环境检查超时。` | 本次只读子进程超过预算 | 本机服务及路径后明确重试 | 不无限等待或遗留自有诊断进程 |
+| `diagnostic_failed` / `机器环境暂时无法核验。` | 不能安全判定机器就绪 | 配置、数据库权限与必要结构 | 不伪报 ready 或转发 stderr |
+| `cli_unavailable` / `probe_unavailable` | 选定 helper 文件未就绪 | 对应绝对路径及完整 helper | 诊断不运行 helper、不申请新权限、不阻塞独立首启配置 |
+| `服务停读未获确认，暂时不能修改路径。请按连接状态中的入口恢复。` | 原目标未确认停止或退场 | 原连接的停读恢复入口 | 不保存新路径或另起服务 |
+| `启动路径未能保存。请填写绝对路径，并在未连接时重试。` | 路径格式、运行阶段或保存条件不满足 | 当前配置与连接状态 | 不覆盖已保存配置或回显文件错误 |
+| `backend_launch_unconfigured` / `本机服务尚未连接` | 尚未配置可核验的绝对 Python 和项目目录 | 应用配置中的机器环境诊断与本机启动路径 | 不依赖 Finder 的交互式 PATH，不自动扫描私人配置，不绕过机器门禁复用握手 |
 | `backend_handshake_invalid` / `本机服务连接信息无效，请检查后重试。` | 握手权限、来源或 address/token/pid 格式未通过验证 | 受控握手路径与后端写入权限 | 不请求非法地址，不回显握手内容，不猜 PID 终止进程 |
 | `backend_connection_failed` / `本机服务连接失败，请重试。` | 认证、状态协议、启动或有界请求失败 | 同一已验证运行时及非秘密启动配置 | 不把异常原文显示到界面，不静默启动另一个读取进程 |
 | `backend_shutdown_unconfirmed` / `后端关闭未获确认，请重试停读。` | 认证关闭没有取得权威 stopped 响应，也未能从原连接确认状态 | 原连接停读重试；窗口保留恢复入口 | 不把连接断开或子进程退出作为 HTTP 停读确认，不改绑定或持久开关 |

@@ -9,7 +9,7 @@ import { selectMenu } from './app-fixture';
 const test = backendTest.extend({ appEnvironment: async ({ backend }, use) => {
   await rm(backend.infoPath);
   await promisify(execFile)('/usr/bin/mkfifo', ['-m', '600', backend.infoPath]);
-  await use({ NOTALONE_BACKEND_INFO: backend.infoPath, NOTALONE_ENV_FILE: path.join(backend.directory, 'synthetic.env') });
+  await use({ NOTALONE_BACKEND_INFO: backend.infoPath, NOTALONE_ENV_FILE: path.join(backend.directory, 'synthetic.env'), NOTALONE_DATABASE_URL: backend.database_url });
 } });
 
 test('无写端 FIFO 握手被有界拒绝，修正后公开重试能恢复并认证退出', async ({ runningApp: { app, appProcess }, backend }) => {

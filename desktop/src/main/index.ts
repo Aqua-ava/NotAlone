@@ -8,6 +8,8 @@ import { installQuitLifecycle } from './backend/quit';
 import { installDesktopControls } from './desktop-controls';
 import { SetupController } from './setup/controller';
 import { installSetupBridge } from './setup/bridge';
+import { StartupDiagnostics } from './startup/diagnostics';
+import { installStartupBridge } from './startup/bridge';
 
 app.setName('NotAlone');
 const selectedDataPath = app.commandLine.getSwitchValue('user-data-dir');
@@ -28,9 +30,12 @@ void app.whenReady().then(async () => {
   const appSession = session.fromPartition('notalone-app');
   installResources(appSession);
   const windows = new AppWindows(appSession);
-  const backend = new BackendHost(app.getPath('userData'));
+  const diagnostics = new StartupDiagnostics(app.getPath('userData'));
+  const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart));
   installSetupBridge(windows, new SetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());
+  installStartupBridge(windows, diagnostics, backend);
+  app.on('before-quit', () => diagnostics.cancel());
   installQuitLifecycle(backend, windows);
   void backend.connect();
   const desktopControls = installDesktopControls(windows);

@@ -1,0 +1,11 @@
+.startup-readiness,.startup-settings{margin:16px 0;padding:20px;border:1px solid #c9d6d6;border-radius:14px;background:#fffdf5;color:#31495b}
+.startup-readiness h2,.startup-settings h2{font-size:17px;margin:0 0 10px}
+.startup-readiness p,.startup-settings p{font-size:14px;line-height:1.7;margin:8px 0}
+.startup-settings .startup-readiness{margin:0 0 20px;padding:0 0 16px;border:0;border-bottom:1px solid #dbe2da;border-radius:0}
+.startup-guidance{color:#617581}
+.startup-paths{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0}
+.startup-paths label{font-size:13px;display:grid;gap:7px;min-width:0}
+.startup-paths input{width:100%;min-width:0;box-sizing:border-box;border:1px solid #c9d6d6;border-radius:7px;padding:9px;font:13px system-ui;color:#31495b;background:#fffef8}
+.startup-paths input:disabled{background:#f1f0e9;color:#617581}
+.startup-actions{display:flex;flex-wrap:wrap;gap:10px}
+@media(max-width:900px){.startup-paths{grid-template-columns:1fr}}

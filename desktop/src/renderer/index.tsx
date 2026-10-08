@@ -7,12 +7,14 @@ import logo from './assets/logo.png';
 import './style.css';
 import { BackendBadge, BackendConnectionNote, useBackendState } from './backend-status';
 import { SetupPanel } from './SetupPanel';
+import { StartupReadiness, StartupSettings, useStartupState } from './StartupSettings';
 
 const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
 
 function App() {
   const backend = useBackendState();
+  const startup = useStartupState();
   const [error, setError] = useState('');
   const [page, setPage] = useState<ManagerPage>('contacts');
   async function operate(operation: () => Promise<void>) {
@@ -68,6 +70,8 @@ function App() {
       <main className="manager-content">
         <div className="manager-title"><h1>{currentPage.title}</h1><p>{currentPage.description}</p></div>
         <BackendConnectionNote state={backend} />
+        {page === 'config' ? <StartupSettings state={startup} backend={backend} />
+          : startup.phase !== 'ready' && <StartupReadiness state={startup} onConfigure={() => setPage('config')} />}
         {page === 'config' && <><SetupPanel /><DesktopControls /></>}
         {page !== 'config' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>

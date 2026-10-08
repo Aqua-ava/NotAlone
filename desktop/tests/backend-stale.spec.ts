@@ -6,7 +6,7 @@ import { selectMenu } from './app-fixture';
 const test = backendTest.extend({ appEnvironment: async ({ backend }, use) => {
   backend.service.statusDelay = 6200;
   backend.service.statusState = 'stopped';
-  await use({ NOTALONE_BACKEND_INFO: backend.infoPath, NOTALONE_ENV_FILE: path.join(backend.directory, 'synthetic.env') });
+  await use({ NOTALONE_BACKEND_INFO: backend.infoPath, NOTALONE_ENV_FILE: path.join(backend.directory, 'synthetic.env'), NOTALONE_DATABASE_URL: backend.database_url });
 } });
 
 test('连接尝试超时后更换握手，旧状态响应不能覆盖新连接或关闭另一运行时', async ({ runningApp: { app, appProcess }, backend }) => {

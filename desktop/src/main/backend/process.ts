@@ -1,7 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import path from 'node:path';
 import { BackendFailure } from './connection';
-import { validateLaunchConfiguration, type BackendConfiguration } from './config';
+import { backendEnvironment, validateLaunchConfiguration, type BackendConfiguration } from './config';
 
 export class OwnedBackendProcess {
   private readonly exited: Promise<void>;
@@ -18,9 +17,7 @@ export class OwnedBackendProcess {
     // 不用 shell 或 PATH，模块路径固定到所选项目，避免 editable install 指向另一个 checkout。
     const child = spawn(pythonExecutable, ['-m', 'notalone.server.command', '--host', '127.0.0.1'], {
       cwd: projectDirectory,
-      env: { ...process.env, PYTHONPATH: path.join(projectDirectory, 'backend/src'), PYTHONNOUSERSITE: '1',
-        NOTALONE_BACKEND_INFO: config.infoPath,
-        NOTALONE_ENV_FILE: config.envFilePath || path.join(projectDirectory, '.env') },
+      env: backendEnvironment({ ...config, projectDirectory }, projectDirectory),
       // 后端 stdout 含 token；不用 stdout 发现连接，也不转发任何原始输出。
       stdio: 'ignore',
     });

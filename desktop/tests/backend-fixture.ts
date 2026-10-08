@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test as appTest } from './app-fixture';
+import { prepareDatabase, projectDirectory, pythonExecutable } from './startup-fixture';
 
 // 合成本机服务只模拟进程边界，不替换 App 内部模块。
 export class SyntheticBackend {
@@ -83,22 +84,26 @@ export class SyntheticBackend {
   }
 }
 
-export type BackendFixture = { service: SyntheticBackend; directory: string; infoPath: string };
+export type BackendFixture = { service: SyntheticBackend; directory: string; infoPath: string; database_url: string };
 export const test = appTest.extend<{ backend: BackendFixture }>({
   backend: async ({}, use) => {
     const directory = await mkdtemp(path.join(tmpdir(), 'notalone-backend-'));
+    const database = await prepareDatabase('create');
     const service = new SyntheticBackend();
     const infoPath = path.join(directory, 'backend.info');
     try {
+      await prepareDatabase('migrate', database.database);
       await service.start();
       await service.writeHandshake(infoPath);
-      await use({ service, directory, infoPath });
+      await use({ service, directory, infoPath, database_url: database.database_url });
     } finally {
       await service.close();
       await rm(directory, { recursive: true, force: true });
+      await prepareDatabase('drop', database.database);
     }
   },
   appEnvironment: async ({ backend }, use) => {
-    await use({ NOTALONE_BACKEND_INFO: backend.infoPath, NOTALONE_ENV_FILE: path.join(backend.directory, 'synthetic.env') });
+    await use({ NOTALONE_BACKEND_INFO: backend.infoPath, NOTALONE_ENV_FILE: path.join(backend.directory, 'synthetic.env'), NOTALONE_DATABASE_URL: backend.database_url });
   },
+  launchConfiguration: async ({}, use) => { await use({ pythonExecutable, projectDirectory }); },
 });
