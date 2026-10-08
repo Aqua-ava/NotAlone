@@ -6,6 +6,7 @@ import { createStartupBridge } from './startup';
 import { createContactSessionBridge } from './contact-session';
 import { createImportBridge } from './imports';
 import { createReplyBridge } from './reply';
+import { createMemoryBridge } from './memory';
 import { createBindingConsentBridge } from './binding-consent';
 import type { DesktopSettings } from '../shared/desktop-bridge';
 
@@ -16,6 +17,7 @@ const bridge: AppBridge = {
   contacts: createContactSessionBridge(),
   imports: createImportBridge(),
   replies: createReplyBridge(),
+  memory: createMemoryBridge(),
   bindings: createBindingConsentBridge(),
   openManager: () => ipcRenderer.invoke('window:open-manager'),
   openHelper: () => ipcRenderer.invoke('window:open-helper'),

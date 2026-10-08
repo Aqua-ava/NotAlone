@@ -8,6 +8,7 @@ import { installQuitLifecycle } from './backend/quit';
 import { installDesktopControls } from './desktop-controls';
 import { installContactSessionBridge } from './contacts/bridge';
 import { installReplyBridge } from './reply/bridge';
+import { installMemoryBridge } from './memory/bridge';
 import { installBindingConsentBridge } from './bindings/bridge';
 import { SetupController } from './setup/controller';
 import { installSetupBridge } from './setup/bridge';
@@ -39,6 +40,7 @@ void app.whenReady().then(async () => {
   const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart));
   const contacts = installContactSessionBridge(windows, backend);
   installImportBridge(windows, new ImportController(backend, contacts));
+  installMemoryBridge(windows, backend, contacts);
   installBindingConsentBridge(windows, backend, contacts);
   installReplyBridge(windows, backend, contacts);
   installSetupBridge(windows, new SetupController(backend));
