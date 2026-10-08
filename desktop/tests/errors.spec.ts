@@ -24,7 +24,13 @@ test('资源缺失时显示安全中文说明，修复资源后可从公开菜�
   let failedWindow: Page | undefined;
   await expect.poll(async () => {
     for (const window of app.windows()) {
-      if (await window.getByRole('heading', { name: '窗口暂时无法打开' }).isVisible()) {
+      if (window.isClosed()) continue;
+      // 资源失败的窗口会被安全说明页替换；只忽略这个已确认关闭的瞬间。
+      const visible = await window.getByRole('heading', { name: '窗口暂时无法打开' }).isVisible().catch((error: unknown) => {
+        if (window.isClosed()) return false;
+        throw error;
+      });
+      if (visible) {
         failedWindow = window;
         return true;
       }

@@ -6,6 +6,7 @@ import { DesktopControls, HelperPinControl, ShortcutWarning } from './DesktopCon
 import logo from './assets/logo.png';
 import './style.css';
 import { BackendBadge, BackendConnectionNote, useBackendState } from './backend-status';
+import { SetupPanel } from './SetupPanel';
 
 const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
@@ -67,12 +68,12 @@ function App() {
       <main className="manager-content">
         <div className="manager-title"><h1>{currentPage.title}</h1><p>{currentPage.description}</p></div>
         <BackendConnectionNote state={backend} />
-        {page === 'config' && <DesktopControls />}
-        <section className="empty-panel" aria-label={currentPage.title}>
+        {page === 'config' && <><SetupPanel /><DesktopControls /></>}
+        {page !== 'config' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
           <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>
           <button className="button" disabled>{currentPage.action}</button>
-        </section>
+        </section>}
         {error && <p className="operation-error" role="alert">{error}</p>}
       </main>
       <footer className="admin-footer">每次回复都对应已确认的联系人。关闭窗口后，可从“窗口”菜单重新打开。</footer>

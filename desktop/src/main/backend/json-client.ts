@@ -1,0 +1,83 @@
+import { request, type ClientRequest } from 'node:http';
+import type { BackendConnection } from './connection';
+
+export interface JsonRequest {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  path: string;
+  body?: unknown;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  maxResponseBytes?: number;
+}
+
+// 只携带安全分类；业务模块自行映射已知错误，不把响应原文转给界面。
+export class BackendRequestFailure extends Error {
+  constructor(readonly kind: 'connection' | 'response' | 'cancelled', readonly status?: number, readonly code?: string) {
+    super('本机业务请求未完成');
+  }
+}
+
+// 主进程共用传输。所有路径由具名业务模块构造，认证信息不进入 preload。
+export class JsonClient {
+  private readonly requests = new Set<ClientRequest>();
+  constructor(private readonly connection: BackendConnection) {}
+
+  cancelPending(): void {
+    for (const req of this.requests) req.destroy(new BackendRequestFailure('cancelled'));
+  }
+
+  perform(options: JsonRequest): Promise<{ status: number; data: unknown }> {
+    const { method, path, signal } = options;
+    const timeout = options.timeoutMs ?? 8000;
+    const limit = options.maxResponseBytes ?? 1_048_576;
+    if (!/^\/api\/[A-Za-z0-9_/?=&.%:-]+$/.test(path) || path.includes('..')
+      || !Number.isFinite(timeout) || timeout < 1 || timeout > 120_000
+      || !Number.isSafeInteger(limit) || limit < 1 || limit > 8_388_608) {
+      return Promise.reject(new BackendRequestFailure('response'));
+    }
+    let body: Buffer;
+    try { body = Buffer.from(options.body === undefined ? '' : JSON.stringify(options.body)); }
+    catch { return Promise.reject(new BackendRequestFailure('response')); }
+    if (body.length > 1_048_576) return Promise.reject(new BackendRequestFailure('response'));
+    if (signal?.aborted) return Promise.reject(new BackendRequestFailure('cancelled'));
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const fail = (error: BackendRequestFailure) => { if (!settled) { settled = true; reject(error); } };
+      const req = request({
+        hostname: '127.0.0.1', port: this.connection.port, method, path,
+        headers: { Authorization: `Bearer ${this.connection.token}`, Accept: 'application/json',
+          'Content-Type': 'application/json', 'Content-Length': String(body.length) },
+      }, (response) => {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        response.on('data', (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > limit) { fail(new BackendRequestFailure('response')); response.destroy(); }
+          else chunks.push(chunk);
+        });
+        response.on('error', () => fail(new BackendRequestFailure('connection')));
+        response.on('aborted', () => fail(new BackendRequestFailure('connection')));
+        response.on('end', () => {
+          if (settled) return;
+          if (!response.headers['content-type']?.startsWith('application/json')) { fail(new BackendRequestFailure('response')); return; }
+          try {
+            const data: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            const status = response.statusCode ?? 0;
+            if (status < 200 || status >= 300) {
+              const code = (data as { error?: unknown })?.error;
+              fail(new BackendRequestFailure('response', status,
+                typeof code === 'string' && /^[a-z][a-z0-9_]{0,79}$/.test(code) ? code : undefined));
+            } else { settled = true; resolve({ status, data }); }
+          } catch { fail(new BackendRequestFailure('response')); }
+        });
+      });
+      const abort = () => req.destroy(new BackendRequestFailure('cancelled'));
+      const timer = setTimeout(() => req.destroy(new BackendRequestFailure('connection')), timeout);
+      this.requests.add(req);
+      signal?.addEventListener('abort', abort, { once: true });
+      req.on('error', (error) => fail(error instanceof BackendRequestFailure ? error : new BackendRequestFailure('connection')));
+      req.on('close', () => { clearTimeout(timer); signal?.removeEventListener('abort', abort); this.requests.delete(req); });
+      req.end(body);
+    });
+  }
+}

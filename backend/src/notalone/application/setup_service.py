@@ -22,6 +22,8 @@ class OwnerDirectory(Protocol):
 
     def create_owner(self, owner_id: UUID, display_name: str) -> object: ...
 
+    def owner_exists(self, owner_id: UUID) -> bool: ...
+
 
 class SetupService:
     """首启向导：owner 初始化（幂等）与凭据写入（受控）。"""
@@ -37,7 +39,7 @@ class SetupService:
         self._owner_directory = owner_directory
         self._env_path = env_path
 
-    def status(self) -> dict[str, object]:
+    def status(self, *, runtime_owner_id: UUID | None = None) -> dict[str, object]:
         owners = self._owner_directory.list_owners()
         configured = bool(
             os.environ.get("NOTALONE_DEEPSEEK_API_KEY", "").strip()
@@ -46,6 +48,11 @@ class SetupService:
             "initialized": len(owners) > 0,
             "owner_configured": len(owners) > 0,
             "credentials_configured": configured,
+            # 由当前实例注入，不接受 HTTP 调用方指定；全库状态不是身份凭证。
+            "runtime_owner_configured": (
+                runtime_owner_id is not None
+                and self._owner_directory.owner_exists(runtime_owner_id)
+            ),
         }
 
     def initialize_owner(self, *, display_name: str) -> dict[str, object]:
@@ -112,5 +119,4 @@ class SetupService:
         except OSError:
             pass
         return path
-
 

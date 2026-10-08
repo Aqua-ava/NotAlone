@@ -101,6 +101,23 @@ class PostgresOwnerDirectory:
             )
         return _OwnerRow(owner_id=row[0], display_name=row[1])
 
+    def owner_exists(self, owner_id: UUID) -> bool:
+        """只读核对受控运行身份，不返回名称或其他 owner 的标识。"""
+
+        if not isinstance(owner_id, UUID):
+            raise OwnerDirectoryPersistenceError("运行身份参数无效。")
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                row = connection.execute(
+                    "SELECT EXISTS(SELECT 1 FROM public.owner WHERE id = %s)",
+                    (owner_id,),
+                ).fetchone()
+        except psycopg.Error:
+            raise OwnerDirectoryPersistenceError("运行身份读取失败。") from None
+        if row is None:
+            raise OwnerDirectoryPersistenceError("运行身份读取失败。")
+        return bool(row[0])
+
 
 __all__ = [
     "OwnerDirectoryPersistenceError",

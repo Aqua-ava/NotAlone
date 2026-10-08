@@ -25,11 +25,12 @@ class FakeSetupService:
         self.credentials_calls: list[tuple[str, str]] = []
         self.initialized = False
 
-    def status(self) -> dict[str, object]:
+    def status(self, *, runtime_owner_id: UUID | None = None) -> dict[str, object]:
         return {
             "initialized": self.initialized,
             "owner_configured": self.initialized,
             "credentials_configured": False,
+            "runtime_owner_configured": self.initialized and runtime_owner_id == OWNER_ID,
         }
 
     def initialize_owner(self, *, display_name: str) -> dict[str, object]:

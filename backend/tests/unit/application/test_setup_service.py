@@ -22,6 +22,9 @@ class FakeOwnerDirectory:
     def list_owners(self) -> tuple[object, ...]:
         return tuple(self.owners)
 
+    def owner_exists(self, owner_id: UUID) -> bool:
+        return any(getattr(owner, "id", None) == owner_id for owner in self.owners)
+
     def create_owner(self, owner_id: UUID, display_name: str) -> object:
         self.created.append((owner_id, display_name))
         self.owners.append(

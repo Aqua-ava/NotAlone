@@ -1,8 +1,9 @@
 import type { BackendState } from '../../shared/backend-bridge';
 import { BackendFailure, readConnection } from './connection';
 import { RuntimeClient } from './runtime-client';
-import { loadBackendConfiguration } from './config';
+import { loadBackendConfiguration, type BackendConfiguration } from './config';
 import { OwnedBackendProcess } from './process';
+import { BackendRequestFailure, type JsonRequest } from './json-client';
 
 export class BackendHost {
   private state: BackendState = { phase: 'disconnected', reused: false, revision: 0, canRetryConnection: true, canRetryShutdown: false };
@@ -11,13 +12,33 @@ export class BackendHost {
   private initialization: Promise<void> | undefined;
   private stopping: Promise<boolean> | undefined;
   private closing = false;
+  private quitting = false;
+  private restarting: Promise<boolean> | undefined;
+  private preparing: Promise<boolean> | undefined;
   private generation = 0;
   private pollTimer: NodeJS.Timeout | undefined;
   private readonly listeners = new Set<(state: BackendState) => void>();
 
-  constructor(private readonly userData: string) {}
+  constructor(private readonly userData: string,
+    private readonly beforeConnect?: (config: BackendConfiguration, canStart: () => boolean) => Promise<void>) {}
 
   getState(): BackendState { return { ...this.state }; }
+  getConnectionGeneration(): number | undefined {
+    return !this.closing && this.state.phase === 'connected' && this.target ? this.generation : undefined;
+  }
+  async requestJson(options: JsonRequest): Promise<{ generation: number; data: unknown }> {
+    const target = this.target;
+    const generation = this.getConnectionGeneration();
+    if (!target || generation === undefined) throw new BackendRequestFailure('cancelled');
+    let data: unknown;
+    try { data = await target.requestJson(options); }
+    catch (error) {
+      if (target !== this.target || generation !== this.getConnectionGeneration()) throw new BackendRequestFailure('cancelled');
+      throw error;
+    }
+    if (target !== this.target || generation !== this.getConnectionGeneration()) throw new BackendRequestFailure('cancelled');
+    return { generation, data };
+  }
   onStateChanged(listener: (state: BackendState) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -44,6 +65,26 @@ export class BackendHost {
   }
 
   async stop(): Promise<boolean> {
+    this.quitting = true;
+    return this.stopRuntime();
+  }
+
+  restart(): Promise<boolean> {
+    if (this.quitting) return Promise.resolve(false);
+    if (this.restarting) return this.restarting;
+    if (this.preparing) return Promise.resolve(false);
+    this.restarting = this.restartRuntime().finally(() => { this.restarting = undefined; });
+    return this.restarting;
+  }
+
+  prepareConfiguration(): Promise<boolean> {
+    if (this.quitting || this.restarting) return Promise.resolve(false);
+    if (this.preparing) return this.preparing;
+    this.preparing = this.prepareRuntime().finally(() => { this.preparing = undefined; });
+    return this.preparing;
+  }
+
+  private async stopRuntime(): Promise<boolean> {
     if (this.state.phase === 'stopped') return true;
     if (this.stopping) return this.stopping;
     this.closing = true;
@@ -55,9 +96,44 @@ export class BackendHost {
     return this.stopping;
   }
 
+  private async restartRuntime(): Promise<boolean> {
+    if (!await this.prepareRuntime() || this.quitting) return false;
+    await this.connect();
+    return this.getConnectionGeneration() !== undefined;
+  }
+
+  private async prepareRuntime(): Promise<boolean> {
+    if (!await this.stopRuntime() || this.quitting) return false;
+    // 连接中停读也可能在等待后获得目标；固定 shutdown 实际确认的那个实例。
+    const previous = this.target;
+    if (previous) {
+      const deadline = Date.now() + 5000;
+      while (await previous.isListening()) {
+        if (this.quitting) return false;
+        if (Date.now() >= deadline) {
+          this.publish({ phase: 'shutdown-failed', errorCode: 'backend_shutdown_unconfirmed', canRetryShutdown: true });
+          return false;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+    if (this.quitting) return false;
+    if (this.ownedChild?.isRunning()) {
+      this.publish({ phase: 'shutdown-failed', errorCode: 'backend_shutdown_unconfirmed', canRetryShutdown: true });
+      return false;
+    }
+    this.target = undefined;
+    this.ownedChild = undefined;
+    this.closing = false;
+    this.publish({ phase: 'disconnected', errorCode: undefined, reused: false, canRetryConnection: true, canRetryShutdown: false });
+    return true;
+  }
+
   private async initialize(generation: number): Promise<void> {
     const canStart = () => !this.closing && generation === this.generation;
     const config = await loadBackendConfiguration(this.userData);
+    if (!canStart()) return;
+    await this.beforeConnect?.(config, canStart);
     if (!canStart()) return;
     const connection = await readConnection(config.infoPath);
     if (!canStart()) return;
@@ -140,6 +216,8 @@ export class BackendHost {
       this.schedulePoll(generation);
     } catch {
       if (this.closing || generation !== this.generation || client !== this.target) return;
+      client.cancelPending();
+      ++this.generation;
       this.publish({ phase: 'disconnected', errorCode: 'backend_connection_failed', canRetryConnection: true });
     }
   }

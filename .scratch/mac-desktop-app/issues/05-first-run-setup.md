@@ -1,7 +1,7 @@
 # 05：首启身份与模型配置
 
 Type: task
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: 02
 Spec: ../spec.md
@@ -30,4 +30,10 @@ Spec: ../spec.md
 ## Comments
 
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
+- 2026-10-08：在独立工作树按已批准 App 操作与真实 HTTP 接缝开始实现；本轮使用随机 `_test` PostgreSQL 库、独立配置与握手，先完成候选验证后由主 Agent 统一组织两轴评审。
 - 2026-10-08：实现者核对发现已有状态仅代表全库、contacts 只检查运行 UUID 非空；主 Agent 在既定首启范围内明确补齐只读 runtime_owner_configured，不扩展身份创建/恢复授权。
+- 2026-10-08：候选已合入集成 `57d419a089ce51e32bf667ec2aafd6df9b07de41`，以它为固定评审基点，保持 claimed 交由主 Agent 两轴评审。管理后台的具名初始化/密钥提交沿用真实 setup HTTP，已有身份直接复用；只读 `runtime_owner_configured` 注入当前服务实例身份并按同库存在性判断，不返回身份标识或密钥，不新增表或迁移。
+- 2026-10-08：逐项 red → green 覆盖空库等待明确动作、初始化重启、密钥提交清空、迟到响应失效，以及库中其他 owner 已有而运行 UUID 不存在的阻塞。最终 `npm run typecheck`、源码 `npm test -- --output=artifacts/full-source` 50 项、源码增量 2 项、首启真实 HTTP/随机正式迁移 PG 组 11 项、重建打包 App 首启/窗口组 14 项、Python setup/认证停读兼容 22 项均通过；`npm run package` 内置严格签名校验和 `git diff --check` 通过。
+- 2026-10-08：失败如实保留：早期源码全套 48/49 通过，安全错误页替换导致已关闭窗口断言竞态；早期打包首启/窗口 13/14 通过，复用断言误先读到点击前已配置状态，随后 5 秒等待截止时真实界面仍连接中。最小修正后相关增量与最终打包组通过，原复用进程在正常认证停读中 exit 0。全程只清理本轮随机库、配置、握手和自建进程，末次核对三项遗留计数均为 0；没有私人 dotenv、业务库、微信、模型调用或远端 Git 操作。
+- 2026-10-08：供 06 复用的主进程边界已落定：`BackendHost.requestJson(options: JsonRequest): Promise<{ generation: number; data: unknown }>`、`getConnectionGeneration(): number | undefined`、`restart(): Promise<boolean>`、`prepareConfiguration(): Promise<boolean>`。`JsonRequest` 含 method/path/body/signal/timeoutMs/maxResponseBytes；路径仅由具名 main 模块构造，token 留在 main，共用限量/超时/取消逻辑，成功和失败异步结果均复核目标与代次。generation 只代表验证连接，不是 owner UUID 证据。restart/prepare 共用同一原目标认证停读；prepare 成功后 disconnected 不自动连接，失败保留 target/shutdown-failed。构造器可选 `beforeConnect(config, canStart): Promise<void>`，await 后复核 canStart，restart 仍走 initialize；本候选未临时借入 03 gate，联合验收由 03 正式合入后补做。
+- 2026-10-08：可复用真实测试夹具为 `desktop/tests/setup-fixture.ts`：当前工作树后端、Conda NotAlone、独立配置/握手/userData、随机迁移 `_test` PG、受控解释器重读本轮配置；HTTP 延迟夹具只控制真实后端传输。源码截图与包截图保留于本工作树 `desktop/artifacts/`，App 产物为 `desktop/out/NotAlone-darwin-arm64/NotAlone.app`，均未加入提交。详细命令与原始失败位置见 `desktop/artifacts/setup-verification.md`。

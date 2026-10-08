@@ -1325,7 +1325,10 @@ class BackendApp:
             )
         try:
             if path == "/api/setup/status" and method == "GET":
-                return _json_response(HTTPStatus.OK, service.status())
+                return _json_response(
+                    HTTPStatus.OK,
+                    service.status(runtime_owner_id=self._owner_id),
+                )
             if path == "/api/setup/initialize" and method == "POST":
                 payload = _parse_setup_json(body)
                 display_name = payload.get("display_name")
