@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 
 import psycopg
 from langchain_core.messages import HumanMessage
+from fixture_cleanup import cleanup_fixture
 
 from notalone.application.model_priority import ModelPriorityControl
 from notalone.application.setup_service import SetupService
@@ -181,8 +182,7 @@ def main() -> None:
                 raise ValueError("未知导入夹具操作。")
             print(json.dumps({"id": command["id"], "result": result}), flush=True)
     finally:
-        fixture.doCleanups()
-        DesktopImportFixture.doClassCleanups()
+        cleanup_fixture(fixture)
 
 
 if __name__ == "__main__":
