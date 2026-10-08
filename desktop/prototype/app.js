@@ -1,5 +1,5 @@
-// 比较草稿优先、消息优先、候选优先三种浮窗；所有资料和操作都是内存中的合成演示。
-const variants = { A: '草稿优先', B: '消息优先', C: '候选优先' };
+// 独立管理后台 + 输入法式小窗；所有资料和操作都是内存中的合成演示。
+const variants = { A: '横向候选栏', B: '纵向候选窗', C: '单行工具条' };
 const contacts = [
   { id: 'c1', name: '小岑', relation: '同事', color: 'green', initial: '岑', count: 128,
     latest: '这版方案你怎么看？我们想周五定下来。',
@@ -26,10 +26,13 @@ const sampleMemories = [
   { id: 'm3', contactId: 'c2', text: '喜欢散步，见面安排倾向周末。', kind: '用户确认',
     source: '合成历史 · 第 12 条', date: '10 月 5 日' },
 ];
-const requestedVariant = new URL(location.href).searchParams.get('variant');
+const previewParams = new URL(location.href).searchParams;
+const requestedVariant = previewParams.get('variant');
+const requestedSurface = previewParams.get('surface') === 'manager' || (!previewParams.has('surface') && !requestedVariant) ? 'manager' : 'ime';
 const state = {
   variant: variants[requestedVariant] ? requestedVariant : 'A',
-  view: 'helper', running: true, configured: true, owner: '合成用户',
+  surface: requestedSurface, view: requestedSurface === 'manager' ? 'manager' : 'helper',
+  running: true, configured: true, owner: '合成用户', managerHidden: false,
   wxChat: 'wx-c1', contactId: 'c1', pendingContact: '', pickerOpen: false,
   bindings: { 'wx-c1': 'c1' }, selectedBindings: new Set(['wx-c1']),
   bindingTargets: { 'wx-c1': 'c1', 'wx-c2': '', 'wx-c3': '' },
@@ -37,8 +40,10 @@ const state = {
   useContext: false, candidates: sampleCandidates.map((item) => ({ ...item,
     basis: { snapshot: contacts[0].latest, mode: 'rewrite', useContext: false, tone: '原样', contactId: 'c1' },
   })), selected: 0,
-  snapshot: contacts[0].latest, dirty: false, generating: false, composerOpen: false,
-  newMessages: {}, copyBuffer: null, wxComposer: '', managerTab: 'contacts',
+  snapshot: contacts[0].latest, dirty: false, generating: false,
+  settingsOpen: false, editorOpen: false, popupOpen: false,
+  newMessages: {}, copyBuffer: null,
+  managerTab: ['contacts', 'import', 'memory', 'sync', 'config'].includes(previewParams.get('tab')) ? previewParams.get('tab') : 'contacts',
   importContact: '', importReady: false, importDone: false, importedContact: '',
   memories: sampleMemories.map((item) => ({ ...item })), memoryContact: 'c1',
   editingMemory: null, memoryEdit: '', ownerEdit: '合成用户',
@@ -91,170 +96,77 @@ function notify(message) {
     document.querySelector('#toast')?.classList.remove('visible');
   }, 3000);
 }
-function windowHeader() {
+// A / B / C 只比较输入法式小窗：横向候选栏、纵向候选窗、单行工具条。
+// 使用经典脚本中的具名函数，预览不依赖模块加载或构建工具。
+function imeHeader() {
   const item = contact();
-  const bound = state.bindings[state.wxChat] === state.contactId && state.contactId;
-  return `<header class="helper-header drag-handle">
-    <div class="wordmark"><span class="brand-symbol">n</span><span>NotAlone</span><span class="pin">${icon('pin', 13)}</span></div>
-    <button class="icon-button" data-action="hide-helper" aria-label="收起回复浮窗">${icon('close')}</button>
-  </header>
-  <div class="contact-header">
-    ${item ? avatar(item, true) : '<span class="avatar small unknown">?</span>'}
-    <button class="contact-name" data-action="choose-contact">${item ? `<strong>${item.name}</strong><span>${item.relation} · ${bound ? '已验证绑定' : '本次手动确认'}</span>` : '<strong>先确认联系人</strong><span>这条回复准备发给谁？</span>'}${icon('down', 14)}</button>
-    <span class="subtle-label">${state.mode === 'rewrite' ? '改写' : '回复'}</span>
-  </div>${state.pickerOpen || !item ? contactPicker() : ''}${contextNotice()}`;
+  return `<div class="ime-header drag-handle">
+    <button class="contact-pill" data-action="choose-contact" aria-label="确认或切换联系人">${item ? `<span class="contact-dot"></span><b>${item.name}</b>${icon('down', 11)}` : '选择联系人'}</button>
+    <span class="binding-hint">${item ? (state.bindings[state.wxChat] === item.id ? '已绑定' : '本次确认') : '未确认'}</span>
+    <div class="ime-modes" role="group" aria-label="写作方式"><button class="${state.mode === 'rewrite' ? 'active' : ''}" data-action="mode" data-value="rewrite" aria-label="改写草稿">改写</button><button class="${state.mode === 'reply' ? 'active' : ''}" data-action="mode" data-value="reply" aria-label="帮我回复">回复</button></div>
+    <button class="icon-button" data-action="toggle-settings" aria-label="本次表达要求">${icon('settings', 15)}</button>
+    <a class="icon-button" href="./index.html?surface=manager" target="_blank" rel="noopener" aria-label="打开独立管理后台">${icon('contacts', 15)}</a>
+    <button class="icon-button" data-action="hide-helper" aria-label="收起输入小窗">${icon('close', 15)}</button>
+  </div>${contactPicker()}${contextNotice()}${state.settingsOpen ? expressionSettings() : ''}`;
 }
 function contactPicker() {
-  return `<section class="contact-picker">
-    <p>微信会话「${escape(chat().title)}」${state.bindings[state.wxChat] ? '已有绑定，可手动校正本次联系人。' : '尚未绑定，请明确选择联系人。'}</p>
-    <div class="inline-row"><select data-field="pending-contact" aria-label="本次回复的联系人">${options(state.pendingContact)}</select>
-    <button class="button primary small-button" data-action="confirm-contact">确认</button></div>
-    <small>这里只确认本次回复；后台读取范围在管理窗口单独确认。</small>
-  </section>`;
+  if (contact() && !state.pickerOpen) return '';
+  return `<div class="contact-picker"><p>请确认这次回复发给谁。</p><div class="inline-row"><select data-field="pending-contact" aria-label="本次回复的联系人">${options(state.pendingContact)}</select><button class="button primary" data-action="confirm-contact">确认</button></div><small>本次确认不扩大后台读取范围。</small></div>`;
 }
 function contextNotice() {
-  if (!state.configured) return `<div class="notice"><span>先完成首次配置，再生成候选。</span><button data-action="open-config">去配置</button></div>`;
-  if (state.dirty) return `<div class="notice"><span>有新消息，当前草稿和候选已保留。</span><button data-action="refresh-context">更新上下文</button></div>`;
+  if (!state.configured) return '<div class="notice">请先在管理后台完成配置。</div>';
+  if (state.dirty) return '<div class="notice"><span>有新消息，草稿与候选已保留。</span><button data-action="refresh-context">更新上下文</button></div>';
   return '';
 }
-function modeTabs() {
-  return `<div class="mode-tabs" role="group" aria-label="写作方式">
-    <button class="${state.mode === 'rewrite' ? 'active' : ''}" data-action="mode" data-value="rewrite">改写草稿</button>
-    <button class="${state.mode === 'reply' ? 'active' : ''}" data-action="mode" data-value="reply">帮我回复</button>
-  </div>`;
+function expressionSettings() {
+  return `<div class="expression-settings"><span>仅本次</span><div class="tone-options">${['原样', '更短', '温和', '直接'].map((tone) => `<button class="chip ${state.tone === tone ? 'selected' : ''}" data-action="tone" data-value="${tone}">${tone}</button>`).join('')}</div><label><input type="checkbox" data-field="use-context" ${state.useContext ? 'checked' : ''}/>参考关系背景</label></div>`;
 }
-function inputArea(label = true) {
+function compactInput() {
   const rewrite = state.mode === 'rewrite';
-  return `<div class="composer">
-    ${label ? `<div class="field-heading"><label for="writing-input">${rewrite ? '先写下你的意思' : '这次想怎么回应？'}</label><span>${rewrite ? '保留原意与立场' : '先定方向，再生成'}</span></div>` : ''}
-    <textarea id="writing-input" aria-label="${rewrite ? '草稿' : '回复方向'}" data-field="${rewrite ? 'draft' : 'direction'}" rows="3" placeholder="${rewrite ? '输入或粘贴草稿，不用先把措辞想好…' : '例如：认可方向，但预算尚未确认，先别答应周五。'}">${escape(rewrite ? state.draft : state.direction)}</textarea>
-    <div class="tone-options" role="group" aria-label="本次表达要求">
-      ${['原样', '更短', '温和', '直接'].map((tone) => `<button class="chip ${state.tone === tone ? 'selected' : ''}" data-action="tone" data-value="${tone}">${tone}</button>`).join('')}
-      <span>仅本次</span>
-    </div>
-    ${rewrite ? `<label class="context-option"><input type="checkbox" data-field="use-context" ${state.useContext ? 'checked' : ''}/>参考关系背景<span>默认关闭</span></label>` : '<p class="input-hint">候选会参考这位联系人的资料，你决定表达立场。</p>'}
-    <button class="button primary generate-button" data-action="generate" ${canGenerate() ? '' : 'disabled'}>${icon('spark', 16)}${state.generating ? '正在模拟生成…' : state.candidates.length ? '重新生成候选' : '生成候选'}</button>
-  </div>`;
+  return `<div class="ime-input"><textarea rows="1" wrap="off" data-field="${rewrite ? 'draft' : 'direction'}" aria-label="${rewrite ? '草稿' : '回复方向'}" placeholder="${rewrite ? '写下你的意思…' : '先写回复方向，例如：认可方向，但预算还需确认…'}">${escape(rewrite ? state.draft : state.direction)}</textarea><button class="generate-button" data-action="generate" aria-label="生成候选" title="生成候选 · ⌘ / Ctrl + Enter" ${canGenerate() ? '' : 'disabled'}>${state.generating ? '<span class="loading-dot">···</span>' : icon('spark', 17)}</button></div>`;
 }
-function sourceEvidence(index = 0) {
+function copyActions(index = state.selected) {
+  return `<div class="copy-actions"><button data-action="copy" data-index="${index}">${icon('copy', 13)}复制</button><button class="copy-hide" data-action="copy-hide" data-index="${index}">复制并收起</button></div>`;
+}
+function sourceEvidence(index = state.selected) {
   const basis = state.candidates[index]?.basis || state;
-  const usesRelationship = basis.mode === 'reply' || basis.useContext;
-  const basisContact = contacts.find((item) => item.id === basis.contactId);
-  return `<details class="evidence"><summary>依据与边界<span>${icon('down', 12)}</span></summary>
-    <div><p><b>表达依据</b>：${basis.mode === 'rewrite' ? '生成时的草稿' : '生成时填写的回复方向'}；语气：${basis.tone}。</p>
-    <p><b>会话快照</b>：「${escape(basis.snapshot)}」</p>
-    <p><b>关系资料</b>：${usesRelationship ? `${basisContact?.name || '未选择'}的合成历史，第 18 条；仅使用当前联系人资料。` : '本次未启用；只调整草稿的表达。'}</p>
-    <p><b>核对点</b>：未加入新承诺；最终语气和事实请自行核对。</p>
-    <small>合成来源 · 候选 ${index + 1} · 这次要求不会保存成长期偏好</small></div>
-  </details>`;
+  return `<details class="evidence"><summary>依据 ${icon('down', 10)}</summary><p>联系人：${contacts.find((item) => item.id === basis.contactId)?.name || '未确认'}；${basis.mode === 'rewrite' ? '生成时的草稿' : '你填写的回复方向'}；语气：${basis.tone}。</p><p>会话快照：「${escape(basis.snapshot)}」</p><p>${basis.mode === 'reply' || basis.useContext ? '参考同一联系人的合成历史，第 18 条。' : '本次未使用关系资料。'} 修改后请核对事实与承诺。</p><small>合成来源 · 一次性要求不写入长期偏好</small></details>`;
 }
-function copyActions(index, compact = false) {
-  return `<div class="copy-actions">
-    <button class="button ${compact ? 'small-button' : 'quiet'}" data-action="copy" data-index="${index}">${icon('copy', 14)}复制</button>
-    <button class="button ${compact ? 'small-button' : 'primary'}" data-action="copy-hide" data-index="${index}">复制并收起 ${icon('right', 14)}</button>
-  </div>`;
+function candidateEditor(index = state.selected) {
+  if (!state.candidates[index]) return '';
+  return `<div class="candidate-editor" role="region" aria-label="编辑所选候选"><div class="editor-heading"><span>${index + 1} · ${state.candidates[index].label}</span><button class="icon-button" data-action="close-editor" aria-label="收起候选编辑">${icon('close', 13)}</button></div><textarea rows="2" data-field="candidate" data-index="${index}" aria-label="候选 ${index + 1}">${escape(state.candidates[index].text)}</textarea><div class="editor-actions">${sourceEvidence(index)}${copyActions(index)}</div></div>`;
 }
-function emptyCandidates() {
-  return `<div class="empty-candidates">${icon('spark', 25)}<strong>措辞交给助手，意思由你决定</strong><p>${state.contactId ? '写下草稿或回复方向，再生成 2–3 个候选。' : '先确认联系人，再填写草稿或回复方向。'}</p></div>`;
+function imeFooter() {
+  return `<div class="ime-footer"><span>${state.candidates.length ? `已选 ${state.selected + 1} · ${state.candidates[state.selected].label}` : (state.mode === 'reply' ? '先明确回复方向' : '先输入草稿') } · 手动发送</span>${state.candidates.length ? `<button class="text-button" data-action="edit-selected">编辑</button>${copyActions()}` : ''}</div>`;
 }
-function footer() {
-  return '<footer class="helper-footer"><span class="status-dot"></span>你选择、修改，再亲自发送<button data-action="open-manager">管理</button></footer>';
+function VariantA() {
+  return `<section class="ime-pane ime-a" role="dialog" aria-label="输入小窗：横向候选栏">${imeHeader()}${compactInput()}<div class="horizontal-candidates">${state.candidates.map((item, index) => `<button class="candidate-chip ${state.selected === index ? 'active' : ''}" data-action="select-candidate" data-index="${index}" title="${escape(item.text)}"><span>${index + 1}</span><div><b>${item.label}</b><p>${escape(item.text)}</p></div></button>`).join('') || '<p class="empty-hint">输入后生成 2–3 个候选</p>'}</div>${imeFooter()}${state.editorOpen ? candidateEditor() : ''}</section>`;
 }
-
-// A：纵向写作台，草稿与完整候选沿纵向排列。
-export function VariantA() {
-  return `<section class="helper-window variant-a" role="dialog" aria-label="回复浮窗：草稿优先">
-    ${windowHeader()}
-    <div class="helper-scroll">${modeTabs()}${inputArea()}
-      <div class="result-heading"><h3>选一句，再改一改</h3><span>${state.candidates.length ? '3 个合成候选 · 可直接编辑' : '等待生成'}</span></div>
-      ${state.candidates.length ? state.candidates.map((item, index) => `<article class="candidate-card">
-        <div class="candidate-heading"><span class="candidate-number">0${index + 1}</span><b>${item.label}</b></div>
-        <textarea data-field="candidate" data-index="${index}" rows="2" aria-label="候选 ${index + 1}">${escape(item.text)}</textarea>
-        ${copyActions(index, true)}${sourceEvidence(index)}
-      </article>`).join('') : emptyCandidates()}
-    </div>${footer()}
+function VariantB() {
+  return `<section class="ime-pane ime-b" role="dialog" aria-label="输入小窗：纵向候选窗">${imeHeader()}${compactInput()}<ol class="vertical-candidates">${state.candidates.map((item, index) => `<li class="${state.selected === index ? 'active' : ''}"><button data-action="select-candidate" data-index="${index}"><span>${index + 1}</span><p>${escape(item.text)}</p><small>${item.label}</small></button>${state.editorOpen && state.selected === index ? candidateEditor(index) : ''}</li>`).join('') || '<li class="empty-hint">输入后生成 2–3 个候选</li>'}</ol>${imeFooter()}</section>`;
+}
+function VariantC() {
+  const item = contact();
+  return `<section class="ime-pane ime-c" role="dialog" aria-label="输入小窗：单行工具条"><div class="single-toolbar drag-handle">
+    <button class="contact-pill" data-action="choose-contact" aria-label="确认或切换联系人"><span class="contact-dot"></span>${item?.name || '选联系人'} ${icon('down', 10)}</button>
+    <button class="inline-mode" data-action="mode-toggle" aria-label="切换写作方式">${state.mode === 'rewrite' ? '改写' : '回复'}</button>
+    ${compactInput()}<button class="candidate-count" data-action="toggle-popup" aria-label="展开候选列表">${state.candidates.length} 候选 ${icon('down', 11)}</button>
+    <button class="icon-button" data-action="toggle-settings" aria-label="本次表达要求">${icon('settings', 15)}</button>
+    <a class="icon-button" href="./index.html?surface=manager" target="_blank" rel="noopener" aria-label="打开独立管理后台">${icon('contacts', 15)}</a>
+    <button class="icon-button" data-action="hide-helper" aria-label="收起输入小窗">${icon('close', 14)}</button></div>
+    ${contactPicker()}${contextNotice()}${state.settingsOpen ? expressionSettings() : ''}
+    ${state.popupOpen ? `<div class="candidate-popup"><div class="popup-heading">选择一句 · 手动发送</div>${state.candidates.map((candidate, index) => `<button class="popup-choice ${state.selected === index ? 'active' : ''}" data-action="select-candidate" data-index="${index}"><span>${index + 1}</span><p>${escape(candidate.text)}</p></button>`).join('') || '<p class="empty-hint">先输入草稿或回复方向</p>'}${state.editorOpen ? candidateEditor() : imeFooter()}</div>` : ''}
   </section>`;
 }
 
-// B：双栏，对话背景占左栏，右栏按方向、表达、选择推进。
-export function VariantB() {
-  const item = state.candidates[state.selected];
-  return `<section class="helper-window variant-b" role="dialog" aria-label="回复浮窗：消息优先">
-    ${windowHeader()}
-    <div class="context-workspace">
-      <aside class="conversation-column">
-        <span class="eyebrow">当前对话</span><h2>先看清，<br/>再回应。</h2>
-        <div class="context-message">${escape(state.snapshot)}</div>
-        <span class="caption">${escape(contact()?.name || '待确认联系人')} · 本次上下文快照</span>
-        <div class="context-note">${icon('memory', 18)}<div><b>${state.useContext || state.mode === 'reply' ? '已参考这位联系人的资料' : '改写默认只看原稿'}</b><p>一次性的表达要求，<br/>不会变成长期偏好。</p></div></div>
-        <button class="text-button" data-action="open-manager">查看关系资料 ${icon('right', 14)}</button>
-      </aside>
-      <div class="workflow-column">
-        ${modeTabs()}<div class="step-label"><span>01</span> ${state.mode === 'rewrite' ? '你的原意' : '你的方向'}</div>${inputArea(false)}
-        <div class="step-label"><span>02</span> 选择一种表达</div>
-        ${item ? `<div class="candidate-tabs">${state.candidates.map((candidate, index) => `<button class="${state.selected === index ? 'active' : ''}" data-action="select-candidate" data-index="${index}">${candidate.label}</button>`).join('')}</div>
-          <textarea class="large-result" data-field="candidate" data-index="${state.selected}" rows="4" aria-label="候选 ${state.selected + 1}">${escape(item.text)}</textarea>
-          ${sourceEvidence(state.selected)}` : emptyCandidates()}
-      </div>
-    </div>${item ? `<div class="workspace-actions">${copyActions(state.selected)}</div>` : ''}${footer()}
-  </section>`;
-}
-
-// C：候选列表占据首屏，选中后展开；编辑原意在底部的独立抽屉中。
-export function VariantC() {
-  return `<section class="helper-window variant-c" role="dialog" aria-label="回复浮窗：候选优先">
-    ${windowHeader()}
-    <div class="helper-scroll">
-      <div class="compact-heading"><div><span class="eyebrow">挑一句顺口的</span><h2>还是你的意思。</h2></div><span class="result-count">${state.candidates.length || '—'}</span></div>
-      ${state.candidates.length ? `<div class="candidate-list">${state.candidates.map((item, index) => `<article class="candidate-row ${state.selected === index ? 'active' : ''}">
-        <button class="candidate-select" data-action="select-candidate" data-index="${index}">
-          <span class="radio-dot"></span><span><b>${item.label}</b><span class="candidate-preview">${escape(item.text)}</span></span>
-        </button>
-        ${state.selected === index ? `<div class="candidate-expanded"><textarea data-field="candidate" data-index="${index}" rows="3" aria-label="候选 ${index + 1}">${escape(item.text)}</textarea>${sourceEvidence(index)}${copyActions(index)}</div>` : ''}
-      </article>`).join('')}</div>` : emptyCandidates()}
-      <div class="draft-drawer ${state.composerOpen || !state.candidates.length ? 'open' : ''}">
-        <button class="drawer-toggle" data-action="toggle-composer"><span>${icon('spark', 15)} ${state.mode === 'rewrite' ? '调整原稿与语气' : '调整回复方向'}</span>${icon('down', 14)}</button>
-        ${state.composerOpen || !state.candidates.length ? `<div class="drawer-content">${modeTabs()}${inputArea()}</div>` : `<p class="draft-preview">${escape(state.mode === 'rewrite' ? state.draft : state.direction || '请展开后明确回复方向')}</p>`}
-      </div>
-    </div>${footer()}
-  </section>`;
-}
-function wechat() {
-  const item = wxContact();
-  const latest = state.newMessages[state.wxChat] || item.latest;
-  return `<section class="wechat-window" aria-label="合成微信会话">
-    <div class="wechat-rail"><span class="rail-avatar">我</span>${icon('message', 25)}${icon('contacts', 25)}<span class="rail-bottom">${icon('settings', 22)}</span></div>
-    <aside class="wechat-sidebar"><div class="mock-traffic"><i></i><i></i><i></i></div><div class="mock-search">搜索合成联系人 ${icon('plus', 13)}</div>
-      ${chats.map((entry) => {
-        const person = contacts.find((c) => c.id === entry.contactId);
-        return `<button class="wechat-chat ${state.wxChat === entry.id ? 'active' : ''}" data-action="wx-chat" data-value="${entry.id}">${avatar(person, true)}<span><b>${entry.title}</b><small>${person.latest}</small></span><time>14:20</time></button>`;
-      }).join('')}
-      <span class="synthetic-sidebar">会话与名称均为合成</span>
-    </aside>
-    <div class="wechat-conversation"><header><b>${item.name}</b><span>合成微信环境 · 无真实连接</span></header>
-      <div class="wechat-messages"><span class="chat-time">今天 14:20</span>
-        <div class="bubble-row">${avatar(item, true)}<p class="chat-bubble">${item.previous}</p></div>
-        <div class="bubble-row mine"><p class="chat-bubble">好，我看一下。</p><span class="avatar small me">我</span></div>
-        <div class="bubble-row">${avatar(item, true)}<p class="chat-bubble">${escape(latest)}</p></div>
-      </div>
-      <div class="wechat-composer"><div class="composer-tools"><span>☺　⌕　▢</span><button class="text-button" data-action="paste-sample" ${state.copyBuffer ? '' : 'disabled'}>${icon('copy', 13)} 模拟粘贴</button></div>
-        <textarea data-field="wx-composer" rows="3" aria-label="合成微信输入框" placeholder="候选复制后，在这里模拟粘贴…">${escape(state.wxComposer)}</textarea>
-        <span class="manual-send">粘贴后由你手动发送 · 本页不执行发送</span>
-      </div>
-    </div>
-  </section>`;
-}
 const managerTabs = { contacts: ['contacts', '联系人与绑定'], import: ['import', '历史导入'], memory: ['memory', '关系记忆'], sync: ['sync', '后台同步'], config: ['settings', '基础配置'] };
 function manager() {
-  return `<section class="manager-window" role="dialog" aria-label="管理窗口">
-    <header class="manager-header"><div class="wordmark"><span class="brand-symbol">n</span>NotAlone <span>管理窗口</span></div><button class="icon-button" data-action="hide-manager" aria-label="关闭管理窗口">${icon('close')}</button></header>
-    <div class="manager-body"><aside class="manager-sidebar"><span class="eyebrow">你的关系资料</span>
-      <nav>${Object.entries(managerTabs).map(([key, [symbol, label]]) => `<button class="${state.managerTab === key ? 'active' : ''}" data-action="manager-tab" data-value="${key}">${icon(symbol, 19)}${label}</button>`).join('')}</nav>
-      <div class="sidebar-help"><span class="status-dot ${state.syncEnabled && state.running ? '' : 'off'}"></span><b>${state.syncEnabled && state.running ? '后台同步中' : '后台读取已停止'}</b><p>关闭窗口只隐藏。<br/>明确退出应用后停读。</p></div>
-    </aside><main class="manager-content">${managerContent()}</main></div>
-    <footer class="manager-footer"><span>合成资料 · 修改只留在本页内存</span><button class="text-button" data-action="show-helper">呼出回复浮窗 ${icon('right', 14)}</button></footer>
-  </section>`;
+  const reading = state.running && state.syncEnabled && Object.keys(state.bindings).length > 0;
+  return `<div class="admin-layout"><aside class="admin-sidebar"><div class="admin-brand"><span class="brand-symbol">n</span><div><b>NotAlone</b><small>关系回复管理后台</small></div></div><span class="sidebar-label">工作区</span><nav>${Object.entries(managerTabs).map(([key, [symbol, label]]) => `<button class="${state.managerTab === key ? 'active' : ''}" data-action="manager-tab" data-value="${key}">${icon(symbol, 18)}${label}</button>`).join('')}</nav><div class="sidebar-help"><span class="status-dot ${reading ? '' : 'off'}"></span><b>${reading ? '后台同步中' : '后台读取已停止'}</b><p>${Object.keys(state.bindings).length} 个已确认会话</p></div></aside>
+    <div class="admin-workspace"><header class="admin-topbar"><span>工作区 <i>/</i> ${managerTabs[state.managerTab][1]}</span><div><span class="prototype-badge">原型 · 合成资料</span><a class="button primary" href="./index.html?surface=ime&variant=A" target="_blank" rel="noopener">打开输入小窗 ${icon('right', 14)}</a></div></header>
+    <main class="manager-content" aria-label="管理后台">${managerContent()}</main><footer class="admin-footer">资料按联系人分开管理 · 回复始终由你选择并亲自发送</footer></div></div>`;
 }
+
 function managerTitle(title, description) {
   return `<div class="manager-title"><span class="eyebrow">${managerTabs[state.managerTab][1]}</span><h1>${title}</h1><p>${description}</p></div>`;
 }
@@ -268,12 +180,12 @@ function managerContent() {
       <label class="scope-checkbox"><input type="checkbox" data-field="binding-scope" data-id="${entry.id}" aria-label="${entry.title}会话允许后台读取" ${state.selectedBindings.has(entry.id) ? 'checked' : ''}/><span>授权</span></label></div>`).join('')}
     </div><div class="manager-actions"><p>确认范围后，只有勾选并绑定的会话可以后台读取。</p><button class="button primary" data-action="confirm-bindings">确认绑定与范围</button></div>`;
   if (state.managerTab === 'import') return `${managerTitle('从一位联系人的历史开始。', '一次导入只属于一位联系人。多联系人混合资料需要先拆分。')}
-    <div class="import-layout"><div class="import-dropzone">${icon('import', 32)}<h3>导入聊天历史</h3><p>支持范围和真实格式在正式规格中确认。<br/>本页使用一份 24 条消息的合成样例。</p><button class="button" data-action="load-import">选择合成样例</button></div>
+    <div class="import-layout"><div class="import-dropzone">${icon('import', 32)}<h3>导入聊天历史</h3><p>选择一份历史，再确认它属于谁。<br/>本页使用一份 24 条消息的合成样例。</p><button class="button" data-action="load-import">选择合成样例</button></div>
     <div class="import-preview"><span class="step-label"><span>01</span> 确认归属</span><label class="field-heading" for="import-contact">这份历史属于谁？</label><select id="import-contact" data-field="import-contact">${options(state.importContact)}</select>
       <div class="import-facts"><p><span>消息</span><b>${state.importReady ? '24 条' : '等待选择'}</b></p><p><span>会话</span><b>${state.importReady ? '1 位联系人' : '—'}</b></p><p><span>处理</span><b>${state.importDone ? '模拟导入完成' : '确认后导入'}</b></p></div>
       <button class="button primary" data-action="import" ${state.importReady && state.importContact && !state.importDone ? '' : 'disabled'}>确认归属并模拟导入</button>
     </div></div>
-    ${state.importDone ? `<div class="success-panel">${icon('check')}<div><b>已模拟导入到${contacts.find((item) => item.id === state.importedContact).name}</b><p>24 条合成消息有独立来源；关系候选不会标成用户确认。</p></div></div>` : '<p class="panel-note">预览、确认归属和删除来源的入口会在正式导入流程中落实。</p>'}`;
+    ${state.importDone ? `<div class="success-panel">${icon('check')}<div><b>已模拟导入到${contacts.find((item) => item.id === state.importedContact).name}</b><p>24 条合成消息有独立来源；关系候选不会标成用户确认。</p></div></div>` : '<p class="panel-note">请选择单联系人样例，并明确确认资料归属。</p>'}`;
   if (state.managerTab === 'memory') return `${managerTitle('让背景可见，也可改。', '自动采纳带来源、可撤销；本次回复策略不会静默成为长期偏好。')}
     <div class="memory-filter"><label>查看联系人</label><select data-field="memory-contact" aria-label="查看谁的记忆">${options(state.memoryContact)}</select></div>
     <div class="memory-list">${state.memories.filter((item) => item.contactId === state.memoryContact).map((item) => `<article class="memory-card">
@@ -300,65 +212,64 @@ function managerContent() {
 }
 function stateSnapshot() {
   return {
-    布局: state.variant, 显示窗口: state.view, 管理页面: state.managerTab, 应用运行: state.running,
-    浮窗位置: state.position, 使用者: state.owner,
-    当前微信会话: state.wxChat, 本次联系人: state.contactId || '未确认',
+    独立界面: state.surface, 布局: state.variant, 显示窗口: state.view, 管理页面: state.managerTab,
+    应用运行: state.running, 管理后台已隐藏: state.managerHidden, 使用者: state.owner, 配置完成: state.configured,
+    本次联系人: state.contactId || '未确认', 当前会话标识: state.wxChat,
     已确认绑定: state.bindings, 待确认读取范围: [...state.selectedBindings],
     后台总开关: state.syncEnabled, 实际模拟读取: state.running && state.syncEnabled && Object.keys(state.bindings).length > 0,
-    配置完成: state.configured, 写作方式: state.mode, 草稿: state.draft, 回复方向: state.direction,
+    写作方式: state.mode, 草稿: state.draft, 回复方向: state.direction,
     本次语气: state.tone, 参考关系背景: state.useContext, 会话快照: state.snapshot,
     有待刷新消息: state.dirty, 候选: state.candidates, 当前候选: state.selected + 1,
-    模拟复制: state.copyBuffer, 合成微信输入框: state.wxComposer,
-    导入: { 已选择样例: state.importReady, 目标联系人: state.importContact, 已完成: state.importDone, 已导入联系人: state.importedContact },
-    关系记忆: state.memories,
+    编辑已展开: state.editorOpen, 候选弹层已展开: state.popupOpen, 模拟复制: state.copyBuffer,
+    导入: { 已选择样例: state.importReady, 目标联系人: state.importContact, 已完成: state.importDone },
+    关系记忆: state.memories, 浮窗位置: state.position,
   };
 }
-function statePanel() {
-  return `<section class="prototype-state" aria-label="原型状态">
-    <div id="state-summary">${stateSummary()}</div>
-    <details id="state-details" ${state.inspectorOpen ? 'open' : ''}><summary>查看完整模拟状态</summary><pre id="state-json">${escape(JSON.stringify(stateSnapshot(), null, 2))}</pre></details>
-  </section>`;
-}
 function stateSummary() {
-  const reads = state.running && state.syncEnabled && Object.keys(state.bindings).length;
-  return `<span><b>本次联系人</b> ${contact()?.name || '未确认'}</span><span><b>草稿</b> ${state.draft.length} 字</span><span><b>候选</b> ${state.candidates.length} 条</span><span><b>新消息</b> ${state.dirty ? '待刷新' : '已追平'}</span><span><b>后台</b> ${reads ? `读取 ${Object.keys(state.bindings).length} 个确认会话` : '停读'}</span><span><b>运行</b> ${state.running ? '当前会话' : '已退出，草稿已清空'}</span>`;
+  return `${contact()?.name || '未确认联系人'} · ${state.candidates.length} 个候选 · ${state.running && state.syncEnabled && Object.keys(state.bindings).length ? '后台读取中' : '已停读'}`;
+}
+function prototypeControls() {
+  return `<aside class="prototype-console" aria-label="原型操作与状态"><details id="prototype-tools" ${state.inspectorOpen ? 'open' : ''}><summary><span class="prototype-dot"></span>原型 · 合成演示 <span id="state-summary">${stateSummary()}</span></summary><div class="prototype-controls">
+    <div class="preview-links"><button data-action="preview-manager">管理后台预览</button><button data-action="preview-ime">输入小窗预览</button></div>
+    <label>示意会话<select data-field="demo-session" aria-label="切换合成会话">${chats.map((item) => `<option value="${item.id}" ${state.wxChat === item.id ? 'selected' : ''}>${item.title}</option>`).join('')}</select></label>
+    <div class="scenario-controls"><button data-action="first-use">首次确认</button><button data-action="new-message">新消息</button><button data-action="configure-demo">模拟配置完成</button><button data-action="hide-manager">模拟关闭后台窗口</button><button data-action="lifecycle">${state.running ? '模拟退出' : '重新打开'}</button></div>
+    <pre id="state-json">${escape(JSON.stringify(stateSnapshot(), null, 2))}</pre></div></details></aside>`;
 }
 function updateStatePanel() {
-  document.querySelector('#state-summary').innerHTML = stateSummary();
+  document.querySelector('#state-summary').textContent = stateSummary();
   document.querySelector('#state-json').textContent = JSON.stringify(stateSnapshot(), null, 2);
   document.querySelectorAll('[data-action="generate"]').forEach((button) => { button.disabled = !canGenerate(); });
   const importButton = document.querySelector('[data-action="import"]');
   if (importButton) importButton.disabled = !state.importReady || !state.importContact || state.importDone;
 }
 function PrototypeSwitcher() {
-  if (document.documentElement.dataset.prototype !== 'true' || !location.pathname.startsWith('/prototype/')) return '';
-  return `<nav class="prototype-switcher" aria-label="原型布局切换"><button data-action="variant-prev" aria-label="上一套布局">${icon('left')}</button><div><span>布局 ${state.variant} / 3</span><strong>${variants[state.variant]}</strong></div><button data-action="variant-next" aria-label="下一套布局">${icon('right')}</button></nav>`;
+  if (state.surface !== 'ime' || document.documentElement.dataset.prototype !== 'true') return '';
+  return `<nav class="prototype-switcher" aria-label="原型布局切换"><button data-action="variant-prev" aria-label="上一套布局">${icon('left')}</button><div><span>小窗 ${state.variant} / 3</span><strong>${variants[state.variant]}</strong></div><button data-action="variant-next" aria-label="下一套布局">${icon('right')}</button></nav>`;
+}
+function updateURL() {
+  const url = new URL(location.href);
+  url.searchParams.set('surface', state.surface);
+  if (state.surface === 'ime') url.searchParams.set('variant', state.variant);
+  else url.searchParams.set('tab', state.managerTab);
+  history.replaceState(null, '', url);
 }
 function render() {
-  app.innerHTML = `<div class="prototype-shell"><header class="prototype-toolbar">
-    <div class="prototype-brand"><span class="brand-symbol">n</span><div><b>NotAlone · 双窗口原型</b><span>合成资料 · 所有操作仅模拟</span></div></div>
-    <div class="surface-switch"><button class="${state.view === 'helper' ? 'active' : ''}" data-action="show-helper">回复浮窗</button><button class="${state.view === 'manager' ? 'active' : ''}" data-action="open-manager">管理窗口</button></div>
-    <div class="scenario-controls"><button data-action="first-use">首次确认</button><button data-action="new-message">新消息</button><button data-action="lifecycle">${state.running ? '模拟退出' : '重新打开'}</button></div>
-  </header>
-  <div class="prototype-intro"><div><span class="eyebrow">日常入口 / 浮窗 + 管理窗口</span><h1>一句话，还是你的意思。</h1></div><p>${state.view === 'manager' ? '管理关系与读取范围。关闭窗口后，后台仍保持运行。' : `${variants[state.variant]}：${{ A: '先写，再比较三份完整候选。', B: '对话在左，表达与选择在右。', C: '先挑候选，需要时再展开原稿。' }[state.variant]}`}<br/>底部切换 A / B / C，也可以用键盘 ← →。</p></div>
-  <div class="desktop-stage ${state.view === 'manager' ? 'manager-stage' : ''}">
-    ${wechat()}
-    ${state.running && state.view === 'helper' ? ({ A: VariantA, B: VariantB, C: VariantC }[state.variant])() : ''}
-    ${state.running && state.view === 'manager' ? manager() : ''}
-    ${state.view === 'desktop' || !state.running ? `<div class="summon-card"><span class="brand-symbol">n</span><div><b>${state.running ? '浮窗已收起' : '应用已模拟退出'}</b><p>${state.running ? '同一联系人下，草稿与候选保留在本次运行。' : '后台已停读；未提交草稿不会跨运行保留。'}</p></div><button class="button primary" data-action="show-helper">${state.running ? '模拟唤起' : '重新打开'}</button></div>` : ''}
-    <span class="desktop-caption">模拟桌面环境 · 拖动浮窗标题栏可调整位置 · 真实全局快捷键待宿主实现</span>
-  </div>
-  ${statePanel()}${PrototypeSwitcher()}<div id="toast" class="toast ${state.toast ? 'visible' : ''}" role="status">${escape(state.toast)}</div></div>`;
-  const helper = document.querySelector('.helper-window');
+  document.body.className = state.surface === 'ime' ? 'ime-page' : 'manager-page';
+  document.title = `NotAlone · ${state.surface === 'ime' ? '输入小窗' : '管理后台'}原型`;
+  const hidden = state.view === 'hidden' || !state.running;
+  app.innerHTML = `${state.surface === 'manager' && !hidden ? manager() : `<main class="ime-preview" aria-label="独立输入小窗预览"><span class="preview-label">${state.surface === 'ime' ? '输入小窗' : '管理后台'} · 交互原型</span>${hidden ? `<div class="hidden-state"><span class="brand-symbol">n</span><p>${state.running ? (state.surface === 'ime' ? '小窗已收起，草稿保留在本次运行。' : '后台窗口已隐藏，读取状态保持。') : '已模拟退出，后台停读，草稿已清空。'}</p><button class="button primary" data-action="${state.surface === 'ime' ? 'show-helper' : 'preview-manager'}">${state.running ? '模拟唤起' : '重新打开'}</button></div>` : ({ A: VariantA, B: VariantB, C: VariantC }[state.variant])()}</main>`}${prototypeControls()}${PrototypeSwitcher()}<div id="toast" class="toast ${state.toast ? 'visible' : ''}" role="status">${escape(state.toast)}</div>`;
+  const helper = document.querySelector('.ime-pane');
   if (helper) helper.style.transform = `translate(${state.position.x}px, ${state.position.y}px)`;
-  document.querySelector('#state-details').addEventListener('toggle', (event) => { state.inspectorOpen = event.target.open; });
+  document.querySelector('#prototype-tools').addEventListener('toggle', (event) => { state.inspectorOpen = event.target.open; });
   bindDrag();
 }
+
 function clearWriting() {
   generationSerial += 1;
   state.draft = ''; state.direction = ''; state.candidates = []; state.selected = 0;
   state.useContext = false; state.tone = '原样'; state.dirty = false;
-  state.copyBuffer = null; state.wxComposer = ''; state.generating = false;
+  state.copyBuffer = null; state.generating = false;
+  state.settingsOpen = false; state.editorOpen = false; state.popupOpen = false;
 }
 function selectWxChat(id) {
   if (state.wxChat === id) return;
@@ -373,7 +284,8 @@ function changeVariant(direction) {
   state.variant = keys[(keys.indexOf(state.variant) + direction + keys.length) % keys.length];
   state.position = { x: 0, y: 0 };
   const url = new URL(location.href); url.searchParams.set('variant', state.variant);
-  history.replaceState(null, '', url); render();
+  history.replaceState(null, '', url);
+  state.editorOpen = false; state.popupOpen = false; render();
 }
 function generate() {
   if (!canGenerate()) return;
@@ -397,12 +309,12 @@ function generate() {
       ];
     }
     state.candidates = state.candidates.map((item) => ({ ...item, basis }));
-    state.selected = 0; state.generating = false; state.composerOpen = false;
+    state.selected = 0; state.generating = false; state.editorOpen = false; state.popupOpen = state.variant === 'C';
     render(); notify('已生成合成示意候选；自定义输入仅演示排版，未调用模型。');
   }, 450);
 }
 function restart() {
-  state.running = true; state.view = 'helper'; clearWriting();
+  state.running = true; state.view = state.surface === 'manager' ? 'manager' : 'helper'; clearWriting();
   state.contactId = state.bindings[state.wxChat] || '';
   state.snapshot = state.newMessages[state.wxChat] || wxContact().latest;
   render(); notify('模拟重新打开；只恢复已确认读取范围，未恢复草稿。');
@@ -410,12 +322,9 @@ function restart() {
 function copy(index, hide) {
   if (!state.candidates[index]?.text.trim()) { notify('候选为空，请先填写内容。'); return; }
   state.copyBuffer = { text: state.candidates[index].text, contactId: state.contactId, wxChat: state.wxChat };
-  if (hide) { state.view = 'desktop'; render(); }
-  else {
-    document.querySelector('[data-action="paste-sample"]').disabled = false;
-    updateStatePanel();
-  }
-  notify('已放入页面内的模拟剪贴板；可以在合成微信窗口模拟粘贴。');
+  if (hide) { state.view = 'hidden'; render(); }
+  else updateStatePanel();
+  notify('已模拟复制；真实剪贴板未改动，最终由你手动发送。');
 }
 app.addEventListener('click', (event) => {
   const button = event.target.closest('[data-action]');
@@ -425,13 +334,22 @@ app.addEventListener('click', (event) => {
   if (action === 'wx-chat') { selectWxChat(value); return; }
   if (action === 'generate') { generate(); return; }
   if (action === 'copy' || action === 'copy-hide') { copy(Number(index), action === 'copy-hide'); return; }
-  if (action === 'show-helper') { if (!state.running) { restart(); return; } state.view = 'helper'; }
-  if (action === 'open-manager' || action === 'open-config') {
-    if (!state.running) { restart(); }
-    state.view = 'manager';
-    if (action === 'open-config') state.managerTab = 'config';
+  if (action === 'show-helper' || action === 'preview-ime') {
+    state.surface = 'ime';
+    if (!state.running) { restart(); return; }
+    state.view = 'helper'; updateURL();
   }
-  if (action === 'hide-helper' || action === 'hide-manager') { state.view = 'desktop'; }
+  if (action === 'preview-manager') {
+    state.surface = 'manager'; state.managerHidden = false;
+    if (!state.running) { restart(); return; }
+    state.view = 'manager'; updateURL();
+  }
+  if (action === 'hide-helper') state.view = 'hidden';
+  if (action === 'hide-manager') {
+    state.managerHidden = true;
+    if (state.surface === 'manager') state.view = 'hidden';
+    notify('管理后台已模拟隐藏；后台读取状态保持，输入小窗独立运行。');
+  }
   if (action === 'choose-contact') state.pickerOpen = !state.pickerOpen;
   if (action === 'confirm-contact') {
     if (!state.pendingContact) { notify('先选择本次回复的联系人。'); return; }
@@ -439,10 +357,17 @@ app.addEventListener('click', (event) => {
     state.contactId = state.pendingContact; state.pickerOpen = false;
     notify('已确认本次联系人；后台读取范围没有改变。');
   }
-  if (action === 'mode') { generationSerial += 1; state.generating = false; state.mode = value; state.candidates = []; state.selected = 0; state.composerOpen = true; }
+  if ((action === 'mode' && value !== state.mode) || action === 'mode-toggle') {
+    generationSerial += 1; state.generating = false;
+    state.mode = action === 'mode-toggle' ? (state.mode === 'rewrite' ? 'reply' : 'rewrite') : value;
+    state.candidates = []; state.selected = 0; state.editorOpen = false; state.popupOpen = false;
+  }
   if (action === 'tone') state.tone = value;
-  if (action === 'select-candidate') state.selected = Number(index);
-  if (action === 'toggle-composer') state.composerOpen = !state.composerOpen;
+  if (action === 'select-candidate') { state.selected = Number(index); state.editorOpen = true; }
+  if (action === 'edit-selected') state.editorOpen = !state.editorOpen;
+  if (action === 'close-editor') state.editorOpen = false;
+  if (action === 'toggle-settings') state.settingsOpen = !state.settingsOpen;
+  if (action === 'toggle-popup') state.popupOpen = !state.popupOpen;
   if (action === 'new-message') {
     state.newMessages[state.wxChat] = '补充一下，你先按自己的节奏确认就好，有结果再告诉我。';
     state.dirty = true; notify('模拟收到新消息；草稿、候选和生成时的快照保持不变。');
@@ -451,12 +376,8 @@ app.addEventListener('click', (event) => {
     state.snapshot = state.newMessages[state.wxChat] || wxContact().latest;
     state.dirty = false; notify('已更新会话快照；草稿和现有候选仍保留，可主动重新生成。');
   }
-  if (action === 'paste-sample') {
-    if (!state.copyBuffer || state.copyBuffer.wxChat !== state.wxChat) { notify('没有属于当前合成会话的复制内容。'); return; }
-    state.wxComposer = state.copyBuffer.text; notify('已模拟粘贴；本页不会执行外部发送。');
-  }
-  if (action === 'manager-tab') state.managerTab = value;
-  if (action === 'manage-bindings') state.managerTab = 'contacts';
+  if (action === 'manager-tab') { state.managerTab = value; updateURL(); }
+  if (action === 'manage-bindings') { state.managerTab = 'contacts'; updateURL(); }
   if (action === 'confirm-bindings') {
     if ([...state.selectedBindings].some((key) => !state.bindingTargets[key])) { notify('每个勾选的会话都需要明确选择对应联系人。'); return; }
     state.bindings = Object.fromEntries([...state.selectedBindings].map((key) => [key, state.bindingTargets[key]]));
@@ -482,17 +403,19 @@ app.addEventListener('click', (event) => {
   }
   if (action === 'delete-memory') { state.memories = state.memories.filter((item) => item.id !== id); notify('已从本页内存删除／撤销这条合成记忆。'); }
   if (action === 'save-config') { state.configured = true; state.owner = state.ownerEdit.trim() || '合成用户'; notify('已保存模拟配置，没有连接模型服务。'); }
+  if (action === 'configure-demo') { state.configured = true; notify('已模拟完成配置，未连接模型服务。'); }
   if (action === 'lifecycle') {
     if (!state.running) { restart(); return; }
-    state.running = false; state.view = 'desktop'; clearWriting();
+    state.running = false; state.view = 'hidden'; clearWriting();
     notify('应用已模拟退出；后台停读，未提交草稿和候选已清空。');
   }
   if (action === 'first-use') {
-    clearWriting(); state.running = true; state.view = 'helper'; state.configured = false;
+    clearWriting(); state.running = true; state.view = state.surface === 'manager' ? 'manager' : 'helper'; state.configured = false;
     state.bindings = {}; state.bindingTargets = { 'wx-c1': '', 'wx-c2': '', 'wx-c3': '' };
     state.selectedBindings = new Set(); state.syncEnabled = false; state.contactId = ''; state.pendingContact = '';
     state.snapshot = state.newMessages[state.wxChat] || wxContact().latest;
     state.importReady = false; state.importDone = false; state.importContact = '';
+    if (state.surface === 'manager') { state.managerTab = 'config'; updateURL(); }
     notify('已切到首次确认场景：联系人未选，后台范围未选，读取关闭。');
   }
   render();
@@ -502,7 +425,6 @@ app.addEventListener('input', (event) => {
   if (field === 'draft') state.draft = event.target.value;
   if (field === 'direction') state.direction = event.target.value;
   if (field === 'candidate') state.candidates[Number(index)].text = event.target.value;
-  if (field === 'wx-composer') state.wxComposer = event.target.value;
   if (field === 'memory-edit') state.memoryEdit = event.target.value;
   if (field === 'owner-edit') state.ownerEdit = event.target.value;
   updateStatePanel();
@@ -517,25 +439,28 @@ app.addEventListener('change', (event) => {
   }
   if (field === 'import-contact') state.importContact = event.target.value;
   if (field === 'memory-contact') { state.memoryContact = event.target.value; render(); }
+  if (field === 'demo-session') { selectWxChat(event.target.value); return; }
   updateStatePanel();
 });
 document.addEventListener('keydown', (event) => {
   const editing = event.target.closest('input, textarea, select, [contenteditable="true"]');
-  if (!editing && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+  if (state.surface === 'ime' && !editing && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
     event.preventDefault(); changeVariant(event.key === 'ArrowRight' ? 1 : -1);
   }
   if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === 'Space') {
-    event.preventDefault(); if (!state.running) restart(); else { state.view = 'helper'; render(); }
+    event.preventDefault(); state.surface = 'ime';
+    if (!state.running) restart(); else { state.view = 'helper'; updateURL(); render(); }
   }
-  if (event.key === 'Escape' && state.view === 'helper') { state.view = 'desktop'; render(); }
+  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && state.surface === 'ime') { event.preventDefault(); generate(); }
+  if (event.key === 'Escape' && state.view === 'helper') { state.view = 'hidden'; render(); }
 });
 function bindDrag() {
   const header = document.querySelector('.drag-handle');
   if (!header) return;
   header.addEventListener('pointerdown', (event) => {
-    if (event.target.closest('button') || event.button !== 0) return;
-    const helper = header.closest('.helper-window');
-    const stage = document.querySelector('.desktop-stage');
+    if (event.target.closest('button, a, input, textarea, select') || event.button !== 0) return;
+    const helper = header.closest('.ime-pane');
+    const stage = document.querySelector('.ime-preview');
     const bounds = helper.getBoundingClientRect(), area = stage.getBoundingClientRect();
     const start = { clientX: event.clientX, clientY: event.clientY, ...state.position };
     header.setPointerCapture(event.pointerId);

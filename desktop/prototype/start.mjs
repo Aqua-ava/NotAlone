@@ -11,13 +11,13 @@ const files = {
   '/prototype/notalone-windows/': ['index.html', 'text/html; charset=utf-8'],
   '/prototype/notalone-windows/index.html': ['index.html', 'text/html; charset=utf-8'],
   '/prototype/notalone-windows/style.css': ['style.css', 'text/css; charset=utf-8'],
-  '/prototype/notalone-windows/app.mjs': ['app.mjs', 'text/javascript; charset=utf-8'],
+  '/prototype/notalone-windows/app.js': ['app.js', 'text/javascript; charset=utf-8'],
 };
 const port = Number(process.env.NOTALONE_PROTOTYPE_PORT || 4176);
 const server = createServer(async (request, response) => {
   const pathname = new URL(request.url, 'http://127.0.0.1').pathname;
   if (pathname === '/') {
-    response.writeHead(302, { Location: '/prototype/notalone-windows/?variant=A' }).end();
+    response.writeHead(302, { Location: '/prototype/notalone-windows/?surface=manager' }).end();
     return;
   }
   const entry = files[pathname];
@@ -29,5 +29,6 @@ const server = createServer(async (request, response) => {
   response.writeHead(200, { 'Content-Type': entry[1], 'Cache-Control': 'no-store' }).end(body);
 });
 server.listen(port, '127.0.0.1', () => {
-  console.log(`NotAlone 交互原型：http://127.0.0.1:${port}/prototype/notalone-windows/?variant=A`);
+  console.log(`管理后台：http://127.0.0.1:${port}/prototype/notalone-windows/?surface=manager`);
+  console.log(`输入小窗：http://127.0.0.1:${port}/prototype/notalone-windows/?surface=ime&variant=A`);
 });
