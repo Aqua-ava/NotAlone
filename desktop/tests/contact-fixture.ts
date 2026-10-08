@@ -58,10 +58,7 @@ export class ContactFixture {
   async cleanup(): Promise<void> {
     for (const child of this.children) {
       if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
-      for (let count = 0; child.exitCode === null && child.signalCode === null && count < 75; count++) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-      if (child.exitCode === null && child.signalCode === null) throw new Error('本轮联系人后端未回收。');
+      await this.waitForChildExit(child, '本轮联系人后端未回收。');
     }
   }
 
@@ -69,11 +66,16 @@ export class ContactFixture {
     const stopped = await this.request('/api/runtime/shutdown', {});
     if (stopped.status !== 200 || stopped.data.state !== 'stopped') throw new Error('本轮真实后端停读未确认。');
     for (const child of this.children) {
-      for (let count = 0; child.exitCode === null && child.signalCode === null && count < 75; count++) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-      if (child.exitCode === null && child.signalCode === null) throw new Error('本轮真实后端正常退出未确认。');
+      await this.waitForChildExit(child, '本轮真实后端正常退出未确认。');
     }
+  }
+
+  private async waitForChildExit(child: ChildProcess, failureMessage: string): Promise<void> {
+    const exited = () => child.exitCode !== null || child.signalCode !== null;
+    for (let count = 0; !exited() && count < 75; count++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (!exited()) throw new Error(failureMessage);
   }
 }
 
