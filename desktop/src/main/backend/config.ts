@@ -6,6 +6,14 @@ import path from 'node:path';
 import { BackendFailure } from './connection';
 import type { StartupPaths } from '../../shared/startup-bridge';
 
+const startupPathKeys = ['pythonExecutable', 'projectDirectory', 'envFilePath', 'backendInfoPath', 'wechatCliPath', 'syncProbePath'] as const;
+const startupPathKeySet = new Set<string>(startupPathKeys);
+
+function validStartupPath(value: unknown, allowEmpty = false): value is string {
+  return typeof value === 'string' && value.length <= 1024 && !/[\0\r\n]/.test(value)
+    && (value === '' ? allowEmpty : path.isAbsolute(value));
+}
+
 export interface BackendConfiguration {
   infoPath: string;
   envFilePath?: string;
@@ -35,10 +43,8 @@ export async function loadBackendConfiguration(userData: string): Promise<Backen
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new BackendFailure('backend_connection_failed');
   }
-  const keys = ['pythonExecutable', 'projectDirectory', 'envFilePath', 'backendInfoPath', 'wechatCliPath', 'syncProbePath'];
   for (const [key, selected] of Object.entries(value)) {
-    if (!keys.includes(key) || typeof selected !== 'string' || selected.length > 1024
-      || !path.isAbsolute(selected) || /[\0\r\n]/.test(selected)) {
+    if (!startupPathKeySet.has(key) || !validStartupPath(selected)) {
       throw new BackendFailure('backend_connection_failed');
     }
   }
@@ -63,21 +69,21 @@ export function configurationPaths(config: BackendConfiguration): StartupPaths {
   };
 }
 
-export async function saveBackendConfiguration(userData: string, paths: unknown): Promise<void> {
-  const keys = ['pythonExecutable', 'projectDirectory', 'envFilePath', 'backendInfoPath', 'wechatCliPath', 'syncProbePath'];
+export async function saveBackendConfiguration(userData: string, paths: unknown, canSave: () => boolean): Promise<void> {
   if (!paths || typeof paths !== 'object' || Array.isArray(paths)
-    || Object.keys(paths).length !== keys.length) throw new Error('启动路径无效');
+    || Object.keys(paths).length !== startupPathKeys.length) throw new Error('启动路径无效');
   const value = paths as Record<string, unknown>;
-  for (const key of keys) {
-    const selected = value[key];
-    if (typeof selected !== 'string' || selected.length > 1024 || /[\0\r\n]/.test(selected)
-      || (selected === '' ? !['wechatCliPath', 'syncProbePath'].includes(key) : !path.isAbsolute(selected))) throw new Error('启动路径无效');
+  for (const key of startupPathKeys) {
+    if (!validStartupPath(value[key], key === 'wechatCliPath' || key === 'syncProbePath')) throw new Error('启动路径无效');
   }
   const output = Object.fromEntries(Object.entries(value).filter(([, selected]) => selected !== ''));
+  if (!canSave()) throw new Error('启动配置暂时不可修改');
   await mkdir(userData, { recursive: true });
   const temporary = path.join(userData, `.backend-launch-${randomUUID()}.tmp`);
   try {
+    if (!canSave()) throw new Error('启动配置暂时不可修改');
     await writeFile(temporary, JSON.stringify(output), { mode: 0o600, flag: 'wx' });
+    if (!canSave()) throw new Error('启动配置暂时不可修改');
     await rename(temporary, path.join(userData, 'backend-launch.json'));
   } finally { await rm(temporary, { force: true }); }
 }

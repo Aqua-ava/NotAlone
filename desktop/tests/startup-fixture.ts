@@ -9,7 +9,8 @@ const execute = promisify(execFile);
 export const projectDirectory = path.resolve('..');
 export const pythonExecutable = path.join(process.env.CONDA_PREFIX ?? '/unconfigured', 'bin/python');
 
-export async function prepareDatabase(action: 'create' | 'migrate' | 'drop' | 'untracked' | 'drift' | 'restore-drift' | 'incomplete', database?: string): Promise<{ database: string; database_url: string }> {
+export async function prepareDatabase(action: 'create' | 'migrate' | 'drop' | 'untracked' | 'drift' | 'restore-drift' | 'incomplete'
+  | 'owner-incomplete' | 'restore-owner-timestamp', database?: string): Promise<{ database: string; database_url: string }> {
   if (process.env.CONDA_DEFAULT_ENV !== 'NotAlone') throw new Error('验收须先激活 NotAlone Conda。');
   const { stdout } = await execute(pythonExecutable, [path.resolve('tests/fixtures/startup-database.py'), action,
     '--project', projectDirectory, ...(database ? ['--database', database] : [])], {
@@ -19,7 +20,7 @@ export async function prepareDatabase(action: 'create' | 'migrate' | 'drop' | 'u
   return JSON.parse(stdout);
 }
 
-export const test = appTest.extend<{ databaseState: 'empty' | 'ready' | 'untracked' | 'drift' | 'incomplete'; startupDatabase: { database: string; database_url: string; directory: string } }>({
+export const test = appTest.extend<{ databaseState: 'empty' | 'ready' | 'untracked' | 'drift' | 'incomplete' | 'owner-incomplete'; startupDatabase: { database: string; database_url: string; directory: string } }>({
   appWorkingDirectory: '/',
   databaseState: ['empty', { option: true }],
   startupDatabase: async ({ databaseState }, use) => {

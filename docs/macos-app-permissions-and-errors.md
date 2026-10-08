@@ -20,9 +20,11 @@
 
 这是一份长期维护的权限与错误台账。凡是新增系统权限、修改权限说明文字、替换 CLI/探针、调整签名或新增用户可见错误，都必须先更新本文档，再更新代码、构建脚本和回归验证。
 
-任务 03 的机器诊断只使用用户配置的绝对 Python、项目、配置文件、握手文件和 helper 路径；不申请系统权限，不运行 helper、不读取聊天正文。只读入口使用有界数据库连接及 READ ONLY 事务，只核对必要系统目录、审计基线与迁移账本，不能执行迁移或接管，也不创建参考库。机器就绪与本人身份、模型首启分别展示。安全错误分类为 `launch_unconfigured`、`configuration_invalid`、`python_unavailable`、`python_version_unsupported`、`backend_package_missing`、`project_unavailable`、`env_path_unavailable`、`info_path_unavailable`、`database_unconfigured`、`database_unavailable`、`baseline_missing`、`baseline_invalid`、`migration_history_mismatch`、`migration_pending`、`schema_incomplete`、`migration_files_invalid`、`diagnostic_timeout`、`diagnostic_failed`；不展示数据库连接串、凭据或底层 stderr。用户可在管理后台修正非秘密路径并重新检查，既有业务库升级仍需明确授权。连接后必须先明确认证停读同一目标并等待退场，失败保留原目标且禁止保存新路径或另起后端。启动配置拒绝符号链接、非普通文件和超过 8 KiB 的内容，FIFO 不阻塞连接或退出。
+任务 03 的机器诊断只使用用户配置的绝对 Python、项目、配置文件、握手文件和 helper 路径；不申请系统权限，不运行 helper、不读取聊天正文。只读入口使用有界数据库连接及 READ ONLY 事务，只核对必要系统目录、审计基线与迁移账本，不能执行迁移或接管，也不创建参考库。机器就绪与本人身份、模型首启分别展示。安全错误分类为 `launch_unconfigured`、`configuration_invalid`、`python_unavailable`、`python_version_unsupported`、`backend_package_missing`、`project_unavailable`、`env_path_unavailable`、`info_path_unavailable`、`database_unconfigured`、`database_unavailable`、`baseline_missing`、`baseline_invalid`、`migration_history_mismatch`、`migration_pending`、`schema_incomplete`、`migration_files_invalid`、`diagnostic_timeout`、`diagnostic_failed`；不展示数据库连接串、凭据或底层 stderr。用户可在管理后台修正非秘密路径并重新检查，既有业务库升级仍需明确授权。只读保存资格基于实际持有的目标、自有未收尾子进程和待启动任务；失联不证明已停止，仍必须明确认证停读同一目标并等待退场。失败保留原目标且禁止保存新路径或另起后端，保存与连接串行且落盘前复核。保存失败说明为“启动路径未能保存。请核对绝对路径，并先确认原服务已停止。”。schema 必需列包含 setup 查询使用的 `owner.created_at`，缺列仍为 `schema_incomplete`；项目目录不存在或不可访问返回 `project_unavailable`，有效项目中的源码/依赖缺失返回 `backend_package_missing`。启动配置拒绝符号链接、非普通文件和超过 8 KiB 的内容，FIFO 不阻塞连接或退出。
 
 任务 03 候选验证（已合正式 05）：类型检查、完整源码 App 72 项、联合诊断/首启 App 28 项、Python 只读入口及迁移 18 项均通过；签名包机器诊断/窗口/关键生命周期 23 项、首启/复用重启/明确重载 4 项通过。本机打包与严格签名校验通过，实际为 `com.notalone.desktop` ad-hoc，只含 `allow-jit`，ATS 任意传输为 false。机器诊断场景的 App 使用 `/` 工作目录、受限 PATH 和空 Conda/PYTHONPATH 输入，仍以明确绝对解释器及当前工作树 `backend/src` 执行真实只读入口。所有数据库/配置/握手/模型/CLI/探针均隔离；本工作树 App 进程、03 前缀测试库与诊断测试角色最终均为零。只读入口在无业务表读取或写入权限、无建库权限的角色下通过 ready 验证，不能据此宣称完整资料审计。真实 Finder 双击、全局按键、微信 helper/权限和模型渠道仍未验收，未使用 CGEvent 或改变 TCC。旧库接管组的早期间歇失败及限定观测结果如实保留在任务 Comments，不纳入通过结论。
+
+任务 03 初审修复验证：失联保存资格、缺 `owner.created_at` 和项目目录错误分类均由公开 App/真实 HTTP/隔离 PG 复现并修复。合并前完整源码 76 项及最终写入资格 6 项、只读 Python 入口 9 项通过；正式合入联系人任务后，最终源码保存/失联/退出 6 项与联系人 11 项通过，重建签名包机器与 gate 11 项、联系人 11 项、首启恢复/窗口/原生命周期 11 项通过。类型、打包及严格签名校验通过，末次本工作树进程、测试库及诊断角色计数均为零。未增加系统权限或读取范围；保存失败和目录提示遵循上文固定文案，旧 adoption 未知成因及待实机范围仍保留，候选继续等待主 Agent 增量两轴评审。
 
 2026-10-08 新 Electron 宿主窗口阶段：`desktop/` 使用 Electron + React/TypeScript，已打包为 `desktop/out/NotAlone-darwin-arm64/NotAlone.app`，新 bundle id 为 `com.notalone.desktop`，与历史 App 区分。只加载随包的界面和 logo，不携带/运行 Python、微信 CLI 或原生探针，不读取默认握手、业务库、`.env`、联系人或模型凭据，不申请 P-01/P-02 或其他系统权限。窗口关闭只隐藏，原生“窗口”菜单可恢复；明确退出仅回收当前 Electron 进程。后端连接和认证停读由后续任务完成，本阶段不能宣称已验证业务停读。
 
@@ -178,7 +180,7 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 | `python_unavailable` / `Python 可执行文件不可用。` | 选定 Python 不存在或不可执行 | Conda NotAlone 的绝对解释器路径 | 不要求先从终端激活 App |
 | `python_version_unsupported` / `Python 版本不兼容。` | 实际解释器不是 Python 3.12 | 所选环境版本 | 不替换系统 Python |
 | `backend_package_missing` / `后端包或必要依赖缺失。` | 项目入口、Python 包或必要依赖不可用 | 所选项目源码与 Conda 环境 | 不依赖其他 checkout 的 editable install |
-| `project_unavailable` / `项目目录不可用。` | 项目不是可核验的目录 | 包含 backend 的绝对目录 | 不自动扫描私人目录 |
+| `project_unavailable` / `项目目录不可用。` | 项目目录不存在、不可访问或不是目录 | 包含 backend 的绝对目录及其读取/进入权限 | 不自动扫描私人目录 |
 | `env_path_unavailable` / `本机配置文件路径不可用。` | 配置路径或父目录不可用 | 用户选定配置文件 | 不回显配置内容或凭据 |
 | `info_path_unavailable` / `后端握手文件路径不可用。` | 握手路径或父目录不可用 | 用户选定握手文件 | 不创建未验证的第二个后端 |
 | `database_unconfigured` / `数据库尚未配置。` | 没有受控数据库连接配置 | 选定配置中的 NOTALONE_DATABASE_URL | 不自动建库 |

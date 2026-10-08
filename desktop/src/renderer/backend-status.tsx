@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import type { BackendState } from '../shared/backend-bridge';
 import { Icon } from './icons';
 
-const initial: BackendState = { phase: 'disconnected', reused: false, revision: -1, canRetryConnection: false, canRetryShutdown: false };
+const initial: BackendState = { phase: 'disconnected', reused: false, revision: -1, canRetryConnection: false, canRetryShutdown: false,
+  canSaveStartupPaths: false, canPrepareConfiguration: false };
 export function useBackendState(): BackendState {
   const [state, setState] = useState(initial);
   useEffect(() => {

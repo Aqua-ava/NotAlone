@@ -15,9 +15,8 @@ export function installStartupBridge(windows: AppWindows, diagnostics: StartupDi
   });
   ipcMain.handle('startup:save-paths', async (event, ...args: unknown[]) => {
     const caller = windows.validateCaller(event, []);
-    if (!caller.webContents.getURL().endsWith('#manager') || args.length !== 1
-      || backend.getState().phase !== 'disconnected') throw new Error('启动配置暂时不可修改');
-    await diagnostics.savePaths(args[0]);
+    if (!caller.webContents.getURL().endsWith('#manager') || args.length !== 1) throw new Error('启动配置暂时不可修改');
+    await backend.saveStartupConfiguration((canSave) => diagnostics.savePaths(args[0], canSave));
   });
   ipcMain.handle('startup:retry', (event, ...args: unknown[]) => {
     windows.validateCaller(event, args);

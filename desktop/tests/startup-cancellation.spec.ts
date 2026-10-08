@@ -25,6 +25,15 @@ test('检查中退出有界回收本轮诊断子进程，迟到诊断不能启�
     await expect.poll(async () => readFile(marker, 'utf8').then((value) => Number(value), () => 0)).toBeGreaterThan(0);
     pid = Number(await readFile(marker, 'utf8'));
     await expect(manager.getByText('正在只读检查机器环境…', { exact: true })).toBeVisible();
+    await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+    await expect(manager.getByLabel('后端握手文件', { exact: true })).toBeDisabled();
+    const configuration = await readFile(path.join(userData, 'backend-launch.json'));
+    expect(await manager.evaluate(async () => {
+      const paths = await window.notalone.startup.getPaths();
+      try { await window.notalone.startup.savePaths({ ...paths, backendInfoPath: `${paths.backendInfoPath}.replacement` }); return false; }
+      catch { return true; }
+    })).toBe(true);
+    expect((await readFile(path.join(userData, 'backend-launch.json'))).equals(configuration)).toBe(true);
     await selectMenu(app, 'NotAlone', '退出 NotAlone');
     await expect.poll(() => appProcess.exitCode).toBe(0);
     await expect.poll(() => { try { process.kill(pid!, 0); return true; } catch { return false; } }).toBe(false);

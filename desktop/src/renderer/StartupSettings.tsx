@@ -42,9 +42,9 @@ export function StartupSettings({ state, backend }: { state: StartupState; backe
     return () => { active = false; };
   }, []);
   const checking = state.phase === 'checking' || backend.phase === 'connecting';
-  const editable = backend.phase === 'disconnected' && !checking && !saving && !preparing;
+  const editable = backend.canSaveStartupPaths && !checking && !saving && !preparing;
   async function prepare() {
-    if (preparing || backend.phase !== 'connected') return;
+    if (preparing || !backend.canPrepareConfiguration) return;
     setPreparing(true);
     try {
       if (await window.notalone.startup.prepareConfiguration()) {
@@ -57,7 +57,7 @@ export function StartupSettings({ state, backend }: { state: StartupState; backe
     if (!paths || !editable) return;
     setSaving(true);
     try { await window.notalone.startup.savePaths(paths); setMessage('启动路径已保存。请重新检查并连接。'); setError(''); }
-    catch { setError('启动路径未能保存。请填写绝对路径，并在未连接时重试。'); }
+    catch { setError('启动路径未能保存。请核对绝对路径，并先确认原服务已停止。'); }
     finally { setSaving(false); }
   }
   async function retry() {
@@ -75,11 +75,11 @@ export function StartupSettings({ state, backend }: { state: StartupState; backe
       </label>)}
     </div>}
     <div className="startup-actions">
-      {backend.phase === 'connected' && <button className="button" disabled={preparing} onClick={() => void prepare()}>{preparing ? '正在确认停读…' : '停止服务以修改路径'}</button>}
+      {(backend.canPrepareConfiguration || preparing) && <button className="button" disabled={preparing} onClick={() => void prepare()}>{preparing ? '正在确认停读…' : '停止服务以修改路径'}</button>}
       <button className="button" disabled={!paths || !editable} onClick={() => void save()}>{saving ? '正在保存…' : '保存启动路径'}</button>
       <button className="button" disabled={!backend.canRetryConnection || checking || saving} onClick={() => void retry()}>重新检查并连接</button>
     </div>
-    {!editable && backend.phase === 'connected' && <p>先明确停止本次服务，再修改启动路径。停读未获确认时保留原运行时与恢复入口。</p>}
+    {!editable && (backend.canPrepareConfiguration || preparing) && <p>先明确停止本次服务，再修改启动路径。失联不能证明服务已停读，未获确认时保留原运行时与恢复入口。</p>}
     {message && <p>{message}</p>}{error && <p role="alert">{error}</p>}
   </section>;
 }

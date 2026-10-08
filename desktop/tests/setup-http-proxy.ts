@@ -5,6 +5,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 export class SetupHttpProxy {
   readonly server: Server;
   failRuntimeStatus = false;
+  failRuntimeShutdown = false;
   holdCredentialResponses = false;
   dropInitializeResponse = false;
   holdStatusAfterInitialize = false;
@@ -18,7 +19,8 @@ export class SetupHttpProxy {
 
   constructor(private readonly address: string) {
     this.server = createServer((incoming, response) => {
-      if (this.failRuntimeStatus && incoming.url === '/api/runtime/status') {
+      if ((this.failRuntimeStatus && incoming.url === '/api/runtime/status')
+        || (this.failRuntimeShutdown && incoming.url === '/api/runtime/shutdown')) {
         response.writeHead(503, { 'Content-Type': 'application/json' });
         response.end('{"error":"synthetic_transport_unavailable"}'); return;
       }

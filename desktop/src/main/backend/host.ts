@@ -6,7 +6,8 @@ import { OwnedBackendProcess } from './process';
 import { BackendRequestFailure, type JsonRequest } from './json-client';
 
 export class BackendHost {
-  private state: BackendState = { phase: 'disconnected', reused: false, revision: 0, canRetryConnection: true, canRetryShutdown: false };
+  private state: BackendState = { phase: 'disconnected', reused: false, revision: 0, canRetryConnection: true, canRetryShutdown: false,
+    canSaveStartupPaths: true, canPrepareConfiguration: false };
   private target: RuntimeClient | undefined;
   private ownedChild: OwnedBackendProcess | undefined;
   private initialization: Promise<void> | undefined;
@@ -15,6 +16,7 @@ export class BackendHost {
   private quitting = false;
   private restarting: Promise<boolean> | undefined;
   private preparing: Promise<boolean> | undefined;
+  private configurationSave: Promise<void> | undefined;
   private generation = 0;
   private pollTimer: NodeJS.Timeout | undefined;
   private readonly listeners = new Set<(state: BackendState) => void>();
@@ -22,7 +24,19 @@ export class BackendHost {
   constructor(private readonly userData: string,
     private readonly beforeConnect?: (config: BackendConfiguration, canStart: () => boolean) => Promise<void>) {}
 
-  getState(): BackendState { return { ...this.state }; }
+  getState(): BackendState {
+    return { ...this.state, canSaveStartupPaths: !this.configurationSave && this.configurationCanChange(),
+      canPrepareConfiguration: !this.quitting && !this.restarting && !this.preparing && !this.stopping && !this.initialization
+        && Boolean(this.target || this.ownedChild) && ['connected', 'disconnected', 'shutdown-failed'].includes(this.state.phase) };
+  }
+  saveStartupConfiguration(save: (canSave: () => boolean) => Promise<void>): Promise<void> {
+    if (!this.getState().canSaveStartupPaths) return Promise.reject(new Error('启动配置暂时不可修改'));
+    // 保存期间的新连接等待落盘；写入前仍核验实际持有的运行时，退出优先。
+    this.configurationSave = Promise.resolve().then(() => save(() => this.configurationCanChange()))
+      .finally(() => { this.configurationSave = undefined; this.publishEligibility(); });
+    this.publishEligibility();
+    return this.configurationSave;
+  }
   getConnectionGeneration(): number | undefined {
     return !this.closing && this.state.phase === 'connected' && this.target ? this.generation : undefined;
   }
@@ -46,6 +60,7 @@ export class BackendHost {
 
   connect(): Promise<void> {
     if (this.closing || this.state.phase === 'connected') return Promise.resolve();
+    if (this.configurationSave) return this.configurationSave.catch(() => {}).then(() => this.connect());
     if (this.initialization) return this.initialization;
     const generation = ++this.generation;
     clearTimeout(this.pollTimer);
@@ -60,7 +75,7 @@ export class BackendHost {
         if (this.ownedChild === failedChild) this.ownedChild = undefined;
       }
       if (!this.closing && generation === this.generation) this.publish({ phase: 'disconnected', errorCode: error instanceof BackendFailure ? error.code : 'backend_connection_failed', canRetryConnection: true });
-    }).finally(() => { this.initialization = undefined; });
+    }).finally(() => { this.initialization = undefined; this.publishEligibility(); });
     return this.initialization;
   }
 
@@ -73,14 +88,14 @@ export class BackendHost {
     if (this.quitting) return Promise.resolve(false);
     if (this.restarting) return this.restarting;
     if (this.preparing) return Promise.resolve(false);
-    this.restarting = this.restartRuntime().finally(() => { this.restarting = undefined; });
+    this.restarting = this.restartRuntime().finally(() => { this.restarting = undefined; this.publishEligibility(); });
     return this.restarting;
   }
 
   prepareConfiguration(): Promise<boolean> {
     if (this.quitting || this.restarting) return Promise.resolve(false);
     if (this.preparing) return this.preparing;
-    this.preparing = this.prepareRuntime().finally(() => { this.preparing = undefined; });
+    this.preparing = this.prepareRuntime().finally(() => { this.preparing = undefined; this.publishEligibility(); });
     return this.preparing;
   }
 
@@ -198,7 +213,19 @@ export class BackendHost {
 
   private publish(update: Partial<BackendState>): void {
     this.state = { ...this.state, ...update, revision: this.state.revision + 1 };
+    this.state = this.getState();
     for (const listener of this.listeners) listener(this.getState());
+  }
+
+  private configurationCanChange(): boolean {
+    return this.state.phase === 'disconnected' && !this.target && !this.ownedChild && !this.initialization
+      && !this.closing && !this.quitting && !this.preparing && !this.restarting && !this.stopping;
+  }
+
+  private publishEligibility(): void {
+    const next = this.getState();
+    if (next.canSaveStartupPaths !== this.state.canSaveStartupPaths
+      || next.canPrepareConfiguration !== this.state.canPrepareConfiguration) this.publish({});
   }
 
   private schedulePoll(generation: number): void {

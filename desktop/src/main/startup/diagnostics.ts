@@ -35,10 +35,10 @@ export class StartupDiagnostics {
         envFilePath: process.env.NOTALONE_ENV_FILE });
     }
   }
-  savePaths(paths: unknown): Promise<void> {
-    if (this.closing || this.saving || this.state.phase === 'checking') return Promise.reject(new Error('启动路径暂时不可修改'));
+  savePaths(paths: unknown, canSave: () => boolean): Promise<void> {
+    if (this.closing || this.saving || this.state.phase === 'checking' || !canSave()) return Promise.reject(new Error('启动路径暂时不可修改'));
     const revision = this.state.revision;
-    this.saving = saveBackendConfiguration(this.userData, paths).then(() => {
+    this.saving = saveBackendConfiguration(this.userData, paths, () => !this.closing && canSave()).then(() => {
       if (!this.closing && this.state.revision === revision) this.publish({ phase: 'idle', code: undefined, helperWarnings: [] });
     }).finally(() => { this.saving = undefined; });
     return this.saving;
@@ -86,6 +86,9 @@ export class StartupDiagnostics {
     if (!await executableExists(config.pythonExecutable)) return 'python_unavailable';
     try {
       if (!path.isAbsolute(config.projectDirectory!) || !(await stat(config.projectDirectory!)).isDirectory()) return 'project_unavailable';
+      await access(config.projectDirectory!, constants.R_OK | constants.X_OK);
+    } catch { return 'project_unavailable'; }
+    try {
       const source = path.join(config.projectDirectory!, 'backend/src/notalone');
       if (!(await stat(path.join(source, 'server/command.py'))).isFile()
         || !(await stat(path.join(source, 'startup_diagnostics.py'))).isFile()) return 'backend_package_missing';

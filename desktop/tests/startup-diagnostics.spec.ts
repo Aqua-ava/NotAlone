@@ -119,6 +119,20 @@ packageMissingTest('必要 Python 包缺失与数据库错误分别显示，修�
 });
 
 const readyTest = test.extend({ databaseState: 'ready' });
+const ownerIncompleteTest = test.extend({ databaseState: 'owner-incomplete' });
+ownerIncompleteTest('setup 必需的本人创建时间缺失会阻止启动，测试库恢复后可重试并读取真实首启状态', async ({ runningApp: { app, userData }, startupDatabase }) => {
+  const manager = await app.firstWindow();
+  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  await expect(manager.getByText('数据库必要结构不完整。', { exact: true })).toBeVisible();
+  expect(await access(path.join(userData, 'backend.info')).then(() => true, () => false)).toBe(false);
+  await prepareDatabase('restore-owner-timestamp', startupDatabase.database);
+  await manager.getByRole('button', { name: '重新检查并连接', exact: true }).click();
+  await expect(manager.getByText('机器环境已就绪。', { exact: true })).toBeVisible();
+  await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(manager.getByRole('region', { name: '本人身份与模型' }).getByText('本人身份尚未初始化', { exact: true })).toBeVisible();
+  await manager.screenshot({ path: test.info().outputPath('owner-timestamp-restored.png') });
+});
+
 readyTest('已连接时明确停服务后可修改路径，保存不会自动启动，公开重试重新连接', async ({ runningApp: { app, userData } }) => {
   const manager = await app.firstWindow();
   await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 15_000 });

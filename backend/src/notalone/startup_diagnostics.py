@@ -24,7 +24,7 @@ REQUIRED_TABLES = frozenset({
     "skill_library", "reply_skill", "reply_skill_version", "reply_skill_resource",
 })
 REQUIRED_COLUMNS = {
-    "owner": {"id": "uuid", "display_name": "text"},
+    "owner": {"id": "uuid", "display_name": "text", "created_at": "timestamp with time zone"},
     "contact": {"id": "uuid", "owner_id": "uuid", "display_name": "text"},
     "message": {"id": "uuid", "owner_id": "uuid", "contact_id": "uuid", "text_content": "text"},
     "source_document": {"id": "uuid", "owner_id": "uuid", "contact_id": "uuid", "status": "text"},

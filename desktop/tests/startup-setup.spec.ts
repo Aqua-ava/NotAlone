@@ -94,3 +94,47 @@ backendTest('路径修改未确认停读时保留旧目标，拒绝保存和另�
   await expect.poll(() => appProcess.exitCode).toBe(0);
   expect((await backend.service.observations()).shutdownCount).toBe(2);
 });
+
+test('失联仍锁定原运行时，停读失败不能保存，原实例确认退出后才可修正路径', async ({ runningApp: { app, userData }, machineSetup: { setup, proxy } }) => {
+  const manager = await app.firstWindow();
+  await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await manager.getByRole('button', { name: '应用配置', exact: true }).click();
+  const before = await readFile(path.join(userData, 'backend-launch.json'));
+  expect((await setup.request('/api/runtime/status')).data.state).toBe('running');
+  proxy.failRuntimeStatus = true;
+  await expect(manager.getByText('尚未连接', { exact: true })).toBeVisible();
+  await manager.screenshot({ path: test.info().outputPath('disconnected-runtime-retained.png') });
+  await expect(manager.getByLabel('后端握手文件', { exact: true })).toBeDisabled();
+  await expect(manager.getByRole('button', { name: '保存启动路径', exact: true })).toBeDisabled();
+  const refused = async () => manager.evaluate(async () => {
+    const paths = await window.notalone.startup.getPaths();
+    try { await window.notalone.startup.savePaths({ ...paths, backendInfoPath: `${paths.backendInfoPath}.replacement` }); return false; }
+    catch { return true; }
+  });
+  expect(await refused()).toBe(true);
+  proxy.failRuntimeShutdown = true;
+  await manager.getByRole('button', { name: '停止服务以修改路径', exact: true }).click();
+  await expect(manager.getByText('服务停读未获确认，暂时不能修改路径。请按连接状态中的入口恢复。', { exact: true })).toBeVisible();
+  expect(await refused()).toBe(true);
+  expect((await readFile(path.join(userData, 'backend-launch.json'))).equals(before)).toBe(true);
+  await manager.evaluate(() => window.notalone.startup.retry());
+  expect(setup.reusedBackend!.exitCode).toBeNull();
+  proxy.failRuntimeStatus = false;
+  proxy.failRuntimeShutdown = false;
+  expect((await setup.request('/api/runtime/status')).data.state).toBe('running');
+  proxy.closeAfterShutdown = true;
+  proxy.afterShutdown = () => setup.waitForExit(setup.reusedBackend!);
+  await manager.getByRole('button', { name: '停止服务以修改路径', exact: true }).click();
+  await expect(manager.getByLabel('后端握手文件', { exact: true })).toBeEnabled();
+  expect(setup.reusedBackend!.exitCode).toBe(0);
+  expect(await access(setup.infoPath).then(() => true, () => false)).toBe(false);
+  const replacement = path.join(userData, 'replacement.info');
+  await manager.getByLabel('后端握手文件', { exact: true }).fill(replacement);
+  await manager.getByRole('button', { name: '保存启动路径', exact: true }).click();
+  await expect(manager.getByText('启动路径已保存。请重新检查并连接。', { exact: true })).toBeVisible();
+  expect(await access(replacement).then(() => true, () => false)).toBe(false);
+  await manager.getByRole('button', { name: '重新检查并连接', exact: true }).click();
+  await expect(manager.getByText('已连接', { exact: true })).toBeVisible({ timeout: 15_000 });
+  expect(await access(replacement).then(() => true, () => false)).toBe(true);
+  await manager.screenshot({ path: test.info().outputPath('retained-runtime-paths-restored.png') });
+});

@@ -91,6 +91,16 @@ class StartupDiagnosticCommandTest(unittest.TestCase):
             connection.execute("ALTER TABLE public.contact DROP COLUMN display_name")
         self.assertEqual(self._run(), {"code": "schema_incomplete"})
 
+    def test_owner_creation_timestamp_is_required_and_can_be_restored(self) -> None:
+        migrate(self.url, MIGRATIONS)
+        with psycopg.connect(self.url) as connection:
+            connection.execute("ALTER TABLE public.owner DROP COLUMN created_at")
+        self.assertEqual(self._run(), {"code": "schema_incomplete"})
+        # 本轮空测试库恢复迁移原定义；产品诊断不会执行此 DDL。
+        with psycopg.connect(self.url) as connection:
+            connection.execute("ALTER TABLE public.owner ADD COLUMN created_at timestamptz NOT NULL DEFAULT now()")
+        self.assertEqual(self._run(), {"code": "ready"})
+
     def test_audited_baseline_with_only_real_subsequent_ledger_is_ready(self) -> None:
         migrate(self.url, MIGRATIONS)
         with psycopg.connect(self.url) as connection:
