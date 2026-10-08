@@ -11,7 +11,8 @@ export class BackendFailure extends Error {
 export async function readConnection(infoPath: string): Promise<BackendConnection | undefined> {
   if (!path.isAbsolute(infoPath)) throw new BackendFailure('backend_handshake_invalid');
   let file;
-  try { file = await open(infoPath, constants.O_RDONLY | constants.O_NOFOLLOW); }
+  // 先非阻塞打开，再核验普通文件，避免无写端 FIFO 把连接与退出卡在 open。
+  try { file = await open(infoPath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     throw new BackendFailure('backend_handshake_invalid');

@@ -27,8 +27,10 @@ export class BackendHost {
     if (this.closing || this.state.phase === 'connected') return Promise.resolve();
     if (this.initialization) return this.initialization;
     const generation = ++this.generation;
+    clearTimeout(this.pollTimer);
+    this.target?.cancelPending();
     this.publish({ phase: 'connecting', errorCode: undefined, canRetryConnection: false });
-    this.initialization = this.initialize().then(() => {
+    this.initialization = this.initialize(generation).then(() => {
       if (!this.closing) this.schedulePoll(generation);
     }).catch(async (error: unknown) => {
       const failedChild = this.ownedChild;
@@ -36,7 +38,7 @@ export class BackendHost {
         // 已回收的失败启动不再占用下次用户明确重试；旧进程对象不参与新运行时状态。
         if (this.ownedChild === failedChild) this.ownedChild = undefined;
       }
-      if (!this.closing) this.publish({ phase: 'disconnected', errorCode: error instanceof BackendFailure ? error.code : 'backend_connection_failed', canRetryConnection: true });
+      if (!this.closing && generation === this.generation) this.publish({ phase: 'disconnected', errorCode: error instanceof BackendFailure ? error.code : 'backend_connection_failed', canRetryConnection: true });
     }).finally(() => { this.initialization = undefined; });
     return this.initialization;
   }
@@ -53,25 +55,30 @@ export class BackendHost {
     return this.stopping;
   }
 
-  private async initialize(): Promise<void> {
-    if (this.target) {
-      // 已验证连接暂时失败时，恢复和退出仍指向它，不让变化后的握手替换关闭目标。
-      if (await this.target.status() !== 'running') throw new BackendFailure('backend_connection_failed');
-      if (!this.closing) this.publish({ phase: 'connected', errorCode: undefined, canRetryConnection: false });
-      return;
-    }
+  private async initialize(generation: number): Promise<void> {
+    const canStart = () => !this.closing && generation === this.generation;
     const config = await loadBackendConfiguration(this.userData);
+    if (!canStart()) return;
     const connection = await readConnection(config.infoPath);
+    if (!canStart()) return;
     if (connection) {
+      // 原自建进程仍存活时不移交另一实例；退出仍须回收本 App 已持有的运行时。
+      if (this.ownedChild?.isRunning() && connection.pid !== this.ownedChild.pid) throw new BackendFailure('backend_handshake_invalid');
       const client = new RuntimeClient(connection);
       if (await client.status() !== 'running') throw new BackendFailure('backend_connection_failed');
+      // 正常明确重连可验证新握手；退出一旦开始，认证中的新目标也不能替换原目标。
+      if (!canStart()) return;
+      this.target?.cancelPending();
       this.target = client;
-      if (!this.closing) this.publish({ phase: 'connected', reused: true, errorCode: undefined, canRetryConnection: false });
+      this.publish({ phase: 'connected', reused: !(this.ownedChild?.isRunning() && connection.pid === this.ownedChild.pid), errorCode: undefined, canRetryConnection: false });
       return;
     }
+    // 丢失握手不能成为另起读取进程的依据；保留原目标供明确退出使用。
+    if (this.target) throw new BackendFailure('backend_connection_failed');
     if (!config.pythonExecutable || !config.projectDirectory) throw new BackendFailure('backend_launch_unconfigured');
     if (this.ownedChild) throw new BackendFailure('backend_connection_failed');
-    this.ownedChild = await OwnedBackendProcess.launch(config);
+    this.ownedChild = await OwnedBackendProcess.launch(config, canStart);
+    // spawn 已完成的子进程仍须取得认证目标并收尾；取消检查只阻止新的 spawn。
     const deadline = Date.now() + 12_000;
     while (Date.now() < deadline && this.ownedChild.isRunning()) {
       const started = await readConnection(config.infoPath);

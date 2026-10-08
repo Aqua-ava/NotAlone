@@ -10,8 +10,11 @@ export class OwnedBackendProcess {
     this.exited = new Promise((resolve) => child.once('exit', () => resolve()));
   }
 
-  static async launch(config: BackendConfiguration): Promise<OwnedBackendProcess> {
+  static async launch(config: BackendConfiguration, canStart: () => boolean): Promise<OwnedBackendProcess> {
+    if (!canStart()) throw new BackendFailure('backend_connection_failed');
     const { pythonExecutable, projectDirectory } = await validateLaunchConfiguration(config);
+    // 路径核验含异步 I/O，最终 spawn 前再次检查退出/连接代际，不在退出后新建读取进程。
+    if (!canStart()) throw new BackendFailure('backend_connection_failed');
     // 不用 shell 或 PATH，模块路径固定到所选项目，避免 editable install 指向另一个 checkout。
     const child = spawn(pythonExecutable, ['-m', 'notalone.server.command', '--host', '127.0.0.1'], {
       cwd: projectDirectory,
