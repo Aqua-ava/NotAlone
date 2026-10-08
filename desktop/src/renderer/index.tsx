@@ -8,8 +8,9 @@ import './style.css';
 import { BackendBadge, BackendConnectionNote, useBackendState } from './backend-status';
 import { SetupPanel } from './SetupPanel';
 import { StartupReadiness, StartupSettings, useStartupState } from './StartupSettings';
-import { CurrentContactLabel, HelperContactPicker, HelperDraft, useContactSession } from './contact-session';
+import { CurrentContactLabel, HelperContactPicker, useContactSession } from './contact-session';
 import { ContactsPage } from './ContactsPage';
+import { ReplyCandidates, RewriteInput, useReplySession } from './RewritePanel';
 
 const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
@@ -18,6 +19,7 @@ function App() {
   const backend = useBackendState();
   const startup = useStartupState();
   const contactSession = useContactSession();
+  const replies = useReplySession();
   const [error, setError] = useState('');
   const [page, setPage] = useState<ManagerPage>('contacts');
   async function operate(operation: () => Promise<void>) {
@@ -37,15 +39,10 @@ function App() {
       <button className="icon-button" aria-label="隐藏输入小窗" title="隐藏输入小窗"
         onClick={() => void operate(window.notalone.hideWindow)}><Icon name="close" size={16} /></button>
     </header>
-    <div className="ime-input">
-      <HelperDraft session={contactSession} />
-      <button className="generate-button" aria-label="生成候选" title="生成候选" disabled><Icon name="sparkle" size={18} /></button>
-    </div>
+    <RewriteInput contacts={contactSession} replies={replies} />
     <div className="ime-status-line"><BackendBadge state={backend} compact />
       <div className="ime-contact-note"><CurrentContactLabel state={contactSession.state} /></div></div>
-    <section className="horizontal-candidates" aria-label="候选回复">
-      <p>暂无候选</p><small>准备好你的意思，再选择合适的表达。</small>
-    </section>
+    <ReplyCandidates replies={replies} />
     <footer className="ime-footer">
       <span>由你修改并亲自发送</span>
       <HelperPinControl />

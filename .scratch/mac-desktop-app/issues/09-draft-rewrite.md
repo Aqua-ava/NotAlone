@@ -1,7 +1,7 @@
 # 09：草稿改写与候选编辑
 
 Type: task
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: 06
 Spec: ../spec.md
@@ -27,4 +27,9 @@ Spec: ../spec.md
 
 ## Comments
 
+- 2026-10-09：用户明确选择先继续不触桌面的工作，实机验收稍后安排。保留原实现并合入集成 `ef86567f1f9c7d5c780f2f03cac939eef3f05264` 的测试门禁；独立重启显式使用统一 `launchApp`，没有以 `npm start`、直接 Playwright 或旧命令绕过预约。当前只完成源码候选、类型/构建检查与只读启动路径审计；没有新 App 时段或启动额度，任务保持 claimed，等待主 Agent 两轴评审和后续预约验收。
+- 2026-10-09：历史实际结果保留：默认改写的关系语境控件缺失、丢失生成响应后的错误分类各经历 red → green；新增 9 条实际 App 行为已分组通过，并在首轮完整回归通过。首轮完整结果为 95 passed / 1 failed，唯一失败是任务 06 尚把生成按钮当占位能力的禁用断言，已改为有草稿时启用。后续完整回归因用户要求优先解决桌面干扰而 Ctrl+C 中止，session 34837 exit 130，21 passed / 75 did not run；不能写成完整 96 条通过。中止后已确认 worker PID 67969 消失，本工作树自有 Electron/后端和改写夹具临时目录已回收。
+- 2026-10-09：历史后端相关命令 `python -m unittest tests.integration.server.test_rewrite_history_permissions tests.integration.server.test_reply_api tests.integration.server.test_core_business_flow -v` 在当前工作树 `backend/src`、Conda NotAlone 与隔离配置下通过 15/15；只创建、迁移并回收本轮随机 `_test` 库，未访问业务库、外部模型、微信或剪贴板。合入门禁并适配重启后，`npm run typecheck`、`npm run build` 均 exit 0；文档与辅助校验继续用于候选收尾，不代替 UI 结果。
+- 2026-10-09：递延项包括最新源码的受控 App 回归、修正后的任务 06 生成按钮断言、补充的候选单选断言、输入快照文案与要求标签布局、重启门禁的真实 App 适配，以及本任务最终签名包和相关 App 验收。当前模型为受控外部边界，候选结构/权限/幂等结果不证明真实模型中文质量；当前后端没有公开澄清对象，不能把空候选或本地等待冒充澄清或服务端进度。未写 Answer 或 resolved。
+- 2026-10-08：任务 09 在独立工作树开始实现；按已批准的实际 App、HTTP 和隔离 PG 接缝逐片 red → green。当前后端仅返回真实候选与风险备注，不把本次 POST 等待伪装为服务端异步进度或澄清结果；评审由主 Agent 统一安排。
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。

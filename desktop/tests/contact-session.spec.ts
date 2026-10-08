@@ -49,7 +49,7 @@ test('两个窗口共享本次联系人，隐藏恢复保留草稿，A→B→A �
   await manager.getByRole('button', { name: '刷新联系人' }).click();
   await expect(manager.getByText('正在读取联系人目录…', { exact: true })).toHaveCount(0);
   await expect(draft).toHaveValue('甲的新草稿，继续本次编辑。');
-  await expect(helper.getByRole('button', { name: '生成候选' })).toBeDisabled();
+  await expect(helper.getByRole('button', { name: '生成候选' })).toBeEnabled();
   await expect(helper.getByRole('button', { name: '复制', exact: true })).toBeDisabled();
   await helper.screenshot({ path: test.info().outputPath('contact-helper.png') });
   await manager.screenshot({ path: test.info().outputPath('contact-manager.png') });

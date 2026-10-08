@@ -1,0 +1,35 @@
+import { expect } from '@playwright/test';
+import { test } from './rewrite-transport-fixture';
+
+test('真实模型超时和失败保留已有编辑，同键可恢复失败请求，空候选不会伪装成功', async ({ runningApp: { app }, rewriteBackend, replyTransport }) => {
+  const manager = await app.firstWindow();
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  const opened = app.waitForEvent('window');
+  await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
+  const helper = await opened;
+  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
+  await rewriteBackend.plan({ count: 1 });
+  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).fill('保留我的本次编辑。');
+  await rewriteBackend.plan({ fault: 'timeout' });
+  await helper.getByRole('button', { name: '重新生成', exact: true }).click();
+  await expect(helper.getByRole('alert')).toContainText('本次生成超时');
+  await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('保留我的本次编辑。');
+  expect(replyTransport.results[1]).toEqual({ status: 504, data: { error: 'reply_timeout' } });
+  await rewriteBackend.plan({ count: 2, prefix: '恢复后的说法' });
+  await helper.getByRole('button', { name: '重试同一次生成', exact: true }).click();
+  await expect(helper.getByRole('textbox', { name: '候选2编辑文本', exact: true })).toHaveValue('恢复后的说法（说法2）。');
+  expect(replyTransport.requests[2]).toEqual(replyTransport.requests[1]);
+  await helper.getByRole('textbox', { name: '候选2编辑文本', exact: true }).fill('恢复后自己修改的表达。');
+  await rewriteBackend.plan({ fault: 'failure' });
+  await helper.getByRole('button', { name: '重新生成', exact: true }).click();
+  await expect(helper.getByRole('alert')).toContainText('本次生成失败');
+  await expect(helper.getByRole('textbox', { name: '候选2编辑文本', exact: true })).toHaveValue('恢复后自己修改的表达。');
+  await expect(helper.getByText('合成原始模型错误不应进入界面。', { exact: true })).toHaveCount(0);
+  await rewriteBackend.plan({ count: 0 });
+  await helper.getByRole('button', { name: '重试同一次生成', exact: true }).click();
+  await expect.poll(() => replyTransport.results.length).toBe(5);
+  expect(replyTransport.results[4]).toEqual({ status: 500, data: { error: 'reply_generation_failed' } });
+  await expect(helper.getByRole('alert')).toContainText('本次生成失败');
+  await expect(helper.getByRole('textbox', { name: '候选2编辑文本', exact: true })).toHaveValue('恢复后自己修改的表达。');
+});
