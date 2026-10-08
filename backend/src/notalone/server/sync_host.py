@@ -25,6 +25,7 @@ from notalone.front_sync.sync_engine import (
     FrontSyncCycleReport,
 )
 from notalone.front_sync.tail_lifecycle import FrontSyncPhase, FollowRuntimeStatus
+from notalone.persistence.conversation_repository import PersistedConversationBinding
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +71,14 @@ class SyncEnginePort(Protocol):
 
     def list_cli_sessions(self) -> tuple[CliBindingCandidateView, ...]:
         """读取 CLI 可见的私聊会话候选；不要求微信在前台。"""
+
+    def list_cli_bindings(self) -> tuple[PersistedConversationBinding, ...]:
+        """读取当前运行范围的 active 绑定目录。"""
+
+    def revoke_cli_binding(
+        self, *, contact_id: UUID, binding_id: UUID,
+    ) -> PersistedConversationBinding:
+        """撤销当前运行范围内的一个绑定。"""
 
     def confirm_cli_bindings(
         self,
@@ -135,6 +144,14 @@ class SyncControlPort(Protocol):
     def cli_sessions(self) -> tuple[CliBindingCandidateView, ...]:
         """读取 CLI 可见的私聊会话候选。"""
 
+    def cli_bindings(self) -> tuple[PersistedConversationBinding, ...]:
+        """读取当前运行范围的 active 绑定目录。"""
+
+    def revoke_cli_binding(
+        self, *, contact_id: UUID, binding_id: UUID,
+    ) -> PersistedConversationBinding:
+        """有界等待循环收尾后撤销；成功返回后不再新增该绑定的读取。"""
+
     def confirm_cli_bindings(
         self,
         selections: Sequence[CliBindingSelection],
@@ -160,6 +177,10 @@ class SyncControlPort(Protocol):
 
 class SyncHostStopped(RuntimeError):
     """运行时正在停止或已停止，不能重新触发读取。"""
+
+
+class SyncHostBusy(RuntimeError):
+    """本轮同步尚未收尾；未取得锁时不执行授权变更。"""
 
 
 class SyncHost:
@@ -307,6 +328,20 @@ class SyncHost:
         with self._active_engine():
             return self._engine.list_cli_sessions()
 
+    def cli_bindings(self) -> tuple[PersistedConversationBinding, ...]:
+        with self._active_engine():
+            return self._engine.list_cli_bindings()
+
+    def revoke_cli_binding(
+        self, *, contact_id: UUID, binding_id: UUID,
+    ) -> PersistedConversationBinding:
+        if not isinstance(contact_id, UUID) or not isinstance(binding_id, UUID):
+            raise TypeError("绑定和联系人必须是 UUID。")
+        with self._active_engine(timeout=4.0):
+            return self._engine.revoke_cli_binding(
+                contact_id=contact_id, binding_id=binding_id,
+            )
+
     def confirm_cli_bindings(
         self,
         selections: Sequence[CliBindingSelection],
@@ -401,12 +436,21 @@ class SyncHost:
     # ------------------------------------------------------------------
 
     @contextmanager
-    def _active_engine(self) -> Iterator[None]:
+    def _active_engine(self, *, timeout: float | None = None) -> Iterator[None]:
         # stop 先设事件；已排队的 API 获得同一锁后也不能重启读取。
-        with self._engine_lock:
+        acquired = (
+            self._engine_lock.acquire()
+            if timeout is None
+            else self._engine_lock.acquire(timeout=timeout)
+        )
+        if not acquired:
+            raise SyncHostBusy("同步仍在收尾，请重试。")
+        try:
             if self._stop_event.is_set():
                 raise SyncHostStopped("同步宿主已停止。")
             yield
+        finally:
+            self._engine_lock.release()
 
     def _loop(self) -> None:
         # 启动先播种一轮初始化报告；随后只在同步开启时按心跳循环。

@@ -11,6 +11,7 @@ import { StartupReadiness, StartupSettings, useStartupState } from './StartupSet
 import { CurrentContactLabel, HelperContactPicker, useContactSession } from './contact-session';
 import { ContactsPage } from './ContactsPage';
 import { ReplyCandidates, RewriteInput, useReplySession } from './RewritePanel';
+import { BindingConsentPage } from './BindingConsentPage';
 
 const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
@@ -76,7 +77,8 @@ function App() {
           : startup.phase !== 'ready' && <StartupReadiness state={startup} onConfigure={() => setPage('config')} />}
         {page === 'config' && <><SetupPanel /><DesktopControls /></>}
         {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} />}
-        {page !== 'config' && page !== 'contacts' && <section className="empty-panel" aria-label={currentPage.title}>
+        {page === 'sync' && <BindingConsentPage contacts={contactSession} navigate={setPage} />}
+        {page !== 'config' && page !== 'contacts' && page !== 'sync' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
           <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>
           <button className="button" disabled>{currentPage.action}</button>
