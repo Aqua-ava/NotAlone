@@ -1,4 +1,5 @@
-import { _electron as electron, expect, type ElectronApplication } from '@playwright/test';
+import { expect, type ElectronApplication } from '@playwright/test';
+import { launchApp } from './app-test-gate';
 import type { ChildProcess } from 'node:child_process';
 import { test } from './contact-fixture';
 import { isolatedAppEnvironment, selectMenu } from './app-fixture';
@@ -15,7 +16,7 @@ test('同一 userData 正常退出再启动时，不恢复联系人选择或未�
   let restarted: ElectronApplication | undefined;
   let restartedProcess: ChildProcess | undefined;
   try {
-    restarted = await electron.launch({ executablePath: process.env.NOTALONE_TEST_APP_EXECUTABLE,
+    restarted = await launchApp({ executablePath: process.env.NOTALONE_TEST_APP_EXECUTABLE,
       args: [...(process.env.NOTALONE_TEST_APP_EXECUTABLE ? [] : [appDirectory]), `--user-data-dir=${userData}`],
       env: isolatedAppEnvironment(userData, appEnvironment) });
     restartedProcess = restarted.process();
@@ -32,9 +33,9 @@ test('同一 userData 正常退出再启动时，不恢复联系人选择或未�
     await selectMenu(restarted, 'NotAlone', '退出 NotAlone');
     await expect.poll(() => restartedProcess!.exitCode).toBe(0);
   } finally {
-    if (restarted && restartedProcess?.exitCode === null) {
+    if (restarted && restartedProcess?.exitCode === null && restartedProcess.signalCode === null) {
       const child = restartedProcess;
-      const fallback = setTimeout(() => { if (child.exitCode === null) child.kill('SIGKILL'); }, 5000);
+      const fallback = setTimeout(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); }, 5000);
       try { await restarted.close().catch(() => {}); } finally { clearTimeout(fallback); }
     }
   }

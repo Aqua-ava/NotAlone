@@ -1,4 +1,5 @@
-import { expect, _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
+import { expect, type ElectronApplication, type Page } from '@playwright/test';
+import { launchApp } from './app-test-gate';
 import { cp, mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -64,7 +65,7 @@ test('用户可以修改快捷键并在重启后继续使用已保存的组合',
   const userData = await app.evaluate(({ app }) => app.getPath('userData'));
   await selectMenu(app, 'NotAlone', '退出 NotAlone');
   await expect.poll(() => appProcess.exitCode).toBe(0);
-  const restarted = await electron.launch({
+  const restarted = await launchApp({
     executablePath: process.env.NOTALONE_TEST_APP_EXECUTABLE,
     args: [...(process.env.NOTALONE_TEST_APP_EXECUTABLE ? [] : [appDirectory]), `--user-data-dir=${userData}`],
     env: isolatedAppEnvironment(userData),

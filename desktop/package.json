@@ -8,8 +8,9 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "start": "npm run build && electron .",
-    "test": "npm run build && playwright test",
-    "test:app": "npm run build && playwright test tests/windows.spec.ts",
+    "test": "npm run typecheck && node scripts/test-safe.mjs",
+    "test:app": "node scripts/test-app.mjs",
+    "test:app:status": "node scripts/test-app.mjs --status",
     "package": "npm run build && node scripts/package.mjs"
   },
   "engines": { "node": ">=22.12.0" },
