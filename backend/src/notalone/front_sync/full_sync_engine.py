@@ -23,6 +23,7 @@ from notalone.front_sync.sync_engine import (
 )
 from notalone.front_sync.tail_lifecycle import FrontSyncPhase, FollowRuntimeStatus
 from notalone.persistence.front_sync_state import PostgresFrontSyncStateStore
+from notalone.persistence.conversation_repository import PersistedConversationBinding
 from notalone.wechat_cli import CliAdapterError, LocalWechatCli
 
 
@@ -257,6 +258,20 @@ class CliFullSyncEngine:
         """读取批量绑定预览；不要求微信在前台。"""
 
         return self._binding_coordinator.list_candidates()
+
+    def list_cli_bindings(self) -> tuple[PersistedConversationBinding, ...]:
+        """读取当前运行范围的有效授权，不调用 CLI 或探针。"""
+
+        return self._binding_coordinator.list_bindings()
+
+    def revoke_cli_binding(
+        self, *, contact_id: UUID, binding_id: UUID,
+    ) -> PersistedConversationBinding:
+        """撤销授权，不主动执行读取；下一轮使用新的 active 快照。"""
+
+        return self._binding_coordinator.revoke_binding(
+            contact_id=contact_id, binding_id=binding_id,
+        )
 
     def confirm_cli_bindings(
         self,
