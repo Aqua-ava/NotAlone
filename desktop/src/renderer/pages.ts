@@ -3,8 +3,8 @@ export const managerPages = {
     title: '联系人与绑定', icon: 'contacts',
     description: '先确认联系人与会话的对应关系，再决定哪些会话可以同步。',
     emptyTitle: '联系人暂不可用',
-    emptyDescription: '连接完成后，这里会显示你的联系人与已确认绑定。',
-    action: '添加联系人',
+    emptyDescription: '连接完成后，这里会显示你的联系人与消息、来源摘要。',
+    action: '选择联系人',
   },
   import: {
     title: '历史导入', icon: 'import',

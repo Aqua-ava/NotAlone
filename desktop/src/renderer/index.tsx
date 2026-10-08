@@ -7,12 +7,15 @@ import logo from './assets/logo.png';
 import './style.css';
 import { BackendBadge, BackendConnectionNote, useBackendState } from './backend-status';
 import { SetupPanel } from './SetupPanel';
+import { CurrentContactLabel, HelperContactPicker, HelperDraft, useContactSession } from './contact-session';
+import { ContactsPage } from './ContactsPage';
 
 const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
 
 function App() {
   const backend = useBackendState();
+  const contactSession = useContactSession();
   const [error, setError] = useState('');
   const [page, setPage] = useState<ManagerPage>('contacts');
   async function operate(operation: () => Promise<void>) {
@@ -23,7 +26,7 @@ function App() {
   return helper ? <main className="ime-pane">
     <header className="ime-header">
       <img className="ime-logo" src={logo} alt="NotAlone" />
-      <button className="contact-pill" disabled><span className="status-dot" />联系人未确认<Icon name="chevron" size={12} /></button>
+      <HelperContactPicker session={contactSession} />
       <div className="ime-modes" role="group" aria-label="写作方式">
         <button className="active" disabled>改写</button><button disabled>回复</button>
       </div>
@@ -33,10 +36,11 @@ function App() {
         onClick={() => void operate(window.notalone.hideWindow)}><Icon name="close" size={16} /></button>
     </header>
     <div className="ime-input">
-      <textarea aria-label="草稿" rows={1} placeholder="连接完成并确认联系人后，就可以写下你的意思…" disabled />
+      <HelperDraft session={contactSession} />
       <button className="generate-button" aria-label="生成候选" title="生成候选" disabled><Icon name="sparkle" size={18} /></button>
     </div>
-    <BackendBadge state={backend} compact />
+    <div className="ime-status-line"><BackendBadge state={backend} compact />
+      <div className="ime-contact-note"><CurrentContactLabel state={contactSession.state} /></div></div>
     <section className="horizontal-candidates" aria-label="候选回复">
       <p>暂无候选</p><small>准备好你的意思，再选择合适的表达。</small>
     </section>
@@ -47,6 +51,7 @@ function App() {
       <button className="copy-hide" disabled>复制并收起</button>
     </footer>
     {error && <p role="alert">{error}</p>}
+    {contactSession.error && <p role="alert">{contactSession.error}</p>}
   </main> : <div className="admin-layout">
     <aside className="admin-sidebar">
       <div className="admin-brand"><img src={logo} alt="NotAlone" /><small>让每一次表达，更像你自己</small></div>
@@ -61,7 +66,7 @@ function App() {
     <div className="admin-workspace">
       <header className="admin-topbar">
         <span>管理后台 <i>／</i> {currentPage.title}</span>
-        <div><BackendBadge state={backend} />
+        <div><CurrentContactLabel state={contactSession.state} /><BackendBadge state={backend} />
           <button className="button primary" onClick={() => void operate(window.notalone.openHelper)}><Icon name="write" size={15} />打开输入小窗</button></div>
       </header>
       <ShortcutWarning />
@@ -69,7 +74,8 @@ function App() {
         <div className="manager-title"><h1>{currentPage.title}</h1><p>{currentPage.description}</p></div>
         <BackendConnectionNote state={backend} />
         {page === 'config' && <><SetupPanel /><DesktopControls /></>}
-        {page !== 'config' && <section className="empty-panel" aria-label={currentPage.title}>
+        {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} />}
+        {page !== 'config' && page !== 'contacts' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
           <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>
           <button className="button" disabled>{currentPage.action}</button>
