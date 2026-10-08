@@ -19,3 +19,19 @@
 .import-confirm { display: flex; align-items: start; gap: 8px; margin: 18px 0 14px; font-size: 12px; color: #597b87; line-height: 1.6; }
 .import-note[role="alert"] { color: #99594e; }
 .import-confirmed { color: #5c8170; font-size: 12px; margin-top: 17px; }
+.import-confirmed .button { margin: 10px 10px 0 0; }
+.import-progress { margin-top: 24px; padding: 20px; border: 1px solid #b8ccbe; border-radius: 4px; background: #f5f8f1; }
+.import-progress h3, .import-progress h4 { color: #476d79; font-weight: 500; font-size: 14px; margin: 0 0 12px; }
+.import-progress h4 { font-size: 13px; margin-top: 20px; }
+.import-progress p, .import-sources { color: #6b7b7b; font-size: 12px; line-height: 1.8; }
+.import-task-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 22px; }
+.import-task-toolbar h4 { margin: 0; }
+.import-task-steps { padding: 0; list-style: none; display: grid; gap: 8px; margin: 15px 0; }
+.import-task-steps li { padding: 12px; border: 1px solid #cdd8ce; border-radius: 3px; background: #fffdf8; }
+.import-task-steps li div { display: flex; gap: 16px; justify-content: space-between; color: #577681; font-size: 12px; }
+.import-task-steps strong { font-weight: 500; }
+.import-task-steps p { margin: 6px 0 0; }
+.import-task-error, .import-progress p[role="alert"] { color: #985a4c; }
+.import-progress .import-complete { color: #528267; }
+.import-sources { padding-left: 18px; overflow-wrap: anywhere; }
+.import-sync-reload { margin-top: 18px; border-top: 1px solid #cdd8ce; padding-top: 10px; }

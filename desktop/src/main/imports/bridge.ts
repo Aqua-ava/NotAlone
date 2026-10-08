@@ -37,12 +37,17 @@ export function installImportBridge(windows: AppWindows, imports: ImportControll
     if (!window.webContents.getURL().endsWith('#manager')) throw new Error('历史导入操作不可用。');
     return imports.setTarget(target(args));
   });
-  for (const action of ['preview', 'confirm-preview', 'cancel-confirmation'] as const) ipcMain.handle(`imports:${action}`, (event, ...args: unknown[]) => {
+  for (const action of ['preview', 'confirm-preview', 'cancel-confirmation', 'submit', 'refresh-task', 'retry-task', 'run-task', 'reload-sync-host'] as const) ipcMain.handle(`imports:${action}`, (event, ...args: unknown[]) => {
     const window = windows.validateCaller(event, []);
     if (!window.webContents.getURL().endsWith('#manager')) throw new Error('历史导入操作不可用。');
     const revision = selectionRevision(args);
     if (action === 'preview') return imports.preview(revision);
     if (action === 'confirm-preview') return imports.confirmPreview(revision);
+    if (action === 'submit') return imports.submit(revision);
+    if (action === 'refresh-task') return imports.refreshTask(revision);
+    if (action === 'retry-task') return imports.retryTask(revision);
+    if (action === 'run-task') return imports.runTask(revision);
+    if (action === 'reload-sync-host') return imports.reloadSyncHost(revision);
     return imports.cancelConfirmation(revision);
   });
 }

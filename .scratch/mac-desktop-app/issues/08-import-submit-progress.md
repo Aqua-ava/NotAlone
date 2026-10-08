@@ -1,7 +1,7 @@
 # 08：导入提交、处理进度与重试
 
 Type: task
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: 07
 Spec: ../spec.md
@@ -28,3 +28,8 @@ Spec: ../spec.md
 ## Comments
 
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
+- 2026-10-09：依赖 07 已完成，开始接入一次性确认后的原子提交、持久任务进度与原任务重试。用户选择先继续不触桌面的工作，本轮只准备公开 App 用例及隔离 HTTP 证据；必要 App 验收待安排，任务保持 claimed。
+- 2026-10-09：真实 HTTP 显示首次 `new_contact_name` 已保存后，同 body 再提交返回 409；联系人、来源、消息仍为 1/1/6。按既定“重复提交返回原结果”获准最小修复：以受控 owner、稳定微信身份与同摘要查找原归属，原 active 来源、active 身份、`manual_create` 确认及当前联系人名称均一致才复用原 contact/task，返回 0 新增、6 重复投影。名称不作匹配键；名称变更、不同文件、原 `manual_select`、错 owner、非 active 来源或 revoked 身份拒绝自动复用/恢复，要求重新预览明确选择既有 UUID。锁定原记录，不新增 schema/DTO/token 或授权，二十张任务与依赖不变。
+- 2026-10-09：本轮不触桌面的候选已接入具名提交、真实持久五步骤与安全错误、原失败任务 retry→run、真实联系人/来源刷新和明确认证停读重启入口。取消/断线只废弃本次等待与展示，不能撤销已发出的 commit 或后台任务；结果未知不自动重发，必须重新预览确认。同 body 新建重放真实 HTTP red 为 409，修复后 200、原 contact/task、0 新增/6 重复；首次同 body 并发均 200，仍只有 1 联系人/1 来源/6 消息。HTTP 九项 green 包含名称、不同文件、owner、manual_select、非 active 来源、revoked 身份及并发状态变更零新增副作用，原任务恢复不重做 parse/normalize、前台回复只用当前草稿范围且后台让位。夹具固定身份冲突及非法 deleted 状态的修正不算产品 red。
+- 2026-10-09：已合入 root 复核的集成 `8a35aac053ba3985f10fe59bc96abcdabfabe722`，保留 07/09/13/16 与桌面门禁；`npm run typecheck && npm run build` 通过。以当前 `backend/src`、Conda NotAlone、禁默认 dotenv、双向独立配置/握手、模型/CLI/探针的随机新 `_test` 库运行 `desktop/tests/fixtures/import_http_check.py` 九项及 `tests.integration.server.test_first_import_api`、`tests.integration.persistence.test_postgres_repository`、`tests.integration.ingest.test_import_command` 四十项通过；仅该库执行正式迁移，逐次按本轮库名核验残留 0，临时目录/HTTP/任务宿主均按夹具收尾。HTTP owner UPDATE 与 CLI owner KEY SHARE/本人渠道身份 UPDATE 的现有锁区别保留；重放另锁原记录。`git diff --check` 与二十票字段/DAG/链接检查通过，后者不算产品测试。
+- 2026-10-09：公开 App 提交、进度、恢复、迟到结果、丢响应及首份身份重装配用例已准备，本轮没有执行 Electron/Playwright/CUA、对话框或剪贴板操作，也未跑签名包、真实微信或语义质量验收；没有 UI red/green 或新截图。任务继续 claimed、验收条件未勾选、没有 Answer，等待 root 统一两轴复核和用户安排 App 时段。

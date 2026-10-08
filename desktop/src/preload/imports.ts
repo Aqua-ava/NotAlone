@@ -13,6 +13,11 @@ export function createImportBridge(): ImportBridge {
     preview: (...args: [ImportSelectionVersion]) => oneArgument('imports:preview', args),
     confirmPreview: (...args: [ImportSelectionVersion]) => oneArgument('imports:confirm-preview', args),
     cancelConfirmation: (...args: [ImportSelectionVersion]) => oneArgument('imports:cancel-confirmation', args),
+    submit: (...args: [ImportSelectionVersion]) => oneArgument('imports:submit', args),
+    refreshTask: (...args: [ImportSelectionVersion]) => oneArgument('imports:refresh-task', args),
+    retryTask: (...args: [ImportSelectionVersion]) => oneArgument('imports:retry-task', args),
+    runTask: (...args: [ImportSelectionVersion]) => oneArgument('imports:run-task', args),
+    reloadSyncHost: (...args: [ImportSelectionVersion]) => oneArgument('imports:reload-sync-host', args),
     onStateChanged: (listener: (state: ImportState) => void) => {
       if (typeof listener !== 'function') throw new Error('历史导入操作不可用。');
       const receive = (_event: unknown, state: ImportState) => listener(state);
