@@ -10,7 +10,7 @@ export class ContactHttpProxy {
   private readonly held: Array<(failure: boolean) => void> = [];
   private readonly pending = new Set<ReturnType<typeof httpRequest>>();
 
-  constructor(address: string) {
+  constructor(address: string, private readonly heldEndpoint = '/api/contacts') {
     this.server = createServer((incoming, response) => {
       if (this.failRuntimeStatus && incoming.url === '/api/runtime/status') {
         response.writeHead(503, { 'Content-Type': 'application/json' });
@@ -25,7 +25,7 @@ export class ContactHttpProxy {
             response.writeHead(failure ? 503 : result.statusCode ?? 500, { 'Content-Type': 'application/json' });
             response.end(failure ? '{"error":"synthetic_transport_unavailable"}' : Buffer.concat(chunks));
           };
-          if (this.holdContacts && incoming.url === '/api/contacts') { this.held.push(deliver); this.heldCount++; }
+          if (this.holdContacts && incoming.url === this.heldEndpoint) { this.held.push(deliver); this.heldCount++; }
           else deliver(false);
         });
       });
@@ -40,11 +40,11 @@ export class ContactHttpProxy {
     });
   }
 
-  static async attach(infoPath: string): Promise<ContactHttpProxy> {
+  static async attach(infoPath: string, heldEndpoint = '/api/contacts'): Promise<ContactHttpProxy> {
     const fields = Object.fromEntries((await readFile(infoPath, 'utf8')).trim().split('\n').map((line) => {
       const at = line.indexOf('='); return [line.slice(0, at), line.slice(at + 1)];
     }));
-    const proxy = new ContactHttpProxy(fields.address);
+    const proxy = new ContactHttpProxy(fields.address, heldEndpoint);
     await new Promise<void>((resolve) => proxy.server.listen(0, '127.0.0.1', resolve));
     const address = proxy.server.address();
     if (!address || typeof address === 'string') throw new Error('联系人测试传输边界未启动。');

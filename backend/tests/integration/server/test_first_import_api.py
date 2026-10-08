@@ -174,6 +174,102 @@ class FirstImportApiIntegrationTest(unittest.TestCase):
             {owner.id for owner in self.directory.list_owners()}, self.owner_ids_before
         )
 
+    def test_preview_rejects_current_owner_identity_conflict_without_writing(self) -> None:
+        self._insert_owner_identity(external_id=f"wxid_other_{uuid4().hex}")
+
+        status, result = self._request(
+            "/api/imports/preview", {"path": str(self.path)}
+        )
+
+        self.assertEqual((status, result), (422, {"error": "import_identity_conflict"}))
+        self.assertEqual(self._contacts(), [])
+
+    def test_preview_does_not_restore_revoked_owner_identity(self) -> None:
+        self._insert_owner_identity(status="revoked")
+
+        status, result = self._request(
+            "/api/imports/preview", {"path": str(self.path)}
+        )
+
+        self.assertEqual((status, result), (422, {"error": "import_identity_conflict"}))
+        self.assertEqual(self._contacts(), [])
+
+    def test_preview_rejects_owner_channel_identity_occupied_by_other_owner(self) -> None:
+        other_owner = uuid4()
+        self.owner_ids.append(other_owner)
+        self.directory.create_owner(other_owner, "另一合成用户")
+        self._insert_owner_identity(owner_id=other_owner)
+
+        status, result = self._request(
+            "/api/imports/preview", {"path": str(self.path)}
+        )
+
+        self.assertEqual((status, result), (422, {"error": "import_identity_conflict"}))
+        self.assertEqual(self._contacts(), [])
+
+    def test_preview_rejects_selected_contact_with_different_channel_identity(self) -> None:
+        status, imported = self._new_contact_import()
+        self.assertEqual(status, 200, imported)
+        original_contacts = self._contacts()
+        records = [json.loads(line) for line in self.path.read_text(encoding="utf-8").splitlines()]
+        original_contact_id = records[0]["id"]["talker"]
+        changed = self.path.read_text(encoding="utf-8").replace(
+            original_contact_id, f"wxid_changed_contact_{uuid4().hex}"
+        )
+        self.path.write_text(changed, encoding="utf-8")
+
+        status, result = self._request(
+            "/api/imports/preview", {"path": str(self.path), "contact_id": imported["contact_id"]}
+        )
+
+        self.assertEqual((status, result), (422, {"error": "import_identity_conflict"}))
+        self.assertEqual(self._contacts(), original_contacts)
+
+    def test_commit_rejects_changed_file_until_fresh_preview_is_confirmed(self) -> None:
+        status, preview = self._request(
+            "/api/imports/preview", {"path": str(self.path)}
+        )
+        self.assertEqual(status, 200, preview)
+        records = [json.loads(line) for line in self.path.read_text(encoding="utf-8").splitlines()]
+        records[0]["text"] = "预览后变动的合成文字。"
+        self.path.write_text(
+            "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n",
+            encoding="utf-8",
+        )
+
+        status, result = self._request(
+            "/api/imports/commit", {"path": str(self.path), "new_contact_name": "变动后合成联系人",
+                                    "expected_content_sha256": preview["content_sha256"]}
+        )
+
+        self.assertEqual((status, result), (409, {"error": "import_file_changed"}))
+        self.assertEqual(self._contacts(), [])
+        status, refreshed = self._request("/api/imports/preview", {"path": str(self.path)})
+        self.assertEqual(status, 200, refreshed)
+        self.assertNotEqual(refreshed["content_sha256"], preview["content_sha256"])
+        status, imported = self._request(
+            "/api/imports/commit", {"path": str(self.path), "new_contact_name": "变动后合成联系人",
+                                    "expected_content_sha256": refreshed["content_sha256"]}
+        )
+        self.assertEqual(status, 200, imported)
+        self.assertEqual(self._contacts()[0]["data_status"], {"message_count": 6, "source_count": 1})
+
+    def test_group_export_is_rejected_before_preview_or_any_import_data(self) -> None:
+        records = [json.loads(line) for line in self.path.read_text(encoding="utf-8").splitlines()]
+        contact_external_id = records[0]["id"]["talker"]
+        self.path.write_text(
+            self.path.read_text(encoding="utf-8").replace(contact_external_id, "synthetic-room@chatroom"),
+            encoding="utf-8",
+        )
+
+        status, result = self._request("/api/imports/preview", {"path": str(self.path)})
+
+        self.assertEqual((status, result), (422, {"error": "import_preview_failed", "reason": "preview_failed"}))
+        self.assertEqual(self._contacts(), [])
+        status, result = self._new_contact_import()
+        self.assertEqual((status, result), (409, {"error": "import_commit_failed"}))
+        self.assertEqual(self._contacts(), [])
+
     def test_repeated_import_reports_counts_without_duplicate_data(self) -> None:
         status, first = self._request(
             "/api/imports/commit",

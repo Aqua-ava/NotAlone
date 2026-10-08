@@ -2,9 +2,11 @@
 
 Electron + React/TypeScript 的本机 Mac App，当前完成管理后台与横向输入小窗。两个窗口独立打开，关闭时隐藏，可从原生“窗口”菜单恢复；使用“隐藏 NotAlone”整体收起后，窗口菜单只恢复所选窗口。“NotAlone → 退出 NotAlone”明确退出。小窗标题空白区域可拖动，底部图钉按钮可切换置顶；隐藏和恢复保留本次置顶状态，管理后台保持独立。
 
-主进程认证连接本机 Python 后端，并在两个窗口显示真实连接状态。重复启动只恢复已有 App；关闭窗口继续隐藏，明确退出先阻止新业务，再通过原已验证连接确认停读。连接或退出失败保留安全说明和重试入口。已接入真实联系人目录、双窗口选择与本次临时草稿；导入、资料、同步管理、生成和候选复制仍由后续任务接线，不能把连接成功当作完整业务闭环可用。
+主进程认证连接本机 Python 后端，并在两个窗口显示真实连接状态。重复启动只恢复已有 App；关闭窗口继续隐藏，明确退出先阻止新业务，再通过原已验证连接确认停读。连接或退出失败保留安全说明和重试入口。已接入真实联系人目录、双窗口选择、本次临时草稿与历史文件预览；正式导入进度、资料、同步管理、生成和候选复制仍由后续任务接线，不能把连接成功当作完整业务闭环可用。
 
 “联系人与绑定”显示当前运行本人范围内的联系人、消息数与来源数，不提供不存在的联系人添加或详情接口。目录先以同一已验证连接查询真实 `runtime_owner_configured`；缺模型密钥不阻塞查看联系人。目录首次默认不选，联系人由你手动确认；空目录说明通过历史导入或同步确认建立联系人。管理后台按钮和小窗选择器使用稳定的内部 `contact_id`，名称只用于展示。两个窗口共享本次联系人，小窗保持显示归属；同联系人隐藏恢复保留本次草稿，切换（包括 A→B→A）、断线、换连接和退出清空临时输入，旧目录成功或失败不会覆盖新范围。草稿仅在内存中保留，重启不恢复；本阶段不生成假候选或发送消息。
+
+“历史导入”通过系统单文件选择器读取用户本次主动选择的单联系人 JSONL；联系人选择默认留空，用户明确选既有联系人或填写新联系人名称。真实后端先完整校验格式、群聊、混合联系人与本人身份，再只读核对当前运行本人及所选联系人的渠道一致性。预览只显示文件名、本人和联系人身份、记录数及类型统计；选择、预览和确认都不写入联系人、身份或消息。换文件、换归属、另一窗口切换联系人、连接变化或主动取消会撤销本次预览；确认时重新读取预览核对内容摘要，迟到结果不能恢复旧范围。确认后的“尚未保存资料”表示正式提交页面尚待任务 08 接入；外部导出工具的非官方能力、密钥与缓存风险在选择前说明。
 
 “应用配置 → 本人身份与模型”已沿用后端 setup 接口：空库等待用户明确初始化本人，App 固定使用 `create_only`，服务端在同一事务内原子检查和创建；发现既有身份时拒绝并保持本轮配置不变。`setup/status` 的只读 `runtime_owner_configured` 核对当前实例受控身份在同库存在，就绪时直接复用。全库已有本人但本次运行身份缺失或不存在时提示检查受控配置，不自动选取其他身份。
 
@@ -36,6 +38,8 @@ npm run package
 `tests/setup.spec.ts`、`tests/setup-stale.spec.ts`、`tests/setup-recovery.spec.ts` 与 `tests/setup-concurrency.spec.ts` 使用本轮随机 `_test` PostgreSQL 库、正式迁移和真实 `notalone.server.command` / HTTP。受控解释器夹具只从独立 `synthetic.env` 加载本轮本人与合成密钥，继续禁止默认 dotenv，并把模型 URL 固定到无服务的回环端口；CLI 与探针使用不存在的本轮路径。覆盖首次初始化、既有配置、缺失或不存在的运行身份、密钥保存失败、启动失败恢复、经验证的复用服务重启、具名 IPC 限制与迟到响应失效；新增响应丢失后的明确重载、失败刷新失效，以及同库两个真实客户端并发初始化。延迟夹具只控制真实后端的 HTTP 传输，PG 锁只安排并发写入窗口，不替换业务仓储。测试完成只清理本轮库、配置和进程，不调用真实模型或微信。
 
 `tests/contact-*.spec.ts` 同样使用随机新建、正式迁移的 `_test` 库及当前工作树真实 HTTP，包含两个合成联系人和同库另一 owner。验证真实统计、本人就绪与空列表、两窗选择、目录外 ID 与过期草稿拒绝、隐藏恢复、A→B→A 清空、断线/连接更换撤销旧成功和失败、相同 userData 重启清空；延迟目录只在本轮回环传输边界安排，不替换联系人业务模块。目录外参数无法从 UI 构造的场景经过公开具名桥接，结果仍核验真实两窗；不使用私有会话模块或通用 renderer 请求。草稿、截图与测试输出均使用合成文字，只清理本轮创建的库、配置、握手与进程。真实候选生成及 SSE 的联系人失效验证由后续 09、19 延续。
+
+`tests/import-preview.spec.ts` 由实际 App 选择、预览、手动确认与取消，连接同一真实 HTTP／随机 `_test` 库。自动化只替换必要的系统文件选择返回，不替换导入业务；覆盖有效单联系人资料、损坏、混合联系人、群聊、多本人、库内身份冲突、文件内容变化、换文件、换归属和双窗口迟到结果。任意路径和目录外联系人经过公开具名桥接拒绝；无正文、完整路径或摘要交给渲染层。最终签名包的真实系统文件选择另由 CUA 核验，自动化中的对话框替身不能代替这项验收。
 
 使用 Playwright 的 experimental Electron 支持，在真实窗口上操作公开按钮和原生关闭/菜单。测试使用独立随机用户数据目录并正常回收进程；不读取 React 私有状态，不访问已有业务数据。构建源码资源与打包 App 共用同一行为测试：
 
@@ -84,12 +88,14 @@ NOTALONE_TEST_APP_EXECUTABLE="$PWD/out/NotAlone-darwin-arm64/NotAlone.app/Conten
 
 | 目录 | 职责 |
 | --- | --- |
-| `src/main/` | 窗口、菜单、资源、单实例、全局快捷键和非秘密桌面设置；`startup/` 管理路径与只读机器门禁，`backend/` 管理启动、握手、认证 HTTP、连接与退出状态 |
+| `src/main/` | 窗口、菜单、资源、单实例、全局快捷键和非秘密桌面设置；`startup/` 管理路径与只读机器门禁，`backend/` 管理启动、握手、认证 HTTP、连接与退出状态；`contacts/` 管理两窗本次联系人和草稿，`imports/` 管理单文件预览与一次确认 |
 | `src/preload/` | 具名窗口、桌面设置和后端桥接及非秘密状态订阅，不暴露通用 IPC、URL 请求或认证信息 |
 | `src/renderer/` | React 界面、交互与展示状态 |
 | `src/shared/` | 跨进程桥接类型 |
 | `tests/` | 实际 Electron App 公开行为自动化 |
 | `scripts/` | 本地资源编译、白名单打包、图标与 ad-hoc 签名 |
+
+历史预览的公开具名桥接为 `imports.getState()`、`chooseFile()`、`setTarget(target)`、`preview({ selectionRevision })`、`confirmPreview({ selectionRevision })`、`cancelConfirmation({ selectionRevision })` 和 `onStateChanged`。渲染层只持有展示数据与本次选择版本。任务 08 的主进程提交操作调用 `ImportController.takeConfirmedSelection(selectionRevision)`，返回 `{ generation, body }`；`body` 包含本轮系统选择的 `path`、`expected_content_sha256` 和二选一的 `contact_id`／`new_contact_name`。该方法同步核对连接 generation、两窗联系人范围及选择版本，并立即消耗确认；提交前再次核对 generation 后，以 `BackendHost.requestJson` 调用 `POST /api/imports/commit`。提交失败或取消必须重新预览确认，不能缓存 body 作为重试授权。服务器从一次读取的同一文档校验摘要、规范化并原子写入，内容不同返回 `409 / import_file_changed`，预览身份冲突返回 `422 / import_identity_conflict`；旧 HTTP 调用的摘要参数仍为可选。
 
 渲染层开启 context isolation、进程沙箱、关闭 Node 集成；正常界面只从受控 `notalone://app/` 资源加载，设置 CSP、拒绝导航/新窗口/网页权限。主进程校验桥接的窗口、主框架、精确资源来源、参数个数和类型。入口资源失败时使用无脚本的安全中文说明页，来源校验拒绝它调用桥接；可从原生菜单重试。临时界面会话使用内存分区；默认应用配置目录是 `~/Library/Application Support/NotAloneDesktop`，与历史 App 分开；`desktop-settings.json` 只保存 `helperShortcut`，不保存草稿、候选、置顶状态或业务资料。
 
@@ -97,4 +103,4 @@ NOTALONE_TEST_APP_EXECUTABLE="$PWD/out/NotAlone-darwin-arm64/NotAlone.app/Conten
 
 新 UI 继续遵守[产品边界](../CONTEXT.md)：用户确认联系人与读取范围、查看并编辑候选、亲自发送；后端接入后桌面退出必须停止本次后台读取。原 Swift 主界面已按 [ADR-036](../architecture/adr/036-retire-swift-main-interface.md) 退役，新宿主边界见 [ADR-037](../architecture/adr/037-electron-dual-window-host.md)。
 
-已核对的官方接口资料：[Electron 安全](https://www.electronjs.org/docs/latest/tutorial/security)、[BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window)、[原生菜单](https://www.electronjs.org/docs/latest/api/menu)、[App 生命周期](https://www.electronjs.org/docs/latest/api/app)、[全局快捷键](https://www.electronjs.org/docs/latest/api/global-shortcut)、[拖动区域](https://www.electronjs.org/docs/latest/tutorial/custom-window-interactions)、[资源协议](https://www.electronjs.org/docs/latest/api/protocol)、[打包器](https://electron.github.io/packager/main/)、[Playwright Electron](https://playwright.dev/docs/api/class-electron)。锁定 Electron 44.7.0 / Playwright 1.64.0 在本机已实际运行；文档和版本锁定本身不能替代上述验收。
+已核对的官方接口资料：[Electron 安全](https://www.electronjs.org/docs/latest/tutorial/security)、[BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window)、[原生菜单](https://www.electronjs.org/docs/latest/api/menu)、[App 生命周期](https://www.electronjs.org/docs/latest/api/app)、[全局快捷键](https://www.electronjs.org/docs/latest/api/global-shortcut)、[系统文件选择器](https://www.electronjs.org/docs/latest/api/dialog)、[拖动区域](https://www.electronjs.org/docs/latest/tutorial/custom-window-interactions)、[资源协议](https://www.electronjs.org/docs/latest/api/protocol)、[打包器](https://electron.github.io/packager/main/)、[Playwright Electron](https://playwright.dev/docs/api/class-electron)。锁定 Electron 44.7.0 / Playwright 1.64.0 在本机已实际运行；文档和版本锁定本身不能替代上述验收。

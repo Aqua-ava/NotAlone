@@ -90,7 +90,10 @@ def validate_records(
         kind = record["kind"]
         # Counter 中尚不存在的键默认计数为 0，因此可以直接加 1。
         kind_counts[kind] += 1
-        talker_ids.add(record["id"]["talker"].strip())
+        talker = record["id"]["talker"].strip()
+        if talker.endswith("@chatroom"):
+            raise ImportPreviewError("群聊资料必须拆分为单联系人后导入。")
+        talker_ids.add(talker)
 
         # system 消息可能没有 sender_wxid，也不能用来判断联系人身份。
         if kind != "system":

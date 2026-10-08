@@ -29,6 +29,12 @@ class FakeRepository:
     def __init__(self) -> None:
         self.calls: list[tuple[UUID | None, ImportBatch, ImportConfirmationRequest]] = []
 
+    def validate_preview_identity(
+        self, *, owner_id: UUID, owner_external_id: str,
+        contact_external_id: str, contact_id: UUID | None = None,
+    ) -> None:
+        """仅适配既有单元测试；身份一致性由真实 HTTP/PG 验证。"""
+
     def import_document(
         self,
         *,
@@ -97,7 +103,7 @@ class ImportServiceTest(unittest.TestCase):
             Path(__file__).resolve().parents[2] / "fixtures" / "valid_single_contact.jsonl"
         )
 
-        result = self.service.preview(path=str(fixture))
+        result = self.service.preview(path=str(fixture), owner_id=OWNER_ID)
 
         self.assertEqual(result["valid"], True)
         self.assertIn("record_count", result)

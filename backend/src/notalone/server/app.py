@@ -55,9 +55,15 @@ from notalone.application.skill_service import (
     SkillImportRejected,
     SkillService,
 )
-from notalone.ingest.errors import ImportPreviewError
+from notalone.ingest.errors import ImportContentChangedError, ImportPreviewError
 from notalone.ingest.import_command import ContactConfirmationError
-from notalone.persistence.postgres_repository import ImportPersistenceError
+from notalone.persistence.postgres_repository import (
+    ChannelIdentityConflictError,
+    ContactNotFoundError,
+    ImportPersistenceError,
+    OwnerChannelIdentityConflictError,
+    OwnerChannelIdentityNotFoundError,
+)
 from notalone.persistence.conversation_repository import (
     ConversationBindingConflictError,
 )
@@ -1159,13 +1165,42 @@ class BackendApp:
             path_value = payload.get("path")
             if not isinstance(path_value, str) or not path_value.strip():
                 raise ImportTaskRequestInvalid()
+            contact_id = None
+            if "contact_id" in payload:
+                if not isinstance(payload["contact_id"], str):
+                    raise ImportTaskRequestInvalid()
+                try:
+                    contact_id = UUID(payload["contact_id"])
+                except ValueError:
+                    raise ImportTaskRequestInvalid() from None
             try:
-                preview = import_service.preview(path=path_value)
-            except (FileNotFoundError, ImportPreviewError, OSError, PermissionError):
+                preview = import_service.preview(
+                    path=path_value,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                )
+            except (
+                ChannelIdentityConflictError,
+                ContactNotFoundError,
+                OwnerChannelIdentityConflictError,
+                OwnerChannelIdentityNotFoundError,
+            ):
+                return _json_response(
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    {"error": "import_identity_conflict"},
+                )
+            except ImportPersistenceError:
+                return _json_response(
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    {"error": "import_preview_failed", "reason": "preview_failed"},
+                )
+            except (
+                FileNotFoundError, ImportPreviewError, OSError, PermissionError,
+            ):
                 # 文件缺失、不可读或内容校验失败：统一 422 + 稳定码，
                 # 具体原因不进入响应（不泄露本机路径或文件内容）。
                 return _json_response(
-                    422,
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
                     {
                         "error": "import_preview_failed",
                         "reason": "preview_failed",
@@ -1204,11 +1239,29 @@ class BackendApp:
                 selection = ExistingContactSelection(contact_id=contact_id)
             else:
                 selection = NewContactSelection(display_name=new_name_value)
+            expected_digest: str | None = None
+            if "expected_content_sha256" in payload:
+                digest_value = payload["expected_content_sha256"]
+                if (
+                    not isinstance(digest_value, str)
+                    or len(digest_value) != 64
+                    or any(
+                        character not in "0123456789abcdef"
+                        for character in digest_value
+                    )
+                ):
+                    raise ImportTaskRequestInvalid()
+                expected_digest = digest_value
             try:
                 result = import_service.commit(
                     path=path_value,
                     owner_id=owner_id,
                     selection=selection,
+                    expected_content_sha256=expected_digest,
+                )
+            except ImportContentChangedError:
+                return _json_response(
+                    HTTPStatus.CONFLICT, {"error": "import_file_changed"},
                 )
             except (
                 ImportPreviewError,

@@ -1,0 +1,81 @@
+import { useEffect, useRef, useState } from 'react';
+import type { ImportState, ImportTarget } from '../shared/import-bridge';
+import type { ContactSessionView } from './contact-session';
+import './imports.css';
+
+const initial: ImportState = { revision: -1, selectionRevision: 0, phase: 'unavailable', fileName: null, target: null, preview: null, error: null };
+const kindLabels: Record<string, string> = {
+  text: '文字', quote: '引用', image: '图片占位', sticker: '表情占位', transfer: '转账记录', system: '系统记录',
+  voice: '语音占位', voip: '通话记录', video: '视频占位', channel_video: '视频号占位', file: '文件占位',
+  link: '链接', location: '位置记录', miniprogram: '小程序', card: '名片', red_packet: '红包记录',
+  forward_chat: '转发记录', app: '应用消息',
+};
+
+export function ImportPage({ session }: { session: ContactSessionView }) {
+  const [state, setState] = useState(initial);
+  const [name, setName] = useState('');
+  const [checked, setChecked] = useState(false);
+  const [error, setError] = useState('');
+  const latest = useRef(state);
+  useEffect(() => {
+    let active = true;
+    const receive = (next: ImportState) => {
+      if (!active || next.revision < latest.current.revision) return;
+      if (next.selectionRevision !== latest.current.selectionRevision) { setChecked(false); setError(''); }
+      if (!next.target) setName('');
+      else if (next.target.kind === 'new' && (latest.current.revision < 0 || latest.current.target?.kind !== 'new')) setName(next.target.displayName);
+      latest.current = next;
+      setState(next);
+    };
+    const unsubscribe = window.notalone.imports.onStateChanged(receive);
+    void window.notalone.imports.getState().then(receive).catch(() => {});
+    return () => { active = false; unsubscribe(); };
+  }, []);
+  const busy = ['choosing', 'previewing', 'confirming'].includes(state.phase);
+  const available = state.phase !== 'unavailable' && session.state.directoryPhase === 'ready';
+  const canPreview = available && !busy && !!state.fileName && !!state.target
+    && (state.target.kind !== 'new' || !!state.target.displayName.trim());
+  async function operate(action: () => Promise<void>) {
+    const revision = latest.current.selectionRevision;
+    try { await action(); }
+    catch { if (revision === latest.current.selectionRevision) setError('本次文件或联系人已变化，请重新预览并确认。'); }
+  }
+  const setTarget = (target: ImportTarget) => void operate(() => window.notalone.imports.setTarget(target));
+  const preview = state.preview;
+  return <section className="import-panel" aria-label="历史文件导入">
+    <div className="import-intro"><h2>先核对，再保存</h2>
+      <p>仅接受单联系人 JSONL；本次选择只用于预览，确认后再进行导入。NotAlone 不运行导出工具，也不读取其他文件。</p>
+      <p>外部导出工具可能读取微信数据库或进程内存，并保留密钥与缓存。它不是微信官方能力；NotAlone 不会取得这些密钥或原始数据库。</p></div>
+    {!available && <p className="import-note">请先连接本机服务并完成本次运行的本人配置，再选择历史文件。</p>}
+    <div className="import-file"><button className="button" disabled={!available || busy}
+      onClick={() => void operate(() => window.notalone.imports.chooseFile())}>选择历史文件</button>
+      <span>{state.fileName ?? '尚未选择文件'}</span></div>
+    <div className="import-target"><label>资料归属联系人<select aria-label="资料归属联系人"
+      value={state.target?.kind === 'new' ? 'new' : state.target?.contactId ?? ''} disabled={!available || busy}
+      onChange={(event) => setTarget(event.target.value === 'new' ? { kind: 'new', displayName: name } : { kind: 'existing', contactId: event.target.value })}>
+      <option value="" disabled>由你选择，不自动匹配</option><option value="new">新建联系人</option>
+      {session.state.contacts.map((entry) => <option key={entry.contactId} value={entry.contactId}>{entry.displayName}</option>)}
+    </select></label>
+    {state.target?.kind === 'new' && <label>新联系人名称<input aria-label="新联系人名称" value={name} maxLength={100} disabled={busy}
+      onChange={(event) => { setName(event.target.value); setTarget({ kind: 'new', displayName: event.target.value }); }} /></label>}
+    <button className="button primary" disabled={!canPreview}
+      onClick={() => void operate(() => window.notalone.imports.preview({ selectionRevision: latest.current.selectionRevision }))}>预览资料范围</button></div>
+    {busy && <p className="import-note" aria-live="polite">{state.phase === 'choosing' ? '等待你选择文件…' : state.phase === 'confirming' ? '正在重新核对这份文件…' : '正在校验单联系人资料…'}</p>}
+    {preview && <section className="import-preview" aria-label="单联系人资料预览">
+      <div className="import-preview-heading"><h3>单联系人资料预览</h3><span>尚未保存资料</span></div>
+      <dl className="import-summary"><div><dt>资料范围</dt><dd>{preview.recordCount} 条记录</dd></div>
+        <div><dt>归属联系人</dt><dd>{preview.targetName}</dd></div>
+        <div><dt>本人渠道身份</dt><dd>{preview.ownerIdentity.observedName}<small>{preview.ownerIdentity.externalId}</small></dd></div>
+        <div><dt>联系人渠道身份</dt><dd>{preview.contactIdentity.observedName}<small>{preview.contactIdentity.externalId}</small></dd></div></dl>
+      <ul className="import-kinds" aria-label="记录类型统计">{Object.entries(preview.kindCounts).map(([kind, count]) => <li key={kind}>{kindLabels[kind] ?? '其他记录'}：{count} 条</li>)}</ul>
+      <p>非文字记录仅表示来源中的载体，不代表已完成转写或形成关系记忆。</p>
+      <label className="import-confirm"><input type="checkbox" checked={checked} disabled={busy || state.phase === 'confirmed'}
+        onChange={(event) => setChecked(event.target.checked)} />我已核对本人渠道身份、联系人和这份文件的资料范围</label>
+      <button className="button primary" disabled={!checked || state.phase !== 'previewed'}
+        onClick={() => void operate(() => window.notalone.imports.confirmPreview({ selectionRevision: latest.current.selectionRevision }))}>确认本次预览</button>
+    </section>}
+    {state.phase === 'confirmed' && <div className="import-confirmed"><p role="status">已确认本次预览，尚未保存资料。</p>
+      <button className="button" onClick={() => void operate(() => window.notalone.imports.cancelConfirmation({ selectionRevision: latest.current.selectionRevision }))}>取消本次确认</button></div>}
+    {(state.error || error) && <p className="import-note" role="alert">{state.error ?? error}</p>}
+  </section>;
+}

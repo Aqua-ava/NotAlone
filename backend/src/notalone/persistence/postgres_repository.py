@@ -75,6 +75,87 @@ class PostgresIngestRepository:
             raise ValueError("database_url 不能为空。")
         self._database_url = database_url
 
+    def validate_preview_identity(
+        self,
+        *,
+        owner_id: UUID,
+        owner_external_id: str,
+        contact_external_id: str,
+        contact_id: UUID | None = None,
+    ) -> None:
+        """只读核对本人和所选联系人的渠道，不初始化或恢复身份。"""
+
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+                )
+                owner = connection.execute(
+                    "SELECT 1 FROM public.owner WHERE id = %s", (owner_id,),
+                ).fetchone()
+                if owner is None:
+                    raise OwnerNotFoundError("指定的 owner 不存在。")
+                active = connection.execute(
+                    """SELECT external_id FROM public.owner_channel_identity
+                       WHERE owner_id = %s AND channel = 'wechat'
+                         AND status = 'active'""", (owner_id,),
+                ).fetchone()
+                if active is not None and active[0] != owner_external_id:
+                    raise OwnerChannelIdentityConflictError(
+                        "本人渠道身份与预览不一致。"
+                    )
+                if active is None:
+                    previous = connection.execute(
+                        """SELECT 1 FROM public.owner_channel_identity
+                           WHERE owner_id = %s AND channel = 'wechat' LIMIT 1""",
+                        (owner_id,),
+                    ).fetchone()
+                    if previous is not None:
+                        raise OwnerChannelIdentityNotFoundError(
+                            "本人渠道身份已撤销。"
+                        )
+                occupied = connection.execute(
+                    """SELECT owner_id FROM public.owner_channel_identity
+                       WHERE channel = 'wechat' AND external_id = %s
+                         AND status = 'active'""", (owner_external_id,),
+                ).fetchone()
+                if occupied is not None and occupied[0] != owner_id:
+                    raise OwnerChannelIdentityConflictError(
+                        "本人渠道身份与已有绑定冲突。"
+                    )
+                if contact_id is not None:
+                    contact = connection.execute(
+                        "SELECT 1 FROM public.contact WHERE owner_id = %s AND id = %s",
+                        (owner_id, contact_id),
+                    ).fetchone()
+                    if contact is None:
+                        raise ContactNotFoundError("选择的联系人不存在。")
+                    channel = connection.execute(
+                        """SELECT external_id FROM public.channel_identity
+                           WHERE owner_id = %s AND contact_id = %s
+                             AND channel = 'wechat' AND status = 'active'""",
+                        (owner_id, contact_id),
+                    ).fetchone()
+                    if channel is not None and channel[0] != contact_external_id:
+                        raise ChannelIdentityConflictError(
+                            "联系人渠道身份与预览不一致。"
+                        )
+                    occupied_contact = connection.execute(
+                        """SELECT contact_id FROM public.channel_identity
+                           WHERE owner_id = %s AND channel = 'wechat'
+                             AND external_id = %s AND status = 'active'""",
+                        (owner_id, contact_external_id),
+                    ).fetchone()
+                    if (
+                        occupied_contact is not None
+                        and occupied_contact[0] != contact_id
+                    ):
+                        raise ChannelIdentityConflictError(
+                            "联系人渠道身份与已有绑定冲突。"
+                        )
+        except psycopg.Error:
+            raise ImportPersistenceError("预览身份核对暂不可用。") from None
+
     def import_document(
         self,
         *,
