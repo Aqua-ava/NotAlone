@@ -187,6 +187,9 @@ class CliBindingCoordinator:
                 raise ValueError("所选会话显示名已经变化，须重新核对。")
             existing = active.get(selection.locator)
             if existing is not None:
+                # App 明确新建的选择不能静默变成对已有联系人的确认；旧调用保持跳过兼容。
+                if selection.observed_display_name is not None and selection.contact_id is None:
+                    raise ValueError("所选会话已建立绑定，须重新核对联系人。")
                 if (
                     selection.contact_id is not None
                     and selection.contact_id != existing.scope.contact_id

@@ -3,15 +3,15 @@ import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import { runtimeOwnerConfigured } from '../contacts/directory';
 import type { ContactSession } from '../contacts/session';
+import { isBindingIdentifier, isConversationLocator } from './validation';
 
-const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const identifier = (value: unknown): string => {
-  if (typeof value !== 'string' || !uuid.test(value)) throw new Error('授权目录不可用。');
+  if (!isBindingIdentifier(value)) throw new Error('授权目录不可用。');
   return value.toLowerCase();
 };
 const locator = (value: unknown): string => {
-  if (typeof value !== 'string' || !value.trim() || value.length > 4096 || /[\u0000-\u001f]/.test(value)) throw new Error('会话元数据不可用。');
+  if (!isConversationLocator(value)) throw new Error('会话元数据不可用。');
   return value;
 };
 export function bindingSummary(value: unknown): BindingSummary {

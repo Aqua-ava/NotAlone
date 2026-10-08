@@ -4,6 +4,7 @@ import type { AppWindows } from '../windows';
 import { BindingConsentController } from './controller';
 import type { BindingConfirmation, BindingRevocation } from '../../shared/binding-consent-bridge';
 import type { ContactSession } from '../contacts/session';
+import { isBindingIdentifier, isConversationLocator } from './validation';
 
 function confirmation(args: unknown[]): BindingConfirmation {
   const value = args[0] as Record<string, unknown> | undefined;
@@ -15,9 +16,9 @@ function confirmation(args: unknown[]): BindingConfirmation {
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('授权操作不可用。');
     const choice = item as Record<string, unknown>;
     if (Object.keys(choice).length !== 3 || !Object.keys(choice).every((key) => ['locator', 'displayName', 'contactId'].includes(key))
-      || typeof choice.locator !== 'string' || !choice.locator.trim() || choice.locator.length > 4096 || /[\u0000-\u001f]/.test(choice.locator)
+      || !isConversationLocator(choice.locator)
       || typeof choice.displayName !== 'string' || !choice.displayName.trim() || choice.displayName.length > 4096
-      || (choice.contactId !== null && (typeof choice.contactId !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(choice.contactId)))) throw new Error('授权操作不可用。');
+      || (choice.contactId !== null && !isBindingIdentifier(choice.contactId))) throw new Error('授权操作不可用。');
     return { locator: choice.locator, displayName: choice.displayName, contactId: choice.contactId === null ? null : (choice.contactId as string).toLowerCase() };
   });
   if (new Set(selections.map((item) => item.locator)).size !== selections.length) throw new Error('授权操作不可用。');
@@ -29,7 +30,7 @@ function revocation(args: unknown[]): BindingRevocation {
   if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)
     || Object.keys(value).length !== 3 || !Object.keys(value).every((key) => ['scopeRevision', 'contactId', 'bindingId'].includes(key))
     || typeof value.scopeRevision !== 'number' || !Number.isSafeInteger(value.scopeRevision) || value.scopeRevision < 0
-    || ![value.contactId, value.bindingId].every((field) => typeof field === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(field))) throw new Error('授权操作不可用。');
+    || ![value.contactId, value.bindingId].every(isBindingIdentifier)) throw new Error('授权操作不可用。');
   return { scopeRevision: value.scopeRevision, contactId: (value.contactId as string).toLowerCase(), bindingId: (value.bindingId as string).toLowerCase() };
 }
 

@@ -83,7 +83,58 @@ class BindingConsentApiTests(unittest.TestCase):
         self.assertEqual(self.backend.request("/api/sync/cli-bindings/confirm", {"selections": [selection]})[0], 200)
         bindings = self.backend.request("/api/sync/cli-bindings")[1]["bindings"]
         self.assertEqual(bindings[0]["display_name"], "用户自定展示名")
+        # 已明确指定相同联系人仍可重放；未带新字段的旧新建调用保持跳过兼容。
+        for repeated in (selection, {"locator": "wxid_synthetic_a", "display_name": "另一自定展示名"}):
+            self.assertEqual(self.backend.request("/api/sync/cli-bindings/confirm", {"selections": [repeated]})[0], 200)
+            self.assertEqual(self.backend.request("/api/sync/cli-bindings")[1]["bindings"], bindings)
         self.assertEqual(self.backend.tails(), [])
+
+    def test_concurrent_new_contact_confirmation_rejects_stale_choice_without_partial_scope_or_reads(self) -> None:
+        backend = self.backend
+        # 对应 App 最后一次复读：两个会话尚未授权，用户明确选择新建。
+        preview = backend.request("/api/sync/cli-sessions")[1]["sessions"]
+        self.assertTrue(all(item["bound_contact_id"] is None for item in preview))
+        self.assertEqual(backend.request("/api/sync/cli-bindings")[1], {"bindings": []})
+        contact_ids = {item["contact_id"] for item in backend.request("/api/contacts")[1]["contacts"]}
+        stale_new = [{"locator": locator, "observed_display_name": "同名会话"}
+                     for locator in ("wxid_synthetic_b", "wxid_synthetic_a")]
+        state = cli_state()
+        state["messages"] = {locator: [{"local_id": 1, "text": "合成范围消息", "create_time": int(time.time()) + 10}]
+                             for locator in ("wxid_synthetic_a", "wxid_synthetic_b")}
+        backend.set_cli(state)
+        self.assertEqual(backend.request("/api/sync/enable", {})[0], 200)
+        gate = backend.directory / "hold-sessions"
+        gate.touch()
+        self.addCleanup(lambda: gate.unlink(missing_ok=True))
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            winner = pool.submit(backend.request, "/api/sync/cli-bindings/confirm", {"selections": [{
+                "locator": "wxid_synthetic_a", "contact_id": backend.data["contact_ids"][0],
+                "observed_display_name": "同名会话",
+            }]})
+            try:
+                ready = backend.directory / "held-sessions-ready"
+                deadline = time.monotonic() + 5
+                while not ready.exists() and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                self.assertTrue(ready.exists(), "另一合法确认须已经进入 CLI 元数据边界。")
+                stale = pool.submit(backend.request, "/api/sync/cli-bindings/confirm", {"selections": stale_new})
+                time.sleep(0.15)
+                self.assertFalse(stale.done(), "最终确认必须等待同一同步互斥边界。")
+            finally:
+                gate.unlink(missing_ok=True)
+            self.assertEqual(winner.result()[0], 200)
+            result = stale.result()
+        # 整批拒绝不能只略过已绑定项，或先创建本批其他联系人和授权。
+        with self.subTest("过期的新建选择"):
+            self.assertEqual(result, (409, {"error": "cli_binding_rejected", "reason": "selection_stale"}))
+        with self.subTest("联系人范围不变"):
+            self.assertEqual({item["contact_id"] for item in backend.request("/api/contacts")[1]["contacts"]}, contact_ids)
+        with self.subTest("授权范围不变"):
+            active = backend.request("/api/sync/cli-bindings")[1]["bindings"]
+            self.assertEqual([(item["conversation_locator"], item["contact_id"]) for item in active],
+                             [("wxid_synthetic_a", backend.data["contact_ids"][0])])
+        with self.subTest("拒绝后不触发正文读取"):
+            self.assertEqual(backend.tails(), ["wxid_synthetic_a"])
 
     def block_authorized_cycle(self, pool):
         backend = self.backend
