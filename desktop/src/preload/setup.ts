@@ -12,6 +12,7 @@ export function createSetupBridge(): SetupBridge {
     saveDeepSeekKey: (...args: unknown[]) => args.length === 1 && typeof args[0] === 'string'
       ? ipcRenderer.invoke('setup:save-deepseek-key', args[0]) : Promise.reject(new Error('首次配置操作不可用')),
     retryRestart: (...args: unknown[]) => invoke('setup:retry-restart', args),
+    reloadControlledConfiguration: (...args: unknown[]) => invoke('setup:reload-controlled-configuration', args),
     onStateChanged: (listener: (state: SetupState) => void) => {
       if (typeof listener !== 'function') throw new Error('首次配置操作不可用');
       const receive = (_event: unknown, state: SetupState) => listener(state);

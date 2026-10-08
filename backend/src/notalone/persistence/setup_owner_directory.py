@@ -19,6 +19,14 @@ class OwnerDirectoryPersistenceError(RuntimeError):
     """不暴露 SQL、连接信息或正文的持久化错误。"""
 
 
+def _validate_creation(owner_id: UUID, display_name: str) -> str:
+    if not isinstance(owner_id, UUID):
+        raise OwnerDirectoryPersistenceError("owner 初始化参数必须是内部 UUID。")
+    if not isinstance(display_name, str) or not display_name.strip():
+        raise OwnerDirectoryPersistenceError("owner 展示名称不能为空。")
+    return display_name.strip()
+
+
 class _OwnerRow:
     """owner 目录行：只暴露 id 与 display_name 两个字段。"""
 
@@ -63,14 +71,7 @@ class PostgresOwnerDirectory:
     def create_owner(self, owner_id: UUID, display_name: str) -> Any:
         """幂等创建 owner；已存在时返回既有行，不覆盖展示名称。"""
 
-        if not isinstance(owner_id, UUID):
-            raise OwnerDirectoryPersistenceError(
-                "owner 初始化参数必须是内部 UUID。"
-            )
-        if not isinstance(display_name, str) or not display_name.strip():
-            raise OwnerDirectoryPersistenceError(
-                "owner 展示名称不能为空。"
-            )
+        name = _validate_creation(owner_id, display_name)
         try:
             with psycopg.connect(self._database_url) as connection:
                 row = connection.execute(
@@ -80,7 +81,7 @@ class PostgresOwnerDirectory:
                     ON CONFLICT (id) DO NOTHING
                     RETURNING id, display_name
                     """,
-                    (owner_id, display_name.strip()),
+                    (owner_id, name),
                 ).fetchone()
                 if row is None:
                     row = connection.execute(
@@ -99,6 +100,26 @@ class PostgresOwnerDirectory:
             raise OwnerDirectoryPersistenceError(
                 "owner 初始化结果不可用。"
             )
+        return _OwnerRow(owner_id=row[0], display_name=row[1])
+
+    def create_owner_if_empty(self, owner_id: UUID, display_name: str) -> Any | None:
+        """同一事务互斥检查和创建；与普通 INSERT/UPDATE/DELETE 也互斥。"""
+
+        name = _validate_creation(owner_id, display_name)
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                connection.execute("SET LOCAL lock_timeout = '5s'")
+                connection.execute("LOCK TABLE public.owner IN SHARE ROW EXCLUSIVE MODE")
+                if connection.execute("SELECT EXISTS(SELECT 1 FROM public.owner)").fetchone()[0]:
+                    return None
+                row = connection.execute(
+                    "INSERT INTO public.owner (id, display_name) VALUES (%s, %s) RETURNING id, display_name",
+                    (owner_id, name),
+                ).fetchone()
+        except psycopg.Error:
+            raise OwnerDirectoryPersistenceError("owner 初始化失败。") from None
+        if row is None:
+            raise OwnerDirectoryPersistenceError("owner 初始化结果不可用。")
         return _OwnerRow(owner_id=row[0], display_name=row[1])
 
     def owner_exists(self, owner_id: UUID) -> bool:

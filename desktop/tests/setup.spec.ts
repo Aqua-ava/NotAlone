@@ -145,7 +145,7 @@ test('已保存的本人配置遇到真实启动失败时不报就绪，恢复�
   await writeFile(path.join(setup.directory, 'restart-unavailable'), 'synthetic unavailable');
   await panel.getByRole('textbox', { name: '本人展示名称' }).fill('重启恢复合成用户');
   await panel.getByRole('button', { name: '初始化本人' }).click();
-  await expect(panel.getByText('配置已保存，但后端重启未获确认。请重试加载配置。', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(panel.getByText('后端重启未获确认。请检查受控配置后重试加载。', { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(panel.getByText('本次运行的本人身份已就绪', { exact: true })).toHaveCount(0);
   await rm(path.join(setup.directory, 'restart-unavailable'));
   await panel.getByRole('button', { name: '重试加载配置', exact: true }).click();

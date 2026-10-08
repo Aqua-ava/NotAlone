@@ -13,6 +13,21 @@ from psycopg import sql
 operation, name = sys.argv[1:3]
 if not re.fullmatch(r"notalone_setup_[0-9a-f]{32}_test", name):
     raise SystemExit("拒绝非本轮测试库名称。")
+if operation in {"hold-owner-writes", "waiting-owner-writes"}:
+    with psycopg.connect(f"host=/tmp dbname={name}") as connection:
+        if operation == "hold-owner-writes":
+            # 仅安排并发窗口；不读写业务行，两个真实 HTTP 写操作仍进正式仓储。
+            connection.execute("LOCK TABLE public.owner IN SHARE MODE")
+            print("ready", flush=True)
+            sys.stdin.readline()
+        else:
+            row = connection.execute(
+                """SELECT count(*) FROM pg_locks
+                WHERE database = (SELECT oid FROM pg_database WHERE datname = current_database())
+                  AND relation = 'public.owner'::regclass AND NOT granted"""
+            ).fetchone()
+            print(row[0])
+    raise SystemExit(0)
 with psycopg.connect("host=/tmp dbname=postgres", autocommit=True) as admin:
     if operation == "create":
         admin.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(sql.Identifier(name)))

@@ -49,7 +49,7 @@ from notalone.application.import_service import (
 )
 from notalone.application.task_service import TaskService
 from notalone.application.model_priority import ModelWorkStopped
-from notalone.application.setup_service import SetupService
+from notalone.application.setup_service import OwnerAlreadyConfigured, SetupService
 from notalone.application.skill_service import (
     LedgerService,
     SkillImportRejected,
@@ -1332,12 +1332,15 @@ class BackendApp:
             if path == "/api/setup/initialize" and method == "POST":
                 payload = _parse_setup_json(body)
                 display_name = payload.get("display_name")
+                create_only = payload.get("create_only", False)
+                if not isinstance(create_only, bool):
+                    raise SetupRequestInvalid()
                 if not isinstance(display_name, str) or not display_name.strip():
                     raise SetupRequestInvalid()
                 try:
                     return _json_response(
                         HTTPStatus.OK,
-                        service.initialize_owner(display_name=display_name),
+                        service.initialize_owner(display_name=display_name, create_only=create_only),
                     )
                 except ValueError:
                     raise SetupRequestInvalid() from None
@@ -1355,6 +1358,8 @@ class BackendApp:
                 except ValueError:
                     raise SetupRequestInvalid() from None
             raise SetupRequestInvalid()
+        except OwnerAlreadyConfigured:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "owner_already_configured"})
         except SetupRequestInvalid:
             return _json_response(
                 HTTPStatus.BAD_REQUEST, {"error": "setup_request_invalid"}

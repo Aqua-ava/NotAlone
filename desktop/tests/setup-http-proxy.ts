@@ -6,6 +6,12 @@ export class SetupHttpProxy {
   readonly server: Server;
   failRuntimeStatus = false;
   holdCredentialResponses = false;
+  dropInitializeResponse = false;
+  holdStatusAfterInitialize = false;
+  closeAfterShutdown = false;
+  afterShutdown: (() => Promise<void>) | undefined;
+  holdSetupStatusResponses = false;
+  initializeCompletedCount = 0;
   heldCount = 0;
   private readonly held: Array<() => void> = [];
   private readonly pending = new Set<ReturnType<typeof httpRequest>>();
@@ -20,11 +26,24 @@ export class SetupHttpProxy {
         const chunks: Buffer[] = [];
         result.on('data', (chunk: Buffer) => chunks.push(chunk));
         result.on('end', () => {
+          if (incoming.url === '/api/setup/initialize') {
+            this.initializeCompletedCount++;
+            if (this.holdStatusAfterInitialize) this.holdSetupStatusResponses = true;
+            if (this.dropInitializeResponse) { response.destroy(); return; }
+          }
           const deliver = () => {
+            if (this.closeAfterShutdown && incoming.url === '/api/runtime/shutdown' && result.statusCode === 200) {
+              response.once('finish', () => {
+                void (this.afterShutdown?.() ?? Promise.resolve()).then(() => {
+                  this.server.close(); this.server.closeIdleConnections();
+                }).catch(() => {});
+              });
+            }
             response.writeHead(result.statusCode ?? 500, { 'Content-Type': 'application/json' });
             response.end(Buffer.concat(chunks));
           };
-          if (this.holdCredentialResponses && incoming.url === '/api/setup/credentials') {
+          if ((this.holdCredentialResponses && incoming.url === '/api/setup/credentials')
+            || (this.holdSetupStatusResponses && incoming.url === '/api/setup/status')) {
             this.held.push(deliver); this.heldCount++;
           } else deliver();
         });
@@ -48,6 +67,7 @@ export class SetupHttpProxy {
     return proxy;
   }
   release(): void { for (const deliver of this.held.splice(0)) deliver(); }
+  releaseLatest(): void { this.held.pop()?.(); }
   async close(): Promise<void> {
     this.release();
     for (const request of this.pending) request.destroy();

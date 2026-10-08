@@ -25,6 +25,9 @@ class FakeOwnerDirectory:
     def owner_exists(self, owner_id: UUID) -> bool:
         return any(getattr(owner, "id", None) == owner_id for owner in self.owners)
 
+    def create_owner_if_empty(self, owner_id: UUID, display_name: str) -> object | None:
+        return None if self.owners else self.create_owner(owner_id, display_name)
+
     def create_owner(self, owner_id: UUID, display_name: str) -> object:
         self.created.append((owner_id, display_name))
         self.owners.append(

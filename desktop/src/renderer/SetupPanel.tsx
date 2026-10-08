@@ -28,12 +28,16 @@ export function SetupPanel() {
           <button className="button" onClick={() => void window.notalone.setup.refresh()}>重试查询配置</button></>
           : state.phase === 'saving' ? <p>正在保存配置…</p>
             : state.phase === 'restarting' ? <p>正在停读并重新加载配置…</p>
-              : state.phase === 'restart-failed' ? <><p role="alert">配置已保存，但后端重启未获确认。请重试加载配置。</p>
+              : state.phase === 'restart-failed' ? <><p role="alert">后端重启未获确认。请检查受控配置后重试加载。</p>
                 <button className="button" onClick={() => void window.notalone.setup.retryRestart()}>重试加载配置</button></>
           : <>
             <p>{state.ownerReady ? '本次运行的本人身份已就绪' : state.phase === 'needs-owner' ? '本人身份尚未初始化'
               : '检测到既有本人资料，但本次运行尚未绑定本人身份。请检查受控配置后重新连接。'}</p>
             <p>{state.credentialsConfigured ? 'DeepSeek 已配置' : 'DeepSeek 尚未配置'}</p>
+            {state.phase === 'identity-unbound' && <button className="button" onClick={() => {
+              setError('');
+              void window.notalone.setup.reloadControlledConfiguration().catch(() => setError('后端重启未获确认。请检查受控配置后重试加载。'));
+            }}>重新加载受控配置</button>}
             {state.phase === 'needs-owner' && <form onSubmit={(event) => {
               event.preventDefault(); setError('');
               void window.notalone.setup.initializeOwner(name).catch(() => setError('本人初始化未完成，请重试。'));

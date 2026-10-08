@@ -11,9 +11,9 @@ const python = path.join(process.env.CONDA_PREFIX ?? '/unconfigured', 'bin/pytho
 const projectDirectory = path.resolve('..');
 
 export class SetupFixture {
-  readonly databaseName = `notalone_setup_${randomUUID().replaceAll('-', '')}_test`;
-  readonly databaseUrl = `host=/tmp dbname=${this.databaseName}`;
-  constructor(readonly directory: string) {}
+  constructor(readonly directory: string,
+    readonly databaseName = `notalone_setup_${randomUUID().replaceAll('-', '')}_test`) {}
+  get databaseUrl(): string { return `host=/tmp dbname=${this.databaseName}`; }
   private readonly children: ChildProcess[] = [];
   reusedBackend: ChildProcess | undefined;
   get infoPath(): string { return path.join(this.directory, 'backend.info'); }
@@ -46,7 +46,7 @@ export class SetupFixture {
 
   async waitForExit(child: ChildProcess): Promise<void> {
     for (let count = 0; count < 75; count++) {
-      if (child.exitCode !== null) return;
+      if (child.exitCode !== null || child.signalCode !== null) return;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     throw new Error('本轮真实后端未退出。');
@@ -67,8 +67,27 @@ export class SetupFixture {
   async cleanup(): Promise<void> {
     // 仅回收夹具自身创建的进程；不把失败断言后的回收算作产品停读验证。
     for (const child of this.children) {
-      if (child.exitCode === null) { child.kill('SIGTERM'); await this.waitForExit(child); }
+      if (child.exitCode === null && child.signalCode === null) { child.kill('SIGTERM'); await this.waitForExit(child); }
     }
+  }
+
+  async prepareInterpreter(): Promise<void> {
+    await writeFile(this.pythonPath, `#!${python}\n${await readFile(path.resolve('tests/fixtures/setup-python.py'), 'utf8')}`, { mode: 0o700 });
+  }
+
+  async holdOwnerWrites(): Promise<{ waiting: () => Promise<number>; release: () => Promise<void> }> {
+    const fixture = path.resolve('tests/fixtures/setup-database.py');
+    const child = spawn(python, [fixture, 'hold-owner-writes', this.databaseName], { stdio: ['pipe', 'pipe', 'ignore'] });
+    this.children.push(child);
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('本轮 PG 写入屏障未准备。')), 5000);
+      child.stdout!.once('data', () => { clearTimeout(timer); resolve(); });
+      child.once('exit', () => { clearTimeout(timer); reject(new Error('本轮 PG 写入屏障未准备。')); });
+    });
+    return {
+      waiting: async () => Number((await execute(python, [fixture, 'waiting-owner-writes', this.databaseName], { timeout: 5000 })).stdout.trim()),
+      release: async () => { if (!child.stdin!.writableEnded) child.stdin!.end('\n'); await this.waitForExit(child); },
+    };
   }
 
   async database(operation: 'create' | 'drop'): Promise<void> {
@@ -99,7 +118,7 @@ export const test = appTest.extend<{ setup: SetupFixture; setupSeed: 'empty' | '
     const setup = new SetupFixture(directory);
     try {
       await setup.database('create');
-      await writeFile(setup.pythonPath, `#!${python}\n${await readFile(path.resolve('tests/fixtures/setup-python.py'), 'utf8')}`, { mode: 0o700 });
+      await setup.prepareInterpreter();
       if (setupSeed !== 'empty') await setup.seed(setupSeed);
       await use(setup);
     } finally {

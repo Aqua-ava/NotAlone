@@ -12,5 +12,6 @@ export interface SetupBridge {
   initializeOwner(displayName: string): Promise<void>;
   saveDeepSeekKey(apiKey: string): Promise<void>;
   retryRestart(): Promise<void>;
+  reloadControlledConfiguration(): Promise<void>;
   onStateChanged(listener: (state: SetupState) => void): () => void;
 }

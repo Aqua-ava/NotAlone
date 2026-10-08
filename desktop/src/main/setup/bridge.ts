@@ -21,6 +21,11 @@ export function installSetupBridge(windows: AppWindows, setup: SetupController):
     if (!window.webContents.getURL().endsWith('#manager')) throw new Error('首次配置操作不可用');
     return setup.retryRestart();
   });
+  ipcMain.handle('setup:reload-controlled-configuration', (event, ...args: unknown[]) => {
+    const window = windows.validateCaller(event, args);
+    if (!window.webContents.getURL().endsWith('#manager')) throw new Error('首次配置操作不可用');
+    return setup.reloadControlledConfiguration();
+  });
   ipcMain.handle('setup:save-deepseek-key', (event, ...args: unknown[]) => {
     const window = windows.validateCaller(event, []);
     const value = args[0];

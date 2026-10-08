@@ -33,7 +33,7 @@ class FakeSetupService:
             "runtime_owner_configured": self.initialized and runtime_owner_id == OWNER_ID,
         }
 
-    def initialize_owner(self, *, display_name: str) -> dict[str, object]:
+    def initialize_owner(self, *, display_name: str, create_only: bool = False) -> dict[str, object]:
         self.initialize_calls.append(display_name)
         if self.initialized:
             return {"owner_id": str(OWNER_ID), "created": False}
