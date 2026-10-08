@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test';
 import { selectMenu } from './app-fixture';
 import { SyntheticBackend, test } from './backend-fixture';
-import { spawn } from 'node:child_process';
+import { spawnApp } from './app-test-gate';
 import path from 'node:path';
 
 test('App 认证复用本机服务，双窗口共享真实连接，退出确认停读', async ({ runningApp: { app, appProcess }, backend }) => {
@@ -110,7 +110,7 @@ test('重复 App 启动恢复已有窗口，不创建第二个 App 或后端', a
   await expect(manager.getByRole('status')).toContainText('已连接');
   await (await app.browserWindow(manager)).evaluate((window) => window.close());
   const executable = process.env.NOTALONE_TEST_APP_EXECUTABLE || path.resolve('node_modules/electron/dist/Electron.app/Contents/MacOS/Electron');
-  const secondary = spawn(executable, [...(process.env.NOTALONE_TEST_APP_EXECUTABLE ? [] : [path.resolve('.')]), `--user-data-dir=${userData}`], {
+  const secondary = await spawnApp(executable, [...(process.env.NOTALONE_TEST_APP_EXECUTABLE ? [] : [path.resolve('.')]), `--user-data-dir=${userData}`], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '', NOTALONE_DISABLE_DOTENV: '1',
       NOTALONE_BACKEND_INFO: path.join(userData, 'untrusted-second.info'), NOTALONE_ENV_FILE: path.join(userData, 'synthetic.env'),
       NOTALONE_DATABASE_URL: '', NOTALONE_OWNER_ID: '', DEEPSEEK_API_KEY: '',

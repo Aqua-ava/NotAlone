@@ -15,7 +15,7 @@ Electron + React/TypeScript 的本机 Mac App，当前完成管理后台与横�
 本人初始化或 DeepSeek 密钥保存成功后，先认证停读同一服务，等待旧运行时退场，再通过正常启动检查重连。初始化已写库和配置而响应丢失时，用户可明确选择“重新加载受控配置”；重载只读取实际配置，不重复初始化。失败显示真实结果，恢复查询结束后再次复核连接与操作，旧错误不能覆盖断线或较新状态。密钥输入为密码框，提交后清空，页面只显示是否配置；配置本身不会发起模型调用。页面说明本机配置文件和 PostgreSQL 资料长期保存、未提供静态加密，以及供应商外部副本的独立删除限制。
 
 后端生产启动会沿用本人身份和已确认同步范围；每次启动或复用前先通过机器环境只读诊断，连接状态不能代替数据库就绪。测试使用本轮随机新建的隔离 `_test` 库、握手、配置与 userData，不访问既有业务库、模型或微信。主进程才持有认证 token，渲染层只收到具名操作和非秘密状态。
-已接入默认 `Command+Shift+Space` 的系统注册与小窗显示/隐藏回调。在“应用配置 → 桌面操作”查看真实注册结果并修改组合；无效、注册失败或保存失败时保留旧键与旧设置。支持 `Command`、`Control`、`Alt`、`Shift` 加字母、数字、F1–F24 或常用导航键，至少需要前三种修饰键之一。注册结果不保证该组合没有被其他程序处理；本轮 CUA 输入没有验证全局键实际派发，真实快捷键验收仍待完成，可先使用公开按钮和“窗口”菜单。
+已接入默认 `Command+Shift+Space` 的系统注册与小窗显示/隐藏回调。在“应用配置 → 桌面操作”查看真实注册结果并修改组合；无效、注册失败或保存失败时保留旧键与旧设置。支持 `Command`、`Control`、`Alt`、`Shift` 加字母、数字、F1–F24 或常用导航键，至少需要前三种修饰键之一。注册结果不保证该组合没有被其他程序处理。经用户明确授权，任务 03 保存的本机签名 App 已在全新隔离配置下接收两次真实系统按键，分别隐藏并恢复同一小窗，窗口 ID 和位置保持不变；没有启动业务后端、输入正文或操作微信。也可使用公开按钮和“窗口”菜单。
 
 ## 本机运行与构建
 
@@ -26,14 +26,38 @@ cd desktop
 npm ci
 npx install-electron     # 首次显式准备锁定版本的 Electron 运行时
 npm run typecheck
-npm run test:app
+npm test                # 类型检查和安全调度回归，真实 App 不运行
 npm start
 npm run package
 ```
 
 本机 arm64 产物为 `out/NotAlone-darwin-arm64/NotAlone.app`。可在 Finder 双击打开；包只包含编译后的本地资源和最小启动清单，不依赖开发服务器、原型目录或仓库绝对路径。打包只替换本目录的 `out/` 产物，不覆盖历史 App。当前为 ad-hoc 本机签名，未做 Developer ID 分发、公证或 DMG；权限与签名边界见[台账](../docs/macos-app-permissions-and-errors.md)。
 
-## 实际 App 自动化
+## 安全检查与预约 App 验收
+
+`npm test` 默认只执行 TypeScript 检查和 `tests/scheduling/command.test.mjs` 的测试 CLI 回归：未协调调用拒绝、跨独立命令副本/TMPDIR 互斥、启动预算、到期、Ctrl+C/SIGTERM、崩溃与损坏租约，以及 Playwright 门禁和限定文件发现。合成孩子固定为 Node；原始 Electron API 的拒绝检查也显式使用 Node 可执行文件，避免门禁回归时打开桌面。命令明确报告真实 App 未运行。这些结果不能证明窗口、业务 UI、后端 HTTP 接线、签名包或实机验收通过；安全目录从真实 App 全量中排除。
+
+真实 App 验收会显示窗口并使用桌面焦点。必须由主 Agent 先协调用户认可的有限时段，再执行下面的显式命令。参数只是实施门禁，不能代替用户对该时段的认可；当前原任务的 App 验收仍暂停，直到本调度修复安全检查和两轴评审完成。`npm start` 是用户正常打开 App 的入口，不能当作绕过测试门禁的自动验收方式。
+
+```bash
+npm run test:app -- --interactive --coordinator main-agent \
+  --from '<预约开始，带时区的 ISO8601>' --until '<预约截止，带时区的 ISO8601>' \
+  --max-launches 4 -- tests/windows.spec.ts
+```
+
+开始时间必须已到、截止尚未到，两者间隔最多一小时；构建也计入预约时段。必须给出最小相关的 `tests/<name>.spec.ts` 文件，可加 `--grep` 缩小用例和 `--output artifacts/<name>` 保存合成输出。每次 Electron 首次启动、重启和重复实例都消耗统一预算；测试失败即停，不自动重试、重复运行或扩展全量。`workers: 1` 保留为单个命令内部约束，全机互斥另由租约负责。功能阶段只验收必要组，最终集成才在一次预约中显式以 `--suite` 替代文件列表，并给出适合该组的启动预算（最大 250）；不由每个 Agent 重复执行完整回归。
+
+租约位于 OS 用户账户目录中的 `.notalone-desktop-tests/interactive.lock`，使用 OS 用户信息而非 HOME/TMPDIR/userData 或工作树路径决定位置。目录、记录和本机 Unix socket 均核验所有者与私有权限，随机 token 只传给本 runner 的孩子，不写入记录或输出。主配置在 fixture 前检查活 runner；fixture 与独立启动/重启也检查随机 token、工作树归属、截止时间和预算。直接 `npx playwright test` 默认失败关闭；`--list` 只列出用例，不能证明运行。生产窗口的 show/focus 与正常快捷键行为保持原状，没有通过隐藏 App 或未知 headless 参数伪造静默 UI 验收。
+
+到期或 Ctrl+C 先关闭新启动资格，再要求本 runner 的孩子收尾；App 守卫同时检查截止及活 runner。兜底只对本次 spawn/launch 返回且仍存活的 ChildProcess 发信号，强制回收不算产品认证停读通过。结束后还核验本轮进程组消失和启动登记归零；EPERM、疑似 PID 复用、未完成登记或其他不确定性都保留锁，不依据未知 PID 终止任何进程。runner 崩溃留下的锁即使到期也不自动抢占。
+
+```bash
+npm run test:app:status  # 只读租约归属线索，App 不运行，不自动解锁
+```
+
+状态文件和 PID 只提供线索。出现 `app_test_locked`、`app_test_lease_unsafe` 或 `app_test_cleanup_unconfirmed` 时，主 Agent 必须先核验上轮自己创建的资源已收尾；未知归属时继续暂停，不能以删除锁或按进程名 kill 继续测试。恢复旧工作树之前必须先合入最新集成提交并审计新增启动路径；尚未合入门禁的旧脚本不会被机器租约自动拦截，暂停/恢复由主 Agent 协调，不新增常驻监控。
+
+原 [App/HTTP 测试接缝](../.scratch/mac-desktop-app/spec.md)继续保留。没有可靠独立桌面 runner 时将真实 UI 项列为预约验收，不用 DOM 检查替代原证据。以下测试组说明的是既有约定和已实现夹具范围，本轮安全 CLI 通过不会更新其实际 App 验收结果。
 
 包含真实 Python 宿主的测试需先激活 Conda `NotAlone`。测试使用当前工作树的 `backend/src`，隔离 dotenv 的读取和写回、握手、owner、模型、CLI/探针和 App 配置。测试准备阶段只对自己随机新建的 `_test` 库显式迁移，App 始终运行真实只读诊断；完成后只清理本轮拥有的库。数据库不可用场景使用受控回环端口，其他生命周期场景使用已迁移的隔离库，不连接已有数据库。
 
@@ -46,14 +70,15 @@ npm run package
 使用 Playwright 的 experimental Electron 支持，在真实窗口上操作公开按钮和原生关闭/菜单。测试使用独立随机用户数据目录并正常回收进程；不读取 React 私有状态，不访问已有业务数据。构建源码资源与打包 App 共用同一行为测试：
 
 ```bash
-npm test
 NOTALONE_TEST_APP_EXECUTABLE="$PWD/out/NotAlone-darwin-arm64/NotAlone.app/Contents/MacOS/NotAlone" \
-  npx playwright test tests/windows.spec.ts --output=artifacts/packaged
+  npm run test:app -- --interactive --coordinator main-agent \
+    --from '<预约开始，带时区的 ISO8601>' --until '<预约截止，带时区的 ISO8601>' \
+    --max-launches 4 -- tests/windows.spec.ts --output artifacts/packaged
 ```
 
 窗口测试验证双窗口打开、关闭隐藏、互相恢复、菜单恢复、整体隐藏后仅恢复目标窗口、退出回收，以及随包 logo 加载和真实未就绪状态。macOS 的 `hide` 菜单角色由 Cocoa 执行，`MenuItem.click()` 不执行该默认动作；自动化确认公开菜单项后，通过 `Menu.sendActionToFirstResponder('hide:')` 执行原生隐藏，再操作窗口菜单并读取两窗可见结果。实际 CUA 点击菜单另行核验同一边界。后端测试通过公开 App 操作和本机 HTTP 核验单实例、受控启动/复用、认证、断线重试、握手非法或变化、迟到状态、退出失败/超时与恢复；包含实际 `notalone.server.command` 和 `BackendServer` 的启动/停读场景。入口资源故障只修改隔离构建副本，不损坏签名包。
 
-`tests/desktop-controls.spec.ts` 验证注册结果、改键与重启恢复、注册/保存失败保留旧键、正文置顶按钮、隐藏恢复及退出注销。注册失败场景在隔离启动包装中先安排系统注册，再同步加载原始 App 入口；只控制必要系统边界，不替换业务模块，不调用快捷键回调，签名包跳过该夹具。截图在 `test-results/` 或指定 `artifacts/` 目录中，均不提交。这些验收不证明全局键盘派发、联系人隔离、剪贴板、权限或真实微信渠道可用。
+`tests/desktop-controls.spec.ts` 验证注册结果、改键与重启恢复、注册/保存失败保留旧键、正文置顶按钮、隐藏恢复及退出注销。注册失败场景在隔离启动包装中先安排系统注册，再同步加载原始 App 入口；只控制必要系统边界，不替换业务模块，不调用快捷键回调，签名包跳过该夹具。截图在 `test-results/` 或指定 `artifacts/` 目录中，均不提交。这些自动验收不证明全局键盘派发、联系人隔离、剪贴板、权限或真实微信渠道可用；另行完成的两次系统按键实机结果见[权限与验收台账](../docs/macos-app-permissions-and-errors.md)。
 
 `tests/startup-diagnostics.spec.ts` 验证 Python/包缺失、数据库不可用、缺基线、账本漂移、待迁移和必要结构缺失，以及公开路径修正和重试。真实只读 Python 入口与实际 `BackendServer` 均来自当前工作树。App 以 `/` 为工作目录、清空 Conda 变量并限制 PATH，检查无需预先激活终端的启动条件；这项自动化不等同于用户在 Finder 双击的实机验收。`tests/startup-cancellation.spec.ts` 在受控 Python 包装边界延迟诊断并忽略 SIGTERM，验证超时/退出回收自有子进程、迟到结果不能启动后端；释放后仍执行真实诊断入口。
 
@@ -94,8 +119,8 @@ NOTALONE_TEST_APP_EXECUTABLE="$PWD/out/NotAlone-darwin-arm64/NotAlone.app/Conten
 | `src/preload/` | 具名窗口、桌面设置和后端桥接及非秘密状态订阅，不暴露通用 IPC、URL 请求或认证信息 |
 | `src/renderer/` | React 界面、交互与展示状态 |
 | `src/shared/` | 跨进程桥接类型 |
-| `tests/` | 实际 Electron App 公开行为自动化 |
-| `scripts/` | 本地资源编译、白名单打包、图标与 ad-hoc 签名 |
+| `tests/` | 实际 Electron App 公开行为自动化、统一启动门禁；`scheduling/` 只验证安全命令 |
+| `scripts/` | 本地资源编译、白名单打包、图标与 ad-hoc 签名、安全检查和预约测试租约 |
 
 渲染层开启 context isolation、进程沙箱、关闭 Node 集成；正常界面只从受控 `notalone://app/` 资源加载，设置 CSP、拒绝导航/新窗口/网页权限。主进程校验桥接的窗口、主框架、精确资源来源、参数个数和类型。入口资源失败时使用无脚本的安全中文说明页，来源校验拒绝它调用桥接；可从原生菜单重试。临时界面会话使用内存分区；默认应用配置目录是 `~/Library/Application Support/NotAloneDesktop`，与历史 App 分开；`desktop-settings.json` 只保存 `helperShortcut`，不保存草稿、候选、置顶状态或业务资料。
 
@@ -103,4 +128,4 @@ NOTALONE_TEST_APP_EXECUTABLE="$PWD/out/NotAlone-darwin-arm64/NotAlone.app/Conten
 
 新 UI 继续遵守[产品边界](../CONTEXT.md)：用户确认联系人与读取范围、查看并编辑候选、亲自发送；后端接入后桌面退出必须停止本次后台读取。原 Swift 主界面已按 [ADR-036](../architecture/adr/036-retire-swift-main-interface.md) 退役，新宿主边界见 [ADR-037](../architecture/adr/037-electron-dual-window-host.md)。
 
-已核对的官方接口资料：[Electron 安全](https://www.electronjs.org/docs/latest/tutorial/security)、[BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window)、[原生菜单](https://www.electronjs.org/docs/latest/api/menu)、[App 生命周期](https://www.electronjs.org/docs/latest/api/app)、[全局快捷键](https://www.electronjs.org/docs/latest/api/global-shortcut)、[拖动区域](https://www.electronjs.org/docs/latest/tutorial/custom-window-interactions)、[资源协议](https://www.electronjs.org/docs/latest/api/protocol)、[打包器](https://electron.github.io/packager/main/)、[Playwright Electron](https://playwright.dev/docs/api/class-electron)。锁定 Electron 44.7.0 / Playwright 1.64.0 在本机已实际运行；文档和版本锁定本身不能替代上述验收。
+已核对的官方接口资料：[Electron 安全](https://www.electronjs.org/docs/latest/tutorial/security)、[BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window)、[原生菜单](https://www.electronjs.org/docs/latest/api/menu)、[App 生命周期](https://www.electronjs.org/docs/latest/api/app)、[全局快捷键](https://www.electronjs.org/docs/latest/api/global-shortcut)、[拖动区域](https://www.electronjs.org/docs/latest/tutorial/custom-window-interactions)、[资源协议](https://www.electronjs.org/docs/latest/api/protocol)、[打包器](https://electron.github.io/packager/main/)、[Playwright Electron](https://playwright.dev/docs/api/class-electron)。调度修复没有可用 Context7，回退核对 [Playwright 配置](https://playwright.dev/docs/test-configuration)、[Node Unix socket](https://nodejs.org/api/net.html)、[ChildProcess](https://nodejs.org/api/child_process.html)、[OS 用户信息](https://nodejs.org/api/os.html#osuserinfooptions) 和 [文件打开标志](https://nodejs.org/docs/latest-v25.x/api/fs.html#file-open-constants)。本轮实际 Node 25.2.1、安装的 Playwright 1.64.0 / Electron 44.7.0 与锁定文件一致；Playwright 的脱离进程组行为也与安装版本源码核对，只用于保守的归属探测，不据此终止未知组。前期真实 Electron 已有独立验收记录，本轮仅通过安全命令/类型检查，文档不能替代预约 App 验收。

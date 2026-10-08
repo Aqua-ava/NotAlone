@@ -20,7 +20,7 @@
 
 - 除非仓库记录了替代方案，Python 测试使用 `unittest`。测试夹具只能使用合成或匿名化数据。
 - 从仓库根目录运行完整 Python 测试用 `python -m unittest discover -s backend/tests -t backend -v`；按 `tests.unit...` / `tests.integration...` 指定模块时在 `backend/` 执行。原生测试入口为 `swift test --package-path native/macos`。
-- 桌面端在 `desktop/` 执行 `npm run typecheck`、`npm test` 和 `npm run package`；真实 Electron 与打包 App 的公共行为入口见 [桌面说明](../../desktop/README.md)。窗口测试不替代后端、原生读取或权限的端到端验证。
+- 桌面端在 `desktop/` 执行 `npm test`，默认仅 TypeScript 与安全测试调度 CLI/合成进程回归，必须报告真实 App 未运行；`npm run package` 只构建打包。真实 Electron/签名包与桌面操作仅由主 Agent 在用户认可的有限时段以显式受限 `test:app` 协调执行，普通实现/评审不得直接运行 Playwright 或并发重启 App；跨工作树共用 OS 用户租约，过期停止新启动，不确定收尾保留锁且不杀未知进程。功能阶段使用最小组，最终集成全量只在一次预约中执行。旧工作树恢复前先合入门禁并审计新增启动路径，未合入的脚本不受锁自动拦截。参数及真实 App/HTTP 公共行为入口见 [桌面说明](../../desktop/README.md)，原约定验收继续保留，安全命令、窗口测试均不能替代后端、原生读取或权限的端到端验证。
 - 覆盖范围随实现推进，至少包括正常导入、损坏文件、联系人隔离、来源与删除、空或模糊检索、已确认绑定的增量去重、未绑定会话不读取正文、微信非前台时不采集视觉帧、关闭同步时停读，以及候选回复不会发送外部消息。CLI 后台同步与前台定位按 ADR-030 分别验证。
 - 每次改动运行最小且相关的验证；报告数据处理影响、实际命令和剩余风险。只有端到端验证才能证明消息渠道集成可用。
 
