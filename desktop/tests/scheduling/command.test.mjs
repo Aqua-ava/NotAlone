@@ -125,6 +125,19 @@ test('损坏且未知归属的陈旧记录失败关闭，既不读取原始内�
   } finally { await rm(directory, { recursive: true }); }
 });
 
+test('锁目录已创建但租约记录尚未写入时不可核验，不能显示 absent', async () => {
+  const id = randomUUID();
+  const directory = leasePath(id);
+  await mkdir(directory, { mode: 0o700, recursive: true });
+  try {
+    const status = await start(['--status', '--probe', id]).done;
+    assert.equal(status.code, 2, status.output);
+    assert.match(status.output, /app_test_lease_unsafe/);
+    assert.doesNotMatch(status.output, /"state":"absent"/);
+    assert.match((await start(probe(id)).done).output, /app_test_locked/);
+  } finally { await rm(directory, { recursive: true }); }
+});
+
 test('到期记录即使写着当前活 PID 也不推断归属或抢占', async () => {
   const id = randomUUID();
   const directory = leasePath(id);

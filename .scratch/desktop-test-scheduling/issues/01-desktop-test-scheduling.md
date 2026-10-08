@@ -16,7 +16,7 @@ State: claimed
 - 真实 App 仅由主 Agent 在用户认可的有限时段通过显式 `test:app` 执行。命令必须给出交互声明、协调人、开始/截止时间、最小文件范围和启动次数预算；最终全量仅在预约时段显式选择一次。
 - 跨工作树、Agent、TMPDIR 和 userData 使用同一 OS 用户的稳定私有租约。租约不确定、损坏或崩溃后不自动抢占，也不依据未知 PID 终止任何进程。
 - Playwright 直接调用和每个 Electron 启动/重启/重复实例都必须核验活租约；时段到期后不再新启动。Ctrl+C、超时和故障只能收尾本 runner 拥有的孩子；收尾不确定时保留租约、拒绝下一轮。
-- 保留正常 App 窗口的 show/focus，保留原 [spec](../mac-desktop-app/spec.md) 公开真实 App/HTTP 接缝和最终签名包/实机验收。没有独立桌面 runner 时诚实安排预约，不以 DOM、未知 headless、app.hide 或 showInactive 宣称静默 UI 通过。
+- 保留正常 App 窗口的 show/focus，保留原 [spec](../../mac-desktop-app/spec.md) 公开真实 App/HTTP 接缝和最终签名包/实机验收。没有独立桌面 runner 时诚实安排预约，不以 DOM、未知 headless、app.hide 或 showInactive 宣称静默 UI 通过。
 
 ## Testing Decisions
 
@@ -34,3 +34,5 @@ State: claimed
 - 2026-10-09（Asia/Taipei）：安全 CLI 反馈按垂直切片形成：未协调入口缺失 red → 明确拒绝 green；跨副本租约缺失 red → 不同 cwd/TMPDIR 的命令副本互斥 green；原始 Electron API 门禁模块缺失 red → 独立 Playwright worker 在 spawn 前拒绝 green。预算/到期切片首次仍等待五秒且返回 0（预期 124），接入合成孩子与租约后发现异步等待覆盖中断状态，修复后按期返回 124、第二次启动领取拒绝并正常收尾。全量发现首次因空范围环境值 JSON 解析失败，修正后可安全列出、限定文件且排除安全目录。
 - 2026-10-09：最终 `desktop/npm test` 通过 TypeScript 与 13/13 安全 CLI：跨两份独立命令副本及 TMPDIR、次数、到期、SIGINT 130/SIGTERM 143、runner SIGKILL 崩溃后的孩子退出与陈旧锁拒绝、到期疑似复用 PID、损坏/FIFO 记录、原始 launch 与主配置拒绝、全量/限定文件发现。`npm run test:app -- --interactive` 实际拒绝为 2/`app_test_unapproved`；`npm run test:app:status` 为 0/`absent`。`git diff --check` 与主 Agent 的二十任务字段/DAG/链接辅助检查通过。后续守卫将 Playwright 启动等待上限也限制到剩余时段，并对 socket 建立失败及无效协议原文使用安全错误；这些收尾改动只补相关类型与单项门禁验证，不重复全套。
 - 2026-10-09：启动审计确认本基点 fixture、桌面设置重启、联系人重启以及重复实例均经过统一门禁；07 `57c10b9` 没有新增独立 launch，09 未提交的 `rewrite-restart.spec.ts` 另有原始 launch，合入主配置门禁可覆盖同一 API，但恢复前仍须合入并改用显式受限 `launchApp`、审计新增路径。旧树未合入时不会受租约自动拦截。本轮没有执行 Electron、App 打包、native dialog、CUA/系统按键、Python/PG/模型/微信或读取私人资料；仅测试租约元信息、固定合成 Node 孩子和各自临时副本。真实窗口正向启动、到期/强制回收以及签名包/实机项仍需主 Agent 安排最小预约验收；安全绿灯不替代原 App/HTTP 证据。候选保持 claimed，等待双轴评审。
+- 2026-10-09（Asia/Taipei）：候选 `078257dc74a9a3bcceceb3a733bb86997ded8d8b` 两轴评审后，只处理三项增量。Standards 的路径要求通过迁入本文件及修正原 spec 相对链接落实；仓库中没有其他旧路径引用。采纳重复逻辑维护建议，抽取私有 `monitorLease` 共用心跳、重入保护、到期、升级 timer 与退出清理；App 保留正常 close 后 3/5 秒信号升级，普通 ChildProcess 保留直接 SIGTERM 后 3 秒 SIGKILL，信号始终只作用于仍存活的自有孩子，不增加通用 Harness。
+- 2026-10-09：Spec 的缺记录问题经公共 CLI red → green：本轮合成锁目录已创建但没有 `lease.json` 时，原状态命令返回 0/`absent`，新增回归失败；修复后为 2/`app_test_lease_unsafe`，后续领取仍为 `app_test_locked`。仅锁目录本身不存在才能报告 absent，记录缺失、读取失败或归属不明均保留锁。单项 green 与类型检查通过；相关状态/预算/中断/崩溃/原始 API 和主配置门禁共 10/10 安全检查通过，差异及二十任务辅助检查通过。未重复完整安全组，未运行真实 App、CUA、打包或业务数据库；共享监视器的真实 Electron 正向适配仍待预约。保持 claimed，交回主 Agent 增量两轴复核，不写 Answer/resolved。

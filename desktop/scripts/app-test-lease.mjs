@@ -66,15 +66,20 @@ export async function acquireLease(options) {
 }
 
 export async function leaseStatus(probeId) {
+  const directory = leasePath(probeId);
+  try {
+    await privateDirectory(directory);
+  } catch (error) {
+    if (error.code === 'ENOENT') return { state: 'absent' };
+    throw gateError('app_test_lease_unsafe', '租约状态不可核验，禁止启动或自动解锁');
+  }
   try {
     await privateDirectory(leaseRoot);
-    await privateDirectory(leasePath(probeId));
-    const record = await readRecord(leasePath(probeId));
+    const record = await readRecord(directory);
     // 只报告归属线索；文件或 PID 不能证明活 runner/孩子均已结束，不自动解锁。
     return { state: 'needs-owner-verification', id: record.id, runnerPid: record.runnerPid,
       project: record.project, coordinator: record.coordinator, until: record.until };
-  } catch (error) {
-    if (error.code === 'ENOENT') return { state: 'absent' };
+  } catch {
     throw gateError('app_test_lease_unsafe', '租约状态不可核验，禁止启动或自动解锁');
   }
 }

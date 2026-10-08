@@ -11,34 +11,53 @@ async function releaseAfterExit(child: ChildProcess, launchId: string): Promise<
   if (ownedGroupGone(child)) await requestAppTestLease('release', launchId).catch(() => {});
 }
 
-function watchApp(app: ElectronApplication, launchId: string, until: number): void {
-  const child = app.process();
-  const originalClose = app.close.bind(app);
-  let finished: Promise<void> | undefined;
-  let closing = false;
+type LeaseShutdown = {
+  gracefulStop: () => void | Promise<void>;
+  terminateAfterMs?: number;
+  killAfterMs: number;
+};
+
+function monitorLease(child: ChildProcess, until: number, shutdown: LeaseShutdown): () => void {
+  let stopping = false;
   let checking = false;
-  const finish = () => {
+  const escalation: ReturnType<typeof setTimeout>[] = [];
+  const dispose = () => {
     clearInterval(heartbeat);
-    finished ??= releaseAfterExit(child, launchId);
-    return finished;
+    escalation.forEach(clearTimeout);
   };
   const cleanup = async () => {
-    if (closing || !alive(child)) return;
-    closing = true;
+    if (stopping || !alive(child)) return;
+    stopping = true;
     // 只操作此 launch 返回并仍存活的 ChildProcess；强制回收不算产品停读通过。
-    const terminate = setTimeout(() => { if (alive(child)) child.kill('SIGTERM'); }, 3000);
-    const kill = setTimeout(() => { if (alive(child)) child.kill('SIGKILL'); }, 5000);
-    try { await originalClose().catch(() => {}); }
-    finally { clearTimeout(terminate); clearTimeout(kill); await finish(); }
+    if (shutdown.terminateAfterMs !== undefined) {
+      escalation.push(setTimeout(() => { if (alive(child)) child.kill('SIGTERM'); }, shutdown.terminateAfterMs));
+    }
+    escalation.push(setTimeout(() => { if (alive(child)) child.kill('SIGKILL'); }, shutdown.killAfterMs));
+    // 正常关闭失败也保留升级时限，直到拥有的孩子退出；不释放未知的启动登记。
+    try { await shutdown.gracefulStop(); } catch {}
   };
   const heartbeat = setInterval(async () => {
-    if (checking || closing) return;
+    if (checking || stopping || !alive(child)) return;
     checking = true;
     try { if (Date.now() >= until) throw new Error('expired'); await verifyAppTestLease(); }
     catch { void cleanup(); }
     finally { checking = false; }
   }, 500);
   heartbeat.unref();
+  child.once('exit', dispose);
+  return dispose;
+}
+
+function watchApp(app: ElectronApplication, launchId: string, until: number): void {
+  const child = app.process();
+  const originalClose = app.close.bind(app);
+  const dispose = monitorLease(child, until, { gracefulStop: originalClose, terminateAfterMs: 3000, killAfterMs: 5000 });
+  let finished: Promise<void> | undefined;
+  const finish = () => {
+    dispose();
+    finished ??= releaseAfterExit(child, launchId);
+    return finished;
+  };
   app.once('close', () => { void finish(); });
   app.close = async () => { await originalClose(); await finish(); };
 }
@@ -66,19 +85,9 @@ export async function spawnApp(executable: string, args: string[], options: Spaw
   if (Date.now() >= permit.until) throw new Error('app_test_expired: 验收时段已到期，禁止启动 App');
   const child = spawn(executable, args, { ...options, detached: true });
   child.once('exit', () => { void releaseAfterExit(child, permit.launchId!); });
-  let terminating = false;
-  let kill: ReturnType<typeof setTimeout> | undefined;
-  const timer = setInterval(async () => {
-    if (terminating || !alive(child)) return;
-    try { if (Date.now() >= permit.until) throw new Error('expired'); await verifyAppTestLease(); }
-    catch {
-      terminating = true;
-      if (alive(child)) child.kill('SIGTERM');
-      kill = setTimeout(() => { if (alive(child)) child.kill('SIGKILL'); }, 3000);
-    }
-  }, 500);
-  timer.unref();
-  child.once('exit', () => { clearInterval(timer); clearTimeout(kill); });
+  monitorLease(child, permit.until, {
+    gracefulStop: () => { if (alive(child)) child.kill('SIGTERM'); }, killAfterMs: 3000,
+  });
   return child;
 }
 
