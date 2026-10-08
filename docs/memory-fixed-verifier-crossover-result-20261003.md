@@ -39,7 +39,7 @@ root独立复核聚合算术、原17分母、9正例／8缺陷分组及预先冻
 
 ## 核验职责的限制
 
-源码只读核对确认：合法unsupported由原Flow硬拒绝；uncertain只增加semantic风险并保留原候选，通常进入pending。因此协议可以减少错误保留，但把supported改成uncertain只是降级，不能称为错记已经修好。确定性的来源／target／quote硬门验证编号、范围及字面片段，不能单独证明片段支持全部含义；引用真实与主张准确需分别审计。参见 [Flow](../src/notalone/memory_extraction/flow.py)、[证据契约](../src/notalone/memory_extraction/verification.py)及[ADR-033](../architecture/adr/033-source-semantic-verification-before-adoption.md)。
+源码只读核对确认：合法unsupported由原Flow硬拒绝；uncertain只增加semantic风险并保留原候选，通常进入pending。因此协议可以减少错误保留，但把supported改成uncertain只是降级，不能称为错记已经修好。确定性的来源／target／quote硬门验证编号、范围及字面片段，不能单独证明片段支持全部含义；引用真实与主张准确需分别审计。参见 [Flow](../backend/src/notalone/memory_extraction/flow.py)、[证据契约](../backend/src/notalone/memory_extraction/verification.py)及[ADR-033](../architecture/adr/033-source-semantic-verification-before-adoption.md)。
 
 V不能改正正文或主体，也不能补原raw没有提取的主张。issue表示错误轴，不表示确定性等级，不能把全部uncertain按meaning／time／pragmatics标签直接删除；这会改变现行“证据不足待确认、无支持拒绝”的政策。本轮不实施这种政策变更，不用拒绝全部候选获得较低错误数。
 

@@ -4,7 +4,22 @@ NotAlone 是面向用户真实联系人的中文关系感知回复助手。用�
 
 仓库当前保留的路径：微信单联系人 JSONL 只读预览、联系人确认后的 PostgreSQL 正式导入、CLI 后台增量同步（前台 OCR 只负责定位当前会话）、记忆提取与管理、检索评测，以及 Python 本地后台的候选回复接口。代码中不存在发送消息 Tool；验证以合成数据、scripted fake model 和本地适配器为主，真实 DeepSeek 冒烟需显式配置凭据后运行。
 
-旧 Swift 主界面 `macos_app/` 已删除。后续前端采用 TypeScript + React，UI 将重新设计；当前没有替代主窗口、图形首启向导或 React 脚手架。Python 后台和 `macos_sync_probe/` 的 Mac 原生截图、OCR、会话定位能力保留，Windows 微信适配尚未实现，见 [ADR-036](architecture/adr/036-retire-swift-main-interface.md)。
+旧 Swift 主界面 `macos_app/` 已删除。后续前端采用 TypeScript + React，UI 将重新设计；当前没有替代主窗口、图形首启向导或 React 脚手架。Python 后台位于 `backend/`，Mac 原生截图、OCR、会话定位探针位于 `native/macos/`；Windows 微信适配尚未实现，见 [ADR-036](architecture/adr/036-retire-swift-main-interface.md)。
+
+## 仓库目录
+
+```text
+NotAlone/
+├── backend/          Python 后端：源码、测试、SQL 迁移与 pyproject.toml
+├── desktop/          未来 TypeScript + React 桌面端，目前仅职责说明
+├── native/macos/     Swift 原生截图、OCR 与会话定位探针
+├── website/          独立静态官网
+├── scripts/          仓库级安装与部署入口
+├── docs/             工程、操作及验证说明
+└── architecture/     领域设计、现行规格与 ADR
+```
+
+Python 与原生探针各自管理依赖、构建和测试；领域代码不放入桌面界面。详细入口见 [后端说明](backend/README.md)、[桌面端说明](desktop/README.md)与 [Mac 原生探针](native/macos/README.md)。`.env` 与私人导入目录 `chat_exports/` 仍位于仓库根目录，并由 Git 忽略。除单独注明外，下列命令从仓库根目录执行。
 
 ## 环境要求
 
@@ -25,15 +40,15 @@ NotAlone 是面向用户真实联系人的中文关系感知回复助手。用�
 zsh scripts/install.sh
 ```
 
-脚本按顺序完成：检查依赖（macOS / Homebrew / conda / PostgreSQL / swiftc）→ 创建 `NotAlone` conda 环境并 `pip install -e .` → 启动本地 PostgreSQL 并创建 `notalone_dev` → 按版本记录应用尚未完成的 `database/migrations/*.sql` → 生成只含数据库连接的受控 `.env`（0600）→ 构建前台同步探针。每个迁移与成功记录同事务提交，失败只回滚当前迁移，重跑从未完成版本继续；机器环境等此前已完成步骤会保留。无迁移记录的旧库会停止并提示核验，不会凭 `owner` 表猜测基线或重放历史 SQL，见 [数据库迁移说明](database/README.md)。
+脚本按顺序完成：检查依赖（macOS / Homebrew / conda / PostgreSQL / swiftc）→ 创建 `NotAlone` conda 环境并 `pip install -e ./backend` → 启动本地 PostgreSQL 并创建 `notalone_dev` → 按版本记录应用尚未完成的 `backend/database/migrations/*.sql` → 生成只含数据库连接的受控根 `.env`（0600）→ 构建前台同步探针。每个迁移与成功记录同事务提交，失败只回滚当前迁移，重跑从未完成版本继续；机器环境等此前已完成步骤会保留。无迁移记录的旧库会停止并提示核验，不会凭 `owner` 表猜测基线或重放历史 SQL，见 [数据库迁移说明](backend/database/README.md)。
 
-图形首启向导随旧主界面退役，当前首次初始化沿用下文历史导入的 `--initialize-owner`；模型凭据通过本地受控 `.env` 或环境变量提供。安装脚本不填写密钥，也不启动真实微信读取。探针的独立构建与调试见 [macos_sync_probe/README.md](macos_sync_probe/README.md)。
+图形首启向导随旧主界面退役，当前首次初始化沿用下文历史导入的 `--initialize-owner`；模型凭据通过本地受控 `.env` 或环境变量提供。安装脚本不填写密钥，也不启动真实微信读取。探针的独立构建与调试见 [native/macos/README.md](native/macos/README.md)。
 
 Python 命令必须在 conda 环境 `NotAlone` 中运行；命令启动时自动读取当前或上级目录的 `.env`，已有 shell 环境变量优先：
 
 ```bash
 conda activate NotAlone
-python -m pip install -e .
+python -m pip install -e ./backend
 ```
 
 常用环境变量：
@@ -70,7 +85,7 @@ notalone-front-sync status      # 执行一次双通道检查，输出 CLI 后�
 notalone-front-sync disable     # 手动关闭并停读；重新开启后的有界补齐遵循 ADR-025
 ```
 
-绑定只接受 CLI 返回的私聊会话定位标识，不用昵称猜测联系人；用户确认后才为新会话创建本地联系人，已绑定会话不会静默改绑。输出只含状态、计数、展示名称与候选标识，不含消息正文。CLI 全局流不可用时退化为有界一次性轮询。已有安装升级前先查看 [数据库迁移说明](database/README.md)；无版本记录的旧库需要单独核验，安装脚本不会自动接管。
+绑定只接受 CLI 返回的私聊会话定位标识，不用昵称猜测联系人；用户确认后才为新会话创建本地联系人，已绑定会话不会静默改绑。输出只含状态、计数、展示名称与候选标识，不含消息正文。CLI 全局流不可用时退化为有界一次性轮询。已有安装升级前先查看 [数据库迁移说明](backend/database/README.md)；无版本记录的旧库需要单独核验，安装脚本不会自动接管。
 
 ### 历史导入
 
@@ -94,7 +109,7 @@ notalone-ingest chat_exports/example.jsonl \
 
 ### 删除导入资料与查看回复依据
 
-本地后端按已确认联系人列出导入来源，支持删除单份导入并查询后台步骤与结果；中断、失败或 Worker 忙时可重新请求继续删除。请求与结果保存到数据库，不依赖模型密钥，当前通过 HTTP 接口使用这些能力。升级需先按[数据库迁移说明](database/README.md)应用 `036_source_deletion_tasks.sql`，本仓库修改不会自动迁移现有业务库。
+本地后端按已确认联系人列出导入来源，支持删除单份导入并查询后台步骤与结果；中断、失败或 Worker 忙时可重新请求继续删除。请求与结果保存到数据库，不依赖模型密钥，当前通过 HTTP 接口使用这些能力。升级需先按[数据库迁移说明](backend/database/README.md)应用 `036_source_deletion_tasks.sql`，本仓库修改不会自动迁移现有业务库。
 
 删除清除 NotAlone 中该来源及失去来源的聊天、记忆历史正文和回复快照；共享来源支持的资料保留。微信聊天、用户原始文件和不含正文的最小 AI 调用记录保留，外部模型副本须按供应商规则另行处理。联系人/账户整体删除不由此入口提供。缺少可核验删除任务的旧凭证（含任务已过期清理）不显示为本轮删除完成，历史正文残留需要单独核验。
 
@@ -144,7 +159,7 @@ notalone-task-cleanup                        # 删除超过 90 天的终态任�
 ```bash
 notalone-retrieval-evaluate            # 内存契约评测
 notalone-retrieval-evaluate --json
-python -m unittest tests.integration.persistence.test_retrieval_evaluation   # PostgreSQL SQL/全文路径
+(cd backend && python -m unittest tests.integration.persistence.test_retrieval_evaluation)   # PostgreSQL SQL/全文路径
 ```
 
 评测覆盖同义表达、确切短语、时间条件、无结果、冲突和跨联系人隔离，记录空结果率、降级率、Top-K 命中、引用纠错率、候选拒绝率、延迟、Token 和 Tool 次数；没有匿名运行观察值时引用纠错率与候选拒绝率显示为 `N/A`。向量候选当前不启用；只有持续检索异常、真实反馈、provider 配置和隐私评审同时满足才进入后续决策，SQL/全文路径仍是唯一生产检索路径。
@@ -152,7 +167,7 @@ python -m unittest tests.integration.persistence.test_retrieval_evaluation   # P
 ### 记忆召回评测
 
 ```bash
-python -m unittest tests.unit.retrieval.test_recall_evaluation
+(cd backend && python -m unittest tests.unit.retrieval.test_recall_evaluation)
 ```
 
 109 条合成中文用例覆盖直述、改写、无关拒绝、跨联系人隔离、失效与删除、双预算和排序七个维度；评测装配真实评分器与真实回复上下文组装，不连接数据库、不调用模型、不需要凭据，门槛作为常规测试断言。结果与常量标定见 [`docs/memory-recall-evaluation-baseline.md`](docs/memory-recall-evaluation-baseline.md)。
@@ -189,7 +204,8 @@ python -m notalone.memory_extraction.replica_experiment --split all --repetition
 ## 测试
 
 ```bash
-python -m unittest discover -s tests -v
+conda activate NotAlone
+NOTALONE_DISABLE_DOTENV=1 python -m unittest discover -s backend/tests -t backend -v
 ```
 
 测试只使用合成数据，不读取 `chat_exports/` 中的私人资料。PostgreSQL 集成测试默认使用本地 `notalone_test` 库，也可用 `NOTALONE_TEST_DATABASE_URL` 指定其他以 `_test` 结尾的隔离库；每个用例使用随机 owner 并只清理自己的合成数据，测试拒绝连接名称不以 `_test` 结尾的数据库。
@@ -198,7 +214,7 @@ python -m unittest discover -s tests -v
 
 ```bash
 conda activate NotAlone
-NOTALONE_DISABLE_DOTENV=1 python -m unittest tests.integration.server.test_import_auto_flow tests.integration.server.test_core_business_flow -v
+(cd backend && NOTALONE_DISABLE_DOTENV=1 python -m unittest tests.integration.server.test_import_auto_flow tests.integration.server.test_core_business_flow -v)
 ```
 
 此验收从公开回环 HTTP 入口串联“预览 → 确认联系人 → 导入 → 自动处理原任务 → 检索 → 候选与依据 → 同键重放 → 删除来源”，并通过公开 shutdown 验证关闭边界。导入、生产 Worker 装配、固定任务步骤、记忆存储、PostgreSQL 检索和候选存储均使用真实模块，只有模型使用 scripted fake。用例在提交之前准备模型脚本与 Event，自建、迁移并清理随机 `_test` 库，需要本机 PostgreSQL 和建库权限，不使用现有业务库或外部模型凭据。

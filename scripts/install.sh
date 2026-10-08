@@ -68,10 +68,10 @@ fi
 
 eval "$(conda shell.zsh hook)"
 conda activate "${env_name}"
-log "安装 Python 依赖（pip install -e .）…"
-python -m pip install -e . || fail "Python 依赖安装失败；请检查 pyproject.toml 与网络。"
+log "安装 Python 依赖（pip install -e ./backend）…"
+python -m pip install -e "${repo_root}/backend" || fail "Python 依赖安装失败；请检查 backend/pyproject.toml 与网络。"
 command -v notalone-server >/dev/null 2>&1 \
-    || fail "未找到 notalone-server 命令；pip install -e . 后应在环境 ${env_name} 中出现。"
+    || fail "未找到 notalone-server 命令；安装 backend 项目后应在环境 ${env_name} 中出现。"
 
 # ------------------------------------------------------------------
 # 2. PostgreSQL 本地服务与数据库
@@ -115,8 +115,8 @@ fi
 # ------------------------------------------------------------------
 log "检查版本记录并应用待执行迁移…"
 NOTALONE_DATABASE_URL="${database_url}" \
-    python -m notalone.database_migrations --migrations "${repo_root}/database/migrations" \
-    || fail "迁移未完成；请按错误提示与 database/README.md 处理，不要重放历史 SQL。"
+    python -m notalone.database_migrations --migrations "${repo_root}/backend/database/migrations" \
+    || fail "迁移未完成；请按错误提示与 backend/database/README.md 处理，不要重放历史 SQL。"
 
 # ------------------------------------------------------------------
 # 4. 生成/校验 .env（不写任何密钥）
@@ -140,7 +140,7 @@ fi
 # 5. 构建 Mac 原生探针
 # ------------------------------------------------------------------
 log "构建前台同步探针（CLI）…"
-zsh macos_sync_probe/scripts/build_cli.sh || fail "探针构建失败。"
+zsh native/macos/scripts/build_cli.sh || fail "探针构建失败。"
 
 # ------------------------------------------------------------------
 # 6. 收尾引导

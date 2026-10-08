@@ -8,6 +8,8 @@
 
 2026-10-08：旧 Swift 主窗口及其构建入口已按 ADR-036 退役，新 UI 尚未实现。本文中 `NotAloneApp.app`、`macos_app/` 和主 App 的权限／签名验收属于历史记录，不再是当前操作入口；独立原生探针仍保留。未来桌面宿主需重新记录权限归属和实际验收，不能直接继承旧 App 的验证结论。本次只删除源码与旧构建调用，不停止正在运行的程序、不修改 TCC、不删除本机旧构建产物或私人数据。
 
+2026-10-08 目录整理：现有独立探针由 `macos_sync_probe/` 移至 `native/macos/`，Python 后端移至 `backend/`。本次只更新工程位置与调用路径，探针内部构建、bundle id、权限说明及签名策略保持原有行为；历史主 App 路径与验收记录保留。验证使用隔离构建与合成测试；普通构建遇到缓存中的旧绝对路径时，仅用 `swift package clean` 清理探针的 SwiftPM 生成缓存后重建，不清理独立 `build/` 产物，不运行或替换 App、不触发微信采集、不修改 TCC。
+
 ## 1. 产品边界
 
 NotAlone 的本地读取必须满足以下条件：
@@ -24,7 +26,7 @@ NotAlone 的本地读取必须满足以下条件：
 | 编号 | 权限 | 触发目标 | 配置位置 | 触发时机 | 允许后能做什么 |
 | --- | --- | --- | --- | --- | --- |
 | P-01 | 访问其他 App 的数据 | `NotAloneApp.app` 启动签名后的 `wechat-cli` | `macos_app/App/Info.plist` 的 `NSAppDataUsageDescription` | 用户开启 CLI 全量同步，并且后台需要读取已绑定会话时 | 通过本机只读 CLI 更新已绑定微信会话消息 |
-| P-02 | 屏幕与系统音频录制 | 主 App 启动的前台同步探针，或独立菜单栏探针 | `macos_app/App/Info.plist`、`macos_sync_probe/App/Info.plist` 的 `NSScreenCaptureUsageDescription` | 用户进行前台微信会话定位/屏幕采集时 | 在微信前台读取当前窗口的会话标题、选中行和聊天区域定位信息 |
+| P-02 | 屏幕与系统音频录制 | 主 App 启动的前台同步探针，或独立菜单栏探针 | `macos_app/App/Info.plist`（历史）、`native/macos/App/Info.plist` 的 `NSScreenCaptureUsageDescription` | 用户进行前台微信会话定位/屏幕采集时 | 在微信前台读取当前窗口的会话标题、选中行和聊天区域定位信息 |
 
 ### P-01：访问其他 App 的数据
 
@@ -83,7 +85,7 @@ NotAlone 的本地读取必须满足以下条件：
 2. 允许实际执行采集的、已签名的 NotAlone App/探针。
 3. 回到菜单栏选择“重新检测权限”，不需要反复重启 App。
 
-权限记忆依赖代码签名身份。`macos_sync_probe/scripts/build_app.sh` 和 `build_cli.sh` 优先使用本机稳定的 Apple Development 证书；退回 ad-hoc 时，每次重建都可能需要重新授权，不能把这种构建当作权限持久性验证。
+权限记忆依赖代码签名身份。`native/macos/scripts/build_app.sh` 和 `build_cli.sh` 优先使用本机稳定的 Apple Development 证书；退回 ad-hoc 时，每次重建都可能需要重新授权，不能把这种构建当作权限持久性验证。
 
 ## 3. 不应主动申请的权限
 
@@ -119,7 +121,7 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 | `回复生成超时` / `本次生成尝试过多` | 模型或只读 Tool 在本次有界运行内未完成 | 运行预算、模型响应、Skill 资源反馈和候选请求台账 | 不要把未完成请求当成已生成或已发送 |
 | `Follow 流：未运行` | Follow 当前没有启动或已退出 | Follow 控制状态、CLI 可用性和用户是否启动人工验证 | 不要把状态文字当作消息发送失败，也不要自动发送消息 |
 
-适配层只向 UI 暴露稳定错误码和安全说明，不回显 CLI 原始输出、数据库路径、完整会话标识、聊天正文或凭据。相关实现：[CLI 错误定义](../src/notalone/wechat_cli/errors.py)、[前台探针适配器](../src/notalone/front_sync/probe_adapter.py)。
+适配层只向 UI 暴露稳定错误码和安全说明，不回显 CLI 原始输出、数据库路径、完整会话标识、聊天正文或凭据。相关实现：[CLI 错误定义](../backend/src/notalone/wechat_cli/errors.py)、[前台探针适配器](../backend/src/notalone/front_sync/probe_adapter.py)。
 
 2026-10-03 桌面连接修复范围：握手解析、普通 HTTP 客户端和 SSE 共用回环地址校验；直接构造非法连接也在请求前返回既有安全连接错误，避免强制解包崩溃。验证只使用合成握手、临时路径和合成本机服务；不读取真实 backend.info、不启动 App 或微信读取进程、不改变权限／签名，不替换当前 App。独立临时构建目录中的 Swift 37 项与真正 App 目标编译通过，Standards／Spec 两轴均 0；打包与实机集成不在本轮验证范围。详细红绿过程和命令见 [连接地址修复任务](../.scratch/native-app-backend/issues/17-validate-backend-connection.md)。
 
@@ -185,7 +187,7 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 
 ### 当前自动化检查
 
-- [ ] `swift test -q`（`macos_sync_probe`）。
+- [ ] 从仓库根目录运行 `swift test --package-path native/macos -q`。
 - [ ] `conda activate NotAlone` 后运行相关 Python 合成测试。
 - [ ] `git diff --check`。
 
@@ -213,7 +215,7 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 - 本文档的权限清单和错误对照表；
 - 对应 `Info.plist`、entitlements 和构建/签名脚本；
 - 自动化回归测试；
-- 当前桌面宿主的 README（实现后）或 `macos_sync_probe/README.md` 的用户操作说明；
+- 当前桌面宿主的 README（实现后）或 `native/macos/README.md` 的用户操作说明；
 - 对应 `.scratch/` 任务文件及验证结果。
 
 未经上述记录和验证，不得把新的系统权限申请直接交给用户处理。

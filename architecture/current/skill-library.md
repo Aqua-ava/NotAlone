@@ -1,8 +1,8 @@
 # Skill Library（Skill 库）
 
 > 状态：已采纳且已按本文件完成初版实现；管理接口、辅助资源持久化与运行时读取均已落地，测试见
-> [tests](../../tests/unit/skills)、[tests](../../tests/integration/persistence) 与
-> [tests](../../tests/unit/reply)，以 `python -m unittest discover -s tests` 的真实验证为准。
+> [tests](../../backend/tests/unit/skills)、[tests](../../backend/tests/integration/persistence) 与
+> [tests](../../backend/tests/unit/reply)，以 在 `backend/` 运行 `python -m unittest discover -s tests` 的真实验证为准。
 > 日期：2026-08-24
 
 ## 1. 目标与范围
@@ -166,7 +166,7 @@ PostgreSQL 继续是 Skill 目录、版本、状态、资源元数据和删除�
 
 ## 9. 当前实现状态与完成条件
 
-仓库已完成 Skill Library 初版实现：领域模型见 [skills/models.py](../../src/notalone/skills/models.py)，只读受控目录、版本与资源读取见 [skill_port.py](../../src/notalone/persistence/skill_port.py)，管理接口 import/update/enable/disable/rollback/delete/export/preview 见 [skill_library.py](../../src/notalone/persistence/skill_library.py)。运行时按需读取 SKILL.md 与受控 references/assets 的 Adapter 见 [langchain_runtime.py](../../src/notalone/reply/adapters/langchain_runtime.py)，试用执行器见 [skill_preview.py](../../src/notalone/reply/adapters/skill_preview.py)，运行记录与资源摘要见 [reply_store.py](../../src/notalone/persistence/reply_store.py) 和 [024_skill_run_record.sql](../../database/migrations/024_skill_run_record.sql)，包导入校验见 [008_skill_port.sql](../../database/migrations/008_skill_port.sql) 与 [023_skill_library_resources.sql](../../database/migrations/023_skill_library_resources.sql)。
+仓库已完成 Skill Library 初版实现：领域模型见 [skills/models.py](../../backend/src/notalone/skills/models.py)，只读受控目录、版本与资源读取见 [skill_port.py](../../backend/src/notalone/persistence/skill_port.py)，管理接口 import/update/enable/disable/rollback/delete/export/preview 见 [skill_library.py](../../backend/src/notalone/persistence/skill_library.py)。运行时按需读取 SKILL.md 与受控 references/assets 的 Adapter 见 [langchain_runtime.py](../../backend/src/notalone/reply/adapters/langchain_runtime.py)，试用执行器见 [skill_preview.py](../../backend/src/notalone/reply/adapters/skill_preview.py)，运行记录与资源摘要见 [reply_store.py](../../backend/src/notalone/persistence/reply_store.py) 和 [024_skill_run_record.sql](../../backend/database/migrations/024_skill_run_record.sql)，包导入校验见 [008_skill_port.sql](../../backend/database/migrations/008_skill_port.sql) 与 [023_skill_library_resources.sql](../../backend/database/migrations/023_skill_library_resources.sql)。
 
 初版实现已通过的完成条件：
 

@@ -23,7 +23,7 @@
 
 另一条固定慢跑习惯使用preference，符合现有E提示中“习惯与口味用preference”。联网前独立Gold只容许common_fact／recent_state，容许集合过严，前置审阅未发现这处边界。冻结Gold与首次输出保持原样，主评分照列，并另报现有提示分类下的1/2；不将它称为模型正文或分类语义错误，不把两项冻结偏离说成两条实质错误auto。即使认可这个类别，来源缺陷仍独立使阶段失败。
 
-原V提示要求完整主张被其来源支持；现有确定性门核对来源范围、声明ID、逐字quote及至少一个target，不能证明quote涵盖全部含义。新组ID同样只组织结果，不是证据。[E规则与字段](../src/notalone/memory_extraction/adapters.py)、[V规则](../src/notalone/memory_extraction/verification_adapters.py)、[引用校验](../src/notalone/memory_extraction/verification.py)是实际代码依据；不能从这一次观察断言flat输出是根因，或推算实际聊天准确率。
+原V提示要求完整主张被其来源支持；现有确定性门核对来源范围、声明ID、逐字quote及至少一个target，不能证明quote涵盖全部含义。新组ID同样只组织结果，不是证据。[E规则与字段](../backend/src/notalone/memory_extraction/adapters.py)、[V规则](../backend/src/notalone/memory_extraction/verification_adapters.py)、[引用校验](../backend/src/notalone/memory_extraction/verification.py)是实际代码依据；不能从这一次观察断言flat输出是根因，或推算实际聊天准确率。
 
 ## 调用、验证与关闭
 

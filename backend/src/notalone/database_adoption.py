@@ -200,7 +200,8 @@ def _run_pg(program: str, database_url: str, arguments: list[str]) -> None:
 
 
 def _backup_directory(directory: Path) -> Path:
-    repository = Path(__file__).resolve().parents[2]
+    # backend/src/notalone 下移后，备份保护范围仍覆盖整个仓库。
+    repository = Path(__file__).resolve().parents[3]
     if directory.is_symlink() or directory.resolve().is_relative_to(repository):
         raise MigrationError("backup_path_invalid：备份必须保存在仓库外的本机受限目录。")
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)

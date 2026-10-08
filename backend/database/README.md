@@ -4,7 +4,7 @@ NotAlone 使用 PostgreSQL 作为权威业务库。安装脚本统一调用逐�
 
 ## 执行与恢复
 
-从仓库根目录执行；连接串由环境变量提供，命令不会读取 `.env`：
+本页命令从 `backend/` 目录执行（从仓库根目录先 `cd backend`）；连接串由环境变量提供，迁移命令不会读取 `.env`：
 
 ```bash
 conda activate NotAlone

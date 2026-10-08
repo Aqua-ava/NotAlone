@@ -76,7 +76,7 @@ RewriteDraft(
 ## 4. Retrieval 与 Memory 的位置
 
 ```text
-src/notalone/
+backend/src/notalone/
 ├── memory/          关系记忆的权威管理与目录维护
 ├── retrieval/       消息和关系记忆的查询能力
 └── reply/           候选回复业务模块

@@ -357,6 +357,14 @@ class DatabaseAdoptionTest(unittest.TestCase):
         self._assert_unadopted()
         self.assertFalse((ROOT / "private_backup").exists())
 
+    def test_backup_outside_backend_but_inside_repository_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="synthetic_backup_", dir=ROOT.parent) as temporary:
+            backup = Path(temporary)
+            with self.assertRaisesRegex(MigrationError, "backup_path_invalid"):
+                adopt_legacy_database(self.url, MIGRATIONS, backup)
+            self._assert_unadopted()
+            self.assertEqual(list(backup.iterdir()), [])
+
     def test_cross_scope_observation_binding_is_rejected(self) -> None:
         owner, contact, _, _, _ = self._seed_scope()
         _, _, other_binding, _, _ = self._seed_scope()

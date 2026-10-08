@@ -21,13 +21,15 @@
 
 ## 构建与测试
 
-在本目录运行：
+在本目录运行（从仓库根目录先 `cd native/macos`）：
 
 ```bash
 swift test
 swift run notalone-sync-probe --help
 swift run notalone-sync-probe --self-test
 ```
+
+若搬迁目录后出现 `PCH was compiled with module cache path`，先在本目录运行 `swift package clean` 清理生成缓存，再重新构建；它不会清理 `build/` 中的独立 App 或 CLI 产物。
 
 正常的完整 Xcode/Swift 工具链应使用上述 SwiftPM 命令。也可以用以下脚本
 单独编译命令行程序并运行核心逻辑自检：

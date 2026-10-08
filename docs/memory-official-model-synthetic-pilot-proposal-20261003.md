@@ -8,7 +8,7 @@
 
 官方DeepSeek当前确实提供deepseek-v4-pro。它是可比较的候选，不是已证明更懂本次中文聊天的模型。[官方模型表](https://api-docs.deepseek.com/quick_start/pricing/)
 
-现有项目只配置了ECNU入口。原E与V已通过BaseChatModel注入，Fact、来源／target／逐字引用及采纳门无需因对照而改变。当前构造器和评测支持对子进程显式覆盖模型／地址，不能凭这些代码就宣称新服务可用。[构造器](../src/notalone/reply/adapters/deepseek_provider.py)、[提取](../src/notalone/memory_extraction/adapters.py)、[核验](../src/notalone/memory_extraction/verification_adapters.py)
+现有项目只配置了ECNU入口。原E与V已通过BaseChatModel注入，Fact、来源／target／逐字引用及采纳门无需因对照而改变。当前构造器和评测支持对子进程显式覆盖模型／地址，不能凭这些代码就宣称新服务可用。[构造器](../backend/src/notalone/reply/adapters/deepseek_provider.py)、[提取](../backend/src/notalone/memory_extraction/adapters.py)、[核验](../backend/src/notalone/memory_extraction/verification_adapters.py)
 
 ## 拟冻结的一次配置
 
