@@ -62,8 +62,9 @@ svg { flex-shrink: 0; vertical-align: middle; }
 
 /* 小窗只保留几行输入与横向候选区域，不承载管理导航。 */
 .ime-pane { height: 100vh; padding: 9px 12px 0; border: 1px solid #b3bfbe; border-radius: 4px 7px 4px 6px; background: radial-gradient(ellipse at 2% 4%, #9ec7dc25, transparent 48%), #fff9ed; }
-.ime-header { display: flex; align-items: center; gap: 8px; height: 35px; -webkit-app-region: drag; }
+.ime-header { display: flex; align-items: center; gap: 8px; height: 35px; user-select: none; -webkit-app-region: drag; }
 .ime-header button { -webkit-app-region: no-drag; }
+.ime-input, .horizontal-candidates, .ime-footer { -webkit-app-region: no-drag; }
 .ime-logo { width: 43px; height: auto; margin-right: 1px; }
 .contact-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 5px; border-radius: 4px; }
 .ime-modes { margin-left: auto; display: flex; gap: 2px; }

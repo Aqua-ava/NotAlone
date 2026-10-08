@@ -2,6 +2,7 @@ import { app, dialog, ipcMain, Menu, protocol, session } from 'electron';
 import path from 'node:path';
 import { installResources } from './resources';
 import { AppWindows } from './windows';
+import { installDesktopControls } from './desktop-controls';
 
 app.setName('NotAlone');
 const selectedDataPath = app.commandLine.getSwitchValue('user-data-dir');
@@ -18,6 +19,8 @@ void app.whenReady().then(async () => {
   const appSession = session.fromPartition('notalone-app');
   installResources(appSession);
   const windows = new AppWindows(appSession);
+  const desktopControls = installDesktopControls(windows);
+  app.on('will-quit', () => desktopControls.dispose());
   let quitting = false;
   const openWindow = (role: 'manager' | 'helper') => {
     void windows.open(role).catch(() => {

@@ -47,7 +47,7 @@ test('界面显示品牌资源和真实未就绪状态，不提供假联系人�
   for (const page of ['历史导入', '关系资料', '同步设置', '应用配置']) {
     await manager.getByRole('button', { name: page, exact: true }).click();
     await expect(manager.getByRole('heading', { name: page, exact: true })).toBeVisible();
-    await expect(manager.getByRole('status')).toContainText('尚未连接');
+    await expect(manager.getByRole('status').filter({ hasText: '尚未连接' })).toBeVisible();
   }
   await manager.getByRole('button', { name: '历史导入', exact: true }).click();
   await expect(manager.getByRole('button', { name: '选择历史文件' })).toBeDisabled();
