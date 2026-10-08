@@ -12,7 +12,7 @@
 
 - Python 产品代码使用 Conda 环境 `NotAlone`（Python 3.12）。开发、启动、安装依赖、运行 Python 命令或测试前先执行 `conda activate NotAlone`。
 - Python 工程位于 `backend/`，包含 `src/notalone/`、`tests/`、`database/` 与 `pyproject.toml`；从仓库根目录安装用 `python -m pip install -e ./backend`。根 `.env` 保持原位置，运行入口见 [后端说明](../../backend/README.md)。
-- `desktop/` 是 Electron + React/TypeScript 桌面端；当前双窗口宿主可运行，业务连接尚未接入。使用独立用户数据目录验证，不沿用历史 App 的业务或权限验收。
+- `desktop/` 是 Electron + React/TypeScript 桌面端；当前已接入受控后端、联系人、历史导入预览、会话读取授权、草稿改写与只读关系资料。完整业务闭环与最新版 App 验收尚未完成，实际支持的命令和行为从 `README.md`、代码与测试核验。使用独立用户数据目录验证，不沿用历史 App 的业务或权限验收。
 - `native/macos/` 是 ScreenCaptureKit 与 Vision 的原生 Swift 探针，只验证前台同步能力，不承载领域、存储或回复生成逻辑。
 - 修改 macOS App/探针的权限、`Info.plist`、签名、打包或用户可见启动错误前，先读取并更新 [macOS App 权限与启动错误记录](../macos-app-permissions-and-errors.md)。
 
