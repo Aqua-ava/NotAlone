@@ -15,7 +15,7 @@ export const managerPages = {
   },
   memory: {
     title: '关系资料', icon: 'memory',
-    description: '查看、修正和删除关系记忆，让每一份资料都有清楚的来源。',
+    description: '查看当前有效的关系记忆、本人记忆和待确认候选，核对资料来源与时间。',
     emptyTitle: '关系资料暂不可用',
     emptyDescription: '连接并选择联系人后，可查看资料、来源和采纳状态。',
     action: '选择联系人',

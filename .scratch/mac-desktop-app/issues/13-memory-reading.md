@@ -1,7 +1,7 @@
 # 13：关系资料查看与来源回溯
 
 Type: task
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: 06
 Spec: ../spec.md
@@ -28,3 +28,9 @@ Spec: ../spec.md
 ## Comments
 
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
+- 2026-10-09：开始实现只读资料链路。用户已选择“先继续不触桌面的工作，实机验收稍后安排”；本轮仅代码、类型检查和隔离后端 HTTP 验证，不启动 Electron、Playwright App、CUA 或原生对话框。公开 App red → green 继续待认可时段，验收勾选与 resolved 保留待完成。
+- 2026-10-09：只读候选实现读取现有四个 GET：当前联系人有效记忆、当前本人有效记忆、当前联系人 pending 候选、当前联系人来源目录。主进程按已验证连接 generation、联系人 `scopeRevision` 和每栏操作 revision 拒绝旧结果，具名桥接复用 App 来源校验并拒绝额外身份/URL/非法参数；认证不传到 renderer。四栏分别显示加载、真实空结果和安全失败，支持独立重读；文本按 React 普通文本显示，不解释 HTML。未新增后端 API、表、算法、编辑/删除或业务 SSE。
+- 2026-10-09：如实区分自动采纳（可撤销）、手动采纳和待确认候选，标明 self/contact/shared；本人资料按当前本人共享。保存时间、来源聊天时间和生效/失效时间分开，未知与不完整保持可见；混合 `source_ids` 仅在真实匹配当前联系人来源目录时展示其已有元数据，其他引用不猜类型。版本/候选只展示已有 `supersedes_memory_id`、`source_candidate_id` 等引用，未承诺完整历史正文。任务 14、15、19 继续保持各自范围。
+- 2026-10-09：验证基点已从分配时 `a3d200f8f47f4649a91a93208861189f5829f338` 快进到集成 `ef86567f1f9c7d5c780f2f03cac939eef3f05264`（仅任务 04 收尾文档）。Context7 无可调用工具，回退核对 [Electron ipcMain](https://www.electronjs.org/docs/latest/api/ipc-main)、[contextBridge](https://www.electronjs.org/docs/latest/api/context-bridge)、[React useEffect](https://react.dev/reference/react/useEffect) 与 [Playwright Electron](https://playwright.dev/docs/api/class-electron)，锁文件与复用的安装版本同为 Electron 44.7.0 / Playwright 1.64.0 / React 19.3.0。官方文档与类型可用不代表实际 App 已通过。
+- 2026-10-09：实际通过 `desktop/` 的 `npm run typecheck`、`npm run build`，以及根目录激活 Conda `NotAlone`、独立 dotenv/握手/CLI/探针/模型环境后的 `PYTHONPATH="$PWD/backend/src" python desktop/tests/fixtures/memory-database.py check-http`。自检核验当前工作树真实后端与本轮随机 `_test` 库上的夹具数据、auto/manual、pending 主体、有效期过滤、完整/不完整/未知时间、来源/版本引用、当前 owner/contact 隔离与空结果；不是对未改后端 API 新增镜像回归。首次自检仅因等价时区的 ISO 表示不同而失败，改按带时区 datetime 语义核对后通过；各轮都回收本轮库和自有服务，最终轮取得真实认证 stopped 响应并正常退出。自动审批曾拒绝外层 `rm -rf` 写法且未执行，改用上下文及 `rmdir` 后成功。未读取私人 `.env`/默认握手、既有业务库、真实微信、剪贴板或真实模型。
+- 2026-10-09：`memory-reading.spec.ts` 与 `memory-stale.spec.ts` 的十条公开 App 用例已保存并通过类型检查，覆盖可见资料/时间/引用、空结果、独立失败重读、非法具名参数、同范围更新、A→B→A 和断线重连后的旧成功/失败。未运行用例、未证明 UI red/green；来源详情布局、本人共享范围、失效显示和桥接拒绝均待认可时段实际验收。新增用例全部使用现有受限 `runningApp` fixture，没有新增原始 Electron launch 路径。本轮没有执行 App、安全调度中的 Playwright 或打包实机验收；`git diff --check` 与 `node /tmp/notalone-app-context.p9MPie/validate-tickets.mjs` 通过。任务仍 claimed、全部 UI 验收框未勾，Standards/Spec 两轴由主 Agent 统一安排。
