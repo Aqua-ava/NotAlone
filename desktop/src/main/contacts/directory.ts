@@ -1,8 +1,8 @@
 import type { ContactSummary } from '../../shared/contact-session-bridge';
 import type { BackendHost } from '../backend/host';
+import { normalizeUuid } from '../uuid';
 import type { ContactDirectoryResult } from './session';
 
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 export async function readContactDirectory(backend: BackendHost): Promise<ContactDirectoryResult> {
@@ -26,10 +26,11 @@ export function contactSummaries(value: unknown): ContactSummary[] {
   if (!record(value) || !Array.isArray(value.contacts)) throw new Error('联系人目录不可用。');
   const known = new Set<string>();
   return value.contacts.map((entry: unknown) => {
-    if (!record(entry) || typeof entry.contact_id !== 'string' || !uuid.test(entry.contact_id)
+    if (!record(entry)) throw new Error('联系人目录不可用。');
+    const contactId = normalizeUuid(entry.contact_id);
+    if (contactId === null
       || typeof entry.display_name !== 'string' || !entry.display_name.trim()
       || !record(entry.data_status)) throw new Error('联系人目录不可用。');
-    const contactId = entry.contact_id.toLowerCase();
     const { message_count: messageCount, source_count: sourceCount } = entry.data_status;
     if (known.has(contactId) || typeof messageCount !== 'number' || !Number.isSafeInteger(messageCount) || messageCount < 0
       || typeof sourceCount !== 'number' || !Number.isSafeInteger(sourceCount) || sourceCount < 0) {

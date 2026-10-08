@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import type { ImportTarget } from '../../shared/import-bridge';
 import type { AppWindows } from '../windows';
+import { normalizeUuid } from '../uuid';
 import type { ImportController } from './controller';
 
 function selectionRevision(args: unknown[]): number {
@@ -14,8 +15,10 @@ function selectionRevision(args: unknown[]): number {
 function target(args: unknown[]): ImportTarget {
   const value = args[0];
   if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== 2) throw new Error('历史导入操作不可用。');
-  if ('kind' in value && value.kind === 'existing' && 'contactId' in value && typeof value.contactId === 'string'
-    && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value.contactId)) return { kind: 'existing', contactId: value.contactId.toLowerCase() };
+  if ('kind' in value && value.kind === 'existing' && 'contactId' in value) {
+    const contactId = normalizeUuid(value.contactId);
+    if (contactId !== null) return { kind: 'existing', contactId };
+  }
   if ('kind' in value && value.kind === 'new' && 'displayName' in value && typeof value.displayName === 'string'
     && value.displayName.length <= 100 && !/[\u0000-\u001f]/.test(value.displayName)) return { kind: 'new', displayName: value.displayName };
   throw new Error('历史导入操作不可用。');
