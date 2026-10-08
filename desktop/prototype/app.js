@@ -1,4 +1,4 @@
-// 独立管理后台 + 输入法式小窗；所有资料和操作都是内存中的合成演示。
+// 独立管理后台 + 三种输入法式小窗，沿用品牌图的水彩与纸张风格；所有操作都是合成演示。
 const variants = { A: '横向候选栏', B: '纵向候选窗', C: '单行工具条' };
 const contacts = [
   { id: 'c1', name: '小岑', relation: '同事', color: 'green', initial: '岑', count: 128,
@@ -162,7 +162,7 @@ function VariantC() {
 const managerTabs = { contacts: ['contacts', '联系人与绑定'], import: ['import', '历史导入'], memory: ['memory', '关系记忆'], sync: ['sync', '后台同步'], config: ['settings', '基础配置'] };
 function manager() {
   const reading = state.running && state.syncEnabled && Object.keys(state.bindings).length > 0;
-  return `<div class="admin-layout"><aside class="admin-sidebar"><div class="admin-brand"><span class="brand-symbol">n</span><div><b>NotAlone</b><small>关系回复管理后台</small></div></div><span class="sidebar-label">工作区</span><nav>${Object.entries(managerTabs).map(([key, [symbol, label]]) => `<button class="${state.managerTab === key ? 'active' : ''}" data-action="manager-tab" data-value="${key}">${icon(symbol, 18)}${label}</button>`).join('')}</nav><div class="sidebar-help"><span class="status-dot ${reading ? '' : 'off'}"></span><b>${reading ? '后台同步中' : '后台读取已停止'}</b><p>${Object.keys(state.bindings).length} 个已确认会话</p></div></aside>
+  return `<div class="admin-layout"><aside class="admin-sidebar"><div class="admin-brand"><img class="brand-logo" src="./logo.png" alt="NotAlone" width="1536" height="1024"/><span class="brand-symbol compact-brand" aria-hidden="true">n</span><small>关系回复管理后台</small></div><span class="sidebar-label">工作区</span><nav>${Object.entries(managerTabs).map(([key, [symbol, label]]) => `<button class="${state.managerTab === key ? 'active' : ''}" data-action="manager-tab" data-value="${key}">${icon(symbol, 18)}${label}</button>`).join('')}</nav><div class="sidebar-help"><span class="status-dot ${reading ? '' : 'off'}"></span><b>${reading ? '后台同步中' : '后台读取已停止'}</b><p>${Object.keys(state.bindings).length} 个已确认会话</p></div></aside>
     <div class="admin-workspace"><header class="admin-topbar"><span>工作区 <i>/</i> ${managerTabs[state.managerTab][1]}</span><div><span class="prototype-badge">原型 · 合成资料</span><a class="button primary" href="./index.html?surface=ime&variant=A" target="_blank" rel="noopener">打开输入小窗 ${icon('right', 14)}</a></div></header>
     <main class="manager-content" aria-label="管理后台">${managerContent()}</main><footer class="admin-footer">资料按联系人分开管理 · 回复始终由你选择并亲自发送</footer></div></div>`;
 }
