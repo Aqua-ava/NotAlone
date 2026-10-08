@@ -1,27 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReplySessionState, RewriteOptions, RewriteTone } from '../shared/reply-bridge';
 import { HelperDraft, type ContactSessionView } from './contact-session';
 import { Icon } from './icons';
+import { useRevisionedSession } from './use-revisioned-session';
 import './rewrite.css';
 
 export function useReplySession() {
-  const [state, setState] = useState<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null,
+  const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null,
     options: { tone: 'original', instruction: '', includeRelationshipContext: false },
-    phase: 'idle', result: null, selectedCandidateId: null, canRetry: false });
-  const [error, setError] = useState('');
-  const latest = useRef(state);
-  const active = useRef(true);
-  const receive = (next: ReplySessionState) => {
-    if (!active.current || next.revision < latest.current.revision) return;
-    if (next.scopeRevision !== latest.current.scopeRevision) setError('');
-    latest.current = next; setState(next);
-  };
-  useEffect(() => {
-    active.current = true;
-    const unsubscribe = window.notalone.replies.onStateChanged(receive);
-    void window.notalone.replies.getState().then(receive).catch(() => {});
-    return () => { active.current = false; unsubscribe(); };
-  }, []);
+    phase: 'idle', result: null, selectedCandidateId: null, canRetry: false }, window.notalone.replies);
   async function operate(operation: () => Promise<ReplySessionState | void>) {
     const scopeRevision = latest.current.scopeRevision;
     try { const next = await operation(); if (next) receive(next); if (active.current && scopeRevision === latest.current.scopeRevision) setError(''); }

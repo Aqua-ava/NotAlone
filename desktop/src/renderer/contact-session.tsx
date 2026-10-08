@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ContactSessionState } from '../shared/contact-session-bridge';
+import { useRevisionedSession } from './use-revisioned-session';
 
 const initial: ContactSessionState = {
   revision: -1, scopeRevision: 0, directoryPhase: 'unavailable',
@@ -7,22 +8,7 @@ const initial: ContactSessionState = {
 };
 
 export function useContactSession() {
-  const [state, setState] = useState(initial);
-  const [error, setError] = useState('');
-  const latest = useRef(state);
-  const active = useRef(true);
-  const receive = (next: ContactSessionState) => {
-    if (!active.current || next.revision < latest.current.revision) return;
-    if (next.scopeRevision !== latest.current.scopeRevision) setError('');
-    latest.current = next;
-    setState(next);
-  };
-  useEffect(() => {
-    active.current = true;
-    const unsubscribe = window.notalone.contacts.onStateChanged(receive);
-    void window.notalone.contacts.getState().then(receive).catch(() => {});
-    return () => { active.current = false; unsubscribe(); };
-  }, []);
+  const { state, error, setError, latest, active, receive } = useRevisionedSession(initial, window.notalone.contacts);
 
   async function selectContact(contactId: string) {
     const scopeRevision = latest.current.scopeRevision;
