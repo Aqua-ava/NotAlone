@@ -14,6 +14,10 @@
 
 实机结果为 macOS 15.7.5、微信 4.0.6.240（用户版本页；Bundle 元数据为 4.0.6、build 29387）：两次运行 `xcrun swift research/wechat-ax-check.swift --wait` 均返回 `chat_title_not_exposed`，分别检查 5、6 个控件，仅有窗口、组和标准按钮。第二次确认窗口数为 1、焦点窗口等于主窗口，未触发列表剪枝；子节点属性读取 4 次成功、2 次为 `AXError.noValue`，6 个控件的标识属性均为 `noValue`，没有找到 `big_title_line_h_view` 标题控件。这证明本次只读路径没有取得当前会话标题，不能推导为所有版本或其他访问方式都不可用。未验证选中状态、联系人绑定或 Windows，正式探针与 OCR 保留。`swiftc -typecheck` 与 `git diff --check` 通过；程序退出码 0 表示诊断完成，不表示 AX 会话定位可用。脱敏明细记录在被忽略的 `research/cross-platform-input-research-20261008.md`，无真实姓名或消息正文。
 
+2026-10-08 AX 按位置补测：用户明确要求验证 `AXUIElementCopyElementAtPosition`，并确认已将微信会话置于前台、鼠标停在顶部会话标题。独立程序 `research/wechat-ax-point-check.swift` 只查询这个测试点，不移动鼠标、不截图、不点击、不扫描窗口。先核验微信进程、主窗口、顶部区域和鼠标稳定；只对该点命中的小型文字／标题按钮控件读取最小文本属性，窗口、组、输入框或正文区域不读文字。返回对象必须属于同一微信进程、主窗口和授权标题区域，焦点或鼠标变化时停止。坐标和实际文字只在本地进程内处理，输出仅含脱敏状态、标准角色和错误码。沿用已有辅助功能授权，不设置无障碍属性、不修改权限、签名或正式探针。
+
+按位置实机结果：同一 macOS 15.7.5 / 微信 4.0.6.240（Bundle 4.0.6、build 29387），既有辅助功能授权仍有效。运行 `xcrun swift research/wechat-ax-point-check.swift --wait`，两次对用户指定点的查询均返回 `point_query_failed`、错误码 `-25208`；本机 Apple SDK 核对为 `AXError.notImplemented`。没有取得标题控件，也没有进入文字读取分支；此结果仅证明限定微信应用对象的这条按位置调用未通过，不代表所有 AX 功能都不可用。`swiftc -typecheck`、11 项合成范围检查（`--self-test`）及 `git diff --check` 通过，实机程序退出码 0 只表示诊断完成。没有访问数据库、调用 CLI 正文读取或改变绑定；正式探针及 OCR 保留。脱敏命令和结果续记于同一调研报告。
+
 ## 1. 产品边界
 
 NotAlone 的本地读取必须满足以下条件：
