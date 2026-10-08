@@ -1,7 +1,7 @@
 # 05：首启身份与模型配置
 
 Type: task
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: 02
 Spec: ../spec.md
@@ -14,12 +14,12 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 沿用已有 setup/credentials 公共接口，展示首次配置及已配置状态，并处理必要的后端重连或重启。
-- [ ] setup/status 的只读 runtime_owner_configured 验证当前实例身份在库中存在；全库已有其他 owner、缺失或不存在的运行身份不得被显示为本次配置完成，也不自动恢复他人身份。
-- [ ] App 首次初始化使用 create_only，在服务端原子检查与创建边界内拒绝并发出现的既有身份，拒绝发生在写受控配置之前；保留原有明确恢复调用的语义。
-- [ ] 初始化已写库和配置但响应丢失时，可显式重新加载受控配置；通过同一已验证目标认证停读再重启，不猜测身份或另启读取实例。失败刷新结束后再次验证原连接和操作，过期错误不覆盖新状态。
-- [ ] 密钥仅由受控提交路径传递，提交后清空输入，不回显已有密钥，不写入诊断日志。
-- [ ] 说明模型调用范围和本机存储事实，不宣称尚未实现的加密；用合成 owner 与隔离配置验收。
+- [x] 沿用已有 setup/credentials 公共接口，展示首次配置及已配置状态，并处理必要的后端重连或重启。
+- [x] setup/status 的只读 runtime_owner_configured 验证当前实例身份在库中存在；全库已有其他 owner、缺失或不存在的运行身份不得被显示为本次配置完成，也不自动恢复他人身份。
+- [x] App 首次初始化使用 create_only，在服务端原子检查与创建边界内拒绝并发出现的既有身份，拒绝发生在写受控配置之前；保留原有明确恢复调用的语义。
+- [x] 初始化已写库和配置但响应丢失时，可显式重新加载受控配置；通过同一已验证目标认证停读再重启，不猜测身份或另启读取实例。失败刷新结束后再次验证原连接和操作，过期错误不覆盖新状态。
+- [x] 密钥仅由受控提交路径传递，提交后清空输入，不回显已有密钥，不写入诊断日志。
+- [x] 说明模型调用范围和本机存储事实，不宣称尚未实现的加密；用合成 owner 与隔离配置验收。
 
 ## 测试与范围
 
@@ -29,6 +29,32 @@ Spec: ../spec.md
 - 涉及业务数据时只使用合成资料、随机隔离 `_test` 库和独立握手/配置；本任务未涉及的后端、渠道与桌面能力保持后续任务范围。
 - 按仓库工作流读取相关领域及工程约束，完成最小相关检查、Standards/Spec 两轴评审和只含本任务改动的本地提交。
 - 不提交私人资料或凭据，不发送外部聊天消息；远端 Git 操作需另有用户明确同意。
+
+## Answer
+
+管理后台已接入本人首启、既有配置复用、DeepSeek 密钥提交与受控重载，见[实现说明](../../../desktop/README.md)、[配置控制器](../../../desktop/src/main/setup/controller.ts)和[具名桥接契约](../../../desktop/src/shared/setup-bridge.ts)。当前运行身份由服务端注入的 owner_id 做同库只读存在查询；原三个全库布尔值保持含义，缺失或不存在的运行身份不会被其他 owner 的存在误报为就绪。App 初始化固定 create_only，在现有表的同一事务中检查和创建，既有身份在配置写入前返回 409；既有明确恢复调用保留 created:false 语义。初始化响应丢失可明确重载实际配置，保存失败的恢复查询完成后再次复核连接代次与操作，旧结果不会覆盖断线或较新状态。
+
+可复用的[主进程边界](../../../desktop/src/main/backend/host.ts)为 `BackendHost.requestJson(options: JsonRequest): Promise<{ generation: number; data: unknown }>`、`getConnectionGeneration(): number | undefined`、`restart(): Promise<boolean>`、`prepareConfiguration(): Promise<boolean>`；JsonRequest 含 method/path/body/signal/timeoutMs/maxResponseBytes。路径只由具名 main 模块构造，token 留在 main，异步成功与失败均复核已验证目标和 generation；generation 不作为 owner 身份证据。restart/prepare 共用同一原目标认证停读，未确认则保留 target/shutdown-failed，不猜 PID 或另启实例；prepare 成功后 disconnected，不自动连接。可选构造参数 `beforeConnect?: (config: BackendConfiguration, canStart: () => boolean) => Promise<void>` 保留，await 后复核 canStart，restart 仍走 initialize。新增 `SetupBridge.reloadControlledConfiguration(): Promise<void>` 只允许管理后台从未绑定状态明确重读配置，不接受路径、URL 或身份。
+
+真实验证在 Conda NotAlone 与当前工作树模块下完成：[首启回归](../../../desktop/tests/setup.spec.ts)、[失败与迟到结果](../../../desktop/tests/setup-stale.spec.ts)、[响应丢失恢复](../../../desktop/tests/setup-recovery.spec.ts)和[真实并发初始化](../../../desktop/tests/setup-concurrency.spec.ts)均使用实际 App、真实本机 HTTP、随机正式迁移 `_test` PG；传输延迟与 PG 写入屏障只控制相应边界，不替换业务仓储。每项先 red 后 green，原始失败与夹具退场修正如 Comments 所记。最终在 `desktop/` 执行：
+
+```bash
+source /Users/local-user/miniconda3/etc/profile.d/conda.sh
+conda activate NotAlone
+npm run typecheck
+npm test -- --output=artifacts/review-full-source
+npm run package
+NOTALONE_TEST_APP_EXECUTABLE="$PWD/out/NotAlone-darwin-arm64/NotAlone.app/Contents/MacOS/NotAlone" \
+  npx playwright test tests/setup.spec.ts tests/setup-stale.spec.ts tests/setup-recovery.spec.ts tests/setup-concurrency.spec.ts tests/windows.spec.ts --output=artifacts/review-packaged-final
+```
+
+类型检查通过，完整源码 56/56，重建签名包 20/20，package 内置严格 ad-hoc 签名校验通过；在 `backend/` 以 `PYTHONPATH="$PWD/src" PYTHONNOUSERSITE=1 python - <<'PY'` 运行隔离环境的 unittest loader，setup service、setup API、runtime shutdown 兼容 22/22。完整隔离脚本、命令和失败证据保留于未提交的 `desktop/artifacts/setup-verification.md`。完成记录阶段不重复这些已绿测试；`node /tmp/notalone-app-context.p9MPie/validate-tickets.mjs` 的 20 张任务字段/依赖/DAG/本地链接校验通过，`git diff --check` 通过。
+
+两轴结果由主 Agent 统一组织：首次候选 `1b45b65aa5aed5dc8ea7000fda9974cbb5fe9f52` 以 `57d419a089ce51e32bf667ec2aafd6df9b07de41` 为基点，Standards 无硬违规但有一项 Duplicated Code 建议，Spec 三项 P2。已合入先明确范围的 `afe40b0fb6a60c3e1f1e656c8adde8ab75cde9a2` 并修复；固定修复候选 `aa95d0706c0d1b87a5f1a429bafc35484020e6cd` 相对旧候选的增量复审为 Standards 0 硬违规、0 新增判断，原重复代码已解决；Spec 缺失/越界/偏差各 0，原三项 P2 均修复。主 Agent 据此确认本任务 resolved，本次收尾提交只补记录，不修改已审实现。
+
+数据影响仅为用户明确动作创建本人与写本机受控配置；密钥输入提交后清空，不回显已有密钥或进入诊断日志，界面如实说明长期存储、未提供静态加密和外部供应商副本的独立删除限制。验收只处理合成资料、独立配置/握手/userData 和本轮随机库，未访问私人 dotenv、业务库、微信或真实模型，没有新表、迁移、供应商、自动恢复他人身份或外部消息发送。实现验收末次只读清理核对为随机首启库 0、本工作树 App 进程 0、受控首启后端进程 0，不清理他人资源。03 的机器 gate/路径入口与 setup restart 联合验收待后续正式合入，本任务不宣称已经完成该联合验收。
+
+保留本工作树忽略产物：`desktop/out/NotAlone-darwin-arm64/NotAlone.app`、`desktop/artifacts/setup-verification.md`、`desktop/artifacts/review-packaged-final/`（最终 configured.png）、`desktop/artifacts/review-recovery-red/`、`desktop/artifacts/review-failure-red/`、`desktop/artifacts/review-concurrency-red/` 与首次恢复 green 失败证据 `desktop/artifacts/review-recovery-green/`；均不加入提交。未 push、创建 PR 或自行修改集成工作树，后续由主 Agent 安排正式合入。
 
 ## Comments
 
@@ -44,3 +70,4 @@ Spec: ../spec.md
 - 2026-10-08：已合入范围补充 `afe40b0fb6a60c3e1f1e656c8adde8ab75cde9a2`，修复候选以旧候选 `1b45b65aa5aed5dc8ea7000fda9974cbb5fe9f52` 为固定增量评审基点，继续 claimed。三项 P2 均先在实际 App/真实 HTTP/随机迁移 PG 证明 red，再修正：初始化响应丢失后提供具名明确重载；App 固定 create_only，现有 owner 表事务内互斥检查与创建，冲突返回 409 且拒绝前不写配置，既有明确恢复仍 created:false；本人和密钥写操作共用保存生命周期，失败恢复查询结束后复核连接代次与操作，较新状态或断线不会被旧错误覆盖。
 - 2026-10-08：修正后的 `npm run typecheck` 与完整源码 `npm test -- --output=artifacts/review-full-source` 56/56、Python setup/认证停读兼容 22/22 通过；`npm run package` 内置严格 ad-hoc 签名校验通过，重建包的首启/恢复/并发/窗口组 20/20 通过。最小 green 组分别为响应丢失恢复 1/1、失败刷新失效与恢复 4/4、并发保护 2/2；新增本人写失败失联场景也由最终源码与包覆盖。首次恢复 green 尝试曾因传输代理早于真实旧后端退场而失败，修正为等待自建上游进程正常退出后才关闭代理，再通过；详细红例、失败与命令保留在未提交的 `desktop/artifacts/setup-verification.md`。
 - 2026-10-08：末次只读清理核对为随机首启测试库 0、本工作树 App 进程 0、受控首启后端进程 0；不清理他人资源。新增 `SetupBridge.reloadControlledConfiguration(): Promise<void>` 只允许管理后台从未绑定状态明确重读受控配置，不传入路径或身份。Host 的 requestJson/getConnectionGeneration/restart/prepareConfiguration 与可选 beforeConnect 签名保持，03 联合 gate 验收仍待正式合入。不新增表、迁移、模型调用、业务读取范围或外部消息。
+- 2026-10-08：主 Agent 对固定 `aa95d0706c0d1b87a5f1a429bafc35484020e6cd` 的增量两轴复审通过：Standards 0 硬违规/0 新增判断，原重复代码建议已解决；Spec 缺失/越界/偏差各 0，原三项 P2 已修复。按确认补 Answer 和 resolved，只提交任务完成记录；保留忽略产物及真实失败证据，03 联合 gate 待后续，不重复已绿的 56/22/20 验证。
