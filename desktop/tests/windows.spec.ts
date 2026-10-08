@@ -82,7 +82,8 @@ test('界面显示品牌资源和真实未就绪状态，不提供假联系人�
   const helperOpened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗' }).click();
   const helper = await helperOpened;
-  await expect(helper.getByText('联系人未确认', { exact: true })).toBeVisible();
+  await expect(helper.getByRole('combobox', { name: '本次联系人' })).toBeDisabled();
+  await expect(helper.getByText('本次联系人：未确认', { exact: true })).toBeVisible();
   await expect(helper.getByText('暂无候选', { exact: true })).toBeVisible();
   await expect(helper.getByRole('button', { name: '生成候选' })).toBeDisabled();
   await expect(helper.getByRole('button', { name: '复制', exact: true })).toBeDisabled();

@@ -6,6 +6,7 @@ import { BackendHost } from './backend/host';
 import { installBackendBridge } from './backend/bridge';
 import { installQuitLifecycle } from './backend/quit';
 import { installDesktopControls } from './desktop-controls';
+import { installContactSessionBridge } from './contacts/bridge';
 import { SetupController } from './setup/controller';
 import { installSetupBridge } from './setup/bridge';
 import { StartupDiagnostics } from './startup/diagnostics';
@@ -32,6 +33,7 @@ void app.whenReady().then(async () => {
   const windows = new AppWindows(appSession);
   const diagnostics = new StartupDiagnostics(app.getPath('userData'));
   const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart));
+  installContactSessionBridge(windows, backend);
   installSetupBridge(windows, new SetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());
   installStartupBridge(windows, diagnostics, backend);

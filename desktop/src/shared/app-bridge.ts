@@ -3,5 +3,8 @@ import type { DesktopBridge } from './desktop-bridge';
 import type { WindowBridge } from './window-bridge';
 import type { SetupBridge } from './setup-bridge';
 import type { StartupBridge } from './startup-bridge';
+import type { ContactSessionBridge } from './contact-session-bridge';
 
-export type AppBridge = WindowBridge & DesktopBridge & { backend: BackendBridge; setup: SetupBridge; startup: StartupBridge };
+export type AppBridge = WindowBridge & DesktopBridge & {
+  backend: BackendBridge; setup: SetupBridge; startup: StartupBridge; contacts: ContactSessionBridge;
+};

@@ -3,12 +3,14 @@ import type { AppBridge } from '../shared/app-bridge';
 import { createBackendBridge } from './backend';
 import { createSetupBridge } from './setup';
 import { createStartupBridge } from './startup';
+import { createContactSessionBridge } from './contact-session';
 import type { DesktopSettings } from '../shared/desktop-bridge';
 
 const bridge: AppBridge = {
   backend: createBackendBridge(),
   setup: createSetupBridge(),
   startup: createStartupBridge(),
+  contacts: createContactSessionBridge(),
   openManager: () => ipcRenderer.invoke('window:open-manager'),
   openHelper: () => ipcRenderer.invoke('window:open-helper'),
   hideWindow: () => ipcRenderer.invoke('window:hide'),
