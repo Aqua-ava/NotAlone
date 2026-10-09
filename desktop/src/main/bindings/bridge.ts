@@ -1,6 +1,5 @@
-import { ipcMain } from 'electron';
+import { noArguments, type PageCommands } from '../page-commands';
 import type { BackendHost } from '../backend/host';
-import type { AppWindows } from '../windows';
 import { BindingConsentController } from './controller';
 import type { BindingConfirmation, BindingRevocation } from '../../shared/binding-consent-bridge';
 import type { ContactSession } from '../contacts/session';
@@ -34,25 +33,19 @@ function revocation(args: unknown[]): BindingRevocation {
   return { scopeRevision: value.scopeRevision, contactId: (value.contactId as string).toLowerCase(), bindingId: (value.bindingId as string).toLowerCase() };
 }
 
-export function installBindingConsentBridge(windows: AppWindows, backend: BackendHost, contacts: ContactSession): void {
+export function installBindingConsentBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession): void {
   const bindings = new BindingConsentController(backend, contacts);
-  bindings.onStateChanged((state) => windows.publish('bindings:state-changed', state));
-  ipcMain.handle('bindings:get-state', (event, ...args: unknown[]) => {
-    windows.validateCaller(event, args); return bindings.getState();
+  bindings.onStateChanged((state) => commands.publish('bindings:state-changed', state));
+  commands.handle('bindings:get-state', (...args: unknown[]) => {
+    noArguments(args); return bindings.getState();
   });
-  ipcMain.handle('bindings:refresh', (event, ...args: unknown[]) => {
-    const window = windows.validateCaller(event, args);
-    if (!window.webContents.getURL().endsWith('#manager')) throw new Error('授权操作不可用。');
-    return bindings.refresh();
-  });
-  ipcMain.handle('bindings:confirm-selections', (event, ...args: unknown[]) => {
-    const window = windows.validateCaller(event, []);
-    if (!window.webContents.getURL().endsWith('#manager')) throw new Error('授权操作不可用。');
+  commands.handle('bindings:refresh', (...args: unknown[]) => {
+    noArguments(args); return bindings.refresh();
+  }, 'manager');
+  commands.handle('bindings:confirm-selections', (...args: unknown[]) => {
     return bindings.confirmSelections(confirmation(args));
-  });
-  ipcMain.handle('bindings:revoke-binding', (event, ...args: unknown[]) => {
-    const window = windows.validateCaller(event, []);
-    if (!window.webContents.getURL().endsWith('#manager')) throw new Error('授权操作不可用。');
+  }, 'manager');
+  commands.handle('bindings:revoke-binding', (...args: unknown[]) => {
     return bindings.revokeBinding(revocation(args));
-  });
+  }, 'manager');
 }

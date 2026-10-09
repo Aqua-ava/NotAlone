@@ -1,5 +1,5 @@
 import type { PageTransport } from './transport';
-import type { MemoryBridge, MemoryCorrectionRequest, MemoryReadRequest, MemoryReadingState } from '../shared/memory-bridge';
+import type { MemoryAdditionRequest, MemoryBridge, MemoryCorrectionRequest, MemoryReadRequest, MemoryReadingState } from '../shared/memory-bridge';
 
 export function createMemoryBridge(ipcRenderer: PageTransport): MemoryBridge {
   return Object.freeze({
@@ -7,6 +7,8 @@ export function createMemoryBridge(ipcRenderer: PageTransport): MemoryBridge {
       : Promise.reject(new Error('资料读取不可用。')),
     refresh: (...args: [MemoryReadRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:refresh', args[0])
       : Promise.reject(new Error('资料读取不可用。')),
+    add: (...args: [MemoryAdditionRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:add', args[0])
+      : Promise.reject(new Error('资料补充不可用。')),
     correct: (...args: [MemoryCorrectionRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:correct', args[0])
       : Promise.reject(new Error('资料修正不可用。')),
     onStateChanged: (listener: (state: MemoryReadingState) => void) => {
