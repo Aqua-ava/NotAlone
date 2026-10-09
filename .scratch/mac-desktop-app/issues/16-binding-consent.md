@@ -1,7 +1,7 @@
 # 16：首次会话选择与绑定授权
 
 Type: task
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: 06
 Spec: ../spec.md
@@ -29,6 +29,14 @@ Spec: ../spec.md
 - 按仓库工作流读取相关领域及工程约束，完成最小相关检查、Standards/Spec 两轴评审和只含本任务改动的本地提交。
 - 不提交私人资料或凭据，不发送外部聊天消息；远端 Git 操作需另有用户明确同意。
 
+## Answer
+
+已完成首次会话选择与绑定授权的普通页面及真实 HTTP 范围。页面不预选或自动授权，绑定以稳定身份和当前元数据确认；目录、整批过期拒绝、撤销超时与重试、撤销成功后的停止新增读取均有隔离数据证据。历史资料保留，来源清除仍由任务15处理。
+
+运行源码 `858db1f012a6516de790cee56cfec7e5cdf2734e` 的受限 `binding-consent + binding-stale` 为13/13，exit0。单Chrome，quiet79次active/window0；13库全部精确回收，82条归属身份无存活匹配，两租约absent，cleanupConfirmed=true。首轮页面加载竞态失败及等待修复记录保留，生产授权行为没有放宽。
+
+固定 `1c8825b317dfb46d93a734b0af101669b321a13a…09851885a9eb643c1ad55d752feaaae8a269a2d2` 的独立Standards hard0/possible0、Spec0，P0–P3均0；原后端评审和实际检查保留。类型、构建、差异及任务检查通过。新版App wrapper、原生窗口、真实微信渠道和最终签名包未运行，按已批准的页面接缝完成本任务，原生整体验收保留在任务20。
+
 ## Comments
 
 - 2026-10-08：开始在独占 `codex/mac-app-16-bindings` 实现；固定基点 `e88423b68c025de24d491e077cf79172fca298ee`。按已批准的实际 App、真实 HTTP、随机隔离 PostgreSQL 与合成 CLI 接缝做 red → green；候选保持 claimed，交由主 Agent 安排双轴评审。
@@ -55,3 +63,7 @@ Spec: ../spec.md
 - 2026-10-09：静态修复 App wrapper 与纯夹具的停读见证接线：所有绑定 App 场景均由本轮 BindingFixture 预启并持有唯一真实后端，App 在原路径正常连接／app.close；复用单个回环代理，仅在原 token、POST /api/runtime/shutdown、真实 HTTP 200 和正文 state:stopped 同时匹配时记录见证，再独立核验 owned child exit 0。未提前向 App 外部停读；没有见证时只对保存的原目标尝试夹具认证收尾，日志区分 app-http-response、page-host 与 fixture-shutdown，不能把后者作为产品退出通过。CLI 准备失败且尚未尝试启动时可只精确回收本轮新库，停读字段保持 false；启动结果或页面／传输清理未知时保留诊断。类型、构建、静态纯依赖与差异检查通过；本轮仍未运行任何 App、HTTP、PG 或浏览器，不把静态接线称为原生或普通页面 green。
 
 - 2026-10-09：静态合入指定任务08候选 `5518f84710de1eb416dcb76c626bd799f470fe60`（含当前10／12／14切片）；入口冲突保留生产 PageCommands 绑定、回复会话、Electron 复制和导入选择各自接线。当前普通 PageHost 只新增绑定 installer，renderer 复用同一 preload factory；copySurface／chooseImportFile 和既有复制／导入／资料／回复／依据通道均保留。任务16既有11条 consent＋2条 stale 的13个普通场景入口已在当前合并宿主静态构建；run.ts 与受限 test-pages 登记交由主 Agent／14唯一共享入口负责人串行处理。类型、构建、纯页面依赖、固定差异与20票检查通过；没有运行PG、HTTP、浏览器或App，不将静态接线记为 UI green，任务继续 claimed、无 Answer。
+
+- 2026-10-09：按主 Agent 独占运行安排快进至 `78ddb4b9d0ba627480a2a502b9cc3490fb7b8693`，复用集成 node_modules 自有软链，原依赖目录保留在 ignored 产物；未安装或下载。首轮普通页面授权前6场通过，第7场因 helper 创建事件早于页面加载而在桥接调用处失败（exit 1）；生产桥接已经接入，不能称产品缺陷 red。修复为等待本轮 helper URL 完成加载，提交 `858db1f012a6516de790cee56cfec7e5cdf2734e`，没有修改生产绑定行为或放宽角色门禁。首轮7场夹具均认证 stopped、owned child exit 0、精确本轮库删除；最终7精确库 absent、45条 owned identities 无存活匹配、cleanupConfirmed true、两租约 absent；单Chrome quiet 43／active 0／可见窗口 0。失败日志及归属／资源／回收证据保留在外部交接 context 的 `16-final-78ddb4b-*`。
+
+- 2026-10-09：固定运行源码 `858db1f012a6516de790cee56cfec7e5cdf2734e`，Conda NotAlone 内执行 `npm run test:pages -- --case binding-consent --case binding-stale --timeout-seconds 300`，完整13/13（授权11／迟到2）通过、exit 0。原默认未选／刷新、撤销超时与重试、改名／消失／冲突、服务端最终复读、缺本人渠道、CLI不可用／执行失败／恢复、具名参数／旧范围／跨owner与account／helper门禁、稳定UUID追加和明确重确认均通过；新增并发新建整批拒绝、短于超时等待的撤销成功及后续零新增tail也通过；旧连接成功／失败均在原公开Promise完成后核对新范围不受旧结果污染。每场使用独立随机 `_test` 库与页面context，复用唯一Chrome；真实生产控制器／preload／页面与HTTP／PG，仅CLI为合成脚本，没有模型或追踪。13场均由page-host正常认证stopped、owned child exit 0，再精确删除owned库；最终13精确库 absent、82条owned identities无存活匹配、cleanupConfirmed true、两租约 absent。quiet 79／active 0／可见窗口 0；自有子树RSS采样峰值Chrome 1013264 KiB、runner Node 210448 KiB、backend 189392 KiB，不代表物理内存或永久上限。逐场固定SHA／case／scene／收尾、日志、resources、owned-identities及leases保存于外部交接context的 `16-final-858db1f-*`。类型、构建、固定差异与20票字段／DAG／链接检查通过；运行权已明确返还主Agent，本轮随后仅静态记录。未运行新版App wrapper、签名包、真实微信、原生权限／剪贴板或真实模型，不沿用历史App见证；待主Agent独立双轴复核，16保持claimed、无Answer，不改依赖图。

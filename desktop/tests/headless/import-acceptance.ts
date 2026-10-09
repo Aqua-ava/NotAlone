@@ -1,5 +1,6 @@
+import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -12,7 +13,7 @@ import { savedImport, changedImport, failedImportRecovery, priorityImport, stale
   type ImportStalePages } from '../import-page-scenarios';
 import { PageHost } from './page-host';
 import { withControllerEnvironment, withImportBackend } from './backend-fixture';
-import { ownResource } from './cleanup';
+import { ownResource, pendingCleanup } from './cleanup';
 
 // 每项独立真实库和页面上下文；只有系统文件选择由本轮 Node 宿主提供。
 async function withImportPages(browser: Browser, origin: string, use: (pages: ImportStalePages) => Promise<void>) {
@@ -64,23 +65,29 @@ export async function importStaleAcceptance(browser: Browser, origin: string) {
 }
 
 // 首份场景由生产 BackendHost 启动及重启真实后端；停读未确认时保留库和归属记录。
-export async function importBootstrap(browser: Browser, origin: string) {
+async function runImportBootstrap(browser: Browser, origin: string, name: string, prepareScript: string) {
   if (process.env.CONDA_DEFAULT_ENV !== 'NotAlone' || !process.env.CONDA_PREFIX) throw new Error('首份导入验收须先激活 Conda NotAlone。');
-  const name = '首份导入后认证停读重装配，不新增读取授权';
   process.stdout.write(`page_test_scenario: ${name}\n`);
   const released = ownResource();
   const directory = await mkdtemp(path.join(tmpdir(), 'notalone-headless-import-bootstrap-'));
   const python = path.join(process.env.CONDA_PREFIX, 'bin/python');
   const execute = promisify(execFile);
   const script = path.resolve('tests/fixtures/contact-database.py');
+  const evidencePath = `artifacts/headless-pages/${path.basename(prepareScript, '.py')}-cleanup.json`;
   const environment = isolatedAppEnvironment(directory, {
     PYTHONPATH: path.resolve('../backend/src'), NOTALONE_DEEPSEEK_API_KEY: '', NOTALONE_DEEPSEEK_BASE_URL: 'http://127.0.0.1:1',
   });
+  const ownershipPath = path.join(directory, 'database-ownership.json');
   let data: ContactDatabase | undefined;
+  let prepareStopped = false;
   let stopped = true;
+  let backendStarted = false;
+  let databaseName: string | undefined;
   let failure: unknown;
   try {
-    const prepared = await execute(python, [script, 'create', 'empty'], { env: environment, timeout: 70_000 });
+    const prepared = await execute(python, [prepareScript, 'create', 'empty', ownershipPath], { env: environment, timeout: 70_000 });
+    prepareStopped = true;
+    process.stdout.write(`page_test_import_prepare: ${JSON.stringify({ driver: path.basename(prepareScript), exitCode: 0 })}\n`);
     data = JSON.parse(prepared.stdout) as ContactDatabase;
     const fixture = new ContactFixture(directory, python, data);
     await withControllerEnvironment(fixture, async (userData) => {
@@ -89,6 +96,7 @@ export async function importBootstrap(browser: Browser, origin: string) {
         chooseImportFile: async () => selectedFile ? { canceled: false, filePaths: [selectedFile] } : { canceled: true, filePaths: [] },
       });
       stopped = false;
+      backendStarted = true;
       try {
         await host.backend.connect();
         await firstImportBootstrap(await host.open('manager'), fixture, async (filePath) => { selectedFile = filePath; });
@@ -96,20 +104,54 @@ export async function importBootstrap(browser: Browser, origin: string) {
     });
   } catch (error) { failure = error; }
   try {
-    if (!stopped) throw new Error('首份导入后端停读未确认。');
-    if (data) {
-      await execute(python, [script, 'drop', data.database_name], { env: environment, timeout: 15_000 });
-      // 精确核验本轮库不存在，不把drop命令完成当作清理证明。
-      await execute(python, ['-c', 'import sys, psycopg\nwith psycopg.connect("host=/tmp dbname=postgres") as c:\n n = c.execute("SELECT count(*) FROM pg_database WHERE datname = %s", (sys.argv[1],)).fetchone()[0]\n if n: raise RuntimeError("本轮首份导入库仍存在。")', data.database_name],
-        { env: environment, timeout: 15_000 });
+    if (!prepareStopped || !stopped) throw new Error('首份导入准备进程或后端停读未确认。');
+    const ownershipStat = await lstat(ownershipPath);
+    if (!ownershipStat.isFile() || (ownershipStat.mode & 0o077) !== 0 || ownershipStat.uid !== process.getuid?.()) {
+      throw new Error('首份导入精确建库归属未确认。');
     }
+    const ownership = JSON.parse(await readFile(ownershipPath, 'utf8')) as Record<string, unknown>;
+    const ownedName = ownership.database_name;
+    if (ownership.version !== 1 || typeof ownedName !== 'string'
+      || !/^notalone_contact_session_[0-9a-f]{32}_test$/.test(ownedName)
+      || !Number.isInteger(ownership.pid) || Number(ownership.pid) <= 0
+      || (data && data.database_name !== ownedName)) throw new Error('首份导入本轮库名归属不匹配。');
+    databaseName = ownedName;
+    await execute(python, [script, 'drop', databaseName], { env: environment, timeout: 15_000 });
+    // 精确核验本轮库不存在，不把drop命令完成当作清理证明。
+    const verified = await execute(python, ['-c', 'import sys, psycopg\nwith psycopg.connect("host=/tmp dbname=postgres") as c:\n n = c.execute("SELECT count(*) FROM pg_database WHERE datname = %s", (sys.argv[1],)).fetchone()[0]\n if n: raise RuntimeError("本轮首份导入库仍存在。")\n print(n)', databaseName],
+      { env: environment, timeout: 15_000 });
+    assert.equal(verified.stdout.trim(), '0', '精确库不存在查询须返回零。');
     await rm(directory, { recursive: true, force: true });
     released();
   } catch {
     await mkdir(directory, { recursive: true });
-    await writeFile(path.join(directory, 'cleanup-unconfirmed.json'), JSON.stringify({ databaseName: data?.database_name ?? null, stopped }), { mode: 0o600 });
+    await writeFile(path.join(directory, 'cleanup-unconfirmed.json'), JSON.stringify({ databaseName: data?.database_name ?? null, ownershipPath, prepareStopped, stopped }), { mode: 0o600 });
     throw new Error(`首份导入收尾未确认，保留归属记录：${directory}`);
   }
+  const evidence = { prepareExitCode: 0, backendStarted, backendStopConfirmed: backendStarted ? stopped : null,
+    databaseName, databaseRemaining: 0, databaseAbsent: true, directoryRemoved: true, resourceReleased: true };
+  await writeFile(evidencePath, JSON.stringify(evidence, null, 2));
+  process.stdout.write(`page_test_import_cleanup: ${JSON.stringify(evidence)}\n`);
   if (failure) throw failure;
   process.stdout.write(`page_test_scenario_passed: ${name}\n`);
+}
+
+export async function importBootstrap(browser: Browser, origin: string) {
+  await runImportBootstrap(browser, origin, '首份导入后认证停读重装配，不新增读取授权',
+    path.resolve('tests/fixtures/contact-database.py'));
+}
+
+// 真实建库子进程正常退出，但输出损坏；走同一首份夹具解析及精确收尾边界。
+export async function importBootstrapPrepareFailure(browser: Browser, origin: string) {
+  const markerCount = pendingCleanup.size;
+  await assert.rejects(runImportBootstrap(browser, origin, '准备返回JSON损坏仍精确回收本轮库',
+    path.resolve('tests/fixtures/import-bootstrap-prepare-failure.py')), SyntaxError);
+  assert.equal(pendingCleanup.size, markerCount, '已确认精确收尾必须释放本轮资源标记。');
+  const evidence = JSON.parse(await readFile('artifacts/headless-pages/import-bootstrap-prepare-failure-cleanup.json', 'utf8'));
+  assert.equal(evidence.prepareExitCode, 0);
+  assert.equal(evidence.backendStarted, false);
+  assert.equal(evidence.backendStopConfirmed, null, '准备退出不代表后端停读。');
+  assert.equal(evidence.databaseAbsent, true);
+  assert.equal(evidence.directoryRemoved, true);
+  process.stdout.write('page_test_scenario_passed: 准备返回JSON损坏仍精确回收本轮库\n');
 }

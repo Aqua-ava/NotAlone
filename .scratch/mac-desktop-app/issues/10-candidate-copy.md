@@ -44,3 +44,9 @@ Spec: ../spec.md
 - 2026-10-09：第三片沿现有公开桥接准备当前第二候选选择、空白禁用及参数/联系人/候选/角色越界拒绝；类型和构建通过，实际运行待串行调度，不新增产品实现。
 
 - 2026-10-09：聚合源c61d86c受限candidate-copy+reply-evidence实际退出0，复制3/3及依据9/9通过，cleanupConfirmed=true、单Chrome、quiet62次active/window0、两租约absent；日志 /tmp/notalone-app-context.p9MPie/12-final.log。第三片沿现有保护直接green，未虚构产品red。下一片仅安排合成系统复制迟到，验证切换联系人后不收起新会话、不发布旧提示，原已触发写入不推断为撤销；类型/构建通过，实际场景待运行。
+
+- 2026-10-09：聚合源6005389547673144fdba53d419a0a7eca4c377a3的受限 `memory-editing-owner + candidate-copy` 实际退出0，复制4/4和资料本人单场通过；单Chrome、cleanupConfirmed=true、quiet25次active/window0、两租约absent。第四片验证复制迟到后新联系人编辑保持，旧完成无隐藏／成功／错误污染，新范围仍能复制；日志 `/tmp/notalone-app-context.p9MPie/14-fix-and-10-final.log`。固定5aa3545…60301e84的任务10增量独立Standards hard0/possible0、Spec0，P0–P3均0，原初审0保留；生产复制实现仍为37ae6e。
+
+- 2026-10-09：准备 `tests/candidate-copy.spec.ts` 原生正向接线，沿既有受限App夹具及真实隔离HTTP/PG生成，只经公开按钮调用生产Electron复制。测试先覆盖合成占位，再比较本轮已知文本，核验编辑与原快照、manager角色拒绝、真实写入及同一helper隐藏／恢复；比较结果不回传剪贴板正文，收尾只清空仍属于本轮的已知文本。类型、差异和任务辅助检查通过；测试未运行，没有读取或写入本机剪贴板、启动App或重建签名包。普通页面证据与真实原生验收分开记录，任务继续claimed，无Answer。
+
+- 2026-10-09：固定 `78ddb4b…485fbfaf93f4cf6d977f9ec239c21fbc8c80bd16` 的原生测试准备增量独立Standards hard0/possible0、Spec0，P0–P3均0。两轴仅只读核验门禁、当前编辑及同一小窗接线与合成数据边界，未操作App或剪贴板；不构成原生green，任务状态和验收勾选保持待实机。
