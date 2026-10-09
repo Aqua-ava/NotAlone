@@ -13,6 +13,7 @@ import { installContactSessionBridge } from './contacts/bridge';
 import { installReplyBridge } from './reply/bridge';
 import { installMemoryBridge } from './memory/bridge';
 import { installBindingConsentBridge } from './bindings/bridge';
+import { installSyncControlBridge } from './sync/bridge';
 import { SetupController } from './setup/controller';
 import { installSetupBridge } from './setup/bridge';
 import { StartupDiagnostics } from './startup/diagnostics';
@@ -49,6 +50,7 @@ void app.whenReady().then(async () => {
   installElectronImportFileSelection(windows, imports);
   installMemoryBridge(commands, backend, contacts);
   installBindingConsentBridge(commands, backend, contacts);
+  installSyncControlBridge(commands, backend, contacts);
   const replies = installReplyBridge(commands, backend, contacts);
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies));
   installSetupBridge(windows, new SetupController(backend));

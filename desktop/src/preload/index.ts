@@ -9,6 +9,7 @@ import { createImportBridge } from './imports';
 import { createReplyBridge } from './reply';
 import { createMemoryBridge } from './memory';
 import { createBindingConsentBridge } from './binding-consent';
+import { createSyncControlBridge } from './sync-control';
 import type { DesktopSettings } from '../shared/desktop-bridge';
 
 const bridge: AppBridge = {
@@ -21,6 +22,7 @@ const bridge: AppBridge = {
   candidateCopy: createCandidateCopyBridge(ipcRenderer),
   memory: createMemoryBridge(ipcRenderer),
   bindings: createBindingConsentBridge(ipcRenderer),
+  syncControl: createSyncControlBridge(ipcRenderer),
   openManager: () => ipcRenderer.invoke('window:open-manager'),
   openHelper: () => ipcRenderer.invoke('window:open-helper'),
   hideWindow: () => ipcRenderer.invoke('window:hide'),

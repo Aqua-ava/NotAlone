@@ -16,6 +16,7 @@ import { ReplyCandidates, ReplyModePicker, RewriteInput, useReplySession } from 
 import { DirectedReplyInput } from './DirectedReplyInput';
 import { MemoryPage } from './MemoryPage';
 import { BindingConsentPage } from './BindingConsentPage';
+import { SyncControlPanel } from './SyncControlPanel';
 
 const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
@@ -87,7 +88,7 @@ function App() {
         {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} />}
         {page === 'import' && <ImportPage session={contactSession} />}
         {page === 'memory' && <MemoryPage session={contactSession} navigate={setPage} />}
-        {page === 'sync' && <BindingConsentPage contacts={contactSession} navigate={setPage} />}
+        {page === 'sync' && <><SyncControlPanel bridge={window.notalone.syncControl} /><BindingConsentPage contacts={contactSession} navigate={setPage} /></>}
         {page !== 'config' && page !== 'contacts' && page !== 'import' && page !== 'memory' && page !== 'sync' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
           <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>

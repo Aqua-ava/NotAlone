@@ -5,6 +5,7 @@ import { createImportBridge } from '../../src/preload/imports';
 import { createMemoryBridge } from '../../src/preload/memory';
 import { createReplyBridge } from '../../src/preload/reply';
 import { createBindingConsentBridge } from '../../src/preload/binding-consent';
+import { createSyncControlBridge } from '../../src/preload/sync-control';
 import { createBackendBridge } from '../../src/preload/backend';
 import { createStartupBridge } from '../../src/preload/startup';
 import type { AppBridge } from '../../src/shared/app-bridge';
@@ -32,5 +33,6 @@ const bridge: AppBridge = {
     retryRestart: unsupported, reloadControlledConfiguration: unsupported, onStateChanged: noEvents },
   imports: createImportBridge(transport),
   bindings: createBindingConsentBridge(transport),
+  syncControl: createSyncControlBridge(transport),
 };
 window.notalone = Object.freeze(bridge);
