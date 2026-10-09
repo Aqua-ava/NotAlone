@@ -32,7 +32,9 @@ async function prepare(pages: RewritePages, contact: '甲' | '乙' = '甲', coun
   await pages.manager.getByRole('button', { name: `选择合成联系人${contact}`, exact: true }).click();
   await pages.helper.getByRole('textbox', { name: '草稿', exact: true }).fill(`${contact}的原始生成输入。`);
   await pages.rewriteBackend.plan({ count, prefix: `${contact}的依据候选` });
-  await pages.helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  const regenerate = pages.helper.getByRole('button', { name: '重新生成', exact: true });
+  // 同场景第二轮必须显式建立新请求，不把正确的同键重放误当作新模型结果。
+  await (await regenerate.count() ? regenerate : pages.helper.getByRole('button', { name: '生成候选', exact: true })).click();
   await expect(pages.helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue(`${contact}的依据候选（说法1）。`);
 }
 function loadPending(pages: RewritePages) {
