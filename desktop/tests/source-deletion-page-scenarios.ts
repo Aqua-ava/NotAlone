@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import type { SourceDeletionFixture } from './source-deletion-fixture';
+import type { MemoryHttpProxy } from './memory-http-proxy';
 
 // 公共页面发起真实删除；最终证明来自原持久任务，不用来源标记或百分比替代。
 export async function sourceDeletionBasic(manager: Page, fixture: SourceDeletionFixture) {
@@ -48,4 +49,50 @@ export async function sourceDeletionVerification(manager: Page, fixture: SourceD
   const task = await fixture.http(`/api/tasks/status?contact_id=${contactId}&task_id=${deleted.task_id}`);
   expect(task.data.status).toBe('succeeded');
   expect((task.data.steps as { status: string }[]).every((step) => step.status === 'succeeded')).toBe(true);
+}
+
+export async function sourceDeletionUnknown(manager: Page, fixture: SourceDeletionFixture, proxy: MemoryHttpProxy) {
+  const contactId = fixture.data.contact_ids[0];
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  const panel = manager.getByRole('region', { name: '来源删除管理', exact: true });
+  await expect(panel.getByRole('button', { name: '删除来源', exact: true })).toBeVisible();
+  proxy.failurePaths.add(`/api/contacts/${contactId}/sources`);
+  await panel.getByRole('button', { name: '删除来源', exact: true }).click();
+  await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
+  await expect(panel.getByRole('alert')).toContainText('删除结果尚未确认');
+  await expect(panel.getByText('已删除，已通过不可检索校验', { exact: true })).toHaveCount(0);
+  expect(proxy.requests.some((request) => request.method === 'DELETE' && request.path.startsWith(`/api/contacts/${contactId}/sources/`))).toBe(true);
+  proxy.failurePaths.clear();
+  await panel.getByRole('button', { name: '刷新删除状态', exact: true }).click();
+  await expect(panel.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
+  const result = await fixture.http(`/api/contacts/${contactId}/sources`);
+  const taskId = (result.data.sources as { task_id: string }[])[0].task_id;
+  const task = await fixture.http(`/api/tasks/status?contact_id=${contactId}&task_id=${taskId}`);
+  expect(task.data.status).toBe('succeeded');
+}
+
+export async function sourceDeletionArguments(manager: Page, helper: Page, fixture: SourceDeletionFixture, proxy: MemoryHttpProxy) {
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  await expect(manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('button', { name: '删除来源', exact: true })).toBeVisible();
+  const state = await manager.evaluate(() => window.notalone.sources.getState());
+  const request = { contactId: state.contactId!, scopeRevision: state.scopeRevision, sourceId: state.sources[0].sourceId };
+  const before = proxy.requests.filter((request) => request.method === 'DELETE').length;
+  const outcomes = await manager.evaluate(async ({ request, otherContact }) => {
+    const invoke = window.notalone.sources.delete as (...args: unknown[]) => Promise<unknown>;
+    const results: string[] = [];
+    for (const args of [[request, 'extra'], [{ ...request, ownerId: 'renderer-owner' }], [{ ...request, scopeRevision: -1 }],
+      [{ ...request, contactId: otherContact }], [{ ...request, sourceId: otherContact }], [{ ...request, sourceId: '../../source' }]]) {
+      try { await invoke(...args); results.push('accepted'); } catch { results.push('rejected'); }
+    }
+    return results;
+  }, { request, otherContact: fixture.data.other_contact_id });
+  expect(outcomes).toEqual(Array(6).fill('rejected'));
+  expect(await helper.evaluate(async (request) => {
+    try { await window.notalone.sources.delete(request); return 'accepted'; } catch { return 'rejected'; }
+  }, request)).toBe('rejected');
+  expect(proxy.requests.filter((request) => request.method === 'DELETE').length).toBe(before);
+  const source = await fixture.http(`/api/contacts/${request.contactId}/sources`);
+  expect((source.data.sources as { status: string }[])[0].status).toBe('active');
 }
