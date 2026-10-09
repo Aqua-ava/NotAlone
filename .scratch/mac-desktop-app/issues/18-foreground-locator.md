@@ -1,7 +1,7 @@
 # 18：前台定位与人工消歧
 
 Type: task
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: 09, 16
 Spec: ../spec.md
@@ -28,3 +28,5 @@ Spec: ../spec.md
 ## Comments
 
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
+
+- 2026-10-09：从固定集成 `e1bfe74c298a37c2275c597b7f5e2f5e104df1d4` 在独占 `codex/mac-app-18-foreground-locator` 领取，09/16 已 resolved。按当前 STATIC ONLY 只读核对真实 sync/front、probe/resolver、联系人切换与窗口路径；`GET /api/sync/status` 是无观察时间的 cycle 缓存，人工验证 `last_valid_observation` 为历史，不能据此自动选联系人；`/api/sync/check` 同时触发后台正文安全对账，不能偷偷作为前台定位调用。现有探针 JSON 没有定位置信度，旧 native 或历史 App 证据不能冒充当前唯一验证绑定。先向主 Agent 提交独立只读观察、trusted 焦点 generation/一次消费与人工消歧的最小协议方案，新增 HTTP/contracts 及共享文件所有权待明确。首片只准备“helper获得焦点后前台定位暂停、已确认CLI总开关保持、手动联系人及编辑不被旧观察覆盖”的公开页面失败接缝设计；尚未写运行用例、没有运行red/green、没有生产或测试实现。未启动后端/PG/浏览器/App/探针、未读取图帧/私人资料、未安装/打包/签名或外部操作。第三条原生验收、所有验收勾选及 Answer 保持未完成；后续按一次垂直切片推进。
