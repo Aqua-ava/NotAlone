@@ -1,6 +1,6 @@
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
-import { initialForegroundState, type ForegroundState } from '../../shared/foreground-bridge';
+import { initialForegroundState, type ForegroundState, type ForegroundConfirmation, type GenerationBlock } from '../../shared/foreground-bridge';
 import { foregroundObservation } from './observation';
 
 type Flight = { abort: AbortController; promise: Promise<void> };
@@ -14,6 +14,7 @@ export class ForegroundController {
   private generation: number | undefined;
   private scopeRevision: number;
   private draft: string;
+  private qualification: { generation: number; scopeRevision: number; contactId: string } | undefined;
   private readonly listeners = new Set<(state: ForegroundState) => void>();
   private readonly unsubscribe: (() => void)[];
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession) {
@@ -24,17 +25,44 @@ export class ForegroundController {
       const generation = backend.getConnectionGeneration();
       if (generation === this.generation) return;
       this.generation = generation;
+      this.qualification = undefined;
       this.invalidatePending();
       this.clearObservation('unavailable', 'connection_changed');
     }), contacts.onStateChanged((state) => {
       if (state.scopeRevision !== this.scopeRevision) {
         this.scopeRevision = state.scopeRevision;
+        this.qualification = undefined;
         this.invalidatePending(); this.clearObservation('idle', 'contact_changed');
       } else if (state.draft !== this.draft) this.invalidatePending();
       this.draft = state.draft;
     })];
   }
   getState(): ForegroundState { return { ...this.state }; }
+  getGenerationBlock(): GenerationBlock {
+    const contact = this.contacts.getState();
+    const qualified = this.qualification;
+    return !this.disposed && qualified && qualified.generation === this.backend.getConnectionGeneration()
+      && qualified.scopeRevision === contact.scopeRevision && qualified.contactId === contact.selectedContactId
+      && (contact.directoryPhase === 'ready' || contact.directoryPhase === 'loading')
+      ? null : 'foreground-confirmation-required';
+  }
+  // 仅由helper具名桥调用；同步校验并选择，异步旧观察不能在确认后覆盖资格。
+  confirm(selection: ForegroundConfirmation) {
+    const generation = this.backend.getConnectionGeneration();
+    const contact = this.contacts.getState();
+    if (this.disposed || generation === undefined || generation !== this.generation
+      || selection.foregroundRevision !== this.state.foregroundRevision
+      || selection.contactScopeRevision !== contact.scopeRevision
+      || !contact.contacts.some((item) => item.contactId === selection.contactId)
+      || (contact.directoryPhase !== 'ready' && contact.directoryPhase !== 'loading')) {
+      throw new Error('联系人确认已失效，请重新选择本次联系人。');
+    }
+    this.invalidatePending(); ++this.epoch;
+    const selected = this.contacts.selectContact({ contactId: selection.contactId, scopeRevision: contact.scopeRevision });
+    this.qualification = { generation, scopeRevision: selected.scopeRevision, contactId: selection.contactId };
+    this.publish({ foregroundRevision: this.state.foregroundRevision + 1 });
+    return selected;
+  }
   onStateChanged(listener: (state: ForegroundState) => void): () => void {
     this.listeners.add(listener); return () => this.listeners.delete(listener);
   }
@@ -82,7 +110,7 @@ export class ForegroundController {
   notifyHelperLifecycle(event: 'focused' | 'blurred' | 'hidden' | 'closed'): void {
     if (this.disposed) return;
     this.invalidatePending(); ++this.epoch;
-    this.publish({ suspendedByHelperFocus: event === 'focused' });
+    this.publish({ suspendedByHelperFocus: event === 'focused', foregroundRevision: this.state.foregroundRevision + 1 });
     if (event === 'closed') this.clearObservation('idle', 'helper_closed');
   }
   invalidatePending(): void {
@@ -102,7 +130,10 @@ export class ForegroundController {
   }
   private publish(update: Partial<ForegroundState>): void {
     if (this.disposed) return;
-    this.state = { ...this.state, ...update, revision: this.state.revision + 1 };
+    const generationBlock = this.getGenerationBlock();
+    this.state = { ...this.state, ...update, revision: this.state.revision + 1,
+      generationBlock, confirmation: generationBlock === null ? 'manual-confirmed' : 'required',
+      confirmedContactId: generationBlock === null ? this.qualification!.contactId : null };
     for (const listener of this.listeners) listener(this.getState());
   }
 }
