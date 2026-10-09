@@ -22,6 +22,7 @@ export function useReplySession() {
     updateOptions: (options: RewriteOptions) => operate(() => window.notalone.replies.updateOptions({ ...selection(), options })),
     setMode: (mode: ReplyMode) => operate(() => window.notalone.replies.setMode({ ...selection(), mode })),
     loadMessages: (older = false) => operate(() => window.notalone.replies.loadMessages({ ...selection(), older })),
+    retrySourceValidation: () => operate(() => window.notalone.replies.retrySourceValidation(selection())),
     reconnectMessages: () => operate(() => window.notalone.replies.reconnectMessages(selection())),
     selectMessage: (messageId: string) => operate(() => window.notalone.replies.selectMessage({ ...selection(), messageId })),
     updateDirection: (direction: string) => operate(() => window.notalone.replies.updateDirection({ ...selection(), direction })),
@@ -83,6 +84,8 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
   const { state } = replies;
   const evidence = useReplyEvidence();
   return <section className="reply-candidates" aria-label="候选回复">
+    {state.sourceAvailability === 'checking' && <p role="status">正在核对删除后的依据…</p>}
+    {state.sourceAvailability === 'failed' && <p role="alert">删除后的依据尚未确认，原候选暂不可用。<button onClick={() => void replies.retrySourceValidation()}>重新核对依据</button></p>}
     {state.phase === 'waiting' && <p className="reply-note" role="status">正在等待本次生成结果…</p>}
     {state.phase === 'failed' && <p className="reply-note" role="alert">{state.errorCode === 'connection' ? '未收到生成结果，请用同一次请求重试。'
       : state.errorCode === 'timeout' ? '本次生成超时，请重试同一次生成。'

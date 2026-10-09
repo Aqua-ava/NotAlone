@@ -11,6 +11,7 @@ import { installContactSessionBridge } from '../../src/main/contacts/bridge';
 import { ImportController, type ImportFileSelector } from '../../src/main/imports/controller';
 import { installImportBridge } from '../../src/main/imports/bridge';
 import { installMemoryBridge } from '../../src/main/memory/bridge';
+import { installSourceDeletionBridge } from '../../src/main/sources/bridge';
 import { installReplyBridge } from '../../src/main/reply/bridge';
 import { installBindingConsentBridge } from '../../src/main/bindings/bridge';
 import { installSyncControlBridge } from '../../src/main/sync/bridge';
@@ -63,8 +64,13 @@ export class PageHost implements PageCommands {
       if (!options.chooseImportFile) throw new Error('本轮页面未提供文件选择输入。');
       return imports.chooseFile(options.chooseImportFile);
     }, 'manager');
-    installMemoryBridge(this, this.backend, contacts);
+    const memory = installMemoryBridge(this, this.backend, contacts);
     const replies = installReplyBridge(this, this.backend, contacts);
+    installSourceDeletionBridge(this, this.backend, contacts, async (contactId) => {
+      const checking = replies.revalidateDeletedSource(contactId);
+      try { await memory.revalidateDeletedSource(contactId); }
+      finally { await checking; }
+    });
     const copies = new CandidateCopyController(this.backend, contacts, replies);
     this.handle('candidate-copy:copy', (...args: unknown[]) => {
       const request = candidateCopyRequest(args);

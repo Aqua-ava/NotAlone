@@ -72,6 +72,7 @@ export interface ReplySessionState {
   direction: string;
   phase: 'idle' | 'waiting' | 'ready' | 'failed';
   errorCode?: ReplyFailureCode;
+  sourceAvailability?: 'checking' | 'failed';
   result: ReplyResult | null;
   selectedCandidateId: string | null;
   canRetry: boolean;
@@ -84,6 +85,7 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   setMode(update: ReplyModeUpdate): Promise<void>;
   loadMessages(request: ReplyMessagePageRequest): Promise<void>;
   reconnectMessages(selection: ContactSelection): Promise<void>;
+  retrySourceValidation(selection: ContactSelection): Promise<void>;
   selectMessage(selection: ReplyMessageSelection): Promise<ReplySessionState>;
   updateDirection(update: ReplyDirectionUpdate): Promise<ReplySessionState>;
   generate(selection: GenerateReply): Promise<void>;
