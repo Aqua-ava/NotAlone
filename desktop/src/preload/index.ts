@@ -1,3 +1,4 @@
+import { createForegroundBridge } from './foreground';
 import { createCandidateCopyBridge } from './candidate-copy';
 import { createSourceDeletionBridge } from './source-deletion';
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
@@ -10,6 +11,7 @@ import { createImportBridge } from './imports';
 import { createReplyBridge } from './reply';
 import { createMemoryBridge } from './memory';
 import { createBindingConsentBridge } from './binding-consent';
+import { createSyncControlBridge } from './sync-control';
 import type { DesktopSettings } from '../shared/desktop-bridge';
 
 const bridge: AppBridge = {
@@ -23,6 +25,8 @@ const bridge: AppBridge = {
   sources: createSourceDeletionBridge(ipcRenderer),
   memory: createMemoryBridge(ipcRenderer),
   bindings: createBindingConsentBridge(ipcRenderer),
+  foreground: createForegroundBridge(ipcRenderer),
+  syncControl: createSyncControlBridge(ipcRenderer),
   openManager: () => ipcRenderer.invoke('window:open-manager'),
   openHelper: () => ipcRenderer.invoke('window:open-helper'),
   hideWindow: () => ipcRenderer.invoke('window:hide'),

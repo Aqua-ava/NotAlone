@@ -1,3 +1,4 @@
+import type { ForegroundBridge } from './foreground-bridge';
 import type { CandidateCopyBridge } from './candidate-copy-bridge';
 import type { SourceDeletionBridge } from './source-deletion-bridge';
 import type { BackendBridge } from './backend-bridge';
@@ -10,9 +11,10 @@ import type { ImportBridge } from './import-bridge';
 import type { ReplyBridge } from './reply-bridge';
 import type { MemoryBridge } from './memory-bridge';
 import type { BindingConsentBridge } from './binding-consent-bridge';
+import type { SyncControlBridge } from './sync-control-bridge';
 
 export type AppBridge = WindowBridge & DesktopBridge & {
   backend: BackendBridge; setup: SetupBridge; startup: StartupBridge;
   contacts: ContactSessionBridge; imports: ImportBridge; bindings: BindingConsentBridge; replies: ReplyBridge;
-  memory: MemoryBridge; candidateCopy: CandidateCopyBridge; sources: SourceDeletionBridge;
+  memory: MemoryBridge; candidateCopy: CandidateCopyBridge; sources: SourceDeletionBridge; syncControl: SyncControlBridge; foreground: ForegroundBridge;
 };

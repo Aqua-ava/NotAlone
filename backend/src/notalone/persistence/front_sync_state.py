@@ -9,10 +9,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Callable
 from datetime import datetime
 from uuid import UUID
 
+import os
+
 import psycopg
+from psycopg.conninfo import conninfo_to_dict
 
 
 class FrontSyncStatePersistenceError(RuntimeError):
@@ -47,9 +51,19 @@ class PostgresFrontSyncStateStore:
     def read(self, *, owner_id: UUID) -> FrontSyncState:
         """读取开关状态；没有记录或 owner 已删除时返回默认关闭。"""
 
+        return self._read(owner_id=owner_id, connect=self._connect)
+
+    def read_bounded(self, *, owner_id: UUID) -> FrontSyncState:
+        """新观察的只读门禁：连接超时最少2秒，单条查询预算200ms。"""
+
+        return self._read(owner_id=owner_id, connect=self._connect_bounded)
+
+    def _read(
+        self, *, owner_id: UUID, connect: Callable[[], psycopg.Connection],
+    ) -> FrontSyncState:
         self._validate_owner(owner_id)
         try:
-            with self._connect() as connection:
+            with connect() as connection:
                 row = connection.execute(
                     """
                     SELECT enabled, enabled_at, disabled_at, updated_at
@@ -161,3 +175,17 @@ class PostgresFrontSyncStateStore:
 
     def _connect(self) -> psycopg.Connection:
         return psycopg.connect(self._database_url)
+
+    def _connect_bounded(self) -> psycopg.Connection:
+        # connect_timeout按host生效；新观察不尝试多host或间接service配置。
+        parameters = conninfo_to_dict(self._database_url)
+        if (parameters.get("service") or os.environ.get("PGSERVICE")) or any(
+            "," in str(parameters.get(key) or os.environ.get(f"PG{key.upper()}") or "")
+            for key in ("host", "hostaddr")
+        ):
+            raise FrontSyncStatePersistenceError("新观察的数据库连接范围不可核验。")
+        options = str(parameters.get("options") or os.environ.get("PGOPTIONS") or "")
+        return psycopg.connect(
+            self._database_url, connect_timeout=2, autocommit=True,
+            options=f"{options} -c statement_timeout=200 -c lock_timeout=200",
+        )

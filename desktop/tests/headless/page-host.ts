@@ -1,3 +1,5 @@
+import { installForegroundBridge } from '../../src/main/foreground/bridge';
+import type { ForegroundController } from '../../src/main/foreground/controller';
 import { CandidateCopyController, candidateCopyRequest, type CandidateCopySurface } from '../../src/main/candidate-copy/controller';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -12,6 +14,7 @@ import { installMemoryBridge } from '../../src/main/memory/bridge';
 import { installSourceDeletionBridge } from '../../src/main/sources/bridge';
 import { installReplyBridge } from '../../src/main/reply/bridge';
 import { installBindingConsentBridge } from '../../src/main/bindings/bridge';
+import { installSyncControlBridge } from '../../src/main/sync/bridge';
 import { noArguments, type PageCommands, type PageRole } from '../../src/main/page-commands';
 import { ownResource } from './cleanup';
 
@@ -46,11 +49,14 @@ export class PageHost implements PageCommands {
   private readonly released = ownResource();
   readonly backend: BackendHost;
   readonly diagnostics: StartupDiagnostics;
+  readonly foreground: ForegroundController;
   constructor(private readonly context: BrowserContext, private readonly origin: string, userData: string, options: { copySurface?: CandidateCopySurface; chooseImportFile?: ImportFileSelector } = {}) {
     this.diagnostics = new StartupDiagnostics(userData);
     this.backend = new BackendHost(userData, (config, canStart) => this.diagnostics.ensureReady(config, canStart));
     const contacts = installContactSessionBridge(this, this.backend);
+    this.foreground = installForegroundBridge(this, this.backend, contacts);
     installBindingConsentBridge(this, this.backend, contacts);
+    installSyncControlBridge(this, this.backend, contacts);
     const imports = new ImportController(this.backend, contacts);
     installImportBridge(this, imports);
     this.handle('imports:choose-file', (...args: unknown[]) => {
@@ -92,7 +98,11 @@ export class PageHost implements PageCommands {
   }
   async open(role: PageRole): Promise<Page> {
     if (this.closing) throw new Error('本轮页面已收尾。');
+    if (role === 'helper') await this.foreground.observeBeforeShow();
+    if (this.closing) throw new Error('本轮页面已收尾。');
     const page = await this.context.newPage();
+    // 本轮系统生命周期输入由可信host提供，不替换HTTP观察内容。
+    if (role === 'helper') page.on('close', () => this.foreground.notifyHelperLifecycle('closed'));
     this.pages.set(page, role);
     await page.setViewportSize(role === 'manager' ? { width: 1080, height: 740 } : { width: 680, height: 520 });
     await page.exposeBinding('pageCommand', (source, channel: unknown, args: unknown) => {
@@ -107,10 +117,12 @@ export class PageHost implements PageCommands {
     });
     await page.addInitScript({ path: path.resolve('artifacts/headless-runtime/renderer.js') });
     await page.goto(`${this.origin}/#${role}`);
+    this.foreground.notifyHelperLifecycle(role === 'helper' ? 'focused' : 'blurred');
     return page;
   }
   async close(): Promise<void> {
     this.closing = true;
+    this.foreground.dispose();
     this.diagnostics.cancel();
     const stopped = await this.backend.stop();
     await Promise.allSettled(this.pendingEvents);

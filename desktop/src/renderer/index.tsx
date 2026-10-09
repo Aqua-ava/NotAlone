@@ -1,3 +1,4 @@
+import { ForegroundPanel, useForegroundState } from './ForegroundPanel';
 import { CandidateCopyControls } from './CandidateCopyControls';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -16,6 +17,7 @@ import { ReplyCandidates, ReplyModePicker, RewriteInput, useReplySession } from 
 import { DirectedReplyInput } from './DirectedReplyInput';
 import { MemoryPage } from './MemoryPage';
 import { BindingConsentPage } from './BindingConsentPage';
+import { SyncControlPanel } from './SyncControlPanel';
 
 const helper = window.location.hash === '#helper';
 document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台';
@@ -25,6 +27,7 @@ function App() {
   const startup = useStartupState();
   const contactSession = useContactSession();
   const replies = useReplySession();
+  const foreground = useForegroundState(window.notalone.foreground, helper);
   const [error, setError] = useState('');
   const [page, setPage] = useState<ManagerPage>('contacts');
   async function operate(operation: () => Promise<void>) {
@@ -42,6 +45,7 @@ function App() {
       <button className="icon-button" aria-label="隐藏输入小窗" title="隐藏输入小窗"
         onClick={() => void operate(window.notalone.hideWindow)}><Icon name="close" size={16} /></button>
     </header>
+    <ForegroundPanel state={foreground} />
     {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} /> : <DirectedReplyInput replies={replies} />}
     {replies.state.messageNotice.phase === 'connected' && <p role="status">{replies.state.messageNotice.needsRefresh
       ? '消息提醒已恢复，期间可能有遗漏，请主动刷新消息核对。生成依据仍是原快照。' : replies.state.messageNotice.changed
@@ -87,7 +91,7 @@ function App() {
         {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} />}
         {page === 'import' && <ImportPage session={contactSession} />}
         {page === 'memory' && <MemoryPage session={contactSession} navigate={setPage} />}
-        {page === 'sync' && <BindingConsentPage contacts={contactSession} navigate={setPage} />}
+        {page === 'sync' && <><SyncControlPanel bridge={window.notalone.syncControl} /><BindingConsentPage contacts={contactSession} navigate={setPage} /></>}
         {page !== 'config' && page !== 'contacts' && page !== 'import' && page !== 'memory' && page !== 'sync' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
           <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>
