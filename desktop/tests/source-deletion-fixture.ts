@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFile, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { lstat, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -12,6 +12,7 @@ const cleanupRecords: { databaseName: string; databaseRemaining: number; databas
 export class SourceDeletionFixture extends ContactFixture {
   private backendChild: ChildProcess | undefined;
   private controllerStopped = false;
+  constructor(directory: string, python: string, data: ContactDatabase, private readonly replyEnabled = false) { super(directory, python, data); }
   async failFinalVerification(contactId: string, taskId: string) {
     if (!this.data.contact_ids.includes(contactId) || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(taskId)) throw new Error('仅能安排本轮原任务。');
     await promisify(execFile)(this.pythonExecutable, [path.resolve('tests/fixtures/source-deletion-arrangement.py'),
@@ -30,6 +31,21 @@ export class SourceDeletionFixture extends ContactFixture {
   }
   override request(endpoint: Parameters<ContactFixture['request']>[0], body?: object) { return this.http(endpoint, body); }
   override async startBackend(): Promise<ChildProcess> {
+    if (this.replyEnabled) {
+      const project = path.resolve('..');
+      this.backendChild = spawn(this.pythonExecutable, [path.resolve('tests/fixtures/source-deletion-backend.py')], {
+        cwd: project, stdio: 'ignore', env: isolatedAppEnvironment(this.directory, {
+          ...this.environment(), PYTHONPATH: `${path.join(project, 'backend/src')}:${path.join(project, 'backend')}`,
+        }),
+      });
+      for (let count = 0; count < 150; count++) {
+        if (this.backendChild.exitCode !== null || this.backendChild.signalCode !== null) throw new Error('本轮来源回复后端未启动。');
+        try { if ((await this.http('/api/runtime/status')).data.state === 'running') return this.backendChild; }
+        catch { /* 有限等待本轮真实认证HTTP就绪。 */ }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      throw new Error('本轮来源回复后端启动超时。');
+    }
     this.backendChild = await super.startBackend();
     return this.backendChild;
   }
@@ -49,7 +65,7 @@ export class SourceDeletionFixture extends ContactFixture {
 }
 
 // 准备未知或任一资源收尾未确认时保留目录及标记，不清理前缀范围或杀未知进程。
-export async function withSourceDeletionFixture(use: (fixture: SourceDeletionFixture) => Promise<void>) {
+export async function withSourceDeletionFixture(use: (fixture: SourceDeletionFixture) => Promise<void>, mode: 'basic' | 'reply' = 'basic') {
   if (process.env.CONDA_DEFAULT_ENV !== 'NotAlone' || !process.env.CONDA_PREFIX) throw new Error('来源删除验收须先激活 Conda NotAlone。');
   const released = ownResource();
   const directory = await mkdtemp(path.join(tmpdir(), 'notalone-headless-source-deletion-'));
@@ -63,10 +79,10 @@ export async function withSourceDeletionFixture(use: (fixture: SourceDeletionFix
   let fixture: SourceDeletionFixture | undefined;
   let failure: unknown;
   try {
-    const prepared = await execute(python, [script, 'create', ownershipPath], { env: environment, timeout: 70_000 });
+    const prepared = await execute(python, [script, 'create', ownershipPath, mode], { env: environment, timeout: 70_000 });
     prepareStopped = true;
     data = JSON.parse(prepared.stdout) as ContactDatabase;
-    fixture = new SourceDeletionFixture(directory, python, data);
+    fixture = new SourceDeletionFixture(directory, python, data, mode === 'reply');
     await fixture.startBackend();
     await use(fixture);
   } catch (error) { failure = error; }

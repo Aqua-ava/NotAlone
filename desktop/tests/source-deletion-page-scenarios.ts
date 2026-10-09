@@ -96,3 +96,30 @@ export async function sourceDeletionArguments(manager: Page, helper: Page, fixtu
   const source = await fixture.http(`/api/contacts/${request.contactId}/sources`);
   expect((source.data.sources as { status: string }[])[0].status).toBe('active');
 }
+
+export async function sourceDeletionReplies(manager: Page, helper: Page, fixture: SourceDeletionFixture) {
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('说明本人喜欢合成绿茶。');
+  await helper.getByRole('checkbox', { name: '结合关系语境', exact: true }).check();
+  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
+  await expect(editor).toHaveValue('来源引用合成候选。', { timeout: 15_000 });
+  await editor.fill('本人资料引用的本轮编辑稿。');
+  await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
+  const evidence = helper.getByRole('region', { name: '候选1依据', exact: true });
+  await expect(evidence.getByText('本人喜欢合成绿茶。', { exact: true })).toBeVisible();
+  const state = await helper.evaluate(() => window.notalone.replies.getState());
+  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  const sourcePanel = manager.getByRole('region', { name: '来源删除管理', exact: true });
+  await sourcePanel.getByRole('button', { name: '删除来源', exact: true }).click();
+  await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
+  await expect(sourcePanel.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
+  // 两窗不得继续保留被删来源支持的候选、编辑和已展开正文；不推断供应商副本。
+  await expect(editor).toHaveCount(0);
+  await expect(evidence).toHaveCount(0);
+  await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('说明本人喜欢合成绿茶。');
+  await expect(helper.getByRole('button', { name: '复制', exact: true })).toBeDisabled();
+  const gone = await fixture.http(`/api/contacts/${state.contactId}/replies/${state.result!.replyRequestId}/evidence`);
+  expect(gone.status).toBe(404);
+  await expect(manager.getByText('本人喜欢合成绿茶。', { exact: true })).toHaveCount(0);
+}
