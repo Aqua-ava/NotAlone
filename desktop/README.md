@@ -134,7 +134,7 @@ npm run test:app:status  # 只读租约归属线索，App 不运行，不自动�
 
 `tests/memory-reading.spec.ts` 与 `tests/memory-stale.spec.ts` 已准备上述公开 App 用例，包含 A→B→A、同范围重读、连接失效、独立失败和受限参数。夹具使用当前工作树真实 HTTP 与随机 `_test` PostgreSQL 库，仅延迟或拒绝本轮回环传输来安排迟到结果。**本轮实际 App 用例未运行，其原生生命周期与签名验收仍待认可时段**；上述普通页面 green 覆盖当前资料 React 交互与真实隔离 HTTP/PG，不代表完整 Mac App 或微信渠道验收。类型检查、构建和历史夹具 HTTP 自检不能单独替代页面验收。`tests/fixtures/memory-database.py check-http` 在激活 Conda `NotAlone`、显式禁用默认 dotenv 并指定本轮独立 `synthetic.env`/握手路径后，可只核验合成数据的公开列表契约与隔离；它不启动 Electron，不读取真实微信、剪贴板或私人资料，不调用模型，结束后认证停读并只清理自己创建的后端、临时目录与库。
 
-任务 08 的 `tests/import-submit.spec.ts` 与 `tests/import-submit-stale.spec.ts` 已准备公开 App 操作：正式保存、真实五步任务、原失败任务恢复、文件变动拒绝、取消/换联系人/换连接后的迟到成功与失败、保存响应丢失后重新确认，以及首份渠道身份后的明确认证停读重启。合成模型仅替换外部 provider，HTTP、持久任务、调度、回复范围与 PostgreSQL 使用生产模块；文件选择只替换必要对话框 I/O。这些 App 用例本轮未运行，没有 UI red/green、截图、真实微信或语义质量验收证据，任务保持 claimed。首份身份不会自动授权同步，用户明确重启只沿用既有开关与确认范围。
+任务 08 的 `tests/import-submit.spec.ts` 与 `tests/import-submit-stale.spec.ts` 已准备公开 App 操作：正式保存、真实五步任务、原失败任务恢复、文件变动拒绝、取消/换联系人/换连接后的迟到成功与失败、保存响应丢失后重新确认，以及首份渠道身份后的明确认证停读重启。合成模型仅替换外部 provider，HTTP、持久任务、调度、回复范围与 PostgreSQL 使用生产模块；文件选择只替换必要对话框 I/O。普通页面在源 `60301e84` 完整12/12通过；准备失败精确清理修复后，源 `c21b05ef` 的损坏JSON与正常首份导入两项通过，精确库残留0、cleanupConfirmed=true、两租约absent。独立双轴最终hard0/possible0、Spec0，任务08完成普通页面范围。这些 App 用例、真实系统选择器与最终签名包仍待任务20验收，没有本轮原生通过或真实微信／语义质量证据。首份身份不会自动授权同步，用户明确重启只沿用既有开关与确认范围。
 
 无桌面 HTTP 检查可以单独执行，入口自动隔离 dotenv 读写、握手、模型、CLI/探针，随机创建 `_test` 库并仅迁移和清理该库：
 
