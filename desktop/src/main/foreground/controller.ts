@@ -110,7 +110,7 @@ export class ForegroundController {
   notifyHelperLifecycle(event: 'focused' | 'blurred' | 'hidden' | 'closed'): void {
     if (this.disposed) return;
     this.invalidatePending(); ++this.epoch;
-    this.publish({ suspendedByHelperFocus: event === 'focused' });
+    this.publish({ suspendedByHelperFocus: event === 'focused', foregroundRevision: this.state.foregroundRevision + 1 });
     if (event === 'closed') this.clearObservation('idle', 'helper_closed');
   }
   invalidatePending(): void {
