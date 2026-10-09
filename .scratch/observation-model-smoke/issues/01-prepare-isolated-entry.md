@@ -2,7 +2,7 @@
 
 Type: task
 Triage: ready-for-agent
-State: claimed
+State: resolved
 
 ## 范围
 
@@ -21,3 +21,30 @@ State: claimed
 ## Comments
 
 基线 `08f8fa5`。使用 implement → TDD → code-review；不更改产品 API、数据库结构或第三方库接口。
+
+## Answer
+
+入口实现提交 `abd57c9`。复用观察夹具，离线模型与显式真实模型共享生产宿主、
+观察发布、HTTP 状态、待确认检索、删除及关闭场景；未修改产品代码或数据库结构。
+首次新用例因共用夹具尚未提供而失败，抽取夹具后场景通过；不将此记为产品缺陷。
+模型配置存在性检查仅输出布尔值，随后只读取接收主机和模型名：
+HTTPS `chat.ecnu.edu.cn`、`ecnu-max`。未输出 key 或完整 URL，未发起模型请求。
+
+实际验证（先激活 Conda NotAlone，在 backend 目录）：
+
+- `NOTALONE_DISABLE_DOTENV=1 NOTALONE_RUN_REAL_OBSERVATION_SMOKE=0 python -m unittest tests.integration.server.test_observation_model_smoke tests.integration.server.test_observation_auto_flow -v`：19 项通过，真实验收类跳过 1 项。
+- 仅指定真实类、专用开关为 0 且凭据为合成占位值：0 项执行、按预期跳过；另将开关设 1、key 设空并禁止 dotenv：明确报告缺少配置，按预期失败，未创建测试库或调用模型。
+- `MYPYPATH=src python -m mypy --follow-imports=silent tests/integration/server/test_observation_auto_flow.py tests/integration/server/test_observation_model_smoke.py`：两个模块通过。首次命令缺 MYPYPATH 报安装包未标注类型，补齐源码搜索路径后通过。
+- `git diff --check`：通过。所有实际数据库测试均由夹具创建、迁移并清理随机 `_test` 库。
+
+仅完成准备和离线预演。真实模型实际调用、真实微信／桌面、业务库升级与远端推送均未执行。
+可审阅的外发数据、命令、费用／重试及留存边界见 [验收说明](../acceptance.md)。
+下一步是用户确认该实际接收方与单条合成消息范围后，显式运行一次真实类。
+
+## Standards
+
+固定范围 `08f8fa5...abd57c9`，独立只读评审：0 项硬规范违反，0 项代码味道。
+
+## Spec
+
+独立只读评审：0 项缺失、范围越界或实现错误。两轴均无遗留问题。
