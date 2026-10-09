@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
+import json
 import threading
 import time
 import unittest
@@ -68,7 +69,12 @@ class ObservationModel:
             if message.message_id in window.target_message_id_set)
 
 
-class ObservationAutoFlowTest(CoreBusinessFlowFixture, unittest.TestCase):
+class ObservationAutoFlowFixture(CoreBusinessFlowFixture):
+    """复用隔离库、观察提交与 HTTP 状态；具体场景决定模型边界。"""
+
+    message_text = "我喜欢科幻小说"
+    task_timeout = 5
+
     def setUp(self):
         self.scope = ContactScope(uuid4(), uuid4())
         with psycopg.connect(self.database_url) as connection:
@@ -88,12 +94,7 @@ class ObservationAutoFlowTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.events = EventBus()
         self.model_available = True
         self.priority = ModelPriorityControl()
-        self.host = TaskHost(
-            worker_builder=self.build_worker,
-            lock_connection_builder=lambda: psycopg.connect(self.database_url, autocommit=True),
-            event_publisher=lambda update: None, task_repository=self.repository,
-            model_priority=self.priority,
-        )
+        self.host = self.create_task_host()
         self.backend = HttpBackend(create_app(
             database_url=self.database_url, owner_id=self.scope.owner_id,
             events=self.events, task_host=self.host,
@@ -103,6 +104,14 @@ class ObservationAutoFlowTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.addCleanup(self.model.release.set)
         self.publisher = EventBusMessagePublisher(
             self.events, owner_id=self.scope.owner_id, task_host=self.host,
+        )
+
+    def create_task_host(self):
+        return TaskHost(
+            worker_builder=self.build_worker,
+            lock_connection_builder=lambda: psycopg.connect(self.database_url, autocommit=True),
+            event_publisher=lambda update: None, task_repository=self.repository,
+            model_priority=self.priority,
         )
 
     def build_worker(self):
@@ -131,12 +140,12 @@ class ObservationAutoFlowTest(CoreBusinessFlowFixture, unittest.TestCase):
             last_local_id=number, last_cursor=f"cursor-{number}", record_count=1,
             messages=(NormalizedMessage(
                 source_locator=f"cli:{number}", speaker="contact", message_type="text",
-                text_content="我喜欢科幻小说", media_placeholder=None,
+                text_content=self.message_text, media_placeholder=None,
                 occurred_at=datetime.fromtimestamp(timestamp, timezone.utc),
                 wechat_metadata=WechatMessageMetadata(
                     external_local_id=number, external_server_id=f"synthetic-{number}",
                     external_talker=locator, source_create_time=timestamp,
-                    raw_payload_json='{"text":"我喜欢科幻小说"}',
+                    raw_payload_json=json.dumps({"text": self.message_text}, ensure_ascii=False),
                 ),
             ),),
         )
@@ -150,7 +159,7 @@ class ObservationAutoFlowTest(CoreBusinessFlowFixture, unittest.TestCase):
                 )
 
     def wait_task(self, status="succeeded"):
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + self.task_timeout
         latest = None
         while time.monotonic() < deadline:
             code, current = self.backend.request(f"/api/tasks/status?contact_id={self.scope.contact_id}")
@@ -166,6 +175,7 @@ class ObservationAutoFlowTest(CoreBusinessFlowFixture, unittest.TestCase):
             time.sleep(0.01)
         self.fail(f"任务未达到预期状态：{latest}")
 
+class ObservationAutoFlowTest(ObservationAutoFlowFixture, unittest.TestCase):
     def test_committed_observation_automatically_processes_original_task(self):
         batch = self.record()
         self.publish(batch)
