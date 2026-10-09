@@ -1,53 +1,10 @@
-import { expect } from '@playwright/test';
-import { test } from './rewrite-transport-fixture';
+import { test, openRewriteAppPages } from './rewrite-transport-fixture';
+import { relationshipScope, unboundRejection } from './rewrite-page-scenarios';
 
 test('主动开启关系语境只进入当前联系人范围，切换清除候选、编辑和当次要求', async ({ runningApp: { app }, rewriteBackend, replyTransport }) => {
-  const manager = await app.firstWindow();
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
-  const opened = app.waitForEvent('window');
-  await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
-  const helper = await opened;
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
-  await helper.getByRole('checkbox', { name: '结合关系语境', exact: true }).check();
-  await helper.getByRole('textbox', { name: '本次要求', exact: true }).fill('自然一点');
-  await rewriteBackend.plan({ probe_history: true });
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
-  await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toBeVisible();
-  const observations = await rewriteBackend.command('observations');
-  const payload = (observations.payloads as Array<Record<string, unknown>>)[0];
-  expect(payload).toMatchObject({ include_relationship_context: true, user_instruction: '自然一点' });
-  expect(JSON.stringify(observations.outbound)).toContain('甲的私密合成历史');
-  expect(JSON.stringify(observations.outbound)).not.toContain('乙的私密合成历史');
-  expect(JSON.stringify(observations.outbound)).not.toContain('另一用户的私密合成历史');
-  const requestId = replyTransport.results[0].data.reply_request_id;
-  const evidence = await rewriteBackend.request(`/api/contacts/${rewriteBackend.data.contact_ids[0]}/replies/${requestId}/evidence`);
-  expect(evidence.status).toBe(200);
-  expect((evidence.data.evidence as Array<{ kind: string }>).map((item) => item.kind).sort()).toEqual(['message', 'user_draft']);
-  expect(observations.tool_names).toContain('conversation_search');
-  expect(replyTransport.requests[0]).toMatchObject({ contact_id: rewriteBackend.data.contact_ids[0] });
-  await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).fill('甲的临时编辑');
-  await manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
-  await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
-  await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
-  await expect(helper.getByRole('checkbox', { name: '结合关系语境', exact: true })).not.toBeChecked();
-  await expect(helper.getByRole('textbox', { name: '本次要求', exact: true })).toHaveValue('');
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
-  await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
-  await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
+  await relationshipScope({ ...await openRewriteAppPages(app), rewriteBackend, replyTransport });
 });
 
 test('没有 active 已确认绑定时真实拒绝生成，其他 owner 的联系人不出现在目录', async ({ runningApp: { app }, rewriteBackend, replyTransport }) => {
-  await rewriteBackend.command('revoke', { contact_id: rewriteBackend.data.contact_ids[0] });
-  const manager = await app.firstWindow();
-  await expect(manager.getByRole('button', { name: '选择另一用户的联系人', exact: true })).toHaveCount(0);
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
-  const opened = app.waitForEvent('window');
-  await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
-  const helper = await opened;
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
-  await expect(helper.getByRole('alert')).toContainText('确认联系人及有效会话绑定');
-  await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
-  expect(replyTransport.results).toEqual([{ status: 409, data: { error: 'reply_rejected', reason: 'no_active_binding' } }]);
-  expect((await rewriteBackend.command('observations')).payloads).toEqual([]);
+  await unboundRejection({ ...await openRewriteAppPages(app), rewriteBackend, replyTransport });
 });
