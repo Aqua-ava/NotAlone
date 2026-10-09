@@ -61,6 +61,26 @@ export async function savedImport(pages: ImportPages): Promise<void> {
 
 export async function changedImport(pages: ImportPages): Promise<void> {
   const { manager, helper, importBackend } = pages;
+  expect(await helper.evaluate(async () => {
+    const outcomes: string[] = [];
+    for (const action of [() => window.notalone.imports.chooseFile(),
+      () => window.notalone.imports.setTarget({ kind: 'new', displayName: '未授权联系人' }),
+      () => window.notalone.imports.submit({ selectionRevision: 0 })]) {
+      try { await action(); outcomes.push('accepted'); } catch { outcomes.push('rejected'); }
+    }
+    return outcomes;
+  })).toEqual(['rejected', 'rejected', 'rejected']);
+  expect(await manager.evaluate(async () => {
+    try {
+      // @ts-expect-error 具名选择不接受路径或角色，由真实host核验页面来源。
+      await window.notalone.imports.chooseFile({ path: '/synthetic/arbitrary.jsonl', role: 'manager' });
+      return 'accepted';
+    } catch { return 'rejected'; }
+  })).toBe('rejected');
+  expect(await manager.evaluate(async (contactId) => {
+    try { await window.notalone.imports.setTarget({ kind: 'existing', contactId }); return 'accepted'; }
+    catch { return 'rejected'; }
+  }, importBackend.data.other_contact_id)).toBe('rejected');
   await confirm(pages, importBackend.data.file_path);
   const revision = (await manager.evaluate(() => window.notalone.imports.getState())).selectionRevision;
   const original = await readFile(importBackend.data.file_path, 'utf8');
