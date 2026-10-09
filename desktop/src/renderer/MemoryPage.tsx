@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { ActiveMemory, MemoryContent, MemoryCorrectionRequest, MemoryReadingState, MemorySection, MemorySectionName, MemorySource, PendingMemoryCandidate } from '../shared/memory-bridge';
+import type { ActiveMemory, MemoryAdditionRequest, MemoryContent, MemoryCorrectionRequest, MemoryReadingState, MemorySection, MemorySectionName, MemorySource, PendingMemoryCandidate } from '../shared/memory-bridge';
 import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
 import './memory.css';
@@ -57,8 +57,19 @@ function useMemoryReading(session: ContactSessionView) {
       }
     }
   }
+  async function add(level: MemoryAdditionRequest['level'], text: string, category: MemoryAdditionRequest['category']) {
+    const { selectedContactId, scopeRevision } = scope.current;
+    if (!selectedContactId) return;
+    setError('');
+    try { await window.notalone.memory.add({ contactId: selectedContactId, scopeRevision, level, text, category }); }
+    catch {
+      if (active.current && scope.current.selectedContactId === selectedContactId && scope.current.scopeRevision === scopeRevision) {
+        setError('资料范围已变化，请刷新后再补充。');
+      }
+    }
+  }
   const matches = state.contactId === session.state.selectedContactId && state.scopeRevision === session.state.scopeRevision;
-  return { state: matches ? state : initial, error, refresh, correct };
+  return { state: matches ? state : initial, error, refresh, correct, add };
 }
 
 // 时间展示统一注明 UTC+8；不把来源日期、保存日期或有效期互相替代。
@@ -99,9 +110,9 @@ function MemoryCard({ content, memory, candidate, sources, correct, busy }: {
     <div className="memory-times"><p>来源聊天时间：{sourceTime(content)}</p><p>保存时间：{timeText(content.timing.recordedAt)}</p></div>
     <button className="memory-details-button" aria-label={`查看来源与版本：${content.text}`} aria-expanded={expanded}
       onClick={() => setExpanded((value) => !value)}>{expanded ? '收起来源与版本' : '查看来源与版本'}</button>
-    {memory?.level === 'owner' && correct && <button className="button" disabled={busy}
+    {memory && correct && <button className="button" disabled={busy}
       aria-label={`修正资料：${content.text}`} onClick={() => setEditing(true)}>修正资料</button>}
-    {editing && memory && correct && <form aria-label="修正本人资料" className="memory-edit-form" onSubmit={(event) => {
+    {editing && memory && correct && <form aria-label={memory.level === 'owner' ? '修正本人资料' : '修正联系人资料'} className="memory-edit-form" onSubmit={(event) => {
       event.preventDefault(); void correct(memory, text, category);
     }}><label>资料正文<textarea aria-label="资料正文" value={text} disabled={busy} onChange={(event) => setText(event.target.value)} /></label>
       <label>资料分类<select aria-label="资料分类" value={category} disabled={busy}
@@ -127,6 +138,29 @@ function MemoryCard({ content, memory, candidate, sources, correct, busy }: {
   </article>;
 }
 
+function AdditionControl({ level, phase, add }: {
+  level: 'owner' | 'contact'; phase: MemoryReadingState['mutation']['phase'];
+  add: (level: MemoryAdditionRequest['level'], text: string, category: MemoryAdditionRequest['category']) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [category, setCategory] = useState<MemoryAdditionRequest['category']>('common_fact');
+  const name = level === 'owner' ? '补充本人资料' : '补充联系人资料';
+  const busy = phase === 'working';
+  useEffect(() => { if (phase === 'success') { setOpen(false); setText(''); } }, [phase]);
+  return <div><button className="button" disabled={busy} onClick={() => setOpen(true)}>{name}</button>
+    {open && <form className="memory-edit-form" aria-label={name} onSubmit={(event) => { event.preventDefault(); void add(level, text, category); }}>
+      <label>资料正文<textarea aria-label="资料正文" value={text} disabled={busy} onChange={(event) => setText(event.target.value)} /></label>
+      <label>资料分类<select aria-label="资料分类" value={category} disabled={busy}
+        onChange={(event) => setCategory(event.target.value as MemoryAdditionRequest['category'])}>
+        {Object.entries(categoryNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <p>{level === 'owner' ? '本人资料可在不同联系人的回复中共享使用。' : '只保存到当前已确认联系人的资料。'}手动补充不会成为自动采纳。</p>
+      <button className="button" type="submit" disabled={busy || !text.trim()}>保存资料</button>
+      <button className="button" type="button" disabled={busy} onClick={() => setOpen(false)}>取消补充</button>
+    </form>}
+  </div>;
+}
+
 function ReadingSection<T>({ title, note, empty, state, retry, children }: {
   title: string; note: string; empty: string; state: MemorySection<T>; retry: () => void; children: ReactNode;
 }) {
@@ -135,7 +169,7 @@ function ReadingSection<T>({ title, note, empty, state, retry, children }: {
       <button className="button" disabled={state.phase === 'loading'} onClick={retry} aria-label={`重新读取${title}`}>刷新</button></header>
     {(state.phase === 'loading' || state.phase === 'idle') && <p className="memory-section-note" role="status">正在读取{title}…</p>}
     {state.phase === 'error' && <p className="memory-section-note" role="alert">{title}读取失败，请重试。</p>}
-    {state.phase === 'ready' && (state.items.length === 0 ? <p className="memory-section-note">{empty}</p> : children)}
+    {state.phase === 'ready' && (<>{state.items.length === 0 && <p className="memory-section-note">{empty}</p>}{children}</>)}
   </section>;
 }
 
@@ -156,10 +190,13 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
         <p className="memory-scope-note">当前联系人：{contact.displayName}。记忆只展示当前有效资料；旧版本、过期或尚未生效的记忆不在此列表。</p>
         <ReadingSection title="联系人记忆" note="自动采纳不代表用户确认；手动采纳可能来自录入、确认候选或修正。" empty="这位联系人暂无当前有效记忆。"
           state={state.contact} retry={() => void memory.refresh('contact')}>
-          <div className="memory-cards">{state.contact.items.map((entry) => <MemoryCard key={entry.memoryId} content={entry} memory={entry} sources={state.sources} />)}</div>
+          <AdditionControl key={`contact:${state.scopeRevision}`} level="contact" phase={state.mutation.phase} add={memory.add} />
+          <div className="memory-cards">{state.contact.items.map((entry) => <MemoryCard key={entry.memoryId} content={entry} memory={entry} sources={state.sources}
+            correct={memory.correct} busy={state.mutation.phase === 'working'} />)}</div>
         </ReadingSection>
         <ReadingSection title="本人记忆" note="属于当前本人，可在与不同联系人的回复中共享使用。" empty="当前本人暂无有效记忆。"
           state={state.owner} retry={() => void memory.refresh('owner')}>
+          <AdditionControl key={`owner:${state.scopeRevision}`} level="owner" phase={state.mutation.phase} add={memory.add} />
           <div className="memory-cards">{state.owner.items.map((entry) => <MemoryCard key={entry.memoryId} content={entry} memory={entry} sources={state.sources}
             correct={memory.correct} busy={state.mutation.phase === 'working'} />)}</div>
         </ReadingSection>
