@@ -23,6 +23,7 @@ backend/build/
 backend/dist/
 .coverage
 .pytest_cache/
+/.venv/
 
 native/macos/.build/
 native/macos/build/
