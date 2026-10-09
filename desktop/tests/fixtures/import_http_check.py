@@ -2,9 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 import json
-import os
 from pathlib import Path
-import tempfile
 import time
 import unittest
 from uuid import uuid4
@@ -12,6 +10,7 @@ from uuid import uuid4
 import psycopg
 
 from import_backend import DesktopImportFixture
+from import_http_runner import run_import_http_suite
 
 
 class ImportSubmissionHttpCheck(DesktopImportFixture):
@@ -248,28 +247,8 @@ class ImportSubmissionHttpCheck(DesktopImportFixture):
 
 
 if __name__ == "__main__":
-    # 仅此无桌面入口自行隔离读取、写回及第三方边界；App 夹具由统一门禁准备。
-    with tempfile.TemporaryDirectory(prefix="notalone-import-http-") as directory:
-        current = Path(directory)
-        os.environ.update({
-            "NOTALONE_DISABLE_DOTENV": "1",
-            "NOTALONE_ENV_FILE": str(current / "synthetic.env"),
-            "NOTALONE_BACKEND_INFO": str(current / "backend.info"),
-            "NOTALONE_DATABASE_URL": "", "NOTALONE_OWNER_ID": "",
-            "NOTALONE_DEEPSEEK_API_KEY": "", "DEEPSEEK_API_KEY": "",
-            "LANGSMITH_TRACING": "false", "LANGCHAIN_TRACING_V2": "false",
-            "NOTALONE_DEEPSEEK_BASE_URL": "http://127.0.0.1:1",
-            "NOTALONE_WECHAT_CLI": str(current / "unavailable-cli"),
-            "NOTALONE_SYNC_PROBE": str(current / "unavailable-probe"),
-        })
-        result = unittest.TextTestRunner(verbosity=2).run(
-            unittest.defaultTestLoader.loadTestsFromTestCase(ImportSubmissionHttpCheck)
-        )
-        with psycopg.connect("host=/tmp dbname=postgres") as admin:
-            remaining = admin.execute(
-                "SELECT count(*) FROM pg_database WHERE datname = %s",
-                (ImportSubmissionHttpCheck.database_name,),
-            ).fetchone()[0]
-        print(f"本轮隔离数据库残留：{remaining}", flush=True)
-        if not result.wasSuccessful() or remaining:
-            raise SystemExit(1)
+    run_import_http_suite(
+        unittest.defaultTestLoader.loadTestsFromTestCase(ImportSubmissionHttpCheck),
+        ImportSubmissionHttpCheck,
+        directory_prefix="notalone-import-http-",
+    )

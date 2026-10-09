@@ -7,7 +7,8 @@ import { FixtureTransport, requestFixtureHttp } from './fixture-transport';
 
 const project = path.resolve('..');
 type Prepared = { database_name: string; database_url: string; owner_id: string; contact_ids: string[]; other_contact_id: string; file_path: string };
-type Operation = 'hold-extraction' | 'release-extraction' | 'fail-extraction' | 'hold-reply' | 'release-reply' | 'observations' | 'restart' | 'stop';
+type Operation = 'hold-extraction' | 'prepare-priority-import' | 'release-active-extraction' | 'observe-next-extraction'
+  | 'release-extraction' | 'fail-extraction' | 'hold-reply' | 'release-reply' | 'observations' | 'restart' | 'stop';
 
 export class ImportFixture {
   private readonly transport: FixtureTransport<Prepared>;

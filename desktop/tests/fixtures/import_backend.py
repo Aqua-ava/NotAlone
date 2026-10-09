@@ -11,6 +11,7 @@ import os
 import sys
 import threading
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -114,6 +115,34 @@ class DesktopImportFixture(CoreBusinessFlowFixture, unittest.TestCase):
         for gate in self.extraction_model.gates.values():
             gate.release.set()
 
+    def prepare_priority_import(self) -> Path:
+        """保留三批真实模型工作，避免回复到达前单批已经结束。"""
+        file_path = self.synthetic_file("synthetic-priority-import.jsonl")
+        rows = [json.loads(line) for line in file_path.read_text(encoding="utf-8").splitlines()]
+        for index in range(40):
+            row = dict(rows[0], text=f"合成资料第 {index + 1} 条。")
+            number = 200 + index
+            row["id"] = dict(row["id"], local_id=number, server_id_str=f"server-{number}")
+            row["create_time"] = rows[5]["create_time"] + 60 * (index + 1)
+            row["time_iso"] = datetime.fromtimestamp(row["create_time"], timezone.utc).isoformat()
+            rows.append(row)
+        file_path.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+                             encoding="utf-8")
+        # 三批提取加首批来源核验；只在外部模型边界阻塞，不读取调度器状态。
+        for index in range(4):
+            self.extraction_model.block_call(index)
+        return file_path
+
+    def release_active_extraction(self) -> None:
+        index = len(self.extraction_model.seen_calls) - 1
+        self.extraction_model.gates[index].release.set()
+
+    def observe_next_extraction(self) -> dict[str, object]:
+        index = len(self.extraction_model.seen_calls)
+        gate = self.extraction_model.gates[index]
+        return {"next_extraction_entered": gate.entered.wait(0.3),
+                "extraction_calls": len(self.extraction_model.seen_calls)}
+
     def synthetic_file(self, name: str = "synthetic-import.jsonl") -> Path:
         file_path = Path(self.temporary.name) / name
         fixture_path = Path(__file__).resolve().parents[3] / "backend/tests/fixtures/valid_single_contact.jsonl"
@@ -147,6 +176,13 @@ def main() -> None:
             if operation == "hold-extraction":
                 fixture.extraction_model.block_call(len(fixture.extraction_model.seen_calls))
                 result = {}
+            elif operation == "prepare-priority-import":
+                result = {"file_path": str(fixture.prepare_priority_import())}
+            elif operation == "release-active-extraction":
+                fixture.release_active_extraction()
+                result = {}
+            elif operation == "observe-next-extraction":
+                result = fixture.observe_next_extraction()
             elif operation == "release-extraction":
                 fixture.release_extraction()
                 result = {}

@@ -76,22 +76,41 @@ test('导入后台模型等待时小窗仍能发起当前已绑定联系人的�
   const opened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
   const helper = await opened;
-  await importBackend.command('hold-extraction');
+  const prepared = await importBackend.command('prepare-priority-import');
   await importBackend.command('hold-reply');
-  await confirmImport(app, importBackend.data.file_path);
+  await confirmImport(app, prepared.file_path as string);
   await manager.getByRole('button', { name: '正式导入这份资料', exact: true }).click();
   await expect.poll(async () => (await importBackend.command('observations')).extraction_entered).toBe(true);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('我会晚一点回复你。');
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
   await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
+  // 点击完成不证明 HTTP 已进入优先级等待；逐个释放已开始的模型调用，
+  // 直到真实回复模型进入。最多释放三次，始终留下至少一次后续模型工作。
+  for (let released = 0; released < 3; released++) {
+    const before = await importBackend.command('observations');
+    if (before.reply_entered) break;
+    await importBackend.command('release-active-extraction');
+    await expect.poll(async () => {
+      const observed = await importBackend.command('observations');
+      return observed.reply_entered || Number(observed.extraction_calls) > Number(before.extraction_calls);
+    }).toBe(true);
+  }
+  const active = await importBackend.command('observations');
+  expect(active.reply_entered).toBe(true);
+  expect(Number(active.extraction_calls)).toBeLessThan(4);
+  const receipt = await manager.evaluate(async () => (await window.notalone.imports.getState()).submission?.receipt);
+  if (!receipt) throw new Error('本轮公开导入收据尚未就绪。');
+  const imported = { contact_id: receipt.contactId, task_id: receipt.taskId };
   await importBackend.command('release-extraction');
-  await expect.poll(async () => (await importBackend.command('observations')).reply_entered).toBe(true);
-  const imported = await originalImport(importBackend);
+  expect(await importBackend.command('observe-next-extraction')).toEqual({
+    next_extraction_entered: false, extraction_calls: active.extraction_calls,
+  });
   expect((await importBackend.task(imported)).data.status).toBe('running');
-  expect((await importBackend.command('observations')).extraction_calls).toBe(1);
   await importBackend.command('release-reply');
   await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('我会晚一点回复你。');
+  await expect.poll(async () => (await importBackend.task(imported)).data.status, { timeout: 20_000 }).toBe('succeeded');
   const observations = await importBackend.command('observations');
+  expect(Number(observations.extraction_calls)).toBeGreaterThan(Number(active.extraction_calls));
   expect(JSON.stringify(observations.reply_outbound)).not.toContain('茉莉茶');
   expect((observations.tool_names as string[]).some((name) => name.includes('send'))).toBe(false);
 });
