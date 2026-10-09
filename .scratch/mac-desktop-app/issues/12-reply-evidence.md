@@ -1,7 +1,7 @@
 # 12：候选依据与上下文核对
 
 Type: task
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: 09
 Spec: ../spec.md
@@ -28,3 +28,5 @@ Spec: ../spec.md
 ## Comments
 
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
+
+- 2026-10-09：接续批准的任务12，依据公开生成快照接口准备最小页面行为；当前运行资源由任务14独占，本任务先静态编写公开验收，不启动HTTP/PG或浏览器，不将未运行用例称为red/green。原生验收保持暂停。
