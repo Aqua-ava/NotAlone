@@ -74,4 +74,3 @@ export class ContactFixture {
     if (!exited()) throw new Error(failureMessage);
   }
 }
-
