@@ -1,7 +1,7 @@
 # 14：资料补充、修正与撤销
 
 Type: task
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: 13
 Spec: ../spec.md
@@ -31,3 +31,9 @@ Spec: ../spec.md
 
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
 - 2026-10-08：已核验本人资料的各后端层次与 schema 均没有修正接口或版本字段。用户明确批准补齐原子修正方案：manual 新版本保留来源、旧版退出检索，仅补最小后端操作与字段；现有业务库升级另行确认。实现仍待任务 13 完成后进入，验收接缝不变。
+- 2026-10-09：任务 13 已完成普通页面与真实隔离 HTTP/PG 验收，本任务领取至 `codex/mac-app-14-memory-editing`。遵循最新测试决定，仅使用真实隔离 HTTP/PG 与单实例非 Electron 无头 Chrome 的公开页面；原生 App、系统输入、剪贴板及真实渠道不在本轮范围。运行资源交接前仅准备本人原子修正的首个公开 HTTP 失败测试及合成场景，不启动后端、数据库或浏览器，不提前实现。
+- 2026-10-09：首片准备位于 `desktop/tests/fixtures/memory_editing_http_check.py` 与 `desktop/tests/memory-editing-page-scenarios.ts`，分别通过认证 HTTP 和公开页面控件核验本人新 manual 版本、旧版本引用、来源时间保留与当前列表更新。仅通过 Conda `NotAlone` 的 `py_compile`、桌面类型检查和 `git diff --check`；本轮 HTTP/PG/浏览器尚未运行，没有 red/green 结果。当前工作树复用集成树已有 `node_modules`，未安装或下载依赖；共享运行器和生产代码未改动。
+- 2026-10-09：运行资源正式交接后，首个真实 HTTP 测试先因本人 correct 缺失返回 `400 / memory_request_invalid` 得到 red；补齐 `037_owner_memory_versioning.sql` 及模型、端口、应用层、仓储与 HTTP 后，同一测试 1/1 green。一次事务创建新 ID 的 manual/revision 2、旧版引用并退出现行列表，保留直接来源和来源时间，新版有独立保存时间。测试适配使用官方 Python 3.12 `ProxyHandler({})` 禁代理、禁止重定向、固定自有 PID 和 `127.0.0.1` 握手，关闭全部三项 tracing；两轮均确认认证停读、子进程 exit 0、精确本轮测试库残留 0。迁移仅用于随机新库，未升级业务库、未启动浏览器或 App；其余验收继续推进。
+- 2026-10-09：真实 HTTP 追加核验：新版本 INSERT 的合成故障返回 `500 / memory_operation_failed`，旧版保持有效且故障解除后可再次修正；跨 owner 请求被拒绝，当前两位联系人及另一 owner 的资料保持；候选重复 confirm 返回同一旧 invalidated 版本、不恢复旧版也不产生第二份本人资料，新版 `source_candidate_id` 为空并经旧版引用回溯。回滚单片 1/1、隔离单片 1/1、最终重放及隔离组 2/2 通过，每次自有后端均认证停读、exit 0，精确本轮测试库残留 0。重放测试初次因新增方法插入位置错误出现 `NameError`，已修正；这是测试编写错误，不记录为业务 red。用户要求完整工作迁移到新会话，本任务停止继续启动测试或实现，仍 claimed、未勾验收、未评审；旧回复依据、完整相关回归与页面编辑仍未完成。
+- 2026-10-09：新会话恢复后补齐真实 HTTP 依据回归 1/1：沿用正式后端 command、PG 检索/持久化与 LangChain 流程，仅外部模型边界返回合成结果。修正后旧回复依据正文及时间快照完全保留，新生成引用新 manual 版本且不再引用旧 ID。测试初次字段误写 request_id，随后误假设上下文仅一条本人资料，均是测试断言错误，未记为产品 red。补充失效/过期/未生效/删除版本拒绝、同旧版并发修正仅一份新版本、迁移重复运行与只读待迁移诊断 3/3，以及直接来源正在删除时写入保护 1/1；来源夹具初次违反删除凭证约束，调整为合法 deleting 安排后通过。每轮均认证 stopped、exit 0、精确本轮库残留 0、cleanup_confirmed true；无浏览器或原生运行，仍未完成页面及评审。
+- 2026-10-09：合入任务 11 集成 tip `1c8825b` 后，本人修正公开页面首片实际 red 为缺少“修正资料”按钮；补齐仅管理页可调用的具名 correct、范围/版本检查、原子 HTTP 提交及当前列表重新核对，最小 `memory-editing-owner` 1/1 green（deadline 120、exit 0）。来源、manual、新版本、旧版引用及真实 HTTP 当前列表均由公开控件验收，typecheck 与 diff 检查通过。单实例无头 Chrome，quiet active/window 0、cleanupConfirmed true，两种租约 absent；原生 App 未运行，剩余 CRUD、迟到/失败回归及两轴评审仍未完成。
