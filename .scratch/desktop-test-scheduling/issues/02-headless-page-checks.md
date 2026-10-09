@@ -30,8 +30,8 @@ State: claimed
 
 ## Comments
 
-- 2026-10-09：最终最小验证：`npm test` 24/24（10 条无头 CLI＋14 条既有 App 调度门禁，均合成进程），`npm run typecheck`、`npm run build`、票据字段/DAG 与 diff 检查通过。同步现有租约 `.d.mts` 的可选 mode 声明；默认命令不启动浏览器或 Electron。候选待主 Agent Standards/Spec 双轴评审，未写 Answer 或 resolved。
-- 2026-10-09：主 Agent 候选前指出资源全局字段过宽及迟到断言未等待原公开操作完成。已收窄为全局只 PID/PPID、仅自有子树读取 RSS/进程名，浏览器退出后不观察旧 PID，收尾等待在途采样；迟到组通过真实具名生成 Promise 确认旧操作已完成后才检查切乙页面。相关改写组 1/1，通过 8 次 owned PID 观测为 active 0 / 屏上窗口 0 / policy prohibited；最新 RSS KiB Chrome 1,027,536 / Node 156,256 / Python 153,584。主 App 与 headless 租约均 absent；真实日志保存在本轮交接目录，未更新普通功能票或原生验收状态。
-- 2026-10-09：候选实现接通 `test:pages` 的两个最小真实页面组；contacts/memory/reply 的生产 handler/validator 与 preload 传输复用，Electron 来源与 helper 角色检查由生产 adapter 保留。headless 固定角色只由 host 注册 page，未支持原生/业务入口明确拒绝。随机隔离 HTTP/PG、单 Chrome 两组 2/2 通过；有限 12 次只读 owned PID 观测 active/屏上窗口均为 0、策略 prohibited。RSS 峰值 KiB：Chrome 子树 1,034,880、页面控制器 Node 177,760、合成 Python 192,384；共享页可能重复计，构建/编译开销未计入，不代表永久上限或瞬时行为保证。正常收尾 lease absent。CLI red 揭示异步赋值覆盖截止码/收尾码，修复后最小 8/8 绿，最后安全回归待记录。原生与整票业务未由此完成；保持 claimed，等待主 Agent 两轴评审。
-- 2026-10-09：实现者在独立工作树认领。首先贯通联系人、关系资料与改写的真实页面接缝；全程只使用单个无头浏览器和合成隔离后端，不启动 Electron。
 - 2026-10-09：主 Agent 通过 read_thread 核对直接人类反馈及“可以”，先记录新的测试接缝和边界。只读环境确认 arm64、16 GiB 内存、约 39 GiB 空闲及现有 Chrome；这些不是浏览器资源实测或静默性证明。虚拟机方向已排除，原二十票 DAG 保留。
+- 2026-10-09：实现者在独立工作树认领。首先贯通联系人、关系资料与改写的真实页面接缝；全程只使用单个无头浏览器和合成隔离后端，不启动 Electron。
+- 2026-10-09：候选实现接通 `test:pages` 的两个最小真实页面组；contacts/memory/reply 的生产 handler/validator 与 preload 传输复用，Electron 来源与 helper 角色检查由生产 adapter 保留。headless 固定角色只由 host 注册 page，未支持原生/业务入口明确拒绝。随机隔离 HTTP/PG、单 Chrome 两组 2/2 通过；有限 12 次只读 owned PID 观测 active/屏上窗口均为 0、策略 prohibited。RSS 峰值 KiB：Chrome 子树 1,034,880、页面控制器 Node 177,760、合成 Python 192,384；共享页可能重复计，构建/编译开销未计入，不代表永久上限或瞬时行为保证。正常收尾 lease absent。CLI red 揭示异步赋值覆盖截止码/收尾码，修复后最小 8/8 绿，最后安全回归待记录。原生与整票业务未由此完成；保持 claimed，等待主 Agent 两轴评审。
+- 2026-10-09：主 Agent 候选前指出资源全局字段过宽及迟到断言未等待原公开操作完成。已收窄为全局只 PID/PPID、仅自有子树读取 RSS/进程名，浏览器退出后不观察旧 PID，收尾等待在途采样；迟到组通过真实具名生成 Promise 确认旧操作已完成后才检查切乙页面。相关改写组 1/1，通过 8 次 owned PID 观测为 active 0 / 屏上窗口 0 / policy prohibited；最新 RSS KiB Chrome 1,027,536 / Node 156,256 / Python 153,584。主 App 与 headless 租约均 absent；真实日志保存在本轮交接目录，未更新普通功能票或原生验收状态。
+- 2026-10-09：最终最小验证：`npm test` 24/24（10 条无头 CLI＋14 条既有 App 调度门禁，均合成进程），`npm run typecheck`、`npm run build`、票据字段/DAG 与 diff 检查通过。同步现有租约 `.d.mts` 的可选 mode 声明；默认命令不启动浏览器或 Electron。候选待主 Agent Standards/Spec 双轴评审，未写 Answer 或 resolved。
