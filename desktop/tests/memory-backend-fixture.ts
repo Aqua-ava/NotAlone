@@ -29,6 +29,7 @@ export class MemoryFixture extends ContactFixture {
     const token = /^token=([^\n]+)$/m.exec(info)?.[1];
     if (!address || !token) throw new Error('本轮资料后端握手未就绪。');
     const response = await fetch(`http://${address}${endpoint}`, {
+      signal: AbortSignal.timeout(5_000),
       method: body ? 'POST' : 'GET', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     });
