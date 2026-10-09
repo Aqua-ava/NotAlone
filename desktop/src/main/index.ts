@@ -57,7 +57,8 @@ void app.whenReady().then(async () => {
   const memory = installMemoryBridge(commands, backend, contacts);
   installBindingConsentBridge(commands, backend, contacts);
   installSyncControlBridge(commands, backend, contacts);
-  const replies = installReplyBridge(commands, backend, contacts);
+  const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
+  foreground.onStateChanged(() => replies.refreshGenerationEligibility());
   installSourceDeletionBridge(commands, backend, contacts, async (contactId) => {
     const checking = replies.revalidateDeletedSource(contactId);
     try { await memory.revalidateDeletedSource(contactId); }

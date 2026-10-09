@@ -7,7 +7,7 @@ import './rewrite.css';
 import { ReplyEvidence, useReplyEvidence } from './ReplyEvidence';
 
 export function useReplySession() {
-  const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null,
+  const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null, generationBlock: 'foreground-confirmation-required',
     options: { tone: 'original', instruction: '', includeRelationshipContext: false },
     mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null, direction: '',
     messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
@@ -52,7 +52,7 @@ export function RewriteInput({ contacts, replies }: { contacts: ContactSessionVi
   return <>
     <div className="ime-input"><HelperDraft session={contacts} />
       <button className="generate-button" aria-label="生成候选" title="生成候选"
-        disabled={!enabled || !contacts.state.draft.trim() || replies.state.phase === 'waiting'}
+        disabled={!enabled || !contacts.state.draft.trim() || replies.state.phase === 'waiting' || Boolean(replies.state.generationBlock)}
         onClick={() => void replies.generate()}><Icon name="sparkle" size={18} /></button></div>
     <div className="rewrite-options">
       <label>本次语气<select aria-label="本次语气" value={options.tone} disabled={!enabled}
@@ -67,8 +67,8 @@ export function RewriteInput({ contacts, replies }: { contacts: ContactSessionVi
     </div>
     <p className="rewrite-privacy">{options.includeRelationshipContext ? '本次允许使用这位联系人的近期消息和相关资料。' : '默认只处理草稿，不读取关系历史。'} 语气和要求只作用于本次生成。</p>
     <div className="rewrite-retry">
-      {replies.state.canRetry && <button disabled={replies.state.phase === 'waiting'} onClick={() => void replies.generate()}>重试同一次生成</button>}
-      {replies.state.result && <button disabled={!contacts.state.draft.trim() || replies.state.phase === 'waiting'} onClick={() => void replies.generate(true)}>重新生成</button>}
+      {replies.state.canRetry && <button disabled={replies.state.phase === 'waiting' || Boolean(replies.state.generationBlock)} onClick={() => void replies.generate()}>重试同一次生成</button>}
+      {replies.state.result && <button disabled={!contacts.state.draft.trim() || replies.state.phase === 'waiting' || Boolean(replies.state.generationBlock)} onClick={() => void replies.generate(true)}>重新生成</button>}
     </div>
   </>;
 }

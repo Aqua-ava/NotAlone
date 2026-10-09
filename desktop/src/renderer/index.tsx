@@ -38,14 +38,14 @@ function App() {
   return helper ? <main className="ime-pane">
     <header className="ime-header">
       <img className="ime-logo" src={logo} alt="NotAlone" />
-      <HelperContactPicker session={contactSession} />
+      <HelperContactPicker session={contactSession} foreground={foreground} />
       <ReplyModePicker replies={replies} enabled={Boolean(contactSession.state.selectedContactId)} />
       <button className="icon-button" aria-label="打开管理后台" title="打开管理后台"
         onClick={() => void operate(window.notalone.openManager)}><Icon name="contacts" size={16} /></button>
       <button className="icon-button" aria-label="隐藏输入小窗" title="隐藏输入小窗"
         onClick={() => void operate(window.notalone.hideWindow)}><Icon name="close" size={16} /></button>
     </header>
-    <ForegroundPanel state={foreground} />
+    <ForegroundPanel state={foreground} session={contactSession} />
     {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} /> : <DirectedReplyInput replies={replies} />}
     {replies.state.messageNotice.phase === 'connected' && <p role="status">{replies.state.messageNotice.needsRefresh
       ? '消息提醒已恢复，期间可能有遗漏，请主动刷新消息核对。生成依据仍是原快照。' : replies.state.messageNotice.changed

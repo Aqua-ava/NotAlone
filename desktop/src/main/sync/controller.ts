@@ -1,11 +1,11 @@
-import type { SyncControlState, SyncSwitchRequest } from '../../shared/sync-control-bridge';
+import type { SyncControlState, SyncControlRequest } from '../../shared/sync-control-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
-import { readSyncStatus, setSyncEnabled } from './status';
+import { readSyncStatus, setSyncEnabled, controlBackfill } from './status';
 
 type Scope = { generation: number; scopeRevision: number };
-type Operation = 'refresh' | 'enable' | 'disable';
+type Operation = 'refresh' | 'enable' | 'disable' | 'pause' | 'retry';
 
 export class SyncControlController {
   private state: SyncControlState = { revision: 0, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
@@ -42,15 +42,22 @@ export class SyncControlController {
     if (!this.scope || this.pending) return;
     await this.perform('refresh', this.scope);
   }
-  enable(request: SyncSwitchRequest): Promise<void> { return this.switch(request, 'enable'); }
-  disable(request: SyncSwitchRequest): Promise<void> { return this.switch(request, 'disable'); }
-  private async switch(request: SyncSwitchRequest, operation: 'enable' | 'disable'): Promise<void> {
+  enable(request: SyncControlRequest): Promise<void> { return this.control(request, 'enable'); }
+  disable(request: SyncControlRequest): Promise<void> { return this.control(request, 'disable'); }
+  pause(request: SyncControlRequest): Promise<void> { return this.control(request, 'pause'); }
+  retry(request: SyncControlRequest): Promise<void> { return this.control(request, 'retry'); }
+  private async control(request: SyncControlRequest, operation: Exclude<Operation, 'refresh'>): Promise<void> {
     this.synchronizeScope();
     if (!this.scope || this.pending || this.state.phase !== 'ready' || !this.state.report
       || request.scopeRevision !== this.state.scopeRevision) throw new Error('本次同步范围已失效，请刷新状态后重试。');
+    if (operation === 'pause' || operation === 'retry') {
+      const phases = operation === 'pause' ? ['gap_detected', 'backfilling', 'incomplete'] : ['paused', 'failed', 'incomplete'];
+      if (!this.state.report.enabled || !phases.includes(this.state.report.backfill.phase)) throw new Error('当前补齐状态不支持本次操作。');
+    }
     await this.perform(operation, this.scope);
   }
   private async perform(operation: Operation, scope: Scope): Promise<void> {
+    const enabledBefore = this.state.report?.enabled;
     const epoch = ++this.epoch;
     const pending = new AbortController();
     this.pending = pending;
@@ -60,9 +67,11 @@ export class SyncControlController {
     this.publish({ phase: 'loading', report: null, busy: operation === 'refresh' ? null : operation, errorCode: null });
     try {
       const result = operation === 'refresh' ? await readSyncStatus(this.backend, pending.signal)
-        : await setSyncEnabled(this.backend, operation === 'enable', pending.signal);
+        : operation === 'enable' || operation === 'disable' ? await setSyncEnabled(this.backend, operation === 'enable', pending.signal)
+        : await controlBackfill(this.backend, operation, pending.signal);
       if (!current() || result.generation !== scope.generation) return;
-      if (operation !== 'refresh' && result.report.enabled !== (operation === 'enable')) throw new Error('同步结果未确认。');
+      if ((operation === 'enable' || operation === 'disable') && result.report.enabled !== (operation === 'enable')) throw new Error('同步结果未确认。');
+      if ((operation === 'pause' || operation === 'retry') && result.report.enabled !== enabledBefore) throw new Error('同步结果未确认。');
       this.publish({ phase: 'ready', report: result.report });
     } catch (error) {
       if (!current()) return;

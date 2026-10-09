@@ -1,7 +1,7 @@
 import { isUuid } from '../uuid';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import { noArguments, type PageCommands } from '../page-commands';
-import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyDirectionUpdate, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, RewriteOptions, RewriteOptionsUpdate } from '../../shared/reply-bridge';
+import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, RewriteOptions, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { ReplySession } from './session';
@@ -35,8 +35,9 @@ function options(args: unknown[]): RewriteOptionsUpdate {
   return { contactId: value.contactId as string, scopeRevision: value.scopeRevision as number, options: { ...settings } as unknown as RewriteOptions };
 }
 
-export function installReplyBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession): ReplySession {
-  const replies = new ReplySession(contacts, backend);
+export function installReplyBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession,
+  generationBlock?: () => ReplyGenerationBlock): ReplySession {
+  const replies = new ReplySession(contacts, backend, generationBlock);
   const evidence = new ReplyEvidenceSession(backend, replies);
   evidence.onStateChanged((state) => commands.publish('reply:evidence-changed', state));
   commands.handle('reply:get-evidence-state', (...args: unknown[]) => { noArguments(args); return evidence.getState(); }, 'helper');

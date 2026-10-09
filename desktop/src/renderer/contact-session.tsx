@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ForegroundState } from '../shared/foreground-bridge';
 import type { ContactSessionState } from '../shared/contact-session-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
 
@@ -20,6 +21,16 @@ export function useContactSession() {
     }
   }
 
+  async function confirmContact(contactId: string, foregroundRevision: number) {
+    const contactScopeRevision = latest.current.scopeRevision;
+    try {
+      receive(await window.notalone.foreground.confirm({ contactId, contactScopeRevision, foregroundRevision }));
+      if (active.current) setError('');
+    } catch {
+      if (active.current) setError('联系人确认已失效，请重新选择本次联系人。');
+    }
+  }
+
   async function setDraft(text: string) {
     const { selectedContactId, scopeRevision } = latest.current;
     if (!selectedContactId) return;
@@ -35,7 +46,7 @@ export function useContactSession() {
     catch { if (active.current) setError('联系人目录暂时无法刷新，请重试。'); }
   }
 
-  return { state, error, selectContact, setDraft, refreshContacts };
+  return { state, error, selectContact, confirmContact, setDraft, refreshContacts };
 }
 
 export type ContactSessionView = ReturnType<typeof useContactSession>;
@@ -45,10 +56,10 @@ export function CurrentContactLabel({ state }: { state: ContactSessionState }) {
   return <span className="current-contact">本次联系人：{selected?.displayName ?? '未确认'}</span>;
 }
 
-export function HelperContactPicker({ session }: { session: ContactSessionView }) {
+export function HelperContactPicker({ session, foreground }: { session: ContactSessionView; foreground?: ForegroundState }) {
   return <select className="contact-picker" aria-label="本次联系人"
-    value={session.state.selectedContactId ?? ''} disabled={session.state.contacts.length === 0}
-    onChange={(event) => void session.selectContact(event.target.value)}>
+    value={session.state.selectedContactId ?? ''} disabled={session.state.contacts.length === 0 || !foreground}
+    onChange={(event) => foreground && void session.confirmContact(event.target.value, foreground.foregroundRevision)}>
     <option value="" disabled>联系人未确认</option>
     {session.state.contacts.map((contact) => <option key={contact.contactId} value={contact.contactId}>{contact.displayName}</option>)}
   </select>;
