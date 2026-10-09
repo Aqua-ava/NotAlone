@@ -1,0 +1,913 @@
+{
+  "prototype": true,
+  "synthetic_only": true,
+  "skill_enabled": false,
+  "model": "ecnu-max",
+  "endpoint_host": "chat.ecnu.edu.cn",
+  "sdk_max_retries": 2,
+  "ledger_granularity": "application_invocation",
+  "versions": {
+    "langchain": "1.3.15",
+    "langgraph": "1.2.11",
+    "langchain-deepseek": "1.1.0"
+  },
+  "prompt": "你是中文聊天回应助手。输入全部为合成资料。\nevidence按时间顺序排列，kind=message的最后一项是待回应消息；此前message是前文。\n每条文字中的“我”指用户，“对方”指当前已确认联系人。只使用本次资料，不推断其他联系人。\n本任务是理解对方并提供可选回应方向。用户无需先告诉你方向；他尚未决定正是需要选项的原因。\ninterpretation仅简短说明对方这句话在前文中正在表达什么，并说明支持判断的具体内容。\n不要用“用户没说想怎么回”代替对方表达的解释。uncertainty只写无法由资料确定的事情。\n不能凭一句话断言深层动机、关系状态或确定心理。证据有倾向时可说明更可能的解释，\n证据不足时保留可能含义。不要把所有聊天都套成邀请。\n通常返回kind=directions和2至3个不同回应意愿，各有简短适用条件与有效evidence_ids。\n方向是供选择的可能性，不代表用户已经愿意。不要只给同一意思的语气变体。\n可以提出暂不回复，不捆绑用户未选择的承诺，不编造背景；无需强凑接受/拒绝三件套。\n只有缺少关键背景、连有意义的条件式方向都无法给出时才返回clarification，问一个具体背景问题。\n不能仅因用户意愿未定就追问“你想怎么回”。不生成实际候选正文，不替用户选择或发送。\nintent_summary记录用户希望获得方向建议且尚未选择。使用Result工具返回，\ndirections分支question为空，clarification分支directions为空，candidates始终为空。\n",
+  "prompt_variant": "focused",
+  "scenarios": [
+    {
+      "id": "capable_help",
+      "title": "你可真行：解决问题",
+      "mode": "respond",
+      "steps": [
+        {
+          "event": {
+            "user_text": "帮我看看怎么回。",
+            "source": "synthetic_user_input"
+          },
+          "input": {
+            "mode": "respond",
+            "confirmed_contact": "synthetic-contact-A",
+            "revision": 1,
+            "current_intent": "",
+            "event": {
+              "user_text": "帮我看看怎么回。",
+              "source": "synthetic_user_input"
+            },
+            "evidence": [
+              {
+                "id": "m1",
+                "text": "对方：表格一直打不开，下午还要交。",
+                "kind": "message"
+              },
+              {
+                "id": "m2",
+                "text": "我：修好了，刚发给你，你试试。",
+                "kind": "message"
+              },
+              {
+                "id": "m3",
+                "text": "对方：打开了，数据也都在。",
+                "kind": "message"
+              },
+              {
+                "id": "m4",
+                "text": "对方：你可真行",
+                "kind": "message"
+              },
+              {
+                "id": "u1",
+                "text": "帮我看看怎么回。",
+                "kind": "user_input"
+              }
+            ],
+            "prior_result": null
+          },
+          "expected_kind": "directions",
+          "call_id": 1,
+          "result": {
+            "kind": "directions",
+            "interpretation": "对方在确认表格已经打开、数据都在之后说了“你可真行”，紧接在问题解决之后，更像是对这次帮忙的一个简短收尾式回应；但由于只有这一句、没有更多上下文，具体是称赞、调侃还是略带反讽的语气无法确定。",
+            "uncertainty": "无法从资料确定对方的语气是真心称赞、玩笑调侃还是反话，也无法确定双方平时的相处风格和亲密程度。",
+            "intent_summary": "用户希望获得针对对方“你可真行”这句话的回应方向建议，尚未选择具体方向。",
+            "directions": [
+              {
+                "id": "d1",
+                "label": "顺着收下这句话，把事情收尾",
+                "reason": "如果倾向于把这话当作夸奖，可以轻松应下并顺带确认对方交表是否来得及，回应焦点仍在刚解决的问题上。",
+                "evidence_ids": [
+                  "m1",
+                  "m2",
+                  "m3",
+                  "m4"
+                ]
+              },
+              {
+                "id": "d2",
+                "label": "用玩笑口气回一句，不正面接夸奖",
+                "reason": "如果觉得对方语气偏调侃，可以用半开玩笑的方式回应，避免显得太当真，适合平时说话比较松弛的情况。",
+                "evidence_ids": [
+                  "m3",
+                  "m4"
+                ]
+              },
+              {
+                "id": "d3",
+                "label": "先不急着回，看对方是否继续",
+                "reason": "对方这句话本身像是收尾，若没有新信息，暂不回复也不会让对话中断，可以等对方接着说再决定。",
+                "evidence_ids": [
+                  "m3",
+                  "m4"
+                ]
+              }
+            ],
+            "question": "",
+            "candidates": []
+          },
+          "failures": [],
+          "latency_ms": 6182
+        }
+      ]
+    },
+    {
+      "id": "capable_absent",
+      "title": "你可真行：爽约",
+      "mode": "respond",
+      "steps": [
+        {
+          "event": {
+            "user_text": "帮我看看怎么回。",
+            "source": "synthetic_user_input"
+          },
+          "input": {
+            "mode": "respond",
+            "confirmed_contact": "synthetic-contact-A",
+            "revision": 1,
+            "current_intent": "",
+            "event": {
+              "user_text": "帮我看看怎么回。",
+              "source": "synthetic_user_input"
+            },
+            "evidence": [
+              {
+                "id": "m1",
+                "text": "我：今晚七点我一定到。",
+                "kind": "message"
+              },
+              {
+                "id": "m2",
+                "text": "对方：已经八点了，你在哪？",
+                "kind": "message"
+              },
+              {
+                "id": "m3",
+                "text": "我：忘了告诉你，我跟别人吃饭去了，今晚不来了。",
+                "kind": "message"
+              },
+              {
+                "id": "m4",
+                "text": "对方：你可真行",
+                "kind": "message"
+              },
+              {
+                "id": "u1",
+                "text": "帮我看看怎么回。",
+                "kind": "user_input"
+              }
+            ],
+            "prior_result": null
+          },
+          "expected_kind": "directions",
+          "call_id": 2,
+          "result": {
+            "kind": "directions",
+            "interpretation": "对方发“你可真行”是在你承诺七点到、八点被问在哪、随后才说已和别人吃饭不来了之后作出的回应，语气带有不满和讽刺（m1-m4），并非在提出新的邀请或问题。",
+            "uncertainty": "无法从资料确定对方是否愿意继续沟通、是否希望得到道歉，以及你们之间的联系是否涉及后续安排。",
+            "intent_summary": "用户想获得如何回应对方“你可真行”的方向建议，尚未选择具体立场。",
+            "directions": [
+              {
+                "id": "d1",
+                "label": "先道歉认错，回应自己失约且没及时说",
+                "reason": "适用于用户意识到自己有错、想让对方知道这不是敷衍；因为m1-m4显示对方不满的直接原因是失约和事后才告知。",
+                "evidence_ids": [
+                  "m1",
+                  "m2",
+                  "m4"
+                ]
+              },
+              {
+                "id": "d2",
+                "label": "接住对方的讽刺，简洁承认但不展开解释",
+                "reason": "适用于用户不想长篇辩解、只承认对方有理由不满；m4的讽刺语气下，简答可避免再次触发争执。",
+                "evidence_ids": [
+                  "m3",
+                  "m4"
+                ]
+              },
+              {
+                "id": "d3",
+                "label": "暂不回复，等情绪过去或想清楚再回应",
+                "reason": "适用于用户当下没有想好怎么说、也不想仓促再补一句；现有资料只显示对方一句不满，没有要求立刻答复（m4）。",
+                "evidence_ids": [
+                  "m4"
+                ]
+              }
+            ],
+            "question": "",
+            "candidates": []
+          },
+          "failures": [],
+          "latency_ms": 7854
+        }
+      ]
+    },
+    {
+      "id": "capable_unknown",
+      "title": "你可真行：没有前文",
+      "mode": "respond",
+      "steps": [
+        {
+          "event": {
+            "user_text": "帮我看看怎么回。",
+            "source": "synthetic_user_input"
+          },
+          "input": {
+            "mode": "respond",
+            "confirmed_contact": "synthetic-contact-A",
+            "revision": 1,
+            "current_intent": "",
+            "event": {
+              "user_text": "帮我看看怎么回。",
+              "source": "synthetic_user_input"
+            },
+            "evidence": [
+              {
+                "id": "m1",
+                "text": "对方：你可真行",
+                "kind": "message"
+              },
+              {
+                "id": "u1",
+                "text": "帮我看看怎么回。",
+                "kind": "user_input"
+              }
+            ],
+            "prior_result": null
+          },
+          "expected_kind": "directions",
+          "call_id": 3,
+          "result": {
+            "kind": "directions",
+            "interpretation": "对方只发了一句“你可真行”，没有说明具体指什么事。这句在中文里既可能表示真心的夸赞/佩服，也常带反讽意味（指对方做了让人无语、不满的事），还可能只是调侃性质的玩笑。因此目前只能确定对方在对你（或你刚做的某件事）做出一种带情绪的简短评价，具体是褒是贬无法从资料判断。",
+            "uncertainty": "不知道“你可真行”指向的具体事由（你说过或做过什么）、你们平时的玩笑尺度、以及这句话前后的语境（比如是否刚发生争执或刚帮了忙），因此无法确定对方是夸赞、反讽还是调侃。",
+            "intent_summary": "用户希望获得如何回复对方的可选方向建议，尚未选定任何方向。",
+            "directions": [
+              {
+                "id": "d1",
+                "label": "先弄清对方指的是哪件事",
+                "reason": "适合你也不确定这句是夸还是损的情况：以轻描淡写的疑问请对方点明所指，避免在误判褒贬的基础上作答。",
+                "evidence_ids": [
+                  "m1"
+                ]
+              },
+              {
+                "id": "d2",
+                "label": "按玩笑/调侃来接",
+                "reason": "适合你们平时说话随意、对方这句话更像打趣的情况：顺着轻松氛围回应，不深究褒贬。",
+                "evidence_ids": [
+                  "m1"
+                ]
+              },
+              {
+                "id": "d3",
+                "label": "暂不回复，等对方补充",
+                "reason": "适合你自己也没想好、或觉得对方话没说完的情况：把球留在对方那边，看ta是否继续说明。",
+                "evidence_ids": [
+                  "m1"
+                ]
+              }
+            ],
+            "question": "",
+            "candidates": []
+          },
+          "failures": [],
+          "latency_ms": 6560
+        }
+      ]
+    },
+    {
+      "id": "capable_irrelevant",
+      "title": "你可真行：解决问题加无关前文",
+      "mode": "respond",
+      "steps": [
+        {
+          "event": {
+            "user_text": "帮我看看怎么回。",
+            "source": "synthetic_user_input"
+          },
+          "input": {
+            "mode": "respond",
+            "confirmed_contact": "synthetic-contact-A",
+            "revision": 1,
+            "current_intent": "",
+            "event": {
+              "user_text": "帮我看看怎么回。",
+              "source": "synthetic_user_input"
+            },
+            "evidence": [
+              {
+                "id": "m1",
+                "text": "对方：中午吃了面。",
+                "kind": "message"
+              },
+              {
+                "id": "m2",
+                "text": "对方：表格一直打不开，下午还要交。",
+                "kind": "message"
+              },
+              {
+                "id": "m3",
+                "text": "我：修好了，刚发给你，你试试。",
+                "kind": "message"
+              },
+              {
+                "id": "m4",
+                "text": "对方：打开了，数据也都在。",
+                "kind": "message"
+              },
+              {
+                "id": "m5",
+                "text": "对方：你可真行",
+                "kind": "message"
+              },
+              {
+                "id": "u1",
+                "text": "帮我看看怎么回。",
+                "kind": "user_input"
+              }
+            ],
+            "prior_result": null
+          },
+          "expected_kind": "directions",
+          "call_id": 4,
+          "result": {
+            "kind": "directions",
+            "interpretation": "对方在确认表格已打开、数据也都在之后说“你可真行”，是对用户刚才“修好了，刚发给你”这一帮忙行为的评价性回应，语气偏向肯定/称赞（也可能是半开玩笑的感慨）。",
+            "uncertainty": "“你可真行”具体是真心称赞还是带调侃意味，资料里无法确定；双方平时说话风格、关系亲疏也无从判断。",
+            "intent_summary": "用户希望获得对“你可真行”这句话的回应方向建议，尚未选择具体方向。",
+            "directions": [
+              {
+                "id": "d1",
+                "label": "轻松接下称赞，顺势把话题往前推",
+                "reason": "如果用户认为对方是在真心夸，接住并带向提交表格等后续，互动更自然。",
+                "evidence_ids": [
+                  "m2",
+                  "m3",
+                  "m4",
+                  "m5"
+                ]
+              },
+              {
+                "id": "d2",
+                "label": "以玩笑口吻回应，承接可能的调侃意味",
+                "reason": "如果用户感觉“你可真行”带点打趣成分，用轻松玩笑回应更贴合语气。",
+                "evidence_ids": [
+                  "m4",
+                  "m5"
+                ]
+              },
+              {
+                "id": "d3",
+                "label": "先不回复，观察对方是否还有下文",
+                "reason": "如果用户不确定对方是收尾还是想继续聊，暂缓可以避免给出不合语气的回应。",
+                "evidence_ids": [
+                  "m5"
+                ]
+              }
+            ],
+            "question": "",
+            "candidates": []
+          },
+          "failures": [],
+          "latency_ms": 2278
+        }
+      ]
+    },
+    {
+      "id": "no_need_solved",
+      "title": "不用了：已经解决",
+      "mode": "respond",
+      "steps": [
+        {
+          "event": {
+            "user_text": "帮我看看怎么回。",
+            "source": "synthetic_user_input"
+          },
+          "input": {
+            "mode": "respond",
+            "confirmed_contact": "synthetic-contact-A",
+            "revision": 1,
+            "current_intent": "",
+            "event": {
+              "user_text": "帮我看看怎么回。",
+              "source": "synthetic_user_input"
+            },
+            "evidence": [
+              {
+                "id": "m1",
+                "text": "对方：文件找不到了，能帮我找找吗？",
+                "kind": "message"
+              },
+              {
+                "id": "m2",
+                "text": "对方：我在备份里找到了。",
+                "kind": "message"
+              },
+              {
+                "id": "m3",
+                "text": "我：那还要我帮忙吗？",
+                "kind": "message"
+              },
+              {
+                "id": "m4",
+                "text": "对方：不用了",
+                "kind": "message"
+              },
+              {
+                "id": "u1",
+                "text": "帮我看看怎么回。",
+                "kind": "user_input"
+              }
+            ],
+            "prior_result": null
+          },
+          "expected_kind": "directions",
+          "call_id": 5,
+          "result": {
+            "kind": "directions",
+            "interpretation": "对方在 m1 请求帮忙找文件，m2 说明已在备份中找到，m4 对“还要我帮忙吗”回答“不用了”，即明确表示不需要用户继续介入这件事，属于对先前求助的收尾回应。",
+            "uncertainty": "无法确定对方是否希望此话题就此结束、是否还有后续需要，也无法确定双方关系与语气期待；资料未显示任何邀请或新话题。",
+            "intent_summary": "用户希望获得针对“不用了”的回应方向建议，尚未选择具体方向。",
+            "directions": [
+              {
+                "id": "d1",
+                "label": "简短收尾",
+                "reason": "对方已在 m2、m4 中表示问题自行解决且无需帮忙，简短回应符合“事情已结束”的语境，不额外延伸话题。",
+                "evidence_ids": [
+                  "m2",
+                  "m4"
+                ]
+              },
+              {
+                "id": "d2",
+                "label": "表示随时可再找",
+                "reason": "用户此前主动询问是否还需要帮忙（m3），若想在收尾同时保留一点支持姿态，可在接受“不用了”的前提下提一句之后再找也可以。",
+                "evidence_ids": [
+                  "m1",
+                  "m3",
+                  "m4"
+                ]
+              },
+              {
+                "id": "d3",
+                "label": "暂不回复",
+                "reason": "对方说“不用了”后对话已可自然结束，若用户没有想说的事项，不回复也符合当前语境。",
+                "evidence_ids": [
+                  "m4"
+                ]
+              }
+            ],
+            "question": "",
+            "candidates": []
+          },
+          "failures": [],
+          "latency_ms": 6023
+        }
+      ]
+    },
+    {
+      "id": "no_need_hurt",
+      "title": "不用了：求助被敷衍",
+      "mode": "respond",
+      "steps": [
+        {
+          "event": {
+            "user_text": "帮我看看怎么回。",
+            "source": "synthetic_user_input"
+          },
+          "input": {
+            "mode": "respond",
+            "confirmed_contact": "synthetic-contact-A",
+            "revision": 1,
+            "current_intent": "",
+            "event": {
+              "user_text": "帮我看看怎么回。",
+              "source": "synthetic_user_input"
+            },
+            "evidence": [
+              {
+                "id": "m1",
+                "text": "对方：我今天被裁员了，能听我说说吗？",
+                "kind": "message"
+              },
+              {
+                "id": "m2",
+                "text": "我：这有什么好说的，谁没倒霉过。",
+                "kind": "message"
+              },
+              {
+                "id": "m3",
+                "text": "对方：我只是想找个人说说。",
+                "kind": "message"
+              },
+              {
+                "id": "m4",
+                "text": "我：那你说吧。",
+                "kind": "message"
+              },
+              {
+                "id": "m5",
+                "text": "对方：不用了",
+                "kind": "message"
+              },
+              {
+                "id": "u1",
+                "text": "帮我看看怎么回。",
+                "kind": "user_input"
+              }
+            ],
+            "prior_result": null
+          },
+          "expected_kind": "directions",
+          "call_id": 6,
+          "result": {
+            "kind": "directions",
+            "interpretation": "对方先说被裁员、想找人倾诉（m1），被敷衍后又说明“只是想找个人说说”（m3），在得到“那你说吧”（m4）这句明显不情愿的回应后回了“不用了”（m5）——这更像是在收回倾诉意愿、情绪已经退回去，而不是真的没事了。支持判断的是m1、m3到m5的连续变化：请求被两次冷处理后，对方主动关闭了话题。",
+            "uncertainty": "无法确定对方现在是否还愿意继续谈这件事，也无法确定“不用了”是彻底不想说、还是等一个更真诚的态度；整体关系状态和对方当前情绪强度也无法从资料确定。",
+            "intent_summary": "用户希望获得对“不用了”的回应方向建议，尚未选择任何方向。",
+            "directions": [
+              {
+                "id": "d1",
+                "label": "承认之前态度不好，重新把话题打开",
+                "reason": "适用于用户确实愿意听、也想弥补前面敷衍的情况；先为“那你说吧”这种口气道个歉，再表示现在愿意认真听。",
+                "evidence_ids": [
+                  "m1",
+                  "m2",
+                  "m4",
+                  "m5"
+                ]
+              },
+              {
+                "id": "d2",
+                "label": "先关心对方当下的状态，不强推倾诉",
+                "reason": "适用于用户在意对方但不想再施压的情况；只表达关心、把“要不要说”交回对方，不追问细节。",
+                "evidence_ids": [
+                  "m1",
+                  "m3",
+                  "m5"
+                ]
+              },
+              {
+                "id": "d3",
+                "label": "暂不回复，等对方主动",
+                "reason": "适用于用户暂时不想接这个话头、或觉得自己再说什么都容易出错的情况；留出空间，之后再看对方是否重提。",
+                "evidence_ids": [
+                  "m3",
+                  "m4",
+                  "m5"
+                ]
+              }
+            ],
+            "question": "",
+            "candidates": []
+          },
+          "failures": [],
+          "latency_ms": 2678
+        }
+      ]
+    },
+    {
+      "id": "no_need_unknown",
+      "title": "不用了：没有前文",
+      "mode": "respond",
+      "steps": [
+        {
+          "event": {
+            "user_text": "帮我看看怎么回。",
+            "source": "synthetic_user_input"
+          },
+          "input": {
+            "mode": "respond",
+            "confirmed_contact": "synthetic-contact-A",
+            "revision": 1,
+            "current_intent": "",
+            "event": {
+              "user_text": "帮我看看怎么回。",
+              "source": "synthetic_user_input"
+            },
+            "evidence": [
+              {
+                "id": "m1",
+                "text": "对方：不用了",
+                "kind": "message"
+              },
+              {
+                "id": "u1",
+                "text": "帮我看看怎么回。",
+                "kind": "user_input"
+              }
+            ],
+            "prior_result": null
+          },
+          "expected_kind": "directions",
+          "call_id": 7,
+          "result": {
+            "kind": "directions",
+            "interpretation": "对方仅说了一句“不用了”，是在回应此前某个提议或帮助；从这句话本身只能看出对方表示不需要，无法确定是客气推辞还是明确拒绝。此前没有任何对方的消息作为上下文，所以能确定的只是“对方不打算接受某项东西/帮助”。",
+            "uncertainty": "不清楚对方是在回应什么具体提议（帮忙、约会、送东西、代劳等），也不知道用户此前说了什么、两人关系远近，因此无法判断“不用了”是客套、已经解决还是不愿继续这个话题。",
+            "intent_summary": "用户希望获得如何回应对方的可选方向，尚未选择具体方向。",
+            "directions": [
+              {
+                "id": "d1",
+                "label": "顺着对方，轻松收尾",
+                "reason": "把“不用了”当作已经明确的意思，简短回应后不再追问，适合想让对话自然结束、不给对方压力的情况。",
+                "evidence_ids": [
+                  "m1"
+                ]
+              },
+              {
+                "id": "d2",
+                "label": "保留余地，表示需要时再说",
+                "reason": "承认对方不需要，同时留一句“有需要随时说”，适合你仍愿意提供帮助但不想显得勉强的情况。",
+                "evidence_ids": [
+                  "m1"
+                ]
+              },
+              {
+                "id": "d3",
+                "label": "暂不回，先确认前文",
+                "reason": "在不知道对方拒绝的是什么之前，任何回应都容易对不上；先回看之前的提议内容再决定是否以及如何回复。",
+                "evidence_ids": [
+                  "m1",
+                  "u1"
+                ]
+              }
+            ],
+            "question": "",
+            "candidates": []
+          },
+          "failures": [],
+          "latency_ms": 3060
+        }
+      ]
+    },
+    {
+      "id": "busy_understanding",
+      "title": "你忙吧：体谅忙碌",
+      "mode": "respond",
+      "steps": [
+        {
+          "event": {
+            "user_text": "帮我看看怎么回。",
+            "source": "synthetic_user_input"
+          },
+          "input": {
+            "mode": "respond",
+            "confirmed_contact": "synthetic-contact-A",
+            "revision": 1,
+            "current_intent": "",
+            "event": {
+              "user_text": "帮我看看怎么回。",
+              "source": "synthetic_user_input"
+            },
+            "evidence": [
+              {
+                "id": "m1",
+                "text": "对方：现在能聊两句吗？",
+                "kind": "message"
+              },
+              {
+                "id": "m2",
+                "text": "我：我马上要做项目汇报，结束了再聊可以吗？",
+                "kind": "message"
+              },
+              {
+                "id": "m3",
+                "text": "对方：好，汇报加油。",
+                "kind": "message"
+              },
+              {
+                "id": "m4",
+                "text": "对方：你忙吧",
+                "kind": "message"
+              },
+              {
+                "id": "u1",
+                "text": "帮我看看怎么回。",
+                "kind": "user_input"
+              }
+            ],
+            "prior_result": null
+          },
+          "expected_kind": "directions",
+          "call_id": 8,
+          "result": {
+            "kind": "directions",
+            "interpretation": "对方先说“现在能聊两句吗”，在你说明要做项目汇报、结束后再聊之后，他回“好，汇报加油”表示接受并鼓励，随后又补了一句“你忙吧”（m1-m4）。这两句连在一起更像是把之前“等你忙完”的约定收尾、不再打扰，给你留出汇报空间；至于是否在暗示随后仍等你回来，资料中没有明确表示。",
+            "uncertainty": "无法确定对方是单纯收尾不再等你回复，还是仍期待你忙完后主动找他；也无法确定汇报已持续多久、现在是否已经忙完。",
+            "intent_summary": "用户尚未选择回应意愿，希望先获得可选方向建议以决定怎么回对方。",
+            "directions": [
+              {
+                "id": "d1",
+                "label": "先简短确认收到，说明稍后联系",
+                "reason": "承接对方“你忙吧”的不打扰表态，同时保留此前“结束了再聊”的约定，适合你还没有忙完、但不想让对话悬着的情形。",
+                "evidence_ids": [
+                  "m2",
+                  "m3",
+                  "m4"
+                ]
+              },
+              {
+                "id": "d2",
+                "label": "告知已忙完，主动把话题接回来",
+                "reason": "此前你提过“结束了再聊”，对方也接受并等待，若你现在已结束，这类方向可自然回接此前未展开的对话。",
+                "evidence_ids": [
+                  "m1",
+                  "m2",
+                  "m3"
+                ]
+              },
+              {
+                "id": "d3",
+                "label": "暂不回复，等自己方便时再说",
+                "reason": "对方已表示“你忙吧”，本身不构成必须立刻回应的要求，适合你暂时不想或不便展开的情况下先搁置。",
+                "evidence_ids": [
+                  "m3",
+                  "m4"
+                ]
+              }
+            ],
+            "question": "",
+            "candidates": []
+          },
+          "failures": [],
+          "latency_ms": 2946
+        }
+      ]
+    },
+    {
+      "id": "busy_withdraw",
+      "title": "你忙吧：可能不满",
+      "mode": "respond",
+      "steps": [
+        {
+          "event": {
+            "user_text": "帮我看看怎么回。",
+            "source": "synthetic_user_input"
+          },
+          "input": {
+            "mode": "respond",
+            "confirmed_contact": "synthetic-contact-A",
+            "revision": 1,
+            "current_intent": "",
+            "event": {
+              "user_text": "帮我看看怎么回。",
+              "source": "synthetic_user_input"
+            },
+            "evidence": [
+              {
+                "id": "m1",
+                "text": "对方：你说好今晚一起商量搬家的事。",
+                "kind": "message"
+              },
+              {
+                "id": "m2",
+                "text": "我：我还在打游戏。",
+                "kind": "message"
+              },
+              {
+                "id": "m3",
+                "text": "对方：我已经等了两个小时。",
+                "kind": "message"
+              },
+              {
+                "id": "m4",
+                "text": "我：再等会儿。",
+                "kind": "message"
+              },
+              {
+                "id": "m5",
+                "text": "对方：你忙吧",
+                "kind": "message"
+              },
+              {
+                "id": "u1",
+                "text": "帮我看看怎么回。",
+                "kind": "user_input"
+              }
+            ],
+            "prior_result": null
+          },
+          "expected_kind": "directions",
+          "call_id": 9,
+          "result": {
+            "kind": "directions",
+            "interpretation": "对方在整段前文里反复确认的是\"今晚一起商量搬家\"这件事：先说好今晚商量（m1），随后指出已经等了两个小时（m3），在你回\"再等会儿\"之后（m4），给出\"你忙吧\"（m5）。这句\"你忙吧\"表面是给对方让路，但承接的是\"约定未兑现＋长时间等待被搁置\"，更接近于一种带失落的收线或退缩，而不是真的在提出新的邀请或轻松道别。",
+            "uncertainty": "对方说\"你忙吧\"之后是否仍希望今晚继续商量、是否已经生气或只是暂时放下，资料无法确定；搬家这件事的紧迫程度和你打游戏的实际安排也不在资料中。",
+            "intent_summary": "用户希望获得对\"你忙吧\"这句话的回应方向建议，自己尚未选定怎么回。",
+            "directions": [
+              {
+                "id": "d1",
+                "label": "承认让对方久等，把商量重新约到具体时间",
+                "reason": "适合你确实还想谈搬家、且愿意先接住对方等待两小时这件事的情况；重点在于给出可兑现的时间而不是再次模糊拖延。",
+                "evidence_ids": [
+                  "m1",
+                  "m3",
+                  "m5"
+                ]
+              },
+              {
+                "id": "d2",
+                "label": "先为失约道歉，不急着推进话题",
+                "reason": "适合你意识到问题出在承诺没做到、想先修复这次的不愉快，把搬家商量留到对方愿意时再谈。",
+                "evidence_ids": [
+                  "m2",
+                  "m4",
+                  "m5"
+                ]
+              },
+              {
+                "id": "d3",
+                "label": "暂不回复，等自己退出游戏、想清楚安排后再回",
+                "reason": "适合你当前仍在游戏中、仓促回复只会再来一次空头承诺的情况；但对方已经等了很久，延迟本身有代价。",
+                "evidence_ids": [
+                  "m2",
+                  "m4",
+                  "m5"
+                ]
+              }
+            ],
+            "question": "",
+            "candidates": []
+          },
+          "failures": [],
+          "latency_ms": 2989
+        }
+      ]
+    },
+    {
+      "id": "busy_unknown",
+      "title": "你忙吧：没有前文",
+      "mode": "respond",
+      "steps": [
+        {
+          "event": {
+            "user_text": "帮我看看怎么回。",
+            "source": "synthetic_user_input"
+          },
+          "input": {
+            "mode": "respond",
+            "confirmed_contact": "synthetic-contact-A",
+            "revision": 1,
+            "current_intent": "",
+            "event": {
+              "user_text": "帮我看看怎么回。",
+              "source": "synthetic_user_input"
+            },
+            "evidence": [
+              {
+                "id": "m1",
+                "text": "对方：你忙吧",
+                "kind": "message"
+              },
+              {
+                "id": "u1",
+                "text": "帮我看看怎么回。",
+                "kind": "user_input"
+              }
+            ],
+            "prior_result": null
+          },
+          "expected_kind": "directions",
+          "call_id": 10,
+          "result": {
+            "kind": "directions",
+            "interpretation": "对方只留下一句“你忙吧”，句面是主动让对方结束当前交谈、把时间让出来；但仅凭这一句看不出是体谅、是失落还是想被挽留，也看不出前文在聊什么。",
+            "uncertainty": "无法确定此前聊天的内容、双方语气与关系亲疏，因此无法判断“你忙吧”更偏体谅、客气收尾还是带情绪的试探；也无法确定用户是否真的在忙、是否希望继续聊。",
+            "intent_summary": "用户希望获得针对对方“你忙吧”的回应方向建议，尚未选择具体方向，也未表明自己想继续聊还是结束对话。",
+            "directions": [
+              {
+                "id": "d1",
+                "label": "先结束这一轮、顺势收尾",
+                "reason": "如果用户此刻确实不想或不方便继续聊，顺着对方给的话头自然结束，不额外展开话题，以后需要时再开启。",
+                "evidence_ids": [
+                  "m1"
+                ]
+              },
+              {
+                "id": "d2",
+                "label": "回应并留出继续聊的口子",
+                "reason": "如果用户其实愿意继续，可以在承认对方体贴的同时说明自己仍有空或稍后能聊，把是否继续的选择交回对方。",
+                "evidence_ids": [
+                  "m1"
+                ]
+              },
+              {
+                "id": "d3",
+                "label": "先确认对方是不是有情绪或有事",
+                "reason": "如果担心“你忙吧”可能是对方有话说却被搁下、或带着不快的收尾，可以先不接“收尾”这层，转而问一句对方的状态。",
+                "evidence_ids": [
+                  "m1"
+                ]
+              }
+            ],
+            "question": "",
+            "candidates": []
+          },
+          "failures": [],
+          "latency_ms": 9462
+        }
+      ]
+    }
+  ],
+  "experiment": "context_directions_probe"
+}
