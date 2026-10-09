@@ -2,6 +2,11 @@ import { expect, type Page } from '@playwright/test';
 import type { SourceDeletionFixture } from './source-deletion-fixture';
 import type { MemoryHttpProxy } from './memory-http-proxy';
 
+async function confirmHelperContact(helper: Page) {
+  await helper.getByRole('button', { name: '确认本次联系人', exact: true }).click();
+  await expect(helper.getByText('本次联系人已由你确认。', { exact: true })).toBeVisible();
+}
+
 // 公共页面发起真实删除；最终证明来自原持久任务，不用来源标记或百分比替代。
 export async function sourceDeletionBasic(manager: Page, fixture: SourceDeletionFixture) {
   const contactId = fixture.data.contact_ids[0];
@@ -99,6 +104,7 @@ export async function sourceDeletionArguments(manager: Page, helper: Page, fixtu
 
 export async function sourceDeletionReplies(manager: Page, helper: Page, fixture: SourceDeletionFixture) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('说明本人喜欢合成绿茶。');
   await helper.getByRole('checkbox', { name: '结合关系语境', exact: true }).check();
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
@@ -136,6 +142,7 @@ export async function sourceDeletionCrossContact(manager: Page, helper: Page, fi
   await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
   await expect.poll(() => proxy.heldCount, { timeout: 1500 }).toBe(1);
   await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(fixture.data.contact_ids[1]);
+  await confirmHelperContact(helper);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('说明本人喜欢合成绿茶。');
   await helper.getByRole('checkbox', { name: '结合关系语境', exact: true }).check();
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
@@ -162,6 +169,7 @@ export async function sourceDeletionCrossContact(manager: Page, helper: Page, fi
 export async function sourceDeletionUnrelated(manager: Page, helper: Page, fixture: SourceDeletionFixture,
   proxy?: MemoryHttpProxy) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('仅改写这份合成草稿。');
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
   const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
@@ -239,6 +247,7 @@ export async function sourceDeletionMultiSource(manager: Page, fixture: SourceDe
 export async function sourceDeletionStaleRequest(manager: Page, helper: Page, fixture: SourceDeletionFixture,
   proxy: import('./source-deletion-proxy').SourceDeletionProxy) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper);
   const draft = helper.getByRole('textbox', { name: '草稿', exact: true });
   await draft.fill('旧请求的独立合成草稿。');
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
