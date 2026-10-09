@@ -81,7 +81,7 @@ export async function memoryNamedArguments(manager: Page, memoryBackend: MemoryF
     }));
   }, memoryBackend.data.other_contact_id);
   expect(rejected).toEqual([true, true, true, true, true, true]);
-  expect(await manager.evaluate(() => Object.keys(window.notalone.memory).sort())).toEqual(['getState', 'onStateChanged', 'refresh']);
+  expect(await manager.evaluate(() => Object.keys(window.notalone.memory).sort())).toEqual(['add', 'confirmCandidate', 'correct', 'discardCandidate', 'getState', 'onStateChanged', 'refresh', 'remove']);
   await expect(manager.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
   await expect(manager.getByText('另一用户的联系人资料。', { exact: true })).toHaveCount(0);
   expect(await manager.evaluate(async () => {

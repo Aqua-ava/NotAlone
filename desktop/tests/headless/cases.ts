@@ -40,7 +40,7 @@ export async function memoryReading(browser: Browser, origin: string) {
         }));
       }, fixture.data.other_contact_id);
       expect(denied).toEqual([true, true, true, true]);
-      expect(await manager.evaluate(() => Object.keys(window.notalone.memory).sort())).toEqual(['getState', 'onStateChanged', 'refresh']);
+      expect(await manager.evaluate(() => Object.keys(window.notalone.memory).sort())).toEqual(['add', 'confirmCandidate', 'correct', 'discardCandidate', 'getState', 'onStateChanged', 'refresh', 'remove']);
       expect(await manager.evaluate(async () => {
         const current = await window.notalone.contacts.getState();
         try { await window.notalone.replies.generate({ contactId: current.selectedContactId!, scopeRevision: current.scopeRevision, newRequest: true }); return false; }

@@ -213,3 +213,105 @@ export async function memoryMutationFailures(manager: Page, fixture: MemoryFixtu
   expect((after.data.memories as Array<Record<string, unknown>>).find((item) => item.text === '本人失败后修正为合成红茶。'))
     .toMatchObject({ adoption_method: 'manual', supersedes_memory_id: previous.memory_id, source_ids: previous.source_ids });
 }
+
+// 公开具名能力拒绝越界参数和助手页写操作，真实传输边界没有写请求。
+export async function memoryMutationArguments(manager: Page, helper: Page, fixture: MemoryFixture, proxy: import('./memory-http-proxy').MemoryHttpProxy) {
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  await expect(manager.getByText('本人喜欢合成绿茶。', { exact: true })).toBeVisible();
+  const snapshot = await fixture.readMemorySection(fixture.data.contact_ids[0], 'owner');
+  const pending = await fixture.readMemorySection(fixture.data.contact_ids[0], 'pending');
+  const owner = (snapshot.data.memories as Array<Record<string, unknown>>)[0];
+  const candidate = (pending.data.candidates as Array<Record<string, unknown>>)[0];
+  const input = { contactId: fixture.data.contact_ids[0], memoryId: owner.memory_id as string,
+    revision: owner.revision as number, candidateId: candidate.candidate_id as string, outside: fixture.data.other_contact_id };
+  const before = proxy.requests.length;
+  const rejected = await manager.evaluate(async (ids) => {
+    const scope = await window.notalone.contacts.getState();
+    const base = { contactId: ids.contactId, scopeRevision: scope.scopeRevision };
+    const addition = { ...base, level: 'owner', text: '不应保存的合成资料。', category: 'common_fact' };
+    const removal = { ...base, level: 'owner', memoryId: ids.memoryId, revision: ids.revision };
+    const correction = { ...removal, text: addition.text, category: addition.category };
+    const candidate = { ...base, candidateId: ids.candidateId };
+    const calls = [
+      ['add', { ...addition, ownerId: ids.outside }], ['add', { ...addition, contactId: ids.outside }],
+      ['add', { ...addition, scopeRevision: scope.scopeRevision - 1 }], ['add', { ...addition, level: 'shared' }],
+      ['correct', { ...correction, revision: 0 }], ['correct', { ...correction, url: '/api/anything' }],
+      ['remove', { ...removal, revision: ids.revision + 1 }], ['remove', { ...removal, role: 'manager' }],
+      ['confirmCandidate', { ...candidate, subject: 'self' }], ['discardCandidate', { ...candidate, candidateId: 'bad' }],
+    ] as const;
+    return Promise.all(calls.map(async ([name, request]) => {
+      try { await (window.notalone.memory[name] as unknown as (value: unknown) => Promise<void>)(request); return false; }
+      catch { return true; }
+    }));
+  }, input);
+  expect(rejected).toEqual(Array(10).fill(true));
+  const helperRejected = await helper.evaluate(async (ids) => {
+    const scope = await window.notalone.contacts.getState();
+    const base = { contactId: ids.contactId, scopeRevision: scope.scopeRevision };
+    const addition = { ...base, level: 'owner', text: '助手不应保存的合成资料。', category: 'common_fact' };
+    const removal = { ...base, level: 'owner', memoryId: ids.memoryId, revision: ids.revision };
+    const requests = [['add', addition], ['correct', { ...removal, text: addition.text, category: addition.category }],
+      ['remove', removal], ['confirmCandidate', { ...base, candidateId: ids.candidateId }],
+      ['discardCandidate', { ...base, candidateId: ids.candidateId }]] as const;
+    return Promise.all(requests.map(async ([name, request]) => {
+      try { await (window.notalone.memory[name] as unknown as (value: unknown) => Promise<void>)(request); return false; }
+      catch { return true; }
+    }));
+  }, input);
+  expect(helperRejected).toEqual(Array(5).fill(true));
+  expect(proxy.requests.slice(before).filter((item) => item.method === 'POST')).toEqual([]);
+  expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'owner')).toEqual(snapshot);
+  expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'pending')).toEqual(pending);
+}
+
+// 提交后的真实 GET 已完成但传输挂起；切换 scope 后不得发布旧操作结果。
+export async function memoryMutationStale(manager: Page, fixture: MemoryFixture, proxy: import('./memory-http-proxy').MemoryHttpProxy, reconnect: boolean, failure: boolean) {
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
+  await expect(contact.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
+  const before = await fixture.readMemorySection(fixture.data.contact_ids[0], 'contact');
+  const previous = (before.data.memories as Array<Record<string, unknown>>).find((item) => item.text === '甲喜欢合成茉莉茶。')!;
+  const text = '甲经迟到提交保存的合成资料。';
+  proxy.holdPath = `/api/contacts/${fixture.data.contact_ids[0]}/memories`;
+  // 具名公开写操作返回 Promise，用于明确等待旧操作结束；不访问 React/控制器私有状态。
+  const write = manager.evaluate(async ({ memoryId, revision, text }) => {
+    const scope = await window.notalone.contacts.getState();
+    await window.notalone.memory.correct({ contactId: scope.selectedContactId!, scopeRevision: scope.scopeRevision,
+      level: 'contact', memoryId, revision, text, category: 'preference' });
+  }, { memoryId: previous.memory_id as string, revision: previous.revision as number, text });
+  await expect.poll(() => proxy.heldCount).toBe(1);
+  proxy.holdPath = null;
+  const saved = await fixture.readMemorySection(fixture.data.contact_ids[0], 'contact');
+  expect((saved.data.memories as Array<Record<string, unknown>>).find((item) => item.text === text))
+    .toMatchObject({ supersedes_memory_id: previous.memory_id, adoption_method: 'manual' });
+  if (reconnect) {
+    proxy.failRuntimeStatus = true;
+    await expect(manager.getByRole('status').filter({ hasText: '尚未连接' })).toBeVisible();
+    await expect(manager.getByRole('region', { name: '资料范围未确认' })).toBeVisible();
+    proxy.failRuntimeStatus = false;
+    proxy.holdPath = null;
+    await manager.getByRole('button', { name: '重试连接', exact: true }).click();
+    await expect(manager.getByRole('combobox', { name: '资料联系人' })).toBeEnabled();
+    await manager.getByRole('combobox', { name: '资料联系人' }).selectOption(fixture.data.contact_ids[1]);
+  } else {
+    await manager.getByRole('combobox', { name: '资料联系人' }).selectOption(fixture.data.contact_ids[1]);
+  }
+  await expect(manager.getByText('乙喜欢合成乌龙茶。', { exact: true })).toBeVisible();
+  if (!reconnect) {
+    proxy.holdPath = null;
+    await manager.getByRole('combobox', { name: '资料联系人' }).selectOption(fixture.data.contact_ids[0]);
+    await expect(contact.getByText(text, { exact: true })).toBeVisible();
+  }
+  proxy.release(failure);
+  await write;
+  const state = await manager.evaluate(() => window.notalone.memory.getState());
+  expect(state.mutation).toEqual({ phase: 'idle', message: '' });
+  expect(state.contactId).toBe(fixture.data.contact_ids[reconnect ? 1 : 0]);
+  await expect(manager.getByText('资料操作已完成并重新核对。', { exact: true })).toHaveCount(0);
+  await expect(manager.getByText('未能完成资料操作与核对，请刷新确认后重试。', { exact: true })).toHaveCount(0);
+  await expect(contact.getByText(reconnect ? '乙喜欢合成乌龙茶。' : text, { exact: true })).toBeVisible();
+  if (reconnect) await expect(manager.getByText(text, { exact: true })).toHaveCount(0);
+  expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'contact')).toEqual(saved);
+}

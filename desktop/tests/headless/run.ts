@@ -8,7 +8,7 @@ import { draftRewriteAcceptance, draftRewriteSession } from './rewrite-acceptanc
 import { directedReply } from './directed-reply';
 import { replyEvidence } from './evidence-cases';
 import { memoryReadingFull, memoryStaleFull } from './memory-cases';
-import { memoryEditingFailures, memoryEditingCandidateDiscard, memoryEditingCandidateConfirmation, memoryEditingRemoval, memoryEditingContactCorrection, memoryEditingAddition, memoryEditingOwner } from './memory-editing';
+import { memoryEditingFull, memoryEditingStale, memoryEditingArguments, memoryEditingFailures, memoryEditingCandidateDiscard, memoryEditingCandidateConfirmation, memoryEditingRemoval, memoryEditingContactCorrection, memoryEditingAddition, memoryEditingOwner } from './memory-editing';
 import { pendingCleanup } from './cleanup';
 
 const execute = promisify(execFile);
@@ -16,7 +16,7 @@ if (!process.send || !/^[a-f0-9]{64}$/.test(process.env.NOTALONE_PAGE_RUN_NONCE 
   throw new Error('page_test_unapproved: 只能由 test:pages 的自有子进程执行。');
 }
 const cases = JSON.parse(process.env.NOTALONE_PAGE_CASES ?? 'null') as string[];
-if (!Array.isArray(cases) || !cases.length || cases.length > 2 || !cases.every((name) => ['memory-reading', 'memory-reading-full', 'memory-stale-full', 'draft-rewrite', 'draft-rewrite-acceptance', 'draft-rewrite-session', 'directed-reply', 'reply-evidence', 'memory-editing-owner', 'memory-editing-addition', 'memory-editing-contact-correction', 'memory-editing-removal', 'memory-editing-confirm', 'memory-editing-discard', 'memory-editing-failures'].includes(name))) {
+if (!Array.isArray(cases) || !cases.length || cases.length > 2 || !cases.every((name) => ['memory-reading', 'memory-reading-full', 'memory-stale-full', 'draft-rewrite', 'draft-rewrite-acceptance', 'draft-rewrite-session', 'directed-reply', 'reply-evidence', 'memory-editing-owner', 'memory-editing-addition', 'memory-editing-contact-correction', 'memory-editing-removal', 'memory-editing-confirm', 'memory-editing-discard', 'memory-editing-failures', 'memory-editing-arguments', 'memory-editing-stale', 'memory-editing-full'].includes(name))) {
   throw new Error('page_test_arguments: 页面范围不可核验。');
 }
 let browser: Browser | undefined;
@@ -80,7 +80,7 @@ try {
   for (const name of cases) {
     if (failed) throw new Error('page_test_interrupted: 本轮已停止。');
     process.stdout.write(`page_test_case: ${name}\n`);
-    await (name === 'reply-evidence' ? replyEvidence : name === 'directed-reply' ? directedReply : name === 'memory-editing-failures' ? memoryEditingFailures : name === 'memory-editing-discard' ? memoryEditingCandidateDiscard : name === 'memory-editing-confirm' ? memoryEditingCandidateConfirmation : name === 'memory-editing-removal' ? memoryEditingRemoval : name === 'memory-editing-contact-correction' ? memoryEditingContactCorrection : name === 'memory-editing-addition' ? memoryEditingAddition : name === 'memory-editing-owner' ? memoryEditingOwner : name === 'memory-reading' ? memoryReading : name === 'memory-reading-full' ? memoryReadingFull : name === 'memory-stale-full' ? memoryStaleFull
+    await (name === 'reply-evidence' ? replyEvidence : name === 'directed-reply' ? directedReply : name === 'memory-editing-full' ? memoryEditingFull : name === 'memory-editing-stale' ? memoryEditingStale : name === 'memory-editing-arguments' ? memoryEditingArguments : name === 'memory-editing-failures' ? memoryEditingFailures : name === 'memory-editing-discard' ? memoryEditingCandidateDiscard : name === 'memory-editing-confirm' ? memoryEditingCandidateConfirmation : name === 'memory-editing-removal' ? memoryEditingRemoval : name === 'memory-editing-contact-correction' ? memoryEditingContactCorrection : name === 'memory-editing-addition' ? memoryEditingAddition : name === 'memory-editing-owner' ? memoryEditingOwner : name === 'memory-reading' ? memoryReading : name === 'memory-reading-full' ? memoryReadingFull : name === 'memory-stale-full' ? memoryStaleFull
       : name === 'draft-rewrite-acceptance' ? draftRewriteAcceptance : name === 'draft-rewrite-session' ? draftRewriteSession : draftRewrite)(browser, assets.origin);
     completed.push(name);
     process.stdout.write(`page_test_passed: ${name}\n`);
