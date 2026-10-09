@@ -37,3 +37,9 @@ export async function syncBackfillRetry(browser: Browser, origin: string): Promi
 export async function syncArguments(browser: Browser, origin: string): Promise<void> {
   await withSyncPage(browser, origin, 'sync-arguments-preserve-stopped-scope', syncArgumentsPreserveStoppedScope);
 }
+
+export async function syncControlFull(browser: Browser, origin: string): Promise<void> {
+  await syncArguments(browser, origin);
+  await syncSwitch(browser, origin);
+  await syncBackfillRetry(browser, origin);
+}
