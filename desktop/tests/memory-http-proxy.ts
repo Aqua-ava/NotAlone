@@ -7,12 +7,14 @@ export class MemoryHttpProxy {
   holdPath: string | null = null;
   failRuntimeStatus = false;
   readonly failurePaths = new Set<string>();
+  readonly requests: Array<{ method: string; path: string }> = [];
   private readonly held: Array<(failure: boolean) => void> = [];
   private readonly pending = new Set<ReturnType<typeof httpRequest>>();
   get heldCount(): number { return this.held.length; }
 
   constructor(address: string) {
     this.server = createServer((incoming, response) => {
+      this.requests.push({ method: incoming.method ?? '', path: incoming.url ?? '' });
       if ((this.failRuntimeStatus && incoming.url === '/api/runtime/status') || this.failurePaths.has(incoming.url ?? '')) {
         response.writeHead(503, { 'Content-Type': 'application/json' });
         response.end('{"error":"synthetic_transport_unavailable"}'); return;
