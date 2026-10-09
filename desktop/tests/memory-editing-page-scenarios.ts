@@ -131,3 +131,31 @@ export async function memoryRemoval(manager: Page, fixture: MemoryFixture) {
   expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'pending')).toEqual(pending);
   expect(await fixture.readMemorySection(fixture.data.contact_ids[1], 'contact')).toEqual(other);
 }
+
+export async function memoryCandidateConfirmation(manager: Page, fixture: MemoryFixture) {
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  const pending = manager.getByRole('region', { name: '待确认候选', exact: true });
+  await expect(pending.getByText('待确认 · 不是已确认事实', { exact: true })).toHaveCount(3);
+  const before = await fixture.readMemorySection(fixture.data.contact_ids[0], 'pending');
+  const other = await fixture.readMemorySection(fixture.data.contact_ids[1], 'contact');
+  const sources = await fixture.readMemorySection(fixture.data.contact_ids[0], 'sources');
+  for (const item of before.data.candidates as Array<Record<string, unknown>>) {
+    await pending.getByRole('button', { name: `确认并保存：${item.text}`, exact: true }).click();
+    await expect(pending.getByText(item.text as string, { exact: true })).toHaveCount(0);
+    const region = manager.getByRole('region', { name: item.subject === 'self' ? '本人记忆' : '联系人记忆', exact: true });
+    const card = region.getByRole('article').filter({ has: manager.getByText(item.text as string, { exact: true }) });
+    await expect(card.getByText('手动采纳', { exact: true })).toBeVisible();
+    const actual = await fixture.readMemorySection(fixture.data.contact_ids[0], item.subject === 'self' ? 'owner' : 'contact');
+    expect(actual.status).toBe(200);
+    // 既有联系人 DTO 未公开来源候选 ID；核对本轮唯一正文和直接来源，本人 DTO 另核候选链。
+    const memory = (actual.data.memories as Array<Record<string, unknown>>).find((entry) =>
+      item.subject === 'self' ? entry.source_candidate_id === item.candidate_id : entry.text === item.text)!;
+    expect(memory).toMatchObject({ text: item.text, source_ids: item.source_ids, adoption_method: 'manual', status: 'active',
+      level: item.subject === 'self' ? 'owner' : 'contact' });
+  }
+  await expect(pending.getByText('这位联系人暂无待确认候选。', { exact: true })).toBeVisible();
+  expect((await fixture.readMemorySection(fixture.data.contact_ids[0], 'pending')).data.candidates).toEqual([]);
+  expect(await fixture.readMemorySection(fixture.data.contact_ids[1], 'contact')).toEqual(other);
+  expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'sources')).toEqual(sources);
+}

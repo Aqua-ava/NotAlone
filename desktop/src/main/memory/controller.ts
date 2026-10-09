@@ -1,4 +1,4 @@
-import type { MemoryAdditionRequest, MemoryCorrectionRequest, MemoryReadingState, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
+import type { MemoryAdditionRequest, MemoryCandidateRequest, MemoryCorrectionRequest, MemoryReadingState, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { activeMemories, memorySources, pendingCandidates } from './read';
@@ -79,6 +79,15 @@ export class MemoryReadingController {
     const path = request.level === 'owner' ? `/api/memories/owner/${request.memoryId}/delete`
       : `/api/contacts/${scope.contactId}/memories/${request.memoryId}/delete`;
     await this.writeAndRefresh(scope, path, {}, [request.level]);
+  }
+  async confirmCandidate(request: MemoryCandidateRequest): Promise<void> {
+    this.synchronizeScope();
+    const scope = this.scope;
+    const candidate = this.state.pending.items.find((item) => item.candidateId === request.candidateId);
+    if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision
+      || this.state.pending.phase !== 'ready' || !candidate || this.mutation) throw new Error('候选范围已失效，请刷新后再确认。');
+    await this.writeAndRefresh(scope, `/api/contacts/${scope.contactId}/memory-candidates/${request.candidateId}/confirm`,
+      {}, ['pending', candidate.subject === 'self' ? 'owner' : 'contact']);
   }
   private async writeAndRefresh(scope: Scope, path: string, body: unknown, sections: MemorySectionName[]): Promise<void> {
     const operation = { revision: ++this.operationRevision, abort: new AbortController() };

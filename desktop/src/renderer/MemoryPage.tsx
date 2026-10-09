@@ -80,8 +80,19 @@ function useMemoryReading(session: ContactSessionView) {
       }
     }
   }
+  async function confirmCandidate(entry: PendingMemoryCandidate) {
+    const { selectedContactId, scopeRevision } = scope.current;
+    if (!selectedContactId) return;
+    setError('');
+    try { await window.notalone.memory.confirmCandidate({ contactId: selectedContactId, scopeRevision, candidateId: entry.candidateId }); }
+    catch {
+      if (active.current && scope.current.selectedContactId === selectedContactId && scope.current.scopeRevision === scopeRevision) {
+        setError('候选范围已变化，请刷新后再确认。');
+      }
+    }
+  }
   const matches = state.contactId === session.state.selectedContactId && state.scopeRevision === session.state.scopeRevision;
-  return { state: matches ? state : initial, error, refresh, correct, add, remove };
+  return { state: matches ? state : initial, error, refresh, correct, add, remove, confirmCandidate };
 }
 
 // 时间展示统一注明 UTC+8；不把来源日期、保存日期或有效期互相替代。
@@ -106,9 +117,9 @@ function SourceReference({ id, sources }: { id: string; sources: MemorySection<M
       : sources.phase === 'loading' || sources.phase === 'idle' ? '来源目录尚未读取完成。' : '引用类型或来源详情暂不可用。'}</p>}</li>;
 }
 
-function MemoryCard({ content, memory, candidate, sources, correct, remove, busy }: {
+function MemoryCard({ content, memory, candidate, sources, correct, remove, confirmCandidate, busy }: {
   content: MemoryContent; memory?: ActiveMemory; candidate?: PendingMemoryCandidate; sources: MemorySection<MemorySource>;
-  correct?: (entry: ActiveMemory, text: string, category: MemoryCorrectionRequest['category']) => Promise<void>; remove?: (entry: ActiveMemory) => Promise<void>; busy?: boolean;
+  correct?: (entry: ActiveMemory, text: string, category: MemoryCorrectionRequest['category']) => Promise<void>; remove?: (entry: ActiveMemory) => Promise<void>; confirmCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; busy?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -143,6 +154,8 @@ function MemoryCard({ content, memory, candidate, sources, correct, remove, busy
       <button className="button" disabled={busy} onClick={() => void remove(memory)}>{memory.adoptionMethod === 'auto' ? '确认撤销' : '确认删除'}</button>
       <button className="button" disabled={busy} onClick={() => setRemoving(false)}>取消删除</button>
     </div>}
+    {candidate && confirmCandidate && <button className="button" disabled={busy}
+      aria-label={`确认并保存：${content.text}`} onClick={() => void confirmCandidate(candidate)}>确认并保存</button>}
     {expanded && <div className="memory-details">
       <p>来源聊天时间表示当时说过，不保证事件在当天发生。</p>
       <p>生效时间：{content.validAt ? timeText(content.validAt) : '未指定'}</p>
@@ -223,7 +236,8 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
         </ReadingSection>
         <ReadingSection title="待确认候选" note="仅来自当前联系人范围；本人、联系人与双方主体分别标明，未经确认不能当作确定事实。" empty="这位联系人暂无待确认候选。"
           state={state.pending} retry={() => void memory.refresh('pending')}>
-          <div className="memory-cards">{state.pending.items.map((entry) => <MemoryCard key={entry.candidateId} content={entry} candidate={entry} sources={state.sources} />)}</div>
+          <div className="memory-cards">{state.pending.items.map((entry) => <MemoryCard key={entry.candidateId} content={entry} candidate={entry} sources={state.sources}
+            confirmCandidate={memory.confirmCandidate} busy={state.mutation.phase === 'working'} />)}</div>
         </ReadingSection>
         <ReadingSection title="当前联系人来源" note="来源目录不能解析所有消息、观察或人工引用；无法核对的引用会保留未知说明。" empty="这位联系人暂无来源记录。"
           state={state.sources} retry={() => void memory.refresh('sources')}>
