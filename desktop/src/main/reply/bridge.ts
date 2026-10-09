@@ -1,10 +1,10 @@
+import { isUuid } from '../uuid';
 import { noArguments, type PageCommands } from '../page-commands';
 import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyDirectionUpdate, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, RewriteOptions, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { ReplySession } from './session';
 
-const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
 function fields(args: unknown[], keys: string[]): Record<string, unknown> {
   const value = args[0];
   if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)
@@ -12,13 +12,13 @@ function fields(args: unknown[], keys: string[]): Record<string, unknown> {
     throw new Error('本次表达操作不可用。');
   }
   const record = value as Record<string, unknown>;
-  if (!uuid(record.contactId) || typeof record.scopeRevision !== 'number'
+  if (!isUuid(record.contactId) || typeof record.scopeRevision !== 'number'
     || !Number.isSafeInteger(record.scopeRevision) || record.scopeRevision < 0) throw new Error('本次表达操作不可用。');
   return { ...record, contactId: record.contactId.toLowerCase() };
 }
 function candidate(args: unknown[], editing = false): ReplyCandidateSelection | ReplyCandidateEdit {
   const value = fields(args, ['contactId', 'scopeRevision', 'replyRequestId', 'candidateId', ...(editing ? ['text'] : [])]);
-  if (!uuid(value.replyRequestId) || !uuid(value.candidateId)
+  if (!isUuid(value.replyRequestId) || !isUuid(value.candidateId)
     || (editing && (typeof value.text !== 'string' || value.text.length > 65_536))) throw new Error('本次候选操作不可用。');
   return { ...value, replyRequestId: value.replyRequestId.toLowerCase(), candidateId: value.candidateId.toLowerCase() } as unknown as ReplyCandidateEdit;
 }
@@ -50,7 +50,7 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   }, 'helper');
   commands.handle('reply:select-message', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'messageId']);
-    if (!uuid(value.messageId)) throw new Error('待回复消息不可用。');
+    if (!isUuid(value.messageId)) throw new Error('待回复消息不可用。');
     return replies.selectMessage({ ...value, messageId: value.messageId.toLowerCase() } as unknown as ReplyMessageSelection);
   }, 'helper');
   commands.handle('reply:update-direction', (...args: unknown[]) => {
