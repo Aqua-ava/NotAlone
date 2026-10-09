@@ -2,7 +2,7 @@
 
 Type: task
 State: open
-Triage: ready-for-agent
+Triage: needs-info
 Blocked by: 03, 04, 10, 14, 15, 17, 18, 19
 Spec: ../spec.md
 
