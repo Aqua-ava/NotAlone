@@ -1,3 +1,4 @@
+import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { expect, type Browser } from '@playwright/test';
 import { withRewritePages } from './rewrite-acceptance';
 import type { RewritePages } from '../rewrite-page-scenarios';
@@ -30,6 +31,7 @@ async function withEvidencePages(browser: Browser, origin: string, use: (pages: 
 
 async function prepare(pages: RewritePages, contact: '甲' | '乙' = '甲', count = 1) {
   await pages.manager.getByRole('button', { name: `选择合成联系人${contact}`, exact: true }).click();
+  await confirmHelperContact(pages.helper, pages.rewriteBackend.data.contact_ids[contact === '甲' ? 0 : 1]);
   await pages.helper.getByRole('textbox', { name: '草稿', exact: true }).fill(`${contact}的原始生成输入。`);
   await pages.rewriteBackend.plan({ count, prefix: `${contact}的依据候选` });
   const regenerate = pages.helper.getByRole('button', { name: '重新生成', exact: true });
@@ -49,6 +51,7 @@ function loadPending(pages: RewritePages) {
 // 点击生产页面，经具名控制器读取真实 HTTP/PG 的生成快照；不读取 React 私有状态。
 async function draftEvidence({ manager, helper, rewriteBackend }: RewritePages) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('这是本次明确输入的合成草稿。');
   await rewriteBackend.plan({ count: 1, prefix: '依据验收候选' });
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
@@ -204,6 +207,7 @@ async function removedEvidence(pages: EvidencePages) {
 
 async function legacySnapshot(pages: EvidencePages) {
   await pages.manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(pages.helper, pages.rewriteBackend.data.contact_ids[0]);
   await pages.helper.getByRole('button', { name: '回复', exact: true }).click();
   await pages.helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
   await pages.helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('只说明现在可以回复。');

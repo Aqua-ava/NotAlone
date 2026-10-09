@@ -1,3 +1,4 @@
+import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { expect, type Browser } from '@playwright/test';
 import { PageHost } from './page-host';
 import { withControllerEnvironment, withMemoryBackend, withRewriteBackend } from './backend-fixture';
@@ -68,6 +69,7 @@ export async function draftRewrite(browser: Browser, origin: string) {
         const helper = await nextPage;
         await expect(helper.getByRole('button', { name: '生成候选', exact: true })).toBeDisabled();
         await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+        await confirmHelperContact(helper, fixture.data.contact_ids[0]);
         await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
         await fixture.plan({ count: 2 });
         await helper.getByRole('button', { name: '生成候选', exact: true }).click();

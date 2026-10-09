@@ -1,3 +1,4 @@
+import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { expect, type Browser, type Page } from '@playwright/test';
 import path from 'node:path';
 import { copyFile, mkdir } from 'node:fs/promises';
@@ -37,6 +38,7 @@ async function withEventPages(browser: Browser, origin: string, use: (pages: Eve
 }
 async function prepare({ manager, helper, fixture }: EventPages, contact: '甲' | '乙' = '甲') {
   await manager.getByRole('button', { name: `选择合成联系人${contact}`, exact: true }).click();
+  await confirmHelperContact(helper, fixture.data.contact_ids[contact === '甲' ? 0 : 1]);
   await helper.getByRole('button', { name: '回复', exact: true }).click();
   const target = helper.getByRole('radio', { name: new RegExp(`${contact}的原始合成消息`) });
   await target.click();
