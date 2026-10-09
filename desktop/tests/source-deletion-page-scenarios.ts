@@ -135,7 +135,7 @@ export async function sourceDeletionCrossContact(manager: Page, helper: Page, fi
   await panel.getByRole('button', { name: '删除来源', exact: true }).click();
   await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
   await expect.poll(() => proxy.heldCount, { timeout: 1500 }).toBe(1);
-  await manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
+  await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(fixture.data.contact_ids[1]);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('说明本人喜欢合成绿茶。');
   await helper.getByRole('checkbox', { name: '结合关系语境', exact: true }).check();
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
