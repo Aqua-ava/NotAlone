@@ -1,7 +1,7 @@
 # 19：新消息事件与编辑保护
 
 Type: task
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: 11, 12
 Spec: ../spec.md
@@ -28,3 +28,5 @@ Spec: ../spec.md
 ## Comments
 
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
+
+- 2026-10-09：接续19，先静态准备真实SSE公开页面red及认证回环传输方案；当前唯一运行权由root分配给其他票据，不启动PG/HTTP/browser/App。事件只提示当前已确认联系人上下文变化，主动刷新保留编辑，禁止自动生成及发送。保持claimed且无Answer。
