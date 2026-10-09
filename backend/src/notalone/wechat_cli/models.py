@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from notalone.source_processing.models import ProcessingRecord
+
 
 @dataclass(frozen=True, slots=True)
 class ChatCandidate:
@@ -37,7 +39,7 @@ class MessageIdentifier:
     server_id_str: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class CliMessageEvent:
     """通过 CLI tail 读取的一条 v1 文字消息事件。"""
 
@@ -50,9 +52,10 @@ class CliMessageEvent:
     create_time: int | None
     time: str | None
     time_iso: str | None
+    processing_record: ProcessingRecord | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class TailResult:
     """一次性 tail 读取结果和下一次读取所需的 cursor。
 
@@ -72,15 +75,17 @@ class TailResult:
     # 没有完整水位的空输出不能证明来源已经追到当前；后台补齐会将其
     # 标记为 incomplete，而不是把未知 freshness 当作完成。
     freshness_confirmed: bool = False
+    filtered_records: tuple[ProcessingRecord, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class TailFollowItem:
     """一次 ``tail --follow`` 输出的已校验增量事件。"""
 
     cursor: str
     local_id: int
     event: CliMessageEvent | None
+    processing_record: ProcessingRecord | None = None
 
 
 @dataclass(frozen=True, slots=True)

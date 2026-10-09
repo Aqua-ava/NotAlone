@@ -127,6 +127,7 @@ class TaskProgressUpdate:
     attempt_count: int
     retry_count: int
     error_code: str | None = None
+    failure_state_commit: str | None = None
 
     def as_payload(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -139,6 +140,8 @@ class TaskProgressUpdate:
         }
         if self.error_code is not None:
             payload["error_code"] = self.error_code
+        if self.failure_state_commit is not None:
+            payload["failure_state_commit"] = self.failure_state_commit
         return payload
 
 
@@ -376,6 +379,10 @@ class TaskHost:
                     processed_count=getattr(result, "processed_count", 0),
                     attempt_count=getattr(result, "attempt_count", 0),
                     retry_count=retry_count,
+                    error_code=getattr(result, "error_code", None),
+                    failure_state_commit=getattr(
+                        result, "failure_state_commit", None
+                    ),
                 )
             )
 
@@ -441,6 +448,7 @@ class TaskHost:
                     attempt_count=result.attempt_count,
                     retry_count=result.retry_count,
                     error_code=result.error_code,
+                    failure_state_commit=result.failure_state_commit,
                 )
             )
             return result.status

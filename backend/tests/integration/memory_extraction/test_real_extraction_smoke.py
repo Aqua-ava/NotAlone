@@ -15,6 +15,7 @@ from notalone.memory_extraction.adjudication_adapters import (
 )
 from notalone.memory_extraction.cli_support import load_contact_messages
 from notalone.memory_extraction.command import run_extraction
+from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
 from notalone.persistence import (
     PostgresMemoryStore,
     PostgresOwnerMemoryStore,
@@ -164,6 +165,9 @@ class RealExtractionSmokeTest(unittest.TestCase):
             owner_memory_port=owner_store,
             adjudication_runtime=LangChainAdjudicationRuntime(model=model),
             ledger=ledger,
+            # 本冒烟只验证真实模型链路的自动采纳落库与检索可见性，显式放行
+            # 全部维度；默认收紧（空放行表）由 tests/unit 的 test_adoption 覆盖。
+            dimension_release=RELEASE_ALL_DIMENSIONS,
         )
 
         confirmed = memory_store.list_confirmed(self.scope)

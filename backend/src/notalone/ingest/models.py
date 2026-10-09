@@ -10,6 +10,8 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
+from notalone.source_processing.models import ProcessingRecord
+
 
 # @dataclass 会根据下面声明的字段自动生成 __init__、__repr__ 和 __eq__。
 # frozen=True 表示对象创建后不能重新给字段赋值，避免预览结果被后续代码悄悄修改。
@@ -107,6 +109,7 @@ class NormalizedMessage:
     media_placeholder: str | None
     occurred_at: datetime | None
     wechat_metadata: WechatMessageMetadata | None
+    processing_record: ProcessingRecord | None = None
 
     def __post_init__(self) -> None:
         if not self.source_locator.strip():

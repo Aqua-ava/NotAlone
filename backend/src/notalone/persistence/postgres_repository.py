@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
@@ -16,6 +17,14 @@ from notalone.ingest.models import (
 from notalone.persistence.background_tasks import (
     PostgresBackgroundTaskRepository,
 )
+from notalone.persistence.locks import lock_contact_scope
+from notalone.persistence.source_processing import (
+    SourceProcessingWriteError,
+    save_processing_batch,
+)
+from notalone.scopes import ContactScope
+from notalone.source_processing.models import ProcessingRecord
+from notalone.source_processing.rule_capture import capture_execution
 
 
 class ImportPersistenceError(RuntimeError):
@@ -220,6 +229,36 @@ class PostgresIngestRepository:
                 "数据库导入失败，未写入任何数据。"
             ) from None
 
+    def record_input_failure(
+        self, *, scope: ContactScope, record: ProcessingRecord
+    ) -> None:
+        """未验证输入仅保存无正文失败定位，未选定／无权访问联系人时不建记录。"""
+
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                lock_contact_scope(
+                    connection,
+                    owner_id=scope.owner_id,
+                    contact_id=scope.contact_id,
+                )
+                exists = connection.execute(
+                    "SELECT 1 FROM public.contact WHERE owner_id=%s AND id=%s FOR KEY SHARE",
+                    (scope.owner_id, scope.contact_id),
+                ).fetchone()
+                if exists is None:
+                    return
+                save_processing_batch(
+                    connection,
+                    scope=scope,
+                    source_kind="source_document",
+                    source_id=None,
+                    records=(record,),
+                    receipts={},
+                    status="failed",
+                )
+        except psycopg.Error:
+            raise SourceProcessingWriteError() from None
+
     @staticmethod
     def _import_in_transaction(
         *,
@@ -230,6 +269,7 @@ class PostgresIngestRepository:
         document: ImportBatch,
         confirmation: ImportConfirmationRequest,
     ) -> ImportResult:
+        started_at = datetime.now(timezone.utc)
         owner_id = PostgresIngestRepository._resolve_owner(
             connection=connection,
             owner_id=owner_id,
@@ -366,16 +406,29 @@ class PostgresIngestRepository:
                 (owner_id, contact_id, source_document_id),
             ).fetchone()
             if existing_confirmation is None:
-                raise ImportPersistenceError("无法确认重复来源的联系人确认记录。")
-            confirmation_id, existing_channel_identity_id, confirmation_method = (
-                existing_confirmation
-            )
+                raise ImportPersistenceError(
+                    "无法确认重复来源的联系人确认记录。"
+                )
+            (
+                confirmation_id,
+                existing_channel_identity_id,
+                confirmation_method,
+            ) = existing_confirmation
             task_id = PostgresIngestRepository._ensure_import_task(
                 connection=connection,
                 owner_id=owner_id,
                 contact_id=contact_id,
                 source_document_id=source_document_id,
                 message_count=record_count,
+            )
+            PostgresIngestRepository._save_processing(
+                connection,
+                owner_id=owner_id,
+                contact_id=contact_id,
+                source_id=source_document_id,
+                document=document,
+                reused=True,
+                started_at=started_at,
             )
             return ImportResult(
                 contact_id=contact_id,
@@ -553,6 +606,15 @@ class PostgresIngestRepository:
             source_document_id=source_document_id,
             message_count=document.record_count,
         )
+        PostgresIngestRepository._save_processing(
+            connection,
+            owner_id=owner_id,
+            contact_id=contact_id,
+            source_id=source_document_id,
+            document=document,
+            reused=False,
+            started_at=started_at,
+        )
         return ImportResult(
             contact_id=contact_id,
             channel_identity_id=channel_identity_id,
@@ -563,6 +625,54 @@ class PostgresIngestRepository:
             message_count=document.record_count,
             task_id=task_id,
             owner_id=owner_id,
+        )
+
+    @staticmethod
+    def _save_processing(
+        connection: psycopg.Connection[Any],
+        *,
+        owner_id: UUID,
+        contact_id: UUID,
+        source_id: UUID,
+        document: ImportBatch,
+        reused: bool,
+        started_at: datetime,
+    ) -> None:
+        records = tuple(
+            message.processing_record
+            for message in document.messages
+            if message.processing_record is not None
+        )
+        if not records:
+            return
+        refs = connection.execute(
+            "SELECT id, message_id, source_locator FROM public.message_source_ref WHERE owner_id=%s AND contact_id=%s AND source_document_id=%s",
+            (owner_id, contact_id, source_id),
+        ).fetchall()
+        receipts = {
+            row[2]: {
+                "message_id": row[1],
+                "source_ref_id": row[0],
+                "outcome": (
+                    "source_and_message_reused"
+                    if reused
+                    else "message_created"
+                ),
+                "source_ref_added": not reused,
+                "dedup_rule": "active_source_sha256_reuse_else_reject_overlapping_message",
+                "execution": capture_execution(
+                    started_at, __file__, status="prepared_for_commit"
+                ),
+            }
+            for row in refs
+        }
+        save_processing_batch(
+            connection,
+            scope=ContactScope(owner_id, contact_id),
+            source_kind="source_document",
+            source_id=source_id,
+            records=records,
+            receipts=receipts,
         )
 
     @staticmethod
@@ -678,9 +788,11 @@ class PostgresIngestRepository:
         else:
             owner = connection.execute(
                 # 首次渠道身份初始化按 owner 串行，避免并发确认重复绑定。
-                "SELECT 1 FROM public.owner WHERE id = %s FOR UPDATE"
-                if initialize_first_owner_identity
-                else "SELECT 1 FROM public.owner WHERE id = %s FOR KEY SHARE",
+                (
+                    "SELECT 1 FROM public.owner WHERE id = %s FOR UPDATE"
+                    if initialize_first_owner_identity
+                    else "SELECT 1 FROM public.owner WHERE id = %s FOR KEY SHARE"
+                ),
                 (owner_id,),
             ).fetchone()
             if owner is None:

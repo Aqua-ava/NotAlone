@@ -39,7 +39,8 @@ class SyncStatusPayload:
         if not isinstance(self.sync_enabled, bool):
             raise TypeError("sync_enabled 必须是 bool。")
         if self.failure_code is not None and (
-            not isinstance(self.failure_code, str) or not self.failure_code.strip()
+            not isinstance(self.failure_code, str)
+            or not self.failure_code.strip()
         ):
             raise ValueError("failure_code 必须是非空字符串或 None。")
 
@@ -52,6 +53,8 @@ class TaskProgressPayload:
     processed_count: int
     attempt_count: int
     retry_count: int
+    error_code: str | None = None
+    failure_state_commit: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.task_id, UUID):
@@ -60,12 +63,24 @@ class TaskProgressPayload:
             raise ValueError("step 不能为空。")
         if not isinstance(self.status, str) or not self.status.strip():
             raise ValueError("status 不能为空。")
+        if self.error_code is not None and (
+            not isinstance(self.error_code, str) or not self.error_code.strip()
+        ):
+            raise ValueError("error_code 必须是非空字符串或 None。")
+        if self.failure_state_commit not in {None, "committed", "unknown"}:
+            raise ValueError(
+                "failure_state_commit 必须是已提交、未知或 None。"
+            )
         for name, value in (
             ("processed_count", self.processed_count),
             ("attempt_count", self.attempt_count),
             ("retry_count", self.retry_count),
         ):
-            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 0
+            ):
                 raise ValueError(f"{name} 必须是非负整数。")
 
 
@@ -154,6 +169,8 @@ class BackendEvent:
         attempt_count: int,
         retry_count: int,
         event_id: UUID | None = None,
+        error_code: str | None = None,
+        failure_state_commit: str | None = None,
     ) -> "BackendEvent":
         return cls(
             event_id=event_id or uuid4(),
@@ -167,5 +184,7 @@ class BackendEvent:
                 processed_count=processed_count,
                 attempt_count=attempt_count,
                 retry_count=retry_count,
+                error_code=error_code,
+                failure_state_commit=failure_state_commit,
             ),
         )

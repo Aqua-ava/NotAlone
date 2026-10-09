@@ -37,6 +37,8 @@ from notalone.persistence.observation_store import (
     ObservationPersistenceError,
     PostgresObservationStore,
 )
+from notalone.persistence.source_processing import SourceProcessingWriteError
+from notalone.source_processing.models import ProcessingRecord
 from notalone.wechat_cli import (
     CliAdapterError,
     CliOutputError,
@@ -228,7 +230,9 @@ class CliBackgroundSync:
         cli: LocalWechatCli,
         bindings: BindingSourcePort | Sequence[object],
         observation_store: ObservationStorePort | PostgresObservationStore,
-        backfill_state: BackfillStatePort | PostgresBackfillStateStore | None = None,
+        backfill_state: (
+            BackfillStatePort | PostgresBackfillStateStore | None
+        ) = None,
         sync_state: SyncStatePort | None = None,
         message_events: MessageEventPublisher | None = None,
         clock: Callable[[], datetime] | None = None,
@@ -285,7 +289,9 @@ class CliBackgroundSync:
 
         if not isinstance(enabled, bool):
             raise TypeError("enabled 必须是 bool。")
-        if priority_contact_id is not None and not isinstance(priority_contact_id, UUID):
+        if priority_contact_id is not None and not isinstance(
+            priority_contact_id, UUID
+        ):
             raise TypeError("priority_contact_id 必须是 UUID 或 None。")
         if not enabled:
             self.close()
@@ -334,15 +340,20 @@ class CliBackgroundSync:
                 batch_message_count=0,
             )
 
-        by_locator = {binding.conversation_locator: binding for binding in bindings}
-        priority_binding = self._priority_binding(bindings, priority_contact_id)
+        by_locator = {
+            binding.conversation_locator: binding for binding in bindings
+        }
+        priority_binding = self._priority_binding(
+            bindings, priority_contact_id
+        )
         priority_locator = (
             None
             if priority_binding is None
             else priority_binding.conversation_locator
         )
         active_binding_locators = {
-            binding.binding_id: binding.conversation_locator for binding in bindings
+            binding.binding_id: binding.conversation_locator
+            for binding in bindings
         }
         self._baseline_ready_bindings = {
             binding_id: locator
@@ -436,20 +447,27 @@ class CliBackgroundSync:
             except ObservationPersistenceError:
                 self._failure_code = "observation_persistence_failed"
                 # 与 CLI 错误相同，延后到后续有界轮询，保证其他联系人公平。
+            except SourceProcessingWriteError:
+                self._failure_code = "source_processing_write_failed"
             except BackfillStatePersistenceError:
                 self._failure_code = "backfill_state_unavailable"
                 # 补齐状态无法写入时不能把本轮显示为完成；后续心跳重试。
             finally:
                 self._backfill_pending_locators.discard(locator)
 
-        if self._backfill_check_requested and not self._backfill_pending_locators:
+        if (
+            self._backfill_check_requested
+            and not self._backfill_pending_locators
+        ):
             self._backfill_check_requested = False
             self._backfill_trigger_at = None
 
         try:
             backfill_states = self._active_backfill_states(bindings)
         except BackfillStatePersistenceError:
-            self._failure_code = self._failure_code or "backfill_state_unavailable"
+            self._failure_code = (
+                self._failure_code or "backfill_state_unavailable"
+            )
             backfill_states = ()
 
         if self._stream is not None:
@@ -580,7 +598,10 @@ class CliBackgroundSync:
                     trigger_at=self._backfill_trigger_at or self._clock(),
                 )
                 phase = _backfill_phase_value(getattr(state, "phase", None))
-            elif self._backfill_check_requested and phase == BackfillPhase.COMPLETE.value:
+            elif (
+                self._backfill_check_requested
+                and phase == BackfillPhase.COMPLETE.value
+            ):
                 state = store.mark_retry(
                     owner_id=self._owner_id,
                     contact_id=binding.scope.contact_id,
@@ -629,7 +650,9 @@ class CliBackgroundSync:
                 binding_id = getattr(state, "binding_id", None)
                 if not isinstance(binding_id, UUID):
                     candidates = binding_ids.get(state.scope.contact_id, [])
-                    binding_id = candidates[0] if len(candidates) == 1 else None
+                    binding_id = (
+                        candidates[0] if len(candidates) == 1 else None
+                    )
                 if not isinstance(binding_id, UUID):
                     continue
                 self._last_backfill_state = store.mark_retry(
@@ -720,7 +743,8 @@ class CliBackgroundSync:
             (
                 binding
                 for binding in bindings
-                if getattr(binding.scope, "contact_id", None) == priority_contact_id
+                if getattr(binding.scope, "contact_id", None)
+                == priority_contact_id
             ),
             None,
         )
@@ -732,7 +756,9 @@ class CliBackgroundSync:
     ) -> None:
         """把当前前台联系人移到已有事件队列的队首。"""
 
-        priority_binding = self._priority_binding(bindings, priority_contact_id)
+        priority_binding = self._priority_binding(
+            bindings, priority_contact_id
+        )
         if priority_binding is None or not self._pending_locators:
             return
         priority = priority_binding.conversation_locator
@@ -748,7 +774,11 @@ class CliBackgroundSync:
             return
         self._pending_locators = deque(
             [priority]
-            + [locator for locator in self._pending_locators if locator != priority]
+            + [
+                locator
+                for locator in self._pending_locators
+                if locator != priority
+            ]
         )
 
     def _enqueue_initial_or_safety_sweep(
@@ -777,7 +807,10 @@ class CliBackgroundSync:
                 bindings,
                 priority_contact_id=priority_contact_id,
             ):
-                if binding.conversation_locator in self._backfill_pending_locators:
+                if (
+                    binding.conversation_locator
+                    in self._backfill_pending_locators
+                ):
                     self._enqueue(binding.conversation_locator)
             self._last_sweep_at = self._clock()
             return
@@ -808,7 +841,9 @@ class CliBackgroundSync:
             last_read_at + _PRIORITY_READ_INTERVAL
         )
 
-    def _enqueue_priority_live_read(self, priority_locator: str | None) -> None:
+    def _enqueue_priority_live_read(
+        self, priority_locator: str | None
+    ) -> None:
         """让当前联系人独立按三秒节奏进入 live 读取队列。"""
 
         if priority_locator is None:
@@ -839,7 +874,9 @@ class CliBackgroundSync:
             # 当前联系人即使暂停了后台补齐，也必须保留实时读取路径；
             # 否则安全对账会被暂停门禁直接跳过，遗漏我方发送的消息。
             self._enqueue_live(priority.conversation_locator)
-        remaining = tuple(binding for binding in bindings if binding is not priority)
+        remaining = tuple(
+            binding for binding in bindings if binding is not priority
+        )
         if not remaining:
             return
         count = min(
@@ -867,12 +904,14 @@ class CliBackgroundSync:
         priority = tuple(
             binding
             for binding in bindings
-            if getattr(binding.scope, "contact_id", None) == priority_contact_id
+            if getattr(binding.scope, "contact_id", None)
+            == priority_contact_id
         )
         rest = tuple(
             binding
             for binding in bindings
-            if getattr(binding.scope, "contact_id", None) != priority_contact_id
+            if getattr(binding.scope, "contact_id", None)
+            != priority_contact_id
         )
         return priority + rest
 
@@ -882,7 +921,9 @@ class CliBackgroundSync:
         state = self._sync_state.read(owner_id=self._owner_id)
         disabled_at = getattr(state, "disabled_at", None)
         enabled_at = getattr(state, "enabled_at", None)
-        if not isinstance(disabled_at, datetime) or not isinstance(enabled_at, datetime):
+        if not isinstance(disabled_at, datetime) or not isinstance(
+            enabled_at, datetime
+        ):
             return None
         if enabled_at <= disabled_at:
             return None
@@ -949,6 +990,7 @@ class CliBackgroundSync:
                 **kwargs,
             )
         except CliAdapterError as error:
+            self._record_input_failure(binding, error, backfill_state)
             self._fail_backfill(
                 binding,
                 error.code,
@@ -1000,13 +1042,21 @@ class CliBackgroundSync:
                     last_local_id=(
                         None if cursor is None else cursor.last_local_id
                     ),
-                    last_cursor=(None if cursor is None else cursor.last_cursor),
+                    last_cursor=(
+                        None if cursor is None else cursor.last_cursor
+                    ),
                 )
             return 0
         try:
-            messages = normalize_cli_events(result.events)
-        except CliNormalizationError:
-            self._fail_backfill(binding, "cli_normalization_failed", backfill_state)
+            processing_receipts: list[ProcessingRecord] = []
+            messages = normalize_cli_events(
+                result.events, processing_receipts=processing_receipts
+            )
+        except CliNormalizationError as error:
+            self._record_input_failure(binding, error, backfill_state)
+            self._fail_backfill(
+                binding, "cli_normalization_failed", backfill_state
+            )
             raise
         try:
             event_count = (
@@ -1026,7 +1076,9 @@ class CliBackgroundSync:
                 mode=ObservationMode.CLI_BACKGROUND,
                 cli_version=self._cli_version_value(),
                 conversation_locator=binding.conversation_locator,
-                since_local_id=None if cursor is None else cursor.last_local_id,
+                since_local_id=(
+                    None if cursor is None else cursor.last_local_id
+                ),
                 since_cursor=None if cursor is None else cursor.last_cursor,
                 last_local_id=result.last_local_id,
                 last_cursor=result.cursor,
@@ -1034,6 +1086,15 @@ class CliBackgroundSync:
                 event_count=event_count,
                 non_text_count=non_text_count,
                 messages=messages,
+                processing_records=tuple(
+                    sorted(
+                        (*processing_receipts, *result.filtered_records),
+                        key=lambda record: record.payload().get(
+                            "input_position"
+                        )
+                        or 0,
+                    )
+                ),
             )
         except CliAdapterError as error:
             self._fail_backfill(
@@ -1044,7 +1105,14 @@ class CliBackgroundSync:
             )
             raise
         except ObservationPersistenceError:
-            self._fail_backfill(binding, "observation_persistence_failed", backfill_state)
+            self._fail_backfill(
+                binding, "observation_persistence_failed", backfill_state
+            )
+            raise
+        except SourceProcessingWriteError:
+            self._fail_backfill(
+                binding, "source_processing_write_failed", backfill_state
+            )
             raise
         if backfill_state is not None:
             self._complete_backfill(
@@ -1061,6 +1129,38 @@ class CliBackgroundSync:
         )
         return len(messages)
 
+    def _record_input_failure(
+        self,
+        binding: object,
+        error: CliAdapterError | CliNormalizationError,
+        backfill_state: object | None,
+    ) -> None:
+        """已验证绑定的失败只保存无正文定位；存储故障保留明确失败状态。"""
+
+        record_failure = getattr(
+            self._observation_store, "record_input_failure", None
+        )
+        if error.failure_record is None or not callable(record_failure):
+            return
+        try:
+            record_failure(
+                owner_id=self._owner_id,
+                contact_id=getattr(binding, "scope").contact_id,
+                binding_id=getattr(binding, "binding_id"),
+                conversation_locator=getattr(binding, "conversation_locator"),
+                record=error.failure_record,
+            )
+        except SourceProcessingWriteError:
+            self._fail_backfill(
+                binding, "source_processing_write_failed", backfill_state
+            )
+            raise
+        except ObservationPersistenceError:
+            self._fail_backfill(
+                binding, "observation_persistence_failed", backfill_state
+            )
+            raise
+
     def _reconcile_cursor(self, binding: object) -> object | None:
         """在读取前确认联系人游标没有超过最后可靠观察批次。"""
 
@@ -1069,7 +1169,9 @@ class CliBackgroundSync:
             owner_id=self._owner_id,
             contact_id=contact_id,
         )
-        read_reliable = getattr(self._observation_store, "read_reliable_cursor", None)
+        read_reliable = getattr(
+            self._observation_store, "read_reliable_cursor", None
+        )
         rewind = getattr(self._observation_store, "rewind_cursor", None)
         if not callable(read_reliable) or not callable(rewind):
             return cursor
@@ -1160,7 +1262,9 @@ class CliBackgroundSync:
         if trigger_at is None and disabled_window is None:
             if existing is None:
                 return None
-            existing_phase = _backfill_phase_value(getattr(existing, "phase", None))
+            existing_phase = _backfill_phase_value(
+                getattr(existing, "phase", None)
+            )
             if existing_phase == BackfillPhase.COMPLETE.value:
                 return None
             if existing_phase in {
@@ -1309,8 +1413,7 @@ class CliBackgroundSync:
             return _empty_backfill_status_fields()
 
         by_binding = {
-            getattr(state, "binding_id", None): state
-            for state in states
+            getattr(state, "binding_id", None): state for state in states
         }
         total_contacts = len(bindings) if expected else len(states)
         complete_states = [
@@ -1360,16 +1463,23 @@ class CliBackgroundSync:
                 state
                 for state in states
                 if priority_contact_id is not None
-                and getattr(
-                    getattr(state, "scope", None), "contact_id", None
-                )
+                and getattr(getattr(state, "scope", None), "contact_id", None)
                 == priority_contact_id
             ),
             self._last_backfill_state,
         )
-        if current is None or getattr(current, "binding_id", None) not in by_binding:
+        if (
+            current is None
+            or getattr(current, "binding_id", None) not in by_binding
+        ):
             current = next(
-                iter(active_states or paused_states or incomplete_states or failed_states or states),
+                iter(
+                    active_states
+                    or paused_states
+                    or incomplete_states
+                    or failed_states
+                    or states
+                ),
                 None,
             )
         if active_states:
@@ -1391,29 +1501,34 @@ class CliBackgroundSync:
         return {
             "backfill_phase": phase,
             "backfill_contact_id": contact_id,
-            "backfill_message_count": int(
-                getattr(current, "message_count", 0)
-            )
-            if current is not None
-            else 0,
-            "backfill_non_text_count": int(
-                getattr(current, "non_text_count", 0)
-            )
-            if current is not None
-            else 0,
+            "backfill_message_count": (
+                int(getattr(current, "message_count", 0))
+                if current is not None
+                else 0
+            ),
+            "backfill_non_text_count": (
+                int(getattr(current, "non_text_count", 0))
+                if current is not None
+                else 0
+            ),
             "backfill_last_cursor": (
-                getattr(current, "last_cursor", None) if current is not None else None
+                getattr(current, "last_cursor", None)
+                if current is not None
+                else None
             ),
             "backfill_failure_code": (
                 getattr(failure_state, "failure_code", None)
                 if failure_state is not None
-                else getattr(current, "failure_code", None)
-                if current is not None
-                else None
+                else (
+                    getattr(current, "failure_code", None)
+                    if current is not None
+                    else None
+                )
             ),
             "backfill_total_contacts": total_contacts,
             "backfill_completed_contacts": completed_contacts,
-            "backfill_succeeded_contacts": completed_contacts - skipped_contacts,
+            "backfill_succeeded_contacts": completed_contacts
+            - skipped_contacts,
             "backfill_skipped_contacts": skipped_contacts,
             "backfill_failed_contacts": len(failed_states),
             "backfill_incomplete_contacts": len(incomplete_states),

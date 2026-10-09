@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -317,7 +317,10 @@ class HistoryToolAccess:
                 or message.scope != self._scope
                 or not message.source_ids
                 or message.status != "active"
-                or message.invalid_at is not None
+                or (
+                    message.invalid_at is not None
+                    and datetime.now(timezone.utc) >= message.invalid_at
+                )
             ):
                 raise ReplyContextInvariantError(
                     "历史 Tool 返回了越权或已失效消息。"
@@ -334,7 +337,13 @@ class HistoryToolAccess:
                 if message.occurred_at is not None
                 else None
             ),
-            "session_id": str(self._conversation_binding_id),
+            # 只透传检索层给出的真实会话标识；缺失时如实为 null，
+            # 不能把同联系人其他会话的消息标成当前绑定会话。
+            "session_id": (
+                str(message.session_id)
+                if message.session_id is not None
+                else None
+            ),
             "source_ids": [str(source_id) for source_id in message.source_ids],
             "status": message.status,
             "text": message.text,

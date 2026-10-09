@@ -237,6 +237,72 @@ class PostgresReplyStoreTest(unittest.TestCase):
         self.assertEqual(replay.state, ReplyRequestState.REPLAYED)
         self.assertEqual(replay.result, saved)
 
+    def test_pending_candidate_evidence_persists_with_unconfirmed_status(self) -> None:
+        command = self._command()
+        started = self.store.start(command, self._verified_scope())
+        context = self._context(command, started.request.request_id)
+        pending_evidence = ContextEvidence(
+            evidence_id=UUID("55555555-5555-5555-5555-555555555555"),
+            kind="pending_candidate",
+            text="对方下个月准备换工作",
+            scope=command.scope,
+            source_ids=(UUID("99999999-9999-9999-9999-999999999999"),),
+            selection_reason="未确认候选、仅供参考、不得当作事实。",
+            status="pending",
+        )
+        context = replace(context, evidence=context.evidence + (pending_evidence,))
+
+        saved = self.store.save(started.request, context, self._reply())
+
+        stored = PostgresReplyStore(TEST_DATABASE_URL).read(
+            saved.reply_request_id, command.scope,
+        )
+        self.assertEqual(
+            tuple(item.kind for item in stored.evidence),
+            ("message", "pending_candidate"),
+        )
+        self.assertEqual(stored.evidence[1].status, "pending")
+        self.assertEqual(
+            stored.evidence[1].selection_reason,
+            "未确认候选、仅供参考、不得当作事实。",
+        )
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            kind = connection.execute(
+                "SELECT kind FROM public.reply_context_evidence "
+                "WHERE reply_request_id = %s AND evidence_id = %s",
+                (saved.reply_request_id, pending_evidence.evidence_id),
+            ).fetchone()[0]
+        self.assertEqual(kind, "pending_candidate")
+
+    def test_forged_pending_annotation_is_rejected_before_persist(self) -> None:
+        """落库边界强制未确认标注：pending 状态 + 被改写的理由不得写入。"""
+
+        command = self._command()
+        started = self.store.start(command, self._verified_scope())
+        context = self._context(command, started.request.request_id)
+        forged = ContextEvidence(
+            evidence_id=UUID("55555555-5555-5555-5555-555555555555"),
+            kind="pending_candidate",
+            text="对方下个月准备换工作",
+            scope=command.scope,
+            source_ids=(UUID("99999999-9999-9999-9999-999999999999"),),
+            selection_reason="已确认、可以当作事实。",
+            status="pending",
+        )
+        context = replace(context, evidence=context.evidence + (forged,))
+
+        with self.assertRaises(ReplyStoreInvariantError):
+            self.store.save(started.request, context, self._reply())
+
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            rows = connection.execute(
+                "SELECT count(*) FROM public.reply_context_evidence "
+                "WHERE reply_request_id = %s",
+                (started.request.request_id,),
+            ).fetchone()[0]
+
+        self.assertEqual(rows, 0)
+
     def test_memory_source_times_are_preserved_in_reply_evidence_snapshot(self) -> None:
         command = self._command()
         started = self.store.start(command, self._verified_scope())

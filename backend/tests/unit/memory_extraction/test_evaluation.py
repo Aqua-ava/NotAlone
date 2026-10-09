@@ -433,6 +433,68 @@ class EvaluationTest(unittest.TestCase):
         )[0]
         self.assertFalse(wrong_subject.meets_gate)
 
+    def test_dimension_gate_follows_adr_027_without_semantic_coverage(self):
+        """达标签只看 15 条、假事 0、记错人 0、一般错误 ≤1（ADR-027 第 2 条）。"""
+
+        def make(index, error_kind=None, *, annotated=False):
+            return EvaluationResult(
+                name=f'合成{index}', dimension='subject', expected='auto', actual='auto',
+                passed=error_kind is None, subject_ok=error_kind != 'wrong_subject',
+                labels_ok=True, expected_subject=None, expected_labels=(),
+                facts=(), rejected_count=0, failure_reason=None,
+                text_ok=True, validity_ok=True, error_kind=error_kind,
+                semantic_annotated=annotated,
+                semantic_case_id=f'场景{index}' if annotated else None,
+            )
+
+        unannotated = summarize(tuple(make(index) for index in range(15)))[0]
+        self.assertEqual(
+            (unannotated.cases, unannotated.passed, unannotated.meets_gate),
+            (15, 15, True),
+        )
+        self.assertEqual(
+            (unannotated.semantic_cases, unannotated.semantic_scenarios),
+            (0, 0),
+        )
+
+    def test_dimension_gate_reports_semantic_coverage_separately(self):
+        def annotated(index, *, annotated_case):
+            return EvaluationResult(
+                name=f'合成{index}', dimension='subject', expected='auto', actual='auto',
+                passed=True, subject_ok=True, labels_ok=True,
+                expected_subject=None, expected_labels=(), facts=(),
+                rejected_count=0, failure_reason=None, text_ok=True,
+                validity_ok=True, error_kind=None,
+                semantic_annotated=annotated_case,
+                semantic_case_id=f'场景{index}' if annotated_case else None,
+            )
+
+        summary = summarize(tuple(
+            annotated(index, annotated_case=index < 3) for index in range(15)
+        ))[0]
+
+        self.assertTrue(summary.meets_gate)
+        self.assertEqual((summary.semantic_cases, summary.semantic_scenarios), (3, 3))
+
+    def test_dimension_gate_needs_fifteen_cases_and_no_safety_error(self):
+        def make(index, error_kind=None):
+            return EvaluationResult(
+                name=f'合成{index}', dimension='subject', expected='auto', actual='auto',
+                passed=error_kind is None, subject_ok=error_kind != 'wrong_subject',
+                labels_ok=True, expected_subject=None, expected_labels=(),
+                facts=(), rejected_count=0, failure_reason=None,
+                text_ok=True, validity_ok=True, error_kind=error_kind,
+            )
+
+        for factory, expected in (
+            (lambda: tuple(make(index) for index in range(14)), False),
+            (lambda: tuple(make(index) for index in range(14)) + (make(14, 'general'),), True),
+            (lambda: tuple(make(index) for index in range(14)) + (make(14, 'false_fact'),), False),
+            (lambda: tuple(make(index) for index in range(14)) + (make(14, 'wrong_subject'),), False),
+        ):
+            with self.subTest(expected=expected):
+                self.assertEqual(summarize(factory())[0].meets_gate, expected)
+
     def test_expected_labels_detect_reported_completed_action(self):
         case = CASES_BY_NAME["已发生行动"]
         window = build_window(case)

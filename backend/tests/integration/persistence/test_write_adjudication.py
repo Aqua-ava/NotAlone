@@ -14,6 +14,7 @@ from notalone.memory_extraction.adjudication import (
     AdjudicationDecision,
 )
 from notalone.memory_extraction.adoption import MemoryAdoption
+from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.flow import ExtractionOutcome
 from notalone.persistence import (
@@ -120,10 +121,12 @@ class WriteAdjudicationTest(unittest.TestCase):
             connection.commit()
 
     def _adoption(self, adjudicator) -> MemoryAdoption:
+        # 本类验证写入裁决，显式放行全部维度；默认收紧由 tests/unit 覆盖。
         return MemoryAdoption(
             memory_port=self.memory_store,
             owner_memory_port=self.owner_store,
             adjudication_runtime=adjudicator,
+            dimension_release=RELEASE_ALL_DIMENSIONS,
         )
 
     def _fact(self, text, **overrides):

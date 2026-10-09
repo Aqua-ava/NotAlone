@@ -67,6 +67,7 @@ class WorkerCommandResult:
     retry_count: int = 0
     error_code: str | None = None
     task_id: UUID | None = None
+    failure_state_commit: str | None = None
 
 
 def run_worker(
@@ -131,6 +132,26 @@ def run_worker(
             attempt_count = result.attempt_count
             if progress_callback is not None:
                 progress_callback(result, retry_count)
+            if (
+                result.error_code == "trace_write_failed"
+                and result.failure_state_commit == "unknown"
+            ):
+                # 原租约可能仍有效；结束本次运行，不能下一轮 idle 覆盖主错误。
+                return WorkerCommandResult(
+                    status=(
+                        WorkerCommandStatus.STOPPED
+                        if result.outcome is WorkerRunOutcome.STOPPED
+                        else WorkerCommandStatus.FAILED
+                    ),
+                    completed_steps=completed_steps,
+                    last_step=last_step,
+                    processed_count=processed_count,
+                    attempt_count=attempt_count,
+                    retry_count=retry_count,
+                    task_id=current_task_id,
+                    error_code=result.error_code,
+                    failure_state_commit="unknown",
+                )
             if result.outcome is WorkerRunOutcome.STOPPED:
                 return WorkerCommandResult(
                     status=WorkerCommandStatus.STOPPED, completed_steps=completed_steps,
@@ -177,6 +198,7 @@ def run_worker(
                 retry_count=retry_count,
                 error_code=result.error_code,
                 task_id=current_task_id,
+                failure_state_commit=result.failure_state_commit,
             )
     finally:
         if not getattr(lock_connection, "closed", False):
@@ -260,6 +282,8 @@ def worker_main(argv: list[str] | None = None) -> int:
     ]
     if result.error_code is not None:
         output.append(f"error={result.error_code}")
+    if result.failure_state_commit is not None:
+        output.append(f"failure_state_commit={result.failure_state_commit}")
     print(" ".join(output))
     return 1 if result.status is WorkerCommandStatus.FAILED else 0
 

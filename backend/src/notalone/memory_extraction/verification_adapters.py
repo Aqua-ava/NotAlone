@@ -23,7 +23,9 @@ from notalone.memory_extraction.verification import (
     SourceVerificationVerdict,
     validate_source_verification,
 )
-
+from notalone.memory_trace import TraceWriteError
+from notalone.memory_trace.context import record_ledger_entry
+from notalone.memory_trace.transport import invoke_traced_model
 
 SOURCE_VERIFICATION_SYSTEM_PROMPT = """逐条比较记忆候选与同一联系人窗口中的原话，
 只判断候选是否忠实保留原话，不证明现实世界真假；这不是只判断某个子句在逻辑上是否成立。
@@ -53,6 +55,12 @@ shared只用于双方共同主张；正文明确是双方共同经历而subject�
 需原话有条件。明确转述的report和reported都须保留，不能只保留其中一个。
 所有项目都吻合才supported。正文忠实但标签把第三人转述或计划
 升级成确定本人事实，应uncertain并标pragmatics；日期字段没有充分支持也应uncertain并标time。
+来源支持与直接参与者判断是两项独立判断：某条主张的直接参与者是谁，不决定它是否被
+原话支持。report与reported只说明这是明确转述，本身不构成uncertain理由；当候选正文、
+subject、语用字段与来源证据都被原话支持时，verdict应为supported且issues=[]，不能仅因
+report/reported、第三人转述或候选subject不是直接参与者就判uncertain。只有来源支持不足、
+真实歧义或与原话矛盾才用uncertain/unsupported；report/reported标记本身被丢掉或
+升级为本人事实，仍属pragmatics问题，仍须uncertain。
 下面是审稿原则示例，与实际输入没有身份或时间关联：
 - 原话“上周一至周五在甲地值班”，候选只留“上周一在甲地值班”，或invalid_at设到上周二，
   都是unsupported/time。一天确实包含在原期间中，也不能删去同一状态其余期间。
@@ -146,14 +154,26 @@ class LangChainSourceVerificationRuntime:
         called_at = datetime.now(timezone.utc)
         started = time.perf_counter()
         try:
-            bound = self._model.bind_tools(
-                [SOURCE_VERIFICATION_SCHEMA],
-                tool_choice=SOURCE_VERIFICATION_SCHEMA["title"],
+            message = invoke_traced_model(
+                self._model,
+                purpose="verification",
+                schema=SOURCE_VERIFICATION_SCHEMA,
+                tool_options={
+                    "tool_choice": SOURCE_VERIFICATION_SCHEMA["title"]
+                },
+                messages=[
+                    {
+                        "role": "system",
+                        "content": SOURCE_VERIFICATION_SYSTEM_PROMPT,
+                    },
+                    {
+                        "role": "user",
+                        "content": _verification_text(window, facts),
+                    },
+                ],
             )
-            message = bound.invoke([
-                {"role": "system", "content": SOURCE_VERIFICATION_SYSTEM_PROMPT},
-                {"role": "user", "content": _verification_text(window, facts)},
-            ])
+        except TraceWriteError:
+            raise
         except Exception:
             self._record_call(
                 window, called_at, started, LedgerOutcome.RUN_FAILED,
@@ -187,19 +207,35 @@ class LangChainSourceVerificationRuntime:
         raw_metadata = getattr(message, "response_metadata", None)
         usage = raw_usage if isinstance(raw_usage, dict) else {}
         metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
-        model_name = next((value for value in (
-            metadata.get("model_name"), metadata.get("model"),
-            getattr(self._model, "model_name", None),
-            getattr(self._model, "model", None),
-        ) if isinstance(value, str) and value.strip()), "unreported")
-        self._ledger.record(LedgerEntry(
-            entry_id=uuid4(), owner_id=window.owner_id, contact_id=window.contact_id,
-            provider=self._provider, model_name=model_name,
+        model_name = next(
+            (
+                value
+                for value in (
+                    metadata.get("model_name"),
+                    metadata.get("model"),
+                    getattr(self._model, "model_name", None),
+                    getattr(self._model, "model", None),
+                )
+                if isinstance(value, str) and value.strip()
+            ),
+            "unreported",
+        )
+        entry = LedgerEntry(
+            entry_id=uuid4(),
+            owner_id=window.owner_id,
+            contact_id=window.contact_id,
+            provider=self._provider,
+            model_name=model_name,
             input_tokens=_token_count(usage.get("input_tokens")),
             output_tokens=_token_count(usage.get("output_tokens")),
             latency_ms=max(0, int((time.perf_counter() - started) * 1000)),
-            outcome=outcome, called_at=called_at,
-        ))
+            outcome=outcome,
+            called_at=called_at,
+        )
+        started_at = datetime.now(timezone.utc)
+        record_ledger_entry(
+            "verification", self._ledger, entry, started_at=started_at
+        )
 
 
 def _token_count(value: object) -> int | None:

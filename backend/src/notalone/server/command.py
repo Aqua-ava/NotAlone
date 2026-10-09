@@ -20,6 +20,7 @@ from notalone.application.model_priority import (
     ModelPriorityControl, PriorityAdjudicationRuntime, PriorityExtractionRuntime,
     PriorityVerificationRuntime,
 )
+from notalone.memory_extraction.dimensions import DimensionRelease
 from notalone.runtime_config import load_project_env
 from notalone.server.app import BackendServer, create_app
 from notalone.server.connection_info import (
@@ -253,6 +254,7 @@ def _build_import_service(database_url: str) -> ImportService | None:
 def _build_task_host(
     database_url: str, events: EventBus,
     *, model_priority: ModelPriorityControl | None = None,
+    dimension_release: DimensionRelease | None = None,
 ) -> TaskHost | None:
     """装配任务宿主；执行前再检查模型与资源，不提前领取持久任务。"""
 
@@ -282,7 +284,9 @@ def _build_task_host(
     def build_worker() -> BackgroundTaskWorker:
         extraction: ExtractionTaskRunner
         if model_priority is None:
-            extraction = PostgresMemoryExtractionRunner(database_url)
+            extraction = PostgresMemoryExtractionRunner(
+                database_url, dimension_release=dimension_release,
+            )
         else:
             components = build_extraction_components(database_url)
             accounting = MemoryCallAccounting(
@@ -305,6 +309,8 @@ def _build_task_host(
                 ),
                 ledger=components.ledger, watermark_port=components.watermark,
                 model_name=components.model_name,
+                # 生产 main 沿用 None；合成验收显式注入放行维度。
+                dimension_release=dimension_release,
             ), accounting)
         return BackgroundTaskWorker(
             repository=PostgresBackgroundTaskRepository(database_url),
@@ -336,6 +342,8 @@ def _build_task_host(
                 processed_count=update.processed_count,
                 attempt_count=update.attempt_count,
                 retry_count=update.retry_count,
+                error_code=update.error_code,
+                failure_state_commit=update.failure_state_commit,
             )
         )
 

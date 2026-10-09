@@ -1,0 +1,558 @@
+[
+  {
+    "bank_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202",
+    "batches": [
+      {
+        "count": 25,
+        "elapsed_ms": 429.0735420072451,
+        "offset": 0,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      },
+      {
+        "count": 25,
+        "elapsed_ms": 374.78133401600644,
+        "offset": 25,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      },
+      {
+        "count": 25,
+        "elapsed_ms": 317.51229200745,
+        "offset": 50,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      }
+    ],
+    "database_after": {
+      "counts": {
+        "async_operations": 0,
+        "attachments": 0,
+        "banks": 1,
+        "chunks": 75,
+        "documents": 75,
+        "entities": 0,
+        "invalidated_memory_units": 0,
+        "memory_units": 75,
+        "mental_models": 0,
+        "observation_history": 0
+      },
+      "indexes": [
+        {
+          "indexdef": "CREATE INDEX idx_mu_emb_expr_04e5c0fcd99c4026 ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'experience'::text) AND (bank_id = 'notalone-experiment-28892dc5b73d95fca850b48dc9953202'::text))",
+          "indexname": "idx_mu_emb_expr_04e5c0fcd99c4026"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_mu_emb_obsv_04e5c0fcd99c4026 ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'observation'::text) AND (bank_id = 'notalone-experiment-28892dc5b73d95fca850b48dc9953202'::text))",
+          "indexname": "idx_mu_emb_obsv_04e5c0fcd99c4026"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_mu_emb_worl_04e5c0fcd99c4026 ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'world'::text) AND (bank_id = 'notalone-experiment-28892dc5b73d95fca850b48dc9953202'::text))",
+          "indexname": "idx_mu_emb_worl_04e5c0fcd99c4026"
+        }
+      ],
+      "internal_id": "04e5c0fc-d99c-4026-aa2c-0e96446eb0d2",
+      "profile": [
+        {
+          "bank_id": "notalone-experiment-28892dc5b73d95fca850b48dc9953202",
+          "internal_id": "04e5c0fc-d99c-4026-aa2c-0e96446eb0d2"
+        }
+      ]
+    },
+    "elapsed_ms": 1193.07016703533,
+    "indexed_documents": 75,
+    "indexed_units": 75,
+    "local_current_eligible_records": 75,
+    "local_total_records": 75,
+    "scope": {
+      "contact_id": "4aa6566a-c8fc-5163-aa7a-16d54150def9",
+      "owner_id": "efed0e6b-184b-5f8f-afeb-74f5492e70ee"
+    }
+  },
+  {
+    "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+    "batches": [
+      {
+        "count": 25,
+        "elapsed_ms": 637.3884589993395,
+        "offset": 0,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      },
+      {
+        "count": 25,
+        "elapsed_ms": 451.09870797023177,
+        "offset": 25,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      },
+      {
+        "count": 25,
+        "elapsed_ms": 413.29204197973013,
+        "offset": 50,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      },
+      {
+        "count": 25,
+        "elapsed_ms": 348.23191695613787,
+        "offset": 75,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      },
+      {
+        "count": 25,
+        "elapsed_ms": 344.6517499978654,
+        "offset": 100,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      },
+      {
+        "count": 25,
+        "elapsed_ms": 399.3655000231229,
+        "offset": 125,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      },
+      {
+        "count": 25,
+        "elapsed_ms": 521.177250018809,
+        "offset": 150,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      },
+      {
+        "count": 25,
+        "elapsed_ms": 374.9460419639945,
+        "offset": 175,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      },
+      {
+        "count": 25,
+        "elapsed_ms": 343.67687499616295,
+        "offset": 200,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      },
+      {
+        "count": 25,
+        "elapsed_ms": 363.9917090185918,
+        "offset": 225,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      },
+      {
+        "count": 25,
+        "elapsed_ms": 374.6407920261845,
+        "offset": 250,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      },
+      {
+        "count": 25,
+        "elapsed_ms": 805.526459007524,
+        "offset": 275,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+          "items_count": 25,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      },
+      {
+        "count": 10,
+        "elapsed_ms": 184.52929198974743,
+        "offset": 300,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+          "items_count": 10,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      }
+    ],
+    "database_after": {
+      "counts": {
+        "async_operations": 0,
+        "attachments": 0,
+        "banks": 1,
+        "chunks": 310,
+        "documents": 310,
+        "entities": 0,
+        "invalidated_memory_units": 0,
+        "memory_units": 310,
+        "mental_models": 0,
+        "observation_history": 0
+      },
+      "indexes": [
+        {
+          "indexdef": "CREATE INDEX idx_mu_emb_expr_1635121e0ab14ec8 ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'experience'::text) AND (bank_id = 'notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a'::text))",
+          "indexname": "idx_mu_emb_expr_1635121e0ab14ec8"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_mu_emb_obsv_1635121e0ab14ec8 ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'observation'::text) AND (bank_id = 'notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a'::text))",
+          "indexname": "idx_mu_emb_obsv_1635121e0ab14ec8"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_mu_emb_worl_1635121e0ab14ec8 ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'world'::text) AND (bank_id = 'notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a'::text))",
+          "indexname": "idx_mu_emb_worl_1635121e0ab14ec8"
+        }
+      ],
+      "internal_id": "1635121e-0ab1-4ec8-9cbd-9fb3c47b2470",
+      "profile": [
+        {
+          "bank_id": "notalone-experiment-177867ee364b3b2b8d60bf584ada1a7a",
+          "internal_id": "1635121e-0ab1-4ec8-9cbd-9fb3c47b2470"
+        }
+      ]
+    },
+    "elapsed_ms": 5665.666249988135,
+    "indexed_documents": 310,
+    "indexed_units": 310,
+    "local_current_eligible_records": 310,
+    "local_total_records": 314,
+    "scope": {
+      "contact_id": "4c96532b-250d-5df2-b699-11048dcf62dd",
+      "owner_id": "956babce-00f2-50c4-9f68-054341ae3ef7"
+    }
+  },
+  {
+    "bank_id": "notalone-experiment-5399faeaaceead5f8376604d5027d2bb",
+    "batches": [
+      {
+        "count": 2,
+        "elapsed_ms": 46.911042009014636,
+        "offset": 0,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-5399faeaaceead5f8376604d5027d2bb",
+          "items_count": 2,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      }
+    ],
+    "database_after": {
+      "counts": {
+        "async_operations": 0,
+        "attachments": 0,
+        "banks": 1,
+        "chunks": 2,
+        "documents": 2,
+        "entities": 0,
+        "invalidated_memory_units": 0,
+        "memory_units": 2,
+        "mental_models": 0,
+        "observation_history": 0
+      },
+      "indexes": [
+        {
+          "indexdef": "CREATE INDEX idx_mu_emb_expr_502dde295a3240ea ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'experience'::text) AND (bank_id = 'notalone-experiment-5399faeaaceead5f8376604d5027d2bb'::text))",
+          "indexname": "idx_mu_emb_expr_502dde295a3240ea"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_mu_emb_obsv_502dde295a3240ea ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'observation'::text) AND (bank_id = 'notalone-experiment-5399faeaaceead5f8376604d5027d2bb'::text))",
+          "indexname": "idx_mu_emb_obsv_502dde295a3240ea"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_mu_emb_worl_502dde295a3240ea ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'world'::text) AND (bank_id = 'notalone-experiment-5399faeaaceead5f8376604d5027d2bb'::text))",
+          "indexname": "idx_mu_emb_worl_502dde295a3240ea"
+        }
+      ],
+      "internal_id": "502dde29-5a32-40ea-aacb-3f369cd8808d",
+      "profile": [
+        {
+          "bank_id": "notalone-experiment-5399faeaaceead5f8376604d5027d2bb",
+          "internal_id": "502dde29-5a32-40ea-aacb-3f369cd8808d"
+        }
+      ]
+    },
+    "elapsed_ms": 146.35333302430809,
+    "indexed_documents": 2,
+    "indexed_units": 2,
+    "local_current_eligible_records": 2,
+    "local_total_records": 2,
+    "scope": {
+      "contact_id": "65ed989d-46d5-517f-947d-91d22667ea5f",
+      "owner_id": "956babce-00f2-50c4-9f68-054341ae3ef7"
+    }
+  },
+  {
+    "bank_id": "notalone-experiment-e502bd5b1c4e5ebec959fb61e1e7a6d7",
+    "batches": [
+      {
+        "count": 2,
+        "elapsed_ms": 42.58683300577104,
+        "offset": 0,
+        "response": {
+          "async": false,
+          "bank_id": "notalone-experiment-e502bd5b1c4e5ebec959fb61e1e7a6d7",
+          "items_count": 2,
+          "operation_id": null,
+          "operation_ids": null,
+          "success": true,
+          "usage": {
+            "cached_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "thoughts_tokens": 0,
+            "total_tokens": 0
+          }
+        }
+      }
+    ],
+    "database_after": {
+      "counts": {
+        "async_operations": 0,
+        "attachments": 0,
+        "banks": 1,
+        "chunks": 2,
+        "documents": 2,
+        "entities": 0,
+        "invalidated_memory_units": 0,
+        "memory_units": 2,
+        "mental_models": 0,
+        "observation_history": 0
+      },
+      "indexes": [
+        {
+          "indexdef": "CREATE INDEX idx_mu_emb_expr_8d56b25057f748cc ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'experience'::text) AND (bank_id = 'notalone-experiment-e502bd5b1c4e5ebec959fb61e1e7a6d7'::text))",
+          "indexname": "idx_mu_emb_expr_8d56b25057f748cc"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_mu_emb_obsv_8d56b25057f748cc ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'observation'::text) AND (bank_id = 'notalone-experiment-e502bd5b1c4e5ebec959fb61e1e7a6d7'::text))",
+          "indexname": "idx_mu_emb_obsv_8d56b25057f748cc"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_mu_emb_worl_8d56b25057f748cc ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'world'::text) AND (bank_id = 'notalone-experiment-e502bd5b1c4e5ebec959fb61e1e7a6d7'::text))",
+          "indexname": "idx_mu_emb_worl_8d56b25057f748cc"
+        }
+      ],
+      "internal_id": "8d56b250-57f7-48cc-b5d7-deb312b50a64",
+      "profile": [
+        {
+          "bank_id": "notalone-experiment-e502bd5b1c4e5ebec959fb61e1e7a6d7",
+          "internal_id": "8d56b250-57f7-48cc-b5d7-deb312b50a64"
+        }
+      ]
+    },
+    "elapsed_ms": 142.95175002189353,
+    "indexed_documents": 2,
+    "indexed_units": 2,
+    "local_current_eligible_records": 2,
+    "local_total_records": 2,
+    "scope": {
+      "contact_id": "99eeb490-131c-592e-af0c-f3f9197587d6",
+      "owner_id": "99eeb490-131c-592e-af0c-f3f9197587d6"
+    }
+  }
+]

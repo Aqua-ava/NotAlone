@@ -1,7 +1,7 @@
 # macOS App 与前台探针遗留项（第三轮审查）
 
-Triage: needs-triage
-State: open
+Triage: ready-for-agent
+State: resolved
 
 ## 背景
 
@@ -44,3 +44,7 @@ App target 无自动化测试（Package.swift 只覆盖 NotAloneAppCore）；竞
 - 2026-10-03：第 6 项分页实现与验证完成：Core 统一首屏、历史和对账状态，接续后一次展示新增区间，历史游标独立；预算／异常游标停止、失败续读及晚返回结果均有合成覆盖。10 项分页回归、完整 Swift 63 项与 App 目标编译通过；缓冲仅在端侧内存，未替换运行中 App，真实集成尚未验收。最终双轴审查与本地提交记录见 [消息分页任务](20-message-pagination-continuity.md)，本汇总仍保持 open。
 - 2026-10-04：第 14 项已按现代码确认自动状态查询缺少防重入与退出取消；只读证据未实测并发数量，不沿用旧估算。用户确认 [菜单栏轮询任务](21-menubar-status-polling.md) 的公开资格接缝、5 秒状态 GET 超时和构建兼容，进入独立实现；服务端状态锁的旧缺陷已由 issue 13 修复，CLI 同步、OCR 与记忆诊断不在本轮范围。
 - 2026-10-04：第 14 项完成：真实初次／Timer 入口使用 Core 单请求资格，换连接、握手缺失、退出和手动结果使旧轮询失效；状态 GET 两项超时均为 5 秒，POST 保持原等待方式。14 项相关、35 项完整探针测试、SwiftPM App 与禁用签名的 Xcode 双架构构建通过，最终 Standards／Spec 均 0。保留既有 Xcode 配置警告，未运行或替换当前 App，真实集成未验收；本汇总仍有其他遗留项，保持 open。
+
+- 2026-10-04：收尾分类并关闭。16 条遗留项中 9 条经代码复核已由后续提交修好（代际隔离的 BackendSupervisor、导入 409 专用文案、置信度百分数格式、握手地址不再强解包、对账与历史游标分离、attach 失败可重试、`-swift-version 6`、同步轮询防重入、Info.plist 键的前提被本机 TCC 证据反驳），相关 Swift 用例已在 `macos_app/Tests` 与 `macos_sync_probe/Tests` 中存在。
+- 2026-10-04：第 13 条（`--session --json` 的 `ok:false` 仍退出 0）本轮按“契约写清楚”处理：该行为是刻意的——Python 探针适配器先解析 stdout 再检查 `ok`，失败也要带结构化原因返回；已在 `macos_sync_probe/README.md` 新增“`--session --json` 输出契约”一节说明调用方必须读 `ok` 与 `error_code`，并注明纯文本模式仍返回非零退出码。
+- 2026-10-04：剩下 5 条（主线程 OCR 负载、`previousHash` 更新时机、Vision 瞬态错误分类、`excludingDesktopWindows(false, …)`、Timer 强引用）都需要真实屏幕录制权限、真实微信窗口或 Instruments 才能验证／判断，本环境无法执行；其中 Vision 分类与 `excludingDesktopWindows` 可先把判定抽成 Core 纯函数再加合成用例，属新的实现任务。上述边界如实保留，本票关闭但不等同于这 5 条已修复。

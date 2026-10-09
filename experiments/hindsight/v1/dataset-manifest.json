@@ -1,0 +1,18 @@
+{
+  "annotation_basis": "可用于回复的资料 ID；先标注后运行，不是真值标签。",
+  "contact_budget": {
+    "chars": 600,
+    "count": 5
+  },
+  "dataset_id": "hindsight-synthetic-v1",
+  "owner_budget": {
+    "chars": 240,
+    "count": 3
+  },
+  "query_rule": "使用现有 build_query_tokens 的 NFKC/casefold/200字符头尾采样。",
+  "seed": 20261004,
+  "sha256": {
+    "dataset.json": "57ffcd241c5073732ccb28fe26ba26b71a4655d812661b11d676254664d46426",
+    "gold.json": "0e52043ae10a4a29c6f7482f8b4f695f8909c880f343697814e23d93fe91b607"
+  }
+}

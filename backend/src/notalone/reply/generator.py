@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -11,9 +12,11 @@ from notalone.ledger.models import LedgerEntry, LedgerOutcome
 from notalone.ledger.ports import OutboundLedgerPort
 from notalone.reply.context import (
     ContextEvidence,
+    EVIDENCE_KINDS,
     ReplyContext,
     ReplyContextPort,
     ToolCallTrace,
+    evidence_contract_is_valid,
 )
 from notalone.reply.runtime import (
     ReplyRuntime,
@@ -46,6 +49,9 @@ from notalone.reply.interface import (
     SkillUse,
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
+
+
+logger = logging.getLogger(__name__)
 
 
 class ReplyGenerator:
@@ -307,7 +313,11 @@ class ReplyGenerator:
             if hasattr(request, "request_id"):
                 self._store.fail(request, reason=reason)
         except Exception:
-            pass
+            # 标记失败本身不能改变请求结果；但不能静默吞掉，
+            # 否则请求会停到租约过期，且没有任何可观测线索。
+            logger.warning(
+                "回复请求标记失败时存储调用出错", exc_info=True,
+            )
 
     @staticmethod
     def _validate_context(command: GenerateReply, context: object) -> None:
@@ -357,13 +367,7 @@ class ReplyGenerator:
                 or item.scope != context.scope
                 or not isinstance(item.evidence_id, UUID)
                 or item.evidence_id in evidence_ids
-                or item.kind not in (
-                    "message",
-                    "confirmed_memory",
-                    "owner_memory",
-                    "user_draft",
-                    "continued_candidate",
-                )
+                or item.kind not in EVIDENCE_KINDS
                 or not isinstance(item.text, str)
                 or not item.text.strip()
                 or not isinstance(item.source_ids, tuple)
@@ -394,7 +398,11 @@ class ReplyGenerator:
                         or item.revision < 1
                     )
                 )
-                or not ReplyGenerator._valid_evidence_status(item)
+                or not evidence_contract_is_valid(
+                    kind=item.kind,
+                    status=item.status,
+                    selection_reason=item.selection_reason,
+                )
             ):
                 raise ReplyInvariantError("回复依据超出范围或结构无效。")
             evidence_ids.add(item.evidence_id)
@@ -470,19 +478,6 @@ class ReplyGenerator:
             raise
         except Exception:
             raise ReplyContextError("回复依据重新验证失败。") from None
-
-    @staticmethod
-    def _valid_evidence_status(item: ContextEvidence) -> bool:
-        """只允许可解释的本轮证据状态进入模型和持久化边界。"""
-
-        allowed = {
-            "message": {"active"},
-            "confirmed_memory": {"active"},
-            "owner_memory": {"active"},
-            "user_draft": {"active", "user_input"},
-            "continued_candidate": {"active", "candidate"},
-        }
-        return item.status in allowed.get(item.kind, set())
 
     @staticmethod
     def _merge_runtime_context(

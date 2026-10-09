@@ -1,6 +1,6 @@
 # Memory、Skill 与 Prompt 上下文规格
 
-State: open
+State: resolved
 Triage: ready-for-agent
 
 ## Problem Statement
@@ -252,3 +252,8 @@ NotAlone 保留现有 PostgreSQL、联系人范围、来源证据、`ReplyContex
 - 现有 ADR-005、ADR-006、ADR-009、ADR-010、ADR-011、ADR-014、ADR-015 和 ADR-019 的联系人隔离、来源证据、`ReplyContext`、有界 Runtime、Skill 版本、异步任务、目录重建和受控 Resource 约束继续有效。
 - 当前研究笔记提供 TencentDB 的源码和官方来源索引；研究证据只能说明参考项目的行为，不能证明 NotAlone 已经完成集成或真实聊天渠道端到端可用。
 - 规格发布后可以继续拆成 L0/L1 检索、Prompt 上下文、Skill 按需加载、L2 异步索引、删除失效和评测等独立任务；任务之间应明确真实阻塞关系。
+
+## Comments
+
+- 2026-10-04：收尾核验后关闭。7 张 issue 全 resolved；L0 工具预算与会话绑定（`reply/tools.py`）、上下文快照与每轮当前性复核（`reply/context.py`）、Skill 渐进加载与按需资源（`reply/adapters/langchain_runtime.py`）均有实现与单测，`tests/unit/reply` 128 项通过。
+- 2026-10-04：本规格内的“向量扩展”分支已被 `.scratch/memory-semantic-support/` 与 `.scratch/pgvector-memory-recall/`（2026-10-04 结项）承接，且两地评测结论都是**不启用向量默认路径**，`retrieval/feature_flags.py` 保持关闭；这正是规格设想的“先评测再决定”。spec 中关于 ADR-002 冲突的条目已由 ADR-024 解决。

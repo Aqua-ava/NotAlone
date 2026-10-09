@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from collections.abc import Callable
 from contextlib import ExitStack
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -22,7 +23,14 @@ from notalone.memory.models import (
     MemoryCategory,
     MemoryTopic,
 )
-from notalone.memory_extraction.command import extract_main, run_extraction
+from notalone.memory_extraction.command import (
+    extract_main,
+    memory_add_main,
+    memory_delete_main,
+    memory_list_main,
+    run_extraction,
+)
+from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
 from notalone.memory_extraction.errors import (
     ExtractionInvalidOutputError,
     ExtractionRuntimeError,
@@ -39,6 +47,7 @@ from notalone.memory_extraction.recovery import (
 from notalone.memory_extraction.verification_adapters import (
     LangChainSourceVerificationRuntime,
 )
+from notalone.memory_trace.adapters import InMemoryTraceStore
 from notalone.scopes import ContactScope
 from tests.unit.memory_extraction.verification_helpers import (
     FixedSourceVerifier,
@@ -46,7 +55,6 @@ from tests.unit.memory_extraction.verification_helpers import (
     verification_result,
 )
 from tests.unit.reply.test_langchain_vertical_slice import ToolCallingFakeModel
-
 
 OWNER_ID = UUID("aaaaaaaa-1111-1111-1111-111111111111")
 CONTACT_ID = UUID("bbbbbbbb-2222-2222-2222-222222222222")
@@ -297,6 +305,9 @@ class RunExtractionTest(unittest.TestCase):
         self.memory_port = RecordingMemoryPort()
         self.owner_port = RecordingOwnerPort()
         self.watermark = RecordingWatermark()
+        # 本类验证原有三道门槛与批次统计，显式放行全部维度；
+        # 默认收紧（空放行表）由 test_adoption 单独覆盖。
+        self.dimension_release = RELEASE_ALL_DIMENSIONS
 
     def test_ledger_keeps_extraction_and_verification_latency_and_start_separate(self) -> None:
         messages = (replace(_messages(1)[0], text="我习惯直接打电话沟通"),)
@@ -323,6 +334,7 @@ class RunExtractionTest(unittest.TestCase):
             SimpleNamespace(now=clock.now),
         ):
             stats = run_extraction(
+                trace_store=InMemoryTraceStore(),
                 scope=self.scope,
                 messages=messages,
                 watermark_message_id=None,
@@ -332,6 +344,7 @@ class RunExtractionTest(unittest.TestCase):
                 owner_memory_port=self.owner_port,
                 ledger=ledger,
                 model_name="extraction-fake",
+                dimension_release=self.dimension_release,
             )
 
         self.assertEqual(stats.adopted, 1)
@@ -383,6 +396,7 @@ class RunExtractionTest(unittest.TestCase):
                     SimpleNamespace(now=clock.now),
                 ):
                     stats = run_extraction(
+                        trace_store=InMemoryTraceStore(),
                         scope=self.scope,
                         messages=messages,
                         watermark_message_id=None,
@@ -418,6 +432,7 @@ class RunExtractionTest(unittest.TestCase):
         ledger = InMemoryOutboundLedger()
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -427,6 +442,7 @@ class RunExtractionTest(unittest.TestCase):
             owner_memory_port=self.owner_port,
             ledger=ledger,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
         )
 
         self.assertEqual(stats.adopted, 1)
@@ -443,6 +459,7 @@ class RunExtractionTest(unittest.TestCase):
         store = InMemoryMemoryStore()
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -450,6 +467,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=store,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
         )
 
         self.assertEqual(stats.adopted, 0)
@@ -467,6 +485,7 @@ class RunExtractionTest(unittest.TestCase):
         ),))
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -475,6 +494,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=store,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
         )
 
         self.assertEqual(stats.pending, 1)
@@ -495,6 +515,7 @@ class RunExtractionTest(unittest.TestCase):
         ),))
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -504,6 +525,7 @@ class RunExtractionTest(unittest.TestCase):
             owner_memory_port=self.owner_port,
             ledger=ledger,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
         )
 
         self.assertEqual(stats.failed_batches, 0)
@@ -527,13 +549,16 @@ class RunExtractionTest(unittest.TestCase):
             owner_memory_port=self.owner_port,
             ledger=ledger,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
         )
 
         failed = run_extraction(
+            trace_store=InMemoryTraceStore(),
             **kwargs,
             watermark_message_id=None,
             verification_runtime=LangChainSourceVerificationRuntime(
-                model=UnavailableVerificationModel(), ledger=ledger,
+                model=UnavailableVerificationModel(),
+                ledger=ledger,
             ),
         )
 
@@ -558,10 +583,12 @@ class RunExtractionTest(unittest.TestCase):
         ])
 
         retried = run_extraction(
+            trace_store=InMemoryTraceStore(),
             **kwargs,
             watermark_message_id=self.watermark.get(self.scope),
             verification_runtime=LangChainSourceVerificationRuntime(
-                model=retry_model, ledger=ledger,
+                model=retry_model,
+                ledger=ledger,
             ),
         )
 
@@ -591,6 +618,7 @@ class RunExtractionTest(unittest.TestCase):
 
         for attempt in (1, 2, 3):
             stats = run_extraction(
+                trace_store=InMemoryTraceStore(),
                 scope=self.scope,
                 messages=messages,
                 watermark_message_id=self.watermark.get(self.scope),
@@ -600,6 +628,7 @@ class RunExtractionTest(unittest.TestCase):
                 owner_memory_port=self.owner_port,
                 ledger=ledger,
                 watermark_port=self.watermark,
+                dimension_release=self.dimension_release,
             )
             if attempt < 3:
                 self.assertEqual(stats.failed_batches, 1)
@@ -634,6 +663,7 @@ class RunExtractionTest(unittest.TestCase):
             with self.subTest(overrides=overrides):
                 store = InMemoryMemoryStore()
                 stats = run_extraction(
+                    trace_store=InMemoryTraceStore(),
                     scope=self.scope,
                     messages=messages,
                     watermark_message_id=None,
@@ -655,6 +685,7 @@ class RunExtractionTest(unittest.TestCase):
         messages = _messages(7)
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -662,6 +693,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -674,6 +706,7 @@ class RunExtractionTest(unittest.TestCase):
         messages = _messages(7)
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=messages[4].message_id,
@@ -681,6 +714,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -691,6 +725,7 @@ class RunExtractionTest(unittest.TestCase):
         messages = _messages(3)
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=uuid4(),
@@ -698,6 +733,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -708,6 +744,7 @@ class RunExtractionTest(unittest.TestCase):
         ledger = InMemoryOutboundLedger()
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -716,6 +753,7 @@ class RunExtractionTest(unittest.TestCase):
             owner_memory_port=self.owner_port,
             ledger=ledger,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -731,6 +769,7 @@ class RunExtractionTest(unittest.TestCase):
         runtime = RecordingWindowRuntime()
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -752,6 +791,7 @@ class RunExtractionTest(unittest.TestCase):
     def test_context_side_cannot_exceed_twenty_messages(self) -> None:
         with self.assertRaises(ValueError):
             run_extraction(
+                trace_store=InMemoryTraceStore(),
                 scope=self.scope,
                 messages=_messages(1),
                 watermark_message_id=None,
@@ -765,6 +805,7 @@ class RunExtractionTest(unittest.TestCase):
         messages = _messages(6)
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -772,6 +813,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -809,6 +851,7 @@ class RunExtractionTest(unittest.TestCase):
         )
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -816,6 +859,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -861,6 +905,7 @@ class RunExtractionTest(unittest.TestCase):
         self.watermark.failure = previous
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -868,6 +913,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -892,6 +938,7 @@ class RunExtractionTest(unittest.TestCase):
         )
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -899,6 +946,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -920,6 +968,7 @@ class RunExtractionTest(unittest.TestCase):
         )
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -927,6 +976,7 @@ class RunExtractionTest(unittest.TestCase):
             memory_port=self.memory_port,
             owner_memory_port=self.owner_port,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -951,6 +1001,7 @@ class RunExtractionTest(unittest.TestCase):
         messages = _messages(3)
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -962,6 +1013,7 @@ class RunExtractionTest(unittest.TestCase):
                 ExtractionInvalidOutputError("裁决模型未返回结构化结果。")
             ),
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -981,6 +1033,7 @@ class RunExtractionTest(unittest.TestCase):
         ledger = InMemoryOutboundLedger()
 
         stats = run_extraction(
+            trace_store=InMemoryTraceStore(),
             scope=self.scope,
             messages=messages,
             watermark_message_id=None,
@@ -993,6 +1046,7 @@ class RunExtractionTest(unittest.TestCase):
             ),
             ledger=ledger,
             watermark_port=self.watermark,
+            dimension_release=self.dimension_release,
             batch_size=3,
         )
 
@@ -1039,6 +1093,7 @@ class ExtractMainTest(unittest.TestCase):
             "PostgresOwnerMemoryStore": RecordingOwnerPort(),
             "PostgresOutboundLedger": ledger,
             "PostgresWatermarkStore": watermark,
+            "PostgresExtractionTraceStore": InMemoryTraceStore(),
             "contact_exists": True,
             "load_contact_messages": (message,),
         }
@@ -1113,6 +1168,137 @@ class ExtractMainTest(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         self.assertIn("记忆提取准备失败", output.getvalue())
+
+
+class OwnerIdAndAdoptionFailureTest(unittest.TestCase):
+    """非法 owner 配置与写入裁决失败时的稳定错误、统计保真。"""
+
+    def test_invalid_owner_id_returns_error_instead_of_traceback(self) -> None:
+        entries: tuple[tuple[str, Callable[[list[str] | None], int], list[str]], ...] = (
+            (
+                "memory-add",
+                memory_add_main,
+                ["--text", "合成记忆", "--category", "common_fact"],
+            ),
+            ("memory-list", memory_list_main, []),
+            (
+                "memory-delete",
+                memory_delete_main,
+                ["--memory-id", str(uuid4()), "--owner"],
+            ),
+        )
+        for label, entry, arguments in entries:
+            with self.subTest(entry=label):
+                output = StringIO()
+                environment = {
+                    "NOTALONE_DATABASE_URL": "postgresql:///notalone_test",
+                    "NOTALONE_OWNER_ID": "not-a-uuid",
+                }
+                with patch(
+                    "notalone.memory_extraction.command.load_project_env"
+                ), patch.dict("os.environ", environment, clear=True), patch(
+                    "sys.stdout", output
+                ):
+                    exit_code = entry(arguments)
+
+                printed = output.getvalue()
+                self.assertEqual(exit_code, 1)
+                self.assertIn("NOTALONE_OWNER_ID", printed)
+                self.assertIn("UUID", printed)
+                self.assertNotIn("Traceback", printed)
+
+    def test_adoption_failure_keeps_batch_extraction_stats(self) -> None:
+        messages = _messages(1)
+        store = InMemoryMemoryStore()
+        ledger = InMemoryOutboundLedger()
+        verifier = FixedSourceVerifier((verification_result(
+            verdict="unsupported", issues=("meaning",),
+        ),))
+
+        class FailingAdoption:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def adopt(self, scope, outcome):
+                raise ExtractionRuntimeError(
+                    "合成写入裁决失败", ExtractionFailureKind.UNAVAILABLE,
+                )
+
+        with patch(
+            "notalone.memory_extraction.command.MemoryAdoption", FailingAdoption
+        ):
+            stats = run_extraction(
+                trace_store=InMemoryTraceStore(),
+                scope=ContactScope(OWNER_ID, CONTACT_ID),
+                messages=messages,
+                watermark_message_id=None,
+                runtime=PayloadRuntime(),
+                verification_runtime=verifier,
+                memory_port=store,
+                owner_memory_port=RecordingOwnerPort(),
+                ledger=ledger,
+                watermark_port=RecordingWatermark(),
+            )
+
+        self.assertEqual(stats.batches, 1)
+        self.assertEqual(stats.failed_batches, 1)
+        self.assertEqual(stats.extracted, 0)
+        self.assertEqual(stats.rejected_by_contract, 1)
+
+
+class AdoptionFailureStatsTest(unittest.TestCase):
+    """采纳阶段失败时，本批已通过提取与拒绝的候选都要留在统计里。"""
+
+    def test_failed_adoption_keeps_passed_and_rejected_counts(self) -> None:
+        messages = _messages(2)
+
+        class TwoCandidateRuntime:
+            def extract(self, window) -> tuple:
+                return tuple(
+                    _payload(message_id)
+                    for message_id in window.target_message_ids
+                )
+
+        verifier = FixedSourceVerifier((
+            verification_result(evidence=(
+                (messages[0].message_id, messages[0].text),
+            )),
+            verification_result(
+                candidate_index=1,
+                verdict="unsupported", issues=("meaning",),
+            ),
+        ))
+
+        class FailingAdoption:
+            def __init__(self, **kwargs) -> None:
+                pass
+
+            def adopt(self, scope, outcome):
+                raise ExtractionRuntimeError(
+                    "合成写入裁决失败", ExtractionFailureKind.UNAVAILABLE,
+                )
+
+        with patch(
+            "notalone.memory_extraction.command.MemoryAdoption", FailingAdoption
+        ):
+            stats = run_extraction(
+                trace_store=InMemoryTraceStore(),
+                scope=ContactScope(OWNER_ID, CONTACT_ID),
+                messages=messages,
+                watermark_message_id=None,
+                runtime=TwoCandidateRuntime(),
+                verification_runtime=verifier,
+                memory_port=InMemoryMemoryStore(),
+                owner_memory_port=RecordingOwnerPort(),
+                ledger=InMemoryOutboundLedger(),
+                watermark_port=RecordingWatermark(),
+                batch_size=20,
+            )
+
+        self.assertEqual(stats.batches, 1)
+        self.assertEqual(stats.failed_batches, 1)
+        self.assertEqual(stats.extracted, 1)
+        self.assertEqual(stats.rejected_by_contract, 1)
 
 
 if __name__ == "__main__":

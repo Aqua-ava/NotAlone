@@ -42,3 +42,13 @@ class LedgerEntry:
                 raise ValueError(f"台账{name}必须是非负整数或空。")
         if not isinstance(self.called_at, datetime) or self.called_at.tzinfo is None:
             raise ValueError("台账调用时间必须是带时区的 datetime。")
+
+@dataclass(frozen=True, slots=True)
+class OutboundLedgerSummary:
+    """台账概览：计数与 token 合计在数据库侧聚合，不把全表拉进内存。"""
+
+    total_calls: int
+    provider_counts: dict[str, int]
+    outcome_counts: dict[str, int]
+    total_input_tokens: int
+    total_output_tokens: int

@@ -15,7 +15,8 @@ from notalone.memory_extraction.errors import (
     ExtractionInvalidOutputError,
     ExtractionRuntimeError,
 )
-
+from notalone.memory_trace import TraceWriteError
+from notalone.memory_trace.transport import invoke_traced_model
 
 ADJUDICATION_SYSTEM_PROMPT = """你裁决一条新的记忆事实与已有相似记忆的关系，四选一：
 add    = 全新事实，与旧记忆无关。
@@ -58,20 +59,22 @@ class LangChainAdjudicationRuntime:
         self, *, candidate_text: str, similar: tuple[SimilarMemory, ...]
     ) -> AdjudicationDecision:
         try:
-            bound = self._model.bind_tools([ADJUDICATION_SCHEMA])
-            message = bound.invoke(
-                [
+            message = invoke_traced_model(
+                self._model,
+                purpose="adjudication",
+                schema=ADJUDICATION_SCHEMA,
+                messages=[
                     {"role": "system", "content": ADJUDICATION_SYSTEM_PROMPT},
                     {
                         "role": "user",
                         "content": _adjudication_text(candidate_text, similar),
                     },
-                ]
+                ],
             )
-        except ExtractionRuntimeError:
+        except (ExtractionRuntimeError, TraceWriteError):
             raise
         except Exception as error:
-            raise ExtractionRuntimeError("裁决模型调用失败。") from error
+            raise ExtractionRuntimeError("裁决模型调用失败。") from None
         tool_calls = getattr(message, "tool_calls", None)
         if not tool_calls:
             raise ExtractionInvalidOutputError("裁决模型未返回结构化结果。")

@@ -16,13 +16,14 @@ from langchain_core.messages import AIMessage
 from notalone.ledger.adapters import InMemoryOutboundLedger
 from notalone.ledger.models import LedgerOutcome
 from notalone.memory.adapters import InMemoryMemoryStore
+from notalone.memory_trace.adapters import InMemoryTraceStore
 from notalone.scopes import ContactScope
 from notalone.tasks.command import (
     WorkerCommandStatus,
     run_worker,
     worker_main,
 )
-from notalone.tasks.models import BackgroundTaskStepName, IMPORT_TASK_STEPS
+from notalone.tasks.models import IMPORT_TASK_STEPS, BackgroundTaskStepName
 from notalone.tasks.worker import (
     PostgresMemoryExtractionRunner,
     WorkerRunOutcome,
@@ -35,9 +36,10 @@ from tests.unit.memory_extraction.test_command import (
     _messages,
     _payload,
 )
-from tests.unit.memory_extraction.verification_helpers import verification_result
+from tests.unit.memory_extraction.verification_helpers import (
+    verification_result,
+)
 from tests.unit.reply.test_langchain_vertical_slice import ToolCallingFakeModel
-
 
 class FakeWorker:
     def __init__(self, results: list[WorkerRunResult]) -> None:
@@ -279,6 +281,7 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
                 owner_memory_port=RecordingOwnerPort(),
                 ledger=ledger,
                 watermark_port=watermark,
+                trace_store=InMemoryTraceStore(),
             )
             stats = runner.run(scope=scope)
 
@@ -293,6 +296,92 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
             [entry.outcome for entry in ledger.list_by_owner(scope.owner_id)],
             [LedgerOutcome.SUCCEEDED, LedgerOutcome.SUCCEEDED],
         )
+
+    def test_default_runner_keeps_candidates_pending_without_release(self) -> None:
+        """默认装配不得悄悄全量放行：未放行维度仍走原有待确认路径。"""
+
+        scope = ContactScope(uuid4(), uuid4())
+        message = replace(_messages(1)[0], text="我平时喜欢喝茶")
+        payload = {**_payload(message.message_id), "text": "联系人喜欢喝茶"}
+        model = ToolCallingFakeModel(responses=[
+            AIMessage(content="", tool_calls=[{
+                "name": "MemoryExtractionOutput", "id": "extract-default",
+                "args": {"facts": [payload]},
+            }]),
+            AIMessage(content="", tool_calls=[{
+                "name": "SourceVerificationOutput", "id": "verify-default",
+                "args": {"results": [verification_result(
+                    evidence=((message.message_id, "我平时喜欢喝茶"),),
+                )]},
+            }]),
+        ])
+        store = InMemoryMemoryStore()
+        with patch(
+            "notalone.memory_extraction.cli_support.build_deepseek_model",
+            return_value=model,
+        ), patch(
+            "notalone.memory_extraction.cli_support.load_contact_messages",
+            return_value=(message,),
+        ), patch.dict(os.environ, {}, clear=True):
+            runner = PostgresMemoryExtractionRunner(
+                "postgresql:///synthetic_unused_test",
+                memory_port=store,
+                owner_memory_port=RecordingOwnerPort(),
+                ledger=InMemoryOutboundLedger(),
+                watermark_port=RecordingWatermark(),
+                trace_store=InMemoryTraceStore(),
+            )
+            stats = runner.run(scope=scope)
+
+        self.assertEqual(stats.adopted, 0)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(store.list_confirmed(scope), ())
+        self.assertEqual(
+            [candidate.text for candidate in store.list_pending_candidates(scope)],
+            ["联系人喜欢喝茶"],
+        )
+
+    def test_runner_accepts_an_explicit_release_table(self) -> None:
+        """显式注入放行表时该维度恢复原有自动采纳。"""
+
+        from notalone.memory_extraction.dimensions import DimensionRelease
+
+        scope = ContactScope(uuid4(), uuid4())
+        message = replace(_messages(1)[0], text="我平时喜欢喝茶")
+        payload = {**_payload(message.message_id), "text": "联系人喜欢喝茶"}
+        model = ToolCallingFakeModel(responses=[
+            AIMessage(content="", tool_calls=[{
+                "name": "MemoryExtractionOutput", "id": "extract-released",
+                "args": {"facts": [payload]},
+            }]),
+            AIMessage(content="", tool_calls=[{
+                "name": "SourceVerificationOutput", "id": "verify-released",
+                "args": {"results": [verification_result(
+                    evidence=((message.message_id, "我平时喜欢喝茶"),),
+                )]},
+            }]),
+        ])
+        store = InMemoryMemoryStore()
+        with patch(
+            "notalone.memory_extraction.cli_support.build_deepseek_model",
+            return_value=model,
+        ), patch(
+            "notalone.memory_extraction.cli_support.load_contact_messages",
+            return_value=(message,),
+        ), patch.dict(os.environ, {}, clear=True):
+            runner = PostgresMemoryExtractionRunner(
+                "postgresql:///synthetic_unused_test",
+                memory_port=store,
+                owner_memory_port=RecordingOwnerPort(),
+                ledger=InMemoryOutboundLedger(),
+                watermark_port=RecordingWatermark(),
+                trace_store=InMemoryTraceStore(),
+                dimension_release=DimensionRelease(("subject",)),
+            )
+            stats = runner.run(scope=scope)
+
+        self.assertEqual(stats.adopted, 1)
+        self.assertEqual(len(store.list_confirmed(scope)), 1)
 
 
 if __name__ == "__main__":

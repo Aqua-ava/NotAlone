@@ -4,18 +4,39 @@ Triage: ready-for-human
 State: claimed
 Type: task
 Blocked by: none
+> 阻塞说明（2026-10-06 订正）：原记录写「没有现成 ECNU 凭据」，与事实不符——`.env` 的 `NOTALONE_DEEPSEEK_BASE_URL` 已指向 ECNU 端点、模型 `ecnu-max`，2026-10-04 起多轮匿名对照都在该端点上完成（含本票 16 次重复测量）。当前真正的阻塞不是凭据，而是**目标本身**：模型对照已按预注册计划跑完并判定「无可观测的对照信号」，真实聊天严格覆盖仍 6/12、可选 2/6，整体目标未达成；继续推进需要新的预注册对照设计或改变目标范围，属用户决定事项。
+>
+> 处置（2026-10-06，用户决定）：**保持 `claimed`，不结票、不标 `wontfix`**。提示侧改动与全部证据保留，所有旧预算继续关闭、不自动重开；日后若要再投入，恢复条件是「一次新的预注册对照（更多材料窗口与重复、两臂随机顺序、以不确定率为主指标）」或「改变目标范围」，届时另批预算与范围。
 
 按 [spec](../spec.md) 逐条归因未正确保留的必需主张，建立真实红反馈，在现有公开接缝完成有效修复、同批复测与本地提交。
 
 ## 验收
 
-- 区分报价的核心引用与额外扩写、历史主体／转述标签、当前未知和整项未生成；正确拒绝错误标签不称误拒。
-- 首次红、修改前后完整输出与 Gold 可追溯，不覆盖失败或按输出改答案。
-- 分 raw、接受及完整契约覆盖，独立统计正例损失和坏 auto；方案不使错误 auto 增加。
-- 旧认可资料、业务记忆与水位不写，私聊与凭据不进入 Git。
-- 相关检查、隔离全量、两轴评审、本地中文提交完成；无远端 Git。
+- [x] 区分报价的核心引用与额外扩写、历史主体／转述标签、当前未知和整项未生成；正确拒绝错误标签不称误拒。（本轮范围只覆盖“转述标记完整保留却被误判 uncertain”这一类；其他类别仍按各自既有结论记录。）
+- [x] 首次红、修改前后完整输出与 Gold 可追溯，不覆盖失败或按输出改答案。（提示改动保留红绿顺序与命令，见[结果文档](../../../docs/memory-verification-report-support-leaf-20261004.md)。）
+- [ ] 分 raw、接受及完整契约覆盖，独立统计正例损失和坏 auto；方案不使错误 auto 增加。
+- [x] 旧认可资料、业务记忆与水位不写，私聊与凭据不进入 Git。
+- [x] 相关检查、隔离全量、两轴评审、本地中文提交完成；无远端 Git。（单一改动集 `ddfa1f7`，两轴只读审查已记录。）
+
+## Answer
+
+**已完成（本地，0 次联网、0 预算）**：把语义稳定性提示叶并入产品来源核验提示 `SOURCE_VERIFICATION_SYSTEM_PROMPT`（新增 6 行，提示文件 SHA256 `d93ca1d6…`），产品在三种核验 verdict 下的后处理与转述候选的 `pending` 语义未变；新增 [提示契约与 fail-closed 测试](../../../tests/unit/memory_extraction/test_verification_prompt_contract.py)（改动前 2 红 3 绿、改动后 5 项全过），记忆提取子集 175 项与全量 720 项通过，两轴只读审查完成。范围为用户批准的“只改核验提示一小段、不加 `described_party`、本地 0 联网”；证据与限制见[结果文档](../../../docs/memory-verification-report-support-leaf-20261004.md)。
+
+**未完成**：产品提示未经真实模型对照，4/4 试点数字来自带 `described_party` 的变体提示，不能算作产品提示成绩；规格要求的“原始必需主张完整保留”这一整体目标尚未达成，spec 级验收（raw、接受与完整契约覆盖，正例损失与坏 auto 独立统计）保持未勾选。本任务整体仍为 `claimed`，下一步需要用户决定是否为真实模型匿名对照批新预算；未读真实聊天与留出、未写业务记忆与水位、未改默认采纳、无远端 Git。
 
 ## Comments
+
+2026-10-04：v3增量终审及独立参考已冻结：Standards新增硬规范／阻断0、原可选气味1保留，SHA fa47c316…；Spec当前缺失／scope creep／错误阻断0，SHA 0af14710…，明确保留首类别/话题核对不足及D7误标。原3方法／12人工给定正控制、3文件类型／AST通过，目标语义改善仍未实测；首反例、首草案、首审不覆盖。最终文档只补收据SHA和完成元数据，最小核对后仅本任务本地提交。48次尚未批准、旧预算闭账、0新模型/业务/默认/远端Git；ready-for-human／claimed，整体未完成。
+
+2026-10-04：上述首审后补核类别/话题与本人共同完成的语用，发现新合成v2准备缺口，初正确判断不得扩大成完整类别语义正确。首输入、参考和两轴收据不改；v3仅修category/topic及D7 assertion/asserted/auto，原话／人物／scope IDs／subject／日期／风险保持，去向6auto／6pending。原3个契约控制换v3路径后重跑通过，3文件类型／AST通过，不算额外模型/测试样本。独立Spec及Standards已核此增量，最终收据待当前cached文档核对后独占保存；全程0新模型、业务、默认或旧预算改动。实际与E漏提目标仍未完成，48次仍待具体联网范围决定。
+
+2026-10-04：本轮本机准备与四文档两轴终审完成。Standards硬规范／阻断0、可选重复测试helper气味1，SHA a7397c80…；Spec当前缺失／scope creep／实现错误0，SHA 79198570…，独立冻结D1—D12逐条判断支持v2（5auto／7pending）。初scope漏列自造D材料，首记录保留后补充范围说明fdf5fded…，没有授予新外部调用或真实资料。原症状仍2红，所有本机绿检查只说明接缝兼容；新48预算未批准，整体未完成、ready-for-human／claimed不变。收据／链接／统计和最终元数据增量核对后按工程规则保存仅本任务四文档的本地中文提交，不做远端Git。
+
+2026-10-04：用户“好的，把这个设为目标继续弄”启动持续目标并继续本机准备。[本机记录](../../../docs/memory-party-participants-local-preparation-20261004.md)确认两C4原始返回已错、完整输入未遗漏、程序不改错正确分类；三个假设预记录，模型偏重主要人物的因果尚未实测。原／候选提示重放旧响应各2症状断言红、20个已知给定机会保留，3本机契约控制／3文件类型与AST通过；首9类型声明错误及首反馈保留，0新API、SDK真实构造或业务／默认改动。私有提示单叶准备和12条合成开发样本完成，不改schema／guard或旧参考；旧24及所有余额仍关闭，actual／private held未读，E漏提和实际6/12／2/6未改善。新的[4／20／24最多48次匿名对照](../../../docs/memory-party-participants-prompt-pilot-proposal-20261004.md)只准备，按workflow“实际实现需要超出当前spec或ticket”待该新预算具体决定；日常核验由Agent负责。State仍claimed、Blocked by none，Triage ready-for-human仅待新联网范围，当前文档验证／两轴审阅／本地提交继续完成，不标整体完成。
+
+2026-10-04：[24次人物匿名对照结果](../../../docs/memory-party-guard-pilot-result-20261004.md)已关闭：阶段1完整通过才开阶段2，24V全部返回／台账／预约对应，E／R、运行／结构失败及未运行0。原／新坏auto6／0，正14/14完整保护，人物18/20；C4两轮把共同参与mixed误判contact，阶段2及整体门失败，不因安全pending或充分quote改Gold。raw先独审冻结再揭compiled／Flow，Fact与代码推导decision风险分层，原14／未知日期保持。worker11＋root6控制、类型与AST、SDK仅绑定、228SHA／7版本及两轴预检通过；运行／落盘失败统计修正和全部首失败保留。原J未补提，实际6/12及可选2/6保持，0actual／held／业务／默认／产品源码变更。24预算余额0、导入前真实闭账拒绝；State claimed、Triage ready-for-agent仅继续本机归因／具体方案，不开放新模型试验。当前三文档最小核验及两轴终审通过；真实mypy选项与C4误判方向文案已修，最终硬问题／阻塞0、可选气味1，终审SHA b3c88e0a…／7cb708b7…保留。按工程规则保存任务专属本地提交，无远端Git；整体spec未完成。
+
+2026-10-04：用户明确“同意24次匿名对照”，批准d460b16的[具体提案](../../../docs/memory-party-guard-pilot-proposal-20261004.md)，原提案SHA95bfb4f0…保留。新独立目录／24上限仅匿名V，8先运行并由Agent原话全审，全部过门才准后16；原14／scope／sender／target／日期不改、E／R0。先相关TDD／类型／真实SDK合成凭据只绑定、独立参考／两轴预检与完整冻结，再唯一运行；raw先审后编译／Flow，失败和未运行分母不删，判败余额关闭，无公开invoke重试或调参。Triage回ready-for-agent、State claimed、Blocked by none；只现ECNU、不用官方key，不读actual／private held、不写业务或默认，不把C2给定候选核验称E补漏。旧预算仍关闭，整体有效修复及实际6/12／可选2/6保持未完成。
 
 2026-10-04：当前四文档与限定私有实现／证据两轴终审完成。Standards硬规范0、非阻塞原四键测试转换重复气味1；Spec当前缺失／scope creep／实现错误均0，整体有效修复／实际同批／最终留出仍未完成。收据SHA67ec2ca8…／300cd863…分别保留，无审查模型调用或测试复跑。任务链接／引用SHA／状态及暂存diff最小核验后保存仅本任务四文档的中文本地提交；不提交私有材料、不捎并行macOS或reply工作、不做远端Git。新24次仍待用户具体决定、旧预算关闭、State claimed，实际6/12及可选2/6保持。
 
@@ -123,3 +144,25 @@ Blocked by: none
 
 
 2026-10-03：来源语用有限试验闭账，见[结果](../../../docs/memory-source-pragmatics-pilot-result-20261003.md)。用户新授权8次V全部完成，唯一session18583 exit0、8预约／ledger，E／R0、失败／未运行0、余0，所有旧余额仍闭。18项不同控制、worker/root各4文件mypy／AST、2种SDK仅绑定、4份请求边界捕获后冻结103指纹；初漏19依赖及并行HEAD守卫拒绝已保留并修正冻结路由。24raw先独审冻结SHA5a10e831…再解锁全审SHAd93ea5c6…；root分立核对一致。source标签4/12、负例要求0/4、同次bad-auto原4／source4、合法正例等价支持保护8/8→4/8、新语义降级4。原14输入全24未改，四B-source最终risk经原Flow新增semantic:pragmatics，名义pending仍pending不能算等价保护；每臂核心正文／来源／日期及E标签正确8/12。192机械组与8捕获0API重放通过，96精确读取路径字节未变；SDK总22,701tokens，HTTP／金额未知，不混作新样本。采用门失败，模型独立来源仍同错而非确定性程序丢字段；J没有新E也仍漏，真实必需6/12及可选2/6保持。不采用、不发布、不补跑，不读actual／private held或写业务／水位／旧五条／产品／默认。Triage继续ready-for-agent、State claimed、Blocked by none，只准本机归因及方案准备／收尾，新协议、调用和实际复测未授权，整体有效修复未完成。完成本轮文档最小验证、两轴终审和任务专属本地提交。
+
+2026-10-04：用户在获知旧24闭账、新最多48次（4／20／24）、仅ECNU且核验由Agent完成后明确回复“同意”，批准b077e50中的直接参与者提示单叶提案（原SHA aa313409…）。新的独立目录memory-party-participants-pilot-20261004绑定该答复与原提案；只准已知匿名A/B/C及12条手工合成D，E/R0，不读actual／held、不写业务／水位／旧五条或改默认。先完成新固定编排的TDD、SDK合成凭据仅绑定、独立参考和两轴预检；完整材料冻结后唯一启动4次，raw独审冻结后揭compiled／Flow，全部过门才继续20、24。任阶段判败／无明确收益关闭余量，不复开旧预算、调参或补跑。State仍claimed、Blocked by none，整体验收未完成；普通验证和修正在该具体范围内连续推进，不重复请求同一授权。
+
+2026-10-04：阶段1已按冻结v2计划完成4次公开V调用（4/4位置、失败0、业务写入0），raw独审先通过：候选人物`mixed`为2/2、目标证据为2/2，基线两次均出现旧`contact`方向。full审计发现第1次候选新增`semantic:pragmatics`并由`uncertain/pragmatics`造成不必要降级，完整Fact无降级仅1/2，阶段门失败；余44次已关闭，阶段2／3未启动，无重试、调参或默认变更。结果见[阶段1结果](../../../docs/memory-party-participants-prompt-pilot-result-20261004.md)，原始收据在私有目录保存；本次不能称整体语义准确率修复或授权真实资料复测。
+
+2026-10-04：阶段1失败后的本机诊断已完成，见仓库外私有`semantic-diagnosis-v1.json`。相同C4候选V-input字节级同SHA，但ECNU一次返回`uncertain/pragmatics`、一次返回`supported`；固定捕获响应离线重跑真实Flow确认，verdict才是Fact风险差异，quote末尾标点不是直接原因。现有Flow保持fail-closed，不在本地强制把uncertain改成supported。形成新的[语义稳定性有限对照提案](../../../docs/memory-party-semantic-stability-pilot-proposal-20261004.md)：只澄清report/reported与人物集合独立判断，最多8次、4／4分阶段，仅现有ECNU、匿名C4、无官方key／真实资料／业务写入；尚未批准联网，旧48次余额不复开。
+
+2026-10-04：用户回复“批准”后，按新提案完成独立8次匿名对照，结果见[语义稳定性结果](../../../docs/memory-party-semantic-stability-pilot-result-20261004.md)。预检通过；候选两阶段合计`mixed 4/4`、目标证据4/4、完整Fact无新增semantic风险4/4、`report/reported`保持pending，基线4次仍为旧`contact`错误，坏auto与业务写入0。阶段2四次返回后收尾触发预算类累计slot检查，停止收据保留，未重试或增加第9次；8/8已审计并闭账，所有旧余额不复开。结果支持该提示叶在匿名C4上的局部改善，但不切产品默认、不读真实／留出、不授权发布；下一步若进入产品或真实同批范围需另行决定。
+
+2026-10-04：用户在获知“只改来源核验提示一小段、不加`described_party`字段、本地0次联网”的范围后批准，遂把该提示叶并入产品默认。改动只有`verification_adapters.py`的`SOURCE_VERIFICATION_SYSTEM_PROMPT`一段（新SHA256 `d93ca1d6062842bf33349ec3c340ee37fd126f86a7d62b51e50b09b603cb638f`），schema、Flow、采纳门和窄guard未改。按先红后绿：改动前两条提示契约测试失败（提示未写明“完全被支持的转述不得仅因report/reported判uncertain”，也未保留“标记被丢掉仍须uncertain”），改后新增5项全过；三条流程测试始终守住`supported`不加`semantic:*`且仍`pending`、`uncertain`加`semantic:pragmatics`、`unsupported`拒收。全量单元720项通过；`mypy src/notalone/memory_extraction`仅剩`command.py:504`一处既有无关错误（`git stash`核对改动前同样存在）；`git diff --check`通过。改动与证据记在[来源核验提示转述支持单叶](../../../docs/memory-verification-report-support-leaf-20261004.md)。限制如实保留：本地只证明提示语义与产品后处理，未证明模型行为；试点数字来自带`described_party`的变体提示，不等于产品提示成绩。真实模型匿名对照仍需另批预算，整体修复仍未完成；State保持claimed，下一步状态为ready-for-human（待真实对照范围决定）。
+
+2026-10-04：本轮改动完成两轴只读审查。Standards轴发现2条硬性违规，都在结果文档的验证数字上：全量单测裸命令`unittest discover -s tests/unit`（不加`-t .`）实际为715项加1个既有顶层包导入错误，只有`-t .`才是720项通过；“新测试文件mypy通过”未注明需要`--ignore-missing-imports`（默认单文件调用会报5个`import-untyped`，未改动的同类测试文件同样如此）。另有1条待定级项：文档未说明新段落与既有“标签丢失或升级仍须uncertain”句子的分工。可选建议3条（重复覆盖、断言句式脆弱、未用导入）。Spec轴结论为**产品代码零扩张**：与`HEAD`逐字节比对只有6行插入，schema/Flow/pragmatics/采纳门/其他提示段落均未改，全仓无`described_party`产品字段；红绿由审查方在`/tmp`影子副本独立复现（改动前2红3绿、改动后5项全过）；三条verdict行为与`flow.py`、`pragmatics.py`一致；试点数字与本地证据分层如实，未冒充产品成绩。已按审查修正：验证段改为逐条可复现命令，补记新段落与既有句子的分工、产品版与试点叶少一句`PragmaticInterpreter`说明的文本差异、以及提示句式断言的脆弱面；删除未用导入并补`issues=[]`断言；测试文件SHA更新为`ffa18a3386de2fe4641ab509bc0ab4d4234c6e7e782279c9658bc1ea3dbae25e`。审查未发现代码、隐私、业务写入或联网问题；真实模型对照仍是未完成项。
+
+2026-10-04：用户要求“全部收尾”，遂核对剩余可执行性。仓库 `.env` 只含 `NOTALONE_DEEPSEEK_API_KEY`／`BASE_URL`／`MODEL`／`NOTALONE_OWNER_ID`／`NOTALONE_DATABASE_URL` 五个键名，没有 ECNU 条目；用户此前明确“不要使用 DeepSeek 官方 key”，而历次匿名对照都要求逐次明确批准后才能读取凭据并联一次网。因此**模型侧确认在当前环境不可执行**：不是预算未批，而是可用凭据缺失且官方 key 被禁止，Agent 不得自行读取或回退。已在任务头部记录该阻塞说明。本轮不含任何本地可继续推进的项：授权范围内的提示改动、红绿测试、隔离全量、两轴审查与本地提交（`ddfa1f7`、`28d93d6`）均已完成，任务整体目标（必需主张完整保留的模型侧证据）不能在无凭据条件下达成，故 `State` 保持 `claimed`，不再自行降级或宣称修复完成。若日后恢复：用户提供可用 ECNU 凭据并明确批准一次匿名对照，即可按既有模式重启；若决定不再投入，可把本任务按“提示侧已定稿、模型侧不再验证”改为 `wontfix` 并保留全部证据。
+
+2026-10-04：用户确认“可以做”后着手真实模型对照，并核到关键事实：`.env` 的 `NOTALONE_DEEPSEEK_BASE_URL` 已指向 `https://chat.ecnu.edu.cn/open/api/v1`、模型 `ecnu-max`，该 key 在 ECNU 端点可用（先用一次极小结构化调用探测通过）。因此阻塞解除，按预注册计划完成产品提示的两臂匿名对照：仓库内先冻结材料与执行脚本（`.scratch/memory-core-claim-retention/product-prompt-comparison-v1/`，输入正文留在仓库外私有目录），基线臂从 `e015b96` 取改动前提示，候选臂用当前仓库提示，工具 schema 与用户消息两臂相同，共 4 次公开调用（2 窗口 × 2 臂），只连 ECNU、不读真实/留出、不写业务。结果：基线两窗口均 `supported`；候选中窗口 1 `supported`、窗口 2 `uncertain/pragmatics`，编译后多出 `semantic:pragmatics`。四条都保持 pending 且坏 auto 为 0，但“两窗口都 supported”“无新增语义风险”“不必要降级为 0”三条门槛失败。按计划判败闭账：预算 4/4 用完，不重试、不调参、不补跑；本轮不改动产品提示（既不为 4 次调用回滚已提交的单叶，也不追加预算跑出想要的结果）。结果与限制见[产品提示匿名对照结果](../../../docs/memory-product-prompt-comparison-result-20261004.md)，私有收据含 preflight、4 份原始返回与 `close-v1.json`。整体目标仍未达成：核心事实完整保留需要新的、预注册的对照（更多窗口与重复、两臂随机顺序、以不确定率为主指标），需要用户另行决定范围；State 保持 claimed。
+
+2026-10-05：用户先明确「继续投入」，随后在读完[重复测量有限对照提案](../../../docs/memory-claim-retention-repetition-pilot-proposal-20261005.md)后**批准 16 次新预算（2 窗口 × 4 重复 × 2 臂，E=0／V=16／R=0）并接受窗口数仍为 2**，同时接受提案的处置约定：结果「有害」时只出结论、回滚另开实现票并再取得批准，本轮不改产品默认。方向批准与预算批准分开记录；本行只登记批准范围，不代表已产生语义结论。本轮准备按提案第 7 节做（0 API）：仓库内新增冻结计划 v2 与 runner（重复次数、冻结顺序表、分阶段门、失败与空返回计分母），先红后绿补测试，跑 `unittest`／`mypy`／AST／SDK 合成凭据只绑定／`--dry-run`，再两轴预检并冻结全部材料哈希；**冻结完成前不读取 ECNU 凭据、不联网**。旧预算全部继续关闭，不复开、不借用。`State` 保持 claimed、`Triage` 保持 ready-for-agent。
+
+2026-10-05：v2 本机准备通过两轴审查后修正五个问题（0 API、0 联网、0 真实凭据读取）。1）[测试模块](../../../tests/unit/experiments/test_memory_claim_retention_v2.py)不再在 import 期加载 `.scratch/` runner：改为 `setUpClass` 加载 + `unittest.skipUnless` 守卫，脚本缺失时 14 个依赖类整体跳过而不是让 `discover` 收集报错；新增临时仓库副本 + 子进程探针证明「缺失 → skipped、0 error」且「脚本存在时守卫不跳过」。2）冻结计划 `sources` 记录 runner 与 prepare 的 SHA256（文件原始字节），runner 新增 `check_source_integrity()` 并在 dry-run／preflight 校验；改脚本后必须重跑 prepare。3）同一 schema 的两个哈希（`ensure_ascii` True／False）统一为 `canonical_json_sha256`（`ensure_ascii=False, sort_keys=True, separators=(",", ":")`），prepare 通过 importlib 复用 runner 的同一实现，`frozen-plan-v2.json` 的 `schema_sha256` 已更新；`prepare --check` 也逐项核对源码与 schema SHA。4）提案第 7.2 节「SDK 合成凭据只绑定」落在同文件 `SyntheticCredentialBindingTest`：只用自造合成 key 构造 ECNU `ecnu-max` 并走 runner／产品同一形状的具名 `tool_choice` 绑定，`httpx` 同步／异步 `send` 被 patch 成抛错，只断言绑定成功，明确不证明真实调用可用。5）提案第 3 行与末段各补一句「正文写于批准前；批准后按第 7 节新增仓库内准备文件并在本票记录批准范围」，预算、门槛、顺序表与边界未改。`State` 保持 claimed、`Triage` 保持 ready-for-agent；冻结完成前不读凭据、不联网。
+
+2026-10-05：上述 16 次对照已按冻结计划执行并闭账，结果见[重复测量对照结果](../../../docs/memory-claim-retention-repetition-pilot-result-20261005.md)。16/16 完成、0 重试、0 补位：两臂各 8 个位置**全部** `verdict=supported`、`issues=[]`，坏 auto 0、硬拒 0、转述候选 16/16 保持 pending、14 字段保真 16/16；阶段 1 三门与阶段 2 安全门／运行门通过，**主判定＝「无可观测的对照信号」**——按预注册不得当收益通过、不追加预算、默认不加。这同时说明 2026-10-04 候选臂窗口 2 那次 `uncertain/pragmatics` 在本轮 8 个候选位置未复现，更像单次抖动而非稳定效应；但本轮只有 2 个材料窗口，8 个位置是同材料重复、不是独立场景，因此既不宣称单叶有收益，也不推翻旧结论。**运行时偏差如实记录**：每次调用都出现「钉扎工具失败（InternalServerError），退回默认工具选择」——冻结 runner 内既有回退分支改为默认工具选择后成功，两臂同受影响，模型仍一致选择具名工具 `SourceVerificationOutput`；失败请求可能已到服务端，真实 HTTP 次数可能大于 16，且生产核验适配器没有这层回退，故本轮不是生产绑定路径的等价物。整体目标不变：真实聊天严格覆盖仍 6/12、可选 2/6，本轮不含提取调用；不改产品提示、不回滚、不宣称提升。预算 16/16 闭账，旧余额继续关闭。`State` 保持 claimed。

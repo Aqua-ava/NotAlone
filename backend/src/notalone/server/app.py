@@ -48,6 +48,7 @@ from notalone.application.import_service import (
     TaskHost,
 )
 from notalone.application.task_service import TaskService
+from notalone.application.trace_service import TraceService
 from notalone.application.model_priority import ModelWorkStopped
 from notalone.application.setup_service import OwnerAlreadyConfigured, SetupService
 from notalone.application.skill_service import (
@@ -64,6 +65,7 @@ from notalone.persistence.postgres_repository import (
     OwnerChannelIdentityConflictError,
     OwnerChannelIdentityNotFoundError,
 )
+from notalone.persistence.source_processing import SourceProcessingWriteError
 from notalone.persistence.conversation_repository import (
     ConversationBindingConflictError,
     ConversationBindingNotFoundError,
@@ -171,6 +173,7 @@ class BackendApp:
         "_sync_control",
         "_task_host",
         "_task_service",
+        "_trace_service",
         "_token",
     )
 
@@ -191,6 +194,7 @@ class BackendApp:
         import_service: ImportService | None = None,
         task_host: TaskHost | None = None,
         task_service: TaskService | None = None,
+        trace_service: TraceService | None = None,
         skill_service: SkillService | None = None,
         ledger_service: LedgerService | None = None,
         setup_service: SetupService | None = None,
@@ -220,6 +224,7 @@ class BackendApp:
         self._sync_control = sync_control
         self._task_host = task_host
         self._task_service = task_service
+        self._trace_service = trace_service
         self._token = token
 
     @property
@@ -248,6 +253,25 @@ class BackendApp:
             self._runtime_stopped.set()
 
     def handle(
+        self,
+        *,
+        method: str,
+        path: str,
+        headers: Mapping[str, str] | None = None,
+        body: bytes = b"",
+    ) -> Response:
+        response = self._handle_request(
+            method=method, path=path, headers=headers, body=body
+        )
+        if _is_trace_path(path):
+            return Response(
+                response.status_code,
+                {**response.headers, "Cache-Control": "no-store"},
+                response.body,
+            )
+        return response
+
+    def _handle_request(
         self,
         *,
         method: str,
@@ -336,6 +360,12 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.OK,
                 {"contacts": [_contact_payload(contact) for contact in contacts]},
+            )
+        if _is_trace_path(path_value):
+            return self._handle_trace(
+                method=method_upper,
+                path=path_value,
+                query=urlsplit(path).query,
             )
         if path_value.startswith("/api/contacts/") and path_value.endswith("/messages"):
             return self._handle_messages(
@@ -929,6 +959,73 @@ class BackendApp:
             )
         return _json_response(HTTPStatus.OK, _sync_status_payload(report))
 
+    def _handle_trace(self, *, method: str, path: str, query: str) -> Response:
+        owner_id = self._owner_id
+        if owner_id is None:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "owner_uninitialized"},
+            )
+        parts = path.strip("/").split("/")
+        if (
+            len(parts) < 4
+            or parts[:2] != ["api", "contacts"]
+            or parts[3] not in {"memory-traces", "source-processing-traces"}
+        ):
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        try:
+            scope = ContactScope(owner_id, UUID(parts[2]))
+            service = self._trace_service
+            if service is None:
+                return _json_response(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"error": "trace_unavailable"},
+                )
+            if len(parts) == 4 and method == "GET":
+                values = parse_qs(query, keep_blank_values=True)
+                if set(values) - {"limit", "before"} or any(
+                    len(items) != 1 for items in values.values()
+                ):
+                    raise ValueError
+                limit = int(values.get("limit", ["100"])[0])
+                before = (
+                    UUID(values["before"][0]) if "before" in values else None
+                )
+                payload = service.list_batches(
+                    scope, parts[3], limit=limit, before=before
+                )
+            elif len(parts) == 5 and method in {"GET", "DELETE"} and not query:
+                batch_id = UUID(parts[4])
+                if method == "GET":
+                    payload = service.get_batch(scope, parts[3], batch_id)
+                else:
+                    payload = service.delete_batch(scope, parts[3], batch_id)
+            elif (
+                len(parts) == 7
+                and parts[4] == "records"
+                and method == "GET"
+                and not query
+            ):
+                payload = service.find_record(
+                    scope, parts[3], parts[5], UUID(parts[6])
+                )
+            else:
+                return _json_response(
+                    HTTPStatus.NOT_FOUND, {"error": "not_found"}
+                )
+        except LookupError:
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        except (ValueError, TypeError):
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "trace_request_invalid"}
+            )
+        except Exception:
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "trace_operation_failed"},
+            )
+        return _json_response(HTTPStatus.OK, payload)
+
     def _handle_sources(self, method: str, path: str) -> Response:
         parts = path.strip("/").split("/")
         is_list = len(parts) == 4 and method == "GET"
@@ -1261,6 +1358,12 @@ class BackendApp:
         except BackgroundTaskPersistenceError:
             return _json_response(
                 HTTPStatus.SERVICE_UNAVAILABLE, {"error": "task_unavailable"},
+            )
+        except SourceProcessingWriteError:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "source_processing_write_failed"},
+                headers={"Cache-Control": "no-store"},
             )
 
     def _dispatch_import_task(
@@ -1650,6 +1753,12 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.OK, skills.preview(owner_id=owner_id, skill_id=skill_id)
             )
+        if action == "versions":
+            if method != "GET":
+                raise SkillRequestInvalid()
+            return _json_response(
+                HTTPStatus.OK, skills.versions(owner_id=owner_id, skill_id=skill_id)
+            )
         if method != "POST":
             raise SkillRequestInvalid()
         if action == "enable":
@@ -1859,6 +1968,7 @@ def create_app(
     import_service: ImportService | None = None,
     task_host: TaskHost | None = None,
     task_service: TaskService | None = None,
+    trace_service: TraceService | None = None,
     skill_service: SkillService | None = None,
     ledger_service: LedgerService | None = None,
     setup_service: SetupService | None = None,
@@ -1867,28 +1977,49 @@ def create_app(
 ) -> BackendApp:
     """创建服务应用；未显式传 token 时在启动时生成随机 token。"""
 
+    from notalone.persistence.extraction_trace import (
+        PostgresExtractionTraceStore,
+    )
+    from notalone.persistence.source_processing import (
+        PostgresSourceProcessingStore,
+    )
+
+    contacts = ContactDirectory(PostgresContactDirectory(database_url))
     return BackendApp(
-        contact_directory=ContactDirectory(PostgresContactDirectory(database_url)),
+        contact_directory=contacts,
         events=events or EventBus(),
         owner_id=owner_id,
         token=token or secrets.token_urlsafe(32),
         sync_control=sync_control,
         follow_smoke=follow_smoke,
-        message_stream=message_stream or MessageStream(PostgresMessageStream(database_url)),
+        message_stream=message_stream
+        or MessageStream(PostgresMessageStream(database_url)),
         reply_service=reply_service,
-        reply_evidence=reply_evidence or ReplyEvidenceService(PostgresReplyStore(database_url)),
+        reply_evidence=reply_evidence
+        or ReplyEvidenceService(PostgresReplyStore(database_url)),
         source_service=source_service or SourceService(database_url),
         memory_service=memory_service,
         import_service=import_service,
         task_host=task_host,
-        task_service=task_service or TaskService(
+        task_service=task_service
+        or TaskService(
             repository=PostgresBackgroundTaskRepository(database_url),
+        ),
+        trace_service=trace_service
+        or TraceService(
+            contacts=contacts,
+            extraction=PostgresExtractionTraceStore(database_url),
+            processing=PostgresSourceProcessingStore(database_url),
         ),
         skill_service=skill_service,
         ledger_service=ledger_service,
         setup_service=setup_service,
         runtime_shutdown=runtime_shutdown,
     )
+
+
+def _is_trace_path(path: str) -> bool:
+    return "/memory-traces" in path or "/source-processing-traces" in path
 
 
 def _serve_request(
@@ -1899,6 +2030,18 @@ def _serve_request(
 ) -> None:
     try:
         body = _read_request_body(handler)
+    except _RequestLengthInvalid:
+        # 畸形长度不能猜成空体继续处理，否则同一请求会得到不同结果。
+        handler.close_connection = True
+        _write_response(
+            handler,
+            _json_response(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "request_length_invalid"},
+                headers={"Connection": "close"},
+            ),
+        )
+        return
     except _RequestBodyTooLarge:
         # 短时、有界排空可降低正常客户端收到 RST 的概率；随后关闭连接。
         handler.close_connection = True
@@ -1936,6 +2079,10 @@ class _RequestBodyTooLarge(Exception):
     """Content-Length 超出上限：统一映射为稳定 413。"""
 
 
+class _RequestLengthInvalid(Exception):
+    """Content-Length 存在但不是合法的非负整数：映射为稳定 400。"""
+
+
 def _read_request_body(handler: BaseHTTPRequestHandler) -> bytes:
     """按 Content-Length 读取请求体；异常声明映射为稳定 413。
 
@@ -1944,12 +2091,16 @@ def _read_request_body(handler: BaseHTTPRequestHandler) -> bytes:
     长期挂住。
     """
 
+    raw_length = _header_value(handler.headers, "Content-Length")
+    if raw_length is None or not str(raw_length).strip():
+        # 没有声明长度：按空请求体处理，交给应用层做参数校验。
+        return b""
     try:
-        length = int(_header_value(handler.headers, "Content-Length"))
+        length = int(str(raw_length).strip())
     except (ValueError, TypeError):
-        return b""
+        raise _RequestLengthInvalid() from None
     if length < 0:
-        return b""
+        raise _RequestLengthInvalid()
     if length > 1024 * 1024:
         _drain_available_body(handler, limit=length)
         raise _RequestBodyTooLarge()
@@ -1985,7 +2136,10 @@ def _drain_available_body(
 
 def _write_response(handler: BaseHTTPRequestHandler, response: Response) -> None:
     handler.send_response(response.status_code)
-    for key, value in response.headers.items():
+    headers = dict(response.headers)
+    if _is_trace_path(handler.path):
+        headers["Cache-Control"] = "no-store"
+    for key, value in headers.items():
         handler.send_header(key, value)
     handler.end_headers()
     if handler.command == "HEAD":
@@ -2487,7 +2641,7 @@ def _iso_or_none(value: datetime | None) -> str | None:
 
 
 def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "candidate_id": str(candidate.candidate_id),
         "text": candidate.text,
         "category": candidate.category.value,
@@ -2502,3 +2656,8 @@ def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
         "valid_at": _iso_or_none(candidate.valid_at),
         "invalid_at": _iso_or_none(candidate.invalid_at),
     }
+    if candidate.alternatives:
+        payload["alternatives"] = list(candidate.alternatives)
+    if candidate.interpretation_reason.strip():
+        payload["interpretation_reason"] = candidate.interpretation_reason
+    return payload

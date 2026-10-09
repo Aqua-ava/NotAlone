@@ -5,8 +5,9 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Protocol, Sequence
+from typing import Any, Protocol, Sequence
 from uuid import UUID
 
 from notalone.ingest.errors import ImportContentChangedError, ImportPreviewError
@@ -23,7 +24,11 @@ from notalone.persistence.postgres_repository import (
     ImportResult,
     PostgresIngestRepository,
 )
+from notalone.persistence.source_processing import SourceProcessingWriteError
 from notalone.runtime_config import load_project_env, persist_owner_id
+from notalone.scopes import ContactScope
+from notalone.source_processing.models import ProcessingRecord
+from notalone.source_processing.rule_capture import capture_execution
 
 
 class ContactConfirmationError(ValueError):
@@ -74,21 +79,78 @@ def import_file(
 ) -> ImportResult:
     """校验、确认联系人后，把一份 JSONL 批次交给持久化层。"""
 
-    document = read_jsonl(path)
-    # 校验和规范化使用同一份已读文档，不在摘要核对后重新读取路径。
+    try:
+        document = read_jsonl(path)
+        # 摘要核对与规范化使用同一份已读文档，失败也保留范围内的处理回执。
+        if (
+            expected_content_sha256 is not None
+            and document.content_sha256 != expected_content_sha256
+        ):
+            raise ImportContentChangedError("文件内容已变化，请重新预览并确认。")
+        batch = normalize_document(document)
+    except ImportPreviewError as error:
+        _record_input_failure(
+            repository, owner_id, confirmation, error.details
+        )
+        raise
+    started_at = datetime.now(timezone.utc)
+    try:
+        return repository.import_document(
+            owner_id=owner_id,
+            initialize_owner=initialize_owner,
+            initialize_first_owner_identity=initialize_first_owner_identity,
+            document=batch,
+            confirmation=confirmation,
+        )
+    except ImportPersistenceError as error:
+        commit_unknown = type(error) is ImportPersistenceError
+        _record_input_failure(
+            repository,
+            owner_id,
+            confirmation,
+            {
+                "capture_layer": "metadata_only",
+                "capture_status": "withheld_failed_attempt",
+                "record_text": None,
+                "parsed": None,
+                "locator": "document",
+                "stage": "import_persistence",
+                "import_persistence": capture_execution(
+                    started_at, __file__, status="failed"
+                ),
+                "error_code": "import_rejected",
+                "error_category": type(error).__name__,
+                "outcome": (
+                    "import_outcome_unknown"
+                    if commit_unknown
+                    else "input_rejected"
+                ),
+                "business_commit_status": (
+                    "unknown" if commit_unknown else "not_committed"
+                ),
+            },
+        )
+        raise
+
+
+def _record_input_failure(
+    repository: IngestRepository,
+    owner_id: UUID | None,
+    confirmation: ImportConfirmationRequest,
+    details: dict[str, Any],
+) -> None:
+    """只能关联到既有确认联系人；未验证范围不持久化输入或假定位。"""
+
+    record_failure = getattr(repository, "record_input_failure", None)
     if (
-        expected_content_sha256 is not None
-        and document.content_sha256 != expected_content_sha256
+        owner_id is not None
+        and isinstance(confirmation.selection, ExistingContactSelection)
+        and callable(record_failure)
     ):
-        raise ImportContentChangedError("文件内容已变化，请重新预览并确认。")
-    batch = normalize_document(document)
-    return repository.import_document(
-        owner_id=owner_id,
-        initialize_owner=initialize_owner,
-        initialize_first_owner_identity=initialize_first_owner_identity,
-        document=batch,
-        confirmation=confirmation,
-    )
+        record_failure(
+            scope=ContactScope(owner_id, confirmation.selection.contact_id),
+            record=ProcessingRecord.capture(details["locator"], details),
+        )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -159,6 +221,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ContactConfirmationError,
         ImportPreviewError,
         ImportPersistenceError,
+        SourceProcessingWriteError,
     ) as error:
         print(f"导入失败：{error}", file=sys.stderr)
         return 1

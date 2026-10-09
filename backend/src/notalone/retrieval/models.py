@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
+from notalone.memory.models import MemoryCandidateStatus
 from notalone.memory.timing import MemoryTiming
 from notalone.scopes import ContactScope
 
@@ -114,6 +115,76 @@ class RetrievedMemory:
             not isinstance(term, str) or not term for term in self.matched_terms
         ):
             raise ValueError("关系记忆命中词必须是非空字符串元组。")
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class RetrievedPendingCandidate:
+    """只允许尚未确认的记忆候选命中（ADR-027 决策 5、ADR-035）。
+
+    这条证据轨独立于已确认记忆集合：状态只能是记忆候选生命周期里的
+    ``MemoryCandidateStatus.PENDING``，不能承载 ``confirmed`` / ``rejected``
+    / ``invalidated`` 的候选，也不表示候选正文已经是事实。
+    """
+
+    candidate_id: UUID
+    scope: ContactScope
+    text: str
+    category: str
+    source_ids: tuple[UUID, ...]
+    topic: str = ""
+    subject: str = "contact"
+    status: MemoryCandidateStatus = MemoryCandidateStatus.PENDING
+    valid_at: datetime | None = None
+    invalid_at: datetime | None = None
+    confidence: float = 1.0
+    risk_flags: tuple[str, ...] = ()
+    relevance_score: float | None = None
+    matched_terms: tuple[str, ...] = ()
+    timing: MemoryTiming = MemoryTiming()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.timing, MemoryTiming):
+            raise TypeError("待确认候选来源时间结构无效。")
+        if not isinstance(self.candidate_id, UUID):
+            raise TypeError("待确认候选引用必须是 UUID。")
+        if not isinstance(self.scope, ContactScope):
+            raise TypeError("待确认候选检索结果必须带联系人范围。")
+        if not isinstance(self.text, str) or not self.text.strip():
+            raise ValueError("待确认候选检索结果正文不能为空。")
+        if not isinstance(self.category, str) or not self.category.strip():
+            raise ValueError("待确认候选分类不能为空。")
+        if not isinstance(self.subject, str) or not self.subject.strip():
+            raise ValueError("待确认候选主体不能为空。")
+        # 该轨只承载 pending 候选：状态用记忆生命周期的枚举表达，不用
+        # 只可能取一个值的自由字符串。
+        if self.status is not MemoryCandidateStatus.PENDING:
+            raise ValueError("待确认候选证据轨只允许 pending 状态。")
+        if not isinstance(self.source_ids, tuple) or not self.source_ids:
+            raise ValueError("待确认候选检索结果必须带来源引用。")
+        _validate_source_ids(self.source_ids)
+        if not isinstance(self.topic, str):
+            raise TypeError("待确认候选主题结构无效。")
+        if (
+            not isinstance(self.confidence, (int, float))
+            or isinstance(self.confidence, bool)
+            or not 0.0 <= float(self.confidence) <= 1.0
+        ):
+            raise ValueError("待确认候选置信度必须在 0 到 1 之间。")
+        if not isinstance(self.risk_flags, tuple) or any(
+            not isinstance(flag, str) or not flag.strip()
+            for flag in self.risk_flags
+        ):
+            raise ValueError("待确认候选风险标记必须是非空字符串元组。")
+        if self.relevance_score is not None and (
+            not isinstance(self.relevance_score, (int, float))
+            or isinstance(self.relevance_score, bool)
+            or not 0.0 <= float(self.relevance_score) <= 1.0
+        ):
+            raise ValueError("待确认候选相关度必须在 0 到 1 之间。")
+        if not isinstance(self.matched_terms, tuple) or any(
+            not isinstance(term, str) or not term for term in self.matched_terms
+        ):
+            raise ValueError("待确认候选命中词必须是非空字符串元组。")
 
 
 @dataclass(frozen=True, slots=True)

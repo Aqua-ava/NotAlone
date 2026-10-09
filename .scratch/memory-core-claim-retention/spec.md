@@ -27,6 +27,12 @@
 
 ## Implementation Decisions
 
+- 2026-10-04用户明确“同意”新增[直接参与者提示单叶48次有限对照](../../docs/memory-party-participants-prompt-pilot-proposal-20261004.md)，绑定b077e50原提案SHA aa313409e4f785073f843a29383d09fe4b7734fcc7dbe50c9104de56894295fe。基线为既有完整PartyGuardRuntime，候选仅替换附加system中的一段，schema／parser／guard及原14、window、sender、未知日期均保持。新目录独立上限48V，4／20／24逐阶段raw先独审、full过门才继续；阶段1需同期基线至少1错且候选0错才有严格收益。只使用已知匿名A/B/C1—C4和12条新的手工合成D；E/R0，只现ECNU、无官方key／endpoint／fallback，不读取actual／held、不写业务或改默认，不扩大任何已关闭旧预算。批准后完成编排TDD、版本和SDK只绑定、独立参考与两轴预检，完整授权／输入／单叶／代码闭包／规则／配置／版本冻结后才读现ECNU凭据和调用。此试验不检验E补漏，通过也不代表整体spec、实际同批、最终留出或发布完成。
+
+- 2026-10-04用户“好的，把这个设为目标继续弄”将准确性与完整性设为持续目标，继续既有ticket的本机诊断与修订准备。沿原公开模型I/O／verify／四键／Flow／采纳重放C4，两原捕获均contact而参考mixed，原请求完整、程序未丢正确分类；模型因果仍未确定。私有副本只更换人物附加提示的一段说明，schema／函数体／请求／guard不变；原、新提示下旧捕获仍2红、20给定机会保留，3契约控制及3文件类型／AST通过，不当模型语义收益。12新合成开发样本及参考先核对再冻结，仅准备[新48次单叶匿名对照提案](../../docs/memory-party-participants-prompt-pilot-proposal-20261004.md)，未获新调用或真实资料授权；新protocol未增加，预算仍需具体范围决定。旧24及其他预算关闭，0新增API／业务／水位／默认；整体目标、E知识漏提及实际6/12／2/6保持未完成。普通准备、独立审阅与任务专属本地提交连续完成。
+
+- 2026-10-04用户明确回复“同意24次匿名对照”，批准d460b16中[人物核验有限提案](../../docs/memory-party-guard-pilot-proposal-20261004.md)（SHA95bfb4f01d5d047a4407e5f7975f3f5e216266e19578c5f8af7e91066f5a91d5）。新独立上限24次V，E／R0：原A／B捕获各3候选两轮8次，全部过门后才运行C1—C4各1手工匿名候选两轮16次；固定顺序与原14输入不改。完整原V同期对照临时人物及片段＋窄guard联合方案，仍原verify／4键／Flow／采纳；相对旧source不是单因检验，C2给定候选不算E补漏。先完成真实绑定／runner相关TDD、合成凭据SDK只绑定、独立参考及两轴预检，授权／规则／输入／代码／版本／范围完整冻结后唯一运行；阶段raw独审冻结后才揭编译与Flow，null／失败／未运行保留40候选机会分母。阶段1未全过则关闭其余16，不重启／调提示／补位／增臂；stage2仅接受有SHA的完整stage1审计过门。只用现ECNU ecnu-max及既有配置，不用官方key／endpoint／fallback；不读actual／private held、不写业务／水位／旧五条或改默认／发布。通过也不授权真实开发／同批／留出；整体目标及实际6/12／可选2/6仍未完成，所有旧预算继续关闭。
+
 - 2026-10-04用户“继续下一步吧”继续上轮失败后的本机归因、原接缝可运行准备及具体方案。仍0新模型调用，不把续行当新协议／24预算批准。先重放首错误与正控制、冻结四假设，排除已观察的显式提示矛盾、E三标签动态泄露和确定性传播错误；模型人物混淆仅为待实测假设。沿现verify／原四键／Flow接缝，以完整原产品V为基线追加临时人物及定位证据，仅`supported＋third_party＋E assertion/asserted`新增`uncertain/pragmatics`，不改14值／业务字段或升级候选，不把mixed／unclear一律降级。失败source三标签方案未采用；该新方案相对旧source非单变量，相对同期原V也为提示／结构／guard联合检验。[本机记录](../../docs/memory-party-guard-local-preparation-20261004.md)及[24次V-only具体提案](../../docs/memory-party-guard-pilot-proposal-20261004.md)先完成本机相关控制、独立参考与两轴审阅，具体联网范围再决定。旧知识规则／text单叶及R补漏已有失败，本轮不重新包装或声称修复E未知状态遗漏；所有旧余额关闭。
 
 - 2026-10-03用户明确回复“是的”，批准0846e3b版本的[来源语用V-only提案](../../docs/memory-source-pragmatics-pilot-proposal-20261003.md)（SHA14f9f71543ce8b600a549107a842cf7ea2f8908737463776ef8266caf5dc9bc0）。仅旧四条匿名合成原话及r1／r2首次原E各三候选A／B，原V对照隐藏E标签＋来源独立标签＋确定性比较联合核验，按提案固定8位置、新独立上限8次V、E／R0；不重提候选、不改原14值、不回退。先相关TDD／类型／AST、SDK合成凭据仅绑定、独立参考及两轴预检，全部冻结后唯一运行，raw先独审冻结再揭编译／Flow，负4正8及每臂12完整机会计分，判败关闭不补跑。只用现ECNU、不用官方key、不读真实／留出、不写业务或改默认，不能补E知识漏提或把错误pending算正确记忆，通过也不授权后阶段。
@@ -78,6 +84,8 @@
 全历史生产重提取、批量采纳／删除、放宽安全门、业务 schema 迁移、回复／同步／App 权限改版、新供应商、外部聊天发送、后台自动化、正式部署、push 和 PR。
 
 ## Further Notes
+
+2026-10-04用户批准的[人物核验24次匿名对照](../../docs/memory-party-guard-pilot-result-20261004.md)已经完整执行并关闭：8先运行，raw与full独审及root复核全部过门后才跑16；24V／预约／台账均返回，E／R、运行／结构失败、未运行和业务／默认变更0。同期原V坏auto6、新臂0；正确候选14/14保护（auto8／pending6），但人物18/20，C4两次把mixed误判为contact，阶段2及整体门失败。quote定位真实参与者20/20与返回类别一致18/20分开，不能改Gold救门；错误E标签仍待确认，J未补提／C2给定不算E提升，实际6/12与可选2/6未复测。11worker＋6root控制、各4文件mypy／AST4及6、真实SDK仅绑定与双轴预检通过；普通运行停机、落盘失败分母修复及首失败保持，228最终SHA／7版本锁定，24预算关闭且导入前拒绝0调用。整体仍claimed／未完成，ready-for-agent仅准继续本机归因和具体方案准备，不授权新wire／预算／actual-held／产品切换，旧预算不复开。
 
 2026-10-04[人物核验本机准备](../../docs/memory-party-guard-local-preparation-20261004.md)完成：9worker＋4root不同契约控制、worker3文件mypy／AST、root首4文件mypy／AST及格式后root1文件mypy／4AST通过；原缺陷captured重放仍red，未制造模型修复证据。来源quote合法可只定位对象、错contact及mixed／unclear仍auto的反例保留；正确report的Fact与decision风险分层比较，不把仍pending当无损保护。独立C1—C4参考与root114指纹／196私有权限核对通过，所有首失败与修正保留；16明确依赖非全import闭包，早期mypy忽略缓存与产品源码变化分开。新API／真实SDK／key／业务／默认／产品源码0；知识状态未补提，实际必需6/12及可选2/6保持。[24次匿名具体提案](../../docs/memory-party-guard-pilot-proposal-20261004.md)仍未授权，旧预算关闭，task ready-for-human／claimed，只待新协议及有限调用范围，普通核验继续由Agent负责；整体spec未完成。
 

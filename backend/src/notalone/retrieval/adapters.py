@@ -7,14 +7,20 @@ from datetime import datetime, timezone
 from typing import Iterable
 from uuid import UUID
 
-from notalone.memory import MemoryPort
+from notalone.memory import MemoryCandidate, MemoryPort
 from notalone.retrieval.errors import RetrievalInvariantError
 from notalone.retrieval.models import (
     RetrievedMemory,
     RetrievedMessage,
     RetrievedOwnerMemory,
+    RetrievedPendingCandidate,
 )
-from notalone.retrieval.ranking import recall_memories, recall_owner_memories
+from notalone.retrieval.pending import select_current_pending_candidates
+from notalone.retrieval.ranking import (
+    recall_memories,
+    recall_owner_memories,
+    recall_pending_candidates,
+)
 from notalone.scopes import ContactScope
 
 
@@ -271,3 +277,65 @@ class InMemoryRetrieval:
             if memory_ids is None or memory.memory_id in memory_ids
         )
         return recall_memories(retrieved, query=query, limit=limit)
+
+    def search_pending_candidates(
+        self,
+        *,
+        scope: ContactScope,
+        query: str | None = None,
+        limit: int = 3,
+        candidate_ids: tuple[UUID, ...] | None = None,
+    ) -> tuple[RetrievedPendingCandidate, ...]:
+        _validate_limit(limit, 20)
+        if not isinstance(scope, ContactScope):
+            raise TypeError("待确认候选检索范围无效。")
+        if query is not None and not isinstance(query, str):
+            raise TypeError("待确认候选检索 query 必须是字符串或 None。")
+        if candidate_ids is not None and (
+            not isinstance(candidate_ids, tuple)
+            or any(
+                not isinstance(candidate_id, UUID)
+                for candidate_id in candidate_ids
+            )
+        ):
+            raise ValueError("待确认候选复验引用结构无效。")
+        if self.memory_store is None:
+            return ()
+        now = datetime.now(timezone.utc)
+        candidates = self.memory_store.list_pending_candidates(scope)
+        if not isinstance(candidates, tuple) or any(
+            not isinstance(candidate, MemoryCandidate)
+            or candidate.scope != scope
+            for candidate in candidates
+        ):
+            raise RetrievalInvariantError(
+                "待确认候选检索结果超出联系人范围。"
+            )
+        # 与 PostgreSQL 适配器共用同一份「pending + 范围 + 有效期 + 来源
+        # 可用」谓词：内存 store 没有来源可用性模型，因此不传来源读取器，
+        # 但有效期一律按半开区间 [valid_at, invalid_at) 过滤。
+        current = select_current_pending_candidates(
+            candidates,
+            scope=scope,
+            now=now,
+            candidate_ids=candidate_ids,
+        )
+        retrieved = tuple(
+            RetrievedPendingCandidate(
+                candidate_id=candidate.candidate_id,
+                scope=candidate.scope,
+                text=candidate.text,
+                category=candidate.category.value,
+                source_ids=candidate.source_ids,
+                topic=candidate.topic.value,
+                subject=candidate.subject.value,
+                status=candidate.status,
+                confidence=candidate.confidence,
+                risk_flags=candidate.risk_flags,
+                valid_at=candidate.valid_at,
+                invalid_at=candidate.invalid_at,
+                timing=candidate.timing,
+            )
+            for candidate in current
+        )
+        return recall_pending_candidates(retrieved, query=query, limit=limit)

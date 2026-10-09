@@ -10,6 +10,7 @@ from notalone.retrieval.models import (
     RetrievedMemory,
     RetrievedMessage,
     RetrievedOwnerMemory,
+    RetrievedPendingCandidate,
 )
 from notalone.scopes import ContactScope
 
@@ -66,4 +67,20 @@ class RetrievalPort(Protocol):
 
         ``memory_ids`` 只接受来自 L2 目录的导航结果；返回值仍必须重新
         从 L1 权威存储读取并完成状态、来源和范围校验。
+        """
+
+    def search_pending_candidates(
+        self,
+        *,
+        scope: ContactScope,
+        query: str | None = None,
+        limit: int = 3,
+        candidate_ids: tuple[UUID, ...] | None = None,
+    ) -> tuple[RetrievedPendingCandidate, ...]:
+        """查询指定联系人范围内仍待用户确认的记忆候选。
+
+        这条轨只承载 ``pending`` 候选，独立于已确认记忆集合；结果只能
+        作为带未确认标注的参考，不代表候选正文已经是事实。来源失效、
+        状态变化或超出有效期的候选必须返回空。``candidate_ids`` 只用于
+        复验快照中已注入的候选。
         """

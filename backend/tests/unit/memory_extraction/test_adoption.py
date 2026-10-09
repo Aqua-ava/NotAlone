@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import os
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 from uuid import UUID
 
 from notalone.memory import (
     AdoptionMethod,
     InMemoryMemoryStore,
+    MemoryCandidate,
     MemoryCategory,
     MemoryTopic,
 )
@@ -16,6 +19,12 @@ from notalone.memory_extraction.adoption import MemoryAdoption
 from notalone.memory_extraction.adjudication import (
     AdjudicationAction,
     AdjudicationDecision,
+)
+from notalone.memory_extraction import dimensions
+from notalone.memory_extraction.dimensions import (
+    DEFAULT_DIMENSION_RELEASE,
+    RELEASE_ALL_DIMENSIONS,
+    DimensionRelease,
 )
 from notalone.memory_extraction.flow import ExtractionOutcome
 from notalone.memory_extraction.models import ExtractedFact, FactSubject
@@ -32,32 +41,55 @@ CONTACT_ID = UUID("bbbbbbbb-2222-2222-2222-222222222222")
 SOURCE_ID = UUID("cccccccc-3333-3333-3333-333333333333")
 
 
+def _fact(**overrides: object) -> ExtractedFact:
+    """通过语用与风险门槛的合成候选；默认落在 `subject` 维度。"""
+
+    values: dict[str, object] = {
+        "text": "对方最近开始跑步",
+        "category": MemoryCategory.RECENT_STATE,
+        "subject": FactSubject.CONTACT,
+        "topic": MemoryTopic.HEALTH,
+        "source_message_ids": (SOURCE_ID,),
+        "confidence": 0.92,
+        "risk_flags": (),
+        "valid_at": None,
+        "invalid_at": None,
+        "speech_act": SpeechAct.ASSERTION,
+        "assertion_status": AssertionStatus.ASSERTED,
+        "figurative_type": FigurativeType.LITERAL,
+        "interpretation_reason": "消息以确定语气表达一个关系主张。",
+    }
+    values.update(overrides)
+    return ExtractedFact(**values)
+
+
+class RecordingMemoryStore(InMemoryMemoryStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.created: list[MemoryCandidate] = []
+
+    def create_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
+        self.created.append(candidate)
+        return super().create_candidate(candidate)
+
+
 class MemoryAdoptionTest(unittest.TestCase):
-    """只通过 MemoryAdoption 和 MemoryPort 验证可观察生命周期。"""
+    """只通过 MemoryAdoption 和 MemoryPort 验证可观察生命周期。
+
+    这些用例验证的是原有三道门槛，因此显式注入全量放行表；默认收紧的
+    行为由 ``DimensionReleaseGateTest`` 单独覆盖。
+    """
 
     def setUp(self) -> None:
         self.scope = ContactScope(OWNER_ID, CONTACT_ID)
         self.store = InMemoryMemoryStore()
-        self.adoption = MemoryAdoption(memory_port=self.store)
+        self.adoption = MemoryAdoption(
+            memory_port=self.store,
+            dimension_release=RELEASE_ALL_DIMENSIONS,
+        )
 
     def _fact(self, **overrides: object) -> ExtractedFact:
-        values: dict[str, object] = {
-            "text": "对方最近开始跑步",
-            "category": MemoryCategory.RECENT_STATE,
-            "subject": FactSubject.CONTACT,
-            "topic": MemoryTopic.HEALTH,
-            "source_message_ids": (SOURCE_ID,),
-            "confidence": 0.92,
-            "risk_flags": (),
-            "valid_at": None,
-            "invalid_at": None,
-            "speech_act": SpeechAct.ASSERTION,
-            "assertion_status": AssertionStatus.ASSERTED,
-            "figurative_type": FigurativeType.LITERAL,
-            "interpretation_reason": "消息以确定语气表达一个关系主张。",
-        }
-        values.update(overrides)
-        return ExtractedFact(**values)
+        return _fact(**overrides)
 
     def test_sensitive_fact_keeps_provenance_in_pending_candidate(self) -> None:
         stats = self.adoption.adopt(
@@ -65,6 +97,8 @@ class MemoryAdoptionTest(unittest.TestCase):
             ExtractionOutcome(
                 accepted=(self._fact(
                     risk_flags=("health",),
+                    alternatives=("也可能是短期尝试",),
+                    interpretation_reason="消息说明了近期行为，但没有说明是否长期保持。",
                     valid_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
                     invalid_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
                 ),)
@@ -76,7 +110,12 @@ class MemoryAdoptionTest(unittest.TestCase):
         candidates = self.store.list_pending_candidates(self.scope)
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].confidence, 0.92)
-        self.assertEqual(candidates[0].risk_flags, ("health",))
+        self.assertEqual(candidates[0].risk_flags, ("health", "pragmatic:ambiguous"))
+        self.assertEqual(candidates[0].alternatives, ("也可能是短期尝试",))
+        self.assertEqual(
+            candidates[0].interpretation_reason,
+            "消息说明了近期行为，但没有说明是否长期保持。",
+        )
         self.assertEqual(candidates[0].source_ids, (SOURCE_ID,))
         self.assertEqual(
             candidates[0].valid_at,
@@ -99,6 +138,22 @@ class MemoryAdoptionTest(unittest.TestCase):
         self.assertEqual(memory.confidence, 0.92)
         self.assertEqual(memory.risk_flags, ())
         self.assertEqual(memory.source_ids, (SOURCE_ID,))
+
+    def test_auto_adoption_keeps_interpretation_details_on_candidate(self) -> None:
+        fact = self._fact(
+            interpretation_reason="消息表达近期行为，但没有说明是否长期保持。",
+        )
+        store = RecordingMemoryStore()
+        adoption = MemoryAdoption(
+            memory_port=store,
+            dimension_release=RELEASE_ALL_DIMENSIONS,
+        )
+        stats = adoption.adopt(self.scope, ExtractionOutcome(accepted=(fact,)))
+
+        self.assertEqual(stats.adopted, 1)
+        created = store.created[0]
+        self.assertEqual(created.alternatives, ())
+        self.assertEqual(created.interpretation_reason, fact.interpretation_reason)
 
     def test_auto_adopted_shared_fact_keeps_candidate_subject(self) -> None:
         stats = self.adoption.adopt(
@@ -210,6 +265,7 @@ class MemoryAdoptionTest(unittest.TestCase):
         adoption = MemoryAdoption(
             memory_port=self.store,
             adjudication_runtime=UpdateWithoutReplacedIdRuntime(),
+            dimension_release=RELEASE_ALL_DIMENSIONS,
         )
         result = adoption.adopt(
             self.scope,
@@ -227,6 +283,177 @@ class MemoryAdoptionTest(unittest.TestCase):
             [candidate.text for candidate in pending],
             ["对方最近开始跑步锻炼"],
         )
+
+
+class DimensionReleaseGateTest(unittest.TestCase):
+    """第四道合取项：维度未放行时安静待确认，不写 confirmed_memory。"""
+
+    def setUp(self) -> None:
+        self.scope = ContactScope(OWNER_ID, CONTACT_ID)
+        self.store = InMemoryMemoryStore()
+
+    def _adoption(
+        self, release: DimensionRelease | None = None
+    ) -> MemoryAdoption:
+        values: dict[str, object] = {"memory_port": self.store}
+        if release is not None:
+            values["dimension_release"] = release
+        return MemoryAdoption(**values)
+
+    def _time_fact(self) -> ExtractedFact:
+        """仍未过期的临时状态；只带失效时间，避免未来生效时间被语用拦下。"""
+
+        return _fact(
+            invalid_at=datetime.now(timezone.utc) + timedelta(days=7)
+        )
+
+    def _truth_intent_fact(self) -> ExtractedFact:
+        return _fact(
+            text="用户和联系人上周一起看了展览",
+            category=MemoryCategory.COMMON_FACT,
+            topic=MemoryTopic.OTHER,
+            subject=FactSubject.SHARED,
+        )
+
+    def test_default_release_table_keeps_low_risk_candidate_pending(self) -> None:
+        stats = self._adoption(DEFAULT_DIMENSION_RELEASE).adopt(
+            self.scope,
+            ExtractionOutcome(accepted=(_fact(),)),
+        )
+
+        self.assertEqual(stats.adopted, 0)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(self.store.list_confirmed(self.scope), ())
+        candidates = self.store.list_pending_candidates(self.scope)
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].confidence, 0.92)
+
+    def test_environment_unset_defaults_to_the_strict_gate(self) -> None:
+        """未显式配置时按维度放行门就是开启的，保持默认收紧。"""
+
+        with patch.dict(os.environ, {}, clear=True):
+            stats = self._adoption().adopt(
+                self.scope,
+                ExtractionOutcome(accepted=(_fact(),)),
+            )
+
+        self.assertEqual(stats.adopted, 0)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(self.store.list_confirmed(self.scope), ())
+
+    def test_released_dimension_is_auto_adopted(self) -> None:
+        stats = self._adoption(DimensionRelease(("subject",))).adopt(
+            self.scope,
+            ExtractionOutcome(accepted=(_fact(),)),
+        )
+
+        self.assertEqual(stats.adopted, 1)
+        memories = self.store.list_confirmed(self.scope)
+        self.assertEqual(len(memories), 1)
+        self.assertEqual(memories[0].adoption_method, AdoptionMethod.AUTO)
+
+    def test_editing_the_compiled_release_table_actually_releases(self) -> None:
+        """放行台账的权威步骤就是改 DEFAULT_DIMENSION_RELEASE：必须端到端生效。"""
+
+        with patch.dict(os.environ, {}, clear=True), patch.object(
+            dimensions,
+            "DEFAULT_DIMENSION_RELEASE",
+            DimensionRelease(("subject",)),
+        ):
+            stats = self._adoption().adopt(
+                self.scope,
+                ExtractionOutcome(accepted=(_fact(),)),
+            )
+
+        self.assertEqual(stats.adopted, 1)
+        self.assertEqual(stats.pending, 0)
+        self.assertEqual(len(self.store.list_confirmed(self.scope)), 1)
+
+    def test_releasing_one_dimension_does_not_release_another(self) -> None:
+        adoption = self._adoption(DimensionRelease(("time",)))
+
+        subject_stats = adoption.adopt(
+            self.scope, ExtractionOutcome(accepted=(_fact(),))
+        )
+
+        self.assertEqual(subject_stats.adopted, 0)
+        self.assertEqual(subject_stats.pending, 1)
+        self.assertEqual(self.store.list_confirmed(self.scope), ())
+
+    def test_time_dimension_is_auto_adopted_when_released(self) -> None:
+        stats = self._adoption(DimensionRelease(("time",))).adopt(
+            self.scope,
+            ExtractionOutcome(accepted=(self._time_fact(),)),
+        )
+
+        self.assertEqual(stats.adopted, 1)
+        self.assertEqual(len(self.store.list_confirmed(self.scope)), 1)
+
+    def test_truth_intent_dimension_is_auto_adopted_when_released(self) -> None:
+        stats = self._adoption(DimensionRelease(("truth_intent",))).adopt(
+            self.scope,
+            ExtractionOutcome(accepted=(self._truth_intent_fact(),)),
+        )
+
+        self.assertEqual(stats.adopted, 1)
+        self.assertEqual(len(self.store.list_confirmed(self.scope)), 1)
+
+    def test_undecidable_dimension_is_never_auto_adopted(self) -> None:
+        for overrides in (
+            {"speech_act": SpeechAct.UNKNOWN},
+            {"assertion_status": AssertionStatus.UNKNOWN},
+            {
+                "speech_act": SpeechAct.REPORT,
+                "assertion_status": AssertionStatus.REPORTED,
+            },
+        ):
+            with self.subTest(overrides=overrides):
+                store = InMemoryMemoryStore()
+                adoption = MemoryAdoption(
+                    memory_port=store,
+                    dimension_release=RELEASE_ALL_DIMENSIONS,
+                )
+
+                stats = adoption.adopt(
+                    self.scope,
+                    ExtractionOutcome(accepted=(_fact(**overrides),)),
+                )
+
+                self.assertEqual(stats.adopted, 0)
+                self.assertEqual(store.list_confirmed(self.scope), ())
+
+    def test_release_all_dimensions_restores_todays_adoption(self) -> None:
+        stats = self._adoption(RELEASE_ALL_DIMENSIONS).adopt(
+            self.scope,
+            ExtractionOutcome(accepted=(_fact(),)),
+        )
+
+        self.assertEqual(stats.adopted, 1)
+
+    def test_environment_rollback_switch_restores_todays_adoption(self) -> None:
+        with patch.dict(
+            os.environ, {"NOTALONE_MEMORY_DIMENSION_GATE": "0"}, clear=False
+        ):
+            stats = self._adoption().adopt(
+                self.scope,
+                ExtractionOutcome(accepted=(_fact(),)),
+            )
+
+        self.assertEqual(stats.adopted, 1)
+        self.assertEqual(len(self.store.list_confirmed(self.scope)), 1)
+
+    def test_environment_gate_keeps_candidates_pending(self) -> None:
+        with patch.dict(
+            os.environ, {"NOTALONE_MEMORY_DIMENSION_GATE": "1"}, clear=False
+        ):
+            stats = self._adoption().adopt(
+                self.scope,
+                ExtractionOutcome(accepted=(_fact(),)),
+            )
+
+        self.assertEqual(stats.adopted, 0)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(self.store.list_confirmed(self.scope), ())
 
 
 class UpdateWithoutReplacedIdRuntime:

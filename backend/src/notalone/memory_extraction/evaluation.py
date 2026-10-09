@@ -1,4 +1,4 @@
-"""固定合成记忆评测：旧 120 条加严格 15 条，不访问存储或私人资料。"""
+"""固定合成记忆评测：主用例集加严格语义用例，不访问存储或私人资料。"""
 from __future__ import annotations
 
 import argparse
@@ -58,7 +58,14 @@ class EvaluationResult:
 
 @dataclass(frozen=True)
 class DimensionSummary:
-    """一个维度的达标签计数；放行还需要用户确认，工具只给数字。"""
+    """一个维度的达标签计数；放行还需要用户确认，工具只给数字。
+
+    达标签按 ADR-027 第 2 条判定：用例数 ≥ ``GATE_MIN_CASES``、假事 0、
+    记错人 0、一般错误 ≤ ``GATE_MAX_GENERAL_ERRORS``。语义标注覆盖
+    （``semantic_cases``／``semantic_scenarios``）保留为**单独报告字段**，
+    不参与达标签判定；未标注用例不能证明语义维度达标，但也不能把达标签
+    压成永假（ADR-036 的口径对齐）。
+    """
 
     dimension: str
     cases: int
@@ -136,6 +143,9 @@ def evaluate_case(
                 flag for flag in fact.risk_flags if flag != "semantic:unverified"
             ))
         decision = interpreter.interpret(fact)
+        # 这里只算原有三道门槛下的理想去向，作为该维度"若放行则如何"的
+        # 准确率证据，不叠加运行时的维度放行门；否则未放行维度永远无法
+        # 积累放行证据（ADR-036）。
         destination = 'none'
         if decision.disposition is not MemoryDisposition.NONE:
             destination = 'auto' if can_auto_adopt(fact, decision) else 'pending'
@@ -299,7 +309,13 @@ def _validity_matches(case: EvaluationCase, facts: list[dict]) -> bool:
 
 
 def summarize(results: Sequence[EvaluationResult]) -> tuple[DimensionSummary, ...]:
-    """按维度汇总达标签计数，供放行记录使用。"""
+    """按维度汇总达标签计数，供放行记录使用。
+
+    达标签口径与 ADR-027 第 2 条一致：至少 ``GATE_MIN_CASES`` 条用例、
+    假事 0、记错人 0、一般错误 ≤ ``GATE_MAX_GENERAL_ERRORS``。语义标注
+    覆盖只作为单独字段报告，不参与判定。工具输出的 ``meets_gate`` 只是
+    放行证据的一部分；放行还需要用户批准并写入放行台账（ADR-036）。
+    """
     grouped: dict[str, list[EvaluationResult]] = {}
     for result in results:
         grouped.setdefault(result.dimension, []).append(result)
@@ -321,8 +337,7 @@ def summarize(results: Sequence[EvaluationResult]) -> tuple[DimensionSummary, ..
         semantic_scenarios = len({result.semantic_case_id for result in items
                                   if result.semantic_case_id is not None})
         meets_gate = (
-            semantic_cases == len(items)
-            and semantic_scenarios >= GATE_MIN_CASES
+            len(items) >= GATE_MIN_CASES
             and false_facts == 0
             and wrong_subjects == 0
             and general_errors <= GATE_MAX_GENERAL_ERRORS

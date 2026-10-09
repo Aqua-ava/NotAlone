@@ -1,0 +1,20 @@
+{
+  "actual_service_reranking_diagnostic_ms": {
+    "count": 100,
+    "max": 2661.0,
+    "p50": 971.0,
+    "p95": 1726.0
+  },
+  "actual_service_scored_candidate_count": {
+    "count": 100,
+    "max": 155,
+    "p50": 134,
+    "p95": 149
+  },
+  "adapter_mapping_rejections": 3365,
+  "component_time_is_not_full_latency_acceptance": true,
+  "execution_mode": "actual_http",
+  "formal_attempts_sha256": "fda1f4d62699ccc2a0249c1d688748607da73f8af80a875affdddd178271de8d",
+  "paraphrase_after_score_gate_before_local_hydration_recall": 0.15,
+  "raw_returned_empty_mapping_units": 3365
+}

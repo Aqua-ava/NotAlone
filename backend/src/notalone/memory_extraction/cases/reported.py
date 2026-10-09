@@ -1,0 +1,128 @@
+"""转述与本人维度的合成评测用例。"""
+
+from __future__ import annotations
+
+from .types import ClaimExpectation, EvaluationCase, ExpectedDestination
+
+CASES: tuple[EvaluationCase, ...] = (
+    EvaluationCase(
+        "第三方引用",
+        "reported",
+        (("contact", "他说他要贷款 30 万。"),),
+        (0,),
+        ExpectedDestination.PENDING,
+    ),
+    EvaluationCase(
+        "已发生行动",
+        "reported",
+        (("contact", "我已经提交贷款申请了。"),),
+        (0,),
+        ExpectedDestination.PENDING,
+        note="贷款申请是本人已发生事实，但金融风险仍留待确认。",
+        expected_labels=(("speech_act", "assertion"), ("assertion_status", "asserted")),
+    ),
+    EvaluationCase(
+        "转发外部内容",
+        "reported",
+        (("contact", "刚看到个视频说熬夜会致癌，吓死我了。"),),
+        (0,),
+        ExpectedDestination.NONE,
+        note="引用外部内容，不能记成联系人事实",
+    ),
+    EvaluationCase(
+        "无标记转述",
+        "reported",
+        (("contact", "我妈让我十一回家相亲。"),),
+        (0,),
+        ExpectedDestination.PENDING,
+        note="转述第三方要求，不是联系人自身事实",
+    ),
+    EvaluationCase(
+        "明确转述",
+        "reported",
+        (("contact", "老李说他下周要去上海出差。"),),
+        (0,),
+        ExpectedDestination.PENDING,
+        note="转述第三方计划，不得记成联系人本人的确定事实",
+    ),
+    EvaluationCase(
+        "听闻公司变动",
+        "reported",
+        (("contact", "听张姐说公司下个月要裁员。"),),
+        (0,),
+        ExpectedDestination.PENDING,
+        note="听说的传闻，留待确认",
+    ),
+    EvaluationCase(
+        "转述医生建议",
+        "reported",
+        (("contact", "医生建议我多运动，少熬夜。"),),
+        (0,),
+        ExpectedDestination.PENDING,
+        note="转述第三方建议，不是联系人自己下的判断",
+    ),
+    EvaluationCase(
+        "转发文章",
+        "reported",
+        (("contact", "这篇讲睡眠的文章写得挺好，你看看。"),),
+        (0,),
+        ExpectedDestination.NONE,
+        note="转发外部文章，不构成关系记忆",
+    ),
+    EvaluationCase(
+        "转述领导评价",
+        "reported",
+        (("contact", "我们领导说我最近进步很大。"),),
+        (0,),
+        ExpectedDestination.PENDING,
+        note="第三方评价，留待确认",
+    ),
+    EvaluationCase(
+        "第三方婚礼",
+        "reported",
+        (("contact", "小王说下个月结婚，喊我去喝喜酒。"),),
+        (0,),
+        ExpectedDestination.PENDING,
+        note="转述第三方婚礼邀请，不得记成联系人本人事实",
+    ),
+    EvaluationCase(
+        "听说天气",
+        "reported",
+        (("contact", "听说明天要下大雪。"),),
+        (0,),
+        ExpectedDestination.NONE,
+        note="传闻天气信息，不构成关系记忆",
+    ),
+    EvaluationCase(
+        "问换工作",
+        "reported",
+        (("contact", "你之前说想换工作，定了吗？"),),
+        (0,),
+        ExpectedDestination.NONE,
+        note="提问不提取",
+    ),
+    EvaluationCase(
+        "问减肥",
+        "reported",
+        (("self", "你上次说要减肥，现在怎么样了？"),),
+        (0,),
+        ExpectedDestination.NONE,
+        note="提问不提取",
+    ),
+    EvaluationCase(
+        "转述老张来访",
+        "reported",
+        (("contact", "老张说他周末来家里坐坐。"),),
+        (0,),
+        ExpectedDestination.PENDING,
+        note="转述第三方来访计划，不得记成联系人本人的确定事实",
+    ),
+    EvaluationCase(
+        "领导通知加班",
+        "reported",
+        (("contact", "领导通知下周要加班。"),),
+        (0,),
+        ExpectedDestination.PENDING,
+        note="转述领导通知，不得记成联系人本人的确定事实",
+    )
+)

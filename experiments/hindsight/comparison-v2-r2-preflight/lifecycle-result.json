@@ -1,0 +1,2046 @@
+{
+  "kind": "synthetic_lifecycle_only",
+  "status": "passed",
+  "recorded_at": "2026-10-03T18:03:17.827292+00:00",
+  "banks_allowlist": [
+    "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78",
+    "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c",
+    "notalone-experiment-a74398cda3e964de503d4551514fff93"
+  ],
+  "scope": {
+    "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+    "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c"
+  },
+  "tau_B": 0.003,
+  "tau_status": "临时接入阈值，不用于收益验收",
+  "fixtures": [
+    {
+      "content": "合成乳糖限制：对方乳糖不耐受。",
+      "document_id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+      "timestamp": "unset",
+      "update_mode": "replace",
+      "metadata": {
+        "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+        "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+        "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+        "layer": "confirmed_memory",
+        "revision": "1",
+        "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3"
+      }
+    },
+    {
+      "content": "合成控制记忆：对方喜欢周末爬山。",
+      "document_id": "memory-63a434cc-0090-453b-b257-6bafb289a041",
+      "timestamp": "unset",
+      "update_mode": "replace",
+      "metadata": {
+        "local_memory_id": "63a434cc-0090-453b-b257-6bafb289a041",
+        "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+        "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+        "layer": "confirmed_memory",
+        "revision": "1",
+        "source_ids": "139af6a8-afe3-48bd-905c-ec0842665f86"
+      }
+    },
+    {
+      "content": "合成乳糖限制：对方乳糖不耐受。",
+      "document_id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+      "timestamp": "unset",
+      "update_mode": "replace",
+      "metadata": {
+        "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+        "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+        "contact_id": "0db59953-9229-4a6e-b6be-c3d57367f8a6",
+        "layer": "confirmed_memory",
+        "revision": "1",
+        "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3"
+      }
+    },
+    {
+      "content": "合成乳糖限制：对方乳糖不耐受。",
+      "document_id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+      "timestamp": "unset",
+      "update_mode": "replace",
+      "metadata": {
+        "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+        "owner_id": "1941a773-7125-4bbd-b918-6cc2b16bfa4b",
+        "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+        "layer": "confirmed_memory",
+        "revision": "1",
+        "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "新 bank 空且禁止归纳 notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78",
+      "passed": true,
+      "evidence": {
+        "config": {
+          "bank_id": "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78",
+          "config": {
+            "consolidation_max_memories_per_round": 100,
+            "recall_max_tokens": 2048,
+            "observations_mission": null,
+            "retain_mission": null,
+            "recall_budget_adaptive_mid": 0.075,
+            "reflect_mission": null,
+            "mcp_enabled_tools": null,
+            "recall_budget_min": 20,
+            "store_document_text": true,
+            "enable_graph_retrieval": true,
+            "mental_model_min_refresh_interval_seconds": 0,
+            "recall_budget_max": 2000,
+            "consolidation_source_facts_max_tokens_per_observation": 256,
+            "consolidation_llm_parallelism": 4,
+            "enable_text_search": true,
+            "retain_chunk_batch_size": 100,
+            "consolidation_strategies": null,
+            "enable_auto_consolidation": false,
+            "entity_labels": null,
+            "enable_temporal_retrieval": true,
+            "retain_custom_instructions": null,
+            "reflect_source_facts_max_tokens": -1,
+            "retain_max_attachments_per_chunk": 8,
+            "enable_reranking": true,
+            "reflect_default_options": null,
+            "consolidation_source_facts_max_tokens": 4096,
+            "recall_budget_fixed_mid": 300,
+            "disposition_skepticism": null,
+            "recall_budget_fixed_low": 100,
+            "recall_budget_function": "fixed",
+            "memory_defense": null,
+            "consolidation_llm_batch_size": 8,
+            "max_observations_per_scope": -1,
+            "recall_budget_fixed_high": 1000,
+            "retain_chunk_size": 3000,
+            "retain_structured_chunk_size": null,
+            "retain_strategies": null,
+            "recall_include_chunks": true,
+            "disposition_literalism": null,
+            "retain_default_strategy": null,
+            "observation_scope_limits": null,
+            "recall_chunks_max_tokens": 1000,
+            "knowledge_page_default_trigger": null,
+            "recall_budget_adaptive_low": 0.025,
+            "retain_extraction_mode": "chunks",
+            "audit_log_enabled": false,
+            "enable_observations": false,
+            "disposition_empathy": null,
+            "entities_allow_free_form": true,
+            "llm_gemini_safety_settings": null,
+            "recall_budget_adaptive_high": 0.25
+          },
+          "overrides": {
+            "retain_extraction_mode": "chunks",
+            "enable_auto_consolidation": false
+          }
+        },
+        "initial": {
+          "items": [],
+          "total": 0,
+          "limit": 1,
+          "offset": 0
+        },
+        "mental_models": {
+          "items": [],
+          "total": 0,
+          "limit": 100,
+          "offset": 0
+        }
+      }
+    },
+    {
+      "name": "同次完成诊断证明真实空结果 notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78",
+      "passed": true,
+      "evidence": {
+        "bank_id": "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78",
+        "hits": [],
+        "rerank_complete": true,
+        "diagnostics": "2026-10-04 02:03:17,862 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 新建空 bank 合成查询...\n2026-10-04 02:03:17,874 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-97862-39e64f] Query: '新建空 bank 合成查询...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.009s\n  [2] Parallel retrieval (1 fact_types): semantic=0(0.000s), bm25=0(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.002s in 0.002s\n  [3] RRF merge: 0 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 0 candidates scored in 0.000s\n  [5] Truncated to top 0 results\n  [6] Token filtering: 0 results, 0/4096 tokens in 0.000s\n  [phases] generate_query_embedding=9ms, parallel_retrieval=2ms, reranking=0ms, rrf_merge=0ms, combined_scoring=0ms, token_filtering=0ms, hydrate_results=0ms, backend_acquisition=0ms, result_serialization=0ms, entity_build=0ms | accounted=11ms of 12ms\n  [phases:subsets] store_recall=2ms, retrieval_store_recall=2ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-97862-39e64f] Complete: 0 facts (0 tok), 0 chunks (0 tok), 0 entities (0 tok) |  | 0.012s\n"
+      }
+    },
+    {
+      "name": "新 bank 空且禁止归纳 notalone-experiment-88ffc336a3c72bab4db811e9d08d251c",
+      "passed": true,
+      "evidence": {
+        "config": {
+          "bank_id": "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c",
+          "config": {
+            "consolidation_max_memories_per_round": 100,
+            "recall_max_tokens": 2048,
+            "observations_mission": null,
+            "retain_mission": null,
+            "recall_budget_adaptive_mid": 0.075,
+            "reflect_mission": null,
+            "mcp_enabled_tools": null,
+            "recall_budget_min": 20,
+            "store_document_text": true,
+            "enable_graph_retrieval": true,
+            "mental_model_min_refresh_interval_seconds": 0,
+            "recall_budget_max": 2000,
+            "consolidation_source_facts_max_tokens_per_observation": 256,
+            "consolidation_llm_parallelism": 4,
+            "enable_text_search": true,
+            "retain_chunk_batch_size": 100,
+            "consolidation_strategies": null,
+            "enable_auto_consolidation": false,
+            "entity_labels": null,
+            "enable_temporal_retrieval": true,
+            "retain_custom_instructions": null,
+            "reflect_source_facts_max_tokens": -1,
+            "retain_max_attachments_per_chunk": 8,
+            "enable_reranking": true,
+            "reflect_default_options": null,
+            "consolidation_source_facts_max_tokens": 4096,
+            "recall_budget_fixed_mid": 300,
+            "disposition_skepticism": null,
+            "recall_budget_fixed_low": 100,
+            "recall_budget_function": "fixed",
+            "memory_defense": null,
+            "consolidation_llm_batch_size": 8,
+            "max_observations_per_scope": -1,
+            "recall_budget_fixed_high": 1000,
+            "retain_chunk_size": 3000,
+            "retain_structured_chunk_size": null,
+            "retain_strategies": null,
+            "recall_include_chunks": true,
+            "disposition_literalism": null,
+            "retain_default_strategy": null,
+            "observation_scope_limits": null,
+            "recall_chunks_max_tokens": 1000,
+            "knowledge_page_default_trigger": null,
+            "recall_budget_adaptive_low": 0.025,
+            "retain_extraction_mode": "chunks",
+            "audit_log_enabled": false,
+            "enable_observations": false,
+            "disposition_empathy": null,
+            "entities_allow_free_form": true,
+            "llm_gemini_safety_settings": null,
+            "recall_budget_adaptive_high": 0.25
+          },
+          "overrides": {
+            "retain_extraction_mode": "chunks",
+            "enable_auto_consolidation": false
+          }
+        },
+        "initial": {
+          "items": [],
+          "total": 0,
+          "limit": 1,
+          "offset": 0
+        },
+        "mental_models": {
+          "items": [],
+          "total": 0,
+          "limit": 100,
+          "offset": 0
+        }
+      }
+    },
+    {
+      "name": "同次完成诊断证明真实空结果 notalone-experiment-88ffc336a3c72bab4db811e9d08d251c",
+      "passed": true,
+      "evidence": {
+        "bank_id": "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c",
+        "hits": [],
+        "rerank_complete": true,
+        "diagnostics": "2026-10-04 02:03:17,890 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 新建空 bank 合成查询...\n2026-10-04 02:03:17,902 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-97890-d6336b] Query: '新建空 bank 合成查询...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.009s\n  [2] Parallel retrieval (1 fact_types): semantic=0(0.000s), bm25=0(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.002s in 0.002s\n  [3] RRF merge: 0 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 0 candidates scored in 0.000s\n  [5] Truncated to top 0 results\n  [6] Token filtering: 0 results, 0/4096 tokens in 0.000s\n  [phases] generate_query_embedding=9ms, parallel_retrieval=2ms, reranking=0ms, rrf_merge=0ms, combined_scoring=0ms, token_filtering=0ms, hydrate_results=0ms, result_serialization=0ms, entity_build=0ms, backend_acquisition=0ms | accounted=11ms of 11ms\n  [phases:subsets] store_recall=2ms, retrieval_store_recall=2ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-97890-d6336b] Complete: 0 facts (0 tok), 0 chunks (0 tok), 0 entities (0 tok) |  | 0.011s\n"
+      }
+    },
+    {
+      "name": "新 bank 空且禁止归纳 notalone-experiment-a74398cda3e964de503d4551514fff93",
+      "passed": true,
+      "evidence": {
+        "config": {
+          "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+          "config": {
+            "consolidation_max_memories_per_round": 100,
+            "recall_max_tokens": 2048,
+            "observations_mission": null,
+            "retain_mission": null,
+            "recall_budget_adaptive_mid": 0.075,
+            "reflect_mission": null,
+            "mcp_enabled_tools": null,
+            "recall_budget_min": 20,
+            "store_document_text": true,
+            "enable_graph_retrieval": true,
+            "mental_model_min_refresh_interval_seconds": 0,
+            "recall_budget_max": 2000,
+            "consolidation_source_facts_max_tokens_per_observation": 256,
+            "consolidation_llm_parallelism": 4,
+            "enable_text_search": true,
+            "retain_chunk_batch_size": 100,
+            "consolidation_strategies": null,
+            "enable_auto_consolidation": false,
+            "entity_labels": null,
+            "enable_temporal_retrieval": true,
+            "retain_custom_instructions": null,
+            "reflect_source_facts_max_tokens": -1,
+            "retain_max_attachments_per_chunk": 8,
+            "enable_reranking": true,
+            "reflect_default_options": null,
+            "consolidation_source_facts_max_tokens": 4096,
+            "recall_budget_fixed_mid": 300,
+            "disposition_skepticism": null,
+            "recall_budget_fixed_low": 100,
+            "recall_budget_function": "fixed",
+            "memory_defense": null,
+            "consolidation_llm_batch_size": 8,
+            "max_observations_per_scope": -1,
+            "recall_budget_fixed_high": 1000,
+            "retain_chunk_size": 3000,
+            "retain_structured_chunk_size": null,
+            "retain_strategies": null,
+            "recall_include_chunks": true,
+            "disposition_literalism": null,
+            "retain_default_strategy": null,
+            "observation_scope_limits": null,
+            "recall_chunks_max_tokens": 1000,
+            "knowledge_page_default_trigger": null,
+            "recall_budget_adaptive_low": 0.025,
+            "retain_extraction_mode": "chunks",
+            "audit_log_enabled": false,
+            "enable_observations": false,
+            "disposition_empathy": null,
+            "entities_allow_free_form": true,
+            "llm_gemini_safety_settings": null,
+            "recall_budget_adaptive_high": 0.25
+          },
+          "overrides": {
+            "retain_extraction_mode": "chunks",
+            "enable_auto_consolidation": false
+          }
+        },
+        "initial": {
+          "items": [],
+          "total": 0,
+          "limit": 1,
+          "offset": 0
+        },
+        "mental_models": {
+          "items": [],
+          "total": 0,
+          "limit": 100,
+          "offset": 0
+        }
+      }
+    },
+    {
+      "name": "同次完成诊断证明真实空结果 notalone-experiment-a74398cda3e964de503d4551514fff93",
+      "passed": true,
+      "evidence": {
+        "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+        "hits": [],
+        "rerank_complete": true,
+        "diagnostics": "2026-10-04 02:03:17,919 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 新建空 bank 合成查询...\n2026-10-04 02:03:17,934 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-97919-fea60e] Query: '新建空 bank 合成查询...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.011s\n  [2] Parallel retrieval (1 fact_types): semantic=0(0.000s), bm25=0(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.003s in 0.003s\n  [3] RRF merge: 0 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 0 candidates scored in 0.000s\n  [5] Truncated to top 0 results\n  [6] Token filtering: 0 results, 0/4096 tokens in 0.000s\n  [phases] generate_query_embedding=11ms, parallel_retrieval=3ms, reranking=0ms, combined_scoring=0ms, rrf_merge=0ms, token_filtering=0ms, hydrate_results=0ms, entity_build=0ms, result_serialization=0ms, backend_acquisition=0ms | accounted=15ms of 15ms\n  [phases:subsets] store_recall=3ms, retrieval_store_recall=3ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-97919-fea60e] Complete: 0 facts (0 tok), 0 chunks (0 tok), 0 entities (0 tok) |  | 0.015s\n"
+      }
+    },
+    {
+      "name": "删除前原始召回和 Context 均有正例",
+      "passed": true,
+      "evidence": {
+        "database": {
+          "documents": [
+            {
+              "id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+              "original_text": "合成乳糖限制：对方乳糖不耐受。",
+              "content_hash": "916b97e44b627a7806aa9ea765f6fa0e277b43675c524433cfcbca81a8494417",
+              "retain_params": {
+                "metadata": {
+                  "layer": "confirmed_memory",
+                  "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                  "revision": "1",
+                  "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                  "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                  "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+                }
+              }
+            }
+          ],
+          "chunks": [
+            {
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "chunk_index": 0,
+              "chunk_text": "合成乳糖限制：对方乳糖不耐受。"
+            }
+          ],
+          "units": [
+            {
+              "id": "d9584f60-a199-4d03-9cee-bb5db554dbdc",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "text": "合成乳糖限制：对方乳糖不耐受。",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "1",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+              },
+              "has_embedding": true,
+              "dimensions": 512
+            }
+          ],
+          "archive": []
+        },
+        "recall": {
+          "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+          "hits": [
+            {
+              "unit_id": "d9584f60-a199-4d03-9cee-bb5db554dbdc",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "document_id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "1",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+              },
+              "reranker": 0.9999547813552059,
+              "final": 0.9999547813552059
+            },
+            {
+              "unit_id": "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-63a434cc-0090-453b-b257-6bafb289a041_0",
+              "document_id": "memory-63a434cc-0090-453b-b257-6bafb289a041",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "1",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "139af6a8-afe3-48bd-905c-ec0842665f86",
+                "local_memory_id": "63a434cc-0090-453b-b257-6bafb289a041"
+              },
+              "reranker": 0.014729416557524543,
+              "final": 0.014729416557524543
+            }
+          ],
+          "rerank_complete": true,
+          "diagnostics": "2026-10-04 02:03:18,108 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成乳糖限制：对方乳糖不耐受。...\n2026-10-04 02:03:18,142 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-98108-d97144] Query: '合成乳糖限制：对方乳糖不耐受。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.010s\n  [2] Parallel retrieval (1 fact_types): semantic=2(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.004s in 0.004s\n  [3] RRF merge: 2 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 2 candidates scored in 0.017s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 2 results\n  [6] Token filtering: 2 results, 29/4096 tokens in 0.000s\n  [phases] reranking=17ms, generate_query_embedding=10ms, parallel_retrieval=5ms, entity_build=1ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, hydrate_results=0ms, result_serialization=0ms, backend_acquisition=0ms | accounted=34ms of 34ms\n  [phases:subsets] store_recall=4ms, retrieval_store_recall=4ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-98108-d97144] Complete: 2 facts (29 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=2 | 0.034s\n"
+        },
+        "context": {
+          "selected": [
+            {
+              "id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "text": "合成乳糖限制：对方乳糖不耐受。",
+              "source_ids": [
+                "7f34c58b-4231-4800-b63e-335b964a39ce",
+                "0d39a940-6770-4a8a-8451-55b73c39c0b3"
+              ],
+              "revision": 1
+            },
+            {
+              "id": "63a434cc-0090-453b-b257-6bafb289a041",
+              "text": "合成控制记忆：对方喜欢周末爬山。",
+              "source_ids": [
+                "139af6a8-afe3-48bd-905c-ec0842665f86"
+              ],
+              "revision": 1
+            }
+          ],
+          "attempt": {
+            "status": "success",
+            "candidates": 2,
+            "selected_ids": [
+              "a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "63a434cc-0090-453b-b257-6bafb289a041"
+            ],
+            "rejected": [],
+            "error": "",
+            "scores": [
+              [
+                "d9584f60-a199-4d03-9cee-bb5db554dbdc",
+                0.9999547813552059,
+                0.9999547813552059
+              ],
+              [
+                "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+                0.014729416557524543,
+                0.014729416557524543
+              ]
+            ],
+            "service_diagnostics": "2026-10-04 02:03:18,144 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成乳糖限制:对方乳糖不耐受。...\n2026-10-04 02:03:18,175 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-98144-820bc9] Query: '合成乳糖限制:对方乳糖不耐受。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.009s\n  [2] Parallel retrieval (1 fact_types): semantic=2(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.003s in 0.003s\n  [3] RRF merge: 2 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 2 candidates scored in 0.017s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 2 results\n  [6] Token filtering: 2 results, 29/4096 tokens in 0.000s\n  [phases] reranking=17ms, generate_query_embedding=9ms, parallel_retrieval=4ms, entity_build=1ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=31ms of 31ms\n  [phases:subsets] store_recall=3ms, retrieval_store_recall=3ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-98144-820bc9] Complete: 2 facts (29 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=2 | 0.031s\n"
+          }
+        }
+      }
+    },
+    {
+      "name": "独立范围有同正文同 document 正例 notalone-experiment-88ffc336a3c72bab4db811e9d08d251c",
+      "passed": true,
+      "evidence": {
+        "bank_id": "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c",
+        "hits": [
+          {
+            "unit_id": "1b7fac0e-5ca8-4273-aad6-8c0a260b436c",
+            "chunk_id": "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+            "document_id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+            "metadata": {
+              "layer": "confirmed_memory",
+              "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+              "revision": "1",
+              "contact_id": "0db59953-9229-4a6e-b6be-c3d57367f8a6",
+              "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+              "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+            },
+            "reranker": 0.9999547813120838,
+            "final": 0.9999547813120838
+          }
+        ],
+        "rerank_complete": true,
+        "diagnostics": "2026-10-04 02:03:18,178 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成乳糖限制：对方乳糖不耐受。...\n2026-10-04 02:03:18,209 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-98178-987462] Query: '合成乳糖限制：对方乳糖不耐受。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.010s\n  [2] Parallel retrieval (1 fact_types): semantic=1(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.003s in 0.004s\n  [3] RRF merge: 1 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 1 candidates scored in 0.016s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 1 results\n  [6] Token filtering: 1 results, 14/4096 tokens in 0.000s\n  [phases] reranking=16ms, generate_query_embedding=10ms, parallel_retrieval=4ms, entity_build=1ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=31ms of 31ms\n  [phases:subsets] store_recall=3ms, retrieval_store_recall=3ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-98178-987462] Complete: 1 facts (14 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=1 | 0.031s\n"
+      }
+    },
+    {
+      "name": "独立范围有同正文同 document 正例 notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78",
+      "passed": true,
+      "evidence": {
+        "bank_id": "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78",
+        "hits": [
+          {
+            "unit_id": "6a60a297-1fac-4f9f-b819-ad83a6bf1e15",
+            "chunk_id": "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+            "document_id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+            "metadata": {
+              "layer": "confirmed_memory",
+              "owner_id": "1941a773-7125-4bbd-b918-6cc2b16bfa4b",
+              "revision": "1",
+              "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+              "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+              "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+            },
+            "reranker": 0.9999547813120838,
+            "final": 0.9999547813120838
+          }
+        ],
+        "rerank_complete": true,
+        "diagnostics": "2026-10-04 02:03:18,212 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成乳糖限制：对方乳糖不耐受。...\n2026-10-04 02:03:18,246 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-98212-523aed] Query: '合成乳糖限制：对方乳糖不耐受。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.011s\n  [2] Parallel retrieval (1 fact_types): semantic=1(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.004s in 0.004s\n  [3] RRF merge: 1 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 1 candidates scored in 0.018s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 1 results\n  [6] Token filtering: 1 results, 14/4096 tokens in 0.000s\n  [phases] reranking=18ms, generate_query_embedding=11ms, parallel_retrieval=4ms, entity_build=1ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=34ms of 34ms\n  [phases:subsets] store_recall=4ms, retrieval_store_recall=4ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-98212-523aed] Complete: 1 facts (14 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=1 | 0.034s\n"
+      }
+    },
+    {
+      "name": "相同 retain 重试不增文档或单元",
+      "passed": true,
+      "evidence": {
+        "response": {
+          "success": true,
+          "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+          "items_count": 1,
+          "async": false,
+          "operation_id": null,
+          "operation_ids": null,
+          "usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cached_tokens": 0,
+            "thoughts_tokens": 0
+          },
+          "experiment_elapsed_ms": 7.490540971048176
+        },
+        "database": {
+          "documents": [
+            {
+              "id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+              "original_text": "合成乳糖限制：对方乳糖不耐受。",
+              "content_hash": "916b97e44b627a7806aa9ea765f6fa0e277b43675c524433cfcbca81a8494417",
+              "retain_params": {
+                "metadata": {
+                  "layer": "confirmed_memory",
+                  "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                  "revision": "1",
+                  "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                  "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                  "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+                }
+              }
+            }
+          ],
+          "chunks": [
+            {
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "chunk_index": 0,
+              "chunk_text": "合成乳糖限制：对方乳糖不耐受。"
+            }
+          ],
+          "units": [
+            {
+              "id": "d9584f60-a199-4d03-9cee-bb5db554dbdc",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "text": "合成乳糖限制：对方乳糖不耐受。",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "1",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+              },
+              "has_embedding": true,
+              "dimensions": 512
+            }
+          ],
+          "archive": []
+        }
+      }
+    },
+    {
+      "name": "多来源删除一个后保留资料并刷新全部 metadata",
+      "passed": true,
+      "evidence": {
+        "response": {
+          "success": true,
+          "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+          "items_count": 1,
+          "async": false,
+          "operation_id": null,
+          "operation_ids": null,
+          "usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cached_tokens": 0,
+            "thoughts_tokens": 0
+          },
+          "experiment_elapsed_ms": 8.402875042520463
+        },
+        "database": {
+          "documents": [
+            {
+              "id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+              "original_text": "合成乳糖限制：对方乳糖不耐受。",
+              "content_hash": "916b97e44b627a7806aa9ea765f6fa0e277b43675c524433cfcbca81a8494417",
+              "retain_params": {
+                "metadata": {
+                  "layer": "confirmed_memory",
+                  "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                  "revision": "2",
+                  "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                  "source_ids": "0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                  "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+                }
+              }
+            }
+          ],
+          "chunks": [
+            {
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "chunk_index": 0,
+              "chunk_text": "合成乳糖限制：对方乳糖不耐受。"
+            }
+          ],
+          "units": [
+            {
+              "id": "d9584f60-a199-4d03-9cee-bb5db554dbdc",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "text": "合成乳糖限制：对方乳糖不耐受。",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "2",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+              },
+              "has_embedding": true,
+              "dimensions": 512
+            }
+          ],
+          "archive": []
+        },
+        "context": {
+          "selected": [
+            {
+              "id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "text": "合成乳糖限制：对方乳糖不耐受。",
+              "source_ids": [
+                "0d39a940-6770-4a8a-8451-55b73c39c0b3"
+              ],
+              "revision": 2
+            },
+            {
+              "id": "63a434cc-0090-453b-b257-6bafb289a041",
+              "text": "合成控制记忆：对方喜欢周末爬山。",
+              "source_ids": [
+                "139af6a8-afe3-48bd-905c-ec0842665f86"
+              ],
+              "revision": 1
+            }
+          ],
+          "attempt": {
+            "status": "success",
+            "candidates": 2,
+            "selected_ids": [
+              "a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "63a434cc-0090-453b-b257-6bafb289a041"
+            ],
+            "rejected": [],
+            "error": "",
+            "scores": [
+              [
+                "d9584f60-a199-4d03-9cee-bb5db554dbdc",
+                0.9999547813552059,
+                0.9999547813552059
+              ],
+              [
+                "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+                0.014729416557524543,
+                0.014729416557524543
+              ]
+            ],
+            "service_diagnostics": "2026-10-04 02:03:18,324 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成乳糖限制:对方乳糖不耐受。...\n2026-10-04 02:03:18,359 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-98324-b15831] Query: '合成乳糖限制:对方乳糖不耐受。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.010s\n  [2] Parallel retrieval (1 fact_types): semantic=2(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.003s in 0.003s\n  [3] RRF merge: 2 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 2 candidates scored in 0.020s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 2 results\n  [6] Token filtering: 2 results, 29/4096 tokens in 0.000s\n  [phases] reranking=20ms, generate_query_embedding=10ms, parallel_retrieval=4ms, entity_build=1ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=35ms of 35ms\n  [phases:subsets] store_recall=3ms, retrieval_store_recall=3ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-98324-b15831] Complete: 2 facts (29 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=2 | 0.035s\n"
+          }
+        },
+        "unit_ids_preserved": true
+      }
+    },
+    {
+      "name": "同 document changed chunk 刷新正文和 revision",
+      "passed": true,
+      "evidence": {
+        "response": {
+          "success": true,
+          "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+          "items_count": 1,
+          "async": false,
+          "operation_id": null,
+          "operation_ids": null,
+          "usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cached_tokens": 0,
+            "thoughts_tokens": 0
+          },
+          "experiment_elapsed_ms": 28.6164169665426
+        },
+        "database": {
+          "documents": [
+            {
+              "id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+              "original_text": "合成乳糖更新：对方现在选择无糖豆奶。",
+              "content_hash": "910cd19373e3566abbffa7e6236bcda6fa3527326ebe72faddca030bb7bdf889",
+              "retain_params": {
+                "metadata": {
+                  "layer": "confirmed_memory",
+                  "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                  "revision": "3",
+                  "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                  "source_ids": "0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                  "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+                }
+              }
+            }
+          ],
+          "chunks": [
+            {
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "chunk_index": 0,
+              "chunk_text": "合成乳糖更新：对方现在选择无糖豆奶。"
+            }
+          ],
+          "units": [
+            {
+              "id": "8e49a094-127e-4967-b82d-64dd6da8e785",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "text": "合成乳糖更新：对方现在选择无糖豆奶。",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "3",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+              },
+              "has_embedding": true,
+              "dimensions": 512
+            }
+          ],
+          "archive": []
+        },
+        "context": {
+          "selected": [
+            {
+              "id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "text": "合成乳糖更新：对方现在选择无糖豆奶。",
+              "source_ids": [
+                "0d39a940-6770-4a8a-8451-55b73c39c0b3"
+              ],
+              "revision": 3
+            }
+          ],
+          "attempt": {
+            "status": "success",
+            "candidates": 2,
+            "selected_ids": [
+              "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+            ],
+            "rejected": [
+              [
+                "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+                "below_tau"
+              ]
+            ],
+            "error": "",
+            "scores": [
+              [
+                "8e49a094-127e-4967-b82d-64dd6da8e785",
+                0.9999718474703697,
+                0.9999718474703697
+              ],
+              [
+                "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+                0.0005484287925619357,
+                0.0005484287925619357
+              ]
+            ],
+            "service_diagnostics": "2026-10-04 02:03:18,410 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成乳糖更新:对方现在选择无糖豆奶。...\n2026-10-04 02:03:18,443 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-98410-745bf5] Query: '合成乳糖更新:对方现在选择无糖豆奶。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.010s\n  [2] Parallel retrieval (1 fact_types): semantic=2(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.003s in 0.003s\n  [3] RRF merge: 2 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 2 candidates scored in 0.018s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 2 results\n  [6] Token filtering: 2 results, 30/4096 tokens in 0.000s\n  [phases] reranking=18ms, generate_query_embedding=10ms, parallel_retrieval=4ms, entity_build=1ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=33ms of 33ms\n  [phases:subsets] store_recall=3ms, retrieval_store_recall=3ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-98410-745bf5] Complete: 2 facts (30 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=2 | 0.033s\n"
+          }
+        }
+      }
+    },
+    {
+      "name": "更新重试幂等",
+      "passed": true,
+      "evidence": {
+        "response": {
+          "success": true,
+          "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+          "items_count": 1,
+          "async": false,
+          "operation_id": null,
+          "operation_ids": null,
+          "usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cached_tokens": 0,
+            "thoughts_tokens": 0
+          },
+          "experiment_elapsed_ms": 7.4363749590702355
+        },
+        "database": {
+          "documents": [
+            {
+              "id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+              "original_text": "合成乳糖更新：对方现在选择无糖豆奶。",
+              "content_hash": "910cd19373e3566abbffa7e6236bcda6fa3527326ebe72faddca030bb7bdf889",
+              "retain_params": {
+                "metadata": {
+                  "layer": "confirmed_memory",
+                  "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                  "revision": "3",
+                  "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                  "source_ids": "0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                  "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+                }
+              }
+            }
+          ],
+          "chunks": [
+            {
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "chunk_index": 0,
+              "chunk_text": "合成乳糖更新：对方现在选择无糖豆奶。"
+            }
+          ],
+          "units": [
+            {
+              "id": "8e49a094-127e-4967-b82d-64dd6da8e785",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "text": "合成乳糖更新：对方现在选择无糖豆奶。",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "3",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+              },
+              "has_embedding": true,
+              "dimensions": 512
+            }
+          ],
+          "archive": []
+        }
+      }
+    },
+    {
+      "name": "同步 retain 完成且无未终结 retain 生产者",
+      "passed": true,
+      "evidence": {
+        "operations": [],
+        "mode": "同步、串行且本轮是唯一生产者；runtime worker=false"
+      }
+    },
+    {
+      "name": "最后来源删除后 API/SQL/向量单元/archive 清除且可重试",
+      "passed": true,
+      "evidence": {
+        "delete": {
+          "success": true,
+          "message": "Document 'memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f' and 1 associated memory units deleted successfully",
+          "document_id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+          "memory_units_deleted": 1,
+          "experiment_elapsed_ms": 9.05341695761308
+        },
+        "retry": {
+          "already_absent": true,
+          "http_status": 404,
+          "experiment_elapsed_ms": 2.2662500268779695
+        },
+        "api": {
+          "document": {
+            "http_status": 404
+          },
+          "chunks": {
+            "http_status": 404
+          }
+        },
+        "database": {
+          "documents": [],
+          "chunks": [],
+          "units": [],
+          "archive": []
+        },
+        "old_unit_ids": {
+          "memory_units": [],
+          "invalidated_memory_units": []
+        }
+      }
+    },
+    {
+      "name": "同实例缓存再次查询无已删资料 0",
+      "passed": true,
+      "evidence": {
+        "recall": {
+          "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+          "hits": [
+            {
+              "unit_id": "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-63a434cc-0090-453b-b257-6bafb289a041_0",
+              "document_id": "memory-63a434cc-0090-453b-b257-6bafb289a041",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "1",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "139af6a8-afe3-48bd-905c-ec0842665f86",
+                "local_memory_id": "63a434cc-0090-453b-b257-6bafb289a041"
+              },
+              "reranker": 0.014729416557524543,
+              "final": 0.014729416557524543
+            }
+          ],
+          "rerank_complete": true,
+          "diagnostics": "2026-10-04 02:03:18,541 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成乳糖限制：对方乳糖不耐受。...\n2026-10-04 02:03:18,576 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-98541-f0fc74] Query: '合成乳糖限制：对方乳糖不耐受。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.012s\n  [2] Parallel retrieval (1 fact_types): semantic=1(0.000s), bm25=0(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.003s in 0.004s\n  [3] RRF merge: 1 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 1 candidates scored in 0.016s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 1 results\n  [6] Token filtering: 1 results, 15/4096 tokens in 0.000s\n  [phases] reranking=16ms, generate_query_embedding=12ms, parallel_retrieval=4ms, entity_build=2ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=34ms of 34ms\n  [phases:subsets] store_recall=3ms, retrieval_store_recall=3ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-98541-f0fc74] Complete: 1 facts (15 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=1 | 0.034s\n"
+        },
+        "context": {
+          "selected": [
+            {
+              "id": "63a434cc-0090-453b-b257-6bafb289a041",
+              "text": "合成控制记忆：对方喜欢周末爬山。",
+              "source_ids": [
+                "139af6a8-afe3-48bd-905c-ec0842665f86"
+              ],
+              "revision": 1
+            }
+          ],
+          "attempt": {
+            "status": "success",
+            "candidates": 1,
+            "selected_ids": [
+              "63a434cc-0090-453b-b257-6bafb289a041"
+            ],
+            "rejected": [],
+            "error": "",
+            "scores": [
+              [
+                "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+                0.9999774562325262,
+                0.9999774562325262
+              ]
+            ],
+            "service_diagnostics": "2026-10-04 02:03:18,579 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成控制记忆:对方喜欢周末爬山。...\n2026-10-04 02:03:18,615 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-98579-229bc8] Query: '合成控制记忆:对方喜欢周末爬山。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.012s\n  [2] Parallel retrieval (1 fact_types): semantic=1(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.001s | store=0.004s in 0.005s\n  [3] RRF merge: 1 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 1 candidates scored in 0.017s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 1 results\n  [6] Token filtering: 1 results, 15/4096 tokens in 0.000s\n  [phases] reranking=17ms, generate_query_embedding=12ms, parallel_retrieval=5ms, entity_build=2ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=36ms of 36ms\n  [phases:subsets] store_recall=4ms, retrieval_store_recall=4ms, retrieval_temporal_extraction=1ms, semaphore_wait=0ms\n[RECALL notalone-98579-229bc8] Complete: 1 facts (15 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=1 | 0.036s\n"
+          }
+        },
+        "list": {
+          "items": [
+            {
+              "id": "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+              "text": "合成控制记忆：对方喜欢周末爬山。",
+              "context": "",
+              "date": "",
+              "fact_type": "world",
+              "document_id": "memory-63a434cc-0090-453b-b257-6bafb289a041",
+              "mentioned_at": null,
+              "occurred_start": null,
+              "occurred_end": null,
+              "entities": "",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-63a434cc-0090-453b-b257-6bafb289a041_0",
+              "proof_count": 1,
+              "tags": [],
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "1",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "139af6a8-afe3-48bd-905c-ec0842665f86",
+                "local_memory_id": "63a434cc-0090-453b-b257-6bafb289a041"
+              },
+              "consolidated_at": null,
+              "consolidation_failed_at": null,
+              "state": "valid",
+              "invalidation_reason": null,
+              "invalidated_at": null,
+              "edited_at": null,
+              "updated_at": "2026-10-03T18:03:17.974016+00:00",
+              "source_memory_ids": []
+            }
+          ],
+          "total": 1,
+          "limit": 100,
+          "offset": 0
+        }
+      }
+    },
+    {
+      "name": "同实例缓存再次查询无已删资料 1",
+      "passed": true,
+      "evidence": {
+        "recall": {
+          "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+          "hits": [
+            {
+              "unit_id": "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-63a434cc-0090-453b-b257-6bafb289a041_0",
+              "document_id": "memory-63a434cc-0090-453b-b257-6bafb289a041",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "1",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "139af6a8-afe3-48bd-905c-ec0842665f86",
+                "local_memory_id": "63a434cc-0090-453b-b257-6bafb289a041"
+              },
+              "reranker": 0.014729416557524543,
+              "final": 0.014729416557524543
+            }
+          ],
+          "rerank_complete": true,
+          "diagnostics": "2026-10-04 02:03:18,625 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成乳糖限制：对方乳糖不耐受。...\n2026-10-04 02:03:18,664 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-98625-282c9a] Query: '合成乳糖限制：对方乳糖不耐受。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.012s\n  [2] Parallel retrieval (1 fact_types): semantic=1(0.000s), bm25=0(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.003s in 0.004s\n  [3] RRF merge: 1 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 1 candidates scored in 0.021s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 1 results\n  [6] Token filtering: 1 results, 15/4096 tokens in 0.000s\n  [phases] reranking=21ms, generate_query_embedding=12ms, parallel_retrieval=4ms, entity_build=2ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=39ms of 40ms\n  [phases:subsets] store_recall=3ms, retrieval_store_recall=3ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-98625-282c9a] Complete: 1 facts (15 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=1 | 0.040s\n"
+        },
+        "context": {
+          "selected": [
+            {
+              "id": "63a434cc-0090-453b-b257-6bafb289a041",
+              "text": "合成控制记忆：对方喜欢周末爬山。",
+              "source_ids": [
+                "139af6a8-afe3-48bd-905c-ec0842665f86"
+              ],
+              "revision": 1
+            }
+          ],
+          "attempt": {
+            "status": "success",
+            "candidates": 1,
+            "selected_ids": [
+              "63a434cc-0090-453b-b257-6bafb289a041"
+            ],
+            "rejected": [],
+            "error": "",
+            "scores": [
+              [
+                "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+                0.9999774562325262,
+                0.9999774562325262
+              ]
+            ],
+            "service_diagnostics": "2026-10-04 02:03:18,667 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成控制记忆:对方喜欢周末爬山。...\n2026-10-04 02:03:18,701 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-98667-b22689] Query: '合成控制记忆:对方喜欢周末爬山。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.009s\n  [2] Parallel retrieval (1 fact_types): semantic=1(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.003s in 0.004s\n  [3] RRF merge: 1 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 1 candidates scored in 0.020s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 1 results\n  [6] Token filtering: 1 results, 15/4096 tokens in 0.000s\n  [phases] reranking=20ms, generate_query_embedding=9ms, parallel_retrieval=4ms, entity_build=1ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=34ms of 34ms\n  [phases:subsets] store_recall=3ms, retrieval_store_recall=3ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-98667-b22689] Complete: 1 facts (15 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=1 | 0.034s\n"
+          }
+        },
+        "list": {
+          "items": [
+            {
+              "id": "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+              "text": "合成控制记忆：对方喜欢周末爬山。",
+              "context": "",
+              "date": "",
+              "fact_type": "world",
+              "document_id": "memory-63a434cc-0090-453b-b257-6bafb289a041",
+              "mentioned_at": null,
+              "occurred_start": null,
+              "occurred_end": null,
+              "entities": "",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-63a434cc-0090-453b-b257-6bafb289a041_0",
+              "proof_count": 1,
+              "tags": [],
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "1",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "139af6a8-afe3-48bd-905c-ec0842665f86",
+                "local_memory_id": "63a434cc-0090-453b-b257-6bafb289a041"
+              },
+              "consolidated_at": null,
+              "consolidation_failed_at": null,
+              "state": "valid",
+              "invalidation_reason": null,
+              "invalidated_at": null,
+              "edited_at": null,
+              "updated_at": "2026-10-03T18:03:17.974016+00:00",
+              "source_memory_ids": []
+            }
+          ],
+          "total": 1,
+          "limit": 100,
+          "offset": 0
+        }
+      }
+    },
+    {
+      "name": "文档删除不影响同 bank 及其他 owner/contact 控制组",
+      "passed": true,
+      "evidence": {
+        "notalone-experiment-a74398cda3e964de503d4551514fff93/memory-63a434cc-0090-453b-b257-6bafb289a041": {
+          "documents": [
+            {
+              "id": "memory-63a434cc-0090-453b-b257-6bafb289a041",
+              "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+              "original_text": "合成控制记忆：对方喜欢周末爬山。",
+              "content_hash": "c040e7a2631dba38caf0df81e79ab61cff62d6299aadd6cc4ee64a3f9b0294ae",
+              "retain_params": {
+                "metadata": {
+                  "layer": "confirmed_memory",
+                  "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                  "revision": "1",
+                  "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                  "source_ids": "139af6a8-afe3-48bd-905c-ec0842665f86",
+                  "local_memory_id": "63a434cc-0090-453b-b257-6bafb289a041"
+                }
+              }
+            }
+          ],
+          "chunks": [
+            {
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-63a434cc-0090-453b-b257-6bafb289a041_0",
+              "chunk_index": 0,
+              "chunk_text": "合成控制记忆：对方喜欢周末爬山。"
+            }
+          ],
+          "units": [
+            {
+              "id": "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-63a434cc-0090-453b-b257-6bafb289a041_0",
+              "text": "合成控制记忆：对方喜欢周末爬山。",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "1",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "139af6a8-afe3-48bd-905c-ec0842665f86",
+                "local_memory_id": "63a434cc-0090-453b-b257-6bafb289a041"
+              },
+              "has_embedding": true,
+              "dimensions": 512
+            }
+          ],
+          "archive": []
+        },
+        "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c/memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f": {
+          "documents": [
+            {
+              "id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "bank_id": "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c",
+              "original_text": "合成乳糖限制：对方乳糖不耐受。",
+              "content_hash": "916b97e44b627a7806aa9ea765f6fa0e277b43675c524433cfcbca81a8494417",
+              "retain_params": {
+                "metadata": {
+                  "layer": "confirmed_memory",
+                  "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                  "revision": "1",
+                  "contact_id": "0db59953-9229-4a6e-b6be-c3d57367f8a6",
+                  "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                  "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+                }
+              }
+            }
+          ],
+          "chunks": [
+            {
+              "chunk_id": "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "chunk_index": 0,
+              "chunk_text": "合成乳糖限制：对方乳糖不耐受。"
+            }
+          ],
+          "units": [
+            {
+              "id": "1b7fac0e-5ca8-4273-aad6-8c0a260b436c",
+              "chunk_id": "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "text": "合成乳糖限制：对方乳糖不耐受。",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "1",
+                "contact_id": "0db59953-9229-4a6e-b6be-c3d57367f8a6",
+                "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+              },
+              "has_embedding": true,
+              "dimensions": 512
+            }
+          ],
+          "archive": []
+        },
+        "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78/memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f": {
+          "documents": [
+            {
+              "id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "bank_id": "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78",
+              "original_text": "合成乳糖限制：对方乳糖不耐受。",
+              "content_hash": "916b97e44b627a7806aa9ea765f6fa0e277b43675c524433cfcbca81a8494417",
+              "retain_params": {
+                "metadata": {
+                  "layer": "confirmed_memory",
+                  "owner_id": "1941a773-7125-4bbd-b918-6cc2b16bfa4b",
+                  "revision": "1",
+                  "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                  "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                  "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+                }
+              }
+            }
+          ],
+          "chunks": [
+            {
+              "chunk_id": "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "chunk_index": 0,
+              "chunk_text": "合成乳糖限制：对方乳糖不耐受。"
+            }
+          ],
+          "units": [
+            {
+              "id": "6a60a297-1fac-4f9f-b819-ad83a6bf1e15",
+              "chunk_id": "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "text": "合成乳糖限制：对方乳糖不耐受。",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "1941a773-7125-4bbd-b918-6cc2b16bfa4b",
+                "revision": "1",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+              },
+              "has_embedding": true,
+              "dimensions": 512
+            }
+          ],
+          "archive": []
+        }
+      }
+    },
+    {
+      "name": "单来源整条删除：先本地拒绝再外部清除",
+      "passed": true,
+      "evidence": {
+        "before": {
+          "selected": [
+            {
+              "id": "484e2ca9-b047-4630-8746-7d7699cb0078",
+              "text": "合成单来源：对方周四练瑜伽。",
+              "source_ids": [
+                "52dfe7bd-e86f-4bf1-be70-36de83b128a8"
+              ],
+              "revision": 1
+            },
+            {
+              "id": "63a434cc-0090-453b-b257-6bafb289a041",
+              "text": "合成控制记忆：对方喜欢周末爬山。",
+              "source_ids": [
+                "139af6a8-afe3-48bd-905c-ec0842665f86"
+              ],
+              "revision": 1
+            }
+          ],
+          "attempt": {
+            "status": "success",
+            "candidates": 2,
+            "selected_ids": [
+              "484e2ca9-b047-4630-8746-7d7699cb0078",
+              "63a434cc-0090-453b-b257-6bafb289a041"
+            ],
+            "rejected": [],
+            "error": "",
+            "scores": [
+              [
+                "90fd1388-33bd-45c9-aa02-de85c81c4529",
+                0.9999405266217416,
+                0.9999405266217416
+              ],
+              [
+                "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+                0.39623487495300497,
+                0.39623487495300497
+              ]
+            ],
+            "service_diagnostics": "2026-10-04 02:03:18,847 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成单来源:对方周四练瑜伽。...\n2026-10-04 02:03:18,880 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-98847-ee77cb] Query: '合成单来源:对方周四练瑜伽。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.009s\n  [2] Parallel retrieval (1 fact_types): semantic=2(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.003s in 0.003s\n  [3] RRF merge: 2 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 2 candidates scored in 0.018s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 2 results\n  [6] Token filtering: 2 results, 30/4096 tokens in 0.000s\n  [phases] reranking=18ms, generate_query_embedding=9ms, parallel_retrieval=4ms, entity_build=2ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=32ms of 32ms\n  [phases:subsets] store_recall=3ms, retrieval_store_recall=3ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-98847-ee77cb] Complete: 2 facts (30 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=2 | 0.032s\n"
+          }
+        },
+        "stale_external": {
+          "selected": [
+            {
+              "id": "63a434cc-0090-453b-b257-6bafb289a041",
+              "text": "合成控制记忆：对方喜欢周末爬山。",
+              "source_ids": [
+                "139af6a8-afe3-48bd-905c-ec0842665f86"
+              ],
+              "revision": 1
+            }
+          ],
+          "attempt": {
+            "status": "success",
+            "candidates": 2,
+            "selected_ids": [
+              "63a434cc-0090-453b-b257-6bafb289a041"
+            ],
+            "rejected": [
+              [
+                "484e2ca9-b047-4630-8746-7d7699cb0078",
+                "local_authority"
+              ]
+            ],
+            "error": "",
+            "scores": [
+              [
+                "90fd1388-33bd-45c9-aa02-de85c81c4529",
+                0.9999405266217416,
+                0.9999405266217416
+              ],
+              [
+                "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+                0.39623487495300497,
+                0.39623487495300497
+              ]
+            ],
+            "service_diagnostics": "2026-10-04 02:03:18,883 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成单来源:对方周四练瑜伽。...\n2026-10-04 02:03:18,915 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-98883-3f7bcc] Query: '合成单来源:对方周四练瑜伽。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.008s\n  [2] Parallel retrieval (1 fact_types): semantic=2(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.003s in 0.004s\n  [3] RRF merge: 2 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 2 candidates scored in 0.018s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 2 results\n  [6] Token filtering: 2 results, 30/4096 tokens in 0.000s\n  [phases] reranking=18ms, generate_query_embedding=8ms, parallel_retrieval=4ms, entity_build=2ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=31ms of 32ms\n  [phases:subsets] store_recall=3ms, retrieval_store_recall=3ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-98883-3f7bcc] Complete: 2 facts (30 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=2 | 0.032s\n"
+          }
+        },
+        "delete": {
+          "success": true,
+          "message": "Document 'memory-484e2ca9-b047-4630-8746-7d7699cb0078' and 1 associated memory units deleted successfully",
+          "document_id": "memory-484e2ca9-b047-4630-8746-7d7699cb0078",
+          "memory_units_deleted": 1,
+          "experiment_elapsed_ms": 6.065624998882413
+        }
+      }
+    },
+    {
+      "name": "真实 correct 生成新本地 ID 且旧外部命中无效",
+      "passed": true,
+      "evidence": {
+        "old_id": "b0de713f-f365-4c9e-b37c-93bcec84e105",
+        "new_id": "01464445-e37c-4587-8787-674578b71d3a",
+        "stale_context": {
+          "selected": [
+            {
+              "id": "63a434cc-0090-453b-b257-6bafb289a041",
+              "text": "合成控制记忆：对方喜欢周末爬山。",
+              "source_ids": [
+                "139af6a8-afe3-48bd-905c-ec0842665f86"
+              ],
+              "revision": 1
+            }
+          ],
+          "attempt": {
+            "status": "success",
+            "candidates": 2,
+            "selected_ids": [
+              "63a434cc-0090-453b-b257-6bafb289a041"
+            ],
+            "rejected": [
+              [
+                "b0de713f-f365-4c9e-b37c-93bcec84e105",
+                "local_authority"
+              ]
+            ],
+            "error": "",
+            "scores": [
+              [
+                "0aeb2b13-23f8-4d12-b767-799ad144660f",
+                0.9999747083631002,
+                0.9999747083631002
+              ],
+              [
+                "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+                0.5181355269792071,
+                0.5181355269792071
+              ]
+            ],
+            "service_diagnostics": "2026-10-04 02:03:18,970 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成修正前:对方周日打羽毛球。...\n2026-10-04 02:03:19,003 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-98970-568a90] Query: '合成修正前:对方周日打羽毛球。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.009s\n  [2] Parallel retrieval (1 fact_types): semantic=2(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.004s in 0.004s\n  [3] RRF merge: 2 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 2 candidates scored in 0.018s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 2 results\n  [6] Token filtering: 2 results, 30/4096 tokens in 0.000s\n  [phases] reranking=18ms, generate_query_embedding=9ms, parallel_retrieval=4ms, entity_build=1ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=33ms of 33ms\n  [phases:subsets] store_recall=4ms, retrieval_store_recall=4ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-98970-568a90] Complete: 2 facts (30 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=2 | 0.033s\n"
+          }
+        },
+        "current_context": {
+          "selected": [
+            {
+              "id": "01464445-e37c-4587-8787-674578b71d3a",
+              "text": "合成修正后：对方周日改练游泳。",
+              "source_ids": [
+                "3ca9420b-750c-4d6f-8ebf-d39b719f8778"
+              ],
+              "revision": 2
+            },
+            {
+              "id": "63a434cc-0090-453b-b257-6bafb289a041",
+              "text": "合成控制记忆：对方喜欢周末爬山。",
+              "source_ids": [
+                "139af6a8-afe3-48bd-905c-ec0842665f86"
+              ],
+              "revision": 1
+            }
+          ],
+          "attempt": {
+            "status": "success",
+            "candidates": 2,
+            "selected_ids": [
+              "01464445-e37c-4587-8787-674578b71d3a",
+              "63a434cc-0090-453b-b257-6bafb289a041"
+            ],
+            "rejected": [],
+            "error": "",
+            "scores": [
+              [
+                "4437dbbf-718e-48af-bfe3-63a9a0eb89a5",
+                0.9999794689849029,
+                0.9999794689849029
+              ],
+              [
+                "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+                0.9509950644618651,
+                0.9509950644618651
+              ]
+            ],
+            "service_diagnostics": "2026-10-04 02:03:19,037 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成修正后:对方周日改练游泳。...\n2026-10-04 02:03:19,071 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-99037-6b08ad] Query: '合成修正后:对方周日改练游泳。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.010s\n  [2] Parallel retrieval (1 fact_types): semantic=2(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s, temporal=0(0.000s) | store=0.004s in 0.004s | temporal_range=2026-10-04 to 2026-10-04\n  [3] RRF merge: 2 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 2 candidates scored in 0.018s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 2 results\n  [6] Token filtering: 2 results, 30/4096 tokens in 0.000s\n  [phases] reranking=18ms, generate_query_embedding=10ms, parallel_retrieval=5ms, entity_build=1ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=33ms of 34ms\n  [phases:subsets] store_recall=4ms, retrieval_store_recall=4ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-99037-6b08ad] Complete: 2 facts (30 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=2 | 0.034s\n"
+          }
+        }
+      }
+    },
+    {
+      "name": "删除后重建及重建重试仍只有当前副本",
+      "passed": true,
+      "evidence": {
+        "response": {
+          "success": true,
+          "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+          "items_count": 1,
+          "async": false,
+          "operation_id": null,
+          "operation_ids": null,
+          "usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cached_tokens": 0,
+            "thoughts_tokens": 0
+          },
+          "experiment_elapsed_ms": 22.86841702880338
+        },
+        "database": {
+          "documents": [
+            {
+              "id": "memory-01464445-e37c-4587-8787-674578b71d3a",
+              "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+              "original_text": "合成修正后：对方周日改练游泳。",
+              "content_hash": "03766be47a3aa037e88290cfb280ea0375f7e9bbca380929b5a6d64ed3b61c3e",
+              "retain_params": {
+                "metadata": {
+                  "layer": "confirmed_memory",
+                  "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                  "revision": "2",
+                  "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                  "source_ids": "3ca9420b-750c-4d6f-8ebf-d39b719f8778",
+                  "local_memory_id": "01464445-e37c-4587-8787-674578b71d3a"
+                }
+              }
+            }
+          ],
+          "chunks": [
+            {
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-01464445-e37c-4587-8787-674578b71d3a_0",
+              "chunk_index": 0,
+              "chunk_text": "合成修正后：对方周日改练游泳。"
+            }
+          ],
+          "units": [
+            {
+              "id": "00b10120-9b96-48d7-af07-d27d39837323",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-01464445-e37c-4587-8787-674578b71d3a_0",
+              "text": "合成修正后：对方周日改练游泳。",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "2",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "3ca9420b-750c-4d6f-8ebf-d39b719f8778",
+                "local_memory_id": "01464445-e37c-4587-8787-674578b71d3a"
+              },
+              "has_embedding": true,
+              "dimensions": 512
+            }
+          ],
+          "archive": []
+        },
+        "context": {
+          "selected": [
+            {
+              "id": "01464445-e37c-4587-8787-674578b71d3a",
+              "text": "合成修正后：对方周日改练游泳。",
+              "source_ids": [
+                "3ca9420b-750c-4d6f-8ebf-d39b719f8778"
+              ],
+              "revision": 2
+            },
+            {
+              "id": "63a434cc-0090-453b-b257-6bafb289a041",
+              "text": "合成控制记忆：对方喜欢周末爬山。",
+              "source_ids": [
+                "139af6a8-afe3-48bd-905c-ec0842665f86"
+              ],
+              "revision": 1
+            }
+          ],
+          "attempt": {
+            "status": "success",
+            "candidates": 2,
+            "selected_ids": [
+              "01464445-e37c-4587-8787-674578b71d3a",
+              "63a434cc-0090-453b-b257-6bafb289a041"
+            ],
+            "rejected": [],
+            "error": "",
+            "scores": [
+              [
+                "00b10120-9b96-48d7-af07-d27d39837323",
+                0.9999794689849029,
+                0.9999794689849029
+              ],
+              [
+                "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+                0.9509950644618651,
+                0.9509950644618651
+              ]
+            ],
+            "service_diagnostics": "2026-10-04 02:03:19,167 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成修正后:对方周日改练游泳。...\n2026-10-04 02:03:19,207 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-99167-f437b2] Query: '合成修正后:对方周日改练游泳。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.010s\n  [2] Parallel retrieval (1 fact_types): semantic=2(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s, temporal=0(0.000s) | store=0.004s in 0.004s | temporal_range=2026-10-04 to 2026-10-04\n  [3] RRF merge: 2 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 2 candidates scored in 0.024s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 2 results\n  [6] Token filtering: 2 results, 30/4096 tokens in 0.000s\n  [phases] reranking=24ms, generate_query_embedding=10ms, parallel_retrieval=4ms, entity_build=1ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=40ms of 40ms\n  [phases:subsets] store_recall=4ms, retrieval_store_recall=4ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-99167-f437b2] Complete: 2 facts (30 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=2 | 0.040s\n"
+          }
+        }
+      }
+    },
+    {
+      "name": "重启同一持久库后已删资料仍不可检索且控制正例存在",
+      "passed": true,
+      "evidence": {
+        "previous_pid": "52132",
+        "new_pid": "73330",
+        "health": {
+          "status": "healthy",
+          "database": "connected",
+          "db_acquire_ms": 1.0,
+          "db_pool_waiting": 0,
+          "db_pool_in_use": 0,
+          "db_pool_max": 100,
+          "db_pool_idle": 5
+        },
+        "restart_to_health_ms": 11650.481791992206,
+        "api": {
+          "document": {
+            "http_status": 404
+          },
+          "chunks": {
+            "http_status": 404
+          }
+        },
+        "recall": {
+          "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+          "hits": [
+            {
+              "unit_id": "00b10120-9b96-48d7-af07-d27d39837323",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-01464445-e37c-4587-8787-674578b71d3a_0",
+              "document_id": "memory-01464445-e37c-4587-8787-674578b71d3a",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "2",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "3ca9420b-750c-4d6f-8ebf-d39b719f8778",
+                "local_memory_id": "01464445-e37c-4587-8787-674578b71d3a"
+              },
+              "reranker": 0.044636032506103505,
+              "final": 0.044636032506103505
+            },
+            {
+              "unit_id": "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+              "chunk_id": "notalone-experiment-a74398cda3e964de503d4551514fff93_memory-63a434cc-0090-453b-b257-6bafb289a041_0",
+              "document_id": "memory-63a434cc-0090-453b-b257-6bafb289a041",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "1",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "139af6a8-afe3-48bd-905c-ec0842665f86",
+                "local_memory_id": "63a434cc-0090-453b-b257-6bafb289a041"
+              },
+              "reranker": 0.014729416557524543,
+              "final": 0.014729416557524543
+            }
+          ],
+          "rerank_complete": true,
+          "diagnostics": "2026-10-04 02:03:30,897 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成乳糖限制：对方乳糖不耐受。...\n2026-10-04 02:03:30,947 - INFO - hindsight_api.engine.memories.postgres - Using LinkExpansion graph retriever\n2026-10-04 02:03:30,995 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-10897-21a9b4] Query: '合成乳糖限制：对方乳糖不耐受。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.010s\n  [2] Parallel retrieval (1 fact_types): semantic=2(0.000s), bm25=0(0.000s), graph=0(0.000s), temporal_extraction=0.039s | store=0.027s in 0.066s\n  [3] RRF merge: 2 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 2 candidates scored in 0.017s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 2 results\n  [6] Token filtering: 2 results, 30/4096 tokens in 0.000s\n  [phases] parallel_retrieval=66ms, reranking=17ms, generate_query_embedding=10ms, entity_build=4ms, rrf_merge=0ms, token_filtering=0ms, combined_scoring=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=97ms of 98ms\n  [phases:subsets] retrieval_temporal_extraction=39ms, store_recall=27ms, retrieval_store_recall=27ms, semaphore_wait=0ms\n[RECALL notalone-10897-21a9b4] Complete: 2 facts (30 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=2 | 0.098s\n"
+        },
+        "context": {
+          "selected": [
+            {
+              "id": "63a434cc-0090-453b-b257-6bafb289a041",
+              "text": "合成控制记忆：对方喜欢周末爬山。",
+              "source_ids": [
+                "139af6a8-afe3-48bd-905c-ec0842665f86"
+              ],
+              "revision": 1
+            },
+            {
+              "id": "01464445-e37c-4587-8787-674578b71d3a",
+              "text": "合成修正后：对方周日改练游泳。",
+              "source_ids": [
+                "3ca9420b-750c-4d6f-8ebf-d39b719f8778"
+              ],
+              "revision": 2
+            }
+          ],
+          "attempt": {
+            "status": "success",
+            "candidates": 2,
+            "selected_ids": [
+              "63a434cc-0090-453b-b257-6bafb289a041",
+              "01464445-e37c-4587-8787-674578b71d3a"
+            ],
+            "rejected": [],
+            "error": "",
+            "scores": [
+              [
+                "c414ab48-f069-40a6-91c4-4d0b79ed7ff3",
+                0.9999774562110273,
+                0.9999774562110273
+              ],
+              [
+                "00b10120-9b96-48d7-af07-d27d39837323",
+                0.8235466733695351,
+                0.8235466733695351
+              ]
+            ],
+            "service_diagnostics": "2026-10-04 02:03:30,999 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成控制记忆:对方喜欢周末爬山。...\n2026-10-04 02:03:31,027 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-10999-ac03a1] Query: '合成控制记忆:对方喜欢周末爬山。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.008s\n  [2] Parallel retrieval (1 fact_types): semantic=2(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.003s in 0.004s\n  [3] RRF merge: 2 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 2 candidates scored in 0.015s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 2 results\n  [6] Token filtering: 2 results, 30/4096 tokens in 0.000s\n  [phases] reranking=15ms, generate_query_embedding=8ms, parallel_retrieval=4ms, entity_build=1ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=28ms of 28ms\n  [phases:subsets] store_recall=3ms, retrieval_store_recall=3ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-10999-ac03a1] Complete: 2 facts (30 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=2 | 0.028s\n"
+          }
+        }
+      }
+    },
+    {
+      "name": "联系人 bank 清除所有活动表与作用域向量索引",
+      "passed": true,
+      "evidence": {
+        "before": {
+          "profile": [
+            {
+              "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+              "internal_id": "7cb35dee-aa78-47fc-9395-f424502e95a4"
+            }
+          ],
+          "internal_id": "7cb35dee-aa78-47fc-9395-f424502e95a4",
+          "counts": {
+            "banks": 1,
+            "documents": 2,
+            "chunks": 2,
+            "memory_units": 2,
+            "invalidated_memory_units": 0,
+            "entities": 0,
+            "observation_history": 0,
+            "mental_models": 0,
+            "attachments": 0,
+            "async_operations": 1
+          },
+          "indexes": [
+            {
+              "indexname": "idx_mu_emb_expr_7cb35deeaa7847fc",
+              "indexdef": "CREATE INDEX idx_mu_emb_expr_7cb35deeaa7847fc ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'experience'::text) AND (bank_id = 'notalone-experiment-a74398cda3e964de503d4551514fff93'::text))"
+            },
+            {
+              "indexname": "idx_mu_emb_obsv_7cb35deeaa7847fc",
+              "indexdef": "CREATE INDEX idx_mu_emb_obsv_7cb35deeaa7847fc ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'observation'::text) AND (bank_id = 'notalone-experiment-a74398cda3e964de503d4551514fff93'::text))"
+            },
+            {
+              "indexname": "idx_mu_emb_worl_7cb35deeaa7847fc",
+              "indexdef": "CREATE INDEX idx_mu_emb_worl_7cb35deeaa7847fc ON public.memory_units USING hnsw (embedding vector_cosine_ops) WHERE ((fact_type = 'world'::text) AND (bank_id = 'notalone-experiment-a74398cda3e964de503d4551514fff93'::text))"
+            }
+          ]
+        },
+        "delete": {
+          "success": true,
+          "message": "Bank 'notalone-experiment-a74398cda3e964de503d4551514fff93' and all associated data deleted successfully",
+          "deleted_count": 4
+        },
+        "after": {
+          "profile": [],
+          "internal_id": "7cb35dee-aa78-47fc-9395-f424502e95a4",
+          "counts": {
+            "banks": 0,
+            "documents": 0,
+            "chunks": 0,
+            "memory_units": 0,
+            "invalidated_memory_units": 0,
+            "entities": 0,
+            "observation_history": 0,
+            "mental_models": 0,
+            "attachments": 0,
+            "async_operations": 0
+          },
+          "indexes": []
+        },
+        "bank_export_http_status": 404
+      }
+    },
+    {
+      "name": "bank 删除不影响外范围正例 notalone-experiment-88ffc336a3c72bab4db811e9d08d251c",
+      "passed": true,
+      "evidence": {
+        "database": {
+          "documents": [
+            {
+              "id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "bank_id": "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c",
+              "original_text": "合成乳糖限制：对方乳糖不耐受。",
+              "content_hash": "916b97e44b627a7806aa9ea765f6fa0e277b43675c524433cfcbca81a8494417",
+              "retain_params": {
+                "metadata": {
+                  "layer": "confirmed_memory",
+                  "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                  "revision": "1",
+                  "contact_id": "0db59953-9229-4a6e-b6be-c3d57367f8a6",
+                  "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                  "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+                }
+              }
+            }
+          ],
+          "chunks": [
+            {
+              "chunk_id": "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "chunk_index": 0,
+              "chunk_text": "合成乳糖限制：对方乳糖不耐受。"
+            }
+          ],
+          "units": [
+            {
+              "id": "1b7fac0e-5ca8-4273-aad6-8c0a260b436c",
+              "chunk_id": "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "text": "合成乳糖限制：对方乳糖不耐受。",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "1",
+                "contact_id": "0db59953-9229-4a6e-b6be-c3d57367f8a6",
+                "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+              },
+              "has_embedding": true,
+              "dimensions": 512
+            }
+          ],
+          "archive": []
+        },
+        "recall": {
+          "bank_id": "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c",
+          "hits": [
+            {
+              "unit_id": "1b7fac0e-5ca8-4273-aad6-8c0a260b436c",
+              "chunk_id": "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "document_id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "41a58efb-2e20-4337-9103-a16db697c779",
+                "revision": "1",
+                "contact_id": "0db59953-9229-4a6e-b6be-c3d57367f8a6",
+                "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+              },
+              "reranker": 0.9999547813120838,
+              "final": 0.9999547813120838
+            }
+          ],
+          "rerank_complete": true,
+          "diagnostics": "2026-10-04 02:03:31,250 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成乳糖限制：对方乳糖不耐受。...\n2026-10-04 02:03:31,278 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-11250-a388c0] Query: '合成乳糖限制：对方乳糖不耐受。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.007s\n  [2] Parallel retrieval (1 fact_types): semantic=1(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.004s in 0.004s\n  [3] RRF merge: 1 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 1 candidates scored in 0.014s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 1 results\n  [6] Token filtering: 1 results, 14/4096 tokens in 0.000s\n  [phases] reranking=14ms, generate_query_embedding=7ms, parallel_retrieval=5ms, entity_build=1ms, combined_scoring=0ms, token_filtering=0ms, rrf_merge=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=27ms of 27ms\n  [phases:subsets] store_recall=4ms, retrieval_store_recall=4ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-11250-a388c0] Complete: 1 facts (14 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=1 | 0.027s\n"
+        }
+      }
+    },
+    {
+      "name": "bank 删除不影响外范围正例 notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78",
+      "passed": true,
+      "evidence": {
+        "database": {
+          "documents": [
+            {
+              "id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "bank_id": "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78",
+              "original_text": "合成乳糖限制：对方乳糖不耐受。",
+              "content_hash": "916b97e44b627a7806aa9ea765f6fa0e277b43675c524433cfcbca81a8494417",
+              "retain_params": {
+                "metadata": {
+                  "layer": "confirmed_memory",
+                  "owner_id": "1941a773-7125-4bbd-b918-6cc2b16bfa4b",
+                  "revision": "1",
+                  "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                  "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                  "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+                }
+              }
+            }
+          ],
+          "chunks": [
+            {
+              "chunk_id": "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "chunk_index": 0,
+              "chunk_text": "合成乳糖限制：对方乳糖不耐受。"
+            }
+          ],
+          "units": [
+            {
+              "id": "6a60a297-1fac-4f9f-b819-ad83a6bf1e15",
+              "chunk_id": "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "text": "合成乳糖限制：对方乳糖不耐受。",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "1941a773-7125-4bbd-b918-6cc2b16bfa4b",
+                "revision": "1",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+              },
+              "has_embedding": true,
+              "dimensions": 512
+            }
+          ],
+          "archive": []
+        },
+        "recall": {
+          "bank_id": "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78",
+          "hits": [
+            {
+              "unit_id": "6a60a297-1fac-4f9f-b819-ad83a6bf1e15",
+              "chunk_id": "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78_memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f_0",
+              "document_id": "memory-a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+              "metadata": {
+                "layer": "confirmed_memory",
+                "owner_id": "1941a773-7125-4bbd-b918-6cc2b16bfa4b",
+                "revision": "1",
+                "contact_id": "1c7c3f2f-13fd-47c9-9e81-8cbc24efcc1c",
+                "source_ids": "7f34c58b-4231-4800-b63e-335b964a39ce,0d39a940-6770-4a8a-8451-55b73c39c0b3",
+                "local_memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f"
+              },
+              "reranker": 0.9999547813120838,
+              "final": 0.9999547813120838
+            }
+          ],
+          "rerank_complete": true,
+          "diagnostics": "2026-10-04 02:03:31,321 - INFO - hindsight_api.engine.memory_engine - [RECALL notalone] Starting recall for query: 合成乳糖限制：对方乳糖不耐受。...\n2026-10-04 02:03:31,349 - INFO - hindsight_api.engine.memory_engine - \n[RECALL notalone-11321-4a73c6] Query: '合成乳糖限制：对方乳糖不耐受。...' (budget=100, max_tokens=4096)\n  [1] Generate query embedding: 0.008s\n  [2] Parallel retrieval (1 fact_types): semantic=1(0.000s), bm25=1(0.000s), graph=0(0.000s), temporal_extraction=0.000s | store=0.004s in 0.005s\n  [3] RRF merge: 1 unique candidates in 0.000s\n  [4] Reranking [cross-encoder]: 1 candidates scored in 0.014s\n  [4.6] Combined scoring: ce * recency_boost(0.2) * temporal_boost(0.2)\n  [5] Truncated to top 1 results\n  [6] Token filtering: 1 results, 14/4096 tokens in 0.000s\n  [phases] reranking=14ms, generate_query_embedding=8ms, parallel_retrieval=5ms, entity_build=1ms, combined_scoring=0ms, rrf_merge=0ms, token_filtering=0ms, result_serialization=0ms, hydrate_results=0ms, backend_acquisition=0ms | accounted=27ms of 28ms\n  [phases:subsets] store_recall=4ms, retrieval_store_recall=4ms, retrieval_temporal_extraction=0ms, semaphore_wait=0ms\n[RECALL notalone-11321-4a73c6] Complete: 1 facts (14 tok), 0 chunks (0 tok), 0 entities (0 tok) | world=1 | 0.028s\n"
+        }
+      }
+    },
+    {
+      "name": "清理 allowlist 控制 bank notalone-experiment-88ffc336a3c72bab4db811e9d08d251c",
+      "passed": true,
+      "evidence": {
+        "profile": [],
+        "internal_id": "753bcfba-ef6d-4c5d-970e-939078597a3b",
+        "counts": {
+          "banks": 0,
+          "documents": 0,
+          "chunks": 0,
+          "memory_units": 0,
+          "invalidated_memory_units": 0,
+          "entities": 0,
+          "observation_history": 0,
+          "mental_models": 0,
+          "attachments": 0,
+          "async_operations": 0
+        },
+        "indexes": []
+      }
+    },
+    {
+      "name": "清理 allowlist 控制 bank notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78",
+      "passed": true,
+      "evidence": {
+        "profile": [],
+        "internal_id": "929d10a2-f459-4298-9676-eafb503b15d5",
+        "counts": {
+          "banks": 0,
+          "documents": 0,
+          "chunks": 0,
+          "memory_units": 0,
+          "invalidated_memory_units": 0,
+          "entities": 0,
+          "observation_history": 0,
+          "mental_models": 0,
+          "attachments": 0,
+          "async_operations": 0
+        },
+        "indexes": []
+      }
+    }
+  ],
+  "limitations": [
+    "只证明活动 SQL/向量列/服务可检索副本的清除，不证明 MVCC、WAL、索引死元组、备份或介质物理擦除。",
+    "来源/revision 更新由声明的合成权威快照模拟；未连接业务来源删除任务。实际 correct/delete 使用现有内存公开方法。",
+    "重排故障与竞态使用外部边界替身，真实生命周期结果不是泛化召回收益。"
+  ],
+  "initial_health": {
+    "status": "healthy",
+    "database": "connected",
+    "db_acquire_ms": 0.4,
+    "db_pool_waiting": 0,
+    "db_pool_in_use": 0,
+    "db_pool_max": 100,
+    "db_pool_idle": 25
+  },
+  "database_environment": {
+    "identity": [
+      {
+        "database": "postgres",
+        "schema": "public",
+        "version": "PostgreSQL 18.1 on aarch64-apple-darwin24.6.0, compiled by Apple clang version 17.0.0 (clang-1700.0.13.5), 64-bit"
+      }
+    ],
+    "migrations": [
+      {
+        "version_num": "e5b1c7d3a902"
+      }
+    ],
+    "foreign_keys": [
+      {
+        "conname": "memory_units_document_fkey",
+        "definition": "FOREIGN KEY (document_id, bank_id) REFERENCES documents(id, bank_id) ON DELETE CASCADE"
+      },
+      {
+        "conname": "chunks_document_fkey",
+        "definition": "FOREIGN KEY (document_id, bank_id) REFERENCES documents(id, bank_id) ON DELETE CASCADE"
+      },
+      {
+        "conname": "memory_units_chunk_fkey",
+        "definition": "FOREIGN KEY (chunk_id) REFERENCES chunks(chunk_id) ON DELETE CASCADE"
+      },
+      {
+        "conname": "invalidated_mu_document_fkey",
+        "definition": "FOREIGN KEY (document_id, bank_id) REFERENCES documents(id, bank_id) ON DELETE CASCADE"
+      }
+    ]
+  },
+  "initial_retain": [
+    {
+      "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+      "memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+      "response": {
+        "success": true,
+        "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+        "items_count": 1,
+        "async": false,
+        "operation_id": null,
+        "operation_ids": null,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0,
+          "cached_tokens": 0,
+          "thoughts_tokens": 0
+        },
+        "experiment_elapsed_ms": 23.91941600944847
+      }
+    },
+    {
+      "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+      "memory_id": "63a434cc-0090-453b-b257-6bafb289a041",
+      "response": {
+        "success": true,
+        "bank_id": "notalone-experiment-a74398cda3e964de503d4551514fff93",
+        "items_count": 1,
+        "async": false,
+        "operation_id": null,
+        "operation_ids": null,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0,
+          "cached_tokens": 0,
+          "thoughts_tokens": 0
+        },
+        "experiment_elapsed_ms": 24.175541009753942
+      }
+    },
+    {
+      "bank_id": "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c",
+      "memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+      "response": {
+        "success": true,
+        "bank_id": "notalone-experiment-88ffc336a3c72bab4db811e9d08d251c",
+        "items_count": 1,
+        "async": false,
+        "operation_id": null,
+        "operation_ids": null,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0,
+          "cached_tokens": 0,
+          "thoughts_tokens": 0
+        },
+        "experiment_elapsed_ms": 22.260666999500245
+      }
+    },
+    {
+      "bank_id": "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78",
+      "memory_id": "a4be68c6-1be2-4ade-a257-5c45bf36fc4f",
+      "response": {
+        "success": true,
+        "bank_id": "notalone-experiment-277ee5b9a7aee94ed0539cb115f28d78",
+        "items_count": 1,
+        "async": false,
+        "operation_id": null,
+        "operation_ids": null,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0,
+          "cached_tokens": 0,
+          "thoughts_tokens": 0
+        },
+        "experiment_elapsed_ms": 23.689958034083247
+      }
+    }
+  ],
+  "final_health": {
+    "status": "healthy",
+    "database": "connected",
+    "db_acquire_ms": 0.4,
+    "db_pool_waiting": 0,
+    "db_pool_in_use": 0,
+    "db_pool_max": 100,
+    "db_pool_idle": 5
+  },
+  "resource_observation": {
+    "timing": "本轮运行后单点观测，不是整轮峰值",
+    "api_ps_pid_cpu_percent_rss_kib_elapsed": "73330  15.6 1125376 00:10",
+    "database_model_disk_kib": "60564\t/tmp/notalone-hindsight-runtime-f7dd3f4/database\n591612\t/tmp/notalone-hindsight-runtime-f7dd3f4/models"
+  },
+  "development_runs": []
+}

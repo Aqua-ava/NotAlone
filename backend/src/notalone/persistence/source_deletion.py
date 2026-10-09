@@ -9,14 +9,20 @@ from uuid import UUID, uuid4
 
 import psycopg
 
-from notalone.persistence.source_memory_erasure import erase_source_memories
+from notalone.persistence.extraction_trace import erase_source_traces
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.message_cleanup import (
     cleanup_derived_data,
     collect_orphan_message_ids,
     delete_messages,
 )
-from notalone.persistence.reply_cleanup import ReplyCleanupError, delete_source_replies
+from notalone.persistence.reply_cleanup import (
+    ReplyCleanupError,
+    delete_source_replies,
+)
+from notalone.persistence.source_memory_erasure import erase_source_memories
+from notalone.persistence.source_processing import erase_source_processing
+from notalone.scopes import ContactScope
 
 
 class SourceDeletionError(RuntimeError):
@@ -110,6 +116,16 @@ class PostgresSourceDeletionRepository:
                     owner_id=owner_id,
                     contact_id=contact_id,
                     source_document_id=source_document_id,
+                )
+                erase_source_traces(
+                    connection,
+                    owner_id=owner_id,
+                    removed_ids={source_document_id},
+                )
+                erase_source_processing(
+                    connection,
+                    scope=ContactScope(owner_id, contact_id),
+                    source_id=source_document_id,
                 )
                 # 删除来源只移除其引用；消息仅在失去全部有效引用后清理。
                 source_message_ids = tuple(
@@ -282,7 +298,9 @@ class PostgresSourceDeletionRepository:
             )
             raise SourceDeletionError("来源删除失败。") from None
 
-    def verify_deleted(self, *, owner_id: UUID, contact_id: UUID, source_document_id: UUID) -> None:
+    def verify_deleted(
+        self, *, owner_id: UUID, contact_id: UUID, source_document_id: UUID
+    ) -> None:
         """复核原子删除产生的最小凭证和来源引用，不把中间态当成功。"""
         try:
             with psycopg.connect(self._database_url) as connection:
@@ -294,12 +312,19 @@ class PostgresSourceDeletionRepository:
                                AND ref.source_document_id = source.id)
                     FROM public.source_document AS source
                     WHERE owner_id = %s AND contact_id = %s AND id = %s
-                    """, (owner_id, contact_id, source_document_id),
+                    """,
+                    (owner_id, contact_id, source_document_id),
                 ).fetchone()
                 if row is None:
                     raise SourceNotFoundError("指定范围内不存在该来源。")
-                if row[:4] != ("deleted", None, None, 0) or row[4] is None or row[5]:
-                    raise SourceDeletionVerificationError("来源删除尚未验证完成。")
+                if (
+                    row[:4] != ("deleted", None, None, 0)
+                    or row[4] is None
+                    or row[5]
+                ):
+                    raise SourceDeletionVerificationError(
+                        "来源删除尚未验证完成。"
+                    )
         except psycopg.Error:
             raise SourceDeletionError("删除结果验证失败。") from None
 

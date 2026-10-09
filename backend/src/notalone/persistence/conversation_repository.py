@@ -395,8 +395,8 @@ class PostgresConversationBindingRepository:
             raise TypeError("items 必须是序列。")
         if not items:
             return ()
-        if not isinstance(baseline_at, datetime):
-            raise TypeError("baseline_at 必须是 datetime。")
+        if not isinstance(baseline_at, datetime) or baseline_at.tzinfo is None:
+            raise TypeError("baseline_at 必须是带时区的 datetime。")
         seen: set[str] = set()
         for item in items:
             if not isinstance(item, CliBindingCreation):

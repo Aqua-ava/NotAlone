@@ -167,6 +167,8 @@ class PostgresMemoryStoreTest(unittest.TestCase):
         category: MemoryCategory = MemoryCategory.PREFERENCE,
         confidence: float = 1.0,
         risk_flags: tuple[str, ...] = (),
+        alternatives: tuple[str, ...] = (),
+        interpretation_reason: str = "",
         valid_at: datetime | None = None,
         invalid_at: datetime | None = None,
     ) -> MemoryCandidate:
@@ -178,6 +180,8 @@ class PostgresMemoryStoreTest(unittest.TestCase):
             source_ids=source_ids or (self.source_id,),
             confidence=confidence,
             risk_flags=risk_flags,
+            alternatives=alternatives,
+            interpretation_reason=interpretation_reason,
             valid_at=valid_at,
             invalid_at=invalid_at,
         )
@@ -196,6 +200,7 @@ class PostgresMemoryStoreTest(unittest.TestCase):
 
         self.assertEqual(candidate.confidence, 0.86)
         self.assertEqual(candidate.risk_flags, ("low",))
+        self.assertEqual(candidate.alternatives, ())
         self.assertEqual(candidate.valid_at, valid_at)
 
         confirmed = self.store.confirm(
@@ -207,6 +212,38 @@ class PostgresMemoryStoreTest(unittest.TestCase):
         self.assertEqual(confirmed.risk_flags, ("low",))
         self.assertEqual(confirmed.source_candidate_id, candidate.candidate_id)
         self.assertEqual(confirmed.invalid_at, invalid_at)
+
+    def test_candidate_interpretation_details_round_trip(self) -> None:
+        candidate = self.store.create_candidate(self._candidate(
+            alternatives=("也可能是短期安排", "也可能是转述"),
+            interpretation_reason="消息使用将来时，且没有完成事实。",
+        ))
+
+        listed = self.store.list_pending_candidates(self._scope())
+        self.assertEqual(listed[0].alternatives, candidate.alternatives)
+        self.assertEqual(listed[0].interpretation_reason, candidate.interpretation_reason)
+
+        self.store.confirm(
+            scope=self._scope(),
+            candidate_id=candidate.candidate_id,
+            adoption_method=AdoptionMethod.MANUAL,
+        )
+        processed = self.store.get_candidate(
+            scope=self._scope(), candidate_id=candidate.candidate_id
+        )
+        self.assertEqual(processed.alternatives, candidate.alternatives)
+        self.assertEqual(processed.interpretation_reason, candidate.interpretation_reason)
+
+        rejected = self.store.create_candidate(self._candidate(
+            candidate_id=uuid4(),
+            alternatives=("也可能是误解",),
+            interpretation_reason="来源上下文不足，先保留给用户判断。",
+        ))
+        discarded = self.store.discard_candidate_with_fingerprint(
+            scope=self._scope(), candidate_id=rejected.candidate_id
+        )
+        self.assertEqual(discarded.alternatives, rejected.alternatives)
+        self.assertEqual(discarded.interpretation_reason, rejected.interpretation_reason)
 
     def test_correction_creates_a_version_and_keeps_old_audit_row(self) -> None:
         candidate = self.store.create_candidate(self._candidate())

@@ -200,6 +200,47 @@ class PostgresSkillLifecycleTest(unittest.TestCase):
         )
         self.assertEqual(current_count, 1)
 
+    def test_list_versions_orders_history_and_marks_current(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            first = self._package(
+                "versions-skill",
+                content="第一版策略正文。\n",
+                temporary_directory=temporary_directory,
+            )
+            imported = self.library.import_package(self.owner_id, first)
+            second = self._package(
+                "versions-skill",
+                content="第二版策略正文。\n",
+                temporary_directory=temporary_directory,
+            )
+            updated = self.library.update_package(self.owner_id, second)
+
+            before = self.library.list_versions(
+                self.owner_id, imported.skill_id,
+            )
+            self.library.rollback(
+                self.owner_id, imported.skill_id, imported.version_id,
+            )
+            after = self.library.list_versions(
+                self.owner_id, imported.skill_id,
+            )
+
+        self.assertEqual(
+            [entry.version_number for entry in before], [2, 1],
+        )
+        self.assertEqual(
+            [(entry.version_number, entry.is_current) for entry in before],
+            [(2, True), (1, False)],
+        )
+        self.assertEqual(
+            [(entry.version_number, entry.is_current) for entry in after],
+            [(2, False), (1, True)],
+        )
+        for entry in after:
+            self.assertEqual(entry.name, "versions-skill")
+            self.assertIsNotNone(entry.created_at.tzinfo)
+            self.assertTrue(entry.enabled)
+
     def test_rollback_makes_old_version_current_and_restores_usable(self) -> None:
         with TemporaryDirectory() as temporary_directory:
             first = self._package(

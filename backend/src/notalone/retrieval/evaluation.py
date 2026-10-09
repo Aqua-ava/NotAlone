@@ -32,6 +32,9 @@ EvaluationCategory = Literal[
 ]
 EvaluationStatus = Literal["hit", "empty", "miss", "failed", "fallback"]
 
+# 与回复链路取数一致的有界查询，避免评测被慢查询挂住。
+_EVALUATION_TIMEOUT_MS = 500
+
 _EVALUATION_CATEGORIES = frozenset(
     {
         "synonym_expression",
@@ -666,6 +669,7 @@ def _evaluate_case(
                 limit=case.top_k,
                 occurred_after=case.occurred_after,
                 occurred_before=case.occurred_before,
+                timeout_ms=_EVALUATION_TIMEOUT_MS,
             ),
             scope=case.scope,
         )

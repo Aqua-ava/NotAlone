@@ -1,7 +1,7 @@
 # 检索层性能与结构缺口（第二轮审查）
 
-Triage: needs-triage
-State: open
+Triage: ready-for-agent
+State: resolved
 
 ## 背景
 
@@ -22,3 +22,12 @@ State: open
 性能改动必须先建立基线测量（见 engineering.md 性能分支：先测量再修改）；涉及检索契约需对照 `docs/agents/domain.md` 的检索领域文档。
 
 ## Comments
+
+## Comments
+
+- 2026-10-04：收尾核验后保持 `open`。三处缺口经只读复核**全部仍然存在**：①`persistence/retrieval.py` 每 token 一个 `position(lower(...) in lower(...)) > 0` 不可索引谓词，36 个迁移里没有任何 `tsvector`／`gin` 索引；②`persistence/message_stream.py` 的 `LEFT JOIN LATERAL (... LIMIT 1)` 仍无 `ORDER BY`，没有“优先带 quote payload”的偏好；③`persistence/outbound_ledger.py` 的 `list_by_owner` 仍无 LIMIT／时间窗，调用方只取末尾 10 条却在内存里拉全量。
+- 2026-10-04：两处订正与限制：①`statement_timeout` 并非完全不生效——应用主路径经 `reply/tools.py` 默认传 500ms，只有检索适配器的默认值是 `None`；②本票引用的“engineering.md 性能分支”不存在（该文档只有 32 行），因此“先做基线测量”目前没有书面口径，需要先补测量方法再改实现；③缺口 2、3 改变用户可见契约（引用视图偏好、台账分页／保留），需要用户先定语义。`Triage` 由 `needs-triage` 改为 `ready-for-agent`，但上述测量口径与契约决定仍需用户输入。
+
+- 2026-10-04：缺口 2（引用视图）已修：`persistence/message_stream.py` 的 `LEFT JOIN LATERAL (...)` 增加确定性排序（优先带引用正文的记录，再按 id），同一消息的引用视图不再随行序变化。缺口 3（台账）已收口：概览改为 SQL 侧聚合，`list_by_owner` 支持窗口，整表不再进内存；HTTP 字段与展示条数不变。缺口 1（词法谓词与全文索引）保持 open：它需要先有测量口径与索引方案，属于新的实现任务。测量口径建议按“同联系人 N 条消息、固定查询集、预热后取 P50/P95、先测后改”的方式记录在票内，再决定加 GIN／全文索引还是改查询形状。
+
+- 2026-10-04：缺口 1 的本机基线已测量，结论是**当前不构成时延问题，改为记录触发条件**。方法：临时 `_test` 库、单联系人合成消息、每档预热 3 次后测 20 次 `search_messages(query="周末 旅行", limit=20, timeout_ms=1500)`（含 `set_config` 与两次查询）。结果（消息数 → P50／P95／最大值，毫秒）：1,000 → 3.4／4.1／4.3；5,000 → 8.9／9.3／9.4；10,000 → 19.0／20.6／21.0。`EXPLAIN` 显示该谓词走 `Seq Scan`，但在单联系人范围内增长近似线性，10k 时仍比回复链路 500ms 预算低一个数量级。触发条件：单联系人消息量超过 5 万，或同一查询 P95 超过 200ms，或 `EXPLAIN` 显示检索计划出现排序溢出；达到任一条件再评估全文索引／`tsvector` 或改查询形状，并复测同一方法留证。

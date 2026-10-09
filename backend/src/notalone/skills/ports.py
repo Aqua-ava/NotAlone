@@ -17,6 +17,7 @@ from notalone.skills.models import (
     SkillResource,
     SkillVersion,
     SkillVersionResult,
+    SkillVersionEntry,
 )
 
 
@@ -72,6 +73,13 @@ class SkillLibraryManagementPort(Protocol):
     def enable(self, owner_id: UUID, skill_id: UUID) -> SkillVersionResult: ...
 
     def disable(self, owner_id: UUID, skill_id: UUID) -> SkillVersionResult: ...
+
+    def list_versions(
+        self,
+        owner_id: UUID,
+        skill_id: UUID,
+    ) -> tuple[SkillVersionEntry, ...]:
+        """返回该 skill 的历史版本（新到旧），供用户选择回滚目标。"""
 
     def rollback(
         self,

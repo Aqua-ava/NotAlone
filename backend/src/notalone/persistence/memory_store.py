@@ -12,7 +12,6 @@ import psycopg
 from psycopg.rows import dict_row
 
 from notalone.memory.models import (
-    MemoryTopic,
     AdoptionMethod,
     ConfirmedMemory,
     ConfirmedMemoryStatus,
@@ -20,12 +19,13 @@ from notalone.memory.models import (
     MemoryCandidate,
     MemoryCandidateStatus,
     MemoryCategory,
+    MemoryTopic,
 )
-from notalone.scopes import ContactScope
-from notalone.persistence.locks import lock_contact_scope
-from notalone.persistence.message_sources import valid_source_ref_exists_sql
+from notalone.persistence.extraction_trace import erase_record_traces
+from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.memory_timing import timed_memory_rows
-
+from notalone.persistence.message_sources import valid_source_ref_exists_sql
+from notalone.scopes import ContactScope
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -53,6 +53,8 @@ _CANDIDATE_COLUMNS = """
     invalid_at AS candidate_invalid_at,
     confidence AS candidate_confidence,
     risk_flags AS candidate_risk_flags,
+    alternatives AS candidate_alternatives,
+    interpretation_reason AS candidate_interpretation_reason,
     failure_reason AS candidate_failure_reason,
     created_at AS recorded_at
 """
@@ -98,6 +100,11 @@ class PostgresMemoryStore:
         self._clock = clock
         self._id_factory = id_factory
 
+    @property
+    def database_url(self) -> str:
+        """供同一数据库内的提取追踪装配使用。"""
+        return self._database_url
+
     def create_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
         """保存一条带来源和联系人范围的候选。"""
 
@@ -120,11 +127,12 @@ class PostgresMemoryStore:
                     INSERT INTO public.memory_candidate (
                         id, owner_id, contact_id, text_content, category,
                         topic, subject, source_ids, status, valid_at, invalid_at,
-                        confidence, risk_flags, failure_reason
+                        confidence, risk_flags, alternatives,
+                        interpretation_reason, failure_reason
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s
                     )
                     RETURNING {_CANDIDATE_COLUMNS}
                     """,
@@ -142,6 +150,8 @@ class PostgresMemoryStore:
                         candidate.invalid_at,
                         candidate.confidence,
                         list(candidate.risk_flags),
+                        list(candidate.alternatives),
+                        candidate.interpretation_reason or None,
                         candidate.failure_reason,
                     ),
                 ).fetchone()
@@ -226,11 +236,12 @@ class PostgresMemoryStore:
                     INSERT INTO public.memory_candidate (
                         id, owner_id, contact_id, text_content, category,
                         topic, subject, source_ids, status, valid_at, invalid_at,
-                        confidence, risk_flags, failure_reason
+                        confidence, risk_flags, alternatives,
+                        interpretation_reason, failure_reason
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s
                     )
                     RETURNING {_CANDIDATE_COLUMNS}
                     """,
@@ -248,6 +259,8 @@ class PostgresMemoryStore:
                         candidate.invalid_at,
                         candidate.confidence,
                         list(candidate.risk_flags),
+                        list(candidate.alternatives),
+                        candidate.interpretation_reason or None,
                         candidate.failure_reason,
                     ),
                 ).fetchone()
@@ -583,6 +596,13 @@ class PostgresMemoryStore:
                 self._ensure_scope(row, scope)
                 if row["candidate_status"] != MemoryCandidateStatus.PENDING.value:
                     raise RuntimeError("当前关系记忆候选不能丢弃。")
+                lock_owner_scope(connection, owner_id=scope.owner_id)
+                erase_record_traces(
+                    connection,
+                    owner_id=scope.owner_id,
+                    record_kind="candidate",
+                    record_id=candidate_id,
+                )
                 updated = connection.execute(
                     f"""
                     UPDATE public.memory_candidate
@@ -854,6 +874,14 @@ class PostgresMemoryStore:
                 if row is None:
                     raise LookupError("关系记忆不存在。")
                 self._ensure_scope(row, scope)
+                if next_status is ConfirmedMemoryStatus.DELETED:
+                    lock_owner_scope(connection, owner_id=scope.owner_id)
+                    erase_record_traces(
+                        connection,
+                        owner_id=scope.owner_id,
+                        record_kind="contact_memory",
+                        record_id=memory_id,
+                    )
                 if reject_deleted and row["memory_status"] == (
                     ConfirmedMemoryStatus.DELETED.value
                 ):
@@ -1066,6 +1094,8 @@ class PostgresMemoryStore:
             invalid_at=row["candidate_invalid_at"],
             confidence=row["candidate_confidence"],
             risk_flags=tuple(row["candidate_risk_flags"] or ()),
+            alternatives=tuple(row["candidate_alternatives"] or ()),
+            interpretation_reason=row["candidate_interpretation_reason"] or "",
             failure_reason=row["candidate_failure_reason"],
             timing=row["timing"],
         )

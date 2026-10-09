@@ -28,9 +28,12 @@ from notalone.reply import (
     RewriteDraft,
 )
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
+from notalone.memory import InMemoryMemoryStore, MemoryCandidate, MemoryCategory
 from notalone.reply.context import (
+    PENDING_CANDIDATE_SELECTION_REASON,
     ContextEvidence,
     ReplyContext,
+    RetrievalReplyContext,
 )
 from notalone.reply.runtime import ReplyRuntimeResult
 from notalone.reply.store import (
@@ -41,6 +44,7 @@ from notalone.reply.store import (
 )
 from notalone.reply.errors import ReplyInvariantError
 from notalone.memory.timing import MemoryTiming
+from notalone.retrieval import InMemoryRetrieval, RetrievedMessage
 from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.skills import SkillCatalog, SkillCatalogEntry, SkillVersion
 
@@ -336,6 +340,176 @@ class LangChainVerticalSliceTest(unittest.TestCase):
         )
         self.assertIn("不等于事件发生时间", system_text)
         self.assertIn("当前有效不证明", system_text)
+
+    def test_pending_candidate_status_reaches_the_actual_model_input(self) -> None:
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        content = ReplyToMessage(
+            MESSAGE_ID,
+            ConfirmedDirection(
+                "先问清楚是不是真的要换工作",
+                DirectionSource.DIRECT_INPUT,
+            ),
+        )
+        command = GenerateReply(
+            idempotency_key=REQUEST_KEY,
+            scope=scope,
+            conversation_binding_id=BINDING_ID,
+            content=content,
+        )
+        prepared = ReplyContext(
+            reply_request_id=REQUEST_ID,
+            command=command,
+            scope=scope,
+            current_text="他下个月准备换工作吗？",
+            direction=content.direction,
+            evidence=(
+                ContextEvidence(
+                    evidence_id=MESSAGE_ID,
+                    kind="message",
+                    text="他下个月准备换工作吗？",
+                    scope=scope,
+                ),
+                ContextEvidence(
+                    evidence_id=CANDIDATE_ID,
+                    kind="pending_candidate",
+                    text="对方下个月准备换工作",
+                    scope=scope,
+                    source_ids=(MESSAGE_ID,),
+                    selection_reason="未确认候选、仅供参考、不得当作事实。",
+                    status="pending",
+                ),
+            ),
+            skill_library_revision=4,
+        )
+        model = ToolCallingFakeModel(responses=[AIMessage(
+            content="",
+            tool_calls=[{
+                "name": "ReplyRuntimeOutput",
+                "args": {
+                    "candidates": [{
+                        "text": "听说你下个月要换工作，是真的吗？",
+                        "basis": "对未确认候选只做确认式提问",
+                        "citation_ids": [str(CANDIDATE_ID)],
+                        "risk_notes": [],
+                    }],
+                    "used_skill_version_id": None,
+                },
+                "id": "pending-candidate-result",
+            }],
+        )])
+
+        LangChainReplyRuntime(
+            model=model,
+            skill_port=EmptySkillPort(scope=scope, revision=4),
+        ).generate(prepared)
+
+        payload = next(
+            json.loads(message.content)
+            for call in model.seen_calls
+            for message in call
+            if message.type == "human"
+        )
+        pending_payload = payload["evidence"][1]
+        self.assertEqual(pending_payload["kind"], "pending_candidate")
+        self.assertEqual(pending_payload["status"], "pending")
+        self.assertIn("未确认", pending_payload["selection_reason"])
+        system_text = "\n".join(
+            str(message.content) for call in model.seen_calls for message in call
+            if message.type == "system"
+        )
+        self.assertIn("pending_candidate", system_text)
+        self.assertIn("不得表述为确定事实", system_text)
+
+    def test_pending_reason_reaches_model_input_from_real_retrieval(self) -> None:
+        """票 02 验收第 2 条：从检索到模型 payload，「为什么待确认」不丢。"""
+
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        content = ReplyToMessage(
+            MESSAGE_ID,
+            ConfirmedDirection(
+                "先问清楚是不是真的要换工作",
+                DirectionSource.DIRECT_INPUT,
+            ),
+        )
+        command = GenerateReply(
+            idempotency_key=REQUEST_KEY,
+            scope=scope,
+            conversation_binding_id=BINDING_ID,
+            content=content,
+        )
+        memory_store = InMemoryMemoryStore()
+        memory_store.create_candidate(
+            MemoryCandidate(
+                candidate_id=CANDIDATE_ID,
+                scope=scope,
+                text="对方下个月准备换工作",
+                category=MemoryCategory.RECENT_STATE,
+                source_ids=(MESSAGE_ID,),
+                confidence=0.62,
+                risk_flags=("needs_user_confirmation",),
+            )
+        )
+        prepared = RetrievalReplyContext(
+            retrieval=InMemoryRetrieval(
+                messages=(
+                    RetrievedMessage(
+                        MESSAGE_ID,
+                        scope,
+                        "他下个月准备换工作吗？",
+                        source_ids=(MESSAGE_ID,),
+                    ),
+                ),
+                memory_store=memory_store,
+            ),
+            skill_library_revision=4,
+        ).build(
+            command=command,
+            verified_scope=VERIFIED_SCOPE,
+            reply_request_id=REQUEST_ID,
+        )
+        model = ToolCallingFakeModel(responses=[AIMessage(
+            content="",
+            tool_calls=[{
+                "name": "ReplyRuntimeOutput",
+                "args": {
+                    "candidates": [{
+                        "text": "听说你下个月要换工作，是真的吗？",
+                        "basis": "对未确认候选只做确认式提问",
+                        "citation_ids": [str(CANDIDATE_ID)],
+                        "risk_notes": [],
+                    }],
+                    "used_skill_version_id": None,
+                },
+                "id": "pending-reason-result",
+            }],
+        )])
+
+        LangChainReplyRuntime(
+            model=model,
+            skill_port=EmptySkillPort(scope=scope, revision=4),
+        ).generate(prepared)
+
+        payload = next(
+            json.loads(message.content)
+            for call in model.seen_calls
+            for message in call
+            if message.type == "human"
+        )
+        pending_payload = next(
+            item for item in payload["evidence"]
+            if item["kind"] == "pending_candidate"
+        )
+        self.assertEqual(pending_payload["status"], "pending")
+        self.assertTrue(
+            pending_payload["selection_reason"].startswith(
+                PENDING_CANDIDATE_SELECTION_REASON
+            )
+        )
+        self.assertIn("0.62", pending_payload["selection_reason"])
+        self.assertIn(
+            "needs_user_confirmation",
+            pending_payload["selection_reason"],
+        )
 
     def _two_skill_port(self, scope: ContactScope) -> MultiSkillPort:
         warm_entry = SkillCatalogEntry(

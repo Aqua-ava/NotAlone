@@ -36,3 +36,7 @@
 依据[原spec](../.scratch/memory-core-claim-retention/spec.md)的既有ECNU模型配置、同联系人冻结窗口和捕获重放范围，[ADR-027](../architecture/adr/027-memory-accuracy-evaluation-gate.md)允许模型配置修错；既有Runtime可分别注入E和V，无接口或模型阶段新增。Spec只读范围核对已确认属于原授权内的评测组装，不把用户拒绝官方当作新授权。
 
 私有原话、公开I/O、逐索引矩阵和runner保存在仓库外0700／0600目录，不保存内部思考、不入Git；每次调用独立无正文台账。业务记忆、旧认可资料、水位、回复模型、后台同步和外部聊天均不写。本页只记录计划与聚合证据；本地提交不含私人资料，不进行远端Git。
+
+## 后续变更
+
+2026-10-04：本页记录的“当前生产源码与原V相同”已不再成立。产品来源核验提示随后并入转述支持语义单叶，`verification_adapters.py` 现为 SHA256 `d93ca1d6062842bf33349ec3c340ee37fd126f86a7d62b51e50b09b603cb638f`（原 `9a48913f…`）；提取侧 `adapters.py` 仍为 `04f457602d…` 未变。本页冻结数字只对应变更前的捕获与对照，不适用于新提示。改动范围与本地验证见[来源核验提示转述支持单叶](memory-verification-report-support-leaf-20261004.md)。

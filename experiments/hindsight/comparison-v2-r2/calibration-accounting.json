@@ -1,0 +1,208 @@
+{
+  "calibration_sha256": "7bfa9f9352815dce92848d7f9754dc77b254a26304bbc689afb8b2f8e1691815",
+  "captured_actual_http_requests": 27,
+  "captured_execution_mode": "actual_http",
+  "chosen_dev_paraphrase_summary": {
+    "duplicate_ids": 0,
+    "failed_queries": 0,
+    "irrelevant_injection_queries": 1,
+    "irrelevant_injection_query_rate": 0.06666666666666667,
+    "macro_precision_at_5": 0.9583333333333334,
+    "macro_recall_at_5": 0.36666666666666664,
+    "over_budget_queries": 0,
+    "positive_empty_rate": 0.4666666666666667,
+    "positive_queries": 15,
+    "precision_query_denominator": 8,
+    "queries": 15,
+    "scope_violations": 0,
+    "unexpected_id_count": 1
+  },
+  "dev_context_trials": 52320,
+  "legacy_field_explanation": "selected_attempts.http_attempts 在此版本记录 RecallClient 边界调用；底层ReplayClient没有网络。捕获/final是实际HTTP。没有改动已冻结calibration JSON。",
+  "selected_actual_http_requests": 0,
+  "selected_execution_mode": "dev_replay",
+  "selected_query_modes": [
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-garden-paraphrase-1",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-garden-paraphrase-2",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-garden-paraphrase-3",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-garden-direct",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-photo-paraphrase-1",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-photo-paraphrase-2",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-photo-paraphrase-3",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-photo-direct",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-museum-paraphrase-1",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-museum-paraphrase-2",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-museum-paraphrase-3",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-museum-direct",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-chess-paraphrase-1",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-chess-paraphrase-2",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-chess-paraphrase-3",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-chess-direct",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-swim-paraphrase-1",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-swim-paraphrase-2",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-swim-paraphrase-3",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-swim-direct",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-empty-1",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-empty-2",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-empty-3",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-empty-4",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-empty-5",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-empty-6",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-empty-7",
+      "recall_boundary_calls": 1
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-empty-8",
+      "recall_boundary_calls": 0
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-empty-9",
+      "recall_boundary_calls": 0
+    },
+    {
+      "actual_http_requests": 0,
+      "execution_mode": "dev_replay",
+      "query_id": "dev-empty-10",
+      "recall_boundary_calls": 0
+    }
+  ],
+  "selected_recall_boundary_calls": 27,
+  "threshold_count": 1744
+}

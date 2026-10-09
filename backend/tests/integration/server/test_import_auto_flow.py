@@ -183,6 +183,27 @@ class ImportAutoFlowHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self._memory(self.backend, imported)
         self._reply(self.backend, imported)
 
+    def test_default_dimension_release_keeps_automatic_import_candidates_pending(self):
+        # 与生产 main 一样不注入维度放行表，仍经相同优先级与追踪装配。
+        self.dimension_release = None
+        backend = self._backend(self.owner_id)
+        imported = self._import_auto(backend, "默认空放行", "茉莉茶")
+        self._wait_task(backend, imported, "succeeded")
+        contact_id = imported["contact_id"]
+        self.assertEqual(
+            self._get(backend, f"/api/contacts/{contact_id}/memories")["memories"],
+            [],
+        )
+        candidates = self._get(
+            backend, f"/api/contacts/{contact_id}/memory-candidates",
+        )["candidates"]
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["text"], "联系人喜欢茉莉茶。")
+        self.assertEqual(candidates[0]["status"], "pending")
+        self.assertEqual(
+            candidates[0]["source_ids"], [imported["fact_message"]["message_id"]],
+        )
+
     def test_new_import_while_same_contact_is_active_is_not_lost(self):
         active = self.extraction_model.block_call(0)
         first = self._import_auto(self.backend, "继续排队", "茉莉茶")

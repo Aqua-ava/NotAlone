@@ -4,14 +4,14 @@ NotAlone 是面向用户真实联系人的中文关系感知回复助手。用�
 
 仓库当前保留的路径：微信单联系人 JSONL 只读预览、联系人确认后的 PostgreSQL 正式导入、CLI 后台增量同步（前台 OCR 只负责定位当前会话）、记忆提取与管理、检索评测，以及 Python 本地后台的候选回复接口。代码中不存在发送消息 Tool；验证以合成数据、scripted fake model 和本地适配器为主，真实 DeepSeek 冒烟需显式配置凭据后运行。
 
-旧 Swift 主界面 `macos_app/` 已删除。后续前端采用 TypeScript + React，UI 将重新设计；当前没有替代主窗口、图形首启向导或 React 脚手架。Python 后台位于 `backend/`，Mac 原生截图、OCR、会话定位探针位于 `native/macos/`；Windows 微信适配尚未实现，见 [ADR-036](architecture/adr/036-retire-swift-main-interface.md)。
+旧 Swift 主界面 `macos_app/` 已删除。新的 Electron + TypeScript/React 桌面端已接入管理窗口、小窗与主要业务流程；完整原生交付仍待验收。Python 后台位于 `backend/`，Mac 原生截图、OCR、会话定位探针位于 `native/macos/`；Windows 微信适配尚未实现，见 [ADR-039](architecture/adr/039-retire-swift-main-interface.md)。
 
 ## 仓库目录
 
 ```text
 NotAlone/
 ├── backend/          Python 后端：源码、测试、SQL 迁移与 pyproject.toml
-├── desktop/          未来 TypeScript + React 桌面端，目前仅职责说明
+├── desktop/          Electron + TypeScript/React 桌面端与受限验收
 ├── native/macos/     Swift 原生截图、OCR 与会话定位探针
 ├── website/          独立静态官网
 ├── scripts/          仓库级安装与部署入口
@@ -42,7 +42,7 @@ zsh scripts/install.sh
 
 脚本按顺序完成：检查依赖（macOS / Homebrew / conda / PostgreSQL / swiftc）→ 创建 `NotAlone` conda 环境并 `pip install -e ./backend` → 启动本地 PostgreSQL 并创建 `notalone_dev` → 按版本记录应用尚未完成的 `backend/database/migrations/*.sql` → 生成只含数据库连接的受控根 `.env`（0600）→ 构建前台同步探针。每个迁移与成功记录同事务提交，失败只回滚当前迁移，重跑从未完成版本继续；机器环境等此前已完成步骤会保留。无迁移记录的旧库会停止并提示核验，不会凭 `owner` 表猜测基线或重放历史 SQL，见 [数据库迁移说明](backend/database/README.md)。
 
-图形首启向导随旧主界面退役，当前首次初始化沿用下文历史导入的 `--initialize-owner`；模型凭据通过本地受控 `.env` 或环境变量提供。安装脚本不填写密钥，也不启动真实微信读取。探针的独立构建与调试见 [native/macos/README.md](native/macos/README.md)。
+桌面首启支持显式初始化身份，CLI 仍可使用下文历史导入的 `--initialize-owner`；模型凭据通过本地受控 `.env` 或环境变量提供。安装脚本不填写密钥，也不启动真实微信读取。探针的独立构建与调试见 [native/macos/README.md](native/macos/README.md)。
 
 Python 命令必须在 conda 环境 `NotAlone` 中运行；命令启动时自动读取当前或上级目录的 `.env`，已有 shell 环境变量优先：
 
@@ -63,6 +63,7 @@ python -m pip install -e ./backend
 | `NOTALONE_DEEPSEEK_MODEL` | 覆盖模型名，默认 `deepseek-chat`（支持工具调用与结构化输出） |
 | `NOTALONE_DEEPSEEK_BASE_URL` | 覆盖默认官方 API 地址（中转或代理服务） |
 | `NOTALONE_TEST_DATABASE_URL` | 隔离测试库，名称必须以 `_test` 结尾 |
+| `NOTALONE_MEMORY_DIMENSION_GATE` | 记忆按维度放行开关；只有显式 `0` 才关闭，关闭后恢复"通过原有三道门槛即自动采纳"（见 ADR-036） |
 
 `.env` 已被 Git 忽略，不应提交或分享。
 
@@ -72,7 +73,7 @@ python -m pip install -e ./backend
 
 同步分为两个独立通道：CLI 后台按各联系人自己的 cursor 读取文字增量；前台 OCR/探针只定位当前微信联系人，失败不影响 CLI 后台同步。原始视觉帧不保存，消息按稳定身份写入并与历史导入跨来源去重。
 
-当前通过下列 CLI 入口列出会话，再由用户逐一确认绑定后开启总开关；没有图形同步管理页，不会自动授权新增会话。关闭总开关或退出后端运行时停止读取；重新开启后只对仍有效的已确认绑定补齐 baseline 之后的可检测缺口，不读取未确认会话正文。新桌面宿主仍须落实退出停读规则。
+当前支持桌面同步管理页及下列 CLI 入口；用户确认绑定后开启总开关，不会自动授权新增会话。关闭总开关或退出后端运行时停止读取；重新开启后只对仍有效的已确认绑定补齐 baseline 之后的可检测缺口，不读取未确认会话正文。新桌面宿主已接入退出停读，最终原生验收状态见桌面说明。
 
 ```bash
 export NOTALONE_DATABASE_URL='postgresql:///notalone_dev'
@@ -130,7 +131,28 @@ notalone-memory-delete --contact-id '...' --memory-id '...'
 notalone-task-cleanup                        # 删除超过 90 天的终态任务元数据
 ```
 
-提取候选先经证据契约与逐条来源语义核验：支持才继续原采纳门，证据不足留待确认，无支持拒绝，未核验不能自动入库。核验不改写正文、主体、来源或有效期；返回片段必须是候选来源中的真实原文，并包含主消息。之后仍执行置信度与风险门槛（低于 0.7 或带敏感/未知风险留待定）、删除指纹和写入裁决，达标者自动采纳、标记 `auto` 并可撤销。生产 CLI／Worker 默认用既有模型每窗口至多增加一次核验，单批最多 60 条；提取与核验各有无正文台账。网络或模型不可用时不推进该批水位；非法结构输出按 ADR-029 连续三次后记录可见跳过并推进，未跳过前不推进。Worker 模型或网络暂时失败最多自动重试 3 次并续期步骤租约，进程中断后重跑从未完成步骤继续，无任务时输出 `status=idle`。`index -> verify` 按确定性代码维护联系人记忆目录（分类、主题提示和 memory_id 引用，最多 20 个主题），不复制正文。手动录入标记 `manual`，支持联系人级与 owner 级。所有命令输出只含状态、计数和元数据，不含聊天正文或模型完整输入输出。目标流程见 ADR-014、ADR-015、ADR-018、ADR-033。
+提取候选先经证据契约与逐条来源语义核验：支持才继续原采纳门，证据不足留待确认，无支持拒绝，未核验不能自动入库。核验不改写正文、主体、来源或有效期；返回片段必须是候选来源中的真实原文，并包含主消息。之后仍执行置信度与风险门槛（低于 0.7 或带敏感/未知风险留待定）、按维度放行（ADR-036：默认放行表为空，只有已放行维度才自动采纳，其余安静待确认）、删除指纹和写入裁决，全部通过才自动采纳、标记 `auto` 并可撤销；`NOTALONE_MEMORY_DIMENSION_GATE=0` 可回退按维度放行。生产 CLI／Worker 默认用既有模型每窗口至多增加一次核验，单批最多 60 条；提取与核验各有无正文台账。网络或模型不可用时不推进该批水位；非法结构输出按 ADR-029 连续三次后记录可见跳过并推进，未跳过前不推进。Worker 模型或网络暂时失败最多自动重试 3 次并续期步骤租约，进程中断后重跑从未完成步骤继续，无任务时输出 `status=idle`。`index -> verify` 按确定性代码维护联系人记忆目录（分类、主题提示和 memory_id 引用，最多 20 个主题），不复制正文。手动录入标记 `manual`，支持联系人级与 owner 级。普通运行命令输出只含状态、计数和元数据；下面的追踪查看命令由用户主动读取完整敏感资料。目标流程见 ADR-014、ADR-015、ADR-018、ADR-033、ADR-036。
+
+实际提取默认把全过程写入 PostgreSQL：原始来源处理记录、消息读取与窗口、提取／核验／裁决的实际输入和原始返回、逐候选规则及写入结果。生产 CLI、任务 Worker 和 HTTP 原任务使用相同记录链；CLI 增量同步仍只保存来源与消息，不新增自动提取调度。含正文追踪没有自动到期时间，保留到手动删除或来源删除；90 天任务清理不清追踪。来源删除会清除受影响整份追踪的正文，手动删除追踪保留权威消息／记忆。旧数据缺失显示 `not_recorded`，手输资料显示 `not_applicable`，从模型候选人工确认的记忆仍关联原批次。不能观察到供应商 HTTP 载荷的适配器明确显示 `not_observable`；不会用应用输入冒充最终 HTTP 请求。
+
+```bash
+notalone-memory-trace --contact-id '...' list --limit 100
+notalone-memory-trace --contact-id '...' list --before '...'  # 使用上一页 next_before
+notalone-memory-trace --contact-id '...' show '...'           # 主动查看完整敏感正文
+notalone-memory-trace --contact-id '...' find contact_memory '...'
+notalone-memory-trace --contact-id '...' find message '...'   # 正查使用该消息的提取批次
+notalone-memory-trace --contact-id '...' delete '...'
+notalone-source-trace --contact-id '...' find message '...'
+notalone-source-trace --contact-id '...' show '...'
+```
+
+查询／删除只需要既有 `NOTALONE_OWNER_ID`、`NOTALONE_DATABASE_URL` 与已确认联系人，不构建模型。HTTP 沿用本地服务 token 和固定 owner：`GET /api/contacts/{contact_id}/memory-traces`、`GET/DELETE /api/contacts/{contact_id}/memory-traces/{trace_id}`、`GET /api/contacts/{contact_id}/memory-traces/records/{message|candidate|contact_memory|owner_memory}/{record_id}`；来源处理使用同一路径中的 `source-processing-traces` 和 `message|source_ref|source_document|local_wechat_observation`。消息可以正查实际使用它的提取批次，包括仅作上下文、零候选和失败的批次；来源处理批次另行返回。列表支持 `limit=1..500` 与 `before={next_before}`，按时间和批次 UUID 稳定翻页；游标必须属于当前联系人。所有追踪响应（包括失败）均为 `Cache-Control: no-store`，越界／不存在统一 404，不返回错误正文或数据库凭据。
+
+追踪写入失败停止本批，返回安全的 `trace_write_failed`，不累积模型非法输出预算、不推进水位；保留已提交部分和提交回执未知状态。HTTP 导入来源记录故障返回 `source_processing_write_failed`。任务进度／SSE 只发布 `error_code` 等元数据，外层执行 `finished` 后应查原 `task_id` 的持久状态。追踪与失败状态同时不可写时，运行仍明确返回 `trace_write_failed` 和 `failure_state_commit=unknown`，结束本次执行；不宣称任务失败已落库、不返还原 attempt。停止、来源／租约失效、guard 存储故障分别记录；旧调用晚返回仍保留一次无正文调用台账和 `calls` 关联，已删正文不恢复。数据库迁移更新至 `043`；本轮仅在合成 `_test` 库验证，没有迁移私人库或调用真实模型／微信。完整后端已验证，App 查看入口随 ADR-039 后续新界面接入，当前未实现。
+
+手输本人资料的 owner 标识只表示归属，追踪以资料自身 ID 保留删除依赖；既有资料不会阻断下一次提取。实际缓存的每份来源／引用在保存窗口前复验，已删除的原始快照即使规范消息由另一来源保留也不能复活。旧记忆 UPDATE 的失效计划和权威状态关联到同一记录，区分已失效提交与尚待核对；校验失败追踪保存稳定的 `error_code`、`fields`、`rule` 与实际定位，不复制校验前正文或无效时间原值。
+
+自动采纳在原有三道门槛之上再叠加一道**按维度放行**（ADR-036）：一条候选还要落到已放行的维度键才会自动写入，无法明确判定维度键的候选一律视为未放行。**默认放行表为空**，因此当前所有通过原有门槛的候选都进入待确认、不新增自动采纳；放行某一类需要该维度本轮评测达标签并由用户逐类批准，记录在 [记忆维度自动采纳放行台账](docs/memory-adoption-dimension-release-ledger.md)。当前 `paraphrase`、`reference`、`media`、`reported` 四个维度缺少必要结构化字段、无法从既有提取结果推导，即使达标也不能放行。运维回退设 `NOTALONE_MEMORY_DIMENSION_GATE=0`，恢复本门启用前的行为。
 
 导入 HTTP 提交返回原 `task_id`，消息提交后立即可用；本后端随后自动处理这次原任务，无需另外启动。重复提交复用原任务，同一任务唤醒合并；Worker 全局锁忙时持续退避等待，间隔最多 30 秒，关闭结束等待。自动处理不扫描较早的其他任务或重启前的队列，也不自动重做成功、失败或取消终态。指定任务只限定调度，提取仍使用该联系人的有效消息、既有水位和窗口；不是按单一来源独立提取。
 
@@ -140,7 +162,7 @@ notalone-task-cleanup                        # 删除超过 90 天的终态任�
 
 本地后端中的候选回复优先于尚未开始的后台提取、来源核验与写入裁决调用。已开始的一次适配器调用（包括 SDK 内部重试）结束后，等待回复先执行；整次回复完成前暂停后续后台模型调用。等待发生在候选请求租约与 20 秒生成计时之前，独立 CLI Worker 保留原行为。
 
-`POST /api/runtime/shutdown` 和服务器公开关闭共用停止协议：拒绝新工作、唤醒许可等待者，等待收尾最多 5 秒。不能中断的旧调用返回后丢弃结果，不把未完成任务标为成功；成功步骤保留，原租约到期后可按原任务显式继续。协作停止在有效来源与租约内返还本次尝试，真实模型失败仍计入三次预算；来源或租约已失效、进程被强制结束、停止记账不可用时不保证返还。调用许可与锁连接统一收尾，已发生的调用仍保留无正文台账。行为约束见 [ADR-035](architecture/adr/035-import-triggered-memory-work-and-reply-priority.md)，合成 HTTP 验收覆盖上述范围，不代表外部模型或正式部署已验收。
+`POST /api/runtime/shutdown` 和服务器公开关闭共用停止协议：拒绝新工作、唤醒许可等待者，当前实现共享 4 秒收尾预算。不能中断的旧调用返回后丢弃结果，不把未完成任务标为成功；成功步骤保留，原租约到期后可按原任务显式继续。协作停止在有效来源与租约内返还本次尝试，真实模型失败仍计入三次预算；来源或租约已失效、进程被强制结束、停止记账不可用时不保证返还。调用许可与锁连接统一收尾，已发生的调用仍保留无正文台账。行为约束见 [ADR-038](architecture/adr/038-import-triggered-memory-work-and-reply-priority.md)，合成 HTTP 验收覆盖上述范围，不代表外部模型或正式部署已验收。
 
 后台记忆接口为候选、联系人记忆和本人记忆返回来源聊天时间、保存／录入时间，
 以及存在的生效／失效时间。来源跨多条消息时返回日期范围，缺失或无法核实的时间
@@ -187,9 +209,11 @@ python -m notalone.memory_extraction.evaluation --baseline  # 仅合成资料：
 保留旧 120 条七维度用例，另有 15 个独立来源场景的逐命题挑战，其中 6 个为预留变体。
 默认评测同时走来源核验，`--baseline` 只对固定仓库合成集合测未经核验的潜在去向，不提供生产绕过入口。
 逐候选完整对照允许命题、主体、限定、时间与去向，并检查每条期望命题召回；正确输出不能覆盖额外错误。
-自动无支持主张计安全错误，记错人独立计数。旧集合仅部分有严格命题标注，汇总显式列出语义覆盖；
-未标注用例不能证明语义维度达标。同义正则是受控测试 oracle，未匹配结果仍需核对原文，不代表通用语义证明。
-`auto` 表示通过正式采纳门的路径，评测不执行存储去重或写入裁决；不能从有限合成结果推断真实聊天准确率。
+自动无支持主张计安全错误，记错人独立计数。汇总的达标签按 ADR-027 第 2 条判定：该维度用例数 ≥15、假事 0、记错人 0、一般错误 ≤1；
+语义标注覆盖（`semantic_cases`／`semantic_scenarios`）作为单独字段如实报告，不参与达标签判定，未标注用例不能证明语义维度达标。
+达到门槛只是放行某一维度的必要条件，仍需用户逐类批准并记入 [放行台账](docs/memory-adoption-dimension-release-ledger.md)（见 ADR-036）。
+同义正则是受控测试 oracle，未匹配结果仍需核对原文，不代表通用语义证明。
+`auto` 表示通过正式采纳门的路径，评测不执行存储去重或写入裁决，也不叠加运行时的维度放行门（否则未放行维度永远无法积累放行证据）；不能从有限合成结果推断真实聊天准确率。
 
 独立方法复刻实验提供现有方式、叙事后提取、来源时间精修和组合四条路径：
 
@@ -225,5 +249,6 @@ conda activate NotAlone
 
 - [CONTEXT.md](CONTEXT.md)：统一领域词汇
 - [architecture/](architecture/README.md)：现行规格、设计草案与 ADR 索引
+- [记忆维度自动采纳放行台账](docs/memory-adoption-dimension-release-ledger.md)：当前放行表、放行证据与回退步骤
 - [docs/agents/](docs/agents/)：工程、领域与任务工作流
 - [website/](website/README.md)：产品官网（本地预览与部署）

@@ -40,6 +40,7 @@ from notalone.application.skill_service import LedgerService
 from notalone.conversation.models import ConversationObservation
 from notalone.memory_extraction.adapters import LangChainExtractionRuntime
 from notalone.memory_extraction.adjudication_adapters import LangChainAdjudicationRuntime
+from notalone.memory_extraction.dimensions import DimensionRelease
 from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime
 from notalone.persistence.background_tasks import PostgresBackgroundTaskRepository
 from notalone.persistence.contact_memory_index import PostgresContactMemoryIndexRepository
@@ -178,6 +179,10 @@ class CoreBusinessFlowFixture:
     extraction_model_factory = ScriptedCoreModel
     production_model_wiring = False
     _database_ownership_path: Path | None = None
+    # 合成模型只覆盖当前可推导维度；门保持开启，生产默认空表另行验证。
+    dimension_release: DimensionRelease | None = DimensionRelease(
+        allowed=frozenset({"subject", "truth_intent", "time"}),
+    )
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -272,6 +277,10 @@ class CoreBusinessFlowFixture:
                 LangChainAdjudicationRuntime(model=self.extraction_model), priority,
             ),
             ledger=ledger, provider="synthetic", model_name="scripted-core-test",
+            # 本验收只替换模型边界、保留真实采纳链路，因此显式放行合成维度；
+            # 默认收紧（空放行表、未放行维度安静待确认）由
+            # test_import_auto_flow 的公开默认路径及独立采纳测试覆盖。
+            dimension_release=self.dimension_release,
         )
 
         def lock_connection():
@@ -340,7 +349,7 @@ class CoreBusinessFlowFixture:
         return backend
 
     def _production_backend(self, owner_id: UUID) -> HttpBackend:
-        """装配实际 server builders，仅在外部模型构造边界替换。"""
+        """装配实际 server builders，替换模型并注入合成维度配置。"""
 
         from notalone.server.command import _build_task_host
         from notalone.server.reply_wiring import build_reply_service
@@ -352,7 +361,10 @@ class CoreBusinessFlowFixture:
         )
         extraction_patch.start()
         self.addCleanup(extraction_patch.stop)
-        task_host = _build_task_host(self.database_url, events, model_priority=priority)
+        task_host = _build_task_host(
+            self.database_url, events, model_priority=priority,
+            dimension_release=self.dimension_release,
+        )
         with patch("notalone.server.reply_wiring.build_deepseek_model",
                    return_value=self.reply_model):
             reply_service = build_reply_service(

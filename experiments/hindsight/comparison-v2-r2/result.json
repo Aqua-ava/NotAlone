@@ -1,0 +1,822 @@
+{
+  "B_candidate_stage_summaries": {
+    "after_tau_and_local_hydration_recall": 0.15,
+    "external_mapped_candidate_recall": 0.9666666666666667,
+    "final_context_recall": 0.15
+  },
+  "download_cost_evidence": "download-cost-evidence.json",
+  "final_provenance": {
+    "code_commit_at_run": "5fc4938ddc7a501f1b9b99b1dbb4762172ee45a4",
+    "new_modules_are_included_by_file_hash": true,
+    "participating_file_sha256": {
+      "src/notalone/experiments/__init__.py": "80b02f60939b528d927814bf8b2e41d3af5a832c58e41a6cf11dda18a2dc751a",
+      "src/notalone/experiments/hindsight_adapter.py": "eac965b7bf9bdef3ae8c66ad6439b7a664b4c3f9aa75506fed85bd106f5a80cb",
+      "src/notalone/experiments/hindsight_baseline.py": "738d2f9442356be5161ba4d324bea9b8b2cc8409c79653fde8e35fa555adb2bd",
+      "src/notalone/experiments/hindsight_calibration.py": "f4ae2e6d5eadc05665a0dc8ead66acf52445e24ae411052ad0a268aa7dbb90c3",
+      "src/notalone/experiments/hindsight_client.py": "f51362e7627bc806bac114e17229ca78a1e8eaf0a4e2ba1d4a5ca5adad4d2423",
+      "src/notalone/experiments/hindsight_comparison.py": "4bcf8d6230a547cac7cda3d85133d398a7dd2d70ddd47aee1c16bac11c9522b5",
+      "src/notalone/experiments/hindsight_comparison_io.py": "77ba2e3c1faad19ded4032222d7e2c51b4ec6646bc0fa3f93ba892fe22b62803",
+      "src/notalone/experiments/hindsight_dataset.py": "752a5d2764f4a258663d9d9a0a0a2a1d05fc8ffbe70574aba9b67321229028e1",
+      "src/notalone/experiments/hindsight_lifecycle.py": "886ae0c27f1a3c0d0a935327bb62d80df1f193a00d009691b7f8e3b3c10a2401",
+      "src/notalone/experiments/hindsight_lifecycle_db.py": "9637122b379eeca4020575bfee413c326a7e6a6de09944b10743303d61d2031a",
+      "src/notalone/experiments/hindsight_metrics.py": "5b7ef63969b1749c5c2e22ed5cf20e069292fa9b987652b996a5451831d4b83e",
+      "src/notalone/experiments/hindsight_runtime.py": "d5fcc856b17b0c8738a79c05b36b7e47db62797a6071d8ce8f397b625e4dda55",
+      "src/notalone/experiments/hindsight_smoke.py": "dda32776798ea717ceb13155a2dcfbc990c7e0519be9f3938f4fef21d14aa31f",
+      "src/notalone/memory/__init__.py": "053b017cea4e6161fd4e391589936fe0418476f51af696ab953bc07fcaa61d4d",
+      "src/notalone/memory/adapters.py": "d5318b84d03fe7d02ffdd0e8ccc2ee3d4c6fb098703c5788df858460d515221e",
+      "src/notalone/memory/models.py": "fe24105d973bffcba53cd410b286f0390b9b5e2d79dc60fe51c23dbbb4e86c31",
+      "src/notalone/memory/ports.py": "f825cf280bf6d5a100af17eb54285533b4249c34101b0be06c7704094a255df2",
+      "src/notalone/memory/timing.py": "d788315f07226b0a86783b505272a7118cdd12bcb0894915f2e6a32194f9a376",
+      "src/notalone/reply/__init__.py": "f54f72a35c5f168fdc4652e9295cc54bb1a00b07f4d59d87882ee8d635fd740d",
+      "src/notalone/reply/context.py": "c64a2e5409bc8360bf8b89e23539ebcd8979e38ff400ba6a9ef65f856f66d692",
+      "src/notalone/reply/errors.py": "25b1657f167a3353ee3b953a236c66b5e51a25d84aff2d5bd679f384d6b5edb4",
+      "src/notalone/reply/generator.py": "b9914b96bc2e8ea6b1bf3e7b815d7f837bda8c434a4e10b3e9e556d20cf84de3",
+      "src/notalone/reply/interface.py": "ccf1b08496577cfa553a473a0b44b8840a962ccd6ab507de366abbe6a04f05f2",
+      "src/notalone/reply/risk.py": "04a9cf0efd2ebc329b85d850e3afc7ba315734538edf5ebff312b0417bc0f591",
+      "src/notalone/reply/runtime.py": "ebd77016824466ee5b165527c526997582df1a76b50bca1600f9745f4d1d2ffe",
+      "src/notalone/reply/store.py": "0006722274eb3aa57d19eaa263199a5e0df4999772a8b561b7b04066097b5186",
+      "src/notalone/reply/tools.py": "f8af2a460a6d2b8f773aca28f7ef39fecb8963590d1af6e1723c4bc48691d9e7",
+      "src/notalone/retrieval/__init__.py": "805af588fd920e0dc811c9ce643a1ed2687d960d84594ce2a5024a7ec88310e3",
+      "src/notalone/retrieval/adapters.py": "bbc0394d3db84da22bd36cb1ac2834dc3fe36f76ed6382960e67d157c37a54ab",
+      "src/notalone/retrieval/errors.py": "bbcd2c09f6ef87f538f48a040c42d0bda7f58f64c3b1d90d2c5be84c79b0d4db",
+      "src/notalone/retrieval/evaluation.py": "e1d9b57c9d301ea47b694fa886252a03ec3e3905cd669f765914f53dd6540794",
+      "src/notalone/retrieval/feature_flags.py": "dce7f9f864fdd3700b6b97987ba1546f888a46ed334bc19ae1534a53f0713db0",
+      "src/notalone/retrieval/lexical.py": "93ec53f0a40db5200ba673898d9461015c21a6879ca0bcaa55ebfe4d9105b233",
+      "src/notalone/retrieval/models.py": "b93ebf56f5e0cb13ecfa95aeace99004aac468c9534007f5cb88e79b133cf9d3",
+      "src/notalone/retrieval/ports.py": "8ae7491fd8c5c12ba8f5092b0edc054db9e7d3a2fb9a566d6e0fdf10bff59b3f",
+      "src/notalone/retrieval/ranking.py": "fc051c60af45dd29376029f72485fd7a1219f40d0f590e491475d8fe6c648173",
+      "src/notalone/retrieval/recall_cases.py": "310f6102e8d0f0c1a0d971fc22436b6fa346ae1cfb462aa932f5e8bfe52b1c03",
+      "src/notalone/retrieval/recall_evaluation.py": "a730fdefe803eca5cfcd19cb2b9bbc208fd1c8c3eae706dca55b994c723760eb",
+      "src/notalone/scopes.py": "91cee703569e5f6d025f44a412742d0f8ec207f9d0466df25528a010471de076"
+    },
+    "participating_status": [
+      " M src/notalone/experiments/hindsight_client.py",
+      "?? src/notalone/experiments/hindsight_calibration.py",
+      "?? src/notalone/experiments/hindsight_comparison.py",
+      "?? src/notalone/experiments/hindsight_comparison_io.py"
+    ],
+    "participating_tracked_diff_sha256": "22a90344c608ad355a8989b64c4dd7bac996e3545013399a2c8a74a107ed703a"
+  },
+  "frozen_config_sha256": "6b931bb5d2974abf47c534b45d3645c369697c320b1b9d1b58f256119a565140",
+  "gates": {
+    "each_arm_at_least_100_attempts": true,
+    "full_B_p95_at_most_1000_ms": false,
+    "irrelevant_injection_not_increased": true,
+    "lifecycle_preconditions_passed": true,
+    "owner_local_path_identical": true,
+    "recall_gain_at_least_0_10": true,
+    "repeated_query_id_order_stable": true,
+    "scope_state_source_budget_duplicate_and_authority_zero": true,
+    "source_model_dataset_rules_unchanged_after_freeze": true
+  },
+  "hardware": {
+    "cpu": "Apple M2",
+    "logical_cpus": "8",
+    "machine": "arm64",
+    "physical_memory_bytes": "17179869184",
+    "platform": "macOS-15.7.5-arm64-arm-64bit",
+    "product_python": "3.12.13",
+    "runtime_kind": "原生独立 Python 3.11 venv + pg0；不是容器"
+  },
+  "health_before_run": {
+    "database": "connected",
+    "db_acquire_ms": 0.4,
+    "db_pool_idle": 5,
+    "db_pool_in_use": 0,
+    "db_pool_max": 100,
+    "db_pool_waiting": 0,
+    "status": "healthy"
+  },
+  "latency": {
+    "A": {
+      "all_attempts": {
+        "count": 103,
+        "max_ms": 36.43258399097249,
+        "p50_ms": 16.743124986533076,
+        "p95_ms": 28.360582946334034
+      },
+      "failure_rate": 0.0,
+      "failures": 0,
+      "http_attempts": 0,
+      "no_http_attempts": 103,
+      "quantile_rule": "排序后第 ceil(p*N) 个值，包含失败。",
+      "successful_attempts": {
+        "count": 103,
+        "max_ms": 36.43258399097249,
+        "p50_ms": 16.743124986533076,
+        "p95_ms": 28.360582946334034
+      },
+      "timeout_failures": 0
+    },
+    "B": {
+      "all_attempts": {
+        "count": 103,
+        "max_ms": 2839.065042033326,
+        "p50_ms": 1010.2950840373524,
+        "p95_ms": 1782.9612080240622
+      },
+      "failure_rate": 0.0,
+      "failures": 0,
+      "http_attempts": 100,
+      "no_http_attempts": 3,
+      "quantile_rule": "排序后第 ceil(p*N) 个值，包含失败。",
+      "successful_attempts": {
+        "count": 103,
+        "max_ms": 2839.065042033326,
+        "p50_ms": 1010.2950840373524,
+        "p95_ms": 1782.9612080240622
+      },
+      "timeout_failures": 0
+    }
+  },
+  "models_cached_restart_to_health_ms_from_lifecycle": 11650.481791992206,
+  "recall_gain": 0.13333333333333333,
+  "recorded_at": "2026-10-03T18:10:42.458825+00:00",
+  "safety": {
+    "A": {
+      "audited_final_records": 131,
+      "authority_field_violations": 0,
+      "duplicate_ids": 0,
+      "over_budget_queries": 0,
+      "scope_violations": 0,
+      "state_or_source_violations": 0
+    },
+    "B": {
+      "audited_final_records": 127,
+      "authority_field_violations": 0,
+      "duplicate_ids": 0,
+      "over_budget_queries": 0,
+      "scope_violations": 0,
+      "state_or_source_violations": 0
+    }
+  },
+  "summaries": {
+    "A": {
+      "final/budget": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_5": 1.0,
+        "macro_recall_at_5": 0.6666666666666666,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/direct": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 5,
+        "irrelevant_injection_query_rate": 0.25,
+        "macro_precision_at_5": 0.9166666666666666,
+        "macro_recall_at_5": 0.9416666666666667,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 20,
+        "precision_query_denominator": 20,
+        "queries": 20,
+        "scope_violations": 0,
+        "unexpected_id_count": 5
+      },
+      "final/empty": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 4,
+        "irrelevant_injection_query_rate": 0.4,
+        "macro_precision_at_5": 0.0,
+        "macro_recall_at_5": null,
+        "over_budget_queries": 0,
+        "positive_empty_rate": null,
+        "positive_queries": 0,
+        "precision_query_denominator": 4,
+        "queries": 10,
+        "scope_violations": 0,
+        "unexpected_id_count": 16
+      },
+      "final/isolation": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 1,
+        "irrelevant_injection_query_rate": 1.0,
+        "macro_precision_at_5": 0.6666666666666666,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 1
+      },
+      "final/lifecycle": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 4,
+        "irrelevant_injection_query_rate": 1.0,
+        "macro_precision_at_5": 0.2,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 4,
+        "precision_query_denominator": 4,
+        "queries": 4,
+        "scope_violations": 0,
+        "unexpected_id_count": 16
+      },
+      "final/owner": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_3": 1.0,
+        "macro_recall_at_3": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/owner_budget": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_3": 1.0,
+        "macro_recall_at_3": 0.75,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/paraphrase": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 3,
+        "irrelevant_injection_query_rate": 0.05,
+        "macro_precision_at_5": 0.4,
+        "macro_recall_at_5": 0.016666666666666666,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.9166666666666666,
+        "positive_queries": 60,
+        "precision_query_denominator": 5,
+        "queries": 60,
+        "scope_violations": 0,
+        "unexpected_id_count": 11
+      },
+      "final/quality": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 15,
+        "irrelevant_injection_query_rate": 0.15789473684210525,
+        "macro_precision_at_5": 0.6686274509803922,
+        "macro_recall_at_5": 0.2803921568627451,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.6470588235294118,
+        "positive_queries": 85,
+        "precision_query_denominator": 34,
+        "queries": 95,
+        "scope_violations": 0,
+        "unexpected_id_count": 45
+      },
+      "final/topic": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 3,
+        "irrelevant_injection_query_rate": 0.6,
+        "macro_precision_at_5": 0.48,
+        "macro_recall_at_5": 0.8,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 5,
+        "precision_query_denominator": 5,
+        "queries": 5,
+        "scope_violations": 0,
+        "unexpected_id_count": 13
+      }
+    },
+    "B": {
+      "final/budget": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_5": 1.0,
+        "macro_recall_at_5": 0.6666666666666666,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/direct": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 2,
+        "irrelevant_injection_query_rate": 0.1,
+        "macro_precision_at_5": 0.9666666666666666,
+        "macro_recall_at_5": 0.875,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 20,
+        "precision_query_denominator": 20,
+        "queries": 20,
+        "scope_violations": 0,
+        "unexpected_id_count": 2
+      },
+      "final/empty": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 3,
+        "irrelevant_injection_query_rate": 0.3,
+        "macro_precision_at_5": 0.0,
+        "macro_recall_at_5": null,
+        "over_budget_queries": 0,
+        "positive_empty_rate": null,
+        "positive_queries": 0,
+        "precision_query_denominator": 3,
+        "queries": 10,
+        "scope_violations": 0,
+        "unexpected_id_count": 4
+      },
+      "final/isolation": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_5": 1.0,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/lifecycle": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 4,
+        "irrelevant_injection_query_rate": 1.0,
+        "macro_precision_at_5": 0.2,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 4,
+        "precision_query_denominator": 4,
+        "queries": 4,
+        "scope_violations": 0,
+        "unexpected_id_count": 16
+      },
+      "final/owner": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_3": 1.0,
+        "macro_recall_at_3": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/owner_budget": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 0,
+        "irrelevant_injection_query_rate": 0.0,
+        "macro_precision_at_3": 1.0,
+        "macro_recall_at_3": 0.75,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 1,
+        "precision_query_denominator": 1,
+        "queries": 1,
+        "scope_violations": 0,
+        "unexpected_id_count": 0
+      },
+      "final/paraphrase": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 2,
+        "irrelevant_injection_query_rate": 0.03333333333333333,
+        "macro_precision_at_5": 0.9019607843137255,
+        "macro_recall_at_5": 0.15,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.7166666666666667,
+        "positive_queries": 60,
+        "precision_query_denominator": 17,
+        "queries": 60,
+        "scope_violations": 0,
+        "unexpected_id_count": 3
+      },
+      "final/quality": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 12,
+        "irrelevant_injection_query_rate": 0.12631578947368421,
+        "macro_precision_at_5": 0.7966666666666667,
+        "macro_recall_at_5": 0.37058823529411766,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.5058823529411764,
+        "positive_queries": 85,
+        "precision_query_denominator": 45,
+        "queries": 95,
+        "scope_violations": 0,
+        "unexpected_id_count": 26
+      },
+      "final/topic": {
+        "duplicate_ids": 0,
+        "failed_queries": 0,
+        "irrelevant_injection_queries": 5,
+        "irrelevant_injection_query_rate": 1.0,
+        "macro_precision_at_5": 0.23666666666666666,
+        "macro_recall_at_5": 1.0,
+        "over_budget_queries": 0,
+        "positive_empty_rate": 0.0,
+        "positive_queries": 5,
+        "precision_query_denominator": 5,
+        "queries": 5,
+        "scope_violations": 0,
+        "unexpected_id_count": 17
+      }
+    }
+  },
+  "tau_B": 0.024230102630622113,
+  "unexpected_final_ids": {
+    "A": [
+      {
+        "memory_id": "c77afd04-ce6b-58dc-ba72-6564323b0663",
+        "query_id": "final-coffee-direct",
+        "text": "联系人同事喜欢酸味咖啡，这不是联系人自己的口味。"
+      },
+      {
+        "memory_id": "56149a7f-fba5-56a6-8b1d-8bbd53b75392",
+        "query_id": "final-train-direct",
+        "text": "联系人睡眠浅，住宿需要远离电梯的安静房间。"
+      },
+      {
+        "memory_id": "9dc346b8-3646-5a1f-b97b-ea53fdbe6ed5",
+        "query_id": "final-cat-direct",
+        "text": "联系人喝牛奶会腹胀，饮品需要不加奶。"
+      },
+      {
+        "memory_id": "bbe6b76f-228b-5afb-a70b-8d4d1935c6b4",
+        "query_id": "final-hair-direct",
+        "text": "联系人姐姐喜欢烫发，不是本人的预约需求。"
+      },
+      {
+        "memory_id": "1acff262-aa85-5f51-acad-209b75031f5e",
+        "query_id": "final-birthday-paraphrase-2",
+        "text": "联系人预算压力组同意讨论第2项活动细节。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。"
+      },
+      {
+        "memory_id": "29b5f499-7ef3-5321-9aa8-6e88f806104d",
+        "query_id": "final-birthday-paraphrase-2",
+        "text": "联系人预算压力组同意讨论第6项活动细节。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。"
+      },
+      {
+        "memory_id": "5b1eff9c-a096-5f55-83d7-c2952d47c4aa",
+        "query_id": "final-birthday-paraphrase-2",
+        "text": "联系人预算压力组同意讨论第1项活动细节。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。"
+      },
+      {
+        "memory_id": "82d01c79-4342-508e-80b2-8cd61606bce3",
+        "query_id": "final-birthday-paraphrase-2",
+        "text": "联系人预算压力组同意讨论第5项活动细节。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。"
+      },
+      {
+        "memory_id": "16b378db-bb99-5b92-a0f7-1492c6288fe4",
+        "query_id": "final-birthday-paraphrase-3",
+        "text": "联系人给同事组织过大团建，不是本人的生日。"
+      },
+      {
+        "memory_id": "cc1c98f8-8dc0-5d5b-8665-85925cc6bcb5",
+        "query_id": "final-birthday-paraphrase-3",
+        "text": "联系人保存过生日蛋糕的包装照片。"
+      },
+      {
+        "memory_id": "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af",
+        "query_id": "final-video-paraphrase-1",
+        "text": "联系人不喜欢生日惊喜，庆祝安排要提前告诉本人。"
+      },
+      {
+        "memory_id": "1acff262-aa85-5f51-acad-209b75031f5e",
+        "query_id": "final-video-paraphrase-1",
+        "text": "联系人预算压力组同意讨论第2项活动细节。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。"
+      },
+      {
+        "memory_id": "2686bacd-9fe1-555d-b88b-780ac83dfe69",
+        "query_id": "final-video-paraphrase-1",
+        "text": "联系人生日只想和几位熟悉朋友小范围聚会。"
+      },
+      {
+        "memory_id": "29b5f499-7ef3-5321-9aa8-6e88f806104d",
+        "query_id": "final-video-paraphrase-1",
+        "text": "联系人预算压力组同意讨论第6项活动细节。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。"
+      },
+      {
+        "memory_id": "5b1eff9c-a096-5f55-83d7-c2952d47c4aa",
+        "query_id": "final-video-paraphrase-1",
+        "text": "联系人预算压力组同意讨论第1项活动细节。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。这项安排只适用于本次活动。"
+      },
+      {
+        "memory_id": "eba0cde0-fade-5289-abfb-a4954f4f2bad",
+        "query_id": "final-video-direct",
+        "text": "联系人同事喜欢突然打视频。"
+      },
+      {
+        "memory_id": "9ad6f6b4-9aad-5c01-8e2d-61ad0102224c",
+        "query_id": "final-empty-2",
+        "text": "联系人喜欢纸质小说，收礼时愿意收到书。"
+      },
+      {
+        "memory_id": "9b9ba348-6c71-5f14-911c-e5ce0eae1a72",
+        "query_id": "final-empty-2",
+        "text": "联系人无法到会时希望收到文字纪要。"
+      },
+      {
+        "memory_id": "c76de322-187c-5aea-84a8-e3b3a9bd8aef",
+        "query_id": "final-empty-2",
+        "text": "联系人经常出差，无人照料植物，不想收到盆栽。"
+      },
+      {
+        "memory_id": "5669c722-f789-5e22-9144-333d7b351392",
+        "query_id": "final-empty-2",
+        "text": "联系人收藏过猫咪表情贴纸。"
+      },
+      {
+        "memory_id": "5e074958-701b-51f8-831f-51b8fb66a628",
+        "query_id": "final-empty-2",
+        "text": "联系人把旧车票收进相册。"
+      },
+      {
+        "memory_id": "56149a7f-fba5-56a6-8b1d-8bbd53b75392",
+        "query_id": "final-empty-4",
+        "text": "联系人睡眠浅，住宿需要远离电梯的安静房间。"
+      },
+      {
+        "memory_id": "72e5c01a-3230-564e-b07e-be067d779153",
+        "query_id": "final-empty-4",
+        "text": "联系人家里的老猫每天晚饭后需要服药。"
+      },
+      {
+        "memory_id": "85d93f3a-8d2e-54ab-9d2d-2f6ee3ece5af",
+        "query_id": "final-empty-4",
+        "text": "联系人不喜欢生日惊喜，庆祝安排要提前告诉本人。"
+      },
+      {
+        "memory_id": "b9f54e1e-c928-5bf3-beaf-4d06ac41907c",
+        "query_id": "final-empty-4",
+        "text": "联系人晚上要照顾孩子，不能参加晚间会议。"
+      },
+      {
+        "memory_id": "17b31801-b52b-59fa-959b-38ff940e67ff",
+        "query_id": "final-empty-4",
+        "text": "联系人周二固定休息，不安排跑步训练。"
+      },
+      {
+        "memory_id": "81fe466f-c0cb-52ce-afde-ad32e1c4d5ee",
+        "query_id": "final-empty-5",
+        "text": "联系人家里的烤箱坏了，暂时不能烘烤。"
+      },
+      {
+        "memory_id": "291399ae-791e-51ae-8e66-06f25fc4d51d",
+        "query_id": "final-empty-5",
+        "text": "联系人家的遥控器放在茶几上。"
+      },
+      {
+        "memory_id": "374a27fe-6887-5119-b4aa-95d872d1d013",
+        "query_id": "final-empty-5",
+        "text": "联系人父亲的帽子是棕色。"
+      },
+      {
+        "memory_id": "3e8477dc-ab99-5666-a1f2-4d21e8824b20",
+        "query_id": "final-empty-5",
+        "text": "联系人看过高山植物的纪录片。"
+      },
+      {
+        "memory_id": "49c05ee8-b0cf-5ec0-90e8-6ec430142794",
+        "query_id": "final-empty-5",
+        "text": "联系人打印过朋友的行程单。"
+      },
+      {
+        "memory_id": "4bdad046-0de7-53f4-83af-6c95b77ada10",
+        "query_id": "final-empty-7",
+        "text": "联系人收藏纸袋不等于想收袋子。"
+      },
+      {
+        "memory_id": "86c8ea6e-a329-5ed6-aceb-c1b45ba202b3",
+        "query_id": "final-topic-1",
+        "text": "联系人同事喜欢爬陡坡，不代表联系人能去。"
+      },
+      {
+        "memory_id": "eba0cde0-fade-5289-abfb-a4954f4f2bad",
+        "query_id": "final-topic-1",
+        "text": "联系人同事喜欢突然打视频。"
+      },
+      {
+        "memory_id": "36ae4ac0-0bd1-5e6e-b613-51850016570f",
+        "query_id": "final-topic-1",
+        "text": "联系人办公室的咖啡机每周五清洗。"
+      },
+      {
+        "memory_id": "f8edf5be-80cb-533b-bded-4ff8e57a22d3",
+        "query_id": "final-topic-1",
+        "text": "联系人常去的咖啡店九点开门。"
+      },
+      {
+        "memory_id": "48d7093f-ccab-5715-975a-bf838fd5dbac",
+        "query_id": "final-topic-2",
+        "text": "联系人旧地图放在抽屉。"
+      },
+      {
+        "memory_id": "291399ae-791e-51ae-8e66-06f25fc4d51d",
+        "query_id": "final-topic-2",
+        "text": "联系人家的遥控器放在茶几上。"
+      },
+      {
+        "memory_id": "6aa6e973-fc6e-5aa5-9803-5e6b956a8fda",
+        "query_id": "final-topic-2",
+        "text": "联系人把发夹放在小盒里。"
+      },
+      {
+        "memory_id": "6d228c72-eb09-5b84-8b48-ed04e6f3d95e",
+        "query_id": "final-topic-2",
+        "text": "联系人保存过跑道地图。"
+      },
+      {
+        "memory_id": "5669c722-f789-5e22-9144-333d7b351392",
+        "query_id": "final-topic-3",
+        "text": "联系人收藏过猫咪表情贴纸。"
+      },
+      {
+        "memory_id": "817ff8f9-c7e1-5bc3-93c3-f4fb51589117",
+        "query_id": "final-topic-3",
+        "text": "联系人收藏过乐队海报。"
+      },
+      {
+        "memory_id": "e48480ab-a77c-5324-ac11-eb0c50e62c5e",
+        "query_id": "final-topic-3",
+        "text": "联系人收藏了一张公路明信片。"
+      },
+      {
+        "memory_id": "036b72c4-e209-5a7d-8cd7-6c56827b5e74",
+        "query_id": "final-topic-3",
+        "text": "联系人收藏过餐厅菜单设计。"
+      },
+      {
+        "memory_id": "487ae116-c1dc-5e7d-9222-d071a84c2b4b",
+        "query_id": "final-topic-3",
+        "text": "联系人收藏过列车模型。"
+      }
+    ],
+    "B": [
+      {
+        "memory_id": "d902df9d-1ae1-5b10-a784-03d2f288f2f3",
+        "query_id": "final-train-direct",
+        "text": "联系人坐汽车易晕，长途希望坐前排。"
+      },
+      {
+        "memory_id": "b37a24f5-5abf-5418-af75-602faf0de57f",
+        "query_id": "final-car-paraphrase-2",
+        "text": "联系人家的路由器放在柜子上。"
+      },
+      {
+        "memory_id": "8920f8ae-13a7-5ed1-b650-9a839fb61460",
+        "query_id": "final-car-paraphrase-2",
+        "text": "联系人家的车钥匙挂在墙上。"
+      },
+      {
+        "memory_id": "7ab7a589-d49c-5a7d-819f-0d8c6188eaab",
+        "query_id": "final-car-direct",
+        "text": "联系人坐长途火车容易晕，希望坐靠窗位置。"
+      },
+      {
+        "memory_id": "b42de1ff-a4c2-5cfe-9b38-37d102e84af1",
+        "query_id": "final-run-paraphrase-2",
+        "text": "联系人future资料组当前预约在周三，需提前文字确认。"
+      },
+      {
+        "memory_id": "d4128fc0-81c6-5fd6-b98d-9c7b91c1088c",
+        "query_id": "final-empty-2",
+        "text": "联系人deleted资料组当前预约在周三，需提前文字确认。"
+      },
+      {
+        "memory_id": "b08474f2-4b85-5dbd-b95b-8f6c8a1b0e68",
+        "query_id": "final-empty-4",
+        "text": "联系人同事习惯晚上开会。"
+      },
+      {
+        "memory_id": "adbc4b47-6cbb-5843-ae16-a4747ba5658b",
+        "query_id": "final-empty-4",
+        "text": "联系人常去的餐厅周一休息。"
+      },
+      {
+        "memory_id": "974674da-31a1-5b2b-967e-4f418962d8dc",
+        "query_id": "final-empty-5",
+        "text": "联系人家的盘子是白色。"
+      },
+      {
+        "memory_id": "69b5ace2-e6ef-584d-b24b-9a5abfa4d5cc",
+        "query_id": "final-topic-1",
+        "text": "联系人喝酸味咖啡会胃不舒服。"
+      },
+      {
+        "memory_id": "c0c6fe18-5159-53d8-8402-480da9dc6e8f",
+        "query_id": "final-topic-1",
+        "text": "联系人收藏蓝色咖啡杯。"
+      },
+      {
+        "memory_id": "48d7093f-ccab-5715-975a-bf838fd5dbac",
+        "query_id": "final-topic-2",
+        "text": "联系人旧地图放在抽屉。"
+      },
+      {
+        "memory_id": "f317cccc-25cc-5322-9c5f-e3601f42a7de",
+        "query_id": "final-topic-2",
+        "text": "联系人曾拍摄影院招牌。"
+      },
+      {
+        "memory_id": "466371ea-0b11-5867-9083-c99f5c2a85cc",
+        "query_id": "final-topic-2",
+        "text": "联系人常去的影院有三个入口。"
+      },
+      {
+        "memory_id": "b7804dc3-e5e3-565c-88ac-81b234912579",
+        "query_id": "final-topic-3",
+        "text": "联系人替父亲买过车载手机架。"
+      },
+      {
+        "memory_id": "e8e17679-96ea-5ea7-bcd9-de0808ea5683",
+        "query_id": "final-topic-3",
+        "text": "联系人家人保存了旧合照。"
+      },
+      {
+        "memory_id": "a464974b-685e-53fe-9683-c9a948e8cb52",
+        "query_id": "final-topic-3",
+        "text": "联系人给母亲买过烤盘。"
+      },
+      {
+        "memory_id": "042d5bf4-773f-5ec5-b023-a927df2e4b5a",
+        "query_id": "final-topic-3",
+        "text": "联系人给母亲买过盆栽。"
+      },
+      {
+        "memory_id": "c0c716aa-f8ad-5aec-af9d-3ec3b0e8b1a3",
+        "query_id": "final-topic-4",
+        "text": "联系人把旧贺卡收进纸盒。"
+      },
+      {
+        "memory_id": "679ec5f2-2a55-5f42-84c6-5e338a7cd2f2",
+        "query_id": "final-topic-4",
+        "text": "联系人将旧议程归档。"
+      },
+      {
+        "memory_id": "5e074958-701b-51f8-831f-51b8fb66a628",
+        "query_id": "final-topic-4",
+        "text": "联系人把旧车票收进相册。"
+      },
+      {
+        "memory_id": "be5c4dcb-587d-5877-b766-0a47ddc6de87",
+        "query_id": "final-topic-4",
+        "text": "联系人把旧钥匙退给房东。"
+      },
+      {
+        "memory_id": "974674da-31a1-5b2b-967e-4f418962d8dc",
+        "query_id": "final-topic-5",
+        "text": "联系人家的盘子是白色。"
+      },
+      {
+        "memory_id": "b6a572f7-b035-534d-b7c9-2a9fd30e0807",
+        "query_id": "final-topic-5",
+        "text": "联系人新家的墙是浅灰色。"
+      },
+      {
+        "memory_id": "deb0deaf-b014-5648-9c63-e7cedaa53452",
+        "query_id": "final-topic-5",
+        "text": "联系人出差箱上的标签是蓝色。"
+      },
+      {
+        "memory_id": "92c78579-5859-5ee3-9b33-a09a1dbd8bed",
+        "query_id": "final-topic-5",
+        "text": "联系人猫窝外罩是蓝色。"
+      }
+    ]
+  },
+  "verdict": "未达到门槛"
+}

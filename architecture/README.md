@@ -17,7 +17,7 @@
 ## 按任务阅读
 
 1. 先读根目录 [`CONTEXT.md`](../CONTEXT.md)，使用统一领域语言。
-2. 按任务读取一份或多份现行规格：[`domain-data.md`](current/domain-data.md)、[`core-flows.md`](current/core-flows.md)、[`privacy-deletion.md`](current/privacy-deletion.md)、[`skill-library.md`](current/skill-library.md)。
+2. 按任务读取一份或多份现行规格：[`domain-data.md`](current/domain-data.md)、[`core-flows.md`](current/core-flows.md)、[`privacy-deletion.md`](current/privacy-deletion.md)、[`skill-library.md`](current/skill-library.md)。涉及记忆提取溯源时，再读 [`memory-extraction-trace.md`](current/memory-extraction-trace.md)；全过程后端已实现并经合成验证，App 查看待新前端接入。
 3. 只有涉及云端部署、回复运行时或真实表达质量时，才读取对应草案：[`cloud-engineering.md`](drafts/cloud-engineering.md)、[`agent-runtime.md`](drafts/agent-runtime.md)、[`authentic-expression.md`](drafts/authentic-expression.md)。
 4. 当现行规格或草案引用 ADR 时，再读取对应决策；复审既有决定时必须新增 ADR 修订或替代，不能覆盖历史原因。
 5. 整体关系可查看 [NotAlone 架构图](notalone-system-architecture.drawio)；架构图同样不代表运行时验证。
@@ -59,19 +59,26 @@
 32. [ADR-032：审计基线与实际迁移账本分开](adr/032-audited-legacy-schema-baseline.md)
 33. [ADR-033：记忆采纳前核验来源语义支持](adr/033-source-semantic-verification-before-adoption.md)
 34. [ADR-034：显式失败任务恢复按原任务领取](adr/034-explicit-failed-task-recovery-selection.md)
-35. [ADR-035：导入触发原记忆任务并让前台回复优先](adr/035-import-triggered-memory-work-and-reply-priority.md)
-36. [ADR-036：退役 Swift 主界面，重新设计共享前端](adr/036-retire-swift-main-interface.md)
-37. [ADR-037：Electron 双窗口桌面宿主](adr/037-electron-dual-window-host.md)
+35. [ADR-035：待确认候选作为强制标注的未确认参考进入回复](adr/035-pending-candidate-unconfirmed-reply-reference.md)
+36. [ADR-036：按维度放行自动采纳](adr/036-per-dimension-adoption-release.md)
+37. [ADR-037：默认保存记忆提取的完整过程](adr/037-complete-memory-extraction-trace.md)
+38. [ADR-038：导入触发原记忆任务并让前台回复优先](adr/038-import-triggered-memory-work-and-reply-priority.md)
+39. [ADR-039：退役 Swift 主界面，重新设计共享前端](adr/039-retire-swift-main-interface.md)
+
+40. [ADR-040：Electron 双窗口桌面宿主](adr/040-electron-dual-window-host.md)
 
 ## 当前架构决策
 
-- 旧 Swift 主界面已按 ADR-036 退役；共享前端使用 TypeScript + React，由 ADR-037 的 Electron 双窗口宿主承载。当前完成窗口、品牌外观、本机打包及认证后端连接/退出停读，业务页面尚未接线；Python 后台与 Mac 原生探针保留。
+- 旧 Swift 主界面已按 ADR-039 退役；共享前端采用 TypeScript + React，由 ADR-040 的 Electron 双窗口宿主承载；已接通业务页面，完整原生验收仍未完成。Python 后台与 Mac 原生探针保留。
 - 采用云端模块化单体，PostgreSQL 是联系人、消息、关系资料、任务和删除状态的权威业务库。
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
 - 文字是统一的检索与生成表示；前台 display name OCR、本地微信 CLI、截图和语音都是输入适配器。
 - Mac 前台 OCR 由 display name 和左侧选中会话元数据优先定位当前会话，头像视觉指纹只作备用；CLI 独立同步用户主动选择并确认的联系人及我方文字增量，首次不预选会话。CLI 的外部会话标识不能替代 `contact_id`，同步范围与停止/恢复规则见 ADR-030。
 - 生成只使用已选联系人及用户本人范围内的有界上下文；模型提取的记忆必须带来源、标记 `auto` 且可撤销。
+- 自动采纳在原有语用、置信度与风险门槛之上再叠加一道按维度放行：默认放行表为空，未放行的维度安静待确认；放行某一类需要本轮评测达标签与用户逐类批准，运维回退见 `NOTALONE_MEMORY_DIMENSION_GATE`（见 ADR-036、[放行台账](../docs/memory-adoption-dimension-release-ledger.md)）。
+- 所有实际记忆提取默认保存从原始聊天到最终处理结果的全过程追踪，保留到手动删除或来源删除，追踪写入失败停止本批；含正文资料与最小出站台账分开管理（见 ADR-037，后端已实现，App 查看待新前端接入，历史／不可观察载荷明确保留缺口）。
 - 关系记忆与本人记忆不设置固定常驻模式；记忆召回第一期按当前正文做确定性中文词法评分，使用独立双预算和相关性阈值；联系人记忆目录只保留版本复验职责。
+- 待确认候选可以参与候选回复，但只能用独立证据类型和独立预算、带强制「未确认」标注作为参考，不得写成确定事实，也不进入已确认记忆集合；用户否决后永久不再参与（见 ADR-035）。
 - 候选回复只在应用内展示，最终由用户修改并亲自发送。
 
 ## 状态规则

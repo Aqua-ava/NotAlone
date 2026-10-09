@@ -27,6 +27,7 @@ class FakeSkillService:
         self.disable_calls: list[UUID] = []
         self.delete_calls: list[UUID] = []
         self.rollback_calls: list[tuple[UUID, UUID]] = []
+        self.version_calls: list[UUID] = []
         self.reject_import = False
         self.entries = [
             {
@@ -51,6 +52,29 @@ class FakeSkillService:
 
     def list(self, *, owner_id: UUID) -> dict[str, object]:
         return {"skills": self.entries}
+
+    def versions(self, *, owner_id: UUID, skill_id: UUID) -> dict[str, object]:
+        self.version_calls.append(skill_id)
+        return {"versions": [
+            {
+                "version_id": str(UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")),
+                "version_number": 2,
+                "name": "warm-reply",
+                "description": "温和而明确地回应当前消息",
+                "is_current": True,
+                "enabled": True,
+                "created_at": "2026-10-04T12:00:00+00:00",
+            },
+            {
+                "version_id": str(UUID("dddddddd-dddd-dddd-dddd-dddddddddddd")),
+                "version_number": 1,
+                "name": "warm-reply",
+                "description": "温和而明确地回应当前消息",
+                "is_current": False,
+                "enabled": True,
+                "created_at": "2026-10-03T12:00:00+00:00",
+            },
+        ]}
 
     def import_skill(self, *, owner_id: UUID, package_path: str) -> dict[str, object]:
         self.import_calls.append(package_path)
@@ -91,9 +115,31 @@ class FakeSkillService:
 
 
 class FakeLedger:
-    """与 PostgresOutboundLedger 同形的最小 fake：只提供 list_by_owner。"""
+    """与 PostgresOutboundLedger 同形的最小 fake：窗口查询 + 存储侧聚合。"""
 
-    def list_by_owner(self, owner_id: UUID) -> tuple[object, ...]:
+    def summarize_by_owner(self, owner_id: UUID) -> object:
+        from types import SimpleNamespace
+
+        entries = self.list_by_owner(owner_id)
+        return SimpleNamespace(
+            total_calls=len(entries),
+            provider_counts={"deepseek": len(entries)},
+            outcome_counts={"succeeded": len(entries)},
+            total_input_tokens=sum(
+                entry.input_tokens or 0 for entry in entries
+            ),
+            total_output_tokens=sum(
+                entry.output_tokens or 0 for entry in entries
+            ),
+        )
+
+    def list_by_owner(
+        self,
+        owner_id: UUID,
+        *,
+        limit: int | None = None,
+    ) -> tuple[object, ...]:
+        del limit
         from datetime import datetime, timezone
 
         from notalone.ledger.models import LedgerOutcome
@@ -253,6 +299,21 @@ class SkillApiContractTest(unittest.TestCase):
                 self.assertEqual(
                     response.json(), {"error": "skill_request_invalid"}
                 )
+
+    def test_list_skill_versions(self) -> None:
+        skill_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+        response = self.client.request(
+            "GET",
+            f"/api/skills/{skill_id}/versions",
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        versions = response.json()["versions"]
+        self.assertEqual([item["version_number"] for item in versions], [2, 1])
+        self.assertEqual(
+            [item["is_current"] for item in versions], [True, False],
+        )
+        self.assertEqual(self.skills.version_calls, [skill_id])
 
     def test_enable_disable_delete_rollback(self) -> None:
         skill_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")

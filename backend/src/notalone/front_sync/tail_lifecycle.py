@@ -16,7 +16,6 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from uuid import UUID
 
-from notalone.ingest.models import NormalizedMessage
 from notalone.conversation.matcher import (
     BindingMatchDecision,
     BindingMatchKind,
@@ -25,6 +24,11 @@ from notalone.conversation.matcher import (
     match_front_session,
     normalize_display_text,
 )
+from notalone.front_sync.event_publisher import (
+    MessageEventPublisher,
+    NullMessageEventPublisher,
+)
+from notalone.ingest.models import NormalizedMessage
 from notalone.persistence.conversation_repository import (
     PersistedConversationBinding,
     PostgresConversationBindingRepository,
@@ -38,18 +42,21 @@ from notalone.persistence.observation_store import (
     ObservationPersistenceError,
     PostgresObservationStore,
 )
+from notalone.persistence.source_processing import SourceProcessingWriteError
 from notalone.scopes import ContactScope
-from notalone.front_sync.event_publisher import (
-    MessageEventPublisher,
-    NullMessageEventPublisher,
-)
+from notalone.source_processing.models import ProcessingRecord
+from notalone.source_processing.rule_capture import capture_execution
 from notalone.wechat_cli import (
     CliAdapterError,
     CliCommandError,
     LocalWechatCli,
     TailFollowStream,
 )
-from notalone.wechat_cli.models import ChatCandidate, CliMessageEvent, TailFollowItem
+from notalone.wechat_cli.models import (
+    ChatCandidate,
+    CliMessageEvent,
+    TailFollowItem,
+)
 from notalone.wechat_cli.normalizer import (
     CliNormalizationError,
     normalize_cli_events,
@@ -236,7 +243,9 @@ class TailLifecycle:
             stream_active=stream is not None and not stream.closed,
             process_id=stream.process_id if stream is not None else None,
             mode=(session.next_mode.value if session is not None else None),
-            watermark=(session.since_local_id if session is not None else None),
+            watermark=(
+                session.since_local_id if session is not None else None
+            ),
         )
 
     # ------------------------------------------------------------------
@@ -348,7 +357,10 @@ class TailLifecycle:
         session = self._session
         if session is None:
             return 0
-        if self._phase is FrontSyncPhase.FAILED and not self._backoff_elapsed():
+        if (
+            self._phase is FrontSyncPhase.FAILED
+            and not self._backoff_elapsed()
+        ):
             return 0
         if self._follow_enabled and self._follow_supported:
             if (
@@ -387,6 +399,10 @@ class TailLifecycle:
         except CliAdapterError as error:
             stream.close()
             session.follow_stream = None
+            failure_code = self._read_failure_code(session, error)
+            if failure_code != error.code:
+                self._mark_failure(failure_code)
+                return 0
             if error.code == "cli_follow_unsupported":
                 self._follow_supported = False
                 return self._poll_once(session)
@@ -417,24 +433,38 @@ class TailLifecycle:
                 cursor=session.since_cursor,
             )
         except CliAdapterError as error:
-            self._mark_failure(error.code)
+            self._mark_failure(self._read_failure_code(session, error))
             return 0
         if result.last_local_id is None or result.cursor is None:
             if session.next_mode is ObservationMode.CLI_CATCHUP:
                 session.next_mode = ObservationMode.LIVE
             self._recover_from_failure()
             return 0
-        events = _outside_disabled_window(result.events, session.skip_window)
+        events, filtered_records = _select_events(
+            result.events, session.skip_window
+        )
         try:
-            messages = normalize_cli_events(events)
-        except CliNormalizationError:
-            self._mark_failure(_FAILURE_NORMALIZATION)
+            processing_receipts: list[ProcessingRecord] = []
+            messages = normalize_cli_events(
+                events, processing_receipts=processing_receipts
+            )
+        except CliNormalizationError as error:
+            self._mark_failure(self._read_failure_code(session, error))
             return 0
         return self._record_batch(
             session,
             last_local_id=result.last_local_id,
             last_cursor=result.cursor,
             messages=messages,
+            processing_records=_ordered_processing_records(
+                (
+                    *processing_receipts,
+                    *result.filtered_records,
+                    *filtered_records,
+                )
+            ),
+            event_count=result.event_count,
+            non_text_count=result.non_text_count,
         )
 
     def _record_follow_item(
@@ -443,12 +473,15 @@ class TailLifecycle:
         item: TailFollowItem,
     ) -> int:
         events = () if item.event is None else (item.event,)
-        events = _outside_disabled_window(events, session.skip_window)
+        events, filtered_records = _select_events(events, session.skip_window)
         try:
-            messages = normalize_cli_events(events)
-        except CliNormalizationError:
+            processing_receipts: list[ProcessingRecord] = []
+            messages = normalize_cli_events(
+                events, processing_receipts=processing_receipts
+            )
+        except CliNormalizationError as error:
             self._prepare_follow_restart(session)
-            self._mark_failure(_FAILURE_NORMALIZATION)
+            self._mark_failure(self._read_failure_code(session, error))
             self._close_follow_stream(session)
             return 0
         return self._record_batch(
@@ -456,6 +489,15 @@ class TailLifecycle:
             last_local_id=item.local_id,
             last_cursor=item.cursor,
             messages=messages,
+            processing_records=tuple(processing_receipts)
+            + (
+                (item.processing_record,)
+                if item.event is None and item.processing_record is not None
+                else ()
+            )
+            + filtered_records,
+            event_count=1,
+            non_text_count=int(item.event is None),
         )
 
     def _record_batch(
@@ -465,6 +507,9 @@ class TailLifecycle:
         last_local_id: int,
         last_cursor: str,
         messages: tuple[NormalizedMessage, ...],
+        processing_records: tuple[ProcessingRecord, ...] = (),
+        event_count: int | None = None,
+        non_text_count: int = 0,
     ) -> int:
         scope = session.binding.scope
         try:
@@ -481,11 +526,22 @@ class TailLifecycle:
                 last_cursor=last_cursor,
                 record_count=len(messages),
                 messages=messages,
+                processing_records=processing_records,
+                event_count=event_count,
+                non_text_count=non_text_count,
             )
-        except (CliAdapterError, ObservationPersistenceError):
+        except (
+            CliAdapterError,
+            ObservationPersistenceError,
+            SourceProcessingWriteError,
+        ) as error:
             if session.follow_stream is not None:
                 self._prepare_follow_restart(session)
-            self._mark_failure(_FAILURE_PERSISTENCE)
+            self._mark_failure(
+                "source_processing_write_failed"
+                if isinstance(error, SourceProcessingWriteError)
+                else _FAILURE_PERSISTENCE
+            )
             self._close_follow_stream(session)
             return 0
         self._publish_message_events(
@@ -496,6 +552,31 @@ class TailLifecycle:
         self._advance_session(session, last_local_id, last_cursor)
         self._recover_from_failure()
         return len(messages)
+
+    def _read_failure_code(
+        self,
+        session: _ActiveTailSession,
+        error: CliAdapterError | CliNormalizationError,
+    ) -> str:
+        """已确认读取的损坏输入只保存安全定位；记录写入失败也关闭本轮。"""
+
+        record_failure = getattr(
+            self._observation_store, "record_input_failure", None
+        )
+        if error.failure_record is not None and callable(record_failure):
+            try:
+                record_failure(
+                    owner_id=self._owner_id,
+                    contact_id=session.binding.scope.contact_id,
+                    binding_id=session.binding.binding_id,
+                    conversation_locator=session.binding.conversation_locator,
+                    record=error.failure_record,
+                )
+            except SourceProcessingWriteError:
+                return "source_processing_write_failed"
+            except ObservationPersistenceError:
+                return _FAILURE_PERSISTENCE
+        return error.code
 
     def _publish_message_events(
         self,
@@ -525,7 +606,9 @@ class TailLifecycle:
                 session.binding.binding_id if session is not None else None
             ),
             active_contact_id=(
-                session.binding.scope.contact_id if session is not None else None
+                session.binding.scope.contact_id
+                if session is not None
+                else None
             ),
             failure_code=self._failure_code,
             active_binding_display_name=(
@@ -541,7 +624,10 @@ class TailLifecycle:
         """启动或保持一个联系人的读取会话；先停止旧联系人。"""
 
         session = self._session
-        if session is not None and session.binding.binding_id == binding.binding_id:
+        if (
+            session is not None
+            and session.binding.binding_id == binding.binding_id
+        ):
             # 并发或重复启动同一联系人保持稳定，不重建会话。
             if self._phase is not FrontSyncPhase.FAILED:
                 self._phase = FrontSyncPhase.ACTIVE
@@ -562,7 +648,9 @@ class TailLifecycle:
                 if cursor is not None
                 else ObservationMode.LIVE
             ),
-            since_local_id=cursor.last_local_id if cursor is not None else None,
+            since_local_id=(
+                cursor.last_local_id if cursor is not None else None
+            ),
             since_cursor=cursor.last_cursor if cursor is not None else None,
             skip_window=_skip_window_from_state(
                 self._sync_state.read(owner_id=self._owner_id)
@@ -653,11 +741,84 @@ class TailLifecycle:
         return self._cli_version
 
 
+def _ordered_processing_records(
+    records: tuple[ProcessingRecord, ...],
+) -> tuple[ProcessingRecord, ...]:
+    return tuple(
+        sorted(
+            records,
+            key=lambda record: record.payload().get("input_position") or 0,
+        )
+    )
+
+
+def _select_events(
+    read_events: tuple[CliMessageEvent, ...],
+    window: tuple[float, float] | None,
+) -> tuple[tuple[CliMessageEvent, ...], tuple[ProcessingRecord, ...]]:
+    """在真正筛选时捕获时间；跳过正文只留判断所需的定位和时间。"""
+
+    started_at = datetime.now(timezone.utc)
+    selected_events = _outside_disabled_window(read_events, window)
+    filtering = capture_execution(started_at, __file__, status="filtered")
+    return selected_events, _disabled_window_records(
+        read_events, selected_events, window=window, filtering=filtering
+    )
+
+
+def _disabled_window_records(
+    read_events: tuple[CliMessageEvent, ...],
+    selected_events: tuple[CliMessageEvent, ...],
+    *,
+    window: tuple[float, float] | None,
+    filtering: dict[str, object],
+) -> tuple[ProcessingRecord, ...]:
+    """旧前台验证的关闭窗口仅保存筛选定位，不保留已跳过的正文。"""
+
+    records = []
+    selected = {id(event) for event in selected_events}
+    for event in read_events:
+        if id(event) not in selected:
+            records.append(
+                ProcessingRecord.capture(
+                    f"cli:{event.message_id.local_id}",
+                    {
+                        "capture_layer": "metadata_only",
+                        "input_position": (
+                            event.processing_record.payload().get(
+                                "input_position"
+                            )
+                            if event.processing_record is not None
+                            else None
+                        ),
+                        "record_text": None,
+                        "parsed": {
+                            "id": {
+                                "local_id": event.message_id.local_id,
+                                "talker": event.message_id.talker,
+                            }
+                        },
+                        "outcome": "disabled_window_filtered",
+                        "filter_rule": "outside_disabled_window",
+                        "filter_input": {
+                            "create_time": event.create_time,
+                            "time_iso": event.time_iso,
+                            "disabled_window": window,
+                        },
+                        "filter": filtering,
+                    },
+                )
+            )
+    return tuple(records)
+
+
 def _datetime_from_clock(moment: float) -> datetime:
     return datetime.fromtimestamp(moment, tz=timezone.utc)
 
 
-def _skip_window_from_state(state: FrontSyncState) -> tuple[float, float] | None:
+def _skip_window_from_state(
+    state: FrontSyncState,
+) -> tuple[float, float] | None:
     """从开关状态推导手动关闭窗口；从未关闭过或时间矛盾时返回 None。"""
 
     if state.disabled_at is None or state.enabled_at is None:

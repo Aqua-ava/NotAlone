@@ -16,7 +16,10 @@ from typing import Any, cast
 from langchain_core.language_models import BaseChatModel
 
 from notalone.memory_extraction.evaluation import API_KEY_ENV, evaluate_case
-from notalone.memory_extraction.evaluation_cases import EvaluationCase
+from notalone.memory_extraction.evaluation_cases import (
+    EvaluationCase,
+    ExpectedDestination,
+)
 from notalone.memory_extraction.models import ExtractionWindow
 from notalone.memory_extraction.runtime import ExtractionPayload, MemoryExtractionRuntime
 from notalone.memory_extraction.verification import SourceVerificationRuntime
@@ -52,7 +55,7 @@ def run_trial(
     if arm not in ARMS:
         raise ValueError('未知实验臂。')
     captured = _CapturedRuntime(runtime)
-    case = EvaluationCase(case_id, dimension, (), (), 'none')
+    case = EvaluationCase(case_id, dimension, (), (), ExpectedDestination.NONE)
     started = time.perf_counter()
     raw = evaluate_case(case, window, captured, baseline=True)
     guarded = None if raw.failure_reason else evaluate_case(

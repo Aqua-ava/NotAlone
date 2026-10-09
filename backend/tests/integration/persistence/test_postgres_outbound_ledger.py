@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import psycopg
@@ -114,6 +114,32 @@ class PostgresOutboundLedgerTest(unittest.TestCase):
         self.ledger.record(entry)
 
         self.assertEqual(self.ledger.list_by_owner(self.owner_id), (entry,))
+
+    def test_window_and_summary_aggregate_on_storage_side(self) -> None:
+        base = datetime(2026, 8, 22, 10, 0, 0, tzinfo=timezone.utc)
+        for index in range(4):
+            self.ledger.record(_make_entry(
+                self.owner_id,
+                uuid4(),
+                called_at=base + timedelta(minutes=index),
+                input_tokens=7,
+                output_tokens=3,
+            ))
+
+        window = self.ledger.list_by_owner(self.owner_id, limit=2)
+        summary = self.ledger.summarize_by_owner(self.owner_id)
+
+        self.assertEqual(len(window), 2)
+        self.assertEqual(
+            [entry.called_at for entry in window],
+            [base + timedelta(minutes=2), base + timedelta(minutes=3)],
+        )
+        self.assertEqual(summary.total_calls, 4)
+        self.assertEqual(summary.total_input_tokens, 28)
+        self.assertEqual(summary.total_output_tokens, 12)
+        self.assertEqual(sum(summary.provider_counts.values()), 4)
+        with self.assertRaises(ValueError):
+            self.ledger.list_by_owner(self.owner_id, limit=0)
 
     def test_list_by_owner_hides_other_owners(self) -> None:
         other_owner = uuid4()

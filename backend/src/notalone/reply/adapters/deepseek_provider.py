@@ -5,9 +5,9 @@ from __future__ import annotations
 import os
 from typing import Any
 
+import httpx
 from langchain_core.language_models import BaseChatModel
 from langchain_deepseek import ChatDeepSeek
-
 
 DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
 DEFAULT_DEEPSEEK_TIMEOUT_SECONDS = 60.0
@@ -25,6 +25,7 @@ def build_deepseek_model(
     timeout_seconds: float | None = None,
     base_url: str | None = None,
     extra_body: dict[str, Any] | None = None,
+    http_client: httpx.Client | None = None,
 ) -> BaseChatModel:
     """构造 DeepSeek 模型；默认模型只选支持结构化输出的 deepseek-chat。"""
 
@@ -73,4 +74,6 @@ def build_deepseek_model(
         options["base_url"] = resolved_base_url
     if extra_body is not None:
         options["extra_body"] = extra_body
+    if http_client is not None:
+        options["http_client"] = http_client
     return ChatDeepSeek(**options)

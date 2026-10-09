@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from hashlib import sha256
 from typing import Literal
 from uuid import UUID
@@ -380,6 +381,32 @@ class SkillPreview:
             raise TypeError("Skill 预览资源路径无效。")
         if not isinstance(self.fallback_reason, str):
             raise TypeError("Skill 预览回退原因必须是字符串。")
+
+
+@dataclass(frozen=True, slots=True)
+class SkillVersionEntry:
+    """版本历史投影：只含身份、编号与生命周期，不含正文。"""
+
+    version_id: UUID
+    version_number: int
+    name: str
+    description: str
+    is_current: bool
+    enabled: bool
+    created_at: datetime
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.version_id, UUID):
+            raise TypeError("Skill 版本标识必须是 UUID。")
+        if not isinstance(self.version_number, int) or self.version_number <= 0:
+            raise ValueError("Skill 版本号必须是正整数。")
+        _validate_skill_name(self.name)
+        if not isinstance(self.description, str) or not self.description.strip():
+            raise ValueError("Skill 版本必须带描述。")
+        if not isinstance(self.is_current, bool) or not isinstance(self.enabled, bool):
+            raise TypeError("Skill 版本状态必须是布尔值。")
+        if not isinstance(self.created_at, datetime) or self.created_at.tzinfo is None:
+            raise TypeError("Skill 版本时间必须是带时区的 datetime。")
 
 
 @dataclass(frozen=True, slots=True)

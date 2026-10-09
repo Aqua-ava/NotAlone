@@ -1,0 +1,355 @@
+{
+  "kind": "isolated_first_download_cost",
+  "recorded_at": "2026-10-03T17:53:23.447206+00:00",
+  "说明": "新建独立空缓存，从公开 Hugging Face 模型地址实际下载；不复制或链接正式缓存，不发送合成 query 或资料；结束后删除本轮独立缓存。",
+  "cache": "/var/folders/rr/_dq5nv2d1z92894w670mmjc80000gn/T/notalone-hindsight-cost-4o2uftlj",
+  "huggingface_hub_version": "1.6.0",
+  "python_version": "3.11.15",
+  "ignore_patterns": [
+    "*.bin",
+    "*.h5",
+    "*.ot",
+    "onnx/*",
+    "openvino/*",
+    "flax_model.msgpack"
+  ],
+  "timeouts": {
+    "per_model_process_seconds": 180,
+    "etag_seconds": 15,
+    "download_read_seconds": 30
+  },
+  "token": false,
+  "endpoint": "https://huggingface.co",
+  "依赖安装限制": "最初 Hindsight/uv 依赖安装耗时没有完整测量记录；本补测不将现有已缓存 venv 或 uv 缓存误称首次安装。",
+  "models": [
+    {
+      "status": "downloaded",
+      "snapshot": "/var/folders/rr/_dq5nv2d1z92894w670mmjc80000gn/T/notalone-hindsight-cost-4o2uftlj/models/hub/models--BAAI--bge-small-zh-v1.5/snapshots/7999e1d3359715c523056ef9478215996d62a620",
+      "download_elapsed_ms": 7447.909832990263,
+      "model": "BAAI/bge-small-zh-v1.5",
+      "revision": "7999e1d3359715c523056ef9478215996d62a620",
+      "process_elapsed_ms": 7669.253208034206,
+      "snapshot_file_count": 12,
+      "snapshot_file_bytes": 96407485,
+      "download_blob_file_bytes": 96407485,
+      "files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 1519
+        },
+        {
+          "path": "1_Pooling/config.json",
+          "bytes": 190,
+          "sha256": "aaa8861589f80c961a03cc86c7eeaef7605c1676b9ab55329d33a304738769c6",
+          "formal_config_sha256": "aaa8861589f80c961a03cc86c7eeaef7605c1676b9ab55329d33a304738769c6",
+          "same_as_formal_config": true
+        },
+        {
+          "path": "README.md",
+          "bytes": 27670
+        },
+        {
+          "path": "config.json",
+          "bytes": 776,
+          "sha256": "3853a7979202c348751b753e36f579c41d8da7d36af617d3d907e1fc9b441f2a",
+          "formal_config_sha256": "3853a7979202c348751b753e36f579c41d8da7d36af617d3d907e1fc9b441f2a",
+          "same_as_formal_config": true
+        },
+        {
+          "path": "config_sentence_transformers.json",
+          "bytes": 124,
+          "sha256": "940d5f50db195fa6e5e6a4f122c095f77880de259d74b14a65779ed48bdd7c56",
+          "formal_config_sha256": "940d5f50db195fa6e5e6a4f122c095f77880de259d74b14a65779ed48bdd7c56",
+          "same_as_formal_config": true
+        },
+        {
+          "path": "model.safetensors",
+          "bytes": 95827648
+        },
+        {
+          "path": "modules.json",
+          "bytes": 349,
+          "sha256": "84e40c8e006c9b1d6c122e02cba9b02458120b5fb0c87b746c41e0207cf642cf",
+          "formal_config_sha256": "84e40c8e006c9b1d6c122e02cba9b02458120b5fb0c87b746c41e0207cf642cf",
+          "same_as_formal_config": true
+        },
+        {
+          "path": "sentence_bert_config.json",
+          "bytes": 52,
+          "sha256": "84e39fda68ccbff05bfa723ae9c0e70e23e2ec373b76e0f8c6e71af72a693cbf",
+          "formal_config_sha256": "84e39fda68ccbff05bfa723ae9c0e70e23e2ec373b76e0f8c6e71af72a693cbf",
+          "same_as_formal_config": true
+        },
+        {
+          "path": "special_tokens_map.json",
+          "bytes": 125,
+          "sha256": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+          "formal_config_sha256": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+          "same_as_formal_config": true
+        },
+        {
+          "path": "tokenizer.json",
+          "bytes": 439125,
+          "sha256": "48cea5d44424912a6fd1ea647bf4fe50b55ab8b1e5879c3275f80e339e8fae26",
+          "formal_config_sha256": "48cea5d44424912a6fd1ea647bf4fe50b55ab8b1e5879c3275f80e339e8fae26",
+          "same_as_formal_config": true
+        },
+        {
+          "path": "tokenizer_config.json",
+          "bytes": 367,
+          "sha256": "e6f3b96db926a37d4039995fbf5ad17de158dfb8f6343d607e4dbaad18d75f5a",
+          "formal_config_sha256": "e6f3b96db926a37d4039995fbf5ad17de158dfb8f6343d607e4dbaad18d75f5a",
+          "same_as_formal_config": true
+        },
+        {
+          "path": "vocab.txt",
+          "bytes": 109540
+        }
+      ]
+    },
+    {
+      "status": "downloaded",
+      "snapshot": "/var/folders/rr/_dq5nv2d1z92894w670mmjc80000gn/T/notalone-hindsight-cost-4o2uftlj/models/hub/models--cross-encoder--mmarco-mMiniLMv2-L12-H384-v1/snapshots/1427fd652930e4ba29e8149678df786c240d8825",
+      "download_elapsed_ms": 20067.734625015873,
+      "model": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+      "revision": "1427fd652930e4ba29e8149678df786c240d8825",
+      "process_elapsed_ms": 20318.759500049055,
+      "snapshot_file_count": 9,
+      "snapshot_file_bytes": 492761724,
+      "download_blob_file_bytes": 492761724,
+      "files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 1227
+        },
+        {
+          "path": "README.md",
+          "bytes": 2278
+        },
+        {
+          "path": "config.json",
+          "bytes": 891,
+          "sha256": "cc2cfe51aa3fd759d21d21acf5dfd6994aa67a3c9210636d22e143699d336c77",
+          "formal_config_sha256": "cc2cfe51aa3fd759d21d21acf5dfd6994aa67a3c9210636d22e143699d336c77",
+          "same_as_formal_config": true
+        },
+        {
+          "path": "model.safetensors",
+          "bytes": 470592698
+        },
+        {
+          "path": "sentencepiece.bpe.model",
+          "bytes": 5069051
+        },
+        {
+          "path": "special_tokens_map.json",
+          "bytes": 239,
+          "sha256": "378eb3bf733eb16e65792d7e3fda5b8a4631387ca04d2015199c4d4f22ae554d",
+          "formal_config_sha256": "378eb3bf733eb16e65792d7e3fda5b8a4631387ca04d2015199c4d4f22ae554d",
+          "same_as_formal_config": true
+        },
+        {
+          "path": "tokenizer.json",
+          "bytes": 17082660,
+          "sha256": "62c24cdc13d4c9952d63718d6c9fa4c287974249e16b7ade6d5a85e7bbb75626",
+          "formal_config_sha256": "62c24cdc13d4c9952d63718d6c9fa4c287974249e16b7ade6d5a85e7bbb75626",
+          "same_as_formal_config": true
+        },
+        {
+          "path": "tokenizer_config.json",
+          "bytes": 435,
+          "sha256": "e7fbfbfa6347b4e414c1cee50d142e2c2f9a895dad68b068ae83a8b564c3837e",
+          "formal_config_sha256": "e7fbfbfa6347b4e414c1cee50d142e2c2f9a895dad68b068ae83a8b564c3837e",
+          "same_as_formal_config": true
+        },
+        {
+          "path": "train_script.py",
+          "bytes": 12245
+        }
+      ]
+    }
+  ],
+  "status": "passed",
+  "cache_removed": true,
+  "cleanup_scope": "只删除本子任务 tempfile.mkdtemp 创建的独立下载缓存；正式 runtime/cache 未改。",
+  "total_download_elapsed_ms": 27515.644458006136,
+  "total_snapshot_file_bytes": 589169209,
+  "config_json_consistent_with_formal_models": true,
+  "first_download_scope": "本子任务首次新建本地空缓存的实际网络下载；不证明远端 CDN 未缓存。",
+  "additional_fresh_cache_repeat": {
+    "kind": "isolated_first_download_cost",
+    "recorded_at": "2026-10-03T17:54:09.315768+00:00",
+    "说明": "新建独立空缓存，从公开 Hugging Face 模型地址实际下载；不复制或链接正式缓存，不发送合成 query 或资料；结束后删除本轮独立缓存。",
+    "cache": "/tmp/notalone-hindsight-cost-5ydacs5z",
+    "huggingface_hub_version": "1.6.0",
+    "python_version": "3.11.15",
+    "ignore_patterns": [
+      "*.bin",
+      "*.h5",
+      "*.ot",
+      "onnx/*",
+      "openvino/*",
+      "flax_model.msgpack"
+    ],
+    "timeouts": {
+      "per_model_process_seconds": 180,
+      "etag_seconds": 15,
+      "download_read_seconds": 30
+    },
+    "token": false,
+    "endpoint": "https://huggingface.co",
+    "依赖安装限制": "最初 Hindsight/uv 依赖安装耗时没有完整测量记录；本补测不将现有已缓存 venv 或 uv 缓存误称首次安装。",
+    "models": [
+      {
+        "status": "downloaded",
+        "snapshot": "/tmp/notalone-hindsight-cost-5ydacs5z/models/hub/models--BAAI--bge-small-zh-v1.5/snapshots/7999e1d3359715c523056ef9478215996d62a620",
+        "download_elapsed_ms": 5691.911542031448,
+        "model": "BAAI/bge-small-zh-v1.5",
+        "revision": "7999e1d3359715c523056ef9478215996d62a620",
+        "process_elapsed_ms": 5910.331749997567,
+        "snapshot_file_count": 12,
+        "snapshot_file_bytes": 96407485,
+        "download_blob_file_bytes": 96407485,
+        "files": [
+          {
+            "path": ".gitattributes",
+            "bytes": 1519
+          },
+          {
+            "path": "1_Pooling/config.json",
+            "bytes": 190,
+            "sha256": "aaa8861589f80c961a03cc86c7eeaef7605c1676b9ab55329d33a304738769c6",
+            "formal_config_sha256": "aaa8861589f80c961a03cc86c7eeaef7605c1676b9ab55329d33a304738769c6",
+            "same_as_formal_config": true
+          },
+          {
+            "path": "README.md",
+            "bytes": 27670
+          },
+          {
+            "path": "config.json",
+            "bytes": 776,
+            "sha256": "3853a7979202c348751b753e36f579c41d8da7d36af617d3d907e1fc9b441f2a",
+            "formal_config_sha256": "3853a7979202c348751b753e36f579c41d8da7d36af617d3d907e1fc9b441f2a",
+            "same_as_formal_config": true
+          },
+          {
+            "path": "config_sentence_transformers.json",
+            "bytes": 124,
+            "sha256": "940d5f50db195fa6e5e6a4f122c095f77880de259d74b14a65779ed48bdd7c56",
+            "formal_config_sha256": "940d5f50db195fa6e5e6a4f122c095f77880de259d74b14a65779ed48bdd7c56",
+            "same_as_formal_config": true
+          },
+          {
+            "path": "model.safetensors",
+            "bytes": 95827648
+          },
+          {
+            "path": "modules.json",
+            "bytes": 349,
+            "sha256": "84e40c8e006c9b1d6c122e02cba9b02458120b5fb0c87b746c41e0207cf642cf",
+            "formal_config_sha256": "84e40c8e006c9b1d6c122e02cba9b02458120b5fb0c87b746c41e0207cf642cf",
+            "same_as_formal_config": true
+          },
+          {
+            "path": "sentence_bert_config.json",
+            "bytes": 52,
+            "sha256": "84e39fda68ccbff05bfa723ae9c0e70e23e2ec373b76e0f8c6e71af72a693cbf",
+            "formal_config_sha256": "84e39fda68ccbff05bfa723ae9c0e70e23e2ec373b76e0f8c6e71af72a693cbf",
+            "same_as_formal_config": true
+          },
+          {
+            "path": "special_tokens_map.json",
+            "bytes": 125,
+            "sha256": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+            "formal_config_sha256": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+            "same_as_formal_config": true
+          },
+          {
+            "path": "tokenizer.json",
+            "bytes": 439125,
+            "sha256": "48cea5d44424912a6fd1ea647bf4fe50b55ab8b1e5879c3275f80e339e8fae26",
+            "formal_config_sha256": "48cea5d44424912a6fd1ea647bf4fe50b55ab8b1e5879c3275f80e339e8fae26",
+            "same_as_formal_config": true
+          },
+          {
+            "path": "tokenizer_config.json",
+            "bytes": 367,
+            "sha256": "e6f3b96db926a37d4039995fbf5ad17de158dfb8f6343d607e4dbaad18d75f5a",
+            "formal_config_sha256": "e6f3b96db926a37d4039995fbf5ad17de158dfb8f6343d607e4dbaad18d75f5a",
+            "same_as_formal_config": true
+          },
+          {
+            "path": "vocab.txt",
+            "bytes": 109540
+          }
+        ]
+      },
+      {
+        "status": "downloaded",
+        "snapshot": "/tmp/notalone-hindsight-cost-5ydacs5z/models/hub/models--cross-encoder--mmarco-mMiniLMv2-L12-H384-v1/snapshots/1427fd652930e4ba29e8149678df786c240d8825",
+        "download_elapsed_ms": 16513.757208012976,
+        "model": "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+        "revision": "1427fd652930e4ba29e8149678df786c240d8825",
+        "process_elapsed_ms": 16701.8908750033,
+        "snapshot_file_count": 9,
+        "snapshot_file_bytes": 492761724,
+        "download_blob_file_bytes": 492761724,
+        "files": [
+          {
+            "path": ".gitattributes",
+            "bytes": 1227
+          },
+          {
+            "path": "README.md",
+            "bytes": 2278
+          },
+          {
+            "path": "config.json",
+            "bytes": 891,
+            "sha256": "cc2cfe51aa3fd759d21d21acf5dfd6994aa67a3c9210636d22e143699d336c77",
+            "formal_config_sha256": "cc2cfe51aa3fd759d21d21acf5dfd6994aa67a3c9210636d22e143699d336c77",
+            "same_as_formal_config": true
+          },
+          {
+            "path": "model.safetensors",
+            "bytes": 470592698
+          },
+          {
+            "path": "sentencepiece.bpe.model",
+            "bytes": 5069051
+          },
+          {
+            "path": "special_tokens_map.json",
+            "bytes": 239,
+            "sha256": "378eb3bf733eb16e65792d7e3fda5b8a4631387ca04d2015199c4d4f22ae554d",
+            "formal_config_sha256": "378eb3bf733eb16e65792d7e3fda5b8a4631387ca04d2015199c4d4f22ae554d",
+            "same_as_formal_config": true
+          },
+          {
+            "path": "tokenizer.json",
+            "bytes": 17082660,
+            "sha256": "62c24cdc13d4c9952d63718d6c9fa4c287974249e16b7ade6d5a85e7bbb75626",
+            "formal_config_sha256": "62c24cdc13d4c9952d63718d6c9fa4c287974249e16b7ade6d5a85e7bbb75626",
+            "same_as_formal_config": true
+          },
+          {
+            "path": "tokenizer_config.json",
+            "bytes": 435,
+            "sha256": "e7fbfbfa6347b4e414c1cee50d142e2c2f9a895dad68b068ae83a8b564c3837e",
+            "formal_config_sha256": "e7fbfbfa6347b4e414c1cee50d142e2c2f9a895dad68b068ae83a8b564c3837e",
+            "same_as_formal_config": true
+          },
+          {
+            "path": "train_script.py",
+            "bytes": 12245
+          }
+        ]
+      }
+    ],
+    "status": "passed",
+    "cache_removed": true,
+    "cleanup_scope": "只删除本子任务 tempfile.mkdtemp 创建的独立下载缓存；正式 runtime/cache 未改。"
+  },
+  "重复说明": "系统 tempfile 首轮落在 /var/folders；第二轮 /tmp 空缓存已启动后得知路径不影响指标。保留第一轮主结果，第二轮仅为额外重复，没有丢弃或改称首次。"
+}

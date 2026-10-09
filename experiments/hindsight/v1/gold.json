@@ -1,0 +1,1140 @@
+{
+  "annotations": [
+    {
+      "contact_gold": [
+        "72a2931e-ddd9-5e6b-a68d-ae511b71e8ed",
+        "9f8e096a-6306-53bf-a390-83062807a51e"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-garden-paraphrase-1",
+      "rationale": "当前照料薄荷的光照与浇水条件相关，其他园艺对象和周边无关。"
+    },
+    {
+      "contact_gold": [
+        "72a2931e-ddd9-5e6b-a68d-ae511b71e8ed",
+        "9f8e096a-6306-53bf-a390-83062807a51e"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-garden-paraphrase-2",
+      "rationale": "当前照料薄荷的光照与浇水条件相关，其他园艺对象和周边无关。"
+    },
+    {
+      "contact_gold": [
+        "72a2931e-ddd9-5e6b-a68d-ae511b71e8ed",
+        "9f8e096a-6306-53bf-a390-83062807a51e"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-garden-paraphrase-3",
+      "rationale": "当前照料薄荷的光照与浇水条件相关，其他园艺对象和周边无关。"
+    },
+    {
+      "contact_gold": [
+        "72a2931e-ddd9-5e6b-a68d-ae511b71e8ed",
+        "9f8e096a-6306-53bf-a390-83062807a51e"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-garden-direct",
+      "rationale": "当前照料薄荷的光照与浇水条件相关，其他园艺对象和周边无关。"
+    },
+    {
+      "contact_gold": [
+        "c1bf4344-d5ee-5767-a6cb-0a39ca5b9f9d",
+        "0849b648-5979-507b-906b-9337e20bd905"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-photo-paraphrase-1",
+      "rationale": "野鸟拍摄的距离及器材相关，不混入人像、朋友器材或收纳信息。"
+    },
+    {
+      "contact_gold": [
+        "c1bf4344-d5ee-5767-a6cb-0a39ca5b9f9d",
+        "0849b648-5979-507b-906b-9337e20bd905"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-photo-paraphrase-2",
+      "rationale": "野鸟拍摄的距离及器材相关，不混入人像、朋友器材或收纳信息。"
+    },
+    {
+      "contact_gold": [
+        "c1bf4344-d5ee-5767-a6cb-0a39ca5b9f9d",
+        "0849b648-5979-507b-906b-9337e20bd905"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-photo-paraphrase-3",
+      "rationale": "野鸟拍摄的距离及器材相关，不混入人像、朋友器材或收纳信息。"
+    },
+    {
+      "contact_gold": [
+        "c1bf4344-d5ee-5767-a6cb-0a39ca5b9f9d",
+        "0849b648-5979-507b-906b-9337e20bd905"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-photo-direct",
+      "rationale": "野鸟拍摄的距离及器材相关，不混入人像、朋友器材或收纳信息。"
+    },
+    {
+      "contact_gold": [
+        "e8086499-dcbc-5dd0-a02a-027a6baa8066",
+        "17975979-8d6d-5125-abe8-3a749e3652b6"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-museum-paraphrase-1",
+      "rationale": "本人参观顺序和节奏相关，展务与纪念周边不等于逛展方式。"
+    },
+    {
+      "contact_gold": [
+        "e8086499-dcbc-5dd0-a02a-027a6baa8066",
+        "17975979-8d6d-5125-abe8-3a749e3652b6"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-museum-paraphrase-2",
+      "rationale": "本人参观顺序和节奏相关，展务与纪念周边不等于逛展方式。"
+    },
+    {
+      "contact_gold": [
+        "e8086499-dcbc-5dd0-a02a-027a6baa8066",
+        "17975979-8d6d-5125-abe8-3a749e3652b6"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-museum-paraphrase-3",
+      "rationale": "本人参观顺序和节奏相关，展务与纪念周边不等于逛展方式。"
+    },
+    {
+      "contact_gold": [
+        "e8086499-dcbc-5dd0-a02a-027a6baa8066",
+        "17975979-8d6d-5125-abe8-3a749e3652b6"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-museum-direct",
+      "rationale": "本人参观顺序和节奏相关，展务与纪念周边不等于逛展方式。"
+    },
+    {
+      "contact_gold": [
+        "0e31aa6e-fe78-5fc1-99b2-00549dbbab60",
+        "4c6cf23f-5d5e-56e5-86d7-3e8f64e4aa9c"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-chess-paraphrase-1",
+      "rationale": "本人的复盘方式和思考节奏相关，他人快棋与棋具周边不代表本人节奏。"
+    },
+    {
+      "contact_gold": [
+        "0e31aa6e-fe78-5fc1-99b2-00549dbbab60",
+        "4c6cf23f-5d5e-56e5-86d7-3e8f64e4aa9c"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-chess-paraphrase-2",
+      "rationale": "本人的复盘方式和思考节奏相关，他人快棋与棋具周边不代表本人节奏。"
+    },
+    {
+      "contact_gold": [
+        "0e31aa6e-fe78-5fc1-99b2-00549dbbab60",
+        "4c6cf23f-5d5e-56e5-86d7-3e8f64e4aa9c"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-chess-paraphrase-3",
+      "rationale": "本人的复盘方式和思考节奏相关，他人快棋与棋具周边不代表本人节奏。"
+    },
+    {
+      "contact_gold": [
+        "0e31aa6e-fe78-5fc1-99b2-00549dbbab60",
+        "4c6cf23f-5d5e-56e5-86d7-3e8f64e4aa9c"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-chess-direct",
+      "rationale": "本人的复盘方式和思考节奏相关，他人快棋与棋具周边不代表本人节奏。"
+    },
+    {
+      "contact_gold": [
+        "b171ad7f-e2a0-555c-bb1b-514f4c564469",
+        "0135d067-2aa8-5bc2-9e99-d7e8c71ea241"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-swim-paraphrase-1",
+      "rationale": "初学本人的区域与教练在场限制相关，他人能力和泳池周边不构成安全授权。"
+    },
+    {
+      "contact_gold": [
+        "b171ad7f-e2a0-555c-bb1b-514f4c564469",
+        "0135d067-2aa8-5bc2-9e99-d7e8c71ea241"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-swim-paraphrase-2",
+      "rationale": "初学本人的区域与教练在场限制相关，他人能力和泳池周边不构成安全授权。"
+    },
+    {
+      "contact_gold": [
+        "b171ad7f-e2a0-555c-bb1b-514f4c564469",
+        "0135d067-2aa8-5bc2-9e99-d7e8c71ea241"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-swim-paraphrase-3",
+      "rationale": "初学本人的区域与教练在场限制相关，他人能力和泳池周边不构成安全授权。"
+    },
+    {
+      "contact_gold": [
+        "b171ad7f-e2a0-555c-bb1b-514f4c564469",
+        "0135d067-2aa8-5bc2-9e99-d7e8c71ea241"
+      ],
+      "owner_gold": [],
+      "query_id": "dev-swim-direct",
+      "rationale": "初学本人的区域与教练在场限制相关，他人能力和泳池周边不构成安全授权。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "dev-empty-1",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "dev-empty-2",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "dev-empty-3",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "dev-empty-4",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "dev-empty-5",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "dev-empty-6",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "dev-empty-7",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "dev-empty-8",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "dev-empty-9",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "dev-empty-10",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [
+        "866a3151-9a9d-5484-84bd-cd57522e2cfe",
+        "a26a51ef-f188-59b8-ba68-66832dd6b798"
+      ],
+      "owner_gold": [],
+      "query_id": "final-coffee-paraphrase-1",
+      "rationale": "本次为本人下单；胃部刺激和奶配料直接约束选择，店务及他人偏好不支持此次选择。"
+    },
+    {
+      "contact_gold": [
+        "866a3151-9a9d-5484-84bd-cd57522e2cfe",
+        "a26a51ef-f188-59b8-ba68-66832dd6b798"
+      ],
+      "owner_gold": [],
+      "query_id": "final-coffee-paraphrase-2",
+      "rationale": "本次为本人下单；胃部刺激和奶配料直接约束选择，店务及他人偏好不支持此次选择。"
+    },
+    {
+      "contact_gold": [
+        "866a3151-9a9d-5484-84bd-cd57522e2cfe",
+        "a26a51ef-f188-59b8-ba68-66832dd6b798"
+      ],
+      "owner_gold": [],
+      "query_id": "final-coffee-paraphrase-3",
+      "rationale": "本次为本人下单；胃部刺激和奶配料直接约束选择，店务及他人偏好不支持此次选择。"
+    },
+    {
+      "contact_gold": [
+        "866a3151-9a9d-5484-84bd-cd57522e2cfe",
+        "a26a51ef-f188-59b8-ba68-66832dd6b798"
+      ],
+      "owner_gold": [],
+      "query_id": "final-coffee-direct",
+      "rationale": "本次为本人下单；胃部刺激和奶配料直接约束选择，店务及他人偏好不支持此次选择。"
+    },
+    {
+      "contact_gold": [
+        "a956e776-03ea-5960-8a24-65ec6f4c30d7",
+        "0a96a8b2-ac7e-5131-9d10-cbf0e672a75b"
+      ],
+      "owner_gold": [],
+      "query_id": "final-hiking-paraphrase-1",
+      "rationale": "此次本人轻度步行，恢复限制与可接受路线有用；装备、他人竞赛和照片不是体力授权。"
+    },
+    {
+      "contact_gold": [
+        "a956e776-03ea-5960-8a24-65ec6f4c30d7",
+        "0a96a8b2-ac7e-5131-9d10-cbf0e672a75b"
+      ],
+      "owner_gold": [],
+      "query_id": "final-hiking-paraphrase-2",
+      "rationale": "此次本人轻度步行，恢复限制与可接受路线有用；装备、他人竞赛和照片不是体力授权。"
+    },
+    {
+      "contact_gold": [
+        "a956e776-03ea-5960-8a24-65ec6f4c30d7",
+        "0a96a8b2-ac7e-5131-9d10-cbf0e672a75b"
+      ],
+      "owner_gold": [],
+      "query_id": "final-hiking-paraphrase-3",
+      "rationale": "此次本人轻度步行，恢复限制与可接受路线有用；装备、他人竞赛和照片不是体力授权。"
+    },
+    {
+      "contact_gold": [
+        "a956e776-03ea-5960-8a24-65ec6f4c30d7",
+        "0a96a8b2-ac7e-5131-9d10-cbf0e672a75b"
+      ],
+      "owner_gold": [],
+      "query_id": "final-hiking-direct",
+      "rationale": "此次本人轻度步行，恢复限制与可接受路线有用；装备、他人竞赛和照片不是体力授权。"
+    },
+    {
+      "contact_gold": [
+        "54118540-5ae6-589d-aafc-3216444a5ace",
+        "5b80a747-b1a5-5f1c-bf4a-204bcdeeba9d"
+      ],
+      "owner_gold": [],
+      "query_id": "final-meeting-paraphrase-1",
+      "rationale": "只标注本人晚间出席限制和缺席同步方式，不把同事习惯或设备知识当作本人可参加。"
+    },
+    {
+      "contact_gold": [
+        "54118540-5ae6-589d-aafc-3216444a5ace",
+        "5b80a747-b1a5-5f1c-bf4a-204bcdeeba9d"
+      ],
+      "owner_gold": [],
+      "query_id": "final-meeting-paraphrase-2",
+      "rationale": "只标注本人晚间出席限制和缺席同步方式，不把同事习惯或设备知识当作本人可参加。"
+    },
+    {
+      "contact_gold": [
+        "54118540-5ae6-589d-aafc-3216444a5ace",
+        "5b80a747-b1a5-5f1c-bf4a-204bcdeeba9d"
+      ],
+      "owner_gold": [],
+      "query_id": "final-meeting-paraphrase-3",
+      "rationale": "只标注本人晚间出席限制和缺席同步方式，不把同事习惯或设备知识当作本人可参加。"
+    },
+    {
+      "contact_gold": [
+        "54118540-5ae6-589d-aafc-3216444a5ace",
+        "5b80a747-b1a5-5f1c-bf4a-204bcdeeba9d"
+      ],
+      "owner_gold": [],
+      "query_id": "final-meeting-direct",
+      "rationale": "只标注本人晚间出席限制和缺席同步方式，不把同事习惯或设备知识当作本人可参加。"
+    },
+    {
+      "contact_gold": [
+        "99149230-ac09-5f38-8cdd-e27d119a9178",
+        "5d1aee7c-4996-57d0-92e1-4a0e8f23ccd4"
+      ],
+      "owner_gold": [],
+      "query_id": "final-train-paraphrase-1",
+      "rationale": "本次本人长途订票，座位与夜间乘车限制有效；代购及家人的座位偏好不适用。"
+    },
+    {
+      "contact_gold": [
+        "99149230-ac09-5f38-8cdd-e27d119a9178",
+        "5d1aee7c-4996-57d0-92e1-4a0e8f23ccd4"
+      ],
+      "owner_gold": [],
+      "query_id": "final-train-paraphrase-2",
+      "rationale": "本次本人长途订票，座位与夜间乘车限制有效；代购及家人的座位偏好不适用。"
+    },
+    {
+      "contact_gold": [
+        "99149230-ac09-5f38-8cdd-e27d119a9178",
+        "5d1aee7c-4996-57d0-92e1-4a0e8f23ccd4"
+      ],
+      "owner_gold": [],
+      "query_id": "final-train-paraphrase-3",
+      "rationale": "本次本人长途订票，座位与夜间乘车限制有效；代购及家人的座位偏好不适用。"
+    },
+    {
+      "contact_gold": [
+        "99149230-ac09-5f38-8cdd-e27d119a9178",
+        "5d1aee7c-4996-57d0-92e1-4a0e8f23ccd4"
+      ],
+      "owner_gold": [],
+      "query_id": "final-train-direct",
+      "rationale": "本次本人长途订票，座位与夜间乘车限制有效；代购及家人的座位偏好不适用。"
+    },
+    {
+      "contact_gold": [
+        "b9b373c7-c5e8-539f-9eb3-0f1f00d7c7e7",
+        "c53ac80c-4daf-5a9e-a0f6-d7b1f953f8de"
+      ],
+      "owner_gold": [],
+      "query_id": "final-movie-paraphrase-1",
+      "rationale": "标注本次观影题材和语言可理解性，其他人的口味与电影周边不限制选片。"
+    },
+    {
+      "contact_gold": [
+        "b9b373c7-c5e8-539f-9eb3-0f1f00d7c7e7",
+        "c53ac80c-4daf-5a9e-a0f6-d7b1f953f8de"
+      ],
+      "owner_gold": [],
+      "query_id": "final-movie-paraphrase-2",
+      "rationale": "标注本次观影题材和语言可理解性，其他人的口味与电影周边不限制选片。"
+    },
+    {
+      "contact_gold": [
+        "b9b373c7-c5e8-539f-9eb3-0f1f00d7c7e7",
+        "c53ac80c-4daf-5a9e-a0f6-d7b1f953f8de"
+      ],
+      "owner_gold": [],
+      "query_id": "final-movie-paraphrase-3",
+      "rationale": "标注本次观影题材和语言可理解性，其他人的口味与电影周边不限制选片。"
+    },
+    {
+      "contact_gold": [
+        "b9b373c7-c5e8-539f-9eb3-0f1f00d7c7e7",
+        "c53ac80c-4daf-5a9e-a0f6-d7b1f953f8de"
+      ],
+      "owner_gold": [],
+      "query_id": "final-movie-direct",
+      "rationale": "标注本次观影题材和语言可理解性，其他人的口味与电影周边不限制选片。"
+    },
+    {
+      "contact_gold": [
+        "480d22bf-5122-5456-adee-eae83ebd5fd9",
+        "c60f4129-97ac-5e45-9aa4-bbe07d44a4bd"
+      ],
+      "owner_gold": [],
+      "query_id": "final-meal-paraphrase-1",
+      "rationale": "本人安全禁忌和素食决定菜单；代购肉食与花生并不表示本人食用。"
+    },
+    {
+      "contact_gold": [
+        "480d22bf-5122-5456-adee-eae83ebd5fd9",
+        "c60f4129-97ac-5e45-9aa4-bbe07d44a4bd"
+      ],
+      "owner_gold": [],
+      "query_id": "final-meal-paraphrase-2",
+      "rationale": "本人安全禁忌和素食决定菜单；代购肉食与花生并不表示本人食用。"
+    },
+    {
+      "contact_gold": [
+        "480d22bf-5122-5456-adee-eae83ebd5fd9",
+        "c60f4129-97ac-5e45-9aa4-bbe07d44a4bd"
+      ],
+      "owner_gold": [],
+      "query_id": "final-meal-paraphrase-3",
+      "rationale": "本人安全禁忌和素食决定菜单；代购肉食与花生并不表示本人食用。"
+    },
+    {
+      "contact_gold": [
+        "480d22bf-5122-5456-adee-eae83ebd5fd9",
+        "c60f4129-97ac-5e45-9aa4-bbe07d44a4bd"
+      ],
+      "owner_gold": [],
+      "query_id": "final-meal-direct",
+      "rationale": "本人安全禁忌和素食决定菜单；代购肉食与花生并不表示本人食用。"
+    },
+    {
+      "contact_gold": [
+        "619bec79-f532-594f-b8f8-1501f20029d5",
+        "37681f35-ee04-582b-aeb0-573f4c299711"
+      ],
+      "owner_gold": [],
+      "query_id": "final-gift-paraphrase-1",
+      "rationale": "本次为本人选择礼物，小说兴趣与盆栽维护限制相关；送给别人和周边信息不代表本人愿望。"
+    },
+    {
+      "contact_gold": [
+        "619bec79-f532-594f-b8f8-1501f20029d5",
+        "37681f35-ee04-582b-aeb0-573f4c299711"
+      ],
+      "owner_gold": [],
+      "query_id": "final-gift-paraphrase-2",
+      "rationale": "本次为本人选择礼物，小说兴趣与盆栽维护限制相关；送给别人和周边信息不代表本人愿望。"
+    },
+    {
+      "contact_gold": [
+        "619bec79-f532-594f-b8f8-1501f20029d5",
+        "37681f35-ee04-582b-aeb0-573f4c299711"
+      ],
+      "owner_gold": [],
+      "query_id": "final-gift-paraphrase-3",
+      "rationale": "本次为本人选择礼物，小说兴趣与盆栽维护限制相关；送给别人和周边信息不代表本人愿望。"
+    },
+    {
+      "contact_gold": [
+        "619bec79-f532-594f-b8f8-1501f20029d5",
+        "37681f35-ee04-582b-aeb0-573f4c299711"
+      ],
+      "owner_gold": [],
+      "query_id": "final-gift-direct",
+      "rationale": "本次为本人选择礼物，小说兴趣与盆栽维护限制相关；送给别人和周边信息不代表本人愿望。"
+    },
+    {
+      "contact_gold": [
+        "ced5a2f1-0724-5e71-803d-724cef78e16b",
+        "b5d38c18-954f-5166-bbdd-73ef60989e8d"
+      ],
+      "owner_gold": [],
+      "query_id": "final-car-paraphrase-1",
+      "rationale": "关注本人的晕车照顾方式，他人座位、代购配件和车务不构成照顾措施。"
+    },
+    {
+      "contact_gold": [
+        "ced5a2f1-0724-5e71-803d-724cef78e16b",
+        "b5d38c18-954f-5166-bbdd-73ef60989e8d"
+      ],
+      "owner_gold": [],
+      "query_id": "final-car-paraphrase-2",
+      "rationale": "关注本人的晕车照顾方式，他人座位、代购配件和车务不构成照顾措施。"
+    },
+    {
+      "contact_gold": [
+        "ced5a2f1-0724-5e71-803d-724cef78e16b",
+        "b5d38c18-954f-5166-bbdd-73ef60989e8d"
+      ],
+      "owner_gold": [],
+      "query_id": "final-car-paraphrase-3",
+      "rationale": "关注本人的晕车照顾方式，他人座位、代购配件和车务不构成照顾措施。"
+    },
+    {
+      "contact_gold": [
+        "ced5a2f1-0724-5e71-803d-724cef78e16b",
+        "b5d38c18-954f-5166-bbdd-73ef60989e8d"
+      ],
+      "owner_gold": [],
+      "query_id": "final-car-direct",
+      "rationale": "关注本人的晕车照顾方式，他人座位、代购配件和车务不构成照顾措施。"
+    },
+    {
+      "contact_gold": [
+        "a5c8b7de-d8bf-5822-b66a-754a7a5c7c4e",
+        "547d2fe5-9a38-5ef9-a26b-dc63c3d1061e"
+      ],
+      "owner_gold": [],
+      "query_id": "final-cat-paraphrase-1",
+      "rationale": "只涉及照料当前老猫的用药时间和牛奶禁忌，其他宠物及用品不构成护理要求。"
+    },
+    {
+      "contact_gold": [
+        "a5c8b7de-d8bf-5822-b66a-754a7a5c7c4e",
+        "547d2fe5-9a38-5ef9-a26b-dc63c3d1061e"
+      ],
+      "owner_gold": [],
+      "query_id": "final-cat-paraphrase-2",
+      "rationale": "只涉及照料当前老猫的用药时间和牛奶禁忌，其他宠物及用品不构成护理要求。"
+    },
+    {
+      "contact_gold": [
+        "a5c8b7de-d8bf-5822-b66a-754a7a5c7c4e",
+        "547d2fe5-9a38-5ef9-a26b-dc63c3d1061e"
+      ],
+      "owner_gold": [],
+      "query_id": "final-cat-paraphrase-3",
+      "rationale": "只涉及照料当前老猫的用药时间和牛奶禁忌，其他宠物及用品不构成护理要求。"
+    },
+    {
+      "contact_gold": [
+        "a5c8b7de-d8bf-5822-b66a-754a7a5c7c4e",
+        "547d2fe5-9a38-5ef9-a26b-dc63c3d1061e"
+      ],
+      "owner_gold": [],
+      "query_id": "final-cat-direct",
+      "rationale": "只涉及照料当前老猫的用药时间和牛奶禁忌，其他宠物及用品不构成护理要求。"
+    },
+    {
+      "contact_gold": [
+        "86ef16af-2432-5f1b-b280-331c6fdeae13",
+        "f4697a88-a9b8-5541-a707-41abce1780bd"
+      ],
+      "owner_gold": [],
+      "query_id": "final-exam-paraphrase-1",
+      "rationale": "当前备考的能力短板与训练方法相关；别人科目、办事和文具信息不解决复习问题。"
+    },
+    {
+      "contact_gold": [
+        "86ef16af-2432-5f1b-b280-331c6fdeae13",
+        "f4697a88-a9b8-5541-a707-41abce1780bd"
+      ],
+      "owner_gold": [],
+      "query_id": "final-exam-paraphrase-2",
+      "rationale": "当前备考的能力短板与训练方法相关；别人科目、办事和文具信息不解决复习问题。"
+    },
+    {
+      "contact_gold": [
+        "86ef16af-2432-5f1b-b280-331c6fdeae13",
+        "f4697a88-a9b8-5541-a707-41abce1780bd"
+      ],
+      "owner_gold": [],
+      "query_id": "final-exam-paraphrase-3",
+      "rationale": "当前备考的能力短板与训练方法相关；别人科目、办事和文具信息不解决复习问题。"
+    },
+    {
+      "contact_gold": [
+        "86ef16af-2432-5f1b-b280-331c6fdeae13",
+        "f4697a88-a9b8-5541-a707-41abce1780bd"
+      ],
+      "owner_gold": [],
+      "query_id": "final-exam-direct",
+      "rationale": "当前备考的能力短板与训练方法相关；别人科目、办事和文具信息不解决复习问题。"
+    },
+    {
+      "contact_gold": [
+        "d6210817-ad50-512b-b4a8-830123f8cd2d",
+        "998e1f0e-b4b8-5e44-b14a-dd80f0de5417"
+      ],
+      "owner_gold": [],
+      "query_id": "final-move-paraphrase-1",
+      "rationale": "本次搬运保护与电梯手续有用，旧房和他人住宅条件不适用。"
+    },
+    {
+      "contact_gold": [
+        "d6210817-ad50-512b-b4a8-830123f8cd2d",
+        "998e1f0e-b4b8-5e44-b14a-dd80f0de5417"
+      ],
+      "owner_gold": [],
+      "query_id": "final-move-paraphrase-2",
+      "rationale": "本次搬运保护与电梯手续有用，旧房和他人住宅条件不适用。"
+    },
+    {
+      "contact_gold": [
+        "d6210817-ad50-512b-b4a8-830123f8cd2d",
+        "998e1f0e-b4b8-5e44-b14a-dd80f0de5417"
+      ],
+      "owner_gold": [],
+      "query_id": "final-move-paraphrase-3",
+      "rationale": "本次搬运保护与电梯手续有用，旧房和他人住宅条件不适用。"
+    },
+    {
+      "contact_gold": [
+        "d6210817-ad50-512b-b4a8-830123f8cd2d",
+        "998e1f0e-b4b8-5e44-b14a-dd80f0de5417"
+      ],
+      "owner_gold": [],
+      "query_id": "final-move-direct",
+      "rationale": "本次搬运保护与电梯手续有用，旧房和他人住宅条件不适用。"
+    },
+    {
+      "contact_gold": [
+        "e85745cf-3832-572a-af68-8dffb6428a69",
+        "7867e38a-81f6-5315-93b3-7fc841276c61"
+      ],
+      "owner_gold": [],
+      "query_id": "final-cook-paraphrase-1",
+      "rationale": "当前本人厨房设备决定做法，家人和公司设备不表示本人家中可用。"
+    },
+    {
+      "contact_gold": [
+        "e85745cf-3832-572a-af68-8dffb6428a69",
+        "7867e38a-81f6-5315-93b3-7fc841276c61"
+      ],
+      "owner_gold": [],
+      "query_id": "final-cook-paraphrase-2",
+      "rationale": "当前本人厨房设备决定做法，家人和公司设备不表示本人家中可用。"
+    },
+    {
+      "contact_gold": [
+        "e85745cf-3832-572a-af68-8dffb6428a69",
+        "7867e38a-81f6-5315-93b3-7fc841276c61"
+      ],
+      "owner_gold": [],
+      "query_id": "final-cook-paraphrase-3",
+      "rationale": "当前本人厨房设备决定做法，家人和公司设备不表示本人家中可用。"
+    },
+    {
+      "contact_gold": [
+        "e85745cf-3832-572a-af68-8dffb6428a69",
+        "7867e38a-81f6-5315-93b3-7fc841276c61"
+      ],
+      "owner_gold": [],
+      "query_id": "final-cook-direct",
+      "rationale": "当前本人厨房设备决定做法，家人和公司设备不表示本人家中可用。"
+    },
+    {
+      "contact_gold": [
+        "88286fd0-2e13-57d5-a31a-bb5b9c47145c",
+        "bcd09b4b-4977-5a06-9079-2cf501f7af03"
+      ],
+      "owner_gold": [],
+      "query_id": "final-run-paraphrase-1",
+      "rationale": "本人的当前能力和休息日决定训练，代购与他人能力不能用于安排。"
+    },
+    {
+      "contact_gold": [
+        "88286fd0-2e13-57d5-a31a-bb5b9c47145c",
+        "bcd09b4b-4977-5a06-9079-2cf501f7af03"
+      ],
+      "owner_gold": [],
+      "query_id": "final-run-paraphrase-2",
+      "rationale": "本人的当前能力和休息日决定训练，代购与他人能力不能用于安排。"
+    },
+    {
+      "contact_gold": [
+        "88286fd0-2e13-57d5-a31a-bb5b9c47145c",
+        "bcd09b4b-4977-5a06-9079-2cf501f7af03"
+      ],
+      "owner_gold": [],
+      "query_id": "final-run-paraphrase-3",
+      "rationale": "本人的当前能力和休息日决定训练，代购与他人能力不能用于安排。"
+    },
+    {
+      "contact_gold": [
+        "88286fd0-2e13-57d5-a31a-bb5b9c47145c",
+        "bcd09b4b-4977-5a06-9079-2cf501f7af03"
+      ],
+      "owner_gold": [],
+      "query_id": "final-run-direct",
+      "rationale": "本人的当前能力和休息日决定训练，代购与他人能力不能用于安排。"
+    },
+    {
+      "contact_gold": [
+        "2ee91b68-1d55-5680-b53d-222aed54e496",
+        "3b7c3f69-d9f4-50d8-b096-589d08095232"
+      ],
+      "owner_gold": [],
+      "query_id": "final-hair-paraphrase-1",
+      "rationale": "本次本人项目选择与药剂禁忌相关，姐姐爱好和周边不适用。"
+    },
+    {
+      "contact_gold": [
+        "2ee91b68-1d55-5680-b53d-222aed54e496",
+        "3b7c3f69-d9f4-50d8-b096-589d08095232"
+      ],
+      "owner_gold": [],
+      "query_id": "final-hair-paraphrase-2",
+      "rationale": "本次本人项目选择与药剂禁忌相关，姐姐爱好和周边不适用。"
+    },
+    {
+      "contact_gold": [
+        "2ee91b68-1d55-5680-b53d-222aed54e496",
+        "3b7c3f69-d9f4-50d8-b096-589d08095232"
+      ],
+      "owner_gold": [],
+      "query_id": "final-hair-paraphrase-3",
+      "rationale": "本次本人项目选择与药剂禁忌相关，姐姐爱好和周边不适用。"
+    },
+    {
+      "contact_gold": [
+        "2ee91b68-1d55-5680-b53d-222aed54e496",
+        "3b7c3f69-d9f4-50d8-b096-589d08095232"
+      ],
+      "owner_gold": [],
+      "query_id": "final-hair-direct",
+      "rationale": "本次本人项目选择与药剂禁忌相关，姐姐爱好和周边不适用。"
+    },
+    {
+      "contact_gold": [
+        "be724841-9712-592d-bd5e-f949e3556cfa",
+        "3c4c2cbe-bb82-550e-a718-7200e51d2b89"
+      ],
+      "owner_gold": [],
+      "query_id": "final-concert-paraphrase-1",
+      "rationale": "订座时本人噪声承受与离场方便相关，代购票和音乐周边不表示座位意愿。"
+    },
+    {
+      "contact_gold": [
+        "be724841-9712-592d-bd5e-f949e3556cfa",
+        "3c4c2cbe-bb82-550e-a718-7200e51d2b89"
+      ],
+      "owner_gold": [],
+      "query_id": "final-concert-paraphrase-2",
+      "rationale": "订座时本人噪声承受与离场方便相关，代购票和音乐周边不表示座位意愿。"
+    },
+    {
+      "contact_gold": [
+        "be724841-9712-592d-bd5e-f949e3556cfa",
+        "3c4c2cbe-bb82-550e-a718-7200e51d2b89"
+      ],
+      "owner_gold": [],
+      "query_id": "final-concert-paraphrase-3",
+      "rationale": "订座时本人噪声承受与离场方便相关，代购票和音乐周边不表示座位意愿。"
+    },
+    {
+      "contact_gold": [
+        "be724841-9712-592d-bd5e-f949e3556cfa",
+        "3c4c2cbe-bb82-550e-a718-7200e51d2b89"
+      ],
+      "owner_gold": [],
+      "query_id": "final-concert-direct",
+      "rationale": "订座时本人噪声承受与离场方便相关，代购票和音乐周边不表示座位意愿。"
+    },
+    {
+      "contact_gold": [
+        "702df54f-7f5c-5773-874d-c43625d740da",
+        "b1056b3b-b1c4-5204-a240-a5321204388d"
+      ],
+      "owner_gold": [],
+      "query_id": "final-feedback-paraphrase-1",
+      "rationale": "本次纠错沟通的场合与行动建议相关，管理者偏好不替代本人的接受方式。"
+    },
+    {
+      "contact_gold": [
+        "702df54f-7f5c-5773-874d-c43625d740da",
+        "b1056b3b-b1c4-5204-a240-a5321204388d"
+      ],
+      "owner_gold": [],
+      "query_id": "final-feedback-paraphrase-2",
+      "rationale": "本次纠错沟通的场合与行动建议相关，管理者偏好不替代本人的接受方式。"
+    },
+    {
+      "contact_gold": [
+        "702df54f-7f5c-5773-874d-c43625d740da",
+        "b1056b3b-b1c4-5204-a240-a5321204388d"
+      ],
+      "owner_gold": [],
+      "query_id": "final-feedback-paraphrase-3",
+      "rationale": "本次纠错沟通的场合与行动建议相关，管理者偏好不替代本人的接受方式。"
+    },
+    {
+      "contact_gold": [
+        "702df54f-7f5c-5773-874d-c43625d740da",
+        "b1056b3b-b1c4-5204-a240-a5321204388d"
+      ],
+      "owner_gold": [],
+      "query_id": "final-feedback-direct",
+      "rationale": "本次纠错沟通的场合与行动建议相关，管理者偏好不替代本人的接受方式。"
+    },
+    {
+      "contact_gold": [
+        "6da5573e-a4cf-51b7-a19d-f0108df86c94",
+        "caf36864-6a0f-5ffe-84c9-4d2a62441325"
+      ],
+      "owner_gold": [],
+      "query_id": "final-father-paraphrase-1",
+      "rationale": "对伯父交谈的听力照顾相关，母亲口味和其他家庭琐事不是沟通条件。"
+    },
+    {
+      "contact_gold": [
+        "6da5573e-a4cf-51b7-a19d-f0108df86c94",
+        "caf36864-6a0f-5ffe-84c9-4d2a62441325"
+      ],
+      "owner_gold": [],
+      "query_id": "final-father-paraphrase-2",
+      "rationale": "对伯父交谈的听力照顾相关，母亲口味和其他家庭琐事不是沟通条件。"
+    },
+    {
+      "contact_gold": [
+        "6da5573e-a4cf-51b7-a19d-f0108df86c94",
+        "caf36864-6a0f-5ffe-84c9-4d2a62441325"
+      ],
+      "owner_gold": [],
+      "query_id": "final-father-paraphrase-3",
+      "rationale": "对伯父交谈的听力照顾相关，母亲口味和其他家庭琐事不是沟通条件。"
+    },
+    {
+      "contact_gold": [
+        "6da5573e-a4cf-51b7-a19d-f0108df86c94",
+        "caf36864-6a0f-5ffe-84c9-4d2a62441325"
+      ],
+      "owner_gold": [],
+      "query_id": "final-father-direct",
+      "rationale": "对伯父交谈的听力照顾相关，母亲口味和其他家庭琐事不是沟通条件。"
+    },
+    {
+      "contact_gold": [
+        "3f977170-8363-5505-a54b-3fa390436f6f",
+        "0013b5a4-5261-51e1-92da-7861b22e2e86"
+      ],
+      "owner_gold": [],
+      "query_id": "final-hotel-paraphrase-1",
+      "rationale": "本人过夜的噪声与烟味要求相关，他人订单、景点和酒店宣传不适用。"
+    },
+    {
+      "contact_gold": [
+        "3f977170-8363-5505-a54b-3fa390436f6f",
+        "0013b5a4-5261-51e1-92da-7861b22e2e86"
+      ],
+      "owner_gold": [],
+      "query_id": "final-hotel-paraphrase-2",
+      "rationale": "本人过夜的噪声与烟味要求相关，他人订单、景点和酒店宣传不适用。"
+    },
+    {
+      "contact_gold": [
+        "3f977170-8363-5505-a54b-3fa390436f6f",
+        "0013b5a4-5261-51e1-92da-7861b22e2e86"
+      ],
+      "owner_gold": [],
+      "query_id": "final-hotel-paraphrase-3",
+      "rationale": "本人过夜的噪声与烟味要求相关，他人订单、景点和酒店宣传不适用。"
+    },
+    {
+      "contact_gold": [
+        "3f977170-8363-5505-a54b-3fa390436f6f",
+        "0013b5a4-5261-51e1-92da-7861b22e2e86"
+      ],
+      "owner_gold": [],
+      "query_id": "final-hotel-direct",
+      "rationale": "本人过夜的噪声与烟味要求相关，他人订单、景点和酒店宣传不适用。"
+    },
+    {
+      "contact_gold": [
+        "d79ba31c-d4cb-5f2d-9dc2-db02b87d4cc9",
+        "37688e99-dab3-5ff6-8bd4-871f722ad8d4"
+      ],
+      "owner_gold": [],
+      "query_id": "final-birthday-paraphrase-1",
+      "rationale": "本人的知情和熟悉小圈聚会偏好相关；姐姐的惊喜与替别人组织活动不代表本人愿望。"
+    },
+    {
+      "contact_gold": [
+        "d79ba31c-d4cb-5f2d-9dc2-db02b87d4cc9",
+        "37688e99-dab3-5ff6-8bd4-871f722ad8d4"
+      ],
+      "owner_gold": [],
+      "query_id": "final-birthday-paraphrase-2",
+      "rationale": "本人的知情和熟悉小圈聚会偏好相关；姐姐的惊喜与替别人组织活动不代表本人愿望。"
+    },
+    {
+      "contact_gold": [
+        "d79ba31c-d4cb-5f2d-9dc2-db02b87d4cc9",
+        "37688e99-dab3-5ff6-8bd4-871f722ad8d4"
+      ],
+      "owner_gold": [],
+      "query_id": "final-birthday-paraphrase-3",
+      "rationale": "本人的知情和熟悉小圈聚会偏好相关；姐姐的惊喜与替别人组织活动不代表本人愿望。"
+    },
+    {
+      "contact_gold": [
+        "d79ba31c-d4cb-5f2d-9dc2-db02b87d4cc9",
+        "37688e99-dab3-5ff6-8bd4-871f722ad8d4"
+      ],
+      "owner_gold": [],
+      "query_id": "final-birthday-direct",
+      "rationale": "本人的知情和熟悉小圈聚会偏好相关；姐姐的惊喜与替别人组织活动不代表本人愿望。"
+    },
+    {
+      "contact_gold": [
+        "ad723ae9-b32e-581c-ae68-a35ab8672874",
+        "b825eb0c-aff3-5474-854b-885adac7cce2"
+      ],
+      "owner_gold": [],
+      "query_id": "final-video-paraphrase-1",
+      "rationale": "本次与本人远程联络的连接限制和提前约定相关，他人习惯和硬件周边不决定联系方式。"
+    },
+    {
+      "contact_gold": [
+        "ad723ae9-b32e-581c-ae68-a35ab8672874",
+        "b825eb0c-aff3-5474-854b-885adac7cce2"
+      ],
+      "owner_gold": [],
+      "query_id": "final-video-paraphrase-2",
+      "rationale": "本次与本人远程联络的连接限制和提前约定相关，他人习惯和硬件周边不决定联系方式。"
+    },
+    {
+      "contact_gold": [
+        "ad723ae9-b32e-581c-ae68-a35ab8672874",
+        "b825eb0c-aff3-5474-854b-885adac7cce2"
+      ],
+      "owner_gold": [],
+      "query_id": "final-video-paraphrase-3",
+      "rationale": "本次与本人远程联络的连接限制和提前约定相关，他人习惯和硬件周边不决定联系方式。"
+    },
+    {
+      "contact_gold": [
+        "ad723ae9-b32e-581c-ae68-a35ab8672874",
+        "b825eb0c-aff3-5474-854b-885adac7cce2"
+      ],
+      "owner_gold": [],
+      "query_id": "final-video-direct",
+      "rationale": "本次与本人远程联络的连接限制和提前约定相关，他人习惯和硬件周边不决定联系方式。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "final-empty-1",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "final-empty-2",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "final-empty-3",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "final-empty-4",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "final-empty-5",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "final-empty-6",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "final-empty-7",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "final-empty-8",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "final-empty-9",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [],
+      "query_id": "final-empty-10",
+      "rationale": "无任务语境，不应凭寒暄注入长期资料。"
+    },
+    {
+      "contact_gold": [
+        "2bf42a3f-a0ca-5971-9b95-0116bcc16b10"
+      ],
+      "owner_gold": [],
+      "query_id": "final-topic-1",
+      "rationale": "问题明确询问周边或其他人物；这些资料在此问法下相关，不是永远排除的负例。"
+    },
+    {
+      "contact_gold": [
+        "6b355801-4afa-5f8c-92a9-e02e3d8a6682"
+      ],
+      "owner_gold": [],
+      "query_id": "final-topic-2",
+      "rationale": "问题明确询问周边或其他人物；这些资料在此问法下相关，不是永远排除的负例。"
+    },
+    {
+      "contact_gold": [
+        "235c6a78-f400-5576-aece-a5fa3ebff03b"
+      ],
+      "owner_gold": [],
+      "query_id": "final-topic-3",
+      "rationale": "问题明确询问周边或其他人物；这些资料在此问法下相关，不是永远排除的负例。"
+    },
+    {
+      "contact_gold": [
+        "1f5c6557-f094-5071-b651-0904d06865ff"
+      ],
+      "owner_gold": [],
+      "query_id": "final-topic-4",
+      "rationale": "问题明确询问周边或其他人物；这些资料在此问法下相关，不是永远排除的负例。"
+    },
+    {
+      "contact_gold": [
+        "5026b966-c45b-5f90-b998-b6dc640b95f1"
+      ],
+      "owner_gold": [],
+      "query_id": "final-topic-5",
+      "rationale": "问题明确询问周边或其他人物；这些资料在此问法下相关，不是永远排除的负例。"
+    },
+    {
+      "contact_gold": [
+        "866a3151-9a9d-5484-84bd-cd57522e2cfe",
+        "a26a51ef-f188-59b8-ba68-66832dd6b798"
+      ],
+      "owner_gold": [],
+      "query_id": "final-isolation",
+      "rationale": "三位合成同名联系人正文相同；只允许当前已确认 owner/contact 的两个 ID。"
+    },
+    {
+      "contact_gold": [
+        "e00ad1ac-8c7b-520b-b3a6-a2cd4a560be3"
+      ],
+      "owner_gold": [],
+      "query_id": "final-deleted",
+      "rationale": "当前有效预约是正例；删除、失效、到期或未来记录必须拒绝。"
+    },
+    {
+      "contact_gold": [
+        "ae53b0ef-af2e-52a9-84fc-ca30ad117540"
+      ],
+      "owner_gold": [],
+      "query_id": "final-invalidated",
+      "rationale": "当前有效预约是正例；删除、失效、到期或未来记录必须拒绝。"
+    },
+    {
+      "contact_gold": [
+        "abd1130c-4c51-5bfb-a365-80030836270f"
+      ],
+      "owner_gold": [],
+      "query_id": "final-expired",
+      "rationale": "当前有效预约是正例；删除、失效、到期或未来记录必须拒绝。"
+    },
+    {
+      "contact_gold": [
+        "713d54e8-3850-5259-a5cd-524c90e94ca7"
+      ],
+      "owner_gold": [],
+      "query_id": "final-future",
+      "rationale": "当前有效预约是正例；删除、失效、到期或未来记录必须拒绝。"
+    },
+    {
+      "contact_gold": [
+        "b4dc3ede-48d2-5e13-b4e6-d999b0e54a69",
+        "988f92b8-daf4-55bd-9ee9-27c22f7cc758",
+        "0cb74e24-ff17-5583-814f-dab01d6122db",
+        "6babf623-1ced-548a-9bb7-9e15c5ada82b",
+        "eaca8c51-f1f5-57a6-a52f-360c08c953b4",
+        "3197a3fd-4d44-5095-a360-1dcf4902abce"
+      ],
+      "owner_gold": [],
+      "query_id": "final-budget-contact",
+      "rationale": "六条均相关且超过联系人条数和字符预算；只报告压力诊断，不进入主收益分母。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [
+        "3ce48b9d-dbbc-5457-ad34-bb5f08a24b5e",
+        "0a7b9aa6-8970-5e1f-8d84-8971e6642864",
+        "66fa3f16-a222-59a5-930d-14330a6a0e5d"
+      ],
+      "query_id": "final-owner-meal",
+      "rationale": "本人路径独立评价前三项饮食及晚间约束，不计入联系人 Recall@5。"
+    },
+    {
+      "contact_gold": [],
+      "owner_gold": [
+        "3ce48b9d-dbbc-5457-ad34-bb5f08a24b5e",
+        "0a7b9aa6-8970-5e1f-8d84-8971e6642864",
+        "66fa3f16-a222-59a5-930d-14330a6a0e5d",
+        "a271936e-b479-5247-bc1f-b1e7ab2b83af"
+      ],
+      "query_id": "final-owner-budget",
+      "rationale": "四条本人约束均相关，超过本人三条预算；独立压力组。"
+    }
+  ],
+  "dataset_id": "hindsight-synthetic-v1"
+}

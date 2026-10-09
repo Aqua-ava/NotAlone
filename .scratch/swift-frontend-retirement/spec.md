@@ -36,4 +36,4 @@
 - `git diff --numstat -- src tests database pyproject.toml macos_sync_probe/Sources macos_sync_probe/Tests macos_sync_probe/scripts` 为空；Python、数据库和原生探针实现未改动。
 - 删除了 37 个旧主界面版本库文件；本轮临时创建的 `desktop_app/` 已撤回，没有新 UI／脚手架。旧本地忽略构建产物保留，不属于源码或提交。
 - 未执行机器安装脚本、真实 App／微信／模型或 Windows 集成；没有读取、迁移或删除真实用户数据。当前无主窗口与图形首启向导，后续 UI 另行设计。
-- Standards / Spec 初审各发现同一处 README 残留页面描述，已改为当前后台接口说明；复审两轴均 0 项剩余。旧 ADR 的正文与原因保留，仅追加指向 ADR-036 的局部修订备注。
+- Standards / Spec 初审各发现同一处 README 残留页面描述，已改为当前后台接口说明；复审两轴均 0 项剩余。旧 ADR 的正文与原因保留，仅追加指向 ADR-039 的局部修订备注。

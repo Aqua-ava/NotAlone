@@ -19,6 +19,7 @@ from notalone.memory_extraction.adjudication import (
 from notalone.memory_extraction.models import ExtractedFact, ExtractionWindow
 from notalone.memory_extraction.runtime import ExtractionPayload, MemoryExtractionRuntime
 from notalone.memory_extraction.verification import SourceVerificationRuntime
+from notalone.memory_trace.context import current_trace
 from notalone.persistence.background_tasks import BackgroundTaskPersistenceError
 from notalone.reply.interface import GenerateReply, ReplyOutcome
 from notalone.scopes import ContactScope, VerifiedConversationScope
@@ -112,6 +113,18 @@ class ModelPriorityControl:
                 self._background_active = False
                 self._condition.notify_all()
 
+    def wait_for_foreground(self) -> None:
+        """释放模型许可后，让已登记回复完成再消费后台返回结果。"""
+
+        with self._condition:
+            self.check_running()
+            while self._reply_waiters or self._reply_active:
+                self._condition.wait()
+                self.check_running()
+            self.check_running()
+        # 等待不持有模型许可；返回前复验原来源与步骤租约。
+        self._check_background_scope()
+
 
 class MemoryCallAccounting:
     """仅补记被停止或原任务 guard 丢弃的已返回调用；普通持久失败不补记。"""
@@ -127,26 +140,30 @@ class MemoryCallAccounting:
     def run_scope(self, scope: ContactScope) -> Iterator[None]:
         self._run.scope = scope
         self._run.extraction_record = None
+        self._run.extraction_trace = None
         try:
             yield
         except (ModelWorkStopped, BackgroundTaskPersistenceError):
             # 只控制/guard 中断会绕过原 E 台账；水位错误发生在原台账之后。
             entry = self._run.extraction_record
-            if entry is not None:
+            if entry is not None and self._run.extraction_trace is None:
                 self._ledger.record(entry)
             raise
         finally:
             del self._run.scope
             del self._run.extraction_record
+            del self._run.extraction_trace
 
     def extraction_started(self) -> None:
         self._run.extraction_record = None
+        self._run.extraction_trace = current_trace()
 
     def extraction_returned(self, called_at: datetime, latency_ms: int) -> None:
         self._run.extraction_record = self._entry(called_at, latency_ms)
 
     def record_discarded(self, called_at: datetime, latency_ms: int) -> None:
-        self._ledger.record(self._entry(called_at, latency_ms))
+        if current_trace() is None:
+            self._ledger.record(self._entry(called_at, latency_ms))
 
     def _entry(self, called_at: datetime, latency_ms: int) -> LedgerEntry:
         scope = self._run.scope
@@ -198,7 +215,8 @@ class PriorityExtractionRuntime:
                 self._accounting.extraction_returned(
                     called_at, max(0, int((time.perf_counter() - started) * 1000)),
                 )
-            return result
+        self._control.wait_for_foreground()
+        return result
 
 
 class PriorityVerificationRuntime:
@@ -208,8 +226,18 @@ class PriorityVerificationRuntime:
     def verify(
         self, *, window: ExtractionWindow, facts: tuple[ExtractedFact, ...],
     ) -> tuple[dict[str, Any], ...]:
-        with self._control.background_call():
-            return self._runtime.verify(window=window, facts=facts)
+        returned = False
+        try:
+            with self._control.background_call():
+                result = self._runtime.verify(window=window, facts=facts)
+                returned = True
+            self._control.wait_for_foreground()
+            return result
+        except (ModelWorkStopped, BackgroundTaskPersistenceError):
+            trace = current_trace()
+            if returned and trace is not None:
+                trace.discard_call("verification")
+            raise
 
 
 class PriorityAdjudicationRuntime:
@@ -231,7 +259,8 @@ class PriorityAdjudicationRuntime:
                 result = self._runtime.adjudicate(candidate_text=candidate_text, similar=similar)
                 returned = True
                 latency_ms = max(0, int((time.perf_counter() - started) * 1000))
-                return result
+            self._control.wait_for_foreground()
+            return result
         except (ModelWorkStopped, BackgroundTaskPersistenceError):
             if returned and self._accounting is not None:
                 self._accounting.record_discarded(called_at, latency_ms)

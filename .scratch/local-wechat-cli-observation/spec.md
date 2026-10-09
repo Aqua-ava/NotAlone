@@ -1,7 +1,7 @@
 # 本地微信 CLI 前台增量观察规格
 
 Type: task
-State: open
+State: resolved
 Triage: ready-for-agent
 
 > 来源：2026-08-24 `grill-with-docs` 设计访谈，共 43 个问题；架构记录见 ADR-016、ADR-017。
@@ -148,3 +148,8 @@ NotAlone 原计划用 OCR 识别微信聊天正文，但 OCR 还需要判断消�
 - [ADR-001：Mac 微信前台会话同步](../../architecture/adr/001-macos-wechat-active-session-sync.md)
 - [ADR-016：用本地微信 CLI 读取消息正文，OCR 只定位当前会话](../../architecture/adr/016-local-wechat-cli-observation.md)
 - [ADR-017：优先用选中会话元数据匹配当前微信会话](../../architecture/adr/017-selected-session-metadata-matching.md)
+
+## Comments
+
+- 2026-10-04：收尾核验后关闭。9 张 issue 全 resolved；适配器（`wechat_cli/adapter.py`）、选中行解析（`front_sync/foreground_locator.py`）、绑定与去重（`front_sync/cli_binding.py`）、每联系人 cursor 与 `cli_catchup`（`persistence/observation_store.py`、迁移 019/020）、tail 生命周期（`front_sync/tail_lifecycle.py`）均可核对；`tests/unit/wechat_cli` 43 项与 `tests/unit/front_sync` 63 项通过。
+- 2026-10-04：如实说明核验边界——对应的 PostgreSQL 集成测试（`tests/integration/front_sync/test_tail_lifecycle.py`、`test_front_sync_end_to_end.py`）本次**没有运行**（避免新建数据库），上述结论基于代码与单测；spec 文末列出的 5 项 GAP 已被后续实现闭合，原文已过期。

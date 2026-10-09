@@ -321,7 +321,7 @@ class MemoryEditingHttpCheck(unittest.TestCase):
         self.assertEqual(migrated.returncode, 0)
         self.assertEqual(database_readiness(self.data["database_url"], directory), "ready")
         with self.owned_database_connection() as connection:
-            connection.execute("DELETE FROM public.notalone_schema_migration WHERE name = '037_owner_memory_versioning.sql'")
+            connection.execute("DELETE FROM public.notalone_schema_migration WHERE name = '044_owner_memory_versioning.sql'")
         self.assertEqual(database_readiness(self.data["database_url"], directory), "migration_pending")
         self.assertEqual(database_readiness(self.data["database_url"], directory), "migration_pending")
         self.assertEqual(self.get("/api/memories/owner"), before)

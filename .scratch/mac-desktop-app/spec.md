@@ -195,7 +195,7 @@ App 有两个独立窗口：管理后台负责资料和配置；输入法式小�
 
 - 工程入口：[桌面端](../../desktop/README.md)、[后端](../../backend/README.md)、[原生探针](../../native/macos/README.md)。
 - 产品词汇与约束：[CONTEXT](../../CONTEXT.md)、[领域与数据](../../architecture/current/domain-data.md)、[核心流程](../../architecture/current/core-flows.md)、[隐私与删除](../../architecture/current/privacy-deletion.md)。
-- 本地服务与分发：[ADR-020](../../architecture/adr/020-local-backend-service-and-event-driven-sync.md)、[ADR-021](../../architecture/adr/021-source-distribution-and-first-run-setup.md)、[ADR-036](../../architecture/adr/036-retire-swift-main-interface.md)。本期本机构建复用外部运行环境，与源码分发边界一致。
+- 本地服务与分发：[ADR-020](../../architecture/adr/020-local-backend-service-and-event-driven-sync.md)、[ADR-021](../../architecture/adr/021-source-distribution-and-first-run-setup.md)、[ADR-039](../../architecture/adr/039-retire-swift-main-interface.md)。本期本机构建复用外部运行环境，与源码分发边界一致。
 - 同步：[ADR-023](../../architecture/adr/023-global-cli-sync-and-ocr-foreground-locator.md)、[ADR-025](../../architecture/adr/025-cli-background-sync-gap-backfill.md)、[ADR-030](../../architecture/adr/030-confirmed-contact-background-sync-consent.md)。
 - 权限、helper、签名和停读历史：[macOS 权限与错误台账](../../docs/macos-app-permissions-and-errors.md)。新宿主实现前记录新的权限归属和验收，不沿用旧构建结论。
 - 实际接口：[HTTP 路由](../../backend/src/notalone/server/app.py)、[回复请求契约](../../backend/src/notalone/application/reply_request.py)、[后端启动](../../backend/src/notalone/server/command.py)、[握手](../../backend/src/notalone/server/connection_info.py)。

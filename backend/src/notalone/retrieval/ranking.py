@@ -11,7 +11,11 @@ from notalone.retrieval.lexical import (
     build_query_tokens,
     score_tokens,
 )
-from notalone.retrieval.models import RetrievedMemory, RetrievedOwnerMemory
+from notalone.retrieval.models import (
+    RetrievedMemory,
+    RetrievedOwnerMemory,
+    RetrievedPendingCandidate,
+)
 
 
 def recall_owner_memories(
@@ -64,10 +68,10 @@ def rank_owner_memories(
             scored,
             key=lambda memory: _memory_ranking_key(
                 memory.relevance_score,
-                memory.adoption_method,
-                memory.confidence,
-                memory.valid_at,
-                memory.memory_id,
+                manual_adoption=memory.adoption_method == "manual",
+                confidence=memory.confidence,
+                valid_at=memory.valid_at,
+                memory_id=memory.memory_id,
             ),
         )[:limit]
     )
@@ -123,10 +127,76 @@ def rank_memories(
             scored,
             key=lambda memory: _memory_ranking_key(
                 memory.relevance_score,
-                memory.adoption_method,
-                memory.confidence,
-                memory.valid_at,
-                memory.memory_id,
+                manual_adoption=memory.adoption_method == "manual",
+                confidence=memory.confidence,
+                valid_at=memory.valid_at,
+                memory_id=memory.memory_id,
+            ),
+        )[:limit]
+    )
+
+
+def recall_pending_candidates(
+    candidates: tuple[RetrievedPendingCandidate, ...],
+    *,
+    query: str | None,
+    limit: int,
+) -> tuple[RetrievedPendingCandidate, ...]:
+    """按 query 评分召回待确认候选；query 为 None 时保持复验语义。"""
+
+    if not isinstance(candidates, tuple) or any(
+        not isinstance(candidate, RetrievedPendingCandidate)
+        for candidate in candidates
+    ):
+        raise TypeError("待确认候选必须是 RetrievedPendingCandidate 元组。")
+    if query is None:
+        return candidates[:limit]
+    if not isinstance(query, str):
+        raise TypeError("待确认候选检索 query 必须是字符串或 None。")
+    query_tokens = build_query_tokens(query)
+    if not query_tokens:
+        return ()
+    return rank_pending_candidates(
+        candidates,
+        query_tokens=query_tokens,
+        limit=limit,
+    )
+
+
+def rank_pending_candidates(
+    candidates: tuple[RetrievedPendingCandidate, ...],
+    *,
+    query_tokens: tuple[LexicalToken, ...],
+    limit: int,
+) -> tuple[RetrievedPendingCandidate, ...]:
+    """写入相关性与命中词，并按同一词典序返回前 limit 条待确认候选。"""
+
+    if not isinstance(candidates, tuple) or any(
+        not isinstance(candidate, RetrievedPendingCandidate)
+        for candidate in candidates
+    ):
+        raise TypeError("待确认候选必须是 RetrievedPendingCandidate 元组。")
+    if not isinstance(limit, int) or limit < 1:
+        raise ValueError("待确认候选排序预算无效。")
+    scored = tuple(
+        replace(
+            candidate,
+            relevance_score=result.score,
+            matched_terms=result.matched_terms,
+        )
+        for candidate in candidates
+        for result in (score_tokens(query_tokens, candidate.text),)
+    )
+    return tuple(
+        sorted(
+            scored,
+            key=lambda candidate: _memory_ranking_key(
+                candidate.relevance_score,
+                # 待确认候选尚未采纳，明确按「非人工采纳」排序，不冒充采纳方式。
+                manual_adoption=False,
+                confidence=candidate.confidence,
+                valid_at=candidate.valid_at,
+                memory_id=candidate.candidate_id,
             ),
         )[:limit]
     )
@@ -134,14 +204,22 @@ def rank_memories(
 
 def _memory_ranking_key(
     score: float | None,
-    adoption_method: str,
+    *,
+    manual_adoption: bool,
     confidence: float,
     valid_at: datetime | None,
     memory_id: UUID,
 ) -> tuple[object, ...]:
+    """可解释的词典序键：先相关度，再人工采纳、置信度、时间与标识。
+
+    ``manual_adoption`` 显式表达「这条命中是否由人工采纳」。待确认候选
+    还没有采纳方式，传入 ``False`` 表示它不属于人工采纳，而不是伪造一个
+    采纳方式字面量。
+    """
+
     return (
         -(score or 0.0),
-        adoption_method != "manual",
+        not manual_adoption,
         -confidence,
         valid_at is None,
         -(valid_at.timestamp() if valid_at is not None else 0.0),

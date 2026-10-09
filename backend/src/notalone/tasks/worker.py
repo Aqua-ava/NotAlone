@@ -7,7 +7,7 @@ from contextlib import nullcontext
 from datetime import timedelta
 from enum import StrEnum
 from threading import Event, Thread
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 import psycopg
@@ -25,12 +25,14 @@ from notalone.memory_extraction.command import (
     ExtractionRunStats,
     run_extraction,
 )
+from notalone.memory_extraction.dimensions import DimensionRelease
 from notalone.memory_extraction.errors import (
     ExtractionRuntimeError,
     MemoryExtractionError,
 )
 from notalone.memory_extraction.runtime import MemoryExtractionRuntime
 from notalone.memory_extraction.verification import SourceVerificationRuntime
+from notalone.memory_trace import TracePort, TraceWriteError
 from notalone.persistence.background_tasks import (
     BackgroundTaskLeaseError,
     BackgroundTaskPersistenceError,
@@ -45,27 +47,29 @@ from notalone.persistence.memory_store import (
     MemoryPersistenceError,
     PostgresMemoryStore,
 )
+from notalone.persistence.outbound_ledger import (
+    OutboundLedgerPersistenceError,
+    PostgresOutboundLedger,
+)
 from notalone.persistence.owner_memory_store import (
     OwnerMemoryPersistenceError,
     PostgresOwnerMemoryStore,
 )
-from notalone.persistence.outbound_ledger import (
-    OutboundLedgerPersistenceError,
-    PostgresOutboundLedger,
+from notalone.persistence.source_deletion import (
+    PostgresSourceDeletionRepository,
+    SourceDeletionError,
 )
 from notalone.persistence.watermark_store import (
     PostgresWatermarkStore,
     WatermarkPersistenceError,
 )
 from notalone.scopes import ContactScope
-from notalone.persistence.source_deletion import PostgresSourceDeletionRepository, SourceDeletionError
 from notalone.tasks.models import (
-    BackgroundTaskStepName,
     DELETE_TASK_STEPS,
+    BackgroundTaskStepName,
     BackgroundTaskStepStatus,
     ClaimedBackgroundTaskStep,
 )
-
 
 class ExtractionTaskRunner(Protocol):
     """Worker 调用的记忆提取执行 seam。"""
@@ -93,6 +97,7 @@ class WorkerRunResult:
     processed_count: int = 0
     attempt_count: int = 0
     error_code: str | None = None
+    failure_state_commit: str | None = None
 
 
 class _LeaseHeartbeat:
@@ -171,6 +176,7 @@ class PostgresMemoryExtractionRunner:
         "_adjudication_runtime",
         "_batch_size",
         "_database_url",
+        "_dimension_release",
         "_ledger",
         "_memory_port",
         "_model_name",
@@ -179,6 +185,7 @@ class PostgresMemoryExtractionRunner:
         "_runtime",
         "_verification_runtime",
         "_watermark_port",
+        "_trace_store",
     )
 
     def __init__(
@@ -195,6 +202,8 @@ class PostgresMemoryExtractionRunner:
         batch_size: int = EXTRACTION_BATCH_SIZE,
         provider: str = "deepseek",
         model_name: str | None = None,
+        dimension_release: DimensionRelease | None = None,
+        trace_store: TracePort | None = None,
     ) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
@@ -205,6 +214,9 @@ class PostgresMemoryExtractionRunner:
             raise ValueError(
                 f"记忆提取批次大小必须在 1 到 {EXTRACTION_BATCH_SIZE} 之间。"
             )
+        # None 表示沿用运维开关与默认空放行表（ADR-036），不是"全部放行"。
+        dimension_release = DimensionRelease.resolve(dimension_release)
+        self._dimension_release = dimension_release
         self._database_url = database_url
         if runtime is None:
             from notalone.memory_extraction.adapters import (
@@ -245,17 +257,29 @@ class PostgresMemoryExtractionRunner:
         self._batch_size = batch_size
         self._provider = provider
         self._model_name = model_name or "unreported"
+        from notalone.persistence.extraction_trace import (
+            PostgresExtractionTraceStore,
+        )
+
+        self._trace_store = (
+            trace_store
+            if trace_store is not None
+            else PostgresExtractionTraceStore(database_url)
+        )
 
     @property
     def model_version(self) -> str:
         return self._model_name
 
     def run(self, *, scope: ContactScope) -> ExtractionRunStats:
-        from notalone.memory_extraction.cli_support import load_contact_messages
+        from notalone.memory_extraction.cli_support import (
+            load_contact_messages,
+        )
 
-        messages = load_contact_messages(scope, self._database_url)
-        if not messages:
-            return ExtractionRunStats()
+        selection_receipts: list[dict[str, Any]] = []
+        messages = load_contact_messages(
+            scope, self._database_url, selection_receipts=selection_receipts
+        )
         return run_extraction(
             scope=scope,
             messages=messages,
@@ -270,6 +294,9 @@ class PostgresMemoryExtractionRunner:
             batch_size=self._batch_size,
             provider=self._provider,
             model_name=self._model_name,
+            dimension_release=self._dimension_release,
+            trace_store=self._trace_store,
+            selection_receipts=tuple(selection_receipts),
         )
 
 
@@ -598,6 +625,20 @@ class BackgroundTaskWorker:
             # 暂时不可用时，失败状态已无法落库；按可重试的临时失败
             # 返回，让 worker 循环存活，由租约收尸与下次认领决定
             # 任务去向，而不是让异常逃逸 run_once 崩溃整个进程。
+            if error_code == "trace_write_failed":
+                # 主追踪故障必须向运行状态暴露；失败状态的提交回执未知。
+                return WorkerRunResult(
+                    outcome=(
+                        WorkerRunOutcome.STOPPED
+                        if self._stopping()
+                        else WorkerRunOutcome.RETRYABLE
+                    ),
+                    task_id=claim.task_id,
+                    step_name=claim.name,
+                    attempt_count=claim.attempt_count,
+                    error_code=error_code,
+                    failure_state_commit="unknown",
+                )
             if self._stopping():
                 # 已知失败的记账暂不可用时不能当协作停止退款。
                 return WorkerRunResult(
@@ -617,10 +658,15 @@ class BackgroundTaskWorker:
             step_name=claim.name,
             attempt_count=claim.attempt_count,
             error_code=error_code,
+            failure_state_commit=(
+                "committed" if error_code == "trace_write_failed" else None
+            ),
         )
 
 
 def _failure_info(error: Exception) -> tuple[str, bool]:
+    if isinstance(error, TraceWriteError):
+        return "trace_write_failed", True
     if isinstance(
         error,
         (

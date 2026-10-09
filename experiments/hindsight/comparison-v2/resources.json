@@ -1,0 +1,76 @@
+{
+  "api_max_sampled_ps_cpu_percent": 229.8,
+  "api_max_sampled_rss_kib": 613184,
+  "api_sampling_interval_seconds": 1.0,
+  "limits": "API是每秒ps抽样最大值，含整个dev校准和final；runner是OS记录峰值。数据库子进程和系统总内存未合计。",
+  "runner_process_peak_rss_bytes": 50380800,
+  "runner_system_cpu_seconds": 0.039862999999999996,
+  "runner_user_cpu_seconds": 0.21411699999999997,
+  "samples": [
+    {
+      "at": "2026-10-03T18:00:12.973864+00:00",
+      "pid": 52132,
+      "ps_cpu_percent": 0.4,
+      "rss_kib": 110896
+    },
+    {
+      "at": "2026-10-03T18:00:13.982614+00:00",
+      "pid": 52132,
+      "ps_cpu_percent": 229.8,
+      "rss_kib": 445664
+    },
+    {
+      "at": "2026-10-03T18:00:14.993913+00:00",
+      "pid": 52132,
+      "ps_cpu_percent": 163.1,
+      "rss_kib": 613184
+    },
+    {
+      "at": "2026-10-03T18:00:16.003888+00:00",
+      "pid": 52132,
+      "ps_cpu_percent": 176.8,
+      "rss_kib": 583424
+    },
+    {
+      "at": "2026-10-03T18:00:17.011688+00:00",
+      "pid": 52132,
+      "ps_cpu_percent": 183.7,
+      "rss_kib": 556864
+    },
+    {
+      "at": "2026-10-03T18:00:18.025746+00:00",
+      "pid": 52132,
+      "ps_cpu_percent": 171.4,
+      "rss_kib": 497840
+    },
+    {
+      "at": "2026-10-03T18:00:19.041319+00:00",
+      "pid": 52132,
+      "ps_cpu_percent": 167.1,
+      "rss_kib": 486304
+    },
+    {
+      "at": "2026-10-03T18:00:20.056621+00:00",
+      "pid": 52132,
+      "ps_cpu_percent": 114.6,
+      "rss_kib": 472064
+    },
+    {
+      "at": "2026-10-03T18:00:21.065828+00:00",
+      "pid": 52132,
+      "ps_cpu_percent": 147.8,
+      "rss_kib": 491456
+    },
+    {
+      "at": "2026-10-03T18:00:22.077022+00:00",
+      "pid": 52132,
+      "ps_cpu_percent": 152.7,
+      "rss_kib": 498944
+    }
+  ],
+  "storage_kib": {
+    "database": "61732",
+    "models": "591612",
+    "venv": "1789276"
+  }
+}

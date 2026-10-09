@@ -16,6 +16,7 @@ from notalone.memory import (
 from notalone.memory.timing import MemoryTiming
 from notalone.reply.context import (
     ReplyContext,
+    ReplyContextError,
     ReplyContextInvariantError,
     RetrievalReplyContext,
 )
@@ -31,6 +32,7 @@ from notalone.retrieval import (
     RetrievedMemory,
     RetrievedMessage,
     RetrievedOwnerMemory,
+    RetrievedPendingCandidate,
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
 
@@ -42,6 +44,7 @@ BINDING_ID = UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 TARGET_MESSAGE_ID = UUID("bbbbbbbb-cccc-dddd-eeee-ffffffffffff")
 SOURCE_ID = UUID("cccccccc-dddd-eeee-ffff-000000000000")
 CANDIDATE_ID = UUID("dddddddd-eeee-ffff-0000-111111111111")
+EXPIRED_CANDIDATE_ID = UUID("dddddddd-eeee-ffff-0000-222222222222")
 
 
 def _ids() -> list[UUID]:
@@ -67,6 +70,7 @@ class RecordingRetrieval:
         self.owner_calls = 0
         self.memory_queries: list[str | None] = []
         self.owner_queries: list[str | None] = []
+        self.pending_calls = 0
         self.fail_memory = False
 
     def search_messages(
@@ -141,6 +145,20 @@ class RecordingRetrieval:
             if memory.owner_id == owner_id
             and (memory_ids is None or memory.memory_id in memory_ids)
         )
+
+    def search_pending_candidates(
+        self,
+        *,
+        scope: ContactScope,
+        query: str | None = None,
+        limit: int = 3,
+        candidate_ids: tuple[UUID, ...] | None = None,
+    ) -> tuple[RetrievedPendingCandidate, ...]:
+        """协议声明的待确认候选轨：这个假适配器没有候选，显式返回空。"""
+
+        del scope, query, limit, candidate_ids
+        self.pending_calls += 1
+        return ()
 
 
 class RecordingMemoryIndex:
@@ -323,6 +341,107 @@ class ContextRetrievalTest(unittest.TestCase):
         )
         self.assertTrue(all(item.scope == self.scope for item in result.evidence))
         self.assertEqual(result.skill_library_revision, 7)
+
+    def test_expired_memory_with_invalid_at_never_enters_the_reply_basis(self) -> None:
+        """带过期 invalid_at 的关系记忆不得进入回复依据，但记忆本身仍在库里。"""
+
+        expired_at = datetime(2026, 9, 16, tzinfo=timezone.utc)
+        retrieval = self._retrieval()
+        active = retrieval.memory_store.list_confirmed(self.scope)[0]
+        retrieval.memory_store.create_candidate(
+            MemoryCandidate(
+                EXPIRED_CANDIDATE_ID,
+                self.scope,
+                "对方明天上午去医院复查",
+                MemoryCategory.RECENT_STATE,
+                (SOURCE_ID,),
+                valid_at=datetime(2026, 9, 15, tzinfo=timezone.utc),
+                invalid_at=expired_at,
+            )
+        )
+        expired = retrieval.memory_store.confirm(
+            scope=self.scope,
+            candidate_id=EXPIRED_CANDIDATE_ID,
+            adoption_method=AdoptionMethod.AUTO,
+        )
+        self.assertEqual(expired.invalid_at, expired_at)
+        self.assertNotIn(
+            expired.memory_id,
+            {memory.memory_id for memory in retrieval.memory_store.list_confirmed(self.scope)},
+        )
+
+        result = RetrievalReplyContext(
+            retrieval=retrieval,
+            skill_library_revision=1,
+            id_factory=iter(_ids()).__next__,
+        ).build(
+            command=self._reply_command(),
+            verified_scope=self.verified_scope,
+        )
+
+        memory_evidence = tuple(
+            item for item in result.evidence if item.kind == "confirmed_memory"
+        )
+        self.assertEqual(
+            tuple(item.evidence_id for item in memory_evidence),
+            (active.memory_id,),
+        )
+        self.assertEqual(memory_evidence[0].invalid_at, None)
+
+    def test_retrieval_keeps_unexpired_memory_and_drops_only_the_expired_one(self) -> None:
+        """同一路径里有效期未到的记忆仍可检索，证明过滤只针对已过期。"""
+
+        future_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
+        retrieval = self._retrieval()
+        active = retrieval.memory_store.list_confirmed(self.scope)[0]
+        retrieval.memory_store.create_candidate(
+            MemoryCandidate(
+                EXPIRED_CANDIDATE_ID,
+                self.scope,
+                "对方年底前都在上海出差",
+                MemoryCategory.RECENT_STATE,
+                (SOURCE_ID,),
+                valid_at=datetime(2026, 9, 15, tzinfo=timezone.utc),
+                invalid_at=future_at,
+            )
+        )
+        visible = retrieval.memory_store.confirm(
+            scope=self.scope,
+            candidate_id=EXPIRED_CANDIDATE_ID,
+            adoption_method=AdoptionMethod.AUTO,
+        )
+
+        # query=None 只看有效期过滤，避免词法覆盖率再筛掉这条合成记忆。
+        retrieved = retrieval.search_confirmed_memories(scope=self.scope, query=None)
+
+        self.assertEqual(
+            tuple(memory.memory_id for memory in retrieved),
+            (active.memory_id, visible.memory_id),
+        )
+
+    def test_revision_snapshot_failure_fails_closed(self) -> None:
+        retrieval = self._retrieval()
+        memory = retrieval.memory_store.list_confirmed(self.scope)[0]
+        index = RecordingMemoryIndex((memory.memory_id,), revisions=(4, 4))
+
+        def failing_snapshot(scope):
+            del scope
+            raise RuntimeError("synthetic revision outage")
+
+        index.revision_snapshot = failing_snapshot  # type: ignore[method-assign]
+        context = RetrievalReplyContext(
+            retrieval=retrieval,
+            memory_index=index,
+            skill_library_revision=7,
+            id_factory=iter(_ids()).__next__,
+        )
+
+        # 读不到 revision 不能当成“没有变化”，否则瞬时故障会让本轮缺少 tripwire。
+        with self.assertRaises(ReplyContextError):
+            context.build(
+                command=self._reply_command(),
+                verified_scope=self.verified_scope,
+            )
 
     def test_directory_only_provides_revision_snapshot(self) -> None:
         retrieval = self._retrieval()

@@ -148,6 +148,36 @@ class ModelPriorityLifecycleHttpTest(CoreBusinessFlowFixture, unittest.TestCase)
         self._prepare_adjudication(imported, two_facts=True)
         self._assert_foreground_priority(imported, 2, 3)
 
+    def test_adjudication_result_waits_for_reply_before_changing_memory(self):
+        imported = self._import(self.backend, "裁决结果交接", "茉莉茶")
+        self._prepare_adjudication(imported)
+        adjudication = self.extraction_model.block_call(2)
+        reply_gate = self.reply_model.block_call(0)
+        body = self._reply_body(imported)
+        self._start_import_worker(self.backend, imported)
+        self.assertTrue(adjudication.entered.wait(5))
+        reply = self.executor.submit(self.backend.request, "/api/reply/generate", body)
+        self.assertFalse(reply_gate.entered.wait(0.3))
+        adjudication.release.set()
+        self.assertTrue(reply_gate.entered.wait(5))
+        # 前台模型被明确保持运行，观察期间后台旧裁决不能使其依据失效。
+        deadline = time.monotonic() + 0.3
+        while time.monotonic() < deadline:
+            memories = self._get(
+                self.backend, f"/api/contacts/{imported['contact_id']}/memories",
+            )["memories"]
+            self.assertEqual([row["text"] for row in memories], ["联系人很喜欢茉莉茶。"])
+            threading.Event().wait(0.02)
+        reply_gate.release.set()
+        status, payload = reply.result(timeout=5)
+        self.assertEqual(status, 200, payload)
+        self._wait_task(self.backend, imported, "succeeded")
+        memories = self._get(
+            self.backend, f"/api/contacts/{imported['contact_id']}/memories",
+        )["memories"]
+        self.assertEqual({row["text"] for row in memories},
+                         {"联系人很喜欢茉莉茶。", "联系人喜欢茉莉茶。"})
+
     def test_foreground_wait_longer_than_runtime_and_request_lease_still_succeeds(self):
         extraction = self.extraction_model.block_call(0)
         imported = self._import(self.backend, "长等待", "茉莉茶")

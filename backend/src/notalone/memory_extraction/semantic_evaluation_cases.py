@@ -4,7 +4,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from notalone.memory_extraction.evaluation_cases import ClaimExpectation, EvaluationCase
+from notalone.memory_extraction.evaluation_cases import (
+    ClaimExpectation,
+    EvaluationCase,
+    ExpectedDestination,
+)
 from notalone.memory_extraction.models import ExtractionWindow
 from notalone.memory_extraction.runtime import ExtractionPayload
 
@@ -54,22 +58,22 @@ def challenge_payloads(
 SEMANTIC_CHALLENGES: tuple[CandidateChallenge, ...] = (
     CandidateChallenge(
         EvaluationCase("严格：否定饮酒", "paraphrase",
-            (("contact", "我不喝酒，你们喝就行。"),), (0,), "auto",
-            expected_claims=(ClaimExpectation("contact", "auto",
+            (("contact", "我不喝酒，你们喝就行。"),), (0,), ExpectedDestination.AUTO,
+            expected_claims=(ClaimExpectation("contact", ExpectedDestination.AUTO,
                 (r"(?:联系人)?(?:不喝酒|不饮酒|滴酒不沾)[。]?",)),)),
         (CandidateVariant("联系人不喝酒。"),),
         (CandidateVariant("联系人每天喝半斤白酒。"),),
     ),
     CandidateChallenge(
         EvaluationCase("严格：否定牛奶", "paraphrase",
-            (("contact", "我从来不喝牛奶，早餐喝豆浆。"),), (0,), "auto",
+            (("contact", "我从来不喝牛奶，早餐喝豆浆。"),), (0,), ExpectedDestination.AUTO,
             expected_claims=(
-                ClaimExpectation("contact", "auto",
+                ClaimExpectation("contact", ExpectedDestination.AUTO,
                     (
                         r"(?:联系人)?(?:从来不喝|从不喝|从不饮用)牛奶[。]?",
                         r"(?:联系人)?(?:从来不喝|从不喝|从不饮用)牛奶[，,](?:早餐|早饭)(?:喝|饮用)豆浆[。]?",
                     )),
-                ClaimExpectation("contact", "auto",
+                ClaimExpectation("contact", ExpectedDestination.AUTO,
                     (
                         r"(?:联系人)?(?:早餐|早饭)(?:喝|饮用)豆浆[。]?",
                         r"(?:联系人)?(?:从来不喝|从不喝|从不饮用)牛奶[，,](?:早餐|早饭)(?:喝|饮用)豆浆[。]?",
@@ -79,22 +83,22 @@ SEMANTIC_CHALLENGES: tuple[CandidateChallenge, ...] = (
     ),
     CandidateChallenge(
         EvaluationCase("严格：偶尔徒步", "paraphrase",
-            (("contact", "我偶尔去徒步，并不是每周都去。"),), (0,), "auto",
-            expected_claims=(ClaimExpectation("contact", "auto",
+            (("contact", "我偶尔去徒步，并不是每周都去。"),), (0,), ExpectedDestination.AUTO,
+            expected_claims=(ClaimExpectation("contact", ExpectedDestination.AUTO,
                 (r"(?:联系人)?(?:偶尔|有时|不定期)(?:去)?徒步(?:，(?:不是|并非)每周都去)?[。]?",)),)),
         (CandidateVariant("联系人偶尔去徒步。"),),
         (CandidateVariant("联系人每周都去徒步。"),),
     ),
     CandidateChallenge(
         EvaluationCase("严格：养猫数量", "quantity",
-            (("contact", "我家养了两只猫，没有养狗。"),), (0,), "auto",
+            (("contact", "我家养了两只猫，没有养狗。"),), (0,), ExpectedDestination.AUTO,
             expected_claims=(
-                ClaimExpectation("contact", "auto",
+                ClaimExpectation("contact", ExpectedDestination.AUTO,
                     (
                         r"(?:联系人)?(?:家里|家中|家)?(?:养了|养着|有)(?:两|2)只猫[。]?",
                         r"(?:联系人)?(?:家里|家中|家)?(?:养了|养着|有)(?:两|2)只猫[，,](?:没有养狗|没养狗|不养狗)[。]?",
                     )),
-                ClaimExpectation("contact", "auto",
+                ClaimExpectation("contact", ExpectedDestination.AUTO,
                     (
                         r"(?:联系人)?(?:没有养狗|没养狗|不养狗)[。]?",
                         r"(?:联系人)?(?:家里|家中|家)?(?:养了|养着|有)(?:两|2)只猫[，,](?:没有养狗|没养狗|不养狗)[。]?",
@@ -104,16 +108,16 @@ SEMANTIC_CHALLENGES: tuple[CandidateChallenge, ...] = (
     ),
     CandidateChallenge(
         EvaluationCase("严格：门票省略数量", "reference",
-            (("self", "展览门票买好了吗？"), ("contact", "买好了，两张。")), (1,), "auto",
-            expected_claims=(ClaimExpectation("contact", "auto",
+            (("self", "展览门票买好了吗？"), ("contact", "买好了，两张。")), (1,), ExpectedDestination.AUTO,
+            expected_claims=(ClaimExpectation("contact", ExpectedDestination.AUTO,
                 (r"(?:联系人)?(?:已经|已)?(?:买好|买了|购得)(?:了)?(?:两|2)张展览门票[。]?",)),)),
         (CandidateVariant("联系人已买好两张展览门票。", source_indices=(0, 1)),),
         (CandidateVariant("联系人已买好三张展览门票。", source_indices=(0, 1)),),
     ),
     CandidateChallenge(
         EvaluationCase("严格：降雨前提", "condition",
-            (("contact", "明天要是不降雨，我才去露营。"),), (0,), "pending",
-            expected_claims=(ClaimExpectation("contact", "pending", (
+            (("contact", "明天要是不降雨，我才去露营。"),), (0,), ExpectedDestination.PENDING,
+            expected_claims=(ClaimExpectation("contact", ExpectedDestination.PENDING, (
                 r"(?:联系人)?(?:明天不降雨才|只有明天不下雨才|如果明天不降雨就)(?:去|会去)露营[。]?",
             ), (("speech_act", "plan"), ("assertion_status", "conditional"))),)),
         (CandidateVariant("联系人只有明天不下雨才去露营。", speech_act="plan", assertion_status="conditional"),),
@@ -121,8 +125,8 @@ SEMANTIC_CHALLENGES: tuple[CandidateChallenge, ...] = (
     ),
     CandidateChallenge(
         EvaluationCase("严格：现场工作限定", "condition",
-            (("self", "我只有周三去现场办公，其他工作日都远程办公。"),), (0,), "auto",
-            expected_claims=(ClaimExpectation("self", "auto", (
+            (("self", "我只有周三去现场办公，其他工作日都远程办公。"),), (0,), ExpectedDestination.AUTO,
+            expected_claims=(ClaimExpectation("self", ExpectedDestination.AUTO, (
                 r"(?:用户)?(?:只有|仅在|仅)周三(?:去)?现场办公[，,](?:其他|其余)工作日(?:都)?远程办公[。]?",
             )),)),
         (CandidateVariant("用户仅在周三现场办公，其他工作日远程办公。", subject="self"),),
@@ -130,12 +134,12 @@ SEMANTIC_CHALLENGES: tuple[CandidateChallenge, ...] = (
     ),
     CandidateChallenge(
         EvaluationCase("严格：姐姐职业", "reported",
-            (("contact", "我姐在苏州做设计，我在无锡做仓库管理。"),), (0,), "auto",
+            (("contact", "我姐在苏州做设计，我在无锡做仓库管理。"),), (0,), ExpectedDestination.AUTO,
             expected_claims=(
-                ClaimExpectation("contact", "pending", (
+                ClaimExpectation("contact", ExpectedDestination.PENDING, (
                     r"(?:据联系人说[，,])?联系人的姐姐在苏州(?:做设计|从事设计工作|当设计师)[。]?",
                 ), (("speech_act", "report"), ("assertion_status", "reported"))),
-                ClaimExpectation("contact", "auto", (
+                ClaimExpectation("contact", ExpectedDestination.AUTO, (
                     r"(?:联系人)?在无锡(?:做仓库管理|管理仓库|负责仓库管理)[。]?",
                 )),)),
         (CandidateVariant("联系人的姐姐在苏州从事设计工作。", speech_act="report", assertion_status="reported"),
@@ -144,20 +148,20 @@ SEMANTIC_CHALLENGES: tuple[CandidateChallenge, ...] = (
     ),
     CandidateChallenge(
         EvaluationCase("严格：跨消息第三人", "reference",
-            (("self", "老陈现在住哪里？"), ("contact", "他住天津，我住重庆。")), (1,), "auto",
+            (("self", "老陈现在住哪里？"), ("contact", "他住天津，我住重庆。")), (1,), ExpectedDestination.AUTO,
             expected_claims=(
-                ClaimExpectation("contact", "pending", (
+                ClaimExpectation("contact", ExpectedDestination.PENDING, (
                     r"(?:据联系人说[，,])?老陈(?:住在|住|居住在)天津[。]?",
                 ), (("speech_act", "report"), ("assertion_status", "reported"))),
-                ClaimExpectation("contact", "auto", (r"(?:联系人)?(?:住在|住|居住在)重庆[。]?",)),)),
+                ClaimExpectation("contact", ExpectedDestination.AUTO, (r"(?:联系人)?(?:住在|住|居住在)重庆[。]?",)),)),
         (CandidateVariant("老陈住在天津。", source_indices=(0, 1), speech_act="report", assertion_status="reported"),
          CandidateVariant("联系人居住在重庆。", source_indices=(1,))),
         (CandidateVariant("联系人住在天津。", source_indices=(0, 1)),), "holdout",
     ),
     CandidateChallenge(
         EvaluationCase("严格：工作期间跨度", "time",
-            (("self", "本周一到周三临时在南区值班，周四回原办公室。"),), (0,), "auto",
-            expected_claims=(ClaimExpectation("self", "auto", (
+            (("self", "本周一到周三临时在南区值班，周四回原办公室。"),), (0,), ExpectedDestination.AUTO,
+            expected_claims=(ClaimExpectation("self", ExpectedDestination.AUTO, (
                 r"(?:用户)?本周(?:一到周三|一至周三|周一至周三)临时在南区值班[。]?",
             ), valid_at_iso="2026-09-14T00:00:00+00:00", invalid_at_iso="2026-09-17T00:00:00+00:00"),)),
         (CandidateVariant("用户本周一至周三临时在南区值班。", subject="self",
@@ -167,8 +171,8 @@ SEMANTIC_CHALLENGES: tuple[CandidateChallenge, ...] = (
     ),
     CandidateChallenge(
         EvaluationCase("严格：历史学习时间", "time",
-            (("contact", "我是去年春天学会游泳的，不是今年。"),), (0,), "auto",
-            expected_claims=(ClaimExpectation("contact", "auto", (
+            (("contact", "我是去年春天学会游泳的，不是今年。"),), (0,), ExpectedDestination.AUTO,
+            expected_claims=(ClaimExpectation("contact", ExpectedDestination.AUTO, (
                 r"(?:联系人)?(?:去年春天|去年春季)(?:学会了|学会)游泳(?:[，,]不是今年)?[。]?",
             )),)),
         (CandidateVariant("联系人去年春季学会了游泳。"),),
@@ -176,8 +180,8 @@ SEMANTIC_CHALLENGES: tuple[CandidateChallenge, ...] = (
     ),
     CandidateChallenge(
         EvaluationCase("严格：取消安排", "time",
-            (("contact", "我们原定周六去看展览，已经取消了。"),), (0,), "auto",
-            expected_claims=(ClaimExpectation("shared", "auto", (
+            (("contact", "我们原定周六去看展览，已经取消了。"),), (0,), ExpectedDestination.AUTO,
+            expected_claims=(ClaimExpectation("shared", ExpectedDestination.AUTO, (
                 r"(?:双方|我们)(?:原定|原计划)周六(?:去)?看展览(?:的安排)?(?:已经|已)?取消(?:了)?[。]?",
             )),)),
         (CandidateVariant("双方原定周六看展览的安排已取消。", subject="shared"),),
@@ -185,10 +189,10 @@ SEMANTIC_CHALLENGES: tuple[CandidateChallenge, ...] = (
     ),
     CandidateChallenge(
         EvaluationCase("严格：当前与未来分离", "time",
-            (("contact", "我现在在南京工作，下个月准备去青岛参加培训。"),), (0,), "auto",
+            (("contact", "我现在在南京工作，下个月准备去青岛参加培训。"),), (0,), ExpectedDestination.AUTO,
             expected_claims=(
-                ClaimExpectation("contact", "auto", (r"(?:联系人)?(?:现在|目前|当前)?在南京工作[。]?",)),
-                ClaimExpectation("contact", "pending", (
+                ClaimExpectation("contact", ExpectedDestination.AUTO, (r"(?:联系人)?(?:现在|目前|当前)?在南京工作[。]?",)),
+                ClaimExpectation("contact", ExpectedDestination.PENDING, (
                     r"(?:联系人)?下个月(?:准备|计划|打算)去青岛(?:参加培训|培训)[。]?",
                 ), (("speech_act", "plan"),))),),
         (CandidateVariant("联系人目前在南京工作。"),
@@ -197,10 +201,10 @@ SEMANTIC_CHALLENGES: tuple[CandidateChallenge, ...] = (
     ),
     CandidateChallenge(
         EvaluationCase("严格：跨话题拼接", "reference",
-            (("contact", "我平时喜欢喝红茶。"), ("contact", "另外，下周计划去厦门参展。")), (0, 1), "auto",
+            (("contact", "我平时喜欢喝红茶。"), ("contact", "另外，下周计划去厦门参展。")), (0, 1), ExpectedDestination.AUTO,
             expected_claims=(
-                ClaimExpectation("contact", "auto", (r"(?:联系人)?(?:平时)?(?:喜欢喝|爱喝|偏爱)红茶[。]?",)),
-                ClaimExpectation("contact", "pending", (
+                ClaimExpectation("contact", ExpectedDestination.AUTO, (r"(?:联系人)?(?:平时)?(?:喜欢喝|爱喝|偏爱)红茶[。]?",)),
+                ClaimExpectation("contact", ExpectedDestination.PENDING, (
                     r"(?:联系人)?下周(?:计划|准备|打算)去厦门(?:参展|参加展会)[。]?",
                 ), (("speech_act", "plan"),))),),
         (CandidateVariant("联系人爱喝红茶。"),
@@ -209,8 +213,8 @@ SEMANTIC_CHALLENGES: tuple[CandidateChallenge, ...] = (
     ),
     CandidateChallenge(
         EvaluationCase("严格：明确职业正向", "subject",
-            (("self", "我在宁波的博物馆做讲解员，已经工作三年了。"),), (0,), "auto",
-            expected_claims=(ClaimExpectation("self", "auto", (
+            (("self", "我在宁波的博物馆做讲解员，已经工作三年了。"),), (0,), ExpectedDestination.AUTO,
+            expected_claims=(ClaimExpectation("self", ExpectedDestination.AUTO, (
                 r"(?:用户)?在宁波(?:的)?博物馆(?:做讲解员|担任讲解员|从事讲解工作)[，,](?:已经|已)?工作(?:三|3)年(?:了)?[。]?",
             )),)),
         (CandidateVariant("用户在宁波博物馆担任讲解员，已工作三年。", subject="self"),),
@@ -221,20 +225,20 @@ SEMANTIC_CHALLENGES: tuple[CandidateChallenge, ...] = (
             (("contact", "你怎么看那家泥塑体验课的报价？"),
              ("self", "我觉得两次课90元挺合适，不过报不报名还没决定。"),
              ("self", "如果周末有空，我只去问场地是否能借工具。")),
-            (1, 2), "auto",
+            (1, 2), ExpectedDestination.AUTO,
             note="完全合成的关系资料：评价价格不等于报名意向；条件咨询不等于实际借用。"
                  "有限 oracle 固定去向与空日期，不覆盖保守 pending、自然引用完整性或分类；"
                  "受控 category 仍为 preference，不能据此证明模型改善。",
             expected_claims=(
-                ClaimExpectation("self", "auto", (
+                ClaimExpectation("self", ExpectedDestination.AUTO, (
                     r"(?:用户)?(?:觉得|认为)(?:两次泥塑体验课90元|泥塑体验课两次90元)(?:挺)?合适[。]?",
                     r"(?:用户)?(?:觉得|认为)(?:两次泥塑体验课90元|泥塑体验课两次90元)(?:挺)?合适[，,](?:但|不过)?(?:尚未|还没)决定(?:是否|要不要)报名(?:泥塑体验课)?[。]?",
                 ), (("speech_act", "assertion"), ("assertion_status", "asserted"))),
-                ClaimExpectation("self", "auto", (
+                ClaimExpectation("self", ExpectedDestination.AUTO, (
                     r"(?:用户)?(?:尚未|还没)决定(?:是否|要不要)报名(?:泥塑体验课)?[。]?",
                     r"(?:用户)?(?:觉得|认为)(?:两次泥塑体验课90元|泥塑体验课两次90元)(?:挺)?合适[，,](?:但|不过)?(?:尚未|还没)决定(?:是否|要不要)报名(?:泥塑体验课)?[。]?",
                 ), (("speech_act", "assertion"), ("assertion_status", "asserted"))),
-                ClaimExpectation("self", "pending", (
+                ClaimExpectation("self", ExpectedDestination.PENDING, (
                     r"(?:用户)?(?:仅在周末有空时|只有周末有空才|如果周末有空才)(?:只)?(?:去)?(?:咨询|询问)场地(?:是否能|能否)借工具[。]?",
                 ), (("speech_act", "plan"), ("assertion_status", "conditional"))),
             )),
@@ -251,15 +255,15 @@ SEMANTIC_CHALLENGES: tuple[CandidateChallenge, ...] = (
             (("contact", "2024年暑假，我表弟曾在社区读书会负责活动主持。"),
              ("self", "你表弟现在做什么工作？"),
              ("contact", "现在他做什么工作，我不知道。")),
-            (0, 2), "auto",
+            (0, 2), ExpectedDestination.AUTO,
             note="完全合成：历史经历属于联系人的表弟；当前不知道是联系人明确自述的知识状态，"
                  "不是模型证据不足。有限 oracle 固定拆分标签、去向与空日期；"
                  "不覆盖忠实混合转述、自述的复合候选、保守 pending、自然引用完整性或分类。",
             expected_claims=(
-                ClaimExpectation("contact", "pending", (
+                ClaimExpectation("contact", ExpectedDestination.PENDING, (
                     r"(?:据联系人说[，,])?联系人的表弟(?:2024年暑假|在2024年暑假)(?:曾)?(?:在社区读书会负责活动主持|负责社区读书会的活动主持)[。]?",
                 ), (("speech_act", "report"), ("assertion_status", "reported"))),
-                ClaimExpectation("contact", "auto", (
+                ClaimExpectation("contact", ExpectedDestination.AUTO, (
                     r"联系人(?:不知道|不清楚)(?:其表弟|自己的表弟|表弟)(?:目前|现在)(?:做什么工作|从事什么职业)[。]?",
                 ), (("speech_act", "assertion"), ("assertion_status", "asserted"))),
             )),

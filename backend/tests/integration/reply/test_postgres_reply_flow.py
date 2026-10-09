@@ -406,6 +406,106 @@ class PostgresReplyFlowTest(unittest.TestCase):
                 command=conflicting_command,
             )
 
+    def _pending_candidate(self, text: str) -> MemoryCandidate:
+        return self.memory_store.create_candidate(
+            MemoryCandidate(
+                candidate_id=uuid4(),
+                scope=self.scope,
+                text=text,
+                category=MemoryCategory.RECENT_STATE,
+                source_ids=(self.source_id,),
+            )
+        )
+
+    def _reply_model_citing(self, *citation_ids: UUID) -> ToolCallingFakeModel:
+        return ToolCallingFakeModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "ReplyRuntimeOutput",
+                            "args": {
+                                "candidates": [
+                                    {
+                                        "text": "听说你明天可能没空，那改天一起吃饭？",
+                                        "basis": "对未确认候选只做确认式提问",
+                                        "citation_ids": [
+                                            str(citation_id)
+                                            for citation_id in citation_ids
+                                        ],
+                                        "risk_notes": [],
+                                    }
+                                ],
+                                "used_skill_version_id": None,
+                            },
+                            "id": "return-pending-aware-candidate",
+                        }
+                    ],
+                ),
+            ]
+        )
+
+    def _model_evidence(self, model: ToolCallingFakeModel) -> list[dict[str, Any]]:
+        import json
+
+        return next(
+            json.loads(message.content)["evidence"]
+            for call in model.seen_calls
+            for message in call
+            if message.type == "human"
+        )
+
+    def test_pending_candidate_reaches_model_as_unconfirmed_and_persists(self) -> None:
+        pending = self._pending_candidate("对方说明天可能没空一起吃饭。")
+        model = self._reply_model_citing(self.target_message_id, pending.candidate_id)
+
+        result = self.flow.execute(
+            reply=self._generator(model, self.store),
+            command=self._command(),
+        )
+
+        assert result.reply is not None
+        evidence = self._model_evidence(model)
+        pending_payload = next(
+            item for item in evidence if item["kind"] == "pending_candidate"
+        )
+        self.assertEqual(pending_payload["status"], "pending")
+        self.assertIn("未确认", pending_payload["selection_reason"])
+        self.assertIn("不得当作事实", pending_payload["selection_reason"])
+
+        stored = self.store.read(result.reply.reply_request_id, self.scope)
+        pending_evidence = next(
+            item for item in stored.evidence if item.kind == "pending_candidate"
+        )
+        self.assertEqual(pending_evidence.evidence_id, pending.candidate_id)
+        self.assertEqual(pending_evidence.status, "pending")
+        self.assertIn(pending.candidate_id, result.reply.candidates[0].citation_ids)
+
+    def test_rejected_candidate_never_reaches_model_input(self) -> None:
+        pending = self._pending_candidate("对方说明天可能没空一起吃饭。")
+        self.memory_store.reject_candidate(
+            scope=self.scope,
+            candidate_id=pending.candidate_id,
+        )
+        model = self._reply_model_citing(self.target_message_id)
+
+        result = self.flow.execute(
+            reply=self._generator(model, self.store),
+            command=self._command(),
+        )
+
+        assert result.reply is not None
+        self.assertNotIn(
+            "pending_candidate",
+            {item["kind"] for item in self._model_evidence(model)},
+        )
+        stored = self.store.read(result.reply.reply_request_id, self.scope)
+        self.assertNotIn(
+            "pending_candidate",
+            {item.kind for item in stored.evidence},
+        )
+
     def test_unverified_or_cross_contact_scope_stops_before_reply_runtime(self) -> None:
         for state, reason in (
             (
