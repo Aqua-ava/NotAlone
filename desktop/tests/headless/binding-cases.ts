@@ -26,7 +26,9 @@ async function runScenario(browser: Browser, origin: string, name: string, scena
             async openHelper() {
               const opened = manager.context().waitForEvent('page');
               await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
-              return opened;
+              const helper = await opened;
+              await helper.waitForURL(`${origin}/#helper`);
+              return helper;
             },
           }, proxy);
         } finally {
