@@ -4,6 +4,10 @@
 最后更新：2026-10-09
 适用范围：新 Electron `NotAlone.app`、历史 `NotAloneApp.app`、`NotAloneSyncProbe.app`、`notalone-sync-probe` 和历史主 App 打包的 `wechat-cli`
 
+2026-10-09 任务 18 原生源码安全退化片：目前没有可追溯、已验证的最小定位区域 profile，因此新 CLI 的默认 `--session --json`、追加 `--minimal-region` 和旧 text session 都在 `NSApplication`、权限检查、窗口查询及采集调用之前安全暂停，返回 `minimal_region_layout_unverified`；删除 session 的完整窗口采集及回退路径。脱离 session 的 `--minimal-region`、重复、未知和混用参数也先拒绝。未新增权限、坐标猜测、可用 profile、质量生产字段或自动身份匹配；历史 watch/menu 诊断路径未扩展，不能作为新宿主证明。
+
+本片只编译源码并执行独立的纯 Swift 参数/政策驱动（17 组参数通过）；`swift build --package-path native/macos --target NotAloneSyncCLI` 与 `--target NotAloneSyncProbeTests` 静态编译通过，测试目标未执行。没有启动 CLI、App、屏幕采集、权限检查、签名或打包。既有源码的完整窗口路径是已查明风险，纯逻辑结果不称原生 red → green。正式构建脚本的硬编码 Core 输入须在集成时登记新源码；任务 18 仍为 claimed，实际原生最小采集及权限验收尚未完成。
+
 2026-10-09 任务 16 评审修复（待增量双轴）：带 `observed_display_name` 的明确新建选择，若最后确认时会话已被另一合法确认绑定，则在现有同步互斥边界内整批拒绝；不静默复用联系人、部分新建授权或触发正文循环。名称变化整批拒绝、显式相同联系人重放、自定义展示名及旧调用兼容仍保留。绑定 IPC 与后端响应解析共用两条私有值规则，继续各自校验及返回原固定中文错误。本轮仅类型检查与隔离后端相关组 66/66（21.541s）通过；并发真实 HTTP 竞态有失败到通过及补充 PG 行数证据。按用户当前要求未运行 App、Playwright、CUA 或系统按键，未重建签名包，历史 App 验收不能代表本轮修复通过 UI 验收。未新增权限、外部发送、协议字段、数据表或业务库迁移。
 
 2026-10-09 桌面验收调度修复（候选待评审）：用户反馈多工作树/Agent 的真实 Electron 反复启动、退出并抢焦点，故当前全部功能任务 App 验收暂停。普通 `npm test` 改为类型检查与安全 CLI/合成 Node 回归，并明确报告 App 未运行；真实源码/签名包验收保留原公开 App/HTTP 接缝，只由主 Agent 在用户认可的有限时段通过 `test:app` 限定文件/预算执行。稳定 OS 用户目录中的私有租约跨工作树互斥，活 socket/token 门禁覆盖 fixture、独立重启及重复实例；到期停止新增启动、仅收尾本轮拥有的 ChildProcess，不以未知 PID 或名字杀用户进程。崩溃/损坏/EPERM 或不确定收尾留下的锁不自动抢占，先由主 Agent 核验归属和收尾。旧树须先合最新集成及门禁才可恢复，锁不能拦截尚未合入的旧脚本。详情与安全状态查询见[桌面验收说明](../desktop/README.md#安全检查与预约-app-验收)。本修复不改生产窗口 show/focus、App 权限、签名、系统按键或业务读取范围；以下既有真实 App 结果属于各自历史验证，不等于本修复通过 UI 验收。
