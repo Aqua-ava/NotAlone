@@ -331,7 +331,7 @@ class TaskHost:
                 while not self._stopped.is_set():
                     if reliable and task_id is not None:
                         try:
-                            if not self._can_execute(scope, task_id):
+                            if not self._prepare_for_execution(scope, task_id):
                                 break
                         except Exception:
                             self._defer(scope, task_id, "execution_resources_unavailable")
@@ -354,7 +354,9 @@ class TaskHost:
                 if self._stopped.is_set():
                     self._pending.pop(scope, None)
 
-    def _can_execute(self, scope: tuple[UUID, UUID], task_id: UUID) -> bool:
+    def _prepare_for_execution(self, scope: tuple[UUID, UUID], task_id: UUID) -> bool:
+        """复验可执行状态；失败观察任务可能消费已登记的新批次并重排。"""
+
         if self._task_repository is None:
             return True
         try:

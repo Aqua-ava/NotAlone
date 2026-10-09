@@ -1,6 +1,6 @@
 """真实观察存储、发布端口及 HTTP 状态验证自动记忆任务。"""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import time
@@ -43,13 +43,18 @@ class ObservationModel:
         self.release.set()
         self.unavailable = False
         self.fail_through = 0
+        self.failure_calls = set()
+        self.call_gates = {}
 
     def extract(self, window):
         self.calls.append(window.target_message_id_set)
+        call_number = len(self.calls)
         self.entered.set()
         if not self.release.wait(5):
             raise TimeoutError("合成模型未释放。")
-        if self.unavailable or len(self.calls) <= self.fail_through:
+        if call_number in self.call_gates and not self.call_gates[call_number].wait(5):
+            raise TimeoutError("合成轮次未释放。")
+        if self.unavailable or call_number <= self.fail_through or call_number in self.failure_calls:
             raise ExtractionRuntimeError("合成外部服务暂不可用")
         return tuple({
             "text": "联系人喜欢科幻小说", "category": "preference",
@@ -389,3 +394,73 @@ class ObservationAutoFlowTest(CoreBusinessFlowFixture, unittest.TestCase):
                 break
             time.sleep(0.01)
         self.assertEqual(len(self.model.calls), 3)
+
+    def test_deleted_pending_batch_after_successful_round_does_not_restore_failure(self):
+        self.model.failure_calls = {2, 3, 4}
+        second_gate = threading.Event()
+        self.model.call_gates[2] = second_gate
+        self.addCleanup(second_gate.set)
+        self.model.release.clear()
+        self.publish(self.record())
+        self.assertTrue(self.model.entered.wait(3))
+        self.publish(self.record(2))
+        self.model.release.set()
+        deadline = time.monotonic() + 3
+        while len(self.model.calls) < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(len(self.model.calls), 2)
+        third = self.record(3)
+        self.publish(third)
+        self.store.delete_observation(
+            owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
+            observation_id=third.observation.observation_id,
+        )
+        second_gate.set()
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            if self.host.current(owner_id=self.scope.owner_id,
+                                 contact_id=self.scope.contact_id)["status"] != "running":
+                break
+            time.sleep(0.01)
+        self.assertEqual(len(self.model.calls), 4)
+        self.wait_task("failed")
+
+    def test_round_start_uses_time_after_contact_lock_wait(self):
+        batch = self.record()
+        task_id = self.repository.enqueue_observation_message(
+            owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
+            message_id=batch.message_ids[0],
+        )
+        application_name = f"synthetic_claim_{uuid4().hex}"
+        repository = PostgresBackgroundTaskRepository(
+            f"{self.database_url} application_name={application_name}",
+        )
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            with psycopg.connect(self.database_url) as gate:
+                lock_contact_scope(gate, owner_id=self.scope.owner_id,
+                                   contact_id=self.scope.contact_id)
+                claim = pool.submit(repository.claim_next_step,
+                                    owner_id=self.scope.owner_id,
+                                    contact_id=self.scope.contact_id,
+                                    lease_duration=timedelta(seconds=30),
+                                    worker_id=uuid4(), task_id=task_id)
+                with psycopg.connect(self.database_url, autocommit=True) as monitor:
+                    deadline = time.monotonic() + 3
+                    while time.monotonic() < deadline:
+                        if claim.done():
+                            claim.result()
+                        waiting = monitor.execute(
+                            "SELECT 1 FROM pg_stat_activity WHERE application_name = %s "
+                            "AND wait_event_type = 'Lock'", (application_name,),
+                        ).fetchone()
+                        if waiting:
+                            break
+                        time.sleep(0.01)
+                self.assertIsNotNone(waiting)
+                before_unlock = gate.execute("SELECT clock_timestamp()").fetchone()[0]
+            self.assertIsNotNone(claim.result(timeout=3))
+        with psycopg.connect(self.database_url) as connection:
+            started_at = connection.execute(
+                "SELECT started_at FROM public.background_task WHERE id = %s", (task_id,),
+            ).fetchone()[0]
+        self.assertGreaterEqual(started_at, before_unlock)

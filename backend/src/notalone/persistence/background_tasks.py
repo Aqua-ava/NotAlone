@@ -285,7 +285,8 @@ class PostgresBackgroundTaskRepository:
                     message_count=observation[1],
                 )
                 connection.execute(
-                    "UPDATE public.local_wechat_observation SET memory_enqueued_at = now() WHERE id = %s",
+                    # 取实际登记时刻；事务可能在等待联系人锁之前已经开始。
+                    "UPDATE public.local_wechat_observation SET memory_enqueued_at = clock_timestamp() WHERE id = %s",
                     (observation[0],),
                 )
                 return task_id
@@ -649,7 +650,7 @@ class PostgresBackgroundTaskRepository:
                         current_step = %s,
                         model_version = COALESCE(%s, model_version),
                         rule_version = COALESCE(%s, rule_version),
-                        started_at = COALESCE(started_at, now()),
+                        started_at = COALESCE(started_at, clock_timestamp()),
                         updated_at = now()
                     WHERE id = %s
                     """,
@@ -763,6 +764,7 @@ class PostgresBackgroundTaskRepository:
                             current_step = CASE WHEN %s
                                 THEN 'extract_memory' ELSE %s END,
                             observation_pending = false,
+                            started_at = CASE WHEN %s THEN NULL ELSE started_at END,
                             finished_at = CASE WHEN %s THEN NULL ELSE now() END,
                             updated_at = now()
                         WHERE id = %s
@@ -771,6 +773,7 @@ class PostgresBackgroundTaskRepository:
                             requeue_observation,
                             requeue_observation,
                             claim.name.value,
+                            requeue_observation,
                             requeue_observation,
                             claim.task_id,
                         ),
