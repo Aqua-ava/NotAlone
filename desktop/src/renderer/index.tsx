@@ -43,6 +43,9 @@ function App() {
         onClick={() => void operate(window.notalone.hideWindow)}><Icon name="close" size={16} /></button>
     </header>
     {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} /> : <DirectedReplyInput replies={replies} />}
+    {replies.state.messageNotice.phase === 'connected' && <p role="status">{replies.state.messageNotice.changed
+      ? '当前联系人有新消息，生成依据仍是原快照。由你决定刷新消息或重新生成。' : '新消息提醒已连接。'}</p>}
+    {replies.state.messageNotice.phase === 'interrupted' && <p role="status">消息提醒已中断，请主动刷新消息核对当前上下文。</p>}
     <div className="ime-status-line"><BackendBadge state={backend} compact />
       <div className="ime-contact-note"><CurrentContactLabel state={contactSession.state} /></div></div>
     <ReplyCandidates replies={replies} />

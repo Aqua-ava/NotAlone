@@ -59,6 +59,7 @@ export interface ReplyResult {
   contextEvidenceIds: string[];
 }
 export type ReplyFailureCode = 'generation_failed' | 'timeout' | 'unavailable' | 'rejected' | 'connection';
+export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; }
 export interface ReplySessionState {
   revision: number;
   scopeRevision: number;
@@ -66,6 +67,7 @@ export interface ReplySessionState {
   options: RewriteOptions;
   mode: ReplyMode;
   messages: ReplyMessagesState;
+  messageNotice: ReplyMessageNotice;
   targetMessageId: string | null;
   direction: string;
   phase: 'idle' | 'waiting' | 'ready' | 'failed';

@@ -1,5 +1,6 @@
 import { expect, type Browser } from '@playwright/test';
 import path from 'node:path';
+import { copyFile, mkdir } from 'node:fs/promises';
 import { withRewriteFixture } from '../rewrite-backend-fixture';
 import { withControllerEnvironment } from './backend-fixture';
 import { ownResource } from './cleanup';
@@ -42,7 +43,17 @@ export async function messageEvents(browser: Browser, origin: string) {
         await expect(editor).toHaveValue('用户仍在编辑的措辞。');
         expect((await fixture.request(endpoint)).data).toEqual(before.data);
         expect((await fixture.command('observations')).model_calls).toBe(1);
-      } finally { await host.close(); }
+      } finally {
+        await host.close();
+        // 先确认自有夹具收尾并保留精确归属，再由通用生命周期幂等核验和移除目录。
+        await fixture.cleanup();
+        const evidence = path.resolve('artifacts/headless-pages/message-events-owned');
+        await mkdir(evidence, { recursive: true });
+        for (const suffix of ['database-ownership', 'owned']) {
+          await copyFile(path.join(fixture.directory, `message-events-${suffix}.json`),
+            path.join(evidence, `${fixture.data.owner_id}-${suffix}.json`));
+        }
+      }
     });
   }, released, path.resolve('tests/fixtures/message-events-backend.py'));
   process.stdout.write(`page_test_scenario_passed: ${name}\n`);

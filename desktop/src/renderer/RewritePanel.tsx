@@ -10,6 +10,7 @@ export function useReplySession() {
   const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null,
     options: { tone: 'original', instruction: '', includeRelationshipContext: false },
     mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null, direction: '',
+    messageNotice: { phase: 'idle', changed: false },
     phase: 'idle', result: null, selectedCandidateId: null, canRetry: false }, window.notalone.replies);
   async function operate(operation: () => Promise<ReplySessionState | void>) {
     const scopeRevision = latest.current.scopeRevision;

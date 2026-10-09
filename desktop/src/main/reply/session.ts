@@ -14,6 +14,7 @@ const tones = { original: '', warm: '本次语气自然温和。', concise: '本
 export class ReplySession {
   private state: ReplySessionState = { revision: 0, scopeRevision: 0, contactId: null,
     options: defaults(), mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null },
+    messageNotice: { phase: 'idle', changed: false },
     targetMessageId: null, direction: '', phase: 'idle', result: null, selectedCandidateId: null, canRetry: false };
   private draft = '';
   private operation = 0;
@@ -21,6 +22,9 @@ export class ReplySession {
   private lastAttempt: { input: ReplyInputSnapshot; requestKey: string } | undefined;
   private messageOperation = 0;
   private messagePending: AbortController | undefined;
+  private noticeStream: AbortController | undefined;
+  private noticeVerification: AbortController | undefined;
+  private noticeRevision = 0;
   private readonly listeners = new Set<(state: ReplySessionState) => void>();
 
   constructor(private readonly contacts: ContactSession, private readonly backend: BackendHost) {
@@ -68,6 +72,7 @@ export class ReplySession {
     const current = () => operation === this.messageOperation && generation === this.backend.getConnectionGeneration()
       && request.scopeRevision === this.state.scopeRevision && request.contactId === this.state.contactId;
     this.publish({ messages: { ...this.state.messages, phase: 'loading' } });
+    const noticeRevision = this.noticeRevision;
     try {
       const page = await readReplyMessages(this.backend, request.contactId, before, pending.signal);
       if (!current() || page.generation !== generation) return;
@@ -77,7 +82,9 @@ export class ReplySession {
         this.invalidateInput();
         this.publish({ targetMessageId: null });
       }
-      this.publish({ messages: { phase: 'ready', items, nextCursor: page.nextCursor } });
+      this.publish({ messages: { phase: 'ready', items, nextCursor: page.nextCursor },
+        messageNotice: { ...this.state.messageNotice,
+          changed: before || noticeRevision !== this.noticeRevision ? this.state.messageNotice.changed : false } });
     } catch {
       if (current()) this.publish({ messages: { ...this.state.messages, phase: 'failed' } });
     } finally { if (this.messagePending === pending) this.messagePending = undefined; }
@@ -173,19 +180,57 @@ export class ReplySession {
   }
   private receiveContact(state: ContactSessionState): void {
     if (state.scopeRevision !== this.state.scopeRevision || state.selectedContactId !== this.state.contactId) {
+      this.noticeStream?.abort(); this.noticeVerification?.abort();
+      this.noticeStream = undefined; this.noticeVerification = undefined;
       this.cancelPending();
       this.cancelMessagePage();
       this.lastAttempt = undefined;
       this.draft = state.draft;
       this.publish({ scopeRevision: state.scopeRevision, contactId: state.selectedContactId,
         options: defaults(), mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null },
+        messageNotice: { phase: 'idle', changed: false },
         targetMessageId: null, direction: '', phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false });
+      this.beginMessageNotice();
     } else if (state.draft !== this.draft) {
       this.draft = state.draft;
       this.cancelPending();
       this.lastAttempt = undefined;
       this.publish({ phase: this.state.result ? 'ready' : 'idle', errorCode: undefined, canRetry: false });
     }
+  }
+  private beginMessageNotice(): void {
+    const contactId = this.state.contactId;
+    const scopeRevision = this.state.scopeRevision;
+    const generation = this.backend.getConnectionGeneration();
+    if (!contactId || generation === undefined) return;
+    const pending = new AbortController();
+    this.noticeStream = pending;
+    const current = () => !pending.signal.aborted && contactId === this.state.contactId
+      && scopeRevision === this.state.scopeRevision && generation === this.backend.getConnectionGeneration();
+    this.publish({ messageNotice: { phase: 'connecting', changed: false } });
+    this.backend.subscribeMessages({
+      connected: () => { if (current()) this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'connected' } }); },
+      interrupted: () => { if (current()) {
+        this.noticeVerification?.abort();
+        this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'interrupted' } });
+      } },
+      message: (event) => {
+        if (!current() || event.contactId !== contactId || this.state.messageNotice.changed) return;
+        const revision = ++this.noticeRevision;
+        this.noticeVerification?.abort();
+        const verification = new AbortController();
+        this.noticeVerification = verification;
+        // 事件只含标识；用当前认证联系人真实的有界消息投影确认归属，不猜缺失范围。
+        void readReplyMessages(this.backend, contactId, null, verification.signal).then((page) => {
+          if (!current() || verification.signal.aborted || revision !== this.noticeRevision || page.generation !== generation) return;
+          if (page.messages.some((message) => message.messageId === event.messageId)) {
+            this.publish({ messageNotice: { phase: 'connected', changed: true } });
+          }
+        }).catch(() => {
+          if (current() && !verification.signal.aborted) this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'interrupted' } });
+        }).finally(() => { if (this.noticeVerification === verification) this.noticeVerification = undefined; });
+      },
+    }, pending.signal);
   }
   private invalidateInput(): void {
     this.cancelPending(); this.lastAttempt = undefined;
