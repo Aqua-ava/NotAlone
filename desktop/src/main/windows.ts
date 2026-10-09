@@ -3,6 +3,11 @@ import path from 'node:path';
 
 type WindowRole = 'manager' | 'helper';
 type HostedWindow = { window: BrowserWindow; ready: Promise<void>; failed: boolean };
+type HelperLifecycle = 'focused' | 'blurred' | 'hidden' | 'closed';
+type HelperObservationHooks = {
+  beforeShow(): Promise<void>;
+  onLifecycle(event: HelperLifecycle): void;
+};
 const pages: Record<WindowRole, string> = {
   manager: 'notalone://app/index.html#manager',
   helper: 'notalone://app/index.html#helper',
@@ -13,6 +18,7 @@ export class AppWindows {
   private quitting = false;
   private helperPinned = false;
   private helperToggle: Promise<void> = Promise.resolve();
+  private helperObservation: HelperObservationHooks | undefined;
 
   constructor(private readonly appSession: Session) {}
 
@@ -32,6 +38,12 @@ export class AppWindows {
     await hosted.ready;
     const window = hosted.window;
     if (this.quitting || window.isDestroyed()) return;
+    if (role === 'helper' && !hosted.failed) {
+      // 必须在 app.show、恢复窗口和取得焦点之前完成本次有界观察。
+      // 定位不可用仍允许打开小窗，由具名定位状态要求人工确认。
+      await this.helperObservation?.beforeShow().catch(() => {});
+      if (this.quitting || window.isDestroyed()) return;
+    }
     if (app.isHidden()) {
       // app.show 会恢复整体隐藏前的窗口，先明确隐藏非目标窗口。
       for (const { window: other } of this.windows.values()) {
@@ -44,7 +56,12 @@ export class AppWindows {
     window.focus();
   }
 
-  prepareToQuit(): void { this.quitting = true; }
+  setHelperObservation(hooks: HelperObservationHooks): void { this.helperObservation = hooks; }
+
+  prepareToQuit(): void {
+    this.quitting = true;
+    this.helperObservation?.onLifecycle('closed');
+  }
 
   publish(channel: string, value: unknown): void {
     for (const [role, hosted] of this.windows) {
@@ -139,6 +156,12 @@ export class AppWindows {
     window.on('close', (event) => {
       if (!this.quitting) { event.preventDefault(); window.hide(); }
     });
+    if (!manager) {
+      window.on('focus', () => this.helperObservation?.onLifecycle('focused'));
+      window.on('blur', () => this.helperObservation?.onLifecycle('blurred'));
+      window.on('hide', () => this.helperObservation?.onLifecycle('hidden'));
+      window.on('closed', () => this.helperObservation?.onLifecycle('closed'));
+    }
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     window.webContents.on('will-navigate', (event) => event.preventDefault());
     window.webContents.on('will-frame-navigate', (event) => event.preventDefault());
