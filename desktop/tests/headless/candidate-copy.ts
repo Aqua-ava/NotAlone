@@ -69,4 +69,58 @@ export async function candidateCopy(browser: Browser, origin: string) {
     hideWindow() { actions.push('hide'); },
   });
   process.stdout.write('page_test_scenario_passed: 复制失败保留编辑与重试成功后收起\n');
+
+  const selectedCopies: string[] = [];
+  process.stdout.write('page_test_scenario: 仅复制当前选择且拒绝空白范围与角色越界\n');
+  await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
+    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('只说明稍后联系，不补充其他事情。');
+    await rewriteBackend.plan({ count: 2, prefix: '双候选选择' });
+    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    const second = helper.getByRole('textbox', { name: '候选2编辑文本', exact: true });
+    await expect(second).toHaveValue('双候选选择（说法2）。');
+    await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).fill('第一条保留自己的编辑。');
+    await helper.getByRole('radio', { name: '说法 2', exact: true }).click();
+    const edited = '我稍后再联系你，我们到时再说。';
+    await second.fill(edited);
+    await helper.getByRole('button', { name: '复制', exact: true }).click();
+    await expect(helper.getByRole('status').filter({ hasText: '已复制当前编辑文本' })).toBeVisible();
+    expect(selectedCopies).toEqual([edited]);
+    const request = await helper.evaluate(async () => {
+      const state = await window.notalone.replies.getState();
+      return { contactId: state.contactId!, scopeRevision: state.scopeRevision,
+        replyRequestId: state.result!.replyRequestId, candidateId: state.selectedCandidateId!, hideAfterCopy: false };
+    });
+    expect(await helper.evaluate(async ({ request, otherContact }) => {
+      const state = await window.notalone.replies.getState();
+      const invoke = window.notalone.candidateCopy.copy as (...args: unknown[]) => Promise<void>;
+      const invalid = [[], [request, {}], [{ ...request, text: '不得直接指定任意正文。' }],
+        [{ ...request, ownerId: crypto.randomUUID() }], [{ ...request, contactId: otherContact }],
+        [{ ...request, scopeRevision: request.scopeRevision + 1 }],
+        [{ ...request, candidateId: state.result!.candidates[0].original.candidateId }]];
+      const results: string[] = [];
+      for (const args of invalid) {
+        try { await invoke(...args); results.push('accepted'); } catch { results.push('rejected'); }
+      }
+      return results;
+    }, { request, otherContact: rewriteBackend.data.contact_ids[1] })).toEqual(Array(7).fill('rejected'));
+    expect(await manager.evaluate(async (request) => {
+      try { await window.notalone.candidateCopy.copy(request); return 'accepted'; } catch { return 'rejected'; }
+    }, request)).toBe('rejected');
+    expect(await helper.evaluate(async (request) => {
+      window.location.hash = '#manager';
+      try { await window.notalone.candidateCopy.copy(request); return 'accepted'; }
+      catch { return 'rejected'; } finally { window.location.hash = '#helper'; }
+    }, request)).toBe('rejected');
+    expect(selectedCopies).toEqual([edited]);
+    await second.fill('   \n ');
+    await expect(helper.getByRole('button', { name: '复制', exact: true })).toBeDisabled();
+    await expect(helper.getByRole('button', { name: '复制并收起', exact: true })).toBeDisabled();
+    expect(await helper.evaluate(async (request) => {
+      try { await window.notalone.candidateCopy.copy(request); return 'accepted'; } catch { return 'rejected'; }
+    }, request)).toBe('rejected');
+    expect(selectedCopies).toEqual([edited]);
+    expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
+  }, { async writeText(text) { selectedCopies.push(text); }, hideWindow() { throw new Error('单独复制不应收起。'); } });
+  process.stdout.write('page_test_scenario_passed: 仅复制当前选择且拒绝空白范围与角色越界\n');
 }
