@@ -9,23 +9,22 @@ private struct ProbeOptions {
     let watch: Bool
     let showText: Bool
     let selfTest: Bool
-    let session: Bool
-    let json: Bool
 
     static let help = """
     用法：
       swift run notalone-sync-probe [--watch] [--interval seconds]
         [--crop x,y,width,height] [--show-text]
       swift run notalone-sync-probe --session [--show-text]
-      swift run notalone-sync-probe --session --json
+      swift run notalone-sync-probe --session --json [--minimal-region]
 
     选项：
       --watch              持续观察前台微信窗口；默认只采集一次。
       --interval seconds   观察间隔，默认 1.0 秒，最小 0.5 秒。
       --crop value         相对微信窗口的聊天区域，默认 0.34,0.10,0.66,0.80。
       --show-text          明确要求后才在终端显示短预览等文本；默认只输出字段有无。
-      --session            只做一次选中会话定位，输出顶部 display name 和选中行元数据。
+      --session            只做一次会话定位；当前没有已验证最小区域，安全暂停且不采集。
       --json               与 --session 配合输出机器可读 JSON，供本机同步驱动解析。
+      --minimal-region     仅与 --session --json 配合；不能绕过最小区域安全政策。
       --self-test          运行合成数据自检，不截取屏幕。
       --help               显示本说明。
 
@@ -39,12 +38,14 @@ private struct ProbeOptions {
         var watch = false
         var showText = false
         var selfTest = false
-        var session = false
-        var json = false
         var index = 0
+        var seen = Set<String>()
 
         while index < arguments.count {
             let argument = arguments[index]
+            guard seen.insert(argument).inserted else {
+                throw ProbeError.invalidArguments("参数不可重复。")
+            }
             switch argument {
             case "--help":
                 throw ProbeError.invalidArguments(help)
@@ -54,10 +55,6 @@ private struct ProbeOptions {
                 showText = true
             case "--self-test":
                 selfTest = true
-            case "--session":
-                session = true
-            case "--json":
-                json = true
             case "--interval", "--crop":
                 index += 1
                 guard index < arguments.count else {
@@ -83,9 +80,7 @@ private struct ProbeOptions {
             intervalSeconds: intervalSeconds,
             watch: watch,
             showText: showText,
-            selfTest: selfTest,
-            session: session,
-            json: json
+            selfTest: selfTest
         )
     }
 }
@@ -95,41 +90,24 @@ struct NotAloneSyncCLI {
     @MainActor
     static func main() async {
         do {
-            _ = NSApplication.shared
-            let options = try ProbeOptions.parse(arguments: Array(CommandLine.arguments.dropFirst()))
+            let arguments = Array(CommandLine.arguments.dropFirst())
+            if let session = try SessionInvocation.parse(arguments: arguments) {
+                if session.json {
+                    printJsonLine(["ok": false, "error": SessionCaptureSafety.failureCode])
+                } else {
+                    fputs("前台定位安全暂停：最小区域布局尚未验证（minimal_region_layout_unverified）。\n", stderr)
+                }
+                return
+            }
+            let options = try ProbeOptions.parse(arguments: arguments)
             if options.selfTest {
                 try CoreSelfTest.run()
                 print("自检通过：动态聊天区域定位、文本规范化和内存去重逻辑正常。")
                 return
             }
-
-            if options.session, options.json {
-                await printSessionJson()
-                return
-            }
-            if options.json {
-                throw ProbeError.invalidArguments("--json 只能与 --session 配合使用。\n\n\(ProbeOptions.help)")
-            }
+            _ = NSApplication.shared
             guard CGPreflightScreenCaptureAccess() else {
                 throw ProbeError.screenCapturePermissionMissing
-            }
-
-            if options.session {
-                // 单次定位当前选中会话：输出匹配用元数据，不读取聊天区域正文。
-                let probe = WeChatCaptureProbe()
-                let snapshot = try await probe.captureWindowSnapshot()
-                let metadata = try probe.selectedSessionMetadata(from: snapshot)
-                print("微信在前台：是")
-                print("选中会话行：已定位")
-                print("顶部 display name：\(metadata.displayName ?? "未识别")")
-                print("选中行名字：\(metadata.selectedRowName ?? "未识别")")
-                print("最近时间：\(metadata.lastTimeText ?? "未识别")")
-                if options.showText {
-                    print("短预览：\(metadata.previewText ?? "未识别")")
-                } else {
-                    print("短预览：\(metadata.previewText == nil ? "未识别" : "已识别（--show-text 显示文本）")")
-                }
-                return
             }
 
             let probe = WeChatCaptureProbe(crop: options.crop)
@@ -176,6 +154,9 @@ struct NotAloneSyncCLI {
                     try await Task.sleep(nanoseconds: UInt64(options.intervalSeconds * 1_000_000_000))
                 }
             } while options.watch
+        } catch SessionInvocationError.invalidArguments {
+            fputs("会话定位参数无效，未检查权限或采集。\n", stderr)
+            exit(EXIT_FAILURE)
         } catch ProbeError.invalidArguments(let message) {
             // 参数错误必须走 stderr：--session --json 的 stdout 是
             // 机器可读契约，任何多出来的文本都会让驱动解析失败。
@@ -184,42 +165,6 @@ struct NotAloneSyncCLI {
         } catch {
             fputs("探针失败：\(error.localizedDescription)\n", stderr)
             exit(EXIT_FAILURE)
-        }
-    }
-
-    // 机器可读的单次定位输出：同步驱动按 JSON 解析前台证据。
-    // 微信非前台或证据不可读都是正常的稳定状态，用 ok 结果表达；
-    // 只有权限缺失等环境错误才返回失败结果。
-    @MainActor
-    private static func printSessionJson() async {
-        guard CGPreflightScreenCaptureAccess() else {
-            printJsonLine([
-                "ok": false,
-                "error": "screen_capture_permission_missing",
-            ])
-            return
-        }
-
-        let probe = WeChatCaptureProbe()
-        do {
-            let snapshot = try await probe.captureWindowSnapshot()
-            do {
-                let metadata = try probe.selectedSessionMetadata(from: snapshot)
-                var object = metadata.jsonObject()
-                object["ok"] = true
-                object["wechat_in_front"] = true
-                printJsonLine(object)
-            } catch ProbeError.selectedRowNotFound, ProbeError.chatRegionNotFound {
-                // 选中行或聊天区暂时不可读：返回前台状态但不携带证据。
-                printJsonLine(["ok": true, "wechat_in_front": true])
-            }
-        } catch ProbeError.weChatNotFrontmost {
-            printJsonLine(["ok": true, "wechat_in_front": false])
-        } catch ProbeError.weChatWindowNotFound {
-            // 微信在前台但窗口不可见：同样按证据不可读处理。
-            printJsonLine(["ok": true, "wechat_in_front": true])
-        } catch {
-            printJsonLine(["ok": false, "error": "probe_failed"])
         }
     }
 
