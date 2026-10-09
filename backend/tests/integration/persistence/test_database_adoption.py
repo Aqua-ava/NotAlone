@@ -149,6 +149,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
             "042_extraction_trace_call_receipts.sql",
             "043_extraction_trace_record_operations.sql",
             "044_owner_memory_versioning.sql",
+            "045_observation_background_task.sql",
         ))
         self.assertEqual(migrate(self.url, MIGRATIONS), ())
         self.assertFalse(adopt_legacy_database(self.url, MIGRATIONS, self.backup).adopted)
@@ -158,6 +159,14 @@ class DatabaseAdoptionTest(unittest.TestCase):
             ).fetchall(), [
                 ("036_source_deletion_tasks.sql",),
                 ("037_pending_candidate_evidence_kind.sql",),
+                ("038_memory_candidate_interpretation.sql",),
+                ("039_memory_extraction_trace.sql",),
+                ("040_source_processing_trace.sql",),
+                ("041_source_processing_capture_tombstone.sql",),
+                ("042_extraction_trace_call_receipts.sql",),
+                ("043_extraction_trace_record_operations.sql",),
+                ("044_owner_memory_versioning.sql",),
+                ("045_observation_background_task.sql",),
             ])
 
     def test_full_035_needs_no_repair_and_preserves_ids_pause_and_message_evidence(self) -> None:
