@@ -1,7 +1,7 @@
 # 16：首次会话选择与绑定授权
 
 Type: task
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: 06
 Spec: ../spec.md
@@ -28,6 +28,14 @@ Spec: ../spec.md
 - 涉及业务数据时只使用合成资料、随机隔离 `_test` 库和独立握手/配置；本任务未涉及的后端、渠道与桌面能力保持后续任务范围。
 - 按仓库工作流读取相关领域及工程约束，完成最小相关检查、Standards/Spec 两轴评审和只含本任务改动的本地提交。
 - 不提交私人资料或凭据，不发送外部聊天消息；远端 Git 操作需另有用户明确同意。
+
+## Answer
+
+已完成首次会话选择与绑定授权的普通页面及真实 HTTP 范围。页面不预选或自动授权，绑定以稳定身份和当前元数据确认；目录、整批过期拒绝、撤销超时与重试、撤销成功后的停止新增读取均有隔离数据证据。历史资料保留，来源清除仍由任务15处理。
+
+运行源码 `858db1f012a6516de790cee56cfec7e5cdf2734e` 的受限 `binding-consent + binding-stale` 为13/13，exit0。单Chrome，quiet79次active/window0；13库全部精确回收，82条归属身份无存活匹配，两租约absent，cleanupConfirmed=true。首轮页面加载竞态失败及等待修复记录保留，生产授权行为没有放宽。
+
+固定 `1c8825b317dfb46d93a734b0af101669b321a13a…09851885a9eb643c1ad55d752feaaae8a269a2d2` 的独立Standards hard0/possible0、Spec0，P0–P3均0；原后端评审和实际检查保留。类型、构建、差异及任务检查通过。新版App wrapper、原生窗口、真实微信渠道和最终签名包未运行，按已批准的页面接缝完成本任务，原生整体验收保留在任务20。
 
 ## Comments
 
