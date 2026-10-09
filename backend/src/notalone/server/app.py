@@ -1072,6 +1072,20 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.OK, {"memory": _owner_memory_payload(memory)}
             )
+        if method == "POST" and path.startswith("/api/memories/owner/") \
+                and path.endswith("/correct"):
+            memory_id = _uuid_or_raise(_path_tail(path, "/api/memories/owner/", "/correct"), "memory_id")
+            payload = _parse_memory_json(body)
+            text = payload.get("text")
+            if not isinstance(text, str) or not text.strip():
+                raise MemoryRequestInvalid()
+            memory = service.correct_owner_memory(
+                owner_id=owner_id, memory_id=memory_id, text=text,
+                category=_optional_category(payload.get("category")),
+            )
+            return _json_response(
+                HTTPStatus.OK, {"memory": _owner_memory_payload(memory)}
+            )
 
         # 联系人级端点：/api/contacts/{contact_id}/...
         parts = path.removeprefix("/api/contacts/").split("/")
@@ -2381,6 +2395,10 @@ def _owner_memory_payload(memory: OwnerMemory) -> dict[str, object]:
         "adoption_method": memory.adoption_method.value,
         "status": memory.status.value,
         "revision": memory.revision,
+        "supersedes_memory_id": (
+            str(memory.supersedes_memory_id)
+            if memory.supersedes_memory_id is not None else None
+        ),
         "source_ids": [str(source_id) for source_id in memory.source_ids],
         "source_candidate_id": (
             str(memory.source_candidate_id)

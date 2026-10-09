@@ -6,6 +6,8 @@ import importlib.util
 import inspect
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -14,10 +16,17 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+class NoRedirect(HTTPRedirectHandler):
+    """本轮认证请求不可被重定向到另一个目标。"""
+
+    def redirect_request(self, request, response, code, message, headers, url):
+        return None
 
 
 class MemoryEditingHttpCheck(unittest.TestCase):
@@ -26,12 +35,14 @@ class MemoryEditingHttpCheck(unittest.TestCase):
     def setUp(self) -> None:
         if os.environ.get("CONDA_DEFAULT_ENV") != "NotAlone":
             raise RuntimeError("资料编辑回归须激活 Conda NotAlone。")
-        self.temporary = tempfile.TemporaryDirectory(prefix="notalone-memory-editing-http-")
-        self.addCleanup(self.temporary.cleanup)
-        self.directory = Path(self.temporary.name)
+        self.directory = Path(tempfile.mkdtemp(prefix="notalone-memory-editing-http-"))
         self.info = self.directory / "backend.info"
         self.original_environment = dict(os.environ)
-        self.addCleanup(self.restore_environment)
+        self.data = None
+        self.child = None
+        self.database_fixture = None
+        self.opener = build_opener(ProxyHandler({}), NoRedirect())
+        self.addCleanup(self.cleanup_owned_resources)
         for key in list(os.environ):
             if key.startswith(("NOTALONE_", "DEEPSEEK_", "LANGSMITH_", "LANGCHAIN_", "OTEL_")):
                 del os.environ[key]
@@ -42,6 +53,7 @@ class MemoryEditingHttpCheck(unittest.TestCase):
             "NOTALONE_DEEPSEEK_API_KEY": "", "DEEPSEEK_API_KEY": "",
             "NOTALONE_DEEPSEEK_BASE_URL": "http://127.0.0.1:1",
             "LANGSMITH_TRACING": "false", "LANGCHAIN_TRACING_V2": "false",
+            "LANGCHAIN_TRACING": "false",
             "NOTALONE_WECHAT_CLI": str(self.directory / "unavailable-cli"),
             "NOTALONE_SYNC_PROBE": str(self.directory / "unavailable-probe"),
             "PYTHONNOUSERSITE": "1", "PYTHONPATH": str(ROOT / "backend/src"),
@@ -56,8 +68,8 @@ class MemoryEditingHttpCheck(unittest.TestCase):
         assert spec is not None and spec.loader is not None
         database_fixture = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(database_fixture)
+        self.database_fixture = database_fixture
         self.data = database_fixture.create_database()
-        self.addCleanup(database_fixture.contact_database.drop_database, self.data["database_name"])
         os.environ.update({
             "NOTALONE_DATABASE_URL": self.data["database_url"],
             "NOTALONE_OWNER_ID": self.data["owner_id"],
@@ -66,7 +78,6 @@ class MemoryEditingHttpCheck(unittest.TestCase):
             [sys.executable, "-m", "notalone.server.command"], cwd=ROOT, env=dict(os.environ),
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
-        self.addCleanup(self.stop_owned_backend)
         deadline = time.monotonic() + 20
         while True:
             if self.child.poll() is not None:
@@ -81,19 +92,24 @@ class MemoryEditingHttpCheck(unittest.TestCase):
                 raise RuntimeError("本轮资料编辑后端启动超时。")
             time.sleep(0.05)
 
-    def restore_environment(self) -> None:
-        os.environ.clear()
-        os.environ.update(self.original_environment)
-
     def request(self, path: str, body: dict[str, object] | None = None) -> tuple[int, dict]:
-        fields = dict(line.split("=", 1) for line in self.info.read_text().strip().splitlines())
+        lines = self.info.read_text().splitlines()
+        fields = dict(line.split("=", 1) for line in lines)
+        address = fields.get("address", "")
+        if (len(lines) != 3 or set(fields) != {"address", "token", "pid"}
+                or not re.fullmatch(r"127\.0\.0\.1:[1-9][0-9]{0,4}", address)
+                or int(address.rsplit(":", 1)[1]) > 65535
+                or not re.fullmatch(r"[A-Za-z0-9_-]+", fields["token"])
+                or self.child is None or fields["pid"] != str(self.child.pid)
+                or not path.startswith("/api/") or any(character in path for character in "\r\n")):
+            raise ValueError("本轮资料编辑握手或请求目标无效。")
         request = Request(
-            "http://" + fields["address"] + path,
+            "http://" + address + path,
             data=json.dumps(body).encode("utf-8") if body is not None else None,
             headers={"Authorization": "Bearer " + fields["token"], "Content-Type": "application/json"},
         )
         try:
-            response = urlopen(request, timeout=10)
+            response = self.opener.open(request, timeout=10)
         except HTTPError as error:
             response = error
         with response:
@@ -104,23 +120,55 @@ class MemoryEditingHttpCheck(unittest.TestCase):
         self.assertEqual(status, 200, payload)
         return payload
 
-    def stop_owned_backend(self) -> None:
-        """认证停读优先；失败只回收本方法仍持有的自有子进程。"""
-        if self.child.poll() is not None:
-            return
+    def cleanup_owned_resources(self) -> None:
+        """确认认证停读、子进程与精确库收尾；不确定时保留诊断目录。"""
+        shutdown_confirmed = False
+        database_remaining = None
+        failure = None
         try:
-            status, state = self.request("/api/runtime/shutdown", {})
-            if status != 200 or state.get("state") != "stopped":
-                raise RuntimeError("本轮资料编辑后端停读未确认。")
-            self.child.wait(timeout=10)
-        finally:
-            if self.child.poll() is None:
-                self.child.terminate()
+            if self.child is not None and self.child.poll() is None:
                 try:
-                    self.child.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    self.child.kill()
-                    self.child.wait(timeout=5)
+                    status, state = self.request("/api/runtime/shutdown", {})
+                    shutdown_confirmed = status == 200 and state.get("state") == "stopped"
+                    if not shutdown_confirmed:
+                        raise RuntimeError("本轮资料编辑后端停读未确认。")
+                    self.child.wait(timeout=10)
+                except Exception as error:
+                    failure = error
+                finally:
+                    if self.child.poll() is None:
+                        self.child.terminate()
+                        try:
+                            self.child.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            self.child.kill()
+                            self.child.wait(timeout=5)
+            exited = self.child is None or self.child.poll() is not None
+            if self.data is not None and exited:
+                self.database_fixture.contact_database.drop_database(self.data["database_name"])
+                import psycopg
+
+                with psycopg.connect("host=/tmp dbname=postgres", connect_timeout=3) as admin:
+                    database_remaining = admin.execute(
+                        "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = %s)",
+                        (self.data["database_name"],),
+                    ).fetchone()[0]
+            confirmed = ((self.child is None or shutdown_confirmed and self.child.poll() == 0)
+                         and (self.data is None or database_remaining is False))
+            if confirmed:
+                shutil.rmtree(self.directory)
+            print(json.dumps({"memory_editing_cleanup": {
+                "authenticated_stopped": shutdown_confirmed,
+                "backend_exit_code": self.child.poll() if self.child else None,
+                "owned_database_remaining": database_remaining,
+                "cleanup_confirmed": confirmed,
+                **({"retained_directory": str(self.directory)} if not confirmed else {}),
+            }}), flush=True)
+            if not confirmed or failure is not None:
+                raise RuntimeError("本轮资料编辑资源收尾未完全确认。") from failure
+        finally:
+            os.environ.clear()
+            os.environ.update(self.original_environment)
 
     def test_owner_correction_creates_manual_version_and_retires_previous_version(self) -> None:
         before = self.get("/api/memories/owner")["memories"]
