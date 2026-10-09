@@ -181,3 +181,35 @@ export async function memoryCandidateDiscard(manager: Page, fixture: MemoryFixtu
   expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'owner')).toEqual(own);
   expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'sources')).toEqual(sources);
 }
+
+export async function memoryMutationFailures(manager: Page, fixture: MemoryFixture, proxy: import('./memory-http-proxy').MemoryHttpProxy) {
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  const owner = manager.getByRole('region', { name: '本人记忆', exact: true });
+  await expect(owner.getByText('本人喜欢合成绿茶。', { exact: true })).toBeVisible();
+  const before = await fixture.readMemorySection(fixture.data.contact_ids[0], 'owner');
+  const previous = (before.data.memories as Array<Record<string, unknown>>).find((item) => item.text === '本人喜欢合成绿茶。')!;
+  const path = `/api/memories/owner/${previous.memory_id}/correct`;
+  proxy.failurePaths.add(path);
+  await owner.getByRole('button', { name: '修正资料：本人喜欢合成绿茶。', exact: true }).click();
+  const form = owner.getByRole('form', { name: '修正本人资料', exact: true });
+  await form.getByRole('textbox', { name: '资料正文', exact: true }).fill('本人失败后修正为合成红茶。');
+  await form.getByRole('button', { name: '保存修正', exact: true }).click();
+  await expect(manager.getByRole('alert').filter({ hasText: '未能完成资料操作与核对' })).toBeVisible();
+  await expect(form.getByRole('textbox', { name: '资料正文', exact: true })).toHaveValue('本人失败后修正为合成红茶。');
+  expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'owner')).toEqual(before);
+  await expect(manager.getByText('资料操作已完成并重新核对。', { exact: true })).toHaveCount(0);
+  proxy.failurePaths.delete(path);
+  proxy.failurePaths.add('/api/memories/owner');
+  await form.getByRole('button', { name: '保存修正', exact: true }).click();
+  await expect(owner.getByText('本人记忆读取失败，请重试。', { exact: true })).toBeVisible();
+  await expect(manager.getByRole('alert').filter({ hasText: '未能完成资料操作与核对' })).toBeVisible();
+  await expect(manager.getByText('资料操作已完成并重新核对。', { exact: true })).toHaveCount(0);
+  proxy.failurePaths.delete('/api/memories/owner');
+  await owner.getByRole('button', { name: '重新读取本人记忆', exact: true }).click();
+  const corrected = owner.getByRole('article').filter({ has: manager.getByText('本人失败后修正为合成红茶。', { exact: true }) });
+  await expect(corrected.getByText('手动采纳', { exact: true })).toBeVisible();
+  const after = await fixture.readMemorySection(fixture.data.contact_ids[0], 'owner');
+  expect((after.data.memories as Array<Record<string, unknown>>).find((item) => item.text === '本人失败后修正为合成红茶。'))
+    .toMatchObject({ adoption_method: 'manual', supersedes_memory_id: previous.memory_id, source_ids: previous.source_ids });
+}
