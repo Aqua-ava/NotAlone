@@ -329,6 +329,25 @@ class EventStreamContractTest(unittest.TestCase):
             server.shutdown()
             thread.join(timeout=1)
 
+    def test_real_sse_subscription_close_finishes_http_response(self) -> None:
+        server = BackendServer(self.app, port=0)
+        host, port = server.start()
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            request = urllib.request.Request(
+                f"http://{host}:{port}/api/events", headers=self.headers,
+            )
+            with urllib.request.urlopen(request, timeout=2) as response:
+                self.assertEqual(response.status, 200)
+                self.app.events.close()
+                # 公开HTTP读取必须得到EOF，不能等keep-alive超时才发现订阅结束。
+                self.assertEqual(response.read(), b"")
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            self.assertFalse(thread.is_alive())
+
     def test_head_request_returns_headers_without_body(self) -> None:
         # HEAD 响应按协议不携带 body；状态码维持与 GET 同一分支逻辑。
         import http.client
