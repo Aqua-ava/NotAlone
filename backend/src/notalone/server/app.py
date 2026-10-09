@@ -552,6 +552,7 @@ class BackendApp:
             "/api/sync/enable",
             "/api/sync/disable",
             "/api/sync/check",
+            "/api/sync/foreground/observe",
             "/api/sync/priority",
             "/api/sync/backfill/pause",
             "/api/sync/backfill/retry",
@@ -614,6 +615,8 @@ class BackendApp:
             )
         if method != "POST":
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        if path == "/api/sync/foreground/observe":
+            return self._handle_foreground_observe(sync=sync, body=body)
         if path == "/api/sync/priority":
             return self._handle_sync_priority(sync=sync, body=body)
         if path == "/api/sync/cli-bindings/confirm":
@@ -643,6 +646,43 @@ class BackendApp:
                 HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "sync_control_failed"}
             )
         return _json_response(HTTPStatus.OK, _sync_status_payload(report))
+
+    def _handle_foreground_observe(
+        self, *, sync: SyncControlPort, body: bytes,
+    ) -> Response:
+        """固定运行身份的一次只读观察，不接受调用方范围或采集参数。"""
+
+        try:
+            payload = json.loads(body.decode("utf-8"))
+            if not isinstance(payload, dict) or payload:
+                raise ValueError
+        except (UnicodeDecodeError, TypeError, ValueError):
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "foreground_observation_invalid"},
+            )
+        try:
+            observation = sync.observe_foreground()
+        except SyncHostBusy:
+            return _json_response(
+                HTTPStatus.CONFLICT, {"error": "foreground_observation_busy"},
+            )
+        except SyncHostStopped:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "runtime_stopped"})
+        except Exception:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "foreground_observation_unavailable"},
+            )
+        return _json_response(HTTPStatus.OK, {
+            "observation_id": str(observation.observation_id),
+            "observed_at": observation.observed_at.isoformat(),
+            "phase": observation.phase,
+            "reason": observation.reason,
+            "probe_available": observation.probe_available,
+            "wechat_in_front": observation.wechat_in_front,
+            "binding_id": None,
+            "contact_id": None,
+        })
 
     def _handle_cli_binding_revoke(
         self, *, sync: SyncControlPort, body: bytes,

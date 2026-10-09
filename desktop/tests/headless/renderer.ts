@@ -1,3 +1,4 @@
+import { createForegroundBridge } from '../../src/preload/foreground';
 import { createCandidateCopyBridge } from '../../src/preload/candidate-copy';
 import type { PageTransport } from '../../src/preload/transport';
 import { createContactSessionBridge } from '../../src/preload/contact-session';
@@ -33,6 +34,7 @@ const bridge: AppBridge = {
     retryRestart: unsupported, reloadControlledConfiguration: unsupported, onStateChanged: noEvents },
   imports: createImportBridge(transport),
   bindings: createBindingConsentBridge(transport),
+  foreground: createForegroundBridge(transport),
   syncControl: createSyncControlBridge(transport),
 };
 window.notalone = Object.freeze(bridge);
