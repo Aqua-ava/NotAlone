@@ -1,10 +1,10 @@
+import { isUuid } from '../uuid';
 import { noArguments, type PageCommands } from '../page-commands';
-import type { GenerateRewrite, ReplyCandidateEdit, ReplyCandidateSelection, RewriteOptions, RewriteOptionsUpdate } from '../../shared/reply-bridge';
+import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyDirectionUpdate, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, RewriteOptions, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { ReplySession } from './session';
 
-const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
 function fields(args: unknown[], keys: string[]): Record<string, unknown> {
   const value = args[0];
   if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)
@@ -12,13 +12,13 @@ function fields(args: unknown[], keys: string[]): Record<string, unknown> {
     throw new Error('本次表达操作不可用。');
   }
   const record = value as Record<string, unknown>;
-  if (!uuid(record.contactId) || typeof record.scopeRevision !== 'number'
+  if (!isUuid(record.contactId) || typeof record.scopeRevision !== 'number'
     || !Number.isSafeInteger(record.scopeRevision) || record.scopeRevision < 0) throw new Error('本次表达操作不可用。');
   return { ...record, contactId: record.contactId.toLowerCase() };
 }
 function candidate(args: unknown[], editing = false): ReplyCandidateSelection | ReplyCandidateEdit {
   const value = fields(args, ['contactId', 'scopeRevision', 'replyRequestId', 'candidateId', ...(editing ? ['text'] : [])]);
-  if (!uuid(value.replyRequestId) || !uuid(value.candidateId)
+  if (!isUuid(value.replyRequestId) || !isUuid(value.candidateId)
     || (editing && (typeof value.text !== 'string' || value.text.length > 65_536))) throw new Error('本次候选操作不可用。');
   return { ...value, replyRequestId: value.replyRequestId.toLowerCase(), candidateId: value.candidateId.toLowerCase() } as unknown as ReplyCandidateEdit;
 }
@@ -38,10 +38,30 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   replies.onStateChanged((state) => commands.publish('reply:state-changed', state));
   commands.handle('reply:get-state', (...args: unknown[]) => { noArguments(args); return replies.getState(); });
   commands.handle('reply:update-options', (...args: unknown[]) => { return replies.updateOptions(options(args)); }, 'helper');
+  commands.handle('reply:set-mode', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'mode']);
+    if (!['rewrite_draft', 'reply_to_message'].includes(value.mode as string)) throw new Error('本次输入方式不可用。');
+    return replies.setMode(value as unknown as ReplyModeUpdate);
+  }, 'helper');
+  commands.handle('reply:load-messages', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'older']);
+    if (typeof value.older !== 'boolean') throw new Error('消息列表操作不可用。');
+    return replies.loadMessages(value as unknown as ReplyMessagePageRequest);
+  }, 'helper');
+  commands.handle('reply:select-message', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'messageId']);
+    if (!isUuid(value.messageId)) throw new Error('待回复消息不可用。');
+    return replies.selectMessage({ ...value, messageId: value.messageId.toLowerCase() } as unknown as ReplyMessageSelection);
+  }, 'helper');
+  commands.handle('reply:update-direction', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'direction']);
+    if (typeof value.direction !== 'string' || value.direction.length > 4096) throw new Error('表达方向不可用。');
+    return replies.updateDirection(value as unknown as ReplyDirectionUpdate);
+  }, 'helper');
   commands.handle('reply:generate', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'newRequest']);
     if (typeof value.newRequest !== 'boolean') throw new Error('本次生成操作不可用。');
-    return replies.generate(value as unknown as GenerateRewrite);
+    return replies.generate(value as unknown as GenerateReply);
   }, 'helper');
   commands.handle('reply:select-candidate', (...args: unknown[]) => { return replies.selectCandidate(candidate(args)); }, 'helper');
   commands.handle('reply:edit-candidate', (...args: unknown[]) => { return replies.editCandidate(candidate(args, true) as ReplyCandidateEdit); }, 'helper');

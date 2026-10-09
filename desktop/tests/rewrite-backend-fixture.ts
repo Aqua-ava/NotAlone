@@ -6,7 +6,7 @@ import { FixtureTransport, requestFixtureHttp } from './fixture-transport';
 import { isolatedAppEnvironment } from './isolated-environment';
 const project = path.resolve('..');
 
-export type Prepared = { database_url: string; owner_id: string; contact_ids: string[]; other_contact_id: string };
+export type Prepared = { database_url: string; owner_id: string; contact_ids: string[]; other_contact_id: string; empty_contact_id: string };
 export type ModelPlan = { count?: number; risk_notes?: string[]; prefix?: string; fault?: 'timeout' | 'failure'; probe_history?: boolean };
 
 export class RewriteFixture {

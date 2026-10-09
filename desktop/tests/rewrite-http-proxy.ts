@@ -7,6 +7,9 @@ export class RewriteHttpProxy {
   readonly requests: Array<Record<string, unknown>> = [];
   readonly results: Array<{ status: number; data: Record<string, unknown> }> = [];
   nextReply: 'normal' | 'drop' | 'hold' = 'normal';
+  nextMessages: 'normal' | 'drop' | 'hold' = 'normal';
+  readonly messageRequests: string[] = [];
+  failMessages = false;
   failRuntime = false;
   heldCount = 0;
   private readonly held: Array<() => void> = [];
@@ -19,8 +22,22 @@ export class RewriteHttpProxy {
         response.end('{"error":"synthetic_transport_unavailable"}'); return;
       }
       const generating = incoming.url === '/api/reply/generate';
-      const delivery = generating ? this.nextReply : 'normal';
+      const messages = /^\/api\/contacts\/[a-f0-9-]+\/messages\?/.test(incoming.url ?? '');
+      if (messages) this.messageRequests.push(incoming.url!);
+      const delivery = generating ? this.nextReply : messages ? this.nextMessages : 'normal';
       if (generating) this.nextReply = 'normal';
+      if (messages) this.nextMessages = 'normal';
+      if (messages && this.failMessages) {
+        const deliver = () => {
+          if (response.destroyed) return;
+          response.writeHead(503, { 'Content-Type': 'application/json' });
+          response.end('{"error":"synthetic_transport_unavailable"}');
+        };
+        if (delivery === 'hold') this.hold(deliver);
+        else if (delivery === 'drop') response.destroy();
+        else deliver();
+        return;
+      }
       const body: Buffer[] = [];
       incoming.on('data', (chunk: Buffer) => body.push(chunk));
       incoming.on('end', () => {
@@ -38,7 +55,7 @@ export class RewriteHttpProxy {
               response.end(value);
             };
             if (delivery === 'drop') response.destroy();
-            else if (delivery === 'hold') { this.held.push(deliver); this.heldCount++; }
+            else if (delivery === 'hold') this.hold(deliver);
             else deliver();
           });
         });
@@ -49,6 +66,7 @@ export class RewriteHttpProxy {
       });
     });
   }
+  private hold(deliver: () => void): void { this.held.push(deliver); this.heldCount++; }
 
   static async attach(infoPath: string): Promise<RewriteHttpProxy> {
     const values = Object.fromEntries((await readFile(infoPath, 'utf8')).trim().split('\n').map((line) => {

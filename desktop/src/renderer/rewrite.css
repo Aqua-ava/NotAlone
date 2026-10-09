@@ -22,3 +22,14 @@
 .rewrite-retry button { font-size: 11px; color: #456b87; border: 1px solid #c8d1cf; border-radius: 3px; padding: 3px 7px; }
 .reply-empty { display: flex; gap: 12px; align-items: center; min-height: 50px; font-size: 12px; color: #707980; }
 .reply-empty small { font-size: 11px; }
+.directed-input { flex-shrink: 0; font-size: 11px; -webkit-app-region: no-drag; }
+.message-heading { display: flex; justify-content: space-between; align-items: center; padding: 3px; }
+.directed-input button:not(.generate-button) { padding: 3px 7px; border: 1px solid #c8d1cf; border-radius: 3px; color: #456b87; font-size: 11px; }
+.reply-message-list { max-height: 105px; overflow-y: auto; border: 1px solid #d8d6ca; border-radius: 4px; background: #fffdf6; }
+.reply-message { display: flex; gap: 7px; align-items: flex-start; padding: 5px 7px; border-bottom: 1px solid #e9e5d9; }
+.reply-message > span { min-width: 0; flex: 1; }
+.reply-message small { display: block; font-size: 10px; color: #707980; }
+.reply-message-text { display: block; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.directed-input .ime-input label { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.directed-input .ime-input textarea { height: 58px; }
+.directed-input > [role] { padding: 4px; }

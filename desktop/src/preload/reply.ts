@@ -1,11 +1,15 @@
 import type { PageTransport } from './transport';
-import type { GenerateRewrite, ReplyBridge, ReplyCandidateEdit, ReplyCandidateSelection, ReplySessionState, RewriteOptionsUpdate } from '../shared/reply-bridge';
+import type { GenerateReply, ReplyBridge, ReplyCandidateEdit, ReplyCandidateSelection, ReplySessionState, RewriteOptionsUpdate } from '../shared/reply-bridge';
 
 export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
   return Object.freeze({
     getState: (...args: unknown[]) => args.length === 0 ? ipcRenderer.invoke('reply:get-state') : Promise.reject(new Error('本次表达操作不可用。')),
     updateOptions: (update: RewriteOptionsUpdate) => ipcRenderer.invoke('reply:update-options', update),
-    generate: (selection: GenerateRewrite) => ipcRenderer.invoke('reply:generate', selection),
+    setMode: (...args: unknown[]) => ipcRenderer.invoke('reply:set-mode', ...args),
+    loadMessages: (...args: unknown[]) => ipcRenderer.invoke('reply:load-messages', ...args),
+    selectMessage: (...args: unknown[]) => ipcRenderer.invoke('reply:select-message', ...args),
+    updateDirection: (...args: unknown[]) => ipcRenderer.invoke('reply:update-direction', ...args),
+    generate: (selection: GenerateReply) => ipcRenderer.invoke('reply:generate', selection),
     selectCandidate: (selection: ReplyCandidateSelection) => ipcRenderer.invoke('reply:select-candidate', selection),
     editCandidate: (edit: ReplyCandidateEdit) => ipcRenderer.invoke('reply:edit-candidate', edit),
     onStateChanged: (listener: (state: ReplySessionState) => void) => {

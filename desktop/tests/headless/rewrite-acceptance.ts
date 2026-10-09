@@ -6,7 +6,7 @@ import { defaultRewrite, relationshipScope, unboundRejection, idempotentRewrite,
   prepareTransientRewrite, assertTransientRewriteCleared, type RewritePages } from '../rewrite-page-scenarios';
 
 // 每个具名场景有独立随机库和浏览器上下文，组内串行复用一个已租约的 Chrome。
-async function withPages(browser: Browser, origin: string, use: (pages: RewritePages, host: PageHost, userData: string) => Promise<void>) {
+export async function withRewritePages(browser: Browser, origin: string, use: (pages: RewritePages, host: PageHost, userData: string) => Promise<void>) {
   await withRewriteBackend(async (rewriteBackend) => {
     const replyTransport = await RewriteHttpProxy.attach(rewriteBackend.infoPath);
     try { await withControllerEnvironment(rewriteBackend, async (userData) => {
@@ -122,7 +122,7 @@ export async function draftRewriteAcceptance(browser: Browser, origin: string) {
   ];
   for (const [name, scenario] of scenarios) {
     process.stdout.write(`page_test_scenario: ${name}\n`);
-    await withPages(browser, origin, scenario);
+    await withRewritePages(browser, origin, scenario);
     process.stdout.write(`page_test_scenario_passed: ${name}\n`);
   }
 }
@@ -130,6 +130,6 @@ export async function draftRewriteAcceptance(browser: Browser, origin: string) {
 export async function draftRewriteSession(browser: Browser, origin: string) {
   const name = '新生产会话同 userData 不恢复临时输入';
   process.stdout.write(`page_test_scenario: ${name}\n`);
-  await withPages(browser, origin, (pages, host, userData) => newSession(pages, host, userData, browser, origin));
+  await withRewritePages(browser, origin, (pages, host, userData) => newSession(pages, host, userData, browser, origin));
   process.stdout.write(`page_test_scenario_passed: ${name}\n`);
 }
