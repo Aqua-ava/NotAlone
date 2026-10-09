@@ -22,7 +22,9 @@ export async function messageEvents(browser: Browser, origin: string) {
         const helper = await opened;
         await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
         await helper.getByRole('button', { name: '回复', exact: true }).click();
-        await helper.getByRole('radio', { name: /甲的原始合成消息/ }).check();
+        const target = helper.getByRole('radio', { name: /甲的原始合成消息/ });
+        await target.click();
+        await expect(target).toBeChecked();
         await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('说明原时间安排。');
         await fixture.plan({ count: 1, prefix: '原快照候选' });
         await helper.getByRole('button', { name: '生成候选', exact: true }).click();
