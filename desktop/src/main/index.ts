@@ -43,7 +43,7 @@ void app.whenReady().then(async () => {
   const contacts = installContactSessionBridge(commands, backend);
   installImportBridge(windows, new ImportController(backend, contacts));
   installMemoryBridge(commands, backend, contacts);
-  installBindingConsentBridge(windows, backend, contacts);
+  installBindingConsentBridge(commands, backend, contacts);
   installReplyBridge(commands, backend, contacts);
   installSetupBridge(windows, new SetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());

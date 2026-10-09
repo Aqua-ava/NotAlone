@@ -18,7 +18,7 @@ const bridge: AppBridge = {
   imports: createImportBridge(),
   replies: createReplyBridge(ipcRenderer),
   memory: createMemoryBridge(ipcRenderer),
-  bindings: createBindingConsentBridge(),
+  bindings: createBindingConsentBridge(ipcRenderer),
   openManager: () => ipcRenderer.invoke('window:open-manager'),
   openHelper: () => ipcRenderer.invoke('window:open-helper'),
   hideWindow: () => ipcRenderer.invoke('window:hide'),
