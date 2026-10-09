@@ -2,6 +2,7 @@ import type { Browser } from '@playwright/test';
 import { withBindingFixture } from '../binding-backend-fixture';
 import { syncSwitchStopsReading } from '../sync-page-scenarios';
 import { syncBackfillRetriesConfirmedScope } from '../sync-backfill-page-scenarios';
+import { syncArgumentsPreserveStoppedScope } from '../sync-arguments-page-scenarios';
 import { withControllerEnvironment } from './backend-fixture';
 import { ownResource } from './cleanup';
 import { PageHost } from './page-host';
@@ -31,4 +32,14 @@ export async function syncSwitch(browser: Browser, origin: string): Promise<void
 
 export async function syncBackfillRetry(browser: Browser, origin: string): Promise<void> {
   await withSyncPage(browser, origin, 'sync-backfill-retries-confirmed-scope', syncBackfillRetriesConfirmedScope);
+}
+
+export async function syncArguments(browser: Browser, origin: string): Promise<void> {
+  await withSyncPage(browser, origin, 'sync-arguments-preserve-stopped-scope', syncArgumentsPreserveStoppedScope);
+}
+
+export async function syncControlFull(browser: Browser, origin: string): Promise<void> {
+  await syncArguments(browser, origin);
+  await syncSwitch(browser, origin);
+  await syncBackfillRetry(browser, origin);
 }
