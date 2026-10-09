@@ -36,3 +36,8 @@ Spec: ../spec.md
 - 2026-10-09：首轮a1ed36f实际exit2，尚未进入候选生成编辑断言，属于夹具启动失败且cleanup未确认，不能记为产品red。纯import及合成模型构造确认importlib模块未登记导致Pydantic延迟注解无法解析；修复模块登记，并为ready前失败保留精确DB归属和异常文件。旧日志19-first-red保留；headless租约由root核验处理，未确认前停止新运行。静态模型构造通过，未调用setUpClass/后端/模型外部接口。
 
 - 2026-10-09：root只读pg_catalog核验所有可能本轮随机core_flow测试库count=0，未DROP任何库，首轮精确库名不可恢复仍保留事实。补充CoreBusinessFlowFixture默认None的私有归属路径，19指定独立0600文件，随机dbname生成后、任何PG连接/CREATE前以O_EXCL/O_NOFOLLOW写入并flush/fsync；planned归属、finally清理确认及异常分开保存。AST/typecheck/diff通过，尚未开始下一轮运行。
+
+- 2026-10-09：source0d625a4真正首public red在候选已生成/编辑及原依据GET200后缺连接提醒而失败，exit1/cleanuptrue。sourcee9cb741首片1/1green；此前22d68c7尝试因radio.check即时断言不适配异步桥接而失败，改为公开click+checked等待，不改产品。
+- 2026-10-09：sourcefce463c真实订阅close后提示未转中断，actual red且cleanuptrue；实际HTTP缺结束响应导致keep-alive等待，ebd2a70最小修复SSE结束连接，用户具名重连并明确核对遗漏。2/2公开场景green。认证和帧不进入renderer，消息归属沿当前联系人limit20真实投影核验；无自动刷新、生成或无限历史扫描。
+- 2026-10-09：source7eb602a五场实际green，exit0/cleanuptrue/Chrome1，quiet30 active0/window0，32 captured identities及自有groups无存活；12个历轮归属manifest精确库名只读核验均不存在，两leases absent。包含他owner/contact和foreign message ID、联系人/实际认证连接迟到失效、重连严格scope/字段/manager角色拒绝、新request保留旧GET依据。fe67982前一尝试因新增代理未flush真实响应头而5s等待失败，已仅修fixture并保留真实记录。
+- 2026-10-09：新增真实HTTP EOF最小回归1/1通过（Conda、显式本工作树PYTHONPATH），不访问PG、不运行App。首次命令遗漏PYTHONPATH导入原仓库editable源而超时，独立attempt1保留，不记作当前候选失败或产品red。证据在context19-*；待合入最新main后最小复核与两轴评审，保持claimed且无Answer。依照WHATWG SSE解析约定和Node25.2.1官方http文档核对，无新依赖或安装。
