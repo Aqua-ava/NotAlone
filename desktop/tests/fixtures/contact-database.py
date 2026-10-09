@@ -48,8 +48,15 @@ def seed_contact(connection, owner_id, name, message_count):
     return str(contact_id)
 
 
-def create_database(mode):
+def create_database(mode, ownership_path=None):
     database_name = f"notalone_contact_session_{uuid4().hex}_test"
+    if ownership_path is not None:
+        # 建库前持久化精确归属；即使调用方超时也不能丢失本轮库名。
+        descriptor = os.open(ownership_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as ownership:
+            json.dump({"version": 1, "database_name": database_name, "pid": os.getpid()}, ownership)
+            ownership.flush()
+            os.fsync(ownership.fileno())
     with psycopg.connect("host=/tmp dbname=postgres", autocommit=True) as admin:
         admin.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(
             sql.Identifier(database_name),
@@ -104,7 +111,7 @@ def drop_database(database_name):
 if __name__ == "__main__":
     operation = sys.argv[1]
     if operation == "create":
-        print(json.dumps(create_database(sys.argv[2])))
+        print(json.dumps(create_database(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)))
     elif operation == "drop":
         drop_database(sys.argv[2])
     else:
