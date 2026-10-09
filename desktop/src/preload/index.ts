@@ -15,7 +15,7 @@ const bridge: AppBridge = {
   setup: createSetupBridge(),
   startup: createStartupBridge(ipcRenderer),
   contacts: createContactSessionBridge(ipcRenderer),
-  imports: createImportBridge(),
+  imports: createImportBridge(ipcRenderer),
   replies: createReplyBridge(ipcRenderer),
   memory: createMemoryBridge(ipcRenderer),
   bindings: createBindingConsentBridge(),

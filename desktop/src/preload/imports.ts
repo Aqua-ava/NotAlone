@@ -1,11 +1,11 @@
-import { ipcRenderer } from 'electron';
+import type { PageTransport } from './transport';
 import type { ImportBridge, ImportSelectionVersion, ImportState, ImportTarget } from '../shared/import-bridge';
 
-export function createImportBridge(): ImportBridge {
+export function createImportBridge(transport: PageTransport): ImportBridge {
   const noArguments = (channel: string, args: unknown[]) => args.length === 0
-    ? ipcRenderer.invoke(channel) : Promise.reject(new Error('历史导入操作不可用。'));
+    ? transport.invoke(channel) : Promise.reject(new Error('历史导入操作不可用。'));
   const oneArgument = (channel: string, args: unknown[]) => args.length === 1
-    ? ipcRenderer.invoke(channel, args[0]) : Promise.reject(new Error('历史导入操作不可用。'));
+    ? transport.invoke(channel, args[0]) : Promise.reject(new Error('历史导入操作不可用。'));
   return Object.freeze({
     getState: (...args: unknown[]) => noArguments('imports:get-state', args),
     chooseFile: (...args: unknown[]) => noArguments('imports:choose-file', args),
@@ -21,8 +21,8 @@ export function createImportBridge(): ImportBridge {
     onStateChanged: (listener: (state: ImportState) => void) => {
       if (typeof listener !== 'function') throw new Error('历史导入操作不可用。');
       const receive = (_event: unknown, state: ImportState) => listener(state);
-      ipcRenderer.on('imports:state-changed', receive);
-      return () => ipcRenderer.removeListener('imports:state-changed', receive);
+      transport.on('imports:state-changed', receive);
+      return () => transport.removeListener('imports:state-changed', receive);
     },
   });
 }

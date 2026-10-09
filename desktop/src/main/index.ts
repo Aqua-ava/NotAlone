@@ -17,6 +17,7 @@ import { StartupDiagnostics } from './startup/diagnostics';
 import { installStartupBridge } from './startup/bridge';
 import { ImportController } from './imports/controller';
 import { installImportBridge } from './imports/bridge';
+import { installElectronImportFileSelection } from './imports/electron-file-selection';
 
 app.setName('NotAlone');
 const selectedDataPath = app.commandLine.getSwitchValue('user-data-dir');
@@ -41,7 +42,9 @@ void app.whenReady().then(async () => {
   const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart));
   const commands = electronPageCommands(windows);
   const contacts = installContactSessionBridge(commands, backend);
-  installImportBridge(windows, new ImportController(backend, contacts));
+  const imports = new ImportController(backend, contacts);
+  installImportBridge(commands, imports);
+  installElectronImportFileSelection(windows, imports);
   installMemoryBridge(commands, backend, contacts);
   installBindingConsentBridge(windows, backend, contacts);
   installReplyBridge(commands, backend, contacts);
