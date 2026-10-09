@@ -1,3 +1,4 @@
+import type { CandidateCopySurface } from '../../src/main/candidate-copy/controller';
 import { expect, type Browser } from '@playwright/test';
 import { PageHost } from './page-host';
 import { withControllerEnvironment, withRewriteBackend } from './backend-fixture';
@@ -6,11 +7,11 @@ import { defaultRewrite, relationshipScope, unboundRejection, idempotentRewrite,
   prepareTransientRewrite, assertTransientRewriteCleared, type RewritePages } from '../rewrite-page-scenarios';
 
 // 每个具名场景有独立随机库和浏览器上下文，组内串行复用一个已租约的 Chrome。
-export async function withRewritePages(browser: Browser, origin: string, use: (pages: RewritePages, host: PageHost, userData: string) => Promise<void>) {
+export async function withRewritePages(browser: Browser, origin: string, use: (pages: RewritePages, host: PageHost, userData: string) => Promise<void>, copySurface?: CandidateCopySurface) {
   await withRewriteBackend(async (rewriteBackend) => {
     const replyTransport = await RewriteHttpProxy.attach(rewriteBackend.infoPath);
     try { await withControllerEnvironment(rewriteBackend, async (userData) => {
-      const host = new PageHost(await browser.newContext(), origin, userData);
+      const host = new PageHost(await browser.newContext(), origin, userData, { copySurface });
       try {
         await host.backend.connect();
         const manager = await host.open('manager');

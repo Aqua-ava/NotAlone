@@ -1,7 +1,8 @@
 import { noArguments, type PageCommands } from '../page-commands';
-import type { MemoryReadRequest, MemorySectionName } from '../../shared/memory-bridge';
+import type { MemoryAdditionRequest, MemoryCorrectionRequest, MemoryReadRequest, MemorySectionName } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
+import { isUuid } from '../uuid';
 import { MemoryReadingController } from './controller';
 
 function requestArguments(args: unknown[]): MemoryReadRequest {
@@ -32,5 +33,40 @@ export function installMemoryBridge(commands: PageCommands, backend: BackendHost
   commands.handle('memory:refresh', (...args: unknown[]) => {
     return memory.refresh(requestArguments(args));
   });
+  commands.handle('memory:add', (...args: unknown[]) => memory.add(additionArguments(args)), 'manager');
+  commands.handle('memory:correct', (...args: unknown[]) => memory.correct(correctionArguments(args)), 'manager');
   return memory;
+}
+
+function correctionArguments(args: unknown[]): MemoryCorrectionRequest {
+  const value = args[0];
+  if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)) throw new Error('资料修正不可用。');
+  const fields = value as Record<string, unknown>;
+  if (Object.keys(fields).length !== 7 || !Object.keys(fields).every((key) =>
+    ['contactId', 'scopeRevision', 'level', 'memoryId', 'revision', 'text', 'category'].includes(key))
+    || !isUuid(fields.contactId) || !isUuid(fields.memoryId)
+    || typeof fields.scopeRevision !== 'number' || !Number.isSafeInteger(fields.scopeRevision) || fields.scopeRevision < 0
+    || !['owner', 'contact'].includes(fields.level as string) || typeof fields.revision !== 'number' || !Number.isSafeInteger(fields.revision) || fields.revision < 1
+    || typeof fields.text !== 'string' || !fields.text.trim()
+    || !['common_fact', 'preference', 'taboo', 'recent_state', 'relationship_note'].includes(fields.category as string)) {
+    throw new Error('资料修正不可用。');
+  }
+  return { contactId: fields.contactId.toLowerCase(), scopeRevision: fields.scopeRevision, level: fields.level as MemoryCorrectionRequest['level'],
+    memoryId: fields.memoryId.toLowerCase(), revision: fields.revision, text: fields.text, category: fields.category as MemoryCorrectionRequest['category'] };
+}
+
+function additionArguments(args: unknown[]): MemoryAdditionRequest {
+  const value = args[0];
+  if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)) throw new Error('资料补充不可用。');
+  const fields = value as Record<string, unknown>;
+  if (Object.keys(fields).length !== 5 || !Object.keys(fields).every((key) =>
+    ['contactId', 'scopeRevision', 'level', 'text', 'category'].includes(key))
+    || !isUuid(fields.contactId) || typeof fields.scopeRevision !== 'number'
+    || !Number.isSafeInteger(fields.scopeRevision) || fields.scopeRevision < 0
+    || !['owner', 'contact'].includes(fields.level as string) || typeof fields.text !== 'string' || !fields.text.trim()
+    || !['common_fact', 'preference', 'taboo', 'recent_state', 'relationship_note'].includes(fields.category as string)) {
+    throw new Error('资料补充不可用。');
+  }
+  return { contactId: fields.contactId.toLowerCase(), scopeRevision: fields.scopeRevision,
+    level: fields.level as MemoryAdditionRequest['level'], text: fields.text, category: fields.category as MemoryAdditionRequest['category'] };
 }

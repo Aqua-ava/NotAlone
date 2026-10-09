@@ -201,3 +201,11 @@ class MemoryService:
 
     def delete_owner_memory(self, *, owner_id: UUID, memory_id: UUID) -> OwnerMemory:
         return self._owner_memory.delete(owner_id, memory_id)
+
+    def correct_owner_memory(
+        self, *, owner_id: UUID, memory_id: UUID, text: str,
+        category: MemoryCategory | None = None,
+    ) -> OwnerMemory:
+        return self._owner_memory.correct(
+            owner_id=owner_id, memory_id=memory_id, text=text, category=category,
+        )

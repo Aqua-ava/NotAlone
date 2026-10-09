@@ -1,3 +1,4 @@
+import { CandidateCopyControls } from './CandidateCopyControls';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Icon } from './icons';
@@ -48,8 +49,7 @@ function App() {
     <footer className="ime-footer">
       <span>由你修改并亲自发送</span>
       <HelperPinControl />
-      <button disabled><Icon name="copy" size={13} />复制</button>
-      <button className="copy-hide" disabled>复制并收起</button>
+      <CandidateCopyControls state={replies.state} />
     </footer>
     {error && <p role="alert">{error}</p>}
     {contactSession.error && <p role="alert">{contactSession.error}</p>}

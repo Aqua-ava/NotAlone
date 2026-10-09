@@ -1,3 +1,4 @@
+import { createCandidateCopyBridge } from '../../src/preload/candidate-copy';
 import type { PageTransport } from '../../src/preload/transport';
 import { createContactSessionBridge } from '../../src/preload/contact-session';
 import { createMemoryBridge } from '../../src/preload/memory';
@@ -20,6 +21,7 @@ pageWindow.pageEvent = (channel, state) => { for (const listener of listeners.ge
 const unsupported = () => Promise.reject(new Error('无头页面未支持此原生或业务入口。'));
 const noEvents = () => () => {};
 const bridge: AppBridge = {
+  candidateCopy: createCandidateCopyBridge(transport),
   backend: createBackendBridge(transport), startup: createStartupBridge(transport),
   contacts: createContactSessionBridge(transport), memory: createMemoryBridge(transport), replies: createReplyBridge(transport),
   openManager: () => transport.invoke('page:open-manager'), openHelper: () => transport.invoke('page:open-helper'), hideWindow: unsupported,

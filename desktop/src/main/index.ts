@@ -1,3 +1,5 @@
+import { CandidateCopyController } from './candidate-copy/controller';
+import { installElectronCandidateCopy } from './candidate-copy/electron';
 import { app, dialog, ipcMain, Menu, protocol, session } from 'electron';
 import path from 'node:path';
 import { electronPageCommands } from './electron-page-commands';
@@ -47,7 +49,8 @@ void app.whenReady().then(async () => {
   installElectronImportFileSelection(windows, imports);
   installMemoryBridge(commands, backend, contacts);
   installBindingConsentBridge(windows, backend, contacts);
-  installReplyBridge(commands, backend, contacts);
+  const replies = installReplyBridge(commands, backend, contacts);
+  installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies));
   installSetupBridge(windows, new SetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());
   installStartupBridge(windows, diagnostics, backend);
