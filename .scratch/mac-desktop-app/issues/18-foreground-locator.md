@@ -37,3 +37,5 @@ Spec: ../spec.md
 - 2026-10-09（首条公开失败接缝静态准备）：仅新增专属合成probe脚本、复用已验证BindingFixture生命周期的暂停夹具与一条公开页面场景，真实HTTP确认本轮合成绑定并开启CLI总开关，probe返回微信不在前台，断言小窗显示定位暂停、手选联系人与草稿保持、真实sync/status开关仍true和foreground_phase为waiting_foreground。不调用sync/check、不提供图帧或模拟业务成功；未登记host/CLI入口，未运行red/green或任何服务。类型与构建、差异和二十票检查通过。新fresh observe/当前绑定质量与trusted窗口时效方案已交主Agent，规格补齐及生产接口仍待裁定，不先实现高风险seam，不写Answer或勾验收。
 
 - 2026-10-09：只读核对发现缺少新观察公共接缝、探针未投影OCR质量且旧路径先捕获完整窗口。主Agent按本任务已有定位/人工消歧范围明确规格中的最小只读接线、保守质量门禁、1500ms可信show前预算与草稿保留；不新增业务表、读取授权或同步算法。普通页面与纯合成原生逻辑可继续，实际App/微信探针、签名与权限仍暂停；尚无本任务运行red/green，不沿用历史证明。
+
+- 2026-10-09（新观察首片wrapper静态准备）：合入范围决定59a442b，保留原claim与首片记录；新增专属headless foregroundPaused wrapper，先复用真实BindingFixture的认证HTTP/PG确认合成绑定、开启CLI，验证空对象foreground/observe返回本次paused/null身份/最小投影且没有新增tail，再打开公共helper检查暂停提示、手选联系人与草稿保留、总开关独立。后台HTTP红断言与页面wrapper均尚未运行，现有端点不存在不能冒充实际red。只给主Agent foreground-paused的run/test-pages白名单与dispatch patch，不直接改共享接线；生产endpoint/窗口hooks/生成guard与原生采集未实施。typecheck/build与diff静态通过，无服务或原生执行；所有验收勾选、Answer仍空。
