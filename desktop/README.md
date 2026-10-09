@@ -43,10 +43,12 @@ npm run package
 
 ```bash
 npm run test:pages -- --case memory-reading --case draft-rewrite --timeout-seconds 120
+npm run test:pages -- --case draft-rewrite-acceptance --timeout-seconds 180
+npm run test:pages -- --case draft-rewrite-session --timeout-seconds 120
 npm run test:pages -- --status  # 只读租约，不启动浏览器或 Electron
 ```
 
-时限为 1–300 秒，包含构建；没有默认全量。`memory-reading` 验证实际资料/采纳方式/来源引用/切换/空状态及具名参数与角色限制；`draft-rewrite` 验证真实模型替代边界下的生成、候选编辑与原快照、选择和跨联系人迟到结果。两个页面组复用生产 React、联系人/资料/回复 handler、参数校验、preload 传输接口及真实 HTTP/PostgreSQL；生产 Electron adapter 仍使用原 `validateCaller` 与角色检查。headless 的角色由 host 登记的 page 对象确定，不接受 renderer 自报；具名函数只接收已注册操作，renderer 不持有后端 token、数据库地址或任意 HTTP/系统调用。回环资源 host 与浏览器控制端仅用于测试，不进入交付 App。
+时限为 1–300 秒，包含构建；没有默认全量。`memory-reading` 验证实际资料/采纳方式/来源引用/切换/空状态及具名参数与角色限制；`draft-rewrite` 验证真实模型替代边界下的生成、候选编辑与原快照、选择和跨联系人迟到结果。`draft-rewrite-acceptance` 串行验证任务 09 的九个具名普通页面场景，每场景新建随机库和页面上下文；包括关系语境、真实 1–3 候选、等待/风险/编辑、幂等、失败与空候选、联系人及连接迟到成功/失败、同 userData 新生产会话清空及具名参数/角色/来源限制。六类交互与原 App 用例共用公开页面场景；新会话的输入准备/清空断言也与原生重启用例共享，各自保留停读、PageHost 或原生生命周期。`draft-rewrite-session` 固定只运行完整组中的同一个新会话场景，供相关小修复核使用；不能把单场景结果扩张为全部九项重跑。原生隐藏/恢复及真正 App 重启仍保留实际 App 验收。页面组复用生产 React、联系人/资料/回复 handler、参数校验、preload 传输接口及真实 HTTP/PostgreSQL；生产 Electron adapter 仍使用原 `validateCaller` 与角色检查。headless 的角色由 host 登记的 page 对象确定，不接受 renderer 自报；具名函数只接收已注册操作，renderer 不持有后端 token、数据库地址或任意 HTTP/系统调用。回环资源 host 与浏览器控制端仅用于测试，不进入交付 App。
 
 每例创建自己的随机 `_test` 库、合成联系人/本人、配置、握手和 context，仅外部模型及必要传输迟到被替代。窗口切换在测试中创建对应角色的页面，原生隐藏/置顶/快捷键/剪贴板与未接通业务入口明确拒绝，不返回假成功。未改正常 App 的 show/focus。原生窗口、真实 IPC 来源、系统对话框、签名 App、微信权限和完整 App 验收仍待实机，两个最小页面组不能替代功能票全部条件。
 
@@ -106,7 +108,7 @@ npm run test:app:status  # 只读租约归属线索，App 不运行，不自动�
 
 `tests/draft-rewrite.spec.ts` 与 `tests/rewrite-*.spec.ts` 使用真实生产回复装配、LangChain 调用、HTTP、随机 `_test` 库和正式持久化，只把外部模型替换成可捕获输入的受控模型。两个本人联系人、另一 owner 的资料和有效绑定均为合成准备；不证明绑定 UI、真实微信或模型语义质量。覆盖默认不读取历史、明确开启后的联系人范围、真实 1–3 候选/风险提醒/原文快照、编辑与选择、真实响应丢失后的幂等恢复、新输入和重新生成、实际绑定撤销拒绝、真实超时/失败、迟到结果失效、隐藏恢复、重启清空与受限桥接。延迟和丢包只安排真实回环 HTTP 传输，模型故障仍经过真实运行时与错误契约；不替换业务仓储、不读取剪贴板或微信，不访问供应商服务。
 
-任务 09 的历史 9 条 App 行为已通过；首轮完整回归为 95/96，旧占位按钮断言已修正，末轮完整回归在用户要求解决桌面干扰时中止为 21 passed / 75 did not run（exit 130）。用户随后选择只继续不触桌面的工作：当前保留原实现，合入门禁并把独立重启改为 `launchApp`；类型与构建通过不更新 App 验收结果。最新候选单选断言、标签布局/快照措辞、修正后的联系人断言、门禁下的重启与本任务最终签名 App 均等待后续预约，不能称完整回归通过。详见[任务 09 记录](../.scratch/mac-desktop-app/issues/09-draft-rewrite.md)。
+任务 09 最新普通页面验收 `draft-rewrite-acceptance` 为 9/9 green（单个无头 Chrome、真实隔离 HTTP/PG）；首轮最后一场景因页面尚未初始化而失败，补齐公开控件可见等待后末轮通过，不能称业务缺陷的 red → green。生产控制器正常停读后在同一 userData 新建会话，不恢复草稿、编辑、语气和本次要求；该结果不证明原生 App 重启、隐藏/恢复、剪贴板、签名或真实模型质量。任务仍等待两轴评审后如实收尾。任务 09 的历史 9 条 App 行为已通过；首轮完整回归为 95/96，旧占位按钮断言已修正，末轮完整回归在用户要求解决桌面干扰时中止为 21 passed / 75 did not run（exit 130）。用户随后选择只继续不触桌面的工作：当前保留原实现，合入门禁并把独立重启改为 `launchApp`；类型与构建通过不更新 App 验收结果。最新候选单选断言、标签布局/快照措辞、修正后的联系人断言、门禁下的重启与本任务最终签名 App 均等待后续预约，不能称完整回归通过。详见[任务 09 记录](../.scratch/mac-desktop-app/issues/09-draft-rewrite.md)。
 
 `tests/import-preview.spec.ts` 由实际 App 选择、预览、手动确认与取消，连接同一真实 HTTP／随机 `_test` 库。自动化只替换必要的系统文件选择返回，不替换导入业务；覆盖有效单联系人资料、损坏、混合联系人、群聊、多本人、库内身份冲突、文件内容变化、换文件、换归属和双窗口迟到结果。任意路径和目录外联系人经过公开具名桥接拒绝；无正文、完整路径或摘要交给渲染层。门禁引入前源码 14 项预览及全组 101 项已有历史通过记录；后续不触桌面的构建签名产物按原源版本保留，UUID 去重只检查类型与 build，没有重打包或运行 App。真实系统文件选择器与签名包 UI 列为任务 20 的待实机项，等用户安排验收时段；自动化中的必要对话框 I/O 替代不能证明这两项通过。
 

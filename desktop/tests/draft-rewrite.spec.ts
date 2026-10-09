@@ -1,35 +1,7 @@
-import { expect } from '@playwright/test';
-import { test } from './rewrite-fixture';
+import { test, openRewriteAppPages } from './rewrite-transport-fixture';
+import { defaultRewrite } from './rewrite-page-scenarios';
 
-test('草稿默认只改写原句，真实候选可编辑且保留原快照', async ({ runningApp: { app }, rewriteBackend }, testInfo) => {
-  const manager = await app.firstWindow();
-  const opened = app.waitForEvent('window');
-  await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
-  const helper = await opened;
-  await expect(helper.getByRole('button', { name: '生成候选', exact: true })).toBeDisabled();
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
-  await expect(helper.getByRole('checkbox', { name: '结合关系语境', exact: true })).not.toBeChecked();
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
-  await rewriteBackend.plan({ count: 2, risk_notes: ['请核实本次承诺。'] });
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
-  await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('我会晚一点回复你（说法1）。');
-  await expect(helper.getByRole('textbox', { name: '候选2编辑文本', exact: true })).toHaveValue('我会晚一点回复你（说法2）。');
-  await expect(helper.getByRole('radio', { name: '说法 1', exact: true })).toBeChecked();
-  await helper.getByRole('radio', { name: '说法 2', exact: true }).check();
-  await expect(helper.getByRole('radio', { name: '说法 2', exact: true })).toBeChecked();
-  await expect(helper.getByRole('radio', { name: '说法 1', exact: true })).not.toBeChecked();
-  await expect(helper.getByText('请核实本次承诺。', { exact: true })).toHaveCount(2);
-  await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).fill('我今晚忙完再回复你。');
-  await helper.getByText('查看原候选', { exact: true }).first().click();
-  await expect(helper.getByText('我会晚一点回复你（说法1）。', { exact: true })).toBeVisible();
-  const observations = await rewriteBackend.command('observations');
-  const payload = (observations.payloads as Array<Record<string, unknown>>)[0];
-  expect(payload).toMatchObject({ input_mode: 'rewrite_draft', draft_text: '今晚我会晚一点回复你。', include_relationship_context: false });
-  expect((payload.evidence as Array<{ kind: string }>).map((item) => item.kind)).toEqual(['user_draft']);
-  expect(observations.tool_names).toEqual(['read_file', 'ReplyRuntimeOutput']);
-  const outbound = JSON.stringify(observations.payloads);
-  expect(outbound).not.toContain('甲的私密合成历史');
-  expect(outbound).not.toContain('乙的私密合成历史');
-  expect(outbound).not.toContain('另一用户的私密合成历史');
-  await helper.screenshot({ path: testInfo.outputPath('draft-candidates.png') });
+test('草稿默认只改写原句，真实候选可编辑且保留原快照', async ({ runningApp: { app }, rewriteBackend, replyTransport }, testInfo) => {
+  await defaultRewrite({ ...await openRewriteAppPages(app), rewriteBackend, replyTransport,
+    screenshotPath: testInfo.outputPath('draft-candidates.png') });
 });
