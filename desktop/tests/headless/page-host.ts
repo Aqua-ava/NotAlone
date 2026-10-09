@@ -65,7 +65,8 @@ export class PageHost implements PageCommands {
       return imports.chooseFile(options.chooseImportFile);
     }, 'manager');
     const memory = installMemoryBridge(this, this.backend, contacts);
-    const replies = installReplyBridge(this, this.backend, contacts);
+    const replies = installReplyBridge(this, this.backend, contacts, () => this.foreground.getGenerationBlock());
+    this.foreground.onStateChanged(() => replies.refreshGenerationEligibility());
     installSourceDeletionBridge(this, this.backend, contacts, async (contactId) => {
       const checking = replies.revalidateDeletedSource(contactId);
       try { await memory.revalidateDeletedSource(contactId); }
