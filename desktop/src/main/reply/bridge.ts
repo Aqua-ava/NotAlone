@@ -55,6 +55,8 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     if (typeof value.older !== 'boolean') throw new Error('消息列表操作不可用。');
     return replies.loadMessages(value as unknown as ReplyMessagePageRequest);
   }, 'helper');
+  commands.handle('reply:retry-source-validation', (...args: unknown[]) =>
+    replies.retrySourceValidation(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
   commands.handle('reply:reconnect-messages', (...args: unknown[]) =>
     replies.reconnectMessages(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
   commands.handle('reply:select-message', (...args: unknown[]) => {

@@ -59,8 +59,12 @@ export class PageHost implements PageCommands {
       return imports.chooseFile(options.chooseImportFile);
     }, 'manager');
     const memory = installMemoryBridge(this, this.backend, contacts);
-    installSourceDeletionBridge(this, this.backend, contacts, (contactId) => memory.revalidateDeletedSource(contactId));
     const replies = installReplyBridge(this, this.backend, contacts);
+    installSourceDeletionBridge(this, this.backend, contacts, async (contactId) => {
+      const checking = replies.revalidateDeletedSource(contactId);
+      try { await memory.revalidateDeletedSource(contactId); }
+      finally { await checking; }
+    });
     const copies = new CandidateCopyController(this.backend, contacts, replies);
     this.handle('candidate-copy:copy', (...args: unknown[]) => {
       const request = candidateCopyRequest(args);

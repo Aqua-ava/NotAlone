@@ -49,9 +49,13 @@ void app.whenReady().then(async () => {
   installImportBridge(commands, imports);
   installElectronImportFileSelection(windows, imports);
   const memory = installMemoryBridge(commands, backend, contacts);
-  installSourceDeletionBridge(commands, backend, contacts, (contactId) => memory.revalidateDeletedSource(contactId));
   installBindingConsentBridge(commands, backend, contacts);
   const replies = installReplyBridge(commands, backend, contacts);
+  installSourceDeletionBridge(commands, backend, contacts, async (contactId) => {
+    const checking = replies.revalidateDeletedSource(contactId);
+    try { await memory.revalidateDeletedSource(contactId); }
+    finally { await checking; }
+  });
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies));
   installSetupBridge(windows, new SetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());

@@ -6,6 +6,7 @@ import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
 import { generateReply } from './client';
 import { readReplyMessages } from './messages';
+import { readReplyEvidence } from './evidence-read';
 
 const defaults = () => ({ tone: 'original' as const, instruction: '', includeRelationshipContext: false });
 const tones = { original: '', warm: '本次语气自然温和。', concise: '本次表达简洁直接。', polite: '本次语气礼貌克制。' };
@@ -16,6 +17,8 @@ export class ReplySession {
     options: defaults(), mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null },
     messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
     targetMessageId: null, direction: '', phase: 'idle', result: null, selectedCandidateId: null, canRetry: false };
+  private sourceCheck: AbortController | undefined;
+  private heldResult: { result: NonNullable<ReplySessionState['result']>; selectedCandidateId: string | null } | undefined;
   private draft = '';
   private operation = 0;
   private pending: AbortController | undefined;
@@ -35,6 +38,52 @@ export class ReplySession {
   onStateChanged(listener: (state: ReplySessionState) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  // 删除检查点只接收主进程已确认的联系人；跨联系人本人资料也可能影响当前依据。
+  async revalidateDeletedSource(contactId: string): Promise<void> {
+    const held = this.heldResult ?? (this.state.result ? {
+      result: this.state.result, selectedCandidateId: this.state.selectedCandidateId,
+    } : undefined);
+    this.cancelPending();
+    this.lastAttempt = undefined;
+    const operation = this.operation;
+    const scopeRevision = this.state.scopeRevision;
+    const currentContact = this.state.contactId;
+    const generation = this.backend.getConnectionGeneration();
+    this.heldResult = held;
+    const pending = new AbortController();
+    this.sourceCheck = pending;
+    const current = () => !pending.signal.aborted && operation === this.operation
+      && scopeRevision === this.state.scopeRevision && currentContact === this.state.contactId
+      && generation === this.backend.getConnectionGeneration();
+    this.publish({ result: null, selectedCandidateId: null, phase: 'idle', canRetry: false,
+      errorCode: undefined, sourceAvailability: held ? 'checking' : undefined });
+    if (contactId === currentContact) {
+      this.cancelMessagePage();
+      this.publish({ messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null });
+      if (currentContact && generation !== undefined) {
+        await this.loadMessages({ contactId: currentContact, scopeRevision, older: false });
+      }
+    }
+    if (!held || !currentContact || generation === undefined || !current()) return;
+    try {
+      const evidence = await readReplyEvidence(this.backend, currentContact, held.result.replyRequestId, pending.signal);
+      if (!current() || evidence.generation !== generation) return;
+      this.heldResult = undefined;
+      this.publish({ result: held.result, selectedCandidateId: held.selectedCandidateId,
+        phase: 'ready', sourceAvailability: undefined });
+    } catch (error) {
+      if (!current()) return;
+      if (error instanceof BackendRequestFailure && error.status === 404) {
+        this.heldResult = undefined;
+        this.publish({ sourceAvailability: undefined });
+      } else this.publish({ sourceAvailability: 'failed' });
+    } finally { if (this.sourceCheck === pending) this.sourceCheck = undefined; }
+  }
+  async retrySourceValidation(selection: ContactSelection): Promise<void> {
+    this.assertScope(selection);
+    if (this.state.sourceAvailability === 'failed') await this.revalidateDeletedSource(selection.contactId);
   }
 
   updateOptions(update: RewriteOptionsUpdate): ReplySessionState {
@@ -245,7 +294,11 @@ export class ReplySession {
     this.publish({ phase: this.state.result ? 'ready' : 'idle', errorCode: undefined, canRetry: false });
   }
   private cancelMessagePage(): void { ++this.messageOperation; this.messagePending?.abort(); this.messagePending = undefined; }
-  private cancelPending(): void { ++this.operation; this.pending?.abort(); this.pending = undefined; }
+  private cancelPending(): void {
+    ++this.operation; this.pending?.abort(); this.pending = undefined;
+    this.sourceCheck?.abort(); this.sourceCheck = undefined; this.heldResult = undefined;
+    if (this.state.sourceAvailability) this.publish({ sourceAvailability: undefined });
+  }
   private publish(update: Partial<ReplySessionState>): void {
     this.state = { ...this.state, ...update, revision: this.state.revision + 1 };
     for (const listener of this.listeners) listener(this.getState());
