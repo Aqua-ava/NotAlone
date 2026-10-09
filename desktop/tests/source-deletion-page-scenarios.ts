@@ -235,3 +235,47 @@ export async function sourceDeletionMultiSource(manager: Page, fixture: SourceDe
   const other = await fixture.http(`/api/contacts/${fixture.data.contact_ids[1]}/messages`);
   expect(other.data.messages).toHaveLength(1);
 }
+
+export async function sourceDeletionStaleRequest(manager: Page, helper: Page, fixture: SourceDeletionFixture,
+  proxy: import('./source-deletion-proxy').SourceDeletionProxy) {
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  const draft = helper.getByRole('textbox', { name: '草稿', exact: true });
+  await draft.fill('旧请求的独立合成草稿。');
+  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
+  await expect(editor).toHaveValue('来源引用合成候选。', { timeout: 15_000 });
+  await editor.fill('旧请求编辑稿不得恢复。');
+  await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
+  await expect(helper.getByRole('region', { name: '候选1依据', exact: true }).getByText('旧请求的独立合成草稿。', { exact: true })).toBeVisible();
+  const old = await helper.evaluate(() => window.notalone.replies.getState());
+  proxy.holdEvidencePath = `/api/contacts/${old.contactId}/replies/${old.result!.replyRequestId}/evidence`;
+  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  const panel = manager.getByRole('region', { name: '来源删除管理', exact: true });
+  await panel.getByRole('button', { name: '删除来源', exact: true }).click();
+  await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
+  await expect.poll(() => proxy.heldCount, { timeout: 1500 }).toBeGreaterThan(0);
+  expect(proxy.heldStatuses.every((status) => status === 200)).toBe(true);
+  await expect(editor).toHaveCount(0);
+  await expect(helper.getByRole('region', { name: '候选1依据', exact: true })).toHaveCount(0);
+  await draft.fill('新请求的独立合成草稿。');
+  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await expect(editor).toHaveValue('来源引用合成候选。', { timeout: 2500 });
+  await editor.fill('新请求的本轮编辑稿。');
+  const current = await helper.evaluate(() => window.notalone.replies.getState());
+  expect(current.result!.replyRequestId).not.toBe(old.result!.replyRequestId);
+  // 若自动gate已提前放行，这轮只算安排失败，不能声称覆盖了迟到响应。
+  expect(proxy.heldCount).toBeGreaterThan(0);
+  proxy.holdEvidencePath = null;
+  proxy.release();
+  await expect(panel.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(editor).toHaveValue('新请求的本轮编辑稿。');
+  await expect(draft).toHaveValue('新请求的独立合成草稿。');
+  await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
+  const basis = helper.getByRole('region', { name: '候选1依据', exact: true });
+  await expect(basis.getByText('新请求的独立合成草稿。', { exact: true })).toBeVisible();
+  await expect(helper.getByText('旧请求的独立合成草稿。', { exact: true })).toHaveCount(0);
+  const final = await helper.evaluate(() => window.notalone.replies.getState());
+  expect(final.result!.replyRequestId).toBe(current.result!.replyRequestId);
+  expect(final.selectedCandidateId).toBe(current.selectedCandidateId);
+  expect((await fixture.http(`/api/contacts/${final.contactId}/replies/${final.result!.replyRequestId}/evidence`)).status).toBe(200);
+}
