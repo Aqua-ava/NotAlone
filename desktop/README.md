@@ -45,6 +45,7 @@ npm run package
 npm run test:pages -- --case memory-reading --case draft-rewrite --timeout-seconds 120
 npm run test:pages -- --case draft-rewrite-acceptance --timeout-seconds 180
 npm run test:pages -- --case draft-rewrite-session --timeout-seconds 120
+npm run test:pages -- --case memory-reading-full --case memory-stale-full --timeout-seconds 240
 npm run test:pages -- --status  # 只读租约，不启动浏览器或 Electron
 ```
 
@@ -114,7 +115,9 @@ npm run test:app:status  # 只读租约归属线索，App 不运行，不自动�
 
 关系资料页的只读链路读取当前联系人有效记忆、当前本人有效记忆、当前联系人 pending 候选和来源目录。`auto` 展示为“自动采纳（可撤销）”，`manual` 展示为“手动采纳”，pending 明示不是已确认事实；来源聊天时间、保存时间和有效期分开，未知或不完整时间不补造。来源目录只解析实际匹配的来源记录，其余消息、观察或人工引用保留未知说明；已有版本和候选引用可展开，当前公开接口没有完整历史正文。各栏独立加载和重读，连接、联系人范围或更新的读取操作会废弃旧响应；此处未接入编辑、删除或业务 SSE。
 
-`tests/memory-reading.spec.ts` 与 `tests/memory-stale.spec.ts` 已准备上述公开 App 用例，包含 A→B→A、同范围重读、连接失效、独立失败和受限参数。夹具使用当前工作树真实 HTTP 与随机 `_test` PostgreSQL 库，仅延迟或拒绝本轮回环传输来安排迟到结果。**本轮 App 用例未运行，UI red → green 和实际可见布局待认可时段**；类型检查、构建和夹具 HTTP 自检不能替代 UI 或端到端验收。`tests/fixtures/memory-database.py check-http` 在激活 Conda `NotAlone`、显式禁用默认 dotenv 并指定本轮独立 `synthetic.env`/握手路径后，可只核验合成数据的公开列表契约与隔离；它不启动 Electron，不读取真实微信、剪贴板或私人资料，不调用模型，结束后认证停读并只清理自己创建的后端、临时目录与库。
+`memory-reading-full` 与 `memory-stale-full` 分别验证九个资料/独立重读/真实空结果场景和六个迟到成功/失败场景，每场景使用新随机库与页面上下文。原十条 App 用例的公开页面断言共用；四栏加载、失败和独立重读只安排真实回环传输，旧操作的公开 refresh Promise 完成后才核对可见页面。当前两组 15/15 green，单个无头 Chrome、85 次自有进程静默采样未见激活或可见窗口，真实资源收尾确认、两租约 absent；任务等待两轴复核后收尾。首次完整组仅因相同保存时间命中两张卡的旧选择器而失败，限定对应记忆卡后通过，生产源码没有变化。实际 App、签名和原生能力仍须各自验收。
+
+`tests/memory-reading.spec.ts` 与 `tests/memory-stale.spec.ts` 已准备上述公开 App 用例，包含 A→B→A、同范围重读、连接失效、独立失败和受限参数。夹具使用当前工作树真实 HTTP 与随机 `_test` PostgreSQL 库，仅延迟或拒绝本轮回环传输来安排迟到结果。**本轮实际 App 用例未运行，其原生生命周期与签名验收仍待认可时段**；上述普通页面 green 覆盖当前资料 React 交互与真实隔离 HTTP/PG，不代表完整 Mac App 或微信渠道验收。类型检查、构建和历史夹具 HTTP 自检不能单独替代页面验收。`tests/fixtures/memory-database.py check-http` 在激活 Conda `NotAlone`、显式禁用默认 dotenv 并指定本轮独立 `synthetic.env`/握手路径后，可只核验合成数据的公开列表契约与隔离；它不启动 Electron，不读取真实微信、剪贴板或私人资料，不调用模型，结束后认证停读并只清理自己创建的后端、临时目录与库。
 
 任务 08 的 `tests/import-submit.spec.ts` 与 `tests/import-submit-stale.spec.ts` 已准备公开 App 操作：正式保存、真实五步任务、原失败任务恢复、文件变动拒绝、取消/换联系人/换连接后的迟到成功与失败、保存响应丢失后重新确认，以及首份渠道身份后的明确认证停读重启。合成模型仅替换外部 provider，HTTP、持久任务、调度、回复范围与 PostgreSQL 使用生产模块；文件选择只替换必要对话框 I/O。这些 App 用例本轮未运行，没有 UI red/green、截图、真实微信或语义质量验收证据，任务保持 claimed。首份身份不会自动授权同步，用户明确重启只沿用既有开关与确认范围。
 

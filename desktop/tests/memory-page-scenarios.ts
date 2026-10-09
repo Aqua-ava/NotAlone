@@ -23,8 +23,9 @@ export async function memoryDetails(manager: Page, memoryBackend: MemoryFixture)
   await expect(pending.getByText('主体：联系人', { exact: true })).toBeVisible();
   await expect(pending.getByText('主体：双方', { exact: true })).toBeVisible();
   await contact.getByRole('button', { name: '查看来源与版本：甲喜欢合成茉莉茶。' }).click();
+  const automatic = contact.getByRole('article').filter({ has: manager.getByText('甲喜欢合成茉莉茶。', { exact: true }) });
   await expect(contact.getByText('来源聊天时间：2024年1月2日 10:00:00（UTC+8）', { exact: true })).toBeVisible();
-  await expect(contact.getByText('保存时间：2026年1月2日 10:00:00（UTC+8）', { exact: true })).toBeVisible();
+  await expect(automatic.getByText('保存时间：2026年1月2日 10:00:00（UTC+8）', { exact: true })).toBeVisible();
   await expect(contact.getByText('保存时间：2024年1月2日 10:00:00（UTC+8）', { exact: true })).toHaveCount(0);
   await expect(contact.getByText(`来源引用：${memoryBackend.data.direct_message_id}`, { exact: true })).toBeVisible();
   await expect(contact.getByText('引用类型或来源详情暂不可用。', { exact: true })).toBeVisible();
