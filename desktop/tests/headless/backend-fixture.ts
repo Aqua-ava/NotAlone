@@ -2,6 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ContactFixture } from '../contact-backend-fixture';
 import { MemoryFixture, type MemoryDatabase } from '../memory-backend-fixture';
+import { withImportFixture, type ImportFixture } from '../import-backend-fixture';
 import { withRewriteFixture, type RewriteFixture } from '../rewrite-backend-fixture';
 import { withSyntheticBackendFixture } from '../synthetic-backend-fixture';
 import { isolatedAppEnvironment } from '../isolated-environment';
@@ -24,7 +25,11 @@ export async function withRewriteBackend(use: (fixture: RewriteFixture) => Promi
   const released = ownResource();
   await withRewriteFixture('notalone-headless-rewrite-', use, released);
 }
-export async function withControllerEnvironment(fixture: ContactFixture | RewriteFixture, use: (userData: string) => Promise<void>) {
+export async function withImportBackend(use: (fixture: ImportFixture) => Promise<void>) {
+  const released = ownResource();
+  await withImportFixture('notalone-headless-import-', use, released);
+}
+export async function withControllerEnvironment(fixture: ContactFixture | RewriteFixture | ImportFixture, use: (userData: string) => Promise<void>) {
   const userData = path.join(fixture.directory, 'page-controller');
   const { mkdir } = await import('node:fs/promises');
   await mkdir(userData);

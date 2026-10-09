@@ -1,7 +1,7 @@
 # 10：真实复制与复制后隐藏
 
 Type: task
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: 09
 Spec: ../spec.md
@@ -28,3 +28,13 @@ Spec: ../spec.md
 ## Comments
 
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
+
+- 2026-10-09：开始准备候选复制的公开页面切片，沿用真实生成与当前编辑文本；普通页面仅替换操作系统复制/隐藏边界，真实剪贴板和窗口验收继续暂停，任务保持 claimed。
+
+- 2026-10-09：首个受限 candidate-copy 普通页实际退出1：真实生成和编辑后点击旧复制按钮，按钮仍 disabled，30秒超时为产品red。单Chrome、cleanupConfirmed=true、52次有限quiet采样active/window0、两租约absent；日志 /tmp/notalone-app-context.p9MPie/10-first-red.log。已将runtime返14，开始最小复制实现；未读取真实剪贴板。
+
+- 2026-10-09：最小复制源已准备：具名请求只带当前联系人/请求/候选身份，文本从主进程编辑状态取得；原生入口验证本次helper caller，等待Electron44.7.0 writeText Promise完成并复核范围后才隐藏同一caller。普通PageHost只替换系统复制/隐藏边界，首片断言精确当前编辑文本。类型/构建/空白/DAG通过；首green尚待唯一runtime调度，无原生通过证据。Context7未暴露，已用Electron官方clipboard文档并与实际electron.d.ts 7035/7045的异步签名核对。
+
+- 2026-10-09：源版本37ae6e的首个candidate-copy普通页实际1/1通过、exit0：复制接收端取得当前编辑文本，编辑与原候选快照分离。单Chrome、cleanupConfirmed=true、7次有限quiet采样active/window0、两租约absent；日志 /tmp/notalone-app-context.p9MPie/10-first-green.log。已归还runtime给14；真实剪贴板、原生隐藏及后续失败/范围场景仍待，任务继续claimed。
+
+- 2026-10-09：在已通过的最小复制实现上准备第二个公开页面场景，系统边界一次失败后验证安全提示、编辑保留、无成功或收起，再重试核对写入完成先于收起。仅类型与构建通过，场景尚未运行，不新增产品逻辑。

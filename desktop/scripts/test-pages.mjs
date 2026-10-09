@@ -30,7 +30,7 @@ function parse(args) {
   const names = []; let timeout;
   while (args.length) {
     const key = args.shift();
-    if (key === '--case' && ['memory-reading', 'memory-reading-full', 'memory-stale-full', 'draft-rewrite', 'draft-rewrite-acceptance', 'draft-rewrite-session', 'directed-reply', 'reply-evidence', 'memory-editing-owner', 'memory-editing-addition', 'memory-editing-contact-correction', 'memory-editing-removal', 'memory-editing-confirm', 'memory-editing-discard', 'memory-editing-failures', 'memory-editing-arguments', 'memory-editing-stale', 'memory-editing-full'].includes(args[0])) names.push(args.shift());
+    if (key === '--case' && ['memory-reading', 'memory-reading-full', 'memory-stale-full', 'draft-rewrite', 'draft-rewrite-acceptance', 'draft-rewrite-session', 'directed-reply', 'candidate-copy', 'import-submit-acceptance', 'import-stale-acceptance', 'import-bootstrap', 'binding-consent', 'binding-stale', 'reply-evidence', 'memory-editing-owner', 'memory-editing-addition', 'memory-editing-contact-correction', 'memory-editing-removal', 'memory-editing-confirm', 'memory-editing-discard', 'memory-editing-failures', 'memory-editing-arguments', 'memory-editing-stale', 'memory-editing-full'].includes(args[0])) names.push(args.shift());
     else if (key === '--timeout-seconds' && /^\d+$/.test(args[0] ?? '')) timeout = Number(args.shift());
     else throw new Error('page_test_arguments: 需要明确页面范围与有限截止时间');
   }

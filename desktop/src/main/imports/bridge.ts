@@ -1,6 +1,5 @@
-import { ipcMain } from 'electron';
+import { noArguments, type PageCommands } from '../page-commands';
 import type { ImportTarget } from '../../shared/import-bridge';
-import type { AppWindows } from '../windows';
 import { normalizeUuid } from '../uuid';
 import type { ImportController } from './controller';
 
@@ -24,22 +23,11 @@ function target(args: unknown[]): ImportTarget {
   throw new Error('历史导入操作不可用。');
 }
 
-export function installImportBridge(windows: AppWindows, imports: ImportController): void {
-  imports.onStateChanged((state) => windows.publish('imports:state-changed', state));
-  ipcMain.handle('imports:get-state', (event, ...args: unknown[]) => { windows.validateCaller(event, args); return imports.getState(); });
-  ipcMain.handle('imports:choose-file', (event, ...args: unknown[]) => {
-    const window = windows.validateCaller(event, args);
-    if (!window.webContents.getURL().endsWith('#manager')) throw new Error('历史导入操作不可用。');
-    return imports.chooseFile(window);
-  });
-  ipcMain.handle('imports:set-target', (event, ...args: unknown[]) => {
-    const window = windows.validateCaller(event, []);
-    if (!window.webContents.getURL().endsWith('#manager')) throw new Error('历史导入操作不可用。');
-    return imports.setTarget(target(args));
-  });
-  for (const action of ['preview', 'confirm-preview', 'cancel-confirmation', 'submit', 'refresh-task', 'retry-task', 'run-task', 'reload-sync-host'] as const) ipcMain.handle(`imports:${action}`, (event, ...args: unknown[]) => {
-    const window = windows.validateCaller(event, []);
-    if (!window.webContents.getURL().endsWith('#manager')) throw new Error('历史导入操作不可用。');
+export function installImportBridge(commands: PageCommands, imports: ImportController): void {
+  imports.onStateChanged((state) => commands.publish('imports:state-changed', state));
+  commands.handle('imports:get-state', (...args: unknown[]) => { noArguments(args); return imports.getState(); });
+  commands.handle('imports:set-target', (...args: unknown[]) => imports.setTarget(target(args)), 'manager');
+  for (const action of ['preview', 'confirm-preview', 'cancel-confirmation', 'submit', 'refresh-task', 'retry-task', 'run-task', 'reload-sync-host'] as const) commands.handle(`imports:${action}`, (...args: unknown[]) => {
     const revision = selectionRevision(args);
     if (action === 'preview') return imports.preview(revision);
     if (action === 'confirm-preview') return imports.confirmPreview(revision);
@@ -49,5 +37,5 @@ export function installImportBridge(windows: AppWindows, imports: ImportControll
     if (action === 'run-task') return imports.runTask(revision);
     if (action === 'reload-sync-host') return imports.reloadSyncHost(revision);
     return imports.cancelConfirmation(revision);
-  });
+  }, 'manager');
 }
