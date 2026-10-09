@@ -9,7 +9,7 @@ export async function sourceDeletionBasic(manager: Page, fixture: SourceDeletion
   const sourceId = (before.data.sources as { source_id: string }[])[0].source_id;
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await manager.getByRole('button', { name: '关系资料', exact: true }).click();
-  const source = manager.getByRole('listitem').filter({ hasText: `来源标识：${sourceId}` });
+  const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem').filter({ hasText: `来源标识：${sourceId}` });
   await expect(source).toBeVisible();
   await source.getByRole('button', { name: '删除来源', exact: true }).click();
   await expect(manager.getByText('应用内删除不代表外部模型副本已删除。', { exact: true })).toBeVisible();

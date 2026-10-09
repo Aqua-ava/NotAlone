@@ -12,6 +12,7 @@ import { installDesktopControls } from './desktop-controls';
 import { installContactSessionBridge } from './contacts/bridge';
 import { installReplyBridge } from './reply/bridge';
 import { installMemoryBridge } from './memory/bridge';
+import { installSourceDeletionBridge } from './sources/bridge';
 import { installBindingConsentBridge } from './bindings/bridge';
 import { SetupController } from './setup/controller';
 import { installSetupBridge } from './setup/bridge';
@@ -47,7 +48,8 @@ void app.whenReady().then(async () => {
   const imports = new ImportController(backend, contacts);
   installImportBridge(commands, imports);
   installElectronImportFileSelection(windows, imports);
-  installMemoryBridge(commands, backend, contacts);
+  const memory = installMemoryBridge(commands, backend, contacts);
+  installSourceDeletionBridge(commands, backend, contacts, (contactId) => memory.revalidateDeletedSource(contactId));
   installBindingConsentBridge(commands, backend, contacts);
   const replies = installReplyBridge(commands, backend, contacts);
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies));

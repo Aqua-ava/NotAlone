@@ -48,6 +48,19 @@ export class MemoryReadingController {
     }
     await Promise.all((request.section ? [request.section] : sections).map((section) => this.readSection(section, scope)));
   }
+  // 来源删除可改变共享本人资料；取消旧写入回填，按当前可信范围重读四个投影。
+  async revalidateDeletedSource(_contactId: string): Promise<void> {
+    this.synchronizeScope();
+    const scope = this.scope;
+    if (!scope) return;
+    this.mutation?.abort.abort();
+    this.mutation = undefined;
+    for (const operation of this.operations.values()) operation.abort.abort();
+    this.operations.clear();
+    this.publish({ mutation: { phase: 'idle', message: '' }, ...empty() });
+    const results = await Promise.all(sections.map((section) => this.readSection(section, scope)));
+    if (this.scope === scope && !results.every(Boolean)) throw new Error('来源已变化，资料仍需刷新核对。');
+  }
   async correct(request: MemoryCorrectionRequest): Promise<void> {
     this.synchronizeScope();
     const scope = this.scope;

@@ -75,8 +75,13 @@ export async function withSourceDeletionFixture(use: (fixture: SourceDeletionFix
     await execute(python, [script, 'drop', ownership.database_name], { env: environment, timeout: 15_000 });
     const absent = await execute(python, ['-c', 'import sys, psycopg\nwith psycopg.connect("host=/tmp dbname=postgres") as c:\n n = c.execute("SELECT count(*) FROM pg_database WHERE datname = %s", (sys.argv[1],)).fetchone()[0]\n if n: raise RuntimeError("本轮来源库仍存在")\n print(n)', ownership.database_name], { env: environment, timeout: 15_000 });
     assert.equal(absent.stdout.trim(), '0');
+    await writeFile('artifacts/headless-pages/source-deletion-cleanup.json', JSON.stringify({
+      databaseName: ownership.database_name, databaseRemaining: 0, databaseAbsent: true,
+      prepareExitCode: 0, backendCleanupConfirmed: Boolean(fixture),
+    }, null, 2));
     await rm(directory, { recursive: true });
     released();
+    process.stdout.write('page_test_source_cleanup: 精确本轮库查询为0，认证后端退出及目录清理已确认。\n');
   } catch {
     await writeFile(path.join(directory, 'cleanup-unconfirmed.json'), JSON.stringify({ prepareStopped, databaseName: data?.database_name ?? null, ownershipPath }), { mode: 0o600 });
     throw new Error(`来源删除资源收尾未确认，保留本轮归属：${directory}`);

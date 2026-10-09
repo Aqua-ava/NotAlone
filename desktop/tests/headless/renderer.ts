@@ -1,4 +1,5 @@
 import { createCandidateCopyBridge } from '../../src/preload/candidate-copy';
+import { createSourceDeletionBridge } from '../../src/preload/source-deletion';
 import type { PageTransport } from '../../src/preload/transport';
 import { createContactSessionBridge } from '../../src/preload/contact-session';
 import { createImportBridge } from '../../src/preload/imports';
@@ -24,6 +25,7 @@ const unsupported = () => Promise.reject(new Error('无头页面未支持此原�
 const noEvents = () => () => {};
 const bridge: AppBridge = {
   candidateCopy: createCandidateCopyBridge(transport),
+  sources: createSourceDeletionBridge(transport),
   backend: createBackendBridge(transport), startup: createStartupBridge(transport),
   contacts: createContactSessionBridge(transport), memory: createMemoryBridge(transport), replies: createReplyBridge(transport),
   openManager: () => transport.invoke('page:open-manager'), openHelper: () => transport.invoke('page:open-helper'), hideWindow: unsupported,
