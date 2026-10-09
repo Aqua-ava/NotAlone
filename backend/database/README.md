@@ -2,6 +2,20 @@
 
 NotAlone 使用 PostgreSQL 作为权威业务库。安装脚本统一调用逐版本迁移命令，不允许只在图形客户端中手工修改正式表结构。
 
+## App 启动前只读检查
+
+轻量入口只判断机器级条件，不装配业务运行时，不查询联系人或聊天正文。使用所选 Python、项目和明确配置文件执行：
+
+```bash
+conda activate NotAlone
+NOTALONE_ENV_FILE='/绝对路径/受控配置.env' \
+  python -m notalone.startup_diagnostics --migrations database/migrations
+```
+
+入口只返回固定 JSON 状态，例如 `{"code":"ready"}`，不回显连接串或底层异常；`ready` 的退出码为 0，其余为 1。数据库连接有界且事务为 READ ONLY，只读必要系统目录、既有审计基线和迁移账本，核对连续迁移文件、checksum 与必要表/列类型。它不调用迁移或旧库接管、不创建参考库、不创建账本，也不检查业务资料完整性、本人身份或模型可用性。
+
+空库或有后续版本返回 `migration_pending`；已有结构缺账本返回 `baseline_missing`，无效审计凭证返回 `baseline_invalid`；基线文件或账本漂移返回 `migration_history_mismatch`；必要结构缺失返回 `schema_incomplete`。这些结果只提供恢复依据，不能授权自动升级现有业务库。App 在首次连接、复用与受控重启前使用该门禁，只有修正条件并明确重试后才连接。
+
 ## 执行与恢复
 
 本页命令从 `backend/` 目录执行（从仓库根目录先 `cd backend`）；连接串由环境变量提供，迁移命令不会读取 `.env`：

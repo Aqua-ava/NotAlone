@@ -12,7 +12,7 @@
 
 - Python 产品代码使用 Conda 环境 `NotAlone`（Python 3.12）。开发、启动、安装依赖、运行 Python 命令或测试前先执行 `conda activate NotAlone`。
 - Python 工程位于 `backend/`，包含 `src/notalone/`、`tests/`、`database/` 与 `pyproject.toml`；从仓库根目录安装用 `python -m pip install -e ./backend`。根 `.env` 保持原位置，运行入口见 [后端说明](../../backend/README.md)。
-- `desktop/` 预留 TypeScript + React 桌面端；当前只有目录职责说明，尚无可运行主 UI 或桌面宿主。
+- `desktop/` 是 Electron + React/TypeScript 桌面端；当前已接入受控后端、联系人、历史导入预览、会话读取授权、草稿改写与只读关系资料。完整业务闭环与最新版 App 验收尚未完成，实际支持的命令和行为从 `README.md`、代码与测试核验。使用独立用户数据目录验证，不沿用历史 App 的业务或权限验收。
 - `native/macos/` 是 ScreenCaptureKit 与 Vision 的原生 Swift 探针，只验证前台同步能力，不承载领域、存储或回复生成逻辑。
 - 修改 macOS App/探针的权限、`Info.plist`、签名、打包或用户可见启动错误前，先读取并更新 [macOS App 权限与启动错误记录](../macos-app-permissions-and-errors.md)。
 
@@ -20,6 +20,7 @@
 
 - 除非仓库记录了替代方案，Python 测试使用 `unittest`。测试夹具只能使用合成或匿名化数据。
 - 从仓库根目录运行完整 Python 测试用 `python -m unittest discover -s backend/tests -t backend -v`；按 `tests.unit...` / `tests.integration...` 指定模块时在 `backend/` 执行。原生测试入口为 `swift test --package-path native/macos`。
+- 桌面端在 `desktop/` 执行 `npm test`，默认仅 TypeScript 与安全测试调度 CLI/合成进程回归，必须报告真实 App 未运行；`npm run package` 只构建打包。真实 Electron/签名包与桌面操作仅由主 Agent 在用户认可的有限时段以显式受限 `test:app` 协调执行，普通实现/评审不得直接运行 Playwright App 或并发重启 App；用户已同意的普通页面可显式使用受限 `test:pages`，单实例无头 Chrome 复用生产控制器与隔离 HTTP/PG，原生能力不得据此验收；跨工作树共用 OS 用户租约，过期停止新启动，不确定收尾保留锁且不杀未知进程。功能阶段使用最小组，最终集成全量只在一次预约中执行。旧工作树恢复前先合入门禁并审计新增启动路径，未合入的脚本不受锁自动拦截。参数及真实 App/HTTP 公共行为入口见 [桌面说明](../../desktop/README.md)，原约定验收继续保留，安全命令、窗口测试均不能替代后端、原生读取或权限的端到端验证。
 - 覆盖范围随实现推进，至少包括正常导入、损坏文件、联系人隔离、来源与删除、空或模糊检索、已确认绑定的增量去重、未绑定会话不读取正文、微信非前台时不采集视觉帧、关闭同步时停读，以及候选回复不会发送外部消息。CLI 后台同步与前台定位按 ADR-030 分别验证。
 - 每次改动运行最小且相关的验证；报告数据处理影响、实际命令和剩余风险。只有端到端验证才能证明消息渠道集成可用。
 

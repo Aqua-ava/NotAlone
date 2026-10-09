@@ -109,6 +109,12 @@ class OwnerMemoryPort(Protocol):
     def list_active(self, owner_id: UUID) -> tuple[OwnerMemory, ...]:
         """返回某位用户当前有效（active 且在有效期内）的 owner 级记忆。"""
 
+    def correct(
+        self, *, owner_id: UUID, memory_id: UUID, text: str,
+        category: MemoryCategory | None = None,
+    ) -> OwnerMemory:
+        """在同一事务创建手动新版本并使原本人资料失效。"""
+
     def delete(self, owner_id: UUID, memory_id: UUID) -> OwnerMemory:
         """软删除一条 owner 级记忆，保留文本指纹。"""
 

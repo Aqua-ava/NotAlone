@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
+from time import monotonic
 from uuid import UUID
 
 from notalone.front_sync.cli_binding import (
@@ -13,6 +14,7 @@ from notalone.front_sync.cli_binding import (
     CliBindingSelection,
 )
 from notalone.front_sync.cli_sync import CliBackgroundSync, CliSyncCycleResult
+from notalone.front_sync.foreground_observation import FreshForegroundObservation
 from notalone.front_sync.foreground_locator import (
     ForegroundLocator,
     ForegroundLocatorStatus,
@@ -23,12 +25,16 @@ from notalone.front_sync.sync_engine import (
 )
 from notalone.front_sync.tail_lifecycle import FrontSyncPhase, FollowRuntimeStatus
 from notalone.persistence.front_sync_state import PostgresFrontSyncStateStore
+from notalone.persistence.conversation_repository import PersistedConversationBinding
 from notalone.wechat_cli import CliAdapterError, LocalWechatCli
 
 
 class SyncStatePort(Protocol):
     def read(self, *, owner_id: UUID) -> object:
         """读取用户同步开关。"""
+
+    def read_bounded(self, *, owner_id: UUID) -> object:
+        """有界读取新前台观察所需的同步总门禁。"""
 
     def enable(self, *, owner_id: UUID, at: datetime | None = None) -> object:
         """开启用户同步开关。"""
@@ -168,6 +174,32 @@ class CliFullSyncEngine:
             raise RuntimeError("后台补齐控制不可用。")
         retry()
 
+    def observe_foreground(self, *, deadline: float) -> FreshForegroundObservation:
+        """只读取本次前台投影，既有后台循环与缓存保持独立。"""
+
+        if monotonic() >= deadline:
+            return FreshForegroundObservation.create(
+                phase="unavailable", reason="observation_timeout",
+                probe_available=False, wechat_in_front=False,
+            )
+        read = getattr(self._sync_state, "read_bounded", None)
+        if not callable(read):
+            return FreshForegroundObservation.create(
+                phase="unavailable", reason="sync_gate_unavailable",
+                probe_available=False, wechat_in_front=False,
+            )
+        state = read(owner_id=self._owner_id)
+        # DB的有界收尾可超过UI预算；过期后绝不晚启动视觉探针。
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            return FreshForegroundObservation.create(
+                phase="unavailable", reason="observation_timeout",
+                probe_available=False, wechat_in_front=False,
+            )
+        return self._foreground.observe_fresh(
+            enabled=bool(state.enabled), deadline=deadline,
+        )
+
     def cycle(self) -> FrontSyncCycleReport:
         enabled = self.sync_enabled()
         foreground: ForegroundLocatorStatus = self._foreground.observe(enabled=enabled)
@@ -257,6 +289,20 @@ class CliFullSyncEngine:
         """读取批量绑定预览；不要求微信在前台。"""
 
         return self._binding_coordinator.list_candidates()
+
+    def list_cli_bindings(self) -> tuple[PersistedConversationBinding, ...]:
+        """读取当前运行范围的有效授权，不调用 CLI 或探针。"""
+
+        return self._binding_coordinator.list_bindings()
+
+    def revoke_cli_binding(
+        self, *, contact_id: UUID, binding_id: UUID,
+    ) -> PersistedConversationBinding:
+        """撤销授权，不主动执行读取；下一轮使用新的 active 快照。"""
+
+        return self._binding_coordinator.revoke_binding(
+            contact_id=contact_id, binding_id=binding_id,
+        )
 
     def confirm_cli_bindings(
         self,

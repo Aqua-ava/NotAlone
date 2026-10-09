@@ -1,0 +1,35 @@
+.ime-pane { display: flex; flex-direction: column; padding-bottom: 4px; }
+.ime-header, .ime-input, .ime-status-line, .ime-footer, .rewrite-options, .rewrite-privacy { flex-shrink: 0; }
+.ime-input textarea { height: 68px; }
+.rewrite-options { display: flex; gap: 10px; flex-wrap: wrap; padding: 0 4px; font-size: 11px; }
+.rewrite-options label { display: flex; gap: 6px; align-items: center; }
+.rewrite-options select, .rewrite-options input:not([type="checkbox"]) { font: inherit; color: inherit; background: #fffdf6; border: 1px solid #c6cfcd; border-radius: 3px; padding: 5px 7px; }
+.rewrite-options .rewrite-instruction { flex: 1 0 100%; white-space: nowrap; }
+.rewrite-instruction input { flex: 1; width: auto; min-width: 0; }
+.rewrite-privacy { color: #707980; font-size: 10px; line-height: 1.6; padding: 6px 4px; }
+.reply-candidates { flex: 1; min-height: 0; overflow-y: auto; padding: 4px; -webkit-app-region: no-drag; }
+.reply-candidate-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 8px; }
+.reply-candidate { min-width: 0; border: 1px solid #c8d1cf; border-radius: 4px 7px 3px 5px; background: #fffdf6; padding: 8px; }
+.reply-choice { display: flex; align-items: center; gap: 5px; color: #456b87; font-size: 11px; margin-bottom: 8px; }
+.reply-candidate textarea { width: 100%; min-height: 92px; resize: vertical; background: #faf7ef; border: 1px solid #d8d6ca; border-radius: 3px; padding: 7px; font: inherit; font-size: 13px; line-height: 1.7; }
+.reply-basis, .reply-risk, .reply-original, .reply-input-snapshot p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.7; margin: 6px 0; }
+.reply-basis { color: #69787f; }
+.reply-risk { color: #975d3d; background: #f3e4c3; padding: 3px 5px; border-radius: 3px; }
+.reply-candidates summary { cursor: pointer; font-size: 11px; color: #456b87; }
+.reply-input-snapshot { margin-bottom: 8px; }
+.reply-note { padding: 5px 1px; font-size: 11px; color: #6e797d; }
+.rewrite-retry { display: flex; gap: 10px; min-height: 20px; padding: 0 4px; flex-shrink: 0; }
+.rewrite-retry button { font-size: 11px; color: #456b87; border: 1px solid #c8d1cf; border-radius: 3px; padding: 3px 7px; }
+.reply-empty { display: flex; gap: 12px; align-items: center; min-height: 50px; font-size: 12px; color: #707980; }
+.reply-empty small { font-size: 11px; }
+.directed-input { flex-shrink: 0; font-size: 11px; -webkit-app-region: no-drag; }
+.message-heading { display: flex; justify-content: space-between; align-items: center; padding: 3px; }
+.directed-input button:not(.generate-button) { padding: 3px 7px; border: 1px solid #c8d1cf; border-radius: 3px; color: #456b87; font-size: 11px; }
+.reply-message-list { max-height: 105px; overflow-y: auto; border: 1px solid #d8d6ca; border-radius: 4px; background: #fffdf6; }
+.reply-message { display: flex; gap: 7px; align-items: flex-start; padding: 5px 7px; border-bottom: 1px solid #e9e5d9; }
+.reply-message > span { min-width: 0; flex: 1; }
+.reply-message small { display: block; font-size: 10px; color: #707980; }
+.reply-message-text { display: block; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.directed-input .ime-input label { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.directed-input .ime-input textarea { height: 58px; }
+.directed-input > [role] { padding: 4px; }

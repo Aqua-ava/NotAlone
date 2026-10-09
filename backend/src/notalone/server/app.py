@@ -49,17 +49,25 @@ from notalone.application.import_service import (
 )
 from notalone.application.task_service import TaskService
 from notalone.application.model_priority import ModelWorkStopped
-from notalone.application.setup_service import SetupService
+from notalone.application.setup_service import OwnerAlreadyConfigured, SetupService
 from notalone.application.skill_service import (
     LedgerService,
     SkillImportRejected,
     SkillService,
 )
-from notalone.ingest.errors import ImportPreviewError
+from notalone.ingest.errors import ImportContentChangedError, ImportPreviewError
 from notalone.ingest.import_command import ContactConfirmationError
-from notalone.persistence.postgres_repository import ImportPersistenceError
+from notalone.persistence.postgres_repository import (
+    ChannelIdentityConflictError,
+    ContactNotFoundError,
+    ImportPersistenceError,
+    OwnerChannelIdentityConflictError,
+    OwnerChannelIdentityNotFoundError,
+)
 from notalone.persistence.conversation_repository import (
     ConversationBindingConflictError,
+    ConversationBindingNotFoundError,
+    PersistedConversationBinding,
 )
 from notalone.persistence.skill_library import (
     SkillDeletedError,
@@ -99,7 +107,7 @@ from notalone.server.follow_smoke import (
     FollowSmokeStatus,
 )
 from notalone.server.sse import encode_sse_frame
-from notalone.server.sync_host import SyncControlPort, SyncHostStopped
+from notalone.server.sync_host import SyncControlPort, SyncHostBusy, SyncHostStopped
 
 
 @dataclass(frozen=True, slots=True)
@@ -544,12 +552,15 @@ class BackendApp:
             "/api/sync/enable",
             "/api/sync/disable",
             "/api/sync/check",
+            "/api/sync/foreground/observe",
             "/api/sync/priority",
             "/api/sync/backfill/pause",
             "/api/sync/backfill/retry",
             "/api/sync/confirm",
             "/api/sync/confirm-pending",
             "/api/sync/cli-sessions",
+            "/api/sync/cli-bindings",
+            "/api/sync/cli-bindings/revoke",
             "/api/sync/cli-bindings/confirm",
         }:
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
@@ -588,12 +599,30 @@ class BackendApp:
                 HTTPStatus.OK,
                 {"sessions": [_cli_session_payload(session) for session in sessions]},
             )
+        if path == "/api/sync/cli-bindings":
+            if method != "GET":
+                return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            try:
+                bindings = sync.cli_bindings()
+            except Exception:
+                return _json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "cli_bindings_failed"},
+                )
+            return _json_response(
+                HTTPStatus.OK,
+                {"bindings": [_cli_binding_payload(binding) for binding in bindings]},
+            )
         if method != "POST":
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        if path == "/api/sync/foreground/observe":
+            return self._handle_foreground_observe(sync=sync, body=body)
         if path == "/api/sync/priority":
             return self._handle_sync_priority(sync=sync, body=body)
         if path == "/api/sync/cli-bindings/confirm":
             return self._handle_cli_bindings_confirm(sync=sync, body=body)
+        if path == "/api/sync/cli-bindings/revoke":
+            return self._handle_cli_binding_revoke(sync=sync, body=body)
         if path in {"/api/sync/confirm", "/api/sync/confirm-pending"}:
             return self._handle_sync_confirm(
                 sync=sync,
@@ -617,6 +646,84 @@ class BackendApp:
                 HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "sync_control_failed"}
             )
         return _json_response(HTTPStatus.OK, _sync_status_payload(report))
+
+    def _handle_foreground_observe(
+        self, *, sync: SyncControlPort, body: bytes,
+    ) -> Response:
+        """固定运行身份的一次只读观察，不接受调用方范围或采集参数。"""
+
+        try:
+            payload = json.loads(body.decode("utf-8"))
+            if not isinstance(payload, dict) or payload:
+                raise ValueError
+        except (UnicodeDecodeError, TypeError, ValueError):
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "foreground_observation_invalid"},
+            )
+        try:
+            observation = sync.observe_foreground()
+        except SyncHostBusy:
+            return _json_response(
+                HTTPStatus.CONFLICT, {"error": "foreground_observation_busy"},
+            )
+        except SyncHostStopped:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "runtime_stopped"})
+        except Exception:
+            return _json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": "foreground_observation_unavailable"},
+            )
+        return _json_response(HTTPStatus.OK, {
+            "observation_id": str(observation.observation_id),
+            "observed_at": observation.observed_at.isoformat(),
+            "phase": observation.phase,
+            "reason": observation.reason,
+            "probe_available": observation.probe_available,
+            "wechat_in_front": observation.wechat_in_front,
+            "binding_id": None,
+            "contact_id": None,
+        })
+
+    def _handle_cli_binding_revoke(
+        self, *, sync: SyncControlPort, body: bytes,
+    ) -> Response:
+        """撤销读取授权，保留既有绑定记录和历史资料。"""
+
+        try:
+            payload = json.loads(body.decode("utf-8"))
+            if (
+                not isinstance(payload, dict)
+                or set(payload) != {"contact_id", "binding_id"}
+            ):
+                raise ValueError
+            if not all(isinstance(payload[key], str) for key in payload):
+                raise ValueError
+            contact_id = UUID(payload["contact_id"])
+            binding_id = UUID(payload["binding_id"])
+        except (UnicodeDecodeError, TypeError, ValueError):
+            return _json_response(
+                HTTPStatus.BAD_REQUEST, {"error": "cli_binding_revoke_invalid"},
+            )
+        try:
+            binding = sync.revoke_cli_binding(
+                contact_id=contact_id, binding_id=binding_id,
+            )
+        except ConversationBindingNotFoundError:
+            return _json_response(
+                HTTPStatus.NOT_FOUND, {"error": "cli_binding_not_found"},
+            )
+        except SyncHostBusy:
+            return _json_response(
+                HTTPStatus.CONFLICT, {"error": "cli_binding_revoke_busy"},
+            )
+        except SyncHostStopped:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "runtime_stopped"})
+        except Exception:
+            return _json_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "cli_binding_revoke_failed"},
+            )
+        return _json_response(HTTPStatus.OK, _cli_binding_payload(binding))
 
     def _handle_sync_priority(
         self,
@@ -719,11 +826,18 @@ class BackendApp:
                     not isinstance(display_name, str) or not display_name.strip()
                 ):
                     raise ValueError
+                observed_display_name = raw.get("observed_display_name")
+                if observed_display_name is not None and (
+                    not isinstance(observed_display_name, str)
+                    or not observed_display_name.strip()
+                ):
+                    raise ValueError
                 selections.append(
                     CliBindingSelection(
                         locator=locator,
                         contact_id=contact_id,
                         display_name=display_name,
+                        observed_display_name=observed_display_name,
                     )
                 )
         except (TypeError, ValueError):
@@ -998,6 +1112,20 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.OK, {"memory": _owner_memory_payload(memory)}
             )
+        if method == "POST" and path.startswith("/api/memories/owner/") \
+                and path.endswith("/correct"):
+            memory_id = _uuid_or_raise(_path_tail(path, "/api/memories/owner/", "/correct"), "memory_id")
+            payload = _parse_memory_json(body)
+            text = payload.get("text")
+            if not isinstance(text, str) or not text.strip():
+                raise MemoryRequestInvalid()
+            memory = service.correct_owner_memory(
+                owner_id=owner_id, memory_id=memory_id, text=text,
+                category=_optional_category(payload.get("category")),
+            )
+            return _json_response(
+                HTTPStatus.OK, {"memory": _owner_memory_payload(memory)}
+            )
 
         # 联系人级端点：/api/contacts/{contact_id}/...
         parts = path.removeprefix("/api/contacts/").split("/")
@@ -1159,13 +1287,42 @@ class BackendApp:
             path_value = payload.get("path")
             if not isinstance(path_value, str) or not path_value.strip():
                 raise ImportTaskRequestInvalid()
+            contact_id = None
+            if "contact_id" in payload:
+                if not isinstance(payload["contact_id"], str):
+                    raise ImportTaskRequestInvalid()
+                try:
+                    contact_id = UUID(payload["contact_id"])
+                except ValueError:
+                    raise ImportTaskRequestInvalid() from None
             try:
-                preview = import_service.preview(path=path_value)
-            except (FileNotFoundError, ImportPreviewError, OSError, PermissionError):
+                preview = import_service.preview(
+                    path=path_value,
+                    owner_id=owner_id,
+                    contact_id=contact_id,
+                )
+            except (
+                ChannelIdentityConflictError,
+                ContactNotFoundError,
+                OwnerChannelIdentityConflictError,
+                OwnerChannelIdentityNotFoundError,
+            ):
+                return _json_response(
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    {"error": "import_identity_conflict"},
+                )
+            except ImportPersistenceError:
+                return _json_response(
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    {"error": "import_preview_failed", "reason": "preview_failed"},
+                )
+            except (
+                FileNotFoundError, ImportPreviewError, OSError, PermissionError,
+            ):
                 # 文件缺失、不可读或内容校验失败：统一 422 + 稳定码，
                 # 具体原因不进入响应（不泄露本机路径或文件内容）。
                 return _json_response(
-                    422,
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
                     {
                         "error": "import_preview_failed",
                         "reason": "preview_failed",
@@ -1204,11 +1361,29 @@ class BackendApp:
                 selection = ExistingContactSelection(contact_id=contact_id)
             else:
                 selection = NewContactSelection(display_name=new_name_value)
+            expected_digest: str | None = None
+            if "expected_content_sha256" in payload:
+                digest_value = payload["expected_content_sha256"]
+                if (
+                    not isinstance(digest_value, str)
+                    or len(digest_value) != 64
+                    or any(
+                        character not in "0123456789abcdef"
+                        for character in digest_value
+                    )
+                ):
+                    raise ImportTaskRequestInvalid()
+                expected_digest = digest_value
             try:
                 result = import_service.commit(
                     path=path_value,
                     owner_id=owner_id,
                     selection=selection,
+                    expected_content_sha256=expected_digest,
+                )
+            except ImportContentChangedError:
+                return _json_response(
+                    HTTPStatus.CONFLICT, {"error": "import_file_changed"},
                 )
             except (
                 ImportPreviewError,
@@ -1325,16 +1500,22 @@ class BackendApp:
             )
         try:
             if path == "/api/setup/status" and method == "GET":
-                return _json_response(HTTPStatus.OK, service.status())
+                return _json_response(
+                    HTTPStatus.OK,
+                    service.status(runtime_owner_id=self._owner_id),
+                )
             if path == "/api/setup/initialize" and method == "POST":
                 payload = _parse_setup_json(body)
                 display_name = payload.get("display_name")
+                create_only = payload.get("create_only", False)
+                if not isinstance(create_only, bool):
+                    raise SetupRequestInvalid()
                 if not isinstance(display_name, str) or not display_name.strip():
                     raise SetupRequestInvalid()
                 try:
                     return _json_response(
                         HTTPStatus.OK,
-                        service.initialize_owner(display_name=display_name),
+                        service.initialize_owner(display_name=display_name, create_only=create_only),
                     )
                 except ValueError:
                     raise SetupRequestInvalid() from None
@@ -1352,6 +1533,8 @@ class BackendApp:
                 except ValueError:
                     raise SetupRequestInvalid() from None
             raise SetupRequestInvalid()
+        except OwnerAlreadyConfigured:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "owner_already_configured"})
         except SetupRequestInvalid:
             return _json_response(
                 HTTPStatus.BAD_REQUEST, {"error": "setup_request_invalid"}
@@ -1833,6 +2016,8 @@ def _serve_sse(handler: BaseHTTPRequestHandler, response: SseResponse) -> None:
         pass
     finally:
         response.subscription.close()
+        # SSE 没有 Content-Length；结束订阅时也结束当前响应，不能留在 keep-alive 等下一请求。
+        handler.close_connection = True
 
 
 def _header_value(headers: Mapping[str, str], name: str) -> str:
@@ -1918,6 +2103,18 @@ def _sync_status_payload(report: FrontSyncCycleReport) -> dict[str, object]:
             }
         )
     return payload
+
+
+def _cli_binding_payload(binding: PersistedConversationBinding) -> dict[str, object]:
+    """授权目录只暴露稳定身份和展示字段，不暴露原始定位证据。"""
+
+    return {
+        "binding_id": str(binding.binding_id),
+        "contact_id": str(binding.scope.contact_id),
+        "conversation_locator": binding.conversation_locator,
+        "display_name": binding.display_name,
+        "status": binding.status.value,
+    }
 
 
 def _cli_session_payload(session: CliBindingCandidateView) -> dict[str, object]:
@@ -2240,6 +2437,10 @@ def _owner_memory_payload(memory: OwnerMemory) -> dict[str, object]:
         "adoption_method": memory.adoption_method.value,
         "status": memory.status.value,
         "revision": memory.revision,
+        "supersedes_memory_id": (
+            str(memory.supersedes_memory_id)
+            if memory.supersedes_memory_id is not None else None
+        ),
         "source_ids": [str(source_id) for source_id in memory.source_ids],
         "source_candidate_id": (
             str(memory.source_candidate_id)

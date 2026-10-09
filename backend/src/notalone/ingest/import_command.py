@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Protocol, Sequence
 from uuid import UUID
 
-from notalone.ingest.errors import ImportPreviewError
+from notalone.ingest.errors import ImportContentChangedError, ImportPreviewError
 from notalone.ingest.jsonl_reader import read_jsonl
 from notalone.ingest.models import (
     ExistingContactSelection,
@@ -68,12 +68,19 @@ def import_file(
     owner_id: UUID | None,
     initialize_owner: bool = False,
     initialize_first_owner_identity: bool = False,
+    expected_content_sha256: str | None = None,
     confirmation: ImportConfirmationRequest,
     repository: IngestRepository,
 ) -> ImportResult:
     """校验、确认联系人后，把一份 JSONL 批次交给持久化层。"""
 
     document = read_jsonl(path)
+    # 校验和规范化使用同一份已读文档，不在摘要核对后重新读取路径。
+    if (
+        expected_content_sha256 is not None
+        and document.content_sha256 != expected_content_sha256
+    ):
+        raise ImportContentChangedError("文件内容已变化，请重新预览并确认。")
     batch = normalize_document(document)
     return repository.import_document(
         owner_id=owner_id,

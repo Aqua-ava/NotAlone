@@ -43,6 +43,7 @@ _OWNER_MEMORY_COLUMNS = """
     confidence,
     risk_flags,
     source_candidate_id,
+    supersedes_memory_id,
     created_at AS recorded_at
 """
 
@@ -85,12 +86,13 @@ class PostgresOwnerMemoryStore:
                         id, owner_id, text_content, category, topic,
                         source_ids, adoption_method, status,
                         valid_at, invalid_at, revision, confidence, risk_flags,
-                        source_candidate_id
+                        source_candidate_id, supersedes_memory_id
                     ) VALUES (
                         %(memory_id)s, %(owner_id)s, %(text)s, %(category)s,
                         %(topic)s, %(source_ids)s, %(adoption_method)s,
                         %(status)s, %(valid_at)s, %(invalid_at)s, %(revision)s,
-                        %(confidence)s, %(risk_flags)s, %(source_candidate_id)s
+                        %(confidence)s, %(risk_flags)s, %(source_candidate_id)s,
+                        %(supersedes_memory_id)s
                     ) RETURNING {_OWNER_MEMORY_COLUMNS}
                     """,
                     _to_row(memory),
@@ -194,12 +196,13 @@ class PostgresOwnerMemoryStore:
                         id, owner_id, text_content, category, topic,
                         source_ids, adoption_method, status, valid_at,
                         invalid_at, revision, confidence, risk_flags,
-                        source_candidate_id
+                        source_candidate_id, supersedes_memory_id
                     ) VALUES (
                         %(memory_id)s, %(owner_id)s, %(text)s, %(category)s,
                         %(topic)s, %(source_ids)s, %(adoption_method)s,
                         %(status)s, %(valid_at)s, %(invalid_at)s, %(revision)s,
-                        %(confidence)s, %(risk_flags)s, %(source_candidate_id)s
+                        %(confidence)s, %(risk_flags)s, %(source_candidate_id)s,
+                        %(supersedes_memory_id)s
                     )
                     RETURNING {_OWNER_MEMORY_COLUMNS}
                     """,
@@ -251,6 +254,82 @@ class PostgresOwnerMemoryStore:
             for row in rows
             if _is_effective(_from_row(row), now)
         )
+
+    def correct(
+        self, *, owner_id: UUID, memory_id: UUID, text: str,
+        category: MemoryCategory | None = None,
+    ) -> OwnerMemory:
+        """原子替换当前有效本人资料；旧版与候选链留作审计。"""
+        _validate_owner_id(owner_id)
+        if not isinstance(memory_id, UUID):
+            raise OwnerMemoryPersistenceError("owner 记忆 ID 无效。")
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("修正后的本人记忆不能为空。")
+        if category is not None and not isinstance(category, MemoryCategory):
+            raise TypeError("本人记忆分类无效。")
+        try:
+            with self._connect() as connection:
+                lock_owner_scope(connection, owner_id=owner_id)
+                previous = connection.execute(
+                    f"""SELECT {_OWNER_MEMORY_COLUMNS}
+                    FROM public.owner_memory
+                    WHERE owner_id = %s AND id = %s FOR UPDATE""",
+                    (owner_id, memory_id),
+                ).fetchone()
+                if previous is None:
+                    raise LookupError("本人记忆不存在。")
+                now = datetime.now(timezone.utc)
+                if (previous["status"] != ConfirmedMemoryStatus.ACTIVE.value
+                        or previous["valid_at"] is not None and now < previous["valid_at"]
+                        or previous["invalid_at"] is not None and now >= previous["invalid_at"]):
+                    raise RuntimeError("只有当前有效本人资料可以修正。")
+                sources = tuple(previous["source_ids"])
+                # 手动录入的 owner 引用不是聊天来源；其他引用仍须有效。
+                _ensure_active_sources(
+                    connection, owner_id=owner_id,
+                    source_ids=tuple(source for source in sources if source != owner_id),
+                )
+                corrected = OwnerMemory(
+                    memory_id=uuid4(), owner_id=owner_id, text=text,
+                    category=category or MemoryCategory(previous["category"]),
+                    topic=MemoryTopic(previous["topic"]), source_ids=sources,
+                    adoption_method=AdoptionMethod.MANUAL,
+                    status=ConfirmedMemoryStatus.ACTIVE,
+                    supersedes_memory_id=memory_id,
+                    valid_at=previous["valid_at"], invalid_at=previous["invalid_at"],
+                    revision=previous["revision"] + 1,
+                    confidence=previous["confidence"],
+                    risk_flags=tuple(previous["risk_flags"] or ()),
+                )
+                updated = connection.execute(
+                    """UPDATE public.owner_memory
+                    SET status = 'invalidated', invalid_at = COALESCE(invalid_at, %s),
+                        revision = %s, updated_at = now()
+                    WHERE owner_id = %s AND id = %s AND status = 'active'""",
+                    (now, corrected.revision, owner_id, memory_id),
+                ).rowcount
+                if updated != 1:
+                    raise OwnerMemoryPersistenceError("本人旧版本失效更新失败。")
+                row = connection.execute(
+                    f"""INSERT INTO public.owner_memory (
+                        id, owner_id, text_content, category, topic, source_ids,
+                        adoption_method, status, valid_at, invalid_at, revision,
+                        confidence, risk_flags, source_candidate_id, supersedes_memory_id
+                    ) VALUES (
+                        %(memory_id)s, %(owner_id)s, %(text)s, %(category)s,
+                        %(topic)s, %(source_ids)s, %(adoption_method)s, %(status)s,
+                        %(valid_at)s, %(invalid_at)s, %(revision)s, %(confidence)s,
+                        %(risk_flags)s, %(source_candidate_id)s, %(supersedes_memory_id)s
+                    ) RETURNING {_OWNER_MEMORY_COLUMNS}""",
+                    _to_row(corrected),
+                ).fetchone()
+                if row is None:
+                    raise OwnerMemoryPersistenceError("本人新版本写入结果为空。")
+                return _from_row(_timed_rows(connection, [row])[0])
+        except (LookupError, PermissionError, RuntimeError, OwnerMemoryPersistenceError):
+            raise
+        except Exception as error:
+            raise OwnerMemoryPersistenceError(_OWNER_MEMORY_UNAVAILABLE) from error
 
     def delete(self, owner_id: UUID, memory_id: UUID) -> OwnerMemory:
         _validate_owner_id(owner_id)
@@ -407,6 +486,7 @@ def _to_row(memory: OwnerMemory) -> dict[str, Any]:
         "confidence": memory.confidence,
         "risk_flags": list(memory.risk_flags),
         "source_candidate_id": memory.source_candidate_id,
+        "supersedes_memory_id": memory.supersedes_memory_id,
     }
 
 
@@ -426,6 +506,7 @@ def _from_row(row: dict[str, Any]) -> OwnerMemory:
         confidence=row["confidence"],
         risk_flags=tuple(row["risk_flags"] or ()),
         source_candidate_id=row["source_candidate_id"],
+        supersedes_memory_id=row["supersedes_memory_id"],
         timing=row["timing"],
     )
 

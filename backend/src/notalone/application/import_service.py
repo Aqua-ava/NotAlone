@@ -12,7 +12,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Protocol
 from uuid import UUID, uuid4
 
 import psycopg
@@ -32,21 +32,47 @@ from notalone.persistence.background_tasks import (
 from notalone.tasks.models import BackgroundTaskStatus
 
 
+class ImportRepository(IngestRepository, Protocol):
+    """导入写入与当前本人身份只读预检的应用边界。"""
+
+    def validate_preview_identity(
+        self,
+        *,
+        owner_id: UUID,
+        owner_external_id: str,
+        contact_external_id: str,
+        contact_id: UUID | None = None,
+    ) -> None: ...
+
+
 class ImportService:
     """导入预览与正式提交。"""
 
     __slots__ = ("_repository",)
 
-    def __init__(self, *, repository: IngestRepository) -> None:
+    def __init__(self, *, repository: ImportRepository) -> None:
         self._repository = repository
 
-    def preview(self, *, path: str) -> dict[str, object]:
+    def preview(
+        self,
+        *,
+        path: str,
+        owner_id: UUID,
+        contact_id: UUID | None = None,
+    ) -> dict[str, object]:
         """完整校验文件并返回结构化预览结果。"""
 
         preview = build_preview(Path(path))
+        self._repository.validate_preview_identity(
+            owner_id=owner_id,
+            owner_external_id=preview.owner_channel_identity.external_id,
+            contact_external_id=preview.channel_identity.external_id,
+            contact_id=contact_id,
+        )
         return {
             "valid": True,
             "file_name": preview.file_name,
+            "content_sha256": preview.content_sha256,
             "record_count": preview.record_count,
             "kind_counts": dict(preview.kind_counts),
             "owner_channel_identity": {
@@ -65,6 +91,7 @@ class ImportService:
         path: str,
         owner_id: UUID,
         selection: ContactSelection,
+        expected_content_sha256: str | None = None,
     ) -> dict[str, object]:
         """确认联系人后导入；首启 owner 仅可建立从未绑定过的渠道身份。"""
 
@@ -72,6 +99,7 @@ class ImportService:
             path=Path(path),
             owner_id=owner_id,
             initialize_first_owner_identity=True,
+            expected_content_sha256=expected_content_sha256,
             confirmation=ImportConfirmationRequest(selection=selection),
             repository=self._repository,
         )

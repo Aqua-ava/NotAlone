@@ -1,0 +1,37 @@
+.import-panel { padding: 22px; border: 1px solid #c5cecb; border-radius: 4px; background: #fffdf7c9; }
+.import-intro h2 { color: #355f7c; font-size: 15px; font-weight: 500; }
+.import-intro p, .import-note, .import-preview p { margin-top: 9px; color: #737e80; font-size: 12px; line-height: 1.85; }
+.import-intro p:last-child { font-size: 11px; color: #89918b; }
+.import-file { display: flex; align-items: center; gap: 16px; margin: 22px 0 16px; }
+.import-file span { color: #537081; font-size: 12px; overflow-wrap: anywhere; }
+.import-target { display: flex; align-items: end; flex-wrap: wrap; gap: 15px; }
+.import-target label { display: grid; gap: 8px; color: #6f7d7c; font-size: 12px; }
+.import-target select, .import-target input { height: 34px; padding: 6px 9px; border: 1px solid #c5cfcc; border-radius: 4px; background: #fffef7; color: #496e88; font: inherit; min-width: 205px; }
+.import-preview { margin-top: 23px; padding: 18px; border: 1px dashed #adc1c5; border-radius: 4px; background: #f3f6f0; }
+.import-preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.import-preview-heading h3 { margin: 0; font-size: 14px; font-weight: 500; color: #496e88; }
+.import-preview-heading span { font-size: 11px; color: #758379; }
+.import-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; margin: 20px 0; }
+.import-summary dt { color: #7f8882; font-size: 11px; }
+.import-summary dd { margin: 8px 0 0; color: #396784; font-size: 13px; overflow-wrap: anywhere; }
+.import-summary small { display: block; font-size: 11px; margin-top: 5px; color: #7e8985; }
+.import-kinds { display: flex; flex-wrap: wrap; gap: 7px 18px; padding: 0; list-style: none; font-size: 11px; color: #6f807e; }
+.import-confirm { display: flex; align-items: start; gap: 8px; margin: 18px 0 14px; font-size: 12px; color: #597b87; line-height: 1.6; }
+.import-note[role="alert"] { color: #99594e; }
+.import-confirmed { color: #5c8170; font-size: 12px; margin-top: 17px; }
+.import-confirmed .button { margin: 10px 10px 0 0; }
+.import-progress { margin-top: 24px; padding: 20px; border: 1px solid #b8ccbe; border-radius: 4px; background: #f5f8f1; }
+.import-progress h3, .import-progress h4 { color: #476d79; font-weight: 500; font-size: 14px; margin: 0 0 12px; }
+.import-progress h4 { font-size: 13px; margin-top: 20px; }
+.import-progress p, .import-sources { color: #6b7b7b; font-size: 12px; line-height: 1.8; }
+.import-task-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 22px; }
+.import-task-toolbar h4 { margin: 0; }
+.import-task-steps { padding: 0; list-style: none; display: grid; gap: 8px; margin: 15px 0; }
+.import-task-steps li { padding: 12px; border: 1px solid #cdd8ce; border-radius: 3px; background: #fffdf8; }
+.import-task-steps li div { display: flex; gap: 16px; justify-content: space-between; color: #577681; font-size: 12px; }
+.import-task-steps strong { font-weight: 500; }
+.import-task-steps p { margin: 6px 0 0; }
+.import-task-error, .import-progress p[role="alert"] { color: #985a4c; }
+.import-progress .import-complete { color: #528267; }
+.import-sources { padding-left: 18px; overflow-wrap: anywhere; }
+.import-sync-reload { margin-top: 18px; border-top: 1px solid #cdd8ce; padding-top: 10px; }

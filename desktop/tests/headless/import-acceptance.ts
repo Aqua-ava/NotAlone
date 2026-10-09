@@ -1,0 +1,157 @@
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import type { Browser } from '@playwright/test';
+import { ContactFixture, type ContactDatabase } from '../contact-backend-fixture';
+import { ContactHttpProxy } from '../contact-http-proxy';
+import { isolatedAppEnvironment } from '../isolated-environment';
+import { savedImport, changedImport, failedImportRecovery, priorityImport, staleImportViewing,
+  staleImportContact, staleImportConnection, lostImportResponse, firstImportBootstrap,
+  type ImportStalePages } from '../import-page-scenarios';
+import { PageHost } from './page-host';
+import { withControllerEnvironment, withImportBackend } from './backend-fixture';
+import { ownResource, pendingCleanup } from './cleanup';
+
+// 每项独立真实库和页面上下文；只有系统文件选择由本轮 Node 宿主提供。
+async function withImportPages(browser: Browser, origin: string, use: (pages: ImportStalePages) => Promise<void>) {
+  await withImportBackend(async (importBackend) => {
+    const importProxy = await ContactHttpProxy.attach(importBackend.infoPath, '/api/imports/commit');
+    const proxyReleased = ownResource();
+    try { await withControllerEnvironment(importBackend, async (userData) => {
+      let selectedFile: string | undefined;
+      const host = new PageHost(await browser.newContext(), origin, userData, {
+        chooseImportFile: async () => selectedFile ? { canceled: false, filePaths: [selectedFile] } : { canceled: true, filePaths: [] },
+      });
+      try {
+        await host.backend.connect();
+        const manager = await host.open('manager');
+        const helper = await host.open('helper');
+        await use({ manager, helper, importBackend, importProxy,
+          chooseFile: async (filePath) => { selectedFile = filePath; },
+          screenshotPath: 'artifacts/headless-pages/import-task-completed.png' });
+      } finally { importProxy.release(); await host.close(); }
+    }); } finally { await importProxy.close(); proxyReleased(); }
+  });
+}
+async function runImportScenarios(browser: Browser, origin: string,
+  scenarios: Array<[string, (pages: ImportStalePages) => Promise<void>]>) {
+  for (const [name, scenario] of scenarios) {
+    process.stdout.write(`page_test_scenario: ${name}\n`);
+    await withImportPages(browser, origin, scenario);
+    process.stdout.write(`page_test_scenario_passed: ${name}\n`);
+  }
+}
+export async function importSubmitAcceptance(browser: Browser, origin: string) {
+  await runImportScenarios(browser, origin, [
+    ['保存真实消息来源五步骤与原任务重复导入', savedImport],
+    ['文件改变拒绝与重新确认', changedImport],
+    ['真实提取失败与原任务恢复', failedImportRecovery],
+    ['多批提取期间前台回复优先', priorityImport],
+  ]);
+}
+export async function importStaleAcceptance(browser: Browser, origin: string) {
+  const scenarios: Array<[string, (pages: ImportStalePages) => Promise<void>]> = [];
+  for (const failure of [false, true]) {
+    const outcome = failure ? '失败' : '成功';
+    scenarios.push([`停止查看后迟到${outcome}`, (pages) => staleImportViewing(pages, failure)],
+      [`另一角色页面换联系人后迟到${outcome}`, (pages) => staleImportContact(pages, failure)],
+      [`真实换连接后迟到${outcome}`, (pages) => staleImportConnection(pages, failure)]);
+  }
+  scenarios.push(['保存响应丢失后重新确认恢复原来源', lostImportResponse]);
+  await runImportScenarios(browser, origin, scenarios);
+}
+
+// 首份场景由生产 BackendHost 启动及重启真实后端；停读未确认时保留库和归属记录。
+async function runImportBootstrap(browser: Browser, origin: string, name: string, prepareScript: string) {
+  if (process.env.CONDA_DEFAULT_ENV !== 'NotAlone' || !process.env.CONDA_PREFIX) throw new Error('首份导入验收须先激活 Conda NotAlone。');
+  process.stdout.write(`page_test_scenario: ${name}\n`);
+  const released = ownResource();
+  const directory = await mkdtemp(path.join(tmpdir(), 'notalone-headless-import-bootstrap-'));
+  const python = path.join(process.env.CONDA_PREFIX, 'bin/python');
+  const execute = promisify(execFile);
+  const script = path.resolve('tests/fixtures/contact-database.py');
+  const evidencePath = `artifacts/headless-pages/${path.basename(prepareScript, '.py')}-cleanup.json`;
+  const environment = isolatedAppEnvironment(directory, {
+    PYTHONPATH: path.resolve('../backend/src'), NOTALONE_DEEPSEEK_API_KEY: '', NOTALONE_DEEPSEEK_BASE_URL: 'http://127.0.0.1:1',
+  });
+  const ownershipPath = path.join(directory, 'database-ownership.json');
+  let data: ContactDatabase | undefined;
+  let prepareStopped = false;
+  let stopped = true;
+  let backendStarted = false;
+  let databaseName: string | undefined;
+  let failure: unknown;
+  try {
+    const prepared = await execute(python, [prepareScript, 'create', 'empty', ownershipPath], { env: environment, timeout: 70_000 });
+    prepareStopped = true;
+    process.stdout.write(`page_test_import_prepare: ${JSON.stringify({ driver: path.basename(prepareScript), exitCode: 0 })}\n`);
+    data = JSON.parse(prepared.stdout) as ContactDatabase;
+    const fixture = new ContactFixture(directory, python, data);
+    await withControllerEnvironment(fixture, async (userData) => {
+      let selectedFile: string | undefined;
+      const host = new PageHost(await browser.newContext(), origin, userData, {
+        chooseImportFile: async () => selectedFile ? { canceled: false, filePaths: [selectedFile] } : { canceled: true, filePaths: [] },
+      });
+      stopped = false;
+      backendStarted = true;
+      try {
+        await host.backend.connect();
+        await firstImportBootstrap(await host.open('manager'), fixture, async (filePath) => { selectedFile = filePath; });
+      } finally { await host.close(); stopped = true; }
+    });
+  } catch (error) { failure = error; }
+  try {
+    if (!prepareStopped || !stopped) throw new Error('首份导入准备进程或后端停读未确认。');
+    const ownershipStat = await lstat(ownershipPath);
+    if (!ownershipStat.isFile() || (ownershipStat.mode & 0o077) !== 0 || ownershipStat.uid !== process.getuid?.()) {
+      throw new Error('首份导入精确建库归属未确认。');
+    }
+    const ownership = JSON.parse(await readFile(ownershipPath, 'utf8')) as Record<string, unknown>;
+    const ownedName = ownership.database_name;
+    if (ownership.version !== 1 || typeof ownedName !== 'string'
+      || !/^notalone_contact_session_[0-9a-f]{32}_test$/.test(ownedName)
+      || !Number.isInteger(ownership.pid) || Number(ownership.pid) <= 0
+      || (data && data.database_name !== ownedName)) throw new Error('首份导入本轮库名归属不匹配。');
+    databaseName = ownedName;
+    await execute(python, [script, 'drop', databaseName], { env: environment, timeout: 15_000 });
+    // 精确核验本轮库不存在，不把drop命令完成当作清理证明。
+    const verified = await execute(python, ['-c', 'import sys, psycopg\nwith psycopg.connect("host=/tmp dbname=postgres") as c:\n n = c.execute("SELECT count(*) FROM pg_database WHERE datname = %s", (sys.argv[1],)).fetchone()[0]\n if n: raise RuntimeError("本轮首份导入库仍存在。")\n print(n)', databaseName],
+      { env: environment, timeout: 15_000 });
+    assert.equal(verified.stdout.trim(), '0', '精确库不存在查询须返回零。');
+    await rm(directory, { recursive: true, force: true });
+    released();
+  } catch {
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, 'cleanup-unconfirmed.json'), JSON.stringify({ databaseName: data?.database_name ?? null, ownershipPath, prepareStopped, stopped }), { mode: 0o600 });
+    throw new Error(`首份导入收尾未确认，保留归属记录：${directory}`);
+  }
+  const evidence = { prepareExitCode: 0, backendStarted, backendStopConfirmed: backendStarted ? stopped : null,
+    databaseName, databaseRemaining: 0, databaseAbsent: true, directoryRemoved: true, resourceReleased: true };
+  await writeFile(evidencePath, JSON.stringify(evidence, null, 2));
+  process.stdout.write(`page_test_import_cleanup: ${JSON.stringify(evidence)}\n`);
+  if (failure) throw failure;
+  process.stdout.write(`page_test_scenario_passed: ${name}\n`);
+}
+
+export async function importBootstrap(browser: Browser, origin: string) {
+  await runImportBootstrap(browser, origin, '首份导入后认证停读重装配，不新增读取授权',
+    path.resolve('tests/fixtures/contact-database.py'));
+}
+
+// 真实建库子进程正常退出，但输出损坏；走同一首份夹具解析及精确收尾边界。
+export async function importBootstrapPrepareFailure(browser: Browser, origin: string) {
+  const markerCount = pendingCleanup.size;
+  await assert.rejects(runImportBootstrap(browser, origin, '准备返回JSON损坏仍精确回收本轮库',
+    path.resolve('tests/fixtures/import-bootstrap-prepare-failure.py')), SyntaxError);
+  assert.equal(pendingCleanup.size, markerCount, '已确认精确收尾必须释放本轮资源标记。');
+  const evidence = JSON.parse(await readFile('artifacts/headless-pages/import-bootstrap-prepare-failure-cleanup.json', 'utf8'));
+  assert.equal(evidence.prepareExitCode, 0);
+  assert.equal(evidence.backendStarted, false);
+  assert.equal(evidence.backendStopConfirmed, null, '准备退出不代表后端停读。');
+  assert.equal(evidence.databaseAbsent, true);
+  assert.equal(evidence.directoryRemoved, true);
+  process.stdout.write('page_test_scenario_passed: 准备返回JSON损坏仍精确回收本轮库\n');
+}

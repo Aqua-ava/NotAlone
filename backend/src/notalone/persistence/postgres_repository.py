@@ -75,6 +75,87 @@ class PostgresIngestRepository:
             raise ValueError("database_url 不能为空。")
         self._database_url = database_url
 
+    def validate_preview_identity(
+        self,
+        *,
+        owner_id: UUID,
+        owner_external_id: str,
+        contact_external_id: str,
+        contact_id: UUID | None = None,
+    ) -> None:
+        """只读核对本人和所选联系人的渠道，不初始化或恢复身份。"""
+
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+                )
+                owner = connection.execute(
+                    "SELECT 1 FROM public.owner WHERE id = %s", (owner_id,),
+                ).fetchone()
+                if owner is None:
+                    raise OwnerNotFoundError("指定的 owner 不存在。")
+                active = connection.execute(
+                    """SELECT external_id FROM public.owner_channel_identity
+                       WHERE owner_id = %s AND channel = 'wechat'
+                         AND status = 'active'""", (owner_id,),
+                ).fetchone()
+                if active is not None and active[0] != owner_external_id:
+                    raise OwnerChannelIdentityConflictError(
+                        "本人渠道身份与预览不一致。"
+                    )
+                if active is None:
+                    previous = connection.execute(
+                        """SELECT 1 FROM public.owner_channel_identity
+                           WHERE owner_id = %s AND channel = 'wechat' LIMIT 1""",
+                        (owner_id,),
+                    ).fetchone()
+                    if previous is not None:
+                        raise OwnerChannelIdentityNotFoundError(
+                            "本人渠道身份已撤销。"
+                        )
+                occupied = connection.execute(
+                    """SELECT owner_id FROM public.owner_channel_identity
+                       WHERE channel = 'wechat' AND external_id = %s
+                         AND status = 'active'""", (owner_external_id,),
+                ).fetchone()
+                if occupied is not None and occupied[0] != owner_id:
+                    raise OwnerChannelIdentityConflictError(
+                        "本人渠道身份与已有绑定冲突。"
+                    )
+                if contact_id is not None:
+                    contact = connection.execute(
+                        "SELECT 1 FROM public.contact WHERE owner_id = %s AND id = %s",
+                        (owner_id, contact_id),
+                    ).fetchone()
+                    if contact is None:
+                        raise ContactNotFoundError("选择的联系人不存在。")
+                    channel = connection.execute(
+                        """SELECT external_id FROM public.channel_identity
+                           WHERE owner_id = %s AND contact_id = %s
+                             AND channel = 'wechat' AND status = 'active'""",
+                        (owner_id, contact_id),
+                    ).fetchone()
+                    if channel is not None and channel[0] != contact_external_id:
+                        raise ChannelIdentityConflictError(
+                            "联系人渠道身份与预览不一致。"
+                        )
+                    occupied_contact = connection.execute(
+                        """SELECT contact_id FROM public.channel_identity
+                           WHERE owner_id = %s AND channel = 'wechat'
+                             AND external_id = %s AND status = 'active'""",
+                        (owner_id, contact_external_id),
+                    ).fetchone()
+                    if (
+                        occupied_contact is not None
+                        and occupied_contact[0] != contact_id
+                    ):
+                        raise ChannelIdentityConflictError(
+                            "联系人渠道身份与已有绑定冲突。"
+                        )
+        except psycopg.Error:
+            raise ImportPersistenceError("预览身份核对暂不可用。") from None
+
     def import_document(
         self,
         *,
@@ -173,14 +254,21 @@ class PostgresIngestRepository:
                 raise ContactNotFoundError("选择的联系人不存在。")
             confirmation_method = "manual_select"
         else:
-            contact_id = connection.execute(
-                """
-                INSERT INTO public.contact (owner_id, display_name)
-                VALUES (%s, %s)
-                RETURNING id
-                """,
-                (owner_id, selection.display_name),
-            ).fetchone()[0]
+            contact_id = PostgresIngestRepository._confirmed_create_replay(
+                connection=connection,
+                owner_id=owner_id,
+                document=document,
+                display_name=selection.display_name,
+            )
+            if contact_id is None:
+                contact_id = connection.execute(
+                    """
+                    INSERT INTO public.contact (owner_id, display_name)
+                    VALUES (%s, %s)
+                    RETURNING id
+                    """,
+                    (owner_id, selection.display_name),
+                ).fetchone()[0]
             confirmation_method = "manual_create"
 
         active_identity = connection.execute(
@@ -498,6 +586,55 @@ class PostgresIngestRepository:
             raise ImportPersistenceError(
                 "数据库导入失败，未写入任何数据。"
             ) from None
+
+    @staticmethod
+    def _confirmed_create_replay(
+        *,
+        connection: psycopg.Connection[Any],
+        owner_id: UUID,
+        document: ImportBatch,
+        display_name: str,
+    ) -> UUID | None:
+        """只复用同一已确认的新建导入，不按昵称匹配或恢复撤销身份。"""
+
+        identities = connection.execute(
+            """
+            SELECT id, contact_id, status
+            FROM public.channel_identity
+            WHERE owner_id = %s AND channel = 'wechat' AND external_id = %s
+            FOR UPDATE
+            """,
+            (owner_id, document.channel_identity.external_id),
+        ).fetchall()
+        if not identities:
+            return None
+        if len(identities) != 1 or identities[0][2] != "active":
+            raise ChannelIdentityConflictError("渠道身份需要重新选择既有联系人。")
+        identity_id, contact_id, _ = identities[0]
+        contact = connection.execute(
+            """SELECT display_name FROM public.contact
+               WHERE owner_id = %s AND id = %s FOR UPDATE""",
+            (owner_id, contact_id),
+        ).fetchone()
+        source = connection.execute(
+            """SELECT id, status FROM public.source_document
+               WHERE owner_id = %s AND contact_id = %s AND content_sha256 = %s
+               FOR UPDATE""",
+            (owner_id, contact_id, document.content_sha256),
+        ).fetchone()
+        if contact is None or contact[0] != display_name or source is None:
+            raise ChannelIdentityConflictError("导入确认需要重新选择既有联系人。")
+        if source[1] != "active":
+            raise SourceStateConflictError("同一来源处于非 active 状态。")
+        confirmation = connection.execute(
+            """SELECT channel_identity_id, method FROM public.import_confirmation
+               WHERE owner_id = %s AND contact_id = %s AND source_document_id = %s
+               FOR UPDATE""",
+            (owner_id, contact_id, source[0]),
+        ).fetchone()
+        if confirmation != (identity_id, "manual_create"):
+            raise ChannelIdentityConflictError("原确认需要重新选择既有联系人。")
+        return contact_id
 
     @staticmethod
     def _resolve_owner(

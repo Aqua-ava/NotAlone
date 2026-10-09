@@ -1,7 +1,7 @@
 # 15：来源删除到不可检索
 
 Type: task
-State: open
+State: resolved
 Triage: ready-for-agent
 Blocked by: 08, 12, 13
 Spec: ../spec.md
@@ -14,17 +14,45 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 使用已有来源删除和后台任务契约，展示请求、执行、失败、重试及最终结果。
-- [ ] 只有确定性不可检索验证完成才显示已删除，处理多来源引用，保留其他有效来源支持的资料。
-- [ ] 两个窗口废弃相关正文和旧依据，另一联系人不受影响；不宣称外部模型副本也已删除。
+- [x] 使用已有来源删除和后台任务契约，展示请求、执行、失败、重试及最终结果。
+- [x] 只有确定性不可检索验证完成才显示已删除，处理多来源引用，保留其他有效来源支持的资料。
+- [x] 两个窗口废弃相关正文和旧依据；另一联系人不依赖被删来源的资料/回复不受影响，共享本人资料造成的关联依据按既有契约失效；不宣称外部模型副本也已删除。
 
 ## 测试与范围
 
 - 沿用规格中用户已确认的实际 App 操作与后端 HTTP 公共接缝；一次推进一个 red -> green 行为，自动验收与实现一起完成。
 - 涉及业务数据时只使用合成资料、随机隔离 `_test` 库和独立握手/配置；本任务未涉及的后端、渠道与桌面能力保持后续任务范围。
+- 来源 deleted 不是最终成功证明；核验原删除任务 succeeded 与最终 verify_not_retrievable 步骤 succeeded。专用 DELETE 路径不保证 task.progress SSE，需通过既有公开查询追踪真状态并验证两窗口失效，不新增事件假设。
 - 按仓库工作流读取相关领域及工程约束，完成最小相关检查、Standards/Spec 两轴评审和只含本任务改动的本地提交。
 - 不提交私人资料或凭据，不发送外部聊天消息；远端 Git 操作需另有用户明确同意。
 
 ## Comments
 
+- 2026-10-09：开始任务15静态首片准备；核对来源 DELETE、持久删除任务与最终 verify_not_retrievable 双成功门禁。公开页面/真实隔离 HTTP 与 PG 为已批准接缝；当前运行权属于任务19，未启动资源、未产生 red/green。回复内存失效与共享宿主接线由 root 协调，任务保持 claimed、无 Answer。
+
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
+- 2026-10-08：只读证据确认来源清除可影响同 owner 在另一联系人中引用该来源支持的本人资料；明确无关资料保留与相关依据失效的区别，并对齐持久任务最终校验门禁。现有 API 和删除范围不变，尚未开始实现或操作业务库。
+
+- 2026-10-09（普通页面首片）：固定准备登记源 `c587156e640976ea52e220eec550b20846463a27` 受限 source-deletion-basic120秒实际 exit1；选定联系人、真实来源卡成功，删除按钮缺失点击30秒超时，属于公开产品 red。cleanupConfirmed true、单Chrome、quiet49 active/window0、10项 owned身份无存活、两租约 absent；精确库不存在已在夹具查询实际0后释放，但首red未保存库名artifact，不补造额外证据。源 `9441ad74bbff1eb4932f2f0413ac8299adb1226d` 接入具名管理接口/确认UI/原任务查询与有限轮询后，同受限入口实际 green1/1、exit0、cleanupConfirmed true、quiet11 active/window0、11项owned身份无存活、两租约 absent；本轮精确库查询0和准备exit0/后端认证退出证明另存 `15-basic-green-database.json`。两轮日志/资源/身份/收尾核验位于 `/tmp/notalone-app-context.p9MPie/15-{first-red,basic-green}-*`。类型/构建/diff通过，实际只用合成随机库，无App/原生/剪贴板/微信/外部模型。后续原任务失败恢复、多来源/共享本人引用、两窗正文/依据失效及迟到需逐条验证，首片不代表完整闭环；claimed、无Answer、验收未勾选。
+
+- 2026-10-09（两窗来源失效首片）：固定 `46e365807434c51066e2cc9a0cd7d25034c4bd1e` 的 source-deletion-replies180秒实际 red，真实合成生成、编辑和 owner-memory 依据展开成功，删除最终验证完成后旧编辑仍可见。源 `0c25e8bd2016b820d5458bd88494c924c155c52d` 同场实际 green1/1、exit0；删除检查点立即隐藏公开正文/编辑/依据，404清除，200恢复同请求编辑，读取失败安全不可用并提供具名重试，草稿保留。red/green 均 cleanupConfirmed true、单Chrome、quiet15/10 active/window0、owned10/12身份无存活、精确随机库查询0、两leases absent。证据 `/tmp/notalone-app-context.p9MPie/15-replies-first-{red,green}-*`，green 全库数组另存 `15-replies-first-green-databases.json`。类型/构建/diff通过；未运行 App/原生/剪贴板/真实渠道。跨联系人共享本人依据、无关200保留、多来源和迟到仍待逐条验证，保持claimed、无Answer。
+
+- 2026-10-09（跨联系人共享本人来源）：`5de493b` 初尝试定位到目录页按钮，乙生成未执行，安排失败不计产品red；gate自动释放并精确正常收尾。修正公开资料联系人选择器后 `b6d16a44b682bd6b3efc65afbc18955fc4a9a375` 实际red：乙已生成并展开甲来源支持的owner依据，甲原任务succeeded且乙依据404，但旧正文仍可见。`ab43003a426c82cab4f700aba5e39fe3d6c76e9f` 将已确认真实DELETE/有界原task跟踪与UI scope分离后，同场实际green1/1、exit0、cleanuptrue、单Chrome、quiet9 active/window0、owned10身份无存活、精确1库remaining0、双leasesabsent；证据 `/tmp/notalone-app-context.p9MPie/15-cross-{first-red,red-retry,green}-*`。类型/构建/diff通过，未运行原生App或外部模型；无关200保留及依据读取失败重试新场景仅静态准备，未登记、未运行。运行权在正常检查点返root，任务仍claimed、无Answer。
+
+- 2026-10-09（无关依据与安全重试）：固定 `fad08cd4200c6cb348dae0f958d05b4af8b18f46` 受限两组240秒实际直接green2/2、exit0。无关草稿依据真实200时保留同request/selection/edited/draft；依据读取失败时旧正文隐藏且禁复制，公开具名重试真实200后恢复编辑。cleanupConfirmed true、单Chrome、quiet16 active/window0、18项owned PID/group无存活，两精确随机库remaining0、prepare0/认证退出已证、双leasesabsent。证据 `/tmp/notalone-app-context.p9MPie/15-unrelated-failure-*`；未运行App/原生/真实渠道，未制造产品red。运行权已明确返root；multi-source独立场及迟到保护仍需逐条验证，claimed、无Answer。
+
+- 2026-10-09（同一消息多来源）：固定 `fcec1f16ef86b343f3fd0136f7af7bd2c044c335` 受限 source-deletion-multi-source180秒实际直接green1/1、exit0。同一规范消息以两条真实source_document引用支持原confirmed_memory；公开删除第一来源后原message/memory/source_ids保留，删除最后来源后message/memory清除，乙消息保持；两次真实原task succeeded及verify_not_retrievable succeeded逐项核验。cleanupConfirmed true、单Chrome、quiet12 active/window0、12项owned PID/group无存活，精确1库remaining0/prepare0/认证退出已证、两leasesabsent。证据 `/tmp/notalone-app-context.p9MPie/15-multi-source-*`。不制造red，未运行App/原生/外部模型；正常检查点已明确返root运行权，迟到scope/request/connection保护仍待公开独立验证，claimed、无Answer。
+
+- 2026-10-09（同联系人新request迟到200）：固定 `3a2a48e089f0e7858cbaa902100f17f646a59ebd` 受限 source-deletion-stale-request180秒实际直接green1/1、exit0；专属gate实际获取原evidence200并有界延迟，旧公开正文/展开依据立即隐藏；gate仍hold期间公开新request生成与编辑成功，释放旧200后新request/selection/edited/draft及新展开依据保持、旧依据不复现，新evidence真实200。cleanupConfirmed true、单Chrome、quiet9 active/window0、12项owned PID/group无存活，精确1库remaining0/prepare0/认证退出已证、双leasesabsent。证据 `/tmp/notalone-app-context.p9MPie/15-stale-request-*`。未改生产session，未运行App/原生/私人渠道，运行权已明确返root供18guard串行接线；迟到失败及scope/connection独立场仍需协调范围，claimed、无Answer。
+
+- 2026-10-09（最终普通页面相关组）：固定 `7de5b8166c4486d38489b2c7b7e45adaa3254f1f` 受限 source-deletion-full300秒实际10/10、exit0，依次复用 basic/verification/unknown/arguments/replies/cross-contact/unrelated/evidence-failure/multi-source/stale-request；需要生成的场景均先通过18真实助手公开本次确认，原模型/HTTP/PG/verify与行为断言保持。本轮10/10不与历史10unique重复加总。cleanupConfirmed true、单Chrome、quiet71 active/window0、65项owned PID/group无存活，完整数组10个唯一精确随机库全部remaining0/absent/prepare0/认证退出10/10，双leasesabsent。证据 `/tmp/notalone-app-context.p9MPie/15-final-full.log` 与 `15-final-full-{resources,owned-identities,cleanup,databases}.json`。运行权已明确返root，未运行App/原生/剪贴板/真实微信/外部模型；独立Standards/Spec两轴尚待root安排，不写Answer/resolved、验收框暂未勾选。
+
+- 2026-10-09（评审生命周期修复后复核）：初评Spec P0-P3均0、Standards hard均0，仅possible P3三处proxy生命周期重复；固定 `7e40eb2a5212fb5224ab9c372277a7f06e9ec9f5` 单文件共用wrapper修正后，实际源 `ff66d4e805dce8b9b923e877401abbe4554c0c52` 受限 source-deletion-full300秒必要复核10/10、exit0，原十场公开行为/真实HTTP/PG及断言保持。本次10/10不与前次full或历史unique加总。cleanupConfirmed true、单Chrome、quiet64 active/window0、68项owned PID/group无存活，完整数组10个唯一精确随机库全部remaining0/absent/prepare0/认证退出10/10，双leasesabsent；证据 `/tmp/notalone-app-context.p9MPie/15-final-refactor-full-*`。运行权已明确返root，未追加组或App/native；增量独立评审仍待root汇总，claimed/noAnswer/resolved保持。
+
+## Answer
+
+已完成来源删除的普通页面与真实隔离HTTP/PG闭环：明确确认删除、跟踪原持久任务、失败后恢复原任务，只有原任务及verify_not_retrievable成功才展示完成。相关正文与旧依据立即不可用；真实依据404清除、200保留同请求编辑，读取失败安全隐藏并显式重试。跨联系人共享本人依据失效，无关资料保留；多来源先保留剩余支持，最后来源删除后清除。旧200不会覆盖同联系人新请求、编辑或草稿。
+
+实际命令为Conda NotAlone下npm run test:pages -- --case source-deletion-full --timeout-seconds 300。最终生产及确认整合源7de5b816实际10/10；评审只发现测试代理生命周期possible duplication，整理后固定ff66d4e805dce8b9b923e877401abbe4554c0c52必要复核仍10/10，exit0。当前十场不与历史次数加总。最后一轮cleanuptrue、唯一Chrome、quiet64 active/window0、68 owned PID/group无存活、十个唯一精确_test库全部不存在、后端认证停读/正常退出10/10、双租约absent。完整证据外部context15-final-refactor-full-*；先前未保存首red库名等历史artifact限制保留，不补造。
+
+Standards原hard0、possible P3=1已修并独立补审归零；Spec完整及增量P0–P3均0。仅使用合成资料与受控模型接缝，不新增业务删除协议或读取授权，不清除微信、用户原文件或外部模型副本。实际App窗口、剪贴板、签名包与真实渠道仍由任务10/18/20验收；普通通过不代表完整Mac交付。

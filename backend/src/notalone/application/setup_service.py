@@ -15,12 +15,20 @@ from uuid import UUID, uuid4
 from notalone.runtime_config import _writable_env_path
 
 
+class OwnerAlreadyConfigured(RuntimeError):
+    """仅创建模式发现既有身份；拒绝选择或写回任意既有 owner。"""
+
+
 class OwnerDirectory(Protocol):
     """owner 初始化所需的最小持久化边界。"""
 
     def list_owners(self) -> tuple[object, ...]: ...
 
     def create_owner(self, owner_id: UUID, display_name: str) -> object: ...
+
+    def owner_exists(self, owner_id: UUID) -> bool: ...
+
+    def create_owner_if_empty(self, owner_id: UUID, display_name: str) -> object | None: ...
 
 
 class SetupService:
@@ -37,7 +45,7 @@ class SetupService:
         self._owner_directory = owner_directory
         self._env_path = env_path
 
-    def status(self) -> dict[str, object]:
+    def status(self, *, runtime_owner_id: UUID | None = None) -> dict[str, object]:
         owners = self._owner_directory.list_owners()
         configured = bool(
             os.environ.get("NOTALONE_DEEPSEEK_API_KEY", "").strip()
@@ -46,14 +54,25 @@ class SetupService:
             "initialized": len(owners) > 0,
             "owner_configured": len(owners) > 0,
             "credentials_configured": configured,
+            # 由当前实例注入，不接受 HTTP 调用方指定；全库状态不是身份凭证。
+            "runtime_owner_configured": (
+                runtime_owner_id is not None
+                and self._owner_directory.owner_exists(runtime_owner_id)
+            ),
         }
 
-    def initialize_owner(self, *, display_name: str) -> dict[str, object]:
-        """幂等初始化 owner：已存在则返回现有，不重复创建。"""
+    def initialize_owner(self, *, display_name: str, create_only: bool = False) -> dict[str, object]:
+        """App 仅创建；既有明确恢复调用保留幂等返回与写回语义。"""
 
         name = display_name.strip()
         if not name:
             raise ValueError("owner 展示名称不能为空。")
+        if create_only:
+            owner_id = uuid4()
+            if self._owner_directory.create_owner_if_empty(owner_id, name) is None:
+                raise OwnerAlreadyConfigured("本人已配置。")
+            self._persist_owner_id(owner_id)
+            return {"owner_id": str(owner_id), "created": True}
         owners = self._owner_directory.list_owners()
         if owners:
             owner_id = getattr(owners[0], "id", None)
@@ -112,5 +131,3 @@ class SetupService:
         except OSError:
             pass
         return path
-
-

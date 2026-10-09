@@ -28,7 +28,9 @@ class FakeImportService:
         self.invalid_path = False
         self.task_id = uuid4()
 
-    def preview(self, *, path: str) -> dict[str, object]:
+    def preview(
+        self, *, path: str, owner_id: UUID, contact_id: UUID | None = None,
+    ) -> dict[str, object]:
         self.preview_calls.append(path)
         if self.invalid_path:
             raise FileNotFoundError(path)
@@ -47,6 +49,7 @@ class FakeImportService:
         path: str,
         owner_id: UUID,
         selection: object,
+        expected_content_sha256: str | None = None,
     ) -> dict[str, object]:
         self.commit_calls.append((path, selection))
         return {

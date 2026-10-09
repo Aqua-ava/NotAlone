@@ -13,3 +13,7 @@ class ImportPreviewError(ValueError):
     继承 ``ValueError`` 表示输入内容不符合约定。抛出这个异常时，消息只能包含行号、
     字段名和错误类别，不能拼接原始 JSON 或聊天正文。
     """
+
+
+class ImportContentChangedError(ImportPreviewError):
+    """本次重新读取的文件与用户核对的预览不一致。"""
