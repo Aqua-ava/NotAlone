@@ -1,7 +1,7 @@
 # 14：资料补充、修正与撤销
 
 Type: task
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: 13
 Spec: ../spec.md
@@ -14,10 +14,10 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 联系人沿用已有记忆公共接口及版本规则；本人资料补齐已确认的原子修正，区分归属并保留来源和 manual/auto 语义。
-- [ ] 本人修正一次事务创建新 ID 的 manual 版本、引用旧版并使旧版退出检索；失败保留旧版有效，另一 owner/联系人与历史回复依据快照不受影响。
-- [ ] 修改、单条删除或撤销后更新当前页面和可用上下文，不污染另一联系人。
-- [ ] 失败不显示成功；公开 App 操作加 HTTP 回归核验可撤销及可修正行为。
+- [x] 联系人沿用已有记忆公共接口及版本规则；本人资料补齐已确认的原子修正，区分归属并保留来源和 manual/auto 语义。
+- [x] 本人修正一次事务创建新 ID 的 manual 版本、引用旧版并使旧版退出检索；失败保留旧版有效，另一 owner/联系人与历史回复依据快照不受影响。
+- [x] 修改、单条删除或撤销后更新当前页面和可用上下文，不污染另一联系人。
+- [x] 失败不显示成功；按最新已确认接缝，公开普通页面操作加真实隔离 HTTP 回归核验可撤销及可修正行为，原生 App 集成交付留待任务 20。
 
 ## 测试与范围
 
@@ -46,3 +46,17 @@ Spec: ../spec.md
 - 2026-10-09：迟到测试因 fixture GET 自身挂起到 deadline，CLI exit 2/cleanup_unconfirmed 且保留租约（不是产品 red，无场景通过）。本轮 owned recovery 证据匹配 runner 18556、child group 18567、后端 18617、当前树与独立 OMq6TW 握手目录；原后端 loopback 认证 shutdown=stopped，三个 PID 与原组均退出，精确本轮随机测试库已 DROP 并核缺席，不处理其他进程/库。为 MemoryFixture HTTP 增加 5 秒 AbortSignal 超时，避免断言读取阻断 finally；typecheck 通过，租约释放仍由主协调核验后处理，尚未新运行。
 - 2026-10-09：主协调依据固定租约身份、private UID/mode/inode/dev、已退出 PID/组、当前 headless/profile/quiet 进程与临时 profile 缺席核验后安全释放旧租约（历史 Chrome 精确 PID 未恢复，原 CLI 仍 exit 2/cleanup_unconfirmed，不改记通过）。源 `3a9be09c2a81037dc8db39d52c0b4a07a537b136` 上修正迟到最小组 4/4 green；最终 `memory-editing-full` 12/12 和主协调授权的 `candidate-copy` 2/2 一次 CLI 通过，受影响读取 9/9 与迟到 6/6 一次 CLI 通过。各 CLI 最多两组/deadline<=240、单 Chrome、quiet active/window 0、cleanupConfirmed true，两 leases absent；每轮 resources/owned-identities 与日志保留于交接 context。原实现保护直接通过新增失败/迟到回归，不虚构产品 red。
 - 2026-10-09：页面回收后串行运行最后相关后端 12 模块，实际 123/123、外层 1/1 green、exit 0；外层正式后端认证 stopped/exit 0、精确随机库缺席/cleanup_confirmed true。保留任务 12/08/16/10 聚合源与各 claimed 状态；更新桌面能力说明但不称原生或完整闭环可用。完整相关页面 27/27 已完成，仍未勾验收、没有 Answer，交主协调对最终候选作 Standards/Spec 两轴评审。
+
+- 2026-10-09：完整固定87f57a7…1d119ed评审：Standards hard0/possibleP3重复夹具生命周期1，Spec0。按2b604fd仅提取六入口共同生命周期后，固定1d119ed…2b604fd增量两轴均0（hard/possible与P0-P3均0）。聚合源60053895的必要memory-editing-owner回归1/1及复制4/4实际退出0，单Chrome、quiet25次active/window0、cleanupConfirmed=true、两租约absent；原场景与断言未变，未重复完整27场。
+
+## Answer
+
+管理页已支持本人和联系人资料补充、版本修正、单条删除、自动采纳撤销，以及三类主体的待确认候选确认与丢弃。所有操作从已确认范围和当前版本出发，写入后重新核对真实列表；提交或读回失败不显示成功，旧联系人或连接的迟到结果不发布。
+
+本人资料修正由后端单事务创建新manual版本、引用旧ID并使旧版退出检索，保留来源及来源时间；失败回滚保持旧版有效。已核验另一owner/联系人隔离、旧回复依据不变、新生成使用新版本、来源删除期间保护、并发与重复确认。迁移037只在本轮随机新测试库执行，未升级现有业务库；该升级仍需单独确认。
+
+真实验证：源3a9be09的memory-editing-full 12/12、memory-reading-full 9/9、memory-stale-full 6/6（受限test:pages，最多两组、单Chrome）；Conda NotAlone的memory_editing_http_check.py相关后端12模块123/123及外层HTTP1/1；类型、构建、完整差异与二十票字段/DAG检查通过。修复后的60053895沿test:pages运行memory-editing-owner与candidate-copy、deadline180，生命周期回归1/1通过。最终双轴hard0/possible0、Spec0。
+
+正常轮次均确认认证停读、自有进程退出和精确测试库缺席；两租约absent。旧迟到安排超时轮仍保留exit2/cleanup_unconfirmed及独立恢复记录，没有改记通过。证据保留于/tmp/notalone-app-context.p9MPie/14-*日志、resources、owned-identities、恢复proof与双轴报告。
+
+数据处理仅涉及合成资料、回环HTTP与随机隔离_test库。未读取私人资料、微信或真实剪贴板，未调用真实模型或外部tracing，未远端Git。当前完成普通页面及后端接缝；原生App、签名和完整桌面闭环在任务20验收。
