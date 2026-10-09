@@ -1,5 +1,8 @@
 import { expect, type Page } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import type { ContactFixture } from './contact-backend-fixture';
+import { requestFixtureHttp } from './fixture-transport';
 import type { ImportFixture } from './import-backend-fixture';
 import type { ContactHttpProxy } from './contact-http-proxy';
 
@@ -225,4 +228,37 @@ export async function lostImportResponse(pages: ImportStalePages): Promise<void>
   await manager.getByRole('button', { name: '正式导入这份资料', exact: true }).click();
   await expect(manager.getByText('新增 0 条消息，已存在 6 条消息。', { exact: true })).toBeVisible();
   expect(await importBackend.request('/api/contacts')).toEqual(before);
+}
+
+export async function firstImportBootstrap(manager: Page, contactBackend: ContactFixture,
+  chooseFile: (filePath: string) => Promise<void>): Promise<void> {
+  const request = (endpoint: string) => requestFixtureHttp(contactBackend.infoPath, endpoint);
+  expect((await request('/api/sync/status')).status).toBe(503);
+  const filePath = path.join(contactBackend.directory, 'first-owner.jsonl');
+  await writeFile(filePath, await readFile(path.resolve('../backend/tests/fixtures/valid_single_contact.jsonl')));
+  await chooseFile(filePath);
+  await confirmImportPage(manager);
+  await manager.getByRole('button', { name: '正式导入这份资料', exact: true }).click();
+  await expect(manager.getByText('新增 6 条消息，已存在 0 条消息。', { exact: true })).toBeVisible();
+  const receipt = (await manager.evaluate(() => window.notalone.imports.getState())).submission?.receipt;
+  if (!receipt) throw new Error('首份导入收据尚未就绪。');
+  const reload = manager.getByRole('button', { name: '认证停读并重新加载同步服务', exact: true });
+  await expect(reload).toBeEnabled();
+  const before = await readFile(contactBackend.infoPath, 'utf8');
+  await reload.click();
+  await expect(manager.getByText('同步服务已重新加载。请在同步设置中主动选择并确认会话授权；如需查看原导入任务，请重新预览确认同一份文件。', { exact: true })).toBeVisible({ timeout: 20_000 });
+  expect(await readFile(contactBackend.infoPath, 'utf8')).not.toBe(before);
+  const sync = await request('/api/sync/status');
+  expect(sync.status).toBe(200);
+  expect(typeof sync.data.sync_enabled).toBe('boolean');
+  expect(typeof sync.data.probe_available).toBe('boolean');
+  expect(typeof sync.data.cli_available).toBe('boolean');
+  expect((await request('/api/sync/cli-bindings')).data.bindings).toEqual([]);
+  expect((await request('/api/contacts')).data.contacts).toHaveLength(1);
+  expect((await request(`/api/contacts/${receipt.contactId}/sources`)).data.sources).toHaveLength(1);
+  expect((await request(`/api/contacts/${receipt.contactId}/messages`)).data.messages).toHaveLength(6);
+  // 空模型配置不得把消息保存成功冒充记忆提取完成；重启不自动扫描旧任务。
+  const task = await request(`/api/tasks/status?contact_id=${receipt.contactId}&task_id=${receipt.taskId}`);
+  expect(task.status).toBe(200);
+  expect(task.data.status).toBe('queued');
 }

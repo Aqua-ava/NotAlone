@@ -3,7 +3,7 @@ import type { ImportFixture } from './import-backend-fixture';
 import { confirmImportPage, type ImportPages } from './import-page-scenarios';
 export { originalImport } from './import-page-scenarios';
 
-async function selectAppFile(app: ElectronApplication, filePath: string): Promise<void> {
+export async function selectAppFile(app: ElectronApplication, filePath: string): Promise<void> {
   // 只替换必要系统 I/O；实际原生对话框仍需独立实机验收。
   await app.evaluate(({ dialog }, selectedPath) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selectedPath] }); }, filePath);
 }
