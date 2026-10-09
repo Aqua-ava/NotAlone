@@ -27,3 +27,8 @@
 .memory-source-list b { color: #496e88; font-size: 12px; font-weight: 500; }
 .memory-source-list p { color: #758184; font-size: 11px; line-height: 1.8; margin-top: 5px; }
 @media (max-width: 900px) { .memory-cards { grid-template-columns: 1fr; } .memory-toolbar { flex-wrap: wrap; } }
+
+.memory-edit-form { display: grid; gap: 12px; margin-top: 12px; padding: 14px; background: #f8fafb; border-radius: 8px; }
+.memory-edit-form label { display: grid; gap: 6px; }
+.memory-edit-form textarea { min-height: 90px; resize: vertical; }
+.memory-edit-form textarea, .memory-edit-form select { font: inherit; padding: 9px; border: 1px solid #b7c6d1; border-radius: 6px; }
