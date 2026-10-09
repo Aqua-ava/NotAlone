@@ -35,3 +35,5 @@ Spec: ../spec.md
 - 2026-10-09：首片green单Chrome，cleanupConfirmed=true，7次quiet采样active/window均0、activationPolicy2；自有子树RSS采样峰值Chrome855104、Node180688、Python155040 KiB，共享页可能重复计，不保证物理内存或瞬时上限。两租约absent，已释放root分配的12-pages运行所有权。只完成默认草稿快照首片，删除/范围/迟到/失败及完整相关回归、双轴评审仍待；保持claimed、未勾选验收且无Answer，原生/签名/完整App未验收。
 
 - 2026-10-09：运行所有权已交回root后，静态准备后续八场景（安全503重试、候选/输入快照、新生成/联系人/连接迟到、HTTP与具名范围拒绝、自有请求移除404、旧快照缺时间不倒填），加首片共九场景。专属回环代理只安排传输；专属Python工具严格限制本轮随机_test库和owner/contact/request，仅安排请求移除或旧timing缺失，HTTP/页面用于断言，不证明来源删除流程完成。类型、Python静态语法和空白检查通过；后续八场景未运行，不称red/green。未再修改共享registry/PageHost/backend-fixture/run/test-pages。
+
+- 2026-10-09：按root授权静态合入任务16共享 `67d338f8d60bbde905ba75d2d6cd3513d63c0f06` 及任务10 `5aa354590836f006e0165d1e9d93e4736f69ffcb`，所有通道保留，未直接编辑run/test-pages。任务12专属源码和九场景保持不变；typecheck、生产build、从1c8825b起完整diff空白及二十票字段/规格/关闭条件/依赖DAG通过。未启动HTTP/PG、浏览器或任何runtime；首场历史green，后续八场仍未实际跑，保持claimed、无Answer。
