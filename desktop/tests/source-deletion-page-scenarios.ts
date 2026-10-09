@@ -123,3 +123,38 @@ export async function sourceDeletionReplies(manager: Page, helper: Page, fixture
   expect(gone.status).toBe(404);
   await expect(manager.getByText('本人喜欢合成绿茶。', { exact: true })).toHaveCount(0);
 }
+
+export async function sourceDeletionCrossContact(manager: Page, helper: Page, fixture: SourceDeletionFixture,
+  proxy: import('./source-deletion-proxy').SourceDeletionProxy) {
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  const panel = manager.getByRole('region', { name: '来源删除管理', exact: true });
+  await expect(panel.getByRole('button', { name: '删除来源', exact: true })).toBeVisible();
+  const source = await manager.evaluate(() => window.notalone.sources.getState());
+  proxy.holdDelete = true;
+  await panel.getByRole('button', { name: '删除来源', exact: true }).click();
+  await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
+  await expect.poll(() => proxy.heldCount, { timeout: 1500 }).toBe(1);
+  await manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
+  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('说明本人喜欢合成绿茶。');
+  await helper.getByRole('checkbox', { name: '结合关系语境', exact: true }).check();
+  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
+  await expect(editor).toHaveValue('来源引用合成候选。', { timeout: 2500 });
+  await helper.getByRole('button', { name: '展开候选1依据', exact: true }).click();
+  await expect(helper.getByRole('region', { name: '候选1依据', exact: true }).getByText('本人喜欢合成绿茶。', { exact: true })).toBeVisible({ timeout: 1500 });
+  const reply = await helper.evaluate(() => window.notalone.replies.getState());
+  proxy.release();
+  await expect.poll(async () => {
+    const response = await fixture.http(`/api/contacts/${source.contactId}/sources`);
+    const taskId = (response.data.sources as { task_id: string | null }[])[0].task_id;
+    if (!taskId) return 'missing';
+    const task = await fixture.http(`/api/tasks/status?contact_id=${source.contactId}&task_id=${taskId}`);
+    return task.data.status;
+  }, { timeout: 15_000 }).toBe('succeeded');
+  expect((await fixture.http(`/api/contacts/${reply.contactId}/replies/${reply.result!.replyRequestId}/evidence`)).status).toBe(404);
+  await expect(editor).toHaveCount(0);
+  await expect(helper.getByRole('region', { name: '候选1依据', exact: true })).toHaveCount(0);
+  await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('说明本人喜欢合成绿茶。');
+  await expect(helper.getByRole('button', { name: '复制', exact: true })).toBeDisabled();
+}

@@ -47,3 +47,20 @@ export async function sourceDeletionRepliesAcceptance(browser: Browser, origin: 
   }), 'reply');
   process.stdout.write('page_test_scenario_passed: source-deletion-replies\n');
 }
+
+export async function sourceDeletionCrossContactAcceptance(browser: Browser, origin: string) {
+  const { SourceDeletionProxy } = await import('../source-deletion-proxy');
+  const { sourceDeletionCrossContact } = await import('../source-deletion-page-scenarios');
+  await withSourceDeletionFixture(async (fixture) => {
+    const released = ownResource();
+    const proxy = await SourceDeletionProxy.attach(fixture.infoPath);
+    try { await withControllerEnvironment(fixture, async (userData) => {
+      const host = new PageHost(await browser.newContext(), origin, userData);
+      try {
+        await host.backend.connect();
+        await sourceDeletionCrossContact(await host.open('manager'), await host.open('helper'), fixture, proxy);
+      } finally { proxy.release(); await host.close(); fixture.confirmControllerStopped(); }
+    }); } finally { await proxy.close(); released(); }
+  }, 'reply');
+  process.stdout.write('page_test_scenario_passed: source-deletion-cross-contact\n');
+}
