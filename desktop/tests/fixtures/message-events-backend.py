@@ -68,28 +68,31 @@ class MessageEventsFixture(rewrite.DesktopRewriteFixture):
         with patch.object(rewrite, "create_app", side_effect=create_with_events):
             return super()._backend(owner_id)
 
-    def append_message(self, contact_id: str) -> dict[str, str]:
+    def append_message(self, contact_id: str, *, owner_id: UUID | None = None,
+                       text: str = "甲的新合成消息：时间安排更新。") -> dict[str, str]:
+        owner_id = owner_id or self.owner_id
         message_id = uuid4()
         with psycopg.connect(self.database_url) as connection:
             source_id = connection.execute(
                 "SELECT id FROM public.source_document WHERE owner_id=%s AND contact_id=%s",
-                (self.owner_id, UUID(contact_id)),
+                (owner_id, UUID(contact_id)),
             ).fetchone()[0]
             connection.execute(
                 """INSERT INTO public.message (
                     id, owner_id, contact_id, speaker, message_type, text_content, occurred_at
                 ) VALUES (%s,%s,%s,'contact','text',%s,now())""",
-                (message_id, self.owner_id, UUID(contact_id), "甲的新合成消息：时间安排更新。"),
+                (message_id, owner_id, UUID(contact_id), text),
             )
             connection.execute(
                 """INSERT INTO public.message_source_ref (
                     message_id, owner_id, contact_id, source_kind,
                     source_document_id, source_locator, raw_payload
                 ) VALUES (%s,%s,%s,'source_document',%s,%s,'{}'::jsonb)""",
-                (message_id, self.owner_id, UUID(contact_id), source_id, f"synthetic:{message_id}"),
+                (message_id, owner_id, UUID(contact_id), source_id, f"synthetic:{message_id}"),
             )
+        # 两位合成 owner 的事件进同一总线，仍由生产订阅按认证 owner 筛选。
         self.event_buses[self.owner_id].publish(BackendEvent.message_created(
-            scope=ContactScope(self.owner_id, UUID(contact_id)),
+            scope=ContactScope(owner_id, UUID(contact_id)),
             occurred_at=datetime.now(timezone.utc), message_id=message_id,
         ))
         return {"message_id": str(message_id)}
@@ -130,11 +133,32 @@ def main() -> None:
                 result = {}
             elif operation == "append_message":
                 result = fixture.append_message(contact_ids[0])
+            elif operation == "append_other_contact":
+                result = fixture.append_message(contact_ids[1], text="乙的新合成消息：时间安排更新。")
+            elif operation == "append_other_owner":
+                result = fixture.append_message(other_contact_id, owner_id=fixture.other_owner_id,
+                                                text="另一用户的新合成消息。")
+            elif operation == "publish_foreign_id":
+                with psycopg.connect(fixture.database_url) as connection:
+                    message_id = connection.execute(
+                        "SELECT id FROM public.message WHERE owner_id=%s AND contact_id=%s LIMIT 1",
+                        (fixture.other_owner_id, UUID(other_contact_id)),
+                    ).fetchone()[0]
+                fixture.event_buses[fixture.owner_id].publish(BackendEvent.message_created(
+                    scope=ContactScope(fixture.owner_id, UUID(contact_ids[0])),
+                    occurred_at=datetime.now(timezone.utc), message_id=message_id,
+                ))
+                result = {}
             elif operation == "disconnect_stream":
                 fixture.event_buses[fixture.owner_id].disconnect_streams()
                 result = {}
             elif operation == "observations":
                 result = {"model_calls": len(fixture.reply_model.seen_calls)}
+            elif operation == "restart":
+                fixture.backend.close()
+                fixture.backend = fixture._backend(fixture.owner_id)
+                write_backend_info(address=fixture.backend.base_url.removeprefix("http://"), token=fixture.backend.token)
+                result = {}
             elif operation == "stop":
                 print(json.dumps({"id": command["id"], "result": {}}), flush=True)
                 break
