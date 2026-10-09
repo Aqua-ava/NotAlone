@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { ActiveMemory, MemoryContent, MemoryReadingState, MemorySection, MemorySectionName, MemorySource, PendingMemoryCandidate } from '../shared/memory-bridge';
+import type { ActiveMemory, MemoryContent, MemoryCorrectionRequest, MemoryReadingState, MemorySection, MemorySectionName, MemorySource, PendingMemoryCandidate } from '../shared/memory-bridge';
 import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
 import './memory.css';
 
-const initial: MemoryReadingState = { revision: -1, contactId: null, scopeRevision: 0,
+const initial: MemoryReadingState = { revision: -1, contactId: null, scopeRevision: 0, mutation: { phase: 'idle', message: '' },
   contact: { phase: 'idle', items: [] }, owner: { phase: 'idle', items: [] },
   pending: { phase: 'idle', items: [] }, sources: { phase: 'idle', items: [] } };
 const categoryNames = { common_fact: '共同事实', preference: '偏好', taboo: '禁忌', recent_state: '近期状态', relationship_note: '关系备注' };
@@ -45,8 +45,20 @@ function useMemoryReading(session: ContactSessionView) {
     setError('');
     if (session.state.selectedContactId) void refresh();
   }, [session.state.selectedContactId, session.state.scopeRevision]);
+  async function correct(entry: ActiveMemory, text: string, category: MemoryCorrectionRequest['category']) {
+    const { selectedContactId, scopeRevision } = scope.current;
+    if (!selectedContactId) return;
+    setError('');
+    try { await window.notalone.memory.correct({ contactId: selectedContactId, scopeRevision, level: entry.level,
+      memoryId: entry.memoryId, revision: entry.revision, text, category }); }
+    catch {
+      if (active.current && scope.current.selectedContactId === selectedContactId && scope.current.scopeRevision === scopeRevision) {
+        setError('资料范围或版本已变化，请刷新后再修正。');
+      }
+    }
+  }
   const matches = state.contactId === session.state.selectedContactId && state.scopeRevision === session.state.scopeRevision;
-  return { state: matches ? state : initial, error, refresh };
+  return { state: matches ? state : initial, error, refresh, correct };
 }
 
 // 时间展示统一注明 UTC+8；不把来源日期、保存日期或有效期互相替代。
@@ -71,10 +83,14 @@ function SourceReference({ id, sources }: { id: string; sources: MemorySection<M
       : sources.phase === 'loading' || sources.phase === 'idle' ? '来源目录尚未读取完成。' : '引用类型或来源详情暂不可用。'}</p>}</li>;
 }
 
-function MemoryCard({ content, memory, candidate, sources }: {
+function MemoryCard({ content, memory, candidate, sources, correct, busy }: {
   content: MemoryContent; memory?: ActiveMemory; candidate?: PendingMemoryCandidate; sources: MemorySection<MemorySource>;
+  correct?: (entry: ActiveMemory, text: string, category: MemoryCorrectionRequest['category']) => Promise<void>; busy?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(content.text);
+  const [category, setCategory] = useState(content.category);
   return <article className={`memory-card ${candidate ? 'memory-pending' : ''}`}>
     <div className="memory-card-labels"><span>{categoryNames[content.category]} · {topicNames[content.topic]}</span>
       <b>{candidate ? '待确认 · 不是已确认事实' : memory?.adoptionMethod === 'auto' ? '自动采纳（可撤销）' : '手动采纳'}</b></div>
@@ -83,6 +99,18 @@ function MemoryCard({ content, memory, candidate, sources }: {
     <div className="memory-times"><p>来源聊天时间：{sourceTime(content)}</p><p>保存时间：{timeText(content.timing.recordedAt)}</p></div>
     <button className="memory-details-button" aria-label={`查看来源与版本：${content.text}`} aria-expanded={expanded}
       onClick={() => setExpanded((value) => !value)}>{expanded ? '收起来源与版本' : '查看来源与版本'}</button>
+    {memory?.level === 'owner' && correct && <button className="button" disabled={busy}
+      aria-label={`修正资料：${content.text}`} onClick={() => setEditing(true)}>修正资料</button>}
+    {editing && memory && correct && <form aria-label="修正本人资料" className="memory-edit-form" onSubmit={(event) => {
+      event.preventDefault(); void correct(memory, text, category);
+    }}><label>资料正文<textarea aria-label="资料正文" value={text} disabled={busy} onChange={(event) => setText(event.target.value)} /></label>
+      <label>资料分类<select aria-label="资料分类" value={category} disabled={busy}
+        onChange={(event) => setCategory(event.target.value as MemoryCorrectionRequest['category'])}>
+        {Object.entries(categoryNames).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></label>
+      <p>修正会保存新的手动版本并保留来源，旧版退出当前资料。</p>
+      <button className="button" type="submit" disabled={busy || !text.trim()}>保存修正</button>
+      <button className="button" type="button" disabled={busy} onClick={() => setEditing(false)}>取消修正</button>
+    </form>}
     {expanded && <div className="memory-details">
       <p>来源聊天时间表示当时说过，不保证事件在当天发生。</p>
       <p>生效时间：{content.validAt ? timeText(content.validAt) : '未指定'}</p>
@@ -132,7 +160,8 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
         </ReadingSection>
         <ReadingSection title="本人记忆" note="属于当前本人，可在与不同联系人的回复中共享使用。" empty="当前本人暂无有效记忆。"
           state={state.owner} retry={() => void memory.refresh('owner')}>
-          <div className="memory-cards">{state.owner.items.map((entry) => <MemoryCard key={entry.memoryId} content={entry} memory={entry} sources={state.sources} />)}</div>
+          <div className="memory-cards">{state.owner.items.map((entry) => <MemoryCard key={entry.memoryId} content={entry} memory={entry} sources={state.sources}
+            correct={memory.correct} busy={state.mutation.phase === 'working'} />)}</div>
         </ReadingSection>
         <ReadingSection title="待确认候选" note="仅来自当前联系人范围；本人、联系人与双方主体分别标明，未经确认不能当作确定事实。" empty="这位联系人暂无待确认候选。"
           state={state.pending} retry={() => void memory.refresh('pending')}>
@@ -145,6 +174,7 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
           </li>)}</ul>
         </ReadingSection>
       </>}
+    {state.mutation.phase !== 'idle' && <p className="memory-section-note" role={state.mutation.phase === 'error' ? 'alert' : 'status'}>{state.mutation.message}</p>}
     {memory.error && <p className="memory-section-note" role="alert">{memory.error}</p>}
     {session.error && <p className="memory-section-note" role="alert">{session.error}</p>}
   </div>;

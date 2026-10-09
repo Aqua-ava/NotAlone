@@ -238,6 +238,7 @@ class OwnerMemory:
     revision: int = 1
     confidence: float = 1.0
     risk_flags: tuple[str, ...] = ()
+    supersedes_memory_id: UUID | None = None
     timing: MemoryTiming = MemoryTiming()
 
     def __post_init__(self) -> None:
@@ -268,6 +269,10 @@ class OwnerMemory:
             UUID,
         ):
             raise ValueError("owner 记忆来源候选标识无效。")
+        if self.supersedes_memory_id is not None and not isinstance(
+            self.supersedes_memory_id, UUID,
+        ):
+            raise ValueError("owner 记忆版本链标识无效。")
         if not isinstance(self.revision, int) or self.revision < 1:
             raise ValueError("owner 记忆版本必须从 1 开始。")
         if (
