@@ -13,6 +13,8 @@ import sys
 import tempfile
 import time
 import unittest
+from uuid import UUID, uuid4
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from urllib.error import HTTPError
@@ -76,7 +78,7 @@ class MemoryEditingHttpCheck(unittest.TestCase):
             "NOTALONE_OWNER_ID": self.data["owner_id"],
         })
         self.child = subprocess.Popen(
-            [sys.executable, "-m", "notalone.server.command"], cwd=ROOT, env=dict(os.environ),
+            [sys.executable, str(Path(__file__).with_name("memory_editing_backend.py"))], cwd=ROOT, env=dict(os.environ),
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         self.backends.append((self.child, self.info))
@@ -225,6 +227,104 @@ class MemoryEditingHttpCheck(unittest.TestCase):
         self.assertEqual({item["memory_id"] for item in after},
                          {item["memory_id"] for item in before if item != previous} | {corrected["memory_id"]})
         self.assertEqual(next(item for item in after if item["memory_id"] == corrected["memory_id"]), corrected)
+
+    def test_old_reply_snapshot_survives_correction_and_new_reply_uses_new_version(self) -> None:
+        from notalone.persistence.conversation_repository import PostgresConversationBindingRepository
+        PostgresConversationBindingRepository(self.data["database_url"]).create_binding(
+            owner_id=UUID(self.data["owner_id"]), contact_id=UUID(self.data["contact_ids"][0]),
+            channel="wechat", account_scope="synthetic-memory-editing",
+            conversation_locator="synthetic-memory-editing-contact",
+        )
+        previous = next(item for item in self.get("/api/memories/owner")["memories"]
+                        if item["source_candidate_id"] == self.data["owner_candidate_id"])
+
+        def generate():
+            status, reply = self.request("/api/reply/generate", {
+                "contact_id": self.data["contact_ids"][0], "idempotency_key": str(uuid4()),
+                "content": {"type": "rewrite_draft", "draft_text": "本人喜欢合成茶。",
+                            "include_relationship_context": True},
+            })
+            self.assertEqual(status, 200, reply)
+            path = (f"/api/contacts/{self.data['contact_ids'][0]}/replies/"
+                    f"{reply['reply_request_id']}/evidence")
+            return reply, path, self.get(path)
+
+        old_reply, old_path, old_snapshot = generate()
+        old_memory = next(item for item in old_snapshot["evidence"] if item["kind"] == "owner_memory")
+        self.assertEqual(old_reply["candidates"][0]["text"], "本人喜欢合成绿茶。")
+        self.assertEqual(old_memory["evidence_id"], previous["memory_id"])
+        self.assertEqual(old_memory["timing"], previous["timing"])
+        status, result = self.request(f"/api/memories/owner/{previous['memory_id']}/correct",
+                                      {"text": "本人改为喜欢合成白茶。"})
+        self.assertEqual(status, 200, result)
+        self.assertEqual(self.get(old_path), old_snapshot)
+        new_reply, _, new_snapshot = generate()
+        owner_evidence = [item for item in new_snapshot["evidence"] if item["kind"] == "owner_memory"]
+        self.assertNotIn(previous["memory_id"], {item["evidence_id"] for item in owner_evidence})
+        new_memory = next(item for item in owner_evidence if item["evidence_id"] == result["memory"]["memory_id"])
+        self.assertEqual(new_memory["text"], "本人改为喜欢合成白茶。")
+        self.assertEqual(new_memory["timing"], result["memory"]["timing"])
+        self.assertEqual(new_reply["candidates"][0]["text"], "本人改为喜欢合成白茶。")
+
+    def test_unavailable_owner_versions_cannot_be_corrected(self) -> None:
+        memories = []
+        for text in ("合成失效资料。", "合成过期资料。", "合成未来资料。", "合成删除资料。"):
+            status, saved = self.request("/api/memories/manual-owner", {"text": text, "category": "common_fact"})
+            self.assertEqual(status, 200, saved)
+            memories.append(saved["memory"])
+        with self.owned_database_connection() as connection:
+            for item, column, value in zip(memories[:3], ("status", "invalid_at", "valid_at"),
+                                           ("invalidated", "2020-01-01T00:00:00Z", "2099-01-01T00:00:00Z")):
+                from psycopg import sql
+                connection.execute(sql.SQL("UPDATE public.owner_memory SET {} = %s WHERE id = %s").format(
+                    sql.Identifier(column)), (value, item["memory_id"]))
+        self.assertEqual(self.request(f"/api/memories/owner/{memories[3]['memory_id']}/delete", {})[0], 200)
+        before = self.get("/api/memories/owner")
+        for item in memories:
+            self.assertEqual(self.request(f"/api/memories/owner/{item['memory_id']}/correct",
+                                          {"text": "不能恢复不可用版本。"}),
+                             (500, {"error": "memory_operation_failed"}))
+        self.assertEqual(self.get("/api/memories/owner"), before)
+
+    def test_concurrent_corrections_of_same_version_only_create_one_current_version(self) -> None:
+        previous = next(item for item in self.get("/api/memories/owner")["memories"]
+                        if item["source_candidate_id"] == self.data["owner_candidate_id"])
+        path = f"/api/memories/owner/{previous['memory_id']}/correct"
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(lambda text: self.request(path, {"text": text}),
+                                        ("本人合成并发修正甲。", "本人合成并发修正乙。")))
+        self.assertEqual(sorted(status for status, _ in results), [200, 500])
+        current = self.get("/api/memories/owner")["memories"]
+        versions = [item for item in current if item["supersedes_memory_id"] == previous["memory_id"]]
+        self.assertEqual(len(versions), 1)
+        self.assertEqual(versions[0], next(body["memory"] for status, body in results if status == 200))
+        self.assertNotIn(previous["memory_id"], {item["memory_id"] for item in current})
+
+    def test_owner_correction_rechecks_inactive_direct_source_before_writing(self) -> None:
+        previous = next(item for item in self.get("/api/memories/owner")["memories"]
+                        if item["source_candidate_id"] == self.data["owner_candidate_id"])
+        with self.owned_database_connection() as connection:
+            connection.execute("UPDATE public.source_document SET status = 'deleting' WHERE id = %s",
+                               (self.data["source_document_id"],))
+        before = self.get("/api/memories/owner")
+        self.assertEqual(self.request(f"/api/memories/owner/{previous['memory_id']}/correct",
+                                      {"text": "来源删除过程中不得新增版本。"}),
+                         (500, {"error": "memory_operation_failed"}))
+        self.assertEqual(self.get("/api/memories/owner"), before)
+
+    def test_repeated_migration_and_read_only_pending_diagnostic(self) -> None:
+        from notalone.startup_diagnostics import database_readiness
+        directory = ROOT / "backend/database/migrations"
+        before = self.get("/api/memories/owner")
+        migrated = subprocess.run([sys.executable, "-m", "notalone.database_migrations", "--migrations", str(directory)],
+                                  cwd=ROOT, env=dict(os.environ), capture_output=True, timeout=60)
+        self.assertEqual(migrated.returncode, 0)
+        self.assertEqual(database_readiness(self.data["database_url"], directory), "ready")
+        with self.owned_database_connection() as connection:
+            connection.execute("DELETE FROM public.notalone_schema_migration WHERE name = '037_owner_memory_versioning.sql'")
+        self.assertEqual(database_readiness(self.data["database_url"], directory), "migration_pending")
+        self.assertEqual(database_readiness(self.data["database_url"], directory), "migration_pending")
+        self.assertEqual(self.get("/api/memories/owner"), before)
 
     def test_failed_owner_version_insert_rolls_back_and_can_be_corrected_again(self) -> None:
         before = self.get("/api/memories/owner")["memories"]
