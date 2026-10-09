@@ -94,3 +94,40 @@ export async function memoryContactCorrection(manager: Page, fixture: MemoryFixt
   expect(await fixture.readMemorySection(fixture.data.contact_ids[1], 'contact')).toEqual(other);
   expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'owner')).toEqual(own);
 }
+
+export async function memoryRemoval(manager: Page, fixture: MemoryFixture) {
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
+  const owner = manager.getByRole('region', { name: '本人记忆', exact: true });
+  await expect(contact.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
+  const before = await fixture.readMemorySection(fixture.data.contact_ids[0], 'contact');
+  const ownBefore = await fixture.readMemorySection(fixture.data.contact_ids[0], 'owner');
+  const sources = await fixture.readMemorySection(fixture.data.contact_ids[0], 'sources');
+  const pending = await fixture.readMemorySection(fixture.data.contact_ids[0], 'pending');
+  const other = await fixture.readMemorySection(fixture.data.contact_ids[1], 'contact');
+  const automatic = contact.getByRole('article').filter({ has: manager.getByText('甲喜欢合成茉莉茶。', { exact: true }) });
+  await automatic.getByRole('button', { name: '撤销自动采纳：甲喜欢合成茉莉茶。', exact: true }).click();
+  await expect(automatic.getByText('撤销等同删除这条资料，不删除来源消息，也不提供恢复承诺。', { exact: true })).toBeVisible();
+  await automatic.getByRole('button', { name: '确认撤销', exact: true }).click();
+  await expect(contact.getByText('甲喜欢合成茉莉茶。', { exact: true })).toHaveCount(0);
+  const manual = contact.getByRole('article').filter({ has: manager.getByText('甲的新版本关系备注。', { exact: true }) });
+  await manual.getByRole('button', { name: '删除资料：甲的新版本关系备注。', exact: true }).click();
+  await manual.getByRole('button', { name: '确认删除', exact: true }).click();
+  await expect(contact.getByText('这位联系人暂无当前有效记忆。', { exact: true })).toBeVisible();
+  const ownManual = owner.getByRole('article').filter({ has: manager.getByText('本人喜欢合成绿茶。', { exact: true }) });
+  await ownManual.getByRole('button', { name: '删除资料：本人喜欢合成绿茶。', exact: true }).click();
+  await ownManual.getByRole('button', { name: '确认删除', exact: true }).click();
+  await expect(owner.getByText('本人喜欢合成绿茶。', { exact: true })).toHaveCount(0);
+  await expect(owner.getByText('本人手动录入的合成资料。', { exact: true })).toBeVisible();
+  const actual = await fixture.readMemorySection(fixture.data.contact_ids[0], 'contact');
+  const actualOwn = await fixture.readMemorySection(fixture.data.contact_ids[0], 'owner');
+  expect(actual.status).toBe(200);
+  expect(actual.data.memories).toEqual([]);
+  const deleted = (ownBefore.data.memories as Array<Record<string, unknown>>).find((item) => item.text === '本人喜欢合成绿茶。')!;
+  expect((actualOwn.data.memories as Array<Record<string, unknown>>).some((item) => item.memory_id === deleted.memory_id)).toBe(false);
+  expect(before.data.memories).toHaveLength(2);
+  expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'sources')).toEqual(sources);
+  expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'pending')).toEqual(pending);
+  expect(await fixture.readMemorySection(fixture.data.contact_ids[1], 'contact')).toEqual(other);
+}
