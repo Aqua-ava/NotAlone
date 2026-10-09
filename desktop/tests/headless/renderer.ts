@@ -4,6 +4,7 @@ import { createContactSessionBridge } from '../../src/preload/contact-session';
 import { createImportBridge } from '../../src/preload/imports';
 import { createMemoryBridge } from '../../src/preload/memory';
 import { createReplyBridge } from '../../src/preload/reply';
+import { createBindingConsentBridge } from '../../src/preload/binding-consent';
 import { createBackendBridge } from '../../src/preload/backend';
 import { createStartupBridge } from '../../src/preload/startup';
 import type { AppBridge } from '../../src/shared/app-bridge';
@@ -30,6 +31,6 @@ const bridge: AppBridge = {
   setup: { getState: unsupported, refresh: unsupported, initializeOwner: unsupported, saveDeepSeekKey: unsupported,
     retryRestart: unsupported, reloadControlledConfiguration: unsupported, onStateChanged: noEvents },
   imports: createImportBridge(transport),
-  bindings: { getState: unsupported, refresh: unsupported, confirmSelections: unsupported, revokeBinding: unsupported, onStateChanged: noEvents },
+  bindings: createBindingConsentBridge(transport),
 };
 window.notalone = Object.freeze(bridge);

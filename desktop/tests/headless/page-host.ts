@@ -10,6 +10,7 @@ import { ImportController, type ImportFileSelector } from '../../src/main/import
 import { installImportBridge } from '../../src/main/imports/bridge';
 import { installMemoryBridge } from '../../src/main/memory/bridge';
 import { installReplyBridge } from '../../src/main/reply/bridge';
+import { installBindingConsentBridge } from '../../src/main/bindings/bridge';
 import { noArguments, type PageCommands, type PageRole } from '../../src/main/page-commands';
 import { ownResource } from './cleanup';
 
@@ -48,6 +49,7 @@ export class PageHost implements PageCommands {
     this.diagnostics = new StartupDiagnostics(userData);
     this.backend = new BackendHost(userData, (config, canStart) => this.diagnostics.ensureReady(config, canStart));
     const contacts = installContactSessionBridge(this, this.backend);
+    installBindingConsentBridge(this, this.backend, contacts);
     const imports = new ImportController(this.backend, contacts);
     installImportBridge(this, imports);
     this.handle('imports:choose-file', (...args: unknown[]) => {
