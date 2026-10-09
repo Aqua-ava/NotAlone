@@ -6,7 +6,7 @@ import { withPausedForegroundFixture, withManualForegroundFixture } from '../for
 import type { BindingFixture } from '../binding-backend-fixture';
 import { foregroundObservationPaused, foregroundPausedWithManualDraft, foregroundManualConfirmation } from '../foreground-page-scenarios';
 
-async function withForegroundPages(browser: Browser, origin: string, fixture: BindingFixture,
+export async function withForegroundPages(browser: Browser, origin: string, fixture: BindingFixture,
   use: (manager: Page, openHelper: () => Promise<Page>) => Promise<void>): Promise<void> {
   await withControllerEnvironment(fixture, async (userData) => {
     const host = new PageHost(await browser.newContext(), origin, userData);
@@ -41,7 +41,7 @@ export async function foregroundPaused(browser: Browser, origin: string): Promis
   process.stdout.write(`page_test_scenario_passed: ${name}\n`);
 }
 
-// 下一单条public red准备；仅公共HTTP/页面与系统probe输入，不实现确认或门禁。
+// 公开人工确认场景：仅公共HTTP、页面和合成probe，验证本次helper确认门禁。
 export async function foregroundManual(browser: Browser, origin: string): Promise<void> {
   const name = '缺少定位质量时保留草稿且需本次helper确认才能生成';
   process.stdout.write(`page_test_scenario: ${name}\n`);
