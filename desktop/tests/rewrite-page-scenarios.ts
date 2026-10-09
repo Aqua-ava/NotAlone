@@ -182,3 +182,21 @@ export async function rewriteSecurity({ manager, helper, rewriteBackend, replyTr
   expect((await rewriteBackend.command('observations')).payloads).toEqual([]);
   await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('本次合成草稿。');
 }
+
+// 只共用公开页面准备与结果断言；App/无头入口各自负责停读和重启生命周期。
+export async function prepareTransientRewrite(helper: Page, rewriteBackend: RewriteFixture, includeRelationshipContext = false) {
+  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('退出后不恢复的草稿。');
+  await helper.getByRole('combobox', { name: '本次语气', exact: true }).selectOption('polite');
+  await helper.getByRole('textbox', { name: '本次要求', exact: true }).fill('本次临时要求');
+  if (includeRelationshipContext) await helper.getByRole('checkbox', { name: '结合关系语境', exact: true }).check();
+  await rewriteBackend.plan({ count: 1 });
+  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).fill('退出后不恢复的编辑。');
+}
+export async function assertTransientRewriteCleared(helper: Page) {
+  await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
+  await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
+  await expect(helper.getByRole('textbox', { name: '本次要求', exact: true })).toHaveValue('');
+  await expect(helper.getByRole('combobox', { name: '本次语气', exact: true })).toHaveValue('original');
+  await expect(helper.getByRole('checkbox', { name: '结合关系语境', exact: true })).not.toBeChecked();
+}

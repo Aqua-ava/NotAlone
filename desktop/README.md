@@ -44,10 +44,11 @@ npm run package
 ```bash
 npm run test:pages -- --case memory-reading --case draft-rewrite --timeout-seconds 120
 npm run test:pages -- --case draft-rewrite-acceptance --timeout-seconds 180
+npm run test:pages -- --case draft-rewrite-session --timeout-seconds 120
 npm run test:pages -- --status  # 只读租约，不启动浏览器或 Electron
 ```
 
-时限为 1–300 秒，包含构建；没有默认全量。`memory-reading` 验证实际资料/采纳方式/来源引用/切换/空状态及具名参数与角色限制；`draft-rewrite` 验证真实模型替代边界下的生成、候选编辑与原快照、选择和跨联系人迟到结果。`draft-rewrite-acceptance` 串行验证任务 09 的九个具名普通页面场景，每场景新建随机库和页面上下文；包括关系语境、真实 1–3 候选、等待/风险/编辑、幂等、失败与空候选、联系人及连接迟到成功/失败、同 userData 新生产会话清空及具名参数/角色/来源限制。六类交互与原 App 用例共用公开页面场景，原生隐藏/恢复及真正 App 重启仍保留实际 App 验收。页面组复用生产 React、联系人/资料/回复 handler、参数校验、preload 传输接口及真实 HTTP/PostgreSQL；生产 Electron adapter 仍使用原 `validateCaller` 与角色检查。headless 的角色由 host 登记的 page 对象确定，不接受 renderer 自报；具名函数只接收已注册操作，renderer 不持有后端 token、数据库地址或任意 HTTP/系统调用。回环资源 host 与浏览器控制端仅用于测试，不进入交付 App。
+时限为 1–300 秒，包含构建；没有默认全量。`memory-reading` 验证实际资料/采纳方式/来源引用/切换/空状态及具名参数与角色限制；`draft-rewrite` 验证真实模型替代边界下的生成、候选编辑与原快照、选择和跨联系人迟到结果。`draft-rewrite-acceptance` 串行验证任务 09 的九个具名普通页面场景，每场景新建随机库和页面上下文；包括关系语境、真实 1–3 候选、等待/风险/编辑、幂等、失败与空候选、联系人及连接迟到成功/失败、同 userData 新生产会话清空及具名参数/角色/来源限制。六类交互与原 App 用例共用公开页面场景；新会话的输入准备/清空断言也与原生重启用例共享，各自保留停读、PageHost 或原生生命周期。`draft-rewrite-session` 固定只运行完整组中的同一个新会话场景，供相关小修复核使用；不能把单场景结果扩张为全部九项重跑。原生隐藏/恢复及真正 App 重启仍保留实际 App 验收。页面组复用生产 React、联系人/资料/回复 handler、参数校验、preload 传输接口及真实 HTTP/PostgreSQL；生产 Electron adapter 仍使用原 `validateCaller` 与角色检查。headless 的角色由 host 登记的 page 对象确定，不接受 renderer 自报；具名函数只接收已注册操作，renderer 不持有后端 token、数据库地址或任意 HTTP/系统调用。回环资源 host 与浏览器控制端仅用于测试，不进入交付 App。
 
 每例创建自己的随机 `_test` 库、合成联系人/本人、配置、握手和 context，仅外部模型及必要传输迟到被替代。窗口切换在测试中创建对应角色的页面，原生隐藏/置顶/快捷键/剪贴板与未接通业务入口明确拒绝，不返回假成功。未改正常 App 的 show/focus。原生窗口、真实 IPC 来源、系统对话框、签名 App、微信权限和完整 App 验收仍待实机，两个最小页面组不能替代功能票全部条件。
 

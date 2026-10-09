@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { chromium, type BrowserServer, type Browser } from '@playwright/test';
 import { servePageAssets } from './page-host';
 import { memoryReading, draftRewrite } from './cases';
-import { draftRewriteAcceptance } from './rewrite-acceptance';
+import { draftRewriteAcceptance, draftRewriteSession } from './rewrite-acceptance';
 import { pendingCleanup } from './cleanup';
 
 const execute = promisify(execFile);
@@ -12,7 +12,7 @@ if (!process.send || !/^[a-f0-9]{64}$/.test(process.env.NOTALONE_PAGE_RUN_NONCE 
   throw new Error('page_test_unapproved: 只能由 test:pages 的自有子进程执行。');
 }
 const cases = JSON.parse(process.env.NOTALONE_PAGE_CASES ?? 'null') as string[];
-if (!Array.isArray(cases) || !cases.length || cases.length > 2 || !cases.every((name) => ['memory-reading', 'draft-rewrite', 'draft-rewrite-acceptance'].includes(name))) {
+if (!Array.isArray(cases) || !cases.length || cases.length > 2 || !cases.every((name) => ['memory-reading', 'draft-rewrite', 'draft-rewrite-acceptance', 'draft-rewrite-session'].includes(name))) {
   throw new Error('page_test_arguments: 页面范围不可核验。');
 }
 let browser: Browser | undefined;
@@ -76,7 +76,7 @@ try {
   for (const name of cases) {
     if (failed) throw new Error('page_test_interrupted: 本轮已停止。');
     process.stdout.write(`page_test_case: ${name}\n`);
-    await (name === 'memory-reading' ? memoryReading : name === 'draft-rewrite-acceptance' ? draftRewriteAcceptance : draftRewrite)(browser, assets.origin);
+    await (name === 'memory-reading' ? memoryReading : name === 'draft-rewrite-acceptance' ? draftRewriteAcceptance : name === 'draft-rewrite-session' ? draftRewriteSession : draftRewrite)(browser, assets.origin);
     completed.push(name);
     process.stdout.write(`page_test_passed: ${name}\n`);
   }

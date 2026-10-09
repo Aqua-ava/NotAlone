@@ -3,7 +3,7 @@ import { PageHost } from './page-host';
 import { withControllerEnvironment, withRewriteBackend } from './backend-fixture';
 import { RewriteHttpProxy } from '../rewrite-http-proxy';
 import { defaultRewrite, relationshipScope, unboundRejection, idempotentRewrite, rewriteFailures, rewriteSecurity,
-  type RewritePages } from '../rewrite-page-scenarios';
+  prepareTransientRewrite, assertTransientRewriteCleared, type RewritePages } from '../rewrite-page-scenarios';
 
 // 每个具名场景有独立随机库和浏览器上下文，组内串行复用一个已租约的 Chrome。
 async function withPages(browser: Browser, origin: string, use: (pages: RewritePages, host: PageHost, userData: string) => Promise<void>) {
@@ -85,13 +85,7 @@ async function staleConnection(pages: RewritePages) {
 async function newSession(pages: RewritePages, host: PageHost, userData: string, browser: Browser, origin: string) {
   const { manager, helper, rewriteBackend } = pages;
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
-  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('退出后不恢复的草稿。');
-  await helper.getByRole('combobox', { name: '本次语气', exact: true }).selectOption('polite');
-  await helper.getByRole('textbox', { name: '本次要求', exact: true }).fill('本次临时要求');
-  await helper.getByRole('checkbox', { name: '结合关系语境', exact: true }).check();
-  await rewriteBackend.plan({ count: 1 });
-  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
-  await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).fill('退出后不恢复的编辑。');
+  await prepareTransientRewrite(helper, rewriteBackend, true);
   await host.close();
   await rewriteBackend.command('restart');
   const restarted = new PageHost(await browser.newContext(), origin, userData);
@@ -101,11 +95,7 @@ async function newSession(pages: RewritePages, host: PageHost, userData: string,
     await expect(nextManager.getByText('本次联系人：未确认', { exact: true })).toBeVisible();
     await nextManager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     const nextHelper = await restarted.open('helper');
-    await expect(nextHelper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
-    await expect(nextHelper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
-    await expect(nextHelper.getByRole('textbox', { name: '本次要求', exact: true })).toHaveValue('');
-    await expect(nextHelper.getByRole('combobox', { name: '本次语气', exact: true })).toHaveValue('original');
-    await expect(nextHelper.getByRole('checkbox', { name: '结合关系语境', exact: true })).not.toBeChecked();
+    await assertTransientRewriteCleared(nextHelper);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
   } finally { await restarted.close(); }
 }
@@ -135,4 +125,11 @@ export async function draftRewriteAcceptance(browser: Browser, origin: string) {
     await withPages(browser, origin, scenario);
     process.stdout.write(`page_test_scenario_passed: ${name}\n`);
   }
+}
+
+export async function draftRewriteSession(browser: Browser, origin: string) {
+  const name = '新生产会话同 userData 不恢复临时输入';
+  process.stdout.write(`page_test_scenario: ${name}\n`);
+  await withPages(browser, origin, (pages, host, userData) => newSession(pages, host, userData, browser, origin));
+  process.stdout.write(`page_test_scenario_passed: ${name}\n`);
 }
