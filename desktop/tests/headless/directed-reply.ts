@@ -1,3 +1,4 @@
+import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { expect, type Browser } from '@playwright/test';
 import { withRewritePages } from './rewrite-acceptance';
 import type { RewritePages } from '../rewrite-page-scenarios';
@@ -5,6 +6,7 @@ import { PageHost } from './page-host';
 
 async function confirmedTarget({ manager, helper, replyTransport, rewriteBackend }: RewritePages) {
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await helper.getByRole('button', { name: '回复', exact: true }).click({ timeout: 3000 });
     await expect(helper.getByRole('textbox', { name: '表达方向', exact: true })).toHaveValue('');
     await expect(helper.getByRole('radio', { name: /甲的私密合成历史/ })).not.toBeChecked();
@@ -42,6 +44,7 @@ async function confirmedTarget({ manager, helper, replyTransport, rewriteBackend
 async function messagePages({ manager, helper, replyTransport, rewriteBackend }: RewritePages) {
   await rewriteBackend.command('older_messages');
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('button', { name: '回复', exact: true }).click();
   const targets = helper.getByRole('group', { name: '待回复消息', exact: true });
   await expect(targets.getByRole('radio')).toHaveCount(20);
@@ -72,6 +75,7 @@ async function messagePages({ manager, helper, replyTransport, rewriteBackend }:
 
 async function unavailableTarget({ manager, helper, replyTransport, rewriteBackend }: RewritePages) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('button', { name: '回复', exact: true }).click();
   await helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
   await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('说明现在的安排。');
@@ -95,6 +99,7 @@ async function unavailableTarget({ manager, helper, replyTransport, rewriteBacke
 async function inputIdentity({ manager, helper, replyTransport, rewriteBackend }: RewritePages) {
   await rewriteBackend.command('older_messages');
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('button', { name: '回复', exact: true }).click();
   await helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
   await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('第一版明确方向。');
@@ -158,6 +163,7 @@ async function emptyAndRejected({ manager, helper, replyTransport, rewriteBacken
   await expect(helper.getByRole('button', { name: '生成候选', exact: true })).toBeDisabled();
   expect(replyTransport.requests).toEqual([]);
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   replyTransport.failMessages = true;
   await helper.getByRole('button', { name: '回复', exact: true }).click();
   await expect(helper.getByRole('alert')).toContainText('消息读取失败');
@@ -179,6 +185,7 @@ async function emptyAndRejected({ manager, helper, replyTransport, rewriteBacken
 
 async function prepareReply(pages: RewritePages, contact: '甲' | '乙', direction: string) {
   await pages.manager.getByRole('button', { name: `选择合成联系人${contact}`, exact: true }).click();
+  await confirmHelperContact(pages.helper, pages.rewriteBackend.data.contact_ids[contact === '甲' ? 0 : 1]);
   await pages.helper.getByRole('button', { name: '回复', exact: true }).click();
   await pages.helper.getByRole('radio', { name: new RegExp(`${contact}的私密合成历史`) }).click();
   await pages.helper.getByRole('textbox', { name: '表达方向', exact: true }).fill(direction);

@@ -1,3 +1,4 @@
+import { confirmHelperContact } from './foreground-confirmation-actions';
 import { expect } from '@playwright/test';
 import { selectMenu } from './app-fixture';
 import { test } from './rewrite-transport-fixture';
@@ -8,6 +9,7 @@ test('同联系人隐藏恢复保留编辑，迟到成功和失败都不能串�
   const opened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
   const helper = await opened;
+  await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
   await rewriteBackend.plan();
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
@@ -29,6 +31,7 @@ test('同联系人隐藏恢复保留编辑，迟到成功和失败都不能串�
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
     await expect(helper.getByRole('alert')).toHaveCount(0);
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
     await rewriteBackend.plan();
     await helper.getByRole('button', { name: '生成候选', exact: true }).click();
@@ -42,6 +45,7 @@ test('换连接废弃迟到结果，并清除当次草稿、候选和编辑', as
   const opened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
   const helper = await opened;
+  await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
   await rewriteBackend.plan();
   replyTransport.nextReply = 'hold';

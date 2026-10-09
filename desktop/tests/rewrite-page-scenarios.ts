@@ -1,3 +1,4 @@
+import { confirmHelperContact } from './foreground-confirmation-actions';
 import { expect, type Page } from '@playwright/test';
 import type { RewriteFixture } from './rewrite-backend-fixture';
 import type { RewriteHttpProxy } from './rewrite-http-proxy';
@@ -14,6 +15,7 @@ export interface RewritePages {
 export async function defaultRewrite({ manager, helper, rewriteBackend, screenshotPath }: RewritePages) {
   await expect(helper.getByRole('button', { name: '生成候选', exact: true })).toBeDisabled();
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await expect(helper.getByRole('checkbox', { name: '结合关系语境', exact: true })).not.toBeChecked();
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
   await rewriteBackend.plan({ count: 2, risk_notes: ['请核实本次承诺。'] });
@@ -45,6 +47,7 @@ export async function defaultRewrite({ manager, helper, rewriteBackend, screensh
 
 export async function relationshipScope({ manager, helper, rewriteBackend, replyTransport }: RewritePages) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
   await helper.getByRole('checkbox', { name: '结合关系语境', exact: true }).check();
   await helper.getByRole('textbox', { name: '本次要求', exact: true }).fill('自然一点');
@@ -78,6 +81,7 @@ export async function unboundRejection({ manager, helper, rewriteBackend, replyT
   await rewriteBackend.command('revoke', { contact_id: rewriteBackend.data.contact_ids[0] });
   await expect(manager.getByRole('button', { name: '选择另一用户的联系人', exact: true })).toHaveCount(0);
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
   await expect(helper.getByRole('alert')).toContainText('确认联系人及有效会话绑定');
@@ -88,6 +92,7 @@ export async function unboundRejection({ manager, helper, rewriteBackend, replyT
 
 export async function idempotentRewrite({ manager, helper, rewriteBackend, replyTransport }: RewritePages) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
   await rewriteBackend.plan({ count: 1 });
   replyTransport.nextReply = 'drop';
@@ -127,6 +132,7 @@ export async function idempotentRewrite({ manager, helper, rewriteBackend, reply
 
 export async function rewriteFailures({ manager, helper, rewriteBackend, replyTransport }: RewritePages) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
   await rewriteBackend.plan({ count: 1 });
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
@@ -185,6 +191,7 @@ export async function rewriteSecurity({ manager, helper, rewriteBackend, replyTr
 
 // 只共用公开页面准备与结果断言；App/无头入口各自负责停读和重启生命周期。
 export async function prepareTransientRewrite(helper: Page, rewriteBackend: RewriteFixture, includeRelationshipContext = false) {
+  await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('退出后不恢复的草稿。');
   await helper.getByRole('combobox', { name: '本次语气', exact: true }).selectOption('polite');
   await helper.getByRole('textbox', { name: '本次要求', exact: true }).fill('本次临时要求');

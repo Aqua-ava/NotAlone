@@ -1,3 +1,4 @@
+import { confirmHelperContact } from './foreground-confirmation-actions';
 import { expect, type Page } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -128,6 +129,7 @@ export async function failedImportRecovery(pages: ImportPages): Promise<void> {
 export async function priorityImport(pages: ImportPages): Promise<void> {
   const { manager, helper, importBackend } = pages;
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper, importBackend.data.contact_ids[0]);
   const prepared = await importBackend.command('prepare-priority-import');
   await importBackend.command('hold-reply');
   await confirm(pages, prepared.file_path as string);

@@ -1,3 +1,4 @@
+import { confirmHelperContact } from '../foreground-confirmation-actions';
 import type { CandidateCopySurface } from '../../src/main/candidate-copy/controller';
 import { expect, type Browser } from '@playwright/test';
 import { PageHost } from './page-host';
@@ -36,6 +37,7 @@ async function staleContact(pages: RewritePages) {
   const { manager, helper, rewriteBackend, replyTransport } = pages;
   for (const fault of [undefined, 'timeout'] as const) {
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('甲的旧草稿。');
     await rewriteBackend.plan({ count: 1, fault, prefix: '旧联系人迟到结果' });
     replyTransport.nextReply = 'hold';
@@ -58,6 +60,7 @@ async function staleConnection(pages: RewritePages) {
   const { manager, helper, rewriteBackend, replyTransport } = pages;
   for (const fault of [undefined, 'failure'] as const) {
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
     await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('旧连接甲的草稿。');
     await helper.getByRole('combobox', { name: '本次语气', exact: true }).selectOption('polite');
     await helper.getByRole('textbox', { name: '本次要求', exact: true }).fill('旧连接的要求');
