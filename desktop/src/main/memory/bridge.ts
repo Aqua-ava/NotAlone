@@ -1,5 +1,5 @@
 import { noArguments, type PageCommands } from '../page-commands';
-import type { MemoryAdditionRequest, MemoryCorrectionRequest, MemoryReadRequest, MemorySectionName } from '../../shared/memory-bridge';
+import type { MemoryAdditionRequest, MemoryCorrectionRequest, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { isUuid } from '../uuid';
@@ -34,6 +34,7 @@ export function installMemoryBridge(commands: PageCommands, backend: BackendHost
     return memory.refresh(requestArguments(args));
   });
   commands.handle('memory:add', (...args: unknown[]) => memory.add(additionArguments(args)), 'manager');
+  commands.handle('memory:remove', (...args: unknown[]) => memory.remove(removalArguments(args)), 'manager');
   commands.handle('memory:correct', (...args: unknown[]) => memory.correct(correctionArguments(args)), 'manager');
   return memory;
 }
@@ -69,4 +70,18 @@ function additionArguments(args: unknown[]): MemoryAdditionRequest {
   }
   return { contactId: fields.contactId.toLowerCase(), scopeRevision: fields.scopeRevision,
     level: fields.level as MemoryAdditionRequest['level'], text: fields.text, category: fields.category as MemoryAdditionRequest['category'] };
+}
+
+function removalArguments(args: unknown[]): MemoryRemovalRequest {
+  const value = args[0];
+  if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)) throw new Error('资料删除不可用。');
+  const fields = value as Record<string, unknown>;
+  if (Object.keys(fields).length !== 5 || !Object.keys(fields).every((key) =>
+    ['contactId', 'scopeRevision', 'level', 'memoryId', 'revision'].includes(key))
+    || !isUuid(fields.contactId) || !isUuid(fields.memoryId) || typeof fields.scopeRevision !== 'number'
+    || !Number.isSafeInteger(fields.scopeRevision) || fields.scopeRevision < 0
+    || !['owner', 'contact'].includes(fields.level as string) || typeof fields.revision !== 'number'
+    || !Number.isSafeInteger(fields.revision) || fields.revision < 1) throw new Error('资料删除不可用。');
+  return { contactId: fields.contactId.toLowerCase(), scopeRevision: fields.scopeRevision,
+    level: fields.level as MemoryRemovalRequest['level'], memoryId: fields.memoryId.toLowerCase(), revision: fields.revision };
 }

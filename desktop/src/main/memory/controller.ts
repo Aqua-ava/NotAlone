@@ -1,4 +1,4 @@
-import type { MemoryAdditionRequest, MemoryCorrectionRequest, MemoryReadingState, MemoryReadRequest, MemorySectionName } from '../../shared/memory-bridge';
+import type { MemoryAdditionRequest, MemoryCorrectionRequest, MemoryReadingState, MemoryReadRequest, MemoryRemovalRequest, MemorySectionName } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { activeMemories, memorySources, pendingCandidates } from './read';
@@ -69,10 +69,21 @@ export class MemoryReadingController {
     await this.writeAndRefresh(scope, `/api/memories/manual-${request.level}`, body,
       request.level === 'contact' ? ['contact', 'sources'] : ['owner']);
   }
+  async remove(request: MemoryRemovalRequest): Promise<void> {
+    this.synchronizeScope();
+    const scope = this.scope;
+    const previous = this.state[request.level].items.find((item) => item.memoryId === request.memoryId);
+    if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision
+      || this.state[request.level].phase !== 'ready' || !previous || previous.revision !== request.revision
+      || this.mutation) throw new Error('资料范围或版本已失效，请刷新后再删除。');
+    const path = request.level === 'owner' ? `/api/memories/owner/${request.memoryId}/delete`
+      : `/api/contacts/${scope.contactId}/memories/${request.memoryId}/delete`;
+    await this.writeAndRefresh(scope, path, {}, [request.level]);
+  }
   private async writeAndRefresh(scope: Scope, path: string, body: unknown, sections: MemorySectionName[]): Promise<void> {
     const operation = { revision: ++this.operationRevision, abort: new AbortController() };
     this.mutation = operation;
-    this.publish({ mutation: { phase: 'working', message: '正在保存并核对资料…' } });
+    this.publish({ mutation: { phase: 'working', message: '正在处理并核对资料…' } });
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.mutation === operation; };
     try {
       const result = await this.backend.requestJson({ method: 'POST', path, body, signal: operation.abort.signal });
@@ -80,7 +91,7 @@ export class MemoryReadingController {
       const refreshed = await Promise.all(sections.map((section) => this.readSection(section, scope)));
       if (!current()) return;
       if (!refreshed.every(Boolean)) throw new Error('资料已提交，但当前列表核对失败，请刷新确认结果。');
-      this.publish({ mutation: { phase: 'success', message: '资料已保存并重新核对。' } });
+      this.publish({ mutation: { phase: 'success', message: '资料操作已完成并重新核对。' } });
     } catch {
       if (current()) this.publish({ mutation: { phase: 'error', message: '未能完成资料操作与核对，请刷新确认后重试。' } });
     } finally { if (this.mutation === operation) this.mutation = undefined; }

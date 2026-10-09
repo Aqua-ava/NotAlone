@@ -58,6 +58,9 @@ export interface MemoryReadRequest extends ContactSelection { section?: MemorySe
 export interface MemoryAdditionRequest extends ContactSelection {
   level: 'owner' | 'contact'; text: string; category: MemoryCategory;
 }
+export interface MemoryRemovalRequest extends ContactSelection {
+  level: 'owner' | 'contact'; memoryId: string; revision: number;
+}
 export interface MemoryCorrectionRequest extends ContactSelection {
   level: 'owner' | 'contact'; memoryId: string; revision: number; text: string; category: MemoryCategory;
 }
@@ -65,6 +68,7 @@ export interface MemoryBridge {
   getState(): Promise<MemoryReadingState>;
   refresh(request: MemoryReadRequest): Promise<void>;
   add(request: MemoryAdditionRequest): Promise<void>;
+  remove(request: MemoryRemovalRequest): Promise<void>;
   correct(request: MemoryCorrectionRequest): Promise<void>;
   onStateChanged(listener: (state: MemoryReadingState) => void): () => void;
 }
