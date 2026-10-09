@@ -1,4 +1,20 @@
-import type { ForegroundState } from '../shared/foreground-bridge';
+import { useEffect, useState } from 'react';
+import { initialForegroundState, type ForegroundBridge, type ForegroundState } from '../shared/foreground-bridge';
+
+export function useForegroundState(bridge: ForegroundBridge, enabled: boolean): ForegroundState {
+  const [state, setState] = useState<ForegroundState>(initialForegroundState);
+  useEffect(() => {
+    if (!enabled) return;
+    let active = true;
+    const receive = (next: ForegroundState) => {
+      if (active) setState((previous) => next.revision >= previous.revision ? next : previous);
+    };
+    const unsubscribe = bridge.onStateChanged(receive);
+    void bridge.getState().then(receive).catch(() => {});
+    return () => { active = false; unsubscribe(); };
+  }, [bridge, enabled]);
+  return state;
+}
 
 export function ForegroundPanel({ state }: { state: ForegroundState }) {
   const paused = state.phase === 'paused' || state.suspendedByHelperFocus;

@@ -9,6 +9,10 @@ export interface ForegroundState {
   wechatInFront: boolean | null;
   suspendedByHelperFocus: boolean;
 }
+export const initialForegroundState: ForegroundState = Object.freeze({
+  revision: 0, foregroundRevision: 0, phase: 'idle', reason: null,
+  observedAt: null, probeAvailable: null, wechatInFront: null, suspendedByHelperFocus: false,
+});
 export interface ForegroundBridge {
   getState(): Promise<ForegroundState>;
   onStateChanged(listener: (state: ForegroundState) => void): () => void;

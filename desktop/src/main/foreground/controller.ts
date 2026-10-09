@@ -1,14 +1,13 @@
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
-import type { ForegroundState } from '../../shared/foreground-bridge';
+import { initialForegroundState, type ForegroundState } from '../../shared/foreground-bridge';
 import { foregroundObservation } from './observation';
 
 type Flight = { abort: AbortController; promise: Promise<void> };
 
 // 新观察只在可信show之前触发；页面不能声明焦点或调用任意定位请求。
 export class ForegroundController {
-  private state: ForegroundState = { revision: 0, foregroundRevision: 0, phase: 'idle', reason: null,
-    observedAt: null, probeAvailable: null, wechatInFront: null, suspendedByHelperFocus: false };
+  private state: ForegroundState = { ...initialForegroundState };
   private epoch = 0;
   private disposed = false;
   private flight: Flight | undefined;
