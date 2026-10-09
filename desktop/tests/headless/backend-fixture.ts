@@ -1,20 +1,21 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { ContactFixture, type ContactDatabase } from '../contact-backend-fixture';
+import { ContactFixture } from '../contact-backend-fixture';
+import { MemoryFixture, type MemoryDatabase } from '../memory-backend-fixture';
 import { withRewriteFixture, type RewriteFixture } from '../rewrite-backend-fixture';
 import { withSyntheticBackendFixture } from '../synthetic-backend-fixture';
 import { isolatedAppEnvironment } from '../isolated-environment';
 import { ownResource } from './cleanup';
 
 const project = path.resolve('..');
-export type MemoryData = ContactDatabase & { empty_contact_id: string; direct_message_id: string; source_document_id: string };
-export async function withMemoryBackend(use: (fixture: ContactFixture & { data: MemoryData }) => Promise<void>) {
+export type MemoryData = MemoryDatabase;
+export async function withMemoryBackend(use: (fixture: MemoryFixture) => Promise<void>, emptyOwnerMemory = false) {
   const released = ownResource();
   let failure: unknown;
-  await withSyntheticBackendFixture<MemoryData, ContactFixture & { data: MemoryData }>({
+  await withSyntheticBackendFixture<MemoryData, MemoryFixture>({
     directoryPrefix: 'notalone-headless-memory-', databaseScript: path.resolve('tests/fixtures/memory-database.py'),
-    createArguments: [], prepareTimeoutMs: 70_000, reuseBackend: true,
-    createFixture: (directory, python, data) => new ContactFixture(directory, python, data) as ContactFixture & { data: MemoryData },
+    createArguments: emptyOwnerMemory ? ['empty-owner-memory'] : [], prepareTimeoutMs: 70_000, reuseBackend: true,
+    createFixture: (directory, python, data) => new MemoryFixture(directory, python, data),
   }, async (fixture) => { try { await use(fixture); } catch (error) { failure = error; } });
   released();
   if (failure) throw failure;

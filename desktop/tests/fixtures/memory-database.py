@@ -33,7 +33,7 @@ contact_database = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(contact_database)
 
 
-def create_database() -> dict[str, object]:
+def create_database(*, empty_owner_memory: bool = False) -> dict[str, object]:
     """复用本轮随机建库与正式迁移，不操作已有库。"""
     data = contact_database.create_database("ready")
     try:
@@ -87,8 +87,10 @@ def create_database() -> dict[str, object]:
         ):
             candidate(text, tuple(message_ids), subject=subject, confidence=0.5,
                       risk_flags=("pragmatic:planned",))
-        owner_candidate = candidate("本人喜欢合成绿茶。", (message_ids[0],), subject=FactSubject.SELF)
-        service.confirm_candidate(owner_id=owner_id, contact_id=a, candidate_id=owner_candidate.candidate_id)
+        owner_candidate = None
+        if not empty_owner_memory:
+            owner_candidate = candidate("本人喜欢合成绿茶。", (message_ids[0],), subject=FactSubject.SELF)
+            service.confirm_candidate(owner_id=owner_id, contact_id=a, candidate_id=owner_candidate.candidate_id)
 
         # 历史与未来状态只属于夹具条件；公开列表不得把它们显示为当前资料。
         for text, validity in (
@@ -107,10 +109,11 @@ def create_database() -> dict[str, object]:
                 category=MemoryCategory.PREFERENCE, source_ids=(selected_scope.contact_id,),
             ))
             store.confirm(scope=selected_scope, candidate_id=item.candidate_id, adoption_method=AdoptionMethod.MANUAL)
-        service.add_manual_owner_memory(
-            owner_id=owner_id,
-            entry=ManualMemoryEntry(text="本人手动录入的合成资料。", category=MemoryCategory.COMMON_FACT),
-        )
+        if not empty_owner_memory:
+            service.add_manual_owner_memory(
+                owner_id=owner_id,
+                entry=ManualMemoryEntry(text="本人手动录入的合成资料。", category=MemoryCategory.COMMON_FACT),
+            )
         service.add_manual_owner_memory(
             owner_id=other_scope.owner_id,
             entry=ManualMemoryEntry(text="另一用户的本人资料。", category=MemoryCategory.COMMON_FACT),
@@ -121,7 +124,7 @@ def create_database() -> dict[str, object]:
         return {**data, "empty_contact_id": str(empty_contact_id),
                 "direct_message_id": str(message_ids[0]), "source_document_id": str(source_id),
                 "supersedes_memory_id": str(old_memory.memory_id), "corrected_memory_id": str(corrected.memory_id),
-                "owner_candidate_id": str(owner_candidate.candidate_id)}
+                "owner_candidate_id": str(owner_candidate.candidate_id) if owner_candidate else None}
     except BaseException:
         contact_database.drop_database(data["database_name"])
         raise
@@ -222,7 +225,10 @@ if __name__ == "__main__":
     if not env_file.is_absolute() or not info_file.is_absolute() or env_file.name != "synthetic.env" or info_file.parent == Path.home() / ".notalone":
         raise RuntimeError("资料夹具须使用本轮独立 synthetic.env 与握手路径。")
     if sys.argv[1] == "create":
-        print(json.dumps(create_database()))
+        arguments = sys.argv[2:]
+        if arguments not in ([], ["empty-owner-memory"]):
+            raise ValueError("未知资料夹具模式。")
+        print(json.dumps(create_database(empty_owner_memory=bool(arguments))))
     elif sys.argv[1] == "drop":
         contact_database.drop_database(sys.argv[2])
     elif sys.argv[1] == "check-http":
