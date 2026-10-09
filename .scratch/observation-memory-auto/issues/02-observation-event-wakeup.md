@@ -1,6 +1,7 @@
 # 02 — 观察提交后自动唤醒记忆任务
 
-**State:** ready
+Triage: ready-for-agent
+State: claimed
 **Blocked by:** 01 — observation 任务的持久状态和 Worker 领取能力
 
 ## What to build
@@ -18,3 +19,10 @@
 ## Verification
 
 在真实观察存储、真实 PostgreSQL、真实 Worker 与 scripted fake model 上先红后绿；覆盖任务状态、消息水位、来源引用、候选/记忆结果和隔离，不读取真实微信或业务库。
+
+## Comments
+
+2026-10-09：从 `b4d9bb5` 继续 implement → TDD → 双轴评审；任务 01 已完成。
+沿用消息提交后的公开发布端口、TaskHost、真实观察存储和 HTTP 任务状态接缝。
+事件只作通知，数据库复验消息的观察来源与绑定后按观察批次去重调度；全局锁忙由
+既有 TaskHost 保留唤醒。验证仅用新建随机 `_test` 库及合成模型，不运行桌面或微信。

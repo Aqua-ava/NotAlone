@@ -99,7 +99,7 @@ def load_contact_messages(
             WHERE message.owner_id = %s
               AND message.contact_id = %s
               AND {valid_source_ref_exists_sql("message")}
-            ORDER BY message.occurred_at NULLS LAST, message.id
+            ORDER BY message.occurred_at NULLS LAST, message.created_at, message.id
             """,
             (scope.owner_id, scope.contact_id),
         ).fetchall()

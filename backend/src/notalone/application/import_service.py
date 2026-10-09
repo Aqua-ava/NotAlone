@@ -29,7 +29,7 @@ from notalone.application.model_priority import ModelPriorityControl, ModelWorkS
 from notalone.persistence.background_tasks import (
     BackgroundTaskNotFoundError, PostgresBackgroundTaskRepository,
 )
-from notalone.tasks.models import BackgroundTaskStatus
+from notalone.tasks.models import BackgroundTaskStatus, BackgroundTaskType
 
 
 class ImportRepository(IngestRepository, Protocol):
@@ -230,6 +230,26 @@ class TaskHost:
             self._launch(scope, task_id)
             return {"status": "started"}
 
+    def wake_observation(
+        self, *, owner_id: UUID, contact_id: UUID, message_id: UUID,
+    ) -> dict[str, object]:
+        """可靠观察提交后的通知不触发读取，只排队该来源所属联系人。"""
+
+        with self._lock:
+            if self._stopped.is_set() or (
+                self._model_priority is not None
+                and self._model_priority.stop_event.is_set()
+            ):
+                return {"status": "stopped"}
+            if self._task_repository is None:
+                raise RuntimeError("观察自动处理缺少持久任务状态仓储。")
+            task_id = self._task_repository.enqueue_observation_message(
+                owner_id=owner_id, contact_id=contact_id, message_id=message_id,
+            )
+            if task_id is None:
+                return {"status": "ignored"}
+            return self.wake(owner_id=owner_id, contact_id=contact_id, task_id=task_id)
+
     def _launch(self, scope: tuple[UUID, UUID], task_id: UUID | None) -> None:
         owner_id, contact_id = scope
         thread = threading.Thread(
@@ -343,10 +363,20 @@ class TaskHost:
             )
         except BackgroundTaskNotFoundError:
             return False
-        return task.status not in {
+        if task.task_type is BackgroundTaskType.OBSERVATION and task.status is BackgroundTaskStatus.FAILED:
+            return self._task_repository.retry_pending_observation(
+                owner_id=scope[0], contact_id=scope[1], task_id=task_id,
+            )
+        if task.status in {
             BackgroundTaskStatus.SUCCEEDED, BackgroundTaskStatus.FAILED,
             BackgroundTaskStatus.CANCELLED,
-        }
+        }:
+            return False
+        if task.task_type is BackgroundTaskType.OBSERVATION:
+            return self._task_repository.has_authorized_observation(
+                owner_id=scope[0], contact_id=scope[1],
+            )
+        return True
 
     def _execute(
         self,

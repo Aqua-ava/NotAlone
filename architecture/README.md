@@ -68,6 +68,7 @@
 39. [ADR-039：退役 Swift 主界面，重新设计共享前端](adr/039-retire-swift-main-interface.md)
 
 40. [ADR-040：Electron 双窗口桌面宿主](adr/040-electron-dual-window-host.md)
+41. [ADR-041：观察提交后唤醒联系人记忆任务](adr/041-observation-triggered-memory-work.md)
 
 ## 当前架构决策
 

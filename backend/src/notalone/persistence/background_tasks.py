@@ -235,6 +235,135 @@ class PostgresBackgroundTaskRepository:
         )
         return task_id
 
+    def enqueue_observation_message(
+        self, *, owner_id: UUID, contact_id: UUID, message_id: UUID,
+    ) -> UUID | None:
+        """事件仅作提示；以已提交的观察来源与绑定确定任务范围。"""
+
+        try:
+            with psycopg.connect(self._database_url, connect_timeout=2) as connection:
+                # 调度处在同步通知路径，锁等待不能占住宿主关闭协议。
+                connection.execute("SET LOCAL statement_timeout = '250ms'")
+                self._lock_scope(connection, owner_id, contact_id)
+                observation = connection.execute(
+                    """
+                    SELECT observation.id, observation.record_count,
+                           observation.memory_enqueued_at
+                    FROM public.local_wechat_observation AS observation
+                    JOIN public.message_source_ref AS ref
+                      ON ref.observation_id = observation.id
+                     AND ref.owner_id = observation.owner_id
+                     AND ref.contact_id = observation.contact_id
+                    JOIN public.conversation_binding AS binding
+                      ON binding.id = observation.binding_id
+                     AND binding.owner_id = observation.owner_id
+                     AND binding.contact_id = observation.contact_id
+                    WHERE observation.owner_id = %s AND observation.contact_id = %s
+                      AND ref.message_id = %s AND binding.status = 'active'
+                    ORDER BY observation.created_at DESC, observation.id
+                    LIMIT 1
+                    FOR SHARE OF observation, ref, binding
+                    """,
+                    (owner_id, contact_id, message_id),
+                ).fetchone()
+                if observation is None:
+                    return None
+                if observation[2] is not None:
+                    # 旧批次不重排终态；排队中的配置恢复或唤醒重试复用原任务。
+                    task = connection.execute(
+                        """
+                        SELECT id FROM public.background_task
+                        WHERE owner_id = %s AND contact_id = %s
+                          AND task_type = 'observation'
+                          AND status IN ('queued', 'running', 'verifying')
+                        """,
+                        (owner_id, contact_id),
+                    ).fetchone()
+                    return task[0] if task else None
+                task_id = self.create_observation_task(
+                    connection, owner_id=owner_id, contact_id=contact_id,
+                    message_count=observation[1],
+                )
+                connection.execute(
+                    "UPDATE public.local_wechat_observation SET memory_enqueued_at = now() WHERE id = %s",
+                    (observation[0],),
+                )
+                return task_id
+        except psycopg.Error:
+            raise BackgroundTaskPersistenceError("观察记忆任务排队失败。") from None
+
+    def has_authorized_observation(self, *, owner_id: UUID, contact_id: UUID) -> bool:
+        """等待全局锁期间，来源删除或解绑应终止当前唤醒。"""
+
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                return connection.execute(
+                    """
+                    SELECT 1 FROM public.local_wechat_observation AS observation
+                    JOIN public.conversation_binding AS binding
+                      ON binding.id = observation.binding_id
+                     AND binding.owner_id = observation.owner_id
+                     AND binding.contact_id = observation.contact_id
+                    WHERE observation.owner_id = %s AND observation.contact_id = %s
+                      AND binding.status = 'active'
+                      AND EXISTS (
+                          SELECT 1 FROM public.message_source_ref AS ref
+                          WHERE ref.observation_id = observation.id
+                            AND ref.owner_id = observation.owner_id
+                            AND ref.contact_id = observation.contact_id
+                      )
+                    LIMIT 1
+                    """,
+                    (owner_id, contact_id),
+                ).fetchone() is not None
+        except psycopg.Error:
+            raise BackgroundTaskPersistenceError("观察记忆任务来源检查失败。") from None
+
+    def retry_pending_observation(
+        self, *, owner_id: UUID, contact_id: UUID, task_id: UUID,
+    ) -> bool:
+        """本轮失败时，只消费运行中已登记的新批次，不重开无新资料的失败任务。"""
+
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                self._lock_scope(connection, owner_id, contact_id)
+                task = connection.execute(
+                    """
+                    SELECT task.message_count FROM public.background_task AS task
+                    WHERE owner_id = %s AND contact_id = %s AND id = %s
+                      AND task_type = 'observation' AND status = 'failed'
+                      AND observation_pending
+                      AND EXISTS (
+                          SELECT 1 FROM public.local_wechat_observation AS observation
+                          JOIN public.conversation_binding AS binding
+                            ON binding.id = observation.binding_id
+                           AND binding.owner_id = observation.owner_id
+                           AND binding.contact_id = observation.contact_id
+                          WHERE observation.owner_id = task.owner_id
+                            AND observation.contact_id = task.contact_id
+                            AND observation.memory_enqueued_at >= task.started_at
+                            AND binding.status = 'active'
+                            AND EXISTS (
+                                SELECT 1 FROM public.message_source_ref AS ref
+                                WHERE ref.observation_id = observation.id
+                                  AND ref.owner_id = task.owner_id
+                                  AND ref.contact_id = task.contact_id
+                            )
+                      )
+                    FOR UPDATE OF task
+                    """,
+                    (owner_id, contact_id, task_id),
+                ).fetchone()
+                if task is None:
+                    return False
+                self.create_observation_task(
+                    connection, owner_id=owner_id, contact_id=contact_id,
+                    message_count=task[0],
+                )
+                return True
+        except psycopg.Error:
+            raise BackgroundTaskPersistenceError("观察记忆任务恢复失败。") from None
+
     def record_queued_reason(
         self, *, owner_id: UUID, contact_id: UUID, task_id: UUID, error_code: str,
     ) -> None:

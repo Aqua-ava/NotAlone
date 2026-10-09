@@ -15,6 +15,7 @@ from notalone.front_sync.factory import (
     owner_wechat_account_scope,
 )
 from notalone.application.setup_service import SetupService
+from notalone.application.import_service import TaskHost
 from notalone.application.model_priority import (
     AccountedExtractionRunner, MemoryCallAccounting,
     ModelPriorityControl, PriorityAdjudicationRuntime, PriorityExtractionRuntime,
@@ -71,11 +72,13 @@ def main(argv: list[str] | None = None) -> int:
     events = EventBus()
     model_priority = ModelPriorityControl()
     setup_service = _build_setup_service(database_url)
+    task_host = _build_task_host(database_url, events, model_priority=model_priority)
     sync_host = _build_sync_host(
         database_url=database_url,
         owner_id=owner_id,
         interval=args.sync_interval,
         events=events,
+        task_host=task_host,
     )
     follow_smoke = (
         FollowSmokeController(
@@ -95,7 +98,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     memory_service = _build_memory_service(database_url)
     import_service = _build_import_service(database_url)
-    task_host = _build_task_host(database_url, events, model_priority=model_priority)
     skill_service = _build_skill_service(database_url)
     ledger_service = _build_ledger_service(database_url)
     server: BackendServer | None = None
@@ -199,6 +201,7 @@ def _build_sync_host(
     owner_id: UUID | None,
     interval: float,
     events: EventBus,
+    task_host: TaskHost | None = None,
 ) -> SyncHost | None:
     """有微信渠道身份时装配同步宿主；否则返回 None（同步不可用）。"""
 
@@ -214,10 +217,12 @@ def _build_sync_host(
         database_url=database_url,
         owner_id=owner_id,
         account_scope=account_scope,
-        # 消息写入即发布 message.created 事件，供界面消息流实时更新。
+        # 消息提交后发布事件，并复验观察来源后唤醒同联系人的记忆任务。
         # 正常主路径由全局 CLI 后台同步驱动；人工验证页仍可显式使用
         # 旧的前台 Follow 兜底流程，不改变正式同步开关。
-        message_events=EventBusMessagePublisher(events),
+        message_events=EventBusMessagePublisher(
+            events, owner_id=owner_id, task_host=task_host,
+        ),
     )
     return SyncHost(engine=engine, interval=interval)
 
