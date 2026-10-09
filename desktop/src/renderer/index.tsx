@@ -1,3 +1,4 @@
+import { ForegroundPanel, useForegroundState } from './ForegroundPanel';
 import { CandidateCopyControls } from './CandidateCopyControls';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -26,6 +27,7 @@ function App() {
   const startup = useStartupState();
   const contactSession = useContactSession();
   const replies = useReplySession();
+  const foreground = useForegroundState(window.notalone.foreground, helper);
   const [error, setError] = useState('');
   const [page, setPage] = useState<ManagerPage>('contacts');
   async function operate(operation: () => Promise<void>) {
@@ -43,6 +45,7 @@ function App() {
       <button className="icon-button" aria-label="隐藏输入小窗" title="隐藏输入小窗"
         onClick={() => void operate(window.notalone.hideWindow)}><Icon name="close" size={16} /></button>
     </header>
+    <ForegroundPanel state={foreground} />
     {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} /> : <DirectedReplyInput replies={replies} />}
     {replies.state.messageNotice.phase === 'connected' && <p role="status">{replies.state.messageNotice.needsRefresh
       ? '消息提醒已恢复，期间可能有遗漏，请主动刷新消息核对。生成依据仍是原快照。' : replies.state.messageNotice.changed

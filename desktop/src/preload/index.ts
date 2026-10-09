@@ -1,3 +1,4 @@
+import { createForegroundBridge } from './foreground';
 import { createCandidateCopyBridge } from './candidate-copy';
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type { AppBridge } from '../shared/app-bridge';
@@ -22,6 +23,7 @@ const bridge: AppBridge = {
   candidateCopy: createCandidateCopyBridge(ipcRenderer),
   memory: createMemoryBridge(ipcRenderer),
   bindings: createBindingConsentBridge(ipcRenderer),
+  foreground: createForegroundBridge(ipcRenderer),
   syncControl: createSyncControlBridge(ipcRenderer),
   openManager: () => ipcRenderer.invoke('window:open-manager'),
   openHelper: () => ipcRenderer.invoke('window:open-helper'),

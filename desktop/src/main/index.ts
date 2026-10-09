@@ -1,3 +1,4 @@
+import { installForegroundBridge } from './foreground/bridge';
 import { CandidateCopyController } from './candidate-copy/controller';
 import { installElectronCandidateCopy } from './candidate-copy/electron';
 import { app, dialog, ipcMain, Menu, protocol, session } from 'electron';
@@ -45,6 +46,10 @@ void app.whenReady().then(async () => {
   const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart));
   const commands = electronPageCommands(windows);
   const contacts = installContactSessionBridge(commands, backend);
+  const foreground = installForegroundBridge(commands, backend, contacts);
+  windows.setHelperObservation({ beforeShow: () => foreground.observeBeforeShow(),
+    onLifecycle: (event) => foreground.notifyHelperLifecycle(event) });
+  app.on('will-quit', () => foreground.dispose());
   const imports = new ImportController(backend, contacts);
   installImportBridge(commands, imports);
   installElectronImportFileSelection(windows, imports);
