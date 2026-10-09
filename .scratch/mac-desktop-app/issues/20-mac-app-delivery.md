@@ -30,3 +30,7 @@ Spec: ../spec.md
 ## Comments
 
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
+
+- 2026-10-09（依赖阶段静态准备）：15/17已resolved，10/18及原生桌面验收继续待完成。root仅准备CLI构建输入与签名选择源码：新session安全政策加入硬编码Core清单，build_cli.sh默认明确ad-hoc、仅显式签名身份，不扫描私人证书。未执行脚本、构建包、签名或App。现打包仍缺完整可追溯wechat-cli/WCDB输入；用户绝对目录及版本来源请求待答，不能用合成CLI充当正式helper。外置旧probe仍可能沿后台三参数取整窗，最终受控helper须在执行前验证完整可信产物，不能运行未知probe探测能力或回退旧捕获。当前仅静态准备，20保持open、原依赖图不变，不写Answer或勾验收。
+
+- 2026-10-09（上述静态准备验证）：实际命令zsh -n native/macos/scripts/build_cli.sh、git diff --check与二十任务字段/DAG/链接辅助检查均通过，仅解析脚本与仓库文档，没有执行build_cli.sh、codesign或任何原生程序。数据处理范围未增加，不读取聊天、帧、钥匙串或模型凭据；完整包/外置probe可信门禁与最终实机仍待。

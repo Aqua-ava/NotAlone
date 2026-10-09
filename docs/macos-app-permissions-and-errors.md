@@ -165,7 +165,7 @@ NotAlone 的本地读取必须满足以下条件：
 2. 允许实际执行采集的、已签名的 NotAlone App/探针。
 3. 回到菜单栏选择“重新检测权限”，不需要反复重启 App。
 
-权限记忆依赖代码签名身份。`native/macos/scripts/build_app.sh` 和 `build_cli.sh` 优先使用本机稳定的 Apple Development 证书；退回 ad-hoc 时，每次重建都可能需要重新授权，不能把这种构建当作权限持久性验证。
+权限记忆依赖代码签名身份。`native/macos/scripts/build_cli.sh` 默认明确使用 ad-hoc，仅接受 `NOTALONE_PROBE_SIGNING_IDENTITY` 显式配置，不再扫描或选择钥匙串证书；ad-hoc 不能作为权限持久性或分发验证。旧 `build_app.sh` 仍保留历史证书选择行为，未在本轮执行或作为新 Electron 宿主交付入口。新宿主 helper 的实际签名和权限归属仍待独立核验。
 
 ## 3. 不应主动申请的权限
 

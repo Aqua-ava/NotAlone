@@ -2,6 +2,8 @@
 
 这是 NotAlone 的技术验证程序，不是正式产品。它包含一个保留给合成自检的命令行工具，以及一个带独立 macOS App 身份的菜单栏验证程序。两者都只在 Mac 微信处于前台时截取指定的聊天区域，在本地运行 OCR，并比较连续结果中的新增文本。
 
+当前 CLI 的 `--session --json`、追加 `--minimal-region` 和文字 `--session` 共用采集前安全门禁。仓库尚无可追溯的最小定位区域布局，故这些调用在创建 App、检查权限或读取窗口前返回 `minimal_region_layout_unverified`；不会回退整窗捕获。旧诊断、watch 和菜单栏路径保留原验证范围，不能据此认定新 Electron 宿主的定位或权限已通过。
+
 它不会：
 
 - 保存原始截图；
@@ -39,6 +41,8 @@ zsh scripts/build_cli.sh
 ./build/cli/notalone-sync-probe --self-test
 ./build/cli/notalone-sync-probe --help
 ```
+
+`build_cli.sh` 默认明确使用 ad-hoc 签名，不扫描钥匙串或自动选择证书。未来如需指定签名身份，可显式设置 `NOTALONE_PROBE_SIGNING_IDENTITY`；这不会证明稳定的屏幕录制权限或可分发性。当前阶段仅完成源码与纯逻辑验证，未执行该脚本、签名或原生采集。
 
 `build/` 已被本目录忽略，不会进入版本控制。
 
