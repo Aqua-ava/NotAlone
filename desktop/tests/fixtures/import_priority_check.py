@@ -2,16 +2,12 @@
 
 from concurrent.futures import ThreadPoolExecutor
 import json
-import os
-from pathlib import Path
-import tempfile
 import threading
 import unittest
 from uuid import uuid4
 
-import psycopg
-
 from import_http_check import ImportSubmissionHttpCheck
+from import_http_runner import run_import_http_suite
 
 
 class ImportPriorityHttpCheck(ImportSubmissionHttpCheck):
@@ -100,28 +96,10 @@ class ImportPriorityHttpCheck(ImportSubmissionHttpCheck):
 
 
 if __name__ == "__main__":
-    with tempfile.TemporaryDirectory(prefix="notalone-import-priority-http-") as directory:
-        current = Path(directory)
-        os.environ.update({
-            "NOTALONE_DISABLE_DOTENV": "1",
-            "NOTALONE_ENV_FILE": str(current / "synthetic.env"),
-            "NOTALONE_BACKEND_INFO": str(current / "backend.info"),
-            "NOTALONE_DATABASE_URL": "", "NOTALONE_OWNER_ID": "",
-            "NOTALONE_DEEPSEEK_API_KEY": "", "DEEPSEEK_API_KEY": "",
-            "LANGSMITH_TRACING": "false", "LANGCHAIN_TRACING_V2": "false",
-            "NOTALONE_DEEPSEEK_BASE_URL": "http://127.0.0.1:1",
-            "NOTALONE_WECHAT_CLI": str(current / "unavailable-cli"),
-            "NOTALONE_SYNC_PROBE": str(current / "unavailable-probe"),
-        })
-        # 只跑本次两个排序检查，不重复已过的导入业务回归。
-        suite = unittest.TestSuite(ImportPriorityHttpCheck(name) for name in (
-            "test_late_http_does_not_keep_completed_single_batch_running",
-            "test_staged_batches_yield_after_delayed_foreground_arrival",
-        ))
-        result = unittest.TextTestRunner(verbosity=2).run(suite)
-        with psycopg.connect("host=/tmp dbname=postgres") as admin:
-            remaining = admin.execute("SELECT count(*) FROM pg_database WHERE datname = %s",
-                                      (ImportPriorityHttpCheck.database_name,)).fetchone()[0]
-        print(f"本轮隔离数据库残留：{remaining}", flush=True)
-        if not result.wasSuccessful() or remaining:
-            raise SystemExit(1)
+    # 只跑本次两个排序检查，不重复已过的导入业务回归。
+    suite = unittest.TestSuite(ImportPriorityHttpCheck(name) for name in (
+        "test_late_http_does_not_keep_completed_single_batch_running",
+        "test_staged_batches_yield_after_delayed_foreground_arrival",
+    ))
+    run_import_http_suite(suite, ImportPriorityHttpCheck,
+                          directory_prefix="notalone-import-priority-http-")
