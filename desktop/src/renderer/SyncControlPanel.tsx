@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { BackgroundSyncPhase, ForegroundReportPhase, SyncControlBridge, SyncControlState } from '../shared/sync-control-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
 import './bindings.css';
@@ -11,6 +12,10 @@ const foregroundLabels: Record<ForegroundReportPhase, string> = { sync_disabled:
 
 export function SyncControlPanel({ bridge }: { bridge: SyncControlBridge }) {
   const { state, latest, active, error, setError } = useRevisionedSession(initial, bridge);
+  useEffect(() => {
+    // 连接时报告可能还未播种；进入页面只刷新一次缓存状态，不触发正文周期。
+    void bridge.refresh().catch(() => { if (active.current) setError('同步状态暂时无法刷新，请重试。'); });
+  }, [bridge, active, setError]);
   async function operate(operation: () => Promise<void>) {
     const scopeRevision = latest.current.scopeRevision;
     try { await operation(); if (active.current && scopeRevision === latest.current.scopeRevision) setError(''); }

@@ -9,13 +9,32 @@ export async function syncSwitchStopsReading({ manager, syncBackend }: SyncPage)
   expect((await syncBackend.request('/api/sync/cli-bindings/confirm', { selections: [{
     locator: 'wxid_synthetic_a', contact_id: confirmedContact,
   }] })).status).toBe(200);
-  expect((await syncBackend.request('/api/sync/status')).data.sync_enabled).toBe(false);
+  const status = await syncBackend.request('/api/sync/status');
+  expect(status.status).toBe(200);
+  expect(status.data.sync_enabled).toBe(false);
+  expect(status.data.sync_mode).toBe('cli_background');
+  expect(status.data.cli_sync_phase).toBe('disabled');
+  expect(status.data.foreground_phase).toBe('sync_disabled');
   expect(await syncBackend.tails()).toEqual([]);
 
   await manager.getByRole('button', { name: '同步设置', exact: true }).click();
   const background = manager.getByRole('region', { name: '后台 CLI 同步', exact: true });
   await expect(background.getByRole('button', { name: '开启后台同步', exact: true })).toBeVisible();
-  await expect(background.getByText('后台正文同步已关闭', { exact: true })).toBeVisible();
+  const readPublicStatus = () => manager.evaluate(async () => {
+    const state = await window.notalone.syncControl.getState();
+    return { phase: state.phase, enabled: state.report?.enabled ?? null, busy: state.busy, errorCode: state.errorCode,
+      backgroundPhase: state.report?.backgroundPhase ?? null, foregroundPhase: state.report?.foregroundPhase ?? null };
+  });
+  console.log('sync_control_initial_report:', JSON.stringify(await readPublicStatus()));
+  try {
+    await expect.poll(readPublicStatus, { message: '公开同步状态应反映真实关闭报告' })
+      .toMatchObject({ phase: 'ready', enabled: false });
+    await expect(background.getByText('后台正文同步已关闭', { exact: true })).toBeVisible();
+  } catch (error) {
+    console.log('sync_control_initial_report_failure:', JSON.stringify({ state: await readPublicStatus(),
+      alerts: await background.getByRole('alert').allTextContents() }));
+    throw error;
+  }
 
   const state = initialCliState();
   const timestamp = Math.floor(Date.now() / 1000) + 10;
