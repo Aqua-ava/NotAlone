@@ -3,6 +3,7 @@ import type { ActiveMemory, MemoryAdditionRequest, MemoryContent, MemoryCorrecti
 import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
 import './memory.css';
+import { SourceDeletionPanel } from './SourceDeletionPanel';
 
 const initial: MemoryReadingState = { revision: -1, contactId: null, scopeRevision: 0, mutation: { phase: 'idle', message: '' },
   contact: { phase: 'idle', items: [] }, owner: { phase: 'idle', items: [] },
@@ -265,6 +266,7 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
           </li>)}</ul>
         </ReadingSection>
       </>}
+    {contact && <SourceDeletionPanel session={session} />}
     {state.mutation.phase !== 'idle' && <p className="memory-section-note" role={state.mutation.phase === 'error' ? 'alert' : 'status'}>{state.mutation.message}</p>}
     {memory.error && <p className="memory-section-note" role="alert">{memory.error}</p>}
     {session.error && <p className="memory-section-note" role="alert">{session.error}</p>}
