@@ -11,7 +11,8 @@ import { StartupReadiness, StartupSettings, useStartupState } from './StartupSet
 import { CurrentContactLabel, HelperContactPicker, useContactSession } from './contact-session';
 import { ContactsPage } from './ContactsPage';
 import { ImportPage } from './ImportPage';
-import { ReplyCandidates, RewriteInput, useReplySession } from './RewritePanel';
+import { ReplyCandidates, ReplyModePicker, RewriteInput, useReplySession } from './RewritePanel';
+import { DirectedReplyInput } from './DirectedReplyInput';
 import { MemoryPage } from './MemoryPage';
 import { BindingConsentPage } from './BindingConsentPage';
 
@@ -34,15 +35,13 @@ function App() {
     <header className="ime-header">
       <img className="ime-logo" src={logo} alt="NotAlone" />
       <HelperContactPicker session={contactSession} />
-      <div className="ime-modes" role="group" aria-label="写作方式">
-        <button className="active" disabled>改写</button><button disabled>回复</button>
-      </div>
+      <ReplyModePicker replies={replies} enabled={Boolean(contactSession.state.selectedContactId)} />
       <button className="icon-button" aria-label="打开管理后台" title="打开管理后台"
         onClick={() => void operate(window.notalone.openManager)}><Icon name="contacts" size={16} /></button>
       <button className="icon-button" aria-label="隐藏输入小窗" title="隐藏输入小窗"
         onClick={() => void operate(window.notalone.hideWindow)}><Icon name="close" size={16} /></button>
     </header>
-    <RewriteInput contacts={contactSession} replies={replies} />
+    {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} /> : <DirectedReplyInput replies={replies} />}
     <div className="ime-status-line"><BackendBadge state={backend} compact />
       <div className="ime-contact-note"><CurrentContactLabel state={contactSession.state} /></div></div>
     <ReplyCandidates replies={replies} />

@@ -59,8 +59,10 @@ class DesktopRewriteModel(ScriptedCoreModel):
             if plan["fault"] == "timeout":
                 raise TimeoutError("本轮合成外部模型超时。")
             raise RuntimeError("合成原始模型错误不应进入界面。")
-        draft = next(item for item in payload["evidence"] if item["kind"] == "user_draft")
-        citations = [draft["evidence_id"]]
+        primary = next(item for item in payload["evidence"]
+                       if (item["kind"] == "user_draft" if payload["input_mode"] == "rewrite_draft"
+                           else item["kind"] == "message" and item["text"] == payload["current_text"]))
+        citations = [primary["evidence_id"]]
         if plan.get("cite_history"):
             result = next(json.loads(message.content) for message in messages
                           if isinstance(message, ToolMessage) and message.name == "conversation_search")
@@ -69,7 +71,8 @@ class DesktopRewriteModel(ScriptedCoreModel):
         self.responses.append(tool_response("ReplyRuntimeOutput", {
             "candidates": [{
                 "text": f"{plan.get('prefix', '我会晚一点回复你')}（说法{number + 1}）。",
-                "basis": "保留本次草稿的事实和承诺范围。",
+                "basis": ("保留本次草稿的事实和承诺范围。" if payload["input_mode"] == "rewrite_draft"
+                          else "依据选中的消息，在本次明确方向内组织表达。"),
                 "citation_ids": citations,
                 "risk_notes": plan.get("risk_notes", []),
             } for number in range(plan.get("count", 2))],
@@ -132,6 +135,30 @@ class DesktopRewriteFixture(CoreBusinessFlowFixture, unittest.TestCase):
         )
         return str(contact_id)
 
+    def add_older_messages(self, contact_id: str) -> None:
+        """本轮固定合成分页资料，不能指定其他 owner 或任意消息正文。"""
+        with psycopg.connect(self.database_url) as connection:
+            source_id = connection.execute(
+                "SELECT id FROM public.source_document WHERE owner_id=%s AND contact_id=%s",
+                (self.owner_id, UUID(contact_id)),
+            ).fetchone()[0]
+            for number in range(21):
+                message_id = uuid4()
+                connection.execute(
+                    """INSERT INTO public.message (
+                        id, owner_id, contact_id, speaker, message_type, text_content, occurred_at
+                    ) VALUES (%s, %s, %s, 'contact', 'text', %s,
+                              now() - (%s * interval '1 minute'))""",
+                    (message_id, self.owner_id, UUID(contact_id), f"甲的较早合成消息 {number + 1:02d}", number + 1),
+                )
+                connection.execute(
+                    """INSERT INTO public.message_source_ref (
+                        message_id, owner_id, contact_id, source_kind, source_document_id,
+                        source_locator, raw_payload
+                    ) VALUES (%s, %s, %s, 'source_document', %s, %s, '{}'::jsonb)""",
+                    (message_id, self.owner_id, UUID(contact_id), source_id, f"synthetic:older:{number + 1}"),
+                )
+
 
 def main() -> None:
     fixture = DesktopRewriteFixture()
@@ -145,10 +172,15 @@ def main() -> None:
         other_contact_id = fixture.prepare_contact(
             fixture.other_owner_id, "另一用户的联系人", "另一用户的私密合成历史：今晚我会晚一点回复你。",
         )
+        empty_contact_id = uuid4()
+        with psycopg.connect(fixture.database_url) as connection:
+            connection.execute("INSERT INTO public.contact (owner_id, id, display_name) VALUES (%s,%s,%s)",
+                               (fixture.owner_id, empty_contact_id, "无消息的合成联系人"))
         write_backend_info(address=fixture.backend.base_url.removeprefix("http://"), token=fixture.backend.token)
         print(json.dumps({"ready": {
             "database_url": fixture.database_url, "owner_id": str(fixture.owner_id),
             "contact_ids": contact_ids, "other_contact_id": other_contact_id,
+            "empty_contact_id": str(empty_contact_id),
         }}), flush=True)
         for line in sys.stdin:
             command = json.loads(line)
@@ -172,6 +204,16 @@ def main() -> None:
                                if str(item.scope.contact_id) == command["contact_id"])
                 fixture.bindings.revoke_binding(owner_id=fixture.owner_id,
                                                contact_id=binding.scope.contact_id, binding_id=binding.binding_id)
+                result = {}
+            elif operation == "older_messages":
+                fixture.add_older_messages(contact_ids[0])
+                result = {}
+            elif operation == "withdraw_target_source":
+                with psycopg.connect(fixture.database_url) as connection:
+                    connection.execute(
+                        "UPDATE public.source_document SET status='delete_requested' WHERE owner_id=%s AND contact_id=%s",
+                        (fixture.owner_id, UUID(contact_ids[0])),
+                    )
                 result = {}
             elif operation == "restart":
                 fixture.backend.close()

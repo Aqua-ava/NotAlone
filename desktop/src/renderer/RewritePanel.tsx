@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ReplySessionState, RewriteOptions, RewriteTone } from '../shared/reply-bridge';
+import type { ReplyMode, ReplySessionState, RewriteOptions, RewriteTone } from '../shared/reply-bridge';
 import { HelperDraft, type ContactSessionView } from './contact-session';
 import { Icon } from './icons';
 import { useRevisionedSession } from './use-revisioned-session';
@@ -8,6 +8,7 @@ import './rewrite.css';
 export function useReplySession() {
   const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null,
     options: { tone: 'original', instruction: '', includeRelationshipContext: false },
+    mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null, direction: '',
     phase: 'idle', result: null, selectedCandidateId: null, canRetry: false }, window.notalone.replies);
   async function operate(operation: () => Promise<ReplySessionState | void>) {
     const scopeRevision = latest.current.scopeRevision;
@@ -17,12 +18,25 @@ export function useReplySession() {
   const selection = () => ({ contactId: latest.current.contactId!, scopeRevision: latest.current.scopeRevision });
   return { state, error,
     updateOptions: (options: RewriteOptions) => operate(() => window.notalone.replies.updateOptions({ ...selection(), options })),
+    setMode: (mode: ReplyMode) => operate(() => window.notalone.replies.setMode({ ...selection(), mode })),
+    loadMessages: (older = false) => operate(() => window.notalone.replies.loadMessages({ ...selection(), older })),
+    selectMessage: (messageId: string) => operate(() => window.notalone.replies.selectMessage({ ...selection(), messageId })),
+    updateDirection: (direction: string) => operate(() => window.notalone.replies.updateDirection({ ...selection(), direction })),
     generate: (newRequest = false) => operate(() => window.notalone.replies.generate({ ...selection(), newRequest })),
     selectCandidate: (candidateId: string) => operate(() => window.notalone.replies.selectCandidate({ ...selection(), replyRequestId: latest.current.result!.replyRequestId, candidateId })),
     editCandidate: (candidateId: string, text: string) => operate(() => window.notalone.replies.editCandidate({ ...selection(), replyRequestId: latest.current.result!.replyRequestId, candidateId, text })),
   };
 }
 export type ReplySessionView = ReturnType<typeof useReplySession>;
+
+export function ReplyModePicker({ replies, enabled }: { replies: ReplySessionView; enabled: boolean }) {
+  return <div className="ime-modes" role="group" aria-label="写作方式">
+    <button className={replies.state.mode === 'rewrite_draft' ? 'active' : ''} aria-pressed={replies.state.mode === 'rewrite_draft'}
+      disabled={!enabled} onClick={() => void replies.setMode('rewrite_draft')}>改写</button>
+    <button className={replies.state.mode === 'reply_to_message' ? 'active' : ''} aria-pressed={replies.state.mode === 'reply_to_message'}
+      disabled={!enabled} onClick={() => void replies.setMode('reply_to_message')}>回复</button>
+  </div>;
+}
 
 export function RewriteInput({ contacts, replies }: { contacts: ContactSessionView; replies: ReplySessionView }) {
   const [options, setOptions] = useState(replies.state.options);
@@ -71,10 +85,13 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
       : state.errorCode === 'rejected' ? '本次生成被拒绝，请在管理后台确认联系人及有效会话绑定。'
       : state.errorCode === 'unavailable' ? '回复服务暂不可用，请检查应用配置和本机服务。'
       : '本次生成失败，请核对本机服务后重试。'}</p>}
+    {state.phase === 'failed' && state.mode === 'reply_to_message' && <p className="reply-note">可以刷新待回复消息重新选择，或切换到草稿改写。</p>}
     {state.result ? <>
       <details className="reply-input-snapshot"><summary>这组候选的生成输入 · {state.result.input.contactDisplayName}</summary>
-        <p>{state.result.input.draftText}</p><p>{state.result.input.userInstruction ?? '没有额外要求'}</p>
-        <p>关系语境：{state.result.input.includeRelationshipContext ? '已开启' : '关闭'}</p></details>
+        {state.result.input.mode === 'rewrite_draft' ? <><p>{state.result.input.draftText}</p><p>{state.result.input.userInstruction ?? '没有额外要求'}</p>
+          <p>关系语境：{state.result.input.includeRelationshipContext ? '已开启' : '关闭'}</p></>
+          : <><p>待回复消息：{state.result.input.target.text ?? state.result.input.target.mediaPlaceholder}</p>
+            <p>表达方向：{state.result.input.direction}</p></>}</details>
       <div className="reply-candidate-grid">
         {state.result.candidates.map(({ original, editedText }, index) => <article className="reply-candidate" key={original.candidateId}>
           <label className="reply-choice"><input type="radio" name="candidate" checked={state.selectedCandidateId === original.candidateId}

@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { ContactSelection, ContactSessionState } from '../../shared/contact-session-bridge';
-import type { GenerateRewrite, ReplyCandidateEdit, ReplyCandidateSelection, ReplySessionState, RewriteOptionsUpdate, RewriteSnapshot } from '../../shared/reply-bridge';
+import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyDirectionUpdate, ReplyInputSnapshot, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, ReplySessionState, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
-import { generateRewrite } from './client';
+import { generateReply } from './client';
+import { readReplyMessages } from './messages';
 
 const defaults = () => ({ tone: 'original' as const, instruction: '', includeRelationshipContext: false });
 const tones = { original: '', warm: '本次语气自然温和。', concise: '本次表达简洁直接。', polite: '本次语气礼貌克制。' };
@@ -12,11 +13,14 @@ const tones = { original: '', warm: '本次语气自然温和。', concise: '本
 // 本次编辑只在主进程内存保留；原始候选和编辑稿分别保存。
 export class ReplySession {
   private state: ReplySessionState = { revision: 0, scopeRevision: 0, contactId: null,
-    options: defaults(), phase: 'idle', result: null, selectedCandidateId: null, canRetry: false };
+    options: defaults(), mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null },
+    targetMessageId: null, direction: '', phase: 'idle', result: null, selectedCandidateId: null, canRetry: false };
   private draft = '';
   private operation = 0;
   private pending: AbortController | undefined;
-  private lastAttempt: { input: RewriteSnapshot; requestKey: string } | undefined;
+  private lastAttempt: { input: ReplyInputSnapshot; requestKey: string } | undefined;
+  private messageOperation = 0;
+  private messagePending: AbortController | undefined;
   private readonly listeners = new Set<(state: ReplySessionState) => void>();
 
   constructor(private readonly contacts: ContactSession, private readonly backend: BackendHost) {
@@ -39,16 +43,78 @@ export class ReplySession {
     return this.getState();
   }
 
-  async generate(selection: GenerateRewrite): Promise<void> {
+  async setMode(update: ReplyModeUpdate): Promise<void> {
+    this.assertScope(update);
+    if (update.mode !== this.state.mode) {
+      this.invalidateInput();
+      this.cancelMessagePage();
+      this.publish({ mode: update.mode, messages: { ...this.state.messages,
+        phase: this.state.messages.items.length ? 'ready' : 'idle' } });
+    }
+    if (update.mode === 'reply_to_message' && this.state.messages.phase === 'idle') {
+      await this.loadMessages({ ...update, older: false });
+    }
+  }
+  async loadMessages(request: ReplyMessagePageRequest): Promise<void> {
+    this.assertScope(request);
+    if (this.state.mode !== 'reply_to_message' || this.state.messages.phase === 'loading') return;
+    const before = request.older ? this.state.messages.nextCursor : null;
+    if (request.older && !before) return;
+    this.cancelMessagePage();
+    const operation = this.messageOperation;
+    const generation = this.backend.getConnectionGeneration();
+    const pending = new AbortController();
+    this.messagePending = pending;
+    const current = () => operation === this.messageOperation && generation === this.backend.getConnectionGeneration()
+      && request.scopeRevision === this.state.scopeRevision && request.contactId === this.state.contactId;
+    this.publish({ messages: { ...this.state.messages, phase: 'loading' } });
+    try {
+      const page = await readReplyMessages(this.backend, request.contactId, before, pending.signal);
+      if (!current() || page.generation !== generation) return;
+      const known = new Set(this.state.messages.items.map((item) => item.messageId));
+      const items = before ? [...this.state.messages.items, ...page.messages.filter((item) => !known.has(item.messageId))] : page.messages;
+      if (this.state.targetMessageId && !items.some((item) => item.messageId === this.state.targetMessageId)) {
+        this.invalidateInput();
+        this.publish({ targetMessageId: null });
+      }
+      this.publish({ messages: { phase: 'ready', items, nextCursor: page.nextCursor } });
+    } catch {
+      if (current()) this.publish({ messages: { ...this.state.messages, phase: 'failed' } });
+    } finally { if (this.messagePending === pending) this.messagePending = undefined; }
+  }
+  selectMessage(selection: ReplyMessageSelection): ReplySessionState {
+    this.assertScope(selection);
+    if (this.state.mode !== 'reply_to_message' || !this.state.messages.items.some((item) => item.messageId === selection.messageId)) {
+      throw new Error('待回复消息已失效，请重新选择。');
+    }
+    if (selection.messageId !== this.state.targetMessageId) {
+      this.invalidateInput(); this.publish({ targetMessageId: selection.messageId });
+    }
+    return this.getState();
+  }
+  updateDirection(update: ReplyDirectionUpdate): ReplySessionState {
+    this.assertScope(update);
+    if (this.state.mode !== 'reply_to_message') throw new Error('请先切换到回复模式。');
+    if (update.direction !== this.state.direction) {
+      this.invalidateInput(); this.publish({ direction: update.direction });
+    }
+    return this.getState();
+  }
+
+  async generate(selection: GenerateReply): Promise<void> {
     const contactState = this.assertScope(selection);
-    if (this.state.phase === 'waiting' || !contactState.draft.trim()) return;
+    if (this.state.phase === 'waiting') return;
     const generation = this.backend.getConnectionGeneration();
     const contact = contactState.contacts.find((item) => item.contactId === selection.contactId)!;
     const options = this.state.options;
-    const input = { contactId: selection.contactId, contactDisplayName: contact.displayName,
-      draftText: contactState.draft.trim(),
-      userInstruction: [tones[options.tone], options.instruction.trim()].filter(Boolean).join('\n') || null,
-      includeRelationshipContext: options.includeRelationshipContext };
+    const target = this.state.messages.items.find((item) => item.messageId === this.state.targetMessageId);
+    if (this.state.mode === 'rewrite_draft' ? !contactState.draft.trim() : !target || !this.state.direction.trim()) return;
+    const common = { contactId: selection.contactId, contactDisplayName: contact.displayName };
+    const input: ReplyInputSnapshot = this.state.mode === 'rewrite_draft'
+      ? { ...common, mode: 'rewrite_draft', draftText: contactState.draft.trim(),
+        userInstruction: [tones[options.tone], options.instruction.trim()].filter(Boolean).join('\n') || null,
+        includeRelationshipContext: options.includeRelationshipContext }
+      : { ...common, mode: 'reply_to_message', target: structuredClone(target!), direction: this.state.direction.trim() };
     if (selection.newRequest || !this.lastAttempt) this.lastAttempt = { input, requestKey: randomUUID() };
     const attempt = this.lastAttempt;
     this.cancelPending();
@@ -59,7 +125,7 @@ export class ReplySession {
       && selection.scopeRevision === this.state.scopeRevision && selection.contactId === this.state.contactId;
     this.publish({ phase: 'waiting', errorCode: undefined, canRetry: true });
     try {
-      const result = await generateRewrite(this.backend, attempt.input, attempt.requestKey, pending.signal);
+      const result = await generateReply(this.backend, attempt.input, attempt.requestKey, pending.signal);
       if (!current() || result.generation !== generation) return;
       // 同键重放恢复原结果，保留该候选在本次运行中的编辑和选择。
       if (this.state.result?.replyRequestId === result.replyRequestId) { this.publish({ phase: 'ready' }); return; }
@@ -108,10 +174,12 @@ export class ReplySession {
   private receiveContact(state: ContactSessionState): void {
     if (state.scopeRevision !== this.state.scopeRevision || state.selectedContactId !== this.state.contactId) {
       this.cancelPending();
+      this.cancelMessagePage();
       this.lastAttempt = undefined;
       this.draft = state.draft;
       this.publish({ scopeRevision: state.scopeRevision, contactId: state.selectedContactId,
-        options: defaults(), phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false });
+        options: defaults(), mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null },
+        targetMessageId: null, direction: '', phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false });
     } else if (state.draft !== this.draft) {
       this.draft = state.draft;
       this.cancelPending();
@@ -119,6 +187,11 @@ export class ReplySession {
       this.publish({ phase: this.state.result ? 'ready' : 'idle', errorCode: undefined, canRetry: false });
     }
   }
+  private invalidateInput(): void {
+    this.cancelPending(); this.lastAttempt = undefined;
+    this.publish({ phase: this.state.result ? 'ready' : 'idle', errorCode: undefined, canRetry: false });
+  }
+  private cancelMessagePage(): void { ++this.messageOperation; this.messagePending?.abort(); this.messagePending = undefined; }
   private cancelPending(): void { ++this.operation; this.pending?.abort(); this.pending = undefined; }
   private publish(update: Partial<ReplySessionState>): void {
     this.state = { ...this.state, ...update, revision: this.state.revision + 1 };

@@ -1,4 +1,4 @@
-import type { ReplyCandidate, RewriteSnapshot } from '../../shared/reply-bridge';
+import type { ReplyCandidate, ReplyInputSnapshot } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -12,12 +12,15 @@ function identifiers(value: unknown): string[] {
 }
 
 // 仅调用已存在的同步生成端点；不推断异步进度或澄清对象。
-export async function generateRewrite(backend: BackendHost, input: RewriteSnapshot, requestKey: string, signal: AbortSignal) {
+export async function generateReply(backend: BackendHost, input: ReplyInputSnapshot, requestKey: string, signal: AbortSignal) {
   const response = await backend.requestJson({
     method: 'POST', path: '/api/reply/generate', timeoutMs: 25_000, signal,
-    body: { contact_id: input.contactId, idempotency_key: requestKey, content: {
+    body: { contact_id: input.contactId, idempotency_key: requestKey, content: input.mode === 'rewrite_draft' ? {
       type: 'rewrite_draft', draft_text: input.draftText,
       user_instruction: input.userInstruction, include_relationship_context: input.includeRelationshipContext,
+    } : {
+      type: 'reply_to_message', target_message_id: input.target.messageId,
+      direction: input.direction, direction_source: 'direct_input',
     } },
   });
   const value = response.data;
