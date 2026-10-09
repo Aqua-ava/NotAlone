@@ -1,7 +1,7 @@
 # 09：草稿改写与候选编辑
 
 Type: task
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: 06
 Spec: ../spec.md
@@ -14,16 +14,31 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 默认 rewrite_draft 且关系语境关闭；用户可明确打开，只提交当前联系人和本次输入。
-- [ ] 展示真实候选或澄清、处理中、核实提醒、超时和失败；保留原候选快照，编辑独立存于本次运行。
-- [ ] 相同输入重试复用幂等键，改变输入或明确重新生成使用新键；可控模型捕获范围，测试不伪装为语义质量评测。
+- [x] 默认 rewrite_draft 且关系语境关闭；用户可明确打开，只提交当前联系人和本次输入。
+- [x] 展示真实候选或澄清、处理中、核实提醒、超时和失败；保留原候选快照，编辑独立存于本次运行。
+- [x] 相同输入重试复用幂等键，改变输入或明确重新生成使用新键；可控模型捕获范围，测试不伪装为语义质量评测。
 
 ## 测试与范围
 
-- 沿用规格中用户已确认的实际 App 操作与后端 HTTP 公共接缝；一次推进一个 red -> green 行为，自动验收与实现一起完成。
+- 按规格现行 Testing Decisions，普通页面使用用户已认可的生产 React → 具名业务控制器 → 真实隔离 HTTP/PG 无头接缝；原生能力保留实际 App/本机操作验收。发现失败再走最小 red → green，不为既有功能验收制造假 red。
 - 涉及业务数据时只使用合成资料、随机隔离 `_test` 库和独立握手/配置；本任务未涉及的后端、渠道与桌面能力保持后续任务范围。
 - 按仓库工作流读取相关领域及工程约束，完成最小相关检查、Standards/Spec 两轴评审和只含本任务改动的本地提交。
 - 不提交私人资料或凭据，不发送外部聊天消息；远端 Git 操作需另有用户明确同意。
+
+## Answer
+
+已完成任务 09 的全部普通页面条件。默认以 `rewrite_draft` 和关闭的关系语境生成；明确开启后，模型输入和 HTTP 依据仅包含当前 owner/contact 与本次草稿/语气/要求。真实 1–3 候选、风险提醒、单选和独立编辑均可见，原候选与生成依据快照不随编辑变化；已完成请求的相同输入重试复用请求身份且不重复调用模型，修改输入或明确重新生成采用新键。真实模型替代边界产生超时/失败/空候选拒绝，保留已有编辑并可同键恢复；无有效绑定、非法参数、旧范围及其他 owner 拒绝。联系人切换和断线重连的迟到成功/失败均等公开操作 Promise 结束后核验不会回填。正常认证停读后，在同一 userData 重建生产会话对象，不恢复临时草稿、编辑、语气、要求及关系语境。
+
+验证和评审分开记录：
+
+- 完整公开组 `npm run test:pages -- --case draft-rewrite-acceptance --timeout-seconds 180` 末轮 **9/9 green、exit 0**。首轮八项通过，最后新增的公开 evaluate 在页面初始化前执行而失败；补齐真实控件可见等待后末轮通过，失败证据保留，不能称生产业务缺陷的 red → green。
+- 完整固定范围 `480dcef4b627853c995434f0757d52ed710eec00..50224679ecf96fcf0c3399ef0127fdec7f149446` 的 Spec P0–P3 全 0、Standards hard 0 / possible P3 一项。采纳重复新会话准备/断言问题后，增量 `50224679ecf96fcf0c3399ef0127fdec7f149446..06da552be7f119f2bc78d069f780c31d080a5923` 的 Standards hard 0 / possible 0、Spec P0–P3 全 0。
+- P3 修复只重跑受影响的固定组 `npm run test:pages -- --case draft-rewrite-session --timeout-seconds 120`，**1/1 green、exit 0**；它调用完整组中的同一个新会话函数，不把本次单场景写成完整九项重跑。两轮相关 `npm run typecheck`、公开组内 `scripts/build.mjs` 和 `node --test tests/headless/command.test.mjs` **10/10** 通过；固定全范围差异及二十票字段/DAG/本地链接校验通过。
+- 每场景独立随机 `_test` 库、页面上下文和配置/握手/dotenv/userData；复用真实生产装配、HTTP/PostgreSQL，只替换外部模型。模型捕获默认与显式语境输入、跨联系人/owner 排除、幂等恢复调用次数和依据，不证明真实模型中文质量。真实夹具清理核验自有数据库不存在，生产控制器认证停读、HTTP/目录/页面、Chrome 和自有进程组收尾均确认，两轮 `cleanupConfirmed=true`；末轮及安全回归后两个公开租约状态均 absent。
+
+完整组的首轮失败与末轮通过证据分别保全于集成工作树 `desktop/artifacts/acceptance-09-5022467/`，见[完整组保全清单](/Users/local-user/.codex/worktrees/mac-desktop-app/NotAlone/desktop/artifacts/acceptance-09-5022467/preservation-manifest.json)；本次单场景、CLI、类型日志、资源及完整 handoff 另存于 `desktop/artifacts/acceptance-09-fix-06da552/`，见[修复组保全清单](/Users/local-user/.codex/worktrees/mac-desktop-app/NotAlone/desktop/artifacts/acceptance-09-fix-06da552/preservation-manifest.json)，不覆盖原完整组。本次只处理合成联系人/绑定/来源/消息/候选与本轮随机库，保留外部追踪关闭链，未读私人资料、调用供应商、操作微信或远端 Git。
+
+本次没有公开澄清协议，未伪造澄清或服务端进度。无头具名角色/来源检查不证明真实 Electron IPC；重建生产会话对象不等于原生 App 重启。原生隐藏/焦点、系统剪贴板、签名 App、真实渠道权限及完整 Mac App 交付仍由对应原生任务和任务 20 实机验收。09 现在 resolved，只解除其对既有 10/11/12 的阻塞；这些任务的状态与依赖字段和原二十票 DAG 保持原样。
 
 ## Comments
 
@@ -46,3 +61,4 @@ Spec: ../spec.md
 - 2026-10-09（最小工程核验）：末轮后 `npm run typecheck` exit 0，生产构建由受限 `test:pages` 内的 `scripts/build.mjs` 成功执行；变更 allowlist 的 `node --test tests/headless/command.test.mjs` 为 10/10、exit 0，仅固定 Node 合成孩子，不启动浏览器或 App。后续再核验两类租约均 absent。最后只去掉共享场景未使用的解构参数及无关截图路径，未改变场景操作或断言；类型、差异和二十票字段/DAG/本地链接检查用于提交收尾，不重复已绿业务或原生验收。
 - 2026-10-09（完整双轴与唯一 P3 修复，待增量复核）：root 固定 `480dcef4b627853c995434f0757d52ed710eec00..50224679ecf96fcf0c3399ef0127fdec7f149446` 的完整 Spec 为 P0–P3 全部 0，Standards hard 0 / possible P3 一项：新生产会话与原 App 重启重复临时输入准备/清空断言。采纳后只抽取已有 `rewrite-page-scenarios` 内的公开页面准备/断言；原 App 的菜单、`launchApp`、进程退出检查和 headless 的认证停读、新 PageHost 生命周期分别保留，headless 显式开启关系语境、原 App 保持原默认条件。生产代码、协议及二十票范围不变。
 - 2026-10-09（P3 最小相关验证）：固定公开组 `npm run test:pages -- --case draft-rewrite-session --timeout-seconds 120` 只调用完整九组中的同一个新会话函数，本次 1/1 green、exit 0；未重跑全部九场景、后端全量或 App。`npm run typecheck`、公开组内真实生产 build、`node --test tests/headless/command.test.mjs` 10/10、全范围差异与二十票字段/DAG/链接检查通过。单 Chrome、13 次静默采样 active 0 / 屏上窗口 0 / policy 2；RSS 峰值 KiB Chrome 1031168、Node 157072、Python 182496（同原采样限制）。真实自有 HTTP/PG/目录/页面收尾与 Chrome 退出确认，`cleanupConfirmed=true`，随后两个租约 absent。本次仅合成资料与随机库，原生能力继续未运行；历史完整 9/9 与本次单场景 1/1 分别保存，09 仍 claimed、无 Answer、验收框未勾和后继依赖不变，等待 root 增量双轴。
+- 2026-10-09（root 双轴清零与文档收束）：完整 `480dcef4b627853c995434f0757d52ed710eec00..50224679ecf96fcf0c3399ef0127fdec7f149446` 为 Spec 0、Standards hard 0 / possible P3 一项；修复增量 `50224679ecf96fcf0c3399ef0127fdec7f149446..06da552be7f119f2bc78d069f780c31d080a5923` 的 Standards hard 0 / possible 0、Spec P0–P3 全 0，唯一 P3 已消除。Answer 分开记录完整 9/9 与受影响单场景 1/1，原始等待失败与各自证据保留；09 全部普通条件勾选并 resolved，依原图解除 10/11/12 阻塞，不修改后继字段/DAG。本次只做文档差异与二十票辅助检查，没有重跑类型、构建、CLI、无头、App 或数据库。生产代码树等价于已复核 `06da552`；原生能力与完整 App 继续待任务 20 实机，未声称全部 Mac App 完成。
