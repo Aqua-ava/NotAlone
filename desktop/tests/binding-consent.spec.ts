@@ -1,5 +1,4 @@
 import { test } from './binding-fixture';
-import { ContactHttpProxy } from './contact-http-proxy';
 import { bindingInitialSelection, bindingRevokeBusy, bindingMetadataStale, bindingFinalNameStale, bindingNoChannel, bindingCliUnavailable, bindingNamedArguments, bindingStableContacts, bindingReconfirm, bindingConcurrentNew, bindingRevokeWaiting } from './binding-page-scenarios';
 
 test('首次没有选择，刷新只保留仍有效的手选，新会话不授权且不读正文', async ({ bindingPage }) => {
@@ -21,9 +20,8 @@ test('App 复读后服务端最终复读发生改名时整批拒绝，不部分�
 test.describe('本人渠道身份尚未确认', () => {
   test.use({ bindingMode: 'no-channel' });
   test('真实同步接口不可用时引导先单联系人历史导入，不伪装就绪', async ({ bindingPage }) => {
-  await bindingNoChannel(bindingPage);
+    await bindingNoChannel(bindingPage);
   });
-
 });
 
 test('已授权目录在 CLI 不可用时仍能撤销，新增范围诚实显示不可用', async ({ bindingPage }) => {
@@ -46,13 +44,6 @@ test('撤销等待本轮结束后成功，后续检查不再新增读取', async
   await bindingRevokeWaiting(bindingPage);
 });
 
-const raceTest = test.extend<{ bindingProxy: ContactHttpProxy }>({
-  bindingProxy: [async ({ bindingBackend }, use) => {
-    await bindingBackend.startBackend();
-    const proxy = await ContactHttpProxy.attach(bindingBackend.infoPath);
-    try { await use(proxy); } finally { await proxy.close(); }
-  }, { auto: true }],
-});
-raceTest('并发新建的旧选择公开拒绝且不部分创建联系人或扩大读取', async ({ bindingPage, bindingProxy }) => {
+test('并发新建的旧选择公开拒绝且不部分创建联系人或扩大读取', async ({ bindingPage, bindingProxy }) => {
   await bindingConcurrentNew(bindingPage, bindingProxy);
 });
