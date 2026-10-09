@@ -159,3 +159,25 @@ export async function memoryCandidateConfirmation(manager: Page, fixture: Memory
   expect(await fixture.readMemorySection(fixture.data.contact_ids[1], 'contact')).toEqual(other);
   expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'sources')).toEqual(sources);
 }
+
+export async function memoryCandidateDiscard(manager: Page, fixture: MemoryFixture) {
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  const pending = manager.getByRole('region', { name: '待确认候选', exact: true });
+  await expect(pending.getByText('待确认 · 不是已确认事实', { exact: true })).toHaveCount(3);
+  const before = await fixture.readMemorySection(fixture.data.contact_ids[0], 'pending');
+  const contacts = await fixture.readMemorySection(fixture.data.contact_ids[0], 'contact');
+  const own = await fixture.readMemorySection(fixture.data.contact_ids[0], 'owner');
+  const sources = await fixture.readMemorySection(fixture.data.contact_ids[0], 'sources');
+  for (const item of before.data.candidates as Array<Record<string, unknown>>) {
+    await pending.getByRole('button', { name: `丢弃候选：${item.text}`, exact: true }).click();
+    const card = pending.getByRole('article').filter({ has: manager.getByText(item.text as string, { exact: true }) });
+    await card.getByRole('button', { name: '确认丢弃', exact: true }).click();
+    await expect(pending.getByText(item.text as string, { exact: true })).toHaveCount(0);
+  }
+  await expect(pending.getByText('这位联系人暂无待确认候选。', { exact: true })).toBeVisible();
+  expect((await fixture.readMemorySection(fixture.data.contact_ids[0], 'pending')).data.candidates).toEqual([]);
+  expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'contact')).toEqual(contacts);
+  expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'owner')).toEqual(own);
+  expect(await fixture.readMemorySection(fixture.data.contact_ids[0], 'sources')).toEqual(sources);
+}

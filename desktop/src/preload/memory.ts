@@ -11,6 +11,8 @@ export function createMemoryBridge(ipcRenderer: PageTransport): MemoryBridge {
       : Promise.reject(new Error('资料补充不可用。')),
     remove: (...args: [MemoryRemovalRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:remove', args[0])
       : Promise.reject(new Error('资料删除不可用。')),
+    discardCandidate: (...args: [MemoryCandidateRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:discard-candidate', args[0])
+      : Promise.reject(new Error('候选丢弃不可用。')),
     confirmCandidate: (...args: [MemoryCandidateRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:confirm-candidate', args[0])
       : Promise.reject(new Error('候选确认不可用。')),
     correct: (...args: [MemoryCorrectionRequest]) => args.length === 1 ? ipcRenderer.invoke('memory:correct', args[0])

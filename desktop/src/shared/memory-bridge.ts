@@ -70,6 +70,7 @@ export interface MemoryBridge {
   refresh(request: MemoryReadRequest): Promise<void>;
   add(request: MemoryAdditionRequest): Promise<void>;
   remove(request: MemoryRemovalRequest): Promise<void>;
+  discardCandidate(request: MemoryCandidateRequest): Promise<void>;
   confirmCandidate(request: MemoryCandidateRequest): Promise<void>;
   correct(request: MemoryCorrectionRequest): Promise<void>;
   onStateChanged(listener: (state: MemoryReadingState) => void): () => void;

@@ -89,6 +89,14 @@ export class MemoryReadingController {
     await this.writeAndRefresh(scope, `/api/contacts/${scope.contactId}/memory-candidates/${request.candidateId}/confirm`,
       {}, ['pending', candidate.subject === 'self' ? 'owner' : 'contact']);
   }
+  async discardCandidate(request: MemoryCandidateRequest): Promise<void> {
+    this.synchronizeScope();
+    const scope = this.scope;
+    const candidate = this.state.pending.items.find((item) => item.candidateId === request.candidateId);
+    if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision
+      || this.state.pending.phase !== 'ready' || !candidate || this.mutation) throw new Error('候选范围已失效，请刷新后再丢弃。');
+    await this.writeAndRefresh(scope, `/api/contacts/${scope.contactId}/memory-candidates/${request.candidateId}/discard`, {}, ['pending']);
+  }
   private async writeAndRefresh(scope: Scope, path: string, body: unknown, sections: MemorySectionName[]): Promise<void> {
     const operation = { revision: ++this.operationRevision, abort: new AbortController() };
     this.mutation = operation;

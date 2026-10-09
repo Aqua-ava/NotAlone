@@ -35,6 +35,7 @@ export function installMemoryBridge(commands: PageCommands, backend: BackendHost
   });
   commands.handle('memory:add', (...args: unknown[]) => memory.add(additionArguments(args)), 'manager');
   commands.handle('memory:remove', (...args: unknown[]) => memory.remove(removalArguments(args)), 'manager');
+  commands.handle('memory:discard-candidate', (...args: unknown[]) => memory.discardCandidate(candidateArguments(args)), 'manager');
   commands.handle('memory:confirm-candidate', (...args: unknown[]) => memory.confirmCandidate(candidateArguments(args)), 'manager');
   commands.handle('memory:correct', (...args: unknown[]) => memory.correct(correctionArguments(args)), 'manager');
   return memory;
