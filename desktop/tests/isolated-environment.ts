@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { withoutExternalTracing } from '../scripts/test-environment.mjs';
 
 export function isolatedAppEnvironment(userData: string, overrides: NodeJS.ProcessEnv = {}): Record<string, string> {
   const environment = {
@@ -10,6 +11,5 @@ export function isolatedAppEnvironment(userData: string, overrides: NodeJS.Proce
     NOTALONE_SYNC_PROBE: path.join(userData, 'unavailable-probe'),
     ...overrides,
   };
-  return Object.fromEntries(Object.entries(environment).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
+  return withoutExternalTracing(environment);
 }
-

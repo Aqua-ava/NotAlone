@@ -1,6 +1,9 @@
-import type { ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { FixtureTransport, requestFixtureHttp } from './fixture-transport';
+import { isolatedAppEnvironment } from './isolated-environment';
 const project = path.resolve('..');
 
 export type Prepared = { database_url: string; owner_id: string; contact_ids: string[]; other_contact_id: string };
@@ -32,11 +35,48 @@ export class RewriteFixture {
     return requestFixtureHttp(this.infoPath, endpoint, body);
   }
   async cleanup(): Promise<void> {
-    if (this.child.exitCode === null && this.child.signalCode === null) await this.command('stop');
+    let failure: unknown;
+    try {
+      if (this.child.exitCode === null && this.child.signalCode === null) await this.command('stop');
+    } catch (error) { failure = error; }
+    finally {
+      // 命令通道失败时仍关闭本轮stdin，使Python进入已有finally清理；不向未知PID发信号。
+      if (this.child.exitCode === null && this.child.signalCode === null) this.child.stdin?.end();
+    }
     for (let count = 0; this.child.exitCode === null && this.child.signalCode === null && count < 100; count++) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    if (this.child.exitCode !== 0) throw new Error('本轮改写夹具或测试库未正常清理。');
+    if (failure || this.child.exitCode !== 0) throw new Error('本轮改写夹具或测试库未正常清理。');
   }
 }
 
+// 两个真实入口只共用改写夹具的生命周期；各自负责页面/App与资源登记。
+export async function withRewriteFixture(directoryPrefix: string, use: (fixture: RewriteFixture) => Promise<void>,
+  cleanupConfirmed?: () => void): Promise<void> {
+  if (process.env.CONDA_DEFAULT_ENV !== 'NotAlone' || !process.env.CONDA_PREFIX) throw new Error('改写验收须先激活 Conda NotAlone。');
+  const directory = await mkdtemp(path.join(tmpdir(), directoryPrefix));
+  const pythonExecutable = path.join(process.env.CONDA_PREFIX, 'bin/python');
+  const child = spawn(pythonExecutable, [path.join(project, 'desktop/tests/fixtures/rewrite-backend.py')], {
+    cwd: project, stdio: ['pipe', 'pipe', 'ignore'], env: isolatedAppEnvironment(directory, {
+      PYTHONPATH: `${path.join(project, 'backend/src')}:${path.join(project, 'backend')}`, PYTHONNOUSERSITE: '1',
+      NOTALONE_DEEPSEEK_API_KEY: '', NOTALONE_DEEPSEEK_BASE_URL: 'http://127.0.0.1:1',
+    }),
+  });
+  const fixture = new RewriteFixture(directory, pythonExecutable, child);
+  try { await fixture.ready; await use(fixture); }
+  finally {
+    try {
+      await fixture.cleanup();
+      await rm(directory, { recursive: true, force: true });
+      cleanupConfirmed?.();
+    } catch {
+      // 仅保留自有非秘密归属线索，方便核验残留；不能因进程退出就假报数据库清理。
+      const databaseName = /(?:^|\s)dbname=(notalone_core_flow_[0-9a-f]{32}_test)(?:\s|$)/.exec(fixture.data?.database_url ?? '')?.[1] ?? null;
+      await writeFile(path.join(directory, 'cleanup-unconfirmed.json'), JSON.stringify({
+        childPid: child.pid ?? null, exitCode: child.exitCode, signal: child.signalCode,
+        databaseName,
+      }), { mode: 0o600 });
+      throw new Error(`本轮改写夹具收尾未确认，保留归属记录：${directory}`);
+    }
+  }
+}

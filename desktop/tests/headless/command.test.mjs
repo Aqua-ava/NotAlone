@@ -37,7 +37,7 @@ function start(args, file = command, extraEnvironment = {}) {
 const probe = (id, hold = 0, timeout = 5) => ['--probe', id, '--hold-ms', String(hold), '--timeout-seconds', String(timeout)];
 test('两份独立命令和不同TMPDIR互斥，正常退出后重获租约', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'notalone-page-command-'));
-  for (const file of ['scripts/test-pages.mjs', 'scripts/app-test-lease.mjs', 'tests/headless/probe-child.mjs']) {
+  for (const file of ['scripts/test-pages.mjs', 'scripts/app-test-lease.mjs', 'scripts/test-environment.mjs', 'tests/headless/probe-child.mjs']) {
     await mkdir(path.dirname(path.join(directory, file)), { recursive: true }); await copyFile(path.resolve(file), path.join(directory, file));
   }
   const { symlink } = await import('node:fs/promises');

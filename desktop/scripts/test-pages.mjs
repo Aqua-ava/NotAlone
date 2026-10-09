@@ -6,6 +6,7 @@ import { access, mkdir } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { build, stop as stopBuild } from 'esbuild';
 import { acquireLease, leaseStatus, ownedGroupGone } from './app-test-lease.mjs';
+import { withoutExternalTracing } from './test-environment.mjs';
 
 const desktop = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -61,13 +62,13 @@ async function run(options) {
   process.on('SIGINT', interrupt); process.on('SIGTERM', terminate);
   const deadline = setTimeout(() => stop(124), options.timeout * 1000);
   const executeBuild = (command = process.execPath, args = ['scripts/build.mjs']) => new Promise((resolve) => {
-    child = spawn(command, args, { cwd: desktop, detached: true, stdio: 'inherit' });
+    child = spawn(command, args, { cwd: desktop, detached: true, stdio: 'inherit', env: withoutExternalTracing(process.env) });
     children.push(child);
     child.once('error', () => resolve(2)); child.once('close', (status) => resolve(status ?? 2));
   });
   const executeRunner = (probe) => new Promise((resolve) => {
     runtimeAttempted = true;
-    const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('NOTALONE_') && !key.startsWith('DEEPSEEK_')));
+    const environment = withoutExternalTracing(Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('NOTALONE_') && !key.startsWith('DEEPSEEK_'))));
     child = fork(path.join(desktop, probe ? 'tests/headless/probe-child.mjs' : 'artifacts/headless-runtime/run.mjs'),
       probe ? [String(options.hold), String(options.uncertain)] : [], { cwd: desktop, detached: true, stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
         env: { ...environment, NOTALONE_DISABLE_DOTENV: '1', NOTALONE_PAGE_RUN_NONCE: nonce, NOTALONE_PAGE_CASES: JSON.stringify(options.names) } });

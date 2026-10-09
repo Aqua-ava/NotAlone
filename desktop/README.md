@@ -50,13 +50,27 @@ npm run test:pages -- --status  # 只读租约，不启动浏览器或 Electron
 
 每例创建自己的随机 `_test` 库、合成联系人/本人、配置、握手和 context，仅外部模型及必要传输迟到被替代。窗口切换在测试中创建对应角色的页面，原生隐藏/置顶/快捷键/剪贴板与未接通业务入口明确拒绝，不返回假成功。未改正常 App 的 show/focus。原生窗口、真实 IPC 来源、系统对话框、签名 App、微信权限和完整 App 验收仍待实机，两个最小页面组不能替代功能票全部条件。
 
+页面 CLI 的构建/运行子进程及共用 Python 测试环境主动剥除全部 `LANGSMITH_` / `LANGCHAIN_` 追踪配置与凭据，并明确关闭当前和旧版 tracing 开关；调用方覆盖值也不能重新开启。合成模型仍会经过真实 LangChain 回调，不能靠替换模型阻止外部 trace。检查命令只使用自有回环收集器和假密钥：
+
+```bash
+node tests/headless/tracing-isolation-check.mjs          # 真实 pipeline 正控制与隔离效果
+node tests/headless/tracing-isolation-check.mjs --pages  # 另跑限定 draft-rewrite 一组
+node tests/headless/rewrite-lifecycle-check.mjs          # 实际未知命令故障与随机库收尾
+```
+
+改写 App/页面入口只共用 tempdir、Python 启动、ready 和清理生命周期，各自保留资源登记。控制通道失败仍关闭本轮 stdin，尝试触发 Python 的原有 finally 清理；退出码或清理未确认则保留私有 `cleanup-unconfirmed.json`（自有 PID、退出状态、已限定的随机 `_test` 库名），不撤销登记或解除租约，不包含 token/连接串。故障检查须另核验本轮库和进程后才清理自有诊断目录。
+
 全机用户租约为 `.notalone-desktop-tests/headless.lock`，跨工作树和独立命令互斥，复用私有归属检查；不创建 App broker 或 App token。到期/中断只通知本轮 `ChildProcess` 收尾；控制器停读、HTTP/PG/临时目录、浏览器退出和自有进程组均需确认，失败保锁且不抢占陈旧锁、不杀未知 PID。`--status` 只提供归属线索，不能证明残余资源已清理。
 
 `artifacts/headless-pages/` 保存仅合成资料的页面截图及 `resources.json`。资源记录为自有子树 RSS 之和的采样峰值，共享页可能重复计，不是精确物理内存或永久上限；Node 指页面控制器进程，构建/Swift 编译开销未计入该峰值。小型 Swift helper 以约 700 ms 间隔只读本轮浏览器 PID 的 AppKit 激活状态和 CoreGraphics 屏上窗口数，不截屏、不读取其他 App 的标题、无 AX/系统输入或 TCC 请求；有限采样不能保证采样间没有任何瞬时行为。
 
 本轮最小两组 2/2 通过；12 次 owned PID 观测中 active 为 0、屏上窗口数为 0、激活策略为 prohibited。随后资源采集收窄为全局仅 PID/PPID、仅本轮子树读取 RSS/进程名，并等待在途采样后收尾；迟到组保留公开生成 Promise，释放真实 HTTP 后等其完成才检查新范围。只重跑该改写组，1/1 通过，8 次静默观测仍为 0/0；最新峰值 RSS：Chrome 子树 1,027,536 KiB、页面控制器 Node 156,256 KiB、合成 Python 153,584 KiB。正常收尾后租约 absent。公开 CLI 的范围拒绝、跨命令互斥、截止、中断收尾与不确定保锁通过；不更新原生或完整功能票的完成状态。
 
+双轴评审后的隔离修复取得真实 red→green：旧隔离器在合成追踪父环境下向回环收集器发出 1 次 POST；修复后真实 pipeline 正控制 1 次、隔离 0 次，公共 CLI→Node→Python 的实际改写组 1/1 且 trace 为 0。该次 8 次 owned PID 观测仍为 active 0 / 屏上窗口 0 / prohibited；RSS 采样峰值 KiB 为 Chrome 子树 1,035,920 / 控制器 Node 160,000 / 合成 Python 155,120，正常清理与租约 absent。未知命令故障使实际夹具 exit 1、随机库残留 0，同时未确认 marker 保留、诊断先保留后由检查者核验清理；CLI 10/10 与共享传输 6/6 通过。此次只重跑受影响改写组，没有重跑两组或原生 App。
+
 官方接口核验：[Playwright BrowserType](https://playwright.dev/docs/api/class-browsertype)、[BrowserServer](https://playwright.dev/docs/api/class-browserserver)、[Apple NSRunningApplication](https://developer.apple.com/documentation/appkit/nsrunningapplication?language=objc)、[窗口信息](https://developer.apple.com/documentation/coregraphics/cgwindowlistcopywindowinfo(_:_:))。Context7 本轮不可用，官方一手资料与已安装 Playwright 1.64.0、macOS SDK 的实际编译/运行均已核对。
+
+追踪隔离核对 [LangSmith 的 LangChain 追踪](https://docs.langchain.com/langsmith/trace-with-langchain)与实际安装 `langchain-core 1.5.5` / `langsmith 0.11.0` / `langchain 1.3.15`：环境开关可自动安装真实回调，检查显式等待 trace flush；本轮只处理合成正文与 owned loopback，不审阅真实追踪密钥，也不据风险推断历史数据已上传。
 
 ## 安全检查与预约 App 验收
 

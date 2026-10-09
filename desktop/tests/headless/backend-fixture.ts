@@ -1,9 +1,7 @@
-import { spawn } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ContactFixture, type ContactDatabase } from '../contact-backend-fixture';
-import { RewriteFixture } from '../rewrite-backend-fixture';
+import { withRewriteFixture, type RewriteFixture } from '../rewrite-backend-fixture';
 import { withSyntheticBackendFixture } from '../synthetic-backend-fixture';
 import { isolatedAppEnvironment } from '../isolated-environment';
 import { ownResource } from './cleanup';
@@ -22,17 +20,8 @@ export async function withMemoryBackend(use: (fixture: ContactFixture & { data: 
   if (failure) throw failure;
 }
 export async function withRewriteBackend(use: (fixture: RewriteFixture) => Promise<void>) {
-  const directory = await mkdtemp(path.join(tmpdir(), 'notalone-headless-rewrite-'));
-  const python = path.join(process.env.CONDA_PREFIX!, 'bin/python');
-  const child = spawn(python, [path.resolve('tests/fixtures/rewrite-backend.py')], { cwd: project,
-    stdio: ['pipe', 'pipe', 'ignore'], env: isolatedAppEnvironment(directory, {
-      PYTHONPATH: `${path.join(project, 'backend/src')}:${path.join(project, 'backend')}`, PYTHONNOUSERSITE: '1',
-      NOTALONE_DEEPSEEK_API_KEY: '', NOTALONE_DEEPSEEK_BASE_URL: 'http://127.0.0.1:1',
-    }) });
-  const fixture = new RewriteFixture(directory, python, child);
   const released = ownResource();
-  try { await fixture.ready; await use(fixture); }
-  finally { await fixture.cleanup(); await rm(directory, { recursive: true, force: true }); released(); }
+  await withRewriteFixture('notalone-headless-rewrite-', use, released);
 }
 export async function withControllerEnvironment(fixture: ContactFixture | RewriteFixture, use: (userData: string) => Promise<void>) {
   const userData = path.join(fixture.directory, 'page-controller');
