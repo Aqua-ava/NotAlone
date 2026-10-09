@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { ContactFixture, type ContactDatabase } from './contact-backend-fixture';
 import { isolatedAppEnvironment } from './isolated-environment';
 import { ownResource } from './headless/cleanup';
+const cleanupRecords: { databaseName: string; databaseRemaining: number; databaseAbsent: boolean; prepareExitCode: number; backendCleanupConfirmed: boolean }[] = [];
 
 export class SourceDeletionFixture extends ContactFixture {
   private backendChild: ChildProcess | undefined;
@@ -82,10 +83,13 @@ export async function withSourceDeletionFixture(use: (fixture: SourceDeletionFix
     await execute(python, [script, 'drop', ownership.database_name], { env: environment, timeout: 15_000 });
     const absent = await execute(python, ['-c', 'import sys, psycopg\nwith psycopg.connect("host=/tmp dbname=postgres") as c:\n n = c.execute("SELECT count(*) FROM pg_database WHERE datname = %s", (sys.argv[1],)).fetchone()[0]\n if n: raise RuntimeError("本轮来源库仍存在")\n print(n)', ownership.database_name], { env: environment, timeout: 15_000 });
     assert.equal(absent.stdout.trim(), '0');
-    await writeFile('artifacts/headless-pages/source-deletion-cleanup.json', JSON.stringify({
+    const evidence = {
       databaseName: ownership.database_name, databaseRemaining: 0, databaseAbsent: true,
       prepareExitCode: 0, backendCleanupConfirmed: Boolean(fixture),
-    }, null, 2));
+    };
+    cleanupRecords.push(evidence);
+    await writeFile('artifacts/headless-pages/source-deletion-cleanup.json', JSON.stringify(evidence, null, 2));
+    await writeFile('artifacts/headless-pages/source-deletion-databases.json', JSON.stringify(cleanupRecords, null, 2));
     await rm(directory, { recursive: true });
     released();
     process.stdout.write('page_test_source_cleanup: 精确本轮库查询为0，认证后端退出及目录清理已确认。\n');
