@@ -2,7 +2,7 @@
 
 Type: task
 State: claimed
-Triage: ready-for-agent
+Triage: ready-for-human
 Blocked by: 09
 Spec: ../spec.md
 
@@ -52,3 +52,5 @@ Spec: ../spec.md
 - 2026-10-09：固定 `78ddb4b…485fbfaf93f4cf6d977f9ec239c21fbc8c80bd16` 的原生测试准备增量独立Standards hard0/possible0、Spec0，P0–P3均0。两轴仅只读核验门禁、当前编辑及同一小窗接线与合成数据边界，未操作App或剪贴板；不构成原生green，任务状态和验收勾选保持待实机。
 
 - 2026-10-09（本次联系人资格适配后的普通回归）：测试准备8ff023d仅在原4场5处生成前及原生准备1处新增真实helper“确认本次联系人”按钮操作，并从具名公开状态核对当前联系人、scope及生成资格；逐文件去除新增动作后与原复制测试完全一致，保留原断言、故障/迟到安排以及先写合成sentinel、只比较本轮已知文本的原生边界。typecheck/build/diff检查通过，原生准备没有执行。FF固定干净source 0ef0527115a014c82c87f72331bb7cac222e7058，Conda NotAlone仅一次`npm run test:pages -- --case candidate-copy --timeout-seconds 180`，原4场串行4/4、CLI exit0、19.56秒；实际确认动作后验证当前编辑与原快照分离、复制失败保留及重试后收起、当前选择与参数/角色拒绝、复制迟到切换联系人不污染新范围。真实HTTP/PG及本地合成模型保持，系统复制/隐藏只在本轮合成接收边界，不把普通页面当原生剪贴板或窗口验收。仓库外只读见证沿本轮进程stdout和真实HTTP记录4个后端认证POST shutdown 200/stopped，child82895/82995/83107/83186均exit0/signalnull，instance/class cleanup均true；独立只读catalog逐场精确查询4个本轮notalone_core_flow_*_test均不存在，完整名称与场景映射保存在外部context `10-confirmed-regression-0ef0527-databases.json`。捕获64自有身份无存活匹配，6独占进程组均ESRCH，Chrome1、quiet24 active0/window0、cleanupConfirmed=true，两lease独立复查absent；日志/exit/resources/owned-identities/cleanup/independent-final保存在同前缀。精确正常收尾后已明确归还唯一runtime，没有追加组或重跑；本轮仅10 Comments事实记录，不改production。当前原生测试仍未执行、真实剪贴板/App未运行，历史评审与验收事实保留，任务claimed/noAnswer、实机条件未勾选。
+
+- 2026-10-09（集成收尾）：在固定集成源 `d6a3e6a` 重新运行 `npm run test:pages -- --case candidate-copy --timeout-seconds 300`，确认动作复用后的原四场 4/4、exit0；4 个精确随机库不存在、自有进程无残留、单 Chrome、cleanupConfirmed=true、两租约 absent。见 `desktop/artifacts/acceptance-closeout-d6a3e6a/closeout-d6a3e6a-copy-*` 和汇总 `closeout-verification.json`。未改生产实现；真实剪贴板/原生隐藏尚未验证，保持 claimed 和未勾验收，下一步需要用户安排已暂停的原生窗口，Triage 改为 ready-for-human。
