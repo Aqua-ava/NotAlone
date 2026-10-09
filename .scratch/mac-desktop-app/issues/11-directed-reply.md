@@ -1,7 +1,7 @@
 # 11：按明确方向回复消息
 
 Type: task
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: 09
 Spec: ../spec.md
@@ -14,9 +14,9 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 沿用联系人范围消息分页与 reply_to_message 接口；目标为空或方向为空时不提交。
-- [ ] 目标、方向和候选绑定本次请求，不按昵称或消息正文猜测联系人。
-- [ ] 无消息或不可接续时显示实际状态，可使用草稿改写；不实现模型方向建议接口。
+- [x] 沿用联系人范围消息分页与 reply_to_message 接口；目标为空或方向为空时不提交。
+- [x] 目标、方向和候选绑定本次请求，不按昵称或消息正文猜测联系人。
+- [x] 无消息或不可接续时显示实际状态，可使用草稿改写；不实现模型方向建议接口。
 
 ## 测试与范围
 
@@ -34,3 +34,11 @@ Spec: ../spec.md
 - 2026-10-09：合入集成分支 `87f57a7`，保留关系资料和回复固定页面组。`npm run test:pages -- --case directed-reply --case draft-rewrite-acceptance --timeout-seconds 300` 实际退出 0：任务 11 的十一项场景及受影响任务 09 的九项场景全部通过，共用一个无头 Chrome，场景内使用独立随机 `_test` 库、真实生产 handler / 校验器 / HTTP / PG 与受控外部模型。包含无目标/空方向不 POST、真实较早目标、输入与候选快照、幂等/新键、无消息/列表错误重试、绑定撤销和目标来源不再有效的真实拒绝、联系人与连接迟到列表/生成成功失败、新生产会话不恢复目标方向编辑，以及具名参数/角色/范围拒绝。
 - 2026-10-09：改动 CLI 的十项合成进程安全检查、类型检查、最终命令内生产构建、脚本语法、二十张任务字段/依赖/DAG/链接与完整范围空白检查通过。最终报告 `cleanupConfirmed: true`，所有夹具清理核对通过；App / headless 租约均为 absent。静默 142 次采样 active / on-screen 均 0、activationPolicy 2；RSS 自有子树之和峰值为 Chrome 1045472 KiB、Node 214864 KiB、Python 192720 KiB，共享页可能重复计，不代表物理内存、持续上限或瞬时保证。运行日志为本轮外部交接目录的 `11-final-acceptance.log`、`11-cli-safety.log`，截图与资源报告留在本工作树 `desktop/artifacts/headless-pages/`。
 - 2026-10-09：仅读取已确认联系人范围；选择消息和方向只在本次前端会话内存保存，提交后的原目标、方向、候选和依据沿既有后端请求保存。未改生产 schema / 生成算法 / 同步授权，无真实模型或追踪调用、微信/剪贴板/系统按键/可见 Electron、原生验收、VM、远端 Git；目标失效场景只在自有合成库准备来源状态，不宣称完成来源删除。保持 claimed、验收框不勾选且无 Answer，等待主 Agent Standards / Spec 两轴评审。
+
+## Answer
+
+- 已完成当前联系人真实消息分页、明确目标及方向、候选编辑和请求快照；无消息或不可接续时诚实恢复到草稿入口。
+- 原候选 a0fa072 的受限普通页面实际 11/11 与受影响改写 9/9 通过，CLI 10/10、类型及构建通过，cleanupConfirmed=true、两租约 absent；保全证据在集成树 desktop/artifacts/acceptance-11-a0fa072。
+- 固定增量 a0fa072...c027776 复用现有 isUuid，保留 ASCII、不修剪、各边界结构与范围校验。类型、构建、空白和二十票 DAG 检查通过；未重复已通过的二十页面组。初次工具 cwd 错误未改源码，纠正后检查通过。
+- 原完整评审 Standards hard0/possibleP3 UUID重复1、Spec0；增量专职双轴评审 Standards hard0/possible0、Spec0，P0/P1/P2/P3各0，历史重复项已解决。
+- 仅当前联系人范围读取；临时目标与方向仅本次内存，提交快照沿既有后端保存。无 schema、算法或同步授权变更，无真实外部模型、私人数据或桌面操作。普通任务11完成；原生 IPC/窗口/剪贴板、签名包与完整App仍待任务20，19仍受12阻塞。
