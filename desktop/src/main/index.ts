@@ -1,5 +1,6 @@
 import { app, dialog, ipcMain, Menu, protocol, session } from 'electron';
 import path from 'node:path';
+import { electronPageCommands } from './electron-page-commands';
 import { installResources } from './resources';
 import { AppWindows } from './windows';
 import { BackendHost } from './backend/host';
@@ -38,11 +39,12 @@ void app.whenReady().then(async () => {
   const windows = new AppWindows(appSession);
   const diagnostics = new StartupDiagnostics(app.getPath('userData'));
   const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart));
-  const contacts = installContactSessionBridge(windows, backend);
+  const commands = electronPageCommands(windows);
+  const contacts = installContactSessionBridge(commands, backend);
   installImportBridge(windows, new ImportController(backend, contacts));
-  installMemoryBridge(windows, backend, contacts);
+  installMemoryBridge(commands, backend, contacts);
   installBindingConsentBridge(windows, backend, contacts);
-  installReplyBridge(windows, backend, contacts);
+  installReplyBridge(commands, backend, contacts);
   installSetupBridge(windows, new SetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());
   installStartupBridge(windows, diagnostics, backend);

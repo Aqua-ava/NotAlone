@@ -7,8 +7,8 @@ import path from 'node:path';
 
 const user = userInfo();
 export const leaseRoot = path.join(user.homedir, '.notalone-desktop-tests');
-export function leasePath(probeId) {
-  return path.join(leaseRoot, probeId ? `probe-${probeId}.lock` : 'interactive.lock');
+export function leasePath(probeId, mode) {
+  return path.join(leaseRoot, probeId ? `probe-${probeId}.lock` : mode === 'headless' ? 'headless.lock' : 'interactive.lock');
 }
 
 export function gateError(code, message) { return new Error(`${code}: ${message}`); }
@@ -30,7 +30,7 @@ async function readRecord(directory) {
     }
     const record = JSON.parse(await file.readFile('utf8'));
     if (record?.version !== 1 || typeof record.id !== 'string' || !/^[a-f\d-]{36}$/.test(record.id)
-      || !['interactive', 'probe'].includes(record.mode) || !Number.isFinite(record.until) || typeof record.project !== 'string') {
+      || !['interactive', 'probe', 'headless'].includes(record.mode) || !Number.isFinite(record.until) || typeof record.project !== 'string') {
       throw gateError('app_test_lease_unsafe', '租约记录不可核验');
     }
     return record;
@@ -40,7 +40,7 @@ async function readRecord(directory) {
 export async function acquireLease(options) {
   await mkdir(leaseRoot, { mode: 0o700, recursive: true });
   await privateDirectory(leaseRoot);
-  const directory = leasePath(options.mode === 'probe' ? options.id : undefined);
+  const directory = leasePath(options.mode === 'probe' || options.mode === 'headless' ? options.id : undefined, options.mode);
   try { await mkdir(directory, { mode: 0o700 }); }
   catch (error) {
     if (error.code === 'EEXIST') throw gateError('app_test_locked', '同一用户已有验收租约，或上轮收尾尚未确认；禁止抢占陈旧锁');
@@ -65,8 +65,8 @@ export async function acquireLease(options) {
   };
 }
 
-export async function leaseStatus(probeId) {
-  const directory = leasePath(probeId);
+export async function leaseStatus(probeId, mode) {
+  const directory = leasePath(probeId, mode);
   try {
     await privateDirectory(directory);
   } catch (error) {

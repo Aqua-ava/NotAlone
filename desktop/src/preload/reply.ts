@@ -1,7 +1,7 @@
-import { ipcRenderer } from 'electron';
+import type { PageTransport } from './transport';
 import type { GenerateRewrite, ReplyBridge, ReplyCandidateEdit, ReplyCandidateSelection, ReplySessionState, RewriteOptionsUpdate } from '../shared/reply-bridge';
 
-export function createReplyBridge(): ReplyBridge {
+export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
   return Object.freeze({
     getState: (...args: unknown[]) => args.length === 0 ? ipcRenderer.invoke('reply:get-state') : Promise.reject(new Error('本次表达操作不可用。')),
     updateOptions: (update: RewriteOptionsUpdate) => ipcRenderer.invoke('reply:update-options', update),

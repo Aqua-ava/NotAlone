@@ -11,13 +11,13 @@ import { createBindingConsentBridge } from './binding-consent';
 import type { DesktopSettings } from '../shared/desktop-bridge';
 
 const bridge: AppBridge = {
-  backend: createBackendBridge(),
+  backend: createBackendBridge(ipcRenderer),
   setup: createSetupBridge(),
-  startup: createStartupBridge(),
-  contacts: createContactSessionBridge(),
+  startup: createStartupBridge(ipcRenderer),
+  contacts: createContactSessionBridge(ipcRenderer),
   imports: createImportBridge(),
-  replies: createReplyBridge(),
-  memory: createMemoryBridge(),
+  replies: createReplyBridge(ipcRenderer),
+  memory: createMemoryBridge(ipcRenderer),
   bindings: createBindingConsentBridge(),
   openManager: () => ipcRenderer.invoke('window:open-manager'),
   openHelper: () => ipcRenderer.invoke('window:open-helper'),

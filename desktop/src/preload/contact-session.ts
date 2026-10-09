@@ -1,7 +1,7 @@
-import { ipcRenderer } from 'electron';
+import type { PageTransport } from './transport';
 import type { ContactDraft, ContactSelection, ContactSessionBridge, ContactSessionState } from '../shared/contact-session-bridge';
 
-export function createContactSessionBridge(): ContactSessionBridge {
+export function createContactSessionBridge(ipcRenderer: PageTransport): ContactSessionBridge {
   const withoutArguments = (channel: string, args: unknown[]) => args.length === 0
     ? ipcRenderer.invoke(channel) : Promise.reject(new Error('联系人操作不可用。'));
   return Object.freeze({

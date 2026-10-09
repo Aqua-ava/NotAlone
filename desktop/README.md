@@ -37,9 +37,30 @@ npm run package
 
 本机 arm64 产物为 `out/NotAlone-darwin-arm64/NotAlone.app`。可在 Finder 双击打开；包只包含编译后的本地资源和最小启动清单，不依赖开发服务器、原型目录或仓库绝对路径。打包只替换本目录的 `out/` 产物，不覆盖历史 App。当前为 ad-hoc 本机签名，未做 Developer ID 分发、公证或 DMG；权限与签名边界见[台账](../docs/macos-app-permissions-and-errors.md)。
 
+## 轻量无头页面验证
+
+用户已同意普通页面采用后台接口和单实例无头浏览器；宿主桌面的可见 Electron 批量验收继续暂停，不安装虚拟机。`test:pages` 使用本机已有的 Google Chrome 与锁定 Playwright，独立临时 profile，最多两个明确页面组，串行运行；没有浏览器则失败，不隐式下载。先激活 Conda `NotAlone`：
+
+```bash
+npm run test:pages -- --case memory-reading --case draft-rewrite --timeout-seconds 120
+npm run test:pages -- --status  # 只读租约，不启动浏览器或 Electron
+```
+
+时限为 1–300 秒，包含构建；没有默认全量。`memory-reading` 验证实际资料/采纳方式/来源引用/切换/空状态及具名参数与角色限制；`draft-rewrite` 验证真实模型替代边界下的生成、候选编辑与原快照、选择和跨联系人迟到结果。两个页面组复用生产 React、联系人/资料/回复 handler、参数校验、preload 传输接口及真实 HTTP/PostgreSQL；生产 Electron adapter 仍使用原 `validateCaller` 与角色检查。headless 的角色由 host 登记的 page 对象确定，不接受 renderer 自报；具名函数只接收已注册操作，renderer 不持有后端 token、数据库地址或任意 HTTP/系统调用。回环资源 host 与浏览器控制端仅用于测试，不进入交付 App。
+
+每例创建自己的随机 `_test` 库、合成联系人/本人、配置、握手和 context，仅外部模型及必要传输迟到被替代。窗口切换在测试中创建对应角色的页面，原生隐藏/置顶/快捷键/剪贴板与未接通业务入口明确拒绝，不返回假成功。未改正常 App 的 show/focus。原生窗口、真实 IPC 来源、系统对话框、签名 App、微信权限和完整 App 验收仍待实机，两个最小页面组不能替代功能票全部条件。
+
+全机用户租约为 `.notalone-desktop-tests/headless.lock`，跨工作树和独立命令互斥，复用私有归属检查；不创建 App broker 或 App token。到期/中断只通知本轮 `ChildProcess` 收尾；控制器停读、HTTP/PG/临时目录、浏览器退出和自有进程组均需确认，失败保锁且不抢占陈旧锁、不杀未知 PID。`--status` 只提供归属线索，不能证明残余资源已清理。
+
+`artifacts/headless-pages/` 保存仅合成资料的页面截图及 `resources.json`。资源记录为自有子树 RSS 之和的采样峰值，共享页可能重复计，不是精确物理内存或永久上限；Node 指页面控制器进程，构建/Swift 编译开销未计入该峰值。小型 Swift helper 以约 700 ms 间隔只读本轮浏览器 PID 的 AppKit 激活状态和 CoreGraphics 屏上窗口数，不截屏、不读取其他 App 的标题、无 AX/系统输入或 TCC 请求；有限采样不能保证采样间没有任何瞬时行为。
+
+本轮最小两组 2/2 通过；12 次 owned PID 观测中 active 为 0、屏上窗口数为 0、激活策略为 prohibited。随后资源采集收窄为全局仅 PID/PPID、仅本轮子树读取 RSS/进程名，并等待在途采样后收尾；迟到组保留公开生成 Promise，释放真实 HTTP 后等其完成才检查新范围。只重跑该改写组，1/1 通过，8 次静默观测仍为 0/0；最新峰值 RSS：Chrome 子树 1,027,536 KiB、页面控制器 Node 156,256 KiB、合成 Python 153,584 KiB。正常收尾后租约 absent。公开 CLI 的范围拒绝、跨命令互斥、截止、中断收尾与不确定保锁通过；不更新原生或完整功能票的完成状态。
+
+官方接口核验：[Playwright BrowserType](https://playwright.dev/docs/api/class-browsertype)、[BrowserServer](https://playwright.dev/docs/api/class-browserserver)、[Apple NSRunningApplication](https://developer.apple.com/documentation/appkit/nsrunningapplication?language=objc)、[窗口信息](https://developer.apple.com/documentation/coregraphics/cgwindowlistcopywindowinfo(_:_:))。Context7 本轮不可用，官方一手资料与已安装 Playwright 1.64.0、macOS SDK 的实际编译/运行均已核对。
+
 ## 安全检查与预约 App 验收
 
-`npm test` 默认只执行 TypeScript 检查和 `tests/scheduling/command.test.mjs` 的测试 CLI 回归：未协调调用拒绝、跨独立命令副本/TMPDIR 互斥、启动预算、到期、Ctrl+C/SIGTERM、崩溃与损坏租约，以及 Playwright 门禁和限定文件发现。合成孩子固定为 Node；原始 Electron API 的拒绝检查也显式使用 Node 可执行文件，避免门禁回归时打开桌面。命令明确报告真实 App 未运行。这些结果不能证明窗口、业务 UI、后端 HTTP 接线、签名包或实机验收通过；安全目录从真实 App 全量中排除。
+`npm test` 默认只执行 TypeScript 检查和测试 CLI 的合成回归（`tests/scheduling/`、`tests/headless/command.test.mjs`）：未协调调用拒绝、跨独立命令副本/TMPDIR 互斥、启动预算、到期、Ctrl+C/SIGTERM、崩溃与损坏租约，以及 Playwright 门禁和限定文件发现。合成孩子固定为 Node；原始 Electron API 的拒绝检查也显式使用 Node 可执行文件，避免门禁回归时打开桌面。命令明确报告真实 App 未运行。这些结果不能证明窗口、业务 UI、后端 HTTP 接线、签名包或实机验收通过；安全目录从真实 App 全量中排除。
 
 真实 App 验收会显示窗口并使用桌面焦点。必须由主 Agent 先协调用户认可的有限时段，再执行下面的显式命令。参数只是实施门禁，不能代替用户对该时段的认可；当前原任务的 App 验收仍暂停，直到本调度修复安全检查和两轴评审完成。`npm start` 是用户正常打开 App 的入口，不能当作绕过测试门禁的自动验收方式。
 

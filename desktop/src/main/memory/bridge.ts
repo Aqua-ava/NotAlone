@@ -1,8 +1,7 @@
-import { ipcMain } from 'electron';
+import { noArguments, type PageCommands } from '../page-commands';
 import type { MemoryReadRequest, MemorySectionName } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
-import type { AppWindows } from '../windows';
 import { MemoryReadingController } from './controller';
 
 function requestArguments(args: unknown[]): MemoryReadRequest {
@@ -20,18 +19,17 @@ function requestArguments(args: unknown[]): MemoryReadRequest {
   return { contactId: fields.contactId.toLowerCase(), scopeRevision: fields.scopeRevision,
     ...(keys.includes('section') ? { section: fields.section as MemorySectionName } : {}) };
 }
-export function installMemoryBridge(windows: AppWindows, backend: BackendHost, contacts: ContactSession): MemoryReadingController {
+export function installMemoryBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession): MemoryReadingController {
   const memory = new MemoryReadingController(backend, contacts);
-  memory.onStateChanged((state) => windows.publish('memory:state-changed', state));
+  memory.onStateChanged((state) => commands.publish('memory:state-changed', state));
   contacts.onStateChanged(() => memory.synchronizeScope());
   backend.onStateChanged(() => memory.synchronizeScope());
   memory.synchronizeScope();
-  ipcMain.handle('memory:get-state', (event, ...args: unknown[]) => {
-    windows.validateCaller(event, args);
+  commands.handle('memory:get-state', (...args: unknown[]) => {
+    noArguments(args);
     return memory.getState();
   });
-  ipcMain.handle('memory:refresh', (event, ...args: unknown[]) => {
-    windows.validateCaller(event, []);
+  commands.handle('memory:refresh', (...args: unknown[]) => {
     return memory.refresh(requestArguments(args));
   });
   return memory;

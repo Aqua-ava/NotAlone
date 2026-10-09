@@ -1,7 +1,7 @@
-import { ipcRenderer } from 'electron';
+import type { PageTransport } from './transport';
 import type { MemoryBridge, MemoryReadRequest, MemoryReadingState } from '../shared/memory-bridge';
 
-export function createMemoryBridge(): MemoryBridge {
+export function createMemoryBridge(ipcRenderer: PageTransport): MemoryBridge {
   return Object.freeze({
     getState: (...args: unknown[]) => args.length === 0 ? ipcRenderer.invoke('memory:get-state')
       : Promise.reject(new Error('资料读取不可用。')),

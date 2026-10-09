@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { isolatedAppEnvironment } from './app-fixture';
+import { isolatedAppEnvironment } from './isolated-environment';
 
 const execute = promisify(execFile);
 const project = path.resolve('..');

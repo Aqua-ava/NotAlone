@@ -11,6 +11,7 @@
     "test": "npm run typecheck && node scripts/test-safe.mjs",
     "test:app": "node scripts/test-app.mjs",
     "test:app:status": "node scripts/test-app.mjs --status",
+    "test:pages": "node scripts/test-pages.mjs",
     "package": "npm run build && node scripts/package.mjs"
   },
   "engines": { "node": ">=22.12.0" },

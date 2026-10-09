@@ -1,7 +1,7 @@
-import { ipcRenderer } from 'electron';
+import type { PageTransport } from './transport';
 import type { StartupBridge, StartupState } from '../shared/startup-bridge';
 
-export function createStartupBridge(): StartupBridge {
+export function createStartupBridge(ipcRenderer: PageTransport): StartupBridge {
   const invoke = (channel: string, args: unknown[]) => args.length === 0
     ? ipcRenderer.invoke(channel) : Promise.reject(new Error('启动诊断不可用'));
   return Object.freeze({

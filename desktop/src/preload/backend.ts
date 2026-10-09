@@ -1,7 +1,7 @@
-import { ipcRenderer } from 'electron';
+import type { PageTransport } from './transport';
 import type { BackendBridge, BackendState } from '../shared/backend-bridge';
 
-export function createBackendBridge(): BackendBridge {
+export function createBackendBridge(ipcRenderer: PageTransport): BackendBridge {
   const invoke = (channel: string, args: unknown[]) => args.length === 0
     ? ipcRenderer.invoke(channel) : Promise.reject(new Error('后端操作不可用'));
   return Object.freeze({

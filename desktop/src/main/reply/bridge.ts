@@ -1,8 +1,7 @@
-import { ipcMain } from 'electron';
+import { noArguments, type PageCommands } from '../page-commands';
 import type { GenerateRewrite, ReplyCandidateEdit, ReplyCandidateSelection, RewriteOptions, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
-import type { AppWindows } from '../windows';
 import { ReplySession } from './session';
 
 const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
@@ -34,22 +33,17 @@ function options(args: unknown[]): RewriteOptionsUpdate {
   return { contactId: value.contactId as string, scopeRevision: value.scopeRevision as number, options: { ...settings } as unknown as RewriteOptions };
 }
 
-export function installReplyBridge(windows: AppWindows, backend: BackendHost, contacts: ContactSession): ReplySession {
+export function installReplyBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession): ReplySession {
   const replies = new ReplySession(contacts, backend);
-  replies.onStateChanged((state) => windows.publish('reply:state-changed', state));
-  const helper = (event: Parameters<AppWindows['validateCaller']>[0]) => {
-    const window = windows.validateCaller(event, []);
-    if (window.webContents.getURL() !== 'notalone://app/index.html#helper') throw new Error('请在输入小窗操作本次表达。');
-  };
-  ipcMain.handle('reply:get-state', (event, ...args: unknown[]) => { windows.validateCaller(event, args); return replies.getState(); });
-  ipcMain.handle('reply:update-options', (event, ...args: unknown[]) => { helper(event); return replies.updateOptions(options(args)); });
-  ipcMain.handle('reply:generate', (event, ...args: unknown[]) => {
-    helper(event);
+  replies.onStateChanged((state) => commands.publish('reply:state-changed', state));
+  commands.handle('reply:get-state', (...args: unknown[]) => { noArguments(args); return replies.getState(); });
+  commands.handle('reply:update-options', (...args: unknown[]) => { return replies.updateOptions(options(args)); }, 'helper');
+  commands.handle('reply:generate', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'newRequest']);
     if (typeof value.newRequest !== 'boolean') throw new Error('本次生成操作不可用。');
     return replies.generate(value as unknown as GenerateRewrite);
-  });
-  ipcMain.handle('reply:select-candidate', (event, ...args: unknown[]) => { helper(event); return replies.selectCandidate(candidate(args)); });
-  ipcMain.handle('reply:edit-candidate', (event, ...args: unknown[]) => { helper(event); return replies.editCandidate(candidate(args, true) as ReplyCandidateEdit); });
+  }, 'helper');
+  commands.handle('reply:select-candidate', (...args: unknown[]) => { return replies.selectCandidate(candidate(args)); }, 'helper');
+  commands.handle('reply:edit-candidate', (...args: unknown[]) => { return replies.editCandidate(candidate(args, true) as ReplyCandidateEdit); }, 'helper');
   return replies;
 }
