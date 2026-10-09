@@ -1,7 +1,7 @@
 # 13：关系资料查看与来源回溯
 
 Type: task
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: 06
 Spec: ../spec.md
@@ -14,9 +14,9 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 资料按当前范围显示，auto/manual/pending 可区分，不把候选标为已确认事实。
-- [ ] 来源聊天时间、保存时间及缺失信息正确展示；可查看现有来源和版本引用。
-- [ ] 切换联系人不显示旧范围结果；空资料与加载失败有可见状态。
+- [x] 资料按当前范围显示，auto/manual/pending 可区分，不把候选标为已确认事实。
+- [x] 来源聊天时间、保存时间及缺失信息正确展示；可查看现有来源和版本引用。
+- [x] 切换联系人不显示旧范围结果；空资料与加载失败有可见状态。
 
 ## 测试与范围
 
@@ -24,6 +24,16 @@ Spec: ../spec.md
 - 涉及业务数据时只使用合成资料、随机隔离 `_test` 库和独立握手/配置；本任务未涉及的后端、渠道与桌面能力保持后续任务范围。
 - 按仓库工作流读取相关领域及工程约束，完成最小相关检查、Standards/Spec 两轴评审和只含本任务改动的本地提交。
 - 不提交私人资料或凭据，不发送外部聊天消息；远端 Git 操作需另有用户明确同意。
+
+## Answer
+
+已完成本票普通页面条件。生产资料页通过现有四个真实 GET 展示当前联系人记忆、当前本人记忆、当前联系人 pending 与来源；区分 auto/manual/pending 和 self/contact/shared，按 owner/contact 与当前有效期隔离。来源聊天时间、保存时间、完整/不完整/未知时间保持各自含义；仅显示已有来源与版本引用，不猜测缺失详情。四栏各有真实空结果、加载与失败状态，可独立重读；同范围更新、A→B→A、断线重连后的旧成功/失败均在原公开 refresh Promise 完成后核验不会回填。
+
+本轮实际证据分开记录：最小 `memory-reading` 1/1 green；首次完整组在首场景因两张卡相同保存时间造成旧选择器歧义而失败，0 个场景通过、exit 1、资源清理确认。将断言限定对应实际记忆卡后，固定 `memory-reading-full` 九项与 `memory-stale-full` 六项合计 15/15 green、exit 0；未修改生产业务、API、schema 或读取授权。受影响的合成 CLI 安全检查 10/10，类型检查与每轮 public 入口资源构建通过。不是生产业务缺陷的 red → green。
+
+完整组只启动一个无头 Chrome，各场景使用独立上下文和随机 `_test` 库，真实控制器/代理/后端/数据库/临时目录/浏览器收尾确认，两租约 absent。85 次本轮进程静默采样 active 0 / onscreen 0 / activationPolicy 2；RSS 子树采样峰值 KiB 为 Chrome 864976、Node 170416、Python 182880，共享页可重复计，不是物理内存或永久上限。仅使用合成资料，未读取私人环境、业务库、微信或真实模型，未执行外部聊天发送或远端 Git。
+
+主 Agent 对固定基点 `894cfb2abba88e50620a042b727ecad977f16685` 至源码候选 `7379ae6957edfc912db2a01caecf2565595f61b8` 完成完整双轴：Standards hard 0 / possible 0（12 类 smell 均判断），Spec P0–P3 全 0。证据保存在 `/Users/local-user/.codex/worktrees/mac-desktop-app/NotAlone/desktop/artifacts/acceptance-13-7379ae6`，七个白名单文件逐 SHA 保全；截图只来自最小 memory 组，不能视为完整十五项截图。普通资料条件已 resolved；实际 Electron/签名/原生能力、微信渠道及完整 Mac App 交付仍由对应后续票验收。任务 14/15 只满足原有对 13 的依赖，Blocked by 字段不变；15 仍受 08/12 阻塞。
 
 ## Comments
 
@@ -46,3 +56,4 @@ Spec: ../spec.md
 - 2026-10-09（普通页面验收准备）：先确认原工作树 clean 并快进到集成 `480dcef4b627853c995434f0757d52ed710eec00`。按用户批准的受限无头页面接缝，将原十条 App 用例的公开 UI 断言抽到共用场景，保留原 App 入口；纯 MemoryFixture 与固定空本人资料种子供真实 HTTP/PG 复用。准备 `memory-reading-full` 与 `memory-stale-full` 两组，覆盖四栏资料/时间/引用/隔离、四栏加载失败及独立重读、四栏真实空结果、同范围/A→B→A/断线重连旧成功和失败；旧操作的公开 refresh Promise 完成后再断言页面。只记录代理请求方法与路径，不保存认证或正文。尚未注册或运行这两组，未启动 Chrome、Electron、HTTP、Python、PG 或桌面资源，未把准备代码记为通过。当前 `npm run typecheck`、`npm run build` 已通过；任务仍 claimed，框未勾、无 Answer，二十张任务状态与依赖不变。
 - 2026-10-09（完整普通页面实际验收）：在先合入已评审任务 09 固定源码 `06da552be7f119f2bc78d069f780c31d080a5923` 后，由主 Agent 转交唯一串行时段，注册固定 `memory-reading-full` / `memory-stale-full`，保持最多两组、1–300 秒、全机租约、loopback 与 nonce 门禁。原 `memory-reading` 最小组 1/1 green；完整首轮第一场景因相同保存时间匹配两张记忆卡的原 App 选择器 strict mode 失败，exit 1 且真实清理确认，没有生产缺陷结论。将该断言限定实际自动记忆 article 后，完整两组一次 public CLI 重跑为 15/15 green、exit 0：四真实 GET、auto/manual/pending、self/contact/shared、有效期与当前 owner/contact 过滤、完整/不完整/未知来源时间、保存时间、实际来源/版本引用、四栏加载/503/独立重读和真实空结果、同范围更新/A→B→A/断线重连旧成功/失败，后者均等待原公开 refresh Promise 完成才检查可见页面。生产业务/API/schema/授权未修改。
 - 2026-10-09（本轮命令与边界）：激活 Conda `NotAlone` 后，实际运行 `npm run test:pages -- --case memory-reading --timeout-seconds 120` 与 `npm run test:pages -- --case memory-reading-full --case memory-stale-full --timeout-seconds 240`（完整两轮分别保留首败与最终日志）；最终完整组只启动一个无头 Chrome，每场景独立随机 `_test` 库和上下文。85 次本轮 PID 静默采样 active 0 / onscreen 0 / activationPolicy 2；自有子树 RSS 采样峰值 KiB 为 Chrome 864976、Node 170416、Python 182880，共享页可能重复计，不是物理内存或永久上限。公开入口确认 cleanupConfirmed=true，自有控制器、代理、后端、随机库、临时目录及浏览器正常收尾；随后 `npm run typecheck` 与受影响 `node --test tests/headless/command.test.mjs` 10/10 通过，两种租约均 absent。每个 public 页面入口包含资源构建。未启动 Electron/VM、执行原生焦点/快捷键/剪贴板/对话框、读取微信/私人 profile/业务库/真实模型或执行远端 Git；原生与签名仍在对应后续票。本票保持 claimed、框未勾、无 Answer，等待主 Agent 固定候选双轴。
+- 2026-10-09（固定双轴与文档关闭）：主 Agent 已确认 `894cfb2abba88e50620a042b727ecad977f16685...7379ae6957edfc912db2a01caecf2565595f61b8` 完整 Standards hard 0 / possible 0（12 smell 全判断）与 Spec P0–P3 全 0；最小 1/1、首轮选择器歧义失败 0 pass、最终 9+6=15/15 与安全 10/10 分开保留。证据归档 `/Users/local-user/.codex/worktrees/mac-desktop-app/NotAlone/desktop/artifacts/acceptance-13-7379ae6` 的七个白名单文件逐 SHA 保全，截图仅证明最小组页面。本次只写 Answer、勾三框并将 13 resolved，同步 README；仅运行完整差异空白与二十票字段/DAG/链接校验，不再运行 types/build/CLI/headless/HTTP/PG。14/15 的既有依赖字段与其他票事实不变，09 resolved 保留；原生、签名、微信和完整 App 未据此宣称通过。
