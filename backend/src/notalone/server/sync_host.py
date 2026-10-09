@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import threading
+from time import monotonic
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from collections.abc import Iterator, Sequence
@@ -16,6 +17,7 @@ from contextlib import contextmanager
 from typing import Protocol
 from uuid import UUID
 
+from notalone.front_sync.foreground_observation import FreshForegroundObservation
 from notalone.front_sync.cli_binding import (
     CliBindingCandidateView,
     CliBindingSelection,
@@ -50,6 +52,9 @@ class SyncEnginePort(Protocol):
 
     def disable_sync(self) -> None:
         """手动关闭前台同步。"""
+
+    def observe_foreground(self, *, deadline: float) -> FreshForegroundObservation:
+        """取得一次不驱动后台正文读取的新观察。"""
 
     def sync_enabled(self) -> bool:
         """读取当前同步开关（不触发探针或 CLI）。"""
@@ -117,6 +122,9 @@ class SyncEnginePort(Protocol):
 
 class SyncControlPort(Protocol):
     """后端向 HTTP 应用层暴露的同步控制端口。"""
+
+    def observe_foreground(self) -> FreshForegroundObservation:
+        """有界读取本次前台投影，不返回历史报告。"""
 
     def status(self) -> FrontSyncCycleReport | None:
         """返回最近一次循环报告；尚未运行过循环时返回 None。"""
@@ -273,6 +281,15 @@ class SyncHost:
     # ------------------------------------------------------------------
     # 状态与控制端口
     # ------------------------------------------------------------------
+
+    def observe_foreground(self) -> FreshForegroundObservation:
+        """锁预算200ms、probe预算900ms，停读后的排队调用失败关闭。"""
+
+        deadline = monotonic() + 1.3
+        with self._active_engine(timeout=0.2):
+            if monotonic() >= deadline:
+                raise SyncHostBusy("本次前台观察预算已过期。")
+            return self._engine.observe_foreground(deadline=deadline)
 
     def status(self) -> FrontSyncCycleReport | None:
         with self._state_lock:

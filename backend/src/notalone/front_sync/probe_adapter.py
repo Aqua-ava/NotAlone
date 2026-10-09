@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
@@ -56,6 +57,7 @@ class MacosFrontSessionProbe:
     __slots__ = (
         "_executable",
         "_runner",
+        "_default_runner",
         "_timeout_seconds",
         "_permission_blocked",
     )
@@ -74,6 +76,7 @@ class MacosFrontSessionProbe:
         self._executable = executable
         self._timeout_seconds = timeout_seconds
         self._runner = runner or self._run_command
+        self._default_runner = runner is None
         # 权限失败不是普通的瞬时探针错误。macOS 可能在子进程每次
         # 调用 ScreenCaptureKit 时重新弹窗；本进程内先熔断，避免后台
         # 心跳把同一个授权请求重复触发。
@@ -87,15 +90,37 @@ class MacosFrontSessionProbe:
     def observe(self) -> FrontSessionProbeObservation:
         """读取一次前台定位结果；探针不可用时抛出稳定错误。"""
 
+        return self._observe((self._executable, "--session", "--json"), self._runner)
+
+    def observe_fresh(self, *, timeout_seconds: float) -> FrontSessionProbeObservation:
+        """新宿主只允许最小采集协议；旧二进制须在采集前拒绝新参数。"""
+
+        if (
+            isinstance(timeout_seconds, bool)
+            or not math.isfinite(timeout_seconds)
+            or not 0 < timeout_seconds <= 1.0
+        ):
+            raise ValueError("新观察的探针预算须在一秒以内。")
+        runner = (
+            (lambda command: self._run_command(command, timeout_seconds=timeout_seconds))
+            if self._default_runner
+            else self._runner
+        )
+        return self._observe(
+            (self._executable, "--session", "--json", "--minimal-region"), runner,
+        )
+
+    def _observe(
+        self, command: tuple[str, ...], runner: CommandRunner,
+    ) -> FrontSessionProbeObservation:
         if self._permission_blocked:
             raise ProbeAdapterError(
                 "screen_capture_permission_missing",
                 "未授予屏幕录制权限；等待用户授权后再重新检测。",
             )
 
-        command = (self._executable, "--session", "--json")
         try:
-            result = self._runner(command)
+            result = runner(command)
         except FileNotFoundError as error:
             raise ProbeAdapterError("probe_not_found", "前台定位探针不可用。") from error
         except subprocess.TimeoutExpired as error:
@@ -163,13 +188,15 @@ class MacosFrontSessionProbe:
             return code, "前台定位探针报告了环境错误。"
         return "probe_failed", "前台定位探针报告了环境错误。"
 
-    def _run_command(self, command: tuple[str, ...]) -> CommandResult:
+    def _run_command(
+        self, command: tuple[str, ...], *, timeout_seconds: float | None = None,
+    ) -> CommandResult:
         result = subprocess.run(
             command,
             capture_output=True,
             check=False,
             text=True,
-            timeout=self._timeout_seconds,
+            timeout=self._timeout_seconds if timeout_seconds is None else timeout_seconds,
         )
         return _SubprocessResult(
             returncode=result.returncode,

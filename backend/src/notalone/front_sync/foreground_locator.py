@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from uuid import UUID
+from time import monotonic
 
 from notalone.conversation.matcher import (
     BindingMatchKind,
@@ -12,6 +13,7 @@ from notalone.conversation.matcher import (
     match_front_session,
     normalize_display_text,
 )
+from notalone.front_sync.foreground_observation import FreshForegroundObservation
 from notalone.front_sync.probe_adapter import (
     FrontSessionProbeObservation,
     ProbeAdapterError,
@@ -67,6 +69,50 @@ class ForegroundLocator:
         self._probe = probe
         self._cli = cli
         self._bindings = bindings
+
+    def observe_fresh(
+        self, *, enabled: bool, deadline: float,
+    ) -> FreshForegroundObservation:
+        """独立一次观察，不查CLI、不消费历史定位或创建绑定。"""
+
+        if not enabled:
+            return FreshForegroundObservation.create(
+                phase="paused", reason="sync_disabled", probe_available=False,
+                wechat_in_front=False,
+            )
+        observe = getattr(self._probe, "observe_fresh", None)
+        if not callable(observe):
+            return FreshForegroundObservation.create(
+                phase="unavailable", reason="minimal_region_unavailable",
+                probe_available=False, wechat_in_front=False,
+            )
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            return FreshForegroundObservation.create(
+                phase="unavailable", reason="observation_timeout",
+                probe_available=False, wechat_in_front=False,
+            )
+        try:
+            observation = observe(timeout_seconds=min(0.9, remaining))
+        except ProbeAdapterError as error:
+            reason = error.code if error.code in {
+                "probe_not_found", "probe_timeout", "probe_output_invalid",
+                "screen_capture_permission_missing", "probe_failed",
+            } else "probe_failed"
+            return FreshForegroundObservation.create(
+                phase="unavailable", reason=reason,
+                probe_available=False, wechat_in_front=False,
+            )
+        if not observation.wechat_in_front:
+            return FreshForegroundObservation.create(
+                phase="paused", reason="wechat_not_in_front",
+                probe_available=True, wechat_in_front=False,
+            )
+        # 最小区域与OCR质量尚未验证，不能复用旧matcher自动采纳身份。
+        return FreshForegroundObservation.create(
+            phase="manual-required", reason="quality_unverified",
+            probe_available=True, wechat_in_front=True,
+        )
 
     def observe(self, *, enabled: bool) -> ForegroundLocatorStatus:
         """观察一次前台状态；禁用时不启动探针。"""
