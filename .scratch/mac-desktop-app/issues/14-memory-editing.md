@@ -32,3 +32,4 @@ Spec: ../spec.md
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
 - 2026-10-08：已核验本人资料的各后端层次与 schema 均没有修正接口或版本字段。用户明确批准补齐原子修正方案：manual 新版本保留来源、旧版退出检索，仅补最小后端操作与字段；现有业务库升级另行确认。实现仍待任务 13 完成后进入，验收接缝不变。
 - 2026-10-09：任务 13 已完成普通页面与真实隔离 HTTP/PG 验收，本任务领取至 `codex/mac-app-14-memory-editing`。遵循最新测试决定，仅使用真实隔离 HTTP/PG 与单实例非 Electron 无头 Chrome 的公开页面；原生 App、系统输入、剪贴板及真实渠道不在本轮范围。运行资源交接前仅准备本人原子修正的首个公开 HTTP 失败测试及合成场景，不启动后端、数据库或浏览器，不提前实现。
+- 2026-10-09：首片准备位于 `desktop/tests/fixtures/memory_editing_http_check.py` 与 `desktop/tests/memory-editing-page-scenarios.ts`，分别通过认证 HTTP 和公开页面控件核验本人新 manual 版本、旧版本引用、来源时间保留与当前列表更新。仅通过 Conda `NotAlone` 的 `py_compile`、桌面类型检查和 `git diff --check`；本轮 HTTP/PG/浏览器尚未运行，没有 red/green 结果。当前工作树复用集成树已有 `node_modules`，未安装或下载依赖；共享运行器和生产代码未改动。
