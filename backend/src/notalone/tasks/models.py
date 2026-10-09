@@ -173,3 +173,4 @@ class ClaimedBackgroundTaskStep:
     attempt_count: int
     message_count: int
     lease_expires_at: datetime
+    lease_generation: int = 0

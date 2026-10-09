@@ -252,14 +252,18 @@ class PostgresBackgroundTaskRepository:
                     SET last_error_code = %s, updated_at = now()
                     WHERE task.owner_id = %s AND task.contact_id = %s
                       AND task.id = %s AND task.status = 'queued'
-                      AND task.task_type = 'import'
-                      AND EXISTS (
+                      AND ((task.task_type = 'import' AND EXISTS (
                           SELECT 1 FROM public.source_document AS source
                           WHERE source.id = task.source_document_id
                             AND source.owner_id = task.owner_id
                             AND source.contact_id = task.contact_id
                             AND source.status = 'active'
-                      )
+                      )) OR (task.task_type = 'observation' AND EXISTS (
+                          SELECT 1 FROM public.conversation_binding AS binding
+                          WHERE binding.owner_id = task.owner_id
+                            AND binding.contact_id = task.contact_id
+                            AND binding.status = 'active'
+                      )))
                     """,
                     (error_code, owner_id, contact_id, task_id),
                 )
@@ -483,13 +487,14 @@ class PostgresBackgroundTaskRepository:
                     UPDATE public.background_task_step
                     SET status = 'running',
                         attempt_count = %s,
+                        lease_generation = lease_generation + 1,
                         worker_id = %s,
                         lease_expires_at = now() + %s::interval,
                         last_error_code = NULL,
                         started_at = COALESCE(started_at, now()),
                         updated_at = now()
                     WHERE id = %s
-                    RETURNING lease_expires_at
+                    RETURNING lease_expires_at, lease_generation
                     """,
                     (
                         next_attempt,
@@ -538,6 +543,7 @@ class PostgresBackgroundTaskRepository:
                     attempt_count=next_attempt,
                     message_count=candidate[7],
                     lease_expires_at=lease_expires_at[0],
+                    lease_generation=lease_expires_at[1],
                 )
         except BackgroundTaskPersistenceError:
             raise
@@ -1012,7 +1018,8 @@ class PostgresBackgroundTaskRepository:
     ) -> None:
         row = connection.execute(
             """
-            SELECT step.status, step.worker_id, step.lease_expires_at
+            SELECT step.status, step.worker_id, step.lease_expires_at,
+                   step.lease_generation
             FROM public.background_task_step AS step
             JOIN public.background_task AS task ON task.id = step.task_id
             LEFT JOIN public.source_document AS source
@@ -1048,6 +1055,7 @@ class PostgresBackgroundTaskRepository:
             or row[1] != claim.worker_id
             or row[2] is None
             or row[2] <= datetime.now(timezone.utc)
+            or row[3] != claim.lease_generation
         ):
             raise BackgroundTaskLeaseError("后台步骤租约已失效。")
 

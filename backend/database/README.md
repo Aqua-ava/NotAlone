@@ -291,3 +291,8 @@ notalone-task-cleanup
 2026-10-09 汇总记忆追踪与桌面分支时，保留记忆分支的 037–043 顺序，将桌面分支原 `037_owner_memory_versioning.sql` 调整为 `044_owner_memory_versioning.sql`，避免同号文件。只在新建随机测试库验证安装与重复执行，没有升级业务库。曾单独应用桌面原 037 的数据库不能直接沿用该版本账本；升级前必须核对实际结构、备份和已执行文件，不得修改账本绕过历史校验。
 
 增量观察任务分支原 `037_observation_background_task.sql` 同样顺延为 `045_observation_background_task.sql`；未执行任何既有业务库升级，曾单独应用原编号的环境需另行核对迁移历史。
+
+`046_background_step_lease_generation.sql` 为任务步骤增加不随重排清零的领取代次，
+防止同一 Worker 的旧结果在观察任务下一轮误写。续期保持同一代次；领取递增，
+尝试次数及三次失败预算仍独立计算。升级需先停止旧后端／Worker，再按迁移流程应用，
+避免旧程序不校验领取代次；本次仅验证随机 `_test` 库，没有升级既有业务库。
