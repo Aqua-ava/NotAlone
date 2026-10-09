@@ -81,3 +81,39 @@ HTTP 状态轮询最多 360 秒，超时判失败后沿既有宿主停止协议�
 本次不声称精确调用次数或费用，也不把合成冒烟称为总体语义准确率验收。
 未读取真实微信或业务库、未启动桌面、未升级业务库、未发送外部聊天消息。
 仅记录验收事实，无产品代码或 schema 改动；后续真实微信／桌面集成仍需独立限定范围。
+
+## 后续有限桌面验收
+
+用户明确确认“安排长时间”，主 Agent 将本轮时段限定为
+2026-10-09 22:58:43–23:58:43（UTC+8），仍只验约定的两项，最多启动两次，完成即收尾。
+固定源码为 `032d70f`，使用源码 Electron App、临时 userData 和合成资料；不是最终签名包验收。
+
+前置检查：当前工作树缺少 node_modules，首次 npm test 因 tsc 不存在退出；
+按 lockfile 执行 `npm ci --no-audit --no-fund` 后，类型检查及 24 项安全调度回归通过，
+`npm run build` 通过，Electron 可执行文件就绪。预约前 App 租约 absent。
+
+实际在 Conda NotAlone 下运行，清除签名包覆盖、模型 key，禁用默认 dotenv 和外部 tracing：
+
+```bash
+npm run test:app -- --interactive --coordinator main-agent \
+  --from '2026-10-09T14:58:43Z' --until '2026-10-09T15:58:43Z' \
+  --max-launches 2 -- tests/windows.spec.ts tests/memory-reading.spec.ts \
+  --grep '管理后台和输入小窗可独立|按已选联系人显示真实有效资料' \
+  --output artifacts/observation-desktop-20261009
+```
+
+结果 **2 passed（9.8 秒）**：
+
+- 关系资料页面在真实 Electron／HTTP／隔离 PostgreSQL 上显示合成联系人资料、本人共享资料和未确认候选（8.0 秒）。
+- 管理后台和输入小窗独立打开、隐藏、恢复，公开菜单退出并回收测试 App 进程（1.5 秒）。
+
+夹具收尾与随机库 drop 命令完成且未报错；运行器 exit 0，随后 `npm run test:app:status`
+返回 absent。此清理证据来自夹具正常收尾与租约结果；没有额外保留该库名做独立目录核查，
+不与上文真实模型场景的精确库不存在核验混同。
+本地窗口截图与 `.last-run.json` 位于 `desktop/artifacts/observation-desktop-20261009/`，不提交产物。
+
+本轮仅增加上述两项原生证据，没有运行整套 App、真实微信、系统剪贴板或签名包验收，
+没有新增模型外发、读取业务库、迁移业务库或改变同步范围。
+真实模型自动观察与这次桌面资料展示是分开通过的两个场景，尚不能称真实微信新增消息
+经模型后即时显示于桌面的端到端闭环。完整 CLI／WCDB helper 输入、可信最小定位和最终包
+仍沿任务 18／20 的现有范围推进；不因本次通过而关闭完整交付任务。
