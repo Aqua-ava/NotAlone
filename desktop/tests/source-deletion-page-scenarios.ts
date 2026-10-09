@@ -27,3 +27,25 @@ export async function sourceDeletionBasic(manager: Page, fixture: SourceDeletion
   const other = await fixture.http(`/api/contacts/${fixture.data.contact_ids[1]}/messages`);
   expect((other.data.messages as unknown[]).length).toBe(1);
 }
+
+export async function sourceDeletionVerification(manager: Page, fixture: SourceDeletionFixture) {
+  await sourceDeletionBasic(manager, fixture);
+  const contactId = fixture.data.contact_ids[0];
+  const sources = await fixture.http(`/api/contacts/${contactId}/sources`);
+  const deleted = (sources.data.sources as { source_id: string; task_id: string }[])[0];
+  await fixture.failFinalVerification(contactId, deleted.task_id);
+  await manager.getByRole('button', { name: '刷新删除状态', exact: true }).click();
+  const source = manager.getByRole('region', { name: '来源删除管理', exact: true }).getByRole('listitem').filter({ hasText: `来源标识：${deleted.source_id}` });
+  await expect(source.getByText('删除失败：不可检索校验，可重试原任务', { exact: true })).toBeVisible();
+  await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toHaveCount(0);
+  const failed = await fixture.http(`/api/tasks/status?contact_id=${contactId}&task_id=${deleted.task_id}`);
+  expect(failed.data.status).toBe('failed');
+  await source.getByRole('button', { name: '重试来源删除', exact: true }).click();
+  await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
+  await expect(source.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
+  const after = await fixture.http(`/api/contacts/${contactId}/sources`);
+  expect((after.data.sources as { task_id: string }[])[0].task_id).toBe(deleted.task_id);
+  const task = await fixture.http(`/api/tasks/status?contact_id=${contactId}&task_id=${deleted.task_id}`);
+  expect(task.data.status).toBe('succeeded');
+  expect((task.data.steps as { status: string }[]).every((step) => step.status === 'succeeded')).toBe(true);
+}

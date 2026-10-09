@@ -11,6 +11,13 @@ import { ownResource } from './headless/cleanup';
 export class SourceDeletionFixture extends ContactFixture {
   private backendChild: ChildProcess | undefined;
   private controllerStopped = false;
+  async failFinalVerification(contactId: string, taskId: string) {
+    if (!this.data.contact_ids.includes(contactId) || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(taskId)) throw new Error('仅能安排本轮原任务。');
+    await promisify(execFile)(this.pythonExecutable, [path.resolve('tests/fixtures/source-deletion-arrangement.py'),
+      this.data.database_name, this.data.owner_id, contactId, taskId], {
+      env: isolatedAppEnvironment(this.directory, this.environment()), timeout: 5_000,
+    });
+  }
   async http(endpoint: string, body?: object, method = body ? 'POST' : 'GET') {
     const info = await readFile(this.infoPath, 'utf8');
     const address = /^address=(127\.0\.0\.1:\d+)$/m.exec(info)?.[1];
