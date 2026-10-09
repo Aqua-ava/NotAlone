@@ -42,3 +42,5 @@ Spec: ../spec.md
 - 2026-10-09：固定1c8825b…5aa3545的任务10双轴初审：Standards hard0/possible0、Spec0，P0-P3均0。聚合源3a9be09受限memory-editing-full+candidate-copy实际通过：资料编辑12/12、复制2/2，exit0、cleanupConfirmed=true、单Chrome、quiet74次active/window0、两租约absent；日志 /tmp/notalone-app-context.p9MPie/14-full-and-10-copy.log。复制系统边界仍为合成接收端，原生条件未通过。
 
 - 2026-10-09：第三片沿现有公开桥接准备当前第二候选选择、空白禁用及参数/联系人/候选/角色越界拒绝；类型和构建通过，实际运行待串行调度，不新增产品实现。
+
+- 2026-10-09：聚合源c61d86c受限candidate-copy+reply-evidence实际退出0，复制3/3及依据9/9通过，cleanupConfirmed=true、单Chrome、quiet62次active/window0、两租约absent；日志 /tmp/notalone-app-context.p9MPie/12-final.log。第三片沿现有保护直接green，未虚构产品red。下一片仅安排合成系统复制迟到，验证切换联系人后不收起新会话、不发布旧提示，原已触发写入不推断为撤销；类型/构建通过，实际场景待运行。

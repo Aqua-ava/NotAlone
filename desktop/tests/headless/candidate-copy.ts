@@ -123,4 +123,54 @@ export async function candidateCopy(browser: Browser, origin: string) {
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
   }, { async writeText(text) { selectedCopies.push(text); }, hideWindow() { throw new Error('单独复制不应收起。'); } });
   process.stdout.write('page_test_scenario_passed: 仅复制当前选择且拒绝空白范围与角色越界\n');
+
+  const completedCopies: string[] = [];
+  let releaseFirstCopy: (() => void) | undefined;
+  let copyStarts = 0;
+  let hidden = 0;
+  process.stdout.write('page_test_scenario: 复制期间切换联系人不收起新会话或发布旧提示\n');
+  await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
+    try {
+      await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+      await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('甲的本次草稿。');
+      await rewriteBackend.plan({ count: 1, prefix: '甲待复制候选' });
+      await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+      const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
+      await expect(editor).toHaveValue('甲待复制候选（说法1）。');
+      await editor.fill('甲触发复制时的编辑文本。');
+      await helper.getByRole('button', { name: '复制并收起', exact: true }).click();
+      await expect.poll(() => copyStarts).toBe(1);
+      await expect(helper.getByRole('status').filter({ hasText: '正在复制…' })).toBeVisible();
+      expect(completedCopies).toEqual([]);
+      expect(hidden).toBe(0);
+      await manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
+      await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('乙的独立草稿。');
+      await rewriteBackend.plan({ count: 1, prefix: '乙当前候选' });
+      await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+      await expect(editor).toHaveValue('乙当前候选（说法1）。');
+      await editor.fill('乙继续保留自己的编辑文本。');
+      releaseFirstCopy!();
+      await expect.poll(() => completedCopies.length).toBe(1);
+      await expect(helper.getByRole('status').filter({ hasText: '正在复制…' })).toHaveCount(0);
+      await expect(helper.getByRole('status').filter({ hasText: '已复制当前编辑文本' })).toHaveCount(0);
+      await expect(helper.getByRole('alert')).toHaveCount(0);
+      await expect(editor).toHaveValue('乙继续保留自己的编辑文本。');
+      expect(hidden).toBe(0);
+      // 已触发的系统写入不推断为撤销；只验证旧结果不会收起或污染当前乙会话。
+      expect(completedCopies).toEqual(['甲触发复制时的编辑文本。']);
+      await helper.getByRole('button', { name: '复制', exact: true }).click();
+      await expect(helper.getByRole('status').filter({ hasText: '已复制当前编辑文本' })).toBeVisible();
+      expect(completedCopies).toEqual(['甲触发复制时的编辑文本。', '乙继续保留自己的编辑文本。']);
+      expect(hidden).toBe(0);
+      expect((await rewriteBackend.command('observations')).payloads).toHaveLength(2);
+    } finally { releaseFirstCopy?.(); }
+  }, {
+    async writeText(text) {
+      copyStarts++;
+      if (copyStarts === 1) await new Promise<void>((resolve) => { releaseFirstCopy = resolve; });
+      completedCopies.push(text);
+    },
+    hideWindow() { hidden++; },
+  });
+  process.stdout.write('page_test_scenario_passed: 复制期间切换联系人不收起新会话或发布旧提示\n');
 }
