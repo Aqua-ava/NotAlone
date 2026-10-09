@@ -1,7 +1,7 @@
 # 17：同步开关、停读与补齐
 
 Type: task
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: 16
 Spec: ../spec.md
@@ -28,3 +28,7 @@ Spec: ../spec.md
 ## Comments
 
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
+
+- 2026-10-09：按主 Agent 安排从固定 `e1bfe74c298a37c2275c597b7f5e2f5e104df1d4` 的独立 `codex/mac-app-17-sync-switch` 领取。当前仅静态准备首条公开页面反馈与既有 HTTP 契约方案；复用任务16已确认范围和合成CLI生命周期，不重写同步算法。19独占运行，本树不启动PG／HTTP／浏览器／App；共享main／PageHost／renderer／受限登记仅交最小patch供主Agent串行处理。任务保持claimed，无Answer，验收条件未勾选。
+
+- 2026-10-09（首片仅静态准备，未取得实际red）：新增单条共享公开场景及普通wrapper：在真实已确认A／未授权B范围中，经生产同步页的总开关开启、关闭，以真实sync状态／联系人消息接口与本轮合成CLI tail记录核对关闭成功后后续周期零新增读取，不直接读业务表。复用BindingFixture认证stopped、owned child正常退出和精确本轮库回收；未知沿既有marker／诊断保留。当前UI只有绑定授权管理、没有总开关控件，实际页面尚未运行，不能将静态缺项判断记为red／green。受限case `sync-switch`最小登记patch与后续getState／refresh／enable／disable的具名契约方案交主Agent，未编辑共享宿主、登记、BackendHost或ReplySession；先取得实际red再最小green，后续pause／retry／失败／迟到分片推进。类型、构建、42输入无原生入口的静态依赖编译、固定差异与20票字段／DAG／链接检查通过；本轮只复用获准node_modules软链，没有安装／下载或任何HTTP／PG／浏览器／App／模型／原生／私人数据操作，17继续claimed、无Answer。
