@@ -1,7 +1,7 @@
 # 10：真实复制与复制后隐藏
 
 Type: task
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: 09
 Spec: ../spec.md
@@ -28,3 +28,5 @@ Spec: ../spec.md
 ## Comments
 
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
+
+- 2026-10-09：开始准备候选复制的公开页面切片，沿用真实生成与当前编辑文本；普通页面仅替换操作系统复制/隐藏边界，真实剪贴板和窗口验收继续暂停，任务保持 claimed。
