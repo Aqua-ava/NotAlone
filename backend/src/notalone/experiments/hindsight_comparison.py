@@ -153,8 +153,9 @@ def run(
     if output.exists():
         raise ValueError("产物目录已存在；不得覆盖已运行结果。清理后请另建运行目录。")
     root = Path(__file__).resolve().parents[3]
+    repository_root = root.parent
     dataset = build_dataset()
-    hashes = verify_frozen_dataset(dataset, root / "experiments/hindsight/v2")
+    hashes = verify_frozen_dataset(dataset, repository_root / "experiments/hindsight/v2")
     fixture = build_fixture(dataset)
     scopes = sorted(
         {m.scope for m in dataset.memories if m.layer == "contact"},
@@ -433,7 +434,7 @@ def run(
         unchanged = (
             provenance(root)["participating_file_sha256"]
             == frozen["provenance"]["participating_file_sha256"]
-            and verify_frozen_dataset(dataset, root / "experiments/hindsight/v2")
+            and verify_frozen_dataset(dataset, repository_root / "experiments/hindsight/v2")
             == hashes
             and hashlib.sha256((output / "frozen-config.json").read_bytes()).hexdigest()
             == frozen_hash

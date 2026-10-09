@@ -26,7 +26,7 @@ report/reported、第三人转述或候选subject不是直接参与者就判unce
 
 - 试点来源：`.scratch/memory-core-claim-retention` 的 2026-10-04 直接参与者与语义稳定性两轮，结果见 [直接参与者阶段1结果](memory-party-participants-prompt-pilot-result-20261004.md) 与 [语义稳定性结果](memory-party-semantic-stability-pilot-result-20261004.md)；候选叶文本 SHA256 `8d3026b2af2771bf418d380e664f86a48756d28068eaab58f5a75975fdf9f2b0` 保存在仓库外私有目录。
 - 试点结论：匿名 C4 上候选 `described_party=mixed 4/4`、目标证据 4/4、完整 Fact 无新增 `semantic:*` 风险 4/4、`report/reported` 保持 `pending` 4/4、坏 auto 0；同期基线 4 次仍复现旧的 `contact` 方向错误。试点同时确认 `verdict` 才是编译差异的来源，引用标点不是原因。
-- 产品侧不变量（本次改动前已存在，[flow.py](../src/notalone/memory_extraction/flow.py) 与 [pragmatics.py](../src/notalone/memory_extraction/pragmatics.py)）：`unsupported` 拒收、`uncertain` 追加 `semantic:{issue}` 并保持待确认、`supported` 不动；转述类候选一律 `pending`，与核验 verdict 无关。因此本改动不会把转述候选升级为自动采纳。
+- 产品侧不变量（本次改动前已存在，[flow.py](../backend/src/notalone/memory_extraction/flow.py) 与 [pragmatics.py](../backend/src/notalone/memory_extraction/pragmatics.py)）：`unsupported` 拒收、`uncertain` 追加 `semantic:{issue}` 并保持待确认、`supported` 不动；转述类候选一律 `pending`，与核验 verdict 无关。因此本改动不会把转述候选升级为自动采纳。
 
 ## 本地验证（0 次联网、0 预算）
 
@@ -58,7 +58,7 @@ git diff --check                                        # 通过
 
 - 提示文本无法在离线环境证明模型行为：本地证据只说明提示已明确该语义、产品在三种 verdict 下的后处理未变。产品提示此前没有“完全被支持的 report/reported 不得判 uncertain”的明确表述，本次补齐属于降低歧义，不等于模型一定照此返回。
 - 试点的 `mixed 4/4` 与 `supported 4/4` 来自带 `described_party` 的人物变体提示与固定匿名 C4 窗口；产品提示没有该字段，两者不是同一提示的对照，不能把试点数字直接算作产品提示的成绩。
-- 文本差异如实披露：试点候选叶末尾还有一句“语用状态仍由候选已有字段和后续 `PragmaticInterpreter` 处理”，产品版未收录该句，因为产品流水线里这一步本来就由 `PragmaticInterpreter` 承担（[pragmatics.py](../src/notalone/memory_extraction/pragmatics.py)），无需在提示里复述；其余句子含义与候选叶一致。这样产品版比试点版短一句，4/4 的可迁移性因此未经实测。
+- 文本差异如实披露：试点候选叶末尾还有一句“语用状态仍由候选已有字段和后续 `PragmaticInterpreter` 处理”，产品版未收录该句，因为产品流水线里这一步本来就由 `PragmaticInterpreter` 承担（[pragmatics.py](../backend/src/notalone/memory_extraction/pragmatics.py)），无需在提示里复述；其余句子含义与候选叶一致。这样产品版比试点版短一句，4/4 的可迁移性因此未经实测。
 - 提示断言的脆弱面：两条契约测试用“不能仅因”“仍须”等句式作为标记，若日后同义改写提示会误红；判别力主要来自流程测试的 `semantic:*` 为空与 `pending` 断言。
 - 试点捕获的模型响应属于人物变体提示，未用于重放本产品提示，以免得出误导结论。
 - 未读取真实聊天、actual/held 留出、凭据；未写业务记忆、水位或历史资料；未改其他字段、schema、Flow、默认采纳与远端 Git。

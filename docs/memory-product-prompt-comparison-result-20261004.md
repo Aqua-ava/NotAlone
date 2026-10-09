@@ -35,4 +35,4 @@
 - 这次对照**没有复现**试点里“候选更稳定”的结论：产品提示上，基线两窗口都 supported，候选反而在一处返回 `uncertain/pragmatics`。样本只有 2 个窗口、4 次调用，单次不确定返回足以翻转判定，因此结论是“**未通过门槛、证据不足以支持该单叶在产品提示上带来稳定性**”，不是“该单叶有害”。
 - 与试点的差异需要区分清楚：试点候选是带 `described_party` 的人物变体提示、窗口轮换也不同，两者不是同一提示的对照；试点里的 `contact` 方向错误本次两臂都没有出现。
 - 因此本轮**不改动产品提示**：既不因为 4 次调用回滚已提交的单叶（本地契约与试点证据仍成立），也不追加预算去“跑出”想要的结果。若日后要判定单叶去留，需要新的、预注册的对照（更多窗口与重复、两臂随机顺序、以多次返回的不确定率为主指标）。
-- 收据：私有目录 `product-prompt-comparison-20261004/` 保存 preflight、4 份原始返回与 `close-v1.json`（4 次调用、预算关闭、无重试）；仓库内计划与执行脚本见 [frozen-plan-v1.json](.scratch/memory-core-claim-retention/product-prompt-comparison-v1/frozen-plan-v1.json)、[run_comparison.py](.scratch/memory-core-claim-retention/product-prompt-comparison-v1/run_comparison.py)。
+- 收据：私有目录 `product-prompt-comparison-20261004/` 保存 preflight、4 份原始返回与 `close-v1.json`（4 次调用、预算关闭、无重试）；仓库内计划与执行脚本见 [frozen-plan-v1.json](../.scratch/memory-core-claim-retention/product-prompt-comparison-v1/frozen-plan-v1.json)、[run_comparison.py](../.scratch/memory-core-claim-retention/product-prompt-comparison-v1/run_comparison.py)。
