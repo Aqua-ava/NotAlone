@@ -113,3 +113,13 @@ export async function sourceDeletionStaleRequestAcceptance(browser: Browser, ori
   }, 'reply');
   process.stdout.write('page_test_scenario_passed: source-deletion-stale-request\n');
 }
+
+// 仅由受限 test:pages 调度；复用同一浏览器，十场各自完成精确库与后端收尾后再进入下一场。
+export async function sourceDeletionFull(browser: Browser, origin: string) {
+  const scenarios = [sourceDeletionAcceptance, sourceDeletionVerificationAcceptance,
+    sourceDeletionUnknownAcceptance, sourceDeletionArgumentsAcceptance, sourceDeletionRepliesAcceptance,
+    sourceDeletionCrossContactAcceptance, sourceDeletionUnrelatedAcceptance, sourceDeletionEvidenceFailureAcceptance,
+    sourceDeletionMultiSourceAcceptance, sourceDeletionStaleRequestAcceptance];
+  for (const scenario of scenarios) await scenario(browser, origin);
+  process.stdout.write('page_test_scenarios_passed: source-deletion-full 10/10\n');
+}
