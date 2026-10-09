@@ -17,6 +17,7 @@ export class MessageEventHttpProxy {
       const outgoing = request(`http://${address}${incoming.url}`, { method: incoming.method, headers: incoming.headers }, (result) => {
         if (!hold) {
           response.writeHead(result.statusCode ?? 500, result.headers);
+          response.flushHeaders();
           result.pipe(response);
         } else {
           const chunks: Buffer[] = [];
