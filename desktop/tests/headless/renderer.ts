@@ -1,6 +1,7 @@
 import { createCandidateCopyBridge } from '../../src/preload/candidate-copy';
 import type { PageTransport } from '../../src/preload/transport';
 import { createContactSessionBridge } from '../../src/preload/contact-session';
+import { createImportBridge } from '../../src/preload/imports';
 import { createMemoryBridge } from '../../src/preload/memory';
 import { createReplyBridge } from '../../src/preload/reply';
 import { createBackendBridge } from '../../src/preload/backend';
@@ -28,9 +29,7 @@ const bridge: AppBridge = {
   getDesktopSettings: unsupported, setHelperShortcut: unsupported, setHelperPinned: unsupported, onDesktopSettingsChanged: noEvents,
   setup: { getState: unsupported, refresh: unsupported, initializeOwner: unsupported, saveDeepSeekKey: unsupported,
     retryRestart: unsupported, reloadControlledConfiguration: unsupported, onStateChanged: noEvents },
-  imports: { getState: unsupported, chooseFile: unsupported, setTarget: unsupported, preview: unsupported,
-    confirmPreview: unsupported, cancelConfirmation: unsupported, submit: unsupported, refreshTask: unsupported,
-    retryTask: unsupported, runTask: unsupported, reloadSyncHost: unsupported, onStateChanged: noEvents },
+  imports: createImportBridge(transport),
   bindings: { getState: unsupported, refresh: unsupported, confirmSelections: unsupported, revokeBinding: unsupported, onStateChanged: noEvents },
 };
 window.notalone = Object.freeze(bridge);
