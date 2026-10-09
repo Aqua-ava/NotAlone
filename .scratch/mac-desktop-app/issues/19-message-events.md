@@ -32,3 +32,5 @@ Spec: ../spec.md
 - 2026-10-09：接续19，先静态准备真实SSE公开页面red及认证回环传输方案；当前唯一运行权由root分配给其他票据，不启动PG/HTTP/browser/App。事件只提示当前已确认联系人上下文变化，主动刷新保留编辑，禁止自动生成及发送。保持claimed且无Answer。
 
 - 2026-10-09：首片公开页面场景静态就绪，复用生产装配与EventBus，通过真实认证SSE提示新消息；夹具仅插入固定合成PG消息并发布生产事件。预期用户显式刷新后保留编辑和原请求依据，外部模型调用不增加。仅执行TypeScript typecheck、Python AST及diff空白检查，尚未运行场景，不宣称red/green或原生App通过；共享登记由root串行处理。
+
+- 2026-10-09：首轮a1ed36f实际exit2，尚未进入候选生成编辑断言，属于夹具启动失败且cleanup未确认，不能记为产品red。纯import及合成模型构造确认importlib模块未登记导致Pydantic延迟注解无法解析；修复模块登记，并为ready前失败保留精确DB归属和异常文件。旧日志19-first-red保留；headless租约由root核验处理，未确认前停止新运行。静态模型构造通过，未调用setUpClass/后端/模型外部接口。

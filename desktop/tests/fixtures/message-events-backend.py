@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -26,6 +28,8 @@ spec = importlib.util.spec_from_file_location(
 )
 assert spec is not None and spec.loader is not None
 rewrite = importlib.util.module_from_spec(spec)
+# Pydantic 根据类所属模块解析延迟类型注解，必须先登记真实模块命名空间。
+sys.modules[spec.name] = rewrite
 spec.loader.exec_module(rewrite)
 
 
@@ -114,8 +118,24 @@ def main() -> None:
                 raise ValueError("未知新消息夹具操作。")
             print(json.dumps({"id": command["id"], "result": result}), flush=True)
     finally:
+        # 即使 ready 前失败，也保留本轮精确数据库名；不把退出码当作删除证据。
+        ownership_path = Path(os.environ["NOTALONE_ENV_FILE"]).with_name("message-events-owned.json")
+        ownership = {"child_pid": os.getpid(),
+                     "database_name": getattr(type(fixture), "database_name", None),
+                     "cleanup_confirmed": False}
+        ownership_path.write_text(json.dumps(ownership), encoding="utf-8")
+        ownership_path.chmod(0o600)
         cleanup_fixture(fixture)
+        ownership["cleanup_confirmed"] = True
+        ownership_path.write_text(json.dumps(ownership), encoding="utf-8")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # 通用夹具忽略 stderr；仅保存本轮合成进程异常，不输出握手或凭据。
+        failure_path = Path(os.environ["NOTALONE_ENV_FILE"]).with_name("message-events-failure.txt")
+        failure_path.write_text(traceback.format_exc(), encoding="utf-8")
+        failure_path.chmod(0o600)
+        raise
