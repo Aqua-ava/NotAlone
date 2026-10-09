@@ -192,3 +192,46 @@ export async function sourceDeletionUnrelated(manager: Page, helper: Page, fixtu
   await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('仅改写这份合成草稿。');
   await expect(helper.getByRole('button', { name: '复制', exact: true })).toBeEnabled();
 }
+
+export async function sourceDeletionMultiSource(manager: Page, fixture: SourceDeletionFixture) {
+  const contactId = fixture.data.contact_ids[0];
+  const sources = await fixture.http(`/api/contacts/${contactId}/sources`);
+  const entries = sources.data.sources as { source_id: string; file_name: string; status: string }[];
+  expect(entries).toHaveLength(2);
+  expect(entries.every((entry) => entry.status === 'active')).toBe(true);
+  const before = await fixture.http(`/api/contacts/${contactId}/memories`);
+  const memory = (before.data.memories as { memory_id: string; text: string; source_ids: string[] }[])
+    .find((entry) => entry.text === '两个合成来源共同支持的记忆。')!;
+  expect(memory.source_ids).toHaveLength(1);
+  const messageId = memory.source_ids[0];
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  await expect(manager.getByText(memory.text, { exact: true })).toBeVisible();
+  const panel = manager.getByRole('region', { name: '来源删除管理', exact: true });
+  const ordered = [...entries].sort((a, b) => a.file_name.localeCompare(b.file_name));
+  for (const [index, source] of ordered.entries()) {
+    const card = panel.getByRole('listitem').filter({ hasText: `来源标识：${source.source_id}` });
+    await card.getByRole('button', { name: '删除来源', exact: true }).click();
+    await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
+    await expect(card.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
+    const directory = await fixture.http(`/api/contacts/${contactId}/sources`);
+    const deleted = (directory.data.sources as { source_id: string; task_id: string }[]).find((entry) => entry.source_id === source.source_id)!;
+    const task = await fixture.http(`/api/tasks/status?contact_id=${contactId}&task_id=${deleted.task_id}`);
+    expect(task.data.status).toBe('succeeded');
+    expect((task.data.steps as { name: string; status: string }[]).find((step) => step.name === 'verify_not_retrievable')?.status).toBe('succeeded');
+    const messages = await fixture.http(`/api/contacts/${contactId}/messages`);
+    const memories = await fixture.http(`/api/contacts/${contactId}/memories`);
+    const supported = (memories.data.memories as { memory_id: string; source_ids: string[] }[]).find((entry) => entry.memory_id === memory.memory_id);
+    if (index === 0) {
+      expect((messages.data.messages as { message_id: string }[]).some((entry) => entry.message_id === messageId)).toBe(true);
+      expect(supported?.source_ids).toEqual([messageId]);
+      await expect(manager.getByText(memory.text, { exact: true })).toBeVisible();
+    } else {
+      expect((messages.data.messages as { message_id: string }[]).some((entry) => entry.message_id === messageId)).toBe(false);
+      expect(supported).toBeUndefined();
+      await expect(manager.getByText(memory.text, { exact: true })).toHaveCount(0);
+    }
+  }
+  const other = await fixture.http(`/api/contacts/${fixture.data.contact_ids[1]}/messages`);
+  expect(other.data.messages).toHaveLength(1);
+}

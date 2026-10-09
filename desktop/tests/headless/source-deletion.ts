@@ -85,3 +85,14 @@ export async function sourceDeletionEvidenceFailureAcceptance(browser: Browser, 
   }, 'reply');
   process.stdout.write('page_test_scenario_passed: source-deletion-evidence-failure\n');
 }
+
+export async function sourceDeletionMultiSourceAcceptance(browser: Browser, origin: string) {
+  const { sourceDeletionMultiSource } = await import('../source-deletion-page-scenarios');
+  await withSourceDeletionFixture(async (fixture) => withControllerEnvironment(fixture, async (userData) => {
+    const released = ownResource();
+    const host = new PageHost(await browser.newContext(), origin, userData);
+    try { await host.backend.connect(); await sourceDeletionMultiSource(await host.open('manager'), fixture); }
+    finally { await host.close(); fixture.confirmControllerStopped(); released(); }
+  }), 'multi-source');
+  process.stdout.write('page_test_scenario_passed: source-deletion-multi-source\n');
+}

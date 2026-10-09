@@ -65,7 +65,7 @@ export class SourceDeletionFixture extends ContactFixture {
 }
 
 // 准备未知或任一资源收尾未确认时保留目录及标记，不清理前缀范围或杀未知进程。
-export async function withSourceDeletionFixture(use: (fixture: SourceDeletionFixture) => Promise<void>, mode: 'basic' | 'reply' = 'basic') {
+export async function withSourceDeletionFixture(use: (fixture: SourceDeletionFixture) => Promise<void>, mode: 'basic' | 'reply' | 'multi-source' = 'basic') {
   if (process.env.CONDA_DEFAULT_ENV !== 'NotAlone' || !process.env.CONDA_PREFIX) throw new Error('来源删除验收须先激活 Conda NotAlone。');
   const released = ownResource();
   const directory = await mkdtemp(path.join(tmpdir(), 'notalone-headless-source-deletion-'));
