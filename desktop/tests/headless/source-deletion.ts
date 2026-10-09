@@ -1,6 +1,6 @@
 import type { Browser } from '@playwright/test';
 import { withSourceDeletionFixture } from '../source-deletion-fixture';
-import { sourceDeletionBasic, sourceDeletionVerification, sourceDeletionUnknown, sourceDeletionArguments, sourceDeletionReplies } from '../source-deletion-page-scenarios';
+import { sourceDeletionBasic, sourceDeletionVerification, sourceDeletionUnknown, sourceDeletionArguments, sourceDeletionReplies, sourceDeletionUnrelated } from '../source-deletion-page-scenarios';
 import { MemoryHttpProxy } from '../memory-http-proxy';
 import { withControllerEnvironment } from './backend-fixture';
 import { ownResource } from './cleanup';
@@ -36,16 +36,16 @@ async function runProxySourceDeletion(browser: Browser, origin: string, argument
 export async function sourceDeletionUnknownAcceptance(browser: Browser, origin: string) { await runProxySourceDeletion(browser, origin, false); }
 export async function sourceDeletionArgumentsAcceptance(browser: Browser, origin: string) { await runProxySourceDeletion(browser, origin, true); }
 
-export async function sourceDeletionRepliesAcceptance(browser: Browser, origin: string) {
+async function runReplySourceDeletion(browser: Browser, origin: string, scenario: typeof sourceDeletionReplies) {
   await withSourceDeletionFixture(async (fixture) => withControllerEnvironment(fixture, async (userData) => {
     const released = ownResource();
     const host = new PageHost(await browser.newContext(), origin, userData);
     try {
       await host.backend.connect();
-      await sourceDeletionReplies(await host.open('manager'), await host.open('helper'), fixture);
+      await scenario(await host.open('manager'), await host.open('helper'), fixture);
     } finally { await host.close(); fixture.confirmControllerStopped(); released(); }
   }), 'reply');
-  process.stdout.write('page_test_scenario_passed: source-deletion-replies\n');
+  process.stdout.write(`page_test_scenario_passed: ${scenario.name}\n`);
 }
 
 export async function sourceDeletionCrossContactAcceptance(browser: Browser, origin: string) {
@@ -63,4 +63,25 @@ export async function sourceDeletionCrossContactAcceptance(browser: Browser, ori
     }); } finally { await proxy.close(); released(); }
   }, 'reply');
   process.stdout.write('page_test_scenario_passed: source-deletion-cross-contact\n');
+}
+
+export async function sourceDeletionRepliesAcceptance(browser: Browser, origin: string) {
+  await runReplySourceDeletion(browser, origin, sourceDeletionReplies);
+}
+export async function sourceDeletionUnrelatedAcceptance(browser: Browser, origin: string) {
+  await runReplySourceDeletion(browser, origin, sourceDeletionUnrelated);
+}
+export async function sourceDeletionEvidenceFailureAcceptance(browser: Browser, origin: string) {
+  await withSourceDeletionFixture(async (fixture) => {
+    const released = ownResource();
+    const proxy = await MemoryHttpProxy.attach(fixture.infoPath);
+    try { await withControllerEnvironment(fixture, async (userData) => {
+      const host = new PageHost(await browser.newContext(), origin, userData);
+      try {
+        await host.backend.connect();
+        await sourceDeletionUnrelated(await host.open('manager'), await host.open('helper'), fixture, proxy);
+      } finally { proxy.release(); await host.close(); fixture.confirmControllerStopped(); }
+    }); } finally { await proxy.close(); released(); }
+  }, 'reply');
+  process.stdout.write('page_test_scenario_passed: source-deletion-evidence-failure\n');
 }

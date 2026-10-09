@@ -158,3 +158,37 @@ export async function sourceDeletionCrossContact(manager: Page, helper: Page, fi
   await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('说明本人喜欢合成绿茶。');
   await expect(helper.getByRole('button', { name: '复制', exact: true })).toBeDisabled();
 }
+
+export async function sourceDeletionUnrelated(manager: Page, helper: Page, fixture: SourceDeletionFixture,
+  proxy?: MemoryHttpProxy) {
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('仅改写这份合成草稿。');
+  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  const editor = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
+  await expect(editor).toHaveValue('来源引用合成候选。', { timeout: 15_000 });
+  await editor.fill('与被删来源无关的本轮编辑稿。');
+  const before = await helper.evaluate(() => window.notalone.replies.getState());
+  const evidencePath = `/api/contacts/${before.contactId}/replies/${before.result!.replyRequestId}/evidence`;
+  if (proxy) proxy.failurePaths.add(evidencePath);
+  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  const panel = manager.getByRole('region', { name: '来源删除管理', exact: true });
+  await panel.getByRole('button', { name: '删除来源', exact: true }).click();
+  await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
+  await expect(panel.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15_000 });
+  if (proxy) {
+    await expect(helper.getByRole('alert')).toContainText('删除后的依据尚未确认');
+    await expect(editor).toHaveCount(0);
+    await expect(helper.getByRole('button', { name: '复制', exact: true })).toBeDisabled();
+    proxy.failurePaths.clear();
+    await helper.getByRole('button', { name: '重新核对依据', exact: true }).click();
+  }
+  await expect(editor).toHaveValue('与被删来源无关的本轮编辑稿。');
+  const after = await helper.evaluate(() => window.notalone.replies.getState());
+  expect(after.result!.replyRequestId).toBe(before.result!.replyRequestId);
+  expect(after.selectedCandidateId).toBe(before.selectedCandidateId);
+  const evidence = await fixture.http(evidencePath);
+  expect(evidence.status).toBe(200);
+  expect((evidence.data.evidence as { kind: string }[]).every((item) => item.kind === 'user_draft')).toBe(true);
+  await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('仅改写这份合成草稿。');
+  await expect(helper.getByRole('button', { name: '复制', exact: true })).toBeEnabled();
+}
