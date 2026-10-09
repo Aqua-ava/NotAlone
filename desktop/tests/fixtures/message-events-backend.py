@@ -33,13 +33,31 @@ sys.modules[spec.name] = rewrite
 spec.loader.exec_module(rewrite)
 
 
+class ControlledEventBus(EventBus):
+    """仅持有生产订阅供本轮断流安排，不改变事件帧或发布规则。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.subscriptions = []
+
+    def subscribe(self, **kwargs):
+        subscription = super().subscribe(**kwargs)
+        self.subscriptions.append(subscription)
+        return subscription
+
+    def disconnect_streams(self) -> None:
+        for subscription in self.subscriptions:
+            subscription.close()
+        self.subscriptions.clear()
+
+
 class MessageEventsFixture(rewrite.DesktopRewriteFixture):
     def setUp(self) -> None:
-        self.event_buses: dict[UUID, EventBus] = {}
+        self.event_buses: dict[UUID, ControlledEventBus] = {}
         super().setUp()
 
     def _backend(self, owner_id: UUID):
-        events = EventBus()
+        events = ControlledEventBus()
         self.event_buses[owner_id] = events
         create_app = rewrite.create_app
 
@@ -112,6 +130,9 @@ def main() -> None:
                 result = {}
             elif operation == "append_message":
                 result = fixture.append_message(contact_ids[0])
+            elif operation == "disconnect_stream":
+                fixture.event_buses[fixture.owner_id].disconnect_streams()
+                result = {}
             elif operation == "observations":
                 result = {"model_calls": len(fixture.reply_model.seen_calls)}
             elif operation == "stop":
