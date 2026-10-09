@@ -1,3 +1,4 @@
+import { createCandidateCopyBridge } from './candidate-copy';
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type { AppBridge } from '../shared/app-bridge';
 import { createBackendBridge } from './backend';
@@ -15,8 +16,9 @@ const bridge: AppBridge = {
   setup: createSetupBridge(),
   startup: createStartupBridge(ipcRenderer),
   contacts: createContactSessionBridge(ipcRenderer),
-  imports: createImportBridge(),
+  imports: createImportBridge(ipcRenderer),
   replies: createReplyBridge(ipcRenderer),
+  candidateCopy: createCandidateCopyBridge(ipcRenderer),
   memory: createMemoryBridge(ipcRenderer),
   bindings: createBindingConsentBridge(ipcRenderer),
   openManager: () => ipcRenderer.invoke('window:open-manager'),

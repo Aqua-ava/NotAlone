@@ -1,3 +1,4 @@
+import { CandidateCopyController, candidateCopyRequest, type CandidateCopySurface } from '../../src/main/candidate-copy/controller';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -5,6 +6,8 @@ import type { BrowserContext, Page } from '@playwright/test';
 import { BackendHost } from '../../src/main/backend/host';
 import { StartupDiagnostics } from '../../src/main/startup/diagnostics';
 import { installContactSessionBridge } from '../../src/main/contacts/bridge';
+import { ImportController, type ImportFileSelector } from '../../src/main/imports/controller';
+import { installImportBridge } from '../../src/main/imports/bridge';
 import { installMemoryBridge } from '../../src/main/memory/bridge';
 import { installReplyBridge } from '../../src/main/reply/bridge';
 import { noArguments, type PageCommands, type PageRole } from '../../src/main/page-commands';
@@ -41,12 +44,25 @@ export class PageHost implements PageCommands {
   private readonly released = ownResource();
   readonly backend: BackendHost;
   readonly diagnostics: StartupDiagnostics;
-  constructor(private readonly context: BrowserContext, private readonly origin: string, userData: string) {
+  constructor(private readonly context: BrowserContext, private readonly origin: string, userData: string, options: { copySurface?: CandidateCopySurface; chooseImportFile?: ImportFileSelector } = {}) {
     this.diagnostics = new StartupDiagnostics(userData);
     this.backend = new BackendHost(userData, (config, canStart) => this.diagnostics.ensureReady(config, canStart));
     const contacts = installContactSessionBridge(this, this.backend);
+    const imports = new ImportController(this.backend, contacts);
+    installImportBridge(this, imports);
+    this.handle('imports:choose-file', (...args: unknown[]) => {
+      noArguments(args);
+      if (!options.chooseImportFile) throw new Error('本轮页面未提供文件选择输入。');
+      return imports.chooseFile(options.chooseImportFile);
+    }, 'manager');
     installMemoryBridge(this, this.backend, contacts);
-    installReplyBridge(this, this.backend, contacts);
+    const replies = installReplyBridge(this, this.backend, contacts);
+    const copies = new CandidateCopyController(this.backend, contacts, replies);
+    this.handle('candidate-copy:copy', (...args: unknown[]) => {
+      const request = candidateCopyRequest(args);
+      if (!options.copySurface) throw new Error('本轮页面未提供系统复制输入。');
+      return copies.copy(request, options.copySurface);
+    }, 'helper');
     this.handle('backend:get-state', (...args) => { noArguments(args); return this.backend.getState(); });
     this.handle('backend:retry-connection', (...args) => { noArguments(args); return this.backend.connect(); });
     this.handle('startup:get-state', (...args) => { noArguments(args); return this.diagnostics.getState(); });

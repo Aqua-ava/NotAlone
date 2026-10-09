@@ -4,6 +4,7 @@ import { HelperDraft, type ContactSessionView } from './contact-session';
 import { Icon } from './icons';
 import { useRevisionedSession } from './use-revisioned-session';
 import './rewrite.css';
+import { ReplyEvidence, useReplyEvidence } from './ReplyEvidence';
 
 export function useReplySession() {
   const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null,
@@ -78,6 +79,7 @@ function CandidateEditor({ text, candidateId, number, edit }: { text: string; ca
 
 export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
   const { state } = replies;
+  const evidence = useReplyEvidence();
   return <section className="reply-candidates" aria-label="候选回复">
     {state.phase === 'waiting' && <p className="reply-note" role="status">正在等待本次生成结果…</p>}
     {state.phase === 'failed' && <p className="reply-note" role="alert">{state.errorCode === 'connection' ? '未收到生成结果，请用同一次请求重试。'
@@ -100,6 +102,8 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
           <p className="reply-basis">{original.basis}</p>
           {original.riskNotes.map((note, number) => <p className="reply-risk" key={number}>{note}</p>)}
           <details><summary>查看原候选</summary><p className="reply-original">{original.text}</p></details>
+          <ReplyEvidence evidence={evidence} candidate={original} number={index + 1} waiting={state.phase === 'waiting'}
+            selection={{ contactId: state.contactId!, scopeRevision: state.scopeRevision, replyRequestId: state.result!.replyRequestId, candidateId: original.candidateId }} />
         </article>)}
       </div>
     </> : state.phase !== 'waiting' && <div className="reply-empty"><p>暂无候选</p><small>准备好你的意思，再选择合适的表达。</small></div>}

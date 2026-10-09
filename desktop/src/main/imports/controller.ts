@@ -1,6 +1,4 @@
 import path from 'node:path';
-import type { BrowserWindow } from 'electron';
-import { dialog } from 'electron';
 import type { ImportIdentity, ImportPreviewSummary, ImportState, ImportSubmission, ImportTarget } from '../../shared/import-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
@@ -12,6 +10,8 @@ const fileChangedMessage = '文件内容已变化，请重新预览并确认。'
 const rejectedMessage = '预览已拒绝。请提供有效的单联系人 JSONL 文件；混合联系人、群聊、损坏或身份不明确的资料不能导入。';
 const identityMessage = '本人或联系人渠道身份不一致，预览已拒绝。请检查文件或重新选择联系人。';
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+
+export type ImportFileSelector = () => Promise<{ canceled: boolean; filePaths: string[] }>;
 
 export interface ConfirmedImportSelection {
   generation: number;
@@ -76,18 +76,14 @@ export class ImportController {
     return () => this.listeners.delete(listener);
   }
 
-  async chooseFile(window: BrowserWindow): Promise<void> {
+  async chooseFile(selectFile: ImportFileSelector): Promise<void> {
     this.assertAvailable();
     if (this.state.phase === 'choosing') return;
     this.invalidate({ phase: 'choosing', fileName: null });
     this.selectedPath = null;
     const request = this.operation;
     try {
-      const result = await dialog.showOpenDialog(window, {
-        title: '选择单联系人历史文件', buttonLabel: '选择这份文件',
-        properties: ['openFile'], filters: [{ name: '微信单联系人 JSONL', extensions: ['jsonl'] }],
-        message: '只预览你主动选择的这一份单联系人 JSONL 文件。',
-      });
+      const result = await selectFile();
       if (request !== this.operation) return;
       if (result.canceled) { this.publish({ phase: 'idle' }); return; }
       if (result.filePaths.length !== 1 || !path.isAbsolute(result.filePaths[0])) throw new Error();

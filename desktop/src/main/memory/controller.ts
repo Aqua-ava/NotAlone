@@ -1,4 +1,4 @@
-import type { MemoryReadingState, MemoryReadRequest, MemorySectionName } from '../../shared/memory-bridge';
+import type { MemoryAdditionRequest, MemoryCorrectionRequest, MemoryReadingState, MemoryReadRequest, MemorySectionName } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { activeMemories, memorySources, pendingCandidates } from './read';
@@ -11,10 +11,11 @@ const empty = (): Pick<MemoryReadingState, MemorySectionName> => ({
 type Scope = { generation: number; contactId: string; scopeRevision: number };
 
 export class MemoryReadingController {
-  private state: MemoryReadingState = { revision: 0, contactId: null, scopeRevision: 0, ...empty() };
+  private state: MemoryReadingState = { revision: 0, contactId: null, scopeRevision: 0, mutation: { phase: 'idle', message: '' }, ...empty() };
   private scope: Scope | undefined;
   private readonly operations = new Map<MemorySectionName, { revision: number; abort: AbortController }>();
   private operationRevision = 0;
+  private mutation: { revision: number; abort: AbortController } | undefined;
   private readonly listeners = new Set<(state: MemoryReadingState) => void>();
 
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession) {}
@@ -34,8 +35,10 @@ export class MemoryReadingController {
       && next?.scopeRevision === this.scope?.scopeRevision) return;
     for (const operation of this.operations.values()) operation.abort.abort();
     this.operations.clear();
+    this.mutation?.abort.abort();
+    this.mutation = undefined;
     this.scope = next;
-    this.publish({ contactId: next?.contactId ?? null, scopeRevision: contact.scopeRevision, ...empty() });
+    this.publish({ contactId: next?.contactId ?? null, scopeRevision: contact.scopeRevision, mutation: { phase: 'idle', message: '' }, ...empty() });
   }
   async refresh(request: MemoryReadRequest): Promise<void> {
     this.synchronizeScope();
@@ -45,7 +48,44 @@ export class MemoryReadingController {
     }
     await Promise.all((request.section ? [request.section] : sections).map((section) => this.readSection(section, scope)));
   }
-  private async readSection(section: MemorySectionName, scope: Scope): Promise<void> {
+  async correct(request: MemoryCorrectionRequest): Promise<void> {
+    this.synchronizeScope();
+    const scope = this.scope;
+    const previous = this.state[request.level].items.find((item) => item.memoryId === request.memoryId);
+    if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision
+      || !['owner', 'contact'].includes(request.level) || this.state[request.level].phase !== 'ready' || !previous
+      || previous.revision !== request.revision || this.mutation) throw new Error('资料范围或版本已失效，请刷新后再修正。');
+    const path = request.level === 'owner' ? `/api/memories/owner/${request.memoryId}/correct`
+      : `/api/contacts/${scope.contactId}/memories/${request.memoryId}/correct`;
+    await this.writeAndRefresh(scope, path, { text: request.text, category: request.category }, [request.level]);
+  }
+  async add(request: MemoryAdditionRequest): Promise<void> {
+    this.synchronizeScope();
+    const scope = this.scope;
+    if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision
+      || !['owner', 'contact'].includes(request.level) || this.mutation) throw new Error('资料范围已失效，请刷新后再补充。');
+    const body = { text: request.text, category: request.category,
+      ...(request.level === 'contact' ? { contact_id: scope.contactId } : {}) };
+    await this.writeAndRefresh(scope, `/api/memories/manual-${request.level}`, body,
+      request.level === 'contact' ? ['contact', 'sources'] : ['owner']);
+  }
+  private async writeAndRefresh(scope: Scope, path: string, body: unknown, sections: MemorySectionName[]): Promise<void> {
+    const operation = { revision: ++this.operationRevision, abort: new AbortController() };
+    this.mutation = operation;
+    this.publish({ mutation: { phase: 'working', message: '正在保存并核对资料…' } });
+    const current = () => { this.synchronizeScope(); return this.scope === scope && this.mutation === operation; };
+    try {
+      const result = await this.backend.requestJson({ method: 'POST', path, body, signal: operation.abort.signal });
+      if (!current() || result.generation !== scope.generation) return;
+      const refreshed = await Promise.all(sections.map((section) => this.readSection(section, scope)));
+      if (!current()) return;
+      if (!refreshed.every(Boolean)) throw new Error('资料已提交，但当前列表核对失败，请刷新确认结果。');
+      this.publish({ mutation: { phase: 'success', message: '资料已保存并重新核对。' } });
+    } catch {
+      if (current()) this.publish({ mutation: { phase: 'error', message: '未能完成资料操作与核对，请刷新确认后重试。' } });
+    } finally { if (this.mutation === operation) this.mutation = undefined; }
+  }
+  private async readSection(section: MemorySectionName, scope: Scope): Promise<boolean> {
     this.operations.get(section)?.abort.abort();
     const operation = { revision: ++this.operationRevision, abort: new AbortController() };
     this.operations.set(section, operation);
@@ -59,15 +99,17 @@ export class MemoryReadingController {
       pending: `${contactPath}/memory-candidates`, sources: `${contactPath}/sources` };
     try {
       const result = await this.backend.requestJson({ method: 'GET', path: paths[section], signal: operation.abort.signal });
-      if (!current() || result.generation !== scope.generation) return;
+      if (!current() || result.generation !== scope.generation) return false;
       switch (section) {
         case 'contact': this.publish({ contact: { phase: 'ready', items: activeMemories(result.data, 'contact', scope.contactId) } }); break;
         case 'owner': this.publish({ owner: { phase: 'ready', items: activeMemories(result.data, 'owner', scope.contactId) } }); break;
         case 'pending': this.publish({ pending: { phase: 'ready', items: pendingCandidates(result.data) } }); break;
         case 'sources': this.publish({ sources: { phase: 'ready', items: memorySources(result.data) } }); break;
       }
+      return true;
     } catch {
       if (current()) this.publish({ [section]: { phase: 'error', items: [] } });
+      return false;
     } finally {
       if (this.operations.get(section)?.revision === operation.revision) this.operations.delete(section);
     }

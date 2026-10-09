@@ -48,14 +48,23 @@ export interface MemoryReadingState {
   revision: number;
   contactId: string | null;
   scopeRevision: number;
+  mutation: { phase: 'idle' | 'working' | 'success' | 'error'; message: string };
   contact: MemorySection<ActiveMemory>;
   owner: MemorySection<ActiveMemory>;
   pending: MemorySection<PendingMemoryCandidate>;
   sources: MemorySection<MemorySource>;
 }
 export interface MemoryReadRequest extends ContactSelection { section?: MemorySectionName; }
+export interface MemoryAdditionRequest extends ContactSelection {
+  level: 'owner' | 'contact'; text: string; category: MemoryCategory;
+}
+export interface MemoryCorrectionRequest extends ContactSelection {
+  level: 'owner' | 'contact'; memoryId: string; revision: number; text: string; category: MemoryCategory;
+}
 export interface MemoryBridge {
   getState(): Promise<MemoryReadingState>;
   refresh(request: MemoryReadRequest): Promise<void>;
+  add(request: MemoryAdditionRequest): Promise<void>;
+  correct(request: MemoryCorrectionRequest): Promise<void>;
   onStateChanged(listener: (state: MemoryReadingState) => void): () => void;
 }

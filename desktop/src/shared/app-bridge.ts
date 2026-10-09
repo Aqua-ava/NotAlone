@@ -1,3 +1,4 @@
+import type { CandidateCopyBridge } from './candidate-copy-bridge';
 import type { BackendBridge } from './backend-bridge';
 import type { DesktopBridge } from './desktop-bridge';
 import type { WindowBridge } from './window-bridge';
@@ -12,5 +13,5 @@ import type { BindingConsentBridge } from './binding-consent-bridge';
 export type AppBridge = WindowBridge & DesktopBridge & {
   backend: BackendBridge; setup: SetupBridge; startup: StartupBridge;
   contacts: ContactSessionBridge; imports: ImportBridge; bindings: BindingConsentBridge; replies: ReplyBridge;
-  memory: MemoryBridge;
+  memory: MemoryBridge; candidateCopy: CandidateCopyBridge;
 };
