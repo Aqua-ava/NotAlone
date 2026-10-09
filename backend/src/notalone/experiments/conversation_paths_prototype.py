@@ -251,52 +251,7 @@ async def run(output: Path, selected: set[str], refined: bool = False) -> None:
 def render_demo(output: Path) -> None:
     """生成不联网的真实输出回放；按钮不会伪装成新的模型调用。"""
     data = (output / "results.json").read_text(encoding="utf-8").replace("<", "\\u003c")
-    html = """<!doctype html><html lang="zh-CN"><meta charset="utf-8">
-<title>两条链路 · 合成模型验证</title>
-<style>body{font:16px/1.7 system-ui,sans-serif;max-width:1020px;margin:40px auto;padding:0 24px;background:#f6f7f9;color:#202a33}h1{font-size:28px}button{padding:9px 14px;border:1px solid #cbd3db;border-radius:8px;background:white;cursor:pointer;margin:4px}button.active{background:#145c54;color:white}section,article{background:white;border:1px solid #e0e5e9;border-radius:12px;padding:18px;margin:16px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}small{color:#586978}.candidate{border-left:4px solid #208a79;padding:8px 16px;margin:16px 0}.notice{color:#9a3b17}nav{display:flex;flex-wrap:wrap}dt{font-weight:600}dd{margin:0 0 10px}</style>
-<h1>模型能走完两条聊天辅助链路吗？</h1>
-<p>一次性原型：检查收到消息、主动联系中的意愿探索、选择、生成及修改。所有资料和用户动作均为合成；下方回放已发生的真实模型调用，不会联网或发送消息。</p>
-<small id="meta"></small><nav id="tabs"></nav>
-<section><b>自由查看</b><div><button id="reset">从头查看</button><button id="prev">上一步</button><button id="next">下一步</button><button id="skip">尝试跳过方向选择</button></div><p id="notice" class="notice"></p></section>
-<section><b>引导步骤</b><div id="steps"></div></section><main id="view"></main>
-<script id="data" type="application/json">__DATA__</script>
-<script>
-const data=JSON.parse(document.getElementById('data').textContent);
-let state={scenario:0,step:0,notice:''};
-// 纯函数只负责回放导航；跳过选择只演示程序门禁，不是生产链路验证。
-function reduce(s,a,scenarios){
- const steps=scenarios[s.scenario].steps;
- if(a.type==='scenario')return {scenario:a.index,step:0,notice:''};
- if(a.type==='step')return {...s,step:a.index,notice:''};
- if(a.type==='skip')return {...s,notice:steps[s.step].result?.kind==='directions'?'已拦截：此步尚未选择意愿，回放中不能将模型建议当作用户确认。':'本步没有待选择的方向；没有发起任何新调用。'};
- const n=a.type==='reset'?0:a.type==='next'?s.step+1:s.step-1;
- return {...s,step:Math.max(0,Math.min(steps.length-1,n)),notice:''};
-}
-function dispatch(a){state=reduce(state,a,data.scenarios);render()}
-function el(tag,text,parent,cls){const e=document.createElement(tag);e.textContent=text;if(cls)e.className=cls;parent.append(e);return e}
-function render(){
- document.getElementById('meta').textContent=`真实模型：${data.model} · 接收端：${data.endpoint_host} · 未加载 Skill · ${data.scenarios.length} 个合成场景`;
- const tabs=document.getElementById('tabs');tabs.replaceChildren();
- data.scenarios.forEach((c,i)=>{const b=el('button',c.title,tabs,i===state.scenario?'active':'');b.onclick=()=>dispatch({type:'scenario',index:i})});
- const c=data.scenarios[state.scenario], row=c.steps[state.step], r=row.result;
- const steps=document.getElementById('steps');steps.replaceChildren();
- c.steps.forEach((v,i)=>{const b=el('button',`${i+1}. ${v.event.selected_direction?'选择建议':i?'修改／纠正':'发起请求'}`,steps,i===state.step?'active':'');b.onclick=()=>dispatch({type:'step',index:i})});
- document.getElementById('notice').textContent=state.notice;
- const view=document.getElementById('view');view.replaceChildren();
- const input=el('section','',view);el('h2',c.title,input);el('p',`合成用户：${row.event.user_text}`,input);
- if(row.event.selected_direction)el('p',`明确选择：${row.event.selected_direction.label}`,input);
- const evidence=el('details','',input);el('summary','本次可见资料',evidence);el('pre',JSON.stringify(row.input?.evidence||[],null,2),evidence);
- const result=el('section','',view);
- el('p',`检查：${row.failures?.length?row.failures.join('；'):'阶段与引用结构通过（语义质量另行审阅）'} · 耗时 ${row.latency_ms||0} ms`,result);
- if(r){const labels={directions:'等待用户选择意愿',clarification:'需要关键澄清',candidates:'候选已生成，等待用户编辑并亲自发送'};
- el('b',labels[r.kind],result);el('p',`理解：${r.interpretation}`,result);el('p',`当前意愿：${r.intent_summary||'未明确'}`,result);if(r.uncertainty)el('p',`不确定：${r.uncertainty}`,result);
- r.directions.forEach(d=>{const box=el('article','',result);el('b',d.label,box);el('p',d.reason,box)});
- if(r.question)el('p',r.question,result);
- r.candidates.forEach(d=>{const box=el('div','',result,'candidate');el('b',d.approach,box);el('p',d.text,box);el('small',`${d.basis} · 引用 ${d.evidence_ids.join(', ')}`,box)});
- }const details=el('details','',view);el('summary','查看完整实验状态与结构化输出',details);el('pre',JSON.stringify(row,null,2),details);
-}
-['reset','prev','next','skip'].forEach(type=>document.getElementById(type).onclick=()=>dispatch({type}));render();
-</script></html>"""
+    html = Path(__file__).with_name("conversation_paths_demo.html").read_text(encoding="utf-8")
     (output / "demo.html").write_text(html.replace("__DATA__", data), encoding="utf-8")
 
 

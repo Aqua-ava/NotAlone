@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>聊天回复实验 · 按对话看结果</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f6f8;color:#202d37;font:16px/1.75 system-ui,sans-serif}
+header{max-width:1180px;margin:auto;padding:36px 24px 22px}h1{font-size:30px;line-height:1.35;margin:8px 0 14px}h2{font-size:24px;line-height:1.45;margin:0 0 12px}h3{font-size:19px;line-height:1.5;margin:0 0 12px}p{margin:8px 0}small,.muted{color:#61717e}.eyebrow{font-size:13px;font-weight:650;letter-spacing:1px;color:#26786d}.intro{max-width:760px;color:#52636f}
+button{font:inherit;cursor:pointer;border:1px solid #d9e1e6;border-radius:9px;background:#fff;color:inherit;padding:10px 16px}button:hover{border-color:#328777}button:focus-visible,summary:focus-visible{outline:3px solid #489e90;outline-offset:3px}.active{background:#e6f3ef;border-color:#328777;color:#145e50}
+#modes{display:flex;gap:8px;margin-top:22px}.layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:24px;max-width:1180px;margin:auto;padding:0 24px 48px}aside{align-self:start;position:sticky;top:20px}aside p{font-size:13px;color:#667682;margin:0 0 10px}#cases{display:grid;gap:8px}#cases button{text-align:left;line-height:1.5;font-size:15px}.case-number{font-size:12px;display:block;color:#71828c;margin-bottom:3px}
+.panel{padding:26px;border:1px solid #dfe6eb;background:white;border-radius:14px;margin-bottom:20px}.setup{font-size:18px;border-left:3px solid #4b9e8a;padding:8px 0 8px 18px;margin:18px 0}.setup small{display:block;font-size:13px;margin-bottom:5px}.roadmap{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 0}.roadmap span{font-size:14px;background:#eff3f6;padding:6px 12px;border-radius:6px}.step{position:relative}.step-head{display:flex;align-items:center;gap:12px;margin-bottom:20px}.number{width:34px;height:34px;flex:0 0 34px;border-radius:50%;background:#185f53;color:white;text-align:center;line-height:34px;font-weight:650}.step-head h3{margin:0}.label{font-size:13px;font-weight:650;color:#627481;margin:18px 0 8px}.user{background:#eef6f2;border-radius:10px;padding:16px 18px;font-size:18px}.user small{font-size:13px;display:block}.model{padding-top:6px}.option{border:1px solid #dce4e8;border-radius:10px;padding:14px 16px;margin:10px 0}.option.chosen{border-color:#328777;background:#f3faf6}.option b{font-size:17px}.option p{font-size:14px;color:#5e6e77}.tag{font-size:12px;color:#17624e;background:#dcefe5;padding:3px 8px;border-radius:5px;margin-left:10px;white-space:nowrap}.candidate{border:1px solid #dce4e8;border-radius:10px;padding:17px 19px;margin:12px 0}.candidate .quote{font-size:19px;line-height:1.85;margin:8px 0}.candidate small{font-size:13px}mark{background:#fff0c4;color:#7f480c;padding:1px 3px;border-radius:3px}.review{border-radius:9px;padding:13px 16px;margin-top:18px;font-size:15px;background:#eff5f8}.warning{background:#fff5df;border-left:3px solid #d59b37}.question{font-size:19px;padding:18px;background:#f1f4f8;border-radius:10px}.bottomline{font-size:18px}.detail{margin-top:18px;border-top:1px solid #edf0f2;padding-top:12px}.detail summary{cursor:pointer;color:#61717e;font-size:14px}.detail p{font-size:14px}pre{font:12px/1.6 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f8;padding:16px;border-radius:8px}footer{font-size:13px;color:#6b7a86;margin:18px 0}
+@media(max-width:760px){header{padding:24px 18px 18px}h1{font-size:25px}.layout{display:block;padding:0 18px 30px}aside{position:static;margin-bottom:20px}#cases{display:flex;overflow:auto;padding-bottom:8px}#cases button{min-width:175px}.panel{padding:20px}h2{font-size:21px}.candidate .quote{font-size:18px}}
+</style>
+<header>
+  <div class="eyebrow">NotAlone · 真实模型实验回放</div>
+  <h1>按一段对话，看模型怎么帮忙</h1>
+  <p class="intro">先看聊天背景，再从上往下看用户的要求和模型的实际回复。每个步骤都放在同一页，不用来回翻。</p>
+  <p class="muted">聊天和用户操作都是实验编写的，模型回复是真实生成的。这里只看已有结果，不会重新调用模型或发送消息。</p>
+  <nav id="modes" aria-label="选择聊天场景"></nav>
+</header>
+<div class="layout"><aside><p>选择一个例子</p><nav id="cases" aria-label="实验例子"></nav></aside><main id="view" aria-live="polite"></main></div>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const data=JSON.parse(document.getElementById('data').textContent);
+const descriptions={
+ respond_explore:['还没决定怎么回应邀请','对方约周末吃饭，用户还没说明愿不愿意去。看模型怎样给方向，以及选定后如何调整语气。'],
+ respond_direct:['已经决定：婉拒这次邀请','用户已经明确要拒绝，而且不解释原因、不承诺下次。看模型会不会多问或多承诺。'],
+ respond_style_only:['只说“自然一点”，够不够？','“自然一点”只说明语气，没有说明想答应还是拒绝。看模型怎样处理这个缺口。'],
+ respond_correction:['告诉模型：对方是在开玩笑','用户想解释工作忙，随后补充“对方是在开玩笑”。看模型能否改语气，同时保留原意。'],
+ unknown_commitment:['连答应什么都不知道','对方提到“那件事”，但资料没有说明是什么。看模型会不会直接替用户作出承诺。'],
+ initiate_explore:['想聊聊，但还没想好聊什么','没有聊天历史。用户只是想找对方聊聊，先选目的，再看模型给出的开场白。'],
+ initiate_direct:['目的很清楚：约周末吃饭','没有对方的新消息。用户想主动约饭，时间地点还没定，看能否直接得到开场白。'],
+ initiate_old:['用旧话题问近况，会不会乱补？','唯一的背景是：对方在2023年提过学摄影。看模型会不会把旧资料当成现在的事实。'],
+ initiate_change:['改主意：不约饭了，只问近况','先想约饭，后来明确说不约了。看模型能否跟上新目的，而不是继续劝用户见面。']
+};
+let selected=0;
+function el(tag,text,parent,cls){const e=document.createElement(tag);if(text)e.textContent=text;if(cls)e.className=cls;parent.append(e);return e}
+function stepTitle(row,i){if(row.event.selected_direction)return '用户选好方向，模型给出回复';if(i)return '用户补充要求，模型重新调整';return row.result?.kind==='directions'?'先明确想表达什么':row.result?.kind==='clarification'?'模型先问一个关键问题':'用户已经想清楚，直接生成'}
+function review(c,row,i){
+ if(row.skipped)return ['这一步没有运行模型。实验脚本没认出同义的方向名称，后续补跑已单独记录。',true];
+ if(!row.result)return ['这一步调用失败，没有得到回复。不是用户没选好，也不是模型拒绝回答。',true];
+ if(c.id==='respond_style_only')return row.result.kind==='clarification'?['模型没有擅自决定答应或拒绝，但把方向选择变成了追问。按草图，这里应直接展示几个可选方向。',true]:['这次正确给出了不同方向，没有把“自然一点”误当成“我愿意去”。',false];
+ if(c.id==='respond_explore'&&i===0)return ['模型先给方向，没有直接替用户答应。不过它把“这次去不了”和“另约时间”绑在一起，少了一个单纯拒绝的选项。',true];
+ if(c.id==='respond_explore'&&i===1)return ['本次实验选的是“去不了，但另约”。所以候选里的“改天再约”来自所选方向，不是用户只拒绝一次后模型擅自加上的承诺。',false];
+ if(c.id==='respond_explore'&&i===2)return ['回复明显缩短了，并保留“这次不去、以后另约”的原方向。',false];
+ if(c.id==='unknown_commitment')return ['缺的是“要答应什么”，这会影响承诺内容。模型先询问具体事项，没有直接写“我答应”。',false];
+ if(c.id==='respond_correction')return [i?'模型接收了“是在开玩笑”的纠正，改成轻松说法，没有增加想念或见面邀请。':'模型围绕工作忙解释，没有把回复改成想念或邀约。是否喜欢这些措辞仍由用户判断。',false];
+ if(c.id==='initiate_change'&&i===1)return ['模型没有再提约饭，跟上了新目的。但“好久没联系”“突然想起你”没有资料支持，不能因为听起来自然就直接添加。',true];
+ if(c.id==='initiate_old')return ['旧资料可以用来问“现在还在学摄影吗”，却不能证明两人很久没联系。标黄的词句新增了未给出的背景或心理状态。',true];
+ if(c.id==='initiate_explore')return [i?'选择后得到了开场白。第一条可直接看出流程已走完；其他说法仍须检查是否增加“我这边没什么事”之类含义。':'模型先给出目的选项，没有直接把“想聊聊”变成邀约。',false];
+ if(c.id==='initiate_direct')return ['目的明确时直接生成，没有强迫先填时间地点。仍要检查“你定”等说法是否超出用户原意。',false];
+ return ['模型按明确意愿生成了候选。措辞是否合意、事实是否准确，仍要由用户检查。',false];
+}
+function quote(parent,text,c){
+ const p=el('p','',parent,'quote');
+ const patterns=c.id==='initiate_old'||c.id==='initiate_change'?/(好久没联系了|好久没聊了|突然想到你|突然想起你|很久没听到你的消息了)/g:null;
+ if(!patterns){p.textContent=text;return}
+ let start=0;for(const m of text.matchAll(patterns)){p.append(document.createTextNode(text.slice(start,m.index)));el('mark',m[0],p);start=m.index+m[0].length}p.append(document.createTextNode(text.slice(start)));
+}
+function render(){
+ const c=data.scenarios[selected], meta=descriptions[c.id]||[c.title,'从上往下看这段实验。'];
+ const modes=document.getElementById('modes');modes.replaceChildren();
+ for(const [mode,label]of [['respond','回应对方的消息'],['initiate','主动找对方聊聊']]){
+   if(!data.scenarios.some(v=>v.mode===mode))continue;
+   const b=el('button',label,modes,c.mode===mode?'active':'');b.setAttribute('aria-pressed',String(c.mode===mode));b.onclick=()=>{selected=data.scenarios.findIndex(v=>v.mode===mode);render()};
+ }
+ const nav=document.getElementById('cases');nav.replaceChildren();
+ data.scenarios.forEach((v,i)=>{if(v.mode!==c.mode)return;const b=el('button','',nav,i===selected?'active':'');b.setAttribute('aria-pressed',String(i===selected));el('span',v.steps.length>1?`${v.steps.length} 步，完整过程`:'1 步，直接看结果',b,'case-number');el('span',(descriptions[v.id]||[v.title])[0],b);b.onclick=()=>{selected=i;render()}});
+ const view=document.getElementById('view');view.replaceChildren();
+ const setup=el('section','',view,'panel');el('h2',meta[0],setup);el('p',meta[1],setup,'muted');
+ const evidence=c.steps[0]?.input?.evidence||[];
+ const background=evidence.filter(e=>e.kind!=='user_input'&&e.kind!=='user_selected_direction');
+ if(background.length)for(const e of background){const box=el('div','',setup,'setup');el('small',e.kind==='message'?'对方发来的消息':'实验提供的背景',box);el('div',e.text.replace(/^对方：/,''),box)}
+ else el('div','本例没有聊天历史，也没有对方的新消息。模型只能依据用户本次想法。',setup,'setup');
+ const road=el('div','',setup,'roadmap');c.steps.forEach((row,i)=>el('span',`${i+1} · ${row.event.selected_direction?'选择方向':i?'补充／修改':row.result?.kind==='directions'?'先看建议':'提出要求'}`,road));
+ c.steps.forEach((row,i)=>{
+   const r=row.result,section=el('section','',view,'panel step'),head=el('div','',section,'step-head');
+   el('span',String(i+1),head,'number');el('h3',stepTitle(row,i),head);
+   el('div',row.event.selected_direction?'实验中的用户选择':'用户对助手说',section,'label');
+   const user=el('div',row.event.selected_direction?row.event.selected_direction.label:row.event.user_text,section,'user');
+   if(row.event.selected_direction)el('small','这是实验脚本代入的选择，不是模型替用户作决定。',user);
+   const model=el('div','',section,'model');
+   if(r?.kind==='directions'){
+     el('div','模型给出的方向建议（不是可发送的回复）',model,'label');
+     const next=c.steps[i+1]?.event.selected_direction;
+     r.directions.forEach(d=>{const box=el('div','',model,'option'+(next?.id===d.id?' chosen':''));el('b',d.label,box);if(next?.id===d.id)el('span','下一步选了这个',box,'tag');el('p',d.reason,box)});
+   }else if(r?.kind==='candidates'){
+     el('div','模型生成的候选回复（任选一条，仍需用户检查）',model,'label');
+     r.candidates.forEach((v,j)=>{const box=el('article','',model,'candidate');el('small',`说法 ${j+1}`,box);quote(box,v.text,c);const more=el('details','',box,'detail');el('summary','为什么这样写？',more);el('p',v.approach,more);el('p',v.basis,more)});
+   }else if(r?.kind==='clarification'){el('div','模型向用户确认',model,'label');el('p',r.question,model,'question')}
+   else el('p',row.skipped?'实验停在这里，尚未请求下一步。':'本次没有生成结果。',model,'question');
+   const [note,warning]=review(c,row,i);const reviewBox=el('div','',section,'review'+(warning?' warning':''));el('b',warning?'这里有一个问题':'这一步说明了什么',reviewBox);el('p',note,reviewBox);el('small','以上是实验后的人工解读，不是模型原话。',reviewBox);
+   const detail=el('details','',section,'detail');el('summary','展开模型的理解和实验记录',detail);
+   if(r){el('p',`模型怎样理解：${r.interpretation}`,detail);if(r.uncertainty)el('p',`模型认为不确定的地方：${r.uncertainty}`,detail)}
+   el('p',row.latency_ms?`本步耗时约 ${(row.latency_ms/1000).toFixed(1)} 秒。`:'此步没有模型调用。',detail);
+   const raw=el('details','',detail);el('summary','原始数据（开发用）',raw);el('pre',JSON.stringify(row,null,2),raw);
+ });
+ const close=el('section','',view,'panel');el('h3','看完这个例子，应该记住什么？',close);
+ el('p',c.id==='initiate_old'||c.id==='initiate_change'?'模型能按流程生成，也可能在自然的措辞中悄悄添加没有依据的信息。能生成，不等于可以直接发送。':c.steps.some(s=>!s.result)?'前面的步骤有真实输出，但这段记录没有完整走到底。页面保留了失败或中断，不把它包装成成功。':'用户决定想表达什么，模型帮助组织说法。流程能走通，具体候选仍需要检查和修改。',close,'bottomline');
+ el('footer',`模型 ${data.model} · 本轮未使用 Skill · 本页仅回放已有实验，不是产品聊天界面。`,view);
+}
+render();
+</script>
+</html>
