@@ -1,8 +1,18 @@
 import type { PageTransport } from './transport';
 import type { GenerateReply, ReplyBridge, ReplyCandidateEdit, ReplyCandidateSelection, ReplySessionState, RewriteOptionsUpdate } from '../shared/reply-bridge';
+import type { ReplyEvidenceState } from '../shared/reply-evidence';
 
 export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
   return Object.freeze({
+    getEvidenceState: (...args: unknown[]) => args.length === 0 ? ipcRenderer.invoke('reply:get-evidence-state') : Promise.reject(new Error('候选依据不可用。')),
+    loadEvidence: (...args: unknown[]) => ipcRenderer.invoke('reply:load-evidence', ...args),
+    closeEvidence: (...args: unknown[]) => ipcRenderer.invoke('reply:close-evidence', ...args),
+    onEvidenceChanged: (listener: (state: ReplyEvidenceState) => void) => {
+      if (typeof listener !== 'function') throw new Error('候选依据不可用。');
+      const receive = (_event: unknown, state: ReplyEvidenceState) => listener(state);
+      ipcRenderer.on('reply:evidence-changed', receive);
+      return () => ipcRenderer.removeListener('reply:evidence-changed', receive);
+    },
     getState: (...args: unknown[]) => args.length === 0 ? ipcRenderer.invoke('reply:get-state') : Promise.reject(new Error('本次表达操作不可用。')),
     updateOptions: (update: RewriteOptionsUpdate) => ipcRenderer.invoke('reply:update-options', update),
     setMode: (...args: unknown[]) => ipcRenderer.invoke('reply:set-mode', ...args),
