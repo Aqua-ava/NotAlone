@@ -1,61 +1,43 @@
-import type { Browser } from '@playwright/test';
+import type { Browser, Page } from '@playwright/test';
 import { memoryMutationStale, memoryMutationArguments, memoryMutationFailures, memoryCandidateDiscard, memoryCandidateConfirmation, memoryContactCorrection, memoryManualAddition, memoryOwnerCorrection, memoryRemoval } from '../memory-editing-page-scenarios';
+import type { MemoryFixture } from '../memory-backend-fixture';
 import { MemoryHttpProxy } from '../memory-http-proxy';
 import { ownResource } from './cleanup';
 import { PageHost } from './page-host';
 import { withControllerEnvironment, withMemoryBackend } from './backend-fixture';
 
-export async function memoryEditingOwner(browser: Browser, origin: string) {
+// 六种公开场景共用准备与收尾流程；每次调用仍使用独立库和页面。
+async function withMemoryManager(browser: Browser, origin: string,
+  scenario: (manager: Page, fixture: MemoryFixture) => Promise<void>) {
   await withMemoryBackend(async (fixture) => withControllerEnvironment(fixture, async (userData) => {
     const host = new PageHost(await browser.newContext(), origin, userData);
-    try {
-      await host.backend.connect();
-      await memoryOwnerCorrection(await host.open('manager'), fixture);
-    } finally { await host.close(); }
+    try { await host.backend.connect(); await scenario(await host.open('manager'), fixture); }
+    finally { await host.close(); }
   }));
+}
+
+export async function memoryEditingOwner(browser: Browser, origin: string) {
+  await withMemoryManager(browser, origin, memoryOwnerCorrection);
 }
 
 export async function memoryEditingAddition(browser: Browser, origin: string) {
-  await withMemoryBackend(async (fixture) => withControllerEnvironment(fixture, async (userData) => {
-    const host = new PageHost(await browser.newContext(), origin, userData);
-    try {
-      await host.backend.connect();
-      await memoryManualAddition(await host.open('manager'), fixture);
-    } finally { await host.close(); }
-  }));
+  await withMemoryManager(browser, origin, memoryManualAddition);
 }
 
 export async function memoryEditingContactCorrection(browser: Browser, origin: string) {
-  await withMemoryBackend(async (fixture) => withControllerEnvironment(fixture, async (userData) => {
-    const host = new PageHost(await browser.newContext(), origin, userData);
-    try { await host.backend.connect(); await memoryContactCorrection(await host.open('manager'), fixture); }
-    finally { await host.close(); }
-  }));
+  await withMemoryManager(browser, origin, memoryContactCorrection);
 }
 
 export async function memoryEditingRemoval(browser: Browser, origin: string) {
-  await withMemoryBackend(async (fixture) => withControllerEnvironment(fixture, async (userData) => {
-    const host = new PageHost(await browser.newContext(), origin, userData);
-    try { await host.backend.connect(); await memoryRemoval(await host.open('manager'), fixture); }
-    finally { await host.close(); }
-  }));
-
+  await withMemoryManager(browser, origin, memoryRemoval);
 }
 
 export async function memoryEditingCandidateConfirmation(browser: Browser, origin: string) {
-  await withMemoryBackend(async (fixture) => withControllerEnvironment(fixture, async (userData) => {
-    const host = new PageHost(await browser.newContext(), origin, userData);
-    try { await host.backend.connect(); await memoryCandidateConfirmation(await host.open('manager'), fixture); }
-    finally { await host.close(); }
-  }));
+  await withMemoryManager(browser, origin, memoryCandidateConfirmation);
 }
 
 export async function memoryEditingCandidateDiscard(browser: Browser, origin: string) {
-  await withMemoryBackend(async (fixture) => withControllerEnvironment(fixture, async (userData) => {
-    const host = new PageHost(await browser.newContext(), origin, userData);
-    try { await host.backend.connect(); await memoryCandidateDiscard(await host.open('manager'), fixture); }
-    finally { await host.close(); }
-  }));
+  await withMemoryManager(browser, origin, memoryCandidateDiscard);
 }
 
 export async function memoryEditingFailures(browser: Browser, origin: string) {
