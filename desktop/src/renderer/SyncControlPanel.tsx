@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { BackgroundSyncPhase, ForegroundReportPhase, SyncControlBridge, SyncControlState } from '../shared/sync-control-bridge';
+import type { BackgroundSyncPhase, ForegroundReportPhase, SyncBackfillPhase, SyncControlBridge, SyncControlState } from '../shared/sync-control-bridge';
 import { useRevisionedSession } from './use-revisioned-session';
 import './bindings.css';
 
@@ -9,6 +9,10 @@ const backgroundLabels: Record<BackgroundSyncPhase, string> = { disabled: '后�
 const foregroundLabels: Record<ForegroundReportPhase, string> = { sync_disabled: '最近报告：前台定位暂停',
   waiting_foreground: '最近报告：等待微信前台', unavailable: '最近报告：前台定位不可用',
   active: '最近报告：已取得定位结果', failed: '最近报告：前台定位失败' };
+const backfillLabels: Record<SyncBackfillPhase, string> = { not_required: '当前没有补齐任务', gap_detected: '已检测到待补齐缺口',
+  backfilling: '正在补齐历史消息', complete: '补齐已完成', failed: '补齐失败', incomplete: '无法确认补齐完整性', paused: '补齐已暂停' };
+const backfillFailures: Record<string, string> = { cli_freshness_unknown: 'CLI未能确认覆盖到当前水位，请检查后显式重试。',
+  cli_output_invalid: 'CLI返回的数据无法解析，本次补齐未完成，请检查后显式重试。' };
 
 export function SyncControlPanel({ bridge }: { bridge: SyncControlBridge }) {
   const { state, latest, active, error, setError } = useRevisionedSession(initial, bridge);
@@ -39,9 +43,25 @@ export function SyncControlPanel({ bridge }: { bridge: SyncControlBridge }) {
       {state.phase === 'offline' && <p>连接本机服务后查看与控制后台同步。</p>}
       {state.phase === 'unavailable' && <p role="alert">本次运行身份或同步宿主尚未就绪，请检查配置后刷新状态。</p>}
       {state.errorCode && <p role="alert">{state.errorCode === 'operation-unconfirmed'
-        ? '启停结果尚未确认，不能据此判断已经停读。请刷新同步状态后再决定下一步。'
+        ? '同步操作结果尚未确认，请刷新同步状态后再决定下一步。'
         : '同步状态读取失败，请检查本机服务与 CLI 后刷新。'}</p>}
       {error && <p role="alert">{error}</p>}
+    </section>
+    <section className="bindings-explanation" aria-label="历史补齐"><h2>历史补齐</h2>
+      <p role="status">{report ? backfillLabels[report.backfill.phase] : '补齐状态尚未确认'}</p>
+      {report && <><p>已完成{report.backfill.completedContacts}／{report.backfill.totalContacts}个会话，待处理{report.backfill.pendingContacts}个；
+        失败{report.backfill.failedContacts}个，无法确认完整{report.backfill.incompleteContacts}个。</p>
+        <p>已写入文字{report.backfill.messageCount}条，已跳过非文字{report.backfill.nonTextCount}条。</p>
+        {report.backfill.failureCode && <p role="alert">{backfillFailures[report.backfill.failureCode]
+          ?? '本次补齐遇到错误，请检查本机服务与CLI后显式重试。'}</p>}</>}
+      <div className="bindings-toolbar"><button className="button"
+        disabled={!available || !report?.enabled || !['gap_detected', 'backfilling', 'incomplete'].includes(report.backfill.phase)}
+        onClick={() => void operate(() => bridge.pause({ scopeRevision: state.scopeRevision }))}>
+        {state.busy === 'pause' ? '正在暂停补齐…' : '暂停补齐'}</button>
+        <button className="button" disabled={!available || !report?.enabled || !['paused', 'failed', 'incomplete'].includes(report.backfill.phase)}
+          onClick={() => void operate(() => bridge.retry({ scopeRevision: state.scopeRevision }))}>
+          {state.busy === 'retry' ? '正在重试补齐…' : '重试补齐'}</button></div>
+      <p>暂停只针对历史补齐；后台总开关开启时，已确认范围的实时增量仍可读取。关闭后台同步会停止全部新增正文读取。</p>
     </section>
     <section className="bindings-explanation" aria-label="前台定位最近报告"><h2>前台定位</h2>
       <p>{report ? foregroundLabels[report.foregroundPhase] : '最近同步报告尚不可用。'}</p>
