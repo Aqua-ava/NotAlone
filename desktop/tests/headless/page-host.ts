@@ -1,3 +1,4 @@
+import { CandidateCopyController, candidateCopyRequest, type CandidateCopySurface } from '../../src/main/candidate-copy/controller';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -41,12 +42,18 @@ export class PageHost implements PageCommands {
   private readonly released = ownResource();
   readonly backend: BackendHost;
   readonly diagnostics: StartupDiagnostics;
-  constructor(private readonly context: BrowserContext, private readonly origin: string, userData: string) {
+  constructor(private readonly context: BrowserContext, private readonly origin: string, userData: string, options: { copySurface?: CandidateCopySurface } = {}) {
     this.diagnostics = new StartupDiagnostics(userData);
     this.backend = new BackendHost(userData, (config, canStart) => this.diagnostics.ensureReady(config, canStart));
     const contacts = installContactSessionBridge(this, this.backend);
     installMemoryBridge(this, this.backend, contacts);
-    installReplyBridge(this, this.backend, contacts);
+    const replies = installReplyBridge(this, this.backend, contacts);
+    const copies = new CandidateCopyController(this.backend, contacts, replies);
+    this.handle('candidate-copy:copy', (...args: unknown[]) => {
+      const request = candidateCopyRequest(args);
+      if (!options.copySurface) throw new Error('本轮页面未提供系统复制输入。');
+      return copies.copy(request, options.copySurface);
+    }, 'helper');
     this.handle('backend:get-state', (...args) => { noArguments(args); return this.backend.getState(); });
     this.handle('backend:retry-connection', (...args) => { noArguments(args); return this.backend.connect(); });
     this.handle('startup:get-state', (...args) => { noArguments(args); return this.diagnostics.getState(); });

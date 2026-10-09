@@ -20,9 +20,10 @@ async function copyCurrentCandidate({ manager, helper, rewriteBackend }: Rewrite
   await expect(helper.getByText('复制原候选（说法1）。', { exact: true })).toBeVisible();
 }
 
-// 首个反馈只沿用现有宿主；缺少复制入口的失败后再接通必要的系统输入适配。
+// 首个公开失败后，仅替换本轮操作系统复制接收端；生成与编辑状态保持生产路径。
 export async function candidateCopy(browser: Browser, origin: string) {
+  const copiedTexts: string[] = [];
   await withRewritePages(browser, origin, async (pages) => {
-    await copyCurrentCandidate(pages, []);
-  });
+    await copyCurrentCandidate(pages, copiedTexts);
+  }, { async writeText(text) { copiedTexts.push(text); }, hideWindow() { throw new Error('单独复制不应收起。'); } });
 }
