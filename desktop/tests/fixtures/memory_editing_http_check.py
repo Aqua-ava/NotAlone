@@ -326,6 +326,23 @@ class MemoryEditingHttpCheck(unittest.TestCase):
         self.assertEqual(database_readiness(self.data["database_url"], directory), "migration_pending")
         self.assertEqual(self.get("/api/memories/owner"), before)
 
+    def test_related_backend_regressions_on_owned_database(self) -> None:
+        modules = (
+            "tests.unit.application.test_memory_service", "tests.unit.memory.test_memory_store",
+            "tests.unit.memory.test_timing", "tests.unit.reply.test_context_retrieval",
+            "tests.integration.server.test_memory_api", "tests.integration.server.test_memory_integration",
+            "tests.integration.server.test_reply_evidence_api", "tests.integration.persistence.test_postgres_owner_memory",
+            "tests.integration.persistence.test_postgres_memory_store", "tests.integration.persistence.test_memory_adoption",
+            "tests.integration.persistence.test_contact_memory_index", "tests.integration.persistence.test_memory_timing",
+        )
+        environment = {key: value for key, value in os.environ.items() if not key.startswith("PG")}
+        environment.update(NOTALONE_TEST_DATABASE_URL=self.data["database_url"], PGHOST="/tmp")
+        result = subprocess.run([sys.executable, "-m", "unittest", *modules, "-v"],
+                                cwd=ROOT / "backend", env=environment, capture_output=True, text=True, timeout=90)
+        print(result.stdout, end="", flush=True)
+        print(result.stderr, end="", flush=True)
+        self.assertEqual(result.returncode, 0, "相关后端回归失败，完整结果见本轮输出。")
+
     def test_failed_owner_version_insert_rolls_back_and_can_be_corrected_again(self) -> None:
         before = self.get("/api/memories/owner")["memories"]
         previous = next(item for item in before if item["source_candidate_id"] == self.data["owner_candidate_id"])
