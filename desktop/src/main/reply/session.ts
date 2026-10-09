@@ -14,7 +14,7 @@ const tones = { original: '', warm: '本次语气自然温和。', concise: '本
 export class ReplySession {
   private state: ReplySessionState = { revision: 0, scopeRevision: 0, contactId: null,
     options: defaults(), mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null },
-    messageNotice: { phase: 'idle', changed: false },
+    messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
     targetMessageId: null, direction: '', phase: 'idle', result: null, selectedCandidateId: null, canRetry: false };
   private draft = '';
   private operation = 0;
@@ -61,7 +61,7 @@ export class ReplySession {
   }
   async loadMessages(request: ReplyMessagePageRequest): Promise<void> {
     this.assertScope(request);
-    if (this.state.mode !== 'reply_to_message' || this.state.messages.phase === 'loading') return;
+    if (this.state.messages.phase === 'loading') return;
     const before = request.older ? this.state.messages.nextCursor : null;
     if (request.older && !before) return;
     this.cancelMessagePage();
@@ -84,6 +84,7 @@ export class ReplySession {
       }
       this.publish({ messages: { phase: 'ready', items, nextCursor: page.nextCursor },
         messageNotice: { ...this.state.messageNotice,
+          needsRefresh: before || noticeRevision !== this.noticeRevision ? this.state.messageNotice.needsRefresh : false,
           changed: before || noticeRevision !== this.noticeRevision ? this.state.messageNotice.changed : false } });
     } catch {
       if (current()) this.publish({ messages: { ...this.state.messages, phase: 'failed' } });
@@ -188,7 +189,7 @@ export class ReplySession {
       this.draft = state.draft;
       this.publish({ scopeRevision: state.scopeRevision, contactId: state.selectedContactId,
         options: defaults(), mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null },
-        messageNotice: { phase: 'idle', changed: false },
+        messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
         targetMessageId: null, direction: '', phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false });
       this.beginMessageNotice();
     } else if (state.draft !== this.draft) {
@@ -198,7 +199,13 @@ export class ReplySession {
       this.publish({ phase: this.state.result ? 'ready' : 'idle', errorCode: undefined, canRetry: false });
     }
   }
-  private beginMessageNotice(): void {
+  async reconnectMessages(selection: ContactSelection): Promise<void> {
+    this.assertScope(selection);
+    if (this.state.messageNotice.phase !== 'interrupted') return;
+    this.noticeStream?.abort(); this.noticeVerification?.abort();
+    this.beginMessageNotice(true);
+  }
+  private beginMessageNotice(recovered = false): void {
     const contactId = this.state.contactId;
     const scopeRevision = this.state.scopeRevision;
     const generation = this.backend.getConnectionGeneration();
@@ -207,7 +214,8 @@ export class ReplySession {
     this.noticeStream = pending;
     const current = () => !pending.signal.aborted && contactId === this.state.contactId
       && scopeRevision === this.state.scopeRevision && generation === this.backend.getConnectionGeneration();
-    this.publish({ messageNotice: { phase: 'connecting', changed: false } });
+    this.publish({ messageNotice: { phase: 'connecting', changed: recovered && this.state.messageNotice.changed,
+      needsRefresh: recovered } });
     this.backend.subscribeMessages({
       connected: () => { if (current()) this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'connected' } }); },
       interrupted: () => { if (current()) {
@@ -224,7 +232,7 @@ export class ReplySession {
         void readReplyMessages(this.backend, contactId, null, verification.signal).then((page) => {
           if (!current() || verification.signal.aborted || revision !== this.noticeRevision || page.generation !== generation) return;
           if (page.messages.some((message) => message.messageId === event.messageId)) {
-            this.publish({ messageNotice: { phase: 'connected', changed: true } });
+            this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'connected', changed: true } });
           }
         }).catch(() => {
           if (current() && !verification.signal.aborted) this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'interrupted' } });

@@ -17,6 +17,7 @@ export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
     updateOptions: (update: RewriteOptionsUpdate) => ipcRenderer.invoke('reply:update-options', update),
     setMode: (...args: unknown[]) => ipcRenderer.invoke('reply:set-mode', ...args),
     loadMessages: (...args: unknown[]) => ipcRenderer.invoke('reply:load-messages', ...args),
+    reconnectMessages: (...args: unknown[]) => ipcRenderer.invoke('reply:reconnect-messages', ...args),
     selectMessage: (...args: unknown[]) => ipcRenderer.invoke('reply:select-message', ...args),
     updateDirection: (...args: unknown[]) => ipcRenderer.invoke('reply:update-direction', ...args),
     generate: (selection: GenerateReply) => ipcRenderer.invoke('reply:generate', selection),

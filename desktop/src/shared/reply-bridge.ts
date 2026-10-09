@@ -59,7 +59,7 @@ export interface ReplyResult {
   contextEvidenceIds: string[];
 }
 export type ReplyFailureCode = 'generation_failed' | 'timeout' | 'unavailable' | 'rejected' | 'connection';
-export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; }
+export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; needsRefresh: boolean; }
 export interface ReplySessionState {
   revision: number;
   scopeRevision: number;
@@ -83,6 +83,7 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   updateOptions(update: RewriteOptionsUpdate): Promise<ReplySessionState>;
   setMode(update: ReplyModeUpdate): Promise<void>;
   loadMessages(request: ReplyMessagePageRequest): Promise<void>;
+  reconnectMessages(selection: ContactSelection): Promise<void>;
   selectMessage(selection: ReplyMessageSelection): Promise<ReplySessionState>;
   updateDirection(update: ReplyDirectionUpdate): Promise<ReplySessionState>;
   generate(selection: GenerateReply): Promise<void>;
