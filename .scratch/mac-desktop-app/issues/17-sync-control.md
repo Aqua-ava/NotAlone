@@ -1,7 +1,7 @@
 # 17：同步开关、停读与补齐
 
 Type: task
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: 16
 Spec: ../spec.md
@@ -14,9 +14,9 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 正文受运行时、总开关和 active 确认绑定共同门禁；关闭、撤销与退出停止新增读取。
-- [ ] 恢复仅在原确认范围补齐，展示不完整、暂停、失败及显式重试；不推进失败游标或扩大范围。
-- [ ] 与前台定位分别显示状态；权限/CLI 错误沿用安全说明，合成接缝不被描述成真实微信通道已验收。
+- [x] 正文受运行时、总开关和 active 确认绑定共同门禁；关闭、撤销与退出停止新增读取。
+- [x] 恢复仅在原确认范围补齐，展示不完整、暂停、失败及显式重试；不推进失败游标或扩大范围。
+- [x] 与前台定位分别显示状态；权限/CLI 错误沿用安全说明，合成接缝不被描述成真实微信通道已验收。
 
 ## 测试与范围
 
@@ -54,3 +54,11 @@ Spec: ../spec.md
 - 2026-10-09（同源最终组仅静态登记准备）：只新增syncControlFull wrapper，按sync-arguments、sync-switch、sync-backfill-retry顺序串行复用既有三条公开场景；同Chrome、每场独立BindingFixture／PageHost正常回收，失败即停止后续场，未知沿原marker／lease保留。未增加测试断言、生产逻辑或共享登记；sync-control-full与sync-arguments合并最小登记patch交主Agent串行，apply-check通过。类型、56输入wrapper纯依赖（原生0）及差异检查通过，没有重复生产构建或运行。当前最终三场未执行、运行仍待主Agent独占分配，独立两轴尚待，仍claimed、验收未勾、无Answer；App原生退出继续单列任务20待验。
 
 - 2026-10-09（同源最终普通组实际3/3）：主Agent保留15／18并登记两17入口后，FF固定干净源69e1e2abd744f00ee45d16110f05a5a9169b8d98；合后类型／构建／差异／DAG由主Agent核验。唯一明确授权中以Conda执行`npm run test:pages -- --case sync-control-full --timeout-seconds 240`一次，实际16.6秒CLI exit0，arguments→switch→backfill三个公开场景3/3。实际helper六具名操作、80非法请求及换范围后四旧scope请求拒绝，真实status仍off、A/B空且tail0；真实总开关启停与关闭后零新增；真实补齐不完整→暂停→空正文损坏失败且游标null→同ID1显式重试完成及onlyA/B空均通过。每场独立owned backend72024／72106／72210皆PageHost认证stopped、exit0、精确库drop，无unconfirmed资源；三库notalone_binding_7e39c835c48d489a807d7dba831de89b_test、notalone_binding_71e2c32670a14dbeb8b3eba3960a9339_test、notalone_binding_6a1c093f06424cab94034d009ad468b0_test经只读catalog均absent。66 captured identities及所有owned groups无存活、双lease absent、cleanuptrue；Chrome1 quiet21 active0/window0，RSS采样browser1029312/node210976/backend190880 KiB非物理上限。context17-final-69e1e2a-*保存同源日志／exit／每场资源归属／owned identities／精确三库／收尾证据，所有历史失败不变；没有重复单跑arguments或其他组。运行权立即明确归还主Agent，之后仅Comments／差异检查和本地提交；独立Standards／Spec两轴及App原生仍待，本轮不自行resolved，仍claimed、验收未勾、无Answer。App原生退出继续单列20。
+
+## Answer
+
+已完成总开关、真实最近报告与补齐进度的普通页面闭环。manager具名操作严格限制当前范围与参数，复用既有enable/disable/backfill pause/retry；失败和迟到不覆盖新状态，不新增同步算法或自动扩大授权。开启只读取active已确认A，未确认B无正文；关闭后后续检查零新增tail。补齐不完整可暂停，总开关保持独立；损坏正文失败不推进游标，用户显式重试同ID恢复complete。前台报告与后台状态分开，不据历史报告选择联系人。
+
+固定实际源69e1e2abd744f00ee45d16110f05a5a9169b8d98，Conda NotAlone下npm run test:pages -- --case sync-control-full --timeout-seconds 240一次3/3、exit0，实际16.6秒。安全场核helper六操作及manager非法字段/整数80项、旧scope四操作拒绝，真实off/A-B空/tail0；另两场核开关停读和补齐失败/恢复。三后端认证stopped且正常exit0，三精确随机_test库catalog均absent；cleanuptrue、唯一Chrome、quiet21 active/window0、66 captured owned身份及groups无存活、双租约absent。证据外部context17-final-69e1e2a-*，旧实际red与安排失败如实保留。
+
+完整Standards hard/possible及Spec P0–P3均0，类型/构建/差异及依赖检查通过。只处理本轮合成CLI传输与隔离HTTP/PG，不读取真实微信、私人资料或外部模型，不改变既有授权/游标算法。实际App退出与新helper权限、签名及真实微信通道留任务18/20验证，不冒称原生完整通过。
