@@ -37,3 +37,8 @@ Spec: ../spec.md
 - 2026-10-09：运行所有权已交回root后，静态准备后续八场景（安全503重试、候选/输入快照、新生成/联系人/连接迟到、HTTP与具名范围拒绝、自有请求移除404、旧快照缺时间不倒填），加首片共九场景。专属回环代理只安排传输；专属Python工具严格限制本轮随机_test库和owner/contact/request，仅安排请求移除或旧timing缺失，HTTP/页面用于断言，不证明来源删除流程完成。类型、Python静态语法和空白检查通过；后续八场景未运行，不称red/green。未再修改共享registry/PageHost/backend-fixture/run/test-pages。
 
 - 2026-10-09：按root授权静态合入任务16共享 `67d338f8d60bbde905ba75d2d6cd3513d63c0f06` 及任务10 `5aa354590836f006e0165d1e9d93e4736f69ffcb`，所有通道保留，未直接编辑run/test-pages。任务12专属源码和九场景保持不变；typecheck、生产build、从1c8825b起完整diff空白及二十票字段/规格/关闭条件/依赖DAG通过。未启动HTTP/PG、浏览器或任何runtime；首场历史green，后续八场仍未实际跑，保持claimed、无Answer。
+
+- 2026-10-09：合入任务14最终候选1d119ed及任务10 bdb1b6e后，固定源c61d86c0e9a1a786326ad749b67aa569cae8f393的受限最终命令 `npm run test:pages -- --case candidate-copy --case reply-evidence --timeout-seconds 300` 实际退出0，复制3/3与依据9/9全部通过，单Chrome串行独立随机库/上下文。首次attempt1复制3/3及依据前五场通过，第六场第二轮误把同键重放当新模型结果；只修专属prepare显式重新生成后green，不修改产品行为。root最新“以后只跑依据”消息到达时attempt2复制已结束，后续未再启动任何组。
+- 2026-10-09：最终依据覆盖默认折叠、原草稿/候选快照、候选引用、未知时间、安全失败重试、联系人/连接/新生成迟到成功失败、真实HTTP越界404与具名字段/角色拒绝、自有请求移除后404不恢复正文、旧快照缺timing不读当前消息倒填。请求移除仅安排本轮合成PG状态，不宣称来源删除流程或任务15完成。
+- 2026-10-09：最终cleanupConfirmed=true、Chrome1、62次quiet采样active/window0、activationPolicy2；自有子树RSS采样峰值browser1059760/node224944/backend189616 KiB，共享页可能重复计，非物理/瞬时上限。两leases实际absent；56个已记录PID+parent+group身份复核无匹配存活。日志/resources/owned-identities/identity-verification已独立保存context的12-final前缀，attempt1失败证据保留。已明确释放唯一12运行所有权。
+- 2026-10-09：生产build、typecheck、脚本语法、完整范围空白和二十票字段/规格/关闭条件/依赖DAG通过，无任务12 schema/算法/同步授权改动；证据只在本次内存，后端原快照沿既有契约。无可见Electron、真实剪贴板/微信、私人资料、真实模型/tracing、签名包或完整App验收；保持claimed、未勾选且无Answer，等待专职两轴评审。
