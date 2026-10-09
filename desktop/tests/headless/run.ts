@@ -28,6 +28,7 @@ let assets: Awaited<ReturnType<typeof servePageAssets>> | undefined;
 let failed = false;
 let cleanupConfirmed = false;
 let sampleTask: Promise<void> | undefined;
+const ownedIdentities = new Map<number, { pid: number; parent: number; group: number }>();
 const peaks = { browserKiB: 0, nodeKiB: 0, backendKiB: 0 };
 const quiet = { samples: 0, activeSamples: 0, maxOnscreenWindows: 0, maxRegisteredApps: 0, activationPolicies: [] as number[] };
 function sample(): Promise<void> {
@@ -51,6 +52,17 @@ async function readMetrics() {
     && tree.some((item) => item.pid === child.pid && item.parent === process.pid));
   const browserPids = browserAlive() ? descendants(child!.pid!) : new Set<number>();
   const owned = descendants(process.pid);
+  const { stdout: identities } = await execute('/bin/ps', ['-p', [...owned].join(','), '-o', 'pid=,ppid=,pgid='], { timeout: 1000 });
+  for (const line of identities.split('\n')) {
+    const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s*$/.exec(line);
+    if (match && tree.some((item) => item.pid === Number(match[1]) && item.parent === Number(match[2]))) {
+      ownedIdentities.set(Number(match[1]), { pid: Number(match[1]), parent: Number(match[2]), group: Number(match[3]) });
+    }
+  }
+  await writeFile('artifacts/headless-pages/owned-identities.json', JSON.stringify({
+    runnerPid: process.pid, browserPid: child?.pid ?? null, project: process.cwd(), cases,
+    identities: [...ownedIdentities.values()],
+  }, null, 2));
   const { stdout } = await execute('/bin/ps', ['-p', [...owned].join(','), '-o', 'pid=,ppid=,rss=,comm='], { timeout: 1000 });
   const processes = stdout.split('\n').map((line) => /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/.exec(line)).filter(Boolean)
     .map((entry) => ({ pid: Number(entry![1]), parent: Number(entry![2]), rss: Number(entry![3]), name: entry![4] }))
