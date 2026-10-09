@@ -1976,6 +1976,8 @@ def _serve_sse(handler: BaseHTTPRequestHandler, response: SseResponse) -> None:
         pass
     finally:
         response.subscription.close()
+        # SSE 没有 Content-Length；结束订阅时也结束当前响应，不能留在 keep-alive 等下一请求。
+        handler.close_connection = True
 
 
 def _header_value(headers: Mapping[str, str], name: str) -> str:

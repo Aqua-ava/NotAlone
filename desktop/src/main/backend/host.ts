@@ -4,6 +4,7 @@ import { RuntimeClient } from './runtime-client';
 import { loadBackendConfiguration, type BackendConfiguration } from './config';
 import { OwnedBackendProcess } from './process';
 import { BackendRequestFailure, type JsonRequest } from './json-client';
+import type { MessageStreamCallbacks } from './message-stream';
 
 export class BackendHost {
   private state: BackendState = { phase: 'disconnected', reused: false, revision: 0, canRetryConnection: true, canRetryShutdown: false,
@@ -39,6 +40,15 @@ export class BackendHost {
   }
   getConnectionGeneration(): number | undefined {
     return !this.closing && this.state.phase === 'connected' && this.target ? this.generation : undefined;
+  }
+  subscribeMessages(callbacks: MessageStreamCallbacks, signal: AbortSignal): void {
+    const target = this.target;
+    const generation = this.getConnectionGeneration();
+    if (!target || generation === undefined || signal.aborted) return;
+    const current = () => !signal.aborted && target === this.target && generation === this.getConnectionGeneration();
+    target.subscribeMessages({ connected: () => { if (current()) callbacks.connected(); },
+      message: (event) => { if (current()) callbacks.message(event); },
+      interrupted: () => { if (current()) callbacks.interrupted(); } }, signal);
   }
   async requestJson(options: JsonRequest): Promise<{ generation: number; data: unknown }> {
     const target = this.target;

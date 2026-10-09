@@ -1,4 +1,5 @@
 import { isUuid } from '../uuid';
+import type { ContactSelection } from '../../shared/contact-session-bridge';
 import { noArguments, type PageCommands } from '../page-commands';
 import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyDirectionUpdate, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, RewriteOptions, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
@@ -54,6 +55,8 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     if (typeof value.older !== 'boolean') throw new Error('消息列表操作不可用。');
     return replies.loadMessages(value as unknown as ReplyMessagePageRequest);
   }, 'helper');
+  commands.handle('reply:reconnect-messages', (...args: unknown[]) =>
+    replies.reconnectMessages(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
   commands.handle('reply:select-message', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'messageId']);
     if (!isUuid(value.messageId)) throw new Error('待回复消息不可用。');
