@@ -41,3 +41,46 @@ export async function foregroundPausedWithManualDraft(helper: Page, backend: Bin
   expect(report.status).toBe(200);
   expect(report.data.sync_enabled).toBe(true);
 }
+
+// 下一单条red准备：当前helper确认与生成门禁尚未实现，本场尚未运行。
+export async function foregroundManualConfirmation(manager: Page, openHelper: () => Promise<Page>,
+  backend: BindingFixture, setVisible: (visible: boolean) => Promise<void>): Promise<void> {
+  const choice = manager.getByRole('region', { name: '联系人目录', exact: true }).getByRole('button', { name: /^选择/ }).first();
+  await choice.click();
+  const selected = await manager.evaluate(async () => (await window.notalone.contacts.getState()).selectedContactId);
+  expect(selected).not.toBeNull();
+  expect(backend.data.contact_ids).toContain(selected);
+  const original = await openHelper();
+  const draft = '管理页已选择的同联系人合成草稿';
+  await original.getByRole('textbox', { name: '草稿', exact: true }).fill(draft);
+  await original.close();
+  await setVisible(true);
+  const tails = await backend.tails();
+  const observation = await backend.request('/api/sync/foreground/observe', {});
+  expect(observation.status).toBe(200);
+  expect(observation.data.phase).toBe('manual-required');
+  expect(observation.data.reason).toBe('quality_unverified');
+  expect(observation.data.contact_id).toBeNull();
+  expect(observation.data.binding_id).toBeNull();
+  expect(await backend.tails()).toEqual(tails);
+  const helper = await openHelper();
+  const picker = helper.getByRole('combobox', { name: '本次联系人', exact: true });
+  const editor = helper.getByRole('textbox', { name: '草稿', exact: true });
+  await expect(picker).toHaveValue(selected!);
+  await expect(editor).toHaveValue(draft);
+  const state = await helper.evaluate(async () => window.notalone.foreground.getState());
+  expect(state.phase).toBe('manual-required');
+  // 管理页选择与已有草稿都不能代替本次helper确认；不仅禁按钮，main亦须拒绝。
+  const generate = helper.getByRole('button', { name: '生成候选', exact: true });
+  await expect(generate).toBeDisabled();
+  expect(await helper.evaluate(async () => {
+    const contact = await window.notalone.contacts.getState();
+    try { await window.notalone.replies.generate({ contactId: contact.selectedContactId!, scopeRevision: contact.scopeRevision, newRequest: false }); return null; }
+    catch (error) { return error instanceof Error ? error.message : String(error); }
+  })).toContain('请先确认本次联系人');
+  await helper.getByRole('button', { name: '确认本次联系人', exact: true }).click();
+  await expect(picker).toHaveValue(selected!);
+  await expect(editor).toHaveValue(draft);
+  await expect(generate).toBeEnabled();
+  // 恢复资格不等于已有真实候选；受控模型正向生成另按下一反馈补齐。
+}
