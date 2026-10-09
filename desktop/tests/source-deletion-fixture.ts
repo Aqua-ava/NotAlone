@@ -1,0 +1,85 @@
+import assert from 'node:assert/strict';
+import { execFile, type ChildProcess } from 'node:child_process';
+import { lstat, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { ContactFixture, type ContactDatabase } from './contact-backend-fixture';
+import { isolatedAppEnvironment } from './isolated-environment';
+import { ownResource } from './headless/cleanup';
+
+export class SourceDeletionFixture extends ContactFixture {
+  private backendChild: ChildProcess | undefined;
+  private controllerStopped = false;
+  async http(endpoint: string, body?: object, method = body ? 'POST' : 'GET') {
+    const info = await readFile(this.infoPath, 'utf8');
+    const address = /^address=(127\.0\.0\.1:\d+)$/m.exec(info)?.[1];
+    const token = /^token=([^\n]+)$/m.exec(info)?.[1];
+    if (!address || !token || !endpoint.startsWith('/api/')) throw new Error('来源删除本轮握手不可用。');
+    const response = await fetch(`http://${address}${endpoint}`, { method, redirect: 'error', signal: AbortSignal.timeout(5_000),
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    return { status: response.status, data: await response.json() as Record<string, unknown> };
+  }
+  override request(endpoint: Parameters<ContactFixture['request']>[0], body?: object) { return this.http(endpoint, body); }
+  override async startBackend(): Promise<ChildProcess> {
+    this.backendChild = await super.startBackend();
+    return this.backendChild;
+  }
+  confirmControllerStopped() { this.controllerStopped = true; }
+  override async cleanup() {
+    const child = this.backendChild;
+    if (!child) throw new Error('本轮来源后端启动或退出归属未确认。');
+    if (!this.controllerStopped) {
+      const response = await this.http('/api/runtime/shutdown', {});
+      if (response.status !== 200 || response.data.state !== 'stopped') throw new Error('本轮认证停读未确认。');
+    }
+    for (let count = 0; child.exitCode === null && child.signalCode === null && count < 75; count++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (child.exitCode !== 0 || child.signalCode !== null) throw new Error('本轮来源后端正常退出未确认。');
+  }
+}
+
+// 准备未知或任一资源收尾未确认时保留目录及标记，不清理前缀范围或杀未知进程。
+export async function withSourceDeletionFixture(use: (fixture: SourceDeletionFixture) => Promise<void>) {
+  if (process.env.CONDA_DEFAULT_ENV !== 'NotAlone' || !process.env.CONDA_PREFIX) throw new Error('来源删除验收须先激活 Conda NotAlone。');
+  const released = ownResource();
+  const directory = await mkdtemp(path.join(tmpdir(), 'notalone-headless-source-deletion-'));
+  const ownershipPath = path.join(directory, 'database-ownership.json');
+  const python = path.join(process.env.CONDA_PREFIX, 'bin/python');
+  const script = path.resolve('tests/fixtures/source-deletion-database.py');
+  const execute = promisify(execFile);
+  const environment = isolatedAppEnvironment(directory, { PYTHONPATH: path.resolve('../backend/src'), NOTALONE_DEEPSEEK_API_KEY: '' });
+  let prepareStopped = false;
+  let data: ContactDatabase | undefined;
+  let fixture: SourceDeletionFixture | undefined;
+  let failure: unknown;
+  try {
+    const prepared = await execute(python, [script, 'create', ownershipPath], { env: environment, timeout: 70_000 });
+    prepareStopped = true;
+    data = JSON.parse(prepared.stdout) as ContactDatabase;
+    fixture = new SourceDeletionFixture(directory, python, data);
+    await fixture.startBackend();
+    await use(fixture);
+  } catch (error) { failure = error; }
+  try {
+    if (!prepareStopped) throw new Error('来源删除准备退出未确认。');
+    await fixture?.cleanup();
+    const stat = await lstat(ownershipPath);
+    if (!stat.isFile() || stat.uid !== process.getuid?.() || (stat.mode & 0o077) !== 0) throw new Error('本轮归属文件不可核验。');
+    const ownership = JSON.parse(await readFile(ownershipPath, 'utf8'));
+    if (ownership.version !== 1 || typeof ownership.database_name !== 'string'
+      || !/^notalone_contact_session_[0-9a-f]{32}_test$/.test(ownership.database_name)
+      || !Number.isInteger(ownership.pid) || ownership.pid <= 0
+      || (data && ownership.database_name !== data.database_name)) throw new Error('本轮库归属不匹配。');
+    await execute(python, [script, 'drop', ownership.database_name], { env: environment, timeout: 15_000 });
+    const absent = await execute(python, ['-c', 'import sys, psycopg\nwith psycopg.connect("host=/tmp dbname=postgres") as c:\n n = c.execute("SELECT count(*) FROM pg_database WHERE datname = %s", (sys.argv[1],)).fetchone()[0]\n if n: raise RuntimeError("本轮来源库仍存在")\n print(n)', ownership.database_name], { env: environment, timeout: 15_000 });
+    assert.equal(absent.stdout.trim(), '0');
+    await rm(directory, { recursive: true });
+    released();
+  } catch {
+    await writeFile(path.join(directory, 'cleanup-unconfirmed.json'), JSON.stringify({ prepareStopped, databaseName: data?.database_name ?? null, ownershipPath }), { mode: 0o600 });
+    throw new Error(`来源删除资源收尾未确认，保留本轮归属：${directory}`);
+  }
+  if (failure) throw failure;
+}

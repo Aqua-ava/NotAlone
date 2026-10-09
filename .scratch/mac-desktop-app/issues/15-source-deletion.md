@@ -1,7 +1,7 @@
 # 15：来源删除到不可检索
 
 Type: task
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: 08, 12, 13
 Spec: ../spec.md
@@ -27,6 +27,8 @@ Spec: ../spec.md
 - 不提交私人资料或凭据，不发送外部聊天消息；远端 Git 操作需另有用户明确同意。
 
 ## Comments
+
+- 2026-10-09：开始任务15静态首片准备；核对来源 DELETE、持久删除任务与最终 verify_not_retrievable 双成功门禁。公开页面/真实隔离 HTTP 与 PG 为已批准接缝；当前运行权属于任务19，未启动资源、未产生 red/green。回复内存失效与共享宿主接线由 root 协调，任务保持 claimed、无 Answer。
 
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
 - 2026-10-08：只读证据确认来源清除可影响同 owner 在另一联系人中引用该来源支持的本人资料；明确无关资料保留与相关依据失效的区别，并对齐持久任务最终校验门禁。现有 API 和删除范围不变，尚未开始实现或操作业务库。
