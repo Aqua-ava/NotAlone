@@ -1,7 +1,7 @@
 # 11：按明确方向回复消息
 
 Type: task
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: 09
 Spec: ../spec.md
@@ -28,3 +28,5 @@ Spec: ../spec.md
 ## Comments
 
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
+
+- 2026-10-09：开始实现联系人范围内的真实消息选择、明确方向与候选快照；验收使用已批准的公开无头页面和隔离 HTTP/PG，原生桌面能力仍暂停。
