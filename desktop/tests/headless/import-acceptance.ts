@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -76,11 +76,14 @@ export async function importBootstrap(browser: Browser, origin: string) {
   const environment = isolatedAppEnvironment(directory, {
     PYTHONPATH: path.resolve('../backend/src'), NOTALONE_DEEPSEEK_API_KEY: '', NOTALONE_DEEPSEEK_BASE_URL: 'http://127.0.0.1:1',
   });
+  const ownershipPath = path.join(directory, 'database-ownership.json');
   let data: ContactDatabase | undefined;
+  let prepareStopped = false;
   let stopped = true;
   let failure: unknown;
   try {
-    const prepared = await execute(python, [script, 'create', 'empty'], { env: environment, timeout: 70_000 });
+    const prepared = await execute(python, [script, 'create', 'empty', ownershipPath], { env: environment, timeout: 70_000 });
+    prepareStopped = true;
     data = JSON.parse(prepared.stdout) as ContactDatabase;
     const fixture = new ContactFixture(directory, python, data);
     await withControllerEnvironment(fixture, async (userData) => {
@@ -96,18 +99,26 @@ export async function importBootstrap(browser: Browser, origin: string) {
     });
   } catch (error) { failure = error; }
   try {
-    if (!stopped) throw new Error('首份导入后端停读未确认。');
-    if (data) {
-      await execute(python, [script, 'drop', data.database_name], { env: environment, timeout: 15_000 });
-      // 精确核验本轮库不存在，不把drop命令完成当作清理证明。
-      await execute(python, ['-c', 'import sys, psycopg\nwith psycopg.connect("host=/tmp dbname=postgres") as c:\n n = c.execute("SELECT count(*) FROM pg_database WHERE datname = %s", (sys.argv[1],)).fetchone()[0]\n if n: raise RuntimeError("本轮首份导入库仍存在。")', data.database_name],
-        { env: environment, timeout: 15_000 });
+    if (!prepareStopped || !stopped) throw new Error('首份导入准备进程或后端停读未确认。');
+    const ownershipStat = await lstat(ownershipPath);
+    if (!ownershipStat.isFile() || (ownershipStat.mode & 0o077) !== 0 || ownershipStat.uid !== process.getuid?.()) {
+      throw new Error('首份导入精确建库归属未确认。');
     }
+    const ownership = JSON.parse(await readFile(ownershipPath, 'utf8')) as Record<string, unknown>;
+    const databaseName = ownership.database_name;
+    if (ownership.version !== 1 || typeof databaseName !== 'string'
+      || !/^notalone_contact_session_[0-9a-f]{32}_test$/.test(databaseName)
+      || !Number.isInteger(ownership.pid) || Number(ownership.pid) <= 0
+      || (data && data.database_name !== databaseName)) throw new Error('首份导入本轮库名归属不匹配。');
+    await execute(python, [script, 'drop', databaseName], { env: environment, timeout: 15_000 });
+    // 精确核验本轮库不存在，不把drop命令完成当作清理证明。
+    await execute(python, ['-c', 'import sys, psycopg\nwith psycopg.connect("host=/tmp dbname=postgres") as c:\n n = c.execute("SELECT count(*) FROM pg_database WHERE datname = %s", (sys.argv[1],)).fetchone()[0]\n if n: raise RuntimeError("本轮首份导入库仍存在。")', databaseName],
+      { env: environment, timeout: 15_000 });
     await rm(directory, { recursive: true, force: true });
     released();
   } catch {
     await mkdir(directory, { recursive: true });
-    await writeFile(path.join(directory, 'cleanup-unconfirmed.json'), JSON.stringify({ databaseName: data?.database_name ?? null, stopped }), { mode: 0o600 });
+    await writeFile(path.join(directory, 'cleanup-unconfirmed.json'), JSON.stringify({ databaseName: data?.database_name ?? null, ownershipPath, prepareStopped, stopped }), { mode: 0o600 });
     throw new Error(`首份导入收尾未确认，保留归属记录：${directory}`);
   }
   if (failure) throw failure;
