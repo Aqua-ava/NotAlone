@@ -32,3 +32,37 @@ export async function memoryOwnerCorrection(manager: Page, fixture: MemoryFixtur
     supersedes_memory_id: previous.memory_id, source_ids: previous.source_ids,
   });
 }
+
+// 下一片从公开表单补充资料，分别核对联系人范围与本人的共享范围。
+export async function memoryManualAddition(manager: Page, fixture: MemoryFixture) {
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+  const contact = manager.getByRole('region', { name: '联系人记忆', exact: true });
+  await expect(contact.getByText('甲喜欢合成茉莉茶。', { exact: true })).toBeVisible();
+  await contact.getByRole('button', { name: '补充联系人资料', exact: true }).click();
+  const form = contact.getByRole('form', { name: '补充联系人资料', exact: true });
+  await form.getByRole('textbox', { name: '资料正文', exact: true }).fill('甲手动补充的合成偏好。');
+  await form.getByRole('combobox', { name: '资料分类', exact: true }).selectOption('preference');
+  await form.getByRole('button', { name: '保存资料', exact: true }).click();
+  const added = contact.getByRole('article').filter({ has: manager.getByText('甲手动补充的合成偏好。', { exact: true }) });
+  await expect(added.getByText('手动采纳', { exact: true })).toBeVisible();
+  const actual = await fixture.readMemorySection(fixture.data.contact_ids[0], 'contact');
+  expect(actual.status).toBe(200);
+  expect((actual.data.memories as Array<Record<string, unknown>>).find((item) => item.text === '甲手动补充的合成偏好。'))
+    .toMatchObject({ contact_id: fixture.data.contact_ids[0], category: 'preference', adoption_method: 'manual', status: 'active' });
+  await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(fixture.data.contact_ids[1]);
+  await expect(manager.getByText('乙喜欢合成乌龙茶。', { exact: true })).toBeVisible();
+  await expect(manager.getByText('甲手动补充的合成偏好。', { exact: true })).toHaveCount(0);
+  const owner = manager.getByRole('region', { name: '本人记忆', exact: true });
+  await owner.getByRole('button', { name: '补充本人资料', exact: true }).click();
+  const ownForm = owner.getByRole('form', { name: '补充本人资料', exact: true });
+  await ownForm.getByRole('textbox', { name: '资料正文', exact: true }).fill('本人手动补充的合成事实。');
+  await ownForm.getByRole('button', { name: '保存资料', exact: true }).click();
+  await expect(owner.getByText('本人手动补充的合成事实。', { exact: true })).toBeVisible();
+  const actualOwn = await fixture.readMemorySection(fixture.data.contact_ids[1], 'owner');
+  expect(actualOwn.status).toBe(200);
+  expect((actualOwn.data.memories as Array<Record<string, unknown>>).find((item) => item.text === '本人手动补充的合成事实。'))
+    .toMatchObject({ level: 'owner', adoption_method: 'manual', status: 'active' });
+  await manager.getByRole('combobox', { name: '资料联系人', exact: true }).selectOption(fixture.data.contact_ids[0]);
+  await expect(owner.getByText('本人手动补充的合成事实。', { exact: true })).toBeVisible();
+}
