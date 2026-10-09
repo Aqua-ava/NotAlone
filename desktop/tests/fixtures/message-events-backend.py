@@ -80,6 +80,9 @@ class MessageEventsFixture(rewrite.DesktopRewriteFixture):
 def main() -> None:
     fixture = MessageEventsFixture()
     try:
+        MessageEventsFixture._database_ownership_path = Path(
+            os.environ["NOTALONE_ENV_FILE"],
+        ).with_name("message-events-database-ownership.json")
         MessageEventsFixture.setUpClass()
         fixture.setUp()
         contact_ids = [

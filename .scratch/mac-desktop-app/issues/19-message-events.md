@@ -34,3 +34,5 @@ Spec: ../spec.md
 - 2026-10-09：首片公开页面场景静态就绪，复用生产装配与EventBus，通过真实认证SSE提示新消息；夹具仅插入固定合成PG消息并发布生产事件。预期用户显式刷新后保留编辑和原请求依据，外部模型调用不增加。仅执行TypeScript typecheck、Python AST及diff空白检查，尚未运行场景，不宣称red/green或原生App通过；共享登记由root串行处理。
 
 - 2026-10-09：首轮a1ed36f实际exit2，尚未进入候选生成编辑断言，属于夹具启动失败且cleanup未确认，不能记为产品red。纯import及合成模型构造确认importlib模块未登记导致Pydantic延迟注解无法解析；修复模块登记，并为ready前失败保留精确DB归属和异常文件。旧日志19-first-red保留；headless租约由root核验处理，未确认前停止新运行。静态模型构造通过，未调用setUpClass/后端/模型外部接口。
+
+- 2026-10-09：root只读pg_catalog核验所有可能本轮随机core_flow测试库count=0，未DROP任何库，首轮精确库名不可恢复仍保留事实。补充CoreBusinessFlowFixture默认None的私有归属路径，19指定独立0600文件，随机dbname生成后、任何PG连接/CREATE前以O_EXCL/O_NOFOLLOW写入并flush/fsync；planned归属、finally清理确认及异常分开保存。AST/typecheck/diff通过，尚未开始下一轮运行。

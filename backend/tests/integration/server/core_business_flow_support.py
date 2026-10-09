@@ -177,10 +177,20 @@ class CoreBusinessFlowFixture:
     reply_model_factory = ScriptedCoreModel
     extraction_model_factory = ScriptedCoreModel
     production_model_wiring = False
+    _database_ownership_path: Path | None = None
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.database_name = f"notalone_core_flow_{uuid4().hex}_test"
+        if cls._database_ownership_path is not None:
+            # 在可能创建测试库之前落盘归属；默认无此副作用，不记录连接凭据。
+            descriptor = os.open(cls._database_ownership_path,
+                                 os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as record:
+                json.dump({"database_name": cls.database_name, "child_pid": os.getpid(),
+                           "phase": "planned"}, record)
+                record.flush()
+                os.fsync(record.fileno())
         cls.admin = psycopg.connect("host=/tmp dbname=postgres", autocommit=True)
         cls.addClassCleanup(cls.admin.close)
         cls.admin.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(
