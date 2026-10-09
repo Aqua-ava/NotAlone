@@ -1,7 +1,7 @@
 # 15：来源删除到不可检索
 
 Type: task
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: 08, 12, 13
 Spec: ../spec.md
@@ -14,9 +14,9 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 使用已有来源删除和后台任务契约，展示请求、执行、失败、重试及最终结果。
-- [ ] 只有确定性不可检索验证完成才显示已删除，处理多来源引用，保留其他有效来源支持的资料。
-- [ ] 两个窗口废弃相关正文和旧依据；另一联系人不依赖被删来源的资料/回复不受影响，共享本人资料造成的关联依据按既有契约失效；不宣称外部模型副本也已删除。
+- [x] 使用已有来源删除和后台任务契约，展示请求、执行、失败、重试及最终结果。
+- [x] 只有确定性不可检索验证完成才显示已删除，处理多来源引用，保留其他有效来源支持的资料。
+- [x] 两个窗口废弃相关正文和旧依据；另一联系人不依赖被删来源的资料/回复不受影响，共享本人资料造成的关联依据按既有契约失效；不宣称外部模型副本也已删除。
 
 ## 测试与范围
 
@@ -48,3 +48,11 @@ Spec: ../spec.md
 - 2026-10-09（最终普通页面相关组）：固定 `7de5b8166c4486d38489b2c7b7e45adaa3254f1f` 受限 source-deletion-full300秒实际10/10、exit0，依次复用 basic/verification/unknown/arguments/replies/cross-contact/unrelated/evidence-failure/multi-source/stale-request；需要生成的场景均先通过18真实助手公开本次确认，原模型/HTTP/PG/verify与行为断言保持。本轮10/10不与历史10unique重复加总。cleanupConfirmed true、单Chrome、quiet71 active/window0、65项owned PID/group无存活，完整数组10个唯一精确随机库全部remaining0/absent/prepare0/认证退出10/10，双leasesabsent。证据 `/tmp/notalone-app-context.p9MPie/15-final-full.log` 与 `15-final-full-{resources,owned-identities,cleanup,databases}.json`。运行权已明确返root，未运行App/原生/剪贴板/真实微信/外部模型；独立Standards/Spec两轴尚待root安排，不写Answer/resolved、验收框暂未勾选。
 
 - 2026-10-09（评审生命周期修复后复核）：初评Spec P0-P3均0、Standards hard均0，仅possible P3三处proxy生命周期重复；固定 `7e40eb2a5212fb5224ab9c372277a7f06e9ec9f5` 单文件共用wrapper修正后，实际源 `ff66d4e805dce8b9b923e877401abbe4554c0c52` 受限 source-deletion-full300秒必要复核10/10、exit0，原十场公开行为/真实HTTP/PG及断言保持。本次10/10不与前次full或历史unique加总。cleanupConfirmed true、单Chrome、quiet64 active/window0、68项owned PID/group无存活，完整数组10个唯一精确随机库全部remaining0/absent/prepare0/认证退出10/10，双leasesabsent；证据 `/tmp/notalone-app-context.p9MPie/15-final-refactor-full-*`。运行权已明确返root，未追加组或App/native；增量独立评审仍待root汇总，claimed/noAnswer/resolved保持。
+
+## Answer
+
+已完成来源删除的普通页面与真实隔离HTTP/PG闭环：明确确认删除、跟踪原持久任务、失败后恢复原任务，只有原任务及verify_not_retrievable成功才展示完成。相关正文与旧依据立即不可用；真实依据404清除、200保留同请求编辑，读取失败安全隐藏并显式重试。跨联系人共享本人依据失效，无关资料保留；多来源先保留剩余支持，最后来源删除后清除。旧200不会覆盖同联系人新请求、编辑或草稿。
+
+实际命令为Conda NotAlone下npm run test:pages -- --case source-deletion-full --timeout-seconds 300。最终生产及确认整合源7de5b816实际10/10；评审只发现测试代理生命周期possible duplication，整理后固定ff66d4e805dce8b9b923e877401abbe4554c0c52必要复核仍10/10，exit0。当前十场不与历史次数加总。最后一轮cleanuptrue、唯一Chrome、quiet64 active/window0、68 owned PID/group无存活、十个唯一精确_test库全部不存在、后端认证停读/正常退出10/10、双租约absent。完整证据外部context15-final-refactor-full-*；先前未保存首red库名等历史artifact限制保留，不补造。
+
+Standards原hard0、possible P3=1已修并独立补审归零；Spec完整及增量P0–P3均0。仅使用合成资料与受控模型接缝，不新增业务删除协议或读取授权，不清除微信、用户原文件或外部模型副本。实际App窗口、剪贴板、签名包与真实渠道仍由任务10/18/20验收；普通通过不代表完整Mac交付。
