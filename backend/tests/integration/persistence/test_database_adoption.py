@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from collections.abc import Iterator
 import os
 from pathlib import Path
 import shutil
@@ -43,7 +45,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
         for path in sorted(MIGRATIONS.glob("*.sql"))[:35]:
             shutil.copy2(path, self.prefix / path.name)
         migrate(self.url, self.prefix)
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             connection.execute("DROP TABLE public.notalone_schema_migration")
             connection.execute("""
                 ALTER TABLE public.source_document
@@ -52,6 +54,24 @@ class DatabaseAdoptionTest(unittest.TestCase):
                     ADD CONSTRAINT source_document_source_type_check
                     CHECK (source_type = 'wechat_jsonl');
             """)
+
+    @contextmanager
+    def _fixture_connection(self) -> Iterator[psycopg.Connection]:
+        # 等待本夹具的连接在服务端退出，避免把退出中的连接误判为并发写入者。
+        connection = psycopg.connect(self.url)
+        backend_pid = connection.info.backend_pid
+        try:
+            with connection:
+                yield connection
+        finally:
+            deadline = time.monotonic() + 2
+            while self.admin.execute(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = %s AND datname = %s)",
+                (backend_pid, self.name),
+            ).fetchone()[0]:
+                if time.monotonic() >= deadline:
+                    self.fail("本测试夹具连接未在限定时间内退出")
+                time.sleep(0.01)
 
     def _drop_database(self) -> None:
         try:
@@ -64,7 +84,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
     def _seed_scope(self, existing_owner: UUID | None = None) -> tuple:
         owner, contact, binding, document, message = (uuid4() for _ in range(5))
         owner = existing_owner or owner
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             if existing_owner is None:
                 connection.execute("INSERT INTO public.owner (id, display_name) VALUES (%s, '合成用户')", (owner,))
             connection.execute("INSERT INTO public.contact (owner_id, id, display_name) "
@@ -98,7 +118,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
         return owner, contact, binding, document, message
 
     def _assert_unadopted(self) -> None:
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             self.assertIsNone(connection.execute(
                 "SELECT to_regclass('public.notalone_schema_baseline')"
             ).fetchone()[0])
@@ -128,7 +148,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
         self.assertEqual(result.backup_sha256, hashlib.sha256(archive.read_bytes()).hexdigest())
         self.assertEqual(self.backup.stat().st_mode & 0o777, 0o700)
         self.assertEqual(archive.stat().st_mode & 0o777, 0o600)
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             baseline = connection.execute("""
                 SELECT through_version, jsonb_array_length(manifest), restore_verified_at,
                     repair_sha256 FROM public.notalone_schema_baseline
@@ -153,7 +173,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
         ))
         self.assertEqual(migrate(self.url, MIGRATIONS), ())
         self.assertFalse(adopt_legacy_database(self.url, MIGRATIONS, self.backup).adopted)
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             self.assertEqual(connection.execute(
                 "SELECT name FROM public.notalone_schema_migration"
             ).fetchall(), [
@@ -171,7 +191,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
 
     def test_full_035_needs_no_repair_and_preserves_ids_pause_and_message_evidence(self) -> None:
         owner, contact, binding, document, message = self._seed_scope()
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             connection.execute((MIGRATIONS / "025_manual_memory_source.sql").read_text())
             # 规范消息 UUID 是合法证据，不能误判为丢失的文档/观察。
             connection.execute("""
@@ -187,7 +207,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
         self.assertFalse(audit_legacy_database(self.url, MIGRATIONS).repair_required)
         self.assertTrue(adopt_legacy_database(self.url, MIGRATIONS, self.backup).adopted)
         migrate(self.url, MIGRATIONS)
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             self.assertEqual(connection.execute("SELECT id FROM public.source_document").fetchone()[0], document)
             self.assertEqual(connection.execute("SELECT id FROM public.message").fetchone()[0], message)
             self.assertEqual(connection.execute("SELECT binding_id, phase FROM public.cli_backfill_state").fetchone(),
@@ -196,13 +216,13 @@ class DatabaseAdoptionTest(unittest.TestCase):
             self.assertIsNone(connection.execute("SELECT repair_sha256 FROM public.notalone_schema_baseline").fetchone()[0])
 
     def test_extra_structure_and_unknown_constraint_are_rejected_without_backup(self) -> None:
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             connection.execute("CREATE TABLE public.extra_probe (id int)")
         with self.assertRaisesRegex(MigrationError, "legacy_schema_mismatch"):
             adopt_legacy_database(self.url, MIGRATIONS, self.backup)
         self.assertFalse(self.backup.exists())
         self._assert_unadopted()
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             connection.execute("DROP TABLE public.extra_probe")
             connection.execute("""
                 ALTER TABLE public.source_document DROP CONSTRAINT source_document_source_type_check;
@@ -216,7 +236,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
         self._seed_scope()
         owner, contact, _, document, _ = self._seed_scope()
         message = uuid4()
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             connection.execute("""
                 INSERT INTO public.message (id, owner_id, contact_id, speaker, message_type, text_content)
                 VALUES (%s, %s, %s, 'contact', 'text', '不应出现在错误输出中的合成正文')
@@ -239,11 +259,11 @@ class DatabaseAdoptionTest(unittest.TestCase):
     def test_source_less_message_and_cross_owner_memory_are_rejected(self) -> None:
         owner, contact, _, _, message = self._seed_scope()
         other_owner, other_contact, _, other_document, _ = self._seed_scope()
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             connection.execute("DELETE FROM public.message_source_ref WHERE message_id = %s", (message,))
         with self.assertRaisesRegex(MigrationError, "message_without_source=1"):
             audit_legacy_database(self.url, MIGRATIONS)
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             connection.execute("DELETE FROM public.message WHERE id = %s", (message,))
             connection.execute("""
                 INSERT INTO public.confirmed_memory
@@ -281,7 +301,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
         shutil.copy2(MIGRATIONS / "036_source_deletion_tasks.sql", self.prefix)
         with self.assertRaisesRegex(MigrationError, "baseline_files_mismatch"):
             migrate(self.url, self.prefix)
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             self.assertEqual(connection.execute("SELECT count(*) FROM public.notalone_schema_migration").fetchone()[0], 0)
 
     def _pg_wrapper(self, program: str, body: str) -> Path:
@@ -348,7 +368,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
                 gate.execute("SELECT pg_terminate_backend(%s)", (pid,))
                 with self.assertRaisesRegex(MigrationError, "migration_failed"):
                     pending.result(timeout=5)
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             self.assertEqual(connection.execute("SELECT count(*) FROM public.notalone_schema_migration").fetchone()[0], 0)
             definition = connection.execute("""
                 SELECT pg_get_constraintdef(oid) FROM pg_constraint
@@ -361,7 +381,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
 
     def test_fake_historical_success_is_rejected_after_audited_baseline(self) -> None:
         adopt_legacy_database(self.url, MIGRATIONS, self.backup)
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             connection.execute("INSERT INTO public.notalone_schema_migration (name, checksum) "
                                "VALUES ('001_initial_ingest.sql', %s)", ("a" * 64,))
         with self.assertRaisesRegex(MigrationError, "migration_history_mismatch"):
@@ -390,7 +410,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
     def test_cross_scope_observation_binding_is_rejected(self) -> None:
         owner, contact, _, _, _ = self._seed_scope()
         _, _, other_binding, _, _ = self._seed_scope()
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             connection.execute("""
                 INSERT INTO public.local_wechat_observation
                     (owner_id, contact_id, binding_id, mode, cli_version,
@@ -404,7 +424,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
     def test_same_owner_other_contact_memory_source_is_rejected(self) -> None:
         owner, contact, _, _, _ = self._seed_scope()
         _, _, _, _, other_message = self._seed_scope(owner)
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             connection.execute("""
                 INSERT INTO public.memory_candidate
                     (owner_id, contact_id, text_content, category, source_ids)
@@ -424,17 +444,17 @@ class DatabaseAdoptionTest(unittest.TestCase):
         )
         for create, drop in cases:
             with self.subTest(object=create):
-                with psycopg.connect(self.url) as connection:
+                with self._fixture_connection() as connection:
                     connection.execute(create)
                 try:
                     with self.assertRaisesRegex(MigrationError, "legacy_schema_mismatch"):
                         audit_legacy_database(self.url, MIGRATIONS)
                 finally:
-                    with psycopg.connect(self.url) as connection:
+                    with self._fixture_connection() as connection:
                         connection.execute(drop)
 
     def test_catalog_function_shadowing_never_executes_legacy_side_effects(self) -> None:
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             connection.execute("""
                 CREATE FUNCTION public.to_regclass(text) RETURNS regclass LANGUAGE plpgsql AS $$
                 BEGIN
@@ -451,13 +471,13 @@ class DatabaseAdoptionTest(unittest.TestCase):
         url = self.url + " options='-csearch_path=public,pg_catalog'"
         with self.assertRaisesRegex(MigrationError, "legacy_schema_mismatch"):
             adopt_legacy_database(url, MIGRATIONS, self.backup)
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             self.assertEqual(connection.execute("SELECT count(*) FROM public.owner").fetchone()[0], 0)
 
     def test_table_owner_drift_is_rejected(self) -> None:
         if not self.admin.execute("SELECT rolsuper FROM pg_roles WHERE rolname=current_user").fetchone()[0]:
             self.skipTest("所有权漂移夹具需要本机 PostgreSQL superuser；不创建集群角色。")
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             connection.execute("ALTER TABLE public.owner OWNER TO pg_read_all_data")
         with self.assertRaisesRegex(MigrationError, "legacy_schema_mismatch"):
             audit_legacy_database(self.url, MIGRATIONS)
@@ -498,7 +518,7 @@ class DatabaseAdoptionTest(unittest.TestCase):
         self._assert_unadopted()
 
     def test_extra_function_added_to_builtin_extension_is_rejected(self) -> None:
-        with psycopg.connect(self.url) as connection:
+        with self._fixture_connection() as connection:
             connection.execute("""
                 CREATE FUNCTION public.extension_probe() RETURNS integer LANGUAGE sql AS 'SELECT 1';
                 ALTER EXTENSION plpgsql ADD FUNCTION public.extension_probe();

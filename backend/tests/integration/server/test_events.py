@@ -134,6 +134,8 @@ class EventStreamContractTest(unittest.TestCase):
                             "processed_count": 12,
                             "attempt_count": 2,
                             "retry_count": 1,
+                            "error_code": None,
+                            "failure_state_commit": None,
                         },
                     },
                 ),
