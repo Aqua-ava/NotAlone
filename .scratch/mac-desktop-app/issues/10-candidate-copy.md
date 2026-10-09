@@ -38,3 +38,7 @@ Spec: ../spec.md
 - 2026-10-09：源版本37ae6e的首个candidate-copy普通页实际1/1通过、exit0：复制接收端取得当前编辑文本，编辑与原候选快照分离。单Chrome、cleanupConfirmed=true、7次有限quiet采样active/window0、两租约absent；日志 /tmp/notalone-app-context.p9MPie/10-first-green.log。已归还runtime给14；真实剪贴板、原生隐藏及后续失败/范围场景仍待，任务继续claimed。
 
 - 2026-10-09：在已通过的最小复制实现上准备第二个公开页面场景，系统边界一次失败后验证安全提示、编辑保留、无成功或收起，再重试核对写入完成先于收起。仅类型与构建通过，场景尚未运行，不新增产品逻辑。
+
+- 2026-10-09：固定1c8825b…5aa3545的任务10双轴初审：Standards hard0/possible0、Spec0，P0-P3均0。聚合源3a9be09受限memory-editing-full+candidate-copy实际通过：资料编辑12/12、复制2/2，exit0、cleanupConfirmed=true、单Chrome、quiet74次active/window0、两租约absent；日志 /tmp/notalone-app-context.p9MPie/14-full-and-10-copy.log。复制系统边界仍为合成接收端，原生条件未通过。
+
+- 2026-10-09：第三片沿现有公开桥接准备当前第二候选选择、空白禁用及参数/联系人/候选/角色越界拒绝；类型和构建通过，实际运行待串行调度，不新增产品实现。
