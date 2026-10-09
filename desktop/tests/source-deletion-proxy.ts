@@ -1,10 +1,12 @@
 import { createServer, request as httpRequest, type Server } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
 
-// 只暂停用户确认的真实 DELETE 转发；业务响应仍来自生产后端，四秒自动放行。
+// 只暂停真实 DELETE 转发或具名依据响应；业务内容仍来自生产后端，四秒自动放行。
 export class SourceDeletionProxy {
   readonly server: Server;
   holdDelete = false;
+  holdEvidencePath: string | null = null;
+  readonly heldStatuses: number[] = [];
   private gateTimer: NodeJS.Timeout | undefined;
   private readonly held: Array<(failure: boolean) => void> = [];
   private readonly pending = new Set<ReturnType<typeof httpRequest>>();
@@ -22,7 +24,11 @@ export class SourceDeletionProxy {
             response.writeHead(failure ? 503 : result.statusCode ?? 500, { 'Content-Type': 'application/json' });
             response.end(failure ? '{"error":"synthetic_transport_unavailable"}' : Buffer.concat(chunks));
           };
-          deliver(false);
+          if (incoming.method === 'GET' && incoming.url === this.holdEvidencePath) {
+            this.heldStatuses.push(result.statusCode ?? 0);
+            this.held.push(deliver);
+            this.scheduleRelease();
+          } else deliver(false);
         });
       });
       this.pending.add(outgoing);
@@ -38,7 +44,7 @@ export class SourceDeletionProxy {
       };
       if (incoming.method === 'DELETE' && this.holdDelete) {
         this.held.push(() => forward());
-        this.gateTimer = setTimeout(() => this.release(), 4000);
+        this.scheduleRelease();
       } else forward();
     });
   }
@@ -54,6 +60,7 @@ export class SourceDeletionProxy {
     await writeFile(infoPath, `address=127.0.0.1:${address.port}\ntoken=${fields.token}\npid=${fields.pid}\n`, { mode: 0o600 });
     return proxy;
   }
+  private scheduleRelease() { if (!this.gateTimer) this.gateTimer = setTimeout(() => this.release(), 4000); }
   release(failure = false): void { clearTimeout(this.gateTimer); this.gateTimer = undefined; for (const deliver of this.held.splice(0)) deliver(failure); }
   async close(): Promise<void> {
     this.release();

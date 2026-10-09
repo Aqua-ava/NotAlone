@@ -96,3 +96,20 @@ export async function sourceDeletionMultiSourceAcceptance(browser: Browser, orig
   }), 'multi-source');
   process.stdout.write('page_test_scenario_passed: source-deletion-multi-source\n');
 }
+
+export async function sourceDeletionStaleRequestAcceptance(browser: Browser, origin: string) {
+  const { SourceDeletionProxy } = await import('../source-deletion-proxy');
+  const { sourceDeletionStaleRequest } = await import('../source-deletion-page-scenarios');
+  await withSourceDeletionFixture(async (fixture) => {
+    const released = ownResource();
+    const proxy = await SourceDeletionProxy.attach(fixture.infoPath);
+    try { await withControllerEnvironment(fixture, async (userData) => {
+      const host = new PageHost(await browser.newContext(), origin, userData);
+      try {
+        await host.backend.connect();
+        await sourceDeletionStaleRequest(await host.open('manager'), await host.open('helper'), fixture, proxy);
+      } finally { proxy.release(); await host.close(); fixture.confirmControllerStopped(); }
+    }); } finally { await proxy.close(); released(); }
+  }, 'reply');
+  process.stdout.write('page_test_scenario_passed: source-deletion-stale-request\n');
+}
