@@ -1,4 +1,5 @@
 import type { ContactSelection } from './contact-session-bridge';
+import type { ReplyEvidenceCommands } from './reply-evidence';
 
 export type RewriteTone = 'original' | 'warm' | 'concise' | 'polite';
 export interface RewriteOptions {
@@ -75,7 +76,7 @@ export interface ReplySessionState {
 }
 export interface ReplyCandidateSelection extends ContactSelection { replyRequestId: string; candidateId: string; }
 export interface ReplyCandidateEdit extends ReplyCandidateSelection { text: string; }
-export interface ReplyBridge {
+export interface ReplyBridge extends ReplyEvidenceCommands {
   getState(): Promise<ReplySessionState>;
   updateOptions(update: RewriteOptionsUpdate): Promise<ReplySessionState>;
   setMode(update: ReplyModeUpdate): Promise<void>;

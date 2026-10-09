@@ -30,3 +30,6 @@ Spec: ../spec.md
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
 
 - 2026-10-09：接续批准的任务12，依据公开生成快照接口准备最小页面行为；当前运行资源由任务14独占，本任务先静态编写公开验收，不启动HTTP/PG或浏览器，不将未运行用例称为red/green。原生验收保持暂停。
+
+- 2026-10-09：首片通过真实页面→生产具名控制器→HTTP/PG接缝核验：未实现展开按钮时实际red退出1；接入只读生成快照、默认折叠、候选citationIds标注和未知来源时间后green退出0，1/1通过。命令为 `npm run test:pages -- --case reply-evidence --timeout-seconds 120`。日志保存在本轮仓库外交接目录 `12-first-red.log`、`12-first-green.log`；类型、构建、空白与脚本语法检查通过。随机合成测试库/握手/配置、可控外部模型，未处理私人资料或真实渠道。
+- 2026-10-09：首片green单Chrome，cleanupConfirmed=true，7次quiet采样active/window均0、activationPolicy2；自有子树RSS采样峰值Chrome855104、Node180688、Python155040 KiB，共享页可能重复计，不保证物理内存或瞬时上限。两租约absent，已释放root分配的12-pages运行所有权。只完成默认草稿快照首片，删除/范围/迟到/失败及完整相关回归、双轴评审仍待；保持claimed、未勾选验收且无Answer，原生/签名/完整App未验收。

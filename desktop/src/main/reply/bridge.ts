@@ -4,6 +4,7 @@ import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyD
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { ReplySession } from './session';
+import { ReplyEvidenceSession } from './evidence-session';
 
 function fields(args: unknown[], keys: string[]): Record<string, unknown> {
   const value = args[0];
@@ -35,6 +36,11 @@ function options(args: unknown[]): RewriteOptionsUpdate {
 
 export function installReplyBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession): ReplySession {
   const replies = new ReplySession(contacts, backend);
+  const evidence = new ReplyEvidenceSession(backend, replies);
+  evidence.onStateChanged((state) => commands.publish('reply:evidence-changed', state));
+  commands.handle('reply:get-evidence-state', (...args: unknown[]) => { noArguments(args); return evidence.getState(); }, 'helper');
+  commands.handle('reply:load-evidence', (...args: unknown[]) => evidence.load(candidate(args)), 'helper');
+  commands.handle('reply:close-evidence', (...args: unknown[]) => evidence.close(candidate(args)), 'helper');
   replies.onStateChanged((state) => commands.publish('reply:state-changed', state));
   commands.handle('reply:get-state', (...args: unknown[]) => { noArguments(args); return replies.getState(); });
   commands.handle('reply:update-options', (...args: unknown[]) => { return replies.updateOptions(options(args)); }, 'helper');
