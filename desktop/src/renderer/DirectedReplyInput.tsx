@@ -7,7 +7,7 @@ export function DirectedReplyInput({ replies }: { replies: ReplySessionView }) {
   const [direction, setDirection] = useState(state.direction);
   useEffect(() => { setDirection(state.direction); }, [state.scopeRevision]);
   const enabled = Boolean(state.contactId);
-  const canGenerate = enabled && Boolean(state.targetMessageId) && Boolean(direction.trim()) && state.phase !== 'waiting';
+  const canGenerate = enabled && Boolean(state.targetMessageId) && Boolean(direction.trim()) && state.phase !== 'waiting' && !state.generationBlock;
   return <section className="directed-input" aria-label="本次回复输入">
     <div className="message-heading"><b>选择待回复消息</b>
       <button disabled={!enabled || state.messages.phase === 'loading'} onClick={() => void replies.loadMessages()}>刷新消息</button></div>

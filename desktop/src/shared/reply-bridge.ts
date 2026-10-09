@@ -59,11 +59,13 @@ export interface ReplyResult {
   contextEvidenceIds: string[];
 }
 export type ReplyFailureCode = 'generation_failed' | 'timeout' | 'unavailable' | 'rejected' | 'connection';
+export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;
 export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; needsRefresh: boolean; }
 export interface ReplySessionState {
   revision: number;
   scopeRevision: number;
   contactId: string | null;
+  generationBlock: ReplyGenerationBlock;
   options: RewriteOptions;
   mode: ReplyMode;
   messages: ReplyMessagesState;

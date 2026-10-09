@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ContactSelection, ContactSessionState } from '../../shared/contact-session-bridge';
-import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyDirectionUpdate, ReplyInputSnapshot, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, ReplySessionState, RewriteOptionsUpdate } from '../../shared/reply-bridge';
+import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyInputSnapshot, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, ReplySessionState, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
@@ -13,7 +13,7 @@ const tones = { original: '', warm: '本次语气自然温和。', concise: '本
 
 // 本次编辑只在主进程内存保留；原始候选和编辑稿分别保存。
 export class ReplySession {
-  private state: ReplySessionState = { revision: 0, scopeRevision: 0, contactId: null,
+  private state: ReplySessionState = { revision: 0, scopeRevision: 0, contactId: null, generationBlock: null,
     options: defaults(), mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null },
     messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
     targetMessageId: null, direction: '', phase: 'idle', result: null, selectedCandidateId: null, canRetry: false };
@@ -30,11 +30,17 @@ export class ReplySession {
   private noticeRevision = 0;
   private readonly listeners = new Set<(state: ReplySessionState) => void>();
 
-  constructor(private readonly contacts: ContactSession, private readonly backend: BackendHost) {
+  constructor(private readonly contacts: ContactSession, private readonly backend: BackendHost,
+    private readonly generationBlock: () => ReplyGenerationBlock = () => null) {
+    this.state.generationBlock = generationBlock();
     contacts.onStateChanged((state) => this.receiveContact(state));
     this.receiveContact(contacts.getState());
   }
   getState(): ReplySessionState { return structuredClone(this.state); }
+  refreshGenerationEligibility(): void {
+    const generationBlock = this.generationBlock();
+    if (generationBlock !== this.state.generationBlock) this.publish({ generationBlock });
+  }
   onStateChanged(listener: (state: ReplySessionState) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -160,6 +166,8 @@ export class ReplySession {
 
   async generate(selection: GenerateReply): Promise<void> {
     const contactState = this.assertScope(selection);
+    this.refreshGenerationEligibility();
+    if (this.state.generationBlock) throw new Error('请先确认本次联系人。');
     if (this.state.phase === 'waiting') return;
     const generation = this.backend.getConnectionGeneration();
     const contact = contactState.contacts.find((item) => item.contactId === selection.contactId)!;
