@@ -10,6 +10,7 @@ export function useReplySession() {
   const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null,
     options: { tone: 'original', instruction: '', includeRelationshipContext: false },
     mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null, direction: '',
+    messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
     phase: 'idle', result: null, selectedCandidateId: null, canRetry: false }, window.notalone.replies);
   async function operate(operation: () => Promise<ReplySessionState | void>) {
     const scopeRevision = latest.current.scopeRevision;
@@ -21,6 +22,7 @@ export function useReplySession() {
     updateOptions: (options: RewriteOptions) => operate(() => window.notalone.replies.updateOptions({ ...selection(), options })),
     setMode: (mode: ReplyMode) => operate(() => window.notalone.replies.setMode({ ...selection(), mode })),
     loadMessages: (older = false) => operate(() => window.notalone.replies.loadMessages({ ...selection(), older })),
+    reconnectMessages: () => operate(() => window.notalone.replies.reconnectMessages(selection())),
     selectMessage: (messageId: string) => operate(() => window.notalone.replies.selectMessage({ ...selection(), messageId })),
     updateDirection: (direction: string) => operate(() => window.notalone.replies.updateDirection({ ...selection(), direction })),
     generate: (newRequest = false) => operate(() => window.notalone.replies.generate({ ...selection(), newRequest })),
