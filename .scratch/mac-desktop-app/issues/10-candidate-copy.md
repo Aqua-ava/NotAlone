@@ -30,3 +30,5 @@ Spec: ../spec.md
 - 2026-10-08：用户认可二十张任务的粒度和依赖，按 `to-tickets` 发布；尚未开始本任务。
 
 - 2026-10-09：开始准备候选复制的公开页面切片，沿用真实生成与当前编辑文本；普通页面仅替换操作系统复制/隐藏边界，真实剪贴板和窗口验收继续暂停，任务保持 claimed。
+
+- 2026-10-09：首个受限 candidate-copy 普通页实际退出1：真实生成和编辑后点击旧复制按钮，按钮仍 disabled，30秒超时为产品red。单Chrome、cleanupConfirmed=true、52次有限quiet采样active/window0、两租约absent；日志 /tmp/notalone-app-context.p9MPie/10-first-red.log。已将runtime返14，开始最小复制实现；未读取真实剪贴板。
