@@ -2,7 +2,8 @@ import type { SourceDeletionRequest, SourceDeletionState } from '../../shared/so
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
-import { deletionReceipt, deletionSources, deletionTask } from './read';
+import { deletionSources, deletionTask } from './read';
+import { SourceDeletionTracking } from './tracking';
 type Scope = { generation: number; contactId: string; scopeRevision: number };
 
 // DELETE只表示请求被接受；每次公开重读原任务及固定最终步骤，绝不推断SSE或百分比完成。
@@ -13,10 +14,12 @@ export class SourceDeletionController {
   private pending: AbortController | undefined;
   private poll: NodeJS.Timeout | undefined;
   private pollCount = 0;
+  private readonly tracking: SourceDeletionTracking;
   private readonly verified = new Set<string>();
   private readonly listeners = new Set<(state: SourceDeletionState) => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
     private readonly onSourceChanged: (contactId: string) => Promise<void>) {
+    this.tracking = new SourceDeletionTracking(backend, onSourceChanged);
     contacts.onStateChanged(() => this.synchronizeScope());
     backend.onStateChanged(() => this.synchronizeScope());
     this.synchronizeScope();
@@ -47,20 +50,17 @@ export class SourceDeletionController {
   async delete(request: SourceDeletionRequest) {
     const scope = this.assertScope(request);
     if (this.state.busySourceId || this.state.phase !== 'ready' || !this.state.sources.some((source) => source.sourceId === request.sourceId)) throw new Error('来源目录已变化，请刷新后确认。');
-    this.cancel(); const revision = this.revision; const pending = new AbortController(); this.pending = pending;
+    this.cancel(); const revision = this.revision;
     this.publish({ busySourceId: request.sourceId, error: null });
     const current = () => this.scope === scope && revision === this.revision && scope.generation === this.backend.getConnectionGeneration();
     try {
-      const response = await this.backend.requestJson({ method: 'DELETE', path: `/api/contacts/${scope.contactId}/sources/${request.sourceId}`, signal: pending.signal });
-      const taskId = deletionReceipt(response.data);
-      if (!current() || response.generation !== scope.generation) return;
-      await this.onSourceChanged(scope.contactId);
+      const taskId = await this.tracking.delete(scope.contactId, request.sourceId, scope.generation);
       if (!current()) return;
       this.verified.delete(taskId); this.pollCount = 0;
       await this.read(scope);
     } catch {
       if (current()) this.publish({ error: '删除结果尚未确认，请刷新来源核对原任务；不要将请求失败理解为未执行。' });
-    } finally { if (current()) this.publish({ busySourceId: null }); if (this.pending === pending) this.pending = undefined; }
+    } finally { if (current()) this.publish({ busySourceId: null }); }
   }
   private async read(scope: Scope) {
     this.cancel(); const revision = this.revision; const pending = new AbortController(); this.pending = pending;
