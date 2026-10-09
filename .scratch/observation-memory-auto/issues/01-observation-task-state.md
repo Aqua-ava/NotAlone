@@ -1,7 +1,7 @@
 # 01 — 支持增量观察记忆任务的持久状态
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 **Blocked by:** none
 
 ## What to build
@@ -40,3 +40,40 @@ None，red），接通受绑定范围限制的排队原因后 green。相同 Wor
 来源删除后候选清除，重复排队沿用水位且不重新发送已删除消息给合成模型。
 领取代次只是无正文元数据；没有变更采纳门或增量观察自动触发方式。等待双轴评审及
 相关迁移、导入、删除、HTTP 回归后收尾。
+
+## Answer
+
+2026-10-09：任务 01 完成。初版 `8184bf0` 加本轮 `1b390b4` 提供联系人级唯一
+observation 任务、终态重排、运行中新批次合并、提取／索引／验证、失败恢复和非正文
+状态查询。本轮补齐配置不可用原因，并通过独立领取代次拒绝跨轮次或过期接管的旧结果。
+观察任务没有历史文件外键；import/delete 原来源约束保持。调用创建／重排接缝的前提
+仍是可靠观察已经提交，批次事件筛选与自动唤醒由任务 02 实现，本票没有自动调度。
+
+验收覆盖：并发创建复用任务，运行中不重置有效租约；成功步骤在失败恢复时保留；
+解绑后拒绝创建、领取、恢复、完成和续期；跨 owner/contact 不能查询或恢复；联系人
+删除后旧任务不可恢复。真实观察存储和生产提取执行器使用合成模型完成候选与水位；
+来源删除清除失去来源的候选，后续执行不能再次读取已删除消息。联系人任务不依附于
+单份来源，因此来源删除不删除整位联系人的任务身份，仍可处理其他有效消息。
+
+### 已运行验证
+
+均先执行 `conda activate NotAlone`，设置 `NOTALONE_DISABLE_DOTENV=1`；数据库验证
+显式指向本轮随机 `_test` 库，HTTP 与迁移测试按自身夹具另建随机库。
+
+- 根目录：`python -m unittest discover -s backend/tests/unit -t backend`：950 项通过。
+- backend：`python -m unittest discover -s tests/integration/tasks -t . -v`：25 项通过。
+- backend：`python -m unittest tests.integration.persistence.test_database_migrations tests.integration.persistence.test_database_adoption tests.integration.persistence.test_observation_store tests.integration.persistence.test_observation_reply_deletion tests.integration.server.test_failed_task_recovery tests.integration.server.test_import_task_api tests.integration.server.test_import_auto_flow tests.integration.server.test_core_business_flow -v`：104 项中首次 103 项通过、1 项 `adoption_writers_present` 错误；该错误发生于旧库接管测试的连接保护，不是断言失败。
+- 对上述失败单项 `tests.integration.persistence.test_database_adoption.DatabaseAdoptionTest.test_interrupted_036_rolls_back_and_resumes_from_audited_035` 原样重跑：1 项通过；保留首次失败记录，不宣称首轮全绿，也不据此声称偶发连接问题已修复。
+- backend：`python -m mypy src/notalone/tasks/models.py src/notalone/persistence/background_tasks.py --follow-imports=silent`：2 个生产文件通过；`git diff --check` 通过。
+- 新库 001–046 安装与重复执行、旧库审计后续迁移均有测试；045 及以前迁移内容不变。精确随机库 `notalone_observation01_92625d361e4a47dd84ceb28042d5b047_test` 删除前 owner 残留 0，删除后 catalog 核对不存在。
+
+### 评审、数据影响及剩余工作
+
+按 code-review 技能独立执行 Standards／Spec：确认问题均为 0。开始基点是
+`11bd959`；期间其他会话提交 `a635823`、`ddfb6cb` 两笔草图更新，已明确排除在本票
+成果之外；本票 `1b390b4` 只包含自己的 9 个文件，集成分支沿用当前
+`codex/prototype-conversation-paths`，没有推送或创建远端分支。
+
+只新增领取代次等无正文元数据，不改变采纳门、联系人授权或读取范围；未迁移业务库、
+读取真实聊天、调用外部模型、启动微信或桌面 App。046 使用前须按数据库说明停旧
+Worker 并受控升级。任务 02 的观察提交后自动唤醒仍未实现，真实渠道集成未验收。
