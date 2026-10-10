@@ -71,3 +71,5 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 唯一E01入口生成新`docs/evaluations/authentic-expression-declared-combination-http-v1.json`，6次实际调用／792.018542ms，结构失败0、独立synthetic_fixture故意保真失败2、真人0／qualityfalse，三项真实质量维度未知；评价及期望没有进入模型。六个实际payload／system／完整输出／UUID和各轮计量保留。此报告覆盖单次声明、样本和基础候选继续，不声称已组合B完整消息组、公开探索Skill、A09或A12。`aed5517`事务hook依赖原B最小建议引用类型，当前树缺该正式前置，未完成cherry已撤销，等待B公开UUID正式切片再接，不引入旧INT公开API。
 
 限定Spec发现持久三轮重读仅zip可能漏检缺轮；已补完整轮数、输入版本和reply_request_id对应断言，两个新场景再次实际green。该复跑不覆盖原六捕获，报告保持上述原始UUID／计量。Standards原主题hard0／smell0，Spec该问题修复后接续复核。
+
+恢复TEST首轮已由总协调在root正式树`edfab2a`运行具名`authentic-expression-recovery`：样本删除场“删除样本后重连与重开保留独立讨论”完整通过；原始来源删除场在断线重连后仍停于“关系资料”，直接等待联系人选择按钮30000ms超时，整场未通过，后续重开断言不记GREEN。实际exit1、quiet64／active0／onscreen0、单Chrome、cleanupConfirmed=true，Electron／native=false；冻结已由总协调解除。最小测试修复只在共用联系人选择步骤先点击公开“联系人与绑定”导航，不改产品控制器，也不放宽正文遮挡、UUID／旧键／依据／继续或模型调用次数断言。修复后的公开GREEN仍待总协调串行复验。
