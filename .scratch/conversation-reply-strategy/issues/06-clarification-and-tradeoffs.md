@@ -46,3 +46,14 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
 
 2026-10-11 持久UUID前端核心切片：两场公开页面展示关键问题、当前一步及取舍，未确认意愿的回答只继续探索；旧回答在改目的／场景／目标后全部清空，新HTTP为null。目的变更残留旧回答P2已公开RED→GREEN；服务器已确认后应答直接继续的完整页面场仍待补齐，现保持claimed。 真实命令、五场控制／隔离证据与数据影响见[R02本次页面记录](02-understanding-and-direction.md)；非真人或原生验收，原标准保持。
+
+
+## Answer（已确认意愿后的公开澄清切片）
+
+2026-10-11：新增独立页面用例 `reply-strategy-confirmed-clarification`，回应与主动联系各沿真实公开操作先确认意愿；尚有关键问题时不生成，明确回答后发生受控模型故障，用户点击原操作重试才继续探索并调用既有生成链。失败和重试的回答正文、问题身份、输入UUID及操作键相同；生成保留原已确认意愿与单次回答。每场实际4次受控调用，完成后的原操作完整响应重放仍4次，未创建新的确认。原模型、来源、联系人与A会话存储链均保留。
+
+实际在Conda NotAlone中执行 `npm run test:pages -- --case reply-strategy-confirmed-clarification --case reply-strategy-skills --timeout-seconds 180`：第一case两场均完成且调度报告passed；联合命令最终exit1，因为随后R07首场候选缺实际版本展示取得真实产品RED，不能把联合命令说成全通过。资源quiet31、active0、onscreen0、单Chrome、cleanupConfirmed=true，Electron/native=false；隔离夹具正常收尾。更早的未确认回答不生成、当前一步/取舍及改目的/场景/目标擦除旧回答公开实证见R02；此处补足先确认再回答的公开路径。
+
+数据影响：只新增合成消息/受控模型的公开回归，问题与操作沿原输入版本绑定，无长期记忆、额外外部模型或发送能力；无私人聊天/OCR/真实App。该切片实际类型检查、Python夹具编译与diff检查通过；页面调度CLI10项通过（3095.711667ms，skip0），限定Standards hard0/Fowler possible0、Spec0。本地提交标识随正式交付记录补齐。R02六场UUID回归及全票最后对照仍继续，因此State保持claimed、原验收标准不改、不预勾；真实模型语义、原生与人工验收本轮按授权跳过。
+
+总协调主树消费正式 `9866ceeff51b7407efdb6bf8c9d8516f76809885`，只增加本 case 到原完整名单及分发，保留 nonce、租约、最多两 case 和有限期限。Conda `NotAlone`、关闭 dotenv／追踪、`PGHOST=/tmp PGPORT=5432 npm run test:pages -- --case reply-strategy-confirmed-clarification --timeout-seconds 180`：回应和主动两场原断言全部到达，实际 exit0，quiet40、active0、onscreen0、单 Chrome、cleanupConfirmed=true，Electron/native=false。每场四次实际调用及完整重放零追加保持，production 页面／HTTP／隔离 PG 清理确认；类型与差异检查通过，最终限定 Standards 硬要求 0／重要气味 0、Spec 0。历史联合 exit1 与未完成整票依赖保留，未执行人工部分。
