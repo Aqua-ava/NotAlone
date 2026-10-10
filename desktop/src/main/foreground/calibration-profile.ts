@@ -18,9 +18,10 @@ export async function readPendingSelection(userData: string): Promise<Record<str
   } finally { await file.close(); }
 }
 
-export async function invalidateCalibrationProfile(userData: string): Promise<void> {
+export async function invalidateCalibrationProfile(userData: string, resetProgress = true): Promise<void> {
   await rm(path.join(userData, 'foreground-layout-profile.json'), { force: true });
   await rm(path.join(userData, 'foreground-layout-verification.json'), { force: true });
+  if (resetProgress) await rm(path.join(userData, 'foreground-layout-verification-progress.json'), { force: true });
 }
 
 export const layoutVerificationErrors = [
@@ -29,6 +30,35 @@ export const layoutVerificationErrors = [
   'minimal_region_capture_failed', 'calibration_unavailable',
 ] as const;
 export const layoutVerificationStages = ['selection', 'context', 'capture-setup', 'sentinels-before', 'names', 'sentinels-after', 'profile', 'host'] as const;
+
+export function verificationProgressReceiver(onStage: (stage: typeof layoutVerificationStages[number]) => void): (chunk: Buffer) => boolean {
+  let bytes = 0, pending = '';
+  const seen = new Set<string>();
+  return (chunk) => {
+    bytes += chunk.length;
+    if (bytes > 8192) return false;
+    pending += chunk.toString('utf8');
+    let newline: number;
+    while ((newline = pending.indexOf('\n')) >= 0) {
+      const line = pending.slice(0, newline); pending = pending.slice(newline + 1);
+      const prefix = 'notalone_verification_stage:';
+      if (!line.startsWith(prefix)) continue;
+      const stage = line.slice(prefix.length) as typeof layoutVerificationStages[number];
+      if (!layoutVerificationStages.includes(stage) || seen.has(stage)) continue;
+      seen.add(stage); onStage(stage);
+    }
+    return true;
+  };
+}
+
+export async function saveVerificationProgress(userData: string, stage: unknown, isCurrent: () => boolean): Promise<void> {
+  if (!layoutVerificationStages.includes(stage as typeof layoutVerificationStages[number])) throw new Error('calibration_result_invalid');
+  const temporary = path.join(userData, `.foreground-progress-${randomUUID()}.tmp`);
+  try {
+    await writeFile(temporary, JSON.stringify({ state: 'running', stage }), { flag: 'wx', mode: 0o600 });
+    if (isCurrent()) await rename(temporary, path.join(userData, 'foreground-layout-verification-progress.json'));
+  } finally { await rm(temporary, { force: true }); }
+}
 
 // 仅保存固定阶段和安全错误码，不能夹带原生输出、会话名或图像。
 export async function saveLayoutVerificationResult(userData: string, state: 'failed' | 'verified', error: unknown, stage: unknown, isCurrent: () => boolean): Promise<void> {

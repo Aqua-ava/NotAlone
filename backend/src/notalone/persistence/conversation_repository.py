@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import os
 from collections.abc import Sequence
 from typing import Any, Mapping
 from uuid import UUID, uuid4
 
 import psycopg
+from psycopg.conninfo import conninfo_to_dict
 from psycopg.types.json import Jsonb
 
 from notalone.conversation import (
@@ -340,6 +342,7 @@ class PostgresConversationBindingRepository:
         owner_id: UUID,
         channel: str | None = None,
         account_scope: str | None = None,
+        bounded: bool = False,
     ) -> tuple[PersistedConversationBinding, ...]:
         """列出当前 owner 的 active 绑定，供匹配层投影为证据。"""
 
@@ -358,7 +361,7 @@ class PostgresConversationBindingRepository:
             clauses.append("account_scope = %s")
             parameters.append(account_scope)
         try:
-            with psycopg.connect(self._database_url) as connection:
+            with self._connect_bindings(bounded=bounded) as connection:
                 rows = connection.execute(
                     f"""
                     SELECT {_BINDING_COLUMNS}
@@ -375,6 +378,22 @@ class PostgresConversationBindingRepository:
             raise ConversationBindingPersistenceError(
                 "会话绑定列表读取失败。"
             ) from None
+
+    def _connect_bindings(self, *, bounded: bool) -> psycopg.Connection:
+        if not bounded:
+            return psycopg.connect(self._database_url)
+        # 与新观察同步门禁相同：拒绝多host/service，查询有界且不写绑定。
+        parameters = conninfo_to_dict(self._database_url)
+        if (parameters.get("service") or os.environ.get("PGSERVICE")) or any(
+            "," in str(parameters.get(key) or os.environ.get(f"PG{key.upper()}") or "")
+            for key in ("host", "hostaddr")
+        ):
+            raise ConversationBindingPersistenceError("新观察的数据库范围不可核验。")
+        options = str(parameters.get("options") or os.environ.get("PGOPTIONS") or "")
+        return psycopg.connect(
+            self._database_url, connect_timeout=2, autocommit=True,
+            options=f"{options} -c statement_timeout=200 -c lock_timeout=200",
+        )
 
     def create_cli_bindings_batch(
         self,

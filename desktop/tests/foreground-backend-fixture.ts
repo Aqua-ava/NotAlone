@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { withBindingFixture, type BindingFixture } from './binding-backend-fixture';
 
-type ProbeMode = 'paused' | 'manual';
+type ProbeMode = 'paused' | 'manual' | 'verified';
 // 复用真实授权库、认证后端及原精确收尾；只替换外部probe可执行文件。
 async function withForegroundFixture(mode: ProbeMode, use: (fixture: BindingFixture) => Promise<void>, cleanupConfirmed?: () => void) {
   await withBindingFixture(`notalone-foreground-${mode}-`, 'ready', async (fixture) => {
@@ -17,6 +17,9 @@ async function withForegroundFixture(mode: ProbeMode, use: (fixture: BindingFixt
 }
 export async function withPausedForegroundFixture(use: (fixture: BindingFixture) => Promise<void>, cleanupConfirmed?: () => void) {
   await withForegroundFixture('paused', use, cleanupConfirmed);
+}
+export async function withVerifiedForegroundFixture(use: (fixture: BindingFixture) => Promise<void>, cleanupConfirmed?: () => void) {
+  await withForegroundFixture('verified', use, cleanupConfirmed);
 }
 export interface ManualForegroundFixture {
   backend: BindingFixture;

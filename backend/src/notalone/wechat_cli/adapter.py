@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import queue
 import re
 import subprocess
@@ -239,6 +240,7 @@ class LocalWechatCli:
         self._executable = executable
         self._timeout_seconds = timeout_seconds
         self._runner = runner or self._run_command
+        self._default_runner = runner is None
         if follow_runner is not None:
             self._follow_runner = follow_runner
         elif runner is not None:
@@ -283,9 +285,16 @@ class LocalWechatCli:
         keyword: str | None = None,
         type_filter: str | None = None,
         limit: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> tuple[ChatCandidate, ...]:
         """读取 CLI 会话元数据，不读取消息正文。"""
 
+        if timeout_seconds is not None and (
+            isinstance(timeout_seconds, bool)
+            or not math.isfinite(timeout_seconds)
+            or not 0 < timeout_seconds <= 1
+        ):
+            raise ValueError("有界会话元数据预算须在一秒以内。")
         command = [self._executable, "sessions"]
         if keyword is not None:
             command.extend(["--keyword", _require_text(keyword, "keyword")])
@@ -298,7 +307,7 @@ class LocalWechatCli:
                 raise ValueError("limit 必须大于零。")
             command.extend(["--limit", str(limit)])
         command.append("--strict-read-only")
-        envelope = self._run_json(tuple(command))
+        envelope = self._run_json(tuple(command), timeout_seconds=timeout_seconds)
         data = _object_field(envelope, "data")
         raw_sessions = data.get("sessions")
         if not isinstance(raw_sessions, list):
@@ -454,8 +463,8 @@ class LocalWechatCli:
                 except (TimeoutError, subprocess.TimeoutExpired):
                     pass
 
-    def _run_json(self, command: tuple[str, ...]) -> dict[str, Any]:
-        result = self._invoke(command)
+    def _run_json(self, command: tuple[str, ...], *, timeout_seconds: float | None = None) -> dict[str, Any]:
+        result = self._invoke(command, timeout_seconds=timeout_seconds)
         try:
             value = json.loads(result.stdout)
         except (TypeError, json.JSONDecodeError) as error:
@@ -468,9 +477,10 @@ class LocalWechatCli:
             )
         return value
 
-    def _invoke(self, command: tuple[str, ...]) -> CommandResult:
+    def _invoke(self, command: tuple[str, ...], *, timeout_seconds: float | None = None) -> CommandResult:
         try:
-            result = self._runner(command)
+            result = (self._run_command(command, timeout_seconds=timeout_seconds)
+                      if self._default_runner and timeout_seconds is not None else self._runner(command))
         except FileNotFoundError as error:
             raise CliCommandError(
                 "cli_not_found", "微信 CLI 不可用。"
@@ -483,7 +493,7 @@ class LocalWechatCli:
             raise _command_failure(result)
         return result
 
-    def _run_command(self, command: tuple[str, ...]) -> CommandResult:
+    def _run_command(self, command: tuple[str, ...], *, timeout_seconds: float | None = None) -> CommandResult:
         with self._process_lock:
             process = subprocess.Popen(
                 command,
@@ -495,7 +505,7 @@ class LocalWechatCli:
         try:
             try:
                 stdout, stderr = process.communicate(
-                    timeout=self._timeout_seconds
+                    timeout=self._timeout_seconds if timeout_seconds is None else timeout_seconds
                 )
             except subprocess.TimeoutExpired:
                 process.kill()

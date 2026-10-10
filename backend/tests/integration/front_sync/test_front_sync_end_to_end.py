@@ -452,13 +452,20 @@ class FrontSyncEndToEndTest(unittest.TestCase):
         report = self.engine.confirm_binding(
             contact_id=self.contact_a, locator=_TALKER_A
         )
-        self.assertEqual(report.phase, FrontSyncPhase.ACTIVE)
+        self.assertEqual(report.phase, FrontSyncPhase.UNAVAILABLE)
+        self.assertIsNotNone(self.bindings.read_active_by_locator(
+            owner_id=self.owner_id, channel=_CHANNEL, account_scope=_ACCOUNT,
+            conversation_locator=_TALKER_A,
+        ))
 
-        # 选择之后同一会话自动通过，不重复确认。
+        # 只确认一个绑定仍不能证明名字-only画面属于它；同名未绑定会话继续消歧。
+        previous_tails = tuple(self.runner.tail_calls)
         report = self.engine.cycle()
         self.assertEqual(
-            report.decision_reason, BindingMatchReason.CONFIRMED_ACTIVE_BINDING
+            report.decision_reason, BindingMatchReason.AMBIGUOUS_REQUIRES_SELECTION
         )
+        self.assertEqual(report.phase, FrontSyncPhase.UNAVAILABLE)
+        self.assertEqual(tuple(self.runner.tail_calls), previous_tails)
 
     def test_ocr_distorted_name_falls_back_to_recent_sessions(self) -> None:
         # OCR 把标题读成变形名，resolve-chat 落空；回退最近会话转一次性选择。

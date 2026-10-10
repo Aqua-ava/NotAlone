@@ -14,7 +14,10 @@ export class ForegroundController {
   private generation: number | undefined;
   private scopeRevision: number;
   private draft: string;
-  private qualification: { generation: number; scopeRevision: number; contactId: string } | undefined;
+  private readingScopeChanges = 0;
+  private qualification: { generation: number; scopeRevision: number; contactId: string;
+    kind: 'manual-confirmed' | 'verified-binding' } | undefined;
+  private hasReplyEdits: () => boolean = () => true;
   private readonly listeners = new Set<(state: ForegroundState) => void>();
   private readonly unsubscribe: (() => void)[];
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession) {
@@ -38,10 +41,11 @@ export class ForegroundController {
     })];
   }
   getState(): ForegroundState { return { ...this.state }; }
+  setReplyEditGuard(read: () => boolean): void { this.hasReplyEdits = read; }
   getGenerationBlock(): GenerationBlock {
     const contact = this.contacts.getState();
     const qualified = this.qualification;
-    return !this.disposed && qualified && qualified.generation === this.backend.getConnectionGeneration()
+    return !this.disposed && this.readingScopeChanges === 0 && qualified && qualified.generation === this.backend.getConnectionGeneration()
       && qualified.scopeRevision === contact.scopeRevision && qualified.contactId === contact.selectedContactId
       && (contact.directoryPhase === 'ready' || contact.directoryPhase === 'loading')
       ? null : 'foreground-confirmation-required';
@@ -59,8 +63,8 @@ export class ForegroundController {
     }
     this.invalidatePending(); ++this.epoch;
     const selected = this.contacts.selectContact({ contactId: selection.contactId, scopeRevision: contact.scopeRevision });
-    this.qualification = { generation, scopeRevision: selected.scopeRevision, contactId: selection.contactId };
-    this.publish({ foregroundRevision: this.state.foregroundRevision + 1 });
+    this.qualification = { generation, scopeRevision: selected.scopeRevision, contactId: selection.contactId, kind: 'manual-confirmed' };
+    this.publish({ foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null });
     return selected;
   }
   onStateChanged(listener: (state: ForegroundState) => void): () => void {
@@ -68,12 +72,16 @@ export class ForegroundController {
   }
   observeBeforeShow(): Promise<void> {
     if (this.disposed || this.state.suspendedByHelperFocus) return Promise.resolve();
+    if (this.readingScopeChanges > 0) {
+      this.clearObservation('manual-required', 'reading_scope_changed'); return Promise.resolve();
+    }
     if (this.flight) return this.flight.promise;
     const generation = this.backend.getConnectionGeneration();
     if (generation === undefined) {
       this.clearObservation('unavailable', 'connection_unavailable'); return Promise.resolve();
     }
     const scope = this.contacts.getState().scopeRevision;
+    if (this.qualification?.kind === 'verified-binding') this.qualification = undefined;
     const epoch = ++this.epoch;
     const abort = new AbortController();
     const current = () => !this.disposed && !abort.signal.aborted && epoch === this.epoch
@@ -93,10 +101,27 @@ export class ForegroundController {
       signal: abort.signal, timeoutMs: 1500, maxResponseBytes: 4096 }).then((response) => {
       if (!current() || response.generation !== generation) return;
       const observation = foregroundObservation(response.data);
-      // 每个flight只在其有效代际消费一次；首片只发布安全状态，不更改联系人或草稿。
+      // 消费前先废弃flight，内部选择不能把已消费的观察当异步旧结果。
       ++this.epoch;
+      if (observation.contactId) {
+        const contact = this.contacts.getState();
+        if (contact.directoryPhase !== 'ready'
+          || !contact.contacts.some((item) => item.contactId === observation.contactId)) {
+          this.qualification = undefined;
+          this.clearObservation('manual-required', 'contact_unavailable'); return;
+        }
+        if (contact.draft || this.hasReplyEdits()) {
+          this.qualification = undefined;
+          this.publish({ phase: 'manual-required', reason: 'existing_edits_require_confirmation',
+            observedAt: observation.observedAt, probeAvailable: true, wechatInFront: true,
+            suggestedContactId: observation.contactId }); return;
+        }
+        const selected = this.contacts.selectContact({ contactId: observation.contactId, scopeRevision: scope });
+        this.qualification = { generation, scopeRevision: selected.scopeRevision,
+          contactId: observation.contactId, kind: 'verified-binding' };
+      }
       this.publish({ phase: observation.phase, reason: observation.reason, observedAt: observation.observedAt,
-        probeAvailable: observation.probeAvailable, wechatInFront: observation.wechatInFront });
+        probeAvailable: observation.probeAvailable, wechatInFront: observation.wechatInFront, suggestedContactId: null });
     }).catch(() => {
       if (current()) this.clearObservation('unavailable', 'observation_unavailable');
     });
@@ -114,9 +139,24 @@ export class ForegroundController {
     if (event === 'closed') this.clearObservation('idle', 'helper_closed');
   }
   invalidatePending(): void {
-    if (!this.flight) return;
+    if (!this.flight || this.flight.abort.signal.aborted) return;
     ++this.epoch; this.flight.abort.abort();
     this.clearObservation('unavailable', 'observation_cancelled');
+  }
+  beginReadingScopeChange(): () => void {
+    ++this.readingScopeChanges;
+    this.invalidateReadingScope();
+    let finished = false;
+    return () => {
+      if (finished) return;
+      finished = true; --this.readingScopeChanges;
+      this.invalidateReadingScope();
+    };
+  }
+  private invalidateReadingScope(): void {
+    this.qualification = undefined;
+    this.invalidatePending(); ++this.epoch;
+    this.clearObservation('manual-required', 'reading_scope_changed');
   }
   dispose(): void {
     if (this.disposed) return;
@@ -126,13 +166,13 @@ export class ForegroundController {
   }
   private clearObservation(phase: ForegroundState['phase'], reason: string | null): void {
     this.publish({ phase, reason, observedAt: null, probeAvailable: null, wechatInFront: null,
-      foregroundRevision: this.state.foregroundRevision + 1 });
+      foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null });
   }
   private publish(update: Partial<ForegroundState>): void {
     if (this.disposed) return;
     const generationBlock = this.getGenerationBlock();
     this.state = { ...this.state, ...update, revision: this.state.revision + 1,
-      generationBlock, confirmation: generationBlock === null ? 'manual-confirmed' : 'required',
+      generationBlock, confirmation: generationBlock === null ? this.qualification!.kind : 'required',
       confirmedContactId: generationBlock === null ? this.qualification!.contactId : null };
     for (const listener of this.listeners) listener(this.getState());
   }

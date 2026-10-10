@@ -56,8 +56,8 @@ export class PageHost implements PageCommands {
     this.backend = new BackendHost(userData, (config, canStart) => this.diagnostics.ensureReady(config, canStart));
     const contacts = installContactSessionBridge(this, this.backend);
     this.foreground = installForegroundBridge(this, this.backend, contacts);
-    installBindingConsentBridge(this, this.backend, contacts);
-    installSyncControlBridge(this, this.backend, contacts);
+    installBindingConsentBridge(this, this.backend, contacts, () => this.foreground.beginReadingScopeChange());
+    installSyncControlBridge(this, this.backend, contacts, () => this.foreground.beginReadingScopeChange());
     const imports = new ImportController(this.backend, contacts);
     installImportBridge(this, imports);
     this.handle('imports:choose-file', (...args: unknown[]) => {
@@ -70,6 +70,8 @@ export class PageHost implements PageCommands {
     memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
     const replies = installReplyBridge(this, this.backend, contacts, () => this.foreground.getGenerationBlock());
     this.foreground.onStateChanged(() => replies.refreshGenerationEligibility());
+    this.foreground.setReplyEditGuard(() => replies.hasEdits());
+    replies.onInputChanged(() => this.foreground.invalidatePending());
     installSourceDeletionBridge(this, this.backend, contacts, async (contactId) => {
       traces.invalidateSource();
       const checking = replies.revalidateDeletedSource(contactId);

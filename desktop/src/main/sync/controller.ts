@@ -14,7 +14,8 @@ export class SyncControlController {
   private pending: AbortController | undefined;
   private readonly listeners = new Set<(state: SyncControlState) => void>();
 
-  constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession) {
+  constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
+    private readonly beginReadingScopeChange: () => (() => void) = () => () => {}) {
     backend.onStateChanged(() => this.synchronizeScope());
     contacts.onStateChanged(() => this.synchronizeScope());
     this.synchronizeScope();
@@ -54,7 +55,9 @@ export class SyncControlController {
       const phases = operation === 'pause' ? ['gap_detected', 'backfilling', 'incomplete'] : ['paused', 'failed', 'incomplete'];
       if (!this.state.report.enabled || !phases.includes(this.state.report.backfill.phase)) throw new Error('当前补齐状态不支持本次操作。');
     }
-    await this.perform(operation, this.scope);
+    const finish = operation === 'disable' || operation === 'pause' ? this.beginReadingScopeChange() : undefined;
+    try { await this.perform(operation, this.scope); }
+    finally { finish?.(); }
   }
   private async perform(operation: Operation, scope: Scope): Promise<void> {
     const enabledBefore = this.state.report?.enabled;

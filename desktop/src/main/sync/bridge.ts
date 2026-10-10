@@ -13,8 +13,9 @@ function controlRequest(args: unknown[]): SyncControlRequest {
     || fields.scopeRevision < 0) throw new Error('同步操作不可用。');
   return { scopeRevision: fields.scopeRevision };
 }
-export function installSyncControlBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession): void {
-  const sync = new SyncControlController(backend, contacts);
+export function installSyncControlBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession,
+  beginReadingScopeChange?: () => (() => void)): void {
+  const sync = new SyncControlController(backend, contacts, beginReadingScopeChange);
   sync.onStateChanged((state) => commands.publish('sync-control:state-changed', state));
   commands.handle('sync-control:get-state', (...args: unknown[]) => { noArguments(args); return sync.getState(); }, 'manager');
   commands.handle('sync-control:refresh', (...args: unknown[]) => { noArguments(args); return sync.refresh(); }, 'manager');

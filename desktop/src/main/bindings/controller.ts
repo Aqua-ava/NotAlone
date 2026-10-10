@@ -47,7 +47,8 @@ export class BindingConsentController {
   private generation: number | undefined;
   private epoch = 0;
   private readonly listeners = new Set<(state: BindingConsentState) => void>();
-  constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession) {
+  constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
+    private readonly beginReadingScopeChange: () => (() => void) = () => () => {}) {
     backend.onStateChanged(() => {
       const generation = backend.getConnectionGeneration();
       if (generation === this.generation) return;
@@ -150,6 +151,8 @@ export class BindingConsentController {
       || !this.state.bindings.some((item) => item.bindingId === revocation.bindingId && item.contactId === revocation.contactId)) {
       throw new Error('本次授权范围已失效，请刷新后重新确认。');
     }
+    // 请求发出前撤销旧窗口资格；失败或重新开启不自动恢复。
+    const finishReadingScopeChange = this.beginReadingScopeChange();
     const operation = { generation, epoch: ++this.epoch };
     this.publish({ busy: 'revoke', errorCode: null, notice: null });
     try {
@@ -167,7 +170,10 @@ export class BindingConsentController {
       this.publish({ errorCode: busy ? 'revoke-busy' : 'revoke-failed' });
       // 取得锁前超时保证没有写入，直接保留授权供显式重试；其他失败需复核真实目录。
       if (!busy) await this.load(operation);
-    } finally { if (this.current(operation)) this.publish({ busy: null }); }
+    } finally {
+      finishReadingScopeChange();
+      if (this.current(operation)) this.publish({ busy: null });
+    }
   }
   private current(operation: Operation): boolean {
     return operation.generation === this.backend.getConnectionGeneration() && operation.epoch === this.epoch;

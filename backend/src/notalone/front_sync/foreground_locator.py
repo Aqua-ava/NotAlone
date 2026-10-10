@@ -73,7 +73,7 @@ class ForegroundLocator:
     def observe_fresh(
         self, *, enabled: bool, deadline: float,
     ) -> FreshForegroundObservation:
-        """独立一次观察，不查CLI、不消费历史定位或创建绑定。"""
+        """独立一次定位与元数据消歧，不读正文、不消费历史或写绑定。"""
 
         if not enabled:
             return FreshForegroundObservation.create(
@@ -108,9 +108,67 @@ class ForegroundLocator:
                 phase="paused", reason="wechat_not_in_front",
                 probe_available=True, wechat_in_front=False,
             )
-        # 最小区域与OCR质量尚未验证，不能复用旧matcher自动采纳身份。
+        evidence = observation.qualified_evidence
+        if evidence is None:
+            return FreshForegroundObservation.create(
+                phase="manual-required", reason="quality_unverified",
+                probe_available=True, wechat_in_front=True,
+            )
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            return FreshForegroundObservation.create(
+                phase="unavailable", reason="observation_timeout",
+                probe_available=False, wechat_in_front=True,
+            )
+        name = normalize_display_text(evidence.display_name)
+        try:
+            # all包含同名群聊及未绑定会话；达到上限即不能证明唯一。
+            candidates = self._cli.sessions(
+                keyword=name, type_filter="all", limit=51,
+                timeout_seconds=min(0.25, remaining),
+            )
+            if monotonic() >= deadline:
+                raise TimeoutError
+            if len(candidates) >= 51:
+                return FreshForegroundObservation.create(
+                    phase="manual-required", reason="session_candidates_truncated",
+                    probe_available=True, wechat_in_front=True,
+                )
+            exact = tuple(item for item in candidates
+                          if normalize_display_text(item.display_name) == name)
+            if len(exact) != 1 or exact[0].chat_type != "private":
+                return FreshForegroundObservation.create(
+                    phase="manual-required", reason="ambiguous_requires_selection",
+                    probe_available=True, wechat_in_front=True,
+                )
+            bindings = self._bindings.list_active_bindings(
+                owner_id=self._owner_id, channel=self._channel,
+                account_scope=self._account_scope, bounded=True,
+            )
+            if monotonic() >= deadline:
+                raise TimeoutError
+        except TimeoutError:
+            return FreshForegroundObservation.create(
+                phase="unavailable", reason="observation_timeout",
+                probe_available=False, wechat_in_front=True,
+            )
+        except (CliAdapterError, ConversationBindingPersistenceError):
+            return FreshForegroundObservation.create(
+                phase="unavailable", reason="binding_verification_unavailable",
+                probe_available=False, wechat_in_front=True,
+            )
+        matching = tuple(item for item in bindings
+                         if item.conversation_locator == exact[0].username)
+        if len(matching) == 1:
+            binding = matching[0]
+            if normalize_display_text(binding.display_name) == name:
+                return FreshForegroundObservation.create(
+                    phase="confirmed", reason="confirmed_active_binding",
+                    probe_available=True, wechat_in_front=True,
+                    binding_id=binding.binding_id, contact_id=binding.scope.contact_id,
+                )
         return FreshForegroundObservation.create(
-            phase="manual-required", reason="quality_unverified",
+            phase="manual-required", reason="unmatched_requires_selection",
             probe_available=True, wechat_in_front=True,
         )
 
@@ -154,7 +212,6 @@ class ForegroundLocator:
         try:
             candidates = self._cli.resolve_chat(
                 evidence.display_name,
-                type_filter="private",
             ).candidates
             recent_sessions: tuple[ChatCandidate, ...] = ()
             if not candidates:

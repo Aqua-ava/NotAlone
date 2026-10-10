@@ -11,9 +11,14 @@ import Vision
 public enum MinimalSessionCapture {
     public static func verifySelection(_ data: Data) async -> [String: Any] {
         var stage = "selection"
+        func entering(_ name: String) {
+            stage = name
+            FileHandle.standardError.write(Data("notalone_verification_stage:\(name)\n".utf8))
+        }
+        entering("selection")
         do {
             let layout = try MinimalRegionLayout.decode(data, requireVerified: false)
-            stage = "context"
+            entering("context")
             let deadline = Date().addingTimeInterval(60)
             while !layout.contextMatches(), Date() < deadline {
                 try await Task.sleep(nanoseconds: 100_000_000)
@@ -24,16 +29,16 @@ public enum MinimalSessionCapture {
                 }
                 throw MinimalSessionError.layoutChanged
             }
-            stage = "capture-setup"
+            entering("capture-setup")
             let capture = try await Capture(layout)
-            stage = "sentinels-before"
+            entering("sentinels-before")
             let digests = try await capture.sentinels()
-            stage = "names"
+            entering("names")
             let names = try await capture.names()
             guard names.consistent, names.confidence >= 0.90 else { throw MinimalSessionError.qualityUnverified }
-            stage = "sentinels-after"
+            entering("sentinels-after")
             guard try await capture.sentinels() == digests else { throw MinimalSessionError.qualityUnverified }
-            stage = "profile"
+            entering("profile")
             return ["ok": true, "profile": try layout.verified(scale: capture.scale, digests: digests),
                     "verification": ["capture_version": "minimal-region-v1", "names_consistent": true,
                                      "minimum_confidence": names.confidence, "region_count": 5]]

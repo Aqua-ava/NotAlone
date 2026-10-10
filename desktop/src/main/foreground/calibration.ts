@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { savePendingCalibrationSelection } from './calibration-selection';
 import { loadBackendConfiguration } from '../backend/config';
 import { requestCalibrationCoordinates, type CoordinateProposal } from './calibration-form';
-import { invalidateCalibrationProfile, layoutVerificationErrors, layoutVerificationStages, readPendingSelection, saveLayoutVerificationResult, saveVerifiedProfile } from './calibration-profile';
+import { invalidateCalibrationProfile, layoutVerificationErrors, layoutVerificationStages, readPendingSelection, saveLayoutVerificationResult, saveVerifiedProfile, saveVerificationProgress, verificationProgressReceiver } from './calibration-profile';
 
 const verificationMessages: Record<string, string> = {
   screen_capture_permission_missing: '校验未开始：当前探针缺少屏幕录制权限。',
@@ -82,6 +82,7 @@ export class ForegroundCalibration {
       if (this.disposed || choice.response !== 0) return;
       const configuration = await loadBackendConfiguration(this.userData, this.resourcesDirectory);
       if (!configuration.syncProbePath || this.disposed) throw new Error('calibration_unavailable');
+      await saveVerificationProgress(this.userData, 'host', () => !this.disposed);
       const result = JSON.parse(await this.invoke(configuration.syncProbePath, undefined, selection)) as Record<string, unknown>;
       if (this.disposed) return;
       if (result?.ok !== true) {
@@ -93,7 +94,7 @@ export class ForegroundCalibration {
       await saveLayoutVerificationResult(this.userData, 'verified', null, 'profile', () => !this.disposed);
     } catch {
       if (this.disposed) return;
-      await invalidateCalibrationProfile(this.userData);
+      await invalidateCalibrationProfile(this.userData, false);
       await saveLayoutVerificationResult(this.userData, 'failed', code, stage, () => !this.disposed);
       throw new Error(code);
     }
@@ -106,7 +107,7 @@ export class ForegroundCalibration {
       const input = coordinates ?? selection;
       const arguments_ = selection ? ['--verify-minimal-region', '--json'] : ['--calibrate-minimal-region', '--json', ...(coordinates ? ['--coordinates'] : [])];
       const child = spawn(executable, arguments_, {
-        stdio: [input ? 'pipe' : 'ignore', 'pipe', 'ignore'], env: { PATH: '/usr/bin:/bin' },
+        stdio: [input ? 'pipe' : 'ignore', 'pipe', selection ? 'pipe' : 'ignore'], env: { PATH: '/usr/bin:/bin' },
       });
       this.child = child;
       let output = Buffer.alloc(0);
@@ -119,6 +120,12 @@ export class ForegroundCalibration {
         }, 3000);
       };
       const timeout = setTimeout(stop, 400_000);
+      let progressWrites = Promise.resolve();
+      const receiveProgress = verificationProgressReceiver((stage) => {
+        progressWrites = progressWrites.then(() => saveVerificationProgress(this.userData, stage, () => !this.disposed));
+        void progressWrites.catch(stop);
+      });
+      child.stderr?.on('data', (chunk: Buffer) => { if (!receiveProgress(chunk)) stop(); });
       child.stdin?.on('error', stop);
       if (input) child.stdin?.end(JSON.stringify(input));
       child.stdout?.on('data', (chunk: Buffer) => {
@@ -126,10 +133,11 @@ export class ForegroundCalibration {
         output = Buffer.concat([output, chunk]);
       });
       child.once('error', () => { failed = true; });
-      child.once('close', (code) => {
+      child.once('close', async (code) => {
         clearTimeout(timeout);
         clearTimeout(escalation);
         if (this.child === child) this.child = undefined;
+        try { await progressWrites; } catch { failed = true; }
         if (failed || code !== 0) reject(new Error('calibration_unavailable'));
         else resolve(output.toString('utf8'));
       });

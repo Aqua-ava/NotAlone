@@ -33,8 +33,9 @@ function revocation(args: unknown[]): BindingRevocation {
   return { scopeRevision: value.scopeRevision, contactId: (value.contactId as string).toLowerCase(), bindingId: (value.bindingId as string).toLowerCase() };
 }
 
-export function installBindingConsentBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession): void {
-  const bindings = new BindingConsentController(backend, contacts);
+export function installBindingConsentBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession,
+  beginReadingScopeChange?: () => (() => void)): void {
+  const bindings = new BindingConsentController(backend, contacts, beginReadingScopeChange);
   bindings.onStateChanged((state) => commands.publish('bindings:state-changed', state));
   commands.handle('bindings:get-state', (...args: unknown[]) => {
     noArguments(args); return bindings.getState();

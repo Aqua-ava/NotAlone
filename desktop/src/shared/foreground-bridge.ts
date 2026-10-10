@@ -18,12 +18,13 @@ export interface ForegroundState {
   suspendedByHelperFocus: boolean;
   confirmation: 'required' | 'manual-confirmed' | 'verified-binding';
   confirmedContactId: string | null;
+  suggestedContactId: string | null;
   generationBlock: GenerationBlock;
 }
 export const initialForegroundState: ForegroundState = Object.freeze({
   revision: 0, foregroundRevision: 0, phase: 'idle', reason: null,
   observedAt: null, probeAvailable: null, wechatInFront: null, suspendedByHelperFocus: false,
-  confirmation: 'required', confirmedContactId: null, generationBlock: 'foreground-confirmation-required',
+  confirmation: 'required', confirmedContactId: null, suggestedContactId: null, generationBlock: 'foreground-confirmation-required',
 });
 export interface ForegroundBridge {
   getState(): Promise<ForegroundState>;

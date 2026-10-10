@@ -230,10 +230,8 @@ class MatchFrontSessionTest(unittest.TestCase):
         )
         self.assertIsNone(decision.confirmed_binding_id)
 
-    def test_bound_candidate_auto_confirms_with_unbound_duplicate(self) -> None:
-        # 一个同名已绑定 + 一个同名未绑定：沿用既定契约——用户显式
-        # 选择过的单一绑定代表一次已消解的歧义，前台同名自动归入该
-        # 绑定；多个同名候选各自绑定时才必须选择。
+    def test_name_only_binding_does_not_resolve_unbound_duplicate(self) -> None:
+        # 单一已确认绑定不能证明当前画面属于它；未绑定同名会话仍有歧义。
         first = _candidate("wxid_a", "姐姐")
         second = _candidate("wxid_b", "姐姐")
         binding_id = uuid4()
@@ -250,12 +248,24 @@ class MatchFrontSessionTest(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(decision.kind, BindingMatchKind.CONFIRMED)
+        self.assertEqual(decision.kind, BindingMatchKind.NEEDS_SELECTION)
         self.assertEqual(
             decision.reason,
-            BindingMatchReason.CONFIRMED_ACTIVE_BINDING,
+            BindingMatchReason.AMBIGUOUS_REQUIRES_SELECTION,
         )
-        self.assertEqual(decision.confirmed_binding_id, binding_id)
+        self.assertIsNone(decision.confirmed_binding_id)
+
+    def test_name_only_binding_does_not_resolve_same_named_group(self) -> None:
+        decision = match_front_session(
+            evidence=FrontSessionEvidence(display_name="合成同名"),
+            candidates=(_candidate("wxid_a", "合成同名"),
+                        _candidate("synthetic_group", "合成同名", chat_type="group")),
+            stored_bindings=(StoredBindingEvidence(
+                binding_id=uuid4(), conversation_locator="wxid_a", display_name="合成同名",
+            ),),
+        )
+        self.assertEqual(decision.kind, BindingMatchKind.NEEDS_SELECTION)
+        self.assertIsNone(decision.confirmed_binding_id)
 
     def test_evidence_narrowed_bound_candidate_still_confirms(self) -> None:
         # 证据把同名候选收窄到唯一会话且该会话已绑定时，自动确认仍成立。

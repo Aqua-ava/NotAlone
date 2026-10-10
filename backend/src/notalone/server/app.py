@@ -710,8 +710,8 @@ class BackendApp:
             "reason": observation.reason,
             "probe_available": observation.probe_available,
             "wechat_in_front": observation.wechat_in_front,
-            "binding_id": None,
-            "contact_id": None,
+            "binding_id": str(observation.binding_id) if observation.binding_id else None,
+            "contact_id": str(observation.contact_id) if observation.contact_id else None,
         })
 
     def _handle_cli_binding_revoke(

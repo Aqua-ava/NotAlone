@@ -152,6 +152,16 @@ def match_front_session(
         None,
     )
     if binding is not None:
+        # 名字-only证据不能区分已绑定与未绑定同名会话，群聊也参与查重。
+        if normalize_display_text(binding.display_name) == observed_name and not has_evidence and len({
+            candidate.username for candidate in candidates
+            if normalize_display_text(candidate.display_name) == observed_name
+        }) > 1:
+            return BindingMatchDecision(
+                kind=BindingMatchKind.NEEDS_SELECTION,
+                reason=BindingMatchReason.AMBIGUOUS_REQUIRES_SELECTION,
+                candidates=effective,
+            )
         bound_candidates = tuple(
             candidate
             for candidate in effective

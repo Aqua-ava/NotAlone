@@ -29,6 +29,13 @@ export function ForegroundPanel({ state, session }: { state: ForegroundState; se
       确认本次联系人
     </button>}
     {state.confirmation === 'manual-confirmed' && <p>本次联系人已由你确认。</p>}
+    {state.confirmation === 'verified-binding' && <p>本次联系人已通过微信会话绑定确认。</p>}
+    {session && state.suggestedContactId && <p>
+      当前微信会话对应{session.state.contacts.find((item) => item.contactId === state.suggestedContactId)?.displayName}，已有编辑已保留。
+      <button onClick={() => void session.confirmContact(state.suggestedContactId!, state.foregroundRevision)}>
+        确认微信会话对应联系人
+      </button>
+    </p>}
     {session?.error && <p role="alert">{session.error}</p>}
     {state.suspendedByHelperFocus && <p>小窗在前台，暂停新的前台定位；已确认范围的后台同步独立运行。</p>}
   </section>;

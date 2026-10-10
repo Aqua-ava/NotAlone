@@ -276,7 +276,6 @@ class TailLifecycle:
         try:
             candidates = self._cli.resolve_chat(
                 evidence.display_name,
-                type_filter="private",
             ).candidates
         except CliAdapterError as error:
             self._stop_session(FrontSyncPhase.FAILED)

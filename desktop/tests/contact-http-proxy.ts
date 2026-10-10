@@ -6,6 +6,7 @@ export class ContactHttpProxy {
   readonly server: Server;
   holdContacts = false;
   readonly holdBindingPaths = new Set<string>();
+  readonly holdRequestPaths = new Set<string>();
   failRuntimeStatus = false;
   heldCount = 0;
   private runtimeStopped = false;
@@ -18,36 +19,41 @@ export class ContactHttpProxy {
         response.writeHead(503, { 'Content-Type': 'application/json' });
         response.end('{"error":"synthetic_transport_unavailable"}'); return;
       }
-      const outgoing = httpRequest(`http://${address}${incoming.url}`, { method: incoming.method, headers: incoming.headers }, (result) => {
-        const chunks: Buffer[] = [];
-        result.on('data', (chunk: Buffer) => chunks.push(chunk));
-        result.on('end', () => {
-          // 只见证本轮原认证请求的真实停读响应，不从响应迟到、断线或进程退出推定停读。
-          if (this.runtimeToken && incoming.method === 'POST' && incoming.url === '/api/runtime/shutdown'
-            && incoming.headers.authorization === `Bearer ${this.runtimeToken}` && result.statusCode === 200) {
-            try {
-              const stopped: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-              if (stopped && typeof stopped === 'object' && !Array.isArray(stopped)
-                && (stopped as Record<string, unknown>).state === 'stopped') this.runtimeStopped = true;
-            } catch { /* 无效正文不证明已停读，仍按原传输结果交付。 */ }
-          }
-          const deliver = (failure: boolean) => {
-            if (response.destroyed) return;
-            response.writeHead(failure ? 503 : result.statusCode ?? 500, { 'Content-Type': 'application/json' });
-            response.end(failure ? '{"error":"synthetic_transport_unavailable"}' : Buffer.concat(chunks));
-          };
-          if ((this.holdContacts && incoming.url === this.heldEndpoint) || this.holdBindingPaths.has(incoming.url ?? '')) { this.held.push(deliver); this.heldCount++; }
-          else deliver(false);
+      const forward = () => {
+        const outgoing = httpRequest(`http://${address}${incoming.url}`, { method: incoming.method, headers: incoming.headers }, (result) => {
+          const chunks: Buffer[] = [];
+          result.on('data', (chunk: Buffer) => chunks.push(chunk));
+          result.on('end', () => {
+            // 只见证本轮原认证请求的真实停读响应，不从响应迟到、断线或进程退出推定停读。
+            if (this.runtimeToken && incoming.method === 'POST' && incoming.url === '/api/runtime/shutdown'
+              && incoming.headers.authorization === `Bearer ${this.runtimeToken}` && result.statusCode === 200) {
+              try {
+                const stopped: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+                if (stopped && typeof stopped === 'object' && !Array.isArray(stopped)
+                  && (stopped as Record<string, unknown>).state === 'stopped') this.runtimeStopped = true;
+              } catch { /* 无效正文不证明已停读，仍按原传输结果交付。 */ }
+            }
+            const deliver = (failure: boolean) => {
+              if (response.destroyed) return;
+              response.writeHead(failure ? 503 : result.statusCode ?? 500, { 'Content-Type': 'application/json' });
+              response.end(failure ? '{"error":"synthetic_transport_unavailable"}' : Buffer.concat(chunks));
+            };
+            if ((this.holdContacts && incoming.url === this.heldEndpoint) || this.holdBindingPaths.has(incoming.url ?? '')) { this.held.push(deliver); this.heldCount++; }
+            else deliver(false);
+          });
         });
-      });
-      this.pending.add(outgoing);
-      outgoing.on('close', () => this.pending.delete(outgoing));
-      outgoing.on('error', () => {
-        if (response.destroyed) return;
-        response.writeHead(503, { 'Content-Type': 'application/json' });
-        response.end('{"error":"synthetic_transport_unavailable"}');
-      });
-      incoming.pipe(outgoing);
+        this.pending.add(outgoing);
+        outgoing.on('close', () => this.pending.delete(outgoing));
+        outgoing.on('error', () => {
+          if (response.destroyed) return;
+          response.writeHead(503, { 'Content-Type': 'application/json' });
+          response.end('{"error":"synthetic_transport_unavailable"}');
+        });
+        incoming.pipe(outgoing);
+      };
+      // 只暂停本轮具名请求的转发，放行后仍由真实后端执行。
+      if (this.holdRequestPaths.has(incoming.url ?? '')) { this.held.push(() => forward()); this.heldCount++; }
+      else forward();
     });
   }
 

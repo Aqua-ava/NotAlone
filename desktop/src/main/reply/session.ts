@@ -13,6 +13,11 @@ const tones = { original: '', warm: '本次语气自然温和。', concise: '本
 
 // 本次编辑只在主进程内存保留；原始候选和编辑稿分别保存。
 export class ReplySession {
+  hasEdits(): boolean {
+    return Boolean(this.state.result || this.heldResult || this.state.phase === 'waiting' || this.state.targetMessageId
+      || this.state.direction || this.state.mode !== 'rewrite_draft' || this.state.options.instruction
+      || this.state.options.tone !== 'original' || this.state.options.includeRelationshipContext);
+  }
   private state: ReplySessionState = { revision: 0, scopeRevision: 0, contactId: null, generationBlock: null,
     options: defaults(), mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null },
     messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
@@ -29,6 +34,7 @@ export class ReplySession {
   private noticeVerification: AbortController | undefined;
   private noticeRevision = 0;
   private readonly listeners = new Set<(state: ReplySessionState) => void>();
+  private readonly inputListeners = new Set<() => void>();
 
   constructor(private readonly contacts: ContactSession, private readonly backend: BackendHost,
     private readonly generationBlock: () => ReplyGenerationBlock = () => null) {
@@ -44,6 +50,9 @@ export class ReplySession {
   onStateChanged(listener: (state: ReplySessionState) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+  onInputChanged(listener: () => void): () => void {
+    this.inputListeners.add(listener); return () => this.inputListeners.delete(listener);
   }
 
   // 删除检查点只接收主进程已确认的联系人；跨联系人本人资料也可能影响当前依据。
@@ -95,6 +104,7 @@ export class ReplySession {
   updateOptions(update: RewriteOptionsUpdate): ReplySessionState {
     this.assertScope(update);
     if (JSON.stringify(update.options) !== JSON.stringify(this.state.options)) {
+      this.notifyInputChanged();
       this.cancelPending();
       this.lastAttempt = undefined;
       this.publish({ options: { ...update.options }, phase: this.state.result ? 'ready' : 'idle', errorCode: undefined, canRetry: false });
@@ -174,6 +184,7 @@ export class ReplySession {
     const options = this.state.options;
     const target = this.state.messages.items.find((item) => item.messageId === this.state.targetMessageId);
     if (this.state.mode === 'rewrite_draft' ? !contactState.draft.trim() : !target || !this.state.direction.trim()) return;
+    this.notifyInputChanged();
     const common = { contactId: selection.contactId, contactDisplayName: contact.displayName };
     const input: ReplyInputSnapshot = this.state.mode === 'rewrite_draft'
       ? { ...common, mode: 'rewrite_draft', draftText: contactState.draft.trim(),
@@ -212,11 +223,13 @@ export class ReplySession {
 
   selectCandidate(selection: ReplyCandidateSelection): ReplySessionState {
     this.assertCandidate(selection);
+    this.notifyInputChanged();
     this.publish({ selectedCandidateId: selection.candidateId });
     return this.getState();
   }
   editCandidate(edit: ReplyCandidateEdit): ReplySessionState {
     const candidate = this.assertCandidate(edit);
+    this.notifyInputChanged();
     candidate.editedText = edit.text;
     this.publish({});
     return this.getState();
@@ -298,8 +311,12 @@ export class ReplySession {
     }, pending.signal);
   }
   private invalidateInput(): void {
+    this.notifyInputChanged();
     this.cancelPending(); this.lastAttempt = undefined;
     this.publish({ phase: this.state.result ? 'ready' : 'idle', errorCode: undefined, canRetry: false });
+  }
+  private notifyInputChanged(): void {
+    for (const listener of this.inputListeners) listener();
   }
   private cancelMessagePage(): void { ++this.messageOperation; this.messagePending?.abort(); this.messagePending = undefined; }
   private cancelPending(): void {

@@ -65,10 +65,12 @@ void app.whenReady().then(async () => {
   const memory = installMemoryBridge(commands, backend, contacts);
   const traces = installTraceBridge(commands, backend, contacts);
   memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
-  installBindingConsentBridge(commands, backend, contacts);
-  installSyncControlBridge(commands, backend, contacts);
+  installBindingConsentBridge(commands, backend, contacts, () => foreground.beginReadingScopeChange());
+  installSyncControlBridge(commands, backend, contacts, () => foreground.beginReadingScopeChange());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
   foreground.onStateChanged(() => replies.refreshGenerationEligibility());
+  foreground.setReplyEditGuard(() => replies.hasEdits());
+  replies.onInputChanged(() => foreground.invalidatePending());
   installSourceDeletionBridge(commands, backend, contacts, async (contactId) => {
     traces.invalidateSource();
     const checking = replies.revalidateDeletedSource(contactId);

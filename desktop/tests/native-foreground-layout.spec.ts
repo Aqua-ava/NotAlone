@@ -17,25 +17,41 @@ test('公开校准后只以五处最小区域验证当前布局', async ({ runni
   const selectionPath = path.join(userData, 'foreground-layout-selection.json');
   const profilePath = path.join(userData, 'foreground-layout-profile.json');
   const resultPath = path.join(userData, 'foreground-layout-verification.json');
+  const progressPath = path.join(userData, 'foreground-layout-verification-progress.json');
   await expect.poll(async () => { try { return JSON.parse(await readFile(selectionPath, 'utf8')); } catch { return null; } }, { timeout: 180_000 }).not.toBeNull();
   expect(JSON.parse(await readFile(selectionPath, 'utf8')).state).toBe('selected-awaiting-verification');
   await writeFile(test.info().outputPath('pending-layout-selection.json'), await readFile(selectionPath), { mode: 0o600 });
   // 操作者关闭公开结果说明后再选择下一菜单，不读取或操纵内部flight状态。
   process.stdout.write('foreground_layout_operator_step: 五处几何已保存，请关闭结果说明后从窗口菜单校验，并由获认可操作者切回当前微信。\n');
-  await expect.poll(async () => { try { return JSON.parse(await readFile(resultPath, 'utf8')); } catch { return null; } }, { timeout: 100_000 }).not.toBeNull();
-  const verification = JSON.parse(await readFile(resultPath, 'utf8')) as Record<string, unknown>;
-  await writeFile(test.info().outputPath('layout-verification-result.json'), JSON.stringify(verification), { mode: 0o600 });
-  expect(verification.state, `校验阶段=${verification.stage}；安全错误码=${verification.error}`).toBe('verified');
-  expect((await stat(resultPath)).mode & 0o777).toBe(0o600);
-  const profile = JSON.parse(await readFile(profilePath, 'utf8')) as Record<string, unknown>;
-  expect(Object.keys(profile).sort()).toEqual(['schemaVersion', 'state', 'wechatVersion', 'wechatBuild', 'processId', 'windowId', 'windowFrame', 'regions', 'pixelScale', 'sentinelDigests'].sort());
-  expect(profile.state).toBe('verified-minimal-layout');
-  expect(Object.keys(profile.regions as object)).toHaveLength(5);
-  expect(Object.keys(profile.sentinelDigests as object).sort()).toEqual(['headerDivider', 'selectedHighlight', 'verticalDivider']);
-  for (const digest of Object.values(profile.sentinelDigests as object)) expect(digest).toMatch(/^[a-f0-9]{64}$/);
-  expect((await stat(profilePath)).mode & 0o777).toBe(0o600);
-  await writeFile(test.info().outputPath('verified-layout-profile.json'), JSON.stringify(profile), { mode: 0o600 });
-  process.stdout.write('foreground_layout_verified: 本轮原生五处采集、同名质量与细条复核已形成无图像profile；不代表绑定和自动定位通过。\n');
-  await selectMenu(app, 'NotAlone', '退出 NotAlone');
-  await expect.poll(() => appProcess.exitCode, { timeout: 20_000 }).toBe(0);
+  try {
+    // 原生固定阶段或宿主终态失败后才给结果预算；host不证明原生已进入。
+    await expect.poll(async () => {
+      try { if (JSON.parse(await readFile(resultPath, 'utf8')).state === 'failed') return true; } catch { /* 等待真实结果。 */ }
+      try { return ['selection', 'context', 'capture-setup', 'sentinels-before', 'names', 'sentinels-after', 'profile']
+        .includes(JSON.parse(await readFile(progressPath, 'utf8')).stage); } catch { return false; }
+    }, { timeout: 120_000 }).toBe(true);
+    await expect.poll(async () => { try { return JSON.parse(await readFile(resultPath, 'utf8')); } catch { return null; } }, { timeout: 100_000 }).not.toBeNull();
+    const verification = JSON.parse(await readFile(resultPath, 'utf8')) as Record<string, unknown>;
+    await writeFile(test.info().outputPath('layout-verification-result.json'), JSON.stringify(verification), { mode: 0o600 });
+    expect(verification.state, `校验阶段=${verification.stage}；安全错误码=${verification.error}`).toBe('verified');
+    expect((await stat(resultPath)).mode & 0o777).toBe(0o600);
+    const profile = JSON.parse(await readFile(profilePath, 'utf8')) as Record<string, unknown>;
+    expect(Object.keys(profile).sort()).toEqual(['schemaVersion', 'state', 'wechatVersion', 'wechatBuild', 'processId', 'windowId', 'windowFrame', 'regions', 'pixelScale', 'sentinelDigests'].sort());
+    expect(profile.state).toBe('verified-minimal-layout');
+    expect(Object.keys(profile.regions as object)).toHaveLength(5);
+    expect(Object.keys(profile.sentinelDigests as object).sort()).toEqual(['headerDivider', 'selectedHighlight', 'verticalDivider']);
+    for (const digest of Object.values(profile.sentinelDigests as object)) expect(digest).toMatch(/^[a-f0-9]{64}$/);
+    expect((await stat(profilePath)).mode & 0o777).toBe(0o600);
+    await writeFile(test.info().outputPath('verified-layout-profile.json'), JSON.stringify(profile), { mode: 0o600 });
+    process.stdout.write('foreground_layout_verified: 本轮原生五处采集、同名质量与细条复核已形成无图像profile；不代表绑定和自动定位通过。\n');
+    await selectMenu(app, 'NotAlone', '退出 NotAlone');
+    await expect.poll(() => appProcess.exitCode, { timeout: 20_000 }).toBe(0);
+  } finally {
+    try {
+      const progress = JSON.parse(await readFile(progressPath, 'utf8'));
+      if (progress.state === 'running' && ['host', 'selection', 'context', 'capture-setup', 'sentinels-before', 'names', 'sentinels-after', 'profile'].includes(progress.stage)) {
+        await writeFile(test.info().outputPath('layout-verification-progress.json'), JSON.stringify({ state: 'running', stage: progress.stage }), { mode: 0o600 });
+      }
+    } catch { /* 没有阶段文件时保留原失败，不编造进度。 */ }
+  }
 });
