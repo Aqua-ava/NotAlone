@@ -332,7 +332,9 @@ class LocalWechatCli:
             if limit < 1:
                 raise ValueError("limit 必须大于零。")
             command.extend(["--limit", str(limit)])
-        command.extend(["--jsonl", "--strict-read-only"])
+        command.extend(
+            ["--include-media-paths", "false", "--jsonl", "--strict-read-only"]
+        )
         result = self._invoke(tuple(command))
         return _parse_tail_output(result.stdout, expected_talker=talker)
 
@@ -348,7 +350,15 @@ class LocalWechatCli:
         command = [self._executable, "tail", talker]
         if cursor is not None:
             command.extend(["--cursor", _require_text(cursor, "cursor")])
-        command.extend(["--follow", "--jsonl", "--strict-read-only"])
+        command.extend(
+            [
+                "--include-media-paths",
+                "false",
+                "--follow",
+                "--jsonl",
+                "--strict-read-only",
+            ]
+        )
         try:
             process = self._follow_runner(tuple(command))
         except FileNotFoundError as error:
@@ -391,6 +401,8 @@ class LocalWechatCli:
                 str(scan_limit),
                 "--poll-interval",
                 poll_interval,
+                "--include-media-paths",
+                "false",
                 "--follow",
                 "--jsonl",
                 "--strict-read-only",

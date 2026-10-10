@@ -94,3 +94,15 @@ Spec: ../spec.md
   候选产物为 `desktop/artifacts/helper-upstream-20261010.onrvwc/packaged/NotAlone-darwin-arm64/NotAlone.app`；`candidate-verification.json`、`download-verification.json`、原 ZIP/checksum/manifest 与 `package.log` 同目录保留。发行包所附 CLI LICENSE 和 THIRD_PARTY_NOTICES 保留在候选 `.app` 同级目录；稳定包未提供完整 WCDB 版本/许可集合，不宣称重新分发材料完整。仅这次任务自有忽略产物保留供后续有限验收，不覆盖现有 App；临时 Node 检查目录与离线 Electron ZIP 已精确清理。未执行下载二进制、wxkey、安装器或 App，不初始化、读取聊天、改密钥/Keychain/TCC，也未调用模型。CLI 版本迁移的只读/事件契约、WCDB 精确来源、10/18 与现场验收继续待；本票仍 open/needs-info，四项验收不勾选。固定基点 a7bb6a0，双轴评审随后补齐。
 
 - 2026-10-10（官方输入与库环境修复评审收口）：固定 `a7bb6a0 → c48d59b`，独立 Standards 硬违规/建议 0/0、Spec 新问题 0。两轴确认仅已核验包内组返回 WCDB 路径，失效组仍触发覆盖清理，外置显式配置保持原环境；沿用旧票 09 的库注入要求，未以候选构建替代运行冒烟。只读评审未新增执行。49 条本地文档链接、总清单 8/3/4 分类、原票 open/needs-info 与四项未勾核对、`git diff --check` 通过。本票继续未完成，稳定版契约/WCDB 来源、10/18 和现场证据保留；只做本地提交，不上传二进制或私密数据。
+
+- 2026-10-10（继续稳定输入契约与 WCDB 来源核对）：用户要求无需人在场先推进，真实微信/原生继续暂放。稳定 CLI 的 Go build info 与发行 commit 一致；WCDB 的 LC_ID 为 2.1.15，SQLite/SQLCipher 字符串与腾讯固定源码吻合，但官方资产只含源码而无对应 WCDB 二进制，且库的版本函数为 Custom build，不把线索升格为可复现来源。取得官方源归档并核对 API 摘要，定向保留许可及版本材料；稳定 ZIP 的 README、llms.txt、manifest 生成脚本按声明哈希核对。旧源码有限公开路径仍不可取得，不采用 v2 RC 补证。
+
+  在自有目录先验证 OS 默认拒绝的五项边界：目录外读写、网络、其他程序执行、Keychain 服务查找均被拒绝；初始 `/bin/cat` 被 dyld 拒绝启动，核对本机 Apple `dyld-support.sb` 后只补齐加载规则，合成 canary 全部通过。随后该隔离内执行稳定 CLI 的 version/tools/schema/help 元数据命令，版本 1.6.25、38 项 schema 与 tail 参数声明返回；未执行 App/安装器/wxkey 或读取真实微信。合成 tail 数据调用因环境未定义 HOME 返回失败，不能记为数据读取/纯只读初始化已验证，不修改或重定向 HOME。
+
+  同字节 schema 确认 `read_events` 的 `include_media_paths` 默认 true；当前 v1 文字同步不能依赖严格只读来代替关闭媒体补齐。继续受控参数修复：沿既有 `LocalWechatCli` 的 CommandRunner/FollowProcessRunner 公开接缝，逐个 red → green 固定一次性 tail、单会话 follow、全局 sessions follow 的 `--include-media-paths false`；不按文字类型过滤而丢失非文字计数/游标，不扩展接口或新建任务。稳定版元数据只证明参数声明，缺配置的失败不证明实际消息行为；不支持参数的外置版本按现有命令错误失败，不能静默退回媒体默认。原票四项验收及原依赖仍待。
+
+  实际三个公开命令断言分别因缺少关闭参数 red，再各自 green；baseline/cursor 的已有命令断言同步更新后直接通过。Conda `NotAlone` 内运行 `python -m unittest tests.unit.wechat_cli.test_adapter tests.unit.wechat_cli.test_global_session_stream tests.unit.wechat_cli.test_normalizer tests.unit.front_sync.test_cli_background_sync -v`，75/75 通过，包括非文字计数/水位、全局只投影定位信息、已确认范围、关闭/恢复与失败降级；`git diff --check` 通过。只处理公开资料和合成数据，未连接数据库、外部模型或真实微信；没有重跑已通过的桌面构建组。固定本轮基点 `7b46360`，Standards/Spec 复核待补。
+
+  原始证据保留于 `desktop/artifacts/helper-provenance-20261010.GT1GQm/`：腾讯官方 `wcdb-2.1.15.zip` 为 83197863 bytes，SHA-256 `5b7294459f7f8b85ce373fcd5f3d7a3c004743feb9d51d3c39096a0815834c56` 匹配发行 API；`download-verification.json` 记录首次超时及断点续传结果，`provenance-evidence.json` 记录 CLI/库静态证据、9 份定向材料哈希和执行边界。`sandbox-boundaries.json`、四份 stable 元数据 JSON 与两个失败 tail JSON 保留；临时 canary 可执行文件及合成读写夹具精确清理，保留 canary 源码/profile 供复核。研究笔记与目录在忽略的 `research/` 同步，不强行提交。
+
+  本轮有限官方路径已核对：维护者现行新仓历史从 v2 开始、精确稳定 commit 不可取、发行 tag 只有 README、Go 官方 proxy/checksum 同版本查询失败。下一步条件是取得绑定原字节的稳定 CLI 源码和 WCDB 构建/许可材料，或在明确范围内补初始化/实际事件/游标/JSONL 警告证据；不以重复下载同一源码归档、RC 源码或普通页面代替。需要人在场的真实渠道、Finder/文件选择/快捷键/剪贴板/退出与 10/18 依赖继续暂放；本票仍 `open / needs-info`，四项验收不勾选。

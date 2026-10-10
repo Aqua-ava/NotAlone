@@ -73,6 +73,8 @@ JSON 输出只有状态、安全错误码、声明版本、相对文件名、架
 
 静态核查、搬运和默认启动接线属于任务 20 的实现，不授权渠道读取。2026-10-10 用户授权自行查找后，已从维护者现行[发行仓库 v1.6.25](https://github.com/r266-tech/wechat-cli-releases/releases/tag/v1.6.25)取得固定 arm64 ZIP、checksum 和 manifest，匹配 API 与组件哈希并通过严格静态检查；已用该输入实际构建未启动的候选 App。上游 WCDB 版本、构建时间声明为 unknown，同版本原源码目前不可取得，运行兼容与最终原生/微信验收继续待办；不以 v2 RC 源码代替稳定包证据。产物及实测记录见任务 20。
 
+2026-10-10 后续来源补查：WCDB install name 为 `2.1.15`，库内 SQLite `3.27.2`、SQLCipher `4.1.0` 与腾讯固定 tag/子模块相容；版本函数静态指向 `Custom build`。腾讯官方源码 ZIP 的 API digest 已匹配，但无对应 WCDB 成品库，精确构建来源和完整许可组合仍未证明。稳定 CLI 已在 OS 默认拒绝的临时隔离中运行 version/tools/schema/help，返回 `1.6.25`、38 项 schema；隔离先用自有 canary 证实范围外读写、联网、其他 exec 和 Keychain 服务查找被拒绝。只取得契约声明；合成 tail 因未定义 HOME 失败，数据初始化、事件及媒体查询行为未验证。后端三个文字同步入口显式关闭媒体路径补齐，75 项合成回归通过。原始 JSON 与材料保留于 `artifacts/helper-provenance-20261010.GT1GQm/`，详见[任务 20](../.scratch/mac-desktop-app/issues/20-mac-app-delivery.md)；候选 App、安装器、wxkey、真实微信和原生权限均未运行或验收。
+
 ### 核查后的搬运与随包接线
 
 可先独立准备一个不存在的目标目录；父目录须已存在，目标与输入不得重叠。只复制核查过的 CLI/WCDB 和声明依赖，保留相对布局；不复制配置、聊天、C 源码或目录中其他文件，不覆盖已有目标。搬运前、复制字节及搬运后复核哈希；绝对依赖仍指向旧目录时拒绝，失败只清理本次创建的目标，不自动改链接或重签 helper。

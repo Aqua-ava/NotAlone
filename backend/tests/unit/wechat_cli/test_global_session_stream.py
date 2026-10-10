@@ -84,6 +84,8 @@ class GlobalSessionStreamTest(unittest.TestCase):
                     "wxid_1",
                     "--since-time",
                     "2026-09-01T10:00:00+08:00",
+                    "--include-media-paths",
+                    "false",
                     "--jsonl",
                     "--strict-read-only",
                 )
@@ -129,6 +131,8 @@ class GlobalSessionStreamTest(unittest.TestCase):
                     "5000",
                     "--poll-interval",
                     "3s",
+                    "--include-media-paths",
+                    "false",
                     "--follow",
                     "--jsonl",
                     "--strict-read-only",
