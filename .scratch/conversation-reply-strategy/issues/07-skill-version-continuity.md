@@ -1,6 +1,6 @@
 # 07：Skill探索、确认与生成的版本延续
 
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环](02-understanding-and-direction.md)
 
@@ -39,3 +39,7 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 ## Comments
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
+
+2026-10-11 既有B接续：静态选择模块按既有SkillPort读取最多一个版本，以validate_skill_version核对启用、owner/contact和不可变目录身份；明确关闭/无匹配都返回NoSkill，旧指定版本不回退。跨范围目录和正文两次red→green、6项受控模块验证通过。完整探索→确认→生成及库revision失效路径待A051/B052实际接线与公开页面；未标验收通过。
+
+2026-10-11 基础切片补充：auto仅在服务端已核验主要沟通场景时精确匹配applicable_scenes，入口类型和描述文字不能代替任务识别；未知任务使用NoSkill。显式user固定实际版本，非user禁止携带版本。相关20项模块测试通过，两轴限定复审0问题；尚未完成探索→确认→生成或库revision的真实公开闭环，保留原验收项。
