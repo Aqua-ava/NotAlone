@@ -128,9 +128,9 @@ class ReplyDeletionContract(unittest.TestCase):
                 (request.request_id,),
             ).fetchone()[0]
         self.assertEqual(remaining, 0)
-        replay = self.store.start(context.command, self._verified_scope(self.scope))
-        self.assertEqual(replay.state, ReplyRequestState.STARTED)
-        self.assertIsNone(replay.result)
+        # 失效键保留无正文凭证，旧键不能悄悄成为一次新生成。
+        with self.assertRaises(ReplyStoreInvariantError):
+            self.store.start(context.command, self._verified_scope(self.scope))
 
     def test_deletion_follows_multiple_explicit_candidate_continuations(self) -> None:
         original = self._prepare_reply()
