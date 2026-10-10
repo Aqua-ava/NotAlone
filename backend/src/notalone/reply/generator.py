@@ -591,6 +591,7 @@ class ReplyGenerator:
                 not isinstance(candidate, RuntimeCandidate)
                 or not isinstance(candidate.text, str)
                 or not candidate.text.strip()
+                or not candidate.has_valid_message_group()
                 or not isinstance(candidate.basis, str)
                 or not candidate.basis.strip()
                 or not isinstance(candidate.citation_ids, tuple)
@@ -678,6 +679,8 @@ class ReplyGenerator:
                 or saved.basis != expected.basis
                 or saved.citation_ids != expected.citation_ids
                 or saved.risk_notes != expected.risk_notes
+                or tuple(message.text for message in saved.message_group) != expected.message_texts
+                or len({message.message_id for message in saved.message_group}) != len(saved.message_group)
             ):
                 raise ReplyInvariantError(
                     "持久化候选与已校验结果不一致。"

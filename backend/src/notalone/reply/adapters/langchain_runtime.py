@@ -158,7 +158,10 @@ source_time_complete 为 false 时，明确保留未知或不完整，不猜日�
 
 输出格式是硬性要求：必须通过结构化输出工具调用返回 ReplyRuntimeOutput。
 candidates 必须是对象数组（1 到 3 个），每项都包含 text、basis、citation_ids、
-risk_notes 四个字段；禁止把 candidates 写成字符串数组或省略字段。
+risk_notes 四个字段；需要分条表达时可添加 messages 有序文字数组（1至8条），
+text 必须是 messages 用两个换行连接的完整纯文本。messages 属于同一个方案，
+不能视为互斥候选；逐条事实及整组承诺均受当前意愿与来源限制，不构成发送计划。
+禁止把 candidates 写成字符串数组或省略字段。
 """
 
 REPLY_RUNTIME_SCHEMA: dict[str, Any] = {
@@ -181,6 +184,11 @@ REPLY_RUNTIME_SCHEMA: dict[str, Any] = {
                 "description": "一条候选回复；必须包含全部四个字段。",
                 "additionalProperties": False,
                 "properties": {
+                    "messages": {
+                        "description": "同一方案中的有序消息；text须由它们以两个换行连接。",
+                        "type": "array", "minItems": 1, "maxItems": 8,
+                        "items": {"type": "string", "maxLength": 8192},
+                    },
                     "text": {
                         "description": "候选回复正文，用户可编辑后亲自发送。",
                         "type": "string",
@@ -885,13 +893,19 @@ def _runtime_candidate(item: object) -> RuntimeCandidate:
     required = {"text", "basis", "citation_ids", "risk_notes"}
     if (
         not isinstance(item, dict)
-        or set(item) != required
+        or not required <= set(item) or set(item) - required - {"messages"}
         or not isinstance(item["text"], str)
         or not isinstance(item["basis"], str)
         or not isinstance(item["citation_ids"], list)
         or not all(isinstance(value, str) for value in item["citation_ids"])
         or not isinstance(item["risk_notes"], list)
         or not all(isinstance(value, str) for value in item["risk_notes"])
+        or ("messages" in item and (
+            not isinstance(item["messages"], list)
+            or not 1 <= len(item["messages"]) <= 8
+            or any(not isinstance(value, str) or not 0 < len(value.strip()) <= 8192 for value in item["messages"])
+            or item["text"] != "\n\n".join(item["messages"])
+        ))
     ):
         raise ValueError("invalid runtime candidate")
     return RuntimeCandidate(
@@ -899,6 +913,7 @@ def _runtime_candidate(item: object) -> RuntimeCandidate:
         basis=item["basis"],
         citation_ids=tuple(UUID(value) for value in item["citation_ids"]),
         risk_notes=tuple(item["risk_notes"]),
+        messages=tuple(item.get("messages", ())),
     )
 
 

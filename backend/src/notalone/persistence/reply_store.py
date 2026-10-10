@@ -36,6 +36,8 @@ from notalone.reply.errors import (
 from notalone.reply.interface import (
     ContextReceipt,
     GenerateReply,
+    CandidateMessage,
+    candidate_message_group,
     ReplyCandidate,
     ReplyGenerated,
     SkillUse,
@@ -415,6 +417,7 @@ class PostgresReplyStore:
                                 basis=runtime_candidate.basis,
                                 citation_ids=runtime_candidate.citation_ids,
                                 risk_notes=runtime_candidate.risk_notes,
+                                messages=candidate_message_group(candidate_id, runtime_candidate.message_texts, self._new_uuid),
                             )
                         )
                     evidence_ids = tuple(
@@ -939,6 +942,7 @@ class PostgresReplyStore:
             if not (
                 isinstance(candidate.text, str)
                 and bool(candidate.text.strip())
+                and candidate.has_valid_message_group()
                 and isinstance(candidate.basis, str)
                 and bool(candidate.basis.strip())
                 and isinstance(candidate.citation_ids, tuple)
@@ -1105,9 +1109,9 @@ class PostgresReplyStore:
                 INSERT INTO public.reply_candidate (
                     id, reply_request_id, owner_id, contact_id,
                     conversation_binding_id, ordinal, candidate_text,
-                    basis, risk_notes
+                    basis, risk_notes, message_group
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     candidate.candidate_id,
@@ -1119,6 +1123,7 @@ class PostgresReplyStore:
                     candidate.text,
                     candidate.basis,
                     Jsonb(list(candidate.risk_notes)),
+                    Jsonb([{"message_id": str(message.message_id), "text": message.text} for message in candidate.message_group]),
                 ),
             )
             for citation_ordinal, evidence_id in enumerate(candidate.citation_ids):
@@ -1295,7 +1300,7 @@ class PostgresReplyStore:
             raise ReplyStoreInvariantError("已完成回复缺少上下文快照。")
         candidate_rows = connection.execute(
             """
-            SELECT id, candidate_text, basis, risk_notes
+            SELECT id, candidate_text, basis, risk_notes, message_group
             FROM public.reply_candidate
             WHERE reply_request_id = %s
             ORDER BY ordinal
@@ -1336,6 +1341,7 @@ class PostgresReplyStore:
                     basis=row["basis"],
                     citation_ids=citation_ids,
                     risk_notes=self._read_string_array(row["risk_notes"]),
+                    messages=self._read_message_group(row["message_group"], row["candidate_text"]),
                 )
             )
             for evidence_id in citation_ids:
@@ -1395,6 +1401,22 @@ class PostgresReplyStore:
             )),
             used_skill=used_skill,
         )
+
+    @staticmethod
+    def _read_message_group(value: Any, candidate_text: str) -> tuple[CandidateMessage, ...]:
+        if not isinstance(value, list) or not 1 <= len(value) <= 8:
+            raise ReplyStoreInvariantError("候选消息组结构无效。")
+        try:
+            messages = tuple(CandidateMessage(UUID(item["message_id"]), item["text"]) for item in value
+                             if isinstance(item, dict) and set(item) == {"message_id", "text"})
+        except (ValueError, TypeError, KeyError):
+            raise ReplyStoreInvariantError("候选消息组结构无效。") from None
+        if (len(messages) != len(value) or len({item.message_id for item in messages}) != len(messages)
+            or any(not isinstance(item.text, str) or not 0 < len(item.text.strip()) <= (65536 if len(messages) == 1 else 8192) for item in messages)
+            or len(candidate_text) > 65536
+            or candidate_text != "\n\n".join(item.text for item in messages)):
+            raise ReplyStoreInvariantError("候选消息组结构无效。")
+        return messages
 
 
 def _valid_tool_call_trace(trace: object) -> bool:

@@ -18,6 +18,21 @@ class RuntimeCandidate:
     basis: str
     citation_ids: tuple[UUID, ...]
     risk_notes: tuple[str, ...]
+    messages: tuple[str, ...] = ()
+
+    @property
+    def message_texts(self) -> tuple[str, ...]:
+        return self.messages or (self.text,)
+
+    def has_valid_message_group(self) -> bool:
+        return (
+            isinstance(self.messages, tuple)
+            and 1 <= len(self.message_texts) <= 8
+            and len(self.text) <= 65536
+            and all(isinstance(text, str) and 0 < len(text.strip()) <= (65536 if len(self.message_texts) == 1 else 8192)
+                    for text in self.message_texts)
+            and self.text == "\n\n".join(self.message_texts)
+        )
 
 
 @dataclass(frozen=True, slots=True)

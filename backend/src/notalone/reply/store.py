@@ -26,6 +26,7 @@ from notalone.reply.errors import (
 from notalone.reply.interface import (
     ContextReceipt,
     GenerateReply,
+    candidate_message_group,
     ReplyCandidate,
     ReplyGenerated,
     ReplyToMessage,
@@ -338,6 +339,7 @@ class InMemoryReplyStore:
                         basis=runtime_candidate.basis,
                         citation_ids=runtime_candidate.citation_ids,
                         risk_notes=runtime_candidate.risk_notes,
+                        messages=candidate_message_group(candidate_id, runtime_candidate.message_texts, self._new_uuid),
                     )
                 )
             evidence_ids = tuple(
@@ -652,6 +654,7 @@ class InMemoryReplyStore:
             if not (
                 isinstance(candidate.text, str)
                 and bool(candidate.text.strip())
+                and candidate.has_valid_message_group()
                 and isinstance(candidate.basis, str)
                 and bool(candidate.basis.strip())
                 and isinstance(candidate.citation_ids, tuple)

@@ -1,6 +1,6 @@
 # 08：候选消息组逐条编辑与复制
 
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/04 明确目的的主动联系入口](04-proactive-purpose-entry.md)；[assistant-session-context/11 候选编辑、选择与版本回看](../../assistant-session-context/issues/11-candidate-edit-history.md)
 
@@ -38,3 +38,5 @@ Blocked by: [conversation-reply-strategy/04 明确目的的主动联系入口](0
 ## Comments
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
+
+2026-10-11 既有B接续：先复用冻结B交付的原候选message_group DTO、严格聚合校验、稳定逐条ID与HTTP/PG重读。2项真实HTTP/隔离PG由red→green、数据库remaining=0；193回复单元通过。052实际SQL先放backend/database/pending，等待正式A051前缀后通过生产迁移器安装，不造占位。完整编辑/复制/恢复需A053并待公开页面，原验收项未预填。

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal, TypeAlias
+from typing import Callable, Literal, TypeAlias
 from uuid import UUID
 
 from notalone.scopes import ContactScope, VerifiedConversationScope
@@ -199,6 +199,23 @@ class SkillUse:
 
 
 @dataclass(frozen=True, slots=True, repr=False)
+class CandidateMessage:
+    """同一备选方案中的一条有序消息，顺序由消息元组确定。"""
+
+    message_id: UUID
+    text: str
+
+
+def candidate_message_group(
+    candidate_id: UUID, texts: tuple[str, ...], uuid_factory: Callable[[], UUID],
+) -> tuple[CandidateMessage, ...]:
+    """两个存储边界沿用同一逐条身份规则，旧单句使用候选ID。"""
+
+    return tuple(CandidateMessage(candidate_id if index == 0 else uuid_factory(), text)
+                 for index, text in enumerate(texts))
+
+
+@dataclass(frozen=True, slots=True, repr=False)
 class ReplyCandidate:
     """只在 NotAlone 内展示和编辑的候选回复。"""
 
@@ -207,6 +224,11 @@ class ReplyCandidate:
     basis: str
     citation_ids: tuple[UUID, ...]
     risk_notes: tuple[str, ...]
+    messages: tuple[CandidateMessage, ...] = ()
+
+    @property
+    def message_group(self) -> tuple[CandidateMessage, ...]:
+        return self.messages or (CandidateMessage(self.candidate_id, self.text),)
 
 
 @dataclass(frozen=True, slots=True)

@@ -2492,6 +2492,8 @@ def _reply_payload(reply: ReplyGenerated) -> dict[str, object]:
                 "basis": candidate.basis,
                 "citation_ids": [str(citation) for citation in candidate.citation_ids],
                 "risk_notes": list(candidate.risk_notes),
+                "messages": [{"message_id": str(message.message_id), "text": message.text}
+                             for message in candidate.message_group],
             }
             for candidate in reply.candidates
         ],
