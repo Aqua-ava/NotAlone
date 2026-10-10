@@ -1,10 +1,10 @@
 # 04：会话列表、切换及应用生命周期
 
-State: open
-Triage: ready-for-agent
+State: resolved
+Triage: wontfix
 Blocked by: 03 — 生成中新要求和新消息的处理
 
-> 2026-10-11：用户要求重做三份规格的任务粒度。此票暂不领取；State/Triage保留历史值，新细分与替代映射见[第二版提案](../ticket-proposal.md)。尚未实现，不表示验收完成。
+> 2026-10-11：仅拆分替代，未执行实现验收；不代表功能完成，不再领取本票。继任任务见下方Answer。
 
 ## 规格与范围
 
@@ -30,8 +30,20 @@ Blocked by: 03 — 生成中新要求和新消息的处理
 
 真实 App 仅由主 Agent 在另行约定的有限窗口通过项目入口执行；普通验证不启动 App、不读取微信、不调用外部模型。
 
+## Answer
+
+2026-10-11：**仅拆分替代，未执行实现验收；不代表功能完成。** 用户认可复审后的细分，原范围由以下独立任务承接：
+
+- [assistant-session-context/10 新开、列出与选择旧会话](10-session-list-and-new.md)
+- [assistant-session-context/16 切换会话或关闭小窗时保持生成归属](16-background-result-ownership.md)
+- [assistant-session-context/17 退出停止与重开后的中断恢复](17-quit-and-interrupted-recovery.md)
+
+原验收项保持未勾选；本次仅核对替代映射、文档链接、依赖无环与任务状态计数，未执行产品测试。State=resolved与Triage=wontfix仅表示不再按旧粗粒度实施，规格仍由新票交付。
+
 ## Comments
 
 2026-10-11：用户确认测试接缝与六票拆分后发布。尚未开始实现或执行验收。
 
 2026-10-11：按用户要求重新拆分；本票范围映射到第二版提案，待确认后再进行替代，不启动旧粗粒度实现。
+
+2026-10-11：用户认可第三版后完成上述替代，新票已发布；此前“暂不领取/待确认”是历史讨论，不是当前状态。

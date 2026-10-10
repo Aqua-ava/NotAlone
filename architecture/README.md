@@ -71,6 +71,7 @@
 41. [ADR-041：观察提交后唤醒联系人记忆任务](adr/041-observation-triggered-memory-work.md)
 42. [ADR-042：持续助手会话与单次运行上下文分界](adr/042-assistant-session-context-boundary.md)
 43. [ADR-043：聊天场景与有界方向探索](adr/043-conversation-scenarios-and-direction-exploration.md)
+44. [ADR-044：主动保存的表达样本独立于助手会话留存](adr/044-explicit-style-sample-retention.md)
 
 ## 当前架构决策
 

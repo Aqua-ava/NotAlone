@@ -1,8 +1,8 @@
 # 已发布任务全量索引（2026-10-11）
 
-范围：`.scratch/*/issues/*.md`，共172张。状态快照取自原任务字段，包含Markdown引用格式；不把规格、实验报告或草图混入任务数量。
+范围：`.scratch/*/issues/*.md`，共202张。状态快照取自原任务字段，包含Markdown引用格式；不把规格、实验报告或草图混入任务数量。
 
-统计：160 resolved、4 claimed、8 open。resolved中5张wontfix，表示关闭处理而非功能交付；历史实验可因结论明确而关闭，旧Swift实现也不代表当前Electron已验收。未关闭项的细节见[总览](README.md)。
+统计：166 resolved、4 claimed、32 open；未关闭36张。resolved中11张wontfix（含本次6张仅拆分替代、未实现验收），表示关闭处理而非功能交付；历史实验可因结论明确而关闭，旧Swift实现也不代表当前Electron已验收。未关闭项的细节见[总览](README.md)。
 
 本索引不重写历史元数据。部分旧票没有规范的Answer标题，或Triage使用旧值resolved；完成证据须沿原票的完成记录/评论核对，不能只看勾选和字段。本次未重跑历史测试，也未将历史状态格式问题擅自改成新的产品待办。
 
@@ -16,12 +16,52 @@
 
 | 任务 | State | Triage | 解释 |
 | --- | --- | --- | --- |
-| [01：创建、恢复和删除一段助手会话](../assistant-session-context/issues/01-session-lifecycle.md) | open | ready-for-agent | 用户要求重拆，暂不领取；未实现、未验收，State/Triage保留 |
-| [02：连续修改、明确指代和候选版本](../assistant-session-context/issues/02-continuous-revision.md) | open | ready-for-agent | 用户要求重拆，暂不领取；未实现、未验收，State/Triage保留 |
-| [03：生成中新要求和新消息的处理](../assistant-session-context/issues/03-generation-replacement.md) | open | ready-for-agent | 用户要求重拆，暂不领取；未实现、未验收，State/Triage保留 |
-| [04：会话列表、切换及应用生命周期](../assistant-session-context/issues/04-switch-and-exit.md) | open | ready-for-agent | 用户要求重拆，暂不领取；未实现、未验收，State/Triage保留 |
-| [05：长度预算与显式携候选新开](../assistant-session-context/issues/05-budget-and-carry.md) | open | ready-for-agent | 用户要求重拆，暂不领取；未实现、未验收，State/Triage保留 |
-| [06：完整合成回归与真实 App 生命周期验收](../assistant-session-context/issues/06-integrated-acceptance.md) | open | ready-for-agent | 用户要求重拆，暂不领取；未实现、未验收，State/Triage保留 |
+| [01：创建、恢复和删除一段助手会话](../assistant-session-context/issues/01-session-lifecycle.md) | resolved | wontfix | 仅拆分替代、未执行实现验收；继任链接见原票Answer |
+| [02：连续修改、明确指代和候选版本](../assistant-session-context/issues/02-continuous-revision.md) | resolved | wontfix | 仅拆分替代、未执行实现验收；继任链接见原票Answer |
+| [03：生成中新要求和新消息的处理](../assistant-session-context/issues/03-generation-replacement.md) | resolved | wontfix | 仅拆分替代、未执行实现验收；继任链接见原票Answer |
+| [04：会话列表、切换及应用生命周期](../assistant-session-context/issues/04-switch-and-exit.md) | resolved | wontfix | 仅拆分替代、未执行实现验收；继任链接见原票Answer |
+| [05：长度预算与显式携候选新开](../assistant-session-context/issues/05-budget-and-carry.md) | resolved | wontfix | 仅拆分替代、未执行实现验收；继任链接见原票Answer |
+| [06：完整合成回归与真实 App 生命周期验收](../assistant-session-context/issues/06-integrated-acceptance.md) | resolved | wontfix | 仅拆分替代、未执行实现验收；继任链接见原票Answer |
+| [assistant-session-context/07 默认会话的一次生成与可靠保存](../assistant-session-context/issues/07-default-session-persistence.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [assistant-session-context/08 重新连接后恢复已保存会话](../assistant-session-context/issues/08-saved-session-recovery.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [assistant-session-context/09 用户删除一段助手会话](../assistant-session-context/issues/09-delete-assistant-session.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [assistant-session-context/10 新开、列出与选择旧会话](../assistant-session-context/issues/10-session-list-and-new.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [assistant-session-context/11 候选编辑、选择与版本回看](../assistant-session-context/issues/11-candidate-edit-history.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [assistant-session-context/12 模型预算提醒与超限拒绝](../assistant-session-context/issues/12-input-budget-guard.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [assistant-session-context/13 连续要求、改口与明确编号指代](../assistant-session-context/issues/13-continuous-intent-reference.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [assistant-session-context/14 生成中替换请求与迟到结果失效](../assistant-session-context/issues/14-replace-running-generation.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [assistant-session-context/15 新消息提醒与用户触发重新生成](../assistant-session-context/issues/15-new-message-opt-in.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [assistant-session-context/16 切换会话或关闭小窗时保持生成归属](../assistant-session-context/issues/16-background-result-ownership.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [assistant-session-context/17 退出停止与重开后的中断恢复](../assistant-session-context/issues/17-quit-and-interrupted-recovery.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [assistant-session-context/18 显式携候选新开与满会话分流](../assistant-session-context/issues/18-carry-selected-candidate.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [assistant-session-context/19 持续会话组合与真实App生命周期验收](../assistant-session-context/issues/19-combined-native-acceptance.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+
+## authentic-expression
+
+| 任务 | State | Triage | 解释 |
+| --- | --- | --- | --- |
+| [authentic-expression/01 保真评测的离线逐例报告](../authentic-expression/issues/01-offline-fidelity-report.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [authentic-expression/02 当前意图优先的生成与改写](../authentic-expression/issues/02-current-intent-priority.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [authentic-expression/03 无依据扩写的约束与失败呈现](../authentic-expression/issues/03-unsupported-content-boundary.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [authentic-expression/04 表达样本的主动保存、查看和删除](../authentic-expression/issues/04-style-sample-lifecycle.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [authentic-expression/05 生成时有界引用表达样本](../authentic-expression/issues/05-bounded-style-reference.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [authentic-expression/06 跨场景保真、样本与删除组合验收](../authentic-expression/issues/06-combined-fidelity-acceptance.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+
+## conversation-reply-strategy
+
+| 任务 | State | Triage | 解释 |
+| --- | --- | --- | --- |
+| [conversation-reply-strategy/01 回应场景与明确意愿直达候选](../conversation-reply-strategy/issues/01-response-scene-entry.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [conversation-reply-strategy/02 理解、纠正与方向确认闭环](../conversation-reply-strategy/issues/02-understanding-and-direction.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [conversation-reply-strategy/03 换组、推荐与暂不回应](../conversation-reply-strategy/issues/03-direction-options-and-pause.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [conversation-reply-strategy/04 明确目的的主动联系入口](../conversation-reply-strategy/issues/04-proactive-purpose-entry.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [conversation-reply-strategy/05 主动目的探索与确认](../conversation-reply-strategy/issues/05-purpose-exploration.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [conversation-reply-strategy/06 两种场景的关键澄清与取舍](../conversation-reply-strategy/issues/06-clarification-and-tradeoffs.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [conversation-reply-strategy/07 Skill探索、确认与生成的版本延续](../conversation-reply-strategy/issues/07-skill-version-continuity.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [conversation-reply-strategy/08 候选消息组逐条编辑与复制](../conversation-reply-strategy/issues/08-message-group-edit-copy.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [conversation-reply-strategy/09 未选方向时的新消息有界更新](../conversation-reply-strategy/issues/09-bounded-direction-updates.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [conversation-reply-strategy/10 两种场景的连续修改与消息衔接](../conversation-reply-strategy/issues/10-continuous-scenario-revision.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
+| [conversation-reply-strategy/11 策略全路径组合验收](../conversation-reply-strategy/issues/11-combined-strategy-acceptance.md) | open | ready-for-agent | 已确认并发布；尚未实现，按Blocked by推进 |
 
 ## background-import-tasks
 

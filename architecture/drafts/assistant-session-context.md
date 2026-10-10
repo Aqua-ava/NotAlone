@@ -1,9 +1,9 @@
 # 持续会话与上下文管理草图
 
-> 2026-10-11 最新工作流状态：用户要求重新细分任务，产品决定保留；以[第二版拆分提案](../../.scratch/assistant-session-context/ticket-proposal.md)为当前待确认方案，尚未发布新细票。下文旧票数量属于先前发布记录。
+> 2026-10-11 最新工作流状态：复审第三版已确认并发布13张独立任务，见[发布映射](../../.scratch/assistant-session-context/ticket-proposal.md)及对应planning；功能尚未实现。下文旧票数量和待确认语句保留为历史讨论。
 > 状态：产品讨论已收束并转为正式规格；本文件保留讨论记录。记录日期：2026-10-09；Q16–Q18 于 2026-10-11 确认。本文独立记录本轮已确认方向，从 Q1 编号；不续写或修改原有两条聊天辅助链路草图，不替代现行规格或 ADR，也不代表已实现。
 
-工作流进度与拆分准备见[对应功能目录](../../.scratch/assistant-session-context/planning.md)；[正式规格](../../.scratch/assistant-session-context/spec.md)与六张独立任务已发布，尚未实现。
+工作流进度见[对应功能目录](../../.scratch/assistant-session-context/planning.md)；[正式规格](../../.scratch/assistant-session-context/spec.md)及13张当前任务已发布，均未开工。
 
 ## 讨论背景
 
@@ -148,3 +148,7 @@
 ## 工作流发布记录
 
 2026-10-11：用户确认 Q16–Q18 后，又确认测试接缝、六票粒度与依赖。已发布[正式 spec](../../.scratch/assistant-session-context/spec.md)、[六张任务](../../.scratch/assistant-session-context/planning.md)及 [ADR-042](../adr/042-assistant-session-context-boundary.md)。上文“待设计”表述保留讨论时序，后续实现范围以正式规格为准；产品尚未实现，OCR 仍暂停。
+
+## 2026-10-11 复审补充：样本独立留存
+
+用户明确选择：删除助手会话独立保留已主动保存的表达样本，清除讨论与使用痕迹；删除样本或原始聊天来源仍清理相关派生内容。取舍和实现约束见[ADR-044](../adr/044-explicit-style-sample-retention.md)。本轮只记录决定并发布任务，没有执行数据删除或产品验收。
