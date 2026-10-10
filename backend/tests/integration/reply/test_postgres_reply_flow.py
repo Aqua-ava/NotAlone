@@ -197,6 +197,31 @@ class PostgresReplyFlowTest(unittest.TestCase):
                         "先回应对方，再给出明确且自然的答复。",
                     ),
                 )
+                # 内存检索仍使用同一合成资料；持久化守卫需核实实际原始来源和消息引用。
+                cursor.execute(
+                    "INSERT INTO public.source_document "
+                    "(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) "
+                    "VALUES (%s,%s,%s,'wechat_jsonl','synthetic-reply-flow.jsonl',%s,2)",
+                    (self.source_id, self.owner_id, self.contact_id, self.source_id.hex * 2),
+                )
+                cursor.executemany(
+                    "INSERT INTO public.message "
+                    "(id,owner_id,contact_id,speaker,message_type,text_content) "
+                    "VALUES (%s,%s,%s,'contact','text',%s)",
+                    (
+                        (self.target_message_id, self.owner_id, self.contact_id, "明天一起吃饭吗？"),
+                        (self.recent_message_id, self.owner_id, self.contact_id, "上次说过想找时间见面。"),
+                    ),
+                )
+                cursor.executemany(
+                    "INSERT INTO public.message_source_ref "
+                    "(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) "
+                    "VALUES (%s,%s,%s,'source_document',%s,%s,'{}')",
+                    (
+                        (message_id, self.owner_id, self.contact_id, self.source_id, f"synthetic-{index}")
+                        for index, message_id in enumerate((self.target_message_id, self.recent_message_id), 1)
+                    ),
+                )
 
         self.binding_repository = PostgresConversationBindingRepository(
             TEST_DATABASE_URL

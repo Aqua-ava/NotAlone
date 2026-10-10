@@ -37,6 +37,8 @@ Blocked by: [authentic-expression/02 当前意图优先的生成与改写](02-cu
 
 ## Comments
 
+2026-10-11 A12共享来源夹具接续：总协调指出旧`test_postgres_reply_flow`内存检索只给合成UUID、隔离PG没有对应原始来源证明，模型／预算前被C中央来源守卫拒绝。本C沿原正式53随机库实际复现8项中2通过／6ERROR／0skip／0.367秒，全部在prepare_context的原始来源不可用；只为原夹具种同owner/contact的一个合成source_document、两条实际消息及各自source_ref，原生成／来源守卫及测试断言未改。原8项随后全部GREEN／0.754秒、skip0，正式53重复0、自有数据库精确剩余0。此为实际测试前置修复，不冒称产品来源放行RED或完整A历史／预算接线完成；无自动采纳、外部模型、私人资料或页面／App。
+
 去重后的同一相关HTTP组再次实际28项GREEN／29.165秒、skip0、正式001–053，六个本轮Core库精确剩余0，原模型期间sample删除／租约拒绝诊断保留。实际入口均为Conda NotAlone、backend内、PGHOST=/tmp、NOTALONE_DISABLE_DOTENV=1、两tracing=false、PYTHONPATH=src；测试模块为`tests.integration.server.test_style_reference_api`、`test_style_samples`、`test_authentic_expression_session_deletion`、`test_authentic_expression_candidate_versions`、`test_authentic_expression_skill_exploration`、`test_style_reference_budget_api`，复用真实HTTP/正式装配和自有随机PG，仅模型与资料为合成。59项存储/codec入口由本轮显式创建的随机_test库在模块导入前设置NOTALONE_TEST_DATABASE_URL，正式53及repeat()均核对，最终逐一DROP；没有App、OCR、外部实验或隐式采纳。
 
 总协调主树集成上述正式 `3471b181eedc6dd8a1446b149b35985f937889f1` 六文件；相关版本删除组合测试另精确取正式 `5e1ddbb306e5b810ed7e6666ff486200fb0aa761` 的单个 TEST，不重复消费已有 A053、A11 或其他任务文档。Conda `NotAlone`、关闭 dotenv／追踪、`PYTHONPATH=src:.` 环境：
@@ -84,3 +86,5 @@ Blocked by: [authentic-expression/02 当前意图优先的生成与改写](02-cu
 Conda NotAlone／backend内`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src python -m unittest tests.integration.server.test_style_reference_budget_api -q`实际3项GREEN／4.211秒。counter完整最终载荷与真实受控模型实参逐项对照，使用实际输出reserve4096；这是合成协议的精确单位，不外推供应商token。正式001–052随机库按夹具精确清理。该公共guard原行为已满足新反例，不修改产品制造RED；相关联跑和两轴接续。完整助手讨论历史sample依赖仍待A唯一sameconn只读契约，B探索guard由B负责，E05/E06保持真实claimed状态。
 
 相关联跑实际44项真实HTTP／正式001–052随机PG全部GREEN／71.560秒、skip0，八个本轮Core夹具数据库精确核对剩余0；含新预算／Skill组合与原C有界参考／场景／删除、B公开探索／三声明／组消息。样本竞态的既有失败标记租约诊断保留，原拒绝／候选0断言未弱化；没有新增迁移、运行时或真实模型质量结论。
+
+2026-10-11 总协调主树接续：精确集成 C 正式 `a8946af89800592530ccf12568bc25af7641a7bc` 的来源夹具和本票记录。在 Conda `NotAlone`、关闭 dotenv／追踪、`PYTHONPATH=src:.` 环境运行 `python /private/tmp/notalone-coordinator-isolated-tests.py /Users/local-user/learn/NotAlone tests.integration.server.test_assistant_input_budget tests.integration.reply.test_postgres_reply_flow tests.integration.server.test_assistant_session_api`：43 项全部 GREEN／37.857 秒（35 真实 HTTP、8 存储集成），正式 001–053、自有数据库精确剩余 0。旧 6 个来源夹具错误已在同一扩展组消除；仅补实际合成来源前置，不修改业务守卫或原断言。运行删除来源后的租约失效诊断保留，原清理与拒绝断言通过。两文件限定 Standards／Spec 审查均无新问题，未执行页面、人工、原生或外部模型验收；完整 A 历史接线与本票原剩余范围仍继续，不据 43 项关闭本票。
