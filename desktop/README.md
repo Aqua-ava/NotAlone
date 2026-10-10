@@ -71,7 +71,24 @@ npm run check:helpers -- --directory /绝对路径/cli-runtime --version v1.2.3 
 
 JSON 输出只有状态、安全错误码、声明版本、相对文件名、架构、大小和 SHA-256；不回显绝对目录、原始工具输出或来源 URL。退出 0 表示 `static_checks_passed`，退出 2 表示拒绝。版本/来源仍是声明而非核验；`provenanceVerified`、`runtimeValidated`、`helperExecuted` 和 `nativeAcceptance` 均为 false。签名通过不证明可信发行者、Developer ID、公证、权限或完整动态加载行为；WCDB 作为已知动态加载依赖单独检查，其他未写入 Mach-O 的动态加载依赖仍需按实际 CLI 版本核对。目录内最多检查 64 个文件，单文件最多 256 MiB，整体核查预算 60 秒。
 
-该命令属于任务 20 的准备接缝，没有补随包路径、改写启动配置或授权渠道读取。完整输入和来源仍缺，最终包及真实微信验收继续待办。
+静态核查、搬运和默认启动接线属于任务 20 的 CLI 侧实现，不授权渠道读取。完整输入和来源仍缺，探针随包接线、最终包及真实微信验收继续待办。
+
+### 核查后的搬运与随包接线
+
+可先独立准备一个不存在的目标目录；父目录须已存在，目标与输入不得重叠。只复制核查过的 CLI/WCDB 和声明依赖，保留相对布局；不复制配置、聊天、C 源码或目录中其他文件，不覆盖已有目标。搬运前、复制字节及搬运后复核哈希；绝对依赖仍指向旧目录时拒绝，失败只清理本次创建的目标，不自动改链接或重签 helper。
+
+```bash
+npm run prepare:helpers -- --directory /绝对路径/cli-runtime --version v1.2.3 --source https://example.org/public-runtime --destination /已有父目录/notalone-helpers
+npm run package -- --helper-directory /绝对路径/cli-runtime --helper-version v1.2.3 --helper-source https://example.org/public-runtime
+```
+
+`prepare:helpers` 退出 0 为 `prepared`，2 为安全拒绝；JSON 不回显绝对路径或 URL。`manifest.json` 仅保存相对文件名、字节数、架构、SHA-256、签名核查结果和版本/公开来源声明，保留未核验来源/运行/原生状态。准备核查前后各最多 60 秒，复制最多 60 秒；不运行生成文件、不访问网络。
+
+显式打包参数全部齐备时，通过 Packager `extraResource` 放到 `Contents/Resources/notalone-helpers`，ASAR 外保留可执行文件和动态库；缺一项或未知参数直接拒绝。未提供参数仍是前端包。复制后及最终签名后再次核对文件集合与原哈希；已核验 helper 跳过 Electron 重签，保留原字节和签名，不给它添加 JIT entitlement，主包继续 ad-hoc 签名并严格验证。包内 manifest 随主包签名保护，但哈希/签名仍不能证明发行者或真实渠道可用。
+
+仅打包 App 的主进程以 `process.resourcesPath` 提供资源目录；开发与普通页面不自动寻找包内 helper。没有明确路径配置/环境值时，启动诊断和受控后端启动共用包内 CLI 默认值；每次加载核对 manifest、架构、全部文件哈希及非符号链接路径，缺失/变化/越界时 CLI 不可用，不退回 PATH 或未知探针。显式配置优先，绑定和总开关语义不变；前台探针当前仍需明确配置，未知最小布局继续采集前拒绝。
+
+本轮公开准备 CLI、真实 Node 启动诊断与启动环境只用自有合成 Mach-O 验证搬运、脱离源目录、损坏/缺库/越界拒绝及配置优先；没有运行 Packager 生成含 helper 的 App、Electron、Python、微信或探针，不据此宣称 Finder/权限/同步/退出验收通过。Context7 不可用，官方 [Packager extraResource](https://electron.github.io/packager/main/interfaces/Options.html#extraResource)、[Electron resourcesPath](https://www.electronjs.org/docs/latest/api/process#processresourcespath-readonly)与[签名 ignore](https://github.com/electron/osx-sign/blob/main/src/types.ts)已与安装版本 Packager 20.3.0、Electron 44.7.0 及 osx-sign 类型/源码核对。
 
 ## 轻量无头页面验证
 
@@ -120,7 +137,7 @@ node tests/headless/rewrite-lifecycle-check.mjs          # 实际未知命令故
 
 ## 安全检查与预约 App 验收
 
-`npm test` 默认执行 TypeScript 检查、测试 CLI 的合成回归（`tests/scheduling/`、`tests/headless/command.test.mjs`）及 helper 静态核查（`tests/helpers/command.test.mjs`）：未协调调用拒绝、跨独立命令副本/TMPDIR 互斥、启动预算、到期、Ctrl+C/SIGTERM、崩溃与损坏租约，以及 Playwright 门禁和限定文件发现。调度的合成孩子固定为 Node；helper 核查在 macOS 只构建和 ad-hoc 签名临时合成 C 文件，检查格式、架构、依赖和签名，不执行生成的二进制。原始 Electron API 的拒绝检查也显式使用 Node 可执行文件，避免门禁回归时打开桌面。命令明确报告真实 App 未运行。这些结果不能证明窗口、业务 UI、后端 HTTP 接线、签名包或实机验收通过；安全目录从真实 App 全量中排除。
+`npm test` 默认执行 TypeScript 检查、测试 CLI 的合成回归（`tests/scheduling/`、`tests/headless/command.test.mjs`）及 helper 静态核查/搬运与 Node 启动配置（`tests/helpers/command.test.mjs`）：未协调调用拒绝、跨独立命令副本/TMPDIR 互斥、启动预算、到期、Ctrl+C/SIGTERM、崩溃与损坏租约，以及 Playwright 门禁和限定文件发现。调度的合成孩子固定为 Node；helper 核查在 macOS 只构建和 ad-hoc 签名临时合成 C 文件，检查格式、架构、依赖和签名，不执行生成的二进制。原始 Electron API 的拒绝检查也显式使用 Node 可执行文件，避免门禁回归时打开桌面。命令明确报告真实 App 未运行。这些结果不能证明窗口、业务 UI、后端 HTTP 接线、签名包或实机验收通过；安全目录从真实 App 全量中排除。
 
 真实 App 验收会显示窗口并使用桌面焦点。必须由主 Agent 先协调用户认可的有限时段，再执行下面的显式命令。参数只是实施门禁，不能代替用户对该时段的认可；当前原任务的 App 验收仍暂停，直到本调度修复安全检查和两轴评审完成。`npm start` 是用户正常打开 App 的入口，不能当作绕过测试门禁的自动验收方式。
 

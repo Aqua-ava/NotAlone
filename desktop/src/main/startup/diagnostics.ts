@@ -17,7 +17,7 @@ export class StartupDiagnostics {
   private saving: Promise<void> | undefined;
   private closing = false;
 
-  constructor(private readonly userData: string) {}
+  constructor(private readonly userData: string, private readonly resourcesDirectory?: string) {}
 
   getState(): StartupState { return { ...this.state, helperWarnings: [...this.state.helperWarnings] }; }
   onStateChanged(listener: (state: StartupState) => void): () => void {
@@ -26,7 +26,7 @@ export class StartupDiagnostics {
   }
   async getPaths(): Promise<StartupPaths> {
     const revision = this.state.revision;
-    try { return configurationPaths(await loadBackendConfiguration(this.userData)); }
+    try { return configurationPaths(await loadBackendConfiguration(this.userData, this.resourcesDirectory)); }
     catch {
       if (!this.closing && this.state.revision === revision && this.state.phase !== 'checking') {
         this.publish({ phase: 'blocked', code: 'configuration_invalid' });
@@ -52,7 +52,7 @@ export class StartupDiagnostics {
     this.publish({ phase: 'checking', code: undefined, helperWarnings: [] });
     // 另一窗口可在保存的 await 期间重试；旧配置不能在保存成功后继续通过门禁。
     let current: BackendConfiguration;
-    try { current = await loadBackendConfiguration(this.userData); }
+    try { current = await loadBackendConfiguration(this.userData, this.resourcesDirectory); }
     catch {
       if (canStart() && !this.closing) this.publish({ phase: 'blocked', code: 'configuration_invalid' });
       throw new BackendFailure('backend_connection_failed');

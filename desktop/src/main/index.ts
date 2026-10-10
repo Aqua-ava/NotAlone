@@ -43,8 +43,9 @@ void app.whenReady().then(async () => {
   const appSession = session.fromPartition('notalone-app');
   installResources(appSession);
   const windows = new AppWindows(appSession);
-  const diagnostics = new StartupDiagnostics(app.getPath('userData'));
-  const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart));
+  const resourcesDirectory = app.isPackaged ? process.resourcesPath : undefined;
+  const diagnostics = new StartupDiagnostics(app.getPath('userData'), resourcesDirectory);
+  const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart), resourcesDirectory);
   const commands = electronPageCommands(windows);
   const contacts = installContactSessionBridge(commands, backend);
   const foreground = installForegroundBridge(commands, backend, contacts);

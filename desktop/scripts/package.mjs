@@ -4,12 +4,21 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { prepareHelpers } from './prepare-helpers.mjs';
+import { argumentsFor, inspectRuntime } from './helper-runtime.mjs';
 
 if (process.platform !== 'darwin') throw new Error('本机 App 打包需要 macOS。');
 const run = promisify(execFile);
+const helperArguments = process.argv.slice(2);
+const helperInput = helperArguments.length ? argumentsFor(helperArguments.map((value, index) => {
+  if (index % 2 === 0 && !['--helper-directory', '--helper-version', '--helper-source'].includes(value)) throw new Error('helper_check_arguments');
+  return index % 2 === 0 ? value.replace('--helper-', '--') : value;
+})) : undefined;
 const manifest = JSON.parse(await readFile('package.json', 'utf8'));
 const staging = await mkdtemp(path.join(tmpdir(), 'notalone-package-'));
 try {
+  const helperDirectory = path.join(staging, 'notalone-helpers');
+  const prepared = helperInput ? await prepareHelpers({ ...helperInput, destination: helperDirectory }) : undefined;
   const source = path.join(staging, 'app');
   await mkdir(source);
   // 仅复制编译产物与最小启动清单，避免携入仓库、依赖缓存或用户配置。
@@ -45,6 +54,11 @@ try {
     overwrite: true,
     asar: true,
     icon,
+    extraResource: prepared ? [helperDirectory] : undefined,
+    afterCopyExtraResources: prepared ? [async ({ buildPath }) => {
+      const copied = await inspectRuntime({ ...helperInput, directory: path.join(buildPath, 'NotAlone.app/Contents/Resources/notalone-helpers') });
+      if (prepared.files.length !== copied.files.length || prepared.files.some((file) => !copied.files.some((copy) => copy.name === file.name && copy.sha256 === file.sha256))) throw new Error('helper_prepare_input_changed');
+    }] : undefined,
     afterExtract: [async ({ buildPath }) => {
       const plist = path.join(buildPath, 'Electron.app/Contents/Info.plist');
       for (const key of ['NSCameraUsageDescription', 'NSMicrophoneUsageDescription',
@@ -59,6 +73,8 @@ try {
       identityValidation: false,
       preAutoEntitlements: false,
       preEmbedProvisioningProfile: false,
+      // helper 已带核查过的签名，保留字节与权限，不注入 Electron 的 JIT entitlement。
+      ignore: (file) => file.includes(`${path.sep}Contents${path.sep}Resources${path.sep}notalone-helpers${path.sep}`),
       optionsForFile: () => ({
         entitlements: ['com.apple.security.cs.allow-jit'],
         hardenedRuntime: false,
@@ -68,8 +84,13 @@ try {
   });
   for (const output of outputs) {
     const app = path.join(output, 'NotAlone.app');
+    if (prepared) {
+      const bundled = await inspectRuntime({ ...helperInput, directory: path.join(app, 'Contents/Resources/notalone-helpers') });
+      if (prepared.files.length !== bundled.files.length || prepared.files.some((file) => !bundled.files.some((copy) => copy.name === file.name && copy.sha256 === file.sha256))) throw new Error('helper_prepare_input_changed');
+    }
     await run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', app]);
     console.log(`本机 App 已构建并通过 ad-hoc 签名校验：${app}`);
+    console.log(prepared ? 'CLI/WCDB 静态核查与随包字节复核通过；来源、运行和原生验收仍未验证。' : '此包未包含 CLI/WCDB，完整 helper 交付仍待补齐。');
   }
 } finally {
   await rm(staging, { recursive: true, force: true });

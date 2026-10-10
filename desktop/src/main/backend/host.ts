@@ -23,7 +23,8 @@ export class BackendHost {
   private readonly listeners = new Set<(state: BackendState) => void>();
 
   constructor(private readonly userData: string,
-    private readonly beforeConnect?: (config: BackendConfiguration, canStart: () => boolean) => Promise<void>) {}
+    private readonly beforeConnect?: (config: BackendConfiguration, canStart: () => boolean) => Promise<void>,
+    private readonly resourcesDirectory?: string) {}
 
   getState(): BackendState {
     return { ...this.state, canSaveStartupPaths: !this.configurationSave && this.configurationCanChange(),
@@ -156,7 +157,7 @@ export class BackendHost {
 
   private async initialize(generation: number): Promise<void> {
     const canStart = () => !this.closing && generation === this.generation;
-    const config = await loadBackendConfiguration(this.userData);
+    const config = await loadBackendConfiguration(this.userData, this.resourcesDirectory);
     if (!canStart()) return;
     await this.beforeConnect?.(config, canStart);
     if (!canStart()) return;

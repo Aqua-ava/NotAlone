@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { BackendFailure } from './connection';
 import type { StartupPaths } from '../../shared/startup-bridge';
+import { verifiedBundledCli } from './bundled-helpers';
 
 const startupPathKeys = ['pythonExecutable', 'projectDirectory', 'envFilePath', 'backendInfoPath', 'wechatCliPath', 'syncProbePath'] as const;
 const startupPathKeySet = new Set<string>(startupPathKeys);
@@ -24,7 +25,7 @@ export interface BackendConfiguration {
 }
 
 // 本文件只有非秘密路径，由主进程读取；具名机器诊断桥接负责展示和保存。
-export async function loadBackendConfiguration(userData: string): Promise<BackendConfiguration> {
+export async function loadBackendConfiguration(userData: string, resourcesDirectory?: string): Promise<BackendConfiguration> {
   let value: Record<string, unknown> = {};
   try {
     const configPath = path.join(userData, 'backend-launch.json');
@@ -56,7 +57,7 @@ export async function loadBackendConfiguration(userData: string): Promise<Backen
     infoPath, envFilePath,
     pythonExecutable: value.pythonExecutable as string | undefined,
     projectDirectory: value.projectDirectory as string | undefined,
-    wechatCliPath: value.wechatCliPath as string | undefined || process.env.NOTALONE_WECHAT_CLI,
+    wechatCliPath: value.wechatCliPath as string | undefined || process.env.NOTALONE_WECHAT_CLI || await verifiedBundledCli(resourcesDirectory),
     syncProbePath: value.syncProbePath as string | undefined || process.env.NOTALONE_SYNC_PROBE,
   };
 }
