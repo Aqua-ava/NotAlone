@@ -5,8 +5,8 @@
 ## 本轮授权与边界
 
 - A：持续会话 07–18，共 12 张。复用现有会话「实现持续会话的12项任务」。
-- B：聊天回复策略 01–11，共 11 张。未找到可唯一识别的对应用户会话，采用实现子 Agent。
-- C：真实表达 01–06，共 6 张。未找到可唯一识别的对应用户会话，采用实现子 Agent。
+- B：聊天回复策略 01–11，共 11 张。最初本账户列表无法识别对应会话，采用备用实现子 Agent；后收到跨账户本地交付并核对git，现由既有用户会话接续。
+- C：真实表达 01–06，共 6 张。最初采用备用实现子 Agent；后已核验既有用户会话并收取本地接收回执，由其接续。
 - 用户不参与本轮实施验收。仅使用合成资料、可控模型、隔离 PostgreSQL 和受限普通页面自动测试。
 - 排除持续会话 19、原 Mac／微信和记忆质量未完成任务、OCR、真实微信、外部发送、私人资料、媒体提取、云端、Windows、真实 App、外部模型调用和新增预算。
 - 仅本地提交和集成；不 push、发布或部署。
@@ -19,10 +19,12 @@
 | --- | --- | --- | --- |
 | 总协调 | `/Users/local-user/learn/NotAlone` | `codex/autonomous-integration-29` | 依赖协调、顺序集成、公共接线冲突、真实集成复核与汇总 |
 | A | `/private/tmp/notalone-a-session` | `codex/assistant-session-continuity` | 助手会话身份、持久化、版本、预算、取消、恢复和生命周期 |
-| B | `/Users/local-user/.codex-account2/worktrees/reply-strategy-b/NotAlone` | `codex/conversation-reply-strategy-b` | 场景输入、理解与方向探索、Skill 延续、消息组和连续场景 |
-| C | `/Users/local-user/.codex-account2/worktrees/authentic-expression-c/NotAlone` | `codex/authentic-expression-c` | 离线保真报告、保真契约、表达样本生命周期和生成参考 |
+| B | `/Users/local-user/.codex/worktrees/conversation-reply-strategy/NotAlone` | `codex/conversation-reply-strategy` | 既有用户会话`local-chat-id`，唯一负责11票接续 |
+| C | `/Users/local-user/.codex/worktrees/authentic-expression/NotAlone` | `codex/authentic-expression` | 既有用户会话`local-chat-id`，唯一负责6票接续 |
 
-旧 B/C worktree 和分支保持原状；不将存在旧 checkout 推断为本轮活跃负责人。每张任务只有上表对应的实现负责人。
+本账户工具不能读取／投递跨账户会话，未绕过账户访问；既有 B/C 通过本地交付文件确认接收。公共指令与回执见`coordinator-cross-account-handoff-20261011.md`。每张任务只有上表对应负责人。
+
+备用B工作树`/Users/local-user/.codex-account2/worktrees/reply-strategy-b/NotAlone`已冻结47份未提交文件，交付`50fd205`及`/private/tmp/notalone-b-handoff-20261011/`。备用C工作树`/Users/local-user/.codex-account2/worktrees/authentic-expression-c/NotAlone`不扩新票，仅在总协调划定的集成助手范围闭合公共来源守卫。两侧正式提交／失败证据保留；只集成一套探索与样本存储。
 
 ## 公共契约
 
@@ -68,8 +70,19 @@ E01 的 16 例受控报告包含 14 个故意错误输出、1 个超时与1个�
 ## 后续接口协调
 
 - 迁移器要求连续编号，不使用虚假占位。A／C 已写的实际 `048`／`049` 可供 B 在隔离库验证 `050`，辅助副本不提交；最终以正式提交的原文件及账本复验。
-- A 后续 `051` 负责非生成的讨论输入和 `current_input_version_id`。B `052` 的探索结果关联该权威版本及原 session，不创建另一会话或版本权威；C 后续 schema 如需要使用 `053`。
+- A 后续 `051` 负责非生成的讨论输入和 `current_input_version_id`。B `052` 的探索结果关联该权威版本及原 session，不创建另一会话或版本权威；A `053` 负责完整候选组编辑版本，C 后续真正需要迁移时再分配编号。
 - `ReplyServiceRequest.expected_input_version_id` 在 A reserve 的同 owner 锁内进行首次提交 CAS。相同幂等键重放先核对原输入摘要并复验有效性，避免首次版本推进误拒同键重试。
 - 样本删除在同 owner 锁事务中、删除原 reply 前，调用 A 的 `erase_assistant_source_turns`，传样本标识及受影响请求，清除相关讨论及恢复副本，保留无关内容。
 
 其他任务仍按依赖实施；没有下发完成或已通过 mock 就视为集成完成的任务。
+
+## 已有会话接续与公共基础
+
+- 既有B交付R01 `6856a82`、R02 `8a0fb90`，已复用本轮主动目的两提交；其真实页面／HTTP证据保留，但短期整数版本仍须改接A051，未据此宣称持久会话集成完成。
+- 既有C交付E02 `2ab0105`，实际三段页面和35项相关回归通过，含故意改变立场的失败报告；待集成树第三种输入适配与复核。其E04 `530de5f`不叠加另一048／store，提取必要复制／粘贴来源UI和测试，适配唯一C049。
+- C049独立实际schema `72c762d`已集成为`54ce22e`，11项HTTP及106项相关隔离PG曾使用它，公共helper和页面仍待legacy边界修复，不标E04完成。
+- 编号最终当前契约为A048、C049、B050、A051、B052（探索与原候选消息组）、A053（完整候选编辑版本）；撤回C053的预留，后续真正需要schema再分配，不生成空占位。
+- A07三段公开GREEN已取得：默认保存／同键、来源待删除遮挡及无关讨论、迟到真实200不复活。静默20次、激活和屏上窗口均0、cleanupConfirmed=true、单Chrome，无Electron／原生证据；A正在闭合手工本人资料删除的新增真实回归后交稳定提交。
+
+- A07正式提交`041f6d94`已交付：75项真实HTTP／PG（本票20）、10项迁移、safe40及类型检查通过，两轴复审0。手工本人记忆正常读取／重放、伪造哨兵拒绝、删除后清理实际讨论与回复、无关资料保留均有回归；原始错误对象边界保留red→green证据。总协调下一步顺序集成与复验，不将本票证据视为后续11票完成。
+- C公共来源候选已冻结：legacy有源祖先无快照而子代有独立新来源，读取／重放／继续／样本保存均失败关闭；修前真实200、修后12项HTTP及106项相关PG、safe40通过。正在做最终两轴和页面复验，尚未把E04整票关闭。
