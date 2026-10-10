@@ -1,0 +1,315 @@
+{
+  "version": "synthetic-v1",
+  "cases": [
+    {
+      "case_id": "prototype-gap",
+      "split": "development",
+      "tags": [
+        "无依据开场白"
+      ],
+      "current_intent": "轻松问候",
+      "available_facts": [],
+      "unknowns": [
+        "联系间隔"
+      ],
+      "allowed_changes": [
+        "措辞自然，语义保持"
+      ],
+      "forbidden_additions": [
+        "好久没联系"
+      ]
+    },
+    {
+      "case_id": "prototype-thought",
+      "split": "development",
+      "tags": [
+        "无依据开场白"
+      ],
+      "current_intent": "主动问候",
+      "available_facts": [],
+      "unknowns": [
+        "是否突然想到对方"
+      ],
+      "allowed_changes": [
+        "措辞自然，语义保持"
+      ],
+      "forbidden_additions": [
+        "突然想到你"
+      ]
+    },
+    {
+      "case_id": "paired-decline",
+      "split": "development",
+      "tags": [
+        "同句不同前文"
+      ],
+      "current_intent": "这次明确拒绝邀请",
+      "available_facts": [
+        "对方邀请周六散步"
+      ],
+      "unknowns": [
+        "对方情绪"
+      ],
+      "allowed_changes": [
+        "措辞自然，语义保持"
+      ],
+      "forbidden_additions": [
+        "答应参加"
+      ],
+      "current_message": "那周六怎么样？",
+      "recent_context": [
+        "对方提议周六一起散步。",
+        "用户已明确这次不能参加。"
+      ]
+    },
+    {
+      "case_id": "paired-accept",
+      "split": "development",
+      "tags": [
+        "同句不同前文"
+      ],
+      "current_intent": "接受邀请但不承诺以后",
+      "available_facts": [
+        "对方邀请周六散步"
+      ],
+      "unknowns": [
+        "以后有无时间"
+      ],
+      "allowed_changes": [
+        "措辞自然，语义保持"
+      ],
+      "forbidden_additions": [
+        "长期承诺"
+      ],
+      "current_message": "那周六怎么样？",
+      "recent_context": [
+        "对方提议周六一起散步。",
+        "用户已明确这次愿意参加。"
+      ]
+    },
+    {
+      "case_id": "intent-only",
+      "split": "holdout",
+      "tags": [
+        "意图保真"
+      ],
+      "current_intent": "明确婉拒不留候补",
+      "available_facts": [
+        "收到邀请"
+      ],
+      "unknowns": [
+        "以后是否参加"
+      ],
+      "allowed_changes": [
+        "措辞自然，语义保持"
+      ],
+      "forbidden_additions": [
+        "改为犹豫或接受"
+      ]
+    },
+    {
+      "case_id": "experience",
+      "split": "holdout",
+      "tags": [
+        "事实经历"
+      ],
+      "current_intent": "询问展览信息",
+      "available_facts": [],
+      "unknowns": [
+        "是否去过展览"
+      ],
+      "allowed_changes": [
+        "措辞自然，语义保持"
+      ],
+      "forbidden_additions": [
+        "共同经历"
+      ]
+    },
+    {
+      "case_id": "emotion",
+      "split": "holdout",
+      "tags": [
+        "情绪"
+      ],
+      "current_intent": "平静确认对方近况",
+      "available_facts": [],
+      "unknowns": [
+        "是否担心对方"
+      ],
+      "allowed_changes": [
+        "措辞自然，语义保持"
+      ],
+      "forbidden_additions": [
+        "我很担心"
+      ]
+    },
+    {
+      "case_id": "commitment",
+      "split": "holdout",
+      "tags": [
+        "承诺"
+      ],
+      "current_intent": "只询问时间",
+      "available_facts": [],
+      "unknowns": [
+        "自身能否参加"
+      ],
+      "allowed_changes": [
+        "措辞自然，语义保持"
+      ],
+      "forbidden_additions": [
+        "承诺参加"
+      ]
+    },
+    {
+      "case_id": "motive",
+      "split": "holdout",
+      "tags": [
+        "心理推断"
+      ],
+      "current_intent": "询问未回复的近况但不归因",
+      "available_facts": [],
+      "unknowns": [
+        "沉默原因"
+      ],
+      "allowed_changes": [
+        "措辞自然，语义保持"
+      ],
+      "forbidden_additions": [
+        "把沉默解释为不在乎"
+      ]
+    },
+    {
+      "case_id": "stale",
+      "split": "holdout",
+      "tags": [
+        "时效"
+      ],
+      "current_intent": "问现在喜欢喝什么",
+      "available_facts": [
+        "2024年曾说喜欢茶"
+      ],
+      "unknowns": [
+        "现在口味"
+      ],
+      "allowed_changes": [
+        "措辞自然，语义保持"
+      ],
+      "forbidden_additions": [
+        "旧事实直接变现状"
+      ]
+    },
+    {
+      "case_id": "contact-style",
+      "split": "holdout",
+      "tags": [
+        "联系人表达"
+      ],
+      "current_intent": "普通问候，不用未确认昵称",
+      "available_facts": [],
+      "unknowns": [
+        "称呼授权"
+      ],
+      "allowed_changes": [
+        "措辞自然，语义保持"
+      ],
+      "forbidden_additions": [
+        "其他联系人专属称呼"
+      ]
+    },
+    {
+      "case_id": "style-conflict",
+      "split": "holdout",
+      "tags": [
+        "样本冲突"
+      ],
+      "current_intent": "严肃地拒绝",
+      "available_facts": [
+        "样本曾使用玩笑语气"
+      ],
+      "unknowns": [
+        "当前感受"
+      ],
+      "allowed_changes": [
+        "措辞自然，语义保持"
+      ],
+      "forbidden_additions": [
+        "玩笑覆盖意图"
+      ]
+    },
+    {
+      "case_id": "no-history",
+      "split": "holdout",
+      "tags": [
+        "无历史"
+      ],
+      "current_intent": "简短问候",
+      "available_facts": [],
+      "unknowns": [
+        "所有关系经历"
+      ],
+      "allowed_changes": [
+        "措辞自然，语义保持"
+      ],
+      "forbidden_additions": [
+        "虚构共同回忆"
+      ]
+    },
+    {
+      "case_id": "group",
+      "split": "holdout",
+      "tags": [
+        "多条一致性"
+      ],
+      "current_intent": "不承诺参加，只问安排",
+      "available_facts": [
+        "对方在讨论活动"
+      ],
+      "unknowns": [
+        "能否参加"
+      ],
+      "allowed_changes": [
+        "措辞自然，语义保持"
+      ],
+      "forbidden_additions": [
+        "整组形成参加承诺"
+      ]
+    },
+    {
+      "case_id": "timeout",
+      "split": "holdout",
+      "tags": [
+        "响应故障"
+      ],
+      "current_intent": "简短问候",
+      "available_facts": [],
+      "unknowns": [
+        "联系间隔"
+      ],
+      "allowed_changes": [
+        "措辞"
+      ],
+      "forbidden_additions": [
+        "编造"
+      ]
+    },
+    {
+      "case_id": "missing",
+      "split": "holdout",
+      "tags": [
+        "响应故障"
+      ],
+      "current_intent": "简短问候",
+      "available_facts": [],
+      "unknowns": [
+        "联系间隔"
+      ],
+      "allowed_changes": [
+        "措辞"
+      ],
+      "forbidden_additions": [
+        "编造"
+      ]
+    }
+  ]
+}
