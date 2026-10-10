@@ -38,6 +38,8 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 
 ## Comments
 
+2026-10-11 总协调首轮公开恢复组合：root单case180秒，样本删除场完整通过；原始来源删除场等待manager“选择合成联系人甲”30000ms超时，exit1，未到达断言不标通过。quiet64/active0/onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false。已交C定位关系页面后的真实联系人导航，原正文/来源/UUID/模型次数断言保持。两入口冲突只新增case及分派，两轴限定0；typecheck通过，CLI首次受sandbox租约写权限限制5/10失败，授权权限复验10/10通过。不是原生或进程重启证据，任务仍claimed。
+
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
 
 ## Answer（真实依赖逐步接续）
@@ -57,3 +59,7 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 唯一E01报告入口读取上述六个实际调用捕获，交付`docs/evaluations/authentic-expression-combination-http-v1.json`：6开发例，结构失败0，逐例独立synthetic_fixture保真故意失败2，真人0／qualityfalse，token及真实语义／自然度／关系适配／本人相似度未知。输入／system／输出／UUID和测量保留；评价字段未发送给模型。用例范围只包括当前正式基础继续链，Skill版本、澄清附加字段、完整消息组、A09删除和A12预算尚未被该报告覆盖。本票仍claimed，后续消费真实接口后补组合，不新增外部模型实验。
 
 以`a1fab20`为固定点的六文件限定Standards／Spec最终均0，逐例核验6/6源捕获一致、实际payload没有评价字段、故意错误与未知维度均保留。该复审只读，不代替剩余真实依赖的自动集成。
+
+恢复组合页面接续：正式A08已消费为`57735a8`，B三声明薄字段为`dd62af9`。新增具名`authentic-expression-recovery`：在实际公开页面保存独立草稿讨论，显式保存手工样本或有原始来源的候选样本，再以当前拒绝目的生成并核对实际样本载荷／回执。删除样本或通过公开来源管理删除原始来源后，核对旧键、继续和依据拒绝，独立旧键重读保留；断线重连及重新装配后端实例／页面宿主均只恢复独立讨论，相关turn无input/reply，模型不额外调用。
+
+该TEST切片尚未执行页面，不预填GREEN；最小串行预约命令为desktop内`npm run test:pages -- --case authentic-expression-recovery --timeout-seconds 180`，沿原单Chrome/inline范围/nonce/租约门禁，只替受控模型和必要连接生命周期。`restart`只重新装配同一Python夹具中的后端，不称进程重启、退出验收或真实App。A09会话删除、B公开探索/消息组和A12总预算仍待正式依赖。
