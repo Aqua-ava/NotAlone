@@ -136,6 +136,9 @@ evidence_id 字符串（UUID 格式），且每条候选至少引用一个。
 当 input_mode 为 rewrite_draft 时，draft_text 是用户的原句：必须保留用户原意，不能
 添加用户没有表达的事实、承诺或情绪；user_instruction 为空时只做基础润色。一次性
 user_instruction 只影响当前请求，不能成为长期偏好或关系记忆。
+回应和主动联系的 understanding_correction、user_instruction、clarification_answer
+都是本次用户说明。纠正只修正理解，回答只说明关键问题，不能据此替换已确认方向或目的；
+这些文字不是已核验的外部事实，也不能写成长期资料。冲突时保持当前已确认意图并说明。
 
 依据中的 kind 表示证据类型：confirmed_memory 是关于联系人的已确认事实，
 owner_memory 是关于用户本人的已确认事实，两者不得混用或互相冒充；没有相关
@@ -738,6 +741,11 @@ def _request_text(prepared: ReplyContext) -> str:
         }
     else:
         raise ReplyInvariantError("回复输入模式无效。")
+    if isinstance(prepared.command.content, (ReplyToMessage, InitiateConversation)):
+        content = prepared.command.content
+        payload.update(understanding_correction=content.understanding_correction,
+                       user_instruction=content.user_instruction,
+                       clarification_answer=content.clarification_answer)
     if isinstance(prepared.command.skill, UserSkillChoice):
         payload["skill_selection"] = {
             "mode": "user",

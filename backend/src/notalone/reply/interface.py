@@ -35,6 +35,9 @@ class ReplyToMessage:
 
     target_message_id: UUID
     direction: ConfirmedDirection
+    understanding_correction: str | None = None
+    user_instruction: str | None = None
+    clarification_answer: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,13 +81,26 @@ class InitiateConversation:
     """没有待回复目标时，由用户明确目的发起联系。"""
 
     purpose: ConfirmedDirection
+    understanding_correction: str | None = None
+    user_instruction: str | None = None
+    clarification_answer: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.purpose, ConfirmedDirection):
             raise TypeError("主动联系目的必须由用户明确输入或确认。")
+        if not _valid_scenario_declarations(self):
+            raise ValueError("本次表达说明无效。")
 
 
 ReplyInput: TypeAlias = ReplyToMessage | RewriteDraft | InitiateConversation
+
+
+def _valid_scenario_declarations(content: ReplyToMessage | InitiateConversation) -> bool:
+    """本次用户声明不升级为确认意愿、外部事实或长期资料。"""
+
+    return all(value is None or isinstance(value, str) and len(value) <= 4096 for value in (
+        content.understanding_correction, content.user_instruction, content.clarification_answer,
+    ))
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,9 +141,10 @@ class GenerateReply:
             content_valid = (
                 isinstance(self.content.target_message_id, UUID)
                 and isinstance(self.content.direction, ConfirmedDirection)
+                and _valid_scenario_declarations(self.content)
             )
         elif isinstance(self.content, InitiateConversation):
-            content_valid = isinstance(self.content.purpose, ConfirmedDirection)
+            content_valid = isinstance(self.content.purpose, ConfirmedDirection) and _valid_scenario_declarations(self.content)
         else:
             content_valid = (
                 isinstance(self.content, RewriteDraft) and self.content.is_valid()

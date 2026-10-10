@@ -56,7 +56,8 @@ def parse_reply_request(body: bytes) -> tuple[UUID, ReplyServiceRequest]:
             raise ReplyRequestInvalid()
         if content_value.get("target_message_id") is not None:
             raise ReplyRequestInvalid()
-        content = InitiateConversation(ConfirmedDirection(purpose, DirectionSource.DIRECT_INPUT))
+        content = InitiateConversation(ConfirmedDirection(purpose, DirectionSource.DIRECT_INPUT),
+                                       **_scenario_declarations(content_value))
     else:
         raise ReplyRequestInvalid()
 
@@ -95,7 +96,18 @@ def _parse_reply_to_message(content: dict[str, Any]) -> ReplyToMessage:
             text=direction_text,
             source=DirectionSource(source),
         ),
+        **_scenario_declarations(content),
     )
+
+
+def _scenario_declarations(content: dict[str, Any]) -> dict[str, str | None]:
+    fields = {}
+    for field in ("understanding_correction", "user_instruction", "clarification_answer"):
+        value = content.get(field)
+        if value is not None and (not isinstance(value, str) or len(value) > 4096):
+            raise ReplyRequestInvalid()
+        fields[field] = value.strip() or None if value is not None else None
+    return fields
 
 
 def _parse_rewrite_draft(content: dict[str, Any]) -> RewriteDraft:

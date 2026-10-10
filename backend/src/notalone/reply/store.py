@@ -707,6 +707,11 @@ def _normalize_input(command: GenerateReply) -> str:
         }
     else:
         raise ReplyStoreInvariantError("回复输入模式无效。")
+    if isinstance(content, (ReplyToMessage, InitiateConversation)):
+        for name in ("understanding_correction", "user_instruction", "clarification_answer"):
+            declaration = getattr(content, name)
+            if declaration:
+                payload[name] = declaration.strip()
     payload["continued_from_candidate_id"] = (
         str(command.continued_from_candidate_id)
         if command.continued_from_candidate_id is not None
