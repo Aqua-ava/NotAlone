@@ -208,7 +208,7 @@ async function removedEvidence(pages: EvidencePages) {
 async function legacySnapshot(pages: EvidencePages) {
   await pages.manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await confirmHelperContact(pages.helper, pages.rewriteBackend.data.contact_ids[0]);
-  await pages.helper.getByRole('button', { name: '回复', exact: true }).click();
+  await pages.helper.getByRole('button', { name: '回应消息', exact: true }).click();
   await pages.helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
   await pages.helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('只说明现在可以回复。');
   await pages.rewriteBackend.plan({ count: 1, prefix: '旧快照候选' });

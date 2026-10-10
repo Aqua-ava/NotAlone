@@ -1,6 +1,6 @@
 # 01：回应场景与明确意愿直达候选
 
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: None (can start immediately)
 
@@ -36,5 +36,7 @@ Blocked by: None (can start immediately)
 本票不授权OCR、真实微信读取/发送、外部模型调用、部署或push；也不提前实现其他票。
 
 ## Comments
+
+2026-10-11 B 实施：公开接缝沿用 reply:set-mode → ReplySession → /api/reply/generate；场景切换不提交生成，目标仍需明确选择。先验收既有消息与草稿回归，页面→HTTP/PG 证据待总协调串行预约。新增“回应消息”场景入口并保留草稿操作。
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。

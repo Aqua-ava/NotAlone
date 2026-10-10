@@ -34,11 +34,11 @@ export function useReplySession() {
 export type ReplySessionView = ReturnType<typeof useReplySession>;
 
 export function ReplyModePicker({ replies, enabled }: { replies: ReplySessionView; enabled: boolean }) {
-  return <div className="ime-modes" role="group" aria-label="写作方式">
+  return <div className="ime-modes" role="group" aria-label="沟通场景与改写">
     <button className={replies.state.mode === 'rewrite_draft' ? 'active' : ''} aria-pressed={replies.state.mode === 'rewrite_draft'}
       disabled={!enabled} onClick={() => void replies.setMode('rewrite_draft')}>改写</button>
     <button className={replies.state.mode === 'reply_to_message' ? 'active' : ''} aria-pressed={replies.state.mode === 'reply_to_message'}
-      disabled={!enabled} onClick={() => void replies.setMode('reply_to_message')}>回复</button>
+      disabled={!enabled} onClick={() => void replies.setMode('reply_to_message')}>回应消息</button>
   </div>;
 }
 
