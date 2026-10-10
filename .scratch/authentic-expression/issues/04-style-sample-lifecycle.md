@@ -38,6 +38,14 @@ Blocked by: None (can start immediately)
 
 ## Comments
 
+2026-10-11接续：A09审查发现候选选区粘贴后尚未主动保存的样本编辑区会在删除助手会话后残留正文。本模块唯一负责此副本清理，消费正式`2cd7810`只读五字段`confirmedSessionDeletion`，不推断result为空代表删除、不复制A working producer。新增独立公开TEST `style-session-editor-erasure`三场：取消保留、实际同会话404后清候选未保存片段并阻止旧剪贴板洗manual；只复制未粘贴时保留无关手写；已保存样本列表copy保留且仍按已有样本来历拒绝manual。显式保存样本、已删会话旧键／依据、每场1调用均为原断言；尚未运行页面，待正式producer或总协调受控前置树串行RED，不预填GREEN。
+
+随后总协调在A冻结树真实公开`assistant-session-deletion-faults`＋`assistant-session-deletion-lifecycle`／240秒窗口已取得原缺口RED：前三fault通过，第四场实际DELETE完成后手工样本框仍为“未保存副本的合成候选（说法1）。用户未保存的合成编辑。”而期望空，5000ms失败；后续未到达不记通过。quiet35／active0／onscreen0、单Chrome、cleanupConfirmed=true、Electron／native=false。这是原A场的真实反例，不修改其断言或重复制造本轮页面RED。
+
+C最小实现只在本来源controller保留candidate的session／request编号、当前手工文字指纹及实际粘贴来源集合；接受新的同contact／scope／connection回执后清相关未保存正文与来历，通过既有erasureRevision让React清空。多个片段中任一候选来源删除均清理；不清已保存样本、列表copy、无关手写或独立本人消息。跨会话候选复用现有实际依据读取，只有可靠404／410且范围连接仍同一才清，503或迟到不推测删除；候选正文没有进入新缓存，旧指纹复贴不能洗manual，不同新文字粘贴不被误认为旧来源。
+
+Conda NotAlone／desktop内使用Node v25.2.1：`node --test tests/style-samples/controller.test.mjs`首15项为9通过／6失败（含失败父测试），缺删除消费／混合片段／整文及跨会话实查的反例保留；首次实现15GREEN后typecheck发现本地临时origin数组未包含sample union，两行类型修正。补“失效指纹不误认不同新粘贴”实际RED后最小匹配修正，最终16项GREEN／112.305ms、skip0，`npm run typecheck`通过。受控Node没有运行模型、浏览器或App。页面入口CLI首误从仓库根执行，10项缺脚本失败；改desktop入口后9通过／1因root正在持有真实A页面租约、status不是absent失败，没有改租约或断言。随后只读status实际absent，`npm test`类型与40安全测试GREEN／11881.307833ms、skip0；真实App、原生探针及公开页面均未运行。限定Standards硬要求0／Fowler气味0、Spec可操作发现0。C自己三场公开TEST尚未执行，producer仍由A正式交付，不能据Node关闭公开组合验收。
+
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
 
 ## Answer
@@ -77,3 +85,7 @@ Standards复核发现跨样本／说明文字的选区校验失败后未登记�
 以`487735f`为固定点的12文件限定Standards／Spec最终均0，三个已发现P2均已复核关闭。公开`style-copy-origin`还增加跨两个样本及说明的容器选区拒绝、删除来源后独立手写项保留；这段尚未执行，仍与`style-copy-limits`一起由总协调最多两case／有限时段复验。A09/E06组合待真实正式交付，整票保持claimed。
 
 正式薄修`a1fab208`已由总协调消费为`e9cea6a`并实际执行origin＋limits两个case／240秒GREEN窗口，exit0：选区粘贴、cut-fragment和long-copy-shortened三条原RED全部转GREEN；后两条originKind=candidate／hasSources=true。此前未到达的列表选区、跨联系人、跨两样本及说明拒绝、原始来源删除后独立手写保留均实际到达通过。quiet18／active0／onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false。该正式回执补足上述公开待执行项，历史失败保留；A09删除／保存竞态和E06其他组合仍待，不因此提前关闭整票。
+
+总协调主树正式集成 `bbc038744ec9eab71dbc821fe21850fdb77e97f6` 的来源 controller 与测试切片；已有 A 删除身份 DTO 保持同一正式契约，仅合并新具名 case 登记。主树在 `desktop/` 实际运行 `node --test tests/style-samples/controller.test.mjs`：16 项 GREEN／504.490584ms、skip0；`npm run typecheck` 与差异检查通过。最终限定 Standards 硬要求 0／重要气味 0、Spec 0。
+
+此次未执行 C 自有 `style-session-editor-erasure` 三场公开 TEST，主树仍待 A 正式 producer；A working 的原十场公开 GREEN 是已发生的前置组合证据，不能代替本次主树公开验证。新增恢复历史候选复制／粘贴编辑／删除的实际 RED 仍开放，由 C 唯一 controller 与 A 薄历史面板接续修复。整票保持 claimed，原标准及人工未执行状态保留；不新增正文缓存、外部模型或发送能力。

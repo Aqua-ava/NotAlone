@@ -38,6 +38,8 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 
 ## Comments
 
+2026-10-11 接续未保存表达副本：沿 A 正式 only-metadata `2cd7810` 准备具名公开 TEST `style-session-editor-erasure`，三场分别核实际删除后清候选派生未保存编辑、保留无关手写、保留已保存样本列表复制的文字与来历。每场经页面确认／取消→真实 HTTP 旧 session404 和旧 reply／依据拒绝→显式样本前后完全相等／新 manual 保存，不改 A 原 fault，不建第二删除器。C 自有三场页面尚未执行，producer／删除按钮仍待 A 正式前端；不将 TEST 存在记作验收完成。
+
 ### 总协调独立保留测试的正式前置反例（2026-10-11）
 
 仅测试主题 `d3c3595b25a2684ea951845d35f84e520108ca12` 原样接入主树后，在实际001–053随机隔离库执行source场，真实生成、candidate及manual显式保存、A turn正文正向检查均已到达；A09 DELETE仍返回404、期望200，1项实际RED（1.160s），模型仅1次，自有库remaining=0。删除后的独立保留及传递清理尚未到达，不记GREEN；原断言及本票claimed保持。该结果与C此前正式52下404分别保留，等待A09正式删除后端接入再运行两场，不新增另一删除器。
@@ -99,3 +101,8 @@ Skill探索组合实际接续：已消费B正式UUID后端`1484c2b`为`0b0fce7`�
 该Skill组合主题Spec发现探索排除断言最初只查Human JSON，未覆盖实际system／其他消息／工具参数。已补四次实际模型出站请求的完整数量，以及前两次探索完整`seen_model_payloads`全部样本ID／原文均缺席的断言，原Human检查和生成／删除断言全保留。补强前同主题新5项＋B探索／组／声明＋C场景／删除／参考共44真实HTTP／PG GREEN／71.560秒、skip0，8个本轮随机Core库精确核对剩余0；补强两场单独复跑结果另列。当前产品没有变更，不以原较窄断言代替最终全请求证据。
 
 探索全请求P2补强后的同一两场实际复跑2项GREEN／4.159秒，正式001–052随机库精确清理；system／完整messages／tools／settings内均未含样本身份或原文。生成的低权重样本、实际Skill Tool同版、两轮完整计量、重放和删除断言保持。最终审查据此复核，不重复外部模型或页面实验。
+
+
+未保存编辑区原公开 RED 已由 root 在 A faults／lifecycle 两 case240 秒取得：实际 DELETE 后候选粘贴编辑仍留 React 正文，quiet35／cleanuptrue／单 Chrome／Electron-native=false，后续未到达不记 GREEN。C 正式 `bbc038744ec9eab71dbc821fe21850fdb77e97f6` 沿正式 DTO 在唯一 controller 实现选择性 erasureRevision，只有候选关联副本清空，保留显式保存样本、列表复制、无关手写和原始本人消息；跨会话候选由现有后端依据实查，不另造删除权威。C 新 Node 行为回归16 GREEN／112.305ms、typecheck及安全40 GREEN／11881.307833ms、两轴0；其三场 TEST 没有运行，等待 A 正式 producer 与主树公开集成。原类型 union、指纹反例及 CLI 环境失败均在 E04 保留。
+
+后续主 Agent 已在 A working 前置联合执行原 faults／lifecycle 十场，全部 GREEN／quiet68／cleanuptrue，但新增恢复历史候选选区复制→粘贴编辑→删除的公开单场取得真实 RED：DELETE／GET404 后输入框仍有副本，quiet17／cleanuptrue，后续旧 clipboard 禁洗 manual、独立样本及新 CID 断言尚未到达。这项新缺口仍由 C 唯一来源 controller、A 历史面板薄接线修复，不能凭原十场关闭本票；root 的正式 producer 尚未接入，人工部分未执行。
