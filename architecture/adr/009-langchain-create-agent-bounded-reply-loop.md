@@ -50,6 +50,8 @@ validate_scope
 
 ### 4. Todo 与上下文压缩使用 LangChain middleware
 
+> 2026-10-11：适用范围由 [ADR-042](042-assistant-session-context-boundary.md)局部修订；本节不能用于压缩跨请求的持续助手讨论。单次运行消息机制继续有效。
+
 `create_agent` 始终注册 `TodoListMiddleware`，让模型在步骤会随 Tool 结果变化的多步骤请求中调用 `write_todos`；普通回复不强制创建 Todo。有 Todo 时，UI 展示精简的步骤与进度。Todo 是本次运行计划，不是业务事实、关系资料或后台任务状态。
 
 `SummarizationMiddleware` 在达到可配置 token 或消息阈值时压缩较早运行消息并保留最近原文。压缩摘要只属于可丢弃、可重建的 Agent runtime state；PostgreSQL 中的 `message`、`memory_candidate` 和 `confirmed_memory` 仍是权威事实。若使用 checkpointer 延续同一聊天线程，来源或联系人删除必须使相关摘要和 checkpoint 失效，恢复前仍要重新校验联系人、授权与删除状态。

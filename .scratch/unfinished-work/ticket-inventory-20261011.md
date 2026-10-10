@@ -1,8 +1,8 @@
 # 已发布任务全量索引（2026-10-11）
 
-范围：`.scratch/*/issues/*.md`，共166张。状态快照取自原任务字段，包含Markdown引用格式；不把规格、实验报告或草图混入任务数量。
+范围：`.scratch/*/issues/*.md`，共172张。状态快照取自原任务字段，包含Markdown引用格式；不把规格、实验报告或草图混入任务数量。
 
-统计：160 resolved、4 claimed、2 open。resolved中5张wontfix，表示关闭处理而非功能交付；历史实验可因结论明确而关闭，旧Swift实现也不代表当前Electron已验收。未关闭项的细节见[总览](README.md)。
+统计：160 resolved、4 claimed、8 open。resolved中5张wontfix，表示关闭处理而非功能交付；历史实验可因结论明确而关闭，旧Swift实现也不代表当前Electron已验收。未关闭项的细节见[总览](README.md)。
 
 本索引不重写历史元数据。部分旧票没有规范的Answer标题，或Triage使用旧值resolved；完成证据须沿原票的完成记录/评论核对，不能只看勾选和字段。本次未重跑历史测试，也未将历史状态格式问题擅自改成新的产品待办。
 
@@ -11,6 +11,17 @@
 | 任务 | State | Triage | 解释 |
 | --- | --- | --- | --- |
 | [修复重复初始化、复用退出与嵌套签名](../app-data-permission-lifecycle/issues/01-bound-runtime-and-signing.md) | resolved | ready-for-agent | 原票范围已关闭；具体证据及限制见原文 |
+
+## assistant-session-context
+
+| 任务 | State | Triage | 解释 |
+| --- | --- | --- | --- |
+| [01：创建、恢复和删除一段助手会话](../assistant-session-context/issues/01-session-lifecycle.md) | open | ready-for-agent | 新发布，等待按依赖实现；未执行验收 |
+| [02：连续修改、明确指代和候选版本](../assistant-session-context/issues/02-continuous-revision.md) | open | ready-for-agent | 新发布，等待按依赖实现；未执行验收 |
+| [03：生成中新要求和新消息的处理](../assistant-session-context/issues/03-generation-replacement.md) | open | ready-for-agent | 新发布，等待按依赖实现；未执行验收 |
+| [04：会话列表、切换及应用生命周期](../assistant-session-context/issues/04-switch-and-exit.md) | open | ready-for-agent | 新发布，等待按依赖实现；未执行验收 |
+| [05：长度预算与显式携候选新开](../assistant-session-context/issues/05-budget-and-carry.md) | open | ready-for-agent | 新发布，等待按依赖实现；未执行验收 |
+| [06：完整合成回归与真实 App 生命周期验收](../assistant-session-context/issues/06-integrated-acceptance.md) | open | ready-for-agent | 新发布，等待按依赖实现；未执行验收 |
 
 ## background-import-tasks
 
