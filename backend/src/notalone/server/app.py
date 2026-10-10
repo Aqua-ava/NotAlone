@@ -1178,9 +1178,22 @@ class BackendApp:
                 return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             session_id = UUID(parts[4])
             if len(parts) == 5 and method == "GET":
-                turns = service.read(owner_id=self._owner_id, contact_id=contact_id, session_id=session_id)
+                snapshot = service.read_session(owner_id=self._owner_id, contact_id=contact_id, session_id=session_id)
                 return _json_response(HTTPStatus.OK, {
-                    "session_id": str(session_id), "turns": [_assistant_turn_payload(turn) for turn in turns],
+                    "session_id": str(session_id),
+                    "current_input_version_id": (str(snapshot.current_input_version_id)
+                                                  if snapshot.current_input_version_id is not None else None),
+                    "turns": [_assistant_turn_payload(turn) for turn in snapshot.turns],
+                    "inputs": [_assistant_input_payload(record) for record in snapshot.inputs],
+                })
+            if len(parts) == 6 and parts[5] == "inputs" and method == "POST":
+                content, expected = _parse_assistant_discussion_request(body)
+                version = service.record_discussion_input(
+                    owner_id=self._owner_id, contact_id=contact_id, session_id=session_id,
+                    content=content, expected_input_version_id=expected,
+                )
+                return _json_response(HTTPStatus.OK, {
+                    "session_id": str(session_id), "input_version_id": str(version),
                 })
             if len(parts) == 6 and parts[5] == "replies" and method == "POST":
                 body_contact, request = parse_reply_request(body)
@@ -2502,6 +2515,40 @@ def _assistant_turn_payload(turn: AssistantTurn) -> dict[str, object]:
             else "相关来源不可用" if turn.state == "unavailable" else None
         ),
     }
+
+
+def _assistant_input_payload(record: Any) -> dict[str, object]:
+    return {
+        "input_version_id": str(record.input_version_id), "type": record.type,
+        "conversation_binding_id": str(record.conversation_binding_id),
+        "turn_id": str(record.turn_id) if record.turn_id is not None else None,
+        "state": record.state, "content": record.content,
+        "placeholder": ("相关来源已删除" if record.state == "redacted"
+                        else "相关来源不可用" if record.state == "unavailable" else None),
+    }
+
+
+def _parse_assistant_discussion_request(body: bytes) -> tuple[dict[str, Any], UUID | None]:
+    from notalone.persistence.assistant_session_inputs import normalize_discussion_content
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        raise ReplyRequestInvalid() from None
+    if not isinstance(payload, dict) or set(payload) - {"content", "expected_input_version_id"}:
+        raise ReplyRequestInvalid()
+    expected = payload.get("expected_input_version_id")
+    if expected is not None:
+        if not isinstance(expected, str):
+            raise ReplyRequestInvalid()
+        try:
+            expected = UUID(expected)
+        except ValueError:
+            raise ReplyRequestInvalid() from None
+    try:
+        content = normalize_discussion_content(payload.get("content"))
+    except AssistantSessionRejected:
+        raise ReplyRequestInvalid() from None
+    return content, expected
 
 
 def _message_payload(message: StreamedMessage) -> dict[str, object]:

@@ -137,6 +137,7 @@ class ReplyServiceRequest:
     continued_from_candidate_id: UUID | None = None
     skill_version_id: UUID | None = None
     skill_disabled: bool = False
+    expected_input_version_id: UUID | None = None
 
     def build_command(
         self,

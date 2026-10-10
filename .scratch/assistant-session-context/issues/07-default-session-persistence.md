@@ -75,4 +75,23 @@ python -m unittest tests.integration.server.test_assistant_session_api tests.int
 
 讨论及候选默认保留，依赖删除进入原事务清理，新输入不静默变为长期偏好。源失效时不返回正文，实际删除清除回复关联和恢复副本；本人记忆原有删除指纹语义保留。测试过程只生成随机合成 owner/contact，并按实际归属清理，不提交截图或数据库产物。
 
-真实 App、微信/OCR、原生生命周期、外部模型语义及 19 未执行；原验收标准保留。C 的独立表达样本与公共原始来源快照尚未消费，09/E06 及最终集成仍需对正式同一接口复验，不把本票结果当作样本删除组合通过。没有 push、发布或部署；后续 08–18 继续执行，本票完成不是持续目标结束。
+真实 App、微信/OCR、原生生命周期、外部模型语义及 19 未执行；原验收标准保留。初次交付时 C 的独立表达样本与公共原始来源快照尚未消费，后续已按下文集成；09/E06 及最终组合仍需分别验证，不把本票结果当作样本删除组合通过。没有 push、发布或部署；后续 08–18 继续执行，本票完成不是持续目标结束。
+
+### 公共统一输入接口追加
+
+2026-10-11：已消费 C049 公共原始来源事实、样本服务及 B050 主动目的契约；A051 正式迁移扩展会话输入版本。此段交付公共基础，不宣称后续讨论、并发或候选编辑任务已经完成。
+
+- `assistant_session.current_input_version_id` 是单一当前输入指针。生成输入仅关联原 turn，不复制正文；回应理解和主动目的讨论保存已确认字段及服务端核验依赖，按 owner/contact/session 隔离。
+- `POST /api/contacts/{contact_id}/assistant-sessions/{session_id}/inputs` 拒绝客户端来源声明，GET 在同一事务返回输入、当前指针及讨论；新请求校验 expected UUID，同键历史重放不回退当前版本。模型保存后、turn 完成前再次校验，迟到旧结果不能成为有效候选。
+- 共享 `require_current_input(connection, scope, session_id, input_version_id)` 与 `record_discussion_input_in_transaction(connection, scope, session_id, content, expected_input_version_id=None, *, verified_dependencies=())` 使用调用方原事务。后者不提交、不改调用方 row factory，供 B 输入与操作键原子保存，不另建当前指针。
+- 原始来源沿用 C 已捕获的事实，后来挂接的来源不补入旧候选；缺快照或来源失效仅遮挡受影响记录。关系记忆删除在软删前精准擦除关联讨论和父子回复，保留无关生成；联系人、本人与候选记忆按数据库时间重新核验有效期。
+
+最终实际命令（工作目录 `backend/`，已激活 Conda `NotAlone`，自有隔离实例；升级用例另建随机专属库并使用正式迁移 runner）：
+
+```bash
+NOTALONE_DISABLE_DOTENV=1 NOTALONE_TEST_DATABASE_URL='postgresql:///notalone_a_session_test?host=/tmp&port=55441' PYTHONPATH=src python -m unittest tests.integration.server.test_assistant_session_inputs tests.integration.server.test_assistant_session_memory_dependencies tests.integration.server.test_assistant_session_api tests.integration.persistence.test_assistant_session_input_upgrade tests.integration.persistence.test_postgres_memory_store tests.integration.persistence.test_postgres_owner_memory.PostgresOwnerMemoryStoreTest.test_delete_is_soft_and_keeps_fingerprint tests.integration.persistence.test_source_deletion.PostgresSourceDeletionRepositoryTest.test_delete_source_cleans_confirmed_memory_and_index_projection tests.integration.persistence.test_source_deletion.PostgresSourceDeletionRepositoryTest.test_delete_source_keeps_memory_supported_by_another_source tests.integration.persistence.test_source_deletion.PostgresSourceDeletionRepositoryTest.test_delete_failure_is_recorded_without_losing_content -v
+```
+
+最终相关 72/72，28.899 秒，OK：输入 HTTP 10、记忆 HTTP/PG 4、既有会话 HTTP 24、真实升级及事务 14、MemoryStore 16、本人删除 1、来源清理 3。实际 red→green 包括删除后正文残留、八个记忆有效期子反例、来源快照缺失、save→complete 窗口，以及共享事务接口缺失；tuple/dict、已有 owner 锁不自锁、rollback/commit 均经真实 PG 验证。Standards 硬规范/气味均 0，Spec 复查剩余 0；原两项审查缺陷修复后才交付。
+
+新增正文仍只保存在权威讨论记录，来源清除会擦正文及依赖，历史不可恢复；不保存原始视觉帧，不新增聊天发送或后台自治能力。真实 App、私人资料、外部模型、19、push 和部署均未执行。

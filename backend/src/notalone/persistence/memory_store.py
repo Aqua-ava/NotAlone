@@ -876,6 +876,8 @@ class PostgresMemoryStore:
                 self._ensure_scope(row, scope)
                 if next_status is ConfirmedMemoryStatus.DELETED:
                     lock_owner_scope(connection, owner_id=scope.owner_id)
+                    from notalone.persistence.reply_cleanup import delete_contact_memory_replies
+                    delete_contact_memory_replies(connection, scope=scope, memory_id=memory_id)
                     erase_record_traces(
                         connection,
                         owner_id=scope.owner_id,

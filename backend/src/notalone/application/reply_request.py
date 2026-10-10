@@ -67,12 +67,17 @@ def parse_reply_request(body: bytes) -> tuple[UUID, ReplyServiceRequest]:
     skill_disabled = payload.get("skill_disabled", False)
     if not isinstance(skill_disabled, bool) or (skill_disabled and skill_id is not None):
         raise ReplyRequestInvalid()
+    expected_input_version_id = (
+        _uuid_field(payload, "expected_input_version_id")
+        if "expected_input_version_id" in payload else None
+    )
     return contact_id, ReplyServiceRequest(
         idempotency_key=idempotency_key,
         content=content,
         continued_from_candidate_id=continued_id,
         skill_version_id=skill_id,
         skill_disabled=skill_disabled,
+        expected_input_version_id=expected_input_version_id,
     )
 
 

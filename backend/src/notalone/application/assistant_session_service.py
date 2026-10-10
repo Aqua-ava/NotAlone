@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
 
 from notalone.application.reply_service import ReplyService, ReplyServiceRequest
 from notalone.reply.errors import ReplyInProgressError
 from notalone.reply.interface import ReplyGenerated
 from notalone.scopes import ContactScope
+
+if TYPE_CHECKING:
+    from notalone.persistence.assistant_session_inputs import AssistantInput
 
 
 class AssistantSessionError(RuntimeError):
@@ -45,10 +48,28 @@ class AssistantTurn:
     reply: ReplyGenerated | None
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class AssistantSessionSnapshot:
+    session_id: UUID
+    current_input_version_id: UUID | None
+    turns: tuple[AssistantTurn, ...]
+    inputs: tuple[AssistantInput, ...]
+
+
 class AssistantSessionStore(Protocol):
     def default(self, scope: ContactScope) -> UUID: ...
 
     def read(self, scope: ContactScope, session_id: UUID) -> tuple[AssistantTurn, ...]: ...
+
+    def read_session(self, scope: ContactScope, session_id: UUID) -> AssistantSessionSnapshot: ...
+
+    def record_discussion_input(
+        self, scope: ContactScope, session_id: UUID, content: dict[str, Any],
+        expected_input_version_id: UUID | None = None,
+        *, verified_dependencies: tuple[UUID, ...] = (),
+    ) -> UUID: ...
+
+    def is_current_input(self, scope: ContactScope, session_id: UUID, input_version_id: UUID) -> bool: ...
 
     def reserve(
         self, scope: ContactScope, session_id: UUID, request: ReplyServiceRequest,
@@ -76,6 +97,21 @@ class AssistantSessionService:
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
     ) -> tuple[AssistantTurn, ...]:
         return self._store.read(ContactScope(owner_id, contact_id), session_id)
+
+    def read_session(
+        self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
+    ) -> AssistantSessionSnapshot:
+        return self._store.read_session(ContactScope(owner_id, contact_id), session_id)
+
+    def record_discussion_input(
+        self, *, owner_id: UUID, contact_id: UUID, session_id: UUID, content: dict[str, Any],
+        expected_input_version_id: UUID | None = None,
+        verified_dependencies: tuple[UUID, ...] = (),
+    ) -> UUID:
+        return self._store.record_discussion_input(
+            ContactScope(owner_id, contact_id), session_id, content, expected_input_version_id,
+            verified_dependencies=verified_dependencies,
+        )
 
     def generate(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
