@@ -54,6 +54,7 @@ from notalone.application.assistant_session_service import (
     AssistantTurn,
 )
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
+from notalone.persistence.assistant_session_catalog import PostgresAssistantSessionCatalog
 from notalone.application.reply_evidence import ReplyEvidenceService, ReplyEvidenceIncomplete
 from notalone.reply.errors import (
     ReplyStoreInvariantError, ReplyPersistenceError, ReplyInProgressError,
@@ -1195,9 +1196,26 @@ class BackendApp:
             if parts[3:] == ["assistant-session", "default"] and method == "POST":
                 session_id = service.default(owner_id=self._owner_id, contact_id=contact_id)
                 return _json_response(HTTPStatus.OK, {"session_id": str(session_id)})
+            if parts[3:] == ["assistant-sessions"] and method == "POST":
+                if json.loads(body.decode("utf-8")) != {}:
+                    raise ReplyRequestInvalid()
+                session_id = service.new(owner_id=self._owner_id, contact_id=contact_id)
+                return _json_response(HTTPStatus.OK, {"session_id": str(session_id)})
+            if parts[3:] == ["assistant-sessions"] and method == "GET":
+                sessions = service.list_sessions(owner_id=self._owner_id, contact_id=contact_id)
+                return _json_response(HTTPStatus.OK, {
+                    "sessions": [{"session_id": str(item.session_id), "is_current": item.is_current}
+                                 for item in sessions],
+                    "current_session_id": next((str(item.session_id) for item in sessions if item.is_current), None),
+                })
             if len(parts) not in (5, 6) or parts[3] != "assistant-sessions":
                 return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             session_id = UUID(parts[4])
+            if len(parts) == 6 and parts[5] == "select" and method == "POST":
+                if json.loads(body.decode("utf-8")) != {}:
+                    raise ReplyRequestInvalid()
+                selected = service.select(owner_id=self._owner_id, contact_id=contact_id, session_id=session_id)
+                return _json_response(HTTPStatus.OK, {"session_id": str(selected)})
             if len(parts) == 5 and method == "DELETE":
                 confirmation = json.loads(body.decode("utf-8"))
                 if (not isinstance(confirmation, dict) or set(confirmation) != {"confirmed"}
@@ -2129,6 +2147,7 @@ def create_app(
         reply_service=reply_service,
         assistant_sessions=assistant_sessions or AssistantSessionService(
             store=PostgresAssistantSessionStore(database_url), reply=reply_service,
+            catalog=PostgresAssistantSessionCatalog(database_url),
         ),
         reply_evidence=reply_evidence
         or ReplyEvidenceService(PostgresReplyStore(database_url)),

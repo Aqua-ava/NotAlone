@@ -56,6 +56,20 @@ class AssistantSessionSnapshot:
     inputs: tuple[AssistantInput, ...]
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class AssistantSessionSummary:
+    session_id: UUID
+    is_current: bool
+
+
+class AssistantSessionCatalogPort(Protocol):
+    def new(self, scope: ContactScope) -> UUID: ...
+
+    def list_sessions(self, scope: ContactScope) -> tuple[AssistantSessionSummary, ...]: ...
+
+    def select(self, scope: ContactScope, session_id: UUID) -> UUID: ...
+
+
 class AssistantSessionStore(Protocol):
     def default(self, scope: ContactScope) -> UUID: ...
 
@@ -88,12 +102,30 @@ class AssistantSessionStore(Protocol):
 class AssistantSessionService:
     """未可靠保存的生成不能作为完成结果返回；失败重试沿用原请求身份。"""
 
-    def __init__(self, *, store: AssistantSessionStore, reply: ReplyService | None) -> None:
+    def __init__(
+        self, *, store: AssistantSessionStore, reply: ReplyService | None,
+        catalog: AssistantSessionCatalogPort | None = None,
+    ) -> None:
         self._store = store
         self._reply = reply
+        self._catalog = catalog
 
     def default(self, *, owner_id: UUID, contact_id: UUID) -> UUID:
         return self._store.default(ContactScope(owner_id, contact_id))
+
+    def _catalog_port(self) -> AssistantSessionCatalogPort:
+        if self._catalog is None:
+            raise AssistantSessionPersistenceError("助手会话目录尚不可用。")
+        return self._catalog
+
+    def new(self, *, owner_id: UUID, contact_id: UUID) -> UUID:
+        return self._catalog_port().new(ContactScope(owner_id, contact_id))
+
+    def list_sessions(self, *, owner_id: UUID, contact_id: UUID) -> tuple[AssistantSessionSummary, ...]:
+        return self._catalog_port().list_sessions(ContactScope(owner_id, contact_id))
+
+    def select(self, *, owner_id: UUID, contact_id: UUID, session_id: UUID) -> UUID:
+        return self._catalog_port().select(ContactScope(owner_id, contact_id), session_id)
 
     def read(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
