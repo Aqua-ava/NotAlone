@@ -63,3 +63,11 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 恢复组合页面接续：正式A08已消费为`57735a8`，B三声明薄字段为`dd62af9`。新增具名`authentic-expression-recovery`：在实际公开页面保存独立草稿讨论，显式保存手工样本或有原始来源的候选样本，再以当前拒绝目的生成并核对实际样本载荷／回执。删除样本或通过公开来源管理删除原始来源后，核对旧键、继续和依据拒绝，独立旧键重读保留；断线重连及重新装配后端实例／页面宿主均只恢复独立讨论，相关turn无input/reply，模型不额外调用。
 
 该TEST切片尚未执行页面，不预填GREEN；最小串行预约命令为desktop内`npm run test:pages -- --case authentic-expression-recovery --timeout-seconds 180`，沿原单Chrome/inline范围/nonce/租约门禁，只替受控模型和必要连接生命周期。`restart`只重新装配同一Python夹具中的后端，不称进程重启、退出验收或真实App。A09会话删除、B公开探索/消息组和A12总预算仍待正式依赖。
+
+三项单次声明组合接续：正式B基础／候选组／052已顺序消费至`75c5eb2`，无第二schema。新增回应、主动各一条真实HTTP场景，每场三次实际调用；非空understanding_correction、user_instruction、clarification_answer与当前意图分别传递，表达样本仍独立低权重、不能成为引用事实。沿候选继续时调整表达要求而保留拒绝；A持久输入重读保留各轮字段，同键改澄清答案409且不增调用；删除样本后三轮声明、输入和候选均擦除。原不带声明的六例及报告独立保留。
+
+实际命令：Conda NotAlone/backend内`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src NOTALONE_DECLARED_COMBINED_FIDELITY_CAPTURE=../desktop/artifacts/headless-pages/authentic-declared-combination-http-observations.json python -m unittest tests.integration.server.test_authentic_expression_scenarios tests.integration.server.test_authentic_expression_combination tests.integration.server.test_style_reference_api tests.integration.server.test_exploration_generation_fields tests.integration.server.test_reply_message_groups -q`，先回应新增单例1项green，再联跑17项全green／无skip。231完整reply unit亦green；正式生产001–052重复安装及052存储／升级15项真实PG组件另以随机短名_test库运行，全green、skip0，精确清理owned_database_remaining=0。样本删除竞态的既有租约失效诊断保留，原拒绝／候选0断言不弱化。
+
+唯一E01入口生成新`docs/evaluations/authentic-expression-declared-combination-http-v1.json`，6次实际调用／792.018542ms，结构失败0、独立synthetic_fixture故意保真失败2、真人0／qualityfalse，三项真实质量维度未知；评价及期望没有进入模型。六个实际payload／system／完整输出／UUID和各轮计量保留。此报告覆盖单次声明、样本和基础候选继续，不声称已组合B完整消息组、公开探索Skill、A09或A12。`aed5517`事务hook依赖原B最小建议引用类型，当前树缺该正式前置，未完成cherry已撤销，等待B公开UUID正式切片再接，不引入旧INT公开API。
+
+限定Spec发现持久三轮重读仅zip可能漏检缺轮；已补完整轮数、输入版本和reply_request_id对应断言，两个新场景再次实际green。该复跑不覆盖原六捕获，报告保持上述原始UUID／计量。Standards原主题hard0／smell0，Spec该问题修复后接续复核。

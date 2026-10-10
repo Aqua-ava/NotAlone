@@ -101,3 +101,17 @@ PYTHONPATH=src python -m tests.fidelity_capture --capture ../desktop/artifacts/h
 ```
 
 真实A08组合页面、A09独立保留、B07持久Skill探索／澄清附加字段、B10消息组及A12完整预算仍需正式依赖后的组合证据；这些未执行项不勾选、不由本报告替代。
+
+## E06：单次声明与样本、继续的实际组合
+
+本树已消费正式B基础、候选消息组和052至`75c5eb2`。`test_authentic_expression_scenarios`追加回应／主动两场，每场三轮非空纠正、表达要求和澄清答案；当前意图独立保持，样本仍低权重。沿候选继续更改表达要求，同键改声明409而不追加调用；A保存的逐轮声明可重读，删样本后声明与输入／候选均随相关turn擦除。原六例捕获及报告保持独立，不覆盖历史结果。
+
+先回应新增单例1项green，随后场景／删除组合／样本／B字段／消息组17项真实HTTP与隔离PG全green，生产前缀001–052、无skip、精确清理。231完整回复单元green；052存储及旧候选升级15项PG组件另运行在随机短名_test库，正式52文件完整安装、重复安装0、owned_database_remaining=0。真实删除竞态的既有租约失效诊断保留。
+
+新报告`authentic-expression-declared-combination-http-v1.json`逐例保留六次实际payload、system、完整输出和UUID：792.018542ms，结构失败0，故意保真失败2，synthetic_fixture6／真人0／qualityfalse，自然度／关系适配／本人相似度unknown。三声明不是事实证据，期望与标注没有进入模型。
+
+```bash
+PYTHONPATH=src python -m tests.fidelity_capture --capture ../desktop/artifacts/headless-pages/authentic-declared-combination-http-observations.json --case-spec tests/fixtures/fidelity/combined-declared-http-review.json --output ../docs/evaluations/authentic-expression-declared-combination-http-v1.json
+```
+
+该报告不证明公开UUID探索、Skill、整组修改、A09或A12已完成。`aed5517`同事务hook所需原B建议引用类型尚未进入本树，未完成cherry已撤销，等待其正式前置再接；没有新造旧INT公开接口。A08删除恢复具名测试`a86da898`已交总协调预约，尚未取得实际页面结果。

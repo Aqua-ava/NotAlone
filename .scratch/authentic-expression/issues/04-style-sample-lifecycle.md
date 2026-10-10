@@ -75,3 +75,5 @@ Standards复核发现跨样本／说明文字的选区校验失败后未登记�
 本轮安全测试首次39通过／1失败，仅因公开status读到总协调正在持有的页面租约而非预期absent；没有改测试、抢锁或清理他人资源。租约正常收尾后再次`npm test`实际40/40通过，无skip。公开页面GREEN仍待稳定主题交付，不预填。
 
 以`487735f`为固定点的12文件限定Standards／Spec最终均0，三个已发现P2均已复核关闭。公开`style-copy-origin`还增加跨两个样本及说明的容器选区拒绝、删除来源后独立手写项保留；这段尚未执行，仍与`style-copy-limits`一起由总协调最多两case／有限时段复验。A09/E06组合待真实正式交付，整票保持claimed。
+
+正式薄修`a1fab208`已由总协调消费为`e9cea6a`并实际执行origin＋limits两个case／240秒GREEN窗口，exit0：选区粘贴、cut-fragment和long-copy-shortened三条原RED全部转GREEN；后两条originKind=candidate／hasSources=true。此前未到达的列表选区、跨联系人、跨两样本及说明拒绝、原始来源删除后独立手写保留均实际到达通过。quiet18／active0／onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false。该正式回执补足上述公开待执行项，历史失败保留；A09删除／保存竞态和E06其他组合仍待，不因此提前关闭整票。

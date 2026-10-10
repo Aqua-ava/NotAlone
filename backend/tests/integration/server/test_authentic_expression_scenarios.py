@@ -19,6 +19,7 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.capture_rows = []
+        cls.declared_capture_rows = []
 
     @classmethod
     def tearDownClass(cls):
@@ -27,6 +28,11 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
                 Path(path).write_text(json.dumps({
                     "data_kind": "synthetic", "data_version": "authentic-combination-http-v1",
                     "entry_point": "http", "rows": cls.capture_rows,
+                }, ensure_ascii=False, indent=2) + "\n")
+            if path := os.environ.get("NOTALONE_DECLARED_COMBINED_FIDELITY_CAPTURE"):
+                Path(path).write_text(json.dumps({
+                    "data_kind": "synthetic", "data_version": "authentic-combination-declared-http-v1",
+                    "entry_point": "http", "rows": cls.declared_capture_rows,
                 }, ensure_ascii=False, indent=2) + "\n")
         finally:
             super().tearDownClass()
@@ -37,7 +43,13 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
     def test_proactive_current_intent_and_continuation_keep_sample_as_expression_only(self):
         self._exercise_scenario("proactive")
 
-    def _exercise_scenario(self, mode: str):
+    def test_response_declarations_sample_and_continuation_remain_once_only_and_are_erased(self):
+        self._exercise_scenario("response", declared=True)
+
+    def test_proactive_declarations_sample_and_continuation_remain_once_only_and_are_erased(self):
+        self._exercise_scenario("proactive", declared=True)
+
+    def _exercise_scenario(self, mode: str, *, declared: bool = False):
         contact, target, _ = self.prepare_contact(self.owner_id)
         status, saved_sample = self.backend.request(f"/api/contacts/{contact}/style-samples", {
             "idempotency_key": str(uuid4()), "text": "合成旧表达：我总是答应，明晚七点陪你去合成海边。",
@@ -59,6 +71,10 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
             content = {"type": "reply_to_message", "target_message_id": target, "direction": intent} if mode == "response" else {
                 "type": "initiate_conversation", "purpose": intent,
             }
+            declarations = {"understanding_correction": "这只是合成邀约，不是已确认约定。",
+                            "user_instruction": "仅表达拒绝，不新增感受。" if index == 0 else "改成短句，仍然拒绝，不新增感受。",
+                            "clarification_answer": "不陪同，不承诺时间或地点。"} if declared else {}
+            content.update(declarations)
             body = {"contact_id": contact, "idempotency_key": str(uuid4()), "skill_disabled": True, "content": content}
             if current_version is not None:
                 body["expected_input_version_id"] = current_version
@@ -74,16 +90,35 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
             self.assertEqual(result["context_receipt"]["style_sample_ids"], [sample_id])
             self.assertNotIn(sample_id, result["context_receipt"]["evidence_ids"])
             self.assertEqual(result["candidates"][0]["text"], text)
+            for name, value in declarations.items():
+                self.assertEqual(payload[name], value)
+            self.assertFalse(any(item["text"] in declarations.values() for item in payload["evidence"]))
             if previous is not None:
                 self.assertTrue(any(item["kind"] == "continued_candidate" for item in payload["evidence"]))
             self.assertEqual(self._backend(self.owner_id).request(path + "/replies", body), (200, result))
+            if declared:
+                changed = {**body, "content": {**body["content"], "clarification_answer": "不同的合成本次回答。"}}
+                self.assertEqual(self.backend.request(path + "/replies", changed)[0], 409)
             self.assertEqual(len(self.reply_model.payloads), index + 1)
             system = "\n".join(str(message.content) for message in self.reply_model.seen_calls[-1] if message.type == "system")
-            self.capture_rows.append({"case_id": f"{mode}-style-{label}", "owner_id": str(self.owner_id), "contact_id": contact,
+            captures = self.declared_capture_rows if declared else self.capture_rows
+            case_id = f"{mode}-declared-style-{label}" if declared else f"{mode}-style-{label}"
+            captures.append({"case_id": case_id, "owner_id": str(self.owner_id), "contact_id": contact,
                                       "payload": payload, "system_prompt": system, "output": result,
                                       "latency_ms": elapsed_ms, "call_count": 1})
             current_version, previous = result["input_version_id"], result["candidates"][0]["candidate_id"]
             bodies.append(body); results.append(result)
+
+        if declared:
+            saved = self._get(self._backend(self.owner_id), path)
+            self.assertEqual(len(saved["turns"]), len(bodies))
+            self.assertEqual([turn["input_version_id"] for turn in saved["turns"]],
+                             [result["input_version_id"] for result in results])
+            self.assertEqual([turn["reply"]["reply_request_id"] for turn in saved["turns"]],
+                             [result["reply_request_id"] for result in results])
+            for turn, body in zip(saved["turns"], bodies):
+                for name in declarations:
+                    self.assertEqual(turn["input"]["content"][name], body["content"][name])
 
         status, deleted = self.backend.request(f"/api/contacts/{contact}/style-samples/{sample_id}", method="DELETE")
         self.assertEqual(status, 200, deleted)
