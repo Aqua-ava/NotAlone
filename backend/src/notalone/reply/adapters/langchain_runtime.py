@@ -755,7 +755,7 @@ def _request_text(prepared: ReplyContext) -> str:
                 item.invalid_at.isoformat() if item.invalid_at is not None else None
             ),
         }
-        for item in prepared.evidence
+        for item in prepared.evidence if item.model_visible
     ]
     payload["fidelity_contract"] = generation_contract(payload)
     payload["style_references"] = [

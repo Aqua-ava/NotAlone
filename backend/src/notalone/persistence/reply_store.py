@@ -1010,6 +1010,7 @@ class PostgresReplyStore:
                         str(source_id) for source_id in item.source_ids
                     ],
                     "selection_reason": item.selection_reason,
+                    "model_visible": item.model_visible,
                     "status": item.status,
                     "valid_at": (
                         item.valid_at.isoformat()

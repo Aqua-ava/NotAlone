@@ -246,6 +246,42 @@ class RecordingReplyContext:
 
 
 class LangChainVerticalSliceTest(unittest.TestCase):
+    def test_deletion_dependencies_do_not_expand_actual_model_input(self) -> None:
+        scope = ContactScope(OWNER_ID, CONTACT_ID)
+        content = RewriteDraft(draft_text="合成草稿：明天再聊", include_relationship_context=True)
+        command = GenerateReply(
+            idempotency_key=REQUEST_KEY, scope=scope,
+            conversation_binding_id=BINDING_ID, content=content,
+        )
+        hidden = ContextEvidence(
+            evidence_id=SECOND_REQUEST_ID, kind="message", text="合成旧方向来源，仅用于删除清理",
+            scope=scope, source_ids=(SECOND_REQUEST_KEY,), model_visible=False,
+        )
+        prepared = ReplyContext(
+            reply_request_id=REQUEST_ID, command=command, scope=scope,
+            current_text=content.draft_text, direction=None, skill_library_revision=4,
+            evidence=(ContextEvidence(evidence_id=MESSAGE_ID, kind="user_draft",
+                                      text=content.draft_text, scope=scope), hidden),
+        )
+        model = ToolCallingFakeModel(responses=[AIMessage(content="", tool_calls=[{
+            "name": "ReplyRuntimeOutput", "id": "deletion-dependency-result",
+            "args": {"candidates": [{"text": content.draft_text, "basis": "保留合成原意",
+                                      "citation_ids": [str(MESSAGE_ID)], "risk_notes": []}],
+                     "used_skill_version_id": None},
+        }])])
+
+        result = LangChainReplyRuntime(
+            model=model, skill_port=EmptySkillPort(scope=scope, revision=4),
+        ).generate(prepared)
+
+        self.assertEqual(len(model.seen_calls), 1)
+        payload = next(json.loads(message.content) for message in model.seen_calls[0]
+                       if message.type == "human")
+        self.assertEqual([item["evidence_id"] for item in payload["evidence"]], [str(MESSAGE_ID)])
+        self.assertNotIn(hidden.text, json.dumps(payload, ensure_ascii=False))
+        self.assertIn(hidden, prepared.evidence)
+        self.assertEqual(result.candidates[0].text, content.draft_text)
+
     def test_memory_validity_reaches_the_actual_model_input(self) -> None:
         scope = ContactScope(OWNER_ID, CONTACT_ID)
         content = RewriteDraft(

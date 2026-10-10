@@ -163,10 +163,13 @@ class ContextEvidence:
     invalid_at: datetime | None = None
     revision: int | None = None
     timing: MemoryTiming = MemoryTiming()
+    model_visible: bool = True
 
     def __post_init__(self) -> None:
         if not isinstance(self.timing, MemoryTiming):
             raise TypeError("回复依据时间结构无效。")
+        if type(self.model_visible) is not bool:
+            raise TypeError("回复依据模型可见标记必须为布尔值。")
 
 
 @dataclass(frozen=True, slots=True, repr=False)

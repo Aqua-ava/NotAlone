@@ -1,6 +1,6 @@
 # 02：理解、纠正与方向确认闭环
 
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/01 回应场景与明确意愿直达候选](01-response-scene-entry.md)
 
@@ -38,3 +38,24 @@ Blocked by: [conversation-reply-strategy/01 回应场景与明确意愿直达候
 ## Comments
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
+
+## 承接契约
+
+- 明确打开 `POST /api/reply/explore`，提交联系人、短任务 `task_id`、递增 `input_version`、真实 `target_message_id`、纠正和可选已确认建议引用。后端只用同范围目标、最多四条相邻消息、最多两条已确认记忆；一次结构化调用，无业务Tool或表达样本。
+- 返回理解、歧义、真实依据及2–3个不同立场方向；引用使用 `task_id + input_version + suggestion_id`，不得靠正文模糊匹配。纠正只更新探索，已选方向通过有界原始／最新引用延续，不因错误或响应丢失替换意愿。
+- 用户选择方向后再点击生成，继续进入原 `ReplyService → ReplyGenerator → Store`。确认核验只对新领取请求执行，已完成同键重放不依赖临时探索内存。建议协议只保存请求指纹；成功上下文保存当前及原已选方向的完整来源依赖。
+- 额外删除依赖以 `ContextEvidence.model_visible=false` 保留，不突破生成器原有消息、记忆预算；探索记忆正文合计最多600字符。来源删除清除缓存、已编辑派生方向及受影响持久副本；删除后拒绝重放不留下派生请求正文。
+- 缓存15分钟、最多128任务；原意愿到期同时撤销依赖它的当前快照。测试可注入探索时钟，生产仍为monotonic。持久助手会话及其权威输入版本由A负责，后续接线不能把此短任务整数版本扩展为另一套持久权威。
+
+## Answer
+
+2026-10-11：R02可自主执行范围完成；仍是单组方向，换组、澄清、主动目的、Skill及持续会话组合由各后续票推进。
+
+- TDD：公开页面红例首先缺少“帮我理清方向”，补齐后green。增加纠正、不确认不生成、显式选择、失败/丢包恢复、过期建议、跨owner/contact、迟到结果、无效引用与不同立场校验；审查补齐派生方向清理、原方向来源延续、生成预算和原快照TTL边界。
+- 页面命令：Conda NotAlone中 `npm run test:pages -- --case understanding-direction --case response-scene-entry --timeout-seconds 180`，R02六场加R01一场全部通过。真实生产页面/控制器、认证HTTP、每场随机PG、受控模型；包括持久依据重读、后端重启同键重放、独立旧来源移出检索后仍正确删除、失败请求无派生正文。
+- Python：显式 `PYTHONPATH` 指向本工作树，`python -m unittest discover -s tests/unit/reply -t . -q` 175项通过；在本轮随机迁移库运行 `test_reply_service`、`test_reply_api`、`test_postgres_reply_store`、`test_source_deletion` 共46项通过，精确核对测试库剩余0。共享Conda最初导入主仓和共用测试库schema不匹配的结果不计本票证据，没有迁移共用或业务库。
+- `npm run typecheck`、安全调度CLI10项及 `git diff --check` 通过；Standards/Spec独立只读审查最终均0。静态审查不作为运行结果。
+- 测试修正：异步计数曾包含跨用户拒绝响应；删除夹具补齐真实任务、记忆服务。一次旧PageHost未先关闭就重启后端导致原资源报告cleanupConfirmed=false；保留该失败报告，核验仅本轮PID/进程组均已退出、随机库剩余0后恢复自有租约，后续改为先关闭再重启，最终cleanupConfirmed=true。未杀未知进程。
+- 数据影响与剩余：只处理合成消息、受控模型和随机测试库；正文不进入普通日志，探索不写长期偏好。未运行真实App、OCR、微信或额外外部模型，未验收原生能力或自然语言质量。总协调跨账户工具暂不可达，交付保留本地；持久会话权威版本及跨模块组合仍须后续真实接入，不据本票宣称全功能完成。
+
+2026-10-11 持久权威接续：按总协调唯一实现决定，将此前临时整数任务版本改接A051持久UUID；旧7场景公开页面/175回复单元/46隔离PG证据仍保留，不能代表新适配已完成。当前抽取最小探索快照（回应目标±2、主动最近5、已确认资料2），只保存有限展示正文和原事实指纹，复验完整正文/源/角色/时间；保留实际删除对象ID、去除手工身份哨兵，原意愿依赖不进入生成模型。7项TDD单元通过，跨范围复验两个red断言已修正，两轴该模块复审0。等待正式A051后装配唯一公开探索并重跑真实HTTP/页面；State回到claimed，不改写旧验收证据。
