@@ -77,16 +77,23 @@ async function inspectRuntime(input) {
     if (!new RegExp(`\\b${type}\\b`).test(header.split('\n').slice(1).join('\n'))) throw new Error('helper_check_binary_type');
     await tool('/usr/bin/codesign', ['--verify', '--strict', file], 'helper_check_signature', deadline);
     const commands = loadCommands(await tool('/usr/bin/otool', ['-arch', input.arch, '-l', file], 'helper_check_dependency_unresolved', deadline));
-    const rpaths = [...commands.rpaths.map((value) => localPath(value, path.dirname(file), root)).filter(Boolean), ...inheritedRpaths];
+    const rpaths = [...commands.rpaths.map((value) => localPath(value, path.dirname(file), root)), ...inheritedRpaths];
     for (const dependency of commands.dependencies) {
       if (dependency === path.normalize(dependency) && (dependency.startsWith('/usr/lib/') || dependency.startsWith('/System/Library/'))) continue;
+      // 不跳过更早的未知搜索路径：实际装载可能优先命中目录外副本。
+      if (dependency.startsWith('@rpath/') && rpaths.some((directory) => !directory || (directory !== root && !inside(root, directory)))) throw new Error('helper_check_dependency_unresolved');
       const candidates = dependency.startsWith('@rpath/')
         ? rpaths.map((directory) => path.resolve(directory, dependency.slice(7)))
         : [localPath(dependency, path.dirname(file), root)];
       let resolved;
       for (const candidate of candidates) {
-        if (!candidate || !inside(root, candidate)) continue;
-        try { if (await realpath(candidate) === candidate) { resolved = candidate; break; } } catch {}
+        if (!candidate || !inside(root, candidate)) throw new Error('helper_check_dependency_unresolved');
+        try {
+          if (await realpath(candidate) !== candidate) throw new Error('helper_check_dependency_unresolved');
+          resolved = candidate; break;
+        } catch (error) {
+          if (error.code !== 'ENOENT') throw new Error('helper_check_dependency_unresolved');
+        }
       }
       if (!resolved) throw new Error('helper_check_dependency_unresolved');
       await inspect(resolved, rpaths);

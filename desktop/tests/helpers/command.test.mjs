@@ -28,7 +28,7 @@ test('脚本冒充CLI时拒绝格式，不运行输入文件或泄露路径与�
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
-async function withRuntime(use) {
+async function withRuntime(use, rpaths = ['@executable_path']) {
   const directory = await mkdtemp(path.join(tmpdir(), 'notalone-helper-runtime-'));
   const build = (program, values) => {
     const result = spawnSync(program, values, { encoding: 'utf8', timeout: 20_000 });
@@ -39,7 +39,7 @@ async function withRuntime(use) {
     const sentinel = path.join(directory, 'executed');
     await writeFile(path.join(directory, 'cli.c'), `#include <stdio.h>\nextern int synthetic_wcdb(void);\nint main(void) { FILE *f = fopen(${JSON.stringify(sentinel)}, "w"); if (f) fclose(f); return synthetic_wcdb(); }\n`);
     build('/usr/bin/xcrun', ['clang', '-dynamiclib', path.join(directory, 'wcdb.c'), '-Wl,-install_name,@rpath/libWCDB.dylib', '-o', path.join(directory, 'libWCDB.dylib')]);
-    build('/usr/bin/xcrun', ['clang', path.join(directory, 'cli.c'), '-L', directory, '-lWCDB', '-Wl,-rpath,@executable_path', '-o', path.join(directory, 'wechat-cli')]);
+    build('/usr/bin/xcrun', ['clang', path.join(directory, 'cli.c'), '-L', directory, '-lWCDB', ...rpaths.map((value) => `-Wl,-rpath,${value}`), '-o', path.join(directory, 'wechat-cli')]);
     for (const name of ['wechat-cli', 'libWCDB.dylib']) build('/usr/bin/codesign', ['--force', '--sign', '-', path.join(directory, name)]);
     await use(directory, sentinel);
   } finally { await rm(directory, { recursive: true, force: true }); }
@@ -104,4 +104,19 @@ test('动态库改名为wechat-cli不能当作可执行运行时通过', { skip:
     assert.equal(result.status, 2);
     assert.equal(JSON.parse(result.stdout).code, 'helper_check_binary_type');
   });
+});
+test('RPATH先搜索外部或未知目录时，不因内部副本存在而通过', { skip: process.platform !== 'darwin' }, async () => {
+  const outside = await mkdtemp(path.join(tmpdir(), 'notalone-helper-search-'));
+  try {
+    for (const rpath of [outside, '@unknown_runtime/directory']) {
+      await withRuntime(async (directory, sentinel) => {
+        await copyFile(path.join(directory, 'libWCDB.dylib'), path.join(outside, 'libWCDB.dylib'));
+        const result = spawnSync(process.execPath, [command, ...args(directory)], { encoding: 'utf8', timeout: 20_000 });
+        assert.equal(result.status, 2);
+        assert.equal(JSON.parse(result.stdout).code, 'helper_check_dependency_unresolved');
+        assert.doesNotMatch(result.stdout + result.stderr, new RegExp(outside));
+        await assert.rejects(access(sentinel));
+      }, [rpath, '@executable_path']);
+    }
+  } finally { await rm(outside, { recursive: true, force: true }); }
 });

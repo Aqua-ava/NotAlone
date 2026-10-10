@@ -67,7 +67,7 @@ npm run package
 npm run check:helpers -- --directory /绝对路径/cli-runtime --version v1.2.3 --source https://example.org/public-runtime
 ```
 
-仅 macOS 支持。目录至少含 `wechat-cli` 和 `libWCDB.dylib`；默认检查本机架构，可显式选 `--arch arm64` 或 `--arch x86_64`。命令只读取必需文件和 Mach-O 声明的目录内依赖，不扫描其他目录、不加载 WCDB、不运行 CLI/探针；只调用系统 `lipo`、`otool` 和 `codesign --verify --strict`。符号链接、目录外非系统依赖、缺文件、错误架构/文件类型、签名失败或核查中变化都拒绝。只支持可明确解析的 `@loader_path`、`@executable_path` 与 `@rpath`；不可解析的布局须先整理输入，不猜测其他路径。
+仅 macOS 支持。目录至少含 `wechat-cli` 和 `libWCDB.dylib`；默认检查本机架构，可显式选 `--arch arm64` 或 `--arch x86_64`。命令只读取必需文件和 Mach-O 声明的目录内依赖，不扫描其他目录、不加载 WCDB、不运行 CLI/探针；只调用系统 `lipo`、`otool` 和 `codesign --verify --strict`。符号链接、目录外非系统依赖、缺文件、错误架构/文件类型、签名失败或核查中变化都拒绝。只支持可明确解析的 `@loader_path`、`@executable_path` 与 `@rpath`；依赖使用 `@rpath` 时，搜索目录须全部明确落在所选目录内，外部/未知搜索项即使后面存在内部副本也拒绝，不推测系统缓存或跳过潜在优先副本。不可解析的布局须先整理输入，不猜测其他路径。
 
 JSON 输出只有状态、安全错误码、声明版本、相对文件名、架构、大小和 SHA-256；不回显绝对目录、原始工具输出或来源 URL。退出 0 表示 `static_checks_passed`，退出 2 表示拒绝。版本/来源仍是声明而非核验；`provenanceVerified`、`runtimeValidated`、`helperExecuted` 和 `nativeAcceptance` 均为 false。签名通过不证明可信发行者、Developer ID、公证、权限或完整动态加载行为；WCDB 作为已知动态加载依赖单独检查，其他未写入 Mach-O 的动态加载依赖仍需按实际 CLI 版本核对。目录内最多检查 64 个文件，单文件最多 256 MiB，整体核查预算 60 秒。
 
