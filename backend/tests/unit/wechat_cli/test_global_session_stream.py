@@ -86,7 +86,6 @@ class GlobalSessionStreamTest(unittest.TestCase):
                     "2026-09-01T10:00:00+08:00",
                     "--include-media-paths",
                     "false",
-                    "--jsonl",
                     "--strict-read-only",
                 )
             ],

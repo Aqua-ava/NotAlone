@@ -119,6 +119,94 @@ class BlockingCommandProcess:
 
 
 class LocalWechatCliAdapterTest(unittest.TestCase):
+    def test_empty_live_tail_envelope_confirms_freshness_without_advancing(self) -> None:
+        runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=json.dumps({
+            "ok": True,
+            "data": {
+                "events": [], "cursor": "opaque-current-cursor",
+                "freshness": {"message_source": "live_message_db"},
+                "query": {"chat": "wxid_1", "has_more": False},
+            },
+        })))
+
+        result = LocalWechatCli(runner=runner).tail("wxid_1", cursor="opaque-current-cursor")
+
+        self.assertTrue(result.freshness_confirmed)
+        self.assertEqual(result.events, ())
+        self.assertIsNone(result.cursor)
+        self.assertIsNone(result.last_local_id)
+        self.assertNotIn("--jsonl", runner.calls[0])
+
+    def test_tail_envelope_rejects_unproven_or_other_chat_freshness(self) -> None:
+        cases = [
+            {"freshness": {}},
+            {"freshness": {"message_source": "cache"}},
+            {"query": {"chat": "wxid_other", "has_more": False}},
+            {"query": {"chat": "wxid_1"}},
+            {"query": {"chat": "wxid_1", "has_more": True}},
+            {"warnings": ["合成降级警告"]},
+            {"error": {"message": "合成错误"}},
+        ]
+        for changes in cases:
+            with self.subTest(changes=changes):
+                data = {
+                    "events": [],
+                    "freshness": {"message_source": "live_message_db"},
+                    "query": {"chat": "wxid_1", "has_more": False},
+                }
+                data.update(changes)
+                runner = RecordingRunner(FakeCommandResult(
+                    returncode=0, stdout=json.dumps({"ok": True, "data": data})
+                ))
+                with self.assertRaises(CliOutputError) as raised:
+                    LocalWechatCli(runner=runner).tail("wxid_1")
+                self.assertEqual(raised.exception.code, "cli_freshness_unknown")
+
+    def test_tail_envelope_parses_messages_and_rejects_cross_contact_events(self) -> None:
+        for talker in ("wxid_1", "wxid_other"):
+            with self.subTest(talker=talker):
+                runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=json.dumps({
+                    "ok": True,
+                    "data": {
+                        "events": [{
+                            "type": "message", "cursor": "local_id:43",
+                            "message": {
+                                "id": {"local_id": 43, "talker": talker},
+                                "kind": "text", "text": "合成消息", "is_from_me": True,
+                            },
+                        }],
+                        "freshness": {"message_source": "live_message_db"},
+                        "query": {"chat": "wxid_1", "has_more": False},
+                    },
+                })))
+                if talker != "wxid_1":
+                    with self.assertRaises(CliOutputError):
+                        LocalWechatCli(runner=runner).tail("wxid_1")
+                else:
+                    result = LocalWechatCli(runner=runner).tail("wxid_1")
+                    self.assertEqual(result.events[0].text, "合成消息")
+                    self.assertEqual(result.cursor, "local_id:43")
+                    self.assertTrue(result.freshness_confirmed)
+
+    def test_tail_envelope_with_remaining_page_cannot_complete_backfill(self) -> None:
+        runner = RecordingRunner(FakeCommandResult(returncode=0, stdout=json.dumps({
+            "ok": True,
+            "data": {
+                "events": [{
+                    "type": "message", "cursor": "local_id:43",
+                    "message": {
+                        "id": {"local_id": 43, "talker": "wxid_1"},
+                        "kind": "text", "text": "合成消息", "is_from_me": True,
+                    },
+                }],
+                "freshness": {"message_source": "live_message_db"},
+                "query": {"chat": "wxid_1", "has_more": True},
+            },
+        })))
+        with self.assertRaises(CliOutputError) as raised:
+            LocalWechatCli(runner=runner).tail("wxid_1")
+        self.assertEqual(raised.exception.code, "cli_freshness_unknown")
+
     def test_close_terminates_inflight_one_shot_command(self) -> None:
         process = BlockingCommandProcess()
         cli = LocalWechatCli(timeout_seconds=30)
@@ -348,7 +436,6 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
                 "5",
                 "--include-media-paths",
                 "false",
-                "--jsonl",
                 "--strict-read-only",
             ),
         )
@@ -500,7 +587,6 @@ class LocalWechatCliAdapterTest(unittest.TestCase):
                 "local_id:42",
                 "--include-media-paths",
                 "false",
-                "--jsonl",
                 "--strict-read-only",
             ),
         )

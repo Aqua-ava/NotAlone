@@ -342,7 +342,7 @@ class LocalWechatCli:
                 raise ValueError("limit 必须大于零。")
             command.extend(["--limit", str(limit)])
         command.extend(
-            ["--include-media-paths", "false", "--jsonl", "--strict-read-only"]
+            ["--include-media-paths", "false", "--strict-read-only"]
         )
         result = self._invoke(tuple(command))
         return _parse_tail_output(result.stdout, expected_talker=talker)
@@ -602,6 +602,37 @@ def _message_table_missing(message: str | None) -> bool:
 
 
 def _parse_tail_output(stdout: str, *, expected_talker: str) -> TailResult:
+    # 单次查询保留 envelope：JSONL 空输出会丢失实时来源证明。
+    try:
+        envelope = json.loads(stdout)
+    except json.JSONDecodeError:
+        envelope = None
+    if isinstance(envelope, dict) and "ok" in envelope:
+        data = envelope.get("data")
+        if envelope.get("ok") is not True or not isinstance(data, dict):
+            raise CliOutputError("cli_output_invalid", "微信 CLI 查询结果无效。")
+        raw_events = data.get("events")
+        freshness = data.get("freshness")
+        query = data.get("query")
+        if not isinstance(raw_events, list):
+            raise CliOutputError("cli_output_invalid", "微信 CLI 事件列表无效。")
+        if (
+            not isinstance(freshness, dict)
+            or freshness.get("message_source") != "live_message_db"
+            or not isinstance(query, dict)
+            or query.get("chat") != expected_talker
+            # 当前调用方只完成单批补齐；有后续页不能报告已补齐。
+            or query.get("has_more") is not False
+            or envelope.get("warnings")
+            or envelope.get("error")
+            or data.get("warnings")
+            or data.get("error")
+        ):
+            raise CliOutputError("cli_freshness_unknown", "微信 CLI 未确认当前会话的实时读取结果。")
+        if not raw_events:
+            # 空查询只证明检查完成，不用 envelope cursor 推进消息水位。
+            return TailResult(events=(), cursor=None, last_local_id=None, freshness_confirmed=True)
+        stdout = "\n".join(json.dumps(event, ensure_ascii=False) for event in raw_events)
     events: list[CliMessageEvent] = []
     last_local_id: int | None = None
     last_cursor: str | None = None
