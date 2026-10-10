@@ -97,6 +97,28 @@ enum CalibrationContextFailure: String, Error {
     case unavailable = "calibration_context_unavailable"
 }
 
+func selectCalibrationWindow(_ windows: [[String: Any]]) throws -> (windowId: CGWindowID, frame: CGRect) {
+    guard !windows.isEmpty else { throw CalibrationContextFailure.notVisible }
+    var candidates: [(windowId: CGWindowID, frame: CGRect)] = []
+    for window in windows {
+        guard let bounds = window[kCGWindowBounds as String] as? NSDictionary,
+              let frame = CGRect(dictionaryRepresentation: bounds),
+              [frame.origin.x, frame.origin.y, frame.width, frame.height].allSatisfy({ $0.isFinite }),
+              frame.width > 0, frame.height > 0,
+              let identifier = number(window[kCGWindowNumber as String]), identifier >= 1,
+              identifier <= Double(UInt32.max), identifier.rounded() == identifier else {
+            throw CalibrationContextFailure.geometry
+        }
+        // 固定支持版本实机有52×20辅助小窗；只排除无法承载聊天的极小窗口。
+        // 其他未知尺寸仍拒绝，不能用“取最大窗口”绕过多个聊天窗口的歧义。
+        if frame.width <= 100 && frame.height <= 40 { continue }
+        guard frame.width >= 600, frame.height >= 400 else { throw CalibrationContextFailure.windows }
+        candidates.append((CGWindowID(identifier), frame))
+    }
+    guard candidates.count == 1, let candidate = candidates.first else { throw CalibrationContextFailure.windows }
+    return candidate
+}
+
 struct CalibrationContext: Equatable {
     let processId: pid_t
     let windowId: CGWindowID
@@ -131,14 +153,9 @@ struct CalibrationContext: Equatable {
             ($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == application.processIdentifier
                 && ($0[kCGWindowLayer as String] as? NSNumber)?.intValue == 0
         }
-        guard !windows.isEmpty else { throw CalibrationContextFailure.notVisible }
-        guard windows.count == 1, let window = windows.first else { throw CalibrationContextFailure.windows }
-        guard let bounds = window[kCGWindowBounds as String] as? NSDictionary,
-              let frame = CGRect(dictionaryRepresentation: bounds),
-              frame.width >= 600, frame.height >= 400,
-              let number = window[kCGWindowNumber as String] as? NSNumber else { throw CalibrationContextFailure.geometry }
-        return CalibrationContext(processId: application.processIdentifier, windowId: number.uint32Value,
-                                  frame: frame, version: "4.0.6", build: "29387")
+        let window = try selectCalibrationWindow(windows)
+        return CalibrationContext(processId: application.processIdentifier, windowId: window.windowId,
+                                  frame: window.frame, version: "4.0.6", build: "29387")
     }
 
     func selection(_ regions: [String: CGRect]) -> [String: Any] {

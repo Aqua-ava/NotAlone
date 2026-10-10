@@ -1,7 +1,31 @@
 import XCTest
+import CoreGraphics
 @testable import NotAloneSyncCore
 
 final class MinimalRegionLayoutTests: XCTestCase {
+    private func window(_ id: Int, _ width: Double, _ height: Double) -> [String: Any] {
+        [kCGWindowNumber as String: id,
+         kCGWindowBounds as String: CGRect(x: 0, y: 0, width: width, height: height).dictionaryRepresentation]
+    }
+
+    func testTinyAuxiliaryWindowDoesNotMaskUniqueChatWindow() throws {
+        let selected = try selectCalibrationWindow([window(1, 52, 20), window(2, 1072, 846)])
+        XCTAssertEqual(selected.windowId, 2)
+        XCTAssertEqual(selected.frame.size, CGSize(width: 1072, height: 846))
+    }
+
+    func testMultipleChatOrUnknownWindowsStillRejectSelection() {
+        for windows in [
+            [window(1, 1072, 846), window(2, 800, 600)],
+            [window(1, 1072, 846), window(2, 200, 200)],
+            [window(1, 1072, 846), window(2, 0, 20)],
+            [window(1, 52, 20)],
+            [window(1, 1072, 846), [kCGWindowNumber as String: 2]],
+        ] {
+            XCTAssertThrowsError(try selectCalibrationWindow(windows))
+        }
+    }
+
     private func selection() -> [String: Any] {
         ["schemaVersion": 1, "state": "selected-awaiting-verification",
          "wechatVersion": "4.0.6", "wechatBuild": "29387", "processId": 123, "windowId": 456,
