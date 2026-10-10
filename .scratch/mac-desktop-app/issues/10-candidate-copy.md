@@ -1,8 +1,8 @@
 # 10：真实复制与复制后隐藏
 
 Type: task
-State: claimed
-Triage: ready-for-human
+State: resolved
+Triage: ready-for-agent
 Blocked by: 09
 Spec: ../spec.md
 
@@ -14,9 +14,9 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 复制使用当前编辑文本，成功才提示已复制；复制并隐藏仅在成功后隐藏。
-- [ ] 失败保留编辑状态和窗口，并显示安全错误。
-- [ ] 自动测试与原生剪贴板实机检查只使用合成文本；复制不触发发送、长期保存或采用。
+- [x] 复制使用当前编辑文本，成功才提示已复制；复制并隐藏仅在成功后隐藏。
+- [x] 失败保留编辑状态和窗口，并显示安全错误。
+- [x] 自动测试与原生剪贴板实机检查只使用合成文本；复制不触发发送、长期保存或采用。
 
 ## 测试与范围
 
@@ -24,6 +24,14 @@ Spec: ../spec.md
 - 涉及业务数据时只使用合成资料、随机隔离 `_test` 库和独立握手/配置；本任务未涉及的后端、渠道与桌面能力保持后续任务范围。
 - 按仓库工作流读取相关领域及工程约束，完成最小相关检查、Standards/Spec 两轴评审和只含本任务改动的本地提交。
 - 不提交私人资料或凭据，不发送外部聊天消息；远端 Git 操作需另有用户明确同意。
+
+## Answer
+
+2026-10-10，在用户认可的 15:00–15:15（UTC+8）时段，以固定源 `b06953e` 执行受限实际 App／真实隔离 HTTP/PG 验收。`tests/candidate-copy.spec.ts` 1/1 通过（7.8 秒），与窗口正常退出场景合计 2/2（10.2 秒），runner 退出 0；验证当前编辑文本写入系统剪贴板、原候选快照保留、管理窗口调用拒绝、复制并收起只隐藏同一输入小窗、恢复后编辑保持。
+
+原四场普通页面 4/4 证据继续覆盖复制失败保留与重试、空白及范围拒绝、迟到完成不污染新联系人；本次补齐其原生正向边界，没有伪造新的 red。测试先写本轮合成占位，比较结果仅返回布尔值，收尾仅清空仍属于本轮的已知文本。真实模型由本地合成模型边界替代，CLI／探针不可用；未读取真实微信或原有业务资料，没有发送、采纳或长期保存。
+
+App 夹具与 Python 测试库清理完成，租约复查 `absent`；库不存在检查由 `cleanup_fixture` 执行，失败会使子进程和整场失败。日志与本轮核对结果保存于 `desktop/artifacts/native-copy-scheduling-20261010-1500/run.log` 和 `verification.json`。实现及原生测试准备的独立双轴记录保留，本轮按现有验收条件收口；最终签名包完整交付继续由任务 20 承接。
 
 ## Comments
 
@@ -54,3 +62,5 @@ Spec: ../spec.md
 - 2026-10-09（本次联系人资格适配后的普通回归）：测试准备8ff023d仅在原4场5处生成前及原生准备1处新增真实helper“确认本次联系人”按钮操作，并从具名公开状态核对当前联系人、scope及生成资格；逐文件去除新增动作后与原复制测试完全一致，保留原断言、故障/迟到安排以及先写合成sentinel、只比较本轮已知文本的原生边界。typecheck/build/diff检查通过，原生准备没有执行。FF固定干净source 0ef0527115a014c82c87f72331bb7cac222e7058，Conda NotAlone仅一次`npm run test:pages -- --case candidate-copy --timeout-seconds 180`，原4场串行4/4、CLI exit0、19.56秒；实际确认动作后验证当前编辑与原快照分离、复制失败保留及重试后收起、当前选择与参数/角色拒绝、复制迟到切换联系人不污染新范围。真实HTTP/PG及本地合成模型保持，系统复制/隐藏只在本轮合成接收边界，不把普通页面当原生剪贴板或窗口验收。仓库外只读见证沿本轮进程stdout和真实HTTP记录4个后端认证POST shutdown 200/stopped，child82895/82995/83107/83186均exit0/signalnull，instance/class cleanup均true；独立只读catalog逐场精确查询4个本轮notalone_core_flow_*_test均不存在，完整名称与场景映射保存在外部context `10-confirmed-regression-0ef0527-databases.json`。捕获64自有身份无存活匹配，6独占进程组均ESRCH，Chrome1、quiet24 active0/window0、cleanupConfirmed=true，两lease独立复查absent；日志/exit/resources/owned-identities/cleanup/independent-final保存在同前缀。精确正常收尾后已明确归还唯一runtime，没有追加组或重跑；本轮仅10 Comments事实记录，不改production。当前原生测试仍未执行、真实剪贴板/App未运行，历史评审与验收事实保留，任务claimed/noAnswer、实机条件未勾选。
 
 - 2026-10-09（集成收尾）：在固定集成源 `d6a3e6a` 重新运行 `npm run test:pages -- --case candidate-copy --timeout-seconds 300`，确认动作复用后的原四场 4/4、exit0；4 个精确随机库不存在、自有进程无残留、单 Chrome、cleanupConfirmed=true、两租约 absent。见 `desktop/artifacts/acceptance-closeout-d6a3e6a/closeout-d6a3e6a-copy-*` 和汇总 `closeout-verification.json`。未改生产实现；真实剪贴板/原生隐藏尚未验证，保持 claimed 和未勾验收，下一步需要用户安排已暂停的原生窗口，Triage 改为 ready-for-human。
+
+- 2026-10-10（有限原生验收）：用户明确同意现在 15 分钟，只验收合成复制与调度；实际复制 1/1、窗口正常退出 1/1 通过，用户反馈“没有明显干扰”。本轮补齐复制实机条件，三条验收勾选、State 改为 resolved；后续签名包、微信和定位仍按原票推进。
