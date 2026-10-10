@@ -45,6 +45,10 @@ class RecordingReplyStore:
     prepared: ReplyContext
     saved: ValidatedReply | None = None
 
+    def prepare_context(self, request: ReplyRequest, context: ReplyContext) -> None:
+        if request.request_id != context.reply_request_id:
+            raise AssertionError("unexpected synthetic request")
+
     def start(
         self,
         command: GenerateReply,

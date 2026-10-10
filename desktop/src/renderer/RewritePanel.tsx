@@ -6,6 +6,7 @@ import { useRevisionedSession } from './use-revisioned-session';
 import './rewrite.css';
 import { ReplyEvidence, useReplyEvidence } from './ReplyEvidence';
 import { AssistantSessionPanel } from './AssistantSessionPanel';
+import { StyleSamples } from './StyleSamples';
 
 export function useReplySession() {
   const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null, generationBlock: 'foreground-confirmation-required',
@@ -121,5 +122,6 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
       </div>
     </> : state.phase !== 'waiting' && <div className="reply-empty"><p>暂无候选</p><small>准备好你的意思，再选择合适的表达。</small></div>}
     {replies.error && <p className="reply-note" role="alert">{replies.error}</p>}
+    <StyleSamples replies={replies} />
   </section>;
 }

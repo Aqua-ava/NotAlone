@@ -255,6 +255,64 @@ class AssistantSessionHttpTest(unittest.TestCase):
         self.assertEqual(self.backend.request(path + "/replies", body), (200, first))
         self.assertEqual(len(self.model.seen_calls), 1)
 
+    def test_legacy_original_source_snapshot_missing_masks_only_affected_turn(self) -> None:
+        _, session = self._default()
+        path = self._path(session["session_id"])
+        _, target_id = self._source("合成历史消息。")
+        self.model.responses = [self._candidate(target_id), self._candidate(str(self.draft_id))]
+        body = {**self._body(), "content": {"type": "reply_to_message", "target_message_id": target_id,
+                  "direction": "只回应这条合成消息。"}}
+        status, affected = self.backend.request(path + "/replies", body)
+        self.assertEqual(status, 200, affected)
+        self.assertEqual(self.backend.request(path + "/replies", self._body())[0], 200)
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute("DELETE FROM public.reply_original_source_use WHERE reply_request_id=%s",
+                               (affected["reply_request_id"],))
+        status, saved = self.backend.request(path)
+        self.assertEqual(status, 200, saved)
+        self.assertEqual(saved["turns"][0]["state"], "unavailable")
+        self.assertIsNone(saved["turns"][0]["input"])
+        self.assertIsNone(saved["turns"][0]["reply"])
+        self.assertEqual(saved["turns"][1]["state"], "completed")
+        self.assertEqual(saved["turns"][1]["input"]["content"]["draft_text"], "明天见")
+        self.assertEqual(len(self.model.seen_calls), 2)
+
+    def test_memory_message_with_two_sources_masks_only_pending_source_turn(self) -> None:
+        first_source, message_id = self._source("明天一起散步，我希望表达轻松自然。")
+        other_source, _ = self._source("第二份独立合成来源。")
+        status, memory = self.backend.request("/api/memories/manual-owner", {
+            "text": "明天一起散步，我希望表达轻松自然。", "category": "preference", "topic": "other",
+        })
+        self.assertEqual(status, 200, memory)
+        memory_id = memory["memory"]["memory_id"]
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute("INSERT INTO public.message_source_ref "
+                "(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload) "
+                "VALUES (%s,%s,%s,'source_document',%s,%s,'{}'::jsonb)",
+                (message_id,self.owner_id,self.contact_id,other_source,str(uuid4())))
+            connection.execute("UPDATE public.owner_memory SET adoption_method='auto', source_ids=%s::uuid[] "
+                               "WHERE owner_id=%s AND id=%s", ([message_id],self.owner_id,memory_id))
+        _, session = self._default()
+        path = self._path(session["session_id"])
+        body = self._body(draft="明天一起散步，我希望表达轻松自然。")
+        body["content"]["include_relationship_context"] = True
+        self.model.responses = [self._candidate(memory_id,str(self.draft_id)), self._candidate(str(self.draft_id))]
+        status, affected = self.backend.request(path + "/replies", body)
+        self.assertEqual(status, 200, affected)
+        evidence = self.backend.request(
+            f"/api/contacts/{self.contact_id}/replies/{affected['reply_request_id']}/evidence")[1]
+        self.assertTrue(any(item["evidence_id"] == memory_id for item in evidence["evidence"]))
+        self.assertEqual(self.backend.request(path + "/replies", self._body())[0], 200)
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute("UPDATE public.source_document SET status='delete_requested' WHERE id=%s", (first_source,))
+        status, saved = self.backend.request(path)
+        self.assertEqual(status, 200, saved)
+        self.assertEqual(saved["turns"][0]["state"], "unavailable")
+        self.assertIsNone(saved["turns"][0]["input"])
+        self.assertIsNone(saved["turns"][0]["reply"])
+        self.assertEqual(saved["turns"][1]["state"], "completed")
+        self.assertEqual(len(self.model.seen_calls), 2)
+
     def test_source_used_only_as_context_erases_dependent_turn_and_preserves_unrelated_input(self) -> None:
         _, session = self._default()
         path = self._path(session["session_id"])

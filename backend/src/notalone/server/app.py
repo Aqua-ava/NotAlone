@@ -30,6 +30,9 @@ from notalone.application.reply_request import (
     parse_reply_request,
 )
 from notalone.application.source_service import SourceService
+from notalone.application.style_sample_service import StyleSampleService
+from notalone.persistence.style_sample_store import PostgresStyleSampleStore
+from notalone.server.style_samples import handle_style_samples
 from notalone.persistence.source_tasks import SourceDeletionHistoryUnverified
 from notalone.persistence.source_deletion import SourceDeletionError, SourceNotFoundError
 from notalone.persistence.background_tasks import (
@@ -184,6 +187,7 @@ class BackendApp:
         "_source_service",
         "_setup_service",
         "_skill_service",
+        "_style_samples",
         "_sync_control",
         "_task_host",
         "_task_service",
@@ -213,6 +217,7 @@ class BackendApp:
         skill_service: SkillService | None = None,
         ledger_service: LedgerService | None = None,
         setup_service: SetupService | None = None,
+        style_samples: StyleSampleService | None = None,
         runtime_shutdown: Callable[[], None] | None = None,
     ) -> None:
         if owner_id is not None and not isinstance(owner_id, UUID):
@@ -229,6 +234,7 @@ class BackendApp:
         self._reply_service = reply_service
         self._assistant_sessions = assistant_sessions
         self._reply_evidence = reply_evidence
+        self._style_samples = style_samples
         self._runtime_shutdown = runtime_shutdown
         self._runtime_shutdown_lock = threading.Lock()
         self._runtime_stopping = threading.Event()
@@ -383,6 +389,12 @@ class BackendApp:
                 path=path_value,
                 query=urlsplit(path).query,
             )
+        if path_value.startswith("/api/contacts/") and "/style-samples" in path_value:
+            if self._style_samples is None:
+                return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "style_sample_unavailable"})
+            status, payload = handle_style_samples(self._style_samples, owner_id=self._owner_id,
+                                                   method=method_upper, path=path_value, body=request_body)
+            return _json_response(status, payload)
         if path_value.startswith("/api/contacts/") and path_value.endswith("/messages"):
             return self._handle_messages(
                 method=method_upper,
@@ -2046,6 +2058,7 @@ def create_app(
     skill_service: SkillService | None = None,
     ledger_service: LedgerService | None = None,
     setup_service: SetupService | None = None,
+    style_samples: StyleSampleService | None = None,
     follow_smoke: FollowSmokeController | None = None,
     runtime_shutdown: Callable[[], None] | None = None,
 ) -> BackendApp:
@@ -2074,6 +2087,7 @@ def create_app(
         ),
         reply_evidence=reply_evidence
         or ReplyEvidenceService(PostgresReplyStore(database_url)),
+        style_samples=style_samples or StyleSampleService(PostgresStyleSampleStore(database_url)),
         source_service=source_service or SourceService(database_url),
         memory_service=memory_service,
         import_service=import_service,

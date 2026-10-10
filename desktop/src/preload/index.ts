@@ -9,6 +9,7 @@ import { createStartupBridge } from './startup';
 import { createContactSessionBridge } from './contact-session';
 import { createImportBridge } from './imports';
 import { createReplyBridge } from './reply';
+import { createStyleSampleBridge } from './style-samples';
 import { createMemoryBridge } from './memory';
 import { createBindingConsentBridge } from './binding-consent';
 import { createSyncControlBridge } from './sync-control';
@@ -21,6 +22,7 @@ const bridge: AppBridge = {
   contacts: createContactSessionBridge(ipcRenderer),
   imports: createImportBridge(ipcRenderer),
   replies: createReplyBridge(ipcRenderer),
+  styleSamples: createStyleSampleBridge(ipcRenderer),
   candidateCopy: createCandidateCopyBridge(ipcRenderer),
   sources: createSourceDeletionBridge(ipcRenderer),
   memory: createMemoryBridge(ipcRenderer),

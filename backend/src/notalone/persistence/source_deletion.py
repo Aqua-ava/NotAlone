@@ -22,6 +22,7 @@ from notalone.persistence.reply_cleanup import (
 )
 from notalone.persistence.source_memory_erasure import erase_source_memories
 from notalone.persistence.source_processing import erase_source_processing
+from notalone.persistence.style_sample_store import erase_source_style_samples
 from notalone.scopes import ContactScope
 
 
@@ -160,6 +161,10 @@ class PostgresSourceDeletionRepository:
                     connection,
                     owner_id=owner_id,
                     contact_id=contact_id,
+                    removed_ids={source_document_id, *orphan_message_ids},
+                )
+                erase_source_style_samples(
+                    connection, owner_id=owner_id,
                     removed_ids={source_document_id, *orphan_message_ids},
                 )
                 cleanup_derived_data(

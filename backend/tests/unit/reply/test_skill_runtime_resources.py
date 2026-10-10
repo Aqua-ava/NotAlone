@@ -255,6 +255,10 @@ class CountingSkillPort(InMemorySkillPort):
 
 @dataclass
 class InMemoryReplyStore:
+    def prepare_context(self, request: ReplyRequest, context: ReplyContext) -> None:
+        if request.request_id != context.reply_request_id:
+            raise AssertionError("合成上下文范围不一致。")
+
     prepared: ReplyContext
 
     def start(

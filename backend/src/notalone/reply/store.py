@@ -130,6 +130,8 @@ class ReplyStore(Protocol):
         reply: ValidatedReply,
     ) -> ReplyGenerated: ...
 
+    def prepare_context(self, request: ReplyRequest, context: ReplyContext) -> None: ...
+
     def fail(self, request: ReplyRequest, *, reason: str) -> None: ...
 
     def read(self, request_id: UUID, scope: ContactScope) -> StoredReplyRequest: ...
@@ -297,6 +299,10 @@ class InMemoryReplyStore:
                 request=request,
                 continued_candidate=continuation,
             )
+
+    def prepare_context(self, request: ReplyRequest, context: ReplyContext) -> None:
+        """内存适配器只验证结构，不宣称拥有 PostgreSQL 原始来源快照。"""
+        self._validate_context(request, context)
 
     def save(
         self,

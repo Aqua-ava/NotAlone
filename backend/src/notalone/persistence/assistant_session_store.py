@@ -19,6 +19,7 @@ from notalone.application.assistant_session_service import (
 from notalone.application.reply_service import ReplyServiceRequest
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.message_sources import valid_source_ref_exists_sql
+from notalone.persistence.style_sample_store import captured_reply_sources, require_reply_sources_current
 from notalone.reply.context import ReplyContext
 from notalone.reply.errors import ReplyStoreInvariantError
 from notalone.reply.interface import ReplyGenerated, ReplyToMessage
@@ -88,7 +89,8 @@ def _reply_dependencies(connection: Any, scope: ContactScope, request_id: UUID) 
             JOIN public.reply_request AS parent ON parent.id = candidate.reply_request_id
             WHERE parent.owner_id = %s AND parent.contact_id = %s
         )
-        SELECT evidence.evidence_id, evidence.kind, evidence.source_ids, turn.dependency_ids
+        SELECT evidence.evidence_id, evidence.kind, evidence.source_ids, turn.dependency_ids,
+               lineage.id AS request_id
         FROM lineage JOIN public.reply_context_evidence AS evidence ON evidence.reply_request_id = lineage.id
         LEFT JOIN public.assistant_session_turn AS turn ON turn.reply_request_id = lineage.id
           AND turn.owner_id = %s AND turn.contact_id = %s
@@ -103,6 +105,8 @@ def _reply_dependencies(connection: Any, scope: ContactScope, request_id: UUID) 
             connection, owner_id=scope.owner_id, evidence_id=row["evidence_id"],
             kind=row["kind"], source_ids={UUID(value) for value in row["source_ids"]},
         ))
+    for identifier in {row["request_id"] for row in rows}:
+        dependencies.update(captured_reply_sources(connection, owner_id=scope.owner_id, request_id=identifier))
     # 继承当时实际捕获的依赖，不把后来挂接的来源补进旧候选的来历。
     return dependencies
 
@@ -187,6 +191,8 @@ def prepare_assistant_reply_commit(
             or turn["input_digest"] != _digest(binding_id, request.normalized_input)):
         raise ReplyStoreInvariantError("助手会话输入版本已失效。")
     dependencies = set(turn["dependency_ids"])
+    dependencies.update(captured_reply_sources(connection, owner_id=request.scope.owner_id,
+                                               request_id=request.request_id))
     for evidence in context.evidence:
         dependencies.update(_evidence_dependencies(
             connection, owner_id=request.scope.owner_id, evidence_id=evidence.evidence_id,
@@ -429,7 +435,14 @@ class PostgresAssistantSessionStore:
                     ).fetchone()
                     if request is None:
                         raise AssistantSessionPersistenceError("会话回复记录不完整。")
-                    reply = store._read_result(connection, request)
+                    # 已知来源拒绝只遮挡本轮；数据库与其他记录故障仍明确失败。
+                    try:
+                        require_reply_sources_current(connection, owner_id=scope.owner_id, request_id=request["id"])
+                    except ReplyStoreInvariantError:
+                        row["state"] = "unavailable"
+                        row["input_payload"] = None
+                    else:
+                        reply = store._read_result(connection, request)
                 turns.append(self._turn(row, reply))
             return tuple(turns)
 

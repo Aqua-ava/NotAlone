@@ -20,11 +20,13 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from fixture_cleanup import cleanup_fixture
 
 from notalone.application.model_priority import ModelPriorityControl
+from notalone.application.memory_service import MemoryService
 from notalone.application.setup_service import SetupService
 from notalone.persistence.setup_owner_directory import PostgresOwnerDirectory
 from notalone.persistence.memory_store import PostgresMemoryStore
 from notalone.memory import MemoryCandidate, MemoryCategory
 from notalone.scopes import ContactScope
+from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
 from notalone.server.app import create_app
 from notalone.server.connection_info import write_backend_info
 from notalone.server.reply_wiring import build_reply_service
@@ -100,6 +102,10 @@ class DesktopRewriteFixture(CoreBusinessFlowFixture, unittest.TestCase):
         backend = HttpBackend(create_app(
             database_url=self.database_url, owner_id=owner_id,
             token=f"synthetic-desktop-{owner_id}", reply_service=reply_service,
+            memory_service=MemoryService(
+                contact_memory=PostgresMemoryStore(self.database_url),
+                owner_memory=PostgresOwnerMemoryStore(self.database_url),
+            ),
             setup_service=SetupService(
                 owner_directory=PostgresOwnerDirectory(self.database_url),
                 env_path=Path(os.environ["NOTALONE_ENV_FILE"]),

@@ -13,6 +13,7 @@ import { installQuitLifecycle } from './backend/quit';
 import { installDesktopControls } from './desktop-controls';
 import { installContactSessionBridge } from './contacts/bridge';
 import { installReplyBridge } from './reply/bridge';
+import { installStyleSampleBridge } from './style-samples/bridge';
 import { installMemoryBridge } from './memory/bridge';
 import { installSourceDeletionBridge } from './sources/bridge';
 import { installBindingConsentBridge } from './bindings/bridge';
@@ -68,14 +69,16 @@ void app.whenReady().then(async () => {
   installBindingConsentBridge(commands, backend, contacts, () => foreground.beginReadingScopeChange());
   installSyncControlBridge(commands, backend, contacts, () => foreground.beginReadingScopeChange());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
+  const styleSamples = installStyleSampleBridge(commands, backend, contacts, replies);
   foreground.onStateChanged(() => replies.refreshGenerationEligibility());
   foreground.setReplyEditGuard(() => replies.hasEdits());
   replies.onInputChanged(() => foreground.invalidatePending());
   installSourceDeletionBridge(commands, backend, contacts, async (contactId) => {
     traces.invalidateSource();
+    const styleChecking = styleSamples.invalidateSource(contactId);
     const checking = replies.revalidateDeletedSource(contactId);
-    try { await memory.revalidateDeletedSource(contactId); }
-    finally { await checking; }
+    const memoryChecking = memory.revalidateDeletedSource(contactId);
+    await Promise.all([styleChecking, checking, memoryChecking]);
   });
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies));
   installSetupBridge(windows, new SetupController(backend));

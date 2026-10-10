@@ -125,6 +125,7 @@ class ReplyGenerator:
         try:
             self._validate_context(command, context)
             self._validate_current_context(context)
+            self._store.prepare_context(request, context)
         except ReplyError:
             self._mark_failed(request, "context_invariant_failed")
             raise

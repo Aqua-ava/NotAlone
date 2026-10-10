@@ -46,6 +46,7 @@ CONTACT_ID = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 OTHER_CONTACT_ID = UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
 BINDING_ID = UUID("dddddddd-dddd-dddd-dddd-dddddddddddd")
 MESSAGE_ID = UUID("11111111-1111-1111-1111-111111111111")
+SOURCE_ID = UUID("99999999-9999-9999-9999-999999999999")
 REQUEST_KEY = UUID("22222222-2222-2222-2222-222222222222")
 SECOND_REQUEST_KEY = UUID("33333333-3333-3333-3333-333333333333")
 
@@ -105,6 +106,13 @@ class PostgresReplyStoreTest(unittest.TestCase):
                         ),
                     ),
                 )
+            connection.execute("""INSERT INTO public.source_document(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count)
+                VALUES (%s,%s,%s,'wechat_jsonl','synthetic-reply-store.jsonl',%s,1)""",
+                               (SOURCE_ID, self.owner_id, self.contact_id, 'a' * 64))
+            connection.execute("""INSERT INTO public.message(id,owner_id,contact_id,speaker,message_type,text_content)
+                VALUES (%s,%s,%s,'contact','text','明天一起吃饭吗？')""", (MESSAGE_ID, self.owner_id, self.contact_id))
+            connection.execute("""INSERT INTO public.message_source_ref(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload)
+                VALUES (%s,%s,%s,'source_document',%s,'synthetic-1','{}')""", (MESSAGE_ID, self.owner_id, self.contact_id, SOURCE_ID))
         self.clock = FakeClock()
         self.store = PostgresReplyStore(
             TEST_DATABASE_URL,
@@ -170,7 +178,7 @@ class PostgresReplyStoreTest(unittest.TestCase):
                 kind="message",
                 text="明天一起吃饭吗？",
                 scope=command.scope,
-                source_ids=(UUID("99999999-9999-9999-9999-999999999999"),),
+                source_ids=(SOURCE_ID,),
                 selection_reason="当前目标消息",
             )
         ]
@@ -221,6 +229,7 @@ class PostgresReplyStoreTest(unittest.TestCase):
         command = self._command()
         started = self.store.start(command, self._verified_scope())
         context = self._context(command, started.request.request_id)
+        self.store.prepare_context(started.request, context)
         saved = self.store.save(started.request, context, self._reply())
 
         recreated = PostgresReplyStore(
@@ -252,6 +261,7 @@ class PostgresReplyStoreTest(unittest.TestCase):
         )
         context = replace(context, evidence=context.evidence + (pending_evidence,))
 
+        self.store.prepare_context(started.request, context)
         saved = self.store.save(started.request, context, self._reply())
 
         stored = PostgresReplyStore(TEST_DATABASE_URL).read(
@@ -316,6 +326,7 @@ class PostgresReplyStoreTest(unittest.TestCase):
         context = replace(context, evidence=(replace(
             context.evidence[0], kind="confirmed_memory", timing=timing,
         ),))
+        self.store.prepare_context(started.request, context)
         saved = self.store.save(started.request, context, self._reply())
 
         stored = PostgresReplyStore(TEST_DATABASE_URL).read(
@@ -334,6 +345,7 @@ class PostgresReplyStoreTest(unittest.TestCase):
         context = replace(context, evidence=(replace(
             context.evidence[0], timing=timing,
         ),))
+        self.store.prepare_context(started.request, context)
         saved = self.store.save(started.request, context, self._reply())
         # 合成旧版本的历史快照：它没有保存任何时间元数据。
         with psycopg.connect(TEST_DATABASE_URL) as connection:
@@ -354,6 +366,11 @@ class PostgresReplyStoreTest(unittest.TestCase):
         started = self.store.start(command, self._verified_scope())
         context = self._context(command, started.request.request_id)
         second_id = uuid4()
+        with psycopg.connect(TEST_DATABASE_URL) as connection:
+            connection.execute("""INSERT INTO public.message(id,owner_id,contact_id,speaker,message_type,text_content)
+                VALUES (%s,%s,%s,'contact','text','第二条合成时间消息')""", (second_id, self.owner_id, self.contact_id))
+            connection.execute("""INSERT INTO public.message_source_ref(message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload)
+                VALUES (%s,%s,%s,'source_document',%s,'synthetic-2','{}')""", (second_id, self.owner_id, self.contact_id, SOURCE_ID))
         first_timing = MemoryTiming.from_source_times((
             datetime(2025, 4, 2, tzinfo=timezone.utc),
         ))
@@ -364,6 +381,7 @@ class PostgresReplyStoreTest(unittest.TestCase):
             replace(context.evidence[0], timing=first_timing),
             replace(context.evidence[0], evidence_id=second_id, timing=second_timing),
         ))
+        self.store.prepare_context(started.request, context)
         saved = self.store.save(started.request, context, self._reply())
         reversed_snapshot = {
             "scope": {
@@ -399,6 +417,7 @@ class PostgresReplyStoreTest(unittest.TestCase):
         command = self._command()
         started = self.store.start(command, self._verified_scope())
         context = self._context(command, started.request.request_id)
+        self.store.prepare_context(started.request, context)
         saved = self.store.save(started.request, context, self._reply())
         with psycopg.connect(TEST_DATABASE_URL) as connection:
             connection.execute(
@@ -414,8 +433,10 @@ class PostgresReplyStoreTest(unittest.TestCase):
     def test_time_snapshot_with_invalid_evidence_identifier_is_rejected(self) -> None:
         command = self._command()
         started = self.store.start(command, self._verified_scope())
+        context = self._context(command, started.request.request_id)
+        self.store.prepare_context(started.request, context)
         saved = self.store.save(
-            started.request, self._context(command, started.request.request_id),
+            started.request, context,
             self._reply(),
         )
         with psycopg.connect(TEST_DATABASE_URL) as connection:
@@ -482,9 +503,11 @@ class PostgresReplyStoreTest(unittest.TestCase):
     def test_explicit_continuation_rechecks_contact_and_binding_scope(self) -> None:
         command = self._command()
         started = self.store.start(command, self._verified_scope())
+        context = self._context(command, started.request.request_id)
+        self.store.prepare_context(started.request, context)
         first = self.store.save(
             started.request,
-            self._context(command, started.request.request_id),
+            context,
             self._reply(),
         )
         candidate_id = first.candidates[0].candidate_id

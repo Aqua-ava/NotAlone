@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID
 
 import psycopg
+from notalone.persistence.style_sample_store import invalidate_reply_keys
 
 from notalone.persistence.assistant_session_store import erase_assistant_source_turns
 
@@ -59,7 +60,13 @@ def delete_source_replies(
                         evidence.evidence_id = ANY(%s::uuid[])
                         OR evidence.source_ids ?| %s::text[]
                     )
-              ))
+              )
+              OR EXISTS (
+                SELECT 1 FROM public.reply_original_source_use AS used
+                WHERE used.reply_request_id=request.id AND used.owner_id=%s
+                  AND used.source_id=ANY(%s::uuid[])
+              )
+              )
             UNION
             SELECT child.id
             FROM affected
@@ -74,7 +81,7 @@ def delete_source_replies(
         """,
         (
             owner_id, contact_id, contact_id, list(removed_ids), list(removed_ids), contact_id,
-            list(removed_ids), [str(i) for i in removed_ids], owner_id,
+            list(removed_ids), [str(i) for i in removed_ids], owner_id, list(removed_ids), owner_id,
         ),
     ).fetchall()
     request_ids = [row["id"] if isinstance(row, dict) else row[0] for row in rows]
@@ -84,6 +91,7 @@ def delete_source_replies(
     )
     if not request_ids:
         return
+    invalidate_reply_keys(connection, owner_id=owner_id, request_ids=request_ids)
     deleted = connection.execute(
         """
         DELETE FROM public.reply_request

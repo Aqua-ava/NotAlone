@@ -13,6 +13,9 @@ from psycopg.types.json import Jsonb
 
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.assistant_session_store import prepare_assistant_reply_commit
+from notalone.persistence.style_sample_store import (
+    capture_reply_original_sources, capture_declared_reply_sources, require_reply_sources_current,
+)
 from notalone.memory.timing import MemoryTiming
 
 from notalone.reply.context import (
@@ -101,6 +104,9 @@ class PostgresReplyStore:
             with self._connect() as connection:
                 # 与来源删除串行化领取、继续候选和结果写入，避免旧副本复活。
                 lock_owner_scope(connection, owner_id=verified_scope.owner_id)
+                if connection.execute("SELECT 1 FROM public.reply_invalidated_key WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                                      (verified_scope.owner_id, verified_scope.contact_id, command.idempotency_key)).fetchone():
+                    raise ReplyStoreInvariantError("原回复请求已失效，请用新的请求重新生成。")
                 request_id = self._new_uuid()
                 lease_expires_at = now + self._lease_duration
                 inserted = connection.execute(
@@ -302,6 +308,22 @@ class PostgresReplyStore:
             ) from None
         return outcome
 
+    def prepare_context(self, request: ReplyRequest, context: ReplyContext) -> None:
+        """模型调用前在领取租约的范围内固定实际原始来源；不复制正文。"""
+        try:
+            with self._connect() as connection:
+                lock_owner_scope(connection, owner_id=request.scope.owner_id)
+                row = connection.execute("SELECT attempt,state FROM public.reply_request WHERE id=%s AND owner_id=%s AND contact_id=%s FOR UPDATE",
+                                         (request.request_id, request.scope.owner_id, request.scope.contact_id)).fetchone()
+                if row is None or row["attempt"] != request.attempt or row["state"] != 'running':
+                    raise ReplyStoreInvariantError("回复请求已失效。")
+                self._validate_context(connection, request, context)
+                connection.execute("DELETE FROM public.reply_original_source_use WHERE reply_request_id=%s", (request.request_id,))
+                capture_reply_original_sources(connection, request, context)
+                require_reply_sources_current(connection, owner_id=request.scope.owner_id, request_id=request.request_id)
+        except psycopg.Error:
+            raise ReplyPersistenceError("回复来源准备未可靠保存。") from None
+
     def save(
         self,
         request: ReplyRequest,
@@ -358,6 +380,8 @@ class PostgresReplyStore:
                         request,
                         context,
                     )
+                    capture_declared_reply_sources(connection, request, context)
+                    require_reply_sources_current(connection, owner_id=request.scope.owner_id, request_id=request.request_id)
                     prepare_assistant_reply_commit(connection, request, context)
                     self._validate_reply(reply, evidence_ids=evidence)
                     candidates: list[ReplyCandidate] = []
@@ -686,7 +710,7 @@ class PostgresReplyStore:
         row = connection.execute(
             """
             SELECT id, owner_id, contact_id,
-                   conversation_binding_id, candidate_text
+                   conversation_binding_id, candidate_text, reply_request_id
             FROM public.reply_candidate
             WHERE id = %s
               AND owner_id = %s
@@ -704,6 +728,10 @@ class PostgresReplyStore:
             raise ReplyContinuationError(
                 "历史候选不属于当前已验证联系人会话。"
             )
+        try:
+            require_reply_sources_current(connection, owner_id=verified_scope.owner_id, request_id=row["reply_request_id"])
+        except ReplyStoreInvariantError:
+            raise ReplyContinuationError("前序候选使用的原始来源已失效。") from None
         return ContinuedReplyCandidate(
             candidate_id=row["id"],
             scope=ContactScope(row["owner_id"], row["contact_id"]),
@@ -1250,6 +1278,7 @@ class PostgresReplyStore:
         connection: Any,
         request_row: dict[str, Any],
     ) -> ReplyGenerated:
+        require_reply_sources_current(connection, owner_id=request_row["owner_id"], request_id=request_row["id"])
         if request_row["context_snapshot"] is None:
             raise ReplyStoreInvariantError("已完成回复缺少上下文快照。")
         candidate_rows = connection.execute(

@@ -6,6 +6,7 @@ import { createContactSessionBridge } from '../../src/preload/contact-session';
 import { createImportBridge } from '../../src/preload/imports';
 import { createMemoryBridge } from '../../src/preload/memory';
 import { createReplyBridge } from '../../src/preload/reply';
+import { createStyleSampleBridge } from '../../src/preload/style-samples';
 import { createBindingConsentBridge } from '../../src/preload/binding-consent';
 import { createSyncControlBridge } from '../../src/preload/sync-control';
 import { createBackendBridge } from '../../src/preload/backend';
@@ -31,6 +32,7 @@ const bridge: AppBridge = {
   traces: createTraceBridge(transport),
   backend: createBackendBridge(transport), startup: createStartupBridge(transport),
   contacts: createContactSessionBridge(transport), memory: createMemoryBridge(transport), replies: createReplyBridge(transport),
+  styleSamples: createStyleSampleBridge(transport),
   openManager: () => transport.invoke('page:open-manager'), openHelper: () => transport.invoke('page:open-helper'), hideWindow: unsupported,
   getDesktopSettings: unsupported, setHelperShortcut: unsupported, setHelperPinned: unsupported, onDesktopSettingsChanged: noEvents,
   setup: { getState: unsupported, refresh: unsupported, initializeOwner: unsupported, saveDeepSeekKey: unsupported,

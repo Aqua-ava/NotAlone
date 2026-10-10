@@ -14,6 +14,7 @@ import { installMemoryBridge } from '../../src/main/memory/bridge';
 import { installTraceBridge } from '../../src/main/traces/bridge';
 import { installSourceDeletionBridge } from '../../src/main/sources/bridge';
 import { installReplyBridge } from '../../src/main/reply/bridge';
+import { installStyleSampleBridge } from '../../src/main/style-samples/bridge';
 import { installBindingConsentBridge } from '../../src/main/bindings/bridge';
 import { installSyncControlBridge } from '../../src/main/sync/bridge';
 import { noArguments, type PageCommands, type PageRole } from '../../src/main/page-commands';
@@ -69,14 +70,16 @@ export class PageHost implements PageCommands {
     const traces = installTraceBridge(this, this.backend, contacts);
     memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
     const replies = installReplyBridge(this, this.backend, contacts, () => this.foreground.getGenerationBlock());
+    const styleSamples = installStyleSampleBridge(this, this.backend, contacts, replies);
     this.foreground.onStateChanged(() => replies.refreshGenerationEligibility());
     this.foreground.setReplyEditGuard(() => replies.hasEdits());
     replies.onInputChanged(() => this.foreground.invalidatePending());
     installSourceDeletionBridge(this, this.backend, contacts, async (contactId) => {
       traces.invalidateSource();
+      const styleChecking = styleSamples.invalidateSource(contactId);
       const checking = replies.revalidateDeletedSource(contactId);
-      try { await memory.revalidateDeletedSource(contactId); }
-      finally { await checking; }
+      const memoryChecking = memory.revalidateDeletedSource(contactId);
+      await Promise.all([styleChecking, checking, memoryChecking]);
     });
     const copies = new CandidateCopyController(this.backend, contacts, replies);
     this.handle('candidate-copy:copy', (...args: unknown[]) => {
