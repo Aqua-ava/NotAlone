@@ -70,3 +70,31 @@ PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private
 - 主 Agent 对新合入的 B 生成领取测试补显式合成预算装配；原直接运行时构造因 unknown 正确拒绝而报错，只增加测试配置，未放宽产品。正式 001–053 迁移的真实随机 PG 组合：8 项 `test_explored_generation`、12 项 `test_assistant_session_deletion`、1 项 `test_reply_message_groups`、2 项 `test_core_business_flow`，共 23 项 GREEN／19.649 秒，自有测试库残留 0。新测试构造属于 12 预算夹具适配，B 原业务断言保留。
 - 实际单元命令为上列单元命令再加入 `tests.unit.reply.test_input_budget_provider_boundary`。组合命令为 `PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-a-session tests.integration.persistence.test_explored_generation tests.integration.server.test_assistant_session_deletion tests.integration.server.test_reply_message_groups tests.integration.server.test_core_business_flow`。单元与组合的首次包装命令在测试结束后因 zsh 只读变量 `status` 报错，读取真实 unittest 输出分别确认 80 项 OK 及缺配置错误；后续组合用独立变量 `test_exit` 正确返回 0，不把包装错误当功能 RED。
 - 规范修复复审：原 P1 已关闭，硬要求 0、判断性气味 0；规格修复复审 0 条 actionable findings，规格审查者独立重跑 7 项离线边界回归 GREEN／0.408 秒。12 仍为 claimed，累计讨论、预算元数据持久化及公开提醒继续实施；自动部分尚在推进，人工部分未执行。
+
+阶段 3b 前置：A 完整讨论数据源切片已实现并独立验证。`read_assistant_discussion_in_transaction(connection, scope, request_key)` 按实际 A051 当前 generation 读取同范围完整有效历史，排除本次 generation 正文；`require_assistant_discussion_current(connection, scope, snapshot)` 在调用方同连接、同 owner 事务中复验当前 UUID、已使用对象及内容、原始来源和样本状态，不提交或另开锁连接。不可变 `DiscussionContext`／`DiscussionSnapshot` 区分低权重旧讨论、完整候选消息组版本、默认展示与实际选择；正文只在内存，快照仅实际 ID 与指纹，来源 ID 和样本 ID 分别返回，含无 raw 根的手动样本。新版本若未被旧请求使用，不据此失效旧快照。
+
+- 独立新上下文 TDD 共 20 项 PG 反馈，覆盖范围、实际 owner_memory 跨联系人来源证明、删除前后复验、manual 样本、旧候选、绑定、当前 UUID、内容指纹、无隐式提交、不可变容器及长讨论无截断。发现并修复历史数据数组污染的范围验证、已删候选错误分类等边界，没有改变 C 的来源权威。
+- 主 Agent 最近真实命令：`PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-a-session tests.integration.persistence.test_assistant_discussion_context tests.integration.persistence.test_assistant_candidate_versions.AssistantCandidateVersionsStoreTest`，共 34 项 GREEN／2.988 秒，正式 001–053、自有随机库残留 0。有限 mypy 两源码、三个文件语法与差异检查通过。只读限定双轴审查 Standards 硬要求／气味 0、Spec 0。
+- 该数据源依赖已正式交付的 11 存储切片与 053；其删除组合回归依赖 09 后端。C 仍唯一负责实际读取来源的捕获、保存前复验及删除传递清理；A 没有混写 `reply_style_sample_use` 或复制当前样本正文。本切片不意味着新派生已清除、模型已接完整历史或整票完成。
+- 公开预算回执首条 NEW HTTP TDD 已取得真实 RED：临界请求守卫为 warning，HTTP 200 且确实调用模型，但公开响应缺少 `input_budget`。1 项／2.018 秒 FAIL，自有库残留 0；持久回执和新硬上限配置下重读旧历史断言尚未执行到。后续接局部计量回执、可信持久化和页面提示，不用模型输出或 runtime 全局 lastDecision 伪造预算。
+
+
+阶段 3b 薄协议交付：新增严格 `discussion_snapshot_to_payload`／`discussion_snapshot_from_payload`（固定 version 1，仅真实范围／对象 UUID 与 SHA 指纹），拒绝正文、未知字段、非规范 UUID、非 HEX 指纹、重复身份及本次输入／turn 自引用。新增 `require_assistant_discussion_available(connection, scope, snapshot)` 区分历史来源可用性与当前输入 CAS：已完成甲在乙的新输入或绑定撤销后仍可查看，复验原锚点及所用历史，不能推进或回退当前指针；`require_assistant_discussion_current` 继续用于运行／保存的同事务当前版本检查。自锚点不重新进入自己的 C 请求守卫。
+
+- 本阶段实际 `PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-a-session tests.integration.persistence.test_assistant_discussion_context tests.integration.persistence.test_assistant_candidate_versions.AssistantCandidateVersionsStoreTest`：23 历史＋14 候选版本，共 37 项 GREEN／4.317 秒，正式生产 001–053 随机库残留 0；新增纯协议 10 项 GREEN／0.005 秒，有限 mypy 两源码与差异检查通过。各新增纯反馈有真实 RED→GREEN；三条新 PG 中首项 API 缺失 RED→GREEN，其余两项是已有守卫的回归，不虚构 RED。合入期间中止一轮 exit130 且已清理，不计成功或业务失败。
+- 独立两轴限定审查：Standards 硬要求 0、低风险判断性 Duplicated Code 1（两个政策入口的身份四元组比较保持显式；无事务或范围行为重复），Spec 0。审查者各自重跑 10 纯协议 GREEN。只交薄契约，不宣称 C 中央捕获、派生擦除或累计模型输入已完成。
+- 先前阶段的工作树测试确有未正式交付 A10 夹具导入。正式测试修复 `55adc98ca69f3555a48468356f9b9cd91ec4e19d` 移除此导入，以正式 048 表中的合成行准备独立会话，原范围、来源和正文断言全部保留；`git archive` 正式树加精确补丁的隔离副本 36 项历史／版本／迁移 GREEN／3.941 秒，库残留 0，两轴 0。此前 34 项执行事实保留，本次才补足独立正式消费的前置证明。
+- 当前历史 generation 用户正文仍按旧规则要求完成状态；自审已确认该规则会误丢失败、预算阻断或被替换但来源仍有效的用户要求，与规格累计讨论不符。已告知总协调，下一独立真实 TDD 将区分有效用户输入与完成 AI 候选，并用实际总预算回归防止绕过；不将旧过滤当最终契约。12 保持 claimed，自动部分继续实施，人工部分未执行；无真实 App、OCR、微信、外部模型或 19，无 push／发布／部署。
+
+
+阶段 3c 规格纠正交付：将有效用户历史输入与完成 AI 候选的可用性分开。失败、运行中、仅 reserve 及被替换但来源仍有效的 generation 用户正文完整进入累计讨论；候选必须同时证明 A turn 与 C request completed。A 尚未保存 reply 外键时，只按实际 owner/contact/binding/idempotency key 关联真实 C request 并核验其已捕获来源与样本，无 C request 时只核验真实 turn 依赖。`available` 同样接受来源有效的 failed 用户锚点，支持原失败键重试，不放松 CURRENT 指针／绑定 CAS，快照格式和已完成记录指纹构造不变。
+
+- 新增 9 项真实 PG 回归。正文遗漏、真实 C 请求未匹配、实际 raw 依赖漏返回、failed 锚点误拒绝分别取得实际 RED→GREEN；其余来源／manual 样本／替换终态／内容变更／完成保存与 A 完成间隔／状态变更回归初跑即 GREEN。旧排除 USER 断言是对规格的错误解读，现明确更名并纠正为保留 USER／不纳入未完成 AI，不删减任何来源或删除断言；没有引用尚未提交的 14 helper。
+- 实现上下文正式 001–053 隔离 PG：32 历史＋14 版本，共 46 项 GREEN／4.535 秒，纯协议 10 项 GREEN／0.005 秒、有限 mypy 两源码与差异检查通过，每轮自有库残留 0。主 Agent 再从正式 `cc9609c` 导出独立副本，只加入这两个已审文件，排除所有未提交 metadata／14／10／前端源码：46 项 GREEN／4.258 秒，正式生产迁移和库清理均核实。限定两轴 Standards 硬要求／气味 0，Spec 0。
+- C 中央来源与样本删除仍须覆盖 prepared pending／failed、A reply FK 尚为空的实际同键 turn，并清除 fresh-read 用户正文；本阶段验证旧捕获拒绝，不将 fresh-read 派生擦除声称为通过。完整生产模型上下文与总预算增长／替换共用仍继续接线。12 保持 claimed，自动部分继续实施，人工部分未执行；没有实际 App、OCR、微信、外部模型或远端操作。
+
+总协调主树集成阶段 3b／3c：按顺序消费正式 `fda3696ac85642bb8dd3bdc2c4d2129dbbde654f`、`55adc98ca69f3555a48468356f9b9cd91ec4e19d`、`2c0b02c13e65ebf4835f645cb40d7b224b3a680a`、`fa3aa385c189c5474cc26fbb636d39d6e203260f`，只集成本票五个文件，不取 A 未提交的运行时、回执、目录或替换功能。
+
+- 在 Conda `NotAlone`、关闭 dotenv／追踪、`PYTHONPATH=src:.` 环境，运行 `python /private/tmp/notalone-coordinator-isolated-tests.py /Users/local-user/learn/NotAlone tests.integration.persistence.test_assistant_discussion_context tests.integration.persistence.test_assistant_candidate_versions`：48 项 GREEN／6.939 秒（32 历史、16 候选版本及迁移验证），真实正式 001–053、52→53 与 fresh／重复迁移均验证，自有根库和嵌套库残留 0。
+- 同环境 `python -m unittest tests.unit.reply.test_assistant_discussion_serialization -q`：10 项 GREEN／0.010 秒；差异检查通过。最终限定双轴静态复审 Standards 硬要求 0／重要气味 0、Spec 0，不把静态复审冒充额外运行证据。
+- 本次完成数据源与严格身份协议的独立主树集成。累计完整模型载荷、可信预算回执、公开提醒和 C 的中央捕获／派生硬擦除仍由原负责人继续；12 保持 claimed，原验收标准完整保留，人工部分未执行。
