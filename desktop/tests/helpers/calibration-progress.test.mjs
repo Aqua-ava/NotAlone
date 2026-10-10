@@ -42,7 +42,8 @@ test('选区失败保存固定错误码且拒绝原生私密原文', async () =>
       bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
     const profile = await import(pathToFileURL(modulePath).href);
     for (const error of ['calibration_coordinates_invalid', 'calibration_context_unavailable', 'calibration_window_size_changed', 'calibration_window_changed', 'calibration_probe_failed', 'calibration_probe_missing',
-      'calibration_wechat_instances_ambiguous', 'calibration_wechat_version_unsupported', 'calibration_window_not_visible', 'calibration_windows_ambiguous', 'calibration_window_geometry_invalid']) {
+      'calibration_wechat_instances_ambiguous', 'calibration_wechat_version_unsupported', 'calibration_window_not_visible', 'calibration_windows_ambiguous', 'calibration_window_geometry_invalid',
+      'header_name_unreadable', 'row_name_unreadable', 'session_names_mismatch', 'session_name_confidence_low']) {
       await profile.saveLayoutVerificationResult(owned, 'failed', error, 'selection', () => true);
       assert.deepEqual(JSON.parse(await readFile(path.join(owned, 'foreground-layout-verification.json'), 'utf8')),
         { state: 'failed', error, stage: 'selection' });

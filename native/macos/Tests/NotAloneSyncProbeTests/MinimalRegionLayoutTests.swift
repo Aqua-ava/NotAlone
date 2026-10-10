@@ -3,6 +3,24 @@ import CoreGraphics
 @testable import NotAloneSyncCore
 
 final class MinimalRegionLayoutTests: XCTestCase {
+    func testNameValidationReportsSafeFailureCategoryWithoutLoweringQuality() throws {
+        let cases: [(String?, Double, String?, Double, String)] = [
+            (nil, 0, "测试", 1, "header_name_unreadable"),
+            ("测试", 1, nil, 0, "row_name_unreadable"),
+            ("测试", 1, "其他", 1, "session_names_mismatch"),
+            ("测试", 0.89, "测试", 1, "session_name_confidence_low"),
+        ]
+        for (header, headerConfidence, row, rowConfidence, code) in cases {
+            let names = Names(header: Name(text: header, confidence: headerConfidence),
+                              row: Name(text: row, confidence: rowConfidence))
+            XCTAssertThrowsError(try names.validate()) { error in
+                XCTAssertEqual((error as? MinimalSessionError)?.rawValue, code)
+            }
+        }
+        XCTAssertNoThrow(try Names(header: Name(text: "测试", confidence: 0.90),
+                                  row: Name(text: "测试", confidence: 1)).validate())
+    }
+
     private func window(_ id: Int, _ width: Double, _ height: Double) -> [String: Any] {
         [kCGWindowNumber as String: id,
          kCGWindowBounds as String: CGRect(x: 0, y: 0, width: width, height: height).dictionaryRepresentation]

@@ -21,6 +21,10 @@ const verificationMessages: Record<string, string> = {
   wechat_not_in_front: '校验已停止：原生检测未确认微信在前台。',
   minimal_region_layout_changed: '校验已停止：窗口或布局与所选五处区域不一致。',
   quality_unverified: '校验已停止：两处名称或布局细条未通过质量核对。',
+  header_name_unreadable: '校验已停止：顶部名称未识别为完整单行，请核对选区。',
+  row_name_unreadable: '校验已停止：选中行名称未识别为完整单行，请核对选区。',
+  session_names_mismatch: '校验已停止：顶部名称与选中行名称识别结果不一致。',
+  session_name_confidence_low: '校验已停止：名称一致，但识别置信度未达到要求。',
   minimal_region_capture_failed: '校验已停止：最小区域采集未完成。',
 };
 

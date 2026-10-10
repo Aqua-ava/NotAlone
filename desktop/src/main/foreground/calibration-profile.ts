@@ -27,6 +27,7 @@ export async function invalidateCalibrationProfile(userData: string, resetProgre
 export const layoutVerificationErrors = [
   'minimal_region_layout_unverified', 'minimal_region_layout_changed',
   'screen_capture_permission_missing', 'wechat_not_in_front', 'quality_unverified',
+  'header_name_unreadable', 'row_name_unreadable', 'session_names_mismatch', 'session_name_confidence_low',
   'minimal_region_capture_failed', 'calibration_unavailable',
   'calibration_coordinates_invalid', 'calibration_context_unavailable',
   'calibration_window_size_changed', 'calibration_window_changed',

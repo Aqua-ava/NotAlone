@@ -35,7 +35,7 @@ public enum MinimalSessionCapture {
             let digests = try await capture.sentinels()
             entering("names")
             let names = try await capture.names()
-            guard names.consistent, names.confidence >= 0.90 else { throw MinimalSessionError.qualityUnverified }
+            try names.validate()
             entering("sentinels-after")
             guard try await capture.sentinels() == digests else { throw MinimalSessionError.qualityUnverified }
             entering("profile")
@@ -141,16 +141,22 @@ private final class Capture {
     }
 }
 
-private struct Name {
+struct Name {
     let text: String?
     let confidence: Double
 }
 
-private struct Names {
+struct Names {
     let header: Name
     let row: Name
     var consistent: Bool { header.text != nil && header.text == row.text }
     var confidence: Double { min(header.confidence, row.confidence) }
+    func validate() throws {
+        guard header.text != nil else { throw MinimalSessionError.headerNameUnreadable }
+        guard row.text != nil else { throw MinimalSessionError.rowNameUnreadable }
+        guard consistent else { throw MinimalSessionError.namesMismatch }
+        guard confidence >= 0.90 else { throw MinimalSessionError.nameConfidenceLow }
+    }
 }
 
 private func recognize(_ image: CGImage) throws -> Name {

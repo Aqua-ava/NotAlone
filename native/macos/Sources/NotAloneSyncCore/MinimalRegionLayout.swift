@@ -8,6 +8,10 @@ public enum MinimalSessionError: String, Error {
     case permissionMissing = "screen_capture_permission_missing"
     case weChatNotFrontmost = "wechat_not_in_front"
     case qualityUnverified = "quality_unverified"
+    case headerNameUnreadable = "header_name_unreadable"
+    case rowNameUnreadable = "row_name_unreadable"
+    case namesMismatch = "session_names_mismatch"
+    case nameConfidenceLow = "session_name_confidence_low"
     case captureFailed = "minimal_region_capture_failed"
 }
 
