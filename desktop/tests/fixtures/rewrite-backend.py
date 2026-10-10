@@ -77,17 +77,21 @@ class DesktopRewriteModel(ScriptedCoreModel):
             if exploration.get("cite_all"):
                 ids = [item["evidence_id"] for item in payload["evidence"]]
             group = exploration.get("group", "")
+            options = [
+                {"label": "愿意等待", "intent": exploration.get("direction", f"表示愿意等待，但不增加承诺。{group}"),
+                 "reason": "想留出时间时适用。", "citation_ids": ids, "recommended": bool(ids), "pause": False},
+                {"label": "说明边界", "intent": exploration.get("direction", f"表示愿意等待，但不增加承诺。{group}") if exploration.get("same_stance") else f"说明今晚不继续等待，之后再联系。{group}",
+                 "reason": "想说明时间边界时适用。", "citation_ids": [], "recommended": False, "pause": False},
+                {"label": "暂不回应", "intent": f"暂不回应本次消息。{group}", "reason": "尚未想好时可以暂停。",
+                 "citation_ids": [], "recommended": False, "pause": True},
+            ]
+            if "options" in exploration:
+                options = [{"citation_ids": [], "recommended": False, "pause": False, **item}
+                           for item in exploration["options"]]
             self.responses.append(tool_response("ExplorationOutput", {
                 "understanding": exploration.get("understanding", "对方说明回复会晚一点。"),
                 "ambiguities": exploration.get("ambiguities", []), "citation_ids": ids,
-                "options": [
-                    {"label": "愿意等待", "intent": exploration.get("direction", f"表示愿意等待，但不增加承诺。{group}"),
-                     "reason": "想留出时间时适用。", "citation_ids": ids, "recommended": bool(ids), "pause": False},
-                    {"label": "说明边界", "intent": exploration.get("direction", f"表示愿意等待，但不增加承诺。{group}") if exploration.get("same_stance") else f"说明今晚不继续等待，之后再联系。{group}",
-                     "reason": "想说明时间边界时适用。", "citation_ids": [], "recommended": False, "pause": False},
-                    {"label": "暂不回应", "intent": f"暂不回应本次消息。{group}", "reason": "尚未想好时可以暂停。",
-                     "citation_ids": [], "recommended": False, "pause": True},
-                ], "question": exploration.get("question"),
+                "options": options, "question": exploration.get("question"),
                 "current_step": "本次只说明意愿，不推进其他安排。", "tradeoffs": ["简短表达可能只推进当前一步。"],
             }))
             return super()._generate(messages, stop, run_manager, **kwargs)
