@@ -86,3 +86,18 @@ PYTHONPATH=src python -m tests.fidelity_capture --capture ../desktop/artifacts/h
 ## 总协调公开复验
 
 以上保留各C主题当时的结果及失败。总协调在正式root集成树以001–050生产迁移、认证HTTP及合成模型执行fidelity-intent四例和fidelity-content九例／三种确定性拒绝，两个公开组均exit0；quiet分别9及19次，active和屏上窗口0、单Chrome、cleanupConfirmed=true，Electron/native=false。唯一报告入口重建的新三输入报告4例含故意立场失败1、调用4，内容报告9例含故意扩写失败7、调用9；真人通过0、自然度／关系适配／本人相似度未验证。新捕获分别为fidelity-intent-current-observations.json和fidelity-content-observations.json，旧HTTP及历史捕获不覆盖。C05最终完整预算及组合仍待正式A12。
+总协调后续已实际执行`style-reference`：root正式`37d5b70`，51认证HTTP／PG、186单元和type全green；页面exit0、quiet10、active0／onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false。A08正式恢复主题集成后同组与recovery再次全green，quiet26。E05剩余为A12完整请求计量，样本取数界限不能替代该预算。
+
+## E06：正式助手HTTP的独立组合报告
+
+沿正式001–051和生产生成装配，回应／主动各三个逐例实际调用：当前拒绝、继续只改短句、故意从旧表达扩写为答应和未来陪同。既有候选继续接口的覆盖不代表B10完整连续修改或消息组已经接入。每次同键重读零新增调用，样本回执不与事实引用混用；删除样本后三次相关讨论、依据、旧键和继续全部不可恢复。另两条独立组合仍验证删除原始来源或样本后无关讨论保留。
+
+`test_authentic_expression_scenarios`＋`test_authentic_expression_combination`＋`test_style_reference_api`实际11项全部green、无skip，随机隔离库精确清理。样本竞态回归期间既有失败标记在被删除的租约上记录失效诊断，原拒绝／候选0仍通过，没有修改守卫或业务数据。
+
+`authentic-expression-combination-http-v1.json`由唯一E01入口读取六个实际HTTP捕获生成；结构失败0、synthetic_fixture故意保真失败2、真人0／qualityfalse。自然度、关系适配、本人相似度和真实模型质量未知，全部开发集合成例；没有新增外部模型或自动语义评判器。
+
+```bash
+PYTHONPATH=src python -m tests.fidelity_capture --capture ../desktop/artifacts/headless-pages/authentic-combination-http-observations.json --case-spec tests/fixtures/fidelity/combined-http-review.json --output ../docs/evaluations/authentic-expression-combination-http-v1.json
+```
+
+真实A08组合页面、A09独立保留、B07持久Skill探索／澄清附加字段、B10消息组及A12完整预算仍需正式依赖后的组合证据；这些未执行项不勾选、不由本报告替代。

@@ -49,3 +49,11 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 以`8c1cc57`为固定点的两轴限定审查最终0；审查只读这两份切片文件，没有代执行页面或扩大验收范围。
 
 该实例重建不冒充A08真实页面恢复或进程重启。A09会话删除、B07探索版本与B10连续修改／消息组、A12总预算尚未正式交付，本票不勾验收项，不以基础组件代替最终组合；这些剩余项等待实际依赖后继续，不请求用户实施或质量验收。无App、OCR、微信、外部模型或远端操作。
+
+独立后端组合接续：新增`test_authentic_expression_scenarios`，回应和主动各三次真实助手HTTP：当前拒绝与旧答应样本冲突、沿已有候选继续改短句、合法结构但故意答应并增加时间地点／陪同的错误输出。每次都核对本次意图载荷、样本非事实回执、同键重读及调用次数；删样本后三轮输入／候选全部遮挡，旧键／依据／继续拒绝，没有额外模型调用。原候选继续接口的验证不代替B10两场景／消息组完整交付。
+
+首个回应单例1项green，随后`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src NOTALONE_COMBINED_FIDELITY_CAPTURE=../desktop/artifacts/headless-pages/authentic-combination-http-observations.json python -m unittest tests.integration.server.test_authentic_expression_scenarios tests.integration.server.test_authentic_expression_combination tests.integration.server.test_style_reference_api -q`实际11项green、无skip，三类随机隔离库均执行正式001–051并精确清理。样本删除竞态期间有既有失败标记租约失效诊断，原拒绝和候选0断言仍通过；未放宽守卫。
+
+唯一E01报告入口读取上述六个实际调用捕获，交付`docs/evaluations/authentic-expression-combination-http-v1.json`：6开发例，结构失败0，逐例独立synthetic_fixture保真故意失败2，真人0／qualityfalse，token及真实语义／自然度／关系适配／本人相似度未知。输入／system／输出／UUID和测量保留；评价字段未发送给模型。用例范围只包括当前正式基础继续链，Skill版本、澄清附加字段、完整消息组、A09删除和A12预算尚未被该报告覆盖。本票仍claimed，后续消费真实接口后补组合，不新增外部模型实验。
+
+以`a1fab20`为固定点的六文件限定Standards／Spec最终均0，逐例核验6/6源捕获一致、实际payload没有评价字段、故意错误与未知维度均保留。该复审只读，不代替剩余真实依赖的自动集成。
