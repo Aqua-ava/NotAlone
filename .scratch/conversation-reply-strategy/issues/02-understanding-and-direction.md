@@ -37,6 +37,10 @@ Blocked by: [conversation-reply-strategy/01 回应场景与明确意愿直达候
 
 ## Comments
 
+2026-10-11 持久UUID公开后端：生产装配替换旧整数／进程缓存路径，回应与主动共用A实际助手输入、正式052探索存储及原ReplyGenerator。新增真实HTTP/正式001–052 PG覆盖纠正不确认、明确选择/直接意愿、回答仍有歧义不生成、完成同键重放、当前输入/Skill竞态及原根删除。首端点404、主动伪confirmed成功、旧完成操作被TTL/current拒绝、晚期revision保存候选、非法引用推进输入及实际保存TTL未擦正文等反例均先RED再GREEN。页面尚未替换和执行，票保持claimed；旧7场页面不作为本次UUID闭环证据。
+
+本主题最终20新公开HTTP场与单次字段、正式052存储/升级、原生成/候选组、A输入/助手/记忆删除和C样本参考联跑94项全部green、skip0、owned_database_remaining=0；230完整reply unit、11引用/应用unit及桌面 `npm run typecheck` 通过。命令为显式Conda/PYTHONPATH的隔离测试入口，测试使用实际生产迁移和装配；早先模块名错误的联跑保留为失败。Standards hard/Fowler及Spec剩余均0；新增TTL反例直接查库，不依赖后续GET触发清理。仅合成资料、无App/OCR/真实聊天或额外模型。此为R02/R03/R05/R06/R07共同后端交付，不代替页面、A12预算、R09/R10或组合验收。
+
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
 
 ## 承接契约

@@ -33,6 +33,7 @@ from notalone.reply.errors import (
     ReplyPersistenceError,
     ReplyStoreInvariantError,
 )
+from notalone.reply.exploration import ExplorationExpired
 from notalone.reply.interface import (
     ContextReceipt,
     GenerateReply,
@@ -325,6 +326,9 @@ class PostgresReplyStore:
                 connection.execute("DELETE FROM public.reply_original_source_use WHERE reply_request_id=%s", (request.request_id,))
                 capture_reply_original_sources(connection, request, context)
                 require_reply_sources_current(connection, owner_id=request.scope.owner_id, request_id=request.request_id)
+        except ExplorationExpired:
+            self._prune_expired_exploration(request.scope)
+            raise ReplyStoreInvariantError("探索任务已过期。") from None
         except psycopg.Error:
             raise ReplyPersistenceError("回复来源准备未可靠保存。") from None
 
@@ -490,11 +494,24 @@ class PostgresReplyStore:
                         raise ReplyStoreInvariantError(
                             "回复尝试完成状态写入不一致。"
                         )
+        except ExplorationExpired:
+            self._prune_expired_exploration(request.scope)
+            raise ReplyStoreInvariantError("探索任务已过期。") from None
         except ReplyPersistenceError:
             raise
         except psycopg.Error:
             raise ReplyPersistenceError("候选回复持久化失败。") from None
         return result
+
+    def _prune_expired_exploration(self, scope: ContactScope) -> None:
+        """退出持有owner锁的事务后独立擦除过期探索正文。"""
+
+        from notalone.persistence.reply_exploration import PostgresExplorationStore
+        from notalone.persistence.retrieval import PostgresRetrieval
+        from notalone.reply.exploration_context import ExplorationEvidence
+
+        evidence = ExplorationEvidence(PostgresRetrieval(self._database_url))
+        PostgresExplorationStore(self._database_url, evidence=evidence).prune_expired(scope)
 
     def fail(self, request: ReplyRequest, *, reason: str) -> None:
         """把当前运行尝试标记为失败或租约过期。"""
@@ -788,6 +805,8 @@ class PostgresReplyStore:
         request: ReplyRequest,
         context: ReplyContext,
     ) -> set[UUID]:
+        from notalone.persistence.explored_generation import require_explored_context
+
         if not (
             isinstance(context, ReplyContext)
             and isinstance(context.command, GenerateReply)
@@ -831,6 +850,7 @@ class PostgresReplyStore:
             raise ReplyStoreInvariantError(
                 "回复上下文不属于当前持久化请求。"
             )
+        require_explored_context(connection, context)
         evidence_ids: set[UUID] = set()
         require_context_style_references(connection, request.scope, context.style_references)
         for item in context.evidence:

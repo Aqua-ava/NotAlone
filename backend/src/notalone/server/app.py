@@ -33,6 +33,7 @@ from notalone.application.source_service import SourceService
 from notalone.application.style_sample_service import StyleSampleService
 from notalone.persistence.style_sample_store import PostgresStyleSampleStore
 from notalone.server.style_samples import handle_style_samples
+from notalone.server.reply_exploration import handle_exploration
 from notalone.persistence.source_tasks import SourceDeletionHistoryUnverified
 from notalone.persistence.source_deletion import SourceDeletionError, SourceNotFoundError
 from notalone.persistence.background_tasks import (
@@ -407,6 +408,8 @@ class BackendApp:
             return self._handle_assistant_session(method_upper, path_value, request_body)
         if path_value.startswith("/api/contacts/") and "/sources" in path_value:
             return self._handle_sources(method_upper, path_value)
+        if path_value == "/api/reply/explore":
+            return self._handle_reply_explore(method=method_upper, body=request_body)
         if path_value == "/api/reply/generate":
             return self._handle_reply_generate(
                 method=method_upper,
@@ -1105,6 +1108,15 @@ class BackendApp:
             return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "evidence_unavailable"})
         return _json_response(HTTPStatus.OK, payload, headers={"Cache-Control": "no-store"})
 
+    def _handle_reply_explore(self, *, method: str, body: bytes) -> Response:
+        """只返回短任务理解和方向；不调用候选生成器。"""
+
+        if method != "POST":
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        if self._reply_service is None:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "reply_unavailable"})
+        return _json_response(HTTPStatus.CONFLICT, {"error": "exploration_protocol_changed"})
+
     def _handle_reply_generate(self, *, method: str, body: bytes) -> Response:
         """处理候选回复生成请求；失败关闭且不回显请求正文。"""
 
@@ -1128,6 +1140,8 @@ class BackendApp:
                 contact_id=contact_id,
                 request=request,
             )
+        except ReplyIdempotencyConflictError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "reply_input_conflict"})
         except ModelWorkStopped:
             return _json_response(
                 HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_stopping"}
@@ -1169,6 +1183,12 @@ class BackendApp:
         if service is None:
             return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "assistant_session_unavailable"})
         parts = path.strip("/").split("/")
+        if len(parts) >= 6 and parts[5] == "explorations":
+            status, payload = handle_exploration(
+                self._reply_service.exploration if self._reply_service is not None else None,
+                owner_id=self._owner_id, method=method, path=path, body=body, render_turn=_completed_turn_payload,
+            )
+            return _json_response(status, payload, headers={"Cache-Control": "no-store"})
         try:
             contact_id = UUID(parts[2])
             if parts[3:] == ["assistant-session", "default"] and method == "POST":
@@ -1205,11 +1225,7 @@ class BackendApp:
                 )
                 if turn.reply is None:
                     raise AssistantSessionPersistenceError("未保存完成结果。")
-                return _json_response(HTTPStatus.OK, {
-                    **_reply_payload(turn.reply), "session_id": str(session_id),
-                    "turn_id": str(turn.turn_id), "input_version_id": str(turn.input_version_id),
-                    "state": turn.state,
-                })
+                return _json_response(HTTPStatus.OK, _completed_turn_payload(turn))
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         except (ValueError, IndexError, ReplyRequestInvalid):
             return _json_response(HTTPStatus.BAD_REQUEST, {"error": "assistant_session_request_invalid"})
@@ -2466,6 +2482,13 @@ def _candidate_payload(candidate: BindingCandidateView) -> dict[str, object]:
         "display_name": candidate.display_name,
         "last_timestamp": candidate.last_timestamp,
     }
+
+
+def _completed_turn_payload(turn: AssistantTurn) -> dict[str, object]:
+    if turn.reply is None or turn.state != "completed":
+        raise AssistantSessionPersistenceError("未保存完成结果。")
+    return {**_reply_payload(turn.reply), "session_id": str(turn.session_id), "turn_id": str(turn.turn_id),
+            "input_version_id": str(turn.input_version_id), "state": turn.state}
 
 
 def _reply_payload(reply: ReplyGenerated) -> dict[str, object]:

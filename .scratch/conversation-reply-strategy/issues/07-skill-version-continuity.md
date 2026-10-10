@@ -38,6 +38,8 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 
 ## Comments
 
+2026-10-11 公开后端接续：真实合成Skill包经静态read_file Tool加载，探索固定一个不可变版本并在确认后的原生成链使用同版本；明确disabled两段均NoSkill、不能auto回退。目录变更拒绝旧读取/选择，用户明确关闭并刷新时保留原已选意愿。新增模型前与实际保存边界revision竞态反例均先RED后GREEN，拒绝时候选0。探索未装配表达样本port；E06组合载荷与A12正式总预算仍待接，页面版本展示/更换亦未执行，票保持claimed。
+
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
 
 2026-10-11 既有B接续：静态选择模块按既有SkillPort读取最多一个版本，以validate_skill_version核对启用、owner/contact和不可变目录身份；明确关闭/无匹配都返回NoSkill，旧指定版本不回退。跨范围目录和正文两次red→green、6项受控模块验证通过。完整探索→确认→生成及库revision失效路径待A051/B052实际接线与公开页面；未标验收通过。

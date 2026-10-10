@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Callable, Protocol
+from typing import TYPE_CHECKING, Callable, Protocol
 from uuid import UUID
 
 from notalone.conversation import (
@@ -32,6 +32,9 @@ from notalone.reply.interface import (
     UserSkillChoice,
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
+
+if TYPE_CHECKING:
+    from notalone.application.reply_exploration import ReplyExplorationService
 
 
 class ReplyPort(Protocol):
@@ -64,6 +67,7 @@ class ReplyService:
         "_binding_lookup",
         "_conversation_factory",
         "_reply",
+        "_exploration",
     )
 
     def __init__(
@@ -72,10 +76,16 @@ class ReplyService:
         binding_lookup: Callable[[UUID, UUID], ConversationBinding | None],
         conversation_factory: Callable[[ConversationBinding], ConversationPort],
         reply: ReplyPort,
+        exploration: ReplyExplorationService | None = None,
     ) -> None:
         self._binding_lookup = binding_lookup
         self._conversation_factory = conversation_factory
         self._reply = reply
+        self._exploration = exploration
+
+    @property
+    def exploration(self) -> ReplyExplorationService | None:
+        return self._exploration
 
     def generate(
         self,
@@ -118,6 +128,17 @@ class ReplyService:
             return ReplyServiceResult(reply=None, reason="invalid_verification")
         if not command.matches_verified_scope(verification.scope):
             return ReplyServiceResult(reply=None, reason="scope_mismatch")
+        if isinstance(command.content, (ReplyToMessage, InitiateConversation)):
+            from notalone.reply.interface import DirectionSource
+
+            intent = command.content.direction if isinstance(command.content, ReplyToMessage) else command.content.purpose
+            if request.suggestion is not None and isinstance(request.suggestion.input_version, UUID):
+                if self._exploration is None:
+                    return ReplyServiceResult(reply=None, reason="suggestion_unconfirmed")
+            elif intent.source is DirectionSource.CONFIRMED_SUGGESTION:
+                return ReplyServiceResult(reply=None, reason="suggestion_unconfirmed")
+            elif request.suggestion is not None:
+                return ReplyServiceResult(reply=None, reason="invalid_reply_input")
         # 生成阶段的异常（含持久层/基础设施故障）不折叠为业务拒绝：
         # 由调用方映射为 5xx，避免把服务端故障伪装成客户端冲突。
         outcome = self._reply.generate(
@@ -154,10 +175,21 @@ class ReplyServiceRequest:
             return None
         if self.skill_disabled and self.skill_version_id is not None:
             return None
+        if self.suggestion is not None and (
+            not isinstance(self.suggestion, SuggestionReference)
+            or not isinstance(self.suggestion.input_version, UUID)
+        ):
+            return None
+        content = self.content
+        if isinstance(content, (ReplyToMessage, InitiateConversation)):
+            from notalone.reply.interface import DirectionSource
+
+            intent = content.direction if isinstance(content, ReplyToMessage) else content.purpose
+            if intent.source is DirectionSource.CONFIRMED_SUGGESTION and self.suggestion is None:
+                return None
         skill: AutoSkill | UserSkillChoice | NoSkill = NoSkill() if self.skill_disabled else AutoSkill()
         if self.skill_version_id is not None:
             skill = UserSkillChoice(version_id=self.skill_version_id)
-        content = self.content
         if isinstance(content, ReplyToMessage) and self.suggestion is not None:
             content = replace(content, direction=replace(content.direction, suggestion=self.suggestion))
         elif isinstance(content, InitiateConversation) and self.suggestion is not None:

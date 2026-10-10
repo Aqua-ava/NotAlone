@@ -32,12 +32,14 @@ class ExplorationOpen:
     previous_id: UUID | None = None
     automatic: bool = False
     change_group: bool = False
+    question_id: UUID | None = None
 
     def __post_init__(self) -> None:
         if (not isinstance(self.session_id, UUID) or not isinstance(self.operation_key, UUID)
                 or not isinstance(self.content, ExplorationInput)
                 or self.expected_input_version_id is not None and not isinstance(self.expected_input_version_id, UUID)
                 or self.previous_id is not None and not isinstance(self.previous_id, UUID)
+                or self.question_id is not None and not isinstance(self.question_id, UUID)
                 or not isinstance(self.automatic, bool) or not isinstance(self.change_group, bool)):
             raise ValueError("探索请求身份或更新模式无效。")
 
@@ -77,8 +79,19 @@ class ExplorationGeneration:
     skill: NoSkill | UserSkillChoice
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class ExplorationCompletedInput:
+    """只读A已完成请求的原输入；不恢复探索正文或当前指针。"""
+
+    exploration_id: UUID
+    request_key: UUID
+    input_payload: dict[str, Any]
+
+
 class ExplorationGenerationPort(Protocol):
     def generate(self, command: ExplorationGeneration) -> Any: ...
+
+    def replay(self, scope: ContactScope, session_id: UUID, completed: ExplorationCompletedInput) -> Any: ...
 
 
 class ExplorationStore(Protocol):
@@ -113,3 +126,13 @@ class ExplorationStore(Protocol):
     def retry(self, task: ExplorationTask) -> ExplorationTask: ...
 
     def stop(self, scope: ContactScope, exploration_id: UUID, input_version_id: UUID) -> None: ...
+
+    def replay_confirmation(
+        self, scope: ContactScope, session_id: UUID, exploration_id: UUID, input_version_id: UUID,
+        *, suggestion_id: UUID | None, direct_intent: str | None,
+    ) -> ExplorationCompletedInput | None: ...
+
+    def replay_answer(
+        self, scope: ContactScope, session_id: UUID, exploration_id: UUID, input_version_id: UUID,
+        *, question_id: UUID, answer: str, operation_key: UUID,
+    ) -> ExplorationCompletedInput | None: ...

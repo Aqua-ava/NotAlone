@@ -18,6 +18,7 @@ from notalone.reply.interface import (
     InitiateConversation,
     ReplyToMessage,
     RewriteDraft,
+    SuggestionReference,
 )
 
 
@@ -56,7 +57,10 @@ def parse_reply_request(body: bytes) -> tuple[UUID, ReplyServiceRequest]:
             raise ReplyRequestInvalid()
         if content_value.get("target_message_id") is not None:
             raise ReplyRequestInvalid()
-        content = InitiateConversation(ConfirmedDirection(purpose, DirectionSource.DIRECT_INPUT),
+        purpose_source = content_value.get("purpose_source", "direct_input")
+        if purpose_source not in ("direct_input", "confirmed_suggestion"):
+            raise ReplyRequestInvalid()
+        content = InitiateConversation(ConfirmedDirection(purpose, DirectionSource(purpose_source)),
                                        **_scenario_declarations(content_value))
     else:
         raise ReplyRequestInvalid()
@@ -65,6 +69,13 @@ def parse_reply_request(body: bytes) -> tuple[UUID, ReplyServiceRequest]:
     continued_id = _optional_uuid(continued)
     skill_value = payload.get("skill_version_id")
     skill_id = _optional_uuid(skill_value)
+    reference = payload.get("suggestion")
+    suggestion = None
+    if reference is not None:
+        if not isinstance(reference, dict) or set(reference) != {"task_id", "input_version", "suggestion_id"}:
+            raise ReplyRequestInvalid()
+        version = _uuid_field(reference, "input_version")
+        suggestion = SuggestionReference(_uuid_field(reference, "task_id"), version, _uuid_field(reference, "suggestion_id"))
     skill_disabled = payload.get("skill_disabled", False)
     if not isinstance(skill_disabled, bool) or (skill_disabled and skill_id is not None):
         raise ReplyRequestInvalid()
@@ -77,6 +88,7 @@ def parse_reply_request(body: bytes) -> tuple[UUID, ReplyServiceRequest]:
         content=content,
         continued_from_candidate_id=continued_id,
         skill_version_id=skill_id,
+        suggestion=suggestion,
         skill_disabled=skill_disabled,
         expected_input_version_id=expected_input_version_id,
     )

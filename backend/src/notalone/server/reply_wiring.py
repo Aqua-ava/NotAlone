@@ -12,6 +12,9 @@ from uuid import UUID
 import psycopg
 
 from notalone.application.reply_service import ReplyService
+from notalone.application.reply_exploration import ReplyExplorationService
+from notalone.application.assistant_session_service import AssistantSessionService
+from notalone.application.explored_reply_generation import AssistantExplorationGeneration
 from notalone.application.model_priority import ModelPriorityControl, PriorityReplyPort
 from notalone.conversation.models import (
     ConversationBinding,
@@ -27,6 +30,9 @@ from notalone.persistence.contact_memory_index import (
 from notalone.persistence.outbound_ledger import PostgresOutboundLedger
 from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
 from notalone.persistence.reply_store import PostgresReplyStore
+from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
+from notalone.persistence.reply_exploration import PostgresExplorationStore
+from notalone.persistence.explored_reply_context import ExploredReplyContext
 from notalone.persistence.retrieval import PostgresRetrieval
 from notalone.persistence.skill_port import PostgresSkillPort
 from notalone.persistence.style_sample_store import PostgresStyleSampleStore
@@ -34,6 +40,8 @@ from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
 from notalone.reply.context import RetrievalReplyContext
 from notalone.reply.generator import ReplyGenerator
+from notalone.reply.exploration_context import ExplorationEvidence
+from notalone.reply.adapters.exploration_runtime import LangChainExplorationRuntime
 
 
 def build_reply_service(
@@ -64,6 +72,7 @@ def build_reply_service(
             scope.owner_id,
         ),
     )
+    evidence = ExplorationEvidence(retrieval)
     generator = ReplyGenerator(
         store=PostgresReplyStore(database_url),
         runtime=LangChainReplyRuntime(
@@ -71,10 +80,18 @@ def build_reply_service(
             skill_port=PostgresSkillPort(database_url),
             retrieval=retrieval,
         ),
-        context=context,
+        context=ExploredReplyContext(context, database_url=database_url, evidence=evidence),
         ledger=PostgresOutboundLedger(database_url),
     )
-    return ReplyService(
+    exploration = ReplyExplorationService(
+        store=PostgresExplorationStore(database_url, evidence=evidence), evidence=evidence,
+        skills=PostgresSkillPort(database_url),
+        runtime=LangChainExplorationRuntime(model=model, ledger=PostgresOutboundLedger(database_url), priority=model_priority),
+        generation=AssistantExplorationGeneration(lambda: AssistantSessionService(
+            store=PostgresAssistantSessionStore(database_url), reply=reply_service,
+        )),
+    )
+    reply_service = ReplyService(
         binding_lookup=_active_binding_lookup(database_url),
         conversation_factory=lambda binding: PostgresConversationPort(
             database_url,
@@ -82,7 +99,9 @@ def build_reply_service(
             observation=ConversationObservation.confirmed(binding.binding_id),
         ),
         reply=(PriorityReplyPort(generator, model_priority) if model_priority is not None else generator),
+        exploration=exploration,
     )
+    return reply_service
 
 
 def _active_binding_lookup(database_url: str):

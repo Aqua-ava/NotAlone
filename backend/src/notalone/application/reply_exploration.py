@@ -13,7 +13,7 @@ from notalone.reply.exploration import (
 from notalone.reply.exploration_context import EvidenceSnapshot, ExplorationEvidence
 from notalone.reply.exploration_skill import ExplorationSkillSelection, select_exploration_skill
 from notalone.reply.exploration_task import (
-    ExplorationGeneration, ExplorationGenerationPort, ExplorationOpen, ExplorationReadPurpose,
+    ExplorationCompletedInput, ExplorationGeneration, ExplorationGenerationPort, ExplorationOpen, ExplorationReadPurpose,
     ExplorationStore, ExplorationTask,
 )
 from notalone.reply.interface import DirectionSource, NoSkill, UserSkillChoice
@@ -139,15 +139,29 @@ class ReplyExplorationService:
         self._validate_task(scope, task)
         return self._public(task)
 
+    def require_session(self, *, scope: ContactScope, session_id: UUID, exploration_id: UUID) -> None:
+        """历史读取只核对操作归属，执行权限仍由confirm/answer/stop自身复验。"""
+
+        task = self._store.read(scope, exploration_id, purpose=ExplorationReadPurpose.HISTORY)
+        if task.session_id != session_id:
+            raise ExplorationStale("探索不属于当前助手会话。")
+
     def confirm(
         self, *, scope: ContactScope, exploration_id: UUID, input_version_id: UUID,
         suggestion_id: UUID | None = None, direct_intent: str | None = None,
+        session_id: UUID | None = None,
     ) -> dict[str, Any]:
         if (suggestion_id is None) == (direct_intent is None):
             raise ExplorationError("请明确选择一个方向或输入本次意愿。")
         if direct_intent is not None and (not isinstance(direct_intent, str)
                                          or not 0 < len(direct_intent.strip()) <= 4096):
             raise ExplorationError("本次意愿文字无效。")
+        if session_id is not None:
+            completed = self._store.replay_confirmation(scope, session_id, exploration_id, input_version_id,
+                                                        suggestion_id=suggestion_id, direct_intent=direct_intent)
+            if completed is not None:
+                return self._completed(scope, session_id, completed)
+            self.require_session(scope=scope, session_id=session_id, exploration_id=exploration_id)
         task = self._store.read(scope, exploration_id)
         self._validate_task(scope, task)
         task = self._store.select(scope, exploration_id, input_version_id,
@@ -163,9 +177,16 @@ class ReplyExplorationService:
     def answer(
         self, *, scope: ContactScope, exploration_id: UUID, input_version_id: UUID,
         question_id: UUID, answer: str, operation_key: UUID,
+        session_id: UUID | None = None,
     ) -> dict[str, Any]:
         if not isinstance(answer, str) or not 0 < len(answer.strip()) <= 4096:
             raise ExplorationError("关键问题的回答无效。")
+        if session_id is not None:
+            completed = self._store.replay_answer(scope, session_id, exploration_id, input_version_id,
+                                                  question_id=question_id, answer=answer, operation_key=operation_key)
+            if completed is not None:
+                return self._completed(scope, session_id, completed)
+            self.require_session(scope=scope, session_id=session_id, exploration_id=exploration_id)
         task = self._store.read(scope, exploration_id, purpose=ExplorationReadPurpose.HISTORY)
         if task.state == "paused":
             raise ExplorationStale("当前探索已停止，旧问题不能恢复生成。")
@@ -176,7 +197,7 @@ class ReplyExplorationService:
         content = replace(task.content, answer=answer.strip(),
                           confirmed_intent=task.selected_intent if task.has_confirmed_intent else "")
         result = self._open(scope, ExplorationOpen(
-            task.session_id, content, operation_key, input_version_id, exploration_id,
+            task.session_id, content, operation_key, input_version_id, exploration_id, question_id=question_id,
         ))
         next_task = self._store.read(scope, UUID(result["exploration_id"]))
         # 回答不是确认；只沿已存在的服务器选择继续，未明时保留探索。
@@ -234,3 +255,10 @@ class ReplyExplorationService:
         self._store.finish(task)
         return {"kind": "generated", "turn": turn, "confirmed_intent": task.selected_intent,
                 "exploration_id": str(task.exploration_id)}
+
+    def _completed(self, scope: ContactScope, session_id: UUID, completed: ExplorationCompletedInput) -> dict[str, Any]:
+        turn = self._generation.replay(scope, session_id, completed)
+        content = completed.input_payload["content"]
+        intent = content["direction"] if content["type"] == "reply_to_message" else content["purpose"]
+        return {"kind": "generated", "turn": turn, "confirmed_intent": intent,
+                "exploration_id": str(completed.exploration_id)}

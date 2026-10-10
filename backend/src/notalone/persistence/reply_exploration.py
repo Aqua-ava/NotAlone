@@ -26,7 +26,7 @@ from notalone.reply.exploration import ExplorationError, ExplorationExpired, Exp
 from notalone.reply.exploration_context import EvidenceSnapshot, ExplorationEvidence
 from notalone.reply.exploration_skill import ExplorationSkillSelection
 from notalone.reply.exploration_task import (
-    ExplorationOpen, ExplorationReadPurpose, ExplorationTask,
+    ExplorationCompletedInput, ExplorationOpen, ExplorationReadPurpose, ExplorationTask,
 )
 from notalone.reply.interface import DirectionSource
 from notalone.scopes import ContactScope
@@ -43,6 +43,7 @@ def _operation_digest(request: ExplorationOpen) -> str:
     value = {"content": payload, "session_id": str(request.session_id),
              "expected_input_version_id": str(request.expected_input_version_id) if request.expected_input_version_id else None,
              "previous_id": str(request.previous_id) if request.previous_id else None,
+             "question_id": str(request.question_id) if request.question_id else None,
              "automatic": request.automatic, "change_group": request.change_group}
     return sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
@@ -189,6 +190,83 @@ class PostgresExplorationStore:
             if task.state == "running":
                 raise ExplorationInProgress("同一探索正在运行，请等待后手动重读。")
             return task
+
+    @staticmethod
+    def _replay_row(connection: Any, scope: ContactScope, session_id: UUID, exploration_id: UUID) -> dict[str, Any]:
+        row = connection.execute(
+            "SELECT * FROM public.reply_exploration WHERE owner_id=%s AND contact_id=%s AND session_id=%s AND id=%s",
+            (scope.owner_id, scope.contact_id, session_id, exploration_id),
+        ).fetchone()
+        if row is None or row["state"] == "redacted":
+            raise ExplorationStale("探索操作已删除或不属于当前会话。")
+        return row
+
+    @staticmethod
+    def _completed_input(connection: Any, scope: ContactScope, row: dict[str, Any]) -> ExplorationCompletedInput | None:
+        turn = connection.execute(
+            "SELECT input_payload FROM public.assistant_session_turn WHERE owner_id=%s AND contact_id=%s "
+            "AND session_id=%s AND idempotency_key=%s AND state='completed'",
+            (scope.owner_id, scope.contact_id, row["session_id"], row["request_key"]),
+        ).fetchone()
+        if turn is None:
+            return None
+        payload = turn["input_payload"]
+        reference = payload["content"].get("suggestion")
+        if (not isinstance(reference, dict) or reference.get("task_id") != str(row["id"])
+                or reference.get("input_version") != str(row["input_version_id"])):
+            raise ExplorationStale("已完成请求的探索身份不一致。")
+        return ExplorationCompletedInput(row["id"], row["request_key"], payload)
+
+    def replay_confirmation(
+        self, scope: ContactScope, session_id: UUID, exploration_id: UUID, input_version_id: UUID,
+        *, suggestion_id: UUID | None, direct_intent: str | None,
+    ) -> ExplorationCompletedInput | None:
+        with self._transaction(scope) as connection:
+            row = self._replay_row(connection, scope, session_id, exploration_id)
+            if row["input_version_id"] != input_version_id:
+                raise ExplorationStale("确认不属于原输入版本。")
+            completed = self._completed_input(connection, scope, row)
+            if completed is None:
+                return None
+            content = completed.input_payload["content"]
+            mode = content["type"]
+            source = content["direction_source"] if mode == "reply_to_message" else content["purpose_source"]
+            intent = content["direction"] if mode == "reply_to_message" else content["purpose"]
+            reference = content["suggestion"]
+            if (suggestion_id is not None and (source != "confirmed_suggestion" or reference["suggestion_id"] != str(suggestion_id))
+                    or direct_intent is not None and (source != "direct_input" or intent != direct_intent.strip())):
+                raise ExplorationStale("确认与已完成请求的原选择不同。")
+            return completed
+
+    def replay_answer(
+        self, scope: ContactScope, session_id: UUID, exploration_id: UUID, input_version_id: UUID,
+        *, question_id: UUID, answer: str, operation_key: UUID,
+    ) -> ExplorationCompletedInput | None:
+        with self._transaction(scope) as connection:
+            parent = self._replay_row(connection, scope, session_id, exploration_id)
+            if parent["input_version_id"] != input_version_id:
+                raise ExplorationStale("回答不属于原输入版本。")
+            child = connection.execute(
+                "SELECT * FROM public.reply_exploration WHERE owner_id=%s AND contact_id=%s AND session_id=%s AND operation_key=%s",
+                (scope.owner_id, scope.contact_id, session_id, operation_key),
+            ).fetchone()
+            if child is None:
+                return None
+            completed = self._completed_input(connection, scope, child)
+            if completed is None:
+                return None
+            discussion = connection.execute(
+                "SELECT content FROM public.assistant_session_input WHERE owner_id=%s AND contact_id=%s "
+                "AND session_id=%s AND id=%s AND state='active'",
+                (scope.owner_id, scope.contact_id, session_id, child["input_version_id"]),
+            ).fetchone()
+            if discussion is None or child["state"] == "redacted":
+                raise ExplorationStale("原应答或来源已经失效。")
+            request = ExplorationOpen(session_id, replace(_content(discussion["content"]), answer=answer.strip()),
+                                      operation_key, input_version_id, exploration_id, question_id=question_id)
+            if _operation_digest(request) != child["operation_digest"]:
+                raise ExplorationStale("应答与已完成的原操作不同。")
+            return completed
 
     def read(
         self, scope: ContactScope, exploration_id: UUID,

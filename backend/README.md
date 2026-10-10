@@ -37,6 +37,14 @@ NOTALONE_DISABLE_DOTENV=1 python -m unittest discover -s tests -v
 
 数据库集成测试只使用名称以 `_test` 结尾的合成测试库；设置 `NOTALONE_TEST_DATABASE_URL` 可指定隔离库。真实模型冒烟另需显式凭据，不属于离线验证。
 
+## 持久回复探索接口
+
+回应与主动联系共用认证路由 `/api/contacts/{contact_id}/assistant-sessions/{session_id}/explorations`。`POST` 接受 `content`、`operation_key`、可选 `expected_input_version_id`、`previous_id`、`automatic` 和 `change_group`；回应的 `content.type=response_exploration` 携 `target_message_id`，主动的 `purpose_exploration` 携 `purpose_hint`。两场均可携一次性 `correction`、`requirements` 及 `skill_mode=auto|user|disabled`（user须指定有效 `skill_version_id`）。输入版本由既有助手会话原子分配 UUID，不接受客户端整数版本、已确认意愿、回答或来源声明。
+
+返回明确区分 `directions`、`clarification`、`paused` 和 `generated`。`GET /{exploration_id}` 读取当前结果；`POST /{exploration_id}/confirm` 携实际 `input_version_id` 及 `suggestion_id` 或 `direct_intent`，`/answer` 携实际输入／问题 UUID、`answer` 和独立 `operation_key`，`/stop` 携实际输入 UUID。纠正与回答不建立意愿确认；有服务器保存的确认且关键歧义消失才进入原有回复生成链。完成操作原样重放沿既有助手会话结果，不推进新输入或再次调用模型；修改原操作、来源删除或范围变化拒绝重放。旧 `/api/reply/explore` 返回 `409 exploration_protocol_changed`。
+
+正式 052 保存探索的有限正文、来源身份及删除依赖；原15分钟期限不因刷新重置，自动更新最多3次，暂停任务拒绝继续。实际生成在模型前及保存事务再次核对选择、A当前输入和Skill目录版本，过期后退出owner事务再独立擦除正文。探索只加载所选Skill的受控静态文件，不接表达样本。`test_persistent_reply_exploration` 使用正式生产装配、合成受控模型和真实HTTP／随机PostgreSQL，验证这些后端边界；它不证明页面、真人模型质量、原生读取或App验收。
+
 会话授权管理沿用认证回环 HTTP 和当前运行 owner/微信账号范围：`GET /api/sync/cli-bindings` 只返回 active 绑定的 `binding_id/contact_id/conversation_locator/display_name/status`，包含 CLI 列表消失的绑定。`POST /api/sync/cli-bindings/revoke` 严格接受 `{contact_id,binding_id}`，复核完整范围后在 SyncHost 同一 cycle 锁中幂等撤销。最多等待 4 秒取得锁，超时返回 `409 cli_binding_revoke_busy` 且不执行迟到撤销；跨范围为 `404 cli_binding_not_found`，其他失败不会包装成功。成功响应后不再新增该绑定的 tail，历史资料与绑定记录保留。批量 confirm 仍为追加；可选 `observed_display_name` 核对服务端最后复读的名称，任一不符整批拒绝。携带该字段且省略 `contact_id` 的明确新建选择若在最终确认时已存在 active 绑定，同样整批返回 `409 cli_binding_rejected` / `selection_stale`，不静默复用既有联系人或部分创建其他项。显式指定相同联系人仍可重放，原 `display_name` 仍可自定义，未提供新字段的既有调用兼容。此检查不锁住外部微信后续改名，后续变化仍需撤销后重新确认。
 
 `tests.integration.server.test_binding_consent` 自建并回收随机 `_test` 库、正式迁移、生产 `notalone.server.command` 和合成 CLI，只通过真实 HTTP 观察授权与历史结果，并在 CLI 进程边界核验 tail。不依赖默认测试库、私人 `.env`、真实微信或模型；既有测试的 `NOTALONE_TEST_DATABASE_URL` 仍需显式隔离。

@@ -9,6 +9,8 @@ from notalone.persistence.retrieval import PostgresRetrieval
 from notalone.reply.exploration import ExplorationError, ExplorationExpired
 from notalone.reply.exploration_context import ExplorationEvidence
 from notalone.reply.exploration_task import ExplorationReadPurpose, ExplorationTask
+from notalone.reply.context import ReplyContext
+from notalone.reply.errors import ReplyStoreInvariantError
 from notalone.reply.interface import GenerateReply, InitiateConversation, NoSkill, ReplyToMessage, SuggestionReference, UserSkillChoice
 from notalone.scopes import ContactScope
 
@@ -68,3 +70,16 @@ def prepare_explored_generation(
 
     task = read_explored_generation(connection, scope, session_id, command)
     return ExplorationEvidence.dependencies((*task.intent_snapshots, *task.snapshots)) if task else set()
+
+
+def require_explored_context(connection: Any, context: ReplyContext) -> None:
+    """模型前保存和候选提交沿原owner事务复验实际探索版本与选择。"""
+
+    try:
+        task = read_explored_generation(connection, context.scope, None, context.command, generation_required=True)
+        if task is not None and task.skill_library_revision != context.skill_library_revision:
+            raise ReplyStoreInvariantError("探索与生成的Skill目录版本不同。")
+    except ExplorationExpired:
+        raise
+    except (AssistantSessionRejected, ExplorationError):
+        raise ReplyStoreInvariantError("已确认探索或原始来源已经失效。") from None
