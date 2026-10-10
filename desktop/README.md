@@ -197,7 +197,9 @@ npm run test:app:status  # 只读租约归属线索，App 不运行，不自动�
 
 `tests/app-test-expiry.spec.ts` 只在 `NOTALONE_APP_TEST_EXPIRY_ACCEPTANCE=1` 时执行，默认全量跳过。该场景故意等待短预约到期，命令截止须在 60 秒内且位于用户认可时段；预期 runner 返回 124，Playwright 的 interrupted 不是普通 PASS。收口须同时核验窗口 ready、自有 PID／userData 回收及租约 absent。2026-10-10 已用保留的严格签名候选 App 完成上述到期检查；这不证明产品认证停读或完整 App 交付。
 
-`tests/native-desktop-acceptance.spec.ts` 只在 `NOTALONE_NATIVE_DESKTOP_ACCEPTANCE=1` 时执行，默认全量跳过；必须通过上述预约门禁，并以 `NOTALONE_TEST_APP_EXECUTABLE` 指定实际签名包可执行文件。沿用隔离导入夹具的真实 HTTP/PG 与合成资料，等待现场操作真实系统文件选择器和两次物理快捷键，不替换文件选择结果或调用快捷键回调。单场最多 8 分钟，文件选择与每次按键各最多等待 3 分钟，预约截止仍优先。观察到同一小窗隐藏后正常菜单退出，退出后系统快捷键注销；程序窗口状态与用户对操作体验的确认分别记录。
+`tests/native-desktop-acceptance.spec.ts` 只在 `NOTALONE_NATIVE_DESKTOP_ACCEPTANCE=1` 时执行，默认全量跳过；必须通过上述预约门禁，并以 `NOTALONE_TEST_APP_EXECUTABLE` 指定实际签名包可执行文件。沿用隔离导入夹具的真实 HTTP/PG 与合成资料，等待现场操作真实系统文件选择器和两次物理快捷键，不替换文件选择结果或调用快捷键回调。单场最多 8 分钟，文件选择与每次按键各最多等待 3 分钟，每次用户反馈最多等待 90 秒，预约截止仍优先。程序观察到状态后保留 App，等待主 Agent 收到用户对本次操作的明确反馈；两次都确认后才正常菜单退出，退出后系统快捷键注销。缺失、否定或非法反馈均不算通过，失败或预约到期仍按门禁收尾。
+
+协调者从日志所列 `human-show-request.json`／`human-hide-request.json` 读取本轮 `requestId`、操作与随机 `responsePath`，只在收到对应用户反馈后向该自有路径原子写入 `0600` 收据：`{"requestId":"本次请求标识","confirmed":true}` 或 `false`。只存布尔结论，不存用户原话；未答、含糊回答或机器窗口状态不得写成 `true`。不同操作各有随机请求，旧收据不能复用；不允许符号链接、非普通文件或超过 1 KiB 的响应。本次仅准备流程，尚未再次运行真实 App，因此下方旧版实机结果不会更新为新版或人工隐藏通过。
 
 2026-10-10 15:23–15:43（UTC+8）的第二次有限现场预约最多启动 2 次。官方输入候选签名包的 `candidate-copy` 与上述原生场景实际 2/2 通过：真实剪贴板、单文件选择及 6 条合成消息的导入/任务核验成功。用户确认第一次物理 `Command+Shift+Y` 唤起；程序随后观察到同一小窗隐藏后正常退出，15:30:34 的收尾记录确认 App 已退出，用户反馈“现在小窗都不能呼出来了”，隐藏体验仍未获人工确认。本轮末次 PID、userData、夹具目录已回收，租约 absent；没有运行真实微信、外部模型或 Finder。原始结果与分开的人工反馈保留于 `artifacts/native-system-20261010-1523/`；任务 20 继续未完成。
 
