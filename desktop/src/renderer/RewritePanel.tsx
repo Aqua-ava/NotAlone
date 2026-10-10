@@ -79,16 +79,23 @@ export function RewriteInput({ contacts, replies }: { contacts: ContactSessionVi
   </>;
 }
 
-function CandidateEditor({ text, candidateId, number, edit }: { text: string; candidateId: string; number: number; edit: ReplySessionView['editCandidate'] }) {
+function CandidateEditor({ text, candidateId, number, edit, copy }: { text: string; candidateId: string; number: number; edit: ReplySessionView['editCandidate']; copy: (text: string) => void }) {
   const [value, setValue] = useState(text);
   useEffect(() => { setValue(text); }, [candidateId]);
   return <textarea aria-label={`候选${number}编辑文本`} maxLength={65_536} value={value}
+    onCopy={(event) => { const input = event.currentTarget; copy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
+    onCut={(event) => { const input = event.currentTarget; copy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
     onChange={(event) => { setValue(event.target.value); void edit(candidateId, event.target.value); }} />;
 }
 
 export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
   const { state } = replies;
   const evidence = useReplyEvidence();
+  function noteCopy(candidateId: string, text: string) {
+    if (!text.trim() || text.length > 65_536 || !state.contactId || !state.result) return;
+    void window.notalone.styleSamples.noteCandidateCopy({ contactId: state.contactId, scopeRevision: state.scopeRevision,
+      replyRequestId: state.result.replyRequestId, candidateId, text }).catch(() => {});
+  }
   return <section className="reply-candidates" aria-label="候选回复">
     <AssistantSessionPanel replies={replies} />
     {state.sourceAvailability === 'checking' && <p role="status">正在核对删除后的依据…</p>}
@@ -116,10 +123,12 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
         {state.result.candidates.map(({ original, editedText }, index) => <article className="reply-candidate" key={original.candidateId}>
           <label className="reply-choice"><input type="radio" name="candidate" checked={state.selectedCandidateId === original.candidateId}
             onChange={() => void replies.selectCandidate(original.candidateId)} />说法 {index + 1}</label>
-          <CandidateEditor text={editedText} candidateId={original.candidateId} number={index + 1} edit={replies.editCandidate} />
+          <CandidateEditor text={editedText} candidateId={original.candidateId} number={index + 1} edit={replies.editCandidate}
+            copy={(text) => noteCopy(original.candidateId, text)} />
           <p className="reply-basis">{original.basis}</p>
           {original.riskNotes.map((note, number) => <p className="reply-risk" key={number}>{note}</p>)}
-          <details><summary>查看原候选</summary><p className="reply-original">{original.text}</p></details>
+          <details><summary>查看原候选</summary><p className="reply-original"
+            onCopy={() => noteCopy(original.candidateId, window.getSelection()?.toString() ?? '')}>{original.text}</p></details>
           <ReplyEvidence evidence={evidence} candidate={original} number={index + 1} waiting={state.phase === 'waiting'}
             selection={{ contactId: state.contactId!, scopeRevision: state.scopeRevision, replyRequestId: state.result!.replyRequestId, candidateId: original.candidateId }} />
         </article>)}

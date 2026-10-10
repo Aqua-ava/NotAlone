@@ -61,3 +61,17 @@ Blocked by: None (can start immediately)
 本切片自动实现与验证完成，人工部分未执行。真实模型语义、自然度、“像本人”和原生App/微信均未执行，按本轮排除范围跳过；受控响应只证明数据与控制契约。A09/E06中的删助手会话后已保存样本独立保留、不能恢复旧讨论、重新连接/Skill探索/消息组/样本生成的组合，以及主C选择的最终选区粘贴适配仍待其集成验证。当前不让样本进入生成，也不关闭这些剩余原验收项。没有push、发布、部署或发送消息。
 
 既有C接续：正式公共实现已消费为`ce27628`，旧048/store未叠加。新增`style-copy-origin`公开页面回归只准备测试：候选选区粘贴后编辑仍为candidate并有原始来源、列表选区编辑不能洗为manual、换联系人粘贴拒绝、原始来源删除后样本不可得；宿主剪贴板用合成事件替换，业务组件/controller/HTTP仍为生产路径。typecheck及静态Standards/Spec各0；尚未执行RED，先交总协调有限页面预约，未据此标实现或验收通过。现存完整文字来历及原页面断言保留。
+
+2026-10-11选区接续：总协调已在正式树消费测试片`1ac1566`并实际取得RED：候选选区复制→手工框粘贴→继续编辑→主动保存，期望candidate、实际manual。quiet8、active0／onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false；后续列表／跨contact／原始来源删除尚未到达，未记通过。
+
+基于该RED仅提取旧`530de5f`的薄事件适配，保留唯一049和最终服务API：主进程记录最后一次明确复制的不可恢复摘要、来源编号、联系人及连接代数；手工框记录匹配的粘贴来历，后续编辑延续、清空或范围变化解除。列表与本次参考选区仍标样本来历，不能再存为无来源manual；跨contact／旧连接／混合来源拒绝。完整文字来历歧义及删除指纹护栏保持。候选复制按钮只在宿主复制成功并复验当前候选后记录摘要，不自动保存，不读取全局剪贴板。保存重试签名改为摘要，不长期保留失败保存的正文副本。
+
+当前TypeScript与`git diff --check`通过；公开GREEN和两轴复核待本切片交付后由总协调串行执行，不据类型检查关闭本票。A09保存／删除竞态与E06真实恢复组合仍待原接口正式交付；无App、微信、OCR、私人聊天、外部模型或远端操作。
+
+限定Spec复核另发现剪切及长片段两个P2，先提交仅测试的`26c9c92`，总协调取为`09a2d05`。`style-copy-limits`实际exit1，cut-fragment与long-copy-shortened均完整到达，实际originKind=manual／hasSources=false，期望candidate／true；quiet8、active0／onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false。取得真实RED后补候选编辑框onCut，并使候选复制和匹配粘贴的来历事件覆盖候选65536字符上限；手工样本保存／编辑桥接仍4096，样本正文限额不扩大。原身份与来源断言未删减，公开GREEN仍待总协调正式冻结复验。
+
+Standards复核发现跨样本／说明文字的选区校验失败后未登记来历，可能在编辑后变为manual。新增`node --test tests/style-samples/controller.test.mjs`实际RED为Missing expected rejection，薄修后1项green：无法归属的样本复制只留摘要／来源冲突元数据，下一粘贴及编辑拒绝保存，清空后独立手写正常。列表和参考区在容器处理跨项复制；超过65536的跨项选区只登记冲突标记，不持久化正文。样本复制来历事件也有界65536，保存限额不变。type与diff-check通过，限定两轴增量复审中。
+
+本轮安全测试首次39通过／1失败，仅因公开status读到总协调正在持有的页面租约而非预期absent；没有改测试、抢锁或清理他人资源。租约正常收尾后再次`npm test`实际40/40通过，无skip。公开页面GREEN仍待稳定主题交付，不预填。
+
+以`487735f`为固定点的12文件限定Standards／Spec最终均0，三个已发现P2均已复核关闭。公开`style-copy-origin`还增加跨两个样本及说明的容器选区拒绝、删除来源后独立手写项保留；这段尚未执行，仍与`style-copy-limits`一起由总协调最多两case／有限时段复验。A09/E06组合待真实正式交付，整票保持claimed。

@@ -2,6 +2,7 @@ import type { CandidateCopyRequest } from '../../shared/candidate-copy-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import type { ReplySession } from '../reply/session';
+import type { ReplyCandidateSelection } from '../../shared/reply-bridge';
 import { isUuid } from '../uuid';
 
 export interface CandidateCopySurface {
@@ -25,7 +26,8 @@ export function candidateCopyRequest(args: unknown[]): CandidateCopyRequest {
 // 渲染层只提交候选身份；复制文本从本次主进程编辑状态取得，不长期保存。
 export class CandidateCopyController {
   private copying = false;
-  constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession, private readonly replies: ReplySession) {}
+  constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession, private readonly replies: ReplySession,
+    private readonly onCopied?: (selection: ReplyCandidateSelection, text: string) => void) {}
 
   private currentCandidate(request: CandidateCopyRequest) {
     const contact = this.contacts.getState();
@@ -35,7 +37,7 @@ export class CandidateCopyController {
       || contact.scopeRevision !== request.scopeRevision || !['ready', 'loading'].includes(contact.directoryPhase)
       || reply.contactId !== request.contactId || reply.scopeRevision !== request.scopeRevision
       || reply.result?.replyRequestId !== request.replyRequestId || reply.selectedCandidateId !== request.candidateId
-      || reply.phase === 'waiting' || !candidate || !candidate.editedText.trim()) throw new Error('本次候选已变化，请重新确认。');
+      || reply.phase === 'waiting' || reply.sourceAvailability !== undefined || !candidate || !candidate.editedText.trim()) throw new Error('本次候选已变化，请重新确认。');
     return candidate;
   }
   async copy(request: CandidateCopyRequest, surface: CandidateCopySurface): Promise<void> {
@@ -49,6 +51,7 @@ export class CandidateCopyController {
       if (generation !== this.backend.getConnectionGeneration() || this.currentCandidate(request).editedText !== text) {
         throw new Error('本次候选已变化，请重新确认。');
       }
+      this.onCopied?.(request, text);
       if (request.hideAfterCopy) surface.hideWindow();
     } catch { throw new Error('复制未确认，请保留编辑文本并重试。'); }
     finally { this.copying = false; }

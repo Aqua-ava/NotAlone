@@ -64,6 +64,26 @@ export async function styleCopyOrigin(browser: Browser, origin: string) {
     await expect.poll(async () => (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples.length).toBe(1);
 
     await manual.fill('');
+    const independent = '清空后独立手写的合成样本。';
+    await manual.fill(independent);
+    await helper.getByRole('button', { name: '主动保存手工文字', exact: true }).click();
+    await expect(list.getByText(independent, { exact: true })).toBeVisible();
+    const combined = await list.evaluate((element) => {
+      const paragraphs = element.querySelectorAll('li > p');
+      const range = document.createRange(); range.setStart(paragraphs[0].firstChild!, 0);
+      range.setEnd(paragraphs[1].firstChild!, paragraphs[1].textContent!.length);
+      const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+      const text = selection.toString();
+      element.dispatchEvent(new ClipboardEvent('copy', { bubbles: true }));
+      return text;
+    });
+    await pasteAndEdit(manual, combined, '跨样本粘贴后只留下合成短句。');
+    await helper.getByRole('button', { name: '主动保存手工文字', exact: true }).click();
+    await expect(helper.getByRole('alert').filter({ hasText: '样本操作暂时不可用' })).toBeVisible();
+    await helper.getByRole('button', { name: '刷新表达样本', exact: true }).click();
+    await expect.poll(async () => (await helper.evaluate(async () => window.notalone.styleSamples.getState())).samples.length).toBe(2);
+
+    await manual.fill('');
     await copyEditorPrefix(editor, fragment.length);
     await manager.getByRole('button', { name: '选择合成联系人乙', exact: true }).click();
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[1]);
@@ -81,6 +101,7 @@ export async function styleCopyOrigin(browser: Browser, origin: string) {
     await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
     await expect(manager.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible({ timeout: 15000 });
     await expect(list.getByText(finalText, { exact: true })).toHaveCount(0);
+    await expect(list.getByText(independent, { exact: true })).toBeVisible();
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
   });
 }

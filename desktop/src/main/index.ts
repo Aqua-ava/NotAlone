@@ -80,7 +80,8 @@ void app.whenReady().then(async () => {
     const memoryChecking = memory.revalidateDeletedSource(contactId);
     await Promise.all([styleChecking, checking, memoryChecking]);
   });
-  installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies));
+  installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies,
+    (selection, text) => styleSamples.recordCopied(selection, text)));
   installSetupBridge(windows, new SetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());
   installStartupBridge(windows, diagnostics, backend);

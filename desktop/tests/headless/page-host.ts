@@ -81,7 +81,8 @@ export class PageHost implements PageCommands {
       const memoryChecking = memory.revalidateDeletedSource(contactId);
       await Promise.all([styleChecking, checking, memoryChecking]);
     });
-    const copies = new CandidateCopyController(this.backend, contacts, replies);
+    const copies = new CandidateCopyController(this.backend, contacts, replies,
+      (selection, text) => styleSamples.recordCopied(selection, text));
     this.handle('candidate-copy:copy', (...args: unknown[]) => {
       const request = candidateCopyRequest(args);
       if (!options.copySurface) throw new Error('本轮页面未提供系统复制输入。');

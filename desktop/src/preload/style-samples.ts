@@ -8,6 +8,10 @@ export function createStyleSampleBridge(transport: PageTransport): StyleSampleBr
     saveCandidate: (...args: unknown[]) => transport.invoke('style-samples:save-candidate', ...args),
     saveMessage: (...args: unknown[]) => transport.invoke('style-samples:save-message', ...args),
     deleteSample: (...args: unknown[]) => transport.invoke('style-samples:delete', ...args),
+    noteCandidateCopy: (...args: unknown[]) => transport.invoke('style-samples:note-candidate-copy', ...args),
+    noteSavedSampleCopy: (...args: unknown[]) => transport.invoke('style-samples:note-sample-copy', ...args),
+    updateManualText: (...args: unknown[]) => transport.invoke('style-samples:update-manual-text', ...args),
+    noteManualPaste: (...args: unknown[]) => transport.invoke('style-samples:note-manual-paste', ...args),
     onStateChanged: (listener: (state: StyleSampleState) => void) => {
       if (typeof listener !== 'function') throw new Error('样本操作无效。');
       const receive = (_event: unknown, state: StyleSampleState) => listener(state);
