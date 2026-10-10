@@ -14,6 +14,7 @@
     "test:pages": "node scripts/test-pages.mjs",
     "check:helpers": "node scripts/check-helpers.mjs",
     "prepare:helpers": "node scripts/prepare-helpers.mjs",
+    "prepare:probe": "node scripts/prepare-probe.mjs",
     "package": "npm run build && node scripts/package.mjs"
   },
   "engines": { "node": ">=22.12.0" },

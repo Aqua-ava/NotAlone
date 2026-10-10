@@ -71,7 +71,7 @@ npm run check:helpers -- --directory /绝对路径/cli-runtime --version v1.2.3 
 
 JSON 输出只有状态、安全错误码、声明版本、相对文件名、架构、大小和 SHA-256；不回显绝对目录、原始工具输出或来源 URL。退出 0 表示 `static_checks_passed`，退出 2 表示拒绝。版本/来源仍是声明而非核验；`provenanceVerified`、`runtimeValidated`、`helperExecuted` 和 `nativeAcceptance` 均为 false。签名通过不证明可信发行者、Developer ID、公证、权限或完整动态加载行为；WCDB 作为已知动态加载依赖单独检查，其他未写入 Mach-O 的动态加载依赖仍需按实际 CLI 版本核对。目录内最多检查 64 个文件，单文件最多 256 MiB，整体核查预算 60 秒。
 
-静态核查、搬运和默认启动接线属于任务 20 的 CLI 侧实现，不授权渠道读取。完整输入和来源仍缺，探针随包接线、最终包及真实微信验收继续待办。
+静态核查、搬运和默认启动接线属于任务 20 的实现，不授权渠道读取。完整 CLI/WCDB 输入和来源仍缺，仓库探针的构建/搬运接线见下节；最终包及真实微信验收继续待办。
 
 ### 核查后的搬运与随包接线
 
@@ -86,9 +86,22 @@ npm run package -- --helper-directory /绝对路径/cli-runtime --helper-version
 
 显式打包参数全部齐备时，通过 Packager `extraResource` 放到 `Contents/Resources/notalone-helpers`，ASAR 外保留可执行文件和动态库；缺一项或未知参数直接拒绝。未提供参数仍是前端包。复制后及最终签名后再次核对文件集合与原哈希；已核验 helper 跳过 Electron 重签，保留原字节和签名，不给它添加 JIT entitlement，主包继续 ad-hoc 签名并严格验证。包内 manifest 随主包签名保护，但哈希/签名仍不能证明发行者或真实渠道可用。
 
-仅打包 App 的主进程以 `process.resourcesPath` 提供资源目录；开发与普通页面不自动寻找包内 helper。没有明确路径配置/环境值时，启动诊断和受控后端启动共用包内 CLI 默认值；每次加载核对 manifest、架构、全部文件哈希及非符号链接路径，缺失/变化/越界时 CLI 不可用，不退回 PATH 或未知探针。设置保存或环境变量指向当前包内 CLI 时仍执行整组核验，不能把默认路径写入配置后绕过。外部显式配置优先，绑定和总开关语义不变；前台探针当前仍需明确配置，未知最小布局继续采集前拒绝。
+仅打包 App 的主进程以 `process.resourcesPath` 提供资源目录；开发与普通页面不自动寻找包内 helper。没有明确路径配置/环境值时，启动诊断和受控后端启动共用包内默认值；每次加载核对 manifest、架构、全部文件哈希及非符号链接路径，缺失/变化/越界时该组不可用，不退回 PATH 或未知探针。设置保存或环境变量指向当前包内 helper 时仍执行整组核验，不能把默认路径写入配置后绕过。外部显式配置优先，绑定和总开关语义不变；包内探针只接受下面的仓库构建清单，未知最小布局继续采集前拒绝。
 
 本轮公开准备 CLI、真实 Node 启动诊断与启动环境只用自有合成 Mach-O 验证搬运、脱离源目录、损坏/缺库/越界拒绝及配置优先；没有运行 Packager 生成含 helper 的 App、Electron、Python、微信或探针，不据此宣称 Finder/权限/同步/退出验收通过。Context7 不可用，官方 [Packager extraResource](https://electron.github.io/packager/main/interfaces/Options.html#extraResource)、[Electron resourcesPath](https://www.electronjs.org/docs/latest/api/process#processresourcespath-readonly)与[签名 ignore](https://github.com/electron/osx-sign/blob/main/src/types.ts)已与安装版本 Packager 20.3.0、Electron 44.7.0 及 osx-sign 类型/源码核对。
+
+### 仓库探针与核心库
+
+```bash
+npm run prepare:probe -- --destination /已有父目录/notalone-probe
+npm run package -- --with-probe --helper-directory /绝对路径/cli-runtime --helper-version v1.2.3 --helper-source https://example.org/public-runtime
+```
+
+`prepare:probe` 不接收外部二进制或探针目录。只读取仓库固定 7 份 Swift 源码与 `build_cli.sh`，拒绝源码符号链接/变化，在自有临时目录保存快照并执行该构建脚本；明确 ad-hoc 签名，不继承证书选择或用户配置。编译最多 120 秒，模块缓存和编译产物留在本轮临时目录，完成后清理；生成的 CLI 和动态库从不执行或加载。随后复用完整性、架构、签名和相对依赖检查，搬运到不存在的目标，只保留 `notalone-sync-probe`、`libNotAloneSyncCore.dylib` 与 manifest。已有目录拒绝且不覆盖，JSON 不回显绝对路径或编译输出。
+
+探针 manifest 使用 `runtimeKind=repository-probe`，记录固定源码集合及 SHA-256 总摘要、`repository:` 来源声明，保留来源发行者/实际运行/原生验收未验证。仅显式 `--with-probe` 才构建并复制到 `Contents/Resources/notalone-probe`；可以单独包含探针，但缺 CLI/WCDB 的包仍不是完整交付。两组逐一在 Packager 复制后和最终包复核，保留各自签名，不给探针注入 Electron JIT entitlement。主进程核对源码清单摘要和运行时文件后投影 `syncProbePath`，保存值及环境变量指向它时继续核验；一组失效不阻塞另一组或独立首启配置。
+
+现行 `--session --json`（含 `--minimal-region`）仍由 `SessionCaptureSafety` 在 OS 动作前返回 `minimal_region_layout_unverified`，没有新增可信布局或成功自动定位。公开 Node 回归实际编译、签名和搬运仓库探针，验证包内默认值、保存后损坏停用和配置优先；没有运行探针或最终 App，也没有实际执行 Packager 的新拷贝/签名流程，权限及动态运行仍须现场验收。
 
 ## 轻量无头页面验证
 

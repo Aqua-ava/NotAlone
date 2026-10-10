@@ -4,7 +4,7 @@ set -eu
 script_dir="${0:A:h}"
 probe_dir="${script_dir:h}"
 build_dir="${probe_dir}/build/cli"
-module_cache_dir="/private/tmp/notalone-clang-module-cache"
+module_cache_dir="${NOTALONE_PROBE_MODULE_CACHE_DIR:-/private/tmp/notalone-clang-module-cache}"
 
 mkdir -p "${build_dir}"
 mkdir -p "${module_cache_dir}"

@@ -3,25 +3,40 @@ import { access, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 
+type RuntimeKind = 'wechat-cli' | 'repository-probe';
+const layouts = {
+  'wechat-cli': { directory: 'notalone-helpers', entry: 'wechat-cli', library: 'libWCDB.dylib' },
+  'repository-probe': { directory: 'notalone-probe', entry: 'notalone-sync-probe', library: 'libNotAloneSyncCore.dylib' },
+} as const;
+
 export async function resolveWechatCliPath(resourcesDirectory: string | undefined, configuredPath?: string): Promise<string | undefined> {
-  if (!configuredPath) return verifiedBundledCli(resourcesDirectory);
+  return resolveRuntimePath(resourcesDirectory, configuredPath, 'wechat-cli');
+}
+
+export async function resolveSyncProbePath(resourcesDirectory: string | undefined, configuredPath?: string): Promise<string | undefined> {
+  return resolveRuntimePath(resourcesDirectory, configuredPath, 'repository-probe');
+}
+
+async function resolveRuntimePath(resourcesDirectory: string | undefined, configuredPath: string | undefined, kind: RuntimeKind): Promise<string | undefined> {
+  if (!configuredPath) return verifiedBundledRuntime(resourcesDirectory, kind);
   if (!resourcesDirectory || !path.isAbsolute(resourcesDirectory)) return configuredPath;
   const resources = [path.resolve(resourcesDirectory)];
   try { resources.push(await realpath(resourcesDirectory)); } catch { /* 已知包路径失效时仍按声明路径停用。 */ }
   const selected = path.normalize(configuredPath);
-  const roots = resources.map((directory) => path.join(directory, 'notalone-helpers'));
+  const roots = resources.map((directory) => path.join(directory, layouts[kind].directory));
   if (!roots.some((root) => selected === root || selected.startsWith(`${root}${path.sep}`))) return configuredPath;
   // 设置表单保存后的默认路径和环境变量仍属于包内文件，不能绕过整组核验。
-  if (!roots.some((root) => selected === path.join(root, 'wechat-cli'))) return undefined;
-  return verifiedBundledCli(resourcesDirectory);
+  if (!roots.some((root) => selected === path.join(root, layouts[kind].entry))) return undefined;
+  return verifiedBundledRuntime(resourcesDirectory, kind);
 }
 
 // 仅核对包内清单和字节完整性，不运行输入、加载动态库或宣称发行者可信。
-export async function verifiedBundledCli(resourcesDirectory: string | undefined): Promise<string | undefined> {
+async function verifiedBundledRuntime(resourcesDirectory: string | undefined, kind: RuntimeKind): Promise<string | undefined> {
   if (!resourcesDirectory || !path.isAbsolute(resourcesDirectory)) return undefined;
   try {
     const resources = await realpath(resourcesDirectory);
-    const root = path.join(resources, 'notalone-helpers');
+    const layout = layouts[kind];
+    const root = path.join(resources, layout.directory);
     if (await realpath(root) !== root) return undefined;
     const file = await open(path.join(root, 'manifest.json'), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     let manifest: unknown;
@@ -36,10 +51,11 @@ export async function verifiedBundledCli(resourcesDirectory: string | undefined)
     if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return undefined;
     const value = manifest as Record<string, unknown>;
     const architecture = process.arch === 'x64' ? 'x86_64' : process.arch;
-    if (value.schemaVersion !== 1 || value.architecture !== architecture
+    if (value.schemaVersion !== 1 || (value.runtimeKind ?? 'wechat-cli') !== kind || value.architecture !== architecture
       || typeof value.versionDeclaration !== 'string' || !/^[a-zA-Z0-9._+-]{1,64}$/.test(value.versionDeclaration)
       || value.provenanceVerified !== false || value.runtimeValidated !== false || value.helperExecuted !== false || value.nativeAcceptance !== false
       || !Array.isArray(value.files) || value.files.length < 2 || value.files.length > 64) return undefined;
+    if (kind === 'repository-probe' && !validRepositoryBuild(value)) return undefined;
     const names = new Set<string>(); const deadline = Date.now() + 5000;
     for (const entry of value.files) {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return undefined;
@@ -69,8 +85,23 @@ export async function verifiedBundledCli(resourcesDirectory: string | undefined)
           || hash.digest('hex') !== record.sha256) return undefined;
       } finally { await input.close(); }
     }
-    if (!names.has('wechat-cli') || !names.has('libWCDB.dylib')) return undefined;
-    const cli = path.join(root, 'wechat-cli'); await access(cli, constants.X_OK);
+    if (!names.has(layout.entry) || !names.has(layout.library)) return undefined;
+    const cli = path.join(root, layout.entry); await access(cli, constants.X_OK);
     return cli;
   } catch { return undefined; }
+}
+
+function validRepositoryBuild(value: Record<string, unknown>): boolean {
+  if (typeof value.buildSourceDigest !== 'string' || !/^[a-f0-9]{64}$/.test(value.buildSourceDigest)
+    || value.sourceDeclaration !== `repository:${value.buildSourceDigest}` || !Array.isArray(value.buildSources)
+    || value.buildSources.length !== 8) return false;
+  const names = new Set<string>();
+  for (const record of value.buildSources) {
+    if (!record || typeof record !== 'object' || Array.isArray(record)
+      || typeof record.name !== 'string' || names.has(record.name)
+      || !/^(scripts\/build_cli\.sh|Sources\/NotAloneSyncCore\/(ProbeCore|SessionCaptureSafety|CaptureSupport|SelectedSession|FrontSyncStatusReport|BackendStatusPolling)\.swift|Sources\/NotAloneSyncCLI\/main\.swift)$/.test(record.name)
+      || typeof record.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(record.sha256)) return false;
+    names.add(record.name);
+  }
+  return createHash('sha256').update(JSON.stringify(value.buildSources)).digest('hex') === value.buildSourceDigest;
 }

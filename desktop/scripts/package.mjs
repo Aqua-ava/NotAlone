@@ -5,12 +5,16 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { prepareHelpers } from './prepare-helpers.mjs';
-import { argumentsFor, inspectRuntime, requireUnchangedFiles } from './helper-runtime.mjs';
+import { prepareRepositoryProbe } from './prepare-probe.mjs';
+import { argumentsFor, inspectRuntime, requireUnchangedFiles, runtimeLayout } from './helper-runtime.mjs';
 
 if (process.platform !== 'darwin') throw new Error('本机 App 打包需要 macOS。');
 const run = promisify(execFile);
 const helperArguments = process.argv.slice(2);
-const helperInput = helperArguments.length ? argumentsFor(helperArguments.map((value, index) => {
+const withProbe = helperArguments.includes('--with-probe');
+if (helperArguments.filter((value) => value === '--with-probe').length > 1) throw new Error('helper_check_arguments');
+const cliArguments = helperArguments.filter((value) => value !== '--with-probe');
+const helperInput = cliArguments.length ? argumentsFor(cliArguments.map((value, index) => {
   if (index % 2 === 0 && !['--helper-directory', '--helper-version', '--helper-source'].includes(value)) throw new Error('helper_check_arguments');
   return index % 2 === 0 ? value.replace('--helper-', '--') : value;
 })) : undefined;
@@ -19,6 +23,16 @@ const staging = await mkdtemp(path.join(tmpdir(), 'notalone-package-'));
 try {
   const helperDirectory = path.join(staging, 'notalone-helpers');
   const prepared = helperInput ? await prepareHelpers({ ...helperInput, destination: helperDirectory }) : undefined;
+  const probeDirectory = path.join(staging, 'notalone-probe');
+  const preparedProbe = withProbe ? await prepareRepositoryProbe(probeDirectory) : undefined;
+  const groups = [prepared, preparedProbe].filter(Boolean);
+  const verifyResources = async (resources) => {
+    for (const group of groups) {
+      const copied = await inspectRuntime({ directory: path.join(resources, runtimeLayout(group.runtimeKind).directory),
+        arch: group.architecture, version: group.versionDeclaration, runtimeKind: group.runtimeKind });
+      requireUnchangedFiles(group.files, copied.files);
+    }
+  };
   const source = path.join(staging, 'app');
   await mkdir(source);
   // 仅复制编译产物与最小启动清单，避免携入仓库、依赖缓存或用户配置。
@@ -54,10 +68,9 @@ try {
     overwrite: true,
     asar: true,
     icon,
-    extraResource: prepared ? [helperDirectory] : undefined,
-    afterCopyExtraResources: prepared ? [async ({ buildPath }) => {
-      const copied = await inspectRuntime({ ...helperInput, directory: path.join(buildPath, 'NotAlone.app/Contents/Resources/notalone-helpers') });
-      requireUnchangedFiles(prepared.files, copied.files);
+    extraResource: groups.length ? groups.map((group) => path.join(staging, runtimeLayout(group.runtimeKind).directory)) : undefined,
+    afterCopyExtraResources: groups.length ? [async ({ buildPath }) => {
+      await verifyResources(path.join(buildPath, 'NotAlone.app/Contents/Resources'));
     }] : undefined,
     afterExtract: [async ({ buildPath }) => {
       const plist = path.join(buildPath, 'Electron.app/Contents/Info.plist');
@@ -74,7 +87,7 @@ try {
       preAutoEntitlements: false,
       preEmbedProvisioningProfile: false,
       // helper 已带核查过的签名，保留字节与权限，不注入 Electron 的 JIT entitlement。
-      ignore: (file) => file.includes(`${path.sep}Contents${path.sep}Resources${path.sep}notalone-helpers${path.sep}`),
+      ignore: (file) => groups.some((group) => file.includes(`${path.sep}Contents${path.sep}Resources${path.sep}${runtimeLayout(group.runtimeKind).directory}${path.sep}`)),
       optionsForFile: () => ({
         entitlements: ['com.apple.security.cs.allow-jit'],
         hardenedRuntime: false,
@@ -84,13 +97,11 @@ try {
   });
   for (const output of outputs) {
     const app = path.join(output, 'NotAlone.app');
-    if (prepared) {
-      const bundled = await inspectRuntime({ ...helperInput, directory: path.join(app, 'Contents/Resources/notalone-helpers') });
-      requireUnchangedFiles(prepared.files, bundled.files);
-    }
+    await verifyResources(path.join(app, 'Contents/Resources'));
     await run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', app]);
     console.log(`本机 App 已构建并通过 ad-hoc 签名校验：${app}`);
     console.log(prepared ? 'CLI/WCDB 静态核查与随包字节复核通过；来源、运行和原生验收仍未验证。' : '此包未包含 CLI/WCDB，完整 helper 交付仍待补齐。');
+    if (preparedProbe) console.log('仓库探针/核心库静态构建与随包复核通过；未运行探针，不证明定位或权限验收。');
   }
 } finally {
   await rm(staging, { recursive: true, force: true });

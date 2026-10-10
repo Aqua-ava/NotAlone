@@ -9,6 +9,12 @@ const run = promisify(execFile);
 const inside = (root, file) => file.startsWith(`${root}${path.sep}`);
 const identity = (metadata) => `${metadata.dev}:${metadata.ino}:${metadata.size}:${metadata.mtimeMs}:${metadata.ctimeMs}`;
 
+export function runtimeLayout(kind = 'wechat-cli') {
+  if (kind === 'wechat-cli') return { entry: 'wechat-cli', library: 'libWCDB.dylib', directory: 'notalone-helpers' };
+  if (kind === 'repository-probe') return { entry: 'notalone-sync-probe', library: 'libNotAloneSyncCore.dylib', directory: 'notalone-probe' };
+  throw new Error('helper_check_arguments');
+}
+
 export function requireUnchangedFiles(expected, actual) {
   const copies = new Map(actual.map((file) => [file.name, file.sha256]));
   if (expected.length !== actual.length || copies.size !== actual.length
@@ -67,6 +73,7 @@ function localPath(value, loader, executable) {
 
 export async function inspectRuntime(input) {
   if (process.platform !== 'darwin') throw new Error('helper_check_unavailable');
+  const layout = runtimeLayout(input.runtimeKind);
   const root = await realpath(input.directory);
   if (!(await stat(root)).isDirectory()) throw new Error('helper_check_input_invalid');
   const deadline = Date.now() + 60_000;
@@ -79,7 +86,7 @@ export async function inspectRuntime(input) {
     const arches = (await tool('/usr/bin/lipo', ['-archs', file], 'helper_check_not_macho', deadline)).trim().split(/\s+/);
     if (!arches.includes(input.arch)) throw new Error('helper_check_architecture');
     const header = await tool('/usr/bin/otool', ['-arch', input.arch, '-hv', file], 'helper_check_binary_type', deadline);
-    const type = file === path.join(root, 'wechat-cli') ? 'EXECUTE' : 'DYLIB';
+    const type = file === path.join(root, layout.entry) ? 'EXECUTE' : 'DYLIB';
     if (!new RegExp(`\\b${type}\\b`).test(header.split('\n').slice(1).join('\n'))) throw new Error('helper_check_binary_type');
     await tool('/usr/bin/codesign', ['--verify', '--strict', file], 'helper_check_signature', deadline);
     const commands = loadCommands(await tool('/usr/bin/otool', ['-arch', input.arch, '-l', file], 'helper_check_dependency_unresolved', deadline));
@@ -108,11 +115,11 @@ export async function inspectRuntime(input) {
     if (snapshot.sha256 !== final.sha256 || snapshot.identity !== final.identity) throw new Error('helper_check_input_changed');
     files.push({ name: path.relative(root, file), sha256: snapshot.sha256, bytes: snapshot.bytes, architectures: arches, signature: 'verified' });
   }
-  await access(path.join(root, 'wechat-cli'), constants.X_OK);
-  await inspect(path.join(root, 'wechat-cli'));
+  await access(path.join(root, layout.entry), constants.X_OK);
+  await inspect(path.join(root, layout.entry));
   // WCDB可由程序动态加载，必须独立检查，不能只依赖Mach-O的链接表。
-  await inspect(path.join(root, 'libWCDB.dylib'));
-  return { state: 'static_checks_passed', versionDeclaration: input.version, architecture: input.arch, files };
+  await inspect(path.join(root, layout.library));
+  return { state: 'static_checks_passed', runtimeKind: input.runtimeKind ?? 'wechat-cli', versionDeclaration: input.version, architecture: input.arch, files };
 }
 
 export function argumentsFor(values) {
@@ -135,7 +142,7 @@ export function argumentsFor(values) {
 export function failureReport(error) {
   const codes = ['helper_check_arguments', 'helper_check_not_macho', 'helper_check_input_invalid', 'helper_check_input_changed',
     'helper_check_architecture', 'helper_check_binary_type', 'helper_check_signature', 'helper_check_dependency_unresolved', 'helper_check_timeout',
-    'helper_prepare_destination', 'helper_prepare_input_changed'];
+    'helper_prepare_destination', 'helper_prepare_input_changed', 'helper_probe_build_failed'];
   return { state: 'blocked', code: codes.includes(error.message) ? error.message : error.code === 'ENOENT' ? 'helper_check_missing_file' : 'helper_check_unavailable' };
 }
 

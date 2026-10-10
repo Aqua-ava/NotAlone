@@ -3,7 +3,7 @@ import { lstat, mkdir, open, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { acceptanceFlags, argumentsFor, failureReport, inspectRuntime, requireUnchangedFiles } from './helper-runtime.mjs';
+import { acceptanceFlags, argumentsFor, failureReport, inspectRuntime, requireUnchangedFiles, runtimeLayout } from './helper-runtime.mjs';
 
 export function preparationArguments(values) {
   const index = values.indexOf('--destination');
@@ -13,14 +13,14 @@ export function preparationArguments(values) {
   return { ...argumentsFor([...values.slice(0, index), ...values.slice(index + 2)]), destination };
 }
 
-async function copyCheckedFile(source, destination, expected, deadline) {
+async function copyCheckedFile(source, destination, expected, entry, deadline) {
   if (await realpath(source) !== source) throw new Error('helper_prepare_input_changed');
   const input = await open(source, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   let output;
   try {
     const before = await input.stat();
     if (!before.isFile() || before.size !== expected.bytes) throw new Error('helper_prepare_input_changed');
-    output = await open(destination, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, expected.name === 'wechat-cli' ? 0o755 : 0o644);
+    output = await open(destination, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, expected.name === entry ? 0o755 : 0o644);
     const hash = createHash('sha256'); const buffer = Buffer.alloc(1_048_576);
     let position = 0;
     while (position < before.size) {
@@ -43,6 +43,7 @@ async function copyCheckedFile(source, destination, expected, deadline) {
 }
 
 export async function prepareHelpers(input) {
+  const layout = runtimeLayout(input.runtimeKind);
   const root = await realpath(input.directory);
   const parent = await realpath(path.dirname(input.destination));
   const destination = path.join(parent, path.basename(input.destination));
@@ -54,11 +55,12 @@ export async function prepareHelpers(input) {
     const deadline = Date.now() + 60_000;
     for (const file of initial.files) {
       await mkdir(path.dirname(path.join(destination, file.name)), { recursive: true });
-      await copyCheckedFile(path.join(root, file.name), path.join(destination, file.name), file, deadline);
+      await copyCheckedFile(path.join(root, file.name), path.join(destination, file.name), file, layout.entry, deadline);
     }
     const relocated = await inspectRuntime({ ...input, directory: destination });
     requireUnchangedFiles(initial.files, relocated.files);
-    const manifest = { schemaVersion: 1, versionDeclaration: input.version, sourceDeclaration: input.source,
+    const manifest = { schemaVersion: 1, runtimeKind: initial.runtimeKind, versionDeclaration: input.version, sourceDeclaration: input.source,
+      buildSourceDigest: input.buildSourceDigest, buildSources: input.buildSources,
       architecture: input.arch, files: relocated.files, ...acceptanceFlags };
     await writeFile(path.join(destination, 'manifest.json'), `${JSON.stringify(manifest)}\n`, { flag: 'wx', mode: 0o644 });
     return { ...relocated, state: 'prepared', ...acceptanceFlags };
