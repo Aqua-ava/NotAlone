@@ -1,0 +1,121 @@
+"""表达样本独立保留沿A正式会话删除入口验收；不实现另一删除器。"""
+
+from __future__ import annotations
+
+import time
+import unittest
+from uuid import uuid4
+
+import psycopg
+
+from tests.fidelity_http_support import FidelityHttpFixture
+
+
+class AuthenticExpressionSessionDeletionTests(FidelityHttpFixture, unittest.TestCase):
+    production_model_wiring = True
+
+    def test_saved_samples_remain_usable_after_session_delete_then_sample_delete_erases_derivatives(self):
+        self._exercise_retention("sample")
+
+    def test_saved_samples_remain_usable_after_session_delete_then_raw_delete_erases_derivatives(self):
+        self._exercise_retention("source")
+
+    def _exercise_retention(self, removal: str) -> None:
+        contact, target, source = self.prepare_contact(self.owner_id)
+        saved = self.backend.request(f"/api/contacts/{contact}/assistant-session/default", {})[1]
+        old_path = f"/api/contacts/{contact}/assistant-sessions/{saved['session_id']}"
+        old_body = {"contact_id": contact, "idempotency_key": str(uuid4()), "skill_disabled": True,
+                    "content": {"type": "reply_to_message", "target_message_id": target,
+                                "direction": "拒绝这次合成邀请，不新增安排。"}}
+        self.reply_model.plans.append({"text": "本次不参加。", "basis": "只表达当前拒绝。"})
+        status, old_reply = self.backend.request(old_path + "/replies", old_body)
+        self.assertEqual(status, 200, old_reply)
+        sample_body = {"idempotency_key": str(uuid4()), "text": "主动保存的合成拒绝说法。",
+                       "origin": {"kind": "candidate", "id": old_reply["candidates"][0]["candidate_id"]}}
+        status, saved_sample = self.backend.request(f"/api/contacts/{contact}/style-samples", sample_body)
+        self.assertEqual(status, 200, saved_sample)
+        sample_id = saved_sample["sample"]["sample_id"]
+        self.assertIn(source, saved_sample["sample"]["source_ids"])
+        status, manual = self.backend.request(f"/api/contacts/{contact}/style-samples", {
+            "idempotency_key": str(uuid4()), "text": "独立手写的合成短句说法。", "origin": {"kind": "manual"},
+        })
+        self.assertEqual(status, 200, manual)
+        manual_id = manual["sample"]["sample_id"]
+        with psycopg.connect(self.database_url) as connection:
+            turns = connection.execute(
+                "SELECT input_payload FROM public.assistant_session_turn "
+                "WHERE owner_id=%s AND contact_id=%s AND session_id=%s",
+                (self.owner_id, contact, saved["session_id"]),
+            ).fetchall()
+            self.assertEqual(len(turns), 1)
+            self.assertEqual(turns[0][0]["content"]["direction"], old_body["content"]["direction"])
+
+        status, deleted = self.backend.request(old_path, {"confirmed": True}, method="DELETE")
+        self.assertEqual(status, 200, deleted)
+        reopened = self._backend(self.owner_id)
+        self.assertEqual(reopened.request(old_path)[0], 404)
+        self.assertNotEqual(reopened.request(old_path + "/replies", old_body)[0], 200)
+        self.assertNotEqual(reopened.request(f"/api/contacts/{contact}/replies/{old_reply['reply_request_id']}/evidence")[0], 200)
+        self.assertEqual(self._get(reopened, f"/api/contacts/{contact}/style-samples/{sample_id}")["sample"], saved_sample["sample"])
+        self.assertEqual(reopened.request(f"/api/contacts/{contact}/style-samples", sample_body), (200, saved_sample))
+        self.assertNotEqual(reopened.request(f"/api/contacts/{contact}/style-samples", {
+            **sample_body, "idempotency_key": str(uuid4()),
+        })[0], 200)
+        self.assertEqual(len(self.reply_model.payloads), 1)
+        self.assertEqual({item["sample_id"] for item in self._get(reopened, f"/api/contacts/{contact}/style-samples")["samples"]},
+                         {sample_id, manual_id})
+        with psycopg.connect(self.database_url) as connection:
+            self.assertEqual(connection.execute(
+                "SELECT count(*) FROM public.assistant_session_turn "
+                "WHERE owner_id=%s AND contact_id=%s AND session_id=%s AND input_payload IS NOT NULL",
+                (self.owner_id, contact, saved["session_id"]),
+            ).fetchone()[0], 0)
+            self.assertEqual(connection.execute("SELECT count(*) FROM public.assistant_session_input WHERE owner_id=%s AND session_id=%s AND content IS NOT NULL",
+                                                (self.owner_id, saved["session_id"])).fetchone()[0], 0)
+            self.assertEqual(connection.execute("SELECT count(*) FROM public.reply_request WHERE owner_id=%s AND id=%s",
+                                                (self.owner_id, old_reply["reply_request_id"])).fetchone()[0], 0)
+
+        new_session = reopened.request(f"/api/contacts/{contact}/assistant-session/default", {})[1]
+        self.assertNotEqual(new_session["session_id"], saved["session_id"])
+        new_path = f"/api/contacts/{contact}/assistant-sessions/{new_session['session_id']}"
+        self.assertEqual(self._get(reopened, new_path)["turns"], [])
+        body = {"contact_id": contact, "idempotency_key": str(uuid4()), "skill_disabled": True,
+                "content": {"type": "initiate_conversation", "purpose": "本次仍然拒绝，不增加约定。",
+                            "clarification_answer": "不陪同，不承诺时间。"}}
+        self.reply_model.plans.append({"text": "这次不参加。", "basis": "参考说法但保留当前拒绝。"})
+        status, generated = reopened.request(new_path + "/replies", body)
+        self.assertEqual(status, 200, generated)
+        self.assertEqual(set(generated["context_receipt"]["style_sample_ids"]), {sample_id, manual_id})
+        self.assertEqual({item["sample_id"] for item in self.reply_model.payloads[-1]["style_references"]}, {sample_id, manual_id})
+        self.assertEqual(self.reply_model.payloads[-1]["fidelity_contract"]["current_intent"]["text"], body["content"]["purpose"])
+        self.assertEqual(len(self.reply_model.payloads), 2)
+
+        if removal == "sample":
+            self.assertEqual(reopened.request(f"/api/contacts/{contact}/style-samples/{sample_id}", method="DELETE")[0], 200)
+            state = next(item for item in self._get(reopened, f"/api/contacts/{contact}/sources")["sources"] if item["source_id"] == source)
+            self.assertEqual(state["status"], "active")
+        else:
+            status, result = reopened.request(f"/api/contacts/{contact}/sources/{source}", method="DELETE")
+            self.assertEqual(status, 202, result)
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                state = next(item for item in self._get(reopened, f"/api/contacts/{contact}/sources")["sources"] if item["source_id"] == source)
+                self.assertNotEqual(state["task_status"], "failed", state)
+                if state["status"] == "deleted" and state["task_status"] == "succeeded":
+                    break
+                time.sleep(.02)
+            else:
+                self.fail("本轮合成来源删除未完成。")
+        self.assertEqual(reopened.request(f"/api/contacts/{contact}/style-samples/{sample_id}")[0], 410)
+        self.assertEqual(self._get(reopened, f"/api/contacts/{contact}/style-samples/{manual_id}")["sample"], manual["sample"])
+        after = self._get(self._backend(self.owner_id), new_path)
+        self.assertEqual(after["turns"][0]["state"], "redacted")
+        self.assertIsNone(after["turns"][0]["input"])
+        self.assertIsNone(after["turns"][0]["reply"])
+        self.assertNotEqual(reopened.request(new_path + "/replies", body)[0], 200)
+        self.assertEqual(reopened.request(old_path)[0], 404)
+        self.assertEqual(len(self.reply_model.payloads), 2)
+
+
+if __name__ == "__main__":
+    unittest.main()

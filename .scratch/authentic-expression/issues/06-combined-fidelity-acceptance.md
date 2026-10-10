@@ -38,6 +38,10 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 
 ## Comments
 
+### 总协调独立保留测试的正式前置反例（2026-10-11）
+
+仅测试主题 `d3c3595b25a2684ea951845d35f84e520108ca12` 原样接入主树后，在实际001–053随机隔离库执行source场，真实生成、candidate及manual显式保存、A turn正文正向检查均已到达；A09 DELETE仍返回404、期望200，1项实际RED（1.160s），模型仅1次，自有库remaining=0。删除后的独立保留及传递清理尚未到达，不记GREEN；原断言及本票claimed保持。该结果与C此前正式52下404分别保留，等待A09正式删除后端接入再运行两场，不新增另一删除器。
+
 2026-10-11 总协调首轮公开恢复组合：root单case180秒，样本删除场完整通过；原始来源删除场等待manager“选择合成联系人甲”30000ms超时，exit1，未到达断言不标通过。quiet64/active0/onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false。已交C定位关系页面后的真实联系人导航，原正文/来源/UUID/模型次数断言保持。两入口冲突只新增case及分派，两轴限定0；typecheck通过，CLI首次受sandbox租约写权限限制5/10失败，授权权限复验10/10通过。不是原生或进程重启证据，任务仍claimed。
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
@@ -73,3 +77,9 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 限定Spec发现持久三轮重读仅zip可能漏检缺轮；已补完整轮数、输入版本和reply_request_id对应断言，两个新场景再次实际green。该复跑不覆盖原六捕获，报告保持上述原始UUID／计量。Standards原主题hard0／smell0，Spec该问题修复后接续复核。
 
 恢复TEST首轮已由总协调在root正式树`edfab2a`运行具名`authentic-expression-recovery`：样本删除场“删除样本后重连与重开保留独立讨论”完整通过；原始来源删除场在断线重连后仍停于“关系资料”，直接等待联系人选择按钮30000ms超时，整场未通过，后续重开断言不记GREEN。实际exit1、quiet64／active0／onscreen0、单Chrome、cleanupConfirmed=true，Electron／native=false；冻结已由总协调解除。最小测试修复只在共用联系人选择步骤先点击公开“联系人与绑定”导航，不改产品控制器，也不放宽正文遮挡、UUID／旧键／依据／继续或模型调用次数断言。修复后的公开GREEN仍待总协调串行复验。
+
+A09独立保留TEST接续：新增`test_authentic_expression_session_deletion`的sample／source两条真实HTTP组合，沿A唯一助手会话删除入口，不实现另一删除器。预先显式保存有原始来源的candidate样本及独立manual样本；删除助手会话后重装后端、拒绝旧会话／回复／依据，检查持久输入正文与旧reply_request不可得，而样本仍可查看、同保存键重读并在新会话作为非事实表达参考。随后分别删candidate样本或原始来源，擦新会话派生输入／候选，独立manual样本保留。
+
+首个source分支实际命令为Conda NotAlone／backend内`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src python -m unittest tests.integration.server.test_authentic_expression_session_deletion.AuthenticExpressionSessionDeletionTests.test_saved_samples_remain_usable_after_session_delete_then_raw_delete_erases_derivatives -q`；旧会话生成及两次显式保存均200，模型实际调用1次，DELETE助手会话期望200实际404，是本树尚未消费A09正式入口的RED。正式001–052随机隔离库精确清理；后续保留／再用／来源清理断言均未到达，不记通过。两条测试全部GREEN和公开页面组合仍待A正式主题，不复制其未提交产品代码，也不请求用户验收。
+
+限定Spec指出还须核对真正生成正文所在的`assistant_session_turn.input_payload`，不能只查051输入索引的content。已增加删除前原turn正文存在的正向对照，以及删除后同owner/contact/session全部turn正文为空或行已删的只读断言。首source再次实际运行：正向对照通过，仍在DELETE404停止（1项failure／1.199秒），后续擦除结果尚未取得；原RED和预期保留。
