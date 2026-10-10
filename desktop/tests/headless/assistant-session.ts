@@ -27,7 +27,7 @@ export async function assistantSessionPersistence(browser: Browser, origin: stri
   await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
-    await helper.getByRole('button', { name: '回复', exact: true }).click();
+    await helper.getByRole('button', { name: '回应消息', exact: true }).click();
     await helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
     await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('依赖来源的合成讨论。');
     await rewriteBackend.plan({ count: 1, prefix: '依赖来源的合成候选' });
@@ -61,7 +61,7 @@ export async function assistantSessionPersistence(browser: Browser, origin: stri
     const unrelated = await rewriteBackend.command('unrelated_source');
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
-    await helper.getByRole('button', { name: '回复', exact: true }).click();
+    await helper.getByRole('button', { name: '回应消息', exact: true }).click();
     await helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
     await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('迟到核验不得恢复合成候选。');
     await rewriteBackend.plan({ count: 1, prefix: '不可复活的合成候选' });

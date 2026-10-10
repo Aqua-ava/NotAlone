@@ -229,6 +229,32 @@ class AssistantSessionHttpTest(unittest.TestCase):
                          (409, {"error": "assistant_session_input_conflict"}))
         self.assertEqual(len(self.model.seen_calls), 1)
 
+    def test_explicit_no_skill_survives_saved_input_and_same_key_replay(self) -> None:
+        _, session = self._default()
+        path = self._path(session["session_id"])
+        body = {**self._body(), "skill_disabled": True}
+        status, first = self.backend.request(path + "/replies", body)
+        self.assertEqual(status, 200, first)
+        saved_input = self.backend.request(path)[1]["turns"][0]["input"]
+        self.assertIs(saved_input.get("skill_disabled"), True)
+        self.assertIsNone(saved_input["skill_version_id"])
+        self.assertEqual(self.backend.request(path + "/replies", body), (200, first))
+        self.assertEqual(len(self.model.seen_calls), 1)
+
+    def test_proactive_purpose_is_saved_without_a_fake_source_dependency(self) -> None:
+        _, session = self._default()
+        path = self._path(session["session_id"])
+        purpose = "问问近况，暂不作见面承诺。"
+        body = {**self._body(), "content": {"type": "initiate_conversation", "purpose": purpose}}
+        status, first = self.backend.request(path + "/replies", body)
+        self.assertEqual(status, 200, first)
+        saved = self.backend.request(path)[1]["turns"][0]
+        self.assertEqual(saved["state"], "completed")
+        self.assertEqual(saved["input"]["content"]["purpose"], purpose)
+        self.assertNotIn("target_message_id", saved["input"]["content"])
+        self.assertEqual(self.backend.request(path + "/replies", body), (200, first))
+        self.assertEqual(len(self.model.seen_calls), 1)
+
     def test_source_used_only_as_context_erases_dependent_turn_and_preserves_unrelated_input(self) -> None:
         _, session = self._default()
         path = self._path(session["session_id"])

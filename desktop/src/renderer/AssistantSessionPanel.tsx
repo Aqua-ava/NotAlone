@@ -13,7 +13,8 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
       {saved.turns.map((turn, index) => <article key={turn.turnId} aria-label={`第${index + 1}轮讨论`}>
         {turn.placeholder ? <p>{turn.placeholder}</p> : <>
           <p>{typeof turn.input?.content.draft_text === 'string' ? turn.input.content.draft_text
-            : typeof turn.input?.content.direction === 'string' ? turn.input.content.direction : '本轮回复输入'}</p>
+            : typeof turn.input?.content.direction === 'string' ? turn.input.content.direction
+            : typeof turn.input?.content.purpose === 'string' ? turn.input.content.purpose : '本轮回复输入'}</p>
           {typeof turn.input?.content.user_instruction === 'string' && <p>{turn.input.content.user_instruction}</p>}
           {turn.state === 'running' && <p>本轮生成尚未完成。</p>}
           {turn.state === 'failed' && <p>本轮生成未成功保存。</p>}

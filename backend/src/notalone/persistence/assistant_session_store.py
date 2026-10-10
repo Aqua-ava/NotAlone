@@ -36,7 +36,8 @@ def _input_payload(normalized: str) -> dict[str, Any]:
     skill = content.pop("skill")
     content["type"] = content.pop("mode")
     return {"content": content, "continued_from_candidate_id": continued,
-            "skill_version_id": skill.split(":", 1)[1] if skill.startswith("user_choice:") else None}
+            "skill_version_id": skill.split(":", 1)[1] if skill.startswith("user_choice:") else None,
+            "skill_disabled": skill == "disabled"}
 
 
 def _active_binding(connection: Any, scope: ContactScope) -> UUID:
@@ -118,7 +119,7 @@ def _evidence_dependencies(
     ).fetchone():
         # 手工本人记忆沿用 owner 伪引用；依赖具体记忆，不能把任意 UUID 当来源放行。
         dependencies.clear()
-    if kind not in ("user_draft", "continued_candidate"):
+    if kind not in ("user_draft", "user_purpose", "continued_candidate"):
         dependencies.add(evidence_id)
     return dependencies
 
