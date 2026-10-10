@@ -46,10 +46,13 @@ class FidelityControlledModel(ScriptedCoreModel):
         primary = next(item for item in payload["evidence"]
                        if item["kind"] in {"user_draft", "user_purpose"} or
                        (item["kind"] == "message" and item["text"] == payload.get("current_text")))
+        candidate = {"text": plan["text"], "basis": plan["basis"],
+                     "citation_ids": plan.get("citation_ids", [primary["evidence_id"]]),
+                     "risk_notes": plan.get("risk_notes", [])}
+        if "messages" in plan:
+            candidate["messages"] = plan["messages"]
         self.responses.append(tool_response("ReplyRuntimeOutput", {
-            "candidates": [{"text": plan["text"], "basis": plan["basis"],
-                            "citation_ids": plan.get("citation_ids", [primary["evidence_id"]]),
-                            "risk_notes": plan.get("risk_notes", [])}],
+            "candidates": [candidate],
             "used_skill_version_id": None,
         }))
         return super()._generate(messages, stop, run_manager, **kwargs)

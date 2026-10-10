@@ -1,4 +1,4 @@
-"""回应、主动及已有候选继续的真实合成捕获；不代替B消息组与探索集成。"""
+"""回应、主动、整组及既有候选继续的合成捕获；不代替B编辑复制与探索集成。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import os
 import time
 import unittest
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from tests.fidelity_http_support import FidelityHttpFixture
 
@@ -20,6 +20,7 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
         super().setUpClass()
         cls.capture_rows = []
         cls.declared_capture_rows = []
+        cls.group_capture_rows = []
 
     @classmethod
     def tearDownClass(cls):
@@ -33,6 +34,11 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
                 Path(path).write_text(json.dumps({
                     "data_kind": "synthetic", "data_version": "authentic-combination-declared-http-v1",
                     "entry_point": "http", "rows": cls.declared_capture_rows,
+                }, ensure_ascii=False, indent=2) + "\n")
+            if path := os.environ.get("NOTALONE_GROUP_COMBINED_FIDELITY_CAPTURE"):
+                Path(path).write_text(json.dumps({
+                    "data_kind": "synthetic", "data_version": "authentic-combination-group-http-v1",
+                    "entry_point": "http", "rows": cls.group_capture_rows,
                 }, ensure_ascii=False, indent=2) + "\n")
         finally:
             super().tearDownClass()
@@ -49,7 +55,13 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
     def test_proactive_declarations_sample_and_continuation_remain_once_only_and_are_erased(self):
         self._exercise_scenario("proactive", declared=True)
 
-    def _exercise_scenario(self, mode: str, *, declared: bool = False):
+    def test_response_message_groups_are_reviewed_as_a_whole_and_erased_with_their_sample(self):
+        self._exercise_scenario("response", declared=True, grouped=True)
+
+    def test_proactive_message_groups_are_reviewed_as_a_whole_and_erased_with_their_sample(self):
+        self._exercise_scenario("proactive", declared=True, grouped=True)
+
+    def _exercise_scenario(self, mode: str, *, declared: bool = False, grouped: bool = False):
         contact, target, _ = self.prepare_contact(self.owner_id)
         status, saved_sample = self.backend.request(f"/api/contacts/{contact}/style-samples", {
             "idempotency_key": str(uuid4()), "text": "合成旧表达：我总是答应，明晚七点陪你去合成海边。",
@@ -65,9 +77,16 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
             ("continued", "仍然拒绝本次合成邀请，改成短句，不增加约定。", "这次不参加。", "继续保留当前拒绝，不沿旧表达增加承诺。"),
             ("unsupported", "仍然拒绝本次合成邀请，改成短句，不增加约定。", "好呀，明晚七点我陪你去合成海边。", "按旧样本中的邀约安排。"),
         )
+        message_groups = (
+            ("这次不参加。", "谢谢你邀请。"),
+            ("这次不参加。", "谢谢。"),
+            ("这次不参加。", "那就明晚七点我陪你去合成海边。"),
+        )
         previous, current_version = None, None
         bodies, results = [], []
         for index, (label, intent, text, basis) in enumerate(stages):
+            if grouped:
+                text = "\n\n".join(message_groups[index])
             content = {"type": "reply_to_message", "target_message_id": target, "direction": intent} if mode == "response" else {
                 "type": "initiate_conversation", "purpose": intent,
             }
@@ -79,7 +98,10 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
             if current_version is not None:
                 body["expected_input_version_id"] = current_version
                 body["continued_from_candidate_id"] = previous
-            self.reply_model.plans.append({"text": text, "basis": basis})
+            plan = {"text": text, "basis": basis}
+            if grouped:
+                plan["messages"] = list(message_groups[index])
+            self.reply_model.plans.append(plan)
             started = time.perf_counter()
             status, result = self.backend.request(path + "/replies", body)
             elapsed_ms = (time.perf_counter() - started) * 1000
@@ -90,6 +112,10 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
             self.assertEqual(result["context_receipt"]["style_sample_ids"], [sample_id])
             self.assertNotIn(sample_id, result["context_receipt"]["evidence_ids"])
             self.assertEqual(result["candidates"][0]["text"], text)
+            if grouped:
+                messages = result["candidates"][0]["messages"]
+                self.assertEqual([message["text"] for message in messages], list(message_groups[index]))
+                self.assertEqual(len({UUID(message["message_id"]) for message in messages}), len(messages))
             for name, value in declarations.items():
                 self.assertEqual(payload[name], value)
             self.assertFalse(any(item["text"] in declarations.values() for item in payload["evidence"]))
@@ -101,8 +127,12 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
                 self.assertEqual(self.backend.request(path + "/replies", changed)[0], 409)
             self.assertEqual(len(self.reply_model.payloads), index + 1)
             system = "\n".join(str(message.content) for message in self.reply_model.seen_calls[-1] if message.type == "system")
-            captures = self.declared_capture_rows if declared else self.capture_rows
-            case_id = f"{mode}-declared-style-{label}" if declared else f"{mode}-style-{label}"
+            if grouped:
+                captures, case_id = self.group_capture_rows, f"{mode}-group-style-{label}"
+            elif declared:
+                captures, case_id = self.declared_capture_rows, f"{mode}-declared-style-{label}"
+            else:
+                captures, case_id = self.capture_rows, f"{mode}-style-{label}"
             captures.append({"case_id": case_id, "owner_id": str(self.owner_id), "contact_id": contact,
                                       "payload": payload, "system_prompt": system, "output": result,
                                       "latency_ms": elapsed_ms, "call_count": 1})
@@ -119,6 +149,9 @@ class AuthenticExpressionScenarioTests(FidelityHttpFixture, unittest.TestCase):
             for turn, body in zip(saved["turns"], bodies):
                 for name in declarations:
                     self.assertEqual(turn["input"]["content"][name], body["content"][name])
+            if grouped:
+                self.assertEqual([turn["reply"]["candidates"][0]["messages"] for turn in saved["turns"]],
+                                 [result["candidates"][0]["messages"] for result in results])
 
         status, deleted = self.backend.request(f"/api/contacts/{contact}/style-samples/{sample_id}", method="DELETE")
         self.assertEqual(status, 200, deleted)

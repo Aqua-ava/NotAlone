@@ -115,3 +115,17 @@ PYTHONPATH=src python -m tests.fidelity_capture --capture ../desktop/artifacts/h
 ```
 
 该报告不证明公开UUID探索、Skill、整组修改、A09或A12已完成。`aed5517`同事务hook所需原B建议引用类型尚未进入本树，未完成cherry已撤销，等待其正式前置再接；没有新造旧INT公开接口。A08删除恢复具名测试`a86da898`已交总协调预约，尚未取得实际页面结果。
+
+## E06：实际删除恢复与整组消息报告接续
+
+上述接口和页面待执行描述保留此前阶段。B最小正式d89与aed现已顺序消费为`26a5038`／`f5f65b2`；缺sha256导入的首次14个NameError子例修复后，74真实HTTP／正式001–052隔离PG及231reply＋11引用应用unit全部green，限定两轴0。旧INT公开接口没有接入。A09的两条candidate／manual独立保留TEST已正式`d3c3595`，首source仍在未实现的DELETE404停止，原turn实际input_payload正向对照已确认；后续再用及清理不记通过。
+
+总协调恢复组合`authentic-expression-recovery`第二次实际exit0：root `81b94c8`、sample／source两场全到达，quiet25／active0／onscreen0、单Chrome、cleanupConfirmed=true，Electron／native=false。首source导航超时与最小公开导航修复均保留；恢复只保留无关讨论，派生正文、旧键、依据及继续拒绝，后端实例和页面宿主重建不追加模型调用。不称进程或原生App重启，不以此关闭A09、Skill或完整预算。
+
+`test_authentic_expression_scenarios`新增两条整组场景，沿正式052现有有序messages和原候选继续接口：每场三轮非空单次声明和冲突样本，实际保存／同键／重装保留各组消息UUID及顺序，删样本后三轮擦除。第三轮第一条拒绝而第二条从旧样本新增明晚七点、海边和陪同承诺，独立标注按完整方案判失败。最小回应1项及19相关HTTP／随机PG全green、无skip；7个E01报告相关单元green。没有修改生成产品行为或新增schema。
+
+新`authentic-expression-group-combination-http-v1.json`保留6次真实捕获和完整输出组，996.524083ms，结构失败0、故意整组保真失败2、真人0／qualityfalse，全部development；自然度、关系适配、本人相似度与token未知。模型输入不含期望和评分，原825.865583ms与792.018542ms报告不覆盖。此处只验证现有候选继续，不替代B10编辑复制／消息衔接；正式UUID探索及Skill还需消费B最新正式主题，A09和A12保持未验收。
+
+```bash
+PYTHONPATH=src python -m tests.fidelity_capture --capture ../desktop/artifacts/headless-pages/authentic-group-combination-http-observations.json --case-spec tests/fixtures/fidelity/combined-group-http-review.json --output ../docs/evaluations/authentic-expression-group-combination-http-v1.json
+```

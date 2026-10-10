@@ -17,7 +17,7 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 ## Acceptance criteria
 
 - [ ] 回应、主动、消息组及连续修改均覆盖样本冲突、整组承诺一致性、来源依赖和逐例报告；复用前票测试而不补造基础功能。
-- [ ] 通过C02真实业务恢复入口验证：引用样本后删除样本或原始来源，再重连/重试/继续，不能取得已删内容，无关讨论保留。
+- [x] 通过C02真实业务恢复入口验证：引用样本后删除样本或原始来源，再重连/重试/继续，不能取得已删内容，无关讨论保留。
 - [ ] 通过R07验证存在样本且启用Skill时，方向探索实际模型输入不含样本；方向确认后生成才有界选取样本。
 - [ ] 通过C03验证删助手会话后已主动保存样本仍可查看和使用，但旧讨论不可恢复；随后删除样本或其原始来源，样本及相关派生内容不可得。
 - [ ] 交付离线报告和失败/未知说明，不等真实模型预算；无外部评测时明确语义与自然度未验证。
@@ -83,3 +83,11 @@ A09独立保留TEST接续：新增`test_authentic_expression_session_deletion`�
 首个source分支实际命令为Conda NotAlone／backend内`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src python -m unittest tests.integration.server.test_authentic_expression_session_deletion.AuthenticExpressionSessionDeletionTests.test_saved_samples_remain_usable_after_session_delete_then_raw_delete_erases_derivatives -q`；旧会话生成及两次显式保存均200，模型实际调用1次，DELETE助手会话期望200实际404，是本树尚未消费A09正式入口的RED。正式001–052随机隔离库精确清理；后续保留／再用／来源清理断言均未到达，不记通过。两条测试全部GREEN和公开页面组合仍待A正式主题，不复制其未提交产品代码，也不请求用户验收。
 
 限定Spec指出还须核对真正生成正文所在的`assistant_session_turn.input_payload`，不能只查051输入索引的content。已增加删除前原turn正文存在的正向对照，以及删除后同owner/contact/session全部turn正文为空或行已删的只读断言。首source再次实际运行：正向对照通过，仍在DELETE404停止（1项failure／1.199秒），后续擦除结果尚未取得；原RED和预期保留。
+
+后续实际恢复GREEN：总协调将导航修复`782fb01`集成为root `81b94c8f5db11c140f7e7f0c76d4e6e65cceef94`后再次运行同case180秒，sample／source两场全部到达通过，原source重连导航RED转GREEN。正文遮挡、旧键／依据／继续拒绝、无关讨论保留、同一Python夹具后端实例及公开页面宿主重建、0额外模型调用均沿原断言。exit0、quiet25／active0／onscreen0、单Chrome、cleanupConfirmed=true、Electron／native=false；总协调已解除冻结。据此只勾恢复组合项，不据页面结果关闭A09、B07／B10或A12余项。A09独立保留TEST限定两轴最终0，原turn正文P2已关闭；三声明组合主题的Spec复核也已最终0。
+
+整组消息接续：复用正式052候选messages及原继续接口，在回应／主动各三轮中带非空一次声明和旧答应样本；每个方案恰为两条有序消息，当前拒绝和继续改短均保留拒绝／致谢。第三轮故意第一条拒绝、第二条却从样本新增时间地点和陪同承诺；结构合法仍按整组标为保真失败，不能用第一条通过掩盖后一条。实际HTTP回执／重新装配同键／持久turn保留完整顺序和稳定消息UUID；删样本后三轮正文与组候选不可恢复。
+
+最小回应单例1项green；随后Conda NotAlone／backend内`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src NOTALONE_GROUP_COMBINED_FIDELITY_CAPTURE=../desktop/artifacts/headless-pages/authentic-group-combination-http-observations.json python -m unittest tests.integration.server.test_authentic_expression_scenarios tests.integration.server.test_authentic_expression_combination tests.integration.server.test_style_reference_api tests.integration.server.test_exploration_generation_fields tests.integration.server.test_reply_message_groups -q`实际19项green／33.880秒／无skip，正式001–052随机隔离库各按夹具精确清理；既有样本竞态租约诊断保留。E01报告／薄捕获／分维标注7单元亦green。产品已有该基本messages行为，不为报告虚造产品RED；两例故意错误保留为报告失败。
+
+唯一E01入口生成`docs/evaluations/authentic-expression-group-combination-http-v1.json`，逐例保留6次真实捕获、期望、完整messages与判定依据，合计996.524083ms，结构失败0／synthetic_fixture整组保真故意失败2／真人0／qualityfalse；全部development，自然度／关系适配／本人相似度及token未知。原无声明与三声明报告不覆盖。只扩展合成模型输出适配器和测试／报告，不修改生成器或schema；已收到B正式UUID探索`1484c2b`，本主题之后再接。该报告不证明B10候选编辑／复制／消息衔接、Skill公开探索、A09或A12完成。
