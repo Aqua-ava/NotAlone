@@ -1,5 +1,5 @@
 import { packager } from '@electron/packager';
-import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -11,16 +11,44 @@ import { argumentsFor, inspectRuntime, requireUnchangedFiles, runtimeLayout } fr
 if (process.platform !== 'darwin') throw new Error('本机 App 打包需要 macOS。');
 const run = promisify(execFile);
 const helperArguments = process.argv.slice(2);
-const withProbe = helperArguments.includes('--with-probe');
-if (helperArguments.filter((value) => value === '--with-probe').length > 1) throw new Error('helper_check_arguments');
-const cliArguments = helperArguments.filter((value) => value !== '--with-probe');
+let withProbe = false;
+const packagePaths = {}; const cliArguments = [];
+for (let index = 0; index < helperArguments.length; index++) {
+  const key = helperArguments[index];
+  if (key === '--with-probe') {
+    if (withProbe) throw new Error('helper_check_arguments');
+    withProbe = true; continue;
+  }
+  const value = helperArguments[++index];
+  if (typeof value !== 'string' || !value || /[\0\r\n]/.test(value)) throw new Error('helper_check_arguments');
+  if (key === '--output-directory' || key === '--electron-zip-directory') {
+    if (key in packagePaths || !path.isAbsolute(value)) throw new Error('helper_check_arguments');
+    packagePaths[key] = path.resolve(value);
+  } else { cliArguments.push(key, value); }
+}
 const helperInput = cliArguments.length ? argumentsFor(cliArguments.map((value, index) => {
   if (index % 2 === 0 && !['--helper-directory', '--helper-version', '--helper-source'].includes(value)) throw new Error('helper_check_arguments');
   return index % 2 === 0 ? value.replace('--helper-', '--') : value;
 })) : undefined;
 const manifest = JSON.parse(await readFile('package.json', 'utf8'));
-const staging = await mkdtemp(path.join(tmpdir(), 'notalone-package-'));
+let staging; let outputDirectory; let ownedOutput; let completed = false;
 try {
+  if (packagePaths['--output-directory']) {
+    const selected = packagePaths['--output-directory'];
+    outputDirectory = path.join(await realpath(path.dirname(selected)), path.basename(selected));
+    try { await mkdir(outputDirectory); ownedOutput = await lstat(outputDirectory); }
+    catch (error) { if (error.code === 'EEXIST') throw new Error('package_output_exists'); throw error; }
+  }
+  let electronZipDir;
+  if (packagePaths['--electron-zip-directory']) {
+    try {
+      electronZipDir = await realpath(packagePaths['--electron-zip-directory']);
+      if (typeof manifest.devDependencies.electron !== 'string' || !/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.+-]+)?$/.test(manifest.devDependencies.electron)) throw new Error();
+      const archive = await lstat(path.join(electronZipDir, `electron-v${manifest.devDependencies.electron}-darwin-${process.arch}.zip`));
+      if (!archive.isFile() || archive.isSymbolicLink()) throw new Error();
+    } catch { throw new Error('package_offline_archive_unavailable'); }
+  }
+  staging = await mkdtemp(path.join(tmpdir(), 'notalone-package-'));
   const helperDirectory = path.join(staging, 'notalone-helpers');
   const prepared = helperInput ? await prepareHelpers({ ...helperInput, destination: helperDirectory }) : undefined;
   const probeDirectory = path.join(staging, 'notalone-probe');
@@ -64,8 +92,10 @@ try {
     platform: 'darwin',
     arch: process.arch,
     electronVersion: manifest.devDependencies.electron,
-    out: 'out',
-    overwrite: true,
+    electronZipDir,
+    out: outputDirectory || 'out',
+    overwrite: !outputDirectory,
+    tmpdir: path.join(staging, 'electron'),
     asar: true,
     icon,
     extraResource: groups.length ? groups.map((group) => path.join(staging, runtimeLayout(group.runtimeKind).directory)) : undefined,
@@ -95,6 +125,7 @@ try {
       }),
     },
   });
+  if (!outputs.length) throw new Error('package_output_unavailable');
   for (const output of outputs) {
     const app = path.join(output, 'NotAlone.app');
     await verifyResources(path.join(app, 'Contents/Resources'));
@@ -103,6 +134,11 @@ try {
     console.log(prepared ? 'CLI/WCDB 静态核查与随包字节复核通过；来源、运行和原生验收仍未验证。' : '此包未包含 CLI/WCDB，完整 helper 交付仍待补齐。');
     if (preparedProbe) console.log('仓库探针/核心库静态构建与随包复核通过；未运行探针，不证明定位或权限验收。');
   }
+  completed = true;
 } finally {
-  await rm(staging, { recursive: true, force: true });
+  if (staging) await rm(staging, { recursive: true, force: true });
+  if (ownedOutput && !completed) {
+    const current = await lstat(outputDirectory).catch(() => undefined);
+    if (current?.isDirectory() && current.dev === ownedOutput.dev && current.ino === ownedOutput.ino) await rm(outputDirectory, { recursive: true });
+  }
 }

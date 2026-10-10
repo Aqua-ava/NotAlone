@@ -76,3 +76,9 @@ Spec: ../spec.md
   修复后 `npm test` 类型与 38/38 安全检查通过（24 项调度 + 14 项 helper/启动配置），包括实际仓库 Swift 重新构建/签名/搬运与 shell 哨兵拒绝。`node --check desktop/scripts/prepare-probe.mjs`、`git diff --check` 通过；未因构建工具修复重跑 App、普通页面、数据库或模型，临时夹具和编译缓存正常精确清理。
 
 - 2026-10-10（本轮实现评审收口）：固定增量 `30e634c → a197b38` Standards 硬违规/建议 0/0、Spec 新问题 0，原 shell P1 两轴均关闭。CLI 保存路径 P1 在先前 `4cdbf7e → 5f1cf47` 已关闭；本轮两组构建/搬运/默认路径实现及修复完成。只读评审不新增运行。原票仍 `open / needs-info`：真实完整 CLI/WCDB 与来源、实际 Packager 及新最终包、Finder/权限/复制/微信等现场证据和 10/18 依赖尚缺，不勾原验收项。总清单据此调整下一步，不自动安装 CLI，不扩大用户已确认的数据或桌面范围。
+
+- 2026-10-10（目标续跑：离线构建验证）：复核当前源码，Packager 拷贝 hook/签名保留仍只有静态证据，但可以在自有目录用合成 CLI 和仓库探针验证构建，不需要现场或正式 CLI。继续原票公开 `package` 命令接缝：增加显式离线 Electron ZIP 目录和不存在的输出目录，避免联网、覆盖历史产物或启动 App；沿生产 Packager 实际复制两组文件、签名及严格核查，再从实际包 Resources 调用现有 Node 启动诊断/环境。检查包使用当前编译资源和合成 CLI，不作为正式渠道交付，不操作 Finder/权限/微信/剪贴板。显式 `test:package` 只构建检查包，普通 `npm test` 继续排除 App 包构建；先公开命令 red → green，原依赖与现场验收保留。Context7 无可用工具，已核对 Packager 官方 electronZipDir/out 约定及安装 20.3.0 源码：指定 ZIP 目录时不进入下载分支，缺档直接拒绝。
+
+  实际公开打包命令先因新参数未支持退出 1，形成 red；接入独立输出/离线 ZIP 后第一次实际构建因夹具归档带入 AppleDouble 元数据导致 framework 严格签名失败，改为 `ditto --norsrc` 修正自有 ZIP，未修改签名规则或已安装 Electron。最终 `npm run test:package` 1/1 通过（23.943s）：真实 Packager 复制两组、原 CLI 字节保留、manifest 哈希、各文件与主包严格签名、helper 无 JIT entitlement、实际包 Resources 下 Node 路径及环境均通过，且已有输出拒绝/保留、缺档失败后自有输出清理。生成包和输入从未执行，临时包/ZIP/编译缓存精确清理，没有访问数据库、微信、模型、TCC 或系统输入。
+
+  曾用名称过滤排除构建用例但实测未生效，导致默认组也构建检查包并通过 39 项；该轮不算默认无构建证据。评审阶段将构建用例移至独立 `tests/packaging/command.test.mjs`、共享合成 C 夹具，默认入口恢复固定安全文件列表。最终 `npm test` 类型及 38/38 通过（8.634s），输出中无构建用例；脚本语法、`git diff --check` 通过。仅构建工具/测试接线变化，不重跑已通过的页面、真实 App 或后端业务；固定基点 ea317cf，双轴评审随后补齐。本票完整真实输入与现场依赖仍缺，保持 open/needs-info。

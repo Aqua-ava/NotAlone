@@ -5,6 +5,7 @@ import path from 'node:path';
 import { access, chmod, copyFile, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { build as buildScript } from 'esbuild';
+import { withRuntime } from './runtime-fixture.mjs';
 
 const command = path.resolve('scripts/check-helpers.mjs');
 const args = (directory) => ['--directory', directory, '--version', 'synthetic-1', '--source', 'https://example.org/synthetic-helper'];
@@ -29,23 +30,6 @@ test('脚本冒充CLI时拒绝格式，不运行输入文件或泄露路径与�
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
-async function withRuntime(use, rpaths = ['@executable_path'], absoluteDependency = false) {
-  const directory = await mkdtemp(path.join(tmpdir(), 'notalone-helper-runtime-'));
-  const build = (program, values) => {
-    const result = spawnSync(program, values, { encoding: 'utf8', timeout: 20_000 });
-    assert.equal(result.status, 0, '合成原生夹具静态构建失败。');
-  };
-  try {
-    await writeFile(path.join(directory, 'wcdb.c'), 'int synthetic_wcdb(void) { return 0; }\n');
-    const sentinel = path.join(directory, 'executed');
-    await writeFile(path.join(directory, 'cli.c'), `#include <stdio.h>\nextern int synthetic_wcdb(void);\nint main(void) { FILE *f = fopen(${JSON.stringify(sentinel)}, "w"); if (f) fclose(f); return synthetic_wcdb(); }\n`);
-    const installName = absoluteDependency ? path.join(await realpath(directory), 'libWCDB.dylib') : '@rpath/libWCDB.dylib';
-    build('/usr/bin/xcrun', ['clang', '-dynamiclib', path.join(directory, 'wcdb.c'), `-Wl,-install_name,${installName}`, '-o', path.join(directory, 'libWCDB.dylib')]);
-    build('/usr/bin/xcrun', ['clang', path.join(directory, 'cli.c'), '-L', directory, '-lWCDB', ...rpaths.map((value) => `-Wl,-rpath,${value}`), '-o', path.join(directory, 'wechat-cli')]);
-    for (const name of ['wechat-cli', 'libWCDB.dylib']) build('/usr/bin/codesign', ['--force', '--sign', '-', path.join(directory, name)]);
-    await use(directory, sentinel);
-  } finally { await rm(directory, { recursive: true, force: true }); }
-}
 test('完整合成运行时通过架构签名和依赖静态检查，但不宣称运行验收', { skip: process.platform !== 'darwin' }, async () => {
   await withRuntime(async (directory, sentinel) => {
     const result = spawnSync(process.execPath, [command, ...args(directory)], { encoding: 'utf8', timeout: 20_000 });

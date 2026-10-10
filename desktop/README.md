@@ -88,7 +88,7 @@ npm run package -- --helper-directory /绝对路径/cli-runtime --helper-version
 
 仅打包 App 的主进程以 `process.resourcesPath` 提供资源目录；开发与普通页面不自动寻找包内 helper。没有明确路径配置/环境值时，启动诊断和受控后端启动共用包内默认值；每次加载核对 manifest、架构、全部文件哈希及非符号链接路径，缺失/变化/越界时该组不可用，不退回 PATH 或未知探针。设置保存或环境变量指向当前包内 helper 时仍执行整组核验，不能把默认路径写入配置后绕过。外部显式配置优先，绑定和总开关语义不变；包内探针只接受下面的仓库构建清单，未知最小布局继续采集前拒绝。
 
-本轮公开准备 CLI、真实 Node 启动诊断与启动环境只用自有合成 Mach-O 验证搬运、脱离源目录、损坏/缺库/越界拒绝及配置优先；没有运行 Packager 生成含 helper 的 App、Electron、Python、微信或探针，不据此宣称 Finder/权限/同步/退出验收通过。Context7 不可用，官方 [Packager extraResource](https://electron.github.io/packager/main/interfaces/Options.html#extraResource)、[Electron resourcesPath](https://www.electronjs.org/docs/latest/api/process#processresourcespath-readonly)与[签名 ignore](https://github.com/electron/osx-sign/blob/main/src/types.ts)已与安装版本 Packager 20.3.0、Electron 44.7.0 及 osx-sign 类型/源码核对。
+CLI 侧初次实现只用公开准备命令、Node 启动诊断与自有合成 Mach-O 验证搬运、脱离源目录、损坏/缺库/越界拒绝及配置优先；后续实际 Packager 构建证据见“离线检查包”。没有运行 Electron、Python、微信或探针，不据此宣称 Finder/权限/同步/退出验收通过。Context7 不可用，官方 [Packager extraResource](https://electron.github.io/packager/main/interfaces/Options.html#extraResource)、[Electron resourcesPath](https://www.electronjs.org/docs/latest/api/process#processresourcespath-readonly)与[签名 ignore](https://github.com/electron/osx-sign/blob/main/src/types.ts)已与安装版本 Packager 20.3.0、Electron 44.7.0 及 osx-sign 类型/源码核对。
 
 ### 仓库探针与核心库
 
@@ -101,7 +101,26 @@ npm run package -- --with-probe --helper-directory /绝对路径/cli-runtime --h
 
 探针 manifest 使用 `runtimeKind=repository-probe`，记录固定源码集合及 SHA-256 总摘要、`repository:` 来源声明，保留来源发行者/实际运行/原生验收未验证。仅显式 `--with-probe` 才构建并复制到 `Contents/Resources/notalone-probe`；可以单独包含探针，但缺 CLI/WCDB 的包仍不是完整交付。两组逐一在 Packager 复制后和最终包复核，保留各自签名，不给探针注入 Electron JIT entitlement。主进程核对源码清单摘要和运行时文件后投影 `syncProbePath`，保存值及环境变量指向它时继续核验；一组失效不阻塞另一组或独立首启配置。
 
-现行 `--session --json`（含 `--minimal-region`）仍由 `SessionCaptureSafety` 在 OS 动作前返回 `minimal_region_layout_unverified`，没有新增可信布局或成功自动定位。公开 Node 回归实际编译、签名和搬运仓库探针，验证包内默认值、保存后损坏停用和配置优先；没有运行探针或最终 App，也没有实际执行 Packager 的新拷贝/签名流程，权限及动态运行仍须现场验收。
+现行 `--session --json`（含 `--minimal-region`）仍由 `SessionCaptureSafety` 在 OS 动作前返回 `minimal_region_layout_unverified`，没有新增可信布局或成功自动定位。公开 Node 回归实际编译、签名和搬运仓库探针，验证包内默认值、保存后损坏停用和配置优先；后续离线检查包验证了 Packager 拷贝/签名流程，仍没有运行探针或 App，权限及动态运行须现场验收。
+
+### 离线检查包
+
+```bash
+npm run build
+npm run test:package
+```
+
+显式 `test:package` 在自有临时目录复制当前编译资源和 logo，从已安装 Electron 生成不含 AppleDouble 元数据的离线 ZIP，再用合成 CLI/WCDB 和仓库探针调用生产打包命令。实际检查两组资源、原字节/SHA-256、严格签名、helper 未获 JIT entitlement，以及实际包 Resources 下的 Node 启动诊断/后端环境；不执行 Electron、CLI 或探针，不覆盖既有 `out/`，最后精确清理检查包、ZIP 和缓存。合成 CLI 不是正式渠道输入，该结果不能关闭 Finder、权限或微信验收。
+
+需要把真实输入构建到独立目录时，公开 `package` 可附加以下选项：
+
+```bash
+npm run package -- --output-directory /已有父目录/新的输出目录 --electron-zip-directory /绝对路径/离线ElectronZIP目录 --with-probe --helper-directory /绝对路径/cli-runtime --helper-version v1.2.3 --helper-source https://example.org/public-runtime
+```
+
+两项路径必须为绝对路径且不重复。显式输出目录必须不存在，先独占创建，失败时只按目录身份清理本次自有目标；已有目录保留并拒绝，不允许覆盖。离线目录须含 `electron-v版本-darwin-架构.zip` 普通文件，版本来自锁定配置、架构来自本机；缺档拒绝，不回退下载。Packager 临时树留在本轮 staging 下，随本轮清理。未给这些选项时保留原 `out/` 构建方式。SDK 的 [electronZipDir](https://electron.github.io/packager/main/interfaces/Options.html#electronZipDir)、[out/tmpdir](https://electron.github.io/packager/main/interfaces/Options.html#out)已与安装 20.3.0 源码核对。
+
+构建检查位于独立 `tests/packaging/`，默认 `npm test` 的具名文件列表不包含它。实际离线构建 1/1 通过；默认类型/安全组仍为 38/38，不构建 App 包。已有输出保留、缺 ZIP 后自有输出清理均验证通过；签名是 ad-hoc，不证明可信发行者或权限身份稳定。
 
 ## 轻量无头页面验证
 

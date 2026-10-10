@@ -12,6 +12,7 @@
     "test:app": "node scripts/test-app.mjs",
     "test:app:status": "node scripts/test-app.mjs --status",
     "test:pages": "node scripts/test-pages.mjs",
+    "test:package": "node --test tests/packaging/command.test.mjs",
     "check:helpers": "node scripts/check-helpers.mjs",
     "prepare:helpers": "node scripts/prepare-helpers.mjs",
     "prepare:probe": "node scripts/prepare-probe.mjs",
