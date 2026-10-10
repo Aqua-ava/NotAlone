@@ -130,3 +130,5 @@ Spec: ../spec.md
   Finder 仍缺与最终包匹配的受控隔离启动路径，不能通过启动默认业务配置冒充验收；微信测试会话虽已准备，现有最小采集生产路径仍缺，CUA 全窗/整棵 AX 及旧整窗后裁剪均不在允许范围，本轮没有读取微信。WCDB 精确构建/许可、初始化/真实同步、定位/权限与退出停读仍缺；State/Triage、原依赖及四项验收全部保留。最终签名/类型/安全检查与独立两轴评审随后补齐。
 
   补提示后的 `npm test` 类型检查及 38/38 安全组通过（10.65 秒），没有再启动 App 或重跑原生组；候选包实机前后 `codesign --verify --deep --strict --verbose=2` 均通过，`npm run test:app:status` 再次 absent。4 份改动文档的 65 条本地链接、总清单 13 项（讨论8/实现3/验收2）、本票 open/needs-info 与四项未勾、`git diff --check` 均通过。分开的用户反馈和末次自有资源只读复查已写入上述忽略目录的 `verification.json`，独立双轴复核随后补齐；未新增权限、私人数据、模型预算或远端操作。
+
+  固定 `8af1e8e → af273be` 初评 Standards 硬违规/建议 0/0；Spec 指出 P2：原生结果的 `systemShortcutHide: true` 只根据窗口不可见，不能证明隐藏来源。已改为 `helperShownObserved`/`helperHiddenObserved`，并明确 `humanShortcutAcceptanceRecorded: false`；机器结果不代替用户反馈。原运行 JSON 不改写，`verification.json` 另说明旧字段仅表示窗口状态；只修正证据字段及提示，没有再次启动 App，类型检查与增量复核随后补齐。

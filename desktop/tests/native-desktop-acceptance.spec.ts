@@ -50,7 +50,8 @@ test('签名包使用真实文件选择器导入合成资料，系统快捷键�
   expect(app.windows()).toHaveLength(2);
   await writeFile(test.info().outputPath('native-results.json'), JSON.stringify({
     packaged: true, nativeDialogSelected: true, importedMessages: 6,
-    importStepsCompleted: true, systemShortcutShow: true, systemShortcutHide: true,
+    importStepsCompleted: true, helperShownObserved: true, helperHiddenObserved: true,
+    humanShortcutAcceptanceRecorded: false,
     finderLaunchVerified: false, wechatRead: false, externalModelCalls: 0,
   }), { mode: 0o600 });
   console.log('native_acceptance_stage: 程序已观察到小窗隐藏，现正常退出验收 App；窗口状态不代替用户对隐藏体验的确认。');
