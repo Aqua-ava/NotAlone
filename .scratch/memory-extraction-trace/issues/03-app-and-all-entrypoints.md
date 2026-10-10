@@ -114,3 +114,13 @@ Blocked by: 01, 02
 - 页面每轮只用一个无头 Chrome，全部采样 active=0、屏上窗口=0，自有资源清理确认，Electron=false、nativeAcceptance=false。正式提取夹具只用确定性脚本模型，数据及页面截图全部合成；随机 `_test` 库由精确本轮回执清理。未读取私人聊天或业务库、迁移私人库、读取模型凭据、调用供应商、开启微信、改系统剪贴板或 push。
 
 两轴 review 和最终本地提交记录随后补齐。
+
+### 2026-10-10：两轴发现的资料删除缺口与回归
+
+Standards 与 Spec 均发现同一 P1：删除单条联系人/本人记忆或丢弃候选后，管理页仍保留已打开的追踪正文，已发出的读取也可能回填。公开页面先复现：联系人记忆已从权威列表消失，过程详情仍存在，具名删除组 red。现在生产资料控制器在删除开始/结束通知追踪控制器，清空快照并取消旧请求；删除期间拒绝重读，成功、失败和未知提交结果都必须重新核对。联系人范围切换后仍在收尾的删除使用计数防止过早解除门禁。
+
+- `npm run test:pages -- --case memory-traces-record-deletion --case memory-traces-full --timeout-seconds 240`：联系人记忆、本人记忆、候选丢弃、迟到读取四场及完整追踪组通过。
+- 补回执丢失场景后，`npm run test:pages -- --case memory-traces-record-deletion --case memory-editing-removal --timeout-seconds 240`：五场删除回归和既有资料修正/删除组通过。未知回执由真实 HTTP 已提交删除后返回 503 构造，不能当作成功；重新读取只得到已删状态，无正文。
+- 两轮均只有一个无头 Chrome，activeSamples=0、maxOnscreenWindows=0、cleanupConfirmed=true、Electron=false、nativeAcceptance=false。本轮新增夹具由正式 `MemoryService.confirm_candidate` 人工确认候选，不用底层默认自动采纳冒充人工记忆。
+
+上述修复的固定提交、最终安全检查与两轴复核结论待后文补齐。

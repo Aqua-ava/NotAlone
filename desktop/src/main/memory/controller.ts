@@ -17,12 +17,17 @@ export class MemoryReadingController {
   private operationRevision = 0;
   private mutation: { revision: number; abort: AbortController } | undefined;
   private readonly listeners = new Set<(state: MemoryReadingState) => void>();
+  private readonly deletionListeners = new Set<(phase: 'started' | 'settled') => void>();
 
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession) {}
   getState(): MemoryReadingState { return structuredClone(this.state); }
   onStateChanged(listener: (state: MemoryReadingState) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+  onRecordDeletion(listener: (phase: 'started' | 'settled') => void): () => void {
+    this.deletionListeners.add(listener);
+    return () => this.deletionListeners.delete(listener);
   }
   synchronizeScope(): void {
     const generation = this.backend.getConnectionGeneration();
@@ -91,7 +96,7 @@ export class MemoryReadingController {
       || this.mutation) throw new Error('资料范围或版本已失效，请刷新后再删除。');
     const path = request.level === 'owner' ? `/api/memories/owner/${request.memoryId}/delete`
       : `/api/contacts/${scope.contactId}/memories/${request.memoryId}/delete`;
-    await this.writeAndRefresh(scope, path, {}, [request.level]);
+    await this.deleteAndRefresh(scope, path, [request.level]);
   }
   async confirmCandidate(request: MemoryCandidateRequest): Promise<void> {
     this.synchronizeScope();
@@ -108,7 +113,13 @@ export class MemoryReadingController {
     const candidate = this.state.pending.items.find((item) => item.candidateId === request.candidateId);
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision
       || this.state.pending.phase !== 'ready' || !candidate || this.mutation) throw new Error('候选范围已失效，请刷新后再丢弃。');
-    await this.writeAndRefresh(scope, `/api/contacts/${scope.contactId}/memory-candidates/${request.candidateId}/discard`, {}, ['pending']);
+    await this.deleteAndRefresh(scope, `/api/contacts/${scope.contactId}/memory-candidates/${request.candidateId}/discard`, ['pending']);
+  }
+  private async deleteAndRefresh(scope: Scope, path: string, sections: MemorySectionName[]): Promise<void> {
+    // 删除可能已提交而响应未知；起止都取消正文读取，期间不允许重新打开旧快照。
+    for (const listener of this.deletionListeners) listener('started');
+    try { await this.writeAndRefresh(scope, path, {}, sections); }
+    finally { for (const listener of this.deletionListeners) listener('settled'); }
   }
   private async writeAndRefresh(scope: Scope, path: string, body: unknown, sections: MemorySectionName[]): Promise<void> {
     const operation = { revision: ++this.operationRevision, abort: new AbortController() };

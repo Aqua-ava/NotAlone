@@ -10,13 +10,13 @@ import { ownResource } from './cleanup';
 
 const project = path.resolve('..');
 export type MemoryData = MemoryDatabase;
-export type TraceData = MemoryDatabase & { trace_id: string; traced_memory_id: string; trace_candidate_id: string; processing_id: string; trace_message_id: string };
-export async function withTraceBackend(use: (fixture: MemoryFixture, data: TraceData) => Promise<void>) {
+export type TraceData = MemoryDatabase & { trace_id: string; traced_memory_id: string | null; trace_candidate_id: string; processing_id: string; trace_message_id: string; trace_text: string };
+export async function withTraceBackend(use: (fixture: MemoryFixture, data: TraceData) => Promise<void>, mode?: 'deletion-contact' | 'deletion-owner' | 'deletion-candidate') {
   const released = ownResource();
   try {
     await withSyntheticBackendFixture<TraceData, MemoryFixture>({
       directoryPrefix: 'notalone-headless-traces-', databaseScript: path.resolve('tests/fixtures/trace-database.py'),
-      createArguments: [], prepareTimeoutMs: 70_000, reuseBackend: true,
+      createArguments: mode ? [mode] : [], prepareTimeoutMs: 70_000, reuseBackend: true,
       createFixture: (directory, python, data) => new MemoryFixture(directory, python, data),
     }, (fixture) => use(fixture, fixture.data as TraceData));
   } finally { released(); }

@@ -162,3 +162,60 @@ export async function memoryTracesLifecycle(browser: Browser, origin: string) {
     } finally { await proxy.close(); }
   });
 }
+
+export async function memoryTracesRecordDeletion(browser: Browser, origin: string) {
+  for (const mode of ['deletion-contact', 'deletion-owner', 'deletion-candidate', 'deletion-contact-late', 'deletion-contact-unknown'] as const) {
+    await withTraceBackend(async (fixture, data) => {
+      const proxy = await MemoryHttpProxy.attach(fixture.infoPath);
+      try {
+        await withControllerEnvironment(fixture, async (userData) => {
+          const host = new PageHost(await browser.newContext(), origin, userData);
+          try {
+            await host.backend.connect();
+            const page = await host.open('manager'); await openMemory(page);
+            await page.getByRole('button', { name: `查看提取过程：${data.trace_text}`, exact: true }).click();
+            await page.getByRole('button', { name: `查看批次：${data.trace_id}`, exact: true }).click();
+            const panel = page.getByRole('region', { name: '提取与来源处理过程', exact: true });
+            await panel.getByText('1. 实际输入窗口', { exact: true }).click();
+            await expect(panel.getByRole('group', { name: '过程详情', exact: true }).getByText(/桌面验收合成文字/).first()).toBeVisible();
+            const late = mode.endsWith('-late');
+            if (late) {
+              proxy.holdPath = `/api/contacts/${data.contact_ids[0]}/memory-traces/${data.trace_id}`;
+              await page.evaluate((id) => {
+                void window.notalone.contacts.getState().then((scope) => window.notalone.traces.show({ contactId: scope.selectedContactId!, scopeRevision: scope.scopeRevision, resource: 'memory-traces', batchId: id }));
+              }, data.trace_id);
+              await expect.poll(() => proxy.heldCount).toBe(1);
+            }
+            const candidate = mode === 'deletion-candidate';
+            const unknown = mode.endsWith('-unknown');
+            if (unknown) {
+              proxy.holdMethod = 'POST';
+              proxy.holdPath = `/api/contacts/${data.contact_ids[0]}/memories/${data.traced_memory_id}/delete`;
+            }
+            const card = page.getByRole('article').filter({ has: page.getByText(data.trace_text, { exact: true }) });
+            await card.getByRole('button', { name: `${candidate ? '丢弃候选' : '删除资料'}：${data.trace_text}`, exact: true }).click();
+            await card.getByRole('button', { name: candidate ? '确认丢弃' : '确认删除', exact: true }).click();
+            if (unknown) {
+              await expect.poll(() => proxy.heldCount).toBe(1);
+              expect(await page.evaluate(async (id) => {
+                const scope = await window.notalone.contacts.getState();
+                return window.notalone.traces.show({ contactId: scope.selectedContactId!, scopeRevision: scope.scopeRevision, resource: 'memory-traces', batchId: id })
+                  .then(() => false, () => true);
+              }, data.trace_id)).toBe(true);
+              proxy.holdPath = null; proxy.release(true);
+              await expect(page.getByText('未能完成资料操作与核对，请刷新确认后重试。', { exact: true })).toBeVisible();
+            } else await expect(card).toHaveCount(0);
+            await expect(panel.getByRole('group', { name: '过程详情', exact: true })).toHaveCount(0);
+            if (late) { proxy.holdPath = null; proxy.release(); }
+            expect(await page.evaluate(async () => (await window.notalone.traces.getState()).detail)).toBeNull();
+            await panel.getByRole('button', { name: '查看批次列表', exact: true }).click();
+            await panel.getByRole('button', { name: `查看批次：${data.trace_id}`, exact: true }).click();
+            await expect(panel.getByText('过程正文已删除，仅保留实际存在的状态与标识。', { exact: true })).toBeVisible();
+            await expect(panel.getByText(/桌面验收合成文字/)).toHaveCount(0);
+          } finally { proxy.release(); await host.close(); }
+        });
+      } finally { await proxy.close(); }
+    }, mode === 'deletion-contact-late' || mode === 'deletion-contact-unknown' ? 'deletion-contact' : mode);
+    process.stdout.write(`page_test_scenario_passed: trace-${mode}\n`);
+  }
+}

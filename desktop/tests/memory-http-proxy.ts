@@ -5,6 +5,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 export class MemoryHttpProxy {
   readonly server: Server;
   holdPath: string | null = null;
+  holdMethod: 'GET' | 'POST' = 'GET';
   failRuntimeStatus = false;
   readonly failurePaths = new Set<string>();
   readonly requests: Array<{ method: string; path: string }> = [];
@@ -28,7 +29,7 @@ export class MemoryHttpProxy {
             response.writeHead(failure ? 503 : result.statusCode ?? 500, { 'Content-Type': 'application/json' });
             response.end(failure ? '{"error":"synthetic_transport_unavailable"}' : Buffer.concat(chunks));
           };
-          if (incoming.method === 'GET' && incoming.url === this.holdPath) this.held.push(deliver);
+          if (incoming.method === this.holdMethod && incoming.url === this.holdPath) this.held.push(deliver);
           else deliver(false);
         });
       });

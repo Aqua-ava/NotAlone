@@ -9,11 +9,12 @@ import { batchId, batches, document } from './read';
 type Scope = { generation: number; contactId: string; scopeRevision: number };
 const empty = (): Pick<TraceState, 'batches' | 'nextBefore' | 'availability' | 'detail'> => ({ batches: [], nextBefore: null, availability: null, detail: null });
 
-// 正文只停留在当前管理窗口的内存；范围、来源与连接变化取消旧请求并清除快照。
+// 正文只停留在当前管理窗口的内存；范围、资料、来源与连接变化取消旧请求并清除快照。
 export class TraceController {
   private state: TraceState = { revision: 0, contactId: null, scopeRevision: 0, resource: 'memory-traces', phase: 'idle', message: '', ...empty() };
   private scope: Scope | undefined;
   private operation: { abort: AbortController; mutation: boolean } | undefined;
+  private pendingRecordDeletions = 0;
   private readonly listeners = new Set<(state: TraceState) => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession) {}
   getState(): TraceState { return structuredClone(this.state); }
@@ -30,12 +31,20 @@ export class TraceController {
     this.publish({ contactId: next?.contactId ?? null, scopeRevision: contact.scopeRevision, phase: 'idle', message: '', ...empty() });
   }
   invalidateSource(): void {
+    this.invalidate('来源已变化，请重新读取过程。');
+  }
+  recordDeletionChanged(phase: 'started' | 'settled'): void {
+    this.pendingRecordDeletions += phase === 'started' ? 1 : -1;
+    this.invalidate('资料已删除或变化，请重新读取过程。');
+  }
+  private invalidate(message: string): void {
     this.operation?.abort.abort(); this.operation = undefined;
-    this.publish({ phase: 'idle', message: '来源已变化，请重新读取过程。', ...empty() });
+    this.publish({ phase: 'idle', message, ...empty() });
   }
   private requireScope(request: ContactSelection): Scope {
     this.synchronizeScope();
     if (!this.scope || request.contactId !== this.scope.contactId || request.scopeRevision !== this.scope.scopeRevision) throw new Error('过程范围已失效，请重新确认联系人。');
+    if (this.pendingRecordDeletions > 0) throw new Error('正在删除资料，请稍后重新读取过程。');
     if (this.operation?.mutation) throw new Error('正在删除过程记录，请稍后再试。');
     return this.scope;
   }

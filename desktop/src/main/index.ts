@@ -56,6 +56,7 @@ void app.whenReady().then(async () => {
   installElectronImportFileSelection(windows, imports);
   const memory = installMemoryBridge(commands, backend, contacts);
   const traces = installTraceBridge(commands, backend, contacts);
+  memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
   installBindingConsentBridge(commands, backend, contacts);
   installSyncControlBridge(commands, backend, contacts);
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());

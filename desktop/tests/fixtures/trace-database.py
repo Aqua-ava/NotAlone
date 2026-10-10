@@ -40,7 +40,7 @@ class SyntheticRuntime:
         return self.payload
 
 
-def create_database():
+def create_database(mode="full"):
     data = memory_database.create_database()
     try:
         url = data["database_url"]
@@ -57,22 +57,27 @@ def create_database():
             )
 
         # 21 个真实零候选执行，覆盖有界分页；脚本模型没有供应商请求捕获，缺口如实保存。
-        for _ in range(21):
+        for _ in range(21 if mode == "full" else 0):
             extract(SyntheticRuntime())
+        text = "本人参加合成追踪活动。" if mode == "deletion-owner" else "甲参加合成追踪活动。"
         extract(SyntheticRuntime(({
-            "text": "甲参加合成追踪活动。", "category": "common_fact", "subject": "contact",
+            "text": text, "category": "common_fact", "subject": "self" if mode == "deletion-owner" else "contact",
             "topic": "other", "source_message_ids": [str(messages[0].message_id)],
             "confidence": 0.9, "risk_flags": [], "valid_at": None, "invalid_at": None,
             "speech_act": "assertion", "assertion_status": "asserted", "figurative_type": "literal",
             "alternatives": [], "interpretation_reason": "合成确定性返回，用于页面验证。",
         },)))
         pending = memory_store.list_pending_candidates(scope)
-        candidate = next(item for item in pending if item.text == "甲参加合成追踪活动。")
+        candidate = next(item for item in pending if item.text == text)
         lookup = trace_store.find_record(scope, "candidate", candidate.candidate_id)
         recorded_id = lookup["batches"][0]["trace_id"]
         # 人工确认模型候选仍反查真实批次；不是手输资料。
-        confirmed = memory_store.confirm(scope=scope, candidate_id=candidate.candidate_id)
-        extract(SyntheticRuntime(fail=True))
+        confirmed = None
+        if mode != "deletion-candidate":
+            service = memory_database.MemoryService(contact_memory=memory_store, owner_memory=PostgresOwnerMemoryStore(url))
+            confirmed = service.confirm_candidate(owner_id=scope.owner_id, contact_id=scope.contact_id, candidate_id=candidate.candidate_id)
+        if mode == "full":
+            extract(SyntheticRuntime(fail=True))
         with psycopg.connect(url) as connection:
             ref_id = connection.execute(
                 "SELECT id FROM public.message_source_ref WHERE message_id=%s",
@@ -86,7 +91,7 @@ def create_database():
                 }),),
                 receipts={"synthetic:1": {"message_id": str(messages[0].message_id), "source_ref_id": str(ref_id), "outcome": "saved"}},
             )
-        return {**data, "trace_id": recorded_id, "traced_memory_id": str(confirmed.memory_id),
+        return {**data, "trace_id": recorded_id, "traced_memory_id": str(confirmed.memory_id) if confirmed else None, "trace_text": text,
                 "trace_candidate_id": str(candidate.candidate_id), "processing_id": str(processing_id), "trace_message_id": str(messages[0].message_id)}
     except BaseException:
         memory_database.contact_database.drop_database(data["database_name"])
@@ -98,6 +103,8 @@ if __name__ == "__main__":
         raise RuntimeError("追踪夹具须激活 NotAlone 并禁用默认 dotenv。")
     if sys.argv[1:] == ["create"]:
         print(json.dumps(create_database()))
+    elif len(sys.argv) == 3 and sys.argv[1] == "create" and sys.argv[2] in ("deletion-contact", "deletion-owner", "deletion-candidate"):
+        print(json.dumps(create_database(sys.argv[2])))
     elif len(sys.argv) == 3 and sys.argv[1] == "drop":
         memory_database.contact_database.drop_database(sys.argv[2])
     else:

@@ -67,6 +67,7 @@ export class PageHost implements PageCommands {
     }, 'manager');
     const memory = installMemoryBridge(this, this.backend, contacts);
     const traces = installTraceBridge(this, this.backend, contacts);
+    memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
     const replies = installReplyBridge(this, this.backend, contacts, () => this.foreground.getGenerationBlock());
     this.foreground.onStateChanged(() => replies.refreshGenerationEligibility());
     installSourceDeletionBridge(this, this.backend, contacts, async (contactId) => {
