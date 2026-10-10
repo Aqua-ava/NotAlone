@@ -1,6 +1,7 @@
 # ADR-010：使用 Deep Agents SkillsMiddleware 加载回复 Skill
 
 > 状态：已采纳
+> 2026-10-11 局部修订见 [ADR-043](043-conversation-scenarios-and-direction-exploration.md)；不改变既有只读、联系人隔离和禁止发送边界。
 > 日期：2026-08-16
 > 修订：ADR-009 第 3 节的 `load_skill` 实现和第 6 节的 Deep Agents 边界
 > 后续修订：ADR-019 修订 v1 supporting files 的范围；本 ADR 的单 Skill、只读读取、缓存和禁止扩权边界继续有效。
