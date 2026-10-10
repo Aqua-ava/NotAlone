@@ -1,6 +1,6 @@
 # 02：当前意图优先的生成与改写
 
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: [authentic-expression/01 保真评测的离线逐例报告](01-offline-fidelity-report.md)
 
@@ -37,3 +37,11 @@ Blocked by: [authentic-expression/01 保真评测的离线逐例报告](01-offli
 ## Comments
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
+
+## Answer（统一接口适配中）
+
+2026-10-11：原分支 `2ab0105` 已验证原句和回应方向的契约、3个受控公开页面案例及逐例报告；原页面报告包含刻意改变立场失败1例，真人通过0。旧成果保留在 `codex/authentic-expression`，没有把它的第二套报告包或048样本存储叠加到集成树。
+
+本次以总协调正式 `d23a762` 为基线，将生成契约迁入 `notalone.reply.fidelity`，继续使用唯一 `notalone.reply.fidelity_evaluation`。主动联系的 `confirmed_purpose` 是本次明确意图，保持无伪造目标及 `NoSkill` 禁用；原句／已确认回应方向和附加要求边界保持。真实 LangChain 捕获3项通过，主动目的实际认证HTTP／随机PG1项通过，含同键持久重读和跨owner拒绝。改写缺少契约、主动模式未支持两次红例均先保留再修复。
+
+当前票保持claimed：统一逐例捕获报告及集成树公开页面复验还在接续，预约由总协调串行安排。受控模型输出只证明数据与控制契约，语义、自然度和关系效果未验证；不执行真人／真实App／外部模型验收。样本生命周期及删除由最终C049接续，本切片没有迁移或持久数据变更、自动学习、发送能力或自动采纳门禁。
