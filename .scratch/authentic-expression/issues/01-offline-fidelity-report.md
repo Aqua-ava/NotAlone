@@ -1,6 +1,6 @@
 # 01：保真评测的离线逐例报告
 
-State: open
+State: resolved
 Triage: ready-for-agent
 Blocked by: None (can start immediately)
 
@@ -39,3 +39,11 @@ Blocked by: None (can start immediately)
 ## Comments
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
+
+## Answer
+
+2026-10-11：自动实现与验证完成。新增 `notalone.reply.fidelity_evaluation` 离线公开入口、16例合成开发/保留语料与故意错误输出；报告保留原输出、超时/缺失、逐维分母、显式标注依据与未知成本。生成输入不含标签、答案或划分，同句不同前文保持共同原句。模型及提示版本必须非空。仅合成输入，无业务存储、新外部调用、实际发送或私人日志。
+
+实际命令：激活 `NotAlone`，`PYTHONPATH=backend/src python -m unittest tests.unit.reply.test_fidelity_evaluation -v`（在backend执行时PYTHONPATH=src），3项通过；离线CLI输出分母16、契约失败2、合成标注14、保真失败14、未审阅2、已知调用小计15/1640ms、未知成本1，总成本未知。Standards独立审查0；Spec提出5项报告真实性问题，均以相应公开CLI反例修复。
+
+本票离线交付不需要真实模型或人工质量验收；真实语义、自然度与用户相似度仍未验证，不把故意错误合成标注描述为真实质量审阅。普通页面、App和微信未运行。
