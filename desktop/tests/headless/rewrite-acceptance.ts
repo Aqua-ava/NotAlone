@@ -100,6 +100,12 @@ async function newSession(pages: RewritePages, host: PageHost, userData: string,
     await nextManager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
     const nextHelper = await restarted.open('helper');
     await assertTransientRewriteCleared(nextHelper);
+    const discussion = nextHelper.getByRole('region', { name: '已保存的讨论', exact: true });
+    await expect(discussion.getByText('已保存的合成改写输入。', { exact: true })).toBeVisible();
+    await expect(discussion.getByText('我会晚一点回复你（说法1）。', { exact: true })).toBeVisible();
+    await expect(discussion.getByText(/本次临时要求/)).toBeVisible();
+    await expect(nextHelper.getByText('退出后不恢复的编辑。', { exact: true })).toHaveCount(0);
+    await expect(nextHelper.getByText('退出后不恢复的草稿。', { exact: true })).toHaveCount(0);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
   } finally { await restarted.close(); }
 }
@@ -113,7 +119,7 @@ export async function draftRewriteAcceptance(browser: Browser, origin: string) {
     ['真实超时失败恢复与空候选拒绝', rewriteFailures],
     ['联系人切换的迟到成功和失败失效', staleContact],
     ['断线重连的迟到成功和失败失效', staleConnection],
-    ['新生产会话同 userData 不恢复临时输入', (pages, host, userData) => newSession(pages, host, userData, browser, origin)],
+    ['新生产会话恢复已存讨论但不恢复临时输入', (pages, host, userData) => newSession(pages, host, userData, browser, origin)],
     ['具名参数、角色和范围拒绝', async (pages) => {
       await rewriteSecurity(pages);
       expect(await pages.helper.evaluate(async () => {
@@ -132,7 +138,7 @@ export async function draftRewriteAcceptance(browser: Browser, origin: string) {
 }
 
 export async function draftRewriteSession(browser: Browser, origin: string) {
-  const name = '新生产会话同 userData 不恢复临时输入';
+  const name = '新生产会话恢复已存讨论但不恢复临时输入';
   process.stdout.write(`page_test_scenario: ${name}\n`);
   await withRewritePages(browser, origin, (pages, host, userData) => newSession(pages, host, userData, browser, origin));
   process.stdout.write(`page_test_scenario_passed: ${name}\n`);

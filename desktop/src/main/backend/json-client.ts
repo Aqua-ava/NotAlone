@@ -12,7 +12,8 @@ export interface JsonRequest {
 
 // 只携带安全分类；业务模块自行映射已知错误，不把响应原文转给界面。
 export class BackendRequestFailure extends Error {
-  constructor(readonly kind: 'connection' | 'response' | 'cancelled', readonly status?: number, readonly code?: string) {
+  constructor(readonly kind: 'connection' | 'response' | 'cancelled', readonly status?: number, readonly code?: string,
+    readonly reason?: 'target_message_unavailable' | 'source_unavailable') {
     super('本机业务请求未完成');
   }
 }
@@ -65,8 +66,10 @@ export class JsonClient {
             const status = response.statusCode ?? 0;
             if (status < 200 || status >= 300) {
               const code = (data as { error?: unknown })?.error;
+              const reason = (data as { reason?: unknown })?.reason;
               fail(new BackendRequestFailure('response', status,
-                typeof code === 'string' && /^[a-z][a-z0-9_]{0,79}$/.test(code) ? code : undefined));
+                typeof code === 'string' && /^[a-z][a-z0-9_]{0,79}$/.test(code) ? code : undefined,
+                reason === 'target_message_unavailable' || reason === 'source_unavailable' ? reason : undefined));
             } else { settled = true; resolve({ status, data }); }
           } catch { fail(new BackendRequestFailure('response')); }
         });

@@ -262,6 +262,8 @@ export class ReplySession {
         const errorCode = failure?.kind === 'connection' ? 'connection'
           : failure?.code === 'reply_timeout' ? 'timeout'
           : failure?.code === 'assistant_session_save_failed' ? 'save_failed'
+          : failure?.reason === 'target_message_unavailable' ? 'target_unavailable'
+          : failure?.reason === 'source_unavailable' ? 'source_unavailable'
           : ['reply_rejected', 'assistant_session_rejected'].includes(failure?.code ?? '') ? 'rejected'
           : ['reply_unavailable', 'runtime_stopping'].includes(failure?.code ?? '') ? 'unavailable' : 'generation_failed';
         this.publish({ phase: 'failed', errorCode });
@@ -312,6 +314,10 @@ export class ReplySession {
         targetMessageId: null, direction: '', purpose: '', phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false,
         savedSession: { phase: 'idle', sessionId: null, turns: [] } });
       this.beginMessageNotice();
+      // 新连接重新选择联系人后只读取已保存讨论，不恢复本次输入或触发生成。
+      if (state.selectedContactId && state.directoryPhase === 'ready') {
+        void this.readSavedSession({ contactId: state.selectedContactId, scopeRevision: state.scopeRevision });
+      }
     } else if (state.draft !== this.draft) {
       this.draft = state.draft;
       this.cancelPending();

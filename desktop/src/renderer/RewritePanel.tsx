@@ -97,6 +97,10 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
     {state.phase === 'failed' && <p className="reply-note" role="alert">{state.errorCode === 'connection' ? '未收到生成结果，请用同一次请求重试。'
       : state.errorCode === 'save_failed' ? '本次结果未可靠保存，尚不能确认可恢复。请重试同一次生成。'
       : state.errorCode === 'timeout' ? '本次生成超时，请重试同一次生成。'
+      : state.errorCode === 'target_unavailable' ? '待回复消息已失效，请刷新消息重新选择，或使用草稿改写。'
+      : state.errorCode === 'source_unavailable' ? (state.mode === 'reply_to_message'
+        ? '待回复消息或其来源已失效，请刷新消息重新选择，或使用草稿改写。'
+        : '本次回复依据已失效，请重新读取后再试。')
       : state.errorCode === 'rejected' ? '本次生成被拒绝，请在管理后台确认联系人及有效会话绑定。'
       : state.errorCode === 'unavailable' ? '回复服务暂不可用，请检查应用配置和本机服务。'
       : '本次生成失败，请核对本机服务后重试。'}</p>}

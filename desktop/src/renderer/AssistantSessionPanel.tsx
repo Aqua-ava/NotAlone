@@ -4,7 +4,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
   const saved = replies.state.savedSession;
   return <section aria-label="助手会话">
     <button disabled={!replies.state.contactId || saved?.phase === 'loading'} onClick={() => void replies.readSavedSession()}>
-      查看已保存讨论
+      {saved?.phase === 'failed' ? '重试读取已保存讨论' : '查看已保存讨论'}
     </button>
     {saved?.phase === 'loading' && <p role="status">正在读取已保存讨论…</p>}
     {saved?.phase === 'failed' && <p role="alert">已保存讨论暂不可用，请重试读取。</p>}

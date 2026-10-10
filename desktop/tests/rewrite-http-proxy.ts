@@ -9,11 +9,14 @@ export class RewriteHttpProxy {
   nextReply: 'normal' | 'drop' | 'hold' = 'normal';
   nextMessages: 'normal' | 'drop' | 'hold' = 'normal';
   nextEvidence: 'normal' | 'hold' = 'normal';
+  nextSessionRead: 'normal' | 'drop' | 'hold' = 'normal';
   readonly heldEvidenceStatuses: number[] = [];
   readonly sessionReads: Array<{ status: number; states: string[] }> = [];
+  readonly sessionRequests: string[] = [];
   readonly messageRequests: string[] = [];
   failMessages = false;
   failRuntime = false;
+  failSessionReads = false;
   heldCount = 0;
   private readonly held: Array<() => void> = [];
   private readonly pending = new Set<ReturnType<typeof httpRequest>>();
@@ -31,11 +34,15 @@ export class RewriteHttpProxy {
       const sessionRead = incoming.method === 'GET'
         && /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+$/.test(incoming.url ?? '');
       if (messages) this.messageRequests.push(incoming.url!);
-      const delivery = generating ? this.nextReply : messages ? this.nextMessages : evidence ? this.nextEvidence : 'normal';
+      if (sessionRead) this.sessionRequests.push(incoming.url!);
+      const delivery = generating ? this.nextReply : messages ? this.nextMessages : evidence ? this.nextEvidence
+        : sessionRead ? this.nextSessionRead : 'normal';
       if (generating) this.nextReply = 'normal';
       if (messages) this.nextMessages = 'normal';
       if (evidence) this.nextEvidence = 'normal';
-      if (messages && this.failMessages) {
+      if (sessionRead) this.nextSessionRead = 'normal';
+      if ((messages && this.failMessages) || (sessionRead && this.failSessionReads)) {
+        if (sessionRead) this.sessionReads.push({ status: 503, states: [] });
         const deliver = () => {
           if (response.destroyed) return;
           response.writeHead(503, { 'Content-Type': 'application/json' });

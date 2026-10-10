@@ -81,8 +81,9 @@ async function unavailableTarget({ manager, helper, replyTransport, rewriteBacke
   await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('说明现在的安排。');
   await rewriteBackend.command('withdraw_target_source');
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
-  await expect(helper.getByRole('alert')).toContainText('本次生成失败');
-  expect(replyTransport.results).toEqual([{ status: 500, data: { error: 'reply_generation_failed' } }]);
+  await expect(helper.getByRole('alert')).toHaveText('待回复消息或其来源已失效，请刷新消息重新选择，或使用草稿改写。');
+  expect(replyTransport.results).toEqual([{ status: 409, data: { error: 'assistant_session_rejected', reason: 'source_unavailable' } }]);
+  await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
   expect((await rewriteBackend.command('observations')).payloads).toEqual([]);
   await expect(helper.getByText('可以刷新待回复消息重新选择，或切换到草稿改写。', { exact: true })).toBeVisible();
   await helper.getByRole('button', { name: '刷新消息', exact: true }).click();
@@ -175,7 +176,7 @@ async function emptyAndRejected({ manager, helper, replyTransport, rewriteBacken
   await rewriteBackend.command('revoke', { contact_id: rewriteBackend.data.contact_ids[0] });
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
   await expect(helper.getByRole('alert')).toContainText('确认联系人及有效会话绑定');
-  expect(replyTransport.results).toEqual([{ status: 409, data: { error: 'reply_rejected', reason: 'no_active_binding' } }]);
+  expect(replyTransport.results).toEqual([{ status: 409, data: { error: 'assistant_session_rejected', reason: 'no_active_binding' } }]);
   expect((await rewriteBackend.command('observations')).payloads).toEqual([]);
   await expect(helper.getByText('可以刷新待回复消息重新选择，或切换到草稿改写。', { exact: true })).toBeVisible();
   await helper.getByRole('button', { name: '改写', exact: true }).click();
@@ -315,10 +316,11 @@ async function parameterGuards(pages: RewritePages) {
 
 async function newReplySession(pages: RewritePages, host: PageHost, userData: string, browser: Browser, origin: string) {
   const { helper, rewriteBackend } = pages;
-  await prepareReply(pages, '甲', '重启后不恢复的方向。');
+  await prepareReply(pages, '甲', '已保存的合成回应方向。');
   await rewriteBackend.plan({ count: 1, prefix: '本次临时回复' });
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
   await helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }).fill('重启后不恢复的编辑。');
+  await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('未提交的合成回应方向。');
   await host.close();
   await rewriteBackend.command('restart');
   const restarted = new PageHost(await browser.newContext(), origin, userData);
@@ -328,9 +330,15 @@ async function newReplySession(pages: RewritePages, host: PageHost, userData: st
     const nextHelper = await restarted.open('helper');
     await expect(manager.getByText('本次联系人：未确认', { exact: true })).toBeVisible();
     await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await confirmHelperContact(nextHelper, rewriteBackend.data.contact_ids[0]);
     await expect(nextHelper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
     await expect(nextHelper.getByRole('checkbox', { name: '结合关系语境', exact: true })).not.toBeChecked();
     await expect(nextHelper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
+    const discussion = nextHelper.getByRole('region', { name: '已保存的讨论', exact: true });
+    await expect(discussion.getByText('已保存的合成回应方向。', { exact: true })).toBeVisible();
+    await expect(discussion.getByText('本次临时回复（说法1）。', { exact: true })).toBeVisible();
+    await expect(nextHelper.getByText('未提交的合成回应方向。', { exact: true })).toHaveCount(0);
+    await expect(nextHelper.getByText('重启后不恢复的编辑。', { exact: true })).toHaveCount(0);
     await nextHelper.getByRole('button', { name: '回应消息', exact: true }).click();
     await expect(nextHelper.getByRole('textbox', { name: '表达方向', exact: true })).toHaveValue('');
     await expect(nextHelper.getByRole('radio', { name: /甲的私密合成历史/ })).not.toBeChecked();
@@ -351,7 +359,7 @@ export async function directedReply(browser: Browser, origin: string) {
     ['联系人切换后迟到生成成功和失败失效', (pages: RewritePages) => staleGenerated(pages, false)],
     ['断线重连后迟到生成成功和失败失效', (pages: RewritePages) => staleGenerated(pages, true)],
     ['具名参数、消息目标、角色和范围拒绝', parameterGuards],
-    ['新生产会话不恢复目标、方向和编辑', (pages, host, userData) => newReplySession(pages, host, userData, browser, origin)],
+    ['新生产会话恢复原讨论但不恢复未存目标方向和编辑', (pages, host, userData) => newReplySession(pages, host, userData, browser, origin)],
   ];
   for (const [name, scenario] of scenarios) {
     process.stdout.write(`page_test_scenario: ${name}\n`);
