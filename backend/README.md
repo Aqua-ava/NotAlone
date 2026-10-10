@@ -50,3 +50,5 @@ NOTALONE_DISABLE_DOTENV=1 python -m unittest discover -s tests -v
 固定 CLI v1.6.25 在授权单联系人、严格只读与无网络的本机隔离下，已确认用户测试新事件到达。生产有界轮询引擎与正式 PostgreSQL 仓储在独立随机 `_test` 库验证：入库 1 条，重启与重新开启同步新增 0，关闭期间 CLI 调用 0；临时库已清理。未使用模型或业务库，未发送消息。此轮不证明全局会话事件流、异常重启、双联系人切换或完整桌面闭环。
 
 单次 tail 使用完整 JSON envelope，以实时来源、精确会话、无警告和 has_more=false 确认检查完成；空结果不推进游标。不能证明来源或存在后续页时保留未完成状态，当前不执行分页。follow 仍使用 JSONL。相关公开接口与后台合成回归 85/85；现场范围及剩余项见[验收台账](../docs/macos-app-permissions-and-errors.md)。
+
+2026-10-10 追加故障验收：对本轮自有且已核对可执行文件的单次tail进程中断，生产适配器报告cli_command_failed；消息数0、游标不变。显式retry_backfill后补回1条、补齐错误清除；后续重启/重开不重入，关闭零读取，自有进程和临时库均清理。这是单次读取故障后的显式恢复，不能替代全局流自动退避或App退出验证。当前follow-smoke方法仍委托旧fallback引擎，当前主循环的全局流验收不能直接使用这些兼容接口，见[运行手册](../.scratch/native-app-backend/follow-smoke-runbook-20261005.md)。

@@ -4,6 +4,12 @@
 
 用户本轮要求先放置需要人在场的事项。本次只核对手册和前置条件，没有执行真实微信、原生 App、系统权限或 follow。过去的预约不作为新的执行时段。
 
+## 最新执行范围与入口限制（2026-10-10）
+
+当前生产 `CliFullSyncEngine` 的主循环使用全局会话事件通知与按绑定读取；全局流失败后有界轮询。其 `enable_follow_smoke`、`interrupt_follow_stream` 和 `follow_runtime_status` 仍委托旧 fallback 引擎（`backend/src/notalone/front_sync/full_sync_engine.py`）。因此下文历史 HTTP follow 步骤只描述兼容诊断，不能作为当前主循环全局流中断／恢复的验收入口；继续该项前需先明确当前引擎的受控诊断入口。
+
+已完成的真实单联系人证据：测试新事件到达；有界轮询入库1条；引擎重建与开关重开不重复；关闭时CLI调用0；在自有单次CLI进程被中断后，错误为cli_command_failed、消息0且cursor不变，显式retry_backfill后入库1条并清除补齐错误。均使用独立临时测试库，结束清理；不等于全局流自动退避重启、两绑定切换或App退出验收。最新聚合记录见任务04 Comments及后端README；历史“尚未读取”只描述此前阶段，不覆盖这些新证据。
+
 ## 前置条件
 
 | 条件 | 执行前需要具备的证据 |
