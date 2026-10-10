@@ -1,8 +1,11 @@
 # macOS App 权限与启动错误记录
 
 状态：维护中  
-最后更新：2026-10-09
+最后更新：2026-10-10
 适用范围：新 Electron `NotAlone.app`、历史 `NotAloneApp.app`、`NotAloneSyncProbe.app`、`notalone-sync-probe` 和历史主 App 打包的 `wechat-cli`
+
+2026-10-10 前置构建：在4654aec源码显式以ad-hoc构建native/macos探针及核心库，分别通过严格签名校验；桌面arm64包递归严格签名通过，但只含前端资源，未包含微信CLI/WCDB，未运行本次包。SessionCaptureSafetyTests纯政策4项通过，未知布局继续在采集前暂停。未查询证书、改变TCC、读取画面或微信；该结果不证明稳定权限、自动定位或完整包交付。当前已有绑定CLI同步不依赖OCR，真实范围与新时段仍须明确。证据与产物hash见[验收前置记录](../.scratch/observation-model-smoke/acceptance.md#2026-10-10真实微信验收前置核查与已补齐项)。
+
 
 2026-10-09 任务 18 原生源码安全退化片：目前没有可追溯、已验证的最小定位区域 profile，因此新 CLI 的默认 `--session --json`、追加 `--minimal-region` 和旧 text session 都在 `NSApplication`、权限检查、窗口查询及采集调用之前安全暂停，返回 `minimal_region_layout_unverified`；删除 session 的完整窗口采集及回退路径。脱离 session 的 `--minimal-region`、重复、未知和混用参数也先拒绝。未新增权限、坐标猜测、可用 profile、质量生产字段或自动身份匹配；历史 watch/menu 诊断路径未扩展，不能作为新宿主证明。
 

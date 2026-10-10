@@ -61,3 +61,6 @@ Spec: ../spec.md
 - 2026-10-09（两片独立双轴收束）：固定194fab918…fa398b6的native安全退化/构建输入/显式签名源码，独立Standards hard0/possible0、Spec0；固定fa398b6…36bd86e的公开人工确认安全测试/登记，两轴同样全0，P0–P3均0。评审未运行服务或原生程序；source36bd86e真实单场1/1及正常清理另有证据，不能把源码评审、纯17组或普通角色验证混写为实际ElectronIPC/native通过。近期来源删除full五种生成族经实际helper确认后走受控本地模型，证明人工资格可接入真实业务生成；这不是自动绑定、真实模型语义或native定位验收。18仍claimed/noAnswer，验收未勾选。
 
 - 2026-10-09（生成资格适配收尾）：集成 `d6a3e6a` 与已通过首 20 场的 `94e50f7` 在 desktop/backend 无差异，保留该轮实际证据；本次追加依据/消息事件 14、导入/草稿 5、复制 4 场全部通过，共 43 个唯一场景，不重复计算历史复制。43 个精确库的只读 catalog 查询均不存在；各轮正常清理、自有进程无残留、两租约 absent。消息事件的 5 个库额外采用本轮 PID 匹配的建库与清理归属文件核验；其余 38 个保留认证停读/清理/退出见证。固定 `f958df4…a08b542` 测试适配的独立 Standards hard0/possible0、Spec0 既有报告已核实并归档；`npm test` 类型与安全调度 24/24 通过，三轮页面构建通过。证据在 `desktop/artifacts/acceptance-closeout-d6a3e6a`。本轮只补验和记录，未完成可信布局、成功自动定位或原生权限条件，18 保持 claimed/noAnswer。
+
+
+- 2026-10-10（构建与纯政策验证）：用户要求补真实微信前置条件，明确ad-hoc构建探针与核心库、两者codesign严格校验通过；SessionCaptureSafetyTests实际4项通过（17组参数）。未执行probe session、App、微信观察或TCC动作；没有布局profile，minimal_region_layout_unverified保持，不能称定位已完成。CLI后台同步与OCR独立，已在验收记录分开直接同步路径与自动定位后续条件。18保持claimed，无新增验收勾选。
