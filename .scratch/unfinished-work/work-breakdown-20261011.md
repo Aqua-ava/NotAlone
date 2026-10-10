@@ -10,7 +10,7 @@
 
 | 材料 | 当前工作流阶段 | 对应目录内的文件 | 是否正式切票 |
 | --- | --- | --- | --- |
-| 持续会话与上下文 | 从Q16继续收束设计 | [持续会话规划](../assistant-session-context/planning.md) | 否；未决问题解决后先形成spec |
+| 持续会话与上下文 | Q1–Q18已确认；接缝与六票提案待确认 | [持续会话规划](../assistant-session-context/planning.md) | 否；接缝确认后形成spec并逐票发布 |
 | 聊天回复策略 | 通用流程与共享契约待定，具体Skill仍暂停 | [聊天策略规划](../conversation-reply-strategy/planning.md) | 否 |
 | 真实表达与关系感知 | 最小验证范围待定 | [真实表达规划](../authentic-expression/planning.md) | 否 |
 | Agent运行时 | 条件触发的能力差距审查 | [运行时规划](../agent-runtime/planning.md) | 否；不默认迁移框架 |
