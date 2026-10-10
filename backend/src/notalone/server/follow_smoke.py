@@ -1,7 +1,7 @@
 """真实微信 follow 人工验证的本地诊断接缝。
 
-这个模块只编排人工验证，不改变正式同步默认的轮询策略。界面能够显式
-开启 follow 优先、记录元数据检查点和中断当前 follow 流；联系人正文始终
+这个模块只编排人工验证，不改变正式同步策略。界面能够显式
+观察全局流、记录元数据检查点和中断当前流；联系人正文始终
 不进入诊断状态或检查点。
 """
 
@@ -183,13 +183,13 @@ class FollowSmokeController:
         if not self._host.sync_enabled():
             raise FollowSmokeRejected(
                 "sync_disabled",
-                "请先在 App 中开启前台同步，再开始 follow 验证。",
+                "请先在 App 中开启同步，再开始全局流验证。",
             )
         self._checkpoints.clear()
         try:
             self._host.enable_follow_smoke()
         except Exception:
-            # 开启策略后若首轮失败，尽力恢复默认轮询，避免留下半开启状态。
+            # 首轮失败时结束诊断，避免留下半开启状态；正式同步策略不变。
             try:
                 self._host.disable_follow_smoke()
             except Exception:
@@ -199,7 +199,7 @@ class FollowSmokeController:
         return self.status()
 
     def stop(self) -> FollowSmokeStatus:
-        """结束验证并恢复正式同步的轮询策略。"""
+        """结束诊断；正常后台同步继续，不能视为关闭读取。"""
 
         if self._active:
             self._host.disable_follow_smoke()

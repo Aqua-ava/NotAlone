@@ -152,6 +152,7 @@ class SessionEventStream:
             queue.Queue()
         )
         self._closed = False
+        self._stop_requested = False
         self._lock = threading.Lock()
         self._reader = threading.Thread(target=self._read_loop, daemon=True)
         self._reader.start()
@@ -178,21 +179,25 @@ class SessionEventStream:
         return item
 
     def close(self) -> None:
+        # 读取线程结束不代表子进程已退出；只有回收成功才允许幂等跳过。
         with self._lock:
-            if self._closed:
+            if self._stop_requested:
                 return
             self._closed = True
-        terminate = getattr(self._process, "terminate", None)
-        if callable(terminate):
-            terminate()
-        wait = getattr(self._process, "wait", None)
-        if callable(wait):
-            try:
-                wait(timeout=1.0)
-            except (TimeoutError, subprocess.TimeoutExpired):
-                kill = getattr(self._process, "kill", None)
-                if callable(kill):
+            terminate = getattr(self._process, "terminate", None)
+            if callable(terminate):
+                terminate()
+            wait = getattr(self._process, "wait", None)
+            if callable(wait):
+                try:
+                    wait(timeout=1.0)
+                except (TimeoutError, subprocess.TimeoutExpired):
+                    kill = getattr(self._process, "kill", None)
+                    if not callable(kill):
+                        raise
                     kill()
+                    wait(timeout=1.0)
+            self._stop_requested = True
 
     def _read_loop(self) -> None:
         try:

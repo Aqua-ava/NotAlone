@@ -21,6 +21,7 @@ from notalone.front_sync.event_publisher import (
     MessageEventPublisher,
     NullMessageEventPublisher,
 )
+from notalone.front_sync.tail_lifecycle import FollowRuntimeStatus
 from notalone.persistence.backfill_state import (
     BackfillPhase,
     BackfillStatePersistenceError,
@@ -201,6 +202,9 @@ class CliBackgroundSync:
         "_clock",
         "_stream",
         "_stream_supported",
+        "_stream_retry_at",
+        "_stream_failures",
+        "_follow_smoke_enabled",
         "_global_cursor",
         "_initial_scan_done",
         "_sweep_index",
@@ -253,6 +257,9 @@ class CliBackgroundSync:
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._stream: SessionEventStream | object | None = None
         self._stream_supported = True
+        self._stream_retry_at: datetime | None = None
+        self._stream_failures = 0
+        self._follow_smoke_enabled = False
         self._global_cursor: str | None = None
         self._initial_scan_done = False
         self._sweep_index = 0
@@ -307,6 +314,9 @@ class CliBackgroundSync:
                 batch_message_count=0,
             )
 
+        if self._stream_retry_at is not None and self._clock() >= self._stream_retry_at:
+            self._stream_supported = True
+            self._stream_retry_at = None
         if self._stream_supported:
             # 可重试的 CLI/持久化错误只影响当前轮；全局流明确不可用时
             # 保留其稳定错误码，向界面说明正在使用有界轮询。
@@ -479,9 +489,7 @@ class CliBackgroundSync:
             mode = "global_follow"
             stream_active = not bool(getattr(self._stream, "closed", False))
             if not stream_active:
-                self._close_stream()
-                self._stream_supported = False
-                self._failure_code = self._failure_code or "cli_follow_failed"
+                self._stream_failed("cli_follow_failed")
                 phase = CliSyncPhase.DEGRADED
                 mode = "bounded_polling"
         else:
@@ -551,7 +559,43 @@ class CliBackgroundSync:
         self._last_priority_read_at = None
         self._last_priority_locator = None
         self._stream_supported = True
+        self._stream_retry_at = None
+        self._stream_failures = 0
+        self._follow_smoke_enabled = False
         self._failure_code = None
+
+    def enable_follow_smoke(self) -> None:
+        """开始观察当前全局流，不启动兼容前台读取。"""
+        self._follow_smoke_enabled = True
+
+    def disable_follow_smoke(self) -> None:
+        """结束诊断；正常后台同步和事件流保持原策略。"""
+        self._follow_smoke_enabled = False
+
+    def follow_runtime_status(self) -> FollowRuntimeStatus:
+        active = self._stream is not None and not self._stream.closed
+        return FollowRuntimeStatus(
+            enabled=self._follow_smoke_enabled,
+            stream_active=active,
+            process_id=getattr(self._stream, "process_id", None) if active else None,
+            mode="global_follow" if active else "bounded_polling",
+        )
+
+    def interrupt_follow_stream(self) -> None:
+        """只中断诊断中当前持有的全局流，沿正式退避恢复。"""
+        if not self._follow_smoke_enabled or not self.follow_runtime_status().stream_active:
+            raise ValueError("当前没有可中断的全局诊断流。")
+        self._stream_failed("cli_follow_failed")
+
+    def _stream_failed(self, code: str) -> None:
+        self._close_stream()
+        self._failure_code = code
+        self._stream_supported = False
+        self._stream_failures = min(self._stream_failures + 1, 6)
+        self._stream_retry_at = (
+            None if code == "cli_follow_unsupported" else
+            self._clock() + timedelta(seconds=min(60, 3 * 2 ** (self._stream_failures - 1)))
+        )
 
     def request_safety_sweep(self) -> None:
         """让下一次空闲心跳立即执行一小批安全对账。"""
@@ -682,9 +726,7 @@ class CliBackgroundSync:
                 poll_interval="3s",
             )
         except CliAdapterError as error:
-            self._failure_code = error.code
-            self._stream_supported = False
-            self._stream = None
+            self._stream_failed(error.code)
 
     def _consume_global_events(
         self,
@@ -705,6 +747,7 @@ class CliBackgroundSync:
                 if event is None:
                     break
                 self._global_cursor = event.cursor
+                self._stream_failures = 0
                 if event.conversation_locator in by_locator:
                     if (
                         event.conversation_locator == priority_locator
@@ -716,9 +759,7 @@ class CliBackgroundSync:
                     else:
                         self._enqueue(event.conversation_locator)
         except CliAdapterError as error:
-            self._failure_code = error.code
-            self._close_stream()
-            self._stream_supported = False
+            self._stream_failed(error.code)
 
     def _enqueue(self, locator: str) -> None:
         if locator in self._pending_locator_set:

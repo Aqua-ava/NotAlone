@@ -337,20 +337,37 @@ class CliFullSyncEngine:
         )
 
     # ------------------------------------------------------------------
-    # 兼容旧人工验证与前台绑定确认
+    # 当前全局流诊断；绑定确认仍保留旧兼容入口
     # ------------------------------------------------------------------
 
     def enable_follow_smoke(self) -> FrontSyncCycleReport:
-        return self._fallback.enable_follow_smoke()
+        if not self.sync_enabled():
+            raise ValueError("同步未开启，不能开始全局流诊断。")
+        self._background.enable_follow_smoke()
+        return self._follow_diagnostic_report()
 
     def disable_follow_smoke(self) -> FrontSyncCycleReport:
-        return self._fallback.disable_follow_smoke()
+        self._background.disable_follow_smoke()
+        return self._follow_diagnostic_report()
 
     def interrupt_follow_stream(self) -> FrontSyncCycleReport:
-        return self._fallback.interrupt_follow_stream()
+        if not self.sync_enabled():
+            raise ValueError("同步未开启，不能中断全局流。")
+        self._background.interrupt_follow_stream()
+        return self._follow_diagnostic_report()
 
     def follow_runtime_status(self) -> FollowRuntimeStatus:
-        return self._fallback.follow_runtime_status()
+        return self._background.follow_runtime_status()
+
+    def _follow_diagnostic_report(self) -> FrontSyncCycleReport:
+        """诊断只刷新正式后台通道，不调用OCR或旧前台引擎。"""
+        enabled = self.sync_enabled()
+        background = self._background.cycle(enabled=enabled)
+        return self._build_report(
+            enabled=enabled,
+            background=background,
+            foreground=self._last_foreground_status or _unknown_foreground_status(enabled),
+        )
 
     def confirm_binding(self, *, contact_id: UUID, locator: str) -> FrontSyncCycleReport:
         return self._fallback.confirm_binding(contact_id=contact_id, locator=locator)

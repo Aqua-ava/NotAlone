@@ -59,6 +59,7 @@ class FakeCli:
     def __init__(self, *, stream_events: list[tuple[str, str]]) -> None:
         self.stream_events = stream_events
         self.stream_calls = 0
+        self.stream_arguments = []
         self.stream: FakeSessionStream | None = None
         self.tail_calls: list[dict[str, object]] = []
         self.tail_results: dict[str, deque[TailResult]] = {}
@@ -68,6 +69,7 @@ class FakeCli:
 
     def session_events_follow(self, **kwargs):
         self.stream_calls += 1
+        self.stream_arguments.append(kwargs)
         self.stream = FakeSessionStream(self.stream_events)
         return self.stream
 
@@ -1324,6 +1326,65 @@ class CliBackgroundSyncTest(unittest.TestCase):
         )
         self.assertEqual(result.status.stream_mode, "bounded_polling")
         self.assertEqual(result.status.failure_code, "cli_follow_unsupported")
+
+    def test_global_stream_interruption_reconnects_after_backoff(self) -> None:
+        self.sync.cycle(enabled=True)
+        old_stream = self.cli.stream
+        self.sync.enable_follow_smoke()
+        self.assertTrue(self.sync.follow_runtime_status().stream_active)
+        self.sync.interrupt_follow_stream()
+        self.assertTrue(old_stream.closed)
+        self.assertFalse(self.sync.follow_runtime_status().stream_active)
+        self.sync.cycle(enabled=True)
+        self.assertEqual(self.cli.stream_calls, 1)
+        self.now += timedelta(seconds=3)
+        recovered = self.sync.cycle(enabled=True)
+        self.assertEqual(self.cli.stream_calls, 2)
+        self.assertTrue(recovered.status.stream_active)
+        self.sync.disable_follow_smoke()
+        self.assertFalse(self.sync.follow_runtime_status().enabled)
+        self.assertTrue(self.sync.follow_runtime_status().stream_active)
+
+    def test_unexpected_close_resumes_cursor_and_disabled_cancels_retry(self) -> None:
+        self.sync.cycle(enabled=True)
+        cursor = self.cli.stream_events[-1][0]
+        self.cli.stream.closed = True
+        self.sync.cycle(enabled=True)
+        self.now += timedelta(seconds=3)
+        self.sync.cycle(enabled=True)
+        self.assertEqual(self.cli.stream_arguments[-1]["cursor"], cursor)
+        self.assertEqual(self.cli.stream_calls, 2)
+        self.cli.stream.closed = True
+        self.sync.cycle(enabled=True)
+        self.sync.cycle(enabled=False)
+        self.now += timedelta(seconds=100)
+        self.sync.cycle(enabled=False)
+        self.assertEqual(self.cli.stream_calls, 2)
+
+    def test_start_failures_back_off_and_unsupported_does_not_auto_retry(self) -> None:
+        attempts = []
+        def fail(**kwargs):
+            attempts.append(kwargs)
+            raise CliCommandError("cli_follow_failed", "合成失败")
+        self.cli.session_events_follow = fail
+        self.sync.cycle(enabled=True)
+        self.now += timedelta(seconds=3)
+        self.sync.cycle(enabled=True)
+        self.now += timedelta(seconds=3)
+        self.sync.cycle(enabled=True)
+        self.assertEqual(len(attempts), 2)
+        self.now += timedelta(seconds=3)
+        self.sync.cycle(enabled=True)
+        self.assertEqual(len(attempts), 3)
+        self.sync.close()
+        def unsupported(**kwargs):
+            attempts.append(kwargs)
+            raise CliCommandError("cli_follow_unsupported", "合成不支持")
+        self.cli.session_events_follow = unsupported
+        self.sync.cycle(enabled=True)
+        self.now += timedelta(seconds=100)
+        self.sync.cycle(enabled=True)
+        self.assertEqual(len(attempts), 4)
 
     def test_disabled_cycle_closes_global_stream_and_does_not_read(self) -> None:
         self.sync.cycle(enabled=True)

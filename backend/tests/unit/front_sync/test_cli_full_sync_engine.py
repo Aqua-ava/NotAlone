@@ -45,6 +45,8 @@ class FakeBackground:
         self.calls: list[bool] = []
         self.priority_calls: list[UUID | None] = []
         self.safety_sweep_requests = 0
+        self.smoke_enabled = False
+        self.interruptions = 0
         self.result = CliSyncCycleResult(
             status=CliSyncStatus(
                 phase=CliSyncPhase.ACTIVE,
@@ -71,6 +73,18 @@ class FakeBackground:
 
     def request_safety_sweep(self) -> None:
         self.safety_sweep_requests += 1
+
+    def enable_follow_smoke(self):
+        self.smoke_enabled = True
+
+    def disable_follow_smoke(self):
+        self.smoke_enabled = False
+
+    def interrupt_follow_stream(self):
+        self.interruptions += 1
+
+    def follow_runtime_status(self):
+        return FollowRuntimeStatus(enabled=self.smoke_enabled, stream_active=True, mode="global_follow")
 
 
 class FakeForeground:
@@ -161,6 +175,16 @@ def _legacy_report() -> FrontSyncCycleReport:
 
 
 class CliFullSyncEngineTest(unittest.TestCase):
+    def test_follow_diagnostics_use_current_background_without_ocr(self) -> None:
+        self.engine.enable_follow_smoke()
+        self.assertTrue(self.background.smoke_enabled)
+        self.assertEqual(self.engine.follow_runtime_status().mode, "global_follow")
+        self.engine.interrupt_follow_stream()
+        self.assertEqual(self.background.interruptions, 1)
+        self.engine.disable_follow_smoke()
+        self.assertFalse(self.background.smoke_enabled)
+        self.assertEqual(self.foreground.calls, [])
+
     def setUp(self) -> None:
         from notalone.front_sync.full_sync_engine import CliFullSyncEngine
 
