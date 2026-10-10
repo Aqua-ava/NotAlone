@@ -97,7 +97,7 @@ npm run prepare:probe -- --destination /已有父目录/notalone-probe
 npm run package -- --with-probe --helper-directory /绝对路径/cli-runtime --helper-version v1.2.3 --helper-source https://example.org/public-runtime
 ```
 
-`prepare:probe` 不接收外部二进制或探针目录。只读取仓库固定 7 份 Swift 源码与 `build_cli.sh`，拒绝源码符号链接/变化，在自有临时目录保存快照并执行该构建脚本；明确 ad-hoc 签名，不继承证书选择或用户配置。编译最多 120 秒，模块缓存和编译产物留在本轮临时目录，完成后清理；生成的 CLI 和动态库从不执行或加载。随后复用完整性、架构、签名和相对依赖检查，搬运到不存在的目标，只保留 `notalone-sync-probe`、`libNotAloneSyncCore.dylib` 与 manifest。已有目录拒绝且不覆盖，JSON 不回显绝对路径或编译输出。
+`prepare:probe` 不接收外部二进制或探针目录。只读取仓库固定 7 份 Swift 源码与 `build_cli.sh`，拒绝源码符号链接/变化，在自有临时目录保存快照并执行该构建脚本；使用 `zsh -f` 禁用用户启动文件，`ZDOTDIR` 指向本轮临时目录，不改变用户 HOME。明确 ad-hoc 签名，不继承证书选择或用户配置。编译最多 120 秒，模块缓存和编译产物留在本轮临时目录，完成后清理；生成的 CLI 和动态库从不执行或加载。随后复用完整性、架构、签名和相对依赖检查，搬运到不存在的目标，只保留 `notalone-sync-probe`、`libNotAloneSyncCore.dylib` 与 manifest。已有目录拒绝且不覆盖，JSON 不回显绝对路径或编译输出。
 
 探针 manifest 使用 `runtimeKind=repository-probe`，记录固定源码集合及 SHA-256 总摘要、`repository:` 来源声明，保留来源发行者/实际运行/原生验收未验证。仅显式 `--with-probe` 才构建并复制到 `Contents/Resources/notalone-probe`；可以单独包含探针，但缺 CLI/WCDB 的包仍不是完整交付。两组逐一在 Packager 复制后和最终包复核，保留各自签名，不给探针注入 Electron JIT entitlement。主进程核对源码清单摘要和运行时文件后投影 `syncProbePath`，保存值及环境变量指向它时继续核验；一组失效不阻塞另一组或独立首启配置。
 

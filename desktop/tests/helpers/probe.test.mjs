@@ -1,10 +1,27 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { build } from 'esbuild';
+import { repositoryBuildInvocation } from '../../scripts/prepare-probe.mjs';
+
+test('仓库构建 shell 不执行合成启动配置，配置目录隔离于用户目录', { skip: process.platform !== 'darwin' }, async () => {
+  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-build-shell-'));
+  try {
+    const script = path.join(owned, 'build-fixture.sh');
+    await writeFile(script, 'exit 0\n');
+    await writeFile(path.join(owned, '.zshenv'), 'printf synthetic > "$ZDOTDIR/startup-read"\n');
+    const invocation = repositoryBuildInvocation(script, owned);
+    // red 阶段也只读取自有合成配置；不给旧实现机会访问真实 .zshenv。
+    const result = spawnSync(invocation.program, invocation.arguments, { ...invocation.options,
+      env: { ...invocation.options.env, ZDOTDIR: owned }, encoding: 'utf8' });
+    assert.equal(result.status, 0);
+    await assert.rejects(access(path.join(owned, 'startup-read')));
+    assert.equal(invocation.options.env.ZDOTDIR, owned);
+  } finally { await rm(owned, { recursive: true, force: true }); }
+});
 
 test('仓库探针公开准备入口仅构建搬运，保存包内默认路径后仍核验核心库', { skip: process.platform !== 'darwin' }, async () => {
   const owned = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-probe-preparation-')));

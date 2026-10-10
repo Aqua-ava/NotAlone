@@ -17,6 +17,14 @@ const sourceNames = [
   'Sources/NotAloneSyncCLI/main.swift',
 ];
 
+// 构建进程边界独立于编译内容，便于用合成脚本核验 shell 启动隔离。
+export function repositoryBuildInvocation(script, owned) {
+  return { program: '/bin/zsh', arguments: ['-f', script], options: {
+    timeout: 120_000, maxBuffer: 1_048_576,
+    env: { PATH: '/usr/bin:/bin', ZDOTDIR: owned, NOTALONE_PROBE_SIGNING_IDENTITY: '-', NOTALONE_PROBE_MODULE_CACHE_DIR: path.join(owned, 'module-cache') },
+  } };
+}
+
 async function snapshotSource(source, destination) {
   if (await realpath(source) !== source) throw new Error('helper_check_input_invalid');
   const input = await open(source, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -52,10 +60,8 @@ export async function prepareRepositoryProbe(destination) {
     const buildSourceDigest = createHash('sha256').update(JSON.stringify(buildSources)).digest('hex');
     // 只执行仓库构建脚本的自有快照；不继承证书选择、用户配置或调用任何生成产物。
     try {
-      await run('/bin/zsh', [path.join(snapshot, 'scripts/build_cli.sh')], {
-        timeout: 120_000, maxBuffer: 1_048_576,
-        env: { PATH: '/usr/bin:/bin', NOTALONE_PROBE_SIGNING_IDENTITY: '-', NOTALONE_PROBE_MODULE_CACHE_DIR: path.join(owned, 'module-cache') },
-      });
+      const invocation = repositoryBuildInvocation(path.join(snapshot, 'scripts/build_cli.sh'), owned);
+      await run(invocation.program, invocation.arguments, invocation.options);
     } catch { throw new Error('helper_probe_build_failed'); }
     return await prepareHelpers({ directory: path.join(snapshot, 'build/cli'), destination,
       runtimeKind: 'repository-probe', arch: process.arch === 'x64' ? 'x86_64' : process.arch,
