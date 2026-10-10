@@ -1,6 +1,6 @@
 # 06：跨场景保真、样本与删除组合验收
 
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bounded-style-reference.md)；[conversation-reply-strategy/10 两种场景的连续修改与消息衔接](../../conversation-reply-strategy/issues/10-continuous-scenario-revision.md)；[assistant-session-context/08 重新连接后恢复已保存会话](../../assistant-session-context/issues/08-saved-session-recovery.md)；[assistant-session-context/09 用户删除一段助手会话](../../assistant-session-context/issues/09-delete-assistant-session.md)；[conversation-reply-strategy/07 Skill探索、确认与生成的版本延续](../../conversation-reply-strategy/issues/07-skill-version-continuity.md)
 
@@ -39,3 +39,13 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 ## Comments
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
+
+## Answer（真实依赖逐步接续）
+
+2026-10-11：已消费正式A051`7c97856`为本树`8c1cc57`，完整连续迁移与唯一current input UUID／同事务来源守卫保持，未复制A/B未提交实现。先增加正式助手HTTP的两条组合回归：删样本或实际后台删原始来源后，重新装配后端读取、同键和继续均不能恢复相关输入／候选／generation UUID，无关讨论保留；删样本仍保留独立原始来源active。第一来源单例已通过，随后联跑两个组合及原七个样本参考HTTP，9项全部通过、无skip；每类生产迁移器完整001–051，数据库精确DROP并核验不存在。原实现已满足本切片，不编造新RED或改产品来制造失败。
+
+实际命令先激活Conda `NotAlone`，在backend执行`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src python -m unittest tests.integration.server.test_authentic_expression_combination tests.integration.server.test_style_reference_api -q`；只替受控模型，`dimension_release=None`。每条组合模型只调用1次，重新装配及删除后的拒绝均不增加调用。
+
+以`8c1cc57`为固定点的两轴限定审查最终0；审查只读这两份切片文件，没有代执行页面或扩大验收范围。
+
+该实例重建不冒充A08真实页面恢复或进程重启。A09会话删除、B07探索版本与B10连续修改／消息组、A12总预算尚未正式交付，本票不勾验收项，不以基础组件代替最终组合；这些剩余项等待实际依赖后继续，不请求用户实施或质量验收。无App、OCR、微信、外部模型或远端操作。
