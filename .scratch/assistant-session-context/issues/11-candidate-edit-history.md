@@ -147,3 +147,41 @@ python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone
 本阶段仅移动自己的053、更新自己的PG测试与本票记录。没有改app/service/AStore/desktop共享文件，没有stage/commit、pages/native或业务库迁移；HTTP公共槽仍由总协调随后分配。
 
 phase3a 提交前主 Agent 复验：同一正式生产 runner、空库／052 升级／重复执行及 14 项业务适配器回归共 16 项 GREEN／3.068 秒，所有专属测试库残留 0。限定四文件的双轴审查完成：Standards 硬要求 0、低风险判断性气味 1；Spec 0。重复的范围／候选／原版准备守卫保持各入口显式执行，暂不扩大为无关重构。正式迁移与同连接存储 API 作为独立主题提交，供完整讨论及后续 13 消费；该切片不等于公开 HTTP／页面交付，本票仍 claimed，所有原验收标准保持。自动部分继续实施，人工部分未执行。
+
+### phase3b：公开HTTP版本与选择切片（桌面尚未接线）
+
+2026-10-11：新增`server/assistant_candidate_versions.py`，公开上述`GET/POST /candidates/{candidate_id}/versions`与`POST /selections`。主Agent在共享`app.py`只注入既有版本Protocol/正式PostgreSQL适配器，并把对应路径分发到新handler；本票实现者未改共享应用、service、store、runtime或桌面文件。本票仍claimed，原验收框仍保持，页面与完整本票两轴/提交尚待总协调。
+
+- handler只解析严格JSON/UUID、调用唯一`PostgresAssistantCandidateVersions.read/edit/select`并投影其类型结果。owner来自已验证宿主，路径给出contact/session；请求不能注入owner、消息次序或额外候选正文权威。原版继续从B权威组读取，完整版本消息UUID/order及父版/要求来自正式适配器；没有新来源权威或选择指针。
+- 版本历史分别返回`default_display_version_id`与`selected_version_id`。选择返回原有receipt的`selection_id/selection_number/session_id/candidate_id/version_id`，不表示发送或长期偏好。修改和重新连接不会新增模型调用；同键重放不新增版/选择、不倒转较新的实际选择，重新选旧版必须明确提交新操作键。
+- 已知路径不支持的方法返回405。无效结构/UUID/长度400、不在当前范围或删除后404、来源/请求/turn/整组与幂等键冲突409，reason沿用正式适配器；读写故障返回固定503 `assistant_candidate_version_save_failed`，不回显正文、要求、SQL或驱动异常。实际HTTP正常和错误响应均检查`Cache-Control: no-store`，未鉴权401。
+
+本次逐片与回归证据：
+
+| 行为 | 实际结果 |
+| --- | --- |
+| 已生成候选的原版读取、稳定身份及尚未选择 | 当前正式源码重新确认404 RED：1 test / 2.566s；主Agent接线后同用例GREEN：1 / 1.572s |
+| 双条整组编辑、完整UUID/order、父版/要求、同键重放与新后端实例重读 | POST先405 RED：1 / 1.088s；最小edit接线后读取+编辑2 / 2.615s GREEN |
+| 明确选择、编辑不改变原选择、旧key重放不倒current、异选择同key冲突、新key重新选旧版 | POST先405 RED：1 / 1.059s；最小select接线后前三片3 / 3.441s GREEN |
+| 严格body、非法UUID、额外owner/字段、错误method、鉴权和no-store | 回归GREEN：1 / 1.667s；已有版本/选择不变、零额外模型 |
+| 跨owner/contact/session、同会话其他候选的父版/所选版、整组ID和操作键冲突 | 回归GREEN：1 / 1.513s；原history/current不变、零额外模型；另一个会话仅为合成范围夹具，不消费第10票新开能力 |
+| C实际来源pending→公开Worker真实删除，先A→B再删除B、A旧receipt不复活、新key明确重新选A | 回归GREEN：1 / 1.788s；pending读/编辑/选择/重放409，删除后B旧UUID404，新后端不含B候选/编辑/要求/原消息，A保留且当前选择先为空 |
+| 实际PostgreSQL读取、编辑insert和选择insert故障及重试 | 回归GREEN：1 / 1.649s；自有库临时触发器注入真实异常，不替代迁移；版本与current原子回滚、固定503不泄漏SQL或正文，成功重试次序为2 |
+| A turn不再completed及原请求已invalidated | 回归GREEN：1 / 1.945s；已保存编辑与选择的读取/重放均409，不恢复旧正文副本，零额外模型 |
+
+两次合成夹具安排错误不作为业务RED：非法URI最初使用未转义中文，urllib在发出HTTP前拒绝（1 / 5.985s）；改为ASCII `invalid-uuid`后通过。来源候选夹具最初漏填既有`reply_to_message.direction`而生成400（1 / 1.002s）；读取正式parser后补入明确合成方向，再通过。各失败运行仍清理专属数据库。
+
+从`backend/`激活Conda `NotAlone`，使用禁dotenv/禁tracing/`PYTHONPATH=src PGHOST=/tmp PGPORT=55441`环境实际运行：
+
+```bash
+python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-a-session tests.integration.server.test_assistant_candidate_versions tests.integration.persistence.test_assistant_candidate_versions
+python -m compileall -q src/notalone/server/assistant_candidate_versions.py tests/integration/server/test_assistant_candidate_versions.py
+```
+
+最终24 tests / 12.600s，OK（8公开HTTP + 正式迁移/独立适配器16）。生产runner仍实际安装001–053与重复空集，真实052→053准确升级后重复空集；HTTP内层库、两个schema内层库、coordinator外层库均`owned database remaining=0`。不是注入pending SQL、直接执行DDL补造前缀或业务库迁移。编译与任务文件空白检查通过；HTTP测试模型继承已声明的合成预算协议，生产builders显式注入该profile，不猜默认预算或绕过真实模型守卫。
+
+数据影响限于本地真实版本/明确选择记录及同范围公开读取，新增正文仍受原候选、turn、session及C实际原始来源的守卫和删除级联。版本读写不调用模型、不自动发送、不采纳偏好或自动保存样本。本阶段精确改动范围是新server module、新HTTP测试与本票；共享app接线由主Agent管理，053/adapter/PG测试未改。未stage/commit/push，没有页面、App、微信/OCR、私人资料、外部模型或19验收，桌面新版展示/旧版展开/点击操作与人工部分均未执行。
+
+phase3b正式切片提交前复核：仅正式d89584f导出加11四文件（不含14替换、12未正式consumer或桌面working），24项HTTP／PG／迁移全部GREEN／11.589秒，实际001–053、52→53及重复执行通过，自有库0。Standards初审硬0／判断性P3路由重复1，已把宿主与handler路径识别收至candidate_versions_path唯一函数；增量复核硬0／Fowler0、Spec原轴0，受影响8项HTTP再GREEN／8.307秒、库0，来源与完整整组断言未削弱。公开后台阶段完成，桌面编辑／选择／回看与页面仍继续，整票claimed；自动部分继续实施、人工部分未执行。
+
+总协调主树精确消费正式 `daa443deac6bafddfb6ad704a7ce80bc710aba94` 四文件，保留既有 A／B／C 公共接线。在 Conda `NotAlone`、关闭 dotenv／追踪、`PYTHONPATH=src:.` 环境实际运行 `python /private/tmp/notalone-coordinator-isolated-tests.py /Users/local-user/learn/NotAlone tests.integration.server.test_assistant_candidate_versions tests.integration.persistence.test_assistant_candidate_versions`：24 项 GREEN／12.661 秒，正式 001–053、52→53 升级与 fresh 重复迁移通过，内外专属数据库均精确剩余 0。新增 handler 单文件 mypy、两文件 compileall 与差异检查通过；限定两轴审查无新问题。该证据只覆盖公开 HTTP 和存储，未运行本票新桌面页面。A 唯一负责通用版本／选择 ports、主进程／桥接 DTO 和会话回看；B08 复用同一权威实现策略候选组逐消息编辑／复制，不新增选择指针。本票继续 claimed，原验收标准和人工未执行记录保留。

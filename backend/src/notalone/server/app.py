@@ -55,6 +55,10 @@ from notalone.application.assistant_session_service import (
 )
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
 from notalone.persistence.assistant_session_catalog import PostgresAssistantSessionCatalog
+from notalone.persistence.assistant_candidate_versions import (
+    AssistantCandidateVersions, PostgresAssistantCandidateVersions,
+)
+from notalone.server.assistant_candidate_versions import candidate_versions_path, handle_candidate_versions
 from notalone.application.reply_evidence import ReplyEvidenceService, ReplyEvidenceIncomplete
 from notalone.reply.errors import (
     ReplyStoreInvariantError, ReplyPersistenceError, ReplyInProgressError,
@@ -173,6 +177,7 @@ class BackendApp:
 
     __slots__ = (
         "_assistant_sessions",
+        "_candidate_versions",
         "_contact_directory",
         "_events",
         "_follow_smoke",
@@ -210,6 +215,7 @@ class BackendApp:
         message_stream: MessageStream | None = None,
         reply_service: ReplyService | None = None,
         assistant_sessions: AssistantSessionService | None = None,
+        candidate_versions: AssistantCandidateVersions | None = None,
         reply_evidence: ReplyEvidenceService | None = None,
         source_service: SourceService | None = None,
         memory_service: MemoryService | None = None,
@@ -236,6 +242,7 @@ class BackendApp:
         self._message_stream = message_stream
         self._reply_service = reply_service
         self._assistant_sessions = assistant_sessions
+        self._candidate_versions = candidate_versions
         self._reply_evidence = reply_evidence
         self._style_samples = style_samples
         self._runtime_shutdown = runtime_shutdown
@@ -1181,10 +1188,16 @@ class BackendApp:
     def _handle_assistant_session(self, method: str, path: str, body: bytes) -> Response:
         """默认讨论、单次提交与显式读取；不提供自动恢复或发送能力。"""
 
+        parts = path.strip("/").split("/")
+        if candidate_versions_path(parts) is not None:
+            status, payload = handle_candidate_versions(
+                self._candidate_versions, owner_id=self._owner_id,
+                method=method, path=path, body=body,
+            )
+            return _json_response(status, payload, headers={"Cache-Control": "no-store"})
         service = self._assistant_sessions
         if service is None:
             return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "assistant_session_unavailable"})
-        parts = path.strip("/").split("/")
         if len(parts) >= 6 and parts[5] == "explorations":
             status, payload = handle_exploration(
                 self._reply_service.exploration if self._reply_service is not None else None,
@@ -2111,6 +2124,7 @@ def create_app(
     message_stream: MessageStream | None = None,
     reply_service: ReplyService | None = None,
     assistant_sessions: AssistantSessionService | None = None,
+    candidate_versions: AssistantCandidateVersions | None = None,
     reply_evidence: ReplyEvidenceService | None = None,
     source_service: SourceService | None = None,
     memory_service: MemoryService | None = None,
@@ -2149,6 +2163,7 @@ def create_app(
             store=PostgresAssistantSessionStore(database_url), reply=reply_service,
             catalog=PostgresAssistantSessionCatalog(database_url),
         ),
+        candidate_versions=candidate_versions or PostgresAssistantCandidateVersions(database_url),
         reply_evidence=reply_evidence
         or ReplyEvidenceService(PostgresReplyStore(database_url)),
         style_samples=style_samples or StyleSampleService(PostgresStyleSampleStore(database_url)),
