@@ -17,6 +17,7 @@ from notalone.reply.interface import (
 )
 from notalone.scopes import ContactScope
 from tests.unit.reply.test_langchain_vertical_slice import EmptySkillPort, ToolCallingFakeModel
+from tests.input_budget_support import synthetic_budget_kwargs
 
 
 class FidelityInputTests(unittest.TestCase):
@@ -49,7 +50,7 @@ class FidelityInputTests(unittest.TestCase):
                                 current_text=text, direction=None if rewrite else (
                                     content.purpose if proactive else content.direction),
                                 evidence=evidence, skill_library_revision=0)
-        result = LangChainReplyRuntime(model=model, skill_port=EmptySkillPort(scope, 0)).generate(prepared)
+        result = LangChainReplyRuntime(model=model, skill_port=EmptySkillPort(scope, 0), **synthetic_budget_kwargs(model)).generate(prepared)
         payload = next(json.loads(message.content) for message in model.seen_calls[0] if message.type == "human")
         system = "\n".join(str(message.content) for message in model.seen_calls[0] if message.type == "system")
         return result, payload, system, output, primary_id

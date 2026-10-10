@@ -13,7 +13,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
@@ -41,6 +40,7 @@ from notalone.reply.store import (
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.skills import SkillCatalog, SkillCatalogEntry, SkillResource, SkillVersion
+from tests.input_budget_support import SyntheticBudgetModel, synthetic_budget_kwargs
 
 
 OWNER_ID = UUID("aaaaaaaa-1111-1111-1111-111111111111")
@@ -70,7 +70,7 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-class ToolCallingFakeModel(FakeMessagesListChatModel):
+class ToolCallingFakeModel(SyntheticBudgetModel):
     bound_tool_names: list[str] = []
     seen_calls: list[list[BaseMessage]] = []
     model_name: str = "fake-chat-model"
@@ -82,12 +82,11 @@ class ToolCallingFakeModel(FakeMessagesListChatModel):
         tool_choice: str | None = None,
         **kwargs: Any,
     ) -> Runnable:
-        del tool_choice, kwargs
         self.bound_tool_names = [
             getattr(item, "name", getattr(item, "__name__", ""))
             for item in (tools or [])
         ]
-        return self
+        return super().bind_tools(tools or [], tool_choice=tool_choice, **kwargs)
 
     def _generate(
         self,
@@ -116,7 +115,8 @@ class ResourceRetryModel(ToolCallingFakeModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> ChatResult:
-        del stop, run_manager, kwargs
+        del stop, run_manager
+        self.record_model_payload(messages, kwargs)
         self.seen_calls.append(messages)
         last = messages[-1] if messages else None
         last_content = str(last.content) if isinstance(last, ToolMessage) else ""
@@ -408,7 +408,7 @@ class SkillRuntimeResourceTest(unittest.TestCase):
         store = InMemoryReplyStore(self.prepared)
         generator = ReplyGenerator(
             store=store,
-            runtime=LangChainReplyRuntime(model=model, skill_port=port),
+            runtime=LangChainReplyRuntime(model=model, skill_port=port, **synthetic_budget_kwargs(model)),
             context=RecordingReplyContext(prepared=self.prepared),
         )
         return generator.generate(self.command, verified_scope=VERIFIED_SCOPE)
@@ -608,7 +608,7 @@ class SkillRuntimeResourceTest(unittest.TestCase):
         )
         result = ReplyGenerator(
             store=InMemoryReplyStore(prepared),
-            runtime=LangChainReplyRuntime(model=model, skill_port=port),
+            runtime=LangChainReplyRuntime(model=model, skill_port=port, **synthetic_budget_kwargs(model)),
             context=RecordingReplyContext(prepared=prepared),
         ).generate(command, verified_scope=VERIFIED_SCOPE)
 
@@ -831,7 +831,7 @@ class SkillRuntimeResourceTest(unittest.TestCase):
         with self.assertRaises(ReplyInvariantError):
             ReplyGenerator(
                 store=store,
-                runtime=LangChainReplyRuntime(model=model, skill_port=port),
+                runtime=LangChainReplyRuntime(model=model, skill_port=port, **synthetic_budget_kwargs(model)),
                 context=RecordingReplyContext(prepared=self.prepared),
             ).generate(self.command, verified_scope=VERIFIED_SCOPE)
 
@@ -1027,7 +1027,7 @@ class SkillRuntimeResourceTest(unittest.TestCase):
                 result_message("revision-result"),
             ]
         )
-        runtime = LangChainReplyRuntime(model=model, skill_port=port)
+        runtime = LangChainReplyRuntime(model=model, skill_port=port, **synthetic_budget_kwargs(model))
 
         runtime.generate(self.prepared)
         runtime.generate(self.prepared)

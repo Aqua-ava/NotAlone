@@ -32,6 +32,7 @@ from tests.integration.server.core_business_flow_support import (
     CoreBusinessFlowFixture, HttpBackend, ScriptedCoreModel, tool_response,
 )
 from tests.integration.server.test_import_auto_flow import AutoMemoryModel
+from tests.input_budget_support import synthetic_budget_kwargs
 
 
 class ImportReplyModel(ScriptedCoreModel):
@@ -73,7 +74,8 @@ class DesktopImportFixture(CoreBusinessFlowFixture, unittest.TestCase):
         with patch("notalone.server.reply_wiring.build_deepseek_model",
                    return_value=self.reply_model):
             reply = build_reply_service(database_url=self.database_url,
-                                        owner_id=owner_id, model_priority=priority)
+                                        owner_id=owner_id, model_priority=priority,
+                                        **synthetic_budget_kwargs(self.reply_model))
 
         def stop_runtime() -> None:
             priority.stop()

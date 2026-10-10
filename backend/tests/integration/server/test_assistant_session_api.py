@@ -32,6 +32,7 @@ from notalone.reply.generator import ReplyGenerator
 from notalone.server.app import create_app
 from tests.integration.server.core_business_flow_support import HttpBackend, ScriptedCoreModel
 from tests.integration.persistence.concurrency import wait_for_blocked_operations
+from tests.input_budget_support import synthetic_budget_kwargs
 
 
 DATABASE_URL = os.environ.get("NOTALONE_TEST_DATABASE_URL", "")
@@ -108,6 +109,7 @@ class AssistantSessionHttpTest(unittest.TestCase):
             runtime=LangChainReplyRuntime(
                 model=self.model, skill_port=PostgresSkillPort(DATABASE_URL),
                 retrieval=retrieval,
+                **synthetic_budget_kwargs(self.model),
             ),
         )
         self.reply_service = ReplyService(

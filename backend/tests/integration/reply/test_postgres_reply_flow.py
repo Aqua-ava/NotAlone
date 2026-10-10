@@ -11,7 +11,6 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import psycopg
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.runnables import Runnable
 
@@ -51,6 +50,7 @@ from notalone.retrieval import (
     RetrievedOwnerMemory,
 )
 from notalone.scopes import ContactScope
+from tests.input_budget_support import SyntheticBudgetModel, synthetic_budget_kwargs
 
 
 TEST_DATABASE_URL = os.environ.get(
@@ -59,7 +59,7 @@ TEST_DATABASE_URL = os.environ.get(
 )
 
 
-class ToolCallingFakeModel(FakeMessagesListChatModel):
+class ToolCallingFakeModel(SyntheticBudgetModel):
     """只模拟读取 Skill 和返回结构化候选，不连接外部模型。"""
 
     bound_tool_names: list[str] = []
@@ -77,12 +77,11 @@ class ToolCallingFakeModel(FakeMessagesListChatModel):
         tool_choice: str | None = None,
         **kwargs: Any,
     ) -> Runnable:
-        del tool_choice, kwargs
         self.bound_tool_names = [
             getattr(item, "name", getattr(item, "__name__", ""))
             for item in tools
         ]
-        return self
+        return super().bind_tools(tools, tool_choice=tool_choice, **kwargs)
 
     def _generate(
         self,
@@ -345,6 +344,7 @@ class PostgresReplyFlowTest(unittest.TestCase):
             runtime=LangChainReplyRuntime(
                 model=model,
                 skill_port=PostgresSkillPort(TEST_DATABASE_URL),
+                **synthetic_budget_kwargs(model),
             ),
             context=self.context,
         )
@@ -593,7 +593,8 @@ class PostgresReplyFlowTest(unittest.TestCase):
                 run_manager: Any = None,
                 **kwargs: Any,
             ) -> Any:
-                del messages, stop, run_manager, kwargs
+                del stop, run_manager
+                self.record_model_payload(messages, kwargs)
                 raise RuntimeError("synthetic model failure")
 
         failing_generator = self._generator(
@@ -724,6 +725,7 @@ class PostgresReplyFlowTest(unittest.TestCase):
             runtime=LangChainReplyRuntime(
                 model=model, skill_port=PostgresSkillPort(TEST_DATABASE_URL),
                 timeout_seconds=0.05,
+                **synthetic_budget_kwargs(model),
             ),
         )
         with self.assertRaises(ReplyTimeoutError):

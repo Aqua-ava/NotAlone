@@ -7,7 +7,7 @@ import math
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from threading import Lock
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 from uuid import UUID
 
 from deepagents.backends.protocol import (
@@ -24,9 +24,15 @@ from langchain_core.tools import BaseTool
 from langgraph.errors import GraphRecursionError
 
 from notalone.reply.adapters.async_runner import run_with_timeout
+from notalone.reply.adapters.input_budget_middleware import InputBudgetMiddleware
 
 from notalone.reply.context import ReplyContext, allows_history
 from notalone.reply.fidelity import FIDELITY_SYSTEM_PROMPT, factual_role, generation_contract
+from notalone.reply.input_budget import (
+    InputBudgetDecision,
+    InputBudgetProfile,
+    InputTokenCounter,
+)
 from notalone.reply.style_reference import require_reference_contract
 from notalone.reply.runtime import (
     ReplyRuntimeResult,
@@ -553,6 +559,9 @@ class LangChainReplyRuntime:
         "_retrieval",
         "_catalog_cache",
         "_timeout_seconds",
+        "_input_budget_profile",
+        "_input_token_counter",
+        "_on_input_budget",
     )
 
     def __init__(
@@ -563,6 +572,9 @@ class LangChainReplyRuntime:
         retrieval: RetrievalPort | None = None,
         catalog_cache: SkillCatalogCache | None = None,
         timeout_seconds: float = MAX_GENERATION_TIMEOUT_SECONDS,
+        input_budget_profile: InputBudgetProfile | None = None,
+        input_token_counter: InputTokenCounter | None = None,
+        on_input_budget: Callable[[InputBudgetDecision], None] | None = None,
     ) -> None:
         if (
             isinstance(timeout_seconds, bool)
@@ -577,6 +589,26 @@ class LangChainReplyRuntime:
         self._skill_port = skill_port
         self._retrieval = retrieval
         self._catalog_cache = catalog_cache or SkillCatalogCache()
+        if input_budget_profile is not None and not isinstance(
+            input_budget_profile, InputBudgetProfile
+        ):
+            raise TypeError("模型预算能力必须由已验证的 profile 显式提供。")
+        # 供应商完整协议尚未核实时保持 unknown，不能从模型名称或字符比率
+        # 推出上下文能力、token 精度与输出预留，更不能默认允许调用。
+        self._input_budget_profile = input_budget_profile or InputBudgetProfile(
+            model_id=(
+                self._model_name
+                if isinstance(self._model_name, str) and self._model_name.strip()
+                else "unidentified_model"
+            ),
+            context_window_tokens=None,
+            output_reserve_tokens=None,
+            warning_ratio=0.8,
+            measurement_kind=None,
+            measurement_id=None,
+        )
+        self._input_token_counter = input_token_counter
+        self._on_input_budget = on_input_budget
 
     def _discover_catalog(self, prepared: ReplyContext) -> SkillCatalog:
         """读取当前目录；读取或结构失败时安全退化为空目录（无 Skill）。"""
@@ -661,6 +693,7 @@ class LangChainReplyRuntime:
                 skill_budget=budget,
                 history=history,
             )
+            output_strategy = ToolStrategy(REPLY_RUNTIME_SCHEMA, handle_errors=False)
             graph = create_agent(
                 model=self._model,
                 tools=agent_tools,
@@ -669,12 +702,17 @@ class LangChainReplyRuntime:
                         backend=backend,
                         sources=[(f"{SKILL_SOURCE}/", "NotAlone")],
                         system_prompt=NOTALONE_SKILLS_PROMPT,
-                    )
+                    ),
+                    # LangChain 1.3.15 中最后一项是最内层；先由 Skills
+                    # 写入动态 system，再逐轮计量最终输入与输出工具 schema。
+                    InputBudgetMiddleware(
+                        profile=self._input_budget_profile,
+                        counter=self._input_token_counter,
+                        response_format=output_strategy,
+                        on_decision=self._on_input_budget,
+                    ),
                 ],
-                response_format=ToolStrategy(
-                    REPLY_RUNTIME_SCHEMA,
-                    handle_errors=False,
-                ),
+                response_format=output_strategy,
                 context_schema=ReplyRuntimeContext,
                 system_prompt=BASE_SYSTEM_PROMPT,
             )

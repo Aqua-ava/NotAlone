@@ -11,7 +11,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.runnables import Runnable
 
@@ -47,6 +46,7 @@ from notalone.memory.timing import MemoryTiming
 from notalone.retrieval import InMemoryRetrieval, RetrievedMessage
 from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.skills import SkillCatalog, SkillCatalogEntry, SkillVersion
+from tests.input_budget_support import SyntheticBudgetModel, synthetic_budget_kwargs
 
 
 OWNER_ID = UUID("aaaaaaaa-1111-1111-1111-111111111111")
@@ -72,7 +72,7 @@ SKILL_PATH = "/notalone/reply-skills/warm-reply/SKILL.md"
 DIRECT_SKILL_PATH = "/notalone/reply-skills/direct-reply/SKILL.md"
 
 
-class ToolCallingFakeModel(FakeMessagesListChatModel):
+class ToolCallingFakeModel(SyntheticBudgetModel):
     bound_tool_names: list[str] = []
     seen_calls: list[list[BaseMessage]] = []
     model_name: str = "fake-chat-model"
@@ -84,12 +84,11 @@ class ToolCallingFakeModel(FakeMessagesListChatModel):
         tool_choice: str | None = None,
         **kwargs: Any,
     ) -> Runnable:
-        del tool_choice, kwargs
         self.bound_tool_names = [
             getattr(item, "name", getattr(item, "__name__", ""))
             for item in tools
         ]
-        return self
+        return super().bind_tools(tools, tool_choice=tool_choice, **kwargs)
 
     def _generate(
         self,
@@ -272,6 +271,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
 
         result = LangChainReplyRuntime(
             model=model, skill_port=EmptySkillPort(scope=scope, revision=4),
+            **synthetic_budget_kwargs(model),
         ).generate(prepared)
 
         self.assertEqual(len(model.seen_calls), 1)
@@ -347,6 +347,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
         LangChainReplyRuntime(
             model=model,
             skill_port=EmptySkillPort(scope=scope, revision=4),
+            **synthetic_budget_kwargs(model),
         ).generate(prepared)
 
         payload = next(
@@ -441,6 +442,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
         LangChainReplyRuntime(
             model=model,
             skill_port=EmptySkillPort(scope=scope, revision=4),
+            **synthetic_budget_kwargs(model),
         ).generate(prepared)
 
         payload = next(
@@ -527,6 +529,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
         LangChainReplyRuntime(
             model=model,
             skill_port=EmptySkillPort(scope=scope, revision=4),
+            **synthetic_budget_kwargs(model),
         ).generate(prepared)
 
         payload = next(
@@ -653,6 +656,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
         result = LangChainReplyRuntime(
             model=model,
             skill_port=EmptySkillPort(scope=scope, revision=4),
+            **synthetic_budget_kwargs(model),
         ).generate(prepared)
 
         self.assertIsNotNone(result.usage)
@@ -721,6 +725,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
         result = LangChainReplyRuntime(
             model=model,
             skill_port=EmptySkillPort(scope=scope, revision=4),
+            **synthetic_budget_kwargs(model),
         ).generate(prepared)
 
         self.assertIsNone(result.used_skill)
@@ -784,6 +789,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             runtime=LangChainReplyRuntime(
                 model=model,
                 skill_port=EmptySkillPort(scope=scope, revision=4),
+                **synthetic_budget_kwargs(model),
             ),
             context=RecordingReplyContext(prepared=prepared),
         ).generate(command, verified_scope=VERIFIED_SCOPE)
@@ -855,6 +861,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             runtime=LangChainReplyRuntime(
                 model=model,
                 skill_port=EmptySkillPort(scope=scope, revision=4),
+                **synthetic_budget_kwargs(model),
             ),
             context=RecordingReplyContext(prepared=prepared),
         ).generate(command, verified_scope=VERIFIED_SCOPE)
@@ -967,7 +974,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
             ]
         )
         store = InMemoryReplyStore(prepared)
-        runtime = LangChainReplyRuntime(model=model, skill_port=skill_port)
+        runtime = LangChainReplyRuntime(model=model, skill_port=skill_port, **synthetic_budget_kwargs(model))
 
         result = ReplyGenerator(
             store=store,
@@ -1065,7 +1072,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
         with self.assertRaises(ReplyInvariantError):
             ReplyGenerator(
                 store=store,
-                runtime=LangChainReplyRuntime(model=model, skill_port=leaky_port),
+                runtime=LangChainReplyRuntime(model=model, skill_port=leaky_port, **synthetic_budget_kwargs(model)),
                 context=RecordingReplyContext(prepared=prepared),
             ).generate(command, verified_scope=VERIFIED_SCOPE)
 
@@ -1130,7 +1137,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
         with self.assertRaises(ReplyInvariantError):
             ReplyGenerator(
                 store=store,
-                runtime=LangChainReplyRuntime(model=model, skill_port=leaky_port),
+                runtime=LangChainReplyRuntime(model=model, skill_port=leaky_port, **synthetic_budget_kwargs(model)),
                 context=RecordingReplyContext(prepared=prepared),
             ).generate(command, verified_scope=VERIFIED_SCOPE)
 
@@ -1187,6 +1194,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
                 runtime=LangChainReplyRuntime(
                     model=model,
                     skill_port=self._two_skill_port(scope),
+                    **synthetic_budget_kwargs(model),
                 ),
                 context=RecordingReplyContext(prepared=prepared),
             ).generate(command, verified_scope=VERIFIED_SCOPE)
@@ -1322,7 +1330,7 @@ class LangChainVerticalSliceTest(unittest.TestCase):
         context = RecordingReplyContext(prepared=first_prepared)
         generator = ReplyGenerator(
             store=store,
-            runtime=LangChainReplyRuntime(model=model, skill_port=skill_port),
+            runtime=LangChainReplyRuntime(model=model, skill_port=skill_port, **synthetic_budget_kwargs(model)),
             context=context,
         )
 

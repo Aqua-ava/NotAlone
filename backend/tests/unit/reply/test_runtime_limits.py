@@ -22,6 +22,7 @@ from tests.unit.reply.test_langchain_vertical_slice import (
     ToolCallingFakeModel,
 )
 from tests.unit.reply.test_ledger_wiring import _make_command, _make_context
+from tests.input_budget_support import synthetic_budget_kwargs
 
 
 # 运行时限为 recursion_limit=16；真实模型每轮输出唯一 id 的 AIMessage，
@@ -43,6 +44,7 @@ class FreshRepeatingModel(ToolCallingFakeModel):
     ) -> ChatResult:
         if len(self.seen_calls) >= 40:
             raise RuntimeError("合成测试保险上限，防止旧实现无限循环")
+        self.record_model_payload(messages, kwargs)
         self.seen_calls.append(messages)
         return ChatResult(
             generations=[
@@ -77,6 +79,7 @@ class RuntimeLimitsTest(unittest.TestCase):
         )
         runtime = LangChainReplyRuntime(
             model=model, skill_port=EmptySkillPort(context.scope, 4),
+            **synthetic_budget_kwargs(model),
         )
         with self.assertRaises(ReplyRunError):
             runtime.generate(context)
@@ -88,6 +91,7 @@ class RuntimeLimitsTest(unittest.TestCase):
         runtime = LangChainReplyRuntime(
             model=model, skill_port=EmptySkillPort(context.scope, 4),
             timeout_seconds=0.05,
+            **synthetic_budget_kwargs(model),
         )
         started = time.monotonic()
         with self.assertRaises(ReplyRunError):
@@ -133,6 +137,7 @@ class RuntimeLimitsTest(unittest.TestCase):
             model=model,
             skill_port=EmptySkillPort(context.scope, 4),
             retrieval=InMemoryRetrieval(),
+            **synthetic_budget_kwargs(model),
         )
         result = runtime.generate(context)
 
@@ -160,6 +165,7 @@ class RuntimeLimitsTest(unittest.TestCase):
             model=model,
             skill_port=EmptySkillPort(context.scope, 4),
             retrieval=InMemoryRetrieval(),
+            **synthetic_budget_kwargs(model),
         )
         with self.assertRaises(ReplyBudgetError):
             runtime.generate(context)

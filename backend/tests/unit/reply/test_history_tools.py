@@ -11,7 +11,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.runnables import Runnable
 
@@ -27,6 +26,7 @@ from notalone.reply.tools import HistoryToolAccess
 from notalone.retrieval import InMemoryRetrieval, RetrievedMessage
 from notalone.scopes import ContactScope
 from notalone.skills import SkillCatalog
+from tests.input_budget_support import SyntheticBudgetModel, synthetic_budget_kwargs
 
 
 OWNER_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -58,7 +58,7 @@ class EmptySkillPort:
         raise PermissionError("synthetic empty skill catalog")
 
 
-class HistoryToolFakeModel(FakeMessagesListChatModel):
+class HistoryToolFakeModel(SyntheticBudgetModel):
     bound_tool_names: list[str] = []
     seen_calls: list[list[BaseMessage]] = []
 
@@ -69,12 +69,11 @@ class HistoryToolFakeModel(FakeMessagesListChatModel):
         tool_choice: str | None = None,
         **kwargs: Any,
     ) -> Runnable:
-        del tool_choice, kwargs
         self.bound_tool_names = [
             getattr(item, "name", getattr(item, "__name__", ""))
             for item in tools
         ]
-        return self
+        return super().bind_tools(tools, tool_choice=tool_choice, **kwargs)
 
     def _generate(
         self,
@@ -394,6 +393,7 @@ class HistoryToolTest(unittest.TestCase):
             model=model,
             skill_port=EmptySkillPort(),
             retrieval=retrieval,
+            **synthetic_budget_kwargs(model),
         ).generate(prepared)
 
         self.assertIn("conversation_search", model.bound_tool_names)

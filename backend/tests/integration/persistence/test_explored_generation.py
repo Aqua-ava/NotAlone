@@ -18,6 +18,7 @@ from notalone.reply.exploration import ExplorationInput
 from notalone.reply.generator import ReplyGenerator
 from notalone.reply.interface import ConfirmedDirection, DirectionSource, InitiateConversation, ReplyToMessage, SuggestionReference
 from notalone.scopes import VerifiedConversationScope
+from tests.input_budget_support import synthetic_budget_kwargs
 from tests.integration.persistence import test_reply_exploration as component
 
 
@@ -165,7 +166,8 @@ class ExploredGenerationPersistenceTest(unittest.TestCase):
         generator = ReplyGenerator(store=PostgresReplyStore(database_url),
                                    context=RetrievalReplyContext(retrieval=retrieval, skill_library_revision=0),
                                    runtime=LangChainReplyRuntime(model=self.fixture.model, retrieval=retrieval,
-                                                                skill_port=PostgresSkillPort(database_url)))
+                                                                skill_port=PostgresSkillPort(database_url),
+                                                                **synthetic_budget_kwargs(self.fixture.model)))
         command = request.build_command(owner_id=self.scope.owner_id, contact_id=self.scope.contact_id,
                                         binding_id=self.fixture.binding.binding_id)
         reply = generator.generate(command, verified_scope=VerifiedConversationScope(

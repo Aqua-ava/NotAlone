@@ -25,7 +25,6 @@ from uuid import UUID, uuid4
 
 import psycopg
 from psycopg import sql
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.runnables import Runnable
 
@@ -63,12 +62,13 @@ from notalone.server.app import BackendApp, BackendServer, create_app
 from notalone.server.event_bus import EventBus
 from notalone.server.event_models import BackendEvent
 from notalone.tasks.worker import BackgroundTaskWorker, PostgresMemoryExtractionRunner
+from tests.input_budget_support import SyntheticBudgetModel, synthetic_budget_kwargs
 
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
-class ScriptedCoreModel(FakeMessagesListChatModel):
+class ScriptedCoreModel(SyntheticBudgetModel):
     """仅替代外部模型，保留实际 LangChain 模型与 Tool 循环协议。"""
 
     bound_tool_names: list[str] = []
@@ -97,14 +97,13 @@ class ScriptedCoreModel(FakeMessagesListChatModel):
         self, tools: Sequence[Any], *, tool_choice: str | None = None,
         **kwargs: Any,
     ) -> Runnable:
-        del tool_choice, kwargs
         self.bound_tool_names = [
             item.get("title", item.get("name", ""))
             if isinstance(item, dict)
             else getattr(item, "name", getattr(item, "__name__", ""))
             for item in tools
         ]
-        return self
+        return super().bind_tools(tools, tool_choice=tool_choice, **kwargs)
 
     def _generate(
         self, messages: list[BaseMessage], stop: list[str] | None = None,
@@ -309,6 +308,7 @@ class CoreBusinessFlowFixture:
             runtime=LangChainReplyRuntime(
                 model=self.reply_model, skill_port=PostgresSkillPort(self.database_url),
                 retrieval=retrieval,
+                **synthetic_budget_kwargs(self.reply_model),
             ),
             context=RetrievalReplyContext(
                 retrieval=retrieval, skill_library_revision=0,
@@ -369,6 +369,7 @@ class CoreBusinessFlowFixture:
                    return_value=self.reply_model):
             reply_service = build_reply_service(
                 database_url=self.database_url, owner_id=owner_id, model_priority=priority,
+                **synthetic_budget_kwargs(self.reply_model),
             )
         backend = HttpBackend(create_app(
             database_url=self.database_url, owner_id=owner_id,

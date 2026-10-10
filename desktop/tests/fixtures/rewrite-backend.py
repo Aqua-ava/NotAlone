@@ -35,6 +35,7 @@ from notalone.server.reply_wiring import build_reply_service
 from tests.integration.server.core_business_flow_support import (
     CoreBusinessFlowFixture, HttpBackend, ScriptedCoreModel, tool_response,
 )
+from tests.input_budget_support import synthetic_budget_kwargs
 
 
 class DesktopRewriteModel(ScriptedCoreModel):
@@ -65,6 +66,7 @@ class DesktopRewriteModel(ScriptedCoreModel):
             return super()._generate(messages, stop, run_manager, **kwargs)
         if plan.get("fault"):
             self.responses.append(AIMessage(content=""))
+            self.record_model_payload(messages, kwargs)
             self.seen_calls.append(messages)
             if plan["fault"] == "timeout":
                 raise TimeoutError("本轮合成外部模型超时。")
@@ -104,6 +106,7 @@ class DesktopRewriteFixture(CoreBusinessFlowFixture, unittest.TestCase):
         with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=self.reply_model):
             reply_service = build_reply_service(
                 database_url=self.database_url, owner_id=owner_id, model_priority=priority,
+                **synthetic_budget_kwargs(self.reply_model),
             )
         backend = HttpBackend(create_app(
             database_url=self.database_url, owner_id=owner_id,

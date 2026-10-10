@@ -7,6 +7,7 @@ Postgres 技能库、Postgres 存储与出站台账）。
 
 from __future__ import annotations
 
+from typing import Callable
 from uuid import UUID
 
 import psycopg
@@ -42,11 +43,17 @@ from notalone.reply.context import RetrievalReplyContext
 from notalone.reply.generator import ReplyGenerator
 from notalone.reply.exploration_context import ExplorationEvidence
 from notalone.reply.adapters.exploration_runtime import LangChainExplorationRuntime
+from notalone.reply.input_budget import (
+    InputBudgetDecision, InputBudgetProfile, InputTokenCounter,
+)
 
 
 def build_reply_service(
     *, database_url: str, owner_id: UUID,
     model_priority: ModelPriorityControl | None = None,
+    input_budget_profile: InputBudgetProfile | None = None,
+    input_token_counter: InputTokenCounter | None = None,
+    on_input_budget: Callable[[InputBudgetDecision], None] | None = None,
 ) -> ReplyService | None:
     """有 active 绑定且模型凭据可用时装配回复服务；否则返回 None。
 
@@ -79,6 +86,9 @@ def build_reply_service(
             model=model,
             skill_port=PostgresSkillPort(database_url),
             retrieval=retrieval,
+            input_budget_profile=input_budget_profile,
+            input_token_counter=input_token_counter,
+            on_input_budget=on_input_budget,
         ),
         context=ExploredReplyContext(context, database_url=database_url, evidence=evidence),
         ledger=PostgresOutboundLedger(database_url),
