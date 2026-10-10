@@ -231,6 +231,7 @@ def prepare_assistant_reply_commit(
 def erase_assistant_source_turns(
     connection: Any, *, owner_id: UUID, contact_id: UUID | None,
     removed_ids: set[UUID], reply_request_ids: list[UUID],
+    turn_ids: list[UUID] | None = None,
 ) -> None:
     """在原回复副本清除前留下无正文占位，同一 owner 下的传递依赖全部清除。"""
 
@@ -243,10 +244,11 @@ def erase_assistant_source_turns(
           ON request.owner_id = turn.owner_id AND request.contact_id = turn.contact_id
          AND request.idempotency_key = turn.idempotency_key
         WHERE turn.owner_id = %s AND turn.state <> 'redacted'
-          AND (turn.dependency_ids && %s::uuid[] OR request.id = ANY(%s::uuid[]))
+          AND (turn.dependency_ids && %s::uuid[] OR request.id = ANY(%s::uuid[])
+               OR turn.id = ANY(%s::uuid[]))
         FOR UPDATE OF turn
         """,
-        (owner_id, list(removed_ids), reply_request_ids),
+        (owner_id, list(removed_ids), reply_request_ids, turn_ids or []),
     ).fetchall()
     for row in rows:
         payload = row["input_payload"] if isinstance(row, dict) else row[1]
@@ -349,6 +351,13 @@ class PostgresAssistantSessionStore:
                     from notalone.persistence.explored_generation import prepare_explored_generation
                     prepare_explored_generation(connection, scope, session_id, command)
                 return existing["id"]
+            # 沿用回复层的无正文失效凭证，在新会话落输入前阻止旧键恢复。
+            if connection.execute(
+                "SELECT 1 FROM public.reply_invalidated_key WHERE owner_id = %s "
+                "AND contact_id = %s AND idempotency_key = %s",
+                (scope.owner_id, scope.contact_id, request.idempotency_key),
+            ).fetchone():
+                raise AssistantSessionRejected("request_deleted")
             if connection.execute(
                 "SELECT 1 FROM public.reply_request WHERE owner_id = %s AND contact_id = %s "
                 "AND idempotency_key = %s",
@@ -455,6 +464,11 @@ class PostgresAssistantSessionStore:
         with self._transaction(scope) as connection:
             self._require_session(connection, scope, session_id)
             return self._read_turns(connection, scope, session_id)
+
+    def delete(self, scope: ContactScope, session_id: UUID) -> None:
+        from notalone.persistence.assistant_session_deletion import delete_assistant_session
+        with self._transaction(scope) as connection:
+            delete_assistant_session(connection, scope, session_id)
 
     def read_session(self, scope: ContactScope, session_id: UUID) -> AssistantSessionSnapshot:
         from notalone.persistence.assistant_session_inputs import read_input_records, require_input_session

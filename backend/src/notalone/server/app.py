@@ -1197,6 +1197,13 @@ class BackendApp:
             if len(parts) not in (5, 6) or parts[3] != "assistant-sessions":
                 return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             session_id = UUID(parts[4])
+            if len(parts) == 5 and method == "DELETE":
+                confirmation = json.loads(body.decode("utf-8"))
+                if (not isinstance(confirmation, dict) or set(confirmation) != {"confirmed"}
+                        or confirmation["confirmed"] is not True):
+                    raise ReplyRequestInvalid()
+                service.delete(owner_id=self._owner_id, contact_id=contact_id, session_id=session_id)
+                return _json_response(HTTPStatus.OK, {"session_id": str(session_id), "state": "deleted"})
             if len(parts) == 5 and method == "GET":
                 snapshot = service.read_session(owner_id=self._owner_id, contact_id=contact_id, session_id=session_id)
                 return _json_response(HTTPStatus.OK, {

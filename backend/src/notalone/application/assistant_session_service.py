@@ -63,6 +63,8 @@ class AssistantSessionStore(Protocol):
 
     def read_session(self, scope: ContactScope, session_id: UUID) -> AssistantSessionSnapshot: ...
 
+    def delete(self, scope: ContactScope, session_id: UUID) -> None: ...
+
     def record_discussion_input(
         self, scope: ContactScope, session_id: UUID, content: dict[str, Any],
         expected_input_version_id: UUID | None = None,
@@ -102,6 +104,9 @@ class AssistantSessionService:
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
     ) -> AssistantSessionSnapshot:
         return self._store.read_session(ContactScope(owner_id, contact_id), session_id)
+
+    def delete(self, *, owner_id: UUID, contact_id: UUID, session_id: UUID) -> None:
+        self._store.delete(ContactScope(owner_id, contact_id), session_id)
 
     def record_discussion_input(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID, content: dict[str, Any],
