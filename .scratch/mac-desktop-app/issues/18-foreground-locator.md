@@ -2,7 +2,7 @@
 
 Type: task
 State: claimed
-Triage: ready-for-agent
+Triage: ready-for-human
 Blocked by: 09, 16
 Spec: ../spec.md
 
@@ -96,3 +96,7 @@ Spec: ../spec.md
 - 2026-10-10（18:05独立轮次与隔离配置修正）：用户明确认可18:05–18:15、最多1次隔离App。公开`package --with-probe`从生产源码`a0d07f1`构建新ad-hoc签名包并递归严格核验；只含仓库探针，不含CLI/WCDB，不作为完整交付。唯一App65655打开公开校准说明后，Spec评审发现测试的空appEnvironment仍被实际isolatedAppEnvironment补入unavailable-probe，未沿Resources路径。主Agent立即取消并菜单退出，在任何坐标、探针或微信观察前停止；自有runner65648 SIGINT收尾，实际1 interrupted/CLI130，不计green。本轮App/runner/worker65654、userData与租约均缺席，未重启、截图、操作微信、请求/接受权限或终止未知进程；忽略产物在desktop/artifacts/mac18-minimal-layout-20261010-1805。
 
 - 2026-10-10（实际配置回归red→green）：Node检查加载真实现场spec选项但仅登记注册器，绝不执行App回调；再经过真实隔离环境和生产启动配置。实际red明确返回unavailable-probe而非Resources；签名分支改为显式NOTALONE_SYNC_PROBE空字符串后，类型与完整npm test安全39/39通过，并核对开发路径、CLI仍隔离、核心库变化时停用。上述实际包另经Node静态配置检查确认Resources探针选择，未执行App/helper、权限API或后端；离线Electron ZIP及检查临时目录已清理。最终Standards Hard0/Possible0、Spec P0–P3均0；真实新宿主profile、裁剪、质量、自动定位与权限仍待，整票claimed/ready-for-agent、验收与Answer不变。
+
+- 2026-10-10（22:02待现场认可）：当前源码为已验证的`6771495`，工作树干净且App租约absent；18:12–18:22的提议未获认可且已过期，旧问题的迟到答复不能启动该时段。离线核对当前stdin结束、阶段流和生产Resources解析，没有证明早期真实校验的根因，不据推测改原生门禁或重复已通过的组。下一轮请求为“收到本次明确同意后立即开始的10分钟”、最多1次隔离签名App、由主Agent直接操作并最多查看1次当前微信窗口；不切换/滚动会话、发送消息或请求/接受权限，具体起止时间在执行时写入test:app。待本次有效答复，Triage同步ready-for-human，State仍claimed；不要求用户代操作。
+
+- 剩余证据：新签名宿主下真实前台条件、五处采集及OCR质量形成无图像verified profile；随后在用户已确认的绑定范围核验真实新观察与联系人采用/失效保护，以及小窗获焦暂停、CLI同步独立和实际helper权限归属。当前仅为第一项准备最小现场轮次，不把该有限认可扩展为真实联系人读取授权、权限授予或后续验收。全部验收及Answer保持未完成。
