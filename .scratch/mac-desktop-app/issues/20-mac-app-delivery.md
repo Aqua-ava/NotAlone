@@ -106,3 +106,5 @@ Spec: ../spec.md
   原始证据保留于 `desktop/artifacts/helper-provenance-20261010.GT1GQm/`：腾讯官方 `wcdb-2.1.15.zip` 为 83197863 bytes，SHA-256 `5b7294459f7f8b85ce373fcd5f3d7a3c004743feb9d51d3c39096a0815834c56` 匹配发行 API；`download-verification.json` 记录首次超时及断点续传结果，`provenance-evidence.json` 记录 CLI/库静态证据、9 份定向材料哈希和执行边界。`sandbox-boundaries.json`、四份 stable 元数据 JSON 与两个失败 tail JSON 保留；临时 canary 可执行文件及合成读写夹具精确清理，保留 canary 源码/profile 供复核。研究笔记与目录在忽略的 `research/` 同步，不强行提交。
 
   本轮有限官方路径已核对：维护者现行新仓历史从 v2 开始、精确稳定 commit 不可取、发行 tag 只有 README、Go 官方 proxy/checksum 同版本查询失败。下一步条件是取得绑定原字节的稳定 CLI 源码和 WCDB 构建/许可材料，或在明确范围内补初始化/实际事件/游标/JSONL 警告证据；不以重复下载同一源码归档、RC 源码或普通页面代替。需要人在场的真实渠道、Finder/文件选择/快捷键/剪贴板/退出与 10/18 依赖继续暂放；本票仍 `open / needs-info`，四项验收不勾选。
+
+- 2026-10-10（稳定来源补查与媒体参数修复收口）：固定 `7b46360 → 65cfe8f` 的独立 Standards 硬违规/判断建议 0/0，Spec 新问题 0；两轴确认三个入口沿既有进程接缝关闭媒体补齐、保留非文字计数及水位，且文档没有把 schema/HOME 失败/版本线索记为渠道或精确构建验收。两轴只读未新增运行。147 条本地链接、总清单 8/3/4 分类、本票 open/needs-info 与四项未勾、夹具精确清理及 `git diff --check` 通过。评审副本保留在上述自有忽略目录的 `review-results.json`；来源缺口和现场条件保持，只做本地提交。
