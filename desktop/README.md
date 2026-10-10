@@ -71,7 +71,7 @@ npm run check:helpers -- --directory /绝对路径/cli-runtime --version v1.2.3 
 
 JSON 输出只有状态、安全错误码、声明版本、相对文件名、架构、大小和 SHA-256；不回显绝对目录、原始工具输出或来源 URL。退出 0 表示 `static_checks_passed`，退出 2 表示拒绝。版本/来源仍是声明而非核验；`provenanceVerified`、`runtimeValidated`、`helperExecuted` 和 `nativeAcceptance` 均为 false。签名通过不证明可信发行者、Developer ID、公证、权限或完整动态加载行为；WCDB 作为已知动态加载依赖单独检查，其他未写入 Mach-O 的动态加载依赖仍需按实际 CLI 版本核对。目录内最多检查 64 个文件，单文件最多 256 MiB，整体核查预算 60 秒。
 
-静态核查、搬运和默认启动接线属于任务 20 的实现，不授权渠道读取。完整 CLI/WCDB 输入和来源仍缺，仓库探针的构建/搬运接线见下节；最终包及真实微信验收继续待办。
+静态核查、搬运和默认启动接线属于任务 20 的实现，不授权渠道读取。2026-10-10 用户授权自行查找后，已从维护者现行[发行仓库 v1.6.25](https://github.com/r266-tech/wechat-cli-releases/releases/tag/v1.6.25)取得固定 arm64 ZIP、checksum 和 manifest，匹配 API 与组件哈希并通过严格静态检查；已用该输入实际构建未启动的候选 App。上游 WCDB 版本、构建时间声明为 unknown，同版本原源码目前不可取得，运行兼容与最终原生/微信验收继续待办；不以 v2 RC 源码代替稳定包证据。产物及实测记录见任务 20。
 
 ### 核查后的搬运与随包接线
 
@@ -88,7 +88,9 @@ npm run package -- --helper-directory /绝对路径/cli-runtime --helper-version
 
 仅打包 App 的主进程以 `process.resourcesPath` 提供资源目录；开发与普通页面不自动寻找包内 helper。没有明确路径配置/环境值时，启动诊断和受控后端启动共用包内默认值；每次加载核对 manifest、架构、全部文件哈希及非符号链接路径，缺失/变化/越界时该组不可用，不退回 PATH 或未知探针。设置保存或环境变量指向当前包内 helper 时仍执行整组核验，不能把默认路径写入配置后绕过。外部显式配置优先，绑定和总开关语义不变；包内探针只接受下面的仓库构建清单，未知最小布局继续采集前拒绝。
 
-CLI 侧初次实现只用公开准备命令、Node 启动诊断与自有合成 Mach-O 验证搬运、脱离源目录、损坏/缺库/越界拒绝及配置优先；后续实际 Packager 构建证据见“离线检查包”。没有运行 Electron、Python、微信或探针，不据此宣称 Finder/权限/同步/退出验收通过。Context7 不可用，官方 [Packager extraResource](https://electron.github.io/packager/main/interfaces/Options.html#extraResource)、[Electron resourcesPath](https://www.electronjs.org/docs/latest/api/process#processresourcespath-readonly)与[签名 ignore](https://github.com/electron/osx-sign/blob/main/src/types.ts)已与安装版本 Packager 20.3.0、Electron 44.7.0 及 osx-sign 类型/源码核对。
+包内 CLI 选择还会固定 `WECHAT_CLI_WCDB_LIB` 为同组已核验库，清理继承的 `WECHAT_CLI_WCDB_DYLIB`、`WX_MCP_WCDB_LIB`、`WX_MCP_WCDB_DYLIB`；保存包内路径后仍执行整组核验。包内组失效时停用 CLI 并清理这四个覆盖，外部显式 CLI 配置继续保持原环境优先级。该兼容层沿用旧依赖修复的库注入要求，公开 Node 回归验证配置/环境，不加载库或证明某版 CLI 的实际动态行为。
+
+CLI 侧初次实现只用公开准备命令、Node 启动诊断与自有合成 Mach-O 验证搬运、脱离源目录、损坏/缺库/越界拒绝及配置优先；后续实际 Packager 构建证据见“离线检查包”和任务 20 的发行输入候选包记录。没有运行 Electron、Python、微信或探针，不据此宣称 Finder/权限/同步/退出验收通过。Context7 不可用，官方 [Packager extraResource](https://electron.github.io/packager/main/interfaces/Options.html#extraResource)、[Electron resourcesPath](https://www.electronjs.org/docs/latest/api/process#processresourcespath-readonly)与[签名 ignore](https://github.com/electron/osx-sign/blob/main/src/types.ts)已与安装版本 Packager 20.3.0、Electron 44.7.0 及 osx-sign 类型/源码核对。
 
 ### 仓库探针与核心库
 

@@ -84,3 +84,11 @@ Spec: ../spec.md
   曾用名称过滤排除构建用例但实测未生效，导致默认组也构建检查包并通过 39 项；该轮不算默认无构建证据。评审阶段将构建用例移至独立 `tests/packaging/command.test.mjs`、共享合成 C 夹具，默认入口恢复固定安全文件列表。最终 `npm test` 类型及 38/38 通过（8.634s），输出中无构建用例；脚本语法、`git diff --check` 通过。仅构建工具/测试接线变化，不重跑已通过的页面、真实 App 或后端业务；固定基点 ea317cf，双轴评审随后补齐。本票完整真实输入与现场依赖仍缺，保持 open/needs-info。
 
 - 2026-10-10（离线构建评审收口）：固定增量 `ea317cf → 5d980fc` 独立 Standards 硬违规/建议 0/0、Spec 新问题 0。两轴确认独立输出的独占创建/身份核对清理、离线固定版本归档检查、两组搬运/最终核查及默认测试与显式构建测试的隔离符合原范围；只读评审未新增执行。实际合成包构建已有证据，剩余条件优化为正式 CLI/WCDB 来源与输入、正式输入包、10/18 依赖及有限时段下的 Finder/权限/复制/微信等原生验收。本票继续 `open / needs-info`，四项原验收不勾选；总清单同步本轮证据与下一步，不扩展数据、外部调用、桌面或远端 Git 授权。
+
+- 2026-10-10（用户授权自行查找输入）：用户明确答复“你可以直接找下吧”。从仓库记录的维护者查到当前官方源码 `r266-tech/wx-cli` 与其指向的发行仓库 `r266-tech/wechat-cli-releases`；旧仓返回 451，当前发行仓库无历史 v1.6.20，采用其非预发布 v1.6.25 作为待验证输入，不迁移至 v2 RC。已下载固定 arm64 ZIP、checksum、manifest，三者匹配 GitHub API 摘要，CLI/WCDB 字节及组件 SHA-256 匹配，公开静态核查通过。只从归档提取必需二进制与许可证/说明，未执行安装器、wxkey、CLI 或初始化，不读取私人资料；WCDB 版本及构建时间在上游 manifest 中为 unknown，来源与运行可用性仍分开记录。
+
+  核对旧依赖修复票 09 与现行启动配置时，发现包内 CLI 未显式固定 WCDB 库，且整份环境继承可能保留指向外部库的覆盖。继续原票受控启动接缝的必要兼容修复：测试沿既有公开 `loadBackendConfiguration → backendEnvironment` 和 Node `getPaths/savePaths`，合成环境只声明自有外部库路径，验证包内选择固定已核验库、损坏组停用且不保留覆盖、外部显式 CLI 仍保持其配置优先。先 red → green；不运行任何 CLI/库，不改变绑定、权限或后端领域接口。随后用取得的固定发行输入离线重建候选 App，只构建/签名/静态检查，最终原生/微信及原依赖仍未完成。
+
+  实际公开 Node 场景先因 `WECHAT_CLI_WCDB_LIB` 为 undefined 而失败；整组解析同时返回受控库位置后同场通过。进一步合成检查四个覆盖清理、保存后仍固定库、损坏后无覆盖及外部配置优先，直接通过；没有把后续断言写成未运行的 red。最终 `npm test` 类型及 38/38 通过（13.134s）、`npm run build` 通过。实际生产打包命令使用固定输入与 `--with-probe`、独立输出、已安装 Electron 构造的离线 ZIP，通过签名及随包复核；在实际 Resources 下运行 Node 检查，四文件哈希/严格签名、主包 deep strict、原 CLI/WCDB 的上游组件哈希、包内路径及四个库覆盖隔离均通过。
+
+  候选产物为 `desktop/artifacts/helper-upstream-20261010.onrvwc/packaged/NotAlone-darwin-arm64/NotAlone.app`；`candidate-verification.json`、`download-verification.json`、原 ZIP/checksum/manifest 与 `package.log` 同目录保留。发行包所附 CLI LICENSE 和 THIRD_PARTY_NOTICES 保留在候选 `.app` 同级目录；稳定包未提供完整 WCDB 版本/许可集合，不宣称重新分发材料完整。仅这次任务自有忽略产物保留供后续有限验收，不覆盖现有 App；临时 Node 检查目录与离线 Electron ZIP 已精确清理。未执行下载二进制、wxkey、安装器或 App，不初始化、读取聊天、改密钥/Keychain/TCC，也未调用模型。CLI 版本迁移的只读/事件契约、WCDB 精确来源、10/18 与现场验收继续待；本票仍 open/needs-info，四项验收不勾选。固定基点 a7bb6a0，双轴评审随后补齐。

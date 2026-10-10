@@ -9,25 +9,29 @@ const layouts = {
   'repository-probe': { directory: 'notalone-probe', entry: 'notalone-sync-probe', library: 'libNotAloneSyncCore.dylib' },
 } as const;
 
-export async function resolveWechatCliPath(resourcesDirectory: string | undefined, configuredPath?: string): Promise<string | undefined> {
-  return resolveRuntimePath(resourcesDirectory, configuredPath, 'wechat-cli');
+export async function resolveWechatCliRuntime(resourcesDirectory: string | undefined, configuredPath?: string): Promise<{ path?: string; bundled: boolean; wcdbLibraryPath?: string }> {
+  const runtime = await resolveRuntimePath(resourcesDirectory, configuredPath, 'wechat-cli');
+  return { ...runtime, wcdbLibraryPath: runtime.bundled && runtime.path
+    ? path.join(path.dirname(runtime.path), layouts['wechat-cli'].library) : undefined };
 }
 
 export async function resolveSyncProbePath(resourcesDirectory: string | undefined, configuredPath?: string): Promise<string | undefined> {
-  return resolveRuntimePath(resourcesDirectory, configuredPath, 'repository-probe');
+  return (await resolveRuntimePath(resourcesDirectory, configuredPath, 'repository-probe')).path;
 }
 
-async function resolveRuntimePath(resourcesDirectory: string | undefined, configuredPath: string | undefined, kind: RuntimeKind): Promise<string | undefined> {
-  if (!configuredPath) return verifiedBundledRuntime(resourcesDirectory, kind);
-  if (!resourcesDirectory || !path.isAbsolute(resourcesDirectory)) return configuredPath;
+async function resolveRuntimePath(resourcesDirectory: string | undefined, configuredPath: string | undefined, kind: RuntimeKind): Promise<{ path?: string; bundled: boolean }> {
+  const hasResources = Boolean(resourcesDirectory && path.isAbsolute(resourcesDirectory));
+  const bundledRuntime = async () => ({ path: await verifiedBundledRuntime(resourcesDirectory, kind), bundled: hasResources });
+  if (!configuredPath) return bundledRuntime();
+  if (!resourcesDirectory || !path.isAbsolute(resourcesDirectory)) return { path: configuredPath, bundled: false };
   const resources = [path.resolve(resourcesDirectory)];
   try { resources.push(await realpath(resourcesDirectory)); } catch { /* 已知包路径失效时仍按声明路径停用。 */ }
   const selected = path.normalize(configuredPath);
   const roots = resources.map((directory) => path.join(directory, layouts[kind].directory));
-  if (!roots.some((root) => selected === root || selected.startsWith(`${root}${path.sep}`))) return configuredPath;
+  if (!roots.some((root) => selected === root || selected.startsWith(`${root}${path.sep}`))) return { path: configuredPath, bundled: false };
   // 设置表单保存后的默认路径和环境变量仍属于包内文件，不能绕过整组核验。
-  if (!roots.some((root) => selected === path.join(root, layouts[kind].entry))) return undefined;
-  return verifiedBundledRuntime(resourcesDirectory, kind);
+  if (!roots.some((root) => selected === path.join(root, layouts[kind].entry))) return { bundled: true };
+  return bundledRuntime();
 }
 
 // 仅核对包内清单和字节完整性，不运行输入、加载动态库或宣称发行者可信。
