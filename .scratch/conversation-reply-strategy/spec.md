@@ -89,7 +89,7 @@ Triage: ready-for-agent
 - [原草图 Q1–Q32](../../architecture/drafts/conversation-reply-strategy.md)及 2026-10-11 第一版确认记录。
 - [持续会话规格](../assistant-session-context/spec.md)、[真实性规格](../authentic-expression/spec.md)、[ADR-043](../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。
 - [既有原型证据](../conversation-paths-prototype/report.md)、[同句不同前文实验](../conversation-paths-prototype/context-report.md)。
-- [五票提案](ticket-proposal.md)尚待粒度/依赖确认，尚未发布 issues 或执行验收。
+- [十票第二版提案](ticket-proposal.md)尚待粒度/依赖确认，尚未发布 issues 或执行验收。
 
 ### Q1–Q32 覆盖核对
 

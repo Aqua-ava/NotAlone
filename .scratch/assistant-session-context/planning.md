@@ -1,26 +1,9 @@
-# 持续会话与上下文管理：工作流状态
+# 持续会话与上下文：工作流状态
 
-更新日期：2026-10-11。用户已确认 Q1–Q18、测试接缝、六票粒度与依赖。
+更新日期：2026-10-11。[正式规格](spec.md)已确认，产品范围和测试接缝保留。用户认为原任务偏粗，已重做为[13票第二版提案](ticket-proposal.md)，待认可粒度/依赖后发布。
 
-## 当前阶段
+本轮只重拆，不启动实现。C/R/E是提案标识，正式发布时映射到对应issues编号；[总览](../unfinished-work/resplit-20261011.md)记录跨功能依赖、并行前沿和旧票替代方案。
 
-[正式 spec](spec.md)与六张独立实现任务已发布；[ADR-042](../../architecture/adr/042-assistant-session-context-boundary.md)已明确助手讨论不压缩的边界。设计收束、规格及拆票完成，功能实现和验收尚未开始。
+持续会话已有旧01–06六票，均open且未开工，已标明暂不领取；保留State/Triage与历史，不在重拆过程中伪造完成。
 
-## 已发布任务
-
-| 任务 | State | Blocked by |
-| --- | --- | --- |
-| [01 创建、恢复和删除一段助手会话](issues/01-session-lifecycle.md) | open | 无，可开始 |
-| [02 连续修改、明确指代和候选版本](issues/02-continuous-revision.md) | open | 01 |
-| [03 生成中新要求和新消息的处理](issues/03-generation-replacement.md) | open | 02 |
-| [04 会话列表、切换及应用生命周期](issues/04-switch-and-exit.md) | open | 03 |
-| [05 长度预算与显式携候选新开](issues/05-budget-and-carry.md) | open | 04 |
-| [06 完整合成回归与真实 App 生命周期验收](issues/06-integrated-acceptance.md) | open | 05 |
-
-依赖：01 → 02 → 03 → 04 → 05 → 06。当前可执行前沿为 01；其余任务 ready-for-agent 表示材料齐备，仍须等待前置完成。原票是执行状态的权威来源。
-
-## 接续
-
-在新实现上下文读取 01、spec、CONTEXT、相关 ADR 与仓库工作流，按 TDD、相关验证、Standards/Spec 评审和本地提交推进。完成后在原票写 Answer，更新状态和总览。最终真实 App 生命周期需要有限验证窗口，不能预写通过。
-
-[原产品讨论](../../architecture/drafts/assistant-session-context.md)保留确认事实，[原拆分提案](ticket-proposal.md)保留核验来源；已发布范围以 spec 和独立任务为准。OCR、自沉淀、自动摘要、框架迁移均不纳入本轮。
+确认后才发布独立任务，然后按TDD、相关验证、Standards/Spec评审与本地提交逐票推进。OCR、具体邀约Skill、热梗、自动风格学习和真实模型评测均不因本轮重拆而启动。

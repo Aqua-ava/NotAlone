@@ -71,6 +71,6 @@ Triage: ready-for-agent
 - [原草图及第一版确认记录](../../architecture/drafts/authentic-expression.md)。
 - [原型失败证据](../conversation-paths-prototype/report.md)、[同句不同前文证据](../conversation-paths-prototype/context-report.md)。
 - [聊天策略规格](../conversation-reply-strategy/spec.md)、[持续会话规格](../assistant-session-context/spec.md)。
-- [四票提案](ticket-proposal.md)待粒度/依赖确认，未发布 issues。该规格是当前小范围交付，不能替代整个真实表达研究路线。
+- [六票第二版提案](ticket-proposal.md)待粒度/依赖确认，未发布 issues。该规格是当前小范围交付，不能替代整个真实表达研究路线。
 
 生产接缝证据：[统一输入测试](../../backend/tests/unit/reply/test_unified_inputs.py)、[上下文检索测试](../../backend/tests/unit/reply/test_context_retrieval.py)、[来源删除后回复证据读取](../../backend/tests/integration/persistence/test_source_reply_deletion.py)。表达样本目前仅见[领域设计](../../architecture/current/domain-data.md)及核心流程，尚无完整公开保存链路的实现证据。

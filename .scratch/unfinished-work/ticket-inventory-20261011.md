@@ -16,12 +16,12 @@
 
 | 任务 | State | Triage | 解释 |
 | --- | --- | --- | --- |
-| [01：创建、恢复和删除一段助手会话](../assistant-session-context/issues/01-session-lifecycle.md) | open | ready-for-agent | 新发布，等待按依赖实现；未执行验收 |
-| [02：连续修改、明确指代和候选版本](../assistant-session-context/issues/02-continuous-revision.md) | open | ready-for-agent | 新发布，等待按依赖实现；未执行验收 |
-| [03：生成中新要求和新消息的处理](../assistant-session-context/issues/03-generation-replacement.md) | open | ready-for-agent | 新发布，等待按依赖实现；未执行验收 |
-| [04：会话列表、切换及应用生命周期](../assistant-session-context/issues/04-switch-and-exit.md) | open | ready-for-agent | 新发布，等待按依赖实现；未执行验收 |
-| [05：长度预算与显式携候选新开](../assistant-session-context/issues/05-budget-and-carry.md) | open | ready-for-agent | 新发布，等待按依赖实现；未执行验收 |
-| [06：完整合成回归与真实 App 生命周期验收](../assistant-session-context/issues/06-integrated-acceptance.md) | open | ready-for-agent | 新发布，等待按依赖实现；未执行验收 |
+| [01：创建、恢复和删除一段助手会话](../assistant-session-context/issues/01-session-lifecycle.md) | open | ready-for-agent | 用户要求重拆，暂不领取；未实现、未验收，State/Triage保留 |
+| [02：连续修改、明确指代和候选版本](../assistant-session-context/issues/02-continuous-revision.md) | open | ready-for-agent | 用户要求重拆，暂不领取；未实现、未验收，State/Triage保留 |
+| [03：生成中新要求和新消息的处理](../assistant-session-context/issues/03-generation-replacement.md) | open | ready-for-agent | 用户要求重拆，暂不领取；未实现、未验收，State/Triage保留 |
+| [04：会话列表、切换及应用生命周期](../assistant-session-context/issues/04-switch-and-exit.md) | open | ready-for-agent | 用户要求重拆，暂不领取；未实现、未验收，State/Triage保留 |
+| [05：长度预算与显式携候选新开](../assistant-session-context/issues/05-budget-and-carry.md) | open | ready-for-agent | 用户要求重拆，暂不领取；未实现、未验收，State/Triage保留 |
+| [06：完整合成回归与真实 App 生命周期验收](../assistant-session-context/issues/06-integrated-acceptance.md) | open | ready-for-agent | 用户要求重拆，暂不领取；未实现、未验收，State/Triage保留 |
 
 ## background-import-tasks
 

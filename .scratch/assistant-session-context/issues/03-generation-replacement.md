@@ -4,6 +4,8 @@ State: open
 Triage: ready-for-agent
 Blocked by: 02 — 连续修改、明确指代和候选版本
 
+> 2026-10-11：用户要求重做三份规格的任务粒度。此票暂不领取；State/Triage保留历史值，新细分与替代映射见[第二版提案](../ticket-proposal.md)。尚未实现，不表示验收完成。
+
 ## 规格与范围
 
 [正式规格](../spec.md)，覆盖 Q6、Q9、Q16。读取 [工作流](../../../docs/agents/workflow.md)、[领域语言](../../../CONTEXT.md)及 [ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。本票交付范围如下；不要提前实现后续票或恢复 OCR。
@@ -31,3 +33,5 @@ Blocked by: 02 — 连续修改、明确指代和候选版本
 ## Comments
 
 2026-10-11：用户确认测试接缝与六票拆分后发布。尚未开始实现或执行验收。
+
+2026-10-11：按用户要求重新拆分；本票范围映射到第二版提案，待确认后再进行替代，不启动旧粗粒度实现。

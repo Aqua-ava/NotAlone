@@ -1,5 +1,6 @@
 # 聊天回复策略草图
 
+> 2026-10-11 最新工作流状态：用户要求重新细分任务，产品决定保留；以[第二版拆分提案](../../.scratch/conversation-reply-strategy/ticket-proposal.md)为当前待确认方案，尚未发布新细票。下文旧票数量属于先前发布记录。
 > 状态：第一版已于 2026-10-11 收束为正式规格；本文保留 2026-10-09 起的讨论记录，具体 Skill 等后续议题仍暂停。原讨论中的“待设计”保留时序，当前第一版范围以对应 spec 和 ADR-043 为准，不代表功能已实现。
 
 工作流进度与拆分准备见[对应功能目录](../../.scratch/conversation-reply-strategy/planning.md)；[第一版正式规格](../../.scratch/conversation-reply-strategy/spec.md)已发布，5票拆分提案待确认，尚未实现。
