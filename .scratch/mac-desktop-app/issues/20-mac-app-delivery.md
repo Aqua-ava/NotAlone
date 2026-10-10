@@ -116,3 +116,5 @@ Spec: ../spec.md
   Context7 不可用，已对照[官方类型](https://github.com/electron/osx-sign/blob/main/src/types.ts)与[签名实现](https://github.com/electron/osx-sign/blob/main/src/sign.ts)，再核对安装的 2.7.1 类型和数组转临时文件路径源码。旧残留先记录每个自有目录 dev/ino、文件集合与 SHA-256（250 份均为同一仅 allow-jit plist），再次核对后逐文件 unlink、逐目录 rmdir，不用全局或递归删除；旧候选四运行时哈希未变。证据保留在 `desktop/artifacts/package-cleanup-20261010.Tp699L/` 的 `red-result.json`、`green-result.json`、`previous-residue-inventory.json` 和 `previous-residue-cleanup.json`；固定本轮基点 `e23812f`，最终安全组及独立双轴复核随后补齐。
 
   最终 `npm test` 类型检查和默认 38/38 安全组通过（10.457s），该命令未构建 App；显式构建验证仍只记为 `test:package` 1/1。`git diff --check` 通过；没有为打包脚本改动重跑不相关的 Python/数据库/模型或原生组。安全组日志 `safe-result.json` 保存在同一自有目录。只处理公开编译资源、仓库源码和合成资料，未增加权限、读取范围、外部模型或远端 Git 操作。
+
+- 2026-10-10（签名临时文件修复收口）：固定 `e23812f → 9f77aa3` 独立 Standards 硬违规/判断建议 0/0，Spec 新问题 0。两轴确认 staging 内 plist 内容和权限不变、现有 finally 清理、公共命令接缝与证据一致，没有新增执行能力或把构建当作现场验收。评审只读未新增运行，结果副本保存于本轮自有忽略目录的 `review-results.json`。4 份改动文档的 56 条本地链接、原票 open/needs-info 与四项未勾、总清单 8/3/4 分类及 `git diff --check` 通过。下一步仍按精确上游材料、有限现场时段、模型预算或资源关联条件推进；不重复已通过构建或新增无需求工具。
