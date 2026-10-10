@@ -6,6 +6,17 @@ import { requestCalibrationCoordinates, type CoordinateProposal } from './calibr
 import { invalidateCalibrationProfile, layoutVerificationErrors, layoutVerificationStages, readPendingSelection, saveLayoutVerificationResult, saveVerifiedProfile, saveVerificationProgress, verificationProgressReceiver } from './calibration-profile';
 
 const verificationMessages: Record<string, string> = {
+  calibration_coordinates_invalid: '选区未保存：坐标格式或五处区域边界不符合要求。',
+  calibration_context_unavailable: '选区未保存：未找到唯一且受支持的可见微信窗口。',
+  calibration_wechat_instances_ambiguous: '选区未保存：未找到唯一运行中的微信实例。',
+  calibration_wechat_version_unsupported: '选区未保存：当前微信版本不在已验证范围内。',
+  calibration_window_not_visible: '选区未保存：当前桌面没有可见的微信主窗口。',
+  calibration_windows_ambiguous: '选区未保存：当前桌面存在多个微信窗口，请保留一个主窗口。',
+  calibration_window_geometry_invalid: '选区未保存：微信窗口尺寸过小或几何信息不可用。',
+  calibration_window_size_changed: '选区未保存：填写尺寸与实际微信窗口不一致。',
+  calibration_window_changed: '选区未保存：提交期间微信窗口发生变化。',
+  calibration_probe_missing: '选区未保存：当前宿主未找到可用的定位探针。',
+  calibration_probe_failed: '选区未保存：定位探针进程未正常完成。',
   screen_capture_permission_missing: '校验未开始：当前探针缺少屏幕录制权限。',
   wechat_not_in_front: '校验已停止：原生检测未确认微信在前台。',
   minimal_region_layout_changed: '校验已停止：窗口或布局与所选五处区域不一致。',
@@ -27,6 +38,11 @@ export class ForegroundCalibration {
     if (!parent) return;
     this.abort = new AbortController();
     this.flight = (verify ? this.verify(parent, this.abort.signal) : this.run(parent, this.abort.signal)).catch(async (error: unknown) => {
+      if (!verify && !this.disposed) {
+        const code = error instanceof Error && layoutVerificationErrors.includes(error.message as typeof layoutVerificationErrors[number])
+          ? error.message : 'calibration_unavailable';
+        await saveLayoutVerificationResult(this.userData, 'failed', code, 'selection', () => !this.disposed);
+      }
       if (!this.disposed && !parent.isDestroyed()) await dialog.showMessageBox(parent, { type: 'error', title: 'NotAlone',
         message: (error instanceof Error && verificationMessages[error.message])
           || '最小区域选择或校验未完成；前台定位继续暂停，请从窗口菜单重试。', signal: this.abort?.signal });
@@ -54,7 +70,7 @@ export class ForegroundCalibration {
     const coordinates = instructions.response === 0 ? await requestCalibrationCoordinates(parent, signal) : undefined;
     if (this.disposed || (instructions.response === 0 && !coordinates)) return;
     const configuration = await loadBackendConfiguration(this.userData, this.resourcesDirectory);
-    if (!configuration.syncProbePath || this.disposed) throw new Error('calibration_unavailable');
+    if (!configuration.syncProbePath || this.disposed) throw new Error('calibration_probe_missing');
     const output = await this.invoke(configuration.syncProbePath, coordinates);
     if (this.disposed) return;
     const envelope: unknown = JSON.parse(output);
@@ -62,7 +78,8 @@ export class ForegroundCalibration {
     const result = envelope as Record<string, unknown>;
     if (result.ok !== true) {
       if (result.error === 'calibration_cancelled') return;
-      throw new Error('calibration_unavailable');
+      throw new Error(layoutVerificationErrors.includes(result.error as typeof layoutVerificationErrors[number])
+        ? result.error as string : 'calibration_unavailable');
     }
     if (!await savePendingCalibrationSelection(this.userData, result.selection, () => !this.disposed)) return;
     if (!this.disposed && !parent.isDestroyed()) await dialog.showMessageBox(parent, { type: 'info', title: '最小区域选择已保存', signal,
@@ -138,7 +155,7 @@ export class ForegroundCalibration {
         clearTimeout(escalation);
         if (this.child === child) this.child = undefined;
         try { await progressWrites; } catch { failed = true; }
-        if (failed || code !== 0) reject(new Error('calibration_unavailable'));
+        if (failed || code !== 0) reject(new Error(selection ? 'calibration_unavailable' : 'calibration_probe_failed'));
         else resolve(output.toString('utf8'));
       });
     });

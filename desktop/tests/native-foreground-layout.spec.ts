@@ -20,7 +20,19 @@ test('公开校准后只以五处最小区域验证当前布局', async ({ runni
   const profilePath = path.join(userData, 'foreground-layout-profile.json');
   const resultPath = path.join(userData, 'foreground-layout-verification.json');
   const progressPath = path.join(userData, 'foreground-layout-verification-progress.json');
-  await expect.poll(async () => { try { return JSON.parse(await readFile(selectionPath, 'utf8')); } catch { return null; } }, { timeout: 180_000 }).not.toBeNull();
+  const selectionOutcome = async () => {
+    try { return JSON.parse(await readFile(selectionPath, 'utf8')).state; } catch { /* 等待公开选择结果。 */ }
+    try {
+      const result = JSON.parse(await readFile(resultPath, 'utf8'));
+      if (result.state === 'failed') {
+        await writeFile(test.info().outputPath('layout-selection-failure.json'), JSON.stringify(result), { mode: 0o600 });
+        return `failed:${result.error}`;
+      }
+    } catch { /* 等待公开失败结果。 */ }
+    return null;
+  };
+  await expect.poll(selectionOutcome, { timeout: 180_000 }).not.toBeNull();
+  expect(await selectionOutcome()).toBe('selected-awaiting-verification');
   expect(JSON.parse(await readFile(selectionPath, 'utf8')).state).toBe('selected-awaiting-verification');
   await writeFile(test.info().outputPath('pending-layout-selection.json'), await readFile(selectionPath), { mode: 0o600 });
   // 操作者关闭公开结果说明后再选择下一菜单，不读取或操纵内部flight状态。

@@ -14,10 +14,19 @@ public enum RegionCalibration {
               number(input["schemaVersion"]) == 1,
               let size = input["windowSize"] as? [String: Any], Set(size.keys) == ["width", "height"],
               let width = number(size["width"]), let height = number(size["height"]),
-              let proposed = input["regions"] as? [String: Any], Set(proposed.keys) == Set(calibrationFields),
-              let context = CalibrationContext.read(requireForeground: false),
-              width == context.frame.width, height == context.frame.height else {
+              let proposed = input["regions"] as? [String: Any], Set(proposed.keys) == Set(calibrationFields) else {
             return ["ok": false, "error": "calibration_coordinates_invalid"]
+        }
+        let context: CalibrationContext
+        do {
+            context = try CalibrationContext.resolve(requireForeground: false)
+        } catch let error as CalibrationContextFailure {
+            return ["ok": false, "error": error.rawValue]
+        } catch {
+            return ["ok": false, "error": "calibration_context_unavailable"]
+        }
+        guard width == context.frame.width, height == context.frame.height else {
+            return ["ok": false, "error": "calibration_window_size_changed"]
         }
         let bounds = CGRect(origin: .zero, size: context.frame.size)
         var regions: [String: CGRect] = [:]
@@ -79,6 +88,15 @@ func allowedCalibrationRegion(_ rectangle: CGRect, field: String, bounds: CGRect
     }
 }
 
+enum CalibrationContextFailure: String, Error {
+    case instances = "calibration_wechat_instances_ambiguous"
+    case version = "calibration_wechat_version_unsupported"
+    case notVisible = "calibration_window_not_visible"
+    case windows = "calibration_windows_ambiguous"
+    case geometry = "calibration_window_geometry_invalid"
+    case unavailable = "calibration_context_unavailable"
+}
+
 struct CalibrationContext: Equatable {
     let processId: pid_t
     let windowId: CGWindowID
@@ -88,25 +106,37 @@ struct CalibrationContext: Equatable {
 
     @MainActor
     static func read(requireForeground: Bool) -> CalibrationContext? {
+        try? resolve(requireForeground: requireForeground)
+    }
+
+    @MainActor
+    static func resolve(requireForeground: Bool) throws -> CalibrationContext {
         let instances = NSRunningApplication.runningApplications(withBundleIdentifier: "com.tencent.xinWeChat")
-        guard instances.count == 1, let application = instances.first,
-              !requireForeground || NSWorkspace.shared.frontmostApplication?.processIdentifier == application.processIdentifier,
-              let bundleURL = application.bundleURL, let bundle = Bundle(url: bundleURL),
+        guard instances.count == 1, let application = instances.first else {
+            throw CalibrationContextFailure.instances
+        }
+        guard !requireForeground || NSWorkspace.shared.frontmostApplication?.processIdentifier == application.processIdentifier else {
+            throw CalibrationContextFailure.unavailable
+        }
+        guard let bundleURL = application.bundleURL, let bundle = Bundle(url: bundleURL),
               bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String == "4.0.6",
-              bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String == "29387",
-              let information = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
-            return nil
+              bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String == "29387" else {
+            throw CalibrationContextFailure.version
+        }
+        guard let information = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            throw CalibrationContextFailure.unavailable
         }
         // 只取微信PID的窗口编号与几何；不访问窗口名称或其他App的属性。
         let windows = information.filter {
             ($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == application.processIdentifier
                 && ($0[kCGWindowLayer as String] as? NSNumber)?.intValue == 0
         }
-        guard windows.count == 1, let window = windows.first,
-              let bounds = window[kCGWindowBounds as String] as? NSDictionary,
+        guard !windows.isEmpty else { throw CalibrationContextFailure.notVisible }
+        guard windows.count == 1, let window = windows.first else { throw CalibrationContextFailure.windows }
+        guard let bounds = window[kCGWindowBounds as String] as? NSDictionary,
               let frame = CGRect(dictionaryRepresentation: bounds),
               frame.width >= 600, frame.height >= 400,
-              let number = window[kCGWindowNumber as String] as? NSNumber else { return nil }
+              let number = window[kCGWindowNumber as String] as? NSNumber else { throw CalibrationContextFailure.geometry }
         return CalibrationContext(processId: application.processIdentifier, windowId: number.uint32Value,
                                   frame: frame, version: "4.0.6", build: "29387")
     }

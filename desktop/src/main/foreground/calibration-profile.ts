@@ -28,6 +28,11 @@ export const layoutVerificationErrors = [
   'minimal_region_layout_unverified', 'minimal_region_layout_changed',
   'screen_capture_permission_missing', 'wechat_not_in_front', 'quality_unverified',
   'minimal_region_capture_failed', 'calibration_unavailable',
+  'calibration_coordinates_invalid', 'calibration_context_unavailable',
+  'calibration_window_size_changed', 'calibration_window_changed',
+  'calibration_probe_failed', 'calibration_probe_missing',
+  'calibration_wechat_instances_ambiguous', 'calibration_wechat_version_unsupported',
+  'calibration_window_not_visible', 'calibration_windows_ambiguous', 'calibration_window_geometry_invalid',
 ] as const;
 export const layoutVerificationStages = ['selection', 'context', 'capture-setup', 'sentinels-before', 'names', 'sentinels-after', 'profile', 'host'] as const;
 
