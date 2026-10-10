@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { prepareHelpers } from './prepare-helpers.mjs';
-import { argumentsFor, inspectRuntime } from './helper-runtime.mjs';
+import { argumentsFor, inspectRuntime, requireUnchangedFiles } from './helper-runtime.mjs';
 
 if (process.platform !== 'darwin') throw new Error('本机 App 打包需要 macOS。');
 const run = promisify(execFile);
@@ -57,7 +57,7 @@ try {
     extraResource: prepared ? [helperDirectory] : undefined,
     afterCopyExtraResources: prepared ? [async ({ buildPath }) => {
       const copied = await inspectRuntime({ ...helperInput, directory: path.join(buildPath, 'NotAlone.app/Contents/Resources/notalone-helpers') });
-      if (prepared.files.length !== copied.files.length || prepared.files.some((file) => !copied.files.some((copy) => copy.name === file.name && copy.sha256 === file.sha256))) throw new Error('helper_prepare_input_changed');
+      requireUnchangedFiles(prepared.files, copied.files);
     }] : undefined,
     afterExtract: [async ({ buildPath }) => {
       const plist = path.join(buildPath, 'Electron.app/Contents/Info.plist');
@@ -86,7 +86,7 @@ try {
     const app = path.join(output, 'NotAlone.app');
     if (prepared) {
       const bundled = await inspectRuntime({ ...helperInput, directory: path.join(app, 'Contents/Resources/notalone-helpers') });
-      if (prepared.files.length !== bundled.files.length || prepared.files.some((file) => !bundled.files.some((copy) => copy.name === file.name && copy.sha256 === file.sha256))) throw new Error('helper_prepare_input_changed');
+      requireUnchangedFiles(prepared.files, bundled.files);
     }
     await run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', app]);
     console.log(`本机 App 已构建并通过 ad-hoc 签名校验：${app}`);

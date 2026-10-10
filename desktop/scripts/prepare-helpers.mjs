@@ -3,7 +3,7 @@ import { lstat, mkdir, open, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { acceptanceFlags, argumentsFor, failureReport, inspectRuntime } from './helper-runtime.mjs';
+import { acceptanceFlags, argumentsFor, failureReport, inspectRuntime, requireUnchangedFiles } from './helper-runtime.mjs';
 
 export function preparationArguments(values) {
   const index = values.indexOf('--destination');
@@ -57,7 +57,7 @@ export async function prepareHelpers(input) {
       await copyCheckedFile(path.join(root, file.name), path.join(destination, file.name), file, deadline);
     }
     const relocated = await inspectRuntime({ ...input, directory: destination });
-    if (initial.files.length !== relocated.files.length || initial.files.some((file) => !relocated.files.some((copy) => copy.name === file.name && copy.sha256 === file.sha256))) throw new Error('helper_prepare_input_changed');
+    requireUnchangedFiles(initial.files, relocated.files);
     const manifest = { schemaVersion: 1, versionDeclaration: input.version, sourceDeclaration: input.source,
       architecture: input.arch, files: relocated.files, ...acceptanceFlags };
     await writeFile(path.join(destination, 'manifest.json'), `${JSON.stringify(manifest)}\n`, { flag: 'wx', mode: 0o644 });

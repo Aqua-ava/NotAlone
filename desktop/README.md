@@ -86,7 +86,7 @@ npm run package -- --helper-directory /绝对路径/cli-runtime --helper-version
 
 显式打包参数全部齐备时，通过 Packager `extraResource` 放到 `Contents/Resources/notalone-helpers`，ASAR 外保留可执行文件和动态库；缺一项或未知参数直接拒绝。未提供参数仍是前端包。复制后及最终签名后再次核对文件集合与原哈希；已核验 helper 跳过 Electron 重签，保留原字节和签名，不给它添加 JIT entitlement，主包继续 ad-hoc 签名并严格验证。包内 manifest 随主包签名保护，但哈希/签名仍不能证明发行者或真实渠道可用。
 
-仅打包 App 的主进程以 `process.resourcesPath` 提供资源目录；开发与普通页面不自动寻找包内 helper。没有明确路径配置/环境值时，启动诊断和受控后端启动共用包内 CLI 默认值；每次加载核对 manifest、架构、全部文件哈希及非符号链接路径，缺失/变化/越界时 CLI 不可用，不退回 PATH 或未知探针。显式配置优先，绑定和总开关语义不变；前台探针当前仍需明确配置，未知最小布局继续采集前拒绝。
+仅打包 App 的主进程以 `process.resourcesPath` 提供资源目录；开发与普通页面不自动寻找包内 helper。没有明确路径配置/环境值时，启动诊断和受控后端启动共用包内 CLI 默认值；每次加载核对 manifest、架构、全部文件哈希及非符号链接路径，缺失/变化/越界时 CLI 不可用，不退回 PATH 或未知探针。设置保存或环境变量指向当前包内 CLI 时仍执行整组核验，不能把默认路径写入配置后绕过。外部显式配置优先，绑定和总开关语义不变；前台探针当前仍需明确配置，未知最小布局继续采集前拒绝。
 
 本轮公开准备 CLI、真实 Node 启动诊断与启动环境只用自有合成 Mach-O 验证搬运、脱离源目录、损坏/缺库/越界拒绝及配置优先；没有运行 Packager 生成含 helper 的 App、Electron、Python、微信或探针，不据此宣称 Finder/权限/同步/退出验收通过。Context7 不可用，官方 [Packager extraResource](https://electron.github.io/packager/main/interfaces/Options.html#extraResource)、[Electron resourcesPath](https://www.electronjs.org/docs/latest/api/process#processresourcespath-readonly)与[签名 ignore](https://github.com/electron/osx-sign/blob/main/src/types.ts)已与安装版本 Packager 20.3.0、Electron 44.7.0 及 osx-sign 类型/源码核对。
 

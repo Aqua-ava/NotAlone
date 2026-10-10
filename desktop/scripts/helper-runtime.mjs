@@ -9,6 +9,12 @@ const run = promisify(execFile);
 const inside = (root, file) => file.startsWith(`${root}${path.sep}`);
 const identity = (metadata) => `${metadata.dev}:${metadata.ino}:${metadata.size}:${metadata.mtimeMs}:${metadata.ctimeMs}`;
 
+export function requireUnchangedFiles(expected, actual) {
+  const copies = new Map(actual.map((file) => [file.name, file.sha256]));
+  if (expected.length !== actual.length || copies.size !== actual.length
+    || expected.some((file) => copies.get(file.name) !== file.sha256)) throw new Error('helper_prepare_input_changed');
+}
+
 async function readBinary(file, deadline) {
   const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {

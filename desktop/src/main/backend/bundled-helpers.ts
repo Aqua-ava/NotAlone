@@ -3,6 +3,19 @@ import { access, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 
+export async function resolveWechatCliPath(resourcesDirectory: string | undefined, configuredPath?: string): Promise<string | undefined> {
+  if (!configuredPath) return verifiedBundledCli(resourcesDirectory);
+  if (!resourcesDirectory || !path.isAbsolute(resourcesDirectory)) return configuredPath;
+  const resources = [path.resolve(resourcesDirectory)];
+  try { resources.push(await realpath(resourcesDirectory)); } catch { /* 已知包路径失效时仍按声明路径停用。 */ }
+  const selected = path.normalize(configuredPath);
+  const roots = resources.map((directory) => path.join(directory, 'notalone-helpers'));
+  if (!roots.some((root) => selected === root || selected.startsWith(`${root}${path.sep}`))) return configuredPath;
+  // 设置表单保存后的默认路径和环境变量仍属于包内文件，不能绕过整组核验。
+  if (!roots.some((root) => selected === path.join(root, 'wechat-cli'))) return undefined;
+  return verifiedBundledCli(resourcesDirectory);
+}
+
 // 仅核对包内清单和字节完整性，不运行输入、加载动态库或宣称发行者可信。
 export async function verifiedBundledCli(resourcesDirectory: string | undefined): Promise<string | undefined> {
   if (!resourcesDirectory || !path.isAbsolute(resourcesDirectory)) return undefined;

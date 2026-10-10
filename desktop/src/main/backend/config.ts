@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { BackendFailure } from './connection';
 import type { StartupPaths } from '../../shared/startup-bridge';
-import { verifiedBundledCli } from './bundled-helpers';
+import { resolveWechatCliPath } from './bundled-helpers';
 
 const startupPathKeys = ['pythonExecutable', 'projectDirectory', 'envFilePath', 'backendInfoPath', 'wechatCliPath', 'syncProbePath'] as const;
 const startupPathKeySet = new Set<string>(startupPathKeys);
@@ -57,7 +57,7 @@ export async function loadBackendConfiguration(userData: string, resourcesDirect
     infoPath, envFilePath,
     pythonExecutable: value.pythonExecutable as string | undefined,
     projectDirectory: value.projectDirectory as string | undefined,
-    wechatCliPath: value.wechatCliPath as string | undefined || process.env.NOTALONE_WECHAT_CLI || await verifiedBundledCli(resourcesDirectory),
+    wechatCliPath: await resolveWechatCliPath(resourcesDirectory, value.wechatCliPath as string | undefined || process.env.NOTALONE_WECHAT_CLI),
     syncProbePath: value.syncProbePath as string | undefined || process.env.NOTALONE_SYNC_PROBE,
   };
 }

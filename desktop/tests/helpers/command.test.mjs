@@ -159,8 +159,8 @@ test('搬运后通过公开启动诊断使用包内CLI，变更时停用且显�
       await assert.rejects(access(sentinel));
     });
     const runner = path.join(owned, 'startup.mjs');
-    await buildScript({ stdin: { contents: `import { StartupDiagnostics } from './src/main/startup/diagnostics';\nimport { loadBackendConfiguration, backendEnvironment } from './src/main/backend/config';\nconst resources = process.argv[2]; const userData = process.argv[3];\nconst paths = await new StartupDiagnostics(userData, resources).getPaths();\nconst config = await loadBackendConfiguration(userData, resources);\nconfig.projectDirectory = userData;\nprocess.stdout.write(JSON.stringify({paths, cli: backendEnvironment(config, userData).NOTALONE_WECHAT_CLI}));`, resolveDir: process.cwd(), sourcefile: 'startup.ts', loader: 'ts' }, outfile: runner, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
-    const startup = (extra = {}) => spawnSync(process.execPath, [runner, resources, userData], { encoding: 'utf8', timeout: 10_000, env: { PATH: '/usr/bin:/bin', NOTALONE_BACKEND_INFO: path.join(userData, 'backend.info'), ...extra } });
+    await buildScript({ stdin: { contents: `import { StartupDiagnostics } from './src/main/startup/diagnostics';\nimport { loadBackendConfiguration, backendEnvironment } from './src/main/backend/config';\nconst resources = process.argv[2]; const userData = process.argv[3];\nconst diagnostics = new StartupDiagnostics(userData, resources);\nlet paths = await diagnostics.getPaths();\nif (process.argv[4] === 'save') {\n  await diagnostics.savePaths({ ...paths, pythonExecutable: userData + '/synthetic-python', projectDirectory: userData, envFilePath: userData + '/synthetic.env' }, () => true);\n  paths = await diagnostics.getPaths();\n}\nconst config = await loadBackendConfiguration(userData, resources);\nconfig.projectDirectory = userData;\nprocess.stdout.write(JSON.stringify({paths, cli: backendEnvironment(config, userData).NOTALONE_WECHAT_CLI}));`, resolveDir: process.cwd(), sourcefile: 'startup.ts', loader: 'ts' }, outfile: runner, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+    const startup = (extra = {}, mode = 'read') => spawnSync(process.execPath, [runner, resources, userData, mode], { encoding: 'utf8', timeout: 10_000, env: { PATH: '/usr/bin:/bin', NOTALONE_BACKEND_INFO: path.join(userData, 'backend.info'), ...extra } });
     const result = startup();
     assert.equal(result.status, 0);
     const report = JSON.parse(result.stdout);
@@ -168,6 +168,10 @@ test('搬运后通过公开启动诊断使用包内CLI，变更时停用且显�
     assert.equal(report.cli, path.join(destination, 'wechat-cli'));
     assert.equal(report.paths.syncProbePath, '');
     const cli = path.join(destination, 'wechat-cli');
+    const saved = startup({}, 'save');
+    assert.equal(saved.status, 0);
+    assert.equal(JSON.parse(saved.stdout).paths.wechatCliPath, cli);
+    assert.equal(JSON.parse(saved.stdout).cli, cli);
     const original = await readFile(cli);
     await writeFile(cli, Buffer.concat([original, Buffer.from('synthetic_changed_bytes')]));
     const changed = startup();
@@ -188,6 +192,13 @@ test('搬运后通过公开启动诊断使用包内CLI，变更时停用且显�
     assert.equal(JSON.parse(startup().stdout).paths.wechatCliPath, '');
     await writeFile(manifestPath, JSON.stringify(manifest));
     assert.equal(JSON.parse(startup().stdout).paths.wechatCliPath, cli);
+    await rm(path.join(userData, 'backend-launch.json'));
+    await rm(library);
+    const environment = startup({ NOTALONE_WECHAT_CLI: cli });
+    assert.equal(environment.status, 0);
+    assert.equal(JSON.parse(environment.stdout).paths.wechatCliPath, '');
+    assert.equal(JSON.parse(environment.stdout).cli, path.join(userData, 'unconfigured-cli'));
+    await writeFile(library, libraryBytes);
     // 配置经原公开 JSON 文件边界进入，不让测试引入额外的生产加载器。
     await writeFile(path.join(userData, 'backend-launch.json'), JSON.stringify({ wechatCliPath: path.join(userData, 'explicit-cli') }));
     const explicit = startup({ NOTALONE_WECHAT_CLI: path.join(userData, 'environment-cli') });
