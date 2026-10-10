@@ -20,7 +20,7 @@
 | 总协调 | `/Users/local-user/learn/NotAlone` | `codex/autonomous-integration-29` | 依赖协调、顺序集成、公共接线冲突、真实集成复核与汇总 |
 | A | `/private/tmp/notalone-a-session` | `codex/assistant-session-continuity` | 助手会话身份、持久化、版本、预算、取消、恢复和生命周期 |
 | B | `/Users/local-user/.codex/worktrees/conversation-reply-strategy/NotAlone` | `codex/conversation-reply-strategy` | 既有用户会话`local-chat-id`，唯一负责11票接续 |
-| C | `/Users/local-user/.codex/worktrees/authentic-expression/NotAlone` | `codex/authentic-expression` | 既有用户会话`local-chat-id`，唯一负责6票接续 |
+| C | `/Users/local-user/.codex/worktrees/authentic-expression/NotAlone` | `codex/authentic-expression-integration` | 既有用户会话`local-chat-id`，唯一负责6票接续；旧主题提交仍可引用 |
 
 本账户工具不能读取／投递跨账户会话，未绕过账户访问；既有 B/C 通过本地交付文件确认接收。公共指令与回执见`coordinator-cross-account-handoff-20261011.md`。每张任务只有上表对应负责人。
 
@@ -52,12 +52,12 @@
 
 | 任务 | 当前证据 | 集成情况 |
 | --- | --- | --- |
-| A07 | 新增真实 HTTP／PG 9 项及相关回归通过；限定普通页面保存→重读→同键重试通过，未新增模型调用 | A worktree 的页面已通过，待独立审查及主题提交 |
+| A07 | A最终75项HTTP／PG（本票20）、迁移10、safe40、三具名页面和两轴0；root补跨B输入投影两条真实red→green后22HTTP通过 | `041f6d94`已集成为`b6dd9f2`，投影修复`d23a762`；root最后组合页待复验 |
 | B01 | 明确“回应消息”场景并保留草稿，既有 HTTP 契约 10／10 | 原提交 `7bff0cb` 已集成为 `77e85be`；待组合页面与双轴审查 |
 | B04 | 独立主动目的，真实 HTTP／随机 PG 1／1；同键不多调用，跨 owner 拒绝；集成树回复单元 178／178、TypeScript 通过 | 原提交 `914d4db` 已集成为 `ecb441b`；最终迁移组合及页面待 A／C 首批接线 |
 | E01 | 离线公开 CLI 3／3；原 Spec 审查的 5 项缺口全部修复并独立复核，Standards 0 | `932c651` 已集成为 `673e994`，任务 Answer 单独集成；本票可自主验收完成 |
 | B01／B04 审查修复 | 未确认候选依据的白名单、待确认标注和展示已补齐；真实 HTTP 验证来源删除后依据不可得，但同键结果重放的公共持久层缺口尚待 A 守卫集成 | `fd60239` 已集成为 `cc59f37`；集成树回复单元 178／178、TypeScript、差异检查通过，未记组合完成 |
-| E04 | 真实 HTTP／PG 6 项和样本保存→查看→删除公开页面通过；双轴审查发现编辑稿来源、记忆消息来源展开、renderer 副本及异步失效顺序等 5 项待修 | C 正在修复，`049` 尚未正式提交；初次页面通过不替代审查后的最终验证 |
+| E04 | 最终12项真实HTTP、106项相关PG、safe40和两轴0；公开页面含真实消息载荷、编辑复制来源、删除清理／手工保留、跨contact与同文来历歧义均green | `049` schema已正式集成；公共源码正式提交准备中，既有C仍须提取选区／粘贴兼容并接E06组合 |
 
 A07 页面先运行 red：缺少“查看已保存讨论”入口，30 秒等待失败如实保留；实现后 green 通过。两轮都确认资源收尾，单浏览器，静默采样无激活或屏上窗口，`Electron=false`、`nativeAcceptance=false`；随后租约只读状态均为 `absent`。这证明普通页面与 HTTP／PG 保存切片，不证明原生生命周期。
 
@@ -86,3 +86,7 @@ E01 的 16 例受控报告包含 14 个故意错误输出、1 个超时与1个�
 
 - A07正式提交`041f6d94`已交付：75项真实HTTP／PG（本票20）、10项迁移、safe40及类型检查通过，两轴复审0。手工本人记忆正常读取／重放、伪造哨兵拒绝、删除后清理实际讨论与回复、无关资料保留均有回归；原始错误对象边界保留red→green证据。总协调下一步顺序集成与复验，不将本票证据视为后续11票完成。
 - C公共来源候选已冻结：legacy有源祖先无快照而子代有独立新来源，读取／重放／继续／样本保存均失败关闭；修前真实200、修后12项HTTP及106项相关PG、safe40通过。正在做最终两轴和页面复验，尚未把E04整票关闭。
+
+- root最终C页面`style-samples`exit0，quiet17、active0／onscreen0、单Chrome、cleanupConfirmed=true。重跑前保留了受控radio同步check、缺MemoryService导致回调503，以及关系页面未返回联系人导航的三种实际失败；均修原装配／真实UI操作，来源载荷和删除断言没有放宽。
+- root跨A/B追加审查发现NoSkill读回、临时user_purpose伪来源、保存目的展示三缺口；真实两HTTP分别None!=True及保存503，修后22HTTPgreen、type、两轴0，最小提交`d23a762`已由A消费。原A07合并页面旧“回复”标签失败已保留资源收尾，后续按实际“回应消息”入口复验。
+- A08首个公开自动恢复RED已取得：重连未显示已保存讨论，exit1、quiet16、active0／onscreen0、单Chrome、cleanupConfirmed=true。A已补最小自动读取保存面板，正在root有限180秒首green窗口；后续失败／迟到／来源场景仍须真实闭合，未标任务完成。
