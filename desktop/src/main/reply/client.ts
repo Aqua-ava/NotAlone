@@ -18,6 +18,8 @@ export async function generateReply(backend: BackendHost, input: ReplyInputSnaps
     body: { contact_id: input.contactId, idempotency_key: requestKey, content: input.mode === 'rewrite_draft' ? {
       type: 'rewrite_draft', draft_text: input.draftText,
       user_instruction: input.userInstruction, include_relationship_context: input.includeRelationshipContext,
+    } : input.mode === 'initiate_conversation' ? {
+      type: 'initiate_conversation', purpose: input.purpose,
     } : {
       type: 'reply_to_message', target_message_id: input.target.messageId,
       direction: input.direction, direction_source: 'direct_input',

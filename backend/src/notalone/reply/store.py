@@ -29,6 +29,8 @@ from notalone.reply.interface import (
     ReplyCandidate,
     ReplyGenerated,
     ReplyToMessage,
+    InitiateConversation,
+    NoSkill,
     RewriteDraft,
     SkillUse,
     UserSkillChoice,
@@ -677,6 +679,11 @@ def _normalize_input(command: GenerateReply) -> str:
             "direction": content.direction.text.strip(),
             "direction_source": content.direction.source.value,
         }
+    elif isinstance(content, InitiateConversation):
+        payload = {
+            "mode": "initiate_conversation", "purpose": content.purpose.text.strip(),
+            "purpose_source": content.purpose.source.value,
+        }
     elif isinstance(content, RewriteDraft):
         payload = {
             "mode": "rewrite_draft",
@@ -700,7 +707,7 @@ def _normalize_input(command: GenerateReply) -> str:
     payload["skill"] = (
         f"user_choice:{command.skill.version_id}"
         if isinstance(command.skill, UserSkillChoice)
-        else "auto"
+        else "disabled" if isinstance(command.skill, NoSkill) else "auto"
     )
     return json.dumps(
         payload,

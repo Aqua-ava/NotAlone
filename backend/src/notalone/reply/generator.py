@@ -41,6 +41,7 @@ from notalone.reply.errors import (
 from notalone.reply.interface import (
     ContextReceipt,
     GenerateReply,
+    InitiateConversation,
     ReplyCandidate,
     ReplyGenerated,
     ReplyOutcome,
@@ -443,6 +444,15 @@ class ReplyGenerator:
                 raise ReplyInvariantError(
                     "待回复消息或表达方向与请求不一致。"
                 )
+            return
+
+        if isinstance(command.content, InitiateConversation):
+            purpose_evidence = tuple(item for item in context.evidence if item.kind == "user_purpose")
+            if (context.direction != command.content.purpose
+                or context.current_text != command.content.purpose.text
+                or len(purpose_evidence) != 1
+                or purpose_evidence[0].text != command.content.purpose.text):
+                raise ReplyInvariantError("主动目的与回复上下文不一致。")
             return
 
         if isinstance(command.content, RewriteDraft):

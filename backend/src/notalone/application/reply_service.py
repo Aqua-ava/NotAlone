@@ -24,6 +24,8 @@ from notalone.conversation.models import (
 from notalone.reply import GenerateReply, ReplyOutcome
 from notalone.reply.interface import (
     AutoSkill,
+    InitiateConversation,
+    NoSkill,
     ReplyToMessage,
     RewriteDraft,
     UserSkillChoice,
@@ -131,9 +133,10 @@ class ReplyServiceRequest:
     """应用层回复请求：由解析器产出，绑定解析在服务层完成。"""
 
     idempotency_key: UUID
-    content: ReplyToMessage | RewriteDraft
+    content: ReplyToMessage | RewriteDraft | InitiateConversation
     continued_from_candidate_id: UUID | None = None
     skill_version_id: UUID | None = None
+    skill_disabled: bool = False
 
     def build_command(
         self,
@@ -146,7 +149,9 @@ class ReplyServiceRequest:
 
         if not isinstance(binding_id, UUID):
             return None
-        skill: AutoSkill | UserSkillChoice = AutoSkill()
+        if self.skill_disabled and self.skill_version_id is not None:
+            return None
+        skill: AutoSkill | UserSkillChoice | NoSkill = NoSkill() if self.skill_disabled else AutoSkill()
         if self.skill_version_id is not None:
             skill = UserSkillChoice(version_id=self.skill_version_id)
         return GenerateReply(

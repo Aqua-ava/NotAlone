@@ -73,12 +73,28 @@ class RewriteDraft:
         )
 
 
-ReplyInput: TypeAlias = ReplyToMessage | RewriteDraft
+@dataclass(frozen=True, slots=True, repr=False)
+class InitiateConversation:
+    """没有待回复目标时，由用户明确目的发起联系。"""
+
+    purpose: ConfirmedDirection
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.purpose, ConfirmedDirection):
+            raise TypeError("主动联系目的必须由用户明确输入或确认。")
+
+
+ReplyInput: TypeAlias = ReplyToMessage | RewriteDraft | InitiateConversation
 
 
 @dataclass(frozen=True, slots=True)
 class AutoSkill:
     """允许运行时从当前联系人目录中按需选择至多一个 Skill。"""
+
+
+@dataclass(frozen=True, slots=True)
+class NoSkill:
+    """用户明确关闭策略；后续生成不能重新自动选回。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,7 +104,7 @@ class UserSkillChoice:
     version_id: UUID
 
 
-SkillSelection: TypeAlias = AutoSkill | UserSkillChoice
+SkillSelection: TypeAlias = AutoSkill | UserSkillChoice | NoSkill
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +126,8 @@ class GenerateReply:
                 isinstance(self.content.target_message_id, UUID)
                 and isinstance(self.content.direction, ConfirmedDirection)
             )
+        elif isinstance(self.content, InitiateConversation):
+            content_valid = isinstance(self.content.purpose, ConfirmedDirection)
         else:
             content_valid = (
                 isinstance(self.content, RewriteDraft) and self.content.is_valid()
@@ -118,7 +136,7 @@ class GenerateReply:
             self.continued_from_candidate_id is None
             or isinstance(self.continued_from_candidate_id, UUID)
         ) and (
-            isinstance(self.skill, AutoSkill)
+            isinstance(self.skill, (AutoSkill, NoSkill))
             or (
                 isinstance(self.skill, UserSkillChoice)
                 and isinstance(self.skill.version_id, UUID)

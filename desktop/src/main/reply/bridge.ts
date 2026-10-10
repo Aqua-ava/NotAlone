@@ -48,7 +48,7 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   commands.handle('reply:update-options', (...args: unknown[]) => { return replies.updateOptions(options(args)); }, 'helper');
   commands.handle('reply:set-mode', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'mode']);
-    if (!['rewrite_draft', 'reply_to_message'].includes(value.mode as string)) throw new Error('本次输入方式不可用。');
+    if (!['rewrite_draft', 'reply_to_message', 'initiate_conversation'].includes(value.mode as string)) throw new Error('本次输入方式不可用。');
     return replies.setMode(value as unknown as ReplyModeUpdate);
   }, 'helper');
   commands.handle('reply:load-messages', (...args: unknown[]) => {
@@ -69,6 +69,11 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     const value = fields(args, ['contactId', 'scopeRevision', 'direction']);
     if (typeof value.direction !== 'string' || value.direction.length > 4096) throw new Error('表达方向不可用。');
     return replies.updateDirection(value as unknown as ReplyDirectionUpdate);
+  }, 'helper');
+  commands.handle('reply:update-purpose', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'purpose']);
+    if (typeof value.purpose !== 'string' || value.purpose.length > 4096) throw new Error('主动目的不可用。');
+    return replies.updatePurpose(value as unknown as import('../../shared/reply-bridge').ReplyPurposeUpdate);
   }, 'helper');
   commands.handle('reply:generate', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'newRequest']);

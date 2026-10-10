@@ -9,7 +9,7 @@ import { ReplyEvidence, useReplyEvidence } from './ReplyEvidence';
 export function useReplySession() {
   const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null, generationBlock: 'foreground-confirmation-required',
     options: { tone: 'original', instruction: '', includeRelationshipContext: false },
-    mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null, direction: '',
+    mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null, direction: '', purpose: '',
     messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
     phase: 'idle', result: null, selectedCandidateId: null, canRetry: false }, window.notalone.replies);
   async function operate(operation: () => Promise<ReplySessionState | void>) {
@@ -26,6 +26,7 @@ export function useReplySession() {
     reconnectMessages: () => operate(() => window.notalone.replies.reconnectMessages(selection())),
     selectMessage: (messageId: string) => operate(() => window.notalone.replies.selectMessage({ ...selection(), messageId })),
     updateDirection: (direction: string) => operate(() => window.notalone.replies.updateDirection({ ...selection(), direction })),
+    updatePurpose: (purpose: string) => operate(() => window.notalone.replies.updatePurpose({ ...selection(), purpose })),
     generate: (newRequest = false) => operate(() => window.notalone.replies.generate({ ...selection(), newRequest })),
     selectCandidate: (candidateId: string) => operate(() => window.notalone.replies.selectCandidate({ ...selection(), replyRequestId: latest.current.result!.replyRequestId, candidateId })),
     editCandidate: (candidateId: string, text: string) => operate(() => window.notalone.replies.editCandidate({ ...selection(), replyRequestId: latest.current.result!.replyRequestId, candidateId, text })),
@@ -39,6 +40,8 @@ export function ReplyModePicker({ replies, enabled }: { replies: ReplySessionVie
       disabled={!enabled} onClick={() => void replies.setMode('rewrite_draft')}>改写</button>
     <button className={replies.state.mode === 'reply_to_message' ? 'active' : ''} aria-pressed={replies.state.mode === 'reply_to_message'}
       disabled={!enabled} onClick={() => void replies.setMode('reply_to_message')}>回应消息</button>
+    <button className={replies.state.mode === 'initiate_conversation' ? 'active' : ''} aria-pressed={replies.state.mode === 'initiate_conversation'}
+      disabled={!enabled} onClick={() => void replies.setMode('initiate_conversation')}>主动聊聊</button>
   </div>;
 }
 
@@ -97,6 +100,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
       <details className="reply-input-snapshot"><summary>这组候选的生成输入 · {state.result.input.contactDisplayName}</summary>
         {state.result.input.mode === 'rewrite_draft' ? <><p>{state.result.input.draftText}</p><p>{state.result.input.userInstruction ?? '没有额外要求'}</p>
           <p>关系语境：{state.result.input.includeRelationshipContext ? '已开启' : '关闭'}</p></>
+          : state.result.input.mode === 'initiate_conversation' ? <p>主动目的：{state.result.input.purpose}</p>
           : <><p>待回复消息：{state.result.input.target.text ?? state.result.input.target.mediaPlaceholder}</p>
             <p>表达方向：{state.result.input.direction}</p></>}</details>
       <div className="reply-candidate-grid">

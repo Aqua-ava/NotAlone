@@ -15,6 +15,7 @@ from notalone.reply.errors import (
 from notalone.reply.interface import (
     ConfirmedDirection,
     GenerateReply,
+    InitiateConversation,
     ReplyToMessage,
     RewriteDraft,
 )
@@ -54,6 +55,7 @@ EvidenceKind = Literal[
     "confirmed_memory",
     "owner_memory",
     "user_draft",
+    "user_purpose",
     "continued_candidate",
     "pending_candidate",
 ]
@@ -66,6 +68,7 @@ EVIDENCE_STATUSES_BY_KIND: dict[EvidenceKind, frozenset[str]] = {
     "confirmed_memory": frozenset({"active"}),
     "owner_memory": frozenset({"active"}),
     "user_draft": frozenset({"active", "user_input"}),
+    "user_purpose": frozenset({"user_input"}),
     "continued_candidate": frozenset({"active", "candidate"}),
     # 待确认候选只能带 pending 状态进入模型和持久化边界；它不得被当成
     # 已确认资料，也不能借用 active 状态冒充事实。
@@ -125,7 +128,7 @@ def pending_candidate_selection_reason(
 def allows_history(command: GenerateReply) -> bool:
     """回复消息可用历史；草稿润色只有本次明确要求背景时才可用。"""
 
-    return isinstance(command.content, ReplyToMessage) or (
+    return isinstance(command.content, (ReplyToMessage, InitiateConversation)) or (
         isinstance(command.content, RewriteDraft)
         and command.content.include_relationship_context
     )
@@ -417,6 +420,32 @@ class RetrievalReplyContext:
                 risk_notes=self._risk_notes(command, target[0].text),
                 memory_revision=memory_revision,
                 index_revision=index_revision,
+            )
+
+        if isinstance(command.content, InitiateConversation):
+            purpose = command.content.purpose
+            evidence = [ContextEvidence(
+                evidence_id=self._new_id(), kind="user_purpose", text=purpose.text,
+                scope=scope, selection_reason="用户本次明确的主动联系目的。",
+                status="user_input",
+            )]
+            evidence.extend(
+                self._message_evidence(message, is_target=False)
+                for message in self._search_messages(scope=scope)
+            )
+            evidence.extend(self._memory_evidence(memory) for memory in self._search_memories_or_empty(scope=scope, query=purpose.text))
+            evidence.extend(self._owner_memory_evidence(memory, scope=scope) for memory in self._search_owner_memories_or_empty(scope=scope, query=purpose.text))
+            evidence.extend(self._pending_candidate_evidence(candidate, scope=scope) for candidate in self._search_pending_candidates_or_empty(scope=scope, query=purpose.text))
+            if continuation is not None:
+                evidence.append(continuation)
+            self._validate_evidence(evidence, scope=scope)
+            memory_revision, index_revision = self._version_snapshot(scope)
+            return ReplyContext(
+                reply_request_id=request_id, command=command, scope=scope,
+                current_text=purpose.text, direction=purpose, evidence=tuple(evidence),
+                skill_library_revision=self._current_skill_revision(scope),
+                risk_notes=self._risk_notes(command, purpose.text),
+                memory_revision=memory_revision, index_revision=index_revision,
             )
 
         if isinstance(command.content, RewriteDraft):
@@ -768,7 +797,7 @@ class RetrievalReplyContext:
         self,
         *,
         scope: ContactScope,
-        target_message_id: UUID,
+        target_message_id: UUID | None = None,
     ) -> tuple[RetrievedMessage, ...]:
         try:
             messages = self._retrieval.search_messages(
@@ -1083,6 +1112,8 @@ class RetrievalReplyContext:
     def _risk_notes(self, command: GenerateReply, current_text: str) -> tuple[str, ...]:
         if isinstance(command.content, ReplyToMessage):
             text = f"{current_text}\n{command.content.direction.text}"
+        elif isinstance(command.content, InitiateConversation):
+            text = command.content.purpose.text
         elif isinstance(command.content, RewriteDraft):
             text = "\n".join(
                 value

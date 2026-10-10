@@ -15,6 +15,7 @@ from notalone.application.reply_service import ReplyServiceRequest
 from notalone.reply.interface import (
     ConfirmedDirection,
     DirectionSource,
+    InitiateConversation,
     ReplyToMessage,
     RewriteDraft,
 )
@@ -49,6 +50,13 @@ def parse_reply_request(body: bytes) -> tuple[UUID, ReplyServiceRequest]:
         content = _parse_reply_to_message(content_value)
     elif content_type == "rewrite_draft":
         content = _parse_rewrite_draft(content_value)
+    elif content_type == "initiate_conversation":
+        purpose = content_value.get("purpose")
+        if not isinstance(purpose, str) or not purpose.strip() or len(purpose) > 4096:
+            raise ReplyRequestInvalid()
+        if content_value.get("target_message_id") is not None:
+            raise ReplyRequestInvalid()
+        content = InitiateConversation(ConfirmedDirection(purpose, DirectionSource.DIRECT_INPUT))
     else:
         raise ReplyRequestInvalid()
 
@@ -56,11 +64,15 @@ def parse_reply_request(body: bytes) -> tuple[UUID, ReplyServiceRequest]:
     continued_id = _optional_uuid(continued)
     skill_value = payload.get("skill_version_id")
     skill_id = _optional_uuid(skill_value)
+    skill_disabled = payload.get("skill_disabled", False)
+    if not isinstance(skill_disabled, bool) or (skill_disabled and skill_id is not None):
+        raise ReplyRequestInvalid()
     return contact_id, ReplyServiceRequest(
         idempotency_key=idempotency_key,
         content=content,
         continued_from_candidate_id=continued_id,
         skill_version_id=skill_id,
+        skill_disabled=skill_disabled,
     )
 
 

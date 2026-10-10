@@ -21,6 +21,7 @@ export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
     reconnectMessages: (...args: unknown[]) => ipcRenderer.invoke('reply:reconnect-messages', ...args),
     selectMessage: (...args: unknown[]) => ipcRenderer.invoke('reply:select-message', ...args),
     updateDirection: (...args: unknown[]) => ipcRenderer.invoke('reply:update-direction', ...args),
+    updatePurpose: (...args: unknown[]) => ipcRenderer.invoke('reply:update-purpose', ...args),
     generate: (selection: GenerateReply) => ipcRenderer.invoke('reply:generate', selection),
     selectCandidate: (selection: ReplyCandidateSelection) => ipcRenderer.invoke('reply:select-candidate', selection),
     editCandidate: (edit: ReplyCandidateEdit) => ipcRenderer.invoke('reply:edit-candidate', edit),

@@ -61,6 +61,7 @@ class DesktopRewriteModel(ScriptedCoreModel):
             raise RuntimeError("合成原始模型错误不应进入界面。")
         primary = next(item for item in payload["evidence"]
                        if (item["kind"] == "user_draft" if payload["input_mode"] == "rewrite_draft"
+                           else item["kind"] == "user_purpose" if payload["input_mode"] == "initiate_conversation"
                            else item["kind"] == "message" and item["text"] == payload["current_text"]))
         citations = [primary["evidence_id"]]
         if plan.get("cite_history"):

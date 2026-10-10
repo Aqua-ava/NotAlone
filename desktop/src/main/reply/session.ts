@@ -15,13 +15,13 @@ const tones = { original: '', warm: '本次语气自然温和。', concise: '本
 export class ReplySession {
   hasEdits(): boolean {
     return Boolean(this.state.result || this.heldResult || this.state.phase === 'waiting' || this.state.targetMessageId
-      || this.state.direction || this.state.mode !== 'rewrite_draft' || this.state.options.instruction
+      || this.state.direction || this.state.purpose || this.state.mode !== 'rewrite_draft' || this.state.options.instruction
       || this.state.options.tone !== 'original' || this.state.options.includeRelationshipContext);
   }
   private state: ReplySessionState = { revision: 0, scopeRevision: 0, contactId: null, generationBlock: null,
     options: defaults(), mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null },
     messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
-    targetMessageId: null, direction: '', phase: 'idle', result: null, selectedCandidateId: null, canRetry: false };
+    targetMessageId: null, direction: '', purpose: '', phase: 'idle', result: null, selectedCandidateId: null, canRetry: false };
   private sourceCheck: AbortController | undefined;
   private heldResult: { result: NonNullable<ReplySessionState['result']>; selectedCandidateId: string | null } | undefined;
   private draft = '';
@@ -173,6 +173,14 @@ export class ReplySession {
     }
     return this.getState();
   }
+  updatePurpose(update: import('../../shared/reply-bridge').ReplyPurposeUpdate): ReplySessionState {
+    this.assertScope(update);
+    if (this.state.mode !== 'initiate_conversation') throw new Error('请先选择主动聊聊。');
+    if (update.purpose !== this.state.purpose) {
+      this.invalidateInput(); this.publish({ purpose: update.purpose });
+    }
+    return this.getState();
+  }
 
   async generate(selection: GenerateReply): Promise<void> {
     const contactState = this.assertScope(selection);
@@ -183,14 +191,17 @@ export class ReplySession {
     const contact = contactState.contacts.find((item) => item.contactId === selection.contactId)!;
     const options = this.state.options;
     const target = this.state.messages.items.find((item) => item.messageId === this.state.targetMessageId);
-    if (this.state.mode === 'rewrite_draft' ? !contactState.draft.trim() : !target || !this.state.direction.trim()) return;
+    if (this.state.mode === 'rewrite_draft' ? !contactState.draft.trim()
+      : this.state.mode === 'initiate_conversation' ? !this.state.purpose.trim() : !target || !this.state.direction.trim()) return;
     this.notifyInputChanged();
     const common = { contactId: selection.contactId, contactDisplayName: contact.displayName };
     const input: ReplyInputSnapshot = this.state.mode === 'rewrite_draft'
       ? { ...common, mode: 'rewrite_draft', draftText: contactState.draft.trim(),
         userInstruction: [tones[options.tone], options.instruction.trim()].filter(Boolean).join('\n') || null,
         includeRelationshipContext: options.includeRelationshipContext }
-      : { ...common, mode: 'reply_to_message', target: structuredClone(target!), direction: this.state.direction.trim() };
+      : this.state.mode === 'initiate_conversation'
+        ? { ...common, mode: 'initiate_conversation', purpose: this.state.purpose.trim() }
+        : { ...common, mode: 'reply_to_message', target: structuredClone(target!), direction: this.state.direction.trim() };
     if (selection.newRequest || !this.lastAttempt) this.lastAttempt = { input, requestKey: randomUUID() };
     const attempt = this.lastAttempt;
     this.cancelPending();
@@ -260,7 +271,7 @@ export class ReplySession {
       this.publish({ scopeRevision: state.scopeRevision, contactId: state.selectedContactId,
         options: defaults(), mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null },
         messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
-        targetMessageId: null, direction: '', phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false });
+        targetMessageId: null, direction: '', purpose: '', phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false });
       this.beginMessageNotice();
     } else if (state.draft !== this.draft) {
       this.draft = state.draft;

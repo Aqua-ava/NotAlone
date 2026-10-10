@@ -1,6 +1,6 @@
 # 04：明确目的的主动联系入口
 
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/01 回应场景与明确意愿直达候选](01-response-scene-entry.md)
 
@@ -35,5 +35,7 @@ Blocked by: [conversation-reply-strategy/01 回应场景与明确意愿直达候
 本票不授权OCR、真实微信读取/发送、外部模型调用、部署或push；也不提前实现其他票。
 
 ## Comments
+
+2026-10-11 B 实施：公共输入为 InitiateConversation(purpose: ConfirmedDirection)，沿用 GenerateReply/ReplyService；HTTP content.type=initiate_conversation，purpose为独立字段，无target_message_id。user_purpose保留为独立证据，050扩展原白名单。明确目的直接比较候选，切换场景不调用模型、不改变草稿或回复方向。自动类型检查及回复单元回归已通过；真实PG待048/049连续迁移集成，公开页面case已编写，尚未执行。
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。

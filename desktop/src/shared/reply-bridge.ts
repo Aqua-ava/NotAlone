@@ -9,11 +9,12 @@ export interface RewriteOptions {
 }
 export interface RewriteOptionsUpdate extends ContactSelection { options: RewriteOptions; }
 export interface GenerateReply extends ContactSelection { newRequest: boolean; }
-export type ReplyMode = 'rewrite_draft' | 'reply_to_message';
+export type ReplyMode = 'rewrite_draft' | 'reply_to_message' | 'initiate_conversation';
 export interface ReplyModeUpdate extends ContactSelection { mode: ReplyMode; }
 export interface ReplyMessagePageRequest extends ContactSelection { older: boolean; }
 export interface ReplyMessageSelection extends ContactSelection { messageId: string; }
 export interface ReplyDirectionUpdate extends ContactSelection { direction: string; }
+export interface ReplyPurposeUpdate extends ContactSelection { purpose: string; }
 export interface ReplyMessage {
   messageId: string;
   speaker: 'user' | 'contact' | 'system';
@@ -51,7 +52,13 @@ export interface DirectedReplySnapshot {
   target: ReplyMessage;
   direction: string;
 }
-export type ReplyInputSnapshot = RewriteSnapshot | DirectedReplySnapshot;
+export interface ProactiveReplySnapshot {
+  mode: 'initiate_conversation';
+  contactId: string;
+  contactDisplayName: string;
+  purpose: string;
+}
+export type ReplyInputSnapshot = RewriteSnapshot | DirectedReplySnapshot | ProactiveReplySnapshot;
 export interface ReplyResult {
   replyRequestId: string;
   input: ReplyInputSnapshot;
@@ -72,6 +79,7 @@ export interface ReplySessionState {
   messageNotice: ReplyMessageNotice;
   targetMessageId: string | null;
   direction: string;
+  purpose: string;
   phase: 'idle' | 'waiting' | 'ready' | 'failed';
   errorCode?: ReplyFailureCode;
   sourceAvailability?: 'checking' | 'failed';
@@ -90,6 +98,7 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   retrySourceValidation(selection: ContactSelection): Promise<void>;
   selectMessage(selection: ReplyMessageSelection): Promise<ReplySessionState>;
   updateDirection(update: ReplyDirectionUpdate): Promise<ReplySessionState>;
+  updatePurpose(update: ReplyPurposeUpdate): Promise<ReplySessionState>;
   generate(selection: GenerateReply): Promise<void>;
   selectCandidate(selection: ReplyCandidateSelection): Promise<ReplySessionState>;
   editCandidate(edit: ReplyCandidateEdit): Promise<ReplySessionState>;
