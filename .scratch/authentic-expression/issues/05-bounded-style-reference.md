@@ -54,3 +54,9 @@ Blocked by: [authentic-expression/02 当前意图优先的生成与改写](02-cu
 具名`style-reference`公开页面已准备，验证保存七项→实际使用五项展示→同键→删除→旧重放拒绝和跨联系人，但尚未执行，由总协调有限预约。最终system/messages/tools/schema/输出预留总预算尚待A12正式接口，600字符不是替代计量，不能据当前切片标该验收项通过。真实B探索、会话重连与删除的组合仍由E06按真实依赖接续；不关闭本票，不运行App/OCR/微信、外部模型、自动采纳门禁、push／发布／部署。
 
 接续实际证据：总协调已将`c376d0a`正式集成为`37d5b70`，186回复单元、51真实HTTP／PG、type通过，隔离库剩余0；`style-reference`实际公开组exit0，七保存／五有界实际引用展示／同键0新增调用／删除及旧键拒绝／跨联系人全部到达，quiet10、active0／onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false。随后消费A08正式恢复主题后，recovery＋style-reference再次全green，quiet26且收尾确认。原待运行记录属于此前阶段，不作为最新状态。A12最终完整请求预算仍待正式接线，本票保持claimed，不把这些结果记为总预算或E06全组合完成。
+
+完整请求预算接续：消费A12正式公共切片`c4e31ef`为`e1d2274`，实际运行时在Skill动态system生效后逐轮核验全部最终请求；未知真实供应商能力／计量保持拒绝，没有外部调用。当前5完整／600字符只限制取材，不替代总预算。新增`test_style_reference_budget_api`沿生产HTTP生成与显式绑定合成JSON/framing协议验证：无样本基础总量+1容量时，加入五完整有效样本立即502／reply_budget_exceeded、零追加模型调用；删除样本后同容量允许WARNING并正常生成。能力未知且有样本时UNAVAILABLE，计量和模型零调用、候选0；实际read_file补入完整Skill正文后的第二轮EXCEEDED，只发生第一轮Tool调用，不提交新增候选、不截断原意图或样本。
+
+Conda NotAlone／backend内`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src python -m unittest tests.integration.server.test_style_reference_budget_api -q`实际3项GREEN／4.211秒。counter完整最终载荷与真实受控模型实参逐项对照，使用实际输出reserve4096；这是合成协议的精确单位，不外推供应商token。正式001–052随机库按夹具精确清理。该公共guard原行为已满足新反例，不修改产品制造RED；相关联跑和两轴接续。完整助手讨论历史sample依赖仍待A唯一sameconn只读契约，B探索guard由B负责，E05/E06保持真实claimed状态。
+
+相关联跑实际44项真实HTTP／正式001–052随机PG全部GREEN／71.560秒、skip0，八个本轮Core夹具数据库精确核对剩余0；含新预算／Skill组合与原C有界参考／场景／删除、B公开探索／三声明／组消息。样本竞态的既有失败标记租约诊断保留，原拒绝／候选0断言未弱化；没有新增迁移、运行时或真实模型质量结论。
