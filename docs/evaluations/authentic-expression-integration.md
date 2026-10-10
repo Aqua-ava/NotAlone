@@ -50,6 +50,22 @@ PYTHONPATH=src python -m tests.fidelity_capture --capture ../desktop/artifacts/h
 
 本轮完整回复单元186、TypeScript及safe40通过。合并的三个入口／夹具冲突限定审查两轴均0，保留原白名单、最多两组、有限时段与OS租约。首次未显式给隔离URL而误连旧测试库的31项运行有12个持久层错误及A模块skip；该失败保留，随后正确隔离复验未修改旧库。尚未运行本树公开页面，E02/E03仍claimed。
 
+## E02/E03：正式树公开路径接续
+
+总协调已将统一切片集成为`a2b6ae6`，并在正式树串行执行两个有限公开页面入口，复用生产React／controller／具名bridge／认证HTTP及正式迁移后的随机PG。`fidelity-intent --timeout-seconds 120`四例三输入green，quiet9；`fidelity-content --timeout-seconds 120`九例及无效结构、越权引用、模型期间来源撤回拒绝green，quiet19。两组均active0／onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false。上述GREEN说明路径与判定传播通过，故意语义错误仍按原依据失败。
+
+- `authentic-expression-intent-public-current-v2.json`：4例、契约失败0、故意保真失败1，调用4／873.628417ms。
+- `authentic-expression-content-public-v1.json`：9例、契约失败0、故意保真失败7，调用9／2648.521791ms。
+
+两份报告来自root已交实际捕获，全部合成开发集、真人0／qualityfalse；自然度、关系适配及本人相似度unknown。旧HTTP报告与旧三例转换独立保留。重建只读已有捕获，不增加模型调用：
+
+```bash
+PYTHONPATH=src python -m tests.fidelity_capture --capture /Users/local-user/learn/NotAlone/desktop/artifacts/headless-pages/fidelity-intent-current-observations.json --case-spec tests/fixtures/fidelity/intent-public-current-review.json --output ../docs/evaluations/authentic-expression-intent-public-current-v2.json
+PYTHONPATH=src python -m tests.fidelity_capture --capture /Users/local-user/learn/NotAlone/desktop/artifacts/headless-pages/fidelity-content-observations.json --case-spec tests/fixtures/fidelity/content-public-review.json --output ../docs/evaluations/authentic-expression-content-public-v1.json
+```
+
+原待运行页面现已实际完成，E02/E03自动契约和失败呈现据此收口；真实模型质量和真人验收按用户范围跳过，未将其记为质量通过。以`c376d0a`为固定点的两轴限定审查最终0，逐例比对两份源捕获及resolved范围；没有为文档再次运行模型或页面。后续持久Skill探索版本、会话恢复／删除、连续修改及样本组合由E06覆盖。
+
 ## E05：独立有界参考切片
 
 表达参考独立于事实evidence/citation，最多五个完整有效样本；600字符只是额外取数界限，完整请求总预算必须消费A12最终system/messages/tools/schema和输出预留计量。本切片尚未取得该最终接口，不把模型调用的合成契约结果记成总预算通过。默认纯草稿不取样本，方向探索不装配样本port；实际B探索载荷仍待E06验证。
