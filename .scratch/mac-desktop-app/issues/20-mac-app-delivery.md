@@ -120,3 +120,13 @@ Spec: ../spec.md
 - 2026-10-10（签名临时文件修复收口）：固定 `e23812f → 9f77aa3` 独立 Standards 硬违规/判断建议 0/0，Spec 新问题 0。两轴确认 staging 内 plist 内容和权限不变、现有 finally 清理、公共命令接缝与证据一致，没有新增执行能力或把构建当作现场验收。评审只读未新增运行，结果副本保存于本轮自有忽略目录的 `review-results.json`。4 份改动文档的 56 条本地链接、原票 open/needs-info 与四项未勾、总清单 8/3/4 分类及 `git diff --check` 通过。下一步仍按精确上游材料、有限现场时段、模型预算或资源关联条件推进；不重复已通过构建或新增无需求工具。
 
 - 2026-10-10（本次有限复制／调度时段）：任务 10 在源码 App 中完成真实系统剪贴板与输入小窗隐藏／恢复；本票保留的官方输入候选 App 首次以独立配置通过统一 test:app 启动，管理窗口就绪后按短预约到期收尾，runner 预期退出 124、自有 PID/userData 回收、租约 absent。该路径不是 Finder 启动，后端未连接、CLI／探针不可用；没有初始化或运行微信渠道，不构成完整包复制、文件选择、快捷键、权限或产品停读验收。任务 10 已收口，任务 18 及本票来源／数据／最终系统验收继续未完成；State 保持 open/needs-info，四项原验收不勾选。证据见 `desktop/artifacts/native-copy-scheduling-20261010-1500/`。
+
+- 2026-10-10（第二次有限现场：签名包原生能力补验）：用户“现在就可以”授权当前现场后，明确 15:23–15:43（UTC+8）、最多两次启动。保留的官方输入候选包实际完成 `candidate-copy.spec.ts` 1/1（5.8 秒）与 `native-desktop-acceptance.spec.ts` 1/1（3.8 分钟），总 2/2、runner 退出 0；后者沿既有 App/HTTP 公共接缝使用生产系统文件选择器，选择本轮单联系人合成 JSONL，真实隔离 HTTP/PG 完成 6 条消息及全部导入任务核验。外部模型由本地合成模型替换，不能据此宣称语义质量达标。新增验收场景仅显式 flag 启用，默认全量跳过，不调用快捷键回调或替换对话框。
+
+  用户物理 `Command+Shift+Y` 第一次唤起并确认“小窗出现了”；程序观察第二次阶段同一窗口隐藏、仍为两个窗口，随即正常菜单退出。用户反馈“不行了，现在小窗都不能呼出来了”，与 15:30:34 退出及当前 PID 不存在的记录相符；这是时序解释，不把程序状态写成人工认可隐藏体验。测试原先未提前说明确认隐藏后会退出，现只补明确提示，未因提示修改重跑真实 App。启动额度已全部用完；快捷键退出后注销，现场隐藏体验仍待下轮确认。
+
+  实际命令（Conda `NotAlone`，`desktop/` 下）：`NOTALONE_NATIVE_DESKTOP_ACCEPTANCE=1 NOTALONE_TEST_APP_EXECUTABLE=/Users/local-user/learn/NotAlone/desktop/artifacts/helper-upstream-20261010.onrvwc/packaged/NotAlone-darwin-arm64/NotAlone.app/Contents/MacOS/NotAlone npm run test:app -- --interactive --coordinator main-agent --from 2026-10-10T15:23:00+08:00 --until 2026-10-10T15:43:00+08:00 --max-launches 2 --output artifacts/native-system-20261010-1523/results -- tests/candidate-copy.spec.ts tests/native-desktop-acceptance.spec.ts`。源测试输出、精确资源归属及程序结果保留在 `desktop/artifacts/native-system-20261010-1523/`，人工反馈另记 `verification.json`。末次自有 PID 已退出，userData/夹具目录已清理，`test:app:status` 为 absent；库由自有夹具正常退出清理，未另做 PG 目录查询。只处理合成资料，未读取原私人剪贴板；系统文件选择器初始默认目录展示文件名，但未打开其他文件。
+
+  Finder 仍缺与最终包匹配的受控隔离启动路径，不能通过启动默认业务配置冒充验收；微信测试会话虽已准备，现有最小采集生产路径仍缺，CUA 全窗/整棵 AX 及旧整窗后裁剪均不在允许范围，本轮没有读取微信。WCDB 精确构建/许可、初始化/真实同步、定位/权限与退出停读仍缺；State/Triage、原依赖及四项验收全部保留。最终签名/类型/安全检查与独立两轴评审随后补齐。
+
+  补提示后的 `npm test` 类型检查及 38/38 安全组通过（10.65 秒），没有再启动 App 或重跑原生组；候选包实机前后 `codesign --verify --deep --strict --verbose=2` 均通过，`npm run test:app:status` 再次 absent。4 份改动文档的 65 条本地链接、总清单 13 项（讨论8/实现3/验收2）、本票 open/needs-info 与四项未勾、`git diff --check` 均通过。分开的用户反馈和末次自有资源只读复查已写入上述忽略目录的 `verification.json`，独立双轴复核随后补齐；未新增权限、私人数据、模型预算或远端操作。

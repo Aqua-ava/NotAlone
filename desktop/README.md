@@ -197,6 +197,10 @@ npm run test:app:status  # 只读租约归属线索，App 不运行，不自动�
 
 `tests/app-test-expiry.spec.ts` 只在 `NOTALONE_APP_TEST_EXPIRY_ACCEPTANCE=1` 时执行，默认全量跳过。该场景故意等待短预约到期，命令截止须在 60 秒内且位于用户认可时段；预期 runner 返回 124，Playwright 的 interrupted 不是普通 PASS。收口须同时核验窗口 ready、自有 PID／userData 回收及租约 absent。2026-10-10 已用保留的严格签名候选 App 完成上述到期检查；这不证明产品认证停读或完整 App 交付。
 
+`tests/native-desktop-acceptance.spec.ts` 只在 `NOTALONE_NATIVE_DESKTOP_ACCEPTANCE=1` 时执行，默认全量跳过；必须通过上述预约门禁，并以 `NOTALONE_TEST_APP_EXECUTABLE` 指定实际签名包可执行文件。沿用隔离导入夹具的真实 HTTP/PG 与合成资料，等待现场操作真实系统文件选择器和两次物理快捷键，不替换文件选择结果或调用快捷键回调。单场最多 8 分钟，文件选择与每次按键各最多等待 3 分钟，预约截止仍优先。观察到同一小窗隐藏后正常菜单退出，退出后系统快捷键注销；程序窗口状态与用户对操作体验的确认分别记录。
+
+2026-10-10 15:23–15:43（UTC+8）的第二次有限现场预约最多启动 2 次。官方输入候选签名包的 `candidate-copy` 与上述原生场景实际 2/2 通过：真实剪贴板、单文件选择及 6 条合成消息的导入/任务核验成功。用户确认第一次物理 `Command+Shift+Y` 唤起；程序随后观察到同一小窗隐藏并于 15:30:34 正常退出，用户反馈“现在小窗都不能呼出来了”，隐藏体验仍未获人工确认。本轮末次 PID、userData、夹具目录已回收，租约 absent；没有运行真实微信、外部模型或 Finder。原始结果与分开的人工反馈保留于 `artifacts/native-system-20261010-1523/`；任务 20 继续未完成。
+
 状态文件和 PID 只提供线索。出现 `app_test_locked`、`app_test_lease_unsafe` 或 `app_test_cleanup_unconfirmed` 时，主 Agent 必须先核验上轮自己创建的资源已收尾；未知归属时继续暂停，不能以删除锁或按进程名 kill 继续测试。恢复旧工作树之前必须先合入最新集成提交并审计新增启动路径；尚未合入门禁的旧脚本不会被机器租约自动拦截，暂停/恢复由主 Agent 协调，不新增常驻监控。
 
 原 [App/HTTP 测试接缝](../.scratch/mac-desktop-app/spec.md)继续保留。没有可靠独立桌面 runner 时将真实 UI 项列为预约验收，不用 DOM 检查替代原证据。以下测试组说明的是既有约定和已实现夹具范围，本轮安全 CLI 通过不会更新其实际 App 验收结果。
