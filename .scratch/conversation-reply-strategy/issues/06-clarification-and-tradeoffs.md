@@ -1,6 +1,6 @@
 # 06：两种场景的关键澄清与取舍
 
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环](02-understanding-and-direction.md)；[conversation-reply-strategy/04 明确目的的主动联系入口](04-proactive-purpose-entry.md)
 
@@ -36,5 +36,7 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 本票不授权OCR、真实微信读取/发送、外部模型调用、部署或push；也不提前实现其他票。
 
 ## Comments
+
+2026-10-11 接续：同一应用组件覆盖回应/主动两场景的关键问题应答，只沿服务器已有选择、问题消失且无剩余歧义时继续生成；回答/纠正字段不建立确认。暂停任务旧问题拒绝，问题及操作键绑定A输入UUID，丢应答同键复用新输入，失败纠正明确重试不再次推进输入。17项组件测试及两轴该组件0；调用中Skill revision变化不能发布的原red已修正。尚未公开装配或实际PG，不代表本票公开验收通过；正式051/052及受控页面仍在接续。
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。

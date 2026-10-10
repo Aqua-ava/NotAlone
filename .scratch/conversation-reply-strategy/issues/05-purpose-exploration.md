@@ -1,6 +1,6 @@
 # 05：主动目的探索与确认
 
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环](02-understanding-and-direction.md)；[conversation-reply-strategy/04 明确目的的主动联系入口](04-proactive-purpose-entry.md)
 
@@ -35,5 +35,7 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 本票不授权OCR、真实微信读取/发送、外部模型调用、部署或push；也不提前实现其他票。
 
 ## Comments
+
+2026-10-11 接续：已建立同一探索应用组件，主动模糊目的只返回方向或关键问题，选择/直接输入意愿才调用既有生成端口；不伪造目标。探索操作键与A持久输入UUID分开，确认只取服务器保存的选择证明，NoSkill延续到生成。17项组件测试通过，含原失败后意愿丢失、暂停旧问题、旧意愿回退及Skill换组重试反例red→green，两轴该组件最终0。未公开装配、未用模拟Store冒充真实HTTP/PG；等待正式A051同事务输入记录，继续接B052及公开页面，验收项保持未勾选。
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
