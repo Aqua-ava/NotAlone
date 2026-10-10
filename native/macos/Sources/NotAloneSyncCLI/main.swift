@@ -16,7 +16,7 @@ private struct ProbeOptions {
         [--crop x,y,width,height] [--show-text]
       swift run notalone-sync-probe --session [--show-text]
       swift run notalone-sync-probe --session --json [--minimal-region]
-      swift run notalone-sync-probe --calibrate-minimal-region --json
+      swift run notalone-sync-probe --calibrate-minimal-region --json [--coordinates]
 
     选项：
       --watch              持续观察前台微信窗口；默认只采集一次。
@@ -27,6 +27,7 @@ private struct ProbeOptions {
       --json               与 --session 配合输出机器可读 JSON，供本机同步驱动解析。
       --minimal-region     仅与 --session --json 配合；不能绕过最小区域安全政策。
       --calibrate-minimal-region  用户框选五处最小区域，只输出待校验几何，不截图。
+      --coordinates        仅与校准配合，从stdin读取最多4096字节的明确坐标，仅核对元数据。
       --self-test          运行合成数据自检，不截取屏幕。
       --help               显示本说明。
 
@@ -93,6 +94,14 @@ struct NotAloneSyncCLI {
     static func main() async {
         do {
             let arguments = Array(CommandLine.arguments.dropFirst())
+            if arguments == ["--calibrate-minimal-region", "--json", "--coordinates"] {
+                var data = Data()
+                while data.count <= 4096, let chunk = try FileHandle.standardInput.read(upToCount: 4097 - data.count), !chunk.isEmpty {
+                    data.append(chunk)
+                }
+                printJsonLine(RegionCalibration.selectCoordinates(data))
+                return
+            }
             if arguments == ["--calibrate-minimal-region", "--json"] {
                 printJsonLine(RegionCalibration.run())
                 return

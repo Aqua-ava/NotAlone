@@ -6,6 +6,39 @@ import Foundation
 // selected-awaiting-verification 不能作为 SessionCaptureSafety 的可信布局。
 @MainActor
 public enum RegionCalibration {
+    // 坐标入口仍只生成待校验几何；允许在本App表单获得焦点时核对窗口元数据。
+    public static func selectCoordinates(_ data: Data) -> [String: Any] {
+        guard data.count <= 4096,
+              let input = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              Set(input.keys) == ["schemaVersion", "windowSize", "regions"],
+              number(input["schemaVersion"]) == 1,
+              let size = input["windowSize"] as? [String: Any], Set(size.keys) == ["width", "height"],
+              let width = number(size["width"]), let height = number(size["height"]),
+              let proposed = input["regions"] as? [String: Any], Set(proposed.keys) == Set(calibrationFields),
+              let context = CalibrationContext.read(requireForeground: false),
+              width == context.frame.width, height == context.frame.height else {
+            return ["ok": false, "error": "calibration_coordinates_invalid"]
+        }
+        let bounds = CGRect(origin: .zero, size: context.frame.size)
+        var regions: [String: CGRect] = [:]
+        for field in calibrationFields {
+            guard let values = proposed[field] as? [String: Any], Set(values.keys) == ["x", "y", "width", "height"],
+                  let x = number(values["x"]), let y = number(values["y"]),
+                  let width = number(values["width"]), let height = number(values["height"]) else {
+                return ["ok": false, "error": "calibration_coordinates_invalid"]
+            }
+            let rectangle = CGRect(x: x, y: y, width: width, height: height)
+            guard allowedCalibrationRegion(rectangle, field: field, bounds: bounds, regions: regions) else {
+                return ["ok": false, "error": "calibration_coordinates_invalid"]
+            }
+            regions[field] = rectangle
+        }
+        guard CalibrationContext.read(requireForeground: false) == context else {
+            return ["ok": false, "error": "calibration_window_changed"]
+        }
+        return ["ok": true, "selection": context.selection(regions)]
+    }
+
     public static func run() -> [String: Any] {
         let application = NSApplication.shared
         application.setActivationPolicy(.accessory)
@@ -14,6 +47,35 @@ public enum RegionCalibration {
         application.run()
         coordinator.finish()
         return coordinator.result ?? ["ok": false, "error": "calibration_cancelled"]
+    }
+}
+
+private let calibrationFields = ["displayName", "selectedRowName", "verticalDivider", "headerDivider", "selectedHighlight"]
+
+private func number(_ value: Any?) -> Double? {
+    guard let value = value as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID(), value.doubleValue.isFinite else { return nil }
+    return value.doubleValue
+}
+
+private func allowedCalibrationRegion(_ rectangle: CGRect, field: String, bounds: CGRect, regions: [String: CGRect]) -> Bool {
+    guard bounds.contains(rectangle), rectangle.width >= 1, rectangle.height >= 1,
+          !regions.values.contains(where: { $0.intersects(rectangle) }) else { return false }
+    switch field {
+    case "displayName": return rectangle.width <= 400 && rectangle.height <= 44
+    case "selectedRowName": return rectangle.width <= 300 && rectangle.height <= 32
+    case "verticalDivider":
+        return rectangle.width <= 4 && rectangle.height >= 30
+            && rectangle.maxX < regions["displayName"]!.minX
+            && rectangle.minX > regions["selectedRowName"]!.maxX
+    case "headerDivider":
+        return rectangle.height <= 4 && rectangle.width >= 30
+            && rectangle.minY > regions["displayName"]!.maxY
+            && rectangle.minX >= regions["verticalDivider"]!.maxX
+    default:
+        return rectangle.width <= 4 && rectangle.height <= 32
+            && rectangle.maxX < regions["selectedRowName"]!.minX
+            && rectangle.minY < regions["selectedRowName"]!.maxY
+            && rectangle.maxY > regions["selectedRowName"]!.minY
     }
 }
 
@@ -144,7 +206,7 @@ private final class CalibrationCoordinator {
 
 @MainActor
 private final class CalibrationView: NSView {
-    private let fields = ["displayName", "selectedRowName", "verticalDivider", "headerDivider", "selectedHighlight"]
+    private let fields = calibrationFields
     private let instructions = [
         "1/5 框出顶部当前会话名；仅名字，不含聊天正文。",
         "2/5 框出左侧当前选中会话的名字；不含头像、预览或其他联系人。",
@@ -201,25 +263,7 @@ private final class CalibrationView: NSView {
         start = nil; dragging = nil; needsDisplay = true
     }
     private func allowed(_ rectangle: CGRect, field: String) -> Bool {
-        guard bounds.contains(rectangle), rectangle.width >= 1, rectangle.height >= 1,
-              !regions.values.contains(where: { $0.intersects(rectangle) }) else { return false }
-        switch field {
-        case "displayName": return rectangle.width <= 400 && rectangle.height <= 44
-        case "selectedRowName": return rectangle.width <= 300 && rectangle.height <= 32
-        case "verticalDivider":
-            return rectangle.width <= 4 && rectangle.height >= 30
-                && rectangle.maxX < regions["displayName"]!.minX
-                && rectangle.minX > regions["selectedRowName"]!.maxX
-        case "headerDivider":
-            return rectangle.height <= 4 && rectangle.width >= 30
-                && rectangle.minY > regions["displayName"]!.maxY
-                && rectangle.minX >= regions["verticalDivider"]!.maxX
-        default:
-            return rectangle.width <= 4 && rectangle.height <= 32
-                && rectangle.maxX < regions["selectedRowName"]!.minX
-                && rectangle.minY < regions["selectedRowName"]!.maxY
-                && rectangle.maxY > regions["selectedRowName"]!.minY
-        }
+        allowedCalibrationRegion(rectangle, field: field, bounds: bounds, regions: regions)
     }
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { completed(nil); return }

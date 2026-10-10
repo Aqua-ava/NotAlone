@@ -5,19 +5,18 @@ import { test, selectMenu } from './app-fixture';
 
 test.skip(process.env.NOTALONE_FOREGROUND_CALIBRATION_ACCEPTANCE !== '1', '须由主协调者安排有限现场时段');
 test.use({ appEnvironment: { NOTALONE_SYNC_PROBE: path.resolve('../native/macos/build/cli/notalone-sync-probe') } });
-// 只经真实 App 的公开菜单等待用户框选；不替换系统输入或采集微信画面。
-test('用户框选最小定位区域后保存无图像的待校验布局', async ({ runningApp }) => {
+// 只经真实 App 的公开菜单等待明确选区；现场操作者须由用户认可，不替换系统输入。
+test('明确选择最小定位区域后保存无图像的待校验布局', async ({ runningApp }) => {
   test.setTimeout(420_000);
   const { app, appProcess, userData } = runningApp;
   const manager = await app.firstWindow();
   await manager.waitForURL('notalone://app/index.html#manager');
   await writeFile(test.info().outputPath('owned-app.json'), JSON.stringify({ pid: appProcess.pid, userData }), { mode: 0o600 });
   const selectionPath = path.join(userData, 'foreground-layout-selection.json');
-  process.stdout.write('foreground_calibration_human_step: 请手工打开无私人资料的微信测试会话；按校准框内说明选区，最后按回车确认。\n');
+  process.stdout.write('foreground_calibration_operator_step: 本轮获认可的现场操作者按校准框说明选择五处最小区域；仅保存待校验几何。\n');
   await selectMenu(app, '窗口', '校准微信最小定位区域…');
   await expect.poll(async () => {
-    try { return JSON.parse(await readFile(selectionPath, 'utf8')); }
-    catch { return null; }
+    try { return JSON.parse(await readFile(selectionPath, 'utf8')) as Record<string, unknown>; } catch { return null; }
   }, { timeout: 380_000 }).not.toBeNull();
   const selection = JSON.parse(await readFile(selectionPath, 'utf8')) as Record<string, unknown>;
   expect(Object.keys(selection).sort()).toEqual(['processId', 'regions', 'schemaVersion', 'state', 'wechatBuild', 'wechatVersion', 'windowFrame', 'windowId'].sort());
