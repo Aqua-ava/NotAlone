@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -14,13 +16,45 @@ REVIEW_DIMENSIONS = (
 )
 INPUT_FIELDS = ("current_intent", "available_facts", "unknowns", "allowed_changes")
 OPTIONAL_INPUT_FIELDS = ("current_message", "recent_context")
+BOUNDARY_DIMENSIONS = (
+    "intent", "unsupported_facts", "unsupported_commitments", "psychological_attribution",
+)
+REVIEWER_KINDS = ("human", "synthetic_fixture", "agent_review", "unknown")
+_EVALUATION_FIELDS = frozenset({
+    "expectation", "expected_answer", "expected_intent", "forbidden_additions", "labels", "tags", "split",
+    "reviews", "semantic_review", "reviewer", "reviewer_kind", "score", "dimensions", "details",
+})
+
+
+def require_unlabelled_input(value: Any) -> None:
+    """输入任意嵌套层级都不能混入评价字段。"""
+
+    if isinstance(value, dict):
+        if _EVALUATION_FIELDS.intersection(value):
+            raise ValueError("模型输入混入评价资料。")
+        for child in value.values():
+            require_unlabelled_input(child)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            require_unlabelled_input(child)
+
+
+def annotated_content_status(details: dict[str, Any]) -> str:
+    """只汇总已有分维标注，不依据输入或输出推断语义。"""
+
+    statuses = [details[field]["status"] for field in BOUNDARY_DIMENSIONS if field != "intent"]
+    if "fail" in statuses:
+        return "fail"
+    return "unknown" if "unknown" in statuses else "pass"
 
 
 def generation_input(case: dict[str, Any]) -> dict[str, Any]:
     """白名单防止预期答案、评分标签及保留集划分进入模型输入。"""
 
-    return {**{key: case[key] for key in INPUT_FIELDS},
-            **{key: case[key] for key in OPTIONAL_INPUT_FIELDS if key in case}}
+    payload = {**{key: case[key] for key in INPUT_FIELDS},
+               **{key: case[key] for key in OPTIONAL_INPUT_FIELDS if key in case}}
+    require_unlabelled_input(payload)
+    return copy.deepcopy(payload)
 
 
 def _counts(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -47,6 +81,16 @@ def _counts(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "total_call_count": None if unknown_cost else known_calls,
         "total_elapsed_ms": None if unknown_cost else known_elapsed,
         "quality_verified": False, "dimensions": dimensions,
+        "human_fidelity_pass": sum(
+            row["semantic_review"].get("reviewer_kind") == "human"
+            and row["deterministic_contract"]["status"] == "pass"
+            and all(row["semantic_review"].get(field) == "pass"
+                    for field in ("intent", "unsupported_content")) for row in rows
+        ),
+        "reviewer_kinds": {
+            kind: sum(row["semantic_review"].get("reviewer_kind", "unknown") == kind for row in rows)
+            for kind in REVIEWER_KINDS
+        },
     }
 
 
@@ -111,7 +155,7 @@ def build_report(dataset: dict[str, Any], run: dict[str, Any]) -> dict[str, Any]
         elapsed_ms = None if attempt is None else attempt.get("elapsed_ms")
         calls = None if attempt is None else attempt.get("call_count")
         if attempt is not None and (
-            type(elapsed_ms) not in (int, float) or elapsed_ms <= 0
+            type(elapsed_ms) not in (int, float) or not math.isfinite(elapsed_ms) or elapsed_ms <= 0
             or type(calls) is not int or calls < 0
             or (status == "timeout" and calls < 1)
         ):
@@ -130,6 +174,21 @@ def build_report(dataset: dict[str, Any], run: dict[str, Any]) -> dict[str, Any]
                 raise ValueError("语义审阅必须明确标注者、依据及全部维度。")
             semantic = {key: review[key] for key in ("reviewer", "basis", *REVIEW_DIMENSIONS)}
             semantic["status"] = "reviewed"
+            kind = review.get("reviewer_kind", "unknown")
+            if kind not in REVIEWER_KINDS:
+                raise ValueError("语义审阅来源类型无效。")
+            semantic["reviewer_kind"] = kind
+            if "details" in review:
+                details = review["details"]
+                if not isinstance(details, dict) or set(details) != set(BOUNDARY_DIMENSIONS) or any(
+                    not isinstance(value, dict) or value.get("status") not in ("pass", "fail", "unknown")
+                    or not isinstance(value.get("basis"), str) or not value["basis"].strip()
+                    for value in details.values()
+                ):
+                    raise ValueError("保真分维审阅必须记录完整维度及判定依据。")
+                if semantic["intent"] != details["intent"]["status"] or semantic["unsupported_content"] != annotated_content_status(details):
+                    raise ValueError("总体审阅与分维标注不一致。")
+                semantic["details"] = copy.deepcopy(details)
         rows.append({
             "case_id": case["case_id"], "split": case["split"],
             "tags": case.get("tags", []), "generation_input": model_input,
@@ -138,6 +197,18 @@ def build_report(dataset: dict[str, Any], run: dict[str, Any]) -> dict[str, Any]
             "elapsed_ms": elapsed_ms, "call_count": calls,
             "deterministic_contract": contract, "semantic_review": semantic,
         })
+        if "actual_capture" in case:
+            actual = case["actual_capture"]
+            if not isinstance(actual, dict) or any(
+                not isinstance(actual.get(key), str) or not actual[key].strip()
+                for key in ("owner_id", "contact_id", "system_prompt")
+            ) or not isinstance(actual.get("payload"), dict):
+                raise ValueError("实际捕获必须记录范围、系统提示和模型载荷。")
+            require_unlabelled_input(actual["payload"])
+            rows[-1]["actual_capture"] = copy.deepcopy(case["actual_capture"])
+        for field in ("expected_intent", "pair_id"):
+            if field in case:
+                rows[-1][field] = copy.deepcopy(case[field])
     summary = _counts(rows)
     summary["by_split"] = {split: _counts([row for row in rows if row["split"] == split])
                            for split in ("development", "holdout")}

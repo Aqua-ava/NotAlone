@@ -1,0 +1,20 @@
+{
+  "data_kind": "synthetic",
+  "config": {"model": "controlled-scripted-langchain", "prompt_version": "fidelity-content-v1"},
+  "cases": [{
+    "case_id": "purpose-preserve", "split": "development", "labels": ["current-purpose", "public-http-pg"],
+    "expectation": {"intent": "只问近况，不承诺见面。", "forbidden_additions": ["见面安排或联系人动机"],
+                    "unknowns": ["对方近况、反应和真实模型是否服从"]}
+  }],
+  "reviews": [{
+    "case_id": "purpose-preserve", "reviewer_kind": "synthetic_fixture", "reviewer": "独立合成标注，非自动语义评分",
+    "dimensions": {
+      "intent": {"status": "pass", "basis": "当前目的只问近况，受控正文也只问近况。"},
+      "unsupported_facts": {"status": "pass", "basis": "当前没有历史消息，正文没有对近况作出断言。"},
+      "unsupported_commitments": {"status": "pass", "basis": "正文和依据没有增加见面或未来安排。"},
+      "psychological_attribution": {"status": "pass", "basis": "正文和依据没有归因联系人动机。"},
+      "naturalness": {"status": "unknown", "basis": "用户不参加本轮质量验收。"},
+      "relationship_fit": {"status": "unknown", "basis": "没有真人关系适配审阅。"}
+    }
+  }]
+}

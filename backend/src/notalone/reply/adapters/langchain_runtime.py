@@ -26,7 +26,7 @@ from langgraph.errors import GraphRecursionError
 from notalone.reply.adapters.async_runner import run_with_timeout
 
 from notalone.reply.context import ReplyContext, allows_history
-from notalone.reply.fidelity import FIDELITY_SYSTEM_PROMPT, generation_contract
+from notalone.reply.fidelity import FIDELITY_SYSTEM_PROMPT, factual_role, generation_contract
 from notalone.reply.runtime import (
     ReplyRuntimeResult,
     RuntimeCandidate,
@@ -741,6 +741,7 @@ def _request_text(prepared: ReplyContext) -> str:
         {
             "evidence_id": str(item.evidence_id),
             "kind": item.kind,
+            "factual_role": factual_role(item.kind),
             "text": item.text,
             # 状态与入选原因必须透传给模型：pending_candidate 的未确认
             # 标注不能只存在于应用层，否则模型可能把它写成确定事实。

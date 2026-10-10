@@ -1,0 +1,215 @@
+{
+  "data_kind": "synthetic",
+  "config": {
+    "model": "controlled-scripted-langchain",
+    "prompt_version": "fidelity-content-v1"
+  },
+  "cases": [
+    {
+      "case_id": "rewrite-preserve",
+      "split": "development",
+      "pair_id": "same-rewrite-intent",
+      "labels": [
+        "intent",
+        "public-http-pg",
+        "controlled-output"
+      ],
+      "expectation": {
+        "intent": "保留当前明确立场",
+        "forbidden_additions": [
+          "偷换为同意",
+          "新事实或具体行动承诺"
+        ],
+        "unknowns": [
+          "真实模型是否服从",
+          "自然度与本人相似度"
+        ]
+      }
+    },
+    {
+      "case_id": "rewrite-stance-error",
+      "split": "development",
+      "pair_id": "same-rewrite-intent",
+      "labels": [
+        "intent",
+        "public-http-pg",
+        "controlled-output"
+      ],
+      "expectation": {
+        "intent": "保留当前明确立场",
+        "forbidden_additions": [
+          "偷换为同意",
+          "新事实或具体行动承诺"
+        ],
+        "unknowns": [
+          "真实模型是否服从",
+          "自然度与本人相似度"
+        ]
+      }
+    },
+    {
+      "case_id": "reply-preserve",
+      "split": "development",
+      "pair_id": null,
+      "labels": [
+        "intent",
+        "public-http-pg",
+        "controlled-output"
+      ],
+      "expectation": {
+        "intent": "保留当前明确立场",
+        "forbidden_additions": [
+          "偷换为同意",
+          "新事实或具体行动承诺"
+        ],
+        "unknowns": [
+          "真实模型是否服从",
+          "自然度与本人相似度"
+        ]
+      }
+    },
+    {
+      "case_id": "purpose-preserve",
+      "split": "development",
+      "labels": [
+        "current-purpose",
+        "public-http-pg"
+      ],
+      "expectation": {
+        "intent": "只问近况，不承诺见面。",
+        "forbidden_additions": [
+          "见面安排或联系人动机"
+        ],
+        "unknowns": [
+          "对方近况、反应和真实模型是否服从"
+        ]
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "case_id": "rewrite-preserve",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "公开捕获案例的预先合成标注，非模型自动语义评分",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "原句不赞成，受控输出仍说不赞成。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "脚本正文未增加用户经历、当前外部状态或共享事实。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "脚本未新增具体行动或关系承诺；立场错误在intent单列。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "脚本正文与说明没有对联系人动机作断言。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "用户不参与本轮质量验收，受控说法标记不证明自然度。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "没有真人关系适配审阅证据。"
+        }
+      }
+    },
+    {
+      "case_id": "rewrite-stance-error",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "公开捕获案例的预先合成标注，非模型自动语义评分",
+      "dimensions": {
+        "intent": {
+          "status": "fail",
+          "basis": "原句不赞成，受控输出改成赞成；没有增加新事实或具体行动承诺。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "脚本正文未增加用户经历、当前外部状态或共享事实。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "脚本未新增具体行动或关系承诺；立场错误在intent单列。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "脚本正文与说明没有对联系人动机作断言。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "用户不参与本轮质量验收，受控说法标记不证明自然度。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "没有真人关系适配审阅证据。"
+        }
+      }
+    },
+    {
+      "case_id": "reply-preserve",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "公开捕获案例的预先合成标注，非模型自动语义评分",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "已确认方向拒绝参加，受控输出仍拒绝参加。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "脚本正文未增加用户经历、当前外部状态或共享事实。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "脚本未新增具体行动或关系承诺；立场错误在intent单列。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "脚本正文与说明没有对联系人动机作断言。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "用户不参与本轮质量验收，受控说法标记不证明自然度。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "没有真人关系适配审阅证据。"
+        }
+      }
+    },
+    {
+      "case_id": "purpose-preserve",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成标注，非自动语义评分",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "当前目的只问近况，受控正文也只问近况。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "正文和依据没有对当前近况作出断言，没有把历史陈述或主动目的升级为当前事实。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "正文和依据没有增加见面或未来安排。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "正文和依据没有归因联系人动机。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "用户不参加本轮质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "没有真人关系适配审阅。"
+        }
+      }
+    }
+  ]
+}

@@ -145,6 +145,7 @@ class HistoryToolTest(unittest.TestCase):
         message = payload["messages"][0]
         self.assertEqual(message["message_id"], str(MESSAGE_IDS[0]))
         self.assertEqual(message["role"], "contact")
+        self.assertEqual(message["factual_role"], "source_message_statement")
         # 检索层没有给出会话标识时如实为 null，不能伪造成当前绑定会话。
         self.assertIsNone(message["session_id"])
         self.assertEqual(message["source_ids"], [str(SOURCE_ID)])

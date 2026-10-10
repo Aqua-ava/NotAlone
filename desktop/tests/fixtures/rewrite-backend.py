@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import unittest
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ from notalone.application.memory_service import MemoryService
 from notalone.application.setup_service import SetupService
 from notalone.persistence.setup_owner_directory import PostgresOwnerDirectory
 from notalone.persistence.memory_store import PostgresMemoryStore
+from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
 from notalone.memory import MemoryCandidate, MemoryCategory
 from notalone.scopes import ContactScope
 from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
@@ -38,13 +40,16 @@ from tests.integration.server.core_business_flow_support import (
 class DesktopRewriteModel(ScriptedCoreModel):
     plans: list[dict[str, Any]] = []
     payloads: list[dict[str, Any]] = []
+    entered: Any = None
 
     def __init__(self) -> None:
         super().__init__()
         self.plans = []
         self.payloads = []
+        self.entered = threading.Event()
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        self.entered.set()
         self.wait_for_response()
         payload = next(
             json.loads(message.content) for message in messages
@@ -78,10 +83,10 @@ class DesktopRewriteModel(ScriptedCoreModel):
                 citations.append(result["messages"][0]["evidence_id"])
         self.responses.append(tool_response("ReplyRuntimeOutput", {
             "candidates": [{
-                "text": f"{plan.get('prefix', '我会晚一点回复你')}（说法{number + 1}）。",
-                "basis": ("保留本次草稿的事实和承诺范围。" if payload["input_mode"] == "rewrite_draft"
-                          else "依据选中的消息，在本次明确方向内组织表达。"),
-                "citation_ids": citations,
+                "text": plan.get("text", f"{plan.get('prefix', '我会晚一点回复你')}（说法{number + 1}）。"),
+                "basis": plan.get("basis", "保留本次草稿的事实和承诺范围。" if payload["input_mode"] == "rewrite_draft"
+                                  else "依据选中的消息，在本次明确方向内组织表达。"),
+                "citation_ids": plan.get("citation_ids", citations),
                 "risk_notes": plan.get("risk_notes", []),
             } for number in range(plan.get("count", 2))],
             "used_skill_version_id": None,
@@ -92,6 +97,7 @@ class DesktopRewriteModel(ScriptedCoreModel):
 class DesktopRewriteFixture(CoreBusinessFlowFixture, unittest.TestCase):
     production_model_wiring = True
     reply_model_factory = DesktopRewriteModel
+    dimension_release = None
 
     def _backend(self, owner_id: UUID) -> HttpBackend:
         priority = ModelPriorityControl()
@@ -201,6 +207,7 @@ def main() -> None:
                 fixture.reply_model.plans.append(command["plan"])
                 result = {}
             elif operation == "hold":
+                fixture.reply_model.entered.clear()
                 fixture.reply_model.pause_next_response()
                 result = {}
             elif operation == "release":
@@ -208,6 +215,7 @@ def main() -> None:
                 result = {}
             elif operation == "observations":
                 result = {"payloads": fixture.reply_model.payloads,
+                          "model_entered": fixture.reply_model.entered.is_set(),
                           "tool_names": fixture.reply_model.bound_tool_names,
                           "outbound": [str(message.content) for messages in fixture.reply_model.seen_calls
                                        for message in messages]}
@@ -219,6 +227,29 @@ def main() -> None:
                 result = {}
             elif operation == "older_messages":
                 fixture.add_older_messages(contact_ids[0])
+                result = {}
+            elif operation == "fidelity_history":
+                # 固定合成资料；仅调整本夹具甲的消息并确认本夹具空联系人绑定。
+                with psycopg.connect(fixture.database_url) as connection:
+                    source_id = connection.execute(
+                        "SELECT id FROM public.source_document WHERE owner_id=%s AND contact_id=%s",
+                        (fixture.owner_id, UUID(contact_ids[0])),
+                    ).fetchone()[0]
+                    connection.execute("""UPDATE public.message SET text_content='合成旧聊天：我去年住在台北。',
+                        occurred_at='2025-01-01T00:00:00Z' WHERE owner_id=%s AND contact_id=%s""",
+                                       (fixture.owner_id, UUID(contact_ids[0])))
+                    target_id = uuid4()
+                    connection.execute("""INSERT INTO public.message
+                        (id,owner_id,contact_id,speaker,message_type,text_content,occurred_at)
+                        VALUES (%s,%s,%s,'contact','text','合成当前邀请：今晚参加聚会吗？',now())""",
+                                       (target_id, fixture.owner_id, UUID(contact_ids[0])))
+                    connection.execute("""INSERT INTO public.message_source_ref
+                        (message_id,owner_id,contact_id,source_kind,source_document_id,source_locator,raw_payload)
+                        VALUES (%s,%s,%s,'source_document',%s,'synthetic:fidelity:2','{}'::jsonb)""",
+                                       (target_id, fixture.owner_id, UUID(contact_ids[0]), source_id))
+                fixture.bindings.create_binding(owner_id=fixture.owner_id, contact_id=empty_contact_id,
+                    channel="wechat", account_scope=f"synthetic-account-{fixture.owner_id}",
+                    conversation_locator=f"wxid_synthetic_{empty_contact_id}")
                 result = {}
             elif operation == "strategy_pending":
                 with psycopg.connect(fixture.database_url) as connection:

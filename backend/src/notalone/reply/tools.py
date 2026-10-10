@@ -16,6 +16,7 @@ from uuid import UUID
 from notalone.reply.context import ContextEvidence, ToolCallTrace
 from notalone.memory.timing import MemoryTiming
 from notalone.reply.errors import ReplyContextError, ReplyContextInvariantError
+from notalone.reply.fidelity import factual_role
 from notalone.retrieval import RetrievalError, RetrievalPort, RetrievedMessage
 from notalone.scopes import ContactScope
 
@@ -332,6 +333,7 @@ class HistoryToolAccess:
             "evidence_id": str(message.message_id),
             "message_id": str(message.message_id),
             "role": message.role,
+            "factual_role": factual_role("message"),
             "occurred_at": (
                 message.occurred_at.isoformat()
                 if message.occurred_at is not None

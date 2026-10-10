@@ -1,0 +1,11 @@
+[
+  {"case_id":"facts-error","empty_history":false,"output":{"text":"今天不参加聚会，我刚从台北回来。","basis":"按本次拒绝表达润色。"}},
+  {"case_id":"emotion-error","empty_history":false,"output":{"text":"今天不参加聚会，我最近特别焦虑。","basis":"按本次拒绝表达润色。"}},
+  {"case_id":"promise-error","empty_history":false,"output":{"text":"今天不参加聚会，明天一定见面。","basis":"按本次拒绝表达润色。"}},
+  {"case_id":"historical-state-error","empty_history":false,"output":{"text":"今天不参加聚会，你现在还住在台北。","basis":"旧消息有来源，所以能证明现在的住处。"}},
+  {"case_id":"gap-error","empty_history":true,"output":{"text":"今天不参加聚会。好久没联系了。","basis":"没有读到其他消息，所以很久没联系。"}},
+  {"case_id":"motive-error","empty_history":true,"output":{"text":"今天不参加聚会，你生气了才一直不理我。","basis":"对方没回复是因为生气。"}},
+  {"case_id":"basis-error","empty_history":true,"output":{"text":"今天不参加聚会。","basis":"本次草稿证明用户焦虑，对方也有疏远动机。"}},
+  {"case_id":"historical-preserve","empty_history":false,"output":{"text":"今天不参加聚会。","basis":"本次声明是今天不参加；来源只记录对方过去的住处，现状未知，不据此扩写。"}},
+  {"case_id":"conditional-preserve","empty_history":true,"output":{"text":"今天不参加聚会。","basis":"本次声明是拒绝参加；若以后想安排见面，可以再补充要求，这仅是条件性建议，不是本次承诺。","risk_notes":["没有历史材料，联系间隔和对方心理动机未知。"]}}
+]

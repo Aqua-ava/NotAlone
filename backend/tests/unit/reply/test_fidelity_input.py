@@ -20,7 +20,7 @@ from tests.unit.reply.test_langchain_vertical_slice import EmptySkillPort, ToolC
 
 
 class FidelityInputTests(unittest.TestCase):
-    def run_content(self, content):
+    def run_content(self, content, *, additional_evidence=()):
         scope = ContactScope(uuid4(), uuid4())
         primary_id = uuid4()
         rewrite = isinstance(content, RewriteDraft)
@@ -32,7 +32,11 @@ class FidelityInputTests(unittest.TestCase):
             ContextEvidence(primary_id, "user_draft" if rewrite else (
                 "user_purpose" if proactive else "message"), text, scope),
             ContextEvidence(uuid4(), "confirmed_memory", "合成旧习惯：用户过去经常答应参加。", scope),
-        )
+        ) + tuple(ContextEvidence(
+            uuid4(), kind, body, scope,
+            status="pending" if kind == "pending_candidate" else (
+                "candidate" if kind == "continued_candidate" else "active"),
+        ) for kind, body in additional_evidence)
         output = {"candidates": [{"text": "好，我参加。", "basis": "沿用过去常答应的表达。",
                                   "citation_ids": [str(primary_id)], "risk_notes": []}],
                   "used_skill_version_id": None}
@@ -89,6 +93,26 @@ class FidelityInputTests(unittest.TestCase):
         self.assertNotIn("target_message_id", payload)
         self.assertEqual(payload["evidence"][0]["kind"], "user_purpose")
         self.assertIn("不能改变本次立场", system)
+
+    def test_material_roles_do_not_upgrade_history_or_candidates_to_current_facts(self):
+        _, payload, system, _, _ = self.run_content(RewriteDraft(
+            draft_text="今晚不参加。", include_relationship_context=True,
+        ), additional_evidence=(
+            ("message", "合成旧聊天：我去年住在台北。"),
+            ("owner_memory", "用户过去喜欢参加聚会。"),
+            ("pending_candidate", "待确认：对方可能不高兴。"),
+            ("continued_candidate", "旧助手候选：下次一定参加。"),
+        ))
+        roles = {item["kind"]: item["factual_role"] for item in payload["evidence"]}
+        self.assertEqual(roles, {
+            "user_draft": "current_user_statement", "message": "source_message_statement",
+            "confirmed_memory": "sourced_contact_memory", "owner_memory": "sourced_owner_memory",
+            "pending_candidate": "unconfirmed_reference", "continued_candidate": "previous_assistant_candidate",
+        })
+        self.assertEqual(payload["fidelity_contract"]["content_boundary"]["output_scope"],
+                         ["candidate_text", "basis", "risk_notes"])
+        self.assertIn("条件性建议", system)
+        self.assertIn("未读到消息不证明多久没联系", system)
 
 
 if __name__ == "__main__":

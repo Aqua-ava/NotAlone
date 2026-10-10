@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import unittest
+import json
+import os
+from pathlib import Path
+import time
 from uuid import uuid4
 
 from tests.fidelity_http_support import FidelityHttpFixture
@@ -19,7 +23,9 @@ class FidelityIntentApiTests(FidelityHttpFixture, unittest.TestCase):
         self.reply_model.plans.append({
             "text": "最近怎么样？", "basis": "按本次明确目的关心近况，不增加见面安排。",
         })
+        started = time.perf_counter()
         status, result = self.backend.request("/api/reply/generate", body)
+        elapsed_ms = (time.perf_counter() - started) * 1000
         self.assertEqual(status, 200, result)
         payload = self.reply_model.payloads[-1]
         self.assertEqual(payload["fidelity_contract"]["current_intent"], {
@@ -37,6 +43,15 @@ class FidelityIntentApiTests(FidelityHttpFixture, unittest.TestCase):
             **body, "idempotency_key": str(uuid4()),
         })[0], 200)
         self.assertEqual(len(self.reply_model.payloads), 1)
+        if path := os.environ.get("NOTALONE_INTENT_CAPTURE"):
+            system = "\n".join(str(message.content) for message in self.reply_model.seen_calls[-1]
+                               if message.type == "system")
+            Path(path).write_text(json.dumps({
+                "data_kind": "synthetic", "data_version": "intent-purpose-http-v1", "entry_point": "http",
+                "rows": [{"case_id": "purpose-preserve", "owner_id": str(self.owner_id),
+                          "contact_id": contact, "payload": payload, "system_prompt": system,
+                          "output": result, "latency_ms": elapsed_ms, "call_count": 1}],
+            }, ensure_ascii=False, indent=2) + "\n")
 
 
 if __name__ == "__main__":
