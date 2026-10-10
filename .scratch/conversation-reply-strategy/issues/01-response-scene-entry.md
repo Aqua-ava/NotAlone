@@ -37,6 +37,8 @@ Blocked by: None (can start immediately)
 
 ## Comments
 
+2026-10-11：补齐headless runner中的conversation-strategy-entry白名单；原脚本入口已注册但runner遗漏，不能据此宣称页面已执行。TypeScript检查通过；公开页面由本轮总协调在串行受限入口执行。
+
 2026-10-11 B 实施：公开接缝沿用 reply:set-mode → ReplySession → /api/reply/generate；场景切换不提交生成，目标仍需明确选择。先验收既有消息与草稿回归，页面→HTTP/PG 证据待总协调串行预约。新增“回应消息”场景入口并保留草稿操作。
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
