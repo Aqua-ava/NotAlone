@@ -2,7 +2,7 @@
 
 Type: task
 State: claimed
-Triage: ready-for-agent
+Triage: ready-for-human
 Blocked by: 09, 16
 Spec: ../spec.md
 
@@ -64,3 +64,5 @@ Spec: ../spec.md
 
 
 - 2026-10-10（构建与纯政策验证）：用户要求补真实微信前置条件，明确ad-hoc构建探针与核心库、两者codesign严格校验通过；SessionCaptureSafetyTests实际4项通过（17组参数）。未执行probe session、App、微信观察或TCC动作；没有布局profile，minimal_region_layout_unverified保持，不能称定位已完成。CLI后台同步与OCR独立，已在验收记录分开直接同步路径与自动定位后续条件。18保持claimed，无新增验收勾选。
+
+- 2026-10-10（目标模式收尾核对）：人工确认、失效与焦点暂停的合成公开路径已有上述证据；剩余最小区域、质量 producer、成功自动定位及权限归属不能在缺少可信微信布局时实现或验收。下一步需用户认可有限观察范围和时段，故 Triage 同步为 ready-for-human；State 保持 claimed，未知布局仍在 OS 动作前拒绝，不写 Answer 或勾验收。
