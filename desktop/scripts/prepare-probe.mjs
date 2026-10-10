@@ -12,7 +12,7 @@ import { prepareHelpers } from './prepare-helpers.mjs';
 const run = promisify(execFile);
 const sourceNames = [
   'scripts/build_cli.sh',
-  ...['ProbeCore', 'SessionCaptureSafety', 'CaptureSupport', 'SelectedSession', 'FrontSyncStatusReport', 'BackendStatusPolling']
+  ...['ProbeCore', 'SessionCaptureSafety', 'RegionCalibration', 'CaptureSupport', 'SelectedSession', 'FrontSyncStatusReport', 'BackendStatusPolling']
     .map((name) => `Sources/NotAloneSyncCore/${name}.swift`),
   'Sources/NotAloneSyncCLI/main.swift',
 ];

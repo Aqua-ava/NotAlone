@@ -98,14 +98,15 @@ async function verifiedBundledRuntime(resourcesDirectory: string | undefined, ki
 function validRepositoryBuild(value: Record<string, unknown>): boolean {
   if (typeof value.buildSourceDigest !== 'string' || !/^[a-f0-9]{64}$/.test(value.buildSourceDigest)
     || value.sourceDeclaration !== `repository:${value.buildSourceDigest}` || !Array.isArray(value.buildSources)
-    || value.buildSources.length !== 8) return false;
+    || ![8, 9].includes(value.buildSources.length)) return false;
   const names = new Set<string>();
   for (const record of value.buildSources) {
     if (!record || typeof record !== 'object' || Array.isArray(record)
       || typeof record.name !== 'string' || names.has(record.name)
-      || !/^(scripts\/build_cli\.sh|Sources\/NotAloneSyncCore\/(ProbeCore|SessionCaptureSafety|CaptureSupport|SelectedSession|FrontSyncStatusReport|BackendStatusPolling)\.swift|Sources\/NotAloneSyncCLI\/main\.swift)$/.test(record.name)
+      || !/^(scripts\/build_cli\.sh|Sources\/NotAloneSyncCore\/(ProbeCore|SessionCaptureSafety|RegionCalibration|CaptureSupport|SelectedSession|FrontSyncStatusReport|BackendStatusPolling)\.swift|Sources\/NotAloneSyncCLI\/main\.swift)$/.test(record.name)
       || typeof record.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(record.sha256)) return false;
     names.add(record.name);
   }
+  if (names.size !== (names.has('Sources/NotAloneSyncCore/RegionCalibration.swift') ? 9 : 8)) return false;
   return createHash('sha256').update(JSON.stringify(value.buildSources)).digest('hex') === value.buildSourceDigest;
 }

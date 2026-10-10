@@ -1,4 +1,5 @@
 import { installForegroundBridge } from './foreground/bridge';
+import { ForegroundCalibration } from './foreground/calibration';
 import { CandidateCopyController } from './candidate-copy/controller';
 import { installElectronCandidateCopy } from './candidate-copy/electron';
 import { app, dialog, ipcMain, Menu, protocol, session } from 'electron';
@@ -49,6 +50,12 @@ void app.whenReady().then(async () => {
   const commands = electronPageCommands(windows);
   const contacts = installContactSessionBridge(commands, backend);
   const foreground = installForegroundBridge(commands, backend, contacts);
+  const calibration = new ForegroundCalibration(app.getPath('userData'), resourcesDirectory);
+  app.on('before-quit', (event) => {
+    if (!calibration.isRunning()) return;
+    event.preventDefault();
+    void calibration.cancel().then(() => app.quit());
+  });
   windows.setHelperObservation({ beforeShow: () => foreground.observeBeforeShow(),
     onLifecycle: (event) => foreground.notifyHelperLifecycle(event) });
   app.on('will-quit', () => foreground.dispose());
@@ -117,6 +124,7 @@ void app.whenReady().then(async () => {
     { label: '窗口', submenu: [
       { label: '管理后台', click: () => openWindow('manager') },
       { label: '输入小窗', click: () => openWindow('helper') },
+      { label: '校准微信最小定位区域…', click: () => calibration.start() },
       { type: 'separator' },
       { label: '最小化', role: 'minimize' },
       { label: '关闭窗口', role: 'close' },
