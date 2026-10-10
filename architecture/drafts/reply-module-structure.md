@@ -3,7 +3,7 @@
 > 状态：已收束；正式决定见 ADR-012
 > 日期：2026-08-21
 >
-> 本文记录已经确认的模块关系，不代表对应模块都已经实现。未决定的内容继续留在后续讨论中，不提前固化为代码约束。
+> 本文记录设计定稿时的模块关系；对应[实现规格](../../.scratch/reply-module-flow/spec.md)及 8 张任务已关闭。本文不是新的待实现入口，也不证明真实微信或最终原生 App 已验收。
 
 ## 1. 总体关系
 
@@ -91,9 +91,11 @@ search_confirmed_memories(...)
 
 Memory 负责关系记忆的创建、修正、失效、删除和联系人记忆目录；Retrieval 只负责按联系人范围查找资料；Context 决定本次回复使用哪些查询结果。
 
-## 5. 已确认但尚未实现
+## 5. 设计定稿时的实现缺口（历史，已收口）
 
-    - 外层候选回复流程和 `VerifiedConversationScope`。
+以下清单保留当时的拆分背景。2026-10-04 的规格收尾记录已覆盖外层流程、两种输入、独立模块合同、Store/SkillPort 持久化及来源删除；当前代码位于 `backend/src/notalone/`，实际路径由对应任务记录。不根据这些历史缺口重开任务，运行和渠道能力继续按当前代码、测试及独立验收判断。
+
+- 外层候选回复流程和 `VerifiedConversationScope`。
 - `RewriteDraft` 公开输入类型。
 - 正式 Context、Retrieval 和 Memory 模块。
 - PostgreSQL ReplyStore 与 SkillPort。

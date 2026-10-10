@@ -3,7 +3,7 @@
 Type: task
 State: resolved
 Triage: ready-for-agent
-Implementation: not-started; split into implementation tickets before coding
+Implementation: completed
 
 ## Problem Statement
 
@@ -169,11 +169,11 @@ Reply 内部的次级 seam 是统一的 Reply 入口。它接收 `VerifiedConver
 - 不把动态检索、发送、Shell、网络、安装包或子 Agent 暴露为 Runtime Tool。
 - 不把一次性改写要求沉淀为长期偏好、关系记忆或 Skill。
 - 不处理真实聊天导出、真实联系人资料、截图、语音或凭据。
-- 不修改既有 `.scratch/postgres-reply-store-skill-port/spec.md`；该规格仍是独立的 PostgreSQL ReplyStore/SkillPort 工作项，且明确等待上下文与记忆边界稳定。
+- 不修改既有 [PostgreSQL ReplyStore/SkillPort 历史规格](../postgres-reply-store-skill-port/spec.md)；设计定稿时它是等待上下文与记忆边界稳定的独立工作项，现已标为 superseded，由本轨 05/06/07 及 Skill 管理轨覆盖，不另计待实现。
 
-## Current Implementation Gap
+## Current Implementation Gap（历史，2026-10-04 已收口）
 
-以下内容已完成设计确认，但尚未完整实现：
+以下记录拆票前的实现缺口，现已由 8 张 resolved 任务覆盖，收尾与验证见 Comments；它们不再是新的待实现项：
 
 1. 应用层 `candidate_reply_flow` 与正式 `VerifiedConversationScope`。
 2. `RewriteDraft` 公开输入及两个输入模式的统一 Reply 入口。
@@ -182,16 +182,17 @@ Reply 内部的次级 seam 是统一的 Reply 入口。它接收 `VerifiedConver
 5. PostgreSQL ReplyStore、SkillPort 和会话绑定持久化。
 6. 来源删除与 Reply 快照/候选之间的最终级联规则。
 
-当前已有的候选回复纵切可证明部分 Runtime/Skill/候选校验行为，但不能证明本规格的应用层身份验证、两种输入、正式 Retrieval/Memory 或生产持久化已经端到端可用。
+上述“仅有候选回复纵切”描述属于设计定稿时的历史阶段。当前模块实现和验证已按原任务收口；真实微信、最终原生 App 及外部模型质量仍按各自任务判断，不由本规格 resolved 推导。
 
 ## Further Notes
 
 - 已确认：Reply 拆为 Context、Runtime、Store；Memory 与 Retrieval 独立且与 Reply 平级；两个用户输入共用一个入口；外层流程负责联系人/会话验证；最终消息由用户手动发送。
 - 已确认：改写的原句和可选要求都来自用户；改写要求只作用于当前请求；普通改写默认不自动检索长期关系资料。
 - 已确认：Store 保存请求和候选的价值在于幂等、重放、失败恢复、审计和依据追踪，但不保存完整聊天历史或承担上下文选择。
-- 当前代码差异：现有合成纵切仍有过渡性的上下文准备合同和“上一轮未发送候选”路径；实现本规格时必须按新的显式继续和 Context/Store 边界修正，不能把旧行为当成最终设计。
-- 下一步建议：先运行 `to-tickets`，将本规格拆成应用流程、公开输入/Context、Retrieval/Memory seam、Store 收敛和持久化/集成验证等独立任务，再进入实现。
+- 历史代码差异：设计定稿时的过渡性上下文准备合同和“上一轮未发送候选”路径已由后续任务收敛到显式继续及 Context/Store 边界，不能继续按旧缺口拆票。
+- 后续路径：本规格及实现任务已关闭；新聊天交互从持续会话和聊天回复策略草图收束，现有原生/渠道能力按独立验收任务推进，不重复发布本规格任务。
 
 ## Comments
 
 - 2026-10-04：收尾核验后关闭。8 张 issue 全 resolved，spec 的“Current Implementation Gap”6 项逐条已有实现与覆盖：过渡性 `prepare` 已删除、`VerifiedConversationScope` 与三态流程（`application/candidate_reply_flow.py`）、两种输入（`reply/interface.py`）、Store 幂等／重放／冲突／租约／显式继续（`reply/store.py`）均有对应单测，`tests/unit/reply` 128 项与 `tests/unit/application` 49 项通过。头部的 `Implementation: not-started` 字段是拆分任务前的历史状态，已不再成立。
+- 2026-10-10：同步关闭后的元信息与历史段落；`Implementation` 改为 completed，缺口和拆票建议明确标为历史。只核对既有代码、8 张任务状态及关闭记录，没有重跑模型或把旧模块验证当作本轮原生/渠道验收。
