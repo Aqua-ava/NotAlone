@@ -1,6 +1,6 @@
 # 05：生成时有界引用表达样本
 
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: [authentic-expression/02 当前意图优先的生成与改写](02-current-intent-priority.md)；[authentic-expression/03 无依据扩写的约束与失败呈现](03-unsupported-content-boundary.md)；[authentic-expression/04 表达样本的主动保存、查看和删除](04-style-sample-lifecycle.md)
 
@@ -38,3 +38,17 @@ Blocked by: [authentic-expression/02 当前意图优先的生成与改写](02-cu
 ## Comments
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
+
+## Answer（独立切片，最终预算与页面待接续）
+
+2026-10-11：沿正式049实现只读表达参考port，独立`ReplyContext.style_references`与`context_receipt.style_sample_ids`（默认空）。最多选择五个有效完整样本，另有600字符取数界限；不截断样本文字，不新增EvidenceKind或迁移，不把样本ID当事实citation。原始草稿未开关系语境保持不读历史／样本。样本作为低权重说法载荷，本次明确意图仍按E02/E03契约优先；这不是自动语义判定。
+
+实际使用在runtime前、同owner锁记录到既有`reply_style_sample_use`，其当时原始来源合入049原始快照；提交复验相同使用集合。模型期间删除样本会清理running派生请求并拒绝迟到结果／同键重试；已完成结果、后继与主动保存的派生样本按实际使用关系清理。候选重读复验样本及来源，使用回执排序稳定；快照仅增加样本编号，不另存样本文字。桌面展示实际使用的项，空／失效投影不恢复旧正文。
+
+`tests.integration.server.test_style_reference_api`真实HTTP→生产装配→正式001–050随机隔离PG共7项通过：有界／范围／重放、无样本、默认纯草稿、样本不能作事实引用、模型期间删除、派生样本与旧重放清理，以及原始来源只由样本引入时的实际五步删除。全部仅替换模型，`dimension_release=None`；数据库DROP并精确核验。首个实际RED为已保存七样本但模型输入零参考，接线后green；实际重读排序差异也已修正，断言未放宽。
+
+同一E01报告入口交付`docs/evaluations/authentic-expression-style-reference-http-v1.json`，实际两个模型调用捕获输入、期望、输出和四维标注依据，其中一个故意改变意图并从样本扩写未来承诺的输出如实失败。两例均开发集和synthetic_fixture，真人通过0；自然度、关系适配及本人相似度未知，不证明真实模型质量。
+
+最终相关HTTP／PG分组25＋37共62项通过、无skip，正式001–050迁移和数据库精确清理；完整reply unit186、TypeScript及safe40通过。首轮合跑的随机库名超过PG长度上限，两个类被隔离护栏拒绝；补跑入口一次迁移路径错误在测试前停止。两次失败均已清理，修正测试入口后37项green，未删减产品断言。两轴最终0：报告滞后问题用最终捕获重建并逐例复核关闭，没有为报告新增模型调用。
+
+具名`style-reference`公开页面已准备，验证保存七项→实际使用五项展示→同键→删除→旧重放拒绝和跨联系人，但尚未执行，由总协调有限预约。最终system/messages/tools/schema/输出预留总预算尚待A12正式接口，600字符不是替代计量，不能据当前切片标该验收项通过。真实B探索、会话重连与删除的组合仍由E06按真实依赖接续；不关闭本票，不运行App/OCR/微信、外部模型、自动采纳门禁、push／发布／部署。

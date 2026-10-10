@@ -20,6 +20,7 @@ from notalone.reply.interface import (
     RewriteDraft,
 )
 from notalone.reply.risk import DeterministicRiskHints, RiskHintPort
+from notalone.reply.style_reference import StyleReference, StyleReferencePort, require_reference_contract
 from notalone.retrieval import (
     RetrievalError,
     RetrievalPort,
@@ -217,6 +218,7 @@ class ReplyContext:
     memory_revision: int | None = None
     index_revision: int | None = None
     tool_calls: tuple[ToolCallTrace, ...] = ()
+    style_references: tuple[StyleReference, ...] = ()
 
     def has_unauthorized_history(self) -> bool:
         """草稿和显式继续候选之外的历史证据是否超出本次请求权限。"""
@@ -233,6 +235,7 @@ class ReplyContext:
                 )
                 for item in self.evidence
             )
+            or (not allows_history(self.command) and bool(self.style_references))
         )
 
 
@@ -284,6 +287,7 @@ class RetrievalReplyContext:
         "_memory_index",
         "_risk_hints",
         "_skill_revision_reader",
+        "_style_references",
     )
 
     def __init__(
@@ -302,6 +306,7 @@ class RetrievalReplyContext:
         memory_index: ContactMemoryIndexPort | None = None,
         risk_hints: RiskHintPort | None = None,
         skill_revision_reader: Callable[[ContactScope], int] | None = None,
+        style_references: StyleReferencePort | None = None,
     ) -> None:
         if not isinstance(skill_library_revision, int) or skill_library_revision < 0:
             raise ValueError("Skill 库修订号无效。")
@@ -346,6 +351,7 @@ class RetrievalReplyContext:
         if skill_revision_reader is not None and not callable(skill_revision_reader):
             raise TypeError("Skill revision 读取器必须是 callable。")
         self._skill_revision_reader = skill_revision_reader
+        self._style_references = style_references
 
     def build(
         self,
@@ -400,6 +406,7 @@ class RetrievalReplyContext:
                 risk_notes=self._risk_notes(command, target[0].text),
                 memory_revision=memory_revision,
                 index_revision=index_revision,
+                style_references=self._select_references(command, scope),
             )
 
         if isinstance(command.content, InitiateConversation):
@@ -424,6 +431,7 @@ class RetrievalReplyContext:
                 skill_library_revision=self._current_skill_revision(scope),
                 risk_notes=self._risk_notes(command, purpose.text),
                 memory_revision=memory_revision, index_revision=index_revision,
+                style_references=self._select_references(command, scope),
             )
 
         if isinstance(command.content, RewriteDraft):
@@ -459,6 +467,7 @@ class RetrievalReplyContext:
                 ),
                 memory_revision=memory_revision,
                 index_revision=index_revision,
+                style_references=self._select_references(command, scope),
             )
 
         raise ReplyContextInvariantError("回复输入模式无效。")
@@ -493,6 +502,13 @@ class RetrievalReplyContext:
             raise ReplyContextInvariantError("Skill revision 结构无效。")
         return revision
 
+    def _select_references(self, command: GenerateReply, scope: ContactScope) -> tuple[StyleReference, ...]:
+        if self._style_references is None or not allows_history(command):
+            return ()
+        references = self._style_references.select_references(scope)
+        require_reference_contract(scope, references)
+        return references
+
     def validate_current(self, context: ReplyContext) -> None:
         """在生成前后重新读取依据，阻止删除或 revision 变化后的旧快照继续生效。"""
 
@@ -502,6 +518,11 @@ class RetrievalReplyContext:
             raise ReplyContextInvariantError("当前改写不能使用历史资料。")
         scope = context.scope
         self._validate_evidence(context.evidence, scope=scope)
+        require_reference_contract(scope, context.style_references)
+        if context.style_references:
+            if self._style_references is None:
+                raise ReplyContextInvariantError("表达参考无法重新核验。")
+            self._style_references.validate_references(scope, context.style_references)
 
         memory_revision, index_revision = self._version_snapshot(scope)
         if context.memory_revision is not None and (

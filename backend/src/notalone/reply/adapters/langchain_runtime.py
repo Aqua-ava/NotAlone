@@ -27,6 +27,7 @@ from notalone.reply.adapters.async_runner import run_with_timeout
 
 from notalone.reply.context import ReplyContext, allows_history
 from notalone.reply.fidelity import FIDELITY_SYSTEM_PROMPT, factual_role, generation_contract
+from notalone.reply.style_reference import require_reference_contract
 from notalone.reply.runtime import (
     ReplyRuntimeResult,
     RuntimeCandidate,
@@ -702,6 +703,7 @@ class LangChainReplyRuntime:
 
 def _request_text(prepared: ReplyContext) -> str:
     payload: dict[str, Any]
+    require_reference_contract(prepared.scope, prepared.style_references)
     if prepared.has_unauthorized_history():
         raise ReplyInvariantError("当前改写不能使用历史资料。")
     if isinstance(prepared.command.content, ReplyToMessage):
@@ -756,6 +758,11 @@ def _request_text(prepared: ReplyContext) -> str:
         for item in prepared.evidence
     ]
     payload["fidelity_contract"] = generation_contract(payload)
+    payload["style_references"] = [
+        {"sample_id": str(item.sample_id), "text": item.text,
+         "factual_role": "expression_reference", "weight": "low"}
+        for item in prepared.style_references
+    ]
     payload["risk_notes"] = list(prepared.risk_notes)
     return json.dumps(payload, ensure_ascii=False)
 

@@ -67,6 +67,7 @@ export interface ReplyResult {
   input: ReplyInputSnapshot;
   candidates: EditableReplyCandidate[];
   contextEvidenceIds: string[];
+  styleSampleIds?: string[];
 }
 export type ReplyFailureCode = 'generation_failed' | 'save_failed' | 'timeout' | 'unavailable' | 'rejected' | 'connection';
 export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;

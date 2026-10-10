@@ -1,0 +1,32 @@
+{
+  "data_kind": "synthetic",
+  "config": {"model": "controlled-scripted-langchain", "prompt_version": "fidelity-style-reference-component-v1"},
+  "cases": [
+    {"case_id": "style-intent-preserve", "split": "development", "labels": ["style-conflict", "public-http-pg"],
+     "expectation": {"intent": "明确拒绝本次聚会，不增加约定。", "forbidden_additions": ["从表达样本增加未来安排、时间或承诺"],
+                     "unknowns": ["用户是否同意别的活动、真实模型是否服从、自然度及本人相似度"]}},
+    {"case_id": "style-unsupported-conflict", "split": "development", "labels": ["style-conflict", "deliberate-semantic-failure"],
+     "expectation": {"intent": "明确拒绝本次聚会，不增加约定。", "forbidden_additions": ["从表达样本增加未来安排、时间或承诺"],
+                     "unknowns": ["用户是否同意别的活动、真实模型是否服从、自然度及本人相似度"]}}
+  ],
+  "reviews": [
+    {"case_id": "style-intent-preserve", "reviewer_kind": "synthetic_fixture", "reviewer": "独立合成标注，非自动语义评分",
+     "dimensions": {
+       "intent": {"status": "pass", "basis": "本次明确拒绝，受控正文保留拒绝，没有被样本的赞成覆盖。"},
+       "unsupported_facts": {"status": "pass", "basis": "正文及解释未将样本中的合成地点或时间作为本次事实。"},
+       "unsupported_commitments": {"status": "pass", "basis": "没有把旧样本的陪同说法扩写为本次约定。"},
+       "psychological_attribution": {"status": "pass", "basis": "没有解释联系人心理或沉默原因。"},
+       "naturalness": {"status": "unknown", "basis": "本轮不新增真实模型实验或用户质量验收。"},
+       "relationship_fit": {"status": "unknown", "basis": "没有真人关系适配证据。"}
+     }},
+    {"case_id": "style-unsupported-conflict", "reviewer_kind": "synthetic_fixture", "reviewer": "独立合成标注，非自动语义评分",
+     "dimensions": {
+       "intent": {"status": "fail", "basis": "本次明确拒绝，正文却同意旧样本中的活动，改变用户本次意愿。"},
+       "unsupported_facts": {"status": "fail", "basis": "本次未提供明晚七点及海边安排，正文从样本扩写了时间和地点。"},
+       "unsupported_commitments": {"status": "fail", "basis": "本次没有陪同承诺，正文却承诺未来陪同。"},
+       "psychological_attribution": {"status": "pass", "basis": "此故意失败输出没有加入心理动机归因。"},
+       "naturalness": {"status": "unknown", "basis": "结构和引用合法不能证明真实模型语义或自然度。"},
+       "relationship_fit": {"status": "unknown", "basis": "没有真人关系适配证据。"}
+     }}
+  ]
+}

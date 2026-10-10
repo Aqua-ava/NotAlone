@@ -67,6 +67,8 @@ class FidelityHttpFixture(CoreBusinessFlowFixture):
             raise RuntimeError("本轮保真测试库清理未确认。")
 
     def _backend(self, owner_id: UUID) -> HttpBackend:
+        if self.production_model_wiring:
+            return self._production_backend(owner_id)
         priority = ModelPriorityControl()
         with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=self.reply_model):
             reply = build_reply_service(database_url=self.database_url,

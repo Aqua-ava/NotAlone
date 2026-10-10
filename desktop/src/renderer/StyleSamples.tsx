@@ -9,6 +9,9 @@ export function StyleSamples({ replies }: { replies: ReplySessionView }) {
   const [manual, setManual] = useState('');
   const selection = { contactId: replies.state.contactId!, scopeRevision: replies.state.scopeRevision };
   const enabled = Boolean(selection.contactId) && !view.state.busy;
+  const usedIds = replies.state.sourceAvailability === undefined
+    && view.state.contactId === selection.contactId && view.state.scopeRevision === selection.scopeRevision
+    ? replies.state.result?.styleSampleIds ?? [] : [];
   async function operate(action: () => Promise<void>) {
     const revision = replies.state.scopeRevision;
     try { await action(); if (view.active.current && revision === view.latest.current.scopeRevision) view.setError(''); }
@@ -18,6 +21,11 @@ export function StyleSamples({ replies }: { replies: ReplySessionView }) {
   useEffect(() => { setManual(''); }, [view.state.erasureRevision]);
   return <details className="style-samples"><summary>我的表达样本</summary>
     <p>只在你明确保存后作为这位联系人的说法参考。保存不表示已发送；当前意图优先。删除助手会话保留已保存样本，删除原始来源仍会清理依赖样本。</p>
+    {usedIds.length > 0 && <section aria-label="本次表达参考"><p>本次使用的样本只参考说法，不作为事实依据：</p>
+      <ul>{usedIds.map((id) => {
+        const sample = view.state.samples.find((item) => item.sampleId === id);
+        return <li key={id}>{sample ? sample.text : '样本暂不可读，请刷新表达样本。'}</li>;
+      })}</ul></section>}
     <button disabled={!enabled} onClick={() => void operate(() => window.notalone.styleSamples.refresh(selection))}>刷新表达样本</button>
     <label>手工表达样本<textarea aria-label="手工表达样本" maxLength={4096} value={manual} disabled={!enabled} onChange={(event) => setManual(event.target.value)} /></label>
     <button disabled={!enabled || !manual.trim()} onClick={() => void operate(async () => {

@@ -14,7 +14,10 @@ from notalone.application.style_sample_service import (
 )
 from notalone.persistence.locks import lock_owner_scope
 from notalone.reply.context import ReplyContext
-from notalone.reply.errors import ReplyStoreInvariantError
+from notalone.reply.errors import ReplyContextError, ReplyContextInvariantError, ReplyStoreInvariantError
+from notalone.reply.style_reference import (
+    STYLE_REFERENCE_LIMIT, STYLE_REFERENCE_CHAR_BUDGET, StyleReference, require_reference_contract,
+)
 from notalone.reply.store import ReplyRequest
 from notalone.scopes import ContactScope
 
@@ -40,6 +43,7 @@ def reply_original_sources(connection: Any, request: ReplyRequest, context: Repl
                     connection, owner_id=request.scope.owner_id, evidence_id=item.evidence_id,
                     source_ids=item.source_ids, text=item.text))}
     declared.update(item.evidence_id for item in context.evidence if item.kind == "message")
+    declared.update(identifier for item in context.style_references for identifier in item.source_ids)
     if not declared:
         return set()
     raw = connection.execute("""
@@ -127,6 +131,17 @@ def require_reply_sources_current(connection: Any, *, owner_id: UUID, request_id
         if not captured and _request_needs_source_snapshot(connection, owner_id=owner_id, request_id=identifier):
             raise ReplyStoreInvariantError("旧候选缺少当时原始来源记录，请重新生成。")
         sources.update(captured)
+    sample_rows = connection.execute("""
+        SELECT sample.* FROM public.reply_style_sample_use AS use
+        JOIN public.style_sample AS sample ON sample.id=use.sample_id
+          AND sample.owner_id=use.owner_id AND sample.contact_id=use.contact_id
+        WHERE use.owner_id=%s AND use.reply_request_id=ANY(%s::uuid[])
+    """, (owner_id, request_ids)).fetchall()
+    try:
+        for row in sample_rows:
+            _current_sample(connection, row)
+    except StyleSampleError:
+        raise ReplyStoreInvariantError("候选使用的表达样本已失效。") from None
     if sources and connection.execute("""
         SELECT id FROM unnest(%s::uuid[]) AS source(id) WHERE NOT EXISTS (
             SELECT 1 FROM public.source_document AS document WHERE document.owner_id=%s
@@ -168,6 +183,33 @@ def capture_declared_reply_sources(connection: Any, request: ReplyRequest, conte
         connection.execute("""INSERT INTO public.reply_original_source_use(reply_request_id,source_id,owner_id,contact_id)
             VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING""",
                            (request.request_id, source_id, request.scope.owner_id, request.scope.contact_id))
+
+
+def require_context_style_references(connection: Any, scope: ContactScope,
+                                    references: tuple[StyleReference, ...]) -> None:
+    """同owner事务复验实际参考，不能以当前新样本替换模型曾见的样本。"""
+    require_reference_contract(scope, references)
+    for reference in references:
+        row = connection.execute("SELECT * FROM public.style_sample WHERE owner_id=%s AND contact_id=%s AND id=%s",
+                                 (scope.owner_id, scope.contact_id, reference.sample_id)).fetchone()
+        if row is None:
+            raise ReplyStoreInvariantError("表达参考已失效。")
+        try:
+            sample = _current_sample(connection, row)
+        except StyleSampleError:
+            raise ReplyStoreInvariantError("表达参考已失效。") from None
+        if sample.text != reference.text or sample.source_ids != reference.source_ids:
+            raise ReplyStoreInvariantError("表达参考快照已变化。")
+
+
+def capture_reply_style_references(connection: Any, request: ReplyRequest, context: ReplyContext) -> None:
+    require_context_style_references(connection, request.scope, context.style_references)
+    connection.execute("DELETE FROM public.reply_style_sample_use WHERE reply_request_id=%s", (request.request_id,))
+    for item in context.style_references:
+        connection.execute("""
+            INSERT INTO public.reply_style_sample_use(reply_request_id,sample_id,owner_id,contact_id)
+            VALUES (%s,%s,%s,%s)
+        """, (request.request_id, item.sample_id, request.scope.owner_id, request.scope.contact_id))
 
 
 def invalidate_reply_keys(connection: Any, *, owner_id: UUID, request_ids: list[UUID]) -> None:
@@ -272,6 +314,44 @@ def erase_source_style_samples(connection: Any, *, owner_id: UUID, removed_ids: 
 class PostgresStyleSampleStore:
     def __init__(self, database_url: str) -> None:
         self._database_url = database_url
+
+    def select_references(self, scope: ContactScope) -> tuple[StyleReference, ...]:
+        """最多取五个完整样本；只跳过不合界限的项，不截断用户保存文字。"""
+        try:
+            with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+                connection.execute("SET LOCAL statement_timeout='500ms'")
+                lock_owner_scope(connection, owner_id=scope.owner_id)
+                _contact_exists(connection, scope)
+                rows = connection.execute("""
+                    SELECT * FROM public.style_sample WHERE owner_id=%s AND contact_id=%s
+                      AND status='active' AND length(final_text)<=%s
+                    ORDER BY saved_at DESC,id LIMIT %s
+                """, (scope.owner_id, scope.contact_id, STYLE_REFERENCE_CHAR_BUDGET, STYLE_REFERENCE_LIMIT)).fetchall()
+                selected: list[StyleReference] = []
+                characters = 0
+                for row in rows:
+                    try:
+                        sample = _current_sample(connection, row)
+                    except StyleSampleDeleted:
+                        continue
+                    if characters + len(sample.text) > STYLE_REFERENCE_CHAR_BUDGET:
+                        continue
+                    selected.append(StyleReference(sample.sample_id, sample.scope, sample.text, sample.source_ids))
+                    characters += len(sample.text)
+                return tuple(selected)
+        except (psycopg.Error, StyleSampleError):
+            raise ReplyContextError("表达参考读取失败。") from None
+
+    def validate_references(self, scope: ContactScope, references: tuple[StyleReference, ...]) -> None:
+        try:
+            with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+                connection.execute("SET LOCAL statement_timeout='500ms'")
+                lock_owner_scope(connection, owner_id=scope.owner_id)
+                require_context_style_references(connection, scope, references)
+        except ReplyStoreInvariantError:
+            raise ReplyContextInvariantError("表达参考已失效。") from None
+        except psycopg.Error:
+            raise ReplyContextError("表达参考重新读取失败。") from None
 
     def list(self, scope: ContactScope) -> tuple[StyleSample, ...]:
         try:

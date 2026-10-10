@@ -2486,6 +2486,7 @@ def _reply_payload(reply: ReplyGenerated) -> dict[str, object]:
             "evidence_ids": [
                 str(evidence) for evidence in reply.context_receipt.evidence_ids
             ],
+            "style_sample_ids": [str(identifier) for identifier in reply.context_receipt.style_sample_ids],
         },
         "used_skill": used_skill,
     }

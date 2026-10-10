@@ -15,6 +15,7 @@ from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.assistant_session_store import prepare_assistant_reply_commit
 from notalone.persistence.style_sample_store import (
     capture_reply_original_sources, capture_declared_reply_sources, require_reply_sources_current,
+    capture_reply_style_references, require_context_style_references,
 )
 from notalone.memory.timing import MemoryTiming
 
@@ -318,6 +319,7 @@ class PostgresReplyStore:
                 if row is None or row["attempt"] != request.attempt or row["state"] != 'running':
                     raise ReplyStoreInvariantError("回复请求已失效。")
                 self._validate_context(connection, request, context)
+                capture_reply_style_references(connection, request, context)
                 connection.execute("DELETE FROM public.reply_original_source_use WHERE reply_request_id=%s", (request.request_id,))
                 capture_reply_original_sources(connection, request, context)
                 require_reply_sources_current(connection, owner_id=request.scope.owner_id, request_id=request.request_id)
@@ -380,6 +382,12 @@ class PostgresReplyStore:
                         request,
                         context,
                     )
+                    captured_samples = {row["sample_id"] for row in connection.execute(
+                        "SELECT sample_id FROM public.reply_style_sample_use WHERE owner_id=%s AND contact_id=%s AND reply_request_id=%s",
+                        (request.scope.owner_id, request.scope.contact_id, request.request_id),
+                    ).fetchall()}
+                    if captured_samples != {item.sample_id for item in context.style_references}:
+                        raise ReplyStoreInvariantError("表达参考不符合模型调用前的实际使用记录。")
                     capture_declared_reply_sources(connection, request, context)
                     require_reply_sources_current(connection, owner_id=request.scope.owner_id, request_id=request.request_id)
                     prepare_assistant_reply_commit(connection, request, context)
@@ -421,6 +429,7 @@ class PostgresReplyStore:
                         candidates=tuple(candidates),
                         context_receipt=ContextReceipt(
                             evidence_ids=evidence_ids,
+                            style_sample_ids=tuple(sorted(item.sample_id for item in context.style_references)),
                         ),
                         used_skill=reply.used_skill,
                     )
@@ -820,6 +829,7 @@ class PostgresReplyStore:
                 "回复上下文不属于当前持久化请求。"
             )
         evidence_ids: set[UUID] = set()
+        require_context_style_references(connection, request.scope, context.style_references)
         for item in context.evidence:
             if (
                 not isinstance(item, ContextEvidence)
@@ -979,6 +989,7 @@ class PostgresReplyStore:
             "skill_library_revision": context.skill_library_revision,
             "memory_revision": context.memory_revision,
             "index_revision": context.index_revision,
+            "style_sample_ids": [str(item.sample_id) for item in context.style_references],
             "tool_calls": [
                 {
                     "tool_name": trace.tool_name,
@@ -1375,7 +1386,12 @@ class PostgresReplyStore:
         return ReplyGenerated(
             reply_request_id=request_row["id"],
             candidates=tuple(candidates),
-            context_receipt=ContextReceipt(evidence_ids=tuple(evidence_ids)),
+            context_receipt=ContextReceipt(evidence_ids=tuple(evidence_ids), style_sample_ids=tuple(
+                row["sample_id"] for row in connection.execute(
+                    "SELECT sample_id FROM public.reply_style_sample_use WHERE owner_id=%s AND contact_id=%s AND reply_request_id=%s ORDER BY sample_id",
+                    (request_row["owner_id"], request_row["contact_id"], request_row["id"]),
+                ).fetchall()
+            )),
             used_skill=used_skill,
         )
 

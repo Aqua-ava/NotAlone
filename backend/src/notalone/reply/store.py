@@ -350,7 +350,8 @@ class InMemoryReplyStore:
             result = ReplyGenerated(
                 reply_request_id=request.request_id,
                 candidates=tuple(candidates),
-                context_receipt=ContextReceipt(evidence_ids=evidence_ids),
+                context_receipt=ContextReceipt(evidence_ids=evidence_ids,
+                                               style_sample_ids=tuple(sorted(item.sample_id for item in context.style_references))),
                 used_skill=reply.used_skill,
             )
             record.evidence = tuple(context.evidence)

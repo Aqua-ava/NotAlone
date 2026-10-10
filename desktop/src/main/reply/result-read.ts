@@ -21,6 +21,9 @@ export function readReplyResult(value: unknown) {
     known.add(candidateId);
     return { candidateId, text: item.text, basis: item.basis, citationIds: identifiers(item.citation_ids), riskNotes: [...item.risk_notes] };
   });
-  return { replyRequestId: value.reply_request_id.toLowerCase(), candidates,
-    contextEvidenceIds: identifiers(value.context_receipt.evidence_ids) };
+  const contextEvidenceIds = identifiers(value.context_receipt.evidence_ids);
+  const styleSampleIds = identifiers(value.context_receipt.style_sample_ids ?? []);
+  if (styleSampleIds.length > 5 || new Set(styleSampleIds).size !== styleSampleIds.length
+    || styleSampleIds.some((id) => contextEvidenceIds.includes(id))) throw new Error('表达参考格式无效。');
+  return { replyRequestId: value.reply_request_id.toLowerCase(), candidates, contextEvidenceIds, styleSampleIds };
 }

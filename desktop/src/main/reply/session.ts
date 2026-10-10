@@ -253,6 +253,7 @@ export class ReplySession {
       result: { replyRequestId: result.replyRequestId, assistantSessionId: result.assistantSessionId,
         inputVersionId: result.inputVersionId, input: attempt.input,
         contextEvidenceIds: result.contextEvidenceIds,
+        styleSampleIds: result.styleSampleIds,
         candidates: result.candidates.map((original) => ({ original, editedText: original.text })) },
       selectedCandidateId: result.candidates[0].candidateId });
     } catch (error) {

@@ -29,6 +29,7 @@ from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
 from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.persistence.retrieval import PostgresRetrieval
 from notalone.persistence.skill_port import PostgresSkillPort
+from notalone.persistence.style_sample_store import PostgresStyleSampleStore
 from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
 from notalone.reply.context import RetrievalReplyContext
@@ -57,6 +58,7 @@ def build_reply_service(
         retrieval=retrieval,
         memory_index=PostgresContactMemoryIndexRepository(database_url),
         skill_library_revision=skill_revision,
+        style_references=PostgresStyleSampleStore(database_url),
         skill_revision_reader=lambda scope: _skill_library_revision(
             database_url,
             scope.owner_id,

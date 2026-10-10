@@ -45,3 +45,28 @@ PYTHONPATH=src python -m tests.fidelity_capture --capture ../desktop/artifacts/h
 捕获原文件仅在被忽略的测试产物目录，报告提交的实际输入全部是合成资料。新页面将四例写入 `fidelity-intent-current-observations.json`／`intent-public-current-v2`，使用 `intent-public-current-review.json`；旧三例捕获及报告重建命令独立保留。内容页面使用 `content-public-review.json`。E02／E03保持claimed，人工和真实模型质量不是本轮新增完成条件。
 
 本切片两轴固定点为 `a38d8e3`。Spec最初发现递归评价字段遗漏与新页面覆盖旧捕获两个P2，Standards发现同一历史覆盖P3；补字段的三子断言先红后7报告相关单元通过，分离新文件与版本后双方复核0。未放宽仍红的来源断言。
+
+2026-10-11正式公共来源守卫复验：本树已合`bd35f07`为`ce27628`。先由生产迁移器在新建随机`_test`库执行001–050，再显式设置`NOTALONE_TEST_DATABASE_URL`，执行`test_fidelity_api`、`test_fidelity_intent_api`、`test_style_samples`、`test_assistant_session_api`和`test_postgres_reply_store`，55项全部通过，无skip。样本HTTP夹具显式设置`dimension_release=None`，未打开自动采纳门禁；收尾DROP并精确核验owned_database_remaining=0。E03原两个完成后来源撤回200红已转绿，故意语义错误报告仍按原依据失败，不混为质量通过。
+
+本轮完整回复单元186、TypeScript及safe40通过。合并的三个入口／夹具冲突限定审查两轴均0，保留原白名单、最多两组、有限时段与OS租约。首次未显式给隔离URL而误连旧测试库的31项运行有12个持久层错误及A模块skip；该失败保留，随后正确隔离复验未修改旧库。尚未运行本树公开页面，E02/E03仍claimed。
+
+## E05：独立有界参考切片
+
+表达参考独立于事实evidence/citation，最多五个完整有效样本；600字符只是额外取数界限，完整请求总预算必须消费A12最终system/messages/tools/schema和输出预留计量。本切片尚未取得该最终接口，不把模型调用的合成契约结果记成总预算通过。默认纯草稿不取样本，方向探索不装配样本port；实际B探索载荷仍待E06验证。
+
+`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 PYTHONPATH=src python -m unittest tests.integration.server.test_style_reference_api -q`：7项真实HTTP/生产装配/正式迁移后的随机隔离PG通过，自动采纳配置为空。覆盖有界和范围、同键重新装配重读、无样本与纯草稿、不可当事实引用、模型期间删除、派生保存/结果级联清理，以及没有事实历史输入、只通过样本引用原始来源时的实际后台五步删除。数据库精确清理；没有业务库迁移。最初零参考的RED及重放顺序差异保留，修后原断言green。
+
+报告`authentic-expression-style-reference-http-v1.json`保留两个实际HTTP调用：当前拒绝与旧赞成样本冲突；一个保留当前意图，一个故意改变意图并增加样本中的时间、地点及陪同承诺。合法结构/引用的故意错误仍被报告为失败。全部synthetic_fixture开发集，真人通过0，自然度／关系适配／本人相似度未知。报告只读已有捕获，命令如下：
+
+```bash
+PYTHONPATH=src python -m tests.fidelity_capture --capture ../desktop/artifacts/headless-pages/style-reference-http-observations.json --case-spec tests/fixtures/fidelity/style-reference-http-review.json --output ../docs/evaluations/authentic-expression-style-reference-http-v1.json
+```
+
+最终相关HTTP／PG回归分两组完成：样本引用、保真、主动目的及样本生命周期25项通过；助手会话和ReplyStore37项通过，合计62项、无skip。后一组显式随机隔离库先执行正式001–050迁移，核验实际库名，再精确DROP并确认剩余0。首次合跑的随机名称超过PG的63字节上限，后缀被截断，两个测试类在隔离护栏处拒绝；随后补跑入口的迁移相对路径有误，在进入测试前停止。两次失败与清理均保留，最终修正入口后37项green，未修改业务断言。
+
+完整回复单元186、TypeScript及safe40通过；`style-reference`页面已准备且仍走原inline白名单/共享OS租约，尚未执行。以`1ac1566`为固定点的Standards最终hard0／smell0、Spec最终0：两路发现报告未同步最终提示／捕获，使用现有实际捕获重建后逐例复核关闭，无新增模型调用。E05保持claimed，最终总预算、真实页面及A/B组合未被本切片替代。
+
+
+## 总协调公开复验
+
+以上保留各C主题当时的结果及失败。总协调在正式root集成树以001–050生产迁移、认证HTTP及合成模型执行fidelity-intent四例和fidelity-content九例／三种确定性拒绝，两个公开组均exit0；quiet分别9及19次，active和屏上窗口0、单Chrome、cleanupConfirmed=true，Electron/native=false。唯一报告入口重建的新三输入报告4例含故意立场失败1、调用4，内容报告9例含故意扩写失败7、调用9；真人通过0、自然度／关系适配／本人相似度未验证。新捕获分别为fidelity-intent-current-observations.json和fidelity-content-observations.json，旧HTTP及历史捕获不覆盖。C05最终完整预算及组合仍待正式A12。

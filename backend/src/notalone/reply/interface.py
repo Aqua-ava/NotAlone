@@ -160,6 +160,7 @@ class ContextReceipt:
     """本次生成实际使用的依据引用。"""
 
     evidence_ids: tuple[UUID, ...]
+    style_sample_ids: tuple[UUID, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
