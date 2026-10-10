@@ -12,6 +12,9 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from notalone.persistence.locks import lock_owner_scope
+from notalone.persistence.reply_discussion_dependencies import (
+    capture_reply_discussion_dependencies, require_reply_discussion_dependencies, reply_discussion_metadata,
+)
 from notalone.persistence.assistant_session_store import prepare_assistant_reply_commit
 from notalone.persistence.style_sample_store import (
     capture_reply_original_sources, capture_declared_reply_sources, require_reply_sources_current,
@@ -27,6 +30,7 @@ from notalone.reply.context import (
     ToolCallTrace,
     evidence_contract_is_valid,
 )
+from notalone.reply.assistant_discussion import DiscussionContext
 from notalone.reply.errors import (
     ReplyContinuationError,
     ReplyIdempotencyConflictError,
@@ -325,6 +329,9 @@ class PostgresReplyStore:
                 capture_reply_style_references(connection, request, context)
                 connection.execute("DELETE FROM public.reply_original_source_use WHERE reply_request_id=%s", (request.request_id,))
                 capture_reply_original_sources(connection, request, context)
+                capture_reply_discussion_dependencies(
+                    connection, request, context.assistant_discussion.snapshot if context.assistant_discussion else None,
+                )
                 require_reply_sources_current(connection, owner_id=request.scope.owner_id, request_id=request.request_id)
         except ExplorationExpired:
             self._prune_expired_exploration(request.scope)
@@ -394,6 +401,10 @@ class PostgresReplyStore:
                     ).fetchall()}
                     if captured_samples != {item.sample_id for item in context.style_references}:
                         raise ReplyStoreInvariantError("表达参考不符合模型调用前的实际使用记录。")
+                    require_reply_discussion_dependencies(
+                        connection, request.scope, request.request_id, current=True,
+                        expected_snapshot=context.assistant_discussion.snapshot if context.assistant_discussion else None,
+                    )
                     capture_declared_reply_sources(connection, request, context)
                     require_reply_sources_current(connection, owner_id=request.scope.owner_id, request_id=request.request_id)
                     prepare_assistant_reply_commit(connection, request, context)
@@ -460,7 +471,8 @@ class PostgresReplyStore:
                         RETURNING id
                         """,
                         (
-                            Jsonb(self._context_snapshot(context)),
+                            Jsonb({**self._context_snapshot(context),
+                                   **reply_discussion_metadata(connection, request.scope, request.request_id)}),
                             context.skill_library_revision,
                             skill_columns["skill_id"],
                             skill_columns["version_id"],
@@ -600,6 +612,7 @@ class PostgresReplyStore:
             raise ReplyStoreInvariantError("回复请求读取范围结构无效。")
         try:
             with self._connect() as connection:
+                lock_owner_scope(connection, owner_id=scope.owner_id)
                 row = connection.execute(
                     """
                     SELECT id, owner_id, contact_id,
@@ -851,6 +864,13 @@ class PostgresReplyStore:
                 "回复上下文不属于当前持久化请求。"
             )
         require_explored_context(connection, context)
+        discussion = context.assistant_discussion
+        if discussion is not None and (
+            not isinstance(discussion, DiscussionContext)
+            or discussion.scope != request.scope
+            or discussion.request_key != request.idempotency_key
+        ):
+            raise ReplyStoreInvariantError("助手讨论不属于当前持久化请求。")
         evidence_ids: set[UUID] = set()
         require_context_style_references(connection, request.scope, context.style_references)
         for item in context.evidence:

@@ -37,6 +37,30 @@ Blocked by: [authentic-expression/02 当前意图优先的生成与改写](02-cu
 
 ## Comments
 
+去重后的同一相关HTTP组再次实际28项GREEN／29.165秒、skip0、正式001–053，六个本轮Core库精确剩余0，原模型期间sample删除／租约拒绝诊断保留。实际入口均为Conda NotAlone、backend内、PGHOST=/tmp、NOTALONE_DISABLE_DOTENV=1、两tracing=false、PYTHONPATH=src；测试模块为`tests.integration.server.test_style_reference_api`、`test_style_samples`、`test_authentic_expression_session_deletion`、`test_authentic_expression_candidate_versions`、`test_authentic_expression_skill_exploration`、`test_style_reference_budget_api`，复用真实HTTP/正式装配和自有随机PG，仅模型与资料为合成。59项存储/codec入口由本轮显式创建的随机_test库在模块导入前设置NOTALONE_TEST_DATABASE_URL，正式53及repeat()均核对，最终逐一DROP；没有App、OCR、外部实验或隐式采纳。
+
+总协调主树集成上述正式 `3471b181eedc6dd8a1446b149b35985f937889f1` 六文件；相关版本删除组合测试另精确取正式 `5e1ddbb306e5b810ed7e6666ff486200fb0aa761` 的单个 TEST，不重复消费已有 A053、A11 或其他任务文档。Conda `NotAlone`、关闭 dotenv／追踪、`PYTHONPATH=src:.` 环境：
+
+- `python /private/tmp/notalone-coordinator-isolated-tests.py /Users/local-user/learn/NotAlone tests.integration.persistence.test_reply_discussion_dependencies tests.integration.persistence.test_assistant_discussion_context tests.integration.persistence.test_assistant_candidate_versions`：58 项 GREEN／11.721 秒（10 中央依赖、32 完整历史、16 版本及迁移），正式 001–053／52 升级与 fresh 重复迁移，自有根库及嵌套库残留 0。
+- 同 runner 运行上文六个 server 模块：28 项真实 HTTP／正式隔离 PG GREEN／30.937 秒，自有库残留 0。首轮因主树缺上述正式 TEST 为 27 项中 26 通过、1 import ERROR／33.705 秒；补齐后原六模块复跑通过，不把 import 错误称为产品 RED，也不删原断言。运行中删除样本的既有租约失效诊断保留，拒绝和清理断言通过。
+- `python -m unittest discover -s tests/unit/reply -t . -q`：283 项 GREEN／8.082 秒；权限撤回负例有既有无正文 Skill 日志。`python -m mypy --follow-imports=silent src/notalone/persistence/reply_discussion_dependencies.py src/notalone/reply/context.py src/notalone/persistence/reply_store.py`：三个源码通过，未外推为全库类型通过。差异检查和最终基础／新增 TEST 两轴审查均无新问题。
+
+本切片完成中央基础接口的真实主树集成；完整 A 身份消费者与运行时、已明示 running 纯草稿豁免的物理擦除 RED 仍由 A／C 接续，05 继续 claimed。存储适配器的编辑／选择组合不冒充 B08 的公开编辑页面，未执行人工或原生验收。
+
+
+中央guard审查发现嵌套全历史重复展开：新真实PG观察在同次读取对两个request执行三次HISTORY，严格唯一性断言genuine RED／.365秒。先前默认tuple row_factory入口ERROR不是该产品RED；修后TEST更新样本deleted但忘清final_text触发既有049 CHECK，59项中58通过＋1夹具ERROR／7.306秒，不算整组GREEN。纠正符合既有删除状态约束后，中央单次同步复验以actual connection／owner／request UUID去重，仅记录UUID集合，拒循环且finally重置，不跨调用留结果；同一连接的下一读取仍实际发现删除。最终own10＋A23＋版本16＋pure10共59项GREEN／7.713秒、skip0、正式53重复0、自有库0（版本的52升级／fresh两专用库亦0）。Standards原possible重复展开P2已关闭，最终hard0／Fowler0；Spec本C增量0，A consumer P2和既有runningfalse清理风险继续保留，不据此关闭E05。
+
+`python -m mypy --follow-imports=silent`新helper／context／reply_store三文件GREEN。四文件首次包含style_sample_store时有两条旧错误；以3a8d53d原文件＋MYPYPATH=src复核，原_as_sample可空与类方法list遮蔽注解同样两条，未把基线写成全量type GREEN。第一次临时路径复核额外遇import-untyped是入口差异，随后正确源路径复核保留上述两条；未修改无关旧逻辑。
+
+
+2026-10-11：C中央历史依赖切片复用A正式2c0 protocol，`ReplyContext.assistant_discussion`默认None且只在内存携带真实DiscussionContext。新增同连接／同owner事务ports `capture_reply_discussion_dependencies`、`require_reply_discussion_dependencies`、`reply_style_sample_dependencies`；只在既有context_snapshot记录严格version1身份SHA和独立历史sample UUID数组，raw根进入既有original_source_use。当前直接参考仍最多5完整／600，use集合与本次receipt不纳入历史样本。模型前及save用CURRENT，完成结果读取／同键重放用HISTORY；后来的当前输入不能令有效旧结果失效。没有新迁移、另一reader/codec、历史正文持久副本或模型实验。
+
+原两项真实PG RED分别为模型前metadata缺失、删除未清历史-only新候选；实现后同两项GREEN／.499秒。随后9项实际PG／正式001–053／重复0 GREEN／1.941秒，覆盖历史manual不在本次5项、派生主动sample与turn/input正文清理、真实同key未save且FK=NULL、迟到save拒绝、新pointer仅阻旧CURRENT但完成HISTORY可读和原样重放、捕获丢弃／样本集合篡改拒绝、raw历史-only捕获与运行删除、跨owner/contact隔离、主动sample在assistant删除后独立保留及后续依赖删除。较早7项联同A23、版本16（含两schema专用场）与codec10共56GREEN／7.998秒；本主题相关28真实HTTP／正式53 GREEN／30.368秒、skip0，六个实际Core库精确剩余0；回复unit278GREEN／1.711秒。各PG自有_test库逐一DROP，未处理业务资料。
+
+仍有明确A正式配合缺口，不能据以上结果关闭本票：A provider／完整模型history／总预算／failed-replaced输入未接。Spec新P2指出A_generation_dependencies只读direct use，须由A唯一调用本次C `reply_style_sample_dependencies`，纳入跨会话continued祖先metadata后再构造其identity SHA；C不复制A读取。另独立合成探针已实际取得1项genuine RED／.153秒：`_seed_history()`后`_prepare((), relationship=False)`，删除old sample，C请求已物理删除，但A旧independent_draft豁免仍留turn failed＋input_payload及active input；必须沿A公共清理契约区分实际history依赖和无关草稿。C已修自己的contacts按实际owner/contact/key关联未save A记录；不把sample UUID伪作raw依赖、不私改A状态投影。上述原RED与未接部分真实保留，本票继续claimed。
+
+
+
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
 
 ## Answer（独立切片，最终预算待接续）

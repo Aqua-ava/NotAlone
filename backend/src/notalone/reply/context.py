@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Callable, Literal, Protocol, TypeVar, get_args
 from uuid import UUID, uuid4
 
+from notalone.reply.assistant_discussion import DiscussionContext
 from notalone.memory.timing import MemoryTiming
 from notalone.reply.errors import (
     ReplyContextError,
@@ -222,6 +223,7 @@ class ReplyContext:
     index_revision: int | None = None
     tool_calls: tuple[ToolCallTrace, ...] = ()
     style_references: tuple[StyleReference, ...] = ()
+    assistant_discussion: DiscussionContext | None = None
 
     def has_unauthorized_history(self) -> bool:
         """草稿和显式继续候选之外的历史证据是否超出本次请求权限。"""
