@@ -1,20 +1,15 @@
-import type { ReplyCandidate, ReplyInputSnapshot } from '../../shared/reply-bridge';
+import type { ReplyInputSnapshot } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
+import { isUuid } from '../uuid';
+import { defaultAssistantSession } from './assistant-sessions';
+import { isRecord, readReplyResult } from './result-read';
 
-const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-const text = (value: unknown): value is string => typeof value === 'string' && value.length <= 65_536 && Boolean(value.trim());
-function identifiers(value: unknown): string[] {
-  if (!Array.isArray(value) || value.length > 512 || !value.every((item) => typeof item === 'string' && uuid.test(item))) {
-    throw new Error('候选结果格式无效。');
-  }
-  return value.map((item: string) => item.toLowerCase());
-}
-
-// 仅调用已存在的同步生成端点；不推断异步进度或澄清对象。
-export async function generateReply(backend: BackendHost, input: ReplyInputSnapshot, requestKey: string, signal: AbortSignal) {
+// 输入仍经现有生成应用边界；返回前须已可靠保存到所属助手会话。
+export async function generateReply(backend: BackendHost, input: ReplyInputSnapshot, requestKey: string,
+  signal: AbortSignal, sessionId?: string) {
+  const selected = sessionId ?? (await defaultAssistantSession(backend, input.contactId, signal)).sessionId;
   const response = await backend.requestJson({
-    method: 'POST', path: '/api/reply/generate', timeoutMs: 25_000, signal,
+    method: 'POST', path: `/api/contacts/${input.contactId}/assistant-sessions/${selected}/replies`, timeoutMs: 25_000, signal,
     body: { contact_id: input.contactId, idempotency_key: requestKey, content: input.mode === 'rewrite_draft' ? {
       type: 'rewrite_draft', draft_text: input.draftText,
       user_instruction: input.userInstruction, include_relationship_context: input.includeRelationshipContext,
@@ -26,19 +21,8 @@ export async function generateReply(backend: BackendHost, input: ReplyInputSnaps
     } },
   });
   const value = response.data;
-  if (!record(value) || typeof value.reply_request_id !== 'string' || !uuid.test(value.reply_request_id)
-    || !Array.isArray(value.candidates) || value.candidates.length < 1 || value.candidates.length > 3
-    || !record(value.context_receipt)) throw new Error('候选结果格式无效。');
-  const known = new Set<string>();
-  const candidates: ReplyCandidate[] = value.candidates.map((item: unknown) => {
-    if (!record(item) || typeof item.candidate_id !== 'string' || !uuid.test(item.candidate_id)
-      || !text(item.text) || !text(item.basis) || !Array.isArray(item.risk_notes) || item.risk_notes.length > 32
-      || !item.risk_notes.every((note) => typeof note === 'string' && note.length <= 4096)) throw new Error('候选结果格式无效。');
-    const candidateId = item.candidate_id.toLowerCase();
-    if (known.has(candidateId)) throw new Error('候选结果格式无效。');
-    known.add(candidateId);
-    return { candidateId, text: item.text, basis: item.basis, citationIds: identifiers(item.citation_ids), riskNotes: [...item.risk_notes] };
-  });
-  return { generation: response.generation, replyRequestId: value.reply_request_id.toLowerCase(),
-    candidates, contextEvidenceIds: identifiers(value.context_receipt.evidence_ids) };
+  if (!isRecord(value) || value.session_id !== selected || !isUuid(value.input_version_id)
+    || value.state !== 'completed') throw new Error('本次结果尚未可靠保存，请重试同一次生成。');
+  return { ...readReplyResult(value), generation: response.generation, assistantSessionId: selected,
+    inputVersionId: value.input_version_id.toLowerCase() };
 }

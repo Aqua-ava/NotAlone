@@ -18,6 +18,7 @@ export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
     setMode: (...args: unknown[]) => ipcRenderer.invoke('reply:set-mode', ...args),
     loadMessages: (...args: unknown[]) => ipcRenderer.invoke('reply:load-messages', ...args),
     retrySourceValidation: (...args: unknown[]) => ipcRenderer.invoke('reply:retry-source-validation', ...args),
+    readSavedSession: (...args: unknown[]) => ipcRenderer.invoke('reply:read-saved-session', ...args),
     reconnectMessages: (...args: unknown[]) => ipcRenderer.invoke('reply:reconnect-messages', ...args),
     selectMessage: (...args: unknown[]) => ipcRenderer.invoke('reply:select-message', ...args),
     updateDirection: (...args: unknown[]) => ipcRenderer.invoke('reply:update-direction', ...args),

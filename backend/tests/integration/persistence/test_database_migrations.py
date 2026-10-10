@@ -15,6 +15,7 @@ from uuid import uuid4
 
 import psycopg
 from psycopg import sql
+from psycopg.conninfo import make_conninfo
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -23,8 +24,10 @@ ROOT = Path(__file__).resolve().parents[3]
 class DatabaseMigrationCommandTest(unittest.TestCase):
     def setUp(self) -> None:
         self.database_name = f"notalone_migration_{uuid4().hex}_test"
-        # 显式使用本机管理库，仅创建本用例拥有的随机测试库。
-        self.admin = psycopg.connect("host=/tmp dbname=postgres", autocommit=True)
+        # 保持显式隔离实例的 host/port，只创建本用例拥有的随机测试库。
+        instance_url = os.environ.get("NOTALONE_TEST_DATABASE_URL", "host=/tmp dbname=notalone_test")
+        self.database_url = make_conninfo(instance_url, dbname=self.database_name)
+        self.admin = psycopg.connect(instance_url, dbname="postgres", autocommit=True)
         self.admin.execute(
             sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(
                 sql.Identifier(self.database_name)
@@ -50,7 +53,7 @@ class DatabaseMigrationCommandTest(unittest.TestCase):
 
     def _run(self, *, directory: Path | None = None) -> subprocess.CompletedProcess:
         env = dict(os.environ)
-        env["NOTALONE_DATABASE_URL"] = f"host=/tmp dbname={self.database_name}"
+        env["NOTALONE_DATABASE_URL"] = self.database_url
         return subprocess.run(
             [sys.executable, "-m", "notalone.database_migrations",
              "--migrations", str(directory or self.migrations)],
@@ -67,13 +70,13 @@ class DatabaseMigrationCommandTest(unittest.TestCase):
         self.assertEqual(json.loads(repeated.stdout)["applied"], [])
 
     def test_untracked_existing_database_is_rejected_without_writes(self) -> None:
-        with psycopg.connect(f"host=/tmp dbname={self.database_name}") as connection:
+        with psycopg.connect(self.database_url) as connection:
             connection.execute("CREATE TABLE public.owner (id int)")
         self._write("001_start.sql", "CREATE TABLE public.probe (id int);")
         result = self._run()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("legacy_database_untracked", result.stderr)
-        with psycopg.connect(f"host=/tmp dbname={self.database_name}") as connection:
+        with psycopg.connect(self.database_url) as connection:
             self.assertIsNone(connection.execute(
                 "SELECT to_regclass('public.probe')"
             ).fetchone()[0])
@@ -89,7 +92,7 @@ class DatabaseMigrationCommandTest(unittest.TestCase):
         result = self._run()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("migration_history_mismatch", result.stderr)
-        with psycopg.connect(f"host=/tmp dbname={self.database_name}") as connection:
+        with psycopg.connect(self.database_url) as connection:
             self.assertIsNone(connection.execute(
                 "SELECT to_regclass('public.next_probe')"
             ).fetchone()[0])
@@ -121,7 +124,7 @@ class DatabaseMigrationCommandTest(unittest.TestCase):
         failed = self._run()
         self.assertNotEqual(failed.returncode, 0)
         self.assertNotIn("合成私密字段", failed.stderr + failed.stdout)
-        with psycopg.connect(f"host=/tmp dbname={self.database_name}") as connection:
+        with psycopg.connect(self.database_url) as connection:
             self.assertEqual(connection.execute(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_schema='public' AND table_name='probe' ORDER BY ordinal_position"
@@ -135,8 +138,8 @@ class DatabaseMigrationCommandTest(unittest.TestCase):
         result = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(result.returncode, 0, result.stderr)
         applied = json.loads(result.stdout)["applied"]
-        self.assertEqual(len(applied), 47)
-        self.assertEqual(applied[-1], "047_observation_memory_enqueue_receipt.sql")
+        expected = sorted(path.name for path in (ROOT / "database/migrations").glob("*.sql"))
+        self.assertEqual(applied, expected)
         repeated = self._run(directory=ROOT / "database/migrations")
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout)["applied"], [])
@@ -145,7 +148,7 @@ class DatabaseMigrationCommandTest(unittest.TestCase):
         self._write("001_start.sql", "CREATE TABLE public.probe (id int);")
         self.assertEqual(self._run().returncode, 0)
         # 通过数据库边界注入记录写入失败，证明 SQL 与账本真正同事务。
-        with psycopg.connect(f"host=/tmp dbname={self.database_name}") as connection:
+        with psycopg.connect(self.database_url) as connection:
             connection.execute("""
                 ALTER TABLE public.notalone_schema_migration
                 ADD CONSTRAINT synthetic_record_failure CHECK (name = '001_start.sql')
@@ -156,7 +159,7 @@ ALTER TABLE public.probe ADD COLUMN label text;
 COMMIT;
 """)
         self.assertNotEqual(self._run().returncode, 0)
-        with psycopg.connect(f"host=/tmp dbname={self.database_name}") as connection:
+        with psycopg.connect(self.database_url) as connection:
             self.assertEqual(connection.execute(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_schema='public' AND table_name='probe' ORDER BY ordinal_position"
@@ -171,7 +174,7 @@ COMMIT;
         self._write("001_start.sql", "CREATE TABLE public.probe (id int); COMMIT;")
         result = self._run()
         self.assertNotEqual(result.returncode, 0)
-        with psycopg.connect(f"host=/tmp dbname={self.database_name}") as connection:
+        with psycopg.connect(self.database_url) as connection:
             self.assertIsNone(connection.execute(
                 "SELECT to_regclass('public.probe')"
             ).fetchone()[0])
@@ -183,10 +186,10 @@ COMMIT;
             ALTER TABLE public.probe ADD COLUMN label text;
             SELECT pg_advisory_xact_lock(195948557);
         """)
-        gate = psycopg.connect(f"host=/tmp dbname={self.database_name}", autocommit=True)
+        gate = psycopg.connect(self.database_url, autocommit=True)
         gate.execute("SELECT pg_advisory_lock(195948557)")
         env = dict(os.environ)
-        env["NOTALONE_DATABASE_URL"] = f"host=/tmp dbname={self.database_name}"
+        env["NOTALONE_DATABASE_URL"] = self.database_url
         process = subprocess.Popen(
             [sys.executable, "-m", "notalone.database_migrations",
              "--migrations", str(self.migrations)],

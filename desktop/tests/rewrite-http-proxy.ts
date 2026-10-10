@@ -8,6 +8,9 @@ export class RewriteHttpProxy {
   readonly results: Array<{ status: number; data: Record<string, unknown> }> = [];
   nextReply: 'normal' | 'drop' | 'hold' = 'normal';
   nextMessages: 'normal' | 'drop' | 'hold' = 'normal';
+  nextEvidence: 'normal' | 'hold' = 'normal';
+  readonly heldEvidenceStatuses: number[] = [];
+  readonly sessionReads: Array<{ status: number; states: string[] }> = [];
   readonly messageRequests: string[] = [];
   failMessages = false;
   failRuntime = false;
@@ -21,12 +24,17 @@ export class RewriteHttpProxy {
         response.writeHead(503, { 'Content-Type': 'application/json' });
         response.end('{"error":"synthetic_transport_unavailable"}'); return;
       }
-      const generating = incoming.url === '/api/reply/generate';
+      const generating = incoming.url === '/api/reply/generate'
+        || /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+\/replies$/.test(incoming.url ?? '');
       const messages = /^\/api\/contacts\/[a-f0-9-]+\/messages\?/.test(incoming.url ?? '');
+      const evidence = /^\/api\/contacts\/[a-f0-9-]+\/replies\/[a-f0-9-]+\/evidence$/.test(incoming.url ?? '');
+      const sessionRead = incoming.method === 'GET'
+        && /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+$/.test(incoming.url ?? '');
       if (messages) this.messageRequests.push(incoming.url!);
-      const delivery = generating ? this.nextReply : messages ? this.nextMessages : 'normal';
+      const delivery = generating ? this.nextReply : messages ? this.nextMessages : evidence ? this.nextEvidence : 'normal';
       if (generating) this.nextReply = 'normal';
       if (messages) this.nextMessages = 'normal';
+      if (evidence) this.nextEvidence = 'normal';
       if (messages && this.failMessages) {
         const deliver = () => {
           if (response.destroyed) return;
@@ -49,6 +57,12 @@ export class RewriteHttpProxy {
           result.on('end', () => {
             const value = Buffer.concat(chunks);
             if (generating) this.results.push({ status: result.statusCode ?? 500, data: JSON.parse(value.toString('utf8')) });
+            if (evidence && delivery === 'hold') this.heldEvidenceStatuses.push(result.statusCode ?? 500);
+            if (sessionRead) {
+              const saved = JSON.parse(value.toString('utf8'));
+              this.sessionReads.push({ status: result.statusCode ?? 500,
+                states: Array.isArray(saved.turns) ? saved.turns.map((turn: { state: string }) => turn.state) : [] });
+            }
             const deliver = () => {
               if (response.destroyed) return;
               response.writeHead(result.statusCode ?? 500, { 'Content-Type': 'application/json' });

@@ -58,6 +58,8 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   }, 'helper');
   commands.handle('reply:retry-source-validation', (...args: unknown[]) =>
     replies.retrySourceValidation(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
+  commands.handle('reply:read-saved-session', (...args: unknown[]) =>
+    replies.readSavedSession(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
   commands.handle('reply:reconnect-messages', (...args: unknown[]) =>
     replies.reconnectMessages(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
   commands.handle('reply:select-message', (...args: unknown[]) => {

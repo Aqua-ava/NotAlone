@@ -7,6 +7,8 @@ from uuid import UUID
 
 import psycopg
 
+from notalone.persistence.assistant_session_store import erase_assistant_source_turns
+
 
 class ReplyCleanupError(RuntimeError):
     """回复副本未完整删除，调用方必须回滚整个来源删除事务。"""
@@ -16,7 +18,7 @@ def delete_source_replies(
     connection: psycopg.Connection[Any],
     *,
     owner_id: UUID,
-    contact_id: UUID,
+    contact_id: UUID | None,
     removed_ids: set[UUID],
 ) -> None:
     """删除完整请求，由外键级联清除证据、候选、引用及尝试记录。
@@ -33,7 +35,7 @@ def delete_source_replies(
             FROM public.reply_request AS request
             WHERE request.owner_id = %s
               AND (
-                (request.state = 'running' AND (
+                (request.state = 'running' AND %s::uuid IS NOT NULL AND (
                     request.contact_id = %s OR EXISTS (
                         SELECT 1 FROM public.owner_memory AS memory
                         WHERE memory.owner_id = request.owner_id
@@ -41,6 +43,12 @@ def delete_source_replies(
                           AND memory.source_ids && %s::uuid[]
                     )
                 ))
+                OR EXISTS (
+                    SELECT 1 FROM public.assistant_session_turn AS turn
+                    WHERE turn.owner_id = request.owner_id AND turn.contact_id = request.contact_id
+                      AND turn.idempotency_key = request.idempotency_key
+                      AND turn.dependency_ids && %s::uuid[]
+                )
                 OR EXISTS (
                   SELECT 1 FROM public.reply_context_evidence AS evidence
                   WHERE evidence.reply_request_id = request.id
@@ -65,11 +73,15 @@ def delete_source_replies(
         SELECT id FROM affected
         """,
         (
-            owner_id, contact_id, list(removed_ids), contact_id,
+            owner_id, contact_id, contact_id, list(removed_ids), list(removed_ids), contact_id,
             list(removed_ids), [str(i) for i in removed_ids], owner_id,
         ),
     ).fetchall()
-    request_ids = [row[0] for row in rows]
+    request_ids = [row["id"] if isinstance(row, dict) else row[0] for row in rows]
+    erase_assistant_source_turns(
+        connection, owner_id=owner_id, contact_id=contact_id,
+        removed_ids=removed_ids, reply_request_ids=request_ids,
+    )
     if not request_ids:
         return
     deleted = connection.execute(
@@ -81,3 +93,11 @@ def delete_source_replies(
     ).rowcount
     if deleted != len(request_ids):
         raise ReplyCleanupError("来源删除后仍存在回复副本。")
+
+
+def delete_owner_memory_replies(
+    connection: psycopg.Connection[Any], *, owner_id: UUID, memory_id: UUID,
+) -> None:
+    """同 owner 锁内仅清除依赖指定本人记忆的请求，不猜测联系人或撤销无关租约。"""
+
+    delete_source_replies(connection, owner_id=owner_id, contact_id=None, removed_ids={memory_id})

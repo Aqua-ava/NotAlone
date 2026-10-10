@@ -39,8 +39,21 @@ from notalone.persistence.background_tasks import (
     PostgresBackgroundTaskRepository,
 )
 from notalone.application.reply_service import ReplyService
+from notalone.application.assistant_session_service import (
+    AssistantSessionConflict,
+    AssistantSessionError,
+    AssistantSessionNotFound,
+    AssistantSessionPersistenceError,
+    AssistantSessionRejected,
+    AssistantSessionService,
+    AssistantTurn,
+)
+from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
 from notalone.application.reply_evidence import ReplyEvidenceService, ReplyEvidenceIncomplete
-from notalone.reply.errors import ReplyStoreInvariantError, ReplyPersistenceError
+from notalone.reply.errors import (
+    ReplyStoreInvariantError, ReplyPersistenceError, ReplyInProgressError,
+    ReplyIdempotencyConflictError,
+)
 from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.scopes import ContactScope
 from notalone.application.import_service import (
@@ -153,6 +166,7 @@ class BackendApp:
     """只提供本地 API 的无框架 HTTP 应用。"""
 
     __slots__ = (
+        "_assistant_sessions",
         "_contact_directory",
         "_events",
         "_follow_smoke",
@@ -188,6 +202,7 @@ class BackendApp:
         follow_smoke: FollowSmokeController | None = None,
         message_stream: MessageStream | None = None,
         reply_service: ReplyService | None = None,
+        assistant_sessions: AssistantSessionService | None = None,
         reply_evidence: ReplyEvidenceService | None = None,
         source_service: SourceService | None = None,
         memory_service: MemoryService | None = None,
@@ -212,6 +227,7 @@ class BackendApp:
         self._memory_service = memory_service
         self._message_stream = message_stream
         self._reply_service = reply_service
+        self._assistant_sessions = assistant_sessions
         self._reply_evidence = reply_evidence
         self._runtime_shutdown = runtime_shutdown
         self._runtime_shutdown_lock = threading.Lock()
@@ -263,7 +279,7 @@ class BackendApp:
         response = self._handle_request(
             method=method, path=path, headers=headers, body=body
         )
-        if _is_trace_path(path):
+        if _is_trace_path(path) or "/assistant-session" in urlsplit(path).path:
             return Response(
                 response.status_code,
                 {**response.headers, "Cache-Control": "no-store"},
@@ -375,6 +391,8 @@ class BackendApp:
             )
         if path_value.startswith("/api/contacts/") and path_value.endswith("/evidence"):
             return self._handle_reply_evidence(method_upper, path_value)
+        if path_value.startswith("/api/contacts/") and "/assistant-session" in path_value:
+            return self._handle_assistant_session(method_upper, path_value, request_body)
         if path_value.startswith("/api/contacts/") and "/sources" in path_value:
             return self._handle_sources(method_upper, path_value)
         if path_value == "/api/reply/generate":
@@ -1131,6 +1149,61 @@ class BackendApp:
                 {"error": "reply_generation_failed"},
             )
         return _json_response(HTTPStatus.OK, _reply_payload(reply))
+
+    def _handle_assistant_session(self, method: str, path: str, body: bytes) -> Response:
+        """默认讨论、单次提交与显式读取；不提供自动恢复或发送能力。"""
+
+        service = self._assistant_sessions
+        if service is None:
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "assistant_session_unavailable"})
+        parts = path.strip("/").split("/")
+        try:
+            contact_id = UUID(parts[2])
+            if parts[3:] == ["assistant-session", "default"] and method == "POST":
+                session_id = service.default(owner_id=self._owner_id, contact_id=contact_id)
+                return _json_response(HTTPStatus.OK, {"session_id": str(session_id)})
+            if len(parts) not in (5, 6) or parts[3] != "assistant-sessions":
+                return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            session_id = UUID(parts[4])
+            if len(parts) == 5 and method == "GET":
+                turns = service.read(owner_id=self._owner_id, contact_id=contact_id, session_id=session_id)
+                return _json_response(HTTPStatus.OK, {
+                    "session_id": str(session_id), "turns": [_assistant_turn_payload(turn) for turn in turns],
+                })
+            if len(parts) == 6 and parts[5] == "replies" and method == "POST":
+                body_contact, request = parse_reply_request(body)
+                if body_contact != contact_id:
+                    raise ReplyRequestInvalid()
+                turn = service.generate(
+                    owner_id=self._owner_id, contact_id=contact_id,
+                    session_id=session_id, request=request,
+                )
+                if turn.reply is None:
+                    raise AssistantSessionPersistenceError("未保存完成结果。")
+                return _json_response(HTTPStatus.OK, {
+                    **_reply_payload(turn.reply), "session_id": str(session_id),
+                    "turn_id": str(turn.turn_id), "input_version_id": str(turn.input_version_id),
+                    "state": turn.state,
+                })
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        except (ValueError, IndexError, ReplyRequestInvalid):
+            return _json_response(HTTPStatus.BAD_REQUEST, {"error": "assistant_session_request_invalid"})
+        except AssistantSessionNotFound:
+            return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        except AssistantSessionConflict:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "assistant_session_input_conflict"})
+        except AssistantSessionRejected as error:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "assistant_session_rejected", "reason": error.reason})
+        except ReplyInProgressError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "assistant_session_in_progress"})
+        except ReplyIdempotencyConflictError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "assistant_session_input_conflict"})
+        except (AssistantSessionPersistenceError, ReplyPersistenceError):
+            return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "assistant_session_save_failed"})
+        except ReplyTimeoutError:
+            return _json_response(HTTPStatus.GATEWAY_TIMEOUT, {"error": "reply_timeout"})
+        except AssistantSessionError:
+            return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "assistant_session_failed"})
 
     def _handle_memory(self, *, method: str, path: str, body: bytes) -> Response:
         """处理记忆管理端点；失败关闭且不回显正文。"""
@@ -1962,6 +2035,7 @@ def create_app(
     sync_control: SyncControlPort | None = None,
     message_stream: MessageStream | None = None,
     reply_service: ReplyService | None = None,
+    assistant_sessions: AssistantSessionService | None = None,
     reply_evidence: ReplyEvidenceService | None = None,
     source_service: SourceService | None = None,
     memory_service: MemoryService | None = None,
@@ -1995,6 +2069,9 @@ def create_app(
         message_stream=message_stream
         or MessageStream(PostgresMessageStream(database_url)),
         reply_service=reply_service,
+        assistant_sessions=assistant_sessions or AssistantSessionService(
+            store=PostgresAssistantSessionStore(database_url), reply=reply_service,
+        ),
         reply_evidence=reply_evidence
         or ReplyEvidenceService(PostgresReplyStore(database_url)),
         source_service=source_service or SourceService(database_url),
@@ -2397,6 +2474,18 @@ def _reply_payload(reply: ReplyGenerated) -> dict[str, object]:
             ],
         },
         "used_skill": used_skill,
+    }
+
+
+def _assistant_turn_payload(turn: AssistantTurn) -> dict[str, object]:
+    return {
+        "turn_id": str(turn.turn_id), "input_version_id": str(turn.input_version_id),
+        "request_key": str(turn.request_key), "state": turn.state, "input": turn.input,
+        "reply": _reply_payload(turn.reply) if turn.reply is not None else None,
+        "placeholder": (
+            "相关来源已删除" if turn.state == "redacted"
+            else "相关来源不可用" if turn.state == "unavailable" else None
+        ),
     }
 
 

@@ -335,6 +335,14 @@ class PostgresOwnerMemoryStore:
         try:
             with self._connect() as connection:
                 lock_owner_scope(connection, owner_id=owner_id)
+                if not connection.execute(
+                    "SELECT 1 FROM public.owner_memory WHERE owner_id = %s AND id = %s FOR UPDATE",
+                    (owner_id, memory_id),
+                ).fetchone():
+                    raise OwnerMemoryPersistenceError("owner 记忆不存在或已删除。")
+                from notalone.persistence.reply_cleanup import delete_owner_memory_replies
+
+                delete_owner_memory_replies(connection, owner_id=owner_id, memory_id=memory_id)
                 from notalone.persistence.extraction_trace import (
                     erase_record_traces,
                 )

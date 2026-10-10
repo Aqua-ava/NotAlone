@@ -223,10 +223,21 @@ def main() -> None:
                     source_ids=(source_id,), confidence=0.8,
                 ))
                 result = {"candidate_id": str(pending.candidate_id), "source_id": str(source_id)}
+            elif operation == "unrelated_source":
+                source_id = uuid4()
+                with psycopg.connect(fixture.database_url) as connection:
+                    connection.execute(
+                        "INSERT INTO public.source_document "
+                        "(id, owner_id, contact_id, source_type, file_name, content_sha256, record_count) "
+                        "VALUES (%s, %s, %s, 'wechat_jsonl', 'unrelated-synthetic.jsonl', %s, 0)",
+                        (source_id, fixture.owner_id, UUID(contact_ids[0]), uuid4().hex * 2),
+                    )
+                result = {"source_id": str(source_id)}
             elif operation == "withdraw_target_source":
                 with psycopg.connect(fixture.database_url) as connection:
                     connection.execute(
-                        "UPDATE public.source_document SET status='delete_requested' WHERE owner_id=%s AND contact_id=%s",
+                        "UPDATE public.source_document SET status='delete_requested' "
+                        "WHERE owner_id=%s AND contact_id=%s AND status='active'",
                         (fixture.owner_id, UUID(contact_ids[0])),
                     )
                 result = {}

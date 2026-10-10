@@ -12,6 +12,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from notalone.persistence.locks import lock_owner_scope
+from notalone.persistence.assistant_session_store import prepare_assistant_reply_commit
 from notalone.memory.timing import MemoryTiming
 
 from notalone.reply.context import (
@@ -357,6 +358,7 @@ class PostgresReplyStore:
                         request,
                         context,
                     )
+                    prepare_assistant_reply_commit(connection, request, context)
                     self._validate_reply(reply, evidence_ids=evidence)
                     candidates: list[ReplyCandidate] = []
                     candidate_ids: set[UUID] = set()

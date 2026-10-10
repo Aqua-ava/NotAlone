@@ -7,11 +7,12 @@ import type { ContactSession } from '../contacts/session';
 import { generateReply } from './client';
 import { readReplyMessages } from './messages';
 import { readReplyEvidence } from './evidence-read';
+import { defaultAssistantSession, readAssistantSession } from './assistant-sessions';
 
 const defaults = () => ({ tone: 'original' as const, instruction: '', includeRelationshipContext: false });
 const tones = { original: '', warm: '本次语气自然温和。', concise: '本次表达简洁直接。', polite: '本次语气礼貌克制。' };
 
-// 本次编辑只在主进程内存保留；原始候选和编辑稿分别保存。
+// 助手讨论和原候选由后端保存；当前编辑稿与窗口状态分别处理。
 export class ReplySession {
   hasEdits(): boolean {
     return Boolean(this.state.result || this.heldResult || this.state.phase === 'waiting' || this.state.targetMessageId
@@ -33,6 +34,7 @@ export class ReplySession {
   private noticeStream: AbortController | undefined;
   private noticeVerification: AbortController | undefined;
   private noticeRevision = 0;
+  private savedRead: AbortController | undefined;
   private readonly listeners = new Set<(state: ReplySessionState) => void>();
   private readonly inputListeners = new Set<() => void>();
 
@@ -55,8 +57,38 @@ export class ReplySession {
     this.inputListeners.add(listener); return () => this.inputListeners.delete(listener);
   }
 
+  async readSavedSession(selection: ContactSelection): Promise<void> {
+    this.assertScope(selection);
+    this.savedRead?.abort();
+    const pending = new AbortController();
+    this.savedRead = pending;
+    const generation = this.backend.getConnectionGeneration();
+    const current = () => !pending.signal.aborted && selection.scopeRevision === this.state.scopeRevision
+      && selection.contactId === this.state.contactId && generation === this.backend.getConnectionGeneration();
+    const heldSessionId = this.state.savedSession?.sessionId;
+    this.publish({ savedSession: { phase: 'loading', sessionId: heldSessionId ?? null, turns: [] } });
+    try {
+      const sessionId = heldSessionId ?? (await defaultAssistantSession(this.backend, selection.contactId, pending.signal)).sessionId;
+      if (!current()) return;
+      const saved = await readAssistantSession(this.backend, selection.contactId, sessionId, pending.signal);
+      if (current() && saved.generation === generation) {
+        const heldVersion = (this.state.result ?? this.heldResult?.result)?.inputVersionId;
+        const invalid = heldVersion && saved.turns.some((turn) => turn.inputVersionId === heldVersion
+          && ['redacted', 'unavailable'].includes(turn.state));
+        if (invalid) { this.cancelPending(); this.lastAttempt = undefined; }
+        this.publish({ savedSession: { sessionId: saved.sessionId, turns: saved.turns, phase: 'ready' },
+          ...(invalid ? { result: null, selectedCandidateId: null, phase: 'idle', canRetry: false } : {}) });
+      }
+    } catch {
+      if (current()) this.publish({ savedSession: { phase: 'failed', sessionId: heldSessionId ?? null, turns: [] } });
+    } finally { if (this.savedRead === pending) this.savedRead = undefined; }
+  }
+
   // 删除检查点只接收主进程已确认的联系人；跨联系人本人资料也可能影响当前依据。
   async revalidateDeletedSource(contactId: string): Promise<void> {
+    this.savedRead?.abort();
+    this.savedRead = undefined;
+    if (this.state.savedSession) this.publish({ savedSession: { ...this.state.savedSession, phase: 'idle', turns: [] } });
     const held = this.heldResult ?? (this.state.result ? {
       result: this.state.result, selectedCandidateId: this.state.selectedCandidateId,
     } : undefined);
@@ -212,11 +244,14 @@ export class ReplySession {
       && selection.scopeRevision === this.state.scopeRevision && selection.contactId === this.state.contactId;
     this.publish({ phase: 'waiting', errorCode: undefined, canRetry: true });
     try {
-      const result = await generateReply(this.backend, attempt.input, attempt.requestKey, pending.signal);
+      const result = await generateReply(this.backend, attempt.input, attempt.requestKey, pending.signal,
+        this.state.savedSession?.sessionId ?? undefined);
       if (!current() || result.generation !== generation) return;
       // 同键重放恢复原结果，保留该候选在本次运行中的编辑和选择。
       if (this.state.result?.replyRequestId === result.replyRequestId) { this.publish({ phase: 'ready' }); return; }
-      this.publish({ phase: 'ready', result: { replyRequestId: result.replyRequestId, input: attempt.input,
+      this.publish({ phase: 'ready', savedSession: { phase: 'idle', sessionId: result.assistantSessionId, turns: [] },
+      result: { replyRequestId: result.replyRequestId, assistantSessionId: result.assistantSessionId,
+        inputVersionId: result.inputVersionId, input: attempt.input,
         contextEvidenceIds: result.contextEvidenceIds,
         candidates: result.candidates.map((original) => ({ original, editedText: original.text })) },
       selectedCandidateId: result.candidates[0].candidateId });
@@ -225,7 +260,8 @@ export class ReplySession {
         const failure = error instanceof BackendRequestFailure ? error : undefined;
         const errorCode = failure?.kind === 'connection' ? 'connection'
           : failure?.code === 'reply_timeout' ? 'timeout'
-          : failure?.code === 'reply_rejected' ? 'rejected'
+          : failure?.code === 'assistant_session_save_failed' ? 'save_failed'
+          : ['reply_rejected', 'assistant_session_rejected'].includes(failure?.code ?? '') ? 'rejected'
           : ['reply_unavailable', 'runtime_stopping'].includes(failure?.code ?? '') ? 'unavailable' : 'generation_failed';
         this.publish({ phase: 'failed', errorCode });
       }
@@ -262,6 +298,7 @@ export class ReplySession {
   }
   private receiveContact(state: ContactSessionState): void {
     if (state.scopeRevision !== this.state.scopeRevision || state.selectedContactId !== this.state.contactId) {
+      this.savedRead?.abort(); this.savedRead = undefined;
       this.noticeStream?.abort(); this.noticeVerification?.abort();
       this.noticeStream = undefined; this.noticeVerification = undefined;
       this.cancelPending();
@@ -271,7 +308,8 @@ export class ReplySession {
       this.publish({ scopeRevision: state.scopeRevision, contactId: state.selectedContactId,
         options: defaults(), mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null },
         messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
-        targetMessageId: null, direction: '', purpose: '', phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false });
+        targetMessageId: null, direction: '', purpose: '', phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false,
+        savedSession: { phase: 'idle', sessionId: null, turns: [] } });
       this.beginMessageNotice();
     } else if (state.draft !== this.draft) {
       this.draft = state.draft;

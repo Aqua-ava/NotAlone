@@ -1,5 +1,6 @@
 import type { ContactSelection } from './contact-session-bridge';
 import type { ReplyEvidenceCommands } from './reply-evidence';
+import type { SavedAssistantSession } from './assistant-session';
 
 export type RewriteTone = 'original' | 'warm' | 'concise' | 'polite';
 export interface RewriteOptions {
@@ -61,11 +62,13 @@ export interface ProactiveReplySnapshot {
 export type ReplyInputSnapshot = RewriteSnapshot | DirectedReplySnapshot | ProactiveReplySnapshot;
 export interface ReplyResult {
   replyRequestId: string;
+  assistantSessionId?: string;
+  inputVersionId?: string;
   input: ReplyInputSnapshot;
   candidates: EditableReplyCandidate[];
   contextEvidenceIds: string[];
 }
-export type ReplyFailureCode = 'generation_failed' | 'timeout' | 'unavailable' | 'rejected' | 'connection';
+export type ReplyFailureCode = 'generation_failed' | 'save_failed' | 'timeout' | 'unavailable' | 'rejected' | 'connection';
 export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;
 export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; needsRefresh: boolean; }
 export interface ReplySessionState {
@@ -86,6 +89,7 @@ export interface ReplySessionState {
   result: ReplyResult | null;
   selectedCandidateId: string | null;
   canRetry: boolean;
+  savedSession?: SavedAssistantSession;
 }
 export interface ReplyCandidateSelection extends ContactSelection { replyRequestId: string; candidateId: string; }
 export interface ReplyCandidateEdit extends ReplyCandidateSelection { text: string; }
@@ -96,6 +100,7 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   loadMessages(request: ReplyMessagePageRequest): Promise<void>;
   reconnectMessages(selection: ContactSelection): Promise<void>;
   retrySourceValidation(selection: ContactSelection): Promise<void>;
+  readSavedSession(selection: ContactSelection): Promise<void>;
   selectMessage(selection: ReplyMessageSelection): Promise<ReplySessionState>;
   updateDirection(update: ReplyDirectionUpdate): Promise<ReplySessionState>;
   updatePurpose(update: ReplyPurposeUpdate): Promise<ReplySessionState>;
