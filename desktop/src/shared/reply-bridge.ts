@@ -19,6 +19,7 @@ export interface ReplyDirectionUpdate extends ContactSelection { direction: stri
 export interface ReplyCorrectionUpdate extends ContactSelection { correction: string; }
 export interface ReplyDirectionChoice extends ContactSelection { suggestionId: string; inputVersion: string; }
 export interface ReplySkillVersion { name: string; versionId: string; versionNumber: number; }
+export interface ReplyUsedSkill { name: string; versionId: string; loadState: 'loaded' | 'resource_failed'; }
 export type ReplySkillChoice = { mode: 'auto' | 'disabled'; versionId: null } | { mode: 'user'; versionId: string };
 export interface ReplySkillUpdate extends ContactSelection { skill: ReplySkillChoice; }
 export interface ReplyRequirementsUpdate extends ContactSelection { requirements: string; }
@@ -91,6 +92,7 @@ export interface ReplyResult {
   candidates: EditableReplyCandidate[];
   contextEvidenceIds: string[];
   styleSampleIds?: string[];
+  usedSkill?: ReplyUsedSkill | null;
 }
 export type ReplyFailureCode = 'generation_failed' | 'save_failed' | 'timeout' | 'unavailable' | 'rejected' | 'target_unavailable' | 'source_unavailable' | 'connection';
 export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;

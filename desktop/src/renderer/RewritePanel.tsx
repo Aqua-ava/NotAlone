@@ -100,6 +100,8 @@ function CandidateEditor({ text, candidateId, number, edit, copy }: { text: stri
 export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
   const { state } = replies;
   const evidence = useReplyEvidence();
+  const usedSkill = state.result?.usedSkill;
+  const usedVersion = usedSkill && state.skillChoices.find((item) => item.versionId === usedSkill.versionId)?.versionNumber;
   function noteCopy(candidateId: string, text: string) {
     if (!text.trim() || text.length > 65_536 || !state.contactId || !state.result) return;
     void window.notalone.styleSamples.noteCandidateCopy({ contactId: state.contactId, scopeRevision: state.scopeRevision,
@@ -122,6 +124,9 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
       : '本次生成失败，请核对本机服务后重试。'}</p>}
     {state.phase === 'failed' && state.mode === 'reply_to_message' && <p className="reply-note">可以刷新待回复消息重新选择，或切换到草稿改写。</p>}
     {state.result ? <>
+      {usedSkill === null ? <p className="reply-note">这组候选使用通用流程。</p> : usedSkill && <p className="reply-note">
+        这组候选实际 Skill：{usedSkill.name} · 版本 {usedVersion ?? usedSkill.versionId}{usedSkill.loadState === 'resource_failed' ? '（部分资源读取失败）' : ''}
+      </p>}
       <details className="reply-input-snapshot"><summary>这组候选的生成输入 · {state.result.input.contactDisplayName}</summary>
         {state.result.input.mode === 'rewrite_draft' ? <><p>{state.result.input.draftText}</p><p>{state.result.input.userInstruction ?? '没有额外要求'}</p>
           <p>关系语境：{state.result.input.includeRelationshipContext ? '已开启' : '关闭'}</p></>

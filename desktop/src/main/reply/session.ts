@@ -427,6 +427,7 @@ export class ReplySession {
         inputVersionId: result.inputVersionId, input: attempt.input,
         contextEvidenceIds: result.contextEvidenceIds,
         styleSampleIds: result.styleSampleIds,
+        usedSkill: result.usedSkill,
         candidates: result.candidates.map((original) => ({ original, editedText: original.text })) },
       selectedCandidateId: result.candidates[0].candidateId });
     } catch (error) {

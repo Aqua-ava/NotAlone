@@ -1,4 +1,4 @@
-import type { ReplyCandidate } from '../../shared/reply-bridge';
+import type { ReplyCandidate, ReplyUsedSkill } from '../../shared/reply-bridge';
 import { isUuid } from '../uuid';
 
 export const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -6,6 +6,13 @@ const text = (value: unknown): value is string => typeof value === 'string' && v
 function identifiers(value: unknown): string[] {
   if (!Array.isArray(value) || value.length > 512 || !value.every(isUuid)) throw new Error('候选结果格式无效。');
   return value.map((item: string) => item.toLowerCase());
+}
+
+function readUsedSkill(value: unknown): ReplyUsedSkill | null {
+  if (value === null) return null;
+  if (!isRecord(value) || !isUuid(value.skill_id) || !isUuid(value.version_id) || !text(value.name)
+    || (value.load_state !== 'loaded' && value.load_state !== 'resource_failed')) throw new Error('候选实际策略格式无效。');
+  return { name: value.name, versionId: value.version_id.toLowerCase(), loadState: value.load_state };
 }
 
 export function readReplyResult(value: unknown) {
@@ -25,5 +32,6 @@ export function readReplyResult(value: unknown) {
   const styleSampleIds = identifiers(value.context_receipt.style_sample_ids ?? []);
   if (styleSampleIds.length > 5 || new Set(styleSampleIds).size !== styleSampleIds.length
     || styleSampleIds.some((id) => contextEvidenceIds.includes(id))) throw new Error('表达参考格式无效。');
-  return { replyRequestId: value.reply_request_id.toLowerCase(), candidates, contextEvidenceIds, styleSampleIds };
+  return { replyRequestId: value.reply_request_id.toLowerCase(), candidates, contextEvidenceIds, styleSampleIds,
+    ...(value.used_skill === undefined ? {} : { usedSkill: readUsedSkill(value.used_skill) }) };
 }

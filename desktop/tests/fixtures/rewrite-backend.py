@@ -23,7 +23,11 @@ from fixture_cleanup import cleanup_fixture
 from notalone.application.model_priority import ModelPriorityControl
 from notalone.application.memory_service import MemoryService
 from notalone.application.setup_service import SetupService
+from notalone.application.skill_service import LedgerService, SkillService
+from notalone.application.task_service import TaskService
+from notalone.persistence.background_tasks import PostgresBackgroundTaskRepository
 from notalone.persistence.setup_owner_directory import PostgresOwnerDirectory
+from notalone.persistence.skill_library import PostgresSkillLibrary
 from notalone.persistence.memory_store import PostgresMemoryStore
 from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
 from notalone.persistence.outbound_ledger import PostgresOutboundLedger
@@ -60,6 +64,11 @@ class DesktopRewriteModel(ScriptedCoreModel):
         if not self.plans:
             raise AssertionError("桌面模型脚本耗尽，禁止外部调用。")
         plan = self.plans.pop(0)
+        if plan.get("read_skill"):
+            self.responses.append(tool_response("read_file", {
+                "file_path": f"/notalone/reply-skills/{plan["read_skill"]}/SKILL.md",
+            }))
+            return super()._generate(messages, stop, run_manager, **kwargs)
         if plan.get("probe_history"):
             self.plans.insert(0, {**plan, "probe_history": False, "cite_history": True})
             self.responses.append(tool_response("conversation_search", {"query": "私密合成历史", "top_k": 8}))
@@ -135,6 +144,9 @@ class DesktopRewriteFixture(CoreBusinessFlowFixture, unittest.TestCase):
         backend = HttpBackend(create_app(
             database_url=self.database_url, owner_id=owner_id,
             token=f"synthetic-desktop-{owner_id}", reply_service=reply_service,
+            ledger_service=LedgerService(ledger=PostgresOutboundLedger(self.database_url)),
+            skill_service=SkillService(management=PostgresSkillLibrary(self.database_url)),
+            task_service=TaskService(repository=PostgresBackgroundTaskRepository(self.database_url)),
             memory_service=MemoryService(
                 contact_memory=PostgresMemoryStore(self.database_url),
                 owner_memory=PostgresOwnerMemoryStore(self.database_url),
@@ -205,6 +217,34 @@ class DesktopRewriteFixture(CoreBusinessFlowFixture, unittest.TestCase):
                 )
 
 
+    def prepare_strategy_skills(self, contact_ids: list[str], other_contact_id: str) -> dict[str, Any]:
+        """通过原Skill Library导入合成包；只把范围设为本轮已准备的联系人。"""
+        directory = Path(os.environ["NOTALONE_ENV_FILE"]).parent / "synthetic-skills"
+        library = PostgresSkillLibrary(self.database_url)
+        prepared = []
+        for label, owner, contact, versions in (
+            ("first", self.owner_id, contact_ids[0], 1),
+            ("second", self.owner_id, contact_ids[0], 2),
+            ("other_contact", self.owner_id, contact_ids[1], 1),
+            ("other_owner", self.other_owner_id, other_contact_id, 1),
+        ):
+            name = f"synthetic-strategy-{label.replace('_', '-')}-{uuid4().hex[:8]}"
+            package = directory / name
+            package.mkdir(parents=True)
+            for number in range(1, versions + 1):
+                marker = f"合成静态Skill:{label}:v{number}。只辅助本次理解，保留用户意愿，不新增约定。"
+                content = f"---\nname: {name}\ndescription: 合成关系沟通策略，仅用于受控验证。\n---\n\n{marker}\n"
+                (package / "SKILL.md").write_text(content, encoding="utf-8")
+                result = (library.import_package(owner, package) if number == 1
+                          else library.update_package(owner, package))
+            with psycopg.connect(self.database_url) as connection:
+                connection.execute("UPDATE public.reply_skill SET contact_id=%s WHERE id=%s AND owner_id=%s",
+                                   (UUID(contact), result.skill_id, owner))
+            prepared.append({"label": label, "skill_id": str(result.skill_id), "version_id": str(result.version_id),
+                             "name": name, "version_number": versions, "marker": marker})
+        return {"skills": prepared}
+
+
 def main() -> None:
     fixture = DesktopRewriteFixture()
     try:
@@ -242,10 +282,15 @@ def main() -> None:
                 result = {}
             elif operation == "observations":
                 result = {"payloads": fixture.reply_model.payloads,
+                          "skill_reads": [[str(message.content) for message in messages
+                                           if isinstance(message, ToolMessage) and message.name == "read_file"]
+                                          for messages in fixture.reply_model.seen_calls],
                           "model_entered": fixture.reply_model.entered.is_set(),
                           "tool_names": fixture.reply_model.bound_tool_names,
                           "outbound": [str(message.content) for messages in fixture.reply_model.seen_calls
-                                       for message in messages]}
+                                       for message in messages],
+                          "outbound_calls": [[str(message.content) for message in messages]
+                                             for messages in fixture.reply_model.seen_calls]}
             elif operation == "revoke":
                 binding = next(item for item in fixture.bindings.list_active_bindings(owner_id=fixture.owner_id)
                                if str(item.scope.contact_id) == command["contact_id"])
@@ -283,6 +328,8 @@ def main() -> None:
                     channel="wechat", account_scope=f"synthetic-account-{fixture.owner_id}",
                     conversation_locator=f"wxid_synthetic_{empty_contact_id}")
                 result = {}
+            elif operation == "strategy_skills":
+                result = fixture.prepare_strategy_skills(contact_ids, other_contact_id)
             elif operation == "strategy_pending":
                 with psycopg.connect(fixture.database_url) as connection:
                     source_id = connection.execute("SELECT id FROM public.source_document WHERE owner_id=%s AND contact_id=%s", (fixture.owner_id, UUID(contact_ids[0]))).fetchone()[0]

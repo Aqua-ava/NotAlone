@@ -1,4 +1,4 @@
-import type { ReplyCandidate } from './reply-bridge';
+import type { ReplyCandidate, ReplyUsedSkill } from './reply-bridge';
 
 export interface SavedAssistantTurn {
   turnId: string;
@@ -6,7 +6,7 @@ export interface SavedAssistantTurn {
   requestKey: string;
   state: 'running' | 'completed' | 'failed' | 'redacted' | 'unavailable';
   input: { content: Record<string, unknown> } | null;
-  reply: { replyRequestId: string; candidates: ReplyCandidate[]; contextEvidenceIds: string[] } | null;
+  reply: { replyRequestId: string; candidates: ReplyCandidate[]; contextEvidenceIds: string[]; usedSkill?: ReplyUsedSkill | null } | null;
   placeholder: string | null;
 }
 export interface SavedAssistantSession {

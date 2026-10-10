@@ -56,3 +56,24 @@ Context7在本环境未提供，转查官方ModelRequest文档并核对实际Con
 
 
 2026-10-11 总协调实际复验正式47完整探索预算：273回复单元GREEN（1.792s）、30实际HTTP／001–053隔离PG GREEN（37.655s）／自有库0，type通过。新旧普通／探索转换与明确主动入口两labels180公开exit0，实际NoSkill延续与同键0调用；quiet26／cleanuptrue，无原生App或外部模型。预算装配保留A共同守卫、C生成接口，unknown仍失败关闭。限定两轴0；完整实际Skill版本更换和历史／连续生命周期仍未以本切片通过。
+
+
+
+## Answer（实际版本展示与公开延续切片）
+
+2026-10-11：候选结果保留后端实际 `used_skill` 的名称、不可变版本UUID与加载状态；探索确认和普通生成都投影同一只读摘要。候选组展示实际版本，编号只取同一实际UUID的已验证目录项，缺号则显示版本UUID；明确null展示通用流程，缺字段不冒充通用，部分资源读取失败如实标记。下拉框偏好不能替代实际生成元数据。未改原生成链、A当前输入/历史权威、C样本来源或数据库协议。
+
+TDD实际92039：回应首场原HTTP/turn已证明A v1实际加载且模型4次，但候选组缺版本展示，取得真实产品RED；R06两场先通过，联合命令最终exit1。上述最小展示与投影修复后，69000首复跑遇到明确关闭后立即读取上一探索响应的TEST异步缺口，未记新的产品RED或整场GREEN；仅补新HTTP响应计数/200与公开通用状态等待，确认问题也先等公开已确认状态，原版本/NoSkill/调用数断言全保留。
+
+最终在Conda NotAlone中实际执行 `npm run test:pages -- --case reply-strategy-skills --case reply-strategy-skill-invalidation --timeout-seconds 240`（29695），exit0，两case共六条路径全部完成：
+
+- 回应与主动各沿真实Skill Library准备的合成A v1静态探索、明确确认后原read_file实际A、普通生成仍A，明确关闭后确认与普通生成均NoSkill，改选B v2后拒旧未确认task并只加载B；每场13次实际受控调用。候选组展示、HTTP原字段、Tool实际读取和同会话200持久重读均核验。目录不含另一个contact/owner版本，全System/Human/Tool请求也不含两种越界正文。
+- 回应与主动分别执行实际Skill disable和delete，共四场：库操作200、旧读取与旧问题回答409且模型0追加、无候选；用户明确关闭并刷新后保留此前已确认意愿，通用生成，每场4次实际调用。关闭/更换/失效后的整个System/Human/Tool调用均不混入旧Skill正文。探索静态加载阶段没有read_file Tool结果，仍沿原单次结构化探索适配器。
+
+总实际调用26＋16=42；资源quiet105、active0、onscreen0、单Chrome、cleanupConfirmed=true，Electron/native=false，自有隔离夹具已确认收尾。类型、Python夹具编译、diff检查与页面调度CLI10项通过（3095.711667ms、skip0）；限定两轴最终审查Spec0/Standards hard0/Fowler possible0，Human-only观察P2已关闭；本地SHA随正式交付记录补齐。先前共同总预算与C五个样本/Skill真实HTTP验证仍有效，不拿本次公开六场代替A12整票。
+
+数据影响：只增加实际生成摘要在端侧的投影/显示及合成测试包/只读观察；无新增真实聊天读取、外部模型、持久正文副本、长期偏好或发送能力。R02原六场UUID公开回归、恢复/连续修改与R11整体组合最后对照继续，State保持claimed、原标准不改不预勾；真实语义、原生与人工验收按本轮授权跳过，不说成人工通过。
+
+总协调主树正式消费 `c428b25fb977e9eddd15513155b20ad6d7a3afa4`，公共类型保原 A／C 字段，夹具保真实 MemoryService 与既有来源准备，只补实际 Skill／ledger／task 服务、新合成包及完整调用观察；门禁保全部原名单。Conda `NotAlone`、关闭 dotenv／追踪、`PGHOST=/tmp PGPORT=5432 npm run test:pages -- --case reply-strategy-skills --case reply-strategy-skill-invalidation --timeout-seconds 240`：实际 exit0，两场版本延续／关闭／更换和四场禁用／删除六路径全部到达；每场原 13／4 调用断言保留，合计 42 次实际调用。quiet58、active0、onscreen0、单 Chrome、cleanupConfirmed=true，Electron/native=false，隔离夹具收尾确认。
+
+主树类型、Python 夹具编译和差异检查通过；窗口正常收尾后 `node --test tests/headless/command.test.mjs` 10 项 GREEN／2866.330875ms、skip0，原单租约／nonce／期限限制保持。最终限定 Standards 硬要求 0／重要气味 0、Spec 0。该切片主树集成完成，未完成的整票对照及人工部分依上文保留。
