@@ -8,6 +8,7 @@ from uuid import UUID
 
 from notalone.reply.context import ContextEvidence, ReplyContext, ToolCallTrace
 from notalone.reply.interface import SkillUse
+from notalone.reply.input_budget import InputBudgetDecision
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -54,6 +55,7 @@ class ReplyRuntimeResult:
     usage: RuntimeUsage | None = None
     additional_evidence: tuple[ContextEvidence, ...] = ()
     tool_calls: tuple[ToolCallTrace, ...] = ()
+    input_budget: InputBudgetDecision | None = None
 
 
 class ReplyRuntime(Protocol):

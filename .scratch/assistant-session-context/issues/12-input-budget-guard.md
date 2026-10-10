@@ -98,3 +98,34 @@ PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private
 - 在 Conda `NotAlone`、关闭 dotenv／追踪、`PYTHONPATH=src:.` 环境，运行 `python /private/tmp/notalone-coordinator-isolated-tests.py /Users/local-user/learn/NotAlone tests.integration.persistence.test_assistant_discussion_context tests.integration.persistence.test_assistant_candidate_versions`：48 项 GREEN／6.939 秒（32 历史、16 候选版本及迁移验证），真实正式 001–053、52→53 与 fresh／重复迁移均验证，自有根库和嵌套库残留 0。
 - 同环境 `python -m unittest tests.unit.reply.test_assistant_discussion_serialization -q`：10 项 GREEN／0.010 秒；差异检查通过。最终限定双轴静态复审 Standards 硬要求 0／重要气味 0、Spec 0，不把静态复审冒充额外运行证据。
 - 本次完成数据源与严格身份协议的独立主树集成。累计完整模型载荷、可信预算回执、公开提醒和 C 的中央捕获／派生硬擦除仍由原负责人继续；12 保持 claimed，原验收标准完整保留，人工部分未执行。
+
+
+阶段 3b 可信预算回执切片：每次实际运行调用使用局部 collector 收集守卫决策，最终成功决策经 `ReplyRuntimeResult → ValidatedReply → ReplyGenerated` 传递，并与候选在同一事务保存进既有 `context_snapshot.input_budget`。常驻 runtime 没有共享 `lastDecision`，模型输出 schema 没有预算字段；模型添加同名字段会被拒绝。成功回执只包含固定十项纯元数据，严格 codec 拒绝未知字段、正文、缺字段、非整数、bool、非有限数值及不一致总量；旧记录缺字段保留兼容，已存在但为 null／损坏的字段显式失败。重读与幂等回放使用已保存值，不按新 profile 重算。
+
+- 首条公开 warning 反馈的真实 RED 保留：守卫已允许实际模型调用，HTTP 200 但响应缺预算字段。局部回执传递、实际候选事务保存和主 Agent 的公开 projection 接线后，主 Agent 独立复跑 1 项 GREEN／2.522 秒、正式 001–053 自有随机库残留 0。Assistant 端点未知计量与硬超限返回明确 409 状态及纯决策；旧全局生成端点原 502 契约保持。
+- 新增严格 codec 5 项与真实运行时 4 项先取得模块缺失／字段缺失 RED，接线后合计 9 项 GREEN／0.138 秒。运行时测试保留真实 LangChain 图，覆盖末轮完整回执、工具补入后最终回执、同一 runtime 两次重叠调用各自归属，以及模型伪造预算字段的拒绝；只替换外部模型。新增实际内存 Store／Generator／Runtime 重放 1 项 GREEN／0.019 秒，新构造 runtime 的能力未知也不会在重放时调用模型。此项是保存契约回归，未虚构额外 RED。
+- NEW `tests.integration.server.test_assistant_input_budget` 实际公开 HTTP 11 项 GREEN／19.723 秒，正式生产 001–053，自有随机库残留 0。覆盖临界 warning 同候选保存与低容量配置重读、未知计量／初始硬限零次模型、工具材料补入后只有一次模型并在第二轮拒绝、未知新配置下重放原回执、旧记录无字段、损坏字段 503 无正文／无模型、候选保存事务失败不发布部分结果并可重新生成、模型伪造拒绝、删除后 GET／旧键 POST 404。首轮新删除夹具漏传正式公开 `confirmed: true` 得到 400，补齐字段后单项 1.515 秒 GREEN，再跑全组 11 项 GREEN；没有放宽确认规则。
+- 本轮实际命令：`PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-a-session tests.integration.server.test_assistant_input_budget`；`NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src python -m unittest tests.unit.reply.test_input_budget_receipt tests.unit.reply.test_input_budget_metadata_runtime -q`；同环境 `tests.unit.reply.test_input_budget_metadata_store -q`。`py_compile` 新 codec 与测试、`git diff --check` 通过。公开组日志在 `/private/tmp/notalone-assistant-input-budget-http-final.log`，未提交正文或日志产物。
+- 页面采样清理后，只补 `snapshot: dict[str, Any]` 显式类型。正式 `fa3aa385c189c5474cc26fbb636d39d6e203260f` 的六源独立导出与当前七源分别运行有限 mypy，均为同一组 11 条既有错误；新增 codec 单独 mypy 通过。类型对照日志为 `/private/tmp/notalone-input-budget-mypy-baseline.log`／`/private/tmp/notalone-input-budget-mypy-current.log`，不将全七源称为类型检查通过。13 个源码／测试文件 `py_compile` 和差异检查通过。
+- 最终 128 项单元 GREEN／2.050 秒，包含原 80、新增 metadata 10 及既有 Generator／Store 38。首次组合得到 13 个旧单元存储夹具不透传新回执的错误，严格持久化结果一致性检查正确拒绝；经主 Agent 授权，仅在 `test_langchain_vertical_slice`／`test_skill_runtime_resources` 的既有 Store 夹具各加一行 `input_budget=reply.input_budget`，原断言和守卫保持。组合日志为 `/private/tmp/notalone-input-budget-metadata-unit-final.log`。
+- 扩展 PG 组合实际执行 43 项／35.860 秒，37 通过、6 失败，自有随机库残留 0；11 项 NEW 预算与 24 项原会话 API 均通过。6 项全部在旧 `test_postgres_reply_flow` 夹具的 C 原始来源捕获处、预算／模型前拒绝。正式 `fa3aa385` 完整 backend 独立导出、不包含任何本切片修改，再跑该 8 项，0.304 秒同样 2 通过／6 失败，正式 001–053 与库清理均已核对。未弱化 C 来源守卫，也未改该 PG 夹具；基线事实交由 C 来源负责人处理，不将 43 项写成全 GREEN。日志为 `/private/tmp/notalone-input-budget-metadata-pg-final.log`／`/private/tmp/notalone-input-budget-postgres-flow-baseline.log`。一次包装命令将 `reply` 拼为 `rely`，得到模块导入错误，11 HTTP 仍通过且数据库清理；随后用正确命令完成上述 43 项，不作功能 RED。
+- 此切片尚未将权威完整讨论接入生产模型，也未交付预算公开页面提醒或临界大历史响应可读边界；已有全新会话入口和携候选按各自票处理。12 仍为 claimed，自动部分继续实施，人工部分未执行；没有真实 App、微信、OCR、外部模型、push、发布或部署。
+
+最终单元与 PG 组合命令如下，均在 Conda `NotAlone` 执行，关闭 dotenv／追踪，PG 使用 runner 自有随机测试库：
+
+```bash
+NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src python -m unittest tests.unit.reply.test_input_budget tests.unit.reply.test_input_budget_middleware tests.unit.reply.test_input_budget_runtime tests.unit.reply.test_input_budget_runtime_limits tests.unit.reply.test_langchain_vertical_slice tests.unit.reply.test_skill_runtime_resources tests.unit.reply.test_runtime_limits tests.unit.reply.test_history_tools tests.unit.reply.test_fidelity_input tests.unit.reply.test_input_budget_provider_boundary tests.unit.reply.test_input_budget_receipt tests.unit.reply.test_input_budget_metadata_runtime tests.unit.reply.test_input_budget_metadata_store tests.unit.reply.test_generator tests.unit.reply.test_store_lifecycle -q
+PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-a-session tests.integration.server.test_assistant_input_budget tests.integration.reply.test_postgres_reply_flow tests.integration.server.test_assistant_session_api
+PYTHONPATH=src python -m mypy --follow-imports=silent src/notalone/reply/input_budget_receipt.py
+PYTHONPATH=src python -m mypy --follow-imports=silent src/notalone/reply/input_budget_receipt.py src/notalone/reply/runtime.py src/notalone/reply/interface.py src/notalone/reply/store.py src/notalone/reply/generator.py src/notalone/persistence/reply_store.py src/notalone/reply/adapters/langchain_runtime.py
+```
+
+阶段3d提交前独立复核：仅正式 fa3aa385 导出加本回执切片（未包含10目录、11公开路由或14替换working依赖）实际11项HTTP再次全部GREEN／19.749秒，生产001–053、自有随机库剩余0。Standards硬规范0／判断性气味0，Spec0；审查独立运行新增10纯测试／0.374秒及48相关纯测试／0.116秒均通过。128单元与原43中37通过、6同基线来源夹具失败的事实保持，完整讨论生产接线、预算页面提醒仍待，本票继续claimed，自动部分继续实施、人工部分未执行。
+
+总协调主树正式消费 `d4e00f8a9cc5cdf82e14aca028a21fb837443520` 的十五文件；唯一存储冲突将预算回执与已正式 C `reply_discussion_metadata` 一起同事务保存，不覆盖历史身份／样本依赖，也不取 A10／11／14 未提交源码。实际验证使用 Conda `NotAlone`、关闭 dotenv／追踪、`PYTHONPATH=src:.`：
+
+- `python -m unittest discover -s tests/unit/reply -t . -q`：293 项 GREEN／3.152 秒，权限撤回负例保留既有无正文 Skill 日志。
+- `python /private/tmp/notalone-coordinator-isolated-tests.py /Users/local-user/learn/NotAlone tests.integration.server.test_assistant_input_budget tests.integration.persistence.test_reply_discussion_dependencies tests.integration.server.test_authentic_expression_skill_exploration tests.integration.server.test_style_reference_budget_api`：26 项真实 HTTP／数据库 GREEN／30.381 秒（11 回执、10 中央依赖、2 Skill、3 工具预算），正式生产 001–053，自有随机库残留 0。
+- 新 codec 单文件 mypy、相关十二源码／测试 py_compile 与差异检查通过；未把既有十一条类型基线称为全库通过。限定最终 Standards 硬要求 0／重要气味 0、Spec 0。
+
+本次完成可信预算回执的主树集成，完整讨论模型载荷及预算增长、温和页面提醒和 C 已记录物理擦除缺口继续由原负责人推进；12 保持 claimed，原验收不修改，人工部分未执行。

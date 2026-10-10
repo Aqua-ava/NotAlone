@@ -50,6 +50,7 @@ from notalone.reply.interface import (
     SkillUse,
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
+from notalone.reply.input_budget_receipt import validate_input_budget_receipt
 
 
 logger = logging.getLogger(__name__)
@@ -213,6 +214,7 @@ class ReplyGenerator:
         validated = ValidatedReply(
             candidates=runtime_result.candidates,
             used_skill=runtime_result.used_skill,
+            input_budget=runtime_result.input_budget,
         )
         try:
             persisted = self._store.save(request, runtime_context, validated)
@@ -556,6 +558,10 @@ class ReplyGenerator:
             tuple,
         ):
             raise ReplyInvariantError("模型返回了无效结果。")
+        try:
+            validate_input_budget_receipt(result.input_budget)
+        except ValueError:
+            raise ReplyInvariantError("运行结果的预算回执结构无效。") from None
         if result.usage is not None and not ReplyGenerator._valid_usage(
             result.usage
         ):
@@ -657,6 +663,7 @@ class ReplyGenerator:
             or not isinstance(persisted, ReplyGenerated)
             or persisted.reply_request_id != context.reply_request_id
             or persisted.used_skill != validated.used_skill
+            or persisted.input_budget != validated.input_budget
             or not isinstance(persisted.candidates, tuple)
             or len(persisted.candidates) != len(validated.candidates)
             or not isinstance(persisted.context_receipt, ContextReceipt)

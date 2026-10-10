@@ -8,6 +8,7 @@ from typing import Callable, Literal, TypeAlias
 from uuid import UUID
 
 from notalone.scopes import ContactScope, VerifiedConversationScope
+from notalone.reply.input_budget import InputBudgetDecision
 
 
 class DirectionSource(StrEnum):
@@ -276,6 +277,7 @@ class ReplyGenerated:
     candidates: tuple[ReplyCandidate, ...]
     context_receipt: ContextReceipt
     used_skill: SkillUse | None
+    input_budget: InputBudgetDecision | None = None
 
 
 ReplyOutcome = ReplyGenerated

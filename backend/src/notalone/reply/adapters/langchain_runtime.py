@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import PurePosixPath
 from threading import Lock
 from typing import Any, Callable, Mapping
@@ -34,6 +34,7 @@ from notalone.reply.input_budget import (
     InputTokenCounter,
 )
 from notalone.reply.style_reference import require_reference_contract
+from notalone.reply.input_budget_receipt import validate_input_budget_receipt
 from notalone.reply.runtime import (
     ReplyRuntimeResult,
     RuntimeCandidate,
@@ -661,6 +662,14 @@ class LangChainReplyRuntime:
             )
         catalog = apply_user_skill_choice(catalog, prepared.command.skill)
 
+        # 每次调用独立收集，不能在常驻 runtime 上缓存最后预算而串到并发请求。
+        decisions: list[InputBudgetDecision] = []
+
+        def collect_input_budget(decision: InputBudgetDecision) -> None:
+            decisions.append(decision)
+            if self._on_input_budget is not None:
+                self._on_input_budget(decision)
+
         try:
             entries = {entry.name: entry for entry in catalog.entries}
             backend = ScopedSkillsBackend(
@@ -709,7 +718,7 @@ class LangChainReplyRuntime:
                         profile=self._input_budget_profile,
                         counter=self._input_token_counter,
                         response_format=output_strategy,
-                        on_decision=self._on_input_budget,
+                        on_decision=collect_input_budget,
                     ),
                 ],
                 response_format=output_strategy,
@@ -731,13 +740,17 @@ class LangChainReplyRuntime:
                 ),
                 seconds=self._timeout_seconds,
             )
-            return _validated_result(
+            result = _validated_result(
                 state,
                 budget,
                 self._model_name,
                 history=history,
                 selection=prepared.command.skill,
             )
+            if not decisions:
+                raise ReplyInvariantError("成功模型调用缺少完整预算回执。")
+            receipt = validate_input_budget_receipt(decisions[-1])
+            return replace(result, input_budget=receipt)
         except TimeoutError:
             raise ReplyTimeoutError("回复生成超时，本次生成已停止。") from None
         except GraphRecursionError:

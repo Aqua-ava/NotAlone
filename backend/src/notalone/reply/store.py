@@ -38,6 +38,8 @@ from notalone.reply.interface import (
     UserSkillChoice,
 )
 from notalone.reply.runtime import RuntimeCandidate
+from notalone.reply.input_budget import InputBudgetDecision
+from notalone.reply.input_budget_receipt import validate_input_budget_receipt
 from notalone.scopes import ContactScope, VerifiedConversationScope
 
 
@@ -110,6 +112,7 @@ class ValidatedReply:
 
     candidates: tuple[RuntimeCandidate, ...]
     used_skill: SkillUse | None
+    input_budget: InputBudgetDecision | None = None
 
 
 class ReplyStore(Protocol):
@@ -356,6 +359,7 @@ class InMemoryReplyStore:
                 context_receipt=ContextReceipt(evidence_ids=evidence_ids,
                                                style_sample_ids=tuple(sorted(item.sample_id for item in context.style_references))),
                 used_skill=reply.used_skill,
+                input_budget=reply.input_budget,
             )
             record.evidence = tuple(context.evidence)
             record.result = result
@@ -651,6 +655,10 @@ class InMemoryReplyStore:
             )
         ):
             raise ReplyStoreInvariantError("回复结果结构无效。")
+        try:
+            validate_input_budget_receipt(reply.input_budget)
+        except ValueError:
+            raise ReplyStoreInvariantError("回复预算回执结构无效。") from None
         for candidate in reply.candidates:
             if not (
                 isinstance(candidate.text, str)

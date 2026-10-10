@@ -222,6 +222,7 @@ class InMemoryReplyStore:
                 ),
             ),
             used_skill=reply.used_skill,
+            input_budget=reply.input_budget,
         )
 
     def fail(self, request: ReplyRequest, *, reason: str) -> None:

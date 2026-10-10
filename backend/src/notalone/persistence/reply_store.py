@@ -48,6 +48,12 @@ from notalone.reply.interface import (
     SkillUse,
 )
 from notalone.reply.runtime import RuntimeCandidate
+from notalone.reply.input_budget import InputBudgetDecision
+from notalone.reply.input_budget_receipt import (
+    decode_input_budget_receipt,
+    input_budget_receipt_payload,
+    validate_input_budget_receipt,
+)
 from notalone.reply.store import (
     ReplyAttempt,
     ReplyAttemptState,
@@ -450,6 +456,7 @@ class PostgresReplyStore:
                             style_sample_ids=tuple(sorted(item.sample_id for item in context.style_references)),
                         ),
                         used_skill=reply.used_skill,
+                        input_budget=reply.input_budget,
                     )
                     self._insert_evidence(connection, request, context)
                     self._insert_candidates(connection, request, result)
@@ -471,7 +478,7 @@ class PostgresReplyStore:
                         RETURNING id
                         """,
                         (
-                            Jsonb({**self._context_snapshot(context),
+                            Jsonb({**self._context_snapshot(context, input_budget=reply.input_budget),
                                    **reply_discussion_metadata(connection, request.scope, request.request_id)}),
                             context.skill_library_revision,
                             skill_columns["skill_id"],
@@ -978,6 +985,10 @@ class PostgresReplyStore:
             )
         ):
             raise ReplyStoreInvariantError("回复结果结构无效。")
+        try:
+            validate_input_budget_receipt(reply.input_budget)
+        except ValueError:
+            raise ReplyStoreInvariantError("回复预算回执结构无效。") from None
         for candidate in reply.candidates:
             if not (
                 isinstance(candidate.text, str)
@@ -1015,14 +1026,16 @@ class PostgresReplyStore:
             raise ReplyStoreInvariantError("Skill 使用摘要结构无效。")
 
     @staticmethod
-    def _context_snapshot(context: ReplyContext) -> dict[str, Any]:
+    def _context_snapshot(
+        context: ReplyContext, *, input_budget: InputBudgetDecision | None = None,
+    ) -> dict[str, Any]:
         direction: dict[str, str] | None = None
         if context.direction is not None:
             direction = {
                 "text": context.direction.text,
                 "source": context.direction.source.value,
             }
-        return {
+        snapshot: dict[str, Any] = {
             "scope": {
                 "owner_id": str(context.scope.owner_id),
                 "contact_id": str(context.scope.contact_id),
@@ -1072,6 +1085,10 @@ class PostgresReplyStore:
                 for item in context.evidence
             ],
         }
+        receipt = input_budget_receipt_payload(input_budget)
+        if receipt is not None:
+            snapshot["input_budget"] = receipt
+        return snapshot
 
     @staticmethod
     def _skill_columns(
@@ -1336,8 +1353,15 @@ class PostgresReplyStore:
         request_row: dict[str, Any],
     ) -> ReplyGenerated:
         require_reply_sources_current(connection, owner_id=request_row["owner_id"], request_id=request_row["id"])
-        if request_row["context_snapshot"] is None:
+        snapshot = request_row["context_snapshot"]
+        if not isinstance(snapshot, dict):
             raise ReplyStoreInvariantError("已完成回复缺少上下文快照。")
+        input_budget = None
+        if "input_budget" in snapshot:
+            try:
+                input_budget = decode_input_budget_receipt(snapshot["input_budget"])
+            except ValueError:
+                raise ReplyStoreInvariantError("已完成回复的预算回执结构无效。") from None
         candidate_rows = connection.execute(
             """
             SELECT id, candidate_text, basis, risk_notes, message_group
@@ -1440,6 +1464,7 @@ class PostgresReplyStore:
                 ).fetchall()
             )),
             used_skill=used_skill,
+            input_budget=input_budget,
         )
 
     @staticmethod

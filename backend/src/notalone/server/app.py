@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from notalone.reply.errors import ReplyBudgetError, ReplyTimeoutError
+from notalone.reply.input_budget import InputBudgetExceededError, InputBudgetUnavailableError
 
 import json
 import secrets
@@ -1248,6 +1249,14 @@ class BackendApp:
             return _json_response(HTTPStatus.CONFLICT, {"error": "assistant_session_input_conflict"})
         except (AssistantSessionPersistenceError, ReplyPersistenceError):
             return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "assistant_session_save_failed"})
+        except InputBudgetExceededError as error:
+            return _json_response(HTTPStatus.CONFLICT, {
+                "error": "input_budget_exceeded", "input_budget": error.decision.to_payload(),
+            })
+        except InputBudgetUnavailableError as error:
+            return _json_response(HTTPStatus.CONFLICT, {
+                "error": "input_budget_unavailable", "input_budget": error.decision.to_payload(),
+            })
         except ReplyTimeoutError:
             return _json_response(HTTPStatus.GATEWAY_TIMEOUT, {"error": "reply_timeout"})
         except AssistantSessionError:
@@ -2534,6 +2543,7 @@ def _reply_payload(reply: ReplyGenerated) -> dict[str, object]:
             "style_sample_ids": [str(identifier) for identifier in reply.context_receipt.style_sample_ids],
         },
         "used_skill": used_skill,
+        **({"input_budget": reply.input_budget.to_payload()} if reply.input_budget is not None else {}),
     }
 
 
