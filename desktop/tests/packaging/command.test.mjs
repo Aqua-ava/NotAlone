@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { access, copyFile, cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { access, copyFile, cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { build as buildScript } from 'esbuild';
@@ -13,7 +13,10 @@ test('离线临时打包实际复制两组helper且保留签名，Node启动路�
   try {
     const project = process.cwd(); const fixture = path.join(owned, 'fixture');
     const zipDirectory = path.join(owned, 'electron-zip'); const output = path.join(owned, 'output');
+    const buildTemporary = path.join(owned, 'build-temporary');
     await mkdir(fixture); await mkdir(zipDirectory);
+    await mkdir(buildTemporary); await mkdir(path.join(buildTemporary, 'keep-existing'));
+    await writeFile(path.join(buildTemporary, 'keep-existing/sentinel'), 'synthetic_existing_temporary');
     await cp(path.join(project, 'dist'), path.join(fixture, 'dist'), { recursive: true });
     await mkdir(path.join(fixture, 'src/renderer/assets'), { recursive: true });
     await copyFile(path.join(project, 'src/renderer/assets/logo.png'), path.join(fixture, 'src/renderer/assets/logo.png'));
@@ -28,11 +31,20 @@ test('离线临时打包实际复制两组helper且保留签名，Node启动路�
       const values = [path.join(project, 'scripts/package.mjs'), '--output-directory', output, '--electron-zip-directory', zipDirectory,
         '--with-probe', '--helper-directory', directory, '--helper-version', 'synthetic-1', '--helper-source', 'https://example.org/synthetic-helper'];
       const packaged = spawnSync(process.execPath, values, { cwd: fixture, encoding: 'utf8', timeout: 180_000,
-        env: { PATH: '/usr/bin:/bin', TMPDIR: owned } });
+        env: { PATH: '/usr/bin:/bin', TMPDIR: buildTemporary } });
       assert.equal(packaged.status, 0, `离线检查包构建应通过：${packaged.stderr.slice(-1200)}`);
       assert.match(packaged.stdout, /ad-hoc 签名校验/);
+      assert.equal((await readdir(buildTemporary)).filter((name) => name !== 'keep-existing').length, 0,
+        '打包返回后应清理本轮临时文件，不能只依赖测试夹具的最终清理。');
+      assert.equal(await readFile(path.join(buildTemporary, 'keep-existing/sentinel'), 'utf8'), 'synthetic_existing_temporary');
       const app = path.join(output, `NotAlone-darwin-${process.arch}/NotAlone.app`);
       const resources = path.join(app, 'Contents/Resources');
+      const appEntitlements = spawnSync('/usr/bin/codesign', ['-d', '--entitlements', ':-', app], { encoding: 'utf8', timeout: 10_000 });
+      assert.equal(appEntitlements.status, 0);
+      const entitlementJson = spawnSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', '--', '-'],
+        { input: appEntitlements.stdout, encoding: 'utf8', timeout: 10_000 });
+      assert.equal(entitlementJson.status, 0);
+      assert.deepEqual(JSON.parse(entitlementJson.stdout), { 'com.apple.security.cs.allow-jit': true });
       for (const file of ['wechat-cli', 'libWCDB.dylib']) {
         assert.deepEqual(await readFile(path.join(resources, 'notalone-helpers', file)), await readFile(path.join(directory, file)));
       }

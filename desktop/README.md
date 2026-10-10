@@ -116,6 +116,8 @@ npm run test:package
 
 显式 `test:package` 在自有临时目录复制当前编译资源和 logo，从已安装 Electron 生成不含 AppleDouble 元数据的离线 ZIP，再用合成 CLI/WCDB 和仓库探针调用生产打包命令。实际检查两组资源、原字节/SHA-256、严格签名、helper 未获 JIT entitlement，以及实际包 Resources 下的 Node 启动诊断/后端环境；不执行 Electron、CLI 或探针，不覆盖既有 `out/`，最后精确清理检查包、ZIP 和缓存。合成 CLI 不是正式渠道输入，该结果不能关闭 Finder、权限或微信验收。
 
+签名所需的 plist 在本轮 staging 内生成一次，再以文件路径传给 osx-sign；内容仍只有 `com.apple.security.cs.allow-jit=true`，helper 保留原签名。此前数组参数会逐文件生成 staging 外的临时目录，2026-10-10 的公开构建检查实际复现 250 份残留；修复后命令返回时本轮临时目录清空，调用者既有哨兵保留，主 App entitlement 精确等于原单项。旧候选构建的 250 份自有普通 plist 经哈希/目录身份核对后逐项清理，候选包四个运行时哈希未变；不扫描或批量删除系统临时目录。`test:package` 的 red/green 与清理证据见[任务 20](../.scratch/mac-desktop-app/issues/20-mac-app-delivery.md)。
+
 需要把真实输入构建到独立目录时，公开 `package` 可附加以下选项：
 
 ```bash

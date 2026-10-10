@@ -108,3 +108,11 @@ Spec: ../spec.md
   本轮有限官方路径已核对：维护者现行新仓历史从 v2 开始、精确稳定 commit 不可取、发行 tag 只有 README、Go 官方 proxy/checksum 同版本查询失败。下一步条件是取得绑定原字节的稳定 CLI 源码和 WCDB 构建/许可材料，或在明确范围内补初始化/实际事件/游标/JSONL 警告证据；不以重复下载同一源码归档、RC 源码或普通页面代替。需要人在场的真实渠道、Finder/文件选择/快捷键/剪贴板/退出与 10/18 依赖继续暂放；本票仍 `open / needs-info`，四项验收不勾选。
 
 - 2026-10-10（稳定来源补查与媒体参数修复收口）：固定 `7b46360 → 65cfe8f` 的独立 Standards 硬违规/判断建议 0/0，Spec 新问题 0；两轴确认三个入口沿既有进程接缝关闭媒体补齐、保留非文字计数及水位，且文档没有把 schema/HOME 失败/版本线索记为渠道或精确构建验收。两轴只读未新增运行。147 条本地链接、总清单 8/3/4 分类、本票 open/needs-info 与四项未勾、夹具精确清理及 `git diff --check` 通过。评审副本保留在上述自有忽略目录的 `review-results.json`；来源缺口和现场条件保持，只做本地提交。
+
+- 2026-10-10（用户要求继续：签名临时文件清理）：核对上一轮自有候选构建目录，发现 250 个 `tmp-entitlements-*` 残留，不能按此前“临时检查目录已清理”推导签名材料也全部清理。安装的 `@electron/osx-sign 2.7.1` 与官方类型/源码均确认：entitlements 数组会为每个签名文件创建系统临时目录；路径参数可复用已有 plist。继续原票公开 `package` 命令与既有 `test:package` 接缝，以一次 red → green 验证命令返回后本轮临时文件清空、调用者既有文件保留、App 仍只含 allow-jit 且 helper 不获该权限；不增加参数、权限或来源声明，不运行 App/CLI/探针、数据库或模型。旧候选保持原字节，旧残留只在逐项核验自有普通 plist 后精确清理；本票四项验收和依赖不变。
+
+  沿已约定公开 CLI 接缝，给打包子进程单独的自有 TMPDIR，并预置不应删除的目录/哨兵；命令成功返回后的残留断言实际 red（250 !== 0，27.231s）。改为 staging 内单份 plist 路径后，同一 `npm run test:package` 1/1 green（26.095s）：本轮临时文件为 0、哨兵保留、主 App entitlement 精确等于 `{allow-jit: true}`，两组 helper 哈希/严格签名/无 JIT 与 Node 包内路径通过；占用输出保留和缺离线归档失败清理仍通过。主 App 及生成 helper 从未执行，临时检查包/ZIP/编译缓存随夹具 finally 清理。未覆盖旧候选包，不需要因这次构建清理改动重建已保留的官方候选。
+
+  Context7 不可用，已对照[官方类型](https://github.com/electron/osx-sign/blob/main/src/types.ts)与[签名实现](https://github.com/electron/osx-sign/blob/main/src/sign.ts)，再核对安装的 2.7.1 类型和数组转临时文件路径源码。旧残留先记录每个自有目录 dev/ino、文件集合与 SHA-256（250 份均为同一仅 allow-jit plist），再次核对后逐文件 unlink、逐目录 rmdir，不用全局或递归删除；旧候选四运行时哈希未变。证据保留在 `desktop/artifacts/package-cleanup-20261010.Tp699L/` 的 `red-result.json`、`green-result.json`、`previous-residue-inventory.json` 和 `previous-residue-cleanup.json`；固定本轮基点 `e23812f`，最终安全组及独立双轴复核随后补齐。
+
+  最终 `npm test` 类型检查和默认 38/38 安全组通过（10.457s），该命令未构建 App；显式构建验证仍只记为 `test:package` 1/1。`git diff --check` 通过；没有为打包脚本改动重跑不相关的 Python/数据库/模型或原生组。安全组日志 `safe-result.json` 保存在同一自有目录。只处理公开编译资源、仓库源码和合成资料，未增加权限、读取范围、外部模型或远端 Git 操作。

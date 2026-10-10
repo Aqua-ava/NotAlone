@@ -280,6 +280,8 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 
 ## 5. 构建前后的固定检查清单
 
+2026-10-10 签名临时文件清理切片：发现上一轮自有构建根目录残留 250 份 entitlement 临时 plist，之前检查目录/ZIP 清理记录不涵盖这些文件。已在本轮 staging 内保存一份仅 `com.apple.security.cs.allow-jit=true` 的 plist，以 `@electron/osx-sign 2.7.1` 支持的路径参数复用并由既有 finally 清理；保持 ad-hoc、helper 原签名及权限不变。公开离线打包检查实际因 250 份残留 red，修复后 1/1 green：命令返回时本轮临时文件为 0、既有哨兵保留，主 App entitlement 精确等于原单项，四个 helper 文件仍无 JIT 且签名/哈希通过。旧残留经自有目录身份和普通文件哈希逐项核对后 unlink/rmdir，候选包四个运行时文件哈希前后相同；不批量扫描/清理系统临时目录。不启动 App 或 helper，不修改 TCC 或 HOME；运行验证及双轴结果见任务 20。
+
 2026-10-10 稳定契约隔离补查：在自有临时 profile 中先执行合成 canary，实际证实目录外读写、网络、其他程序 exec 与 Keychain 服务查找均被 OS 拒绝；初始 dyld 启动失败后仅补入核对过的本机 Apple 加载规则。随后固定哈希的 v1.6.25 CLI 执行 version/tools/schema/help 成功，只返回版本及参数声明。两次合成 tail 因环境没有 HOME 而失败，未进入成功数据读取，不能证明 strict 初始化或媒体查询行为。没有启动候选 App、安装器或 wxkey，未读取真实配置、微信数据或 Keychain 内容，不修改 TCC、HOME 或现有权限。后端三个文字同步入口依据同二进制 schema 显式传 `--include-media-paths false`，75 项合成回归通过；其他版本不支持时按命令错误失败。WCDB 的 2.1.15/SQLCipher 4.1.0/SQLite 3.27.2 线索与腾讯固定源码相容，但 `Custom build` 的精确来源和完整许可组合仍缺。临时 canary 可执行文件与夹具已精确清理，原始 JSON、profile、源归档及许可材料保留于任务 20 所列忽略目录；真实渠道与原生验收继续未完成。
 
 2026-10-10 官方发行输入候选包：用户授权自行查找后，从现行官方发行仓库取得 v1.6.25 固定 arm64 ZIP、checksum、manifest，归档/API 摘要与 CLI/WCDB 组件字节哈希全部匹配，严格架构/签名检查通过。沿生产 Packager 离线构建包含 CLI/WCDB 与仓库探针的候选 App，原二进制字节保留、四个运行时文件与主包递归严格签名通过；Node 核对实际 Resources 下诊断路径与库环境，未启动 App/helper、安装器、wxkey、Python、数据库、微信或权限 API。修复包内 CLI 未固定 WCDB 的配置缺口：整组核验后显式注入库路径，包内组失效时停用并清理四个已知库覆盖，外置显式 CLI 保持原环境。合成公开配置场景从缺库环境的实际 red 到 green，最终类型/38 项安全回归与构建通过。候选文件、原始归档和脱敏验证 JSON 保留于任务 20 所列忽略目录；离线 Electron ZIP 与临时 Node 检查目录已清理。上游 WCDB 精确版本与构建时间为 unknown，未证明运行/原生/许可组合完整性或 v2 迁移；任务 20 继续未完成，TCC 与现场范围不变。

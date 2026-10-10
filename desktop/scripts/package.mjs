@@ -84,6 +84,13 @@ try {
   }
   const icon = path.join(staging, 'NotAlone.icns');
   await run('iconutil', ['--convert', 'icns', '--output', icon, iconset]);
+  // 复用自有 plist，避免签名器为每个文件在 staging 外创建临时目录。
+  const entitlements = path.join(staging, 'entitlements.plist');
+  await writeFile(entitlements, `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>com.apple.security.cs.allow-jit</key><true/>
+</dict></plist>
+`);
   const outputs = await packager({
     dir: source,
     name: 'NotAlone',
@@ -119,7 +126,7 @@ try {
       // helper 已带核查过的签名，保留字节与权限，不注入 Electron 的 JIT entitlement。
       ignore: (file) => groups.some((group) => file.includes(`${path.sep}Contents${path.sep}Resources${path.sep}${runtimeLayout(group.runtimeKind).directory}${path.sep}`)),
       optionsForFile: () => ({
-        entitlements: ['com.apple.security.cs.allow-jit'],
+        entitlements,
         hardenedRuntime: false,
         timestamp: 'none',
       }),
