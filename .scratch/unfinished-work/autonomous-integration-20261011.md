@@ -46,7 +46,7 @@
 
 环境已核对：Conda `NotAlone`，Python 3.12.13、psycopg 3.3.4、langchain 1.3.15。非交互 shell 先加载 `/Users/local-user/miniconda3/etc/profile.d/conda.sh` 再激活环境；测试明确指定当前 worktree 的 `PYTHONPATH`，禁用 dotenv 和外部 tracing。
 
-页面租约初始只读状态为 `absent`。页面验证由总协调使用 `test:pages` 串行、有限时段执行；复用生产控制器、认证回环 HTTP 和每场景独立随机 `_test` 数据库。真实 App、系统剪贴板和自然语言模型质量须单独区分，不由页面或合成结果推断。
+页面租约初始只读状态为 `absent`。页面验证使用 `test:pages` 和跨工作树共享的 OS 租约串行、有限时段执行；总协调执行集成窗口，B 在本轮自动页面授权内报备具名窗口后执行自身测试并回传真实收尾。复用生产控制器、认证回环 HTTP 和每场景独立随机 `_test` 数据库。真实 App、系统剪贴板和自然语言模型质量须单独区分，不由页面或合成结果推断。
 
 ## 已取得的切片证据
 
@@ -94,29 +94,29 @@ E01 的 16 例受控报告包含 14 个故意错误输出、1 个超时与1个�
 
 ## 当前逐项接续台账
 
-以下记录截至root `f5cb90a` 的正式集成证据及已核对的负责人切片；不是最终29项验收结果。原票State只随已验证主题提交集成，不用此表替代。
+以下记录截至root `bbae91de8d920bbd54e876b10d5aae2050a9daa5` 的正式集成证据及已核对的负责人切片；不是最终29项验收结果。原票State只随已验证主题提交集成，不用此表替代。
 
 | 原任务 | 负责人 | 当前自动工作及剩余接续 |
 | --- | --- | --- |
 | A07 | A | 正式集成；24项助手HTTP来源回归和三场公开保存页面通过，NoSkill／目的／原始来源修复均已交付 |
 | A08 | A | 正式集成6e78df1；自动22公开场、safe40及两轴0，root补恢复＋样本参考两组GREEN；原生验收未执行且未据此宣称通过 |
-| A09 | A | 新增12删除场景及相关145项GREEN；缺按钮及草稿未清空两RED已转为首具名场GREEN，quiet9／cleanuptrue；故障、等待中删除、重建和范围后续场景由A继续，首GREEN不是整票或正式主题 |
+| A09 | A | 首具名场及故障／生命周期8场全部公开GREEN，合计9场；临时要求残留RED已修，quiet54／cleanuptrue。最新审查仍发现跨会话reserve孤儿turn残留P1、旧删除提示P2、未保存样本editor残留P2，A/C按唯一归属继续实际反例与修复，未正式关闭 |
 | A10 | A | 列表／新建三公开HTTP missing404真实红例已准备；正式051已满足，路由及公开页面继续实现 |
-| A11 | A | 正式B052已消费；14组件PG及真实001–052→pending053升级／重复验证GREEN，自有库0。A唯一负责实际053移正式目录、公开选择／编辑和删除组合，尚未交正式SHA |
-| A12 | A | phase3a 73联合unit＋正式001–052下30真实HTTP／PG GREEN；审查发现嵌套extra_body输出上限、顶层model覆盖与SDK消息有损转换三个边界缺口，A补真实反例。纯guard／middleware先独立正式交付，完整讨论／公开总预算尚未完成 |
+| A11 | A | 14组件PG及A实际正式001–053空库／升级／重复16项GREEN，自有库0；root正式前缀仍001–052，053尚未交可消费稳定SHA。A唯一负责公开选择／完整组编辑及删除组合 |
+| A12 | A | c4e31ef纯完整请求guard／middleware已集成root bbae91d；嵌套输出、model路由和SDK转换三个真实RED已修，负责人80unit／23HTTPPG。root268reply unit、99共同HTTP／正式001–052 PG、type及限定两轴0全GREEN，自有库0；完整不可变历史、可信预算回执持久化和公开阻断／新会话提示仍继续，整票claimed |
 | A13 | A | 等待A11＋A12完整输入、已选版本及预算；不另建版本权威 |
-| A14 | A | 等待A12公共预算；取消／替换与迟到失效由A接既有保存身份 |
+| A14 | A | A12公共预算已正式满足；A正独立准备取消／替换模块与真实反例，沿既有保存身份，不新增DDL |
 | A15 | A | 等待A11＋A14；新消息只提醒，用户触发再生成 |
 | A16 | A | 等待A10＋A14；后台结果保持原会话归属 |
 | A17 | A | 等待A08＋A14；受控生命周期可自动验证，真实App退出／重开本轮排除并须准确记录 |
 | A18 | A | 等待A10＋A11＋A12；只携明确选定的完整候选组与新会话预算 |
 | B01 | B | 正式明确“回应消息”入口已集成；既有公开证据保持，持续策略合并后再收口 |
-| B02 | B | 正式052及canonical／reserve／最小引用已集成root10b2c12；8新PG、64共同HTTP／PG、231reply及11应用单元GREEN，自有库0／两轴0。B公开探索18HTTP GREEN但仍复审／待正式主题，不能以组件关闭全票 |
-| B03 | B | 44e9713有界换组／暂停基础与9单元GREEN；待单一公开探索与完整方向版本 |
+| B02 | B | 正式052及共享reserve后，1484c2b UUID公开HTTP已集成ff6b227；root21新＋78共同共99HTTP／正式001–052 PG GREEN，DB0／两轴0。B自身核心2场及最新问题失效3场两case公开GREEN，quiet42／cleanuptrue；前端尚未正式主题，不以这五场关闭全票 |
+| B03 | B | 有界换组／暂停及正式UUID open／confirm／answer／stop已集成；完整七场／公共前端仍继续 |
 | B04 | B | 正式主动目的及NoSkill已集成，来源删除旧键真实红已转绿，root公开保存目的页面通过；待本树收口 |
-| B05 | B | 主动目的／确认应用及正式A051/B052已接；继续唯一公开目的探索与真实确认生成闭环 |
-| B06 | B | 确认／澄清应用17反例与a1bbc62三声明字段已集成；两场景实际HTTP验证字段重读、指纹和18坏字段拒绝，公开问答闭环继续接单一探索 |
-| B07 | B | 44e9713静态Skill选择11单元GREEN，正式输入与Store已到位；确认到生成的公开版本闭环继续接线 |
+| B05 | B | UUID主动探索／确认／应答HTTP正式集成，真实来源根和同键旧结果恢复通过；B自身公开删除来源后派生目的／回答残留RED已转GREEN，正式前端待交 |
+| B06 | B | 三声明字段与唯一UUID问答HTTP已集成；修改操作／来源拒绝、旧完成键重放不受当前指针及TTL影响均有真实回归。公开修改目的／目标／场景后旧回答失效RED修后，三场公开状态及下一HTTP null实际GREEN；正式前端待交 |
+| B07 | B | 静态版本及disabled公开HTTP正式集成；普通生成丢skill_disabled真实页面RED已修，两mode第5次HTTP显式true GREEN。完整版本变更页面链路及探索SDK消费A公共预算仍继续 |
 | B08 | B | 原消息组5d13c2b及正式052 78b79a0已集成，2真实HTTP稳定有序IDs／重放无调用通过；完整编辑版本与UI继续接A053 |
 | B09 | B | 等待B02＋A16＋A17自动接口；原生证据缺口不得误阻塞可自动接续部分 |
 | B10 | B | 等待B05／06／08＋A13／15；两种场景连续修改与新消息组合 |
@@ -125,15 +125,15 @@ E01 的 16 例受控报告包含 14 个故意错误输出、1 个超时与1个�
 | C02 | C | af0dfdb三输入与c9a5d69任务／报告正式集成、State resolved；四例公开捕获GREEN，报告故意立场失败1、真人0／质量未知 |
 | C03 | C | a2b6ae6统一边界与c9a5d69任务／报告正式集成、State resolved；6真实HTTP、186单元、九捕获与三确定性拒绝GREEN；7故意语义失败、真人0／质量未知 |
 | C04 | C | e9cea6a复制来历修复已集成；原选区、剪切／5100字截短三RED全部公开GREEN，列表／跨contact／跨样本／来源删除后续均到达通过；两组quiet18／cleanuptrue，A09独立保留组合仍待完整前置 |
-| C05 | C | 正式37d5b70集成、186单元＋51实际HTTP／PG及公开style-reference GREEN；当前完整001–051组合81项GREEN。仍等A12完整请求预算和C04／C06组合 |
-| C06 | C | edfab2a恢复TEST：样本删除场GREEN、来源场联系人导航超时RED，quiet64／cleanuptrue，由C修最小导航；f5cb90a三声明组合13真实HTTP／PG GREEN／DB0，新六捕获报告结构0／故意保真失败2／真人0。B10／07、A09完整组合和A12尚待 |
+| C05 | C | 正式37d5b70及公开style-reference GREEN；A纯完整请求guard已正式可消费，当前样本完整5条／600字只是取材上限。历史sample ID仍须等A不可变read／require契约，由C唯一扩展中央来源入口，不放宽原精确捕获规则 |
+| C06 | C | 81b94c8导航fix后root恢复2场全部公开GREEN，原source导航RED已闭合，quiet25／cleanuptrue；f5cb90a三声明组合13实际HTTPPG GREEN／DB0，六捕获结构0／故意保真失败2／真人0。d3c3595 A09组合TEST真实DELETE404仍等正式A09；整候选组报告、B07／10和完整历史预算尚待 |
 
 A051正式7c978564ca18a6c709698fd33ac67e5a89c7ba34已集成为a05a891b0866992fa47741728dd4f250a974b358；记忆删除正文擦除、有效日期和同connection讨论记录均已闭合。root正式001–051生产迁移、050升级／重复／账本与A/C组合81项真实HTTP／PG全绿、自有库剩余0。B已消费正式接口并接续052，pending组件结果仍不当成正式生产前缀。
 
-B单次用户字段统一为user_instruction、clarification_answer及understanding_correction，独立临时声明，不修改已确认方向／目的或长期资料。B唯一负责canonical JSON提取及A reserve两处最小探索接线，A保留当前输入UUID权威和其余生命周期实现；两处必须在同事务推进前捕获真实根依赖。正式aed551768908ac8f43f50305d5a5ad1561841ed8及d89a0f4最小类型前置已合为root10b2c1284e861319c1f8fdccf4a9d7a407484249，root8新PG／64共同HTTP与PG／231reply／11应用单元全部GREEN、自有库0、两轴0。A12完整讨论与B预算适配仍未正式交付，公开探索亦待B正式主题，不据组件提前记整票通过。
+B单次用户字段统一为user_instruction、clarification_answer及understanding_correction，独立临时声明，不修改已确认方向／目的或长期资料。共享canonical／reserve正式aed551768908ac8f43f50305d5a5ad1561841ed8及d89a0f4最小类型已合为root10b2c1284e861319c1f8fdccf4a9d7a407484249，root8新PG／64共同HTTP与PG／231reply／11应用单元GREEN、自有库0、两轴0。随后1484c2b013d75b9c45dfac50c102ec3563079e0f已集成为ff6b2278c6faa82d0ad7fff353c46c16339ae175，实际UUID公开探索与旧整数端点明确409已正式可消费；新旧完成操作键、revision／TTL／来源实际竞态均有HTTP回归。root漏dispatch导致404的新增真实RED修后为精确409／模型0／当前输入不变／input计数0，不恢复旧能力。
 
-完整讨论上下文由A唯一读取真实input／turn／version索引，在内存组装；持久快照不再复制讨论正文。来源依赖必须包含历史raw roots和真实sample IDs，C唯一扩展其中央来源／删除入口，不能只遮挡前端或放宽当前直接样本取材界限。B探索runtime消费A正式完整请求预算守卫，unknown拒绝、不另造第二预算。上述后续接口尚未正式交付，以真实HTTP和公开组合结果收口。
+完整讨论上下文由A唯一读取真实input／turn／version索引，在内存组装；持久快照不再复制讨论正文。来源依赖必须包含历史raw roots和真实sample IDs，C唯一扩展其中央来源／删除入口，不能只遮挡前端或放宽当前直接样本取材界限。A只读同conn read／require尚未正式交付；纯完整请求预算c4e31ef1fcb4cff39f333dd21bc73e515ddebac1已集成为bbae91de8d920bbd54e876b10d5aae2050a9daa5。SDK最终SYSTEM／MESSAGES／TOOLS／RESPONSE_SCHEMA／MODEL_SETTINGS／PROVIDER_FRAMING六段均须可信计量，输出reserve绑定actual model；unknown拒绝，不默认供应商容量、外部调用或以字符当通用token上界。root268reply unit＋99共同实际HTTP／正式001–052 PG GREEN（96.159s）、type及限定两轴0，自有库0；B唯一接自己的探索SDK同guard，未完成的公开预算／完整历史不提前收口。
 
-C ed59d26已集成为f5cb90a，root正式001–052下13真实HTTP／PG通过，涵盖两种场景及其三声明、样本参考、基础继续和删除，自有库精确清理0。新六捕获 `/private/tmp/notalone-root-declared-combination-observations-20261011.json` 经唯一E01薄入口生成新报告，实际6调用865.341417ms、结构失败0／故意保真失败2／真人0／quality_verified=false；自然度、关系适配和用户相似度仍unknown，旧792.018542ms负责人报告和root840.725541ms无声明报告均保留。该HTTP成功不替代来源场恢复RED或未实现B10/A12。
+C ed59d26已集成为f5cb90a，root正式001–052下13真实HTTP／PG通过，涵盖两种场景及其三声明、样本参考、基础继续和删除，自有库精确清理0。新六捕获 `/private/tmp/notalone-root-declared-combination-observations-20261011.json` 经唯一E01薄入口生成新报告，实际6调用865.341417ms、结构失败0／故意保真失败2／真人0／quality_verified=false；自然度、关系适配和用户相似度仍unknown，旧792.018542ms负责人报告和root840.725541ms无声明报告均保留。该HTTP成功不替代独立恢复页面或未实现B10／完整A12；恢复导航fix782fb012已集成为81b94c8f5db11c140f7e7f0c76d4e6e65cceef94，第二公开窗口两场均实际完整通过原断言。
 
 本轮root新增验证：C统一主题186回复单元、6认证HTTP／随机PG、typecheck通过；fidelity-intent四捕获和fidelity-content九捕获＋无效结构/越权引用/调用中撤回均通过。全部普通页面quiet采样active0／onscreen0、单Chrome、cleanupConfirmed=true，无Electron／原生App。两份新报告保留故意失败、真人0和质量未验证。表达选区粘贴的第一RED及A回应方向来源提示的两轮RED均保留，后续未到达的场景没有标通过。
