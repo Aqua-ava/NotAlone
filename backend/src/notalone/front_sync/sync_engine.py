@@ -237,6 +237,7 @@ class FrontSyncEngine:
         try:
             observation = self._probe.observe()
         except ProbeAdapterError as error:
+            self._pending_binding_selection = None
             probe_available = False
             probe_failure = error.code
             # 探针不可用无法证明微信在前台：按非前台停止读取。
@@ -245,9 +246,11 @@ class FrontSyncEngine:
             )
         else:
             wechat_in_front = observation.wechat_in_front
+            if wechat_in_front and observation.qualified_evidence is None:
+                self._pending_binding_selection = None
             outcome = self._lifecycle.observe_front_session(
                 wechat_in_front=wechat_in_front,
-                evidence=observation.evidence,
+                evidence=observation.qualified_evidence,
             )
             decision = outcome.decision
             self._remember_pending_selection(outcome)
@@ -298,11 +301,16 @@ class FrontSyncEngine:
         try:
             observation = self._probe.observe()
         except ProbeAdapterError as error:
+            self._pending_binding_selection = None
+            self._lifecycle.observe_front_session(wechat_in_front=False, evidence=None)
             raise BindingConfirmationError(
                 "probe_unavailable", "前台定位探针不可用，不能确认绑定。"
             ) from error
-        evidence = observation.evidence
+        evidence = observation.qualified_evidence
         if not observation.wechat_in_front or evidence is None:
+            if observation.wechat_in_front:
+                self._pending_binding_selection = None
+            self._lifecycle.observe_front_session(wechat_in_front=observation.wechat_in_front, evidence=None)
             raise BindingConfirmationError(
                 "front_session_unavailable",
                 "微信不在前台或会话无法定位，不能确认绑定。",

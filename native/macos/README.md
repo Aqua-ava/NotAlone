@@ -2,7 +2,7 @@
 
 这是 NotAlone 的技术验证程序，不是正式产品。它包含一个保留给合成自检的命令行工具，以及一个带独立 macOS App 身份的菜单栏验证程序。两者都只在 Mac 微信处于前台时截取指定的聊天区域，在本地运行 OCR，并比较连续结果中的新增文本。
 
-当前 CLI 的 `--session --json`、追加 `--minimal-region` 和文字 `--session` 共用采集前安全门禁。仓库尚无可追溯的最小定位区域布局，故这些调用在创建 App、检查权限或读取窗口前返回 `minimal_region_layout_unverified`；不会回退整窗捕获。旧诊断、watch 和菜单栏路径保留原验证范围，不能据此认定新 Electron 宿主的定位或权限已通过。
+当前 CLI 的 `--session --json`、追加 `--minimal-region` 和文字 `--session` 共用采集前安全门禁。缺少受控 `NOTALONE_FOREGROUND_LAYOUT` 指向的0600已验证profile时，在创建 App、检查权限或读取窗口前返回 `minimal_region_layout_unverified`。候选新增逐区display filter采集、细条摘要前后复验、两处名字与置信度输出；不会回退整窗捕获。17:06–17:16的唯一现场校验未通过、未形成profile，真实裁剪与质量仍未证明；旧诊断、watch 和菜单栏路径不能作为新宿主定位或权限证明。
 
 新增首片 `--calibrate-minimal-region --json` 由 Electron 的“窗口 → 校准微信最小定位区域…”菜单显式调用。它等待用户手工打开微信4.0.6（29387）的唯一前台窗口，仅在该窗口上显示透明框选器，用户按说明选两处名字和三条无文字细条并确认。只输出当前版本、进程/窗口标识及相对窗口几何；不调用ScreenCaptureKit、Vision、AX、微信输入或网络，不请求系统权限。取消、超时、跨屏、版本或窗口变化均不产生新选择。主进程保存的状态为 `selected-awaiting-verification`，不证明可信布局、OCR质量或自动绑定，不被session路径消费。
 
@@ -139,3 +139,7 @@ swift run notalone-sync-probe --watch --crop 0.38,0.16,0.58,0.70
 5. 同一段 OCR 文本不在同一次探针运行中重复报告。
 
 这只是视觉能力验证。它尚未处理多行气泡聚合、可靠时间戳、会话标题匹配、正式持久化或联系人绑定。
+
+候选公开菜单“校验微信最小定位区域…”仅静默预检权限，最多等待60秒微信回到前台。校验已选五处区域后写入0600 profile；新选区或重校验先撤销旧profile。原始小帧仅内存，后端质量解析已准备，自动绑定及小窗自动采用仍未完成。纯布局3项、session参数4项通过不等于真实裁剪通过。ScreenCaptureKit接口已与本机SDK及[Apple sourceRect](https://developer.apple.com/documentation/screencapturekit/scstreamconfiguration/sourcerect)、[SCContentFilter](https://developer.apple.com/documentation/screencapturekit/sccontentfilter)、[captureImage](https://developer.apple.com/documentation/ScreenCaptureKit/SCScreenshotManager/captureImage%28contentFilter%3Aconfiguration%3AcompletionHandler%3A%29)核对；文档不能代替实机。
+
+现场失败后补充 `verification_stage` 固定阶段，并在主进程保存0600 `foreground-layout-verification.json`：只含状态、安全错误码与固定阶段，不能携带原生输出、名称或图像。窗口未取得前台、几何变化、权限缺失、OCR质量和采集失败分别说明；结果不授予采集资格。公开App用例等待该结果后立即核对成功或失败，不以等待profile超时替代原因。此诊断补丁已通过类型、构建与纯测试，尚未新跑真实校验。

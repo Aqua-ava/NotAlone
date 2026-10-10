@@ -125,6 +125,7 @@ void app.whenReady().then(async () => {
       { label: '管理后台', click: () => openWindow('manager') },
       { label: '输入小窗', click: () => openWindow('helper') },
       { label: '校准微信最小定位区域…', click: () => calibration.start() },
+      { label: '校验微信最小定位区域…', click: () => calibration.start(true) },
       { type: 'separator' },
       { label: '最小化', role: 'minimize' },
       { label: '关闭窗口', role: 'close' },

@@ -22,7 +22,7 @@ from notalone.front_sync import (
     FrontSessionProbeObservation,
     FrontSyncPhase,
 )
-from notalone.front_sync.probe_adapter import ProbeAdapterError
+from notalone.front_sync.probe_adapter import FrontSessionQuality, ProbeAdapterError
 from notalone.front_sync.sync_engine import (
     BindingConfirmationError,
     FrontSyncCycleReport,
@@ -177,6 +177,8 @@ class FrontSyncEndToEndTest(unittest.TestCase):
     def _front(self, display_name: str | None, *, preview: str | None = None) -> None:
         self.probe.observation = FrontSessionProbeObservation(
             wechat_in_front=display_name is not None,
+            selected_row_name=display_name,
+            quality=FrontSessionQuality("minimal-region-v1", 1, 1),
             evidence=(
                 None
                 if display_name is None
@@ -238,6 +240,60 @@ class FrontSyncEndToEndTest(unittest.TestCase):
     # ------------------------------------------------------------------
     # 绑定确认与自动切换
     # ------------------------------------------------------------------
+
+    def test_unverified_or_inconsistent_observation_cannot_reuse_active_binding(self) -> None:
+        self._confirm_a()
+        for row, quality in [
+            (_NAME_A, None),
+            (_NAME_A, FrontSessionQuality("minimal-region-v1", 1, 0.89)),
+            (_NAME_B, FrontSessionQuality("minimal-region-v1", 1, 1)),
+        ]:
+            with self.subTest(row=row, quality=quality):
+                self.probe.observation = FrontSessionProbeObservation(
+                    wechat_in_front=True,
+                    evidence=FrontSessionEvidence(display_name=_NAME_A),
+                    selected_row_name=row, quality=quality,
+                )
+                previous_tail_calls = len(self.runner.tail_calls)
+                report = self.engine.cycle()
+                self.assertNotEqual(report.phase, FrontSyncPhase.ACTIVE)
+                self.assertIsNone(report.active_contact_id)
+                self.assertEqual(len(self.runner.tail_calls), previous_tail_calls)
+                with self.assertRaises(BindingConfirmationError):
+                    self.engine.confirm_binding(contact_id=self.contact_a, locator=_TALKER_A)
+
+    def test_bad_quality_invalidates_previous_candidate_selection(self) -> None:
+        for operation in ["cycle", "confirm"]:
+            with self.subTest(operation=operation):
+                self._front(_NAME_A)
+                self.assertTrue(self.engine.cycle().candidates)
+                self.probe.observation = FrontSessionProbeObservation(
+                    wechat_in_front=True, evidence=FrontSessionEvidence(display_name=_NAME_A),
+                    selected_row_name=_NAME_A,
+                )
+                if operation == "cycle":
+                    self.assertFalse(self.engine.cycle().candidates)
+                else:
+                    with self.assertRaises(BindingConfirmationError):
+                        self.engine.confirm_binding(contact_id=self.contact_a, locator=_TALKER_A)
+                with self.assertRaises(BindingConfirmationError):
+                    self.engine.confirm_pending_binding(contact_id=self.contact_a, locator=_TALKER_A)
+
+    def test_probe_failure_invalidates_previous_candidate_selection(self) -> None:
+        for code in ["probe_output_invalid", "minimal_region_layout_changed"]:
+            for operation in ["cycle", "confirm"]:
+                with self.subTest(code=code, operation=operation):
+                    self.probe.error = None
+                    self._front(_NAME_A)
+                    self.assertTrue(self.engine.cycle().candidates)
+                    self.probe.error = ProbeAdapterError(code, "合成探针失败")
+                    if operation == "cycle":
+                        self.assertFalse(self.engine.cycle().candidates)
+                    else:
+                        with self.assertRaises(BindingConfirmationError):
+                            self.engine.confirm_binding(contact_id=self.contact_a, locator=_TALKER_A)
+                    with self.assertRaises(BindingConfirmationError):
+                        self.engine.confirm_pending_binding(contact_id=self.contact_a, locator=_TALKER_A)
 
     def test_first_binding_needs_confirmation_then_ingests_and_auto_confirms(
         self,

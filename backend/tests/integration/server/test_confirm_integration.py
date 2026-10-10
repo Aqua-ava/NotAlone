@@ -15,7 +15,7 @@ import psycopg
 
 from notalone.conversation.matcher import FrontSessionEvidence
 from notalone.front_sync import FrontSessionProbeObservation
-from notalone.front_sync.probe_adapter import ProbeAdapterError
+from notalone.front_sync.probe_adapter import FrontSessionQuality, ProbeAdapterError
 from notalone.front_sync.sync_engine import FrontSyncEngine
 from notalone.persistence.conversation_repository import (
     PostgresConversationBindingRepository,
@@ -92,6 +92,8 @@ class ConfirmApiIntegrationTest(unittest.TestCase):
         self.probe = FakeProbe()
         self.probe.observation = FrontSessionProbeObservation(
             wechat_in_front=True,
+            selected_row_name=_NAME,
+            quality=FrontSessionQuality("minimal-region-v1", 1, 1),
             evidence=FrontSessionEvidence(
                 display_name=_NAME,
                 preview_text=None,
@@ -177,6 +179,8 @@ class ConfirmApiIntegrationTest(unittest.TestCase):
         # 确认后触发一轮新的 cycle：同一会话自动识别，不再要求确认。
         self.probe.observation = FrontSessionProbeObservation(
             wechat_in_front=True,
+            selected_row_name=_NAME,
+            quality=FrontSessionQuality("minimal-region-v1", 1, 1),
             evidence=FrontSessionEvidence(
                 display_name=_NAME,
                 preview_text=None,

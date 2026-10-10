@@ -66,6 +66,87 @@ class MacosFrontSessionProbeTest(unittest.TestCase):
         self.assertFalse(observation.wechat_in_front)
         self.assertIsNone(observation.evidence)
 
+    def test_fresh_minimal_capture_keeps_both_name_confidences(self) -> None:
+        stdout = json.dumps({
+            "ok": True, "wechat_in_front": True,
+            "display_name": "合成甲", "selected_row_name": "合成甲",
+            "capture_version": "minimal-region-v1",
+            "quality": {"layout_verified": True,
+                        "display_name_confidence": 0.96,
+                        "selected_row_name_confidence": 0.91},
+        })
+        observation = self._probe(
+            lambda command: FakeCommandResult(returncode=0, stdout=stdout)
+        ).observe_fresh(timeout_seconds=0.9)
+
+        self.assertEqual(observation.selected_row_name, "合成甲")
+        self.assertIsNotNone(observation.quality)
+        assert observation.quality is not None
+        self.assertEqual(observation.quality.capture_version, "minimal-region-v1")
+        self.assertEqual(observation.quality.display_name_confidence, 0.96)
+        self.assertEqual(observation.quality.selected_row_name_confidence, 0.91)
+
+    def test_invalid_confidence_is_rejected_without_echoing_names(self) -> None:
+        for value in [True, "0.99", -0.01, 1.01, float("nan"), float("inf")]:
+            with self.subTest(value=value):
+                stdout = json.dumps({
+                    "ok": True, "wechat_in_front": True,
+                    "display_name": "合成保密标记",
+                    "capture_version": "minimal-region-v1",
+                    "quality": {"layout_verified": True,
+                                "display_name_confidence": value,
+                                "selected_row_name_confidence": 0.99},
+                })
+                with self.assertRaises(ProbeAdapterError) as caught:
+                    self._probe(lambda command: FakeCommandResult(0, stdout)).observe()
+                self.assertEqual(caught.exception.code, "probe_output_invalid")
+                self.assertNotIn("合成保密标记", str(caught.exception))
+
+    def test_matching_evidence_requires_verified_quality_and_equal_names(self) -> None:
+        for row, confidence, version, allowed in [
+            ("合成甲", 0.90, "minimal-region-v1", True),
+            ("合成甲", 0.89, "minimal-region-v1", False),
+            ("合成乙", 1, "minimal-region-v1", False),
+            (None, 1, "minimal-region-v1", False),
+            ("合成甲", 1, None, False),
+        ]:
+            with self.subTest(row=row, confidence=confidence, version=version):
+                stdout = json.dumps({
+                    "ok": True, "wechat_in_front": True,
+                    "display_name": "合成甲", "selected_row_name": row,
+                    "capture_version": version,
+                    "quality": {"layout_verified": True,
+                                "display_name_confidence": 1,
+                                "selected_row_name_confidence": confidence},
+                })
+                observation = self._probe(lambda command: FakeCommandResult(0, stdout)).observe()
+                self.assertEqual(observation.qualified_evidence is not None, allowed)
+
+    def test_missing_or_unverified_quality_cannot_pass_confidence_gate(self) -> None:
+        for extra in [{}, {"capture_version": "unknown"},
+                      {"capture_version": "minimal-region-v1", "quality": {"layout_verified": True}},
+                      {"capture_version": "minimal-region-v1", "quality": {
+                          "layout_verified": False, "display_name_confidence": 1,
+                          "selected_row_name_confidence": 1}}]:
+            with self.subTest(extra=extra):
+                stdout = json.dumps({"ok": True, "wechat_in_front": True,
+                                     "display_name": "合成甲", **extra})
+                observation = self._probe(lambda command: FakeCommandResult(0, stdout)).observe()
+                self.assertIsNone(observation.quality)
+
+    def test_confidence_gate_requires_both_names_to_reach_ninety_percent(self) -> None:
+        for header, row, allowed in [(0.9, 0.9, True), (0.89, 1, False), (1, 0.89, False)]:
+            with self.subTest(header=header, row=row):
+                stdout = json.dumps({"ok": True, "wechat_in_front": True,
+                                     "capture_version": "minimal-region-v1",
+                                     "quality": {"layout_verified": True,
+                                                 "display_name_confidence": header,
+                                                 "selected_row_name_confidence": row}})
+                observation = self._probe(lambda command: FakeCommandResult(0, stdout)).observe()
+                self.assertIsNotNone(observation.quality)
+                assert observation.quality is not None
+                self.assertEqual(observation.quality.meets_minimum_confidence, allowed)
+
     def test_frontmost_without_readable_evidence_returns_null_fields(
         self,
     ) -> None:

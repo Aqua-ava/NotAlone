@@ -97,7 +97,8 @@ export function backendEnvironment(config: BackendConfiguration, userData: strin
     NOTALONE_BACKEND_INFO: config.infoPath,
     NOTALONE_ENV_FILE: config.envFilePath || path.join(config.projectDirectory!, '.env'),
     NOTALONE_WECHAT_CLI: config.wechatCliPath || path.join(userData, 'unconfigured-cli'),
-    NOTALONE_SYNC_PROBE: config.syncProbePath || path.join(userData, 'unconfigured-probe') };
+    NOTALONE_SYNC_PROBE: config.syncProbePath || path.join(userData, 'unconfigured-probe'),
+    NOTALONE_FOREGROUND_LAYOUT: path.join(userData, 'foreground-layout-profile.json') };
   if (config.bundledWechatRuntime) {
     // 包内组只加载已核验WCDB，继承的显式库覆盖不能转向包外文件。
     for (const key of ['WECHAT_CLI_WCDB_LIB', 'WECHAT_CLI_WCDB_DYLIB', 'WX_MCP_WCDB_LIB', 'WX_MCP_WCDB_DYLIB']) delete environment[key];

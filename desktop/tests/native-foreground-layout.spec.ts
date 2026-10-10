@@ -1,0 +1,41 @@
+import { expect } from '@playwright/test';
+import { readFile, stat, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { test, selectMenu } from './app-fixture';
+
+test.skip(process.env.NOTALONE_FOREGROUND_LAYOUT_ACCEPTANCE !== '1', '须由主协调者安排有限的最小区域采集现场轮次');
+test.use({ appEnvironment: { NOTALONE_SYNC_PROBE: path.resolve('../native/macos/build/cli/notalone-sync-probe') } });
+
+// 五处几何仍经公开表单输入；不预造verified文件或替换原生捕获、权限与OCR。
+test('公开校准后只以五处最小区域验证当前布局', async ({ runningApp }) => {
+  test.setTimeout(420_000);
+  const { app, appProcess, userData } = runningApp;
+  const manager = await app.firstWindow();
+  await manager.waitForURL('notalone://app/index.html#manager');
+  await writeFile(test.info().outputPath('owned-app.json'), JSON.stringify({ pid: appProcess.pid, userData }), { mode: 0o600 });
+  await selectMenu(app, '窗口', '校准微信最小定位区域…');
+  const selectionPath = path.join(userData, 'foreground-layout-selection.json');
+  const profilePath = path.join(userData, 'foreground-layout-profile.json');
+  const resultPath = path.join(userData, 'foreground-layout-verification.json');
+  await expect.poll(async () => { try { return JSON.parse(await readFile(selectionPath, 'utf8')); } catch { return null; } }, { timeout: 180_000 }).not.toBeNull();
+  expect(JSON.parse(await readFile(selectionPath, 'utf8')).state).toBe('selected-awaiting-verification');
+  await writeFile(test.info().outputPath('pending-layout-selection.json'), await readFile(selectionPath), { mode: 0o600 });
+  // 操作者关闭公开结果说明后再选择下一菜单，不读取或操纵内部flight状态。
+  process.stdout.write('foreground_layout_operator_step: 五处几何已保存，请关闭结果说明后从窗口菜单校验，并由获认可操作者切回当前微信。\n');
+  await expect.poll(async () => { try { return JSON.parse(await readFile(resultPath, 'utf8')); } catch { return null; } }, { timeout: 100_000 }).not.toBeNull();
+  const verification = JSON.parse(await readFile(resultPath, 'utf8')) as Record<string, unknown>;
+  await writeFile(test.info().outputPath('layout-verification-result.json'), JSON.stringify(verification), { mode: 0o600 });
+  expect(verification.state, `校验阶段=${verification.stage}；安全错误码=${verification.error}`).toBe('verified');
+  expect((await stat(resultPath)).mode & 0o777).toBe(0o600);
+  const profile = JSON.parse(await readFile(profilePath, 'utf8')) as Record<string, unknown>;
+  expect(Object.keys(profile).sort()).toEqual(['schemaVersion', 'state', 'wechatVersion', 'wechatBuild', 'processId', 'windowId', 'windowFrame', 'regions', 'pixelScale', 'sentinelDigests'].sort());
+  expect(profile.state).toBe('verified-minimal-layout');
+  expect(Object.keys(profile.regions as object)).toHaveLength(5);
+  expect(Object.keys(profile.sentinelDigests as object).sort()).toEqual(['headerDivider', 'selectedHighlight', 'verticalDivider']);
+  for (const digest of Object.values(profile.sentinelDigests as object)) expect(digest).toMatch(/^[a-f0-9]{64}$/);
+  expect((await stat(profilePath)).mode & 0o777).toBe(0o600);
+  await writeFile(test.info().outputPath('verified-layout-profile.json'), JSON.stringify(profile), { mode: 0o600 });
+  process.stdout.write('foreground_layout_verified: 本轮原生五处采集、同名质量与细条复核已形成无图像profile；不代表绑定和自动定位通过。\n');
+  await selectMenu(app, 'NotAlone', '退出 NotAlone');
+  await expect.poll(() => appProcess.exitCode, { timeout: 20_000 }).toBe(0);
+});

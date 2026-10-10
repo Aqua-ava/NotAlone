@@ -14,7 +14,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
-from notalone.conversation.matcher import FrontSessionEvidence
+from notalone.conversation.matcher import FrontSessionEvidence, normalize_display_text
 
 
 class ProbeAdapterError(RuntimeError):
@@ -37,11 +37,56 @@ CommandRunner = Callable[[tuple[str, ...]], CommandResult]
 
 
 @dataclass(frozen=True, slots=True)
+class FrontSessionQuality:
+    """已声明最小区域与布局校验的两处OCR质量；不等于绑定已确认。"""
+
+    capture_version: str
+    display_name_confidence: float
+    selected_row_name_confidence: float
+
+    def __post_init__(self) -> None:
+        if self.capture_version != "minimal-region-v1" or any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or not 0 <= value <= 1
+            for value in (
+                self.display_name_confidence, self.selected_row_name_confidence,
+            )
+        ):
+            raise ValueError("前台定位质量无效。")
+
+    @property
+    def meets_minimum_confidence(self) -> bool:
+        return min(
+            self.display_name_confidence, self.selected_row_name_confidence,
+        ) >= 0.90
+
+
+@dataclass(frozen=True, slots=True)
 class FrontSessionProbeObservation:
     """一次前台定位结果：前台状态与可选的匹配证据。"""
 
     wechat_in_front: bool
     evidence: FrontSessionEvidence | None
+    selected_row_name: str | None = None
+    quality: FrontSessionQuality | None = None
+
+    @property
+    def qualified_evidence(self) -> FrontSessionEvidence | None:
+        """只有已校验布局、两处高质量同名才可交给身份匹配。"""
+
+        if (
+            not self.wechat_in_front
+            or self.evidence is None
+            or self.quality is None
+            or not self.quality.meets_minimum_confidence
+        ):
+            return None
+        name = normalize_display_text(self.evidence.display_name)
+        if not name or name != normalize_display_text(self.selected_row_name):
+            return None
+        return self.evidence
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +203,8 @@ class MacosFrontSessionProbe:
             return FrontSessionProbeObservation(wechat_in_front=False, evidence=None)
         return FrontSessionProbeObservation(
             wechat_in_front=True,
+            selected_row_name=_optional_text(envelope.get("selected_row_name")),
+            quality=_quality(envelope),
             evidence=FrontSessionEvidence(
                 display_name=_optional_text(envelope.get("display_name")),
                 last_time_text=_optional_text(envelope.get("last_time_text")),
@@ -215,3 +262,34 @@ def _optional_text(value: object) -> str | None:
             "probe_output_invalid", "前台定位探针返回了无效的文本字段。"
         )
     return value
+
+
+def _quality(envelope: dict[str, Any]) -> FrontSessionQuality | None:
+    """旧协议、未校验布局或缺必要证据不获得质量资格。"""
+
+    if envelope.get("capture_version") != "minimal-region-v1":
+        return None
+    quality = envelope.get("quality")
+    if quality is None:
+        return None
+    fields = {
+        "layout_verified", "display_name_confidence",
+        "selected_row_name_confidence",
+    }
+    if not isinstance(quality, dict) or set(quality) - fields:
+        raise ProbeAdapterError("probe_output_invalid", "前台定位质量无效。")
+    if not fields.issubset(quality):
+        return None
+    if type(quality["layout_verified"]) is not bool:
+        raise ProbeAdapterError("probe_output_invalid", "前台定位质量无效。")
+    try:
+        result = FrontSessionQuality(
+            capture_version="minimal-region-v1",
+            display_name_confidence=quality["display_name_confidence"],
+            selected_row_name_confidence=quality["selected_row_name_confidence"],
+        )
+    except ValueError as error:
+        raise ProbeAdapterError(
+            "probe_output_invalid", "前台定位质量无效。",
+        ) from error
+    return result if quality["layout_verified"] else None

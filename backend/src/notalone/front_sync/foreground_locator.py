@@ -136,14 +136,14 @@ class ForegroundLocator:
                 probe_available=False,
                 failure_code=error.code,
             )
-        if not observation.wechat_in_front or observation.evidence is None:
+        if not observation.wechat_in_front:
             return self._status(
                 phase=FrontSyncPhase.WAITING_FOREGROUND,
                 probe_available=True,
                 wechat_in_front=False,
             )
-        evidence = observation.evidence
-        if not normalize_display_text(evidence.display_name):
+        evidence = observation.qualified_evidence
+        if evidence is None:
             return self._status(
                 phase=FrontSyncPhase.UNAVAILABLE,
                 probe_available=True,

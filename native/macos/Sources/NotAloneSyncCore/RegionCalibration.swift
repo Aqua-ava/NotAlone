@@ -50,14 +50,14 @@ public enum RegionCalibration {
     }
 }
 
-private let calibrationFields = ["displayName", "selectedRowName", "verticalDivider", "headerDivider", "selectedHighlight"]
+let calibrationFields = ["displayName", "selectedRowName", "verticalDivider", "headerDivider", "selectedHighlight"]
 
-private func number(_ value: Any?) -> Double? {
+func number(_ value: Any?) -> Double? {
     guard let value = value as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID(), value.doubleValue.isFinite else { return nil }
     return value.doubleValue
 }
 
-private func allowedCalibrationRegion(_ rectangle: CGRect, field: String, bounds: CGRect, regions: [String: CGRect]) -> Bool {
+func allowedCalibrationRegion(_ rectangle: CGRect, field: String, bounds: CGRect, regions: [String: CGRect]) -> Bool {
     guard bounds.contains(rectangle), rectangle.width >= 1, rectangle.height >= 1,
           !regions.values.contains(where: { $0.intersects(rectangle) }) else { return false }
     switch field {
@@ -79,7 +79,7 @@ private func allowedCalibrationRegion(_ rectangle: CGRect, field: String, bounds
     }
 }
 
-private struct CalibrationContext: Equatable {
+struct CalibrationContext: Equatable {
     let processId: pid_t
     let windowId: CGWindowID
     let frame: CGRect

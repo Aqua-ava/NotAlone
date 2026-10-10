@@ -17,6 +17,7 @@ private struct ProbeOptions {
       swift run notalone-sync-probe --session [--show-text]
       swift run notalone-sync-probe --session --json [--minimal-region]
       swift run notalone-sync-probe --calibrate-minimal-region --json [--coordinates]
+      swift run notalone-sync-probe --verify-minimal-region --json
 
     选项：
       --watch              持续观察前台微信窗口；默认只采集一次。
@@ -94,6 +95,10 @@ struct NotAloneSyncCLI {
     static func main() async {
         do {
             let arguments = Array(CommandLine.arguments.dropFirst())
+            if arguments == ["--verify-minimal-region", "--json"] {
+                printJsonLine(await MinimalSessionCapture.verifySelection(try FileHandle.standardInput.read(upToCount: 8193) ?? Data()))
+                return
+            }
             if arguments == ["--calibrate-minimal-region", "--json", "--coordinates"] {
                 var data = Data()
                 while data.count <= 4096, let chunk = try FileHandle.standardInput.read(upToCount: 4097 - data.count), !chunk.isEmpty {
@@ -107,10 +112,13 @@ struct NotAloneSyncCLI {
                 return
             }
             if let session = try SessionInvocation.parse(arguments: arguments) {
+                let result = await MinimalSessionCapture.observe(profilePath: ProcessInfo.processInfo.environment["NOTALONE_FOREGROUND_LAYOUT"])
                 if session.json {
-                    printJsonLine(["ok": false, "error": SessionCaptureSafety.failureCode])
+                    printJsonLine(result)
                 } else {
-                    fputs("前台定位安全暂停：最小区域布局尚未验证（minimal_region_layout_unverified）。\n", stderr)
+                    if result["ok"] as? Bool == true && result["wechat_in_front"] as? Bool == true {
+                        print("前台最小区域观察完成；文字仅通过JSON协议传递。")
+                    } else { fputs("前台定位安全暂停；请核对布局与屏幕录制权限。\n", stderr) }
                 }
                 return
             }

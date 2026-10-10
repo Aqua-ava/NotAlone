@@ -1,4 +1,4 @@
-// 当前没有可追溯的最小定位区域profile；所有session调用在任何OS动作前失败关闭。
+// 缺少可追溯的最小定位区域profile时，session在任何OS动作前失败关闭。
 public enum SessionCaptureSafety {
     public static let failureCode = "minimal_region_layout_unverified"
 }

@@ -15,7 +15,7 @@ export async function savePendingCalibrationSelection(userData: string, value: u
   } finally { await rm(temporary, { force: true }); }
 }
 
-function validatedSelection(value: unknown): Record<string, unknown> {
+export function validatedSelection(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('calibration_output_invalid');
   const selection = value as Record<string, unknown>;
   const keys = ['schemaVersion', 'state', 'wechatVersion', 'wechatBuild', 'processId', 'windowId', 'windowFrame', 'regions'];
