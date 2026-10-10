@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
+from hashlib import sha256
 from threading import RLock
 from typing import Callable, Protocol
 from uuid import UUID, uuid4
@@ -680,7 +681,9 @@ class InMemoryReplyStore:
         )
 
 
-def _normalize_input(command: GenerateReply) -> str:
+def canonical_reply_input(command: GenerateReply) -> str:
+    """会话投影与请求摘要共用同一用户输入表示。"""
+
     content = command.content
     if isinstance(content, ReplyToMessage):
         payload = {
@@ -708,6 +711,13 @@ def _normalize_input(command: GenerateReply) -> str:
     else:
         raise ReplyStoreInvariantError("回复输入模式无效。")
     if isinstance(content, (ReplyToMessage, InitiateConversation)):
+        direction = content.direction if isinstance(content, ReplyToMessage) else content.purpose
+        if direction.suggestion is not None:
+            reference = direction.suggestion
+            payload["suggestion"] = {"task_id": str(reference.task_id),
+                                     "input_version": str(reference.input_version)
+                                     if isinstance(reference.input_version, UUID) else reference.input_version,
+                                     "suggestion_id": str(reference.suggestion_id)}
         for name in ("understanding_correction", "user_instruction", "clarification_answer"):
             declaration = getattr(content, name)
             if declaration:
@@ -730,6 +740,17 @@ def _normalize_input(command: GenerateReply) -> str:
         sort_keys=True,
         separators=(",", ":"),
     )
+
+
+def _normalize_input(command: GenerateReply) -> str:
+    normalized = canonical_reply_input(command)
+    # 新建议协议在来源核验前领取幂等键，只保存指纹，拒绝路径不留派生正文。
+    # 成功快照与完整删除依赖由上下文保存；既有无建议请求保持原指纹兼容。
+    content = command.content
+    if (isinstance(content, ReplyToMessage) and content.direction.suggestion is not None
+            or isinstance(content, InitiateConversation) and content.purpose.suggestion is not None):
+        return "suggestion-sha256:" + sha256(normalized.encode("utf-8")).hexdigest()
+    return normalized
 
 
 def _safe_failure_reason(reason: str) -> str:

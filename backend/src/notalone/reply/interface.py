@@ -18,15 +18,35 @@ class DirectionSource(StrEnum):
 
 
 @dataclass(frozen=True, slots=True, repr=False)
+class SuggestionReference:
+    """选择及实际输入身份；整数仅兼容未装配的旧组件，不授予生成权限。"""
+
+    task_id: UUID
+    input_version: UUID | int
+    suggestion_id: UUID
+
+    def __post_init__(self) -> None:
+        if (not isinstance(self.task_id, UUID) or not isinstance(self.suggestion_id, UUID)
+                or not (isinstance(self.input_version, UUID)
+                        or type(self.input_version) is int and self.input_version >= 1)):
+            raise ValueError("探索选择引用身份无效。")
+
+
+@dataclass(frozen=True, slots=True, repr=False)
 class ConfirmedDirection:
     """用户已经直接输入或确认的单次表达方向。"""
 
     text: str
     source: DirectionSource
+    suggestion: SuggestionReference | None = None
 
     def __post_init__(self) -> None:
         if not self.text.strip():
             raise ValueError("已确认表达方向不能为空。")
+        if self.suggestion is not None and (not isinstance(self.suggestion, SuggestionReference)
+                                           or self.source is not DirectionSource.CONFIRMED_SUGGESTION
+                                           and not isinstance(self.suggestion.input_version, UUID)):
+            raise ValueError("方向确认引用无效。")
 
 
 @dataclass(frozen=True, slots=True)

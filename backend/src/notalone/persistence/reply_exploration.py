@@ -22,7 +22,7 @@ from notalone.persistence.assistant_session_inputs import (
 )
 from notalone.persistence.assistant_session_store import _active_binding
 from notalone.persistence.locks import lock_owner_scope
-from notalone.reply.exploration import ExplorationError, ExplorationInput, ExplorationStale
+from notalone.reply.exploration import ExplorationError, ExplorationExpired, ExplorationInput, ExplorationStale
 from notalone.reply.exploration_context import EvidenceSnapshot, ExplorationEvidence
 from notalone.reply.exploration_skill import ExplorationSkillSelection
 from notalone.reply.exploration_task import (
@@ -34,10 +34,6 @@ from notalone.scopes import ContactScope
 
 class ExplorationInProgress(ExplorationError):
     """同操作正在运行；并发请求不能再消耗一次模型调用。"""
-
-
-class _ExplorationExpired(ExplorationStale):
-    """授权时实际越过截止时间，事务退出后仍需提交正文擦除。"""
 
 
 def _operation_digest(request: ExplorationOpen) -> str:
@@ -89,7 +85,7 @@ class PostgresExplorationStore:
             with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
                 lock_owner_scope(connection, owner_id=scope.owner_id)
                 yield connection
-        except _ExplorationExpired:
+        except ExplorationExpired:
             self._prune(scope)
             raise ExplorationStale("探索任务已超过原有效期，请明确开启新任务。") from None
         except (AssistantSessionNotFound, AssistantSessionConflict, AssistantSessionRejected):
@@ -108,6 +104,11 @@ class PostgresExplorationStore:
                 "AND root_created_at <= clock_timestamp()-interval '15 minutes'",
                 (scope.owner_id, scope.contact_id),
             )
+
+    def prune_expired(self, scope: ContactScope) -> None:
+        """调用方必须先退出自身owner事务，防止同owner清理互锁。"""
+
+        self._prune(scope)
 
     @staticmethod
     def _read(connection: Any, scope: ContactScope, exploration_id: UUID) -> dict[str, Any]:
@@ -132,7 +133,7 @@ class PostgresExplorationStore:
     ) -> ExplorationTask:
         actual_time = connection.execute("SELECT clock_timestamp() AS current_time").fetchone()["current_time"]
         if row["root_created_at"] + timedelta(minutes=15) <= actual_time:
-            raise _ExplorationExpired("探索任务已过期。")
+            raise ExplorationExpired("探索任务已过期。")
         record = next((item for item in read_input_records(connection, scope, row["session_id"])
                        if item.input_version_id == row["input_version_id"]), None)
         if (record is None or record.state != "active" or record.type == "generation"
@@ -195,7 +196,21 @@ class PostgresExplorationStore:
     ) -> ExplorationTask:
         self._prune(scope)
         with self._transaction(scope) as connection:
-            return self._validate(connection, scope, self._read(connection, scope, exploration_id), purpose)
+            return self.read_in_transaction(connection, scope, exploration_id, purpose=purpose)
+
+    def read_in_transaction(
+        self, connection: Any, scope: ContactScope, exploration_id: UUID,
+        *, purpose: ExplorationReadPurpose = ExplorationReadPurpose.CURRENT, generation_required: bool = False,
+    ) -> ExplorationTask:
+        """沿调用方同owner连接核验；过期异常由外层退出后调用prune_expired。"""
+
+        row = self._read(connection, scope, exploration_id)
+        task = self._validate(connection, scope, row, purpose)
+        if generation_required:
+            turn = self._generation_turn(connection, scope, row)
+            if turn is None or turn["state"] == "redacted":
+                raise ExplorationStale("探索生成尚未由助手会话可靠领取。")
+        return task
 
     def begin(
         self, *, scope: ContactScope, request: ExplorationOpen, snapshots: tuple[EvidenceSnapshot, ...],

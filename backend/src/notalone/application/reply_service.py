@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Protocol
 from uuid import UUID
 
@@ -28,6 +28,7 @@ from notalone.reply.interface import (
     NoSkill,
     ReplyToMessage,
     RewriteDraft,
+    SuggestionReference,
     UserSkillChoice,
 )
 from notalone.scopes import ContactScope, VerifiedConversationScope
@@ -138,6 +139,7 @@ class ReplyServiceRequest:
     skill_version_id: UUID | None = None
     skill_disabled: bool = False
     expected_input_version_id: UUID | None = None
+    suggestion: SuggestionReference | None = None
 
     def build_command(
         self,
@@ -155,11 +157,16 @@ class ReplyServiceRequest:
         skill: AutoSkill | UserSkillChoice | NoSkill = NoSkill() if self.skill_disabled else AutoSkill()
         if self.skill_version_id is not None:
             skill = UserSkillChoice(version_id=self.skill_version_id)
+        content = self.content
+        if isinstance(content, ReplyToMessage) and self.suggestion is not None:
+            content = replace(content, direction=replace(content.direction, suggestion=self.suggestion))
+        elif isinstance(content, InitiateConversation) and self.suggestion is not None:
+            content = replace(content, purpose=replace(content.purpose, suggestion=self.suggestion))
         return GenerateReply(
             idempotency_key=self.idempotency_key,
             scope=ContactScope(owner_id=owner_id, contact_id=contact_id),
             conversation_binding_id=binding_id,
-            content=self.content,
+            content=content,
             continued_from_candidate_id=self.continued_from_candidate_id,
             skill=skill,
         )

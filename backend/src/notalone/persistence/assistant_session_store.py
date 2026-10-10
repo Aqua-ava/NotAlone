@@ -22,8 +22,9 @@ from notalone.persistence.message_sources import valid_source_ref_exists_sql
 from notalone.persistence.style_sample_store import captured_reply_sources, require_reply_sources_current
 from notalone.reply.context import ReplyContext
 from notalone.reply.errors import ReplyStoreInvariantError
+from notalone.reply.exploration import ExplorationExpired
 from notalone.reply.interface import ReplyGenerated, ReplyToMessage
-from notalone.reply.store import ReplyRequest, _normalize_input
+from notalone.reply.store import ReplyRequest, _normalize_input, canonical_reply_input
 from notalone.scopes import ContactScope
 
 
@@ -284,6 +285,14 @@ class PostgresAssistantSessionStore:
             with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
                 lock_owner_scope(connection, owner_id=scope.owner_id)
                 yield connection
+        except ExplorationExpired:
+            from notalone.persistence.reply_exploration import PostgresExplorationStore
+            from notalone.persistence.retrieval import PostgresRetrieval
+            from notalone.reply.exploration_context import ExplorationEvidence
+            PostgresExplorationStore(self._database_url, evidence=ExplorationEvidence(
+                PostgresRetrieval(self._database_url),
+            )).prune_expired(scope)
+            raise AssistantSessionRejected("exploration_expired") from None
         except psycopg.Error:
             raise AssistantSessionPersistenceError("助手会话未可靠保存。") from None
 
@@ -336,6 +345,9 @@ class PostgresAssistantSessionStore:
                 ).fetchone()["dependency_ids"]
                 if not _dependencies_available(connection, scope.owner_id, set(dependencies)):
                     raise AssistantSessionRejected("source_unavailable")
+                if existing["state"] != "completed":
+                    from notalone.persistence.explored_generation import prepare_explored_generation
+                    prepare_explored_generation(connection, scope, session_id, command)
                 return existing["id"]
             if connection.execute(
                 "SELECT 1 FROM public.reply_request WHERE owner_id = %s AND contact_id = %s "
@@ -345,7 +357,8 @@ class PostgresAssistantSessionStore:
                 raise AssistantSessionConflict("历史回复请求不能自动归并。")
             from notalone.persistence.assistant_session_inputs import check_expected_input, require_input_session
             check_expected_input(require_input_session(connection, scope, session_id), request.expected_input_version_id)
-            dependencies: set[UUID] = set()
+            from notalone.persistence.explored_generation import prepare_explored_generation
+            dependencies = prepare_explored_generation(connection, scope, session_id, command)
             if isinstance(command.content, ReplyToMessage):
                 target = connection.execute(
                     "SELECT 1 FROM public.message WHERE owner_id = %s AND contact_id = %s AND id = %s",
@@ -372,7 +385,7 @@ class PostgresAssistantSessionStore:
                 "input_digest, input_payload, dependency_ids) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, input_version_id",
                 (session_id, scope.owner_id, scope.contact_id, request.idempotency_key,
-                 binding_id, digest, Jsonb(_input_payload(normalized)), list(dependencies)),
+                 binding_id, digest, Jsonb(_input_payload(canonical_reply_input(command))), list(dependencies)),
             ).fetchone()
             connection.execute(
                 "INSERT INTO public.assistant_session_input "

@@ -18,6 +18,10 @@ class ExplorationStale(ExplorationError):
     pass
 
 
+class ExplorationExpired(ExplorationStale):
+    """授权时已过期；外层事务退出后提交独立正文擦除。"""
+
+
 @dataclass(frozen=True, slots=True, repr=False)
 class ExplorationInput:
     scene: Literal["reply_to_message", "initiate_conversation"]
