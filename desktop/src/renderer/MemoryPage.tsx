@@ -4,6 +4,8 @@ import type { ContactSessionView } from './contact-session';
 import type { ManagerPage } from './pages';
 import './memory.css';
 import { SourceDeletionPanel } from './SourceDeletionPanel';
+import { TracePanel, useTraceReading } from './TracePanel';
+import type { TraceRecordKind } from '../shared/trace-bridge';
 
 const initial: MemoryReadingState = { revision: -1, contactId: null, scopeRevision: 0, mutation: { phase: 'idle', message: '' },
   contact: { phase: 'idle', items: [] }, owner: { phase: 'idle', items: [] },
@@ -129,9 +131,10 @@ function SourceReference({ id, sources }: { id: string; sources: MemorySection<M
       : sources.phase === 'loading' || sources.phase === 'idle' ? '来源目录尚未读取完成。' : '引用类型或来源详情暂不可用。'}</p>}</li>;
 }
 
-function MemoryCard({ content, memory, candidate, sources, correct, remove, confirmCandidate, discardCandidate, busy }: {
+function MemoryCard({ content, memory, candidate, sources, correct, remove, confirmCandidate, discardCandidate, busy, trace }: {
   content: MemoryContent; memory?: ActiveMemory; candidate?: PendingMemoryCandidate; sources: MemorySection<MemorySource>;
   correct?: (entry: ActiveMemory, text: string, category: MemoryCorrectionRequest['category']) => Promise<void>; remove?: (entry: ActiveMemory) => Promise<void>; confirmCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; discardCandidate?: (entry: PendingMemoryCandidate) => Promise<void>; busy?: boolean;
+  trace: (kind: TraceRecordKind, id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -143,6 +146,10 @@ function MemoryCard({ content, memory, candidate, sources, correct, remove, conf
     <div className="memory-card-labels"><span>{categoryNames[content.category]} · {topicNames[content.topic]}</span>
       <b>{candidate ? '待确认 · 不是已确认事实' : memory?.adoptionMethod === 'auto' ? '自动采纳（可撤销）' : '手动采纳'}</b></div>
     <p className="memory-text">{content.text}</p>
+    <button className="button" aria-label={`查看提取过程：${content.text}`} onClick={() => {
+      if (candidate) trace('candidate', candidate.candidateId);
+      else if (memory) trace(memory.level === 'owner' ? 'owner_memory' : 'contact_memory', memory.memoryId);
+    }}>查看提取过程</button>
     {candidate && <p className="memory-subject">主体：{subjectNames[candidate.subject]}</p>}
     <div className="memory-times"><p>来源聊天时间：{sourceTime(content)}</p><p>保存时间：{timeText(content.timing.recordedAt)}</p></div>
     <button className="memory-details-button" aria-label={`查看来源与版本：${content.text}`} aria-expanded={expanded}
@@ -229,6 +236,8 @@ function ReadingSection<T>({ title, note, empty, state, retry, children }: {
 
 export function MemoryPage({ session, navigate }: { session: ContactSessionView; navigate: (page: ManagerPage) => void }) {
   const memory = useMemoryReading(session);
+  const traces = useTraceReading(session);
+  const trace = (kind: TraceRecordKind, id: string) => { void traces.find('memory-traces', kind, id); };
   const contact = session.state.contacts.find((entry) => entry.contactId === session.state.selectedContactId);
   const { state } = memory;
   return <div className="memory-page">
@@ -246,18 +255,18 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
           state={state.contact} retry={() => void memory.refresh('contact')}>
           <AdditionControl key={`contact:${state.scopeRevision}`} level="contact" phase={state.mutation.phase} add={memory.add} />
           <div className="memory-cards">{state.contact.items.map((entry) => <MemoryCard key={entry.memoryId} content={entry} memory={entry} sources={state.sources}
-            correct={memory.correct} remove={memory.remove} busy={state.mutation.phase === 'working'} />)}</div>
+            trace={trace} correct={memory.correct} remove={memory.remove} busy={state.mutation.phase === 'working'} />)}</div>
         </ReadingSection>
         <ReadingSection title="本人记忆" note="属于当前本人，可在与不同联系人的回复中共享使用。" empty="当前本人暂无有效记忆。"
           state={state.owner} retry={() => void memory.refresh('owner')}>
           <AdditionControl key={`owner:${state.scopeRevision}`} level="owner" phase={state.mutation.phase} add={memory.add} />
           <div className="memory-cards">{state.owner.items.map((entry) => <MemoryCard key={entry.memoryId} content={entry} memory={entry} sources={state.sources}
-            correct={memory.correct} remove={memory.remove} busy={state.mutation.phase === 'working'} />)}</div>
+            trace={trace} correct={memory.correct} remove={memory.remove} busy={state.mutation.phase === 'working'} />)}</div>
         </ReadingSection>
         <ReadingSection title="待确认候选" note="仅来自当前联系人范围；本人、联系人与双方主体分别标明，未经确认不能当作确定事实。" empty="这位联系人暂无待确认候选。"
           state={state.pending} retry={() => void memory.refresh('pending')}>
           <div className="memory-cards">{state.pending.items.map((entry) => <MemoryCard key={entry.candidateId} content={entry} candidate={entry} sources={state.sources}
-            confirmCandidate={memory.confirmCandidate} discardCandidate={memory.discardCandidate} busy={state.mutation.phase === 'working'} />)}</div>
+            trace={trace} confirmCandidate={memory.confirmCandidate} discardCandidate={memory.discardCandidate} busy={state.mutation.phase === 'working'} />)}</div>
         </ReadingSection>
         <ReadingSection title="当前联系人来源" note="来源目录不能解析所有消息、观察或人工引用；无法核对的引用会保留未知说明。" empty="这位联系人暂无来源记录。"
           state={state.sources} retry={() => void memory.refresh('sources')}>
@@ -267,6 +276,7 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
         </ReadingSection>
       </>}
     {contact && <SourceDeletionPanel session={session} />}
+    {contact && <TracePanel key={session.state.scopeRevision} traces={traces} />}
     {state.mutation.phase !== 'idle' && <p className="memory-section-note" role={state.mutation.phase === 'error' ? 'alert' : 'status'}>{state.mutation.message}</p>}
     {memory.error && <p className="memory-section-note" role="alert">{memory.error}</p>}
     {session.error && <p className="memory-section-note" role="alert">{session.error}</p>}

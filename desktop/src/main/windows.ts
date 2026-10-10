@@ -63,8 +63,9 @@ export class AppWindows {
     this.helperObservation?.onLifecycle('closed');
   }
 
-  publish(channel: string, value: unknown): void {
+  publish(channel: string, value: unknown, targetRole?: WindowRole): void {
     for (const [role, hosted] of this.windows) {
+      if (targetRole && role !== targetRole) continue;
       if (!hosted.failed && !hosted.window.isDestroyed() && hosted.window.webContents.getURL() === pages[role]) {
         hosted.window.webContents.send(channel, value);
       }

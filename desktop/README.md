@@ -39,6 +39,10 @@ Electron + React/TypeScript 的本机 Mac App，当前完成管理后台与横�
 
 2026-10-09 阶段收尾：集成分支 `codex/mac-desktop-app` 已合入此前留在任务工作树的 `d6a3e6a`。本次联系人确认适配的相关普通页面共 43/43：保留同源码改写/定向回复 20 场，本次补验依据/消息事件 14 场、导入/草稿 5 场、复制 4 场；每场随机测试库均已清理，自有进程与两类租约正常释放。`npm test` 的类型检查和 24 项合成调度检查通过，页面命令中的构建通过；固定测试适配增量的既有 Standards/Spec 双轴评审均为 0。日志、精确库核对和评审副本保存在 `artifacts/acceptance-closeout-d6a3e6a/`（忽略的本地产物）。任务仍为 17/20 resolved：10 待真实剪贴板/窗口，18 待可信定位布局与成功自动识别、原生验证，20 待完整 helper 输入、打包和最终验收。用户本次确认 CLI/WCDB 材料尚未准备；真实桌面操作继续暂停，不能将这些页面结果称为完整 App 交付。
 
+“关系资料 → 提取与来源处理过程”提供两个独立批次目录、详情与手动删除。每条记忆和待确认候选可直接反查提取批次；也可明确输入消息、来源或记录标识查询。阶段展开显示当时保存的实际输入输出、处理规则、调用、候选与写入收据，历史未记录、手输不适用与已删除分别说明。追踪只向管理窗口提供，读取失败、联系人或连接变化、来源删除检查点均清除旧正文；不会重提取历史或触发模型。
+
+2026-10-10 合成普通页面验证：基础缺口、完整查看/分页/删除、范围/断线/来源删除三个组通过；完整组使用正式提取产生的 21 个零候选、1 个有候选、1 个失败批次及独立来源处理记录。删除过程保留权威记忆；来源删除完成后，已清除事件不能恢复。仅处理随机隔离库中的合成资料，Electron、系统剪贴板、权限及真实微信均未运行，仍按原票保留实机验收。
+
 ## 本机运行与构建
 
 需要 macOS 13 或更新版本、Node.js ≥ 22.12，以及构建图标/本机签名所需的 Xcode Command Line Tools。依赖版本固定在 `package-lock.json`。
@@ -64,6 +68,7 @@ npm run test:pages -- --case memory-reading --case draft-rewrite --timeout-secon
 npm run test:pages -- --case draft-rewrite-acceptance --timeout-seconds 180
 npm run test:pages -- --case draft-rewrite-session --timeout-seconds 120
 npm run test:pages -- --case memory-reading-full --case memory-stale-full --timeout-seconds 240
+npm run test:pages -- --case memory-traces-full --case memory-traces-lifecycle --timeout-seconds 180
 npm run test:pages -- --case directed-reply --case draft-rewrite-acceptance --timeout-seconds 300
 npm run test:pages -- --case message-events --timeout-seconds 300
 npm run test:pages -- --status  # 只读租约，不启动浏览器或 Electron

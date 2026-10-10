@@ -2,7 +2,7 @@
 export type PageRole = 'manager' | 'helper';
 export interface PageCommands {
   handle(channel: string, handler: (...args: unknown[]) => unknown, role?: PageRole): void;
-  publish(channel: string, state: unknown): void;
+  publish(channel: string, state: unknown, role?: PageRole): void;
 }
 export function noArguments(args: unknown[]): void {
   if (args.length) throw new Error('页面操作不可用。');

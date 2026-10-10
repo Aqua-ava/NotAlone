@@ -1,0 +1,11 @@
+.trace-panel { margin-top: 20px; }
+.trace-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin: 14px 0; }
+.trace-controls label { display: grid; gap: 6px; }
+.trace-controls select, .trace-controls input { padding: 8px; border: 1px solid var(--line); border-radius: 6px; }
+.trace-controls input { width: 310px; max-width: 100%; }
+.trace-batches { list-style: none; padding: 0; }
+.trace-batches li { display: grid; gap: 6px; border-top: 1px solid var(--line); padding: 12px 0; overflow-wrap: anywhere; }
+.trace-batches .button { justify-self: start; }
+.trace-snapshot { border: 1px solid var(--line); padding: 12px; border-radius: 8px; margin: 10px 0; }
+.trace-snapshot summary { cursor: pointer; }
+.trace-snapshot pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 440px; overflow: auto; font-size: 12px; }

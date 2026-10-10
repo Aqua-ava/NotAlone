@@ -55,11 +55,13 @@ void app.whenReady().then(async () => {
   installImportBridge(commands, imports);
   installElectronImportFileSelection(windows, imports);
   const memory = installMemoryBridge(commands, backend, contacts);
+  const traces = installTraceBridge(commands, backend, contacts);
   installBindingConsentBridge(commands, backend, contacts);
   installSyncControlBridge(commands, backend, contacts);
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
   foreground.onStateChanged(() => replies.refreshGenerationEligibility());
   installSourceDeletionBridge(commands, backend, contacts, async (contactId) => {
+    traces.invalidateSource();
     const checking = replies.revalidateDeletedSource(contactId);
     try { await memory.revalidateDeletedSource(contactId); }
     finally { await checking; }
@@ -122,3 +124,4 @@ void app.whenReady().then(async () => {
 }).catch(() => {
   dialog.showErrorBox('NotAlone', '应用暂时无法启动，请关闭后重试。');
 });
+import { installTraceBridge } from './traces/bridge';

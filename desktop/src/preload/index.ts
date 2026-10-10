@@ -24,6 +24,7 @@ const bridge: AppBridge = {
   candidateCopy: createCandidateCopyBridge(ipcRenderer),
   sources: createSourceDeletionBridge(ipcRenderer),
   memory: createMemoryBridge(ipcRenderer),
+  traces: createTraceBridge(ipcRenderer),
   bindings: createBindingConsentBridge(ipcRenderer),
   foreground: createForegroundBridge(ipcRenderer),
   syncControl: createSyncControlBridge(ipcRenderer),
@@ -40,3 +41,4 @@ const bridge: AppBridge = {
   },
 };
 contextBridge.exposeInMainWorld('notalone', Object.freeze(bridge));
+import { createTraceBridge } from './traces';

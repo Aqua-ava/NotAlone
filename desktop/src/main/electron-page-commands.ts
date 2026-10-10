@@ -11,6 +11,6 @@ export function electronPageCommands(windows: AppWindows): PageCommands {
         return handler(...args);
       });
     },
-    publish: (channel, state) => windows.publish(channel, state),
+    publish: (channel, state, role) => windows.publish(channel, state, role),
   };
 }

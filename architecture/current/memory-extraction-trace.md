@@ -1,8 +1,8 @@
 # 记忆提取完整追踪
 
-> 状态：PostgreSQL 全过程记录、默认提取装配和受范围查询／删除已实现并经合成公开入口验证；**App 查看界面待 ADR-039 后续新前端接入**。
+> 状态：PostgreSQL 全过程记录、默认提取装配和受范围查询／删除已实现；React 管理页已接入查看与删除，并通过合成普通页面验证。原生 Electron、最终签名包与真实微信验收仍独立保留。
 > 确认日期：2026-10-07。范围与留存决策见 [ADR-037](../adr/037-complete-memory-extraction-trace.md)。
-> 实现状态更新：2026-10-08。迁移 `039`–`043` 与下方代码证据落实后端契约，不补造历史记录，不执行真实私人库迁移或历史重提取。实际捕获缺口继续明确标注。
+> 实现状态更新：2026-10-10。迁移 `039`–`043` 与下方代码证据落实后端契约，不补造历史记录，不执行真实私人库迁移或历史重提取。实际捕获缺口继续明确标注。
 
 ## 要解决的问题
 
@@ -232,7 +232,7 @@ flowchart TD
 | 采纳与裁决 | [采纳流程](../../backend/src/notalone/memory_extraction/adoption.py)、[裁决适配器](../../backend/src/notalone/memory_extraction/adjudication_adapters.py) | 保存稳定候选标识、语用分流、删除指纹、重复、门槛、shortlist 与 ADD/UPDATE/NOOP；手输本人资料的 owner 归属标识不充当来源，仍以自身 memory_id 绑定删除；其他真实来源继续复验。不改变默认空放行表、提示词或预算。 |
 | 业务写入 | [追踪存储](../../backend/src/notalone/persistence/extraction_trace.py)、[记忆存储](../../backend/src/notalone/persistence/memory_store.py)、[操作关联迁移](../../backend/database/migrations/043_extraction_trace_record_operations.sql) | 保存写入意图、返回／权威记录回执与部分提交；联系人及本人旧记忆失效计划也关联实际 ID，按 invalidated 状态核对提交，原行仍 active 时不能因行存在就报失效成功。结束记录和水位同事务提交；回执丢失显示未知／待核对，不假称回滚。 |
 | 调用台账 | [上下文与补账](../../backend/src/notalone/memory_trace/context.py)、[最小关联迁移](../../backend/database/migrations/042_extraction_trace_call_receipts.sql) | 正常、停止和来源删除后的实际调用关联同一 `call_id`／台账 ID，区分 received／returned／unavailable 与 consumed／not_adopted；提交回执未知不另造补账。不保存正文，正文删除后只保留最小关联。 |
-| 查询与删除 | [查询服务](../../backend/src/notalone/application/trace_service.py)、[HTTP](../../backend/src/notalone/server/app.py)、[CLI](../../backend/src/notalone/memory_trace/command.py) | 默认查询装配不需要模型；授权批次列表稳定分页、详情和候选／记忆反查；消息正查引用或使用它的提取批次，包括仅上下文、零候选与失败。来源处理仍使用独立资源。区分已删、未记录及手输不适用，人工确认模型候选仍可反查。所有 HTTP 追踪响应 no-store，越界／不存在统一 404。App 界面尚未实现。 |
+| 查询与删除 | [查询服务](../../backend/src/notalone/application/trace_service.py)、[HTTP](../../backend/src/notalone/server/app.py)、[CLI](../../backend/src/notalone/memory_trace/command.py)、[React 查看页](../../desktop/src/renderer/TracePanel.tsx)、[具名控制器](../../desktop/src/main/traces/controller.ts) | 默认查询装配不需要模型；授权批次列表稳定分页、详情和候选／记忆反查；消息正查引用或使用它的提取批次，包括仅上下文、零候选与失败。来源处理仍使用独立资源。区分已删、未记录及手输不适用，人工确认模型候选仍可反查。所有 HTTP 追踪响应 no-store，越界／不存在统一 404。React 管理页可主动查看阶段原始快照和关联、翻页、按记录查询、确认后删除追踪；切换范围、断线、读取失败和来源删除检查点清除旧正文，迟到响应不回填。正文事件只发布到可信管理窗口，小窗不得查询。普通页面证据不替代原生 IPC 或最终 App 验收。 |
 
 043 前已有窗口可以按实际已保存的消息标识正查；清除这类窗口前只保留无正文标识关联，继续显示已删状态。早已清除且未保存关联的历史无法补造，仍保留 `not_recorded`。生产与合成追踪的错误码／状态使用[同一纯映射](../../backend/src/notalone/memory_trace/status.py)。
 

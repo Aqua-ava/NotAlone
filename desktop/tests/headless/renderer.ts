@@ -28,6 +28,7 @@ const noEvents = () => () => {};
 const bridge: AppBridge = {
   candidateCopy: createCandidateCopyBridge(transport),
   sources: createSourceDeletionBridge(transport),
+  traces: createTraceBridge(transport),
   backend: createBackendBridge(transport), startup: createStartupBridge(transport),
   contacts: createContactSessionBridge(transport), memory: createMemoryBridge(transport), replies: createReplyBridge(transport),
   openManager: () => transport.invoke('page:open-manager'), openHelper: () => transport.invoke('page:open-helper'), hideWindow: unsupported,
@@ -40,3 +41,4 @@ const bridge: AppBridge = {
   syncControl: createSyncControlBridge(transport),
 };
 window.notalone = Object.freeze(bridge);
+import { createTraceBridge } from '../../src/preload/traces';

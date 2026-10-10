@@ -1,6 +1,6 @@
 # 03：在 App 查看全过程并接通所有默认提取入口
 
-Triage: needs-info
+Triage: ready-for-agent
 State: claimed
 Blocked by: 01, 02
 
@@ -10,11 +10,11 @@ Blocked by: 01, 02
 
 ## Acceptance criteria
 
-- [ ] App 提供受授权的批次列表、详情与候选/记忆反查，展示每步实际输入输出、规则、状态和关联。
-- [ ] 手动删除追踪不误删权威记忆，已删/未记录/手动资料不适用与失败状态区分，刷新不会跨联系人显示。
-- [ ] 历史任务、后台增量、CLI 和人工触发全部生产装配默认记录，无静默关闭或绕过。
-- [ ] 故障、部分写入、零候选、重试与水位一致性贯通到任务状态和 App 展示。
-- [ ] 全链来源删除、旧记忆依赖、本人归属和跨 owner/contact 隔离集成验证通过，普通日志和最小台账无正文。
+- [x] App 提供受授权的批次列表、详情与候选/记忆反查，展示每步实际输入输出、规则、状态和关联。
+- [x] 手动删除追踪不误删权威记忆，已删/未记录/手动资料不适用与失败状态区分，刷新不会跨联系人显示。
+- [x] 历史任务、后台增量、CLI 和人工触发全部生产装配默认记录，无静默关闭或绕过。
+- [x] 故障、部分写入、零候选、重试与水位一致性贯通到任务状态和 App 展示。
+- [x] 全链来源删除、旧记忆依赖、本人归属和跨 owner/contact 隔离集成验证通过，普通日志和最小台账无正文。
 - [ ] 运行相关 Python/Swift 验证、完整相关测试与 Standards/Spec 两轴 review，更新实际实现状态并本地提交。
 
 ## Comments
@@ -95,3 +95,22 @@ Blocked by: 01, 02
 
 - 最小公开回归 10 项通过：现有 5 项 SDK／InMemory 提取与查询、3 项 PostgreSQL 消息查询／旧窗口删除／上下文删除、2 项默认 HTTP／CLI 消息查询及追踪／来源处理删除。日志 `/tmp/notalone-trace03-input-link-recheck-validation.log`，本次自建 1 个 `_test` 库清理后残留 0。
 - 涉及的 context／adapters／persistence extraction_trace 三个生产文件 mypy 通过，日志 `/tmp/notalone-trace03-input-link-recheck-type.log`；格式与 `git diff --check` 通过。沿用关闭凭据／dotenv／非回环网络的合成环境，数据处理边界不变；未重复无关完整套件。
+
+### 2026-10-10：React 查看入口与隔离页面验证
+
+用户要求按优先级推进不需人在场的待实现/待验收部分，已覆盖本票此前待定的最小 React 接入范围。沿用原查询/删除公开接缝，复用生产管理页、具名主进程控制器与认证 HTTP；未增加模型、迁移或通用 renderer 请求能力。`Triage` 恢复 ready-for-agent，双轴检查完成前暂留 claimed。
+
+- 关系资料卡片可反查联系人/本人记忆及候选；两个批次目录保持独立，支持 20 条稳定翻页、详情、消息/来源/记录查询和确认后手动删除。阶段原始快照、调用收据、候选去向、写入关联与重试标识按实际存储展示，不补造缺失阶段或供应商输入。
+- 已记录、已删除、历史未记录、手输不适用、越界/不存在与读取失败分别处理。删除追踪先清空展示，成功后权威记忆仍可从公开 HTTP 读取；不把网络未知结果当作删除成功。
+- 联系人/范围代次、连接变化、读取失败和来源删除检查点取消旧请求并清空正文。真实 HTTP 响应暂缓后切换联系人，以及来源删除期间的迟到响应均不得回填。查看只向可信 manager 发布；helper 查询拒绝，helper 订阅收不到追踪正文事件。
+- 本次没有 Swift 改动，原生探针未运行。此前默认装配、停止、未知提交、旧记忆依赖等后端证据继续保留；本次不将普通页面作为原生 IPC、签名包或真实微信验收。
+
+实际命令（桌面命令前激活 Conda NotAlone）：
+
+- `npm run test:pages -- --case memory-traces --timeout-seconds 90`：最初因缺页面为 red，接入后通过基础缺口组。
+- `npm run test:pages -- --case memory-traces-full --case memory-traces-lifecycle --timeout-seconds 180`：完整组通过；生命周期组的测试输入与已删除事件预期经生产契约纠正后，单独以 `--case memory-traces-lifecycle --timeout-seconds 120` 通过。当前生产代码相同。三个具名组均通过；没有把失败整次命令称为通过。
+- `npm test`：页面进程完全收尾后，类型检查及 24/24 安全调度检查通过。此前并行运行的状态检查因本轮页面租约仍存在而失败，未改门禁以掩盖该失败。
+- Conda 中清除模型/外部 tracing/代理环境，禁用 dotenv 并拒绝非回环连接，运行 `python -m unittest` 等效 loader 的 `tests.integration.server.test_memory_trace_api`、`tests.unit.memory_extraction.test_dimensions`、`test_adoption`、`test_evaluation`、`test_flow`：110 项通过。
+- 页面每轮只用一个无头 Chrome，全部采样 active=0、屏上窗口=0，自有资源清理确认，Electron=false、nativeAcceptance=false。正式提取夹具只用确定性脚本模型，数据及页面截图全部合成；随机 `_test` 库由精确本轮回执清理。未读取私人聊天或业务库、迁移私人库、读取模型凭据、调用供应商、开启微信、改系统剪贴板或 push。
+
+两轴 review 和最终本地提交记录随后补齐。

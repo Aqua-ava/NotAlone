@@ -11,6 +11,7 @@ import { installContactSessionBridge } from '../../src/main/contacts/bridge';
 import { ImportController, type ImportFileSelector } from '../../src/main/imports/controller';
 import { installImportBridge } from '../../src/main/imports/bridge';
 import { installMemoryBridge } from '../../src/main/memory/bridge';
+import { installTraceBridge } from '../../src/main/traces/bridge';
 import { installSourceDeletionBridge } from '../../src/main/sources/bridge';
 import { installReplyBridge } from '../../src/main/reply/bridge';
 import { installBindingConsentBridge } from '../../src/main/bindings/bridge';
@@ -65,9 +66,11 @@ export class PageHost implements PageCommands {
       return imports.chooseFile(options.chooseImportFile);
     }, 'manager');
     const memory = installMemoryBridge(this, this.backend, contacts);
+    const traces = installTraceBridge(this, this.backend, contacts);
     const replies = installReplyBridge(this, this.backend, contacts, () => this.foreground.getGenerationBlock());
     this.foreground.onStateChanged(() => replies.refreshGenerationEligibility());
     installSourceDeletionBridge(this, this.backend, contacts, async (contactId) => {
+      traces.invalidateSource();
       const checking = replies.revalidateDeletedSource(contactId);
       try { await memory.revalidateDeletedSource(contactId); }
       finally { await checking; }
@@ -88,9 +91,10 @@ export class PageHost implements PageCommands {
     if (this.handlers.has(channel)) throw new Error('重复页面操作。');
     this.handlers.set(channel, { handler, role });
   }
-  publish(channel: string, state: unknown) {
+  publish(channel: string, state: unknown, role?: PageRole) {
     if (this.closing) return;
-    for (const page of this.pages.keys()) {
+    for (const [page, pageRole] of this.pages) {
+      if (role && pageRole !== role) continue;
       const event = page.evaluate(({ channel, state }) => {
         (window as Window & { pageEvent?: (channel: string, state: unknown) => void }).pageEvent?.(channel, state);
       }, { channel, state }).catch(() => {});

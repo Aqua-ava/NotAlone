@@ -16,5 +16,6 @@ import type { SyncControlBridge } from './sync-control-bridge';
 export type AppBridge = WindowBridge & DesktopBridge & {
   backend: BackendBridge; setup: SetupBridge; startup: StartupBridge;
   contacts: ContactSessionBridge; imports: ImportBridge; bindings: BindingConsentBridge; replies: ReplyBridge;
-  memory: MemoryBridge; candidateCopy: CandidateCopyBridge; sources: SourceDeletionBridge; syncControl: SyncControlBridge; foreground: ForegroundBridge;
+  memory: MemoryBridge; traces: TraceBridge; candidateCopy: CandidateCopyBridge; sources: SourceDeletionBridge; syncControl: SyncControlBridge; foreground: ForegroundBridge;
 };
+import type { TraceBridge } from './trace-bridge';
