@@ -1,6 +1,7 @@
 import type { ContactSelection } from './contact-session-bridge';
 import type { ReplyEvidenceCommands } from './reply-evidence';
 import type { SavedAssistantSession } from './assistant-session';
+import type { ConfirmedAssistantSessionDeletion } from './assistant-session-deletion-events';
 
 export type RewriteTone = 'original' | 'warm' | 'concise' | 'polite';
 export interface RewriteOptions {
@@ -74,6 +75,7 @@ export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;
 export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; needsRefresh: boolean; }
 export interface ReplySessionState {
   revision: number;
+  confirmedSessionDeletion?: ConfirmedAssistantSessionDeletion;
   scopeRevision: number;
   contactId: string | null;
   generationBlock: ReplyGenerationBlock;
