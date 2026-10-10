@@ -52,12 +52,26 @@ cd desktop
 npm ci
 npx install-electron     # 首次显式准备锁定版本的 Electron 运行时
 npm run typecheck
-npm test                # 类型检查和安全调度回归，真实 App 不运行
+npm test                # 类型检查、安全调度和helper静态核查，真实 App 不运行
 npm start
 npm run package
 ```
 
 本机 arm64 产物为 `out/NotAlone-darwin-arm64/NotAlone.app`。可在 Finder 双击打开；包只包含编译后的本地资源和最小启动清单，不依赖开发服务器、原型目录或仓库绝对路径。打包只替换本目录的 `out/` 产物，不覆盖历史 App。当前为 ad-hoc 本机签名，未做 Developer ID 分发、公证或 DMG；权限与签名边界见[台账](../docs/macos-app-permissions-and-errors.md)。
+
+## 完整 helper 输入的静态核查
+
+拿到完整、可追溯的微信 CLI/WCDB 目录后，在 `desktop/` 执行以下命令；路径、版本与公开来源须替换为实际声明，不运行样例未知二进制：
+
+```bash
+npm run check:helpers -- --directory /绝对路径/cli-runtime --version v1.2.3 --source https://example.org/public-runtime
+```
+
+仅 macOS 支持。目录至少含 `wechat-cli` 和 `libWCDB.dylib`；默认检查本机架构，可显式选 `--arch arm64` 或 `--arch x86_64`。命令只读取必需文件和 Mach-O 声明的目录内依赖，不扫描其他目录、不加载 WCDB、不运行 CLI/探针；只调用系统 `lipo`、`otool` 和 `codesign --verify --strict`。符号链接、目录外非系统依赖、缺文件、错误架构/文件类型、签名失败或核查中变化都拒绝。只支持可明确解析的 `@loader_path`、`@executable_path` 与 `@rpath`；不可解析的布局须先整理输入，不猜测其他路径。
+
+JSON 输出只有状态、安全错误码、声明版本、相对文件名、架构、大小和 SHA-256；不回显绝对目录、原始工具输出或来源 URL。退出 0 表示 `static_checks_passed`，退出 2 表示拒绝。版本/来源仍是声明而非核验；`provenanceVerified`、`runtimeValidated`、`helperExecuted` 和 `nativeAcceptance` 均为 false。签名通过不证明可信发行者、Developer ID、公证、权限或完整动态加载行为；WCDB 作为已知动态加载依赖单独检查，其他未写入 Mach-O 的动态加载依赖仍需按实际 CLI 版本核对。目录内最多检查 64 个文件，单文件最多 256 MiB，整体核查预算 60 秒。
+
+该命令属于任务 20 的准备接缝，没有补随包路径、改写启动配置或授权渠道读取。完整输入和来源仍缺，最终包及真实微信验收继续待办。
 
 ## 轻量无头页面验证
 
@@ -106,7 +120,7 @@ node tests/headless/rewrite-lifecycle-check.mjs          # 实际未知命令故
 
 ## 安全检查与预约 App 验收
 
-`npm test` 默认只执行 TypeScript 检查和测试 CLI 的合成回归（`tests/scheduling/`、`tests/headless/command.test.mjs`）：未协调调用拒绝、跨独立命令副本/TMPDIR 互斥、启动预算、到期、Ctrl+C/SIGTERM、崩溃与损坏租约，以及 Playwright 门禁和限定文件发现。合成孩子固定为 Node；原始 Electron API 的拒绝检查也显式使用 Node 可执行文件，避免门禁回归时打开桌面。命令明确报告真实 App 未运行。这些结果不能证明窗口、业务 UI、后端 HTTP 接线、签名包或实机验收通过；安全目录从真实 App 全量中排除。
+`npm test` 默认执行 TypeScript 检查、测试 CLI 的合成回归（`tests/scheduling/`、`tests/headless/command.test.mjs`）及 helper 静态核查（`tests/helpers/command.test.mjs`）：未协调调用拒绝、跨独立命令副本/TMPDIR 互斥、启动预算、到期、Ctrl+C/SIGTERM、崩溃与损坏租约，以及 Playwright 门禁和限定文件发现。调度的合成孩子固定为 Node；helper 核查在 macOS 只构建和 ad-hoc 签名临时合成 C 文件，检查格式、架构、依赖和签名，不执行生成的二进制。原始 Electron API 的拒绝检查也显式使用 Node 可执行文件，避免门禁回归时打开桌面。命令明确报告真实 App 未运行。这些结果不能证明窗口、业务 UI、后端 HTTP 接线、签名包或实机验收通过；安全目录从真实 App 全量中排除。
 
 真实 App 验收会显示窗口并使用桌面焦点。必须由主 Agent 先协调用户认可的有限时段，再执行下面的显式命令。参数只是实施门禁，不能代替用户对该时段的认可；当前原任务的 App 验收仍暂停，直到本调度修复安全检查和两轴评审完成。`npm start` 是用户正常打开 App 的入口，不能当作绕过测试门禁的自动验收方式。
 
