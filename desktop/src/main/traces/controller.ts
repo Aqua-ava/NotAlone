@@ -35,7 +35,7 @@ export class TraceController {
   }
   recordDeletionChanged(phase: 'started' | 'settled'): void {
     this.pendingRecordDeletions += phase === 'started' ? 1 : -1;
-    this.invalidate('资料已删除或变化，请重新读取过程。');
+    this.invalidate(phase === 'started' ? '资料正在删除，请稍后重新读取过程。' : '资料操作已结束，请重新读取过程并确认删除结果。');
   }
   private invalidate(message: string): void {
     this.operation?.abort.abort(); this.operation = undefined;

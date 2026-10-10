@@ -1,7 +1,7 @@
 # 03：在 App 查看全过程并接通所有默认提取入口
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 Blocked by: 01, 02
 
 ## What to build
@@ -15,7 +15,7 @@ Blocked by: 01, 02
 - [x] 历史任务、后台增量、CLI 和人工触发全部生产装配默认记录，无静默关闭或绕过。
 - [x] 故障、部分写入、零候选、重试与水位一致性贯通到任务状态和 App 展示。
 - [x] 全链来源删除、旧记忆依赖、本人归属和跨 owner/contact 隔离集成验证通过，普通日志和最小台账无正文。
-- [ ] 运行相关 Python/Swift 验证、完整相关测试与 Standards/Spec 两轴 review，更新实际实现状态并本地提交。
+- [x] 运行相关 Python/Swift 验证、完整相关测试与 Standards/Spec 两轴 review，更新实际实现状态并本地提交。
 
 ## Comments
 
@@ -124,3 +124,9 @@ Standards 与 Spec 均发现同一 P1：删除单条联系人/本人记忆或丢
 - 两轮均只有一个无头 Chrome，activeSamples=0、maxOnscreenWindows=0、cleanupConfirmed=true、Electron=false、nativeAcceptance=false。本轮新增夹具由正式 `MemoryService.confirm_candidate` 人工确认候选，不用底层默认自动采纳冒充人工记忆。
 
 上述修复的固定提交、最终安全检查与两轴复核结论待后文补齐。
+
+### 2026-10-10：最终收口
+
+React 接入固定提交 `b8e82f94e7670e32904c8322862c7a4b9ee5dce5`，删除修复固定提交 `de3dde3a45a9d9591fc0fc23a118503822837429`。独立 Standards 和 Spec 对初版分别指出同一 P1，增量复核确认已解决：剩余硬违规 0、可选维护问题 0、新增 Spec 阻断 0、范围扩张 0。随后采纳 Spec 可选的删除提示文案建议，分别说明操作进行中/已结束，不在结果未知时声称删除成功；控制与删除行为未变。
+
+最终 `npm test` 类型检查和 24/24 安全调度回归通过，`git diff --check` 通过；前述四个具名追踪组、资料修正删除组及 110 项 Python 回归均有真实通过证据。本票所有实际默认后端入口和当前 React 查看、反查、删除与失效范围完成，改为 `resolved`。无需 Swift 变更，未重跑原生探针；最终签名 App、系统剪贴板、前台布局和真实微信仍分别由原任务承担，不由本票通过推导。
