@@ -44,7 +44,7 @@
 | 1 | P2 | [持续会话与上下文管理](../../architecture/drafts/assistant-session-context.md) | 从 Q16 继续：生成中新消息的处理、输入长度提示与预算、会话和使用痕迹的存储、来源删除依赖及恢复验证。 | 排在已有任务之后。第一版不做自动摘要或压缩；预算数值须结合选定模型验证。 |
 | 2 | P2 | [聊天回复策略](../../architecture/drafts/conversation-reply-strategy.md) | 收束回应与主动联系的入口和接口、如何建议聊法、通用流程与 Skill 的衔接，并落实连续修改与新消息交互。 | 排在已有任务之后，与第 1 项共同核对会话行为。当前暂不展开或创建具体 Skill；恢复样例讨论后再使用“邀约与安排”。 |
 | 9 | P2 | [记忆核心事实完整保留](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | 选择新的预注册对照设计，或明确调整目标范围；整体覆盖目标仍未达成。 | 原票 `claimed / ready-for-human`。用户已决定保留未结票；旧实验和预算关闭，新投入需另定范围与预算。 |
-| 11 | P2 | [按维度放行自动采纳](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | 确定缺失维度字段的后续范围及新的质量改进、评测路线；已有门槛机制不能替代可靠性证据。 | 原票 `claimed / ready-for-agent`。当前放行表为空，已有评测未达标；字段扩展涉及后续 ADR 与迁移，重新评测需新预算，放行仍须逐类批准。 |
+| 11 | P2 | [按维度放行自动采纳](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | 确定缺失维度字段的后续范围及新的质量改进、评测路线；已有门槛机制不能替代可靠性证据。 | 原票 `claimed / ready-for-human`。当前放行表为空，已有评测未达标；字段扩展涉及后续 ADR 与迁移，重新评测需新预算，放行仍须逐类批准。 |
 | 13 | P2 | [真实表达与关系感知](../../architecture/drafts/authentic-expression.md) | 定义表达学习、热梗接入及质量评估的最小验证范围，核对当前意愿、历史样本与真实性边界。 | 先复用前两份草图的交互结论，避免重复设计方向建议。具体学习和接入方式仍待验证。 |
 | 14 | P3 | [Agent 编排与检索运行时](../../architecture/drafts/agent-runtime.md) | 对照已收束的产品行为判断现行运行时是否有真实缺口；只有有证据的需求才进入替代方案验证。 | 维持 ADR-009/010；Harness 不进入主线。两份新草图不构成框架迁移授权。 |
 | 15 | P3 | [云端工程与认证设备](../../architecture/drafts/cloud-engineering.md) | 云端落地前收束认证、设备注册与撤销、端云职责、供应商数据处理及删除路径。 | 在明确需要云端交付时启动；实际部署、数据迁移和外部连接另按工程规则限定范围。 |
