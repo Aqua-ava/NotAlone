@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any
@@ -11,9 +12,15 @@ from uuid import uuid4
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain.agents.middleware.types import ModelRequest
 
 from notalone.reply.adapters.async_runner import run_with_timeout
+from notalone.reply.adapters.input_budget_middleware import InputBudgetMiddleware
 from notalone.reply.exploration import ExplorationContext, ExplorationError, ExplorationPriority, validate_exploration_output
+from notalone.reply.input_budget import (
+    InputBudgetDecision, InputBudgetExceededError, InputBudgetProfile,
+    InputBudgetUnavailableError, InputTokenCounter,
+)
 from notalone.ledger.models import LedgerEntry, LedgerOutcome
 from notalone.ledger.ports import OutboundLedgerPort
 
@@ -58,7 +65,10 @@ OUTPUT_TOOL = {
 
 class LangChainExplorationRuntime:
     def __init__(self, *, model: BaseChatModel, ledger: OutboundLedgerPort,
-                 timeout_seconds: float = 8, priority: ExplorationPriority | None = None) -> None:
+                 timeout_seconds: float = 8, priority: ExplorationPriority | None = None,
+                 input_budget_profile: InputBudgetProfile | None = None,
+                 input_token_counter: InputTokenCounter | None = None,
+                 on_input_budget: Callable[[InputBudgetDecision], None] | None = None) -> None:
         if not 0 < timeout_seconds <= 20:
             raise ValueError("探索超时预算无效。")
         if ledger is None:
@@ -66,24 +76,36 @@ class LangChainExplorationRuntime:
         self._model = model
         self._timeout = timeout_seconds
         self._priority, self._ledger = priority, ledger
+        if input_budget_profile is not None and not isinstance(input_budget_profile, InputBudgetProfile):
+            raise TypeError("探索预算能力必须显式提供已核实的profile。")
+        name = getattr(model, "model_name", None)
+        profile = input_budget_profile or InputBudgetProfile(
+            model_id=name if isinstance(name, str) and name.strip() else "unidentified_model",
+            context_window_tokens=None, output_reserve_tokens=None, warning_ratio=0.8,
+            measurement_kind=None, measurement_id=None,
+        )
+        self._budget = InputBudgetMiddleware(profile=profile, counter=input_token_counter,
+                                             on_decision=on_input_budget)
 
     def explore(self, context: ExplorationContext) -> dict[str, Any]:
         payload = {"input_mode": "direction_exploration", "scene": context.input.scene, **context.input.payload(),
                    "purpose_hint": context.input.purpose_hint,
                    "evidence": list(context.evidence), "skill": context.skill,
                    "previous_intents": list(context.previous_intents)}
-        if len(json.dumps(payload, ensure_ascii=False)) > 24_000:
-            raise ExplorationError("探索快照超出输入预算，请缩小当前输入。")
-        model = self._model.bind_tools([OUTPUT_TOOL], tool_choice="ExplorationOutput")
+        request = ModelRequest(model=self._model, system_message=SystemMessage(EXPLORATION_PROMPT),
+                               messages=[HumanMessage(json.dumps(payload, ensure_ascii=False))],
+                               tools=[OUTPUT_TOOL], tool_choice="ExplorationOutput")
         called_at, started = datetime.now(timezone.utc), time.perf_counter()
         outcome = LedgerOutcome.RUN_FAILED
         called = False
         try:
             with self._priority.foreground() if self._priority else nullcontext():
+                request = self._budget.require_request(request)
+                model = request.model.bind_tools(request.tools, tool_choice=request.tool_choice,
+                                                 **request.model_settings)
                 called = True
-                result = run_with_timeout(model.ainvoke([
-                    SystemMessage(EXPLORATION_PROMPT), HumanMessage(json.dumps(payload, ensure_ascii=False)),
-                ]), seconds=self._timeout)
+                result = run_with_timeout(model.ainvoke([request.system_message, *request.messages]),
+                                          seconds=self._timeout)
                 if self._priority:
                     self._priority.check_running()
             outcome = LedgerOutcome.REJECTED_BY_VALIDATION
@@ -94,6 +116,8 @@ class LangChainExplorationRuntime:
             return validated
         except TimeoutError:
             raise ExplorationError("探索超时，请手动重试。") from None
+        except (InputBudgetExceededError, InputBudgetUnavailableError):
+            raise
         except Exception:
             raise ExplorationError("探索失败，请手动重试。") from None
         finally:

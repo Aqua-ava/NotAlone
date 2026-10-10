@@ -2,7 +2,7 @@
 
 Triage: ready-for-agent
 
-规格状态：第一版范围与测试接缝已确认，2026-10-11 发布；尚未实现；复审后的11张独立任务已发布，均未开工。
+规格状态：第一版范围与测试接缝已确认，2026-10-11发布；复审后的11张独立任务已发布。主树已接明确入口与持久UUID后端，本主题接入核心探索前端，主树公开页面组合仍待复验；完整换组、Skill版本、连续生命周期与总预算继续按各票实施，原验收和真实State保留。
 
 ## Problem Statement（用户问题）
 
@@ -107,4 +107,4 @@ R01复用已有目标消息+明确方向入口并交付场景兼容；R02负责�
 | Q27–Q28 | 未确认方向有界更新、编辑中不覆盖 |
 | Q29–Q32 | 同句不同前文验证、推荐不预选、已选方向保护、暂不回应 |
 
-生产能力核验：当前[回复输入](../../backend/src/notalone/reply/interface.py)只有两种输入；[桌面说明](../../desktop/README.md)明确当前无模型方向建议。[页面接缝](../../desktop/tests/headless/directed-reply.ts)和[HTTP 测试](../../backend/tests/integration/server/test_reply_api.py)可复用，但不代表主动联系或消息组已经实现。
+历史能力核验（本轮实现前）：当时回复输入只有草稿及回应两类，尚无模型方向建议。当前主树已接主动目的、原候选消息组、持久UUID探索及统一生成，运行证据见[后端说明](../../backend/README.md)、[桌面说明](../../desktop/README.md)和各票Answer；原[页面接缝](../../desktop/tests/headless/directed-reply.ts)与[HTTP测试](../../backend/tests/integration/server/test_reply_api.py)继续复用，不能由组件或负责人窗口推断完整组合已完成。

@@ -1,7 +1,7 @@
 import { isUuid } from '../uuid';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import { noArguments, type PageCommands } from '../page-commands';
-import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, RewriteOptions, RewriteOptionsUpdate } from '../../shared/reply-bridge';
+import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyCorrectionUpdate, ReplyDirectionChoice, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, RewriteOptions, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { ReplySession } from './session';
@@ -81,6 +81,43 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     const value = fields(args, ['contactId', 'scopeRevision', 'newRequest']);
     if (typeof value.newRequest !== 'boolean') throw new Error('本次生成操作不可用。');
     return replies.generate(value as unknown as GenerateReply);
+  }, 'helper');
+  commands.handle('reply:update-correction', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'correction']);
+    if (typeof value.correction !== 'string' || value.correction.length > 4096) throw new Error('纠正内容不可用。');
+    return replies.updateCorrection(value as unknown as ReplyCorrectionUpdate);
+  }, 'helper');
+  commands.handle('reply:explore', (...args: unknown[]) =>
+    replies.explore(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
+  commands.handle('reply:change-directions', (...args: unknown[]) =>
+    replies.explore(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection, true), 'helper');
+  commands.handle('reply:answer-clarification', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'answer', 'inputVersion', 'questionId']);
+    if (!isUuid(value.inputVersion) || !isUuid(value.questionId) || typeof value.answer !== 'string'
+      || !value.answer.trim() || value.answer.length > 4096) throw new Error('关键问题回答不可用。');
+    return replies.answerClarification(value as unknown as import('../../shared/reply-bridge').ReplyClarificationAnswer);
+  }, 'helper');
+  commands.handle('reply:stop-exploration', (...args: unknown[]) =>
+    replies.stopExploration(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
+  commands.handle('reply:retry-exploration', (...args: unknown[]) =>
+    replies.retryExploration(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
+  commands.handle('reply:update-requirements', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'requirements']);
+    if (typeof value.requirements !== 'string' || value.requirements.length > 4096) throw new Error('本次要求不可用。');
+    return replies.updateRequirements(value as unknown as import('../../shared/reply-bridge').ReplyRequirementsUpdate);
+  }, 'helper');
+  commands.handle('reply:update-skill', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'skill']), skill = value.skill;
+    if (!skill || typeof skill !== 'object' || Array.isArray(skill) || Object.keys(skill).length !== 2
+      || !Object.keys(skill).every((key) => ['mode', 'versionId'].includes(key))) throw new Error('策略选择不可用。');
+    const choice = skill as Record<string, unknown>;
+    if (choice.mode === 'user' ? !isUuid(choice.versionId) : !['auto', 'disabled'].includes(choice.mode as string) || choice.versionId !== null) throw new Error('策略版本不可用。');
+    return replies.updateSkill(value as unknown as import('../../shared/reply-bridge').ReplySkillUpdate);
+  }, 'helper');
+  commands.handle('reply:select-direction', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'suggestionId', 'inputVersion']);
+    if (!isUuid(value.suggestionId) || !isUuid(value.inputVersion)) throw new Error('方向建议不可用。');
+    return replies.selectDirection(value as unknown as ReplyDirectionChoice);
   }, 'helper');
   commands.handle('reply:select-candidate', (...args: unknown[]) => { return replies.selectCandidate(candidate(args)); }, 'helper');
   commands.handle('reply:edit-candidate', (...args: unknown[]) => { return replies.editCandidate(candidate(args, true) as ReplyCandidateEdit); }, 'helper');

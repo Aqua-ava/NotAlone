@@ -6,6 +6,9 @@ export class RewriteHttpProxy {
   readonly server: Server;
   readonly requests: Array<Record<string, unknown>> = [];
   readonly results: Array<{ status: number; data: Record<string, unknown> }> = [];
+  readonly explorationRequests: Array<Record<string, unknown>> = [];
+  readonly explorationResults: Array<{ status: number; data: Record<string, unknown> }> = [];
+  nextExploration: 'normal' | 'drop' | 'hold' = 'normal';
   nextReply: 'normal' | 'drop' | 'hold' = 'normal';
   nextMessages: 'normal' | 'drop' | 'hold' = 'normal';
   nextEvidence: 'normal' | 'hold' = 'normal';
@@ -29,15 +32,18 @@ export class RewriteHttpProxy {
       }
       const generating = incoming.url === '/api/reply/generate'
         || /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+\/replies$/.test(incoming.url ?? '');
+      const exploring = incoming.url === '/api/reply/explore'
+        || /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+\/explorations(?:\/[a-f0-9-]+\/(?:confirm|answer|stop))?$/.test(incoming.url ?? '') && incoming.method === 'POST';
       const messages = /^\/api\/contacts\/[a-f0-9-]+\/messages\?/.test(incoming.url ?? '');
       const evidence = /^\/api\/contacts\/[a-f0-9-]+\/replies\/[a-f0-9-]+\/evidence$/.test(incoming.url ?? '');
       const sessionRead = incoming.method === 'GET'
         && /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+$/.test(incoming.url ?? '');
       if (messages) this.messageRequests.push(incoming.url!);
       if (sessionRead) this.sessionRequests.push(incoming.url!);
-      const delivery = generating ? this.nextReply : messages ? this.nextMessages : evidence ? this.nextEvidence
+      const delivery = generating ? this.nextReply : exploring ? this.nextExploration : messages ? this.nextMessages : evidence ? this.nextEvidence
         : sessionRead ? this.nextSessionRead : 'normal';
       if (generating) this.nextReply = 'normal';
+      if (exploring) this.nextExploration = 'normal';
       if (messages) this.nextMessages = 'normal';
       if (evidence) this.nextEvidence = 'normal';
       if (sessionRead) this.nextSessionRead = 'normal';
@@ -58,12 +64,14 @@ export class RewriteHttpProxy {
       incoming.on('end', () => {
         const content = Buffer.concat(body);
         if (generating) this.requests.push(JSON.parse(content.toString('utf8')));
+        if (exploring) this.explorationRequests.push(JSON.parse(content.toString('utf8')));
         const outgoing = httpRequest(`http://${address}${incoming.url}`, { method: incoming.method, headers: incoming.headers }, (result) => {
           const chunks: Buffer[] = [];
           result.on('data', (chunk: Buffer) => chunks.push(chunk));
           result.on('end', () => {
             const value = Buffer.concat(chunks);
             if (generating) this.results.push({ status: result.statusCode ?? 500, data: JSON.parse(value.toString('utf8')) });
+            if (exploring) this.explorationResults.push({ status: result.statusCode ?? 500, data: JSON.parse(value.toString('utf8')) });
             if (evidence && delivery === 'hold') this.heldEvidenceStatuses.push(result.statusCode ?? 500);
             if (sessionRead) {
               const saved = JSON.parse(value.toString('utf8'));

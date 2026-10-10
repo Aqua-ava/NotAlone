@@ -4,10 +4,13 @@ import json
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 from langchain_core.messages import HumanMessage
+from notalone.memory import AdoptionMethod, MemoryCandidate, MemoryCategory
+from notalone.persistence.memory_store import PostgresMemoryStore
+from notalone.scopes import ContactScope
 
 from tests.fidelity_http_support import FidelityControlledModel, FidelityHttpFixture
 from tests.integration.server.core_business_flow_support import ScriptedCoreModel, tool_response
@@ -80,6 +83,52 @@ class PersistentExplorationHttpTest(FidelityHttpFixture, unittest.TestCase):
 
     def _calls(self, mode):
         return [payload for payload in self.reply_model.payloads if payload.get("input_mode") == mode]
+
+    def test_multi_source_memory_outside_generation_window_has_one_complete_dependency(self):
+        for scene in ("reply_to_message", "initiate_conversation"):
+            with self.subTest(scene=scene):
+                self.reply_model.plans.clear()
+                path, body, _ = self._prepare(scene)
+                contact = UUID(path.split("/")[3])
+                scope = ContactScope(self.owner_id, contact)
+                sources = tuple(uuid4() for _ in range(21))
+                with psycopg.connect(self.database_url) as connection:
+                    for source in sources:
+                        connection.execute("""INSERT INTO public.source_document
+                            (id,owner_id,contact_id,source_type,file_name,content_sha256,record_count)
+                            VALUES (%s,%s,%s,'wechat_jsonl','multi-source-synthetic.jsonl',%s,0)""",
+                            (source, self.owner_id, contact, uuid4().hex * 2))
+                store = PostgresMemoryStore(self.database_url)
+                candidate = store.create_candidate(MemoryCandidate(
+                    candidate_id=uuid4(), scope=scope, text="仅用于理解的已确认资料标记。",
+                    category=MemoryCategory.RECENT_STATE, source_ids=sources,
+                ))
+                memory = store.confirm(scope=scope, candidate_id=candidate.candidate_id,
+                                       adoption_method=AdoptionMethod.MANUAL)
+                self.reply_model.plans.append({"explore": {}})
+                explored = self._open(path, body)
+                material = next(item for item in explored["evidence"]
+                                if item["evidence_id"] == str(memory.memory_id))
+                self.assertEqual(set(material["source_ids"]), {str(source) for source in sources})
+                self.reply_model.plans.append({"text": "只了解近况，不承诺见面。", "basis": "只表达已确认意愿。"})
+                status, generated = self._confirm(path, explored)
+                self.assertEqual(status, 200, generated)
+                self.assertEqual(generated["kind"], "generated")
+                self.assertEqual(len(generated["turn"]["candidates"]), 1)
+                request_id = generated["turn"]["reply_request_id"]
+                with psycopg.connect(self.database_url) as connection:
+                    count = connection.execute("""SELECT count(*) FROM public.reply_context_evidence
+                        WHERE owner_id=%s AND contact_id=%s AND reply_request_id=%s AND evidence_id=%s""",
+                        (self.owner_id, contact, UUID(request_id), memory.memory_id)).fetchone()[0]
+                    self.assertEqual(count, 1)
+                calls = len(self.reply_model.payloads)
+                self.assertEqual(self._confirm(path, explored), (200, generated))
+                self.assertEqual(len(self.reply_model.payloads), calls)
+                status, receipt = self.backend.request(
+                    f"/api/contacts/{contact}/sources/{sources[0]}", method="DELETE")
+                self.assertEqual(status, 202, receipt)
+                self.assertEqual(self._confirm(path, explored)[0], 409)
+                self.assertEqual(len(self.reply_model.payloads), calls)
 
     def _skill(self, path):
         skill, version = uuid4(), uuid4()

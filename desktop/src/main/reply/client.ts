@@ -10,14 +10,19 @@ export async function generateReply(backend: BackendHost, input: ReplyInputSnaps
   const selected = sessionId ?? (await defaultAssistantSession(backend, input.contactId, signal)).sessionId;
   const response = await backend.requestJson({
     method: 'POST', path: `/api/contacts/${input.contactId}/assistant-sessions/${selected}/replies`, timeoutMs: 25_000, signal,
-    body: { contact_id: input.contactId, idempotency_key: requestKey, content: input.mode === 'rewrite_draft' ? {
+    body: { contact_id: input.contactId, idempotency_key: requestKey,
+      ...(input.mode !== 'rewrite_draft' && input.skillChoice?.mode === 'disabled' ? { skill_disabled: true } : {}),
+      ...(input.mode !== 'rewrite_draft' && input.skillChoice?.mode === 'user' ? { skill_version_id: input.skillChoice.versionId } : {}),
+      content: input.mode === 'rewrite_draft' ? {
       type: 'rewrite_draft', draft_text: input.draftText,
       user_instruction: input.userInstruction, include_relationship_context: input.includeRelationshipContext,
     } : input.mode === 'initiate_conversation' ? {
-      type: 'initiate_conversation', purpose: input.purpose,
+      type: 'initiate_conversation', purpose: input.purpose, understanding_correction: input.correction || null,
+      user_instruction: input.userInstruction || null, clarification_answer: input.clarificationAnswer || null,
     } : {
       type: 'reply_to_message', target_message_id: input.target.messageId,
       direction: input.direction, direction_source: 'direct_input',
+      understanding_correction: input.correction || null, user_instruction: input.userInstruction || null, clarification_answer: input.clarificationAnswer || null,
     } },
   });
   const value = response.data;

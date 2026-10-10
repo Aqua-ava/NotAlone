@@ -9,6 +9,7 @@ from notalone.application.model_priority import ModelWorkStopped
 from notalone.application.reply_exploration import ReplyExplorationService
 from notalone.reply.errors import ReplyError
 from notalone.reply.exploration import ExplorationError, ExplorationInput
+from notalone.reply.input_budget import InputBudgetExceededError, InputBudgetUnavailableError
 from notalone.scopes import ContactScope
 
 
@@ -107,6 +108,8 @@ def handle_exploration(
         return 200, result
     except (ValueError, TypeError, KeyError, AttributeError):
         return 400, {"error": "exploration_request_invalid"}
+    except (InputBudgetExceededError, InputBudgetUnavailableError) as error:
+        return 409, {"error": "exploration_rejected", "input_budget": error.decision.to_payload()}
     except (ExplorationError, AssistantSessionRejected):
         return 409, {"error": "exploration_rejected"}
     except (AssistantSessionError, ReplyError, ModelWorkStopped):

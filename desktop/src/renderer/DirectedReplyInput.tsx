@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import type { ReplySessionView } from './RewritePanel';
+import { StrategyControls } from './StrategyControls';
 import { Icon } from './icons';
 
 export function DirectedReplyInput({ replies }: { replies: ReplySessionView }) {
   const { state } = replies;
   const [direction, setDirection] = useState(state.direction);
-  useEffect(() => { setDirection(state.direction); }, [state.scopeRevision]);
+  useEffect(() => { setDirection(state.direction); }, [state.scopeRevision, state.direction]);
   const enabled = Boolean(state.contactId);
-  const canGenerate = enabled && Boolean(state.targetMessageId) && Boolean(direction.trim()) && state.phase !== 'waiting' && !state.generationBlock;
+  const canGenerate = enabled && Boolean(state.targetMessageId) && Boolean(direction.trim()) && state.phase !== 'waiting' && !state.generationBlock
+    && state.exploration.phase !== 'waiting';
   return <section className="directed-input" aria-label="本次回复输入">
     <div className="message-heading"><b>选择待回复消息</b>
       <button disabled={!enabled || state.messages.phase === 'loading'} onClick={() => void replies.loadMessages()}>刷新消息</button></div>
@@ -24,6 +26,7 @@ export function DirectedReplyInput({ replies }: { replies: ReplySessionView }) {
       </label>)}
     </div>
     {state.messages.nextCursor && <button disabled={state.messages.phase === 'loading'} onClick={() => void replies.loadMessages(true)}>加载更早消息</button>}
+    <StrategyControls replies={replies} />
     <div className="ime-input"><label>表达方向<textarea aria-label="表达方向" maxLength={4096}
       value={direction} disabled={!enabled} placeholder="明确说明想表达什么，例如解释时间安排，不增加承诺"
       onChange={(event) => { setDirection(event.target.value); void replies.updateDirection(event.target.value); }} /></label>

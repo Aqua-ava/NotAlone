@@ -12,6 +12,7 @@ export function useReplySession() {
   const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null, generationBlock: 'foreground-confirmation-required',
     options: { tone: 'original', instruction: '', includeRelationshipContext: false },
     mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null, direction: '', purpose: '',
+    correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], exploration: { phase: 'idle', result: null },
     messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
     phase: 'idle', result: null, selectedCandidateId: null, canRetry: false }, window.notalone.replies);
   async function operate(operation: () => Promise<ReplySessionState | void>) {
@@ -29,6 +30,14 @@ export function useReplySession() {
     reconnectMessages: () => operate(() => window.notalone.replies.reconnectMessages(selection())),
     selectMessage: (messageId: string) => operate(() => window.notalone.replies.selectMessage({ ...selection(), messageId })),
     updateDirection: (direction: string) => operate(() => window.notalone.replies.updateDirection({ ...selection(), direction })),
+    updateCorrection: (correction: string) => operate(() => window.notalone.replies.updateCorrection({ ...selection(), correction })),
+    explore: (changeGroup = false) => operate(() => changeGroup ? window.notalone.replies.changeDirections(selection()) : window.notalone.replies.explore(selection())),
+    answerClarification: (answer: string, inputVersion: string, questionId: string) => operate(() => window.notalone.replies.answerClarification({ ...selection(), answer, inputVersion, questionId })),
+    stopExploration: () => operate(() => window.notalone.replies.stopExploration(selection())),
+    retryExploration: () => operate(() => window.notalone.replies.retryExploration(selection())),
+    updateRequirements: (requirements: string) => operate(() => window.notalone.replies.updateRequirements({ ...selection(), requirements })),
+    updateSkill: (skill: import('../shared/reply-bridge').ReplySkillChoice) => operate(() => window.notalone.replies.updateSkill({ ...selection(), skill })),
+    selectDirection: (suggestionId: string, inputVersion: string) => operate(() => window.notalone.replies.selectDirection({ ...selection(), suggestionId, inputVersion })),
     updatePurpose: (purpose: string) => operate(() => window.notalone.replies.updatePurpose({ ...selection(), purpose })),
     generate: (newRequest = false) => operate(() => window.notalone.replies.generate({ ...selection(), newRequest })),
     selectCandidate: (candidateId: string) => operate(() => window.notalone.replies.selectCandidate({ ...selection(), replyRequestId: latest.current.result!.replyRequestId, candidateId })),

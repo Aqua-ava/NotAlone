@@ -43,7 +43,7 @@ Blocked by: [conversation-reply-strategy/01 回应场景与明确意愿直达候
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
 
-## 承接契约
+## 历史整数接口承接契约（已退役）
 
 - 明确打开 `POST /api/reply/explore`，提交联系人、短任务 `task_id`、递增 `input_version`、真实 `target_message_id`、纠正和可选已确认建议引用。后端只用同范围目标、最多四条相邻消息、最多两条已确认记忆；一次结构化调用，无业务Tool或表达样本。
 - 返回理解、歧义、真实依据及2–3个不同立场方向；引用使用 `task_id + input_version + suggestion_id`，不得靠正文模糊匹配。纠正只更新探索，已选方向通过有界原始／最新引用延续，不因错误或响应丢失替换意愿。
@@ -51,7 +51,7 @@ Blocked by: [conversation-reply-strategy/01 回应场景与明确意愿直达候
 - 额外删除依赖以 `ContextEvidence.model_visible=false` 保留，不突破生成器原有消息、记忆预算；探索记忆正文合计最多600字符。来源删除清除缓存、已编辑派生方向及受影响持久副本；删除后拒绝重放不留下派生请求正文。
 - 缓存15分钟、最多128任务；原意愿到期同时撤销依赖它的当前快照。测试可注入探索时钟，生产仍为monotonic。持久助手会话及其权威输入版本由A负责，后续接线不能把此短任务整数版本扩展为另一套持久权威。
 
-## Answer
+## 历史 Answer（持久UUID接续前）
 
 2026-10-11：R02可自主执行范围完成；仍是单组方向，换组、澄清、主动目的、Skill及持续会话组合由各后续票推进。
 
@@ -69,3 +69,20 @@ Blocked by: [conversation-reply-strategy/01 回应场景与明确意愿直达候
 命令：显式Conda/PYTHONPATH运行隔离测试入口，联跑 `test_reply_exploration`（14组件＋1真实051→052旧候选升级）、生产迁移首次及重复、原 `test_strategy_flow` 2、`test_reply_message_groups` 2、A讨论/记忆依赖，合计34项green、skip0、owned_database_remaining=0。使用实际正式001–052前缀，无辅助schema；原2项候选500缺列失败已实际转绿。审查新增暂停后Skill更新仍残留选项、事务授权前到期窗口和旧选择误确认三条真实PG反例，均先RED再修复GREEN；TTL在实际授权事务复验，拒绝后以独立事务擦除过期正文，finish核对输入UUID、请求键、选择三元组和A完成状态。Standards/Spec该切片最终均0；静态审查不代替运行结果。公开探索HTTP/页面、实际生成端口和最终总预算仍待接，票保持claimed；这些组件结果不替代旧页面或组合验收。
 
 2026-10-11 生成前原子接线：按总协调明确归属，提取 `canonical_reply_input` 供A投影与既有摘要共用，派生协议继续只留SHA指纹；`prepare_explored_generation(connection,scope,session_id,command)` 在A推进唯一UUID之前核对实际选择、目标、一次声明、Skill及原根/当前完整来源，并保存真实依赖。8项PG组件先RED再GREEN，包括主动无根依赖导致删除后正文残留、合法空白声明误拒绝、实际完成后历史重放被新输入/TTL/Skill误拒绝、过期reserve拒绝但未擦除。已完成同键保持原摘要/绑定/保存来源守卫，未完成才复验CURRENT；过期擦除在A事务退出后独立提交。联跑这8项、052存储/升级及A公开保存/输入/记忆删除/B单次字段共63项真实HTTP/隔离PGgreen、skip0、owned_database_remaining=0；230回复单元通过，两轴最终0。公开B探索尚未装配，组件UUID验证不代替页面闭环；原始数据仅合成，不读真实聊天、不写长期偏好。
+
+2026-10-11 持久UUID核心页面交付：新增 `exploration-client` 只适配唯一公开持久接口，先读A实际current UUID；确认/应答/停止均绑定原UUID，失败保持原操作键。两种场景共享理解、依据、关键问题、当前一步、取舍、要求、Skill和暂停控件，纠正及回答不确认，明确选择才能沿原生成链继续。只薄接RewritePanel props，保留A08讨论恢复与C04复制入口。
+
+命令：Conda NotAlone中 `npm run test:pages -- --case reply-strategy-dialogue --case reply-strategy-invalidation --timeout-seconds 240`，五场全部通过；两场核心各4模型调用，原确认完整响应及身份同键重放0追加，关闭Skill后普通生成是第5调用且HTTP明确disabled，主动真实来源删除清空派生目的／回答。三场改目的／场景／目标分别3调用，新HTTP旧回答null。新增三P2均有实际公开RED后修复；前一次未激活Conda只被入口拒绝，未启动页面。typecheck与安全页面CLI10项通过，quiet42/active0/onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false。只处理合成资料；无OCR、真实聊天、外部模型或人工验收。旧七场仍是历史INT证据，待新UUID迁移；完整换组、版本、预算与生命周期未据此通过，保持claimed。
+
+2026-10-11 完整来源复验：Spec发现完整 `source_ids` 误用20条引用预算，补固定21条实际同联系人来源及手动确认记忆后，首次公开探索200但页面拒绝合法结果，取得RED。解析器改为完整来源UUID校验，引用仍最多20条且核对当前依据。首轮修后因夹具未引用记忆而额外要求正文显示，属于测试前提错误；改用当前真实依据ID后，明确确认实际503暴露原根与当前记忆删除依赖重复追加。新增真实HTTP反例先RED，生成适配器按依据身份去重并保留完整来源后GREEN，不扩大模型可见窗口。
+
+最终在显式Conda中运行 `npm run test:pages -- --case reply-strategy-dialogue --timeout-seconds 180`，回应与主动两场全部通过：21完整来源集合、实际引用显示、纠正／回答不确认、明确选择生成、同键完整响应0追加调用、普通生成继续disabled，以及主动来源删除清派生目的／回答。quiet22/active0/onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false。隔离入口联跑 `test_persistent_reply_exploration`、`test_explored_generation`、`test_reply_exploration` 共44项通过（37.475s），正式001–052，owned database remaining=0；230回复单元通过（1.457s）。新HTTP多来源用例两场均查库只有1条记忆依据、重放不追加调用、实际DELETE后旧确认409。
+
+两轴最终只读审查：Spec 0；Standards hard 0，接受1条P3测试准备重复建议，暂保留HTTP与页面各自的合成准备，避免为测试数据新增跨模块接口。该建议不影响产品隔离或行为；静态审查不当运行证据。完整版本、预算、旧七场UUID接续和生命周期仍未据此完成，原验收标准及claimed状态保持。
+
+2026-10-11 普通请求与探索改口边界：协调审查发现普通A生成后探索确认B可能仍复用A旧attempt。新增公开 `reply-strategy-transition` 两场均取得真实RED：下一普通HTTP key仍等于A。仅在runStrategy开始时清除旧普通lastAttempt，保留策略操作自身的UUID/键、实际Skill与保存守卫；修后两场新key、B意愿、实际NoSkill禁用、新候选和第4次模型调用均通过，策略确认及新普通请求各自完整同键重放不追加调用。
+
+命令为Conda NotAlone内 `npm run test:pages -- --case reply-strategy-transition --case reply-strategy-options --timeout-seconds 180`，两case实际GREEN，quiet33/active0/onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false；typecheck通过。首次修后主动最后TEST按钮不存在30秒超时已保留，改用既有主动生成按钮重放；Standards提出聚合catch可能吞收尾错误的硬P2，改为仅捕获页面回调失败，完整收尾失败直接停止且未确认清理不启动下一场，最终限定hard0/Fowler0、Spec0。仅合成资料与受控模型，没有App、OCR、真实聊天、额外模型或人工验收；本切片不关闭完整票和连续生命周期依赖。
+
+
+2026-10-11 总协调主树集成复验：正式414前端、47共同预算与48旧请求修复合并后，保留A08读取、C样本与正式删除DTO。44项实际HTTP／001–053 PG GREEN（42.835s）及随后30项预算／探索／C边界HTTP GREEN（37.655s），两组自有库均0；273回复单元GREEN（1.792s）、type与CLI10通过。此前确认后方向未同步和来源删除漏探索清理的合并P2均修；Spec新普通A→探索确认B→普通复用A的旧键真实两场RED后由B正式48修复。root原transition＋conversation-strategy-entry两labels180实际exit0，回应／主动新key、新意愿／disabled与各自原样重放0调用全部到达，quiet26／cleanuptrue／单Chrome／Electronnativefalse。先前两label窗口exit1、目标场5s仍waiting及后续有界实际HTTP等待取得三场GREEN均保留；不把分窗通过改写成原失败窗口通过。最终限定Standards硬0／重要smell0、Spec0；完整旧七场UUID、Skill版本和连续生命周期等仍接续，claimed不变。

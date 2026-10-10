@@ -30,7 +30,12 @@ class ExploredReplyContext:
         self._require_revision(context, task)
         dependencies = self._evidence.generation_dependencies(command.scope, (*task.intent_snapshots, *task.snapshots))
         known = {item.evidence_id for item in context.evidence}
-        return replace(context, evidence=context.evidence + tuple(item for item in dependencies if item.evidence_id not in known))
+        additional = []
+        for item in dependencies:
+            if item.evidence_id not in known:
+                known.add(item.evidence_id)
+                additional.append(item)
+        return replace(context, evidence=context.evidence + tuple(additional))
 
     def validate_current(self, context: ReplyContext) -> None:
         task = self._read(context.command)

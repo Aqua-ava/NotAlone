@@ -26,9 +26,9 @@ from notalone.application.setup_service import SetupService
 from notalone.persistence.setup_owner_directory import PostgresOwnerDirectory
 from notalone.persistence.memory_store import PostgresMemoryStore
 from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
-from notalone.memory import MemoryCandidate, MemoryCategory
+from notalone.persistence.outbound_ledger import PostgresOutboundLedger
+from notalone.memory import AdoptionMethod, MemoryCandidate, MemoryCategory
 from notalone.scopes import ContactScope
-from notalone.persistence.owner_memory_store import PostgresOwnerMemoryStore
 from notalone.server.app import create_app
 from notalone.server.connection_info import write_backend_info
 from notalone.server.reply_wiring import build_reply_service
@@ -71,6 +71,26 @@ class DesktopRewriteModel(ScriptedCoreModel):
             if plan["fault"] == "timeout":
                 raise TimeoutError("本轮合成外部模型超时。")
             raise RuntimeError("合成原始模型错误不应进入界面。")
+        if payload["input_mode"] == "direction_exploration":
+            exploration = plan.get("explore", {})
+            ids = [str(uuid4()) if exploration.get("invalid_evidence") else payload["evidence"][0]["evidence_id"]] if payload["evidence"] else []
+            if exploration.get("cite_all"):
+                ids = [item["evidence_id"] for item in payload["evidence"]]
+            group = exploration.get("group", "")
+            self.responses.append(tool_response("ExplorationOutput", {
+                "understanding": exploration.get("understanding", "对方说明回复会晚一点。"),
+                "ambiguities": exploration.get("ambiguities", []), "citation_ids": ids,
+                "options": [
+                    {"label": "愿意等待", "intent": exploration.get("direction", f"表示愿意等待，但不增加承诺。{group}"),
+                     "reason": "想留出时间时适用。", "citation_ids": ids, "recommended": bool(ids), "pause": False},
+                    {"label": "说明边界", "intent": exploration.get("direction", f"表示愿意等待，但不增加承诺。{group}") if exploration.get("same_stance") else f"说明今晚不继续等待，之后再联系。{group}",
+                     "reason": "想说明时间边界时适用。", "citation_ids": [], "recommended": False, "pause": False},
+                    {"label": "暂不回应", "intent": f"暂不回应本次消息。{group}", "reason": "尚未想好时可以暂停。",
+                     "citation_ids": [], "recommended": False, "pause": True},
+                ], "question": exploration.get("question"),
+                "current_step": "本次只说明意愿，不推进其他安排。", "tradeoffs": ["简短表达可能只推进当前一步。"],
+            }))
+            return super()._generate(messages, stop, run_manager, **kwargs)
         primary = next(item for item in payload["evidence"]
                        if (item["kind"] == "user_draft" if payload["input_mode"] == "rewrite_draft"
                            else item["kind"] == "user_purpose" if payload["input_mode"] == "initiate_conversation"
@@ -231,6 +251,11 @@ def main() -> None:
             elif operation == "older_messages":
                 fixture.add_older_messages(contact_ids[0])
                 result = {}
+            elif operation == "age_exploration":
+                with psycopg.connect(fixture.database_url) as connection:
+                    connection.execute("UPDATE public.reply_exploration SET created_at=created_at-(%s*interval '1 second'), root_created_at=root_created_at-(%s*interval '1 second') WHERE owner_id=%s",
+                                       (command["seconds"], command["seconds"], fixture.owner_id))
+                result = {}
             elif operation == "fidelity_history":
                 # 固定合成资料；仅调整本夹具甲的消息并确认本夹具空联系人绑定。
                 with psycopg.connect(fixture.database_url) as connection:
@@ -263,6 +288,26 @@ def main() -> None:
                     source_ids=(source_id,), confidence=0.8,
                 ))
                 result = {"candidate_id": str(pending.candidate_id), "source_id": str(source_id)}
+            elif operation == "strategy_many_sources":
+                # 固定21个同联系人合成来源，验证完整来源身份不受引用条数预算截断。
+                source_ids = tuple(uuid4() for _ in range(21))
+                scope = ContactScope(fixture.owner_id, UUID(contact_ids[0]))
+                with psycopg.connect(fixture.database_url) as connection:
+                    for source_id in source_ids:
+                        connection.execute(
+                            "INSERT INTO public.source_document "
+                            "(id,owner_id,contact_id,source_type,file_name,content_sha256,record_count) "
+                            "VALUES (%s,%s,%s,'wechat_jsonl','multi-source-synthetic.jsonl',%s,0)",
+                            (source_id, scope.owner_id, scope.contact_id, uuid4().hex * 2),
+                        )
+                store = PostgresMemoryStore(fixture.database_url)
+                candidate = store.create_candidate(MemoryCandidate(
+                    candidate_id=uuid4(), scope=scope, text="合成已确认资料带完整的二十一个来源。",
+                    category=MemoryCategory.RECENT_STATE, source_ids=source_ids,
+                ))
+                memory = store.confirm(scope=scope, candidate_id=candidate.candidate_id,
+                                       adoption_method=AdoptionMethod.MANUAL)
+                result = {"memory_id": str(memory.memory_id), "source_ids": [str(item) for item in source_ids]}
             elif operation == "unrelated_source":
                 source_id = uuid4()
                 with psycopg.connect(fixture.database_url) as connection:

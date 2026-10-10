@@ -45,3 +45,14 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 2026-10-11 既有B接续：静态选择模块按既有SkillPort读取最多一个版本，以validate_skill_version核对启用、owner/contact和不可变目录身份；明确关闭/无匹配都返回NoSkill，旧指定版本不回退。跨范围目录和正文两次red→green、6项受控模块验证通过。完整探索→确认→生成及库revision失效路径待A051/B052实际接线与公开页面；未标验收通过。
 
 2026-10-11 基础切片补充：auto仅在服务端已核验主要沟通场景时精确匹配applicable_scenes，入口类型和描述文字不能代替任务识别；未知任务使用NoSkill。显式user固定实际版本，非user禁止携带版本。相关20项模块测试通过，两轴限定复审0问题；尚未完成探索→确认→生成或库revision的真实公开闭环，保留原验收项。
+
+2026-10-11 持久UUID前端核心切片：公开页面关闭Skill后完成两场探索及确认，再次普通生成HTTP均保持skill_disabled=true；请求快照固定实际版本或NoSkill，UI自动／指定／关闭偏好分别保存。普通生成丢关闭选择P2已公开RED→GREEN。实际版本选择／更换／revision页面与A12探索总预算仍待接，保持claimed。 真实命令、五场控制／隔离证据与数据影响见[R02本次页面记录](02-understanding-and-direction.md)；非真人或原生验收，原标准保持。
+2026-10-11 探索完整请求预算：正式A12接口已消费为c6a9381，B只在原单次探索SDK适配器构造最终ModelRequest并调用同一require_request；包含system、完整输入与静态Skill、唯一输出工具schema、最终参数和供应商framing，实际输出预留绑定到调用。移除旧24000字符的假总预算。能力或绑定计量未知时不调用模型；错误公开409与共同纯元数据，不带正文。
+
+TDD未知能力原行为仍调用模型，首1项真实RED；公共守卫接线后新5＋原9探索单元14通过。预算错误原被通用503遮蔽，两场HTTP先RED后改为共同metadata，最小1项两场通过。最终52相关HTTP/正式001–053随机PG通过（49.670s，owned database remaining=0），含新3预算HTTP、21持久探索、原原子/存储及C五个样本/Skill组合；273完整回复单元通过（1.766s）。新测试逐项比较完整计量请求与实际调用参数，覆盖输出预留、温和提醒、每次变输入重查、不同模型counter、参数绕过、完整静态Skill超限前0调用。
+
+Context7在本环境未提供，转查官方ModelRequest文档并核对实际Conda版本（LangChain1.3.15/core1.5.5/openai1.5.1/deepseek1.1.0）。两轴静态Spec0/Standards hard0；1条未知profile默认构造重复P3接受保留，B不擅改A公共预算工厂，两个适配器默认均拒绝且受反例覆盖。上述只证明显式合成协议，不当真实供应商计量、自然语言质量或A12整票完成。公开页面接共同guard复验、实际Skill更换/revision仍继续，票保持claimed。
+共同guard公开回归实际完成：Conda NotAlone中 `npm run test:pages -- --case reply-strategy-dialogue --case conversation-strategy-entry --timeout-seconds 240` 全部通过，前者回应与主动21完整来源闭环、后者明确主动目的／原入口切换／待确认依据及持久重读均到达。quiet26/active0/onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false；本轮测试处理合成资料，真实供应商模型及人工验收未执行。完整Skill版本选择／更换／revision公开用例继续接续，预算这批结果不替代那些验收项。
+
+
+2026-10-11 总协调实际复验正式47完整探索预算：273回复单元GREEN（1.792s）、30实际HTTP／001–053隔离PG GREEN（37.655s）／自有库0，type通过。新旧普通／探索转换与明确主动入口两labels180公开exit0，实际NoSkill延续与同键0调用；quiet26／cleanuptrue，无原生App或外部模型。预算装配保留A共同守卫、C生成接口，unknown仍失败关闭。限定两轴0；完整实际Skill版本更换和历史／连续生命周期仍未以本切片通过。

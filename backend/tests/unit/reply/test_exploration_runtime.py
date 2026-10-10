@@ -15,6 +15,7 @@ from notalone.reply.adapters.exploration_runtime import LangChainExplorationRunt
 from notalone.reply.exploration import ExplorationContext, ExplorationError, ExplorationInput
 from notalone.scopes import ContactScope
 from tests.unit.reply.test_langchain_vertical_slice import ToolCallingFakeModel
+from tests.input_budget_support import synthetic_budget_kwargs
 
 
 class RecordingLedger:
@@ -71,10 +72,14 @@ def model(value: dict) -> ToolSchemaModel:
     }])])
 
 
+def configured_runtime(fake: ToolSchemaModel, **kwargs) -> LangChainExplorationRuntime:
+    return LangChainExplorationRuntime(model=fake, **synthetic_budget_kwargs(fake), **kwargs)
+
+
 class ExplorationRuntimeTest(TestCase):
     def test_stopped_host_does_not_call_model_or_record_outbound(self) -> None:
         fake, ledger = model(output()), RecordingLedger()
-        runtime = LangChainExplorationRuntime(model=fake, priority=StoppedPriority(), ledger=ledger)
+        runtime = configured_runtime(fake, priority=StoppedPriority(), ledger=ledger)
         with self.assertRaises(ExplorationError):
             runtime.explore(context())
         self.assertEqual(fake.seen_calls, [])
@@ -82,7 +87,7 @@ class ExplorationRuntimeTest(TestCase):
 
     def test_pause_is_an_unselected_option_and_only_output_tool_is_bound(self) -> None:
         fake, ledger = model(output()), RecordingLedger()
-        result = LangChainExplorationRuntime(model=fake, ledger=ledger).explore(context())
+        result = configured_runtime(fake, ledger=ledger).explore(context())
         self.assertTrue(result["options"][1]["pause"])
         self.assertNotIn("selected_intent", result)
         self.assertEqual([schema["name"] for schema in fake.bound_schemas], ["ExplorationOutput"])
@@ -95,7 +100,7 @@ class ExplorationRuntimeTest(TestCase):
         value["options"][0]["recommended"] = True
         fake, ledger = model(value), RecordingLedger()
         with self.assertRaises(ExplorationError):
-            LangChainExplorationRuntime(model=fake, ledger=ledger).explore(context())
+            configured_runtime(fake, ledger=ledger).explore(context())
         self.assertEqual(len(fake.seen_calls), 1)
         self.assertEqual(len(ledger.entries), 1)
         self.assertIs(ledger.entries[0].outcome, LedgerOutcome.REJECTED_BY_VALIDATION)
@@ -105,14 +110,14 @@ class ExplorationRuntimeTest(TestCase):
         previous = tuple(option["intent"] for option in value["options"])
         fake = model(value)
         with self.assertRaises(ExplorationError):
-            LangChainExplorationRuntime(model=fake, ledger=RecordingLedger()).explore(replace(context(), previous_intents=previous))
+            configured_runtime(fake, ledger=RecordingLedger()).explore(replace(context(), previous_intents=previous))
         self.assertEqual(len(fake.seen_calls), 1)
 
     def test_refresh_cannot_hide_repeated_intents_with_surrounding_whitespace(self) -> None:
         value = output()
         previous = tuple("  " + option["intent"] + "\n" for option in value["options"])
         with self.assertRaises(ExplorationError):
-            LangChainExplorationRuntime(model=model(value), ledger=RecordingLedger()).explore(
+            configured_runtime(model(value), ledger=RecordingLedger()).explore(
                 replace(context(), previous_intents=previous))
 
     def test_outbound_ledger_is_required(self) -> None:
@@ -120,19 +125,19 @@ class ExplorationRuntimeTest(TestCase):
         with self.assertRaises((TypeError, ValueError)):
             LangChainExplorationRuntime(model=fake)
         with self.assertRaises((TypeError, ValueError)):
-            LangChainExplorationRuntime(model=fake, ledger=None)
+            configured_runtime(fake, ledger=None)
 
     def test_unknown_evidence_does_not_become_a_recommendation(self) -> None:
         value = output()
         value["citation_ids"] = [str(uuid4())]
         with self.assertRaises(ExplorationError):
-            LangChainExplorationRuntime(model=model(value), ledger=RecordingLedger()).explore(context())
+            configured_runtime(model(value), ledger=RecordingLedger()).explore(context())
 
     def test_key_question_is_a_distinct_result_without_candidate_text(self) -> None:
         value = output()
         value["options"] = []
         value["question"] = {"text": "你是否已经决定承担这项合成责任？", "impact": "commitment"}
-        result = LangChainExplorationRuntime(model=model(value), ledger=RecordingLedger()).explore(context())
+        result = configured_runtime(model(value), ledger=RecordingLedger()).explore(context())
         self.assertEqual(result["options"], [])
         self.assertEqual(result["question"]["impact"], "commitment")
         self.assertNotIn("candidates", result)
@@ -141,4 +146,4 @@ class ExplorationRuntimeTest(TestCase):
         value = output()
         value["question"] = {"text": "具体时间是什么？", "impact": "schedule"}
         with self.assertRaises(ExplorationError):
-            LangChainExplorationRuntime(model=model(value), ledger=RecordingLedger()).explore(context())
+            configured_runtime(model(value), ledger=RecordingLedger()).explore(context())

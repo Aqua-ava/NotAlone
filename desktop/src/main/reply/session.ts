@@ -1,16 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import type { ContactSelection, ContactSessionState } from '../../shared/contact-session-bridge';
-import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyInputSnapshot, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, ReplySessionState, RewriteOptionsUpdate } from '../../shared/reply-bridge';
+import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyCorrectionUpdate, ReplyDirectionChoice, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyInputSnapshot, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, ReplySessionState, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
 import { generateReply } from './client';
+import type { DirectionExploration, ReplyClarificationAnswer, ReplyRequirementsUpdate, ReplySkillChoice, ReplySkillUpdate } from '../../shared/reply-bridge';
+import { actOnExploration, explorationIdentity, openExploration, type ExplorationRequest, type ExplorationAction } from './exploration-client';
 import { readReplyMessages } from './messages';
 import { readReplyEvidence } from './evidence-read';
 import { defaultAssistantSession, readAssistantSession } from './assistant-sessions';
 
 const defaults = () => ({ tone: 'original' as const, instruction: '', includeRelationshipContext: false });
 const tones = { original: '', warm: '本次语气自然温和。', concise: '本次表达简洁直接。', polite: '本次语气礼貌克制。' };
+
+type StrategyJob = { type: 'open'; request: ExplorationRequest; signature: string; input: ReplyInputSnapshot }
+  | { type: 'action'; request: ExplorationAction; input: ReplyInputSnapshot };
 
 // 助手讨论和原候选由后端保存；当前编辑稿与窗口状态分别处理。
 export class ReplySession {
@@ -22,7 +27,15 @@ export class ReplySession {
   private state: ReplySessionState = { revision: 0, scopeRevision: 0, contactId: null, generationBlock: null,
     options: defaults(), mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null },
     messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
-    targetMessageId: null, direction: '', purpose: '', phase: 'idle', result: null, selectedCandidateId: null, canRetry: false };
+    targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], exploration: { phase: 'idle', result: null },
+    phase: 'idle', result: null, selectedCandidateId: null, canRetry: false };
+  private currentExploration: DirectionExploration | undefined;
+  private generationSkillChoice: ReplySkillChoice | undefined;
+  private explorationPurpose: string | undefined;
+  private strategyJob: StrategyJob | undefined;
+  private directionDerived = false;
+  private explorationOperation = 0;
+  private explorationPending: AbortController | undefined;
   private sourceCheck: AbortController | undefined;
   private heldResult: { result: NonNullable<ReplySessionState['result']>; selectedCandidateId: string | null } | undefined;
   private draft = '';
@@ -86,6 +99,7 @@ export class ReplySession {
 
   // 删除检查点只接收主进程已确认的联系人；跨联系人本人资料也可能影响当前依据。
   async revalidateDeletedSource(contactId: string): Promise<void> {
+    this.invalidateExploration();
     this.savedRead?.abort();
     this.savedRead = undefined;
     if (this.state.savedSession) this.publish({ savedSession: { ...this.state.savedSession, phase: 'idle', turns: [] } });
@@ -108,7 +122,9 @@ export class ReplySession {
       errorCode: undefined, sourceAvailability: held ? 'checking' : undefined });
     if (contactId === currentContact) {
       this.cancelMessagePage();
-      this.publish({ messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null });
+      this.publish({ messages: { phase: 'idle', items: [], nextCursor: null }, targetMessageId: null,
+        correction: '', ...(this.directionDerived ? { direction: '', purpose: '' } : {}) });
+      this.directionDerived = false;
       if (currentContact && generation !== undefined) {
         await this.loadMessages({ contactId: currentContact, scopeRevision, older: false });
       }
@@ -193,7 +209,10 @@ export class ReplySession {
       throw new Error('待回复消息已失效，请重新选择。');
     }
     if (selection.messageId !== this.state.targetMessageId) {
-      this.invalidateInput(); this.publish({ targetMessageId: selection.messageId });
+      const suggested = this.directionDerived;
+      this.directionDerived = false;
+      this.invalidateInput(); this.publish({ targetMessageId: selection.messageId,
+        ...(suggested ? { direction: '' } : {}) });
     }
     return this.getState();
   }
@@ -201,6 +220,7 @@ export class ReplySession {
     this.assertScope(update);
     if (this.state.mode !== 'reply_to_message') throw new Error('请先切换到回复模式。');
     if (update.direction !== this.state.direction) {
+      if (!update.direction.trim()) this.directionDerived = false;
       this.invalidateInput(); this.publish({ direction: update.direction });
     }
     return this.getState();
@@ -214,10 +234,162 @@ export class ReplySession {
     return this.getState();
   }
 
+  updateCorrection(update: ReplyCorrectionUpdate): ReplySessionState {
+    this.assertScope(update);
+    if (this.state.mode === 'rewrite_draft') throw new Error('请先选择聊天场景。');
+    if (update.correction !== this.state.correction) {
+      this.invalidateInput(true); this.publish({ correction: update.correction });
+    }
+    return this.getState();
+  }
+
+  async explore(selection: ContactSelection, changeGroup = false): Promise<void> {
+    this.assertScope(selection); this.refreshGenerationEligibility();
+    if (this.state.generationBlock || this.state.mode === 'rewrite_draft' || this.state.phase === 'waiting'
+      || this.state.exploration.phase === 'waiting' || this.state.mode === 'reply_to_message' && !this.state.targetMessageId) return;
+    const signature = JSON.stringify({ mode: this.state.mode, target: this.state.targetMessageId,
+      purpose: this.explorationPurpose ?? this.state.purpose, correction: this.state.correction,
+      requirements: this.state.requirements, skill: this.state.skillChoice, changeGroup });
+    if (this.strategyJob?.type === 'open' && this.strategyJob.signature === signature && this.state.exploration.phase === 'failed') {
+      await this.runStrategy(this.strategyJob); return;
+    }
+    const generation = this.backend.getConnectionGeneration();
+    const operation = ++this.explorationOperation;
+    const pending = new AbortController(); this.explorationPending = pending;
+    this.publish({ exploration: { phase: 'waiting', result: null, canRetry: false } });
+    try {
+      const previous = this.currentExploration;
+      const identity = previous ? { sessionId: previous.sessionId, currentInputVersionId: previous.inputVersion, generation }
+        : await explorationIdentity(this.backend, selection.contactId, this.state.savedSession?.sessionId ?? undefined, pending.signal);
+      if (pending.signal.aborted || operation !== this.explorationOperation || identity.generation !== generation
+        || selection.contactId !== this.state.contactId || selection.scopeRevision !== this.state.scopeRevision) return;
+      this.explorationPurpose ??= this.state.purpose;
+      const request: ExplorationRequest = { contactId: selection.contactId, sessionId: identity.sessionId,
+        operationKey: randomUUID(), expectedInputVersionId: identity.currentInputVersionId, previousId: previous?.taskId ?? null,
+        scene: this.state.mode as 'reply_to_message' | 'initiate_conversation', targetMessageId: this.state.targetMessageId,
+        purposeHint: this.explorationPurpose, correction: this.state.correction.trim(), requirements: this.state.requirements.trim(),
+        skill: { ...this.state.skillChoice }, changeGroup };
+      this.strategyJob = { type: 'open', request, signature, input: this.strategySnapshot(selection) };
+      await this.runStrategy(this.strategyJob);
+    } catch { if (operation === this.explorationOperation && !pending.signal.aborted) this.publish({ exploration: { phase: 'failed', result: null } }); }
+    finally { if (this.explorationPending === pending) this.explorationPending = undefined; }
+  }
+
+  async selectDirection(selection: ReplyDirectionChoice): Promise<ReplySessionState> {
+    this.assertScope(selection);
+    const result = this.state.exploration.result;
+    const option = result?.directions.find((item) => item.suggestionId === selection.suggestionId);
+    if (!result || !option || result.inputVersion !== selection.inputVersion || this.state.exploration.phase !== 'ready') throw new Error('方向建议已失效，请重新探索。');
+    this.strategyJob = { type: 'action', request: { contactId: selection.contactId, sessionId: result.sessionId,
+      taskId: result.taskId, inputVersion: result.inputVersion, action: 'confirm', suggestionId: option.suggestionId },
+      input: this.strategySnapshot(selection) };
+    await this.runStrategy(this.strategyJob);
+    return this.getState();
+  }
+  async answerClarification(selection: ReplyClarificationAnswer): Promise<void> {
+    this.assertScope(selection);
+    const result = this.state.exploration.result;
+    if (!result?.question || result.inputVersion !== selection.inputVersion || result.question.questionId !== selection.questionId
+      || this.state.exploration.phase !== 'ready') throw new Error('关键问题已经失效，请更新理解。');
+    this.publish({ clarificationAnswer: selection.answer });
+    this.strategyJob = { type: 'action', request: { contactId: selection.contactId, sessionId: result.sessionId,
+      taskId: result.taskId, inputVersion: result.inputVersion, action: 'answer', questionId: selection.questionId,
+      answer: selection.answer, operationKey: randomUUID() }, input: this.strategySnapshot(selection) };
+    await this.runStrategy(this.strategyJob);
+  }
+  async stopExploration(selection: ContactSelection): Promise<void> {
+    this.assertScope(selection);
+    const result = this.currentExploration;
+    if (!result || this.state.exploration.phase === 'waiting') return;
+    this.strategyJob = { type: 'action', request: { contactId: selection.contactId, sessionId: result.sessionId,
+      taskId: result.taskId, inputVersion: result.inputVersion, action: 'stop' }, input: this.strategySnapshot(selection) };
+    await this.runStrategy(this.strategyJob);
+  }
+  async retryExploration(selection: ContactSelection): Promise<void> {
+    this.assertScope(selection);
+    if (this.strategyJob && this.state.exploration.phase !== 'waiting') await this.runStrategy(this.strategyJob);
+  }
+  updateRequirements(update: ReplyRequirementsUpdate): ReplySessionState {
+    this.assertScope(update);
+    if (update.requirements !== this.state.requirements) { this.invalidateInput(true); this.publish({ requirements: update.requirements }); }
+    return this.getState();
+  }
+  updateSkill(update: ReplySkillUpdate): ReplySessionState {
+    this.assertScope(update);
+    if (JSON.stringify(update.skill) !== JSON.stringify(this.state.skillChoice)) {
+      this.generationSkillChoice = undefined;
+      this.invalidateInput(true); this.publish({ skillChoice: { ...update.skill } });
+    }
+    return this.getState();
+  }
+  private strategySnapshot(selection: ContactSelection): ReplyInputSnapshot {
+    const contact = this.contacts.getState().contacts.find((item) => item.contactId === selection.contactId)!;
+    const common = { contactId: selection.contactId, contactDisplayName: contact.displayName,
+      correction: this.state.correction, userInstruction: this.state.requirements, clarificationAnswer: this.state.clarificationAnswer,
+      skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) } };
+    if (this.state.mode === 'initiate_conversation') return { ...common, mode: 'initiate_conversation', purpose: this.state.purpose };
+    const target = this.state.messages.items.find((item) => item.messageId === this.state.targetMessageId);
+    if (!target) throw new Error('待回应消息已失效。');
+    return { ...common, mode: 'reply_to_message', target: structuredClone(target), direction: this.state.direction };
+  }
+  private async runStrategy(job: StrategyJob): Promise<void> {
+    this.refreshGenerationEligibility();
+    if (this.state.generationBlock) return;
+    this.notifyInputChanged(); this.cancelPending(); this.lastAttempt = undefined;
+    this.explorationPending?.abort();
+    const pending = new AbortController(); this.explorationPending = pending;
+    const operation = ++this.explorationOperation, scopeRevision = this.state.scopeRevision;
+    const generation = this.backend.getConnectionGeneration();
+    const current = () => !pending.signal.aborted && operation === this.explorationOperation
+      && scopeRevision === this.state.scopeRevision && job.request.contactId === this.state.contactId
+      && generation === this.backend.getConnectionGeneration();
+    this.publish({ exploration: { phase: 'waiting', result: this.state.exploration.result, canRetry: true } });
+    try {
+      const result = job.type === 'open' ? await openExploration(this.backend, job.request, pending.signal)
+        : await actOnExploration(this.backend, job.request, pending.signal);
+      if (!current() || result.generation !== generation) return;
+      if (result.kind === 'exploration') {
+        this.currentExploration = result.result;
+        this.generationSkillChoice = result.result.usedSkill
+          ? { mode: 'user', versionId: result.result.usedSkill.versionId } : { mode: 'disabled', versionId: null };
+        const confirmed = result.result.confirmedIntent;
+        if (confirmed) this.directionDerived = true;
+        this.publish({ exploration: { phase: 'ready', result: result.result, canRetry: true },
+          savedSession: { phase: 'idle', sessionId: result.result.sessionId, turns: [] }, skillChoices: result.result.skillChoices,
+          ...(confirmed ? this.state.mode === 'reply_to_message' ? { direction: confirmed } : { purpose: confirmed } : {}) });
+      } else if (result.kind === 'paused') {
+        this.currentExploration = undefined; this.explorationPurpose = undefined;
+        this.publish({ exploration: { phase: 'paused', result: null, canRetry: false } });
+      } else {
+        this.currentExploration = undefined; this.explorationPurpose = undefined;
+        const input = job.input.mode === 'rewrite_draft' ? job.input : job.input.mode === 'reply_to_message'
+          ? { ...job.input, direction: result.confirmedIntent } : { ...job.input, purpose: result.confirmedIntent };
+        this.directionDerived = true;
+        this.publish({ exploration: { phase: 'ready', result: null, canRetry: true }, phase: 'ready', errorCode: undefined,
+          savedSession: { phase: 'idle', sessionId: result.reply.assistantSessionId, turns: [] },
+          ...(input.mode === 'reply_to_message' ? { direction: input.direction } : input.mode === 'initiate_conversation' ? { purpose: input.purpose } : {}) });
+        if (this.state.result?.replyRequestId !== result.reply.replyRequestId) this.publish({ result: {
+          ...result.reply, input, candidates: result.reply.candidates.map((original) => ({ original, editedText: original.text })) },
+          selectedCandidateId: result.reply.candidates[0].candidateId });
+      }
+    } catch { if (current()) this.publish({ exploration: { phase: 'failed', result: null, canRetry: true } }); }
+    finally { if (this.explorationPending === pending) this.explorationPending = undefined; }
+  }
+
   async generate(selection: GenerateReply): Promise<void> {
     const contactState = this.assertScope(selection);
     this.refreshGenerationEligibility();
     if (this.state.generationBlock) throw new Error('请先确认本次联系人。');
+    if (this.state.mode !== 'rewrite_draft' && this.state.exploration.result) {
+      const result = this.state.exploration.result;
+      const intent = this.state.mode === 'reply_to_message' ? this.state.direction : this.state.purpose;
+      if (!intent.trim() || this.state.exploration.phase !== 'ready') return;
+      this.strategyJob = { type: 'action', request: { contactId: selection.contactId, sessionId: result.sessionId,
+        taskId: result.taskId, inputVersion: result.inputVersion, action: 'confirm', directIntent: intent.trim() },
+        input: this.strategySnapshot(selection) };
+      await this.runStrategy(this.strategyJob); return;
+    }
+    if (this.state.mode !== 'rewrite_draft' && this.currentExploration) return;
     if (this.state.phase === 'waiting') return;
     const generation = this.backend.getConnectionGeneration();
     const contact = contactState.contacts.find((item) => item.contactId === selection.contactId)!;
@@ -232,8 +404,9 @@ export class ReplySession {
         userInstruction: [tones[options.tone], options.instruction.trim()].filter(Boolean).join('\n') || null,
         includeRelationshipContext: options.includeRelationshipContext }
       : this.state.mode === 'initiate_conversation'
-        ? { ...common, mode: 'initiate_conversation', purpose: this.state.purpose.trim() }
-        : { ...common, mode: 'reply_to_message', target: structuredClone(target!), direction: this.state.direction.trim() };
+        ? { ...common, mode: 'initiate_conversation', purpose: this.state.purpose.trim(), correction: this.state.correction.trim(), userInstruction: this.state.requirements.trim(), clarificationAnswer: this.state.clarificationAnswer.trim(), skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) } }
+        : { ...common, mode: 'reply_to_message', target: structuredClone(target!), direction: this.state.direction.trim(),
+        correction: this.state.correction.trim(), userInstruction: this.state.requirements.trim(), clarificationAnswer: this.state.clarificationAnswer.trim(), skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) } };
     if (selection.newRequest || !this.lastAttempt) this.lastAttempt = { input, requestKey: randomUUID() };
     const attempt = this.lastAttempt;
     this.cancelPending();
@@ -306,12 +479,15 @@ export class ReplySession {
       this.noticeStream = undefined; this.noticeVerification = undefined;
       this.cancelPending();
       this.cancelMessagePage();
+      this.invalidateExploration();
+      this.directionDerived = false;
       this.lastAttempt = undefined;
       this.draft = state.draft;
       this.publish({ scopeRevision: state.scopeRevision, contactId: state.selectedContactId,
         options: defaults(), mode: 'rewrite_draft', messages: { phase: 'idle', items: [], nextCursor: null },
         messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
-        targetMessageId: null, direction: '', purpose: '', phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false,
+        targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], exploration: { phase: 'idle', result: null },
+        phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false,
         savedSession: { phase: 'idle', sessionId: null, turns: [] } });
       this.beginMessageNotice();
       // 新连接重新选择联系人后只读取已保存讨论，不恢复本次输入或触发生成。
@@ -366,10 +542,18 @@ export class ReplySession {
       },
     }, pending.signal);
   }
-  private invalidateInput(): void {
+  private invalidateInput(preserveExploration = false): void {
+    this.invalidateExploration(preserveExploration);
     this.notifyInputChanged();
     this.cancelPending(); this.lastAttempt = undefined;
     this.publish({ phase: this.state.result ? 'ready' : 'idle', errorCode: undefined, canRetry: false });
+  }
+  private invalidateExploration(preserve = false): void {
+    this.strategyJob = undefined;
+    if (!preserve) { this.currentExploration = undefined; this.explorationPurpose = undefined; this.generationSkillChoice = undefined; }
+    ++this.explorationOperation;
+    this.explorationPending?.abort(); this.explorationPending = undefined;
+    this.publish({ exploration: { phase: 'idle', result: null }, clarificationAnswer: '' });
   }
   private notifyInputChanged(): void {
     for (const listener of this.inputListeners) listener();

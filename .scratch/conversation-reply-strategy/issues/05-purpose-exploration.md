@@ -41,3 +41,9 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 2026-10-11 接续：已建立同一探索应用组件，主动模糊目的只返回方向或关键问题，选择/直接输入意愿才调用既有生成端口；不伪造目标。探索操作键与A持久输入UUID分开，确认只取服务器保存的选择证明，NoSkill延续到生成。17项组件测试通过，含原失败后意愿丢失、暂停旧问题、旧意愿回退及Skill换组重试反例red→green，两轴该组件最终0。未公开装配、未用模拟Store冒充真实HTTP/PG；等待正式A051同事务输入记录，继续接B052及公开页面，验收项保持未勾选。
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
+
+2026-10-11 持久UUID前端核心切片：主动模糊目的的公开页面已串联理解纠正、关键回答、明确选择和原主动生成，回答后仍未确认不产生候选；目的独立保存，不加第二次必选开口方式。真实源删除后的派生目的残留P2已公开RED→GREEN。 真实命令、五场控制／隔离证据与数据影响见[R02本次页面记录](02-understanding-and-direction.md)；非真人或原生验收，原标准保持。
+
+2026-10-11 普通请求与探索改口边界：协调审查发现普通A生成后探索确认B可能仍复用A旧attempt。新增公开 `reply-strategy-transition` 两场均取得真实RED：下一普通HTTP key仍等于A。仅在runStrategy开始时清除旧普通lastAttempt，保留策略操作自身的UUID/键、实际Skill与保存守卫；修后两场新key、B意愿、实际NoSkill禁用、新候选和第4次模型调用均通过，策略确认及新普通请求各自完整同键重放不追加调用。
+
+命令为Conda NotAlone内 `npm run test:pages -- --case reply-strategy-transition --case reply-strategy-options --timeout-seconds 180`，两case实际GREEN，quiet33/active0/onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false；typecheck通过。首次修后主动最后TEST按钮不存在30秒超时已保留，改用既有主动生成按钮重放；Standards提出聚合catch可能吞收尾错误的硬P2，改为仅捕获页面回调失败，完整收尾失败直接停止且未确认清理不启动下一场，最终限定hard0/Fowler0、Spec0。仅合成资料与受控模型，没有App、OCR、真实聊天、额外模型或人工验收；本切片不关闭完整票和连续生命周期依赖。

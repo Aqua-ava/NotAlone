@@ -96,7 +96,11 @@ def build_reply_service(
     exploration = ReplyExplorationService(
         store=PostgresExplorationStore(database_url, evidence=evidence), evidence=evidence,
         skills=PostgresSkillPort(database_url),
-        runtime=LangChainExplorationRuntime(model=model, ledger=PostgresOutboundLedger(database_url), priority=model_priority),
+        runtime=LangChainExplorationRuntime(
+            model=model, ledger=PostgresOutboundLedger(database_url), priority=model_priority,
+            input_budget_profile=input_budget_profile, input_token_counter=input_token_counter,
+            on_input_budget=on_input_budget,
+        ),
         generation=AssistantExplorationGeneration(lambda: AssistantSessionService(
             store=PostgresAssistantSessionStore(database_url), reply=reply_service,
         )),
