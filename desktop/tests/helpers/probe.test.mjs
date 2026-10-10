@@ -23,7 +23,7 @@ test('仓库构建 shell 不执行合成启动配置，配置目录隔离于用�
   } finally { await rm(owned, { recursive: true, force: true }); }
 });
 
-test('仓库探针公开准备入口仅构建搬运，保存包内默认路径后仍核验核心库', { skip: process.platform !== 'darwin' }, async () => {
+test('仓库探针公开准备入口仅构建搬运，现场隔离配置沿包内默认路径核验核心库', { skip: process.platform !== 'darwin' }, async () => {
   const owned = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-probe-preparation-')));
   try {
     const resources = path.join(owned, 'Resources'); const userData = path.join(owned, 'userData');
@@ -68,6 +68,32 @@ process.stdout.write(JSON.stringify({ paths, probe: backendEnvironment(config, u
     assert.equal(JSON.parse(initial.stdout).paths.syncProbePath, probe);
     assert.equal(JSON.parse(initial.stdout).probe, probe);
     assert.equal(JSON.parse(initial.stdout).paths.wechatCliPath, '');
+    // 加载实际现场用例的选项，替换测试注册器，绝不执行用例或启动App。
+    const layoutConfiguration = path.join(owned, 'layout-configuration.mjs');
+    await build({ stdin: { contents: `import './tests/native-foreground-layout.spec';
+import { isolatedAppEnvironment } from './tests/isolated-environment';
+const environment = isolatedAppEnvironment(process.argv[2], globalThis.layoutOptions.appEnvironment);
+process.stdout.write(JSON.stringify({ NOTALONE_SYNC_PROBE: environment.NOTALONE_SYNC_PROBE,
+  NOTALONE_WECHAT_CLI: environment.NOTALONE_WECHAT_CLI }));`, resolveDir: process.cwd(), sourcefile: 'layout-configuration.ts', loader: 'ts' },
+    outfile: layoutConfiguration, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent', plugins: [{
+      name: '仅登记现场测试选项', setup(builder) {
+        builder.onResolve({ filter: /^(\.\/app-fixture|@playwright\/test)$/ }, ({ path: request }) => ({ path: request, namespace: 'layout-test-registration' }));
+        builder.onLoad({ filter: /.*/, namespace: 'layout-test-registration' }, ({ path: request }) => ({ contents: request === './app-fixture'
+          ? `export const test = Object.assign(() => {}, { skip() {}, use(options) { globalThis.layoutOptions = options; } });
+export function selectMenu() { throw new Error('本检查禁止运行App用例'); }`
+          : `export function expect() { throw new Error('本检查禁止执行App断言'); }`, loader: 'js' }));
+      },
+    }] });
+    const layoutEnvironment = (packaged) => {
+      const result = spawnSync(process.execPath, [layoutConfiguration, userData], { encoding: 'utf8', timeout: 10_000,
+        env: { PATH: '/usr/bin:/bin', ...(packaged ? { NOTALONE_TEST_APP_EXECUTABLE: '/synthetic-host' } : {}) } });
+      assert.equal(result.status, 0); return JSON.parse(result.stdout);
+    };
+    assert.equal(layoutEnvironment(false).NOTALONE_SYNC_PROBE, path.resolve('../native/macos/build/cli/notalone-sync-probe'));
+    const packagedEnvironment = layoutEnvironment(true);
+    assert.equal(JSON.parse(startup('read', packagedEnvironment).stdout).paths.syncProbePath, probe,
+      '签名现场用例的有效隔离环境必须选择Resources探针，不能落入unavailable-probe。');
+    assert.equal(packagedEnvironment.NOTALONE_WECHAT_CLI, path.join(userData, 'unavailable-cli'));
     const saved = startup('save'); assert.equal(saved.status, 0);
     assert.equal(JSON.parse(saved.stdout).paths.syncProbePath, probe);
     const library = path.join(destination, 'libNotAloneSyncCore.dylib');
@@ -75,6 +101,7 @@ process.stdout.write(JSON.stringify({ paths, probe: backendEnvironment(config, u
     await writeFile(library, Buffer.concat([bytes, Buffer.from('synthetic_changed_bytes')]));
     assert.equal(JSON.parse(startup().stdout).paths.syncProbePath, '');
     assert.equal(JSON.parse(startup().stdout).probe, path.join(userData, 'unconfigured-probe'));
+    assert.equal(JSON.parse(startup('read', packagedEnvironment).stdout).paths.syncProbePath, '');
     await rm(path.join(userData, 'backend-launch.json'));
     assert.equal(JSON.parse(startup('read', { NOTALONE_SYNC_PROBE: probe }).stdout).paths.syncProbePath, '');
     await writeFile(library, bytes);

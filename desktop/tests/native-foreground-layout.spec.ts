@@ -4,7 +4,9 @@ import path from 'node:path';
 import { test, selectMenu } from './app-fixture';
 
 test.skip(process.env.NOTALONE_FOREGROUND_LAYOUT_ACCEPTANCE !== '1', '须由主协调者安排有限的最小区域采集现场轮次');
-test.use({ appEnvironment: { NOTALONE_SYNC_PROBE: path.resolve('../native/macos/build/cli/notalone-sync-probe') } });
+// 签名包清除隔离占位值，沿生产Resources完整性接线；开发验收指定仓库探针。
+test.use({ appEnvironment: process.env.NOTALONE_TEST_APP_EXECUTABLE ? { NOTALONE_SYNC_PROBE: '' }
+  : { NOTALONE_SYNC_PROBE: path.resolve('../native/macos/build/cli/notalone-sync-probe') } });
 
 // 五处几何仍经公开表单输入；不预造verified文件或替换原生捕获、权限与OCR。
 test('公开校准后只以五处最小区域验证当前布局', async ({ runningApp }) => {
