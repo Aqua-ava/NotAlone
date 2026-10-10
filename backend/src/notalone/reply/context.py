@@ -381,30 +381,10 @@ class RetrievalReplyContext:
                 raise ReplyContextInvariantError(
                     "待回复消息未在当前联系人范围内找到。"
                 )
-            memories = self._search_memories_or_empty(
-                scope=scope,
-                query=target[0].text,
-            )
-            owner_memories = self._search_owner_memories_or_empty(
-                scope=scope,
-                query=target[0].text,
-            )
-            pending_candidates = self._search_pending_candidates_or_empty(
-                scope=scope,
-                query=target[0].text,
-            )
             evidence = list(
                 self._message_evidence(message, is_target=message is target[0])
                 for message in messages
-            ) + [
-                self._memory_evidence(memory) for memory in memories
-            ] + [
-                self._owner_memory_evidence(memory, scope=scope)
-                for memory in owner_memories
-            ] + [
-                self._pending_candidate_evidence(candidate, scope=scope)
-                for candidate in pending_candidates
-            ]
+            ) + self._related_memory_evidence(scope=scope, query=target[0].text)
             if continuation is not None:
                 evidence.append(continuation)
             self._validate_evidence(evidence, scope=scope)
@@ -433,9 +413,7 @@ class RetrievalReplyContext:
                 self._message_evidence(message, is_target=False)
                 for message in self._search_messages(scope=scope)
             )
-            evidence.extend(self._memory_evidence(memory) for memory in self._search_memories_or_empty(scope=scope, query=purpose.text))
-            evidence.extend(self._owner_memory_evidence(memory, scope=scope) for memory in self._search_owner_memories_or_empty(scope=scope, query=purpose.text))
-            evidence.extend(self._pending_candidate_evidence(candidate, scope=scope) for candidate in self._search_pending_candidates_or_empty(scope=scope, query=purpose.text))
+            evidence.extend(self._related_memory_evidence(scope=scope, query=purpose.text))
             if continuation is not None:
                 evidence.append(continuation)
             self._validate_evidence(evidence, scope=scope)
@@ -462,30 +440,7 @@ class RetrievalReplyContext:
                 )
             ]
             if allows_history(command):
-                evidence.extend(
-                    self._memory_evidence(memory)
-                    for memory in self._search_memories_or_empty(
-                        scope=scope,
-                        query=command.content.draft_text,
-                    )
-                )
-                evidence.extend(
-                    self._owner_memory_evidence(memory, scope=scope)
-                    for memory in self._search_owner_memories_or_empty(
-                        scope=scope,
-                        query=command.content.draft_text,
-                    )
-                )
-                evidence.extend(
-                    self._pending_candidate_evidence(
-                        candidate,
-                        scope=scope,
-                    )
-                    for candidate in self._search_pending_candidates_or_empty(
-                        scope=scope,
-                        query=command.content.draft_text,
-                    )
-                )
+                evidence.extend(self._related_memory_evidence(scope=scope, query=command.content.draft_text))
             if continuation is not None:
                 evidence.append(continuation)
             self._validate_evidence(evidence, scope=scope)
@@ -507,6 +462,20 @@ class RetrievalReplyContext:
             )
 
         raise ReplyContextInvariantError("回复输入模式无效。")
+
+    def _related_memory_evidence(self, *, scope: ContactScope, query: str) -> list[ContextEvidence]:
+        """共享三类有界资料召回，是否允许历史仍由各场景决定。"""
+
+        return [
+            self._memory_evidence(memory)
+            for memory in self._search_memories_or_empty(scope=scope, query=query)
+        ] + [
+            self._owner_memory_evidence(memory, scope=scope)
+            for memory in self._search_owner_memories_or_empty(scope=scope, query=query)
+        ] + [
+            self._pending_candidate_evidence(candidate, scope=scope)
+            for candidate in self._search_pending_candidates_or_empty(scope=scope, query=query)
+        ]
 
     def _current_skill_revision(self, scope: ContactScope) -> int:
         """build 盖章"当下"的 skill 库修订号。

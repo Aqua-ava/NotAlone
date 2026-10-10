@@ -14,12 +14,14 @@ export async function readReplyEvidence(backend: BackendHost, contactId: string,
     || !Array.isArray(value.evidence) || value.evidence.length > 256) throw new Error('依据快照格式无效。');
   const known = new Set<string>();
   const items: ReplyEvidenceItem[] = value.evidence.map((entry: unknown) => {
-    if (!record(entry) || !isUuid(entry.evidence_id) || !['message', 'confirmed_memory', 'owner_memory', 'user_draft', 'user_purpose', 'continued_candidate'].includes(entry.kind as string)
+    if (!record(entry) || !isUuid(entry.evidence_id) || !['message', 'confirmed_memory', 'owner_memory', 'user_draft', 'user_purpose', 'continued_candidate', 'pending_candidate'].includes(entry.kind as string)
       || !text(entry.text) || !text(entry.selection_reason) || !text(entry.snapshot_status) || typeof entry.cited !== 'boolean'
       || !date(entry.valid_at) || !date(entry.invalid_at) || !record(entry.timing)
       || !date(entry.timing.recorded_at) || !date(entry.timing.source_started_at) || !date(entry.timing.source_ended_at)
       || typeof entry.timing.source_time_complete !== 'boolean') throw new Error('依据快照格式无效。');
     const evidenceId = entry.evidence_id.toLowerCase();
+    if (entry.kind === 'pending_candidate' && (entry.snapshot_status !== 'pending'
+      || !entry.selection_reason.startsWith('未确认候选、仅供参考、不得当作事实。'))) throw new Error('未确认依据标注无效。');
     if (known.has(evidenceId)) throw new Error('依据快照格式无效。');
     known.add(evidenceId);
     return { evidenceId, kind: entry.kind as ReplyEvidenceItem['kind'], text: entry.text, selectionReason: entry.selection_reason,

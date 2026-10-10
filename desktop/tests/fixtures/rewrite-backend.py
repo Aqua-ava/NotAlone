@@ -22,6 +22,9 @@ from fixture_cleanup import cleanup_fixture
 from notalone.application.model_priority import ModelPriorityControl
 from notalone.application.setup_service import SetupService
 from notalone.persistence.setup_owner_directory import PostgresOwnerDirectory
+from notalone.persistence.memory_store import PostgresMemoryStore
+from notalone.memory import MemoryCandidate, MemoryCategory
+from notalone.scopes import ContactScope
 from notalone.server.app import create_app
 from notalone.server.connection_info import write_backend_info
 from notalone.server.reply_wiring import build_reply_service
@@ -64,6 +67,8 @@ class DesktopRewriteModel(ScriptedCoreModel):
                            else item["kind"] == "user_purpose" if payload["input_mode"] == "initiate_conversation"
                            else item["kind"] == "message" and item["text"] == payload["current_text"]))
         citations = [primary["evidence_id"]]
+        if plan.get("cite_pending"):
+            citations.extend(item["evidence_id"] for item in payload["evidence"] if item["kind"] == "pending_candidate")
         if plan.get("cite_history"):
             result = next(json.loads(message.content) for message in messages
                           if isinstance(message, ToolMessage) and message.name == "conversation_search")
@@ -209,6 +214,15 @@ def main() -> None:
             elif operation == "older_messages":
                 fixture.add_older_messages(contact_ids[0])
                 result = {}
+            elif operation == "strategy_pending":
+                with psycopg.connect(fixture.database_url) as connection:
+                    source_id = connection.execute("SELECT id FROM public.source_document WHERE owner_id=%s AND contact_id=%s", (fixture.owner_id, UUID(contact_ids[0]))).fetchone()[0]
+                pending = PostgresMemoryStore(fixture.database_url).create_candidate(MemoryCandidate(
+                    candidate_id=uuid4(), scope=ContactScope(fixture.owner_id, UUID(contact_ids[0])),
+                    text="合成近况：对方可能正在忙。", category=MemoryCategory.RECENT_STATE,
+                    source_ids=(source_id,), confidence=0.8,
+                ))
+                result = {"candidate_id": str(pending.candidate_id), "source_id": str(source_id)}
             elif operation == "withdraw_target_source":
                 with psycopg.connect(fixture.database_url) as connection:
                     connection.execute(

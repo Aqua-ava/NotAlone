@@ -7,7 +7,7 @@ import { isolatedAppEnvironment } from './isolated-environment';
 const project = path.resolve('..');
 
 export type Prepared = { database_url: string; owner_id: string; contact_ids: string[]; other_contact_id: string; empty_contact_id: string };
-export type ModelPlan = { count?: number; risk_notes?: string[]; prefix?: string; fault?: 'timeout' | 'failure'; probe_history?: boolean };
+export type ModelPlan = { count?: number; risk_notes?: string[]; prefix?: string; fault?: 'timeout' | 'failure'; probe_history?: boolean; cite_pending?: boolean };
 
 export class RewriteFixture {
   private readonly transport: FixtureTransport<Prepared>;
