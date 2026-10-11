@@ -350,6 +350,13 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         self.assertEqual(self.backend.request(path + "/replies", new_body), (200, generated))
         self.assertEqual(len(self.model.seen_calls), 1)
 
+    def _unreserved_prepare_rejection(self, path, body, status, payload):
+        key = body.get("replacement", body)["idempotency_key"]
+        parts = path.strip("/").split("/")
+        self.assertEqual(self.backend.request(path, body), (status, {**payload, "no_generation": {
+            "contact_id": parts[2], "session_id": parts[4], "request_key": key, "state": "not_reserved",
+        }}))
+
     def test_replace_prepare_strict_protocol_and_guard_failures_preserve_the_old_running_input(self) -> None:
         path = self._session_path()
         old_body = self._body(draft="合成守卫旧输入")
@@ -373,22 +380,23 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
                 ))
         unavailable = {**new_body, "content": {"type": "reply_to_message",
                        "target_message_id": str(uuid4()), "direction": "合成明确回应。"}}
-        self.assertEqual(self.backend.request(path + "/replace/prepare", {
+        self._unreserved_prepare_rejection(path + "/replace/prepare", {
             **replacement, "replacement": unavailable,
-        }), (409, {"error": "assistant_session_rejected", "reason": "target_message_unavailable"}))
-        self.assertEqual(self.backend.request(path + "/replace/prepare", {
-            **replacement, "replacement": {**new_body, "expected_input_version_id": str(uuid4())},
-        }), (409, {"error": "assistant_session_input_conflict"}))
-        self.assertEqual(self.backend.request(path + "/replace/prepare", {
-            **replacement, "running_request_key": str(uuid4()),
-        }), (404, {"error": "not_found"}))
+        }, 409, {"error": "assistant_session_rejected", "reason": "target_message_unavailable"})
+        self._unreserved_prepare_rejection(path + "/replace/prepare", {
+            **replacement, "replacement": {**new_body, "idempotency_key": str(uuid4()), "expected_input_version_id": str(uuid4())},
+        }, 409, {"error": "assistant_session_input_conflict"})
+        self._unreserved_prepare_rejection(path + "/replace/prepare", {
+            **replacement, "running_request_key": str(uuid4()), "replacement": {**new_body, "idempotency_key": str(uuid4())},
+        }, 404, {"error": "not_found"})
         self.assertEqual(self._backend(owner_id=self.other_owner_id).request(path + "/replace/prepare", replacement), (
             404, {"error": "not_found"},
         ))
         status, other_session = self.backend.request(f"/api/contacts/{self.contact_id}/assistant-sessions", {})
         self.assertEqual(status, 200, other_session)
         other_path = path.rsplit("/", 1)[0] + f"/{other_session['session_id']}"
-        self.assertEqual(self.backend.request(other_path + "/replace/prepare", replacement), (404, {"error": "not_found"}))
+        self._unreserved_prepare_rejection(other_path + "/replace/prepare",
+            {**replacement, "replacement": {**new_body, "idempotency_key": str(uuid4())}}, 404, {"error": "not_found"})
         self.assertEqual(self.backend.request(other_path)[1]["turns"], [])
         self.assertEqual(self.backend.request(path)[1], before)
         self.assertEqual(before["current_input_version_id"], old_receipt["input_version_id"])
@@ -436,9 +444,9 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         self.assertEqual(status, 200, completed)
         before = self.backend.request(path)[1]
 
-        self.assertEqual(self.backend.request(path + "/replace/prepare", {
+        self._unreserved_prepare_rejection(path + "/replace/prepare", {
             "running_request_key": old_body["idempotency_key"], "replacement": self._body(draft="合成过晚替换"),
-        }), (409, {"error": "assistant_session_rejected", "reason": "generation_not_running"}))
+        }, 409, {"error": "assistant_session_rejected", "reason": "generation_not_running"})
 
         self.assertEqual(self.backend.request(path)[1], before)
         self.assertEqual(self.backend.request(path + "/replies/prepare", old_body), (
@@ -527,11 +535,11 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         self.assertEqual(saved["turns"][0]["state"], "redacted")
         self.assertIsNone(saved["turns"][0]["input"])
         self.assertIsNone(saved["turns"][0]["reply"])
-        self.assertEqual(self.backend.request(path + "/replies/prepare", {
+        self._unreserved_prepare_rejection(path + "/replies/prepare", {
             **body, "idempotency_key": str(uuid4()),
-        }), (409, {"error": "assistant_session_rejected", "reason": "target_message_unavailable"}))
+        }, 409, {"error": "assistant_session_rejected", "reason": "target_message_unavailable"})
         self.assertEqual(self.backend.request(path, {"confirmed": True}, method="DELETE")[0], 200)
-        self.assertEqual(self.backend.request(path + "/replies/prepare", body), (404, {"error": "not_found"}))
+        self._unreserved_prepare_rejection(path + "/replies/prepare", body, 404, {"error": "not_found"})
         self.assertEqual(self.model.seen_calls, [])
 
     def test_failed_prepare_replay_does_not_restart_or_rewind_and_fresh_retry_can_generate(self) -> None:
@@ -754,9 +762,9 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
             account_scope="synthetic-http-prepare-other", conversation_locator=f"synthetic-{uuid4()}",
         )
         rescoped_path = path.replace(str(self.contact_id), str(other_contact_id))
-        self.assertEqual(self.backend.request(rescoped_path + "/replies/prepare", {
+        self._unreserved_prepare_rejection(rescoped_path + "/replies/prepare", {
             **body, "contact_id": str(other_contact_id),
-        }), (404, {"error": "not_found"}))
+        }, 404, {"error": "not_found"})
         status, other_session = self.backend.request(f"/api/contacts/{self.contact_id}/assistant-sessions", {})
         self.assertEqual(status, 200, other_session)
         other_session_path = path.rsplit("/", 1)[0] + f"/{other_session['session_id']}"

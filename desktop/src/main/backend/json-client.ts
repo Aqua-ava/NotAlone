@@ -4,6 +4,7 @@ import { isUuid } from '../uuid';
 import { readAssistantContinuationClarification } from '../../shared/assistant-continuation-clarification';
 import type { AssistantInputBudget } from '../../shared/assistant-input-budget';
 import { readInputBudgetFailure } from '../reply/input-budget-read';
+import { readAssistantNoGenerationProof, type AssistantNoGenerationProof } from '../../shared/assistant-no-generation';
 
 export interface JsonRequest {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -13,13 +14,14 @@ export interface JsonRequest {
   timeoutMs?: number;
   maxResponseBytes?: number;
   acceptAssistantContinuationClarification?: true;
+  acceptAssistantNoGenerationProof?: true;
 }
 
 // 只携带安全分类；业务模块自行映射已知错误，不把响应原文转给界面。
 export class BackendRequestFailure extends Error {
   constructor(readonly kind: 'connection' | 'response' | 'cancelled', readonly status?: number, readonly code?: string,
     readonly reason?: 'target_message_unavailable' | 'source_unavailable' | 'request_invalidated' | 'candidate_unavailable',
-    readonly inputBudget?: AssistantInputBudget) {
+    readonly inputBudget?: AssistantInputBudget, readonly noGeneration?: AssistantNoGenerationProof) {
     super('本机业务请求未完成');
   }
 }
@@ -92,11 +94,22 @@ export class JsonClient {
               }
               const code = (data as { error?: unknown })?.error;
               const reason = (data as { reason?: unknown })?.reason;
+              const preparedPath = options.acceptAssistantNoGenerationProof === true && method === 'POST'
+                && parts.length === 8 && parts[1] === 'api' && parts[2] === 'contacts' && isUuid(parts[3])
+                && parts[4] === 'assistant-sessions' && isUuid(parts[5]) && parts[7] === 'prepare'
+                && ['replies', 'replace', 'continue', 'retry-interrupted'].includes(parts[6]);
+              const requestBody = options.body as { idempotency_key?: unknown; request_key?: unknown;
+                replacement?: { idempotency_key?: unknown } } | undefined;
+              const proof = preparedPath ? readAssistantNoGenerationProof(data, status, {
+                contactId: parts[3], sessionId: parts[5], requestKey: parts[6] === 'replace'
+                  ? requestBody?.replacement?.idempotency_key : parts[6] === 'retry-interrupted'
+                    ? requestBody?.request_key : requestBody?.idempotency_key,
+              }) : undefined;
               fail(new BackendRequestFailure('response', status,
                 typeof code === 'string' && /^[a-z][a-z0-9_]{0,79}$/.test(code) ? code : undefined,
                 reason === 'target_message_unavailable' || reason === 'source_unavailable'
                   || reason === 'request_invalidated' || reason === 'candidate_unavailable' ? reason : undefined,
-                readInputBudgetFailure(data, status)));
+                readInputBudgetFailure(data, status), proof));
             } else { settled = true; resolve({ status, data }); }
           } catch { fail(new BackendRequestFailure('response')); }
         });

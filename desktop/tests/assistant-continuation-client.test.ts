@@ -71,6 +71,49 @@ function continuationCommand() {
     ]) };
 }
 
+const noGenerationResponse = { error: 'assistant_session_input_conflict', no_generation: {
+  contact_id: contactId, session_id: sessionId, request_key: requestKey, state: 'not_reserved',
+} };
+
+test('实际prepare的同身份未领取证明才交显式回调，不伪造领取或执行', async (t) => {
+  const { backend } = await clarificationBackend(t, noGenerationResponse);
+  const events: string[] = [], proofs: unknown[] = [];
+  await assert.rejects(continueAssistantSession(backend, contactId, sessionId, continuationCommand(),
+    new AbortController().signal, () => events.push('prepared'), () => events.push('requested'),
+    () => events.push('preparing'), (proof: unknown) => { events.push('no_generation'); proofs.push(proof); }),
+  (error: unknown) => error instanceof BackendRequestFailure && error.code === 'assistant_session_input_conflict');
+  assert.deepEqual(events, ['preparing', 'no_generation']);
+  assert.deepEqual(proofs, [{ contactId, sessionId, requestKey, state: 'not_reserved' }]);
+});
+
+test('未领取证明不得越过路径阶段、原请求身份、未知响应或连接变化', async (t) => {
+  const cases = [
+    { name: '执行阶段', path: continuePath, body: noGenerationResponse, status: 409 },
+    { name: '其它端口', path: `/api/contacts/${contactId}/assistant-sessions/${sessionId}/interrupt`, body: noGenerationResponse, status: 409 },
+    { name: '未知500', path: continuePath + '/prepare', body: noGenerationResponse, status: 500 },
+    { name: '不同key', path: continuePath + '/prepare', body: { ...noGenerationResponse,
+      no_generation: { ...noGenerationResponse.no_generation, request_key: groupId } }, status: 409 },
+    { name: '额外正文', path: continuePath + '/prepare', body: { ...noGenerationResponse, private_text: '合成不可传输正文。' }, status: 409 },
+  ];
+  for (const item of cases) await t.test(item.name, async (context) => {
+    const { client } = await clarificationBackend(context, item.body, item.status);
+    await assert.rejects(client.perform({ method: 'POST', path: item.path,
+      body: { idempotency_key: requestKey }, acceptAssistantNoGenerationProof: true }),
+    (error: unknown) => error instanceof BackendRequestFailure && error.noGeneration === undefined
+      && !('private_text' in error));
+  });
+  await t.test('连接变化', async (context) => {
+    const { backend } = await clarificationBackend(context, noGenerationResponse);
+    let generation = 7; backend.getConnectionGeneration = () => generation;
+    const request = backend.requestJson.bind(backend);
+    backend.requestJson = async (options) => { try { return await request(options); } finally { generation = 8; } };
+    let callbacks = 0;
+    await assert.rejects(continueAssistantSession(backend, contactId, sessionId, continuationCommand(),
+      new AbortController().signal, undefined, undefined, undefined, () => { callbacks += 1; }));
+    assert.equal(callbacks, 0);
+  });
+});
+
 test('实际准备HTTP发出时报告准备阶段，合法澄清不伪造领取或执行回执', async (t) => {
   const { backend } = await clarificationBackend(t, clarificationResponse);
   const requests: string[] = [], phases: string[] = [];

@@ -474,9 +474,15 @@ class PostgresAssistantSessionStore:
     ) -> AssistantGenerationReceipt:
         """复用唯一领取 writer 和 B prepare hook，同事务投影实际元数据。"""
 
+        from notalone.application.assistant_preparation_rejection import AssistantPreparationRejected
+        from notalone.persistence.assistant_preparation_rejection import prepare_generation_in_transaction
         with self._transaction(scope) as connection:
-            turn_id = self._reserve_in_transaction(connection, scope, session_id, request)
-            return self._prepared_receipt(connection, scope, session_id, turn_id)
+            prepared = prepare_generation_in_transaction(connection, scope, session_id, request.idempotency_key,
+                lambda: self._prepared_receipt(connection, scope, session_id,
+                    self._reserve_in_transaction(connection, scope, session_id, request)))
+        if isinstance(prepared, AssistantPreparationRejected):
+            raise prepared
+        return prepared
 
     @staticmethod
     def _prepared_receipt(
@@ -512,11 +518,16 @@ class PostgresAssistantSessionStore:
                 or not isinstance(request.idempotency_key, UUID)
                 or request.idempotency_key == running_request_key):
             raise AssistantSessionRejected("invalid_generation_replacement")
+        from notalone.application.assistant_preparation_rejection import AssistantPreparationRejected
+        from notalone.persistence.assistant_preparation_rejection import prepare_generation_in_transaction
         with self._transaction(scope) as connection:
-            turn_id = self._reserve_in_transaction(
-                connection, scope, session_id, request, running_request_key=running_request_key,
-            )
-            return self._prepared_receipt(connection, scope, session_id, turn_id)
+            prepared = prepare_generation_in_transaction(connection, scope, session_id, request.idempotency_key,
+                lambda: self._prepared_receipt(connection, scope, session_id,
+                    self._reserve_in_transaction(connection, scope, session_id, request,
+                                                 running_request_key=running_request_key)))
+        if isinstance(prepared, AssistantPreparationRejected):
+            raise prepared
+        return prepared
 
     def reserve_replacement(
         self, scope: ContactScope, session_id: UUID, running_request_key: UUID,

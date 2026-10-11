@@ -98,7 +98,9 @@ class AssistantRetrySourceGuardHttpTest(FidelityHttpFixture, unittest.TestCase):
         status, rejected = self.backend.request(path + "/replies/prepare", retry)
 
         self.assertEqual(status, 409, rejected)
-        self.assertEqual(rejected, {"error": "assistant_session_rejected", "reason": "source_unavailable"})
+        self.assertEqual(rejected, {"error": "assistant_session_rejected", "reason": "source_unavailable",
+            "no_generation": {"contact_id": contact, "session_id": prepared["session_id"],
+                              "request_key": retry["idempotency_key"], "state": "not_reserved"}})
         self.assertEqual(self._get(path), pending)
         self.assertEqual(len(self.reply_model.seen_calls), 2)
 
@@ -201,7 +203,9 @@ class AssistantRetrySourceGuardHttpTest(FidelityHttpFixture, unittest.TestCase):
         status, rejected = self.backend.request(path + "/replies/prepare", retry)
 
         self.assertEqual(status, 409, rejected)
-        self.assertEqual(rejected, {"error": "assistant_session_rejected", "reason": "source_unavailable"})
+        self.assertEqual(rejected, {"error": "assistant_session_rejected", "reason": "source_unavailable",
+            "no_generation": {"contact_id": contact, "session_id": prepared["session_id"],
+                              "request_key": retry["idempotency_key"], "state": "not_reserved"}})
         self.assertEqual(self._get(path), before)
         self.assertEqual(len(self.reply_model.seen_calls), 2)
 

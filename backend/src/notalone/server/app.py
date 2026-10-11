@@ -53,6 +53,8 @@ from notalone.application.assistant_session_service import (
     AssistantSessionService,
     AssistantTurn,
 )
+from notalone.application.assistant_preparation_rejection import AssistantPreparationRejected
+from notalone.server.assistant_preparation_rejection import preparation_rejection_payload
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
 from notalone.persistence.assistant_continuation import PostgresAssistantContinuationStore
 from notalone.server.assistant_continuation import handle_continuation
@@ -1370,6 +1372,9 @@ class BackendApp:
                 )
                 return _json_response(HTTPStatus.OK, _completed_turn_payload(turn))
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        except AssistantPreparationRejected as error:
+            status, payload = preparation_rejection_payload(error)
+            return _json_response(HTTPStatus(status), payload, headers={"Cache-Control": "no-store"})
         except (ValueError, IndexError, ReplyRequestInvalid):
             return _json_response(HTTPStatus.BAD_REQUEST, {"error": "assistant_session_request_invalid"})
         except AssistantSessionNotFound:

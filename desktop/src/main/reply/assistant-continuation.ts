@@ -3,6 +3,7 @@ import { BackendRequestFailure } from '../backend/json-client';
 import { isUuid } from '../uuid';
 import { isRecord, readReplyResult } from './result-read';
 import { readAssistantGenerationReceipt, type AssistantGenerationReceipt } from './assistant-generation-jobs';
+import type { AssistantNoGenerationProof } from '../../shared/assistant-no-generation';
 import { ASSISTANT_CONTINUATION_RESPONSE_LIMIT, readAssistantContinuationClarification,
   type RequirementChange, type RequirementClarificationOption } from '../../shared/assistant-continuation-clarification';
 export { readAssistantContinuationClarification } from '../../shared/assistant-continuation-clarification';
@@ -79,7 +80,7 @@ function requestBody(command: AssistantContinuationCommand, sessionId: string) {
 export async function continueAssistantSession(backend: BackendHost, contactId: string, sessionId: string,
   command: AssistantContinuationCommand, signal: AbortSignal,
   onPrepared?: (receipt: AssistantGenerationReceipt) => void, onRequested?: () => void,
-  onPrepareRequest?: () => void) {
+  onPrepareRequest?: () => void, onNoGeneration?: (proof: AssistantNoGenerationProof) => void) {
   if (!isUuid(contactId) || !isUuid(sessionId)) throw new Error('当前助手会话身份无效。');
   const body = requestBody(command, sessionId.toLowerCase());
   const request = { method: 'POST' as const,
@@ -87,7 +88,8 @@ export async function continueAssistantSession(backend: BackendHost, contactId: 
     body, timeoutMs: 25_000, maxResponseBytes: ASSISTANT_CONTINUATION_RESPONSE_LIMIT, signal, acceptAssistantContinuationClarification: true as const };
   const generation = backend.getConnectionGeneration();
   const perform = async (path: string) => {
-    try { return await backend.requestJson({ ...request, path }); }
+    try { return await backend.requestJson({ ...request, path,
+      ...(path === request.path + '/prepare' ? { acceptAssistantNoGenerationProof: true as const } : {}) }); }
     catch (error) {
       if (error instanceof BackendRequestFailure && error.status === 409
         && error.code === 'assistant_continuation_clarification_required') {
@@ -109,7 +111,15 @@ export async function continueAssistantSession(backend: BackendHost, contactId: 
   };
   const preparing = perform(request.path + '/prepare');
   onPrepareRequest?.();
-  const preparation = await preparing;
+  let preparation: Awaited<ReturnType<typeof perform>>;
+  try { preparation = await preparing; }
+  catch (error) {
+    if (error instanceof BackendRequestFailure && error.noGeneration && generation !== undefined
+      && backend.getConnectionGeneration() === generation
+      && error.noGeneration.contactId === contactId.toLowerCase() && error.noGeneration.sessionId === sessionId.toLowerCase()
+      && error.noGeneration.requestKey === body.idempotency_key) onNoGeneration?.(error.noGeneration);
+    throw error;
+  }
   const preparationClarification = clarified(preparation.data, preparation.generation);
   if (preparationClarification) return preparationClarification;
   if (generation === undefined || preparation.generation !== generation

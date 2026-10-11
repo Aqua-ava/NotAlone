@@ -13,7 +13,7 @@ from notalone.application.assistant_continuation import (
     AssistantContinuationReservation, ContinueAssistantSession, continuation_reference,
     continuation_submission, requirement_clauses, resolve_requirements,
 )
-from notalone.application.assistant_session_service import AssistantSessionConflict, AssistantSessionRejected
+from notalone.application.assistant_session_service import AssistantSessionConflict, AssistantSessionNotFound, AssistantSessionRejected
 from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt
 from notalone.application.reply_request import parse_reply_request
 from notalone.persistence.assistant_candidate_versions import (
@@ -234,6 +234,21 @@ class PostgresAssistantContinuationStore:
     def prepare_continuation(
         self, scope: ContactScope, session_id: UUID, command: ContinueAssistantSession,
     ) -> AssistantGenerationReceipt:
+        from notalone.application.assistant_preparation_rejection import AssistantPreparationRejected
+        from notalone.persistence.assistant_preparation_rejection import (
+            has_generation_key, prepare_generation_in_transaction,
+        )
         with self._store._transaction(scope) as connection:
-            reserved = reserve_continuation_in_transaction(connection, self._store, scope, session_id, command)
-            return self._store._prepared_receipt(connection, scope, session_id, reserved.turn_id)
+            def reserve() -> AssistantGenerationReceipt:
+                reserved = reserve_continuation_in_transaction(connection, self._store, scope, session_id, command)
+                return self._store._prepared_receipt(connection, scope, session_id, reserved.turn_id)
+            try:
+                prepared = prepare_generation_in_transaction(connection, scope, session_id, command.idempotency_key, reserve)
+            except AssistantContinuationClarification:
+                # 合法澄清仍可同键确认；已领取的同键却不能被澄清伪装成零生成。
+                if has_generation_key(connection, scope, command.idempotency_key):
+                    raise AssistantSessionConflict("本次生成身份尚未确认。") from None
+                raise
+        if isinstance(prepared, AssistantPreparationRejected):
+            raise prepared
+        return prepared

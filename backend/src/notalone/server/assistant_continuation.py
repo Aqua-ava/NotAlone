@@ -17,6 +17,8 @@ from notalone.application.assistant_session_service import (
 from notalone.reply.errors import ReplyIdempotencyConflictError, ReplyInProgressError, ReplyPersistenceError, ReplyTimeoutError
 from notalone.reply.input_budget import InputBudgetExceededError, InputBudgetUnavailableError
 from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt
+from notalone.application.assistant_preparation_rejection import AssistantPreparationRejected
+from notalone.server.assistant_preparation_rejection import preparation_rejection_payload
 
 
 class ContinuationService(Protocol):
@@ -56,6 +58,8 @@ def handle_continuation(
             raise AssistantSessionPersistenceError("持续要求尚未可靠保存。")
         return 200, {**render_turn(turn), "continuation": turn.input["continuation"],
                      "effective_input": turn.input["content"]}
+    except AssistantPreparationRejected as error:
+        return preparation_rejection_payload(error)
     except AssistantContinuationClarification as error:
         return 409, {"error": "assistant_continuation_clarification_required", "clarification": {
             "reason": error.reason, "requirements": list(error.requirements),

@@ -97,3 +97,14 @@ Conda NotAlone、禁dotenv／外部模型环境和tracing、PGPORT=55441，用 `
 此段仅实际HTTP中断／复制／删除及隔离PG，唯一宿主退出消费者、普通页面恢复和原生退出仍须各自证据；原AC未勾及claimed保持。只有合成数据／受控模型，无真实App、微信、OCR、私料、外部发送、外部模型、push、发布或部署。
 
 Root 独立先接C正式反例，实际 **2 RED／3.527s／55repeat0／自有库0**，无raw手工样本删除后仅prepare复制输入仍running。净接A03八生产路径与原测试四条正向增强后，同一反例和既有来源守卫 **6 GREEN／9.920s／skip0／actualexit0**；55repeat0、自有库剩余0，限定八文件mypy、九文件编译及diff通过。首轮夹带错误模块名产生一个loader ERROR，未冒充完整通过；校正已存在的模块名后取得上述完整六项。仅复用原C样本可用性和A类型来源投影，没有新表／第二依赖图或私人资料；已发现的当前意愿反例仍单独等待修复。
+
+
+### 准备未领取的事务正证明（2026-10-12）
+
+新增 prepare 拒绝证明只在原 owner 事务内生效：局部 savepoint 回滚领取副作用，再复验同 owner/contact/key 在 A turn 与 C request 均不存在，写既有无正文 `reply_invalidated_key` 阻止排队旧键，外层事务提交后才返回原404/409分类与 `no_generation={contact_id,session_id,request_key,state:not_reserved}`。已领取键、连接／5xx未知、解析未入事务与执行阶段不提供证明；证明写入故障返回503且不残留失效键。合法 typed 澄清不封键、仍可同键明确确认；已领取同键的失效参考不能伪装成零生成澄清。无新迁移、registry、writer、来源图或正文副本。
+
+真实 HTTP 首条 RED／1.550s 后 GREEN／0.991s；新三场边界 GREEN／2.420s。新增两场后的一次5项运行因新测试块位置失配有1FAIL，改正后保留原业务断言；原77相关执行为71通过及6个新增证明字段导致的精确旧响应形状失配／105.251s，未冒称全绿。只校正这六项到严格四字段证明，各独立守卫使用新nonce以免前次永久barrier遮住后续守卫，和新增五项共 **11 GREEN／9.982s／skip0**，正式55／repeat0／自有库0；不重复已通过旧组合。第一轮追加测试曾误传UUID字符串及放错晚到测试块，1ERROR与1FAIL仅夹具前提错误，原日志保留。
+
+真实回环 JsonClient 首条回调 RED（30项中1FAIL／90.417ms），最窄客户端修复后30 GREEN／92.434ms，路径／身份／执行／500／额外正文／连接变化负向加入后 **37 GREEN／96.917ms**。whole typecheck、六源 limited silent mypy、八Python编译及diff通过。仅显式具名prepare有限形状与三UUID、实际连接generation匹配才进入第9个 `onNoGeneration` 回调；错误仍仅安全分类、执行和未知不清身份。普通及typed消费者、同Map同键unknown别名正证明释放由对应唯一消费者继续接线；本提供者证据不冒称Main／Host／原生退出已整体完成。原AC及真实State保持，权威身份式中断重建另切片继续。
+
+主树精确净接 sole A `547c716a` 的十四条提供者／协议／测试路径，保留现有其它路由和消费者。独立 runner 执行五个新的 prepare 拒绝正证明场景及四个当前意愿／表达样本实际 HTTP 矩阵，**9 GREEN／19.583秒／skip0／actualexit0**，正式001–055、repeat0、自有随机数据库0；日志 `/private/tmp/notalone-root-proof-and-fidelity-v2-http-pg.log`。同一9项组合不冒为旧77全量，四场C矩阵的12模型输入／调用独立捕获、质量仍未验证。完整桌面类型及两标准页面入口静态bundle通过；协议测试最初本机listen受沙箱EPERM，环境失败不算业务RED，明确授权本机监听后实际37项全部通过，日志 `/private/tmp/notalone-root-proof-client-node-green.log`。普通和确认候选消费者的同Map正证明收口继续，真实App未执行，原State claimed不改变。
