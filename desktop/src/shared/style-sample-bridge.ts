@@ -11,7 +11,7 @@ export interface StyleSampleState {
   phase: 'idle' | 'loading' | 'ready' | 'failed'; samples: StyleSample[];
   busy: boolean; error: string | null;
 }
-export type CandidateTextCopy = ReplyCandidateSelection & { text: string };
+export type CandidateTextCopy = ReplyCandidateSelection & { text: string; invalidSelection?: true };
 export type SavedSampleTextCopy = ContactSelection & { sampleId: string; text: string };
 export type ManualStyleText = ContactSelection & { text: string };
 export interface StyleSampleBridge {

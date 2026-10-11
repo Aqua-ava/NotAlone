@@ -38,6 +38,34 @@ Blocked by: None (can start immediately)
 
 ## Comments
 
+2026-10-11 本主树六文件最终独立两轴复核：Standards硬要求0／重要Fowler可能气味0，Spec新增P0–P2为0；核原copy摘要、拒绝摘要刷新边界、当前可信投影和独立手写，确认上面的主树计量仍只是控制器证据。原公开和人工余项保持真实状态。
+
+2026-10-11 主树独立消费 fde435b＋16344e4 后，保持原两份六反向 RED 报告，沿原同一 probe 复跑六序列：6 GREEN／411.546209ms、实际 exit0，每例再次原片段均拒绝且 POST0；实际 controller SHA256=`2d4dd40f884302b178998328c27ae85eb6479eadae0b52fcaf3e334d8b6d84c4`。原报告另存 `report-root-green.json`，临时 bundle 已删除。这只验证真实控制器端口，未启动 HTTP、数据库、页面或 App，模型和网络调用均0。全组 `node --test tests/style-samples/controller.test.mjs` 实际48 GREEN／2002.659583ms、skip0；`npm run typecheck` 与 staged diff 检查通过。A producer、原 NEW 与 C 三个公开场景仍待正式接线，本票 claimed，未借 Node 结果勾选公开或人工质量。
+
+2026-10-11 fde交付后的独立Spec再发现P2：首次粘贴与原copy不同的文字会覆盖`copied.digest`，清空后原mixed／unknown／flagged-mixed选区无法再匹配；即便实际会话已删除也可截短洗manual。总协调私有合成controller probe六序列分别实际RED／34.753709ms和独立复跑RED／40.5385ms，均首不同paste拒POST0、clear后原clip截短保存错误POST1；这只是controller端口，不冒称HTTP／页面。原fde36GREEN与当时限定审查保留为历史阶段，新P2重开。
+
+C新增mixed／unknown／flagged-mixed×未删／已确认实际SIDdelete六条Node，另加“后续复制合法候选不能丢无效copy摘要”和“复制列表样本后删会话仍保留旧合法候选片段来历”两条；同命令真实44项35通过／9失败（含父测试）／173.463459ms，八个新增行为均Missing expected rejection。最小修正保留原copy SHA；一次未知paste只构造独立的摘要／来源元数据，不覆盖copy摘要。无效非空copy SHA纳既有blockedCopies，合法片段SHA纳既有knownOrigins；以后复制另一项不丢原来历，粘贴命中已有失效摘要先保留冲突再允许原来源归属校验，编辑截短不能洗manual。不新增正文缓存、剪贴板监听、读取API或来源权威。
+
+该阶段原44项全部GREEN／192.663666ms、skip0，typecheck和diff通过；六条每例均继续验证清空后首次不同的独立文字可manual保存，再贴原片段仍拒绝。原36的strict bridge、65536copy／4096保存、空／迟到scope、独立样本和消息边界保持。随后Spec再发现下面两项P2，未将44GREEN当最终关闭；A薄producer、root原NEW和C三public仍未执行，本票与E06继续claimed，无Page／DB／model／App或私聊资料。
+
+后续Spec两P2分别为：later copy后未删除的合法旧片段只留SHA却未找回来历，编辑保存仍manual；invalidSelection前缀恰为合法整文时，普通投影刷新会解除blocked SHA，later copy后原clip可洗manual。加正向真实来历和刷新反向后46项43通过／3失败（含父测试）／175.2055ms，分别实际origin manual和Missing expected rejection。最终一次paste从既有knownOrigins找回唯一候选后，仍在当前真实投影复验contact／request／candidate／SID／连接代数和实际文字，不可读或来源失效拒绝，不另读HTTP；拒绝选区的SHA独立登记为`rejectedCopyDigests`，普通来源刷新不能解除。它只在控制器内存保留摘要，不持久化正文或增加来源权威。
+
+该修正后46GREEN／261.00275ms，type／diff通过；再补旧连接与不可读历史两条来历回找拒绝／清空后独立手写成功，最终同命令48GREEN／147.779333ms、skip0。所有六反向、后续复制、合法来历正向、普通刷新不解除explicit invalid、既有strict bridge及保存边界保持，四文件最终两轴完成：Standards硬要求0／重要Fowler0，Spec新增0；前两项P2已闭合。公开producer／NEW／C三场仍未跑，不据受控来源回归勾公开或模型质量。
+
+总协调主树接续正式 `fde435b37320dee83915016a1bcb894af72b2369` 六文件：源码四文件原样集成；E06 记录冲突保留主树全部既有证据及本提交精确新增三段。在 `desktop/` 实际运行 `node --test tests/style-samples/controller.test.mjs`：36 项 GREEN／254.85875 毫秒、skip 0；`npm run typecheck` 与差异检查通过。包含实际有界旧剪贴板在清空／换范围前未粘贴、后来粘贴编辑仍拒绝，以及不同独立新文字允许保存和再次旧内容拒绝；正常五字段与严格 invalidSelection 具名桥接通过。此为主树受控控制器证据，A 唯一薄 Panel 正式接线、原 NEW 恢复复制及 C 三场公开路径仍待接续，本票继续 claimed，未执行人工／原生／外部模型。
+
+2026-10-11 恢复历史候选复制接续：总协调在A NEW公开单case180实际取得RED，恢复后候选只在历史Panel、`reply.result=null`；实际copy／paste／edit及DELETE／GET404到达，未保存手工框仍留历史候选正文，后续防洗manual／独立样本／新范围未到达。原quiet17／cleanuptrue及此前原十场GREEN各自保留，不把旧十场覆盖这个新缺口。
+
+C唯一controller沿既有`noteCandidateCopy({contactId,scopeRevision,replyRequestId,candidateId,text})`复验当前实际候选或`SavedAssistantSession.phase=ready`中的`completed`轮次，身份必须匹配真实reply/candidate；只从现有投影读取文字，不加正文缓存、历史reader或来源API。历史候选登记必要SID/request/candidate及SHA摘要，已确认删除按原DTO清未保存编辑，已主动保存样本／列表copy／独立本人消息／无关手写仍保留。未知、混合或未完成／不可读历史选区先登记无正文冲突再拒绝；最初沿A working空文本哨兵只验证首次粘贴截短，清空前尚未粘贴的反向缺口在后续Spec中发现并以有界实际文字协议修正，不能将该阶段正向结果当超长完整验收。迟到旧scope不覆盖当前已核实来源；仅known-deleted候选仍按实际摘要匹配，不误拦不同新文字。
+
+真实TDD命令在desktop、Node v25.2.1为`node --test tests/style-samples/controller.test.mjs`：初18项15通过／3失败（含父测试），实际恢复复制拒绝、历史整文未清两反例；最小恢复接线后18GREEN／299.960208ms。再加11个无效历史／混合／哨兵／未知身份的防洗来历反例，30项18通过／12失败（含父测试），均Missing expected rejection；先记录invalid/unverified摘要并沿粘贴冲突后30GREEN／317.082834ms、skip0，`npm run typecheck`通过。使用合成宿主与受控HTTP响应，没有浏览器／模型／App；A唯一thinPanel producer仍待其正式提交，C本轮未执行NEW公开页或原三场editor页，E04／E06保持claimed，公开GREEN须沿原失败断言实跑。
+
+本切片Spec复核发现新的P2：unverified通配冲突在实际粘贴被拒并清空后仍误挡不同新文字，未粘贴时主动清空／切换scope也误挡。加三条实际反例后33项29通过／4失败（含父测试）／199.139333ms；最小修正使未知选区只关联下一次实际粘贴，随后保留该实际粘贴摘要和invalid身份，清空或范围变化取消尚未消费的通配标记。该阶段33GREEN／263.707625ms、skip0，type通过；这三例仅证明新独立文字不被误挡，不能证明空哨兵清空后原超长剪贴板仍拒绝。没有扩大文字上限、监听全局剪贴板或改A producer，公开结果仍待原NEW场景。
+
+Spec随后指出空哨兵丢失实际复制摘要，清空／换scope前尚未粘贴时可能洗manual。总协调正式裁定在原`CandidateTextCopy`增加可选`invalidSelection: true`，普通五字段兼容；A唯一thinPanel将超长actualSelection前65536字符连同标记发送，不再以空字符串表示。C唯一DTO／具名桥接／controller仅接受true标记，拒绝false、undefined、字符串、额外字段及超过65536字符。标记强制invalid，即便有界前缀恰好等于合法历史候选；常驻只保存SHA及来源ID。粘贴事件沿既有相同上限保留证据，清空／同联系人换scope后原剪贴板再粘贴并截短仍拒绝，新不同文字可主动保存，之后再贴原片段仍拒绝；4096保存上限不改。
+
+新增两条清空／换scope反向和真实`installStyleSampleBridge`普通五字段兼容／标记校验回归。首次反向夹具错误把五字符短语重复10923次当65536，实际54615，两条在业务前长度断言失败；改为准确65536合成字符后取得真正36项32通过／4失败（含父测试）／141.820542ms：两个flag被控制器忽略、桥接不接受新协议。最小接线后原36项全部GREEN／160.895584ms、skip0，`npm run typecheck`与`git diff --check`通过；合成宿主、真实具名桥接，不含模型或浏览器。限定六文件最终Standards硬要求0／Fowler0、Spec0，两个P2在C接收侧闭合。A正式producer与root原NEW／C三场公开仍未执行，E04和E06保持claimed，不预填公开GREEN。
+
 2026-10-11接续：A09审查发现候选选区粘贴后尚未主动保存的样本编辑区会在删除助手会话后残留正文。本模块唯一负责此副本清理，消费正式`2cd7810`只读五字段`confirmedSessionDeletion`，不推断result为空代表删除、不复制A working producer。新增独立公开TEST `style-session-editor-erasure`三场：取消保留、实际同会话404后清候选未保存片段并阻止旧剪贴板洗manual；只复制未粘贴时保留无关手写；已保存样本列表copy保留且仍按已有样本来历拒绝manual。显式保存样本、已删会话旧键／依据、每场1调用均为原断言；尚未运行页面，待正式producer或总协调受控前置树串行RED，不预填GREEN。
 
 随后总协调在A冻结树真实公开`assistant-session-deletion-faults`＋`assistant-session-deletion-lifecycle`／240秒窗口已取得原缺口RED：前三fault通过，第四场实际DELETE完成后手工样本框仍为“未保存副本的合成候选（说法1）。用户未保存的合成编辑。”而期望空，5000ms失败；后续未到达不记通过。quiet35／active0／onscreen0、单Chrome、cleanupConfirmed=true、Electron／native=false。这是原A场的真实反例，不修改其断言或重复制造本轮页面RED。

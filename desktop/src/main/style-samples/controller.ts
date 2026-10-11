@@ -9,10 +9,11 @@ import type { CandidateTextCopy, ManualStyleText, SavedSampleTextCopy, StyleSamp
 import { listSamples, readSample } from './client';
 
 type Scope = { contactId: string; scopeRevision: number; generation: number };
-type CandidateOrigin = { id: string; contactId: string; kind: 'candidate'; replyRequestId: string; sessionId?: string };
+type CandidateOrigin = { id: string; contactId: string; kind: 'candidate'; replyRequestId: string; sessionId?: string; generation: number };
+type CandidateSource = { origin: CandidateOrigin; texts: readonly string[] };
 type KnownOrigin = CandidateOrigin | { contactId: string; kind: 'message'; id: string };
 type CopyOrigin = (CandidateOrigin | { id: string; contactId: string; kind: 'sample' })
-  & { digest: string; generation: number; invalid?: boolean };
+  & { digest: string; generation: number; invalid?: boolean; unverified?: boolean };
 const fingerprint = (text: string) => createHash('sha256').update(text.trim()).digest('hex');
 export class StyleSampleController {
   private state: StyleSampleState = { revision: 0, contactId: null, scopeRevision: 0, erasureRevision: 0, phase: 'idle', samples: [], busy: false, error: null };
@@ -31,6 +32,7 @@ export class StyleSampleController {
   private readonly knownOrigins = new Map<string, Map<string, KnownOrigin>>();
   private readonly blockedCopies = new Set<string>();
   private readonly deletedCopies = new Set<string>();
+  private readonly rejectedCopyDigests = new Set<string>();
   private readonly listeners = new Set<(state: StyleSampleState) => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
     private readonly replies: ReplySession) {
@@ -85,6 +87,7 @@ export class StyleSampleController {
   private resetManualOrigin() {
     this.manualOrigin = undefined; this.manualOriginConflict = false;
     this.manualFingerprint = undefined; this.manualPasteOrigins.clear();
+    if (this.copied?.unverified) this.copied = { ...this.copied, unverified: false };
   }
   private candidateOriginsInManual(): CandidateOrigin[] {
     if (this.manualPasteOrigins.size) return [...this.manualPasteOrigins.values()]
@@ -135,13 +138,33 @@ export class StyleSampleController {
       }
     }
   }
+  private replyCandidateSources(reply: ReplySessionState): CandidateSource[] {
+    const scope = this.scope;
+    if (!scope || this.backend.getConnectionGeneration() !== scope.generation
+      || reply.contactId !== scope.contactId || reply.scopeRevision !== scope.scopeRevision || reply.sourceAvailability) return [];
+    const result = reply.result;
+    const sources: CandidateSource[] = (result?.candidates ?? []).map(({ original, editedText }) => ({
+      origin: { contactId: scope.contactId, kind: 'candidate', id: original.candidateId,
+        replyRequestId: result!.replyRequestId, sessionId: result!.assistantSessionId, generation: scope.generation }, texts: [original.text, editedText],
+    }));
+    const saved = reply.savedSession;
+    // 正文只读取既有当前投影；恢复来源必须是已核实会话中的实际完成候选。
+    if (saved?.phase === 'ready' && saved.sessionId) for (const turn of saved.turns) {
+      if (turn.state !== 'completed' || !turn.reply) continue;
+      for (const candidate of turn.reply.candidates) sources.push({
+        origin: { contactId: scope.contactId, kind: 'candidate', id: candidate.candidateId,
+          replyRequestId: turn.reply.replyRequestId, sessionId: saved.sessionId, generation: scope.generation }, texts: [candidate.text],
+      });
+    }
+    return sources;
+  }
   private rememberReplyOrigins() {
-    const reply = this.replies.getState(); if (!reply.contactId || reply.sourceAvailability) return;
-    for (const { original, editedText } of reply.result?.candidates ?? []) {
-      for (const text of [original.text, editedText]) {
+    const reply = this.replies.getState(); const scope = this.scope;
+    if (!scope || reply.contactId !== scope.contactId || reply.scopeRevision !== scope.scopeRevision || reply.sourceAvailability) return;
+    for (const { origin, texts } of this.replyCandidateSources(reply)) {
+      for (const text of texts) {
+        if (!text.trim()) continue;
         const key = fingerprint(text);
-        const origin: CandidateOrigin = { contactId: reply.contactId, kind: 'candidate', id: original.candidateId,
-          replyRequestId: reply.result!.replyRequestId, sessionId: reply.result!.assistantSessionId };
         this.rememberOrigin(key, origin);
         if (!this.invalidatedCandidateRequests.has(`${origin.contactId}:${origin.replyRequestId}`)) this.blockedCopies.delete(key);
       }
@@ -165,7 +188,7 @@ export class StyleSampleController {
     if (pasted?.kind === 'sample') throw new Error('列表文字请使用已有样本，不能改为无来源手工保存。');
     if (pasted?.invalid) throw new Error('复制来源已失效，请清空后重新编辑。');
     const key = fingerprint(selection.text);
-    if (this.blockedCopies.has(key) || this.deletedCopies.has(key)) throw new Error('这段文字的来源已失效，请重新编辑。');
+    if (this.blockedCopies.has(key) || this.deletedCopies.has(key) || this.rejectedCopyDigests.has(key)) throw new Error('这段文字的来源已失效，请重新编辑。');
     const origins = [...(this.knownOrigins.get(key)?.values() ?? [])];
     if (origins.length > 1) throw new Error('同一句文字有多个已知来源，请从明确候选或消息入口保存。');
     const known = origins[0];
@@ -174,23 +197,21 @@ export class StyleSampleController {
     await this.save(selection, selection.text, pasted ? { kind: 'candidate', id: pasted.id }
       : known ? { kind: known.kind, id: known.id } : { kind: 'manual' });
   }
-  recordCopied(selection: ReplyCandidateSelection, text: string) {
-    const scope = this.assertScope(selection); const reply = this.replies.getState();
-    if (reply.contactId !== scope.contactId || reply.scopeRevision !== scope.scopeRevision || reply.sourceAvailability
-      || reply.result?.replyRequestId !== selection.replyRequestId
-      || !reply.result.candidates.some((item) => item.original.candidateId === selection.candidateId)) throw new Error('复制来历已失效。');
+  recordCopied(selection: ReplyCandidateSelection, text: string, invalidSelection = false) {
+    const scope = this.assertScope(selection);
+    const source = this.replyCandidateSources(this.replies.getState()).find(({ origin }) =>
+      origin.replyRequestId === selection.replyRequestId && origin.id === selection.candidateId);
+    const unverified = !text.trim() || text.length > 65_536 || !source || !source.texts.some((candidate) => candidate.includes(text));
+    const invalid = invalidSelection || unverified || this.invalidatedCandidateRequests.has(`${scope.contactId}:${selection.replyRequestId}`);
     // 只记录最后一次显式复制的摘要与来源编号；不监听剪贴板、不保留候选正文。
-    this.copied = { digest: fingerprint(text), id: selection.candidateId, kind: 'candidate', contactId: scope.contactId,
-      generation: scope.generation, replyRequestId: selection.replyRequestId, sessionId: reply.result.assistantSessionId,
-      invalid: this.invalidatedCandidateRequests.has(`${scope.contactId}:${selection.replyRequestId}`) };
+    this.copied = { ...(source?.origin ?? { id: selection.candidateId, kind: 'candidate', contactId: scope.contactId,
+      replyRequestId: selection.replyRequestId }), digest: fingerprint(text), generation: scope.generation, invalid, unverified };
+    if (invalid && text.trim()) this.rejectedCopyDigests.add(this.copied.digest);
+    else if (source && !invalid) this.rememberOrigin(this.copied.digest, source.origin);
+    if (invalid) throw new Error('复制来历已失效。');
   }
   noteCandidateCopy(selection: CandidateTextCopy) {
-    const scope = this.assertScope(selection); const reply = this.replies.getState();
-    const candidate = reply.result?.candidates.find((item) => item.original.candidateId === selection.candidateId);
-    if (!selection.text.trim() || reply.contactId !== scope.contactId || reply.scopeRevision !== scope.scopeRevision
-      || reply.sourceAvailability || reply.result?.replyRequestId !== selection.replyRequestId || !candidate
-      || !(candidate.editedText.includes(selection.text) || candidate.original.text.includes(selection.text))) throw new Error('复制来历已失效。');
-    this.recordCopied(selection, selection.text);
+    this.recordCopied(selection, selection.text, selection.invalidSelection === true);
   }
   noteSavedSampleCopy(selection: SavedSampleTextCopy) {
     const scope = this.assertScope(selection);
@@ -206,15 +227,35 @@ export class StyleSampleController {
     else this.manualFingerprint = fingerprint(selection.text);
     // 粘贴后的编辑继续沿用真实来历；清空输入或范围失效才解除。
   }
+  private rememberedCandidatePaste(digest: string, text: string): CopyOrigin | undefined {
+    const origins = [...(this.knownOrigins.get(digest)?.values() ?? [])];
+    if (origins.length > 1) { this.manualOriginConflict = true; return; }
+    const origin = origins[0];
+    if (origin?.kind !== 'candidate') return;
+    const available = this.replyCandidateSources(this.replies.getState()).some(({ origin: current, texts }) =>
+      current.contactId === origin.contactId && current.id === origin.id && current.replyRequestId === origin.replyRequestId
+      && current.sessionId === origin.sessionId && current.generation === origin.generation
+      && texts.some((candidate) => candidate.includes(text)));
+    return { ...origin, digest, invalid: !available
+      || this.invalidatedCandidateRequests.has(`${origin.contactId}:${origin.replyRequestId}`) };
+  }
   noteManualPaste(selection: ManualStyleText) {
     this.assertScope(selection);
-    if (!this.copied || (this.copied.digest !== fingerprint(selection.text)
-      && (this.copied.kind === 'candidate' || !this.copied.invalid))) return;
-    this.manualPasteOrigins.set(`${this.copied.contactId}:${this.copied.kind}:${this.copied.id}`, this.copied);
-    if (this.copied.invalid) { this.manualOriginConflict = true; return; }
-    if (this.manualOrigin && (this.manualOrigin.id !== this.copied.id || this.manualOrigin.kind !== this.copied.kind
-      || this.manualOrigin.contactId !== this.copied.contactId || this.manualOrigin.generation !== this.copied.generation)) this.manualOriginConflict = true;
-    else this.manualOrigin = this.copied;
+    const digest = fingerprint(selection.text);
+    if (this.blockedCopies.has(digest) || this.deletedCopies.has(digest) || this.rejectedCopyDigests.has(digest)) this.manualOriginConflict = true;
+    // 混合、未知或超长选区只登记冲突；即使后来截短，也不能洗成手工来历。
+    let copied = this.copied;
+    if (!copied || (!copied.unverified && copied.digest !== digest
+      && (copied.kind === 'candidate' || !copied.invalid))) copied = this.rememberedCandidatePaste(digest, selection.text);
+    if (!copied) return;
+    // 一次粘贴冲突单独记录摘要，不能覆盖原复制摘要；清空后允许不同独立文字。
+    const pasted = copied.unverified ? { ...copied, digest, unverified: false } : copied;
+    if (copied === this.copied && copied.unverified) this.copied = { ...copied, unverified: false };
+    this.manualPasteOrigins.set(`${pasted.contactId}:${pasted.kind}:${pasted.id}`, pasted);
+    if (pasted.invalid) { this.manualOriginConflict = true; return; }
+    if (this.manualOrigin && (this.manualOrigin.id !== pasted.id || this.manualOrigin.kind !== pasted.kind
+      || this.manualOrigin.contactId !== pasted.contactId || this.manualOrigin.generation !== pasted.generation)) this.manualOriginConflict = true;
+    else this.manualOrigin = pasted;
   }
   async saveCandidate(selection: ReplyCandidateSelection) {
     this.assertScope(selection); const reply = this.replies.getState();

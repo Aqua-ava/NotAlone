@@ -17,6 +17,16 @@ function selection(args: unknown[], extra: string[] = [], textLimit = 4096): Rec
     || extra.some((key) => key === 'text' ? typeof row.text !== 'string' || row.text.length > textLimit : !isUuid(row[key]))) throw new Error('样本操作无效。');
   return { ...row, contactId: row.contactId.toLowerCase() };
 }
+function candidateCopy(args: unknown[]): CandidateTextCopy {
+  const value = args[0];
+  if (args.length === 1 && value && typeof value === 'object' && !Array.isArray(value)
+    && Object.hasOwn(value, 'invalidSelection')) {
+    const { invalidSelection, ...rest } = value as Record<string, unknown>;
+    if (invalidSelection !== true) throw new Error('样本操作无效。');
+    return { ...selection([rest], ['replyRequestId', 'candidateId', 'text'], 65_536), invalidSelection: true } as CandidateTextCopy;
+  }
+  return selection(args, ['replyRequestId', 'candidateId', 'text'], 65_536) as unknown as CandidateTextCopy;
+}
 export function installStyleSampleBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession, replies: ReplySession) {
   const samples = new StyleSampleController(backend, contacts, replies);
   samples.onStateChanged((state) => commands.publish('style-samples:state-changed', state));
@@ -26,7 +36,7 @@ export function installStyleSampleBridge(commands: PageCommands, backend: Backen
   commands.handle('style-samples:save-candidate', (...args) => samples.saveCandidate(selection(args, ['replyRequestId', 'candidateId']) as unknown as ReplyCandidateSelection), 'helper');
   commands.handle('style-samples:save-message', (...args) => samples.saveMessage(selection(args, ['messageId']) as unknown as ContactSelection & { messageId: string }), 'helper');
   commands.handle('style-samples:delete', (...args) => samples.deleteSample(selection(args, ['sampleId']) as unknown as ContactSelection & { sampleId: string }), 'helper');
-  commands.handle('style-samples:note-candidate-copy', (...args) => samples.noteCandidateCopy(selection(args, ['replyRequestId', 'candidateId', 'text'], 65_536) as unknown as CandidateTextCopy), 'helper');
+  commands.handle('style-samples:note-candidate-copy', (...args) => samples.noteCandidateCopy(candidateCopy(args)), 'helper');
   commands.handle('style-samples:note-sample-copy', (...args) => samples.noteSavedSampleCopy(selection(args, ['sampleId', 'text'], 65_536) as unknown as SavedSampleTextCopy), 'helper');
   commands.handle('style-samples:update-manual-text', (...args) => samples.updateManualText(selection(args, ['text']) as unknown as ManualStyleText), 'helper');
   commands.handle('style-samples:note-manual-paste', (...args) => samples.noteManualPaste(selection(args, ['text'], 65_536) as unknown as ManualStyleText), 'helper');

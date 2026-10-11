@@ -38,6 +38,20 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 
 ## Comments
 
+2026-10-11 本主树六文件最终独立两轴复核：Standards硬要求0／重要Fowler可能气味0，Spec新增P0–P2为0；核原copy摘要、拒绝摘要刷新边界、当前可信投影和独立手写，确认上面的主树计量仍只是控制器证据。原公开和人工余项保持真实状态。
+
+2026-10-11 主树精确合并 fde435b＋16344e4 的四个源码／测试及两票净增记录，保留本树已有证据。原六反向独立复跑6 GREEN／411.546209ms／exit0，各错误保存 POST0；全48 Node GREEN／2002.659583ms、skip0，typecheck／差异检查通过。旧 RED 报告与新 GREEN 报告分开保留；这是控制器端口结果，没有 HTTP／PG／公开页面或模型调用。公开 producer／NEW／三组合场与人工质量仍未据此完成，E04／E06状态不变。
+
+2026-10-11 copy接收侧新P2接续：root对fde实际probe发现首个不同paste覆盖原copy SHA，mixed／unknown／flagged-mixed×有无actualSIDdelete六反向均RED；原36GREEN和当时审查仅为阶段证据，不关闭该新缺口。C同现有controller新增该六反向及两后续copy覆盖反向，44项35通过／9失败（含父测试）／173.463459ms→阶段最小修复后44GREEN／192.663666ms、skip0／type／diff通过。原copy摘要固定，一次paste冲突单独保存SHA／ID；该阶段失效copy与合法片段分别登记blocked／known摘要，六例还保清空后不同新文字正常manual与原片段再贴拒绝，不加bodycache／新API。44审查又发现下述两P2，不当最终关闭；A producer／root NEW与C三公开仍未执行，claimed不变。
+
+后续两P2实际46项43通过／3失败（含父测试）／175.2055ms：未删除合法旧片段在later copy后仍manual、普通刷新会解除与合法整文同SHA的无效选区。最终仅C控制器在已知摘要唯一来源基础上复验当前actual contact/request/candidate/SID/generation/text，不另读HTTP／正文缓存；明确拒绝copy SHA独立内存登记，普通刷新不清除。46GREEN／261.00275ms及type／diff后，再补旧连接／不可读历史拒绝和独立手写正向，最终48GREEN／147.779333ms、skip0。E04保留root与C每阶段真实失败、来源与计量归属；四文件最终两轴完成：Standards硬要求0／重要Fowler0、Spec新增0，前两项P2已闭合；受控Node不替代A/B公开接口组合或真实质量，本票claimed。
+
+2026-10-11 历史候选复制恢复缺口独立接续：沿总协调A NEW真实公开RED，在C唯一来源controller读取当前投影的真实ready/completed历史候选，既有copy签名不变；仅SID/request/candidate与摘要常驻，不另存讨论正文。来源模糊、混合、未知或空哨兵记录冲突后拒绝，旧scope不覆盖当前来历；实际会话删除清未保存编辑，保存样本／列表／手写按原边界保留。自己的Node从恢复2个行为RED、来源失败后洗manual的11个行为RED逐步转30GREEN／317.082834ms，type通过，具体失败分母与命令见E04。该受控Node不等于A NEW或C三场公开GREEN；A正式producer、完整历史模型载荷／预算／硬擦除、B10及最终组合仍接续，本票保持claimed。
+
+该恢复切片Spec新P2“无效通配误挡后续独立粘贴”再以三条实际Node反例RED→GREEN修复，该阶段33GREEN／263.707625ms、skip0及type通过。未知选区仅等待一次真实粘贴，消费后绑定实际摘要；清空／换scope取消未消费通配，保留不同新文字手工保存。这三条正向不证明空哨兵丢摘要后原超长剪贴板仍拒绝；Spec后续反向缺口与协议修复见下，原阶段不冒称完整关闭。E04保留全部失败分母、原两阶段GREEN及公开未执行项，未把受控来源回归当模型质量或整组合验收。
+
+按总协调窄契约，C只扩原copy DTO可选`invalidSelection:true`并接真实具名桥接／controller，A独占超长选区actualText前65536＋标记薄适配。普通五字段兼容、标记强制invalid、未知附加字段／非法标记拒绝；只存SHA与来源ID。新清空／换scope反向以及真实桥接行为在准确夹具下36项32通过／4失败（含父测试）／141.820542ms，修后36GREEN／160.895584ms、skip0与type／diff通过。原超长剪贴板在清空或范围变化后再贴、截短、另存独立文字后再贴均拒绝，独立新文字仍manual；首次夹具长度错误完整记E04，不算产品RED。限定六文件最终Standards硬要求0／Fowler0、Spec0，仅C接收侧两个P2闭合；A producer／root NEW公开仍接续，受控Node不替代完整history依赖、模型预算、Skill或跨场景页面，本票claimed。
+
 2026-10-11 接续未保存表达副本：沿 A 正式 only-metadata `2cd7810` 准备具名公开 TEST `style-session-editor-erasure`，三场分别核实际删除后清候选派生未保存编辑、保留无关手写、保留已保存样本列表复制的文字与来历。每场经页面确认／取消→真实 HTTP 旧 session404 和旧 reply／依据拒绝→显式样本前后完全相等／新 manual 保存，不改 A 原 fault，不建第二删除器。C 自有三场页面尚未执行，producer／删除按钮仍待 A 正式前端；不将 TEST 存在记作验收完成。
 
 ### 总协调独立保留测试的正式前置反例（2026-10-11）
