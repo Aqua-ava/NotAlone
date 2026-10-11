@@ -193,3 +193,102 @@ phase3b正式切片提交前复核：仅正式d89584f导出加11四文件（不�
 phase3c 权威选择重读：同一 `/api/contacts/{contact_id}/assistant-sessions/{session_id}/selections` 新增 GET，响应 `{selection: receipt|null}`。只委托既有 `selected(scope, session_id)`，没有新增选择指针或从默认展示、逐候选标记推断选择。首项公开 405 RED／1.195 秒，四行接线后 1.592 秒 GREEN；扩展原八项加一项公开完整流程，共九项 GREEN／9.763 秒。空会话、原版与新版明确选择、旧 selection_key 回执重放、重新连接、来源失效与实际清除、turn／request 失效及会话删除均验证实际指针，不新增模型调用。原方法负例改用 DELETE，保留 405 断言；初始 socket 拒绝和三处合成安排修正不作业务 RED。
 
 主 Agent 从正式 `5fad4327e3eb2d37f1c45bb46ce0b156c03a0cd0` 导出独立副本，只加入 handler 与 HTTP 测试两文件，排除其他未提交代码。实际 `PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-a11-selection-get-cut-4jkxdx1g/source tests.integration.server.test_assistant_candidate_versions` 九项 GREEN／9.999 秒，生产 001–053、HTTP 内层与 runner 外层自有数据库清理均剩余零。日志 `/private/tmp/notalone-a11-selection-get-fresh.log`。限定独立双轴 Standards 硬规范 0、Fowler 判断 0；Spec 0。桌面通用 DTO／RPC、来源删除后的 RAM 视图协调及历史页面继续实施，本票保持 claimed，人工部分未执行。
+
+2026-10-11 通用桌面接口切片新增严格版本 DTO、唯一版本控制器及 Main／preload 四个 RPC：读取、保存整组编辑、明确选择、显示已有版本。默认展示新版不代表用户选择，明确选择始终从后端 GET selections 重读，旧操作回执不能倒退实际指针；消息 UUID 与次序、父版本、本次要求和展示编号均保留。保存与选择无模型调用，不将复制、自动第一项或临时编辑推断为持久选择。
+
+新鲜审查先指出单候选来源失败仍在 Main 保留旧正文，补公开 RPC 回归后修复；第二轮独立审查又指出同一 raw 来源可能影响多个 turn，READ／SAVE／SELECT 各在 404 和 source_unavailable 两条路径共六个实际 RED，不能只清触发候选。现先隔离旧投影与正文动作，以同会话完整 GET 权威复验所有轮次、输入和版本；清理 actual redacted／unavailable／消失的记录，同时保留权威仍有效的独立讨论。中间事件不能发布尚未核验正文，GET 失败物理清空旧视图，旧 contact／SID／scope／connection／operation 的迟到复验不能清新视图。不新增正文恢复缓存。受控 generation 与独立结果的 waiting 收尾、重连接口的版本 scope 也有真实 RED→GREEN。
+
+实际在 desktop cwd 运行 `node --test tests/assistant-candidate-versions.test.mjs tests/assistant-candidate-version-ports.test.mjs tests/assistant-session-catalog.test.mjs tests/assistant-session-catalog-read.test.mjs`：工作树和固定正式 1675 导出的独立 ONLY11 副本均 50／50 GREEN、类型检查 GREEN；主 Agent 重建冻结副本再得 50 GREEN／2.541 秒、`npm run typecheck` GREEN。五十项包含八项既有目录回归，不计作五十项新增版本测试。另加已经独立交付的 09 门禁四项，相关组合 46 GREEN／1.086 秒，未运行页面或真实 App。
+
+本切片只正式交付通用 DTO／RPC、来源复验及测试与本票记录，历史展开、编辑／选择按钮和展示页面仍待；不能用纯 Node 回归替代公开页面→HTTP→PG 闭环。最终新鲜两轴审查与本地提交正在进行，原整票保持 claimed，自动部分继续、人工部分未执行；未触及 B RewritePanel 业务、C 样本复制控制器、13／16／054、私人资料或外部发送。
+
+第三轮新鲜审查实际发现三个剩余来源路径：生成清空当前 turn 展示后仍缓存的历史版本、消息列表及来源派生目的、另一有效讨论尚在核验依据的 held 结果。各有公开 RPC 的真实 RED→GREEN。版本控制器只向复验返回 turn／candidate UUID，完整 GET 失效或缺失时一并清除历史正文；复验期间隐藏旧消息与派生目的，再从正式消息入口重读；用户独立手写目的保留。只保留另一有效结果已有的来源核验任务，不增设可恢复正文副本。独立副本相关 57 项 GREEN／2.641 秒、类型检查 GREEN，包含已正式交付的 09 四项。
+
+主 Agent 随后补较早分页反例：另一有效消息已被用户从第二页明确选中，版本来源复验只刷新最新二十条会错误清空该选择，真实一项 RED／208.271 毫秒。现在沿后端实际游标核验到已选消息或末页，只将重新核验的正文进入原视图；重复游标失败关闭、scope／generation／operation 失效即停读，不以旧缓存证明来源有效。工作树五份相关纯测试共 58／58 GREEN／1.348 秒、`npm run typecheck` GREEN，模型请求未增加。冻结 ONLY11 独立副本的主 Agent 复验、第四轮两轴审查及本地提交继续；真实页面和人工部分仍未执行，不据这些回归勾选整票验收。
+
+第四轮独立副本 58 项 GREEN／1.318 秒、类型检查 GREEN 后，两轴同报一项 P1：generated 探索已经清空 currentExploration，却仍持有 strategyJob 的旧输入快照；来源复验仅取消尚存探索指针的路径，公开重试及迟到响应可再次带回原消息。新增两个公开 RPC 反例真实 RED，再按作业自己的 session、原输入 UUID 及失效结果清除作业，取消对应请求并推进 operation；来源失效后的旧重试不再发出 POST，已接收的迟到响应也不能再次发布原输入或候选。工作树完整相关 60／60 GREEN／2.615 秒、类型检查 GREEN。最初迟到夹具重复阻塞第二次调用，已终止该自有纯 Node 进程并把阻塞限定为一次；该夹具问题不作业务 RED。重新冻结与第五轮两轴审查继续，真实页面与人工仍未执行。
+
+第四轮 Standards 的另一项 P3 判断为版本控制器的范围操作生命周期重复，非硬性违规；此处保留明确入口，不扩大来源修复为无关控制器重构。
+
+### 第六来源核验修复切片：公开接管、删除检查点与正式终态传输
+
+2026-10-11：本票仍 claimed / partial。仅在固定 `9bef2c67e74e14d8db9bdca5dbcbf26fa6a0d2b0` 加 ONLY11 的独立源码切片中修复第五次复审的三类问题；当前阶段未宣称完整 11、页面或原生交付。共享 Main 与 JsonClient 仅提供精确补丁，由主 Agent 串行接入，不带入未提交 13/17/18。
+
+- 公开完整会话读取接管已确认来源失效后，404 / source409 复用原来源清理入口，清除结果、候选版本、私有策略输入、探索身份和派生意愿。即使尚未建立策略 job，在途身份读取也失效；迟到 generated 重试和再次重试不能恢复目标消息正文。独立手写草稿及目的保留。
+- 删除受理与删除任务成功的既有 production 检查点遇到版本来源核验时，先用同一实际 scope 的 `readSavedSession` 接管完整 GET，再执行原消息／依据复验；保留已核验有效的独立讨论。未知传输失败保留隔离并允许同范围公开读取重试收尾，旧 scope 迟到结果不改变新视图，不建立第二份正文缓存。
+- 真实 JsonClient 的 typed reason 与序列化白名单仅增加正式 `request_invalidated`、`candidate_unavailable`。候选控制器严格匹配 `409 + assistant_candidate_version_conflict + 正式失效 reason`；read/save/select 和后续 selections GET／恢复协调按原来源清理处理。普通 edit_key_conflict、selection_key_conflict、无 reason 409 和任意后端字符串不扩大为来源删除，也不暴露 SQL／正文。
+
+真实 RED→GREEN（仅纯控制器及随机本地回环合成 HTTP）：第一类 3 fail→3 pass；第二类 2 fail→2 pass；第三类真实回环合同先 7 fail / 3 pass，再 10 pass。第三类首次受限运行因 loopback listen EPERM 失败，属于执行环境失败，未记为业务 RED；随后只对合成回环 HTTP 升级重跑才取得上述真实 RED。附加未知故障公开重试、旧 scope、两个正式 reason 的选择 GET／reconcile 共 4 pass。
+
+在精确 ONLY11 切片从 `desktop/` 运行：
+
+```bash
+node --test --test-reporter=spec tests/assistant-candidate-version-ports.test.mjs tests/assistant-candidate-versions.test.mjs tests/assistant-session-catalog-read.test.mjs tests/assistant-session-catalog.test.mjs tests/assistant-session-deletion-guards.test.mjs
+./node_modules/.bin/tsc --noEmit
+```
+
+原 60 项与新增 19 项共 79 / 79 GREEN，类型检查 exit 0。原有效 B held／依据核验、較早分页中的已选消息、同源多 turn／历史版本缓存与普通故障保留均继续通过。源码冻结、文件 allowlist／SHA、精确 shared patch、逐片原始日志位于 `/private/tmp/notalone-a11-sixth-freeze-WmsO11rr/`，不是提交的敏感资料。
+
+数据影响仅为删除／失效后的当前授权会话内存副本及展示收尾，不增加持久化、来源权威、联系人授权、外发或样本留存。未运行 App、pages、npm test、safe、微信／OCR、私人数据、外部模型或 19；未 stage／commit／push。后端正式 provider、主树接入、后续两轴 fresh review、公开页面与人工原生项仍由主 Agent 据实收口，B/C 继续等待 formal11 provider；本切片不勾选完整验收框。
+
+### 第七来源核验切片：首次探索与展示／读取结果归属
+
+2026-10-11：本票保持 claimed / partial。以正式 `0137671a2b0856922fce7fd5988f7877867136e0` 导出并只覆盖原十份 ONLY11 文件；无未提交 13/14/15/16/18、055 或 C working。主树只同步版本控制器及其两份 OWN 测试；共享 Main 与本票记录均提交精确增量补丁供主 Agent 串行接入，不直接修改共享主树。
+
+- 首次 open 保存新输入 X 的响应仍在途时，`expected_input_version_id` 是有效独立前版本 B，不能作为 X 或目标消息 T 的来源有效性证明。完整会话 GET 中 A/X 已 redacted、B 仍 active，且公开消息读取不再包含 T 时，清除策略中的目标快照并推进探索 operation；迟到 directions 与后续 retry 均不能恢复已删依据、理解或原消息。有效独立 B 的输入、讨论及版本继续保留。
+- show 已有版本只持有展示结果，不接管读取／保存／选择结果的 operation。已确认的 404 与正式来源 409 独立按 contact/scopeRevision/SID/generation 传递给 Main 复验；同范围较新读取接管也不能吞掉该信号。旧 scope、SID 或 generation 仍不能报告当前失效或污染新视图；普通 edit_key_conflict、selection_key_conflict 和无 reason 409 不扩大为删除。
+- 完整来源快照通过后，继续使用既有 reconcile GET selections 读取唯一实际指针，保留无正文占位及独立有效版本，解除无 live operation 的 loading。后续选择来源再次失效至多再复验一次，持续失败以 failed/null 收尾，不无限循环读取。读取最终选择期间，用户已明确展开的同候选旧版继续显示，不被默认新版回退，也不产生选择 POST。
+
+真实逐片：首次 open 的 404 / source409 为 2 fail → 2 pass；同源 show/迟到失效、独立 A 实际选择收尾及有效 B 读取为 4 fail → 4 pass；版本控制器四种同范围读取接管为 4 fail → 4 pass；同候选选择 GET 迟到回退为 1 fail → 1 pass。旧 ports 测试原先锁定永久 loading/null；改为必须完成来源复验、保留独立 A、重读实际选择且达到 ready。旧 controller 测试原先仅 operationCurrent=false、scope 未变化却要求不报告来源；保留不发布／不污染 state 的原断言，并加强为必须传递范围信号，另增真实旧范围反例。原已知有效 B held、较早分页目标与其他所有原用例仍运行，未削弱原时限。
+
+在十文件 ONLY11 切片的 `desktop/` 实际运行：
+
+```bash
+node --test --test-reporter=spec tests/assistant-candidate-version-ports.test.mjs tests/assistant-candidate-versions.test.mjs tests/assistant-session-catalog-read.test.mjs tests/assistant-session-catalog.test.mjs tests/assistant-session-deletion-guards.test.mjs
+./node_modules/.bin/tsc --noEmit
+```
+
+完整原 79 场及新增 12 场合计 91 / 91 GREEN（1444.034333 ms）；类型检查 exit 0。原始 RED/GREEN、命令 exit code、正式基线、十文件 allowlist/SHA 与共享增量补丁保留于 `/private/tmp/notalone-a11-seventh-6mo5gW/`。首次完整回归 87/88 的唯一失败是上述错误的“同范围来源静默”旧预期，已保留原状态断言后加强；首次探索事件断言的采集起点曾含来源尚有效时的 loading 事件，已改为从来源确认失效起采集并在未修复基线重新取得真实 RED。
+
+数据影响仅为当前授权范围内已失效的助手输入、目标消息、策略快照、历史版本和实际选择 RAM／展示收尾；不新增持久化副本、来源权威、读取授权、样本、模型调用或外发。未运行 App、pages、npm test、safe、PG、微信/OCR、私人资料或外部模型，未 stage/commit/push。新鲜两轴复核及最终主树接入由主 Agent 继续；公开页面、实际 App 与整票验收仍未执行，保持所有原验收框未勾。
+
+
+### 第八来源核验切片：首次 open 的实际输入与 reconcile 展示收尾
+
+2026-10-11：本票保持 claimed / partial。以正式 `0cc6e30fe693d85610d33aa83ccf0d056c6f8267` 导出，叠加第七轮精确十份 ONLY11 文件，再仅修改本票控制器、两份 OWN 测试及共享 Main 增量。主树所有文件保持本轮开始时的 SHA，未并发写入；OWN、Main 和本票追加均以精确补丁交主 Agent 在测试窗口释放后串行接入。无未提交 13/055、B/C working 或其他票改动混入切片。
+
+- 首次 open 的新输入 X 会捕获目标 T 之外的近期消息或确认资料；前版本 `expected_input_version_id` B 与目标 T 仍有效，不证明 X 的额外来源 R 有效。来源 A/X 失效时，完整会话返回 X 的 redacted/unavailable 占位；迟到 directions 必须用实际响应的 `input_version_id` 核验并清除策略。独立有效 B 的版本和讨论、仍有效 T 均保留，不复制原始来源或制造新输入身份。
+- 策略只持有当前 operation、contact/scopeRevision/SID 和 connection generation 的 UUID/state 来源摘要，无第二份正文缓存。完整 GET 已确认 inactive、仍 active 和尚未覆盖实际 X 分别处理；早于 X 保存的成功快照缺项先隔离，迟到响应或公开精确重试按实际 X 完整补验。连接故障、403 和普通 409 保留独立 B，探索以 failed/canRetry 收尾而不发布旧依据；同范围正式会话 404/source409 停止探索及后续重试。旧 scope、operation 或 generation 的补验结果既不发布正文也不改变新版本视图。来源事件只复验/清理，不能作为当前展示结果复活。
+- reconcile 的 selections GET 在途时，公开 show 可展开已核验有效 A 的旧版；成功或普通故障收尾从当前受信 items 取展示，不覆盖用户期间选择的 displayVersionId。后端唯一实际选择仍通过 GET 决定；无隐式选择 POST，不永久 loading。
+
+逐片真实 RED→GREEN：实际 X 的额外 R 失效、B/T 均有效，真实 JsonClient 回环 404/source409 两场 2 fail→2 pass；完整来源复验后公开 reconcile/show 一场 1 fail→1 pass；controller direct success/transport 两场 2 fail→2 pass。首次回环 listen EPERM 单独记为环境失败，随后只升级合成随机回环 HTTP 得到业务 RED。完整 GET 早于 X 保存的缺项竞态再取得 1 fail→1 pass；实际 UUID 与 current 指针区分、未知 GET 精确重试、正式 GET 终态和 scope/operation/generation 迟到守卫另有 9 pass。
+
+最小测试、完整相关回归及类型检查从十文件工作切片的 `desktop/` 实际运行：原 91 项及新增 15 项共 106 / 106 GREEN（1615.183833 ms），类型检查 exit 0。原用例全部保留，没有放宽时限或删除断言；正式基线精确冻结的复验结果与命令 metadata 见下述产物 manifest。
+
+```bash
+node --test --test-reporter=spec tests/assistant-candidate-version-ports.test.mjs tests/assistant-candidate-versions.test.mjs tests/assistant-session-catalog-read.test.mjs tests/assistant-session-catalog.test.mjs tests/assistant-session-deletion-guards.test.mjs
+./node_modules/.bin/tsc --noEmit
+```
+
+数据影响仅为已授权会话范围内的失效输入、方向探索、版本展示和实际选择 RAM 收尾；无新增原始资料、持久化副本、读取范围、样本留存、模型调用或外发。原始日志、正式基线、精确十文件 SHA 及补丁位于 `/private/tmp/notalone-a11-eighth-7G1wlF/`。未运行 App、pages、npm test、safe、PG、微信/OCR、私人资料或外部模型，未 stage/commit/push。最终主树接入与新鲜两轴 review 由主 Agent 接管；整票及公开页面/人工 App 未验收，原验收框均不勾选。
+
+
+### 第八来源收尾及通用四 RPC 正式部分交付
+
+2026-10-11：总协调确认先正式交付本十文件通用接口，供 B、C 接线；整票保持 claimed / partial。首次探索的实际新输入 X 不能由 expected B 或目标 T 代替复验：使用同范围、同 generation／operation 的无正文 UUID/state 摘要，在实际 X 回来时再次核验。快照尚未包含 X 视为未知并允许严格同范围重试，实际 X 已失效则清原作业与目标；独立有效 B 保留。reconcile GET selections 成功或失败收尾均读取当时展示，不能倒退用户在等待期间展开的旧版。实际 HTTP 两条来源 RED→GREEN、控制器与 ports 的展示反例三条 RED→GREEN、早期未知 X 一条 RED→GREEN，均保留原来源门禁及完整消息组。
+
+主 Agent 已逐项核对十文件 SHA，并串行应用精确 OWN/shared/issue 补丁。只在固定正式 `0cc6e30fe693d85610d33aa83ccf0d056c6f8267` 加 ONLY11 副本运行上述五份纯 Node 模块：106 / 106 GREEN，1534.882417 ms；`./node_modules/.bin/tsc --noEmit` exit0。不启动 App、浏览器或模型；合成回环验证不代替公开页面→后端HTTP→隔离PG。
+
+Standards 新鲜轴：硬性违例0；已知 P3 possible Duplicated Code 1（版本操作生命周期守卫重复），本来源修复不扩大为无关重构。Spec 新鲜轴：P2 实现错误1——合法长版本历史超过 JsonClient 1 MiB 响应上限；renderer 操作与完整公开页面组合仍 partial2，其他范围／来源／实际选择未发现新增错误。连续三个 65536 字中文编辑版，正式响应同时返回 `text` 和 `messages.text`，仅正文便至少 1,179,648 字节；保存可能成功而响应及重读失败，不能据本阶段声明长历史完整可用。
+
+总协调已批准下一切片用只读分页与有界写入回执修复上述 P2，四 RPC 签名保持兼容、复用唯一版本写入者，模型完整历史读取不分页／不截断，不提高全局 transport 上限。逐页使用实际 scope/connection/operation；任何页确认来源失效须丢弃整个累积正文，实际选择和用户展开旧版继续保留。该修复仍待实现与真实大体积 HTTP 回归。
+
+本提交只包含四 RPC、DTO／Main／preload、JsonClient 正式 reason 白名单及来源安全控制器和两份 OWN 测试与本票；没有 C 样本控制器、13/15/16/17/18 working、055 或 B 业务。真实 App、人工部分和19均未执行；本阶段不勾选整票验收、不宣称全部自动部分完成。
+
+2026-10-11 总协调净接正式adb426c8四RPC ONLY10。与已正式root6303860 B自动更新同一Main的临时三路合并仅一处publish冲突：保A实际operation来源复验初始化，保B automaticUpdatesPaused，不改各自authority。其余八source/tests逐字正式patch，原11doc只附正式后缀保主树历史。whole桌面 `npm --prefix desktop run typecheck` actualexit0；desktop运行原五版本／目录／门禁加样本77及actualSkill5共188项。首次默认sandbox为174G/14ERROR0.956s，十四项均127.0.0.1 listen EPERM，未到产品HTTP，不计产品RED；授权回环测试重跑原188 **188G／1137.229375ms／skip0**。其中真实JsonClient回环HTTP仍受控后端，不是实际PG或公开页面，未借它闭整票。大版本超过1MiB的已知P2、renderer与页面组合仍由A/B及root继续；原11claimed及标准不改，独立安全端口可供B08/C06消费，不将其说成所有历史GET成功。
+
+2026-10-11 总协调最终合并发现并修复与 B09 的交叉 P2：公开 `saveCandidateVersion` 保存用户编辑必须沿既有 `notifyInputChanged()` 停止自动队列和定时器，并拒绝在途自动回执，不能让新消息继续更新原讨论。实际公开 preload/RPC → BackendHost/HTTP → 隔离 PG 先复现 RED：探索 POST 2、模型 3；同一保存入口一行修复后 GREEN：探索 POST 1、模型 2，CURRENT 不变，自有资源清理成功。该修复不取消已发候选生成、不增加来源或选择写入者。两轴新鲜复核新增交叉问题0、规范硬要求0／重要判断项0；已知长响应 P2 和完整编辑组件缺口继续保留。
+
+永久回归登记在原 `reply-strategy-bounded-updates` 的第14场。实际命令 `npm --prefix desktop run test:pages -- --case reply-strategy-bounded-updates --timeout-seconds 240`：原13场及新增公开保存版本后两次真实 SSE 只提醒共14完整场景全部 GREEN、actualexit0。新增场景以四 RPC 保存真实不可变版本，不是假版本投影；同 SID 明确开启未确认探索后保存，检查原理解、总模型载荷2、CURRENT 和完整 turns 均不变，不代表 B08 全组编辑 UI 完成。quiet92／active0／onscreen0／maxApps1／policy2、单 Chrome、cleanupConfirmed=true，独立 fresh status absent 后释放窗口；Electron/nativeAcceptance=false。新修复后的原188项 Node 亦全部 GREEN（1155.7675ms）、skip0；whole桌面 TypeScript exit0。日志保留 `/private/tmp/notalone-root-version-edit-auto-real-red.log`、`/private/tmp/notalone-root-version-edit-auto-green.log`、`/private/tmp/notalone-root-a11-notify-related-node-green.log`、`/private/tmp/notalone-root-b-r09-fourteen-save-version-page.log`。
+
+本轮部分交付新增的是当前范围的 RAM 清理与编辑停止自动探索；不新增持久化正文副本、样本、模型权限或发送能力。大历史分页、有界写入回执和完整 renderer/页面仍接续；本票仍 claimed，原标准未提前勾选，人工真实 App 未执行。

@@ -40,6 +40,10 @@ export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
     generate: (selection: GenerateReply) => ipcRenderer.invoke('reply:generate', selection),
     selectCandidate: (selection: ReplyCandidateSelection) => ipcRenderer.invoke('reply:select-candidate', selection),
     editCandidate: (edit: ReplyCandidateEdit) => ipcRenderer.invoke('reply:edit-candidate', edit),
+    readCandidateVersions: (...args: unknown[]) => ipcRenderer.invoke('reply:read-candidate-versions', ...args),
+    saveCandidateVersion: (...args: unknown[]) => ipcRenderer.invoke('reply:save-candidate-version', ...args),
+    selectCandidateVersion: (...args: unknown[]) => ipcRenderer.invoke('reply:select-candidate-version', ...args),
+    showCandidateVersion: (...args: unknown[]) => ipcRenderer.invoke('reply:show-candidate-version', ...args),
     onStateChanged: (listener: (state: ReplySessionState) => void) => {
       if (typeof listener !== 'function') throw new Error('本次表达操作不可用。');
       const receive = (_event: unknown, state: ReplySessionState) => listener(state);

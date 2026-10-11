@@ -2,6 +2,7 @@ import type { ContactSelection } from './contact-session-bridge';
 import type { ReplyEvidenceCommands } from './reply-evidence';
 import type { AssistantSessionCatalog, SavedAssistantSession } from './assistant-session';
 import type { ConfirmedAssistantSessionDeletion } from './assistant-session-deletion-events';
+import type { AssistantCandidateVersionsState, ExplicitAssistantCandidateSelection, ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from './assistant-candidate-versions';
 
 export type RewriteTone = 'original' | 'warm' | 'concise' | 'polite';
 export interface RewriteOptions {
@@ -126,6 +127,8 @@ export interface ReplySessionState {
   sourceAvailability?: 'checking' | 'failed';
   result: ReplyResult | null;
   selectedCandidateId: string | null;
+  candidateVersions?: AssistantCandidateVersionsState;
+  explicitCandidateSelection?: ExplicitAssistantCandidateSelection;
   canRetry: boolean;
   savedSession?: SavedAssistantSession;
   sessionCatalog?: AssistantSessionCatalog;
@@ -161,5 +164,9 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   generate(selection: GenerateReply): Promise<void>;
   selectCandidate(selection: ReplyCandidateSelection): Promise<ReplySessionState>;
   editCandidate(edit: ReplyCandidateEdit): Promise<ReplySessionState>;
+  readCandidateVersions(request: ReplyCandidateVersionRead): Promise<ReplySessionState>;
+  saveCandidateVersion(edit: ReplyCandidateVersionEdit): Promise<ReplySessionState>;
+  selectCandidateVersion(selection: ReplyCandidateVersionSelection): Promise<ReplySessionState>;
+  showCandidateVersion(selection: ReplyCandidateVersionDisplay): Promise<ReplySessionState>;
   onStateChanged(listener: (state: ReplySessionState) => void): () => void;
 }

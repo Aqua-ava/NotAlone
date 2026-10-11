@@ -276,6 +276,55 @@ async function freshTaskAfterDeletion(pages: EventPages) {
   expect((await pages.fixture.request(oldPath)).status).toBe(404);
 }
 
+async function savedVersionStopsAutomaticUpdates(pages: EventPages) {
+  const { manager, helper, fixture } = pages;
+  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+  await confirmHelperContact(helper, fixture.data.contact_ids[0]);
+  await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('只保留原意的合成草稿。');
+  await fixture.plan({ count: 1, prefix: '保存编辑前的合成候选' });
+  await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
+    .toHaveValue('保存编辑前的合成候选（说法1）。');
+  const prior = await helper.evaluate(async () => {
+    const state = await window.notalone.replies.getState();
+    const sessionId = state.savedSession!.sessionId!, candidateId = state.result!.candidates[0].original.candidateId;
+    const read = await window.notalone.replies.readCandidateVersions({
+      contactId: state.contactId!, scopeRevision: state.scopeRevision, sessionId, candidateId,
+    });
+    const version = read.candidateVersions!.items.find((item) => item.candidateId === candidateId)!.history!.versions.at(-1)!;
+    return { contactId: state.contactId!, scopeRevision: state.scopeRevision, sessionId, candidateId, version };
+  });
+  await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
+  await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill('想了解近况，还没确认本次意愿。');
+  await helper.getByRole('combobox', { name: '策略选择', exact: true }).selectOption('disabled');
+  await expect(helper.getByRole('status').filter({ hasText: '新消息提醒已连接' })).toBeVisible();
+  const task = await open(pages, '编辑前明确开启的未确认合成探索。');
+  expect(task.sessionId).toBe(prior.sessionId);
+  const before = await reread(pages, task.sessionId);
+  const saved = await helper.evaluate(async (prior) => {
+    const { version, ...identity } = prior;
+    return window.notalone.replies.saveCandidateVersion({ ...identity, editKey: crypto.randomUUID(),
+      parentVersionId: version.versionId, requirements: '本次只修改说法。',
+      messages: version.messages.map((message) => ({ ...message, text: '用户明确保存的合成版本编辑。' })),
+    });
+  }, prior);
+  const history = saved.candidateVersions!.items.find((item) => item.candidateId === prior.candidateId)!.history!;
+  expect(history.versions.at(-1)!.text).toBe('用户明确保存的合成版本编辑。');
+  // 这里只验证具名公开保存入口；完整组编辑组件由R08继续接入，不冒其UI已完成。
+  await fixture.plan({ explore: { understanding: '编辑后不得出现的自动理解。' } });
+  await fixture.command('append_burst');
+  await expect(helper.getByRole('status').filter({ hasText: '当前联系人有新消息' })).toBeVisible();
+  // 超过原150毫秒合并窗口后复验，再给第二次通知同样的有界处理机会。
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  await fixture.command('append_burst');
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  await expect(helper.getByRole('region', { name: '理解与方向', exact: true })).toContainText('编辑前明确开启的未确认合成探索。');
+  expect((await fixture.command('observations')).payloads).toHaveLength(2);
+  const after = await reread(pages, task.sessionId);
+  expect(after.current_input_version_id).toBe(before.current_input_version_id);
+  expect(after.turns).toEqual(before.turns);
+}
+
 export async function replyStrategyBoundedUpdates(browser: Browser, origin: string) {
   const scenarios: Array<[string, (pages: EventPages) => Promise<void>]> = [
     ...(['回应消息', '主动聊聊'] as const).map((scene): [string, (pages: EventPages) => Promise<void>] =>
@@ -291,6 +340,7 @@ export async function replyStrategyBoundedUpdates(browser: Browser, origin: stri
     ['改变目的后的新问题不继承旧输入回答草稿', (pages) => answerCannotMoveToNewQuestion(pages, true)],
     ['编辑已确认任务的回答后手动刷新保留意愿接续', confirmedQuestionKeepsIntent],
     ['旧会话确认删除后直接明确的新任务继续有界更新', freshTaskAfterDeletion],
+    ['经公开版本入口保存编辑后新消息只提醒而不自动探索', savedVersionStopsAutomaticUpdates],
   ];
   for (const [name, scenario] of scenarios) {
     process.stdout.write(`page_test_scenario: ${name}\n`);

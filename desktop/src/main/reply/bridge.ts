@@ -7,6 +7,38 @@ import type { ContactSession } from '../contacts/session';
 import { ReplySession } from './session';
 import { ReplyEvidenceSession } from './evidence-session';
 import type { AssistantSessionSelection } from '../../shared/reply-bridge';
+import type { ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from '../../shared/assistant-candidate-versions';
+
+function candidateVersion(args: unknown[], operation: 'read' | 'display' | 'select' | 'edit'): ReplyCandidateVersionRead {
+  const additions = operation === 'read' ? [] : operation === 'edit'
+    ? ['editKey', 'parentVersionId', 'messages', 'requirements']
+    : ['versionId', ...(operation === 'select' ? ['selectionKey'] : [])];
+  const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'candidateId', ...additions]);
+  const identifiers = ['sessionId', 'candidateId', ...(operation === 'edit' ? ['editKey', 'parentVersionId']
+    : operation === 'read' ? [] : ['versionId', ...(operation === 'select' ? ['selectionKey'] : [])])];
+  if (!identifiers.every((key) => isUuid(value[key]))) throw new Error('候选版本操作不可用。');
+  for (const key of identifiers) value[key] = (value[key] as string).toLowerCase();
+  if (operation === 'edit') {
+    const messages = value.messages;
+    if (!Array.isArray(messages) || messages.length < 1 || messages.length > 8
+      || (value.requirements !== null && (typeof value.requirements !== 'string'
+        || !value.requirements.trim() || value.requirements.length > 4096))) throw new Error('候选版本操作不可用。');
+    const known = new Set<string>();
+    value.messages = messages.map((message) => {
+      if (!message || typeof message !== 'object' || Array.isArray(message)
+        || Object.keys(message).length !== 2 || !Object.keys(message).every((key) => ['messageId', 'text'].includes(key))) {
+        throw new Error('候选版本操作不可用。');
+      }
+      const item = message as Record<string, unknown>;
+      if (!isUuid(item.messageId) || typeof item.text !== 'string' || !item.text.trim()
+        || item.text.length > (messages.length === 1 ? 65_536 : 8192)
+        || known.has(item.messageId.toLowerCase())) throw new Error('候选版本操作不可用。');
+      const messageId = item.messageId.toLowerCase(); known.add(messageId);
+      return { messageId, text: item.text };
+    });
+  }
+  return value as unknown as ReplyCandidateVersionRead;
+}
 
 function fields(args: unknown[], keys: string[]): Record<string, unknown> {
   const value = args[0];
@@ -141,5 +173,13 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   }, 'helper');
   commands.handle('reply:select-candidate', (...args: unknown[]) => { return replies.selectCandidate(candidate(args)); }, 'helper');
   commands.handle('reply:edit-candidate', (...args: unknown[]) => { return replies.editCandidate(candidate(args, true) as ReplyCandidateEdit); }, 'helper');
+  commands.handle('reply:read-candidate-versions', (...args: unknown[]) =>
+    replies.readCandidateVersions(candidateVersion(args, 'read')), 'helper');
+  commands.handle('reply:save-candidate-version', (...args: unknown[]) =>
+    replies.saveCandidateVersion(candidateVersion(args, 'edit') as ReplyCandidateVersionEdit), 'helper');
+  commands.handle('reply:select-candidate-version', (...args: unknown[]) =>
+    replies.selectCandidateVersion(candidateVersion(args, 'select') as ReplyCandidateVersionSelection), 'helper');
+  commands.handle('reply:show-candidate-version', (...args: unknown[]) =>
+    replies.showCandidateVersion(candidateVersion(args, 'display') as ReplyCandidateVersionDisplay), 'helper');
   return replies;
 }

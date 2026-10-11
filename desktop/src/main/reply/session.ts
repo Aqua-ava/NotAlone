@@ -12,12 +12,35 @@ import { readReplyEvidence } from './evidence-read';
 import { defaultAssistantSession, deleteAssistantSession, readAssistantSession } from './assistant-sessions';
 import { listAssistantSessions, newAssistantSession, selectAssistantSession } from './assistant-session-catalog';
 import type { AssistantSessionSelection } from '../../shared/reply-bridge';
+import type { ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from '../../shared/assistant-candidate-versions';
+import { AssistantCandidateSourceUnavailable, AssistantCandidateVersionSession } from './assistant-candidate-versions';
 
 const defaults = () => ({ tone: 'original' as const, instruction: '', includeRelationshipContext: false });
 const tones = { original: '', warm: '本次语气自然温和。', concise: '本次表达简洁直接。', polite: '本次语气礼貌克制。' };
 
-type StrategyJob = { type: 'open'; request: ExplorationRequest; signature: string; input: ReplyInputSnapshot }
-  | { type: 'action'; request: ExplorationAction; input: ReplyInputSnapshot };
+type StrategySourceValidation = {
+  scope: ContactSelection & { sessionId: string };
+  operation: number;
+  generation: number;
+  phase: 'checking' | 'ready' | 'failed';
+  inputs: { inputVersionId: string; state: 'active' | 'redacted' | 'unavailable' }[];
+};
+type StrategyJob = ({ type: 'open'; request: ExplorationRequest; signature: string; input: ReplyInputSnapshot }
+  | { type: 'action'; request: ExplorationAction; input: ReplyInputSnapshot }) & {
+    actualInputVersionId?: string;
+    sourceValidation?: StrategySourceValidation;
+  };
+type CandidateSourceCheck = {
+  pending: AbortController;
+  scope: ContactSelection & { sessionId: string };
+  turns: { turnId: string; candidateIds: string[] }[];
+  inputIds: string[];
+  refreshMessages: boolean;
+  confirmedCandidateIds: string[];
+  strategyJob: StrategyJob | undefined;
+  strategyOperation: number;
+  strategyWaiting: boolean;
+};
 
 // 助手讨论和原候选由后端保存；当前编辑稿与窗口状态分别处理。
 export class ReplySession {
@@ -55,16 +78,45 @@ export class ReplySession {
   private savedRead: AbortController | undefined;
   private sessionDelete: AbortController | undefined;
   private catalogPending: AbortController | undefined;
+  private candidateRestoreOperation = 0;
+  private candidateSourceCheck: CandidateSourceCheck | undefined;
+  private readonly candidateVersions: AssistantCandidateVersionSession;
   private readonly listeners = new Set<(state: ReplySessionState) => void>();
   private readonly inputListeners = new Set<() => void>();
 
   constructor(private readonly contacts: ContactSession, private readonly backend: BackendHost,
     private readonly generationBlock: () => ReplyGenerationBlock = () => null) {
+    this.candidateVersions = new AssistantCandidateVersionSession(backend);
+    this.candidateVersions.onStateChanged((state) => {
+      if (state.candidateVersions.sessionId === null) this.candidateRestoreOperation += 1;
+      this.publish(state);
+    });
+    let versionGeneration = backend.getConnectionGeneration();
+    backend.onStateChanged(() => {
+      const generation = backend.getConnectionGeneration();
+      if (generation !== versionGeneration) {
+        versionGeneration = generation;
+        this.candidateVersions.setScope(null);
+      }
+    });
     this.state.generationBlock = generationBlock();
     contacts.onStateChanged((state) => this.receiveContact(state));
     this.receiveContact(contacts.getState());
   }
-  getState(): ReplySessionState { return structuredClone(this.state); }
+  getState(): ReplySessionState {
+    const state = structuredClone(this.state);
+    if (!this.candidateSourceCheck) return state;
+    // 完整来源复验期间只隔离现有视图，不另存可恢复正文。
+    return { ...state, result: null, selectedCandidateId: null, canRetry: false,
+      messages: { phase: 'loading', items: [], nextCursor: null }, targetMessageId: null,
+      ...(this.directionDerived ? { direction: '', purpose: '' } : {}),
+      exploration: { phase: 'idle', result: null },
+      savedSession: state.savedSession ? { ...state.savedSession,
+        phase: state.savedSession.phase === 'failed' ? 'failed' : 'loading', turns: [], inputs: [], currentInputVersionId: null } : undefined,
+      candidateVersions: state.candidateVersions ? { ...state.candidateVersions, phase: 'loading',
+        items: state.candidateVersions.items.map((item) => ({ ...item, phase: 'loading', history: null, displayVersionId: null })) } : undefined,
+      explicitCandidateSelection: { phase: 'loading', selection: null } };
+  }
   refreshGenerationEligibility(): void {
     const generationBlock = this.generationBlock();
     if (generationBlock !== this.state.generationBlock) this.publish({ generationBlock });
@@ -80,6 +132,7 @@ export class ReplySession {
   async readSavedSession(selection: ContactSelection): Promise<void> {
     this.assertScope(selection);
     if (this.state.sessionDeletion === 'deleting' || this.catalogPending || this.state.sessionCatalog?.selectionPending) return;
+    this.candidateRestoreOperation += 1;
     this.savedRead?.abort();
     const pending = new AbortController();
     this.savedRead = pending;
@@ -91,8 +144,13 @@ export class ReplySession {
     try {
       const sessionId = heldSessionId ?? (await defaultAssistantSession(this.backend, selection.contactId, pending.signal)).sessionId;
       if (!current()) return;
-      const saved = await readAssistantSession(this.backend, selection.contactId, sessionId, pending.signal);
+      let saved = await readAssistantSession(this.backend, selection.contactId, sessionId, pending.signal);
       if (current() && saved.generation === generation) {
+        if (this.candidateSourceCheck) {
+          const verified = await this.acceptCandidateSourceSnapshot(saved, this.candidateSourceCheck, pending.signal, current);
+          if (!verified || !current()) return;
+          saved = verified;
+        }
         const heldVersion = (this.state.result ?? this.heldResult?.result)?.inputVersionId;
         const invalid = heldVersion && saved.turns.some((turn) => turn.inputVersionId === heldVersion
           && ['redacted', 'unavailable'].includes(turn.state));
@@ -100,9 +158,24 @@ export class ReplySession {
         this.publish({ savedSession: { sessionId: saved.sessionId, turns: saved.turns, inputs: saved.inputs, currentInputVersionId: saved.currentInputVersionId, phase: 'ready' },
           ...(saved.sessionId !== heldSessionId ? { sessionDeletion: undefined } : {}),
           ...(invalid ? { result: null, selectedCandidateId: null, phase: 'idle', canRetry: false } : {}) });
+        await this.restoreCandidateVersions(selection, saved.sessionId,
+          saved.turns.flatMap((turn) => turn.reply?.candidates.map((candidate) => candidate.candidateId) ?? []), true);
       }
-    } catch {
-      if (current()) this.publish({ savedSession: { phase: 'failed', sessionId: heldSessionId ?? null, turns: [], inputs: [], currentInputVersionId: null } });
+    } catch (error) {
+      if (current()) {
+        const unavailable = error instanceof BackendRequestFailure && (error.status === 404 || error.reason === 'source_unavailable');
+        if (unavailable) {
+          if (heldSessionId) {
+            this.candidateVersions.setScope({ ...selection, sessionId: heldSessionId });
+            this.clearUnavailableCandidateSource({ ...selection, sessionId: heldSessionId });
+          }
+          this.candidateVersions.setScope(null); this.heldResult = undefined;
+        }
+        if (unavailable) this.candidateSourceCheck = undefined;
+        this.publish({ savedSession: { phase: 'failed', sessionId: heldSessionId ?? null, turns: [], inputs: [], currentInputVersionId: null },
+          ...(this.candidateSourceCheck ? { sourceAvailability: 'failed' } : unavailable ? { sourceAvailability: undefined } : {}),
+          ...(unavailable ? { result: null, selectedCandidateId: null, phase: 'idle', canRetry: false } : {}) });
+      }
     } finally { if (this.savedRead === pending) this.savedRead = undefined; }
   }
 
@@ -151,11 +224,13 @@ export class ReplySession {
       const saved = await readAssistantSession(this.backend, selection.contactId, selected.sessionId, pending.signal);
       if (!current() || saved.generation !== generation) return;
       this.savedRead?.abort(); this.savedRead = undefined;
+      this.candidateSourceCheck?.pending.abort();
       this.cancelPending(); this.lastAttempt = undefined;
       this.invalidateExploration(); this.directionDerived = false;
       this.notifyInputChanged(); this.contacts.clearDraft(selection);
       const items = (previous?.items ?? []).map((item) => ({ ...item, isCurrent: item.sessionId === saved.sessionId }));
       if (!items.some((item) => item.sessionId === saved.sessionId)) items.push({ sessionId: saved.sessionId, isCurrent: true });
+      this.candidateVersions.setScope(null); this.candidateSourceCheck = undefined;
       this.publish({ savedSession: { phase: 'ready', sessionId: saved.sessionId, turns: saved.turns,
         inputs: saved.inputs, currentInputVersionId: saved.currentInputVersionId },
         sessionCatalog: { phase: 'ready', items, currentSessionId: saved.sessionId, selectionPending: false },
@@ -163,6 +238,8 @@ export class ReplySession {
         options: defaults(), inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
         mode: 'rewrite_draft', targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '',
         result: null, selectedCandidateId: null, canRetry: false, phase: 'idle', errorCode: undefined });
+      await this.restoreCandidateVersions(selection, saved.sessionId,
+        saved.turns.flatMap((turn) => turn.reply?.candidates.map((candidate) => candidate.candidateId) ?? []), true);
     } catch {
       // POST 可能已落库；只有显式选择并重读成功才能恢复本次生成。
       if (current()) this.publish({ sessionCatalog: { phase: 'failed', items: [], currentSessionId: null, selectionPending: true } });
@@ -176,6 +253,8 @@ export class ReplySession {
       throw new Error('本次助手会话已变化，请重新确认。');
     }
     if (this.state.sessionDeletion === 'deleting') return;
+    this.candidateSourceCheck?.pending.abort();
+    this.candidateVersions.setScope(null);
     this.savedRead?.abort(); this.savedRead = undefined;
     this.cancelPending(); this.lastAttempt = undefined;
     this.invalidateExploration(); this.directionDerived = false;
@@ -189,6 +268,7 @@ export class ReplySession {
     this.publish({ sessionDeletion: 'deleting', result: null, selectedCandidateId: null, canRetry: false,
       phase: 'idle', errorCode: undefined, confirmedSessionDeletion: undefined,
       savedSession: { phase: 'idle', sessionId: selection.sessionId, turns: [], inputs: [], currentInputVersionId: null } });
+    this.candidateSourceCheck = undefined;
     try {
       const result = await deleteAssistantSession(this.backend, selection.contactId, selection.sessionId, pending.signal);
       if (!current() || result.generation !== generation) return;
@@ -209,6 +289,18 @@ export class ReplySession {
 
   // 删除检查点只接收主进程已确认的联系人；跨联系人本人资料也可能影响当前依据。
   async revalidateDeletedSource(contactId: string): Promise<void> {
+    let candidateSnapshotAccepted = false;
+    if (this.candidateSourceCheck) {
+      const { scope } = this.candidateSourceCheck;
+      const generation = this.backend.getConnectionGeneration();
+      // 先由同范围的公开完整读取接管；未知传输失败保留隔离，供公开重试收尾。
+      await this.readSavedSession(scope);
+      if (this.candidateSourceCheck || scope.contactId !== this.state.contactId
+        || scope.scopeRevision !== this.state.scopeRevision || scope.sessionId !== this.state.savedSession?.sessionId
+        || generation !== this.backend.getConnectionGeneration()) return;
+      candidateSnapshotAccepted = this.state.savedSession.phase === 'ready';
+    }
+    if (!candidateSnapshotAccepted) this.candidateVersions.setScope(null);
     if (this.catalogPending) {
       this.catalogPending.abort(); this.catalogPending = undefined;
       this.publish({ sessionCatalog: { phase: 'failed', items: [], currentSessionId: null, selectionPending: true } });
@@ -216,20 +308,19 @@ export class ReplySession {
     this.invalidateExploration();
     this.savedRead?.abort();
     this.savedRead = undefined;
-    if (this.state.savedSession) this.publish({ savedSession: { ...this.state.savedSession, phase: 'idle', turns: [], inputs: [], currentInputVersionId: null } });
+    if (this.state.savedSession && !candidateSnapshotAccepted) this.publish({ savedSession: { ...this.state.savedSession, phase: 'idle', turns: [], inputs: [], currentInputVersionId: null } });
     const held = this.heldResult ?? (this.state.result ? {
       result: this.state.result, selectedCandidateId: this.state.selectedCandidateId,
     } : undefined);
     this.cancelPending();
     this.lastAttempt = undefined;
-    const operation = this.operation;
     const scopeRevision = this.state.scopeRevision;
     const currentContact = this.state.contactId;
     const generation = this.backend.getConnectionGeneration();
     this.heldResult = held;
     const pending = new AbortController();
     this.sourceCheck = pending;
-    const current = () => !pending.signal.aborted && operation === this.operation
+    const current = () => !pending.signal.aborted && this.sourceCheck === pending
       && scopeRevision === this.state.scopeRevision && currentContact === this.state.contactId
       && generation === this.backend.getConnectionGeneration();
     this.publish({ result: null, selectedCandidateId: null, phase: 'idle', canRetry: false,
@@ -250,6 +341,9 @@ export class ReplySession {
       this.heldResult = undefined;
       this.publish({ result: held.result, selectedCandidateId: held.selectedCandidateId,
         phase: 'ready', sourceAvailability: undefined });
+      if (held.result.assistantSessionId && !this.candidateSourceCheck) await this.restoreCandidateVersions(
+        { contactId: currentContact, scopeRevision }, held.result.assistantSessionId,
+        held.result.candidates.map((item) => item.original.candidateId));
     } catch (error) {
       if (!current()) return;
       if (error instanceof BackendRequestFailure && error.status === 404) {
@@ -288,6 +382,7 @@ export class ReplySession {
   }
   async loadMessages(request: ReplyMessagePageRequest): Promise<void> {
     this.assertScope(request);
+    if (this.candidateSourceCheck) throw new Error('请等待相关来源核验完成。');
     if (this.state.messages.phase === 'loading') return;
     const before = request.older ? this.state.messages.nextCursor : null;
     if (request.older && !before) return;
@@ -319,6 +414,7 @@ export class ReplySession {
   }
   selectMessage(selection: ReplyMessageSelection): ReplySessionState {
     this.assertScope(selection);
+    if (this.candidateSourceCheck) throw new Error('请等待相关来源核验完成。');
     if (this.state.mode !== 'reply_to_message' || !this.state.messages.items.some((item) => item.messageId === selection.messageId)) {
       throw new Error('待回复消息已失效，请重新选择。');
     }
@@ -334,7 +430,7 @@ export class ReplySession {
     this.assertScope(update);
     if (this.state.mode !== 'reply_to_message') throw new Error('请先切换到回复模式。');
     if (update.direction !== this.state.direction) {
-      if (!update.direction.trim()) this.directionDerived = false;
+      this.directionDerived = false;
       this.invalidateInput(); this.publish({ direction: update.direction });
     }
     return this.getState();
@@ -343,6 +439,7 @@ export class ReplySession {
     this.assertScope(update);
     if (this.state.mode !== 'initiate_conversation') throw new Error('请先选择主动聊聊。');
     if (update.purpose !== this.state.purpose) {
+      this.directionDerived = false;
       this.invalidateInput(); this.publish({ purpose: update.purpose });
     }
     return this.getState();
@@ -487,13 +584,31 @@ export class ReplySession {
       || Boolean(automaticTask && automaticTask === this.automaticExploration))
       && !pending.signal.aborted && operation === this.explorationOperation
       && scopeRevision === this.state.scopeRevision && job.request.contactId === this.state.contactId
+      && job === this.strategyJob && (!this.state.savedSession?.sessionId || job.request.sessionId === this.state.savedSession.sessionId)
       && generation === this.backend.getConnectionGeneration();
+    if (job.sourceValidation && generation !== undefined) job.sourceValidation = {
+      scope: { contactId: job.request.contactId, scopeRevision, sessionId: job.request.sessionId },
+      operation, generation, phase: 'checking', inputs: [],
+    };
     this.publish({ exploration: { phase: 'waiting', result: this.state.exploration.result, canRetry: true,
       automaticUpdatesPaused: this.state.exploration.automaticUpdatesPaused } });
     try {
       const result = job.type === 'open' ? await openExploration(this.backend, job.request, pending.signal)
         : await actOnExploration(this.backend, job.request, pending.signal);
       if (!current() || result.generation !== generation) return;
+      const actualInputVersionId = result.kind === 'exploration' ? result.result.inputVersion
+        : result.kind === 'generated' ? result.reply.inputVersionId : undefined;
+      if (actualInputVersionId) {
+        job.actualInputVersionId = actualInputVersionId;
+        const sourceState = await this.strategyInputSourceState(job, actualInputVersionId, pending.signal, current);
+        if (!current()) return;
+        if (sourceState === 'unavailable') {
+          this.clearUnavailableCandidateSource({ contactId: job.request.contactId, scopeRevision, sessionId: job.request.sessionId },
+            [], new Set([actualInputVersionId]));
+          return;
+        }
+        if (sourceState === 'unknown') throw new Error('本次探索来源尚未核验。');
+      }
       if (result.kind === 'exploration') {
         this.currentExploration = result.result;
         this.generationSkillChoice = result.result.usedSkill
@@ -521,6 +636,8 @@ export class ReplySession {
         if (this.state.result?.replyRequestId !== result.reply.replyRequestId) this.publish({ result: {
           ...result.reply, input, candidates: result.reply.candidates.map((original) => ({ original, editedText: original.text })) },
           selectedCandidateId: result.reply.candidates[0].candidateId });
+        await this.restoreCandidateVersions({ contactId: job.request.contactId, scopeRevision },
+          result.reply.assistantSessionId, result.reply.candidates.map((candidate) => candidate.candidateId));
       }
     } catch {
       if (current()) {
@@ -532,6 +649,37 @@ export class ReplySession {
     } finally {
       if (this.explorationPending === pending) this.explorationPending = undefined;
       if (current() && this.automaticExploration?.queued) this.queueAutomaticExploration();
+    }
+  }
+
+  private async strategyInputSourceState(job: StrategyJob, inputVersionId: string, signal: AbortSignal,
+    current: () => boolean): Promise<'active' | 'unavailable' | 'unknown'> {
+    const validation = job.sourceValidation;
+    if (!validation) return 'active';
+    const valid = () => current() && job.sourceValidation === validation
+      && validation.operation === this.explorationOperation && validation.generation === this.backend.getConnectionGeneration()
+      && validation.scope.contactId === this.state.contactId && validation.scope.scopeRevision === this.state.scopeRevision
+      && validation.scope.sessionId === job.request.sessionId;
+    if (!valid()) return 'unknown';
+    const known = validation.phase === 'ready' && !this.candidateSourceCheck
+      ? validation.inputs.find((input) => input.inputVersionId === inputVersionId) : undefined;
+    if (known) return known.state === 'active' ? 'active' : 'unavailable';
+    // 首次 open 的实际新输入由响应给出；完整快照未覆盖它时只重新核验，不猜测前版本或复制依据。
+    try {
+      const saved = await readAssistantSession(this.backend, job.request.contactId, job.request.sessionId, signal);
+      if (!valid() || saved.generation !== validation.generation || this.candidateSourceCheck) return 'unknown';
+      validation.phase = 'ready';
+      validation.inputs = saved.inputs.map(({ inputVersionId, state }) => ({ inputVersionId, state }));
+      return saved.inputs.some((input) => input.inputVersionId === inputVersionId && input.state === 'active')
+        ? 'active' : 'unavailable';
+    } catch (error) {
+      if (!valid()) return 'unknown';
+      validation.phase = 'failed'; validation.inputs = [];
+      if (error instanceof BackendRequestFailure && error.kind === 'response'
+        && (error.status === 404 && error.code === 'not_found' || error.status === 409 && error.reason === 'source_unavailable')) {
+        this.clearUnavailableCandidateSource(validation.scope);
+      }
+      return 'unknown';
     }
   }
 
@@ -592,6 +740,8 @@ export class ReplySession {
         usedSkill: result.usedSkill,
         candidates: result.candidates.map((original) => ({ original, editedText: original.text })) },
       selectedCandidateId: result.candidates[0].candidateId });
+      await this.restoreCandidateVersions(selection, result.assistantSessionId,
+        result.candidates.map((candidate) => candidate.candidateId));
     } catch (error) {
       if (current()) {
         const failure = error instanceof BackendRequestFailure ? error : undefined;
@@ -620,8 +770,254 @@ export class ReplySession {
     this.publish({});
     return this.getState();
   }
+  async readCandidateVersions(request: ReplyCandidateVersionRead): Promise<ReplySessionState> {
+    this.assertVersionScope(request);
+    this.candidateRestoreOperation += 1;
+    const current = this.candidateVersionOperationCurrent(request);
+    try { await this.candidateVersions.read(request, current); }
+    catch (error) { await this.handleCandidateSourceUnavailable(error); throw error; }
+    return this.getState();
+  }
+  async saveCandidateVersion(edit: ReplyCandidateVersionEdit): Promise<ReplySessionState> {
+    this.assertVersionScope(edit);
+    this.candidateRestoreOperation += 1;
+    this.notifyInputChanged();
+    const current = this.candidateVersionOperationCurrent(edit);
+    try { await this.candidateVersions.save(edit, current); }
+    catch (error) { await this.handleCandidateSourceUnavailable(error); throw error; }
+    return this.getState();
+  }
+  async selectCandidateVersion(selection: ReplyCandidateVersionSelection): Promise<ReplySessionState> {
+    this.assertVersionScope(selection);
+    this.candidateRestoreOperation += 1;
+    this.notifyInputChanged();
+    const current = this.candidateVersionOperationCurrent(selection);
+    try { await this.candidateVersions.select(selection, current); }
+    catch (error) { await this.handleCandidateSourceUnavailable(error); throw error; }
+    return this.getState();
+  }
+  showCandidateVersion(selection: ReplyCandidateVersionDisplay): ReplySessionState {
+    this.assertVersionScope(selection);
+    this.candidateVersions.show(selection);
+    return this.getState();
+  }
+  private assertVersionScope(request: ReplyCandidateVersionRead): void {
+    this.assertScope(request); this.assertSessionSelection();
+    if (request.sessionId !== this.state.savedSession?.sessionId || this.state.sessionDeletion === 'deleting'
+      || this.state.sessionDeletion === 'failed' || this.state.sourceAvailability !== undefined) {
+      throw new Error('本次候选会话已变化，请重新读取。');
+    }
+    this.candidateVersions.setScope(request);
+  }
+  private candidateVersionOperationCurrent(request: ContactSelection & { sessionId: string }): () => boolean {
+    const operation = this.candidateRestoreOperation, generation = this.backend.getConnectionGeneration();
+    return () => operation === this.candidateRestoreOperation && generation !== undefined
+      && generation === this.backend.getConnectionGeneration()
+      && request.contactId === this.state.contactId && request.scopeRevision === this.state.scopeRevision
+      && request.sessionId === this.state.savedSession?.sessionId && this.state.sessionDeletion !== 'deleting';
+  }
+  private async handleCandidateSourceUnavailable(error: unknown, refreshSelection = true): Promise<void> {
+    if (!(error instanceof AssistantCandidateSourceUnavailable)
+      || error.generation !== this.backend.getConnectionGeneration()
+      || error.scope.contactId !== this.state.contactId || error.scope.scopeRevision !== this.state.scopeRevision
+      || error.scope.sessionId !== this.state.savedSession?.sessionId || this.state.sessionDeletion === 'deleting') return;
+    this.candidateRestoreOperation += 1;
+    this.savedRead?.abort(); this.savedRead = undefined;
+    const pending = new AbortController(); this.savedRead = pending;
+    const check: CandidateSourceCheck = { pending, scope: error.scope,
+      turns: [...this.state.savedSession.turns.map((turn) => ({ turnId: turn.turnId,
+        candidateIds: turn.reply?.candidates.map((candidate) => candidate.candidateId) ?? [] })),
+        ...this.candidateVersions.getCachedTurnCandidates(error.scope)],
+      inputIds: this.state.savedSession.inputs.map((input) => input.inputVersionId),
+      refreshMessages: this.state.messages.items.length > 0 || this.state.targetMessageId !== null,
+      confirmedCandidateIds: error.candidateId === null ? [] : [error.candidateId],
+      strategyJob: this.strategyJob, strategyOperation: this.explorationOperation,
+      strategyWaiting: this.explorationPending !== undefined };
+    if (check.strategyJob?.request.sessionId === error.scope.sessionId) check.strategyJob.sourceValidation = {
+      scope: { ...error.scope }, operation: check.strategyOperation, generation: error.generation, phase: 'checking', inputs: [],
+    };
+    this.candidateSourceCheck = check;
+    this.cancelMessagePage(); this.cancelPending(true); this.lastAttempt = undefined;
+    if (error.candidateId !== null) this.clearUnavailableCandidateSource(error.scope, [error.candidateId]);
+    this.publish({ sourceAvailability: 'checking', phase: this.state.result ? 'ready' : 'idle', canRetry: false, errorCode: undefined });
+    const current = this.candidateVersionOperationCurrent(error.scope);
+    let accepted = false;
+    try {
+      const saved = await readAssistantSession(this.backend, error.scope.contactId, error.scope.sessionId, pending.signal);
+      if (pending.signal.aborted || !current() || saved.generation !== error.generation) return;
+      accepted = Boolean(await this.acceptCandidateSourceSnapshot(saved, check, pending.signal, current));
+    } catch {
+      if (!pending.signal.aborted && current() && this.candidateSourceCheck === check) {
+        this.clearUnavailableCandidateSource(error.scope);
+        this.candidateSourceCheck = undefined;
+        this.publish({ savedSession: { phase: 'failed', sessionId: error.scope.sessionId,
+          turns: [], inputs: [], currentInputVersionId: null }, sourceAvailability: undefined });
+      }
+    } finally { if (this.savedRead === pending) this.savedRead = undefined; }
+    if (!accepted || !current() || !refreshSelection) return;
+    // 完整快照只证明来源有效性，实际选择仍从后端唯一指针重读，保留无正文占位。
+    try {
+      await this.candidateVersions.reconcile(error.scope,
+        this.candidateVersions.getState().candidateVersions.items.map((item) => item.candidateId), current);
+    } catch (selectionError) {
+      // 新的选择来源失效再复验一次；持续失败以 failed/null 收尾，不循环读取。
+      await this.handleCandidateSourceUnavailable(selectionError, false);
+    }
+  }
+  private async acceptCandidateSourceSnapshot(saved: Awaited<ReturnType<typeof readAssistantSession>>, check: CandidateSourceCheck,
+    signal: AbortSignal, operationCurrent: () => boolean): Promise<Awaited<ReturnType<typeof readAssistantSession>> | undefined> {
+    const current = () => !signal.aborted && operationCurrent() && this.candidateSourceCheck === check
+      && check.scope.sessionId === saved.sessionId && check.scope.contactId === this.state.contactId
+      && check.scope.scopeRevision === this.state.scopeRevision && saved.generation === this.backend.getConnectionGeneration();
+    if (!current()) return;
+    let messages: ReplySessionState['messages'] | undefined;
+    if (check.refreshMessages) {
+      try {
+        const page = await readReplyMessages(this.backend, check.scope.contactId, null, signal);
+        if (page.generation !== saved.generation) return;
+        const items = [...page.messages], cursors = new Set<string>();
+        let nextCursor = page.nextCursor;
+        // 已选消息可能来自较早分页；只沿后端实际游标核验，不沿用旧正文证明其仍有效。
+        while (this.state.targetMessageId && !items.some((item) => item.messageId === this.state.targetMessageId) && nextCursor) {
+          if (!current()) return;
+          if (cursors.has(nextCursor)) throw new Error('消息分页游标无效。');
+          cursors.add(nextCursor);
+          const older = await readReplyMessages(this.backend, check.scope.contactId, nextCursor, signal);
+          if (older.generation !== saved.generation) return;
+          const known = new Set(items.map((item) => item.messageId));
+          items.push(...older.messages.filter((item) => !known.has(item.messageId)));
+          nextCursor = older.nextCursor;
+        }
+        messages = { phase: 'ready', items, nextCursor };
+      } catch { messages = { phase: 'failed', items: [], nextCursor: null }; }
+      if (!current()) return;
+    }
+    const confirmed = new Set(check.confirmedCandidateIds);
+    const turns = saved.turns.map((turn) => !['redacted', 'unavailable'].includes(turn.state)
+      && turn.reply?.candidates.some((candidate) => confirmed.has(candidate.candidateId))
+      ? { ...turn, state: 'unavailable' as const, input: null, reply: null, placeholder: '相关来源不可用' } : turn);
+    const unavailableTurns = new Set(turns.filter((turn) => ['redacted', 'unavailable'].includes(turn.state)).map((turn) => turn.turnId));
+    const availableTurns = new Set(turns.map((turn) => turn.turnId));
+    const candidateIds = check.turns.filter((turn) => unavailableTurns.has(turn.turnId) || !availableTurns.has(turn.turnId))
+      .flatMap((turn) => turn.candidateIds);
+    candidateIds.push(...confirmed);
+    const inputs = saved.inputs.map((input) => input.turnId && unavailableTurns.has(input.turnId) && input.state === 'active'
+      ? { ...input, state: 'unavailable' as const, content: null, placeholder: '相关来源不可用' } : input);
+    const invalidInputs = new Set(inputs.filter((input) => input.state !== 'active').map((input) => input.inputVersionId));
+    for (const inputId of check.inputIds) if (!inputs.some((input) => input.inputVersionId === inputId)) invalidInputs.add(inputId);
+    const strategyValidation = check.strategyJob?.sourceValidation;
+    if (check.strategyJob === this.strategyJob && check.strategyOperation === this.explorationOperation
+      && strategyValidation?.operation === check.strategyOperation && strategyValidation.generation === saved.generation
+      && strategyValidation.scope.contactId === check.scope.contactId
+      && strategyValidation.scope.scopeRevision === check.scope.scopeRevision && strategyValidation.scope.sessionId === saved.sessionId) {
+      // 只保留本次 operation 的来源身份/状态，迟到响应须按实际新输入版本匹配。
+      strategyValidation.phase = 'ready';
+      strategyValidation.inputs = inputs.map(({ inputVersionId, state }) => ({ inputVersionId, state }));
+      const actualInputVersionId = check.strategyJob?.actualInputVersionId;
+      const actualInput = inputs.find((input) => input.inputVersionId === actualInputVersionId);
+      if (actualInputVersionId && (actualInput ? actualInput.state !== 'active' : !check.strategyWaiting)) {
+        invalidInputs.add(actualInputVersionId);
+      }
+    }
+    for (const result of [this.state.result, this.heldResult?.result]) {
+      if (result?.assistantSessionId === saved.sessionId && result.inputVersionId
+        && !inputs.some((input) => input.inputVersionId === result.inputVersionId && input.state === 'active')) {
+        invalidInputs.add(result.inputVersionId);
+        candidateIds.push(...result.candidates.map((candidate) => candidate.original.candidateId));
+      }
+    }
+    // 首次探索保存的新输入尚未回包；expectedInputVersionId 只是前版本，不能证明目标仍有效。
+    const strategyTarget = this.strategyJob?.request.sessionId === saved.sessionId
+      && this.strategyJob.input.mode === 'reply_to_message' ? this.strategyJob.input.target.messageId : null;
+    const strategyTargetUnavailable = Boolean(messages && strategyTarget
+      && !messages.items.some((message) => message.messageId === strategyTarget));
+    this.candidateVersions.setScope(check.scope);
+    this.clearUnavailableCandidateSource(check.scope, candidateIds, invalidInputs, strategyTargetUnavailable);
+    const targetUnavailable = messages && this.state.targetMessageId !== null
+      && !messages.items.some((message) => message.messageId === this.state.targetMessageId);
+    const clearMessageDirection = targetUnavailable && this.directionDerived && this.state.mode === 'reply_to_message';
+    if (clearMessageDirection) this.directionDerived = false;
+    this.candidateSourceCheck = undefined;
+    check.pending.abort();
+    this.publish({ savedSession: { phase: 'ready', sessionId: saved.sessionId, turns, inputs,
+      currentInputVersionId: saved.currentInputVersionId },
+      ...(messages ? { messages, ...(targetUnavailable ? { targetMessageId: null } : {}) } : {}),
+      ...(clearMessageDirection ? { direction: '', purpose: '' } : {}),
+      sourceAvailability: this.heldResult ? this.sourceCheck ? 'checking' : 'failed' : undefined });
+    return { ...saved, turns, inputs };
+  }
+  private clearUnavailableCandidateSource(scope: ContactSelection & { sessionId: string }, candidateIds?: string[],
+    invalidInputs: Set<string> = new Set(), strategyTargetUnavailable = false): void {
+    const affected = candidateIds ? new Set(candidateIds) : null;
+    const saved = this.state.savedSession;
+    const turns = saved?.turns.filter((turn) => !affected
+      || turn.reply?.candidates.some((candidate) => affected.has(candidate.candidateId))) ?? [];
+    const turnIds = new Set(turns.map((turn) => turn.turnId));
+    const inputIds = new Set([...invalidInputs, ...turns.map((turn) => turn.inputVersionId)]);
+    const requestIds = new Set(turns.flatMap((turn) => turn.reply ? [turn.reply.replyRequestId] : []));
+    for (const turn of turns) for (const candidate of turn.reply?.candidates ?? []) affected?.add(candidate.candidateId);
+    const matches = (result: ReplySessionState['result'] | undefined) => Boolean(result
+      && result.assistantSessionId === scope.sessionId && (!affected || requestIds.has(result.replyRequestId)
+        || (result.inputVersionId && inputIds.has(result.inputVersionId))
+        || result.candidates.some((candidate) => affected.has(candidate.original.candidateId))));
+    const clearResult = matches(this.state.result), clearHeld = matches(this.heldResult?.result);
+    const clearExploration = this.currentExploration && (!affected || inputIds.has(this.currentExploration.inputVersion));
+    const jobInputId = this.strategyJob?.actualInputVersionId
+      ?? (this.strategyJob?.type === 'action' ? this.strategyJob.request.inputVersion : undefined);
+    const clearStrategy = this.strategyJob?.request.sessionId === scope.sessionId
+      && (!affected || clearResult || clearHeld || clearExploration || strategyTargetUnavailable
+        || (jobInputId && inputIds.has(jobInputId)));
+    const clearDerived = this.directionDerived && (!affected || clearResult || clearHeld || clearExploration || clearStrategy);
+    if (!affected || clearResult || clearHeld) {
+      const result = clearResult ? this.state.result : this.heldResult?.result;
+      if (result?.inputVersionId) inputIds.add(result.inputVersionId);
+      for (const candidate of result?.candidates ?? []) affected?.add(candidate.original.candidateId);
+      this.notifyInputChanged(); this.cancelPending(); this.lastAttempt = undefined;
+    } else if (this.lastAttempt && turns.some((turn) => turn.requestKey === this.lastAttempt?.requestKey)) {
+      this.lastAttempt = undefined;
+    }
+    if (!affected || clearExploration || clearStrategy) {
+      this.explorationOperation += 1; this.explorationPending?.abort(); this.explorationPending = undefined;
+      this.currentExploration = undefined; this.explorationPurpose = undefined;
+      this.generationSkillChoice = undefined; this.strategyJob = undefined;
+      this.publish({ exploration: { phase: 'idle', result: null } });
+    }
+    this.candidateVersions.invalidate(scope, affected ? [...affected] : undefined);
+    const placeholder = '相关来源不可用';
+    this.publish({ ...(!affected ? { messages: { phase: 'idle' as const, items: [], nextCursor: null }, targetMessageId: null } : {}),
+      ...(clearDerived ? { direction: '', purpose: '' } : {}),
+      ...(saved ? { savedSession: { ...saved,
+      turns: saved.turns.map((turn) => turnIds.has(turn.turnId)
+        ? { ...turn, state: 'unavailable', input: null, reply: null, placeholder } : turn),
+      inputs: saved.inputs.map((input) => !affected || inputIds.has(input.inputVersionId)
+        ? input.state === 'active' ? { ...input, state: 'unavailable', content: null, placeholder } : input : input),
+      currentInputVersionId: saved.currentInputVersionId && inputIds.has(saved.currentInputVersionId)
+        ? null : saved.currentInputVersionId } } : {}),
+      ...(clearResult ? { result: null, selectedCandidateId: null, phase: 'idle', canRetry: false, errorCode: undefined } : {}) });
+    if (clearDerived) this.directionDerived = false;
+  }
+  private async restoreCandidateVersions(selection: ContactSelection, sessionId: string, candidateIds: string[], complete = false): Promise<void> {
+    const operation = ++this.candidateRestoreOperation;
+    const generation = this.backend.getConnectionGeneration();
+    const current = () => operation === this.candidateRestoreOperation
+      && generation !== undefined && generation === this.backend.getConnectionGeneration()
+      && selection.contactId === this.state.contactId && selection.scopeRevision === this.state.scopeRevision
+      && sessionId === this.state.savedSession?.sessionId && this.state.sessionDeletion !== 'deleting';
+    if (!current()) return;
+    this.candidateVersions.setScope({ ...selection, sessionId });
+    if (complete) {
+      try { await this.candidateVersions.reconcile({ ...selection, sessionId }, candidateIds, current); }
+      catch (error) { await this.handleCandidateSourceUnavailable(error); return; }
+    }
+    for (const candidateId of new Set(candidateIds)) {
+      if (!current()) return;
+      try { await this.candidateVersions.read({ ...selection, sessionId, candidateId }, current); }
+      catch (error) { await this.handleCandidateSourceUnavailable(error); }
+    }
+  }
   private assertCandidate(selection: ReplyCandidateSelection) {
     this.assertScope(selection);
+    if (this.candidateSourceCheck) throw new Error('请等待相关来源核验完成。');
     const result = this.state.result;
     const candidate = result?.candidates.find((item) => item.original.candidateId === selection.candidateId);
     if (!candidate || result?.replyRequestId !== selection.replyRequestId) throw new Error('候选已失效，请重新生成。');
@@ -639,12 +1035,15 @@ export class ReplySession {
     if (this.state.sessionDeletion === 'deleting' || this.state.sessionDeletion === 'failed') {
       throw new Error('请先核对当前助手会话的删除结果。');
     }
+    if (this.candidateSourceCheck) throw new Error('请等待相关来源核验完成。');
     if (this.catalogPending || this.state.sessionCatalog?.selectionPending) {
       throw new Error('请刷新会话列表并明确选择本次助手会话。');
     }
   }
   private receiveContact(state: ContactSessionState): void {
     if (state.scopeRevision !== this.state.scopeRevision || state.selectedContactId !== this.state.contactId) {
+      this.candidateSourceCheck?.pending.abort();
+      this.candidateVersions.setScope(null);
       this.sessionDelete?.abort(); this.sessionDelete = undefined;
       this.catalogPending?.abort(); this.catalogPending = undefined;
       this.savedRead?.abort(); this.savedRead = undefined;
@@ -664,6 +1063,7 @@ export class ReplySession {
         savedSession: { phase: 'idle', sessionId: null, turns: [], inputs: [], currentInputVersionId: null }, sessionDeletion: undefined,
         sessionCatalog: undefined,
         confirmedSessionDeletion: undefined });
+      this.candidateSourceCheck = undefined;
       this.beginMessageNotice();
       // 新连接重新选择联系人后只读取已保存讨论，不恢复本次输入或触发生成。
       if (state.selectedContactId && state.directoryPhase === 'ready') {
@@ -778,8 +1178,9 @@ export class ReplySession {
     for (const listener of this.inputListeners) listener();
   }
   private cancelMessagePage(): void { ++this.messageOperation; this.messagePending?.abort(); this.messagePending = undefined; }
-  private cancelPending(): void {
+  private cancelPending(preserveSourceValidation = false): void {
     ++this.operation; this.pending?.abort(); this.pending = undefined;
+    if (preserveSourceValidation) return;
     this.sourceCheck?.abort(); this.sourceCheck = undefined; this.heldResult = undefined;
     if (this.state.sourceAvailability) this.publish({ sourceAvailability: undefined });
   }
