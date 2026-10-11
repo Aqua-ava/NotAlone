@@ -123,3 +123,9 @@ Root 独立先接C正式反例，实际 **2 RED／3.527s／55repeat0／自有库
 ### 主树已确认策略的权威恢复复验（2026-10-12）
 
 精确净接 sole A `c3a5973b` 三生产源与新模式HTTP测试，原 `reconfirm` 仅抽同一owner事务helper供恢复复用，不构造新writer、来源图或renderer正文。原用户草稿的实际输入与完整单条要求保持；回应和主动的已确认策略恢复从原实际选择复验并建立新有效任务，旧B键不会冒充新A request key。提供者两场真实409 invalid_reply_input RED保留；主树用唯一随机隔离库 runner 独立执行 `tests.integration.server.test_assistant_interrupted_authority_modes`，**2测试 GREEN／3.029秒／skip0／actualexit0**，其中第二测试分别覆盖已确认回应与主动，故不是三个测试。001–055逐名账本、repeat0及自有库0，日志 `/private/tmp/notalone-root-confirmed-recovery-three-http-pg.log`；固定四文件独立两轴0。原5场typed恢复与本模式分开计量；Main/Host及原生未验继续，State claimed保留。
+
+### 主树已确认策略准备的严格零领取证明（2026-10-12）
+
+精确净接 sole A `d7787ddb` 五生产／协议／测试路径。仅两条公开策略prepare在真正 A 事务证明后附无正文 `exploration_preparation`，绑定原path task、原input、action以及confirm suggestion或answer operation；JsonClient只有explicit对应范围、原请求体和实际动作全部匹配才接受服务端实际request key，不拿operation UUID或泛503当生成身份。旧keyless未知别名无法证明等价，继续保留，由原同Map处理。
+
+主树随机隔离 runner 独立执行 `tests.integration.server.test_exploration_preparation_rejection`：**3实际HTTP GREEN／2.891秒／skip0／actualexit0**，55逐名迁移repeat0、自有库0；八个合成本机 HTTP 协议用例 **8 GREEN／71.819625ms／skip0**，额外正文、错动作／身份、未知503和非具名入口均拒绝。日志 `/private/tmp/notalone-root-confirmed-no-generation-three-http-pg.log`、`/private/tmp/notalone-root-exploration-proof-client-node.log`。类型通过，固定五源两个独立审查轴0；严格Main consumer接线继续，当前keylesstoken的明确证明不会解除旧未知alias，真实App未执行，原State claimed不变。

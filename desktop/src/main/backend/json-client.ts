@@ -5,6 +5,7 @@ import { readAssistantContinuationClarification } from '../../shared/assistant-c
 import type { AssistantInputBudget } from '../../shared/assistant-input-budget';
 import { readInputBudgetFailure } from '../reply/input-budget-read';
 import { readAssistantNoGenerationProof, type AssistantNoGenerationProof } from '../../shared/assistant-no-generation';
+import { readExplorationNoGenerationProof } from '../../shared/exploration-no-generation';
 
 export interface JsonRequest {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -104,7 +105,8 @@ export class JsonClient {
                 contactId: parts[3], sessionId: parts[5], requestKey: parts[6] === 'replace'
                   ? requestBody?.replacement?.idempotency_key : parts[6] === 'retry-interrupted'
                     ? requestBody?.request_key : requestBody?.idempotency_key,
-              }) : undefined;
+              }) : options.acceptAssistantNoGenerationProof === true && method === 'POST'
+                ? readExplorationNoGenerationProof(data, status, path, options.body) : undefined;
               fail(new BackendRequestFailure('response', status,
                 typeof code === 'string' && /^[a-z][a-z0-9_]{0,79}$/.test(code) ? code : undefined,
                 reason === 'target_message_unavailable' || reason === 'source_unavailable'

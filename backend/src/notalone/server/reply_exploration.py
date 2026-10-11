@@ -5,6 +5,8 @@ from typing import Any, Callable, Literal, overload
 from uuid import UUID
 
 from notalone.application.assistant_session_service import AssistantSessionError, AssistantSessionRejected, AssistantTurn
+from notalone.application.assistant_preparation_rejection import AssistantPreparationRejected
+from notalone.server.assistant_preparation_rejection import preparation_rejection_payload
 from notalone.application.model_priority import ModelWorkStopped
 from notalone.application.reply_exploration import ReplyExplorationService
 from notalone.reply.errors import ReplyError
@@ -131,6 +133,16 @@ def handle_exploration(
                 "state": receipt.state,
             }}
         return 200, result
+    except AssistantPreparationRejected as error:
+        # 只在实际 A prepare 的事务证明后绑定原 B 命令；不从普通探索错误推断零领取。
+        if method != "POST" or len(parts) != 8 or parts[7] not in ("prepare-confirm", "prepare-answer"):
+            raise
+        status, rejected = preparation_rejection_payload(error)
+        return status, {**rejected, "exploration_preparation": {
+            "exploration_id": str(UUID(parts[6])), "input_version_id": str(_uuid(request, "input_version_id")),
+            "action": parts[7],
+            "operation_key": str(_uuid(request, "operation_key")) if parts[7] == "prepare-answer" else None,
+        }}
     except (ValueError, TypeError, KeyError, AttributeError):
         return 400, {"error": "exploration_request_invalid"}
     except (InputBudgetExceededError, InputBudgetUnavailableError) as error:
