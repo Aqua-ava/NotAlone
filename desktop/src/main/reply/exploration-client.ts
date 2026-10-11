@@ -109,7 +109,7 @@ export async function prepareExplorationAction(backend: BackendHost, input: Expl
   if (input.action === 'stop') throw new Error('停止方向探索不能领取候选生成。');
   const response = await backend.requestJson({ method: 'POST',
     path: `/api/contacts/${input.contactId}/assistant-sessions/${input.sessionId}/explorations/${input.taskId}/prepare-${input.action}`,
-    timeoutMs: 25_000, signal, body: actionBody(input) });
+    timeoutMs: 25_000, signal, body: actionBody(input), acceptAssistantNoGenerationProof: true });
   const value = response.data;
   if (isRecord(value) && value.kind === 'prepared') {
     if (Object.keys(value).length !== 3 || !isUuid(value.exploration_id) || !isRecord(value.generation)

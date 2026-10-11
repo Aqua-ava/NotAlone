@@ -15,6 +15,7 @@ export class BackendHost {
   private stopping: Promise<boolean> | undefined;
   private closing = false;
   private quitting = false;
+  private quitPreparationFailed = false;
   private restarting: Promise<boolean> | undefined;
   private preparing: Promise<boolean> | undefined;
   private configurationSave: Promise<void> | undefined;
@@ -40,7 +41,9 @@ export class BackendHost {
     return this.configurationSave;
   }
   getConnectionGeneration(): number | undefined {
-    return !this.closing && this.state.phase === 'connected' && this.target ? this.generation : undefined;
+    return !this.closing && (this.state.phase === 'connected'
+      || this.quitting && this.quitPreparationFailed && this.state.phase === 'shutdown-failed')
+      && this.target ? this.generation : undefined;
   }
   subscribeMessages(callbacks: MessageStreamCallbacks, signal: AbortSignal): void {
     const target = this.target;
@@ -64,13 +67,29 @@ export class BackendHost {
     if (target !== this.target || generation !== this.getConnectionGeneration()) throw new BackendRequestFailure('cancelled');
     return { generation, data };
   }
+  // 只给已接纳作业保留原认证目标的停止能力，不向页面暴露跨连接业务请求。
+  captureAssistantStoppingConnection(scope: { connectionGeneration: number; contactId: string; sessionId: string }):
+    Pick<BackendHost, 'getConnectionGeneration' | 'requestJson'> | undefined {
+    const target = this.target;
+    if (!target || scope.connectionGeneration !== this.getConnectionGeneration()) return undefined;
+    const path = `/api/contacts/${scope.contactId}/assistant-sessions/${scope.sessionId}`;
+    const generation = scope.connectionGeneration;
+    return Object.freeze({ getConnectionGeneration: () => generation, requestJson: async (options: JsonRequest) => {
+      const allowedRead = options.method === 'GET' && options.body === undefined
+        && (options.path === path || options.path.startsWith(`${path}?read_part=`));
+      if (!allowedRead && !(options.method === 'POST' && options.path === `${path}/interrupt`)) {
+        throw new BackendRequestFailure('cancelled');
+      }
+      return { generation, data: await target.requestJson(options) };
+    } });
+  }
   onStateChanged(listener: (state: BackendState) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
   connect(): Promise<void> {
-    if (this.closing || this.state.phase === 'connected') return Promise.resolve();
+    if (this.quitting || this.closing || this.state.phase === 'connected') return Promise.resolve();
     if (this.configurationSave) return this.configurationSave.catch(() => {}).then(() => this.connect());
     if (this.initialization) return this.initialization;
     const generation = ++this.generation;
@@ -90,8 +109,16 @@ export class BackendHost {
     return this.initialization;
   }
 
-  async stop(): Promise<boolean> {
+  async stop(beforeShutdown?: () => Promise<void>): Promise<boolean> {
     this.quitting = true;
+    try { await beforeShutdown?.(); }
+    catch {
+      this.quitPreparationFailed = true;
+      this.publish({ phase: 'shutdown-failed', errorCode: 'backend_shutdown_unconfirmed',
+        canRetryConnection: false, canRetryShutdown: true });
+      return false;
+    }
+    this.quitPreparationFailed = false;
     return this.stopRuntime();
   }
 

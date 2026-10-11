@@ -10,6 +10,7 @@ import { AppWindows } from './windows';
 import { BackendHost } from './backend/host';
 import { installBackendBridge } from './backend/bridge';
 import { installQuitLifecycle } from './backend/quit';
+import { interruptAssistantGeneration, recoverAssistantGenerationReceipt } from './reply/assistant-generation-interruption';
 import { installDesktopControls } from './desktop-controls';
 import { installContactSessionBridge } from './contacts/bridge';
 import { installReplyBridge } from './reply/bridge';
@@ -86,7 +87,9 @@ void app.whenReady().then(async () => {
   installBackendBridge(windows, backend, () => app.quit());
   installStartupBridge(windows, diagnostics, backend);
   app.on('before-quit', () => diagnostics.cancel());
-  installQuitLifecycle(backend, windows);
+  installQuitLifecycle(backend, windows, () => replies.beginGenerationClosing(
+    (receipt) => interruptAssistantGeneration(backend, receipt),
+    (identity) => recoverAssistantGenerationReceipt(backend, identity)));
   void backend.connect();
   const desktopControls = installDesktopControls(windows);
   app.on('will-quit', () => desktopControls.dispose());

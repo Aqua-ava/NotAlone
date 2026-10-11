@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { SavedAssistantDiscussion, SavedAssistantInput, SavedAssistantTurn } from '../../shared/assistant-session';
+import { readAssistantCarry } from './assistant-candidate-carry';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import { isUuid } from '../uuid';
@@ -8,7 +9,7 @@ import { isRecord, readReplyResult } from './result-read';
 const READ_PART_BYTES = 256 * 1024;
 const invalidRead = () => new Error('已保存讨论暂不可用。');
 
-async function readAssistantSessionParts(backend: BackendHost, path: string, sessionId: string,
+async function readAssistantSessionParts(backend: Pick<BackendHost, 'getConnectionGeneration' | 'requestJson'>, path: string, sessionId: string,
   signal: AbortSignal, generation: number, current: () => boolean) {
   const fragments: string[] = [];
   let first: Record<string, unknown> | undefined;
@@ -82,7 +83,7 @@ export async function defaultAssistantSession(backend: BackendHost, contactId: s
   return { sessionId: response.data.session_id.toLowerCase(), generation: response.generation };
 }
 
-export async function readAssistantSession(backend: BackendHost, contactId: string, sessionId: string, signal: AbortSignal) {
+export async function readAssistantSession(backend: Pick<BackendHost, 'getConnectionGeneration' | 'requestJson'>, contactId: string, sessionId: string, signal: AbortSignal) {
   const path = `/api/contacts/${contactId}/assistant-sessions/${sessionId}`;
   const generation = backend.getConnectionGeneration?.();
   const current = () => !signal.aborted && (typeof backend.getConnectionGeneration !== 'function'
@@ -106,6 +107,7 @@ export async function readAssistantSession(backend: BackendHost, contactId: stri
   const turns: SavedAssistantTurn[] = value.turns.map((item: unknown) => {
     if (!isRecord(item) || !isUuid(item.turn_id) || !isUuid(item.input_version_id) || !isUuid(item.request_key)
       || !['running', 'completed', 'failed', 'redacted', 'unavailable'].includes(item.state as string)
+      || !(item.interruption_reason === null || item.state === 'failed' && item.interruption_reason === 'app_quit')
       || (item.input !== null && (!isRecord(item.input) || !isRecord(item.input.content)))
       || (item.placeholder !== null && !['相关来源已删除', '相关来源不可用'].includes(item.placeholder as string))) throw new Error('已保存讨论格式无效。');
     const turnId = item.turn_id.toLowerCase();
@@ -114,21 +116,21 @@ export async function readAssistantSession(backend: BackendHost, contactId: stri
     known.add(turnId);
     return { turnId, inputVersionId: item.input_version_id.toLowerCase(), requestKey: item.request_key.toLowerCase(),
       state: item.state as SavedAssistantTurn['state'], input: item.input as SavedAssistantTurn['input'],
-      reply: item.reply === null ? null : readReplyResult(item.reply), placeholder: item.placeholder as string | null };
+      reply: item.reply === null ? null : readReplyResult(item.reply), interruptionReason: item.interruption_reason as 'app_quit' | null, placeholder: item.placeholder as string | null };
   });
   const versions = new Set<string>();
   const inputs: SavedAssistantInput[] = value.inputs.map((item: unknown) => {
     if (!isRecord(item) || Object.keys(item).length !== 7 || !Object.keys(item).every((key) => [
       'input_version_id', 'type', 'conversation_binding_id', 'turn_id', 'state', 'content', 'placeholder',
     ].includes(key)) || !isUuid(item.input_version_id) || !isUuid(item.conversation_binding_id)
-      || !['generation', 'purpose_exploration', 'response_exploration'].includes(item.type as string)
+      || !['generation', 'purpose_exploration', 'response_exploration', 'candidate_carry'].includes(item.type as string)
       || !['active', 'redacted', 'unavailable'].includes(item.state as string)) throw new Error('已保存讨论格式无效。');
     const version = item.input_version_id.toLowerCase();
     const expectedPlaceholder = item.state === 'redacted' ? '相关来源已删除' : item.state === 'unavailable' ? '相关来源不可用' : null;
     if (versions.has(version) || item.placeholder !== expectedPlaceholder
       || (item.state !== 'active' && item.content !== null)) throw new Error('已保存讨论格式无效。');
     versions.add(version);
-    let content: SavedAssistantDiscussion | null = null;
+    let content: SavedAssistantInput['content'] = null;
     if (item.type === 'generation') {
       const turnId = isUuid(item.turn_id) ? item.turn_id.toLowerCase() : null;
       const turn = turns.find((candidate) => candidate.turnId === turnId);
@@ -138,7 +140,9 @@ export async function readAssistantSession(backend: BackendHost, contactId: stri
       }
     } else {
       if (item.turn_id !== null) throw new Error('已保存讨论格式无效。');
-      if (item.state === 'active') content = discussion(item.content, item.type as SavedAssistantDiscussion['type']);
+      if (item.state === 'active') content = item.type === 'candidate_carry'
+        ? readAssistantCarry(item.content, contactId, sessionId, item.conversation_binding_id.toLowerCase())
+        : discussion(item.content, item.type as SavedAssistantDiscussion['type']);
     }
     return { inputVersionId: version, type: item.type as SavedAssistantInput['type'],
       conversationBindingId: item.conversation_binding_id.toLowerCase(),

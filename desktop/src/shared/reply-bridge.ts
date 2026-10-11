@@ -14,8 +14,12 @@ export interface RewriteOptions {
 }
 export interface RewriteOptionsUpdate extends ContactSelection { options: RewriteOptions; }
 export interface GenerateReply extends ContactSelection { newRequest: boolean; }
+export interface AssistantInterruptedRetry extends ContactSelection { sessionId: string; turnId: string; inputVersionId: string; }
 export interface AssistantSessionDeletion extends ContactSelection { sessionId: string; confirmed: true; }
 export interface AssistantSessionSelection extends ContactSelection { sessionId: string; }
+export interface AssistantCandidateCarry extends AssistantSessionSelection {
+  expectedSelectionId: string; candidateId: string; versionId: string;
+}
 export interface ReplyContinuation extends AssistantSessionSelection {
   instruction: string;
   intentionUpdate?: string;
@@ -166,10 +170,12 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   setMode(update: ReplyModeUpdate): Promise<void>;
   loadMessages(request: ReplyMessagePageRequest): Promise<void>;
   reconnectMessages(selection: ContactSelection): Promise<void>;
+  combineNewMessages(selection: ContactSelection): Promise<void>;
   retrySourceValidation(selection: ContactSelection): Promise<void>;
   readSavedSession(selection: ContactSelection): Promise<void>;
   listSavedSessions(selection: ContactSelection): Promise<void>;
   newSavedSession(selection: ContactSelection): Promise<void>;
+  newSavedSessionWithCandidate(selection: AssistantCandidateCarry): Promise<void>;
   selectSavedSession(selection: AssistantSessionSelection): Promise<void>;
   deleteSavedSession(selection: AssistantSessionDeletion): Promise<void>;
   selectMessage(selection: ReplyMessageSelection): Promise<ReplySessionState>;
@@ -189,6 +195,7 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   continueSession(command: ReplyContinuation): Promise<void>;
   confirmContinuation(command: ReplyContinuationConfirmation): Promise<void>;
   retryContinuation(selection: AssistantSessionSelection): Promise<void>;
+  retryInterruptedGeneration(request: AssistantInterruptedRetry): Promise<void>;
   selectCandidate(selection: ReplyCandidateSelection): Promise<ReplySessionState>;
   editCandidate(edit: ReplyCandidateEdit): Promise<ReplySessionState>;
   beginCandidateVersionEdit(selection: ReplyCandidateVersionDisplay): Promise<ReplySessionState>;

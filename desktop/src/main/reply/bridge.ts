@@ -6,7 +6,7 @@ import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { ReplySession } from './session';
 import { ReplyEvidenceSession } from './evidence-session';
-import type { AssistantSessionSelection } from '../../shared/reply-bridge';
+import type { AssistantInterruptedRetry, AssistantSessionSelection } from '../../shared/reply-bridge';
 import type { ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from '../../shared/assistant-candidate-versions';
 import type { ReplyContinuation, ReplyContinuationConfirmation } from '../../shared/reply-bridge';
 import { ASSISTANT_CONTINUATION_RESPONSE_LIMIT } from '../../shared/assistant-continuation-clarification';
@@ -127,6 +127,14 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     replies.listSavedSessions(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
   commands.handle('reply:new-saved-session', (...args: unknown[]) =>
     replies.newSavedSession(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
+  commands.handle('reply:new-with-candidate', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'expectedSelectionId', 'candidateId', 'versionId']);
+    for (const key of ['sessionId', 'expectedSelectionId', 'candidateId', 'versionId']) {
+      if (!isUuid(value[key])) throw new Error('请先明确选用要携入的保存版本。');
+      value[key] = (value[key] as string).toLowerCase();
+    }
+    return replies.newSavedSessionWithCandidate(value as unknown as import('../../shared/reply-bridge').AssistantCandidateCarry);
+  }, 'helper');
   commands.handle('reply:select-saved-session', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'sessionId']);
     if (!isUuid(value.sessionId)) throw new Error('助手会话不可用。');
@@ -139,6 +147,8 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   }, 'helper');
   commands.handle('reply:reconnect-messages', (...args: unknown[]) =>
     replies.reconnectMessages(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
+  commands.handle('reply:combine-new-messages', (...args: unknown[]) =>
+    replies.combineNewMessages(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
   commands.handle('reply:select-message', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'messageId']);
     if (!isUuid(value.messageId)) throw new Error('待回复消息不可用。');
@@ -171,6 +181,14 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     const value = fields(args, ['contactId', 'scopeRevision', 'sessionId']);
     if (!isUuid(value.sessionId)) throw new Error('本次连续修改已失效。');
     return replies.retryContinuation({ ...value, sessionId: value.sessionId.toLowerCase() } as unknown as AssistantSessionSelection);
+  }, 'helper');
+  commands.handle('reply:retry-interrupted-generation', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'turnId', 'inputVersionId']);
+    for (const key of ['sessionId', 'turnId', 'inputVersionId']) {
+      if (!isUuid(value[key])) throw new Error('中断生成暂不可重试。');
+      value[key] = (value[key] as string).toLowerCase();
+    }
+    return replies.retryInterruptedGeneration(value as unknown as AssistantInterruptedRetry);
   }, 'helper');
   commands.handle('reply:update-correction', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'correction']);

@@ -69,11 +69,33 @@ test('严格只读输入拒绝意外协议字段', async () => {
 test('generation 输入与轮次一一关联，来源删除状态不能伪装 active', async () => {
   const { readAssistantSession } = await adapter('src/main/reply/assistant-sessions.ts');
   const data = discussionSnapshot(), inputId = data.inputs[0].input_version_id, turnId = randomUUID();
-  data.turns = [{ turn_id: turnId, input_version_id: inputId, request_key: randomUUID(), state: 'redacted',
+  data.turns = [{ turn_id: turnId, input_version_id: inputId, request_key: randomUUID(), state: 'redacted', interruption_reason: null,
     input: null, reply: null, placeholder: '相关来源已删除' }];
   data.inputs[0] = { ...data.inputs[0], type: 'generation', turn_id: turnId, state: 'redacted', content: null, placeholder: '相关来源已删除' };
   const read = await readAssistantSession(transport(data), randomUUID(), data.session_id, new AbortController().signal);
   assert.equal(read.inputs[0].turnId, read.turns[0].turnId); assert.equal(read.inputs[0].content, null);
   data.inputs[0].state = 'active'; data.inputs[0].placeholder = null;
+  await assert.rejects(readAssistantSession(transport(data), randomUUID(), data.session_id, new AbortController().signal));
+});
+
+
+test('只读恢复严格识别nullable中断原因，只有failed可投影app_quit', async () => {
+  const { readAssistantSession } = await adapter('src/main/reply/assistant-sessions.ts');
+  const turnId = randomUUID(), inputId = randomUUID(), key = randomUUID();
+  const data = { session_id: randomUUID(), current_input_version_id: inputId,
+    turns: [{ turn_id: turnId, input_version_id: inputId, request_key: key, state: 'failed', interruption_reason: 'app_quit',
+      input: { content: { type: 'rewrite_draft', draft_text: '合成中断输入。' } }, reply: null, placeholder: null }],
+    inputs: [{ input_version_id: inputId, type: 'generation', conversation_binding_id: randomUUID(), turn_id: turnId,
+      state: 'active', content: null, placeholder: null }] };
+  const saved = await readAssistantSession(transport(data), randomUUID(), data.session_id, new AbortController().signal);
+  assert.equal(saved.turns[0].interruptionReason, 'app_quit');
+  data.turns[0].interruption_reason = null;
+  assert.equal((await readAssistantSession(transport(data), randomUUID(), data.session_id,
+    new AbortController().signal)).turns[0].interruptionReason, null);
+  for (const invalid of ['unknown', {}, 1, undefined]) {
+    data.turns[0].interruption_reason = invalid;
+    await assert.rejects(readAssistantSession(transport(data), randomUUID(), data.session_id, new AbortController().signal));
+  }
+  data.turns[0].state = 'running'; data.turns[0].interruption_reason = 'app_quit';
   await assert.rejects(readAssistantSession(transport(data), randomUUID(), data.session_id, new AbortController().signal));
 });

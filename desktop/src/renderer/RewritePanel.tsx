@@ -11,6 +11,7 @@ import { CandidateVersionEditor } from './CandidateVersionEditor';
 import type { ReplyCandidateVersionRead, ReplyCandidateVersionEdit, ReplyCandidateVersionDisplay, ReplyCandidateVersionSelection } from '../shared/assistant-candidate-versions';
 import type { RequirementChange } from '../shared/assistant-continuation-clarification';
 import { AssistantContinuationControls } from './AssistantContinuationControls';
+import { AssistantMessageNoticeActions } from './AssistantMessageNoticeActions';
 
 export function useReplySession() {
   const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null, generationBlock: 'foreground-confirmation-required',
@@ -48,9 +49,16 @@ export function useReplySession() {
     readSavedSession: () => operate(() => window.notalone.replies.readSavedSession(selection())),
     listSavedSessions: () => operate(() => window.notalone.replies.listSavedSessions(selection())),
     newSavedSession: () => operate(() => window.notalone.replies.newSavedSession(selection())),
+    newSavedSessionWithCandidate: () => operate(() => {
+      const choice = latest.current.explicitCandidateSelection?.selection;
+      if (!choice) throw new Error('请先明确选用要携入的保存版本。');
+      return window.notalone.replies.newSavedSessionWithCandidate({ ...selection(), sessionId: choice.sessionId,
+        expectedSelectionId: choice.selectionId, candidateId: choice.candidateId, versionId: choice.versionId });
+    }),
     selectSavedSession: (sessionId: string) => operate(() => window.notalone.replies.selectSavedSession({ ...selection(), sessionId })),
     deleteSavedSession: (command: AssistantSessionDeletion) => operate(() => window.notalone.replies.deleteSavedSession(command)),
     reconnectMessages: () => operate(() => window.notalone.replies.reconnectMessages(selection())),
+    combineNewMessages: () => operate(() => window.notalone.replies.combineNewMessages(selection())),
     selectMessage: (messageId: string) => operate(() => window.notalone.replies.selectMessage({ ...selection(), messageId })),
     updateDirection: (direction: string) => operate(() => window.notalone.replies.updateDirection({ ...selection(), direction })),
     updateCorrection: (correction: string) => operate(() => window.notalone.replies.updateCorrection({ ...selection(), correction })),
@@ -63,6 +71,8 @@ export function useReplySession() {
     updateSkill: (skill: import('../shared/reply-bridge').ReplySkillChoice) => operate(() => window.notalone.replies.updateSkill({ ...selection(), skill })),
     selectDirection: (suggestionId: string, inputVersion: string) => operate(() => window.notalone.replies.selectDirection({ ...selection(), suggestionId, inputVersion })),
     updatePurpose: (purpose: string) => operate(() => window.notalone.replies.updatePurpose({ ...selection(), purpose })),
+    retryInterruptedGeneration: (sessionId: string, turnId: string, inputVersionId: string) =>
+      operate(() => window.notalone.replies.retryInterruptedGeneration({ ...selection(), sessionId, turnId, inputVersionId })),
     generate: (newRequest = false) => operate(() => window.notalone.replies.generate({ ...selection(), newRequest })),
     continueSession: (instruction: string, intentionUpdate?: string) => operate(() => window.notalone.replies.continueSession({
       ...selection(), sessionId: latest.current.savedSession!.sessionId!, instruction,
@@ -255,6 +265,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
     {replies.error && <p className="reply-note" role="alert">{replies.error}</p>}
     <AssistantContinuationControls key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${state.inputClearRevision ?? 0}`}
       replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
+    <AssistantMessageNoticeActions replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
     <StyleSamples replies={replies} />
   </section>;
 }

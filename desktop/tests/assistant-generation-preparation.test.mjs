@@ -105,3 +105,47 @@ test('已知请求键的正式澄清仍是明确零生成结果，不阻塞退�
   assert.equal(calls, 0);
   assert.deepEqual(jobs.pendingReceipts(), []);
 });
+
+
+test('未知key的严格未领取证明只结算当前准备，保留失败发布到finally且可退出', async () => {
+  const jobs = new AssistantGenerationJobs();
+  const preparation = jobs.beginPreparation(owner);
+  const proof = { contactId: owner.contactId, sessionId: owner.sessionId, requestKey, state: 'not_reserved' };
+  jobs.receivePreparationNoGenerationProof(preparation, proof, owner.connectionGeneration);
+  assert.equal(jobs.isActive(preparation), true);
+  jobs.finish(preparation);
+  assert.equal(jobs.isActive(preparation), false);
+  await jobs.beginClosing(async () => { throw new Error('未领取不应发中断。'); });
+});
+
+test('未知key的未领取证明拒绝错范围或实际回执，并不能释放旧未知准备', async () => {
+  const jobs = new AssistantGenerationJobs();
+  const previous = jobs.beginPreparation(owner);
+  jobs.finish(previous);
+  const preparation = jobs.beginPreparation(owner);
+  const proof = { contactId: owner.contactId, sessionId: owner.sessionId, requestKey, state: 'not_reserved' };
+  for (const invalid of [{ ...proof, sessionId: receipt.turnId }, { ...proof, contactId: receipt.turnId },
+    { ...proof, requestKey: 'invalid' }, { ...proof, extra: true }, { ...proof, state: 'running' }]) {
+    assert.throws(() => jobs.receivePreparationNoGenerationProof(preparation, invalid, owner.connectionGeneration), /归属/);
+  }
+  assert.throws(() => jobs.receivePreparationNoGenerationProof(preparation, proof, owner.connectionGeneration + 1), /归属/);
+  const known = jobs.begin({ ...owner, requestKey });
+  jobs.prepareStarted(known);
+  assert.throws(() => jobs.receivePreparationNoGenerationProof(known, proof, owner.connectionGeneration), /归属/);
+  jobs.receiveReceipt(known, receipt);
+  assert.throws(() => jobs.receivePreparationNoGenerationProof(known, proof, owner.connectionGeneration), /归属/);
+  jobs.receivePreparationNoGenerationProof(preparation, proof, owner.connectionGeneration);
+  jobs.finish(preparation);
+  jobs.finish(known, true);
+  await assert.rejects(jobs.beginClosing(async () => { throw new Error('旧身份没有实际回执。'); }), /身份尚未确认/);
+});
+
+test('未知key准备的证明在退出等待中迟到时仍结算当前身份', async () => {
+  const jobs = new AssistantGenerationJobs();
+  const preparation = jobs.beginPreparation(owner);
+  const closing = jobs.beginClosing(async () => { throw new Error('实际未领取。'); });
+  jobs.receivePreparationNoGenerationProof(preparation,
+    { contactId: owner.contactId, sessionId: owner.sessionId, requestKey, state: 'not_reserved' }, owner.connectionGeneration);
+  await closing;
+  jobs.finish(preparation);
+});

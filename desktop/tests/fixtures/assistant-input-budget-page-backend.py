@@ -102,6 +102,27 @@ def main() -> None:
             elif operation == "metrics":
                 result = {"model_calls": len(fixture.reply_model.seen_model_payloads),
                           "migration_count": fixture.migration_count, "migration_repeat": fixture.migration_repeat}
+            elif operation == "large_history":
+                contact_id = contacts[0]
+                status, session = fixture.backend.request(f"/api/contacts/{contact_id}/assistant-session/default", {})
+                if status != 200:
+                    raise RuntimeError("合成完整历史的默认会话未建立。")
+                base = f"/api/contacts/{contact_id}/assistant-sessions/{session['session_id']}"
+                identifiers = []
+                for letter in "甲乙丙丁":
+                    status, saved = fixture.backend.request(base + "/inputs", {
+                        "content": {"type": "purpose_exploration", "purpose_hint": letter * 100000},
+                        **({"expected_input_version_id": identifiers[-1]} if identifiers else {}),
+                    })
+                    if status != 200:
+                        raise RuntimeError("合成完整历史输入未通过公开HTTP保存。")
+                    identifiers.append(saved["input_version_id"])
+                status, saved = fixture.backend.request(base)
+                wire_bytes = len(json.dumps(saved, ensure_ascii=False).encode("utf-8"))
+                if status != 200 or wire_bytes <= 1048576:
+                    raise RuntimeError("合成完整历史必须真实超过默认1MiB上限。")
+                result = {"session_id": session["session_id"], "input_version_ids": identifiers,
+                          "wire_bytes": wire_bytes, "characters_per_input": 100000}
             elif operation == "stop":
                 print(json.dumps({"id": command["id"], "result": {}}), flush=True)
                 break

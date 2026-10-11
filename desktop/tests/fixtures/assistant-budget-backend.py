@@ -10,8 +10,10 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
+from uuid import UUID
 
 import psycopg
+from psycopg import sql
 
 from fixture_cleanup import cleanup_fixture
 from notalone.application.model_priority import ModelPriorityControl
@@ -116,7 +118,43 @@ def main() -> None:
                 result = connection()
             elif operation == "metrics":
                 result = {"model_calls": len(fixture.reply_model.seen_model_payloads),
+                          "payloads": fixture.reply_model.payloads,
                           "decisions": [decision.to_payload() for decision in fixture.decisions]}
+            elif operation == "invalidate_exploration":
+                contact = str(UUID(command["contact_id"]))
+                if contact not in contacts:
+                    raise ValueError("只允许本夹具已确认联系人。")
+                # 仅设置原无正文屏障输入，不读取内部键或业务输出作为断言。
+                with psycopg.connect(fixture.database_url) as database:
+                    inserted = database.execute(
+                        "INSERT INTO public.reply_invalidated_key(owner_id,contact_id,idempotency_key) "
+                        "SELECT owner_id,contact_id,request_key FROM public.reply_exploration "
+                        "WHERE owner_id=%s AND contact_id=%s AND id=%s",
+                        (fixture.owner_id, UUID(contact), UUID(command["task_id"])),
+                    )
+                    if inserted.rowcount != 1:
+                        raise ValueError("合成探索输入身份未确认。")
+                result = {}
+            elif operation == "invalidate_next_exploration":
+                contact = str(UUID(command["contact_id"]))
+                if contact not in contacts:
+                    raise ValueError("只允许本夹具已确认联系人。")
+                # 新应答task尚未存在；只为实际公开operation设置本隔离库的合成输入。
+                with psycopg.connect(fixture.database_url) as database:
+                    database.execute(sql.SQL("""CREATE FUNCTION synthetic_answer_barrier() RETURNS trigger LANGUAGE plpgsql AS $$
+                        BEGIN
+                            IF NEW.owner_id = {} AND NEW.contact_id = {} AND NEW.operation_key = {} THEN
+                                INSERT INTO public.reply_invalidated_key(owner_id,contact_id,idempotency_key)
+                                VALUES(NEW.owner_id,NEW.contact_id,NEW.request_key);
+                            END IF;
+                            RETURN NEW;
+                        END $$""").format(sql.Literal(fixture.owner_id), sql.Literal(UUID(contact)),
+                                            sql.Literal(UUID(command["operation_key"]))))
+                    database.execute("CREATE TRIGGER synthetic_answer_barrier AFTER INSERT ON public.reply_exploration "
+                                     "FOR EACH ROW EXECUTE FUNCTION synthetic_answer_barrier()")
+                result = {}
+            elif operation == "model-inputs":
+                result = fixture.reply_model.payloads
             elif operation == "hold":
                 fixture.reply_model.pause_next_response()
                 result = {}

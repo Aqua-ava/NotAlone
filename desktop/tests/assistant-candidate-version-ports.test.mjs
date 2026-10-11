@@ -31,7 +31,7 @@ async function fixture() {
   const selection = { selection_id: randomUUID(), selection_number: 1, session_id: sessionId,
     candidate_id: candidateId, version_id: versionId };
   const records = { history, selection, failure: null, saved: { session_id: sessionId, current_input_version_id: inputVersionId,
-    turns: [{ turn_id: turnId, input_version_id: inputVersionId, request_key: randomUUID(), state: 'completed',
+    turns: [{ turn_id: turnId, input_version_id: inputVersionId, request_key: randomUUID(), state: 'completed', interruption_reason: null,
       input: { content: { type: 'rewrite_draft', draft_text: '本次合成草稿。' } }, placeholder: null,
       reply: { reply_request_id: requestId, candidates: [{ candidate_id: candidateId, text: '本次合成原候选。',
         messages: [{ message_id: messageId, text: '本次合成原候选。' }], basis: '保留本次草稿原意。', citation_ids: [], risk_notes: [] }],
@@ -126,7 +126,7 @@ function appendCandidate(f, { sameTurn = false, text = '独立合成候选仍可
   if (sameTurn) f.records.saved.turns[0].reply.candidates.push(candidate);
   else {
     f.records.saved.turns.push({ turn_id: turnId, input_version_id: inputVersionId, request_key: randomUUID(),
-      state: 'completed', input: { content: { type: 'rewrite_draft', draft_text: '独立合成输入。' } }, placeholder: null,
+      state: 'completed', interruption_reason: null, input: { content: { type: 'rewrite_draft', draft_text: '独立合成输入。' } }, placeholder: null,
       reply: { reply_request_id: requestId, candidates: [candidate], context_receipt: { evidence_ids: [] } } });
     f.records.saved.inputs.push({ input_version_id: inputVersionId, type: 'generation', conversation_binding_id: randomUUID(),
       turn_id: turnId, state: 'active', content: null, placeholder: null });
@@ -189,7 +189,7 @@ function replaceSavedFixture(f, sessionId = f.sessionId) {
   const candidateId = randomUUID(), versionId = randomUUID(), turnId = randomUUID();
   const inputId = randomUUID(), messageId = randomUUID(), requestId = randomUUID(), text = '新范围合成候选。';
   f.records.saved = { session_id: sessionId, current_input_version_id: inputId,
-    turns: [{ turn_id: turnId, input_version_id: inputId, request_key: randomUUID(), state: 'completed',
+    turns: [{ turn_id: turnId, input_version_id: inputId, request_key: randomUUID(), state: 'completed', interruption_reason: null,
       input: { content: { type: 'rewrite_draft', draft_text: '新范围合成草稿。' } }, placeholder: null,
       reply: { reply_request_id: requestId, candidates: [{ candidate_id: candidateId, text,
         messages: [{ message_id: messageId, text }], basis: '新范围合成依据。', citation_ids: [], risk_notes: [] }],

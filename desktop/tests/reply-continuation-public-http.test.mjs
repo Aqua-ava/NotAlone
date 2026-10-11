@@ -41,7 +41,16 @@ test('B10回应消息连续修改捕获当前显示的第二组编辑版本，�
   assert.equal(continued.input.continuation.candidate_id, second.candidateId);
   assert.equal(continued.input.continuation.version_id, displayed);
   assert.equal(continued.input.continuation.candidate_group_id, second.candidateGroupId);
-  assert.equal(continued.input.content.draft_text, '第二组编辑版第1条。\n\n第二组编辑版第2条。');
+  assert.equal(continued.input.content.type, 'reply_to_message');
+  assert.equal(continued.input.content.direction, '拒绝本次邀约。');
+  assert.equal(continued.input.content.target_message_id, message.messageId);
+  assert.equal('draft_text' in continued.input.content, false);
+  const payload = (await f.command('metrics')).payloads.at(-1);
+  assert.equal(payload.confirmed_direction, '拒绝本次邀约。');
+  assert.deepEqual(payload.continuation_reference.messages.map((item) => item.text),
+    ['第二组编辑版第1条。', '第二组编辑版第2条。']);
+  assert.equal(payload.continuation_reference.version_id, displayed);
+  assert.equal(payload.continuation_reference.is_current_draft, false);
   assert.equal(continued.input.content.user_instruction, '自然一点；不要承诺；简短一点');
   assert.equal(persisted.current_input_version_id, continued.input_version_id);
   assert.equal((await f.command('metrics')).model_calls, 2);

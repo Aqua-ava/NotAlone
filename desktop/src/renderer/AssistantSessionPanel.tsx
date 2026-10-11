@@ -4,7 +4,7 @@ import type { ReplySessionView } from './RewritePanel';
 import type { SavedAssistantInput, SavedAssistantTurn } from '../shared/assistant-session';
 import { AssistantInputBudgetNotice } from './AssistantInputBudgetNotice';
 
-function SavedTurn({ turn, index }: { turn: SavedAssistantTurn; index: number }) {
+function SavedTurn({ turn, index, retry, busy }: { turn: SavedAssistantTurn; index: number; retry?: () => void; busy: boolean }) {
   return <article aria-label={`第${index + 1}轮讨论`}>
     {turn.placeholder ? <p>{turn.placeholder}</p> : <>
       <p>{typeof turn.input?.content.draft_text === 'string' ? turn.input.content.draft_text
@@ -12,7 +12,8 @@ function SavedTurn({ turn, index }: { turn: SavedAssistantTurn; index: number })
         : typeof turn.input?.content.purpose === 'string' ? turn.input.content.purpose : '本轮回复输入'}</p>
       {typeof turn.input?.content.user_instruction === 'string' && <p>{turn.input.content.user_instruction}</p>}
       {turn.state === 'running' && <p>本轮生成尚未完成。</p>}
-      {turn.state === 'failed' && <p>本轮生成未成功保存。</p>}
+      {turn.state === 'failed' && <p>{turn.interruptionReason === 'app_quit' ? '上次生成中断。' : '本轮生成未成功保存。'}</p>}
+      {turn.interruptionReason === 'app_quit' && retry && <button disabled={busy} onClick={retry}>重试上次中断生成</button>}
       {turn.reply?.inputBudget && <AssistantInputBudgetNotice budget={turn.reply.inputBudget} historical />}
       {turn.reply?.candidates.map((candidate) => <p key={candidate.candidateId}
         data-assistant-candidate-id={candidate.candidateId}
@@ -22,6 +23,10 @@ function SavedTurn({ turn, index }: { turn: SavedAssistantTurn; index: number })
 }
 function SavedDiscussion({ input }: { input: SavedAssistantInput }) {
   const content = input.content;
+  if (content?.type === 'candidate_carry') return <article aria-label="携入的已选版本">
+    <p>携入的已选版本，仅作表达参考。</p>
+    {content.messages.map((message) => <p key={message.messageId}>{message.text}</p>)}
+  </article>;
   return <article aria-label="已保存的方向讨论">
     {input.placeholder ? <p>{input.placeholder}</p> : content && <dl>
       {content.type === 'purpose_exploration' ? <><dt>当时的主动目的</dt><dd>{content.purposeHint}</dd></>
@@ -45,6 +50,10 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
   const deleting = replies.state.sessionDeletion === 'deleting';
   const catalog = replies.state.sessionCatalog;
   const budgetNotice = replies.state.inputBudgetNotice;
+  const chosen = replies.state.explicitCandidateSelection;
+  const chosenView = replies.state.candidateVersions?.items.find((item) => item.candidateId === chosen?.selection?.candidateId);
+  const canCarry = chosen?.phase === 'ready' && chosen.selection?.sessionId === saved?.sessionId
+    && chosenView?.phase === 'ready' && chosenView.displayVersionId === chosen.selection?.versionId;
   const currentBudget = budgetNotice?.contactId === replies.state.contactId
     && budgetNotice.scopeRevision === replies.state.scopeRevision && budgetNotice.sessionId === saved?.sessionId
     && !replies.state.sourceAvailability ? budgetNotice.decision : undefined;
@@ -82,6 +91,10 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     <button disabled={!replies.state.contactId || busy} onClick={() => void replies.newSavedSession()}>
       新开助手会话
     </button>
+    <button disabled={!replies.state.contactId || busy || !canCarry} onClick={() => void replies.newSavedSessionWithCandidate()}>
+      携已选版本新开
+    </button>
+    {!canCarry && <p>携入前，请在候选区明确选用要保留的保存版本。</p>}
     <button disabled={!replies.state.contactId || busy} onClick={() => void replies.listSavedSessions()}>刷新会话列表</button>
     {catalog?.phase === 'loading' && <p role="status">正在核对助手会话…</p>}
     {catalog?.selectionPending && catalog.phase !== 'loading' && <p role="alert">助手会话操作尚未确认，请刷新列表后明确选择会话。</p>}
@@ -122,7 +135,10 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
       {saved.inputs.map((input) => {
         if (input.type !== 'generation') return <SavedDiscussion key={input.inputVersionId} input={input} />;
         const index = saved.turns.findIndex((turn) => turn.turnId === input.turnId && turn.inputVersionId === input.inputVersionId);
-        return index < 0 ? null : <SavedTurn key={input.inputVersionId} turn={saved.turns[index]} index={index} />;
+        return index < 0 ? null : <SavedTurn key={input.inputVersionId} turn={saved.turns[index]} index={index}
+          busy={busy || replies.state.phase === 'waiting' || Boolean(replies.state.generationBlock)}
+          retry={saved.currentInputVersionId === input.inputVersionId ? () => void replies.retryInterruptedGeneration(
+            saved.sessionId!, saved.turns[index].turnId, input.inputVersionId) : undefined} />;
       })}
     </section>}
   </section>;

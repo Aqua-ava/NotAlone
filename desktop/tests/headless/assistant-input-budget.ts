@@ -8,8 +8,9 @@ import { withRewritePages } from './rewrite-acceptance';
 
 const draft = '合成预算讨论：' + '今晚不参加，感谢邀请。'.repeat(60);
 const instruction = '只保留当前草稿的事实与承诺。';
+export { draft as budgetDraft, instruction as budgetInstruction };
 
-async function prepareDraft({ manager, helper, rewriteBackend }: RewritePages, prefix: string) {
+export async function prepareDraft({ manager, helper, rewriteBackend }: RewritePages, prefix: string) {
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill(draft);
