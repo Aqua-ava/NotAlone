@@ -95,3 +95,11 @@ NOTALONE_DISABLE_DOTENV=1 NOTALONE_TEST_DATABASE_URL='postgresql:///notalone_a_s
 最终相关 72/72，28.899 秒，OK：输入 HTTP 10、记忆 HTTP/PG 4、既有会话 HTTP 24、真实升级及事务 14、MemoryStore 16、本人删除 1、来源清理 3。实际 red→green 包括删除后正文残留、八个记忆有效期子反例、来源快照缺失、save→complete 窗口，以及共享事务接口缺失；tuple/dict、已有 owner 锁不自锁、rollback/commit 均经真实 PG 验证。Standards 硬规范/气味均 0，Spec 复查剩余 0；原两项审查缺陷修复后才交付。
 
 新增正文仍只保存在权威讨论记录，来源清除会擦正文及依赖，历史不可恢复；不保存原始视觉帧，不新增聊天发送或后台自治能力。真实 App、私人资料、外部模型、19、push 和部署均未执行。
+
+### 本轮自主协调最终结果（2026-10-12）
+
+默认会话通过原公开生成入口可靠保存；同键重放、不同输入冲突、保存失败与来源删除均有真实HTTP／PG证据。稳定身份按owner/contact隔离。
+
+剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。
+
+证据：[29票逐项结果与实际命令](../../unfinished-work/round29-autonomous-results-20261011.md)、[固定源码、自动验证及清理回执](../../unfinished-work/round29-autonomous-verification-20261011.json)。各次不同来源的计量分列，未把静态审查、合成模型或受控宿主冒为原生／真人通过。原验收文本逐行对共同基线保留；只更新实际可验收的勾选和State。

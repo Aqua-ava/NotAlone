@@ -53,3 +53,11 @@ Blocked by: [conversation-reply-strategy/01 回应场景与明确意愿直达候
 2026-10-11 B 实施：公共输入为 InitiateConversation(purpose: ConfirmedDirection)，沿用 GenerateReply/ReplyService；HTTP content.type=initiate_conversation，purpose为独立字段，无target_message_id。user_purpose保留为独立证据，050扩展原白名单。明确目的直接比较候选，切换场景不调用模型、不改变草稿或回复方向。自动类型检查及回复单元回归已通过；真实PG待048/049连续迁移集成，公开页面case已编写，尚未执行。
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
+
+### 本轮自主协调最终结果（2026-10-12）
+
+主动场景使用真实明确目的，不伪造对方目标；复用统一生成入口，无第二次必选开口方式。切换不调用模型。
+
+剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。
+
+证据：[29票逐项结果与实际命令](../../unfinished-work/round29-autonomous-results-20261011.md)、[固定源码、自动验证及清理回执](../../unfinished-work/round29-autonomous-verification-20261011.json)。各次不同来源的计量分列，未把静态审查、合成模型或受控宿主冒为原生／真人通过。原验收文本逐行对共同基线保留；只更新实际可验收的勾选和State。

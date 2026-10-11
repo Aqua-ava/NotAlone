@@ -1,6 +1,6 @@
 # 29 项自主实现与集成结果
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 
 ## 本轮范围与证据边界
@@ -8,6 +8,61 @@ Triage: ready-for-agent
 本轮接续集成分支 `codex/autonomous-integration-29` 的 `84b5dd32`，处理 A 持续会话 07–18、B 聊天回复策略 01–11、C 真实表达 01–06 共 29 张原任务。原任务验收标准不删改，最终状态以各票实际完成范围为准。本文件是总协调结果索引，不替代原票或给人工验收补签。
 
 用户已授权公开页面 → 生产具名 bridge → 后端 HTTP → 隔离 PostgreSQL 的自动验证。仅使用合成数据、可控模型和自有随机 `_test` 库；默认 dotenv 与外部追踪关闭。未授权范围为 OCR、真实微信、外部聊天发送、私人资料、付费或外部模型调用、push、发布、部署、额外用户会话及请求用户实施验收。
+
+## 最终当前结果（2026-10-12）
+
+29张原票均已记录带证据的结果与剩余工作：28张`resolved`，A17保持`claimed`。共同基线`84b5dd32`的166条原验收文本逐行保留；164条有自动证据并勾选，A17第1、3条真正App停止／重开未执行、保留未勾。总协调任务的`resolved`仅表示本轮允许的全部自主工作已完成，不代替A17整票或真人／原生验收。本轮只实际执行受控宿主和具名公开页面窗口，真正App停启未执行；按工程要求保留这两项原生未验，不请求用户实施。
+
+| 原票 | 最终State | 实际AC | 完成结果与原证据 |
+| --- | --- | --- | --- |
+| A07 | resolved | 6／6 | [默认会话通过原公开生成入口可靠保存；同键重放、不同输入冲突、保存失败与来源删除均有真实HTTP／PG证据。稳定身份按owner/contact隔离。](../assistant-session-context/issues/07-default-session-persistence.md#answer) |
+| A08 | resolved | 5／5 | [重新连接通过原保存读取恢复，读取不调用模型；来源／绑定失效拒绝，未完成请求不会自动续跑。权威恢复消费者另经主树实际验证。](../assistant-session-context/issues/08-saved-session-recovery.md#answer) |
+| A09 | resolved | 6／6 | [会话删除、幂等和迟到竞态经真实业务存储验证；已主动保存的独立表达样本按ADR-044保留，原始来源删除仍覆盖相关样本与派生内容。](../assistant-session-context/issues/09-delete-assistant-session.md#answer) |
+| A10 | resolved | 5／5 | [空新开、列表及旧会话选择使用实际会话身份，零模型；不自动携正文。最后携入两场同时验证空新开和满会话分流。](../assistant-session-context/issues/10-session-list-and-new.md#answer) |
+| A11 | resolved | 6／6 | [候选及组内消息编辑、明确选择、历史版本重读均接原稳定身份和删除依赖；默认展示不冒充用户选择。最后消息组公开场覆盖编辑及复制，复制不记发送。](../assistant-session-context/issues/11-candidate-edit-history.md#answer) |
+| A12 | resolved | 6／6 | [同一预算守卫覆盖初次、typed连续要求、探索、工具补入和替换；warning、hard及完整历史均有独占页面实际证据。合法大历史完整传输，不静默截断；模型能力未知保持拒绝。](../assistant-session-context/issues/12-input-budget-guard.md#answer) |
+| A13 | resolved | 6／6 | [明确编号、改口、兼容要求和澄清按原会话继续；累计4106码点在权威恢复及新消息采用后完整保持并经过原预算。原39HTTP＋2unit及51HTTP／295unit、最新采用两项和最终公开typed组合分别保留。](../assistant-session-context/issues/13-continuous-intent-reference.md#answer) |
+| A14 | resolved | 5／5 | [替换使旧请求失效，实际保存、失败、幂等、来源删除和迟到结果均复验；唯一Map／prepare／replace沿原预算。最后两种在途采用场核旧结果不能覆盖新候选。](../assistant-session-context/issues/14-replace-running-generation.md#answer) |
+| A15 | resolved | 5／5 | [真实合成消息经SSE只提醒，不覆盖编辑或自动生成；明确结合复验实际消息与CURRENT并替换。累计要求新反例两场完整通过，最终公开在途两场及删除／预算后段均已执行。](../assistant-session-context/issues/15-new-message-opt-in.md#answer) |
+| A16 | resolved | 5／5 | [切换联系人、助手会话及关闭小窗保留已发候选归属；迟到旧结果不能覆盖当前视图。受控宿主和公开生命周期已验证；真正App证据属于原规格后续边界，本轮没有冒称原生通过。](../assistant-session-context/issues/16-background-result-ownership.md#answer) |
+| A17 | claimed | 3／5 | [自动部分完成：受控quit／准备停止／恢复、完成和失败回包竞态、来源及样本删除、原身份重放和同冻结策略命令ACK丢失均有真实Main→HTTP→隔离PG结果。主树39项退出／携入、7项权威／意愿／proof和3项命令关联分别通过。](../assistant-session-context/issues/17-quit-and-interrupted-recovery.md#answer) |
+| A18 | resolved | 5／5 | [普通会话与受控预算已满会话都可全新开始或只携明确选定版本；新会话零模型、旧记录保留，来源物理删除清新旧相关副本并保留无关讨论。主树3HTTP及最后2场公开DOM均通过。](../assistant-session-context/issues/18-carry-selected-candidate.md#answer) |
+| B01 | resolved | 6／6 | [回应入口保持目标消息和明确方向，草稿改写兼容；场景切换零模型，不猜最近消息，默认改写不读关系背景。最后策略组合实际走公开入口。](../conversation-reply-strategy/issues/01-response-scene-entry.md#answer) |
+| B02 | resolved | 6／6 | [一句理解、依据、歧义及不同意愿建议绑定实际输入版本；纠正与回答不冒为确认，明确选择或方向后才生成。旧建议、跨范围和来源删除拒绝。](../conversation-reply-strategy/issues/02-understanding-and-direction.md#answer) |
+| B03 | resolved | 5／5 | [换组、推荐、自填和暂缓由用户决定，推荐不预选，旧组失效；暂不回应不建立提醒或发送。最后两种场景选项公开路径通过。](../conversation-reply-strategy/issues/03-direction-options-and-pause.md#answer) |
+| B04 | resolved | 5／5 | [主动场景使用真实明确目的，不伪造对方目标；复用统一生成入口，无第二次必选开口方式。切换不调用模型。](../conversation-reply-strategy/issues/04-proactive-purpose-entry.md#answer) |
+| B05 | resolved | 5／5 | [目的探索与用户确认绑定实际输入，旧探索／迟到／失效拒绝；明确目的进入候选。最后主动纠正和方向确认公开路径通过。](../conversation-reply-strategy/issues/05-purpose-exploration.md#answer) |
+| B06 | resolved | 6／6 | [回应及主动均覆盖关键澄清、回答后仍须明确意愿、取舍和继续；普通未知项不虚构也不强制追问。目标／目的修改使旧问题失效，较晚澄清不覆盖已确认候选。](../conversation-reply-strategy/issues/06-clarification-and-tradeoffs.md#answer) |
+| B07 | resolved | 7／7 | [最多一个有效不可变Skill版本沿探索、确认和生成；显式关闭不自动选回，更换／禁用／删除使旧结果失效。方向探索无表达样本，生成才有界引用；无外部业务Tool或具体邀约Skill。](../conversation-reply-strategy/issues/07-skill-version-continuity.md#answer) |
+| B08 | resolved | 6／6 | [两种场景区分备选方案及有序组内消息，逐条编辑、复制、明确版本选择并可靠恢复。新消息与断流保留编辑，复制不记发送；页面不声称系统剪贴板原生能力通过。](../conversation-reply-strategy/issues/08-message-group-edit-copy.md#answer) |
+| B09 | resolved | 6／6 | [仅已打开且未确认的活跃探索有界更新，通知合并与次数／超时预算保持；确认后只提醒。关闭探索不取消已发候选；同冻结prepare ACK丢失3个原反例修复后主树实际通过。](../conversation-reply-strategy/issues/09-bounded-direction-updates.md#answer) |
+| B10 | resolved | 6／6 | [回应及主动均经公开typed修改、编号引用、澄清和新消息显式采用，原目的／方向及完整旧组保持。4096合法／4097拒绝的三个DOM字段、失效版本与删除真实验证，复用唯一生命周期与存储。](../conversation-reply-strategy/issues/10-continuous-scenario-revision.md#answer) |
+| B11 | resolved | 5／5 | [同一正式生产装配公开页面→HTTP→隔离PG完成策略38场；随后测试导航修正后独立完成携入2场，共40个完成场景、41次进入，原整命令退出1保留。原场景与门禁保持，同句不同前文四例／8调用可审阅；语义质量和真实模型预算未验证。](../conversation-reply-strategy/issues/11-combined-strategy-acceptance.md#answer) |
+| C01 | resolved | 7／7 | [唯一离线逐例协议保留输出、版本、失败、超时成本、开发／保留划分及未审阅；确定性契约与人工语义分列。没有真人通过或真实模型自然度结论。](../authentic-expression/issues/01-offline-fidelity-report.md#answer) |
+| C02 | resolved | 5／5 | [当前明确意愿优先于旧习惯／记忆／Skill，旧已选组只作低权重参考。无新增事实但改立场的实际输入矩阵及typed页面v2报告保留故意失败和未知。](../authentic-expression/issues/02-current-intent-priority.md#answer) |
+| C03 | resolved | 6／6 | [同一保真协议区分事实、声明、条件与未知；新增承诺／心理／旧事实等逐例失败保留。结构与来源失效拒绝；没有第二模型审查、自动重写或无限重试。](../authentic-expression/issues/03-unsupported-content-boundary.md#answer) |
+| C04 | resolved | 7／7 | [仅用户主动保存样本，保存／查看／删除同联系人完整生命周期及幂等已验证；手动／衍生来历明确，复制或同步不保存。删助手会话保独立样本，删原始来源清相关派生。](../authentic-expression/issues/04-style-sample-lifecycle.md#answer) |
+| C05 | resolved | 6／6 | [生成最多5条低权重表达样本且计预算，不作当前事实，不进探索；无样本正常。删除／重试／生成竞态与恢复拒绝已删正文，保无关手动样本。](../authentic-expression/issues/05-bounded-style-reference.md#answer) |
+| C06 | resolved | 7／7 | [四HTTP矩阵、来源／样本删除、Skill探索无样本、会话删除独立样本、权威恢复、累计新消息采用及最终typed页面均有真实合成集成证据。新页面v2由实际捕获生成E01报告，旧分母与失败／未知保留。](../authentic-expression/issues/06-combined-fidelity-acceptance.md#answer) |
+
+最终公开集成采用同一正式生产装配、单Chrome，分窗完成`reply-strategy-combination`38场及`assistant-candidate-carry`2场，共40个完成场景、41次进入（含首次失败携入）。策略窗口整个命令actualexit1如实保留，策略label已正常完成；随后仅测试导航修正、生产完全未变，携入窗口actualexit0，两场均完成。没有制造同一次40GREEN。原5秒DOM轮询、HTTP／quiet／SSE门禁不放宽。两个窗口各自1017个backend／desktop文件前后SHA一致；窗口间唯一差异为携入TEST producer，全部生产字节相等。
+
+策略固定HEAD`687ac83a53d6c7ea84740f7b65ef0a0c35beace0`，实际2026-10-11T20:35:12.050258+00:00至2026-10-11T20:39:21.224988+00:00；携入固定HEAD`9281aa6c9c9fc7edc55bc220dfc33b22e36f0483`，实际2026-10-11T20:54:43.199746+00:00至2026-10-11T20:54:57.335121+00:00。两次cleanupConfirmed=true，精确自有PID/PPID/PGID分别223与20个全部退出、fresh lease absent；quiet分别352与17 samples，均active0／onscreen0／registered≤1／policy2。全部RewriteFixture强制执行Python DROP后SQL EXISTS=false且退出0；实际本窗口留存的SSE库名另由Root新连接逐库SQL核验；Default夹具没有留名，不声称Root额外逐库审计或迁移计量；两次原Budget RewriteFixture强制DROP后SQL EXISTS=false与exit0；本fixture没有留库名供Root另查。未运行Electron或原生验收。完整回执及29项索引见[自动验证实录](round29-autonomous-verification-20261011.json)。
+
+实际命令（全部Python与Page前先激活Conda `NotAlone`）：
+
+- 策略38：在desktop以 `PGHOST=/tmp PGPORT=55441 NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false npm run test:pages -- --case reply-strategy-combination --case assistant-candidate-carry --timeout-seconds 299`；策略label完成，随后携入测试前置失败、整个命令exit1。
+- 携入2：同环境 `npm run test:pages -- --case assistant-candidate-carry --timeout-seconds 149`，仅测试公开导航修正，actualexit0；空新开／完整两条／旧记录／新turn0／modeldelta0／55repeat0两实际checkpoint达到。
+- 最后代理三项：`node --test tests/reply-strategy-clarification-confirm-http.test.mjs`，Root实际3G／9170.843ms，8受控模型；真实确认752.834ms、四最终结果200，丢／挂起后同命令重放不额外调用。
+- Skill原双场：`node --test tests/reply-strategy-skill-switch-http.test.mjs`，Root实际2G／21892.734833ms、模型26，second确认2975.654／3007.274ms，old409／UUID／CURRENT全部达到；两限定mypy／compile通过。
+- 累计要求采用原两项：`node --test tests/authentic-expression-accumulated-message-opt-in-http.test.mjs`，Root实际2G／10466.420042ms、模型6、两份55迁移重复0／库0，4106码点保持，两个真实PRODUCT RED已修；精确后端两项7.237秒。
+- 原命令关联三项：`node --test tests/reply-strategy-preparation-retry-ack-http.test.mjs`，Root实际3G／9694.099792ms、模型6、三份55迁移重复0／库0。
+- 受控退出／携入39HTTP、权威意愿proof7HTTP、safe CLI40、Job Map15及类型／限定mypy／compile分别保留下方原固定源码计量，未冒称同一次全套或借子树结果。
+- E01新页面报告仅读取本次实际v2捕获，使用唯一 `python -m tests.fidelity_capture` 离线入口；无新增模型或数据库。
+
+新实际页面v2逐例报告见[报告](../authentic-expression/reports/public-typed-continuation-page-controlled-v2.json)：`{"denominator":8,"contract_failed":0,"semantic_reviewed":6,"fidelity_failed":2,"unreviewed":2,"known_call_count":9,"known_elapsed_ms":10737.094165000017,"unknown_cost_count":0,"total_call_count":9,"total_elapsed_ms":10737.094165000017,"quality_verified":false,"dimensions":{"intent":{"denominator":8,"evaluated_denominator":6,"pass":4,"fail":2,"unknown":0,"unreviewed":2},"unsupported_content":{"denominator":8,"evaluated_denominator":6,"pass":4,"fail":2,"unknown":0,"unreviewed":2},"naturalness":{"denominator":8,"evaluated_denominator":0,"pass":0,"fail":0,"unknown":6,"unreviewed":2},"relationship_fit":{"denominator":8,"evaluated_denominator":0,"pass":0,"fail":0,"unknown":6,"unreviewed":2},"user_similarity":{"denominator":8,"evaluated_denominator":0,"pass":0,"fail":0,"unknown":6,"unreviewed":2}},"human_fidelity_pass":0,"reviewer_kinds":{"human":0,"synthetic_fixture":6,"agent_review":0,"unknown":2},"by_split":{"development":{"denominator":8,"contract_failed":0,"semantic_reviewed":6,"fidelity_failed":2,"unreviewed":2,"known_call_count":9,"known_elapsed_ms":10737.094165000017,"unknown_cost_count":0,"total_call_count":9,"total_elapsed_ms":10737.094165000017,"quality_verified":false,"dimensions":{"intent":{"denominator":8,"evaluated_denominator":6,"pass":4,"fail":2,"unknown":0,"unreviewed":2},"unsupported_content":{"denominator":8,"evaluated_denominator":6,"pass":4,"fail":2,"unknown":0,"unreviewed":2},"naturalness":{"denominator":8,"evaluated_denominator":0,"pass":0,"fail":0,"unknown":6,"unreviewed":2},"relationship_fit":{"denominator":8,"evaluated_denominator":0,"pass":0,"fail":0,"unknown":6,"unreviewed":2},"user_similarity":{"denominator":8,"evaluated_denominator":0,"pass":0,"fail":0,"unknown":6,"unreviewed":2}},"human_fidelity_pass":0,"reviewer_kinds":{"human":0,"synthetic_fixture":6,"agent_review":0,"unknown":2}},"holdout":{"denominator":0,"contract_failed":0,"semantic_reviewed":0,"fidelity_failed":0,"unreviewed":0,"known_call_count":0,"known_elapsed_ms":0,"unknown_cost_count":0,"total_call_count":0,"total_elapsed_ms":0,"quality_verified":false,"dimensions":{"intent":{"denominator":0,"evaluated_denominator":0,"pass":0,"fail":0,"unknown":0,"unreviewed":0},"unsupported_content":{"denominator":0,"evaluated_denominator":0,"pass":0,"fail":0,"unknown":0,"unreviewed":0},"naturalness":{"denominator":0,"evaluated_denominator":0,"pass":0,"fail":0,"unknown":0,"unreviewed":0},"relationship_fit":{"denominator":0,"evaluated_denominator":0,"pass":0,"fail":0,"unknown":0,"unreviewed":0},"user_similarity":{"denominator":0,"evaluated_denominator":0,"pass":0,"fail":0,"unknown":0,"unreviewed":0}},"human_fidelity_pass":0,"reviewer_kinds":{"human":0,"synthetic_fixture":0,"agent_review":0,"unknown":0}}}}`。保留旧v1、HTTP12例、旧Page8例及故意失败／未审阅分母；合同检查通过不等保真质量通过，真人通过0、quality_verified=false，语义、自然度、关系适配、本人相似度及真实模型预算未知。系统剪贴板、真实App、微信／OCR等原生边界未用公开页面代签。
+
+所有生产迁移仍为001–055，无第二写入者、依赖图或自动发送能力。数据只为合成与随机隔离库；外部追踪和dotenv关闭。OCR、真实微信、外部发送、私人资料、付费或外部模型、push、PR、发布、部署、额外用户会话均未执行。三个独立worktree的正式交付均经逐项净集成、Standards与Spec审查和本地提交；既有A会话只交唯一普通消费者／宿主切片，旧机械副本不冒称正式独立装配。
 
 ## 独立工作树与共享契约
 
@@ -27,7 +82,7 @@ Triage: ready-for-agent
 
 2026-10-11（台北）：原票 18 张为 `resolved`；A12–18、B09–11、C06 共 11 张仍为 `claimed` 或 `open`。这些状态是接续起点，不能当成本轮已经验收。已核对工作流、领域路由、ADR-042/043/044、现有迁移与主树未提交源；普通页面租约的只读状态为 `absent`。
 
-## 原任务逐项索引
+## 接续起点原任务索引（历史状态）
 
 | 原任务 | 名称 | 接续起点 State | 已勾／未勾 AC | 原票证据 |
 | --- | --- | --- | --- | --- |
@@ -63,7 +118,7 @@ Triage: ready-for-agent
 
 ## 逐项结果
 
-待各组正式交付、独立 Standards/Spec 审查和主树集成验证后，逐项记录证据、提交、跳过理由与剩余工作。
+以下保留各阶段实际记录；其中“待”“当前”均指当时固定源码状态，最终状态见上方逐票表和各原票最终Answer，不删除真实失败或补造通过。
 
 ### 已逐项集成的切片
 
@@ -81,7 +136,7 @@ Triage: ready-for-agent
 
 A13 提供者实际复现 2 个 HTTP RED 后修复为 2 个 GREEN，保留未知要求必须明确确认的约束；独立 B Standards 与 C Spec 分别无新增问题。主树复验没有复用提供者测试计量。首次 PostgreSQL 与回环 Node 在沙箱内遭 socket `EPERM`，未当作产品 RED；改为已授权的本机测试范围后通过。第一次 Node 入口误用未安装的 `tsx`，已采用仓库已有 esbuild 编译方式，未安装依赖。
 
-## 后续独立集成进度（2026-10-12，仍在推进）
+## 后续独立集成进度（2026-10-12，阶段历史）
 
 下列是主树实际运行后的本地主题提交，不借子树计量。当前仍有前端严格证明与权威恢复消费、最后页面组合及原票结账尚待完成，不能以本段把29票全部关闭。
 
@@ -183,3 +238,66 @@ B原117行正式 `7188779b` test-only1不改原双scene／13调用／old409／�
 Readonly核实际RewritePanel：未continuation的即时rewrite_draft沿原候选文本编辑；已保存版本／历史视图使用CandidateVersionEditor。携入Page producer需通过既有公开旧会话版本视图编辑与选择，不能把缺控件当成已发生携入失败或为测试新增UI。仅修原测试入口准备，保两完整消息、显式版本／选择、零自动生成、空新开、旧记录、临时要求不携和满预算原断言；生产不猜改。若最后仅测试准备变化，已通过38策略不再无由重跑，最终证据会分窗、保持原exit1，不造同一次40G。
 
 携入TEST-only1固定patch SHA `b58544de642a798738464224620e7a5d24561a85fb919cc469c8ba181d6f0b07`、source389be5c3，经完整TypeScript／diff及A Standards硬要求0／重要气味0、C Spec新增P0–P3=0。新增即时候选2完整两条DOM→实际SID的公开刷新／查看旧会话→版本组编辑准备，导航前后全部metrics相等验证零模型；原两场完整后续断言与五秒门禁保持，正式业务源未变。之后仅执行两个携入场，不把已完成38策略另跑或涂掉原整命令exit1。
+
+
+## Answer
+
+本轮全部获准自主实现、验证、审查、逐项集成和逐票结账已完成；当前28resolved／1claimed，真实人工剩余与风险见“最终当前结果”。历史失败、环境准备错误和各固定源码分母完整保留，未把后续G改写成此前已通过。最终本地提交清单和三工作树状态由末次审查后附录记录，无远端操作。
+
+## 本地提交与最终交付固定点
+
+最终文档收口前，主树从共同基线到正式运行固定点 `9281aa6c9c9fc7edc55bc220dfc33b22e36f0483` 已有35个本轮本地提交。所有实现、反例修复和阶段证据均已本地集成；最后逐票结账与历史台账另外按本任务文件提交。此前35个提交如下（最新在前）：
+
+- `9281aa6c` 校准携入页面验收的公开版本导航入口
+- `687ac83a` 减少探索确认对无关历史输入的重复读取
+- `ab816f3a` 修正准备阶段最终探索结果的测试观察
+- `cc7b81c7` 接通累计要求的新消息显式采用与权威回读
+- `ad1c3a6d` 修复累计要求采用新消息的权威继承
+- `8ec887a7` 按冻结确认命令收口已结束的未知准备身份
+- `133e9a8c` 集成公开会话控制器与严格生成归属
+- `6e15d7e8` 集成同句不同前文的实际语义审阅证据
+- `6439f640` 核对原确认身份并支持连续要求及重复恢复
+- `f80e83d8` 登记本轮独立集成验证与真实剩余
+- `f6baf916` 绑定已确认策略准备的未领取证明
+- `139ead5c` 恢复已确认策略中的真实中断输入
+- `06aec207` 从权威输入恢复用户明确重试的中断生成
+- `749afe40` 集成持续修改的真实表达新版证据
+- `8ec6750d` 为准备拒绝提供未领取生成的事务证明
+- `2bd9a492` 修复连续修改输入的中文与码点边界
+- `65c87d05` 保留编号续答中的当前用户意愿
+- `674c2ba5` 清理实际表达样本失效后的中断复制输入
+- `e48239e9` 报告连续修改实际准备请求的开始时点
+- `70f3f134` 修复已确认候选失败后仍等待的公开状态
+- `e4738db9` 集成大历史完整分段读取与权限复验
+- `4afa7704` 集成合法累计要求的完整预算验证
+- `f3cc237c` 保护模型已读取而未完成的来源重试依赖
+- `908d915e` 集成两场景连续修改与明确要求澄清
+- `740e2ace` 集成唯一作业的未知准备登记协议
+- `878a6522` 建立29项自主集成的证据索引
+- `732d76c5` 集成可靠失败结果的原事务退出确认
+- `81b5fea2` 集成预算提醒的具名公开页面验证入口
+- `a97e65f9` 阻止失效来源输入重试并继承原删除依赖
+- `dfb1c31c` 集成续答中断后表达样本与来源删除验证
+- `8e32480c` 集成已确认回复策略的唯一作业生命周期
+- `06d18092` 集成持续续答的同输入准备回执
+- `9a15a9ca` 同步表达样本文档的自动实现与未验收范围
+- `af83e72d` 集成连续修改与样本来源删除的真实四场验证
+- `d41c1ff6` 接通选定版本持续要求的主树续答接口
+
+三个独立worktree已接收最终正式交付，状态只读核对均clean，没有运行项目测试、数据库或页面：
+
+| 组 | 独立worktree | 最终正式交付 | 主树净集成范围 |
+| --- | --- | --- | --- |
+| A | `/private/tmp/notalone-round29-a` | `fd3fe2a04257ffc9807de48cbfe445adc2ed8e90` | 唯一后端provider、预算及权威恢复，ADR-042／规格状态 |
+| B | `/private/tmp/notalone-round29-b` | `31beb216afce0b21af137e4295130b297a71c365` | 唯一策略消费者、公开场及ADR-043／规格／流程净段 |
+| C | `/private/tmp/notalone-round29-c` | `6fcf65837c3cd7139522bfce8e15d1065086ff19` | 样本、保真及本次实际v2报告，ADR-044／规格净段 |
+
+既有A实现会话的唯一普通消费正式交付为 `4e5bc165`，其快照恢复时的文档固定HEAD为 `e692e2cd`、工作树clean；随后唯一阶段结果文档正式提交 `5688e5920220fd36824564cf66ba3c8b536c5877`，最终工作树再次只读确认clean。该会话旧机械副本21文件（11 tracked＋10 untracked）先按冻结清单21个SHA保存到本地恢复分支 `codex/assistant-session-07-18-history-20261012` 的 `504eac9c25517a6116514c660a0616a392e15e79`，再恢复自己的工作树；[快照回执](/private/tmp/notalone-a07-18-history-snapshot-isoGiB/receipt.json)保留。没有丢弃未保存的本任务记录，没有拿旧树声明最新Root独立全装配GREEN，也没有运行额外测试或操作其他数据。
+
+最终文档固定审查包含29票／166原标准、当前State、所有受控与原生边界、实际页面／HTTP／报告计量及三个历史交接文件。各实现净切片已完成Standards和Spec两轴；最后文档的两轴结果由最终结账记录补入，不用静态审查代替运行验证。
+
+### 最终规范与规格审查记录
+
+固定42文档补丁SHA256 `5fd084063386c2e680163476b7e808c522bac6a2b265d25651779804d1fa350d`（manifest `57f8988d832c4ffdbeeef6b7411b6d9b0eb94162fb3a1314493452d977acdfea`）分别由独立A执行Standards、独立C执行Spec只读审查。Standards硬要求0、重要possible0；Spec Missing0／Wrong0／Creep0、P0–P2为0。两条事实P3随后更正：不把真正App未执行归因用户明文禁止；不把受控预算已满夹具描述为执行100轮。另按实际正式提交校准既有A的clean时点。
+
+最后增量仅这些措辞与本段审查回执；29票原166AC、164勾选、28resolved／A17claimed及原1／3未勾、实际报告分母与失败、生产和测试源码均不变。原标准、相对链接、A19范围、敏感模式及diff由本地文档检查确认；两位审查者未运行项目测试、模型、数据库或页面，不把静态审查计作集成运行。

@@ -88,3 +88,11 @@ PGHOST=/tmp PGPORT=55441 npm run test:pages -- --case assistant-session-deletion
 2026-10-11 总协调最新公开复验：Conda NotAlone／关闭外部追踪，在根执行 `npm --prefix desktop run test:pages -- --case assistant-session-deletion-faults --case assistant-session-deletion-lifecycle --timeout-seconds 240`，session70322 actualexit0。原五故障及五生命周期共10完整场景通过，包括删除失败后三个策略入口无新增请求、读取或明确生成新SID无旧删除提示、未保存样本粘贴副本清除而独立样本及手写保留、真实生成与可靠保存后的迟到响应、跨联系人／同联系人新会话／连接变化的迟到复核。quiet86／active0／onscreen0／maxApps1／policy2／singleChrome／cleanuptrue／nativefalse，独立freshstatus actualexit0 absent后释放。此前74449第四场5秒超时和ps1秒采样失败未复现但原因未知，失败历史保留。本主题已双轴无新增P0–P2，目录8及删除门禁4 Node与全桌面类型检查通过；不能据这10项关闭候选恢复复制或样本编辑器的另组页面，原09继续claimed。人工部分未执行，用户排除真实App/微信/OCR/19；剩余自动组合继续。
 
 2026-10-11 总协调按原六条标准收口：原删除十三项后端、相关来源擦除／中央样本真实组合、目录和删除共用门禁以及公开确认／复核／迟到证据已正式；最新 root45507 两原labels `assistant-session-deletion-recovered-copy`＋`style-session-editor-erasure`、240秒 actualexit0，恢复复制1场和编辑器3场全G。重建后可见历史候选经真实DOM copy/paste和唯一C来源控制，删除清空未保存编辑，旧候选再粘贴当场拒绝且样本GET不变；独立主动保存样本、只复制未粘贴的手写、新范围草稿保留，模型计数无追加。quiet41／active0／onscreen0／maxApps1／policy2／singleChrome／cleanuptrue／nativefalse，独立freshstatus actual0 absent后释放。实际命令为Conda NotAlone／关闭外部追踪，根 `npm --prefix desktop run test:pages -- --case assistant-session-deletion-recovered-copy --case style-session-editor-erasure --timeout-seconds 240`。此前root70322十故障／生命周期G以及root0a54四场C恢复／retention支持独立样本保留与原始来源传递清理；均为真实公开页面→HTTP→合成隔离PG，不是mock存储。原临时超时及观测失败历史保留，未复现不冒根因已修。本票原六条自动标准已完成，据实勾选并设resolved；人工／原生／真实App／微信／OCR／19按用户范围未执行，不宣称通过。未来A13／18新增谱系闭包由各票继续，不为现09补造新验收前置。
+
+### 本轮自主协调最终结果（2026-10-12）
+
+会话删除、幂等和迟到竞态经真实业务存储验证；已主动保存的独立表达样本按ADR-044保留，原始来源删除仍覆盖相关样本与派生内容。
+
+剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。
+
+证据：[29票逐项结果与实际命令](../../unfinished-work/round29-autonomous-results-20261011.md)、[固定源码、自动验证及清理回执](../../unfinished-work/round29-autonomous-verification-20261011.json)。各次不同来源的计量分列，未把静态审查、合成模型或受控宿主冒为原生／真人通过。原验收文本逐行对共同基线保留；只更新实际可验收的勾选和State。

@@ -1,6 +1,6 @@
 # 18：显式携候选新开与满会话分流
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: [assistant-session-context/10 新开、列出与选择旧会话](10-session-list-and-new.md)；[assistant-session-context/11 候选编辑、选择与版本回看](11-candidate-edit-history.md)；[assistant-session-context/12 模型预算提醒与超限拒绝](12-input-budget-guard.md)
 
@@ -16,11 +16,11 @@ Blocked by: [assistant-session-context/10 新开、列出与选择旧会话](10-
 
 ## Acceptance criteria
 
-- [ ] 普通或已满会话都能选择全新开始，或只携用户明确选中的候选版本；不携整段讨论和临时要求。
-- [ ] 携入前复验候选、范围与原始来源，失效候选拒绝；新会话不自动生成，旧会话仍可查看。
-- [ ] 携入内容维持来源传递依赖，来源删除覆盖新旧会话相关副本；保留不依赖该来源的讨论。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
+- [x] 普通或已满会话都能选择全新开始，或只携用户明确选中的候选版本；不携整段讨论和临时要求。
+- [x] 携入前复验候选、范围与原始来源，失效候选拒绝；新会话不自动生成，旧会话仍可查看。
+- [x] 携入内容维持来源传递依赖，来源删除覆盖新旧会话相关副本；保留不依赖该来源的讨论。
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
 ## 范围边界
 
@@ -73,3 +73,13 @@ Conda `NotAlone`，禁 dotenv／tracing，执行 `/private/tmp/notalone-coordina
 主树新鲜 Standards 发现新 HTTP 嵌套夹具在 setup 后才注册清理、且 doCleanups 的失败可能被外层吞掉。仅本测试生命周期修正：setup 前注册 cleanup wrapper，内层清理返回 False 时令外层失败；产品源与业务断言未改。实际 unittest 公共运行边界的两个私有故障探针（部分 setup 失败仍释放已分配资源、内层 cleanup 失败不能成为外层 GREEN）先 **2 RED／0.001秒／exit1**，修复后 **2 GREEN／0.001秒／exit0**；未创建数据库、HTTP 或模型，不将其冒为业务端到端。日志 `/private/tmp/notalone-root-carry-cleanup-lifecycle-red.log`、`/private/tmp/notalone-root-carry-cleanup-lifecycle-green.log`。
 
 清理修正后用同 Conda／禁 dotenv 与 tracing／自有随机数据库命令重跑原九 HTTP 和三迁移：**12 GREEN／11.135秒／skip0／actualexit0**，真实001–055账本及repeat0，三个迁移库与外层库剩余全部0，日志 `/private/tmp/notalone-root-candidate-carry-cleanup-fixed-http-pg.log`。这是修正后的实际重跑，不替换此前12／57或owner的数字。新鲜 Standards Hard0／重要possible0，旧清理P2关闭；Spec删除前专用来历读取表述已限定，普通读取和生成仍检查来源可用性。桌面及C物理组合继续，本票仍claimed，原五条验收文字和未勾状态保留。
+
+## Answer
+
+### 本轮自主协调最终结果（2026-10-12）
+
+普通会话与受控预算已满会话都可全新开始或只携明确选定版本；新会话零模型、旧记录保留，来源物理删除清新旧相关副本并保留无关讨论。主树3HTTP及最后2场公开DOM均通过。
+
+剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。
+
+证据：[29票逐项结果与实际命令](../../unfinished-work/round29-autonomous-results-20261011.md)、[固定源码、自动验证及清理回执](../../unfinished-work/round29-autonomous-verification-20261011.json)。各次不同来源的计量分列，未把静态审查、合成模型或受控宿主冒为原生／真人通过。原验收文本逐行对共同基线保留；只更新实际可验收的勾选和State。

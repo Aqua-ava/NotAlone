@@ -82,3 +82,11 @@ Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠�
 总协调独占受控页面原两 labels（assistant-session-catalog＋assistant-session-catalog-guards，240 秒），session18273 actual CLI exit 0，目录两场及门禁三场全部 GREEN；quiet samples 35／active 0／onscreen 0／cleanupConfirmed true／Electron native false，独立 status84486 exit 0 state absent，原首缺按钮 RED 与夹具 Conda 入口错误保留。该实际证据覆盖空新会话零模型、精确 SID 列表／选择与独立输入、失效或错误响应留编辑且禁未知会话生成、已撤销绑定只读目录／恢复而拒新生成，不将原 SID 与昵称作为权威替代。接口与用例两轴审查记录沿用先前限定结果，所有前端切片文件独立类型验证通过。本票自动部分完成，人工／真实 App 部分未执行，原标准与未执行项保留；13–18 及持续目标继续。
 
 2026-10-11 总协调按原范围收口：既有22真实HTTP／PG及目录8 Node、原两label五完整公开页面均通过；原目录门禁最近复验session64217实际exit0／quiet67／cleanuptrue／freshstatus absent，不包含运行中归属或候选搬运。当前桌面全类型检查actualexit0，限定目录／删除共同UI两轴无新增阻塞；精确闲置切换、新空会话、稳定ID目录和失效读取已本地集成。按原五条验收勾选并设resolved，未增加运行中归属作为本票前置；真实App／人工未执行，不宣称原生验证。数据仅合成隔离，目录没有正文或隐式生成，所有后台／连续请求后续票继续。
+
+### 本轮自主协调最终结果（2026-10-12）
+
+空新开、列表及旧会话选择使用实际会话身份，零模型；不自动携正文。最后携入两场同时验证空新开和满会话分流。
+
+剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。
+
+证据：[29票逐项结果与实际命令](../../unfinished-work/round29-autonomous-results-20261011.md)、[固定源码、自动验证及清理回执](../../unfinished-work/round29-autonomous-verification-20261011.json)。各次不同来源的计量分列，未把静态审查、合成模型或受控宿主冒为原生／真人通过。原验收文本逐行对共同基线保留；只更新实际可验收的勾选和State。

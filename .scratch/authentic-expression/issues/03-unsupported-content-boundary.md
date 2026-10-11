@@ -8,7 +8,7 @@ Blocked by: [authentic-expression/01 保真评测的离线逐例报告](01-offli
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧02；事实安全。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧02；事实安全。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)。依赖是完整交付的前置，不代表这些前置已完成；本轮受控自动实现与验收证据见 Answer。
 
 ## What to build
 
@@ -54,3 +54,13 @@ Blocked by: [authentic-expression/01 保真评测的离线逐例报告](01-offli
 2026-10-11正式公开接续：总协调在已集成`a2b6ae6`的正式树运行`npm run test:pages -- --case fidelity-content --timeout-seconds 120`，九例捕获及无效结构、越权引用、模型期间来源撤回拒绝全部green；quiet19、active0、onscreen0、单Chrome、cleanupConfirmed=true、Electron/native=false。实际capture经同一E01入口重建`docs/evaluations/authentic-expression-content-public-v1.json`，9例、结构失败0、故意保真失败7、实际调用9／2648.521791ms、真人通过0；四个硬维度逐例保留标注依据。原HTTP报告与历史失败不覆盖。
 
 本票全部可自主执行的实现、公开路径和离线失败呈现已完成，状态据此resolved。合法结构/引用的故意语义错误仍失败；没有自动语义评分器、第二模型审查或新外部实验。真人质量、真实语义、自然度、关系适配及本人相似度按本轮范围跳过并保持unknown。真实App/OCR/微信均未运行；B探索、A恢复／会话删除和样本组合继续由E06验收，未在本票预填。新报告只读实际捕获，不增加模型调用或业务迁移。
+
+## Answer
+
+### 本轮自主协调最终结果（2026-10-12）
+
+同一保真协议区分事实、声明、条件与未知；新增承诺／心理／旧事实等逐例失败保留。结构与来源失效拒绝；没有第二模型审查、自动重写或无限重试。
+
+剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。
+
+证据：[29票逐项结果与实际命令](../../unfinished-work/round29-autonomous-results-20261011.md)、[固定源码、自动验证及清理回执](../../unfinished-work/round29-autonomous-verification-20261011.json)。各次不同来源的计量分列，未把静态审查、合成模型或受控宿主冒为原生／真人通过。原验收文本逐行对共同基线保留；只更新实际可验收的勾选和State。

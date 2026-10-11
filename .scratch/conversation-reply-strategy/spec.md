@@ -2,7 +2,7 @@
 
 Triage: ready-for-agent
 
-规格状态：第一版范围与测试接缝已确认，2026-10-11发布；复审后的11张独立任务已发布。主树已接明确入口与持久UUID后端，本主题接入核心探索前端，主树公开页面组合仍待复验；完整换组、Skill版本、连续生命周期与总预算继续按各票实施，原验收和真实State保留。
+规格状态：第一版范围与测试接缝已确认，2026-10-11发布；11张独立任务已有逐票实现与合成自动证据。本轮固定源的公开策略标签实际完整通过38场，原AC与真实State逐票保留；同次命令随后A18测试前置失败使整体exit1，不宣称同次40场通过。真实App／原生与真人语义未验，不能借自动结果关闭这些验收。
 
 ## Problem Statement（用户问题）
 
@@ -94,7 +94,7 @@ R01复用已有目标消息+明确方向入口并交付场景兼容；R02负责�
 - [原草图 Q1–Q32](../../architecture/drafts/conversation-reply-strategy.md)及 2026-10-11 第一版确认记录。
 - [持续会话规格](../assistant-session-context/spec.md)、[真实性规格](../authentic-expression/spec.md)、[ADR-043](../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。
 - [既有原型证据](../conversation-paths-prototype/report.md)、[同句不同前文实验](../conversation-paths-prototype/context-report.md)。
-- [十一票第三版发布映射](ticket-proposal.md)：R05拆为目的探索与关键澄清；旧R06–R10顺延为R07–R11，正式任务01–11已发布，尚未执行验收。
+- [十一票第三版发布映射](ticket-proposal.md)：R05拆为目的探索与关键澄清；旧R06–R10顺延为R07–R11，正式任务01–11已发布并执行逐票合成自动验证，真实State和命令／结果见各票Answer；最新策略组合实际38场通过，真实App／原生与真人质量未由合成回归验收。
 
 ### Q1–Q32 覆盖核对
 

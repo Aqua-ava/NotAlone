@@ -1,6 +1,6 @@
 # 06：跨场景保真、样本与删除组合验收
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bounded-style-reference.md)；[conversation-reply-strategy/10 两种场景的连续修改与消息衔接](../../conversation-reply-strategy/issues/10-continuous-scenario-revision.md)；[assistant-session-context/08 重新连接后恢复已保存会话](../../assistant-session-context/issues/08-saved-session-recovery.md)；[assistant-session-context/09 用户删除一段助手会话](../../assistant-session-context/issues/09-delete-assistant-session.md)；[conversation-reply-strategy/07 Skill探索、确认与生成的版本延续](../../conversation-reply-strategy/issues/07-skill-version-continuity.md)
 
@@ -8,7 +8,7 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧04；第一版组合。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-044](../../../architecture/adr/044-explicit-style-sample-retention.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧04；第一版组合。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-044](../../../architecture/adr/044-explicit-style-sample-retention.md)。依赖是完整交付的前置，不代表这些前置已完成；本轮受控自动实现与验收证据见 Answer。
 
 ## What to build
 
@@ -16,13 +16,13 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 
 ## Acceptance criteria
 
-- [ ] 回应、主动、消息组及连续修改均覆盖样本冲突、整组承诺一致性、来源依赖和逐例报告；复用前票测试而不补造基础功能。
+- [x] 回应、主动、消息组及连续修改均覆盖样本冲突、整组承诺一致性、来源依赖和逐例报告；复用前票测试而不补造基础功能。
 - [x] 通过C02真实业务恢复入口验证：引用样本后删除样本或原始来源，再重连/重试/继续，不能取得已删内容，无关讨论保留。
 - [x] 通过R07验证存在样本且启用Skill时，方向探索实际模型输入不含样本；方向确认后生成才有界选取样本。
 - [x] 通过C03验证删助手会话后已主动保存样本仍可查看和使用，但旧讨论不可恢复；随后删除样本或其原始来源，样本及相关派生内容不可得。
 - [x] 交付离线报告和失败/未知说明，不等真实模型预算；无外部评测时明确语义与自然度未验证。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
 ## 范围边界
 
@@ -476,4 +476,32 @@ Root 集成正式 `969a8cba` 的两路径净变更后，用剥除模型凭据、
 
 实际命令：激活 Conda NotAlone、PGPORT55441，`NOTALONE_TYPED_FIDELITY_CAPTURE=/private/tmp/notalone-root-typed-v2-capture.json python /private/tmp/notalone-round29-controlled-tests.py /Users/local-user/learn/NotAlone tests.integration.server.test_assistant_prepare_rejection tests.integration.server.test_authentic_expression_continuation`；随后 `PYTHONPATH=src python -m tests.fidelity_capture --capture /private/tmp/notalone-root-typed-v2-capture.json --case-spec tests/fixtures/fidelity/typed-continuation-http-review-v2.json --output ../.scratch/authentic-expression/reports/typed-continuation-http-root-controlled-v2.json`。报告CLI actualexit0、新模型0、新库0。四场包括回应／主动分别删除样本／原始来源，保留当前方向／目的、完整已编辑组仅低权重参考，重试、删后新旧键、独立讨论和手动样本边界原断言保持。
 
-当前新版 Page 两场只完成类型与标准静态入口检查，并排入总协调最后独占组合；尚未执行，不借v1页或9HTTP代为通过。A15与Host追加组合继续，原State claimed与未完全验证项保留，用户本轮禁止的真实App、微信/OCR、外部调用、私人数据、原生与真人质量均未执行。固定C净五源两独立审查轴0；主树额外报告只来自上述真实合成捕获，不是人工评价。
+当前新版 Page 两场只完成类型与标准静态入口检查，并排入总协调最后独占组合；尚未执行，不借v1页或9HTTP代为通过。A15与Host追加组合继续，原State claimed与未完全验证项保留，真实App、原生与真人质量均未执行；本轮明文禁止的微信/OCR、外部模型及私人数据均未处理。固定C净五源两独立审查轴0；主树额外报告只来自上述真实合成捕获，不是人工评价。
+
+### 最终当前：公开类型化续写第二版的实际结果
+
+总协调在固定 `687ac83a53d6c7ea84740f7b65ef0a0c35beace0` 的第三名窗实际执行公开页面→认证HTTP→隔离PG。`reply-strategy-combination` 实际完成38场，原计划36少计了有界更新中的两场；其中回应／主动的公开typed样本两场均通过。后续第39携入测试入口找错控件、保存及携入未到，第40未启动，整命令actualexit1保持；这不是40场通过，也不能借本两场关闭携入或真正退出任务。实际UTC窗口为 `2026-10-11T20:35:12.050258+00:00` 至 `20:39:21.224988+00:00`，参数timeout299，Root完整清理及FULLRELEASE后才读取本次新捕获。
+
+两场保留公开完整组编辑／保存／明确选择、两轮typed续改与实际冻结命令同键重放；当前回应方向／主动目的保持原用户意愿，完整旧组只为低权重 `previous_assistant_candidate`／`is_current_draft=false`。实际样本或raw DELETE后重建公开视图，旧continue／prepare、版本及依据入口拒绝，独立样本和无关讨论保留；这些自动控制结果与故意错误输出逐例分别记录。
+
+实际捕获为 `desktop/artifacts/headless-pages/authentic-expression-typed-observations.json`，SHA256 `02a580ff24e4244b7f287bd10c322bbeb82bc366eb7e6aae6bd4fe67b4c01283`，`data_version=authentic-expression-public-typed-v2`／`entry_point=page`／8rows／2完整版本。只使用既有E01 CLI与[第二版独立审阅表](../../../backend/tests/fixtures/fidelity/public-typed-continuation-review-v2.json)生成[第二版实际页面报告](../reports/public-typed-continuation-page-controlled-v2.json)：actualexit0，新增模型／数据库调用0，没有重跑任何页面或模型。
+
+实际命令在本C的Conda NotAlone／`backend`执行，禁dotenv并剥除全部LANGSMITH／LANGCHAIN追踪变量：`PYTHONPATH=src python -m tests.fidelity_capture --capture /Users/local-user/learn/NotAlone/desktop/artifacts/headless-pages/authentic-expression-typed-observations.json --case-spec tests/fixtures/fidelity/public-typed-continuation-review-v2.json --output ../.scratch/authentic-expression/reports/public-typed-continuation-page-controlled-v2.json`，actualexit0。
+
+报告实际8例／9次输入与调用，页面操作至HTTP完成耗时小计10737.094165ms，development8／holdout0。契约失败0，6例合成标注中的整组擅增承诺故意失败2，未审阅2；真人通过0、`quality_verified=false`。自然度／关系适配／本人相似度均为6未知加2未审阅，token未知；不能把页面GREEN、contract0或合成标注的4条保真通过写成真人质量达标。旧第一版页面、两版12例HTTP报告及标注表全部原样保留，旧AI草稿假设的失败历史不被新报告覆盖。
+
+Root实际收尾凭据为1017源码逐文件unchanged、223个自有PID freshps无剩余、quiet352／active0／onscreen0、单Chrome／cleanuptrue／freshleaseabsent。28个实际SSE测试库由Root新连接逐库核验不存在；其余RewriteFixture实际强制DROP后SQL EXISTS=false正常退出，没有留名的默认夹具不冒Root另一次逐库SQL或repeat迁移计量。这些是Root窗口证据，不计作C自跑或新的PG测试。
+
+Root随后仅修携入测试的公开旧会话入口，正式 `9281aa6c` 与策略窗的生产源码逐字相同；只另跑普通／满会话两场，实际exit0／2场通过，空新开、完整两条携入、旧记录不变、新turn0／自动模型0均达到。其UTC实际窗口 `2026-10-11T20:54:43.199746+00:00` 至 `20:54:57.335121+00:00`，20自有PID无剩余、quiet17／active0／cleanuptrue／mandatoryDROP后EXISTS=false／freshleaseabsent。最终两个窗口40个不同场景完成、41次启动，原策略整命令exit1保留；不改本报告8例／9调用或冒称同次40场全部通过。
+
+本C原六票／38条标准文字与本票七项原AC及真实State不变；当前新增公开typed第二版已完成，不再记未运行。先前provider缺路由404、重复中断、手工样本无raw、旧AI意愿及累计要求采用的RED/GREEN分阶段历史全部保留。其他任务仍据各自原AC收口：原生App真正退出／重开、原生系统剪贴板、真人语义／自然度／关系适配／本人相似度均未执行；本轮不请求用户实施，不增加OCR、真实微信、付费／外部模型、发送、push、发布或部署。
+
+## Answer
+
+### 本轮自主协调最终结果（2026-10-12）
+
+四HTTP矩阵、来源／样本删除、Skill探索无样本、会话删除独立样本、权威恢复、累计新消息采用及最终typed页面均有真实合成集成证据。新页面v2由实际捕获生成E01报告，旧分母与失败／未知保留。
+
+剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。
+
+证据：[29票逐项结果与实际命令](../../unfinished-work/round29-autonomous-results-20261011.md)、[固定源码、自动验证及清理回执](../../unfinished-work/round29-autonomous-verification-20261011.json)。各次不同来源的计量分列，未把静态审查、合成模型或受控宿主冒为原生／真人通过。原验收文本逐行对共同基线保留；只更新实际可验收的勾选和State。

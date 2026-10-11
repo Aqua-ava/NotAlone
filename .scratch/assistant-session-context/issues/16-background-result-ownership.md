@@ -1,6 +1,6 @@
 # 16：切换会话或关闭小窗时保持生成归属
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: [assistant-session-context/10 新开、列出与选择旧会话](10-session-list-and-new.md)；[assistant-session-context/14 生成中替换请求与迟到结果失效](14-replace-running-generation.md)
 
@@ -8,7 +8,7 @@ Blocked by: [assistant-session-context/10 新开、列出与选择旧会话](10-
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧04；Q13、Q14及Q15关闭小窗。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧04；Q13、Q14及Q15关闭小窗。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖是完整交付的前置，不代表这些前置已完成；本轮受控自动实现与验收证据见 Answer。
 
 ## What to build
 
@@ -16,11 +16,11 @@ Blocked by: [assistant-session-context/10 新开、列出与选择旧会话](10-
 
 ## Acceptance criteria
 
-- [ ] 切换联系人、同联系人新开/切换会话或关闭小窗时，已发起生成继续；结果只归原会话，不能覆盖当前视图。
-- [ ] 新开或回到旧会话不自动生成，受控迟到响应验证A结果不覆盖B；范围或来源失效仍拒绝提交。
-- [ ] 以受控宿主事件验证应用仍运行的生命周期；真正退出由C10处理，真实App证据留待C13。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
+- [x] 切换联系人、同联系人新开/切换会话或关闭小窗时，已发起生成继续；结果只归原会话，不能覆盖当前视图。
+- [x] 新开或回到旧会话不自动生成，受控迟到响应验证A结果不覆盖B；范围或来源失效仍拒绝提交。
+- [x] 以受控宿主事件验证应用仍运行的生命周期；真正退出由C10处理，真实App证据留待C13。
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
 ## 范围边界
 
@@ -135,3 +135,11 @@ Blocked by: [assistant-session-context/10 新开、列出与选择旧会话](10-
 Conda NotAlone／desktop，禁dotenv和tracing，执行 `PYTHONPATH=/Users/local-user/learn/NotAlone/backend/src:/Users/local-user/learn/NotAlone/backend node --test --test-reporter=spec tests/assistant-generation-ownership-http.test.mjs`，session78236 **actualexit0／20 GREEN／60319.436375ms／skip0**。真实preload具名桥接→Main／JsonClient→认证HTTP→每项隔离PG，控制三种普通模式的模型和宿主事件；日志20条actual model_counts小计26，20次正式001–054账本核验／repeat0，20份instance/class清理均true、database_remaining均false。原prepare严格身份、离开返回、隐藏、目录等待、迟到结果、连接／会话归属、同键失败重试及再次显式替换、完成重放、早到replace精确409/model0/current不变的完整断言通过；20执行期间主树runtime/fixture/迁移保持字节不变。
 
 主树完整TypeScript、diff通过；新鲜Standards硬要求0／重要possible0，新问题未把原unused hasPending P3重复列为新增。B确认与澄清回答的注册、17退出排空和真正公开页面仍由对应后续切片继续，不能用普通20项或合成宿主事件提前填它们为通过；State保持claimed。原生真实App、用户验收、微信及付费模型按本轮范围未执行，无新增正文副本、DDL、外部调用或发送能力。
+
+### 本轮自主协调最终结果（2026-10-12）
+
+切换联系人、助手会话及关闭小窗保留已发候选归属；迟到旧结果不能覆盖当前视图。受控宿主和公开生命周期已验证；真正App证据属于原规格后续边界，本轮没有冒称原生通过。
+
+剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。
+
+证据：[29票逐项结果与实际命令](../../unfinished-work/round29-autonomous-results-20261011.md)、[固定源码、自动验证及清理回执](../../unfinished-work/round29-autonomous-verification-20261011.json)。各次不同来源的计量分列，未把静态审查、合成模型或受控宿主冒为原生／真人通过。原验收文本逐行对共同基线保留；只更新实际可验收的勾选和State。

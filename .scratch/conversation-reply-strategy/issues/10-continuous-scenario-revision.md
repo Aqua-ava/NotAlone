@@ -1,6 +1,6 @@
 # 10：两种场景的连续修改与消息衔接
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/05 主动目的探索与确认](05-purpose-exploration.md)；[conversation-reply-strategy/06 两种场景的关键澄清与取舍](06-clarification-and-tradeoffs.md)；[conversation-reply-strategy/08 候选消息组逐条编辑与复制](08-message-group-edit-copy.md)；[assistant-session-context/13 连续要求、改口与明确编号指代](../../assistant-session-context/issues/13-continuous-intent-reference.md)；[assistant-session-context/15 新消息提醒与用户触发重新生成](../../assistant-session-context/issues/15-new-message-opt-in.md)
 
@@ -8,7 +8,7 @@ Blocked by: [conversation-reply-strategy/05 主动目的探索与确认](05-purp
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧04；Q7、Q10、Q11、Q28、Q31。 第二版标识为R09。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-043](../../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧04；Q7、Q10、Q11、Q28、Q31。 第二版标识为R09。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-043](../../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。依赖是完整交付的前置，不代表这些前置已完成；本轮受控自动实现与验收证据见 Answer。
 
 ## What to build
 
@@ -16,12 +16,12 @@ Blocked by: [conversation-reply-strategy/05 主动目的探索与确认](05-purp
 
 ## Acceptance criteria
 
-- [ ] 回应和主动路径均支持改口、明确引用组内候选及澄清后继续，目的、方向、候选组和输入版本一致。
-- [ ] 新消息由用户决定是否结合，复用C06/C08的连续要求、快照和迟到失效规则，不新建另一套取消或存储。
-- [ ] 旧建议、旧问题、旧候选版本不能应用到新输入；越权与来源删除清理新增讨论及派生结果。
-- [ ] 不依赖未选方向自动更新R09；手动连续修改可独立验收。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
+- [x] 回应和主动路径均支持改口、明确引用组内候选及澄清后继续，目的、方向、候选组和输入版本一致。
+- [x] 新消息由用户决定是否结合，复用C06/C08的连续要求、快照和迟到失效规则，不新建另一套取消或存储。
+- [x] 旧建议、旧问题、旧候选版本不能应用到新输入；越权与来源删除清理新增讨论及派生结果。
+- [x] 不依赖未选方向自动更新R09；手动连续修改可独立验收。
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
 ## 范围边界
 
@@ -105,3 +105,28 @@ Root 净接正式 `54d4b07e` 的十个source/test路径后独立运行 `node --t
 固定ONLY2 `/private/tmp/notalone-b-continuation-codepoints-only2.patch` SHA256 `ddef0a1add6c71f5f917b77651d5675459618223891ec028b8c86a66871b697d` 已独立两轴完成：A Standards硬要求0／新增重要Fowler possible0，C Spec新增P0–P3为0；只读审查不借上述计量，不把待执行的三字段DOM边界预填通过。此主题单独本地提交，provider当前意图与全组合继续。
 
 主树净接 B `bae794bb` 的两条 Unicode 边界路径并独立验证：公开 Main/preload→HTTP→随机隔离 PG **1 GREEN／4097.980959ms**，4096 码点完整交付、4097 拒绝、模型1、001–055 repeat0与自有库0；类型通过。日志 `/private/tmp/notalone-root-carry-followup-continuation-http.log` 的这一独立用例，不借其它八项为本主题通过。B 后续具名两场 Chrome 页面已实际验证三个字段 4096／4097，源 `a287c454`、actualexit0、quiet29／active0／单Chrome／cleanuptrue／nativefalse；主树独立1489源码哈希一致、精确三PID消失、两库查询0与fresh租约absent后FULLRELEASE。原票状态与其它未验要求保持真实，两个范围的计量不混作一场。
+
+## Answer（2026-10-12策略38场后的原标准收口）
+
+本票六条原标准的自动范围已满足，原第2项补勾，State改为resolved，原文字不改。最新固定687ac83a公开策略38场由总协调实际执行，其中本人typed两场、在途新消息采用两场与C第二版typed删除重连两场全部通过；完整组及版本路径另有4场。旧两场具名Page／HTTP只是已有阶段证据，不冒为本人此次38场运行。
+
+| 原AC | 实际自动证据及范围 |
+| --- | --- |
+| 1 | 回应／主动公开整组保存和选版本→明确改口→编号续改→要求冲突0模型→明确替换；实际input／候选UUID、原当前意愿与累计要求一致。instruction本身改意愿的真实两scene RED→GREEN和下一普通请求亦保。 |
+| 2 | 新消息零自动、用户显式结合，完成后新请求与实际在途replace两场均公开通过；同唯一A CURRENT／snapshot／C07／C11与唯一Jobs，不新建取消或存储。 |
+| 3 | 原失效group／版本、跨scope／owner／旧连接拒绝，最新C样本／raw删除后重建、旧continue入口和依据拒绝；旧正文清理。 |
+| 4 | typed手动续改原独立HTTP／具名两场可运行，不依赖未选方向自动更新；最新公开两scene同时通过。 |
+| 5 | 全程owner/contact与动态来源守卫，合成日志及受控模型，候选仅人工发送；不写长期偏好。 |
+| 6 | 命令、本人／供应方／总协调计量、正式提交、历史失败及准确剩余范围分列。 |
+
+4096／4097三个公开控件码点边界按原时限实际保留；合法累计4106采用只在UI全文等于实际CURRENT要求时走权威marker，不上传或截断累计正文。本人原C112两scene2GREEN／10439.423292ms与最新在途DOM两scene分别是自己的控制及引用的总协调Page证据；真实预算／CURRENT／三turn样本删除后段详见本票此前记录与[A15最终收口](../../assistant-session-context/issues/15-new-message-opt-in.md)。本票不借合成结果关闭A17原生、系统剪贴板或真人质量；整条策略＋carry命令exit1与最新策略标签38PASS的区别见[R11](11-combined-strategy-acceptance.md)。
+
+## Answer
+
+### 本轮自主协调最终结果（2026-10-12）
+
+回应及主动均经公开typed修改、编号引用、澄清和新消息显式采用，原目的／方向及完整旧组保持。4096合法／4097拒绝的三个DOM字段、失效版本与删除真实验证，复用唯一生命周期与存储。
+
+剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。
+
+证据：[29票逐项结果与实际命令](../../unfinished-work/round29-autonomous-results-20261011.md)、[固定源码、自动验证及清理回执](../../unfinished-work/round29-autonomous-verification-20261011.json)。各次不同来源的计量分列，未把静态审查、合成模型或受控宿主冒为原生／真人通过。原验收文本逐行对共同基线保留；只更新实际可验收的勾选和State。

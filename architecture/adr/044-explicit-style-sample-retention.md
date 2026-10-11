@@ -1,6 +1,6 @@
 # ADR-044：主动保存的表达样本独立于助手会话留存
 
-> 状态：已采纳；样本基础生命周期已实现并自动验证，跨路径组合尚未全部验收。
+> 状态：已采纳；样本生命周期与跨场景原自动范围已实现并验证，真实App／原生与真人语义质量未验。
 > 决策日期：2026-10-11；用户明确选择“独立保留已主动保存的样本”。
 > 细化 ADR-042 的助手会话删除范围，以及真实表达第一版的样本来源与删除规则。
 
@@ -12,4 +12,6 @@
 
 实现及验证归[持续会话任务](../../.scratch/assistant-session-context/planning.md)和[真实表达任务](../../.scratch/authentic-expression/planning.md)，跨路径用例由真实表达06收口。本决定本身不作为实现证据，不涉及真实资料迁移或扩大外部读取与发送范围。
 
-2026-10-11 实现注记：[样本生命周期](../../.scratch/authentic-expression/issues/04-style-sample-lifecycle.md)与[有界参考](../../.scratch/authentic-expression/issues/05-bounded-style-reference.md)已完成各自自动范围。真实 HTTP／隔离 PostgreSQL 已验证删除助手会话保留成功主动保存的样本、保存与删除两种提交顺序、后续样本或原始来源删除清理派生输入。普通页面已验证主动保存、查看、删除和来源约束；[跨场景组合](../../.scratch/authentic-expression/issues/06-combined-fidelity-acceptance.md)仍为 claimed，类型化续写页面和后续生命周期组合尚未完成。只使用合成资料及受控模型，真实 App／原生与真人语义质量未验；这些结果不证明真实消息渠道集成可用。
+2026-10-11 基础实现注记：[样本生命周期](../../.scratch/authentic-expression/issues/04-style-sample-lifecycle.md)与[有界参考](../../.scratch/authentic-expression/issues/05-bounded-style-reference.md)已完成各自自动范围。真实 HTTP／隔离 PostgreSQL 已验证删除助手会话保留成功主动保存的样本、保存与删除两种提交顺序、后续样本或原始来源删除清理派生输入。普通页面已验证主动保存、查看、删除和来源约束。当前[跨场景组合](../../.scratch/authentic-expression/issues/06-combined-fidelity-acceptance.md)已完成原七项自动范围；最新回应／主动类型化续写、完整消息组版本、样本／来源删除及重连有独立第二版页面报告，新消息采用及仍运行宿主的候选归属另有分项组合证据。报告保留故意失败、未审阅与真人通过0／quality_verified=false，不据本决定或C票状态关闭其他持续会话／聊天策略任务。真正退出与真实App重开仍按任务17／19的未验范围记录；只有合成资料及受控模型，这些结果不证明真实消息渠道集成或真人语义质量。
+
+2026-10-12 该阶段实施证据：无原始聊天来源的手工样本也参与实际生成依赖，样本删除必须清理仅准备的重试输入；相关真实反例及唯一提供者修复已由[真实表达06](../../.scratch/authentic-expression/issues/06-combined-fidelity-acceptance.md)记录并独立HTTP复验。当时当前意愿编号修复后公开第二版、身份式中断恢复与追加宿主组合未验；最新实际结果见E06最终当前记录，原采纳决定和独立留存／来源删除边界不变。

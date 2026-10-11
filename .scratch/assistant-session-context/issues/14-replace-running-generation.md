@@ -1,6 +1,6 @@
 # 14：生成中替换请求与迟到结果失效
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠保存](07-default-session-persistence.md)；[assistant-session-context/12 模型预算提醒与超限拒绝](12-input-budget-guard.md)
 
@@ -8,7 +8,7 @@ Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠�
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧03；Q9。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧03；Q9。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖是完整交付的前置，不代表这些前置已完成；本轮受控自动实现与验收证据见 Answer。
 
 ## What to build
 
@@ -16,11 +16,11 @@ Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠�
 
 ## Acceptance criteria
 
-- [ ] 旧请求未完成时提交明确新要求，旧请求失效，新请求按有效输入生成；不依赖自然语言编号能力。
-- [ ] 同时从公开结果和后端提交验证迟到旧响应不能成为有效候选；覆盖失败、幂等及来源/会话删除竞态。
-- [ ] 替换保留有效讨论且沿用C11总预算，超限新输入不绕过守卫；取消不承诺供应商停止计算或计费。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
+- [x] 旧请求未完成时提交明确新要求，旧请求失效，新请求按有效输入生成；不依赖自然语言编号能力。
+- [x] 同时从公开结果和后端提交验证迟到旧响应不能成为有效候选；覆盖失败、幂等及来源/会话删除竞态。
+- [x] 替换保留有效讨论且沿用C11总预算，超限新输入不绕过守卫；取消不承诺供应商停止计算或计费。
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
 ## 范围边界
 
@@ -105,3 +105,11 @@ Standards：硬性违反0、判断性Fowler问题0。实际C身份/规范输入/
 Spec：本热修缺失/partial0、范围外0、实现错误0；实际B confirm/C.save窗口成立，同键修改Skill继续拒绝，可靠完成与新CURRENT均保留。整票桌面和页面组合、17宿主恢复仍未完成，人工部分未执行；审查与52项自动结果不能代替它们。
 
 2026-10-11 总协调最终集成：仅消费正式 17 与实际 B completed 竞争窄修复，原七个后端模块共 **54G/47.562s，skip0**；真实生产迁移 001–054、账本54、重复迁移0、自有隔离库剩余0。命令为 Conda NotAlone 下以 `/private/tmp/notalone-coordinator-style-samples-no-dimension.py` 执行两个 replacement、prepare、两个 lifecycle 及 C reconfirmation/replacement 模块；仅合成 StyleSampleHttpTest 的维度 fixture 设为空，不改变生产门禁。六源 focused mypy、十个 Python 源／测试编译与 diff 检查通过；新鲜 Standards/Spec 均无新增 P0–P2。旧 A051 可靠完成兼容断言仍由唯一 A 负责人另行修正，桌面／受控生命周期／公开页面组合继续，原整票保持 claimed，人工部分未执行。
+
+### 本轮自主协调最终结果（2026-10-12）
+
+替换使旧请求失效，实际保存、失败、幂等、来源删除和迟到结果均复验；唯一Map／prepare／replace沿原预算。最后两种在途采用场核旧结果不能覆盖新候选。
+
+剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。
+
+证据：[29票逐项结果与实际命令](../../unfinished-work/round29-autonomous-results-20261011.md)、[固定源码、自动验证及清理回执](../../unfinished-work/round29-autonomous-verification-20261011.json)。各次不同来源的计量分列，未把静态审查、合成模型或受控宿主冒为原生／真人通过。原验收文本逐行对共同基线保留；只更新实际可验收的勾选和State。

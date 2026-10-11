@@ -1,0 +1,674 @@
+{
+  "scope": "29张原票全部自主范围；原生未执行保持原票未关闭",
+  "baseline": "84b5dd328a68bf9cf309b4b84a430949719e5658",
+  "source_head": "9281aa6c9c9fc7edc55bc220dfc33b22e36f0483",
+  "original_criteria_changed": [],
+  "original_tickets": [
+    {
+      "task": "A07",
+      "path": ".scratch/assistant-session-context/issues/07-default-session-persistence.md",
+      "state": "resolved",
+      "checked": 6,
+      "criteria": 6,
+      "result": "默认会话通过原公开生成入口可靠保存；同键重放、不同输入冲突、保存失败与来源删除均有真实HTTP／PG证据。稳定身份按owner/contact隔离。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "A08",
+      "path": ".scratch/assistant-session-context/issues/08-saved-session-recovery.md",
+      "state": "resolved",
+      "checked": 5,
+      "criteria": 5,
+      "result": "重新连接通过原保存读取恢复，读取不调用模型；来源／绑定失效拒绝，未完成请求不会自动续跑。权威恢复消费者另经主树实际验证。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "A09",
+      "path": ".scratch/assistant-session-context/issues/09-delete-assistant-session.md",
+      "state": "resolved",
+      "checked": 6,
+      "criteria": 6,
+      "result": "会话删除、幂等和迟到竞态经真实业务存储验证；已主动保存的独立表达样本按ADR-044保留，原始来源删除仍覆盖相关样本与派生内容。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "A10",
+      "path": ".scratch/assistant-session-context/issues/10-session-list-and-new.md",
+      "state": "resolved",
+      "checked": 5,
+      "criteria": 5,
+      "result": "空新开、列表及旧会话选择使用实际会话身份，零模型；不自动携正文。最后携入两场同时验证空新开和满会话分流。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "A11",
+      "path": ".scratch/assistant-session-context/issues/11-candidate-edit-history.md",
+      "state": "resolved",
+      "checked": 6,
+      "criteria": 6,
+      "result": "候选及组内消息编辑、明确选择、历史版本重读均接原稳定身份和删除依赖；默认展示不冒充用户选择。最后消息组公开场覆盖编辑及复制，复制不记发送。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "A12",
+      "path": ".scratch/assistant-session-context/issues/12-input-budget-guard.md",
+      "state": "resolved",
+      "checked": 6,
+      "criteria": 6,
+      "result": "同一预算守卫覆盖初次、typed连续要求、探索、工具补入和替换；warning、hard及完整历史均有独占页面实际证据。合法大历史完整传输，不静默截断；模型能力未知保持拒绝。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "A13",
+      "path": ".scratch/assistant-session-context/issues/13-continuous-intent-reference.md",
+      "state": "resolved",
+      "checked": 6,
+      "criteria": 6,
+      "result": "明确编号、改口、兼容要求和澄清按原会话继续；累计4106码点在权威恢复及新消息采用后完整保持并经过原预算。原39HTTP＋2unit及51HTTP／295unit、最新采用两项和最终公开typed组合分别保留。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "A14",
+      "path": ".scratch/assistant-session-context/issues/14-replace-running-generation.md",
+      "state": "resolved",
+      "checked": 5,
+      "criteria": 5,
+      "result": "替换使旧请求失效，实际保存、失败、幂等、来源删除和迟到结果均复验；唯一Map／prepare／replace沿原预算。最后两种在途采用场核旧结果不能覆盖新候选。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "A15",
+      "path": ".scratch/assistant-session-context/issues/15-new-message-opt-in.md",
+      "state": "resolved",
+      "checked": 5,
+      "criteria": 5,
+      "result": "真实合成消息经SSE只提醒，不覆盖编辑或自动生成；明确结合复验实际消息与CURRENT并替换。累计要求新反例两场完整通过，最终公开在途两场及删除／预算后段均已执行。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "A16",
+      "path": ".scratch/assistant-session-context/issues/16-background-result-ownership.md",
+      "state": "resolved",
+      "checked": 5,
+      "criteria": 5,
+      "result": "切换联系人、助手会话及关闭小窗保留已发候选归属；迟到旧结果不能覆盖当前视图。受控宿主和公开生命周期已验证；真正App证据属于原规格后续边界，本轮没有冒称原生通过。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "A17",
+      "path": ".scratch/assistant-session-context/issues/17-quit-and-interrupted-recovery.md",
+      "state": "claimed",
+      "checked": 3,
+      "criteria": 5,
+      "result": "自动部分完成：受控quit／准备停止／恢复、完成和失败回包竞态、来源及样本删除、原身份重放和同冻结策略命令ACK丢失均有真实Main→HTTP→隔离PG结果。主树39项退出／携入、7项权威／意愿／proof和3项命令关联分别通过。",
+      "remaining": "剩余：原第1、3条要求真正App停止／重开；本轮只实际执行受控宿主和具名公开页面窗口，真正App停启未执行，保留原文和未勾选、State claimed。工程要求原生运行使用用户认可的有限时段与显式test:app入口；本轮没有这项实际验收记录，受控结果不代替原生证据，不请求用户实施验收。"
+    },
+    {
+      "task": "A18",
+      "path": ".scratch/assistant-session-context/issues/18-carry-selected-candidate.md",
+      "state": "resolved",
+      "checked": 5,
+      "criteria": 5,
+      "result": "普通会话与受控预算已满会话都可全新开始或只携明确选定版本；新会话零模型、旧记录保留，来源物理删除清新旧相关副本并保留无关讨论。主树3HTTP及最后2场公开DOM均通过。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "B01",
+      "path": ".scratch/conversation-reply-strategy/issues/01-response-scene-entry.md",
+      "state": "resolved",
+      "checked": 6,
+      "criteria": 6,
+      "result": "回应入口保持目标消息和明确方向，草稿改写兼容；场景切换零模型，不猜最近消息，默认改写不读关系背景。最后策略组合实际走公开入口。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "B02",
+      "path": ".scratch/conversation-reply-strategy/issues/02-understanding-and-direction.md",
+      "state": "resolved",
+      "checked": 6,
+      "criteria": 6,
+      "result": "一句理解、依据、歧义及不同意愿建议绑定实际输入版本；纠正与回答不冒为确认，明确选择或方向后才生成。旧建议、跨范围和来源删除拒绝。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "B03",
+      "path": ".scratch/conversation-reply-strategy/issues/03-direction-options-and-pause.md",
+      "state": "resolved",
+      "checked": 5,
+      "criteria": 5,
+      "result": "换组、推荐、自填和暂缓由用户决定，推荐不预选，旧组失效；暂不回应不建立提醒或发送。最后两种场景选项公开路径通过。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "B04",
+      "path": ".scratch/conversation-reply-strategy/issues/04-proactive-purpose-entry.md",
+      "state": "resolved",
+      "checked": 5,
+      "criteria": 5,
+      "result": "主动场景使用真实明确目的，不伪造对方目标；复用统一生成入口，无第二次必选开口方式。切换不调用模型。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "B05",
+      "path": ".scratch/conversation-reply-strategy/issues/05-purpose-exploration.md",
+      "state": "resolved",
+      "checked": 5,
+      "criteria": 5,
+      "result": "目的探索与用户确认绑定实际输入，旧探索／迟到／失效拒绝；明确目的进入候选。最后主动纠正和方向确认公开路径通过。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "B06",
+      "path": ".scratch/conversation-reply-strategy/issues/06-clarification-and-tradeoffs.md",
+      "state": "resolved",
+      "checked": 6,
+      "criteria": 6,
+      "result": "回应及主动均覆盖关键澄清、回答后仍须明确意愿、取舍和继续；普通未知项不虚构也不强制追问。目标／目的修改使旧问题失效，较晚澄清不覆盖已确认候选。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "B07",
+      "path": ".scratch/conversation-reply-strategy/issues/07-skill-version-continuity.md",
+      "state": "resolved",
+      "checked": 7,
+      "criteria": 7,
+      "result": "最多一个有效不可变Skill版本沿探索、确认和生成；显式关闭不自动选回，更换／禁用／删除使旧结果失效。方向探索无表达样本，生成才有界引用；无外部业务Tool或具体邀约Skill。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "B08",
+      "path": ".scratch/conversation-reply-strategy/issues/08-message-group-edit-copy.md",
+      "state": "resolved",
+      "checked": 6,
+      "criteria": 6,
+      "result": "两种场景区分备选方案及有序组内消息，逐条编辑、复制、明确版本选择并可靠恢复。新消息与断流保留编辑，复制不记发送；页面不声称系统剪贴板原生能力通过。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "B09",
+      "path": ".scratch/conversation-reply-strategy/issues/09-bounded-direction-updates.md",
+      "state": "resolved",
+      "checked": 6,
+      "criteria": 6,
+      "result": "仅已打开且未确认的活跃探索有界更新，通知合并与次数／超时预算保持；确认后只提醒。关闭探索不取消已发候选；同冻结prepare ACK丢失3个原反例修复后主树实际通过。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "B10",
+      "path": ".scratch/conversation-reply-strategy/issues/10-continuous-scenario-revision.md",
+      "state": "resolved",
+      "checked": 6,
+      "criteria": 6,
+      "result": "回应及主动均经公开typed修改、编号引用、澄清和新消息显式采用，原目的／方向及完整旧组保持。4096合法／4097拒绝的三个DOM字段、失效版本与删除真实验证，复用唯一生命周期与存储。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "B11",
+      "path": ".scratch/conversation-reply-strategy/issues/11-combined-strategy-acceptance.md",
+      "state": "resolved",
+      "checked": 5,
+      "criteria": 5,
+      "result": "同一正式生产装配公开页面→HTTP→隔离PG完成策略38场；随后测试导航修正后独立完成携入2场，共40个完成场景、41次进入，原整命令退出1保留。原场景与门禁保持，同句不同前文四例／8调用可审阅；语义质量和真实模型预算未验证。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "C01",
+      "path": ".scratch/authentic-expression/issues/01-offline-fidelity-report.md",
+      "state": "resolved",
+      "checked": 7,
+      "criteria": 7,
+      "result": "唯一离线逐例协议保留输出、版本、失败、超时成本、开发／保留划分及未审阅；确定性契约与人工语义分列。没有真人通过或真实模型自然度结论。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "C02",
+      "path": ".scratch/authentic-expression/issues/02-current-intent-priority.md",
+      "state": "resolved",
+      "checked": 5,
+      "criteria": 5,
+      "result": "当前明确意愿优先于旧习惯／记忆／Skill，旧已选组只作低权重参考。无新增事实但改立场的实际输入矩阵及typed页面v2报告保留故意失败和未知。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "C03",
+      "path": ".scratch/authentic-expression/issues/03-unsupported-content-boundary.md",
+      "state": "resolved",
+      "checked": 6,
+      "criteria": 6,
+      "result": "同一保真协议区分事实、声明、条件与未知；新增承诺／心理／旧事实等逐例失败保留。结构与来源失效拒绝；没有第二模型审查、自动重写或无限重试。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "C04",
+      "path": ".scratch/authentic-expression/issues/04-style-sample-lifecycle.md",
+      "state": "resolved",
+      "checked": 7,
+      "criteria": 7,
+      "result": "仅用户主动保存样本，保存／查看／删除同联系人完整生命周期及幂等已验证；手动／衍生来历明确，复制或同步不保存。删助手会话保独立样本，删原始来源清相关派生。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "C05",
+      "path": ".scratch/authentic-expression/issues/05-bounded-style-reference.md",
+      "state": "resolved",
+      "checked": 6,
+      "criteria": 6,
+      "result": "生成最多5条低权重表达样本且计预算，不作当前事实，不进探索；无样本正常。删除／重试／生成竞态与恢复拒绝已删正文，保无关手动样本。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    },
+    {
+      "task": "C06",
+      "path": ".scratch/authentic-expression/issues/06-combined-fidelity-acceptance.md",
+      "state": "resolved",
+      "checked": 7,
+      "criteria": 7,
+      "result": "四HTTP矩阵、来源／样本删除、Skill探索无样本、会话删除独立样本、权威恢复、累计新消息采用及最终typed页面均有真实合成集成证据。新页面v2由实际捕获生成E01报告，旧分母与失败／未知保留。",
+      "remaining": "剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。"
+    }
+  ],
+  "original_states": {
+    "resolved": 28,
+    "claimed": 1
+  },
+  "page": {
+    "scope": "同一正式生产源码分窗38策略＋2携入；未把失败整命令改成通过",
+    "head": "9281aa6c9c9fc7edc55bc220dfc33b22e36f0483",
+    "source_count": 1017,
+    "source_unchanged": true,
+    "production_source_unchanged_between_windows": true,
+    "source_changes_between_windows": [
+      "desktop/tests/headless/assistant-candidate-carry.ts"
+    ],
+    "actual_exit": 0,
+    "actual_exit_scope": "最后仅携入两场命令，前策略组合整命令actualexit1保留在strategy_window",
+    "scenarios_completed_unique": 40,
+    "total_scenarios_started_across_final_windows": 41,
+    "cases_completed": [
+      "reply-strategy-combination",
+      "assistant-candidate-carry"
+    ],
+    "lease_absent": true,
+    "owned_processes_checked": 243,
+    "owned_processes_remaining": 0,
+    "owned_databases_remaining": 0,
+    "event_databases_independently_checked": 28,
+    "database_cleanup_basis": "全部RewriteFixture强制执行Python DROP后SQL EXISTS=false且退出0；实际本窗口留存的SSE库名另由Root新连接逐库SQL核验；Default夹具没有留名，不声称Root额外逐库审计或迁移计量；两次原Budget RewriteFixture强制DROP后SQL EXISTS=false与exit0；本fixture没有留库名供Root另查",
+    "cleanup_confirmed": true,
+    "electron_run": false,
+    "native_acceptance": false,
+    "strategy_window": {
+      "name": "最终策略与携入38场",
+      "named_window_start": "2026-10-11T20:35:12.050258+00:00",
+      "named_window_end": "2026-10-11T20:40:12.050258+00:00",
+      "actual_start": "2026-10-11T20:35:12.050258+00:00",
+      "timeout_seconds": 299,
+      "head": "687ac83a53d6c7ea84740f7b65ef0a0c35beace0",
+      "command": [
+        "npm",
+        "run",
+        "test:pages",
+        "--",
+        "--case",
+        "reply-strategy-combination",
+        "--case",
+        "assistant-candidate-carry",
+        "--timeout-seconds",
+        "299"
+      ],
+      "actual_exit": 1,
+      "actual_end": "2026-10-11T20:39:21.224988+00:00",
+      "source_count": 1017,
+      "source_unchanged": true,
+      "lease_absent": true,
+      "owned_processes_checked": 223,
+      "owned_processes_remaining": 0,
+      "owned_databases_remaining": 0,
+      "event_databases_independently_checked": 28,
+      "database_cleanup_basis": "全部RewriteFixture强制执行Python DROP后SQL EXISTS=false且退出0；实际本窗口留存的SSE库名另由Root新连接逐库SQL核验；Default夹具没有留名，不声称Root额外逐库审计或迁移计量",
+      "cases_completed": [
+        "reply-strategy-combination"
+      ],
+      "case_pass_markers": [
+        "reply-strategy-combination"
+      ],
+      "scenarios_started": 39,
+      "scenario_names": [
+        "回应消息换组、拒绝旧选择、暂不回应与自填方向",
+        "主动聊聊换组、拒绝旧选择、暂不回应与自填方向",
+        "回应消息纠正不确认、回答不确认、明确选择后生成",
+        "主动聊聊纠正不确认、回答不确认、明确选择后生成",
+        "回应消息实际Skill版本延续、关闭与更换",
+        "主动聊聊实际Skill版本延续、关闭与更换",
+        "回应消息整组编辑、明确版本选择、逐条复制与重建恢复",
+        "主动聊聊整组编辑、明确版本选择、逐条复制与重建恢复",
+        "回应消息真实新消息与显式刷新保留消息组编辑",
+        "主动聊聊真实新消息与断流重连保留消息组编辑",
+        "回应消息显式任务内合并真实通知与三次预算",
+        "主动聊聊显式任务内合并真实通知与三次预算",
+        "自动探索失败后停止重试并等待手动更新",
+        "真实根任务过期后模型前拒绝并等待手动更新",
+        "切回草稿停止探索更新且不改原讨论输入",
+        "首次明确探索等待期间的通知合并为一次后续更新",
+        "自动请求在途遇到消息流中断后可手动刷新",
+        "编辑尚未提交的关键回答后仅提醒且保留文字",
+        "首次手动请求中断后完成回执不重启自动任务",
+        "手动刷新后的新问题不继承旧问题回答草稿",
+        "改变目的后的新问题不继承旧输入回答草稿",
+        "编辑已确认任务的回答后手动刷新保留意愿接续",
+        "旧会话确认删除后直接明确的新任务继续有界更新",
+        "经公开版本入口保存编辑后新消息只提醒而不自动探索",
+        "回应消息确认方向发起候选，关闭小窗保持原消息组",
+        "主动聊聊确认方向发起候选，关闭小窗保持原消息组",
+        "回应消息已确认意愿后回答发起候选，关闭小窗保持原消息组",
+        "主动聊聊已确认意愿后回答发起候选，关闭小窗保持原消息组",
+        "回应消息确认方向发起候选，公开切会话保持原消息组",
+        "主动聊聊确认方向发起候选，公开切会话保持原消息组",
+        "回应消息已确认意愿后回答发起候选，公开切会话保持原消息组",
+        "主动聊聊已确认意愿后回答发起候选，公开切会话保持原消息组",
+        "回应消息完整组编辑→明确改口→要求澄清→显式结合真实新消息",
+        "主动聊聊完整组编辑→明确改口→要求澄清→显式结合真实新消息",
+        "回应消息实际在途候选明确采用新消息，晚旧模型不覆盖新CURRENT",
+        "主动聊聊实际在途候选明确采用新消息，晚旧模型不覆盖新CURRENT",
+        "response公开typed连续修改保留完整版本与要求，sample删除后重连拒绝旧来源",
+        "proactive公开typed连续修改保留完整版本与要求，source删除后重连拒绝旧来源",
+        "普通会话公开空新开与完整已选编辑版本携入，旧记录及零自动生成"
+      ],
+      "cleanup_confirmed": true,
+      "quiet": {
+        "samples": 352,
+        "activeSamples": 0,
+        "maxOnscreenWindows": 0,
+        "maxRegisteredApps": 1,
+        "activationPolicies": [
+          2
+        ]
+      },
+      "browser_count": 1,
+      "electron_run": false,
+      "native_acceptance": false,
+      "strategy_scenarios_completed": 38,
+      "failure": "普通携入原producer使用草稿即时页面，却寻找只在版本/消息组视图存在的说法2消息组控件；保存和携入未到",
+      "new_page_retry_authorized": false
+    },
+    "carry_window": {
+      "name": "仅携入两场最终验证",
+      "named_window_start": "2026-10-11T20:54:43.199746+00:00",
+      "named_window_end": "2026-10-11T20:57:13.199746+00:00",
+      "actual_start": "2026-10-11T20:54:43.199746+00:00",
+      "timeout_seconds": 149,
+      "head": "9281aa6c9c9fc7edc55bc220dfc33b22e36f0483",
+      "source_count": 1017,
+      "source_changes_since_strategy_window": [
+        "desktop/tests/headless/assistant-candidate-carry.ts"
+      ],
+      "production_source_unchanged_between_windows": true,
+      "command": [
+        "npm",
+        "run",
+        "test:pages",
+        "--",
+        "--case",
+        "assistant-candidate-carry",
+        "--timeout-seconds",
+        "149"
+      ],
+      "actual_exit": 0,
+      "actual_end": "2026-10-11T20:54:57.335121+00:00",
+      "source_unchanged": true,
+      "lease_absent": true,
+      "owned_processes_checked": 20,
+      "owned_processes_remaining": 0,
+      "owned_databases_remaining": 0,
+      "database_cleanup_basis": "两次原Budget RewriteFixture强制DROP后SQL EXISTS=false与exit0；本fixture没有留库名供Root另查",
+      "cases_completed": [
+        "assistant-candidate-carry"
+      ],
+      "scenarios_started": 2,
+      "scenarios_completed": 2,
+      "scenario_names": [
+        "普通会话公开空新开与完整已选编辑版本携入，旧记录及零自动生成",
+        "已满会话公开空新开与完整已选编辑版本携入，旧记录及零自动生成"
+      ],
+      "scenario_passed_names": [
+        "普通会话公开空新开与完整已选编辑版本携入，旧记录及零自动生成",
+        "已满会话公开空新开与完整已选编辑版本携入，旧记录及零自动生成"
+      ],
+      "carry_checkpoints": [
+        "blank_empty=true carry_messages=2 old_unchanged=true new_turns=0 automatic_model_delta=0 migrations=55 repeat=0",
+        "blank_empty=true carry_messages=2 old_unchanged=true new_turns=0 automatic_model_delta=0 migrations=55 repeat=0"
+      ],
+      "cleanup_confirmed": true,
+      "quiet": {
+        "samples": 17,
+        "activeSamples": 0,
+        "maxOnscreenWindows": 0,
+        "maxRegisteredApps": 1,
+        "activationPolicies": [
+          2
+        ]
+      },
+      "browser_count": 1,
+      "electron_run": false,
+      "native_acceptance": false
+    }
+  },
+  "latest_page_fidelity_summary": {
+    "denominator": 8,
+    "contract_failed": 0,
+    "semantic_reviewed": 6,
+    "fidelity_failed": 2,
+    "unreviewed": 2,
+    "known_call_count": 9,
+    "known_elapsed_ms": 10737.094165000017,
+    "unknown_cost_count": 0,
+    "total_call_count": 9,
+    "total_elapsed_ms": 10737.094165000017,
+    "quality_verified": false,
+    "dimensions": {
+      "intent": {
+        "denominator": 8,
+        "evaluated_denominator": 6,
+        "pass": 4,
+        "fail": 2,
+        "unknown": 0,
+        "unreviewed": 2
+      },
+      "unsupported_content": {
+        "denominator": 8,
+        "evaluated_denominator": 6,
+        "pass": 4,
+        "fail": 2,
+        "unknown": 0,
+        "unreviewed": 2
+      },
+      "naturalness": {
+        "denominator": 8,
+        "evaluated_denominator": 0,
+        "pass": 0,
+        "fail": 0,
+        "unknown": 6,
+        "unreviewed": 2
+      },
+      "relationship_fit": {
+        "denominator": 8,
+        "evaluated_denominator": 0,
+        "pass": 0,
+        "fail": 0,
+        "unknown": 6,
+        "unreviewed": 2
+      },
+      "user_similarity": {
+        "denominator": 8,
+        "evaluated_denominator": 0,
+        "pass": 0,
+        "fail": 0,
+        "unknown": 6,
+        "unreviewed": 2
+      }
+    },
+    "human_fidelity_pass": 0,
+    "reviewer_kinds": {
+      "human": 0,
+      "synthetic_fixture": 6,
+      "agent_review": 0,
+      "unknown": 2
+    },
+    "by_split": {
+      "development": {
+        "denominator": 8,
+        "contract_failed": 0,
+        "semantic_reviewed": 6,
+        "fidelity_failed": 2,
+        "unreviewed": 2,
+        "known_call_count": 9,
+        "known_elapsed_ms": 10737.094165000017,
+        "unknown_cost_count": 0,
+        "total_call_count": 9,
+        "total_elapsed_ms": 10737.094165000017,
+        "quality_verified": false,
+        "dimensions": {
+          "intent": {
+            "denominator": 8,
+            "evaluated_denominator": 6,
+            "pass": 4,
+            "fail": 2,
+            "unknown": 0,
+            "unreviewed": 2
+          },
+          "unsupported_content": {
+            "denominator": 8,
+            "evaluated_denominator": 6,
+            "pass": 4,
+            "fail": 2,
+            "unknown": 0,
+            "unreviewed": 2
+          },
+          "naturalness": {
+            "denominator": 8,
+            "evaluated_denominator": 0,
+            "pass": 0,
+            "fail": 0,
+            "unknown": 6,
+            "unreviewed": 2
+          },
+          "relationship_fit": {
+            "denominator": 8,
+            "evaluated_denominator": 0,
+            "pass": 0,
+            "fail": 0,
+            "unknown": 6,
+            "unreviewed": 2
+          },
+          "user_similarity": {
+            "denominator": 8,
+            "evaluated_denominator": 0,
+            "pass": 0,
+            "fail": 0,
+            "unknown": 6,
+            "unreviewed": 2
+          }
+        },
+        "human_fidelity_pass": 0,
+        "reviewer_kinds": {
+          "human": 0,
+          "synthetic_fixture": 6,
+          "agent_review": 0,
+          "unknown": 2
+        }
+      },
+      "holdout": {
+        "denominator": 0,
+        "contract_failed": 0,
+        "semantic_reviewed": 0,
+        "fidelity_failed": 0,
+        "unreviewed": 0,
+        "known_call_count": 0,
+        "known_elapsed_ms": 0,
+        "unknown_cost_count": 0,
+        "total_call_count": 0,
+        "total_elapsed_ms": 0,
+        "quality_verified": false,
+        "dimensions": {
+          "intent": {
+            "denominator": 0,
+            "evaluated_denominator": 0,
+            "pass": 0,
+            "fail": 0,
+            "unknown": 0,
+            "unreviewed": 0
+          },
+          "unsupported_content": {
+            "denominator": 0,
+            "evaluated_denominator": 0,
+            "pass": 0,
+            "fail": 0,
+            "unknown": 0,
+            "unreviewed": 0
+          },
+          "naturalness": {
+            "denominator": 0,
+            "evaluated_denominator": 0,
+            "pass": 0,
+            "fail": 0,
+            "unknown": 0,
+            "unreviewed": 0
+          },
+          "relationship_fit": {
+            "denominator": 0,
+            "evaluated_denominator": 0,
+            "pass": 0,
+            "fail": 0,
+            "unknown": 0,
+            "unreviewed": 0
+          },
+          "user_similarity": {
+            "denominator": 0,
+            "evaluated_denominator": 0,
+            "pass": 0,
+            "fail": 0,
+            "unknown": 0,
+            "unreviewed": 0
+          }
+        },
+        "human_fidelity_pass": 0,
+        "reviewer_kinds": {
+          "human": 0,
+          "synthetic_fixture": 0,
+          "agent_review": 0,
+          "unknown": 0
+        }
+      }
+    }
+  },
+  "prohibited_actions_performed": [],
+  "final_document_review": {
+    "scope": "42文档独立Standards/Spec初审，事实P3最窄更正；不代表新项目运行",
+    "fixed_patch_sha256": "5fd084063386c2e680163476b7e808c522bac6a2b265d25651779804d1fa350d",
+    "fixed_manifest_sha256": "57f8988d832c4ffdbeeef6b7411b6d9b0eb94162fb3a1314493452d977acdfea",
+    "standards": {
+      "reviewer": "a_sessions",
+      "hard_findings": 0,
+      "important_possible_findings": 0
+    },
+    "spec": {
+      "reviewer": "c_expression",
+      "missing": 0,
+      "wrong": 0,
+      "creep": 0,
+      "P0_P2_findings": 0
+    },
+    "factual_P3_corrections": [
+      "真正App未执行不是用户明文禁止原生",
+      "预算已满夹具没有执行100轮"
+    ],
+    "original_criteria_changed": [],
+    "project_tests_run_by_final_reviewers": false,
+    "previous_A_delivery": {
+      "formal_source": "4e5bc165f054b0ef39da858853152f710cb11b91",
+      "final_document_commit": "5688e5920220fd36824564cf66ba3c8b536c5877",
+      "working_tree_clean": true,
+      "recovery_snapshot_commit": "504eac9c25517a6116514c660a0616a392e15e79",
+      "recovery_files_verified": 21
+    }
+  }
+}

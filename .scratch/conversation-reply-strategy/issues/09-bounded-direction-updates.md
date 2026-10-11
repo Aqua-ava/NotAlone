@@ -1,6 +1,6 @@
 # 09：未选方向时的新消息有界更新
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环](02-understanding-and-direction.md)；[assistant-session-context/16 切换会话或关闭小窗时保持生成归属](../../assistant-session-context/issues/16-background-result-ownership.md)；[assistant-session-context/17 退出停止与重开后的中断恢复](../../assistant-session-context/issues/17-quit-and-interrupted-recovery.md)
 
@@ -19,7 +19,7 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 - [x] 只有用户已打开且方向未确认的活跃任务在授权新消息到达时更新理解/建议；不形成全局后台调用。
 - [x] 连续通知合并、有快照和调用次数/超时/重试预算；失败或超预算要求手动刷新，不扩大范围补扫历史。
 - [x] 方向确认、候选生成或编辑后仅提醒；旧探索结果不能覆盖已确认方向。
-- [ ] 切换离开或关闭停止探索更新，已发起候选仍按C09继续；退出按C10停止，不另建生命周期模型。
+- [x] 切换离开或关闭停止探索更新，已发起候选仍按C09继续；退出按C10停止，不另建生命周期模型。
 - [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
 - [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 ## 范围边界
@@ -163,3 +163,28 @@ Root 独立净接两代码路径后，实际公开 Main/preload→HTTP→隔离 
 日志 `/private/tmp/notalone-b-confirmed-retry-ack-three-green.log`；默认temporary capture路径会随同标签运行更新，GREEN归属另复制保存在 `/private/tmp/notalone-b-confirmed-retry-ack-green-captures/`，此前RED日志及总协调已转交的原快照继续归原失败阶段，不把后来GREEN capture当RED原始文件。全桌面类型与diff通过，Main固定ONLY1 SHA256 `c41f6c6f673a8e9517ed35cb9bc046272e47c7951f57e86fe5e5c6a81b563e2c` 独立A Standards硬要求0／新增重要Fowler possible0、C Spec新增P0–P3为0，只读未借运行作轴自测。没有Map自建策略、普通生成／Host改动或Page／原生／真人质量通过；原第4条及claimed继续等待总协调最新全源集成的准确结果。
 
 总协调独立命令关联验证：正式6edad唯一Map与e85唯一薄调用净集成，原三实际ACK丢失场3 GREEN／9694.099792ms、六实际受控模型、55×3重复0／三自有库清理0；原15Map契约GREEN／111.662667ms、完整类型通过。同冻结HTTP正文与真实回执／严格证明不变，仅关联已结束无回执旧身份；live、legacy、不同范围／命令保持失败关闭。此自动结果不替代真实App与最终公开组合，本票状态暂按原范围保留。
+
+## Answer（2026-10-12策略38场后的原标准收口）
+
+本票六条原标准的自动范围已满足，原第4项补勾，State改为resolved，文字不变。总协调固定687ac83a的reply-strategy-combination实际完整通过38场，其中有界更新14场、确认／已确认回答×回应／主动×关闭／切会话8场。旧36是准备阶段少计了两场，不能写成36场实际通过。最新Page归总协调，本人只引用其真实日志和receipt，不作为本人另跑。
+
+| 原AC | 实际自动证据及范围 |
+| --- | --- |
+| 1 | 14场有界更新只在已明确打开、方向未确认的同联系人任务内运行；未打开／编辑／已确认时模型增量0。 |
+| 2 | 真实SSE合并、三次预算、失败暂停、根TTL与断流后手动刷新；任务／输入／CURRENT及次数断言不改。 |
+| 3 | 编辑关键回答或版本后仅提醒，确认及开始候选后停止自动探索；旧任务／旧问题／晚结果拒绝。 |
+| 4 | 最新8场关闭／切换与本票原晚prepare中断实际证据；唯一Jobs／Main／BackendHost退出复用总协调受控36quit＋3carry共39GREEN／133135.8115ms和同命令ACK丢失3GREEN／9694.099792ms。实际receipt／六字段interrupt收口，无另一生命周期模型。 |
+| 5 | 原owner/contact越权／来源删除负向和最新组／typed／C删除重连，普通日志无敏感正文，用户亲自发送边界保持。 |
+| 6 | 本票原RED／GREEN与夹具前提错误、当前准确Page结果／命令／数据与剩余风险均保留。 |
+
+第4项只证明本新增路径复用正式受控退出合同，不据此关闭仍claimed的A17真实App／C13验收。完整窗口、分组及清理归属见[R11最终收口](11-combined-strategy-acceptance.md)。真实App退出／重开、原生和真人语义未执行，不能借本票自动resolved声明它们通过；无额外业务模型、发送、OCR、微信、私人资料、push或部署。
+
+## Answer
+
+### 本轮自主协调最终结果（2026-10-12）
+
+仅已打开且未确认的活跃探索有界更新，通知合并与次数／超时预算保持；确认后只提醒。关闭探索不取消已发候选；同冻结prepare ACK丢失3个原反例修复后主树实际通过。
+
+剩余：本票可自主范围已完成。真实模型语义、自然度、关系适配及用户相似度未知；本轮没有原生App、私人资料、微信／OCR、外部发送或远端操作。
+
+证据：[29票逐项结果与实际命令](../../unfinished-work/round29-autonomous-results-20261011.md)、[固定源码、自动验证及清理回执](../../unfinished-work/round29-autonomous-verification-20261011.json)。各次不同来源的计量分列，未把静态审查、合成模型或受控宿主冒为原生／真人通过。原验收文本逐行对共同基线保留；只更新实际可验收的勾选和State。
