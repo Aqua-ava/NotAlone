@@ -173,6 +173,8 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   }, 'helper');
   commands.handle('reply:select-candidate', (...args: unknown[]) => { return replies.selectCandidate(candidate(args)); }, 'helper');
   commands.handle('reply:edit-candidate', (...args: unknown[]) => { return replies.editCandidate(candidate(args, true) as ReplyCandidateEdit); }, 'helper');
+  commands.handle('reply:begin-candidate-version-edit', (...args: unknown[]) =>
+    replies.beginCandidateVersionEdit(candidateVersion(args, 'display') as ReplyCandidateVersionDisplay), 'helper');
   commands.handle('reply:read-candidate-versions', (...args: unknown[]) =>
     replies.readCandidateVersions(candidateVersion(args, 'read')), 'helper');
   commands.handle('reply:save-candidate-version', (...args: unknown[]) =>

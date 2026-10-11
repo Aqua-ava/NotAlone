@@ -116,15 +116,19 @@ class DesktopRewriteModel(ScriptedCoreModel):
                           if isinstance(message, ToolMessage) and message.name == "conversation_search")
             if result.get("status") == "ok" and result.get("messages"):
                 citations.append(result["messages"][0]["evidence_id"])
+        candidates = [{
+            "text": plan.get("text", f"{plan.get('prefix', '我会晚一点回复你')}（说法{number + 1}）。"),
+            "basis": plan.get("basis", "保留本次草稿的事实和承诺范围。" if payload["input_mode"] == "rewrite_draft"
+                              else "依据选中的消息，在本次明确方向内组织表达。"),
+            "citation_ids": plan.get("citation_ids", citations),
+            "risk_notes": plan.get("risk_notes", []),
+        } for number in range(plan.get("count", 2))]
+        if "message_groups" in plan:
+            for candidate, parts in zip(candidates, plan["message_groups"], strict=True):
+                candidate["messages"] = parts
+                candidate["text"] = "\n\n".join(parts)
         self.responses.append(tool_response("ReplyRuntimeOutput", {
-            "candidates": [{
-                "text": plan.get("text", f"{plan.get('prefix', '我会晚一点回复你')}（说法{number + 1}）。"),
-                "basis": plan.get("basis", "保留本次草稿的事实和承诺范围。" if payload["input_mode"] == "rewrite_draft"
-                                  else "依据选中的消息，在本次明确方向内组织表达。"),
-                "citation_ids": plan.get("citation_ids", citations),
-                "risk_notes": plan.get("risk_notes", []),
-            } for number in range(plan.get("count", 2))],
-            "used_skill_version_id": None,
+            "candidates": candidates, "used_skill_version_id": None,
         }))
         return super()._generate(messages, stop, run_manager, **kwargs)
 

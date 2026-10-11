@@ -1861,3 +1861,41 @@ for (const reason of ['request_invalidated', 'candidate_unavailable']) {
     }
   });
 }
+
+
+test('开始编辑已核验版本只通知原输入门禁，不写版本或选择', async () => {
+  const f = await fixture();
+  let notices = 0;
+  const stop = f.replies.onInputChanged(() => { notices++; });
+  const before = await f.bridge.getState(), calls = f.calls.length;
+  try {
+    const state = await f.bridge.beginCandidateVersionEdit({ ...f.scope, sessionId: f.sessionId,
+      candidateId: f.candidateId, versionId: f.versionId });
+    assert.equal(notices, 1);
+    assert.equal(f.calls.length, calls);
+    assert.deepEqual(state.candidateVersions, before.candidateVersions);
+    assert.deepEqual(state.explicitCandidateSelection, before.explicitCandidateSelection);
+    assert.deepEqual(state.savedSession, before.savedSession);
+    assert.equal(f.handlers.get('reply:begin-candidate-version-edit').role, 'helper');
+  } finally { stop(); }
+});
+
+test('开始编辑拒绝不属于当前显示版本的身份和未知正文', async () => {
+  const f = await fixture();
+  assert.equal(typeof f.bridge.beginCandidateVersionEdit, 'function');
+  let notices = 0;
+  const stop = f.replies.onInputChanged(() => { notices++; });
+  const identity = { ...f.scope, sessionId: f.sessionId, candidateId: f.candidateId, versionId: f.versionId };
+  try {
+    for (const request of [
+      { ...identity, contactId: randomUUID() }, { ...identity, scopeRevision: identity.scopeRevision + 1 },
+      { ...identity, sessionId: randomUUID() }, { ...identity, candidateId: randomUUID() },
+      { ...identity, versionId: randomUUID() }, { ...identity, versionId: f.candidateId },
+      { ...identity, text: '不能传入的合成正文。' }, { ...identity, versionId: null },
+    ]) await assert.rejects(async () => f.bridge.beginCandidateVersionEdit(request));
+    assert.equal(notices, 0);
+    await assert.rejects(async () => f.bridge.beginCandidateVersionEdit(identity, identity));
+    await assert.rejects(async () => f.bridge.beginCandidateVersionEdit());
+    assert.equal(notices, 0);
+  } finally { stop(); }
+});

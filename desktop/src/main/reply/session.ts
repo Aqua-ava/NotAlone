@@ -778,6 +778,18 @@ export class ReplySession {
     catch (error) { await this.handleCandidateSourceUnavailable(error); throw error; }
     return this.getState();
   }
+  beginCandidateVersionEdit(selection: ReplyCandidateVersionDisplay): ReplySessionState {
+    this.assertVersionScope(selection);
+    const view = this.state.candidateVersions?.items.find((item) => item.candidateId === selection.candidateId);
+    if (this.state.phase === 'waiting' || this.state.savedSession?.phase !== 'ready'
+      || this.state.candidateVersions?.phase !== 'ready' || view?.phase !== 'ready'
+      || view.displayVersionId !== selection.versionId
+      || !view.history?.versions.some((version) => version.versionId === selection.versionId)) {
+      throw new Error('本组编辑版本尚未核对，请重新读取。');
+    }
+    this.notifyInputChanged();
+    return this.getState();
+  }
   async saveCandidateVersion(edit: ReplyCandidateVersionEdit): Promise<ReplySessionState> {
     this.assertVersionScope(edit);
     this.candidateRestoreOperation += 1;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AssistantSessionDeletion, ReplyMode, ReplySessionState, RewriteOptions, RewriteTone } from '../shared/reply-bridge';
 import { HelperDraft, type ContactSessionView } from './contact-session';
 import { Icon } from './icons';
@@ -7,6 +7,8 @@ import './rewrite.css';
 import { ReplyEvidence, useReplyEvidence } from './ReplyEvidence';
 import { AssistantSessionPanel } from './AssistantSessionPanel';
 import { StyleSamples } from './StyleSamples';
+import { CandidateVersionEditor } from './CandidateVersionEditor';
+import type { ReplyCandidateVersionRead, ReplyCandidateVersionEdit, ReplyCandidateVersionDisplay, ReplyCandidateVersionSelection } from '../shared/assistant-candidate-versions';
 
 export function useReplySession() {
   const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null, generationBlock: 'foreground-confirmation-required',
@@ -21,7 +23,22 @@ export function useReplySession() {
     catch { if (active.current && scopeRevision === latest.current.scopeRevision) setError('本次表达操作暂时不可用，请重新确认联系人。'); }
   }
   const selection = () => ({ contactId: latest.current.contactId!, scopeRevision: latest.current.scopeRevision });
+  async function versionOperation(operation: () => Promise<ReplySessionState>) {
+    const scopeRevision = latest.current.scopeRevision;
+    try {
+      const next = await operation(); receive(next);
+      if (active.current && scopeRevision === latest.current.scopeRevision) setError('');
+    } catch (error) {
+      if (active.current && scopeRevision === latest.current.scopeRevision) setError('本组版本操作尚未确认，请保留编辑后重试。');
+      throw error;
+    }
+  }
   return { state, error,
+    beginCandidateVersionEdit: (request: ReplyCandidateVersionDisplay) => versionOperation(() => window.notalone.replies.beginCandidateVersionEdit(request)),
+    readCandidateVersions: (request: ReplyCandidateVersionRead) => versionOperation(() => window.notalone.replies.readCandidateVersions(request)),
+    saveCandidateVersion: (request: ReplyCandidateVersionEdit) => versionOperation(() => window.notalone.replies.saveCandidateVersion(request)),
+    showCandidateVersion: (request: ReplyCandidateVersionDisplay) => versionOperation(() => window.notalone.replies.showCandidateVersion(request)),
+    selectCandidateVersion: (request: ReplyCandidateVersionSelection) => versionOperation(() => window.notalone.replies.selectCandidateVersion(request)),
     updateOptions: (options: RewriteOptions) => operate(() => window.notalone.replies.updateOptions({ ...selection(), options })),
     setMode: (mode: ReplyMode) => operate(() => window.notalone.replies.setMode({ ...selection(), mode })),
     loadMessages: (older = false) => operate(() => window.notalone.replies.loadMessages({ ...selection(), older })),
@@ -107,10 +124,24 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
   const evidence = useReplyEvidence();
   const usedSkill = state.result?.usedSkill;
   const usedVersion = usedSkill && state.skillChoices.find((item) => item.versionId === usedSkill.versionId)?.versionNumber;
+  const recovered = !state.result && state.savedSession?.phase === 'ready'
+    ? state.savedSession.turns.filter((turn) => turn.state === 'completed' && turn.reply).at(-1) : undefined;
+  const replyRequestId = state.result?.replyRequestId ?? recovered?.reply?.replyRequestId;
+  const candidates = state.result?.candidates.map((item) => item.original) ?? recovered?.reply?.candidates ?? [];
+  const completedRead = useRef('');
+  useEffect(() => {
+    const result = state.result;
+    if (!result || result.input.mode === 'rewrite_draft' || state.phase !== 'ready'
+      || state.savedSession?.sessionId !== result.assistantSessionId || state.savedSession?.phase !== 'idle') return;
+    const identity = `${state.contactId}:${state.scopeRevision}:${result.assistantSessionId}:${result.replyRequestId}`;
+    if (completedRead.current === identity) return;
+    completedRead.current = identity;
+    void replies.readSavedSession();
+  }, [state.result, state.phase, state.savedSession?.phase, state.savedSession?.sessionId, state.contactId, state.scopeRevision]);
   function noteCopy(candidateId: string, text: string) {
-    if (!text.trim() || text.length > 65_536 || !state.contactId || !state.result) return;
+    if (!text.trim() || text.length > 65_536 || !state.contactId || !replyRequestId) return;
     void window.notalone.styleSamples.noteCandidateCopy({ contactId: state.contactId, scopeRevision: state.scopeRevision,
-      replyRequestId: state.result.replyRequestId, candidateId, text }).catch(() => {});
+      replyRequestId, candidateId, text }).catch(() => {});
   }
   return <section className="reply-candidates" aria-label="候选回复">
     <AssistantSessionPanel replies={replies} />
@@ -138,7 +169,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
           : state.result.input.mode === 'initiate_conversation' ? <p>主动目的：{state.result.input.purpose}</p>
           : <><p>待回复消息：{state.result.input.target.text ?? state.result.input.target.mediaPlaceholder}</p>
             <p>表达方向：{state.result.input.direction}</p></>}</details>
-      <div className="reply-candidate-grid">
+      {state.result.input.mode === 'rewrite_draft' && <div className="reply-candidate-grid">
         {state.result.candidates.map(({ original, editedText }, index) => <article className="reply-candidate" key={original.candidateId}>
           <label className="reply-choice"><input type="radio" name="candidate" checked={state.selectedCandidateId === original.candidateId}
             onChange={() => void replies.selectCandidate(original.candidateId)} />说法 {index + 1}</label>
@@ -151,8 +182,24 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
           <ReplyEvidence evidence={evidence} candidate={original} number={index + 1} waiting={state.phase === 'waiting'}
             selection={{ contactId: state.contactId!, scopeRevision: state.scopeRevision, replyRequestId: state.result!.replyRequestId, candidateId: original.candidateId }} />
         </article>)}
-      </div>
-    </> : state.phase !== 'waiting' && <div className="reply-empty"><p>暂无候选</p><small>准备好你的意思，再选择合适的表达。</small></div>}
+      </div>}
+    </> : state.phase !== 'waiting' && candidates.length === 0 && <div className="reply-empty"><p>暂无候选</p><small>准备好你的意思，再选择合适的表达。</small></div>}
+    {(state.result?.input.mode !== 'rewrite_draft' || !state.result) && candidates.length > 0 && <div className="reply-candidate-grid">
+      {candidates.map((candidate, index) => {
+        const view = state.candidateVersions?.items.find((item) => item.candidateId === candidate.candidateId);
+        return <article className="reply-candidate" key={candidate.candidateId}>
+          <h3>说法 {index + 1}</h3>
+          {replyRequestId && <CandidateVersionEditor key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${candidate.candidateId}:${replyRequestId}`}
+              replies={replies} view={view} candidateId={candidate.candidateId} replyRequestId={replyRequestId}
+              number={index + 1} restored={!state.result} noteCopy={(text) => noteCopy(candidate.candidateId, text)} />
+          }
+          <p className="reply-basis">{candidate.basis}</p>
+          {candidate.riskNotes.map((note, number) => <p className="reply-risk" key={number}>{note}</p>)}
+          <ReplyEvidence evidence={evidence} candidate={candidate} number={index + 1} waiting={state.phase === 'waiting'}
+            selection={{ contactId: state.contactId!, scopeRevision: state.scopeRevision, replyRequestId: replyRequestId!, candidateId: candidate.candidateId }} />
+        </article>;
+      })}
+    </div>}
     {replies.error && <p className="reply-note" role="alert">{replies.error}</p>}
     <StyleSamples replies={replies} />
   </section>;

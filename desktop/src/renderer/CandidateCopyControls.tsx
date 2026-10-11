@@ -14,7 +14,8 @@ export function CandidateCopyControls({ state }: { state: ReplySessionState }) {
   const [error, setError] = useState('');
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   useEffect(() => { setNotice(''); setError(''); }, [identity]);
-  const enabled = Boolean(state.contactId && state.result && candidate?.editedText.trim() && state.phase !== 'waiting' && !busy);
+  const enabled = Boolean(state.contactId && state.result?.input.mode === 'rewrite_draft'
+    && candidate?.editedText.trim() && state.phase !== 'waiting' && !busy);
   async function copy(hideAfterCopy: boolean) {
     if (!enabled || !state.result || !candidate || !state.contactId) return;
     const operation = identity;
@@ -28,6 +29,7 @@ export function CandidateCopyControls({ state }: { state: ReplySessionState }) {
     } finally { if (active.current) setBusy(false); }
   }
   return <>
+    {state.result && state.result.input.mode !== 'rewrite_draft' && <span>请在消息组选择版本后逐条复制。</span>}
     <button disabled={!enabled} onClick={() => void copy(false)}><Icon name="copy" size={13} />复制</button>
     <button className="copy-hide" disabled={!enabled} onClick={() => void copy(true)}>复制并收起</button>
     {busy && <span role="status">正在复制…</span>}

@@ -21,6 +21,8 @@ export class RewriteHttpProxy {
   failMessages = false;
   failRuntime = false;
   failSessionReads = false;
+  failNextCandidateVersionSave = false;
+  failNextCandidateSelectionRead = false;
   // 只为本轮已知会话的精确路径设置故障；不记录确认正文。
   failSessionDeletes: string | null = null;
   heldCount = 0;
@@ -43,6 +45,18 @@ export class RewriteHttpProxy {
         && /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+$/.test(incoming.url ?? '');
       const sessionDelete = incoming.method === 'DELETE'
         && /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+$/.test(incoming.url ?? '');
+      if (this.failNextCandidateVersionSave && incoming.method === 'POST'
+        && /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+\/candidates\/[a-f0-9-]+\/versions$/.test(new URL(incoming.url ?? '/', 'http://127.0.0.1').pathname)) {
+        this.failNextCandidateVersionSave = false; incoming.resume();
+        response.writeHead(503, { 'Content-Type': 'application/json' });
+        response.end('{"error":"synthetic_transport_unavailable"}'); return;
+      }
+      if (this.failNextCandidateSelectionRead && incoming.method === 'GET'
+        && /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+\/selections$/.test(incoming.url ?? '')) {
+        this.failNextCandidateSelectionRead = false; incoming.resume();
+        response.writeHead(503, { 'Content-Type': 'application/json' });
+        response.end('{"error":"synthetic_transport_unavailable"}'); return;
+      }
       if (sessionDelete && this.failSessionDeletes === incoming.url) {
         this.sessionDeletes.push({ path: incoming.url!, status: 503 });
         response.writeHead(503, { 'Content-Type': 'application/json' });
