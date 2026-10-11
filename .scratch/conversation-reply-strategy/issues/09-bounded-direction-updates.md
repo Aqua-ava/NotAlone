@@ -1,6 +1,6 @@
 # 09：未选方向时的新消息有界更新
 
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环](02-understanding-and-direction.md)；[assistant-session-context/16 切换会话或关闭小窗时保持生成归属](../../assistant-session-context/issues/16-background-result-ownership.md)；[assistant-session-context/17 退出停止与重开后的中断恢复](../../assistant-session-context/issues/17-quit-and-interrupted-recovery.md)
 
@@ -8,7 +8,7 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧04；Q27、Q28、Q31。 第二版标识为R08。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-043](../../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧04；Q27、Q28、Q31。 第二版标识为R08。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-043](../../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。依赖是完整交付的前置，不代表这些前置已完成；已交付的阶段证据与尚待接续范围见 Answer。
 
 ## What to build
 
@@ -79,3 +79,12 @@ prepare 前的原 55 项 GREEN 及 prepare 后一轮 54 pass／1 ERROR（179.911
 本切片最终限定 Spec 新增 P0–P3 为 0、原 P2 源码缺口关闭；Standards hard 0／新增重要 Fowler possible 0，既有接受 P3 保留。原 P2 的真实受控修复与尚未运行的公开第十三场结果分开记录。R09 仍 open、原验收未勾，原十二业务 GREEN／整体观测 exit1 与所有早期 RED／超时各自保留；原采样预算未修改，A16／17 实际关闭退出接口继续依正式交付接入。没有 OCR、真实聊天、真实 App、额外模型、人工／原生验收、自动外部发送、push、发布或部署。
 
 2026-10-11 总协调真实主树集成：正式7eda／3b19／a70净生产、fixture、公开case及inline登记，在已正式rootA09/A10 UI与054／C删除／样本基线上执行 `npm --prefix desktop run test:pages -- --case reply-strategy-bounded-updates --timeout-seconds 240`。Conda NotAlone、关闭外部追踪，session63640 actualexit0，原十三完整场景全部通过，旧SID确认删除后直接新任务继续合并并推进actualCURRENT的新增反例也通过。两scene三次预算、过期模型前拒绝、失败不自动重试、断连迟到、切mode、等待合并和草稿input/question绑定均按原计数与原5秒断言；未新增正文/外部发送。quiet84／active0／onscreen0／maxApps1／policy2／singleChrome／cleanuptrue／nativefalse，独立freshstatus actual0 absent后真release。开始记录脚本换行引号错误未写MAIN而shell继续执行的入口错误保留，运行代码／夹具未改变，不作为产品RED。先前owner12businessG但整体observationexit1／firstopen5秒超时均保，后续未复现不声明根因已修；本根十三完整CLI G与owner71516 G分别计量。源两轴无新增阻塞、whole桌面type0已有。本票仍open：A16/17受控切换／surface close／quit-reopen正式端口及公开组合继续，不以本十三G关闭原第四条生命周期。
+
+
+## Answer（总协调关闭探索边界的独立集成）
+
+2026-10-11：新 B 从原正式 `16f85b1` 在 `/Users/local-user/.codex/worktrees/reply-strategy-completion/NotAlone` 接续，唯一 B 会话为 `local-chat-id`；旧 B 树因系统错误冻结并保留备份。正式 `56e72f4` 的普通生成八源／测试已逐 blob 核对与 root c843相同，Main只多无使用的purpose类型import不净，C合成测试保留root10caf新增来源用例。因此不whole十文件或重复集成同一 registry；原C样本接口、12e beginEdit、e092保存通知和80b来源验证保持。新 B 自己的211Node／20HTTP及54账本与清理是负责人证据，未写作主树55运行。
+
+只净 B 正式 `6a31871db7959aa18166a290d6f4ca88c4a3034b` 的两源码／测试增量：hidden或closed停原自动探索计时器；非已确认生成的在途探索失效，晚回包不恢复建议。确认或已确认后的回答生成、普通已发起候选继续沿 A 原会话作业；没有新取消、正文缓存或 writer。Root自己的真实生产具名桥接→认证HTTP→随机055PG负向及普通hide／close正向 **2 GREEN／6110.748917ms／skip0／actualexit0**；每份实际55账本／repeat0／instance与class清理true／database_remaining=false，合成实际模型各1共2。五个候选版本／来源／样本／复制相关 Node 模块 **225 GREEN／1340.456125ms／skip0／actualexit0**，完整desktop TSC及diff通过。原首次未激活Conda只属环境门禁失败，未建数据库或HTTP，不称产品RED。精确日志 `/private/tmp/notalone-root-hidden-exploration-http-pg.log` 与 `/private/tmp/notalone-root-hidden-exploration-related-node.log`。
+
+B 真实页面 first78240因PageHost未通知reply消费者失败；最薄host bb1d正式后 second18530已越过关闭后SSE零追加模型，重开fixture抢在about:blank加载后读取bridge而失败，其余四未执行，两轮均cleanup／hash／独立freshabsent完整释放。负责人正修原5s加载前提并继续五场；主树尚未净这新页面或自行执行它，不借受控HTTP／旧14场或六编辑场称新五场通过。A16 B确认／回答 registry、A17实际受控quit／重开和B10／11连续组合继续；本票开始实施故当前State改claimed，六条原验收文字和未勾状态保留，历史open及真实失败记录不删除。只有合成资料／可控模型／隔离数据库，真实App、原生、人工、真实模型质量、微信／OCR、外部发送、push和部署未执行。

@@ -135,6 +135,10 @@ export class ReplySession {
   }
   notifyHelperLifecycle(event: 'focused' | 'blurred' | 'hidden' | 'closed'): void {
     if (event === 'hidden' || event === 'closed') {
+      this.stopAutomaticExploration();
+      const generating = this.strategyJob?.type === 'action' && (this.strategyJob.request.action === 'confirm'
+        || this.strategyJob.request.action === 'answer' && Boolean(this.currentExploration?.confirmedIntent));
+      if (!generating) this.invalidateExploration();
       this.helperHidden = true; this.leaveGenerationView();
       this.lastAttempt = undefined;
       this.publish({ phase: this.state.result ? 'ready' : 'idle', canRetry: false, errorCode: undefined });

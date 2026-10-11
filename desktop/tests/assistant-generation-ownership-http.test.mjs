@@ -133,6 +133,30 @@ async function withPublicFixture(use) {
   }, undefined, path.resolve('tests/fixtures/assistant-generation-ownership.py'));
 }
 
+test('关闭未确认方向探索后，原HTTP晚回包不能恢复活跃建议，重显只读历史', async () => {
+  await withPublicFixture(async (f) => {
+    const scope = await f.selectContact(f.contactA);
+    await f.bridge.setMode({ ...scope, mode: 'initiate_conversation' });
+    await f.bridge.updatePurpose({ ...scope, purpose: '了解近况，尚未确认意愿。' });
+    await f.fixture.plan({ explore: { understanding: '关闭后不应恢复的合成理解。' } });
+    await f.fixture.command('hold');
+    const exploring = f.bridge.explore(scope);
+    await eventually(() => f.fixture.command('counts'), (counts) => counts.entered,
+      '公开探索未到达实际模型。');
+    f.replies.notifyHelperLifecycle('hidden');
+    await f.fixture.command('release'); await exploring;
+    const state = await f.bridge.getState();
+    assert.equal(state.exploration.result, null, '关闭的任务不能发布迟到建议。');
+    assert.notEqual(state.exploration.phase, 'waiting');
+    f.replies.notifyHelperLifecycle('focused');
+    await eventually(() => f.bridge.getState(), (value) => value.savedSession?.phase === 'ready',
+      '重显未完成既有会话读取。');
+    assert.equal((await f.bridge.getState()).exploration.result, null,
+      '仅重显窗口不能重新授权旧探索任务。');
+    assert.equal((await f.fixture.command('counts')).actual_calls, 1);
+  });
+});
+
 test('公开生成切换联系人后继续，C唯一保存原SID，迟到A不覆盖B，返回A只GET恢复', async () => {
   await withPublicFixture(async (f) => {
     const scopeA = await f.selectContact(f.contactA);
