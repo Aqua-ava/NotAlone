@@ -91,6 +91,11 @@ class AssistantSessionStore(Protocol):
         self, scope: ContactScope, session_id: UUID, request: ReplyServiceRequest,
     ) -> UUID: ...
 
+    def reserve_replacement(
+        self, scope: ContactScope, session_id: UUID, running_request_key: UUID,
+        request: ReplyServiceRequest,
+    ) -> UUID: ...
+
     def complete(
         self, scope: ContactScope, session_id: UUID, turn_id: UUID,
         reply: ReplyGenerated,
@@ -158,9 +163,29 @@ class AssistantSessionService:
             raise AssistantSessionRejected("reply_unavailable")
         scope = ContactScope(owner_id, contact_id)
         turn_id = self._store.reserve(scope, session_id, request)
+        return self._generate_reserved(scope, session_id, turn_id, request)
+
+    def replace(
+        self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
+        running_request_key: UUID, request: ReplyServiceRequest,
+    ) -> AssistantTurn:
+        """显式旧请求失效后继续既有生成流程，候选仍须可靠保存。"""
+
+        if self._reply is None:
+            raise AssistantSessionRejected("reply_unavailable")
+        scope = ContactScope(owner_id, contact_id)
+        turn_id = self._store.reserve_replacement(scope, session_id, running_request_key, request)
+        return self._generate_reserved(scope, session_id, turn_id, request)
+
+    def _generate_reserved(
+        self, scope: ContactScope, session_id: UUID, turn_id: UUID, request: ReplyServiceRequest,
+    ) -> AssistantTurn:
+        reply = self._reply
+        if reply is None:
+            raise AssistantSessionRejected("reply_unavailable")
         try:
-            result = self._reply.generate(
-                owner_id=owner_id, contact_id=contact_id, request=request,
+            result = reply.generate(
+                owner_id=scope.owner_id, contact_id=scope.contact_id, request=request,
             )
             if result.reply is None:
                 raise AssistantSessionRejected(result.reason or "reply_rejected")

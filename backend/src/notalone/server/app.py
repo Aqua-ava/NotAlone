@@ -1265,6 +1265,24 @@ class BackendApp:
                 if turn.reply is None:
                     raise AssistantSessionPersistenceError("未保存完成结果。")
                 return _json_response(HTTPStatus.OK, _completed_turn_payload(turn))
+            if len(parts) == 6 and parts[5] == "replace" and method == "POST":
+                replacement = json.loads(body.decode("utf-8"))
+                if (not isinstance(replacement, dict)
+                        or set(replacement) != {"running_request_key", "replacement"}
+                        or not isinstance(replacement["running_request_key"], str)
+                        or not isinstance(replacement["replacement"], dict)):
+                    raise ReplyRequestInvalid()
+                running_request_key = UUID(replacement["running_request_key"])
+                body_contact, request = parse_reply_request(
+                    json.dumps(replacement["replacement"], ensure_ascii=False).encode("utf-8"),
+                )
+                if body_contact != contact_id or request.idempotency_key == running_request_key:
+                    raise ReplyRequestInvalid()
+                turn = service.replace(
+                    owner_id=self._owner_id, contact_id=contact_id, session_id=session_id,
+                    running_request_key=running_request_key, request=request,
+                )
+                return _json_response(HTTPStatus.OK, _completed_turn_payload(turn))
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         except (ValueError, IndexError, ReplyRequestInvalid):
             return _json_response(HTTPStatus.BAD_REQUEST, {"error": "assistant_session_request_invalid"})

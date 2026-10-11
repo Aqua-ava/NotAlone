@@ -325,92 +325,130 @@ class PostgresAssistantSessionStore:
         self, scope: ContactScope, session_id: UUID, request: ReplyServiceRequest,
     ) -> UUID:
         with self._transaction(scope) as connection:
-            self._require_session(connection, scope, session_id)
-            binding_id = _active_binding(connection, scope)
-            command = request.build_command(
-                owner_id=scope.owner_id, contact_id=scope.contact_id, binding_id=binding_id,
+            return self._reserve_in_transaction(connection, scope, session_id, request)
+
+    def reserve_replacement(
+        self, scope: ContactScope, session_id: UUID, running_request_key: UUID,
+        request: ReplyServiceRequest,
+    ) -> UUID:
+        """显式旧键由服务端定位；失效与唯一新输入领取在同一事务内提交。"""
+
+        if (not isinstance(running_request_key, UUID)
+                or not isinstance(request, ReplyServiceRequest)
+                or not isinstance(request.idempotency_key, UUID)
+                or request.idempotency_key == running_request_key):
+            raise AssistantSessionRejected("invalid_generation_replacement")
+        with self._transaction(scope) as connection:
+            return self._reserve_in_transaction(
+                connection, scope, session_id, request, running_request_key=running_request_key,
             )
-            if command is None or not command.has_valid_content():
-                raise AssistantSessionRejected("invalid_reply_input")
-            normalized = _normalize_input(command)
-            digest = _digest(binding_id, normalized)
-            existing = connection.execute(
-                "SELECT id, session_id, state, input_digest FROM public.assistant_session_turn "
-                "WHERE owner_id = %s AND contact_id = %s AND idempotency_key = %s FOR UPDATE",
-                (scope.owner_id, scope.contact_id, request.idempotency_key),
-            ).fetchone()
-            if existing is not None:
-                if existing["state"] == "redacted":
-                    raise AssistantSessionRejected("source_deleted")
-                if existing["session_id"] != session_id or existing["input_digest"] != digest:
-                    raise AssistantSessionConflict("请求键已用于不同输入。")
-                dependencies = connection.execute(
-                    "SELECT dependency_ids FROM public.assistant_session_turn WHERE id = %s",
-                    (existing["id"],),
-                ).fetchone()["dependency_ids"]
-                if not _dependencies_available(connection, scope.owner_id, set(dependencies)):
-                    raise AssistantSessionRejected("source_unavailable")
-                if existing["state"] != "completed":
-                    from notalone.persistence.explored_generation import prepare_explored_generation
-                    prepare_explored_generation(connection, scope, session_id, command)
-                return existing["id"]
-            # 沿用回复层的无正文失效凭证，在新会话落输入前阻止旧键恢复。
-            if connection.execute(
-                "SELECT 1 FROM public.reply_invalidated_key WHERE owner_id = %s "
-                "AND contact_id = %s AND idempotency_key = %s",
-                (scope.owner_id, scope.contact_id, request.idempotency_key),
-            ).fetchone():
-                raise AssistantSessionRejected("request_deleted")
-            if connection.execute(
-                "SELECT 1 FROM public.reply_request WHERE owner_id = %s AND contact_id = %s "
-                "AND idempotency_key = %s",
-                (scope.owner_id, scope.contact_id, request.idempotency_key),
-            ).fetchone():
-                raise AssistantSessionConflict("历史回复请求不能自动归并。")
-            from notalone.persistence.assistant_session_inputs import check_expected_input, require_input_session
-            check_expected_input(require_input_session(connection, scope, session_id), request.expected_input_version_id)
-            from notalone.persistence.explored_generation import prepare_explored_generation
-            dependencies = prepare_explored_generation(connection, scope, session_id, command)
-            if isinstance(command.content, ReplyToMessage):
-                target = connection.execute(
-                    "SELECT 1 FROM public.message WHERE owner_id = %s AND contact_id = %s AND id = %s",
-                    (scope.owner_id, scope.contact_id, command.content.target_message_id),
-                ).fetchone()
-                if target is None:
-                    raise AssistantSessionRejected("target_message_unavailable")
-                dependencies.add(command.content.target_message_id)
-                dependencies = _expand_message_sources(connection, scope.owner_id, dependencies)
-            if request.continued_from_candidate_id is not None:
-                candidate = connection.execute(
-                    "SELECT reply_request_id FROM public.reply_candidate WHERE owner_id = %s "
-                    "AND contact_id = %s AND conversation_binding_id = %s AND id = %s",
-                    (scope.owner_id, scope.contact_id, binding_id, request.continued_from_candidate_id),
-                ).fetchone()
-                if candidate is None:
-                    raise AssistantSessionRejected("continued_candidate_unavailable")
-                dependencies.update(_reply_dependencies(connection, scope, candidate["reply_request_id"]))
-            if not _dependencies_available(connection, scope.owner_id, dependencies):
+
+    def _reserve_in_transaction(
+        self, connection: Any, scope: ContactScope, session_id: UUID,
+        request: ReplyServiceRequest, *, running_request_key: UUID | None = None,
+    ) -> UUID:
+        """复用既有规范化、探索与来源门禁；同键重放先于旧请求失效。"""
+
+        self._require_session(connection, scope, session_id)
+        binding_id = _active_binding(connection, scope)
+        command = request.build_command(
+            owner_id=scope.owner_id, contact_id=scope.contact_id, binding_id=binding_id,
+        )
+        if command is None or not command.has_valid_content():
+            raise AssistantSessionRejected("invalid_reply_input")
+        normalized = _normalize_input(command)
+        digest = _digest(binding_id, normalized)
+        existing = connection.execute(
+            "SELECT id, session_id, state, input_digest FROM public.assistant_session_turn "
+            "WHERE owner_id = %s AND contact_id = %s AND idempotency_key = %s FOR UPDATE",
+            (scope.owner_id, scope.contact_id, request.idempotency_key),
+        ).fetchone()
+        if existing is not None:
+            if existing["state"] == "redacted":
+                raise AssistantSessionRejected("source_deleted")
+            if existing["session_id"] != session_id or existing["input_digest"] != digest:
+                raise AssistantSessionConflict("请求键已用于不同输入。")
+            dependencies = connection.execute(
+                "SELECT dependency_ids FROM public.assistant_session_turn WHERE id = %s",
+                (existing["id"],),
+            ).fetchone()["dependency_ids"]
+            if not _dependencies_available(connection, scope.owner_id, set(dependencies)):
                 raise AssistantSessionRejected("source_unavailable")
-            row = connection.execute(
-                "INSERT INTO public.assistant_session_turn "
-                "(session_id, owner_id, contact_id, idempotency_key, conversation_binding_id, "
-                "input_digest, input_payload, dependency_ids) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, input_version_id",
-                (session_id, scope.owner_id, scope.contact_id, request.idempotency_key,
-                 binding_id, digest, Jsonb(_input_payload(canonical_reply_input(command))), list(dependencies)),
+            if existing["state"] != "completed":
+                from notalone.persistence.explored_generation import prepare_explored_generation
+                prepare_explored_generation(connection, scope, session_id, command)
+            return existing["id"]
+        # 沿用回复层的无正文失效凭证，在新会话落输入前阻止旧键恢复。
+        if connection.execute(
+            "SELECT 1 FROM public.reply_invalidated_key WHERE owner_id = %s "
+            "AND contact_id = %s AND idempotency_key = %s",
+            (scope.owner_id, scope.contact_id, request.idempotency_key),
+        ).fetchone():
+            raise AssistantSessionRejected("request_deleted")
+        if connection.execute(
+            "SELECT 1 FROM public.reply_request WHERE owner_id = %s AND contact_id = %s "
+            "AND idempotency_key = %s",
+            (scope.owner_id, scope.contact_id, request.idempotency_key),
+        ).fetchone():
+            raise AssistantSessionConflict("历史回复请求不能自动归并。")
+        from notalone.persistence.assistant_session_inputs import check_expected_input, require_input_session
+        check_expected_input(require_input_session(connection, scope, session_id), request.expected_input_version_id)
+        from notalone.persistence.explored_generation import prepare_explored_generation
+        dependencies = prepare_explored_generation(connection, scope, session_id, command)
+        if isinstance(command.content, ReplyToMessage):
+            target = connection.execute(
+                "SELECT 1 FROM public.message WHERE owner_id = %s AND contact_id = %s AND id = %s",
+                (scope.owner_id, scope.contact_id, command.content.target_message_id),
             ).fetchone()
-            connection.execute(
-                "INSERT INTO public.assistant_session_input "
-                "(id, session_id, owner_id, contact_id, conversation_binding_id, input_type, turn_id) "
-                "VALUES (%s, %s, %s, %s, %s, 'generation', %s)",
-                (row["input_version_id"], session_id, scope.owner_id, scope.contact_id, binding_id, row["id"]),
-            )
-            connection.execute(
-                "UPDATE public.assistant_session SET current_input_version_id = %s, updated_at = now() "
-                "WHERE owner_id = %s AND contact_id = %s AND id = %s",
-                (row["input_version_id"], scope.owner_id, scope.contact_id, session_id),
-            )
-            return row["id"]
+            if target is None:
+                raise AssistantSessionRejected("target_message_unavailable")
+            dependencies.add(command.content.target_message_id)
+            dependencies = _expand_message_sources(connection, scope.owner_id, dependencies)
+        if request.continued_from_candidate_id is not None:
+            candidate = connection.execute(
+                "SELECT reply_request_id FROM public.reply_candidate WHERE owner_id = %s "
+                "AND contact_id = %s AND conversation_binding_id = %s AND id = %s",
+                (scope.owner_id, scope.contact_id, binding_id, request.continued_from_candidate_id),
+            ).fetchone()
+            if candidate is None:
+                raise AssistantSessionRejected("continued_candidate_unavailable")
+            dependencies.update(_reply_dependencies(connection, scope, candidate["reply_request_id"]))
+        if not _dependencies_available(connection, scope.owner_id, dependencies):
+            raise AssistantSessionRejected("source_unavailable")
+        if running_request_key is not None:
+            old = connection.execute(
+                "SELECT id, input_version_id FROM public.assistant_session_turn "
+                "WHERE owner_id = %s AND contact_id = %s AND session_id = %s "
+                "AND idempotency_key = %s FOR UPDATE",
+                (scope.owner_id, scope.contact_id, session_id, running_request_key),
+            ).fetchone()
+            if old is None:
+                raise AssistantSessionNotFound("指定会话内不存在旧生成请求。")
+            from notalone.persistence.assistant_generation_replacement import invalidate_running_generation
+            if not invalidate_running_generation(
+                connection, scope, session_id, old["id"], old["input_version_id"],
+            ):
+                raise AssistantSessionRejected("generation_not_running")
+        row = connection.execute(
+            "INSERT INTO public.assistant_session_turn "
+            "(session_id, owner_id, contact_id, idempotency_key, conversation_binding_id, "
+            "input_digest, input_payload, dependency_ids) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, input_version_id",
+            (session_id, scope.owner_id, scope.contact_id, request.idempotency_key,
+             binding_id, digest, Jsonb(_input_payload(canonical_reply_input(command))), list(dependencies)),
+        ).fetchone()
+        connection.execute(
+            "INSERT INTO public.assistant_session_input "
+            "(id, session_id, owner_id, contact_id, conversation_binding_id, input_type, turn_id) "
+            "VALUES (%s, %s, %s, %s, %s, 'generation', %s)",
+            (row["input_version_id"], session_id, scope.owner_id, scope.contact_id, binding_id, row["id"]),
+        )
+        connection.execute(
+            "UPDATE public.assistant_session SET current_input_version_id = %s, updated_at = now() "
+            "WHERE owner_id = %s AND contact_id = %s AND id = %s",
+            (row["input_version_id"], scope.owner_id, scope.contact_id, session_id),
+        )
+        return row["id"]
 
     def complete(
         self, scope: ContactScope, session_id: UUID, turn_id: UUID, reply: ReplyGenerated,
