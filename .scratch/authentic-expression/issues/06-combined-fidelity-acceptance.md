@@ -314,3 +314,32 @@ C现有组合测试不再SQL插入合成失效键：两种场景均实际方向�
 原公开 HTTP inputs10、prepare17 与上述14真实 PG 组合，共41项 GREEN／22.799s／skip0，隔离生产54迁移／重复0／自有库剩余0；预期的来源失效租约异常日志保留。`python -m mypy --follow-imports=silent` 对两个实际 source 无问题，compile两文件与diff检查通过；不据此宣称全后端类型通过。证据日志 `/private/tmp/notalone-root-c-start-identity-real-red.log`、`/private/tmp/notalone-root-c-start-identity-green.log`、`/private/tmp/notalone-root-c-start-identity-http-related.log`。
 
 本片不新增持久化结构、正文副本、模型能力或外发；只在既有事务写入前复验原身份。A13复合 policy／公开连续引用、C来源预捕获及消息组／连续修改样本仍接续；E06保持 claimed，原验收不预填、人工和真实App未执行。
+
+正式C a7b3041 后缀净接；以下198结果归C，本root独立验证另记，不覆盖上述fd5d领取接线。
+
+
+### 2026-10-11 编辑版本与组内文字的真实样本来源
+
+B明确C拥有本片段样本来历适配，B拥有UUID复制网关和消息组UI。以正式 `b437e74aad16047ee015d51ae3f595566f9842fa` 为基点，只改C样本控制器及自有公开接缝测试。正常生成后A `savedSession` 暂为idle；测试和消费者必须经现有 `readSavedSession` 的真实会话GET取得完成轮次，不伪造单独的完成DTO。来源只从同contact／scope／连接、已读取同SID实际completed turn的候选，及A既有ready版本投影读取；版本session／turn／candidate／candidateGroup必须与完成请求吻合。本轮结果与同一已保存完成候选并存时合并其可核验文字，避免先匹配原版而误拒合法编辑片段。保存仍走原样本接口，来历为原candidate ID，不写第二store或selector，不由展示、复制或选择自动保存。
+
+增加实际turn ID非正文元数据，只消费A已确认的redacted／unavailable轮次来使原候选请求和未保存编辑来历失效；旧编辑输入也登记不可恢复SHA，并发布既有erasureRevision清理界面。普通连接失败、空投影或未知读取不推断删除，重新读取有效版本后仍可复验合法片段；已明确失效文字不能降为manual，清空后不同独立键入可正常保存。C没有新增正文缓存、持久表、迁移、原始来源权威、模型调用或外部发送。A现有版本RAM及后端样本真实存储的原删除边界保持。
+
+TDD通过真实ContactSession／preload具名ReplyBridge／Main ReplySession／A版本解析与C样本控制器，只在HTTP传输边界给合成协议响应：恢复后编辑消息单项真实RED413.356667ms（复制来历已失效）→1GREEN193.142625ms；当前result与完成历史并存真实2项1失败114.941833ms→2GREEN99.778709ms。版本source409初次测试忘记读取接口会在完成清理后抛原错误，6项1失败139.503917ms仅为测试期待错误；补正确reject后真实RED104.680167ms（erasureRevision未变）→只消费A终态及turn元数据后6GREEN107.846334ms。补普通失败／重新读取正向，保留两个实际错turn／request反向，最终新套件7项包含一个父测试及两个子测试，不将父项当成独立业务场景。
+
+Node25／desktop，最终八套相关Node实际195GREEN1816.46325ms／skip0／session66570 actualexit0（原188＋新7），完整 `npm run typecheck` actualexit0，`git diff --check`通过。命令为 `node --test tests/style-samples/candidate-version-source.test.mjs tests/assistant-candidate-versions.test.mjs tests/assistant-candidate-version-ports.test.mjs tests/reply-used-skill.test.mjs tests/style-samples/controller.test.mjs tests/assistant-session-catalog.test.mjs tests/assistant-session-catalog-read.test.mjs tests/assistant-session-deletion-guards.test.mjs`，仅输出转换将esbuild data URL栈缩短，pipefail保持真实退出状态。该联跑含A套件的自有Node HTTP与真实JsonClient，新C套件没有运行真实Python后端／PG／模型／剪贴板／页面。它证明来源控制和协议接线，不替代B公共复制网关、实际样本持久化、原始来源删除或完整页面组合证据。
+
+E06继续claimed，未完成勾选保持。B消息组UI与连续修改公开组合待其正式交付及受限普通页面验证；A长历史1MiB P2由唯一A维护，本片段不扩大cap。真实App／原生、微信／OCR、人工质量与新增外部模型实验按用户范围跳过；没有扩大整A13／A18／R09为E06完成门槛。
+
+本片段Spec审查发现新P2：普通版本读取失败期间实际尝试复制，旧控制器会把先前合法片段SHA永久拒绝；首次7项测试只调用了paste而漏copy，不据其或阶段195项通过关闭该问题。补真实copy→失败→成功read／clear／re-copy／paste，7项6通过1失败115.451291ms，修复后7GREEN122.642625ms。仅在A failed仍持有可信历史、实际已完成同SID／turn／request／candidate以及先前唯一同范围同连接来源SHA全部吻合时，暂时拒绝复制而不新增永久拒绝摘要；不能在失败期间粘贴，也不清掉原永久拒绝。追加失败后显式invalidSelection及真实source409两反向，两种都会在随后重读／清空后仍拒绝，不洗成manual。
+
+新增测试最终10项（六个顶层测试，两个父项各带两个子项），八套完整相关联跑session37666 actualexit0／198GREEN1733.332042ms／skip0；完整桌面类型检查再次actualexit0，diff通过。首次审查的P2和195项阶段证据均保留，最终审查以本修复及198项真实结果为准，不借B的24项或未来页面。没有新Python后端／PG／模型／剪贴板／页面运行。
+
+固定本主题三文件（含完整未跟踪测试）最终Standards硬要求0／重要possible Fowler0，Spec新增P0–P3为0，审查发现的本地恢复P2已闭合；原A长历史1MiB P2继续单列开放。两轴只读、未运行测试。仅本样本来源适配、公开接缝回归和E06真实证据本地提交，任务保持claimed。
+
+2026-10-11 总协调主树净接正式 C `a7b3041` 的 controller、新版本来源测试与原票后缀，保留上述 `fd5d6d4` 的独立领取身份记录。相同八套相关 Node 在主树真实执行 **198 GREEN／1084.418084ms／skip0／actualexit0**，完整桌面 TypeScript exit0、diff检查通过。新来源套件仍是受控传输；联跑既有 A 套件含自有回环 HTTP，不是新的 Python/PG/模型/页面验收，也未使用系统剪贴板。原合法版本复制恢复、当前结果同来源合并、确切失效清理及普通故障后复验边界保持；本票仍 claimed，真实消息组／连续修改样本公开组合继续。
+
+主树新鲜复审另发现多候选 P2：候选 B 读取失败或仍在读取使全局版本阶段 failed/loading，候选 A 自身仍 ready 时，复制已登记来源的 A 编辑片段会错误地永久拒绝摘要。新增真实具名 ReplyBridge／A版本控制器／C样本控制器回归取得两条 RED（原10通过、新2失败／112.589417ms）；首轮单个失败已真实复现139.591709ms，抽取多候选夹具时的局部变量 ReferenceError 仅是测试错误，已修正并重新取得两条产品 RED。修复仅让已知唯一同范围／连接／完成 turn、request、candidate、group 以及 A 保留历史身份一致的摘要，在暂未核验时不新增永久拒绝；暂时复制／粘贴仍拒绝，原已永久拒绝摘要、明确 invalidSelection 和真实来源终态不能通过重试解除。没有绕过 backend 来源复验或增加复制正文缓存。
+
+新12项来源套件 GREEN／213.978208ms，完整相关八套原188＋新12共200項、类型和清理结果以本轮真实日志另记。早前198通过不关闭新增 P2，修复后新鲜审查继续；E06仍 claimed，实际 Python/PG/模型／公共页面组合未由这些受控传输回归代替。
+
+上述主树最终八套 Node session88839 **actualexit0／200 GREEN／1121.304709ms／skip0**；完整桌面 TypeScript exit0、diff通过。仅 Node/受控传输与既有自有回环 HTTP，没有新数据库或浏览器租约。这是总协调实际运行，与 C 原198结果分开；新 P2 的完整页面联通仍随 B 正式消息组继续。

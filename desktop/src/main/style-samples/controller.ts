@@ -9,7 +9,7 @@ import type { CandidateTextCopy, ManualStyleText, ManualStyleUpdate, SavedSample
 import { listSamples, readSample } from './client';
 
 type Scope = { contactId: string; scopeRevision: number; generation: number };
-type CandidateOrigin = { id: string; contactId: string; kind: 'candidate'; replyRequestId: string; sessionId?: string; generation: number; scopeRevision: number };
+type CandidateOrigin = { id: string; contactId: string; kind: 'candidate'; replyRequestId: string; sessionId?: string; turnId?: string; generation: number; scopeRevision: number };
 type CandidateSource = { origin: CandidateOrigin; texts: readonly string[] };
 type KnownOrigin = CandidateOrigin | { contactId: string; kind: 'message'; id: string };
 type CopyOrigin = (CandidateOrigin | { id: string; contactId: string; kind: 'sample' })
@@ -84,6 +84,7 @@ export class StyleSampleController {
     this.synchronize();
     const reply = this.replies.getState();
     this.acceptSessionDeletion(reply);
+    this.acceptUnavailableCandidateTurns(reply);
     this.rememberReplyOrigins();
   }
   private resetManualOrigin() {
@@ -109,9 +110,27 @@ export class StyleSampleController {
       this.blockedCopies.add(this.copied.digest);
     }
     if (this.candidateOriginsInManual().some((origin) => origin.contactId === contactId && requestIds.has(origin.replyRequestId))) {
+      if (this.manualFingerprint) this.blockedCopies.add(this.manualFingerprint);
       this.resetManualOrigin(); this.retry = undefined;
       this.publish({ erasureRevision: this.state.erasureRevision + 1 });
     }
+  }
+  private acceptUnavailableCandidateTurns(reply: ReplySessionState) {
+    const scope = this.scope; const saved = reply.savedSession;
+    if (!scope || reply.contactId !== scope.contactId || reply.scopeRevision !== scope.scopeRevision
+      || this.backend.getConnectionGeneration() !== scope.generation || saved?.phase !== 'ready' || !saved.sessionId) return;
+    const unavailable = new Set(saved.turns.filter((turn) => turn.state === 'redacted' || turn.state === 'unavailable')
+      .map((turn) => turn.turnId));
+    if (!unavailable.size) return;
+    const origins: Array<KnownOrigin | CopyOrigin> = [...this.knownOrigins.values()].flatMap((entries) => [...entries.values()]);
+    if (this.copied) origins.push(this.copied);
+    origins.push(...this.manualPasteOrigins.values());
+    // 仅消费A已确认的轮次终态与既有来源身份；不从网络失败或空投影推断删除。
+    const requestIds = new Set(origins.filter((origin): origin is CandidateOrigin => origin.kind === 'candidate'
+      && origin.contactId === scope.contactId && origin.generation === scope.generation
+      && origin.scopeRevision === scope.scopeRevision && origin.sessionId === saved.sessionId
+      && origin.turnId !== undefined && unavailable.has(origin.turnId)).map((origin) => origin.replyRequestId));
+    this.invalidateCandidateRequests(scope.contactId, requestIds);
   }
   private acceptSessionDeletion(reply: ReplySessionState) {
     const event = reply.confirmedSessionDeletion; const scope = this.scope;
@@ -154,10 +173,25 @@ export class StyleSampleController {
     // 正文只读取既有当前投影；恢复来源必须是已核实会话中的实际完成候选。
     if (saved?.phase === 'ready' && saved.sessionId) for (const turn of saved.turns) {
       if (turn.state !== 'completed' || !turn.reply) continue;
-      for (const candidate of turn.reply.candidates) sources.push({
-        origin: { contactId: scope.contactId, kind: 'candidate', id: candidate.candidateId,
-          replyRequestId: turn.reply.replyRequestId, sessionId: saved.sessionId, generation: scope.generation, scopeRevision: scope.scopeRevision }, texts: [candidate.text],
-      });
+      for (const candidate of turn.reply.candidates) {
+        const versions = reply.candidateVersions;
+        const view = versions?.phase === 'ready' && versions.sessionId === saved.sessionId
+          ? versions.items.find((item) => item.candidateId === candidate.candidateId && item.phase === 'ready') : undefined;
+        const history = view?.history;
+        // 沿A可信版本投影读取正文，实际完成轮次和请求必须与候选来历一致。
+        const texts = history?.sessionId === saved.sessionId && history.turnId === turn.turnId
+          && history.candidateId === candidate.candidateId && history.candidateGroupId === turn.reply.replyRequestId
+          ? [candidate.text, ...history.versions.map((version) => version.text)] : [candidate.text];
+        const current = sources.find(({ origin }) => origin.id === candidate.candidateId
+          && origin.replyRequestId === turn.reply!.replyRequestId && origin.sessionId === saved.sessionId);
+        if (current) {
+          current.origin = { ...current.origin, turnId: turn.turnId };
+          current.texts = [...current.texts, ...texts];
+        }
+        else sources.push({ origin: { contactId: scope.contactId, kind: 'candidate', id: candidate.candidateId,
+          replyRequestId: turn.reply.replyRequestId, sessionId: saved.sessionId, turnId: turn.turnId,
+          generation: scope.generation, scopeRevision: scope.scopeRevision }, texts });
+      }
     }
     return sources;
   }
@@ -202,16 +236,37 @@ export class StyleSampleController {
   }
   recordCopied(selection: ReplyCandidateSelection, text: string, invalidSelection = false) {
     const scope = this.assertScope(selection);
-    const source = this.replyCandidateSources(this.replies.getState()).find(({ origin }) =>
+    const reply = this.replies.getState();
+    const source = this.replyCandidateSources(reply).find(({ origin }) =>
       origin.replyRequestId === selection.replyRequestId && origin.id === selection.candidateId);
     const unverified = invalidSelection || !text.trim() || text.length > 65_536 || !source || !source.texts.some((candidate) => candidate.includes(text));
     const invalid = invalidSelection || unverified || this.invalidatedCandidateRequests.has(`${scope.contactId}:${selection.replyRequestId}`);
     // 只记录最后一次显式复制的摘要与来源编号；不监听剪贴板、不保留候选正文。
     this.copied = { ...(source?.origin ?? { id: selection.candidateId, kind: 'candidate', contactId: scope.contactId,
       replyRequestId: selection.replyRequestId }), digest: fingerprint(text), generation: scope.generation, scopeRevision: scope.scopeRevision, invalid, unverified };
-    if (invalid && text.trim()) this.rejectedCopyDigests.add(this.copied.digest);
+    if (invalid && text.trim() && (invalidSelection || !this.retainedVersionCopyCanRetry(selection, this.copied.digest, reply))) {
+      this.rejectedCopyDigests.add(this.copied.digest);
+    }
     else if (source && !invalid) this.rememberOrigin(this.copied.digest, source.origin);
     if (invalid) throw new Error('复制来历已失效。');
+  }
+  private retainedVersionCopyCanRetry(selection: ReplyCandidateSelection, digest: string, reply: ReplySessionState): boolean {
+    const scope = this.scope; const saved = reply.savedSession; const versions = reply.candidateVersions;
+    const known = [...(this.knownOrigins.get(digest)?.values() ?? [])];
+    const origin = known.length === 1 ? known[0] : undefined;
+    if (!scope || origin?.kind !== 'candidate' || origin.contactId !== scope.contactId
+      || origin.id !== selection.candidateId || origin.replyRequestId !== selection.replyRequestId
+      || origin.generation !== scope.generation || origin.scopeRevision !== scope.scopeRevision
+      || !origin.turnId || reply.sourceAvailability || saved?.phase !== 'ready'
+      || saved.sessionId !== origin.sessionId || !versions || versions.phase === 'idle' || versions.sessionId !== origin.sessionId
+      || this.invalidatedCandidateRequests.has(`${origin.contactId}:${origin.replyRequestId}`)) return false;
+    const turn = saved.turns.find((item) => item.turnId === origin.turnId && item.state === 'completed');
+    const history = versions.items.find((item) => item.candidateId === origin.id)?.history;
+    // 另一候选读取或失败会改变全局阶段；暂时拒绝复制不作废仍有实际完成身份的可信历史摘要。
+    return Boolean(turn?.reply?.replyRequestId === origin.replyRequestId
+      && turn.reply.candidates.some((candidate) => candidate.candidateId === origin.id)
+      && history?.sessionId === origin.sessionId && history.turnId === origin.turnId
+      && history.candidateId === origin.id && history.candidateGroupId === origin.replyRequestId);
   }
   noteCandidateCopy(selection: CandidateTextCopy) {
     this.recordCopied(selection, selection.text, selection.invalidSelection === true);
