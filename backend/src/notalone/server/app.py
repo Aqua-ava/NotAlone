@@ -58,6 +58,7 @@ from notalone.server.assistant_preparation_rejection import preparation_rejectio
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
 from notalone.persistence.assistant_continuation import PostgresAssistantContinuationStore
 from notalone.server.assistant_continuation import handle_continuation
+from notalone.server.assistant_interrupted_recovery import handle_interrupted_recovery
 from notalone.persistence.assistant_session_catalog import PostgresAssistantSessionCatalog
 from notalone.persistence.assistant_candidate_versions import (
     AssistantCandidateVersions, PostgresAssistantCandidateVersions,
@@ -1195,6 +1196,15 @@ class BackendApp:
         """默认讨论、单次提交与显式读取；不提供自动恢复或发送能力。"""
 
         parts = path.strip("/").split("/")
+        if len(parts) in (6, 7) and parts[5] == "retry-interrupted":
+            recovery_owner = self._owner_id
+            if recovery_owner is None:
+                return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "owner_uninitialized"})
+            status, payload = handle_interrupted_recovery(
+                self._assistant_sessions, owner_id=recovery_owner, method=method, path=path, body=body,
+                render_turn=_completed_turn_payload,
+            )
+            return _json_response(HTTPStatus(status), payload, headers={"Cache-Control": "no-store"})
         if len(parts) in (6, 7) and parts[5] == "continue":
             continuation_owner = self._owner_id
             if continuation_owner is None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator
 from uuid import UUID
 
 import psycopg
@@ -38,6 +38,10 @@ from notalone.reply.exploration import ExplorationExpired
 from notalone.reply.interface import ReplyGenerated, ReplyToMessage
 from notalone.reply.store import ReplyRequest, _normalize_input, canonical_reply_input
 from notalone.scopes import ContactScope
+
+if TYPE_CHECKING:
+    from notalone.application.assistant_continuation import AssistantContinuationReservation
+    from notalone.application.assistant_interrupted_recovery import RecoverInterruptedAssistantGeneration
 
 
 def _digest(binding_id: UUID, normalized: str) -> str:
@@ -480,6 +484,28 @@ class PostgresAssistantSessionStore:
             prepared = prepare_generation_in_transaction(connection, scope, session_id, request.idempotency_key,
                 lambda: self._prepared_receipt(connection, scope, session_id,
                     self._reserve_in_transaction(connection, scope, session_id, request)))
+        if isinstance(prepared, AssistantPreparationRejected):
+            raise prepared
+        return prepared
+
+    def reserve_interrupted(
+        self, scope: ContactScope, session_id: UUID, command: RecoverInterruptedAssistantGeneration,
+    ) -> AssistantContinuationReservation:
+        from notalone.persistence.assistant_interrupted_recovery import reserve_interrupted_generation_in_transaction
+        with self._transaction(scope) as connection:
+            return reserve_interrupted_generation_in_transaction(connection, self, scope, session_id, command)
+
+    def prepare_interrupted(
+        self, scope: ContactScope, session_id: UUID, command: RecoverInterruptedAssistantGeneration,
+    ) -> AssistantGenerationReceipt:
+        from notalone.application.assistant_preparation_rejection import AssistantPreparationRejected
+        from notalone.persistence.assistant_interrupted_recovery import reserve_interrupted_generation_in_transaction
+        from notalone.persistence.assistant_preparation_rejection import prepare_generation_in_transaction
+        with self._transaction(scope) as connection:
+            def reserve() -> AssistantGenerationReceipt:
+                reserved = reserve_interrupted_generation_in_transaction(connection, self, scope, session_id, command)
+                return self._prepared_receipt(connection, scope, session_id, reserved.turn_id)
+            prepared = prepare_generation_in_transaction(connection, scope, session_id, command.request_key, reserve)
         if isinstance(prepared, AssistantPreparationRejected):
             raise prepared
         return prepared

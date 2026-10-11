@@ -13,9 +13,12 @@ from notalone.reply.interface import ReplyGenerated
 from notalone.scopes import ContactScope
 
 if TYPE_CHECKING:
+    from notalone.application.assistant_interrupted_recovery import RecoverInterruptedAssistantGeneration
     from notalone.application.assistant_candidate_carry import CarriedAssistantSession, CarryAssistantCandidate
     from notalone.persistence.assistant_session_inputs import AssistantInput
-    from notalone.application.assistant_continuation import AssistantContinuationPort, ContinueAssistantSession
+    from notalone.application.assistant_continuation import (
+        AssistantContinuationPort, AssistantContinuationReservation, ContinueAssistantSession,
+    )
 
 
 class AssistantSessionError(RuntimeError):
@@ -106,6 +109,14 @@ class AssistantSessionStore(Protocol):
     def reserve_prepared(
         self, scope: ContactScope, session_id: UUID, request: ReplyServiceRequest,
     ) -> AssistantGenerationReceipt: ...
+
+    def prepare_interrupted(
+        self, scope: ContactScope, session_id: UUID, command: RecoverInterruptedAssistantGeneration,
+    ) -> AssistantGenerationReceipt: ...
+
+    def reserve_interrupted(
+        self, scope: ContactScope, session_id: UUID, command: RecoverInterruptedAssistantGeneration,
+    ) -> AssistantContinuationReservation: ...
 
     def reserve_replacement_prepared(
         self, scope: ContactScope, session_id: UUID, running_request_key: UUID,
@@ -224,6 +235,22 @@ class AssistantSessionService:
         if self._reply is None or self._continuation_store is None:
             raise AssistantSessionRejected("reply_unavailable")
         return self._continuation_store.prepare_continuation(ContactScope(owner_id, contact_id), session_id, command)
+
+    def prepare_interrupted(
+        self, *, owner_id: UUID, contact_id: UUID, session_id: UUID, command: RecoverInterruptedAssistantGeneration,
+    ) -> AssistantGenerationReceipt:
+        if self._reply is None:
+            raise AssistantSessionRejected("reply_unavailable")
+        return self._store.prepare_interrupted(ContactScope(owner_id, contact_id), session_id, command)
+
+    def recover_interrupted(
+        self, *, owner_id: UUID, contact_id: UUID, session_id: UUID, command: RecoverInterruptedAssistantGeneration,
+    ) -> AssistantTurn:
+        if self._reply is None:
+            raise AssistantSessionRejected("reply_unavailable")
+        scope = ContactScope(owner_id, contact_id)
+        reserved = self._store.reserve_interrupted(scope, session_id, command)
+        return self._generate_reserved(scope, session_id, reserved.turn_id, reserved.request)
 
     def prepare_replacement(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,

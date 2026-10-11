@@ -108,3 +108,14 @@ Root 独立先接C正式反例，实际 **2 RED／3.527s／55repeat0／自有库
 真实回环 JsonClient 首条回调 RED（30项中1FAIL／90.417ms），最窄客户端修复后30 GREEN／92.434ms，路径／身份／执行／500／额外正文／连接变化负向加入后 **37 GREEN／96.917ms**。whole typecheck、六源 limited silent mypy、八Python编译及diff通过。仅显式具名prepare有限形状与三UUID、实际连接generation匹配才进入第9个 `onNoGeneration` 回调；错误仍仅安全分类、执行和未知不清身份。普通及typed消费者、同Map同键unknown别名正证明释放由对应唯一消费者继续接线；本提供者证据不冒称Main／Host／原生退出已整体完成。原AC及真实State保持，权威身份式中断重建另切片继续。
 
 主树精确净接 sole A `547c716a` 的十四条提供者／协议／测试路径，保留现有其它路由和消费者。独立 runner 执行五个新的 prepare 拒绝正证明场景及四个当前意愿／表达样本实际 HTTP 矩阵，**9 GREEN／19.583秒／skip0／actualexit0**，正式001–055、repeat0、自有随机数据库0；日志 `/private/tmp/notalone-root-proof-and-fidelity-v2-http-pg.log`。同一9项组合不冒为旧77全量，四场C矩阵的12模型输入／调用独立捕获、质量仍未验证。完整桌面类型及两标准页面入口静态bundle通过；协议测试最初本机listen受沙箱EPERM，环境失败不算业务RED，明确授权本机监听后实际37项全部通过，日志 `/private/tmp/notalone-root-proof-client-node-green.log`。普通和确认候选消费者的同Map正证明收口继续，真实App未执行，原State claimed不改变。
+
+
+### 原身份恢复提供者：编号、完整累计要求与删除（2026-10-12）
+
+新增仅三UUID的 `POST .../retry-interrupted/prepare` 与同body的执行入口：`original_turn_id/original_input_version_id/request_key`。原owner事务核原failed/app_quit实际终态、绑定、CURRENT（首次）和C实际捕获的raw／discussion／样本依赖；同新键精确绑定两UUID恢复来历后只重放自己的实际turn/input。完整原content／Skill／编号保存版本和4106码点要求保持，唯一A reserve领取；准备五字段0模型，执行沿原生成与可靠保存并返回actual `restored_input`。不接受renderer正文，不新增writer／来源图／DDL。
+
+净消费C正式4ff的唯一237行测试为本树57ed，不改原断言。本人首编号draft垂直停在missing404，**1 FAIL／1.215s**，仅记新provider未实现；接线后同项**1 GREEN／2.181s**。五个原C场景最终 **5 GREEN／11.724s／skip0**，formal001–055逐名／repeat0及内外自有库0；actual capture五行全部control_contract_completed，完成三场各2模型，两个删除场各1模型，准备与删除模型增量0。三个模式保原拒绝意愿、完整编辑版本低权重／is_current_draftfalse、>4096要求、同新键重放0额外；手工样本无raw时和物理raw删除都清原／typed／恢复三turn与CURRENT，独立manual样本保留。日志 `/private/tmp/notalone-a-authoritative-retry-five-green.log`、capture `/private/tmp/notalone-a-authoritative-retry-five-green-capture.json`。五源码limited mypy、七文件compile和diff0；fixed6 SHA256 `9c288036df2942cae9d83e4d301574c297070309fd42fbf8830ae58f5b83fa68`：B独立Standards硬要求0／重要Fowler possible0，C独立Spec新增P0–P3为0，仅只读六源，未借本人五G计自测。
+
+此片只证明上述三模式恢复HTTP，Main／Host正式身份消费者尚待净消费。另新增已确认策略回应／主动两个actual409 invalid_reply_input **2 PRODUCT RED／2.026s**；同轮原用户稿恢复已GREEN，不能用它代替confirmed。原B reconfirm同事务seam的后续修复独立记录，不放宽公开字符串限额或把失败看作无领取。原17五AC／claimed在消费者及受控退出真实组合完成前不勾；真实App原生停止／重开仍禁止且未执行，不请求用户验收。
+
+主树权威中断恢复独立集成：精确净接 A `cc987b206149321bd7b50d10678ff22e4a1129d2` 六条生产源及 C `4ff9f227` 唯一237行新HTTP测试。两端同一严格三UUID正文，准备回原五字段且零模型，执行返回原reply与权威restored_input；恢复原完整已选组和合法4106码点累计要求，不从renderer重建正文，不放宽新输入4096。Conda NotAlone、PGPORT55441、禁dotenv／全部tracing／外部密钥，运行 `python /private/tmp/notalone-round29-controlled-tests.py /Users/local-user/learn/NotAlone tests.integration.server.test_authentic_expression_interrupted_authoritative_retry`：**5 GREEN／11.916秒／skip0／actualexit0**，001–055账本／repeat0／自有库0，日志 `/private/tmp/notalone-root-authoritative-retry-five-http-pg.log`。限定五源silent mypy与七文件compile／diff通过；固定提供者独立 Standards／Spec 两轴0。原未交路由404仅是准备状态，不称产品RED；已确认策略的权威恢复另有真实409反例，正由唯一提供者修复，桌面Main／mapper与Host同Map消费继续，本票claimed与真实App未验保留。
