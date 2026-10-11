@@ -1,6 +1,6 @@
 # 07：Skill探索、确认与生成的版本延续
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环](02-understanding-and-direction.md)
 
@@ -8,7 +8,7 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧03；Q16–Q22、ADR-043。 第二版标识为R06。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-043](../../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧03；Q16–Q22、ADR-043。 第二版标识为R06。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-043](../../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。依赖是完整交付的前置；实际实施结果与未执行项见本票 State 和 Answer。
 
 ## What to build
 
@@ -16,13 +16,13 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 
 ## Acceptance criteria
 
-- [ ] 最多选用一个已启用、范围有效的不可变Skill版本，展示实际名称/版本；无匹配使用通用流程。
-- [ ] 从探索到方向确认再到生成沿用同一有效版本；明确关闭后生成不能退回自动选回，更换后旧策略结果失效。
-- [ ] 库revision变化、禁用或删除使旧目录与结果失效；提交与恢复都不得带回旧正文或两个版本的混合上下文。
-- [ ] 方向探索只加载受控静态内容，无业务Tool补查、外部查询或扩权；只用合成包，不创作具体邀约Skill。
-- [ ] 方向探索不接入表达样本；样本引用实现后的跨规格实际载荷验证由E06完成。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
+- [x] 最多选用一个已启用、范围有效的不可变Skill版本，展示实际名称/版本；无匹配使用通用流程。
+- [x] 从探索到方向确认再到生成沿用同一有效版本；明确关闭后生成不能退回自动选回，更换后旧策略结果失效。
+- [x] 库revision变化、禁用或删除使旧目录与结果失效；提交与恢复都不得带回旧正文或两个版本的混合上下文。
+- [x] 方向探索只加载受控静态内容，无业务Tool补查、外部查询或扩权；只用合成包，不创作具体邀约Skill。
+- [x] 方向探索不接入表达样本；样本引用实现后的跨规格实际载荷验证由E06完成。
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
 ## 范围边界
 
@@ -77,3 +77,14 @@ TDD实际92039：回应首场原HTTP/turn已证明A v1实际加载且模型4次�
 总协调主树正式消费 `c428b25fb977e9eddd15513155b20ad6d7a3afa4`，公共类型保原 A／C 字段，夹具保真实 MemoryService 与既有来源准备，只补实际 Skill／ledger／task 服务、新合成包及完整调用观察；门禁保全部原名单。Conda `NotAlone`、关闭 dotenv／追踪、`PGHOST=/tmp PGPORT=5432 npm run test:pages -- --case reply-strategy-skills --case reply-strategy-skill-invalidation --timeout-seconds 240`：实际 exit0，两场版本延续／关闭／更换和四场禁用／删除六路径全部到达；每场原 13／4 调用断言保留，合计 42 次实际调用。quiet58、active0、onscreen0、单 Chrome、cleanupConfirmed=true，Electron/native=false，隔离夹具收尾确认。
 
 主树类型、Python 夹具编译和差异检查通过；窗口正常收尾后 `node --test tests/headless/command.test.mjs` 10 项 GREEN／2866.330875ms、skip0，原单租约／nonce／期限限制保持。最终限定 Standards 硬要求 0／重要气味 0、Spec 0。该切片主树集成完成，未完成的整票对照及人工部分依上文保留。
+
+
+## Answer（最终自动范围核对）
+
+2026-10-11：R02原六场UUID及场景入口已正式 `46e6af7393cd18dea9a0907007af65277d8b6c38` 完成，本票原前置满足；按本票七项原标准核对可自主范围resolved。正式源码 `c428b25fb977e9eddd15513155b20ad6d7a3afa4` 与本B29695两label240的六条公开完整路径／42实际调用是本票直接验收：两场各13次固定A v1→明确确认→普通生成→关闭NoSkill→B v2替换，四场各4次disable／delete旧读取及问题409→用户明确关闭刷新仍保原意愿→通用生成。实际版本展示取真实used_skill，任一phase至多一个有效版本，实际所有System／Human／Tool调用不含越界或失效Skill静态正文，确认／普通生成不会在disabled后偷偷回退自动。
+
+静态探索只经真实Skill Library及受控单次适配器加载，固定一个已启用且范围有效的合成不可变版本，没有业务Tool补查或表达样本port；生成沿原read_file及原生成器，版本UUID／名称和库revision守卫、models前／save竞态、source删除及恢复均沿已正式真实HTTP/PG证明。C五个Skill／样本组合HTTP和共同预算52项／完整回复273项已实际在47fbcc4执行，仅引用原记录，不用原型或别人的运行填本B。样本引用后的跨规格整体组合仍由E06／R11接续；本票明确不装探索样本，并不借其完成替代最终组合。
+
+29695原exit0、quiet105、cleanuptrue、单Chrome／active0／onscreen0与type／Python夹具编译／CLI10等真实证据及92039产品RED、69000 TEST异步缺口完整保留在上方Answer。root601另外六场42calls／quiet58为其独立复验，不冒作本B运行。既有预算未知profile重复P3仍已接受，本票最终文档两轴审查Spec 0、Standards hard 0／新增重要Fowler possible 0，diff核验通过，只更新状态与原勾选；不重复启动已通过且源码未改的六条路径，没有新增业务或模型调用。
+
+原七项标准文字保持；R08消息组、R09活跃任务有界更新、R10连续修改／完整历史及R11实际跨模块组合继续按正式接口推进，不据此预闭。测试只合成包、不创作具体邀约Skill；真实模型语义、真实App／原生与人工验收按本轮授权跳过，无OCR、真实聊天、额外外部模型、长期偏好写入、自动发送或push。

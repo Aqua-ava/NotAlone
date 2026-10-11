@@ -244,6 +244,76 @@ class DesktopRewriteFixture(CoreBusinessFlowFixture, unittest.TestCase):
                              "name": name, "version_number": versions, "marker": marker})
         return {"skills": prepared}
 
+    def prepare_direction_dependency(self, contact_id: str) -> dict[str, str]:
+        """固定合成旧目标与独立相邻来源，置于生成器近期50条之外。"""
+        contact = UUID(contact_id)
+        target_source, adjacent_source = uuid4(), uuid4()
+        target_id = uuid4()
+        with psycopg.connect(self.database_url) as connection:
+            recent_source = connection.execute(
+                "SELECT id FROM public.source_document WHERE owner_id=%s AND contact_id=%s",
+                (self.owner_id, contact),
+            ).fetchone()[0]
+            for source in (target_source, adjacent_source):
+                connection.execute(
+                    """INSERT INTO public.source_document (
+                        id, owner_id, contact_id, source_type, file_name, content_sha256, record_count
+                    ) VALUES (%s, %s, %s, 'wechat_jsonl', 'strategy-synthetic.jsonl', %s, 1)""",
+                    (source, self.owner_id, contact, uuid4().hex * 2),
+                )
+            rows = [(uuid4(), recent_source, f"用于分页的合成近期消息 {n:02d}", n)
+                    for n in range(1, 56)]
+            rows.extend([(target_id, target_source, "合成较早的回应目标", 100),
+                         (uuid4(), adjacent_source, "合成相邻来源隐私标记", 99)])
+            for message_id, source, text, minutes in rows:
+                connection.execute(
+                    """INSERT INTO public.message (
+                        id, owner_id, contact_id, speaker, message_type, text_content, occurred_at
+                    ) VALUES (%s, %s, %s, 'contact', 'text', %s,
+                              now() - (%s * interval '1 minute'))""",
+                    (message_id, self.owner_id, contact, text, minutes),
+                )
+                connection.execute(
+                    """INSERT INTO public.message_source_ref (
+                        message_id, owner_id, contact_id, source_kind, source_document_id,
+                        source_locator, raw_payload
+                    ) VALUES (%s, %s, %s, 'source_document', %s, %s, '{}'::jsonb)""",
+                    (message_id, self.owner_id, contact, source, f"synthetic:strategy:{minutes}"),
+                )
+        return {"target_id": str(target_id), "target_source": str(target_source), "adjacent_source": str(adjacent_source)}
+
+    def shift_direction_dependency(self, contact_id: str, target_source: str) -> None:
+        """固定合成消息移出旧相邻来源，观察保留意愿的删除依赖。"""
+        with psycopg.connect(self.database_url) as connection:
+            for number in range(3):
+                message_id = uuid4()
+                connection.execute(
+                    """INSERT INTO public.message (
+                        id, owner_id, contact_id, speaker, message_type, text_content, occurred_at
+                    ) VALUES (%s, %s, %s, 'contact', 'text', %s,
+                              now() - interval '100 minutes' + (%s * interval '5 seconds'))""",
+                    (message_id, self.owner_id, UUID(contact_id), f"合成新增近邻消息 {number + 1}", number + 1),
+                )
+                connection.execute(
+                    """INSERT INTO public.message_source_ref (
+                        message_id, owner_id, contact_id, source_kind, source_document_id,
+                        source_locator, raw_payload
+                    ) VALUES (%s, %s, %s, 'source_document', %s, %s, '{}'::jsonb)""",
+                    (message_id, self.owner_id, UUID(contact_id), UUID(target_source), f"synthetic:shift:{number + 1}"),
+                )
+
+    def reply_privacy_counts(self, contact_id: str) -> dict[str, int]:
+        """只观察本轮合成联系人计数，不输出原始请求正文。"""
+        with psycopg.connect(self.database_url) as connection:
+            total, sensitive, failed = connection.execute(
+                """SELECT count(*),
+                    count(*) FILTER (WHERE normalized_input LIKE '%%合成%%'),
+                    count(*) FILTER (WHERE state='failed')
+                FROM public.reply_request WHERE owner_id=%s AND contact_id=%s""",
+                (self.owner_id, UUID(contact_id)),
+            ).fetchone()
+        return {"total": total, "sensitive": sensitive, "failed": failed}
+
 
 def main() -> None:
     fixture = DesktopRewriteFixture()
@@ -300,6 +370,13 @@ def main() -> None:
             elif operation == "older_messages":
                 fixture.add_older_messages(contact_ids[0])
                 result = {}
+            elif operation == "direction_dependency":
+                result = fixture.prepare_direction_dependency(contact_ids[0])
+            elif operation == "shift_direction_dependency":
+                fixture.shift_direction_dependency(contact_ids[0], command["target_source"])
+                result = {}
+            elif operation == "reply_privacy_counts":
+                result = fixture.reply_privacy_counts(contact_ids[0])
             elif operation == "age_exploration":
                 with psycopg.connect(fixture.database_url) as connection:
                     connection.execute("UPDATE public.reply_exploration SET created_at=created_at-(%s*interval '1 second'), root_created_at=root_created_at-(%s*interval '1 second') WHERE owner_id=%s",

@@ -1,6 +1,6 @@
 # 06：两种场景的关键澄清与取舍
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环](02-understanding-and-direction.md)；[conversation-reply-strategy/04 明确目的的主动联系入口](04-proactive-purpose-entry.md)
 
@@ -8,7 +8,7 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 
 ## 规格与范围
 
-[正式规格](../spec.md)；由第二版R05分出；原粗拆旧02，Q9–Q15。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-043](../../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；由第二版R05分出；原粗拆旧02，Q9–Q15。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-043](../../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。依赖是完整交付的前置；实际实施结果与未执行项见本票 State 和 Answer。
 
 ## What to build
 
@@ -16,12 +16,12 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 
 ## Acceptance criteria
 
-- [ ] 回应与主动两场景均覆盖提出一个关键问题、用户回答、继续生成的完整公开路径；结果明确区分澄清与候选；回答本身不代替确认意愿，仍不明确时回到探索/确认且不生成候选。
-- [ ] 普通时间地点缺失不强制追问，可产生不虚构细节的表达；会改变立场或承诺的未知项才追问。
-- [ ] 问题绑定输入版本；回答前修改目标、目的或来源失效后，旧问题/回答不能继续生成，失败允许明确重试。
-- [ ] 复杂目的说明本次推进的一步；目的与说法冲突时说明取舍并保留用户目标，不保证对方反应或假设关系。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
+- [x] 回应与主动两场景均覆盖提出一个关键问题、用户回答、继续生成的完整公开路径；结果明确区分澄清与候选；回答本身不代替确认意愿，仍不明确时回到探索/确认且不生成候选。
+- [x] 普通时间地点缺失不强制追问，可产生不虚构细节的表达；会改变立场或承诺的未知项才追问。
+- [x] 问题绑定输入版本；回答前修改目标、目的或来源失效后，旧问题/回答不能继续生成，失败允许明确重试。
+- [x] 复杂目的说明本次推进的一步；目的与说法冲突时说明取舍并保留用户目标，不保证对方反应或假设关系。
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
 ## 范围边界
 
@@ -57,3 +57,14 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 数据影响：只新增合成消息/受控模型的公开回归，问题与操作沿原输入版本绑定，无长期记忆、额外外部模型或发送能力；无私人聊天/OCR/真实App。该切片实际类型检查、Python夹具编译与diff检查通过；页面调度CLI10项通过（3095.711667ms，skip0），限定Standards hard0/Fowler possible0、Spec0。本地提交标识随正式交付记录补齐。R02六场UUID回归及全票最后对照仍继续，因此State保持claimed、原验收标准不改、不预勾；真实模型语义、原生与人工验收本轮按授权跳过。
 
 总协调主树消费正式 `9866ceeff51b7407efdb6bf8c9d8516f76809885`，只增加本 case 到原完整名单及分发，保留 nonce、租约、最多两 case 和有限期限。Conda `NotAlone`、关闭 dotenv／追踪、`PGHOST=/tmp PGPORT=5432 npm run test:pages -- --case reply-strategy-confirmed-clarification --timeout-seconds 180`：回应和主动两场原断言全部到达，实际 exit0，quiet40、active0、onscreen0、单 Chrome、cleanupConfirmed=true，Electron/native=false。每场四次实际调用及完整重放零追加保持，production 页面／HTTP／隔离 PG 清理确认；类型与差异检查通过，最终限定 Standards 硬要求 0／重要气味 0、Spec 0。历史联合 exit1 与未完成整票依赖保留，未执行人工部分。
+
+
+## Answer（最终自动范围核对）
+
+2026-10-11：R02正式 `46e6af7393cd18dea9a0907007af65277d8b6c38` 与R04 `10b6f11e6b104375dfa834933d674f8aae3f8ad9` 可自主范围完成，本票前置满足。两种场景的关键问题、回答、继续路径已完整交付：未确认意愿的回答仍探索，意图仍有歧义继续探索且生成数为0；先明确确认意愿但尚有关键问题时也不生成，回答消除关键歧义后才沿原链生成，原确认意愿和回答分别保真保存。用户只纠正理解不会被换成另一立场。
+
+直接公开证据为本B `reply-strategy-confirmed-clarification` 两场，正式源码 `9866ceeff51b7407efdb6bf8c9d8516f76809885`：92039联合命令第一case两场实际完成、各4受控模型调用，故障应答明确重试原UUID／键／正文、确认原意愿／单次回答及完成全响应重放0追加均到达；联合命令随后因R07缺实际版本展示actualexit1，quiet31／cleanuptrue，保留失败，不改记联合exit0。root8957单label两场独立GREEN仅为其证据，不充本B执行。R02正式完整六场21次调用及核心dialogue／invalidation既有公开结果补全当前输入、源删除、迟到、范围、目标／目的／场景改动擦旧回答；核心确认阶段各4次、普通生成后各5次，旧问题和回答不进新载荷。
+
+普通时间地点缺失不强制询问的结构契约由真实输出validator限定：只接受stance／commitment／ambiguity关键问题，schedule普通细节反例被拒绝；通用无问题选项可沿明确方向直接生成，未知安排不授权新增承诺。当前一步与取舍在两场实际dialogue中公开可见且不替换用户目标。正式真实HTTP `test_persistent_reply_exploration` 覆盖未选回答、已确认回答失歧义、回答后仍歧义0生成、暂停／来源／跨会话拒旧问题及完成重放；单次字段严格坏输入／同键变更、真实A保存重读见本票Comments。不把合成协议的通过说成真实自然语言质量。
+
+本次只核对本票状态及原六标准勾选，原文字、92039及更早失败历史保持，没有新业务／测试源码改动或重跑。最终文档Spec为0项P0–P2、Standards硬问题及新增重要Fowler问题均0，diff核验通过，State resolved限定可自主范围；R07完整Skill、R08组版本、R09生命周期、R10持续修改及R11真正组合验收仍按各票推进，未借本票关闭。只处理既有合成资料，正文不进普通日志，不写长期偏好、没有自动发送；真实模型语义、原生／真实App与人工验收按本轮范围跳过，未进行OCR、真实聊天、额外外部模型或push。

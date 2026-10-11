@@ -1,6 +1,6 @@
 # 02：理解、纠正与方向确认闭环
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/01 回应场景与明确意愿直达候选](01-response-scene-entry.md)
 
@@ -8,7 +8,7 @@ Blocked by: [conversation-reply-strategy/01 回应场景与明确意愿直达候
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧01；Q1–Q10、Q12、Q15。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-043](../../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧01；Q1–Q10、Q12、Q15。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-043](../../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。依赖是完整交付的前置；实际实施结果与未执行项见本票 State 和 Answer。
 
 ## What to build
 
@@ -16,12 +16,12 @@ Blocked by: [conversation-reply-strategy/01 回应场景与明确意愿直达候
 
 ## Acceptance criteria
 
-- [ ] 未明确意愿时展示一句理解、真实依据和歧义，以及少量不同意愿的方向；不是同立场语气变体。
-- [ ] 纠正理解只刷新理解和方向，未确认意愿时生成调用数为零；已明确意愿不因纠正理解而被替换。
-- [ ] 用户直接给出方向或选择建议后才生成；建议ID与输入版本绑定，过期建议不能应用到新快照。
-- [ ] 仅交付一组方向的完整路径；来源失效、跨范围、错误或迟到建议拒绝，换组由R03扩展。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
+- [x] 未明确意愿时展示一句理解、真实依据和歧义，以及少量不同意愿的方向；不是同立场语气变体。
+- [x] 纠正理解只刷新理解和方向，未确认意愿时生成调用数为零；已明确意愿不因纠正理解而被替换。
+- [x] 用户直接给出方向或选择建议后才生成；建议ID与输入版本绑定，过期建议不能应用到新快照。
+- [x] 仅交付一组方向的完整路径；来源失效、跨范围、错误或迟到建议拒绝，换组由R03扩展。
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
 ## 范围边界
 
@@ -86,3 +86,22 @@ Blocked by: [conversation-reply-strategy/01 回应场景与明确意愿直达候
 
 
 2026-10-11 总协调主树集成复验：正式414前端、47共同预算与48旧请求修复合并后，保留A08读取、C样本与正式删除DTO。44项实际HTTP／001–053 PG GREEN（42.835s）及随后30项预算／探索／C边界HTTP GREEN（37.655s），两组自有库均0；273回复单元GREEN（1.792s）、type与CLI10通过。此前确认后方向未同步和来源删除漏探索清理的合并P2均修；Spec新普通A→探索确认B→普通复用A的旧键真实两场RED后由B正式48修复。root原transition＋conversation-strategy-entry两labels180实际exit0，回应／主动新key、新意愿／disabled与各自原样重放0调用全部到达，quiet26／cleanuptrue／单Chrome／Electronnativefalse。先前两label窗口exit1、目标场5s仍waiting及后续有界实际HTTP等待取得三场GREEN均保留；不把分窗通过改写成原失败窗口通过。最终限定Standards硬0／重要smell0、Spec0；完整旧七场UUID、Skill版本和连续生命周期等仍接续，claimed不变。
+
+
+## Answer（持久UUID完整公开闭环）
+
+2026-10-11：原六条理解与方向页面场景已逐项改接正式UUID探索、确认及唯一A生成链，保留原范围和断言；场景入口的重放也使用实际原助手会话端点。最终Spec为0项P0–P2，Standards硬问题及本次新增重要Fowler问题为0；既有已接受P3测试准备重复建议保留。原验收标准未弱化，本票可自主执行范围已完成，State更新为resolved；不声明原生或人工验收。
+
+- 理解纠正不确认方向；明确选择后未回答关键问题不生成。故障明确重试和丢响应重放沿用原UUID、原键和原正文；用户明确改口后推进新输入且保留新意愿，普通生成数仍为一。原完成A生成和B确认的完整响应在新输入及宿主、后端重启后均原样重放，模型零追加。A请求只从公开会话GET按真实turn_id取完成输入和请求键，不伪造薄确认DTO的字段。
+- owner/contact越权统一返回正式409拒绝元数据，未确认、过期选项和已失效来源均不调用生成；迟到理解不覆盖新快照，无效依据、同立场变体和失败不产生候选。原始来源删除清理派生方向、纠正、保存输入及候选；移出最新快照的旧依据仍保留可删除关系。原根年龄895秒时先证明纠正200、新UUID及原确认意愿，再加6秒证明新增确认请求409且无模型追加，纠正不能重置原根期限。
+- 实际命令：显式Conda后 `npm run test:pages -- --case understanding-direction --case response-scene-entry --timeout-seconds 300` 的26587窗口，原六场understanding全部casepassed GREEN、21实际模型调用（7/2/5/2/3/2）；同CLI第二入口因旧global重放端点DTO误设失败，actualexit1、quiet60、cleanupConfirmedtrue、cases仅understanding。入口仅改原session/replies端点、不剥字段后，`npm run test:pages -- --case response-scene-entry --timeout-seconds 180` 的67209窗口actualexit0、完整入口GREEN、2实际调用、quiet9、cleanupConfirmedtrue。两窗均单Chrome、active/onscreen为0、maxRegisteredApps1、activationPolicies[2]；CLI租约各自实际absent，Electron/native验收均false。已通过的六场源码后未改，不把联合exit1汇报为exit0。
+- 失败历史保留：34123在scope旧404预期遇正式409，continuity原6调用段到达但其余未到；PRE发现手动改口、纠正同键冲突及895成功检查点三缺口，均已恢复加强。补强首次tsc因turn类型漏input_version_id失败、补公字段后通过；1455因薄确认DTO无input/request_key失败，修为真实GET；6454加强连续场已到达但scope漏算两越权HTTP记录，修为操作前数量加一并独立核200和新UUID。各页失败均actualexit1、分别quiet19/10/25、cleanupConfirmedtrue，不记业务修复或整组GREEN。
+- `npm run typecheck` 和 `git diff --check`通过。本次改动仅合成公开测试与任务记录，生产控制器、HTTP、正式PG53存储及原生成器保持实际复用；宿主/后端夹具自有资源已收尾。私密标记均为合成数据，未读取真实聊天，没有OCR、额外外部模型、自动发送、真实App、人工或原生验收、push。合成验证只证明控制、隔离、来源与持久契约；不宣称真实模型语义质量。R03–R07分别已有正式两场或六场公开证据，R08–R11依正式接口继续，不由本票代替其验收。
+
+
+2026-10-11 总协调主树独立公开复验：精确消费正式46e6af7两份合成页面用例，只补必要三个夹具方法及dispatch，保留本树真实生产装配、唯一inline门禁、nonce、最多两labels／1–300秒与租约；没有恢复旧整数目录或替换生产接口。Conda内原 `npm run test:pages -- --case understanding-direction --case response-scene-entry --timeout-seconds 300` 的93006窗口，两label七场全部casepassed但最终观测failed，actualexit1／quiet95／active0／onscreen0／cleanuptrue；原失败资源报告独立留存，不作整体GREEN。临时仅增加采样异常错误日志、保持门禁后，完全相同命令93022 actualexit0，七场原全部断言通过，quiet91／active0／onscreen0／maxRegisteredApps1／activationPolicies[2]／单Chrome／cleanuptrue／Electron与native false；独立status1629 exit0 absent。复跑没有采样异常日志，首次观测失败原因尚未确定，不宣称门禁Bug修复。临时DEBUG两处已全部删除，原门禁代码恢复；资源峰值仅RSS采样，无峰值硬门限。
+
+真实CLI `node --test tests/headless/command.test.mjs`10 GREEN／3558.776041ms、skip0，typecheck、fixture编译与diff通过。首次误用不存在的tests/page-cli.test.mjs是入口错误，未运行产品路径、不作业务RED。真实页面→认证HTTP→每场隔离PG及受控模型、全部新UUID／范围／来源删除／失败重试／原完成响应重放0追加／原TTL895＋6断言保持，未把mock通过算整合；本票原六标准按本轮自动证据勾选，原文字不变。真实App、原生、人工及真实模型语义质量按范围跳过；仅自动范围resolved，B08–11及C新短prefix来源缺口仍继续。
+
+
+2026-10-11 本主树十一文件最终独立两轴：Standards硬要求0／新增重要Fowler可能气味0，Spec新增P0–P2为0；核原六场完整断言、必要合成夹具、门禁、数据隔离与五票状态证据。原观测失败原因未确定的风险保持；审查只读，不替代93022实际公开运行。

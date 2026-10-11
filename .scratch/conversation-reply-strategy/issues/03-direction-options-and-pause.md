@@ -1,6 +1,6 @@
 # 03：换组、推荐与暂不回应
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环](02-understanding-and-direction.md)
 
@@ -8,7 +8,7 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧01；Q23、Q25、Q26、Q30、Q32。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-043](../../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧01；Q23、Q25、Q26、Q30、Q32。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-043](../../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。依赖是完整交付的前置；实际实施结果与未执行项见本票 State 和 Answer。
 
 ## What to build
 
@@ -16,11 +16,11 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 
 ## Acceptance criteria
 
-- [ ] 用户能换一组不同意愿、自行填写方向，推荐可说明依据但不预选；背景不足不强行推荐。
-- [ ] 换组后旧组不能误选，已有习惯不排除合理立场；输入版本改变使旧结果失效。
-- [ ] 暂不回应是有效结果，不强制候选、不创建提醒或定时发送，不继续自动联系。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
+- [x] 用户能换一组不同意愿、自行填写方向，推荐可说明依据但不预选；背景不足不强行推荐。
+- [x] 换组后旧组不能误选，已有习惯不排除合理立场；输入版本改变使旧结果失效。
+- [x] 暂不回应是有效结果，不强制候选、不创建提醒或定时发送，不继续自动联系。
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
 ## 范围边界
 
@@ -57,3 +57,8 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 本主题最终限定两轴Spec0、Standards hard0/Fowler0；只读审查没有冒充页面运行。本地提交仅含R03 TEST、登记、夹具输出扩展与本票记录。
 
 总协调主树正式消费 `6dcd64e0fbe209410d9abe8f483c9c18a5300407` 后，保留主树原完整页面名单和门禁，只合并本票登记。实际命令为 Conda `NotAlone`、关闭 dotenv／追踪、`PGHOST=/tmp PGPORT=5432 npm run test:pages -- --case reply-strategy-options --timeout-seconds 180`：公开回应和主动两场的原换组、新 UUID／旧确认 409、暂停无生成、自填意愿及 `direct_input` 断言全部到达，exit0。quiet16、active0、onscreen0、单 Chrome、cleanupConfirmed=true，Electron/native=false；仅本轮合成隔离数据库。类型与差异检查通过，限定复审 Standards 硬要求 0／重要气味 0、Spec 0。根树自动集成完成本切片，整票状态仍按上文的未完成依赖保留，人工部分未执行。
+
+
+2026-10-11 最终任务核对：R02原六场UUID及入口已经各自实际通过并正式 `46e6af7393cd18dea9a0907007af65277d8b6c38` 自动范围resolved，R03前置现满足。R03沿正式 `6dcd64e0fbe209410d9abe8f483c9c18a5300407` 与已运行51180两场options证据完成原全部可自主执行标准：换组新UUID／旧选择409、推荐不预选、无依据推荐及重复意愿由真实validator拒绝、自填明确方向或目的后生成、暂停0生成且无提醒／发送能力。R02正式六场补全范围、来源删除、迟到及原根TTL共同契约，不替代R09任务活跃生命周期。
+
+本次只修改本票状态、原勾选及事实记录，原标准文字和历史失败记录保留；没有新业务变化，不重复启动已通过页面。51180与对应两轴的实际命令／资源和数据影响见本票Answer，root2591另有两场独立复验，不冒作本B执行。最终文档Spec为0项P0–P2、Standards硬问题及新增重要Fowler问题为0，本票State resolved只指可自主执行范围；真实模型语义、真实App／原生及人工验收按本轮范围跳过，R08–R11与A/C剩余不会据此预关闭。
