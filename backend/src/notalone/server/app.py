@@ -1315,11 +1315,14 @@ class BackendApp:
                     raise AssistantSessionPersistenceError("未保存完成结果。")
                 return _json_response(HTTPStatus.OK, _completed_turn_payload(turn))
             if len(parts) == 6 and parts[5] == "replace" and method == "POST":
+                replacement_owner = self._owner_id
+                if replacement_owner is None:
+                    return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "owner_uninitialized"})
                 running_request_key, body_contact, request = _parse_assistant_replacement_request(body)
                 if body_contact != contact_id:
                     raise ReplyRequestInvalid()
                 turn = service.replace(
-                    owner_id=self._owner_id, contact_id=contact_id, session_id=session_id,
+                    owner_id=replacement_owner, contact_id=contact_id, session_id=session_id,
                     running_request_key=running_request_key, request=request,
                 )
                 return _json_response(HTTPStatus.OK, _completed_turn_payload(turn))
