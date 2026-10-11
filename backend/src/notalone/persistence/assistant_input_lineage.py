@@ -9,6 +9,7 @@ from uuid import UUID
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from notalone.persistence.reply_discussion_dependencies import CapturedReplyDiscussionUse
 from notalone.scopes import ContactScope
 
 
@@ -41,6 +42,7 @@ def select_assistant_input_dependents(
     connection: Any, *, owner_id: UUID, removed_ids: set[UUID], reply_request_ids: list[UUID],
     turn_ids: tuple[UUID, ...] = (), contact_id: UUID | None = None,
     carry_edges: tuple[AssistantCarryInputLineage, ...] = (),
+    captured_uses: tuple[CapturedReplyDiscussionUse, ...] = (),
 ) -> AssistantInputDependents:
     """调用方持有owner锁并给出实际C根；只选择实际A输入，不写记录或传播正文。
 
@@ -62,6 +64,13 @@ def select_assistant_input_dependents(
     }
     raw = getattr(connection, "connection", connection)
     with raw.cursor(row_factory=dict_row) as cursor:
+        from notalone.persistence.assistant_captured_input_lineage import verified_captured_input_edges
+
+        captured = verified_captured_input_edges(
+            cursor, owner_id=owner_id, contact_id=contact_id, captured_uses=captured_uses,
+        )
+        parameters["captured"] = Jsonb([{"child": str(child), "parent": str(parent)}
+                                       for child, parent in captured])
         rows = cursor.execute(
             """
             WITH RECURSIVE inputs AS (
@@ -103,6 +112,12 @@ def select_assistant_input_dependents(
                   AND parent.conversation_binding_id=child.conversation_binding_id
                 WHERE parent.turn_id IS NOT NULL AND parent.request_id IS NOT NULL
                   AND parent.input_digest IS NOT NULL
+                UNION
+                SELECT child.id, parent.id
+                FROM jsonb_to_recordset(%(captured)s::jsonb) AS captured(child uuid,parent uuid)
+                JOIN inputs AS child ON child.id=captured.child
+                JOIN inputs AS parent ON parent.id=captured.parent
+                  AND parent.contact_id=child.contact_id AND parent.session_id=child.session_id
             ), affected(id) AS (
                 SELECT id FROM inputs WHERE dependencies && %(removed)s::uuid[]
                   OR request_id=ANY(%(requests)s::uuid[])

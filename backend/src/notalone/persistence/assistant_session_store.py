@@ -18,7 +18,11 @@ from notalone.application.assistant_session_service import (
     AssistantSessionPersistenceError, AssistantSessionRejected, AssistantSessionSnapshot, AssistantTurn,
 )
 from notalone.application.reply_service import ReplyServiceRequest
+from notalone.persistence.assistant_input_lineage import (
+    AssistantCarryInputLineage, select_assistant_input_dependents,
+)
 from notalone.persistence.locks import lock_owner_scope
+from notalone.persistence.reply_discussion_dependencies import CapturedReplyDiscussionUse
 from notalone.persistence.message_sources import valid_source_ref_exists_sql
 from notalone.persistence.style_sample_store import captured_reply_sources, require_reply_sources_current
 from notalone.reply.context import ReplyContext
@@ -233,14 +237,15 @@ def erase_assistant_source_turns(
     connection: Any, *, owner_id: UUID, contact_id: UUID | None,
     removed_ids: set[UUID], reply_request_ids: list[UUID],
     turn_ids: list[UUID] | None = None,
+    carry_edges: tuple[AssistantCarryInputLineage, ...] = (),
+    captured_uses: tuple[CapturedReplyDiscussionUse, ...] = (),
 ) -> None:
     """在原回复副本清除前留下无正文占位，同一 owner 下的传递依赖全部清除。"""
 
     explicit_turn_ids = set(turn_ids or ())
-    rows = connection.execute(
-        """
+    query = """
         SELECT turn.id, turn.input_payload, turn.dependency_ids,
-               request.state AS request_state
+               request.state AS request_state, request.id AS request_id
         FROM public.assistant_session_turn AS turn
         LEFT JOIN public.reply_request AS request
           ON request.owner_id = turn.owner_id AND request.contact_id = turn.contact_id
@@ -250,23 +255,41 @@ def erase_assistant_source_turns(
                OR (turn.id = ANY(%s::uuid[])
                    AND (%s::uuid IS NULL OR turn.contact_id = %s)))
         FOR UPDATE OF turn
-        """,
-        (owner_id, list(removed_ids), reply_request_ids, list(explicit_turn_ids), contact_id, contact_id),
-    ).fetchall()
-    for row in rows:
+        """
+    parameters = (owner_id, list(removed_ids), reply_request_ids,
+                  list(explicit_turn_ids), contact_id, contact_id)
+    rows = connection.execute(query, parameters).fetchall()
+
+    def independent_draft(row: Any) -> bool:
         payload = row["input_payload"] if isinstance(row, dict) else row[1]
         dependencies = row["dependency_ids"] if isinstance(row, dict) else row[2]
         request_state = row["request_state"] if isinstance(row, dict) else row[3]
         turn_id = row["id"] if isinstance(row, dict) else row[0]
-        # 既有删除会撤销同联系人所有运行租约；与来源无关的独立草稿仍可回看。
-        independent_draft = (
+        return (
             turn_id not in explicit_turn_ids
             and request_state == "running" and not (set(dependencies) & removed_ids)
+            and isinstance(payload, dict)
             and payload["content"]["type"] == "rewrite_draft"
             and not payload["content"].get("include_relationship_context", False)
             and payload.get("continued_from_candidate_id") is None
         )
-        if independent_draft:
+
+    # 范围撤租约中的独立草稿不是删除根；实际历史闭包命中后仍必须清除。
+    independent_requests = {
+        row["request_id"] if isinstance(row, dict) else row[4]
+        for row in rows if independent_draft(row)
+    }
+    selected = select_assistant_input_dependents(
+        connection, owner_id=owner_id, contact_id=contact_id, removed_ids=removed_ids,
+        reply_request_ids=[identifier for identifier in reply_request_ids if identifier not in independent_requests],
+        turn_ids=tuple(explicit_turn_ids), carry_edges=carry_edges, captured_uses=captured_uses,
+    )
+    explicit_turn_ids.update(selected.turn_ids)
+    rows = connection.execute(query, (owner_id, list(removed_ids), reply_request_ids,
+                                     list(explicit_turn_ids), contact_id, contact_id)).fetchall()
+    for row in rows:
+        turn_id = row["id"] if isinstance(row, dict) else row[0]
+        if independent_draft(row):
             connection.execute(
                 "UPDATE public.assistant_session_turn SET state = 'failed', reply_request_id = NULL, "
                 "updated_at = now() WHERE id = %s", (turn_id,),
@@ -278,7 +301,10 @@ def erase_assistant_source_turns(
                 "updated_at = now() WHERE id = %s", (turn_id,),
             )
     from notalone.persistence.assistant_session_inputs import erase_assistant_source_inputs
-    erase_assistant_source_inputs(connection, owner_id=owner_id, removed_ids=removed_ids)
+    erase_assistant_source_inputs(
+        connection, owner_id=owner_id, removed_ids=removed_ids,
+        input_version_ids=selected.input_version_ids,
+    )
 
 
 class PostgresAssistantSessionStore:
