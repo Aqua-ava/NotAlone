@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { AssistantContinuationClarification, RequirementChange } from '../shared/assistant-continuation-clarification';
 import type { ReplySessionView } from './RewritePanel';
 
+const withinTextLimit = (value: string) => Array.from(value).length <= 4096;
+
 function RequirementDecisions({ clarification, disabled, confirm }: {
   clarification: AssistantContinuationClarification;
   disabled: boolean;
@@ -11,7 +13,7 @@ function RequirementDecisions({ clarification, disabled, confirm }: {
   const complete = clarification.requirement_options.every((option, index) => {
     const choice = choices[index];
     return choice && option.actions.some((action) => action === choice.action)
-      && (choice.action !== 'replace' || Boolean(choice.replacement.trim()));
+      && (choice.action !== 'replace' || Boolean(choice.replacement.trim()) && withinTextLimit(choice.replacement));
   });
   function submit() {
     if (!complete || disabled) return;
@@ -38,7 +40,7 @@ function RequirementDecisions({ clarification, disabled, confirm }: {
           </option>)}
         </select></label>
         {choice.action === 'replace' && <label>要求{index + 1}替换内容<textarea aria-label={`要求${index + 1}替换内容`}
-          maxLength={4096} value={choice.replacement} onChange={(event) => setChoices({ ...choices,
+          value={choice.replacement} onChange={(event) => setChoices({ ...choices,
             [index]: { ...choice, replacement: event.target.value } })} /></label>}
       </div>;
     })}
@@ -55,6 +57,7 @@ export function AssistantContinuationControls({ replies, hasUnsavedEdits = false
   const [intention, setIntention] = useState('');
   const submitted = useRef<{ instruction: string; intention: string } | null>(null);
   const continuation = state.continuation;
+  const textTooLong = !withinTextLimit(instruction) || !withinTextLimit(intention);
   useEffect(() => {
     if (continuation?.phase !== 'completed' || !submitted.current) return;
     const actual = submitted.current; submitted.current = null;
@@ -68,19 +71,20 @@ export function AssistantContinuationControls({ replies, hasUnsavedEdits = false
     || state.sourceAvailability !== undefined || state.sessionDeletion === 'deleting' || state.sessionDeletion === 'failed'
     || state.candidateVersions?.phase !== 'ready' || hasUnsavedEdits;
   function submit() {
-    if (disabled || !instruction.trim() && !intention.trim()) return;
+    if (disabled || textTooLong || !instruction.trim() && !intention.trim()) return;
     submitted.current = { instruction, intention };
     void replies.continueSession(instruction.trim() || '继续', intention.trim() || undefined);
   }
   return <section aria-label="连续修改" className="assistant-continuation-controls">
     <p>编号指向当前展示的整组说法。请先保存本组修改，再继续调整。</p>
-    <label>继续修改要求<textarea aria-label="继续修改要求" value={instruction} maxLength={4096} disabled={disabled}
+    <label>继续修改要求<textarea aria-label="继续修改要求" value={instruction} disabled={disabled}
       placeholder="例如：第二条简短一点" onChange={(event) => setInstruction(event.target.value)} /></label>
-    <label>本次改口<textarea aria-label="本次改口" value={intention} maxLength={4096} disabled={disabled}
+    <label>本次改口<textarea aria-label="本次改口" value={intention} disabled={disabled}
       placeholder="明确改变本次意愿时填写" onChange={(event) => setIntention(event.target.value)} /></label>
-    <button disabled={disabled || !instruction.trim() && !intention.trim()}
+    <button disabled={disabled || textTooLong || !instruction.trim() && !intention.trim()}
       onClick={submit}>继续修改</button>
     {hasUnsavedEdits && <p role="status">本组仍有未保存修改，请先保存。</p>}
+    {textTooLong && <p role="status">本次要求和改口分别最多4096个字符，请修改后继续。</p>}
     {continuation?.message && <p role={continuation.phase === 'failed' ? 'alert' : 'status'}>{continuation.message}</p>}
     {continuation?.phase === 'clarification' && continuation.clarification?.requirement_options.length ?
       <RequirementDecisions key={`${continuation.sessionId}:${continuation.expectedInputVersionId}:${JSON.stringify(continuation.clarification)}`}

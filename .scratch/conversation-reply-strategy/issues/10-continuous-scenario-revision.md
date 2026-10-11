@@ -95,3 +95,13 @@ UI提供“继续修改要求”“本次改口”“继续修改”，要求澄
 固定ONLY10 source `/private/tmp/notalone-b10-consumer-source.patch` SHA256 `7bde98b8a5c9314573e42671f971225d959ecc0dd5cb150cd66a30105a91a497` 已由 A 独立Standards只读审查：硬要求0／新增重要Fowler possible0；C独立Spec新增P0–P3为0。两轴未借本人5HTTP／22Node作为自测，明确A15／Page／Host与provider确定无领取后续仍partial。正式消费来源动态复验与失败终态为本树`18551290`（只净接口／测试、不复制A17票），新增四条HTTP本人实际GREEN4.741s／55repeat0／自有库剩余0，三源限定mypy和五文件compile通过；默认导入链54条诊断未掩盖为全仓类型通过。最后完整desktop类型与diff通过，source10未改变。
 
 Root 净接正式 `54d4b07e` 的十个source/test路径后独立运行 `node --test tests/reply-continuation-public-http.test.mjs`：**5 GREEN／18847.531375ms／skip0**，实际模型8，五份55迁移／repeat0／内外自有库残留0；完整TypeScript及diff通过。此为主树新Main/preload→HTTP→PG验证，不借B原五次计量，不替代普通Page、A15消息采用或增强A17未知准备生命周期。原六AC未改，State claimed，故障终态及回执阶段正证明另随正式切片集成。
+
+### 连续输入的 Unicode 码点边界
+
+根核对发现本票三个 textarea 原生maxLength=4096按UTF-16计数，会截断4096个合法emoji；只在既有连续修改组件移除该原生限制，所有输入完整保留，按码点计数禁用超限提交与替换确认，不改变Main／JSON codec／后端4096字符约束。本人实际公开renderer＋真实Main/preload→HTTP/PG反例 **1 RED／4347.412542ms→GREEN／3539.104625ms**，日志 `/private/tmp/notalone-b-codepoint-public-red.log`、`/private/tmp/notalone-b-codepoint-public-green.log`。RED是SSR反例，不冒充Chrome原生输入；GREEN后4096个😀要求与4096个🙂改口在实际canonical prepare正文原样交付，后端要求澄清而零新增候选模型、原CURRENT／一turn不动；4097码点严格bridge拒绝且0新增HTTP。两次各55／repeat0／自有库0，模型各1。
+
+完整桌面类型与静态两个标准Page entry bundle通过。真实DOM的4096／4097要求、改口与替换内容边界已放入原拟 `reply-strategy-continuation` 两scene，尚未运行；待唯一 A 当前意愿修复正式消费及两轴审查、干净HEAD和总协调具名窗口后再执行，不用此SSR或HTTP代替DOM证据。原AC与claimed保留，无真实App／原生、外部调用或私人数据。
+
+固定ONLY2 `/private/tmp/notalone-b-continuation-codepoints-only2.patch` SHA256 `ddef0a1add6c71f5f917b77651d5675459618223891ec028b8c86a66871b697d` 已独立两轴完成：A Standards硬要求0／新增重要Fowler possible0，C Spec新增P0–P3为0；只读审查不借上述计量，不把待执行的三字段DOM边界预填通过。此主题单独本地提交，provider当前意图与全组合继续。
+
+主树净接 B `bae794bb` 的两条 Unicode 边界路径并独立验证：公开 Main/preload→HTTP→随机隔离 PG **1 GREEN／4097.980959ms**，4096 码点完整交付、4097 拒绝、模型1、001–055 repeat0与自有库0；类型通过。日志 `/private/tmp/notalone-root-carry-followup-continuation-http.log` 的这一独立用例，不借其它八项为本主题通过。B 后续具名两场 Chrome 页面已实际验证三个字段 4096／4097，源 `a287c454`、actualexit0、quiet29／active0／单Chrome／cleanuptrue／nativefalse；主树独立1489源码哈希一致、精确三PID消失、两库查询0与fresh租约absent后FULLRELEASE。原票状态与其它未验要求保持真实，两个范围的计量不混作一场。
