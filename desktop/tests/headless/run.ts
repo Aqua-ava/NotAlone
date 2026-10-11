@@ -49,6 +49,8 @@ let browser: Browser | undefined;
 let server: BrowserServer | undefined;
 let assets: Awaited<ReturnType<typeof servePageAssets>> | undefined;
 let failed = false;
+let observationStage = 'idle';
+let observationFailureLogged = false;
 let cleanupConfirmed = false;
 let sampleTask: Promise<void> | undefined;
 const ownedIdentities = new Map<number, { pid: number; parent: number; group: number }>();
@@ -61,6 +63,7 @@ function sample(): Promise<void> {
 }
 async function readMetrics() {
   // 全局只取父子PID关系，再对本轮子树采集RSS/进程名，避免读取其他App的这些字段。
+  observationStage = 'relationships';
   const { stdout: relationships } = await execute('/bin/ps', ['-axo', 'pid=,ppid='], { timeout: 1000 });
   const tree = relationships.split('\n').map((line) => /^\s*(\d+)\s+(\d+)\s*$/.exec(line)).filter(Boolean)
     .map((entry) => ({ pid: Number(entry![1]), parent: Number(entry![2]) }));
@@ -75,6 +78,7 @@ async function readMetrics() {
     && tree.some((item) => item.pid === child.pid && item.parent === process.pid));
   const browserPids = browserAlive() ? descendants(child!.pid!) : new Set<number>();
   const owned = descendants(process.pid);
+  observationStage = 'identities';
   const { stdout: identities } = await execute('/bin/ps', ['-p', [...owned].join(','), '-o', 'pid=,ppid=,pgid='], { timeout: 1000 });
   for (const line of identities.split('\n')) {
     const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s*$/.exec(line);
@@ -82,10 +86,12 @@ async function readMetrics() {
       ownedIdentities.set(Number(match[1]), { pid: Number(match[1]), parent: Number(match[2]), group: Number(match[3]) });
     }
   }
+  observationStage = 'ownership-record';
   await writeFile('artifacts/headless-pages/owned-identities.json', JSON.stringify({
     runnerPid: process.pid, browserPid: child?.pid ?? null, project: process.cwd(), cases,
     identities: [...ownedIdentities.values()],
   }, null, 2));
+  observationStage = 'rss';
   const { stdout } = await execute('/bin/ps', ['-p', [...owned].join(','), '-o', 'pid=,ppid=,rss=,comm='], { timeout: 1000 });
   const processes = stdout.split('\n').map((line) => /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/.exec(line)).filter(Boolean)
     .map((entry) => ({ pid: Number(entry![1]), parent: Number(entry![2]), rss: Number(entry![3]), name: entry![4] }))
@@ -95,7 +101,9 @@ async function readMetrics() {
   peaks.nodeKiB = Math.max(peaks.nodeKiB, total((item) => item.pid === process.pid));
   peaks.backendKiB = Math.max(peaks.backendKiB, total((item) => owned.has(item.pid) && !browserPids.has(item.pid) && /python/i.test(item.name)));
   if (browserPids.size && browserAlive()) {
+    observationStage = 'quiet-command';
     const observed = await execute('artifacts/headless-runtime/quiet-observation', [...browserPids].map(String), { timeout: 1500 });
+    observationStage = 'quiet-result';
     const state = JSON.parse(observed.stdout) as { active: boolean; onscreenWindows: number; registeredApps: number; activationPolicies: number[] };
     quiet.samples++;
     quiet.activeSamples += state.active ? 1 : 0;
@@ -107,7 +115,22 @@ async function readMetrics() {
 }
 const stop = () => { failed = true; void browser?.close(); };
 process.on('SIGTERM', stop); process.on('SIGINT', stop);
-const timer = setInterval(() => void sample().catch(() => { failed = true; }), 700);
+function recordObservationFailure(error: unknown) {
+  failed = true;
+  if (observationFailureLogged) return;
+  observationFailureLogged = true;
+  // 只记录执行阶段与错误类别，不输出命令、进程列表或原始错误正文。
+  const details: Record<string, string | number | boolean> = {
+    stage: observationStage, name: error instanceof Error ? error.name : 'unknown',
+  };
+  if (error && typeof error === 'object') for (const key of ['code', 'signal', 'killed']) {
+    const value: unknown = Reflect.get(error, key);
+    if (typeof value === 'number' || typeof value === 'boolean'
+      || (typeof value === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(value))) details[key] = value;
+  }
+  process.stderr.write(`page_test_observation_failed: ${JSON.stringify(details)}\n`);
+}
+const timer = setInterval(() => void sample().catch(recordObservationFailure), 700);
 const completed: string[] = [];
 try {
   await mkdir('artifacts/headless-pages', { recursive: true });
