@@ -134,3 +134,31 @@ Root 独立先接C正式反例，实际 **2 RED／3.527s／55repeat0／自有库
 2026-10-12 已确认意愿typed与重复app_quit恢复补充：原typed变更要求保留实际confirmed_suggestion，私有历史确认仍需原A/C可靠completed与完整意愿／来源、自己的真实领取及CURRENT；明确改口才移除旧确认来源。普通恢复的fallback continuation不代表typed，分型仅核同owner/contact/SID B实际request_key与原failed Aturn.key，再复用既有reconfirm。独立C原144行测试不改，A实际2RED／2.640s→2G／5.941s；新typed加重复恢复最小三项最终**3G／12.010s／skip0／55逐名repeat0／内外自有库0**。编号完整参考、累计要求、同键0额外、scope拒绝、raw／手工样本删除闭包、独立manual保留均从真实HTTP观察。原8G／21.293s不覆盖再次恢复，历史夹具失配及产品RED分别保留；详情见[13](13-continuous-intent-reference.md)与fixed5 `d4105c8b5a13b3395f07590c0f807c39f3f78d92f9353ca1700e1979f83bef10`。三源码mypy／五编译／diff0。此为sole provider证据，不借为Main／Host／公开DOM或原生退出通过；原五AC与State claimed保持，最终消费者由各唯一owner接续，无新增writer／图／DDL／正文缓存。
 
 总协调独立净集成验证：仅上述新typed1及重复恢复2项，主树实际3G／12.162秒；55逐名迁移、重复0、自有库剩余0，三个限定mypy与五文件compile通过。提供者12.010秒与本次12.162秒分列，不借为Main／宿主／页面或真人验收。
+
+
+### 公开生成归属与权威恢复消费者（2026-10-12）
+
+本人唯一普通Main/client/权威mapper净切片：实际准备的noGeneration只交原Map严格核验并结算；泛HTTP无回执拒绝不释放身份。中断恢复冻结原turn/input及新key三UUID，prepare与execute使用同一正文、实际五字段回执和原连接停止句柄。lastAttempt保留原恢复身份及新key，完成ACK丢失或普通模型失败后的同key显式重试仍走canonical，不转回公开正文解析。返回actual restored_input须精确匹配两UUID恢复来历、实际receipt和完整可靠GET后，才映射候选snapshot；完整已选消息组及合法累计要求保留，公开单次4096边界不扩大，未保存草稿和options不覆盖。
+
+本人在已正式交付后端上先真实公开Main/preload→HTTP/隔离PG：原编号回应4106累计及草稿完整引用两场均在旧mapper拒绝，**2RED／6537.990667ms**、模型各1、55/repeat0/库0；首轮回应4096emoji在公开版本编辑前置校验失败，不冒该失败为canonical反例，换同样合法4096甲后才取得这两个RED。最窄消费者后两场2G／8444.541334ms；首类型一处unknown窄化失败保留，改为已与actual恢复输入全等的typed完成回读后type0、两场2G／7389.119083ms。
+
+fresh Spec又发现消息分页异步间隙会让已接受较晚CURRENT被旧observed覆盖；仅加实际反例取得**1RED／5977.396334ms**、模型3/库0。用同一个acceptLatestRead在映射await前后核最新完整snapshot/CURRENT/active/completed/key/replyID，发布只用最新observed。最后三个新消费者 **3 GREEN／12051.323583ms／skip0**，实际模型2+2+3=7，55/repeat0/自有库0；真实模型输入观察同时断言完整低权重已选版本、4106累计、原意愿、同三UUID重放、零额外模型和未保存编辑。
+
+正式协议变更后只校准原CAS反例两项观察路径为 `/retry-interrupted/prepare`，其CURRENT、重复409、原身份、草稿／options、跨范围及模型断言保留。仅跑受影响公开原输入恢复切片 **8 GREEN／28823.82625ms／skip0**、实际模型合计6，每份55/repeat0/库0；包含完整大草稿预算拒绝、合法Unicode、两模式原意愿、CAS推进、正常失败同key及撤销绑定。没有重复跑旧全36组。
+
+实际命令仍为Conda NotAlone、关闭dotenv及全部外部tracing的 `/private/tmp/notalone-a07-18-node.mjs <本树> --test tests/assistant-interrupted-authoritative-retry-http.test.mjs`，相关八场只按name-pattern选择，日志 `canonical-consumer-red2.log`、`canonical-late-read-red.log`、`canonical-consumer-final3.log`、`canonical-related-recovery.log` 位于 `/private/tmp/notalone-a17-*`。完整TypeScript与diff通过。fresh Standards本消费者硬0／重要0／新增low0（旧位置回调P3接受）；fresh Spec原分页P2静态闭合、新M/W/C0。审查仅只读，未拿静态结论当运行证据。
+
+本提交Main只从本树HEAD提取retryInterruptedGeneration、generateInput、lastAttempt及client导入，其余成员保持原字节；同树唯一B typed/runStrategy/A15增量仍另待正式净接，绝不混入本consumer提交。没有第二Map、writer、正文缓存、普通正文日志或发送接口。按ADR-044保来源及样本删除链，主动保存独立样本不随讨论自动删除；无新增DDL。17仍claimed，原AC未勾，Page最终组合由总协调唯一入口验证，本会话无Page租约。真实App退出／重开、原生权限窗口、真人语义、微信、OCR、私人聊天、外部模型、19逐项跳过；不push／发布／部署。
+
+
+### 同冻结策略命令的准备响应丢失关联（2026-10-12）
+
+总协调最终审查发现新的实际缺口后，仅解除本人唯一Jobs Map冻结。唯一B在公开Main/preload→真实HTTP及隔离PG中，仅丢首次prepare响应，保留实际后端执行；confirm实际回执、answer实际回执和confirm严格未领取证明三场均在显式同命令重试后被旧未知身份阻塞退出。其test-only净切片SHA256 `5e4ebfd75fffed2314dc3a8938d4feb07af23d0244219acefad54fcd0b73e855`；三场合计 **3FAIL／9946.214167ms**，实际模型2＋3＋1；正式001–055、repeat0、自有库清理0。这是总协调／B提供的产品RED，本人没有重复执行或冒称为本人HTTP验证。
+
+只在原唯一Map的ActiveJob增加可选、无正文五字段task/input/action/suggestion/operation UUID命令身份；beginPreparation第四参严格精确字段、复制冻结。confirm使用薄客户端同冻结命令的私有一次UUID，answer使用实际冻结操作UUID且suggestionId必须null；原正文及action来历由唯一B薄客户端绑定。取得实际准备回执或严格NoGen证明后，只关联同owner/generation和同五字段、preparing、传输已结束、无key、无实际回执的旧身份。不同task/input/action/suggestion/operation、不同范围、live、legacy及实际回执全部继续保留；没有按owner批量释放，没有新Map、writer、正文缓存、日志、DDL或发送接口。
+
+本人先只加六个契约，以旧Map取得 **6项中5FAIL／89.346209ms**，确认缺失命令关联；最窄实现后完整 **15GREEN／95.698208ms、skip0**，覆盖actual receipt、strict proof、各身份边界、实际回执及在途保留、精确字段拒绝、复制冻结及finally当前UI存活。实际命令为禁dotenv／全部外部tracing的 `/private/tmp/notalone-a07-18-node.mjs <本树> --test tests/assistant-generation-preparation.test.mjs`；RED、GREEN及type日志在 `/private/tmp/notalone-a17-command-alias-{contract-red,contract-green,type}.log`。完整TypeScript与diff检查通过；未跑旧36、8、Page、OS或真实App。
+
+fresh Standards本两文件硬0／重要0，仅新陈旧注释P3已修；原两种proof镜像P3仍接受。fresh Spec Missing/Wrong/Creep均0；静态审查不代替唯一B薄客户端绑定及原三场产品GREEN。本人此提交只含Jobs1、契约1及本记录1，源码1净切片SHA256 `ba930768dca1e6fd5b8237085ce039d85ece469c210b9115638e619690d5d4eb` 已交总协调，实际组合验证由B／总协调继续。本票仍claimed、原AC未勾；ADR-044的主动保存独立样本和删除链保持，真实App退出／重开、原生权限、真人语义、私人聊天、微信、OCR、外部模型及19逐项跳过，无push、发布或部署。
+
+总协调独立命令关联验证：正式6edad唯一Map与e85唯一薄调用净集成，原三实际ACK丢失场3 GREEN／9694.099792ms、六实际受控模型、55×3重复0／三自有库清理0；原15Map契约GREEN／111.662667ms、完整类型通过。同冻结HTTP正文与真实回执／严格证明不变，仅关联已结束无回执旧身份；live、legacy、不同范围／命令保持失败关闭。此自动结果不替代真实App与最终公开组合，本票状态暂按原范围保留。

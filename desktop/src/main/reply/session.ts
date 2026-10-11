@@ -37,6 +37,7 @@ type StrategyJob = ({ type: 'open'; request: ExplorationRequest; signature: stri
   | { type: 'action'; request: ExplorationAction; input: ReplyInputSnapshot }) & {
     actualInputVersionId?: string;
     sourceValidation?: StrategySourceValidation;
+    confirmationOperationKey?: string;
   };
 type CandidateSourceCheck = {
   pending: AbortController;
@@ -847,7 +848,12 @@ export class ReplySession {
         ownedPreparation = this.generationJobs.beginPreparation({ connectionGeneration: generation,
           contactId: job.request.contactId, sessionId: job.request.sessionId }, pending,
           captureAssistantGenerationStopping(this.backend, { connectionGeneration: generation,
-            contactId: job.request.contactId, sessionId: job.request.sessionId }));
+            contactId: job.request.contactId, sessionId: job.request.sessionId }),
+          job.type === 'action' && job.request.action !== 'stop' ? { taskId: job.request.taskId,
+            inputVersionId: job.request.inputVersion, action: job.request.action,
+            suggestionId: job.request.action === 'confirm' ? job.request.suggestionId ?? null : null,
+            operationKey: job.request.action === 'answer' ? job.request.operationKey
+              : (job.confirmationOperationKey ??= randomUUID()) } : undefined);
       }
       const prepared = job.type === 'action' && job.request.action !== 'stop'
         ? await prepareExplorationAction(this.backend, job.request, pending.signal) : undefined;

@@ -153,3 +153,13 @@ Root 主树按正式 `54d4b07e` 复验新晚prepare：初次测试名过滤未�
 C独立Spec只读新增P0–P3为0，核实际ownedGeneration/current、原键／输入身份与未知元数据保留，未借本人RED/G／10项作为其自测。两轴完成后仅该3path本地提交；新增A15／B11文件不捎带。
 
 Root 独立净接两代码路径后，实际公开 Main/preload→HTTP→隔离 PG 的原失败后重试反例 **1 GREEN／5259.600833ms／skip0／actualexit0**，模型实际3、55repeat0、instance/class与准确自有库残留0；完整桌面类型及diff通过。首个运行未激活Conda，被夹具在HTTP与建库之前拒绝，不计产品RED；激活NotAlone后执行原用例并取得上述真实结果。新来源竞态仍由B单独修复，未借此计为全部来源用例通过。
+
+### 同命令关联的正式薄消费与三场通过（2026-10-12）
+
+唯一A17正式 `6edadbc4a33a1de51b6175b0551af0e8831d4e58` 提供原Map严格五字段命令身份；本B登记源码完整字节与该正式版本相等，SHA256 `9b8cd124cda3c330f9c14922d9b74bc7c7030d4f41900c9f69762ee6bd4b8c92`。只关联同owner／contact／SID／generation及同task、input、action、suggestion、operation，且已结束传输、无key／receipt的旧准备；live、legacy、其它任务或operation及已有回执均保原停止身份。本人正式契约测试 **15 GREEN／109.749833ms／skip0**，不借供应方或Root十五项计为本人运行。
+
+本B仅给既有StrategyJob保存一次本地confirmationOperationKey UUID，明确retry仍同job复用，新选择／directIntent／task重建job取得新UUID；answer沿原HTTP实际operation。五字段通过beginPreparation第4参交唯一Map，不把本地UUID、正文或bodyhash加到HTTP。原114行三个产品RED断言一字未改，实际 **3 GREEN／9912.748667ms／skip0／actualexit0**，模型2／3／1、三份正式55逐名／repeat0／自有库剩余0。可靠同receipt完成或严格同proof重放后closing零interrupt，后段公开投影全文和模型计数均实际达到，三capture closing_completed=true。
+
+日志 `/private/tmp/notalone-b-confirmed-retry-ack-three-green.log`；默认temporary capture路径会随同标签运行更新，GREEN归属另复制保存在 `/private/tmp/notalone-b-confirmed-retry-ack-green-captures/`，此前RED日志及总协调已转交的原快照继续归原失败阶段，不把后来GREEN capture当RED原始文件。全桌面类型与diff通过，Main固定ONLY1 SHA256 `c41f6c6f673a8e9517ed35cb9bc046272e47c7951f57e86fe5e5c6a81b563e2c` 独立A Standards硬要求0／新增重要Fowler possible0、C Spec新增P0–P3为0，只读未借运行作轴自测。没有Map自建策略、普通生成／Host改动或Page／原生／真人质量通过；原第4条及claimed继续等待总协调最新全源集成的准确结果。
+
+总协调独立命令关联验证：正式6edad唯一Map与e85唯一薄调用净集成，原三实际ACK丢失场3 GREEN／9694.099792ms、六实际受控模型、55×3重复0／三自有库清理0；原15Map契约GREEN／111.662667ms、完整类型通过。同冻结HTTP正文与真实回执／严格证明不变，仅关联已结束无回执旧身份；live、legacy、不同范围／命令保持失败关闭。此自动结果不替代真实App与最终公开组合，本票状态暂按原范围保留。

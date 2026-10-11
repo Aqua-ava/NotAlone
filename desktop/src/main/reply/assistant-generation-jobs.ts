@@ -17,15 +17,32 @@ export type AssistantGenerationReceipt = Readonly<{
 }>;
 export type AssistantGenerationRecovery = (identity: AssistantGenerationIdentity) => Promise<AssistantGenerationReceipt | null>;
 export type AssistantGenerationStopping = Readonly<{ interrupt: (receipt: PendingAssistantGenerationReceipt) => Promise<void>; recover: AssistantGenerationRecovery }>;
+export type AssistantPreparationCommandIdentity = Readonly<{
+  taskId: string; inputVersionId: string; action: 'confirm' | 'answer'; suggestionId: string | null; operationKey: string;
+}>;
 export type OwnedAssistantPreparation = Readonly<{ identity: AssistantGenerationOwner; signal: AbortSignal }>;
 export type OwnedAssistantGeneration = Readonly<{ identity: AssistantGenerationIdentity; signal: AbortSignal }>;
 export type PendingAssistantGenerationReceipt = AssistantGenerationIdentity & AssistantGenerationReceipt;
 type ActiveJob = { controller: AbortController; viewRevision: number; stage: 'created' | 'preparing' | 'prepared' | 'requesting';
   receipt?: AssistantGenerationReceipt; preparationSettled: Promise<void>; settlePreparation: () => void;
-  transportEnded?: boolean; failedResponseReceived?: true; terminal?: boolean; settledWithoutGeneration?: true; closingTask?: Promise<void>; stopping?: AssistantGenerationStopping };
+  preparationCommand?: AssistantPreparationCommandIdentity; transportEnded?: boolean; failedResponseReceived?: true; terminal?: boolean; settledWithoutGeneration?: true; closingTask?: Promise<void>; stopping?: AssistantGenerationStopping };
 
 const sameOwner = (left: AssistantGenerationOwner, right: AssistantGenerationOwner) =>
   left.connectionGeneration === right.connectionGeneration && left.contactId === right.contactId && left.sessionId === right.sessionId;
+
+const commandFields = ['taskId', 'inputVersionId', 'action', 'suggestionId', 'operationKey'] as const;
+function capturePreparationCommand(command: AssistantPreparationCommandIdentity): AssistantPreparationCommandIdentity {
+  if (!isRecord(command) || Object.keys(command).length !== commandFields.length
+    || !commandFields.every((key) => Object.hasOwn(command, key))
+    || !isUuid(command.taskId) || !isUuid(command.inputVersionId) || !isUuid(command.operationKey)
+    || !['confirm', 'answer'].includes(command.action)
+    || !(command.suggestionId === null || isUuid(command.suggestionId))
+    || command.action === 'answer' && command.suggestionId !== null) throw new Error('本次准备命令关联无效。');
+  return Object.freeze({ taskId: command.taskId.toLowerCase(), inputVersionId: command.inputVersionId.toLowerCase(),
+    action: command.action, suggestionId: command.suggestionId?.toLowerCase() ?? null, operationKey: command.operationKey.toLowerCase() });
+}
+const sameCommand = (left: AssistantPreparationCommandIdentity, right: AssistantPreparationCommandIdentity) =>
+  commandFields.every((key) => left[key] === right[key]);
 
 export function readAssistantGenerationReceipt(value: unknown, sessionId: string, requestKey: string): AssistantGenerationReceipt {
   const fields = ['session_id', 'turn_id', 'request_key', 'input_version_id', 'state'];
@@ -52,12 +69,14 @@ export class AssistantGenerationJobs {
   }
   // 准备阶段先登记已核验范围，实际请求键只由后端回执提供。
   beginPreparation(owner: AssistantGenerationOwner, controller = new AbortController(),
-    stopping?: AssistantGenerationStopping): OwnedAssistantPreparation {
+    stopping?: AssistantGenerationStopping, command?: AssistantPreparationCommandIdentity): OwnedAssistantPreparation {
     return this.register({ connectionGeneration: owner.connectionGeneration,
-      contactId: owner.contactId, sessionId: owner.sessionId }, controller, stopping);
+      contactId: owner.contactId, sessionId: owner.sessionId }, controller, stopping,
+      command === undefined ? undefined : capturePreparationCommand(command));
   }
   private register(identity: AssistantGenerationOwner | AssistantGenerationIdentity,
-    controller: AbortController, stopping?: AssistantGenerationStopping): OwnedAssistantPreparation {
+    controller: AbortController, stopping?: AssistantGenerationStopping,
+    preparationCommand?: AssistantPreparationCommandIdentity): OwnedAssistantPreparation {
     if (this.closing) throw new Error('应用正在退出，请重开后再生成。');
     if (!Number.isSafeInteger(identity.connectionGeneration) || identity.connectionGeneration < 0
       || !isUuid(identity.contactId) || !isUuid(identity.sessionId)) throw new Error('本次生成归属无效。');
@@ -67,7 +86,7 @@ export class AssistantGenerationJobs {
     let settlePreparation = () => {};
     const preparationSettled = new Promise<void>((resolve) => { settlePreparation = resolve; });
     this.jobs.set(job, { controller, viewRevision: this.viewRevision,
-      stage: 'requestKey' in identity ? 'created' : 'preparing', preparationSettled, settlePreparation, stopping });
+      stage: 'requestKey' in identity ? 'created' : 'preparing', preparationSettled, settlePreparation, stopping, preparationCommand });
     return job;
   }
   receivePrepared(preparation: OwnedAssistantPreparation, receipt: AssistantGenerationReceipt): OwnedAssistantGeneration {
@@ -78,6 +97,7 @@ export class AssistantGenerationJobs {
     const job = Object.freeze({ identity: Object.freeze({ ...preparation.identity,
       requestKey: receipt.requestKey.toLowerCase() }), signal: preparation.signal });
     this.jobs.delete(preparation); this.jobs.set(job, active); this.receiveReceipt(job, receipt);
+    this.settleEndedUnknownPreparations(job, active);
     return job;
   }
   // 只有正式准备明确返回澄清等非候选结果时可用，传输结束不能证明未领取。
@@ -106,7 +126,7 @@ export class AssistantGenerationJobs {
       }
     }
   }
-  // 策略薄客户端先核验原命令证明；未知key只能结算这个准备token，不能推断旧提交等价。
+  // 策略薄客户端先核验原命令证明；只有显式声明的同冻结命令可关联已结束未知身份。
   receivePreparationNoGenerationProof(preparation: OwnedAssistantPreparation, proof: AssistantNoGenerationProof,
     connectionGeneration: number | undefined): void {
     const active = this.jobs.get(preparation);
@@ -118,6 +138,19 @@ export class AssistantGenerationJobs {
       throw new Error('本次未领取证明归属尚未确认。');
     }
     active.settledWithoutGeneration = true; active.settlePreparation();
+    this.settleEndedUnknownPreparations(preparation, active);
+  }
+  // 只按同冻结命令结算结束传输的未知身份；scope相同或没有回执均不能独自证明等价。
+  private settleEndedUnknownPreparations(current: OwnedAssistantPreparation, active: ActiveJob): void {
+    const command = active.preparationCommand;
+    if (!command) return;
+    for (const [previousJob, previous] of this.jobs) {
+      if (previousJob !== current && previous.transportEnded && !previous.receipt && previous.stage === 'preparing'
+        && !('requestKey' in previousJob.identity) && previous.preparationCommand
+        && sameOwner(previousJob.identity, current.identity) && sameCommand(previous.preparationCommand, command)) {
+        previous.terminal = true; previous.settlePreparation(); this.jobs.delete(previousJob);
+      }
+    }
   }
   prepareStarted(job: OwnedAssistantGeneration): void {
     const active = this.jobs.get(job);

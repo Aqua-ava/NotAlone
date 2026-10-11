@@ -149,3 +149,83 @@ test('未知key准备的证明在退出等待中迟到时仍结算当前身份',
   await closing;
   jobs.finish(preparation);
 });
+
+
+const commandIdentity = { taskId: '0e052c91-1538-487b-ae5a-acd2d0095968',
+  inputVersionId: 'ea989846-90e7-47a1-952a-45c91e42ef9b', action: 'confirm',
+  suggestionId: '3c347949-9a9f-4605-aa9c-05f3d1596f13', operationKey: '6927ca6d-b347-41bb-a0c5-4e20c0812cb8' };
+const noGeneration = { contactId: owner.contactId, sessionId: owner.sessionId, requestKey, state: 'not_reserved' };
+
+for (const action of ['confirm', 'answer']) test(`冻结策略命令的结束传输未知身份在${action}实际回执后收口`, async () => {
+  const jobs = new AssistantGenerationJobs();
+  const command = { ...commandIdentity, action, ...(action === 'answer' ? { suggestionId: null } : {}) };
+  const previous = jobs.beginPreparation(owner, undefined, undefined, command);
+  jobs.finish(previous);
+  const preparation = jobs.beginPreparation(owner, undefined, undefined, command);
+  const current = jobs.receivePrepared(preparation, receipt);
+  assert.equal(jobs.isActive(previous), false);
+  jobs.finish(current, true);
+  await jobs.beginClosing(async () => { throw new Error('已完成的同冻结命令无需重复停止。'); });
+});
+
+test('冻结命令实际未领取证明释放已结束未知alias，当前发布保留到finally', async () => {
+  const jobs = new AssistantGenerationJobs();
+  const previous = jobs.beginPreparation(owner, undefined, undefined, commandIdentity);
+  jobs.finish(previous);
+  const current = jobs.beginPreparation(owner, undefined, undefined, commandIdentity);
+  jobs.receivePreparationNoGenerationProof(current, noGeneration, owner.connectionGeneration);
+  assert.equal(jobs.isActive(previous), false);
+  assert.equal(jobs.isActive(current), true);
+  jobs.finish(current);
+  await jobs.beginClosing(async () => { throw new Error('严格同冻结命令未领取。'); });
+});
+
+test('命令关联不释放live、legacy、不同task/input/action/suggestion/operation或实际回执', () => {
+  const jobs = new AssistantGenerationJobs();
+  const identities = [
+    { ...commandIdentity, taskId: receipt.turnId }, { ...commandIdentity, inputVersionId: receipt.inputVersionId },
+    { ...commandIdentity, action: 'answer', suggestionId: null }, { ...commandIdentity, suggestionId: receipt.turnId },
+    { ...commandIdentity, operationKey: receipt.turnId },
+  ];
+  const unmatched = identities.map((command) => {
+    const previous = jobs.beginPreparation(owner, undefined, undefined, command);
+    jobs.finish(previous); return previous;
+  });
+  const foreignOwner = jobs.beginPreparation({ ...owner, connectionGeneration: owner.connectionGeneration + 1 }, undefined, undefined, commandIdentity);
+  jobs.finish(foreignOwner);
+  const legacy = jobs.beginPreparation(owner); jobs.finish(legacy);
+  const live = jobs.beginPreparation(owner, undefined, undefined, commandIdentity);
+  const actual = jobs.beginPreparation(owner, undefined, undefined, commandIdentity);
+  const withReceipt = jobs.receivePrepared(actual, { ...receipt, requestKey: commandIdentity.taskId });
+  jobs.finish(withReceipt);
+  const current = jobs.beginPreparation(owner, undefined, undefined, commandIdentity);
+  jobs.receivePreparationNoGenerationProof(current, noGeneration, owner.connectionGeneration);
+  jobs.finish(current);
+  for (const untouched of [...unmatched, foreignOwner, legacy, live, withReceipt]) assert.equal(jobs.isActive(untouched), true);
+  assert.deepEqual(jobs.pendingReceipts(), [{ ...owner, ...receipt, requestKey: commandIdentity.taskId }]);
+});
+
+test('策略准备命令只允许精确五字段UUID关联，拒绝正文或不完整身份', async () => {
+  const jobs = new AssistantGenerationJobs();
+  const invalid = [
+    { ...commandIdentity, privateText: '不得保存的合成正文' }, { ...commandIdentity, operationKey: undefined },
+    { ...commandIdentity, taskId: 'invalid' }, { ...commandIdentity, inputVersionId: 'invalid' },
+    { ...commandIdentity, action: 'stop' }, { ...commandIdentity, suggestionId: 'invalid' },
+    { ...commandIdentity, action: 'answer' },
+  ];
+  for (const command of invalid) assert.throws(() => jobs.beginPreparation(owner, undefined, undefined, command), /命令/);
+  await jobs.beginClosing(async () => { throw new Error('无有效登记。'); });
+});
+
+test('登记时复制冻结命令身份，后来修改调用方对象不能误清旧身份', () => {
+  const jobs = new AssistantGenerationJobs();
+  const mutable = { ...commandIdentity };
+  const previous = jobs.beginPreparation(owner, undefined, undefined, mutable); jobs.finish(previous);
+  mutable.operationKey = receipt.turnId;
+  const different = jobs.beginPreparation(owner, undefined, undefined, mutable);
+  jobs.receivePreparationNoGenerationProof(different, noGeneration, owner.connectionGeneration); jobs.finish(different);
+  assert.equal(jobs.isActive(previous), true);
+  const matching = jobs.beginPreparation(owner, undefined, undefined, commandIdentity);
+  jobs.receivePreparationNoGenerationProof(matching, noGeneration, owner.connectionGeneration); jobs.finish(matching);
+  assert.equal(jobs.isActive(previous), false);
+});
