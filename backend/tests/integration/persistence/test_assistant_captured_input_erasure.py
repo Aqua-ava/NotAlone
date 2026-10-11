@@ -75,7 +75,6 @@ class AssistantCapturedInputErasureTest(unittest.TestCase):
                 removed_ids=set(source), reply_request_ids=request_ids,
                 turn_ids=list(selected.turn_ids), captured_uses=captures,
             )
-        self.a._delete_source(source[0])
 
         after = self.a.sessions.read_session(self.a.scope, independent_session)
         self.assertEqual(after.turns[0].state, "failed")

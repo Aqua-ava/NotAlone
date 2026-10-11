@@ -59,3 +59,10 @@ Blocked by: [assistant-session-context/11 候选编辑、选择与版本回看](
 主树在正式 `ee9e5e2` 的真实001–055迁移下，禁 dotenv／tracing，用同自有随机库 runner 执行 `test_assistant_captured_input_erasure`（现在9项）、`test_assistant_dependency_erasure`、`test_reply_discussion_dependencies`：**33 GREEN／5.012秒／skip0／actualexit0**，真实账本55／repeat0／外层自有库0，没有外部模型。新第9项实际证明同来源撤销的独立运行草稿保留输入与 CURRENT、已捕获的实际依赖正文擦除，预选择与最终擦除一致。单源 silent mypy、两个实际 Python 文件编译与 diff 通过。日志 `/private/tmp/notalone-root-canonical-source-selection-pg.log`。
 
 该最窄提供者已交唯一 C 物理删除消费者；C 的实际 source／sample 薄接线和跨联系人 caller 尚须其正式交付后在主树验证。完整 A13 连续要求／改口／编号与累计预算公开页面仍继续，本票维持 claimed，六条原验收文字与未勾状态保留；不以本次9或33数据库回归关闭本票或 C06。未运行真实 App、微信／OCR、私人聊天或人工质量实验。
+
+
+主树删除测试兼容补充（2026-10-11）：仅净接 A 正式 `ec808c02c58d0f93bd67822767d5ebf86d5319b7` 的必要两个测试路径。第9项原先先手工执行 A 擦除、再执行 C 物理删除，后者按新契约严格预捕获时已找不到 A 正文；只移除这一次重复 `_delete_source` 调用，保留所有真实选择／独立输入／CURRENT／失败与 redacted 断言。此项验证权威预选择和擦除的纯 seam；C 物理调用方由其单次同事务实际删除测试负责，不降低 typed 校验或把原 ERROR 藏为 skip。原 A18 嵌套清理语义主树 ee9 已同，仅空行差不重复净。普通 jobs 夹具的三处账本计数从54机械升级为已正式055，仍与实际全部文件／数据库账本逐名比较且repeat0。
+
+主树禁 dotenv／tracing、Conda NotAlone 下重跑 `test_assistant_captured_input_erasure`：**9 GREEN／1.374秒／skip0／actualexit0／真实55账本／repeat0／外层库0**。新055 jobs 夹具另在同主树已正式B6a源净增下实际运行隐藏探索负向和普通hide／close继续正向两项生产桥接→HTTP→PG：**2 GREEN／6110.748917ms／skip0／actualexit0**，两份日志各自55／repeat0／instance与class清理true／database_remaining=false，合成调用各1、共2，没有外部模型；不借 A18项9.443秒或其3项10.393秒。首次 Node 未激活Conda被原入口门禁提前拒绝，未建服务或数据库，不计产品RED；同代码补环境后实际两项通过。两个改动文件编译及diff通过。日志 `/private/tmp/notalone-root-canonical-fixture55-pg.log`、`/private/tmp/notalone-root-hidden-exploration-http-pg.log` 与原环境门禁日志保留。
+
+本主题仅测试契约和真实前缀兼容；完整连续意图／预算UI、C实际来源／样本 caller与55携入、B公开生命周期仍按各唯一负责人接续。A13保持claimed及六条原AC未勾，本次无产品源修改，不据九PG或两HTTP关闭A13/C06/B09。
