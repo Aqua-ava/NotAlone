@@ -453,3 +453,17 @@ C自己的30G121067.235459ms和Root此前28／25／11各阶段另保，不借其
 主树精确集成 C `70690d0a` 四文件切片，在已有正式 A13 提供者上独立运行四场公开 HTTP／隔离数据库组合：**4 GREEN／15.329 秒／actualexit0**；正式生产 001–055、重复迁移 0，保真夹具内层 `DROP` 后 `EXISTS` 清理守卫通过，外层自有库剩余 0。本轮受控运行器剥除外部模型与追踪凭据，关闭 dotenv 和真实模型开关；不使用提供者的18项或16.302秒计量。
 
 实际捕获12行、12模型输入、12调用，经唯一E01 CLI生成[主树12例实际报告](../reports/root-typed-continuation-http-controlled-v1.json)：HTTP耗时小计3609.013毫秒、契约失败0、故意无依据整组事实与承诺失败4、真人通过0、quality_verified=false，全部development。相关报告单元 **6 GREEN／0.001秒**，原提供者报告保留。该结果仍只覆盖HTTP组合，公开typed消费、新消息和退出生命周期继续，三条未验AC和claimed保持，未启动真实App、微信或OCR。
+
+### 已准备续写中断后的样本／来源删除 HTTP 子组合
+
+在正式 A `dca102c8` 准备协议及既有 `/interrupt` 上只新增 `test_authentic_expression_interruption` 两场，不修改 A 生命周期、生成装配、writer、领域协议或迁移。每场实际普通生成一次、显式保存来源候选样本、取得五字段续写准备回执，再用实际 request/input 身份中断。重建后端只读：旧 completed 版本、来源样本和同键普通结果逐字段保留；typed turn 为 failed/app_quit，保留完整组草稿及累积要求，无新候选；旧 typed prepare/execute 键拒绝，其他 owner 也无法读取中断或执行。
+
+随后分别删除实际使用的手工表达样本或原始来源，重建读取两轮均为无正文 redacted、CURRENT 清空；旧版本、候选再保存、依据、普通键、typed 新旧键和中断重放都拒绝。候选来源样本返回410，prepare之后主动保存的独立手工样本、无关讨论完整公开投影仍相等；样本删除保留 raw active，raw 删除保留独立手工样本。每场实际1次普通模型调用，prepare、interrupt、重建／重放与删除均增加0次；捕获两个真实模型输入／输出及各阶段身份投影，不作为新增语义通过或原生退出证据。
+
+Conda NotAlone、剥除追踪环境／关闭dotenv、`PGPORT=55441`、唯一隔离 runner 的实际记录：首单场 **1 ERROR／1.629s** 是测试误把 `input.content.draft_text` 读作 `input.draft_text`，中断已完成但删除断言尚未到达；修正观察层级后两场 **2 GREEN／3.427s**。首相关联跑误写不存在的 `AssistantContinuationTests` 类名，loader 1 ERROR／20.213s，保留日志，不作为产品RED或全部通过。
+
+更正实际类名后执行：`python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-round29-c tests.integration.server.test_authentic_expression_interruption tests.integration.server.test_authentic_expression_continuation tests.integration.server.test_authentic_expression_candidate_versions tests.integration.server.test_assistant_continuation.AssistantContinuationHttpTest.test_continuation_prepared_quit_and_delete_reject_old_execution`，结果 **9 GREEN／22.179s／skip0／actualexit0**；正式001–055逐名核对、重复迁移0、Fidelity内层精确DROP/EXISTS和外层自有隔离库剩余0。`NOTALONE_INTERRUPTION_FIDELITY_CAPTURE=/private/tmp/notalone-c-interruption-final-capture.json` 保留本两场实际捕获，两个控制契约完成、model_inputs2、总calls2、真人0／qualityfalse；原12例 typed 语义报告和分母完全不变。新测试编译及diff检查通过，固定两文件由 A 独立 Standards（硬要求0／新增重要Fowler判断0）及 B 独立 Spec（新增P0–P3为0）只读审查后按工程要求本地提交；审查不作为新的运行证据。
+
+这里只核验公开 HTTP 的准备中断与样本领域删除，不代表受控宿主退出、typed页面、A15消息采用或真实App停止／重开。C06仍claimed、三项原未勾AC保留，公开页面及生命周期自动部分继续；真实App／原生与真人语义未执行。全部为合成数据及受控模型，不访问业务库、私人资料、外部模型、微信、OCR或外部发送，不push、发布或部署。
+
+Root 集成正式 `969a8cba` 的两路径净变更后，用剥除模型凭据、dotenv和追踪的本轮受控隔离 runner 独立执行 `tests.integration.server.test_authentic_expression_interruption`：**2 GREEN／3.721s／skip0**，实际55迁移账本一致、repeat0、内层精确清理与外层自有库残留0。新增文件编译及diff检查通过。此两场是 Root 新 HTTP 运行，未新生成语义报告，未借其验收宿主退出或公开页面，原三项未勾AC和claimed保留。
