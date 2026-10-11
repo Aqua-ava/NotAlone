@@ -176,3 +176,19 @@ Skill探索组合实际接续：已消费B正式UUID后端`1484c2b`为`0b0fce7`�
 2026-10-11 总协调在正式来源擦除接缝及B重确认切片的根工作树独立复验原六个保真HTTP场景：首次5通过／1超时86.105秒，回应场首个/replies沿原10秒请求限制超时；未修改断言、请求超时或产品实现。缩小同一用例实际1通过10.980秒，随后原完整六项实际全部通过23.654秒／skip0，正式001–053／重复0／自有库剩余0。首次超时未稳定复现，原因未确认，保留为运行风险；不宣称已修复确定的产品故障。三份报告仍为9190正式负责人历史逐例产物，未用本次运行篡改旧延迟、调用数、输出或审查记录；synthetic_fixture、人类审查0及summary.quality_verified=false保持。未运行真实模型、人工自然度或真实App验收。
 
 2026-10-11 总协调净接正式1836194的七桌面文件及owned c7历史补漏，保留其他主题与原失败，A10 details ID独立归属未混入本切片。主树77条样本控制器加4条删除策略守卫实际81通过1128.884ms／skip0、完整TypeScript通过；原八条current/history×clear/后来复制/实际删除反向在单独私有probe按新合同实际8通过111.726ms，未知paste即时拒且保存POST0，清空后直接typed均manual。控制器SHA217cf58919d10e0ebfa9d4034930364977484eb08947d8aff1dd47e502e0deed前后不变，临时bundle清，HTTP／DB／模型／网络／Page均0。原八条2控制通过／6RED和旧独立未知paste正向属于此前阶段，原报告不改写；新接口的直接键入正向明确另测。最终切片两轴新增重要问题0。C自身两公开labels已通过的记录保留为负责人历史；root公开组合另行顺序验证，E04–06仍claimed。
+
+2026-10-11 明确重试与样本组合接续（未完成）：C开始E06明确重试组合，精确消费B4b1f854五backend，不取working。原9reconfirm HTTP实际GREEN38.474s，Fidelity默认dimension_release=None/ownDB清理确认。新样本＋Skill两scene真实组合：探索不含样本、重确认无model且保Skill、生成实际fidelity当前意图和样本、重装同键、删样本后两turn redacted/current None/生成同键拒绝均到达。末尾旧reconfirm replay仍200纯metadata；C期望非200，两FAIL尚待B权威契约对齐，未认定泄露或改B业务。首运行因直接import TestCase被unittest重复收集原9，实际10tests48.342/2subtestFAIL；已改module import避免重复，未冒新产品RED。新case仍B合成中断凭证，不冒A054完整中断。已直发B请求语义证据，无Page/freeze。
+
+2026-10-11 明确重试样本组合契约核对：B唯一维护方及独立Spec均确认，样本不参与探索，删除后续生成所用样本不应误删独立B讨论；正式4b1f854允许同键只读原metadata，不推进CURRENT，原始来源或B输入自身失效仍拒绝。前述无条件非200断言过宽，保留其实际失败，未当产品漏洞。新断言逐一核对parent／receipt两个B讨论UUID仍active且不含样本，old／generated两个A生成UUID均generation／redacted／content NULL；原回执严格等值200、新key拒绝、会话完整读取不变、CURRENT None、同键生成拒绝且模型无增量。仅改测试，并以module import避免重复收集原9项。最终新1项（回应／主动两子场景）GREEN21.257秒，原9项独立GREEN38.474秒；Fidelity合成维度门None及自有库清理核验保持。默认四源码mypy跟随依赖实际257错误／25文件，不能宣称全树通过；限定follow-imports=skip四源码0、六文件compile通过。两轴最终复核进行中，A真实中断及公开页面仍未执行，不关闭整票。
+
+明确重试切片最终：探索服务原17单测GREEN0.005秒；六源码／测试及上述文档的Spec新增P0–P2为0、Standards硬0／重要Fowler0。只提交B正式四源码、原HTTP测试、新C组合测试及本记录；A14改动和其记录另留working，依赖未完成不关闭E06。
+
+2026-10-11 A14正式后端组合接续（尚未提交／完成）：只接正式0e8ec0541674b72662936abaf44d8738050a83c9的六backend，不取A任务或working。原24项实际22通过／2失败、10.349秒；正式53／repeat0／自有库0。两个来源已删PG断言仍期待source_deleted，但b819清current后实际input_version_stale；拒绝仍有效，原因码契约交A唯一维护方对齐，不放宽断言。
+
+C新增正式装配HTTP组合test_authentic_expression_replacement：暂停旧同意请求→新明确拒绝实际领取→释放旧模型→仅新候选有效→重装及同键重放→删除所用样本→两轮正文清空、current空、旧新键拒绝，实际两次受控模型调用。首次1项2ERROR／11.387秒：夹具先等新响应再释放旧模型，与正式ModelPriorityControl前台串行调度互等；另复用模型不具Core cleanup的response_gates属性。仅修测试观察实际新turn后释放和对应门控cleanup，不改调度或超时，原同一项最终GREEN／2.837秒；Fidelity自有库清理验证执行，原失效租约诊断保留。未把夹具错误当产品RED；A原24中两FAIL仍开放，最终审查和提交未完成。
+
+2026-10-11 A14正式原因对齐接续：C已精确接A正式d1abdfbb6a78e10f9d33e36060f534db93f0e516两个backend，合并原0e8ec054六backend；未取working/任务。原24＋C当前意图替换/样本删除1条完整实际25GREEN14.013s，正式001–053/repeat0/ownedDB0，Fidelity维度None，旧租约拒绝诊断保留。精确input_version_stale+物理CURRENT/input依赖/turn清除加强断言闭原两reason FAIL，不宽放。focused skipimports3mypy G、七compile G、Spec新增0，Standards进行；另原assistant_session_api＋assistant_discussion_context共用被重构reserve/generate接缝，隔离回归6802正跑，不冒已G。不Page/freeze，不关闭已知prepare竞态或整A14/E06。
+
+2026-10-11 A14接入最终验证：原assistant_session_api与assistant_discussion_context完整56项GREEN31.452秒，正式53／repeat0／自有库精确剩余0；与前述25项替换组合分别执行，旧租约拒绝诊断保留。七后端文件最终Spec新增P0–P2为0、Standards硬0／重要Fowler0；限定三源码mypy及七文件compile通过。该切片仅接通当前意图替换和样本删除组合，已知prepare竞态及A完整生命周期、公开页面仍未验收，不关闭E06。
+
+2026-10-11 总协调仅净接正式3fd63cc及a11856e两条新增真实HTTP组合测试，B重确认与A替换源码分别已经root f6d03fb／4f8e1f4正式集成，不再次复制提供者。原两test完整actual GREEN9.280秒／skip0、正式001–053／重复0／自有库剩余0，维度显式None；回应／主动探索样本不进入B载荷，明确重确认零模型保同版Skill，生成实际引用样本并以当前意图为准。样本删除后依赖A输入／候选redacted、CURRENT None和生成重放拒绝；没有样本依赖的B父子输入active，旧metadata等值200只读且不推进指针，变体及新reconfirm键仍拒，未把历史回执误当泄露；同一已删生成改用新idempotency_key的实际/replies请求尚未单独验证，不能用metadata接口的拒绝替代。替换使用真实模型优先级门控，旧迟到拒、新当前意图保留、重建重放和两turn擦除均到达。全部为合成模型；完整A17中断和公开C3／自然度仍未据此验收，票claimed。
