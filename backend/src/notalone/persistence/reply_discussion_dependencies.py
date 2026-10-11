@@ -260,3 +260,19 @@ def captured_reply_discussion_uses(
                 raise ReplyStoreInvariantError("历史依赖快照范围不一致。")
             result.append(CapturedReplyDiscussionUse(row["id"], row["idempotency_key"], metadata[0]))
         return tuple(result)
+
+
+def captured_owner_reply_discussion_uses(
+    connection: Any, *, owner_id: UUID,
+) -> tuple[CapturedReplyDiscussionUse, ...]:
+    """owner删除事务中按实际联系人聚合捕获身份，仍只由上述唯一codec解码。"""
+
+    with _connection(connection).cursor(row_factory=dict_row) as cursor:
+        rows = cursor.execute(
+            "SELECT DISTINCT contact_id FROM public.reply_request "
+            "WHERE owner_id=%s AND (context_snapshot ? %s OR context_snapshot ? %s) "
+            "ORDER BY contact_id", (owner_id, _SNAPSHOT, _SAMPLES),
+        ).fetchall()
+    return tuple(use for row in rows for use in captured_reply_discussion_uses(
+        connection, ContactScope(owner_id, row["contact_id"]),
+    ))

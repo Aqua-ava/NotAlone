@@ -298,6 +298,8 @@ def _current_sample(connection: Any, row: dict[str, Any]) -> StyleSample:
 
 def erase_style_sample_replies(connection: Any, *, owner_id: UUID, sample_ids: list[UUID]) -> list[UUID]:
     """实际使用记录及后继候选共同决定派生清理范围，不删除聊天资料。"""
+    if not sample_ids:
+        return []
     rows = connection.execute("""
         WITH RECURSIVE seeds(id) AS (
             SELECT use.reply_request_id FROM public.reply_style_sample_use AS use
@@ -314,30 +316,24 @@ def erase_style_sample_replies(connection: Any, *, owner_id: UUID, sample_ids: l
         ) SELECT id FROM affected
     """, (owner_id, sample_ids, owner_id, [str(value) for value in sample_ids], owner_id)).fetchall()
     request_ids = [row["id"] if isinstance(row, dict) else row[0] for row in rows]
+    # 在任何A输入或C快照清空之前捕获身份；实际删除闭包只由A计算。
+    table = connection.execute("SELECT to_regclass('public.assistant_session_turn')").fetchone()
+    if table and (table["to_regclass"] if isinstance(table, dict) else table[0]) is not None:
+        from notalone.persistence.assistant_input_lineage import select_assistant_input_dependents
+        from notalone.persistence.assistant_session_store import erase_assistant_source_turns
+        from notalone.persistence.reply_discussion_dependencies import captured_owner_reply_discussion_uses
+
+        captured = captured_owner_reply_discussion_uses(connection, owner_id=owner_id)
+        selected = select_assistant_input_dependents(
+            connection, owner_id=owner_id, contact_id=None, removed_ids=set(sample_ids),
+            reply_request_ids=request_ids, captured_uses=captured,
+        )
+        request_ids = sorted(set(request_ids) | set(selected.reply_request_ids))
+        erase_assistant_source_turns(
+            connection, owner_id=owner_id, contact_id=None, removed_ids=set(sample_ids),
+            reply_request_ids=request_ids, turn_ids=list(selected.turn_ids), captured_uses=captured,
+        )
     if request_ids:
-        # A会话记录必须在回复外键置空之前失效；无关联turn时无需载入适配器。
-        table = connection.execute("SELECT to_regclass('public.assistant_session_turn')").fetchone()
-        if table and (table["to_regclass"] if isinstance(table, dict) else table[0]) is not None:
-            contacts = connection.execute("""
-                SELECT turn.contact_id, array_agg(DISTINCT turn.id) AS turn_ids,
-                       array_agg(DISTINCT request.id) AS request_ids
-                FROM public.assistant_session_turn AS turn
-                JOIN public.reply_request AS request ON request.owner_id=turn.owner_id
-                  AND request.contact_id=turn.contact_id AND request.idempotency_key=turn.idempotency_key
-                JOIN public.assistant_session AS session ON session.id=turn.session_id
-                  AND session.owner_id=turn.owner_id AND session.contact_id=turn.contact_id
-                WHERE turn.owner_id=%s AND request.id=ANY(%s::uuid[])
-                GROUP BY turn.contact_id
-            """, (owner_id, request_ids)).fetchall()
-            if contacts:
-                from notalone.persistence.assistant_session_store import erase_assistant_source_turns
-                for row in contacts:
-                    contact_id = row["contact_id"] if isinstance(row, dict) else row[0]
-                    turn_ids = row["turn_ids"] if isinstance(row, dict) else row[1]
-                    contact_request_ids = row["request_ids"] if isinstance(row, dict) else row[2]
-                    erase_assistant_source_turns(connection, owner_id=owner_id, contact_id=contact_id,
-                                                 removed_ids=set(sample_ids), reply_request_ids=contact_request_ids,
-                                                 turn_ids=turn_ids)
         invalidate_reply_keys(connection, owner_id=owner_id, request_ids=request_ids)
         connection.execute("DELETE FROM public.reply_request WHERE owner_id=%s AND id=ANY(%s::uuid[])",
                            (owner_id, request_ids))

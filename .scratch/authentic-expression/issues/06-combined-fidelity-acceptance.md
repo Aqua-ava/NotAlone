@@ -386,3 +386,11 @@ C负责人的前两新增public Page session68894与58008均真实exit1，仅部
 主树激活 Conda `NotAlone`、禁 dotenv／tracing，从 backend 执行 `PYTHONPATH=src python -m unittest tests.unit.reply.test_fidelity_capture tests.unit.reply.test_fidelity_evaluation tests.unit.reply.test_fidelity_review_details -q`：**9 GREEN／0.214秒／skip0／actualexit0**，涵盖新逐次输入、漏计／布尔计数／最终输入不符／嵌套标签拒绝，以及原公开 CLI 的失败、超时、缺失与未知保留。两个实际 Python 文件编译及 diff 检查通过。另先独立跑 capture 模块为4 GREEN0.001秒；不把其记作 C 的7项0.222秒。日志 `/private/tmp/notalone-root-per-call-fidelity-report-unit.log`。
 
 这只是报告适配器的独立验证；C 前四次新组页面仍实际失败，第四诊断证实保存 HTTP／PG 已成功、fixture 错选旧独立候选，已交 C sole 修正实际 candidate ID，后续完整两场／八例报告和 B 连续场景仍须真实执行。主树尚未净新8例观察或用本适配器生成其正式报告。本票继续 claimed，原验收文字及已有真实勾选保留；真人审阅0、语义／自然度／原生未知，没有外部模型或私人聊天。
+
+### 捕获删除消费者的主树真实集成（2026-10-11）
+
+总协调仅净 C 正式4798c0c70ce0f81594ed24fbab52829620515831的五个C源码／测试路径；A155、canonical source selector、ec808机械用例已在主树，未重复覆盖。共享删除夹具保留主树旧键拒绝及中文解释，仅补直接PG对照完整请求快照和候选组的故障回滚证据，来源delete_failed业务guard未放宽。实际owner事务内先按原严格codec捕获身份，以A唯一规则选择真实依赖，再把实际request IDs纳入来源／样本副本清理；独立running输入／CURRENT和ADR-044主动样本保留。没有第二codec、图、摘要、正文缓存、writer、DDL或模型调用。
+
+主树激活Conda NotAlone、禁dotenv／tracing，用原自有随机库runner实际联跑test_reply_captured_input_cleanup、test_reply_discussion_dependencies、test_assistant_captured_input_erasure、test_assistant_dependency_erasure、test_source_reply_deletion、test_observation_reply_deletion六模块：**55 GREEN／8.078秒／skip0／actualexit0**；实际001–055账本逐名一致／repeat0／外层自有库剩余0。每项C物理测试另核实际outbound ledger0。日志/private/tmp/notalone-root-physical-captured-consumer55-pg.log。三个净源silent mypy、五文件py_compile及diff通过。负责人的55tests／6.682秒／迁移54证据独立保留，未冒充主树055运行。
+
+仅证明当前真实捕获来源／样本消费者集成。055携入输入的carry_edges仍由唯一C接续，不能以055迁移已安装或普通捕获55tests称携入删除已通过；A13/15类型化连续修改、B公开组合、新两场／八例报告与真实模型质量继续。State保持claimed，原验收文字与未执行项不勾；没有真实App、微信/OCR、私人资料、外部发送、付费模型、人工验收、push或部署。

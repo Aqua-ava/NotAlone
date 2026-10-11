@@ -8,7 +8,10 @@ from uuid import UUID
 import psycopg
 from notalone.persistence.style_sample_store import invalidate_reply_keys
 
-from notalone.persistence.assistant_session_store import erase_assistant_source_turns
+from notalone.persistence.assistant_session_store import (
+    erase_assistant_source_turns, select_assistant_source_input_dependents,
+)
+from notalone.persistence.reply_discussion_dependencies import captured_owner_reply_discussion_uses
 from notalone.scopes import ContactScope
 
 
@@ -32,6 +35,7 @@ def delete_source_replies(
     单条记忆删除关闭 revoke_running_scope，仅按已捕获的依赖定位请求。
     """
 
+    captured = captured_owner_reply_discussion_uses(connection, owner_id=owner_id)
     rows = connection.execute(
         """
         WITH RECURSIVE affected(id) AS (
@@ -88,9 +92,15 @@ def delete_source_replies(
         ),
     ).fetchall()
     request_ids = [row["id"] if isinstance(row, dict) else row[0] for row in rows]
+    selected = select_assistant_source_input_dependents(
+        connection, owner_id=owner_id, contact_id=None,
+        removed_ids=removed_ids, reply_request_ids=request_ids, captured_uses=captured,
+    )
+    request_ids = sorted(set(request_ids) | set(selected.reply_request_ids), key=str)
     erase_assistant_source_turns(
-        connection, owner_id=owner_id, contact_id=contact_id,
+        connection, owner_id=owner_id, contact_id=None,
         removed_ids=removed_ids, reply_request_ids=request_ids,
+        turn_ids=list(selected.turn_ids), captured_uses=captured,
     )
     if not request_ids:
         return

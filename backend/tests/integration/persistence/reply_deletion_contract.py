@@ -23,7 +23,7 @@ from notalone.reply.interface import (
     RewriteDraft,
 )
 from notalone.reply.runtime import RuntimeCandidate
-from notalone.reply.store import ReplyRequest, ReplyRequestState, ValidatedReply
+from notalone.reply.store import ReplyRequest, ValidatedReply
 from notalone.scopes import ContactScope, VerifiedConversationScope
 from tests.integration.persistence.concurrency import wait_for_blocked_operations
 
@@ -220,6 +220,16 @@ class ReplyDeletionContract(unittest.TestCase):
         trigger_name = "test_reply_deletion_" + uuid4().hex
         # 仅阻止当前合成用户的删除；其余并行测试不受影响。
         with psycopg.connect(TEST_DATABASE_URL) as connection:
+            original_request = connection.execute(
+                "SELECT state,context_snapshot FROM public.reply_request WHERE id=%s",
+                (request.request_id,),
+            ).fetchone()
+            original_candidates = connection.execute(
+                "SELECT id,candidate_text,message_group FROM public.reply_candidate "
+                "WHERE reply_request_id=%s ORDER BY ordinal", (request.request_id,),
+            ).fetchall()
+            self.assertEqual([(row[0], row[1]) for row in original_candidates],
+                             [(candidate.candidate_id, candidate.text) for candidate in saved.candidates])
             connection.execute(f"""
                 CREATE FUNCTION public.{trigger_name}() RETURNS trigger
                 LANGUAGE plpgsql AS $$ BEGIN
@@ -236,9 +246,16 @@ class ReplyDeletionContract(unittest.TestCase):
         try:
             with self.assertRaises(self.deletion_error):
                 self._delete_source()
-            self.assertEqual(
-                self.store.read(request.request_id, self.scope).result, saved
-            )
+            # 来源故障状态可能关闭业务读取；直接核对事务回滚的实际正文与身份。
+            with psycopg.connect(TEST_DATABASE_URL) as connection:
+                self.assertEqual(connection.execute(
+                    "SELECT state,context_snapshot FROM public.reply_request WHERE id=%s",
+                    (request.request_id,),
+                ).fetchone(), original_request)
+                self.assertEqual(connection.execute(
+                    "SELECT id,candidate_text,message_group FROM public.reply_candidate "
+                    "WHERE reply_request_id=%s ORDER BY ordinal", (request.request_id,),
+                ).fetchall(), original_candidates)
         finally:
             with psycopg.connect(TEST_DATABASE_URL) as connection:
                 connection.execute(
