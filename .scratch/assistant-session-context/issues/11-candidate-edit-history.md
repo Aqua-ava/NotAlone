@@ -1,6 +1,6 @@
 # 11：候选编辑、选择与版本回看
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠保存](07-default-session-persistence.md)
 
@@ -8,7 +8,7 @@ Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠�
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧02；Q11、Q12。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧02；Q11、Q12。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。原依赖关系保留；本票自动验收范围已完成，实际证据及未执行的原生范围见 Answer。
 
 ## What to build
 
@@ -16,12 +16,12 @@ Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠�
 
 ## Acceptance criteria
 
-- [ ] 候选选择和编辑通过公开入口保存，重读显示新版并可展开、重新选择旧版；修改前后和对应要求可追溯。
-- [ ] 区分默认展示与用户明确选择：未点击不能记录为用户已选；实际选择不是发送或长期偏好。
-- [ ] 先以明确候选ID操作，保持会话、候选组、版本身份；不把生成时间或数组位置当持久身份。
-- [ ] 派生版本保留来源依赖，删除后旧版本及恢复副本不可得；自然语言编号解析由C06完成。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
+- [x] 候选选择和编辑通过公开入口保存，重读显示新版并可展开、重新选择旧版；修改前后和对应要求可追溯。
+- [x] 区分默认展示与用户明确选择：未点击不能记录为用户已选；实际选择不是发送或长期偏好。
+- [x] 先以明确候选ID操作，保持会话、候选组、版本身份；不把生成时间或数组位置当持久身份。
+- [x] 派生版本保留来源依赖，删除后旧版本及恢复副本不可得；自然语言编号解析由C06完成。
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
 ## 范围边界
 
@@ -329,3 +329,14 @@ Standards 新鲜轴：硬性违例0；已知 P3 possible Duplicated Code 1（版
 新协议下同八套桌面200项 Node 全部 GREEN／1253.041167ms／skip0／actualexit0，whole TypeScript exit0，两个实际候选 source 的限定 silent mypy 无问题，compile及diff通过。C来源合成传输首次未识别 query 的失败单独保留，只有该夹具使用 A 正式 `candidateVersionProtocol` 适配新协议后，新12项来源回归 GREEN／113.377375ms；不删除原断言、不把该 wrapper 的缓存当实际后端。真实长传输由上述11条 HTTP／PG覆盖。
 
 日志为 `/private/tmp/notalone-root-a11-paging-real-http-pg-combination.log`（初次36）、`/private/tmp/notalone-root-a11-original-053-prefix-migrations-green.log`、`/private/tmp/notalone-root-a11-paging-final-http-pg-combination.log`、`/private/tmp/notalone-root-a11-paging-related-node-combination.log`。本片关闭长版本 transport P2，完整组编辑公开 UI仍随B正式交付/主树Page继续，本票仍claimed；人工真实App未执行，不借协议通过提前勾整票。
+
+
+### 总协调原自动验收收口（2026-10-11）
+
+主树继正式 `b84fcf5` 有界版本传输及 `12e80fe` 编辑／选择／逐消息复制接线，按原规格执行 `npm run test:pages -- --case reply-strategy-group-boundaries --timeout-seconds 240`。Conda `NotAlone`，禁 dotenv／tracing，session10071 **actualexit0／五完整场景 GREEN**，真实公开页面→具名Main→认证HTTP→隔离PG；915个实际运行源码、测试、夹具、迁移及配置全窗 SHA 不变。两种场景各八条完整消息、三次真实整组保存、四版完整重读及父版／消息 UUID，旧权威聚合超过1MiB，正式有界传输保持正文完整；新窗口实际明确选择原版第8条复制、同PG真实后端重启及宿主重建后显示最新完整组，再选择并复制第1条。两种场景 actual historyTool 来源删除均清除已保存／恢复的组与未保存正文和要求，旧版本／消息复制失败，重建仍为无正文占位。另一 owner 使用独立认证HTTP访问甲的实际合法 CID/SID/candidate 路径404，同owner错误CID404；错version/request/组消息、旧scope/SID均拒，当前新范围正向通过。
+
+公开层正常保存503保稿、选择已commit但GET503不假确认、旧版／新版明确选择、逐条复制、samePG重建恢复以及新消息到达保稿，已由主树 `12e80fe` 的四正常加两编辑通知共六完整场景实际GREEN；plain改写／恢复副本与来源擦除已有原公开页面和具名RPC证据。原默认展示不替代选择、candidate/version稳定身份及无隐式发送／长期偏好保持。长版本独立11 HTTP、原server/store/prefix共36真实HTTP/PG GREEN27.516秒、200 Node、TypeScript与范围删除断言是原正式证据，没有用合成transport冒真实后台。
+
+本次 quiet68／active0／onscreen0／maxApps1／policies[2]／单Chrome／cleanupConfirmed=true，Electron/native=false；actualexit后独立freshstatus session29655 **exit0／absent**。915文件全窗未变，原5秒、来源15秒、HTTP23／25秒、ps1秒、quiet、单240和最多两label门槛均保留。日志 `/private/tmp/notalone-root-group-boundaries-five-page.log` 和前后独立status保留。原所有早期失败／迁移夹具修正／未知瞬时风险继续保留，不能据后来GREEN改写旧运行事实。
+
+六条原自动标准据上述公开、持久化、身份与来源证据勾选，State resolved；编号指代仍是A13独立范围，不成为本票新增门槛。只用合成模型、消息及必要宿主适配器，系统剪贴板实际接收、真实App／原生能力、真人语义质量与人工验收按本轮范围未执行且未标通过，不影响已满足的原自动范围。没有付费／外部模型、私人聊天、OCR、微信、发送接口、push、发布或部署。

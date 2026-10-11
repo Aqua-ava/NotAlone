@@ -365,6 +365,14 @@ def main() -> None:
                                        for message in messages],
                           "outbound_calls": [[str(message.content) for message in messages]
                                              for messages in fixture.reply_model.seen_calls]}
+            elif operation == "read_group_as_other_owner":
+                # 同一实际组路径，仅更换为夹具已有的另一owner认证，不拼接错误联系人。
+                session_id, candidate_id = UUID(command["session_id"]), UUID(command["candidate_id"])
+                status, data = fixture.other_backend.request(
+                    f"/api/contacts/{contact_ids[0]}/assistant-sessions/{session_id}"
+                    f"/candidates/{candidate_id}/versions?page=0", timeout=5,
+                )
+                result = {"status": status, "data": data}
             elif operation == "revoke":
                 binding = next(item for item in fixture.bindings.list_active_bindings(owner_id=fixture.owner_id)
                                if str(item.scope.contact_id) == command["contact_id"])

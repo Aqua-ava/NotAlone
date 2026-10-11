@@ -1,6 +1,6 @@
 # 08：候选消息组逐条编辑与复制
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/04 明确目的的主动联系入口](04-proactive-purpose-entry.md)；[assistant-session-context/11 候选编辑、选择与版本回看](../../assistant-session-context/issues/11-candidate-edit-history.md)
 
@@ -8,7 +8,7 @@ Blocked by: [conversation-reply-strategy/04 明确目的的主动联系入口](0
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧04；Q24及C05版本契约。 第二版标识为R07。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-043](../../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧04；Q24及C05版本契约。 第二版标识为R07。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-043](../../../architecture/adr/043-conversation-scenarios-and-direction-exploration.md)。原依赖关系保留；本票自动验收范围已完成，实际证据及未执行的原生范围见最终收口。
 
 ## What to build
 
@@ -16,12 +16,12 @@ Blocked by: [conversation-reply-strategy/04 明确目的的主动联系入口](0
 
 ## Acceptance criteria
 
-- [ ] 回应和主动候选都区分备选方案与组内有序消息，每条可编辑和复制，并保存所属方案、版本及修改关系。
-- [ ] 不把组内消息当互斥候选；逐条事实与整组承诺受本次意图和来源约束，复制不记作发送。
-- [ ] 复用C05稳定候选/版本身份和明确选择，来源删除覆盖派生组与恢复副本，不另造会话存储。
-- [ ] 新消息不覆盖组内编辑；系统剪贴板原生能力沿用现有验证边界，不据页面测试声称原生通过。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
+- [x] 回应和主动候选都区分备选方案与组内有序消息，每条可编辑和复制，并保存所属方案、版本及修改关系。
+- [x] 不把组内消息当互斥候选；逐条事实与整组承诺受本次意图和来源约束，复制不记作发送。
+- [x] 复用C05稳定候选/版本身份和明确选择，来源删除覆盖派生组与恢复副本，不另造会话存储。
+- [x] 新消息不覆盖组内编辑；系统剪贴板原生能力沿用现有验证边界，不据页面测试声称原生通过。
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
 ## 范围边界
 
@@ -92,3 +92,44 @@ Blocked by: [conversation-reply-strategy/04 明确目的的主动联系入口](0
 原资源结果quiet48／active0／onscreen0／maxApps1／policies[2]／单Chrome／cleanupConfirmed=true；ElectronRun=false、nativeAcceptance=false。actualexit后独立freshstatus实际exit0 absent，全部root runtime/source/fixture/OS资源真实RELEASE。原5s、23s/25s、ps1s、quiet和资源门槛全部保持，没有系统剪贴板、外部发送、真实App／微信／OCR或付费模型；复制surface与模型／消息到达是可控合成适配器，HTTP/PG及重启真实。
 
 新鲜生产和fixture Standards硬要求0／重要possible0、Spec新增P0–P3为0；静态确认交叉通知路径及cleanup守卫闭合，再以上述真实六场收口。此前四场B owner结果和root首次两RED均保留，原当前票长历史完整组/来源删除后的恢复组/跨范围公开组合由B继续自动验证，不因六场正常路径提前关闭；R08仍claimed，人工／系统剪贴板／原生／自然模型质量未执行。
+
+
+### 2026-10-11 B正式五边界测试净接（主树页面仍待独立执行）
+
+
+
+2026-10-11 下一限定公开边界验证已准备，尚未运行：新增 `reply-strategy-group-boundaries`，只在既有共享安全catalog／headless dispatch登记，原单实例／240秒、5秒断言及HTTP／清理预算不变。回应与主动各一条完整八消息组，公开逐条编辑三次、保存真实版本、逐条验证父版与稳定消息UUID／要求；旧未分页权威历史整体已超过1MiB时，原生产公开控件仍须完整回看原版、明确选择复制与同PG真实重启重建后完整读取最新版。另两条在实际history Tool来源支持的组修改保存／恢复后，公开删除实际原始来源，要求清理恢复的未保存消息与修改要求，拒绝原identity复制，并再次重建仍只显示来源已删除。最后一条用真实公开组选择与copy端口拒错version／错groupmessage／错request，切换确认联系人前后拒旧会话组身份，并用同实际HTTP后端核异CID／异owner的权威版本读无正文；正向复制和新联系人新组仍要实际通过。
+
+新增内容只有合成测试：`ModelPlan` 类型暴露 Python夹具已有的 `cite_history` 开关，复用原history Tool与真实HTTP／PG来源，未创建生成器或实际正文删除捷径。完整desktop `tsc --noEmit` actualexit0；新五场 Page 尚未运行，不预称GREEN，先限定两轴审查及具名独占排期后才真正执行。此前38 HTTPPG／209 Node及第五旧wire四场属于各自既有范围，不能拿来关闭这些新公开断言。R08仍claimed、原验收项与人工／原生剩余保留，不以完整A13／18或人工为这些既有门禁的新前置。
+
+
+新五场首次规格审查发现一项测试P2：把甲的合法SID／candidate与其他owner的CID拼接，只能证明联系人不匹配，不能独立证明跨用户隔离。已在原Python合成夹具增加一个固定只读操作：用已存在的另一owner真实认证HTTP backend，访问甲原始合法完整candidate路径（联系人固定本轮甲，SID／candidate严格UUID），返回404且无版本正文；没有新App、任意URL、模型或修改数据库。异CID仍用同owner真实HTTP路径另验，切换确认联系人／错版本与消息身份仍走生产公开控件及Main RPC。原预算保持、全desktop tsc及该Python夹具compile再次actual0。新六文件限定复审／Page仍待执行，初次P2记录不拿作产品RED，也不预称修后公共绿色。
+
+
+2026-10-11 新五条公开边界实际完成：在总协调明确具名 ACK、本人独立 freshstatus12e570 actualexit0／absent 后，沿原锁定 Node／Conda NotAlone 入口运行 `node scripts/test-pages.mjs --case reply-strategy-group-boundaries --timeout-seconds 240`。HEAD 为 `03c681ea21c38e1a840a3a830177fd71e6291353`，包括正式有界版本、类型化身份核心和 ROOT metadata／原保存通知消费者；855 个 runtime／source／测试／fixtures／配置在整个运行与清理窗口逐字 hash 不变，期间没有切入尚未消费的 A155392 或 C 新主动样本协议。
+
+本 B session52180 actualexit0，五个完整业务场景全部 GREEN。回应和主动各真实八条消息组经公开逐条编辑三次、完整保存真实版本，核原父版／稳定消息 UUID／全部文本／要求／默认未明确选择；旧未分页权威 history 聚合已超过1MiB后，生产公开版本控件仍完整读四版、明确选原版并完整 copy 第8条全文。真正停止并重启同一隔离 PG 的 backend、重建 host／页面后，最新版八条完整恢复；再次明确选择最新版后完整复制第1条，各长历史场景模型计数仍1，不以整体截断或扩 cap 通过。
+
+回应和主动各另一场经实际 history Tool 引用支持两条组、保存新版并真实恢复；输入尚未保存的消息与 requirements 后，从管理公开原始来源删除路径操作。旧恢复组和两个编辑稿控件清空、旧完整身份不能复制、实际 versions HTTP 不返回历史正文；再次同 PG 重启重建仍仅来源删除占位，旧 identity 拒绝且没有追加模型，两场各保持原两次模型调用。没有用直接 DB 清空或伪造终态代替公开删除。
+
+第五场在生产公开明确选择后拒绝错 version／request／group message 与另一 candidate 的合法旧 version，正向复制该组第1条原文仍成功；真实同 owner 异 CID HTTP 404 无版本，另一 owner 用其实际认证 backend 访问甲原合法完整 CID／SID／candidate 同样404无版本。UI 切换并确认另一联系人后清组、拒旧会话 identity；新的主动组正常生成，旧身份即使伪造当前 CID 也不能复制，默认新版未明确选择仍禁用，模型总2。初审的跨 owner 测试缺口已由这条真正独立认证路径补足，不称它为产品 RED。
+
+原 single240／5秒断言／来源删除既有15秒／23秒25秒 HTTP／ps1秒／采样／quiet／cap 均不变。原末资源报告 quiet67、active0、onscreen0、maxApps1、policies[2]、singleChrome、cleanupConfirmed=true、electronRun=false、nativeAcceptance=false；RSS峰值KiB browser1143920／node392592／backend177136仅是原自有子树采样和，共享页可能重复，不解释为物理占用或门槛。actualexit 后本人独立 freshstatusff411d actualexit0／absent，再明确向协调释放全部本 B runtime／source／UI／fixture 和 OS 窗口。私有原日志保留，末报告读取最初误找 JSON 前缀的工具断言不冒作 Page 失败，真正 page_test_resources 已完整解析。
+
+这五条是本 B 真实公开页面→认证 HTTP→隔离 PG 的完整新边界结果，不借 ROOT六场、C测试、旧wire四场、38HTTPPG或211Node。初六文件固定 v2 Spec新增P0–P3=0／StandardsHard0重要possible0及完整类型／Python夹具编译实际通过，最终记录按限定两轴再收口；原四轮 Page 失败与局部结果继续保留。R08仍claimed、原验收项与人工／原生／真实系统剪贴板接收／模型质量剩余不改写，不以这些五条关闭完整连续修改或 R09／R10／R11。没有真实 App、OCR、微信、私人资料、额外外部模型、外部聊天自动发送、push、发布或部署。
+
+
+最终新增记录初审发现一项文档P3：五条新边界的复制断言只覆盖长历史原版第8条、重建最新版第1条及隔离场景正向第1条，不能写成八条全部逐一复制。现准确更正上述记录；八条所有字段／版本文本仍真实完整编辑、保存及恢复，原第五旧wire四场的两消息逐条复制另有原证据，不混用。本次只更正报告，无产品／测试源码、预算或实际结果变更。
+
+总协调仅从正式 `c9fd4bdbb7bee879bf0633315e3f18e2772700b1` 净接三份case／合成夹具，并在主树原test-pages/run清单及dispatch登记同一label；主树没有B page-test-cases文件，不引入额外公共目录重构。保留所有C页面与原有限预算。完整desktop TypeScript及diff检查通过。以上52180五场、quiet67等仍只属于B负责人，主树自己的五场尚未执行；下一次独立页面执行将基于当前正式A16 jobs及捕获删除核心组合，不能借B结果提前关闭A11／R08。
+
+
+## Answer
+
+前段“主树自己的五场尚未执行”是净接准备阶段。本次主树真实执行 `npm run test:pages -- --case reply-strategy-group-boundaries --timeout-seconds 240`，session10071 **actualexit0／五完整场景 GREEN**；915份runtime／test／fixture／migration／config字节全窗保持，未中途切A/C接口。各条经真实公开页面、Main、认证HTTP、隔离PG验证，重新装配使用同一实际数据库。回应与主动各八条完整消息的三次整组编辑／保存、四版完整读回／父版／稳定message UUID及大于1MiB聚合均保持；实际复制只断言原版第8条、重建最新版第1条及范围正向第1条，不称本五场逐一复制全部八条。来源删除的两scene实际historyTool与公开manager DELETE清除恢复组／未保存正文和要求，旧identity复制拒，重建仍placeholder；错版本、请求、组消息及真实owner／CID／scope／SID越权拒绝，当前范围正向保持。
+
+主树原 `12e80fe` 的四正常与两编辑通知共六完整Page GREEN已覆盖各有序消息逐条复制、保存503保draft／重读、选择commit后GET503仍不确认、再次明确选择原／新版、samePG重启恢复，以及回应和主动真实SSE／重连到达不覆盖组编辑和CURRENT。五字段begin编辑metadata只通知soleMain，旧探索不盖当前稿；版本writer与选择复用A11，不记录发送或长期偏好。A11本轮按其原范围收口resolved，没有用数组位置、模型结果正文或虚构completed turn替代真实身份。
+
+实际 quiet68／active0／onscreen0／maxApps1／policies[2]／singleChrome／cleanupConfirmed=true；Electron/native=false。进程完成后独立freshstatus29655 **actualexit0／absent**，根source及OS窗口已释放。完整TypeScript、合成夹具py_compile、diff及新源码六路径两轴新增问题0均通过；本次运行及原各轮失败日志保留于 `/private/tmp/notalone-root-group-boundaries-five-page.log` 和原票已列路径。原预算／资源门槛未放宽，不把B52180或C页面计数当主树结果。
+
+六条原自动标准均已证据覆盖，State resolved。第4条原生剪贴板边界声明继续有效：只验证具名Main和受控复制适配器，系统剪贴板实际接收／真实App／原生、人工及真实语义质量未执行且未标通过；原票不把它们设为新增自动关闭门槛。C06连续样本、B09生命周期及B10连续修改仍由各票继续，不能用本票关闭代替。无私人资料、OCR、真实微信、付费模型、自动发送、push、发布或部署。
