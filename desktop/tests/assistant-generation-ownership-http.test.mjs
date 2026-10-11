@@ -339,6 +339,49 @@ async function preparedStrategyCandidate(f, action, mode) {
   return { scope, exploration, executing, before };
 }
 
+test('B09晚准备回执必须在原唯一作业退出等待中绑定并实际中断，不能提前排空', async () => {
+  await withPublicFixture(async (f) => {
+    const scope = await f.selectContact(f.contactA);
+    await f.bridge.setMode({ ...scope, mode: 'initiate_conversation' });
+    await f.bridge.updatePurpose({ ...scope, purpose: '合成目的：只确认本次立场。' });
+    await f.fixture.plan({ explore: { question: null } });
+    await f.bridge.explore(scope);
+    const explored = (await f.bridge.getState()).exploration.result;
+    assert(explored);
+    const gate = f.gateResponse((request) => request.path.endsWith('/prepare-confirm'));
+    const confirming = f.bridge.selectDirection({ ...scope, suggestionId: explored.directions[0].suggestionId,
+      inputVersion: explored.inputVersion });
+    const prepared = await gate.arrived.promise;
+    assert.equal(prepared.kind, 'prepared');
+    assert.equal((await f.fixture.command('counts')).actual_calls, 1);
+    const receipts = [];
+    let closed = false;
+    const closing = Promise.resolve(f.replies.beginGenerationClosing(async (receipt) => {
+      receipts.push(receipt);
+      const response = await f.backend.requestJson({ method: 'POST',
+        path: `/api/contacts/${scope.contactId}/assistant-sessions/${receipt.sessionId}/interrupt`,
+        body: { request_key: receipt.requestKey, input_version_id: receipt.inputVersionId } });
+      assert.equal(response.data.state, 'failed');
+      assert.equal(response.data.interruption_reason, 'app_quit');
+    })).then(() => { closed = true; });
+    try {
+      await Promise.resolve(); await Promise.resolve();
+      assert.equal(closed, false, '实际prepare在服务端领取但回执未到Main，退出不能提前完成。');
+      gate.release.resolve();
+      await confirming; await closing;
+      assert.equal(receipts.length, 1);
+      assert.equal(receipts[0].requestKey, prepared.generation.request_key);
+      const saved = await f.rawSession(scope.contactId, explored.sessionId);
+      assert.equal(saved.current_input_version_id, prepared.generation.input_version_id);
+      assert.equal(saved.turns[0].state, 'failed');
+      assert.equal(saved.turns[0].interruption_reason, 'app_quit');
+      assert.equal(saved.turns[0].reply, null);
+      assert.equal((await f.fixture.command('counts')).actual_calls, 1);
+      assert.equal((await f.bridge.getState()).result, null);
+    } finally { gate.release.resolve(); await confirming; await closing; }
+  });
+});
+
 for (const mode of ['reply_to_message', 'initiate_conversation']) {
   for (const action of ['confirm', 'answer']) {
     for (const departure of ['close', 'switch']) {

@@ -16,13 +16,12 @@ Blocked by: [conversation-reply-strategy/02 理解、纠正与方向确认闭环
 
 ## Acceptance criteria
 
-- [ ] 只有用户已打开且方向未确认的活跃任务在授权新消息到达时更新理解/建议；不形成全局后台调用。
-- [ ] 连续通知合并、有快照和调用次数/超时/重试预算；失败或超预算要求手动刷新，不扩大范围补扫历史。
-- [ ] 方向确认、候选生成或编辑后仅提醒；旧探索结果不能覆盖已确认方向。
+- [x] 只有用户已打开且方向未确认的活跃任务在授权新消息到达时更新理解/建议；不形成全局后台调用。
+- [x] 连续通知合并、有快照和调用次数/超时/重试预算；失败或超预算要求手动刷新，不扩大范围补扫历史。
+- [x] 方向确认、候选生成或编辑后仅提醒；旧探索结果不能覆盖已确认方向。
 - [ ] 切换离开或关闭停止探索更新，已发起候选仍按C09继续；退出按C10停止，不另建生命周期模型。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
-
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 ## 范围边界
 
 合并通知、有预算；选定方向后只提醒；旧探索结果不能覆盖已确认方向。明确依赖C09/C10区分视图关闭与退出。
@@ -124,3 +123,21 @@ Root whole桌面TSC、fixture编译、两个entry的esbuild write=false及diff�
 ### 总协调主树集成复验
 
 Root 按正式 `59c4bd62` 的四路径净变更集成，主树重新执行 `node --test --test-name-pattern='B09' tests/assistant-generation-ownership-http.test.mjs`：**8 GREEN／29277.934167ms／skip0**；八份实际001–055迁移账本、repeat0、instance/class清理与自有数据库残留0均有实际输出。完整桌面类型检查与diff检查通过。此项是 Root 新运行的 Main/preload→HTTP→隔离PG证据；独立 B 的具名公开Page八场实际结果另记，不混用次数。原退出未知准备、原生及人工验收范围继续保留。
+
+## Answer（本轮八组公开页面实际完成）
+
+上述“尚未运行Page”为提交准备时的真实状态。随后在总协调具名单次窗口台北21:17–21:22内，冻结本树干净 `59c4bd62`，实际执行 `PGPORT=55441 node scripts/test-pages.mjs --case reply-strategy-confirmed-lifecycle --timeout-seconds 240`：Conda NotAlone、正式001–055、仅合成资料与受控模型、单无头Chrome，session41361实际exit0。回应／主动×明确确认／已确认澄清回答×关闭／新会话 **八个完整场景全部通过**，原5秒界面断言、HTTP23／25秒、gate60秒及150ms合并未修改。每场实际检查原SID与CURRENT、准备／执行同正文、晚完成不覆盖离开视图、原完整消息组恢复、确认后真实SSE仅提示且零追加候选模型。
+
+实际日志 `/private/tmp/notalone-b09-confirmed-eight-page.log`；资源quiet57／active0／onscreen0／maxRegisteredApps1／policy2、browserCount1、cleanupConfirmed=true、electronRun=false、nativeAcceptance=false。自有子树RSS采样峰值为Chrome1056400KiB、Node232992KiB、后端196736KiB，共享页可重复计算，不宣称永久物理内存上限。进入与actualexit后940个运行源的SHA256差异均为空、HEAD一致；独立 `node scripts/test-pages.mjs --status`实际exit0／absent，八份随机`_test`数据库所有权记录逐名查询残留0。UTC13:20:12已完整释放；根另独立复核实际八场日志与freshstatus确认释放，没有默认第二Page。
+
+原六条验收按证据逐项评估：第1–3条的未确认活跃探索、合并预算、确认／编辑后只提示由前文主树原十三场与既有编辑场支撑；本轮八场追加正式确认候选的公开证据。第4条的关闭／离开部分现已实际通过，退出等待晚prepare及真实受控quit仍在唯一A17合同接续，故此条与整票不能关闭。第5条继续沿owner/contact来源／删除原回归与本B29项HTTP检查；第6条命令、数据、失败历史与剩余工作已实记。六条原文字及未勾状态保留，`State: claimed`不变；本次结果不替代退出、原生App、人工或真实模型语义质量，后续B10／B11仍继续自主组合。
+
+### soleJobs准备阶段的正式接续
+
+消费 A 正式 `e94dfa2e` 的唯一准备阶段API后，本B新增原Main公开确认→真实prepare领取但回执在途的实际反例 **1 RED／2796.693208ms**：数据库已领取，原调用方却提前完成退出等待。最窄改为prepare发出前 `beginPreparation`，实际receipt到达后 `receivePrepared`，正式明确非候选结果才positive收口；原 `beginGenerationClosing` 返回真实Promise并等待异步HTTP中断。原同反例 **1 GREEN／3078.435042ms**，用实际 `/interrupt` 验证failed/app_quit及0候选模型，没有模拟原生Host。
+
+消费后的原八关闭／切换与新晚prepare原文件共 **9 GREEN／29179.360708ms／skip0／actualexit0**；九份55/repeat0、instance/class及自有库清理残留0，实际合成模型共21。日志 `/private/tmp/notalone-b09-registry-nine-final.log`，命令 Conda NotAlone／`PGPORT=55441 node --test --test-name-pattern='B09' tests/assistant-generation-ownership-http.test.mjs`。正式六项registry Node在本B另实跑6G97.954583ms，类型检查通过。
+
+原第1、2、3、5、6条自动条件按上述实际／明确引用证据勾选，原文字不改；第4条只完成离开／关闭及薄consumer晚prepare等待，整体受控Host退出／重开仍须唯一 A17正式集成验证，继续未勾、整票claimed。旧Page八场属于59c4冻结源，此新阶段九HTTP不冒充fresh Page或原生验收。
+
+Root 主树按正式 `54d4b07e` 复验新晚prepare：初次测试名过滤未命中业务场景，只有模块包装层完成，未计为HTTP通过；核对实际名称后 `node --test --test-name-pattern='B09晚准备' tests/assistant-generation-ownership-http.test.mjs` 真正 **1 GREEN／4867.447167ms**，实际55／repeat0、模型1（探索）、候选模型0、真实中断failed/app_quit、自有库残留0。完整类型与diff通过；此项不是宿主或原生退出。后续执行失败phase和增强原target作业接口继续独立集成，原第4项未勾和claimed保留。

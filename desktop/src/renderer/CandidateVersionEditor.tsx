@@ -4,7 +4,7 @@ import type { ReplySessionView } from './RewritePanel';
 import { CandidateMessageGroup } from './CandidateMessageGroup';
 
 // 编辑稿只在当前组件内保留；保存和采用版本分别调用既有公开接口。
-export function CandidateVersionEditor({ replies, view, candidateId, replyRequestId, number, restored, noteCopy }: {
+export function CandidateVersionEditor({ replies, view, candidateId, replyRequestId, number, restored, noteCopy, onDirtyChange }: {
   replies: ReplySessionView;
   view: AssistantCandidateVersionView | undefined;
   candidateId: string;
@@ -12,6 +12,7 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   number: number;
   restored: boolean;
   noteCopy: (text: string) => void;
+  onDirtyChange?: (candidateId: string, dirty: boolean) => void;
 }) {
   const { state } = replies;
   const history = view?.history;
@@ -33,6 +34,8 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   }, [version]);
   const dirty = messages.some((message, index) => message.text !== version?.messages[index].text)
     || requirements !== (version?.requirements ?? '');
+  useEffect(() => { onDirtyChange?.(candidateId, Boolean(draft && dirty)); }, [candidateId, draft?.versionId, dirty, onDirtyChange]);
+  useEffect(() => () => { onDirtyChange?.(candidateId, false); }, [candidateId, onDirtyChange]);
   const selected = state.explicitCandidateSelection;
   const chosen = selected?.phase === 'ready' && selected.selection?.sessionId === history?.sessionId
     && selected.selection?.candidateId === candidateId && selected.selection?.versionId === version?.versionId;

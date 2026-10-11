@@ -14,7 +14,10 @@ import { listAssistantSessions, newAssistantSession, selectAssistantSession } fr
 import type { AssistantSessionSelection } from '../../shared/reply-bridge';
 import type { ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from '../../shared/assistant-candidate-versions';
 import { AssistantCandidateSourceUnavailable, AssistantCandidateVersionSession } from './assistant-candidate-versions';
-import { AssistantGenerationJobs, type OwnedAssistantGeneration, type PendingAssistantGenerationReceipt } from './assistant-generation-jobs';
+import { AssistantGenerationJobs, type OwnedAssistantGeneration, type OwnedAssistantPreparation, type PendingAssistantGenerationReceipt } from './assistant-generation-jobs';
+import type { ReplyContinuation, ReplyContinuationConfirmation } from '../../shared/reply-bridge';
+import { continueAssistantSession, requirementChangeFromClarification, type AssistantContinuationCommand } from './assistant-continuation';
+import { captureReplyContinuation, continuationInputSnapshot } from './continuation-view';
 
 const defaults = () => ({ tone: 'original' as const, instruction: '', includeRelationshipContext: false });
 const tones = { original: '', warm: '本次语气自然温和。', concise: '本次表达简洁直接。', polite: '本次语气礼貌克制。' };
@@ -74,6 +77,7 @@ export class ReplySession {
   private readonly generationJobs = new AssistantGenerationJobs();
   private helperHidden = false;
   private lastAttempt: { input: ReplyInputSnapshot; requestKey: string } | undefined;
+  private continuationAttempt: { scope: ContactSelection; generation: number; command: AssistantContinuationCommand } | undefined;
   private messageOperation = 0;
   private messagePending: AbortController | undefined;
   private noticeStream: AbortController | undefined;
@@ -118,7 +122,7 @@ export class ReplySession {
       || notice.connectionGeneration !== this.backend.getConnectionGeneration())) state.inputBudgetNotice = undefined;
     if (!this.candidateSourceCheck) return state;
     // 完整来源复验期间只隔离现有视图，不另存可恢复正文。
-    return { ...state, inputBudgetNotice: undefined, result: null, selectedCandidateId: null, canRetry: false,
+    return { ...state, inputBudgetNotice: undefined, continuation: undefined, result: null, selectedCandidateId: null, canRetry: false,
       messages: { phase: 'loading', items: [], nextCursor: null }, targetMessageId: null,
       ...(this.directionDerived ? { direction: '', purpose: '' } : {}),
       exploration: { phase: 'idle', result: null },
@@ -155,8 +159,139 @@ export class ReplySession {
   }
   pendingGenerationReceipts(): PendingAssistantGenerationReceipt[] { return this.generationJobs.pendingReceipts(); }
   // 退出调用方接收实际标识后走17的中断协议；hide/close不调用本接口。
-  beginGenerationClosing(onReceipt: (receipt: PendingAssistantGenerationReceipt) => void): void {
-    this.generationJobs.beginClosing(onReceipt); this.leaveGenerationView();
+  beginGenerationClosing(onReceipt: (receipt: PendingAssistantGenerationReceipt) => void | Promise<void>): Promise<void> {
+    const closing = this.generationJobs.beginClosing(onReceipt); this.leaveGenerationView(); return closing;
+  }
+
+  async continueSession(update: ReplyContinuation): Promise<void> {
+    const contacts = this.assertScope(update);
+    this.assertSessionSelection();
+    if (this.state.generationBlock || this.state.phase === 'waiting' || this.state.exploration.phase === 'waiting') {
+      throw new Error('请等待当前操作完成后再继续本次讨论。');
+    }
+    const generation = this.backend.getConnectionGeneration()!;
+    const frame = captureReplyContinuation(this.getState(), update.sessionId);
+    const command: AssistantContinuationCommand = Object.freeze({ ...frame, requestKey: randomUUID(),
+      instruction: update.instruction.trim(),
+      ...(update.intentionUpdate === undefined ? {} : { intentionUpdate: update.intentionUpdate.trim() }),
+      ...(update.requirementChanges === undefined ? {} : { requirementChanges: structuredClone(update.requirementChanges) }) });
+    await this.runContinuation(update, command,
+      contacts.contacts.find((contact) => contact.contactId === update.contactId)!.displayName, generation);
+  }
+  async confirmContinuation(update: ReplyContinuationConfirmation): Promise<void> {
+    const contacts = this.assertScope(update); this.assertSessionSelection();
+    const attempt = this.continuationAttempt, continuation = this.state.continuation;
+    const generation = this.backend.getConnectionGeneration()!;
+    if (!attempt || continuation?.phase !== 'clarification' || !continuation.clarification
+      || attempt.generation !== generation || update.contactId !== attempt.scope.contactId
+      || update.scopeRevision !== attempt.scope.scopeRevision || update.sessionId !== continuation.sessionId
+      || update.expectedInputVersionId !== attempt.command.expectedInputVersionId
+      || this.state.savedSession?.currentInputVersionId !== update.expectedInputVersionId
+      || this.state.generationBlock || this.state.phase === 'waiting') {
+      throw new Error('本次澄清已经失效，请重新提交要求。');
+    }
+    const frame = captureReplyContinuation(this.getState(), update.sessionId);
+    if (JSON.stringify(frame.displayedGroup) !== JSON.stringify(attempt.command.displayedGroup)) {
+      throw new Error('候选展示已变化，请重新提交要求。');
+    }
+    const options = continuation.clarification.requirement_options;
+    if (!options.length || options.length !== update.requirementChanges.length) throw new Error('请逐项明确本次要求的处理方式。');
+    const seen = new Set<string>();
+    const changes = update.requirementChanges.map((change) => {
+      const option = options.find((item) => change.action === 'add'
+        ? item.origin === 'new' && item.requirement === change.replacement
+        : item.origin === 'existing' && item.requirement === change.previous);
+      if (!option || seen.has(option.requirement)) throw new Error('本次要求已变化，请重新确认。');
+      seen.add(option.requirement);
+      return requirementChangeFromClarification(option, change.action, change.action === 'replace' ? change.replacement : undefined);
+    });
+    await this.runContinuation(update, Object.freeze({ ...attempt.command, requirementChanges: changes }),
+      contacts.contacts.find((contact) => contact.contactId === update.contactId)!.displayName, generation);
+  }
+  async retryContinuation(update: AssistantSessionSelection): Promise<void> {
+    const contacts = this.assertScope(update); this.assertSessionSelection();
+    const attempt = this.continuationAttempt;
+    if (!attempt || this.state.continuation?.phase !== 'failed' || !this.state.continuation.canRetry
+      || attempt.generation !== this.backend.getConnectionGeneration() || update.contactId !== attempt.scope.contactId
+      || update.scopeRevision !== attempt.scope.scopeRevision || update.sessionId !== attempt.command.displayedGroup.sessionId
+      || this.state.generationBlock || this.state.phase === 'waiting') throw new Error('本次连续修改已失效，请重新提交要求。');
+    await this.runContinuation(update, attempt.command,
+      contacts.contacts.find((contact) => contact.contactId === update.contactId)!.displayName, attempt.generation);
+  }
+  private async runContinuation(update: AssistantSessionSelection, command: AssistantContinuationCommand,
+    contactDisplayName: string, generation: number): Promise<void> {
+    this.invalidateExploration(); this.notifyInputChanged(); this.cancelPending(); this.lastAttempt = undefined;
+    this.continuationAttempt = { scope: { contactId: update.contactId, scopeRevision: update.scopeRevision }, generation, command };
+    const pending = new AbortController(); this.pending = pending;
+    const operation = this.operation;
+    let job: OwnedAssistantGeneration | undefined;
+    let receivedPreparation = false;
+    const current = () => !pending.signal.aborted && operation === this.operation
+      && generation === this.backend.getConnectionGeneration() && update.contactId === this.state.contactId
+      && update.scopeRevision === this.state.scopeRevision && update.sessionId === this.state.savedSession?.sessionId
+      && !this.state.sessionCatalog?.selectionPending && !this.candidateSourceCheck
+      && (!job || this.generationJobs.canPublish(job, { connectionGeneration: generation,
+        contactId: update.contactId, sessionId: update.sessionId }));
+    const identity = { sessionId: update.sessionId, expectedInputVersionId: command.expectedInputVersionId };
+    this.publish({ phase: 'waiting', canRetry: false, errorCode: undefined,
+      continuation: { ...identity, phase: 'waiting', canRetry: false } });
+    try {
+      job = this.generationJobs.begin({ connectionGeneration: generation, contactId: update.contactId,
+        sessionId: update.sessionId, requestKey: command.requestKey }, pending);
+      const ownedJob = job;
+      const result = await continueAssistantSession(this.backend, update.contactId, update.sessionId, command, pending.signal,
+        (receipt) => { this.generationJobs.receiveReceipt(ownedJob, receipt); receivedPreparation = true; },
+        () => this.generationJobs.requestStarted(ownedJob));
+      if (!current() || result.generation !== generation) return;
+      if (result.phase === 'clarification') {
+        if (receivedPreparation) throw new Error('本次澄清与实际领取状态不一致，请重新读取讨论。');
+        this.generationJobs.completePreparationWithoutGeneration(ownedJob); job = undefined;
+        this.publish({ phase: this.state.result ? 'ready' : 'idle',
+          continuation: { ...identity, phase: 'clarification', canRetry: false,
+            clarification: result.clarification, message: result.message } });
+        return;
+      }
+      const beforeRead = this.state.savedSession;
+      const saved = await readAssistantSession(this.backend, update.contactId, update.sessionId, pending.signal);
+      if (!current() || saved.generation !== generation) return;
+      const observed = this.state.savedSession;
+      const valid = saved.currentInputVersionId === result.inputVersionId
+        && saved.turns.some((turn) => turn.inputVersionId === result.inputVersionId && turn.requestKey === command.requestKey
+          && turn.state === 'completed' && turn.reply?.replyRequestId === result.replyRequestId)
+        && saved.inputs.some((input) => input.inputVersionId === result.inputVersionId && input.state === 'active');
+      if (!valid || observed !== beforeRead && observed?.currentInputVersionId !== result.inputVersionId) {
+        this.continuationAttempt = undefined;
+        this.publish({ phase: this.state.result ? 'ready' : 'idle', continuation: undefined });
+        await this.readSavedSession(update); return;
+      }
+      const input = continuationInputSnapshot(result.effectiveInput, this.state, contactDisplayName);
+      this.savedRead?.abort(); this.savedRead = undefined;
+      this.continuationAttempt = undefined;
+      this.publish({ phase: 'ready', savedSession: { phase: 'ready', sessionId: saved.sessionId,
+        turns: saved.turns, inputs: saved.inputs, currentInputVersionId: saved.currentInputVersionId },
+        requirements: result.effectiveRequirements.join('；'),
+        ...(command.intentionUpdate ? this.state.mode === 'reply_to_message' ? { direction: command.intentionUpdate }
+          : this.state.mode === 'initiate_conversation' ? { purpose: command.intentionUpdate } : {} : {}),
+        continuation: { ...identity, phase: 'completed', canRetry: false, effectiveRequirements: result.effectiveRequirements },
+        result: { replyRequestId: result.replyRequestId, assistantSessionId: result.assistantSessionId,
+          inputVersionId: result.inputVersionId, input, contextEvidenceIds: result.contextEvidenceIds,
+          styleSampleIds: result.styleSampleIds, usedSkill: result.usedSkill, inputBudget: result.inputBudget,
+          continuation: { candidateId: result.resolvedCandidateId, versionId: result.resolvedVersionId,
+            candidateGroupId: command.displayedGroup.candidateGroupId },
+          candidates: result.candidates.map((original) => ({ original, editedText: original.text })) },
+        selectedCandidateId: null });
+      await this.restoreCandidateVersions(update, update.sessionId, result.candidates.map((candidate) => candidate.candidateId));
+    } catch (error) {
+      if (!current()) return;
+      const failure = error instanceof BackendRequestFailure ? error : undefined;
+      const canRetry = failure?.kind === 'connection' || failure?.code === 'reply_timeout'
+        || failure?.code === 'assistant_session_save_failed' || Boolean(failure?.status && failure.status >= 500);
+      if (!canRetry) this.continuationAttempt = undefined;
+      this.publish({ phase: this.state.result ? 'ready' : 'idle',
+        continuation: { ...identity, phase: 'failed', canRetry,
+          message: canRetry ? '本次继续的结果尚未确认，请用原请求重试。' : '本次继续尚未可靠确认，请重新读取讨论。' } });
+      if (!canRetry && failure) await this.readSavedSession(update);
+    } finally { if (job) this.generationJobs.finish(job); if (this.pending === pending) this.pending = undefined; }
   }
 
   async readSavedSession(selection: ContactSelection): Promise<void> {
@@ -623,6 +758,7 @@ export class ReplySession {
     const viewOperation = this.operation;
     const generation = this.backend.getConnectionGeneration();
     let ownedGeneration: OwnedAssistantGeneration | undefined;
+    let ownedPreparation: OwnedAssistantPreparation | undefined;
     if (job.type === 'action' && (job.request.action === 'confirm'
       || job.request.action === 'answer' && Boolean(this.currentExploration?.confirmedIntent))) {
       this.strategyCandidatePending = pending;
@@ -644,17 +780,23 @@ export class ReplySession {
     this.publish({ exploration: { phase: 'waiting', result: this.state.exploration.result, canRetry: true,
       automaticUpdatesPaused: this.state.exploration.automaticUpdatesPaused } });
     try {
+      if (this.strategyCandidatePending === pending) {
+        if (generation === undefined) throw new Error('本次生成连接尚未确认。');
+        ownedPreparation = this.generationJobs.beginPreparation({ connectionGeneration: generation,
+          contactId: job.request.contactId, sessionId: job.request.sessionId }, pending);
+      }
       const prepared = job.type === 'action' && job.request.action !== 'stop'
         ? await prepareExplorationAction(this.backend, job.request, pending.signal) : undefined;
-      if (pending.signal.aborted || generation === undefined || generation !== this.backend.getConnectionGeneration()) return;
       if (prepared?.kind === 'prepared') {
-        if (prepared.generation !== generation) return;
-        ownedGeneration = this.generationJobs.begin({ connectionGeneration: generation,
-          contactId: job.request.contactId, sessionId: job.request.sessionId, requestKey: prepared.receipt.requestKey }, pending);
-        this.generationJobs.receiveReceipt(ownedGeneration, prepared.receipt);
+        if (!ownedPreparation || prepared.generation !== generation) throw new Error('本次候选准备归属尚未确认。');
+        ownedGeneration = this.generationJobs.receivePrepared(ownedPreparation, prepared.receipt);
+        ownedPreparation = undefined;
         if (current()) this.publish({ phase: 'waiting', canRetry: false,
           exploration: { phase: 'ready', result: null, canRetry: true } });
+      } else if (prepared && ownedPreparation) {
+        this.generationJobs.completePreparationWithoutGeneration(ownedPreparation); ownedPreparation = undefined;
       }
+      if (pending.signal.aborted || generation === undefined || generation !== this.backend.getConnectionGeneration()) return;
       const result = job.type === 'open' ? await openExploration(this.backend, job.request, pending.signal)
         : prepared?.kind === 'prepared' ? await (() => {
           if (!ownedGeneration) throw new Error('本次候选生成尚未登记。');
@@ -717,6 +859,7 @@ export class ReplySession {
       }
     } finally {
       if (ownedGeneration) this.generationJobs.finish(ownedGeneration);
+      if (ownedPreparation) this.generationJobs.finish(ownedPreparation);
       if (this.strategyCandidatePending === pending) this.strategyCandidatePending = undefined;
       if (this.explorationPending === pending) this.explorationPending = undefined;
       if (current() && this.automaticExploration?.queued) this.queueAutomaticExploration();
@@ -997,6 +1140,7 @@ export class ReplySession {
   }
   showCandidateVersion(selection: ReplyCandidateVersionDisplay): ReplySessionState {
     this.assertVersionScope(selection);
+    this.notifyInputChanged();
     this.candidateVersions.show(selection);
     return this.getState();
   }
@@ -1378,11 +1522,15 @@ export class ReplySession {
   }
   private notifyInputChanged(preserveAutomatic = false): void {
     if (!preserveAutomatic) this.stopAutomaticExploration();
+    this.continuationAttempt = undefined;
+    if (this.state.continuation) this.publish({ continuation: undefined });
     for (const listener of this.inputListeners) listener();
   }
   private cancelMessagePage(): void { ++this.messageOperation; this.messagePending?.abort(); this.messagePending = undefined; }
   private leaveGenerationView(): void {
     this.generationJobs.leaveView(); ++this.operation; this.pending = undefined;
+    this.continuationAttempt = undefined;
+    if (this.state.continuation) this.publish({ continuation: undefined });
     // 明确确认/已确认回答已送出；离开视图仍接收真实准备回执，交由同一作业继续或退出中断。
     if (this.explorationPending === this.strategyCandidatePending) this.explorationPending = undefined;
     this.sourceCheck?.abort(); this.sourceCheck = undefined; this.heldResult = undefined;
@@ -1390,6 +1538,8 @@ export class ReplySession {
   }
   private cancelPending(preserveSourceValidation = false): void {
     ++this.operation; this.pending?.abort(); this.pending = undefined;
+    this.continuationAttempt = undefined;
+    if (this.state.continuation) this.publish({ continuation: undefined });
     if (this.state.inputBudgetNotice) this.publish({ inputBudgetNotice: undefined });
     if (preserveSourceValidation) return;
     this.sourceCheck?.abort(); this.sourceCheck = undefined; this.heldResult = undefined;

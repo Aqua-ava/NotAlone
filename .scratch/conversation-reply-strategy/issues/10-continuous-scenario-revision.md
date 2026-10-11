@@ -1,6 +1,6 @@
 # 10：两种场景的连续修改与消息衔接
 
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: [conversation-reply-strategy/05 主动目的探索与确认](05-purpose-exploration.md)；[conversation-reply-strategy/06 两种场景的关键澄清与取舍](06-clarification-and-tradeoffs.md)；[conversation-reply-strategy/08 候选消息组逐条编辑与复制](08-message-group-edit-copy.md)；[assistant-session-context/13 连续要求、改口与明确编号指代](../../assistant-session-context/issues/13-continuous-intent-reference.md)；[assistant-session-context/15 新消息提醒与用户触发重新生成](../../assistant-session-context/issues/15-new-message-opt-in.md)
 
@@ -77,3 +77,21 @@ TDD 实际记录：首个两场景公开 HTTP 反例因接口尚无而返回 404
 主树四源限定 `mypy --follow-imports=silent` 实际通过，五文件 compile及diff通过。仅自动后端准备接口，不冒宿主 job登記、连续改口／引用／新消息完整公开页面完成；原State open与未勾标准保持。没有新增正文副本、第二生成链、DDL、外部调用或真实App。
 
 固定主树本主题六路径最终Standards硬要求0／重要Fowler possible0、Spec新增P0–P3为0；四生产与新测试等B正式9ad，审查仅只读未运行测试。仅此准备接口主题本地提交，宿主与完整R10公开组合仍继续。
+
+## Answer（本轮正式持续修改的公开客户端阶段）
+
+本 B 在独立树 `/private/tmp/notalone-round29-b` 消费唯一 A `0ec5a1ae`、`dca102c8` 提供者及 `e94dfa2e` soleJobs 为本地 `7abec150`、`5484285a`、`56cc7458`，各自仅净接口／测试，不复制 A 的任务卡。所有实际生成仍由原同 owner/contact/SID HTTP／PG权威写入；不造第二CURRENT、存储、来源图、生成作业表或模型。Main 从实际已读 CURRENT 与公开候选区实际组／编号／displayVersionId冻结指代，不从复制、默认高亮或生成先后猜选择。回应与主动UI场景保持原明确意愿，编号继续的实际后端draft输入只展示在本次快照，并继续使用完整消息组版本编辑器。
+
+公开具名方法 `continueSession`、`confirmContinuation`、`retryContinuation` 经严格有限参数、helper角色及当前范围门禁。澄清确认复验原SID／CURRENT／实际展示frame，保留原instruction与键，只允许本次服务器选项的明确动作；新要求不当旧previous。断连重试继续同键同正文，不产生新模型；输入、版本展示、离开、连接或来源变化清除当前操作资格。正式零领取typed澄清沿唯一作业明确收口；传输失败与普通409尚无权威无领取事实时继续failclosed，不以缺receipt猜不存在旧slot。
+
+五个公开Main/preload→真实HTTP→正式001–055隔离PG垂直回路依次实测：回应第二组实际编辑版首次缺方法 **RED1／3051.357959ms→GREEN1／4349.835625ms**；主动冲突澄清缺确认方法 **RED1／2844.9115ms→GREEN1／3601.00375ms**；实际完成但交付响应丢失缺可重试状态 **RED1／3306.21ms→GREEN1／3669.296959ms**；生产候选renderer缺继续／改口控件 **RED1／2948.44625ms→GREEN1／3165.870459ms**；真实来源删除后旧展示仍残留 **RED1／4794.2445ms→GREEN1／4322.732542ms**。首次直接TS／stdin fixture误入口和中途文本校验作用域错误各保，不冒业务RED或通过；此阶段没有Chrome或真实App。
+
+最终原文件完整 **5 GREEN／14913.144458ms／skip0／actualexit0**，实际模型调用2＋2＋2＋1＋1共8；每场正式55逐名账本、repeat0、instance/class清理与自有库剩余0。澄清期间原CURRENT与turn数不变、0新增模型；实际丢响应后四次prepare/execute正文全部相同、只保原两turn；source删除后重读redacted无input/reply、CURRENT空，公开状态无旧候选正文。22项候选版本／删除门禁Node **GREEN／175.261375ms**，完整desktop类型及diff检查通过。命令：Conda NotAlone、`PGPORT=55441 node --test tests/reply-continuation-public-http.test.mjs`；日志 `/private/tmp/notalone-b10-public-five-final.log` 与各原RED/G日志；模型边界受控、dotenv及外部追踪隔离。
+
+UI提供“继续修改要求”“本次改口”“继续修改”，要求澄清各项不预选，用户明确选择保留／替换／移除／新增后“确认本次要求”；失败可“重试本次连续修改”。未保存的组内编辑在现有版本组件内保留，仅向当前候选区报告dirty元数据以暂停连续提交，不复制编辑正文或改变 C 保存权威。
+
+本阶段原六条AC与`State: claimed`保留。普通Page两场尚待具名窗口执行，A15明确采用授权新消息与生成中替换仍由本B接续；当前五项不能替代它们。原生／人工／真实模型质量未执行，不能据合成输出宣称语义质量。仅合成数据、受控模型、隔离数据库；OCR、微信、私人资料、额外用户会话、付费／外部模型、外部发送、push、发布、部署均未做。
+
+固定ONLY10 source `/private/tmp/notalone-b10-consumer-source.patch` SHA256 `7bde98b8a5c9314573e42671f971225d959ecc0dd5cb150cd66a30105a91a497` 已由 A 独立Standards只读审查：硬要求0／新增重要Fowler possible0；C独立Spec新增P0–P3为0。两轴未借本人5HTTP／22Node作为自测，明确A15／Page／Host与provider确定无领取后续仍partial。正式消费来源动态复验与失败终态为本树`18551290`（只净接口／测试、不复制A17票），新增四条HTTP本人实际GREEN4.741s／55repeat0／自有库剩余0，三源限定mypy和五文件compile通过；默认导入链54条诊断未掩盖为全仓类型通过。最后完整desktop类型与diff通过，source10未改变。
+
+Root 净接正式 `54d4b07e` 的十个source/test路径后独立运行 `node --test tests/reply-continuation-public-http.test.mjs`：**5 GREEN／18847.531375ms／skip0**，实际模型8，五份55迁移／repeat0／内外自有库残留0；完整TypeScript及diff通过。此为主树新Main/preload→HTTP→PG验证，不借B原五次计量，不替代普通Page、A15消息采用或增强A17未知准备生命周期。原六AC未改，State claimed，故障终态及回执阶段正证明另随正式切片集成。

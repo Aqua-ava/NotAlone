@@ -8,6 +8,36 @@ import { ReplySession } from './session';
 import { ReplyEvidenceSession } from './evidence-session';
 import type { AssistantSessionSelection } from '../../shared/reply-bridge';
 import type { ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from '../../shared/assistant-candidate-versions';
+import type { ReplyContinuation, ReplyContinuationConfirmation } from '../../shared/reply-bridge';
+import { ASSISTANT_CONTINUATION_RESPONSE_LIMIT } from '../../shared/assistant-continuation-clarification';
+const continuationText = (item: unknown) => typeof item === 'string' && Boolean(item.trim()) && Array.from(item).length <= 4096;
+
+function continuation(args: unknown[]): ReplyContinuation {
+  const raw = args[0];
+  const optional = ['intentionUpdate', 'requirementChanges'];
+  const keys = raw && typeof raw === 'object' ? optional.filter((key) => Object.hasOwn(raw, key)) : [];
+  const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'instruction', ...keys]);
+  if (!isUuid(value.sessionId) || !continuationText(value.instruction)
+    || keys.includes('intentionUpdate') && !continuationText(value.intentionUpdate)
+    || new TextEncoder().encode(JSON.stringify(value)).byteLength > ASSISTANT_CONTINUATION_RESPONSE_LIMIT) {
+    throw new Error('请明确本次继续的要求与助手会话。');
+  }
+  if (keys.includes('requirementChanges')) requirementChanges(value.requirementChanges);
+  return { ...value, sessionId: value.sessionId.toLowerCase() } as unknown as ReplyContinuation;
+}
+function requirementChanges(value: unknown): void {
+    if (!Array.isArray(value)
+      || new TextEncoder().encode(JSON.stringify(value)).byteLength > ASSISTANT_CONTINUATION_RESPONSE_LIMIT) {
+      throw new Error('本次要求变更无效。');
+    }
+    for (const change of value) {
+      if (!change || typeof change !== 'object' || Array.isArray(change)) throw new Error('本次要求变更无效。');
+      const expected = change.action === 'keep' || change.action === 'remove' ? ['action', 'previous']
+        : change.action === 'replace' ? ['action', 'previous', 'replacement'] : change.action === 'add' ? ['action', 'replacement'] : [];
+      if (!expected.length || Object.keys(change).length !== expected.length || !expected.every((key) => Object.hasOwn(change, key))
+        || expected.filter((key) => key !== 'action').some((key) => !continuationText(change[key]))) throw new Error('本次要求变更无效。');
+    }
+}
 
 function candidateVersion(args: unknown[], operation: 'read' | 'display' | 'select' | 'edit'): ReplyCandidateVersionRead {
   const additions = operation === 'read' ? [] : operation === 'edit'
@@ -128,6 +158,19 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     const value = fields(args, ['contactId', 'scopeRevision', 'newRequest']);
     if (typeof value.newRequest !== 'boolean') throw new Error('本次生成操作不可用。');
     return replies.generate(value as unknown as GenerateReply);
+  }, 'helper');
+  commands.handle('reply:continue-session', (...args: unknown[]) => replies.continueSession(continuation(args)), 'helper');
+  commands.handle('reply:confirm-continuation', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'expectedInputVersionId', 'requirementChanges']);
+    if (!isUuid(value.sessionId) || !isUuid(value.expectedInputVersionId)) throw new Error('本次澄清已经失效，请重新提交要求。');
+    requirementChanges(value.requirementChanges);
+    return replies.confirmContinuation({ ...value, sessionId: value.sessionId.toLowerCase(),
+      expectedInputVersionId: value.expectedInputVersionId.toLowerCase() } as unknown as ReplyContinuationConfirmation);
+  }, 'helper');
+  commands.handle('reply:retry-continuation', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'sessionId']);
+    if (!isUuid(value.sessionId)) throw new Error('本次连续修改已失效。');
+    return replies.retryContinuation({ ...value, sessionId: value.sessionId.toLowerCase() } as unknown as AssistantSessionSelection);
   }, 'helper');
   commands.handle('reply:update-correction', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'correction']);

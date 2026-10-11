@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ClipboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent } from 'react';
 import type { AssistantSessionDeletion, ReplyMode, ReplySessionState, RewriteOptions, RewriteTone } from '../shared/reply-bridge';
 import { HelperDraft, type ContactSessionView } from './contact-session';
 import { Icon } from './icons';
@@ -9,6 +9,8 @@ import { AssistantSessionPanel } from './AssistantSessionPanel';
 import { StyleSamples } from './StyleSamples';
 import { CandidateVersionEditor } from './CandidateVersionEditor';
 import type { ReplyCandidateVersionRead, ReplyCandidateVersionEdit, ReplyCandidateVersionDisplay, ReplyCandidateVersionSelection } from '../shared/assistant-candidate-versions';
+import type { RequirementChange } from '../shared/assistant-continuation-clarification';
+import { AssistantContinuationControls } from './AssistantContinuationControls';
 
 export function useReplySession() {
   const { state, error, setError, latest, active, receive } = useRevisionedSession<ReplySessionState>({ revision: -1, scopeRevision: 0, contactId: null, generationBlock: 'foreground-confirmation-required',
@@ -62,6 +64,14 @@ export function useReplySession() {
     selectDirection: (suggestionId: string, inputVersion: string) => operate(() => window.notalone.replies.selectDirection({ ...selection(), suggestionId, inputVersion })),
     updatePurpose: (purpose: string) => operate(() => window.notalone.replies.updatePurpose({ ...selection(), purpose })),
     generate: (newRequest = false) => operate(() => window.notalone.replies.generate({ ...selection(), newRequest })),
+    continueSession: (instruction: string, intentionUpdate?: string) => operate(() => window.notalone.replies.continueSession({
+      ...selection(), sessionId: latest.current.savedSession!.sessionId!, instruction,
+      ...(intentionUpdate === undefined ? {} : { intentionUpdate }) })),
+    confirmContinuation: (requirementChanges: readonly RequirementChange[]) => operate(() => window.notalone.replies.confirmContinuation({
+      ...selection(), sessionId: latest.current.continuation!.sessionId,
+      expectedInputVersionId: latest.current.continuation!.expectedInputVersionId, requirementChanges })),
+    retryContinuation: () => operate(() => window.notalone.replies.retryContinuation({ ...selection(),
+      sessionId: latest.current.savedSession!.sessionId! })),
     selectCandidate: (candidateId: string) => operate(() => window.notalone.replies.selectCandidate({ ...selection(), replyRequestId: latest.current.result!.replyRequestId, candidateId })),
     editCandidate: (candidateId: string, text: string) => operate(() => window.notalone.replies.editCandidate({ ...selection(), replyRequestId: latest.current.result!.replyRequestId, candidateId, text })),
   };
@@ -157,12 +167,17 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
     ? state.savedSession.turns.filter((turn) => turn.state === 'completed' && turn.reply).at(-1) : undefined;
   const replyRequestId = state.result?.replyRequestId ?? recovered?.reply?.replyRequestId;
   const candidates = state.result?.candidates.map((item) => item.original) ?? recovered?.reply?.candidates ?? [];
+  const [dirtyCandidates, setDirtyCandidates] = useState<Record<string, boolean>>({});
+  const reportDirty = useCallback((candidateId: string, dirty: boolean) => {
+    setDirtyCandidates((previous) => previous[candidateId] === dirty ? previous : { ...previous, [candidateId]: dirty });
+  }, []);
+  const hasUnsavedEdits = candidates.some((candidate) => dirtyCandidates[candidate.candidateId]);
   const completedRead = useRef('');
   useEffect(() => {
     const result = state.result;
     // 删除复核暂时清空结果，返回后须重读同一会话的可信完成记录。
     if (!result) { completedRead.current = ''; return; }
-    if (result.input.mode === 'rewrite_draft' || state.phase !== 'ready'
+    if (result.input.mode === 'rewrite_draft' && !result.continuation || state.phase !== 'ready'
       || state.savedSession?.sessionId !== result.assistantSessionId || state.savedSession?.phase !== 'idle') return;
     const identity = `${state.contactId}:${state.scopeRevision}:${result.assistantSessionId}:${result.replyRequestId}`;
     if (completedRead.current === identity) return;
@@ -202,7 +217,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
           : state.result.input.mode === 'initiate_conversation' ? <p>主动目的：{state.result.input.purpose}</p>
           : <><p>待回复消息：{state.result.input.target.text ?? state.result.input.target.mediaPlaceholder}</p>
             <p>表达方向：{state.result.input.direction}</p></>}</details>
-      {state.result.input.mode === 'rewrite_draft' && <div className="reply-candidate-grid">
+      {state.result.input.mode === 'rewrite_draft' && !state.result.continuation && <div className="reply-candidate-grid">
         {state.result.candidates.map(({ original, editedText }, index) => <article className="reply-candidate" key={original.candidateId}>
           <label className="reply-choice"><input type="radio" name="candidate" checked={state.selectedCandidateId === original.candidateId}
             onChange={() => void replies.selectCandidate(original.candidateId)} />说法 {index + 1}</label>
@@ -220,14 +235,15 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
         </article>)}
       </div>}
     </> : state.phase !== 'waiting' && candidates.length === 0 && <div className="reply-empty"><p>暂无候选</p><small>准备好你的意思，再选择合适的表达。</small></div>}
-    {(state.result?.input.mode !== 'rewrite_draft' || !state.result) && candidates.length > 0 && <div className="reply-candidate-grid">
+    {(state.result?.input.mode !== 'rewrite_draft' || state.result.continuation || !state.result) && candidates.length > 0 && <div className="reply-candidate-grid">
       {candidates.map((candidate, index) => {
         const view = state.candidateVersions?.items.find((item) => item.candidateId === candidate.candidateId);
         return <article className="reply-candidate" key={candidate.candidateId}>
           <h3>说法 {index + 1}</h3>
           {replyRequestId && <CandidateVersionEditor key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${candidate.candidateId}:${replyRequestId}`}
               replies={replies} view={view} candidateId={candidate.candidateId} replyRequestId={replyRequestId}
-              number={index + 1} restored={!state.result} noteCopy={(text) => noteCopy(candidate.candidateId, text)} />
+              number={index + 1} restored={!state.result} noteCopy={(text) => noteCopy(candidate.candidateId, text)}
+              onDirtyChange={reportDirty} />
           }
           <p className="reply-basis">{candidate.basis}</p>
           {candidate.riskNotes.map((note, number) => <p className="reply-risk" key={number}>{note}</p>)}
@@ -237,6 +253,8 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
       })}
     </div>}
     {replies.error && <p className="reply-note" role="alert">{replies.error}</p>}
+    <AssistantContinuationControls key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${state.inputClearRevision ?? 0}`}
+      replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
     <StyleSamples replies={replies} />
   </section>;
 }

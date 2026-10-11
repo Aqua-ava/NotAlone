@@ -4,6 +4,7 @@ import type { AssistantSessionCatalog, SavedAssistantSession } from './assistant
 import type { AssistantInputBudget, AssistantInputBudgetNotice } from './assistant-input-budget';
 import type { ConfirmedAssistantSessionDeletion } from './assistant-session-deletion-events';
 import type { AssistantCandidateVersionsState, ExplicitAssistantCandidateSelection, ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from './assistant-candidate-versions';
+import type { AssistantContinuationClarification, RequirementChange } from './assistant-continuation-clarification';
 
 export type RewriteTone = 'original' | 'warm' | 'concise' | 'polite';
 export interface RewriteOptions {
@@ -15,6 +16,24 @@ export interface RewriteOptionsUpdate extends ContactSelection { options: Rewrit
 export interface GenerateReply extends ContactSelection { newRequest: boolean; }
 export interface AssistantSessionDeletion extends ContactSelection { sessionId: string; confirmed: true; }
 export interface AssistantSessionSelection extends ContactSelection { sessionId: string; }
+export interface ReplyContinuation extends AssistantSessionSelection {
+  instruction: string;
+  intentionUpdate?: string;
+  requirementChanges?: readonly RequirementChange[];
+}
+export interface ReplyContinuationConfirmation extends AssistantSessionSelection {
+  expectedInputVersionId: string;
+  requirementChanges: readonly RequirementChange[];
+}
+export interface ReplyContinuationState {
+  phase: 'waiting' | 'clarification' | 'completed' | 'failed';
+  sessionId: string;
+  expectedInputVersionId: string;
+  canRetry: boolean;
+  clarification?: AssistantContinuationClarification;
+  effectiveRequirements?: readonly string[];
+  message?: string;
+}
 export type ReplyMode = 'rewrite_draft' | 'reply_to_message' | 'initiate_conversation';
 export interface ReplyModeUpdate extends ContactSelection { mode: ReplyMode; }
 export interface ReplyMessagePageRequest extends ContactSelection { older: boolean; }
@@ -99,6 +118,7 @@ export interface ReplyResult {
   styleSampleIds?: string[];
   usedSkill?: ReplyUsedSkill | null;
   inputBudget?: AssistantInputBudget;
+  continuation?: { candidateId: string | null; versionId: string | null; candidateGroupId: string };
 }
 export type ReplyFailureCode = 'generation_failed' | 'save_failed' | 'timeout' | 'unavailable' | 'rejected' | 'target_unavailable' | 'source_unavailable' | 'connection' | 'input_budget_exceeded' | 'input_budget_unavailable';
 export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;
@@ -136,6 +156,7 @@ export interface ReplySessionState {
   sessionCatalog?: AssistantSessionCatalog;
   sessionDeletion?: 'deleting' | 'failed' | 'deleted' | 'missing';
   inputBudgetNotice?: AssistantInputBudgetNotice;
+  continuation?: ReplyContinuationState;
 }
 export interface ReplyCandidateSelection extends ContactSelection { replyRequestId: string; candidateId: string; }
 export interface ReplyCandidateEdit extends ReplyCandidateSelection { text: string; }
@@ -165,6 +186,9 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   selectDirection(selection: ReplyDirectionChoice): Promise<ReplySessionState>;
   updatePurpose(update: ReplyPurposeUpdate): Promise<ReplySessionState>;
   generate(selection: GenerateReply): Promise<void>;
+  continueSession(command: ReplyContinuation): Promise<void>;
+  confirmContinuation(command: ReplyContinuationConfirmation): Promise<void>;
+  retryContinuation(selection: AssistantSessionSelection): Promise<void>;
   selectCandidate(selection: ReplyCandidateSelection): Promise<ReplySessionState>;
   editCandidate(edit: ReplyCandidateEdit): Promise<ReplySessionState>;
   beginCandidateVersionEdit(selection: ReplyCandidateVersionDisplay): Promise<ReplySessionState>;
