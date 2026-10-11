@@ -3,12 +3,13 @@ import type { ContactSelection, ContactSessionState } from '../../shared/contact
 import type { AssistantSessionDeletion, GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyCorrectionUpdate, ReplyDirectionChoice, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyInputSnapshot, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, ReplySessionState, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
+import { isUuid } from '../uuid';
 import type { ContactSession } from '../contacts/session';
 import { captureAssistantGenerationStopping } from './assistant-generation-interruption';
 import { interruptedReplyInput } from './assistant-interrupted-retry';
 import { newAssistantSessionWithCandidate } from './assistant-candidate-carry';
 import type { AssistantCandidateCarry } from '../../shared/reply-bridge';
-import { generateReply, replaceReply, retryInterruptedReply, type InterruptedReplyOrigin } from './client';
+import { generateReply, matchesReplyAdoption, replaceReply, retryInterruptedReply, type InterruptedReplyOrigin } from './client';
 import type { DirectionExploration, ReplyClarificationAnswer, ReplyClarificationEdit, ReplyRequirementsUpdate, ReplySkillChoice, ReplySkillUpdate } from '../../shared/reply-bridge';
 import { actOnExploration, explorationIdentity, openExploration, prepareExplorationAction, type ExplorationRequest, type ExplorationAction } from './exploration-client';
 import { readReplyMessages } from './messages';
@@ -81,7 +82,7 @@ export class ReplySession {
   private pending: AbortController | undefined;
   private readonly generationJobs = new AssistantGenerationJobs();
   private helperHidden = false;
-  private lastAttempt: { input: ReplyInputSnapshot; requestKey: string; expectedInputVersionId?: string; interrupted?: InterruptedReplyOrigin } | undefined;
+  private lastAttempt: { input: ReplyInputSnapshot; requestKey: string; expectedInputVersionId?: string; interrupted?: InterruptedReplyOrigin; adoptNewMessageId?: string } | undefined;
   private continuationAttempt: { scope: ContactSelection; generation: number; command: AssistantContinuationCommand } | undefined;
   private messageOperation = 0;
   private messagePending: AbortController | undefined;
@@ -1051,11 +1052,14 @@ export class ReplySession {
   }
 
   private async generateInput(selection: GenerateReply, input: ReplyInputSnapshot,
-    replaceable?: PendingAssistantGenerationReceipt, expectedInputVersionId?: string, interrupted?: InterruptedReplyOrigin): Promise<void> {
+    replaceable?: PendingAssistantGenerationReceipt, expectedInputVersionId?: string, interrupted?: InterruptedReplyOrigin, adoptNewMessageId?: string): Promise<void> {
+    if (adoptNewMessageId !== undefined && (!isUuid(adoptNewMessageId) || !isUuid(expectedInputVersionId)
+      || interrupted !== undefined || input.mode === 'rewrite_draft')) throw new Error('本次新消息采用身份无效。');
     const generation = this.backend.getConnectionGeneration();
     if (selection.newRequest || !this.lastAttempt) this.lastAttempt = { input, requestKey: randomUUID(),
       ...(expectedInputVersionId === undefined ? {} : { expectedInputVersionId }),
-      ...(interrupted === undefined ? {} : { interrupted: Object.freeze({ ...interrupted }) }) };
+      ...(interrupted === undefined ? {} : { interrupted: Object.freeze({ ...interrupted }) }),
+      ...(adoptNewMessageId === undefined ? {} : { adoptNewMessageId: adoptNewMessageId.toLowerCase() }) };
     const attempt = this.lastAttempt;
     if (replaceable && selection.newRequest) this.generationJobs.cancelRequest(replaceable);
     this.cancelPending();
@@ -1092,12 +1096,14 @@ export class ReplySession {
         this.generationJobs.receiveNoGenerationProof(ownedJob, proof, this.backend.getConnectionGeneration());
         generationTerminal = true;
       };
+      const adoptionOptions = attempt.adoptNewMessageId === undefined ? undefined
+        : Object.freeze({ adoptNewMessageId: attempt.adoptNewMessageId, expectedInputVersionId: attempt.expectedInputVersionId });
       const result = attempt.interrupted
         ? await retryInterruptedReply(this.backend, selection.contactId, sessionId, attempt.interrupted, attempt.requestKey,
           pending.signal, prepared, requested, prepareRequested, notReserved)
         : replaceable && selection.newRequest
-        ? await replaceReply(this.backend, attempt.input, attempt.requestKey, replaceable.requestKey, pending.signal, sessionId, prepared, requested, prepareRequested, notReserved)
-        : await generateReply(this.backend, attempt.input, attempt.requestKey, pending.signal, sessionId, prepared, requested, attempt.expectedInputVersionId, prepareRequested, notReserved);
+        ? await replaceReply(this.backend, attempt.input, attempt.requestKey, replaceable.requestKey, pending.signal, sessionId, prepared, requested, prepareRequested, notReserved, adoptionOptions)
+        : await generateReply(this.backend, attempt.input, attempt.requestKey, pending.signal, sessionId, prepared, requested, attempt.expectedInputVersionId, prepareRequested, notReserved, adoptionOptions);
       generationTerminal = true;
       if (!current() || result.generation !== generation) return;
       // 可靠完成可作为历史读取；只有仍属当前输入且来源有效的结果才可成为当前候选。
@@ -1128,10 +1134,16 @@ export class ReplySession {
         await this.readSavedSession(selection); return;
       }
       let resultInput = attempt.input;
-      if ('restoredInput' in result) {
-        if (!completed.input || JSON.stringify(completed.input) !== JSON.stringify(result.restoredInput)) {
-          throw new Error('原输入恢复与已保存结果不一致，请重试同一次生成。');
-        }
+      if ('restoredInput' in result && (!completed.input || JSON.stringify(completed.input) !== JSON.stringify(result.restoredInput))) {
+        throw new Error('原输入恢复与已保存结果不一致，请重试同一次生成。');
+      }
+      if (attempt.adoptNewMessageId !== undefined && (!completed.input || completed.requestKey !== attempt.requestKey
+        || !saved.inputs.some((input) => input.inputVersionId === result.inputVersionId && input.state === 'active')
+        || !('adoptionSubmission' in result) || !result.adoptionSubmission
+        || !matchesReplyAdoption(completed.input, result.adoptionSubmission))) {
+        throw new Error('本次新消息输入尚未可靠确认，请重试同一次生成。');
+      }
+      if ('restoredInput' in result || attempt.adoptNewMessageId !== undefined) {
         resultInput = await interruptedReplyInput(this.backend, completed,
           { contactId: selection.contactId, displayName: attempt.input.contactDisplayName }, pending.signal, current);
         if (!current() || !acceptLatestRead()) return;
@@ -1632,12 +1644,28 @@ export class ReplySession {
       ? { ...common, mode, target, direction: this.state.direction.trim() }
       : { ...common, mode, purpose: this.state.purpose.trim() };
     if (input.mode === 'reply_to_message' ? !input.direction : !input.purpose) throw new Error('请明确本次方向或目的。');
+    const originalContent = saved.turns.find((turn) => turn.inputVersionId === expected)?.input?.content;
+    const adoptNewMessageId = originalContent?.type === mode
+      && (originalContent.user_instruction ?? '') === common.userInstruction ? notice.messageId : undefined;
+    const previousReplyRequestId = this.state.result?.replyRequestId;
     this.invalidateExploration(); this.notifyInputChanged();
     this.publish({ messages: { phase: 'ready', items: page.messages, nextCursor: page.nextCursor },
       ...(mode === 'reply_to_message' ? { targetMessageId: target.messageId } : {}) });
-    await this.generateInput({ ...selection, newRequest: true }, input, receipt, expected);
+    const generating = this.generateInput({ ...selection, newRequest: true }, input, receipt, expected,
+      undefined, adoptNewMessageId);
+    const generationOperation = this.operation;
+    await generating;
+    const result = this.state.result;
     if (notice === this.noticedMessage && generation === this.backend.getConnectionGeneration()
-      && sessionId === this.state.savedSession?.sessionId && this.state.result?.input === input
+      && generationOperation === this.operation && selection.contactId === this.state.contactId
+      && selection.scopeRevision === this.state.scopeRevision && mode === this.state.mode
+      && sessionId === this.state.savedSession?.sessionId && result?.assistantSessionId === sessionId
+      && result.replyRequestId !== previousReplyRequestId && result.inputVersionId !== expected
+      && result.input.mode === mode && result.input.contactId === selection.contactId
+      && result.input.userInstruction === common.userInstruction
+      && (result.input.mode === 'reply_to_message' ? result.input.target.messageId === target.messageId
+        : result.input.mode === 'initiate_conversation' && input.mode === 'initiate_conversation'
+          && result.input.purpose === input.purpose)
       && this.state.phase === 'ready') {
       this.noticedMessage = undefined;
       this.publish({ messageNotice: { ...this.state.messageNotice, changed: false } });

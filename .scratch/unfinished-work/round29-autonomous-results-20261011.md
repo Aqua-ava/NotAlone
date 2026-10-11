@@ -125,3 +125,9 @@ A13 提供者实际复现 2 个 HTTP RED 后修复为 2 个 GREEN，保留未知
 上述 keyless 关联缺口已在主树 `8ec887a7` 修复：同一冻结命令的三项原反例实际 GREEN／9694.099792ms、受控模型6、55×3迁移重复0与自有库0；Jobs15 GREEN／111.662667ms、类型通过，独立两轴无新增问题。关联仅释放同范围、同代际、同五字段且已结束传输的旧别名，存活或身份不同的作业继续阻断。
 
 累计要求采用新消息的后端正式提供者 `546cfb0a` 六文件净集成：保持公开普通字符串4096限制，显式新消息UUID及expected输入UUID经同联系人事务校验后继承已保存完整要求；不新增写入链路或迁移。Root精确两项HTTP实际 GREEN／7.237秒，生产55迁移重复0、外层自有库剩余0；内层夹具正常DROP但没有独立SQL剩余审计，不借外层结果冒称内层审计。四限定mypy与六compile通过，提供者两轴无新增问题。客户端薄接线及原C两项公开反例仍待完成，最终页面尚未运行。
+
+后续正式消费者已闭合此自动缺口：sole A ordinary `4e5bc165`（Root净source2 SHA `eea0d8e531fdfd3521e3c70090bff812b994e95a288c60daf89ea4e296778260`）仅client、generateInput／lastAttempt及导入；sole B仅combine方法SHA `3074c63b3d9f0418e18b0d1befc240247fee3a1d0b6a49ced9fbb6fab19adea6`。先实际GET核CURRENT、turn/key/input/reply、active索引及canonical声明字段全等，再由原权威mapper恢复完整输入；原scope／operation／连接／较晚读取门禁保留。B只在已保存全文与当前要求相等时采用私有两UUID，未提交的新要求仍走普通声明；成功按实际新reply/input/target或purpose清原提醒。没有新Map、writer、缓存、来源图或DDL。
+
+原C `e12873c9` 唯一112行两测试不改断言：Root在正式生产装配实际 **2 GREEN／10466.420042ms／skip0／exit0**，模型3＋3及六实际输入；完整4106码点入模、SSE仅提醒零增量、第三生成原exact预算、真实PG CURRENT、新回应目标／原主动目的、样本DELETE三turn及RAM清空、独立manual保留后段全部到达。两份55逐名迁移repeat0，自有DROP后EXISTS验证均0。日志 `/private/tmp/notalone-root-accumulated-opt-in-two-green.log`，合成capture SHA `ea4be7d1616f8fec98cc02316541b394f7dc27d712a17b54bf973eafef3590de`。
+
+独立复验归属分别为B执行Root装配2G／10439.423292ms、C执行Root装配2G／10034.893625ms、sole A执行Root装配2G／9595.908ms，各自模型6／两份55repeat0／自有库0及实际源前后不变，不冒为各旧树standalone通过，不合成一组计数。ordinary两文件与B单函数的fresh Standards硬要求0／重要possible0，Spec新增P0–P3为0；完整TypeScript通过。旧C两场PRODUCT RED／7777.315416ms保留为修复前证据。最终独占两label公开页面组合仍待运行，原生及真人边界未改变。
