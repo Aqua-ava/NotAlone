@@ -94,39 +94,41 @@ E01 的 16 例受控报告包含 14 个故意错误输出、1 个超时与1个�
 
 ## 当前逐项接续台账
 
-以下记录截至 root `9b0a6513bbe3cce6b7db452dc104d2650b428c16` 的正式集成证据及已核对的负责人切片。A 目录与版本公开后台、C 旧来源夹具已在主树真实验证并正式集成；恢复复制、完整模型讨论和后续桌面接口继续。不是最终 29 项验收结果。原票 State 只随已验证主题提交集成，不用此表替代。
+以下记录截至主树 `d9ce5dd` 的正式集成与已核对运行证据。原票目前 14 张 resolved，15 张仍 open／claimed；持续推进所有可自主实施部分。B01–07、C01–05及A07／08已按原范围收口，未把语义质量或原生验收当通过。目录五场在主树通过；删除联合页仍有观测失败及候选等待超时，未整体通过。负责人页面与主树实际结果分别记录，原票State和原验收标准保持权威。
 
 | 原任务 | 负责人 | 当前自动工作及剩余接续 |
 | --- | --- | --- |
 | A07 | A | 正式集成；24项助手HTTP来源回归和三场公开保存页面通过，NoSkill／目的／原始来源修复均已交付 |
 | A08 | A | 正式集成6e78df1；自动22公开场、safe40及两轴0，root补恢复＋样本参考两组GREEN；原生验收未执行且未据此宣称通过 |
-| A09 | A | 后端正式 d5450cf6，31 HTTP／PG53 GREEN／DB0。A working producer＋Cbbc 原 faults5／lifecycle5 联合公开 GREEN／quiet68／cleanup，两个旧 P2 已关闭；Cbbc 正式 root548a795 已 Node16／type／两轴0。新增恢复历史候选复制／粘贴编辑／删除仍真实 RED／quiet17／cleanup，C唯一来源 controller＋A薄Panel接续，主树正式 producer 与 C 三场页面未完成 |
-| A10 | A | 正式 d89584f 六文件已 root09764ad；目录 metadata／空新建／按实际 SID 选择，22 真实 HTTP／PG53 GREEN9.994／DB0、mypy2 与两轴0。公开目录／新建 UI、051严格读取投影继续，claimed |
-| A11 | A | 正式053与 C5e1来源 TEST已集成；daa443d四文件已 root9b0a651，公开完整 GET/edit/select、稳定整组与父版要求、明确选择、旧键重放／新键重选及真实故障回滚，24 HTTP／PG53 GREEN12.661／DB0、mypy1／compile／两轴0。A通用DTO/main／会话回看与B08策略组UI按唯一归属继续，claimed，不代替 B08 |
-| A12 | A | 公共完整六段guard正式 bbae91d；fda＋55＋2c＋fa 完整历史/严格codec正式 root5044289，48 PG53 GREEN6.939／DB0＋10pure。有效 failed/running/reserve/replaced USER 保留、AI双completed。d4可信回执15files正式 rootcdb424a：owner128unit／11HTTP和独立archive11 GREEN；root293unit3.152＋26实际HTTP/PG53 GREEN30.381／DB0、codec类型及两轴0。完整历史模型载荷／预算增长、公开提醒及C pure-draft擦除缺口继续，claimed |
-| A13 | A | 等待A11＋A12完整输入、已选版本及预算；不另建版本权威 |
-| A14 | A | 既有唯一保存／CAS及公共预算下，A working 替换七项真实HTTP／PG53已 GREEN；新增第八条完整history接续及两轴／formal／公开路径待交，无额外DDL |
-| A15 | A | 等待A11＋A14；新消息只提醒，用户触发再生成 |
-| A16 | A | 等待A10＋A14；后台结果保持原会话归属 |
-| A17 | A | 等待A08＋A14；受控生命周期可自动验证，真实App退出／重开本轮排除并须准确记录 |
-| A18 | A | 等待A10＋A11＋A12；只携明确选定的完整候选组与新会话预算 |
-| B01 | B | 正式明确“回应消息”入口已集成；既有公开证据保持，持续策略合并后再收口 |
-| B02 | B | UUID后端及正式 B414／47／48 前端预算主题已 root2032 集成；44实际HTTP／PG53与核心2／输入失效3公开场 GREEN。旧普通attempt P2正式修复，root transition＋入口两label180 GREEN／quiet26／cleanup。B旧六场UUID已实际case GREEN21调用，含改口新输入后A／B全响应重放、纠正同键409与895＋6 TTL；同CLI另一入口旧端点测试前提失败，actualexit1／quiet60／cleanup保持，尚待正式切片与主树复验，claimed |
-| B03 | B | B6d TEST正式 root2591de6：回应／主动换不同组、新UUID拒旧409、暂停0生成、自填意愿direct_input全部公开 GREEN／quiet16／cleanup／两轴0；claimed待B02最终收尾 |
+| A09 | A | 实际传递正文清除后端 root e780f2d／ae449 等已有真实 HTTP/PG 证据；A86/167 UI＋96共用入口门禁净接未提交，27文件最终两轴0。原catalog五场G；原fault首轮五场G但整轮观测exit1，复验74449前三场G、第四候选5s超时，并捕获relationships原1s采样SIGTERM；第五及lifecycle未执行，quiet64／cleanuptrue／freshabsent，原因未定、门槛未放宽。claimed，继续最窄诊断与复验 |
+| A10 | A | 目录／新开唯一入口净接待提交；主树原两label五场Page actualexit0／quiet67／cleanuptrue、8Node／typeG；A09 gate四RPC门禁实际G。两票联合源两轴0，删除生命周期尚未整体通过，原标准未预填，claimed |
+| A11 | A | root 9b0a651／0096c34 的版本与唯一选择27真实PG/HTTP G已正式。通用完整GET与逐作业遮挡仍由A sole实施，阶段57pure/typeG后发现exploration重试作业正文与迟到响应残留继续修。B五泛型字段及公开消息组仍待正式DTO/main/RPC，不取working或复制权威，claimed |
+| A12 | A | 完整讨论provider与模型ordered payload正式root28c5ac：66真实HTTP-PG G47.426／53／DB0、293reply单元G2.287、mypy2／两轴0；C唯一历史样本getter实际使用，最终六段与每工具轮budget保。测试清理最窄修复rootd48ba28：原2生命周期RED→G与另11真实HTTP G18.806／DB0。预算UI／大历史响应、实际unknown供应商能力仍接续；pureDraft物理擦除已在A/C正式组合中实闭，历史失败保留，claimed |
+| A13 | A | A完整模型讨论已经正式；A自身continuous-client pure RED→GREEN／type证据已有，完整连续引用后端与公开接线尚未正式交付，沿A11唯一版本和实际预算继续 |
+| A14 | A | 原0e8＋d1后端已root4f8e1f4，24真实PG/HTTP G10.159、source精确input_version_stale／物理擦除保。prepare835新6文件净接但未提交，主树42实际G35.381（24替换＋16准备＋2C组合），freshSpec发现真实C已完成/A完成迟到时B CURRENT先拒旧回执的P2；A actual B确认409→G修复尚未正式交付。保留原失败，prepare与公开生命周期继续，claimed |
+| A15 | A | 沿A11／A14正式接口继续新消息提醒与用户明确触发，未正式交付；到达不得隐式生成或替换用户当前讨论 |
+| A16 | A | 背景离开view与真正quit分开。A-owned prepare薄合同已确认：唯一reserve零模型、返回实际SID／turn／key／inputUUID／state，existingcompleted不假running、不推进current；持久结果原会话归属与公开生命周期仍待正式自动验证 |
+| A17 | A | 054唯一预留A17，fresh核实reserve-only无C attempt故需要body-free interruption原因；A本树fresh／upgrade两迁移G，尚未正式集成，主树前缀仍53。oldkey／lateprocess拒绝、completed先赢和受控quit/rebuild继续；B sole freshkey明确重新确认合同已请求，不由A复制旧suggestion。真实App退出／重开排除，未记人工通过 |
+| A18 | A | 等A10桌面／A11明确选择与A12实际预算接线，只携实际明确选定的完整候选组，候选不能标成已发送；未正式交付 |
+| B01 | B | 原回应入口已正式；6143真实SID/replies七页G与B正式6856原六标准/Answer/State已root566eb62净接，自动resolved。首93006观测exit1原因未知和后来actualG分别保，未人工/真实模型/原生 |
+| B02 | B | 正式B46两TS及必要合成夹具／inline登记已root6143e76。原六场理解＋回应入口共七场真实DOM→HTTP→每场隔离PG在93022 actualexit0／quiet91／cleanuptrue，原调用数、原样重建重放0追加、source和895＋6 TTL断言保持；首93006 casepassed但final观测exit1／原因未知真实保留。CLI10／type／compile／两轴0，原六标准保留并据自动证据resolved |
+| B03 | B | 原options两mode root2591de6 G／quiet16／cleanup；B正式66e5ee9状态与原五标准净增已root6143e76，B02前置满足，自动resolved。不借此闭合R09有界活跃更新 |
 | B04 | B | 自主验收记录正式 root15946a8，State resolved；root4真实HTTP／PG53 GREEN5.795／DB0＋2032公开入口 GREEN，原标准保留，语义质量／原生／人工未知已跳过 |
-| B05 | B | UUID主动探索与正式前端 root2032 已集成；真实源删除清派生目的／回答、原完成同键完整响应0追加，旧attempt修复与主动 transition GREEN。其余旧六场及全票收口继续 |
-| B06 | B | 三声明和UUID问答正式；root三输入失效场 GREEN。正式9866已 root8957d58：确认意愿后关键未答不生成、真实失败原操作重试、原意愿／回答及完整重放0追加，两mode公开 GREEN／quiet40／cleanup／两轴0；原联合Skill RED保留，claimed待B02对照 |
-| B07 | B | 共同完整请求预算47已 root2032，273unit／30真实HTTP-PG53／入口验证通过。c428已正式 root601f792：两mode实际同版→普通→明确NoSkill→switch新版及四disable/delete六场公开 GREEN，42 actualcalls／quiet58／cleanup、type/compile/CLI10及两轴0；owner先前quiet105保留，整票其他对照继续 |
-| B08 | B | 原消息组5d13c2b及正式052 78b79a0已集成，2真实HTTP稳定有序IDs／重放无调用通过。A11完整版本公开后台已 root9b0a651；A唯一通用版本／选择DTO/main与B唯一RewritePanel逐消息编辑／复制按正式接口接续，不另造存储或指针 |
-| B09 | B | 等待B02＋A16＋A17自动接口；原生证据缺口不得误阻塞可自动接续部分 |
-| B10 | B | 等待B05／06／08＋A13／15；两种场景连续修改与新消息组合 |
-| B11 | B | 等待B03／07／09／10；公开策略全路径组合，不推断模型语义质量 |
-| C01 | C | 673e994统一离线报告与原16例／CLI已集成，State resolved |
+| B05 | B | 正式8dd34b4状态／原五标准净增已root6143e76，既有dialogue、目的／源删／失效、transition与options公开证据保持；确认4调用和继续普通5调用归属修正保留。自动resolved，连续修改由B10继续 |
+| B06 | B | root8957d58两mode公开G／quiet40／cleanup及B正式9866、a17c919原六标准净增已root6143e76。已确认但关键未答0gen、回答与原意愿完整保存、原键故障重试／重放0追加保持；owner原联合92039因后Skill RED exit1不冒全G。自动resolved |
+| B07 | B | root601f792原六场42调用G／quiet58／cleanup；正式dc966d6原七标准状态净增已root6143e76。真实同版、NoSkill关闭不回选、切新版与disable/delete恢复均保持；探索无业务Tool／样本，不冒E06整体完成。自动resolved |
+| B08 | B | 公开A版本选择与C删除已root0096 G27；消息copy22真实RED→G及原strictpair保持，A09 sessionDeletion类型已正式满足，尚5泛型缺A11正式projection。两scene全组edit/save/select/permessageCopy+PG恢复公开case准备中，不把纯Node关UI，claimed |
+| B09 | B | 有界150ms合并、root3次／TTL／CURRENT／Skill实际authority已在B实施，最终12场静态两轴0但未全跑。第一single120真实RED；后25723 single240第一回应scene完整G，第二主动firstopen5s超时，其余10未执行；quiet44／cleanuptrue／freshabsent。无OS控制器与原消息HTTP代理各4G仅窄诊断，根因未知；不延期原预算。A16/17生命周期接缝仍待，原State open |
+| B10 | B | 正式4b1重确认元数据与2bd实际CURRENTNone夹具校准已rootf6d03fb ONLY7，主树原五模块56真实HTTP/PG实际G75.649／53repeat0／DB0，focus4mypy／17unit／两轴0。首55G1ERROR72.906历史保留；后A准备阶段B自有54G1HTTPtimeout与最小1G亦各列，不借主树结果覆盖。A054、A13/15与公开组编辑继续，open |
+| B11 | B | 原State实际open，依B09/B10真实公开组合，不因B01–07resolved关本票。C183无正文paste凭证与迟到取消已B正式521消费，rootC762独立81Node/type/八反例G；各owner计量分开，组合尚未完成 |
+| C01 | C | 正式离线与4a71逐例报告已root1d598d1；公开CLI实际重新生成controlled-v1与正式25KB文件字节/SHA一致、7unitG，16合成样本及human0/质量未知保留，resolved |
 | C02 | C | af0dfdb三输入与c9a5d69任务／报告正式集成、State resolved；四例公开捕获GREEN，报告故意立场失败1、真人0／质量未知 |
 | C03 | C | a2b6ae6统一边界与c9a5d69任务／报告正式集成、State resolved；6真实HTTP、186单元、九捕获与三确定性拒绝GREEN；7故意语义失败、真人0／质量未知 |
-| C04 | C | e9复制来历两公开组及独立样本保留真实HTTP已 GREEN。bbc正式 root548a795，Node16／type／两轴0；A working旧十场 GREEN／quiet68。恢复历史候选copy新增真实 RED仍保留；optional invalidSelection:true＋实际65536前缀已由 C 正式 fde435b37320dee83915016a1bcb894af72b2369 交付，owner反向旧clip36 Node GREEN／type／两轴0，root／A thinPanel消费及原NEW／C三公开场仍待集成复验，claimed |
-| C05 | C | 正式参考与完整请求预算 TEST已集成；C347中央metadata/ports正式 roote1626fe，58 PG53 GREEN11.721／DB0、283unit／3mypy／28真实HTTP GREEN30.937／DB0／两轴0。C a894来源fixture两文件正式 root287ee2a，原扩展43组35HTTP＋8PG GREEN37.857／DB0／两轴0，旧6来源ERROR闭合，guard与断言不改；direct五完整／600与receipt不混history。A完整identity consumer／runtime和running pure-draft物理擦除RED继续，claimed |
-| C06 | C | 已有恢复两公开场、A09独立保留、完整候选组及三声明真实组合 GREEN；六捕获结构0／故意保真整组fail2／真人0／质量false。新增正式5e1版本编辑选择源删除TEST已随e162集成；B07／10、完整history、恢复copy和C三公开场仍接续，claimed |
+| C04 | C | 原范围由正式edc8406与原验收/Answer审计闭合，root787b89a ONLY3同时整合C05文档。真实owner锁FIFO验证保存先／删除先与原来源/重装/失效候选共4HTTP/PG G7.481／53repeat0／DB0、两轴0；rootc762 clipboard独立81Node／8反例G及owner公开证据保。原State resolved，不把后续E06或人工作业加为新关闭条件 |
+| C05 | C | 唯一有界样本getter、完整历史/最终每工具轮总预算和真实来源擦除已正式；纯讨论物理清理root42G28.708及66预算HTTP/PG、293unit证据保。正式38d1aaf原六标准/Answer与State resolved已root787b89a净消费、两轴0；真实语义/自然度未知不称通过 |
+| C06 | C | 原三逐例报告rootcccae19、精确quality_verified=false／human0；原6首5G1timeout→single1G→原6G23.654保真。新重确认／替换两个HTTP root133419f与fresh生成键精确失效rootb113a62，相关42实际G35.381／53DB0。只读捕获接口C3d61已rootd9ce5dd实际16PG G18.945／两轴0，唯一A lineage/carry尚待；C3新两公开分支是owner G，主树尚未新label；C02原解析掩盖断言加强9ee单180正在owner运行，不预称G。第1公开消息组／连续修改仍等A11/B正式typed UI，claimed |
+
+本轮原生／真实App、微信/OCR、真实聊天、外部付费模型、人工操作、push／发布／部署均按用户明确范围排除。当前尚能自主实现的接口、页面、修复及集成全部继续；这些排除不作为等待用户或停止其他工作理由。原票如因人工部分未执行不能关闭，保留原State并单独记录；上表自动resolved只适用于已经核对原自动标准的已完成票。
 
 A051正式7c978564ca18a6c709698fd33ac67e5a89c7ba34已集成为a05a891b0866992fa47741728dd4f250a974b358；记忆删除正文擦除、有效日期和同connection讨论记录均已闭合。root正式001–051生产迁移、050升级／重复／账本与A/C组合81项真实HTTP／PG全绿、自有库剩余0。B已消费正式接口并接续052，pending组件结果仍不当成正式生产前缀。
 
