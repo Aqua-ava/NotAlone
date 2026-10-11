@@ -58,7 +58,7 @@ void app.whenReady().then(async () => {
     void calibration.cancel().then(() => app.quit());
   });
   windows.setHelperObservation({ beforeShow: () => foreground.observeBeforeShow(),
-    onLifecycle: (event) => foreground.notifyHelperLifecycle(event) });
+    onLifecycle: (event) => { foreground.notifyHelperLifecycle(event); replies.notifyHelperLifecycle(event); } });
   app.on('will-quit', () => foreground.dispose());
   const imports = new ImportController(backend, contacts);
   installImportBridge(commands, imports);

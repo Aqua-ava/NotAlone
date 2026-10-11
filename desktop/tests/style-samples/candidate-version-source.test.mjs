@@ -55,10 +55,16 @@ async function fixture() {
       calls.push(request);
       let data;
       if (request.path.endsWith('/assistant-session/default')) data = { session_id: sessionId };
+      else if (request.method === 'POST' && request.path.endsWith('/replies/prepare')) {
+        const turn = records.saved.turns[0];
+        turn.request_key = request.body.idempotency_key;
+        data = { session_id: sessionId, turn_id: turnId, request_key: turn.request_key,
+          input_version_id: inputVersionId, state: turn.state };
+      }
       else if (request.method === 'POST' && request.path.endsWith('/replies')) {
         const turn = records.saved.turns[0];
         turn.request_key = request.body.idempotency_key;
-        data = { ...turn.reply, session_id: sessionId, input_version_id: inputVersionId, state: 'completed' };
+        data = { ...turn.reply, session_id: sessionId, turn_id: turnId, input_version_id: inputVersionId, state: 'completed' };
       }
       else if (request.path.endsWith('/versions')) {
         await records.beforeVersionResponse?.(request);

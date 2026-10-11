@@ -43,7 +43,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
   const deleting = replies.state.sessionDeletion === 'deleting';
   const catalog = replies.state.sessionCatalog;
   const busy = deleting || catalog?.phase === 'loading' || saved?.phase === 'loading'
-    || replies.state.phase === 'waiting' || replies.state.exploration.phase === 'waiting'
+    || replies.state.exploration.phase === 'waiting'
     || replies.state.sessionDeletion === 'failed' || replies.state.sourceAvailability === 'checking';
   useEffect(() => { setConfirmation(null); setCopyError(false); }, [replies.state.contactId, replies.state.scopeRevision, saved?.sessionId]);
   function confirmDelete() {

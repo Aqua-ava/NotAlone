@@ -73,12 +73,17 @@ async function fixture() {
         }
       }
       const generatedTurn = records.saved.turns[records.generatedTurnIndex ?? 0];
-      if (request.path.endsWith('/replies')) generatedTurn.request_key = request.body.idempotency_key;
+      if (request.path.endsWith('/replies/prepare')) {
+        generatedTurn.request_key = request.body.idempotency_key;
+        records.saved.current_input_version_id = generatedTurn.input_version_id;
+      }
       const evidenceRequestId = request.path.match(/\/replies\/([^/]+)\/evidence$/)?.[1];
       const data = request.path.endsWith('/assistant-session/default') ? { session_id: records.saved.session_id }
         : request.path.endsWith('/select') ? { session_id: request.path.split('/').at(-2) }
+        : request.path.endsWith('/replies/prepare') ? { session_id: records.saved.session_id, turn_id: generatedTurn.turn_id,
+          request_key: generatedTurn.request_key, input_version_id: generatedTurn.input_version_id, state: generatedTurn.state }
         : request.path.endsWith('/replies') ? { ...generatedTurn.reply, session_id: records.saved.session_id,
-          input_version_id: generatedTurn.input_version_id, state: 'completed' }
+          turn_id: generatedTurn.turn_id, input_version_id: generatedTurn.input_version_id, state: 'completed' }
         : request.path.endsWith('/evidence') ? { reply_request_id: evidenceRequestId, evidence: [] }
         : request.path.includes('/messages?') ? records.messagePages?.[
           new URL(request.path, 'http://localhost').searchParams.get('before') ?? 'latest'] ?? records.messagePage
@@ -341,7 +346,7 @@ test('公开保存和明确选择的source409同步清原结果与同turn副本�
     assert.equal(f.contacts.getState().draft, '用户仍在编辑的新草稿。');
     f.records.failRequest = (request) => request.path.endsWith('/replies') ? new f.BackendRequestFailure('connection') : null;
     await f.bridge.generate({ ...f.scope, newRequest: false });
-    assert.notEqual(f.calls.filter((request) => request.path.endsWith('/replies')).at(-1).body.idempotency_key, oldRequestKey);
+    assert.notEqual(f.calls.filter((request) => request.path.endsWith('/replies/prepare')).at(-1).body.idempotency_key, oldRequestKey);
   }
 });
 
@@ -391,7 +396,8 @@ test('生成清空当前turn投影后完整来源复验仍清历史版本缓存�
     assert.equal(generated.savedSession.sessionId, f.sessionId);
     assert.deepEqual(generated.savedSession.turns, []);
     assert.equal(generated.candidateVersions.items.length, 3);
-    assert.equal(fullReads(), beforeReads);
+    assert.equal(fullReads(), beforeReads + 1);
+    const beforeValidationReads = fullReads();
     let confirmed = false;
     const published = [];
     const unsubscribe = f.bridge.onStateChanged((state) => { if (confirmed) published.push(state); });
@@ -415,7 +421,7 @@ test('生成清空当前turn投影后完整来源复验仍清历史版本缓存�
     assert.equal(state.selectedCandidateId, null);
     assert.equal(state.explicitCandidateSelection.selection, null);
     assert.equal(state.savedSession.phase, 'ready');
-    assert.equal(fullReads(), beforeReads + 1);
+    assert.equal(fullReads(), beforeValidationReads + 1);
     assert(!JSON.stringify(state).includes(historical.text));
     assert(published.length > 0);
     assert(published.every((event) => !JSON.stringify(event).includes(historical.text)));
