@@ -8,9 +8,9 @@ import { ownResource } from './cleanup';
 import { PageHost } from './page-host';
 import { MessageEventHttpProxy } from '../message-event-http-proxy';
 
-type EventPages = { manager: Page; helper: Page; fixture: RewriteFixture; transport: MessageEventHttpProxy };
+export type EventPages = { manager: Page; helper: Page; fixture: RewriteFixture; transport: MessageEventHttpProxy };
 // 直接连接生产认证 HTTP/SSE；不能使用等待响应结束的改写代理。
-async function withEventPages(browser: Browser, origin: string, use: (pages: EventPages) => Promise<void>) {
+export async function withEventPages(browser: Browser, origin: string, use: (pages: EventPages) => Promise<void>) {
   const released = ownResource();
   await withRewriteFixture('notalone-headless-message-events-', async (fixture) => {
     const transport = await MessageEventHttpProxy.attach(fixture.infoPath);

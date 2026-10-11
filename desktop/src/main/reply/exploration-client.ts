@@ -8,7 +8,7 @@ export interface ExplorationRequest {
   contactId: string; sessionId: string; operationKey: string; expectedInputVersionId: string | null;
   previousId: string | null; scene: 'reply_to_message' | 'initiate_conversation';
   targetMessageId: string | null; purposeHint: string; correction: string; requirements: string;
-  skill: ReplySkillChoice; changeGroup: boolean;
+  skill: ReplySkillChoice; changeGroup: boolean; automatic?: boolean;
 }
 export type ExplorationAction = { contactId: string; sessionId: string; taskId: string; inputVersion: string } & (
   { action: 'confirm'; suggestionId: string; directIntent?: never }
@@ -91,7 +91,7 @@ export async function openExploration(backend: BackendHost, input: ExplorationRe
   const response = await backend.requestJson({ method: 'POST',
     path: `/api/contacts/${input.contactId}/assistant-sessions/${input.sessionId}/explorations`, timeoutMs: 23_000, signal,
     body: { operation_key: input.operationKey, expected_input_version_id: input.expectedInputVersionId,
-      previous_id: input.previousId, change_group: input.changeGroup, content: {
+      previous_id: input.previousId, change_group: input.changeGroup, automatic: Boolean(input.automatic), content: {
         type: input.scene === 'reply_to_message' ? 'response_exploration' : 'purpose_exploration',
         ...(input.scene === 'reply_to_message' ? { target_message_id: input.targetMessageId } : { purpose_hint: input.purposeHint }),
         correction: input.correction, requirements: input.requirements,

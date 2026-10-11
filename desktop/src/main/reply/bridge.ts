@@ -106,6 +106,11 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     replies.explore(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
   commands.handle('reply:change-directions', (...args: unknown[]) =>
     replies.explore(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection, true), 'helper');
+  commands.handle('reply:begin-clarification-edit', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'inputVersion', 'questionId']);
+    if (!isUuid(value.inputVersion) || !isUuid(value.questionId)) throw new Error('关键问题已经失效，请更新理解。');
+    return replies.beginClarificationEdit(value as unknown as import('../../shared/reply-bridge').ReplyClarificationEdit);
+  }, 'helper');
   commands.handle('reply:answer-clarification', (...args: unknown[]) => {
     const value = fields(args, ['contactId', 'scopeRevision', 'answer', 'inputVersion', 'questionId']);
     if (!isUuid(value.inputVersion) || !isUuid(value.questionId) || typeof value.answer !== 'string'

@@ -25,6 +25,7 @@ export interface ReplyUsedSkill { name: string; versionId: string; loadState: 'l
 export type ReplySkillChoice = { mode: 'auto' | 'disabled'; versionId: null } | { mode: 'user'; versionId: string };
 export interface ReplySkillUpdate extends ContactSelection { skill: ReplySkillChoice; }
 export interface ReplyRequirementsUpdate extends ContactSelection { requirements: string; }
+export interface ReplyClarificationEdit extends ContactSelection { questionId: string; inputVersion: string; }
 export interface ReplyClarificationAnswer extends ContactSelection { answer: string; questionId: string; inputVersion: string; }
 export interface DirectionExploration {
   taskId: string; sessionId: string; inputVersion: string; understanding: string; ambiguities: string[];
@@ -118,7 +119,7 @@ export interface ReplySessionState {
   clarificationAnswer: string;
   skillChoice: ReplySkillChoice;
   skillChoices: ReplySkillVersion[];
-  exploration: { phase: 'idle' | 'waiting' | 'ready' | 'failed' | 'paused'; result: DirectionExploration | null; canRetry?: boolean };
+  exploration: { phase: 'idle' | 'waiting' | 'ready' | 'failed' | 'paused'; result: DirectionExploration | null; canRetry?: boolean; automaticUpdatesPaused?: boolean };
   purpose: string;
   phase: 'idle' | 'waiting' | 'ready' | 'failed';
   errorCode?: ReplyFailureCode;
@@ -149,6 +150,7 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   updateCorrection(update: ReplyCorrectionUpdate): Promise<ReplySessionState>;
   explore(selection: ContactSelection): Promise<void>;
   changeDirections(selection: ContactSelection): Promise<void>;
+  beginClarificationEdit(selection: ReplyClarificationEdit): Promise<ReplySessionState>;
   answerClarification(selection: ReplyClarificationAnswer): Promise<void>;
   stopExploration(selection: ContactSelection): Promise<void>;
   retryExploration(selection: ContactSelection): Promise<void>;

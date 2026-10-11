@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReplySessionView } from './RewritePanel';
 
 export function StrategyControls({ replies }: { replies: ReplySessionView }) {
   const { state } = replies, result = state.exploration.result;
-  const [answer, setAnswer] = useState('');
-  useEffect(() => setAnswer(''), [state.scopeRevision, result?.question?.questionId]);
+  const [answerDraft, setAnswerDraft] = useState({ question: '', text: '' });
+  const pausedQuestion = useRef('');
+  const question = result?.question ? `${result.inputVersion}:${result.question.questionId}` : '';
+  const answer = question && answerDraft.question === question ? answerDraft.text : '';
+  useEffect(() => { pausedQuestion.current = ''; setAnswerDraft({ question: '', text: '' }); },
+    [state.contactId, state.scopeRevision, state.mode, state.inputClearRevision]);
   const available = Boolean(state.contactId) && !state.generationBlock && state.phase !== 'waiting'
     && state.exploration.phase !== 'waiting' && (state.mode !== 'reply_to_message' || Boolean(state.targetMessageId));
   return <section aria-label="理解与方向">
@@ -20,6 +24,7 @@ export function StrategyControls({ replies }: { replies: ReplySessionView }) {
       {state.skillChoices.map((skill) => <option key={skill.versionId} value={skill.versionId}>{skill.name} · 版本 {skill.versionNumber}</option>)}
     </select></label>
     <button disabled={!available} onClick={() => void replies.explore()}>更新理解</button>
+    {state.exploration.automaticUpdatesPaused && <p role="status">本次自动更新已暂停，请点“更新理解”继续。</p>}
     {state.exploration.phase === 'waiting' && <p role="status">正在理解本次情境…</p>}
     {state.exploration.phase === 'failed' && <p role="alert">方向建议暂不可用，请核对输入或更新策略后明确重试。</p>}
     {state.exploration.phase === 'paused' && <p role="status">本次已暂停。需要继续时，请明确开启新的探索。</p>}
@@ -43,8 +48,17 @@ export function StrategyControls({ replies }: { replies: ReplySessionView }) {
       {result.question && <div role="group" aria-label="关键澄清">
         <p>{result.question.text}</p>
         <label>关键问题回答<textarea aria-label="关键问题回答" maxLength={4096} value={answer} disabled={!available}
-          onChange={(event) => setAnswer(event.target.value)} /></label>
-        <button disabled={!available || !answer.trim()} onClick={() => void replies.answerClarification(answer.trim(), result.inputVersion, result.question!.questionId)}>提交回答</button>
+          onChange={(event) => {
+            setAnswerDraft({ question, text: event.target.value });
+            if (pausedQuestion.current !== question) {
+              pausedQuestion.current = question;
+              void replies.beginClarificationEdit(result.inputVersion, result.question!.questionId);
+            }
+          }} /></label>
+        <button disabled={!available || !answer.trim()} onClick={() => {
+          pausedQuestion.current = '';
+          void replies.answerClarification(answer.trim(), result.inputVersion, result.question!.questionId);
+        }}>提交回答</button>
       </div>}
       <button disabled={!available || Boolean(result.confirmedIntent)} onClick={() => void replies.explore(true)}>换一组方向</button>
       <button disabled={!available} onClick={() => void replies.stopExploration()}>暂停本次探索</button>

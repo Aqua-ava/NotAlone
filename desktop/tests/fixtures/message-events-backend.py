@@ -131,8 +131,19 @@ def main() -> None:
             if operation == "plan":
                 fixture.reply_model.plans.append(command["plan"])
                 result = {}
+            elif operation == "hold":
+                fixture.reply_model.entered.clear()
+                fixture.reply_model.pause_next_response()
+                result = {}
+            elif operation == "release":
+                fixture._release_response_gates()
+                result = {}
             elif operation == "append_message":
                 result = fixture.append_message(contact_ids[0])
+            elif operation == "append_burst":
+                result = {"messages": [fixture.append_message(
+                    contact_ids[0], text=f"甲的新合成消息：第{index + 1}条近况更新。",
+                ) for index in range(3)]}
             elif operation == "append_other_contact":
                 result = fixture.append_message(contact_ids[1], text="乙的新合成消息：时间安排更新。")
             elif operation == "append_other_owner":
@@ -153,7 +164,18 @@ def main() -> None:
                 fixture.event_buses[fixture.owner_id].disconnect_streams()
                 result = {}
             elif operation == "observations":
-                result = {"model_calls": len(fixture.reply_model.seen_calls)}
+                result = {"model_calls": len(fixture.reply_model.seen_calls),
+                          "payloads": fixture.reply_model.payloads,
+                          "model_entered": fixture.reply_model.entered.is_set()}
+            elif operation == "age_exploration":
+                # 只推进本轮合成 owner 的根任务年龄，不替换生产 TTL 判断。
+                with psycopg.connect(fixture.database_url) as connection:
+                    connection.execute(
+                        "UPDATE public.reply_exploration SET created_at=created_at-interval '901 seconds', "
+                        "root_created_at=root_created_at-interval '901 seconds' WHERE owner_id=%s",
+                        (fixture.owner_id,),
+                    )
+                result = {}
             elif operation == "restart":
                 fixture.backend.close()
                 fixture.backend = fixture._backend(fixture.owner_id)

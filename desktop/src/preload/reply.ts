@@ -29,6 +29,7 @@ export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
     updateCorrection: (...args: unknown[]) => ipcRenderer.invoke('reply:update-correction', ...args),
     explore: (...args: unknown[]) => ipcRenderer.invoke('reply:explore', ...args),
     changeDirections: (...args: unknown[]) => ipcRenderer.invoke('reply:change-directions', ...args),
+    beginClarificationEdit: (...args: unknown[]) => ipcRenderer.invoke('reply:begin-clarification-edit', ...args),
     answerClarification: (...args: unknown[]) => ipcRenderer.invoke('reply:answer-clarification', ...args),
     stopExploration: (...args: unknown[]) => ipcRenderer.invoke('reply:stop-exploration', ...args),
     retryExploration: (...args: unknown[]) => ipcRenderer.invoke('reply:retry-exploration', ...args),

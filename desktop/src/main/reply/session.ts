@@ -5,7 +5,7 @@ import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
 import { generateReply } from './client';
-import type { DirectionExploration, ReplyClarificationAnswer, ReplyRequirementsUpdate, ReplySkillChoice, ReplySkillUpdate } from '../../shared/reply-bridge';
+import type { DirectionExploration, ReplyClarificationAnswer, ReplyClarificationEdit, ReplyRequirementsUpdate, ReplySkillChoice, ReplySkillUpdate } from '../../shared/reply-bridge';
 import { actOnExploration, explorationIdentity, openExploration, type ExplorationRequest, type ExplorationAction } from './exploration-client';
 import { readReplyMessages } from './messages';
 import { readReplyEvidence } from './evidence-read';
@@ -38,6 +38,9 @@ export class ReplySession {
   private directionDerived = false;
   private explorationOperation = 0;
   private explorationPending: AbortController | undefined;
+  private automaticExploration: { contactId: string; scopeRevision: number; generation: number;
+    sessionId: string; remaining: number; expiresAt: number; queued: boolean } | undefined;
+  private automaticExplorationTimer: ReturnType<typeof setTimeout> | undefined;
   private sourceCheck: AbortController | undefined;
   private heldResult: { result: NonNullable<ReplySessionState['result']>; selectedCandidateId: string | null } | undefined;
   private draft = '';
@@ -354,18 +357,28 @@ export class ReplySession {
     return this.getState();
   }
 
-  async explore(selection: ContactSelection, changeGroup = false): Promise<void> {
+  async explore(selection: ContactSelection, changeGroup = false, automatic = false): Promise<void> {
     this.assertScope(selection); this.refreshGenerationEligibility();
     this.assertSessionSelection();
     if (this.state.generationBlock || this.state.mode === 'rewrite_draft' || this.state.phase === 'waiting'
       || this.state.exploration.phase === 'waiting' || this.state.mode === 'reply_to_message' && !this.state.targetMessageId) return;
+    if (!automatic) {
+      this.clearAutomaticExplorationTimer();
+      if (this.state.exploration.automaticUpdatesPaused) {
+        // 明确手动更新建立新任务；不重放失败的自动请求，也不静默延长旧根预算。
+        this.currentExploration = undefined; this.explorationPurpose = undefined; this.strategyJob = undefined;
+        this.stopAutomaticExploration();
+      }
+    }
     const signature = JSON.stringify({ mode: this.state.mode, target: this.state.targetMessageId,
       purpose: this.explorationPurpose ?? this.state.purpose, correction: this.state.correction,
-      requirements: this.state.requirements, skill: this.state.skillChoice, changeGroup });
-    if (this.strategyJob?.type === 'open' && this.strategyJob.signature === signature && this.state.exploration.phase === 'failed') {
+      requirements: this.state.requirements, skill: this.state.skillChoice, changeGroup, automatic });
+    if (!automatic && this.strategyJob?.type === 'open' && !this.strategyJob.request.automatic
+      && this.strategyJob.signature === signature && this.state.exploration.phase === 'failed') {
       await this.runStrategy(this.strategyJob); return;
     }
     const generation = this.backend.getConnectionGeneration();
+    if (generation === undefined) throw new Error('后端连接不可用，请重新连接。');
     const operation = ++this.explorationOperation;
     const pending = new AbortController(); this.explorationPending = pending;
     this.publish({ exploration: { phase: 'waiting', result: null, canRetry: false } });
@@ -380,7 +393,11 @@ export class ReplySession {
         operationKey: randomUUID(), expectedInputVersionId: identity.currentInputVersionId, previousId: previous?.taskId ?? null,
         scene: this.state.mode as 'reply_to_message' | 'initiate_conversation', targetMessageId: this.state.targetMessageId,
         purposeHint: this.explorationPurpose, correction: this.state.correction.trim(), requirements: this.state.requirements.trim(),
-        skill: { ...this.state.skillChoice }, changeGroup };
+        skill: { ...this.state.skillChoice }, changeGroup, automatic };
+      if (!automatic && !previous?.confirmedIntent && !this.automaticExploration) {
+        this.automaticExploration = { contactId: selection.contactId, scopeRevision: selection.scopeRevision,
+          generation, sessionId: identity.sessionId, remaining: 3, expiresAt: Date.now() + 15 * 60_000, queued: false };
+      }
       this.strategyJob = { type: 'open', request, signature, input: this.strategySnapshot(selection) };
       await this.runStrategy(this.strategyJob);
     } catch { if (operation === this.explorationOperation && !pending.signal.aborted) this.publish({ exploration: { phase: 'failed', result: null } }); }
@@ -392,10 +409,19 @@ export class ReplySession {
     const result = this.state.exploration.result;
     const option = result?.directions.find((item) => item.suggestionId === selection.suggestionId);
     if (!result || !option || result.inputVersion !== selection.inputVersion || this.state.exploration.phase !== 'ready') throw new Error('方向建议已失效，请重新探索。');
+    this.stopAutomaticExploration();
     this.strategyJob = { type: 'action', request: { contactId: selection.contactId, sessionId: result.sessionId,
       taskId: result.taskId, inputVersion: result.inputVersion, action: 'confirm', suggestionId: option.suggestionId },
       input: this.strategySnapshot(selection) };
     await this.runStrategy(this.strategyJob);
+    return this.getState();
+  }
+  beginClarificationEdit(selection: ReplyClarificationEdit): ReplySessionState {
+    this.assertScope(selection); this.assertSessionSelection();
+    const result = this.currentExploration;
+    if (!result?.question || result.inputVersion !== selection.inputVersion
+      || result.question.questionId !== selection.questionId) throw new Error('关键问题已经失效，请更新理解。');
+    this.stopAutomaticExploration(!result.confirmedIntent);
     return this.getState();
   }
   async answerClarification(selection: ReplyClarificationAnswer): Promise<void> {
@@ -413,12 +439,14 @@ export class ReplySession {
     this.assertScope(selection);
     const result = this.currentExploration;
     if (!result || this.state.exploration.phase === 'waiting') return;
+    this.stopAutomaticExploration();
     this.strategyJob = { type: 'action', request: { contactId: selection.contactId, sessionId: result.sessionId,
       taskId: result.taskId, inputVersion: result.inputVersion, action: 'stop' }, input: this.strategySnapshot(selection) };
     await this.runStrategy(this.strategyJob);
   }
   async retryExploration(selection: ContactSelection): Promise<void> {
     this.assertScope(selection);
+    if (this.strategyJob?.type === 'open' && this.strategyJob.request.automatic) return;
     if (this.strategyJob && this.state.exploration.phase !== 'waiting') await this.runStrategy(this.strategyJob);
   }
   updateRequirements(update: ReplyRequirementsUpdate): ReplySessionState {
@@ -448,15 +476,20 @@ export class ReplySession {
     this.refreshGenerationEligibility();
     this.assertSessionSelection();
     if (this.state.generationBlock) return;
-    this.notifyInputChanged(); this.cancelPending(); this.lastAttempt = undefined;
+    this.clearAutomaticExplorationTimer();
+    this.notifyInputChanged(true); this.cancelPending(); this.lastAttempt = undefined;
     this.explorationPending?.abort();
     const pending = new AbortController(); this.explorationPending = pending;
     const operation = ++this.explorationOperation, scopeRevision = this.state.scopeRevision;
     const generation = this.backend.getConnectionGeneration();
-    const current = () => !pending.signal.aborted && operation === this.explorationOperation
+    const automaticTask = job.type === 'open' && job.request.automatic ? this.automaticExploration : undefined;
+    const current = () => (!(job.type === 'open' && job.request.automatic)
+      || Boolean(automaticTask && automaticTask === this.automaticExploration))
+      && !pending.signal.aborted && operation === this.explorationOperation
       && scopeRevision === this.state.scopeRevision && job.request.contactId === this.state.contactId
       && generation === this.backend.getConnectionGeneration();
-    this.publish({ exploration: { phase: 'waiting', result: this.state.exploration.result, canRetry: true } });
+    this.publish({ exploration: { phase: 'waiting', result: this.state.exploration.result, canRetry: true,
+      automaticUpdatesPaused: this.state.exploration.automaticUpdatesPaused } });
     try {
       const result = job.type === 'open' ? await openExploration(this.backend, job.request, pending.signal)
         : await actOnExploration(this.backend, job.request, pending.signal);
@@ -466,14 +499,18 @@ export class ReplySession {
         this.generationSkillChoice = result.result.usedSkill
           ? { mode: 'user', versionId: result.result.usedSkill.versionId } : { mode: 'disabled', versionId: null };
         const confirmed = result.result.confirmedIntent;
-        if (confirmed) this.directionDerived = true;
-        this.publish({ exploration: { phase: 'ready', result: result.result, canRetry: true },
+        if (confirmed) { this.directionDerived = true; this.stopAutomaticExploration(); }
+        this.publish({ exploration: { phase: 'ready', result: result.result, canRetry: true,
+          automaticUpdatesPaused: !confirmed && !this.automaticExploration
+            && Boolean(this.state.exploration.automaticUpdatesPaused) },
           savedSession: { phase: 'idle', sessionId: result.result.sessionId, turns: [], inputs: [], currentInputVersionId: null }, skillChoices: result.result.skillChoices,
           ...(confirmed ? this.state.mode === 'reply_to_message' ? { direction: confirmed } : { purpose: confirmed } : {}) });
       } else if (result.kind === 'paused') {
+        this.stopAutomaticExploration();
         this.currentExploration = undefined; this.explorationPurpose = undefined;
         this.publish({ exploration: { phase: 'paused', result: null, canRetry: false } });
       } else {
+        this.stopAutomaticExploration();
         this.currentExploration = undefined; this.explorationPurpose = undefined;
         const input = job.input.mode === 'rewrite_draft' ? job.input : job.input.mode === 'reply_to_message'
           ? { ...job.input, direction: result.confirmedIntent } : { ...job.input, purpose: result.confirmedIntent };
@@ -485,8 +522,17 @@ export class ReplySession {
           ...result.reply, input, candidates: result.reply.candidates.map((original) => ({ original, editedText: original.text })) },
           selectedCandidateId: result.reply.candidates[0].candidateId });
       }
-    } catch { if (current()) this.publish({ exploration: { phase: 'failed', result: null, canRetry: true } }); }
-    finally { if (this.explorationPending === pending) this.explorationPending = undefined; }
+    } catch {
+      if (current()) {
+        const automatic = job.type === 'open' && Boolean(job.request.automatic);
+        this.publish({ exploration: { phase: 'failed', result: null, canRetry: !automatic,
+          automaticUpdatesPaused: automatic } });
+        if (automatic) this.stopAutomaticExploration(true);
+      }
+    } finally {
+      if (this.explorationPending === pending) this.explorationPending = undefined;
+      if (current() && this.automaticExploration?.queued) this.queueAutomaticExploration();
+    }
   }
 
   async generate(selection: GenerateReply): Promise<void> {
@@ -494,6 +540,7 @@ export class ReplySession {
     this.assertSessionSelection();
     this.refreshGenerationEligibility();
     if (this.state.generationBlock) throw new Error('请先确认本次联系人。');
+    this.stopAutomaticExploration();
     if (this.state.mode !== 'rewrite_draft' && this.state.exploration.result) {
       const result = this.state.exploration.result;
       const intent = this.state.mode === 'reply_to_message' ? this.state.direction : this.state.purpose;
@@ -650,10 +697,12 @@ export class ReplySession {
       connected: () => { if (current()) this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'connected' } }); },
       interrupted: () => { if (current()) {
         this.noticeVerification?.abort();
+        if (this.automaticExploration) this.stopAutomaticExploration(true);
         this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'interrupted' } });
       } },
       message: (event) => {
-        if (!current() || event.contactId !== contactId || this.state.messageNotice.changed) return;
+        if (!current() || event.contactId !== contactId
+          || this.state.messageNotice.changed && !this.automaticExploration) return;
         const revision = ++this.noticeRevision;
         this.noticeVerification?.abort();
         const verification = new AbortController();
@@ -663,12 +712,52 @@ export class ReplySession {
           if (!current() || verification.signal.aborted || revision !== this.noticeRevision || page.generation !== generation) return;
           if (page.messages.some((message) => message.messageId === event.messageId)) {
             this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'connected', changed: true } });
+            this.queueAutomaticExploration();
           }
         }).catch(() => {
-          if (current() && !verification.signal.aborted) this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'interrupted' } });
+          if (current() && !verification.signal.aborted) {
+            if (this.automaticExploration) this.stopAutomaticExploration(true);
+            this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'interrupted' } });
+          }
         }).finally(() => { if (this.noticeVerification === verification) this.noticeVerification = undefined; });
       },
     }, pending.signal);
+  }
+  private clearAutomaticExplorationTimer(): void {
+    if (this.automaticExplorationTimer) clearTimeout(this.automaticExplorationTimer);
+    this.automaticExplorationTimer = undefined;
+  }
+  private stopAutomaticExploration(paused = false): void {
+    const inFlight = this.state.exploration.phase === 'waiting'
+      && this.strategyJob?.type === 'open' && this.strategyJob.request.automatic;
+    this.clearAutomaticExplorationTimer(); this.automaticExploration = undefined;
+    if (inFlight) {
+      ++this.explorationOperation;
+      this.explorationPending?.abort(); this.explorationPending = undefined;
+      this.strategyJob = undefined; this.currentExploration = undefined; this.explorationPurpose = undefined;
+      this.publish({ exploration: { phase: 'failed', result: null, canRetry: false, automaticUpdatesPaused: true } });
+    } else if (paused) this.publish({ exploration: { ...this.state.exploration, automaticUpdatesPaused: true } });
+  }
+  private queueAutomaticExploration(): void {
+    const task = this.automaticExploration, result = this.currentExploration;
+    if (!task || result?.confirmedIntent || this.state.mode === 'rewrite_draft'
+      || task.contactId !== this.state.contactId || task.scopeRevision !== this.state.scopeRevision
+      || task.generation !== this.backend.getConnectionGeneration() || result && task.sessionId !== result.sessionId
+      || this.state.sessionDeletion === 'deleting' || this.state.sessionDeletion === 'failed'
+      || this.state.generationBlock || this.catalogPending
+      || this.state.sessionCatalog?.selectionPending) return;
+    task.queued = true;
+    if (this.state.exploration.phase === 'waiting') return;
+    if (task.remaining <= 0 || Date.now() >= task.expiresAt) { this.stopAutomaticExploration(true); return; }
+    if (!result || this.state.exploration.phase !== 'ready' || this.automaticExplorationTimer) return;
+    this.automaticExplorationTimer = setTimeout(() => {
+      this.automaticExplorationTimer = undefined;
+      if (this.automaticExploration !== task || this.currentExploration !== result) return;
+      task.queued = false; --task.remaining;
+      // 唯一后端探索存储仍复验实际 CURRENT、来源、Skill 和根预算；失败不自动重试。
+      void this.explore({ contactId: task.contactId, scopeRevision: task.scopeRevision }, false, true)
+        .catch(() => { if (this.automaticExploration === task) this.stopAutomaticExploration(true); });
+    }, 150);
   }
   private invalidateInput(preserveExploration = false): void {
     this.invalidateExploration(preserveExploration);
@@ -677,13 +766,15 @@ export class ReplySession {
     this.publish({ phase: this.state.result ? 'ready' : 'idle', errorCode: undefined, canRetry: false });
   }
   private invalidateExploration(preserve = false): void {
+    this.stopAutomaticExploration();
     this.strategyJob = undefined;
     if (!preserve) { this.currentExploration = undefined; this.explorationPurpose = undefined; this.generationSkillChoice = undefined; }
     ++this.explorationOperation;
     this.explorationPending?.abort(); this.explorationPending = undefined;
     this.publish({ exploration: { phase: 'idle', result: null }, clarificationAnswer: '' });
   }
-  private notifyInputChanged(): void {
+  private notifyInputChanged(preserveAutomatic = false): void {
+    if (!preserveAutomatic) this.stopAutomaticExploration();
     for (const listener of this.inputListeners) listener();
   }
   private cancelMessagePage(): void { ++this.messageOperation; this.messagePending?.abort(); this.messagePending = undefined; }
