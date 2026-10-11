@@ -78,7 +78,8 @@ function requestBody(command: AssistantContinuationCommand, sessionId: string) {
 // 复用唯一认证传输；结果归属、候选版本与生效要求均由后端同事务确定。
 export async function continueAssistantSession(backend: BackendHost, contactId: string, sessionId: string,
   command: AssistantContinuationCommand, signal: AbortSignal,
-  onPrepared?: (receipt: AssistantGenerationReceipt) => void, onRequested?: () => void) {
+  onPrepared?: (receipt: AssistantGenerationReceipt) => void, onRequested?: () => void,
+  onPrepareRequest?: () => void) {
   if (!isUuid(contactId) || !isUuid(sessionId)) throw new Error('当前助手会话身份无效。');
   const body = requestBody(command, sessionId.toLowerCase());
   const request = { method: 'POST' as const,
@@ -106,7 +107,9 @@ export async function continueAssistantSession(backend: BackendHost, contactId: 
         ? '本次文字要求与明确意愿不一致，请改为同一意愿后重新提交。'
         : '请明确选择候选；旧要求可以保留、替换或移除，新要求需明确新增。' };
   };
-  const preparation = await perform(request.path + '/prepare');
+  const preparing = perform(request.path + '/prepare');
+  onPrepareRequest?.();
+  const preparation = await preparing;
   const preparationClarification = clarified(preparation.data, preparation.generation);
   if (preparationClarification) return preparationClarification;
   if (generation === undefined || preparation.generation !== generation

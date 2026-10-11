@@ -71,6 +71,20 @@ function continuationCommand() {
     ]) };
 }
 
+test('实际准备HTTP发出时报告准备阶段，合法澄清不伪造领取或执行回执', async (t) => {
+  const { backend } = await clarificationBackend(t, clarificationResponse);
+  const requests: string[] = [], phases: string[] = [];
+  const requestJson = backend.requestJson.bind(backend);
+  backend.requestJson = async (options) => { requests.push(options.path); return requestJson(options); };
+  const result = await continueAssistantSession(backend, contactId, sessionId, continuationCommand(),
+    new AbortController().signal, () => phases.push('prepared'), () => phases.push('requested'), () => {
+      assert.deepEqual(requests, [continuePath + '/prepare']);
+      phases.push('preparing');
+    });
+  assert.equal(result.phase, 'clarification');
+  assert.deepEqual(phases, ['preparing']);
+});
+
 test('真实JsonClient将当前continue的有限澄清交给业务客户端并保留新增动作', async (t) => {
   const { backend } = await clarificationBackend(t, clarificationResponse);
   const result = await continueAssistantSession(backend, contactId, sessionId, continuationCommand(), new AbortController().signal);

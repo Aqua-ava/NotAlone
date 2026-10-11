@@ -81,3 +81,9 @@ Root 净集成 `e94dfa2e` 的唯一 `AssistantGenerationJobs` 准备登记API与
 固定切片的独立 Standards 硬性违例0／新增重要 possible Fowler 0，独立 Spec 新增P0–P3为0；两轴报告分别保留，仅作静态评审。本段仅后端来源隐私续接与删除证据，不代替唯一桌面宿主、公开恢复页面或原生停止／重开；原 AC 未勾与 State claimed 保留。全部测试为合成数据、受控模型、随机隔离库，未读取业务库、私人资料、微信或 OCR，未外部发送、调用外部模型、push、发布或部署。
 
 Root 净接正式 `ab079a1b` 的三个后端路径后，受控隔离runner独立完整执行 `tests.integration.server.test_assistant_retry_source_guard`：**4 GREEN／7.266s／skip0**，真实55账本／repeat0、内外自有库残留0；两源码限定mypy、三文件编译与diff通过。真实模型前已捕获但A尚未保存的来源同样拒绝待删重试、复制随原来源清理；迟到负例保留既有无正文租约异常分类日志。宿主consumer新增历史failed与实际运行租约竞态及Page组合继续，不以此关闭原17真正App退出要求。
+
+2026-10-11 正式连续客户端补准备阶段身份：第8参数 `onPrepareRequest` 仅在唯一 `/continue/prepare` 的实际 promise 发出后回调，交同一个 Jobs authority 标记 HTTP 已在途；canonical body、五字段回执和实际执行回调仍沿原流程。合法 typed 澄清仅报告 preparing、零 prepared／requested，不从错误或缺回执猜测零领取，未知传输仍由原登记项保留。此切片不修改 Host/controller 或构造第二登记图。
+
+真实 JsonClient 回环 HTTP 的公开回调反例先 **1 RED／57.680ms**（实际已请求但准备阶段未报告），修复后将 TS 测试经 esbuild 临时bundle，用 `node --test` 实际 **29 GREEN／112.183ms／skip0／exit0**；`npm run typecheck` 与diff通过。固定 ONLY2 SHA256 `3b14046f465fba506c77765116cdd1743f8b0add88de7f5dc81872b42027202f` 独立 Standards 硬性违例0／新增重要possible Fowler0、Spec 新增P0–P3为0，两轴只读。此段只证明客户端阶段合同；唯一 Main／宿主 consumer 继续接线与复验，原 AC／claimed不预填，Page／真实App／原生未执行。
+
+Root 净接 `a5240199` 两个代码／测试路径后，实际合成 JsonClient HTTP 与续答协议 **29 GREEN／101.661375ms／skip0／actualexit0**，完整桌面类型和diff通过。准备回调只在实际HTTP已发起时发生；合法澄清仅报告preparing，不伪造已领取或执行回执。此切片不证明Host退出、原生App重开或人工验收，原AC与claimed保持。
