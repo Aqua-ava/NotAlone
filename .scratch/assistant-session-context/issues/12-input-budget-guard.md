@@ -160,3 +160,18 @@ git diff --check
 阶段 3e 提交前主 Agent 独立验证：正式 `daa443deac6bafddfb6ad704a7ce80bc710aba94` 完整导出，只叠加以上七个源／测试文件，不包含任何尚未提交的 10 前端、11 选择读取、13 或 14 补丁。实际 `PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-a12-discussion-cut-triek9ew/source tests.integration.server.test_assistant_discussion_budget tests.integration.server.test_assistant_input_budget` 共 22 项 HTTP GREEN／37.545 秒，生产 001–053、自有随机库剩余 0；日志 `/private/tmp/notalone-a12-discussion-fresh-http.log`。冻结源码的独立两轴审查：Standards 硬规范 0、Fowler 判断 0；Spec 错实现／范围扩张／actionable 各 0，并明确保留预算页面与大历史响应两项票级 partial。规格审查者另跑 21 项纯单元及三项合成载荷探针 GREEN，不作 PG 或页面证据。完整讨论只在当前生成内存和原权威资料中存在，没有新增长期副本。
 
 总协调主树接续正式 `9e1a1d816c703e6434c7c6a75bb5e409edc0d4f2` 八文件：七源码／测试原样集成，任务记录冲突保留主树全部可信回执证据及本提交精确追加内容。在 Conda `NotAlone`、关闭 dotenv／追踪、`PYTHONPATH=src:.` 环境实际运行上文同五模块的主树隔离 runner：66 项 GREEN／47.426 秒（24 真实 HTTP、42 存储集成），生产 001–053、自有库精确剩余 0。回复单元 293 项 GREEN／2.287 秒；两个新源 mypy、七文件 py_compile 与差异检查通过。最终限定 Standards 硬要求／重要气味 0、Spec 0。完整有序消息组正文含实际消息 UUID 和本次要求的 JSON，原样进入模型并计量；未增加历史副本。预算 UI、1 MiB 大响应和 C 旧纯草稿历史依赖删除的物理擦除缺口仍由原负责人接续，本次不将其关闭，12 保持 claimed；人工／原生／外部模型未执行。
+
+正式A 5ee4eac仅测试修正后缀净接；以下77项等结果归A，根最小独立复验另记。
+
+
+### 来源删除后的 CURRENT 回归测试修正
+
+2026-10-11：仅更正一个已过时的合成 HTTP 验收期待，生产预算、C 来源守卫、模型上下文和写入者均未修改。旧样本删除按正式路径清除三个依赖生成输入并将 CURRENT 置空；继续携带已被擦除的 expected_input_version_id 请求新模型本来必须失败。纯正式 c0844 无任何此补丁取得真 RED：1 项／1.557 秒／exit1，旧用例错误地要求200；与11分页切片无关。
+
+新断言先证明 CURRENT为空、三条实际generation输入均redacted且正文NULL；旧expected身份返回409 assistant_session_input_conflict、模型增量0、公开GET讨论逐字未改变。再由合成用户以新UUID键提交独立新草稿、不携已删除expected，返回200且仅新增一次可控模型调用，实际新input UUID不属于已删除集合、CURRENT指向新输入。原独立讨论、当前五次与旧历史样本分离及模型完整历史断言全部保留，没有抹去失败或恢复旧身份。
+
+TDD：同项1 / 1 GREEN／2.013秒；完整相关讨论预算模块11 / 11 GREEN／17.733秒，均真实生产001–054迁移、账本匹配、repeat0及两层自有库剩余0。旧RED/新GREEN/完整模块原始日志保留于 /private/tmp/notalone-a12-deleted-current-compat-r8h5tfht；本阶段只提交这一测试与本票追加。全票仍claimed，预算页面与有界大历史读取等剩余自动范围继续；人工、Page/App/native、19、微信/OCR与私人资料未执行。
+
+主 Agent 新鲜限定两轴：Standards 硬性0／Fowler判断0；Spec actionable0、越界0，确认旧expect200已过时且未削弱删除。最终正式11分页＋实际C启动＋本测试的相关完整组合77 / 77 GREEN／46.440秒，正式54迁移账本、repeat0及自有库0；原76G1F与purebaseline RED继续保留，不作预算公开页面完成证据。
+
+2026-10-11 总协调仅净接正式A `5ee4eac` 原测试的22行修正及本票后缀，未修改预算、CURRENT或删除生产代码。主树实际认证HTTP→隔离PG整个原模块 **11 GREEN／17.853s／skip0／actualexit0**；001–054账本／repeat0、自有库剩余0。旧身份409及零模型、完整历史不变、新键独立输入一次模型和新CURRENT的加强断言全部通过，原样本、讨论与删除标准保留。新鲜Standards硬要求0／重要Fowler possible0、Spec新增P0–P3为0；两轴只读未代测试。此提交不代表累计预算公开UI完成，12仍claimed，公开提醒与新开路径由A继续正式交付，人工未执行。

@@ -422,11 +422,31 @@ class AssistantDiscussionBudgetHttpTest(unittest.TestCase):
         self.assertTrue(all(turn["state"] == "redacted" and turn["reply"] is None
                             for turn in saved["turns"]))
         self.assertEqual(saved["inputs"][0]["content"]["purpose_hint"], "合成来源无关讨论保持完整。")
+        self.assertIsNone(saved["current_input_version_id"])
+        erased_inputs = [item for item in saved["inputs"] if item["type"] == "generation"]
+        self.assertEqual(len(erased_inputs), 3)
+        self.assertTrue(all(item["state"] == "redacted" and item["content"] is None
+                            for item in erased_inputs))
+        self.assertIn(expected, {item["input_version_id"] for item in erased_inputs})
+        calls = len(self.fixture.reply_model.seen_model_payloads)
+        stale_body = self.fixture._body(contact_id, "合成删除后的独立当前原句。")
+        stale_body["expected_input_version_id"] = expected
+        self.assertEqual(backend.request(path + "/replies", stale_body), (
+            409, {"error": "assistant_session_input_conflict"},
+        ))
+        self.assertEqual(len(self.fixture.reply_model.seen_model_payloads), calls)
+        self.assertEqual(backend.request(path), (200, saved))
+        # 用户明确输入新的独立原句，用新键提交，不恢复已擦除的旧 CURRENT 身份。
         body = self.fixture._body(contact_id, "合成删除后的独立当前原句。")
-        body["expected_input_version_id"] = expected
+        self.assertNotEqual(body["idempotency_key"], stale_body["idempotency_key"])
         self.fixture._plan(body["content"]["draft_text"])
         status, generated = backend.request(path + "/replies", body)
         self.assertEqual(status, 200, generated)
+        self.assertEqual(len(self.fixture.reply_model.seen_model_payloads), calls + 1)
+        self.assertNotIn(generated["input_version_id"],
+                         {item["input_version_id"] for item in erased_inputs})
+        self.assertEqual(backend.request(path)[1]["current_input_version_id"],
+                         generated["input_version_id"])
         items = self._model_request(self.fixture.reply_model.seen_model_payloads[-1])["assistant_discussion"]["items"]
         self.assertEqual([item["kind"] for item in items], ["discussion_input"])
         self.assertNotIn("合成引用旧表达风格的旧 AI 候选。", json.dumps(items, ensure_ascii=False))
