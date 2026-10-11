@@ -32,7 +32,7 @@ test('无法归属单个样本的复制片段不能在粘贴编辑后保存为�
     await samples.refresh(selection);
     const fragment = `${first.text}\n${second.text}`;
     assert.throws(() => samples.noteSavedSampleCopy({ ...selection, sampleId: first.sample_id, text: fragment }));
-    samples.noteManualPaste({ ...selection, text: fragment });
+    assert.throws(() => samples.noteManualPaste({ ...selection, text: fragment }));
     samples.updateManualText({ ...selection, text: '跨项粘贴后只留下合成短句。' });
     await assert.rejects(samples.saveManual({ ...selection, text: '跨项粘贴后只留下合成短句。' }));
     assert.equal(writes.length, 0);
@@ -96,12 +96,137 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
         sessionId, contactId, scopeRevision: 1, connectionGeneration: 1, revision: state.revision + 1, ...update } });
       const copyPaste = () => {
         samples.noteCandidateCopy({ ...selection, replyRequestId: requestId, candidateId, text: candidateText.slice(0, 8) });
-        samples.noteManualPaste({ ...selection, text: candidateText.slice(0, 8) });
+        const receipt = samples.noteManualPaste({ ...selection, text: candidateText.slice(0, 8) });
+        samples.updateManualText({ ...selection, text: candidateText.slice(0, 8), pastedText: candidateText.slice(0, 8), ...receipt });
         samples.updateManualText({ ...selection, text: '粘贴候选后编辑但未保存。' });
       };
       return { samples, backend, contacts, replies, writes, reads, emit, deleted, copyPaste, get state() { return state; },
         setGeneration: (value) => { generation = value; } };
     }
+
+    for (const sourceShape of ['current', 'history']) for (const sequence of ['clear', 'later-copy', 'delete', 'later-copy-delete']) {
+      await t.test(`来源不可核验的粘贴立即拒绝，清空后独立键入可保存：${sourceShape}/${sequence}`, async () => {
+        const prefix = '甲'.repeat(65_536);
+        const history = structuredClone(restoredSession);
+        history.turns[0].reply.candidates[0].text = prefix;
+        const f = sourceShape === 'history' ? fixture({ savedSession: history }) : fixture();
+        if (sourceShape === 'current') f.emit({ result: { ...f.state.result,
+          candidates: [{ original: { candidateId, text: prefix }, editedText: prefix }] } });
+        await f.samples.refresh(selection);
+        assert.throws(() => f.samples.noteCandidateCopy({ ...selection, replyRequestId: requestId,
+          candidateId, text: prefix, invalidSelection: true }));
+        f.samples.updateManualText({ ...selection, text: '' });
+        if (sequence.includes('later-copy')) f.samples.noteSavedSampleCopy({ ...selection, sampleId, text: saved.text });
+        if (sequence.includes('delete')) f.deleted({});
+        if (sequence.includes('delete') && sourceShape === 'history') f.emit({ savedSession: { phase: 'idle', turns: [] } });
+        assert.throws(() => f.samples.noteManualPaste({ ...selection, text: prefix.slice(0, 4096) }));
+        f.samples.updateManualText({ ...selection, text: '被拒片段不能编辑后改为手工来源。' });
+        await assert.rejects(f.samples.saveManual({ ...selection, text: '被拒片段不能编辑后改为手工来源。' }));
+        assert.equal(f.writes.length, 0);
+        f.samples.updateManualText({ ...selection, text: '' });
+        const independent = '清空后直接键入的独立合成文字。';
+        assert.throws(() => f.samples.noteManualPaste({ ...selection, text: independent }));
+        await assert.rejects(f.samples.saveManual({ ...selection, text: independent }));
+        assert.equal(f.writes.length, 0);
+        f.samples.updateManualText({ ...selection, text: '' });
+        f.samples.updateManualText({ ...selection, text: independent });
+        await f.samples.saveManual({ ...selection, text: independent });
+        assert.equal(f.writes.length, 1);
+        assert.deepEqual(f.writes[0].origin, { kind: 'manual' });
+      });
+    }
+
+    await t.test('验源完成但未实际插入时，新键入的独立文字仍是manual', async () => {
+      const f = fixture();
+      f.samples.noteCandidateCopy({ ...selection, replyRequestId: requestId, candidateId, text: candidateText });
+      f.samples.noteManualPaste({ ...selection, text: candidateText });
+      const text = '尚未插入候选时直接键入的独立文字。';
+      f.samples.updateManualText({ ...selection, text });
+      await f.samples.saveManual({ ...selection, text });
+      assert.deepEqual(f.writes[0].origin, { kind: 'manual' });
+    });
+
+    for (const invalidation of ['typed', 'clear', 'next-paste', 'scope', 'connection', 'delete', 'projection']) {
+      await t.test(`待插入凭证经${invalidation}后失效，不能挂上旧来历`, async () => {
+        const f = fixture();
+        f.samples.noteCandidateCopy({ ...selection, replyRequestId: requestId, candidateId, text: candidateText });
+        const receipt = f.samples.noteManualPaste({ ...selection, text: candidateText });
+        let nextReceipt;
+        if (invalidation === 'typed') f.samples.updateManualText({ ...selection, text: '新键入的独立文字。' });
+        if (invalidation === 'clear') f.samples.updateManualText({ ...selection, text: '' });
+        if (invalidation === 'next-paste') nextReceipt = f.samples.noteManualPaste({ ...selection, text: candidateText });
+        if (invalidation === 'scope') f.emit({ scopeRevision: 2 });
+        if (invalidation === 'connection') f.setGeneration(2);
+        if (invalidation === 'delete') f.deleted();
+        if (invalidation === 'projection') f.emit({});
+        assert.throws(() => f.samples.updateManualText({ ...selection, text: candidateText, pastedText: candidateText, ...receipt }));
+        assert.equal(f.writes.length, 0);
+        if (nextReceipt) {
+          f.samples.updateManualText({ ...selection, text: candidateText, pastedText: candidateText, ...nextReceipt });
+          f.samples.updateManualText({ ...selection, text: '新凭证提交后的编辑。' });
+          await f.samples.saveManual({ ...selection, text: '新凭证提交后的编辑。' });
+          assert.deepEqual(f.writes[0].origin, { kind: 'candidate', id: candidateId });
+          assert.throws(() => f.samples.updateManualText({ ...selection, text: candidateText, pastedText: candidateText, ...nextReceipt }));
+        }
+      });
+    }
+    await t.test('取消未插入的待验片段不丢失已有候选编辑的真实来历', async () => {
+      const f = fixture(); f.copyPaste();
+      const receipt = f.samples.noteManualPaste({ ...selection, text: candidateText.slice(0, 8) });
+      f.samples.updateManualText({ ...selection, text: '已有候选编辑在待插入期间继续改写。' });
+      await f.samples.saveManual({ ...selection, text: '已有候选编辑在待插入期间继续改写。' });
+      assert.deepEqual(f.writes[0].origin, { kind: 'candidate', id: candidateId });
+      assert.throws(() => f.samples.updateManualText({ ...selection, text: candidateText.slice(0, 8),
+        pastedText: candidateText.slice(0, 8), ...receipt }));
+    });
+    for (const tamper of ['fragment', 'result', 'token', 'length']) await t.test(`粘贴凭证不能配合篡改${tamper}提交`, () => {
+      const f = fixture();
+      f.samples.noteCandidateCopy({ ...selection, replyRequestId: requestId, candidateId, text: candidateText });
+      const receipt = f.samples.noteManualPaste({ ...selection, text: candidateText });
+      const update = { ...selection, text: candidateText, pastedText: candidateText, ...receipt };
+      if (tamper === 'fragment') update.pastedText = '任意其他文字。';
+      if (tamper === 'result') update.text = '不含实际粘贴内容。';
+      if (tamper === 'token') update.pasteId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+      if (tamper === 'length') update.text += '长'.repeat(4096);
+      assert.throws(() => f.samples.updateManualText(update));
+      assert.equal(f.writes.length, 0);
+    });
+
+    await t.test('已证来源的长粘贴可有界插入，再编辑仍保留候选来历', async () => {
+      const f = fixture(); const text = '合成较长说法'.repeat(850);
+      f.emit({ result: { ...f.state.result, candidates: [{ original: { candidateId, text }, editedText: text }] } });
+      f.samples.noteCandidateCopy({ ...selection, replyRequestId: requestId, candidateId, text });
+      const receipt = f.samples.noteManualPaste({ ...selection, text });
+      const insertedText = text.slice(0, 4096);
+      f.samples.updateManualText({ ...selection, text: insertedText, pastedText: text, insertedText, ...receipt });
+      f.samples.updateManualText({ ...selection, text: '有界插入后明确编辑的合成文字。' });
+      await f.samples.saveManual({ ...selection, text: '有界插入后明确编辑的合成文字。' });
+      assert.deepEqual(f.writes[0].origin, { kind: 'candidate', id: candidateId });
+    });
+
+    for (const existingCandidate of [false, true]) await t.test(`提交回包迟到前取消插入，保留${existingCandidate ? '已有候选' : '独立手写'}来历`, async () => {
+      const f = fixture();
+      if (existingCandidate) f.copyPaste();
+      f.samples.noteCandidateCopy({ ...selection, replyRequestId: requestId, candidateId, text: candidateText });
+      const receipt = f.samples.noteManualPaste({ ...selection, text: candidateText });
+      f.samples.updateManualText({ ...selection, text: candidateText, pastedText: candidateText, ...receipt });
+      const text = '提交回包之前新键入的合成表达。';
+      f.samples.updateManualText({ ...selection, text, cancelPasteId: receipt.pasteId });
+      await f.samples.saveManual({ ...selection, text });
+      assert.deepEqual(f.writes[0].origin, existingCandidate ? { kind: 'candidate', id: candidateId } : { kind: 'manual' });
+    });
+
+    await t.test('同一句已登记多个候选来历时，粘贴阶段即拒绝而非等保存', async () => {
+      const f = fixture();
+      f.samples.noteCandidateCopy({ ...selection, replyRequestId: requestId, candidateId, text: candidateText });
+      f.emit({ result: { ...f.state.result, candidates: [
+        ...f.state.result.candidates,
+        { original: { candidateId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', text: candidateText }, editedText: candidateText },
+      ] } });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: candidateText }));
+      assert.equal(f.writes.length, 0);
+      await assert.rejects(f.samples.saveManual({ ...selection, text: '歧义粘贴不能编辑后失去来源。' }));
+    });
 
     await t.test('恢复后只在已保存讨论可见的完成候选保留来历，删除后清未保存编辑', async () => {
       const f = fixture({ savedSession: restoredSession }); await f.samples.refresh(selection);
@@ -113,7 +238,7 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       const before = f.samples.getState(); f.deleted();
       assert.equal(f.samples.getState().erasureRevision, before.erasureRevision + 1);
       assert.deepEqual(f.samples.getState().samples, before.samples);
-      f.samples.noteManualPaste({ ...selection, text: candidateText.slice(0, 8) });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: candidateText.slice(0, 8) }));
       f.samples.updateManualText({ ...selection, text: '恢复候选旧剪贴板再次编辑。' });
       await assert.rejects(f.samples.saveManual({ ...selection, text: '恢复候选旧剪贴板再次编辑。' }));
       assert.equal(f.writes.length, 1);
@@ -139,7 +264,7 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       const f = fixture({ savedSession: item.saved ?? restoredSession });
       const copy = { ...selection, replyRequestId: requestId, candidateId, text: candidateText.slice(0, 8), ...item.copy };
       assert.throws(() => f.samples.noteCandidateCopy(copy));
-      f.samples.noteManualPaste({ ...selection, text: item.paste ?? copy.text });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: item.paste ?? copy.text }));
       f.samples.updateManualText({ ...selection, text: '来源不可确认的片段粘贴后编辑。' });
       await assert.rejects(f.samples.saveManual({ ...selection, text: '来源不可确认的片段粘贴后编辑。' }));
       assert.equal(f.writes.length, 0);
@@ -155,22 +280,21 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       assert.deepEqual(f.writes[0].origin, { kind: 'candidate', id: candidateId });
       f.deleted(); assert.equal(f.samples.getState().erasureRevision, 1);
     });
-    await t.test('无效复制实际粘贴被拒后，清空可另贴不同独立文字', async () => {
+    await t.test('无效复制实际粘贴被拒后，清空可直接键入不同独立文字', async () => {
       const f = fixture({ savedSession: restoredSession });
       const fragment = candidateText.slice(0, 8);
       assert.throws(() => f.samples.noteCandidateCopy({ ...selection,
         replyRequestId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', candidateId, text: fragment }));
-      f.samples.noteManualPaste({ ...selection, text: fragment });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: fragment }));
       f.samples.updateManualText({ ...selection, text: '未知来历复制后编辑。' });
       await assert.rejects(f.samples.saveManual({ ...selection, text: '未知来历复制后编辑。' }));
       f.samples.updateManualText({ ...selection, text: '' });
-      const independent = '清空后从别处粘贴的独立合成文字。';
-      f.samples.noteManualPaste({ ...selection, text: independent });
+      const independent = '清空后直接键入的独立合成文字。';
       f.samples.updateManualText({ ...selection, text: independent });
       await f.samples.saveManual({ ...selection, text: independent });
       assert.deepEqual(f.writes[0].origin, { kind: 'manual' });
       f.samples.updateManualText({ ...selection, text: '' });
-      f.samples.noteManualPaste({ ...selection, text: fragment });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: fragment }));
       f.samples.updateManualText({ ...selection, text: '原无效片段再次编辑。' });
       await assert.rejects(f.samples.saveManual({ ...selection, text: '原无效片段再次编辑。' }));
       assert.equal(f.writes.length, 1);
@@ -181,8 +305,7 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       const currentSelection = { ...selection, scopeRevision: changedScope ? 2 : 1 };
       if (changedScope) f.emit({ scopeRevision: 2 });
       else f.samples.updateManualText({ ...selection, text: '' });
-      const text = '新范围或主动清空后粘贴的独立合成文字。';
-      f.samples.noteManualPaste({ ...currentSelection, text });
+      const text = '新范围或主动清空后键入的独立合成文字。';
       f.samples.updateManualText({ ...currentSelection, text });
       await f.samples.saveManual({ ...currentSelection, text });
       assert.deepEqual(f.writes[0].origin, { kind: 'manual' });
@@ -200,20 +323,52 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       const currentSelection = { ...selection, scopeRevision: changedScope ? 2 : 1 };
       if (changedScope) f.emit({ scopeRevision: 2 });
       else f.samples.updateManualText({ ...selection, text: '' });
-      f.samples.noteManualPaste({ ...currentSelection, text: actualSelection.slice(0, 65_536) });
+      assert.throws(() => f.samples.noteManualPaste({ ...currentSelection, text: actualSelection.slice(0, 65_536) }));
       f.samples.updateManualText({ ...currentSelection, text: '超长原剪贴板重新粘贴后截短。' });
       await assert.rejects(f.samples.saveManual({ ...currentSelection, text: '超长原剪贴板重新粘贴后截短。' }));
       assert.equal(f.writes.length, 0);
       f.samples.updateManualText({ ...currentSelection, text: '' });
-      const independent = '主动清空后另贴的独立合成文字。';
-      f.samples.noteManualPaste({ ...currentSelection, text: independent });
+      const independent = '主动清空后键入的独立合成文字。';
       f.samples.updateManualText({ ...currentSelection, text: independent });
       await f.samples.saveManual({ ...currentSelection, text: independent });
       assert.deepEqual(f.writes[0].origin, { kind: 'manual' });
       f.samples.updateManualText({ ...currentSelection, text: '' });
-      f.samples.noteManualPaste({ ...currentSelection, text: prefix });
+      assert.throws(() => f.samples.noteManualPaste({ ...currentSelection, text: prefix }));
       f.samples.updateManualText({ ...currentSelection, text: '独立保存后再贴原超长选区。' });
       await assert.rejects(f.samples.saveManual({ ...currentSelection, text: '独立保存后再贴原超长选区。' }));
+      assert.equal(f.writes.length, 1);
+    });
+    for (const sourceShape of ['current', 'history']) for (const clearFirst of [false, true]) await t.test(`${sourceShape === 'current' ? '当前' : '恢复'}合法前缀被明确拒绝后${clearFirst ? '先清空' : ''}，首次较短粘贴不能洗为manual`, async () => {
+      const prefix = '甲'.repeat(65_536);
+      const history = structuredClone(restoredSession);
+      history.turns[0].reply.candidates[0].text = prefix;
+      const f = sourceShape === 'history' ? fixture({ savedSession: history }) : fixture();
+      if (sourceShape === 'current') f.emit({ result: { ...f.state.result,
+        candidates: [{ original: { candidateId, text: prefix }, editedText: prefix }] } });
+      assert.throws(() => f.samples.noteCandidateCopy({ ...selection, replyRequestId: requestId, candidateId,
+        text: prefix, invalidSelection: true }), /复制来历已失效/);
+      if (clearFirst) {
+        f.samples.updateManualText({ ...selection, text: '合成占位输入。' });
+        f.samples.updateManualText({ ...selection, text: '' });
+      }
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: prefix.slice(0, 4096) }));
+      f.samples.updateManualText({ ...selection, text: '明确无效选区的短前缀编辑。' });
+      await assert.rejects(f.samples.saveManual({ ...selection, text: '明确无效选区的短前缀编辑。' }));
+      assert.equal(f.writes.length, 0);
+      f.samples.updateManualText({ ...selection, text: '' });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: prefix.slice(0, 4096) }));
+      f.samples.updateManualText({ ...selection, text: '清空重贴同一短片段仍有失效来源。' });
+      await assert.rejects(f.samples.saveManual({ ...selection, text: '清空重贴同一短片段仍有失效来源。' }));
+      assert.equal(f.writes.length, 0);
+      f.samples.updateManualText({ ...selection, text: '' });
+      const independent = '清空后键入独立合成文字。';
+      f.samples.updateManualText({ ...selection, text: independent });
+      await f.samples.saveManual({ ...selection, text: independent });
+      assert.deepEqual(f.writes[0].origin, { kind: 'manual' });
+      f.samples.updateManualText({ ...selection, text: '' });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: prefix }));
+      f.samples.updateManualText({ ...selection, text: '不同文字保存后仍保留原被拒复制摘要。' });
+      await assert.rejects(f.samples.saveManual({ ...selection, text: '不同文字保存后仍保留原被拒复制摘要。' }));
       assert.equal(f.writes.length, 1);
     });
     await t.test('实际具名桥接兼容普通五字段，并强制拒绝有界无效选区及非法标记', async () => {
@@ -224,7 +379,14 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       const invoke = (channel, payload) => handlers.get(`style-samples:${channel}`)(payload);
       const copied = { ...selection, replyRequestId: requestId, candidateId, text: candidateText.slice(0, 8) };
       invoke('note-candidate-copy', copied);
-      invoke('note-manual-paste', { ...selection, text: copied.text });
+      const receipt = invoke('note-manual-paste', { ...selection, text: copied.text });
+      for (const fields of [
+        { pasteId: receipt.pasteId }, { pastedText: copied.text }, { insertedText: copied.text },
+        { cancelPasteId: 'not-a-uuid' }, { cancelPasteId: receipt.pasteId, pasteId: receipt.pasteId, pastedText: copied.text },
+        { pasteId: receipt.pasteId, pastedText: copied.text, insertedText: '' },
+        { pasteId: receipt.pasteId, pastedText: copied.text, extra: '不接收额外字段' },
+      ]) assert.throws(() => invoke('update-manual-text', { ...selection, text: copied.text, ...fields }), /样本操作无效/);
+      invoke('update-manual-text', { ...selection, text: copied.text, pastedText: copied.text, ...receipt });
       invoke('update-manual-text', { ...selection, text: '普通五字段复制后编辑。' });
       await invoke('save-manual', { ...selection, text: '普通五字段复制后编辑。' });
       assert.deepEqual(f.writes[0].origin, { kind: 'candidate', id: candidateId });
@@ -236,7 +398,7 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       assert.throws(() => invoke('note-candidate-copy', { ...copied, text: '甲'.repeat(65_537), invalidSelection: true }), /样本操作无效/);
       assert.throws(() => invoke('note-candidate-copy', { ...copied, invalidSelection: true }), /复制来历已失效/);
       invoke('update-manual-text', { ...selection, text: '' });
-      invoke('note-manual-paste', { ...selection, text: copied.text });
+      assert.throws(() => invoke('note-manual-paste', { ...selection, text: copied.text }));
       invoke('update-manual-text', { ...selection, text: '有界无效选区再次粘贴后编辑。' });
       await assert.rejects(invoke('save-manual', { ...selection, text: '有界无效选区再次粘贴后编辑。' }));
       assert.equal(f.writes.length, 1);
@@ -251,23 +413,22 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
         const f = fixture({ savedSession: restoredSession });
         assert.throws(() => f.samples.noteCandidateCopy({ ...selection, replyRequestId: requestId, candidateId, ...copied }));
         const independent = '首次另贴的独立合成文字。';
-        f.samples.noteManualPaste({ ...selection, text: independent });
+        assert.throws(() => f.samples.noteManualPaste({ ...selection, text: independent }));
         f.samples.updateManualText({ ...selection, text: '首次另贴后编辑的合成文字。' });
         await assert.rejects(f.samples.saveManual({ ...selection, text: '首次另贴后编辑的合成文字。' }));
         assert.equal(f.writes.length, 0);
         if (deletedSession) f.deleted();
         f.samples.updateManualText({ ...selection, text: '' });
-        f.samples.noteManualPaste({ ...selection, text: copied.text });
+        assert.throws(() => f.samples.noteManualPaste({ ...selection, text: copied.text }));
         f.samples.updateManualText({ ...selection, text: '原复制片段重贴后编辑。' });
         await assert.rejects(f.samples.saveManual({ ...selection, text: '原复制片段重贴后编辑。' }));
         assert.equal(f.writes.length, 0);
         f.samples.updateManualText({ ...selection, text: '' });
-        f.samples.noteManualPaste({ ...selection, text: independent });
         f.samples.updateManualText({ ...selection, text: independent });
         await f.samples.saveManual({ ...selection, text: independent });
         assert.deepEqual(f.writes[0].origin, { kind: 'manual' });
         f.samples.updateManualText({ ...selection, text: '' });
-        f.samples.noteManualPaste({ ...selection, text: copied.text });
+        assert.throws(() => f.samples.noteManualPaste({ ...selection, text: copied.text }));
         f.samples.updateManualText({ ...selection, text: '独立保存之后再贴原片段。' });
         await assert.rejects(f.samples.saveManual({ ...selection, text: '独立保存之后再贴原片段。' }));
         assert.equal(f.writes.length, 1);
@@ -279,7 +440,7 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       assert.throws(() => f.samples.noteCandidateCopy({ ...selection, replyRequestId: requestId, candidateId, text: invalidText }));
       f.samples.noteCandidateCopy({ ...selection, replyRequestId: requestId, candidateId, text: candidateText });
       f.samples.updateManualText({ ...selection, text: '' });
-      f.samples.noteManualPaste({ ...selection, text: invalidText });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: invalidText }));
       f.samples.updateManualText({ ...selection, text: '复制其他候选后重贴无效片段。' });
       await assert.rejects(f.samples.saveManual({ ...selection, text: '复制其他候选后重贴无效片段。' }));
       assert.equal(f.writes.length, 0);
@@ -290,7 +451,7 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       f.samples.noteCandidateCopy({ ...selection, replyRequestId: requestId, candidateId, text: fragment });
       f.samples.noteSavedSampleCopy({ ...selection, sampleId, text: saved.text });
       f.deleted();
-      f.samples.noteManualPaste({ ...selection, text: fragment });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: fragment }));
       f.samples.updateManualText({ ...selection, text: '后来复制列表后重贴已删候选片段。' });
       await assert.rejects(f.samples.saveManual({ ...selection, text: '后来复制列表后重贴已删候选片段。' }));
       assert.equal(f.writes.length, 0);
@@ -300,13 +461,14 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       const fragment = candidateText.slice(0, 8);
       f.samples.noteCandidateCopy({ ...selection, replyRequestId: requestId, candidateId, text: fragment });
       f.samples.noteSavedSampleCopy({ ...selection, sampleId, text: saved.text });
-      f.samples.noteManualPaste({ ...selection, text: fragment });
+      const receipt = f.samples.noteManualPaste({ ...selection, text: fragment });
+      f.samples.updateManualText({ ...selection, text: fragment, pastedText: fragment, ...receipt });
       f.samples.updateManualText({ ...selection, text: '旧合法片段粘贴后继续编辑。' });
       await f.samples.saveManual({ ...selection, text: '旧合法片段粘贴后继续编辑。' });
       assert.deepEqual(f.writes[0].origin, { kind: 'candidate', id: candidateId });
       f.deleted();
       assert.equal(f.samples.getState().erasureRevision, 1);
-      f.samples.noteManualPaste({ ...selection, text: fragment });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: fragment }));
       f.samples.updateManualText({ ...selection, text: '删除实际来源会话后重贴旧片段。' });
       await assert.rejects(f.samples.saveManual({ ...selection, text: '删除实际来源会话后重贴旧片段。' }));
       assert.equal(f.writes.length, 1);
@@ -320,7 +482,7 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
         text: prefix, invalidSelection: true }));
       f.emit({ savedSession: structuredClone(history) });
       f.samples.noteSavedSampleCopy({ ...selection, sampleId, text: saved.text });
-      f.samples.noteManualPaste({ ...selection, text: prefix });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: prefix }));
       f.samples.updateManualText({ ...selection, text: '刷新和复制其他项后编辑无效选区。' });
       await assert.rejects(f.samples.saveManual({ ...selection, text: '刷新和复制其他项后编辑无效选区。' }));
       assert.equal(f.writes.length, 0);
@@ -332,7 +494,7 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       f.samples.noteSavedSampleCopy({ ...selection, sampleId, text: saved.text });
       if (unavailable === 'connection') f.setGeneration(2);
       else f.emit({ savedSession: { ...restoredSession, phase: 'failed' } });
-      f.samples.noteManualPaste({ ...selection, text: fragment });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: fragment }));
       f.samples.updateManualText({ ...selection, text: '不能核实的旧片段再次编辑。' });
       await assert.rejects(f.samples.saveManual({ ...selection, text: '不能核实的旧片段再次编辑。' }));
       assert.equal(f.writes.length, 0);
@@ -345,7 +507,7 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       const before = f.samples.getState(); f.deleted();
       assert.equal(f.samples.getState().erasureRevision, before.erasureRevision + 1);
       assert.deepEqual(f.samples.getState().samples, before.samples);
-      f.samples.noteManualPaste({ ...selection, text: candidateText.slice(0, 8) });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: candidateText.slice(0, 8) }));
       f.samples.updateManualText({ ...selection, text: '再次粘贴旧片段后编辑。' });
       await assert.rejects(f.samples.saveManual({ ...selection, text: '再次粘贴旧片段后编辑。' }));
       assert.equal(f.writes.length, 0);
@@ -361,18 +523,18 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       await f.samples.saveManual({ ...selection, text: '独立手写不来自候选。' });
       assert.deepEqual(f.writes[0].origin, { kind: 'manual' });
     });
-    await t.test('已失效复制指纹不误认后来粘贴的不同文字', async () => {
+    await t.test('已失效复制指纹不误认后来直接键入的不同文字', async () => {
       const f = fixture(); f.copyPaste(); f.deleted();
       f.samples.updateManualText({ ...selection, text: '' });
-      const text = '删除后从别处粘贴的独立合成新文字。';
-      f.samples.noteManualPaste({ ...selection, text }); f.samples.updateManualText({ ...selection, text });
+      const text = '删除后直接键入的独立合成新文字。';
+      f.samples.updateManualText({ ...selection, text });
       await f.samples.saveManual({ ...selection, text });
       assert.deepEqual(f.writes[0].origin, { kind: 'manual' });
     });
     await t.test('独立样本列表复制保留原来历，不变为manual', async () => {
       const f = fixture(); await f.samples.refresh(selection);
       f.samples.noteSavedSampleCopy({ ...selection, sampleId, text: saved.text.slice(0, 8) });
-      f.samples.noteManualPaste({ ...selection, text: saved.text.slice(0, 8) });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: saved.text.slice(0, 8) }));
       f.samples.updateManualText({ ...selection, text: '列表样本粘贴后编辑。' }); f.deleted();
       assert.equal(f.samples.getState().erasureRevision, 0);
       await assert.rejects(f.samples.saveManual({ ...selection, text: '列表样本粘贴后编辑。' }));
@@ -399,7 +561,7 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       const f = fixture(); f.samples.updateManualText({ ...selection, text: candidateText }); f.deleted();
       assert.equal(f.samples.getState().erasureRevision, 1);
     });
-    await t.test('混合两候选片段时删除第二来源也清除，不能只记首来源', () => {
+    await t.test('第二候选粘贴立即拒绝，不将未插入的来源挂到首段输入', () => {
       const f = fixture(); f.copyPaste();
       const secondSession = '88888888-8888-4888-8888-888888888888';
       const secondRequest = '99999999-9999-4999-8999-999999999999';
@@ -408,9 +570,9 @@ test('已核实的确切会话删除只清关联未保存表达，并保留独�
       f.emit({ result: { replyRequestId: secondRequest, assistantSessionId: secondSession,
         candidates: [{ original: { candidateId: secondCandidate, text: secondText }, editedText: secondText }] } });
       f.samples.noteCandidateCopy({ ...selection, replyRequestId: secondRequest, candidateId: secondCandidate, text: secondText });
-      f.samples.noteManualPaste({ ...selection, text: secondText });
+      assert.throws(() => f.samples.noteManualPaste({ ...selection, text: secondText }));
       f.samples.updateManualText({ ...selection, text: '两个候选混合后继续编辑。' });
-      f.deleted({ sessionId: secondSession }); assert.equal(f.samples.getState().erasureRevision, 1);
+      f.deleted({ sessionId: secondSession }); assert.equal(f.samples.getState().erasureRevision, 0);
     });
     await t.test('跨会话候选沿真实依据读取失效后清除，仍可读则保留', async () => {
       for (const status of [404, 200, 503]) {

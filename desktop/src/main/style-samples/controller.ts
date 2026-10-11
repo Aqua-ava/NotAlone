@@ -5,15 +5,15 @@ import type { ContactSession } from '../contacts/session';
 import type { ReplySession } from '../reply/session';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import type { ReplyCandidateSelection, ReplySessionState } from '../../shared/reply-bridge';
-import type { CandidateTextCopy, ManualStyleText, SavedSampleTextCopy, StyleSampleState } from '../../shared/style-sample-bridge';
+import type { CandidateTextCopy, ManualStyleText, ManualStyleUpdate, SavedSampleTextCopy, StyleSampleState } from '../../shared/style-sample-bridge';
 import { listSamples, readSample } from './client';
 
 type Scope = { contactId: string; scopeRevision: number; generation: number };
-type CandidateOrigin = { id: string; contactId: string; kind: 'candidate'; replyRequestId: string; sessionId?: string; generation: number };
+type CandidateOrigin = { id: string; contactId: string; kind: 'candidate'; replyRequestId: string; sessionId?: string; generation: number; scopeRevision: number };
 type CandidateSource = { origin: CandidateOrigin; texts: readonly string[] };
 type KnownOrigin = CandidateOrigin | { contactId: string; kind: 'message'; id: string };
 type CopyOrigin = (CandidateOrigin | { id: string; contactId: string; kind: 'sample' })
-  & { digest: string; generation: number; invalid?: boolean; unverified?: boolean };
+  & { digest: string; generation: number; scopeRevision: number; invalid?: boolean; unverified?: boolean };
 const fingerprint = (text: string) => createHash('sha256').update(text.trim()).digest('hex');
 export class StyleSampleController {
   private state: StyleSampleState = { revision: 0, contactId: null, scopeRevision: 0, erasureRevision: 0, phase: 'idle', samples: [], busy: false, error: null };
@@ -25,6 +25,8 @@ export class StyleSampleController {
   private manualOrigin: CopyOrigin | undefined;
   private manualOriginConflict = false;
   private manualFingerprint: string | undefined;
+  private pendingPaste: { id: string; origin: CopyOrigin; scope: Scope; replyRevision: number;
+    rollback?: { origin: CopyOrigin | undefined; origins: Array<[string, CopyOrigin]> } } | undefined;
   private lastSessionDeletionRevision = 0;
   private readonly manualPasteOrigins = new Map<string, CopyOrigin>();
   private readonly invalidatedCandidateRequests = new Set<string>();
@@ -85,6 +87,7 @@ export class StyleSampleController {
     this.rememberReplyOrigins();
   }
   private resetManualOrigin() {
+    this.pendingPaste = undefined;
     this.manualOrigin = undefined; this.manualOriginConflict = false;
     this.manualFingerprint = undefined; this.manualPasteOrigins.clear();
     if (this.copied?.unverified) this.copied = { ...this.copied, unverified: false };
@@ -145,7 +148,7 @@ export class StyleSampleController {
     const result = reply.result;
     const sources: CandidateSource[] = (result?.candidates ?? []).map(({ original, editedText }) => ({
       origin: { contactId: scope.contactId, kind: 'candidate', id: original.candidateId,
-        replyRequestId: result!.replyRequestId, sessionId: result!.assistantSessionId, generation: scope.generation }, texts: [original.text, editedText],
+        replyRequestId: result!.replyRequestId, sessionId: result!.assistantSessionId, generation: scope.generation, scopeRevision: scope.scopeRevision }, texts: [original.text, editedText],
     }));
     const saved = reply.savedSession;
     // 正文只读取既有当前投影；恢复来源必须是已核实会话中的实际完成候选。
@@ -153,7 +156,7 @@ export class StyleSampleController {
       if (turn.state !== 'completed' || !turn.reply) continue;
       for (const candidate of turn.reply.candidates) sources.push({
         origin: { contactId: scope.contactId, kind: 'candidate', id: candidate.candidateId,
-          replyRequestId: turn.reply.replyRequestId, sessionId: saved.sessionId, generation: scope.generation }, texts: [candidate.text],
+          replyRequestId: turn.reply.replyRequestId, sessionId: saved.sessionId, generation: scope.generation, scopeRevision: scope.scopeRevision }, texts: [candidate.text],
       });
     }
     return sources;
@@ -201,11 +204,11 @@ export class StyleSampleController {
     const scope = this.assertScope(selection);
     const source = this.replyCandidateSources(this.replies.getState()).find(({ origin }) =>
       origin.replyRequestId === selection.replyRequestId && origin.id === selection.candidateId);
-    const unverified = !text.trim() || text.length > 65_536 || !source || !source.texts.some((candidate) => candidate.includes(text));
+    const unverified = invalidSelection || !text.trim() || text.length > 65_536 || !source || !source.texts.some((candidate) => candidate.includes(text));
     const invalid = invalidSelection || unverified || this.invalidatedCandidateRequests.has(`${scope.contactId}:${selection.replyRequestId}`);
     // 只记录最后一次显式复制的摘要与来源编号；不监听剪贴板、不保留候选正文。
     this.copied = { ...(source?.origin ?? { id: selection.candidateId, kind: 'candidate', contactId: scope.contactId,
-      replyRequestId: selection.replyRequestId }), digest: fingerprint(text), generation: scope.generation, invalid, unverified };
+      replyRequestId: selection.replyRequestId }), digest: fingerprint(text), generation: scope.generation, scopeRevision: scope.scopeRevision, invalid, unverified };
     if (invalid && text.trim()) this.rejectedCopyDigests.add(this.copied.digest);
     else if (source && !invalid) this.rememberOrigin(this.copied.digest, source.origin);
     if (invalid) throw new Error('复制来历已失效。');
@@ -218,11 +221,42 @@ export class StyleSampleController {
     const sample = this.state.samples.find((item) => item.sampleId === selection.sampleId);
     const invalid = !selection.text.trim() || !sample?.text.includes(selection.text);
     // 跨项或失效选区仍登记样本来历冲突，不能因校验失败把随后粘贴变成manual。
-    this.copied = { digest: fingerprint(selection.text), id: selection.sampleId, kind: 'sample', contactId: scope.contactId, generation: scope.generation, invalid };
+    this.copied = { digest: fingerprint(selection.text), id: selection.sampleId, kind: 'sample', contactId: scope.contactId, generation: scope.generation, scopeRevision: scope.scopeRevision, invalid };
     if (invalid) throw new Error('表达样本复制来历已失效。');
   }
-  updateManualText(selection: ManualStyleText) {
-    this.assertScope(selection);
+  updateManualText(selection: ManualStyleUpdate) {
+    const scope = this.assertScope(selection);
+    if (selection.cancelPasteId !== undefined) {
+      const pending = this.pendingPaste;
+      if (selection.pasteId !== undefined || selection.pastedText !== undefined || selection.insertedText !== undefined
+        || !pending || pending.id !== selection.cancelPasteId || pending.scope !== scope) throw new Error('取消粘贴凭证已失效。');
+      if (pending.rollback) {
+        this.manualOrigin = pending.rollback.origin;
+        this.manualPasteOrigins.clear();
+        for (const [key, origin] of pending.rollback.origins) this.manualPasteOrigins.set(key, origin);
+      }
+      this.pendingPaste = undefined;
+    }
+    if (selection.pasteId !== undefined) {
+      const pending = this.pendingPaste;
+      const insertedText = selection.insertedText ?? selection.pastedText;
+      if (!pending || pending.rollback || pending.id !== selection.pasteId || pending.scope !== scope
+        || pending.replyRevision !== this.replies.getState().revision || this.manualOriginConflict
+        || typeof selection.pastedText !== 'string' || !selection.pastedText.trim()
+        || fingerprint(selection.pastedText) !== pending.origin.digest
+        || typeof insertedText !== 'string' || !insertedText.trim() || insertedText.length > 4096
+        || !selection.pastedText.startsWith(insertedText)
+        || !selection.text.includes(insertedText) || selection.text.length > 4096
+        || !this.candidateCopyContains(pending.origin, selection.pastedText)
+        || (pending.origin.kind === 'candidate'
+          && this.invalidatedCandidateRequests.has(`${scope.contactId}:${pending.origin.replyRequestId}`))) {
+        throw new Error('粘贴凭证已失效，请重新复制并粘贴。');
+      }
+      pending.rollback = { origin: this.manualOrigin, origins: [...this.manualPasteOrigins] };
+      this.manualOrigin = pending.origin;
+      this.manualPasteOrigins.set(`${pending.origin.contactId}:${pending.origin.kind}:${pending.origin.id}`, pending.origin);
+    } else if (selection.pastedText !== undefined || selection.insertedText !== undefined) throw new Error('粘贴凭证不完整。');
+    if (selection.pasteId === undefined) this.pendingPaste = undefined;
     if (!selection.text.trim()) this.resetManualOrigin();
     else this.manualFingerprint = fingerprint(selection.text);
     // 粘贴后的编辑继续沿用真实来历；清空输入或范围失效才解除。
@@ -239,23 +273,34 @@ export class StyleSampleController {
     return { ...origin, digest, invalid: !available
       || this.invalidatedCandidateRequests.has(`${origin.contactId}:${origin.replyRequestId}`) };
   }
+  private candidateCopyContains(origin: CopyOrigin, text: string): boolean {
+    return origin.kind === 'candidate' && this.replyCandidateSources(this.replies.getState()).some(({ origin: current, texts }) =>
+      current.contactId === origin.contactId && current.id === origin.id && current.replyRequestId === origin.replyRequestId
+      && texts.some((candidate) => candidate.includes(text)));
+  }
   noteManualPaste(selection: ManualStyleText) {
-    this.assertScope(selection);
+    const scope = this.assertScope(selection);
+    this.pendingPaste = undefined;
     const digest = fingerprint(selection.text);
-    if (this.blockedCopies.has(digest) || this.deletedCopies.has(digest) || this.rejectedCopyDigests.has(digest)) this.manualOriginConflict = true;
-    // 混合、未知或超长选区只登记冲突；即使后来截短，也不能洗成手工来历。
-    let copied = this.copied;
-    if (!copied || (!copied.unverified && copied.digest !== digest
-      && (copied.kind === 'candidate' || !copied.invalid))) copied = this.rememberedCandidatePaste(digest, selection.text);
-    if (!copied) return;
-    // 一次粘贴冲突单独记录摘要，不能覆盖原复制摘要；清空后允许不同独立文字。
-    const pasted = copied.unverified ? { ...copied, digest, unverified: false } : copied;
-    if (copied === this.copied && copied.unverified) this.copied = { ...copied, unverified: false };
-    this.manualPasteOrigins.set(`${pasted.contactId}:${pasted.kind}:${pasted.id}`, pasted);
-    if (pasted.invalid) { this.manualOriginConflict = true; return; }
+    const reject = () => {
+      this.manualOriginConflict = true;
+      throw new Error('无法核验粘贴来源，请清空后直接输入，或从明确候选、本人消息入口保存。');
+    };
+    if (this.manualOriginConflict || this.blockedCopies.has(digest) || this.deletedCopies.has(digest)
+      || this.rejectedCopyDigests.has(digest) || (this.knownOrigins.get(digest)?.size ?? 0) > 1) return reject();
+    // 只复验确切登记过的粘贴来历；整体摘要不能证明删除后未知片段的来源。
+    const copied = this.copied;
+    const pasted = copied && (copied.digest === digest || (!copied.invalid && !copied.unverified
+      && this.candidateCopyContains(copied, selection.text))) ? copied : this.rememberedCandidatePaste(digest, selection.text);
+    if (!pasted || pasted.kind !== 'candidate' || pasted.invalid || pasted.unverified
+      || pasted.contactId !== scope.contactId || pasted.generation !== scope.generation
+      || pasted.scopeRevision !== scope.scopeRevision || !this.candidateCopyContains(pasted, selection.text)
+      || this.invalidatedCandidateRequests.has(`${pasted.contactId}:${pasted.replyRequestId}`)) return reject();
     if (this.manualOrigin && (this.manualOrigin.id !== pasted.id || this.manualOrigin.kind !== pasted.kind
-      || this.manualOrigin.contactId !== pasted.contactId || this.manualOrigin.generation !== pasted.generation)) this.manualOriginConflict = true;
-    else this.manualOrigin = pasted;
+      || this.manualOrigin.contactId !== pasted.contactId || this.manualOrigin.generation !== pasted.generation)) return reject();
+    const pasteId = randomUUID();
+    this.pendingPaste = { id: pasteId, origin: { ...pasted, digest }, scope, replyRevision: this.replies.getState().revision };
+    return { pasteId };
   }
   async saveCandidate(selection: ReplyCandidateSelection) {
     this.assertScope(selection); const reply = this.replies.getState();

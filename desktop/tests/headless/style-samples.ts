@@ -130,4 +130,72 @@ export async function styleSamples(browser: Browser, origin: string) {
     expect(payloads[0]).toMatchObject({ input_mode: 'reply_to_message', current_text: '甲的私密合成历史：今晚我会晚一点回复你。' });
     expect(payloads[1]).toMatchObject({ input_mode: 'rewrite_draft', include_relationship_context: false });
   }, { async writeText(text) { copies.push(text); }, hideWindow() { throw new Error('来源歧义测试不收起窗口。'); } });
+  await withRewritePages(browser, origin, async ({ manager, helper, rewriteBackend }) => {
+    await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
+    await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
+    await helper.getByText('我的表达样本', { exact: true }).click();
+    const input = helper.getByRole('textbox', { name: '手工表达样本', exact: true });
+    const paste = async (text: string) => input.evaluate((element, value) => {
+      const clipboardData = new DataTransfer(); clipboardData.setData('text/plain', value);
+      const event = new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true });
+      element.dispatchEvent(event); return event.defaultPrevented;
+    }, text);
+    expect(await paste('来源未知的合成剪贴板内容。')).toBe(true);
+    await expect(helper.getByRole('alert').filter({ hasText: '无法核验粘贴来源' })).toBeVisible();
+    await expect(input).toHaveValue('');
+    await expect(helper.getByRole('button', { name: '主动保存手工文字', exact: true })).toBeDisabled();
+    expect((await rewriteBackend.request(`/api/contacts/${rewriteBackend.data.contact_ids[0]}/style-samples`)).data.samples).toEqual([]);
+    await input.fill('清空输入框后直接键入的合成表达。');
+    await helper.getByRole('button', { name: '主动保存手工文字', exact: true }).click();
+    await expect(input).toHaveValue('');
+    await expect(helper.getByRole('list', { name: '表达样本目录', exact: true }).getByText('清空输入框后直接键入的合成表达。', { exact: true })).toBeVisible();
+    await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('合成合法候选来源。');
+    await rewriteBackend.plan({ count: 1, prefix: '已登记复制候选' });
+    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('已登记复制候选（说法1）。');
+    await helper.getByRole('radio', { name: '说法 1', exact: true }).check();
+    const before = copies.length;
+    await helper.getByRole('button', { name: '复制', exact: true }).click();
+    await expect.poll(() => copies.length).toBe(before + 1);
+    expect(await paste(copies.at(-1)!)).toBe(true);
+    await expect(input).toHaveValue(copies.at(-1)!);
+    await input.fill('');
+    for (const stage of ['note', 'commit'] as const) {
+      const typed = `${stage}回包尚未返回时新键入的独立合成文字。`;
+      // 仅延迟既有具名 IPC 的返回，主进程来源校验与业务保存仍真实执行。
+      await helper.evaluate((stage) => {
+        const surface = window as unknown as { pageCommand: (channel: string, args: unknown[]) => Promise<unknown>;
+          stylePasteGate?: { entered: boolean; release: () => void } };
+        const original = surface.pageCommand;
+        let release!: () => void;
+        const held = new Promise<void>((resolve) => { release = resolve; });
+        surface.stylePasteGate = { entered: false, release };
+        surface.pageCommand = async (channel, args) => {
+          const result = await original(channel, args);
+          if ((stage === 'note' && channel === 'style-samples:note-manual-paste')
+            || (stage === 'commit' && channel === 'style-samples:update-manual-text'
+              && Boolean((args[0] as { pasteId?: string })?.pasteId))) {
+            surface.stylePasteGate!.entered = true;
+            await held; surface.pageCommand = original;
+          }
+          return result;
+        };
+      }, stage);
+      try {
+        expect(await paste(copies.at(-1)!)).toBe(true);
+        await expect.poll(() => helper.evaluate(() => (window as unknown as {
+          stylePasteGate: { entered: boolean } }).stylePasteGate.entered)).toBe(true);
+        await expect(input).toHaveValue('');
+        await input.fill(typed);
+      } finally {
+        await helper.evaluate(() => (window as unknown as { stylePasteGate: { release: () => void } }).stylePasteGate.release());
+      }
+      await expect(input).toHaveValue(typed);
+      await helper.getByRole('button', { name: '主动保存手工文字', exact: true }).click();
+      await expect(input).toHaveValue('');
+      const samples = (await rewriteBackend.request(`/api/contacts/${rewriteBackend.data.contact_ids[0]}/style-samples`)).data.samples as Array<{ text: string; origin_kind: string }>;
+      expect(samples.find((item) => item.text === typed)?.origin_kind).toBe('manual');
+    }
+    expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
+  }, { async writeText(text) { copies.push(text); }, hideWindow() { throw new Error('粘贴边界测试不收起窗口。'); } });
 }

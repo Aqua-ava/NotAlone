@@ -6,7 +6,7 @@ import { isUuid } from '../uuid';
 import { StyleSampleController } from './controller';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import type { ReplyCandidateSelection } from '../../shared/reply-bridge';
-import type { CandidateTextCopy, SavedSampleTextCopy, ManualStyleText } from '../../shared/style-sample-bridge';
+import type { CandidateTextCopy, SavedSampleTextCopy, ManualStyleText, ManualStyleUpdate } from '../../shared/style-sample-bridge';
 
 function selection(args: unknown[], extra: string[] = [], textLimit = 4096): Record<string, unknown> {
   const value = args[0]; const keys = ['contactId', 'scopeRevision', ...extra];
@@ -27,6 +27,24 @@ function candidateCopy(args: unknown[]): CandidateTextCopy {
   }
   return selection(args, ['replyRequestId', 'candidateId', 'text'], 65_536) as unknown as CandidateTextCopy;
 }
+function manualUpdate(args: unknown[]): ManualStyleUpdate {
+  const value = args[0];
+  if (args.length === 1 && value && typeof value === 'object' && !Array.isArray(value)
+    && Object.hasOwn(value, 'cancelPasteId')) {
+    const { cancelPasteId, ...rest } = value as Record<string, unknown>;
+    if (!isUuid(cancelPasteId)) throw new Error('样本操作无效。');
+    return { ...selection([rest], ['text']), cancelPasteId } as ManualStyleUpdate;
+  }
+  if (args.length === 1 && value && typeof value === 'object' && !Array.isArray(value)
+    && (Object.hasOwn(value, 'pasteId') || Object.hasOwn(value, 'pastedText') || Object.hasOwn(value, 'insertedText'))) {
+    const { pasteId, pastedText, insertedText, ...rest } = value as Record<string, unknown>;
+    if (!isUuid(pasteId) || typeof pastedText !== 'string' || !pastedText.trim() || pastedText.length > 65_536
+      || (Object.hasOwn(value, 'insertedText') && (typeof insertedText !== 'string' || !insertedText.trim() || insertedText.length > 4096))) throw new Error('样本操作无效。');
+    return { ...selection([rest], ['text']), pasteId, pastedText,
+      ...(insertedText === undefined ? {} : { insertedText }) } as ManualStyleUpdate;
+  }
+  return selection(args, ['text']) as unknown as ManualStyleUpdate;
+}
 export function installStyleSampleBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession, replies: ReplySession) {
   const samples = new StyleSampleController(backend, contacts, replies);
   samples.onStateChanged((state) => commands.publish('style-samples:state-changed', state));
@@ -38,7 +56,7 @@ export function installStyleSampleBridge(commands: PageCommands, backend: Backen
   commands.handle('style-samples:delete', (...args) => samples.deleteSample(selection(args, ['sampleId']) as unknown as ContactSelection & { sampleId: string }), 'helper');
   commands.handle('style-samples:note-candidate-copy', (...args) => samples.noteCandidateCopy(candidateCopy(args)), 'helper');
   commands.handle('style-samples:note-sample-copy', (...args) => samples.noteSavedSampleCopy(selection(args, ['sampleId', 'text'], 65_536) as unknown as SavedSampleTextCopy), 'helper');
-  commands.handle('style-samples:update-manual-text', (...args) => samples.updateManualText(selection(args, ['text']) as unknown as ManualStyleText), 'helper');
+  commands.handle('style-samples:update-manual-text', (...args) => samples.updateManualText(manualUpdate(args)), 'helper');
   commands.handle('style-samples:note-manual-paste', (...args) => samples.noteManualPaste(selection(args, ['text'], 65_536) as unknown as ManualStyleText), 'helper');
   return samples;
 }

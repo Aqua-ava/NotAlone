@@ -37,6 +37,7 @@ export async function styleCopyLimits(browser: Browser, origin: string) {
         const clipboardData = new DataTransfer(); clipboardData.setData('text/plain', text);
         element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, clipboardData }));
       }, item.edited.slice(0, item.length));
+      await expect(manual).toHaveValue(item.edited.slice(0, Math.min(item.length, 4096)));
       await manual.fill(item.final);
       await helper.getByRole('button', { name: '主动保存手工文字', exact: true }).click();
       await expect(helper.getByRole('list', { name: '表达样本目录', exact: true })

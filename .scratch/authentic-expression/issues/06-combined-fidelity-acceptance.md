@@ -148,4 +148,31 @@ Skill探索组合实际接续：已消费B正式UUID后端`1484c2b`为`0b0fce7`�
 
 这些场景覆盖回应／主动、沿候选继续、本次三项声明、整组承诺错误可见、样本删除后旧键和恢复拒绝；B最终多轮UI和A新版本复制、暂停草稿来源擦除及公开NEW/C3仍未完成。四文件报告交付最终Standards硬要求0／重要Fowler0、Spec新增P0–P2为0，E06保持claimed。
 
+2026-10-11 主树C4e复验后fresh Spec新增一个P2：flagged65,536 copy→clear→后来复制列表样本／实际SIDdelete／两者→首次贴原4,096短片段再编辑，会丢原来历并错误POST1 origin manual。真实控制器私有probe current／history八序列分别two controls GREEN与六genuine RED，全部八例clear后different independent文字正向通过；Standards硬要求0／重要Fowler0，但Spec为1P2，本切片未提交。root沿同probe独立复跑并保report-root-red.json，源码前后4f206e不变、临时bundle清、零network/model/HTTP/PG/Page/App。原52与旧反例GREEN仅历史阶段，来源为现lastcopied或已删除投影不足以识别尚未登记短摘要；交C唯一负责人最小修复并保独立文字正向，不增正文缓存／读取API或来源权威。
+
+2026-10-11 主树精确消费C正式4e6513后，原短prefix probe从同SHA原真实POST1 RED转为actual exit0／GREEN，invalid先实际拒绝、首4096粘贴编辑后保存拒绝且POST0；实际源码前后SHA=`4f206e042f1b38fe98fd9b2284faac9f12cce488861ae4078b4dafddbb89291e`不变，旧RED与新GREEN报告分开保留，bundle清理完成。原六反向同probe再6 GREEN／183.83675ms／POST0，全52 Node GREEN／5946.19425ms／skip0、typecheck与diff通过。这两probe均只是实际controller端口，无HTTP／数据库／页面／App／网络或模型调用；公开producer、原NEW和C三场以及pureDraft真实擦除仍待正式联动，不借Node预勾，claimed保持。
+
+再补首次短贴前先清空的顺序交叉：Spec定位清空解除unverified后尚未登记短片段；当前／恢复各增加clearFirst分支，实际52项49pass／3fail含父762.576667ms。统一既有受信候选片段校验供粘贴路由和拒绝摘要登记复用，明确invalid来源的实际片段在清空后仍保留来源约束，不相关独立文字正常放行。最终52GREEN205.874625ms／skip0，TypeScript通过；最终Standards硬要求0／重要Fowler0、Spec新增P0–P2为0，两个清空顺序P2均已闭合。
+
+补充最终反向：fresh Spec发现首次短片段清空后重贴仍会丢失来历；当前与恢复两用例增加相同4096片段重贴断言，实际50项47pass／3fail含父、518.6425ms。首次将所有冲突摘要常驻的尝试误伤既有独立文字正向，保留失败，不采用该方案；最终仅在该短片段与同联系人、同实际候选及reply_request的受信正文对应时保留拒绝摘要，不保存正文。原短片段重贴、原长摘要重贴均拒绝，独立文字正向保持；最终50GREEN171.320125ms／skip0，规格复核接续。
+
+2026-10-11 明确无效选区的首个短粘贴补漏：B真实controller反向证明，合法候选65536字前缀带invalidSelection=true被拒后，不清空直接粘贴4096字短前缀再编辑，旧实现错误POST manual。C为当前及恢复候选各加入实际反向，原50项结果47pass／3fail含父、185.672458ms；将明确invalidSelection纳入首次粘贴的未核实状态后，同50项GREEN239.933625ms／skip0，TypeScript通过。保持原复制摘要、清空后不同独立文字可保存、再贴原被拒摘要仍拒绝；不新增协议、正文缓存或reader。旧48项为此前阶段证据，不能覆盖此新反例。fresh两轴接续，公开NEW/C3尚未执行，任务保持claimed。
+
+2026-10-11 来源不可判定约定接续（尚未完成／提交）：总协调01:41明确整体摘要不能证明来源正文删除后的任意未知子串；现有手工样本框仅允许明确登记且能从当前实际候选唯一复验的粘贴，未知／样本／无效／混合／已删／旧范围／旧连接拒绝且不先插入。独立直接键入继续允许；旧独立未知paste正向属于被替代的接口假设，原标准不删除。未加剪贴板读取、监听、新路由或正文副本。
+
+八条current/history×clear/latercopy/delete/latercopy+delete自动反向在原实现真实全部失败：60项51通过／9失败（含父）、197.296834ms。最初错误cwd仅构建入口失败，非产品RED。主进程立即拒绝并增加scopeRevision复验后，旧测试按新合同改即时throw与typed正向，60GREEN239.345292ms；旧合同中间40失败不作新增业务RED。另同句多个候选来历此前要到保存才拒，新61项59通过／2失败（含父）408.994625ms，粘贴时提前检查歧义后61GREEN404.579375ms；桌面类型检查通过。
+
+经root单窗授权及freshstatus absent，原CLI style-samples单label300执行session2022，实际exit1。新增第三公开场确实走生产ClipboardEvent／bridge／controller／HTTP／PG：unknown默认插入已阻止、空框与不可保存、独立typed保存及known候选粘贴均到达；仅延迟既有pageCommand的真实验源回包，期间用户新typed后保存预期manual、实际candidate，构成真实P2。原两场顺序先执行，但整体cases为空，不宣称整个组通过。Spec只读亦确认pending来历未撤销，Standards无独立新增；修复及最终两轴尚未完成。quiet51／active0／onscreen0／maxApps1／policies[2]／单Chrome／cleanupConfirmedtrue／Electronfalse；独立status43908 exit0 absent，源码冻结和OS窗口已释放给root目录窗。
+
+下一步将验源与实际插入的来源提交绑定，并保留原已有输入的来历，避免简单清空误伤。已向总协调对齐既有noteManualPaste/updateManualText协议最小调整；页面通过、复制修复formal与整票关闭均尚未发生。
+
+2026-10-11 两阶段粘贴接续（未完成）：C按已授权两phase实施中：note返回{pasteId}，update可选pasteId+pastedText（实际原片段，摘要对照），长片段再带insertedText有界前缀并验证原片段startsWith/结果contains/真实当前候选；最终4096、原剪贴板65536保持，不保存文字。62pending反向60G/2FAIL250.920→62G208.404；旧token/typed取消/clear/newpaste/scope/gen/source/projection/篡改/已有candidate编辑保留74G233.151；长copy兼容75=73G/2FAIL201.721→75G1462.363，TSC G。style-copy-limits只补等待真实有界插入后再编辑，保原candidate/source断言。未Page/未formal，root目录freeze不动。
+另第二回包窗口已actual Node RED：update实际提交来源成功但响应被延迟、UI尚未插入时typed；77=75PASS/2FAIL含父200.646，manual实际仍candidate，原已有candidate正向G。拟沿同一update可选cancelPasteId，将该次待显示提交回滚为此前committed来源（仅同token且尚未被后续编辑替代），普通typed随后正常更新；一个pending slot保来源IDs/摘要快照，绝无正文。Renderer本地待显示阶段onChange携取消id；显示完成后的普通编辑不取消。这是已授权pending取消语义补全，不新route/authority；root若反对具体field请指出。将追加真实IPC提交回包延迟公开反向，不能借note-delay G覆盖该窗口。
+
+2026-10-11 复制来源修复最终公开复验：沿总协调授权单窗，`npm run test:pages -- --case style-samples --case style-copy-limits --timeout-seconds 300`实际exit0。原style-samples两场和新增第三场全部通过；新增场核验未知粘贴不插入、独立键入为manual、已知候选插入，以及note／commit两个真实IPC回包延迟期间新键入仍为manual。原cut-fragment与long-copy-shortened均实际candidate／hasSources=true。quiet52／active0／onscreen0／maxApps1／policies[2]／单Chrome／cleanupConfirmed=true，Electron及原生验收false；独立status54796 exit0 absent后释放窗口。最终77项Node全通过262.177ms／skip0、完整TypeScript通过、限定Spec新增P0–P2为0、Standards硬0／重要Fowler0。历史页面RED及中间失败均保留；本次只关闭复制来源修复，不关闭整票或未执行组合。
+
+最新复制接口：未知／样本／歧义／失效粘贴立即拒绝，独立直接键入允许；合法候选粘贴采用无正文UUID两阶段凭证，待显示提交可按同凭证取消并恢复此前来源元数据。最终编辑／保存4096字符上限不变，无新路由、正文缓存或自动保存。此复制切片已通过上述真实公开复验；原任务状态仍claimed，其他组合依赖继续按记录接续。
+
 2026-10-11 总协调在正式来源擦除接缝及B重确认切片的根工作树独立复验原六个保真HTTP场景：首次5通过／1超时86.105秒，回应场首个/replies沿原10秒请求限制超时；未修改断言、请求超时或产品实现。缩小同一用例实际1通过10.980秒，随后原完整六项实际全部通过23.654秒／skip0，正式001–053／重复0／自有库剩余0。首次超时未稳定复现，原因未确认，保留为运行风险；不宣称已修复确定的产品故障。三份报告仍为9190正式负责人历史逐例产物，未用本次运行篡改旧延迟、调用数、输出或审查记录；synthetic_fixture、人类审查0及summary.quality_verified=false保持。未运行真实模型、人工自然度或真实App验收。
+
+2026-10-11 总协调净接正式1836194的七桌面文件及owned c7历史补漏，保留其他主题与原失败，A10 details ID独立归属未混入本切片。主树77条样本控制器加4条删除策略守卫实际81通过1128.884ms／skip0、完整TypeScript通过；原八条current/history×clear/后来复制/实际删除反向在单独私有probe按新合同实际8通过111.726ms，未知paste即时拒且保存POST0，清空后直接typed均manual。控制器SHA217cf58919d10e0ebfa9d4034930364977484eb08947d8aff1dd47e502e0deed前后不变，临时bundle清，HTTP／DB／模型／网络／Page均0。原八条2控制通过／6RED和旧独立未知paste正向属于此前阶段，原报告不改写；新接口的直接键入正向明确另测。最终切片两轴新增重要问题0。C自身两公开labels已通过的记录保留为负责人历史；root公开组合另行顺序验证，E04–06仍claimed。
