@@ -546,11 +546,17 @@ class PostgresAssistantSessionStore:
             (scope.owner_id, scope.contact_id, request.idempotency_key),
         ).fetchone():
             raise AssistantSessionConflict("历史回复请求不能自动归并。")
-        from notalone.persistence.assistant_session_inputs import check_expected_input, require_input_session
+        from notalone.persistence.assistant_session_inputs import (
+            check_expected_input, require_current_input, require_input_session,
+        )
         check_expected_input(require_input_session(connection, scope, session_id), request.expected_input_version_id)
+        # 新键延续明确旧输入时，CURRENT UUID 相同仍须来源可用，并保留其实际删除依赖。
+        expected_dependencies = (require_current_input(connection, scope, session_id, request.expected_input_version_id)
+                                 if request.expected_input_version_id is not None else ())
         from notalone.persistence.explored_generation import prepare_explored_generation
         dependencies = prepare_explored_generation(connection, scope, session_id, command)
         dependencies.update(inherited_dependencies)
+        dependencies.update(expected_dependencies)
         if isinstance(command.content, ReplyToMessage):
             target = connection.execute(
                 "SELECT 1 FROM public.message WHERE owner_id = %s AND contact_id = %s AND id = %s",

@@ -288,8 +288,8 @@ def read_input_records(
 
 def require_current_input(
     connection: Any, scope: ContactScope, session_id: UUID, input_version_id: UUID,
-) -> None:
-    """复用调用方事务；局部 dict cursor 兼容默认 tuple row，不更换调用方 factory。"""
+) -> tuple[UUID, ...]:
+    """同事务复验当前输入并返回原权威依赖，不另建来源图或正文副本。"""
 
     if not isinstance(input_version_id, UUID):
         raise AssistantSessionRejected("input_version_stale")
@@ -318,6 +318,8 @@ def require_current_input(
         state = _input_state(cursor, scope, row)
         if state != "active":
             raise AssistantSessionRejected("source_deleted" if state == "redacted" else "source_unavailable")
+        dependencies = row["turn_dependencies"] if row["input_type"] == "generation" else row["dependency_ids"]
+        return tuple(sorted(set(dependencies or ())))
 
 
 def erase_assistant_source_inputs(

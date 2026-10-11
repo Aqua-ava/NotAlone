@@ -51,3 +51,13 @@ Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](
 2026-10-11：按总协调确认和本票可靠完成语义更新原 AFTER_C.save 输入竞态回归；纯正式代码先重现旧断言失败 1F / 0.632s，修订后的实际 C 唯一完成、重放零额外模型和新 CURRENT 不倒退通过，完整输入模块 10G / 6.813s（实际 54/repeat0/库0）。BEFORE_C.save／来源失效拒绝保留。详见[兼容回归记录](../17-implementation-notes.md)；本票保持 claimed，桌面及人工状态未改变。
 
 2026-10-11 总协调精确净接正式7d3兼容测试及两记录后缀，并消费c084六个独立只读typed provider文件；原5unit＋11PG＋输入HTTP10共 **26G／7.405s／skip0**，实际生产迁移001–054／repeat0／自有库剩余0。命令为Conda NotAlone／关闭外部追踪，根 `/private/tmp/notalone-coordinator-isolated-tests.py` 执行 test_assistant_continuation_identity、test_assistant_reply_identity、test_assistant_session_inputs 三模块。四core source focused mypy、七source/test compile通过；新鲜Standards/Spec两切片均无新增阻塞。此兼容修正只保可靠已保存历史、唯一C完成和新CURRENT，不把历史迟到结果当当前可展示；A16 Main发布资格、受控quit及原生人工仍独立未验，本17保持claimed。
+
+2026-10-11 重试来源隐私竞态独立收口：原事务仅比较 `expected_input_version_id` 与 CURRENT UUID 不足以证明输入仍可用。新键明确延续原输入时，原 `require_current_input` 在同 owner 事务继续复验绑定、输入状态及来源，并返回原 turn／discussion 权威依赖供唯一 reserve 继承；不另建图、writer 或正文缓存，同键完成重放仍在原分支处理。
+
+两条真实 HTTP 反例：先从原资料生成，再选定候选续写、无编号准备并中断，公开 GET 得到允许手动重试的 `continued_from_candidate_id=null` 草稿。来源进入 `delete_requested` 而 worker 未清 CURRENT 时新键 prepare 仍 200，**1 RED／1.343s**；补原来源复验后 **1 GREEN／1.387s**。只复验而不继承时，公开 DELETE 已实际完成但新准备复制仍 running，**1 RED／1.461s**；继承原权威依赖后复制及旧内容 redacted、CURRENT 清空，重放拒绝，无关新会话逐字段保留，模型调用不增加。
+
+Conda NotAlone、禁 dotenv／外部追踪、PGPORT=55441，执行 `/private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-round29-a` 加 `test_assistant_retry_source_guard`、`test_assistant_generation_lifecycle`、`test_assistant_generation_prepare`、`test_assistant_session_inputs`、`test_assistant_candidate_carry` 五个 integration.server 模块，实际 **46 GREEN／39.741s／skip0／exit0**。真实001–055账本／repeat0、外层自有库剩余0；原负向迟到用例出现既有无正文租约失效日志，未变为业务失败。两源码限定 mypy、两源码及新测试编译、diff检查通过；固定 ONLY3 SHA256 `f11e2c284b6bfe26e048686494e72dd9451e96f9cf8a9cae4a9c7284d5d6c47a` 独立 Standards 硬性违例0／新增重要 possible Fowler 0、Spec 新增 P0–P3 0；两轴只读，不借为运行证据。
+
+本段仅后端重试来源门禁与删除继承证据；公开宿主退出和恢复组合仍由唯一桌面消费者继续，原生／人工未执行，原五条验收未勾且 State claimed。其它累计要求、超大历史传输及预算页面在途改动未混入本主题。
+
+Root 净接 `7b2af9c4` 后，任务文档仅保留主树已有证据并追加本主题，未导入尚未集成的登记API段落。主树受控隔离 runner 独立执行 `tests.integration.server.test_assistant_retry_source_guard`：**2 GREEN／3.006s／skip0**，真实55迁移逐名账本／repeat0、Fidelity内层与外层自有库残留0；两源码限定mypy、三文件编译、diff及冲突标记检查通过。原验收和claimed保留，宿主退出自动部分仍接续。
