@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
@@ -318,17 +319,25 @@ def erase_style_sample_replies(connection: Any, *, owner_id: UUID, sample_ids: l
         table = connection.execute("SELECT to_regclass('public.assistant_session_turn')").fetchone()
         if table and (table["to_regclass"] if isinstance(table, dict) else table[0]) is not None:
             contacts = connection.execute("""
-                SELECT DISTINCT turn.contact_id FROM public.assistant_session_turn AS turn
+                SELECT turn.contact_id, array_agg(DISTINCT turn.id) AS turn_ids,
+                       array_agg(DISTINCT request.id) AS request_ids
+                FROM public.assistant_session_turn AS turn
                 JOIN public.reply_request AS request ON request.owner_id=turn.owner_id
                   AND request.contact_id=turn.contact_id AND request.idempotency_key=turn.idempotency_key
+                JOIN public.assistant_session AS session ON session.id=turn.session_id
+                  AND session.owner_id=turn.owner_id AND session.contact_id=turn.contact_id
                 WHERE turn.owner_id=%s AND request.id=ANY(%s::uuid[])
+                GROUP BY turn.contact_id
             """, (owner_id, request_ids)).fetchall()
             if contacts:
                 from notalone.persistence.assistant_session_store import erase_assistant_source_turns
                 for row in contacts:
                     contact_id = row["contact_id"] if isinstance(row, dict) else row[0]
+                    turn_ids = row["turn_ids"] if isinstance(row, dict) else row[1]
+                    contact_request_ids = row["request_ids"] if isinstance(row, dict) else row[2]
                     erase_assistant_source_turns(connection, owner_id=owner_id, contact_id=contact_id,
-                                                 removed_ids=set(sample_ids), reply_request_ids=request_ids)
+                                                 removed_ids=set(sample_ids), reply_request_ids=contact_request_ids,
+                                                 turn_ids=turn_ids)
         invalidate_reply_keys(connection, owner_id=owner_id, request_ids=request_ids)
         connection.execute("DELETE FROM public.reply_request WHERE owner_id=%s AND id=ANY(%s::uuid[])",
                            (owner_id, request_ids))
@@ -463,12 +472,14 @@ class PostgresStyleSampleStore:
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
                 """, (scope.owner_id, scope.contact_id, command.save_key, command.text.strip(),
                       command.origin_kind, command.origin_id, sources, dependencies)).fetchone()
+                if row is None:
+                    raise StyleSampleError("表达样本保存未返回记录。")
                 return _as_sample(row)
         except psycopg.Error:
             raise StyleSampleError("表达样本保存失败。") from None
 
     @staticmethod
-    def _origin(connection: Any, scope: ContactScope, command: SaveStyleSample) -> tuple[list[UUID], list[UUID]]:
+    def _origin(connection: Any, scope: ContactScope, command: SaveStyleSample) -> tuple[builtins.list[UUID], builtins.list[UUID]]:
         if command.origin_kind == "manual":
             # 公开候选保存路径始终携真实候选标识；已知原文不能改称无来源输入。
             known = connection.execute("""

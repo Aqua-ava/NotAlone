@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 import psycopg
@@ -19,6 +20,58 @@ class AuthenticExpressionSessionDeletionTests(FidelityHttpFixture, unittest.Test
 
     def test_saved_samples_remain_usable_after_session_delete_then_raw_delete_erases_derivatives(self):
         self._exercise_retention("source")
+
+    def test_history_sample_delete_erases_running_draft_without_relationship_context(self):
+        contact, _, _ = self.prepare_contact(self.owner_id)
+        status, saved = self.backend.request(f"/api/contacts/{contact}/style-samples", {
+            "idempotency_key": str(uuid4()), "text": "合成旧样本：说话轻一点。", "origin": {"kind": "manual"},
+        })
+        self.assertEqual(status, 200, saved)
+        sample_id = saved["sample"]["sample_id"]
+        session = self.backend.request(f"/api/contacts/{contact}/assistant-session/default", {})[1]
+        path = f"/api/contacts/{contact}/assistant-sessions/{session['session_id']}"
+        previous = {"contact_id": contact, "idempotency_key": str(uuid4()), "skill_disabled": True,
+                    "content": {"type": "rewrite_draft", "draft_text": "上次明确拒绝。", "include_relationship_context": True}}
+        self.reply_model.plans.append({"text": "上次不参加。", "basis": "保留明确拒绝。"})
+        status, reply = self.backend.request(path + "/replies", previous)
+        self.assertEqual(status, 200, reply)
+        self.assertEqual(reply["context_receipt"]["style_sample_ids"], [sample_id])
+        current = {**previous, "idempotency_key": str(uuid4()), "content": {
+            "type": "rewrite_draft", "draft_text": "本次仍明确拒绝。", "include_relationship_context": False,
+        }}
+        self.reply_model.plans.append({"text": "本次不参加。", "basis": "保留本次明确拒绝。"})
+        self.reply_model.entered.clear()
+        gate = self.reply_model.pause_next_response()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(self.backend.request, path + "/replies", current)
+            try:
+                self.assertTrue(self.reply_model.entered.wait(5))
+                status, deleted = self.backend.request(f"/api/contacts/{contact}/style-samples/{sample_id}", method="DELETE")
+                self.assertEqual(status, 200, deleted)
+                restored = self._get(self._backend(self.owner_id), path)
+            finally:
+                gate.set()
+            status, result = future.result(timeout=10)
+        self.assertNotEqual(status, 200, result)
+        self.assertEqual(len(restored["turns"]), 2)
+        for turn in restored["turns"]:
+            self.assertEqual(turn["state"], "redacted")
+            self.assertIsNone(turn["input"])
+            self.assertIsNone(turn["reply"])
+        with psycopg.connect(self.database_url) as connection:
+            row = connection.execute(
+                "SELECT current_input_version_id FROM public.assistant_session WHERE owner_id=%s AND contact_id=%s AND id=%s",
+                (self.owner_id, contact, session["session_id"]),
+            ).fetchone()
+            self.assertEqual(row, (None,))
+            remaining = connection.execute(
+                "SELECT count(*) FROM public.assistant_session_input WHERE owner_id=%s AND session_id=%s AND state<>'redacted'",
+                (self.owner_id, session["session_id"]),
+            ).fetchone()[0]
+            self.assertEqual(remaining, 0)
+        self.assertNotEqual(self.backend.request(path + "/replies", current)[0], 200)
+        self.assertEqual(self.reply_model.payloads[-1]["style_references"], [])
+        self.assertEqual(len(self.reply_model.payloads), 2)
 
     def _exercise_retention(self, removal: str) -> None:
         contact, target, source = self.prepare_contact(self.owner_id)

@@ -34,10 +34,14 @@ class ReplyDiscussionDependenciesTest(unittest.TestCase):
     def setUp(self) -> None:
         # 共用A正式夹具的范围和真实公开存储入口，不复刻其读取或codec。
         self.fixture = support.AssistantDiscussionContextTest()
+        self.addCleanup(self._release_fixture)
         self.fixture.setUp()
-        self.addCleanup(self.fixture.doCleanups)
         self.samples = PostgresStyleSampleStore(support.DATABASE_URL)
         self.store = PostgresReplyStore(support.DATABASE_URL)
+
+    def _release_fixture(self) -> None:
+        if not self.fixture.doCleanups():
+            raise RuntimeError("合成中央依赖夹具清理失败。")
 
     def _seed_history(self, *, source=None):
         old = self.samples.save(self.fixture.scope, SaveStyleSample(
@@ -147,6 +151,51 @@ class ReplyDiscussionDependenciesTest(unittest.TestCase):
         self._assert_erased_turn(prepared)
         with self.assertRaises(ReplyStoreInvariantError):
             self._save(prepared)
+
+    def test_history_sample_delete_erases_running_rewrite_without_relationship_and_current_pointer(self):
+        old, current, _ = self._seed_history()
+        prepared = self._prepare((), relationship=False)
+        metadata = self._row(prepared[2].request_id)[0]
+        self.assertEqual(metadata["assistant_discussion_style_sample_ids"], [str(old.sample_id)])
+        self.samples.delete(self.fixture.scope, old.sample_id)
+        self.assertIsNone(self._row(prepared[2].request_id))
+        self._assert_erased_turn(prepared)
+        with psycopg.connect(support.DATABASE_URL) as connection:
+            pointer = connection.execute(
+                "SELECT current_input_version_id FROM public.assistant_session WHERE owner_id=%s AND contact_id=%s AND id=%s",
+                (self.fixture.owner_id, self.fixture.contact_id, self.fixture.session_id),
+            ).fetchone()[0]
+        self.assertIsNone(pointer)
+        self.assertEqual({item.sample_id for item in self.samples.list(self.fixture.scope)},
+                         {item.sample_id for item in current})
+        with self.assertRaises(ReplyStoreInvariantError):
+            self._save(prepared)
+
+    def test_history_sample_delete_keeps_unrelated_running_draft_in_another_actual_session(self):
+        from notalone.persistence.assistant_session_catalog import PostgresAssistantSessionCatalog
+        old, _, _ = self._seed_history()
+        affected = self._prepare((), relationship=False)
+        affected_session = self.fixture.session_id
+        independent_session = PostgresAssistantSessionCatalog(support.DATABASE_URL).new(self.fixture.scope)
+        self.fixture.session_id = independent_session
+        independent = self._prepare((), relationship=False)
+        self.fixture.session_id = affected_session
+        self.assertEqual(self._row(independent[2].request_id)[0]["assistant_discussion_style_sample_ids"], [])
+        self.samples.delete(self.fixture.scope, old.sample_id)
+        with psycopg.connect(support.DATABASE_URL) as connection:
+            row = connection.execute(
+                "SELECT turn.state,turn.input_payload,input.state,input.content,session.current_input_version_id "
+                "FROM public.assistant_session_turn AS turn JOIN public.assistant_session_input AS input "
+                "ON input.id=turn.input_version_id JOIN public.assistant_session AS session ON session.id=turn.session_id "
+                "WHERE turn.owner_id=%s AND turn.contact_id=%s AND turn.session_id=%s AND turn.id=%s",
+                (self.fixture.owner_id, self.fixture.contact_id, independent_session, independent[1]),
+            ).fetchone()
+        self.assertEqual((row[0], row[2]), ("running", "active"))
+        self.assertIsNotNone(row[1])
+        self.assertIsNone(row[3])  # generation正文只在实际turn，不增加输入索引副本。
+        self.assertEqual(row[4], independent[3].assistant_discussion.current_input_version_id)
+        self.assertIsNotNone(self._row(independent[2].request_id))
+        self._assert_erased_turn(affected)
 
     def test_new_current_input_blocks_save_but_keeps_completed_history_read_and_replay(self):
         _, _, references = self._seed_history()

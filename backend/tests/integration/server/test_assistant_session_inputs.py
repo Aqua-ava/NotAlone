@@ -106,7 +106,7 @@ class AssistantSessionInputHttpTest(unittest.TestCase):
         self.assertEqual(saved["inputs"][1]["state"], "redacted")
         self.assertIsNone(saved["inputs"][1]["content"])
         self.assertEqual(saved["inputs"][1]["placeholder"], "相关来源已删除")
-        self.assertEqual(saved["current_input_version_id"], dependent["input_version_id"])
+        self.assertIsNone(saved["current_input_version_id"])
         self.assertFalse(self.store.is_current_input(self.scope, self.session_id, UUID(dependent["input_version_id"])))
         self.assertEqual(saved["turns"], [])
         self.assertEqual(len(self.fixture.model.seen_calls), 0)

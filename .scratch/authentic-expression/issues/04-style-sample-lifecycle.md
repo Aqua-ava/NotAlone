@@ -117,3 +117,9 @@ Standards复核发现跨样本／说明文字的选区校验失败后未登记�
 总协调主树正式集成 `bbc038744ec9eab71dbc821fe21850fdb77e97f6` 的来源 controller 与测试切片；已有 A 删除身份 DTO 保持同一正式契约，仅合并新具名 case 登记。主树在 `desktop/` 实际运行 `node --test tests/style-samples/controller.test.mjs`：16 项 GREEN／504.490584ms、skip0；`npm run typecheck` 与差异检查通过。最终限定 Standards 硬要求 0／重要气味 0、Spec 0。
 
 此次未执行 C 自有 `style-session-editor-erasure` 三场公开 TEST，主树仍待 A 正式 producer；A working 的原十场公开 GREEN 是已发生的前置组合证据，不能代替本次主树公开验证。新增恢复历史候选复制／粘贴编辑／删除的实际 RED 仍开放，由 C 唯一 controller 与 A 薄历史面板接续修复。整票保持 claimed，原标准及人工未执行状态保留；不新增正文缓存、外部模型或发送能力。
+
+2026-10-11 样本存储窄类型修复：总协调／B静态检查指出save RETURNING可为空及类list方法遮蔽类型注解。C在原正式e5cea83源复验：默认mypy共61错误／15文件，不能当单文件或全树通过；限定`python -m mypy --follow-imports=skip src/notalone/persistence/style_sample_store.py`实际1个list遮蔽错误。仅新增RETURNING空记录的领域错误守卫，并使用builtins.list类型，不用cast／ignore，不改来源、删除、数据结构或API。窄mypy修后0，最终五行Spec新增P0–P2为0／Standards硬0及重要Fowler0。
+
+相关原12项HTTP首次GREEN10.659秒，但直接执行误用Core默认合成dimension_release配置；这是本轮执行偏差，不作为关闭门禁范围验收。随后显式将StyleSampleHttpTest.dimension_release设为None，原12项完整GREEN25.639秒；正式53／repeat0／自有随机库精确剩余0。未访问业务库或真实资料，未改变生产门禁；不宣称默认全树mypy通过。复制来源新合同、页面异步保护与公开组合继续，整票claimed。
+
+总协调主树集成 e5cea839 的四个必要 backend 文件及 f6d94b 的五行存储修正，保留所有历史和负责人证据。原四模块实际30项 GREEN／16.713秒；追加原12样本 HTTP，在临时 runner 子进程仅显式设 StyleSampleHttpTest.dimension_release=None，真实生产 CLI 迁移与 HTTP／PostgreSQL和全部原断言保持，共42项 GREEN／28.708秒，正式001–053、重复迁移0、自有库残留0。当前样本存储限定 mypy --follow-imports=skip 单文件通过、相关四文件编译通过；首次默认两类型错误及 C 默认跨文件错误保留，不宣称全树类型通过。最终此七文件 Standards硬要求／重要Fowler可能气味0、Spec0。仅接线、来源物理擦除和样本生命周期已自动验证，C未知粘贴新合同的公开异步来源反例、A恢复复制和其他组合继续；C04–06保持claimed，人工部分未执行。

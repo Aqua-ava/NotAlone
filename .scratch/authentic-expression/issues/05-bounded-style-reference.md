@@ -88,3 +88,17 @@ Conda NotAlone／backend内`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRAC
 相关联跑实际44项真实HTTP／正式001–052随机PG全部GREEN／71.560秒、skip0，八个本轮Core夹具数据库精确核对剩余0；含新预算／Skill组合与原C有界参考／场景／删除、B公开探索／三声明／组消息。样本竞态的既有失败标记租约诊断保留，原拒绝／候选0断言未弱化；没有新增迁移、运行时或真实模型质量结论。
 
 2026-10-11 总协调主树接续：精确集成 C 正式 `a8946af89800592530ccf12568bc25af7641a7bc` 的来源夹具和本票记录。在 Conda `NotAlone`、关闭 dotenv／追踪、`PYTHONPATH=src:.` 环境运行 `python /private/tmp/notalone-coordinator-isolated-tests.py /Users/local-user/learn/NotAlone tests.integration.server.test_assistant_input_budget tests.integration.reply.test_postgres_reply_flow tests.integration.server.test_assistant_session_api`：43 项全部 GREEN／37.857 秒（35 真实 HTTP、8 存储集成），正式 001–053、自有数据库精确剩余 0。旧 6 个来源夹具错误已在同一扩展组消除；仅补实际合成来源前置，不修改业务守卫或原断言。运行删除来源后的租约失效诊断保留，原清理与拒绝断言通过。两文件限定 Standards／Spec 审查均无新问题，未执行页面、人工、原生或外部模型验收；完整 A 历史接线与本票原剩余范围仍继续，不据 43 项关闭本票。
+
+2026-10-11 running纯草稿删除接续（未完成）：C中央caller已按实际owner/contact/key和真实SID关联聚合turn_ids，经既有A helper传递；无第二writer或迁移。接线后本C完整12项PG实际10通过／2失败、3.490秒，正式53／repeat0／唯一自有库精确剩余0。两失败仍是历史sample受影响running rewrite的turn正文和051状态未擦除，跨新SID无关草稿正向保持；等待A正式helper取消显式turn豁免并清对应输入／current指针，不预填完成。另C嵌套夹具同类清理问题使用actual TestCase.run私有反向：首次缺URL导致一个构造异常干扰，只作入口诊断；设合成未使用URL后两真实RED.002秒，setUp前注册cleanup并向外传播doCleanups失败后同两GREEN.032秒。该probe不连接数据库，12项实际PG已复验夹具。
+
+2026-10-11 公开HTTP再现：新增 `test_authentic_expression_session_deletion.test_history_sample_delete_erases_running_draft_without_relationship_context`，先真实助手HTTP生成使用样本的旧轮，再暂停不读关系草稿的受控模型，通过真实DELETE删除历史样本并重新装配后端读取。实际1项FAIL／2.389秒，旧模型迟到返回已拒绝，但公开turn仍为failed而非redacted；之后物理输入及current断言尚未到达，不预填通过。标准Fidelity随机_test库cleanup执行并确认不存在；既有租约失效诊断保留。与两PG失败共同等待A正式helper，本测试保持未完成工作，不以存储测试替代HTTP删除链。
+
+
+2026-10-11 A正式删除修复接续：精确消费b819b660de44862657248ccd88909bba6389e978的assistant_session_store／inputs及五项依赖擦除测试三个backend，不取A票或working。C中央已按真实owner/contact/key和实际SID聚合受影响turn_ids，沿既有A helper显式传递；A显式命中的turn不再豁免为独立草稿，同事务擦除051并只清对应current指针，无关草稿／新讨论保留，无新迁移或正文副本。
+
+原两PG失败及真实HTTP失败原断言均转GREEN。C实际A5依赖擦除＋C12中央＋C3HTTP会话／样本／raw删除，共20GREEN／29.253秒、skip0；正式53／repeat0，外层及Core两自有数据库精确剩余0。HTTP真实暂停模型→sample DELETE→后端重新装配后turn/input无正文、current清空，旧键及迟到响应拒绝，另新SID无关草稿仍running／active；此前尚未到达的物理状态断言本次已执行。原租约失效诊断保留。两个A source mypy和六个相关source/test编译通过；共享历史、输入、记忆依赖和会话删除回归及两轴继续，不据20项关闭公开UI组合。
+
+
+共享删除回归保真记录：首轮四模块59项实际1FAIL＋2ERROR／108.363秒，全部自有库已清理。FAIL为旧测试仍要求current指向已redacted输入，与A b819正式清空契约相反；只将该断言改为None，保留旧输入占位、无关讨论和失效校验。两个memory-expiration子例是HTTP timeout；新隔离库原单例1GREEN／0.968秒，线程定时诊断未触发，未定位或宣称修复超时原因。原四模块完整复跑最终59GREEN／56.255秒、skip0，正式53／repeat0／嵌套和外层两自有库精确0，原租约失效诊断保留。加上前述20项最小组合，本删除主题相关验证完成；最终十文件只读两轴完成：Standards硬要求0／重要Fowler0，Spec新增P0–P2为0。复制后来copy／清空／先删SID后首次短贴的新P2独立开放，不由本删除修复关闭E04–E06。
+
+总协调主树集成 e5cea839 的四个必要 backend 文件及 f6d94b 的五行存储修正，保留所有历史和负责人证据。原四模块实际30项 GREEN／16.713秒；追加原12样本 HTTP，在临时 runner 子进程仅显式设 StyleSampleHttpTest.dimension_release=None，真实生产 CLI 迁移与 HTTP／PostgreSQL和全部原断言保持，共42项 GREEN／28.708秒，正式001–053、重复迁移0、自有库残留0。当前样本存储限定 mypy --follow-imports=skip 单文件通过、相关四文件编译通过；首次默认两类型错误及 C 默认跨文件错误保留，不宣称全树类型通过。最终此七文件 Standards硬要求／重要Fowler可能气味0、Spec0。仅接线、来源物理擦除和样本生命周期已自动验证，C未知粘贴新合同的公开异步来源反例、A恢复复制和其他组合继续；C04–06保持claimed，人工部分未执行。

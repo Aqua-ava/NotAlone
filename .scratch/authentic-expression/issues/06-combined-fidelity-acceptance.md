@@ -130,3 +130,12 @@ Skill探索组合实际接续：已消费B正式UUID后端`1484c2b`为`0b0fce7`�
 未保存编辑区原公开 RED 已由 root 在 A faults／lifecycle 两 case240 秒取得：实际 DELETE 后候选粘贴编辑仍留 React 正文，quiet35／cleanuptrue／单 Chrome／Electron-native=false，后续未到达不记 GREEN。C 正式 `bbc038744ec9eab71dbc821fe21850fdb77e97f6` 沿正式 DTO 在唯一 controller 实现选择性 erasureRevision，只有候选关联副本清空，保留显式保存样本、列表复制、无关手写和原始本人消息；跨会话候选由现有后端依据实查，不另造删除权威。C 新 Node 行为回归16 GREEN／112.305ms、typecheck及安全40 GREEN／11881.307833ms、两轴0；其三场 TEST 没有运行，等待 A 正式 producer 与主树公开集成。原类型 union、指纹反例及 CLI 环境失败均在 E04 保留。
 
 后续主 Agent 已在 A working 前置联合执行原 faults／lifecycle 十场，全部 GREEN／quiet68／cleanuptrue，但新增恢复历史候选选区复制→粘贴编辑→删除的公开单场取得真实 RED：DELETE／GET404 后输入框仍有副本，quiet17／cleanuptrue，后续旧 clipboard 禁洗 manual、独立样本及新 CID 断言尚未到达。这项新缺口仍由 C 唯一来源 controller、A 历史面板薄接线修复，不能凭原十场关闭本票；root 的正式 producer 尚未接入，人工部分未执行。
+
+2026-10-11 A正式删除修复接续：精确消费b819b660de44862657248ccd88909bba6389e978的assistant_session_store／inputs及五项依赖擦除测试三个backend，不取A票或working。C中央已按真实owner/contact/key和实际SID聚合受影响turn_ids，沿既有A helper显式传递；A显式命中的turn不再豁免为独立草稿，同事务擦除051并只清对应current指针，无关草稿／新讨论保留，无新迁移或正文副本。
+
+原两PG失败及真实HTTP失败原断言均转GREEN。C实际A5依赖擦除＋C12中央＋C3HTTP会话／样本／raw删除，共20GREEN／29.253秒、skip0；正式53／repeat0，外层及Core两自有数据库精确剩余0。HTTP真实暂停模型→sample DELETE→后端重新装配后turn/input无正文、current清空，旧键及迟到响应拒绝，另新SID无关草稿仍running／active；此前尚未到达的物理状态断言本次已执行。原租约失效诊断保留。两个A source mypy和六个相关source/test编译通过；共享历史、输入、记忆依赖和会话删除回归及两轴继续，不据20项关闭公开UI组合。
+
+
+共享删除回归保真记录：首轮四模块59项实际1FAIL＋2ERROR／108.363秒，全部自有库已清理。FAIL为旧测试仍要求current指向已redacted输入，与A b819正式清空契约相反；只将该断言改为None，保留旧输入占位、无关讨论和失效校验。两个memory-expiration子例是HTTP timeout；新隔离库原单例1GREEN／0.968秒，线程定时诊断未触发，未定位或宣称修复超时原因。原四模块完整复跑最终59GREEN／56.255秒、skip0，正式53／repeat0／嵌套和外层两自有库精确0，原租约失效诊断保留。加上前述20项最小组合，本删除主题相关验证完成；最终十文件只读两轴完成：Standards硬要求0／重要Fowler0，Spec新增P0–P2为0。复制后来copy／清空／先删SID后首次短贴的新P2独立开放，不由本删除修复关闭E04–E06。
+
+总协调主树集成 e5cea839 的四个必要 backend 文件及 f6d94b 的五行存储修正，保留所有历史和负责人证据。原四模块实际30项 GREEN／16.713秒；追加原12样本 HTTP，在临时 runner 子进程仅显式设 StyleSampleHttpTest.dimension_release=None，真实生产 CLI 迁移与 HTTP／PostgreSQL和全部原断言保持，共42项 GREEN／28.708秒，正式001–053、重复迁移0、自有库残留0。当前样本存储限定 mypy --follow-imports=skip 单文件通过、相关四文件编译通过；首次默认两类型错误及 C 默认跨文件错误保留，不宣称全树类型通过。最终此七文件 Standards硬要求／重要Fowler可能气味0、Spec0。仅接线、来源物理擦除和样本生命周期已自动验证，C未知粘贴新合同的公开异步来源反例、A恢复复制和其他组合继续；C04–06保持claimed，人工部分未执行。
