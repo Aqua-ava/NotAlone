@@ -430,3 +430,26 @@ Root先只补正式两个测试，当前同SID已有completed候选、两保存�
 随后完整原budget public suite实际30GREEN／109674.323042ms／skip0／actualexit0，30份真实001–055账本、repeat0和自有库剩余0逐条核验，合成实际模型总35；非404 connection/503仍保原key重试、较新CURRENT与ready/loading和成功迟到warning边界均通过。strict预算decoder3GREEN／131.962875ms，版本／来源／样本／复制原五Node套225GREEN／2138.758708ms、whole桌面TSC及diff通过。相关Node首默认沙箱真实回环listen EPERM导致211pass/14fail／1247.422625ms，仅补监听权限同代码复验225G；不作产品RED、不放宽断言。实际日志/private/tmp/notalone-root-budget-terminal-delete-{red-http55,fixed-http55,related30-http55,decoder3,related225-node-fixed-env}.log保留。
 
 C自己的30G121067.235459ms和Root此前28／25／11各阶段另保，不借其关闭本新P2。本主题只完成预算终态删除的自动实现与真实验证；A13选定版本要求soleA正式修复、typed Main/prepare/jobs、A15/16B/17及C06最后组合继续，State claimed／原三未验AC保留。未运行真实App/原生/微信/OCR/私料/外部模型/人工发送或远端操作。
+
+### 本轮 C06 正式 typed 续写与表达样本的真实 HTTP 组合
+
+仅消费 A 正式 `0ec5a1ae9005fe42bb59acb3af433c2414e4697d` 的唯一续写提供者（本树 `fdaef786`），不建立第二 writer、来源图、codec、迁移或样本缓存。新增 `test_authentic_expression_continuation`：回应／主动各覆盖删除样本和删除原始来源，共四场。每场经真实 HTTP 保存低权重手工样本与独立讨论，普通生成后实际读取、编辑完整两消息版本、明确选择，再通过 `/continue` 的“第一条自然一点”和“第一条简短一点”续写。实际输入保留选定版本全文、`不要承诺` 等兼容要求和有界样本回执，旧键重读不追加模型。
+
+删除后重建生产后端读取：三轮均为无正文 `redacted`，CURRENT 清空，旧普通／typed 键、依据、版本读取、编辑、选择及新键继续均拒绝；无关独立讨论的公开投影与删除前逐字段相等。删除样本时独立原始来源仍 active；删除原始来源时无依赖的手工样本仍可独立查看。正文、输入及选择都通过公开业务接口观察；原物理删除证据仍由前票测试独立保留。
+
+实际验证按 Conda `NotAlone`、剥除 `LANGSMITH*`／`LANGCHAIN*` 追踪环境、`NOTALONE_DISABLE_DOTENV=1`、`PGPORT=55441` 及随机自有 `_test` 库执行：
+
+- 基线未消费 A 正式接口前，首回应场 `1 FAIL／1.883s` 在 `/continue` 返回 404；属于依赖未接入，后续未到达的断言不标通过。此前默认沙箱 socket EPERM 未建库，仅为环境入口失败。
+- 正式提供者接入后的首场 `1 ERROR／2.140s` 是夹具把 `is_current_draft` 的版本元数据误当成另有 `messages`；正文已完整在 `draft_text`，纠正为核对全文和元数据，不新增正文副本。随后四场 `4 FAIL／16.021s` 是夹具把未规范化请求与公开输入的空默认字段比较；改为真实公开删除前后投影完全相等。两个夹具错误记录及实际捕获均保留，不宣称为产品 RED 或修复。
+- 修正后的原四场 **4 GREEN／16.302s／skip0／actualexit0**。最终同隔离 runner 联跑 `test_authentic_expression_continuation`、`test_authentic_expression_scenarios`、`test_authentic_expression_candidate_versions`、`test_authentic_expression_combination`、`test_authentic_expression_session_deletion`：**18 GREEN／47.924s／skip0／actualexit0**。正式001–055账本逐名核验、重复迁移0、自有库剩余0；已有删除竞态的租约失效诊断保留，拒绝断言通过。
+- 唯一 E01 捕获入口 `PYTHONPATH=src python -m tests.fidelity_capture --capture /private/tmp/notalone-c-typed-final-capture.json --case-spec tests/fixtures/fidelity/typed-continuation-http-review.json --output ../.scratch/authentic-expression/reports/typed-continuation-http-controlled-v1.json` 实际 exit0，交付[12例实际报告](../reports/typed-continuation-http-controlled-v1.json)。完整最终运行捕获12次模型输入／输出／UUID、12调用、HTTP入口耗时小计3347.113ms；全部 development，不冒称未见保留集。整组首句拒绝但后句增加明晚七点／海边／陪同承诺的四个故意错误如实保真失败；契约失败0，真人通过0，`quality_verified=false`，真实语义、自然度、关系适配、本人相似度和 token 仍 unknown。报告生成本身模型调用0。
+
+本切片只完成 typed 提供者的 HTTP／隔离数据库与逐例报告，不借其关闭公开 typed 页面、确认方向／回答后离开、活跃新消息采用或退出重开组合。原三条未勾验收标准和 `State: claimed` 保留。数据仅合成，无业务数据库、私人资料、新外部模型、付费、OCR、微信、自动学习、自动发送、push、发布或部署；真实App／原生／人工质量按本轮明确排除范围跳过。
+
+最终实际捕获逐例ID／12个模型输入及调用数检验、唯一入口临时重生报告逐byte相等、相关报告单元 **9 GREEN／0.232s**、新增文件编译与diff均通过。本四文件固定差异分别由 A 独立 Standards（硬要求0／新增重要Fowler可能气味0）和 B 独立 Spec（新增P0–P3为0）只读审查；审查不代运行这些测试或公开页面。完成后按工程要求本地提交本主题，后续公开typed与生命周期继续，不提前关闭本票。
+
+### 本轮主树独立复验正式 typed HTTP 组合
+
+主树精确集成 C `70690d0a` 四文件切片，在已有正式 A13 提供者上独立运行四场公开 HTTP／隔离数据库组合：**4 GREEN／15.329 秒／actualexit0**；正式生产 001–055、重复迁移 0，保真夹具内层 `DROP` 后 `EXISTS` 清理守卫通过，外层自有库剩余 0。本轮受控运行器剥除外部模型与追踪凭据，关闭 dotenv 和真实模型开关；不使用提供者的18项或16.302秒计量。
+
+实际捕获12行、12模型输入、12调用，经唯一E01 CLI生成[主树12例实际报告](../reports/root-typed-continuation-http-controlled-v1.json)：HTTP耗时小计3609.013毫秒、契约失败0、故意无依据整组事实与承诺失败4、真人通过0、quality_verified=false，全部development。相关报告单元 **6 GREEN／0.001秒**，原提供者报告保留。该结果仍只覆盖HTTP组合，公开typed消费、新消息和退出生命周期继续，三条未验AC和claimed保持，未启动真实App、微信或OCR。
