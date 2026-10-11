@@ -21,6 +21,7 @@ from notalone.persistence.assistant_session_inputs import (
 )
 from notalone.persistence.assistant_session_store import _dependencies_available, _reply_dependencies
 from notalone.persistence.style_sample_store import captured_reply_sources, require_reply_sources_current
+from notalone.persistence.reply_discussion_dependencies import reply_style_sample_dependencies
 from notalone.reply.assistant_discussion import (
     DiscussionContext, DiscussionDependencies, DiscussionIdentity, DiscussionItem,
     DiscussionSnapshot,
@@ -132,30 +133,8 @@ def _generation_dependencies(connection: Any, scope: ContactScope, row: dict[str
         return DiscussionDependencies(tuple(sorted(sources)))
     sources.update(_reply_dependencies(connection, scope, row["reply_request_id"]))
     sources.update(captured_reply_sources(connection, owner_id=scope.owner_id, request_id=row["reply_request_id"]))
-    sample_rows = connection.execute("""
-        WITH RECURSIVE ancestors(id,continued_from_candidate_id) AS (
-            SELECT id,continued_from_candidate_id FROM public.reply_request
-            WHERE owner_id=%s AND contact_id=%s AND id=%s
-            UNION
-            SELECT parent.id,parent.continued_from_candidate_id FROM ancestors
-            JOIN public.reply_candidate AS candidate ON candidate.id=ancestors.continued_from_candidate_id
-            JOIN public.reply_request AS parent ON parent.id=candidate.reply_request_id
-            WHERE candidate.owner_id=%s AND candidate.contact_id=%s
-              AND parent.owner_id=%s AND parent.contact_id=%s
-        ), samples(id) AS (
-            SELECT use.sample_id FROM public.reply_style_sample_use AS use
-            WHERE use.owner_id=%s AND use.contact_id=%s
-              AND use.reply_request_id IN (SELECT id FROM ancestors)
-            UNION
-            SELECT dependency.id FROM samples
-            JOIN public.style_sample AS sample ON sample.id=samples.id
-              AND sample.owner_id=%s AND sample.contact_id=%s
-            CROSS JOIN LATERAL unnest(sample.dependency_sample_ids) AS dependency(id)
-        ) SELECT id FROM samples ORDER BY id
-    """, (scope.owner_id, scope.contact_id, row["reply_request_id"],
-          scope.owner_id, scope.contact_id, scope.owner_id, scope.contact_id,
-          scope.owner_id, scope.contact_id, scope.owner_id, scope.contact_id)).fetchall()
-    return DiscussionDependencies(tuple(sorted(sources)), tuple(item["id"] for item in sample_rows))
+    samples = reply_style_sample_dependencies(connection, scope, row["reply_request_id"])
+    return DiscussionDependencies(tuple(sorted(sources)), samples)
 
 
 def _generation_identity(row: dict[str, Any], dependencies: DiscussionDependencies) -> DiscussionIdentity:

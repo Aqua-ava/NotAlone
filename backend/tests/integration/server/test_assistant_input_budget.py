@@ -20,7 +20,7 @@ from notalone.reply.input_budget import BudgetState, InputBudgetDecision
 from notalone.server.app import create_app
 from notalone.server.reply_wiring import build_reply_service
 from tests.fidelity_http_support import FidelityControlledModel, FidelityHttpFixture
-from tests.input_budget_support import synthetic_budget_kwargs
+from tests.input_budget_support import SyntheticModelCounter, synthetic_budget_kwargs
 from tests.integration.server.core_business_flow_support import HttpBackend, ScriptedCoreModel, tool_response
 
 
@@ -69,6 +69,7 @@ class AssistantInputBudgetHttpTest(FidelityHttpFixture, unittest.TestCase):
 
     def _budget_backend(
         self, owner_id: UUID, *, capacity: int = 100000, unknown: bool = False,
+        counters: list[SyntheticModelCounter | None] | None = None,
     ) -> tuple[HttpBackend, list[InputBudgetDecision]]:
         """每个 startup 显式绑定同一合成模型；collector 仅供测试观察。"""
 
@@ -83,6 +84,8 @@ class AssistantInputBudgetHttpTest(FidelityHttpFixture, unittest.TestCase):
                 output_reserve_tokens=None, measurement_kind=None, measurement_id=None,
             )
             configuration["input_token_counter"] = None
+        if counters is not None:
+            counters.append(configuration["input_token_counter"])
         with patch(
             "notalone.server.reply_wiring.build_deepseek_model",
             return_value=self.reply_model,

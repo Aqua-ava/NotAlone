@@ -35,6 +35,8 @@ from notalone.reply.input_budget import (
 )
 from notalone.reply.style_reference import require_reference_contract
 from notalone.reply.input_budget_receipt import validate_input_budget_receipt
+from notalone.reply.assistant_discussion import DISCUSSION_HISTORY_NOTICE
+from notalone.reply.assistant_discussion_payload import assistant_discussion_payload
 from notalone.reply.runtime import (
     ReplyRuntimeResult,
     RuntimeCandidate,
@@ -723,7 +725,8 @@ class LangChainReplyRuntime:
                 ],
                 response_format=output_strategy,
                 context_schema=ReplyRuntimeContext,
-                system_prompt=BASE_SYSTEM_PROMPT,
+                system_prompt=(BASE_SYSTEM_PROMPT + "\n" + DISCUSSION_HISTORY_NOTICE
+                               if prepared.assistant_discussion is not None else BASE_SYSTEM_PROMPT),
             )
             state = run_with_timeout(
                 graph.ainvoke(
@@ -831,6 +834,8 @@ def _request_text(prepared: ReplyContext) -> str:
         for item in prepared.style_references
     ]
     payload["risk_notes"] = list(prepared.risk_notes)
+    if prepared.assistant_discussion is not None:
+        payload["assistant_discussion"] = assistant_discussion_payload(prepared.assistant_discussion)
     return json.dumps(payload, ensure_ascii=False)
 
 

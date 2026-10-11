@@ -34,6 +34,7 @@ from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
 from notalone.persistence.reply_exploration import PostgresExplorationStore
 from notalone.persistence.explored_reply_context import ExploredReplyContext
+from notalone.persistence.assistant_discussion_reply_context import PostgresAssistantDiscussionContext
 from notalone.persistence.retrieval import PostgresRetrieval
 from notalone.persistence.skill_port import PostgresSkillPort
 from notalone.persistence.style_sample_store import PostgresStyleSampleStore
@@ -90,7 +91,10 @@ def build_reply_service(
             input_token_counter=input_token_counter,
             on_input_budget=on_input_budget,
         ),
-        context=ExploredReplyContext(context, database_url=database_url, evidence=evidence),
+        context=PostgresAssistantDiscussionContext(
+            ExploredReplyContext(context, database_url=database_url, evidence=evidence),
+            database_url=database_url,
+        ),
         ledger=PostgresOutboundLedger(database_url),
     )
     exploration = ReplyExplorationService(

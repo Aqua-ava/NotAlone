@@ -129,3 +129,30 @@ PYTHONPATH=src python -m mypy --follow-imports=silent src/notalone/reply/input_b
 - 新 codec 单文件 mypy、相关十二源码／测试 py_compile 与差异检查通过；未把既有十一条类型基线称为全库通过。限定最终 Standards 硬要求 0／重要气味 0、Spec 0。
 
 本次完成可信预算回执的主树集成，完整讨论模型载荷及预算增长、温和页面提醒和 C 已记录物理擦除缺口继续由原负责人推进；12 保持 claimed，原验收不修改，人工部分未执行。
+
+阶段 3e 完整讨论生产消费者：在正式预算回执 `d4e00f8`、C 讨论来源消费 `3223a135c824ef0eb6ced1e71e4a282dd1f832b2` 基础上，新增 `PostgresAssistantDiscussionContext`，正式 `build_reply_service` 将其组合在 `ExploredReplyContext` 外层。基础上下文及其当前性验证先完成，再在单一 owner 锁／连接内调用正式 `read_assistant_discussion_in_transaction`／`require_assistant_discussion_current`，避免与基础样本适配器自有连接锁重入。无真实 A generation 锚点时保留旧全局回复的 `None`；真实 A 锚点不能静默绕过读取。
+
+- A 历史依赖读取移除重复样本递归 SQL，只调用 C 唯一 `reply_style_sample_dependencies` 同连接端口；没有改动 C 中央来源／样本模块，也没有把历史样本混入当前五条直接参考。来源捕获、CURRENT 保存复验、HISTORY 重读和依赖删除仍由正式 C 接缝负责。
+- 最终模型请求新增完整 `assistant_discussion`：保留正式 reader 顺序中的全部讨论输入、来源有效的 USER（含失败／阻断／被替换输入）、完成 AI 的每个消息组版本及父版本、默认展示／显式选择身份。正文逐项原样进入请求，不摘要、截断或另存历史正文副本；明确标为低权重讨论参考、不是联系人事实、未发送，当前明确意愿优先。系统提示增加同一边界说明；既有 fidelity、消息组、工具、Skill 和输出协议保持，最内层预算守卫逐轮计入新增完整正文与系统提示。
+- 首条真正公开 HTTP 反馈在生产装配下取得 RED：1 项／0.558 秒，实际模型请求缺少 `assistant_discussion`；接线后同项 GREEN／0.536 秒，每次正式 001–053 随机库残留 0。日志为 `/private/tmp/notalone-assistant-discussion-consumer-red.log`／`/private/tmp/notalone-assistant-discussion-consumer-green.log`。后续新增项为公开契约回归，未虚构额外 RED；夹具曾将初始候选版本误写为 1（正式为 0）、将缺省意愿传为空字符串而触发公开 400，均只修正合成夹具，不放宽产品校验。一次测试编辑错误导致 NameError，修复后重新执行全组，不计为功能缺口。
+- NEW `tests.integration.server.test_assistant_discussion_budget` 共 11 项实际公开 HTTP GREEN／17.785 秒，日志为 `/private/tmp/notalone-assistant-discussion-consumer-final-http.log`。覆盖完整 USER／AI 版本与选择、累计 warning 后硬限零次新增模型、被预算阻断的 USER 在下一次仍完整保留、两轮真实工具调用均保留全部原历史、同对象合成计量载荷与实际出站载荷一致、完成键在新输入／未知配置下重放且不回退 CURRENT、范围隔离、删除后旧键不可复活及新会话无旧历史。正式版本／样本 Store 构造两版候选及手动样本：当前五条参考不包含旧样本，删除旧样本后 C 清理三个实际依赖 turn，独立讨论仍可继续生成。
+- 最终一次必要回归：回复纯单元 293 项 GREEN／1.882 秒；NEW 消费者 11、既有预算 HTTP 11、A 历史 32、C 讨论依赖 10、正式 C 版本 HTTP 2，组合共 66 项真实 PostgreSQL GREEN／58.686 秒。runner 实际安装正式生产 001–053，自有随机库剩余 0。日志为 `/private/tmp/notalone-assistant-discussion-consumer-unit-final.log`／`/private/tmp/notalone-assistant-discussion-consumer-pg-final.log`。这是当前工作树本切片的运行证据，独立正式导出、两轴复审与本地提交由主 Agent 后续执行。
+- 两个 NEW 源文件有限 mypy 通过；五个生产源与两个测试文件共七文件 `py_compile`、`git diff --check` 通过。14 的独立夹具由该票 owner 接入真实消费者，本票未修改其文件或预填第八项结果。13 的连续指代薄字段尚未加入本次运行时补丁，后续由主 Agent 组合，不冒充本组已经验证其行为。
+
+本切片精确文件范围为 `persistence/assistant_discussion_reply_context.py`、`reply/assistant_discussion_payload.py` 两个 NEW 源，`persistence/assistant_discussion_context.py`、`reply/adapters/langchain_runtime.py`、`server/reply_wiring.py` 三个现有源，NEW `tests/integration/server/test_assistant_discussion_budget.py`、既有 `tests/integration/server/test_assistant_input_budget.py` 的可选同对象计量观察构造，以及本票 Answer。没有修改 A Store／Service／App、B 探索、C 中央守卫、桌面或页面夹具。
+
+实际命令在 Conda `NotAlone`、backend cwd 执行；PG runner 使用已授权本地 55441 自有随机库，模型只替换为显式合成协议适配器，没有真实供应商请求：
+
+```bash
+NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src python -m unittest discover -s tests/unit/reply -t . -q
+PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-a-session tests.integration.server.test_assistant_discussion_budget tests.integration.server.test_assistant_input_budget tests.integration.persistence.test_assistant_discussion_context tests.integration.persistence.test_reply_discussion_dependencies tests.integration.server.test_authentic_expression_candidate_versions
+PYTHONPATH=src python -m mypy --follow-imports=silent src/notalone/persistence/assistant_discussion_reply_context.py src/notalone/reply/assistant_discussion_payload.py
+PYTHONPATH=src python -m py_compile src/notalone/persistence/assistant_discussion_reply_context.py src/notalone/reply/assistant_discussion_payload.py src/notalone/persistence/assistant_discussion_context.py src/notalone/reply/adapters/langchain_runtime.py src/notalone/server/reply_wiring.py tests/integration/server/test_assistant_discussion_budget.py tests/integration/server/test_assistant_input_budget.py
+git diff --check
+```
+
+完整讨论现在已接入生产模型及同一预算守卫，旧完整历史在阻断和低容量重读时仍由公开 HTTP 读取。尚未执行预算公开页面提醒／新会话入口闭环，未验证桌面 JsonClient 1 MiB 响应边界下的大历史可读性；真实 DeepSeek 的能力／计量仍未核实，默认阻断规则保持。合成计量不是供应商 token，也不证明自然语言质量。12 保持 claimed，自动部分继续实施、人工部分未执行；未运行真实 App、微信、OCR、私人资料、外部模型、push、发布或部署，未自行暂存或提交。
+
+阶段 3e 提交前主 Agent 独立验证：正式 `daa443deac6bafddfb6ad704a7ce80bc710aba94` 完整导出，只叠加以上七个源／测试文件，不包含任何尚未提交的 10 前端、11 选择读取、13 或 14 补丁。实际 `PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-a12-discussion-cut-triek9ew/source tests.integration.server.test_assistant_discussion_budget tests.integration.server.test_assistant_input_budget` 共 22 项 HTTP GREEN／37.545 秒，生产 001–053、自有随机库剩余 0；日志 `/private/tmp/notalone-a12-discussion-fresh-http.log`。冻结源码的独立两轴审查：Standards 硬规范 0、Fowler 判断 0；Spec 错实现／范围扩张／actionable 各 0，并明确保留预算页面与大历史响应两项票级 partial。规格审查者另跑 21 项纯单元及三项合成载荷探针 GREEN，不作 PG 或页面证据。完整讨论只在当前生成内存和原权威资料中存在，没有新增长期副本。
+
+总协调主树接续正式 `9e1a1d816c703e6434c7c6a75bb5e409edc0d4f2` 八文件：七源码／测试原样集成，任务记录冲突保留主树全部可信回执证据及本提交精确追加内容。在 Conda `NotAlone`、关闭 dotenv／追踪、`PYTHONPATH=src:.` 环境实际运行上文同五模块的主树隔离 runner：66 项 GREEN／47.426 秒（24 真实 HTTP、42 存储集成），生产 001–053、自有库精确剩余 0。回复单元 293 项 GREEN／2.287 秒；两个新源 mypy、七文件 py_compile 与差异检查通过。最终限定 Standards 硬要求／重要气味 0、Spec 0。完整有序消息组正文含实际消息 UUID 和本次要求的 JSON，原样进入模型并计量；未增加历史副本。预算 UI、1 MiB 大响应和 C 旧纯草稿历史依赖删除的物理擦除缺口仍由原负责人接续，本次不将其关闭，12 保持 claimed；人工／原生／外部模型未执行。
