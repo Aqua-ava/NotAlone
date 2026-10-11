@@ -283,3 +283,5 @@ quiet51／activeSamples0／maxOnscreenWindows0／maxRegisteredApps1／activation
 测试时主树同时有尚未正式提交的 A09/A10 UI、A835准备接口及 B7eda共享生产切片；本次只覆盖明确新开与直接生成，不覆盖B活跃自动更新的已知旧删除状态P2，也不覆盖A准备回执已知完成/CURRENT竞争。此前全树TSC B新case136一处unknown错误随后精确消费B正式3b19单行payloads.toHaveLength修正、实际全树typecheck通过；未用限定检查冒全树通过。C样本编辑擦除适配的公开通过属于负责人既有证据，本主树本窗口只跑上述4场，不混计。
 
 本票仍claimed，原第1条消息组与连续修改的公开样本组合继续依A11/B正式typed接口；不将整个A13/A18、原生或外部质量评测追加为新关闭条件。没有真实聊天、外部模型或消息发送。
+
+2026-10-11 总协调仅消费 C 正式 ce9e2f5 的新增 `reply-used-skill.test.mjs`；五个 production reader／状态／展示字段在主树此前正式 B c428／601f 接口中已存在，未重复导入或改变生成权威。于 desktop 执行 `node --test tests/reply-used-skill.test.mjs`，实际5G／137.177209ms／skip0，覆盖 loaded、resource_failed、关闭后的null、旧字段缺失以及错误版本身份整份拒绝。该回归只经真实 main／preload 具名桥接受控 transport，不是真正 HTTP／PG／模型或页面，未将请求计数说成模型计数；公共消息组／连续修改与样本组合继续，E06 保持 claimed，原验收不变。无新正文副本、迁移、外部调用或数据处理影响。
