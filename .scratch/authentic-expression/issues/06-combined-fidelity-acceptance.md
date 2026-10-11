@@ -419,3 +419,14 @@ Root具名authentic-expression-groups、single240、session70707 actualexit0，�
 实际capture 8rows／9model_inputs／9calls／2UI，private /private/tmp/notalone-root-public-groups-capture.json，SHAcef07aa2ba80ea787ef3a732691a4b4b117b0a772f48c936972cca33b81520b2。quiet40／active0／onscreen0／maxApps1／policies2／singleChrome／cleanuptrue／nativefalse，两个真实fixture实例／class清理及database_remaining=false门禁通过；952个backend／desktop源码、fixture、测试、配置逐字全窗unchanged且HEAD520f94c相同。actualexit后独立freshstatus actual0absent，明确FULLRELEASE后才继续；日志/private/tmp/notalone-root-authentic-public-group-page.log及private freeze manifest保留。
 
 根自己的实际capture沿唯一E01 CLI生成独立root-public-group-page-controlled-v1.json，不覆盖负责人原报告：SHAc4c3d99b2df8564cfb4f11cef2ea709d7d0a8f8d7d4b0d67bd69171d2074e73d。分母8、contract_failed0、真实calls9／elapsed5732.707208999988ms、6syntheticreview中4pass／2故意fail、2unreviewed／human0／holdout0／quality_verified=false，逐次九输入及两UI观察真实保留。供应商token、费用、自然度／关系适配／用户相似度未知；typedcontinuation明确pending。负责人第七84256／5180.312833ms／b5报告继续保留，不能用它替代本次根055事实；Root已完成这两场也不自动关闭C06剩余连续组合和原未验三AC。State claimed，所有人工／App／OCR微信／私料／外部模型／外部发送／push发布部署均未执行。
+
+
+### 预算拒绝后同会话终态删除的主树正文清理（2026-10-11）
+
+只净C正式7919f5e的两路径增量，原A328预算／B a5同键复验已经主树0a正式，不整文件复制Main或改A身份authority。新增11行在原current范围、连接代与SID作业守卫通过后，实际GET404或source_unavailable沿既有clearUnavailableCandidateSource及版本scope清理：中止savedRead、清未主动保存候选／held result／保存讨论投影／版本选择；独立当前手写草稿与options保留。无新正文缓存、删除图、codec、writer或DDL，ADR044主动保存的独立样本规则不改。
+
+Root先只补正式两个测试，当前同SID已有completed候选、两保存版本及明确selection，再budget409→实际DELETE→GET404；两个真实HTTP反例actual2FAIL／7685.878458ms／exit1，两55repeat0及自有库0。仅接上述source11行后，原两项实际2GREEN／7604.008083ms／skip0／exit0，每场合成模型2共4（含校准），两55repeat0及库0。第二项在真正旧GET已取body后gate，删除清除后release，旧body不复活；显式新SID为空且零额外模型，原独立草稿/options不丢。
+
+随后完整原budget public suite实际30GREEN／109674.323042ms／skip0／actualexit0，30份真实001–055账本、repeat0和自有库剩余0逐条核验，合成实际模型总35；非404 connection/503仍保原key重试、较新CURRENT与ready/loading和成功迟到warning边界均通过。strict预算decoder3GREEN／131.962875ms，版本／来源／样本／复制原五Node套225GREEN／2138.758708ms、whole桌面TSC及diff通过。相关Node首默认沙箱真实回环listen EPERM导致211pass/14fail／1247.422625ms，仅补监听权限同代码复验225G；不作产品RED、不放宽断言。实际日志/private/tmp/notalone-root-budget-terminal-delete-{red-http55,fixed-http55,related30-http55,decoder3,related225-node-fixed-env}.log保留。
+
+C自己的30G121067.235459ms和Root此前28／25／11各阶段另保，不借其关闭本新P2。本主题只完成预算终态删除的自动实现与真实验证；A13选定版本要求soleA正式修复、typed Main/prepare/jobs、A15/16B/17及C06最后组合继续，State claimed／原三未验AC保留。未运行真实App/原生/微信/OCR/私料/外部模型/人工发送或远端操作。

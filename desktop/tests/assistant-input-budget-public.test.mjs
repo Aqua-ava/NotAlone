@@ -69,6 +69,77 @@ test('预算拒绝后实际删除会话的复验404仍废弃旧输入和同次�
   assert.equal((await f.command('metrics')).model_calls, 0);
 });
 
+for (const delayedHistoryRead of [false, true]) {
+  test(`预算拒绝复验确认404清除同会话已有候选和保存版本正文${delayedHistoryRead ? '，迟到完整读取不能复活' : ''}`, { skip: !enabled }, async (t) => {
+    const f = await limitedFixture(t);
+    f.contacts.setDraft({ ...f.scope, text: draft });
+    await f.command('plan', { plan: { text: draft, count: 1 } });
+    await f.bridge.generate({ ...f.scope, newRequest: true });
+    await f.bridge.readSavedSession(f.scope);
+    const completed = await f.bridge.getState();
+    assert.equal(completed.phase, 'ready'); assert.equal(completed.result.candidates[0].original.text, draft);
+    const candidateId = completed.result.candidates[0].original.candidateId;
+    const sessionId = completed.savedSession.sessionId;
+    const identity = { ...f.scope, sessionId, candidateId };
+    const original = completed.candidateVersions.items.find((item) => item.candidateId === candidateId).history.versions[0];
+    const edited = '仅为本次删除验证保存的合成编辑版本，不承诺参加。';
+    await f.bridge.saveCandidateVersion({ ...identity, editKey: randomUUID(), parentVersionId: original.versionId,
+      messages: original.messages.map((message) => ({ ...message, text: edited })), requirements: '不要承诺参加。' });
+    const history = (await f.bridge.getState()).candidateVersions.items.find((item) => item.candidateId === candidateId).history;
+    await f.bridge.selectCandidateVersion({ ...identity, versionId: history.versions.at(-1).versionId, selectionKey: randomUUID() });
+    const saved = await f.bridge.getState();
+    assert.equal(saved.savedSession.turns[0].reply.candidates[0].text, draft);
+    assert.equal(saved.candidateVersions.items.find((item) => item.candidateId === candidateId).history.versions.length, 2);
+    assert(saved.explicitCandidateSelection.selection);
+    const before = await f.command('metrics');
+    const next = '会话删除后独立手写的合成草稿。';
+    const options = { tone: 'concise', instruction: '当前独立手写要求：简短拒绝。', includeRelationshipContext: false };
+    f.contacts.setDraft({ ...f.scope, text: next }); await f.bridge.updateOptions({ ...f.scope, options });
+    const endpoint = `/api/contacts/${f.scope.contactId}/assistant-sessions/${sessionId}`;
+    let deleted = false, historyRead, releaseRead;
+    let enteredRead;
+    const entered = new Promise((resolve) => { enteredRead = resolve; });
+    const gate = new Promise((resolve) => { releaseRead = resolve; });
+    f.delivery.after = async (request) => {
+      if (request.method === 'POST' && request.path.endsWith('/replies')) {
+        assert.equal((await f.command('metrics')).decisions.at(-1).state, 'exceeded');
+        if (delayedHistoryRead) {
+          historyRead = f.bridge.readSavedSession(f.scope);
+          await entered;
+        }
+        const receipt = await f.request(endpoint, { confirmed: true }, 'DELETE');
+        assert.equal(receipt.state, 'deleted'); deleted = true;
+      } else if (delayedHistoryRead && !deleted && request.method === 'GET' && request.path === endpoint) {
+        enteredRead(); await gate;
+      }
+    };
+    try {
+      await f.bridge.generate({ ...f.scope, newRequest: true });
+      assert.equal(deleted, true);
+      const after = await f.bridge.getState();
+      assert.equal(after.result === null, true); assert.equal(after.selectedCandidateId, null);
+      assert.equal(after.canRetry, false); assert.equal(after.inputBudgetNotice, undefined); assert.equal(after.errorCode, undefined);
+      assert(after.savedSession.turns.every((turn) => turn.input === null && turn.reply === null));
+      assert(after.savedSession.inputs.every((input) => input.content === null));
+      assert.deepEqual(after.candidateVersions.items, []); assert.equal(after.explicitCandidateSelection.selection, null);
+      assert(!JSON.stringify(after).includes(draft)); assert(!JSON.stringify(after).includes(edited));
+      assert.equal(f.contacts.getState().draft, next); assert.deepEqual(after.options, options);
+      assert.equal((await f.command('metrics')).model_calls, before.model_calls);
+      releaseRead(); await historyRead;
+      const late = await f.bridge.getState();
+      assert.equal(late.result, null); assert.deepEqual(late.candidateVersions.items, []);
+      assert(!JSON.stringify(late).includes(draft)); assert(!JSON.stringify(late).includes(edited));
+      assert.equal(f.contacts.getState().draft, next); assert.deepEqual(late.options, options);
+      await assert.rejects(f.request(endpoint), (error) => error.status === 404);
+      await f.bridge.newSavedSession(f.scope);
+      const reopened = await f.bridge.getState();
+      assert.notEqual(reopened.savedSession.sessionId, sessionId);
+      assert.deepEqual(reopened.savedSession.turns, []); assert.deepEqual(reopened.candidateVersions.items, []);
+      assert.equal(reopened.result, null); assert.equal((await f.command('metrics')).model_calls, before.model_calls);
+    } finally { f.delivery.after = undefined; releaseRead(); await historyRead; }
+  });
+}
+
 test('预算公开生成不继承父环境的旧版追踪开关与供应商配置', { skip: !enabled }, async (t) => {
   const inherited = process.env;
   let f;

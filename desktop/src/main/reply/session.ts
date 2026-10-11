@@ -869,6 +869,17 @@ export class ReplySession {
               && input.turnId === receipt?.turnId && input.state === 'active'));
           const sourceUnavailable = readFailure instanceof BackendRequestFailure
             && (readFailure.status === 404 || readFailure.reason === 'source_unavailable');
+          if (sourceUnavailable && receipt) {
+            // 已确认同会话不可读时清除既有正文；迟到完整读取不能恢复旧投影。
+            this.savedRead?.abort(); this.savedRead = undefined;
+            const scope = { contactId: selection.contactId, scopeRevision: selection.scopeRevision, sessionId: receipt.sessionId };
+            this.candidateVersions.setScope(scope); this.clearUnavailableCandidateSource(scope);
+            this.candidateVersions.setScope(null); this.heldResult = undefined; this.candidateSourceCheck = undefined;
+            this.publish({ savedSession: { phase: 'failed', sessionId: receipt.sessionId, turns: [], inputs: [], currentInputVersionId: null },
+              sourceAvailability: undefined, result: null, selectedCandidateId: null, phase: 'idle', canRetry: false,
+              errorCode: undefined, inputBudgetNotice: undefined });
+            return;
+          }
           if (!saved && readFailure && receipt && failure?.inputBudget && !superseded && !sourceUnavailable) {
             // 无法复验不等于输入已失效；隐藏预算结论，保留本次身份供后端守卫重试。
             this.publish({ phase: 'failed', canRetry: true, inputBudgetNotice: undefined,
