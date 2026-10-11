@@ -131,3 +131,26 @@ A13 提供者实际复现 2 个 HTTP RED 后修复为 2 个 GREEN，保留未知
 原C `e12873c9` 唯一112行两测试不改断言：Root在正式生产装配实际 **2 GREEN／10466.420042ms／skip0／exit0**，模型3＋3及六实际输入；完整4106码点入模、SSE仅提醒零增量、第三生成原exact预算、真实PG CURRENT、新回应目标／原主动目的、样本DELETE三turn及RAM清空、独立manual保留后段全部到达。两份55逐名迁移repeat0，自有DROP后EXISTS验证均0。日志 `/private/tmp/notalone-root-accumulated-opt-in-two-green.log`，合成capture SHA `ea4be7d1616f8fec98cc02316541b394f7dc27d712a17b54bf973eafef3590de`。
 
 独立复验归属分别为B执行Root装配2G／10439.423292ms、C执行Root装配2G／10034.893625ms、sole A执行Root装配2G／9595.908ms，各自模型6／两份55repeat0／自有库0及实际源前后不变，不冒为各旧树standalone通过，不合成一组计数。ordinary两文件与B单函数的fresh Standards硬要求0／重要possible0，Spec新增P0–P3为0；完整TypeScript通过。旧C两场PRODUCT RED／7777.315416ms保留为修复前证据。最终独占两label公开页面组合仍待运行，原生及真人边界未改变。
+
+
+### 最后公开组合第一次实际失败（2026-10-12）
+
+UTC18:58–19:03具名窗口，实际18:59:08.616–18:59:31.717、命令231秒上限；正式HEAD`cc7b81c7`及1015源前后相同。策略组合执行选项两场后，在回应场景纠正／回答仍待确认、点击确认方向时失败：原5000ms策略响应计数预期4、实际3。actualexit1、entered3、完成label0，携入和C typed v2未到；这是实际页面断言失败，未当作完整通过，原断言和超时不改。
+
+quiet28／active0／onscreen0／maxregistered1／policy2；资源receipt cleanupConfirmedtrue，记录的22自有PID在Root freshps均不存在，共享fresh租约absent。三次RewriteFixture均实际exit0，mandatory cleanup_fixture执行DROP后SQL EXISTS=false才允许成功；本轮没有持久化三库名供Root另查，不冒称额外Root SQL审计。实际失败、源冻结、资源及身份receipt保留`/private/tmp/notalone-root-final38-page-failure-1/`。Root确认失败行程FULLRELEASE后，仅唯一B继续此澄清后确认路径的真实反例与最窄修复；未自动开启下一Page，C不读旧capture或提前生成v2报告。
+
+
+### 澄清确认观察边界的真实定位（2026-10-12）
+
+临时test-only两文件诊断`53f9f446`保原响应4／5000ms断言。第一次固定诊断窗口实际启动19:31:18仅余11秒，outer exit124，状态读取被截止中断，未冒为新完整业务RED；资源quiet12、11自有PIDfresh不存在、mandatory夹具清理及租约absent均确认。第二窗口从实际UTC19:38:17.384记150秒、入口149秒，实际19:38:29.762正常exit1，原4vs3复现，公开phase ready／error null／alerts空，actual prepare-confirm200和confirm200 generated、四实际模型，三观察fulfilled。源1015前后相同、quiet14／active0／onscreen0／policy2、11自有PID不存在、mandatoryDROP后EXISTSfalse与freshleaseabsent后FULLRELEASE；两个失败各自归档，不借作完整组合通过。
+
+B随后在原DefaultRewriteFixture＋真实BackendHost＋原RewriteHttpProxy＋真实Main/preload→HTTP／隔离PG精确取得1FAIL／4156.662ms：实际确认714.803ms小于原5000ms，四模型、可靠单turn／CURRENT及原纠正／回答均正确，唯一代理计数3而预期4。实际路径是open clarification、纠正open clarification、prepare-answer directions、prepare-confirm prepared、confirm generated；第三次探索已在prepare-answer完成，没有第二次answer execute，旧代理正则漏记其正式结果。此前由“模型4＋最后generated”推断“晚到第四条响应记录”不成立，已按真实路径修正。生产无需因此猜改；仅代理实际非prepared最终outcome观察和原drop／hold语义由唯一B修复，原页面计数及超时不变。日志`/private/tmp/notalone-b-proxy-clarification-outcome-red.log`；最终38尚待新固定观察器通过。
+
+
+### 最终页面观察缺口修复（2026-10-12）
+
+原公开确认计数4／5秒断言失败的根因是测试代理没有记录 `/prepare-answer` 直接返回的非prepared最终探索结果；生产确认约715毫秒已成功，候选与CURRENT可靠保存。B真实原代理三反例为3RED／14573.452ms，最窄测试修复后3G／9230.147084ms，原四次计数及drop／hold同命令零额外模型重放保留。真实prepared回执不计模型结果、不消费探索故障门禁；实际最终结果、错误与重放沿原观察链。临时DEBUG与准备观察数组均已删除，原dialogue与 `cc7b81c7` 完全相同，生产源码没有变更。
+
+Root独立同三项实际GREEN／9170.843ms，分场3901.444167／2557.194875／2593.95525ms，模型4＋2＋2＝8，确认752.834毫秒；实际clarification／clarification／directions／generated四结果全部200。命令：Conda NotAlone后在desktop以 `PGHOST=/tmp PGPORT=55441 NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false node --test tests/reply-strategy-clarification-confirm-http.test.mjs`。完整TypeScript与diff通过；固定Proxy SHA062e9699、测试SHAf3cb7f28。原三个RewriteFixture回调收尾断言全部达到，mandatory Python DROP后SQL EXISTS=false与进程exit0成立；此原夹具没有独立持久化迁移／重复计数或库名，不能借其他夹具的55／repeat0或声称Root逐库另查。日志 `/private/tmp/notalone-root-proxy-outcomes-three-green.log`；捕获仅合成、本轮未提交临时产物。最新完整38场仍待固定源最终窗口。
+
+固定最终ONLY4补丁 `b9bd100ca219e58d6fd9880416f70565bf9b260133bb354a48703da00cf80e5f` 已经A Standards硬要求0／新增重要气味0、C Spec新增P0–P3为0；两轴只读，不算新增运行。Root仅净接Proxy与新三反例，原dialogue不留差异，B11后缀待最终真实Page逐票结账。

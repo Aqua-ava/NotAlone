@@ -39,6 +39,8 @@ export class RewriteHttpProxy {
         || /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+\/replies$/.test(incoming.url ?? '');
       const exploring = incoming.url === '/api/reply/explore'
         || /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+\/explorations(?:\/[a-f0-9-]+\/(?:confirm|answer|stop))?$/.test(incoming.url ?? '') && incoming.method === 'POST';
+      const preparingExploration = incoming.method === 'POST'
+        && /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+\/explorations\/[a-f0-9-]+\/prepare-(?:confirm|answer)$/.test(incoming.url ?? '');
       const messages = /^\/api\/contacts\/[a-f0-9-]+\/messages\?/.test(incoming.url ?? '');
       const evidence = /^\/api\/contacts\/[a-f0-9-]+\/replies\/[a-f0-9-]+\/evidence$/.test(incoming.url ?? '');
       const sessionRead = incoming.method === 'GET'
@@ -89,6 +91,7 @@ export class RewriteHttpProxy {
         const content = Buffer.concat(body);
         if (generating) this.requests.push(JSON.parse(content.toString('utf8')));
         if (exploring) this.explorationRequests.push(JSON.parse(content.toString('utf8')));
+        const preparationBody = preparingExploration ? JSON.parse(content.toString('utf8')) : undefined;
         const outgoing = httpRequest(`http://${address}${incoming.url}`, { method: incoming.method, headers: incoming.headers }, (result) => {
           const chunks: Buffer[] = [];
           result.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -96,6 +99,17 @@ export class RewriteHttpProxy {
             const value = Buffer.concat(chunks);
             if (generating) this.results.push({ status: result.statusCode ?? 500, data: JSON.parse(value.toString('utf8')) });
             if (exploring) this.explorationResults.push({ status: result.statusCode ?? 500, data: JSON.parse(value.toString('utf8')) });
+            let outcomeDelivery = delivery;
+            if (preparingExploration) {
+              const outcome = JSON.parse(value.toString('utf8'));
+              // 未领取候选的准备步骤可直接完成探索；实际准备回执仍不计作探索结果。
+              if (outcome.kind !== 'prepared') {
+                this.explorationRequests.push(preparationBody);
+                this.explorationResults.push({ status: result.statusCode ?? 500, data: outcome });
+                outcomeDelivery = this.nextExploration;
+                this.nextExploration = 'normal';
+              }
+            }
             if (evidence && delivery === 'hold') this.heldEvidenceStatuses.push(result.statusCode ?? 500);
             if (sessionDelete) this.sessionDeletes.push({ path: incoming.url!, status: result.statusCode ?? 500 });
             if (sessionRead) {
@@ -108,8 +122,8 @@ export class RewriteHttpProxy {
               response.writeHead(result.statusCode ?? 500, { 'Content-Type': 'application/json' });
               response.end(value);
             };
-            if (delivery === 'drop') response.destroy();
-            else if (delivery === 'hold') this.hold(deliver);
+            if (outcomeDelivery === 'drop') response.destroy();
+            else if (outcomeDelivery === 'hold') this.hold(deliver);
             else deliver();
           });
         });
