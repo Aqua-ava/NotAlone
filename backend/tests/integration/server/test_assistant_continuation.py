@@ -250,8 +250,8 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
         self.assertEqual(len(self.reply_model.seen_calls), 2)
 
-    def _display_edited_second(self, requirements):
-        path, generated, frame = self._generated()
+    def _display_edited_second(self, requirements, *, content=None, with_source=False):
+        path, generated, frame = self._generated(content=content, with_source=with_source)
         candidate = generated["candidates"][1]
         versions_path = path + f"/candidates/{candidate['candidate_id']}/versions"
         original = self._get(self.backend, versions_path)["versions"][0]
@@ -295,6 +295,229 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(continued["continuation"]["effective_requirements"], ["自然一点"])
         self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
         self.assertEqual(len(self.reply_model.seen_calls), 2)
+
+    def test_selected_requirements_and_new_intention_use_full_cumulative_budget(self):
+        legal = "😀" * 4096
+        baseline, _, _ = self._limited_backend()
+        self.backend = baseline
+        path, generated, frame = self._display_edited_second(legal, content={
+            "type": "initiate_conversation", "purpose": "拒绝邀约",
+        })
+        command = self._command(generated, frame, intention_update="答应", requirement_changes=[
+            {"action": "keep", "previous": legal},
+        ])
+        before = len(self.reply_model.seen_calls)
+
+        status, continued = self.backend.request(path + "/continue", command)
+
+        self.assertEqual(status, 200, continued)
+        self.assertEqual(continued["continuation"]["effective_requirements"], [legal, "自然一点"])
+        self.assertEqual(continued["effective_input"]["user_instruction"], legal + "；自然一点")
+        self.assertEqual(self._model_payload()["user_instruction"], legal + "；自然一点")
+        self.assertEqual(self._model_payload()["confirmed_purpose"], "答应")
+        self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
+        self.assertEqual(len(self.reply_model.seen_calls), before + 1)
+        saved = self._get(self.backend, path)
+        self.assertEqual(saved["turns"][-1]["input"]["continuation"], continued["continuation"])
+        next_command = self._command(continued, self._frame(path, continued), instruction="继续")
+        status, following = self.backend.request(path + "/continue", next_command)
+        self.assertEqual(status, 200, following)
+        self.assertEqual(following["continuation"]["effective_requirements"], [legal, "自然一点"])
+        self.assertEqual(self._model_payload()["user_instruction"], legal + "；自然一点")
+        self.assertEqual(self.backend.request(path + "/continue", next_command), (200, following))
+        self.assertEqual(len(self.reply_model.seen_calls), before + 2)
+        status, rejected = self.backend.request(path + "/replies", {
+            "contact_id": path.split("/")[3], "idempotency_key": str(uuid4()),
+            "content": {"type": "initiate_conversation", "purpose": "答应", "user_instruction": legal + "；自然一点"},
+        })
+        self.assertEqual(status, 400, rejected)
+        self.assertEqual(len(self.reply_model.seen_calls), before + 2)
+
+    def test_selected_version_requirements_deduplicate_before_keep_remove_and_replace(self):
+        for instruction, changes, expected in (
+            ("第二条自然一点", [], ["自然一点", "不要承诺"]),
+            ("第二条自然一点", [{"action": "remove", "previous": "不要承诺"}], ["自然一点"]),
+            ("第二条正式一点", [{"action": "replace", "previous": "自然一点",
+                               "replacement": "正式一点"}], ["正式一点", "不要承诺"]),
+        ):
+            with self.subTest(action=changes[0]["action"] if changes else "continue"):
+                path, generated, frame = self._display_edited_second("自然一点；不要承诺；自然一点", content={
+                    "type": "rewrite_draft", "draft_text": "合成原句。",
+                    "user_instruction": "自然一点；不要承诺",
+                })
+                command = self._command(generated, frame, instruction=instruction, requirement_changes=changes)
+                before = len(self.reply_model.seen_calls)
+                status, continued = self.backend.request(path + "/continue", command)
+                self.assertEqual(status, 200, continued)
+                self.assertEqual(continued["continuation"]["effective_requirements"], expected)
+                self.assertEqual(self._model_payload()["user_instruction"], "；".join(expected))
+                saved = self._get(self.backend, path)["turns"][-1]
+                self.assertEqual(saved["input"]["continuation"], continued["continuation"])
+                self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
+                self.assertEqual(len(self.reply_model.seen_calls), before + 1)
+
+    def test_selected_original_version_does_not_inherit_later_edit_requirements(self):
+        path, generated, frame = self._display_edited_second("正式一点")
+        versions_path = path + f"/candidates/{generated['candidates'][1]['candidate_id']}/versions"
+        history = self._get(self.backend, versions_path)
+        original = history["versions"][0]
+        self.assertNotEqual(original["version_id"], history["default_display_version_id"])
+        frame["candidates"][1]["version_id"] = original["version_id"]
+        command = self._command(generated, frame)
+
+        status, continued = self.backend.request(path + "/continue", command)
+
+        self.assertEqual(status, 200, continued)
+        self.assertEqual(continued["continuation"]["version_id"], original["version_id"])
+        self.assertEqual(continued["continuation"]["effective_requirements"], ["自然一点"])
+        self.assertEqual(self._model_payload()["user_instruction"], "自然一点")
+        self.assertEqual(self._model_payload()["draft_text"], "第二种合成说法。")
+        self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
+        self.assertEqual(len(self.reply_model.seen_calls), 2)
+
+    def test_replacing_selected_edit_requirements_does_not_inherit_sibling_branch(self):
+        path, generated, frame = self._display_edited_second("自然一点")
+        selected_version_id = frame["candidates"][1]["version_id"]
+        versions_path = path + f"/candidates/{generated['candidates'][1]['candidate_id']}/versions"
+        original = self._get(self.backend, versions_path)["versions"][0]
+        status, sibling = self.backend.request(versions_path, {
+            "edit_key": str(uuid4()), "parent_version_id": original["version_id"],
+            "messages": [{"message_id": original["messages"][0]["message_id"],
+                          "text": "合成兄弟编辑版本。"}],
+            "requirements": "正式一点；详细一点",
+        })
+        self.assertEqual(status, 200, sibling)
+        self.assertNotEqual(sibling["default_display_version_id"], selected_version_id)
+        command = self._command(generated, frame, instruction="第二条简短一点", requirement_changes=[
+            {"action": "replace", "previous": "自然一点", "replacement": "正式一点"},
+        ])
+
+        status, continued = self.backend.request(path + "/continue", command)
+
+        self.assertEqual(status, 200, continued)
+        self.assertEqual(continued["continuation"]["version_id"], selected_version_id)
+        self.assertEqual(continued["continuation"]["effective_requirements"], ["正式一点", "简短一点"])
+        self.assertEqual(self._model_payload()["user_instruction"], "正式一点；简短一点")
+        self.assertEqual(self._model_payload()["draft_text"], "第二种合成说法。")
+        self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
+        self.assertEqual(len(self.reply_model.seen_calls), 2)
+
+    def test_changed_intention_preserves_selected_requirements_and_clarifies_conflicts(self):
+        reason = "以身体不舒服为由拒绝"
+        for requirements, clarification_reason, changes, expected in (
+            ("不要承诺", None, [], ["不要承诺", "自然一点"]),
+            ("正式一点", "requirements_conflict", [
+                {"action": "replace", "previous": "正式一点", "replacement": "自然一点"},
+            ], ["自然一点"]),
+            (f"自然一点；{reason}", "requirements_need_confirmation", [
+                {"action": "remove", "previous": reason},
+            ], ["自然一点"]),
+        ):
+            with self.subTest(clarification_reason=clarification_reason):
+                path, generated, frame = self._display_edited_second(requirements, content={
+                    "type": "initiate_conversation", "purpose": "拒绝邀约",
+                })
+                command = self._command(generated, frame, intention_update="答应")
+                before_calls = len(self.reply_model.seen_calls)
+                before_session = self._get(self.backend, path)
+                if clarification_reason is not None:
+                    status, clarified = self.backend.request(path + "/continue", command)
+                    self.assertEqual(status, 409, clarified)
+                    self.assertEqual(clarified["clarification"]["reason"], clarification_reason)
+                    self.assertEqual(self._get(self.backend, path), before_session)
+                    self.assertEqual(len(self.reply_model.seen_calls), before_calls)
+                    command["requirement_changes"] = changes
+                status, continued = self.backend.request(path + "/continue", command)
+                self.assertEqual(status, 200, continued)
+                self.assertEqual(continued["effective_input"]["purpose"], "答应")
+                self.assertEqual(continued["continuation"]["effective_requirements"], expected)
+                self.assertEqual(self._model_payload()["confirmed_purpose"], "答应")
+                self.assertEqual(self._model_payload()["user_instruction"], "；".join(expected))
+                self.assertFalse(self._model_payload()["continuation_reference"]["is_current_draft"])
+                self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
+                self.assertEqual(len(self.reply_model.seen_calls), before_calls + 1)
+
+    def test_selected_version_complete_unicode_requirement_uses_same_budget_guard(self):
+        legal = "😀" * 4096
+        baseline, _, _ = self._limited_backend()
+        self.backend = baseline
+        path, generated, frame = self._display_edited_second(legal)
+        versions_path = path + f"/candidates/{generated['candidates'][1]['candidate_id']}/versions"
+        before_versions = self._get(self.backend, versions_path)
+        original = before_versions["versions"][0]
+        before_calls = len(self.reply_model.seen_calls)
+        status, invalid = self.backend.request(versions_path, {
+            "edit_key": str(uuid4()), "parent_version_id": original["version_id"],
+            "messages": original["messages"], "requirements": "😀" * 4097,
+        })
+        self.assertEqual(status, 400, invalid)
+        self.assertEqual(self._get(self.backend, versions_path), before_versions)
+        self.assertEqual(len(self.reply_model.seen_calls), before_calls)
+        command = self._command(generated, frame, instruction="第二条继续")
+        status, continued = baseline.request(path + "/continue", command)
+        self.assertEqual(status, 200, continued)
+        self.assertEqual(continued["continuation"]["effective_requirements"], [legal])
+        self.assertEqual(self._model_payload()["user_instruction"], legal)
+        self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
+        self.assertEqual(len(self.reply_model.seen_calls), before_calls + 1)
+
+        capacity = continued["input_budget"]["total_tokens"] - 1
+        limited, decisions, counter = self._limited_backend(capacity)
+        self.backend = limited
+        path, generated, frame = self._display_edited_second(legal)
+        before_calls = len(self.reply_model.seen_calls)
+        status, blocked = limited.request(path + "/continue", self._command(
+            generated, frame, instruction="第二条继续",
+        ))
+        self.assertEqual(status, 409, blocked)
+        self.assertEqual(blocked["error"], "input_budget_exceeded")
+        self.assertEqual(blocked["input_budget"], decisions[-1].to_payload())
+        self.assertGreater(decisions[-1].total_tokens, capacity)
+        self.assertEqual(len(self.reply_model.seen_calls), before_calls)
+        measured = next(json.loads(message["content"]) for message in counter.seen_payloads[-1]["messages"]
+                        if message["role"] == "user")
+        self.assertEqual(measured["user_instruction"], legal)
+        self.assertEqual(measured["continuation_reference"]["version_id"], frame["candidates"][1]["version_id"])
+        saved = self._get(limited, path)
+        self.assertEqual(saved["turns"][-1]["input"]["continuation"]["effective_requirements"], [legal])
+        self.assertIsNone(saved["turns"][-1]["reply"])
+
+    def test_cumulative_scenario_requirements_cannot_bypass_actual_hard_budget(self):
+        legal = "😀" * 4096
+        for with_source in (False, True):
+            with self.subTest(with_source=with_source):
+                baseline, _, _ = self._limited_backend()
+                self.backend = baseline
+                content = {"type": "initiate_conversation", "purpose": "拒绝邀约", "user_instruction": "自然一点"}
+                path, generated, frame = self._display_edited_second(legal, content=content, with_source=with_source)
+                command = self._command(generated, frame, intention_update="答应", requirement_changes=[
+                    {"action": "keep", "previous": legal},
+                ])
+                status, calibration = self.backend.request(path + "/continue", command)
+                self.assertEqual(status, 200, calibration)
+                accumulated = "自然一点；" + legal
+                self.assertEqual(self._model_payload()["user_instruction"], accumulated)
+                capacity = calibration["input_budget"]["total_tokens"] - 1
+                limited, decisions, counter = self._limited_backend(capacity)
+                self.backend = limited
+                path, generated, frame = self._display_edited_second(legal, content=content, with_source=with_source)
+                before_calls = len(self.reply_model.seen_calls)
+                status, rejected = self.backend.request(path + "/continue", self._command(
+                    generated, frame, intention_update="答应", requirement_changes=[
+                        {"action": "keep", "previous": legal},
+                    ],
+                ))
+                self.assertEqual(status, 409, rejected)
+                self.assertEqual(rejected["error"], "input_budget_exceeded")
+                self.assertGreater(decisions[-1].total_tokens, capacity)
+                self.assertEqual(len(self.reply_model.seen_calls), before_calls)
+                measured = next(json.loads(message["content"]) for message in counter.seen_payloads[-1]["messages"]
+                                if message["role"] == "user")
+                self.assertEqual(measured["user_instruction"], accumulated)
+                saved = self._get(self.backend, path)
+                self.assertEqual(saved["turns"][-1]["input"]["content"]["user_instruction"], accumulated)
+                self.assertEqual(saved["turns"][-1]["input"]["continuation"]["effective_requirements"], ["自然一点", legal])
+                self.assertIsNone(saved["turns"][-1]["reply"])
 
     def test_continuation_prepare_reuses_actual_identity_and_canonical_command(self):
         path, generated, frame = self._generated()

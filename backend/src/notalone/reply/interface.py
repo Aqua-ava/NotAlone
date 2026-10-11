@@ -11,6 +11,16 @@ from notalone.scopes import ContactScope, VerifiedConversationScope
 from notalone.reply.input_budget import InputBudgetDecision
 
 
+class AccumulatedReplyRequirements(str):
+    """已解析要求的完整集合；单次 JSON 声明的长度限制仍由公开解析器执行。"""
+
+    def __new__(cls, requirements: tuple[str, ...]) -> AccumulatedReplyRequirements:
+        if (not isinstance(requirements, tuple) or not requirements
+                or any(not isinstance(value, str) or not value.strip() for value in requirements)):
+            raise ValueError("累积表达要求无效。")
+        return super().__new__(cls, "；".join(requirements))
+
+
 class DirectionSource(StrEnum):
     """用户确认本次表达方向的来源。"""
 
@@ -119,8 +129,12 @@ ReplyInput: TypeAlias = ReplyToMessage | RewriteDraft | InitiateConversation
 def _valid_scenario_declarations(content: ReplyToMessage | InitiateConversation) -> bool:
     """本次用户声明不升级为确认意愿、外部事实或长期资料。"""
 
-    return all(value is None or isinstance(value, str) and len(value) <= 4096 for value in (
-        content.understanding_correction, content.user_instruction, content.clarification_answer,
+    declarations_valid = all(value is None or isinstance(value, str) and len(value) <= 4096 for value in (
+        content.understanding_correction, content.clarification_answer,
+    ))
+    instruction = content.user_instruction
+    return declarations_valid and (instruction is None or isinstance(instruction, str) and (
+        len(instruction) <= 4096 or isinstance(instruction, AccumulatedReplyRequirements)
     ))
 
 

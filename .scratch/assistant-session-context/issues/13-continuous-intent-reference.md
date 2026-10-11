@@ -96,3 +96,13 @@ node --input-type=module -e 'import {build} from "esbuild"; const result=await b
 沿前段实际命令完整复验 continuation、session inputs 及应用单元：**56 tests／58.038 秒／OK／skip0／actualexit0**，生产001–055逐名账本和重复执行0、续答内层与外层随机库剩余0。合法成功客户端现在明确两次 HTTP（prepare零模型、execute一次模型），澄清仍一次 HTTP／零模型；原 Unicode、2048条要求、幂等、来源删除和预算断言保持。Node **28 GREEN／63.391 ms／skip0／actualexit0**；whole桌面类型、四源 silent mypy、Python 编译与 diff 通过。
 
 固定 `0ec5a1ae→十路径` 差异两轴各自独立只读：B Standards Hard0／新增重要 possible Fowler0；C Spec新增P0–P3=0。真实 Main 的晚准备退出排空、B typed UI、公开页面和原生均仍属后续切片，不据 prepare HTTP 或回执客户端关闭原13／16／17。State与原AC未改，不新增迁移、外部模型或发送能力。
+
+### 合法选定要求的完整累计与改口预算
+
+本轮净消费既有正式 f2 的额外要求修复，已由 `0ec5a1ae` 实现的选定版两行不重复。`AccumulatedReplyRequirements` 仅表示同事务解析完成的完整要求集合；从实际 continuation 元数据复原时核对持久 content 全文一致，其余字段仍走原公开 parser。单次公开 JSON 的4096码点限制保持，合法旧要求与新明确要求累计超过4096后不被误拒、截断或摘要，仍进入唯一实际模型预算守卫。原版不继承后续编辑或兄弟分支要求，明确改口保留兼容要求、冲突仍先澄清，同键完整重放不增加模型。
+
+真实选定版4096个合法Unicode码点加新要求与意愿，原实现返回400／assistant_continuation_request_invalid，**1 RED／1.895s**；最窄提供者修复后 **1 GREEN／2.918s**。此前加载器和夹具参数错误未计产品RED。Conda NotAlone、关闭 dotenv／追踪、PGPORT=55441，`/private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-round29-a` 加 `tests.integration.server.test_assistant_continuation`、`tests.integration.server.test_assistant_session_inputs`、`tests.unit.application.test_assistant_continuation`、`tests.unit.application.test_assistant_continuation_identity`，实际 **68 GREEN／85.376s／skip0／exit0**；正式001–055／repeat0、续答内层及外层自有库剩余0。`cd backend && PYTHONPATH=src python -m unittest discover -s tests/unit/reply -t . -q` 实际 **295 GREEN／1.778s／exit0**；原权限拒绝合成 Skill fixture 的安全日志保留，未访问真实Skill或外部模型。两源码 limited mypy、三文件编译、整树桌面类型和diff通过。
+
+固定 ONLY3 SHA256 `a5ea8500ac034d17a6d4f4f08ade3e0de9ac7c594c7b751666ac97cf783638bf` 经独立 Standards 硬性违例0／新增重要possible Fowler0与独立 Spec 新增P0–P3为0，未借两轴为运行证据。这里只关闭已复现的累计要求提供者缺口；公开 typed 控件、宿主／页面组合继续由正式消费者验证，原13 State claimed和六条未勾AC不预填，真人／真实App未执行。没有新增writer、图、DDL、正文缓存、私人资料、OCR、微信、外部模型或发送，也未push、发布或部署。
+
+Root 净接正式 `9463f7db` 的两源码与七项新增HTTP测试增量，保留已存在选定版本修复和dca准备协议。主树受控隔离runner独立完整 `test_assistant_continuation` **51 GREEN／75.849s／skip0**，续答内层与外层精确清理0；独立 `discover -s tests/unit/reply -t .` **295 GREEN／1.630s／skip0**。两运行均真实55迁移逐名一致／repeat0／自有库剩余0，未有外部模型凭据。两源码限定mypy、三文件编译与diff通过；单次公开4096限制保持、完整累积由原预算守卫计量。旧无正文租约异常和合成Skill permission-denied负例提示保留，均无业务失败。公开typed实际结果另由B/C具名页面证据集成，不借HTTP关闭页面或原生要求。

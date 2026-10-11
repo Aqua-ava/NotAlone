@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID
 
 from notalone.application.assistant_continuation import (
-    AssistantContinuationClarification, AssistantContinuationReplyRequest,
+    AssistantContinuationClarification, AssistantContinuationInvalid, AssistantContinuationReplyRequest,
     AssistantContinuationReservation, ContinueAssistantSession, continuation_reference,
     continuation_submission, requirement_clauses, resolve_requirements,
 )
@@ -23,7 +23,7 @@ from notalone.persistence.assistant_session_inputs import require_current_input
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
 from notalone.persistence.style_sample_store import require_reply_sources_current
 from notalone.reply.assistant_continuation_reference import AssistantContinuationReference
-from notalone.reply.interface import ConfirmedDirection, DirectionSource, InitiateConversation, ReplyInput, ReplyToMessage, RewriteDraft
+from notalone.reply.interface import AccumulatedReplyRequirements, ConfirmedDirection, DirectionSource, InitiateConversation, ReplyInput, ReplyToMessage, RewriteDraft
 from notalone.scopes import ContactScope
 
 
@@ -66,9 +66,23 @@ def _frame_histories(
 
 
 def _request_from_input(scope: ContactScope, key: UUID, payload: dict[str, Any]):
+    metadata = payload.get("continuation")
+    accumulated = None
+    if isinstance(metadata, dict):
+        requirements = metadata.get("effective_requirements")
+        content = payload.get("content")
+        if not isinstance(requirements, list) or not isinstance(content, dict):
+            raise AssistantContinuationInvalid("持续要求记录无效。")
+        accumulated = AccumulatedReplyRequirements(tuple(requirements)) if requirements else None
+        if content.get("user_instruction") != accumulated:
+            raise AssistantContinuationInvalid("持续要求记录不一致。")
+        # 只复原同事务内的权威累积要求，其余字段继续经过原公开结构解析。
+        payload = {**payload, "content": {**content, "user_instruction": None}}
     _, request = parse_reply_request(json.dumps({
         **payload, "contact_id": str(scope.contact_id), "idempotency_key": str(key),
     }, ensure_ascii=False).encode("utf-8"))
+    if isinstance(metadata, dict):
+        request = replace(request, content=replace(request.content, user_instruction=accumulated))
     return request
 
 
@@ -166,7 +180,7 @@ def reserve_continuation_in_transaction(
         previous = tuple(dict.fromkeys((*previous, *requirement_clauses(selected[1].requirements))))
     requirements = resolve_requirements(previous, instruction, command.requirement_changes,
                                         intention_changed=intention is not None and intention != prior_intent)
-    user_instruction = "；".join(requirements) or None
+    user_instruction = AccumulatedReplyRequirements(requirements) if requirements else None
     reference = (AssistantContinuationReference(selected[0].candidate_id, selected[1].version_id, selected[1].messages)
                  if selected is not None else None)
     content: ReplyInput
