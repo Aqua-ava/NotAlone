@@ -285,3 +285,22 @@ quiet51／activeSamples0／maxOnscreenWindows0／maxRegisteredApps1／activation
 本票仍claimed，原第1条消息组与连续修改的公开样本组合继续依A11/B正式typed接口；不将整个A13/A18、原生或外部质量评测追加为新关闭条件。没有真实聊天、外部模型或消息发送。
 
 2026-10-11 总协调仅消费 C 正式 ce9e2f5 的新增 `reply-used-skill.test.mjs`；五个 production reader／状态／展示字段在主树此前正式 B c428／601f 接口中已存在，未重复导入或改变生成权威。于 desktop 执行 `node --test tests/reply-used-skill.test.mjs`，实际5G／137.177209ms／skip0，覆盖 loaded、resource_failed、关闭后的null、旧字段缺失以及错误版本身份整份拒绝。该回归只经真实 main／preload 具名桥接受控 transport，不是真正 HTTP／PG／模型或页面，未将请求计数说成模型计数；公共消息组／连续修改与样本组合继续，E06 保持 claimed，原验收不变。无新正文副本、迁移、外部调用或数据处理影响。
+
+
+### 2026-10-11 真实中断凭证与方向重新确认、样本、Skill 组合
+
+以正式 `de80e706` 为基点，精确消费 A `0137671a2b0856922fce7fd5988f7877867136e0` 的九个后端／迁移／测试文件，以及 A `0cc6e30fe693d85610d33aa83ccf0d056c6f8267` 的唯一store完成回执修复和真实B确认竞态测试；不取A任务记录或工作树。054只增加无正文的 `interruption_reason` 分类，复用failed／redacted状态、原owner事务、attempt和失效键；新增严格 `POST /api/contacts/{contact_id}/assistant-sessions/{session_id}/interrupt`，请求仅原request_key／input_version_id，响应身份和状态沿A唯一writer。全部只运行自有合成数据库，没有迁移用户或正式数据。
+
+C现有组合测试不再SQL插入合成失效键：两种场景均实际方向探索／选择，真实生成进入受控模型后调用该HTTP接口，核当前输入不倒退、app_quit与failed保存、迟到请求非200、实际C request／attempt为failed且候选0。重建后端后中断重放、GET和旧键prepare／generate保持零新增模型调用；新键先明确重新确认，元数据步骤不调用模型，沿实际相同Skill版本生成，模型输入仍以本次“只了解近况，不承诺见面”为准，样本仅作表达参考。
+
+删除样本后，两代generation输入及候选均redacted／正文null，CURRENT为空，旧中断入口精确拒绝source_deleted，恢复不泄出中断或候选正文；旧B元数据可只读等值重放而不能激活旧输入，无样本依赖的独立讨论仍active。保留原新生成键沿旧B引用精确input_version_stale与物理输入清理断言。本测试没有运行宿主退出，HTTP失效不承诺供应商工作立即停止；真实A桌面停止端口仍由A交付，未据此关闭整A17或新增为本票门槛。
+
+实际TDD及边界：首次直接导入TestCase导致模块发现额外21项B测试，22项／32.840s中C两场因误用未公开request_key字段ERROR；改为module别名并从实际GET轮次领取身份，属夹具错误而非产品RED。随后C单项两场真正RED2.344s（旧树interrupt404）→精确接A正式054接口。首次接口接入后两场FAIL5.497s，原因是测试错误要求HTTP失效立即停止后续模型轮；没有提交这一越界断言，改核真实失效租约、迟到结果不发布／候选0，以及恢复和拒绝零新增调用，原失败保留。窄C组合实际1GREEN13.411s。A完成回执新反例先只接正式test，真实RED2.076s（C已completed、A尚running，后继CURRENT后原prepare409 input_version_stale）→接唯一正式store修复后1GREEN2.429s，GET／行版本／CURRENT不变。
+
+最终增加删除后中断入口拒绝与分类不可恢复断言，再联跑五模块：A prepare17＋HTTP interruption8＋真实迁移3＋C重新确认1（两场）＋C当前意图替换1，session62676实际30GREEN33.775s、skip0。命令在Conda NotAlone／backend：`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src:. python /private/tmp/notalone-c-generation-lifecycle-tests.py tests.integration.server.test_assistant_generation_prepare tests.integration.server.test_assistant_generation_lifecycle tests.integration.persistence.test_assistant_generation_lifecycle tests.integration.server.test_authentic_expression_reconfirmation.AuthenticExpressionReconfirmationTests tests.integration.server.test_authentic_expression_replacement.AuthenticExpressionReplacementTests`。临时runner在导入前创建本轮唯一随机_test外层库并设显式URL，正式54／repeat空集；两个Core库各正式54／repeat空集、维度None、精确剩余0，外层库剩余0，三迁移库由原正式测试精确清理并核0。租约失效时原通用诊断保留，不包含正文或身份。
+
+十个Python文件compile通过。默认 `python -m mypy` 五入口扩大导入检查后实际失败256错误／24文件，未宣称全树类型通过，也未修改其他任务文件；明确限定 `python -m mypy --follow-imports=silent` 五改动source检查实际通过。`git diff --check`通过。没有新页面、真实App、外部模型实验、私人资料、微信或OCR操作；合成结果只证明数据及控制契约。E06继续claimed，公开消息组／连续修改样本组合与A唯一typed selector薄接仍待正式，A11和宿主端完成状态不由本轮后端证据代替。
+
+固定本主题十二文件（含全部五个未跟踪文件）最终Standards硬要求0／重要possible Fowler0，Spec新增P0–P3为0；两轴均未运行测试或借用其他工作树结果。仅本轮正式依赖消费、真实组合测试和本票证据本地提交，不改变未完成的验收项。
+
+2026-10-11 总协调净接正式2a8仅原reconfirmation测试及本票新证据后缀；A54中断／0cc完成守卫早已root9232252，未重复导入其他十个backend源或复制新authority。真实公开HTTP generation→interrupt→old-key prepare/generate精确generation_interrupted→重建只读→明确重新确认／actual Skill／样本删除的两完整scene在主树运行，来源删除后中断严格source_deleted，纯B独立讨论保留。联跑prepare17／HTTP interruption8／迁移3／C2／replacement10共 **40G／42.834s／skip0**，正式001–054／repeat0／自有库0，三迁移测试核账本／升级／回滚。命令为Conda NotAlone、关闭外部追踪，在根以 `/private/tmp/notalone-coordinator-style-samples-no-dimension.py` 执行六原module；只将合成StyleSampleHttpTest维度fixture设为空，不改生产门禁或计量。迟到失效的预期异常记录保持，HTTP不能声称供应商立即停止或真正宿主quit。没有新增生产源／schema／正文副本；E06第一公共组／连续修改仍待正式A11/B，原标准和claimed不变，不借这40关闭A17/B09或原生验收。
