@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
 
 from notalone.reply.exploration import ExplorationInput
@@ -13,6 +13,9 @@ from notalone.reply.exploration_context import EvidenceSnapshot
 from notalone.reply.exploration_skill import ExplorationSkillSelection
 from notalone.reply.interface import DirectionSource, NoSkill, UserSkillChoice
 from notalone.scopes import ContactScope
+
+if TYPE_CHECKING:
+    from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt
 
 
 class ExplorationReadPurpose(StrEnum):
@@ -89,6 +92,12 @@ class ExplorationCompletedInput:
 
 
 class ExplorationGenerationPort(Protocol):
+    def prepare(self, command: ExplorationGeneration) -> AssistantGenerationReceipt: ...
+
+    def prepare_replay(
+        self, scope: ContactScope, session_id: UUID, completed: ExplorationCompletedInput,
+    ) -> AssistantGenerationReceipt: ...
+
     def generate(self, command: ExplorationGeneration) -> Any: ...
 
     def replay(self, scope: ContactScope, session_id: UUID, completed: ExplorationCompletedInput) -> Any: ...

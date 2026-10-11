@@ -56,3 +56,24 @@ TDD 实际记录：首个两场景公开 HTTP 反例因接口尚无而返回 404
 2026-10-11 总协调仅消费 B 正式76ae56d 的 replace 路由四行 owner 类型收窄：其余 A 回执、替换、054、中断 source／tests 此前已root9232252正式，不重复导入。明确 replacement_owner 为 UUID 后委托唯一 service；不可用仍使用既有503 owner_uninitialized，不加cast／ignore或改变来源、输入、迟到、预算与鉴权门禁。主树 Conda NotAlone 下 `python -m mypy --follow-imports=silent src/notalone/server/app.py` 前78条、后77条，按去行号诊断集合严格比较只删除一条该新增replace可空owner错误，无新增诊断；77条既有通用入口诊断继续保留，未宣称全仓类型通过。app.py编译及diff检查通过；B本人修正后原十项真实HTTP G14.335属其交付证据，主树后续组合运行另记，不借作本次根本人新HTTP。R10 open及原标准保持，自动连续修改继续，无正文/schema/外部调用变化。
 
 2026-10-11 上述 owner 窄守卫的主树动态相关复验已完成：净接 C 正式2a8的真实HTTP中断测试后，prepare17／HTTP interruption8／迁移3／C reconfirmation及replacement2／原replacement HTTP10共 **40G／42.834s／skip0**，原Conda隔离入口 `/private/tmp/notalone-coordinator-style-samples-no-dimension.py`、正式生产迁移001–054／repeat0／自有库剩余0；三迁移场景核实际账本、升级与回滚。C重确认含两scene，测试仅合成模型及StyleSampleHttpTest维度fixture为空，不改变生产门禁。原十替换HTTP已在这40中本人实际执行，不借B14.335s计量；明确HTTP中断不等于真实宿主停止模型。原状态open及桌面连续修改、leave/quit组合剩余保持。
+
+正式B 9ad3e034准备接口后缀净接；以下28/7结果归B，主树独立复验另记。
+
+
+2026-10-11 首次确认与已确认澄清的实际生成准备 producer：只修改本 B 原探索服务／适配器／公开路由及端口，新加真实 HTTP／隔离 PG 回归，沿 A 已正式唯一 AssistantSessionService.prepare 领取生成身份，不新建模型、registry、selector、正文表或第二生成链。新增 POST `…/explorations/{id}/prepare-confirm` 沿原 confirm 严格 body；`prepare-answer` 沿原 answer 严格 body与operation_key。只有服务器已有明确确认且意愿清楚时返回 `{kind:'prepared', exploration_id, generation}`；generation 严格五字段 `session_id,turn_id,request_key,input_version_id,state`，来自实际 A receipt，这里 input 是 A 领取的生成 G，不能当 B 讨论 Q。原 reconfirm／interrupt 六字段回执保持。
+
+未确认的澄清回答仍是探索，确认后仍不清楚则继续澄清，暂缓不准备；不能从回答推断发送意图。准备确认的候选模型调用为0；准备回答只执行原探索判断，候选模型为0。后续执行仍用原 confirm／answer、原 body与operation_key及实际探索链；准备和执行共享原 canonical request 工厂，Skill 固定为实际版本或 NoSkill，关闭后不自动回退。实际完成重放走 A 原规范输入／来源复验、只返回已有 metadata，不回退后继 CURRENT。Main 消费此正式回执后登记／中断仍由 A 唯一宿主 authority 接线，本切片没有声称关闭或退出已集成。
+
+本 B TDD 历史保留：首次两场 prepare-confirm 同一个 HTTP 测试真实404 RED（1.253s）→薄 A.prepare 接线后1项GREEN（2.645s）；中间夹具误读 saved turn 不存在的 request_key、session_id，以及删除真实202queued误期200，均保原失败日志并按实际 schema 校准，不放宽身份／CURRENT／模型断言，不声称删除 job 完成或物理擦除。模块5项曾GREEN11.025s；原5＋21策略＋2真实 Skill／表达参考组合28项GREEN39.068s属于 UUID 工厂守卫之前；加实际 UUID 守卫与显式内容 union 后，原5＋2实际再次7项GREEN14.332s，阶段证据分别保留，不互相覆盖。
+
+按总协调确认的五字段共享合同，先收紧新回执 exact keys：同原测试两场真实 RED（1.261s、2个subtest失败多 interruption_reason、自有库剩余0）。只改新准备回执的薄序列化后，沿生产 CLI 安装正式迁移前缀，在自有随机 runner 实际联跑 `test_exploration_generation_preparation`、`test_persistent_reply_exploration`、`test_authentic_expression_reconfirmation`、`test_authentic_expression_replacement`，session48515 actualexit0，共28项GREEN（42.015s、skip0、自有数据库剩余0）。新5项含两场真实准备→原执行→重放、未确认／已确认仍不清／已确认清楚的六个回答组合、中断旧身份及来源删除拒绝、后继 CURRENT 后完成 metadata 不回退、owner／SID／额外字段／GET守卫。失效租约下旧响应被拒的既有合成异常日志保留；不用这些绿色掩盖公开路径尚未运行。
+
+外层 runner 只运行正式生产迁移 CLI，不借 A／C／ROOT 的 ledger或repeat 证据。最终四个生产源的默认 mypy actualexit0（不是 silent imports），五个 Python 文件 compileall 与 diff检查通过；原七源通用 app.py 的77条基线不据此说成全仓通过。这里只用合成消息、可控模型和隔离 PG，原正文仍沿既有 A／B 输入与 C 结果持久保存和来源／TTL，不把无正文 HTTP receipt 说成全库无正文。R10保持open、原验收不勾；A13／15的明确组内引用、完整连续修改及新消息选择、A16／17宿主关闭退出和实际公开页面组合继续沿正式依赖，无人工／真实App／OCR／真实聊天／额外外部模型／原生验收／自动发送／push。
+
+限定 ONLY6 原审查 Spec 新增 P0–P3为0、Standards hard0／新增重要 Fowler possible0；规范审查的非阻断建议已采纳：端口对唯一 A Receipt 的纯返回注解改为既有 TYPE_CHECKING 导入，避免在运行时经 lifecycle 加载 reply_service，不移动 A DTO 或新建身份权威。其后默认四源 mypy／五文件 compileall／diff 再次通过；新准备5＋真实 Skill／样本2 的最小 HTTP／隔离 PG 回归实际7项GREEN（17.229s、skip0、session75417 actualexit0、自有库剩余0）。前述28项是五字段功能收口后的完整相关范围，此7项是最后仅类型导入调整后的复验，分别保留。
+
+2026-10-11 总协调主树精确净接正式 `9ad3e034` 四个生产文件、新准备 HTTP suite 与本票证据后缀，未复制工作树或宿主 registry。实际认证 HTTP→隔离 PostgreSQL 联跑新准备5、主树正式原策略22、真实 Skill2，共 **29 GREEN／39.825s／skip0／actualexit0**；B原28／42.015是其自己的正式树结果，不能用它替代本主树29。正式001–054迁移账本核验及repeat0，自有随机测试库剩余0；准备候选零调用、原同键确认／回答一次生成、completed后继CURRENT不回退、来源/范围/旧中断及原Skill版本守卫保持。
+
+主树四源限定 `mypy --follow-imports=silent` 实际通过，五文件 compile及diff通过。仅自动后端准备接口，不冒宿主 job登記、连续改口／引用／新消息完整公开页面完成；原State open与未勾标准保持。没有新增正文副本、第二生成链、DDL、外部调用或真实App。
+
+固定主树本主题六路径最终Standards硬要求0／重要Fowler possible0、Spec新增P0–P3为0；四生产与新测试等B正式9ad，审查仅只读未运行测试。仅此准备接口主题本地提交，宿主与完整R10公开组合仍继续。

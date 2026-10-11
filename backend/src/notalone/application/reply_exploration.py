@@ -150,6 +150,7 @@ class ReplyExplorationService:
         self, *, scope: ContactScope, exploration_id: UUID, input_version_id: UUID,
         suggestion_id: UUID | None = None, direct_intent: str | None = None,
         session_id: UUID | None = None,
+        prepare_only: bool = False,
     ) -> dict[str, Any]:
         if (suggestion_id is None) == (direct_intent is None):
             raise ExplorationError("请明确选择一个方向或输入本次意愿。")
@@ -160,6 +161,8 @@ class ReplyExplorationService:
             completed = self._store.replay_confirmation(scope, session_id, exploration_id, input_version_id,
                                                         suggestion_id=suggestion_id, direct_intent=direct_intent)
             if completed is not None:
+                if prepare_only:
+                    return self._prepare_completed(scope, session_id, completed)
                 return self._completed(scope, session_id, completed)
             self.require_session(scope=scope, session_id=session_id, exploration_id=exploration_id)
         task = self._store.read(scope, exploration_id)
@@ -172,12 +175,13 @@ class ReplyExplorationService:
                     "input_version_id": str(input_version_id), "confirmed_intent": task.selected_intent}
         if not self._clear_intent(task):
             return self._public(task)
-        return self._generate(task)
+        return self._prepare(task) if prepare_only else self._generate(task)
 
     def answer(
         self, *, scope: ContactScope, exploration_id: UUID, input_version_id: UUID,
         question_id: UUID, answer: str, operation_key: UUID,
         session_id: UUID | None = None,
+        prepare_only: bool = False,
     ) -> dict[str, Any]:
         if not isinstance(answer, str) or not 0 < len(answer.strip()) <= 4096:
             raise ExplorationError("关键问题的回答无效。")
@@ -185,6 +189,8 @@ class ReplyExplorationService:
             completed = self._store.replay_answer(scope, session_id, exploration_id, input_version_id,
                                                   question_id=question_id, answer=answer, operation_key=operation_key)
             if completed is not None:
+                if prepare_only:
+                    return self._prepare_completed(scope, session_id, completed)
                 return self._completed(scope, session_id, completed)
             self.require_session(scope=scope, session_id=session_id, exploration_id=exploration_id)
         task = self._store.read(scope, exploration_id, purpose=ExplorationReadPurpose.HISTORY)
@@ -202,7 +208,7 @@ class ReplyExplorationService:
         next_task = self._store.read(scope, UUID(result["exploration_id"]))
         # 回答不是确认；只沿已存在的服务器选择继续，未明时保留探索。
         if task.has_confirmed_intent and self._clear_intent(next_task):
-            return self._generate(next_task)
+            return self._prepare(next_task) if prepare_only else self._generate(next_task)
         return result
 
     def reconfirm(
@@ -269,7 +275,7 @@ class ReplyExplorationService:
                 "skill_library_revision": task.skill_library_revision,
                 "confirmed_intent": task.selected_intent if task.has_confirmed_intent else None}
 
-    def _generate(self, task: ExplorationTask) -> dict[str, Any]:
+    def _generation_command(self, task: ExplorationTask) -> ExplorationGeneration:
         self._validate_task(task.scope, task)
         if not self._clear_intent(task) or task.state not in ("selected", "confirmed"):
             raise ExplorationStale("本次意愿仍未明确确认。")
@@ -277,9 +283,21 @@ class ReplyExplorationService:
         if not isinstance(intent, str) or not isinstance(source, DirectionSource):
             raise ExplorationStale("本次意愿没有可靠的确认记录。")
         skill = UserSkillChoice(task.skill_version_id) if task.skill_version_id else NoSkill()
-        turn = self._generation.generate(ExplorationGeneration(
-            task, intent, source, skill,
-        ))
+        return ExplorationGeneration(task, intent, source, skill)
+
+    def _prepare(self, task: ExplorationTask) -> dict[str, Any]:
+        # 只领取 A 的实际两 UUID 身份；意愿未明确的探索不会到达此处。
+        receipt = self._generation.prepare(self._generation_command(task))
+        return {"kind": "prepared", "exploration_id": str(task.exploration_id), "generation": receipt}
+
+    def _prepare_completed(
+        self, scope: ContactScope, session_id: UUID, completed: ExplorationCompletedInput,
+    ) -> dict[str, Any]:
+        receipt = self._generation.prepare_replay(scope, session_id, completed)
+        return {"kind": "prepared", "exploration_id": str(completed.exploration_id), "generation": receipt}
+
+    def _generate(self, task: ExplorationTask) -> dict[str, Any]:
+        turn = self._generation.generate(self._generation_command(task))
         self._store.finish(task)
         return {"kind": "generated", "turn": turn, "confirmed_intent": task.selected_intent,
                 "exploration_id": str(task.exploration_id)}

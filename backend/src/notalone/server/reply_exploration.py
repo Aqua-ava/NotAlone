@@ -91,12 +91,13 @@ def handle_exploration(
         elif len(parts) == 8 and method == "POST":
             exploration_id = UUID(parts[6])
             action = parts[7]
-            if action == "confirm":
+            if action in ("confirm", "prepare-confirm"):
                 request = _json(body, {"input_version_id", "suggestion_id", "direct_intent"})
                 result = service.confirm(scope=scope, session_id=session_id, exploration_id=exploration_id,
                                          input_version_id=_uuid(request, "input_version_id"),
                                          suggestion_id=_uuid(request, "suggestion_id", optional=True),
-                                         direct_intent=_text(request, "direct_intent") if "direct_intent" in request else None)
+                                         direct_intent=_text(request, "direct_intent") if "direct_intent" in request else None,
+                                         prepare_only=action == "prepare-confirm")
             elif action == "reconfirm":
                 request = _json(body, {"input_version_id", "expected_input_version_id", "request_key", "suggestion_id", "direct_intent"})
                 result = service.reconfirm(scope=scope, session_id=session_id, exploration_id=exploration_id,
@@ -105,11 +106,12 @@ def handle_exploration(
                                            request_key=_uuid(request, "request_key"),
                                            suggestion_id=_uuid(request, "suggestion_id", optional=True),
                                            direct_intent=_text(request, "direct_intent") if "direct_intent" in request else None)
-            elif action == "answer":
+            elif action in ("answer", "prepare-answer"):
                 request = _json(body, {"input_version_id", "question_id", "answer", "operation_key"})
                 result = service.answer(scope=scope, session_id=session_id, exploration_id=exploration_id,
                                         input_version_id=_uuid(request, "input_version_id"), question_id=_uuid(request, "question_id"),
-                                        answer=_text(request, "answer"), operation_key=_uuid(request, "operation_key"))
+                                        answer=_text(request, "answer"), operation_key=_uuid(request, "operation_key"),
+                                        prepare_only=action == "prepare-answer")
             elif action == "stop":
                 request = _json(body, {"input_version_id"})
                 service.require_session(scope=scope, session_id=session_id, exploration_id=exploration_id)
@@ -121,6 +123,13 @@ def handle_exploration(
             return 405, {"error": "method_not_allowed"}
         if result["kind"] == "generated":
             result = {**result, "turn": render_turn(result["turn"])}
+        elif result["kind"] == "prepared":
+            receipt = result["generation"]
+            result = {**result, "generation": {
+                "session_id": str(receipt.session_id), "turn_id": str(receipt.turn_id),
+                "request_key": str(receipt.request_key), "input_version_id": str(receipt.input_version_id),
+                "state": receipt.state,
+            }}
         return 200, result
     except (ValueError, TypeError, KeyError, AttributeError):
         return 400, {"error": "exploration_request_invalid"}
