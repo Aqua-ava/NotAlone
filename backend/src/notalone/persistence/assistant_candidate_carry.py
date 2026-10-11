@@ -24,7 +24,9 @@ from notalone.persistence.assistant_candidate_versions import (
 from notalone.persistence.assistant_session_inputs import (
     require_input_session, verified_discussion_dependencies,
 )
-from notalone.persistence.assistant_session_store import _active_binding, _reply_dependencies
+from notalone.persistence.assistant_session_store import (
+    _active_binding, _partition_assistant_dependencies, _reply_dependencies,
+)
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.reply_discussion_dependencies import reply_style_sample_dependencies
 from notalone.persistence.style_sample_store import require_reply_sources_current
@@ -104,8 +106,11 @@ def _origin_dependencies(
                 cursor, owner_id=scope.owner_id, request_id=history.candidate_group_id,
             ))
             dependencies.update(_reply_dependencies(cursor, scope, history.candidate_group_id))
-            sources = verified_discussion_dependencies(cursor, scope, tuple(sorted(dependencies)))
-            samples = reply_style_sample_dependencies(connection, scope, history.candidate_group_id)
+            typed = _partition_assistant_dependencies(cursor, scope, dependencies)
+            sources = verified_discussion_dependencies(cursor, scope, typed.source_ids)
+            samples = tuple(sorted(set(typed.style_sample_ids) | set(
+                reply_style_sample_dependencies(connection, scope, history.candidate_group_id),
+            )))
         except ReplyStoreInvariantError:
             raise AssistantSessionRejected("source_unavailable") from None
         return (DiscussionDependencies(tuple(sorted(sources)), samples),

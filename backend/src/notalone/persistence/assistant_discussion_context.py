@@ -19,7 +19,9 @@ from notalone.persistence.assistant_candidate_versions import (
 from notalone.persistence.assistant_session_inputs import (
     require_current_input, verified_discussion_dependencies,
 )
-from notalone.persistence.assistant_session_store import _dependencies_available, _reply_dependencies
+from notalone.persistence.assistant_session_store import (
+    _dependencies_available, _partition_assistant_dependencies, _reply_dependencies,
+)
 from notalone.persistence.style_sample_store import captured_reply_sources, require_reply_sources_current
 from notalone.persistence.reply_discussion_dependencies import reply_style_sample_dependencies
 from notalone.reply.assistant_discussion import (
@@ -114,7 +116,7 @@ def _discussion_available(connection: Any, scope: ContactScope, row: dict[str, A
 def _generation_input_available(connection: Any, scope: ContactScope, row: dict[str, Any]) -> bool:
     if (row["state"] != "active" or row["turn_state"] not in ("running", "failed", "completed")
             or row["input_payload"] is None
-            or not _dependencies_available(connection, scope.owner_id, set(row["turn_dependencies"] or ()))):
+            or not _dependencies_available(connection, scope, set(row["turn_dependencies"] or ()))):
         return False
     try:
         dependencies = set(row["turn_dependencies"] or ())
@@ -125,7 +127,8 @@ def _generation_input_available(connection: Any, scope: ContactScope, row: dict[
             dependencies.update(_reply_dependencies(connection, scope, row["reply_request_id"]))
         elif row["turn_state"] == "completed":
             return False
-        verified_discussion_dependencies(connection, scope, tuple(sorted(dependencies)))
+        typed = _partition_assistant_dependencies(connection, scope, dependencies)
+        verified_discussion_dependencies(connection, scope, typed.source_ids)
     except (ReplyStoreInvariantError, AssistantSessionRejected):
         return False
     return True
@@ -137,12 +140,16 @@ def _candidate_generation_available(row: dict[str, Any]) -> bool:
 
 def _generation_dependencies(connection: Any, scope: ContactScope, row: dict[str, Any]) -> DiscussionDependencies:
     sources = set(row["turn_dependencies"] or ())
+    inherited = _partition_assistant_dependencies(connection, scope, sources)
+    sources = set(inherited.source_ids)
     if row["reply_request_id"] is None:
-        return DiscussionDependencies(tuple(sorted(sources)))
+        return inherited
     sources.update(_reply_dependencies(connection, scope, row["reply_request_id"]))
     sources.update(captured_reply_sources(connection, owner_id=scope.owner_id, request_id=row["reply_request_id"]))
-    samples = reply_style_sample_dependencies(connection, scope, row["reply_request_id"])
-    return DiscussionDependencies(tuple(sorted(sources)), samples)
+    typed = _partition_assistant_dependencies(connection, scope, sources)
+    samples = (set(inherited.style_sample_ids) | set(typed.style_sample_ids)
+               | set(reply_style_sample_dependencies(connection, scope, row["reply_request_id"])))
+    return DiscussionDependencies(typed.source_ids, tuple(sorted(samples)))
 
 
 def _generation_identity(row: dict[str, Any], dependencies: DiscussionDependencies) -> DiscussionIdentity:
@@ -292,7 +299,7 @@ def require_assistant_discussion_available(
         if (anchor["anchor_input_state"] != "active" or anchor["state"] not in ("running", "failed", "completed")
                 or anchor["input_payload"] is None
                 or anchor["anchor_binding_id"] != anchor["conversation_binding_id"]
-                or not _dependencies_available(cursor, scope.owner_id, set(anchor["dependency_ids"]))):
+                or not _dependencies_available(cursor, scope, set(anchor["dependency_ids"]))):
             raise ReplyStoreInvariantError("助手讨论捕获输入来源已失效。")
         return _require_captured_records(cursor, scope, snapshot)
 

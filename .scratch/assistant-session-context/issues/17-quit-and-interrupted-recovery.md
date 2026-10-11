@@ -87,3 +87,13 @@ Root 净接正式 `ab079a1b` 的三个后端路径后，受控隔离runner独立
 真实 JsonClient 回环 HTTP 的公开回调反例先 **1 RED／57.680ms**（实际已请求但准备阶段未报告），修复后将 TS 测试经 esbuild 临时bundle，用 `node --test` 实际 **29 GREEN／112.183ms／skip0／exit0**；`npm run typecheck` 与diff通过。固定 ONLY2 SHA256 `3b14046f465fba506c77765116cdd1743f8b0add88de7f5dc81872b42027202f` 独立 Standards 硬性违例0／新增重要possible Fowler0、Spec 新增P0–P3为0，两轴只读。此段只证明客户端阶段合同；唯一 Main／宿主 consumer 继续接线与复验，原 AC／claimed不预填，Page／真实App／原生未执行。
 
 Root 净接 `a5240199` 两个代码／测试路径后，实际合成 JsonClient HTTP 与续答协议 **29 GREEN／101.661375ms／skip0／actualexit0**，完整桌面类型和diff通过。准备回调只在实际HTTP已发起时发生；合法澄清仅报告preparing，不伪造已领取或执行回执。此切片不证明Host退出、原生App重开或人工验收，原AC与claimed保持。
+
+2026-10-11 无raw样本的退出后复制删除闭包：净消费C正式 `9f5c0163` 的单测试源，再于本A树补四行公开GET验证复制在删除前确为running且原输入完整。样本由公开manual保存、source_ids为空且sources列表为空，真正进入受控模型的style_references只含实际样本ID／低权重；HTTP中断后新键仅prepare、模型增量0，随后DELETE样本。原turn已redacted而复制仍running／CURRENT指复制，A本树实际 **2 RED／3.494s**；沿原C `reply_style_sample_dependencies` 继承UUID至既有turn依赖数组、同owner/contact分raw/style并复用 `_require_samples`，最窄复跑 **2 GREEN／3.496s**。两场实际模型分别1／2，准备及删除增量0，独立已完成讨论和后来保存样本保留，重连后复制无正文且CURRENT为空；没有新表、缓存、collector、writer或来源图。
+
+首轮九个相关模块实际 **134项／123.618s，1 FAIL＋1 ERROR**，不能作整组通过：原删除预捕获适配器仍把样本UUID列为raw，指纹不匹配导致样本DELETE500与来源待删身份拒绝。补原 `assistant_captured_input_lineage` 同型分离，只在已有删除身份复验中关闭样本liveguard，原scope／turn／key／binding／版本及指纹门禁保持；两实际失败窄复跑 **2 GREEN／2.927s**。正常读取、继续、版本与携入仍沿样本当前可用性门禁，删除身份不用于恢复正文。
+
+Conda NotAlone、禁dotenv／外部模型环境和tracing、PGPORT=55441，用 `/private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-round29-a` 重新执行 `test_authentic_expression_sample_only_retry`、`test_assistant_retry_source_guard`、`test_assistant_generation_lifecycle`、`test_assistant_continuation`、`test_assistant_candidate_carry`、`test_style_samples` 六个integration.server模块及 `test_assistant_discussion_context`、`test_assistant_captured_input_erasure`、`test_assistant_dependency_erasure` 三个integration.persistence模块，实际 **134 GREEN／124.397s／skip0／actualexit0**；每轮正式001–055／repeat0，内外自有库剩余0。原迟到租约异常日志不含正文，未外推为私料或外部调用。八源mypy、九文件编译、完整桌面typecheck和diff通过。固定ONLY8 SHA256 `9fb9da44f8b4d35a32e5c90a3ab733e38637a780ca96f2a963f04d2301b309d5` 的独立 Standards硬性违例0／新增重要possible Fowler0、Spec新增P0–P3为0；两轴只读，不借为运行证据。
+
+此段仅实际HTTP中断／复制／删除及隔离PG，唯一宿主退出消费者、普通页面恢复和原生退出仍须各自证据；原AC未勾及claimed保持。只有合成数据／受控模型，无真实App、微信、OCR、私料、外部发送、外部模型、push、发布或部署。
+
+Root 独立先接C正式反例，实际 **2 RED／3.527s／55repeat0／自有库0**，无raw手工样本删除后仅prepare复制输入仍running。净接A03八生产路径与原测试四条正向增强后，同一反例和既有来源守卫 **6 GREEN／9.920s／skip0／actualexit0**；55repeat0、自有库剩余0，限定八文件mypy、九文件编译及diff通过。首轮夹带错误模块名产生一个loader ERROR，未冒充完整通过；校正已存在的模块名后取得上述完整六项。仅复用原C样本可用性和A类型来源投影，没有新表／第二依赖图或私人资料；已发现的当前意愿反例仍单独等待修复。

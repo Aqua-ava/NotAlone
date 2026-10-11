@@ -181,7 +181,7 @@ def _require_candidate(
         raise AssistantCandidateVersionConflict("request_invalidated")
     if row["turn_state"] != "completed" or row["request_state"] != "completed" or row["input_payload"] is None:
         raise AssistantCandidateVersionConflict("candidate_unavailable")
-    if not _dependencies_available(connection, scope.owner_id, set(row["dependency_ids"])):
+    if not _dependencies_available(connection, scope, set(row["dependency_ids"])):
         raise AssistantCandidateVersionConflict("source_unavailable")
     try:
         require_reply_sources_current(connection, owner_id=scope.owner_id, request_id=row["reply_request_id"])

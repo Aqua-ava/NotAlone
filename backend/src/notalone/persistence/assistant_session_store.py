@@ -31,6 +31,7 @@ from notalone.persistence.assistant_reply_identity import (
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.message_sources import valid_source_ref_exists_sql
 from notalone.persistence.style_sample_store import captured_reply_sources, require_reply_sources_current
+from notalone.reply.assistant_discussion import DiscussionDependencies
 from notalone.reply.context import ReplyContext
 from notalone.reply.errors import ReplyStoreInvariantError
 from notalone.reply.exploration import ExplorationExpired
@@ -129,7 +130,9 @@ def captured_generation_dependencies(
 ) -> set[UUID]:
     """同事务沿实际C请求键复验模型前捕获；失败输入不以尚未填回的结果ID放行。"""
 
-    from notalone.persistence.reply_discussion_dependencies import require_reply_discussion_dependencies
+    from notalone.persistence.reply_discussion_dependencies import (
+        reply_style_sample_dependencies, require_reply_discussion_dependencies,
+    )
 
     request = connection.execute(
         "SELECT id, conversation_binding_id FROM public.reply_request "
@@ -150,6 +153,7 @@ def captured_generation_dependencies(
     discussion = require_reply_discussion_dependencies(connection, scope, request["id"])
     if discussion is not None:
         dependencies.update(discussion.source_ids)
+    dependencies.update(reply_style_sample_dependencies(connection, scope, request["id"]))
     return dependencies
 
 
@@ -170,9 +174,32 @@ def _evidence_dependencies(
     return dependencies
 
 
-def _dependencies_available(connection: Any, owner_id: UUID, dependencies: set[UUID]) -> bool:
+def _partition_assistant_dependencies(
+    connection: Any, scope: ContactScope, dependencies: set[UUID],
+    *, require_available: bool = True,
+) -> DiscussionDependencies:
+    """既有turn依赖按实际同范围样本分型；样本仍沿C唯一可用性门禁。"""
+
+    from notalone.persistence.reply_discussion_dependencies import _require_samples
+
+    rows = connection.execute(
+        "SELECT id FROM public.style_sample WHERE owner_id=%s AND contact_id=%s "
+        "AND id=ANY(%s::uuid[]) ORDER BY id",
+        (scope.owner_id, scope.contact_id, list(dependencies)),
+    ).fetchall()
+    samples = tuple(row["id"] for row in rows)
+    if require_available:
+        _require_samples(connection, scope, samples)
+    return DiscussionDependencies(tuple(sorted(dependencies - set(samples))), samples)
+
+
+def _dependencies_available(connection: Any, scope: ContactScope, dependencies: set[UUID]) -> bool:
     """同一 owner 锁与数据库事务时间内核验来源、证据和记忆有效期。"""
 
+    try:
+        typed = _partition_assistant_dependencies(connection, scope, dependencies)
+    except ReplyStoreInvariantError:
+        return False
     row = connection.execute(
         f"""
         SELECT NOT EXISTS (
@@ -211,7 +238,7 @@ def _dependencies_available(connection: Any, owner_id: UUID, dependencies: set[U
             )
         ) AS available
         """,
-        {"owner_id": owner_id, "dependencies": list(dependencies)},
+        {"owner_id": scope.owner_id, "dependencies": list(typed.source_ids)},
     ).fetchone()
     return row["available"]
 
@@ -251,6 +278,8 @@ def prepare_assistant_reply_commit(
     dependencies = set(turn["dependency_ids"])
     dependencies.update(captured_reply_sources(connection, owner_id=request.scope.owner_id,
                                                request_id=request.request_id))
+    from notalone.persistence.reply_discussion_dependencies import reply_style_sample_dependencies
+    dependencies.update(reply_style_sample_dependencies(connection, request.scope, request.request_id))
     for evidence in context.evidence:
         dependencies.update(_evidence_dependencies(
             connection, owner_id=request.scope.owner_id, evidence_id=evidence.evidence_id,
@@ -265,7 +294,7 @@ def prepare_assistant_reply_commit(
         if previous is None:
             raise ReplyStoreInvariantError("前序候选来源已失效。")
         dependencies.update(_reply_dependencies(connection, request.scope, previous["reply_request_id"]))
-    if not _dependencies_available(connection, request.scope.owner_id, dependencies):
+    if not _dependencies_available(connection, request.scope, dependencies):
         raise ReplyStoreInvariantError("助手会话来源已失效，不能提交旧候选。")
     connection.execute(
         "UPDATE public.assistant_session_turn SET reply_request_id = %s, dependency_ids = %s, "
@@ -543,7 +572,7 @@ class PostgresAssistantSessionStore:
                 "SELECT dependency_ids FROM public.assistant_session_turn WHERE id = %s",
                 (existing["id"],),
             ).fetchone()["dependency_ids"]
-            if not _dependencies_available(connection, scope.owner_id, set(dependencies)):
+            if not _dependencies_available(connection, scope, set(dependencies)):
                 raise AssistantSessionRejected("source_unavailable")
             completed = connection.execute(
                 "SELECT id, normalized_input FROM public.reply_request WHERE owner_id = %s "
@@ -605,7 +634,7 @@ class PostgresAssistantSessionStore:
             if candidate is None:
                 raise AssistantSessionRejected("continued_candidate_unavailable")
             dependencies.update(_reply_dependencies(connection, scope, candidate["reply_request_id"]))
-        if not _dependencies_available(connection, scope.owner_id, dependencies):
+        if not _dependencies_available(connection, scope, dependencies):
             raise AssistantSessionRejected("source_unavailable")
         if running_request_key is not None:
             old = connection.execute(
@@ -689,7 +718,7 @@ class PostgresAssistantSessionStore:
         dependencies = set(turn["dependency_ids"]) | _reply_dependencies(
             connection, scope, reply.reply_request_id,
         )
-        if not _dependencies_available(connection, scope.owner_id, dependencies):
+        if not _dependencies_available(connection, scope, dependencies):
             raise AssistantSessionRejected("source_unavailable")
         from notalone.persistence.reply_store import PostgresReplyStore
         saved_reply = PostgresReplyStore(self._database_url)._read_result(connection, stored)
@@ -759,7 +788,7 @@ class PostgresAssistantSessionStore:
         for row in rows:
             reply = None
             if row["state"] != "redacted" and not _dependencies_available(
-                connection, scope.owner_id, set(row["dependency_ids"]),
+                connection, scope, set(row["dependency_ids"]),
             ):
                 # 此时只遮挡读取结果；真正来源清除后才写 redacted 占位。
                 row["state"] = "unavailable"

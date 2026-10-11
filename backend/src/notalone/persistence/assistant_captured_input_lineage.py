@@ -10,7 +10,7 @@ from notalone.persistence.assistant_discussion_context import (
     _candidate_identity, _captured_anchor, _current_fingerprint, _discussion_identity,
     _generation_identity, _input_rows,
 )
-from notalone.persistence.assistant_session_store import _reply_dependencies
+from notalone.persistence.assistant_session_store import _partition_assistant_dependencies, _reply_dependencies
 from notalone.persistence.reply_discussion_dependencies import (
     CapturedReplyDiscussionUse, reply_style_sample_dependencies,
 )
@@ -69,14 +69,18 @@ def _require_generation(cursor: Any, scope: ContactScope, row: dict[str, Any]) -
 
 def _dependencies(cursor: Any, scope: ContactScope, row: dict[str, Any]) -> DiscussionDependencies:
     sources = set(row["turn_dependencies"] or ())
+    inherited = _partition_assistant_dependencies(cursor, scope, sources, require_available=False)
+    sources = set(inherited.source_ids)
     request_id = row["reply_request_id"]
     if request_id is None:
-        return DiscussionDependencies(tuple(sorted(sources)))
+        return inherited
     sources.update(_reply_dependencies(cursor, scope, request_id))
     sources.update(captured_reply_sources(cursor, owner_id=scope.owner_id, request_id=request_id))
     # C唯一codec和样本依赖图；删除身份复验不使用样本来源可用性门禁。
-    samples = reply_style_sample_dependencies(cursor, scope, request_id, require_available=False)
-    return DiscussionDependencies(tuple(sorted(sources)), samples)
+    typed = _partition_assistant_dependencies(cursor, scope, sources, require_available=False)
+    samples = (set(inherited.style_sample_ids) | set(typed.style_sample_ids)
+               | set(reply_style_sample_dependencies(cursor, scope, request_id, require_available=False)))
+    return DiscussionDependencies(typed.source_ids, tuple(sorted(samples)))
 
 
 def _require_candidate_identity(cursor: Any, scope: ContactScope, row: dict[str, Any],

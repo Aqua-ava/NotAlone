@@ -57,7 +57,7 @@ def require_interruption_input(
             raise AssistantSessionRejected("source_deleted")
         if row["conversation_binding_id"] != row["turn_binding_id"]:
             raise AssistantSessionRejected("binding_changed")
-        if not _dependencies_available(cursor, scope.owner_id, set(row["dependency_ids"]) | set(row["turn_dependencies"])):
+        if not _dependencies_available(cursor, scope, set(row["dependency_ids"]) | set(row["turn_dependencies"])):
             raise AssistantSessionRejected("source_unavailable")
         return row["conversation_binding_id"]
 

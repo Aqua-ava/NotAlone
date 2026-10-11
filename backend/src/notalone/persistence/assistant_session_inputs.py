@@ -182,7 +182,7 @@ def verified_discussion_dependencies(
         contact_refs.update(refs)
     contact_sources = _capture_original_dependencies(connection, scope, contact_refs, current_contact=True)
     captured = declared | owner_sources | contact_sources
-    if not _dependencies_available(connection, scope.owner_id, captured):
+    if not _dependencies_available(connection, scope, captured):
         raise AssistantSessionRejected("source_unavailable")
     return captured
 
@@ -248,7 +248,7 @@ def _input_state(connection: Any, scope: ContactScope, row: dict[str, Any]) -> s
             return "unavailable"
         return "active"
     dependencies = row["turn_dependencies"] if row["input_type"] == "generation" else row["dependency_ids"]
-    if not _dependencies_available(connection, scope.owner_id, set(dependencies or ())):
+    if not _dependencies_available(connection, scope, set(dependencies or ())):
         return "unavailable"
     if row["input_type"] == "generation":
         if row["turn_state"] == "completed" and row["turn_reply_request_id"] is None:
@@ -375,7 +375,7 @@ def record_discussion_input_in_transaction(
             if target is None:
                 raise AssistantSessionRejected("target_message_unavailable")
             dependencies.update(_expand_message_sources(cursor, scope.owner_id, {target_id}))
-        if not _dependencies_available(cursor, scope.owner_id, dependencies):
+        if not _dependencies_available(cursor, scope, dependencies):
             raise AssistantSessionRejected("source_unavailable")
         row = cursor.execute(
             "INSERT INTO public.assistant_session_input "

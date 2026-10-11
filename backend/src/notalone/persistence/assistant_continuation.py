@@ -136,7 +136,7 @@ def reserve_continuation_in_transaction(
         )
         return AssistantContinuationReservation(store._reserve_in_transaction(connection, scope, session_id, request), request)
     # 首次解析、当前输入CAS、来源与领取均在同一个owner事务中完成。
-    require_current_input(connection, scope, session_id, command.expected_input_version_id)
+    current_dependencies = require_current_input(connection, scope, session_id, command.expected_input_version_id)
     current = connection.execute(
         "SELECT id,state,input_payload,dependency_ids,reply_request_id FROM public.assistant_session_turn "
         "WHERE owner_id=%s AND contact_id=%s "
@@ -148,7 +148,7 @@ def reserve_continuation_in_transaction(
     if current["reply_request_id"] is None:
         raise AssistantContinuationClarification("completed_generation_required")
     # 无编号的下一轮也从当前已完成输入派生，不能把复制的候选正文变为独立用户稿。
-    inherited_dependencies = tuple(sorted(set(current["dependency_ids"]) | require_reply_sources_current(
+    inherited_dependencies = tuple(sorted(set(current_dependencies) | require_reply_sources_current(
         connection, owner_id=scope.owner_id, request_id=current["reply_request_id"],
     )))
     histories = _frame_histories(connection, scope, session_id, command)
