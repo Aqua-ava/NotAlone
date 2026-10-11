@@ -343,3 +343,26 @@ E06继续claimed，未完成勾选保持。B消息组UI与连续修改公开组�
 新12项来源套件 GREEN／213.978208ms，完整相关八套原188＋新12共200項、类型和清理结果以本轮真实日志另记。早前198通过不关闭新增 P2，修复后新鲜审查继续；E06仍 claimed，实际 Python/PG/模型／公共页面组合未由这些受控传输回归代替。
 
 上述主树最终八套 Node session88839 **actualexit0／200 GREEN／1121.304709ms／skip0**；完整桌面 TypeScript exit0、diff通过。仅 Node/受控传输与既有自有回环 HTTP，没有新数据库或浏览器租约。这是总协调实际运行，与 C 原198结果分开；新 P2 的完整页面联通仍随 B 正式消息组继续。
+
+正式C 7560718后缀净接；以下18结果归C，主树独立复验另记，不覆盖此前根来源／领取证据。
+
+
+### 2026-10-11 删除预捕获只读样本依赖接口
+
+按总协调与A明确的最小接口归属，只扩展C已有 `reply_style_sample_dependencies(connection, scope, request_id, *, require_available=True)`。默认及显式True沿原 `_require_samples` 校验，生成、保存、GET和正常来源读取的调用均不改。删除预捕获可在原owner事务、父来源／context snapshot／receipt CASCADE清理前显式传False，仅跳最后的样本可用性复验；实际请求owner/contact、继续祖先、严格DiscussionSnapshot及样本UUID codec、既有传递样本图保持。非bool不允许关闭校验。返回仍只有排序去重UUID，无正文、写入、缓存、路由、DDL、解码替代品或第二删除闭包。
+
+真实垂直反例经原A/C存储：raw来源→实际候选→主动样本→历史生成→派生样本→新已捕获回复，同owner事务把raw标成delete_requested。默认读取仍拒，删除专用False应返回原依赖UUIDs且四张原表xmin不变。首次single实际ERROR0.361s（旧接口不接require_available keyword），正式54/repeat空集/ownedDB0；最小接口后1GREEN0.377s。补两类范围、五类captured身份／样本ID篡改和三种非bool模式反向，不以关闭availability绕过strict原身份；None／0／字符串不成为False。新增两测试的subTest不是独立业务场景。
+
+Conda NotAlone／backend，`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src:. python /private/tmp/notalone-c-generation-lifecycle-tests.py tests.integration.persistence.test_reply_discussion_dependencies`，session41405 actualexit0／18GREEN3.694s／skip0（原16＋新增2）。该模块保留实际保存、正常历史读取、旧request key、来源及样本物理删除、无关会话和CURRENT保护全部原断言。唯一外层隔离库实际正式54／repeat空集／精确剩余0；此套不是Core或真实HTTP/Page，不借外层初始化宣称A新公开continue/carry已集成。限定单source `mypy --follow-imports=silent` 与两个文件compile实际通过，diff通过；原whole/app检查限制保留。
+
+本接口供A唯一 `_generation_identity` 在删除预捕获时重建已捕获样本ID，而非证明删除全部接线已完成。A的actual captured_uses consumer／统一eraser参数正式后，C继续薄捕获／传递，再在snapshot或父来源清除前做实际组合反例；不复制A图或hash，也不把接口存在当已清理携入内容。E06继续claimed，ROOT多候选来源正式80b待本C净接、A有界版本4e正式待接、B四公共消息组场景尚未完整通过。没有新模型实验、私人数据、页面、真实App／微信／OCR／自动门禁／发送／push／发布／部署。
+
+固定本主题三文件最终Standards硬要求0／重要possible Fowler0，Spec新增P0–P3为0；两轴只读未运行测试。仅C最小接口、实际只读／严格边界反例和自身证据本地提交，未改变任务未完成状态。
+
+2026-10-11 总协调主树精确净接正式 `7560718` 的历史依赖读取及两项新回归，原16加新2共 **18项实际PG GREEN／3.164s／skip0／actualexit0**，正式001–054 ledger与repeat0、自有随机库剩余0。一个 source 的限定 silent mypy 无问题，两个文件 compile及diff通过。默认／explicitTrue拒绝已不可用资料、onlyFalse只读返回历史UUID，范围、strict codec、非bool及四表xmin不变断言保持；没有新HTTP／模型／页面、正文副本或第二删除闭包。A最小 captured_uses 消费与统一 eraser尚待正式接线，不能据此将整个来源删除路径或E06标为完成，原claimed及人工未执行保持。
+
+主树复核发现新的范围 P2：`_require_samples` 原来同时检查成员归属与可用性，False 跳过整个函数会让合法 UUID 的其他联系人、其他用户或不存在样本混入返回集合；原18通过只覆盖请求范围与 codec，不能关闭该成员缺口。新增实际 PG 回归分别从种子与递归依赖注入上述三类 UUID，19项首次实际失败六个 subTest／3.203s，真实产品 RED；没有把 subTest 计成六张独立任务。修复只对最终去重 UUID 集合按 owner_id＋contact_id 核查行数，不取正文、不重新检查可用性、不增加图或 hash。False 仍能读取本范围已有删除标记的样本身份，默认True保持原完整门禁。
+
+修正新增测试的只读比较为同一 owner 事务、同一连接读取（原另连接比较会读到旧 MVCC 版本，不能证明本事务不变）；保留实际六类拒绝和 finally 恢复。相同正式001–054隔离 runner 复验 session29546 **actualexit0／19 GREEN／3.158s／skip0**，正式 ledger/repeat0、自有库剩余0。没有新HTTP／模型／页面／缓存或删除写入，A captured_uses consumer 与统一 eraser仍另行接线；本票继续 claimed，原人工／原生未执行。
+
+上述主树成员修复限定 silent mypy 1source通过，2文件 compile 与diff通过。新鲜Standards硬要求0／重要Fowler possible0、Spec新增P0–P3为0，均明确旧成员范围P2已闭合；仅只读复审、未代运行。只提交这一个历史读取主题的三个路径，不捎带共享协调记录或B准备接口。

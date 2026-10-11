@@ -331,6 +331,76 @@ class ReplyDiscussionDependenciesTest(unittest.TestCase):
             self.assertEqual(connection.execute("SELECT status FROM public.source_document WHERE id=%s",
                                                 (unrelated_id,)).fetchone(), ("active",))
 
+    def test_cleanup_style_ids_remain_readable_after_raw_delete_requested_without_writes(self):
+        source = self.fixture._source()
+        candidate, _, _ = self.fixture._complete(source=source)
+        first = self.samples.save(self.fixture.scope, SaveStyleSample(
+            uuid4(), "合成主动保存的第一层表达。", "candidate", candidate.candidate_id,
+        ))
+        parent = self._prepare(self.samples.select_references(self.fixture.scope))
+        parent_result = self._save(parent)
+        derived = self.samples.save(self.fixture.scope, SaveStyleSample(
+            uuid4(), "合成主动保存的第二层表达。", "candidate", parent_result.candidates[0].candidate_id,
+        ))
+        prepared = self._prepare(self.samples.select_references(self.fixture.scope))
+        self._save(prepared)
+        with psycopg.connect(support.DATABASE_URL) as connection:
+            lock_owner_scope(connection, owner_id=self.fixture.owner_id)
+            expected = reply_style_sample_dependencies(connection, self.fixture.scope, prepared[2].request_id)
+            self.assertEqual(set(expected), {first.sample_id, derived.sample_id})
+            connection.execute("UPDATE public.source_document SET status='delete_requested' WHERE id=%s", (source[0],))
+            tables = ("reply_request", "style_sample", "assistant_session_input", "assistant_session_turn")
+            before = {table: connection.execute(
+                f"SELECT id,xmin::text FROM public.{table} WHERE owner_id=%s ORDER BY id", (self.fixture.owner_id,),
+            ).fetchall() for table in tables}
+            with self.assertRaises(ReplyStoreInvariantError):
+                reply_style_sample_dependencies(connection, self.fixture.scope, prepared[2].request_id)
+            captured = reply_style_sample_dependencies(
+                connection, self.fixture.scope, prepared[2].request_id, require_available=False,
+            )
+            self.assertEqual(captured, expected)
+            self.assertNotIn("合成主动保存", repr(captured))
+            after = {table: connection.execute(
+                f"SELECT id,xmin::text FROM public.{table} WHERE owner_id=%s ORDER BY id", (self.fixture.owner_id,),
+            ).fetchall() for table in tables}
+            self.assertEqual(after, before)
+            with self.assertRaises(ReplyStoreInvariantError):
+                reply_style_sample_dependencies(connection, self.fixture.scope, prepared[2].request_id, require_available=True)
+
+    def test_cleanup_style_ids_keep_scope_codec_and_explicit_boolean_mode(self):
+        _, _, references = self._seed_history()
+        prepared = self._prepare(references)
+        original = self._row(prepared[2].request_id)[0]
+        with psycopg.connect(support.DATABASE_URL) as connection:
+            lock_owner_scope(connection, owner_id=self.fixture.owner_id)
+            for scope in (ContactScope(self.fixture.owner_id, self.fixture.other_contact_id),
+                          ContactScope(self.fixture.other_owner_id, self.fixture.contact_id)):
+                with self.subTest(scope=scope), self.assertRaises(ReplyStoreInvariantError):
+                    reply_style_sample_dependencies(connection, scope, prepared[2].request_id, require_available=False)
+            for mode in (None, 0, "false"):
+                with self.subTest(mode=mode), self.assertRaises(ReplyStoreInvariantError):
+                    reply_style_sample_dependencies(connection, self.fixture.scope, prepared[2].request_id,
+                                                    require_available=mode)
+            for field in ("scope", "request_key", "version", "current_payload_sha256", "sample_ids"):
+                with self.subTest(field=field):
+                    changed = json.loads(json.dumps(original))
+                    snapshot = changed["assistant_discussion_snapshot"]
+                    if field == "scope":
+                        snapshot["scope"]["contact_id"] = str(self.fixture.other_contact_id)
+                    elif field == "sample_ids":
+                        identifier = changed["assistant_discussion_style_sample_ids"][0]
+                        changed["assistant_discussion_style_sample_ids"] = [identifier, identifier]
+                    else:
+                        snapshot[field] = {"request_key": str(uuid4()), "version": 2,
+                                           "current_payload_sha256": "不是合法指纹"}[field]
+                    connection.execute("UPDATE public.reply_request SET context_snapshot=%s WHERE id=%s",
+                                       (Jsonb(changed), prepared[2].request_id))
+                    with self.assertRaises(ReplyStoreInvariantError):
+                        reply_style_sample_dependencies(connection, self.fixture.scope, prepared[2].request_id,
+                                                        require_available=False)
+                    connection.execute("UPDATE public.reply_request SET context_snapshot=%s WHERE id=%s",
+                                       (Jsonb(original), prepared[2].request_id))
+
     def test_style_dependency_port_includes_history_and_rejects_other_owner_contact(self):
         old, current, references = self._seed_history()
         prepared = self._prepare(references)
@@ -343,6 +413,56 @@ class ReplyDiscussionDependenciesTest(unittest.TestCase):
                           ContactScope(self.fixture.other_owner_id, self.fixture.contact_id)):
                 with self.subTest(scope=scope), self.assertRaises(ReplyStoreInvariantError):
                     reply_style_sample_dependencies(connection, scope, prepared[2].request_id)
+
+    def test_cleanup_style_ids_reject_foreign_or_missing_sample_membership(self):
+        other_contact = self.samples.save(
+            ContactScope(self.fixture.owner_id, self.fixture.other_contact_id),
+            SaveStyleSample(uuid4(), "合成其他联系人样本。", "manual"),
+        )
+        foreign_contact_id = uuid4()
+        with psycopg.connect(support.DATABASE_URL) as connection:
+            connection.execute(
+                "INSERT INTO public.contact (owner_id,id,display_name) VALUES (%s,%s,'合成其他用户联系人')",
+                (self.fixture.other_owner_id, foreign_contact_id),
+            )
+        other_owner = self.samples.save(
+            ContactScope(self.fixture.other_owner_id, foreign_contact_id),
+            SaveStyleSample(uuid4(), "合成其他用户样本。", "manual"),
+        )
+        local = self.samples.save(self.fixture.scope, SaveStyleSample(uuid4(), "合成本范围样本。", "manual"))
+        prepared = self._prepare()
+        original = self._row(prepared[2].request_id)[0]
+        with psycopg.connect(support.DATABASE_URL) as connection:
+            lock_owner_scope(connection, owner_id=self.fixture.owner_id)
+            for membership in ("seed", "dependency"):
+                for label, identifier in (("other_contact", other_contact.sample_id),
+                                          ("other_owner", other_owner.sample_id), ("missing", uuid4())):
+                    with self.subTest(membership=membership, identifier=label):
+                        changed = json.loads(json.dumps(original))
+                        changed["assistant_discussion_style_sample_ids"] = [
+                            str(identifier if membership == "seed" else local.sample_id),
+                        ]
+                        connection.execute("UPDATE public.reply_request SET context_snapshot=%s WHERE id=%s",
+                                           (Jsonb(changed), prepared[2].request_id))
+                        connection.execute("UPDATE public.style_sample SET dependency_sample_ids=%s WHERE id=%s",
+                                           ([identifier] if membership == "dependency" else [], local.sample_id))
+                        before = connection.execute(
+                            "SELECT xmin::text,context_snapshot FROM public.reply_request WHERE id=%s",
+                            (prepared[2].request_id,),
+                        ).fetchone()
+                        try:
+                            with self.assertRaises(ReplyStoreInvariantError):
+                                reply_style_sample_dependencies(connection, self.fixture.scope, prepared[2].request_id,
+                                                                require_available=False)
+                            self.assertEqual(connection.execute(
+                                "SELECT xmin::text,context_snapshot FROM public.reply_request WHERE id=%s",
+                                (prepared[2].request_id,),
+                            ).fetchone(), before)
+                        finally:
+                            connection.execute("UPDATE public.reply_request SET context_snapshot=%s WHERE id=%s",
+                                               (Jsonb(original), prepared[2].request_id))
+                            connection.execute("UPDATE public.style_sample SET dependency_sample_ids='{}' WHERE id=%s",
+                                               (local.sample_id,))
 
     def test_explicit_sample_survives_session_delete_and_keeps_history_sample_delete_path(self):
         old, current, references = self._seed_history()

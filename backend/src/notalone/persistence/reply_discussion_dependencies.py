@@ -159,11 +159,19 @@ def require_reply_discussion_dependencies(
         return dependencies
 
 
-def reply_style_sample_dependencies(connection: Any, scope: ContactScope, request_id: UUID) -> tuple[UUID, ...]:
-    """返回同范围真实请求/继续祖先的直接及历史样本依赖，供A身份和主动派生样本复用。"""
+def reply_style_sample_dependencies(
+    connection: Any, scope: ContactScope, request_id: UUID, *, require_available: bool = True,
+) -> tuple[UUID, ...]:
+    """返回真实请求/祖先样本身份；删除预捕获可关闭末尾可用性复验。
+
+    调用方持有owner锁。False仅用于父来源和快照清除前的删除依赖捕获，
+    仍保留原范围、codec和样本图；生成、保存及普通读取默认复验可用性。
+    """
 
     from notalone.persistence.style_sample_store import _reply_ancestor_ids
 
+    if type(require_available) is not bool:
+        raise ReplyStoreInvariantError("历史依赖读取模式无效。")
     with _connection(connection).cursor(row_factory=dict_row) as cursor:
         _request_row(cursor, scope, request_id)
         requests = _reply_ancestor_ids(cursor, owner_id=scope.owner_id, request_id=request_id)
@@ -190,7 +198,16 @@ def reply_style_sample_dependencies(connection: Any, scope: ContactScope, reques
             (list(identifiers), scope.owner_id, scope.contact_id),
         ).fetchall()
         result = tuple(row["id"] for row in dependencies)
-        _require_samples(cursor, scope, result)
+        if require_available:
+            _require_samples(cursor, scope, result)
+        elif result:
+            row = cursor.execute(
+                "SELECT count(*) AS count FROM public.style_sample "
+                "WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[])",
+                (scope.owner_id, scope.contact_id, list(result)),
+            ).fetchone()
+            if row["count"] != len(result):
+                raise ReplyStoreInvariantError("历史样本编号不属于当前联系人。")
         return result
 
 
