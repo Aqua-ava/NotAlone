@@ -192,3 +192,13 @@ C新增正式装配HTTP组合test_authentic_expression_replacement：暂停旧�
 2026-10-11 A14接入最终验证：原assistant_session_api与assistant_discussion_context完整56项GREEN31.452秒，正式53／repeat0／自有库精确剩余0；与前述25项替换组合分别执行，旧租约拒绝诊断保留。七后端文件最终Spec新增P0–P2为0、Standards硬0／重要Fowler0；限定三源码mypy及七文件compile通过。该切片仅接通当前意图替换和样本删除组合，已知prepare竞态及A完整生命周期、公开页面仍未验收，不关闭E06。
 
 2026-10-11 总协调仅净接正式3fd63cc及a11856e两条新增真实HTTP组合测试，B重确认与A替换源码分别已经root f6d03fb／4f8e1f4正式集成，不再次复制提供者。原两test完整actual GREEN9.280秒／skip0、正式001–053／重复0／自有库剩余0，维度显式None；回应／主动探索样本不进入B载荷，明确重确认零模型保同版Skill，生成实际引用样本并以当前意图为准。样本删除后依赖A输入／候选redacted、CURRENT None和生成重放拒绝；没有样本依赖的B父子输入active，旧metadata等值200只读且不推进指针，变体及新reconfirm键仍拒，未把历史回执误当泄露；同一已删生成改用新idempotency_key的实际/replies请求尚未单独验证，不能用metadata接口的拒绝替代。替换使用真实模型优先级门控，旧迟到拒、新当前意图保留、重建重放和两turn擦除均到达。全部为合成模型；完整A17中断和公开C3／自然度仍未据此验收，票claimed。
+
+### 2026-10-11 补齐删除后新生成键的实际 HTTP 证据
+
+- root 的 Spec 审查指出原组合只验证旧生成键及新重确认键，不能据此宣称新生成键也拒绝。现保留原 B suggestion 的全部 UUID，以 fresh `idempotency_key` 请求 `/replies`；实际 CURRENT 为 None，HTTP 协议以省略 expected 字段表示。
+- 两场景实际精确 `409 / assistant_session_rejected / input_version_stale`：B 的 CURRENT 读取先验证旧讨论输入仍为当前，不能在样本删除后重新激活历史讨论输入。不宣称到达后续 request-key 校验。独立 B 历史 metadata 同键等值 200、全部 GET 不变、生成 input/body 已清空及零额外模型调用断言仍保留。
+- 最小实际命令：在 Conda NotAlone、backend 目录，`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src python -m unittest tests.integration.server.test_authentic_expression_reconfirmation -v`，1 test／两场景 GREEN 5.600s；正式迁移夹具、随机自有数据库清理确认，维度门禁 None。
+- 首次编辑因相对路径误指 backend/backend 未应用，原测试意外重跑 1 GREEN 10.861s，不算新增覆盖。随后显式 null 在 HTTP 解析层两 FAIL（400，5.006s）；省略后实际两 FAIL（input_version_stale 而预期 exploration_stale，5.888s）。这两次为测试协议与原因预期修正，保留失败记录，未改产品或放宽为任意非 200。
+- 数据处理与接口无变化，只有合成验证补强；不把本结果冒 A054 正式中断、完整 E06 或真实模型质量通过。
+
+2026-10-11 总协调精确消费2e70b0a的六行生成请求补测，与正式替换及新prepare提供者实际联跑42项全部通过35.381秒／skip0、正式001–053／重复0／自有库剩余0。删除样本后的actual CURRENT None以省略expected字段表示，原已删生成改用全新idempotency_key、保留旧B确认引用，实际/replies返回409及精确input_version_stale；合法历史metadata200、GET不变和模型计数不增均保持。原覆盖陈述P2据这条实际生成路径闭合，未声称后续普通独立输入或新的有效B确认也应拒绝。新prepare的B完成后继指针静态P2另归A，仍待实际反向和正式fix，本次只提交C测试／记录两文件，不混该未闭提供者。

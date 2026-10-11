@@ -74,6 +74,12 @@ class AuthenticExpressionReconfirmationTests(FidelityHttpFixture, unittest.TestC
                     self.assertIsNone(turn["input"])
                     self.assertIsNone(turn["reply"])
                 self.assertNotEqual(rebuilt.request(path + "/replies", body)[0], 200)
+                # 真实新生成键沿旧 B 引用请求；CURRENT 已清空，不能重新激活历史讨论输入。
+                fresh_generation = {**body, "idempotency_key": str(uuid4())}
+                # HTTP 的空 expected 以省略字段表示；显式 null 会在解析层拒绝。
+                fresh_generation.pop("expected_input_version_id")
+                self.assertEqual(rebuilt.request(path + "/replies", fresh_generation),
+                                 (409, {"error": "assistant_session_rejected", "reason": "input_version_stale"}))
                 # 样本只参与生成；无样本依赖的 B 讨论回执允许只读重放，不能推进当前指针。
                 self.assertEqual(rebuilt.request(endpoint, request), (200, receipt))
                 self.assertNotEqual(rebuilt.request(endpoint, {**request, "request_key": str(uuid4())})[0], 200)
