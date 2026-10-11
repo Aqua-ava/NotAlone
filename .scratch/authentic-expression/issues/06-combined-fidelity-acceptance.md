@@ -18,9 +18,9 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 
 - [ ] 回应、主动、消息组及连续修改均覆盖样本冲突、整组承诺一致性、来源依赖和逐例报告；复用前票测试而不补造基础功能。
 - [x] 通过C02真实业务恢复入口验证：引用样本后删除样本或原始来源，再重连/重试/继续，不能取得已删内容，无关讨论保留。
-- [ ] 通过R07验证存在样本且启用Skill时，方向探索实际模型输入不含样本；方向确认后生成才有界选取样本。
-- [ ] 通过C03验证删助手会话后已主动保存样本仍可查看和使用，但旧讨论不可恢复；随后删除样本或其原始来源，样本及相关派生内容不可得。
-- [ ] 交付离线报告和失败/未知说明，不等真实模型预算；无外部评测时明确语义与自然度未验证。
+- [x] 通过R07验证存在样本且启用Skill时，方向探索实际模型输入不含样本；方向确认后生成才有界选取样本。
+- [x] 通过C03验证删助手会话后已主动保存样本仍可查看和使用，但旧讨论不可恢复；随后删除样本或其原始来源，样本及相关派生内容不可得。
+- [x] 交付离线报告和失败/未知说明，不等真实模型预算；无外部评测时明确语义与自然度未验证。
 - [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
 - [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
@@ -220,3 +220,66 @@ C新增正式装配HTTP组合test_authentic_expression_replacement：暂停旧�
 精确消费 C 正式 `3d61a819e32ca485d4e2a7298180b0e8cefba3c5` 的接口与原同名 PG 测试，不取未提交 A lineage/carry 实现。总协调在 Conda NotAlone、禁 dotenv/tracing、Core 维度 None、自有随机隔离库中运行 `python /private/tmp/notalone-coordinator-style-samples-no-dimension.py /Users/local-user/learn/NotAlone tests.integration.persistence.test_reply_discussion_dependencies`，实际 16/16 通过（18.945s）；正式生产迁移 001–053 与账本逐名一致，重复新增 0、自有库清理剩余 0。单文件限定 mypy、两文件 compile 与差异检查通过。Standards hard 0／重要 Fowler 0，Spec 新增 P0–P2 为 0。
 
 这里只完成可消费的只读端口；A 实际身份复验、carry 与传递删除闭包仍待正式实现和真实集成，不关闭 E06 或外推完整页面与原生验收。
+
+
+本段为 C 负责人正式提交 `fd34afa955e148ff3a7be45d3ceb9c62b6eddb54` 的历史证据，计量属于其独立工作树。
+
+
+### 2026-10-11 C03 样本独立保留与后续删除的完整公开组合通过
+
+在正式 HEAD `1898859`，依总协调具名窗口，Conda NotAlone／Node25／desktop 执行 `npm run test:pages -- --case authentic-expression-session-retention --timeout-seconds 240`。独立 fresh status 35871 exit0 absent 后单实例启动，整个窗口冻结 runtime/source/UI/fixture；session50504 实际 exit0，两分支均 `page_test_scenario_passed`。
+
+两场均经生产页面真实主动保存候选为样本，UI 删除旧助手会话，HTTP确认旧SID404及样本列表逐字不变，再UI新开会话确认零额外模型调用。新会话当前明确拒绝生成实际有界引用该样本，实际模型载荷核当前意图与sample UUID／原文。随后分别UI删除样本或UI删除原始来源，确认样本列表空、新turn input/reply已redacted、CURRENT None、旧SID仍404、原请求重放拒绝，模型总调用保持2。由此勾选本票 C03 条目，未勾未完成的消息组与连续修改组合。
+
+收尾 quiet28／active0／onscreen0／maxApps1／policies[2]／browserCount1／cleanupConfirmed=true；ElectronRun=false、nativeAcceptance=false。独立 fresh status86042 exit0 absent，已释放本树冻结与OS窗口。无生产代码变更，本次只登记本人实际公开证据；不借其他树结果，不冒真实模型质量、原生或整E06完成。A/B后续正式接口依赖仍继续。
+
+
+本段为 C 负责人正式提交 `da1de799a4dd91078fe71d1ccc13f5a81788805a` 的历史证据，计量属于其独立工作树。
+
+
+### 2026-10-11 按原条目收敛剩余验收范围
+
+独立逐条 Spec 核对确认 R07 窄组合已具备实际证据：`test_authentic_expression_skill_exploration` 两场真实 HTTP 的完整模型出站请求（含 system、messages、tools、settings）排除七个样本 UUID 与正文；明确确认／回答后才引用五个完整样本，实际 Skill Tool 与版号一致，重放、删除、完整预算证据见本票历史及正式53迁移回归。故勾选第3条，不把 R07 整票或未新增的页面功能作为这条的新前置。
+
+三套离线报告保留实际逐例输入、期望、完整输出、UUID及判定依据，故意语义失败和未人工评分均如实呈现；`quality_verified=false`，自然度及真人质量未知。第5条已完成，不等待真实模型预算，不追加外部实验。
+
+本票仍 claimed。第1条生产页面的消息组／连续修改＋样本冲突、整组承诺一致性及删除重连链尚缺完整实际回执；已有三套 HTTP 捕获和版本编辑／选择 HTTP 不冒充该页面组合。待 A11／B 正式 typed UI 接缝交付后补此范围，不将 A13／A18 整票扩为 E06 新完成条件；涉及现有来源边界的正式薄 consumer 配合仍继续履行。隐私和实际交付记录条目在最终组合收尾时再核对，未提前勾整票。
+
+
+本段为 C 负责人正式提交 `9ee5fe497a2a0f2cdca192777a71dd6feab20d40` 的历史证据，计量属于其独立工作树。
+
+
+### 2026-10-11 C02 继续请求断言补强待公开复验
+
+再次核验发现旧 `authentic-expression-recovery.ts` 继续请求显式传递实际为 None 的 `expected_input_version_id`，可能在 HTTP 解析层以400被拒，原非200断言不能证明到达已删除候选守卫。原两分支的重连、旧键与依据拒绝、独立讨论保留、清除及模型计数通过记录仍有效，但不外推这一窄请求。
+
+只修改测试：先断言真实 CURRENT 为 null，再省略 expected 字段，要求精确 `409 / assistant_session_rejected / continued_candidate_unavailable`，并核请求前后完整 GET 不变；不修改生产或弱化其他断言。desktop、Node25的 `npm run typecheck` 实际通过，尚未公开运行增强断言。C02暂撤勾，已向总协调申请原 `authentic-expression-recovery` 单label180，在B和root已排窗口后依具名ACK及freshstatus执行。数据处理无变化，无新模型实验。
+
+
+本段为 C 负责人正式提交 `e253d71361deed6b401e98c420df2d373402f2ca` 的历史证据，计量属于其独立工作树。
+
+
+### 2026-10-11 C02 加强断言后的完整公开组合通过
+
+依总协调03:14:03具名窗口，正式HEAD `3d61a819e32ca485d4e2a7298180b0e8cefba3c5`（包含测试补强 `9ee5fe4`），Conda NotAlone／Node25／desktop执行 `PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false npm run test:pages -- --case authentic-expression-recovery --timeout-seconds 180`。独立freshstatus24962 actualexit0 absent后启动单实例并冻结runtime/source/UI/fixture；session31868 actualexit0，删除样本和删除原始来源两个完整场景均 `page_test_scenario_passed`，具名case通过。
+
+本轮实际确认CURRENT为null，省略expected字段后继续请求精确返回 `409 / assistant_session_rejected / continued_candidate_unavailable`，请求前后完整GET等值，不能以解析层400替代候选守卫。旧请求和依据不可得，独立讨论同键等值可读；真实断线重连及重新装配backend／页面宿主均只恢复独立讨论，受影响turn无input/reply、样本列表空。两个分支实际模型载荷数分别保持2和3，恢复／拒绝不增加调用。由此重新勾选C02条目；之前较宽非200断言的局限与待验记录保留。
+
+收尾quiet34／activeSamples0／maxOnscreenWindows0／maxRegisteredApps1／activationPolicies[2]／browserCount1／cleanupConfirmed=true，ElectronRun=false、nativeAcceptance=false。独立freshstatus17153 actualexit0 absent后已向总协调和B发布全部冻结与OS窗口释放记录。数据库和模型仍由原合成隔离夹具管理，没有产品数据处理或接口变化；本次只登记本人真实公开证据，不将受控结果解释为真实模型质量。
+
+E06继续claimed：公共消息组／连续修改的样本组合仍待A11／B正式接口；A唯一selector的来源清理薄接线仍按正式交付配合，不把整A13／A18扩为本票新条件。没有新增外部模型、真实App、微信或OCR验收。
+
+本次唯一文档增量最终Standards硬要求0／重要possible Fowler0、Spec新增P0–P3为0，`git diff --check`通过。
+
+
+### 总协调实际公开组合：恢复与独立样本保留
+
+精准消费正式 C `3dad2a6`／`9ee5fe4` 的同文件公开用例和粘贴测试适配；登记仅新增一个 `authentic-expression-session-retention` label、import 与 dispatch，保留原两组上限、有限时段、静默采样及失败门槛。
+
+在 Conda NotAlone、禁 dotenv/tracing 的主树执行 `npm --prefix desktop run test:pages -- --case authentic-expression-recovery --case authentic-expression-session-retention --timeout-seconds 240`，session87984 实际 exit0。样本／原始来源删除后的恢复两个场景、先删除助手会话保留独立样本再删除样本／原始来源两个场景，共4个完整公开场景全部通过；全部沿生产页面→认证 HTTP→每场隔离 PG。旧SID404、独立样本列表等值、新开0额外模型、真实当前拒绝及样本载荷、CURRENTNone与受影响input/reply擦除、旧键/继续/依据拒绝、重连重建与无关讨论保留的原断言保持。加强继续请求省略空expected字段并精确409 continued_candidate_unavailable，不能以解析400替代守卫。
+
+quiet51／activeSamples0／maxOnscreenWindows0／maxRegisteredApps1／activationPolicies[2]／单Chrome／cleanupConfirmed=true；ElectronRun=false、nativeAcceptance=false。独立freshstatus444285实际exit0 absent，全部自有资源与OS窗已释放。当前两C入口及其所有传递生产源码限定strict TSC实际exit0；主树77样本＋8目录＋4删除门禁Node共89/89通过（279.169ms、skip0）。首次Node从根目录启动导致按desktop相对路径查找源码失败，未执行相关源码；纠正cwd后的实际通过单列，原入口错误未记成产品RED。
+
+测试时主树同时有尚未正式提交的 A09/A10 UI、A835准备接口及 B7eda共享生产切片；本次只覆盖明确新开与直接生成，不覆盖B活跃自动更新的已知旧删除状态P2，也不覆盖A准备回执已知完成/CURRENT竞争。此前全树TSC B新case136一处unknown错误随后精确消费B正式3b19单行payloads.toHaveLength修正、实际全树typecheck通过；未用限定检查冒全树通过。C样本编辑擦除适配的公开通过属于负责人既有证据，本主树本窗口只跑上述4场，不混计。
+
+本票仍claimed，原第1条消息组与连续修改的公开样本组合继续依A11/B正式typed接口；不将整个A13/A18、原生或外部质量评测追加为新关闭条件。没有真实聊天、外部模型或消息发送。

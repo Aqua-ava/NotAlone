@@ -7,7 +7,6 @@ const replyText = '合成候选只表达本次拒绝，不新增约定。';
 const savedManual = '主动保存且独立保留的合成手写样本。';
 const unsavedCandidate = '合成候选片段粘贴后编辑，但尚未主动保存。';
 const unsavedManual = '这段独立手写与复制候选无关，尚未保存。';
-const unsavedSample = '主动保存样本的列表片段粘贴后继续编辑。';
 
 async function copyCandidate(editor: Locator, size: number) {
   await editor.evaluate((element, length) => {
@@ -23,6 +22,7 @@ async function pasteAndEdit(manual: Locator, fragment: string, text: string) {
     const clipboardData = new DataTransfer(); clipboardData.setData('text/plain', value);
     element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, clipboardData }));
   }, fragment);
+  await expect(manual).toHaveValue(fragment);
   await manual.fill(text);
 }
 
@@ -64,13 +64,21 @@ async function editorAfterSessionDeletion(pages: RewritePages, kind: 'candidate'
       const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
       element.dispatchEvent(new ClipboardEvent('copy', { bubbles: true }));
     }, fragment.length);
-    await pasteAndEdit(manual, fragment, unsavedSample);
+    await manual.evaluate((element, value) => {
+      const clipboardData = new DataTransfer(); clipboardData.setData('text/plain', value);
+      const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData });
+      element.dispatchEvent(event);
+      if (!event.defaultPrevented) throw new Error('样本粘贴必须阻止默认插入。');
+    }, fragment);
+    await expect(helper.getByRole('alert').filter({ hasText: '无法核验粘贴来源' })).toBeVisible();
+    await expect(manual).toHaveValue('');
+    await expect(helper.getByRole('button', { name: '主动保存手工文字', exact: true })).toBeDisabled();
   } else {
     await copyCandidate(editor, fragment.length);
     if (kind === 'candidate') await pasteAndEdit(manual, fragment, unsavedCandidate);
     else await manual.fill(unsavedManual);
   }
-  const expectedBefore = kind === 'candidate' ? unsavedCandidate : kind === 'manual' ? unsavedManual : unsavedSample;
+  const expectedBefore = kind === 'candidate' ? unsavedCandidate : kind === 'manual' ? unsavedManual : '';
   await expect(manual).toHaveValue(expectedBefore);
   await helper.getByRole('button', { name: '删除当前助手会话', exact: true }).click();
   const confirmation = helper.getByRole('group', { name: '确认删除助手会话', exact: true });
@@ -93,9 +101,15 @@ async function editorAfterSessionDeletion(pages: RewritePages, kind: 'candidate'
   expect((await rewriteBackend.request(`/api/contacts/${contactId}/replies/${generation.data.reply_request_id}/evidence`)).status).not.toBe(200);
 
   if (kind !== 'manual') {
-    if (kind === 'candidate') await pasteAndEdit(manual, fragment, '删除后再次粘贴旧片段，不能洗为手工样本。');
-    await helper.getByRole('button', { name: '主动保存手工文字', exact: true }).click();
-    await expect(helper.getByRole('alert').filter({ hasText: '样本操作暂时不可用' })).toBeVisible();
+    await manual.evaluate((element, value) => {
+      const clipboardData = new DataTransfer(); clipboardData.setData('text/plain', value);
+      const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData });
+      element.dispatchEvent(event);
+      if (!event.defaultPrevented) throw new Error('失效粘贴必须阻止默认插入。');
+    }, fragment);
+    await expect(helper.getByRole('alert').filter({ hasText: '无法核验粘贴来源' })).toBeVisible();
+    await expect(manual).toHaveValue('');
+    await expect(helper.getByRole('button', { name: '主动保存手工文字', exact: true })).toBeDisabled();
     expect((await rewriteBackend.request(samplePath)).data).toEqual(beforeSamples.data);
     await manual.fill('');
     await manual.fill('清空来源后新写的独立合成样本。');
@@ -115,7 +129,7 @@ export async function styleSessionEditorErasure(browser: Browser, origin: string
   const scenarios = [
     ['candidate', '删除助手会话清除未保存候选片段，主动保存样本独立保留'],
     ['manual', '只复制未粘贴的候选不影响独立手写编辑'],
-    ['sample', '删除助手会话保留已保存样本列表复制及其来历'],
+    ['sample', '列表粘贴当场拒绝，删除助手会话仍保留已保存样本'],
   ] as const;
   for (const [kind, name] of scenarios) {
     process.stdout.write(`page_test_scenario: ${name}\n`);

@@ -103,9 +103,15 @@ async function deletionRecovery(pages: RewritePages, host: PageHost, userData: s
   expect((await rewriteBackend.request(sessionPath + '/replies', reference.request)).status).not.toBe(200);
   const saved = await rewriteBackend.request(sessionPath);
   expect(saved.status).toBe(200);
-  expect((await rewriteBackend.request(sessionPath + '/replies', { ...reference.request, idempotency_key: randomUUID(),
-    expected_input_version_id: saved.data.current_input_version_id,
-    continued_from_candidate_id: (reference.result.candidates as { candidate_id: string }[])[0].candidate_id })).status).not.toBe(200);
+  expect(saved.data.current_input_version_id).toBeNull();
+  const continuation = { ...reference.request, idempotency_key: randomUUID(),
+    continued_from_candidate_id: (reference.result.candidates as { candidate_id: string }[])[0].candidate_id };
+  // HTTP 空 expected 以省略字段表示，不能让解析层 400 代替已删候选守卫。
+  delete (continuation as Record<string, unknown>).expected_input_version_id;
+  expect(await rewriteBackend.request(sessionPath + '/replies', continuation)).toEqual({
+    status: 409, data: { error: 'assistant_session_rejected', reason: 'continued_candidate_unavailable' },
+  });
+  expect(await rewriteBackend.request(sessionPath)).toEqual(saved);
   expect((await rewriteBackend.request(`/api/contacts/${contactId}/replies/${reference.result.reply_request_id}/evidence`)).status).not.toBe(200);
   expect((await rewriteBackend.request(sessionPath + '/replies', independent.request)).data).toEqual(independent.result);
 
@@ -138,6 +144,75 @@ export async function authenticExpressionRecovery(browser: Browser, origin: stri
     const name = removal === 'sample' ? '删除样本后重连与重开保留独立讨论' : '删除原始来源后重连与重开不复活样本和派生讨论';
     process.stdout.write(`page_test_scenario: ${name}\n`);
     await withRewritePages(browser, origin, (pages, host, userData) => deletionRecovery(pages, host, userData, browser, origin, removal));
+    process.stdout.write(`page_test_scenario_passed: ${name}\n`);
+  }
+}
+
+
+// C03：删除讨论只保留主动保存的最终样本；原始来源随后删除仍传递清理。
+export async function authenticExpressionSessionRetention(browser: Browser, origin: string) {
+  for (const removal of ['sample', 'source'] as const) {
+    const name = `删除助手会话后样本独立再用，随后删除${removal === 'sample' ? '样本' : '原始来源'}清除新派生`;
+    process.stdout.write(`page_test_scenario: ${name}\n`);
+    await withRewritePages(browser, origin, async (pages) => {
+      const { manager, helper, rewriteBackend } = pages;
+      const contactId = rewriteBackend.data.contact_ids[0];
+      await chooseContact(manager, helper, contactId);
+      await helper.getByRole('button', { name: '回应消息', exact: true }).click();
+      await helper.getByRole('radio', { name: /甲的私密合成历史/ }).click();
+      await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill(sourceDirection);
+      const first = await generate(pages, sourceReply);
+      await helper.getByText('我的表达样本', { exact: true }).click();
+      await helper.getByRole('button', { name: '主动保存说法1为样本', exact: true }).click();
+      const list = helper.getByRole('list', { name: '表达样本目录', exact: true });
+      await expect(list.getByText(sourceReply, { exact: true })).toBeVisible();
+      const samplePath = `/api/contacts/${contactId}/style-samples`;
+      const savedSamples = await rewriteBackend.request(samplePath);
+      expect(savedSamples.status).toBe(200);
+      expect(savedSamples.data.samples).toHaveLength(1);
+      const sample = (savedSamples.data.samples as Array<{ sample_id: string; origin_kind: string; source_ids: string[] }>)[0];
+      expect(sample.origin_kind).toBe('candidate');
+      expect(sample.source_ids.length).toBeGreaterThan(0);
+      const oldPath = `/api/contacts/${contactId}/assistant-sessions/${first.result.session_id}`;
+      await helper.getByRole('button', { name: '删除当前助手会话', exact: true }).click();
+      await helper.getByRole('group', { name: '确认删除助手会话', exact: true })
+        .getByRole('button', { name: '确认删除会话', exact: true }).click();
+      await expect(helper.getByRole('status').filter({ hasText: '当前助手会话已删除' })).toBeVisible();
+      expect((await rewriteBackend.request(oldPath)).status).toBe(404);
+      expect(await rewriteBackend.request(samplePath)).toEqual(savedSamples);
+      await expect(list.getByText(sourceReply, { exact: true })).toBeVisible();
+      await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })).toHaveCount(0);
+      await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
+      await expect(helper.getByText('当前会话还没有讨论。', { exact: true })).toBeVisible();
+      expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
+      await helper.getByRole('button', { name: '主动聊聊', exact: true }).click();
+      await helper.getByRole('textbox', { name: '主动目的', exact: true }).fill(currentIntent);
+      const second = await generate(pages, referenceReply);
+      expect(second.result.session_id).not.toBe(first.result.session_id);
+      expect((second.result.context_receipt as { style_sample_ids: string[] }).style_sample_ids).toEqual([sample.sample_id]);
+      const payloads = (await rewriteBackend.command('observations')).payloads as Record<string, unknown>[];
+      expect(payloads).toHaveLength(2);
+      expect(payloads[1].fidelity_contract).toMatchObject({ current_intent: { text: currentIntent } });
+      expect(payloads[1].style_references).toEqual([expect.objectContaining({ sample_id: sample.sample_id, text: sourceReply })]);
+      const nextPath = `/api/contacts/${contactId}/assistant-sessions/${second.result.session_id}`;
+      if (removal === 'sample') {
+        await helper.getByRole('button', { name: `删除表达样本：${sourceReply}`, exact: true }).click();
+      } else {
+        await manager.getByRole('button', { name: '关系资料', exact: true }).click();
+        const sources = manager.getByRole('region', { name: '来源删除管理', exact: true });
+        await sources.getByRole('button', { name: '删除来源', exact: true }).click();
+        await manager.getByRole('button', { name: '确认删除来源', exact: true }).click();
+        await expect(sources.getByText('已删除，已通过不可检索校验', { exact: true })).toBeVisible();
+      }
+      await expect.poll(async () => (await rewriteBackend.request(samplePath)).data.samples).toEqual([]);
+      const erased = await rewriteBackend.request(nextPath);
+      expect(erased.status).toBe(200);
+      expect(erased.data.current_input_version_id).toBeNull();
+      expect(erased.data.turns).toEqual([expect.objectContaining({ state: 'redacted', input: null, reply: null })]);
+      expect((await rewriteBackend.request(nextPath + '/replies', second.request)).status).not.toBe(200);
+      expect((await rewriteBackend.request(oldPath)).status).toBe(404);
+      expect((await rewriteBackend.command('observations')).payloads).toHaveLength(2);
+    });
     process.stdout.write(`page_test_scenario_passed: ${name}\n`);
   }
 }
