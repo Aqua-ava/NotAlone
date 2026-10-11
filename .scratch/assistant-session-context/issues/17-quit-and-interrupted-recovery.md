@@ -71,3 +71,5 @@ Conda NotAlone、禁 dotenv／外部追踪、PGPORT=55441，以唯一隔离 runn
 本段是正式 HTTP 终态协议与隔离 PG 证据，失败回包 gate 的 Main／宿主组合仍由唯一桌面消费者复验，未冒为本人公开页面或原生退出通过。原 AC 和 State claimed 保留，人工／真实 App 本轮未执行，无外部模型、OCR、微信、发送或远端操作。
 
 Root 净接正式 `3fe38933` 后在剥除模型凭据、dotenv与追踪的受控隔离 runner 独立运行完整 `tests.integration.server.test_assistant_generation_lifecycle`：**10 GREEN／11.106s／skip0**，实际55迁移逐名一致／repeat0、自有内外库残留0；单源码限定mypy、两文件编译与diff通过。迟到失效负例保留原无正文异常类别日志。只证实HTTP终态和租约分类；宿主失败回包gate及另一类运行中捕获来源闭包仍接续，原验收及claimed保留。
+
+Root 净集成 `e94dfa2e` 的唯一 `AssistantGenerationJobs` 准备登记API与新测试，不导入另一套registry。未知键先登记验证范围，实际回执迁移同项；退出Promise等待准备和实际异步确认，明确非生成结果才收口，缺回执保留纯身份。主树 `node --test tests/assistant-generation-preparation.test.mjs` 实际 **6 GREEN／194.2925ms／skip0**，完整TypeScript及diff通过，固定提供者两轴无新增阻塞。这是纯元数据Node证据；增强原target停止句柄、宿主HTTP退出与typed生命周期继续由唯一A17消费者和B消费后复验，原票claimed不改。
