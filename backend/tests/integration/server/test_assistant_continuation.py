@@ -206,7 +206,10 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(continued["continuation"]["version_id"], second["candidate_id"])
         self.assertEqual(continued["continuation"]["effective_requirements"], ["自然一点"])
         payload = self._model_payload()
-        self.assertEqual(payload["draft_text"], "第二种合成说法。")
+        self.assertEqual(payload["draft_text"], "明天再聊。")
+        self.assertEqual([item["text"] for item in payload["continuation_reference"]["messages"]],
+                         ["第二种合成说法。"])
+        self.assertFalse(payload["continuation_reference"]["is_current_draft"])
         self.assertIn("自然一点", payload["user_instruction"])
         self.assertEqual(len(self.reply_model.seen_calls), 2)
         saved = self._get(self.backend, path)["turns"][-1]
@@ -239,10 +242,10 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
 
         self.assertEqual(status, 200, continued)
         self.assertEqual(continued["continuation"]["version_id"], edited["default_display_version_id"])
-        self.assertEqual(self._model_payload()["draft_text"],
-                         "这是用户明确编辑的第一段。\n\n这是用户明确编辑的完整第二段。")
+        self.assertEqual(self._model_payload()["draft_text"], "明天再聊。")
         reference = self._model_payload()["continuation_reference"]
-        self.assertTrue(reference["is_current_draft"])
+        self.assertEqual([item["text"] for item in reference["messages"]], [item["text"] for item in messages])
+        self.assertFalse(reference["is_current_draft"])
         self.assertEqual(reference["version_id"], edited["default_display_version_id"])
         saved = self._get(self.backend, path)["turns"][-1]
         self.assertEqual(saved["input"]["continuation"], continued["continuation"])
@@ -371,7 +374,9 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(continued["continuation"]["version_id"], original["version_id"])
         self.assertEqual(continued["continuation"]["effective_requirements"], ["自然一点"])
         self.assertEqual(self._model_payload()["user_instruction"], "自然一点")
-        self.assertEqual(self._model_payload()["draft_text"], "第二种合成说法。")
+        self.assertEqual(self._model_payload()["draft_text"], "明天再聊。")
+        self.assertEqual([item["text"] for item in self._model_payload()["continuation_reference"]["messages"]],
+                         ["第二种合成说法。"])
         self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
         self.assertEqual(len(self.reply_model.seen_calls), 2)
 
@@ -398,7 +403,9 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(continued["continuation"]["version_id"], selected_version_id)
         self.assertEqual(continued["continuation"]["effective_requirements"], ["正式一点", "简短一点"])
         self.assertEqual(self._model_payload()["user_instruction"], "正式一点；简短一点")
-        self.assertEqual(self._model_payload()["draft_text"], "第二种合成说法。")
+        self.assertEqual(self._model_payload()["draft_text"], "明天再聊。")
+        self.assertEqual([item["text"] for item in self._model_payload()["continuation_reference"]["messages"]],
+                         ["第二种合成说法。"])
         self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
         self.assertEqual(len(self.reply_model.seen_calls), 2)
 
@@ -1113,7 +1120,8 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                              (503, {"error": "assistant_session_save_failed"}))
         saved = self._get(self.backend, path)
         self.assertEqual(saved["turns"][-1]["state"], "failed")
-        self.assertEqual(saved["turns"][-1]["input"]["content"]["draft_text"], "第二种合成说法。")
+        self.assertEqual(saved["turns"][-1]["input"]["content"], continued["effective_input"])
+        self.assertEqual(saved["turns"][-1]["input"]["content"]["direction"], "拒绝邀约")
         self.assertEqual(saved["current_input_version_id"], saved["turns"][-1]["input_version_id"])
         with psycopg.connect(self.database_url) as connection:
             missing = connection.execute(
@@ -1156,7 +1164,8 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                              (503, {"error": "assistant_session_save_failed"}))
         saved = self._get(self.backend, path)
         self.assertEqual(saved["turns"][-1]["state"], "failed")
-        self.assertEqual(saved["turns"][-1]["input"]["content"]["draft_text"], "第二种合成说法。")
+        self.assertEqual(saved["turns"][-1]["input"]["content"], continued["effective_input"])
+        self.assertEqual(saved["turns"][-1]["input"]["content"]["purpose"], "自然地问候一下")
         with psycopg.connect(self.database_url) as connection:
             missing = connection.execute(
                 "SELECT count(*) FROM public.reply_request WHERE owner_id=%s AND idempotency_key=%s",

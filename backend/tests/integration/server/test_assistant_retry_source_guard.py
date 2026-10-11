@@ -72,7 +72,10 @@ class AssistantRetrySourceGuardHttpTest(FidelityHttpFixture, unittest.TestCase):
         interrupted = next(turn for turn in observed["turns"] if turn["turn_id"] == prepared["turn_id"])
         self.assertEqual(interrupted["interruption_reason"], "app_quit")
         self.assertIsNone(interrupted["input"]["continued_from_candidate_id"])
-        self.assertEqual(interrupted["input"]["content"]["type"], "rewrite_draft")
+        self.assertEqual(interrupted["input"]["content"], continued["effective_input"])
+        self.assertEqual(interrupted["input"]["content"]["type"], "reply_to_message")
+        self.assertEqual(interrupted["input"]["content"]["target_message_id"], target)
+        self.assertEqual(interrupted["input"]["content"]["direction"], "拒绝邀约")
         self.assertEqual(len(self.reply_model.seen_calls), 2)
         retry = {"contact_id": contact, "idempotency_key": str(uuid4()), "skill_disabled": True,
                  "expected_input_version_id": prepared["input_version_id"],

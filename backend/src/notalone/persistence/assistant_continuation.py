@@ -193,11 +193,8 @@ def reserve_continuation_in_transaction(
                               user_instruction=user_instruction, clarification_answer=None)
         else:
             content = RewriteDraft(intention, user_instruction, old_content.include_relationship_context)
-    elif reference is not None:
-        content = RewriteDraft(reference.text, user_instruction,
-                               old_content.include_relationship_context if isinstance(old_content, RewriteDraft) else True)
-        intent_field = "draft_text"
     else:
+        # 编号只选择说法参考；旧候选不能替换本次明确意愿或用户原句。
         content = replace(old_content, user_instruction=user_instruction)
     metadata = {
         "version": 1, "submission": submission,

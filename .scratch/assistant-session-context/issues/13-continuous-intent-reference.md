@@ -106,3 +106,14 @@ node --input-type=module -e 'import {build} from "esbuild"; const result=await b
 固定 ONLY3 SHA256 `a5ea8500ac034d17a6d4f4f08ade3e0de9ac7c594c7b751666ac97cf783638bf` 经独立 Standards 硬性违例0／新增重要possible Fowler0与独立 Spec 新增P0–P3为0，未借两轴为运行证据。这里只关闭已复现的累计要求提供者缺口；公开 typed 控件、宿主／页面组合继续由正式消费者验证，原13 State claimed和六条未勾AC不预填，真人／真实App未执行。没有新增writer、图、DDL、正文缓存、私人资料、OCR、微信、外部模型或发送，也未push、发布或部署。
 
 Root 净接正式 `9463f7db` 的两源码与七项新增HTTP测试增量，保留已存在选定版本修复和dca准备协议。主树受控隔离runner独立完整 `test_assistant_continuation` **51 GREEN／75.849s／skip0**，续答内层与外层精确清理0；独立 `discover -s tests/unit/reply -t .` **295 GREEN／1.630s／skip0**。两运行均真实55迁移逐名一致／repeat0／自有库剩余0，未有外部模型凭据。两源码限定mypy、三文件编译与diff通过；单次公开4096限制保持、完整累积由原预算守卫计量。旧无正文租约异常和合成Skill permission-denied负例提示保留，均无业务失败。公开typed实际结果另由B/C具名页面证据集成，不借HTTP关闭页面或原生要求。
+### 本轮编号参考不替代当前意愿的修复
+
+2026-10-11 独立C测试正式 `116a5bc8` 的三模式反例经A实际复验：回应、主动、用户原稿都明确拒绝，旧AI候选故意为答应及具体承诺；同body真实prepare五字段／0模型后execute，`fidelity_contract.current_intent`却变旧AI全文，实际 **3 RED／3.618s／exit1**。最窄复用旧正式 `e0946295` 的分支修正：编号只选择完整说法参考，未明确改口时保留原content类型及direction／purpose／draft_text；低权重 `continuation_reference`、实际版本UUID、来源CAS、累计要求、重放与明确intention_update均沿原路径，不另建writer或DTO。原三项 **3 GREEN／5.939s／exit0**，每场实际2次调用，共6真实模型输入，prepare和重放增量0。
+
+原两个HTTP模块首次55项实 **6 FAIL＋2 ERROR／85.443s**，旧测试错误要求把旧AI／编辑组变成current draft或改写模式，不能保留为规格正确行为。现逐项校正为用户原句／方向／目的仍完整、旧选定版本完整消息组在reference且不升级current draft，保存失败输入等于实际effective_input；原版本身份、累计／替换要求、来源与样本删除、C插入故障、CURRENT及模型次数断言均保留，原AC语义未改变。
+
+Conda NotAlone、禁dotenv／外部模型环境与tracing、PGPORT=55441，以 `/private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-round29-a` 实际重跑 `test_authentic_expression_continuation_intent`、`test_assistant_continuation`、`test_assistant_retry_source_guard`、`test_authentic_expression_sample_only_retry`、`test_assistant_candidate_carry` 五个integration.server模块和 `tests.unit.application.test_assistant_continuation`，合计 **71 GREEN／105.554s／skip0／actualexit0**（69真实HTTP、2应用单元），正式001–055／repeat0／内外自有库0。限定mypy一源、四文件compile及diff通过；固定ONLY3 SHA256 `f7c1ce7a523fc17b3abd00c24fb6be4246fd44e1d20c48382236d7829561216b` 独立Standards硬性违例0／新增重要possible Fowler0、Spec新增P0–P3为0，只读评审不借为运行证据。
+
+新三场仅控制与来源契约，故意模型错误不算真实模型质量；B/C唯一页面消费者须净接该正式模式并校准旧badDTO断言后另验。原AC与claimed保持，公开typed界面／宿主及原生组合另有各自证据；无App、微信、OCR、私料、外部发送、外部模型、push、发布或部署。
+
+Root 净接正式ee0四个后端路径后，原完整continuation与三模式实际当前意愿反例 **54 GREEN／96.326s／skip0／actualexit0**，正式55repeat0、内外自有库均剩余0；限定provider mypy、四文件编译与diff通过。引用旧完整消息组仍作为低权重表达参考，模型实际current_intent保留原用户稿／方向／目的；主树没有把C/A的RED计量作为自测。已发现的typed编号及累计要求中断重建仍属A17后续自动工作，不借这组通过关闭该缺口或原生验收。
