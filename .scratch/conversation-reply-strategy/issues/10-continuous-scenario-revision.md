@@ -38,3 +38,17 @@ Blocked by: [conversation-reply-strategy/05 主动目的探索与确认](05-purp
 ## Comments
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
+
+2026-10-11 明确重试的元数据接口前置：按总协调 01:22:50 裁定，在原探索 handler／唯一 PostgresExplorationStore 增加 `POST /api/contacts/{contact_id}/assistant-sessions/{session_id}/explorations/{exploration_id}/reconfirm`。严格输入为原 B `input_version_id`、实际旧生成 `expected_input_version_id`、全新 `request_key`，以及唯一的原已选 `suggestion_id` 或完全相同的 `direct_intent`。仅允许实际失败旧 turn、旧键已失效且尚无 C 已完成候选；复验同 owner/contact/session、原选择与来源、实际 CURRENT、原 Skill 版本／目录和根 TTL。沿原 A 同事务输入端口签发新 B 确认及选择 UUID，返回无正文的 reference／request key／input UUID／方向来源和实际 Skill 元数据；生成仍由原 `prepare/replies` 路径执行。同键重放读取原回执，不推进或回退当前输入；变体、旧键、其他选择／任务／范围、来源删除、TTL 或 Skill 变化均拒绝。旧任务、旧键和旧回执保持，根 TTL 与自动调用计数不续期，不降级成直接意愿。新确认在原 B 表增加派生行，沿既有字段保存原输入、证据和结果，继承来源依赖及根 TTL；不新增独立正文缓存、表、模型调用或生成链。
+
+TDD 实际记录：首个两场景公开 HTTP 反例因接口尚无而返回 404，1 test／2 FAIL（2.280s），实现后原路径 GREEN（4.594s）。初次夹具误把既有空候选失败的真实 503 期望为 409，未走到新接口，不算此接口 RED。之后先前置 53 项 GREEN（99.752s），C 候选已保存但 A 投影失败的真实反例 1 FAIL（6.032s），加已有 C 状态守卫后原 1 GREEN（3.035s），相关 54 项 GREEN（98.146s）。最终规格复核又发现澄清会重建建议 UUID，服务器原明确选择仍保留旧 ID：两场景澄清→确认原方向→回答→生成失败→再次确认实际返回 500，1 test／2 FAIL（2.916s）。只从已复验的服务器原选择签发新 UUID 兜底后，同反例 GREEN（4.313s）；验证旧记录不变、原 TTL、方向来源与意愿不变、零隐式调用，并沿原生成入口保留澄清回答。
+
+本 B 显式 Conda NotAlone、当前工作树 PYTHONPATH，执行自有随机库入口 `python /private/tmp/notalone-b-isolated-tests.py /Users/local-user/.codex/worktrees/conversation-reply-strategy/NotAlone tests.integration.server.test_exploration_reconfirmation tests.integration.server.test_persistent_reply_exploration tests.integration.server.test_exploration_generation_fields tests.integration.persistence.test_reply_exploration tests.integration.persistence.test_explored_generation`，正式 001–053 实际完整 55 项 GREEN（64.905s、skip0＝32 真实 HTTP／23 直接 PG，外层自有库剩余 0，HTTP 夹具各自清理）。四个改动 source 的 mypy、五文件 py_compile、原探索服务 17 unit（0.004s）和 diff 检查通过。新增 HTTP 覆盖重建宿主后的同键重放、直接意愿、跨范围／严格 JSON、当前输入、来源物理删除、TTL／目录、实际选定 Skill 同版及停用拒绝、已保存候选优先和上述澄清后选择延续。最终源码 Spec 新增 P0–P2 为 0、Standards hard 0／新增重要 Fowler possible 0，原接受 P3 保持；文档最终复核及本地 SHA 随交付补齐。
+
+此处退出事件只以合成宿主的既有旧键失效凭证适配；未消费 A 工作中 054、未直接改 A turn／正文／当前指针，不据此宣称 A17 生命周期完成。真实 `interrupt→reconfirm→prepare/replies`、迟到结果、重装、级联删除与公开页面组合仍待 A 正式接口；本票 open 和原验收标准保持，R08–R11 自主集成继续。只处理合成消息及隔离数据库，无真实 App、OCR、私人聊天、额外外部模型、人工验收、外部聊天发送或远端写入。
+
+2026-10-11 来源删除后生成领取测试的前置校准：总协调消费本 B 重确认及 C 传递删除后发现，原测试仍以已删探索的旧输入 UUID 作 expected，先触发 A 当前输入 CAS 冲突，尚未到达 B 来源守卫。本 B 在 e222 正式前置上独立复现最小一项 ERROR（1.294s、正式 001–053、自有库剩余 0）；这是测试前提过期，不冒充新的产品失败。只改原测试：先真实断言 CURRENT 为空、原 051 输入 redacted 且 content 为 NULL，再把 expected 更新为实际 None，保留原已删除 suggestion／reference，要求精确 AssistantSessionRejected.reason=exploration_stale，并保持零生成 turn 和探索派生正文擦除断言。业务源码、顺序与门禁没有改动。
+
+同一最小测试实际 GREEN（2.185s、正式 53、skip0、自有库剩余 0）；继而在显式 Conda／本树 PYTHONPATH、自有随机库原入口联跑 test_exploration_reconfirmation、test_persistent_reply_exploration、test_exploration_generation_fields、test_reply_exploration、test_explored_generation，完整原 55 项 GREEN（66.374s、skip0＝32 真实 HTTP＋23 PG、正式 001–053、自有库剩余 0）。原最小 ERROR 和先前 55 项通过记录各自保留。原测试 py_compile 和 diff 检查通过；限定测试／最终记录 Spec 新增 P0–P3 为 0，Standards hard 0／新增重要 Fowler possible 0。本票仍 open、原验收项保留，不将该测试修复说成公开路径、A14 删除 reason 或 A17 真实中断通过。
+
+2026-10-11 总协调精确消费B正式4b1及2bd夹具修正，在本树原五模块完整56项实际通过75.649秒／skip0（本树包含另一个已正式回归，与B自身55项分别计量）；正式001–053、迁移重复0及外层自有随机库剩余0。此前56=55通过／1ERROR72.906秒真实保留：旧fixture传已删expected版本，提前A CAS，未验证B guard；修后先核实际CURRENT None／051redacted与content NULL，再用expectedNone及原已删suggestion触发精确exploration_stale，零turn和派生正文清理均到达。业务守卫未宽化，四源类型检查、17unit、compile与diff及最终两轴无重要问题。仅完成明确重试后端元数据切片；真实A17中断、A13连续语义与公开组合仍继续，本票open及原标准不变。

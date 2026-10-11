@@ -1,7 +1,7 @@
 """持久探索公开操作；owner来自认证宿主，输入UUID来自助手会话。"""
 
 import json
-from typing import Any, Callable
+from typing import Any, Callable, Literal, overload
 from uuid import UUID
 
 from notalone.application.assistant_session_service import AssistantSessionError, AssistantSessionRejected, AssistantTurn
@@ -18,6 +18,14 @@ def _json(body: bytes, allowed: set[str]) -> dict[str, Any]:
     if not isinstance(payload, dict) or not set(payload) <= allowed:
         raise ValueError
     return payload
+
+
+@overload
+def _uuid(payload: dict[str, Any], field: str, *, optional: Literal[False] = False) -> UUID: ...
+
+
+@overload
+def _uuid(payload: dict[str, Any], field: str, *, optional: Literal[True]) -> UUID | None: ...
 
 
 def _uuid(payload: dict[str, Any], field: str, *, optional: bool = False) -> UUID | None:
@@ -89,6 +97,14 @@ def handle_exploration(
                                          input_version_id=_uuid(request, "input_version_id"),
                                          suggestion_id=_uuid(request, "suggestion_id", optional=True),
                                          direct_intent=_text(request, "direct_intent") if "direct_intent" in request else None)
+            elif action == "reconfirm":
+                request = _json(body, {"input_version_id", "expected_input_version_id", "request_key", "suggestion_id", "direct_intent"})
+                result = service.reconfirm(scope=scope, session_id=session_id, exploration_id=exploration_id,
+                                           input_version_id=_uuid(request, "input_version_id"),
+                                           expected_input_version_id=_uuid(request, "expected_input_version_id"),
+                                           request_key=_uuid(request, "request_key"),
+                                           suggestion_id=_uuid(request, "suggestion_id", optional=True),
+                                           direct_intent=_text(request, "direct_intent") if "direct_intent" in request else None)
             elif action == "answer":
                 request = _json(body, {"input_version_id", "question_id", "answer", "operation_key"})
                 result = service.answer(scope=scope, session_id=session_id, exploration_id=exploration_id,

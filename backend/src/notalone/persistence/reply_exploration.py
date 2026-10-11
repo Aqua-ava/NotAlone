@@ -305,6 +305,8 @@ class PostgresExplorationStore:
             if (previous is None) != (request.previous_id is None):
                 raise ExplorationStale("探索接续身份无效。")
             if previous is not None:
+                if request.previous_id is None:
+                    raise ExplorationStale("探索接续身份无效。")
                 parent = self._validate(connection, scope, self._read(connection, scope, request.previous_id),
                                         ExplorationReadPurpose.CURRENT if request.automatic else ExplorationReadPurpose.CONTINUE)
                 if (parent != previous or parent.session_id != request.session_id or parent.state == "paused"
@@ -343,19 +345,102 @@ class PostgresExplorationStore:
                 "WHERE owner_id=%s AND contact_id=%s AND session_id=%s AND state IN ('running','ready','selected','confirmed','failed')",
                 (scope.owner_id, scope.contact_id, request.session_id),
             )
-            connection.execute(
-                "INSERT INTO public.reply_exploration "
-                "(id,owner_id,contact_id,session_id,input_version_id,operation_key,operation_digest,request_key,"
-                "input_payload,snapshots,intent_snapshots,source_ids,skill_library_revision,skill_version_id,state,"
-                "root_created_at,automatic_call_count,selected_intent,selection_id,selection_source) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'running',%s,%s,%s,%s,%s)",
-                (task.exploration_id, scope.owner_id, scope.contact_id, task.session_id, version, request.operation_key,
-                 _operation_digest(request), task.request_key, Jsonb(task.content.payload()),
-                 Jsonb([item.storage_payload for item in snapshots]), Jsonb([item.storage_payload for item in roots]),
-                 list(dependencies), task.skill_library_revision, task.skill_version_id, task.root_created_at,
-                 task.automatic_call_count, task.selected_intent, task.selection_id,
-                 task.selection_source.value if task.selection_source else None),
+            self._insert(connection, task, _operation_digest(request), dependencies)
+            return task
+
+    @staticmethod
+    def _insert(connection: Any, task: ExplorationTask, operation_digest: str, dependencies: set[UUID]) -> None:
+        connection.execute(
+            "INSERT INTO public.reply_exploration "
+            "(id,owner_id,contact_id,session_id,input_version_id,operation_key,operation_digest,request_key,"
+            "input_payload,snapshots,intent_snapshots,source_ids,skill_library_revision,skill_version_id,state,"
+            "root_created_at,automatic_call_count,selected_intent,selection_id,selection_source,result_payload) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            (task.exploration_id, task.scope.owner_id, task.scope.contact_id, task.session_id, task.input_version_id,
+             task.operation_key, operation_digest, task.request_key, Jsonb(task.content.payload()),
+             Jsonb([item.storage_payload for item in task.snapshots]),
+             Jsonb([item.storage_payload for item in task.intent_snapshots]), list(dependencies),
+             task.skill_library_revision, task.skill_version_id, task.state, task.root_created_at,
+             task.automatic_call_count, task.selected_intent, task.selection_id,
+             task.selection_source.value if task.selection_source else None,
+             Jsonb(task.result) if task.result is not None else None),
+        )
+
+    def reconfirm(
+        self, scope: ContactScope, session_id: UUID, exploration_id: UUID, input_version_id: UUID,
+        *, expected_input_version_id: UUID, request_key: UUID,
+        suggestion_id: UUID | None, direct_intent: str | None,
+    ) -> ExplorationTask:
+        self._prune(scope)
+        with self._transaction(scope) as connection:
+            parent = self._validate(connection, scope, self._read(connection, scope, exploration_id),
+                                    ExplorationReadPurpose.HISTORY)
+            self._require_skill(connection, scope, parent.skill_library_revision, parent.skill_version_id)
+            if (parent.session_id != session_id or parent.input_version_id != input_version_id
+                    or parent.state not in ("selected", "confirmed") or not parent.has_confirmed_intent
+                    or not isinstance(parent.selected_intent, str)
+                    or parent.result is None or parent.result["question"] is not None or parent.result["ambiguities"]
+                    or (suggestion_id is None) == (direct_intent is None)
+                    or suggestion_id is not None and (parent.selection_source != DirectionSource.CONFIRMED_SUGGESTION
+                                                      or parent.selection_id != suggestion_id)
+                    or direct_intent is not None and (parent.selection_source != DirectionSource.DIRECT_INPUT
+                                                      or parent.selected_intent != direct_intent)
+                    or request_key == parent.request_key):
+                raise ExplorationStale("重试必须明确确认原输入的已选意愿。")
+            content = replace(parent.content, confirmed_intent=parent.selected_intent)
+            operation = ExplorationOpen(session_id, content, request_key, expected_input_version_id, exploration_id)
+            digest = _operation_digest(operation)
+            replay = connection.execute(
+                "SELECT * FROM public.reply_exploration WHERE owner_id=%s AND contact_id=%s AND request_key=%s FOR UPDATE",
+                (scope.owner_id, scope.contact_id, request_key),
+            ).fetchone()
+            if replay is not None:
+                task = self._validate(connection, scope, replay, ExplorationReadPurpose.HISTORY)
+                if (replay["operation_digest"] != digest or task.session_id != session_id
+                        or task.state not in ("selected", "confirmed") or not task.has_confirmed_intent
+                        or task.selected_intent != parent.selected_intent or task.selection_source != parent.selection_source):
+                    raise ExplorationStale("重试键已用于不同的确认。")
+                return task
+            turn = self._generation_turn(connection, scope, self._read(connection, scope, exploration_id))
+            saved = connection.execute(
+                "SELECT state FROM public.reply_request WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                (scope.owner_id, scope.contact_id, parent.request_key),
+            ).fetchone()
+            if (turn is None or turn["state"] != "failed" or turn["input_version_id"] != expected_input_version_id
+                    or saved is not None and saved["state"] != "failed"
+                    or not connection.execute(
+                        "SELECT 1 FROM public.reply_invalidated_key WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                        (scope.owner_id, scope.contact_id, parent.request_key),
+                    ).fetchone()):
+                raise ExplorationStale("原生成尚未可靠中断。")
+            self._validate(connection, scope, self._read(connection, scope, exploration_id), ExplorationReadPurpose.CURRENT)
+            require_current_input(connection, scope, session_id, expected_input_version_id)
+            if (connection.execute(
+                    "SELECT 1 FROM public.assistant_session_turn WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                    (scope.owner_id, scope.contact_id, request_key),
+                ).fetchone() or connection.execute(
+                    "SELECT 1 FROM public.reply_request WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                    (scope.owner_id, scope.contact_id, request_key),
+                ).fetchone() or connection.execute(
+                    "SELECT 1 FROM public.reply_invalidated_key WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                    (scope.owner_id, scope.contact_id, request_key),
+                ).fetchone()):
+                raise ExplorationStale("请使用新的重试请求键。")
+            dependencies = self._evidence.dependencies((*parent.intent_snapshots, *parent.snapshots))
+            version = record_discussion_input_in_transaction(
+                connection, scope, session_id, content.payload(), expected_input_version_id,
+                verified_dependencies=tuple(sorted(dependencies)),
             )
+            options = [{**option, "suggestion_id": str(uuid4())} for option in parent.result["options"]]
+            # 澄清会重建建议编号；原明确选择的权威来自已复验的选择记录。
+            selection = (next((UUID(option["suggestion_id"])
+                               for old, option in zip(parent.result["options"], options, strict=True)
+                               if old["suggestion_id"] == str(parent.selection_id)), uuid4())
+                         if suggestion_id else uuid4())
+            task = replace(parent, exploration_id=uuid4(), input_version_id=version, operation_key=request_key,
+                           request_key=request_key, content=content, state="selected", selection_id=selection,
+                           result={**parent.result, "options": options})
+            self._insert(connection, task, digest, dependencies)
             return task
 
     def complete(self, task: ExplorationTask, result: dict[str, Any]) -> ExplorationTask:
@@ -389,7 +474,12 @@ class PostgresExplorationStore:
                 raise ExplorationStale("方向建议已经失效。")
             if direct_intent is not None and (not isinstance(direct_intent, str) or not 0 < len(direct_intent.strip()) <= 4096):
                 raise ExplorationError("本次意愿文字无效。")
-            intent = option["intent"] if option else direct_intent.strip()
+            if option is not None:
+                intent = option["intent"]
+            else:
+                if direct_intent is None:
+                    raise ExplorationError("本次意愿没有可靠输入。")
+                intent = direct_intent.strip()
             source = DirectionSource.CONFIRMED_SUGGESTION if option else DirectionSource.DIRECT_INPUT
             selection_id = suggestion_id or (task.selection_id if task.selected_intent == intent and task.selection_source == source else uuid4())
             if self._generation_turn(connection, scope, row) is not None:

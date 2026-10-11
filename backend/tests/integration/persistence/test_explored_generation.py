@@ -89,8 +89,18 @@ class ExploredGenerationPersistenceTest(unittest.TestCase):
     def test_deleted_root_is_rejected_before_any_generation_input_or_derived_body_is_saved(self):
         task, request, source, _ = self._selected()
         self.fixture._delete_source(str(source))
-        with self.assertRaises(AssistantSessionRejected):
+        self.assertIsNone(self.component._current())
+        with psycopg.connect(component.fixture.DATABASE_URL) as connection:
+            input_row = connection.execute(
+                "SELECT state,content FROM public.assistant_session_input "
+                "WHERE owner_id=%s AND contact_id=%s AND session_id=%s AND id=%s",
+                (self.scope.owner_id, self.scope.contact_id, self.session_id, task.input_version_id),
+            ).fetchone()
+        self.assertEqual(input_row, ("redacted", None))
+        request = replace(request, expected_input_version_id=None)
+        with self.assertRaises(AssistantSessionRejected) as rejection:
             self.a_store.reserve(self.scope, self.session_id, request)
+        self.assertEqual(rejection.exception.reason, "exploration_stale")
         self.assertEqual(self._generation_count(), 0)
         with psycopg.connect(component.fixture.DATABASE_URL) as connection:
             row = connection.execute("SELECT state,input_payload,selected_intent FROM public.reply_exploration WHERE id=%s",

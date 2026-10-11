@@ -95,7 +95,7 @@ class ReplyExplorationService:
                     or previous.content.purpose_hint != content.purpose_hint):
                 raise ExplorationStale("旧探索不属于当前目标或目的。")
             # 纠正保留已确认意愿，客户端传入的同名文字不能建立或替换确认。
-            content = replace(content, confirmed_intent=previous.selected_intent
+            content = replace(content, confirmed_intent=previous.selected_intent or ""
                               if previous.has_confirmed_intent else "")
         if request.automatic and (previous is None or previous.state != "ready" or previous.has_confirmed_intent):
             raise ExplorationStale("只有活跃且尚未选定方向的任务允许更新。")
@@ -195,7 +195,7 @@ class ReplyExplorationService:
                 or task.result["question_id"] != str(question_id)):
             raise ExplorationStale("关键问题不属于当前输入。")
         content = replace(task.content, answer=answer.strip(),
-                          confirmed_intent=task.selected_intent if task.has_confirmed_intent else "")
+                          confirmed_intent=task.selected_intent or "" if task.has_confirmed_intent else "")
         result = self._open(scope, ExplorationOpen(
             task.session_id, content, operation_key, input_version_id, exploration_id, question_id=question_id,
         ))
@@ -204,6 +204,34 @@ class ReplyExplorationService:
         if task.has_confirmed_intent and self._clear_intent(next_task):
             return self._generate(next_task)
         return result
+
+    def reconfirm(
+        self, *, scope: ContactScope, session_id: UUID, exploration_id: UUID, input_version_id: UUID,
+        expected_input_version_id: UUID, request_key: UUID,
+        suggestion_id: UUID | None = None, direct_intent: str | None = None,
+    ) -> dict[str, Any]:
+        """显式重试只确认新的执行身份；模型仍由原助手会话入口运行。"""
+
+        if (suggestion_id is None) == (direct_intent is None):
+            raise ExplorationError("请明确再次确认原意愿。")
+        if direct_intent is not None and (not isinstance(direct_intent, str)
+                                         or not 0 < len(direct_intent.strip()) <= 4096):
+            raise ExplorationError("本次意愿文字无效。")
+        parent = self._store.read(scope, exploration_id, purpose=ExplorationReadPurpose.HISTORY)
+        self._validate_task(scope, parent)
+        task = self._store.reconfirm(
+            scope, session_id, exploration_id, input_version_id,
+            expected_input_version_id=expected_input_version_id, request_key=request_key,
+            suggestion_id=suggestion_id, direct_intent=direct_intent.strip() if direct_intent is not None else None,
+        )
+        if task.selection_source is None or not isinstance(task.selection_id, UUID):
+            raise ExplorationStale("重试确认没有可靠保存。")
+        return {"kind": "confirmed", "session_id": str(task.session_id),
+                "exploration_id": str(task.exploration_id), "input_version_id": str(task.input_version_id),
+                "request_key": str(task.request_key), "suggestion_id": str(task.selection_id),
+                "direction_source": task.selection_source.value,
+                "skill_version_id": str(task.skill_version_id) if task.skill_version_id else None,
+                "skill_library_revision": task.skill_library_revision}
 
     def stop(self, *, scope: ContactScope, exploration_id: UUID, input_version_id: UUID) -> None:
         self._store.stop(scope, exploration_id, input_version_id)
