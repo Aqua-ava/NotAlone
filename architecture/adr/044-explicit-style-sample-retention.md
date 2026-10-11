@@ -1,6 +1,6 @@
 # ADR-044：主动保存的表达样本独立于助手会话留存
 
-> 状态：已采纳，尚未实现。
+> 状态：已采纳；样本基础生命周期已实现并自动验证，跨路径组合尚未全部验收。
 > 决策日期：2026-10-11；用户明确选择“独立保留已主动保存的样本”。
 > 细化 ADR-042 的助手会话删除范围，以及真实表达第一版的样本来源与删除规则。
 
@@ -10,4 +10,6 @@
 
 代价是实现中须区分会话关联与原始来源依赖，不能用一条无差别级联把两种删除意图合并。仅保存候选ID而在删除会话时丢失来源链也不满足要求。保存与删除竞态应以实际提交结果为准：只保留删除前已成功主动保存的样本，失效的候选不能在删除后重新保存。
 
-实现及验证归[持续会话任务](../../.scratch/assistant-session-context/planning.md)和[真实表达任务](../../.scratch/authentic-expression/planning.md)，跨路径用例由真实表达06收口。本决定不表示已实现，不涉及真实资料迁移或扩大外部读取与发送范围。
+实现及验证归[持续会话任务](../../.scratch/assistant-session-context/planning.md)和[真实表达任务](../../.scratch/authentic-expression/planning.md)，跨路径用例由真实表达06收口。本决定本身不作为实现证据，不涉及真实资料迁移或扩大外部读取与发送范围。
+
+2026-10-11 实现注记：[样本生命周期](../../.scratch/authentic-expression/issues/04-style-sample-lifecycle.md)与[有界参考](../../.scratch/authentic-expression/issues/05-bounded-style-reference.md)已完成各自自动范围。真实 HTTP／隔离 PostgreSQL 已验证删除助手会话保留成功主动保存的样本、保存与删除两种提交顺序、后续样本或原始来源删除清理派生输入。普通页面已验证主动保存、查看、删除和来源约束；[跨场景组合](../../.scratch/authentic-expression/issues/06-combined-fidelity-acceptance.md)仍为 claimed，类型化续写页面和后续生命周期组合尚未完成。只使用合成资料及受控模型，真实 App／原生与真人语义质量未验；这些结果不证明真实消息渠道集成可用。
