@@ -57,12 +57,14 @@ class AssistantGenerationInterruptionHttpTest(unittest.TestCase):
     def _backend(
         self, *, owner_id: UUID | None = None,
         completion_barrier: AssistantCompletionBarrierStore | None = None,
+        capacity: int = 100000,
+        output_reserve: int = 4096,
     ) -> HttpBackend:
         current_owner = owner_id or self.owner_id
         with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=self.model):
             reply_service = build_reply_service(
                 database_url=DATABASE_URL, owner_id=current_owner,
-                **synthetic_budget_kwargs(self.model),
+                **synthetic_budget_kwargs(self.model, capacity=capacity, output_reserve=output_reserve),
             )
         backend = HttpBackend(create_app(
             database_url=DATABASE_URL, owner_id=current_owner,
@@ -116,6 +118,66 @@ class AssistantGenerationInterruptionHttpTest(unittest.TestCase):
         self.assertIsNone(restored["turns"][0]["reply"])
         self.assertEqual(self.model.seen_calls, [])
         self.assertEqual(reopened.request("/api/ledger/summary")[1]["total_calls"], 0)
+
+    def test_reliable_failed_generation_is_terminal_without_app_quit_reclassification(self) -> None:
+        path = self._session_path()
+        body = self._body()
+        prepared = self._prepare(path, body)
+        limited = self._backend(capacity=1000, output_reserve=100)
+        status, failed = limited.request(path + "/replies", body)
+        self.assertEqual(status, 409, failed)
+        self.assertEqual(failed["error"], "input_budget_exceeded")
+        actual_failed = {**prepared, "state": "failed"}
+        self.assertEqual(limited.request(path + "/replies/prepare", body), (200, actual_failed))
+        before = limited.request(path)[1]
+        self.assertEqual(before["turns"][0]["state"], "failed")
+        self.assertIsNone(before["turns"][0]["interruption_reason"])
+        interruption = self._interruption_body(prepared)
+        wrong_input = {**interruption, "input_version_id": str(uuid4())}
+        self.assertEqual(limited.request(path + "/interrupt", wrong_input)[0], 409)
+        other = self._backend(owner_id=self.other_owner_id)
+        self.assertEqual(other.request(path + "/interrupt", interruption)[0], 404)
+
+        status, terminal = limited.request(path + "/interrupt", interruption)
+
+        self.assertEqual(status, 200, terminal)
+        self.assertEqual(terminal, {**actual_failed, "interruption_reason": None})
+        self.assertEqual(limited.request(path + "/interrupt", interruption), (200, terminal))
+        self.assertEqual(limited.request(path)[1], before)
+        self.assertEqual(limited.request(path + "/replies/prepare", body), (200, actual_failed))
+        self.assertEqual(self.model.seen_calls, [])
+
+    def test_historical_failed_turn_with_actual_running_retry_is_interrupted_as_app_quit(self) -> None:
+        self.model = LatePreparedModel()
+        self.backend = self._backend()
+        path = self._session_path()
+        body = self._body()
+        prepared = self._prepare(path, body)
+        limited = self._backend(capacity=1000, output_reserve=100)
+        self.assertEqual(limited.request(path + "/replies", body)[0], 409)
+        self.assertEqual(limited.request(path + "/replies/prepare", body), (200, {**prepared, "state": "failed"}))
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            running = pool.submit(self.backend.request, path + "/replies", body, timeout=20)
+            try:
+                self.assertTrue(self.model.response_entered.wait(5), "同键重试须实际进入模型。")
+                old_turn = self.backend.request(path)[1]["turns"][0]
+                self.assertEqual(old_turn["state"], "failed")
+                self.assertIsNone(old_turn["interruption_reason"])
+                self.assertEqual(self.backend.request(path + "/replies/prepare", body), (200, prepared))
+
+                status, stopped = self.backend.request(path + "/interrupt", self._interruption_body(prepared))
+
+                self.assertEqual(status, 200, stopped)
+                self.assertEqual(stopped, {**prepared, "state": "failed", "interruption_reason": "app_quit"})
+                self.assertEqual(len(self.model.seen_calls), 1)
+            finally:
+                self.model.release_first_response.set()
+            self.assertNotEqual(running.result(timeout=10)[0], 200)
+        after = self.backend.request(path)[1]["turns"][0]
+        self.assertEqual(after["state"], "failed")
+        self.assertEqual(after["interruption_reason"], "app_quit")
+        self.assertIsNone(after["reply"])
 
     def test_reliable_saved_result_wins_quit_after_the_current_input_advances(self) -> None:
         barrier = AssistantCompletionBarrierStore(DATABASE_URL)

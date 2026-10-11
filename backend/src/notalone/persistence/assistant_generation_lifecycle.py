@@ -127,6 +127,20 @@ def interrupt_generation_in_transaction(
                     or request is not None and (request["state"] != "failed" or attempt is None)):
                 raise AssistantSessionPersistenceError("退出中断凭证不完整。")
             return _receipt(turn)
+        if turn["state"] == "failed" and request is not None and request["state"] == "failed":
+            # 历史 failed 不足以证明任务停止；同事务复验 C 最新 attempt 且没有运行租约。
+            terminal = cursor.execute(
+                "SELECT 1 FROM public.reply_attempt AS attempt "
+                "WHERE attempt.reply_request_id = %s AND attempt.number = %s "
+                "AND attempt.state IN ('failed', 'expired') "
+                "AND attempt.failure_reason IS DISTINCT FROM 'app_quit' AND NOT EXISTS ("
+                "SELECT 1 FROM public.reply_attempt AS running "
+                "WHERE running.reply_request_id = attempt.reply_request_id AND running.state = 'running')",
+                (request["id"], request["attempt"]),
+            ).fetchone()
+            if terminal is None:
+                raise AssistantSessionPersistenceError("失败生成终态尚未可靠确认。")
+            return _receipt(turn)
         invalidate_running_generation(
             connection, scope, session_id, turn["id"], input_version_id, invalidation_reason="app_quit",
         )

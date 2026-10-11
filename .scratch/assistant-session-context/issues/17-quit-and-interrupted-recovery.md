@@ -61,3 +61,13 @@ Conda NotAlone、禁 dotenv／外部追踪、PGPORT=55441，执行 `/private/tmp
 本段仅后端重试来源门禁与删除继承证据；公开宿主退出和恢复组合仍由唯一桌面消费者继续，原生／人工未执行，原五条验收未勾且 State claimed。其它累计要求、超大历史传输及预算页面在途改动未混入本主题。
 
 Root 净接 `7b2af9c4` 后，任务文档仅保留主树已有证据并追加本主题，未导入尚未集成的登记API段落。主树受控隔离 runner 独立执行 `tests.integration.server.test_assistant_retry_source_guard`：**2 GREEN／3.006s／skip0**，真实55迁移逐名账本／repeat0、Fidelity内层与外层自有库残留0；两源码限定mypy、三文件编译、diff及冲突标记检查通过。原验收和claimed保留，宿主退出自动部分仍接续。
+
+2026-10-11 可靠失败终态的退出确认：失败结果已可靠落入原 A turn 与 C request、但失败 HTTP 回包尚在途时，宿主仍可用原实际身份请求确认。原 `/interrupt` 同 owner 事务沿用 input／turn／key／binding／source 门禁，只有 C 最新 attempt 已 failed／expired 且没有任何 running 租约才返回实际六字段 `state=failed, interruption_reason=null`；不把普通失败重分类为 app_quit，不写新失效键或新候选。已退出凭证继续要求原 app_quit 完整证明；旧 failed turn 对应实际运行中的同键 C 重试仍执行原 app_quit 失效，不凭历史 failed 放行。
+
+首两次合成容量1000配默认输出预留4096，配置构造错误 **1 ERROR／0.544s、1 ERROR／0.548s**，均未到产品终态判断，保留且不算业务 RED。修正本测试输出预留100、恢复纯正式原 interrupt 后，可靠预算失败的 matching 请求实际409/generation_not_running，**1 RED／1.040s**；最窄原事务修复后 **1 GREEN／1.059s**。新增实际同键重试进入模型1次、历史 turn 仍 failed 的负向回归，确认它返回 app_quit 而不是普通失败终态；错误输入／其他 owner 继续拒绝，可靠终态重放不改变当前记录，模型增量0。
+
+Conda NotAlone、禁 dotenv／外部追踪、PGPORT=55441，以唯一隔离 runner 运行 `test_assistant_generation_lifecycle`、`test_assistant_generation_prepare`、`test_assistant_retry_source_guard` 三个 integration.server 模块，实际 **29 GREEN／28.226s／skip0／exit0**；真实001–055账本／repeat0、自有库剩余0。原负向迟到请求保留无正文租约失效日志。原生命周期源码限定 mypy、新增源／测试编译及diff通过；固定 ONLY2 SHA256 `a82906fd735fb1448ecda458b99d7e33faaf66af8f1316b4bfaf8da91d865023` 独立 Standards 硬性违例0／新增重要 possible Fowler 0、Spec 新增 P0–P3 0；两轴只读，不借为运行证据。
+
+本段是正式 HTTP 终态协议与隔离 PG 证据，失败回包 gate 的 Main／宿主组合仍由唯一桌面消费者复验，未冒为本人公开页面或原生退出通过。原 AC 和 State claimed 保留，人工／真实 App 本轮未执行，无外部模型、OCR、微信、发送或远端操作。
+
+Root 净接正式 `3fe38933` 后在剥除模型凭据、dotenv与追踪的受控隔离 runner 独立运行完整 `tests.integration.server.test_assistant_generation_lifecycle`：**10 GREEN／11.106s／skip0**，实际55迁移逐名一致／repeat0、自有内外库残留0；单源码限定mypy、两文件编译与diff通过。迟到失效负例保留原无正文异常类别日志。只证实HTTP终态和租约分类；宿主失败回包gate及另一类运行中捕获来源闭包仍接续，原验收及claimed保留。
