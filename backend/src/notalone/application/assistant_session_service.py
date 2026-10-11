@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
 
 from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt
+from notalone.application.assistant_message_adoption import AssistantMessageAdoptionRequest
 from notalone.application.reply_service import ReplyService, ReplyServiceRequest
 from notalone.reply.errors import ReplyInProgressError
 from notalone.reply.interface import ReplyGenerated
@@ -110,6 +111,16 @@ class AssistantSessionStore(Protocol):
         self, scope: ContactScope, session_id: UUID, request: ReplyServiceRequest,
     ) -> AssistantGenerationReceipt: ...
 
+    def reserve_message_adoption(
+        self, scope: ContactScope, session_id: UUID, request: AssistantMessageAdoptionRequest,
+        running_request_key: UUID | None = None,
+    ) -> AssistantContinuationReservation: ...
+
+    def prepare_message_adoption(
+        self, scope: ContactScope, session_id: UUID, request: AssistantMessageAdoptionRequest,
+        running_request_key: UUID | None = None,
+    ) -> AssistantGenerationReceipt: ...
+
     def prepare_interrupted(
         self, scope: ContactScope, session_id: UUID, command: RecoverInterruptedAssistantGeneration,
     ) -> AssistantGenerationReceipt: ...
@@ -202,6 +213,8 @@ class AssistantSessionService:
 
         if self._reply is None:
             raise AssistantSessionRejected("reply_unavailable")
+        if isinstance(request, AssistantMessageAdoptionRequest):
+            return self._store.prepare_message_adoption(ContactScope(owner_id, contact_id), session_id, request)
         return self._store.reserve_prepared(ContactScope(owner_id, contact_id), session_id, request)
 
     def interrupt(
@@ -217,6 +230,9 @@ class AssistantSessionService:
         if self._reply is None:
             raise AssistantSessionRejected("reply_unavailable")
         scope = ContactScope(owner_id, contact_id)
+        if isinstance(request, AssistantMessageAdoptionRequest):
+            reserved = self._store.reserve_message_adoption(scope, session_id, request)
+            return self._generate_reserved(scope, session_id, reserved.turn_id, reserved.request)
         turn_id = self._store.reserve(scope, session_id, request)
         return self._generate_reserved(scope, session_id, turn_id, request)
 
@@ -260,6 +276,9 @@ class AssistantSessionService:
 
         if self._reply is None:
             raise AssistantSessionRejected("reply_unavailable")
+        if isinstance(request, AssistantMessageAdoptionRequest):
+            return self._store.prepare_message_adoption(
+                ContactScope(owner_id, contact_id), session_id, request, running_request_key)
         return self._store.reserve_replacement_prepared(
             ContactScope(owner_id, contact_id), session_id, running_request_key, request,
         )
@@ -273,6 +292,9 @@ class AssistantSessionService:
         if self._reply is None:
             raise AssistantSessionRejected("reply_unavailable")
         scope = ContactScope(owner_id, contact_id)
+        if isinstance(request, AssistantMessageAdoptionRequest):
+            reserved = self._store.reserve_message_adoption(scope, session_id, request, running_request_key)
+            return self._generate_reserved(scope, session_id, reserved.turn_id, reserved.request)
         turn_id = self._store.reserve_replacement(scope, session_id, running_request_key, request)
         return self._generate_reserved(scope, session_id, turn_id, request)
 

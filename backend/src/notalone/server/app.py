@@ -30,6 +30,7 @@ from notalone.application.reply_request import (
     ReplyRequestInvalid,
     parse_reply_request,
 )
+from notalone.application.assistant_message_adoption import parse_assistant_reply_request
 from notalone.application.source_service import SourceService
 from notalone.application.style_sample_service import StyleSampleService
 from notalone.persistence.style_sample_store import PostgresStyleSampleStore
@@ -1262,7 +1263,7 @@ class BackendApp:
                 if prepare_owner is None:
                     return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "owner_uninitialized"})
                 session_id = UUID(parts[4])
-                body_contact, request = parse_reply_request(body)
+                body_contact, request = parse_assistant_reply_request(body)
                 if body_contact != contact_id:
                     raise ReplyRequestInvalid()
                 receipt = service.prepare(
@@ -1359,7 +1360,7 @@ class BackendApp:
                     "session_id": str(session_id), "input_version_id": str(version),
                 })
             if len(parts) == 6 and parts[5] == "replies" and method == "POST":
-                body_contact, request = parse_reply_request(body)
+                body_contact, request = parse_assistant_reply_request(body)
                 if body_contact != contact_id:
                     raise ReplyRequestInvalid()
                 turn = service.generate(
@@ -2733,7 +2734,7 @@ def _parse_assistant_replacement_request(body: bytes) -> tuple[UUID, UUID, Reply
             or not isinstance(replacement["replacement"], dict)):
         raise ReplyRequestInvalid()
     running_request_key = UUID(replacement["running_request_key"])
-    body_contact, request = parse_reply_request(
+    body_contact, request = parse_assistant_reply_request(
         json.dumps(replacement["replacement"], ensure_ascii=False).encode("utf-8"),
     )
     if request.idempotency_key == running_request_key:

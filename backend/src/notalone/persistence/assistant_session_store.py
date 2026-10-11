@@ -40,6 +40,7 @@ from notalone.reply.store import ReplyRequest, _normalize_input, canonical_reply
 from notalone.scopes import ContactScope
 
 if TYPE_CHECKING:
+    from notalone.application.assistant_message_adoption import AssistantMessageAdoptionRequest
     from notalone.application.assistant_continuation import AssistantContinuationReservation
     from notalone.application.assistant_interrupted_recovery import RecoverInterruptedAssistantGeneration
 
@@ -484,6 +485,36 @@ class PostgresAssistantSessionStore:
             prepared = prepare_generation_in_transaction(connection, scope, session_id, request.idempotency_key,
                 lambda: self._prepared_receipt(connection, scope, session_id,
                     self._reserve_in_transaction(connection, scope, session_id, request)))
+        if isinstance(prepared, AssistantPreparationRejected):
+            raise prepared
+        return prepared
+
+    def reserve_message_adoption(
+        self, scope: ContactScope, session_id: UUID, request: AssistantMessageAdoptionRequest,
+        running_request_key: UUID | None = None,
+    ) -> AssistantContinuationReservation:
+        from notalone.persistence.assistant_message_adoption import reserve_message_adoption_in_transaction
+        if running_request_key is not None and running_request_key == request.idempotency_key:
+            raise AssistantSessionRejected("invalid_generation_replacement")
+        with self._transaction(scope) as connection:
+            return reserve_message_adoption_in_transaction(
+                connection, self, scope, session_id, request, running_request_key)
+
+    def prepare_message_adoption(
+        self, scope: ContactScope, session_id: UUID, request: AssistantMessageAdoptionRequest,
+        running_request_key: UUID | None = None,
+    ) -> AssistantGenerationReceipt:
+        from notalone.application.assistant_preparation_rejection import AssistantPreparationRejected
+        from notalone.persistence.assistant_message_adoption import reserve_message_adoption_in_transaction
+        from notalone.persistence.assistant_preparation_rejection import prepare_generation_in_transaction
+        if running_request_key is not None and running_request_key == request.idempotency_key:
+            raise AssistantSessionRejected("invalid_generation_replacement")
+        with self._transaction(scope) as connection:
+            def reserve() -> AssistantGenerationReceipt:
+                reserved = reserve_message_adoption_in_transaction(
+                    connection, self, scope, session_id, request, running_request_key)
+                return self._prepared_receipt(connection, scope, session_id, reserved.turn_id)
+            prepared = prepare_generation_in_transaction(connection, scope, session_id, request.idempotency_key, reserve)
         if isinstance(prepared, AssistantPreparationRejected):
             raise prepared
         return prepared
