@@ -138,12 +138,16 @@ class DesktopRewriteFixture(CoreBusinessFlowFixture, unittest.TestCase):
     reply_model_factory = DesktopRewriteModel
     dimension_release = None
 
+    def input_budget_configuration(self) -> dict[str, Any]:
+        """默认合成协议不变，预算页面夹具仅覆盖显式能力配置。"""
+        return synthetic_budget_kwargs(self.reply_model)
+
     def _backend(self, owner_id: UUID) -> HttpBackend:
         priority = ModelPriorityControl()
         with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=self.reply_model):
             reply_service = build_reply_service(
                 database_url=self.database_url, owner_id=owner_id, model_priority=priority,
-                **synthetic_budget_kwargs(self.reply_model),
+                **self.input_budget_configuration(),
             )
         backend = HttpBackend(create_app(
             database_url=self.database_url, owner_id=owner_id,

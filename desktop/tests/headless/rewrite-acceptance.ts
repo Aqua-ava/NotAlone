@@ -8,7 +8,7 @@ import { defaultRewrite, relationshipScope, unboundRejection, idempotentRewrite,
   prepareTransientRewrite, assertTransientRewriteCleared, type RewritePages } from '../rewrite-page-scenarios';
 
 // 每个具名场景有独立随机库和浏览器上下文，组内串行复用一个已租约的 Chrome。
-export async function withRewritePages(browser: Browser, origin: string, use: (pages: RewritePages, host: PageHost, userData: string) => Promise<void>, copySurface?: CandidateCopySurface) {
+export async function withRewritePages(browser: Browser, origin: string, use: (pages: RewritePages, host: PageHost, userData: string) => Promise<void>, copySurface?: CandidateCopySurface, scriptPath?: string) {
   await withRewriteBackend(async (rewriteBackend) => {
     const replyTransport = await RewriteHttpProxy.attach(rewriteBackend.infoPath);
     try { await withControllerEnvironment(rewriteBackend, async (userData) => {
@@ -22,7 +22,7 @@ export async function withRewritePages(browser: Browser, origin: string, use: (p
           screenshotPath: 'artifacts/headless-pages/rewrite-acceptance-candidates.png' }, host, userData);
       } finally { replyTransport.release(); await host.close(); }
     }); } finally { await replyTransport.close(); }
-  });
+  }, scriptPath);
 }
 
 // 仅公开具名操作 Promise，用于等待迟到请求实际结束；不窥探 React/controller 状态。

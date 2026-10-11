@@ -32,9 +32,9 @@ export async function withMemoryBackend(use: (fixture: MemoryFixture) => Promise
   released();
   if (failure) throw failure;
 }
-export async function withRewriteBackend(use: (fixture: RewriteFixture) => Promise<void>) {
+export async function withRewriteBackend(use: (fixture: RewriteFixture) => Promise<void>, scriptPath?: string) {
   const released = ownResource();
-  await withRewriteFixture('notalone-headless-rewrite-', use, released);
+  await withRewriteFixture('notalone-headless-rewrite-', use, released, scriptPath);
 }
 export async function withImportBackend(use: (fixture: ImportFixture) => Promise<void>) {
   const released = ownResource();

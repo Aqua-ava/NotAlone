@@ -188,3 +188,21 @@ TDD：同项1 / 1 GREEN／2.013秒；完整相关讨论预算模块11 / 11 GREEN
 后续新P2的真实主树反馈（2026-10-11）：Root与B规格审查同样发现budget409后CURRENT复验GET异常被空catch吞掉，无法证明输入已失效却清idle并丢同键身份；原25HTTP不覆盖此情形。只净B正式a5eb6a186b83f91504e4757d00b7fc7d7254e4af的c598f2三path增量，先只取新增测试／共享BackendRequestFailure测试出口，在未改A328源时Root两实际HTTP409→PG failed→控制的delivery GET connection／503反例**2 RED／7824.234542ms／actualexit1／模型0／两055repeat0自有库0**；此为受控delivery seam错误，不声称真实TCP断线。
 
 再只净Main最窄12行，区分不能复验与真正404／来源失效，前者显示原connection／unavailable一般失败、隐藏未复验budget并保同次request身份，后者及较晚CURRENT／loading仍失效，不新authorities。Root实际重跑新2故障＋真实confirmed DELETE后404＋8新CURRENT／成功迟到／loading相关回归：**11 GREEN／37225.823917ms／skip0／actualexit0**；11实际055repeat0／instance与class清理true／database_remaining=false，模型10，两新故障同键重试保持turn／key／CURRENT且模型0。日志/private/tmp/notalone-root-budget-read-fault-red-http55.log与/private/tmp/notalone-root-budget-read-fault-fixed-http55.log。TSC与diff再通过；原25／3阶段数及B8／8／1自己的证据各自保留，不将11写为原全25在修后全部重跑。新鲜两轴复核后此预算主题本地提交；公开DOM仍由A唯一case接续、claimed及原AC不改。
+
+### 本轮独立工作树的公开预算提醒场景准备
+
+从总协调正式 `84b5dd32` 接续，预算生产守卫与现有界面不另改；只增加七个明确测试／有限调度路径，保留所有现有 label、nonce、单 Chrome、租约和自有资源清理门禁。`assistant-input-budget` 仅含一个完整 warning 场景：通过真实生产页面先校准实际预算，再在合成模型夹具中把能力设为实际总量加 100，重新连接并明确新开，重新填入相同草稿、语气与要求。只使用合成容量配置，不增加产品能力的 HTTP 写入口；实际两模型、001–055 全名账本与重复迁移 0、named DOM 提示、草稿／本次要求／checkbox、保存历史及当时预算回执均有原精确断言。
+
+旧源相同场景首次 RED 的真实 release 文件 `/private/tmp/notalone-a12-warning-page-red-release.json` 已只读核验：HTTP200／warning、模型2、实际总量9022／容量9122、正式55／repeat0，在缺 namedDOMstatus 的原5000ms断言失败，actualexit1；后续草稿与完整历史断言当时未执行。quiet17／active0／onscreen0／单Chrome、cleanuptrue、源changed[]及独立fresh status exit0/absent，旧窗口已 FULLRELEASE。不改写旧失败，也不把尚未执行的 GREEN 写为通过。
+
+本树 `npm run typecheck`、两个 Python 夹具编译、`git diff --check` 与按正式 `packages: 'external'` 的 headless entry esbuild（write=false，不执行）通过；`node --test tests/headless/command.test.mjs` **10 GREEN／2712.184 ms／skip0／actualexit0**，仅合成 CLI／孩子与租约测试，没有实际页面。首个自写非标准 bundling 试图打包 Playwright 自带外部依赖，产生两个 resolve error；按项目脚本相同 external 方式复验通过，未安装或修改共享依赖，也不计产品 RED。
+
+固定 ONLY7 差异独立 Standards：B Hard0／新增重要 possible Fowler0；独立 Spec：C 新增P0–P3=0，明确此准备只覆盖原AC2的 warning 切片，不能代替硬限、工具轮、未知计量或整12验收。真正公开页面须等待总协调新具名 single240 ACK，期间不沿用旧工作树 ACK、不与 B/C 并发起窗口。State保持claimed、六条原AC及未勾状态保持；没有真实App／原生、微信/OCR、私料、外部模型、人工或远端操作。
+
+2026-10-11：总协调在台北21:24–21:29给本树 `6ad45edb` 的新具名 ONLY warning／single240 ACK。实际先核 clock13:24:45UTC在窗、独立租约 status exit0/absent、986个 tracked backend／desktop／native 源／配置／测试及HEAD字节不变、工作树clean，再以剥除外部tracing与模型环境的受限入口执行 `PGPORT=55441 node scripts/test-pages.mjs --case assistant-input-budget --timeout-seconds 240`。session9742 **actualexit0，完整一场 GREEN**；原 namedDOM status、5000ms断言、草稿／语气／本次要求／checkbox、完整保存讨论、当时预算以及实际 GET 回执等值均执行并通过。真实 HTTP200／warning，模型总2，实际总量9022／容量9122，正式001–055／repeat0。
+
+实际 quiet10／active0／onscreen0／maxApps1／activationPolicies2，singleChrome、cleanupConfirmed=true、Electron/native=false。夹具 finally 的 instance/class 清理及准确自有库 `EXISTS=false` 门禁由实际childexit0和资源清理确认，未冒称总协调独立SQL。退出后986源changed[]／HEAD6ad45same／dirty空，两次独立 fresh status actualexit0/absent，已 FULLRELEASE 本树与OS窗口，不默认第二场。完整 receipt `/private/tmp/notalone-round29-a12-warning-release.json` 和实际日志 `/private/tmp/notalone-round29-a12-page-actual.log` 只保在自有临时目录，没有提交截图或库产物。
+
+该真实 GREEN 闭合上述旧源 warning RED；仍仅此自动提醒场景，不借其关闭硬限完整页面、新消息采用、typed页、携入、退出或大历史读取边界。原六条验收标准和claimed状态继续保留，后续自动工作接续；真实App／原生／人工质量本轮未执行。
+
+Root 净集成 `6ad45edb` 八路径与 `b9b5d360` 实际warning收尾记录后，主树独立完整桌面类型、两夹具编译、两headless入口的正式external-package esbuild和diff通过。租约只读freshstatus实际absent；`npm test` 实际 **40 GREEN／12206.496917ms／skip0**，范围为类型与调度CLI合成进程安全回归，未启动Chrome／Electron／真实App。warning Page仍按提供者具名窗口的单场实际证据计一次；Root独立核对该actual日志、986源无变化与freshstatus释放，不冒充本次新跑Page。hard-limit和超大历史公开验证仍继续，原AC与claimed不改。
