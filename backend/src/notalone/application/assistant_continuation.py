@@ -16,6 +16,7 @@ from notalone.application.assistant_continuation_identity import (
 )
 
 from notalone.scopes import ContactScope
+from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +88,10 @@ class AssistantContinuationPort(Protocol):
     def reserve_continuation(
         self, scope: ContactScope, session_id: UUID, command: ContinueAssistantSession,
     ) -> AssistantContinuationReservation: ...
+
+    def prepare_continuation(
+        self, scope: ContactScope, session_id: UUID, command: ContinueAssistantSession,
+    ) -> AssistantGenerationReceipt: ...
 
 
 def _uuid(value: object) -> UUID:

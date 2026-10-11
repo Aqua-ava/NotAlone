@@ -16,6 +16,7 @@ from notalone.application.assistant_session_service import (
 )
 from notalone.reply.errors import ReplyIdempotencyConflictError, ReplyInProgressError, ReplyPersistenceError, ReplyTimeoutError
 from notalone.reply.input_budget import InputBudgetExceededError, InputBudgetUnavailableError
+from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt
 
 
 class ContinuationService(Protocol):
@@ -23,14 +24,19 @@ class ContinuationService(Protocol):
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID, command: ContinueAssistantSession,
     ) -> AssistantTurn: ...
 
+    def prepare_continuation(
+        self, *, owner_id: UUID, contact_id: UUID, session_id: UUID, command: ContinueAssistantSession,
+    ) -> AssistantGenerationReceipt: ...
+
 
 def handle_continuation(
     service: ContinuationService | None, *, owner_id: UUID, method: str, path: str, body: bytes,
     render_turn: Callable[[AssistantTurn], dict[str, Any]],
 ) -> tuple[int, dict[str, Any]]:
     parts = path.strip("/").split("/")
-    if (len(parts) != 6 or parts[:2] != ["api", "contacts"]
-            or parts[3] != "assistant-sessions" or parts[5] != "continue"):
+    if (len(parts) not in (6, 7) or parts[:2] != ["api", "contacts"]
+            or parts[3] != "assistant-sessions" or parts[5] != "continue"
+            or len(parts) == 7 and parts[6] != "prepare"):
         return 404, {"error": "not_found"}
     if method != "POST":
         return 405, {"error": "method_not_allowed"}
@@ -38,6 +44,12 @@ def handle_continuation(
         return 503, {"error": "assistant_session_unavailable"}
     try:
         command = parse_continuation(json.loads(body))
+        if len(parts) == 7:
+            receipt = service.prepare_continuation(owner_id=owner_id, contact_id=UUID(parts[2]),
+                                                   session_id=UUID(parts[4]), command=command)
+            return 200, {"session_id": str(receipt.session_id), "turn_id": str(receipt.turn_id),
+                         "request_key": str(receipt.request_key), "input_version_id": str(receipt.input_version_id),
+                         "state": receipt.state}
         turn = service.continue_completed(owner_id=owner_id, contact_id=UUID(parts[2]),
                                           session_id=UUID(parts[4]), command=command)
         if turn.reply is None or turn.input is None or "continuation" not in turn.input:

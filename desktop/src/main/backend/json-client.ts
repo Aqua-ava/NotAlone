@@ -73,7 +73,8 @@ export class JsonClient {
             if (status < 200 || status >= 300) {
               const parts = path.split('/');
               if (options.acceptAssistantContinuationClarification === true && method === 'POST' && status === 409
-                && parts.length === 7 && parts[1] === 'api' && parts[2] === 'contacts' && isUuid(parts[3])
+                && (parts.length === 7 || parts.length === 8 && parts[7] === 'prepare')
+                && parts[1] === 'api' && parts[2] === 'contacts' && isUuid(parts[3])
                 && parts[4] === 'assistant-sessions' && isUuid(parts[5]) && parts[6] === 'continue') {
                 const clarification = readAssistantContinuationClarification(data);
                 if (clarification) {

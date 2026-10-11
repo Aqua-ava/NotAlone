@@ -1193,7 +1193,7 @@ class BackendApp:
         """默认讨论、单次提交与显式读取；不提供自动恢复或发送能力。"""
 
         parts = path.strip("/").split("/")
-        if len(parts) == 6 and parts[5] == "continue":
+        if len(parts) in (6, 7) and parts[5] == "continue":
             continuation_owner = self._owner_id
             if continuation_owner is None:
                 return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "owner_uninitialized"})

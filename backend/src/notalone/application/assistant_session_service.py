@@ -218,6 +218,13 @@ class AssistantSessionService:
         reserved = self._continuation_store.reserve_continuation(scope, session_id, command)
         return self._generate_reserved(scope, session_id, reserved.turn_id, reserved.request)
 
+    def prepare_continuation(
+        self, *, owner_id: UUID, contact_id: UUID, session_id: UUID, command: ContinueAssistantSession,
+    ) -> AssistantGenerationReceipt:
+        if self._reply is None or self._continuation_store is None:
+            raise AssistantSessionRejected("reply_unavailable")
+        return self._continuation_store.prepare_continuation(ContactScope(owner_id, contact_id), session_id, command)
+
     def prepare_replacement(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
         running_request_key: UUID, request: ReplyServiceRequest,

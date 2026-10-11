@@ -59,7 +59,8 @@ async function clarificationBackend(t: TestContext, response: unknown, status = 
     client.cancelPending();
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   });
-  const backend = { requestJson: async (options: JsonRequest) => ({ generation: 7, data: (await client.perform(options)).data }) };
+  const backend = { getConnectionGeneration: () => 7,
+    requestJson: async (options: JsonRequest) => ({ generation: 7, data: (await client.perform(options)).data }) };
   return { client, backend: backend as BackendHost };
 }
 
@@ -120,6 +121,8 @@ test('真实JsonClient只放行显式当前continue的合法有限澄清，其�
     { name: '未显式启用', body: clarificationResponse, accept: false },
     { name: '其他业务路径', body: clarificationResponse, path: '/api/reply/generate' },
     { name: '路径附带查询', body: clarificationResponse, path: continuePath + '?page=1' },
+    { name: '准备路径附带查询', body: clarificationResponse, path: continuePath + '/prepare?page=1' },
+    { name: '准备路径附带额外段', body: clarificationResponse, path: continuePath + '/prepare/extra' },
     { name: '无效联系人身份', body: clarificationResponse, path: continuePath.replace(contactId, 'invalid') },
     { name: '其他方法', body: clarificationResponse, method: 'GET' as const },
     { name: '其他状态', body: clarificationResponse, status: 400 },

@@ -15,8 +15,10 @@ const { JsonClient, BackendRequestFailure, continueAssistantSession, captureDisp
 const transport = new JsonClient({ port: fixture.port, token: fixture.token });
 let requests = 0;
 let status;
-const backend = { requestJson: async (options) => {
+const bodies = [], events = [], receipts = [];
+const backend = { getConnectionGeneration: () => 7, requestJson: async (options) => {
   requests += 1;
+  bodies.push(JSON.stringify(options.body));
   const response = await transport.perform(options);
   status = response.status;
   return { generation: 7, data: response.data };
@@ -28,15 +30,24 @@ try {
     requirementChangeFromClarification(option, 'keep')) : fixture.replacement ? [requirementChangeFromClarification({
     requirement: fixture.replacement.previous, origin: 'existing', actions: ['keep', 'replace', 'remove'],
   }, 'replace', fixture.replacement.text)] : command.requirement_changes;
-  const result = await continueAssistantSession(backend, fixture.contactId, fixture.sessionId, {
+  const clientCommand = {
     requestKey: command.idempotency_key, expectedInputVersionId: command.expected_input_version_id,
     instruction: command.instruction,
     displayedGroup: captureDisplayedCandidateGroup(frame.session_id, frame.candidate_group_id,
       frame.candidates.map((item) => ({ number: item.number, candidateId: item.candidate_id, versionId: item.version_id }))),
     ...(command.intention_update === undefined ? {} : { intentionUpdate: command.intention_update }),
     ...(requirementChanges === undefined ? {} : { requirementChanges }),
-  }, new AbortController().signal);
-  process.stdout.write(JSON.stringify({ ok: true, requests, status, result }));
+  };
+  const result = await continueAssistantSession(backend, fixture.contactId, fixture.sessionId, clientCommand,
+    new AbortController().signal, (receipt) => {
+      events.push('prepared'); receipts.push(receipt);
+      if (fixture.observeLifecycle) {
+        clientCommand.instruction = '第二条正式一点';
+        if (clientCommand.requirementChanges?.[0]) clientCommand.requirementChanges[0].replacement = '正式一点';
+      }
+    }, () => events.push('requested'));
+  process.stdout.write(JSON.stringify({ ok: true, requests, status, result,
+    ...(fixture.observeLifecycle ? { lifecycle: { events, receipts, sameBody: bodies.length === 2 && bodies[0] === bodies[1] } } : {}) }));
 } catch (error) {
   // 错误只输出安全类别，不回传异常正文、认证信息或原 HTTP 响应。
   process.stdout.write(JSON.stringify({ ok: false, requests, kind: error.constructor.name,

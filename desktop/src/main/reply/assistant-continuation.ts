@@ -2,6 +2,7 @@ import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import { isUuid } from '../uuid';
 import { isRecord, readReplyResult } from './result-read';
+import { readAssistantGenerationReceipt, type AssistantGenerationReceipt } from './assistant-generation-jobs';
 import { ASSISTANT_CONTINUATION_RESPONSE_LIMIT, readAssistantContinuationClarification,
   type RequirementChange, type RequirementClarificationOption } from '../../shared/assistant-continuation-clarification';
 export { readAssistantContinuationClarification } from '../../shared/assistant-continuation-clarification';
@@ -70,40 +71,58 @@ function requestBody(command: AssistantContinuationCommand, sessionId: string) {
       candidate_group_id: frame.candidateGroupId, candidates: frame.candidates.map((item) => ({ number: item.number,
         candidate_id: item.candidateId, version_id: item.versionId })) },
     ...(command.intentionUpdate === undefined ? {} : { intention_update: command.intentionUpdate }),
-    ...(command.requirementChanges === undefined ? {} : { requirement_changes: command.requirementChanges }),
+    ...(command.requirementChanges === undefined ? {} : { requirement_changes: structuredClone(command.requirementChanges) }),
   };
 }
 
 // 复用唯一认证传输；结果归属、候选版本与生效要求均由后端同事务确定。
 export async function continueAssistantSession(backend: BackendHost, contactId: string, sessionId: string,
-  command: AssistantContinuationCommand, signal: AbortSignal) {
+  command: AssistantContinuationCommand, signal: AbortSignal,
+  onPrepared?: (receipt: AssistantGenerationReceipt) => void, onRequested?: () => void) {
   if (!isUuid(contactId) || !isUuid(sessionId)) throw new Error('当前助手会话身份无效。');
   const body = requestBody(command, sessionId.toLowerCase());
   const request = { method: 'POST' as const,
     path: `/api/contacts/${contactId.toLowerCase()}/assistant-sessions/${sessionId.toLowerCase()}/continue`,
     body, timeoutMs: 25_000, maxResponseBytes: ASSISTANT_CONTINUATION_RESPONSE_LIMIT, signal, acceptAssistantContinuationClarification: true as const };
-  let response;
-  try {
-    response = await backend.requestJson(request);
-  } catch (error) {
-    if (error instanceof BackendRequestFailure && error.status === 409
-      && error.code === 'assistant_continuation_clarification_required') {
-      throw new Error('本次澄清内容尚未读到，请重新提交。');
+  const generation = backend.getConnectionGeneration();
+  const perform = async (path: string) => {
+    try { return await backend.requestJson({ ...request, path }); }
+    catch (error) {
+      if (error instanceof BackendRequestFailure && error.status === 409
+        && error.code === 'assistant_continuation_clarification_required') {
+        throw new Error('本次澄清内容尚未读到，请重新提交。');
+      }
+      throw error;
     }
-    throw error;
-  }
-  const value = response.data;
-  if (isRecord(value) && value.error === 'assistant_continuation_clarification_required') {
+  };
+  const clarified = (value: unknown, responseGeneration: number) => {
+    if (!(isRecord(value) && value.error === 'assistant_continuation_clarification_required')) return undefined;
     const clarification = readAssistantContinuationClarification(value);
     if (!clarification) throw new Error('本次澄清格式无效，请重新提交。');
-    return { phase: 'clarification' as const, clarification, generation: response.generation,
+    return { phase: 'clarification' as const, clarification, generation: responseGeneration,
       contactId: contactId.toLowerCase(), assistantSessionId: sessionId.toLowerCase(),
       expectedInputVersionId: body.expected_input_version_id, requestKey: body.idempotency_key,
       message: clarification.reason === 'intention_conflict'
         ? '本次文字要求与明确意愿不一致，请改为同一意愿后重新提交。'
         : '请明确选择候选；旧要求可以保留、替换或移除，新要求需明确新增。' };
-  }
+  };
+  const preparation = await perform(request.path + '/prepare');
+  const preparationClarification = clarified(preparation.data, preparation.generation);
+  if (preparationClarification) return preparationClarification;
+  if (generation === undefined || preparation.generation !== generation
+    || backend.getConnectionGeneration() !== generation) throw new Error('本次生成连接已变化。');
+  const receipt = readAssistantGenerationReceipt(preparation.data, sessionId.toLowerCase(), body.idempotency_key);
+  onPrepared?.(receipt);
+  if (signal.aborted) throw new BackendRequestFailure('cancelled');
+  const execution = perform(request.path);
+  onRequested?.();
+  const response = await execution;
+  const value = response.data;
+  const executionClarification = clarified(value, response.generation);
+  if (executionClarification) return executionClarification;
   if (!isRecord(value) || value.session_id !== sessionId.toLowerCase() || value.state !== 'completed'
+    || value.input_version_id !== receipt.inputVersionId || value.turn_id !== receipt.turnId
+    || response.generation !== generation || backend.getConnectionGeneration() !== generation
     || !isUuid(value.input_version_id) || !isRecord(value.continuation) || !isRecord(value.effective_input)) {
     throw new Error('本次继续尚未可靠保存。');
   }

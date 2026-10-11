@@ -14,6 +14,7 @@ from notalone.application.assistant_continuation import (
     continuation_submission, requirement_clauses, resolve_requirements,
 )
 from notalone.application.assistant_session_service import AssistantSessionConflict, AssistantSessionRejected
+from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt
 from notalone.application.reply_request import parse_reply_request
 from notalone.persistence.assistant_candidate_versions import (
     AssistantCandidateHistory, AssistantCandidateVersion, AssistantCandidateVersionError, read_candidate_versions,
@@ -218,3 +219,10 @@ class PostgresAssistantContinuationStore:
     ) -> AssistantContinuationReservation:
         with self._store._transaction(scope) as connection:
             return reserve_continuation_in_transaction(connection, self._store, scope, session_id, command)
+
+    def prepare_continuation(
+        self, scope: ContactScope, session_id: UUID, command: ContinueAssistantSession,
+    ) -> AssistantGenerationReceipt:
+        with self._store._transaction(scope) as connection:
+            reserved = reserve_continuation_in_transaction(connection, self._store, scope, session_id, command)
+            return self._store._prepared_receipt(connection, scope, session_id, reserved.turn_id)

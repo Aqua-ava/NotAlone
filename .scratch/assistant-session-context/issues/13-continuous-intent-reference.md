@@ -84,3 +84,15 @@ node --input-type=module -e 'import {build} from "esbuild"; const result=await b
 完整相关 **51 tests／52.848 秒／OK／skip0／actualexit0**，真实生产 001–055 全名账本匹配、重复迁移 0，续答夹具及外层自有数据库剩余均为 0。实际默认 JsonClient 的合法 Unicode 4096 边界、33／2048 条既有要求、澄清动作、冲突零模型／零请求、范围、来源删除及累计预算均通过。Node **26 GREEN／55.166 ms／skip0／actualexit0**；完整桌面类型检查、三个来源的 limited silent mypy、九个 Python 文件编译及 diff 检查通过。首次未升级沙箱的 socket 连接被 EPERM 拒绝，没有创建测试库，也不计产品 RED。
 
 两轴分别由现有独立 B／C Agent 只读执行固定 `84b5dd32→14 pending` 差异：Standards 硬规范 0、重要 possible Fowler 0；Spec 新增 P0–P3 为 0，明确 typed Main／公开页面及 prepare/jobs/退出仍属后续切片。两轴不代替测试，也不将部分提供者当完整交付。原 `State: claimed`、六条原验收标准和未勾状态保持；B/C 正式消费、用户可见 typed 连续讨论、A15/16/17/18 与组合继续。没有新增正文缓存、DDL、外部模型、私人资料、微信/OCR、外部发送、真实 App、人工验收、push、发布或部署。
+
+### 续答准备回执与正式客户端的同输入执行
+
+本轮从 `0ec5a1ae` 继续十个明确路径：新增 `POST /continue/prepare`，与 `/continue` 使用同一严格 `ContinueAssistantSession` 命令及唯一 reserve 事务，准备只领取实际 turn/input/key，不调用模型，返回无正文五字段回执。旧键同 canonical 命令的准备、执行和完成重放复用身份；输入改变冲突。准备后 CURRENT 推进、退出中断或会话删除均拒绝旧执行，可靠完成历史保持完成。
+
+正式 `continueAssistantSession` 先准备再执行，同一次构造和克隆的 body 不从界面重取；回执及最终 turn/input、scope、connection generation 逐项校验。`onPrepared`／`onRequested` 只交实际元数据给唯一作业 authority，不另建缓存或 writer。默认认证 JsonClient 的有限澄清只对 exact `/continue` 和 `/continue/prepare` 放行；附加查询、额外路径、未知字段和其他错误仍拒绝原正文。
+
+真实公开 HTTP：缺少准备路由 **1 RED／1.155 秒→1 GREEN／1.796 秒**；默认 JsonClient 原先只执行一次、没有生命周期回执的反例 **1 RED／1.599 秒→1 GREEN／2.006 秒**，修复后两次 HTTP 与相同 body、准确回执及冻结版本要求通过。新 CURRENT 回归首次把生成返回附带 session 元数据与历史 reply 投影直接比较，造成 3 项中 1 个夹具失败／3.232 秒；改为公开读取前后同投影比较，保留全部拒绝、零模型和 CURRENT 不回退断言，不记为产品 RED。
+
+沿前段实际命令完整复验 continuation、session inputs 及应用单元：**56 tests／58.038 秒／OK／skip0／actualexit0**，生产001–055逐名账本和重复执行0、续答内层与外层随机库剩余0。合法成功客户端现在明确两次 HTTP（prepare零模型、execute一次模型），澄清仍一次 HTTP／零模型；原 Unicode、2048条要求、幂等、来源删除和预算断言保持。Node **28 GREEN／63.391 ms／skip0／actualexit0**；whole桌面类型、四源 silent mypy、Python 编译与 diff 通过。
+
+固定 `0ec5a1ae→十路径` 差异两轴各自独立只读：B Standards Hard0／新增重要 possible Fowler0；C Spec新增P0–P3=0。真实 Main 的晚准备退出排空、B typed UI、公开页面和原生均仍属后续切片，不据 prepare HTTP 或回执客户端关闭原13／16／17。State与原AC未改，不新增迁移、外部模型或发送能力。

@@ -131,13 +131,15 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 "expected_input_version_id": generated["input_version_id"],
                 "instruction": instruction, "displayed_group": frame, **changes}
 
-    def _continue_with_default_json_client(self, path, command, *, replacement=None, confirmed_options=None):
+    def _continue_with_default_json_client(self, path, command, *, replacement=None, confirmed_options=None,
+                                          observe_lifecycle=False):
         root = Path(__file__).resolve().parents[4]
         fixture = {
             "port": int(self.backend.base_url.rsplit(":", 1)[1]), "token": self.backend.token,
             "contactId": path.split("/")[3], "sessionId": path.split("/")[5], "command": command,
             **({"replacement": replacement} if replacement is not None else {}),
             **({"confirmedOptions": confirmed_options} if confirmed_options is not None else {}),
+            "observeLifecycle": observe_lifecycle,
         }
         result = subprocess.run(
             ["node", "tests/fixtures/assistant-continuation-http.mjs"], cwd=root / "desktop",
@@ -293,6 +295,116 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(continued["continuation"]["effective_requirements"], ["自然一点"])
         self.assertEqual(self.backend.request(path + "/continue", command), (200, continued))
         self.assertEqual(len(self.reply_model.seen_calls), 2)
+
+    def test_continuation_prepare_reuses_actual_identity_and_canonical_command(self):
+        path, generated, frame = self._generated()
+        command = self._command(generated, frame)
+
+        status, prepared = self.backend.request(path + "/continue/prepare", command)
+
+        self.assertEqual(status, 200, prepared)
+        self.assertEqual(set(prepared), {"session_id", "turn_id", "request_key", "input_version_id", "state"})
+        self.assertEqual(prepared["state"], "running")
+        self.assertEqual(prepared["request_key"], command["idempotency_key"])
+        self.assertEqual(self.backend.request(path + "/continue/prepare", command), (200, prepared))
+        self.assertEqual(len(self.reply_model.seen_calls), 1)
+        status, continued = self.backend.request(path + "/continue", command)
+        self.assertEqual(status, 200, continued)
+        self.assertEqual(continued["turn_id"], prepared["turn_id"])
+        self.assertEqual(continued["input_version_id"], prepared["input_version_id"])
+        self.assertEqual(continued["continuation"]["submission"], command)
+        self.assertEqual(self.backend.request(path + "/continue/prepare", command),
+                         (200, {**prepared, "state": "completed"}))
+        self.assertEqual(len(self.reply_model.seen_calls), 2)
+        changed = {**command, "instruction": "第二条简短一点"}
+        self.assertEqual(self.backend.request(path + "/continue/prepare", changed),
+                         (409, {"error": "assistant_session_input_conflict"}))
+        self.assertEqual(len(self.reply_model.seen_calls), 2)
+
+    def test_default_client_prepares_identity_before_execution_and_freezes_requirements(self):
+        path, generated, frame = self._display_edited_second("正式一点")
+        command = self._command(generated, frame, requirement_changes=[
+            {"action": "replace", "previous": "正式一点", "replacement": "自然一点"},
+        ])
+
+        observed = self._continue_with_default_json_client(path, command, observe_lifecycle=True)
+
+        self.assertTrue(observed["ok"], observed)
+        self.assertEqual(observed["requests"], 2)
+        self.assertEqual(observed["lifecycle"]["events"], ["prepared", "requested"])
+        self.assertEqual(len(observed["lifecycle"]["receipts"]), 1)
+        self.assertTrue(observed["lifecycle"]["sameBody"])
+        receipt = observed["lifecycle"]["receipts"][0]
+        result = observed["result"]
+        self.assertEqual(receipt["sessionId"], result["assistantSessionId"])
+        self.assertEqual(receipt["inputVersionId"], result["inputVersionId"])
+        self.assertEqual(receipt["requestKey"], command["idempotency_key"])
+        saved = self._get(self.backend, path)["turns"][-1]
+        self.assertEqual(receipt["turnId"], saved["turn_id"])
+        self.assertEqual(saved["input"]["continuation"]["effective_requirements"], ["自然一点"])
+        self.assertEqual(self._model_payload()["user_instruction"], "自然一点")
+        self.assertEqual(len(self.reply_model.seen_calls), 2)
+
+    def test_continuation_prepare_clarifies_without_claiming_or_model(self):
+        path, generated, frame = self._display_edited_second("正式一点")
+        command = self._command(generated, frame)
+        before = self._get(self.backend, path)
+
+        status, clarified = self.backend.request(path + "/continue/prepare", command)
+
+        self.assertEqual(status, 409, clarified)
+        self.assertEqual(clarified["clarification"]["reason"], "requirements_conflict")
+        self.assertEqual(self._get(self.backend, path), before)
+        self.assertEqual(len(self.reply_model.seen_calls), 1)
+
+    def test_continuation_prepared_then_new_current_does_not_execute_or_rewind(self):
+        path, generated, frame = self._generated()
+        original_reply = self._get(self.backend, path)["turns"][0]["reply"]
+        command = self._command(generated, frame)
+        status, prepared = self.backend.request(path + "/continue/prepare", command)
+        self.assertEqual(status, 200, prepared)
+        status, newest = self.backend.request(path + "/inputs", {
+            "expected_input_version_id": prepared["input_version_id"],
+            "content": {"type": "purpose_exploration", "purpose_hint": "准备后明确修改的合成讨论。"},
+        })
+        self.assertEqual(status, 200, newest)
+
+        status, rejected = self.backend.request(path + "/continue", command)
+
+        self.assertNotEqual(status, 200, rejected)
+        self.assertEqual(len(self.reply_model.seen_calls), 1)
+        saved = self._get(self.backend, path)
+        self.assertEqual(saved["current_input_version_id"], newest["input_version_id"])
+        self.assertIsNone(saved["turns"][-1]["reply"])
+        self.assertEqual(saved["turns"][0]["reply"], original_reply)
+
+    def test_continuation_prepared_quit_and_delete_reject_old_execution(self):
+        for removal in ("quit", "session"):
+            with self.subTest(removal=removal):
+                path, generated, frame = self._generated()
+                command = self._command(generated, frame)
+                status, prepared = self.backend.request(path + "/continue/prepare", command)
+                self.assertEqual(status, 200, prepared)
+                before = len(self.reply_model.seen_calls)
+                if removal == "quit":
+                    status, stopped = self.backend.request(path + "/interrupt", {
+                        "request_key": prepared["request_key"], "input_version_id": prepared["input_version_id"],
+                    })
+                    self.assertEqual(status, 200, stopped)
+                    self.assertEqual(stopped["state"], "failed")
+                    self.assertEqual(stopped["interruption_reason"], "app_quit")
+                else:
+                    self.assertEqual(self.backend.request(path, {"confirmed": True}, method="DELETE")[0], 200)
+                for operation in ("continue", "continue/prepare"):
+                    self.assertNotEqual(self.backend.request(path + "/" + operation, command)[0], 200)
+                self.assertEqual(len(self.reply_model.seen_calls), before)
+                if removal == "quit":
+                    saved = self._get(self._backend(self.owner_id), path)
+                    self.assertEqual(saved["turns"][-1]["interruption_reason"], "app_quit")
+                    self.assertIsNone(saved["turns"][-1]["reply"])
+                    self.assertEqual(saved["turns"][0]["state"], "completed")
+                else:
+                    self.assertEqual(self.backend.request(path), (404, {"error": "not_found"}))
 
     def test_ambiguous_or_missing_number_clarifies_before_new_input_or_model(self):
         path, generated, frame = self._generated()
@@ -1300,7 +1412,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                       f"requests={observed['requests']} ok={observed['ok']} "
                       f"model_delta={len(self.reply_model.seen_calls) - before}", flush=True)
                 self.assertTrue(observed["ok"], observed)
-                self.assertEqual(observed["requests"], 1)
+                self.assertEqual(observed["requests"], 2)
                 self.assertEqual(observed["status"], 200)
                 self.assertEqual(observed["result"]["phase"], "completed")
                 self.assertEqual(observed["result"]["effectiveRequirements"], [legal])
@@ -1344,7 +1456,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 ))
                 self.assertTrue(observed["ok"], observed)
                 self.assertEqual(observed["status"], 200)
-                self.assertEqual(observed["requests"], 1)
+                self.assertEqual(observed["requests"], 2)
                 self.assertEqual(observed["result"]["effectiveRequirements"], [legal])
                 self.assertEqual(self._model_payload()["user_instruction"], legal)
                 self.assertEqual(self._get(self.backend, path)["turns"][-1]["input"]["continuation"]["effective_requirements"], [legal])
@@ -1375,7 +1487,7 @@ class AssistantContinuationHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 ))
                 self.assertTrue(observed["ok"], observed)
                 self.assertEqual(observed["status"], 200)
-                self.assertEqual(observed["requests"], 1)
+                self.assertEqual(observed["requests"], 2)
                 self.assertEqual(observed["result"]["phase"], "completed")
                 self.assertEqual(observed["result"]["effectiveRequirements"], requirements)
                 self.assertEqual(self._model_payload()["user_instruction"], "；".join(requirements))
