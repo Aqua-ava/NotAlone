@@ -6,7 +6,7 @@ import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
 import { generateReply, replaceReply } from './client';
 import type { DirectionExploration, ReplyClarificationAnswer, ReplyClarificationEdit, ReplyRequirementsUpdate, ReplySkillChoice, ReplySkillUpdate } from '../../shared/reply-bridge';
-import { actOnExploration, explorationIdentity, openExploration, type ExplorationRequest, type ExplorationAction } from './exploration-client';
+import { actOnExploration, explorationIdentity, openExploration, prepareExplorationAction, type ExplorationRequest, type ExplorationAction } from './exploration-client';
 import { readReplyMessages } from './messages';
 import { readReplyEvidence } from './evidence-read';
 import { defaultAssistantSession, deleteAssistantSession, readAssistantSession } from './assistant-sessions';
@@ -62,6 +62,7 @@ export class ReplySession {
   private directionDerived = false;
   private explorationOperation = 0;
   private explorationPending: AbortController | undefined;
+  private strategyCandidatePending: AbortController | undefined;
   private automaticExploration: { contactId: string; scopeRevision: number; generation: number;
     sessionId: string; remaining: number; expiresAt: number; queued: boolean } | undefined;
   private automaticExplorationTimer: ReturnType<typeof setTimeout> | undefined;
@@ -619,14 +620,23 @@ export class ReplySession {
     this.explorationPending?.abort();
     const pending = new AbortController(); this.explorationPending = pending;
     const operation = ++this.explorationOperation, scopeRevision = this.state.scopeRevision;
+    const viewOperation = this.operation;
     const generation = this.backend.getConnectionGeneration();
+    let ownedGeneration: OwnedAssistantGeneration | undefined;
+    if (job.type === 'action' && (job.request.action === 'confirm'
+      || job.request.action === 'answer' && Boolean(this.currentExploration?.confirmedIntent))) {
+      this.strategyCandidatePending = pending;
+    }
     const automaticTask = job.type === 'open' && job.request.automatic ? this.automaticExploration : undefined;
     const current = () => (!(job.type === 'open' && job.request.automatic)
       || Boolean(automaticTask && automaticTask === this.automaticExploration))
-      && !pending.signal.aborted && operation === this.explorationOperation
+      && !pending.signal.aborted && operation === this.explorationOperation && viewOperation === this.operation
       && scopeRevision === this.state.scopeRevision && job.request.contactId === this.state.contactId
       && job === this.strategyJob && (!this.state.savedSession?.sessionId || job.request.sessionId === this.state.savedSession.sessionId)
-      && generation === this.backend.getConnectionGeneration();
+      && generation === this.backend.getConnectionGeneration()
+      && (!ownedGeneration || this.generationJobs.canPublish(ownedGeneration, {
+        connectionGeneration: ownedGeneration.identity.connectionGeneration,
+        contactId: job.request.contactId, sessionId: this.state.savedSession?.sessionId ?? job.request.sessionId }));
     if (job.sourceValidation && generation !== undefined) job.sourceValidation = {
       scope: { contactId: job.request.contactId, scopeRevision, sessionId: job.request.sessionId },
       operation, generation, phase: 'checking', inputs: [],
@@ -634,8 +644,26 @@ export class ReplySession {
     this.publish({ exploration: { phase: 'waiting', result: this.state.exploration.result, canRetry: true,
       automaticUpdatesPaused: this.state.exploration.automaticUpdatesPaused } });
     try {
+      const prepared = job.type === 'action' && job.request.action !== 'stop'
+        ? await prepareExplorationAction(this.backend, job.request, pending.signal) : undefined;
+      if (pending.signal.aborted || generation === undefined || generation !== this.backend.getConnectionGeneration()) return;
+      if (prepared?.kind === 'prepared') {
+        if (prepared.generation !== generation) return;
+        ownedGeneration = this.generationJobs.begin({ connectionGeneration: generation,
+          contactId: job.request.contactId, sessionId: job.request.sessionId, requestKey: prepared.receipt.requestKey }, pending);
+        this.generationJobs.receiveReceipt(ownedGeneration, prepared.receipt);
+        if (current()) this.publish({ phase: 'waiting', canRetry: false,
+          exploration: { phase: 'ready', result: null, canRetry: true } });
+      }
       const result = job.type === 'open' ? await openExploration(this.backend, job.request, pending.signal)
-        : await actOnExploration(this.backend, job.request, pending.signal);
+        : prepared?.kind === 'prepared' ? await (() => {
+          if (!ownedGeneration) throw new Error('本次候选生成尚未登记。');
+          const execution = actOnExploration(this.backend, job.request, pending.signal, prepared.receipt);
+          this.generationJobs.requestStarted(ownedGeneration); return execution;
+        })() : prepared ?? await actOnExploration(this.backend, job.request, pending.signal);
+      if (prepared?.kind === 'prepared' && (result.kind !== 'generated' || result.taskId !== prepared.taskId)) {
+        throw new Error('本次确认结果不属于原准备任务。');
+      }
       if (!current() || result.generation !== generation) return;
       const actualInputVersionId = result.kind === 'exploration' ? result.result.inputVersion
         : result.kind === 'generated' ? result.reply.inputVersionId : undefined;
@@ -688,6 +716,8 @@ export class ReplySession {
         if (automatic) this.stopAutomaticExploration(true);
       }
     } finally {
+      if (ownedGeneration) this.generationJobs.finish(ownedGeneration);
+      if (this.strategyCandidatePending === pending) this.strategyCandidatePending = undefined;
       if (this.explorationPending === pending) this.explorationPending = undefined;
       if (current() && this.automaticExploration?.queued) this.queueAutomaticExploration();
     }
@@ -1353,6 +1383,8 @@ export class ReplySession {
   private cancelMessagePage(): void { ++this.messageOperation; this.messagePending?.abort(); this.messagePending = undefined; }
   private leaveGenerationView(): void {
     this.generationJobs.leaveView(); ++this.operation; this.pending = undefined;
+    // 明确确认/已确认回答已送出；离开视图仍接收真实准备回执，交由同一作业继续或退出中断。
+    if (this.explorationPending === this.strategyCandidatePending) this.explorationPending = undefined;
     this.sourceCheck?.abort(); this.sourceCheck = undefined; this.heldResult = undefined;
     if (this.state.sourceAvailability) this.publish({ sourceAvailability: undefined });
   }

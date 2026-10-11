@@ -260,6 +260,137 @@ for (const mode of ['reply_to_message', 'initiate_conversation']) {
   });
 }
 
+test('B09确认方向的候选领取实际回执，关闭后只保存原SID且重显零追加模型', async () => {
+  await withPublicFixture(async (f) => {
+    const scope = await f.selectContact(f.contactA);
+    await f.bridge.setMode({ ...scope, mode: 'initiate_conversation' });
+    await f.bridge.updatePurpose({ ...scope, purpose: '想了解合成近况，尚未确定意愿。' });
+    await f.fixture.plan({ explore: { understanding: '只确认本次合成意愿。', question: null } });
+    await f.bridge.explore(scope);
+    const exploration = (await f.bridge.getState()).exploration.result;
+    assert(exploration);
+    await f.fixture.plan({ count: 1, message_groups: [['只归原已确认会话。', '不增加其他安排。']] });
+    await f.fixture.command('hold');
+    const confirming = f.bridge.selectDirection({ ...scope, suggestionId: exploration.directions[0].suggestionId,
+      inputVersion: exploration.inputVersion });
+    try {
+      await eventually(() => f.fixture.command('counts'), (counts) => counts.entered,
+        '方向确认的候选未到达实际模型。');
+      const running = await f.rawSession(f.contactA, exploration.sessionId);
+      const receipts = f.replies.pendingGenerationReceipts();
+      assert.equal(receipts.length, 1, '已确认候选须由唯一A作业持有实际准备回执。');
+      assert.equal(receipts[0].sessionId, exploration.sessionId);
+      assert.equal(receipts[0].turnId, running.turns[0].turn_id);
+      assert.equal(receipts[0].inputVersionId, running.turns[0].input_version_id);
+      assert.equal(receipts[0].requestKey, running.turns[0].request_key);
+      f.replies.notifyHelperLifecycle('closed');
+      await f.fixture.command('release'); await confirming;
+      const saved = await f.rawSession(f.contactA, exploration.sessionId);
+      assert.equal(saved.turns.length, 1); assert.equal(saved.turns[0].state, 'completed');
+      assert.deepEqual(saved.turns[0].reply.candidates[0].messages.map((message) => message.text),
+        ['只归原已确认会话。', '不增加其他安排。']);
+      assert.equal((await f.bridge.getState()).result, null, '已关闭视图不能发布完成候选。');
+      f.replies.notifyHelperLifecycle('focused');
+      await eventually(() => f.bridge.getState(), (state) => state.savedSession?.turns[0]?.state === 'completed',
+        '重显未读取原已确认候选。');
+      assert.equal((await f.fixture.command('counts')).actual_calls, 2);
+      assert.deepEqual(f.replies.pendingGenerationReceipts(), []);
+    } finally { await f.fixture.command('release'); await confirming; }
+  });
+});
+
+async function preparedStrategyCandidate(f, action, mode) {
+  const scope = await f.selectContact(f.contactA);
+  await f.bridge.setMode({ ...scope, mode });
+  if (mode === 'initiate_conversation') {
+    await f.bridge.updatePurpose({ ...scope, purpose: '合成目的：了解近况，尚未决定意愿。' });
+  } else {
+    await f.bridge.loadMessages({ ...scope, older: false });
+    const state = await f.bridge.getState();
+    await f.bridge.selectMessage({ ...scope, messageId: state.messages.items[0].messageId });
+  }
+  await f.fixture.plan({ explore: { understanding: '只确认本次合成意愿。',
+    question: action === 'answer' ? { text: '本次是否不增加其他承诺？', impact: 'commitment' } : null } });
+  await f.bridge.explore(scope);
+  let exploration = (await f.bridge.getState()).exploration.result;
+  assert(exploration);
+  if (action === 'answer') {
+    await f.bridge.selectDirection({ ...scope, suggestionId: exploration.directions[0].suggestionId,
+      inputVersion: exploration.inputVersion });
+    exploration = (await f.bridge.getState()).exploration.result;
+    assert(exploration?.confirmedIntent); assert(exploration.question);
+    assert.equal(f.replies.pendingGenerationReceipts().length, 0, '仍有关键问题时不领取候选。');
+    await f.fixture.plan({ explore: { understanding: '回答只补足本次承诺信息。', question: null } });
+  }
+  await f.fixture.plan({ count: 1, message_groups: [['本次合成已确认说法。', '不增加其他安排。']] });
+  const gate = action === 'answer' ? f.gateResponse((request) => request.path.endsWith('/prepare-answer')) : null;
+  if (!gate) await f.fixture.command('hold');
+  const before = f.requests.length;
+  const executing = action === 'answer'
+    ? f.bridge.answerClarification({ ...scope, answer: '不增加其他承诺。',
+      questionId: exploration.question.questionId, inputVersion: exploration.inputVersion })
+    : f.bridge.selectDirection({ ...scope, suggestionId: exploration.directions[0].suggestionId,
+      inputVersion: exploration.inputVersion });
+  if (gate) {
+    await gate.arrived.promise;
+    await f.fixture.command('hold'); gate.release.resolve();
+  }
+  await eventually(() => f.fixture.command('counts'), (counts) => counts.entered, '已确认候选未进入实际模型。');
+  return { scope, exploration, executing, before };
+}
+
+for (const mode of ['reply_to_message', 'initiate_conversation']) {
+  for (const action of ['confirm', 'answer']) {
+    for (const departure of ['close', 'switch']) {
+      if (mode === 'initiate_conversation' && action === 'confirm' && departure === 'close') continue;
+      test(`B09 ${mode} ${action}候选在${departure}后继续原SID，实际回执与持久重读一致`, async () => {
+        await withPublicFixture(async (f) => {
+          const { scope, exploration, executing, before } = await preparedStrategyCandidate(f, action, mode);
+          try {
+            const running = await f.rawSession(f.contactA, exploration.sessionId);
+            const receipt = f.replies.pendingGenerationReceipts()[0];
+            assert.equal(f.replies.pendingGenerationReceipts().length, 1);
+            assert.equal(receipt.sessionId, exploration.sessionId);
+            assert.equal(receipt.turnId, running.turns[0].turn_id);
+            assert.equal(receipt.inputVersionId, running.turns[0].input_version_id);
+            assert.equal(receipt.requestKey, running.turns[0].request_key);
+            const execution = f.requests.slice(before).find((request) => request.path.endsWith('/' + action));
+            const prepare = f.requests.slice(before).find((request) => request.path.endsWith('/prepare-' + action));
+            assert.equal(prepare.bodyHash, execution.bodyHash, '准备与执行保持同一原输入和操作键。');
+            assert.equal((await f.bridge.getState()).exploration.phase, 'ready');
+            let newSession;
+            if (departure === 'close') f.replies.notifyHelperLifecycle('closed');
+            else {
+              await f.bridge.newSavedSession(scope);
+              newSession = (await f.bridge.getState()).savedSession.sessionId;
+              assert.notEqual(newSession, exploration.sessionId);
+            }
+            assert.equal(execution.signal.aborted, false, '离开视图不能中止原已确认候选。');
+            await f.fixture.command('release'); await executing;
+            const saved = await f.rawSession(f.contactA, exploration.sessionId);
+            assert.equal(saved.turns.length, 1); assert.equal(saved.turns[0].state, 'completed');
+            assert.deepEqual(saved.turns[0].reply.candidates[0].messages.map((message) => message.text),
+              ['本次合成已确认说法。', '不增加其他安排。']);
+            assert.equal((await f.bridge.getState()).result, null, '原候选不能发布到离开的视图。');
+            if (departure === 'close') {
+              f.replies.notifyHelperLifecycle('focused');
+              await eventually(() => f.bridge.getState(), (state) => state.savedSession?.turns[0]?.state === 'completed',
+                '重显未读取原已确认候选。');
+            } else {
+              assert.equal((await f.bridge.getState()).savedSession.sessionId, newSession);
+              assert.equal((await f.rawSession(f.contactA, newSession)).turns.length, 0);
+              await f.bridge.selectSavedSession({ ...scope, sessionId: exploration.sessionId });
+            }
+            assert.equal((await f.bridge.getState()).savedSession.turns[0].state, 'completed');
+            assert.equal((await f.fixture.command('counts')).actual_calls, action === 'answer' ? 3 : 2);
+            assert.deepEqual(f.replies.pendingGenerationReceipts(), []);
+          } finally { await f.fixture.command('release'); await executing; }
+        });
+      });
+    }
+  }
+}
+
 test('prepare实际回执在途时离开A，晚到后仍用原key/body/SID生成且不发布B', async () => {
   await withPublicFixture(async (f) => {
     const scopeA = await f.selectContact(f.contactA);

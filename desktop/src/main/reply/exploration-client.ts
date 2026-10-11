@@ -3,6 +3,7 @@ import type { BackendHost } from '../backend/host';
 import { isUuid } from '../uuid';
 import { defaultAssistantSession } from './assistant-sessions';
 import { isRecord, readReplyResult } from './result-read';
+import { readAssistantGenerationReceipt, type AssistantGenerationReceipt } from './assistant-generation-jobs';
 
 export interface ExplorationRequest {
   contactId: string; sessionId: string; operationKey: string; expectedInputVersionId: string | null;
@@ -99,12 +100,36 @@ export async function openExploration(backend: BackendHost, input: ExplorationRe
       } } });
   return { ...readOutcome(response.data, input.sessionId), generation: response.generation };
 }
-export async function actOnExploration(backend: BackendHost, input: ExplorationAction, signal: AbortSignal) {
+function actionBody(input: ExplorationAction) {
+  return { input_version_id: input.inputVersion, ...(input.action === 'confirm' ? input.suggestionId
+    ? { suggestion_id: input.suggestionId } : { direct_intent: input.directIntent }
+    : input.action === 'answer' ? { question_id: input.questionId, answer: input.answer, operation_key: input.operationKey } : {}) };
+}
+export async function prepareExplorationAction(backend: BackendHost, input: ExplorationAction, signal: AbortSignal) {
+  if (input.action === 'stop') throw new Error('停止方向探索不能领取候选生成。');
+  const response = await backend.requestJson({ method: 'POST',
+    path: `/api/contacts/${input.contactId}/assistant-sessions/${input.sessionId}/explorations/${input.taskId}/prepare-${input.action}`,
+    timeoutMs: 25_000, signal, body: actionBody(input) });
+  const value = response.data;
+  if (isRecord(value) && value.kind === 'prepared') {
+    if (Object.keys(value).length !== 3 || !isUuid(value.exploration_id) || !isRecord(value.generation)
+      || !isUuid(value.generation.request_key)) throw new Error('本次探索生成准备回执无效。');
+    return { kind: 'prepared' as const, taskId: value.exploration_id.toLowerCase(),
+      receipt: readAssistantGenerationReceipt(value.generation, input.sessionId, value.generation.request_key),
+      generation: response.generation };
+  }
+  return { ...readOutcome(value, input.sessionId), generation: response.generation };
+}
+export async function actOnExploration(backend: BackendHost, input: ExplorationAction, signal: AbortSignal,
+  receipt?: AssistantGenerationReceipt) {
   const response = await backend.requestJson({ method: 'POST',
     path: `/api/contacts/${input.contactId}/assistant-sessions/${input.sessionId}/explorations/${input.taskId}/${input.action}`, timeoutMs: 25_000, signal,
-    body: { input_version_id: input.inputVersion, ...(input.action === 'confirm' ? input.suggestionId
-      ? { suggestion_id: input.suggestionId } : { direct_intent: input.directIntent }
-      : input.action === 'answer' ? { question_id: input.questionId, answer: input.answer, operation_key: input.operationKey } : {}) } });
+    body: actionBody(input) });
+  if (receipt && (!isRecord(response.data) || response.data.kind !== 'generated' || !isRecord(response.data.turn)
+    || response.data.turn.turn_id !== receipt.turnId || response.data.turn.input_version_id !== receipt.inputVersionId
+    || response.data.turn.session_id !== receipt.sessionId || response.data.turn.state !== 'completed')) {
+    throw new Error('本次确认结果与准备回执不一致。');
+  }
   return { ...readOutcome(response.data, input.sessionId), generation: response.generation };
 }
 export type ExplorationOutcome = Awaited<ReturnType<typeof actOnExploration>>;

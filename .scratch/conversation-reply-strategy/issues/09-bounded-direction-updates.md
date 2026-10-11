@@ -106,3 +106,21 @@ Root whole桌面TSC、fixture编译、两个entry的esbuild write=false及diff�
 补充本次门禁实际结果：同代码补权限后的安全CLI实际9pass／1fail，失败仅初始只读status期待absent而A具名预算RED窗口仍持有共享实际Page租约；不改门禁、不清他人锁、不并发真实Page。此阶段不标CLI总体通过，待A完整FULLRELEASE后原10项再运行。
 
 共享实际Page租约独立freshstatus actual0absent后，同代码原安全CLI十项重新完整运行：10 GREEN／2717.629666ms／skip0／actualexit0。仅合成probe进程与自己的probe租约，不启动Chrome/Electron/真实App；先前5FAIL目录权限及9G1FAIL实际租约阶段各保留，门禁/预算未修改。日志/private/tmp/notalone-root-confirmed-lifecycle-safe-cli-released.log。八场准备源码此前fresh两轴无新增问题，本次仅补准确结果；真实八场及A16B仍未运行/未接，不以CLI代替页面证据。
+
+## Answer（本轮已确认候选的唯一作业接线）
+
+本轮 B 在独立工作树 `/private/tmp/notalone-round29-b`、基线 `84b5dd32` 接续，消费唯一 A 正式 `0ec5a1ae` 的十四个提供者／客户端文件为本地 `7abec150`；没有复制 A 的任务记录或改写其状态。消费兼容性实际验证为选定版本要求两条 HTTP 加命令单元两条，共 **4 GREEN／2.267 秒**，正式001–055逐名账本、重复0、内外自有数据库残留0；完整桌面类型及diff检查通过。这四条属于本 B 新运行，不借 A 的51条或 Root 的41条结果。
+
+针对未登记已确认候选的实际缺口，原 `assistant-generation-ownership-http.test.mjs` 新公开反例先取得 **1 FAIL／3820.159083ms**：主动探索与明确确认已进入真实模型，唯一作业的实际回执数组却是0，原要求为1。补充原 `prepare-confirm`／`prepare-answer` 的薄客户端后，该同反例 **1 GREEN／3389.149375ms**；不把环境socket EPERM或首次类型括号错误记作产品RED。
+
+准备与执行共用 `actionBody`，准备结果必须是实际五字段 A receipt，候选完成再核turn／输入／SID及真实任务ID。仍有问题或未确认的回答只发布探索结果，不领取候选；确认后才把实际receipt登记至已有 `AssistantGenerationJobs`。关闭或切会话只离开视图，原请求与原body不变；既有view operation、范围、连接、SID和唯一作业发布资格共同拒绝把旧候选发到后来的视图。准备中已明确提交的确认／已确认回答保留本次请求控制器以接实际receipt，不建立第二作业表、CURRENT writer、正文缓存、来源图或发送接口。
+
+新增两场景×确认／已确认回答×关闭／新开共八个具名Main/preload→真实HTTP→隔离PG场景 **8 GREEN／28326.785875ms／skip0**：每场实际2或3次合成模型，准备／执行body hash一致，receipt的turn／input／key取真实GET，关闭不发布、新SID为空、选回或重显只读取原完成组且零追加。加实际prepared／generated任务ID等值守卫后的完整同文件相关回归 **29 GREEN／84573.4795ms／skip0／actualexit0**；29份正式55迁移及repeat0、29份instance/class清理和自有库剩余0逐项确认。原普通生成、来源删除、绑定撤销、连接变化、完成优先及替换回归保留。
+
+实际命令均先激活Conda `NotAlone`，`PGPORT=55441`，隔离dotenv与追踪，只使用模型边界合成响应：`node --test --test-name-pattern='B09' tests/assistant-generation-ownership-http.test.mjs`，最终 `node --test tests/assistant-generation-ownership-http.test.mjs`；完整 `npm run typecheck` 和 `git diff --check`通过。固定三个源码／测试路径独立两轴：A Standards硬要求0／新增重要Fowler possible0，C Spec新增P0–P3为0；只读审查未冒充执行。
+
+本阶段没有运行普通Page。既有confirmed八场仍须在总协调具名有限窗口真正执行；本 B 的29项HTTP不能替代它们。退出在prepare回执尚未到Main时的未知领取阶段已明确交唯一 A17补齐，同作业必须等待真实准备落定再中断，不能用本八条关闭该边界。原 `State: claimed`、六条原验收及所有历史失败继续保留。无真实App、原生、人工、系统剪贴板、OCR、微信、私人资料、付费或外部模型、自动发送、push、发布或部署；自然语言质量仍未知。
+
+### 总协调主树集成复验
+
+Root 按正式 `59c4bd62` 的四路径净变更集成，主树重新执行 `node --test --test-name-pattern='B09' tests/assistant-generation-ownership-http.test.mjs`：**8 GREEN／29277.934167ms／skip0**；八份实际001–055迁移账本、repeat0、instance/class清理与自有数据库残留0均有实际输出。完整桌面类型检查与diff检查通过。此项是 Root 新运行的 Main/preload→HTTP→隔离PG证据；独立 B 的具名公开Page八场实际结果另记，不混用次数。原退出未知准备、原生及人工验收范围继续保留。
