@@ -1,6 +1,6 @@
 # 05：生成时有界引用表达样本
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: [authentic-expression/02 当前意图优先的生成与改写](02-current-intent-priority.md)；[authentic-expression/03 无依据扩写的约束与失败呈现](03-unsupported-content-boundary.md)；[authentic-expression/04 表达样本的主动保存、查看和删除](04-style-sample-lifecycle.md)
 
@@ -8,7 +8,7 @@ Blocked by: [authentic-expression/02 当前意图优先的生成与改写](02-cu
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧03；样本参考。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-044](../../../architecture/adr/044-explicit-style-sample-retention.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧03；样本参考。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-044](../../../architecture/adr/044-explicit-style-sample-retention.md)。依赖是完整交付的前置，不代表这些前置已完成；本票原自动验收范围已完成；跨规格组合状态见 E06。
 
 ## What to build
 
@@ -16,12 +16,12 @@ Blocked by: [authentic-expression/02 当前意图优先的生成与改写](02-cu
 
 ## Acceptance criteria
 
-- [ ] 已确认联系人生成仅有界选取有效样本，最多5条且计入现有输入预算，展示实际用到的样本；无样本正常工作。
-- [ ] 样本仅提供低权重说法参考，不提供本次事实，不覆盖当前意图，不进入方向探索；与E02/E03保真契约一致。
-- [ ] 删除样本或原始来源后，相关输入、派生上下文、缓存及重试副本不可复用；生成/删除竞态不能提交旧结果。
-- [ ] 重试重放核验来源及样本仍有效；重新连接助手会话和Skill探索载荷的跨规格组合由E06验收。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
+- [x] 已确认联系人生成仅有界选取有效样本，最多5条且计入现有输入预算，展示实际用到的样本；无样本正常工作。
+- [x] 样本仅提供低权重说法参考，不提供本次事实，不覆盖当前意图，不进入方向探索；与E02/E03保真契约一致。
+- [x] 删除样本或原始来源后，相关输入、派生上下文、缓存及重试副本不可复用；生成/删除竞态不能提交旧结果。
+- [x] 重试重放核验来源及样本仍有效；重新连接助手会话和Skill探索载荷的跨规格组合由E06验收。
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
 ## 范围边界
 
@@ -102,3 +102,12 @@ Conda NotAlone／backend内`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRAC
 共享删除回归保真记录：首轮四模块59项实际1FAIL＋2ERROR／108.363秒，全部自有库已清理。FAIL为旧测试仍要求current指向已redacted输入，与A b819正式清空契约相反；只将该断言改为None，保留旧输入占位、无关讨论和失效校验。两个memory-expiration子例是HTTP timeout；新隔离库原单例1GREEN／0.968秒，线程定时诊断未触发，未定位或宣称修复超时原因。原四模块完整复跑最终59GREEN／56.255秒、skip0，正式53／repeat0／嵌套和外层两自有库精确0，原租约失效诊断保留。加上前述20项最小组合，本删除主题相关验证完成；最终十文件只读两轴完成：Standards硬要求0／重要Fowler0，Spec新增P0–P2为0。复制后来copy／清空／先删SID后首次短贴的新P2独立开放，不由本删除修复关闭E04–E06。
 
 总协调主树集成 e5cea839 的四个必要 backend 文件及 f6d94b 的五行存储修正，保留所有历史和负责人证据。原四模块实际30项 GREEN／16.713秒；追加原12样本 HTTP，在临时 runner 子进程仅显式设 StyleSampleHttpTest.dimension_release=None，真实生产 CLI 迁移与 HTTP／PostgreSQL和全部原断言保持，共42项 GREEN／28.708秒，正式001–053、重复迁移0、自有库残留0。当前样本存储限定 mypy --follow-imports=skip 单文件通过、相关四文件编译通过；首次默认两类型错误及 C 默认跨文件错误保留，不宣称全树类型通过。最终此七文件 Standards硬要求／重要Fowler可能气味0、Spec0。仅接线、来源物理擦除和样本生命周期已自动验证，C未知粘贴新合同的公开异步来源反例、A恢复复制和其他组合继续；C04–06保持claimed，人工部分未执行。
+
+2026-10-11 按原六条验收逐项复核后完成本票，未新增模型实验或重复运行已通过且源码未变的测试：
+
+- 最多五条完整有效样本及实际使用展示、无样本、整体输入预算：本票公开五条展示与预算三项记录、`test_style_reference_budget_api` 和已接 A 完整预算证据；600 字限制不冒作完整模型总预算。
+- 低权重表达参考、当前意图优先、非事实来源、不进方向探索：`test_authentic_expression_skill_exploration` 的实际完整出站载荷及 E02/E03 契约；故意语义失败的逐例报告仍保留失败，真人质量未知。
+- 样本／raw 删除和生成竞态、历史样本传播、输入／正文／CURRENT 物理清除与迟到拒绝：`test_style_reference_api`、`test_reply_discussion_dependencies`、`test_authentic_expression_session_deletion` 及本票最终清理实证。旧阶段失败均保留，不把早期通过改写为最终证据。
+- 重建后端后的依据读取和同键重放拒绝、owner/contact 两种隔离反例均有真实 HTTP/PG 证据；不新增普通日志正文、外部发送、隐式长期学习或自动采纳门禁。
+
+本次只校准任务状态与证据索引，不修改生产或测试，数据处理无新增影响。原阶段记录中“待 provider／擦除修复”等是当时状态，后续实际修复和验证已经在同票记录；不删除这些历史。E04 的显式样本生命周期及保存／删除竞态已完成。更广 A/B 会话恢复、连续修改与 Skill 行为集成仍由 E06 继续，新的 A13/A18 来源引用契约尚待正式交付与消费，不把这些未运行组合预填通过。真实 App、原生、OCR、微信和新增外部模型实验按本轮范围跳过。

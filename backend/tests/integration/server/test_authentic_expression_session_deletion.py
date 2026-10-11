@@ -9,7 +9,9 @@ from uuid import uuid4
 
 import psycopg
 
+from notalone.persistence.locks import lock_owner_scope
 from tests.fidelity_http_support import FidelityHttpFixture
+from tests.integration.persistence.concurrency import wait_for_blocked_operations
 
 
 class AuthenticExpressionSessionDeletionTests(FidelityHttpFixture, unittest.TestCase):
@@ -72,6 +74,63 @@ class AuthenticExpressionSessionDeletionTests(FidelityHttpFixture, unittest.Test
         self.assertNotEqual(self.backend.request(path + "/replies", current)[0], 200)
         self.assertEqual(self.reply_model.payloads[-1]["style_references"], [])
         self.assertEqual(len(self.reply_model.payloads), 2)
+
+    def test_candidate_save_and_session_delete_follow_actual_owner_lock_order(self):
+        for save_first in (True, False):
+            with self.subTest(save_first=save_first):
+                contact, target, source = self.prepare_contact(self.owner_id)
+                session = self.backend.request(f"/api/contacts/{contact}/assistant-session/default", {})[1]
+                path = f"/api/contacts/{contact}/assistant-sessions/{session['session_id']}"
+                calls = len(self.reply_model.payloads)
+                self.reply_model.plans.append({"text": "本次不参加。", "basis": "仅表达合成拒绝。"})
+                status, reply = self.backend.request(path + "/replies", {
+                    "contact_id": contact, "idempotency_key": str(uuid4()), "skill_disabled": True,
+                    "content": {"type": "reply_to_message", "target_message_id": target,
+                                "direction": "明确拒绝，不承诺其他安排。"},
+                })
+                self.assertEqual(status, 200, reply)
+                sample_path = f"/api/contacts/{contact}/style-samples"
+                save_body = {"idempotency_key": str(uuid4()), "text": "主动另存的合成拒绝。",
+                             "origin": {"kind": "candidate", "id": reply["candidates"][0]["candidate_id"]}}
+                operations = {
+                    "save": lambda: self.backend.request(sample_path, save_body),
+                    "delete": lambda: self.backend.request(path, {"confirmed": True}, method="DELETE"),
+                }
+                order = ("save", "delete") if save_first else ("delete", "save")
+                # 两个真实 HTTP 事务先后进入同一 owner 锁队列，不以线程启动时间猜顺序。
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    with psycopg.connect(self.database_url) as blocker:
+                        lock_owner_scope(blocker, owner_id=self.owner_id)
+                        blocker_pid = blocker.execute("SELECT pg_backend_pid()").fetchone()[0]
+                        first = executor.submit(operations[order[0]])
+                        waiting = wait_for_blocked_operations(self.database_url, {blocker_pid}, 1)
+                        second = executor.submit(operations[order[1]])
+                        wait_for_blocked_operations(self.database_url, {blocker_pid, *waiting}, 2)
+                    results = {order[0]: first.result(timeout=10), order[1]: second.result(timeout=10)}
+                self.assertEqual(results["delete"][0], 200, results)
+                rebuilt = self._backend(self.owner_id)
+                self.assertEqual(rebuilt.request(path), (404, {"error": "not_found"}))
+                if save_first:
+                    self.assertEqual(results["save"][0], 200, results)
+                    sample = results["save"][1]["sample"]
+                    self.assertIn(source, sample["source_ids"])
+                    self.assertEqual(self._get(rebuilt, sample_path)["samples"], [sample])
+                    self.assertEqual(rebuilt.request(sample_path, save_body), results["save"])
+                else:
+                    self.assertEqual(results["save"][0], 404, results)
+                    self.assertEqual(self._get(rebuilt, sample_path)["samples"], [])
+                    self.assertEqual(rebuilt.request(sample_path, save_body)[0], 404)
+                self.assertEqual(rebuilt.request(sample_path, {**save_body, "idempotency_key": str(uuid4())})[0], 404)
+                with psycopg.connect(self.database_url) as connection:
+                    self.assertEqual(connection.execute(
+                        "SELECT count(*) FROM public.assistant_session_input WHERE owner_id=%s AND session_id=%s AND content IS NOT NULL",
+                        (self.owner_id, session["session_id"]),
+                    ).fetchone()[0], 0)
+                    self.assertEqual(connection.execute(
+                        "SELECT count(*) FROM public.reply_request WHERE owner_id=%s AND id=%s",
+                        (self.owner_id, reply["reply_request_id"]),
+                    ).fetchone()[0], 0)
+                self.assertEqual(len(self.reply_model.payloads), calls + 1)
 
     def _exercise_retention(self, removal: str) -> None:
         contact, target, source = self.prepare_contact(self.owner_id)

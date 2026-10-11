@@ -1,6 +1,6 @@
 # 04：表达样本的主动保存、查看和删除
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: None (can start immediately)
 
@@ -8,7 +8,7 @@ Blocked by: None (can start immediately)
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧03；样本管理。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-044](../../../architecture/adr/044-explicit-style-sample-retention.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧03；样本管理。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-044](../../../architecture/adr/044-explicit-style-sample-retention.md)。依赖是完整交付的前置，不代表这些前置已完成；本票原自动验收范围已完成；跨规格组合状态见 E06。
 
 ## What to build
 
@@ -16,13 +16,13 @@ Blocked by: None (can start immediately)
 
 ## Acceptance criteria
 
-- [ ] 用户明确保存最终文字后能查看同联系人样本、主动删除；选择、复制或同步事件不自动保存，无发送证据保持未知。
-- [ ] 手工文字和候选/消息衍生样本标明真实来源，保留原始聊天依赖；不得复制后改称无来源手动输入逃避删除。
-- [ ] 保存/查看/删除是同票完整生命周期，跨owner/contact拒绝；删除或来源清理后重读、同键重试与恢复副本不可得，部分失败可重试。
-- [ ] 按ADR-044将已主动保存样本作为独立对象：删助手会话仍可查看样本，只保留必要的非正文来历标识和有效原始来源依赖，不保存会话全文或从样本恢复旧讨论。
-- [ ] 删除样本不删除独立聊天资料；会话删除完整组合在E06核验。保存与会话删除竞态只保留删除前成功主动保存的样本，失效候选不能在删除后重新保存；本票不让样本进入生成。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
+- [x] 用户明确保存最终文字后能查看同联系人样本、主动删除；选择、复制或同步事件不自动保存，无发送证据保持未知。
+- [x] 手工文字和候选/消息衍生样本标明真实来源，保留原始聊天依赖；不得复制后改称无来源手动输入逃避删除。
+- [x] 保存/查看/删除是同票完整生命周期，跨owner/contact拒绝；删除或来源清理后重读、同键重试与恢复副本不可得，部分失败可重试。
+- [x] 按ADR-044将已主动保存样本作为独立对象：删助手会话仍可查看样本，只保留必要的非正文来历标识和有效原始来源依赖，不保存会话全文或从样本恢复旧讨论。
+- [x] 删除样本不删除独立聊天资料；会话删除完整组合在E06核验。保存与会话删除竞态只保留删除前成功主动保存的样本，失效候选不能在删除后重新保存；本票不让样本进入生成。
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
 ## 范围边界
 
@@ -152,3 +152,19 @@ Standards复核发现跨样本／说明文字的选区校验失败后未登记�
 最新复制接口：未知／样本／歧义／失效粘贴立即拒绝，独立直接键入允许；合法候选粘贴采用无正文UUID两阶段凭证，待显示提交可按同凭证取消并恢复此前来源元数据。最终编辑／保存4096字符上限不变，无新路由、正文缓存或自动保存。此复制切片已通过上述真实公开复验；原任务状态仍claimed，其他组合依赖继续按记录接续。
 
 2026-10-11 总协调净接正式1836194的七桌面文件及owned c7历史补漏，保留其他主题与原失败，A10 details ID独立归属未混入本切片。主树77条样本控制器加4条删除策略守卫实际81通过1128.884ms／skip0、完整TypeScript通过；原八条current/history×clear/后来复制/实际删除反向在单独私有probe按新合同实际8通过111.726ms，未知paste即时拒且保存POST0，清空后直接typed均manual。控制器SHA217cf58919d10e0ebfa9d4034930364977484eb08947d8aff1dd47e502e0deed前后不变，临时bundle清，HTTP／DB／模型／网络／Page均0。原八条2控制通过／6RED和旧独立未知paste正向属于此前阶段，原报告不改写；新接口的直接键入正向明确另测。最终切片两轴新增重要问题0。C自身两公开labels已通过的记录保留为负责人历史；root公开组合另行顺序验证，E04–06仍claimed。
+
+
+### 2026-10-11 补齐主动保存与删除助手会话的真实并发证据
+
+独立逐条审查确认此前保存成功后再 DELETE 的顺序场不能证明竞态。新增 `test_candidate_save_and_session_delete_follow_actual_owner_lock_order`：持有实际 owner 事务锁，先后提交两个真实 HTTP 请求，并以 `pg_blocking_pids` 观察两个请求均已排队后释放锁，分别验证保存先赢与删除先赢，不用线程启动时间猜顺序。
+
+- 保存先赢：200，随后会话 DELETE 200／GET 404；样本与原始来源身份独立保留，同键保存等值重放，新键失效候选保存 404。
+- 删除先赢：DELETE 200，保存 404，列表空；原保存键及新键重试仍 404。两分支重新创建后端读取，并查实际 generation input 正文与 reply_request 均无残留，各仅一次合成模型调用。
+- Conda NotAlone／backend，`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src python -m unittest tests.integration.server.test_authentic_expression_session_deletion.AuthenticExpressionSessionDeletionTests.test_candidate_save_and_session_delete_follow_actual_owner_lock_order -v`：1 test／两顺序 GREEN 2.427s。随后原整个 `tests.integration.server.test_authentic_expression_session_deletion` 模块 4 GREEN 11.691s；正式迁移、随机自有数据库清理确认，dimension_release=None。原运行期删除导致租约失效诊断保留且拒绝断言通过。
+- 只有合成测试变化，无新生产接口、迁移、数据副本、发送或外部模型。新增测试第一次即通过，不虚构产品 RED；原明确并发证据缺口已补，C3 页面组合仍另行排队，E06 未完成。
+
+原七条自动验收已逐项完成：主动保存／查看／删除、复制不保存与发送未知，真实来源依赖与 scope 隔离，重放与失败重试，删除讨论后显式样本独立保留且讨论正文物理清除，以及本次补齐的两种真实保存／删除锁顺序。证据为本票保留的实际 HTTP/PG、公开页面与控制器记录；最后增量规范硬要求0／重要Fowler0、规格新增0。
+
+本结论只关闭 E04 原范围。C3 完整新会话再用页面、A/B 后续组合继续在 E06 处理；真实 App／原生／OCR／微信／外部模型质量均未运行，且本轮用户明确排除，不能用合成结果代替。无自动学习、自动发送、生产数据处理或远端发布。
+
+2026-10-11 总协调精确接入edc8406真实owner锁竞争测试，两种提交顺序及原生命周期完整4项实际通过7.481秒／skip0；正式001–053／重复0／自有库剩余0。保存先提交后SID删除只保成功独立样本；删除先提交后保存拒绝，原会话404／正文清理与独立资料断言保持。C自己两组公开Clipboard及editor/recovered路径已实际通过，根77样本／8新合同probe和物理42项已有独立证据，原限定范围据正式逐条Answer resolved；公开整组／连续修改仍另由E06接续，原生及真实模型未据此通过。
