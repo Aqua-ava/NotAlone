@@ -467,3 +467,13 @@ Conda NotAlone、剥除追踪环境／关闭dotenv、`PGPORT=55441`、唯一隔�
 这里只核验公开 HTTP 的准备中断与样本领域删除，不代表受控宿主退出、typed页面、A15消息采用或真实App停止／重开。C06仍claimed、三项原未勾AC保留，公开页面及生命周期自动部分继续；真实App／原生与真人语义未执行。全部为合成数据及受控模型，不访问业务库、私人资料、外部模型、微信、OCR或外部发送，不push、发布或部署。
 
 Root 集成正式 `969a8cba` 的两路径净变更后，用剥除模型凭据、dotenv和追踪的本轮受控隔离 runner 独立执行 `tests.integration.server.test_authentic_expression_interruption`：**2 GREEN／3.721s／skip0**，实际55迁移账本一致、repeat0、内层精确清理与外层自有库残留0。新增文件编译及diff检查通过。此两场是 Root 新 HTTP 运行，未新生成语义报告，未借其验收宿主退出或公开页面，原三项未勾AC和claimed保留。
+
+### 主树连续修改页面与当前意愿新版证据集成（2026-10-12）
+
+净接 C `9d36c0f9` 的具名公开两场准备及 `0012e077` 的实际八例第一版报告，保留原十二例第一版报告与各自分母。其实际 C 页面两场由生产 renderer/Main/preload→HTTP→隔离 PG 完成，九输入和九模型调用、6348.670ms、contract失败0、故意保真失败2、未审阅2、人0、qualityfalse；源码1504份一致、actualexit0、quiet35／active0／单Chrome／cleanuptrue／nativefalse及fresh租约absent，经主树独立核验后FULLRELEASE。第一版报告只保留当次控制和删除事实，其旧AI正文假设已由当前意愿反例否定，不作为新版载荷的通过。
+
+仅取 C `a5283fa4` 净五路径的当前意愿四场矩阵与新版 Page 准备／审阅表／独立报告，保持当时本人12实际输入调用与5489.977ms、四故意失败、人0及真实自然度未知。主树在唯一当前意愿和样本删除源上独立运行四场矩阵与五个prepare正证明，共 **9 HTTP GREEN／19.583秒／skip0／actualexit0**，001–055账本、repeat0、自有库0。新版四场实际捕获12输入／调用、5319.699ms，经唯一 E01 `tests.fidelity_capture` 生成 [主树独立12例新版报告](../reports/typed-continuation-http-root-controlled-v2.json)：contract失败0、故意保真失败4、development12、holdout0、human0、quality_verified=false，三真实质量维度全部未知；不改旧v1或C本人v2数字。
+
+实际命令：激活 Conda NotAlone、PGPORT55441，`NOTALONE_TYPED_FIDELITY_CAPTURE=/private/tmp/notalone-root-typed-v2-capture.json python /private/tmp/notalone-round29-controlled-tests.py /Users/local-user/learn/NotAlone tests.integration.server.test_assistant_prepare_rejection tests.integration.server.test_authentic_expression_continuation`；随后 `PYTHONPATH=src python -m tests.fidelity_capture --capture /private/tmp/notalone-root-typed-v2-capture.json --case-spec tests/fixtures/fidelity/typed-continuation-http-review-v2.json --output ../.scratch/authentic-expression/reports/typed-continuation-http-root-controlled-v2.json`。报告CLI actualexit0、新模型0、新库0。四场包括回应／主动分别删除样本／原始来源，保留当前方向／目的、完整已编辑组仅低权重参考，重试、删后新旧键、独立讨论和手动样本边界原断言保持。
+
+当前新版 Page 两场只完成类型与标准静态入口检查，并排入总协调最后独占组合；尚未执行，不借v1页或9HTTP代为通过。A15与Host追加组合继续，原State claimed与未完全验证项保留，用户本轮禁止的真实App、微信/OCR、外部调用、私人数据、原生与真人质量均未执行。固定C净五源两独立审查轴0；主树额外报告只来自上述真实合成捕获，不是人工评价。

@@ -25,7 +25,7 @@ class AuthenticExpressionContinuationTests(FidelityHttpFixture, unittest.TestCas
         try:
             if path := os.environ.get("NOTALONE_TYPED_FIDELITY_CAPTURE"):
                 Path(path).write_text(json.dumps({
-                    "data_kind": "synthetic", "data_version": "authentic-typed-continuation-http-v1",
+                    "data_kind": "synthetic", "data_version": "authentic-typed-continuation-http-v2",
                     "entry_point": "http", "rows": cls.capture_rows,
                     "coverage": {
                         "interface": "A唯一 /continue；公开版本读取、编辑和选择；真实HTTP与隔离PG",
@@ -102,15 +102,19 @@ class AuthenticExpressionContinuationTests(FidelityHttpFixture, unittest.TestCas
                  "instruction": "第一条自然一点", "displayed_group": frame}
         continued = self._capture_reply(path + "/continue", typed, contact, mode, removal, "edited", (
             "这次不参加。", "谢谢你。",
-        ), "保留当前明确拒绝与不要承诺，只调整说法。", sample_id, "这次不参加。\n\n谢谢。")
+        ), "保留当前明确拒绝与不要承诺，只调整说法。", sample_id, intent)
         payload = self.reply_model.payloads[-1]
-        self.assertEqual(payload["draft_text"], "这次不参加。\n\n谢谢。")
+        self.assertEqual(payload["confirmed_direction" if mode == "response" else "confirmed_purpose"], intent)
+        self.assertEqual(continued["effective_input"]["type"], content["type"])
         self.assertEqual(payload["user_instruction"], "不要承诺；自然一点")
         self.assertEqual(continued["continuation"]["version_id"], displayed)
         self.assertEqual(continued["continuation"]["candidate_id"], candidate_id)
         self.assertEqual(payload["continuation_reference"]["version_id"], displayed)
-        self.assertTrue(payload["continuation_reference"]["is_current_draft"])
-        self.assertNotIn("messages", payload["continuation_reference"])
+        self.assertFalse(payload["continuation_reference"]["is_current_draft"])
+        self.assertEqual([item["text"] for item in payload["continuation_reference"]["messages"]],
+                         ["这次不参加。", "谢谢。"])
+        self.assertEqual(payload["continuation_reference"]["weight"], "low")
+        self.assertEqual(payload["continuation_reference"]["factual_role"], "previous_assistant_candidate")
 
         status, continued_history = self.backend.request(
             path + f"/candidates/{continued['candidates'][0]['candidate_id']}/versions")
@@ -120,7 +124,10 @@ class AuthenticExpressionContinuationTests(FidelityHttpFixture, unittest.TestCas
                        "displayed_group": self._frame(session["session_id"], continued, continued_history)}
         failed_semantics = self._capture_reply(path + "/continue", unsupported, contact, mode, removal, "unsupported", (
             "这次不参加。", "那就明晚七点我陪你去合成海边。",
-        ), "沿旧样本安排未来陪同。", sample_id, "这次不参加。\n\n谢谢你。")
+        ), "沿旧样本安排未来陪同。", sample_id, intent)
+        self.assertEqual(self.reply_model.payloads[-1]["confirmed_direction" if mode == "response" else "confirmed_purpose"], intent)
+        self.assertEqual([item["text"] for item in self.reply_model.payloads[-1]["continuation_reference"]["messages"]],
+                         ["这次不参加。", "谢谢你。"])
         self.assertEqual(self.reply_model.payloads[-1]["user_instruction"], "不要承诺；自然一点；简短一点")
         self.assertEqual(failed_semantics["continuation"]["effective_requirements"], ["不要承诺", "自然一点", "简短一点"])
         turns = self._get(self._backend(self.owner_id), path)["turns"]

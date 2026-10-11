@@ -1,0 +1,731 @@
+{
+  "data_kind": "synthetic",
+  "config": {
+    "model": "controlled-scripted-langchain",
+    "prompt_version": "fidelity-typed-continuation-style-reference-http-v2"
+  },
+  "cases": [
+    {
+      "case_id": "response-typed-sample-current",
+      "split": "development",
+      "labels": [
+        "response",
+        "style-conflict",
+        "typed-continuation-http-pg",
+        "whole-message-group",
+        "sample",
+        "current"
+      ],
+      "expectation": {
+        "intent": "明确拒绝本次合成邀请，不增加约定。",
+        "forbidden_additions": [
+          "把已编辑候选中的拒绝改为答应",
+          "从低权重旧表达样本引入明晚七点、海边与未来陪同承诺",
+          "把本次不要承诺、自然一点或简短一点升为长期偏好",
+          "只看首条拒绝而漏掉整组后续承诺"
+        ],
+        "unknowns": [
+          "真实模型语义、自然度、关系适配和本人相似度",
+          "合成输出的保真标注不是真人审阅"
+        ]
+      }
+    },
+    {
+      "case_id": "response-typed-sample-edited",
+      "split": "development",
+      "labels": [
+        "response",
+        "style-conflict",
+        "typed-continuation-http-pg",
+        "whole-message-group",
+        "sample",
+        "edited"
+      ],
+      "expectation": {
+        "intent": "明确拒绝本次合成邀请，不增加约定。",
+        "forbidden_additions": [
+          "把已编辑候选中的拒绝改为答应",
+          "从低权重旧表达样本引入明晚七点、海边与未来陪同承诺",
+          "把本次不要承诺、自然一点或简短一点升为长期偏好",
+          "只看首条拒绝而漏掉整组后续承诺"
+        ],
+        "unknowns": [
+          "真实模型语义、自然度、关系适配和本人相似度",
+          "合成输出的保真标注不是真人审阅"
+        ]
+      }
+    },
+    {
+      "case_id": "response-typed-sample-unsupported",
+      "split": "development",
+      "labels": [
+        "response",
+        "style-conflict",
+        "typed-continuation-http-pg",
+        "whole-message-group",
+        "sample",
+        "unsupported"
+      ],
+      "expectation": {
+        "intent": "明确拒绝本次合成邀请，不增加约定。",
+        "forbidden_additions": [
+          "把已编辑候选中的拒绝改为答应",
+          "从低权重旧表达样本引入明晚七点、海边与未来陪同承诺",
+          "把本次不要承诺、自然一点或简短一点升为长期偏好",
+          "只看首条拒绝而漏掉整组后续承诺"
+        ],
+        "unknowns": [
+          "真实模型语义、自然度、关系适配和本人相似度",
+          "合成输出的保真标注不是真人审阅"
+        ]
+      }
+    },
+    {
+      "case_id": "response-typed-source-current",
+      "split": "development",
+      "labels": [
+        "response",
+        "style-conflict",
+        "typed-continuation-http-pg",
+        "whole-message-group",
+        "source",
+        "current"
+      ],
+      "expectation": {
+        "intent": "明确拒绝本次合成邀请，不增加约定。",
+        "forbidden_additions": [
+          "把已编辑候选中的拒绝改为答应",
+          "从低权重旧表达样本引入明晚七点、海边与未来陪同承诺",
+          "把本次不要承诺、自然一点或简短一点升为长期偏好",
+          "只看首条拒绝而漏掉整组后续承诺"
+        ],
+        "unknowns": [
+          "真实模型语义、自然度、关系适配和本人相似度",
+          "合成输出的保真标注不是真人审阅"
+        ]
+      }
+    },
+    {
+      "case_id": "response-typed-source-edited",
+      "split": "development",
+      "labels": [
+        "response",
+        "style-conflict",
+        "typed-continuation-http-pg",
+        "whole-message-group",
+        "source",
+        "edited"
+      ],
+      "expectation": {
+        "intent": "明确拒绝本次合成邀请，不增加约定。",
+        "forbidden_additions": [
+          "把已编辑候选中的拒绝改为答应",
+          "从低权重旧表达样本引入明晚七点、海边与未来陪同承诺",
+          "把本次不要承诺、自然一点或简短一点升为长期偏好",
+          "只看首条拒绝而漏掉整组后续承诺"
+        ],
+        "unknowns": [
+          "真实模型语义、自然度、关系适配和本人相似度",
+          "合成输出的保真标注不是真人审阅"
+        ]
+      }
+    },
+    {
+      "case_id": "response-typed-source-unsupported",
+      "split": "development",
+      "labels": [
+        "response",
+        "style-conflict",
+        "typed-continuation-http-pg",
+        "whole-message-group",
+        "source",
+        "unsupported"
+      ],
+      "expectation": {
+        "intent": "明确拒绝本次合成邀请，不增加约定。",
+        "forbidden_additions": [
+          "把已编辑候选中的拒绝改为答应",
+          "从低权重旧表达样本引入明晚七点、海边与未来陪同承诺",
+          "把本次不要承诺、自然一点或简短一点升为长期偏好",
+          "只看首条拒绝而漏掉整组后续承诺"
+        ],
+        "unknowns": [
+          "真实模型语义、自然度、关系适配和本人相似度",
+          "合成输出的保真标注不是真人审阅"
+        ]
+      }
+    },
+    {
+      "case_id": "proactive-typed-sample-current",
+      "split": "development",
+      "labels": [
+        "proactive",
+        "style-conflict",
+        "typed-continuation-http-pg",
+        "whole-message-group",
+        "sample",
+        "current"
+      ],
+      "expectation": {
+        "intent": "明确拒绝本次合成邀请，不增加约定。",
+        "forbidden_additions": [
+          "把已编辑候选中的拒绝改为答应",
+          "从低权重旧表达样本引入明晚七点、海边与未来陪同承诺",
+          "把本次不要承诺、自然一点或简短一点升为长期偏好",
+          "只看首条拒绝而漏掉整组后续承诺"
+        ],
+        "unknowns": [
+          "真实模型语义、自然度、关系适配和本人相似度",
+          "合成输出的保真标注不是真人审阅"
+        ]
+      }
+    },
+    {
+      "case_id": "proactive-typed-sample-edited",
+      "split": "development",
+      "labels": [
+        "proactive",
+        "style-conflict",
+        "typed-continuation-http-pg",
+        "whole-message-group",
+        "sample",
+        "edited"
+      ],
+      "expectation": {
+        "intent": "明确拒绝本次合成邀请，不增加约定。",
+        "forbidden_additions": [
+          "把已编辑候选中的拒绝改为答应",
+          "从低权重旧表达样本引入明晚七点、海边与未来陪同承诺",
+          "把本次不要承诺、自然一点或简短一点升为长期偏好",
+          "只看首条拒绝而漏掉整组后续承诺"
+        ],
+        "unknowns": [
+          "真实模型语义、自然度、关系适配和本人相似度",
+          "合成输出的保真标注不是真人审阅"
+        ]
+      }
+    },
+    {
+      "case_id": "proactive-typed-sample-unsupported",
+      "split": "development",
+      "labels": [
+        "proactive",
+        "style-conflict",
+        "typed-continuation-http-pg",
+        "whole-message-group",
+        "sample",
+        "unsupported"
+      ],
+      "expectation": {
+        "intent": "明确拒绝本次合成邀请，不增加约定。",
+        "forbidden_additions": [
+          "把已编辑候选中的拒绝改为答应",
+          "从低权重旧表达样本引入明晚七点、海边与未来陪同承诺",
+          "把本次不要承诺、自然一点或简短一点升为长期偏好",
+          "只看首条拒绝而漏掉整组后续承诺"
+        ],
+        "unknowns": [
+          "真实模型语义、自然度、关系适配和本人相似度",
+          "合成输出的保真标注不是真人审阅"
+        ]
+      }
+    },
+    {
+      "case_id": "proactive-typed-source-current",
+      "split": "development",
+      "labels": [
+        "proactive",
+        "style-conflict",
+        "typed-continuation-http-pg",
+        "whole-message-group",
+        "source",
+        "current"
+      ],
+      "expectation": {
+        "intent": "明确拒绝本次合成邀请，不增加约定。",
+        "forbidden_additions": [
+          "把已编辑候选中的拒绝改为答应",
+          "从低权重旧表达样本引入明晚七点、海边与未来陪同承诺",
+          "把本次不要承诺、自然一点或简短一点升为长期偏好",
+          "只看首条拒绝而漏掉整组后续承诺"
+        ],
+        "unknowns": [
+          "真实模型语义、自然度、关系适配和本人相似度",
+          "合成输出的保真标注不是真人审阅"
+        ]
+      }
+    },
+    {
+      "case_id": "proactive-typed-source-edited",
+      "split": "development",
+      "labels": [
+        "proactive",
+        "style-conflict",
+        "typed-continuation-http-pg",
+        "whole-message-group",
+        "source",
+        "edited"
+      ],
+      "expectation": {
+        "intent": "明确拒绝本次合成邀请，不增加约定。",
+        "forbidden_additions": [
+          "把已编辑候选中的拒绝改为答应",
+          "从低权重旧表达样本引入明晚七点、海边与未来陪同承诺",
+          "把本次不要承诺、自然一点或简短一点升为长期偏好",
+          "只看首条拒绝而漏掉整组后续承诺"
+        ],
+        "unknowns": [
+          "真实模型语义、自然度、关系适配和本人相似度",
+          "合成输出的保真标注不是真人审阅"
+        ]
+      }
+    },
+    {
+      "case_id": "proactive-typed-source-unsupported",
+      "split": "development",
+      "labels": [
+        "proactive",
+        "style-conflict",
+        "typed-continuation-http-pg",
+        "whole-message-group",
+        "source",
+        "unsupported"
+      ],
+      "expectation": {
+        "intent": "明确拒绝本次合成邀请，不增加约定。",
+        "forbidden_additions": [
+          "把已编辑候选中的拒绝改为答应",
+          "从低权重旧表达样本引入明晚七点、海边与未来陪同承诺",
+          "把本次不要承诺、自然一点或简短一点升为长期偏好",
+          "只看首条拒绝而漏掉整组后续承诺"
+        ],
+        "unknowns": [
+          "真实模型语义、自然度、关系适配和本人相似度",
+          "合成输出的保真标注不是真人审阅"
+        ]
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "case_id": "response-typed-sample-current",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注，非程序语义判断或真人审阅",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "整个消息组保留明确拒绝；另一条仅致谢，没有改口答应。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "两条均未把旧表达样本中的时间地点当作本次事实。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "拒绝与致谢的完整组合没有陪同、见面或未来安排承诺。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "整组没有添加本人或对方的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "未调用真实模型、未进行真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，没有真实关系适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达审阅证据。"
+        }
+      }
+    },
+    {
+      "case_id": "response-typed-sample-edited",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注，非程序语义判断或真人审阅",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "整个消息组保留明确拒绝；另一条仅致谢，没有改口答应。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "两条均未把旧表达样本中的时间地点当作本次事实。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "拒绝与致谢的完整组合没有陪同、见面或未来安排承诺。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "整组没有添加本人或对方的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "未调用真实模型、未进行真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，没有真实关系适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达审阅证据。"
+        }
+      }
+    },
+    {
+      "case_id": "response-typed-sample-unsupported",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注，非程序语义判断或真人审阅",
+      "dimensions": {
+        "intent": {
+          "status": "fail",
+          "basis": "整组首条拒绝，第二条却安排未来陪同，违背当前原句与不要承诺。"
+        },
+        "unsupported_facts": {
+          "status": "fail",
+          "basis": "第二条把低权重表达样本中的明晚七点与合成海边当作本次安排，当前输入未提供。"
+        },
+        "unsupported_commitments": {
+          "status": "fail",
+          "basis": "第二条新增我陪你去的未来承诺，与原句拒绝及本次不要承诺冲突，首条拒绝不能抵消。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "整组没有添加本人或对方的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "未调用真实模型、未进行真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，没有真实关系适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达审阅证据。"
+        }
+      }
+    },
+    {
+      "case_id": "response-typed-source-current",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注，非程序语义判断或真人审阅",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "整个消息组保留明确拒绝；另一条仅致谢，没有改口答应。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "两条均未把旧表达样本中的时间地点当作本次事实。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "拒绝与致谢的完整组合没有陪同、见面或未来安排承诺。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "整组没有添加本人或对方的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "未调用真实模型、未进行真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，没有真实关系适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达审阅证据。"
+        }
+      }
+    },
+    {
+      "case_id": "response-typed-source-edited",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注，非程序语义判断或真人审阅",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "整个消息组保留明确拒绝；另一条仅致谢，没有改口答应。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "两条均未把旧表达样本中的时间地点当作本次事实。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "拒绝与致谢的完整组合没有陪同、见面或未来安排承诺。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "整组没有添加本人或对方的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "未调用真实模型、未进行真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，没有真实关系适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达审阅证据。"
+        }
+      }
+    },
+    {
+      "case_id": "response-typed-source-unsupported",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注，非程序语义判断或真人审阅",
+      "dimensions": {
+        "intent": {
+          "status": "fail",
+          "basis": "整组首条拒绝，第二条却安排未来陪同，违背当前原句与不要承诺。"
+        },
+        "unsupported_facts": {
+          "status": "fail",
+          "basis": "第二条把低权重表达样本中的明晚七点与合成海边当作本次安排，当前输入未提供。"
+        },
+        "unsupported_commitments": {
+          "status": "fail",
+          "basis": "第二条新增我陪你去的未来承诺，与原句拒绝及本次不要承诺冲突，首条拒绝不能抵消。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "整组没有添加本人或对方的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "未调用真实模型、未进行真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，没有真实关系适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达审阅证据。"
+        }
+      }
+    },
+    {
+      "case_id": "proactive-typed-sample-current",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注，非程序语义判断或真人审阅",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "整个消息组保留明确拒绝；另一条仅致谢，没有改口答应。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "两条均未把旧表达样本中的时间地点当作本次事实。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "拒绝与致谢的完整组合没有陪同、见面或未来安排承诺。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "整组没有添加本人或对方的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "未调用真实模型、未进行真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，没有真实关系适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达审阅证据。"
+        }
+      }
+    },
+    {
+      "case_id": "proactive-typed-sample-edited",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注，非程序语义判断或真人审阅",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "整个消息组保留明确拒绝；另一条仅致谢，没有改口答应。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "两条均未把旧表达样本中的时间地点当作本次事实。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "拒绝与致谢的完整组合没有陪同、见面或未来安排承诺。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "整组没有添加本人或对方的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "未调用真实模型、未进行真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，没有真实关系适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达审阅证据。"
+        }
+      }
+    },
+    {
+      "case_id": "proactive-typed-sample-unsupported",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注，非程序语义判断或真人审阅",
+      "dimensions": {
+        "intent": {
+          "status": "fail",
+          "basis": "整组首条拒绝，第二条却安排未来陪同，违背当前原句与不要承诺。"
+        },
+        "unsupported_facts": {
+          "status": "fail",
+          "basis": "第二条把低权重表达样本中的明晚七点与合成海边当作本次安排，当前输入未提供。"
+        },
+        "unsupported_commitments": {
+          "status": "fail",
+          "basis": "第二条新增我陪你去的未来承诺，与原句拒绝及本次不要承诺冲突，首条拒绝不能抵消。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "整组没有添加本人或对方的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "未调用真实模型、未进行真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，没有真实关系适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达审阅证据。"
+        }
+      }
+    },
+    {
+      "case_id": "proactive-typed-source-current",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注，非程序语义判断或真人审阅",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "整个消息组保留明确拒绝；另一条仅致谢，没有改口答应。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "两条均未把旧表达样本中的时间地点当作本次事实。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "拒绝与致谢的完整组合没有陪同、见面或未来安排承诺。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "整组没有添加本人或对方的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "未调用真实模型、未进行真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，没有真实关系适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达审阅证据。"
+        }
+      }
+    },
+    {
+      "case_id": "proactive-typed-source-edited",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注，非程序语义判断或真人审阅",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "整个消息组保留明确拒绝；另一条仅致谢，没有改口答应。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "两条均未把旧表达样本中的时间地点当作本次事实。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "拒绝与致谢的完整组合没有陪同、见面或未来安排承诺。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "整组没有添加本人或对方的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "未调用真实模型、未进行真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，没有真实关系适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达审阅证据。"
+        }
+      }
+    },
+    {
+      "case_id": "proactive-typed-source-unsupported",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注，非程序语义判断或真人审阅",
+      "dimensions": {
+        "intent": {
+          "status": "fail",
+          "basis": "整组首条拒绝，第二条却安排未来陪同，违背当前原句与不要承诺。"
+        },
+        "unsupported_facts": {
+          "status": "fail",
+          "basis": "第二条把低权重表达样本中的明晚七点与合成海边当作本次安排，当前输入未提供。"
+        },
+        "unsupported_commitments": {
+          "status": "fail",
+          "basis": "第二条新增我陪你去的未来承诺，与原句拒绝及本次不要承诺冲突，首条拒绝不能抵消。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "整组没有添加本人或对方的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "未调用真实模型、未进行真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，没有真实关系适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达审阅证据。"
+        }
+      }
+    }
+  ]
+}
