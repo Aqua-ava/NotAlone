@@ -59,6 +59,7 @@ from notalone.persistence.assistant_candidate_versions import (
     AssistantCandidateVersions, PostgresAssistantCandidateVersions,
 )
 from notalone.server.assistant_candidate_versions import candidate_versions_path, handle_candidate_versions
+from notalone.server.assistant_candidate_carry import parse_candidate_carry_request
 from notalone.server.assistant_generation_lifecycle import generation_lifecycle_path, handle_generation_lifecycle
 from notalone.application.reply_evidence import ReplyEvidenceService, ReplyEvidenceIncomplete
 from notalone.reply.errors import (
@@ -1273,6 +1274,16 @@ class BackendApp:
             if len(parts) not in (5, 6) or parts[3] != "assistant-sessions":
                 return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             session_id = UUID(parts[4])
+            if len(parts) == 6 and parts[5] == "new-with-candidate":
+                if method != "POST":
+                    return _json_response(HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"})
+                carried = service.new_with_candidate(
+                    owner_id=self._owner_id, contact_id=contact_id, session_id=session_id,
+                    command=parse_candidate_carry_request(body),
+                )
+                return _json_response(HTTPStatus.OK, {
+                    "session_id": str(carried.session_id), "input_version_id": str(carried.input_version_id),
+                }, headers={"Cache-Control": "no-store"})
             if len(parts) == 6 and parts[5] == "select" and method == "POST":
                 if json.loads(body.decode("utf-8")) != {}:
                     raise ReplyRequestInvalid()

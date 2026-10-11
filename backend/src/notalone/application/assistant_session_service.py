@@ -13,6 +13,7 @@ from notalone.reply.interface import ReplyGenerated
 from notalone.scopes import ContactScope
 
 if TYPE_CHECKING:
+    from notalone.application.assistant_candidate_carry import CarriedAssistantSession, CarryAssistantCandidate
     from notalone.persistence.assistant_session_inputs import AssistantInput
 
 
@@ -66,6 +67,10 @@ class AssistantSessionSummary:
 
 class AssistantSessionCatalogPort(Protocol):
     def new(self, scope: ContactScope) -> UUID: ...
+
+    def new_with_candidate(
+        self, scope: ContactScope, session_id: UUID, command: CarryAssistantCandidate,
+    ) -> CarriedAssistantSession: ...
 
     def list_sessions(self, scope: ContactScope) -> tuple[AssistantSessionSummary, ...]: ...
 
@@ -140,6 +145,11 @@ class AssistantSessionService:
 
     def new(self, *, owner_id: UUID, contact_id: UUID) -> UUID:
         return self._catalog_port().new(ContactScope(owner_id, contact_id))
+
+    def new_with_candidate(
+        self, *, owner_id: UUID, contact_id: UUID, session_id: UUID, command: CarryAssistantCandidate,
+    ) -> CarriedAssistantSession:
+        return self._catalog_port().new_with_candidate(ContactScope(owner_id, contact_id), session_id, command)
 
     def list_sessions(self, *, owner_id: UUID, contact_id: UUID) -> tuple[AssistantSessionSummary, ...]:
         return self._catalog_port().list_sessions(ContactScope(owner_id, contact_id))

@@ -81,6 +81,24 @@ def delete_assistant_session(
         parameters,
     ).fetchall()
     request_ids = [row["id"] if isinstance(row, dict) else row[0] for row in rows]
+    # 在原版、选择回执和C快照清除前捕获真实父边，复用A唯一选择器。
+    from notalone.persistence.assistant_candidate_carry import read_candidate_carry_lineage_for_deletion
+    from notalone.persistence.assistant_input_lineage import select_assistant_input_dependents
+    from notalone.persistence.reply_discussion_dependencies import captured_reply_discussion_uses
+
+    carry_edges = read_candidate_carry_lineage_for_deletion(connection, owner_id=scope.owner_id)
+    captured_uses = captured_reply_discussion_uses(connection, scope)
+    original_turns = connection.execute(
+        "SELECT id FROM public.assistant_session_turn WHERE owner_id=%s AND contact_id=%s AND session_id=%s",
+        (scope.owner_id, scope.contact_id, session_id),
+    ).fetchall()
+    root_turn_ids = tuple(row["id"] if isinstance(row, dict) else row[0] for row in original_turns)
+    selected = select_assistant_input_dependents(
+        connection, owner_id=scope.owner_id, contact_id=scope.contact_id, removed_ids=set(),
+        reply_request_ids=request_ids, turn_ids=root_turn_ids,
+        carry_edges=carry_edges, captured_uses=captured_uses,
+    )
+    request_ids = sorted(set(request_ids) | set(selected.reply_request_ids))
     candidates = connection.execute(
         "SELECT id FROM public.reply_candidate WHERE owner_id = %s AND contact_id = %s "
         "AND reply_request_id = ANY(%s::uuid[])",
@@ -94,6 +112,7 @@ def delete_assistant_session(
         (scope.owner_id, scope.contact_id, [str(identifier) for identifier in candidate_ids]),
     ).fetchall()
     turn_ids = [row["id"] if isinstance(row, dict) else row[0] for row in reserved]
+    turn_ids = sorted(set(turn_ids) | set(selected.turn_ids))
     connection.execute(
         "INSERT INTO public.reply_invalidated_key (owner_id, contact_id, idempotency_key) "
         "SELECT owner_id, contact_id, idempotency_key FROM public.assistant_session_turn "
@@ -106,6 +125,7 @@ def delete_assistant_session(
     erase_assistant_source_turns(
         connection, owner_id=scope.owner_id, contact_id=scope.contact_id,
         removed_ids=set(candidate_ids), reply_request_ids=request_ids, turn_ids=turn_ids,
+        carry_edges=carry_edges, captured_uses=captured_uses,
     )
     connection.execute(
         "DELETE FROM public.reply_request WHERE owner_id = %s AND contact_id = %s "

@@ -97,8 +97,16 @@ def _discussion_available(connection: Any, scope: ContactScope, row: dict[str, A
     if row["state"] != "active" or row["content"] is None:
         return False
     try:
-        verified_discussion_dependencies(connection, scope, tuple(row["dependency_ids"]))
-    except AssistantSessionRejected:
+        if row["input_type"] == "candidate_carry":
+            from notalone.persistence.assistant_candidate_carry import read_candidate_carry_in_transaction
+            read_candidate_carry_in_transaction(
+                connection.connection, scope, row["content"],
+                dependency_ids=tuple(row["dependency_ids"]),
+                conversation_binding_id=row["conversation_binding_id"],
+            )
+        else:
+            verified_discussion_dependencies(connection, scope, tuple(row["dependency_ids"]))
+    except (AssistantSessionNotFound, AssistantSessionRejected):
         return False
     return True
 
@@ -195,7 +203,24 @@ def read_assistant_discussion_in_transaction(
                 continue
             if row["input_type"] != "generation":
                 if _discussion_available(cursor, scope, row):
-                    items.append(DiscussionItem("discussion_input", _json_text(row["content"]), row["id"]))
+                    if row["input_type"] == "candidate_carry":
+                        from notalone.persistence.assistant_candidate_carry import read_candidate_carry_in_transaction
+                        carry = read_candidate_carry_in_transaction(
+                            cursor.connection, scope, row["content"],
+                            dependency_ids=tuple(row["dependency_ids"]),
+                            conversation_binding_id=row["conversation_binding_id"],
+                        )
+                        messages = [{"message_id": str(message.message_id), "text": message.text}
+                                    for message in carry.messages]
+                        items.append(DiscussionItem(
+                            "candidate_carry", _json_text({"messages": messages}), row["id"],
+                            carry.origin.origin_turn_id, carry.origin.origin_reply_request_id,
+                            carry.origin.origin_candidate_id, carry.origin.origin_version_id,
+                            carry.parent_version_id, carry.candidate_number, carry.version_number,
+                            False, True,
+                        ))
+                    else:
+                        items.append(DiscussionItem("discussion_input", _json_text(row["content"]), row["id"]))
                     records.append(_discussion_identity(row))
                 continue
             if not _generation_input_available(cursor, scope, row):
@@ -288,6 +313,14 @@ def _require_captured_records(
             if not _discussion_available(cursor, scope, row) or _discussion_identity(row) != identity:
                 raise ReplyStoreInvariantError("本次使用的助手讨论已失效。")
             dependencies.update(row["dependency_ids"])
+            if row["input_type"] == "candidate_carry":
+                from notalone.persistence.assistant_candidate_carry import read_candidate_carry_in_transaction
+                carry = read_candidate_carry_in_transaction(
+                    cursor.connection, scope, row["content"],
+                    dependency_ids=tuple(row["dependency_ids"]),
+                    conversation_binding_id=row["conversation_binding_id"],
+                )
+                samples.update(carry.dependencies.style_sample_ids)
             continue
         if identity.input_version_id not in captured_by_input:
             if not _generation_input_available(cursor, scope, row):

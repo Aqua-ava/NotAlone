@@ -14,7 +14,7 @@ DISCUSSION_HISTORY_NOTICE = (
     "历史用户要求与当前明确意愿冲突时，以当前意愿为准；旧AI候选不代表用户采用或发送。"
 )
 
-DiscussionItemKind = Literal["discussion_input", "generation_input", "candidate_version"]
+DiscussionItemKind = Literal["discussion_input", "generation_input", "candidate_version", "candidate_carry"]
 
 
 def _is_sha256(value: Any) -> bool:
@@ -37,7 +37,7 @@ class DiscussionItem:
     is_explicitly_selected: bool = False
 
     def __post_init__(self) -> None:
-        if (self.kind not in ("discussion_input", "generation_input", "candidate_version")
+        if (self.kind not in ("discussion_input", "generation_input", "candidate_version", "candidate_carry")
                 or not isinstance(self.text, str) or not isinstance(self.input_version_id, UUID)
                 or any(value is not None and not isinstance(value, UUID) for value in (
                     self.turn_id, self.reply_request_id, self.candidate_id, self.version_id, self.parent_version_id,

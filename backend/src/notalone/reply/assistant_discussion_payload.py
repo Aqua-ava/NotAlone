@@ -19,7 +19,7 @@ def assistant_discussion_payload(discussion: DiscussionContext) -> dict[str, Any
         "notice": discussion.notice,
         "items": [{
             "kind": item.kind,
-            "role": "assistant_candidate" if item.kind == "candidate_version" else "user",
+            "role": "assistant_candidate" if item.kind in ("candidate_version", "candidate_carry") else "user",
             "text": item.text,
             "input_version_id": str(item.input_version_id),
             "turn_id": str(item.turn_id) if item.turn_id is not None else None,

@@ -237,6 +237,17 @@ def _input_state(connection: Any, scope: ContactScope, row: dict[str, Any]) -> s
         return "redacted"
     if row["input_type"] == "generation" and row["turn_state"] is None:
         return "unavailable"
+    if row["input_type"] == "candidate_carry":
+        from notalone.persistence.assistant_candidate_carry import read_candidate_carry_in_transaction
+        try:
+            read_candidate_carry_in_transaction(
+                getattr(connection, "connection", connection), scope, row["content"],
+                dependency_ids=tuple(row["dependency_ids"]),
+                conversation_binding_id=row["conversation_binding_id"],
+            )
+        except (AssistantSessionNotFound, AssistantSessionRejected):
+            return "unavailable"
+        return "active"
     dependencies = row["turn_dependencies"] if row["input_type"] == "generation" else row["dependency_ids"]
     if not _dependencies_available(connection, scope.owner_id, set(dependencies or ())):
         return "unavailable"
@@ -258,11 +269,19 @@ def read_input_records(
     records = []
     for row in _input_rows(connection, scope, session_id):
         state = _input_state(connection, scope, row)
+        content = row["content"] if state == "active" else None
+        if state == "active" and row["input_type"] == "candidate_carry":
+            from notalone.persistence.assistant_candidate_carry import read_candidate_carry_in_transaction
+            content = read_candidate_carry_in_transaction(
+                getattr(connection, "connection", connection), scope, row["content"],
+                dependency_ids=tuple(row["dependency_ids"]),
+                conversation_binding_id=row["conversation_binding_id"],
+            ).content_payload()
         records.append(AssistantInput(
             input_version_id=row["id"], session_id=row["session_id"],
             type=row["input_type"], conversation_binding_id=row["conversation_binding_id"],
             turn_id=row["turn_id"], state=state,
-            content=row["content"] if state == "active" else None,
+            content=content,
         ))
     return tuple(records)
 
@@ -281,7 +300,7 @@ def require_current_input(
         if session["current_input_version_id"] != input_version_id:
             raise AssistantSessionRejected("input_version_stale")
         row = cursor.execute(
-            "SELECT input.input_type, input.conversation_binding_id, input.state, input.dependency_ids, "
+            "SELECT input.input_type, input.content, input.conversation_binding_id, input.state, input.dependency_ids, "
             "turn.state AS turn_state, turn.dependency_ids AS turn_dependencies, "
             "turn.reply_request_id AS turn_reply_request_id "
             "FROM public.assistant_session_input AS input "
