@@ -853,7 +853,8 @@ export class ReplySession {
     } catch {
       if (current()) {
         const automatic = job.type === 'open' && Boolean(job.request.automatic);
-        this.publish({ exploration: { phase: 'failed', result: null, canRetry: !automatic,
+        this.publish({ ...(ownedGeneration ? { phase: this.state.result ? 'ready' as const : 'failed' as const } : {}),
+          exploration: { phase: 'failed', result: null, canRetry: !automatic,
           automaticUpdatesPaused: automatic } });
         if (automatic) this.stopAutomaticExploration(true);
       }

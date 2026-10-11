@@ -299,6 +299,44 @@ test('B09确认方向的候选领取实际回执，关闭后只保存原SID且�
   });
 });
 
+test('B09已确认候选实际执行失败后结束等待，同输入明确重试只完成原turn', async () => {
+  await withPublicFixture(async (f) => {
+    const scope = await f.selectContact(f.contactA);
+    await f.bridge.setMode({ ...scope, mode: 'initiate_conversation' });
+    await f.bridge.updatePurpose({ ...scope, purpose: '合成目的：只了解近况。' });
+    await f.fixture.plan({ explore: { understanding: '只确认当前合成意愿。', question: null } });
+    await f.bridge.explore(scope);
+    const exploration = (await f.bridge.getState()).exploration.result;
+    assert(exploration);
+    await f.fixture.plan({ fault: 'failure' });
+    await f.bridge.selectDirection({ ...scope, suggestionId: exploration.directions[0].suggestionId,
+      inputVersion: exploration.inputVersion });
+    const failed = await f.bridge.getState();
+    const saved = await f.rawSession(f.contactA, exploration.sessionId);
+    assert.equal(saved.turns.length, 1);
+    assert.equal(saved.turns[0].state, 'failed', '失败必须来自实际候选执行。');
+    assert.equal(failed.exploration.phase, 'failed');
+    assert.equal(failed.exploration.canRetry, true);
+    assert.notEqual(failed.phase, 'waiting', '实际失败后公开页面须允许手动重试与更新理解。');
+    assert.equal(failed.savedSession.sessionId, exploration.sessionId);
+    const first = f.requests.find((request) => request.path.endsWith('/confirm'));
+    assert(first?.failure, '原候选执行须真实收到失败 HTTP。');
+    await f.fixture.plan({ count: 1, message_groups: [['明确重试后的原会话说法。', '不增加承诺。']] });
+    await f.bridge.retryExploration(scope);
+    const completed = await f.rawSession(f.contactA, exploration.sessionId);
+    assert.equal(completed.turns.length, 1);
+    assert.equal(completed.turns[0].turn_id, saved.turns[0].turn_id);
+    assert.equal(completed.turns[0].input_version_id, saved.turns[0].input_version_id);
+    assert.equal(completed.turns[0].request_key, saved.turns[0].request_key);
+    assert.equal(completed.turns[0].state, 'completed');
+    assert.equal((await f.bridge.getState()).phase, 'ready');
+    const attempts = f.requests.filter((request) => request.path === first.path);
+    assert.equal(attempts.length, 2);
+    assert.equal(attempts[1].bodyHash, first.bodyHash);
+    assert.equal((await f.fixture.command('counts')).actual_calls, 3);
+  });
+});
+
 async function preparedStrategyCandidate(f, action, mode) {
   const scope = await f.selectContact(f.contactA);
   await f.bridge.setMode({ ...scope, mode });

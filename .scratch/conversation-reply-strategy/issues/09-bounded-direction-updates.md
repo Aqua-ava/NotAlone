@@ -141,3 +141,15 @@ Root 按正式 `59c4bd62` 的四路径净变更集成，主树重新执行 `node
 原第1、2、3、5、6条自动条件按上述实际／明确引用证据勾选，原文字不改；第4条只完成离开／关闭及薄consumer晚prepare等待，整体受控Host退出／重开仍须唯一 A17正式集成验证，继续未勾、整票claimed。旧Page八场属于59c4冻结源，此新阶段九HTTP不冒充fresh Page或原生验收。
 
 Root 主树按正式 `54d4b07e` 复验新晚prepare：初次测试名过滤未命中业务场景，只有模块包装层完成，未计为HTTP通过；核对实际名称后 `node --test --test-name-pattern='B09晚准备' tests/assistant-generation-ownership-http.test.mjs` 真正 **1 GREEN／4867.447167ms**，实际55／repeat0、模型1（探索）、候选模型0、真实中断failed/app_quit、自有库残留0。完整类型与diff通过；此项不是宿主或原生退出。后续执行失败phase和增强原target作业接口继续独立集成，原第4项未勾和claimed保留。
+
+### 已确认候选实际失败后的手动重试入口
+
+根从原B实现会话转交已正式test-only反例38行，本B仅净取该反例，不取其第二Main策略。正式`54d4b07e`前置的实际执行失败已在PG写failed，但整体公开phase仍waiting，导致策略控件禁用重试／更新；本人本树真实 **1 RED／3558.750792ms**，模型2／55repeat0／自有库0，日志`/private/tmp/notalone-b09-confirmed-failure-red.log`，原B本人3308.912167ms不借作本次计量。
+
+只在唯一jobs已登记实际ownedGeneration的catch恢复公开phase：存在旧候选则ready，否则failed；原探索failed/canRetry、原任务／键／正文与jobs身份保持，不从失败HTTP推断零领取或终态。原反例实际 **1 GREEN／3867.213791ms**：同键同正文手动retry完成原turn／input／request键，turn数仍1，模型共3。随后原八关闭切换＋晚prepare＋失败重试完整 **10 GREEN／32718.236708ms／skip0／actualexit0**，模型实际共24，十份正式55/repeat0与instance/class及自有库残留0；日志`/private/tmp/notalone-b09-registry-ten-final.log`，完整desktop类型及diff检查通过。
+
+固定source两路径补丁`/private/tmp/notalone-b09-confirmed-failure-source.patch` SHA256 `288f14666e19284e2f9608e3bcf74b33dd84f195db5d48bba598e3d5123188db`，A独立Standards硬要求0／新增重要Fowler possible0。此阶段没有Page／Host／原生／人工或真实模型验收，第4条与claimed按此前剩余范围保留；root最终唯一A17接线另行消费，不覆写其退出函数。
+
+C独立Spec只读新增P0–P3为0，核实际ownedGeneration/current、原键／输入身份与未知元数据保留，未借本人RED/G／10项作为其自测。两轴完成后仅该3path本地提交；新增A15／B11文件不捎带。
+
+Root 独立净接两代码路径后，实际公开 Main/preload→HTTP→隔离 PG 的原失败后重试反例 **1 GREEN／5259.600833ms／skip0／actualexit0**，模型实际3、55repeat0、instance/class与准确自有库残留0；完整桌面类型及diff通过。首个运行未激活Conda，被夹具在HTTP与建库之前拒绝，不计产品RED；激活NotAlone后执行原用例并取得上述真实结果。新来源竞态仍由B单独修复，未借此计为全部来源用例通过。
