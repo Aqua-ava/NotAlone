@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import unittest
-from dataclasses import replace
+from dataclasses import asdict, replace
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -15,6 +15,7 @@ from psycopg.types.json import Jsonb
 from notalone.application.style_sample_service import SaveStyleSample
 from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.persistence.reply_discussion_dependencies import reply_style_sample_dependencies
+from notalone.persistence import reply_discussion_dependencies as discussion_uses
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.style_sample_store import PostgresStyleSampleStore
 from notalone.persistence.style_sample_store import require_reply_sources_current
@@ -102,6 +103,85 @@ class ReplyDiscussionDependenciesTest(unittest.TestCase):
                 "WHERE turn.id=%s", (prepared[1],),
             ).fetchone()
         self.assertEqual(row, ("redacted", None, None, "redacted", None))
+
+    def test_captured_discussion_uses_are_body_free_and_read_only_before_cleanup(self):
+        discussion_id = self.fixture._discussion("合成待删讨论，不能进入只读依赖回执。")
+        prepared = self._prepare()
+        with psycopg.connect(support.DATABASE_URL) as connection:
+            lock_owner_scope(connection, owner_id=self.fixture.owner_id)
+            before = connection.execute(
+                "SELECT id,xmin::text,context_snapshot FROM public.reply_request WHERE owner_id=%s ORDER BY id",
+                (self.fixture.owner_id,),
+            ).fetchall()
+            uses = discussion_uses.captured_reply_discussion_uses(connection, self.fixture.scope)
+            self.assertEqual(len(uses), 1)
+            self.assertEqual(uses[0].reply_request_id, prepared[2].request_id)
+            self.assertEqual(uses[0].request_key, prepared[0].idempotency_key)
+            self.assertEqual({item.input_version_id for item in uses[0].snapshot.records}, {discussion_id})
+            self.assertEqual(uses[0].snapshot.current_turn_id, prepared[1])
+            self.assertNotIn("合成待删讨论", json.dumps(asdict(uses[0]), ensure_ascii=False, default=str))
+            self.assertNotIn("本次明确拒绝", json.dumps(asdict(uses[0]), ensure_ascii=False, default=str))
+            after = connection.execute(
+                "SELECT id,xmin::text,context_snapshot FROM public.reply_request WHERE owner_id=%s ORDER BY id",
+                (self.fixture.owner_id,),
+            ).fetchall()
+            self.assertEqual(after, before)
+
+    def test_captured_discussion_uses_reject_tampered_stored_identity(self):
+        self.fixture._discussion()
+        prepared = self._prepare()
+        self._save(prepared)
+        original = self._row(prepared[2].request_id)[0]
+        for field in ("outer_scope", "scope", "request_key", "version", "current_payload_sha256"):
+            with self.subTest(field=field), psycopg.connect(support.DATABASE_URL) as connection:
+                lock_owner_scope(connection, owner_id=self.fixture.owner_id)
+                changed = json.loads(json.dumps(original))
+                snapshot = changed["assistant_discussion_snapshot"]
+                if field == "outer_scope":
+                    changed["scope"]["contact_id"] = str(self.fixture.other_contact_id)
+                elif field == "scope":
+                    snapshot["scope"]["owner_id"] = str(self.fixture.other_owner_id)
+                else:
+                    snapshot[field] = {"request_key": str(uuid4()), "version": 2,
+                                       "current_payload_sha256": "不是合法指纹"}[field]
+                connection.execute("UPDATE public.reply_request SET context_snapshot=%s WHERE id=%s",
+                                   (Jsonb(changed), prepared[2].request_id))
+                with self.assertRaises(ReplyStoreInvariantError):
+                    discussion_uses.captured_reply_discussion_uses(connection, self.fixture.scope)
+                connection.execute("UPDATE public.reply_request SET context_snapshot=%s WHERE id=%s",
+                                   (Jsonb(original), prepared[2].request_id))
+
+    def test_cleanup_reads_captured_edges_after_source_request_without_availability(self):
+        source = self.fixture._source()
+        self.fixture._complete(source=source)
+        prepared = self._prepare()
+        self._save(prepared)
+        with psycopg.connect(support.DATABASE_URL) as connection:
+            lock_owner_scope(connection, owner_id=self.fixture.owner_id)
+            before = discussion_uses.captured_reply_discussion_uses(connection, self.fixture.scope)
+            self.assertEqual(len(before), 1)
+            connection.execute("UPDATE public.source_document SET status='delete_requested' WHERE id=%s", (source[0],))
+            with self.assertRaises(ReplyStoreInvariantError):
+                discussion_uses.require_reply_discussion_dependencies(connection, self.fixture.scope, prepared[2].request_id)
+            # 模拟同事务预清理阶段；仍保存的捕获身份不能因A输入已擦除而消失。
+            connection.execute("UPDATE public.assistant_session_input SET state='redacted',content=NULL,dependency_ids='{}' "
+                               "WHERE owner_id=%s AND session_id=%s", (self.fixture.owner_id, self.fixture.session_id))
+            self.assertEqual(discussion_uses.captured_reply_discussion_uses(connection, self.fixture.scope), before)
+            connection.execute("DELETE FROM public.reply_request WHERE id=%s", (prepared[2].request_id,))
+            self.assertEqual(discussion_uses.captured_reply_discussion_uses(connection, self.fixture.scope), ())
+
+    def test_captured_discussion_uses_are_owner_contact_scoped_and_skip_uncaptured_requests(self):
+        self.fixture._complete()
+        prepared = self._prepare()
+        with psycopg.connect(support.DATABASE_URL) as connection:
+            lock_owner_scope(connection, owner_id=self.fixture.owner_id)
+            uses = discussion_uses.captured_reply_discussion_uses(connection, self.fixture.scope)
+            self.assertEqual([item.reply_request_id for item in uses], [prepared[2].request_id])
+            for scope in (ContactScope(self.fixture.owner_id, self.fixture.other_contact_id),
+                          ContactScope(self.fixture.other_owner_id, self.fixture.contact_id)):
+                self.assertEqual(discussion_uses.captured_reply_discussion_uses(connection, scope), ())
+            with connection.cursor(row_factory=dict_row) as cursor:
+                self.assertEqual(discussion_uses.captured_reply_discussion_uses(cursor, self.fixture.scope), uses)
 
     def test_historical_manual_sample_is_captured_separately_from_current_five(self):
         old, current, references = self._seed_history()

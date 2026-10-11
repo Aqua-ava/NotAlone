@@ -202,3 +202,21 @@ C新增正式装配HTTP组合test_authentic_expression_replacement：暂停旧�
 - 数据处理与接口无变化，只有合成验证补强；不把本结果冒 A054 正式中断、完整 E06 或真实模型质量通过。
 
 2026-10-11 总协调精确消费2e70b0a的六行生成请求补测，与正式替换及新prepare提供者实际联跑42项全部通过35.381秒／skip0、正式001–053／重复0／自有库剩余0。删除样本后的actual CURRENT None以省略expected字段表示，原已删生成改用全新idempotency_key、保留旧B确认引用，实际/replies返回409及精确input_version_stale；合法历史metadata200、GET不变和模型计数不增均保持。原覆盖陈述P2据这条实际生成路径闭合，未声称后续普通独立输入或新的有效B确认也应拒绝。新prepare的B完成后继指针静态P2另归A，仍待实际反向和正式fix，本次只提交C测试／记录两文件，不混该未闭提供者。
+
+
+### 2026-10-11 删除前捕获讨论依赖的只读接口
+
+按总协调 02:57:16 的唯一归属，在既有 C `reply_discussion_dependencies` 提供 `captured_reply_discussion_uses(connection, scope)`，返回不可变 `CapturedReplyDiscussionUse(reply_request_id, request_key, snapshot)`。snapshot复用现有严格 `DiscussionSnapshot` codec，仅身份与不可逆内容指纹，无正文；同owner/contact查询并校验保存scope、request key、schema／hash格式及可选外层scope。A仍负责实际input/turn/version及内容指纹复验和唯一传递闭包，C不复刻A算法或扫描其未提交元数据。
+
+调用者须持有既有owner事务锁，必须在snapshot或父来源被purge前调用。这个清理专用接口不调用availability，不改变行或CURRENT；正常生成／重放的CURRENT、来源、Skill及失效键守卫未改。尚未接A selector或新增carry路径，不据此宣称两层删除集成完成。
+
+真实TDD：新接口不存在单项ERROR0.241s→实现后1GREEN0.119s；外层scope篡改单项FAIL0.153s→严格校验后1GREEN0.145s。随后全16首次15通过／1夹具ERROR4.771s：试图将completed请求context置NULL违反正式schema，改用实际DELETE模拟purge，不改产品或约束；最终原模块16GREEN4.309s（原12＋新增4）。新增覆盖正文不出回执、xmin及原快照不变、connection/cursor等价、owner/contact隔离、不含capture的请求跳过、五类保存身份篡改拒绝、来源delete_requested与A输入redacted时仍可预捕获、purge后无边。可用性守卫在同一来源待删状态仍实际拒绝。
+
+命令在Conda NotAlone／backend，`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src:. python /private/tmp/notalone-c-discussion-uses-test.py tests.integration.persistence.test_reply_discussion_dependencies`；临时runner在导入前创建唯一随机_test库、设置环境，正式迁移53／重复空集，逐次自有库剩余0，Core维度None。一次误在仓库根调用runner导致迁移目录缺失，库仍清理0，属入口错误而非产品RED。单source限定mypy及两文件compile通过；无新DDL、存储副本、模型或页面。
+
+
+### 总协调实际集成：删除前只读依赖接口
+
+精确消费 C 正式 `3d61a819e32ca485d4e2a7298180b0e8cefba3c5` 的接口与原同名 PG 测试，不取未提交 A lineage/carry 实现。总协调在 Conda NotAlone、禁 dotenv/tracing、Core 维度 None、自有随机隔离库中运行 `python /private/tmp/notalone-coordinator-style-samples-no-dimension.py /Users/local-user/learn/NotAlone tests.integration.persistence.test_reply_discussion_dependencies`，实际 16/16 通过（18.945s）；正式生产迁移 001–053 与账本逐名一致，重复新增 0、自有库清理剩余 0。单文件限定 mypy、两文件 compile 与差异检查通过。Standards hard 0／重要 Fowler 0，Spec 新增 P0–P2 为 0。
+
+这里只完成可消费的只读端口；A 实际身份复验、carry 与传递删除闭包仍待正式实现和真实集成，不关闭 E06 或外推完整页面与原生验收。

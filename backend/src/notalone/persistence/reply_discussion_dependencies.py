@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
@@ -202,3 +203,43 @@ def reply_discussion_metadata(connection: Any, scope: ContactScope, request_id: 
         return {}
     snapshot, samples = metadata
     return {_SNAPSHOT: discussion_snapshot_to_payload(snapshot), _SAMPLES: [str(value) for value in samples]}
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedReplyDiscussionUse:
+    """删除预捕获的无正文边；A消费现有typed身份，不自行解码C快照。"""
+
+    reply_request_id: UUID
+    request_key: UUID
+    snapshot: DiscussionSnapshot
+
+
+def captured_reply_discussion_uses(
+    connection: Any, scope: ContactScope,
+) -> tuple[CapturedReplyDiscussionUse, ...]:
+    """调用者持有owner事务锁，在清空快照前读取同联系人实际捕获身份。
+
+    这里只检查保存身份的严格codec、scope和request key；不调用可用性门禁。
+    A负责复验实际input/turn/version及内容指纹，再统一计算删除闭包。
+    """
+
+    if not isinstance(scope, ContactScope):
+        raise ReplyStoreInvariantError("历史依赖范围无效。")
+    with _connection(connection).cursor(row_factory=dict_row) as cursor:
+        rows = cursor.execute(
+            "SELECT id,idempotency_key,context_snapshot FROM public.reply_request "
+            "WHERE owner_id=%s AND contact_id=%s AND context_snapshot IS NOT NULL ORDER BY id",
+            (scope.owner_id, scope.contact_id),
+        ).fetchall()
+        result = []
+        for row in rows:
+            metadata = _metadata(row, scope)
+            if metadata is None:
+                continue
+            payload = row["context_snapshot"]
+            if "scope" in payload and payload["scope"] != {
+                "owner_id": str(scope.owner_id), "contact_id": str(scope.contact_id),
+            }:
+                raise ReplyStoreInvariantError("历史依赖快照范围不一致。")
+            result.append(CapturedReplyDiscussionUse(row["id"], row["idempotency_key"], metadata[0]))
+        return tuple(result)
