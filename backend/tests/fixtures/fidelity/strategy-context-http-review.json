@@ -1,0 +1,209 @@
+{
+  "data_kind": "synthetic",
+  "config": {
+    "model": "controlled-scripted-langchain",
+    "prompt_version": "runtime-persistent-exploration-and-fidelity-v1"
+  },
+  "cases": [
+    {
+      "case_id": "same-quote-resolved",
+      "split": "development",
+      "pair_id": "same-quote-context",
+      "labels": [
+        "same-quote-different-context",
+        "问题修复",
+        "actual-http-pg"
+      ],
+      "expectation": {
+        "intent": "只确认问题已解决，不扩大为长期承诺。",
+        "forbidden_additions": [
+          "联系人心理保证",
+          "未经确认的邀约、补偿或长期承诺"
+        ],
+        "unknowns": [
+          "你可真行的具体语气",
+          "对方后续意愿和动机",
+          "真实模型是否遵守意图",
+          "真人自然度、关系适配及本人相似度"
+        ]
+      }
+    },
+    {
+      "case_id": "same-quote-missed",
+      "split": "development",
+      "pair_id": "same-quote-context",
+      "labels": [
+        "same-quote-different-context",
+        "失约",
+        "actual-http-pg"
+      ],
+      "expectation": {
+        "intent": "只为本次失约道歉，不作补偿或长期保证。",
+        "forbidden_additions": [
+          "联系人心理保证",
+          "未经确认的邀约、补偿或长期承诺"
+        ],
+        "unknowns": [
+          "你可真行的具体语气",
+          "对方后续意愿和动机",
+          "真实模型是否遵守意图",
+          "真人自然度、关系适配及本人相似度"
+        ]
+      }
+    },
+    {
+      "case_id": "same-quote-missed-promise-error",
+      "split": "development",
+      "pair_id": "same-quote-context",
+      "labels": [
+        "same-quote-different-context",
+        "失约故意承诺错误",
+        "actual-http-pg"
+      ],
+      "expectation": {
+        "intent": "只为本次失约道歉，不作补偿或长期保证。",
+        "forbidden_additions": [
+          "联系人心理保证",
+          "未经确认的邀约、补偿或长期承诺"
+        ],
+        "unknowns": [
+          "你可真行的具体语气",
+          "对方后续意愿和动机",
+          "真实模型是否遵守意图",
+          "真人自然度、关系适配及本人相似度"
+        ]
+      }
+    },
+    {
+      "case_id": "same-quote-no-context",
+      "split": "development",
+      "pair_id": "same-quote-context",
+      "labels": [
+        "same-quote-different-context",
+        "无前文",
+        "actual-http-pg"
+      ],
+      "expectation": {
+        "intent": "先确认说哪件事，不猜夸奖、责备或未来安排。",
+        "forbidden_additions": [
+          "联系人心理保证",
+          "未经确认的邀约、补偿或长期承诺"
+        ],
+        "unknowns": [
+          "你可真行的具体语气",
+          "对方后续意愿和动机",
+          "真实模型是否遵守意图",
+          "真人自然度、关系适配及本人相似度"
+        ]
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "case_id": "same-quote-resolved",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成标注，非自动语义评分",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "实际整句受控输出保留本次明确选择的方向，没有另作安排。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "受控输出没有声称新的已发生经历或地点事实。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "实际整句没有增加未来联系、补偿、赴约或长期保证。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "实际候选及依据没有断言联系人动机、原谅或真实情绪。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "仅合成输出，无用户自然度审阅。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "没有真实关系或人工适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "未读取私人表达，无用户相似度结论。"
+        }
+      }
+    },
+    {
+      "case_id": "same-quote-missed",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成标注，非自动语义评分",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "实际整句受控输出保留本次明确选择的方向，没有另作安排。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "受控输出没有声称新的已发生经历或地点事实。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "实际整句没有增加未来联系、补偿、赴约或长期保证。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "实际候选及依据没有断言联系人动机、原谅或真实情绪。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "仅合成输出，无用户自然度审阅。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "没有真实关系或人工适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "未读取私人表达，无用户相似度结论。"
+        }
+      }
+    },
+    {
+      "case_id": "same-quote-missed-promise-error",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成标注，非自动语义评分",
+      "dimensions": {
+        "intent": {
+          "status": "fail",
+          "basis": "本次只道歉的意愿被即时赴约与长期保证取代。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "受控输出没有声称新的已发生经历或地点事实。"
+        },
+        "unsupported_commitments": {
+          "status": "fail",
+          "basis": "“我这就过去”与“以后每次都准时到”增加了本次未授权的即时及长期承诺。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "实际候选及依据没有断言联系人动机、原谅或真实情绪。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "仅合成输出，无用户自然度审阅。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "没有真实关系或人工适配证据。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "未读取私人表达，无用户相似度结论。"
+        }
+      }
+    }
+  ],
+  "review_notes": "最后无前文案例独立保留为未审阅；全部四例development，故意承诺错作为报告可见性验证，不是产品自动拒绝。旧外部原型记录只作历史开发证据，本次不调用外部模型。"
+}
