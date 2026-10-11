@@ -37,6 +37,10 @@ Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠�
 
 ## Comments
 
+2026-10-11 本主树上述五文件最终独立两轴：Standards硬要求0／重要Fowler可能气味0、Spec新增P0–P2为0。审查检查唯一选择权威与原物理删除断言；27项实际运行结果由总协调单独取得，未将静态审查当成运行验收。
+
+2026-10-11 总协调主树精确消费 A a035 的 handler／HTTP 两文件及 C 549 的版本公开组合测试净增，不重复已集成 A10／A11 store。隔离 runner 真实联跑 `tests.integration.server.test_assistant_candidate_versions`、`tests.integration.persistence.test_assistant_candidate_versions`、`tests.integration.server.test_authentic_expression_candidate_versions`：27 GREEN／43.636秒、skip0＝9版本HTTP＋16持久化／迁移＋2C删除HTTP。正式001–053、052→053与重复0均核验，HTTP／两个schema库／外层随机库精确剩余0；handler mypy1、三文件compile及diff通过。C两例各一次受控模型与旧入口拒绝／物理清理断言均保留；本轮未运行UI／App／外部模型，不据此关闭桌面或人工剩余。
+
 ### 总协调正式基础集成复验（2026-10-11）
 
 主树原样接入正式 `6c5d26e965fdfa28dbb69048c9cbdf01a9c0b0ff` 后，实际生产001–053空库、052升级及重复迁移均通过；16项测试中15项通过，删除级联1项在 `PostgresAssistantSessionStore.delete` 处出现接口缺失错误（3.244s），自有随机数据库全部清理，remaining=0。该方法属于尚未正式交付的A09后端，本次不复制working实现、不移除或放宽原断言。A11存储基础的Standards hard0／新增重要smell0，Spec实现0、集成依赖缺口1；本票继续claimed，待正式A09接入后复跑完整16及公开HTTP／页面，不将15项基础通过写成删除组合通过。负责人自树的16项GREEN与这次主树缺前置结果分别保留。
@@ -185,3 +189,7 @@ python -m compileall -q src/notalone/server/assistant_candidate_versions.py test
 phase3b正式切片提交前复核：仅正式d89584f导出加11四文件（不含14替换、12未正式consumer或桌面working），24项HTTP／PG／迁移全部GREEN／11.589秒，实际001–053、52→53及重复执行通过，自有库0。Standards初审硬0／判断性P3路由重复1，已把宿主与handler路径识别收至candidate_versions_path唯一函数；增量复核硬0／Fowler0、Spec原轴0，受影响8项HTTP再GREEN／8.307秒、库0，来源与完整整组断言未削弱。公开后台阶段完成，桌面编辑／选择／回看与页面仍继续，整票claimed；自动部分继续实施、人工部分未执行。
 
 总协调主树精确消费正式 `daa443deac6bafddfb6ad704a7ce80bc710aba94` 四文件，保留既有 A／B／C 公共接线。在 Conda `NotAlone`、关闭 dotenv／追踪、`PYTHONPATH=src:.` 环境实际运行 `python /private/tmp/notalone-coordinator-isolated-tests.py /Users/local-user/learn/NotAlone tests.integration.server.test_assistant_candidate_versions tests.integration.persistence.test_assistant_candidate_versions`：24 项 GREEN／12.661 秒，正式 001–053、52→53 升级与 fresh 重复迁移通过，内外专属数据库均精确剩余 0。新增 handler 单文件 mypy、两文件 compileall 与差异检查通过；限定两轴审查无新问题。该证据只覆盖公开 HTTP 和存储，未运行本票新桌面页面。A 唯一负责通用版本／选择 ports、主进程／桥接 DTO 和会话回看；B08 复用同一权威实现策略候选组逐消息编辑／复制，不新增选择指针。本票继续 claimed，原验收标准和人工未执行记录保留。
+
+phase3c 权威选择重读：同一 `/api/contacts/{contact_id}/assistant-sessions/{session_id}/selections` 新增 GET，响应 `{selection: receipt|null}`。只委托既有 `selected(scope, session_id)`，没有新增选择指针或从默认展示、逐候选标记推断选择。首项公开 405 RED／1.195 秒，四行接线后 1.592 秒 GREEN；扩展原八项加一项公开完整流程，共九项 GREEN／9.763 秒。空会话、原版与新版明确选择、旧 selection_key 回执重放、重新连接、来源失效与实际清除、turn／request 失效及会话删除均验证实际指针，不新增模型调用。原方法负例改用 DELETE，保留 405 断言；初始 socket 拒绝和三处合成安排修正不作业务 RED。
+
+主 Agent 从正式 `5fad4327e3eb2d37f1c45bb46ce0b156c03a0cd0` 导出独立副本，只加入 handler 与 HTTP 测试两文件，排除其他未提交代码。实际 `PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-a11-selection-get-cut-4jkxdx1g/source tests.integration.server.test_assistant_candidate_versions` 九项 GREEN／9.999 秒，生产 001–053、HTTP 内层与 runner 外层自有数据库清理均剩余零。日志 `/private/tmp/notalone-a11-selection-get-fresh.log`。限定独立双轴 Standards 硬规范 0、Fowler 判断 0；Spec 0。桌面通用 DTO／RPC、来源删除后的 RAM 视图协调及历史页面继续实施，本票保持 claimed，人工部分未执行。

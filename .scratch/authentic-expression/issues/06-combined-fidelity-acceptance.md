@@ -38,6 +38,16 @@ Blocked by: [authentic-expression/05 生成时有界引用表达样本](05-bound
 
 ## Comments
 
+2026-10-11 本主树上述五文件最终独立两轴：Standards硬要求0／重要Fowler可能气味0、Spec新增P0–P2为0。审查检查唯一选择权威与原物理删除断言；27项实际运行结果由总协调单独取得，未将静态审查当成运行验收。
+
+2026-10-11 总协调主树精确消费 A a035 的 handler／HTTP 两文件及 C 549 的版本公开组合测试净增，不重复已集成 A10／A11 store。隔离 runner 真实联跑 `tests.integration.server.test_assistant_candidate_versions`、`tests.integration.persistence.test_assistant_candidate_versions`、`tests.integration.server.test_authentic_expression_candidate_versions`：27 GREEN／43.636秒、skip0＝9版本HTTP＋16持久化／迁移＋2C删除HTTP。正式001–053、052→053与重复0均核验，HTTP／两个schema库／外层随机库精确剩余0；handler mypy1、三文件compile及diff通过。C两例各一次受控模型与旧入口拒绝／物理清理断言均保留；本轮未运行UI／App／外部模型，不据此关闭桌面或人工剩余。
+
+2026-10-11 候选版本公开组合接续：只消费A10正式`d89584f6e9c1a10cdb863c061212295bc5bf8884`五backend与A11正式`daa443deac6bafddfb6ad704a7ce80bc710aba94`三backend（共享app合为七文件），不改A票、不建第二版本指针／store／迁移。C原两条样本／raw删除组合从store扩为真实GET原版→POST逐消息编辑→POST明确选择→重建后端GET与同键edit/select重放→原删除链；原存储观察及物理清理断言保持。候选组ID核真实public history与原store同一ID，消息UUID／顺序／parent／requirements／selected全等，历史重放不追加模型；每例实际1次受控模型。删唯一样本或raw后旧HTTP读／edit／select均404，version／selection两表同scope/SID物理0，A turn/input无正文，旧回复键／依据不可恢复；无关raw或独立manual保留。
+
+接入前C两条真实FAIL404／1.917秒是在GET版本时依赖入口未消费，不宣称A产品缺陷，后续未到达。A10补丁check0／先消费后A11check0；此前单查A11缺A10 import上下文的预检失败未应用，不算产品RED。接入后同`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false PYTHONPATH=src python -m unittest tests.integration.server.test_authentic_expression_candidate_versions -v`套件在外层迁移／精确清理审计下2GREEN／4.334秒、skip0；唯一随机Core库formal53／repeat0／remaining0。
+
+同环境随机自有短名`_test`库相关联跑`test_assistant_session_catalog`持久化＋HTTP、`test_assistant_candidate_versions`HTTP＋持久化／迁移四模块46GREEN／21.461秒、skip0：22目录＋24版本（21HTTP／25PG含两个迁移场景）。正式001–053与实际052→053、重复0，外层PG与HTTP Core库及两个schema库分别精确清理0；目标Core类`dimension_release=None`，不开自动采纳门。首次外层夹具库名超过PG63字节，截断丢`_test`后3个setUpClass ERROR，只有10项GREEN／10.585秒；该环境错误不计产品RED或whole GREEN，DROP执行完成后以≤63短名及`current_database()==name`复验重跑，产品与原断言未改。新catalog／handler两source mypy、八文件compile与diff均GREEN；限定九文件最终Standards硬要求0／重要Fowler0、Spec新增P0–P2为0。受控HTTP不代替版本UI／每条系统copy、完整历史provider或pureDraft来源擦除；E06保持claimed。无页／App／私聊／外部模型／push。
+
 2026-10-11 本主树六文件最终独立两轴复核：Standards硬要求0／重要Fowler可能气味0，Spec新增P0–P2为0；核原copy摘要、拒绝摘要刷新边界、当前可信投影和独立手写，确认上面的主树计量仍只是控制器证据。原公开和人工余项保持真实状态。
 
 2026-10-11 主树精确合并 fde435b＋16344e4 的四个源码／测试及两票净增记录，保留本树已有证据。原六反向独立复跑6 GREEN／411.546209ms／exit0，各错误保存 POST0；全48 Node GREEN／2002.659583ms、skip0，typecheck／差异检查通过。旧 RED 报告与新 GREEN 报告分开保留；这是控制器端口结果，没有 HTTP／PG／公开页面或模型调用。公开 producer／NEW／三组合场与人工质量仍未据此完成，E04／E06状态不变。

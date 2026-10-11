@@ -118,6 +118,10 @@ def handle_candidate_versions(
             return 200, _history_payload(store.edit(
                 scope, session_id, UUID(parts[6]), _edit_command(body),
             ))
+        if route == "selections" and method == "GET":
+            selection = store.selected(scope, session_id)
+            return 200, {"selection": (_selection_payload(selection)
+                                      if selection is not None else None)}
         if route == "selections" and method == "POST":
             return 200, _select(store, scope, session_id, body)
         return 405, {"error": "method_not_allowed"}

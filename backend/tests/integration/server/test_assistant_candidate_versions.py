@@ -286,6 +286,35 @@ class AssistantCandidateVersionsHttpTest(CoreBusinessFlowFixture, unittest.TestC
         self.assertEqual(len(restored["versions"]), 2)
         self.assertEqual(len(self.reply_model.seen_calls), 1)
 
+    def test_current_selection_is_publicly_readable_without_implicit_choice_or_replay_rewind(self):
+        _, session_path, generated = self._generated()
+        candidate = generated["candidates"][0]
+        candidate_id = candidate["candidate_id"]
+        selection_path = session_path + "/selections"
+        status, payload, headers = self._raw_request(selection_path)
+        self.assertEqual((status, payload), (200, {"selection": None}))
+        self.assertEqual(headers["Cache-Control"], "no-store")
+        original = {"selection_key": str(uuid4()), "candidate_id": candidate_id,
+                    "version_id": candidate_id}
+        status, original_receipt = self.backend.request(selection_path, original)
+        self.assertEqual(status, 200, original_receipt)
+        self.assertEqual(self.backend.request(selection_path), (200, {"selection": original_receipt}))
+        status, edited = self.backend.request(session_path + f"/candidates/{candidate_id}/versions", {
+            "edit_key": str(uuid4()), "parent_version_id": candidate_id,
+            "messages": [{"message_id": candidate["messages"][0]["message_id"], "text": "那明天见。"}],
+        })
+        self.assertEqual(status, 200, edited)
+        selected = {**original, "selection_key": str(uuid4()),
+                    "version_id": edited["default_display_version_id"]}
+        status, current_receipt = self.backend.request(selection_path, selected)
+        self.assertEqual(status, 200, current_receipt)
+        self.assertEqual(self.backend.request(selection_path, original), (200, original_receipt))
+        reopened = self._backend(self.owner_id)
+        self.assertEqual(reopened.request(selection_path), (200, {"selection": current_receipt}))
+        self.assertEqual(self._raw_request(selection_path, authorized=False)[:2],
+                         (401, {"error": "unauthorized"}))
+        self.assertEqual(len(self.reply_model.seen_calls), 1)
+
     def test_strict_request_shapes_uuid_and_methods_do_not_create_versions_or_choices(self):
         contact_id, session_path, generated = self._generated()
         candidate = generated["candidates"][0]
@@ -325,8 +354,11 @@ class AssistantCandidateVersionsHttpTest(CoreBusinessFlowFixture, unittest.TestC
             self.assertEqual(headers["Cache-Control"], "no-store")
         self.assertEqual(self.backend.request(path, method="DELETE"),
                          (405, {"error": "method_not_allowed"}))
-        self.assertEqual(self.backend.request(session_path + "/selections"),
+        self.assertEqual(self.backend.request(session_path + "/selections", method="DELETE"),
                          (405, {"error": "method_not_allowed"}))
+        for identifier in (str(contact_id), session_path.split("/")[-1]):
+            self.assertEqual(self.backend.request(
+                (session_path + "/selections").replace(identifier, "invalid-uuid")), invalid)
         status, payload, headers = self._raw_request(path)
         self.assertEqual((status, payload), (200, original))
         self.assertEqual(headers["Cache-Control"], "no-store")
@@ -370,10 +402,14 @@ class AssistantCandidateVersionsHttpTest(CoreBusinessFlowFixture, unittest.TestC
             self.assertEqual(self.backend.request(foreign_path), not_found)
             self.assertEqual(self.backend.request(foreign_path, {**edit, "edit_key": str(uuid4())}), not_found)
             foreign_session_path = foreign_path.split("/candidates/")[0]
+            expected_selection = ((200, {"selection": None})
+                                  if str(other_session) in foreign_session_path else not_found)
+            self.assertEqual(self.backend.request(foreign_session_path + "/selections"), expected_selection)
             self.assertEqual(self.backend.request(foreign_session_path + "/selections", choice), not_found)
         self.assertEqual(self.other_backend.request(path), not_found)
         self.assertEqual(self.other_backend.request(path, edit), not_found)
         self.assertEqual(self.other_backend.request(session_path + "/selections", choice), not_found)
+        self.assertEqual(self.other_backend.request(session_path + "/selections"), not_found)
         self.assertEqual(self.backend.request(path, {
             **edit, "edit_key": str(uuid4()), "parent_version_id": second_id,
         }), not_found)
@@ -432,6 +468,7 @@ class AssistantCandidateVersionsHttpTest(CoreBusinessFlowFixture, unittest.TestC
                 conflict = (409, {"error": "assistant_candidate_version_conflict", "reason": "source_unavailable"})
                 self.assertEqual(self.backend.request(second_path), conflict)
                 self.assertEqual(self.backend.request(second_path, edit), conflict)
+                self.assertEqual(self.backend.request(selection_path), conflict)
                 self.assertEqual(self.backend.request(selection_path, second_choice), conflict)
                 self.assertEqual(self.backend.request(selection_path, {
                     **second_choice, "selection_key": str(uuid4()),
@@ -445,18 +482,25 @@ class AssistantCandidateVersionsHttpTest(CoreBusinessFlowFixture, unittest.TestC
         self.assertEqual(self.backend.request(selection_path, second_choice), not_found)
         reopened = self._backend(self.owner_id)
         self.assertEqual(reopened.request(second_path), not_found)
+        self.assertEqual(reopened.request(selection_path), (200, {"selection": None}))
         remaining = self._get(reopened, first_path)
         self.assertEqual(remaining["versions"][0]["messages"], first["candidates"][0]["messages"])
         self.assertIsNone(remaining["selected_version_id"])
         self.assertEqual(reopened.request(selection_path, first_choice), (200, first_receipt))
+        self.assertEqual(reopened.request(selection_path), (200, {"selection": None}))
         self.assertIsNone(self._get(reopened, first_path)["selected_version_id"])
         self.assertEqual(reopened.request(selection_path, {
             **first_choice, "selection_key": str(uuid4()),
         })[0], 200)
         self.assertEqual(self._get(reopened, first_path)["selected_version_id"], first_id)
+        selected = self._get(reopened, selection_path)["selection"]
+        self.assertEqual(selected["candidate_id"], first_id)
+        self.assertEqual(selected["version_id"], first_id)
         restored_session = json.dumps(self._get(reopened, session_path), ensure_ascii=False)
         for text in ("来自待删来源的候选。", "本次B编辑文字。", "本次B修改要求。", "合成版本B原始消息"):
             self.assertNotIn(text, restored_session)
+        self.assertEqual(self.backend.request(session_path, {"confirmed": True}, method="DELETE")[0], 200)
+        self.assertEqual(reopened.request(selection_path), not_found)
         self.assertEqual(len(self.reply_model.seen_calls), 2)
 
     def test_storage_faults_are_sanitized_and_roll_back_version_and_current_choice(self):
@@ -528,6 +572,7 @@ class AssistantCandidateVersionsHttpTest(CoreBusinessFlowFixture, unittest.TestC
             rejected = (409, {"error": "assistant_candidate_version_conflict", "reason": reason})
             self.assertEqual(self.backend.request(path), rejected)
             self.assertEqual(self.backend.request(path, edit), rejected)
+            self.assertEqual(self.backend.request(session_path + "/selections"), rejected)
             self.assertEqual(self.backend.request(session_path + "/selections", choice), rejected)
             if reason == "candidate_unavailable":
                 with psycopg.connect(self.database_url) as connection:
