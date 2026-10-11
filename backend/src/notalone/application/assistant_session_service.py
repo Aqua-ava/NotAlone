@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
 
+from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt
 from notalone.application.reply_service import ReplyService, ReplyServiceRequest
 from notalone.reply.errors import ReplyInProgressError
 from notalone.reply.interface import ReplyGenerated
@@ -46,6 +47,7 @@ class AssistantTurn:
     state: str
     input: dict[str, Any] | None
     reply: ReplyGenerated | None
+    interruption_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -87,9 +89,22 @@ class AssistantSessionStore(Protocol):
 
     def is_current_input(self, scope: ContactScope, session_id: UUID, input_version_id: UUID) -> bool: ...
 
+    def interrupt(
+        self, scope: ContactScope, session_id: UUID, request_key: UUID, input_version_id: UUID,
+    ) -> AssistantGenerationReceipt: ...
+
     def reserve(
         self, scope: ContactScope, session_id: UUID, request: ReplyServiceRequest,
     ) -> UUID: ...
+
+    def reserve_prepared(
+        self, scope: ContactScope, session_id: UUID, request: ReplyServiceRequest,
+    ) -> AssistantGenerationReceipt: ...
+
+    def reserve_replacement_prepared(
+        self, scope: ContactScope, session_id: UUID, running_request_key: UUID,
+        request: ReplyServiceRequest,
+    ) -> AssistantGenerationReceipt: ...
 
     def reserve_replacement(
         self, scope: ContactScope, session_id: UUID, running_request_key: UUID,
@@ -155,6 +170,22 @@ class AssistantSessionService:
             verified_dependencies=verified_dependencies,
         )
 
+    def prepare(
+        self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
+        request: ReplyServiceRequest,
+    ) -> AssistantGenerationReceipt:
+        """领取原生成输入并返回无正文身份，不启动模型或改写已有状态。"""
+
+        if self._reply is None:
+            raise AssistantSessionRejected("reply_unavailable")
+        return self._store.reserve_prepared(ContactScope(owner_id, contact_id), session_id, request)
+
+    def interrupt(
+        self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
+        request_key: UUID, input_version_id: UUID,
+    ) -> AssistantGenerationReceipt:
+        return self._store.interrupt(ContactScope(owner_id, contact_id), session_id, request_key, input_version_id)
+
     def generate(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
         request: ReplyServiceRequest,
@@ -164,6 +195,18 @@ class AssistantSessionService:
         scope = ContactScope(owner_id, contact_id)
         turn_id = self._store.reserve(scope, session_id, request)
         return self._generate_reserved(scope, session_id, turn_id, request)
+
+    def prepare_replacement(
+        self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
+        running_request_key: UUID, request: ReplyServiceRequest,
+    ) -> AssistantGenerationReceipt:
+        """原事务内失效显式旧键并领取新输入；这里只返回实际身份。"""
+
+        if self._reply is None:
+            raise AssistantSessionRejected("reply_unavailable")
+        return self._store.reserve_replacement_prepared(
+            ContactScope(owner_id, contact_id), session_id, running_request_key, request,
+        )
 
     def replace(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,

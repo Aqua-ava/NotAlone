@@ -81,3 +81,27 @@ Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠�
 上述兼容切片最终新鲜 Standards 硬要求／重要 Fowler 0、Spec 0；只正式交付两个源／测试及本票记录。另一个 prepare 状态投影 P2 仍有独立真实 RED 与修复流程，不用这三项或兼容审查盖过。
 
 2026-10-11 总协调精确消费0e8ec054及正式d1abdfb修正后，原两个模块实际24项通过10.159秒／skip0，正式001–053／重复0／自有随机库剩余0。两条来源删除反向保留CURRENT NULL、051 input redacted/content NULL/dependencies []、旧turn input_payload NULL及精确input_version_stale拒绝；旧模型迟到仍被原租约与当前输入守卫拒绝。两个源文件focused mypy通过；另含server/app.py的默认单文件静态检查仍34条可空分支等诊断，未宣称全树类型检查通过。此前主树24=22通过／2原因不匹配与service可空类型失败保留，修正不宽放异常或删除物理清理断言。此为替换后端切片，prepare竞态、桌面生命周期与整票剩余仍未关闭。
+
+2026-10-11 身份回执独立切片：`POST .../{session_id}/replies/prepare` 接收原生成 JSON，`POST .../{session_id}/replace/prepare` 接收原替换 JSON。两个入口复用唯一规范化、B prepare hook、reserve 及同事务替换 writer，只返回真实 `session_id/turn_id/request_key/input_version_id/state`，不启动模型。旧键失效后不能重领；新键重放不取消后续请求、不回退 CURRENT。准备阶段只固定实际身份；完整历史与最终模型预算仍由原长生成链校验，未宣称新增预算预检接口。
+
+首轮十四项新增真实 HTTP 场景已逐项 RED→GREEN，覆盖零模型领取、同键 running 竞争及唯一模型、completed／failed 回执、实际 B 探索确认的规范输入、严格方法／scope、原替换 CAS／来源／已删除会话、失败预算和迟到模型。两项旧来源原因断言在正式 b819 下失败，随后由前述独立兼容提交解决。该阶段完整三模块 38 GREEN／25.259 秒；主 Agent 的冻结 ONLY14 副本又得 38 GREEN／22.382 秒，实际迁移 001–053、重复空集和测试库残留零。
+
+新鲜 Spec 指出状态投影 P2：C 同键重试已 running 而 A turn 仍 failed，或者 C 已可靠 SAVE completed 而 A complete 尚未执行，回执原先只报物理 A 状态。两条真实 HTTP／PG 竞争分别 RED／2.929 秒、RED／1.062 秒；单个只读 SQL 同 owner/contact/key 并复验可选 reply ID，按 C 真实执行状态投影后分别 GREEN／7.630 秒、GREEN／1.565 秒。实际 A／C 行版本前后相同，模型总数均一，不新增 writer 或状态值，不改 C 生成链。中间一轮新增测试 JSON 顶层字段误读导致 KeyError，只修夹具，保留失败日志。
+
+最终十六项专属加原十项 HTTP／十四项 PG 共 40 GREEN／24.647 秒；正式 53 项迁移与账本一致、重复执行空集、自有库零。核心三源 mypy GREEN；App 原有 78→78、整个后端原有 329→329／234 文件，新增错误均零，未宣称整树通过。冻结证据 `/private/tmp/notalone-a14-state-projection-freeze.json`，后续新鲜两轴与仅本主题提交仍在推进。替换按钮、后台归属、退出恢复和公开页面未完成；原整票 claimed，自动部分继续、人工部分未执行，不运行真实 App、19、私人资料、外部模型或 push。
+
+最终回执后端独立新鲜复审：Standards 硬要求／重要 Fowler 0，Spec 0；前述状态 P2 已按真实 C 竞争窗口关闭。正式提交仅四源、十六项专属测试及本票，排除已独立正式的兼容 PG 测试、13、C 工作源码、054 和全部未完成桌面接线。六文件与已验证冻结副本逐字一致。
+
+
+2026-10-11：后续真实 B 确认完成窗口修复。C 已实际保存 completed，而 A complete 有限暂停，此时新独立讨论推进 CURRENT；原同键普通 prepare 再次走 B 的新生成 CURRENT 守卫，实际返回409/input_version_stale。公开真实 B explorations→confirm→C.save→A.complete 等待用例为 1F/1.037s，最小同 owner/contact/key/binding 与实际可选 C ID 查询确认已完成、原规范输入与 C sole 来源门禁后为1G/1.590s。它只跳过 completed 的新生成门禁，不写 A/C 状态、不回退 CURRENT；修改 Skill 的同键输入仍409，实际 A/C xmin不变、模型2次。初次门控未进入是 B lazy store 注入位置的夹具错误，保留日志，不记产品RED。
+
+该原9bef加 ONLY14两源测试冻结的完整原40+新1为41G/27.318s，真实001–053/账本53/repeat0/自有库0。正式17已独立提交0137671a2b0856922fce7fd5988f7877867136e0；当前窄修复另以这个真实54基底冻结，保留17的 interruption_reason 与唯一完成关联，不借未提交13/18源码。主会话在该正式基底执行原40+新1+17的8 HTTP与3迁移，实际 **52G/34.393s**，真实001–054/账本54/repeat0/全部自有库0；核心3文件mypy通过，改动源码与测试compileall通过；桌面替换/后台归属/受控宿主/页面组合与人工仍未验，不宣称整票完成。
+
+
+### 本次窄修复的新鲜双轴结果
+
+Standards：硬性违反0、判断性Fowler问题0。实际C身份/规范输入/来源复验后只跳过新生成门禁，17中断与失效键先检查，无新增writer或CURRENT写入。
+
+Spec：本热修缺失/partial0、范围外0、实现错误0；实际B confirm/C.save窗口成立，同键修改Skill继续拒绝，可靠完成与新CURRENT均保留。整票桌面和页面组合、17宿主恢复仍未完成，人工部分未执行；审查与52项自动结果不能代替它们。
+
+2026-10-11 总协调最终集成：仅消费正式 17 与实际 B completed 竞争窄修复，原七个后端模块共 **54G/47.562s，skip0**；真实生产迁移 001–054、账本54、重复迁移0、自有隔离库剩余0。命令为 Conda NotAlone 下以 `/private/tmp/notalone-coordinator-style-samples-no-dimension.py` 执行两个 replacement、prepare、两个 lifecycle 及 C reconfirmation/replacement 模块；仅合成 StyleSampleHttpTest 的维度 fixture 设为空，不改变生产门禁。六源 focused mypy、十个 Python 源／测试编译与 diff 检查通过；新鲜 Standards/Spec 均无新增 P0–P2。旧 A051 可靠完成兼容断言仍由唯一 A 负责人另行修正，桌面／受控生命周期／公开页面组合继续，原整票保持 claimed，人工部分未执行。

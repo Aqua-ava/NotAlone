@@ -43,7 +43,7 @@ from notalone.persistence.background_tasks import (
     BackgroundTaskStateError,
     PostgresBackgroundTaskRepository,
 )
-from notalone.application.reply_service import ReplyService
+from notalone.application.reply_service import ReplyService, ReplyServiceRequest
 from notalone.application.assistant_session_service import (
     AssistantSessionConflict,
     AssistantSessionError,
@@ -59,6 +59,7 @@ from notalone.persistence.assistant_candidate_versions import (
     AssistantCandidateVersions, PostgresAssistantCandidateVersions,
 )
 from notalone.server.assistant_candidate_versions import candidate_versions_path, handle_candidate_versions
+from notalone.server.assistant_generation_lifecycle import generation_lifecycle_path, handle_generation_lifecycle
 from notalone.application.reply_evidence import ReplyEvidenceService, ReplyEvidenceIncomplete
 from notalone.reply.errors import (
     ReplyStoreInvariantError, ReplyPersistenceError, ReplyInProgressError,
@@ -1189,6 +1190,14 @@ class BackendApp:
         """默认讨论、单次提交与显式读取；不提供自动恢复或发送能力。"""
 
         parts = path.strip("/").split("/")
+        if generation_lifecycle_path(parts) is not None:
+            interruption_owner = self._owner_id
+            if interruption_owner is None:
+                return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "owner_uninitialized"})
+            interruption_status, interruption_payload = handle_generation_lifecycle(
+                self._assistant_sessions, owner_id=interruption_owner, method=method, path=path, body=body,
+            )
+            return _json_response(interruption_status, interruption_payload, headers={"Cache-Control": "no-store"})
         if candidate_versions_path(parts) is not None:
             status, payload = handle_candidate_versions(
                 self._candidate_versions, owner_id=self._owner_id,
@@ -1221,6 +1230,46 @@ class BackendApp:
                                  for item in sessions],
                     "current_session_id": next((str(item.session_id) for item in sessions if item.is_current), None),
                 })
+            if (len(parts) == 7 and parts[3] == "assistant-sessions"
+                    and parts[5:] == ["replies", "prepare"]):
+                if method != "POST":
+                    return _json_response(HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"})
+                prepare_owner = self._owner_id
+                if prepare_owner is None:
+                    return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "owner_uninitialized"})
+                session_id = UUID(parts[4])
+                body_contact, request = parse_reply_request(body)
+                if body_contact != contact_id:
+                    raise ReplyRequestInvalid()
+                receipt = service.prepare(
+                    owner_id=prepare_owner, contact_id=contact_id,
+                    session_id=session_id, request=request,
+                )
+                return _json_response(HTTPStatus.OK, {
+                    "session_id": str(receipt.session_id), "turn_id": str(receipt.turn_id),
+                    "request_key": str(receipt.request_key),
+                    "input_version_id": str(receipt.input_version_id), "state": receipt.state,
+                }, headers={"Cache-Control": "no-store"})
+            if (len(parts) == 7 and parts[3] == "assistant-sessions"
+                    and parts[5:] == ["replace", "prepare"]):
+                if method != "POST":
+                    return _json_response(HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"})
+                replacement_owner = self._owner_id
+                if replacement_owner is None:
+                    return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "owner_uninitialized"})
+                session_id = UUID(parts[4])
+                running_request_key, body_contact, request = _parse_assistant_replacement_request(body)
+                if body_contact != contact_id:
+                    raise ReplyRequestInvalid()
+                receipt = service.prepare_replacement(
+                    owner_id=replacement_owner, contact_id=contact_id, session_id=session_id,
+                    running_request_key=running_request_key, request=request,
+                )
+                return _json_response(HTTPStatus.OK, {
+                    "session_id": str(receipt.session_id), "turn_id": str(receipt.turn_id),
+                    "request_key": str(receipt.request_key),
+                    "input_version_id": str(receipt.input_version_id), "state": receipt.state,
+                }, headers={"Cache-Control": "no-store"})
             if len(parts) not in (5, 6) or parts[3] != "assistant-sessions":
                 return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             session_id = UUID(parts[4])
@@ -1266,17 +1315,8 @@ class BackendApp:
                     raise AssistantSessionPersistenceError("未保存完成结果。")
                 return _json_response(HTTPStatus.OK, _completed_turn_payload(turn))
             if len(parts) == 6 and parts[5] == "replace" and method == "POST":
-                replacement = json.loads(body.decode("utf-8"))
-                if (not isinstance(replacement, dict)
-                        or set(replacement) != {"running_request_key", "replacement"}
-                        or not isinstance(replacement["running_request_key"], str)
-                        or not isinstance(replacement["replacement"], dict)):
-                    raise ReplyRequestInvalid()
-                running_request_key = UUID(replacement["running_request_key"])
-                body_contact, request = parse_reply_request(
-                    json.dumps(replacement["replacement"], ensure_ascii=False).encode("utf-8"),
-                )
-                if body_contact != contact_id or request.idempotency_key == running_request_key:
+                running_request_key, body_contact, request = _parse_assistant_replacement_request(body)
+                if body_contact != contact_id:
                     raise ReplyRequestInvalid()
                 turn = service.replace(
                     owner_id=self._owner_id, contact_id=contact_id, session_id=session_id,
@@ -2603,6 +2643,7 @@ def _assistant_turn_payload(turn: AssistantTurn) -> dict[str, object]:
     return {
         "turn_id": str(turn.turn_id), "input_version_id": str(turn.input_version_id),
         "request_key": str(turn.request_key), "state": turn.state, "input": turn.input,
+        "interruption_reason": turn.interruption_reason,
         "reply": _reply_payload(turn.reply) if turn.reply is not None else None,
         "placeholder": (
             "相关来源已删除" if turn.state == "redacted"
@@ -2620,6 +2661,22 @@ def _assistant_input_payload(record: Any) -> dict[str, object]:
         "placeholder": ("相关来源已删除" if record.state == "redacted"
                         else "相关来源不可用" if record.state == "unavailable" else None),
     }
+
+
+def _parse_assistant_replacement_request(body: bytes) -> tuple[UUID, UUID, ReplyServiceRequest]:
+    replacement = json.loads(body.decode("utf-8"))
+    if (not isinstance(replacement, dict)
+            or set(replacement) != {"running_request_key", "replacement"}
+            or not isinstance(replacement["running_request_key"], str)
+            or not isinstance(replacement["replacement"], dict)):
+        raise ReplyRequestInvalid()
+    running_request_key = UUID(replacement["running_request_key"])
+    body_contact, request = parse_reply_request(
+        json.dumps(replacement["replacement"], ensure_ascii=False).encode("utf-8"),
+    )
+    if request.idempotency_key == running_request_key:
+        raise ReplyRequestInvalid()
+    return running_request_key, body_contact, request
 
 
 def _parse_assistant_discussion_request(body: bytes) -> tuple[dict[str, Any], UUID | None]:

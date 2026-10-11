@@ -1,6 +1,6 @@
 # 17：退出停止与重开后的中断恢复
 
-State: open
+State: claimed
 Triage: ready-for-agent
 Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](08-saved-session-recovery.md)；[assistant-session-context/14 生成中替换请求与迟到结果失效](14-replace-running-generation.md)
 
@@ -37,3 +37,12 @@ Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](
 ## Comments
 
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
+
+
+## Answer
+
+2026-10-11：自动后端部分完成，[17 实现记录](../17-implementation-notes.md)记录无正文退出协议、正式 054 迁移、8 HTTP + 3 迁移及原 14 的 40 项相关自动回归（51G/67.893s、实际迁移 54/repeat0/自有测试库剩余0）。迟到结果不能覆盖新请求，可靠保存完成优先；已非 CURRENT 的原 pending 也可被退出停止，而新 CURRENT 保持不变。
+
+当前仍为 claimed：后端新鲜 Standards 硬性违例0（P3判断1）、Spec 实现错误0，主会话重跑11G/10.162s；桌面真正退出调用与受控宿主／公开页面组合恢复、B 确认方向的新请求桥接仍由主会话继续。人工部分未执行；用户本轮排除真实 App／微信／OCR／19，不修改原验收标准，也不宣称整张任务已经完成。
+
+2026-10-11 总协调最终集成：仅消费正式 17 与实际 B completed 竞争窄修复，原七个后端模块共 **54G/47.562s，skip0**；真实生产迁移 001–054、账本54、重复迁移0、自有隔离库剩余0。命令为 Conda NotAlone 下以 `/private/tmp/notalone-coordinator-style-samples-no-dimension.py` 执行两个 replacement、prepare、两个 lifecycle 及 C reconfirmation/replacement 模块；仅合成 StyleSampleHttpTest 的维度 fixture 设为空，不改变生产门禁。六源 focused mypy、十个 Python 源／测试编译与 diff 检查通过；新鲜 Standards/Spec 均无新增 P0–P2。旧 A051 可靠完成兼容断言仍由唯一 A 负责人另行修正，桌面／受控生命周期／公开页面组合继续，原整票保持 claimed，人工部分未执行。

@@ -12,6 +12,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from notalone.application.assistant_generation_lifecycle import AssistantGenerationReceipt
 from notalone.application.assistant_session_service import (
     AssistantSessionConflict, AssistantSessionNotFound,
     AssistantSessionPersistenceError, AssistantSessionRejected, AssistantSessionSnapshot, AssistantTurn,
@@ -321,11 +322,70 @@ class PostgresAssistantSessionStore:
             ).fetchone()
             return row["id"]
 
+    def interrupt(
+        self, scope: ContactScope, session_id: UUID, request_key: UUID, input_version_id: UUID,
+    ) -> AssistantGenerationReceipt:
+        from notalone.persistence.assistant_generation_lifecycle import interrupt_generation_in_transaction
+        with self._transaction(scope) as connection:
+            return interrupt_generation_in_transaction(
+                connection, scope, session_id, request_key, input_version_id,
+                complete_saved=self._complete_saved_in_transaction,
+            )
+
     def reserve(
         self, scope: ContactScope, session_id: UUID, request: ReplyServiceRequest,
     ) -> UUID:
         with self._transaction(scope) as connection:
             return self._reserve_in_transaction(connection, scope, session_id, request)
+
+    def reserve_prepared(
+        self, scope: ContactScope, session_id: UUID, request: ReplyServiceRequest,
+    ) -> AssistantGenerationReceipt:
+        """复用唯一领取 writer 和 B prepare hook，同事务投影实际元数据。"""
+
+        with self._transaction(scope) as connection:
+            turn_id = self._reserve_in_transaction(connection, scope, session_id, request)
+            return self._prepared_receipt(connection, scope, session_id, turn_id)
+
+    @staticmethod
+    def _prepared_receipt(
+        connection: Any, scope: ContactScope, session_id: UUID, turn_id: UUID,
+    ) -> AssistantGenerationReceipt:
+        turn = connection.execute(
+            "SELECT turn.id, turn.session_id, turn.idempotency_key, turn.input_version_id, "
+            "CASE WHEN request.state IN ('running', 'completed', 'failed') THEN request.state ELSE turn.state END AS state "
+            "FROM public.assistant_session_turn AS turn LEFT JOIN public.reply_request AS request "
+            "ON request.owner_id = turn.owner_id AND request.contact_id = turn.contact_id "
+            "AND request.idempotency_key = turn.idempotency_key "
+            "AND (turn.reply_request_id IS NULL OR request.id = turn.reply_request_id) "
+            "WHERE turn.owner_id = %s AND turn.contact_id = %s "
+            "AND turn.session_id = %s AND turn.id = %s",
+            (scope.owner_id, scope.contact_id, session_id, turn_id),
+        ).fetchone()
+        if turn is None:
+            raise AssistantSessionPersistenceError("已领取生成身份未可靠保存。")
+        return AssistantGenerationReceipt(
+            session_id=turn["session_id"], turn_id=turn["id"],
+            request_key=turn["idempotency_key"], input_version_id=turn["input_version_id"],
+            state=turn["state"],
+        )
+
+    def reserve_replacement_prepared(
+        self, scope: ContactScope, session_id: UUID, running_request_key: UUID,
+        request: ReplyServiceRequest,
+    ) -> AssistantGenerationReceipt:
+        """复用原替换 writer；先失效旧输入再领取新版本，全程不调用模型。"""
+
+        if (not isinstance(running_request_key, UUID)
+                or not isinstance(request, ReplyServiceRequest)
+                or not isinstance(request.idempotency_key, UUID)
+                or request.idempotency_key == running_request_key):
+            raise AssistantSessionRejected("invalid_generation_replacement")
+        with self._transaction(scope) as connection:
+            turn_id = self._reserve_in_transaction(
+                connection, scope, session_id, request, running_request_key=running_request_key,
+            )
+            return self._prepared_receipt(connection, scope, session_id, turn_id)
 
     def reserve_replacement(
         self, scope: ContactScope, session_id: UUID, running_request_key: UUID,
@@ -359,7 +419,7 @@ class PostgresAssistantSessionStore:
         normalized = _normalize_input(command)
         digest = _digest(binding_id, normalized)
         existing = connection.execute(
-            "SELECT id, session_id, state, input_digest FROM public.assistant_session_turn "
+            "SELECT id, session_id, state, input_digest, reply_request_id, interruption_reason FROM public.assistant_session_turn "
             "WHERE owner_id = %s AND contact_id = %s AND idempotency_key = %s FOR UPDATE",
             (scope.owner_id, scope.contact_id, request.idempotency_key),
         ).fetchone()
@@ -368,13 +428,35 @@ class PostgresAssistantSessionStore:
                 raise AssistantSessionRejected("source_deleted")
             if existing["session_id"] != session_id or existing["input_digest"] != digest:
                 raise AssistantSessionConflict("请求键已用于不同输入。")
+            if existing["interruption_reason"] is not None:
+                raise AssistantSessionRejected("generation_interrupted")
+            if connection.execute(
+                "SELECT 1 FROM public.reply_invalidated_key WHERE owner_id = %s "
+                "AND contact_id = %s AND idempotency_key = %s",
+                (scope.owner_id, scope.contact_id, request.idempotency_key),
+            ).fetchone():
+                raise AssistantSessionRejected("request_deleted")
             dependencies = connection.execute(
                 "SELECT dependency_ids FROM public.assistant_session_turn WHERE id = %s",
                 (existing["id"],),
             ).fetchone()["dependency_ids"]
             if not _dependencies_available(connection, scope.owner_id, set(dependencies)):
                 raise AssistantSessionRejected("source_unavailable")
-            if existing["state"] != "completed":
+            completed = connection.execute(
+                "SELECT id, normalized_input FROM public.reply_request WHERE owner_id = %s "
+                "AND contact_id = %s AND idempotency_key = %s AND conversation_binding_id = %s "
+                "AND state = 'completed' AND (%s::uuid IS NULL OR id = %s)",
+                (scope.owner_id, scope.contact_id, request.idempotency_key, binding_id,
+                 existing["reply_request_id"], existing["reply_request_id"]),
+            ).fetchone()
+            if completed is not None:
+                if completed["normalized_input"] != normalized:
+                    raise AssistantSessionConflict("请求键已用于不同输入。")
+                try:
+                    require_reply_sources_current(connection, owner_id=scope.owner_id, request_id=completed["id"])
+                except ReplyStoreInvariantError:
+                    raise AssistantSessionRejected("source_unavailable") from None
+            if existing["state"] != "completed" and completed is None:
                 from notalone.persistence.explored_generation import prepare_explored_generation
                 prepare_explored_generation(connection, scope, session_id, command)
             return existing["id"]
@@ -454,44 +536,61 @@ class PostgresAssistantSessionStore:
         self, scope: ContactScope, session_id: UUID, turn_id: UUID, reply: ReplyGenerated,
     ) -> AssistantTurn:
         with self._transaction(scope) as connection:
-            self._require_session(connection, scope, session_id)
-            binding_id = _active_binding(connection, scope)
-            turn = connection.execute(
-                "SELECT * FROM public.assistant_session_turn WHERE owner_id = %s "
-                "AND contact_id = %s AND session_id = %s AND id = %s FOR UPDATE",
-                (scope.owner_id, scope.contact_id, session_id, turn_id),
-            ).fetchone()
-            if turn is None:
-                raise AssistantSessionNotFound("助手讨论不存在。")
-            if turn["state"] == "redacted":
-                raise AssistantSessionRejected("source_deleted")
-            if turn["state"] != "completed":
-                # 首次可靠完成前继续复验；已完成同 key 重放保留历史身份。
-                from notalone.persistence.assistant_session_inputs import require_current_input
-                require_current_input(connection, scope, session_id, turn["input_version_id"])
-            stored = connection.execute(
-                "SELECT * FROM public.reply_request WHERE owner_id = %s AND contact_id = %s "
-                "AND id = %s AND idempotency_key = %s AND state = 'completed'",
-                (scope.owner_id, scope.contact_id, reply.reply_request_id, turn["idempotency_key"]),
-            ).fetchone()
-            if stored is None or stored["conversation_binding_id"] != binding_id:
-                raise AssistantSessionPersistenceError("回复结果尚未可靠关联到会话。")
-            dependencies = set(turn["dependency_ids"]) | _reply_dependencies(
-                connection, scope, reply.reply_request_id,
-            )
-            if not _dependencies_available(connection, scope.owner_id, dependencies):
-                raise AssistantSessionRejected("source_unavailable")
-            from notalone.persistence.reply_store import PostgresReplyStore
-            saved_reply = PostgresReplyStore(self._database_url)._read_result(connection, stored)
-            if saved_reply != reply:
-                raise AssistantSessionPersistenceError("回复结果与可靠保存记录不一致。")
-            connection.execute(
-                "UPDATE public.assistant_session_turn SET state = 'completed', "
-                "reply_request_id = %s, dependency_ids = %s, updated_at = now() WHERE id = %s",
-                (reply.reply_request_id, list(dependencies), turn_id),
-            )
-            turn["state"] = "completed"
-            return self._turn(turn, saved_reply)
+            return self._complete_in_transaction(connection, scope, session_id, turn_id, reply)
+
+    def _complete_saved_in_transaction(
+        self, connection: Any, scope: ContactScope, session_id: UUID, turn_id: UUID, request_id: UUID,
+    ) -> AssistantTurn:
+        from notalone.persistence.reply_store import PostgresReplyStore
+        stored = connection.execute(
+            "SELECT * FROM public.reply_request WHERE owner_id = %s AND contact_id = %s "
+            "AND id = %s AND state = 'completed'",
+            (scope.owner_id, scope.contact_id, request_id),
+        ).fetchone()
+        if stored is None:
+            raise AssistantSessionPersistenceError("回复结果尚未可靠保存。")
+        reply = PostgresReplyStore(self._database_url)._read_result(connection, stored)
+        return self._complete_in_transaction(connection, scope, session_id, turn_id, reply)
+
+    def _complete_in_transaction(
+        self, connection: Any, scope: ContactScope, session_id: UUID, turn_id: UUID, reply: ReplyGenerated,
+    ) -> AssistantTurn:
+        self._require_session(connection, scope, session_id)
+        turn = connection.execute(
+            "SELECT * FROM public.assistant_session_turn WHERE owner_id = %s "
+            "AND contact_id = %s AND session_id = %s AND id = %s FOR UPDATE",
+            (scope.owner_id, scope.contact_id, session_id, turn_id),
+        ).fetchone()
+        if turn is None:
+            raise AssistantSessionNotFound("助手讨论不存在。")
+        if turn["state"] == "redacted":
+            raise AssistantSessionRejected("source_deleted")
+        if turn["interruption_reason"] is not None:
+            raise AssistantSessionRejected("generation_interrupted")
+        # C 已在实际保存事务中复验输入和来源；此处只关联可靠结果，不回退 CURRENT。
+        stored = connection.execute(
+            "SELECT * FROM public.reply_request WHERE owner_id = %s AND contact_id = %s "
+            "AND id = %s AND idempotency_key = %s AND state = 'completed'",
+            (scope.owner_id, scope.contact_id, reply.reply_request_id, turn["idempotency_key"]),
+        ).fetchone()
+        if stored is None or stored["conversation_binding_id"] != turn["conversation_binding_id"]:
+            raise AssistantSessionPersistenceError("回复结果尚未可靠关联到会话。")
+        dependencies = set(turn["dependency_ids"]) | _reply_dependencies(
+            connection, scope, reply.reply_request_id,
+        )
+        if not _dependencies_available(connection, scope.owner_id, dependencies):
+            raise AssistantSessionRejected("source_unavailable")
+        from notalone.persistence.reply_store import PostgresReplyStore
+        saved_reply = PostgresReplyStore(self._database_url)._read_result(connection, stored)
+        if saved_reply != reply:
+            raise AssistantSessionPersistenceError("回复结果与可靠保存记录不一致。")
+        connection.execute(
+            "UPDATE public.assistant_session_turn SET state = 'completed', interruption_reason = NULL, "
+            "reply_request_id = %s, dependency_ids = %s, updated_at = now() WHERE id = %s",
+            (reply.reply_request_id, list(dependencies), turn_id),
+        )
+        turn["state"] = "completed"
+        return self._turn(turn, saved_reply)
 
     def fail(self, scope: ContactScope, turn_id: UUID) -> None:
         with self._transaction(scope) as connection:
@@ -579,4 +678,5 @@ class PostgresAssistantSessionStore:
             turn_id=row["id"], session_id=row["session_id"],
             input_version_id=row["input_version_id"], request_key=row["idempotency_key"],
             state=row["state"], input=row["input_payload"], reply=reply,
+            interruption_reason=row.get("interruption_reason") if row["state"] == "failed" else None,
         )
