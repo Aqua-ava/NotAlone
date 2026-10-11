@@ -92,3 +92,8 @@ B 真实页面 first78240因PageHost未通知reply消费者失败；最薄host b
 主树新生命周期公开回归准备（2026-10-11）：仅净B正式240926a／bb1d546／3920080的必要七个页面／夹具路径；Root仍沿原两个inline白名单及dispatcher只加同一label，未引入负责人新catalog重构，既有Root/C所有case和资源门禁保留。PageHost按真实Main分别通知foreground与reply的closed／focused，沿原待处理command集合观察实际完成；新增身份查询只读本轮合成owner的无正文UUID，实际完成仍公开GET复验。原B六参数／原等待／SSE150ms及120秒范围不改，about:blank重显先等原公开“回应消息”按钮可见，不弱化期待。
 
 Root whole桌面TSC、fixture编译、两个entry的esbuild write=false及diff均通过；首次编译命令多entry遗漏outdir是工具入口错误，改逐entry同配置构建后实际通过，不称产品RED。之前脚本尝试负责人存在但Root没有的catalog路径失败，Root依实际inline路由精确接线，没有复制架构。此为准备证据，主树新五完整公开场尚未运行；原Root14／六编辑场、负责人两个实际FAIL和最终新窄HTTP结果各自保留。B预算409复验GET静态P2在其独立主题修复，不凭新五场准备借G。State claimed及六条原AC未勾，A registry／退出仍由A接续，无真实App／原生、微信/OCR、外部模型、私料、发送或远端操作。
+
+
+主树新五场真实公开结果（2026-10-11）：具名reply-strategy-lifecycle single120、session86224 actualexit0，回应／主动关闭未确认探索后的真实SSE不追加调用、在途探索晚回包不恢复、两scene已发起普通组在关闭后唯一保存原SID并公开重显，五个原完整场均passed。Root实际运行源formal0a33a25＋43456a7及正在最终只读审查的Ccarry薄caller；没有A54 provider。941个全部backend／desktop运行源码、fixture、测试、配置逐字全窗unchanged，HEAD不变；quiet32／active0／onscreen0／maxApps1／policies2／singleChrome／cleanuptrue／nativefalse。actualexit后独立freshstatus actual0absent，按本轮freeze时间精确五ownership文件只读PG核database_remaining=0，明确FULLRELEASE后才接后续源。日志/private/tmp/notalone-root-reply-lifecycle-page.log及private sourcefreeze、五归属文件保留。
+
+原5s、SSE150ms与模型计数断言不改，不借负责人36102的五G；初MAIN编码记录错误未写而shell继续，运行文件未改变，后补实际记录，不称产品RED。普通生成及未确认探索范围已由新Page证明；已确认／回答的A作业归属、真正受控退出drain、B10／11连续组合仍继续，本五场未测试携入UI，不能因运行树含C55caller称携入页面通过。State claimed、六条原AC未勾；真实App/微信/人工/供应商/原生剪贴板/外部发送/remote未执行。
