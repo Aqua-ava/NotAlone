@@ -94,22 +94,22 @@ E01 的 16 例受控报告包含 14 个故意错误输出、1 个超时与1个�
 
 ## 当前逐项接续台账
 
-以下记录截至主树 `d9ce5dd` 的正式集成与已核对运行证据。原票目前 14 张 resolved，15 张仍 open／claimed；持续推进所有可自主实施部分。B01–07、C01–05及A07／08已按原范围收口，未把语义质量或原生验收当通过。目录五场在主树通过；删除联合页仍有观测失败及候选等待超时，未整体通过。负责人页面与主树实际结果分别记录，原票State和原验收标准保持权威。
+以下记录截至主树 `07cd91b` 的正式集成与已核对运行证据。原票目前15张resolved、7张claimed、7张open，共29张；14张仍有可自主接续部分。B01–07、C01–05及A07／08／10已按原范围收口。主树目录五场、删除故障与生命周期十场、C恢复与独立样本保留四场均真实完整通过；旧短暂超时及观测失败保留，不能据后续未复现宣布原因关闭。负责人结果与主树运行分别记录，原票State及验收标准保持权威。
 
 | 原任务 | 负责人 | 当前自动工作及剩余接续 |
 | --- | --- | --- |
 | A07 | A | 正式集成；24项助手HTTP来源回归和三场公开保存页面通过，NoSkill／目的／原始来源修复均已交付 |
 | A08 | A | 正式集成6e78df1；自动22公开场、safe40及两轴0，root补恢复＋样本参考两组GREEN；原生验收未执行且未据此宣称通过 |
-| A09 | A | 实际传递正文清除后端 root e780f2d／ae449 等已有真实 HTTP/PG 证据；A86/167 UI＋96共用入口门禁净接未提交，27文件最终两轴0。原catalog五场G；原fault首轮五场G但整轮观测exit1，复验74449前三场G、第四候选5s超时，并捕获relationships原1s采样SIGTERM；第五及lifecycle未执行，quiet64／cleanuptrue／freshabsent，原因未定、门槛未放宽。claimed，继续最窄诊断与复验 |
-| A10 | A | 目录／新开唯一入口净接待提交；主树原两label五场Page actualexit0／quiet67／cleanuptrue、8Node／typeG；A09 gate四RPC门禁实际G。两票联合源两轴0，删除生命周期尚未整体通过，原标准未预填，claimed |
-| A11 | A | root 9b0a651／0096c34 的版本与唯一选择27真实PG/HTTP G已正式。通用完整GET与逐作业遮挡仍由A sole实施，阶段57pure/typeG后发现exploration重试作业正文与迟到响应残留继续修。B五泛型字段及公开消息组仍待正式DTO/main/RPC，不取working或复制权威，claimed |
+| A09 | A | 实际传递正文清除后端及C中央清理已正式，A86/167 UI＋96共用入口门禁ONLY27与目录已root9394ab8。原fault/lifecycle70322 actualexit0，5+5十完整场景G／quiet86／cleanuptrue／freshabsent，失败后策略三入口不调用、迟到与跨视图拒绝到达；旧74449 ps1s/第四5s超时原因未知保留。候选恢复复制及style-editor-erasure另组Page待，claimed |
+| A10 | A | 原22真实HTTP／PG、8Node、目录五完整公开场景及type/双轴0具证；root9394ab8仅A主题27精确集成，按原五标准resolved。目录只有稳定ID，无隐式生成或候选搬运；运行中归属仍由A16，人工／原生未执行 |
+| A11 | A | root9b0a651／0096c34版本与唯一选择27真实PG/HTTP已正式；A11桌面91相关Node／类型阶段及新首次探索失效/旧版展开两P2窄RED→G由sole A继续最终复审，尚未formal。B08/C06只待正式typed DTO/main/read-save-show-select与actualcompletedSavedTurn，不绑定整A13/18，不取working，claimed |
 | A12 | A | 完整讨论provider与模型ordered payload正式root28c5ac：66真实HTTP-PG G47.426／53／DB0、293reply单元G2.287、mypy2／两轴0；C唯一历史样本getter实际使用，最终六段与每工具轮budget保。测试清理最窄修复rootd48ba28：原2生命周期RED→G与另11真实HTTP G18.806／DB0。预算UI／大历史响应、实际unknown供应商能力仍接续；pureDraft物理擦除已在A/C正式组合中实闭，历史失败保留，claimed |
 | A13 | A | A完整模型讨论已经正式；A自身continuous-client pure RED→GREEN／type证据已有，完整连续引用后端与公开接线尚未正式交付，沿A11唯一版本和实际预算继续 |
-| A14 | A | 原0e8＋d1后端已root4f8e1f4，24真实PG/HTTP G10.159、source精确input_version_stale／物理擦除保。prepare835新6文件净接但未提交，主树42实际G35.381（24替换＋16准备＋2C组合），freshSpec发现真实C已完成/A完成迟到时B CURRENT先拒旧回执的P2；A actual B确认409→G修复尚未正式交付。保留原失败，prepare与公开生命周期继续，claimed |
+| A14 | A | 原24replacement后端及prepare真实身份投影已root9232252 ONLY14同A17集成；可靠C completed/A complete迟到后新CURRENT的真实B反例已由formal0cc修复，source严格identity/canon/来源/Skill仍保，旧P2关闭。主树七模块54G47.562／054repeat0／DB0，focus6/compile10/双轴0；桌面替换、后台归属与公开组合继续，claimed |
 | A15 | A | 沿A11／A14正式接口继续新消息提醒与用户明确触发，未正式交付；到达不得隐式生成或替换用户当前讨论 |
-| A16 | A | 背景离开view与真正quit分开。A-owned prepare薄合同已确认：唯一reserve零模型、返回实际SID／turn／key／inputUUID／state，existingcompleted不假running、不推进current；持久结果原会话归属与公开生命周期仍待正式自动验证 |
-| A17 | A | 054唯一预留A17，fresh核实reserve-only无C attempt故需要body-free interruption原因；A本树fresh／upgrade两迁移G，尚未正式集成，主树前缀仍53。oldkey／lateprocess拒绝、completed先赢和受控quit/rebuild继续；B sole freshkey明确重新确认合同已请求，不由A复制旧suggestion。真实App退出／重开排除，未记人工通过 |
-| A18 | A | 等A10桌面／A11明确选择与A12实际预算接线，只携实际明确选定的完整候选组，候选不能标成已发送；未正式交付 |
+| A16 | A | 唯一A-owner零模型prepare返回实际SID／turn／key／inputUUID／state已root9232252，可靠completed不假running、不推进CURRENT；独立client registry和受控leave／close公开归属ports仍sole A实施。不能把后端54G当页面生命周期通过，open |
+| A17 | A | 正式054 app_quit无正文原因和唯一interrupt/complete事务已root9232252，53→54／repeat／rollback及8HTTP/3迁移真实验证，根七模块54G47.562／DB0/双轴0。旧key不可重领、迟到与可靠完成先赢／后继CURRENT保留；旧A051完成兼容测试sole A已真RED后修正未formal。受控宿主quit/rebuild及B新key明确重确认继续；原生人工排除，claimed |
+| A18 | A | sole A预留真实最小055 candidate_carry，实际新携候选HTTP原404已取得RED；需A11明确选择正式版本、A10显式新开和统一A lineage闭包。不供正文，不带整段讨论/临时要求，不自动生成；055与新接口未formal，open |
 | B01 | B | 原回应入口已正式；6143真实SID/replies七页G与B正式6856原六标准/Answer/State已root566eb62净接，自动resolved。首93006观测exit1原因未知和后来actualG分别保，未人工/真实模型/原生 |
 | B02 | B | 正式B46两TS及必要合成夹具／inline登记已root6143e76。原六场理解＋回应入口共七场真实DOM→HTTP→每场隔离PG在93022 actualexit0／quiet91／cleanuptrue，原调用数、原样重建重放0追加、source和895＋6 TTL断言保持；首93006 casepassed但final观测exit1／原因未知真实保留。CLI10／type／compile／两轴0，原六标准保留并据自动证据resolved |
 | B03 | B | 原options两mode root2591de6 G／quiet16／cleanup；B正式66e5ee9状态与原五标准净增已root6143e76，B02前置满足，自动resolved。不借此闭合R09有界活跃更新 |
@@ -118,15 +118,15 @@ E01 的 16 例受控报告包含 14 个故意错误输出、1 个超时与1个�
 | B06 | B | root8957d58两mode公开G／quiet40／cleanup及B正式9866、a17c919原六标准净增已root6143e76。已确认但关键未答0gen、回答与原意愿完整保存、原键故障重试／重放0追加保持；owner原联合92039因后Skill RED exit1不冒全G。自动resolved |
 | B07 | B | root601f792原六场42调用G／quiet58／cleanup；正式dc966d6原七标准状态净增已root6143e76。真实同版、NoSkill关闭不回选、切新版与disable/delete恢复均保持；探索无业务Tool／样本，不冒E06整体完成。自动resolved |
 | B08 | B | 公开A版本选择与C删除已root0096 G27；消息copy22真实RED→G及原strictpair保持，A09 sessionDeletion类型已正式满足，尚5泛型缺A11正式projection。两scene全组edit/save/select/permessageCopy+PG恢复公开case准备中，不把纯Node关UI，claimed |
-| B09 | B | 有界150ms合并、root3次／TTL／CURRENT／Skill实际authority已在B实施，最终12场静态两轴0但未全跑。第一single120真实RED；后25723 single240第一回应scene完整G，第二主动firstopen5s超时，其余10未执行；quiet44／cleanuptrue／freshabsent。无OS控制器与原消息HTTP代理各4G仅窄诊断，根因未知；不延期原预算。A16/17生命周期接缝仍待，原State open |
-| B10 | B | 正式4b1重确认元数据与2bd实际CURRENTNone夹具校准已rootf6d03fb ONLY7，主树原五模块56真实HTTP/PG实际G75.649／53repeat0／DB0，focus4mypy／17unit／两轴0。首55G1ERROR72.906历史保留；后A准备阶段B自有54G1HTTPtimeout与最小1G亦各列，不借主树结果覆盖。A054、A13/15与公开组编辑继续，open |
-| B11 | B | 原State实际open，依B09/B10真实公开组合，不因B01–07resolved关本票。C183无正文paste凭证与迟到取消已B正式521消费，rootC762独立81Node/type/八反例G；各owner计量分开，组合尚未完成 |
+| B09 | B | B正式7eda＋3b19＋a70有界150ms合并/3次15分钟/实际CURRENT来源Skillauthority已根净接尚未本地主题commit；whole桌面type0，增量两轴0。owner39352原12业务G但final观测exit1，不全CLI G；25723 firstopen5s超时历史保。新deleted/missing queue真实noOS HTTP/PG RED→G，公开第13场未跑；B下一具名single240原13场已ACK，A16/17 leave/quitports仍待，open |
+| B10 | B | 正式重确认元数据及CURRENTNone已rootf6d03fb原56真实G75.649；root9232252正式54与可靠completed guard具证。owner自行54G68.290与原55超时/串行55G分别保。C真实HTTP interrupt/样本Skill新组合正在sole C两轴formal，根未消费前不借owner新G；A13/15及消息组页面接线继续，open |
+| B11 | B | 原State open，等真实B09/10组合；root07cd91b仅新增actualSkill五具名桥接Node G137.177/skip0/两轴0，五production早由B正式交付，受控transport不是真HTTP/PG/model/Page。C无正文paste凭证、latecancel/rootC762已有真实证据；不以Node或B01–07resolved关本票 |
 | C01 | C | 正式离线与4a71逐例报告已root1d598d1；公开CLI实际重新生成controlled-v1与正式25KB文件字节/SHA一致、7unitG，16合成样本及human0/质量未知保留，resolved |
 | C02 | C | af0dfdb三输入与c9a5d69任务／报告正式集成、State resolved；四例公开捕获GREEN，报告故意立场失败1、真人0／质量未知 |
 | C03 | C | a2b6ae6统一边界与c9a5d69任务／报告正式集成、State resolved；6真实HTTP、186单元、九捕获与三确定性拒绝GREEN；7故意语义失败、真人0／质量未知 |
 | C04 | C | 原范围由正式edc8406与原验收/Answer审计闭合，root787b89a ONLY3同时整合C05文档。真实owner锁FIFO验证保存先／删除先与原来源/重装/失效候选共4HTTP/PG G7.481／53repeat0／DB0、两轴0；rootc762 clipboard独立81Node／8反例G及owner公开证据保。原State resolved，不把后续E06或人工作业加为新关闭条件 |
 | C05 | C | 唯一有界样本getter、完整历史/最终每工具轮总预算和真实来源擦除已正式；纯讨论物理清理root42G28.708及66预算HTTP/PG、293unit证据保。正式38d1aaf原六标准/Answer与State resolved已root787b89a净消费、两轴0；真实语义/自然度未知不称通过 |
-| C06 | C | 原三逐例报告rootcccae19、精确quality_verified=false／human0；原6首5G1timeout→single1G→原6G23.654保真。新重确认／替换两个HTTP root133419f与fresh生成键精确失效rootb113a62，相关42实际G35.381／53DB0。只读捕获接口C3d61已rootd9ce5dd实际16PG G18.945／两轴0，唯一A lineage/carry尚待；C3新两公开分支是owner G，主树尚未新label；C02原解析掩盖断言加强9ee单180正在owner运行，不预称G。第1公开消息组／连续修改仍等A11/B正式typed UI，claimed |
+| C06 | C | 原三逐例报告／quality_verified=false／human0及故意语义失败保留。C3d只读capture已rootd9ce5dd16PG G；root0a54aef两原labels四完整C恢复／retention场景actual0／quiet51／cleanuptrue／freshabsent，精确continued_candidate_unavailable、整GET不变与source传递擦除到达，原第2–5已勾。root07cd91b五actualSkill桥接G只transport，不冒新Page；新真实HTTP interrupt两scene组合待C formal，A typedselector/消息组连续修改还待，claimed |
 
 本轮原生／真实App、微信/OCR、真实聊天、外部付费模型、人工操作、push／发布／部署均按用户明确范围排除。当前尚能自主实现的接口、页面、修复及集成全部继续；这些排除不作为等待用户或停止其他工作理由。原票如因人工部分未执行不能关闭，保留原State并单独记录；上表自动resolved只适用于已经核对原自动标准的已完成票。
 
@@ -139,3 +139,5 @@ B单次用户字段统一为user_instruction、clarification_answer及understand
 C ed59d26已集成为f5cb90a，root正式001–052下13真实HTTP／PG通过，涵盖两种场景及其三声明、样本参考、基础继续和删除，自有库精确清理0。新六捕获 `/private/tmp/notalone-root-declared-combination-observations-20261011.json` 经唯一E01薄入口生成新报告，实际6调用865.341417ms、结构失败0／故意保真失败2／真人0／quality_verified=false；自然度、关系适配和用户相似度仍unknown，旧792.018542ms负责人报告和root840.725541ms无声明报告均保留。该HTTP成功不替代独立恢复页面或未实现B10／完整A12；恢复导航fix782fb012已集成为81b94c8f5db11c140f7e7f0c76d4e6e65cceef94，第二公开窗口两场均实际完整通过原断言。
 
 本轮root新增验证：C统一主题186回复单元、6认证HTTP／随机PG、typecheck通过；fidelity-intent四捕获和fidelity-content九捕获＋无效结构/越权引用/调用中撤回均通过。全部普通页面quiet采样active0／onscreen0、单Chrome、cleanupConfirmed=true，无Electron／原生App。两份新报告保留故意失败、真人0和质量未验证。表达选区粘贴的第一RED及A回应方向来源提示的两轮RED均保留，后续未到达的场景没有标通过。
+
+2026-10-11 新正式主题：root9232252生成回执／054中断14文件，真实七模块54G47.562；root9394ab8会话目录／删除界面27文件，A-only共享源及inline登记排除B自动队列，A10原范围resolved／A09另组待验；root07cd91b仅C actualSkill新增test＋准确记录2文件，5G137.177。三组均先相关验证和新鲜Standards/Spec无新增阻塞后本地提交，无远端操作；源代码、数据库前缀及未验剩余不互相冒称。根当前没有运行Page，B下一具名R09单240原13场已ACK，独占租约/freeze/cleanup/freshstatus依原要求。
