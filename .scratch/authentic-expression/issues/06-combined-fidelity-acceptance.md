@@ -377,3 +377,12 @@ Conda NotAlone／backend，`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRAC
 Conda／desktop实际运行五套Node：`node --test --test-reporter=spec tests/assistant-candidate-versions.test.mjs tests/assistant-candidate-version-ports.test.mjs tests/candidate-copy/controller.test.mjs tests/style-samples/controller.test.mjs tests/style-samples/candidate-version-source.test.mjs`。首次默认沙箱211通过／14失败／1886.545375ms／exit1，十四均为既有JsonClient受控127.0.0.1监听EPERM，未计生产RED；允许同一已授权回环后原五套 **225 GREEN／1147.616416ms／skip0／actualexit0**。完整desktop TypeScript及diff通过。新增边界保留部分形状／extra args／范围和实际完成轮错配／错展示版本／长度／legacy与来源终态拒绝，Root原prepare／生成turn_id薄适配未回退。这些是具名Main和受控传输契约，不能冒生产PG或完整公开页面证明。
 
 C负责人的前两新增public Page session68894与58008均真实exit1，仅部分两捕获／两调用／零完整场景；915主树B边界five或C的225 Node均不能替它们关闭。C正独立诊断后续计数2／1的真实失败，并接A唯一捕获删除core的物理pre-capture薄调用方；完整八例soleE01逐例报告、真正typed连续修改、B组合及主树独立公开页面仍接续。本切片没有生成或宣称完整八例报告通过，原故意语义失败／human0／quality_verified=false及未知说明保留。只处理合成资料和本地输入，不新增HTTP业务写口、schema、正文缓存、依赖图、供应商调用或发送能力；人工／系统剪贴板／原生App／微信/OCR／私人聊天／付费模型／push／发布／部署均未执行。
+
+
+### 主树逐次实际输入报告适配（2026-10-11）
+
+仅净接 C 正式 `f5598cbfa6254670c7f7cc19802ac606d9bfbce2` 的两个测试／报告适配路径。复用唯一 E01 报告与 `require_unlabelled_input`，提供 model_inputs 时逐次校验其非空结构、每次无审阅标签、实际 int 调用数与记录长度一致且最后一次等于最终 payload；实际 UI 观察与 coverage 仅深拷贝进入报告，不进入模型。旧无逐次记录的捕获格式继续兼容，不捏造缺失的工具轮或实际输入，也没有新语义分类器、模型、存储或产品缓存。
+
+主树激活 Conda `NotAlone`、禁 dotenv／tracing，从 backend 执行 `PYTHONPATH=src python -m unittest tests.unit.reply.test_fidelity_capture tests.unit.reply.test_fidelity_evaluation tests.unit.reply.test_fidelity_review_details -q`：**9 GREEN／0.214秒／skip0／actualexit0**，涵盖新逐次输入、漏计／布尔计数／最终输入不符／嵌套标签拒绝，以及原公开 CLI 的失败、超时、缺失与未知保留。两个实际 Python 文件编译及 diff 检查通过。另先独立跑 capture 模块为4 GREEN0.001秒；不把其记作 C 的7项0.222秒。日志 `/private/tmp/notalone-root-per-call-fidelity-report-unit.log`。
+
+这只是报告适配器的独立验证；C 前四次新组页面仍实际失败，第四诊断证实保存 HTTP／PG 已成功、fixture 错选旧独立候选，已交 C sole 修正实际 candidate ID，后续完整两场／八例报告和 B 连续场景仍须真实执行。主树尚未净新8例观察或用本适配器生成其正式报告。本票继续 claimed，原验收文字及已有真实勾选保留；真人审阅0、语义／自然度／原生未知，没有外部模型或私人聊天。

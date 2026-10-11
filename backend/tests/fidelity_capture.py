@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 from notalone.reply.fidelity_evaluation import (
-    BOUNDARY_DIMENSIONS, annotated_content_status, build_report,
+    BOUNDARY_DIMENSIONS, annotated_content_status, build_report, require_unlabelled_input,
 )
 
 
@@ -34,6 +34,17 @@ def capture_report(capture: dict, case_spec: dict) -> dict:
         payload = row["payload"]
         expectation = specification.get("expectation", {})
         evidence = payload["evidence"]
+        actual = {"owner_id": row["owner_id"], "contact_id": row["contact_id"],
+                  "payload": payload, "system_prompt": row["system_prompt"]}
+        if "model_inputs" in row:
+            inputs = row["model_inputs"]
+            if (not isinstance(inputs, list) or not inputs or type(row["call_count"]) is not int
+                    or len(inputs) != row["call_count"] or inputs[-1] != payload
+                    or any(not isinstance(item, dict) or not item for item in inputs)):
+                raise ValueError("逐次模型捕获与实际调用计数或最终输入不一致。")
+            for item in inputs:
+                require_unlabelled_input(item)
+            actual["model_inputs"] = inputs
         cases.append({
             "case_id": row["case_id"], "split": specification["split"],
             "tags": specification.get("labels", []),
@@ -48,8 +59,7 @@ def capture_report(capture: dict, case_spec: dict) -> dict:
             "forbidden_additions": expectation.get("forbidden_additions", []),
             "expected_intent": expectation.get("intent"),
             "allowed_citations": [item["evidence_id"] for item in evidence],
-            "actual_capture": {"owner_id": row["owner_id"], "contact_id": row["contact_id"],
-                               "payload": payload, "system_prompt": row["system_prompt"]},
+            "actual_capture": actual,
         })
         attempts.append({"case_id": row["case_id"], "status": "ok", "output": row["output"],
                          "elapsed_ms": row["latency_ms"], "call_count": row["call_count"]})
@@ -71,8 +81,12 @@ def capture_report(capture: dict, case_spec: dict) -> dict:
     report["protocol"].update({
         "capture_entry_point": entry, "capture_elapsed_scope": elapsed_scope[entry],
         "token_count": "unknown",
-        "actual_input": "actual_capture保留实际模型输入；generation_input为供审阅整理的字段，不由报告发给模型。",
+        "actual_input": "actual_capture保留实际最终模型输入；提供model_inputs时另保留逐次实际输入。generation_input仅供审阅，不由报告发给模型。",
     })
+    if "coverage" in capture:
+        report["protocol"]["capture_coverage"] = copy.deepcopy(capture["coverage"])
+    if "ui_edits" in capture:
+        report["public_ui_observations"] = copy.deepcopy(capture["ui_edits"])
     return report
 
 
