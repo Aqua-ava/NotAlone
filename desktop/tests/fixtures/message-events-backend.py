@@ -167,6 +167,15 @@ def main() -> None:
                 result = {"model_calls": len(fixture.reply_model.seen_calls),
                           "payloads": fixture.reply_model.payloads,
                           "model_entered": fixture.reply_model.entered.is_set()}
+            elif operation == "exploration_identities":
+                # 只观察本轮合成 owner 的实际身份，完成状态仍经公开 HTTP 复验。
+                with psycopg.connect(fixture.database_url) as connection:
+                    rows = connection.execute(
+                        "SELECT id,session_id FROM public.reply_exploration WHERE owner_id=%s",
+                        (fixture.owner_id,),
+                    ).fetchall()
+                result = {"items": [{"exploration_id": str(row[0]), "session_id": str(row[1])}
+                                    for row in rows]}
             elif operation == "age_exploration":
                 # 只推进本轮合成 owner 的根任务年龄，不替换生产 TTL 判断。
                 with psycopg.connect(fixture.database_url) as connection:

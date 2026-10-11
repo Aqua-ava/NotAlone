@@ -3,6 +3,7 @@ import { confirmHelperContact } from '../foreground-confirmation-actions';
 import { withEventPages, type EventPages } from './message-events';
 
 const manualNotice = '本次自动更新已暂停，请点“更新理解”继续。';
+export { prepare as prepareDirectionTask, open as openDirectionTask };
 async function current(pages: EventPages) {
   return pages.helper.evaluate(async () => (await window.notalone.replies.getState()).exploration.result);
 }

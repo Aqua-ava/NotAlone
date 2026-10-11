@@ -8,7 +8,8 @@ import { ownResource } from './cleanup';
 import { PageHost } from './page-host';
 import { MessageEventHttpProxy } from '../message-event-http-proxy';
 
-export type EventPages = { manager: Page; helper: Page; fixture: RewriteFixture; transport: MessageEventHttpProxy };
+export type EventPages = { manager: Page; helper: Page; fixture: RewriteFixture; transport: MessageEventHttpProxy;
+  awaitPendingCommands: () => Promise<void> };
 // 直接连接生产认证 HTTP/SSE；不能使用等待响应结束的改写代理。
 export async function withEventPages(browser: Browser, origin: string, use: (pages: EventPages) => Promise<void>) {
   const released = ownResource();
@@ -21,7 +22,8 @@ export async function withEventPages(browser: Browser, origin: string, use: (pag
         const manager = await host.open('manager');
         const opened = manager.context().waitForEvent('page');
         await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
-        await use({ manager, helper: await opened, fixture, transport });
+        await use({ manager, helper: await opened, fixture, transport,
+          awaitPendingCommands: () => host.awaitPendingCommands() });
       } finally {
         transport.release(); await host.close();
         // 先确认自有夹具收尾并保留精确归属，再由通用生命周期幂等核验和移除目录。

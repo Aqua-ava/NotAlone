@@ -47,11 +47,13 @@ export class PageHost implements PageCommands {
   private readonly handlers = new Map<string, { handler: (...args: unknown[]) => unknown; role?: PageRole }>();
   private readonly pages = new Map<Page, PageRole>();
   private readonly pendingEvents = new Set<Promise<unknown>>();
+  private readonly pendingCommands = new Set<Promise<unknown>>();
   private closing = false;
   private readonly released = ownResource();
   readonly backend: BackendHost;
   readonly diagnostics: StartupDiagnostics;
   readonly foreground: ForegroundController;
+  private readonly replies: ReturnType<typeof installReplyBridge>;
   constructor(private readonly context: BrowserContext, private readonly origin: string, userData: string, options: { copySurface?: CandidateCopySurface; chooseImportFile?: ImportFileSelector } = {}) {
     this.diagnostics = new StartupDiagnostics(userData);
     this.backend = new BackendHost(userData, (config, canStart) => this.diagnostics.ensureReady(config, canStart));
@@ -69,7 +71,7 @@ export class PageHost implements PageCommands {
     const memory = installMemoryBridge(this, this.backend, contacts);
     const traces = installTraceBridge(this, this.backend, contacts);
     memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
-    const replies = installReplyBridge(this, this.backend, contacts, () => this.foreground.getGenerationBlock());
+    const replies = this.replies = installReplyBridge(this, this.backend, contacts, () => this.foreground.getGenerationBlock());
     const styleSamples = installStyleSampleBridge(this, this.backend, contacts, replies);
     this.foreground.onStateChanged(() => replies.refreshGenerationEligibility());
     this.foreground.setReplyEditGuard(() => replies.hasEdits());
@@ -114,10 +116,13 @@ export class PageHost implements PageCommands {
     if (this.closing) throw new Error('本轮页面已收尾。');
     const page = await this.context.newPage();
     // 本轮系统生命周期输入由可信host提供，不替换HTTP观察内容。
-    if (role === 'helper') page.on('close', () => this.foreground.notifyHelperLifecycle('closed'));
+    if (role === 'helper') page.on('close', () => {
+      this.foreground.notifyHelperLifecycle('closed');
+      this.replies.notifyHelperLifecycle('closed');
+    });
     this.pages.set(page, role);
     await page.setViewportSize(role === 'manager' ? { width: 1080, height: 740 } : { width: 680, height: 520 });
-    await page.exposeBinding('pageCommand', (source, channel: unknown, args: unknown) => {
+    await page.exposeBinding('pageCommand', async (source, channel: unknown, args: unknown) => {
       if (this.closing || source.page !== page || source.frame !== page.mainFrame()
         || page.url() !== `${this.origin}/#${role}` || typeof channel !== 'string' || !Array.isArray(args)) throw new Error('页面操作不可用。');
       if (channel === 'page:open-manager' || channel === 'page:open-helper') {
@@ -125,12 +130,20 @@ export class PageHost implements PageCommands {
       }
       const command = this.handlers.get(channel);
       if (!command || (command.role && command.role !== this.pages.get(page))) throw new Error('页面操作不可用。');
-      return command.handler(...args);
+      const pending = Promise.resolve(command.handler(...args));
+      this.pendingCommands.add(pending);
+      try { return await pending; }
+      finally { this.pendingCommands.delete(pending); }
     });
     await page.addInitScript({ path: path.resolve('artifacts/headless-runtime/renderer.js') });
     await page.goto(`${this.origin}/#${role}`);
     this.foreground.notifyHelperLifecycle(role === 'helper' ? 'focused' : 'blurred');
+    this.replies.notifyHelperLifecycle(role === 'helper' ? 'focused' : 'blurred');
     return page;
+  }
+  // 观察本轮公开页面命令是否已经完成或取消，不替换业务响应。
+  async awaitPendingCommands(): Promise<void> {
+    await Promise.allSettled(this.pendingCommands);
   }
   async close(): Promise<void> {
     this.closing = true;
