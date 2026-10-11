@@ -67,10 +67,12 @@ def _frame_histories(
 
 def _request_from_input(scope: ContactScope, key: UUID, payload: dict[str, Any]):
     metadata = payload.get("continuation")
+    content = dict(payload["content"])
+    suggestion = content.pop("suggestion", None)
+    payload = {**payload, "content": content, "suggestion": suggestion}
     accumulated = None
     if isinstance(metadata, dict):
         requirements = metadata.get("effective_requirements")
-        content = payload.get("content")
         if not isinstance(requirements, list) or not isinstance(content, dict):
             raise AssistantContinuationInvalid("持续要求记录无效。")
         accumulated = AccumulatedReplyRequirements(tuple(requirements)) if requirements else None

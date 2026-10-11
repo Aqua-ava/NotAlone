@@ -373,75 +373,88 @@ class PostgresExplorationStore:
     ) -> ExplorationTask:
         self._prune(scope)
         with self._transaction(scope) as connection:
-            parent = self._validate(connection, scope, self._read(connection, scope, exploration_id),
-                                    ExplorationReadPurpose.HISTORY)
-            self._require_skill(connection, scope, parent.skill_library_revision, parent.skill_version_id)
-            if (parent.session_id != session_id or parent.input_version_id != input_version_id
-                    or parent.state not in ("selected", "confirmed") or not parent.has_confirmed_intent
-                    or not isinstance(parent.selected_intent, str)
-                    or parent.result is None or parent.result["question"] is not None or parent.result["ambiguities"]
-                    or (suggestion_id is None) == (direct_intent is None)
-                    or suggestion_id is not None and (parent.selection_source != DirectionSource.CONFIRMED_SUGGESTION
-                                                      or parent.selection_id != suggestion_id)
-                    or direct_intent is not None and (parent.selection_source != DirectionSource.DIRECT_INPUT
-                                                      or parent.selected_intent != direct_intent)
-                    or request_key == parent.request_key):
-                raise ExplorationStale("重试必须明确确认原输入的已选意愿。")
-            content = replace(parent.content, confirmed_intent=parent.selected_intent)
-            operation = ExplorationOpen(session_id, content, request_key, expected_input_version_id, exploration_id)
-            digest = _operation_digest(operation)
-            replay = connection.execute(
-                "SELECT * FROM public.reply_exploration WHERE owner_id=%s AND contact_id=%s AND request_key=%s FOR UPDATE",
-                (scope.owner_id, scope.contact_id, request_key),
-            ).fetchone()
-            if replay is not None:
-                task = self._validate(connection, scope, replay, ExplorationReadPurpose.HISTORY)
-                if (replay["operation_digest"] != digest or task.session_id != session_id
-                        or task.state not in ("selected", "confirmed") or not task.has_confirmed_intent
-                        or task.selected_intent != parent.selected_intent or task.selection_source != parent.selection_source):
-                    raise ExplorationStale("重试键已用于不同的确认。")
-                return task
-            turn = self._generation_turn(connection, scope, self._read(connection, scope, exploration_id))
-            saved = connection.execute(
-                "SELECT state FROM public.reply_request WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
-                (scope.owner_id, scope.contact_id, parent.request_key),
-            ).fetchone()
-            if (turn is None or turn["state"] != "failed" or turn["input_version_id"] != expected_input_version_id
-                    or saved is not None and saved["state"] != "failed"
-                    or not connection.execute(
-                        "SELECT 1 FROM public.reply_invalidated_key WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
-                        (scope.owner_id, scope.contact_id, parent.request_key),
-                    ).fetchone()):
-                raise ExplorationStale("原生成尚未可靠中断。")
-            self._validate(connection, scope, self._read(connection, scope, exploration_id), ExplorationReadPurpose.CURRENT)
-            require_current_input(connection, scope, session_id, expected_input_version_id)
-            if (connection.execute(
-                    "SELECT 1 FROM public.assistant_session_turn WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
-                    (scope.owner_id, scope.contact_id, request_key),
-                ).fetchone() or connection.execute(
-                    "SELECT 1 FROM public.reply_request WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
-                    (scope.owner_id, scope.contact_id, request_key),
-                ).fetchone() or connection.execute(
-                    "SELECT 1 FROM public.reply_invalidated_key WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
-                    (scope.owner_id, scope.contact_id, request_key),
-                ).fetchone()):
-                raise ExplorationStale("请使用新的重试请求键。")
-            dependencies = self._evidence.dependencies((*parent.intent_snapshots, *parent.snapshots))
-            version = record_discussion_input_in_transaction(
-                connection, scope, session_id, content.payload(), expected_input_version_id,
-                verified_dependencies=tuple(sorted(dependencies)),
+            return self.reconfirm_in_transaction(
+                connection, scope, session_id, exploration_id, input_version_id,
+                expected_input_version_id=expected_input_version_id, request_key=request_key,
+                suggestion_id=suggestion_id, direct_intent=direct_intent,
             )
-            options = [{**option, "suggestion_id": str(uuid4())} for option in parent.result["options"]]
-            # 澄清会重建建议编号；原明确选择的权威来自已复验的选择记录。
-            selection = (next((UUID(option["suggestion_id"])
-                               for old, option in zip(parent.result["options"], options, strict=True)
-                               if old["suggestion_id"] == str(parent.selection_id)), uuid4())
-                         if suggestion_id else uuid4())
-            task = replace(parent, exploration_id=uuid4(), input_version_id=version, operation_key=request_key,
-                           request_key=request_key, content=content, state="selected", selection_id=selection,
-                           result={**parent.result, "options": options})
-            self._insert(connection, task, digest, dependencies)
+
+    def reconfirm_in_transaction(
+        self, connection: Any, scope: ContactScope, session_id: UUID, exploration_id: UUID, input_version_id: UUID,
+        *, expected_input_version_id: UUID, request_key: UUID,
+        suggestion_id: UUID | None, direct_intent: str | None,
+    ) -> ExplorationTask:
+        """沿唯一 B 确认 writer 复用调用方 owner 事务，防止恢复时另开锁或提交。"""
+
+        parent = self._validate(connection, scope, self._read(connection, scope, exploration_id),
+                                ExplorationReadPurpose.HISTORY)
+        self._require_skill(connection, scope, parent.skill_library_revision, parent.skill_version_id)
+        if (parent.session_id != session_id or parent.input_version_id != input_version_id
+                or parent.state not in ("selected", "confirmed") or not parent.has_confirmed_intent
+                or not isinstance(parent.selected_intent, str)
+                or parent.result is None or parent.result["question"] is not None or parent.result["ambiguities"]
+                or (suggestion_id is None) == (direct_intent is None)
+                or suggestion_id is not None and (parent.selection_source != DirectionSource.CONFIRMED_SUGGESTION
+                                                  or parent.selection_id != suggestion_id)
+                or direct_intent is not None and (parent.selection_source != DirectionSource.DIRECT_INPUT
+                                                  or parent.selected_intent != direct_intent)
+                or request_key == parent.request_key):
+            raise ExplorationStale("重试必须明确确认原输入的已选意愿。")
+        content = replace(parent.content, confirmed_intent=parent.selected_intent)
+        operation = ExplorationOpen(session_id, content, request_key, expected_input_version_id, exploration_id)
+        digest = _operation_digest(operation)
+        replay = connection.execute(
+            "SELECT * FROM public.reply_exploration WHERE owner_id=%s AND contact_id=%s AND request_key=%s FOR UPDATE",
+            (scope.owner_id, scope.contact_id, request_key),
+        ).fetchone()
+        if replay is not None:
+            task = self._validate(connection, scope, replay, ExplorationReadPurpose.HISTORY)
+            if (replay["operation_digest"] != digest or task.session_id != session_id
+                    or task.state not in ("selected", "confirmed") or not task.has_confirmed_intent
+                    or task.selected_intent != parent.selected_intent or task.selection_source != parent.selection_source):
+                raise ExplorationStale("重试键已用于不同的确认。")
             return task
+        turn = self._generation_turn(connection, scope, self._read(connection, scope, exploration_id))
+        saved = connection.execute(
+            "SELECT state FROM public.reply_request WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+            (scope.owner_id, scope.contact_id, parent.request_key),
+        ).fetchone()
+        if (turn is None or turn["state"] != "failed" or turn["input_version_id"] != expected_input_version_id
+                or saved is not None and saved["state"] != "failed"
+                or not connection.execute(
+                    "SELECT 1 FROM public.reply_invalidated_key WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                    (scope.owner_id, scope.contact_id, parent.request_key),
+                ).fetchone()):
+            raise ExplorationStale("原生成尚未可靠中断。")
+        self._validate(connection, scope, self._read(connection, scope, exploration_id), ExplorationReadPurpose.CURRENT)
+        require_current_input(connection, scope, session_id, expected_input_version_id)
+        if (connection.execute(
+                "SELECT 1 FROM public.assistant_session_turn WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                (scope.owner_id, scope.contact_id, request_key),
+            ).fetchone() or connection.execute(
+                "SELECT 1 FROM public.reply_request WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                (scope.owner_id, scope.contact_id, request_key),
+            ).fetchone() or connection.execute(
+                "SELECT 1 FROM public.reply_invalidated_key WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
+                (scope.owner_id, scope.contact_id, request_key),
+            ).fetchone()):
+            raise ExplorationStale("请使用新的重试请求键。")
+        dependencies = self._evidence.dependencies((*parent.intent_snapshots, *parent.snapshots))
+        version = record_discussion_input_in_transaction(
+            connection, scope, session_id, content.payload(), expected_input_version_id,
+            verified_dependencies=tuple(sorted(dependencies)),
+        )
+        options = [{**option, "suggestion_id": str(uuid4())} for option in parent.result["options"]]
+        # 澄清会重建建议编号；原明确选择的权威来自已复验的选择记录。
+        selection = (next((UUID(option["suggestion_id"])
+                           for old, option in zip(parent.result["options"], options, strict=True)
+                           if old["suggestion_id"] == str(parent.selection_id)), uuid4())
+                     if suggestion_id else uuid4())
+        task = replace(parent, exploration_id=uuid4(), input_version_id=version, operation_key=request_key,
+                       request_key=request_key, content=content, state="selected", selection_id=selection,
+                       result={**parent.result, "options": options})
+        self._insert(connection, task, digest, dependencies)
+        return task
 
     def complete(self, task: ExplorationTask, result: dict[str, Any]) -> ExplorationTask:
         self._prune(task.scope)

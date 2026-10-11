@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 from uuid import UUID
 
@@ -16,6 +17,7 @@ from notalone.persistence.assistant_generation_lifecycle import interrupt_genera
 from notalone.persistence.assistant_session_inputs import require_current_input
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore, _active_binding, captured_generation_dependencies
 from notalone.reply.errors import ReplyStoreInvariantError
+from notalone.reply.interface import DirectionSource, InitiateConversation, ReplyToMessage, SuggestionReference
 from notalone.scopes import ContactScope
 
 
@@ -82,11 +84,38 @@ def reserve_interrupted_generation_in_transaction(
         metadata = {**metadata, "recovery": command.origin()}
         payload = {**payload, "continuation": metadata}
     original_request = _request_from_input(scope, command.request_key, payload)
+    if existing is None and original_request.suggestion is not None:
+        from notalone.persistence.reply_exploration import PostgresExplorationStore
+        from notalone.persistence.retrieval import PostgresRetrieval
+        from notalone.reply.exploration import ExplorationError
+        from notalone.reply.exploration_context import ExplorationEvidence
+        reference = original_request.suggestion
+        content = original_request.content
+        if not isinstance(content, (ReplyToMessage, InitiateConversation)):
+            raise AssistantSessionRejected("exploration_stale")
+        intent = content.direction if isinstance(content, ReplyToMessage) else content.purpose
+        try:
+            task = PostgresExplorationStore(connection.info.dsn, evidence=ExplorationEvidence(
+                PostgresRetrieval(connection.info.dsn),
+            )).reconfirm_in_transaction(
+                connection, scope, session_id, reference.task_id, reference.input_version,
+                expected_input_version_id=command.original_input_version_id, request_key=command.request_key,
+                suggestion_id=reference.suggestion_id if intent.source == DirectionSource.CONFIRMED_SUGGESTION else None,
+                direct_intent=intent.text if intent.source == DirectionSource.DIRECT_INPUT else None,
+            )
+        except ExplorationError:
+            raise AssistantSessionRejected("exploration_stale") from None
+        if not isinstance(task.selection_id, UUID):
+            raise AssistantSessionRejected("exploration_stale")
+        # 新执行身份只由 B 原确认 writer 生成；原明确意愿与资料仍保持原值。
+        original_request = replace(original_request,
+            suggestion=SuggestionReference(task.exploration_id, task.input_version_id, task.selection_id),
+            expected_input_version_id=task.input_version_id)
     request = AssistantContinuationReplyRequest(
         idempotency_key=command.request_key, content=original_request.content,
         continued_from_candidate_id=original_request.continued_from_candidate_id,
         skill_version_id=original_request.skill_version_id, skill_disabled=original_request.skill_disabled,
-        expected_input_version_id=command.original_input_version_id,
+        expected_input_version_id=original_request.expected_input_version_id or command.original_input_version_id,
         suggestion=original_request.suggestion, continuation=metadata,
         reference=_reference_from_metadata(connection, scope, session_id, metadata),
     )
