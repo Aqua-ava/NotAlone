@@ -2,13 +2,17 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { build } from 'esbuild';
+import { candidateVersionProtocol } from './fixtures/assistant-candidate-version-protocol.mjs';
 
 async function controller() {
   const output = await build({ stdin: { contents: `
     export { AssistantCandidateVersionSession, AssistantCandidateSourceUnavailable } from './src/main/reply/assistant-candidate-versions';
     export { BackendRequestFailure } from './src/main/backend/json-client';
   `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false });
-  return import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
+  const ports = await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
+  return { ...ports, AssistantCandidateVersionSession: class extends ports.AssistantCandidateVersionSession {
+    constructor(backend) { super(candidateVersionProtocol(backend)); }
+  } };
 }
 function fixture() {
   const scope = { contactId: randomUUID(), scopeRevision: 4, sessionId: randomUUID() };

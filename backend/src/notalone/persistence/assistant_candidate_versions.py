@@ -76,6 +76,23 @@ class AssistantCandidateHistory:
     versions: tuple[AssistantCandidateVersion, ...]
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class AssistantCandidateVersionPage:
+    history: AssistantCandidateHistory
+    page_number: int
+    version_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class AssistantCandidateEditReceipt:
+    session_id: UUID
+    candidate_id: UUID
+    version_id: UUID
+    version_number: int
+    edit_key: UUID
+    parent_version_id: UUID
+
+
 @dataclass(frozen=True, slots=True)
 class AssistantCandidateSelection:
     selection_id: UUID
@@ -100,6 +117,16 @@ class AssistantCandidateVersions(Protocol):
         self, scope: ContactScope, session_id: UUID, candidate_id: UUID,
         command: EditAssistantCandidate,
     ) -> AssistantCandidateHistory: ...
+
+    def read_page(
+        self, scope: ContactScope, session_id: UUID, candidate_id: UUID,
+        page_number: int, through: UUID | None,
+    ) -> AssistantCandidateVersionPage: ...
+
+    def edit_receipt(
+        self, scope: ContactScope, session_id: UUID, candidate_id: UUID,
+        command: EditAssistantCandidate,
+    ) -> AssistantCandidateEditReceipt: ...
 
     def select(
         self, scope: ContactScope, session_id: UUID, candidate_id: UUID,
@@ -243,6 +270,60 @@ def read_candidate_selection(
         return _selection(row)
 
 
+def read_candidate_version_page(
+    connection: Any, scope: ContactScope, session_id: UUID, candidate_id: UUID,
+    page_number: int, through: UUID | None = None,
+) -> AssistantCandidateVersionPage:
+    """逐页重新核验来源，只读一个完整版本；模型历史仍使用原完整读取。"""
+    _validate_scope(scope, session_id, candidate_id, *((through,) if through is not None else ()))
+    if (type(page_number) is not int or page_number < 0
+            or page_number > 2147483647 or page_number > 0 and through is None):
+        raise AssistantCandidateVersionRequestInvalid("候选版本分页结构无效。")
+    lock_owner_scope(connection, owner_id=scope.owner_id)
+    with connection.cursor(row_factory=dict_row) as cursor:
+        _require_session(cursor, scope, session_id)
+        candidate = _require_candidate(cursor, scope, session_id, candidate_id)
+        if through is None:
+            latest = cursor.execute("""
+                SELECT id,version_number FROM public.assistant_candidate_version
+                WHERE owner_id=%s AND contact_id=%s AND session_id=%s AND candidate_id=%s
+                ORDER BY version_number DESC LIMIT 1
+            """, (scope.owner_id, scope.contact_id, session_id, candidate_id)).fetchone()
+            through = latest["id"] if latest is not None else candidate_id
+            last_number = latest["version_number"] if latest is not None else 0
+        elif through == candidate_id:
+            last_number = 0
+        else:
+            latest = cursor.execute("""
+                SELECT version_number FROM public.assistant_candidate_version
+                WHERE owner_id=%s AND contact_id=%s AND session_id=%s AND candidate_id=%s AND id=%s
+            """, (scope.owner_id, scope.contact_id, session_id, candidate_id, through)).fetchone()
+            if latest is None:
+                raise AssistantCandidateVersionNotFound("当前候选不存在分页锚点。")
+            last_number = latest["version_number"]
+        if page_number > last_number:
+            raise AssistantCandidateVersionRequestInvalid("候选版本页码超出读取范围。")
+        if page_number == 0:
+            version = AssistantCandidateVersion(candidate_id, 0, None,
+                                                _messages(candidate["message_group"]), None,
+                                                candidate["created_at"])
+        else:
+            row = cursor.execute("""
+                SELECT id,version_number,parent_version_id,message_group,requirements,created_at
+                FROM public.assistant_candidate_version
+                WHERE owner_id=%s AND contact_id=%s AND session_id=%s AND candidate_id=%s AND version_number=%s
+            """, (scope.owner_id, scope.contact_id, session_id, candidate_id, page_number)).fetchone()
+            if row is None:
+                raise AssistantCandidateVersionPersistenceError("候选版本分页记录不完整。")
+            version = AssistantCandidateVersion(row["id"], row["version_number"], row["parent_version_id"],
+                                                _messages(row["message_group"]), row["requirements"], row["created_at"])
+        # 选择在收齐所有页后另行重读唯一 current 指针，不从历史锚点推断。
+        history = AssistantCandidateHistory(session_id, candidate["turn_id"], candidate_id,
+                                            candidate["reply_request_id"], candidate["ordinal"] + 1,
+                                            through, None, (version,))
+        return AssistantCandidateVersionPage(history, page_number, last_number + 1)
+
+
 def _validate_edit(command: EditAssistantCandidate) -> None:
     if (not isinstance(command, EditAssistantCandidate)
             or not isinstance(command.edit_key, UUID)
@@ -259,10 +340,10 @@ def _validate_edit(command: EditAssistantCandidate) -> None:
         raise AssistantCandidateVersionRequestInvalid("候选编辑请求结构无效。")
 
 
-def edit_candidate_version(
+def _write_candidate_version(
     connection: Any, scope: ContactScope, session_id: UUID, candidate_id: UUID,
     command: EditAssistantCandidate,
-) -> AssistantCandidateHistory:
+) -> tuple[dict[str, Any], AssistantCandidateEditReceipt]:
     """同一owner锁内只新增不可变版本，不改变当前选择或调用模型。"""
     _validate_scope(scope, session_id, candidate_id)
     _validate_edit(command)
@@ -284,7 +365,7 @@ def edit_candidate_version(
         ).fetchone()["valid"]:
             raise AssistantCandidateVersionConflict("message_group_mismatch")
         existing = cursor.execute("""
-            SELECT parent_version_id,message_group,requirements FROM public.assistant_candidate_version
+            SELECT id,version_number,parent_version_id,message_group,requirements FROM public.assistant_candidate_version
             WHERE owner_id=%s AND contact_id=%s AND session_id=%s AND candidate_id=%s AND edit_key=%s
         """, (scope.owner_id, scope.contact_id, session_id, candidate_id, command.edit_key)).fetchone()
         if existing is not None:
@@ -292,19 +373,43 @@ def edit_candidate_version(
                 command.parent_version_id, group, command.requirements,
             ):
                 raise AssistantCandidateVersionConflict("edit_key_conflict")
-            return _history(cursor, scope, session_id, candidate)
+            return candidate, AssistantCandidateEditReceipt(
+                session_id, candidate_id, existing["id"], existing["version_number"],
+                command.edit_key, command.parent_version_id,
+            )
         number = cursor.execute("""
             SELECT coalesce(max(version_number),0)+1 AS next_number FROM public.assistant_candidate_version
             WHERE owner_id=%s AND contact_id=%s AND session_id=%s AND candidate_id=%s
         """, (scope.owner_id, scope.contact_id, session_id, candidate_id)).fetchone()["next_number"]
-        cursor.execute("""
+        row = cursor.execute("""
             INSERT INTO public.assistant_candidate_version
               (owner_id,contact_id,session_id,turn_id,candidate_id,version_number,
                parent_version_id,edit_key,message_group,requirements)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id,version_number
         """, (scope.owner_id, scope.contact_id, session_id, candidate["turn_id"], candidate_id,
-              number, command.parent_version_id, command.edit_key, Jsonb(group), command.requirements))
+              number, command.parent_version_id, command.edit_key, Jsonb(group), command.requirements)).fetchone()
+        return candidate, AssistantCandidateEditReceipt(
+            session_id, candidate_id, row["id"], row["version_number"], command.edit_key, command.parent_version_id,
+        )
+
+
+def edit_candidate_version(
+    connection: Any, scope: ContactScope, session_id: UUID, candidate_id: UUID,
+    command: EditAssistantCandidate,
+) -> AssistantCandidateHistory:
+    """原完整回执兼容入口，写入复用唯一 writer。"""
+    candidate, _ = _write_candidate_version(connection, scope, session_id, candidate_id, command)
+    with connection.cursor(row_factory=dict_row) as cursor:
         return _history(cursor, scope, session_id, candidate)
+
+
+def edit_candidate_version_receipt(
+    connection: Any, scope: ContactScope, session_id: UUID, candidate_id: UUID,
+    command: EditAssistantCandidate,
+) -> AssistantCandidateEditReceipt:
+    """有界写入回执只返回身份；保存后的正文必须权威重读。"""
+    _, receipt = _write_candidate_version(connection, scope, session_id, candidate_id, command)
+    return receipt
 
 
 def select_candidate_version(
@@ -366,6 +471,19 @@ class PostgresAssistantCandidateVersions:
     def selected(self, scope: ContactScope, session_id: UUID) -> AssistantCandidateSelection | None:
         with self._transaction() as connection:
             return read_candidate_selection(connection, scope, session_id)
+
+    def read_page(
+        self, scope: ContactScope, session_id: UUID, candidate_id: UUID,
+        page_number: int, through: UUID | None = None,
+    ) -> AssistantCandidateVersionPage:
+        with self._transaction() as connection:
+            return read_candidate_version_page(connection, scope, session_id, candidate_id, page_number, through)
+
+    def edit_receipt(
+        self, scope: ContactScope, session_id: UUID, candidate_id: UUID, command: EditAssistantCandidate,
+    ) -> AssistantCandidateEditReceipt:
+        with self._transaction() as connection:
+            return edit_candidate_version_receipt(connection, scope, session_id, candidate_id, command)
 
     def edit(
         self, scope: ContactScope, session_id: UUID, candidate_id: UUID, command: EditAssistantCandidate,

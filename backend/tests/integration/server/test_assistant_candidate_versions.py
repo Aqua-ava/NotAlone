@@ -41,7 +41,7 @@ class CandidateVersionModel(ScriptedCoreModel):
         return super()._generate(messages, stop, run_manager, **kwargs)
 
 
-class AssistantCandidateVersionsHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
+class CandidateVersionHttpFixture(CoreBusinessFlowFixture):
     production_model_wiring = True
     reply_model_factory = CandidateVersionModel
 
@@ -156,6 +156,7 @@ class AssistantCandidateVersionsHttpTest(CoreBusinessFlowFixture, unittest.TestC
                 ))
                 connection.execute(sql.SQL("DROP FUNCTION public.{name}()").format(name=sql.Identifier(name)))
 
+class AssistantCandidateVersionsHttpTest(CandidateVersionHttpFixture, unittest.TestCase):
     def test_generated_candidate_has_original_version_without_recording_selection(self):
         contact_id = self._contact()
         base = f"/api/contacts/{contact_id}/assistant-sessions"

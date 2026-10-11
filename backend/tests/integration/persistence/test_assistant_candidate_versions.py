@@ -46,6 +46,13 @@ class AssistantCandidateVersionMigrationTest(unittest.TestCase):
         self.admin.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(
             sql.Identifier(self.database_name)))
         self.addCleanup(self._drop_database)
+        # 本类固定验证053升级，后续正式迁移由完整目录的独立账本测试覆盖。
+        prefix = tempfile.TemporaryDirectory(prefix="notalone-candidate-053-")
+        self.addCleanup(prefix.cleanup)
+        self.version_migrations = Path(prefix.name)
+        for path in (ROOT / "database/migrations").glob("*.sql"):
+            if int(path.name[:3]) <= 53:
+                shutil.copyfile(path, self.version_migrations / path.name)
 
     def _drop_database(self) -> None:
         self.admin.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(
@@ -67,10 +74,10 @@ class AssistantCandidateVersionMigrationTest(unittest.TestCase):
         return json.loads(result.stdout)["applied"]
 
     def test_empty_database_installs_formal_001_to_053_once(self):
-        applied = self._migrate(ROOT / "database/migrations")
+        applied = self._migrate(self.version_migrations)
         self.assertEqual(len(applied), 53)
         self.assertEqual(applied[-1], VERSION_MIGRATION)
-        self.assertEqual(self._migrate(ROOT / "database/migrations"), [])
+        self.assertEqual(self._migrate(self.version_migrations), [])
         print("candidate_schema_fresh: installed=001–053, repeated=[]", flush=True)
 
     def test_actual_formal_052_prefix_upgrades_to_053_once(self):
@@ -82,8 +89,8 @@ class AssistantCandidateVersionMigrationTest(unittest.TestCase):
             installed = self._migrate(prefix)
             self.assertEqual(len(installed), 52)
             self.assertEqual(installed[-1], "052_reply_exploration.sql")
-        self.assertEqual(self._migrate(ROOT / "database/migrations"), [VERSION_MIGRATION])
-        self.assertEqual(self._migrate(ROOT / "database/migrations"), [])
+        self.assertEqual(self._migrate(self.version_migrations), [VERSION_MIGRATION])
+        self.assertEqual(self._migrate(self.version_migrations), [])
         print("candidate_schema_upgrade: installed=001–052, applied=[053], repeated=[]", flush=True)
 
 

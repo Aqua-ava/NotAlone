@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
 import { build } from 'esbuild';
+import { candidateVersionProtocol } from './fixtures/assistant-candidate-version-protocol.mjs';
 
 async function publicPorts() {
   const output = await build({ stdin: { contents: `
@@ -57,6 +58,20 @@ async function fixture() {
       if (requestedCandidateId && records.missingCandidates?.has(requestedCandidateId)) {
         throw new ports.BackendRequestFailure('response', 404, 'not_found');
       }
+      if (requestedCandidateId && request.method === 'POST') {
+        const saved = records.histories?.[requestedCandidateId] ?? records.history;
+        const latest = saved.versions.at(-1);
+        if (latest.parent_version_id !== request.body.parent_version_id
+          || latest.requirements !== request.body.requirements
+          || JSON.stringify(latest.messages) !== JSON.stringify(request.body.messages)) {
+          const versionId = randomUUID();
+          saved.versions.push({ version_id: versionId, version_number: saved.versions.length,
+            parent_version_id: request.body.parent_version_id, messages: structuredClone(request.body.messages),
+            text: request.body.messages.map((message) => message.text).join('\n\n'),
+            requirements: request.body.requirements, created_at: '2026-10-11T01:02:00+00:00' });
+          saved.default_display_version_id = versionId;
+        }
+      }
       const generatedTurn = records.saved.turns[records.generatedTurnIndex ?? 0];
       if (request.path.endsWith('/replies')) generatedTurn.request_key = request.body.idempotency_key;
       const evidenceRequestId = request.path.match(/\/replies\/([^/]+)\/evidence$/)?.[1];
@@ -83,7 +98,7 @@ async function fixture() {
   const contacts = new ports.ContactSession(async () => ({ generation: records.generation ?? 7,
     contacts: records.contacts ?? [{ contactId, displayName: '合成版本联系人', messageCount: 0, sourceCount: 0 }] }));
   contacts.setConnection(7); await contacts.refreshContacts();
-  const replies = ports.installReplyBridge(commands, backend, contacts);
+  const replies = ports.installReplyBridge(commands, candidateVersionProtocol(backend), contacts);
   const bridge = ports.createReplyBridge({
     invoke: async (channel, ...args) => handlers.get(channel).handler(...args),
     on: (channel, listener) => { const set = listeners.get(channel) ?? new Set(); set.add(listener); listeners.set(channel, set); },

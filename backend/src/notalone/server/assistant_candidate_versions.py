@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import parse_qs
 from uuid import UUID
 
 from notalone.persistence.assistant_candidate_versions import (
+    AssistantCandidateEditReceipt,
     AssistantCandidateHistory,
     AssistantCandidateSelection,
     AssistantCandidateVersionConflict,
     AssistantCandidateVersionError,
     AssistantCandidateVersionNotFound,
+    AssistantCandidateVersionPage,
     AssistantCandidateVersionPersistenceError,
     AssistantCandidateVersions,
     EditAssistantCandidate,
@@ -73,6 +76,21 @@ def _selection_payload(selection: AssistantCandidateSelection) -> dict[str, obje
     }
 
 
+def _page_payload(page: AssistantCandidateVersionPage) -> dict[str, object]:
+    payload = _history_payload(page.history)
+    del payload["selected_version_id"]
+    # 正式 052/053 限制整组正文和要求；每页完整一版，最坏 JSON 转义仍低于 1 MiB。
+    payload.update(page_number=page.page_number, version_count=page.version_count,
+                   next_page=(page.page_number + 1 if page.page_number + 1 < page.version_count else None))
+    return payload
+
+
+def _edit_receipt_payload(receipt: AssistantCandidateEditReceipt) -> dict[str, object]:
+    return {"session_id": str(receipt.session_id), "candidate_id": str(receipt.candidate_id),
+            "version_id": str(receipt.version_id), "version_number": receipt.version_number,
+            "edit_key": str(receipt.edit_key), "parent_version_id": str(receipt.parent_version_id)}
+
+
 def _select(
     store: AssistantCandidateVersions, scope: ContactScope, session_id: UUID, body: bytes,
 ) -> dict[str, object]:
@@ -101,7 +119,7 @@ def candidate_versions_path(parts: list[str]) -> str | None:
 
 def handle_candidate_versions(
     store: AssistantCandidateVersions | None, *, owner_id: UUID,
-    method: str, path: str, body: bytes,
+    method: str, path: str, body: bytes, query: str = "",
 ) -> tuple[int, dict[str, object]]:
     parts = path.strip("/").split("/")
     route = candidate_versions_path(parts)
@@ -112,12 +130,30 @@ def handle_candidate_versions(
     try:
         scope = ContactScope(owner_id, UUID(parts[2]))
         session_id = UUID(parts[4])
+        parameters = parse_qs(query, keep_blank_values=True, strict_parsing=True, max_num_fields=2)
+        if any(len(values) != 1 for values in parameters.values()):
+            raise ValueError
         if route == "versions" and method == "GET":
+            if parameters:
+                if (set(parameters) - {"page", "through"} or "page" not in parameters
+                        or not parameters["page"][0].isascii() or not parameters["page"][0].isdigit()):
+                    raise ValueError
+                number = int(parameters["page"][0])
+                through = UUID(parameters["through"][0]) if "through" in parameters else None
+                return 200, _page_payload(store.read_page(scope, session_id, UUID(parts[6]), number, through))
             return 200, _history_payload(store.read(scope, session_id, UUID(parts[6])))
         if route == "versions" and method == "POST":
+            if parameters:
+                if parameters != {"receipt": ["1"]}:
+                    raise ValueError
+                return 200, _edit_receipt_payload(store.edit_receipt(
+                    scope, session_id, UUID(parts[6]), _edit_command(body),
+                ))
             return 200, _history_payload(store.edit(
                 scope, session_id, UUID(parts[6]), _edit_command(body),
             ))
+        if parameters:
+            raise ValueError
         if route == "selections" and method == "GET":
             selection = store.selected(scope, session_id)
             return 200, {"selection": (_selection_payload(selection)

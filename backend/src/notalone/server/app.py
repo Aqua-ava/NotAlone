@@ -415,7 +415,7 @@ class BackendApp:
         if path_value.startswith("/api/contacts/") and path_value.endswith("/evidence"):
             return self._handle_reply_evidence(method_upper, path_value)
         if path_value.startswith("/api/contacts/") and "/assistant-session" in path_value:
-            return self._handle_assistant_session(method_upper, path_value, request_body)
+            return self._handle_assistant_session(method_upper, path_value, request_body, urlsplit(path).query)
         if path_value.startswith("/api/contacts/") and "/sources" in path_value:
             return self._handle_sources(method_upper, path_value)
         if path_value == "/api/reply/explore":
@@ -1186,7 +1186,7 @@ class BackendApp:
             )
         return _json_response(HTTPStatus.OK, _reply_payload(reply))
 
-    def _handle_assistant_session(self, method: str, path: str, body: bytes) -> Response:
+    def _handle_assistant_session(self, method: str, path: str, body: bytes, query: str = "") -> Response:
         """默认讨论、单次提交与显式读取；不提供自动恢复或发送能力。"""
 
         parts = path.strip("/").split("/")
@@ -1201,7 +1201,7 @@ class BackendApp:
         if candidate_versions_path(parts) is not None:
             status, payload = handle_candidate_versions(
                 self._candidate_versions, owner_id=self._owner_id,
-                method=method, path=path, body=body,
+                method=method, path=path, body=body, query=query,
             )
             return _json_response(status, payload, headers={"Cache-Control": "no-store"})
         service = self._assistant_sessions

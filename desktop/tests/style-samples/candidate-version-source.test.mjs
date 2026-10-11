@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { build } from 'esbuild';
+import { candidateVersionProtocol } from '../fixtures/assistant-candidate-version-protocol.mjs';
 
 const portsPromise = build({ stdin: { contents: `
   export { ContactSession } from './src/main/contacts/session';
@@ -83,7 +84,7 @@ async function fixture() {
   const contacts = new ports.ContactSession(async () => ({ generation: 7,
     contacts: [{ contactId, displayName: '合成版本来源联系人', messageCount: 0, sourceCount: 0 }] }));
   contacts.setConnection(7); await contacts.refreshContacts();
-  const replies = ports.installReplyBridge({ handle: (channel, handler) => handlers.set(channel, handler), publish: () => {} }, backend, contacts);
+  const replies = ports.installReplyBridge({ handle: (channel, handler) => handlers.set(channel, handler), publish: () => {} }, candidateVersionProtocol(backend), contacts);
   const bridge = ports.createReplyBridge({ invoke: async (channel, ...args) => handlers.get(channel)(...args),
     on: () => {}, removeListener: () => {} });
   contacts.selectContact({ contactId, scopeRevision: contacts.getState().scopeRevision });

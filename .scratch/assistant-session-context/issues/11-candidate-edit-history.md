@@ -292,3 +292,40 @@ Standards 新鲜轴：硬性违例0；已知 P3 possible Duplicated Code 1（版
 永久回归登记在原 `reply-strategy-bounded-updates` 的第14场。实际命令 `npm --prefix desktop run test:pages -- --case reply-strategy-bounded-updates --timeout-seconds 240`：原13场及新增公开保存版本后两次真实 SSE 只提醒共14完整场景全部 GREEN、actualexit0。新增场景以四 RPC 保存真实不可变版本，不是假版本投影；同 SID 明确开启未确认探索后保存，检查原理解、总模型载荷2、CURRENT 和完整 turns 均不变，不代表 B08 全组编辑 UI 完成。quiet92／active0／onscreen0／maxApps1／policy2、单 Chrome、cleanupConfirmed=true，独立 fresh status absent 后释放窗口；Electron/nativeAcceptance=false。新修复后的原188项 Node 亦全部 GREEN（1155.7675ms）、skip0；whole桌面 TypeScript exit0。日志保留 `/private/tmp/notalone-root-version-edit-auto-real-red.log`、`/private/tmp/notalone-root-version-edit-auto-green.log`、`/private/tmp/notalone-root-a11-notify-related-node-green.log`、`/private/tmp/notalone-root-b-r09-fourteen-save-version-page.log`。
 
 本轮部分交付新增的是当前范围的 RAM 清理与编辑停止自动探索；不新增持久化正文副本、样本、模型权限或发送能力。大历史分页、有界写入回执和完整 renderer/页面仍接续；本票仍 claimed，原标准未提前勾选，人工真实 App 未执行。
+
+正式A 4e9acf4后缀净接；以下最终proof归A的私有切片复验，不借为此主树实际结果。
+
+### 长版本传输 P2：只读分页与有界写入回执
+
+2026-10-11：在固定正式 `5a5e4f3e7e9c5383356d379ba9ca90f0a44ec82e` 的独立源码副本实现；整票仍 `claimed / partial`。四个通用 RPC 的签名不变，B/C 页面接线及最终 App 验收不由本切片宣称完成。
+
+- 正式 `GET versions?page=0` 返回一个完整版本及读取锚点，后续使用 `page + through` 读取同一有序完整范围；每页同 owner/contact/session/candidate 锁与 C 实际来源守卫。原版在只读事务中也可读取，不靠 GET 写入原版引用；新增版在本次锚点之后时不混入旧页。收齐并核对连续编号、全部身份、消息顺序、父版、要求及末页后才发布正文，不把有限页当完整历史。
+- 桌面保存使用 `POST versions?receipt=1`，仅返回 UUID、编号、编辑键和父版；新旧 HTTP 入口复用同一个版本 writer，保存后始终权威分页重读，并从 GET selections 读取唯一实际选择。旧编辑或选择键回执不能倒退当前指针；用户期间展开旧版及新 scope/connection/operation 的结果不能被迟到页覆盖。旧完整 HTTP 契约仍保留兼容，长历史桌面读取始终使用新分页协议。
+- 中间页 404 或正式来源 409 丢弃本次累积正文，复用既有 Main 来源清理与完整来源复验，保留独立有效讨论。未知传输失败不发布不完整内容，允许精确同范围公开重试；没有新增正文恢复缓存、持久化副本、第二写入者、总版本数限制或全局 response cap 调整。
+- 正式 052/053 的整组聚合正文上限为 65,536 Unicode 字符（含消息分隔符），最多八条，要求最多 4,096 字符。服务端 JSON 每字符最坏六字节转义，双正文加要求的保守上界为 811,008 字节，UUID、编号和时间等固定元数据另少于 2 KiB，仍小于默认 1 MiB。真实八消息极值使用七条 8,192 加末条 8,178 字符，响应实际 811,970 字节；八条各 8,192 加分隔符被正式 HTTP 拒绝。合法 65,536 Unicode codepoint 旧版读取另取得真实 RED，版本 DTO 改按同一字符契约读取，完整正文未截断；本切片未扩大 Bridge 的既有编辑输入规则。
+- 模型仍使用原权威完整 `read_candidate_versions` / discussion reader，不分页、摘要或截断。分页只改变显示传输；完整讨论仍参加同一模型输入预算与来源复验。
+
+真实 TDD：长历史第三次保存的正式 HTTP 已落四版，但默认 JsonClient 保存响应与再次 GET 失败，响应 1,181,164 字节；1 项 RED／1.203 秒／exit1，修改后原反馈 1 项 GREEN／1.317 秒／exit0。Unicode 完整合法正文另为 1 项 RED／1.129 秒／exit1 → GREEN／1.310 秒／exit0。各轮均正式安装 001–054，账本匹配、重复迁移空集，自有数据库剩余 0；保存、读取、选择、重连及故障守卫额外模型调用均 0。
+
+必要相关回归在独立副本实际取得 66 / 66 GREEN／26.232 秒，包括新增长传输公开四 RPC→正式 HTTP→PG、既有九项版本 HTTP、十四项唯一 writer/选择以及三十二项完整讨论读取。五份原相关 Node 模块 106 / 106 GREEN／1132.154167 毫秒，完整桌面类型检查、两源有限 mypy、语法检查通过。最终冻结副本的复验和 SHA/命令/清理证据见 `/private/tmp/notalone-11-transport-freeze/manifest.json`。
+
+扩展完整模型消费者组合实际 77 项／44.635 秒，76 通过、1 失败：未改 `test_assistant_discussion_budget.test_history_only_sample_dependency_is_separate_from_current_five_and_erased_by_c` 在删除旧样本后携旧 expected input UUID 再生成返回 409 `assistant_session_input_conflict`。独立仅正式固定基线、无本切片任何补丁，单跑同项 1 项／2.022 秒同样失败，生产 001–054 与自有库清理 0 已核验；不改 12/C 的守卫或夹具，不将 77 项记作全 GREEN。
+
+默认沙箱合成回环曾 listen EPERM，随后仅对同一已授权自有回环升级执行，不计功能 RED。三处旧合成保存夹具原先不持久化 POST 正文，不能通过新回执与权威重读核验；已补合成后端的实际保存投影并保留全部原断言。中页来源夹具首次按数组第一项错误取独立 B 的展示 UUID，修正为实际 candidate UUID 查询后通过，不计业务 RED。共用 HTTP 夹具提取为非 TestCase，原九项均照常独立执行，没有动态隐藏测试。
+
+数据影响仅为当前授权范围内版本显示的完整传输与失效 RAM 清理，不增加读取授权、来源权威、样本、长期资料或外发。Context7 当前工具清单没有可用入口，按仓库回退核对 Python 3.12 官方 JSON/urllib.parse 文档与实际 3.12.13；不新增依赖。未运行 App、pages、npm test、safe、native、微信/OCR、私人资料、真实外部模型或 19，未 stage/commit/push；共享 app 和 issue 只提供精确增量，主树接入、新鲜两轴与正式本地提交由协调者串行收口。本票原验收框不勾选。
+
+
+### 主 Agent 精确收口与新鲜两轴
+
+主 Agent 对上述九份 OWN 文件及共享路由三处查询透传逐项核对冻结 SHA，精确接入，不夹带 13/15/16/17/18 working 或 055。新鲜 Standards 硬性违例 0，P3 possible duplicate_history 行投影 1；新鲜 Spec 本传输切片错误 0、范围越界 0，既有 B/C 展示接线与 Page 自动验收仍属整票 partial，不能由本切片测试冒充完成。原 77 项组合的基线失败原样保留；12 的新 CURRENT 回归另属独立只测试提交，不改变来源删除门禁。真实 App、人工部分、19、私人资料、微信/OCR及外部发送均未执行。
+
+主 Agent 最终同字节切片最小复验：新十一项正式 HTTP/PG 11 / 11 GREEN／13.217 秒，001–054 账本匹配、repeat0、两层自有库剩余0；原五份窄 Node 模块 106 / 106 GREEN／1062.804833 毫秒，完整桌面 tsc exit0。首次默认沙箱合成回环 listen EPERM，未计为业务 RED；仅对同一已授权自有回环升级后通过。未运行 Page/App/native。
+
+2026-10-11 总协调主树净接正式 A `4e9acf4` 十份源码／测试及本票纯后缀；`app.py` 仅三处 query 透传，保留 B owner guard、`e092de2` 保存停更与 `80b871f` 样本来源恢复，不覆盖 Main/session 或取 13/055 working。公开版本 RPC 签名保持，分页与写入回执遵循实际新 HTTP 协议，模型完整讨论读取不分页、无静默截断或全局 transport cap 扩大。
+
+主树真实首次三模块36项为34通过／2失败／28.038s，失败只在原053迁移测试：使用已包含054的整个目录，却仍要求空库53及052只升级053。仅测试夹具固定复制真实001–053到自有临时目录，保留原53、单次053、重复0及数据库清理断言；完整054安装和账本仍由独立外层生产CLI实验。最小迁移2项 GREEN／1.248s，随后原三模块 **36项全部GREEN／27.516s／skip0／actualexit0**，含11条默认JsonClient/公开版本RPC→实际HTTP→隔离PG的长历史、完整八条消息、Unicode、分页中途来源失效、跨范围/连接/operation迟到及锚点/选择回归；原server9、store14和migration2同轮通过。最坏完整八消息实际响应811970 bytes、模型追加0。正式001–054 ledger与repeat0，自有两Core库、两migration库及外层库剩余全部0。
+
+新协议下同八套桌面200项 Node 全部 GREEN／1253.041167ms／skip0／actualexit0，whole TypeScript exit0，两个实际候选 source 的限定 silent mypy 无问题，compile及diff通过。C来源合成传输首次未识别 query 的失败单独保留，只有该夹具使用 A 正式 `candidateVersionProtocol` 适配新协议后，新12项来源回归 GREEN／113.377375ms；不删除原断言、不把该 wrapper 的缓存当实际后端。真实长传输由上述11条 HTTP／PG覆盖。
+
+日志为 `/private/tmp/notalone-root-a11-paging-real-http-pg-combination.log`（初次36）、`/private/tmp/notalone-root-a11-original-053-prefix-migrations-green.log`、`/private/tmp/notalone-root-a11-paging-final-http-pg-combination.log`、`/private/tmp/notalone-root-a11-paging-related-node-combination.log`。本片关闭长版本 transport P2，完整组编辑公开 UI仍随B正式交付/主树Page继续，本票仍claimed；人工真实App未执行，不借协议通过提前勾整票。

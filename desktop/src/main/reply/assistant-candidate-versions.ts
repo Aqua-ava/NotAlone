@@ -31,6 +31,8 @@ function exact(value: unknown, keys: string[]): value is Record<string, unknown>
   return isRecord(value) && Object.keys(value).length === keys.length
     && Object.keys(value).every((key) => keys.includes(key));
 }
+// 与 PostgreSQL length / Python len 的 Unicode 字符契约一致，避免拒绝合法完整正文。
+const characterCount = (value: string): number => Array.from(value).length;
 function history(value: unknown, request: ReplyCandidateVersionRead): AssistantCandidateHistory {
   if (!exact(value, ['session_id', 'turn_id', 'candidate_id', 'candidate_group_id', 'candidate_number',
     'default_display_version_id', 'selected_version_id', 'versions'])
@@ -46,10 +48,10 @@ function history(value: unknown, request: ReplyCandidateVersionRead): AssistantC
     if (!exact(item, ['version_id', 'version_number', 'parent_version_id', 'text', 'messages', 'requirements', 'created_at'])
       || !isUuid(item.version_id) || item.version_number !== index
       || !Array.isArray(item.messages) || item.messages.length < 1 || item.messages.length > 8
-      || typeof item.text !== 'string' || item.text.length > 65_536
+      || typeof item.text !== 'string' || characterCount(item.text) > 65_536
       || typeof item.created_at !== 'string' || !Number.isFinite(Date.parse(item.created_at))
       || (item.requirements !== null && (typeof item.requirements !== 'string'
-        || !item.requirements.trim() || item.requirements.length > 4096))) throw invalid();
+        || !item.requirements.trim() || characterCount(item.requirements) > 4096))) throw invalid();
     const versionId = item.version_id.toLowerCase();
     if (known.has(versionId) || (index === 0
       ? versionId !== request.candidateId || item.parent_version_id !== null || item.requirements !== null
@@ -57,7 +59,7 @@ function history(value: unknown, request: ReplyCandidateVersionRead): AssistantC
     const limit = item.messages.length === 1 ? 65_536 : 8192;
     const messages = item.messages.map((message: unknown) => {
       if (!exact(message, ['message_id', 'text']) || !isUuid(message.message_id)
-        || typeof message.text !== 'string' || !message.text.trim() || message.text.length > limit) throw invalid();
+        || typeof message.text !== 'string' || !message.text.trim() || characterCount(message.text) > limit) throw invalid();
       return { messageId: message.message_id.toLowerCase(), text: message.text };
     });
     const ids = messages.map((message) => message.messageId);
@@ -86,6 +88,15 @@ function selection(value: unknown, sessionId: string): AssistantCandidateSelecti
     || (item.selection_number as number) < 1) throw invalid();
   return { selectionId: item.selection_id.toLowerCase(), selectionNumber: item.selection_number as number,
     sessionId, candidateId: item.candidate_id.toLowerCase(), versionId: item.version_id.toLowerCase() };
+}
+
+function editReceipt(value: unknown, request: ReplyCandidateVersionEdit): { versionId: string; versionNumber: number } {
+  if (!exact(value, ['session_id', 'candidate_id', 'version_id', 'version_number', 'edit_key', 'parent_version_id'])
+    || value.session_id !== request.sessionId || value.candidate_id !== request.candidateId
+    || value.edit_key !== request.editKey || value.parent_version_id !== request.parentVersionId
+    || !isUuid(value.version_id) || !Number.isSafeInteger(value.version_number)
+    || (value.version_number as number) < 1) throw invalid();
+  return { versionId: value.version_id.toLowerCase(), versionNumber: value.version_number as number };
 }
 
 // 只持有当前会话的受信读取视图；明确选择始终重读后端唯一指针。
@@ -250,21 +261,36 @@ export class AssistantCandidateVersionSession {
       items: [...retained, { candidateId: request.candidateId, phase: edit ? 'saving' : 'loading', history: null, displayVersionId: null }] },
       explicitCandidateSelection: { phase: 'loading', selection: null } });
     try {
-      const versions = await this.backend.requestJson({ method: edit ? 'POST' : 'GET',
-        path: `${base}/candidates/${request.candidateId}/versions`, signal: pending.signal,
-        ...(edit ? { body: { edit_key: edit.editKey, parent_version_id: edit.parentVersionId,
+      let receipt: { versionId: string; versionNumber: number } | undefined;
+      if (edit) {
+        const response = await this.backend.requestJson({ method: 'POST',
+          path: `${base}/candidates/${request.candidateId}/versions?receipt=1`, signal: pending.signal,
+          body: { edit_key: edit.editKey, parent_version_id: edit.parentVersionId,
           messages: edit.messages.map((message) => ({ message_id: message.messageId, text: message.text })),
-          requirements: edit.requirements } } : {}) });
-      if (!current() || versions.generation !== generation) return;
-      const saved = history(versions.data, request);
+            requirements: edit.requirements } });
+        if (!current() || response.generation !== generation) return;
+        receipt = editReceipt(response.data, edit);
+      }
+      const saved = await this.readPages(request, pending.signal, generation, current);
+      if (!saved || !current()) return;
+      if (receipt) {
+        const written = saved.versions.find((version) => version.versionId === receipt.versionId);
+        if (!written || written.versionNumber !== receipt.versionNumber
+          || written.parentVersionId !== edit!.parentVersionId
+          || written.requirements !== edit!.requirements
+          || written.messages.length !== edit!.messages.length
+          || written.messages.some((message, index) => message.messageId !== edit!.messages[index].messageId
+            || message.text !== edit!.messages[index].text)) throw invalid();
+      }
       this.publish({ ...this.state, candidateVersions: { phase: 'loading', sessionId: request.sessionId,
         items: [...this.state.candidateVersions.items.filter((item) => item.candidateId !== request.candidateId),
           { candidateId: saved.candidateId, phase: 'ready', history: saved, displayVersionId: saved.defaultDisplayVersionId }] } });
       unavailableCandidateId = null;
       const chosen = await this.backend.requestJson({ method: 'GET', path: `${base}/selections`, signal: pending.signal });
-      if (!current() || versions.generation !== generation || chosen.generation !== generation) return;
+      if (!current() || chosen.generation !== generation) return;
       const actual = selection(chosen.data, request.sessionId);
       if (actual?.candidateId === saved.candidateId && !saved.versions.some((item) => item.versionId === actual.versionId)) throw invalid();
+      saved.selectedVersionId = actual?.candidateId === saved.candidateId ? actual.versionId : null;
       // 选择重读只收尾实际指针；保留期间用户已明确展开的版本。
       const displayVersionId = this.state.candidateVersions.items.find((item) => item.candidateId === saved.candidateId)
         ?.displayVersionId ?? saved.defaultDisplayVersionId;
@@ -292,6 +318,39 @@ export class AssistantCandidateVersionSession {
         throw invalid();
       }
     } finally { if (this.pending === pending) this.pending = undefined; }
+  }
+  private async readPages(request: ReplyCandidateVersionRead, signal: AbortSignal,
+    generation: number | undefined, current: () => boolean): Promise<AssistantCandidateHistory | null> {
+    const versions: unknown[] = [];
+    let first: Record<string, unknown> | undefined;
+    let pageNumber = 0;
+    while (current()) {
+      const through = first ? `&through=${first.default_display_version_id}` : '';
+      const response = await this.backend.requestJson({ method: 'GET',
+        path: `/api/contacts/${request.contactId}/assistant-sessions/${request.sessionId}/candidates/${request.candidateId}/versions?page=${pageNumber}${through}`,
+        signal });
+      if (!current() || response.generation !== generation) return null;
+      const page = response.data;
+      if (!exact(page, ['session_id', 'turn_id', 'candidate_id', 'candidate_group_id', 'candidate_number',
+        'default_display_version_id', 'versions', 'page_number', 'version_count', 'next_page'])
+        || page.session_id !== request.sessionId || page.candidate_id !== request.candidateId
+        || page.page_number !== pageNumber || !Number.isSafeInteger(page.version_count)
+        || (page.version_count as number) < 1 || pageNumber >= (page.version_count as number)
+        || !isUuid(page.default_display_version_id) || !Array.isArray(page.versions) || page.versions.length !== 1
+        || !isRecord(page.versions[0]) || page.versions[0].version_number !== pageNumber
+        || page.next_page !== (pageNumber + 1 < (page.version_count as number) ? pageNumber + 1 : null)) throw invalid();
+      if (first && ['session_id', 'turn_id', 'candidate_id', 'candidate_group_id', 'candidate_number',
+        'default_display_version_id', 'version_count'].some((key) => page[key] !== first![key])) throw invalid();
+      first ??= page;
+      versions.push(page.versions[0]);
+      if (page.next_page === null) {
+        const { page_number: _pageNumber, version_count: _versionCount, next_page: _nextPage, ...header } = first;
+        // 完整收齐后才进入受信视图；任意页失败让局部累积正文随此调用丢弃。
+        return history({ ...header, selected_version_id: null, versions }, request);
+      }
+      pageNumber += 1;
+    }
+    return null;
   }
   private assertScope(request: VersionScope & { candidateId?: string }): void {
     if (this.backend.getConnectionGeneration() === undefined || this.scope?.contactId !== request.contactId
