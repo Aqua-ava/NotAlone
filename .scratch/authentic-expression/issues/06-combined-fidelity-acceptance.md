@@ -411,3 +411,11 @@ Root再用原合成StyleSampleHttpTest.dimension_release=None适配器、Conda N
 这份已交报告仍是负责人诊断6fed第七84256两场真G的证据：分母8，syntheticreview6中4pass/2故意fail，2unreviewed，human0/holdout0/qualityfalse；仅普通重新生成，typedcontinuation pending。根已正式055/carry，不据报告字节复现冒充当前根真实Page；Root自己的两场公开运行和对应新的真实捕获报告仍待具名窗口。A54连续解析provider39阶段G又发现选定编辑版本要求P2，正在soleA修复，不用本报告把typed修改或B10/C06闭合。原六失败、首Conda入口错误、第七fullrelease及人工/供应商质量未知都保；State claimed及原未验AC不改。
 
 准备补验：Root新增公开label的安全headless CLI合成门禁实际10 GREEN／3146.659208ms／skip0／actualexit0，没有浏览器／Electron；wholeTSC及两个入口构建通过。此处仍未执行Root新两场，不以CLI或者负责人报告代替Page。
+
+### 主树055的真实公开消息组与独立逐例报告（2026-10-11）
+
+Root具名authentic-expression-groups、single240、session70707 actualexit0，原回应／主动两个完整场均passed，原5s和模型计数不改。当前Root正式055/carry1e05、最终预算0a及C接口已在运行树；另有未正式A54 provider及已复现selected-version要求P2，本case仅普通重新生成，没有调用typedcontinue，不能据此关闭那个P2或A13/15/B10。本次真实验证当前显示旧版本、完整组编辑／explicit选择／逐条复制、保存原版与恢复后最后未提交稿、样本与来源删除后所有版本／输入／回复清除及独立讨论保留，重建宿主只读不增模型；copySurface仍是合成宿主适配器，不声称系统剪贴板／原生。
+
+实际capture 8rows／9model_inputs／9calls／2UI，private /private/tmp/notalone-root-public-groups-capture.json，SHAcef07aa2ba80ea787ef3a732691a4b4b117b0a772f48c936972cca33b81520b2。quiet40／active0／onscreen0／maxApps1／policies2／singleChrome／cleanuptrue／nativefalse，两个真实fixture实例／class清理及database_remaining=false门禁通过；952个backend／desktop源码、fixture、测试、配置逐字全窗unchanged且HEAD520f94c相同。actualexit后独立freshstatus actual0absent，明确FULLRELEASE后才继续；日志/private/tmp/notalone-root-authentic-public-group-page.log及private freeze manifest保留。
+
+根自己的实际capture沿唯一E01 CLI生成独立root-public-group-page-controlled-v1.json，不覆盖负责人原报告：SHAc4c3d99b2df8564cfb4f11cef2ea709d7d0a8f8d7d4b0d67bd69171d2074e73d。分母8、contract_failed0、真实calls9／elapsed5732.707208999988ms、6syntheticreview中4pass／2故意fail、2unreviewed／human0／holdout0／quality_verified=false，逐次九输入及两UI观察真实保留。供应商token、费用、自然度／关系适配／用户相似度未知；typedcontinuation明确pending。负责人第七84256／5180.312833ms／b5报告继续保留，不能用它替代本次根055事实；Root已完成这两场也不自动关闭C06剩余连续组合和原未验三AC。State claimed，所有人工／App／OCR微信／私料／外部模型／外部发送／push发布部署均未执行。
