@@ -46,3 +46,8 @@ Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](
 当前仍为 claimed：后端新鲜 Standards 硬性违例0（P3判断1）、Spec 实现错误0，主会话重跑11G/10.162s；桌面真正退出调用与受控宿主／公开页面组合恢复、B 确认方向的新请求桥接仍由主会话继续。人工部分未执行；用户本轮排除真实 App／微信／OCR／19，不修改原验收标准，也不宣称整张任务已经完成。
 
 2026-10-11 总协调最终集成：仅消费正式 17 与实际 B completed 竞争窄修复，原七个后端模块共 **54G/47.562s，skip0**；真实生产迁移 001–054、账本54、重复迁移0、自有隔离库剩余0。命令为 Conda NotAlone 下以 `/private/tmp/notalone-coordinator-style-samples-no-dimension.py` 执行两个 replacement、prepare、两个 lifecycle 及 C reconfirmation/replacement 模块；仅合成 StyleSampleHttpTest 的维度 fixture 设为空，不改变生产门禁。六源 focused mypy、十个 Python 源／测试编译与 diff 检查通过；新鲜 Standards/Spec 均无新增 P0–P2。旧 A051 可靠完成兼容断言仍由唯一 A 负责人另行修正，桌面／受控生命周期／公开页面组合继续，原整票保持 claimed，人工部分未执行。
+
+
+2026-10-11：按总协调确认和本票可靠完成语义更新原 AFTER_C.save 输入竞态回归；纯正式代码先重现旧断言失败 1F / 0.632s，修订后的实际 C 唯一完成、重放零额外模型和新 CURRENT 不倒退通过，完整输入模块 10G / 6.813s（实际 54/repeat0/库0）。BEFORE_C.save／来源失效拒绝保留。详见[兼容回归记录](../17-implementation-notes.md)；本票保持 claimed，桌面及人工状态未改变。
+
+2026-10-11 总协调精确净接正式7d3兼容测试及两记录后缀，并消费c084六个独立只读typed provider文件；原5unit＋11PG＋输入HTTP10共 **26G／7.405s／skip0**，实际生产迁移001–054／repeat0／自有库剩余0。命令为Conda NotAlone／关闭外部追踪，根 `/private/tmp/notalone-coordinator-isolated-tests.py` 执行 test_assistant_continuation_identity、test_assistant_reply_identity、test_assistant_session_inputs 三模块。四core source focused mypy、七source/test compile通过；新鲜Standards/Spec两切片均无新增阻塞。此兼容修正只保可靠已保存历史、唯一C完成和新CURRENT，不把历史迟到结果当当前可展示；A16 Main发布资格、受控quit及原生人工仍独立未验，本17保持claimed。

@@ -156,7 +156,7 @@ class AssistantSessionInputHttpTest(unittest.TestCase):
         self.assertEqual(self.fixture.backend.request(self.path + "/replies", body), (200, generated))
         self.assertEqual(len(self.fixture.model.seen_calls), 1)
 
-    def test_new_input_between_candidate_save_and_turn_completion_rejects_late_response(self) -> None:
+    def test_new_input_after_candidate_save_preserves_completed_history_without_rewinding_current(self) -> None:
         body = self.fixture._body()
         gate = self.fixture.model.pause_next_response()
         with ThreadPoolExecutor(max_workers=2) as pool:
@@ -175,27 +175,36 @@ class AssistantSessionInputHttpTest(unittest.TestCase):
                     wait_for_blocked_operations(DATABASE_URL, {holder} | saving, 2)
                 status, newest = updating.result(timeout=10)
                 self.assertEqual(status, 200, newest)
-                self.assertEqual(running.result(timeout=10), (
-                    409, {"error": "assistant_session_rejected", "reason": "input_version_stale"},
-                ))
+                completed_status, completed = running.result(timeout=10)
+                self.assertEqual(completed_status, 200, completed)
+                self.assertEqual(completed["session_id"], str(self.session_id))
+                self.assertEqual(completed["state"], "completed")
+                self.assertNotEqual(completed["input_version_id"], newest["input_version_id"])
             finally:
                 gate.set()
         # 确认走过实际 save 提交，反例覆盖的是第二个事务窗口。
         with psycopg.connect(DATABASE_URL) as connection:
             persisted = connection.execute(
-                "SELECT state FROM public.reply_request WHERE owner_id = %s AND contact_id = %s "
+                "SELECT id, state FROM public.reply_request WHERE owner_id = %s AND contact_id = %s "
                 "AND idempotency_key = %s",
                 (self.fixture.owner_id, self.fixture.contact_id, UUID(body["idempotency_key"])),
-            ).fetchone()
-        self.assertEqual(persisted, ("completed",))
+            ).fetchall()
+        self.assertEqual(persisted, [(UUID(completed["reply_request_id"]), "completed")])
         saved = self.fixture.backend.request(self.path)[1]
         self.assertEqual(saved["current_input_version_id"], newest["input_version_id"])
-        self.assertEqual(saved["turns"][0]["state"], "failed")
-        self.assertIsNone(saved["turns"][0]["reply"])
-        self.assertEqual(self.fixture.backend.request(self.path + "/replies", body), (
-            409, {"error": "assistant_session_rejected", "reason": "input_version_stale"},
-        ))
+        historical = saved["turns"][0]
+        self.assertEqual(historical["state"], "completed")
+        self.assertEqual(historical["turn_id"], completed["turn_id"])
+        self.assertEqual(historical["input_version_id"], completed["input_version_id"])
+        self.assertEqual(historical["reply"]["reply_request_id"], completed["reply_request_id"])
+        self.assertEqual(historical["reply"]["candidates"], completed["candidates"])
+        self.assertEqual(len(saved["inputs"]), 2)
+        self.assertEqual(saved["inputs"][-1]["content"]["purpose_hint"], "已保存候选后的合成新输入")
+        self.assertEqual(self.fixture.backend.request(self.path + "/replies", body), (200, completed))
+        self.assertEqual(self.fixture.backend.request(self.path)[1]["current_input_version_id"],
+                         newest["input_version_id"])
         self.assertEqual(len(self.fixture.model.seen_calls), 1)
+        # 这里只证明历史保存与重放；A16 仍须拒绝在当前视图展示旧输入的响应。
 
     def test_discussion_http_rejects_cross_scope_and_client_provenance(self) -> None:
         content = {"type": "purpose_exploration", "purpose_hint": "合成范围检查"}

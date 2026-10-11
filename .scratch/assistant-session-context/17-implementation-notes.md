@@ -51,3 +51,25 @@ PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private
 ### Spec
 
 新鲜审查实现错误 0、范围外改动 0。桌面 A16 凭证注册与真正退出调用、B 重新确认、新请求桥接和页面组合恢复仍属未完成自动项；真实 App 停止／重开及人工部分本轮未执行。
+
+
+## 原输入兼容回归的可靠完成语义
+
+2026-10-11：总协调确认按本票“已可靠保存的完成结果保持完成”修订原输入回归。先在纯正式 `0cc6e30fe693d85610d33aa83ccf0d056c6f8267`、不含未提交 13 的独立副本重现旧断言：公开响应实际 200 completed，而旧测试要求 409，1F / 0.632s。这证明需要更新原 AFTER_C.save 预期；BEFORE_C.save 的 CURRENT／来源失效拒绝及其他断言保留。
+
+修订仅触及该测试：实际 C 保存完成后建立独立新输入，旧响应、GET turn 和同键重放均返回同一个实际 completed C request；候选组与原输入 UUID 相同，CURRENT 保持新输入，原请求重放增加模型调用数为 0。新增实际 C 唯一行查询，不借模型 mock 断言推测保存完成。200 的历史读取资格不代表桌面可以覆盖另一视图，A16 仍需按实际作业身份阻止旧响应发布。
+
+首次修订使用了错误的响应字段 `assistant_session_id`，产生 KeyError / 0.633s，属于合成测试安排错误，不作业务 RED。读取正式响应后改用 `session_id`；最小用例 1G / 0.717s，完整原输入模块 10G / 6.813s。两轮通过实际生产迁移 CLI 安装 001–054，ledger 54、重复 applied=[]、自有测试库剩余0。
+
+实际命令（Conda NotAlone、禁 dotenv／tracing，PGPORT=55441）：
+
+```sh
+python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-a17-completion-compat-cvzosrms/source tests.integration.server.test_assistant_session_inputs
+```
+
+本主题只更新已有可靠保存竞态的验收测试与本票记录，不改生产实现、验收标准或原拒绝路径；自动部分继续完成，受控宿主／公开页面恢复和真实 App／人工部分状态不变。
+
+
+本兼容主题新鲜两轴均已完成：Standards 硬性违例0、Fowler判断0（逐项核对十二项）；Spec 本主题缺项0、实现错误0、范围外改动0。整票17的桌面受控宿主／公开恢复与人工项仍如实 partial。三文件SHA与固定基准一致；两轴只读代码审查，未将先前测试日志冒充审查本身。
+
+2026-10-11 总协调精确净接正式7d3兼容测试及两记录后缀，并消费c084六个独立只读typed provider文件；原5unit＋11PG＋输入HTTP10共 **26G／7.405s／skip0**，实际生产迁移001–054／repeat0／自有库剩余0。命令为Conda NotAlone／关闭外部追踪，根 `/private/tmp/notalone-coordinator-isolated-tests.py` 执行 test_assistant_continuation_identity、test_assistant_reply_identity、test_assistant_session_inputs 三模块。四core source focused mypy、七source/test compile通过；新鲜Standards/Spec两切片均无新增阻塞。此兼容修正只保可靠已保存历史、唯一C完成和新CURRENT，不把历史迟到结果当当前可展示；A16 Main发布资格、受控quit及原生人工仍独立未验，本17保持claimed。
