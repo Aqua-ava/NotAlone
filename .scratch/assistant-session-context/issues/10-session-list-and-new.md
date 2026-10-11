@@ -1,6 +1,6 @@
 # 10：新开、列出与选择旧会话
 
-State: claimed
+State: resolved
 Triage: ready-for-agent
 Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠保存](07-default-session-persistence.md)
 
@@ -8,7 +8,7 @@ Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠�
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧04；Q3、Q5。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧04；Q3、Q5。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖以各票实际交付证据为准；本票的自动实现与验证已完成，真实 App／人工部分未执行，详见 Answer。
 
 ## What to build
 
@@ -16,11 +16,11 @@ Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠�
 
 ## Acceptance criteria
 
-- [ ] 同一联系人能显式创建空会话、列出并选择旧会话，旧记录保持可查看；不自动搬入候选或临时要求。
-- [ ] 新开、列表与选择均复验范围且模型调用数为零；闲置会话切换可独立验收，运行中归属由C09扩展。
-- [ ] 无记录、读取失败和失效会话有明确结果；不能凭时间、昵称或复制动作自动选会话。
-- [ ] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
-- [ ] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
+- [x] 同一联系人能显式创建空会话、列出并选择旧会话，旧记录保持可查看；不自动搬入候选或临时要求。
+- [x] 新开、列表与选择均复验范围且模型调用数为零；闲置会话切换可独立验收，运行中归属由C09扩展。
+- [x] 无记录、读取失败和失效会话有明确结果；不能凭时间、昵称或复制动作自动选会话。
+- [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
+- [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
 ## 范围边界
 
@@ -69,3 +69,16 @@ Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠�
 总协调主树正式消费 `d89584f6e9c1a10cdb863c061212295bc5bf8884` 六文件，无冲突，不取 A 桌面／11／14 working。Conda `NotAlone`、关闭 dotenv／追踪、`PYTHONPATH=src:.` 环境运行 `python /private/tmp/notalone-coordinator-isolated-tests.py /Users/local-user/learn/NotAlone tests.integration.persistence.test_assistant_session_catalog tests.integration.server.test_assistant_session_catalog`：22 项真实 HTTP／正式 001–053 隔离 PG GREEN／9.994 秒，自有库残留 0。`python -m mypy --follow-imports=silent src/notalone/persistence/assistant_session_catalog.py src/notalone/application/assistant_session_service.py` 两源码通过，差异检查通过；限定最终 Standards 硬要求 0／重要气味 0、Spec 0，原低风险测试夹具重复建议及保留理由继续保留。
 
 本次完成目录／新建／精确选择后端的主树集成；桌面目录、051 只读投影及公开页面仍由 A 持续实施，整票保持 claimed。目录只含稳定 ID 与当前标记，查看／选择不扩大生成授权；没有模型调用、正文复制、新迁移或外部发送，人工部分未执行。
+
+
+2026-10-11 桌面阶段：后端已由主 Agent 正式提交 `d89584f`。新增目录 HTTP typed adapter 的三项纯 Node 测试先以缺失 module 取得 RED，再转为 GREEN；051 只读输入投影最初缺失 current UUID 的 RED 已转为 GREEN。新增异常投影反馈共 8 项中 6 GREEN、2 RED：意外输入字段与 redacted generation 输入伪装 active；等待公开页面 RED 有限窗口收尾后收紧 parser。`npm run typecheck` 与指定文件 diff 检查通过。目录桥及闲置切换控制器已到可编译 checkpoint，尚未接入目录按钮，不将纯 Node 反馈视为页面交付。已准备 `assistant-session-catalog`、`assistant-session-catalog-guards` 两个公开页面标签，实际启动、资源与数据库收尾仍由主 Agent／总协调串行执行；本上下文没有运行 App、页面、微信、OCR 或外部模型。
+
+2026-10-11 公开页面真实 RED 后接线：总协调在已授权的单标签 180 秒窗口执行 `assistant-session-catalog`，实际 exit 1，首场景已完成既有生成及讨论读取，在等待“新开助手会话”30 秒时失败；后续新开／选择未到达，未记通过。自有页面资源报告为单 Chrome、quiet 51／active 0／onscreen 0、cleanup true、native false。该证据来自总协调实际运行反馈，本上下文没有启动页面。
+
+窗口明确收尾后修复两个 Node RED：输入记录严格只接受正式七字段，generation 输入来源状态须与唯一关联轮次一致。`node --test tests/assistant-session-catalog-read.test.mjs tests/assistant-session-catalog.test.mjs` 实际 8／8 GREEN；`npm run typecheck` GREEN。目录按钮与原桥／控制器接通：POST 成功后重读 exact SID 才清空草稿、候选、临时输入与策略状态；失败保留当前编辑，标明操作尚未确认并要求显式核对。新开不复制内容、不调模型；列表只读、不隐式创建；选择旧会话只恢复可见讨论，生成仍沿实际选中 SID 并保留原绑定门禁。051 输入按实际记录次序展示，generation 仅引用原轮次，不重复正文；纯讨论完整显示或来源占位。保留原第N轮标签、candidate p／data 属性、onCopy、删除确认／状态与 C 唯一来源控制器。本切片 READY 后冻结，两个页面标签及整票两轴审查仍待总协调实际完成，票保持 claimed，未 stage／commit／push。
+
+2026-10-11 主 Agent 前端正式拆分：09 清理端口已独立正式，10 精确增量只包含目录、新建／选择控制、严格 A051 输入读取及纯讨论展示，不含 11 候选版本。`/private/tmp/notalone-a09-a10-cut-eSzsJM/ten-source/desktop` 的独立 `npm run typecheck` exit 0／6.343 秒；09＋10 实际依次应用到正式导出的源码，24 文件与目标逐字相同，四个共享文件与 before-11 一致。最新相关纯测试中目录／严格读取原八项 GREEN，不能把类型检查记作公开页面。
+
+总协调独占受控页面原两 labels（assistant-session-catalog＋assistant-session-catalog-guards，240 秒），session18273 actual CLI exit 0，目录两场及门禁三场全部 GREEN；quiet samples 35／active 0／onscreen 0／cleanupConfirmed true／Electron native false，独立 status84486 exit 0 state absent，原首缺按钮 RED 与夹具 Conda 入口错误保留。该实际证据覆盖空新会话零模型、精确 SID 列表／选择与独立输入、失效或错误响应留编辑且禁未知会话生成、已撤销绑定只读目录／恢复而拒新生成，不将原 SID 与昵称作为权威替代。接口与用例两轴审查记录沿用先前限定结果，所有前端切片文件独立类型验证通过。本票自动部分完成，人工／真实 App 部分未执行，原标准与未执行项保留；13–18 及持续目标继续。
+
+2026-10-11 总协调按原范围收口：既有22真实HTTP／PG及目录8 Node、原两label五完整公开页面均通过；原目录门禁最近复验session64217实际exit0／quiet67／cleanuptrue／freshstatus absent，不包含运行中归属或候选搬运。当前桌面全类型检查actualexit0，限定目录／删除共同UI两轴无新增阻塞；精确闲置切换、新空会话、稳定ID目录和失效读取已本地集成。按原五条验收勾选并设resolved，未增加运行中归属作为本票前置；真实App／人工未执行，不宣称原生验证。数据仅合成隔离，目录没有正文或隐式生成，所有后台／连续请求后续票继续。

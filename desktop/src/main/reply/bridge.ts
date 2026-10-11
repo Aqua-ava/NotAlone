@@ -1,11 +1,12 @@
 import { isUuid } from '../uuid';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import { noArguments, type PageCommands } from '../page-commands';
-import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyCorrectionUpdate, ReplyDirectionChoice, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, RewriteOptions, RewriteOptionsUpdate } from '../../shared/reply-bridge';
+import type { AssistantSessionDeletion, GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyCorrectionUpdate, ReplyDirectionChoice, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, RewriteOptions, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { ReplySession } from './session';
 import { ReplyEvidenceSession } from './evidence-session';
+import type { AssistantSessionSelection } from '../../shared/reply-bridge';
 
 function fields(args: unknown[], keys: string[]): Record<string, unknown> {
   const value = args[0];
@@ -60,6 +61,20 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
     replies.retrySourceValidation(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
   commands.handle('reply:read-saved-session', (...args: unknown[]) =>
     replies.readSavedSession(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
+  commands.handle('reply:list-saved-sessions', (...args: unknown[]) =>
+    replies.listSavedSessions(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
+  commands.handle('reply:new-saved-session', (...args: unknown[]) =>
+    replies.newSavedSession(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
+  commands.handle('reply:select-saved-session', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'sessionId']);
+    if (!isUuid(value.sessionId)) throw new Error('助手会话不可用。');
+    return replies.selectSavedSession({ ...value, sessionId: value.sessionId.toLowerCase() } as unknown as AssistantSessionSelection);
+  }, 'helper');
+  commands.handle('reply:delete-saved-session', (...args: unknown[]) => {
+    const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'confirmed']);
+    if (!isUuid(value.sessionId) || value.confirmed !== true) throw new Error('助手会话删除尚未确认。');
+    return replies.deleteSavedSession({ ...value, sessionId: value.sessionId.toLowerCase() } as unknown as AssistantSessionDeletion);
+  }, 'helper');
   commands.handle('reply:reconnect-messages', (...args: unknown[]) =>
     replies.reconnectMessages(fields(args, ['contactId', 'scopeRevision']) as unknown as ContactSelection), 'helper');
   commands.handle('reply:select-message', (...args: unknown[]) => {

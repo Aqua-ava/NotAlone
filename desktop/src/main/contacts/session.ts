@@ -80,6 +80,13 @@ export class ContactSession {
     return this.getState();
   }
 
+  clearDraft(selection: ContactSelection): void {
+    if (!this.isCurrent(selection) || selection.contactId !== this.state.selectedContactId) {
+      throw new Error('本次联系人已变化，请重新确认。');
+    }
+    this.publish({ draft: '', draftClearRevision: (this.state.draftClearRevision ?? 0) + 1 });
+  }
+
   private isCurrent(selection: ContactSelection): boolean {
     return this.generation !== undefined && selection.scopeRevision === this.state.scopeRevision
       && (this.state.directoryPhase === 'ready' || this.state.directoryPhase === 'loading');

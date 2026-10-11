@@ -15,6 +15,8 @@ export interface ContactSessionState {
   contacts: ContactSummary[];
   selectedContactId: string | null;
   draft: string;
+  // 主进程确认本次助手会话已删除后，通知输入框清除同范围的本地编辑。
+  draftClearRevision?: number;
 }
 
 export interface ContactSelection {

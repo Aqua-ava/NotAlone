@@ -72,3 +72,17 @@ PGHOST=/tmp PGPORT=55441 npm run test:pages -- --case assistant-session-deletion
 2026-10-11 A09 来源清理窄补丁：明确传入的实际 turn_ids 不再被运行中独立草稿豁免保留，保持同 owner/contact 门禁；范围撤租约中没有实际依赖的草稿继续保留。A051 输入同事务物理擦除，只清空指向实际擦除输入的 CURRENT，不回退旧指针、不清新独立讨论。独立正式基线 ac3eeca 导出仅加两个 helper 与五项测试；原真正 RED 1/0.077 秒后 GREEN 1/0.188 秒，五项 GREEN/0.595 秒，相关 A 历史 32＋C 中央依赖 10 项 GREEN/7.932 秒。命令为激活 Conda NotAlone 后 `PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-a09-erasure-cut-dmrp4_la/source tests.integration.persistence.test_assistant_dependency_erasure` 及原 A history/C dependency 模块；生产 CLI、真实账本一致为 001–053、重复迁移 0、自有库残留 0。独立 Standards 0/Fowler 0、Spec 0；helper 与工作树函数一致。C 唯一 caller 的 actual-turn 接线及原 pureDraft 样本 DELETE 反例仍待其消费正式补丁后真实验证，不能用这 47 项替代该组合。人工部分未执行，整票继续 claimed。
 
 总协调本地集成该四文件窄切片后，独立运行 `tests.integration.persistence.test_assistant_dependency_erasure`、`tests.integration.persistence.test_assistant_discussion_context`、`tests.integration.persistence.test_reply_discussion_dependencies`，真实隔离 PostgreSQL 共 47 项 GREEN／47.198 秒，正式 001–053、重复迁移 0、自有库残留 0。两处生产源 mypy、三文件编译及暂存差异检查通过；最终限定 Standards 硬要求／重要判断性气味 0、Spec 0。该证据仅证明来源擦除 helper 及原讨论依赖回归，C 唯一 caller 的真实样本 DELETE 组合尚未在主树集成，本票继续 claimed。
+
+
+2026-10-11 前端独立基础交付：只正式化删除确认、唯一 Main 删除状态／通知生产者、联系人清稿序号、薄 preload/RPC 和受控页面测试，不含 10 目录或 11 版本 RPC。精确 09→10 源拆分位于 `/private/tmp/notalone-a09-a10-cut-eSzsJM`，09 独立快照 `npm run typecheck` exit 0／6.379 秒，全部文件按正式基线逐字重建一致；未执行新的 App 或页面。原真实公开删除、故障与生命周期 GREEN 证据及两轴修复记录沿用上述已执行结果，不把此编译记作页面验收。RewritePanel 仅三处删除端口／输入清除通知薄接线，不含 B 消息组或复制控制器业务。
+
+最新 C 复制来源审查又找到 clear→later copy／确切 SID 删除组合后的短前缀绕过：总协调独立八序列得到两 control GREEN／六 RED，实际错误 POST 为 1，C 唯一控制器正在修复。原 4e65、52 项及首短前缀 GREEN 均保留为当时限定阶段；新增恢复复制公开场景的旧失败及 C 三场仍开放，本次前端基础提交不能据此宣布整票自动完成。人工部分未执行，任务保持 claimed。
+
+
+2026-10-11 总协调的新鲜 Spec 又发现删除失败时策略入口绕过普通生成门禁。公开 preload→RPC→生产 Main 回归实际先得到三项 RED：DELETE 传输失败且确切 SID GET 200 后 `explore`／换组，以及 DELETE 正在传输时 `explore`，各发生一个不应允许的策略 POST。将原普通生成中的检查移到三个执行入口共同使用的 `assertSessionSelection` 后，四项 GREEN／648.893 毫秒；同一失败状态仍可读取和重试 DELETE，原 SID GET 404 后显式读取的新空会话仍可探索。独立正式 1675 导出只加本主题三源／测试，四项 GREEN／266.348 毫秒、`npm run typecheck` GREEN；未借未提交的 11／16 状态。合成 RPC 计数只证明边界，未冒充实际模型调用。
+
+在原 `assistant-session-deletion-faults` 页面场景中追加失败后主动切换聊天模式的三入口反例、策略 HTTP 计数不变与实际模型观测不变，原重试和生命周期断言保留。该新增公开 HTTP／PG 页面断言尚未执行，由总协调独占窗口随后验证；Standards／Spec 最终复审与本地提交仍在推进。没有新持久化副本，不改 B 策略业务或 C 样本来历；原自动部分继续、人工部分未执行，不因此修改验收标准或整票状态。
+
+以上四文件交付的最终新鲜两轴已完成：Standards 硬要求／重要 Fowler 0，Spec 0。结论只覆盖统一删除门禁及新增测试，不闭合尚未执行的公开策略反例、C 复制新问题或整票人工验收。
+
+2026-10-11 总协调最新公开复验：Conda NotAlone／关闭外部追踪，在根执行 `npm --prefix desktop run test:pages -- --case assistant-session-deletion-faults --case assistant-session-deletion-lifecycle --timeout-seconds 240`，session70322 actualexit0。原五故障及五生命周期共10完整场景通过，包括删除失败后三个策略入口无新增请求、读取或明确生成新SID无旧删除提示、未保存样本粘贴副本清除而独立样本及手写保留、真实生成与可靠保存后的迟到响应、跨联系人／同联系人新会话／连接变化的迟到复核。quiet86／active0／onscreen0／maxApps1／policy2／singleChrome／cleanuptrue／nativefalse，独立freshstatus actualexit0 absent后释放。此前74449第四场5秒超时和ps1秒采样失败未复现但原因未知，失败历史保留。本主题已双轴无新增P0–P2，目录8及删除门禁4 Node与全桌面类型检查通过；不能据这10项关闭候选恢复复制或样本编辑器的另组页面，原09继续claimed。人工部分未执行，用户排除真实App/微信/OCR/19；剩余自动组合继续。

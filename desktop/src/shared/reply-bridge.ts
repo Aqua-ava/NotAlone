@@ -1,6 +1,6 @@
 import type { ContactSelection } from './contact-session-bridge';
 import type { ReplyEvidenceCommands } from './reply-evidence';
-import type { SavedAssistantSession } from './assistant-session';
+import type { AssistantSessionCatalog, SavedAssistantSession } from './assistant-session';
 import type { ConfirmedAssistantSessionDeletion } from './assistant-session-deletion-events';
 
 export type RewriteTone = 'original' | 'warm' | 'concise' | 'polite';
@@ -11,6 +11,8 @@ export interface RewriteOptions {
 }
 export interface RewriteOptionsUpdate extends ContactSelection { options: RewriteOptions; }
 export interface GenerateReply extends ContactSelection { newRequest: boolean; }
+export interface AssistantSessionDeletion extends ContactSelection { sessionId: string; confirmed: true; }
+export interface AssistantSessionSelection extends ContactSelection { sessionId: string; }
 export type ReplyMode = 'rewrite_draft' | 'reply_to_message' | 'initiate_conversation';
 export interface ReplyModeUpdate extends ContactSelection { mode: ReplyMode; }
 export interface ReplyMessagePageRequest extends ContactSelection { older: boolean; }
@@ -104,6 +106,8 @@ export interface ReplySessionState {
   contactId: string | null;
   generationBlock: ReplyGenerationBlock;
   options: RewriteOptions;
+  // 与删除后的默认输入一起发布；普通状态回显不覆盖组件内的新编辑。
+  inputClearRevision?: number;
   mode: ReplyMode;
   messages: ReplyMessagesState;
   messageNotice: ReplyMessageNotice;
@@ -123,6 +127,8 @@ export interface ReplySessionState {
   selectedCandidateId: string | null;
   canRetry: boolean;
   savedSession?: SavedAssistantSession;
+  sessionCatalog?: AssistantSessionCatalog;
+  sessionDeletion?: 'deleting' | 'failed' | 'deleted' | 'missing';
 }
 export interface ReplyCandidateSelection extends ContactSelection { replyRequestId: string; candidateId: string; }
 export interface ReplyCandidateEdit extends ReplyCandidateSelection { text: string; }
@@ -134,6 +140,10 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   reconnectMessages(selection: ContactSelection): Promise<void>;
   retrySourceValidation(selection: ContactSelection): Promise<void>;
   readSavedSession(selection: ContactSelection): Promise<void>;
+  listSavedSessions(selection: ContactSelection): Promise<void>;
+  newSavedSession(selection: ContactSelection): Promise<void>;
+  selectSavedSession(selection: AssistantSessionSelection): Promise<void>;
+  deleteSavedSession(selection: AssistantSessionDeletion): Promise<void>;
   selectMessage(selection: ReplyMessageSelection): Promise<ReplySessionState>;
   updateDirection(update: ReplyDirectionUpdate): Promise<ReplySessionState>;
   updateCorrection(update: ReplyCorrectionUpdate): Promise<ReplySessionState>;

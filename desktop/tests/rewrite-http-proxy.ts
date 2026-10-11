@@ -15,11 +15,14 @@ export class RewriteHttpProxy {
   nextSessionRead: 'normal' | 'drop' | 'hold' = 'normal';
   readonly heldEvidenceStatuses: number[] = [];
   readonly sessionReads: Array<{ status: number; states: string[] }> = [];
+  readonly sessionDeletes: Array<{ path: string; status: number }> = [];
   readonly sessionRequests: string[] = [];
   readonly messageRequests: string[] = [];
   failMessages = false;
   failRuntime = false;
   failSessionReads = false;
+  // 只为本轮已知会话的精确路径设置故障；不记录确认正文。
+  failSessionDeletes: string | null = null;
   heldCount = 0;
   private readonly held: Array<() => void> = [];
   private readonly pending = new Set<ReturnType<typeof httpRequest>>();
@@ -38,6 +41,13 @@ export class RewriteHttpProxy {
       const evidence = /^\/api\/contacts\/[a-f0-9-]+\/replies\/[a-f0-9-]+\/evidence$/.test(incoming.url ?? '');
       const sessionRead = incoming.method === 'GET'
         && /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+$/.test(incoming.url ?? '');
+      const sessionDelete = incoming.method === 'DELETE'
+        && /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+$/.test(incoming.url ?? '');
+      if (sessionDelete && this.failSessionDeletes === incoming.url) {
+        this.sessionDeletes.push({ path: incoming.url!, status: 503 });
+        response.writeHead(503, { 'Content-Type': 'application/json' });
+        response.end('{"error":"synthetic_transport_unavailable"}'); return;
+      }
       if (messages) this.messageRequests.push(incoming.url!);
       if (sessionRead) this.sessionRequests.push(incoming.url!);
       const delivery = generating ? this.nextReply : exploring ? this.nextExploration : messages ? this.nextMessages : evidence ? this.nextEvidence
@@ -73,6 +83,7 @@ export class RewriteHttpProxy {
             if (generating) this.results.push({ status: result.statusCode ?? 500, data: JSON.parse(value.toString('utf8')) });
             if (exploring) this.explorationResults.push({ status: result.statusCode ?? 500, data: JSON.parse(value.toString('utf8')) });
             if (evidence && delivery === 'hold') this.heldEvidenceStatuses.push(result.statusCode ?? 500);
+            if (sessionDelete) this.sessionDeletes.push({ path: incoming.url!, status: result.statusCode ?? 500 });
             if (sessionRead) {
               const saved = JSON.parse(value.toString('utf8'));
               this.sessionReads.push({ status: result.statusCode ?? 500,

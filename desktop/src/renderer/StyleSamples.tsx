@@ -81,7 +81,7 @@ export function StyleSamples({ replies }: { replies: ReplySessionView }) {
       // 超长跨项复制只登记不可归属标记，后续粘贴不得丢来源。
       text: text.length <= 65_536 ? text : '' }));
   }
-  return <details className="style-samples"><summary>我的表达样本</summary>
+  return <details id="assistant-expression-samples" className="style-samples"><summary>我的表达样本</summary>
     <p>只在你明确保存后作为这位联系人的说法参考。保存不表示已发送；当前意图优先。删除助手会话保留已保存样本，删除原始来源仍会清理依赖样本。</p>
     {usedIds.length > 0 && <section aria-label="本次表达参考"><p>本次使用的样本只参考说法，不作为事实依据：</p>
       <ul onCopy={noteSampleCopy}>{usedIds.map((id) => {

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ContactSelection, ContactSessionState } from '../../shared/contact-session-bridge';
-import type { GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyCorrectionUpdate, ReplyDirectionChoice, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyInputSnapshot, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, ReplySessionState, RewriteOptionsUpdate } from '../../shared/reply-bridge';
+import type { AssistantSessionDeletion, GenerateReply, ReplyCandidateEdit, ReplyCandidateSelection, ReplyCorrectionUpdate, ReplyDirectionChoice, ReplyDirectionUpdate, ReplyGenerationBlock, ReplyInputSnapshot, ReplyMessagePageRequest, ReplyMessageSelection, ReplyModeUpdate, ReplySessionState, RewriteOptionsUpdate } from '../../shared/reply-bridge';
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
@@ -9,7 +9,9 @@ import type { DirectionExploration, ReplyClarificationAnswer, ReplyRequirementsU
 import { actOnExploration, explorationIdentity, openExploration, type ExplorationRequest, type ExplorationAction } from './exploration-client';
 import { readReplyMessages } from './messages';
 import { readReplyEvidence } from './evidence-read';
-import { defaultAssistantSession, readAssistantSession } from './assistant-sessions';
+import { defaultAssistantSession, deleteAssistantSession, readAssistantSession } from './assistant-sessions';
+import { listAssistantSessions, newAssistantSession, selectAssistantSession } from './assistant-session-catalog';
+import type { AssistantSessionSelection } from '../../shared/reply-bridge';
 
 const defaults = () => ({ tone: 'original' as const, instruction: '', includeRelationshipContext: false });
 const tones = { original: '', warm: '本次语气自然温和。', concise: '本次表达简洁直接。', polite: '本次语气礼貌克制。' };
@@ -48,6 +50,8 @@ export class ReplySession {
   private noticeVerification: AbortController | undefined;
   private noticeRevision = 0;
   private savedRead: AbortController | undefined;
+  private sessionDelete: AbortController | undefined;
+  private catalogPending: AbortController | undefined;
   private readonly listeners = new Set<(state: ReplySessionState) => void>();
   private readonly inputListeners = new Set<() => void>();
 
@@ -72,6 +76,7 @@ export class ReplySession {
 
   async readSavedSession(selection: ContactSelection): Promise<void> {
     this.assertScope(selection);
+    if (this.state.sessionDeletion === 'deleting' || this.catalogPending || this.state.sessionCatalog?.selectionPending) return;
     this.savedRead?.abort();
     const pending = new AbortController();
     this.savedRead = pending;
@@ -79,7 +84,7 @@ export class ReplySession {
     const current = () => !pending.signal.aborted && selection.scopeRevision === this.state.scopeRevision
       && selection.contactId === this.state.contactId && generation === this.backend.getConnectionGeneration();
     const heldSessionId = this.state.savedSession?.sessionId;
-    this.publish({ savedSession: { phase: 'loading', sessionId: heldSessionId ?? null, turns: [] } });
+    this.publish({ savedSession: { phase: 'loading', sessionId: heldSessionId ?? null, turns: [], inputs: [], currentInputVersionId: null } });
     try {
       const sessionId = heldSessionId ?? (await defaultAssistantSession(this.backend, selection.contactId, pending.signal)).sessionId;
       if (!current()) return;
@@ -89,20 +94,126 @@ export class ReplySession {
         const invalid = heldVersion && saved.turns.some((turn) => turn.inputVersionId === heldVersion
           && ['redacted', 'unavailable'].includes(turn.state));
         if (invalid) { this.cancelPending(); this.lastAttempt = undefined; }
-        this.publish({ savedSession: { sessionId: saved.sessionId, turns: saved.turns, phase: 'ready' },
+        this.publish({ savedSession: { sessionId: saved.sessionId, turns: saved.turns, inputs: saved.inputs, currentInputVersionId: saved.currentInputVersionId, phase: 'ready' },
+          ...(saved.sessionId !== heldSessionId ? { sessionDeletion: undefined } : {}),
           ...(invalid ? { result: null, selectedCandidateId: null, phase: 'idle', canRetry: false } : {}) });
       }
     } catch {
-      if (current()) this.publish({ savedSession: { phase: 'failed', sessionId: heldSessionId ?? null, turns: [] } });
+      if (current()) this.publish({ savedSession: { phase: 'failed', sessionId: heldSessionId ?? null, turns: [], inputs: [], currentInputVersionId: null } });
     } finally { if (this.savedRead === pending) this.savedRead = undefined; }
+  }
+
+  async listSavedSessions(selection: ContactSelection): Promise<void> {
+    this.assertScope(selection);
+    if (this.catalogPending || this.state.sessionDeletion === 'deleting') return;
+    const previous = this.state.sessionCatalog;
+    const pending = new AbortController(); this.catalogPending = pending;
+    const generation = this.backend.getConnectionGeneration();
+    const current = () => !pending.signal.aborted && this.catalogPending === pending
+      && selection.contactId === this.state.contactId && selection.scopeRevision === this.state.scopeRevision
+      && generation === this.backend.getConnectionGeneration();
+    this.publish({ sessionCatalog: { phase: 'loading', items: previous?.items ?? [],
+      currentSessionId: previous?.currentSessionId ?? null, selectionPending: previous?.selectionPending } });
+    try {
+      const catalog = await listAssistantSessions(this.backend, selection.contactId, pending.signal);
+      if (current() && catalog.generation === generation) this.publish({ sessionCatalog: { phase: 'ready',
+        items: catalog.items, currentSessionId: catalog.currentSessionId, selectionPending: previous?.selectionPending } });
+    } catch {
+      if (current()) this.publish({ sessionCatalog: { phase: 'failed', items: previous?.items ?? [],
+        currentSessionId: previous?.currentSessionId ?? null, selectionPending: previous?.selectionPending } });
+    } finally { if (this.catalogPending === pending) this.catalogPending = undefined; }
+  }
+  async newSavedSession(selection: ContactSelection): Promise<void> { await this.switchSavedSession(selection); }
+  async selectSavedSession(selection: AssistantSessionSelection): Promise<void> { await this.switchSavedSession(selection); }
+  private async switchSavedSession(selection: ContactSelection & { sessionId?: string }): Promise<void> {
+    this.assertScope(selection);
+    if (this.catalogPending || this.state.phase === 'waiting' || this.state.exploration.phase === 'waiting'
+      || this.state.savedSession?.phase === 'loading' || this.state.sessionDeletion === 'deleting'
+      || this.state.sessionDeletion === 'failed' || this.state.sourceAvailability === 'checking') {
+      throw new Error('请等待当前操作完成后再切换助手会话。');
+    }
+    const previous = this.state.sessionCatalog;
+    const pending = new AbortController(); this.catalogPending = pending;
+    const generation = this.backend.getConnectionGeneration();
+    const current = () => !pending.signal.aborted && this.catalogPending === pending
+      && selection.contactId === this.state.contactId && selection.scopeRevision === this.state.scopeRevision
+      && generation === this.backend.getConnectionGeneration();
+    this.publish({ sessionCatalog: { phase: 'loading', items: previous?.items ?? [],
+      currentSessionId: previous?.currentSessionId ?? null, selectionPending: previous?.selectionPending } });
+    try {
+      const selected = selection.sessionId
+        ? await selectAssistantSession(this.backend, selection.contactId, selection.sessionId, pending.signal)
+        : await newAssistantSession(this.backend, selection.contactId, pending.signal);
+      if (!current() || selected.generation !== generation) return;
+      const saved = await readAssistantSession(this.backend, selection.contactId, selected.sessionId, pending.signal);
+      if (!current() || saved.generation !== generation) return;
+      this.savedRead?.abort(); this.savedRead = undefined;
+      this.cancelPending(); this.lastAttempt = undefined;
+      this.invalidateExploration(); this.directionDerived = false;
+      this.notifyInputChanged(); this.contacts.clearDraft(selection);
+      const items = (previous?.items ?? []).map((item) => ({ ...item, isCurrent: item.sessionId === saved.sessionId }));
+      if (!items.some((item) => item.sessionId === saved.sessionId)) items.push({ sessionId: saved.sessionId, isCurrent: true });
+      this.publish({ savedSession: { phase: 'ready', sessionId: saved.sessionId, turns: saved.turns,
+        inputs: saved.inputs, currentInputVersionId: saved.currentInputVersionId },
+        sessionCatalog: { phase: 'ready', items, currentSessionId: saved.sessionId, selectionPending: false },
+        sessionDeletion: undefined, confirmedSessionDeletion: undefined,
+        options: defaults(), inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
+        mode: 'rewrite_draft', targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '',
+        result: null, selectedCandidateId: null, canRetry: false, phase: 'idle', errorCode: undefined });
+    } catch {
+      // POST 可能已落库；只有显式选择并重读成功才能恢复本次生成。
+      if (current()) this.publish({ sessionCatalog: { phase: 'failed', items: [], currentSessionId: null, selectionPending: true } });
+    } finally { if (this.catalogPending === pending) this.catalogPending = undefined; }
+  }
+
+  async deleteSavedSession(selection: AssistantSessionDeletion): Promise<void> {
+    this.assertScope(selection);
+    if (this.catalogPending || this.state.sessionCatalog?.selectionPending) throw new Error('请先核对助手会话的选择结果。');
+    if (selection.confirmed !== true || selection.sessionId !== this.state.savedSession?.sessionId) {
+      throw new Error('本次助手会话已变化，请重新确认。');
+    }
+    if (this.state.sessionDeletion === 'deleting') return;
+    this.savedRead?.abort(); this.savedRead = undefined;
+    this.cancelPending(); this.lastAttempt = undefined;
+    this.invalidateExploration(); this.directionDerived = false;
+    this.notifyInputChanged();
+    const pending = new AbortController(); this.sessionDelete = pending;
+    const generation = this.backend.getConnectionGeneration();
+    const current = () => !pending.signal.aborted && this.sessionDelete === pending
+      && selection.contactId === this.state.contactId && selection.scopeRevision === this.state.scopeRevision
+      && selection.sessionId === this.state.savedSession?.sessionId
+      && generation === this.backend.getConnectionGeneration();
+    this.publish({ sessionDeletion: 'deleting', result: null, selectedCandidateId: null, canRetry: false,
+      phase: 'idle', errorCode: undefined, confirmedSessionDeletion: undefined,
+      savedSession: { phase: 'idle', sessionId: selection.sessionId, turns: [], inputs: [], currentInputVersionId: null } });
+    try {
+      const result = await deleteAssistantSession(this.backend, selection.contactId, selection.sessionId, pending.signal);
+      if (!current() || result.generation !== generation) return;
+      this.contacts.clearDraft(selection);
+      this.publish({ sessionDeletion: result.phase, savedSession: { phase: 'idle', sessionId: null, turns: [], inputs: [], currentInputVersionId: null },
+        sessionCatalog: undefined,
+        options: defaults(), inputClearRevision: (this.state.inputClearRevision ?? 0) + 1,
+        confirmedSessionDeletion: { sessionId: selection.sessionId, contactId: selection.contactId,
+          scopeRevision: selection.scopeRevision, connectionGeneration: result.generation,
+          revision: this.state.revision + 1 },
+        mode: 'rewrite_draft', direction: '', purpose: '', correction: '', requirements: '',
+        clarificationAnswer: '', targetMessageId: null,
+        result: null, selectedCandidateId: null, canRetry: false, phase: 'idle', errorCode: undefined });
+    } catch {
+      if (current()) this.publish({ sessionDeletion: 'failed' });
+    } finally { if (this.sessionDelete === pending) this.sessionDelete = undefined; }
   }
 
   // 删除检查点只接收主进程已确认的联系人；跨联系人本人资料也可能影响当前依据。
   async revalidateDeletedSource(contactId: string): Promise<void> {
+    if (this.catalogPending) {
+      this.catalogPending.abort(); this.catalogPending = undefined;
+      this.publish({ sessionCatalog: { phase: 'failed', items: [], currentSessionId: null, selectionPending: true } });
+    }
     this.invalidateExploration();
     this.savedRead?.abort();
     this.savedRead = undefined;
-    if (this.state.savedSession) this.publish({ savedSession: { ...this.state.savedSession, phase: 'idle', turns: [] } });
+    if (this.state.savedSession) this.publish({ savedSession: { ...this.state.savedSession, phase: 'idle', turns: [], inputs: [], currentInputVersionId: null } });
     const held = this.heldResult ?? (this.state.result ? {
       result: this.state.result, selectedCandidateId: this.state.selectedCandidateId,
     } : undefined);
@@ -245,6 +356,7 @@ export class ReplySession {
 
   async explore(selection: ContactSelection, changeGroup = false): Promise<void> {
     this.assertScope(selection); this.refreshGenerationEligibility();
+    this.assertSessionSelection();
     if (this.state.generationBlock || this.state.mode === 'rewrite_draft' || this.state.phase === 'waiting'
       || this.state.exploration.phase === 'waiting' || this.state.mode === 'reply_to_message' && !this.state.targetMessageId) return;
     const signature = JSON.stringify({ mode: this.state.mode, target: this.state.targetMessageId,
@@ -334,6 +446,7 @@ export class ReplySession {
   }
   private async runStrategy(job: StrategyJob): Promise<void> {
     this.refreshGenerationEligibility();
+    this.assertSessionSelection();
     if (this.state.generationBlock) return;
     this.notifyInputChanged(); this.cancelPending(); this.lastAttempt = undefined;
     this.explorationPending?.abort();
@@ -355,7 +468,7 @@ export class ReplySession {
         const confirmed = result.result.confirmedIntent;
         if (confirmed) this.directionDerived = true;
         this.publish({ exploration: { phase: 'ready', result: result.result, canRetry: true },
-          savedSession: { phase: 'idle', sessionId: result.result.sessionId, turns: [] }, skillChoices: result.result.skillChoices,
+          savedSession: { phase: 'idle', sessionId: result.result.sessionId, turns: [], inputs: [], currentInputVersionId: null }, skillChoices: result.result.skillChoices,
           ...(confirmed ? this.state.mode === 'reply_to_message' ? { direction: confirmed } : { purpose: confirmed } : {}) });
       } else if (result.kind === 'paused') {
         this.currentExploration = undefined; this.explorationPurpose = undefined;
@@ -366,7 +479,7 @@ export class ReplySession {
           ? { ...job.input, direction: result.confirmedIntent } : { ...job.input, purpose: result.confirmedIntent };
         this.directionDerived = true;
         this.publish({ exploration: { phase: 'ready', result: null, canRetry: true }, phase: 'ready', errorCode: undefined,
-          savedSession: { phase: 'idle', sessionId: result.reply.assistantSessionId, turns: [] },
+          savedSession: { phase: 'idle', sessionId: result.reply.assistantSessionId, turns: [], inputs: [], currentInputVersionId: null },
           ...(input.mode === 'reply_to_message' ? { direction: input.direction } : input.mode === 'initiate_conversation' ? { purpose: input.purpose } : {}) });
         if (this.state.result?.replyRequestId !== result.reply.replyRequestId) this.publish({ result: {
           ...result.reply, input, candidates: result.reply.candidates.map((original) => ({ original, editedText: original.text })) },
@@ -378,6 +491,7 @@ export class ReplySession {
 
   async generate(selection: GenerateReply): Promise<void> {
     const contactState = this.assertScope(selection);
+    this.assertSessionSelection();
     this.refreshGenerationEligibility();
     if (this.state.generationBlock) throw new Error('请先确认本次联系人。');
     if (this.state.mode !== 'rewrite_draft' && this.state.exploration.result) {
@@ -422,7 +536,8 @@ export class ReplySession {
       if (!current() || result.generation !== generation) return;
       // 同键重放恢复原结果，保留该候选在本次运行中的编辑和选择。
       if (this.state.result?.replyRequestId === result.replyRequestId) { this.publish({ phase: 'ready' }); return; }
-      this.publish({ phase: 'ready', savedSession: { phase: 'idle', sessionId: result.assistantSessionId, turns: [] },
+      this.publish({ phase: 'ready', savedSession: { phase: 'idle', sessionId: result.assistantSessionId, turns: [], inputs: [], currentInputVersionId: null },
+      ...(result.assistantSessionId !== this.state.savedSession?.sessionId ? { sessionDeletion: undefined } : {}),
       result: { replyRequestId: result.replyRequestId, assistantSessionId: result.assistantSessionId,
         inputVersionId: result.inputVersionId, input: attempt.input,
         contextEvidenceIds: result.contextEvidenceIds,
@@ -473,8 +588,18 @@ export class ReplySession {
     }
     return state;
   }
+  private assertSessionSelection(): void {
+    if (this.state.sessionDeletion === 'deleting' || this.state.sessionDeletion === 'failed') {
+      throw new Error('请先核对当前助手会话的删除结果。');
+    }
+    if (this.catalogPending || this.state.sessionCatalog?.selectionPending) {
+      throw new Error('请刷新会话列表并明确选择本次助手会话。');
+    }
+  }
   private receiveContact(state: ContactSessionState): void {
     if (state.scopeRevision !== this.state.scopeRevision || state.selectedContactId !== this.state.contactId) {
+      this.sessionDelete?.abort(); this.sessionDelete = undefined;
+      this.catalogPending?.abort(); this.catalogPending = undefined;
       this.savedRead?.abort(); this.savedRead = undefined;
       this.noticeStream?.abort(); this.noticeVerification?.abort();
       this.noticeStream = undefined; this.noticeVerification = undefined;
@@ -489,7 +614,9 @@ export class ReplySession {
         messageNotice: { phase: 'idle', changed: false, needsRefresh: false },
         targetMessageId: null, direction: '', purpose: '', correction: '', requirements: '', clarificationAnswer: '', skillChoice: { mode: 'auto', versionId: null }, skillChoices: [], exploration: { phase: 'idle', result: null },
         phase: 'idle', errorCode: undefined, result: null, selectedCandidateId: null, canRetry: false,
-        savedSession: { phase: 'idle', sessionId: null, turns: [] } });
+        savedSession: { phase: 'idle', sessionId: null, turns: [], inputs: [], currentInputVersionId: null }, sessionDeletion: undefined,
+        sessionCatalog: undefined,
+        confirmedSessionDeletion: undefined });
       this.beginMessageNotice();
       // 新连接重新选择联系人后只读取已保存讨论，不恢复本次输入或触发生成。
       if (state.selectedContactId && state.directoryPhase === 'ready') {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ReplyMode, ReplySessionState, RewriteOptions, RewriteTone } from '../shared/reply-bridge';
+import type { AssistantSessionDeletion, ReplyMode, ReplySessionState, RewriteOptions, RewriteTone } from '../shared/reply-bridge';
 import { HelperDraft, type ContactSessionView } from './contact-session';
 import { Icon } from './icons';
 import { useRevisionedSession } from './use-revisioned-session';
@@ -27,6 +27,10 @@ export function useReplySession() {
     loadMessages: (older = false) => operate(() => window.notalone.replies.loadMessages({ ...selection(), older })),
     retrySourceValidation: () => operate(() => window.notalone.replies.retrySourceValidation(selection())),
     readSavedSession: () => operate(() => window.notalone.replies.readSavedSession(selection())),
+    listSavedSessions: () => operate(() => window.notalone.replies.listSavedSessions(selection())),
+    newSavedSession: () => operate(() => window.notalone.replies.newSavedSession(selection())),
+    selectSavedSession: (sessionId: string) => operate(() => window.notalone.replies.selectSavedSession({ ...selection(), sessionId })),
+    deleteSavedSession: (command: AssistantSessionDeletion) => operate(() => window.notalone.replies.deleteSavedSession(command)),
     reconnectMessages: () => operate(() => window.notalone.replies.reconnectMessages(selection())),
     selectMessage: (messageId: string) => operate(() => window.notalone.replies.selectMessage({ ...selection(), messageId })),
     updateDirection: (direction: string) => operate(() => window.notalone.replies.updateDirection({ ...selection(), direction })),
@@ -59,7 +63,7 @@ export function ReplyModePicker({ replies, enabled }: { replies: ReplySessionVie
 
 export function RewriteInput({ contacts, replies }: { contacts: ContactSessionView; replies: ReplySessionView }) {
   const [options, setOptions] = useState(replies.state.options);
-  useEffect(() => { setOptions(replies.state.options); }, [replies.state.scopeRevision]);
+  useEffect(() => { setOptions(replies.state.options); }, [replies.state.scopeRevision, replies.state.inputClearRevision]);
   const enabled = Boolean(contacts.state.selectedContactId);
   const update = (value: Partial<RewriteOptions>) => {
     const next = { ...options, ...value }; setOptions(next); void replies.updateOptions(next);
