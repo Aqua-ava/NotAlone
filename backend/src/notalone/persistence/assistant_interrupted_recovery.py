@@ -84,7 +84,13 @@ def reserve_interrupted_generation_in_transaction(
         metadata = {**metadata, "recovery": command.origin()}
         payload = {**payload, "continuation": metadata}
     original_request = _request_from_input(scope, command.request_key, payload)
-    if existing is None and original_request.suggestion is not None:
+    # 恢复副本也有 continuation；是否重确认由 B 实际执行键与原失败 turn 的绑定决定。
+    if (existing is None and original_request.suggestion is not None and connection.execute(
+            "SELECT 1 FROM public.reply_exploration WHERE owner_id=%s AND contact_id=%s "
+            "AND session_id=%s AND id=%s AND request_key=%s",
+            (scope.owner_id, scope.contact_id, session_id, original_request.suggestion.task_id,
+             original["idempotency_key"]),
+    ).fetchone() is not None):
         from notalone.persistence.reply_exploration import PostgresExplorationStore
         from notalone.persistence.retrieval import PostgresRetrieval
         from notalone.reply.exploration import ExplorationError

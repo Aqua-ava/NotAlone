@@ -117,3 +117,14 @@ Conda NotAlone、禁dotenv／外部模型环境与tracing、PGPORT=55441，以 `
 新三场仅控制与来源契约，故意模型错误不算真实模型质量；B/C唯一页面消费者须净接该正式模式并校准旧badDTO断言后另验。原AC与claimed保持，公开typed界面／宿主及原生组合另有各自证据；无App、微信、OCR、私料、外部发送、外部模型、push、发布或部署。
 
 Root 净接正式ee0四个后端路径后，原完整continuation与三模式实际当前意愿反例 **54 GREEN／96.326s／skip0／actualexit0**，正式55repeat0、内外自有库均剩余0；限定provider mypy、四文件编译与diff通过。引用旧完整消息组仍作为低权重表达参考，模型实际current_intent保留原用户稿／方向／目的；主树没有把C/A的RED计量作为自测。已发现的typed编号及累计要求中断重建仍属A17后续自动工作，不借这组通过关闭该缺口或原生验收。
+
+
+### 已确认策略继续表达要求与重复中断恢复（2026-10-12）
+
+新增回应／主动真实反例：原B已确认意愿可靠生成后，编号只取原完整组、要求仅改“简短一点”，`/continue/prepare`却409／invalid_reply_input。首次混合运行为1条实际产品RED及1条剩余model plan夹具失配，保留日志；清每场合成plan后两个subtest实际**2 PRODUCT RED／2.042s**。连续提供者复原实际suggestion；只有明确新意愿才去掉原确认来源。私有ContinuationGenerateReply的历史确认复验原同owner/contact/SID的task/input/selection、明确intent、Skill、可靠A/C completed与动态raw／discussion／样本来源，完整累计要求绑定原continuation元数据；模型前／保存前再核自己的实际A领取及CURRENT。普通B当前输入／key门禁不放宽，不新建writer、来源图或DTO。最窄两场**GREEN／4.279s**，扩展typed中断恢复与physical raw删除后相关8项**GREEN／21.293s**；此8项未覆盖下段再次恢复，不借它宣称全部恢复通过。
+
+独立C对固定四源审出再次中断误分类：普通confirmed恢复也有fallback continuation dict，不能据字典存在将其当原已完成typed。C固定144行测试原样净消费，在A树实际**2 PRODUCT RED／2.640s**，两次恢复的第二prepare均409／exploration_stale。仅恢复分型改为同owner/contact/SID实际B.request_key与原failed Aturn.key相等时沿原reconfirm；真正typed仍沿已完成的原确认身份复验。原反例**2 GREEN／5.941s**，再只执行`test_confirmed_strategy_continuation`及`test_authentic_expression_repeated_confirmed_recovery`，最终**3 GREEN／12.010s／skip0／actualexit0**，正式001–055逐名／repeat0及内外自有库0。新typed两scene各实际4模型，repeat两scene各3模型；准备、同键重放与删除模型增量0。手工sample来源为空但真实入模低权重，删除后三个派生turn及CURRENT清除、独立manual样本保留；physical raw闭包亦保持。三个source limited silent mypy、五Python编译和diff0。日志`/private/tmp/notalone-a-confirmed-continuation-final3.log`及`/private/tmp/notalone-a-repeated-confirmed-green-capture.json`记录本次实际结果，不新增真人语义分母。
+
+固定ONLY5 SHA256 `d4105c8b5a13b3395f07590c0f807c39f3f78d92f9353ca1700e1979f83bef10`：B独立Standards硬要求0／新增重要Fowler possible0，C独立Spec新增P0–P3为0并确认原P2修复；两轴只读不代运行。此段修复已确认意愿provider两个新缺口，不改原六AC语义；原自动范围resolved保持，Main／Host最新版消费者与最终具名组合另由唯一owner验证，原生／真实模型质量／真人本轮未执行。
+
+总协调独立净集成验证：仅上述新typed1及重复恢复2项，主树实际3G／12.162秒；55逐名迁移、重复0、自有库剩余0，三个限定mypy与五文件compile通过。提供者12.010秒与本次12.162秒分列，不借为Main／宿主／页面或真人验收。

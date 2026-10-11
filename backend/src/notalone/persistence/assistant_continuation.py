@@ -132,6 +132,7 @@ def reserve_continuation_in_transaction(
             idempotency_key=command.idempotency_key, content=original.content,
             continued_from_candidate_id=original.continued_from_candidate_id,
             skill_version_id=original.skill_version_id, skill_disabled=original.skill_disabled,
+            suggestion=original.suggestion,
             expected_input_version_id=command.expected_input_version_id,
             continuation=metadata,
             reference=_reference_from_metadata(connection, scope, session_id, metadata),
@@ -212,6 +213,7 @@ def reserve_continuation_in_transaction(
         idempotency_key=command.idempotency_key, content=content,
         continued_from_candidate_id=reference.candidate_id if reference is not None else None,
         skill_version_id=original.skill_version_id, skill_disabled=original.skill_disabled,
+        suggestion=original.suggestion if intention is None else None,
         expected_input_version_id=command.expected_input_version_id,
         continuation=metadata, reference=reference,
     )

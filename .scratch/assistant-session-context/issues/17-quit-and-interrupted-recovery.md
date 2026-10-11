@@ -129,3 +129,8 @@ Root 独立先接C正式反例，实际 **2 RED／3.527s／55repeat0／自有库
 精确净接 sole A `d7787ddb` 五生产／协议／测试路径。仅两条公开策略prepare在真正 A 事务证明后附无正文 `exploration_preparation`，绑定原path task、原input、action以及confirm suggestion或answer operation；JsonClient只有explicit对应范围、原请求体和实际动作全部匹配才接受服务端实际request key，不拿operation UUID或泛503当生成身份。旧keyless未知别名无法证明等价，继续保留，由原同Map处理。
 
 主树随机隔离 runner 独立执行 `tests.integration.server.test_exploration_preparation_rejection`：**3实际HTTP GREEN／2.891秒／skip0／actualexit0**，55逐名迁移repeat0、自有库0；八个合成本机 HTTP 协议用例 **8 GREEN／71.819625ms／skip0**，额外正文、错动作／身份、未知503和非具名入口均拒绝。日志 `/private/tmp/notalone-root-confirmed-no-generation-three-http-pg.log`、`/private/tmp/notalone-root-exploration-proof-client-node.log`。类型通过，固定五源两个独立审查轴0；严格Main consumer接线继续，当前keylesstoken的明确证明不会解除旧未知alias，真实App未执行，原State claimed不变。
+
+
+2026-10-12 已确认意愿typed与重复app_quit恢复补充：原typed变更要求保留实际confirmed_suggestion，私有历史确认仍需原A/C可靠completed与完整意愿／来源、自己的真实领取及CURRENT；明确改口才移除旧确认来源。普通恢复的fallback continuation不代表typed，分型仅核同owner/contact/SID B实际request_key与原failed Aturn.key，再复用既有reconfirm。独立C原144行测试不改，A实际2RED／2.640s→2G／5.941s；新typed加重复恢复最小三项最终**3G／12.010s／skip0／55逐名repeat0／内外自有库0**。编号完整参考、累计要求、同键0额外、scope拒绝、raw／手工样本删除闭包、独立manual保留均从真实HTTP观察。原8G／21.293s不覆盖再次恢复，历史夹具失配及产品RED分别保留；详情见[13](13-continuous-intent-reference.md)与fixed5 `d4105c8b5a13b3395f07590c0f807c39f3f78d92f9353ca1700e1979f83bef10`。三源码mypy／五编译／diff0。此为sole provider证据，不借为Main／Host／公开DOM或原生退出通过；原五AC与State claimed保持，最终消费者由各唯一owner接续，无新增writer／图／DDL／正文缓存。
+
+总协调独立净集成验证：仅上述新typed1及重复恢复2项，主树实际3G／12.162秒；55逐名迁移、重复0、自有库剩余0，三个限定mypy与五文件compile通过。提供者12.010秒与本次12.162秒分列，不借为Main／宿主／页面或真人验收。
