@@ -302,15 +302,19 @@ def require_current_input(
 
 
 def erase_assistant_source_inputs(connection: Any, *, owner_id: UUID, removed_ids: set[UUID]) -> None:
-    """实际清除的同一事务内擦除讨论正文，生成索引只随权威 turn 留占位。"""
+    """同事务清正文及失效的当前指针；生成索引只随权威 turn 留占位。"""
 
     connection.execute(
-        "UPDATE public.assistant_session_input AS input SET state = 'redacted', content = NULL, "
+        "WITH erased AS (UPDATE public.assistant_session_input AS input SET state = 'redacted', content = NULL, "
         "dependency_ids = '{}', updated_at = now() WHERE input.owner_id = %s AND input.state <> 'redacted' "
         "AND (input.dependency_ids && %s::uuid[] OR EXISTS ("
         "SELECT 1 FROM public.assistant_session_turn AS turn WHERE turn.id = input.turn_id "
         "AND turn.input_version_id = input.id AND turn.owner_id = input.owner_id "
-        "AND turn.contact_id = input.contact_id AND turn.session_id = input.session_id AND turn.state = 'redacted'))",
+        "AND turn.contact_id = input.contact_id AND turn.session_id = input.session_id AND turn.state = 'redacted')) "
+        "RETURNING input.id, input.session_id, input.owner_id, input.contact_id) "
+        "UPDATE public.assistant_session AS session SET current_input_version_id = NULL, updated_at = now() "
+        "FROM erased WHERE session.id = erased.session_id AND session.owner_id = erased.owner_id "
+        "AND session.contact_id = erased.contact_id AND session.current_input_version_id = erased.id",
         (owner_id, list(removed_ids)),
     )
 

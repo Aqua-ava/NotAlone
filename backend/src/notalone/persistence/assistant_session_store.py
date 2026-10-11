@@ -235,6 +235,7 @@ def erase_assistant_source_turns(
 ) -> None:
     """在原回复副本清除前留下无正文占位，同一 owner 下的传递依赖全部清除。"""
 
+    explicit_turn_ids = set(turn_ids or ())
     rows = connection.execute(
         """
         SELECT turn.id, turn.input_payload, turn.dependency_ids,
@@ -245,10 +246,11 @@ def erase_assistant_source_turns(
          AND request.idempotency_key = turn.idempotency_key
         WHERE turn.owner_id = %s AND turn.state <> 'redacted'
           AND (turn.dependency_ids && %s::uuid[] OR request.id = ANY(%s::uuid[])
-               OR turn.id = ANY(%s::uuid[]))
+               OR (turn.id = ANY(%s::uuid[])
+                   AND (%s::uuid IS NULL OR turn.contact_id = %s)))
         FOR UPDATE OF turn
         """,
-        (owner_id, list(removed_ids), reply_request_ids, turn_ids or []),
+        (owner_id, list(removed_ids), reply_request_ids, list(explicit_turn_ids), contact_id, contact_id),
     ).fetchall()
     for row in rows:
         payload = row["input_payload"] if isinstance(row, dict) else row[1]
@@ -257,7 +259,8 @@ def erase_assistant_source_turns(
         turn_id = row["id"] if isinstance(row, dict) else row[0]
         # 既有删除会撤销同联系人所有运行租约；与来源无关的独立草稿仍可回看。
         independent_draft = (
-            request_state == "running" and not (set(dependencies) & removed_ids)
+            turn_id not in explicit_turn_ids
+            and request_state == "running" and not (set(dependencies) & removed_ids)
             and payload["content"]["type"] == "rewrite_draft"
             and not payload["content"].get("include_relationship_context", False)
             and payload.get("continued_from_candidate_id") is None
