@@ -35,6 +35,10 @@ def delete_source_replies(
     单条记忆删除关闭 revoke_running_scope，仅按已捕获的依赖定位请求。
     """
 
+    from notalone.persistence.assistant_candidate_carry import read_candidate_carry_lineage_for_deletion
+
+    # A核验真实父版本来历；父正文、选择回执和C快照尚未清空。
+    carry_edges = read_candidate_carry_lineage_for_deletion(connection, owner_id=owner_id)
     captured = captured_owner_reply_discussion_uses(connection, owner_id=owner_id)
     rows = connection.execute(
         """
@@ -94,13 +98,14 @@ def delete_source_replies(
     request_ids = [row["id"] if isinstance(row, dict) else row[0] for row in rows]
     selected = select_assistant_source_input_dependents(
         connection, owner_id=owner_id, contact_id=None,
-        removed_ids=removed_ids, reply_request_ids=request_ids, captured_uses=captured,
+        removed_ids=removed_ids, reply_request_ids=request_ids,
+        carry_edges=carry_edges, captured_uses=captured,
     )
     request_ids = sorted(set(request_ids) | set(selected.reply_request_ids), key=str)
     erase_assistant_source_turns(
         connection, owner_id=owner_id, contact_id=None,
         removed_ids=removed_ids, reply_request_ids=request_ids,
-        turn_ids=list(selected.turn_ids), captured_uses=captured,
+        turn_ids=list(selected.turn_ids), carry_edges=carry_edges, captured_uses=captured,
     )
     if not request_ids:
         return

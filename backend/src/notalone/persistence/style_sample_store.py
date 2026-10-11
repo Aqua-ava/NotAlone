@@ -321,17 +321,20 @@ def erase_style_sample_replies(connection: Any, *, owner_id: UUID, sample_ids: l
     if table and (table["to_regclass"] if isinstance(table, dict) else table[0]) is not None:
         from notalone.persistence.assistant_input_lineage import select_assistant_input_dependents
         from notalone.persistence.assistant_session_store import erase_assistant_source_turns
+        from notalone.persistence.assistant_candidate_carry import read_candidate_carry_lineage_for_deletion
         from notalone.persistence.reply_discussion_dependencies import captured_owner_reply_discussion_uses
 
+        carry_edges = read_candidate_carry_lineage_for_deletion(connection, owner_id=owner_id)
         captured = captured_owner_reply_discussion_uses(connection, owner_id=owner_id)
         selected = select_assistant_input_dependents(
             connection, owner_id=owner_id, contact_id=None, removed_ids=set(sample_ids),
-            reply_request_ids=request_ids, captured_uses=captured,
+            reply_request_ids=request_ids, carry_edges=carry_edges, captured_uses=captured,
         )
         request_ids = sorted(set(request_ids) | set(selected.reply_request_ids))
         erase_assistant_source_turns(
             connection, owner_id=owner_id, contact_id=None, removed_ids=set(sample_ids),
-            reply_request_ids=request_ids, turn_ids=list(selected.turn_ids), captured_uses=captured,
+            reply_request_ids=request_ids, turn_ids=list(selected.turn_ids),
+            carry_edges=carry_edges, captured_uses=captured,
         )
     if request_ids:
         invalidate_reply_keys(connection, owner_id=owner_id, request_ids=request_ids)

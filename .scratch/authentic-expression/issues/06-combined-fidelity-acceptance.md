@@ -394,3 +394,13 @@ C负责人的前两新增public Page session68894与58008均真实exit1，仅部
 主树激活Conda NotAlone、禁dotenv／tracing，用原自有随机库runner实际联跑test_reply_captured_input_cleanup、test_reply_discussion_dependencies、test_assistant_captured_input_erasure、test_assistant_dependency_erasure、test_source_reply_deletion、test_observation_reply_deletion六模块：**55 GREEN／8.078秒／skip0／actualexit0**；实际001–055账本逐名一致／repeat0／外层自有库剩余0。每项C物理测试另核实际outbound ledger0。日志/private/tmp/notalone-root-physical-captured-consumer55-pg.log。三个净源silent mypy、五文件py_compile及diff通过。负责人的55tests／6.682秒／迁移54证据独立保留，未冒充主树055运行。
 
 仅证明当前真实捕获来源／样本消费者集成。055携入输入的carry_edges仍由唯一C接续，不能以055迁移已安装或普通捕获55tests称携入删除已通过；A13/15类型化连续修改、B公开组合、新两场／八例报告与真实模型质量继续。State保持claimed，原验收文字与未执行项不勾；没有真实App、微信/OCR、私人资料、外部发送、付费模型、人工验收、push或部署。
+
+### 055携入物理删除的主树集成（2026-10-11）
+
+仅净C正式c9b5453de0bf4f4b0988d7cad6c3cff771afacde的两Ccaller及新四项测试，原A2de／055／ee9清理语义已在主树，不复制十五A路径或其任务。C在同owner原删除事务中、父版本／选择／快照清空前调用A唯一read_candidate_carry_lineage_for_deletion，把真实carry_edges交原选择器及eraser；不解析origin JSON，不另建codec／hash／图／writer或可用性权威。空样本集合仍不读取；独立后续input／CURRENT、原始消息及独立主动样本保留。
+
+Root先仅取四新测试，在尚未净caller时真实**4项／3 FAIL／0.482秒／actualexit1**：无turn、空dependency_ids的样本派生carry仍active，两损坏来历未拒绝；来源正向已G，未称四全RED。先一次自动审批连接中断导致命令未执行，按同授权重试审批后才运行此实际RED，没有绕过。净两caller后同四项**GREEN／0.594秒／skip0／actualexit0／真实55逐名账本-repeat0-outerDB0**；每项真实outbound ledger0。
+
+Root再用原合成StyleSampleHttpTest.dimension_release=None适配器、Conda NotAlone和禁dotenv／tracing的随机库runner，实际联跑原物理六模块55、新C4、A携入HTTP9、迁移3、来历unit2十模块：**73 GREEN／19.053秒／skip0／actualexit0**，外层实际001–055逐名账本／repeat0，三个迁移自有schema库及outerDB剩余全0。日志/private/tmp/notalone-root-carry-physical-delete-red-pg.log、/private/tmp/notalone-root-carry-physical-delete-fixed-pg.log、/private/tmp/notalone-root-carry-physical-delete-related73.log。两净源silent mypy／三个文件编译及限定diff通过，不借C73／17.415或B73／17.937的数字。唯一A读取链的重复父版本查询成本P3仍保留，未称优化，不为此建立跨调用正文缓存。
+
+本次完成携入的backend物理清理实际集成；仍须A18公开携入和A/B类型化连续修改／新消息组合的真实DOM→HTTP→PG。C第七两公开场、八例报告仅诊断6fed源的负责人证据，不含本055，不借其关闭carry页面或Root全组合。E06仍claimed及原剩余AC未勾，真人／真实模型质量、App／原生／微信/OCR／私料、发送、push／部署均未执行。
