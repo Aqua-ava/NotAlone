@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ClipboardEvent } from 'react';
 import type { AssistantSessionDeletion, ReplyMode, ReplySessionState, RewriteOptions, RewriteTone } from '../shared/reply-bridge';
 import { HelperDraft, type ContactSessionView } from './contact-session';
 import { Icon } from './icons';
@@ -110,13 +110,42 @@ export function RewriteInput({ contacts, replies }: { contacts: ContactSessionVi
   </>;
 }
 
-function CandidateEditor({ text, candidateId, number, edit, copy }: { text: string; candidateId: string; number: number; edit: ReplySessionView['editCandidate']; copy: (text: string) => void }) {
+function CandidateEditor({ text, candidateId, number, edit, copy, validatePaste, disabled }: {
+  text: string; candidateId: string; number: number; edit: ReplySessionView['editCandidate']; copy: (text: string) => void;
+  validatePaste: (text: string) => Promise<void>; disabled: boolean;
+}) {
   const [value, setValue] = useState(text);
+  const [pasting, setPasting] = useState(false);
+  const [error, setError] = useState('');
+  const pendingPaste = useRef(false), active = useRef(true);
+  const signature = JSON.stringify([candidateId, value]);
+  const latest = useRef(signature); latest.current = signature;
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   useEffect(() => { setValue(text); }, [candidateId]);
-  return <textarea aria-label={`候选${number}编辑文本`} maxLength={65_536} value={value}
+  async function paste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    event.preventDefault();
+    if (disabled || pendingPaste.current) return;
+    const input = event.currentTarget, pasted = event.clipboardData.getData('text/plain');
+    const start = input.selectionStart, end = input.selectionEnd;
+    const inserted = pasted.slice(0, Math.max(0, input.maxLength - input.value.length + end - start));
+    const next = input.value.slice(0, start) + inserted + input.value.slice(end);
+    const operation = signature;
+    pendingPaste.current = true; setPasting(true); setError('');
+    try {
+      await validatePaste(pasted);
+      if (active.current && latest.current === operation) { setValue(next); void edit(candidateId, next); }
+    } catch {
+      if (active.current && latest.current === operation) setError('这段粘贴文字的来源尚未确认，原编辑文字仍保留。请在原来源入口保存。');
+    } finally { pendingPaste.current = false; if (active.current) setPasting(false); }
+  }
+  return <><textarea aria-label={`候选${number}编辑文本`} maxLength={65_536} value={value} disabled={disabled || pasting}
+    onPaste={(event) => void paste(event)}
     onCopy={(event) => { const input = event.currentTarget; copy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
     onCut={(event) => { const input = event.currentTarget; copy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
-    onChange={(event) => { setValue(event.target.value); void edit(candidateId, event.target.value); }} />;
+    onChange={(event) => { setValue(event.target.value); setError(''); void edit(candidateId, event.target.value); }} />
+    {pasting && <p role="status">正在核对粘贴来源…</p>}
+    {error && <p role="alert">{error}</p>}
+  </>;
 }
 
 export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
@@ -131,7 +160,9 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
   const completedRead = useRef('');
   useEffect(() => {
     const result = state.result;
-    if (!result || result.input.mode === 'rewrite_draft' || state.phase !== 'ready'
+    // 删除复核暂时清空结果，返回后须重读同一会话的可信完成记录。
+    if (!result) { completedRead.current = ''; return; }
+    if (result.input.mode === 'rewrite_draft' || state.phase !== 'ready'
       || state.savedSession?.sessionId !== result.assistantSessionId || state.savedSession?.phase !== 'idle') return;
     const identity = `${state.contactId}:${state.scopeRevision}:${result.assistantSessionId}:${result.replyRequestId}`;
     if (completedRead.current === identity) return;
@@ -174,6 +205,9 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
           <label className="reply-choice"><input type="radio" name="candidate" checked={state.selectedCandidateId === original.candidateId}
             onChange={() => void replies.selectCandidate(original.candidateId)} />说法 {index + 1}</label>
           <CandidateEditor text={editedText} candidateId={original.candidateId} number={index + 1} edit={replies.editCandidate}
+            disabled={state.phase === 'waiting' || state.sourceAvailability !== undefined}
+            validatePaste={(text) => window.notalone.styleSamples.validateCandidatePaste({ contactId: state.contactId!,
+              scopeRevision: state.scopeRevision, replyRequestId: state.result!.replyRequestId, candidateId: original.candidateId, text })}
             copy={(text) => noteCopy(original.candidateId, text)} />
           <p className="reply-basis">{original.basis}</p>
           {original.riskNotes.map((note, number) => <p className="reply-risk" key={number}>{note}</p>)}

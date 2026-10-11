@@ -9,6 +9,8 @@ const portsPromise = build({ stdin: { contents: `
   export { installReplyBridge } from './src/main/reply/bridge';
   export { createReplyBridge } from './src/preload/reply';
   export { StyleSampleController } from './src/main/style-samples/controller';
+  export { installStyleSampleBridge } from './src/main/style-samples/bridge';
+  export { createStyleSampleBridge } from './src/preload/style-samples';
   export { BackendRequestFailure } from './src/main/backend/json-client';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false })
   .then((output) => import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`));
@@ -96,8 +98,10 @@ async function fixture() {
   contacts.selectContact({ contactId, scopeRevision: contacts.getState().scopeRevision });
   const scope = { contactId, scopeRevision: contacts.getState().scopeRevision };
   await bridge.readSavedSession(scope);
-  const samples = new ports.StyleSampleController(backend, contacts, replies);
-  return { ...ports, bridge, replies, contacts, backend, samples, records, calls, scope,
+  const samples = ports.installStyleSampleBridge({ handle: (channel, handler) => handlers.set(channel, handler), publish: () => {} }, backend, contacts, replies);
+  const sampleBridge = ports.createStyleSampleBridge({ invoke: async (channel, ...args) => handlers.get(channel)(...args),
+    on: () => {}, removeListener: () => {} });
+  return { ...ports, bridge, sampleBridge, replies, contacts, backend, samples, records, calls, scope,
     sessionId, candidateId, versionId, turnId, requestId, secondMessageId };
 }
 
@@ -140,6 +144,166 @@ test('本轮原候选与完成历史并存时仍能复验同候选的已保存�
   assert.equal(f.samples.getState().samples[0].originId, f.candidateId);
 });
 
+test('切回原始消息组后主动保存当前展示文字，不保存另一版本的编辑正文', async () => {
+  const f = await fixture();
+  await f.bridge.setMode({ ...f.scope, mode: 'initiate_conversation' });
+  await f.bridge.updatePurpose({ ...f.scope, purpose: '本次拒绝参加，不新增承诺。' });
+  await f.bridge.generate({ ...f.scope, newRequest: true });
+  await f.bridge.readSavedSession(f.scope);
+  await f.bridge.editCandidate({ ...f.scope, replyRequestId: f.requestId,
+    candidateId: f.candidateId, text: '这次不参加。\n\n谢谢理解。' });
+  await f.bridge.showCandidateVersion({ ...f.scope, sessionId: f.sessionId,
+    candidateId: f.candidateId, versionId: f.candidateId });
+  const state = await f.bridge.getState();
+  assert.equal(state.candidateVersions.items[0].displayVersionId, f.candidateId);
+  assert.equal(state.result.candidates[0].editedText, '这次不参加。\n\n谢谢理解。');
+  await f.sampleBridge.saveCandidate({ ...f.scope, replyRequestId: f.requestId, candidateId: f.candidateId,
+    sessionId: f.sessionId, versionId: f.candidateId, text: '这次不参加。\n\n感谢邀请。' });
+  assert.deepEqual(f.samples.getState().samples.map(({ text, originKind, originId }) =>
+    ({ text, originKind, originId })), [{ text: '这次不参加。\n\n感谢邀请。',
+    originKind: 'candidate', originId: f.candidateId }]);
+});
+
+test('恢复消息组的未保存编辑经具名桥接主动保存最终文字且保留候选来源', async () => {
+  const f = await fixture();
+  assert.equal((await f.bridge.getState()).result, null);
+  const priorWrites = f.calls.filter((call) => call.method === 'POST' && !call.path.endsWith('/style-samples')).length;
+  await f.sampleBridge.saveCandidate({ ...f.scope, sessionId: f.sessionId,
+    replyRequestId: f.requestId, candidateId: f.candidateId, versionId: f.versionId,
+    text: '这次不参加。\n\n谢谢理解。先这样。' });
+  assert.deepEqual((await f.sampleBridge.getState()).samples.map(({ text, originKind, originId, sendingStatus }) =>
+    ({ text, originKind, originId, sendingStatus })), [{ text: '这次不参加。\n\n谢谢理解。先这样。',
+    originKind: 'candidate', originId: f.candidateId, sendingStatus: 'unknown' }]);
+  assert.deepEqual((await f.bridge.getState()).candidateVersions.items[0].history.versions[1].messages.map(({ text }) => text),
+    ['这次不参加。', '谢谢理解。']);
+  assert.equal(f.calls.filter((call) => call.method === 'POST' && !call.path.endsWith('/style-samples')).length, priorWrites);
+});
+
+test('组样本保存拒绝部分协议、未知字段、旧模糊入口及不属于当前展示的真实版本', async () => {
+  const f = await fixture();
+  const request = { ...f.scope, sessionId: f.sessionId, replyRequestId: f.requestId,
+    candidateId: f.candidateId, versionId: f.versionId, text: '这次不参加。谢谢理解。' };
+  const legacy = { ...f.scope, replyRequestId: f.requestId, candidateId: f.candidateId };
+  for (const invalid of [
+    legacy, { ...legacy, sessionId: f.sessionId }, { ...legacy, versionId: f.versionId }, { ...legacy, text: request.text },
+    { ...request, extra: '拒绝未知字段' }, { ...request, sessionId: randomUUID() },
+    { ...request, candidateId: randomUUID() }, { ...request, replyRequestId: randomUUID() },
+    { ...request, versionId: f.candidateId }, { ...request, versionId: randomUUID() },
+    { ...request, contactId: randomUUID() }, { ...request, scopeRevision: f.scope.scopeRevision + 1 },
+    { ...request, text: '' }, { ...request, text: '甲'.repeat(4097) },
+  ]) await assert.rejects(async () => f.sampleBridge.saveCandidate(invalid));
+  await assert.rejects(async () => f.sampleBridge.saveCandidate(request, request));
+  await assert.rejects(async () => f.sampleBridge.saveCandidate());
+  assert.equal(f.records.samples.length, 0);
+});
+
+test('组样本保存复验实际完成轮次与请求，不能仅凭候选版本身份保存', async (t) => {
+  for (const field of ['turn_id', 'candidate_group_id']) await t.test(field, async () => {
+    const f = await fixture();
+    f.records.history[field] = randomUUID();
+    await f.bridge.readCandidateVersions({ ...f.scope, sessionId: f.sessionId, candidateId: f.candidateId });
+    await assert.rejects(f.sampleBridge.saveCandidate({ ...f.scope, sessionId: f.sessionId,
+      replyRequestId: f.requestId, candidateId: f.candidateId, versionId: f.versionId, text: '已失效组的合成编辑。' }));
+    assert.equal(f.records.samples.length, 0);
+  });
+});
+
+test('草稿改写仍按原四字段入口主动保存当前编辑文字', async () => {
+  const f = await fixture();
+  f.contacts.setDraft({ ...f.scope, text: '这次不参加。' });
+  await f.bridge.setMode({ ...f.scope, mode: 'rewrite_draft' });
+  await f.bridge.generate({ ...f.scope, newRequest: true });
+  await f.bridge.editCandidate({ ...f.scope, replyRequestId: f.requestId,
+    candidateId: f.candidateId, text: '这次不参加。草稿改写的独立合成编辑。' });
+  await f.sampleBridge.saveCandidate({ ...f.scope, replyRequestId: f.requestId, candidateId: f.candidateId });
+  assert.deepEqual((await f.sampleBridge.getState()).samples.map(({ text, originKind }) => ({ text, originKind })),
+    [{ text: '这次不参加。草稿改写的独立合成编辑。', originKind: 'candidate' }]);
+});
+
+test('本轮消息组已有结果时旧四字段样本入口仍拒绝模糊版本', async () => {
+  const f = await fixture();
+  await f.bridge.setMode({ ...f.scope, mode: 'initiate_conversation' });
+  await f.bridge.updatePurpose({ ...f.scope, purpose: '本次拒绝参加。' });
+  await f.bridge.generate({ ...f.scope, newRequest: true });
+  await f.bridge.readSavedSession(f.scope);
+  await assert.rejects(f.sampleBridge.saveCandidate({ ...f.scope, replyRequestId: f.requestId, candidateId: f.candidateId }));
+  assert.equal(f.records.samples.length, 0);
+});
+
+test('候选生成后另存的列表样本复制不能改为当前候选来源保存', async () => {
+  const f = await fixture();
+  const text = '候选生成后另外主动保存的合成表达。';
+  await f.sampleBridge.saveManual({ ...f.scope, text });
+  const sample = (await f.sampleBridge.getState()).samples[0];
+  await f.sampleBridge.noteSavedSampleCopy({ ...f.scope, sampleId: sample.sampleId, text });
+  await assert.rejects(f.sampleBridge.saveCandidate({ ...f.scope, sessionId: f.sessionId,
+    replyRequestId: f.requestId, candidateId: f.candidateId, versionId: f.versionId, text }));
+  assert.equal(f.records.samples.length, 1);
+});
+
+test('候选编辑粘贴拒绝后保存的样本来历，不写正文也不污染手工输入', async () => {
+  const f = await fixture();
+  const text = '候选生成后保存、尚未进入候选来源的合成样本。';
+  await f.sampleBridge.saveManual({ ...f.scope, text });
+  const sample = (await f.sampleBridge.getState()).samples[0];
+  await f.sampleBridge.noteSavedSampleCopy({ ...f.scope, sampleId: sample.sampleId, text });
+  assert.equal(typeof f.sampleBridge.validateCandidatePaste, 'function');
+  const before = f.calls.length;
+  await assert.rejects(f.sampleBridge.validateCandidatePaste({ ...f.scope, sessionId: f.sessionId,
+    replyRequestId: f.requestId, candidateId: f.candidateId, versionId: f.versionId, text }));
+  assert.equal(f.calls.length, before);
+  await f.sampleBridge.saveManual({ ...f.scope, text: '拒绝粘贴后，另外独立键入的合成文字。' });
+  assert.equal(f.records.samples.length, 2);
+  assert.equal(f.records.samples[1].origin_kind, 'manual');
+});
+
+test('候选编辑的独立粘贴与同候选复制可通过只读复验', async () => {
+  const f = await fixture();
+  const request = { ...f.scope, sessionId: f.sessionId, replyRequestId: f.requestId,
+    candidateId: f.candidateId, versionId: f.versionId };
+  assert.equal(typeof f.sampleBridge.validateCandidatePaste, 'function');
+  const before = f.calls.length;
+  await f.sampleBridge.validateCandidatePaste({ ...request, text: '这次独立输入的合成表达。' });
+  await f.sampleBridge.noteCandidateCopy({ ...f.scope, replyRequestId: f.requestId,
+    candidateId: f.candidateId, text: '谢谢理解。' });
+  await f.sampleBridge.validateCandidatePaste({ ...request, text: '谢谢理解。' });
+  assert.equal(f.calls.length, before);
+  assert.equal(f.records.samples.length, 0);
+});
+
+test('候选粘贴复验拒绝旧版本、范围、部分协议及未知字段', async () => {
+  const f = await fixture();
+  const request = { ...f.scope, sessionId: f.sessionId, replyRequestId: f.requestId,
+    candidateId: f.candidateId, versionId: f.versionId, text: '合成独立输入。' };
+  assert.equal(typeof f.sampleBridge.validateCandidatePaste, 'function');
+  const before = f.calls.length;
+  for (const invalid of [
+    { ...request, versionId: f.candidateId }, { ...request, scopeRevision: f.scope.scopeRevision + 1 },
+    { ...request, sessionId: randomUUID() }, { ...request, candidateId: randomUUID() },
+    { ...request, replyRequestId: randomUUID() }, { ...request, extra: true },
+    { ...f.scope, replyRequestId: f.requestId, candidateId: f.candidateId, versionId: f.versionId, text: request.text },
+    { ...request, text: '甲'.repeat(65_537) },
+  ]) await assert.rejects(f.sampleBridge.validateCandidatePaste(invalid));
+  await assert.rejects(f.sampleBridge.validateCandidatePaste(request, request));
+  assert.equal(f.calls.length, before);
+});
+
+test('草稿候选粘贴同样保留已知来源边界，并允许独立文字', async () => {
+  const f = await fixture();
+  f.contacts.setDraft({ ...f.scope, text: '这次不参加。' });
+  await f.bridge.setMode({ ...f.scope, mode: 'rewrite_draft' });
+  await f.bridge.generate({ ...f.scope, newRequest: true });
+  const text = '草稿候选之后保存的合成列表样本。';
+  await f.sampleBridge.saveManual({ ...f.scope, text });
+  const sample = (await f.sampleBridge.getState()).samples[0];
+  await f.sampleBridge.noteSavedSampleCopy({ ...f.scope, sampleId: sample.sampleId, text });
+  const request = { ...f.scope, replyRequestId: f.requestId, candidateId: f.candidateId };
+  const before = f.calls.length;
+  await assert.rejects(f.sampleBridge.validateCandidatePaste({ ...request, text }));
+  await f.sampleBridge.validateCandidatePaste({ ...request, text: '独立合成表达。' });
+  assert.equal(f.calls.length, before);
+});
+
 test('可信版本的轮次或请求与实际完成候选不符时拒绝保存且不降为manual', async (t) => {
   for (const field of ['turn_id', 'candidate_group_id']) await t.test(field, async () => {
     const f = await fixture();
@@ -173,6 +337,8 @@ test('A确认版本来源失效后清除未保存表达来历并拒绝旧片段'
   assert.equal(state.savedSession.turns[0].state, 'redacted');
   assert(!JSON.stringify(state).includes('谢谢理解。'));
   assert(f.samples.getState().erasureRevision > before);
+  await assert.rejects(f.sampleBridge.saveCandidate({ ...f.scope, sessionId: f.sessionId,
+    replyRequestId: f.requestId, candidateId: f.candidateId, versionId: f.versionId, text: '失效后旧组编辑。' }));
   assert.throws(() => pasteVersionMessage(f), /复制来历已失效/);
   await assert.rejects(f.samples.saveManual({ ...f.scope, text: '谢谢理解。先这样。' }));
   assert.equal(f.records.samples.length, 0);
@@ -221,6 +387,25 @@ async function multipleCandidates() {
   pasteVersionMessage(f);
   return { f, otherIdentity };
 }
+
+test('复制另一候选的首条文字，不把其未复制的第二条误认为独立输入来源', async () => {
+  const { f, otherIdentity } = await multipleCandidates();
+  const other = f.records.saved.turns[0].reply.candidates[1];
+  const messages = [{ message_id: randomUUID(), text: '保重。' }, { message_id: randomUUID(), text: '谢谢理解。' }];
+  other.text = messages.map((message) => message.text).join('\n\n'); other.messages = messages;
+  const version = f.records.extraHistories[0].versions[0];
+  version.text = other.text; version.messages = messages;
+  await f.bridge.readSavedSession(f.scope);
+  await f.sampleBridge.noteCandidateCopy({ ...f.scope, replyRequestId: f.requestId,
+    candidateId: otherIdentity.candidateId, text: messages[0].text });
+  const request = { ...f.scope, sessionId: f.sessionId, replyRequestId: f.requestId,
+    candidateId: f.candidateId, versionId: f.versionId, text: messages[1].text };
+  await f.sampleBridge.validateCandidatePaste(request);
+  await f.sampleBridge.saveCandidate(request);
+  assert.equal(f.records.samples.length, 1);
+  assert.equal(f.records.samples[0].origin_id, f.candidateId);
+  await assert.rejects(f.sampleBridge.validateCandidatePaste({ ...request, text: messages[0].text }));
+});
 
 test('另一候选普通读取失败不能永久拒绝已核实的编辑片段', async () => {
   const { f, otherIdentity } = await multipleCandidates();

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ClipboardEvent, type ReactNode } from 'react';
 
 interface MessageView { messageId: string; text: string; }
 
 export function CandidateMessageGroup({ identity, number, messages, requirements, controls, disabled, dirty, canCopy, restored,
-  edit, editRequirements, save, copy, noteTextCopy }: {
+  edit, editRequirements, save, copy, noteTextCopy, validatePaste }: {
   identity: string;
   number: number;
   messages: readonly MessageView[];
@@ -18,6 +18,7 @@ export function CandidateMessageGroup({ identity, number, messages, requirements
   save: () => Promise<void>;
   copy: (messageId: string) => Promise<void>;
   noteTextCopy: (text: string) => void;
+  validatePaste: (text: string) => Promise<void>;
 }) {
   const signature = JSON.stringify([identity, messages, requirements]);
   const latest = useRef(signature);
@@ -25,6 +26,8 @@ export function CandidateMessageGroup({ identity, number, messages, requirements
   const active = useRef(true);
   const [copying, setCopying] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pasting, setPasting] = useState(false);
+  const pendingPaste = useRef(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
@@ -48,7 +51,24 @@ export function CandidateMessageGroup({ identity, number, messages, requirements
     catch { if (active.current && latest.current === operation) setError('修改尚未保存，编辑文字仍保留，请重试。'); }
     finally { if (active.current) setSaving(false); }
   }
-  return <fieldset className="candidate-message-group" aria-label={`说法${number}消息组`} disabled={disabled || saving}>
+  async function paste(event: ClipboardEvent<HTMLTextAreaElement>, apply: (text: string) => void) {
+    event.preventDefault();
+    if (disabled || saving || copying || pendingPaste.current) return;
+    const input = event.currentTarget;
+    const text = event.clipboardData.getData('text/plain');
+    const start = input.selectionStart, end = input.selectionEnd;
+    const inserted = text.slice(0, Math.max(0, input.maxLength - input.value.length + end - start));
+    const next = input.value.slice(0, start) + inserted + input.value.slice(end);
+    const operation = signature;
+    pendingPaste.current = true; setPasting(true); setNotice(''); setError('');
+    try {
+      await validatePaste(text);
+      if (active.current && latest.current === operation) apply(next);
+    } catch {
+      if (active.current && latest.current === operation) setError('这段粘贴文字的来源尚未确认，原编辑文字仍保留。请在原来源入口保存。');
+    } finally { pendingPaste.current = false; if (active.current) setPasting(false); }
+  }
+  return <fieldset className="candidate-message-group" aria-label={`说法${number}消息组`} disabled={disabled || saving || pasting || copying}>
     <legend>{messages.length > 1 ? `这组共${messages.length}条，按顺序表达` : '这组有1条消息'}</legend>
     {controls}
     {messages.map((message, index) => <div className="candidate-message" key={message.messageId}>
@@ -56,6 +76,7 @@ export function CandidateMessageGroup({ identity, number, messages, requirements
         aria-label={messages.length === 1 && !restored ? `候选${number}编辑文本` : `说法${number}第${index + 1}条编辑文本`}
         value={message.text} maxLength={messages.length > 1 ? 8192 : 65_536}
         onChange={(event) => edit(message.messageId, event.target.value)}
+        onPaste={(event) => void paste(event, (text) => edit(message.messageId, text))}
         onCopy={(event) => { const input = event.currentTarget; noteTextCopy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
         onCut={(event) => { const input = event.currentTarget; noteTextCopy(input.value.slice(input.selectionStart, input.selectionEnd)); }}
       /></label>
@@ -63,12 +84,14 @@ export function CandidateMessageGroup({ identity, number, messages, requirements
     </div>)}
     <label>本组修改要求<textarea aria-label={`说法${number}修改要求`} maxLength={4096} value={requirements}
       placeholder="可选，只作用于本组当前修改"
+      onPaste={(event) => void paste(event, editRequirements)}
       onChange={(event) => editRequirements(event.target.value)} /></label>
     <button disabled={!dirty || copying || messages.some((message) => !message.text.trim())} onClick={() => void saveGroup()}>保存本组修改</button>
     {saving && <p role="status">正在保存本组修改…</p>}
     {!saving && dirty && <p>保存修改后，再选择当前版本并逐条复制。</p>}
     {!dirty && !canCopy && <p>选择当前版本后可逐条复制。</p>}
     {copying && <p role="status">正在复制…</p>}
+    {pasting && <p role="status">正在核对粘贴来源…</p>}
     {notice && <p role="status">{notice}</p>}
     {error && <p role="alert">{error}</p>}
   </fieldset>;

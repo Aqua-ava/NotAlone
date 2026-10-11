@@ -366,3 +366,14 @@ Conda NotAlone／backend，`PGHOST=/tmp NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRAC
 修正新增测试的只读比较为同一 owner 事务、同一连接读取（原另连接比较会读到旧 MVCC 版本，不能证明本事务不变）；保留实际六类拒绝和 finally 恢复。相同正式001–054隔离 runner 复验 session29546 **actualexit0／19 GREEN／3.158s／skip0**，正式 ledger/repeat0、自有库剩余0。没有新HTTP／模型／页面／缓存或删除写入，A captured_uses consumer 与统一 eraser仍另行接线；本票继续 claimed，原人工／原生未执行。
 
 上述主树成员修复限定 silent mypy 1source通过，2文件 compile 与diff通过。新鲜Standards硬要求0／重要Fowler possible0、Spec新增P0–P3为0，均明确旧成员范围P2已闭合；仅只读复审、未代运行。只提交这一个历史读取主题的三个路径，不捎带共享协调记录或B准备接口。
+
+
+### 总协调主树显式最终文字与粘贴来源接口切片（2026-10-11）
+
+从 C 正式 `6fed918927ca0af0cc0975178a72026dae86cd36` 只净接五个API／样本来源路径、三个renderer增量及原候选版本来源测试增量，共九路径；Main候选复制、稳定组身份、原组Page与复制测试已逐字同主树，不重复导入。完整主树已有A16 jobs及严格prepare／turn_id夹具适配均保留；不整包覆盖三十文件、公共Page目录或A/B状态。C06只追加本准确记录，State仍claimed，原验收状态未改。
+
+新候选样本保存保留legacy四字段改写入口，新增完整七字段作用于实际展示版本和本地用户最终稿。Main沿A可信完成轮、SID、request、candidate、version与当前display复验，4096原样本限额不截断，最终文字沿sole旧样本HTTP及candidate origin保存，不读另一版global editedText。组内明确按钮发送当前最终稿，旧模糊全局组入口拒绝。新只读粘贴入口复用最后一次实际复制摘要和原来源，合法独立文字／同候选允许，已知其它样本／候选或失效来历拒绝；不按历史文本相似度追加依赖。界面preventDefault后只在核验及局部identity／signature未变时插入，拒绝保留原稿；result暂空时清除已读标识，恢复后沿sole readSavedSession复核，不建第二缓存或writer。
+
+Conda／desktop实际运行五套Node：`node --test --test-reporter=spec tests/assistant-candidate-versions.test.mjs tests/assistant-candidate-version-ports.test.mjs tests/candidate-copy/controller.test.mjs tests/style-samples/controller.test.mjs tests/style-samples/candidate-version-source.test.mjs`。首次默认沙箱211通过／14失败／1886.545375ms／exit1，十四均为既有JsonClient受控127.0.0.1监听EPERM，未计生产RED；允许同一已授权回环后原五套 **225 GREEN／1147.616416ms／skip0／actualexit0**。完整desktop TypeScript及diff通过。新增边界保留部分形状／extra args／范围和实际完成轮错配／错展示版本／长度／legacy与来源终态拒绝，Root原prepare／生成turn_id薄适配未回退。这些是具名Main和受控传输契约，不能冒生产PG或完整公开页面证明。
+
+C负责人的前两新增public Page session68894与58008均真实exit1，仅部分两捕获／两调用／零完整场景；915主树B边界five或C的225 Node均不能替它们关闭。C正独立诊断后续计数2／1的真实失败，并接A唯一捕获删除core的物理pre-capture薄调用方；完整八例soleE01逐例报告、真正typed连续修改、B组合及主树独立公开页面仍接续。本切片没有生成或宣称完整八例报告通过，原故意语义失败／human0／quality_verified=false及未知说明保留。只处理合成资料和本地输入，不新增HTTP业务写口、schema、正文缓存、依赖图、供应商调用或发送能力；人工／系统剪贴板／原生App／微信/OCR／私人聊天／付费模型／push／发布／部署均未执行。

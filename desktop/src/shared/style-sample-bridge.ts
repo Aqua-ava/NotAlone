@@ -12,6 +12,8 @@ export interface StyleSampleState {
   busy: boolean; error: string | null;
 }
 export type CandidateTextCopy = ReplyCandidateSelection & { text: string; invalidSelection?: true };
+export type CandidateVersionStyleSampleSave = ReplyCandidateSelection & { sessionId: string; versionId: string; text: string };
+export type CandidateStylePaste = (ReplyCandidateSelection & { text: string }) | CandidateVersionStyleSampleSave;
 export type SavedSampleTextCopy = ContactSelection & { sampleId: string; text: string };
 export type ManualStyleText = ContactSelection & { text: string };
 export type StylePasteReceipt = { pasteId: string };
@@ -20,11 +22,12 @@ export interface StyleSampleBridge {
   getState(): Promise<StyleSampleState>;
   refresh(selection: ContactSelection): Promise<void>;
   saveManual(selection: ContactSelection & { text: string }): Promise<void>;
-  saveCandidate(selection: ReplyCandidateSelection): Promise<void>;
+  saveCandidate(selection: ReplyCandidateSelection | CandidateVersionStyleSampleSave): Promise<void>;
   saveMessage(selection: ContactSelection & { messageId: string }): Promise<void>;
   deleteSample(selection: ContactSelection & { sampleId: string }): Promise<void>;
   noteCandidateCopy(selection: CandidateTextCopy): Promise<void>;
   noteSavedSampleCopy(selection: SavedSampleTextCopy): Promise<void>;
+  validateCandidatePaste(selection: CandidateStylePaste): Promise<void>;
   updateManualText(selection: ManualStyleUpdate): Promise<void>;
   noteManualPaste(selection: ManualStyleText): Promise<StylePasteReceipt>;
   onStateChanged(listener: (state: StyleSampleState) => void): () => void;

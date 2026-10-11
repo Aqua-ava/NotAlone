@@ -10,6 +10,7 @@ export function createStyleSampleBridge(transport: PageTransport): StyleSampleBr
     deleteSample: (...args: unknown[]) => transport.invoke('style-samples:delete', ...args),
     noteCandidateCopy: (...args: unknown[]) => transport.invoke('style-samples:note-candidate-copy', ...args),
     noteSavedSampleCopy: (...args: unknown[]) => transport.invoke('style-samples:note-sample-copy', ...args),
+    validateCandidatePaste: (...args: unknown[]) => transport.invoke('style-samples:validate-candidate-paste', ...args),
     updateManualText: (...args: unknown[]) => transport.invoke('style-samples:update-manual-text', ...args),
     noteManualPaste: (...args: unknown[]) => transport.invoke('style-samples:note-manual-paste', ...args),
     onStateChanged: (listener: (state: StyleSampleState) => void) => {

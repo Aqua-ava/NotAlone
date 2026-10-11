@@ -5,7 +5,7 @@ import type { ContactSession } from '../contacts/session';
 import type { ReplySession } from '../reply/session';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import type { ReplyCandidateSelection, ReplySessionState } from '../../shared/reply-bridge';
-import type { CandidateTextCopy, ManualStyleText, ManualStyleUpdate, SavedSampleTextCopy, StyleSampleState } from '../../shared/style-sample-bridge';
+import type { CandidateTextCopy, CandidateStylePaste, CandidateVersionStyleSampleSave, ManualStyleText, ManualStyleUpdate, SavedSampleTextCopy, StyleSampleState } from '../../shared/style-sample-bridge';
 import { listSamples, readSample } from './client';
 
 type Scope = { contactId: string; scopeRevision: number; generation: number };
@@ -357,11 +357,64 @@ export class StyleSampleController {
     this.pendingPaste = { id: pasteId, origin: { ...pasted, digest }, scope, replyRevision: this.replies.getState().revision };
     return { pasteId };
   }
-  async saveCandidate(selection: ReplyCandidateSelection) {
+  private assertCandidateTextOrigin(selection: ReplyCandidateSelection, text: string) {
+    const scope = this.assertScope(selection);
+    const digest = fingerprint(text);
+    const copied = this.copied;
+    if (this.blockedCopies.has(digest) || this.deletedCopies.has(digest) || this.rejectedCopyDigests.has(digest)) {
+      throw new Error('这段文字的来源已失效，请重新编辑。');
+    }
+    // 仅复验显式复制的来历；独立输入不根据历史相似文字追加依赖。
+    if (!copied || copied.digest !== digest) return;
+    if (copied.kind !== 'candidate' || copied.invalid || copied.unverified
+      || copied.contactId !== scope.contactId || copied.generation !== scope.generation
+      || copied.scopeRevision !== scope.scopeRevision || copied.id !== selection.candidateId
+      || copied.replyRequestId !== selection.replyRequestId
+      || this.invalidatedCandidateRequests.has(`${scope.contactId}:${copied.replyRequestId}`)) {
+      throw new Error('这段复制文字有其他来源，请在原来源入口保存。');
+    }
+  }
+  private candidateText(selection: ReplyCandidateSelection | CandidateVersionStyleSampleSave): string {
     this.assertScope(selection); const reply = this.replies.getState();
+    if (reply.contactId !== selection.contactId || reply.scopeRevision !== selection.scopeRevision
+      || reply.phase === 'waiting' || reply.sourceAvailability !== undefined
+      || reply.sessionDeletion === 'deleting' || reply.sessionDeletion === 'failed') {
+      throw new Error('候选已失效，请重新选择。');
+    }
+    if ('versionId' in selection) {
+      const saved = reply.savedSession;
+      const turn = saved?.phase === 'ready' && saved.sessionId === selection.sessionId
+        ? saved.turns.find((item) => item.state === 'completed' && item.reply?.replyRequestId === selection.replyRequestId
+          && item.reply.candidates.some((candidate) => candidate.candidateId === selection.candidateId)) : undefined;
+      const versions = reply.candidateVersions;
+      const view = versions?.phase === 'ready' && versions.sessionId === selection.sessionId
+        ? versions.items.find((item) => item.phase === 'ready' && item.candidateId === selection.candidateId) : undefined;
+      const history = view?.history;
+      if (!turn || !history || history.sessionId !== selection.sessionId || history.turnId !== turn.turnId
+        || history.candidateId !== selection.candidateId || history.candidateGroupId !== selection.replyRequestId
+        || view?.displayVersionId !== selection.versionId
+        || !history.versions.some((version) => version.versionId === selection.versionId)
+        || this.invalidatedCandidateRequests.has(`${selection.contactId}:${selection.replyRequestId}`)) {
+        throw new Error('当前版本样本来源已失效，请重新读取。');
+      }
+      // 用户明确保存当前组编辑稿；版本身份沿A受信视图复验，不另存编辑正文。
+      return selection.text;
+    }
     const candidate = reply.result?.candidates.find((item) => item.original.candidateId === selection.candidateId);
-    if (reply.contactId !== selection.contactId || reply.scopeRevision !== selection.scopeRevision || reply.result?.replyRequestId !== selection.replyRequestId || !candidate) throw new Error('候选已失效，请重新选择。');
-    await this.save(selection, candidate.editedText, { kind: 'candidate', id: selection.candidateId });
+    if (reply.contactId !== selection.contactId || reply.scopeRevision !== selection.scopeRevision
+      || reply.result?.input.mode !== 'rewrite_draft' || reply.result.replyRequestId !== selection.replyRequestId || !candidate) {
+      throw new Error('候选已失效，请重新选择。');
+    }
+    return candidate.editedText;
+  }
+  validateCandidatePaste(selection: CandidateStylePaste) {
+    this.candidateText(selection);
+    this.assertCandidateTextOrigin(selection, selection.text);
+  }
+  async saveCandidate(selection: ReplyCandidateSelection | CandidateVersionStyleSampleSave) {
+    const text = this.candidateText(selection);
+    this.assertCandidateTextOrigin(selection, text);
+    await this.save(selection, text, { kind: 'candidate', id: selection.candidateId });
   }
   async saveMessage(selection: ContactSelection & { messageId: string }) {
     this.assertScope(selection); const reply = this.replies.getState();

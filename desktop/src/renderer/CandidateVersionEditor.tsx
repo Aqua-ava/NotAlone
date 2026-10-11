@@ -20,6 +20,9 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   const messages = draft?.messages ?? [];
   const requirements = draft?.requirements ?? '';
   const [error, setError] = useState('');
+  const [sampleSaving, setSampleSaving] = useState(false);
+  const sampleActive = useRef(true);
+  useEffect(() => { sampleActive.current = true; return () => { sampleActive.current = false; }; }, []);
   const editRevision = useRef(0);
   const saveKey = useRef<{ revision: number; key: string } | null>(null);
   const selectionKey = useRef<{ versionId: string; key: string } | null>(null);
@@ -38,6 +41,8 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
     || state.candidateVersions?.phase !== 'ready' || view?.phase !== 'ready' || state.savedSession?.phase !== 'ready'
     || selected?.phase === 'saving' || selected?.phase === 'loading';
   const identity = `${state.contactId}:${state.scopeRevision}:${history?.sessionId}:${candidateId}:${version?.versionId}`;
+  const sampleIdentity = useRef(identity);
+  sampleIdentity.current = identity;
   const scope = { contactId: state.contactId!, scopeRevision: state.scopeRevision,
     sessionId: state.savedSession?.sessionId ?? '', candidateId };
   function beginEdit() {
@@ -71,6 +76,22 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
       selectionKey.current = null; setError('');
     } catch { setError('当前版本尚未确认选择，请重试。'); }
   }
+  async function saveSample() {
+    if (disabled || sampleSaving || !version || draft?.versionId !== version.versionId) return;
+    const operation = identity;
+    setSampleSaving(true); setError('');
+    try {
+      await window.notalone.styleSamples.saveCandidate({ ...scope, replyRequestId,
+        versionId: version.versionId, text: messages.map((message) => message.text).join('\n\n') });
+      const saved = await window.notalone.styleSamples.getState();
+      if (sampleActive.current && sampleIdentity.current === operation
+        && (saved.phase !== 'ready' || saved.error || saved.contactId !== scope.contactId || saved.scopeRevision !== scope.scopeRevision)) {
+        setError('保存结果尚未确认，请刷新表达样本后核对，编辑文字仍保留。');
+      }
+    } catch {
+      if (sampleActive.current && sampleIdentity.current === operation) setError('样本尚未保存，请核对当前版本后重试。');
+    } finally { if (sampleActive.current) setSampleSaving(false); }
+  }
   function retryRead() { void replies.readCandidateVersions(scope).catch(() => setError('本组版本尚未核对，请重试。')); }
   if (!history || !version || draft?.versionId !== version.versionId) return <>
     <p role="status">{view?.phase === 'failed' ? '本组版本暂不可用，编辑和复制尚未开放。' : '正在读取本组版本…'}</p>
@@ -79,9 +100,11 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   </>;
   return <>
     <CandidateMessageGroup identity={identity} number={number} messages={messages} requirements={requirements}
-      restored={restored} disabled={disabled} dirty={dirty} canCopy={Boolean(chosen)}
+      restored={restored} disabled={disabled || sampleSaving} dirty={dirty} canCopy={Boolean(chosen)}
       edit={editMessage} editRequirements={(text) => { beginEdit(); editRevision.current++; setDraft({ ...draft, requirements: text }); setError(''); }}
       save={save} noteTextCopy={noteCopy}
+      validatePaste={(text) => window.notalone.styleSamples.validateCandidatePaste({ ...scope, replyRequestId,
+        versionId: version.versionId, text })}
       copy={(messageId) => window.notalone.candidateCopy.copy({ contactId: scope.contactId, scopeRevision: scope.scopeRevision,
         replyRequestId, candidateId, versionId: version.versionId, messageId, hideAfterCopy: false })}
       controls={<>
@@ -94,6 +117,9 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
         </select></label>
         <label><input type="radio" name="candidate-version" aria-label={`选择说法${number}当前版本`}
           checked={Boolean(chosen)} disabled={dirty || disabled} onChange={() => void select()} />选择这组当前版本</label>
+        <button disabled={sampleSaving || messages.some((message) => !message.text.trim())
+          || messages.map((message) => message.text).join('\n\n').length > 4096}
+          onClick={() => void saveSample()}>主动保存说法{number}为样本</button>
       </>} />
     {view?.phase === 'failed' && <button onClick={retryRead}>重新读取本组版本</button>}
     {error && <p role="alert">{error}</p>}
