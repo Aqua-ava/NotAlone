@@ -19,7 +19,7 @@ from notalone.application.assistant_session_service import (
 )
 from notalone.application.reply_service import ReplyServiceRequest
 from notalone.persistence.assistant_input_lineage import (
-    AssistantCarryInputLineage, select_assistant_input_dependents,
+    AssistantCarryInputLineage, AssistantInputDependents, select_assistant_input_dependents,
 )
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.reply_discussion_dependencies import CapturedReplyDiscussionUse
@@ -233,17 +233,11 @@ def prepare_assistant_reply_commit(
     )
 
 
-def erase_assistant_source_turns(
+def _assistant_source_turn_rows(
     connection: Any, *, owner_id: UUID, contact_id: UUID | None,
-    removed_ids: set[UUID], reply_request_ids: list[UUID],
-    turn_ids: list[UUID] | None = None,
-    carry_edges: tuple[AssistantCarryInputLineage, ...] = (),
-    captured_uses: tuple[CapturedReplyDiscussionUse, ...] = (),
-) -> None:
-    """在原回复副本清除前留下无正文占位，同一 owner 下的传递依赖全部清除。"""
-
-    explicit_turn_ids = set(turn_ids or ())
-    query = """
+    removed_ids: set[UUID], reply_request_ids: list[UUID], turn_ids: set[UUID],
+) -> list[Any]:
+    return connection.execute("""
         SELECT turn.id, turn.input_payload, turn.dependency_ids,
                request.state AS request_state, request.id AS request_id
         FROM public.assistant_session_turn AS turn
@@ -255,41 +249,81 @@ def erase_assistant_source_turns(
                OR (turn.id = ANY(%s::uuid[])
                    AND (%s::uuid IS NULL OR turn.contact_id = %s)))
         FOR UPDATE OF turn
-        """
-    parameters = (owner_id, list(removed_ids), reply_request_ids,
-                  list(explicit_turn_ids), contact_id, contact_id)
-    rows = connection.execute(query, parameters).fetchall()
+        """, (owner_id, list(removed_ids), reply_request_ids,
+              list(turn_ids), contact_id, contact_id)).fetchall()
 
-    def independent_draft(row: Any) -> bool:
-        payload = row["input_payload"] if isinstance(row, dict) else row[1]
-        dependencies = row["dependency_ids"] if isinstance(row, dict) else row[2]
-        request_state = row["request_state"] if isinstance(row, dict) else row[3]
-        turn_id = row["id"] if isinstance(row, dict) else row[0]
-        return (
-            turn_id not in explicit_turn_ids
-            and request_state == "running" and not (set(dependencies) & removed_ids)
-            and isinstance(payload, dict)
-            and payload["content"]["type"] == "rewrite_draft"
-            and not payload["content"].get("include_relationship_context", False)
-            and payload.get("continued_from_candidate_id") is None
-        )
+
+def _independent_assistant_source_draft(
+    row: Any, *, explicit_turn_ids: set[UUID], removed_ids: set[UUID],
+) -> bool:
+    payload = row["input_payload"] if isinstance(row, dict) else row[1]
+    dependencies = row["dependency_ids"] if isinstance(row, dict) else row[2]
+    request_state = row["request_state"] if isinstance(row, dict) else row[3]
+    turn_id = row["id"] if isinstance(row, dict) else row[0]
+    return (
+        turn_id not in explicit_turn_ids
+        and request_state == "running" and not (set(dependencies) & removed_ids)
+        and isinstance(payload, dict)
+        and payload["content"]["type"] == "rewrite_draft"
+        and not payload["content"].get("include_relationship_context", False)
+        and payload.get("continued_from_candidate_id") is None
+    )
+
+
+def select_assistant_source_input_dependents(
+    connection: Any, *, owner_id: UUID, contact_id: UUID | None,
+    removed_ids: set[UUID], reply_request_ids: list[UUID],
+    turn_ids: list[UUID] | None = None,
+    carry_edges: tuple[AssistantCarryInputLineage, ...] = (),
+    captured_uses: tuple[CapturedReplyDiscussionUse, ...] = (),
+) -> AssistantInputDependents:
+    """同 owner 锁内、C清空捕获身份前选删除闭包；撤租约的独立草稿不作为根。"""
+
+    explicit_turn_ids = set(turn_ids or ())
+    rows = _assistant_source_turn_rows(
+        connection, owner_id=owner_id, contact_id=contact_id, removed_ids=removed_ids,
+        reply_request_ids=reply_request_ids, turn_ids=explicit_turn_ids,
+    )
 
     # 范围撤租约中的独立草稿不是删除根；实际历史闭包命中后仍必须清除。
     independent_requests = {
         row["request_id"] if isinstance(row, dict) else row[4]
-        for row in rows if independent_draft(row)
+        for row in rows if _independent_assistant_source_draft(
+            row, explicit_turn_ids=explicit_turn_ids, removed_ids=removed_ids,
+        )
     }
-    selected = select_assistant_input_dependents(
+    return select_assistant_input_dependents(
         connection, owner_id=owner_id, contact_id=contact_id, removed_ids=removed_ids,
         reply_request_ids=[identifier for identifier in reply_request_ids if identifier not in independent_requests],
         turn_ids=tuple(explicit_turn_ids), carry_edges=carry_edges, captured_uses=captured_uses,
     )
+
+
+def erase_assistant_source_turns(
+    connection: Any, *, owner_id: UUID, contact_id: UUID | None,
+    removed_ids: set[UUID], reply_request_ids: list[UUID],
+    turn_ids: list[UUID] | None = None,
+    carry_edges: tuple[AssistantCarryInputLineage, ...] = (),
+    captured_uses: tuple[CapturedReplyDiscussionUse, ...] = (),
+) -> None:
+    """在原回复副本清除前留下无正文占位，同一 owner 下的传递依赖全部清除。"""
+
+    explicit_turn_ids = set(turn_ids or ())
+    selected = select_assistant_source_input_dependents(
+        connection, owner_id=owner_id, contact_id=contact_id, removed_ids=removed_ids,
+        reply_request_ids=reply_request_ids, turn_ids=turn_ids,
+        carry_edges=carry_edges, captured_uses=captured_uses,
+    )
     explicit_turn_ids.update(selected.turn_ids)
-    rows = connection.execute(query, (owner_id, list(removed_ids), reply_request_ids,
-                                     list(explicit_turn_ids), contact_id, contact_id)).fetchall()
+    rows = _assistant_source_turn_rows(
+        connection, owner_id=owner_id, contact_id=contact_id, removed_ids=removed_ids,
+        reply_request_ids=reply_request_ids, turn_ids=explicit_turn_ids,
+    )
     for row in rows:
         turn_id = row["id"] if isinstance(row, dict) else row[0]
-        if independent_draft(row):
+        if _independent_assistant_source_draft(
+            row, explicit_turn_ids=explicit_turn_ids, removed_ids=removed_ids,
+        ):
             connection.execute(
                 "UPDATE public.assistant_session_turn SET state = 'failed', reply_request_id = NULL, "
                 "updated_at = now() WHERE id = %s", (turn_id,),

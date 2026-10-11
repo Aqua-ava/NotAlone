@@ -15,8 +15,11 @@ from notalone.persistence.assistant_candidate_versions import (
     EditAssistantCandidate, PostgresAssistantCandidateVersions,
 )
 from notalone.persistence.assistant_input_lineage import select_assistant_input_dependents
+from notalone.persistence.assistant_session_catalog import PostgresAssistantSessionCatalog
 from notalone.persistence.assistant_session_inputs import erase_assistant_source_inputs
-from notalone.persistence.assistant_session_store import erase_assistant_source_turns
+from notalone.persistence.assistant_session_store import (
+    erase_assistant_source_turns, select_assistant_source_input_dependents,
+)
 from notalone.persistence.conversation_repository import PostgresConversationBindingRepository
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.outbound_ledger import PostgresOutboundLedger
@@ -45,6 +48,44 @@ class AssistantCapturedInputErasureTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.assertEqual(PostgresOutboundLedger(support.support.DATABASE_URL)
                          .summarize_by_owner(self.a.owner_id).total_calls, 0)
+
+    def test_source_preselection_preserves_independent_scope_revoked_running_draft(self) -> None:
+        source = self.a._source()
+        _, source_request, source_turn = self.a._complete(source=source)
+        affected = self.fixture._prepare(relationship=False)
+        source_session = self.a.session_id
+        independent_session = PostgresAssistantSessionCatalog(support.support.DATABASE_URL).new(self.a.scope)
+        self.a.session_id = independent_session
+        try:
+            independent = self.fixture._prepare(relationship=False)
+        finally:
+            self.a.session_id = source_session
+        before = self.a.sessions.read_session(self.a.scope, independent_session)
+        request_ids = [source_request, affected[2].request_id, independent[2].request_id]
+
+        with psycopg.connect(support.support.DATABASE_URL, row_factory=dict_row) as connection:
+            lock_owner_scope(connection, owner_id=self.a.owner_id)
+            captures = captured_reply_discussion_uses(connection, self.a.scope)
+            selected = select_assistant_source_input_dependents(
+                connection, owner_id=self.a.owner_id, contact_id=self.a.contact_id,
+                removed_ids=set(source), reply_request_ids=request_ids, captured_uses=captures,
+            )
+            erase_assistant_source_turns(
+                connection, owner_id=self.a.owner_id, contact_id=self.a.contact_id,
+                removed_ids=set(source), reply_request_ids=request_ids,
+                turn_ids=list(selected.turn_ids), captured_uses=captures,
+            )
+        self.a._delete_source(source[0])
+
+        after = self.a.sessions.read_session(self.a.scope, independent_session)
+        self.assertEqual(after.turns[0].state, "failed")
+        self.assertEqual(after.turns[0].input, before.turns[0].input)
+        self.assertEqual(after.inputs, before.inputs)
+        self.assertEqual(after.current_input_version_id, before.current_input_version_id)
+        self.assertEqual(set(selected.turn_ids), {source_turn, affected[1]})
+        self.assertEqual(set(selected.reply_request_ids), {source_request, affected[2].request_id})
+        affected_after = self.a.sessions.read_session(self.a.scope, source_session)
+        self.assertTrue(all(turn.state == "redacted" and turn.input is None for turn in affected_after.turns))
 
     def test_real_captures_close_history_to_generation_and_keep_unconsumed_discussion(self) -> None:
         source_id, message_id = self.a._source()
