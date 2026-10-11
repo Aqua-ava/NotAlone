@@ -97,3 +97,12 @@ Root whole桌面TSC、fixture编译、两个entry的esbuild write=false及diff�
 主树新五场真实公开结果（2026-10-11）：具名reply-strategy-lifecycle single120、session86224 actualexit0，回应／主动关闭未确认探索后的真实SSE不追加调用、在途探索晚回包不恢复、两scene已发起普通组在关闭后唯一保存原SID并公开重显，五个原完整场均passed。Root实际运行源formal0a33a25＋43456a7及正在最终只读审查的Ccarry薄caller；没有A54 provider。941个全部backend／desktop运行源码、fixture、测试、配置逐字全窗unchanged，HEAD不变；quiet32／active0／onscreen0／maxApps1／policies2／singleChrome／cleanuptrue／nativefalse。actualexit后独立freshstatus actual0absent，按本轮freeze时间精确五ownership文件只读PG核database_remaining=0，明确FULLRELEASE后才接后续源。日志/private/tmp/notalone-root-reply-lifecycle-page.log及private sourcefreeze、五归属文件保留。
 
 原5s、SSE150ms与模型计数断言不改，不借负责人36102的五G；初MAIN编码记录错误未写而shell继续，运行文件未改变，后补实际记录，不称产品RED。普通生成及未确认探索范围已由新Page证明；已确认／回答的A作业归属、真正受控退出drain、B10／11连续组合仍继续，本五场未测试携入UI，不能因运行树含C55caller称携入页面通过。State claimed、六条原AC未勾；真实App/微信/人工/供应商/原生剪贴板/外部发送/remote未执行。
+
+
+主树已确认候选的公开生命周期准备（2026-10-11）：只净正式B9f9f11c的原消息夹具和原五场文件，沿Root现有两个inline白名单及dispatcher另加reply-strategy-confirmed-lifecycle，原五场及C/Root所有入口保留，没有引入另一catalog或生产生命周期。八场为回应／主动×确认方向／已确认后回答×关闭小窗／公开新开会话；复用实际公开按钮、认证HTTP及隔离PG，只有真实候选input_mode触发合成hold_generation。候选暂停时观察真实manager通知false→true，覆盖原150ms合并窗口后实际GET CURRENT和已进入payload计数保持，再释放；不能把发SSE后的立即释放当作模型未追加的证明。原5s／HTTP23s／gate60与清理不变。
+
+根whole桌面TSC、两个entry esbuild write=false、Python夹具compile与diff通过。首次安全CLI在默认沙箱下因共享probe租约目录不可写，10项中5pass／5fail、515.041834ms，尚无Page或数据库，不称产品RED；按同授权仅补目录权限后重新验证的实测另记。主树八场公开尚未运行，也尚未消费A16B确认／回答作业端口；不借原Root86224或B36102五场G，不把准备当关闭/切换后的候选完成证明。State claimed及原六AC未勾，A17退出／B10／11组合继续；无真实App／原生、私人资料、外部模型、聊天发送或远端操作。
+
+补充本次门禁实际结果：同代码补权限后的安全CLI实际9pass／1fail，失败仅初始只读status期待absent而A具名预算RED窗口仍持有共享实际Page租约；不改门禁、不清他人锁、不并发真实Page。此阶段不标CLI总体通过，待A完整FULLRELEASE后原10项再运行。
+
+共享实际Page租约独立freshstatus actual0absent后，同代码原安全CLI十项重新完整运行：10 GREEN／2717.629666ms／skip0／actualexit0。仅合成probe进程与自己的probe租约，不启动Chrome/Electron/真实App；先前5FAIL目录权限及9G1FAIL实际租约阶段各保留，门禁/预算未修改。日志/private/tmp/notalone-root-confirmed-lifecycle-safe-cli-released.log。八场准备源码此前fresh两轴无新增问题，本次仅补准确结果；真实八场及A16B仍未运行/未接，不以CLI代替页面证据。

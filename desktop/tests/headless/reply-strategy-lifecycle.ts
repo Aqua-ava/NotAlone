@@ -115,3 +115,99 @@ export async function replyStrategyLifecycle(browser: Browser, origin: string) {
     process.stdout.write(`page_test_scenario_passed: ${name}\n`);
   }
 }
+
+async function confirmedCandidateContinues(pages: EventPages, scene: '回应消息' | '主动聊聊',
+  action: 'confirm' | 'answer', departure: 'close' | 'switch') {
+  await prepareDirectionTask(pages, scene);
+  await pages.fixture.plan({ explore: { understanding: '只确认本次合成意愿，离开后保留原候选归属。',
+    question: action === 'answer' ? { text: '本次是否不增加其他承诺？', impact: 'commitment' } : null } });
+  await pages.helper.getByRole('button', { name: '帮我理清方向', exact: true }).click();
+  const strategy = pages.helper.getByRole('region', { name: '理解与方向', exact: true });
+  await expect(strategy).toContainText('只确认本次合成意愿');
+  const initial = (await pages.helper.evaluate(() => window.notalone.replies.getState())).exploration.result!;
+  const sessionId = initial.sessionId;
+  expect((await saved(pages, sessionId)).turns).toEqual([]);
+  if (action === 'answer') {
+    await pages.helper.getByRole('button', { name: '确认方向：愿意等待', exact: true }).click();
+    await expect(strategy).toContainText('已确认本次意愿');
+    expect((await pages.fixture.command('observations')).payloads).toHaveLength(1);
+    expect((await saved(pages, sessionId)).turns).toEqual([]);
+    await pages.helper.getByRole('textbox', { name: '关键问题回答', exact: true })
+      .fill('不增加其他承诺，只保留刚才确认的意愿。');
+    await pages.fixture.plan({ explore: { understanding: '回答只补足信息，保留先前确认的本次意愿。', question: null } });
+  }
+  const messages = ['方便时再告诉我就好。', '只保留这次说定的范围，不增加其他安排。'];
+  await pages.fixture.plan({ count: 1, message_groups: [messages] });
+  await pages.fixture.command('hold_generation');
+  try {
+    await pages.helper.getByRole('button', { name: action === 'confirm' ? '确认方向：愿意等待' : '提交回答', exact: true }).click();
+    await expect.poll(async () => (await pages.fixture.command('observations')).generation_entered).toBe(true);
+    const generating = await saved(pages, sessionId);
+    const modelCalls = action === 'confirm' ? 2 : 3;
+    expect((await pages.fixture.command('observations')).payloads).toHaveLength(modelCalls - 1);
+    expect((await pages.manager.evaluate(() => window.notalone.replies.getState())).messageNotice.changed).toBe(false);
+    let nextSessionId: string | null | undefined;
+    if (departure === 'close') {
+      await pages.helper.close();
+    } else {
+      // 从公开按钮切会话；不能绕过仍处于等待的界面门禁调用桥接。
+      const create = pages.helper.getByRole('button', { name: '新开助手会话', exact: true });
+      await expect(create).toBeEnabled();
+      await create.click();
+      await expect.poll(async () => (await pages.helper.evaluate(() => window.notalone.replies.getState()))
+        .savedSession?.sessionId).not.toBe(sessionId);
+      await expect.poll(async () => (await pages.helper.evaluate(() => window.notalone.replies.getState()))
+        .savedSession?.phase).toBe('ready');
+      nextSessionId = (await pages.helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId;
+      expect(typeof nextSessionId).toBe('string');
+    }
+    await pages.fixture.command('append_burst');
+    await expect.poll(async () => (await pages.manager.evaluate(() => window.notalone.replies.getState()))
+      .messageNotice.changed).toBe(true);
+    // 在候选暂停期间覆盖既有150ms通知合并窗口，证明真实提醒不更新原CURRENT或调用额外模型。
+    await pages.manager.waitForTimeout(400);
+    expect((await saved(pages, sessionId)).current_input_version_id).toBe(generating.current_input_version_id);
+    expect((await pages.fixture.command('observations')).payloads).toHaveLength(modelCalls - 1);
+    await pages.fixture.command('release');
+    await expect.poll(async () => (await saved(pages, sessionId)).turns[0]?.state).toBe('completed');
+    await pages.awaitPendingCommands();
+    const original = await saved(pages, sessionId);
+    expect(original.turns).toHaveLength(1);
+    expect(original.turns[0].reply.candidates[0].messages.map((message: { text: string }) => message.text)).toEqual(messages);
+    expect((await pages.fixture.command('observations')).payloads).toHaveLength(modelCalls);
+    let helper: Page;
+    if (departure === 'close') {
+      helper = await reopen(pages.manager);
+    } else {
+      helper = pages.helper;
+      const switched = await helper.evaluate(() => window.notalone.replies.getState());
+      expect(switched.savedSession?.sessionId).toBe(nextSessionId);
+      expect(switched.savedSession?.turns).toEqual([]);
+      expect(switched.result).toBeNull();
+      expect(switched.exploration.result).toBeNull();
+      await helper.getByRole('button', { name: '刷新会话列表', exact: true }).click();
+      await helper.getByRole('button', { name: `查看会话 ${sessionId}`, exact: true }).click();
+    }
+    await expect.poll(async () => (await helper.evaluate(() => window.notalone.replies.getState()))
+      .savedSession?.turns[0]?.state).toBe('completed');
+    const restored = await helper.evaluate(() => window.notalone.replies.getState());
+    expect(restored.savedSession?.sessionId).toBe(sessionId);
+    expect(restored.savedSession?.currentInputVersionId).toBe(original.current_input_version_id);
+    await expect(helper.getByRole('textbox', { name: '说法1第1条编辑文本', exact: true })).toHaveValue(messages[0]);
+    await expect(helper.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue(messages[1]);
+    expect((await pages.fixture.command('observations')).payloads).toHaveLength(modelCalls);
+  } finally { await pages.fixture.command('release'); }
+}
+
+export async function replyStrategyConfirmedLifecycle(browser: Browser, origin: string) {
+  for (const departure of ['close', 'switch'] as const) {
+    for (const action of ['confirm', 'answer'] as const) {
+      for (const scene of ['回应消息', '主动聊聊'] as const) {
+        const name = `${scene}${action === 'confirm' ? '确认方向' : '已确认意愿后回答'}发起候选，${departure === 'close' ? '关闭小窗' : '公开切会话'}保持原消息组`;
+        process.stdout.write(`page_test_scenario: ${name}\n`);
+        await withEventPages(browser, origin, (pages) => confirmedCandidateContinues(pages, scene, action, departure));
+        process.stdout.write(`page_test_scenario_passed: ${name}\n`);
+      }
+    }
+  }
+}

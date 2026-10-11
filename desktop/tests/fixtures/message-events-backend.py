@@ -9,9 +9,11 @@ import importlib.util
 import json
 import os
 import sys
+import threading
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
@@ -33,6 +35,31 @@ sys.modules[spec.name] = rewrite
 spec.loader.exec_module(rewrite)
 
 
+class EventReplyModel(rewrite.DesktopRewriteModel):
+    """只按实际输入模式阻塞候选阶段，不将关键回答的探索当作候选进入。"""
+
+    generation_entered: Any = None
+    pause_generation_response: bool = False
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.generation_entered = threading.Event()
+
+    def pause_next_generation_response(self) -> None:
+        self.generation_entered.clear()
+        self.pause_generation_response = True
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        if self.pause_generation_response:
+            payload = next(json.loads(message.content) for message in messages
+                           if isinstance(message, rewrite.HumanMessage))
+            if payload["input_mode"] in {"rewrite_draft", "reply_to_message", "initiate_conversation"}:
+                self.pause_generation_response = False
+                self.pause_next_response()
+                self.generation_entered.set()
+        return super()._generate(messages, stop, run_manager, **kwargs)
+
+
 class ControlledEventBus(EventBus):
     """仅持有生产订阅供本轮断流安排，不改变事件帧或发布规则。"""
 
@@ -52,6 +79,8 @@ class ControlledEventBus(EventBus):
 
 
 class MessageEventsFixture(rewrite.DesktopRewriteFixture):
+    reply_model_factory = EventReplyModel
+
     def setUp(self) -> None:
         self.event_buses: dict[UUID, ControlledEventBus] = {}
         super().setUp()
@@ -135,7 +164,11 @@ def main() -> None:
                 fixture.reply_model.entered.clear()
                 fixture.reply_model.pause_next_response()
                 result = {}
+            elif operation == "hold_generation":
+                fixture.reply_model.pause_next_generation_response()
+                result = {}
             elif operation == "release":
+                fixture.reply_model.pause_generation_response = False
                 fixture._release_response_gates()
                 result = {}
             elif operation == "append_message":
@@ -166,7 +199,8 @@ def main() -> None:
             elif operation == "observations":
                 result = {"model_calls": len(fixture.reply_model.seen_calls),
                           "payloads": fixture.reply_model.payloads,
-                          "model_entered": fixture.reply_model.entered.is_set()}
+                          "model_entered": fixture.reply_model.entered.is_set(),
+                          "generation_entered": fixture.reply_model.generation_entered.is_set()}
             elif operation == "exploration_identities":
                 # 只观察本轮合成 owner 的实际身份，完成状态仍经公开 HTTP 复验。
                 with psycopg.connect(fixture.database_url) as connection:
