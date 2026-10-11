@@ -16,11 +16,10 @@ from notalone.application.assistant_session_service import (
     AssistantSessionPersistenceError, AssistantSessionRejected,
 )
 from notalone.persistence.assistant_session_store import (
-    _active_binding, _dependencies_available, _expand_message_sources,
+    _active_binding, _dependencies_available, _expand_message_sources, captured_generation_dependencies,
 )
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.message_sources import valid_source_ref_exists_sql
-from notalone.persistence.style_sample_store import require_reply_sources_current
 from notalone.reply.errors import ReplyStoreInvariantError
 from notalone.scopes import ContactScope
 
@@ -221,7 +220,7 @@ def _input_rows(
 ) -> list[dict[str, Any]]:
     return connection.execute(
         "SELECT input.*, turn.state AS turn_state, turn.dependency_ids AS turn_dependencies, "
-        "turn.reply_request_id AS turn_reply_request_id "
+        "turn.reply_request_id AS turn_reply_request_id, turn.idempotency_key AS turn_request_key "
         "FROM public.assistant_session_input AS input "
         "LEFT JOIN public.assistant_session_turn AS turn ON turn.id = input.turn_id "
         "AND turn.input_version_id = input.id AND turn.owner_id = input.owner_id "
@@ -251,13 +250,14 @@ def _input_state(connection: Any, scope: ContactScope, row: dict[str, Any]) -> s
     dependencies = row["turn_dependencies"] if row["input_type"] == "generation" else row["dependency_ids"]
     if not _dependencies_available(connection, scope.owner_id, set(dependencies or ())):
         return "unavailable"
-    if row["input_type"] == "generation" and row["turn_state"] == "completed":
-        request_id = row["turn_reply_request_id"]
-        if request_id is None:
+    if row["input_type"] == "generation":
+        if row["turn_state"] == "completed" and row["turn_reply_request_id"] is None:
             return "unavailable"
-        # 只复用当时捕获的来源事实；运行中或失败输入仍可继续，不读取候选正文。
         try:
-            require_reply_sources_current(connection, owner_id=scope.owner_id, request_id=request_id)
+            captured_generation_dependencies(
+                connection, scope, row["turn_request_key"], row["conversation_binding_id"],
+                row["turn_reply_request_id"],
+            )
         except ReplyStoreInvariantError:
             return "unavailable"
     return "active"
@@ -302,7 +302,7 @@ def require_current_input(
         row = cursor.execute(
             "SELECT input.input_type, input.content, input.conversation_binding_id, input.state, input.dependency_ids, "
             "turn.state AS turn_state, turn.dependency_ids AS turn_dependencies, "
-            "turn.reply_request_id AS turn_reply_request_id "
+            "turn.reply_request_id AS turn_reply_request_id, turn.idempotency_key AS turn_request_key "
             "FROM public.assistant_session_input AS input "
             "LEFT JOIN public.assistant_session_turn AS turn ON turn.id = input.turn_id "
             "AND turn.input_version_id = input.id AND turn.owner_id = input.owner_id "
@@ -319,7 +319,13 @@ def require_current_input(
         if state != "active":
             raise AssistantSessionRejected("source_deleted" if state == "redacted" else "source_unavailable")
         dependencies = row["turn_dependencies"] if row["input_type"] == "generation" else row["dependency_ids"]
-        return tuple(sorted(set(dependencies or ())))
+        captured = set(dependencies or ())
+        if row["input_type"] == "generation":
+            captured.update(captured_generation_dependencies(
+                cursor, scope, row["turn_request_key"], row["conversation_binding_id"],
+                row["turn_reply_request_id"],
+            ))
+        return tuple(sorted(captured))
 
 
 def erase_assistant_source_inputs(

@@ -123,6 +123,36 @@ def _reply_dependencies(connection: Any, scope: ContactScope, request_id: UUID) 
     return dependencies
 
 
+def captured_generation_dependencies(
+    connection: Any, scope: ContactScope, request_key: UUID, binding_id: UUID,
+    reply_request_id: UUID | None,
+) -> set[UUID]:
+    """同事务沿实际C请求键复验模型前捕获；失败输入不以尚未填回的结果ID放行。"""
+
+    from notalone.persistence.reply_discussion_dependencies import require_reply_discussion_dependencies
+
+    request = connection.execute(
+        "SELECT id, conversation_binding_id FROM public.reply_request "
+        "WHERE owner_id = %s AND contact_id = %s AND idempotency_key = %s",
+        (scope.owner_id, scope.contact_id, request_key),
+    ).fetchone()
+    if request is None:
+        if reply_request_id is not None:
+            raise ReplyStoreInvariantError("助手会话的实际回复请求已失效。")
+        return set()
+    if (request["conversation_binding_id"] != binding_id
+            or reply_request_id is not None and request["id"] != reply_request_id):
+        raise ReplyStoreInvariantError("助手会话的实际回复请求身份不一致。")
+    dependencies = require_reply_sources_current(
+        connection, owner_id=scope.owner_id, request_id=request["id"],
+    )
+    dependencies.update(_reply_dependencies(connection, scope, request["id"]))
+    discussion = require_reply_discussion_dependencies(connection, scope, request["id"])
+    if discussion is not None:
+        dependencies.update(discussion.source_ids)
+    return dependencies
+
+
 def _evidence_dependencies(
     connection: Any, *, owner_id: UUID, evidence_id: UUID, kind: str,
     source_ids: set[UUID],
@@ -734,6 +764,15 @@ class PostgresAssistantSessionStore:
                 # 此时只遮挡读取结果；真正来源清除后才写 redacted 占位。
                 row["state"] = "unavailable"
                 row["input_payload"] = None
+            if row["state"] in ("running", "failed"):
+                try:
+                    captured_generation_dependencies(
+                        connection, scope, row["idempotency_key"], row["conversation_binding_id"],
+                        row["reply_request_id"],
+                    )
+                except ReplyStoreInvariantError:
+                    row["state"] = "unavailable"
+                    row["input_payload"] = None
             if row["state"] == "completed":
                 request = connection.execute(
                     "SELECT * FROM public.reply_request WHERE owner_id = %s AND contact_id = %s "
