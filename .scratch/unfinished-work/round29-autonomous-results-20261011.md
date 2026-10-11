@@ -172,3 +172,14 @@ A唯一后端正式 `d34c3cbc` ONLY2（patchSHA1bd9a30b）沿唯一read_input_re
 B原117行正式 `7188779b` test-only1不改原双scene／13调用／old409／版本／候选／CURRENT／5秒；Root装配B本人2G／21136.684833ms、确认2966.795／3028.305ms、模型26，970相关code前后不变。Root另独立同两场2G／21892.734833ms（10721.530／11059.102250ms）、确认2975.654／3007.274ms，模型13＋13＝26、后段control_completed=true；完整1017源与HEAD前后不变，两限定mypy及compile通过。命令：Conda NotAlone，desktop `PGHOST=/tmp PGPORT=55441 NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false node --test tests/reply-strategy-skill-switch-http.test.mjs`，日志 `/private/tmp/notalone-root-skill-switch-two-green.log`。两原DefaultRewriteFixture mandatoryDROP／SQLfalse／exit0及callback均完成，无持久迁移计量／库名，不借A55或声称Root额外逐库审计。
 
 数据处理仍同一联系人及删除链；读取减少无关历史重复复验，不改变完整历史内容或保存。此次源及测试净主题两轴均0，最终38公开Page尚待新固定窗口，不能以这两项借关整组合或原生／真人质量。
+
+
+### 策略全部通过与携入测试入口定位失败（2026-10-12）
+
+正式687ac83a／1017源，具名UTC20:35:12.050–20:40:12.050，实际20:35:12.050–20:39:21.225、整命令actualexit1。真实日志顺序38个策略场及reply-strategy-combination passed完整到达，包含两Skill、14有界更新、8候选生命周期、typed继续2、在途采用2与C typed v2两场；原计划把有界14误计12，先前36＋携入2的“38”只是计划少计，实际策略38＋携入2应为40，绝不据计划强写场景计数。C typed v2两场实际passed、新捕获已产生；后续第39普通携入在即时草稿界面查找“说法2消息组”失败，原5秒未放宽，编辑保存／选择／携入均未到，满会话第40未执行。
+
+实际cleanupConfirmed=true、quiet352／active0／onscreen0／registered≤1／policy2、单Chrome、Electron/native=false；Root独立223个精确PID/PPID/PGID全gone、freshleaseabsent、1017源码及HEAD不变，28份本窗口SSE库归属由新连接逐库SQL不存在。其它DefaultRewriteFixture mandatoryDROP／SQLfalse／exit0全部已收，未冒称所有库名额外Root审计。archive `/private/tmp/notalone-root-final38-page-failure-3/receipt.json`；此窗完全FULLRELEASE，38策略正常完成与整命令失败如实分列。
+
+Readonly核实际RewritePanel：未continuation的即时rewrite_draft沿原候选文本编辑；已保存版本／历史视图使用CandidateVersionEditor。携入Page producer需通过既有公开旧会话版本视图编辑与选择，不能把缺控件当成已发生携入失败或为测试新增UI。仅修原测试入口准备，保两完整消息、显式版本／选择、零自动生成、空新开、旧记录、临时要求不携和满预算原断言；生产不猜改。若最后仅测试准备变化，已通过38策略不再无由重跑，最终证据会分窗、保持原exit1，不造同一次40G。
+
+携入TEST-only1固定patch SHA `b58544de642a798738464224620e7a5d24561a85fb919cc469c8ba181d6f0b07`、source389be5c3，经完整TypeScript／diff及A Standards硬要求0／重要气味0、C Spec新增P0–P3=0。新增即时候选2完整两条DOM→实际SID的公开刷新／查看旧会话→版本组编辑准备，导航前后全部metrics相等验证零模型；原两场完整后续断言与五秒门禁保持，正式业务源未变。之后仅执行两个携入场，不把已完成38策略另跑或涂掉原整命令exit1。

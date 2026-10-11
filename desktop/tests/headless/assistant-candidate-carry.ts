@@ -64,8 +64,16 @@ async function selectedVersion(pages: RewritePages): Promise<string> {
   await rewriteBackend.plan({ count: 2, message_groups: [['未选用的合成第一组。'],
     ['待编辑的合成第一条。', '待编辑的合成第二条。']] });
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+  await expect(helper.getByRole('textbox', { name: '候选2编辑文本', exact: true }))
+    .toHaveValue('待编辑的合成第一条。\n\n待编辑的合成第二条。');
+  // 即时草稿沿用文本编辑；通过公开旧会话入口读取已保存版本再逐条修改。
+  const generatedSessionId = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId!;
+  const generatedMetrics = await rewriteBackend.command('metrics');
+  await helper.getByRole('button', { name: '刷新会话列表', exact: true }).click();
+  await helper.getByRole('button', { name: `查看会话 ${generatedSessionId}`, exact: true }).click();
   const group = helper.getByRole('group', { name: '说法2消息组', exact: true });
   await expect(group.getByRole('textbox', { name: '说法2第1条编辑文本', exact: true })).toBeVisible();
+  expect(await rewriteBackend.command('metrics')).toEqual(generatedMetrics);
   await expect(helper.getByRole('button', { name: '携已选版本新开', exact: true })).toBeDisabled();
   await group.getByRole('textbox', { name: '说法2第1条编辑文本', exact: true }).fill('明确选用的合成编辑第一条。');
   await group.getByRole('textbox', { name: '说法2第2条编辑文本', exact: true }).fill('明确选用的合成编辑第二条。');
