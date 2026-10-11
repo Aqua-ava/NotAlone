@@ -217,18 +217,23 @@ def _capture_original_dependencies(
 
 def _input_rows(
     connection: Any, scope: ContactScope, session_id: UUID,
+    *, input_version_id: UUID | None = None,
 ) -> list[dict[str, Any]]:
-    return connection.execute(
+    query = (
         "SELECT input.*, turn.state AS turn_state, turn.dependency_ids AS turn_dependencies, "
         "turn.reply_request_id AS turn_reply_request_id, turn.idempotency_key AS turn_request_key "
         "FROM public.assistant_session_input AS input "
         "LEFT JOIN public.assistant_session_turn AS turn ON turn.id = input.turn_id "
         "AND turn.input_version_id = input.id AND turn.owner_id = input.owner_id "
         "AND turn.contact_id = input.contact_id AND turn.session_id = input.session_id "
-        "WHERE input.owner_id = %s AND input.contact_id = %s AND input.session_id = %s "
-        "ORDER BY input.created_at, coalesce(input.turn_id, input.id)",
-        (scope.owner_id, scope.contact_id, session_id),
-    ).fetchall()
+        "WHERE input.owner_id = %s AND input.contact_id = %s AND input.session_id = %s"
+    )
+    parameters: tuple[UUID, ...] = (scope.owner_id, scope.contact_id, session_id)
+    if input_version_id is not None:
+        query += " AND input.id = %s"
+        parameters += (input_version_id,)
+    query += " ORDER BY input.created_at, coalesce(input.turn_id, input.id)"
+    return connection.execute(query, parameters).fetchall()
 
 
 def _input_state(connection: Any, scope: ContactScope, row: dict[str, Any]) -> str:
@@ -265,9 +270,12 @@ def _input_state(connection: Any, scope: ContactScope, row: dict[str, Any]) -> s
 
 def read_input_records(
     connection: Any, scope: ContactScope, session_id: UUID,
+    *, input_version_id: UUID | None = None,
 ) -> tuple[AssistantInput, ...]:
+    """按实际输入复用同一来源映射；完整会话读取默认仍复验全部历史。"""
+
     records = []
-    for row in _input_rows(connection, scope, session_id):
+    for row in _input_rows(connection, scope, session_id, input_version_id=input_version_id):
         state = _input_state(connection, scope, row)
         content = row["content"] if state == "active" else None
         if state == "active" and row["input_type"] == "candidate_carry":

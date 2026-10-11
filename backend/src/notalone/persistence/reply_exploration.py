@@ -135,7 +135,10 @@ class PostgresExplorationStore:
         actual_time = connection.execute("SELECT clock_timestamp() AS current_time").fetchone()["current_time"]
         if row["root_created_at"] + timedelta(minutes=15) <= actual_time:
             raise ExplorationExpired("探索任务已过期。")
-        record = next((item for item in read_input_records(connection, scope, row["session_id"])
+        records = read_input_records(
+            connection, scope, row["session_id"], input_version_id=row["input_version_id"],
+        )
+        record = next((item for item in records
                        if item.input_version_id == row["input_version_id"]), None)
         if (record is None or record.state != "active" or record.type == "generation"
                 or record.conversation_binding_id != _active_binding(connection, scope)):

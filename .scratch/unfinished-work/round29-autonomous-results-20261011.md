@@ -154,3 +154,21 @@ B随后在原DefaultRewriteFixture＋真实BackendHost＋原RewriteHttpProxy＋�
 Root独立同三项实际GREEN／9170.843ms，分场3901.444167／2557.194875／2593.95525ms，模型4＋2＋2＝8，确认752.834毫秒；实际clarification／clarification／directions／generated四结果全部200。命令：Conda NotAlone后在desktop以 `PGHOST=/tmp PGPORT=55441 NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false node --test tests/reply-strategy-clarification-confirm-http.test.mjs`。完整TypeScript与diff通过；固定Proxy SHA062e9699、测试SHAf3cb7f28。原三个RewriteFixture回调收尾断言全部达到，mandatory Python DROP后SQL EXISTS=false与进程exit0成立；此原夹具没有独立持久化迁移／重复计数或库名，不能借其他夹具的55／repeat0或声称Root逐库另查。日志 `/private/tmp/notalone-root-proxy-outcomes-three-green.log`；捕获仅合成、本轮未提交临时产物。最新完整38场仍待固定源最终窗口。
 
 固定最终ONLY4补丁 `b9bd100ca219e58d6fd9880416f70565bf9b260133bb354a48703da00cf80e5f` 已经A Standards硬要求0／新增重要气味0、C Spec新增P0–P3为0；两轴只读，不算新增运行。Root仅净接Proxy与新三反例，原dialogue不留差异，B11后缀待最终真实Page逐票结账。
+
+
+### 最终公开组合第二次实际失败（2026-10-12）
+
+观察代理修复正式 `ab816f3a`，1016个backend／desktop源SHA前后相同，具名UTC20:04:07.607–20:09:07.607，实际20:04:07.607–20:04:52.896、actualexit1。两个场景options和dialogue实际通过，第5回应Skill版本场在关闭后普通候选、再换第二实际版本探索并确认时，原5000ms期望新第二版本候选，仍显示上一关闭普通候选；entered5、完成label0，后续Skill主动、其余策略、携入及C v2均未到，未记为38G。
+
+quiet61／active0／onscreen0／registered≤1／policy2，cleanupConfirmed=true、单Chrome、Electron／native=false；Root新鲜核精确31个自有PID/PPID/PGID全gone、fresh lease absent，原五次DefaultRewriteFixture强制DROP后SQL不存在及actualexit0。没有进入SSE场或留存库名，不借前场55迁移计量或额外RootSQL审计。失败回执 `/private/tmp/notalone-root-final38-page-failure-2/receipt.json`，CPU／PG／Page完全FULLRELEASE；B唯一按原Skill实际序列定位，没有据旧候选猜改生产或放宽原断言。
+
+
+### Skill确认历史增长的真实耗时反例与最窄修复（2026-10-12）
+
+B按原页面完整first／普通／disabled／普通／second序列，含中间旧confirm409，真实BackendHost／原Main／HTTP／隔离PG双场取得2RED／34041.368ms；模型各13，最终second候选、Skill版本、PG CURRENT及ready均正确，仅确认6672.453／6681.337ms违反原5秒。追加单场全部HTTP计时1RED／15110.464ms：prepare732.646ms、confirm执行4869.159ms、版本读取68.735ms、选择读取2.938ms，合计5675.188ms；不是Main后置读或漏发。历史增长使执行485→1496→4869ms，原失败与后段到达分列，不删除旧结果。
+
+A唯一后端正式 `d34c3cbc` ONLY2（patchSHA1bd9a30b）沿唯一read_input_records参数化查询加内部实际输入UUID过滤，B_validate仅取stored同owner／contact／SID输入。仍复用原_input_state、CURRENT、evidence、Skill和来源复验，默认None完整历史及顺序保持；不改预算／5秒、不中断旧讨论、不清历史、无跨事务缓存、第二mapper／图／writer／DDL。A自有两项原owner／source／CID-SID HTTP负向2G／1.635秒、55逐名／repeat0／外层自有库0，两限定mypy／compile通过；B Standards硬要求0／重要气味0、C Spec新增0。
+
+B原117行正式 `7188779b` test-only1不改原双scene／13调用／old409／版本／候选／CURRENT／5秒；Root装配B本人2G／21136.684833ms、确认2966.795／3028.305ms、模型26，970相关code前后不变。Root另独立同两场2G／21892.734833ms（10721.530／11059.102250ms）、确认2975.654／3007.274ms，模型13＋13＝26、后段control_completed=true；完整1017源与HEAD前后不变，两限定mypy及compile通过。命令：Conda NotAlone，desktop `PGHOST=/tmp PGPORT=55441 NOTALONE_DISABLE_DOTENV=1 LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false node --test tests/reply-strategy-skill-switch-http.test.mjs`，日志 `/private/tmp/notalone-root-skill-switch-two-green.log`。两原DefaultRewriteFixture mandatoryDROP／SQLfalse／exit0及callback均完成，无持久迁移计量／库名，不借A55或声称Root额外逐库审计。
+
+数据处理仍同一联系人及删除链；读取减少无关历史重复复验，不改变完整历史内容或保存。此次源及测试净主题两轴均0，最终38公开Page尚待新固定窗口，不能以这两项借关整组合或原生／真人质量。
