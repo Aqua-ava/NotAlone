@@ -206,3 +206,17 @@ TDD：同项1 / 1 GREEN／2.013秒；完整相关讨论预算模块11 / 11 GREEN
 该真实 GREEN 闭合上述旧源 warning RED；仍仅此自动提醒场景，不借其关闭硬限完整页面、新消息采用、typed页、携入、退出或大历史读取边界。原六条验收标准和claimed状态继续保留，后续自动工作接续；真实App／原生／人工质量本轮未执行。
 
 Root 净集成 `6ad45edb` 八路径与 `b9b5d360` 实际warning收尾记录后，主树独立完整桌面类型、两夹具编译、两headless入口的正式external-package esbuild和diff通过。租约只读freshstatus实际absent；`npm test` 实际 **40 GREEN／12206.496917ms／skip0**，范围为类型与调度CLI合成进程安全回归，未启动Chrome／Electron／真实App。warning Page仍按提供者具名窗口的单场实际证据计一次；Root独立核对该actual日志、986源无变化与freshstatus释放，不冒充本次新跑Page。hard-limit和超大历史公开验证仍继续，原AC与claimed不改。
+
+### 本轮独立复验完整历史分段读取
+
+2026-10-11 净消费正式 `54fd20f5` 的六个源／测试路径，只应用必要hunk，保留当前055后端携入metadata、A13 prepare与JsonClient有限澄清，不整文件覆盖其它接口。默认1MiB响应上限不变，仅本地2xx超限启动256KiB UTF8分段；各段仍由原owner/contact读取与来源门禁重验，完整wire SHA／CURRENT／长度／字段及最后首段复验通过才发布本次内存结果，非2xx同名错误不回退，无摘要或静默截断。
+
+本树先仅接真实公开RPC测试，合法四段历史超过1MiB仍 failed 而非 ready，**1 RED／0.745s**；提供者接入后，Conda NotAlone、禁dotenv／追踪、PGPORT=55441，用 `/private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-round29-a tests.integration.server.test_assistant_session_read_transport` 实际 **15 GREEN／22.782s／skip0／exit0**，正式001–055／repeat0／外层自有库剩余0。合法单turn原wire **1,088,019字节／5段／最大单响应306,122字节**；Unicode／JSON转义 **2,281,269字节／9段／最大单响应524,575字节**，读取阶段模型增量0。来源待删／实际删除／收齐后删除、会话删除、CURRENT／联系人／连接变化、畸形片段、范围鉴权、硬预算拒绝后完整查看／编辑／全新开始及大503反例都保留。
+
+六个目录读取／删除／版本／预算解码 Node 模块命令为 `cd desktop && node --test tests/assistant-session-catalog-read.test.mjs tests/assistant-session-catalog.test.mjs tests/assistant-session-deletion-guards.test.mjs tests/assistant-candidate-version-ports.test.mjs tests/assistant-candidate-versions.test.mjs tests/assistant-input-budget-read.test.mjs`，实际 **111 GREEN／1467.481ms／skip0／exit0**。初次默认沙箱合成回环监听EPERM保留，按授权最窄升级后重跑原命令，不计产品RED。完整TypeScript、new read helper限定mypy、三文件编译及diff通过。固定 ONLY6 SHA256 `35b26ba8951d15127d318fd13ffaea382fb384ccc6de0cc013a8c3a0c05d2de4` 的独立 Standards 硬性违例0／新增重要possible Fowler0、独立 Spec 新增P0–P3为0；两轴仅静态，不借为运行证据。
+
+重复全历史数据库读取与端侧完整内存成本仍随历史和段数增长；本段是正式公开RPC／HTTP／PG证据，超大历史普通页面与硬预算页面尚未执行，不冒充原生、真人或整张12完全验收。原AC／claimed保留；其它页面准备未混入此主题。仅合成数据、受控模型、隔离库，无私人资料、OCR、微信、外部模型、发送、push、发布或部署。
+
+Root 净接正式 `85a361aa` 的六个源／测试路径，保留当前dca澄清与续答接口，055前端携入codec仍由A18补齐。主树受控隔离runner独立 `test_assistant_session_read_transport` **15 GREEN／22.441s／skip0**，真实55／repeat0／自有库剩余0；实际wire 1,088,019字节5片最大306,122与2,281,269字节9片最大524,575，读取均0追加模型。完整桌面类型、read helper限定mypy、三Python文件编译与diff通过；五个直接相关目录／删除／版本／预算Node模块 **33 GREEN／197.423542ms／skip0／actualexit0**。
+
+主树原六模块合跑中的 `assistant-candidate-version-ports` 出现9条来源竞态失败并悬挂，未取得完整汇总，不计111通过；只核验并停止本轮自有父子测试进程。原失败断言的具名复验 **1 FAIL／100.856958ms／actualexit1**：额外来源删除后探索仍waiting，期望idle。B在尚未接入85读取模块的独立树中原样复现 **1 FAIL／148.215916ms**，已归属B来源校验策略修复；不放宽断言，不借其它通过项遮盖。原普通Page硬预算与大历史仍按具名窗口分开验证，不冒充原生或整票关闭。

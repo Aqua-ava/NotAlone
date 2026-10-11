@@ -59,7 +59,13 @@ export class JsonClient {
         let size = 0;
         response.on('data', (chunk: Buffer) => {
           size += chunk.length;
-          if (size > limit) { fail(new BackendRequestFailure('response')); response.destroy(); }
+          if (size > limit) {
+            const status = response.statusCode ?? 0;
+            fail(status >= 200 && status < 300
+              ? new BackendRequestFailure('response', undefined, 'response_too_large')
+              : new BackendRequestFailure('response', status));
+            response.destroy();
+          }
           else chunks.push(chunk);
         });
         response.on('error', () => fail(new BackendRequestFailure('connection')));

@@ -1308,14 +1308,35 @@ class BackendApp:
                 service.delete(owner_id=self._owner_id, contact_id=contact_id, session_id=session_id)
                 return _json_response(HTTPStatus.OK, {"session_id": str(session_id), "state": "deleted"})
             if len(parts) == 5 and method == "GET":
+                from notalone.server.assistant_session_read import (
+                    AssistantSessionReadChanged, assistant_session_read_fragment,
+                    parse_assistant_session_read_query,
+                )
+                read_part = parse_assistant_session_read_query(query)
                 snapshot = service.read_session(owner_id=self._owner_id, contact_id=contact_id, session_id=session_id)
-                return _json_response(HTTPStatus.OK, {
+                response = _json_response(HTTPStatus.OK, {
                     "session_id": str(session_id),
                     "current_input_version_id": (str(snapshot.current_input_version_id)
                                                   if snapshot.current_input_version_id is not None else None),
                     "turns": [_assistant_turn_payload(turn) for turn in snapshot.turns],
                     "inputs": [_assistant_input_payload(record) for record in snapshot.inputs],
                 })
+                if read_part is None:
+                    return response
+                try:
+                    fragment = assistant_session_read_fragment(
+                        response.body, session_id=session_id,
+                        current_input_version_id=snapshot.current_input_version_id, request=read_part,
+                    )
+                except AssistantSessionReadChanged:
+                    source_unavailable = any(turn.state in ("redacted", "unavailable") for turn in snapshot.turns) or any(
+                        record.state in ("redacted", "unavailable") for record in snapshot.inputs
+                    )
+                    return _json_response(HTTPStatus.CONFLICT, {
+                        "error": "assistant_session_read_changed",
+                        **({"reason": "source_unavailable"} if source_unavailable else {}),
+                    }, headers={"Cache-Control": "no-store"})
+                return _json_response(HTTPStatus.OK, fragment, headers={"Cache-Control": "no-store"})
             if len(parts) == 6 and parts[5] == "inputs" and method == "POST":
                 content, expected = _parse_assistant_discussion_request(body)
                 version = service.record_discussion_input(
