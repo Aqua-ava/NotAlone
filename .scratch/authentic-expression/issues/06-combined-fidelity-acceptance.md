@@ -304,3 +304,13 @@ C现有组合测试不再SQL插入合成失效键：两种场景均实际方向�
 固定本主题十二文件（含全部五个未跟踪文件）最终Standards硬要求0／重要possible Fowler0，Spec新增P0–P3为0；两轴均未运行测试或借用其他工作树结果。仅本轮正式依赖消费、真实组合测试和本票证据本地提交，不改变未完成的验收项。
 
 2026-10-11 总协调净接正式2a8仅原reconfirmation测试及本票新证据后缀；A54中断／0cc完成守卫早已root9232252，未重复导入其他十个backend源或复制新authority。真实公开HTTP generation→interrupt→old-key prepare/generate精确generation_interrupted→重建只读→明确重新确认／actual Skill／样本删除的两完整scene在主树运行，来源删除后中断严格source_deleted，纯B独立讨论保留。联跑prepare17／HTTP interruption8／迁移3／C2／replacement10共 **40G／42.834s／skip0**，正式001–054／repeat0／自有库0，三迁移测试核账本／升级／回滚。命令为Conda NotAlone、关闭外部追踪，在根以 `/private/tmp/notalone-coordinator-style-samples-no-dimension.py` 执行六原module；只将合成StyleSampleHttpTest维度fixture设为空，不改生产门禁或计量。迟到失效的预期异常记录保持，HTTP不能声称供应商立即停止或真正宿主quit。没有新增生产源／schema／正文副本；E06第一公共组／连续修改仍待正式A11/B，原标准和claimed不变，不借这40关闭A17/B09或原生验收。
+
+### 总协调集成：唯一 C 领取事务薄消费 A 正式身份
+
+2026-10-11：总协调在共同正式 A `c0844bb`／root `64377c3` 基础接管仅 `PostgresReplyStore.start` 的薄接线，避免 C 重复同一入口；C 继续独立样本版本来源及 source/save/delete 预捕获消费。既有 owner 锁后、任何 `reply_request` INSERT 前调用唯一 `prepare_assistant_reply_start`，使用实际规范输入，不复制摘要、codec、闭包或生成写入者。
+
+新增三条实际 C 仓储回归：丢失持续要求的普通命令首写、不同 A 规范输入首写、旧 typed 身份降级重放必须拒绝且无部分写入；有效 typed 首写和重放保留原身份，后继 CURRENT 不回退，outbound ledger 为0。原 A core 11 项加新增3项先真实 RED（3 fail／0.755s），两行接线后14项 GREEN（0.734s），正式001–054／repeat0／自有数据库 remaining0。合成夹具仅注入已约定未来 metadata，实际 A reserve、C start、后继讨论及查询均使用生产仓储。
+
+原公开 HTTP inputs10、prepare17 与上述14真实 PG 组合，共41项 GREEN／22.799s／skip0，隔离生产54迁移／重复0／自有库剩余0；预期的来源失效租约异常日志保留。`python -m mypy --follow-imports=silent` 对两个实际 source 无问题，compile两文件与diff检查通过；不据此宣称全后端类型通过。证据日志 `/private/tmp/notalone-root-c-start-identity-real-red.log`、`/private/tmp/notalone-root-c-start-identity-green.log`、`/private/tmp/notalone-root-c-start-identity-http-related.log`。
+
+本片不新增持久化结构、正文副本、模型能力或外发；只在既有事务写入前复验原身份。A13复合 policy／公开连续引用、C来源预捕获及消息组／连续修改样本仍接续；E06保持 claimed，原验收不预填、人工和真实App未执行。

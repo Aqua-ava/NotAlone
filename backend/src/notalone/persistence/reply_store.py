@@ -11,6 +11,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from notalone.persistence.assistant_reply_identity import prepare_assistant_reply_start
 from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.reply_discussion_dependencies import (
     capture_reply_discussion_dependencies, require_reply_discussion_dependencies, reply_discussion_metadata,
@@ -118,6 +119,7 @@ class PostgresReplyStore:
             with self._connect() as connection:
                 # 与来源删除串行化领取、继续候选和结果写入，避免旧副本复活。
                 lock_owner_scope(connection, owner_id=verified_scope.owner_id)
+                prepare_assistant_reply_start(connection, command, verified_scope, normalized_input)
                 if connection.execute("SELECT 1 FROM public.reply_invalidated_key WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s",
                                       (verified_scope.owner_id, verified_scope.contact_id, command.idempotency_key)).fetchone():
                     raise ReplyStoreInvariantError("原回复请求已失效，请用新的请求重新生成。")

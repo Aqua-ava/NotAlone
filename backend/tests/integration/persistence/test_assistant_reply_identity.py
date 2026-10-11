@@ -1,4 +1,4 @@
-"""未接公开路径的 A 身份提供者；原 owner 交易与实际 A/C 记录契约。"""
+"""A 身份提供者及 C 领取薄接线；原 owner 交易与实际 A/C 记录契约。"""
 
 from __future__ import annotations
 
@@ -210,6 +210,47 @@ class AssistantReplyIdentityContractTest(unittest.TestCase):
                 prepare_assistant_reply_start(
                     connection, command, self.verified_scope, "synthetic-different-normalized-input",
                 )
+
+    def test_c_start_rejects_plain_downgrade_before_creating_a_request(self) -> None:
+        _, turn_id, plain, _, _ = self._reserve_started(start_reply=False)
+        typed = self._typed_identity(turn_id, plain)
+        before = self._snapshot()
+        with self.assertRaises(ReplyIdempotencyConflictError):
+            self.reply_store.start(plain, self.verified_scope)
+        self.assertEqual(self._snapshot(), before)
+        started = self.reply_store.start(typed, self.verified_scope)
+        self.assertIsNotNone(started.request.request_id)
+        after = self._snapshot()
+        for table in ("assistant_session", "assistant_session_input", "assistant_session_turn"):
+            self.assertEqual(after[table], before[table])
+        self.assertEqual(len(after["reply_request"]), 1)
+        self._assert_no_outbound()
+
+    def test_c_start_rejects_a_different_reserved_input_without_partial_writes(self) -> None:
+        _, _, command, _, _ = self._reserve_started(start_reply=False)
+        changed = replace(command, content=RewriteDraft(draft_text="不同的合成草稿", user_instruction="简短一点"))
+        before = self._snapshot()
+        with self.assertRaises(ReplyIdempotencyConflictError):
+            self.reply_store.start(changed, self.verified_scope)
+        self.assertEqual(self._snapshot(), before)
+        self._assert_no_outbound()
+
+    def test_c_start_replay_keeps_typed_identity_and_successor_current(self) -> None:
+        _, turn_id, plain, _, _ = self._reserve_started(start_reply=False)
+        typed = self._typed_identity(turn_id, plain)
+        started = self.reply_store.start(typed, self.verified_scope)
+        self.session_store.record_discussion_input(
+            self.scope, self.session_id,
+            {"type": "purpose_exploration", "purpose_hint": "独立后继的合成讨论"},
+        )
+        before = self._snapshot()
+        with self.assertRaises(ReplyIdempotencyConflictError):
+            self.reply_store.start(plain, self.verified_scope)
+        self.assertEqual(self._snapshot(), before)
+        replay = self.reply_store.start(typed, self.verified_scope)
+        self.assertEqual(replay.request.request_id, started.request.request_id)
+        self.assertEqual(self._snapshot(), before)
+        self._assert_no_outbound()
 
     def test_normal_a_input_and_global_without_a_keep_their_original_path_without_writes(self) -> None:
         _, _, command, _, _ = self._reserve_started()
