@@ -1,0 +1,407 @@
+{
+  "data_kind": "synthetic",
+  "config": {
+    "model": "controlled-scripted-langchain",
+    "prompt_version": "authentic-expression-public-groups-v1"
+  },
+  "cases": [
+    {
+      "case_id": "response-group-public-independent",
+      "split": "development",
+      "labels": [
+        "response",
+        "page-http-pg",
+        "reference-free-support"
+      ],
+      "expectation": {
+        "intent": "独立保存的合成讨论：稍后再确认。",
+        "forbidden_additions": [
+          "增加长期关系目标或新的约定"
+        ],
+        "unknowns": [
+          "此独立支持例未作语义标注；真实质量、自然度及用户相似度未验证"
+        ]
+      }
+    },
+    {
+      "case_id": "response-group-public-current",
+      "split": "development",
+      "labels": [
+        "response",
+        "style-conflict",
+        "page-http-pg",
+        "current",
+        "once-only-user-declarations",
+        "whole-message-group"
+      ],
+      "expectation": {
+        "intent": "明确拒绝本次合成邀请，不增加约定。",
+        "forbidden_additions": [
+          "从表达样本引入明晚七点、海边与未来陪同约定",
+          "把明确拒绝改为接受",
+          "将本次纠正、表达要求或澄清答案升级为长期关系事实",
+          "前条拒绝而后条新增时间地点和陪同承诺，使整组背离当前意图"
+        ],
+        "unknowns": [
+          "真实模型服从性、自然度、关系适配和本人相似度",
+          "用户是否愿意其他活动"
+        ]
+      }
+    },
+    {
+      "case_id": "response-group-public-regenerated",
+      "split": "development",
+      "labels": [
+        "response",
+        "style-conflict",
+        "page-http-pg",
+        "ordinary-regeneration",
+        "once-only-user-declarations",
+        "whole-message-group"
+      ],
+      "expectation": {
+        "intent": "仍然拒绝本次合成邀请，改成短句，不增加约定。",
+        "forbidden_additions": [
+          "从表达样本引入明晚七点、海边与未来陪同约定",
+          "把明确拒绝改为接受",
+          "将本次纠正、表达要求或澄清答案升级为长期关系事实",
+          "前条拒绝而后条新增时间地点和陪同承诺，使整组背离当前意图"
+        ],
+        "unknowns": [
+          "真实模型服从性、自然度、关系适配和本人相似度",
+          "用户是否愿意其他活动"
+        ]
+      }
+    },
+    {
+      "case_id": "response-group-public-unsupported",
+      "split": "development",
+      "labels": [
+        "response",
+        "style-conflict",
+        "page-http-pg",
+        "unsupported",
+        "once-only-user-declarations",
+        "whole-message-group"
+      ],
+      "expectation": {
+        "intent": "仍然拒绝本次合成邀请，改成短句，不增加约定。",
+        "forbidden_additions": [
+          "从表达样本引入明晚七点、海边与未来陪同约定",
+          "把明确拒绝改为接受",
+          "将本次纠正、表达要求或澄清答案升级为长期关系事实",
+          "前条拒绝而后条新增时间地点和陪同承诺，使整组背离当前意图"
+        ],
+        "unknowns": [
+          "真实模型服从性、自然度、关系适配和本人相似度",
+          "用户是否愿意其他活动"
+        ]
+      }
+    },
+    {
+      "case_id": "proactive-group-public-independent",
+      "split": "development",
+      "labels": [
+        "proactive",
+        "page-http-pg",
+        "reference-free-support"
+      ],
+      "expectation": {
+        "intent": "独立保存的合成讨论：稍后再确认。",
+        "forbidden_additions": [
+          "增加长期关系目标或新的约定"
+        ],
+        "unknowns": [
+          "此独立支持例未作语义标注；真实质量、自然度及用户相似度未验证"
+        ]
+      }
+    },
+    {
+      "case_id": "proactive-group-public-current",
+      "split": "development",
+      "labels": [
+        "proactive",
+        "style-conflict",
+        "page-http-pg",
+        "current",
+        "once-only-user-declarations",
+        "whole-message-group"
+      ],
+      "expectation": {
+        "intent": "明确拒绝本次合成邀请，不增加约定。",
+        "forbidden_additions": [
+          "从表达样本引入明晚七点、海边与未来陪同约定",
+          "把明确拒绝改为接受",
+          "将本次纠正、表达要求或澄清答案升级为长期关系事实",
+          "前条拒绝而后条新增时间地点和陪同承诺，使整组背离当前意图"
+        ],
+        "unknowns": [
+          "真实模型服从性、自然度、关系适配和本人相似度",
+          "用户是否愿意其他活动"
+        ]
+      }
+    },
+    {
+      "case_id": "proactive-group-public-regenerated",
+      "split": "development",
+      "labels": [
+        "proactive",
+        "style-conflict",
+        "page-http-pg",
+        "ordinary-regeneration",
+        "once-only-user-declarations",
+        "whole-message-group"
+      ],
+      "expectation": {
+        "intent": "仍然拒绝本次合成邀请，改成短句，不增加约定。",
+        "forbidden_additions": [
+          "从表达样本引入明晚七点、海边与未来陪同约定",
+          "把明确拒绝改为接受",
+          "将本次纠正、表达要求或澄清答案升级为长期关系事实",
+          "前条拒绝而后条新增时间地点和陪同承诺，使整组背离当前意图"
+        ],
+        "unknowns": [
+          "真实模型服从性、自然度、关系适配和本人相似度",
+          "用户是否愿意其他活动"
+        ]
+      }
+    },
+    {
+      "case_id": "proactive-group-public-unsupported",
+      "split": "development",
+      "labels": [
+        "proactive",
+        "style-conflict",
+        "page-http-pg",
+        "unsupported",
+        "once-only-user-declarations",
+        "whole-message-group"
+      ],
+      "expectation": {
+        "intent": "仍然拒绝本次合成邀请，改成短句，不增加约定。",
+        "forbidden_additions": [
+          "从表达样本引入明晚七点、海边与未来陪同约定",
+          "把明确拒绝改为接受",
+          "将本次纠正、表达要求或澄清答案升级为长期关系事实",
+          "前条拒绝而后条新增时间地点和陪同承诺，使整组背离当前意图"
+        ],
+        "unknowns": [
+          "真实模型服从性、自然度、关系适配和本人相似度",
+          "用户是否愿意其他活动"
+        ]
+      }
+    }
+  ],
+  "reviews": [
+    {
+      "case_id": "response-group-public-current",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注；普通重新生成不等于类型化连续修改",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "按整个有序消息组审阅：第一条明确拒绝，第二条仅致谢，没有另行答应或新增安排。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "两条消息都没有把样本中的时间地点或旧聊天升级为本次安排。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "按整组核对承诺：拒绝及致谢均没有新增陪同或未来约定。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "两条消息没有添加本人或联系人的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "没有新增真实模型实验或真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，真实关系适配未知。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达质量证据。"
+        }
+      }
+    },
+    {
+      "case_id": "response-group-public-regenerated",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注；普通重新生成不等于类型化连续修改",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "按整个有序消息组审阅：第一条明确拒绝，第二条仅致谢，没有另行答应或新增安排。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "两条消息都没有把样本中的时间地点或旧聊天升级为本次安排。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "按整组核对承诺：拒绝及致谢均没有新增陪同或未来约定。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "两条消息没有添加本人或联系人的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "没有新增真实模型实验或真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，真实关系适配未知。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达质量证据。"
+        }
+      }
+    },
+    {
+      "case_id": "response-group-public-unsupported",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注；普通重新生成不等于类型化连续修改",
+      "dimensions": {
+        "intent": {
+          "status": "fail",
+          "basis": "整组第一条虽然拒绝，第二条却增加未来陪同安排，合在一起违背本次不新增约定的意图。"
+        },
+        "unsupported_facts": {
+          "status": "fail",
+          "basis": "第二条引入样本中的明晚七点及合成海边，当前消息、目的和澄清声明都没有将其确认为本次事实。"
+        },
+        "unsupported_commitments": {
+          "status": "fail",
+          "basis": "第二条新增我陪你去的未来承诺，与第一条拒绝及本次不新增约定的明确意图相冲突；逐条首句通过不能掩盖整组失败。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "两条消息没有添加本人或联系人的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "没有新增真实模型实验或真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，真实关系适配未知。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达质量证据。"
+        }
+      }
+    },
+    {
+      "case_id": "proactive-group-public-current",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注；普通重新生成不等于类型化连续修改",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "按整个有序消息组审阅：第一条明确拒绝，第二条仅致谢，没有另行答应或新增安排。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "两条消息都没有把样本中的时间地点或旧聊天升级为本次安排。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "按整组核对承诺：拒绝及致谢均没有新增陪同或未来约定。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "两条消息没有添加本人或联系人的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "没有新增真实模型实验或真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，真实关系适配未知。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达质量证据。"
+        }
+      }
+    },
+    {
+      "case_id": "proactive-group-public-regenerated",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注；普通重新生成不等于类型化连续修改",
+      "dimensions": {
+        "intent": {
+          "status": "pass",
+          "basis": "按整个有序消息组审阅：第一条明确拒绝，第二条仅致谢，没有另行答应或新增安排。"
+        },
+        "unsupported_facts": {
+          "status": "pass",
+          "basis": "两条消息都没有把样本中的时间地点或旧聊天升级为本次安排。"
+        },
+        "unsupported_commitments": {
+          "status": "pass",
+          "basis": "按整组核对承诺：拒绝及致谢均没有新增陪同或未来约定。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "两条消息没有添加本人或联系人的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "没有新增真实模型实验或真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，真实关系适配未知。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达质量证据。"
+        }
+      }
+    },
+    {
+      "case_id": "proactive-group-public-unsupported",
+      "reviewer_kind": "synthetic_fixture",
+      "reviewer": "独立合成逐例标注；普通重新生成不等于类型化连续修改",
+      "dimensions": {
+        "intent": {
+          "status": "fail",
+          "basis": "整组第一条虽然拒绝，第二条却增加未来陪同安排，合在一起违背本次不新增约定的意图。"
+        },
+        "unsupported_facts": {
+          "status": "fail",
+          "basis": "第二条引入样本中的明晚七点及合成海边，当前消息、目的和澄清声明都没有将其确认为本次事实。"
+        },
+        "unsupported_commitments": {
+          "status": "fail",
+          "basis": "第二条新增我陪你去的未来承诺，与第一条拒绝及本次不新增约定的明确意图相冲突；逐条首句通过不能掩盖整组失败。"
+        },
+        "psychological_attribution": {
+          "status": "pass",
+          "basis": "两条消息没有添加本人或联系人的动机、感受或心理归因。"
+        },
+        "naturalness": {
+          "status": "unknown",
+          "basis": "没有新增真实模型实验或真人质量验收。"
+        },
+        "relationship_fit": {
+          "status": "unknown",
+          "basis": "仅合成联系人，真实关系适配未知。"
+        },
+        "user_similarity": {
+          "status": "unknown",
+          "basis": "没有用户本人表达质量证据。"
+        }
+      }
+    }
+  ]
+}

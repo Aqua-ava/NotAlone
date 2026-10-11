@@ -404,3 +404,10 @@ Root先仅取四新测试，在尚未净caller时真实**4项／3 FAIL／0.482�
 Root再用原合成StyleSampleHttpTest.dimension_release=None适配器、Conda NotAlone和禁dotenv／tracing的随机库runner，实际联跑原物理六模块55、新C4、A携入HTTP9、迁移3、来历unit2十模块：**73 GREEN／19.053秒／skip0／actualexit0**，外层实际001–055逐名账本／repeat0，三个迁移自有schema库及outerDB剩余全0。日志/private/tmp/notalone-root-carry-physical-delete-red-pg.log、/private/tmp/notalone-root-carry-physical-delete-fixed-pg.log、/private/tmp/notalone-root-carry-physical-delete-related73.log。两净源silent mypy／三个文件编译及限定diff通过，不借C73／17.415或B73／17.937的数字。唯一A读取链的重复父版本查询成本P3仍保留，未称优化，不为此建立跨调用正文缓存。
 
 本次完成携入的backend物理清理实际集成；仍须A18公开携入和A/B类型化连续修改／新消息组合的真实DOM→HTTP→PG。C第七两公开场、八例报告仅诊断6fed源的负责人证据，不含本055，不借其关闭carry页面或Root全组合。E06仍claimed及原剩余AC未勾，真人／真实模型质量、App／原生／微信/OCR／私料、发送、push／部署均未执行。
+
+
+公开消息组与真实报告的主树准备（2026-10-11）：精确净C正式a6c1a9e65ff6eb66318954d40b25c97a0006858c的公开case／报告，并补6fed正式缺席的独立review fixture；Root的message_groups Python／TS控制已经正式具备，不重取同语义hunk，首次原补丁preflight因已存在而拒绝、无应用。Root只在原两个inline门禁及dispatcher加一个authentic-expression-groups label，保其它全部登记，不引入B新增catalog重构。当前准备类型及两个entry write=false构建通过，报告由唯一E01 CLI重生成负责人实际第七8row/9input/9call/2UI capture，字节一致SHA b5d6102fc254d25aea128e01be07f83c87c3d0af6ed77b4a0dd8f8d9ff564e32；原首次CLI误用--cases被argparse拒绝、cmp无文件失败，不借同shell后续4unit exit0当报告通过，正确--case-spec和set-e复验才确认一致。4capture单元实际G，未调用外部模型。
+
+这份已交报告仍是负责人诊断6fed第七84256两场真G的证据：分母8，syntheticreview6中4pass/2故意fail，2unreviewed，human0/holdout0/qualityfalse；仅普通重新生成，typedcontinuation pending。根已正式055/carry，不据报告字节复现冒充当前根真实Page；Root自己的两场公开运行和对应新的真实捕获报告仍待具名窗口。A54连续解析provider39阶段G又发现选定编辑版本要求P2，正在soleA修复，不用本报告把typed修改或B10/C06闭合。原六失败、首Conda入口错误、第七fullrelease及人工/供应商质量未知都保；State claimed及原未验AC不改。
+
+准备补验：Root新增公开label的安全headless CLI合成门禁实际10 GREEN／3146.659208ms／skip0／actualexit0，没有浏览器／Electron；wholeTSC及两个入口构建通过。此处仍未执行Root新两场，不以CLI或者负责人报告代替Page。
