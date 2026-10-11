@@ -1,5 +1,7 @@
 import { request, type ClientRequest } from 'node:http';
 import type { BackendConnection } from './connection';
+import type { AssistantInputBudget } from '../../shared/assistant-input-budget';
+import { readInputBudgetFailure } from '../reply/input-budget-read';
 
 export interface JsonRequest {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -13,7 +15,8 @@ export interface JsonRequest {
 // 只携带安全分类；业务模块自行映射已知错误，不把响应原文转给界面。
 export class BackendRequestFailure extends Error {
   constructor(readonly kind: 'connection' | 'response' | 'cancelled', readonly status?: number, readonly code?: string,
-    readonly reason?: 'target_message_unavailable' | 'source_unavailable' | 'request_invalidated' | 'candidate_unavailable') {
+    readonly reason?: 'target_message_unavailable' | 'source_unavailable' | 'request_invalidated' | 'candidate_unavailable',
+    readonly inputBudget?: AssistantInputBudget) {
     super('本机业务请求未完成');
   }
 }
@@ -70,7 +73,8 @@ export class JsonClient {
               fail(new BackendRequestFailure('response', status,
                 typeof code === 'string' && /^[a-z][a-z0-9_]{0,79}$/.test(code) ? code : undefined,
                 reason === 'target_message_unavailable' || reason === 'source_unavailable'
-                  || reason === 'request_invalidated' || reason === 'candidate_unavailable' ? reason : undefined));
+                  || reason === 'request_invalidated' || reason === 'candidate_unavailable' ? reason : undefined,
+                readInputBudgetFailure(data, status)));
             } else { settled = true; resolve({ status, data }); }
           } catch { fail(new BackendRequestFailure('response')); }
         });

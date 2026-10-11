@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ClipboardEvent } from 'react';
 import type { AssistantSessionDeletion } from '../shared/reply-bridge';
 import type { ReplySessionView } from './RewritePanel';
 import type { SavedAssistantInput, SavedAssistantTurn } from '../shared/assistant-session';
+import { AssistantInputBudgetNotice } from './AssistantInputBudgetNotice';
 
 function SavedTurn({ turn, index }: { turn: SavedAssistantTurn; index: number }) {
   return <article aria-label={`第${index + 1}轮讨论`}>
@@ -12,6 +13,7 @@ function SavedTurn({ turn, index }: { turn: SavedAssistantTurn; index: number })
       {typeof turn.input?.content.user_instruction === 'string' && <p>{turn.input.content.user_instruction}</p>}
       {turn.state === 'running' && <p>本轮生成尚未完成。</p>}
       {turn.state === 'failed' && <p>本轮生成未成功保存。</p>}
+      {turn.reply?.inputBudget && <AssistantInputBudgetNotice budget={turn.reply.inputBudget} historical />}
       {turn.reply?.candidates.map((candidate) => <p key={candidate.candidateId}
         data-assistant-candidate-id={candidate.candidateId}
         data-assistant-reply-request-id={turn.reply!.replyRequestId}>{candidate.text}</p>)}
@@ -42,6 +44,10 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
   const currentCopyScope = useRef(copyScopeKey); currentCopyScope.current = copyScopeKey;
   const deleting = replies.state.sessionDeletion === 'deleting';
   const catalog = replies.state.sessionCatalog;
+  const budgetNotice = replies.state.inputBudgetNotice;
+  const currentBudget = budgetNotice?.contactId === replies.state.contactId
+    && budgetNotice.scopeRevision === replies.state.scopeRevision && budgetNotice.sessionId === saved?.sessionId
+    && !replies.state.sourceAvailability ? budgetNotice.decision : undefined;
   const busy = deleting || catalog?.phase === 'loading' || saved?.phase === 'loading'
     || replies.state.exploration.phase === 'waiting'
     || replies.state.sessionDeletion === 'failed' || replies.state.sourceAvailability === 'checking';
@@ -72,6 +78,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
       .catch(() => { if (currentCopyScope.current === copyScopeKey) setCopyError(true); });
   }
   return <section aria-label="助手会话">
+    {currentBudget && <AssistantInputBudgetNotice budget={currentBudget} />}
     <button disabled={!replies.state.contactId || busy} onClick={() => void replies.newSavedSession()}>
       新开助手会话
     </button>

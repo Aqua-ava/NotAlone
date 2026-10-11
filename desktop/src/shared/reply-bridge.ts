@@ -1,6 +1,7 @@
 import type { ContactSelection } from './contact-session-bridge';
 import type { ReplyEvidenceCommands } from './reply-evidence';
 import type { AssistantSessionCatalog, SavedAssistantSession } from './assistant-session';
+import type { AssistantInputBudget, AssistantInputBudgetNotice } from './assistant-input-budget';
 import type { ConfirmedAssistantSessionDeletion } from './assistant-session-deletion-events';
 import type { AssistantCandidateVersionsState, ExplicitAssistantCandidateSelection, ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from './assistant-candidate-versions';
 
@@ -97,8 +98,9 @@ export interface ReplyResult {
   contextEvidenceIds: string[];
   styleSampleIds?: string[];
   usedSkill?: ReplyUsedSkill | null;
+  inputBudget?: AssistantInputBudget;
 }
-export type ReplyFailureCode = 'generation_failed' | 'save_failed' | 'timeout' | 'unavailable' | 'rejected' | 'target_unavailable' | 'source_unavailable' | 'connection';
+export type ReplyFailureCode = 'generation_failed' | 'save_failed' | 'timeout' | 'unavailable' | 'rejected' | 'target_unavailable' | 'source_unavailable' | 'connection' | 'input_budget_exceeded' | 'input_budget_unavailable';
 export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;
 export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; needsRefresh: boolean; }
 export interface ReplySessionState {
@@ -133,6 +135,7 @@ export interface ReplySessionState {
   savedSession?: SavedAssistantSession;
   sessionCatalog?: AssistantSessionCatalog;
   sessionDeletion?: 'deleting' | 'failed' | 'deleted' | 'missing';
+  inputBudgetNotice?: AssistantInputBudgetNotice;
 }
 export interface ReplyCandidateSelection extends ContactSelection { replyRequestId: string; candidateId: string; }
 export interface ReplyCandidateEdit extends ReplyCandidateSelection { text: string; }

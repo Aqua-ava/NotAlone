@@ -188,6 +188,8 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
         : '本次回复依据已失效，请重新读取后再试。')
       : state.errorCode === 'rejected' ? '本次生成被拒绝，请在管理后台确认联系人及有效会话绑定。'
       : state.errorCode === 'unavailable' ? '回复服务暂不可用，请检查应用配置和本机服务。'
+      : state.errorCode === 'input_budget_exceeded' ? '当前讨论超出模型输入预算，超限调用已停止。请查看已保存讨论或新开助手会话。'
+      : state.errorCode === 'input_budget_unavailable' ? '当前模型的完整输入预算暂不可核验，本次生成已停止。已填写内容和已保存讨论仍会保留。'
       : '本次生成失败，请核对本机服务后重试。'}</p>}
     {state.phase === 'failed' && state.mode === 'reply_to_message' && <p className="reply-note">可以刷新待回复消息重新选择，或切换到草稿改写。</p>}
     {state.result ? <>

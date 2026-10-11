@@ -1,5 +1,6 @@
 import type { ReplyCandidate, ReplyUsedSkill } from '../../shared/reply-bridge';
 import { isUuid } from '../uuid';
+import { readInputBudget } from './input-budget-read';
 
 export const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const text = (value: unknown): value is string => typeof value === 'string' && value.length <= 65_536 && Boolean(value.trim());
@@ -33,5 +34,6 @@ export function readReplyResult(value: unknown) {
   if (styleSampleIds.length > 5 || new Set(styleSampleIds).size !== styleSampleIds.length
     || styleSampleIds.some((id) => contextEvidenceIds.includes(id))) throw new Error('表达参考格式无效。');
   return { replyRequestId: value.reply_request_id.toLowerCase(), candidates, contextEvidenceIds, styleSampleIds,
+    ...(value.input_budget === undefined ? {} : { inputBudget: readInputBudget(value.input_budget, true) }),
     ...(value.used_skill === undefined ? {} : { usedSkill: readUsedSkill(value.used_skill) }) };
 }

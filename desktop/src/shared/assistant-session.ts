@@ -1,4 +1,5 @@
 import type { ReplyCandidate, ReplyUsedSkill } from './reply-bridge';
+import type { AssistantInputBudget } from './assistant-input-budget';
 
 export interface SavedAssistantTurn {
   turnId: string;
@@ -6,7 +7,7 @@ export interface SavedAssistantTurn {
   requestKey: string;
   state: 'running' | 'completed' | 'failed' | 'redacted' | 'unavailable';
   input: { content: Record<string, unknown> } | null;
-  reply: { replyRequestId: string; candidates: ReplyCandidate[]; contextEvidenceIds: string[]; usedSkill?: ReplyUsedSkill | null } | null;
+  reply: { replyRequestId: string; candidates: ReplyCandidate[]; contextEvidenceIds: string[]; usedSkill?: ReplyUsedSkill | null; inputBudget?: AssistantInputBudget } | null;
   placeholder: string | null;
 }
 export interface SavedAssistantSession {

@@ -8,7 +8,7 @@ Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠�
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧05；Q2、Q17预算。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧05；Q2、Q17预算。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖是完整交付的前置，不代表这些前置已完成；预算守卫及界面已部分实现，公开页面组合仍接续。
 
 ## What to build
 
@@ -175,3 +175,16 @@ TDD：同项1 / 1 GREEN／2.013秒；完整相关讨论预算模块11 / 11 GREEN
 主 Agent 新鲜限定两轴：Standards 硬性0／Fowler判断0；Spec actionable0、越界0，确认旧expect200已过时且未削弱删除。最终正式11分页＋实际C启动＋本测试的相关完整组合77 / 77 GREEN／46.440秒，正式54迁移账本、repeat0及自有库0；原76G1F与purebaseline RED继续保留，不作预算公开页面完成证据。
 
 2026-10-11 总协调仅净接正式A `5ee4eac` 原测试的22行修正及本票后缀，未修改预算、CURRENT或删除生产代码。主树实际认证HTTP→隔离PG整个原模块 **11 GREEN／17.853s／skip0／actualexit0**；001–054账本／repeat0、自有库剩余0。旧身份409及零模型、完整历史不变、新键独立输入一次模型和新CURRENT的加强断言全部通过，原样本、讨论与删除标准保留。新鲜Standards硬要求0／重要Fowler possible0、Spec新增P0–P3为0；两轴只读未代测试。此提交不代表累计预算公开UI完成，12仍claimed，公开提醒与新开路径由A继续正式交付，人工未执行。
+
+
+### 预算界面与归属守卫的主树集成（2026-10-11）
+
+只净A正式328f985c56e4c3fcadb0b5df46a748bde004cbc1的14桌面源码／测试路径，本票追加主树证据；保留B6a隐藏探索四行、Bpurpose、12e编辑通知、e092保存通知、80b来源复验与C七字段当前显示版／未提交稿保存及结果重读复位，没有whole覆盖Main或renderer。预算纯元数据严格解码，模型能力未知和硬上限仅按原权威守卫拒绝；旧409／旧成功GET被更新CURRENT或读取超越时不能复活旧提示／结果，同CURRENT合法warning继续显示，普通失败的同键身份仍保留。无模型能力HTTP写入口、正文缓存、第二writer或静默摘要。
+
+主树规定Conda NotAlone、禁dotenv／tracing、PGPORT=55441串行运行node --test tests/assistant-input-budget-public.test.mjs：**25 GREEN／93664.136792ms／skip0／actualexit0**；25实际fixture各001–055逐名账本／repeat0／instance及class清理true／database_remaining=false；实际受控模型调用31。预算read另**3 GREEN／84.660083ms／skip0／actualexit0**，合计28项但不把25个实际HTTP写作28个HTTP。最小硬限409另1 GREEN／4323.436292ms／模型0／55库0，225既有候选版本／复制／样本相关Node GREEN／1370.573917ms，whole桌面TSC及diff通过。日志/private/tmp/notalone-root-input-budget-public-http55.log、/private/tmp/notalone-root-input-budget-read-node.log、/private/tmp/notalone-root-input-budget-minimal-http55.log、/private/tmp/notalone-root-input-budget-related-node.log。首次read在根cwd导致3构建路径ERROR，改规定desktop入口后同代码3G；一次额外端口尝试被沙箱listen EPERM及不存在的jobs文件入口拒绝，未作为产品RED或有效测试证据，未改产品以绕过。
+
+真实Main/preload→认证HTTP→隔离PG和SSR提示已证明；A唯一负责的新普通公开DOM页面预算case仍待正式交付和主树运行，不能用静态HTML或owner自己的28项代替它。完整预算阈值及工具轮后端既有证据保持，完整连续意图／新消息／携入和真正App／供应商质量与停算仍不外推。本票维持claimed、六条原AC文字及未勾状态保留；只有合成数据／可控模型，无App、OCR、微信、外部发送、私料、付费模型、人工或远端操作。
+
+后续新P2的真实主树反馈（2026-10-11）：Root与B规格审查同样发现budget409后CURRENT复验GET异常被空catch吞掉，无法证明输入已失效却清idle并丢同键身份；原25HTTP不覆盖此情形。只净B正式a5eb6a186b83f91504e4757d00b7fc7d7254e4af的c598f2三path增量，先只取新增测试／共享BackendRequestFailure测试出口，在未改A328源时Root两实际HTTP409→PG failed→控制的delivery GET connection／503反例**2 RED／7824.234542ms／actualexit1／模型0／两055repeat0自有库0**；此为受控delivery seam错误，不声称真实TCP断线。
+
+再只净Main最窄12行，区分不能复验与真正404／来源失效，前者显示原connection／unavailable一般失败、隐藏未复验budget并保同次request身份，后者及较晚CURRENT／loading仍失效，不新authorities。Root实际重跑新2故障＋真实confirmed DELETE后404＋8新CURRENT／成功迟到／loading相关回归：**11 GREEN／37225.823917ms／skip0／actualexit0**；11实际055repeat0／instance与class清理true／database_remaining=false，模型10，两新故障同键重试保持turn／key／CURRENT且模型0。日志/private/tmp/notalone-root-budget-read-fault-red-http55.log与/private/tmp/notalone-root-budget-read-fault-fixed-http55.log。TSC与diff再通过；原25／3阶段数及B8／8／1自己的证据各自保留，不将11写为原全25在修后全部重跑。新鲜两轴复核后此预算主题本地提交；公开DOM仍由A唯一case接续、claimed及原AC不改。

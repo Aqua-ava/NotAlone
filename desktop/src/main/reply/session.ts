@@ -99,6 +99,7 @@ export class ReplySession {
       const generation = backend.getConnectionGeneration();
       if (generation !== versionGeneration) {
         versionGeneration = generation;
+        this.publish({ inputBudgetNotice: undefined });
         this.generationJobs.cancelAll();
         this.cancelPending();
         this.candidateVersions.setScope(null);
@@ -110,9 +111,13 @@ export class ReplySession {
   }
   getState(): ReplySessionState {
     const state = structuredClone(this.state);
+    const notice = state.inputBudgetNotice;
+    if (notice && (notice.contactId !== state.contactId || notice.scopeRevision !== state.scopeRevision
+      || notice.sessionId !== state.savedSession?.sessionId || notice.operation !== this.operation
+      || notice.connectionGeneration !== this.backend.getConnectionGeneration())) state.inputBudgetNotice = undefined;
     if (!this.candidateSourceCheck) return state;
     // 完整来源复验期间只隔离现有视图，不另存可恢复正文。
-    return { ...state, result: null, selectedCandidateId: null, canRetry: false,
+    return { ...state, inputBudgetNotice: undefined, result: null, selectedCandidateId: null, canRetry: false,
       messages: { phase: 'loading', items: [], nextCursor: null }, targetMessageId: null,
       ...(this.directionDerived ? { direction: '', purpose: '' } : {}),
       exploration: { phase: 'idle', result: null },
@@ -179,7 +184,13 @@ export class ReplySession {
         const invalid = heldVersion && saved.turns.some((turn) => turn.inputVersionId === heldVersion
           && ['redacted', 'unavailable'].includes(turn.state));
         if (invalid) { this.cancelPending(); this.lastAttempt = undefined; }
+        const budgetNotice = this.state.inputBudgetNotice;
+        const inputBudgetNotice = budgetNotice?.sessionId === saved.sessionId
+          && budgetNotice.inputVersionId === saved.currentInputVersionId
+          && saved.inputs.some((input) => input.inputVersionId === budgetNotice.inputVersionId && input.state === 'active')
+          ? budgetNotice : undefined;
         this.publish({ savedSession: { sessionId: saved.sessionId, turns: saved.turns, inputs: saved.inputs, currentInputVersionId: saved.currentInputVersionId, phase: 'ready' },
+          inputBudgetNotice,
           ...(saved.sessionId !== heldSessionId ? { sessionDeletion: undefined } : {}),
           ...(invalid ? { result: null, selectedCandidateId: null, phase: 'idle', canRetry: false } : {}) });
         await this.restoreCandidateVersions(selection, saved.sessionId,
@@ -755,11 +766,14 @@ export class ReplySession {
     const attempt = this.lastAttempt;
     if (replaceable && selection.newRequest) this.generationJobs.cancelRequest(replaceable);
     this.cancelPending();
+    // 本次输入与请求键已捕获；清理旧预算提示不能丢失本次同键重试身份。
+    this.lastAttempt = attempt;
     const operation = this.operation;
     const pending = new AbortController();
     this.pending = pending;
     const selectedSessionId = this.state.savedSession?.sessionId;
     let job: OwnedAssistantGeneration | undefined;
+    let budgetReceipt: Parameters<AssistantGenerationJobs['receiveReceipt']>[1] | undefined;
     const current = () => operation === this.operation && generation === this.backend.getConnectionGeneration()
       && !pending.signal.aborted && !this.state.sessionCatalog?.selectionPending
       && selection.scopeRevision === this.state.scopeRevision && selection.contactId === this.state.contactId
@@ -773,16 +787,33 @@ export class ReplySession {
       job = this.generationJobs.begin({ connectionGeneration: generation, contactId: selection.contactId,
         sessionId, requestKey: attempt.requestKey }, pending);
       const ownedJob = job;
-      const prepared = (receipt: Parameters<AssistantGenerationJobs['receiveReceipt']>[1]) => this.generationJobs.receiveReceipt(ownedJob, receipt);
+      const prepared = (receipt: Parameters<AssistantGenerationJobs['receiveReceipt']>[1]) => {
+        this.generationJobs.receiveReceipt(ownedJob, receipt); budgetReceipt = receipt;
+      };
       const requested = () => this.generationJobs.requestStarted(ownedJob);
       const result = replaceable && selection.newRequest
         ? await replaceReply(this.backend, attempt.input, attempt.requestKey, replaceable.requestKey, pending.signal, sessionId, prepared, requested)
         : await generateReply(this.backend, attempt.input, attempt.requestKey, pending.signal, sessionId, prepared, requested);
       if (!current() || result.generation !== generation) return;
       // 可靠完成可作为历史读取；只有仍属当前输入且来源有效的结果才可成为当前候选。
+      const beforeRead = this.state.savedSession;
       const saved = await readAssistantSession(this.backend, selection.contactId, sessionId, pending.signal);
       if (!current() || saved.generation !== generation) return;
       const completed = saved.turns.find((turn) => turn.inputVersionId === result.inputVersionId);
+      const observed = this.state.savedSession;
+      // 较晚完整读取优先；只有同一有效CURRENT的完成结果仍可发布。
+      const superseded = observed !== beforeRead && !(observed?.phase === 'ready'
+        && observed.sessionId === sessionId && observed.currentInputVersionId === result.inputVersionId
+        && observed.turns.some((turn) => turn.inputVersionId === result.inputVersionId
+          && turn.requestKey === attempt.requestKey && turn.state === 'completed'
+          && turn.reply?.replyRequestId === result.replyRequestId)
+        && observed.inputs.some((input) => input.inputVersionId === result.inputVersionId && input.state === 'active'));
+      if (superseded) {
+        this.lastAttempt = undefined;
+        this.publish({ phase: this.state.result ? 'ready' : 'idle', canRetry: false,
+          errorCode: undefined, inputBudgetNotice: undefined });
+        return;
+      }
       if (saved.currentInputVersionId !== result.inputVersionId || completed?.state !== 'completed'
         || completed.reply?.replyRequestId !== result.replyRequestId) {
         this.lastAttempt = undefined;
@@ -790,15 +821,21 @@ export class ReplySession {
         await this.readSavedSession(selection); return;
       }
       this.savedRead?.abort(); this.savedRead = undefined;
+      const inputBudgetNotice = result.inputBudget ? { contactId: selection.contactId,
+        scopeRevision: selection.scopeRevision, sessionId: result.assistantSessionId, requestKey: attempt.requestKey,
+        inputVersionId: result.inputVersionId, connectionGeneration: generation, operation, decision: result.inputBudget } : undefined;
       // 同键重放恢复原结果，保留该候选在本次运行中的编辑和选择。
-      if (this.state.result?.replyRequestId === result.replyRequestId) { this.publish({ phase: 'ready' }); return; }
-      this.publish({ phase: 'ready', savedSession: { phase: 'idle', sessionId: result.assistantSessionId, turns: [], inputs: [], currentInputVersionId: null },
+      if (this.state.result?.replyRequestId === result.replyRequestId) { this.publish({ phase: 'ready', inputBudgetNotice }); return; }
+      this.publish({ phase: 'ready', savedSession: observed !== beforeRead ? observed
+        : { phase: 'idle', sessionId: result.assistantSessionId, turns: [], inputs: [], currentInputVersionId: null },
+      inputBudgetNotice,
       ...(result.assistantSessionId !== this.state.savedSession?.sessionId ? { sessionDeletion: undefined } : {}),
       result: { replyRequestId: result.replyRequestId, assistantSessionId: result.assistantSessionId,
         inputVersionId: result.inputVersionId, input: attempt.input,
         contextEvidenceIds: result.contextEvidenceIds,
         styleSampleIds: result.styleSampleIds,
         usedSkill: result.usedSkill,
+        inputBudget: result.inputBudget,
         candidates: result.candidates.map((original) => ({ original, editedText: original.text })) },
       selectedCandidateId: result.candidates[0].candidateId });
       await this.restoreCandidateVersions(selection, result.assistantSessionId,
@@ -806,14 +843,62 @@ export class ReplySession {
     } catch (error) {
       if (current()) {
         const failure = error instanceof BackendRequestFailure ? error : undefined;
+        const budgetFailure = failure?.code === 'input_budget_exceeded' || failure?.code === 'input_budget_unavailable';
+        if (budgetFailure) {
+          const receipt = budgetReceipt;
+          const beforeRead = this.state.savedSession;
+          let saved: Awaited<ReturnType<typeof readAssistantSession>> | undefined;
+          let readFailure: BackendRequestFailure | 'unavailable' | undefined;
+          try {
+            if (receipt && failure?.inputBudget) {
+              saved = await readAssistantSession(this.backend, selection.contactId, receipt.sessionId, pending.signal);
+            }
+          } catch (error) {
+            readFailure = error instanceof BackendRequestFailure ? error : 'unavailable';
+          }
+          if (!current()) return;
+          const failed = saved?.turns.find((turn) => turn.turnId === receipt?.turnId
+            && turn.requestKey === attempt.requestKey && turn.inputVersionId === receipt?.inputVersionId);
+          const observed = this.state.savedSession;
+          // 迟到复验不能越过更新的公开读取；同一CURRENT仍须保留合法预算错误。
+          const superseded = observed !== beforeRead && !(observed?.phase === 'ready'
+            && observed.sessionId === receipt?.sessionId && observed.currentInputVersionId === receipt?.inputVersionId
+            && observed.turns.some((turn) => turn.turnId === receipt?.turnId && turn.requestKey === attempt.requestKey
+              && turn.inputVersionId === receipt?.inputVersionId && turn.state === 'failed')
+            && observed.inputs.some((input) => input.inputVersionId === receipt?.inputVersionId
+              && input.turnId === receipt?.turnId && input.state === 'active'));
+          const sourceUnavailable = readFailure instanceof BackendRequestFailure
+            && (readFailure.status === 404 || readFailure.reason === 'source_unavailable');
+          if (!saved && readFailure && receipt && failure?.inputBudget && !superseded && !sourceUnavailable) {
+            // 无法复验不等于输入已失效；隐藏预算结论，保留本次身份供后端守卫重试。
+            this.publish({ phase: 'failed', canRetry: true, inputBudgetNotice: undefined,
+              errorCode: readFailure instanceof BackendRequestFailure && readFailure.kind === 'connection'
+                ? 'connection' : 'unavailable' });
+            return;
+          }
+          if (!receipt || !saved || saved.generation !== generation || saved.currentInputVersionId !== receipt.inputVersionId
+            || superseded || failed?.state !== 'failed' || !saved.inputs.some((input) => input.inputVersionId === receipt.inputVersionId
+              && input.turnId === receipt.turnId && input.state === 'active')) {
+            this.lastAttempt = undefined;
+            this.publish({ phase: this.state.result ? 'ready' : 'idle', canRetry: false,
+              errorCode: undefined, inputBudgetNotice: undefined });
+            return;
+          }
+        }
         const errorCode = failure?.kind === 'connection' ? 'connection'
+          : budgetFailure ? failure.inputBudget?.state === 'exceeded' ? 'input_budget_exceeded' : 'input_budget_unavailable'
           : failure?.code === 'reply_timeout' ? 'timeout'
           : failure?.code === 'assistant_session_save_failed' ? 'save_failed'
           : failure?.reason === 'target_message_unavailable' ? 'target_unavailable'
           : failure?.reason === 'source_unavailable' ? 'source_unavailable'
           : ['reply_rejected', 'assistant_session_rejected'].includes(failure?.code ?? '') ? 'rejected'
           : ['reply_unavailable', 'runtime_stopping'].includes(failure?.code ?? '') ? 'unavailable' : 'generation_failed';
-        this.publish({ phase: 'failed', errorCode });
+        this.publish({ phase: 'failed', errorCode, ...(budgetFailure ? { canRetry: false } : {}),
+          inputBudgetNotice: budgetReceipt && failure?.inputBudget && generation !== undefined ? {
+            contactId: selection.contactId, scopeRevision: selection.scopeRevision, sessionId: budgetReceipt.sessionId,
+            requestKey: budgetReceipt.requestKey, inputVersionId: budgetReceipt.inputVersionId,
+            connectionGeneration: generation, operation, decision: failure.inputBudget,
+          } : undefined });
       }
     } finally { if (job) this.generationJobs.finish(job); if (this.pending === pending) this.pending = undefined; }
   }
@@ -1262,12 +1347,20 @@ export class ReplySession {
   }
   private cancelPending(preserveSourceValidation = false): void {
     ++this.operation; this.pending?.abort(); this.pending = undefined;
+    if (this.state.inputBudgetNotice) this.publish({ inputBudgetNotice: undefined });
     if (preserveSourceValidation) return;
     this.sourceCheck?.abort(); this.sourceCheck = undefined; this.heldResult = undefined;
     if (this.state.sourceAvailability) this.publish({ sourceAvailability: undefined });
   }
   private publish(update: Partial<ReplySessionState>): void {
-    this.state = { ...this.state, ...update, revision: this.state.revision + 1 };
+    const state = { ...this.state, ...update, revision: this.state.revision + 1 };
+    if (this.state.inputBudgetNotice && !state.inputBudgetNotice
+      && (state.errorCode === 'input_budget_exceeded' || state.errorCode === 'input_budget_unavailable')) {
+      this.lastAttempt = undefined;
+      state.errorCode = undefined; state.canRetry = false;
+      if (state.phase === 'failed') state.phase = state.result ? 'ready' : 'idle';
+    }
+    this.state = state;
     for (const listener of this.listeners) listener(this.getState());
   }
 }
