@@ -37,6 +37,10 @@ Blocked by: [assistant-session-context/07 默认会话的一次生成与可靠�
 
 ## Comments
 
+2026-10-11 上述单测试夹具与本票两文件最终独立审查：Standards硬要求0／重要Fowler可能气味0、Spec新增P0–P2为0；保持原断言与失败门禁，生命周期probe和真实十一HTTP结果分别记录，不借测试清理修复关闭预算UI或来源擦除。
+
+2026-10-11 总协调主树消费B正式2d1f178的单测试夹具清理修复：原真实TestCase生命周期probe分别取得RED（部分setUp已分配资源不清理、doCleanups失败外层仍GREEN）；仅把cleanup登记移至setUp前，且失败向当前runner报告后，同probe两条GREEN：setUp仍有真实error但cleanup已执行，清理失败仍error且runner不成功。该probe只替换合成生命周期，不启动HTTP／PG／模型／页面；不冒作真实服务验收。原完整讨论预算HTTP十一项另在生产001–053随机库真实GREEN／18.806秒、skip0、repeat0、精确remaining0。产品和原断言未改，没有增模型／迁移；这修复避免测试错误冒充成功及残留自有资源。完整provider主树28c5证据保持，预算UI、大响应及pureDraft擦除仍接续，claimed不变。
+
 2026-10-11：用户认可30票复审修订后发布；表达样本独立保留规则已单独确认。尚未开始实现或执行产品验收。
 
 ## Answer

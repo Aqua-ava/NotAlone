@@ -24,8 +24,12 @@ class AssistantDiscussionBudgetHttpTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.fixture = metadata_fixture.AssistantInputBudgetHttpTest()
+        self.addCleanup(self._release_fixture)
         self.fixture.setUp()
-        self.addCleanup(self.fixture.doCleanups)
+
+    def _release_fixture(self) -> None:
+        if not self.fixture.doCleanups():
+            raise RuntimeError("合成预算HTTP夹具清理失败。")
 
     @staticmethod
     def _model_request(actual: dict) -> dict:
