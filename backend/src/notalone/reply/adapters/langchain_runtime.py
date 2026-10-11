@@ -35,6 +35,7 @@ from notalone.reply.input_budget import (
 )
 from notalone.reply.style_reference import require_reference_contract
 from notalone.reply.input_budget_receipt import validate_input_budget_receipt
+from notalone.reply.assistant_continuation_reference import continuation_reference_payload
 from notalone.reply.assistant_discussion import DISCUSSION_HISTORY_NOTICE
 from notalone.reply.assistant_discussion_payload import assistant_discussion_payload
 from notalone.reply.runtime import (
@@ -833,6 +834,9 @@ def _request_text(prepared: ReplyContext) -> str:
          "factual_role": "expression_reference", "weight": "low"}
         for item in prepared.style_references
     ]
+    reference = continuation_reference_payload(prepared)
+    if reference is not None:
+        payload["continuation_reference"] = reference
     payload["risk_notes"] = list(prepared.risk_notes)
     if prepared.assistant_discussion is not None:
         payload["assistant_discussion"] = assistant_discussion_payload(prepared.assistant_discussion)

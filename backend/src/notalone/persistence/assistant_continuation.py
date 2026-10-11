@@ -1,0 +1,220 @@
+"""A会话内解析与普通领取共用一个owner事务；版本正文不另建副本。"""
+
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import replace
+from typing import Any
+from uuid import UUID
+
+from notalone.application.assistant_continuation import (
+    AssistantContinuationClarification, AssistantContinuationReplyRequest,
+    AssistantContinuationReservation, ContinueAssistantSession, continuation_reference,
+    continuation_submission, requirement_clauses, resolve_requirements,
+)
+from notalone.application.assistant_session_service import AssistantSessionConflict, AssistantSessionRejected
+from notalone.application.reply_request import parse_reply_request
+from notalone.persistence.assistant_candidate_versions import (
+    AssistantCandidateHistory, AssistantCandidateVersion, AssistantCandidateVersionError, read_candidate_versions,
+)
+from notalone.persistence.assistant_session_inputs import require_current_input
+from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
+from notalone.persistence.style_sample_store import require_reply_sources_current
+from notalone.reply.assistant_continuation_reference import AssistantContinuationReference
+from notalone.reply.interface import ConfirmedDirection, DirectionSource, InitiateConversation, ReplyInput, ReplyToMessage, RewriteDraft
+from notalone.scopes import ContactScope
+
+
+def _frame_histories(
+    connection: Any, scope: ContactScope, session_id: UUID, command: ContinueAssistantSession,
+) -> dict[int, tuple[AssistantCandidateHistory, AssistantCandidateVersion]]:
+    frame = command.displayed_group
+    if frame.session_id != session_id:
+        raise AssistantContinuationClarification("candidate_session_mismatch")
+    numbers = [item.number for item in frame.candidates]
+    candidates = [item.candidate_id for item in frame.candidates]
+    if not candidates:
+        raise AssistantContinuationClarification("candidate_group_missing")
+    if len(set(numbers)) != len(numbers) or len(set(candidates)) != len(candidates):
+        raise AssistantContinuationClarification("candidate_frame_ambiguous")
+    members = connection.execute(
+        "SELECT candidate.id,candidate.ordinal FROM public.reply_candidate AS candidate "
+        "JOIN public.assistant_session_turn AS turn ON turn.reply_request_id=candidate.reply_request_id "
+        "AND turn.owner_id=candidate.owner_id AND turn.contact_id=candidate.contact_id "
+        "AND turn.conversation_binding_id=candidate.conversation_binding_id "
+        "WHERE candidate.owner_id=%s AND candidate.contact_id=%s AND turn.session_id=%s "
+        "AND candidate.reply_request_id=%s",
+        (scope.owner_id, scope.contact_id, session_id, frame.candidate_group_id),
+    ).fetchall()
+    if {(row["ordinal"] + 1, row["id"]) for row in members} != set(zip(numbers, candidates)):
+        raise AssistantContinuationClarification("candidate_group_unavailable")
+    histories = {}
+    for item in frame.candidates:
+        try:
+            history = read_candidate_versions(connection, scope, session_id, item.candidate_id)
+        except AssistantCandidateVersionError:
+            raise AssistantContinuationClarification("candidate_version_unavailable") from None
+        if (history.candidate_group_id, history.candidate_number) != (frame.candidate_group_id, item.number):
+            raise AssistantContinuationClarification("candidate_frame_ambiguous")
+        version = next((version for version in history.versions if version.version_id == item.version_id), None)
+        if version is None:
+            raise AssistantContinuationClarification("candidate_version_unavailable")
+        histories[item.number] = history, version
+    return histories
+
+
+def _request_from_input(scope: ContactScope, key: UUID, payload: dict[str, Any]):
+    _, request = parse_reply_request(json.dumps({
+        **payload, "contact_id": str(scope.contact_id), "idempotency_key": str(key),
+    }, ensure_ascii=False).encode("utf-8"))
+    return request
+
+
+def _reference_from_metadata(
+    connection: Any, scope: ContactScope, session_id: UUID, metadata: dict[str, Any],
+) -> AssistantContinuationReference | None:
+    candidate_id = metadata["candidate_id"]
+    if candidate_id is None:
+        return None
+    try:
+        history = read_candidate_versions(connection, scope, session_id, UUID(candidate_id))
+        version = next((version for version in history.versions if str(version.version_id) == metadata["version_id"]), None)
+    except (AssistantCandidateVersionError, TypeError, ValueError):
+        raise AssistantContinuationClarification("candidate_version_unavailable") from None
+    if version is None:
+        raise AssistantContinuationClarification("candidate_version_unavailable")
+    return AssistantContinuationReference(history.candidate_id, version.version_id, version.messages)
+
+
+def _known_intention(instruction: str) -> str | None:
+    match = re.fullmatch(r"(?:还是|改为|改口[:：]?)(答应|拒绝|同意|不去)(?:吧)?[。！!]?", instruction)
+    return match.group(1) if match else None
+
+
+def reserve_continuation_in_transaction(
+    connection: Any, store: PostgresAssistantSessionStore, scope: ContactScope, session_id: UUID,
+    command: ContinueAssistantSession,
+) -> AssistantContinuationReservation:
+    submission = continuation_submission(command)
+    store._require_session(connection, scope, session_id)
+    existing = connection.execute(
+        "SELECT id,session_id,state,input_payload FROM public.assistant_session_turn "
+        "WHERE owner_id=%s AND contact_id=%s AND idempotency_key=%s FOR UPDATE",
+        (scope.owner_id, scope.contact_id, command.idempotency_key),
+    ).fetchone()
+    if existing is not None:
+        if existing["state"] == "redacted" or existing["input_payload"] is None:
+            raise AssistantSessionRejected("source_deleted")
+        metadata = existing["input_payload"].get("continuation")
+        if (existing["session_id"] != session_id or not isinstance(metadata, dict)
+                or metadata.get("submission") != submission):
+            raise AssistantSessionConflict("请求键已用于不同的持续要求。")
+        original = _request_from_input(scope, command.idempotency_key, existing["input_payload"])
+        request = AssistantContinuationReplyRequest(
+            idempotency_key=command.idempotency_key, content=original.content,
+            continued_from_candidate_id=original.continued_from_candidate_id,
+            skill_version_id=original.skill_version_id, skill_disabled=original.skill_disabled,
+            expected_input_version_id=command.expected_input_version_id,
+            continuation=metadata,
+            reference=_reference_from_metadata(connection, scope, session_id, metadata),
+        )
+        return AssistantContinuationReservation(store._reserve_in_transaction(connection, scope, session_id, request), request)
+    # 首次解析、当前输入CAS、来源与领取均在同一个owner事务中完成。
+    require_current_input(connection, scope, session_id, command.expected_input_version_id)
+    current = connection.execute(
+        "SELECT id,state,input_payload,dependency_ids,reply_request_id FROM public.assistant_session_turn "
+        "WHERE owner_id=%s AND contact_id=%s "
+        "AND session_id=%s AND input_version_id=%s",
+        (scope.owner_id, scope.contact_id, session_id, command.expected_input_version_id),
+    ).fetchone()
+    if current is None or current["state"] != "completed" or current["input_payload"] is None:
+        raise AssistantContinuationClarification("completed_generation_required")
+    if current["reply_request_id"] is None:
+        raise AssistantContinuationClarification("completed_generation_required")
+    # 无编号的下一轮也从当前已完成输入派生，不能把复制的候选正文变为独立用户稿。
+    inherited_dependencies = tuple(sorted(set(current["dependency_ids"]) | require_reply_sources_current(
+        connection, owner_id=scope.owner_id, request_id=current["reply_request_id"],
+    )))
+    histories = _frame_histories(connection, scope, session_id, command)
+    number, instruction = continuation_reference(command.instruction)
+    if number is not None and number not in histories:
+        raise AssistantContinuationClarification("candidate_number_missing")
+    selected = histories.get(number) if number is not None else None
+    payload = current["input_payload"]
+    original = _request_from_input(scope, command.idempotency_key, payload)
+    old_content = original.content
+    intent_field = "direction" if isinstance(old_content, ReplyToMessage) else "purpose" if isinstance(old_content, InitiateConversation) else "draft_text"
+    prior_intent = (old_content.direction.text if isinstance(old_content, ReplyToMessage)
+                    else old_content.purpose.text if isinstance(old_content, InitiateConversation) else old_content.draft_text)
+    instruction_intention = _known_intention(instruction)
+    if instruction_intention is not None and command.intention_update is not None:
+        # 同次提交没有字段优先约定；仅核对既有明确语法，不推断未知方向。
+        canonical = {"答应": "accept", "同意": "accept", "拒绝": "decline", "不去": "decline"}
+        update_intention = _known_intention(command.intention_update) or command.intention_update
+        if (canonical.get(update_intention) is not None
+                and canonical[instruction_intention] != canonical[update_intention]):
+            raise AssistantContinuationClarification("intention_conflict")
+    intention = command.intention_update or instruction_intention
+    if intention is not None and (instruction_intention is not None or instruction == intention):
+        instruction = ""
+    prior_metadata = payload.get("continuation")
+    previous = (tuple(prior_metadata["effective_requirements"]) if isinstance(prior_metadata, dict)
+                else requirement_clauses(old_content.user_instruction))
+    if selected is not None:
+        previous = tuple(dict.fromkeys((*previous, *requirement_clauses(selected[1].requirements))))
+    requirements = resolve_requirements(previous, instruction, command.requirement_changes,
+                                        intention_changed=intention is not None and intention != prior_intent)
+    user_instruction = "；".join(requirements) or None
+    reference = (AssistantContinuationReference(selected[0].candidate_id, selected[1].version_id, selected[1].messages)
+                 if selected is not None else None)
+    content: ReplyInput
+    if intention is not None:
+        if isinstance(old_content, ReplyToMessage):
+            content = replace(old_content, direction=ConfirmedDirection(intention, DirectionSource.DIRECT_INPUT),
+                              user_instruction=user_instruction, clarification_answer=None)
+        elif isinstance(old_content, InitiateConversation):
+            content = replace(old_content, purpose=ConfirmedDirection(intention, DirectionSource.DIRECT_INPUT),
+                              user_instruction=user_instruction, clarification_answer=None)
+        else:
+            content = RewriteDraft(intention, user_instruction, old_content.include_relationship_context)
+    elif reference is not None:
+        content = RewriteDraft(reference.text, user_instruction,
+                               old_content.include_relationship_context if isinstance(old_content, RewriteDraft) else True)
+        intent_field = "draft_text"
+    else:
+        content = replace(old_content, user_instruction=user_instruction)
+    metadata = {
+        "version": 1, "submission": submission,
+        "candidate_group_id": str(command.displayed_group.candidate_group_id),
+        "candidate_number": number,
+        "candidate_id": str(reference.candidate_id) if reference is not None else None,
+        "version_id": str(reference.version_id) if reference is not None else None,
+        "effective_intent": {"source": intent_field},
+        "effective_requirements": list(requirements), "intention_changed": intention is not None,
+        "scope": "this_assistant_session_only",
+    }
+    request = AssistantContinuationReplyRequest(
+        idempotency_key=command.idempotency_key, content=content,
+        continued_from_candidate_id=reference.candidate_id if reference is not None else None,
+        skill_version_id=original.skill_version_id, skill_disabled=original.skill_disabled,
+        expected_input_version_id=command.expected_input_version_id,
+        continuation=metadata, reference=reference,
+    )
+    turn_id = store._reserve_in_transaction(
+        connection, scope, session_id, request, inherited_dependencies=inherited_dependencies,
+    )
+    return AssistantContinuationReservation(turn_id, request)
+
+
+class PostgresAssistantContinuationStore:
+    """沿用唯一A普通reserve与其事务；不会另立来源或当前输入权威。"""
+
+    def __init__(self, database_url: str) -> None:
+        self._store = PostgresAssistantSessionStore(database_url)
+
+    def reserve_continuation(
+        self, scope: ContactScope, session_id: UUID, command: ContinueAssistantSession,
+    ) -> AssistantContinuationReservation:
+        with self._store._transaction(scope) as connection:
+            return reserve_continuation_in_transaction(connection, self._store, scope, session_id, command)

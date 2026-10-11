@@ -66,3 +66,21 @@ Blocked by: [assistant-session-context/11 候选编辑、选择与版本回看](
 主树禁 dotenv／tracing、Conda NotAlone 下重跑 `test_assistant_captured_input_erasure`：**9 GREEN／1.374秒／skip0／actualexit0／真实55账本／repeat0／外层库0**。新055 jobs 夹具另在同主树已正式B6a源净增下实际运行隐藏探索负向和普通hide／close继续正向两项生产桥接→HTTP→PG：**2 GREEN／6110.748917ms／skip0／actualexit0**，两份日志各自55／repeat0／instance与class清理true／database_remaining=false，合成调用各1、共2，没有外部模型；不借 A18项9.443秒或其3项10.393秒。首次 Node 未激活Conda被原入口门禁提前拒绝，未建服务或数据库，不计产品RED；同代码补环境后实际两项通过。两个改动文件编译及diff通过。日志 `/private/tmp/notalone-root-canonical-fixture55-pg.log`、`/private/tmp/notalone-root-hidden-exploration-http-pg.log` 与原环境门禁日志保留。
 
 本主题仅测试契约和真实前缀兼容；完整连续意图／预算UI、C实际来源／样本 caller与55携入、B公开生命周期仍按各唯一负责人接续。A13保持claimed及六条原AC未勾，本次无产品源修改，不据九PG或两HTTP关闭A13/C06/B09。
+
+### 本轮独立工作树：连续要求正式提供者与选定版本要求修复
+
+2026-10-11：从总协调正式 `84b5dd32` 的独立工作树接续已明确属于本轮的 14 个 provider/client 源码与测试路径；不会丢弃既有在途接口。本切片接通公开 `POST /api/contacts/{contact_id}/assistant-sessions/{session_id}/continue`，真实展示组与具体保存版本在同 owner/CURRENT 事务内核验，再沿唯一 reserve、输入指纹、依赖图及回复运行时生成；结构化澄清先于领取和模型。实际改口及兼容要求只属于本助手会话，不写长期记忆，选择版本的完整消息组与原来源仍受删除约束。
+
+新增 P2 反例在正式提供者原代码独立取得 **2 RED／1.884 秒／actualexit1**：选定保存版本的“不要承诺”从实际输入中遗漏；与“自然一点”冲突的“正式一点”错误返回 200。只在权威 resolver 将选定保存版本的要求并入既有 requirements，再复用原 fail-closed 守卫；同两反例 **2 GREEN／4.109 秒／actualexit0**。保存版本中的未知要求不会自动猜兼容；完整两段版本测试明确 keep 原“保持两段完整。”，保留原版本、整组正文、保存重读和同键重放断言。
+
+实际验证命令先激活 Conda `NotAlone`，关闭 dotenv 与 LangSmith/LangChain tracing，仅使用 `/tmp` socket 55441 的随机自有隔离库：
+
+```bash
+PGPORT=55441 python /private/tmp/notalone-coordinator-isolated-tests.py /private/tmp/notalone-round29-a tests.integration.server.test_assistant_continuation tests.integration.server.test_assistant_session_inputs tests.unit.application.test_assistant_continuation
+npm run typecheck
+node --input-type=module -e 'import {build} from "esbuild"; const result=await build({entryPoints:["tests/assistant-continuation-client.test.ts"],bundle:true,platform:"node",format:"esm",write:false}); await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString("base64")}`);'
+```
+
+完整相关 **51 tests／52.848 秒／OK／skip0／actualexit0**，真实生产 001–055 全名账本匹配、重复迁移 0，续答夹具及外层自有数据库剩余均为 0。实际默认 JsonClient 的合法 Unicode 4096 边界、33／2048 条既有要求、澄清动作、冲突零模型／零请求、范围、来源删除及累计预算均通过。Node **26 GREEN／55.166 ms／skip0／actualexit0**；完整桌面类型检查、三个来源的 limited silent mypy、九个 Python 文件编译及 diff 检查通过。首次未升级沙箱的 socket 连接被 EPERM 拒绝，没有创建测试库，也不计产品 RED。
+
+两轴分别由现有独立 B／C Agent 只读执行固定 `84b5dd32→14 pending` 差异：Standards 硬规范 0、重要 possible Fowler 0；Spec 新增 P0–P3 为 0，明确 typed Main／公开页面及 prepare/jobs/退出仍属后续切片。两轴不代替测试，也不将部分提供者当完整交付。原 `State: claimed`、六条原验收标准和未勾状态保持；B/C 正式消费、用户可见 typed 连续讨论、A15/16/17/18 与组合继续。没有新增正文缓存、DDL、外部模型、私人资料、微信/OCR、外部发送、真实 App、人工验收、push、发布或部署。

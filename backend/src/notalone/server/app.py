@@ -54,6 +54,8 @@ from notalone.application.assistant_session_service import (
     AssistantTurn,
 )
 from notalone.persistence.assistant_session_store import PostgresAssistantSessionStore
+from notalone.persistence.assistant_continuation import PostgresAssistantContinuationStore
+from notalone.server.assistant_continuation import handle_continuation
 from notalone.persistence.assistant_session_catalog import PostgresAssistantSessionCatalog
 from notalone.persistence.assistant_candidate_versions import (
     AssistantCandidateVersions, PostgresAssistantCandidateVersions,
@@ -1191,6 +1193,15 @@ class BackendApp:
         """默认讨论、单次提交与显式读取；不提供自动恢复或发送能力。"""
 
         parts = path.strip("/").split("/")
+        if len(parts) == 6 and parts[5] == "continue":
+            continuation_owner = self._owner_id
+            if continuation_owner is None:
+                return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "owner_uninitialized"})
+            status, payload = handle_continuation(
+                self._assistant_sessions, owner_id=continuation_owner, method=method, path=path, body=body,
+                render_turn=_completed_turn_payload,
+            )
+            return _json_response(HTTPStatus(status), payload, headers={"Cache-Control": "no-store"})
         if generation_lifecycle_path(parts) is not None:
             interruption_owner = self._owner_id
             if interruption_owner is None:
@@ -2234,6 +2245,7 @@ def create_app(
         assistant_sessions=assistant_sessions or AssistantSessionService(
             store=PostgresAssistantSessionStore(database_url), reply=reply_service,
             catalog=PostgresAssistantSessionCatalog(database_url),
+            continuation_store=PostgresAssistantContinuationStore(database_url),
         ),
         candidate_versions=candidate_versions or PostgresAssistantCandidateVersions(database_url),
         reply_evidence=reply_evidence

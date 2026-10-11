@@ -15,6 +15,7 @@ from notalone.scopes import ContactScope
 if TYPE_CHECKING:
     from notalone.application.assistant_candidate_carry import CarriedAssistantSession, CarryAssistantCandidate
     from notalone.persistence.assistant_session_inputs import AssistantInput
+    from notalone.application.assistant_continuation import AssistantContinuationPort, ContinueAssistantSession
 
 
 class AssistantSessionError(RuntimeError):
@@ -130,10 +131,12 @@ class AssistantSessionService:
     def __init__(
         self, *, store: AssistantSessionStore, reply: ReplyService | None,
         catalog: AssistantSessionCatalogPort | None = None,
+        continuation_store: AssistantContinuationPort | None = None,
     ) -> None:
         self._store = store
         self._reply = reply
         self._catalog = catalog
+        self._continuation_store = continuation_store
 
     def default(self, *, owner_id: UUID, contact_id: UUID) -> UUID:
         return self._store.default(ContactScope(owner_id, contact_id))
@@ -205,6 +208,15 @@ class AssistantSessionService:
         scope = ContactScope(owner_id, contact_id)
         turn_id = self._store.reserve(scope, session_id, request)
         return self._generate_reserved(scope, session_id, turn_id, request)
+
+    def continue_completed(
+        self, *, owner_id: UUID, contact_id: UUID, session_id: UUID, command: ContinueAssistantSession,
+    ) -> AssistantTurn:
+        if self._reply is None or self._continuation_store is None:
+            raise AssistantSessionRejected("reply_unavailable")
+        scope = ContactScope(owner_id, contact_id)
+        reserved = self._continuation_store.reserve_continuation(scope, session_id, command)
+        return self._generate_reserved(scope, session_id, reserved.turn_id, reserved.request)
 
     def prepare_replacement(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,

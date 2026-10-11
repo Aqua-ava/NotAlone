@@ -21,8 +21,14 @@ from notalone.application.reply_service import ReplyServiceRequest
 from notalone.persistence.assistant_input_lineage import (
     AssistantCarryInputLineage, AssistantInputDependents, select_assistant_input_dependents,
 )
-from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.reply_discussion_dependencies import CapturedReplyDiscussionUse
+from notalone.application.assistant_continuation_identity import (
+    AssistantContinuationInvalid, continuation_commit_input, continuation_digest_input, continuation_input_payload,
+)
+from notalone.persistence.assistant_reply_identity import (
+    prepare_assistant_reply_start as prepare_assistant_reply_start,
+)
+from notalone.persistence.locks import lock_owner_scope
 from notalone.persistence.message_sources import valid_source_ref_exists_sql
 from notalone.persistence.style_sample_store import captured_reply_sources, require_reply_sources_current
 from notalone.reply.context import ReplyContext
@@ -180,6 +186,7 @@ def _dependencies_available(connection: Any, owner_id: UUID, dependencies: set[U
     return row["available"]
 
 
+
 def prepare_assistant_reply_commit(
     connection: Any, request: ReplyRequest, context: ReplyContext,
 ) -> None:
@@ -198,9 +205,13 @@ def prepare_assistant_reply_commit(
         binding_id = _active_binding(connection, request.scope)
     except (AssistantSessionRejected, AssistantSessionNotFound):
         raise ReplyStoreInvariantError("助手会话绑定已失效。") from None
+    try:
+        normalized = continuation_commit_input(context.command, request.normalized_input, turn["input_payload"])
+    except AssistantContinuationInvalid:
+        raise ReplyStoreInvariantError("助手会话输入身份已失效。") from None
     if (binding_id != request.conversation_binding_id
             or turn["conversation_binding_id"] != binding_id
-            or turn["input_digest"] != _digest(binding_id, request.normalized_input)):
+            or turn["input_digest"] != _digest(binding_id, normalized)):
         raise ReplyStoreInvariantError("助手会话输入版本已失效。")
     from notalone.persistence.assistant_session_inputs import require_current_input
     try:
@@ -267,6 +278,7 @@ def _independent_assistant_source_draft(
         and payload["content"]["type"] == "rewrite_draft"
         and not payload["content"].get("include_relationship_context", False)
         and payload.get("continued_from_candidate_id") is None
+        and not isinstance(payload.get("continuation"), dict)
     )
 
 
@@ -466,6 +478,7 @@ class PostgresAssistantSessionStore:
     def _reserve_in_transaction(
         self, connection: Any, scope: ContactScope, session_id: UUID,
         request: ReplyServiceRequest, *, running_request_key: UUID | None = None,
+        inherited_dependencies: tuple[UUID, ...] = (),
     ) -> UUID:
         """复用既有规范化、探索与来源门禁；同键重放先于旧请求失效。"""
 
@@ -477,7 +490,7 @@ class PostgresAssistantSessionStore:
         if command is None or not command.has_valid_content():
             raise AssistantSessionRejected("invalid_reply_input")
         normalized = _normalize_input(command)
-        digest = _digest(binding_id, normalized)
+        digest = _digest(binding_id, continuation_digest_input(request, normalized))
         existing = connection.execute(
             "SELECT id, session_id, state, input_digest, reply_request_id, interruption_reason FROM public.assistant_session_turn "
             "WHERE owner_id = %s AND contact_id = %s AND idempotency_key = %s FOR UPDATE",
@@ -537,6 +550,7 @@ class PostgresAssistantSessionStore:
         check_expected_input(require_input_session(connection, scope, session_id), request.expected_input_version_id)
         from notalone.persistence.explored_generation import prepare_explored_generation
         dependencies = prepare_explored_generation(connection, scope, session_id, command)
+        dependencies.update(inherited_dependencies)
         if isinstance(command.content, ReplyToMessage):
             target = connection.execute(
                 "SELECT 1 FROM public.message WHERE owner_id = %s AND contact_id = %s AND id = %s",
@@ -577,7 +591,8 @@ class PostgresAssistantSessionStore:
             "input_digest, input_payload, dependency_ids) "
             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, input_version_id",
             (session_id, scope.owner_id, scope.contact_id, request.idempotency_key,
-             binding_id, digest, Jsonb(_input_payload(canonical_reply_input(command))), list(dependencies)),
+             binding_id, digest, Jsonb(continuation_input_payload(
+                 request, _input_payload(canonical_reply_input(command)))), list(dependencies)),
         ).fetchone()
         connection.execute(
             "INSERT INTO public.assistant_session_input "

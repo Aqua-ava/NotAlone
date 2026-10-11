@@ -1,5 +1,7 @@
 import { request, type ClientRequest } from 'node:http';
 import type { BackendConnection } from './connection';
+import { isUuid } from '../uuid';
+import { readAssistantContinuationClarification } from '../../shared/assistant-continuation-clarification';
 import type { AssistantInputBudget } from '../../shared/assistant-input-budget';
 import { readInputBudgetFailure } from '../reply/input-budget-read';
 
@@ -10,6 +12,7 @@ export interface JsonRequest {
   signal?: AbortSignal;
   timeoutMs?: number;
   maxResponseBytes?: number;
+  acceptAssistantContinuationClarification?: true;
 }
 
 // 只携带安全分类；业务模块自行映射已知错误，不把响应原文转给界面。
@@ -68,6 +71,18 @@ export class JsonClient {
             const data: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
             const status = response.statusCode ?? 0;
             if (status < 200 || status >= 300) {
+              const parts = path.split('/');
+              if (options.acceptAssistantContinuationClarification === true && method === 'POST' && status === 409
+                && parts.length === 7 && parts[1] === 'api' && parts[2] === 'contacts' && isUuid(parts[3])
+                && parts[4] === 'assistant-sessions' && isUuid(parts[5]) && parts[6] === 'continue') {
+                const clarification = readAssistantContinuationClarification(data);
+                if (clarification) {
+                  // 仅本次具名请求返回受限业务状态；普通Error不携带任何响应正文。
+                  settled = true;
+                  resolve({ status, data: { error: 'assistant_continuation_clarification_required', clarification } });
+                  return;
+                }
+              }
               const code = (data as { error?: unknown })?.error;
               const reason = (data as { reason?: unknown })?.reason;
               fail(new BackendRequestFailure('response', status,
