@@ -139,3 +139,13 @@ Skill探索组合实际接续：已消费B正式UUID后端`1484c2b`为`0b0fce7`�
 共享删除回归保真记录：首轮四模块59项实际1FAIL＋2ERROR／108.363秒，全部自有库已清理。FAIL为旧测试仍要求current指向已redacted输入，与A b819正式清空契约相反；只将该断言改为None，保留旧输入占位、无关讨论和失效校验。两个memory-expiration子例是HTTP timeout；新隔离库原单例1GREEN／0.968秒，线程定时诊断未触发，未定位或宣称修复超时原因。原四模块完整复跑最终59GREEN／56.255秒、skip0，正式53／repeat0／嵌套和外层两自有库精确0，原租约失效诊断保留。加上前述20项最小组合，本删除主题相关验证完成；最终十文件只读两轴完成：Standards硬要求0／重要Fowler0，Spec新增P0–P2为0。复制后来copy／清空／先删SID后首次短贴的新P2独立开放，不由本删除修复关闭E04–E06。
 
 总协调主树集成 e5cea839 的四个必要 backend 文件及 f6d94b 的五行存储修正，保留所有历史和负责人证据。原四模块实际30项 GREEN／16.713秒；追加原12样本 HTTP，在临时 runner 子进程仅显式设 StyleSampleHttpTest.dimension_release=None，真实生产 CLI 迁移与 HTTP／PostgreSQL和全部原断言保持，共42项 GREEN／28.708秒，正式001–053、重复迁移0、自有库残留0。当前样本存储限定 mypy --follow-imports=skip 单文件通过、相关四文件编译通过；首次默认两类型错误及 C 默认跨文件错误保留，不宣称全树类型通过。最终此七文件 Standards硬要求／重要Fowler可能气味0、Spec0。仅接线、来源物理擦除和样本生命周期已自动验证，C未知粘贴新合同的公开异步来源反例、A恢复复制和其他组合继续；C04–06保持claimed，人工部分未执行。
+
+以下三份报告保留负责人 C 在正式 `9190af0` 记录中的历史运行数据；所述 HEAD／工作区和当时未完成项均指原运行阶段。来源删除接线现已正式集成 `ae449b2`，不能倒写历史报告为新的主树运行或借报告关闭 UI／人工组合。
+
+2026-10-11 当前集成树逐例交付：在HEAD 4a71ee3及尚待A helper的C中央actualturn_ids caller工作区上，独立运行完整 `tests.integration.server.test_authentic_expression_scenarios` 六场真实HTTP→生产装配→随机PG，6GREEN／33.749秒、skip0；正式53／repeat0／唯一自有库精确剩余0，目标门关闭。受控模型共18实际调用，同键重放零新增；记录的HTTP耗时不含模型外推成本。运行时style_sample_store SHA256为 88510bbccbe61704d23d0da2d592828552fca45eb2324ca89f81ce087eb244cf，该caller尚未提交，不能将此证据说成纯草稿删除已经修复。
+
+持久交付[基础与连续修改6例](../reports/combined-http-controlled-v1.json)、[本次声明6例](../reports/declared-http-controlled-v1.json)、[完整消息组6例](../reports/group-http-controlled-v1.json)。每份均有实际系统提示和模型JSON、原输出、期望、四个硬维度依据及真实调用计量；各6例皆development，4个合成符合例＋2个故意违约例，各报告保真失败2、确定性契约失败0、真人通过0，语义／自然度质量未验证。18例不是保留集或真实模型质量证明。原始捕获留在本机临时目录notalone-c-combined-capture-leo9l790，报告由唯一 `tests.fidelity_capture.capture_report` 消费既有独立review表生成，review不进入生成输入；报告已包含完整捕获，不依赖临时目录阅读。
+
+这些场景覆盖回应／主动、沿候选继续、本次三项声明、整组承诺错误可见、样本删除后旧键和恢复拒绝；B最终多轮UI和A新版本复制、暂停草稿来源擦除及公开NEW/C3仍未完成。四文件报告交付最终Standards硬要求0／重要Fowler0、Spec新增P0–P2为0，E06保持claimed。
+
+2026-10-11 总协调在正式来源擦除接缝及B重确认切片的根工作树独立复验原六个保真HTTP场景：首次5通过／1超时86.105秒，回应场首个/replies沿原10秒请求限制超时；未修改断言、请求超时或产品实现。缩小同一用例实际1通过10.980秒，随后原完整六项实际全部通过23.654秒／skip0，正式001–053／重复0／自有库剩余0。首次超时未稳定复现，原因未确认，保留为运行风险；不宣称已修复确定的产品故障。三份报告仍为9190正式负责人历史逐例产物，未用本次运行篡改旧延迟、调用数、输出或审查记录；synthetic_fixture、人类审查0及summary.quality_verified=false保持。未运行真实模型、人工自然度或真实App验收。
