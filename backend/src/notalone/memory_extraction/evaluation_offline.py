@@ -310,6 +310,8 @@ def _run_evaluation_batch(
                                                  if event["kind"] == "adapter_output"),
                         "provider_responses": tuple(event["payload"] for event in current_events
                                                     if event["kind"] == "provider_response"),
+                        "provider_requests": tuple(event["payload"] for event in current_events
+                                                   if event["kind"] == "provider_request"),
                         "gold_reference": dict(gold_reference or {}),
                     })
                     with store.stage(position, "case"):

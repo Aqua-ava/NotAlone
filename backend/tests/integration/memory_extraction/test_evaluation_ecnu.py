@@ -439,6 +439,43 @@ class EvaluationECNUTest(unittest.TestCase):
                 self.assertEqual(result["summary"]["unknown"], 1)
                 self.assertEqual(len(result["audits"]), 1)
 
+    def test_audit_receives_saved_requests_for_actual_verification_input(self):
+        window = build_window(PLAN[0])
+        source = str(window.target_message_ids[0])
+        fact = {
+            "text": "未知第三人不是仓库管理员，在采购部。",
+            "category": "relationship_note", "subject": "contact", "topic": "work",
+            "source_message_ids": [source], "confidence": 0.9,
+            "risk_flags": [], "valid_at": None, "invalid_at": None,
+            "speech_act": "report", "assertion_status": "reported",
+            "figurative_type": "literal", "alternatives": ["第三人身份未知。"],
+            "interpretation_reason": "合成第三人原话。",
+        }
+
+        def response(request):
+            name = json.loads(request.content)["tool_choice"]["function"]["name"]
+            arguments = {"facts": [fact]} if name == "MemoryExtractionOutput" else {
+                "results": [{"candidate_index": 0, "verdict": "supported", "issues": [],
+                             "evidence": [{"message_id": source,
+                                           "quote": window.messages[0].text}]}],
+            }
+            return self.response(request, arguments=arguments)
+
+        result = self.run_ready(
+            transport=httpx.MockTransport(response),
+            audit=lambda bundle: self.audit(bundle, "unknown", "audit_unresolved"),
+        )
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(len(self.audits), 1)
+        requests = self.audits[0]["provider_requests"]
+        saved = tuple(event["payload"] for event in result["events"]
+                      if event["kind"] == "provider_request")
+        self.assertEqual(requests, saved)
+        self.assertEqual(len(requests), 2)
+        self.assertNotIn("authorization", json.dumps(requests).lower())
+        self.assertNotIn("synthetic-not-a-real-key", json.dumps(requests))
+        self.assertIn("candidate_index", json.dumps(requests))
+
     def test_confidence_boolean_or_string_is_saved_then_rejected_before_verification(self):
         window = build_window(PLAN[0])
         source = str(window.target_message_ids[0])
