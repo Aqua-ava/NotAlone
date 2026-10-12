@@ -158,10 +158,64 @@ struct CalibrationContext: Equatable {
                                   frame: window.frame, version: "4.0.6", build: "29387")
     }
 
+    @MainActor
+    static func diagnostics(selectedProcessId: pid_t, windowId: CGWindowID, frame: CGRect) -> [String: Any] {
+        let front = NSWorkspace.shared.frontmostApplication
+        let instances = NSRunningApplication.runningApplications(withBundleIdentifier: "com.tencent.xinWeChat")
+        let code: String
+        do {
+            let current = try resolve(requireForeground: true)
+            code = current.processId == selectedProcessId && current.windowId == windowId && current.frame == frame
+                ? "matched" : "identity_changed"
+        } catch let error as CalibrationContextFailure {
+            code = error.rawValue
+        } catch {
+            code = CalibrationContextFailure.unavailable.rawValue
+        }
+        return CalibrationContextDiagnostics(
+            frontmostProcessId: front?.processIdentifier, frontmostBundleIdentifier: front?.bundleIdentifier,
+            frontmostBundlePath: front?.bundleURL?.path, wechatProcessIds: instances.map(\.processIdentifier),
+            soleWechatBundlePath: instances.count == 1 ? instances.first?.bundleURL?.path : nil,
+            selectedProcessId: selectedProcessId, contextCode: code
+        ).jsonObject()
+    }
+
     func selection(_ regions: [String: CGRect]) -> [String: Any] {
         ["schemaVersion": 1, "state": "selected-awaiting-verification", "wechatVersion": version,
          "wechatBuild": build, "processId": processId, "windowId": windowId,
          "windowFrame": coordinates(frame), "regions": regions.mapValues(coordinates)]
+    }
+}
+
+// 仅记录末次元数据快照，不选择实例、不保存App路径，也不授予采集资格。
+struct CalibrationContextDiagnostics {
+    let frontmostProcessId: pid_t?
+    let frontmostBundleIdentifier: String?
+    let frontmostBundlePath: String?
+    let wechatProcessIds: [pid_t]
+    let soleWechatBundlePath: String?
+    let selectedProcessId: pid_t
+    let contextCode: String
+
+    func jsonObject() -> [String: Any] {
+        let sole = wechatProcessIds.count == 1 ? wechatProcessIds[0] : 0
+        return ["front_app_code": applicationCode(frontmostBundleIdentifier, path: frontmostBundlePath, pid: frontmostProcessId),
+                "front_process_id": frontmostProcessId ?? 0, "selected_process_id": selectedProcessId,
+                "wechat_instance_count": wechatProcessIds.count, "sole_wechat_process_id": sole,
+                "sole_wechat_app_code": applicationCode(sole == 0 ? nil : "com.tencent.xinWeChat", path: soleWechatBundlePath, pid: sole),
+                "context_code": contextCode]
+    }
+
+    private func applicationCode(_ identifier: String?, path: String?, pid: pid_t?) -> String {
+        guard let pid, pid > 0 else { return "none" }
+        switch identifier {
+        case "com.tencent.xinWeChat":
+            guard let path else { return "wechat_unknown" }
+            return path == "/Applications/WeChat.app" ? "wechat_primary" : "wechat_other"
+        case "com.notalone.desktop": return "notalone"
+        case "com.javahello.notalone.NotAloneSyncProbe": return "probe"
+        default: return "other"
+        }
     }
 }
 

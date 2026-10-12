@@ -88,3 +88,40 @@ test('名称质量诊断只保留有限分项数值，拒绝名字和图像且�
     assert.equal(JSON.parse(await readFile(resultPath, 'utf8')).state, 'failed');
   } finally { await rm(owned, { recursive: true, force: true }); }
 });
+
+test('前台上下文诊断只保存固定分类和PID，拒绝路径、标题及不一致实例', async () => {
+  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-calibration-context-'));
+  try {
+    const modulePath = path.join(owned, 'profile.mjs');
+    await build({ entryPoints: ['src/main/foreground/calibration-profile.ts'], outfile: modulePath,
+      bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+    const profile = await import(pathToFileURL(modulePath).href);
+    const context = {
+      front_app_code: 'notalone', front_process_id: 321, selected_process_id: 123,
+      wechat_instance_count: 1, sole_wechat_process_id: 123, sole_wechat_app_code: 'wechat_other',
+      context_code: 'calibration_context_unavailable',
+    };
+    await profile.saveLayoutVerificationResult(owned, 'failed', 'wechat_not_in_front', 'context', () => true, undefined, context);
+    const resultPath = path.join(owned, 'foreground-layout-verification.json');
+    assert.deepEqual(JSON.parse(await readFile(resultPath, 'utf8')), {
+      state: 'failed', error: 'wechat_not_in_front', stage: 'context', context_diagnostics: context,
+    });
+    assert.equal((await stat(resultPath)).mode & 0o777, 0o600);
+    await assert.rejects(readFile(path.join(owned, 'foreground-layout-profile.json')), { code: 'ENOENT' });
+    for (const invalid of [
+      { ...context, bundle_path: '/synthetic/private/app' }, { ...context, window_title: '合成拒绝标题' },
+      { ...context, front_app_code: '合成拒绝名字' }, { ...context, context_code: '合成拒绝原文' },
+      { ...context, front_process_id: true }, { ...context, selected_process_id: 0 },
+      { ...context, sole_wechat_process_id: 2147483648 }, { ...context, wechat_instance_count: 1.5 },
+      { ...context, wechat_instance_count: 2 }, { ...context, front_app_code: 'none' },
+    ]) {
+      await assert.rejects(profile.saveLayoutVerificationResult(owned, 'failed', 'wechat_not_in_front', 'context', () => true, undefined, invalid));
+      assert.deepEqual(JSON.parse(await readFile(resultPath, 'utf8')).context_diagnostics, context);
+    }
+    const multiple = { ...context, wechat_instance_count: 2, sole_wechat_process_id: 0,
+      sole_wechat_app_code: 'none', context_code: 'calibration_wechat_instances_ambiguous' };
+    await profile.saveLayoutVerificationResult(owned, 'failed', 'minimal_region_layout_changed', 'context', () => true, undefined, multiple);
+    assert.equal(JSON.parse(await readFile(resultPath, 'utf8')).context_diagnostics.wechat_instance_count, 2);
+    await assert.rejects(profile.saveLayoutVerificationResult(owned, 'failed', 'wechat_not_in_front', 'selection', () => true, undefined, context));
+  } finally { await rm(owned, { recursive: true, force: true }); }
+});

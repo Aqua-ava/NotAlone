@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { savePendingCalibrationSelection } from './calibration-selection';
 import { loadBackendConfiguration } from '../backend/config';
 import { requestCalibrationCoordinates, type CoordinateProposal } from './calibration-form';
-import { invalidateCalibrationProfile, layoutVerificationErrors, layoutVerificationStages, readPendingSelection, saveLayoutVerificationResult, saveVerifiedProfile, saveVerificationProgress, validatedNameQuality, verificationProgressReceiver, type LayoutNameQuality } from './calibration-profile';
+import { invalidateCalibrationProfile, layoutVerificationErrors, layoutVerificationStages, readPendingSelection, saveLayoutVerificationResult, saveVerifiedProfile, saveVerificationProgress, validatedContextDiagnostics, validatedNameQuality, verificationProgressReceiver, type LayoutContextDiagnostics, type LayoutNameQuality } from './calibration-profile';
 
 const verificationMessages: Record<string, string> = {
   calibration_coordinates_invalid: '选区未保存：坐标格式或五处区域边界不符合要求。',
@@ -95,6 +95,7 @@ export class ForegroundCalibration {
     let code: typeof layoutVerificationErrors[number] = 'calibration_unavailable';
     let stage: typeof layoutVerificationStages[number] = 'host';
     let nameQuality: LayoutNameQuality | undefined;
+    let contextDiagnostics: LayoutContextDiagnostics | undefined;
     try {
       const selection = await readPendingSelection(this.userData);
       const choice = await dialog.showMessageBox(parent, { type: 'info', title: '校验微信最小区域', signal,
@@ -107,6 +108,11 @@ export class ForegroundCalibration {
       await saveVerificationProgress(this.userData, 'host', () => !this.disposed);
       const result = JSON.parse(await this.invoke(configuration.syncProbePath, undefined, selection)) as Record<string, unknown>;
       if (this.disposed) return;
+      if (result?.context_diagnostics !== undefined) {
+        if (result.ok !== false || result.verification_stage !== 'context') throw new Error('calibration_unavailable');
+        contextDiagnostics = validatedContextDiagnostics(result.context_diagnostics);
+        stage = 'context';
+      }
       if (result?.name_quality !== undefined) {
         const diagnosticStage = result.ok === true ? 'profile' : result.verification_stage;
         if (!['names', 'sentinels-after', 'profile'].includes(diagnosticStage as string)) throw new Error('calibration_unavailable');
@@ -123,7 +129,7 @@ export class ForegroundCalibration {
     } catch {
       if (this.disposed) return;
       await invalidateCalibrationProfile(this.userData, false);
-      await saveLayoutVerificationResult(this.userData, 'failed', code, stage, () => !this.disposed, nameQuality);
+      await saveLayoutVerificationResult(this.userData, 'failed', code, stage, () => !this.disposed, nameQuality, contextDiagnostics);
       throw new Error(code);
     }
     if (!parent.isDestroyed()) await dialog.showMessageBox(parent, { type: 'info', title: '布局校验已保存', signal,

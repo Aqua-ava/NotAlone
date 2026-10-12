@@ -62,3 +62,17 @@ npm run test:app -- --interactive --coordinator main-agent \
 如果返回screen_capture_permission_missing，由Root记录当前包identifier、实际helper可执行文件及父进程、触发动作和系统说明；必须用户处理的系统权限只补问该缺项，不重置TCC或自行接受。其他已授权独立任务继续。
 
 后续原验收缺项：新包真实前台/最小区域与质量门、低置信/同名/改名/失效绑定的无生成保护、已有草稿保留/显式切换、helper获焦停视觉但CLI仍运行、最后退出停读，以及权限与签名归属。当前未认证任何一项全部完成；仅把OCR暂停条件移除，票仍claimed。
+
+## 第二片：末次前台上下文诊断
+
+Root以第一片新签名包实际运行本目标场次a，报告约2.5分钟、1 failed；公开五区选择保存成功，校验终态为`context / wechat_not_in_front`。安全结果位于忽略目录`desktop/artifacts/goal-ocr-session-20261013-a/results/native-foreground-layout-公开校准后只以五处最小区域验证当前布局/layout-verification-result.json`，只有固定状态、阶段和错误码，未进入capture或names，没有`name_quality`或profile。此片只读该安全JSON，不读取画面或聊天；实际App时间、Computer Use动作、进程和租约收尾以Root场次台账为准。
+
+代码核对：`CalibrationContext.resolve`先要求同bundle运行实例数恰为1，才检查该唯一PID与前台PID相同，再核版本及该PID屏上唯一可用窗口；不存在按注册App列表顺序或最大窗口猜选。CUA报告同bundle有多个可选App只证明其库存歧义，不能证明系统同时运行两个实例或校验选了错误PID。旧终态只判断末次前台bundle，丢失了实例、窗口或选区身份失败的分支；不能把它直接归因为影子微信或权限问题。
+
+在原60秒context等待失败后，新增`context_diagnostics`，严格且仅有7字段：`front_app_code`、`front_process_id`、`selected_process_id`、`wechat_instance_count`、`sole_wechat_process_id`、`sole_wechat_app_code`、`context_code`。App只归类为固定`wechat_primary/other/unknown`、NotAlone、probe、other或none；primary只表示安装路径匹配`/Applications/WeChat.app`，不证明签名或可信来源。实例数不为1时sole PID固定0、sole分类none，不选择任何实例。原生仅读取本地App与窗口元数据，不捕获画面，不输出路径、bundle原文、窗口标题或姓名；多次系统查询不是原子快照，`matched`也不能撤销已发生的失败或授予资格。
+
+Host只允许failed/context保存这7项，严格固定码、正整数选区PID、有限其他PID/实例计数及sole一致性；拒绝路径、标题、任意扩展字段、非法数值或其他阶段。0600独占临时文件、原子替换和过期不写机制保持，profile与联系人绑定没有新字段。产品实例唯一、前台PID、可见、版本/窗口/几何及0.90质量门全部保持。
+
+固定第二片基点`629618ba88faeb6e7c267ebaad0e6fdbc73cfe50`。已执行：Node安全保存新增用例实际red为缺少context诊断（3通过/1失败），修复后4/4、约0.115秒；Swift新纯分类接缝首红为缺少结构编译失败，不是实机失焦复现，相关布局/采集组12/12、构建3.37秒、测试0.013秒；完整`npm test`类型和安全48/48、安全组11.577秒；最后`npm run typecheck`及`npm run build`通过（Vite120ms），`git diff --check`通过。未新增Python或模型实验；原39/39仅保留前片证据。此片真实App/probe/微信操作、HTTP、发送、权限操作均0；合成临时资源按测试finally清理，实机资源不能由此代签。独立mac_provenance Standards六代码与四文档硬违反0/Fowler判断0/证据越界0；memory_diagnosis独立Spec十文件最终未解决0，本地提交由Root共享暂存调度。
+
+下一场预注册：若实例数>1，诊断应保留ambiguous和sole0；若选区唯一实例为other而前台primary且PID不同，才能支持两者不一致的定位，再核实际可执行文件及签名；若唯一primary且前台NotAlone/other，则只支持末次前台失焦；若selected与sole不同或窗口/几何变更，保留identity/layout失败并重新公开校准。任何分类未知或查询竞态不得猜目标、放松门禁或通过无限重跑取得成功。Root从冻结第二片构建下一包，并只在新有限test:app场次采集该诊断；当前实机失败和原验收未完成继续保留。

@@ -44,6 +44,31 @@ final class MinimalRegionLayoutTests: XCTestCase {
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("合成名称"))
     }
 
+    func testContextDiagnosticsDoNotSelectAnAppOrPersistItsPath() throws {
+        let diagnostics = CalibrationContextDiagnostics(
+            frontmostProcessId: 321, frontmostBundleIdentifier: "com.notalone.desktop", frontmostBundlePath: nil,
+            wechatProcessIds: [123], soleWechatBundlePath: "/synthetic/private/WeChat-shadow.app",
+            selectedProcessId: 123, contextCode: "calibration_context_unavailable"
+        ).jsonObject()
+        XCTAssertEqual(diagnostics["front_app_code"] as? String, "notalone")
+        XCTAssertEqual(diagnostics["front_process_id"] as? Int32, 321)
+        XCTAssertEqual(diagnostics["selected_process_id"] as? Int32, 123)
+        XCTAssertEqual(diagnostics["sole_wechat_app_code"] as? String, "wechat_other")
+        XCTAssertEqual(diagnostics.count, 7)
+        let data = try JSONSerialization.data(withJSONObject: diagnostics)
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("private"))
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("shadow"))
+        let multiple = CalibrationContextDiagnostics(
+            frontmostProcessId: 123, frontmostBundleIdentifier: "com.tencent.xinWeChat", frontmostBundlePath: "/Applications/WeChat.app",
+            wechatProcessIds: [123, 456], soleWechatBundlePath: nil,
+            selectedProcessId: 123, contextCode: "calibration_wechat_instances_ambiguous"
+        ).jsonObject()
+        XCTAssertEqual(multiple["front_app_code"] as? String, "wechat_primary")
+        XCTAssertEqual(multiple["wechat_instance_count"] as? Int, 2)
+        XCTAssertEqual(multiple["sole_wechat_process_id"] as? Int32, 0)
+        XCTAssertEqual(multiple["sole_wechat_app_code"] as? String, "none")
+    }
+
     private func window(_ id: Int, _ width: Double, _ height: Double) -> [String: Any] {
         [kCGWindowNumber as String: id,
          kCGWindowBounds as String: CGRect(x: 0, y: 0, width: width, height: height).dictionaryRepresentation]

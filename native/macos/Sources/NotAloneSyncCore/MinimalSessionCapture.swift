@@ -12,6 +12,7 @@ public enum MinimalSessionCapture {
     public static func verifySelection(_ data: Data) async -> [String: Any] {
         var stage = "selection"
         var nameQuality: [String: Any]?
+        var contextDiagnostics: [String: Any]?
         func entering(_ name: String) {
             stage = name
             FileHandle.standardError.write(Data("notalone_verification_stage:\(name)\n".utf8))
@@ -25,6 +26,7 @@ public enum MinimalSessionCapture {
                 try await Task.sleep(nanoseconds: 100_000_000)
             }
             guard layout.contextMatches() else {
+                contextDiagnostics = CalibrationContext.diagnostics(selectedProcessId: layout.processId, windowId: layout.windowId, frame: layout.frame)
                 if NSWorkspace.shared.frontmostApplication?.bundleIdentifier != "com.tencent.xinWeChat" {
                     throw MinimalSessionError.weChatNotFrontmost
                 }
@@ -52,6 +54,7 @@ public enum MinimalSessionCapture {
             var result = failure(error)
             result["verification_stage"] = stage
             if let nameQuality { result["name_quality"] = nameQuality }
+            if let contextDiagnostics { result["context_diagnostics"] = contextDiagnostics }
             return result
         }
     }

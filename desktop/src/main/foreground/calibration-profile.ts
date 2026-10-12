@@ -64,6 +64,37 @@ export function validatedNameQuality(value: unknown): LayoutNameQuality {
   return { ...quality } as LayoutNameQuality;
 }
 
+export type LayoutContextDiagnostics = {
+  front_app_code: string; front_process_id: number; selected_process_id: number;
+  wechat_instance_count: number; sole_wechat_process_id: number; sole_wechat_app_code: string; context_code: string;
+};
+
+// 来源分类只说明末次元数据观察，不代替前台、布局或身份门禁。
+export function validatedContextDiagnostics(value: unknown): LayoutContextDiagnostics {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('calibration_result_invalid');
+  const context = value as Record<string, unknown>;
+  const keys = ['front_app_code', 'front_process_id', 'selected_process_id', 'wechat_instance_count',
+    'sole_wechat_process_id', 'sole_wechat_app_code', 'context_code'];
+  const wechatCodes = ['wechat_primary', 'wechat_other', 'wechat_unknown'];
+  const contextCodes = ['matched', 'identity_changed', 'calibration_wechat_instances_ambiguous',
+    'calibration_wechat_version_unsupported', 'calibration_window_not_visible', 'calibration_windows_ambiguous',
+    'calibration_window_geometry_invalid', 'calibration_context_unavailable'];
+  const integer = (key: string, minimum: number, maximum: number): boolean => typeof context[key] === 'number'
+    && Number.isInteger(context[key]) && (context[key] as number) >= minimum && (context[key] as number) <= maximum;
+  if (Object.keys(context).length !== keys.length || !Object.keys(context).every(key => keys.includes(key))
+    || ![...wechatCodes, 'notalone', 'probe', 'other', 'none'].includes(context.front_app_code as string)
+    || !contextCodes.includes(context.context_code as string)
+    || !integer('front_process_id', 0, 2147483647) || !integer('selected_process_id', 1, 2147483647)
+    || !integer('sole_wechat_process_id', 0, 2147483647) || !integer('wechat_instance_count', 0, 128)
+    || (context.front_app_code === 'none') !== (context.front_process_id === 0)
+    || (context.wechat_instance_count === 1
+      ? !(context.sole_wechat_process_id as number) || !wechatCodes.includes(context.sole_wechat_app_code as string)
+      : context.sole_wechat_process_id !== 0 || context.sole_wechat_app_code !== 'none')) {
+    throw new Error('calibration_result_invalid');
+  }
+  return { ...context } as LayoutContextDiagnostics;
+}
+
 export function verificationProgressReceiver(onStage: (stage: typeof layoutVerificationStages[number]) => void): (chunk: Buffer) => boolean {
   let bytes = 0, pending = '';
   const seen = new Set<string>();
@@ -94,11 +125,13 @@ export async function saveVerificationProgress(userData: string, stage: unknown,
 }
 
 // 仅保存固定阶段、安全错误码及经过白名单校验的数值，不授予采集资格。
-export async function saveLayoutVerificationResult(userData: string, state: 'failed' | 'verified', error: unknown, stage: unknown, isCurrent: () => boolean, nameQuality?: unknown): Promise<void> {
+export async function saveLayoutVerificationResult(userData: string, state: 'failed' | 'verified', error: unknown, stage: unknown, isCurrent: () => boolean, nameQuality?: unknown, contextDiagnostics?: unknown): Promise<void> {
   if (!['failed', 'verified'].includes(state) || !layoutVerificationStages.includes(stage as typeof layoutVerificationStages[number]) || (state === 'verified' ? error !== null
     : !layoutVerificationErrors.includes(error as typeof layoutVerificationErrors[number]))) throw new Error('calibration_result_invalid');
   if (nameQuality !== undefined && !['names', 'sentinels-after', 'profile'].includes(stage as string)) throw new Error('calibration_result_invalid');
-  const result = { state, error, stage, ...(nameQuality === undefined ? {} : { name_quality: validatedNameQuality(nameQuality) }) };
+  if (contextDiagnostics !== undefined && (state !== 'failed' || stage !== 'context')) throw new Error('calibration_result_invalid');
+  const result = { state, error, stage, ...(nameQuality === undefined ? {} : { name_quality: validatedNameQuality(nameQuality) }),
+    ...(contextDiagnostics === undefined ? {} : { context_diagnostics: validatedContextDiagnostics(contextDiagnostics) }) };
   const temporary = path.join(userData, `.foreground-verification-${randomUUID()}.tmp`);
   try {
     await writeFile(temporary, JSON.stringify(result), { flag: 'wx', mode: 0o600 });
