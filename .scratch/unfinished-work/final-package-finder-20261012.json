@@ -1,0 +1,142 @@
+{
+  "date": "2026-10-12",
+  "scope": [
+    "当前版本本机签名包",
+    "真实Finder启动验收"
+  ],
+  "status": "passed",
+  "production_source_commit": "b6fed39f2e555986d438d522693a9112adeb99e5",
+  "finder_test_sha256": "a631ac93c27e9b3620cf805e1778323b66cc808f0d9d01ae1a68e93422a3f6ba",
+  "artifact": {
+    "app_path": "/Users/local-user/learn/NotAlone/desktop/artifacts/final-package-20261012.IgUojn/packaged/NotAlone-darwin-arm64/NotAlone.app",
+    "archive_path": "/Users/local-user/learn/NotAlone/desktop/artifacts/final-package-20261012.IgUojn/NotAlone-macOS-arm64.zip",
+    "archive_sha256": "b7fdfbc3b6f9983282210c25ff88ff9902fc6bd943e3bbb56c850cd16c79acea",
+    "archive_bytes": 140254252,
+    "archive_integrity_verified": true,
+    "signature": "ad-hoc",
+    "developer_id_or_notarization": false,
+    "architecture": "arm64",
+    "asar_sha256": "27cc230aee9c979dcd88e0b3eecb2e08bc677e6d072bba44183cb8fca591e1c7"
+  },
+  "static_verification": {
+    "production_dist_files_matched": 6,
+    "helper_files_hash_signature_arch_verified": 4,
+    "strict_signature_before_and_after_native_run": true,
+    "only_allow_jit": true,
+    "ats_arbitrary_loads": false,
+    "extra_camera_microphone_audio_bluetooth_declarations": false,
+    "private_config_or_repository_packaged": false
+  },
+  "actual_native_window": {
+    "from": "2026-10-12T10:40:00+08:00",
+    "until": "2026-10-12T11:00:00+08:00",
+    "coordinator": "main-agent",
+    "max_launches": 6,
+    "actual_launches": 4
+  },
+  "packaged_lifecycle": {
+    "command": "NOTALONE_ASSISTANT_LIFECYCLE_ACCEPTANCE=1 NOTALONE_TEST_APP_EXECUTABLE=<本轮包内可执行文件> npm run test:app -- --interactive --coordinator main-agent --from 2026-10-12T02:40:00.000Z --until 2026-10-12T03:00:00.000Z --max-launches 2 tests/assistant-native-lifecycle.spec.ts --output artifacts/final-package-20261012-lifecycle",
+    "passed": 1,
+    "total": 1,
+    "exit_code": 0,
+    "test_seconds": 14.4,
+    "runner_seconds": 14.7,
+    "launches": 2,
+    "helper_close_generation_continues": true,
+    "menu_quit_interrupts": true,
+    "saved_completions_preserved": true,
+    "late_result_not_revived": true,
+    "same_user_data_reopened": true,
+    "reopen_model_delta": 0,
+    "explicit_retry_model_delta": 1,
+    "controlled_model_calls": 4
+  },
+  "finder": {
+    "command": "NOTALONE_FINDER_PACKAGE_ACCEPTANCE=1 NOTALONE_TEST_APP_EXECUTABLE=<同一包内可执行文件> npm run test:app -- --interactive --coordinator main-agent --from 2026-10-12T02:40:00.000Z --until 2026-10-12T03:00:00.000Z --max-launches 1 tests/finder-package-acceptance.spec.ts --output artifacts/final-package-20261012-finder-complete",
+    "passed": 1,
+    "total": 1,
+    "exit_code": 0,
+    "duration_reported": "2.1m",
+    "launches": 1,
+    "source": "主Agent实际CUA在Finder中双击同一NotAlone.app",
+    "compiled_notalone_protocol_ui_observed": true,
+    "configured_absolute_python_started_owned_backend": true,
+    "authenticated_runtime_running_observed": true,
+    "manager_and_configuration_ready": true,
+    "helper_open_and_hide_observed": true,
+    "public_menu_quit_observed": true,
+    "original_user_data_directory_identity_restored": true,
+    "coordinator_receipt_wait_ms": 300000,
+    "external_model_calls": 0
+  },
+  "earlier_finder_attempt": {
+    "exit_code": 1,
+    "duration_reported": "5.3m",
+    "launches": 1,
+    "reason": "实际操作完成，但主Agent协调回执未赶上原3分钟等待；已将等待改为5分钟，全场8分钟及原预约截止仍有效。",
+    "original_directory_restored": true,
+    "owned_app_backend_and_database_cleaned": true,
+    "counted_as_pass": false
+  },
+  "automatic_checks": {
+    "finder_isolation": {
+      "command": "node --test tests/packaging/finder-isolation.test.mjs",
+      "passed": 2,
+      "total": 2,
+      "original_directory_preserved": true,
+      "symlink_and_replaced_directory_rejected": true
+    },
+    "desktop_safety": {
+      "command": "npm test",
+      "passed": 40,
+      "total": 40,
+      "seconds": 12.743747291,
+      "actual_app_run": false
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "exit_code": 0
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  },
+  "review": {
+    "initial_standards_p2": 1,
+    "initial_spec_p2": 1,
+    "same_issue": "查询失败／缺握手不能证明后端退场",
+    "fix": "只有自有PID的ESRCH证明退出；未取得PID一律保留备份、测试库与租约",
+    "remaining_standards_findings": 0,
+    "remaining_spec_findings": 0
+  },
+  "cleanup": {
+    "owned_database_remaining": 0,
+    "exact_owned_database_count": 3,
+    "exact_owned_pids_remaining": 0,
+    "checked_owned_pid_count": 6,
+    "test_directories_remaining": false,
+    "original_user_data_identity_restored": true,
+    "app_lease": "absent",
+    "page_lease": "absent"
+  },
+  "boundary": {
+    "new_product_features": false,
+    "production_code_changed": false,
+    "private_file_contents_read": false,
+    "business_database_touched": false,
+    "ocr_run": false,
+    "wechat_read": false,
+    "external_model_calls": 0,
+    "external_messages_sent": 0,
+    "tcc_or_permission_changes": false,
+    "push_or_deploy": false
+  },
+  "remaining_full_delivery_items": [
+    "WCDB精确构建／许可来源仍未收口",
+    "前台定位任务18及OCR继续暂停",
+    "最终包的完整微信同步／停读链路及剩余原生用户故事未由本轮代签",
+    "真实模型语义质量未由受控模型代签"
+  ],
+  "raw_evidence_location": "desktop/artifacts/final-package-20261012.IgUojn/、final-package-20261012-lifecycle/、final-package-20261012-finder/、final-package-20261012-finder-complete/（全部忽略的本地证据）"
+}

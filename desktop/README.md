@@ -217,6 +217,10 @@ NOTALONE_ASSISTANT_LIFECYCLE_ACCEPTANCE=1 npm run test:app -- --interactive --co
   tests/assistant-native-lifecycle.spec.ts --output artifacts/assistant-native-closeout
 ```
 
+`tests/finder-package-acceptance.spec.ts`默认跳过，显式`NOTALONE_FINDER_PACKAGE_ACCEPTANCE=1`、最终包可执行文件及有限`test:app`活租约才预留一次Finder启动。主Agent实际CUA在Finder双击，读取最终包管理／配置、小窗打开／隐藏和公开菜单退出；只使用随机PG与独立配置，原默认userData仅元数据核验、整体暂存并按原身份恢复。App／后端退场不确定或目录改变时保留备份／库／租约，不清理未知资源。协调等待5分钟、整场8分钟，预约截止优先，不新增产品启动参数或权限。
+
+2026-10-12当前`b6fed39f`产品源码的本机arm64 ad-hoc包已离线构建、运行前后严格验签，6份ASAR资源匹配当前dist，4份helper哈希／架构／签名通过。同一包生命周期1／1（14.4秒、两次启动）和真实Finder整场1／1（约2.1分钟、一次启动）通过，原目录恢复且资源清理；第一场Finder协调超时独立保留，本轮累计4次启动。归档及具体命令见[任务20结果](../.scratch/mac-desktop-app/issues/20-mac-app-delivery.md#2026-10-12-当前签名包与finder启动收口)和[摘要](../.scratch/unfinished-work/final-package-finder-20261012.json)。OCR／微信保持暂停，完整交付、WCDB精确构建／许可及Developer ID／公证分发没有由本场代签。
+
 `tests/native-desktop-acceptance.spec.ts` 只在 `NOTALONE_NATIVE_DESKTOP_ACCEPTANCE=1` 时执行，默认全量跳过；必须通过上述预约门禁，并以 `NOTALONE_TEST_APP_EXECUTABLE` 指定实际签名包可执行文件。沿用隔离导入夹具的真实 HTTP/PG 与合成资料，等待现场操作真实系统文件选择器和两次物理快捷键，不替换文件选择结果或调用快捷键回调。单场最多 8 分钟，文件选择与每次按键各最多等待 3 分钟，每次用户反馈最多等待 90 秒，预约截止仍优先。程序观察到状态后保留 App，等待主 Agent 收到用户对本次操作的明确反馈；两次都确认后才正常菜单退出，退出后系统快捷键注销。缺失、否定或非法反馈均不算通过，失败或预约到期仍按门禁收尾。
 
 协调者从日志所列 `human-show-request.json`／`human-hide-request.json` 读取本轮 `requestId`、操作与随机 `responsePath`，只在收到对应用户反馈后向该自有路径原子写入 `0600` 收据：`{"requestId":"本次请求标识","confirmed":true}` 或 `false`。只存布尔结论，不存用户原话；未答、含糊回答或机器窗口状态不得写成 `true`。不同操作各有随机请求，旧收据不能复用；不允许符号链接、非普通文件或超过 1 KiB 的响应。本次仅准备流程，尚未再次运行真实 App，因此下方旧版实机结果不会更新为新版或人工隐藏通过。

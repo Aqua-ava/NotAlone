@@ -1,7 +1,7 @@
 # 20：本机 App 打包与完整交付验收
 
 Type: task
-State: open
+State: claimed
 Triage: needs-info
 Blocked by: 03, 04, 10, 14, 15, 17, 18, 19
 Spec: ../spec.md
@@ -14,7 +14,7 @@ Spec: ../spec.md
 
 ## 验收条件
 
-- [ ] 实际 .app 由 Finder 启动，运行不依赖开发服务器或原型；Python/PostgreSQL 仍使用已配置本机环境。
+- [x] 实际 .app 由 Finder 启动，运行不依赖开发服务器或原型；Python/PostgreSQL 仍使用已配置本机环境。
 - [ ] 核验完整 helper/动态库、受控路径、签名及权限记录，验收真实快捷键、剪贴板和退出停读。
 - [ ] 自动化/相关后端检查及 Standards/Spec 两轴评审通过，记录产物位置、已通过和未验证的集成部分。
 - [ ] 模型冒烟使用合成输入，真实微信只在既有明确确认范围验收；不处理未授权私人数据、不发送消息、不推送远端。
@@ -138,3 +138,20 @@ Spec: ../spec.md
   固定 `8af1e8e → af273be` 初评 Standards 硬违规/建议 0/0；Spec 指出 P2：原生结果的 `systemShortcutHide: true` 只根据窗口不可见，不能证明隐藏来源。已改为 `helperShownObserved`/`helperHiddenObserved`，并明确 `humanShortcutAcceptanceRecorded: false`；机器结果不代替用户反馈。原运行 JSON 不改写，`verification.json` 另说明旧字段仅表示窗口状态；只修正证据字段及提示，没有再次启动 App，类型检查与增量复核随后补齐。
 
 - 2026-10-10（用户继续：人工验收反馈收口准备）：原流程观察到隐藏就退出，用户反馈来时 App 已停止，影响人工验收。只修改本票既有原生场景的配合流程：显示/隐藏各在状态观察后生成随机请求并等待协调者依据对应用户反馈写入布尔收据，两次明确确认后才写入人工验收结果并正常菜单退出；缺失、否定或非法收据不通过，不根据窗口状态自动确认。响应仅本轮自有输出路径、普通文件、不跟随符号链接、最大 1 KiB，旧请求不能复用；每步反馈最多 90 秒、单场 8 分钟与预约截止优先，失败继续自有夹具/门禁收尾。没有改产品功能、后台数据/权限、公共 App/HTTP 接缝或依赖图，也没有新增自主 Harness；这只是原人工场景的必要协调 I/O。现不再次启动 App，新流程实际现场仍待新的有限预约，原 2/2 历史记录与隐藏未确认不变。本票仍 open/needs-info、四项原验收未勾；最小类型/静态检查及两轴评审随后补齐。
+
+
+## Answer
+
+### 2026-10-12 当前签名包与Finder启动收口
+
+用户本轮指定的当前签名包与Finder启动两项已完成，原第1条据实勾选，State改为claimed，Triage仍needs-info。原四条验收文字及依赖图保持；完整交付票还缺WCDB精确构建／许可、18定位以及剩余渠道／原生链路，不把本次两项通过写成整票resolved。新增功能冻结，OCR继续暂停，后续操作沿用用户本轮授权，没有再逐次询问。
+
+- 当前产品源码固定`b6fed39f`，后续仅增加验收夹具与记录，`desktop/src`、`backend/src`、`native/macos`无变更。离线 `npm run package -- --helper-directory <此前固定发行runtime> --helper-version 1.6.25 --helper-source https://github.com/r266-tech/wechat-cli-releases/releases/tag/v1.6.25 --with-probe --output-directory <本轮独立packaged> --electron-zip-directory <本轮离线归档>`成功。ASAR只含dist及最小清单，6份资源与最终当前dist逐字节一致；CLI/WCDB原发行字节与仓库探针／核心库共4文件的哈希、arm64和严格签名通过。运行前后主包deep strict均通过，主包仅allow-jit、helper无该权限；ATS任意加载false，无新增相机／麦克风／蓝牙声明。
+- 同一包在10:40–11:00有限`test:app`窗口实际执行 `assistant-native-lifecycle.spec.ts`：1／1、14.4秒（runner14.7秒）／exit0、两次启动。小窗close继续、quit持久化中断、旧完成保留、迟到无效、同目录重开模型delta0及明确retry delta1全部保持，受控模型共4次；不是外部模型质量冒烟。
+- `finder-package-acceptance.spec.ts`在同一有限入口预留1次真实Finder启动，由主Agent CUA实际双击最终`.app`。公开管理／配置页面显示`notalone://app/`资源、本机服务已连接、机器环境已就绪及配置的绝对Python；打开／隐藏输入小窗后，从公开菜单退出。认证HTTP running、App／后端PID退出及握手移除均核对；默认userData只整体暂存、不读取原文件，退场后原目录dev/ino恢复。完整复验 **1／1、约2.1分钟／exit0**，实际1次启动；此前约5.3分钟的一场因Root回执未赶上3分钟等待而exit1，操作与清理已完成但不算整场通过。仅协调等待改为5分钟，全场8分钟及原预约截止仍优先。
+- 本轮合计4次实际App启动（包内生命周期2＋首次Finder1＋完整Finder复验1），未再启动。纯合成Finder目录保护2／2、完整TypeScript、默认安全40／40（12.744秒、不运行App）、diff及相对链接检查通过。两轴初评同一P2的未知后端清理问题已修正，复审0；最终证据另做两轴只读核对。
+- Root新PG连接检查3份精确自有随机库均不存在，记录的6个自有App／后端PID均不存在，原目录身份恢复，测试userData／夹具／暂存目录无剩余，App与页面租约absent。原配置文件内容未读取，不修改业务库、TCC、权限或已安装App。没有真实微信、OCR、外部模型、聊天发送、push或部署。
+
+产物：`desktop/artifacts/final-package-20261012.IgUojn/packaged/NotAlone-darwin-arm64/NotAlone.app`；归档`desktop/artifacts/final-package-20261012.IgUojn/NotAlone-macOS-arm64.zip`（140254252 bytes，SHA-256 `b7fdfbc3b6f9983282210c25ff88ff9902fc6bd943e3bbb56c850cd16c79acea`，ZIP完整性通过）。CLI发行许可／说明随归档同级保留；不声明缺失的WCDB构建／许可已完整。
+
+[无敏感验收摘要](../../unfinished-work/final-package-finder-20261012.json)保存固定源码、实际命令、通过与失败分场、清理及完整交付边界；原始CUA画面、测试库名、PID和临时路径不提交。本包为**本机ad-hoc签名**，没有Developer ID／公证分发验收；源App旧结论、旧包及本次同一包结果分别保留。用户指定的这两项收尾完成，其余原20依赖继续按原范围处理。

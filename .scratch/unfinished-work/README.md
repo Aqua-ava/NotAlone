@@ -9,7 +9,7 @@
 
 2026-10-12当前决定：**冻结新增功能，完成持续会话19／17收尾；OCR继续暂停。** 最近29票均resolved（原验收166／166），另补原不在29票范围的19（6／6），第三版30张原票现全部resolved／172条均勾选；这是逐票规格的验收完成，不代表完整Mac产品、真实模型质量或微信渠道全部交付。当前任务State／Answer与[29票结果索引](round29-autonomous-results-20261011.md)为权威结果。
 
-19双联系人／多会话及多来源传递删除自动交叉通过；有限源App整场1／1、11.3秒（runner11.7秒）／exit0，核对真实小窗关闭继续、退出中断、同目录重开零自动模型及显式重试。累计6次启动，前三场验收脚本失败独立保留，所有自有进程、测试库及临时目录清理确认，两租约absent。最新证据见[19最终收口](../assistant-session-context/issues/19-combined-native-acceptance.md#最终收口2026-10-12)及[结果摘要](assistant-session-closeout-20261012.json)。最终签名包／Finder、真实微信同步扩展、OCR及真实模型语义质量仍按既有未完成事项处理，冻结期间不追加功能。
+19双联系人／多会话及多来源传递删除自动交叉通过；有限源App整场1／1、11.3秒（runner11.7秒）／exit0，核对真实小窗关闭继续、退出中断、同目录重开零自动模型及显式重试。累计6次启动，前三场验收脚本失败独立保留，所有自有进程、测试库及临时目录清理确认，两租约absent。最新证据见[19最终收口](../assistant-session-context/issues/19-combined-native-acceptance.md#最终收口2026-10-12)及[结果摘要](assistant-session-closeout-20261012.json)。后续同一当前产品源码的本机arm64 ad-hoc包及真实Finder启动已完成，见[最终包／Finder摘要](final-package-finder-20261012.json)：包内生命周期1／1、真实Finder1／1，原目录恢复与资源清理确认。完整微信同步扩展、OCR、WCDB精确构建／许可及真实模型语义质量仍按既有未完成事项处理，冻结期间不追加功能。
 
 **2026-10-11发布时的历史进度：用户认可复审修订，[第三版30票](resplit-20261011.md)已发布（持续会话13、聊天策略11、真实表达6），全部未开工。持续会话旧六票仅拆分替代，保留历史和继任链接；当前从新07票开始。**
 
@@ -27,7 +27,7 @@
 | 导入到回复的后端闭环 | [核心闭环](../core-business-flow/spec.md)、[导入自动处理](../import-memory-auto/spec.md)、[观察自动处理](../observation-memory-auto/spec.md)、[回复模块](../reply-module-flow/spec.md)的已发布任务已关闭；公开HTTP、正式PG/Worker、来源、幂等、恢复和删除有合成验收 | 脚本模型通过不等于真实模型质量通过，独立CLI入口也不代表App整合完成 |
 | 记忆与可追踪依据 | 提取/来源核验、本人和联系人记忆、待确认候选、时效、追踪和删除链路已有实现；[追踪三票](../memory-extraction-trace/spec.md)已关闭 | 整体事实覆盖和指代质量仍未达标；[自动采纳放行表](../../docs/memory-adoption-dimension-release-ledger.md)仍为空 |
 | 检索与Skill管理 | [词法召回](../memory-recall/spec.md)、[上下文/Skill](../memory-skill-context/spec.md)、[Skill库](../skill-library/spec.md)已有实现与原票验证 | 不把未上线的向量试验或新聊天策略算成产品能力 |
-| 打包与部分原生能力 | [任务20](../mac-desktop-app/issues/20-mac-app-delivery.md)记录helper核验/随包、仓库探针构建、候选包签名、真实剪贴板、系统文件选择和合成导入；复制与桌面调度已结票 | WCDB精确构建/许可、最终Finder隔离启动、完整同步退出及OCR仍缺；历史候选包不自动代表最新代码包 |
+| 打包与部分原生能力 | [任务20](../mac-desktop-app/issues/20-mac-app-delivery.md)记录helper核验/随包、仓库探针构建、候选包签名、真实剪贴板、系统文件选择和合成导入；复制与桌面调度已结票 | 当前本机ad-hoc包及Finder隔离启动已补验；WCDB精确构建/许可、完整同步退出及OCR仍缺，历史其他原生场景不自动代表最新版整体验收 |
 | 真实微信单联系人同步 | [任务04](../native-app-backend/issues/04-real-wechat-follow-smoke.md)：新消息读取/入库/去重、故障自动恢复、关闭期间补齐、故障期间补齐均有实际记录 | 只覆盖已授权单联系人及记录中的测试条件，未覆盖双联系人和最终App退出 |
 | 10分钟持续同步 | `977bd93`：Computer Use分时发送3条测试消息；后台运行601.5秒，120次采样均活跃，三条各入库一次，无重启，关闭零读取且临时资源清理 | 选定会话新增全局事件为0，消息由安全对账读取；不能称全局事件通知或小时级/高负载稳定性通过 |
 | 研究、原型和官网 | [聊天路径原型](../conversation-paths-prototype/report.md)、[DSH探测](../dsh-session-probe/report.md)、Hindsight/pgvector对照已结束；[官网](../../website/README.md)已实现 | 实验结束可得“不采用”结论；聊天原型不等于新会话流程已接入产品，向量仍未默认启用 |
@@ -40,7 +40,7 @@
 | --- | --- | --- | --- |
 | [native-app-backend/04 真实微信follow](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed / ready-for-human | 单联系人实际读取、入库、去重、自动恢复、两类缺口补齐、10分钟分时同步已验证 | 对方来信的全局事件触发；双联系人独立游标和切回；最终App退出停读；视觉边界等OCR恢复后再验。后台持续同步通过不替代严格的follow事件条件 |
 | [mac-desktop-app/18 前台定位](../mac-desktop-app/issues/18-foreground-locator.md) | claimed / ready-for-human；用户暂停 | 最小选区、多窗口极小辅助窗排除、安全失败分类已修；真实前台和采集路径越过前序门禁，名称完整与一致性通过 | 最低OCR置信度低于0.90，无verified profile；仍需定位采用/失效、焦点保护及宿主权限验证。**先不动，不降低门槛** |
-| [mac-desktop-app/20 完整交付](../mac-desktop-app/issues/20-mac-app-delivery.md) | open / needs-info | 受控helper接线、正式候选包构建/签名、若干原生场景已通过 | WCDB Custom build精确来源/许可、与当前源码一致的最终包、Finder受控启动、快捷键隐藏确认、真实同步退出及原18依赖；不能继续写成“什么都没做” |
+| [mac-desktop-app/20 完整交付](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed / needs-info | 当前源码的本机ad-hoc完整helper包及真实Finder隔离启动已通过，包内生命周期复验通过；历史剪贴板／文件选择证据保留 | WCDB Custom build精确来源/许可、剩余快捷键体验、真实同步退出及原18依赖；OCR继续暂停 |
 | [memory-core-claim-retention/01 核心事实](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed / ready-for-human | 提示局部修正及多轮受控实验已记录；部分安全和保真检查通过 | 既有真实资料严格覆盖6/12、可选2/6，目标未达成；新预注册对照或目标范围决定。旧预算已关闭，不是缺凭据 |
 | [memory-extraction-accuracy/07 指代](../memory-extraction-accuracy/issues/07-reference-resolution.md) | open / needs-info | 现行16条用例、门槛和保守去向已核对；110项确定性/追踪回归有记录 | 固定当前模型/配置与基线，针对实际失败修复，再评原门槛；需新对照与调用预算。历史13/15不能沿用为当前16条结果 |
 | [memory-accuracy-next/03 维度放行](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed / ready-for-human | 空放行表、回退开关、工具计算门槛已实现；可推导subject/time/truth_intent | 其余维度缺结构化字段；既有评测未达标。先决定字段和质量路线，再取得可推导维度的达标证据及逐类批准；不自动放行 |

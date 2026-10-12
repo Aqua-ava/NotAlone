@@ -92,7 +92,7 @@ test('最终签名包由Finder打开，绝对解释器连接隔离PG、双窗口
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ state: 'running' });
     await writeCoordination('backend_ready', { appPid, backendPid, until: permit.until, ownedIdentity: isolation.ownedIdentity });
-    await expect.poll(() => coordinatorReceipt(receiptPath), { timeout: 3 * 60_000 }).toEqual({
+    await expect.poll(() => coordinatorReceipt(receiptPath), { timeout: 5 * 60_000 }).toEqual({
       finderOpened: true, managerReady: true, configurationReady: true,
       helperOpened: true, helperHidden: true, normalQuitRequested: true,
     });
