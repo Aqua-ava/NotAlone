@@ -130,6 +130,117 @@ class EvaluationRecordsTest(unittest.TestCase):
                 self.assertTrue(receipt["plan_complete"])
                 self.assertFalse(receipt["quality_certified"])
 
+    def test_repeated_finalize_returns_same_verified_immutable_receipt(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            with patch.object(Path, "home", return_value=home):
+                budget, records = self._store(home)
+                with budget.batch():
+                    pass
+                outcomes = ({
+                    "case_position": 0, "case_name": "合成空候选",
+                    "input_sha256": "a" * 64, "status": "unrun",
+                },)
+                original = records.finalize(outcomes=outcomes, budget_closed=True)
+                first_bytes = (home / "output/completion.json").read_bytes()
+                original["outcomes"][0]["status"] = "completed"
+                repeated = records.finalize(outcomes=outcomes, budget_closed=True)
+                self.assertEqual(repeated["outcomes"][0]["status"], "unrun")
+                self.assertEqual((home / "output/completion.json").read_bytes(), first_bytes)
+                changed = json.loads(first_bytes)
+                changed["quality_certified"] = True
+                (home / "output/completion.json").write_text(json.dumps(changed))
+                with self.assertRaises(EvaluationBudgetAbort):
+                    records.finalize(outcomes=outcomes, budget_closed=True)
+
+    def test_capture_gap_receipt_cannot_resume_events_or_dispatch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            with patch.object(Path, "home", return_value=home):
+                budget, records = self._store(home)
+                sent = []
+                with self.assertRaises(EvaluationBudgetAbort):
+                    with budget.batch(), records.stage(0, "case"):
+                        records.record(kind="case_started", payload={})
+                        with httpx.Client(transport=EvaluationTransport(
+                            budget, records=records,
+                            synthetic_transport=httpx.MockTransport(
+                                lambda request: sent.append(request) or httpx.Response(
+                                    500, content=b"synthetic-opaque-500!",
+                                ),
+                            ),
+                        ), trust_env=False) as client:
+                            client.post(ENDPOINT, json={})
+                outcomes = ({
+                    "case_position": 0, "case_name": "合成空候选",
+                    "input_sha256": "a" * 64, "status": "unknown",
+                },)
+                receipt = records.finalize(outcomes=outcomes, budget_closed=True)
+                original = (home / "output/completion.json").read_bytes()
+                with records.stage(0, "extraction"):
+                    with self.assertRaises(EvaluationBudgetAbort):
+                        records.record(kind="provider_request", payload={})
+                    with httpx.Client(transport=EvaluationTransport(
+                        budget, records=records,
+                        synthetic_transport=httpx.MockTransport(
+                            lambda request: sent.append(request) or httpx.Response(200),
+                        ),
+                    ), trust_env=False) as client:
+                        with self.assertRaises(EvaluationBudgetAbort):
+                            client.post(ENDPOINT, json={})
+                self.assertEqual(len(sent), 1)
+                self.assertEqual(len(records.events()), 3)
+                self.assertEqual(records.finalize(outcomes=outcomes, budget_closed=True), receipt)
+                self.assertEqual((home / "output/completion.json").read_bytes(), original)
+
+    def test_capture_gap_does_not_authorize_retrying_failed_terminal_write(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            with patch.object(Path, "home", return_value=home):
+                budget, records = self._store(home)
+                with self.assertRaises(EvaluationBudgetAbort):
+                    with budget.batch(), records.stage(0, "case"):
+                        records.record(kind="case_started", payload={})
+                        with httpx.Client(transport=EvaluationTransport(
+                            budget, records=records,
+                            synthetic_transport=httpx.MockTransport(
+                                lambda request: httpx.Response(500, content=b"opaque"),
+                            ),
+                        ), trust_env=False) as client:
+                            client.post(ENDPOINT, json={})
+                outcomes = ({
+                    "case_position": 0, "case_name": "合成空候选",
+                    "input_sha256": "a" * 64, "status": "unknown",
+                },)
+                real_open = os.open
+
+                def fault(path, *args, **kwargs):
+                    if str(path) == "completion.json":
+                        raise OSError("synthetic terminal storage fault")
+                    return real_open(path, *args, **kwargs)
+
+                with patch.object(os, "open", side_effect=fault):
+                    with self.assertRaises(EvaluationBudgetAbort):
+                        records.finalize(outcomes=outcomes, budget_closed=True)
+                with self.assertRaises(EvaluationBudgetAbort):
+                    records.finalize(outcomes=outcomes, budget_closed=True)
+                self.assertFalse((home / "output/completion.json").exists())
+                self.assertEqual(budget.closed_receipt()["reserved_requests"], 1)
+
+    def test_non_http_metadata_cannot_be_reported_as_a_capture_gap(self):
+        for payload in (None, {"body_not_saved": "合成非HTTP字段"}):
+            with self.subTest(payload=payload), tempfile.TemporaryDirectory() as temporary:
+                home = Path(temporary)
+                with patch.object(Path, "home", return_value=home):
+                    budget, records = self._store(home)
+                    with budget.batch(), records.stage(0, "case"):
+                        records.record(kind="case_started", payload=payload)
+                    receipt = records.finalize(outcomes=({
+                        "case_position": 0, "case_name": "合成空候选",
+                        "input_sha256": "a" * 64, "status": "unknown",
+                    },), budget_closed=True)
+                    self.assertEqual(receipt["capture_gaps"], [])
+
     def test_opaque_response_records_gap_and_digest_without_persisting_thought(self):
         with tempfile.TemporaryDirectory() as temporary:
             with patch.object(Path, "home", return_value=Path(temporary)):

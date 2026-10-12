@@ -142,6 +142,8 @@ class EvaluationRecordStore:
         self._plan = json.loads(_canonical(plan))
         self._output = Path(self._manifest["output_directory"])
         self._failed = False
+        self._stop_reason: str | None = None
+        self._completion_digest: str | None = None
         self._files: list[tuple[str, str]] = []
         self._stage: ContextVar[tuple[int, str] | None] = ContextVar(
             "evaluation_record_stage", default=None
@@ -176,14 +178,21 @@ class EvaluationRecordStore:
 
     def _stop(self, reason: str) -> NoReturn:
         self._failed = True
+        self._stop_reason = reason
         try:
             self._budget.close()
         except EvaluationBudgetAbort:
             pass
         raise EvaluationBudgetAbort(reason) from None
 
-    def _write(self, filename: str, value: dict) -> dict:
-        if self._failed:
+    def _write(self, filename: str, value: dict, *, terminal: bool = False) -> dict:
+        if self._completion_digest is not None:
+            raise EvaluationBudgetAbort("record_store_finalized")
+        if self._failed and not (
+            terminal and self._stop_reason in {
+                "request_redaction_unavailable", "response_redaction_unavailable",
+            }
+        ):
             raise EvaluationBudgetAbort("record_store_stopped")
         try:
             content = _canonical(value)
@@ -297,28 +306,32 @@ class EvaluationRecordStore:
         try:
             with self._directory() as directory:
                 for filename, expected_digest in self._files:
-                    descriptor = os.open(
-                        filename, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory
-                    )
-                    with os.fdopen(descriptor, "rb") as source:
-                        identity = os.fstat(source.fileno())
-                        if (
-                            not stat.S_ISREG(identity.st_mode)
-                            or identity.st_uid != os.getuid()
-                            or stat.S_IMODE(identity.st_mode) != 0o600
-                            or identity.st_nlink != 1
-                        ):
-                            raise EvaluationBudgetAbort("unsafe_record_file")
-                        event = json.loads(source.read(_MAX_RECORD_BYTES + 1))
-                        if (
-                            canonical_sha256(event["payload"]) != event["payload_sha256"]
-                            or canonical_sha256(event) != expected_digest
-                        ):
-                            raise EvaluationBudgetAbort("record_payload_changed")
-                        result.append(event)
+                    event = self._read_saved(directory, filename, expected_digest)
+                    if canonical_sha256(event["payload"]) != event["payload_sha256"]:
+                        raise EvaluationBudgetAbort("record_payload_changed")
+                    result.append(event)
             return tuple(result)
         except BaseException:
             self._stop("evaluation_record_read_failed")
+
+    def _read_saved(self, directory: int, filename: str, expected_digest: str) -> dict:
+        descriptor = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory)
+        with os.fdopen(descriptor, "rb") as source:
+            identity = os.fstat(source.fileno())
+            if (
+                not stat.S_ISREG(identity.st_mode)
+                or identity.st_uid != os.getuid()
+                or stat.S_IMODE(identity.st_mode) != 0o600
+                or identity.st_nlink != 1
+            ):
+                raise EvaluationBudgetAbort("unsafe_record_file")
+            content = source.read(_MAX_RECORD_BYTES + 1)
+            if len(content) > _MAX_RECORD_BYTES:
+                raise EvaluationBudgetAbort("record_payload_too_large")
+            value = json.loads(content)
+            if canonical_sha256(value) != expected_digest:
+                raise EvaluationBudgetAbort("record_payload_changed")
+            return value
 
     def finalize(self, *, outcomes: tuple[dict, ...], budget_closed: bool) -> dict:
         """先核对真正持久关闭和完整分母，再写收据；不由调用方代签关闭。"""
@@ -398,7 +411,29 @@ class EvaluationRecordStore:
                 "quality_certified": False,
                 "capture_form": "redacted_json",
                 "removed_paths": removed,
+                "capture_gaps": tuple({
+                    "event_sequence": event["event_sequence"],
+                    "case_position": event["case_position"],
+                    "request_sequence": event["request_sequence"],
+                    "kind": event["kind"],
+                    **{key: event["payload"][key] for key in (
+                        "capture_form", "body_not_saved", "original_bytes_sha256",
+                        "original_bytes_length", "status_code",
+                    ) if key in event["payload"]},
+                } for event in events
+                    if event["kind"] in {"provider_request", "provider_response"}
+                    and isinstance(event["payload"], dict)
+                    and "body_not_saved" in event["payload"]),
             }
-            return self._write("completion.json", receipt)
+            if self._completion_digest is not None:
+                if canonical_sha256(receipt) != self._completion_digest:
+                    raise EvaluationBudgetAbort("completion_outcomes_changed")
+                with self._directory() as directory:
+                    return self._read_saved(
+                        directory, "completion.json", self._completion_digest,
+                    )
+            saved = self._write("completion.json", receipt, terminal=True)
+            self._completion_digest = canonical_sha256(saved)
+            return saved
         except BaseException:
             self._stop("evaluation_completion_unavailable")

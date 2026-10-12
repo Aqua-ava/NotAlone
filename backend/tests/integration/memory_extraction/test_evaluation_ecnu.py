@@ -180,6 +180,31 @@ class EvaluationECNUTest(unittest.TestCase):
             self.assertEqual(request["model"], "ecnu-max")
             self.assertEqual(request["thinking"], {"type": "enabled"})
 
+    def test_opaque_http500_stops_once_with_incomplete_terminal_receipt(self):
+        def opaque_error(request):
+            self.requests.append(json.loads(request.content))
+            return httpx.Response(500, content=b"synthetic-opaque-500!", request=request)
+
+        result = self.run_ready(transport=httpx.MockTransport(opaque_error))
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(self.audits, [])
+        self.assertEqual(result["stopped_code"], "ecnu_hard_stop")
+        self.assertEqual(result["summary"]["unknown"], 1)
+        self.assertEqual(result["summary"]["unrun"], 20)
+        self.assertIsNotNone(result["receipt"])
+        self.assertIsNone(result["receipt_error_code"])
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 1)
+        self.assertFalse(result["receipt"]["plan_complete"])
+        self.assertFalse(result["receipt"]["quality_certified"])
+        self.assertEqual(len(result["receipt"]["capture_gaps"]), 1)
+        gap = result["receipt"]["capture_gaps"][0]
+        self.assertEqual(gap["kind"], "provider_response")
+        self.assertEqual(gap["status_code"], 500)
+        self.assertEqual(gap["original_bytes_length"], 21)
+        self.assertNotIn("synthetic-opaque-500!", json.dumps(result))
+        self.assertEqual(result["cleanup_error_codes"], ())
+        self.assertIsNone(result["records_error_code"])
+
     def test_audit_cannot_reassign_current_position_by_mutating_its_bundle(self):
         def reassigned(bundle):
             bundle["case_position"] = 99
