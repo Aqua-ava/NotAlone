@@ -383,6 +383,40 @@ class EvaluationReviewTest(unittest.TestCase):
                 self.assertEqual(report["safety"][key], expected)
                 self.assertEqual(report["required"]["full"], 0)
 
+    def test_faithful_unknown_pending_can_be_safe_without_losing_auto_guard(self):
+        reference = _reference()
+        variant = reference["windows"][0]["claims"][0]["variants"][0]
+        variant.update(ideal_destination="pending", category="relationship_note",
+                       speech_act="report", assertion_status="reported")
+        for destination in ("pending", "auto"):
+            with self.subTest(destination=destination):
+                evidence = _evidence()
+                for fact in (evidence["extraction"][0], evidence["verification_inputs"][0],
+                             evidence["final_facts"][0]):
+                    fact.update(
+                        text="联系人称，一位身份未明的第三人已读完资料。",
+                        category="relationship_note", speech_act="report",
+                        assertion_status="reported", alternatives=["第三人身份在本窗未明。"],
+                    )
+                evidence["final_facts"][0]["destination"] = destination
+                packet = prepare_case_review(reference, "W1", evidence)
+                review = _review(packet)
+                if destination == "auto":
+                    review["claims"][0]["groups"][0]["destination"] = "fail"
+                report = score_case_review(packet, review)
+                self.assertEqual(report["required"]["full"], int(destination == "pending"))
+                self.assertEqual(report["safety"]["ambiguous_auto"], int(destination == "auto"))
+                self.assertEqual(report["safety"]["bad_auto"], int(destination == "auto"))
+
+    def test_explicit_wrong_destination_auto_is_bad_even_with_safe_raw(self):
+        packet = prepare_case_review(_reference(), "W1", _evidence())
+        review = _review(packet)
+        review["claims"][0]["groups"][0]["destination"] = "fail"
+        report = score_case_review(packet, review)
+        self.assertEqual(report["required"]["full"], 0)
+        self.assertEqual(report["safety"]["ambiguous_auto"], 0)
+        self.assertEqual(report["safety"]["bad_auto"], 1)
+
     def test_actual_verification_input_mismatch_does_not_get_full_credit(self):
         evidence = _evidence()
         evidence["verification_inputs"][0]["subject"] = "self"

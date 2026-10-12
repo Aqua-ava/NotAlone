@@ -128,12 +128,53 @@ class EvaluationPhasedAuditTest(unittest.TestCase):
         raw["window_checks"]["lineage"] = "pass"
         return raw
 
-    def audit(self, *, raw=None, full=None):
+    def audit(self, *, raw=None, full=None, **parameters):
         return PhasedEvaluationAudit(
             reference=self.reference, expected_reference_sha256=REFERENCE_SHA,
             annotation_sha256=ANNOTATION_SHA, criteria_sha256=self.criteria_sha,
             raw_reviewer=raw or self.raw_review, full_reviewer=full or self.full_review,
+            **parameters,
         )
+
+    def test_selected_local_position_uses_original_gold_without_reordering_it(self):
+        positions = (0, 1, 7, 4)
+        before = canonical_sha256(self.reference)
+        self.bundle["case_position"] = 2
+
+        def selected_raw(view):
+            self.assertEqual(view["case_position"], 2)
+            self.assertEqual(view["reference_case"]["position"], 7)
+            self.assertEqual(view["case_id"], "A08")
+            return self.raw_review(view)
+
+        audit = self.audit(raw=selected_raw, case_positions=positions)
+        self.assertEqual(audit.case_positions, positions)
+        self.assertEqual(audit(self.bundle)["case_position"], 2)
+        self.assertEqual([event["case_position"] for event in self.events], [2, 2])
+        self.assertEqual(canonical_sha256(self.reference), before)
+        with self.assertRaises(AttributeError):
+            audit.case_positions = (7,)
+
+    def test_invalid_selection_or_local_binding_never_reaches_raw(self):
+        for positions in ((), [7], (True,), (7, 7), (-1,), (21,), ("7",)):
+            with self.subTest(positions=positions):
+                with self.assertRaises(ValueError):
+                    self.audit(case_positions=positions)
+        for position, fault in ((True, "position"), (1, "position"),
+                                (0, "input"), (0, "case")):
+            with self.subTest(position=position, fault=fault):
+                bundle = copy.deepcopy({key: value for key, value in self.bundle.items()
+                                        if key != "persist_audit"})
+                bundle["persist_audit"] = self.persist
+                bundle["case_position"] = position
+                if fault == "input":
+                    bundle["window"]["messages"][0]["text"] = "错输入"
+                elif fault == "case":
+                    bundle["case_name"] = "错位置的合成名称"
+                with self.assertRaises(EvaluationBudgetAbort):
+                    self.audit(case_positions=(7,))(bundle)
+                self.assertEqual(self.order, [])
+                self.assertEqual(self.events, [])
 
     def test_raw_is_sealed_before_full_view_and_final_report_before_decision(self):
         result = self.audit()(self.bundle)

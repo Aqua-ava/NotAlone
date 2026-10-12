@@ -237,6 +237,7 @@ class EvaluationECNUTest(unittest.TestCase):
         config = json.loads((self.output / "manifest.json").read_text())["frozen_config"]
         self.assertEqual(config["timeout"], 60.0)
         self.assertEqual(config["max_retries"], 2)
+        self.assertNotIn("selected_case_positions", config)
         audits = [event for event in result["events"] if event["kind"] == "semantic_audit"]
         self.assertEqual(len(audits), 21)
         for bundle in self.audits:
@@ -251,6 +252,111 @@ class EvaluationECNUTest(unittest.TestCase):
             })
             self.assertEqual(request["model"], "ecnu-max")
             self.assertEqual(request["thinking"], {"type": "enabled"})
+
+    def test_four_selected_cases_have_exact_eight_attempt_cap_and_original_inputs(self):
+        positions = (0, 1, 3, 4)
+        timeouts = []
+
+        def selected_response(request):
+            timeouts.append(request.extensions["timeout"])
+            payload = json.loads(request.content)
+            position = len(self.audits)
+            window = build_window(PLAN[positions[position]])
+            source = str(window.target_message_ids[0])
+            if payload["tool_choice"]["function"]["name"] == "MemoryExtractionOutput":
+                fact = {
+                    "text": "联系人陈述一条公开合成关系主张。", "subject": "contact",
+                    "category": "relationship_note", "topic": "other",
+                    "source_message_ids": [source], "confidence": 0.9, "risk_flags": [],
+                    "valid_at": None, "invalid_at": None, "speech_act": "report",
+                    "assertion_status": "reported", "figurative_type": "literal",
+                    "alternatives": [], "interpretation_reason": "只核SDK接线，不签语义。",
+                }
+                return self.response(request, arguments={"facts": [fact]})
+            target = next(message for message in window.messages
+                          if str(message.message_id) == source)
+            return self.response(request, arguments={"results": [{
+                "candidate_index": 0, "verdict": "supported", "issues": [],
+                "evidence": [{"message_id": source, "quote": target.text}],
+            }]})
+
+        result = self.run_ready(
+            case_positions=positions, request_timeout_seconds=300, max_retries=0,
+            transport=httpx.MockTransport(selected_response),
+        )
+        self.assertEqual(len(self.requests), 8)
+        self.assertEqual(result["receipt"]["budget"]["request_limit"], 8)
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 8)
+        self.assertEqual(result["summary"]["planned"], 4)
+        self.assertEqual([item["case_name"] for item in result["outcomes"]],
+                         [PLAN[position].name for position in positions])
+        self.assertEqual([item["case_position"] for item in result["outcomes"]], list(range(4)))
+        from notalone.memory_extraction.evaluation_records import canonical_sha256
+
+        self.assertEqual([canonical_sha256(item["window"]) for item in self.audits],
+                         [canonical_sha256(build_window(PLAN[position]))
+                          for position in positions])
+        self.assertEqual(timeouts,
+                         [dict.fromkeys(("connect", "read", "write", "pool"), 300.0)] * 8)
+        manifest = json.loads((self.output / "manifest.json").read_text())
+        config = manifest["frozen_config"]
+        self.assertEqual(config["selected_case_positions"], list(positions))
+        self.assertEqual(len(manifest["plan"]), 4)
+        self.assertEqual(config["public_cases_sha256"], canonical_sha256(PLAN))
+        self.assertFalse(result["quality_certified"])
+
+    def test_invalid_selected_positions_fail_before_budget_or_credentials(self):
+        with patch.object(EvaluationBudget, "create",
+                          side_effect=AssertionError("错误选择不能创建预算。")):
+            for positions in ((), [0], (True,), (0, 0), (-1,), (21,), ("0",),
+                              (0, 1, 2, 3, 4)):
+                with self.subTest(positions=positions):
+                    with self.assertRaisesRegex(EvaluationBudgetAbort,
+                                                "ecnu_invalid_case_positions"):
+                        self.run_ready(case_positions=positions)
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+        self.assertEqual(tuple(self.output.iterdir()), ())
+
+    def test_live_selection_and_phased_mapping_mismatch_before_budget(self):
+        from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
+        from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
+        from notalone.memory_extraction.evaluation_records import canonical_sha256
+
+        root = Path(__file__).resolve().parents[4]
+        criterion = ".scratch/unfinished-work/memory-gold-reference-20261012.json"
+        reference_path = root / criterion
+        reference = json.loads(reference_path.read_text())
+        hashes, gold = self.preparation()
+        hashes[criterion] = hashlib.sha256(reference_path.read_bytes()).hexdigest()
+        gold.update(criteria_path=criterion, criteria_sha256=hashes[criterion])
+        with patch.object(EvaluationBudget, "create",
+                          side_effect=AssertionError("错审核位置不能创建预算。")):
+            for selected, reviewed in ((None, (0, 1, 3, 4)),
+                                       ((0, 1, 3, 4), None),
+                                       ((0, 1, 3, 4), (0, 1, 4, 3))):
+                with self.subTest(selected=selected, reviewed=reviewed):
+                    audit = PhasedEvaluationAudit(
+                        reference=reference,
+                        expected_reference_sha256=canonical_sha256(reference),
+                        annotation_sha256=reference["annotation_sha256"],
+                        criteria_sha256=hashes[criterion], case_positions=reviewed,
+                        raw_reviewer=lambda view: self.fail("错绑不能揭raw。"),
+                        full_reviewer=lambda view: self.fail("错绑不能揭full。"),
+                    )
+                    with self.assertRaisesRegex(
+                        EvaluationBudgetAbort, "ecnu_phased_case_positions_mismatch",
+                    ):
+                        run_ecnu_evaluation(
+                            output_directory=self.output, run_id=uuid4(),
+                            deadline=datetime.now(timezone.utc) + timedelta(minutes=10),
+                            repo_root=self.repo, source_hashes=hashes, frozen_gold=gold,
+                            credential_loader=self.credential, audit_case=audit,
+                            case_positions=selected,
+                        )
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+        self.assertEqual(tuple(self.output.iterdir()), ())
 
     def test_opaque_http500_stops_once_with_incomplete_terminal_receipt(self):
         def opaque_error(request):

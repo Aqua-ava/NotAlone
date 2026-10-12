@@ -160,17 +160,27 @@ class PhasedEvaluationAudit:
         self, *, reference: dict, expected_reference_sha256: str,
         annotation_sha256: str, criteria_sha256: str,
         raw_reviewer: Callable[[dict], dict], full_reviewer: Callable[[dict], dict],
+        case_positions: tuple[int, ...] | None = None,
     ):
         validate_public_reference(
             reference, expected_reference_sha256=expected_reference_sha256,
             annotation_sha256=annotation_sha256,
         )
         self._reference = _copy(reference)
+        positions = (tuple(range(len(self._reference["windows"])))
+                     if case_positions is None else case_positions)
+        if (type(positions) is not tuple or not positions
+                or any(type(position) is not int
+                       or not 0 <= position < len(self._reference["windows"])
+                       for position in positions)
+                or len(set(positions)) != len(positions)):
+            raise ValueError("审核位置须唯一且对应完整公开参考。")
         if (not isinstance(criteria_sha256, str) or len(criteria_sha256) != 64
                 or any(char not in "0123456789abcdef" for char in criteria_sha256)
                 or not callable(raw_reviewer) or not callable(full_reviewer)):
             raise ValueError("两阶段审核需要明确摘要与两个审核回调。")
         self._reference_sha256 = expected_reference_sha256
+        self._case_positions = positions
         self._criteria_sha256 = criteria_sha256
         self._raw_reviewer = raw_reviewer
         self._full_reviewer = full_reviewer
@@ -179,6 +189,11 @@ class PhasedEvaluationAudit:
     def criteria_sha256(self) -> str:
         """独立的criteria文件字节摘要，不与规范reference摘要混用。"""
         return self._criteria_sha256
+
+    @property
+    def case_positions(self) -> tuple[int, ...]:
+        """本stage局部位置对应的原Gold位置；不重排或缩减参考。"""
+        return self._case_positions
 
     def __call__(self, bundle: dict) -> dict:
         try:
@@ -196,9 +211,9 @@ class PhasedEvaluationAudit:
         )})
         bundle = {**evidence_bundle, "persist_audit": bundle["persist_audit"]}
         position = bundle["case_position"]
-        if type(position) is not int or not 0 <= position < len(self._reference["windows"]):
+        if type(position) is not int or not 0 <= position < len(self._case_positions):
             raise EvaluationBudgetAbort("phased_case_position_invalid")
-        reference_case = self._reference["windows"][position]
+        reference_case = self._reference["windows"][self._case_positions[position]]
         if (bundle["case_name"] != reference_case["case_name"]
                 or canonical_sha256(bundle["window"]) != reference_case["input_sha256"]
                 or bundle["gold_reference"]["criteria_sha256"] != self._criteria_sha256):

@@ -99,14 +99,23 @@ def run_ecnu_evaluation(
     credential_loader: Callable[[], str], audit_case: Callable[[dict], dict],
     synthetic_transport: httpx.MockTransport | None = None,
     request_timeout_seconds: float = 60.0, max_retries: int = 2,
+    case_positions: tuple[int, ...] | None = None,
 ) -> dict:
-    """固定P1；每个成功位置须保存独审决策，不自动执行P2或认证质量。"""
+    """默认固定P1；显式最多四窗诊断仍须独审，不自动后继或认证质量。"""
     if (type(request_timeout_seconds) not in (int, float)
             or not 0 < request_timeout_seconds <= 300
             or not isfinite(request_timeout_seconds)
             or type(max_retries) is not int or not 0 <= max_retries <= 2):
         raise EvaluationBudgetAbort("ecnu_invalid_request_limits")
     request_timeout_seconds = float(request_timeout_seconds)
+    positions = tuple(range(len(_PLAN_CASES))) if case_positions is None else case_positions
+    if (type(positions) is not tuple or not positions
+            or (case_positions is not None and len(positions) > 4)
+            or any(type(position) is not int or not 0 <= position < len(_PLAN_CASES)
+                   for position in positions)
+            or len(set(positions)) != len(positions)):
+        raise EvaluationBudgetAbort("ecnu_invalid_case_positions")
+    cases = tuple(_PLAN_CASES[position] for position in positions)
     if (current_trace() is not None or not callable(credential_loader)
             or not callable(audit_case)
             or (synthetic_transport is not None
@@ -124,6 +133,8 @@ def run_ecnu_evaluation(
                 or cast(PhasedEvaluationAudit, audit_case).criteria_sha256 !=
                 reference["criteria_sha256"]):
             raise EvaluationBudgetAbort("ecnu_phased_reference_mismatch")
+        if cast(PhasedEvaluationAudit, audit_case).case_positions != positions:
+            raise EvaluationBudgetAbort("ecnu_phased_case_positions_mismatch")
     if (synthetic_transport is None
             and repo_root.resolve() != Path(__file__).resolve().parents[4]):
         raise EvaluationBudgetAbort("ecnu_actual_source_root_required")
@@ -145,20 +156,23 @@ def run_ecnu_evaluation(
     }
     tools = {purpose: convert_to_openai_tool(schema)
              for purpose, (_, schema) in runtime_contracts.items()}
-    windows = tuple(build_window(case) for case in _PLAN_CASES)
+    windows = tuple(build_window(case) for case in cases)
     plan = tuple({
         "case_position": index, "case_name": case.name,
         "input_sha256": canonical_sha256(window),
-    } for index, (case, window) in enumerate(zip(_PLAN_CASES, windows)))
+    } for index, (case, window) in enumerate(zip(cases, windows)))
     config = {
         **_frozen_config(plan, request_timeout_seconds=request_timeout_seconds,
                          max_retries=max_retries),
-        "mode": "ecnu_bounded_evaluation", "stage": "P1",
+        "mode": ("ecnu_bounded_evaluation" if case_positions is None
+                 else "ecnu_bounded_diagnostic"),
+        "stage": "P1" if case_positions is None else "diagnostic",
         "base_url": _BASE_URL, "endpoint": _ENDPOINT, "request_model": "ecnu-max",
         "deadline_utc": deadline.astimezone(timezone.utc).isoformat(),
         "source_hashes": dict(source_hashes),
         "gold_sha256": reference["gold_sha256"],
         "public_cases_sha256": canonical_sha256(_PLAN_CASES),
+        **({"selected_case_positions": list(positions)} if case_positions is not None else {}),
         "response_identity_policy": "first_valid_completion_observation_stop_on_change",
         "request_contract_version": 1,
         "tool_choice": [EXTRACTION_SCHEMA["title"], SOURCE_VERIFICATION_SCHEMA["title"]],
@@ -173,7 +187,7 @@ def run_ecnu_evaluation(
            for purpose, (_, schema) in runtime_contracts.items()},
     }
     budget = EvaluationBudget.create(
-        run_id=run_id, output_directory=output_directory, request_limit=42,
+        run_id=run_id, output_directory=output_directory, request_limit=2 * len(cases),
         allowed_endpoints=(_ENDPOINT,), config_sha256=canonical_sha256(config),
     )
     try:
@@ -207,7 +221,7 @@ def run_ecnu_evaluation(
         return contract.expect_request(expected)
 
     return _run_evaluation_batch(
-        cases=_PLAN_CASES, windows=windows, plan=plan, budget=budget, store=store,
+        cases=cases, windows=windows, plan=plan, budget=budget, store=store,
         base_url=_BASE_URL, request_model="ecnu-max", api_key="",
         synthetic_transport=synthetic_transport, provider="ECNU", contract=contract,
         invocation_scope=invocation_scope,

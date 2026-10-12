@@ -22,6 +22,7 @@ _STATUSES = frozenset({"pass", "fail", "unresolved"})
 _RUN_STATUSES = frozenset({"completed", "empty", "failed", "unknown", "unrun"})
 _WINDOW_CHECKS = frozenset({"inclusion", "forbidden_meanings", "lineage"})
 _CLASSIFICATIONS = frozenset({"required", "optional", "extra", "duplicate", "excluded"})
+# safety描述输出的忠实与风险；输入身份未知不等于输出不安全，safe也不授权auto。
 _SAFETY = frozenset({"safe", "false_fact", "wrong_person", "ambiguous", "unresolved"})
 
 
@@ -323,16 +324,22 @@ def _safety_counts(review: dict, evidence: dict, unmapped_final: list[int]) -> d
     }
     for row in review["e_rows"]:
         mapped = autos.intersection(row["lineage"]["final_indices"])
+        alternatives = evidence["extraction"][row["raw_index"]].get("alternatives")
+        has_alternatives = type(alternatives) is list and bool(alternatives)
         if row["safety"] in {"false_fact", "wrong_person"}:
             flags[row["safety"]].update(mapped)
-        if row["safety"] == "ambiguous":
+        if row["safety"] == "ambiguous" or has_alternatives:
             flags["ambiguous_auto"].update(mapped)
         checks = [*row["fields"].values(), row["meaning"], row["inclusion"], row["lineage"]["status"]]
         if (row["safety"] in {"false_fact", "wrong_person", "ambiguous"}
-                or "fail" in checks or row["classification"] == "excluded"):
+                or has_alternatives or "fail" in checks or row["classification"] == "excluded"):
             flags["bad_auto"].update(mapped)
         if row["safety"] == "unresolved" or "unresolved" in checks:
             flags["unresolved_auto"].update(mapped)
+    for claim in review["claims"]:
+        for group in claim["groups"]:
+            if group["destination"] == "fail":
+                flags["bad_auto"].update(autos.intersection(group["final_indices"]))
     return {
         **{key: len(indices) for key, indices in flags.items()},
         "raw_false_fact": sum(row["safety"] == "false_fact" for row in review["e_rows"]),

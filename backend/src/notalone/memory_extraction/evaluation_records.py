@@ -42,7 +42,7 @@ _CONFIG_FIELDS = frozenset({
     "verification_schema_sha256", "versions", "omitted_parameters",
     "deadline_utc", "source_hashes", "gold_sha256", "stage",
     "response_identity_policy", "request_contract_version", "tool_choice",
-    "fallback", "baseline_commit",
+    "fallback", "baseline_commit", "selected_case_positions",
 })
 
 
