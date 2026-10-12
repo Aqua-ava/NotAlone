@@ -1,0 +1,150 @@
+{
+  "date": "2026-10-12",
+  "source_commit": "39f0ce4f79d18364e25e3db9803f0ae1b453fcd1",
+  "scope": [
+    "A19",
+    "A17"
+  ],
+  "status": "passed",
+  "ticket_results": {
+    "A19": {
+      "state": "resolved",
+      "acceptance": {
+        "checked": 6,
+        "total": 6
+      }
+    },
+    "A17": {
+      "state": "resolved",
+      "acceptance": {
+        "checked": 5,
+        "total": 5
+      }
+    }
+  },
+  "source_app_native": {
+    "command": "NOTALONE_ASSISTANT_LIFECYCLE_ACCEPTANCE=1 npm run test:app -- --interactive --coordinator main-agent --from 2026-10-12T02:15:52.000Z --until 2026-10-12T02:25:52.000Z --max-launches 2 tests/assistant-native-lifecycle.spec.ts --output artifacts/assistant-native-closeout-complete",
+    "window_utc": {
+      "from": "2026-10-12T02:15:52.000Z",
+      "until": "2026-10-12T02:25:52.000Z"
+    },
+    "passed": 1,
+    "total": 1,
+    "exit_code": 0,
+    "test_seconds": 11.3,
+    "runner_seconds": 11.7,
+    "launches": 2,
+    "helper_close_generation_continues": true,
+    "menu_quit_interrupts": true,
+    "saved_completed_turns_preserved": true,
+    "late_result_not_revived": true,
+    "same_user_data_reopened": true,
+    "same_isolated_database_reopened": true,
+    "reopen_model_delta": 0,
+    "explicit_retry_model_delta": 1,
+    "controlled_model_calls": 4,
+    "both_owned_apps_menu_quit_exit_code": 0,
+    "source_app": true,
+    "signed_package_or_finder_accepted": false
+  },
+  "earlier_native_runs": [
+    {
+      "launches": 1,
+      "exit_code": 1,
+      "test_seconds": 13.1,
+      "reason": "测试误要求后台候选覆盖当前编辑框，修为公开保存区重读"
+    },
+    {
+      "launches": 1,
+      "exit_code": 1,
+      "test_seconds": 8.7,
+      "reason": "退出后原HTTP已关闭，修为释放旧模型并由既有夹具重启同库HTTP再核对"
+    },
+    {
+      "launches": 2,
+      "exit_code": 1,
+      "test_seconds": 12.9,
+      "reason": "测试在已关闭Playwright通道调用process()，finally覆盖原失败；修为启动时捕获自有进程"
+    }
+  ],
+  "cumulative_native_launches": 6,
+  "automatic_results": {
+    "page_combination": {
+      "command": "npm run test:pages -- --case assistant-session-combination --timeout-seconds 240",
+      "passed": 1,
+      "total": 1,
+      "exit_code": 0,
+      "controlled_model_calls": 4,
+      "electron_run": false,
+      "quiet_samples": 25,
+      "foreground_or_onscreen_samples": 0,
+      "max_registered_chrome_instances": 1
+    },
+    "multi_source_http_pg": {
+      "command": "python -m unittest tests.integration.server.test_assistant_combination -v",
+      "passed": 1,
+      "total": 1,
+      "exit_code": 0,
+      "seconds": 3.7,
+      "controlled_model_calls": 5
+    },
+    "quit_http_pg": {
+      "command": "node --test --test-name-pattern='^受控退出等待|^真实运行退出后|^真实已可靠完成|^真实来源删除先赢' tests/assistant-generation-quit-http.test.mjs",
+      "passed": 4,
+      "total": 4,
+      "skip": 0,
+      "seconds": 16.267,
+      "controlled_model_calls": 3
+    },
+    "desktop_safety": {
+      "command": "npm test",
+      "passed": 40,
+      "total": 40,
+      "exit_code": 0,
+      "seconds": 13.625,
+      "actual_app_run": false
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "exit_code": 0
+    }
+  },
+  "cleanup": {
+    "last_native_owned_database_remaining": 0,
+    "last_native_owned_app_pids_remaining": 0,
+    "last_native_user_data_remaining": false,
+    "last_native_fixture_directory_remaining": false,
+    "app_lease": "absent",
+    "page_lease": "absent"
+  },
+  "data_boundary": {
+    "synthetic_only": true,
+    "private_material_read": false,
+    "ocr_run": false,
+    "wechat_read": false,
+    "external_model_calls": 0,
+    "external_messages_sent": 0,
+    "production_code_changed": false,
+    "push_or_deploy": false
+  },
+  "remaining_product_boundaries": [
+    "最终签名包与Finder启动未由本场验收",
+    "真实微信及OCR保持暂停",
+    "受控模型不能证明真实模型语义质量"
+  ],
+  "evidence_location": "desktop/artifacts/assistant-session-closeout-20261012/（忽略的本地合成日志与归属清理回执，不提交原始产物）",
+  "review": {
+    "standards_hard_findings": 0,
+    "standards_important_judgement_findings": 0,
+    "spec_new_deviations": 0,
+    "read_only": true
+  },
+  "documentation_checks": {
+    "original_a17_a19_acceptance_text_preserved": true,
+    "changed_markdown_relative_links_valid": true,
+    "round30_tickets_resolved": 30,
+    "round30_acceptance_checked": 172,
+    "round30_acceptance_total": 172,
+    "diff_check_passed": true
+  }
+}

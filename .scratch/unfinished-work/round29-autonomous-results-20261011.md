@@ -9,7 +9,11 @@ Triage: ready-for-agent
 
 用户已授权公开页面 → 生产具名 bridge → 后端 HTTP → 隔离 PostgreSQL 的自动验证。仅使用合成数据、可控模型和自有随机 `_test` 库；默认 dotenv 与外部追踪关闭。未授权范围为 OCR、真实微信、外部聊天发送、私人资料、付费或外部模型调用、push、发布、部署、额外用户会话及请求用户实施验收。
 
-## 最终当前结果（2026-10-12）
+## 2026-10-12原生收尾后的当前结果
+
+用户冻结新增功能并继续暂停OCR；19组合与有限源App生命周期整场通过，补齐17真实停止／同目录重开／零自动模型／显式重试。29张原票现全部resolved，原166条验收均勾选；另补原不在29票范围的19（6／6），第三版30票现全部resolved／172条。此次原生实际2次启动、1／1、11.3秒（runner11.7秒）／exit0，累计6次；前三场测试失败各自保留。详细命令、精确清理及来源边界见[19最终收口](../assistant-session-context/issues/19-combined-native-acceptance.md#最终收口2026-10-12)与[结果摘要](assistant-session-closeout-20261012.json)。这是当前源App的生命周期证据，不代签最终包、微信或真实模型质量。
+
+## 原自主范围收口时的历史结果（2026-10-12）
 
 29张原票均已记录带证据的结果与剩余工作：28张`resolved`，A17保持`claimed`。共同基线`84b5dd32`的166条原验收文本逐行保留；164条有自动证据并勾选，A17第1、3条真正App停止／重开未执行、保留未勾。总协调任务的`resolved`仅表示本轮允许的全部自主工作已完成，不代替A17整票或真人／原生验收。本轮只实际执行受控宿主和具名公开页面窗口，真正App停启未执行；按工程要求保留这两项原生未验，不请求用户实施。
 
@@ -25,7 +29,7 @@ Triage: ready-for-agent
 | A14 | resolved | 5／5 | [替换使旧请求失效，实际保存、失败、幂等、来源删除和迟到结果均复验；唯一Map／prepare／replace沿原预算。最后两种在途采用场核旧结果不能覆盖新候选。](../assistant-session-context/issues/14-replace-running-generation.md#answer) |
 | A15 | resolved | 5／5 | [真实合成消息经SSE只提醒，不覆盖编辑或自动生成；明确结合复验实际消息与CURRENT并替换。累计要求新反例两场完整通过，最终公开在途两场及删除／预算后段均已执行。](../assistant-session-context/issues/15-new-message-opt-in.md#answer) |
 | A16 | resolved | 5／5 | [切换联系人、助手会话及关闭小窗保留已发候选归属；迟到旧结果不能覆盖当前视图。受控宿主和公开生命周期已验证；真正App证据属于原规格后续边界，本轮没有冒称原生通过。](../assistant-session-context/issues/16-background-result-ownership.md#answer) |
-| A17 | claimed | 3／5 | [自动部分完成：受控quit／准备停止／恢复、完成和失败回包竞态、来源及样本删除、原身份重放和同冻结策略命令ACK丢失均有真实Main→HTTP→隔离PG结果。主树39项退出／携入、7项权威／意愿／proof和3项命令关联分别通过。](../assistant-session-context/issues/17-quit-and-interrupted-recovery.md#answer) |
+| A17 | resolved | 5／5 | [自动部分及后续有限源App退出／重开／零自动模型／显式重试已完成；自动历史：受控quit／准备停止／恢复、完成和失败回包竞态、来源及样本删除、原身份重放和同冻结策略命令ACK丢失均有真实Main→HTTP→隔离PG结果。主树39项退出／携入、7项权威／意愿／proof和3项命令关联分别通过。](../assistant-session-context/issues/17-quit-and-interrupted-recovery.md#answer) |
 | A18 | resolved | 5／5 | [普通会话与受控预算已满会话都可全新开始或只携明确选定版本；新会话零模型、旧记录保留，来源物理删除清新旧相关副本并保留无关讨论。主树3HTTP及最后2场公开DOM均通过。](../assistant-session-context/issues/18-carry-selected-candidate.md#answer) |
 | B01 | resolved | 6／6 | [回应入口保持目标消息和明确方向，草稿改写兼容；场景切换零模型，不猜最近消息，默认改写不读关系背景。最后策略组合实际走公开入口。](../conversation-reply-strategy/issues/01-response-scene-entry.md#answer) |
 | B02 | resolved | 6／6 | [一句理解、依据、歧义及不同意愿建议绑定实际输入版本；纠正与回答不冒为确认，明确选择或方向后才生成。旧建议、跨范围和来源删除拒绝。](../conversation-reply-strategy/issues/02-understanding-and-direction.md#answer) |

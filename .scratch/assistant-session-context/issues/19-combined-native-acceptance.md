@@ -1,14 +1,14 @@
 # 19：持续会话组合与真实App生命周期验收
 
-State: claimed
-Triage: ready-for-human
+State: resolved
+Triage: ready-for-agent
 Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](08-saved-session-recovery.md)；[assistant-session-context/09 用户删除一段助手会话](09-delete-assistant-session.md)；[assistant-session-context/13 连续要求、改口与明确编号指代](13-continuous-intent-reference.md)；[assistant-session-context/15 新消息提醒与用户触发重新生成](15-new-message-opt-in.md)；[assistant-session-context/16 切换会话或关闭小窗时保持生成归属](16-background-result-ownership.md)；[assistant-session-context/17 退出停止与重开后的中断恢复](17-quit-and-interrupted-recovery.md)；[assistant-session-context/18 显式携候选新开与满会话分流](18-carry-selected-candidate.md)
 
 拆分标识：C13（第三版映射；执行时以本文件为准）。
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧06；Q1–Q18组合。读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖是完整交付的前置；本票合成交叉验收已完成，原生接续与剩余见Answer，不以自动通过替代真实App结果。
+[正式规格](../spec.md)；旧06；Q1–Q18组合。读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖是完整交付的前置；本票合成交叉及有限源App生命周期验收已完成，原始失败与最终通过分别记录于Answer。
 
 ## What to build
 
@@ -18,7 +18,7 @@ Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](
 
 - [x] 以双合成联系人、多会话串联恢复、版本、连续修改、消息更新、预算、新开及删除；仅增加组合场景，复用前票回归。
 - [x] 验证多来源、后继候选及携候选的传递删除，重读/恢复/再生成不取得已删内容，无关讨论仍存在。
-- [ ] 按项目门禁在有限真实App窗口验证小窗关闭继续、真正退出停止及重开中断；记录实际命令、清理和原生结果。
+- [x] 按项目门禁在有限真实App窗口验证小窗关闭继续、真正退出停止及重开中断；记录实际命令、清理和原生结果。
 - [x] 没有真实App证据时原生验收保持未完成，不能仅凭页面通过关闭本票；不读取微信、不恢复OCR、不调用外部模型。
 - [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
 - [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
@@ -42,6 +42,8 @@ Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](
 2026-10-12：用户要求冻结新增功能，优先完成19／17收尾，能自行验证的先执行，OCR继续暂停。领取本票，只新增原规格的交叉验收场景，复用公开页面／具名生产桥接→HTTP→隔离PostgreSQL；合成联系人与受控模型，不读取真实微信或调用外部模型。原生停止／重开仍须工程要求的有限test:app窗口，本次先准备可审阅入口与检查点，未运行不勾选。
 
 ## Answer
+
+最新结果（2026-10-12）：原6条验收全部达成，State resolved／ready-for-agent。下方准备、三次失败及授权等待均为历史实录；最终源App整场通过与精确清理见末尾，不抹去旧失败。
 
 2026-10-12：自动范围完成，本票保持claimed／ready-for-human，待确认有限原生窗口。只新增验收用例、受限具名调度和记录；`backend/src`、`desktop/src`、原生产品源码均无变更，新增功能冻结。
 
@@ -74,3 +76,20 @@ Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](
 仅测试最窄修正：受限启动后立即保留自有ChildProcess，真实菜单退出的exit0轮询与finally清理复用它，沿用既有app-fixture模式，不在已关闭的Playwright通道重新索取进程。已核对实际安装Playwright 1.64.0及[官方process接口](https://playwright.dev/docs/api/class-electronapplication#electron-application-process)；完整TypeScript、diff检查通过，Standards硬性／重要判断0，Spec新增偏差／缺失0。严格退出、中断、迟到、重开模型delta0及显式重试delta1断言均保留，无生产改动；修正后尚未重新执行原生。
 
 Root以第三场owned-app和owned-reopened-app记录精确核对：两个自有PID均不存在，随机隔离数据库剩余0，userData与夹具目录均不存在，App租约absent。日志及`native-third-cleanup.json`只保留在忽略产物目录。累计4次预算用尽，未再启动；已向用户申请当前窗口内再2次（累计6次、截止不延长），等待回复。OCR、真实微信、外部模型和外部发送均未运行。19／17继续claimed／ready-for-human，原生AC保持未勾。
+
+
+### 最终收口（2026-10-12）
+
+用户明确批准当前窗口累计最多6次启动，随后要求A19／A17后续收尾连续执行、不再逐项询问；新增功能冻结、OCR和微信暂停仍保持。固定源码`39f0ce4f`在10:15:52–10:25:52窗口内执行修正后的完整入口：
+
+```bash
+NOTALONE_ASSISTANT_LIFECYCLE_ACCEPTANCE=1 npm run test:app -- --interactive --coordinator main-agent \
+  --from 2026-10-12T02:15:52.000Z --until 2026-10-12T02:25:52.000Z --max-launches 2 \
+  tests/assistant-native-lifecycle.spec.ts --output artifacts/assistant-native-closeout-complete
+```
+
+Conda NotAlone、PGHOST=/tmp、PGPORT=55441、dotenv及外部tracing关闭。**1／1通过、test 11.3秒／runner 11.7秒、exit0，实际2次源App启动；本轮四场累计6次，前三场失败分别保留。** 真实BrowserWindow.close触发生产隐藏，隐藏期间第二轮完成并可由公开保存区读回；真实菜单退出使在途请求failed／app_quit，既有完成保持，释放旧模型后迟到候选不能复活；同一隔离userData和PG重开后显示“上次生成中断”，重开模型增量0，明确点击重试增量1；两次自有App均经公开菜单正常exit0。完整受控模型共4次。`assistant-native-acceptance.json`真实回执全部相符，不用兜底回收代替产品退出。
+
+Root再以最后owned记录及新PG连接精确核验：本轮随机库剩余0，两自有App PID均不存在，userData与夹具目录不存在；`npm run test:app:status`及`npm run test:pages -- --status`均absent。合成日志、真实回执和`native-complete-cleanup.json`仅留忽略产物目录；仓库保存无身份／凭据／正文的[结果摘要](../../unfinished-work/assistant-session-closeout-20261012.json)。原6条验收文本保持，最后原生条据实勾选；17原第1、3条同步收口。Standards及Spec两轴对测试观察修正和最终证据文档均0；原验收文本、相对链接、真实回执／清理及30票172／172汇总核验通过，自动保存本地提交，不push／部署。
+
+数据影响：只处理双合成联系人和随机测试库，模型只替换外部provider，真实业务保存／删除与App生命周期均执行；没有读取私人资料、真实微信、OCR、调用外部模型或发送消息，没有产品源码变更。**该源App生命周期通过不代表最终签名包／Finder交付、微信渠道或真实模型语义质量通过**；这些既有边界继续保留，不在冻结期间扩展功能。

@@ -1,14 +1,14 @@
 # 17：退出停止与重开后的中断恢复
 
-State: claimed
-Triage: ready-for-human
+State: resolved
+Triage: ready-for-agent
 Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](08-saved-session-recovery.md)；[assistant-session-context/14 生成中替换请求与迟到结果失效](14-replace-running-generation.md)
 
 拆分标识：C10（第三版映射；执行时以本文件为准）。
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧04；Q15退出。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧04；Q15退出。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖是完整交付的前置；本票受控实现与有限源App退出／重开验收已完成，历史过程与最终证据见Answer。
 
 ## What to build
 
@@ -16,9 +16,9 @@ Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](
 
 ## Acceptance criteria
 
-- [ ] 真正退出停止未完成生成；重开只显示上次生成中断，由用户明确重试，不自动续跑。
+- [x] 真正退出停止未完成生成；重开只显示上次生成中断，由用户明确重试，不自动续跑。
 - [x] 已可靠保存的完成结果保持完成；退出与完成、删除、旧进程迟到的竞态不能复活无效请求。
-- [ ] 先在受控生命周期及公开恢复入口验证；真实App停止/重开由C13核对，不能把模拟结果标为原生通过。
+- [x] 先在受控生命周期及公开恢复入口验证；真实App停止/重开由C13核对，不能把模拟结果标为原生通过。
 - [x] 新增路径按owner/contact隔离，保留来源及删除路径；敏感正文不进入普通日志，候选只能由用户亲自发送。
 - [x] 记录实际命令、结果、数据影响及剩余风险；未执行的验收不得预填通过。
 
@@ -40,6 +40,8 @@ Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](
 
 
 ## Answer
+
+最新结果（2026-10-12）：原5条验收全部达成，State resolved／ready-for-agent。受控与真实源App证据分列，下方未验、失败及授权等待均为历史；最终结果见末尾。
 
 2026-10-11：自动后端部分完成，[17 实现记录](../17-implementation-notes.md)记录无正文退出协议、正式 054 迁移、8 HTTP + 3 迁移及原 14 的 40 项相关自动回归（51G/67.893s、实际迁移 54/repeat0/自有测试库剩余0）。迟到结果不能覆盖新请求，可靠保存完成优先；已非 CURRENT 的原 pending 也可被退出停止，而新 CURRENT 保持不变。
 
@@ -181,3 +183,6 @@ fresh Standards本两文件硬0／重要0，仅新陈旧注释P3已修；原两�
 
 
 随后用户确认10:15:52–10:25:52新窗口，第三场实际两次源App启动，累计4次已用尽，12.9秒／exit1。同目录真实重开发生，但退出后的测试清理在已关闭Playwright通道重新调用process()而报错，覆盖原失败；无整场验收回执，不认定全部恢复／重试及最终退出通过。仅修正测试为启动时保留自有ChildProcess，类型／diff与两轴审查通过，无生产修改。精确核对两PID、测试库、userData和夹具目录均无剩余，租约absent。当前只等待累计6次预算是否批准，原截止仍10:25:52；原第1、3条继续未勾，完整原生结果未取得，详见[19实录](19-combined-native-acceptance.md#原生接续实录2026-10-12)。
+
+
+最终收口：用户批准当前10:15:52–10:25:52窗口累计最多6次启动，固定源码`39f0ce4f`的完整 `assistant-native-lifecycle.spec.ts`通过1／1、11.3秒（runner11.7秒）／exit0，实际两次源App启动。真实菜单退出正常exit0、在途请求持久化failed／app_quit；先前可靠完成保留，释放旧模型后迟到结果不能复活。同一自有userData／随机PG重开只显示中断、不自动续跑（模型delta0）；用户明确重试生成可靠完成（delta1），重开App再次公开菜单正常exit0。此前三场失败与累计6次启动按场保留，未改写原验收标准。两个自有PID、测试库、userData、夹具目录无剩余，App／页面租约absent；完整命令、回执和数据边界见[19最终收口](19-combined-native-acceptance.md#最终收口2026-10-12)及[结果摘要](../../unfinished-work/assistant-session-closeout-20261012.json)。据此勾选原第1、3条并resolved；本场只验当前源App生命周期，最终签名包／Finder、微信及真实模型质量不代签，OCR保持暂停。

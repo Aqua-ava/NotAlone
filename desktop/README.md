@@ -207,7 +207,7 @@ npm run test:app:status  # 只读租约归属线索，App 不运行，不自动�
 
 持续会话19／17收尾入口：普通页面用 `npm run test:pages -- --case assistant-session-combination --timeout-seconds 240`，串联双合成联系人、版本续改、新消息显式采用、权威恢复、硬预算、携入和会话删除；不运行Electron或OCR。多来源及后继／携入删除另由后端 `tests.integration.server.test_assistant_combination` 验证。
 
-`tests/assistant-native-lifecycle.spec.ts` 默认跳过，只有显式设置 `NOTALONE_ASSISTANT_LIFECYCLE_ACCEPTANCE=1` 并经有限 `test:app` 门禁才运行。原生场景使用同一隔离userData与随机测试库，最多两次App启动、单场180秒：真实小窗关闭后生成继续，公开菜单退出停止未完成生成，迟到结果不得复活，重开只读显示中断，明确重试才生成。测试源App默认不等同最终签名包／Finder交付；微信CLI和OCR路径固定为本轮不存在路径，无外部模型或消息发送。仅准备用例不代表原生验收通过，实际状态见持续会话17／19。
+`tests/assistant-native-lifecycle.spec.ts` 默认跳过，只有显式设置 `NOTALONE_ASSISTANT_LIFECYCLE_ACCEPTANCE=1` 并经有限 `test:app` 门禁才运行。原生场景使用同一隔离userData与随机测试库，最多两次App启动、单场180秒：真实小窗关闭后生成继续，公开菜单退出停止未完成生成，迟到结果不得复活，重开只读显示中断，明确重试才生成。测试源App默认不等同最终签名包／Finder交付；微信CLI和OCR路径固定为本轮不存在路径，无外部模型或消息发送。2026-10-12该源App场在有限门禁窗口完整1／1通过（11.3秒、两次启动），真实小窗关闭继续、菜单退出中断、同目录重开零自动模型及明确重试均核验；最终自有进程／库／目录无剩余。此前三场测试失败与累计6次启动分别保留，实际命令和边界见[19最终收口](../.scratch/assistant-session-context/issues/19-combined-native-acceptance.md#最终收口2026-10-12)。
 
 先激活Conda `NotAlone`，在用户认可的有限时段内使用以下入口；起止时间必须填写实际已认可的值，不以示例作为授权：
 
