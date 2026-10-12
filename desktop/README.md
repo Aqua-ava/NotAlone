@@ -298,6 +298,10 @@ NOTALONE_TEST_APP_EXECUTABLE="$PWD/out/NotAlone-darwin-arm64/NotAlone.app/Conten
 
 ## 非秘密启动配置与退出
 
+2026-10-12焦点分项准备：`tests/native-focus-acceptance.spec.ts`沿受限`test:app`和同一签名候选包，用空隔离启动配置、不提供Python／项目路径，保持后端未连接，CLI／探针指向本轮不存在路径。先隐藏管理后台和小窗，主Agent把自有空目录的Finder窗口置于前台并写独立Agent收据；真实键盘显示／隐藏用另外两组nonce和对应actor收据。只读记录同helper的可见／焦点、两窗身份及管理窗口保持隐藏，再通过公开菜单确认App正常退出。
+
+这个最小场景不重复系统导入，不代签真实微信／后端停读，也不把“没有NotAlone窗口取得焦点”写成系统必然恢复原外部App。人工模式两次操作及反馈仍共用25分钟交互截止、整场28分钟，实际运行由主Agent声明有限窗口／启动数；准备的类型检查和纯收据3／3不证明真实焦点分项通过。协议协调从原native场抽为共享测试辅助，产品、当前包和原native验收行为保持。接口核对依据官方[BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window)及[Playwright ElectronApplication](https://playwright.dev/docs/api/class-electronapplication)，与安装Electron44.7.0／Playwright1.64.0类型核对；实机仍待本场结果。
+
 主进程读取当前 userData 中的 `backend-launch.json`。在“应用配置 → 机器环境”可查看、修正和保存下列非秘密绝对路径。Python 和项目目录必须同时提供；没有可核验的项目环境时阻止启动和复用，显示恢复说明：
 
 ```json
