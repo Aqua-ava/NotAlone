@@ -13,17 +13,30 @@ import { createBackendBridge } from '../../src/preload/backend';
 import { createStartupBridge } from '../../src/preload/startup';
 import type { AppBridge } from '../../src/shared/app-bridge';
 
+// 默认关闭；仅本轮普通页面的公开传输控制观察事件与原Promise，不替换业务处理器。
+export type PageTransportControl = {
+  receiveEvent(channel: string, state: unknown): boolean;
+  observeInvoke(channel: string, args: unknown[], pending: Promise<unknown>): void;
+};
 const pageWindow = window as unknown as Window & {
   pageCommand(channel: string, args: unknown[]): Promise<unknown>;
   pageEvent(channel: string, state: unknown): void;
+  pageTransportControl?: PageTransportControl;
 };
 const listeners = new Map<string, Set<(event: unknown, state: unknown) => void>>();
 const transport: PageTransport = {
-  invoke: (channel, ...args) => pageWindow.pageCommand(channel, args),
+  invoke: (channel, ...args) => {
+    const pending = pageWindow.pageCommand(channel, args);
+    pageWindow.pageTransportControl?.observeInvoke(channel, args, pending);
+    return pending;
+  },
   on(channel, listener) { if (!listeners.has(channel)) listeners.set(channel, new Set()); listeners.get(channel)!.add(listener); },
   removeListener: (channel, listener) => listeners.get(channel)?.delete(listener),
 };
-pageWindow.pageEvent = (channel, state) => { for (const listener of listeners.get(channel) ?? []) listener(undefined, state); };
+pageWindow.pageEvent = (channel, state) => {
+  if (pageWindow.pageTransportControl?.receiveEvent(channel, state)) return;
+  for (const listener of listeners.get(channel) ?? []) listener(undefined, state);
+};
 const unsupported = () => Promise.reject(new Error('无头页面未支持此原生或业务入口。'));
 const noEvents = () => () => {};
 const bridge: AppBridge = {

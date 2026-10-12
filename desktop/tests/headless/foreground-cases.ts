@@ -10,7 +10,7 @@ import { ContactHttpProxy } from '../contact-http-proxy';
 import { foregroundObservationPaused, foregroundPausedWithManualDraft, foregroundManualConfirmation } from '../foreground-page-scenarios';
 
 export async function withForegroundPages(browser: Browser, origin: string, fixture: BindingFixture,
-  use: (manager: Page, openHelper: () => Promise<Page>) => Promise<void>): Promise<void> {
+  use: (manager: Page, openHelper: () => Promise<Page>, host: PageHost) => Promise<void>): Promise<void> {
   await withControllerEnvironment(fixture, async (userData) => {
     const host = new PageHost(await browser.newContext(), origin, userData);
     try {
@@ -22,7 +22,7 @@ export async function withForegroundPages(browser: Browser, origin: string, fixt
         const helper = await opened;
         await helper.waitForURL(`${origin}/#helper`);
         return helper;
-      });
+      }, host);
     } finally {
       try { await host.close(); fixture.confirmControllerStopped(); }
       catch (error) { fixture.recordUnconfirmedCleanup('page-host'); throw error; }
