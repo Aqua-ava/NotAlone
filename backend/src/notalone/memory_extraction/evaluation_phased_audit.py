@@ -7,7 +7,7 @@ from typing import Callable
 
 from .evaluation_http_budget import EvaluationBudgetAbort
 from .evaluation_records import canonical_sha256
-from .evaluation_reference import validate_public_reference
+from .evaluation_reference import validate_full_public_reference, validate_public_reference
 from .evaluation_review import prepare_case_review, score_case_review
 
 
@@ -161,14 +161,22 @@ class PhasedEvaluationAudit:
         annotation_sha256: str, criteria_sha256: str,
         raw_reviewer: Callable[[dict], dict], full_reviewer: Callable[[dict], dict],
         case_positions: tuple[int, ...] | None = None,
+        case_set: str = "reference21",
     ):
-        validate_public_reference(
+        if (type(case_set) is not str or case_set not in {"reference21", "full140"}
+                or (case_set == "full140" and case_positions is not None)):
+            raise ValueError("审核只接受原21或固定完整140，不允许完整集合缩减。")
+        validation = (validate_full_public_reference if case_set == "full140"
+                      else validate_public_reference)(
             reference, expected_reference_sha256=expected_reference_sha256,
             annotation_sha256=annotation_sha256,
         )
         self._reference = _copy(reference)
-        positions = (tuple(range(len(self._reference["windows"])))
-                     if case_positions is None else case_positions)
+        if case_set == "full140":
+            positions = validation["case_positions"]
+        else:
+            positions = (tuple(range(len(self._reference["windows"])))
+                         if case_positions is None else case_positions)
         if (type(positions) is not tuple or not positions
                 or any(type(position) is not int
                        or not 0 <= position < len(self._reference["windows"])
@@ -181,6 +189,7 @@ class PhasedEvaluationAudit:
             raise ValueError("两阶段审核需要明确摘要与两个审核回调。")
         self._reference_sha256 = expected_reference_sha256
         self._case_positions = positions
+        self._case_set = case_set
         self._criteria_sha256 = criteria_sha256
         self._raw_reviewer = raw_reviewer
         self._full_reviewer = full_reviewer
@@ -194,6 +203,16 @@ class PhasedEvaluationAudit:
     def case_positions(self) -> tuple[int, ...]:
         """本stage局部位置对应的原Gold位置；不重排或缩减参考。"""
         return self._case_positions
+
+    @property
+    def case_set(self) -> str:
+        """只标识两个固定公开集合，不允许调用方注入cases。"""
+        return self._case_set
+
+    @property
+    def reference_sha256(self) -> str:
+        """完整装配对象摘要；选定case的原21投影另保留原摘要。"""
+        return self._reference_sha256
 
     def __call__(self, bundle: dict) -> dict:
         try:
@@ -213,7 +232,13 @@ class PhasedEvaluationAudit:
         position = bundle["case_position"]
         if type(position) is not int or not 0 <= position < len(self._case_positions):
             raise EvaluationBudgetAbort("phased_case_position_invalid")
-        reference_case = self._reference["windows"][self._case_positions[position]]
+        reference_position = self._case_positions[position]
+        reference = (self._reference["provenance"]["parent21"]["reference"]
+                     if self._case_set == "full140" and reference_position < 21
+                     else self._reference)
+        reference_sha = (canonical_sha256(reference) if reference is not self._reference
+                         else self._reference_sha256)
+        reference_case = reference["windows"][reference_position]
         if (bundle["case_name"] != reference_case["case_name"]
                 or canonical_sha256(bundle["window"]) != reference_case["input_sha256"]
                 or bundle["gold_reference"]["criteria_sha256"] != self._criteria_sha256):
@@ -222,14 +247,14 @@ class PhasedEvaluationAudit:
         raw_view = _copy({
             "case_id": reference_case["id"], "case_position": position,
             "case_name": reference_case["case_name"], "window": bundle["window"],
-            "reference_case": reference_case, "common_rules": self._reference["common_rules"],
-            "e_fields": self._reference["e_fields"], "reference_sha256": self._reference_sha256,
+            "reference_case": reference_case, "common_rules": reference["common_rules"],
+            "e_fields": reference["e_fields"], "reference_sha256": reference_sha,
             "extraction": [{"index": index, "payload": fact, "payload_sha256": canonical_sha256(fact)}
                            for index, fact in enumerate(extraction)],
         })
         raw_view["raw_evidence_sha256"] = canonical_sha256(raw_view)
         raw_review = _copy(self._raw_reviewer(_copy(raw_view)))
-        _validate_raw(self._reference, raw_view, raw_review)
+        _validate_raw(reference, raw_view, raw_review)
         receipt = _save(bundle["persist_audit"], {"phase": "raw", "review": raw_review},
                         position, reference_case["case_name"])
         if not extraction and (
@@ -244,7 +269,7 @@ class PhasedEvaluationAudit:
             "verification": _arguments(list(bundle["adapter_outputs"]), _V_TOOL, "results") if extraction else [],
             "final_facts": bundle["original_result"]["facts"], "original_result": bundle["original_result"],
         }
-        packet = prepare_case_review(self._reference, reference_case["id"], _copy(evidence))
+        packet = prepare_case_review(reference, reference_case["id"], _copy(evidence))
         receipt_ref = {key: receipt[key] for key in (
             "case_position", "case_name", "kind", "purpose", "event_sequence", "payload_sha256",
         )}

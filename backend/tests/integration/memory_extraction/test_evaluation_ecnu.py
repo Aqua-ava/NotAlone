@@ -92,6 +92,38 @@ class EvaluationECNUTest(unittest.TestCase):
         self.credentials.append("loaded")
         return "synthetic-not-a-real-key"
 
+    def full_preparation(self, *, change=None):
+        from tests.unit.memory_extraction.test_evaluation_reference import full_reference_fixture
+        from notalone.memory_extraction.evaluation_reference import (
+            FULL_ANNOTATION_PATH, FULL_REFERENCE_PATH, PUBLIC_REFERENCE_PATH,
+        )
+
+        hashes, _ = self.preparation()
+        reference = full_reference_fixture()
+        if change is not None:
+            change(reference)
+        root = Path(__file__).resolve().parents[4]
+        sources = {
+            FULL_REFERENCE_PATH: json.dumps(reference, ensure_ascii=False).encode(),
+            FULL_ANNOTATION_PATH: "合成协议判据。".encode(),
+            PUBLIC_REFERENCE_PATH: (root / PUBLIC_REFERENCE_PATH).read_bytes(),
+            ".scratch/unfinished-work/memory-gold-agent-annotations-20261012.md": (
+                root / ".scratch/unfinished-work/memory-gold-agent-annotations-20261012.md"
+            ).read_bytes(),
+        }
+        for relative, content in sources.items():
+            path = self.repo / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+            hashes[relative] = hashlib.sha256(content).hexdigest()
+        gold = {
+            "status": "frozen_agent_review",
+            "case_names": [case.name for case in (*CASES, *SEMANTIC_CASES)],
+            "criteria_path": FULL_REFERENCE_PATH,
+            "criteria_sha256": hashes[FULL_REFERENCE_PATH],
+        }
+        return hashes, gold, reference
+
     def audit(self, bundle, decision="general_error", reason="coverage_miss"):
         self.audits.append(bundle)
         return {
@@ -219,6 +251,184 @@ class EvaluationECNUTest(unittest.TestCase):
                 ),
             )
         self.assertEqual(calls, [])
+        self.assertEqual(tuple(self.output.iterdir()), ())
+
+    def test_invalid_fixed_case_set_or_full_subset_never_creates_budget(self):
+        with patch.object(EvaluationBudget, "create",
+                          side_effect=AssertionError("非法集合不能创建预算。")):
+            for parameters in ({"case_set": True}, {"case_set": "other"},
+                               {"case_set": "full140", "case_positions": (0,)},
+                               {"case_set": "full140"}):
+                with self.subTest(parameters=parameters):
+                    with self.assertRaises(EvaluationBudgetAbort):
+                        self.run_ready(**parameters)
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+        self.assertEqual(tuple(self.output.iterdir()), ())
+
+    def test_full140_mock_has_exact_original_order_cap_and_frozen_mapping(self):
+        from notalone.memory_extraction.evaluation_records import canonical_sha256
+
+        hashes, gold, reference = self.full_preparation()
+        timeouts = []
+
+        def response(request):
+            timeouts.append(request.extensions["timeout"])
+            return self.response(request)
+
+        result = self.run_ready(
+            hashes=hashes, gold=gold, case_set="full140",
+            request_timeout_seconds=300, max_retries=0,
+            transport=httpx.MockTransport(response),
+        )
+        cases = (*CASES, *SEMANTIC_CASES)
+        self.assertEqual(len(self.requests), 140)
+        self.assertEqual(len(self.audits), 140)
+        self.assertEqual([outcome["case_name"] for outcome in result["outcomes"]],
+                         [case.name for case in cases])
+        self.assertEqual([canonical_sha256(bundle["window"]) for bundle in self.audits],
+                         [canonical_sha256(build_window(case)) for case in cases])
+        self.assertEqual(result["receipt"]["budget"]["request_limit"], 280)
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 140)
+        self.assertTrue(result["summary"]["plan_complete"])
+        self.assertFalse(result["quality_certified"])
+        self.assertEqual(timeouts,
+                         [dict.fromkeys(("connect", "read", "write", "pool"), 300.0)] * 140)
+        manifest = json.loads((self.output / "manifest.json").read_text())
+        config = manifest["frozen_config"]
+        self.assertEqual(config["mode"], "ecnu_bounded_full140")
+        self.assertEqual(config["stage"], "full140")
+        self.assertEqual(config["max_retries"], 0)
+        self.assertEqual(config["public_cases_sha256"], canonical_sha256(cases))
+        self.assertEqual(config["selected_case_positions"],
+                         reference["provenance"]["local_to_reference_positions"])
+        self.assertEqual([item["case_position"] for item in manifest["plan"]], list(range(140)))
+
+    def test_full_phased_scopes_are_sealed_and_unresolved_stops_without_losing_140(self):
+        from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
+        from notalone.memory_extraction.evaluation_records import canonical_sha256
+
+        hashes, gold, reference = self.full_preparation()
+        seen = []
+        parent = reference["provenance"]["parent21"]["reference"]
+
+        def raw_review(view):
+            position = view["case_position"]
+            seen.append(position)
+            scope = parent if position == 0 else reference
+            self.assertEqual(view["reference_sha256"], canonical_sha256(scope))
+            self.assertEqual(view["common_rules"], scope["common_rules"])
+            self.assertEqual(view["extraction"], [])
+            self.assertNotIn("verification", view)
+            self.assertEqual(view["case_id"], ("A01", "R001", "R002")[position])
+            return {
+                "reviewer": "合成分范围raw协议控制", "case_id": view["case_id"],
+                "reference_sha256": view["reference_sha256"],
+                "raw_evidence_sha256": view["raw_evidence_sha256"], "e_rows": [],
+                "claims": [{"claim_id": claim["id"], "groups": []}
+                           for claim in view["reference_case"]["claims"]],
+                "window_checks": {"inclusion": ("fail", "pass", "unresolved")[position],
+                                  "forbidden_meanings": "pass"},
+            }
+
+        def full_review(view):
+            packet = view["packet"]
+            position = len(seen) - 1
+            scope = parent if position == 0 else reference
+            self.assertEqual(packet["reference"], scope)
+            self.assertEqual(packet["reference_sha256"], canonical_sha256(scope))
+            self.assertEqual(view["raw_receipt"]["purpose"], "case")
+            answer = deepcopy(view["sealed_raw_review"])
+            answer.pop("raw_evidence_sha256")
+            answer.update(run_status="empty", evidence_sha256=packet["evidence_sha256"],
+                          v_rows=[])
+            answer["window_checks"]["lineage"] = "pass"
+            return answer
+
+        audit = PhasedEvaluationAudit(
+            reference=reference, expected_reference_sha256=canonical_sha256(reference),
+            annotation_sha256=reference["annotation_sha256"],
+            criteria_sha256=gold["criteria_sha256"], raw_reviewer=raw_review,
+            full_reviewer=full_review, case_set="full140",
+        )
+        result = self.run_ready(hashes=hashes, gold=gold, audit=audit, case_set="full140",
+                                request_timeout_seconds=300, max_retries=0)
+        self.assertEqual(seen, [0, 1, 2])
+        self.assertEqual(len(self.requests), 3)
+        self.assertEqual([item["decision"] for item in result["audits"]],
+                         ["general_error", "safe", "unknown"])
+        self.assertEqual(result["summary"]["planned"], 140)
+        self.assertEqual(result["summary"]["unrun"], 137)
+        self.assertEqual(result["receipt"]["budget"]["request_limit"], 280)
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 3)
+        self.assertFalse(result["receipt"]["plan_complete"])
+        self.assertEqual(result["receipt"]["capture_gaps"], [])
+        phases = [event["payload"].get("phase") for event in result["events"]
+                  if event["kind"] == "semantic_audit"]
+        self.assertEqual(phases, ["raw", "final", None] * 3)
+
+    def test_incomplete_full_reference_is_rejected_before_budget_credentials_and_sends(self):
+        def impossible_interval(reference, end):
+            claim = next(window["claims"][0] for window in reference["windows"][21:]
+                         if window["claims"])
+            claim["variants"][0].update(valid_at="2026-09-15T08:00:00+08:00", invalid_at=end)
+
+        changes = (
+            lambda reference: reference["provenance"].update(reference_complete=False),
+            lambda reference: reference["provenance"].update(unresolved_cases=["R057"]),
+            lambda reference: reference["windows"].pop(),
+            lambda reference: reference["windows"][21].update(input_sha256="f" * 64),
+            lambda reference: reference["provenance"].update(
+                local_to_reference_positions=list(range(140)),
+            ),
+            lambda reference: reference["provenance"]["parent21"]["reference"][
+                "windows"
+            ][0].update(inclusion="none"),
+            lambda reference: impossible_interval(reference, "2026-09-15T00:00:00+00:00"),
+            lambda reference: impossible_interval(reference, "2026-09-14T23:59:59+00:00"),
+            lambda reference: reference["windows"][0]["claims"][0]["variants"][0][
+                "source_choices"
+            ][0]["indices"].__setitem__(0, False),
+            lambda reference: reference["windows"][0]["claims"][0]["variants"][0][
+                "source_choices"
+            ][0]["indices"].__setitem__(0, 0.0),
+        )
+        with patch.object(EvaluationBudget, "create",
+                          side_effect=AssertionError("未完整参考不能创建预算。")):
+            for position, change in enumerate(changes):
+                hashes, gold, _ = self.full_preparation(change=change)
+                with self.subTest(position=position):
+                    with self.assertRaisesRegex(EvaluationBudgetAbort, "ecnu_full_reference_invalid"):
+                        self.run_ready(
+                            hashes=hashes, gold=gold, case_set="full140",
+                            request_timeout_seconds=300, max_retries=0,
+                        )
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+        self.assertEqual(tuple(self.output.iterdir()), ())
+
+    def test_full_requires_all_sources_frozen_and_exact_limits_before_budget(self):
+        from notalone.memory_extraction.evaluation_reference import FULL_ANNOTATION_PATH
+
+        with patch.object(EvaluationBudget, "create",
+                          side_effect=AssertionError("错误full冻结不能创建预算。")):
+            for fault in ("annotation", "changed_source", "timeout", "retry"):
+                hashes, gold, _ = self.full_preparation()
+                parameters = {"request_timeout_seconds": 300, "max_retries": 0}
+                if fault == "annotation":
+                    del hashes[FULL_ANNOTATION_PATH]
+                elif fault == "changed_source":
+                    (self.repo / "backend/src/notalone/memory_extraction/flow.py").write_text(
+                        "合成冻结后变化。", encoding="utf-8",
+                    )
+                elif fault == "timeout":
+                    parameters["request_timeout_seconds"] = 180
+                else:
+                    parameters["max_retries"] = 1
+                with self.subTest(fault=fault), self.assertRaises(EvaluationBudgetAbort):
+                    self.run_ready(hashes=hashes, gold=gold, case_set="full140", **parameters)
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
         self.assertEqual(tuple(self.output.iterdir()), ())
 
     def test_fixed_plan_runs_empty_extraction_with_durable_independent_audits(self):

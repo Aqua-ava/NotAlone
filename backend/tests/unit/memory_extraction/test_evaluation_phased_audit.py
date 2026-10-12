@@ -136,6 +136,113 @@ class EvaluationPhasedAuditTest(unittest.TestCase):
             **parameters,
         )
 
+    def full_audit(self, *, raw, full):
+        from tests.unit.memory_extraction.test_evaluation_reference import full_reference_fixture
+
+        reference = full_reference_fixture()
+        return PhasedEvaluationAudit(
+            reference=reference, expected_reference_sha256=canonical_sha256(reference),
+            annotation_sha256=reference["annotation_sha256"],
+            criteria_sha256=self.criteria_sha, raw_reviewer=raw, full_reviewer=full,
+            case_set="full140",
+        ), reference
+
+    def test_full_old_case_keeps_exact_original_rules_and_raw_full_digest(self):
+        from notalone.memory_extraction.evaluation_cases import CASES
+        from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
+
+        self.bundle["case_position"] = (*CASES, *SEMANTIC_CASES).index(self.case)
+
+        def raw(view):
+            self.assertEqual(view["case_id"], "A08")
+            self.assertEqual(view["reference_sha256"], REFERENCE_SHA)
+            self.assertEqual(view["common_rules"], self.reference["common_rules"])
+            return self.raw_review(view)
+
+        def full(view):
+            self.assertEqual(view["packet"]["reference"], self.reference)
+            self.assertEqual(view["packet"]["reference_sha256"], REFERENCE_SHA)
+            return self.full_review(view)
+
+        audit, reference = self.full_audit(raw=raw, full=full)
+        self.assertEqual(audit.case_set, "full140")
+        self.assertEqual(audit.case_positions[self.bundle["case_position"]], 7)
+        self.assertEqual(audit(self.bundle)["decision"], "safe")
+        self.assertEqual(self.order, ["raw", "persist:raw", "full", "persist:final"])
+        self.assertEqual(reference["windows"][:21], self.reference["windows"])
+        with self.assertRaises(AttributeError):
+            audit.case_set = "reference21"
+
+    def test_full_extended_empty_case_uses_119_scope_without_exposing_verification(self):
+        from notalone.memory_extraction.evaluation import build_window
+        from notalone.memory_extraction.evaluation_cases import CASES
+        from notalone.memory_extraction.evaluation_records import _json_value
+
+        self.case = CASES[1]
+        self.bundle.update(
+            case_position=1, case_name=self.case.name,
+            window=_json_value(build_window(self.case)),
+            original_result={"passed": True, "facts": []}, provider_requests=[],
+            adapter_outputs=[{"tool_calls": [{
+                "name": "MemoryExtractionOutput", "args": {"facts": []},
+            }]}],
+        )
+        reference_holder = []
+
+        def raw(view):
+            reference = reference_holder[0]
+            self.assertEqual(view["case_id"], "R001")
+            self.assertEqual(view["common_rules"], reference["common_rules"])
+            self.assertNotEqual(view["common_rules"], self.reference["common_rules"])
+            self.assertEqual(view["reference_sha256"], canonical_sha256(reference))
+            return self.raw_review(view)
+
+        def full(view):
+            self.order.append("full")
+            self.assertEqual(view["packet"]["reference"], reference_holder[0])
+            self.assertEqual(view["packet"]["evidence"]["verification"], [])
+            answer = copy.deepcopy(view["sealed_raw_review"])
+            answer.pop("raw_evidence_sha256")
+            answer.update(evidence_sha256=view["packet"]["evidence_sha256"],
+                          run_status="empty", v_rows=[])
+            answer["window_checks"]["lineage"] = "pass"
+            return answer
+
+        audit, reference = self.full_audit(raw=raw, full=full)
+        reference_holder.append(reference)
+        self.assertEqual(audit.case_positions[1], 21)
+        self.assertEqual(audit(self.bundle)["decision"], "safe")
+        self.assertTrue(self.events[-1]["payload"]["report"]["none_correct"])
+
+    def test_full_cannot_accept_subset_or_seal_a_different_scope(self):
+        from tests.unit.memory_extraction.test_evaluation_reference import full_reference_fixture
+
+        reference = full_reference_fixture()
+        parameters = {
+            "reference": reference, "expected_reference_sha256": canonical_sha256(reference),
+            "annotation_sha256": reference["annotation_sha256"],
+            "criteria_sha256": self.criteria_sha, "raw_reviewer": self.raw_review,
+            "full_reviewer": self.full_review,
+        }
+        for case_set, positions in ((True, None), ("other", None), ("full140", (7,))):
+            with self.subTest(case_set=case_set, positions=positions), self.assertRaises(ValueError):
+                PhasedEvaluationAudit(**parameters, case_set=case_set, case_positions=positions)
+        from notalone.memory_extraction.evaluation_cases import CASES
+        from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
+
+        self.bundle["case_position"] = (*CASES, *SEMANTIC_CASES).index(self.case)
+
+        def raw(view):
+            review = self.raw_review(view)
+            review["reference_sha256"] = canonical_sha256(reference)
+            return review
+
+        audit, _ = self.full_audit(raw=raw, full=self.full_review)
+        with self.assertRaisesRegex(EvaluationBudgetAbort, "phased_raw_binding_changed"):
+            audit(self.bundle)
+        self.assertEqual(self.events, [])
+        self.assertNotIn("full", self.order)
+
     def test_selected_local_position_uses_original_gold_without_reordering_it(self):
         positions = (0, 1, 7, 4)
         before = canonical_sha256(self.reference)
