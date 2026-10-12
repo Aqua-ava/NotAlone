@@ -1,0 +1,262 @@
+{
+  "date": "2026-10-12",
+  "scope": "同一新候选包的非OCR Mac交付验收；新增功能冻结",
+  "status": "independent_checks_completed_physical_shortcut_pending",
+  "reviewBase": "3677bf31",
+  "productionSourceCommit": "b6fed39f2e555986d438d522693a9112adeb99e5",
+  "productionCodeChanged": false,
+  "packageRebuilt": false,
+  "artifact": {
+    "appPath": "/Users/local-user/learn/NotAlone/desktop/artifacts/wcdb-notice-package-20261012.iecln6/packaged/NotAlone-darwin-arm64/NotAlone.app",
+    "archivePath": "/Users/local-user/learn/NotAlone/desktop/artifacts/wcdb-notice-package-20261012.iecln6/NotAlone-macOS-arm64-with-notices.zip",
+    "archiveSha256": "05307269a90a450265a4416947929d27fc5c97ae5f3ba4bd554433d7da4841d3",
+    "archiveBytes": 140277674,
+    "signature": "ad-hoc",
+    "developerIdOrNotarization": false,
+    "asarSha256": "27cc230aee9c979dcd88e0b3eecb2e08bc677e6d072bba44183cb8fca591e1c7",
+    "licenseFilesInsideApp": 9
+  },
+  "actualWindow": {
+    "from": "2026-10-12T05:51:13.138Z",
+    "until": "2026-10-12T06:11:13.138Z",
+    "initialUpperBound": 25,
+    "updatedUpperBound": 28,
+    "controlledAppLaunches": 26,
+    "unexpectedUngatedDefaultInstanceLaunches": 1,
+    "totalAppLaunches": 27,
+    "coordinator": "main-agent",
+    "authorization": "用户要求继续非OCR交付验收并沿用本轮授权；未重复索要授权，窗口与总上限有明示。"
+  },
+  "checks": {
+    "safety": {
+      "command": "npm test",
+      "passed": 46,
+      "total": 46,
+      "seconds": 11.611703542,
+      "typecheckPassed": true,
+      "realAppRun": false
+    },
+    "backend": {
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "tests.unit.server.test_runtime_shutdown",
+        "tests.unit.front_sync.test_cli_background_sync",
+        "tests.unit.wechat_cli.test_global_session_stream",
+        "-v"
+      ],
+      "passed": 44,
+      "total": 44,
+      "unitSeconds": 0.53,
+      "processSeconds": 1.9397573329915758,
+      "exitCode": 0,
+      "realWechatRead": false,
+      "externalModelCalls": 0
+    },
+    "receiptProtocol": {
+      "passed": 3,
+      "total": 3,
+      "red": "缺少收据模块，3项未通过",
+      "green": true,
+      "humanAndAgentFieldsStrictlySeparated": true,
+      "defaultModesSkipped": true
+    },
+    "app": {
+      "uniqueFullScenariosPassed": 20,
+      "originallyPlanned": 21,
+      "nativeShortcutWholeScenarioPassed": false,
+      "backendRuntimeScenariosPassed": 10,
+      "systemClipboardScenariosPassed": 1,
+      "machineAndOwnerSetupScenariosPassed": 4,
+      "controlledCliSyncScenariosPassed": 4,
+      "packagedLifecycleScenariosPassed": 1,
+      "remainingCorrectedBatch": {
+        "passed": 17,
+        "failed": 1,
+        "didNotRun": 1,
+        "exitCode": 1,
+        "seconds": 96.68987729199999,
+        "reported": "1.6m",
+        "countedAsWholePass": false
+      },
+      "syncCompletion": {
+        "passed": 2,
+        "total": 2,
+        "reportedSeconds": 9.6,
+        "exitCode": 0,
+        "launches": 2,
+        "scope": "仅真实IPC拒绝及同步开启时正常退出，两场最小复验"
+      },
+      "lifecycle": {
+        "passed": 1,
+        "total": 1,
+        "testSeconds": 10.5,
+        "runnerReportedSeconds": 10.8,
+        "launches": 2,
+        "reopenModelDelta": 0,
+        "explicitRetryModelDelta": 1,
+        "sourceApp": false,
+        "firstFailureRootCauseConfirmed": false,
+        "scope": "同包带公开草稿就绪检查及临时诊断的单场通过；之后仅移除诊断日志及增加早归属记录，产品字节未改"
+      },
+      "importPartial": {
+        "nativeSystemDialogSelected": true,
+        "importedMessages": 6,
+        "allTaskStepsAndFinalCheckPassedBeforeShortcut": true,
+        "wholeNativeScenarioPassed": false
+      },
+      "clipboard": {
+        "syntheticSentinelWrittenBeforeRead": true,
+        "originalClipboardNotReadOrRestored": true,
+        "currentEditedTextCopied": true,
+        "copyAndHideSameHelper": true,
+        "knownOwnClipboardTextClearedAtEnd": true
+      },
+      "sync": {
+        "controlledSyntheticCliOnly": true,
+        "unconfirmedScopeNotRead": true,
+        "disabledChecksNoNewReads": true,
+        "backfillPauseFailureRetryPreservesCursor": true,
+        "helperIpcRejected": 6,
+        "extraNamedRequestsRejected": 80,
+        "oldScopeRequestsRejected": 4,
+        "enabledRuntimeNormalQuitAuthenticatedStopped": true,
+        "ownedBackendGoneAfterQuit": true,
+        "postConfirmedStopReadCountUnchanged": true
+      }
+    },
+    "headlessSharedScenario": {
+      "command": "npm run test:pages -- --case sync-arguments --timeout-seconds 120",
+      "passed": 1,
+      "total": 1,
+      "processSeconds": 9.75,
+      "exitCode": 0,
+      "electronRun": false,
+      "nativeAcceptance": false,
+      "helperRejected": 6,
+      "invalidNamedRequestsRejected": 80,
+      "staleScopeRejected": 4,
+      "syntheticReads": 0,
+      "rootKnownBackendGone": true,
+      "rootKnownDatabaseAbsent": true,
+      "fixtureCleanupConfirmed": true,
+      "interactiveAndHeadlessLeasesAbsent": true
+    }
+  },
+  "preservedFailures": [
+    {
+      "attempt": "initial21",
+      "exitCode": 1,
+      "actualLaunches": 1,
+      "reason": "首场候选编辑框未出现，20场未运行；带公开草稿就绪检查的单场通过，未将首次失败根因写成已确认。"
+    },
+    {
+      "attempt": "nativeAgent",
+      "exitCode": 2,
+      "actualControlledLaunches": 1,
+      "reason": "系统导入6条及任务成功后，CUA发键未观察到小窗唤起；没有写Agent收据或人工确认，不算整场通过。"
+    },
+    {
+      "attempt": "backendSelector",
+      "exitCode": 2,
+      "actualLaunches": 1,
+      "reason": "旧status选择器匹配前台定位暂停及已连接两元素，测试strict拒绝；选择器修正后的同场通过。"
+    },
+    {
+      "attempt": "syncArgumentsUrl",
+      "exitCode": 1,
+      "actualLaunches": 1,
+      "reason": "原共享场等待/#helper，签名包实际为/index.html#helper；改为公开hash匹配后两场复验通过。"
+    }
+  ],
+  "desktopToolIncident": {
+    "unexpectedDefaultInstanceLaunches": 1,
+    "countedAsControlledAcceptance": false,
+    "trigger": "原测试App退场后的CUA状态刷新／置前重新解析目标；由时间线推断，不归因于某一RPC",
+    "publicUiObserved": "本机启动路径未配置、尚未连接后端",
+    "normalMenuQuitObserved": true,
+    "processGone": true,
+    "defaultDirectoryIdentityUnchanged": true,
+    "originalConfigurationContentsNotInspected": true,
+    "defaultDirectoryContentsUnchangedNotAsserted": true,
+    "possibleDefaultCacheWritesNotExcluded": true,
+    "rawHistoryRetained": true,
+    "futureControlRule": "动作前核验已知PID与本次阶段截止；确认退场后不再调用该App状态或置前，改看Finder／进程证据。"
+  },
+  "rootVerification": {
+    "knownOwnerRecordCount": 28,
+    "knownRecordedPidsGone": 28,
+    "knownDirectoriesAbsent": 29,
+    "knownRecordedDatabasesAbsent": 7,
+    "limitedSyntheticDatabaseNamespaceSameAsBaseline": true,
+    "appAndHeadlessLeasesAbsent": true,
+    "defaultDirectoryIdentityMatched": true,
+    "strictSignatureAfterRun": true,
+    "helperFilesVerified": 4,
+    "noticeFilesVerified": 9,
+    "asarHashUnchanged": true,
+    "archiveHashUnchanged": true
+  },
+  "dataProcessing": {
+    "controlledBusinessChecksSyntheticOnly": true,
+    "unexpectedDefaultInstanceSeparatelyRecorded": true,
+    "agentDidNotInspectOriginalConfigContents": true,
+    "systemDialogInitiallyListedUserFileNames": true,
+    "unrelatedFilesNotOpened": true,
+    "rawUiOrPrivateFileNamesNotCommitted": true,
+    "officialWechatCliExecuted": false,
+    "controlledSyntheticCliExecuted": true,
+    "realWechatRead": false,
+    "ocrRun": false,
+    "externalModelCalls": 0,
+    "tccOrPermissionsChanged": false,
+    "chatSent": false,
+    "push": false,
+    "deployed": false
+  },
+  "remaining": {
+    "physicalGlobalShortcutShowHideConfirmation": "等待用户是否方便配合真实键盘复验；不用此问题索要新授权",
+    "agentShortcutAcceptanceRecorded": false,
+    "humanShortcutAcceptanceRecorded": false,
+    "exactBuildSourceVerified": false,
+    "binaryLicenseCoverageVerified": false,
+    "realWechatChannelAndExternalModelQualityNotCertified": true,
+    "mac20State": "claimed",
+    "mac20Triage": "needs-info",
+    "originalAcceptanceChecked": 1,
+    "originalAcceptancePending": 3,
+    "newProductFeaturesFrozen": true,
+    "ocrPaused": true
+  },
+  "finalReview": {
+    "base": "3677bf31",
+    "mode": "independent_readonly_two_axis",
+    "standards": {
+      "newCodeOrDocumentHardViolations": 0,
+      "importantJudgmentSuggestions": 0,
+      "recordedExecutionGateViolations": 1,
+      "details": "CUA在App退场后意外重开默认实例，未经过test:app；已正常退出、保留清理和潜在配置／缓存读写不确定性。"
+    },
+    "spec": {
+      "newCodeOrEvidenceErrors": 0,
+      "productScopeCreep": 0,
+      "recordedExecutionScopeIncidents": 1,
+      "retainedMissing": [
+        "实际键盘快捷键显示／隐藏",
+        "WCDB精确构建／二进制完整许可覆盖",
+        "真实渠道与模型质量",
+        "原18的OCR依赖"
+      ],
+      "details": "20个完整App场景只按独立结果累计；失败／未运行与系统导入分项分列，不代签人机收据，不关闭完整票。"
+    },
+    "reviewersRanAppOrTests": false
+  },
+  "localLinks": {
+    "changedMarkdownFilesChecked": 4,
+    "relativeLinksChecked": 83,
+    "missing": 0,
+    "originalAcceptanceAndStateUnchanged": true,
+    "productionDiffEmpty": true
+  }
+}

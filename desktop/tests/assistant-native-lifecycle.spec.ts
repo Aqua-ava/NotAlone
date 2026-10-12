@@ -27,9 +27,16 @@ test('真实小窗关闭继续、正常退出停止，原目录重开只恢复�
   async ({ runningApp: { app, appProcess, userData }, rewriteBackend, appDirectory, appWorkingDirectory }) => {
     test.setTimeout(180_000);
     await verifyAppTestLease();
+    await writeFile(test.info().outputPath('owned-app.json'), JSON.stringify({
+      pid: appProcess.pid, userData, fixtureDirectory: rewriteBackend.directory, sourceApp: !process.env.NOTALONE_TEST_APP_EXECUTABLE,
+      databaseName: /\bdbname=(notalone_core_flow_[a-f\d]{32}_test)\b/.exec(rewriteBackend.data.database_url)?.[1] ?? null,
+    }), { mode: 0o600 });
     const { manager, helper } = await openRewriteAppPages(app);
     await chooseContact(manager, helper, rewriteBackend);
     await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('合成原生第一轮已保存草稿。');
+    // 先确认主进程公开状态收到草稿，再执行生成；不能仅根据renderer输入框值判定就绪。
+    await expect.poll(() => helper.evaluate(async () => (await window.notalone.contacts.getState()).draft))
+      .toBe('合成原生第一轮已保存草稿。');
     await rewriteBackend.plan({ count: 1, prefix: '合成原生已保存候选' });
     await helper.getByRole('button', { name: '生成候选', exact: true }).click();
     await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
@@ -39,10 +46,6 @@ test('真实小窗关闭继续、正常退出停止，原目录重开只恢复�
     const read = async () => { const saved = await rewriteBackend.request(endpoint);
       expect(saved.status).toBe(200);
       return saved.data as { turns: Array<{ state: string; interruption_reason: string | null; reply: unknown }> }; };
-    await writeFile(test.info().outputPath('owned-app.json'), JSON.stringify({
-      pid: appProcess.pid, userData, fixtureDirectory: rewriteBackend.directory, sourceApp: !process.env.NOTALONE_TEST_APP_EXECUTABLE,
-      databaseName: /\bdbname=(notalone_core_flow_[a-f\d]{32}_test)\b/.exec(rewriteBackend.data.database_url)?.[1] ?? null,
-    }), { mode: 0o600 });
 
     let reopened: ElectronApplication | undefined;
     let reopenedProcess: ChildProcess | undefined;

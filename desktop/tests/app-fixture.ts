@@ -30,6 +30,10 @@ export const test = base.extend<AppOptions & { runningApp: RunningApp; appDirect
         env: isolatedAppEnvironment(userData, appEnvironment),
       });
       appProcess = app.process();
+      // 在场景断言前记录自有实例，失败时仍可按精确PID／目录核验收尾。
+      await writeFile(base.info().outputPath('app-test-owned.json'), JSON.stringify({
+        pid: appProcess.pid, userData, executable: process.env.NOTALONE_TEST_APP_EXECUTABLE ?? null,
+      }), { mode: 0o600, flag: 'wx' });
       await use({ app, appProcess, userData });
     } finally {
       // 故障断言失败时也只回收本轮测试 App，不把强制回收算作产品退出验收。

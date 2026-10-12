@@ -11,7 +11,7 @@ test('App 认证复用本机服务，双窗口共享真实连接，退出确认�
   const helperOpened = app.waitForEvent('window');
   await manager.getByRole('button', { name: '打开输入小窗' }).click();
   const helper = await helperOpened;
-  await expect(helper.getByRole('status')).toContainText('已连接');
+  await expect(helper.getByRole('status').filter({ hasText: /^已连接$/ })).toBeVisible();
   await helper.getByRole('button', { name: '隐藏输入小窗' }).click();
   expect((await backend.service.observations()).state).toBe('running');
   await selectMenu(app, 'NotAlone', '退出 NotAlone');

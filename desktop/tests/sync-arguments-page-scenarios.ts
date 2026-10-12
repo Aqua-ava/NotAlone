@@ -15,7 +15,8 @@ export async function syncArgumentsPreserveStoppedScope({ manager, syncBackend }
   const opened = manager.context().waitForEvent('page');
   await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
   const helper = await opened;
-  await helper.waitForURL('**/#helper');
+  // 普通页面使用 /#helper，签名包使用 /index.html#helper；两者共享同一公开角色。
+  await helper.waitForURL(/#helper$/);
   const scopeRevision = await manager.evaluate(async () => (await window.notalone.syncControl.getState()).scopeRevision);
   const helperRejected = await helper.evaluate(async (scopeRevision) => {
     const bridge = window.notalone.syncControl;
