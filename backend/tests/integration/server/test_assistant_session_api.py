@@ -7,6 +7,7 @@ import threading
 import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 from uuid import uuid4
 
 import psycopg
@@ -230,6 +231,61 @@ class AssistantSessionHttpTest(unittest.TestCase):
         self.assertEqual(self.backend.request(path + "/replies", conflicting),
                          (409, {"error": "assistant_session_input_conflict"}))
         self.assertEqual(len(self.model.seen_calls), 1)
+
+    def test_empty_candidates_return_generation_failure_and_same_key_can_retry(self) -> None:
+        status, session = self._default()
+        self.assertEqual(status, 200, session)
+        path = self._path(session["session_id"])
+        body = self._body()
+        valid_response = self.model.responses[0]
+        self.model.responses = [AIMessage(content="", tool_calls=[{
+            "name": "ReplyRuntimeOutput", "id": "synthetic-empty-reply",
+            "args": {"candidates": [], "used_skill_version_id": None},
+        }])]
+
+        self.assertEqual(self.backend.request(path + "/replies", body),
+                         (500, {"error": "reply_generation_failed"}))
+        status, saved = self.backend.request(path)
+        self.assertEqual(status, 200, saved)
+        self.assertEqual(len(saved["turns"]), 1)
+        failed = saved["turns"][0]
+        self.assertEqual(failed["state"], "failed")
+        self.assertIsNone(failed["reply"])
+
+        self.model.responses.append(valid_response)
+        status, completed = self.backend.request(path + "/replies", body)
+        self.assertEqual(status, 200, completed)
+        self.assertEqual(completed["turn_id"], failed["turn_id"])
+        self.assertEqual(len(completed["candidates"]), 1)
+        self.assertEqual(len(self.model.seen_calls), 2)
+        self.assertEqual(self.backend.request(path + "/replies", body), (200, completed))
+        self.assertEqual(len(self.model.seen_calls), 2)
+        self.assertEqual(len(self.backend.request(path)[1]["turns"]), 1)
+
+    def test_reply_errors_keep_specific_codes_without_leaking_private_details(self) -> None:
+        from notalone.reply.errors import (
+            ReplyBudgetError, ReplyInvariantError, ReplyPersistenceError,
+            ReplyProviderContextLimitError, ReplyRunError, ReplyTimeoutError,
+        )
+
+        status, session = self._default()
+        self.assertEqual(status, 200, session)
+        path = self._path(session["session_id"])
+        private = "合成内部异常正文不得回显。"
+        provider = ReplyProviderContextLimitError()
+        for error, expected in (
+            (ReplyTimeoutError(private), (504, {"error": "reply_timeout"})),
+            (ReplyBudgetError(private), (502, {"error": "reply_budget_exceeded"})),
+            (ReplyRunError(private), (500, {"error": "reply_generation_failed"})),
+            (ReplyInvariantError(private), (500, {"error": "reply_generation_failed"})),
+            (ReplyPersistenceError(private), (503, {"error": "assistant_session_save_failed"})),
+            (provider, (409, {"error": "provider_context_limit", "message": str(provider)})),
+            (RuntimeError(private), (500, {"error": "internal_error"})),
+        ):
+            with self.subTest(error=type(error).__name__):
+                with patch.object(ReplyService, "generate", side_effect=error):
+                    self.assertEqual(self.backend.request(path + "/replies", self._body()), expected)
+        self.assertEqual(len(self.model.seen_calls), 0)
 
     def test_explicit_no_skill_survives_saved_input_and_same_key_replay(self) -> None:
         _, session = self._default()

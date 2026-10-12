@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from notalone.reply.errors import (
-    ReplyBudgetError, ReplyProviderContextLimitError, ReplyTimeoutError,
+    ReplyBudgetError, ReplyError, ReplyProviderContextLimitError, ReplyTimeoutError,
 )
 from notalone.reply.input_budget import InputBudgetExceededError, InputBudgetUnavailableError
 
@@ -1420,6 +1420,10 @@ class BackendApp:
             })
         except ReplyTimeoutError:
             return _json_response(HTTPStatus.GATEWAY_TIMEOUT, {"error": "reply_timeout"})
+        except ReplyBudgetError:
+            return _json_response(HTTPStatus.BAD_GATEWAY, {"error": "reply_budget_exceeded"})
+        except ReplyError:
+            return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "reply_generation_failed"})
         except AssistantSessionError:
             return _json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "assistant_session_failed"})
 
