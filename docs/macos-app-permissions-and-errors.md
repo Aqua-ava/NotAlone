@@ -489,3 +489,5 @@ Root确认两场20个已记录自有进程、两个隔离userData及自有Finder
 本票在隔离工作树以Electron44.7.0、本机已核查CLI1.6.25与仓库探针重新打包，包含生产估算／余量提示与实际服务限长文案；没有修改Info.plist、TCC、签名策略或原生入口。首次从安装runtime重建离线ZIP时带入AppleDouble元数据，framework重签因unsealed contents失败，候选输出和自有staging由既有脚本回收。改用ditto --norsrc --noextattr重建ZIP，核对元数据条目0后同命令打包通过。未修改安装runtime或绕过签名核验。
 
 最终候选位于本机忽略的desktop/artifacts/ecnu-estimate-package-20261012/NotAlone-darwin-arm64/NotAlone.app；主包deep strict签名、helper／探针随包原字节和9份许可材料复核通过。类型检查、46项安全检查与构建通过，实际App启动仍0；真实资料20分钟体验由主Agent在原库升级完成后沿有限test:app执行，用户选择联系人并触发ECNU，后续运行和清理据实际收据补录。已有Developer ID／公证及helper精确来源／二进制许可缺项不因重打包改变。
+
+ECNU真实资料体验已于本机22:07:35打开新包管理后台及输入小窗，startup ready、原库055、联系人目录就绪、两窗visible。首场脚本握手格式错误7.2秒失败，实际1次启动且自有资源／租约清理确认；修复后第二场实际1次，预约截止22:27:30，守护器将通过公开菜单收尾，本记录仍是运行中，不冒充已退出或模型质量通过。没有启用CLI新读、OCR、截图／视频／trace或外部聊天发送。
