@@ -253,4 +253,3 @@ def _valid_tool_calls(value: object) -> bool:
         and isinstance(item["function"].get("arguments"), str)
         for item in value
     )
-
