@@ -21,6 +21,13 @@ class ReplyRunError(ReplyError):
     """模型或 Tool 运行失败，公开文本不包含供应商响应。"""
 
 
+class ReplyProviderContextLimitError(ReplyRunError):
+    """供应商稳定错误码确认超长，不伪造本机计量回执。"""
+
+    def __init__(self) -> None:
+        super().__init__("模型提示这次内容过长，请新开助手会话。")
+
+
 class ReplyTimeoutError(ReplyRunError):
     """本次模型运行超过总时限，候选不可保存。"""
 

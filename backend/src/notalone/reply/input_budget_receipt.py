@@ -22,7 +22,9 @@ def decode_input_budget_receipt(payload: object) -> InputBudgetDecision:
     """重读已保存的成功回执；不使用当前 profile 重算历史提醒状态。"""
 
     try:
-        if not isinstance(payload, Mapping) or set(payload) != _FIELDS:
+        if not isinstance(payload, Mapping) or set(payload) not in (
+            _FIELDS, _FIELDS | {"safety_margin_tokens"},
+        ):
             raise ValueError
         if payload["allowed"] is not True or payload["reason"] is not None:
             raise ValueError
@@ -44,9 +46,15 @@ def decode_input_budget_receipt(payload: object) -> InputBudgetDecision:
         measured = payload["input_tokens"]
         reserve = payload["output_reserve_tokens"]
         total = payload["total_tokens"]
+        margin = payload.get("safety_margin_tokens", 0)
+        if type(margin) is not int or margin < 0:
+            raise ValueError
+        if kind is TokenMeasurementKind.APPROXIMATE and margin == 0:
+            raise ValueError
         if (
             capacity <= 0 or measured < 0 or not 0 < reserve < capacity
-            or total != measured + reserve or total > capacity
+            or reserve + margin >= capacity
+            or total != measured + reserve + margin or total > capacity
         ):
             raise ValueError
         return InputBudgetDecision(
@@ -54,6 +62,7 @@ def decode_input_budget_receipt(payload: object) -> InputBudgetDecision:
             context_window_tokens=capacity, input_tokens=measured,
             output_reserve_tokens=reserve, total_tokens=total,
             measurement_kind=kind, measurement_id=payload["measurement_id"],
+            safety_margin_tokens=margin,
         )
     except Exception:
         raise ValueError("输入预算回执结构无效。") from None
@@ -68,6 +77,8 @@ def validate_input_budget_receipt(
         return None
     try:
         if type(value) is not InputBudgetDecision:
+            raise ValueError
+        if type(value.safety_margin_tokens) is not int or value.safety_margin_tokens < 0:
             raise ValueError
         return decode_input_budget_receipt(value.to_payload())
     except Exception:

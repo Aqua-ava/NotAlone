@@ -28,7 +28,11 @@ class InputBudgetReceiptTest(unittest.TestCase):
     def test_complete_receipt_roundtrips_without_recomputing_saved_warning(self):
         for kind in TokenMeasurementKind:
             with self.subTest(kind=kind):
-                expected = replace(receipt(), measurement_kind=kind)
+                expected = replace(
+                    receipt(), measurement_kind=kind,
+                    safety_margin_tokens=100 if kind is TokenMeasurementKind.APPROXIMATE else 0,
+                    total_tokens=950 if kind is TokenMeasurementKind.APPROXIMATE else 850,
+                )
                 payload = input_budget_receipt_payload(expected)
                 decoded = decode_input_budget_receipt(payload)
                 self.assertEqual(decoded, expected)
@@ -91,6 +95,33 @@ class InputBudgetReceiptTest(unittest.TestCase):
             with self.subTest(value_type=type(value).__name__):
                 with self.assertRaises(ValueError):
                     validate_input_budget_receipt(value)
+
+    def test_negative_or_boolean_internal_margin_cannot_disappear_into_a_legacy_receipt(self):
+        for margin in (-1, False, True):
+            with self.subTest(margin=margin):
+                with self.assertRaises(ValueError):
+                    validate_input_budget_receipt(replace(receipt(), safety_margin_tokens=margin))
+
+    def test_legacy_payload_stays_unchanged_and_estimated_receipt_requires_its_margin(self):
+        legacy = receipt().to_payload()
+        self.assertNotIn("safety_margin_tokens", legacy)
+        self.assertEqual(decode_input_budget_receipt(legacy).to_payload(), legacy)
+        with self.assertRaises(ValueError):
+            decode_input_budget_receipt({**legacy, "measurement_kind": "approximate"})
+        approximate = {**legacy, "measurement_kind": "approximate",
+                       "safety_margin_tokens": 100, "total_tokens": 950}
+        self.assertEqual(decode_input_budget_receipt(approximate).to_payload(), approximate)
+        for margin in (0, -1, True, 100.0):
+            with self.subTest(margin=margin):
+                with self.assertRaises(ValueError):
+                    decode_input_budget_receipt({**approximate, "safety_margin_tokens": margin})
+
+    def test_saved_receipt_keeps_space_for_input_after_reserve_and_margin(self):
+        with self.assertRaises(ValueError):
+            decode_input_budget_receipt({
+                **receipt().to_payload(), "input_tokens": 0,
+                "safety_margin_tokens": 900, "total_tokens": 1000,
+            })
 
 
 if __name__ == "__main__":

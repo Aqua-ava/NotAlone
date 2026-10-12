@@ -92,6 +92,34 @@ class SyntheticCounter:
 
 
 class InputBudgetTest(unittest.TestCase):
+    def test_approximate_margin_affects_warning_and_hard_limit(self) -> None:
+        profile = replace(make_profile(), measurement_kind=TokenMeasurementKind.APPROXIMATE,
+                          safety_margin_tokens=100)
+        for measured, state, total in ((599, BudgetState.READY, 799),
+                                       (600, BudgetState.WARNING, 800),
+                                       (801, BudgetState.EXCEEDED, 1001)):
+            with self.subTest(measured=measured):
+                counter = SyntheticCounter(replace(
+                    make_measurement(measured), kind=TokenMeasurementKind.APPROXIMATE,
+                ))
+                decision = InputBudgetGuard(profile=profile, counter=counter).assess(make_request())
+                self.assertEqual((decision.state, decision.total_tokens), (state, total))
+                self.assertEqual(decision.to_payload()["safety_margin_tokens"], 100)
+
+    def test_approximate_profile_requires_positive_margin_and_other_modes_accept_zero(self):
+        for margin in (0, -1, True, 1.5):
+            with self.subTest(margin=margin):
+                with self.assertRaises(ValueError):
+                    replace(make_profile(), measurement_kind=TokenMeasurementKind.APPROXIMATE,
+                            safety_margin_tokens=margin)
+
+    def test_known_capacity_keeps_space_for_input_after_reserve_and_margin(self):
+        for margin in (900, 901):
+            with self.subTest(margin=margin):
+                with self.assertRaises(ValueError):
+                    replace(make_profile(), safety_margin_tokens=margin)
+        self.assertEqual(replace(make_profile(), safety_margin_tokens=899).safety_margin_tokens, 899)
+
     def test_invalid_configuration_is_rejected_without_a_counter_or_model(self) -> None:
         invalid = [
             {"model_id": ""},

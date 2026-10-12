@@ -12,10 +12,11 @@ from notalone.reply.errors import ReplyBudgetError
 
 
 class TokenMeasurementKind(StrEnum):
-    """已核实的精确计量或保守上界；近似比率不能放行调用。"""
+    """明确区分精确计量、已核实上界与带安全余量的输入估算。"""
 
     EXACT = "exact"
     VERIFIED_UPPER_BOUND = "verified_upper_bound"
+    APPROXIMATE = "approximate"
 
 
 class InputComponent(StrEnum):
@@ -48,6 +49,7 @@ class InputBudgetProfile:
     warning_ratio: float
     measurement_kind: TokenMeasurementKind | None
     measurement_id: str | None
+    safety_margin_tokens: int = 0
 
     def __post_init__(self) -> None:
         if not isinstance(self.model_id, str) or not self.model_id.strip():
@@ -81,6 +83,19 @@ class InputBudgetProfile:
             or not self.measurement_id.strip()
         ):
             raise ValueError("预算计量配置标识不能为空。")
+        if type(self.safety_margin_tokens) is not int or self.safety_margin_tokens < 0:
+            raise ValueError("输入预算安全余量必须是非负整数。")
+        if (
+            self.measurement_kind is TokenMeasurementKind.APPROXIMATE
+            and self.safety_margin_tokens == 0
+        ):
+            raise ValueError("输入估算必须明确配置正数安全余量。")
+        if (
+            self.context_window_tokens is not None
+            and self.output_reserve_tokens is not None
+            and self.output_reserve_tokens + self.safety_margin_tokens >= self.context_window_tokens
+        ):
+            raise ValueError("输出预留与安全余量之和必须小于模型上下文能力。")
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -103,7 +118,7 @@ class InputBudgetRequest:
 
 @dataclass(frozen=True, slots=True)
 class InputTokenMeasurement:
-    """计量器对完整请求的结论，必须关联同一模型与已核实计量配置。"""
+    """完整请求的计量或估算结论，必须关联同一模型与明确计量配置。"""
 
     model_id: str
     input_tokens: int
@@ -141,6 +156,7 @@ class InputBudgetDecision:
     measurement_kind: TokenMeasurementKind | None
     measurement_id: str | None
     reason: str | None = None
+    safety_margin_tokens: int = 0
 
     @property
     def allowed(self) -> bool:
@@ -149,7 +165,7 @@ class InputBudgetDecision:
     def to_payload(self) -> dict[str, object]:
         """供公开响应使用的纯元数据；不能包含计量请求或正文。"""
 
-        return {
+        payload: dict[str, object] = {
             "state": self.state.value,
             "allowed": self.allowed,
             "model_id": self.model_id,
@@ -165,6 +181,9 @@ class InputBudgetDecision:
             "measurement_id": self.measurement_id,
             "reason": self.reason,
         }
+        if self.safety_margin_tokens > 0:
+            payload["safety_margin_tokens"] = self.safety_margin_tokens
+        return payload
 
 
 class InputBudgetExceededError(ReplyBudgetError):
@@ -256,7 +275,10 @@ class InputBudgetGuard:
             return self._unavailable("invalid_measurement")
         if not frozenset(InputComponent) <= measurement.covered_components:
             return self._unavailable("incomplete_measurement")
-        total = measurement.input_tokens + self._profile.output_reserve_tokens
+        total = (
+            measurement.input_tokens + self._profile.output_reserve_tokens
+            + self._profile.safety_margin_tokens
+        )
         warning_ratio = Fraction(str(self._profile.warning_ratio))
         warning_threshold = (
             self._profile.context_window_tokens * warning_ratio.numerator
@@ -278,6 +300,7 @@ class InputBudgetGuard:
             measurement_kind=measurement.kind,
             measurement_id=measurement.measurement_id,
             reason="context_window_exceeded" if state is BudgetState.EXCEEDED else None,
+            safety_margin_tokens=self._profile.safety_margin_tokens,
         )
 
     def require(self, request: InputBudgetRequest) -> InputBudgetDecision:
@@ -301,4 +324,5 @@ class InputBudgetGuard:
             measurement_kind=self._profile.measurement_kind,
             measurement_id=self._profile.measurement_id,
             reason=reason,
+            safety_margin_tokens=self._profile.safety_margin_tokens,
         )

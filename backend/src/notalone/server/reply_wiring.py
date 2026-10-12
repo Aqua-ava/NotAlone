@@ -39,6 +39,7 @@ from notalone.persistence.retrieval import PostgresRetrieval
 from notalone.persistence.skill_port import PostgresSkillPort
 from notalone.persistence.style_sample_store import PostgresStyleSampleStore
 from notalone.reply.adapters.deepseek_provider import build_deepseek_model
+from notalone.reply.adapters.ecnu_input_budget import build_ecnu_input_budget
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
 from notalone.reply.context import RetrievalReplyContext
 from notalone.reply.generator import ReplyGenerator
@@ -65,6 +66,10 @@ def build_reply_service(
         model = build_deepseek_model()
     except (ValueError, OSError):
         return None
+    if input_budget_profile is None and input_token_counter is None:
+        ecnu_budget = build_ecnu_input_budget(model)
+        if ecnu_budget is not None:
+            input_budget_profile, input_token_counter = ecnu_budget
     skill_revision = _skill_library_revision(database_url, owner_id)
     retrieval = PostgresRetrieval(
         database_url,

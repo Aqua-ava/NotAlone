@@ -16,6 +16,8 @@ from langchain.agents.middleware.types import ModelRequest
 
 from notalone.reply.adapters.async_runner import run_with_timeout
 from notalone.reply.adapters.input_budget_middleware import InputBudgetMiddleware
+from notalone.reply.adapters.provider_errors import is_provider_context_limit
+from notalone.reply.errors import ReplyProviderContextLimitError
 from notalone.reply.exploration import ExplorationContext, ExplorationError, ExplorationPriority, validate_exploration_output
 from notalone.reply.input_budget import (
     InputBudgetDecision, InputBudgetExceededError, InputBudgetProfile,
@@ -118,7 +120,9 @@ class LangChainExplorationRuntime:
             raise ExplorationError("探索超时，请手动重试。") from None
         except (InputBudgetExceededError, InputBudgetUnavailableError):
             raise
-        except Exception:
+        except Exception as error:
+            if is_provider_context_limit(error):
+                raise ReplyProviderContextLimitError() from None
             raise ExplorationError("探索失败，请手动重试。") from None
         finally:
             if called:

@@ -19,6 +19,33 @@ const unavailable = { ...ready, state: 'unavailable', allowed: false, context_wi
   input_tokens: null, output_reserve_tokens: null, total_tokens: null, measurement_kind: null,
   measurement_id: null, reason: 'model_capability_unknown' };
 
+test('完整估算预算回执保留安全余量，旧精确回执继续按零余量读取', async () => {
+  const { readInputBudget } = await ports();
+  const receipt = { ...ready, measurement_kind: 'approximate',
+    measurement_id: 'synthetic-request-estimate-v1', safety_margin_tokens: 200, total_tokens: 800 };
+  const budget = readInputBudget(receipt, true);
+  assert.equal(budget.measurementKind, 'approximate');
+  assert.equal(budget.safetyMarginTokens, 200);
+  assert.equal(budget.totalTokens, 800);
+  assert.equal(readInputBudget(ready, true).safetyMarginTokens, 0);
+});
+
+test('估算余量与总数必须一致，陌生计量类型和额外正文仍被拒绝', async () => {
+  const { readInputBudget } = await ports();
+  const receipt = { ...ready, measurement_kind: 'approximate',
+    measurement_id: 'synthetic-request-estimate-v1', safety_margin_tokens: 200, total_tokens: 800 };
+  for (const bad of [{ ...receipt, safety_margin_tokens: 0, total_tokens: 600 },
+    { ...receipt, safety_margin_tokens: -1 }, { ...receipt, safety_margin_tokens: 1.5 },
+    { ...receipt, safety_margin_tokens: true }, { ...receipt, safety_margin_tokens: '200' },
+    { ...receipt, safety_margin_tokens: Number.MAX_SAFE_INTEGER + 1 },
+    { ...receipt, safety_margin_tokens: 900, total_tokens: 1500 },
+    { ...receipt, total_tokens: 600 }, { ...receipt, measurement_kind: 'character_ratio' },
+    { ...receipt, text: '不能进入预算元数据的合成正文。' }]) assert.throws(() => readInputBudget(bad));
+  assert.equal(readInputBudget({ ...ready, safety_margin_tokens: 200, total_tokens: 800 }).safetyMarginTokens, 200);
+  assert.equal(readInputBudget({ ...unavailable, measurement_kind: 'approximate',
+    measurement_id: 'synthetic-request-estimate-v1', safety_margin_tokens: 200 }).safetyMarginTokens, 200);
+});
+
 test('预算元数据严格解码已核实数值与未知配置，不接收正文或矛盾状态', async () => {
   const { readInputBudget } = await ports();
   assert.equal(readInputBudget(ready, true).totalTokens, 600);

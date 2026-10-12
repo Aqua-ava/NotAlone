@@ -483,3 +483,9 @@ Root确认两场20个已记录自有进程、两个隔离userData及自有Finder
 同一arm64 ad-hoc候选包在最终独立test:app场1／1、报告1.2m／exit0，Root实际置前自有空Finder后，正式线程新的真实有界tail启动并完成；菜单正常退出及原认证stopped后，自有后端／CLI退出、5秒无新增启动。首两场脚本失败保留，不认证新来信、双联系人或整个间隔Finder持续前台。scope拒绝管理页列表请求，列表执行0；OCR／probe／模型／外部发送／TCC变更0。
 
 三场20个自有进程、测试库和临时目录／空Finder已清理，两租约absent。主包deep strict、4helper strict、15资源文件及ASAR／ZIP原字节保持；默认目录仅身份前后核对，不读取配置正文、不认证缓存全文不变。原包来源／许可、Developer ID／公证和OCR18缺项不变，见[分项摘要](../.scratch/unfinished-work/mac-real-sync-quit-final-20261012.json)及[WCDB补核](../.scratch/unfinished-work/wcdb-provenance-followup-20261012.md)。
+
+## 2026-10-12 ECNU估算提示候选包
+
+本票在隔离工作树以Electron44.7.0、本机已核查CLI1.6.25与仓库探针重新打包，包含生产估算／余量提示与实际服务限长文案；没有修改Info.plist、TCC、签名策略或原生入口。首次从安装runtime重建离线ZIP时带入AppleDouble元数据，framework重签因unsealed contents失败，候选输出和自有staging由既有脚本回收。改用ditto --norsrc --noextattr重建ZIP，核对元数据条目0后同命令打包通过。未修改安装runtime或绕过签名核验。
+
+最终候选位于本机忽略的desktop/artifacts/ecnu-estimate-package-20261012/NotAlone-darwin-arm64/NotAlone.app；主包deep strict签名、helper／探针随包原字节和9份许可材料复核通过。类型检查、46项安全检查与构建通过，实际App启动仍0；真实资料20分钟体验由主Agent在原库升级完成后沿有限test:app执行，用户选择联系人并触发ECNU，后续运行和清理据实际收据补录。已有Developer ID／公证及helper精确来源／二进制许可缺项不因重打包改变。

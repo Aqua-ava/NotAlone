@@ -215,6 +215,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
       : state.errorCode === 'unavailable' ? '回复服务暂不可用，请检查应用配置和本机服务。'
       : state.errorCode === 'input_budget_exceeded' ? '当前讨论超出模型输入预算，超限调用已停止。请查看已保存讨论或新开助手会话。'
       : state.errorCode === 'input_budget_unavailable' ? '当前模型的完整输入预算暂不可核验，本次生成已停止。已填写内容和已保存讨论仍会保留。'
+      : state.errorCode === 'provider_context_limit' ? '模型提示这次内容过长，请新开助手会话。'
       : '本次生成失败，请核对本机服务后重试。'}</p>}
     {state.phase === 'failed' && state.mode === 'reply_to_message' && <p className="reply-note">可以刷新待回复消息重新选择，或切换到草稿改写。</p>}
     {state.result ? <>
