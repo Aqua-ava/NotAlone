@@ -8,7 +8,7 @@ Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](
 
 ## 规格与范围
 
-[正式规格](../spec.md)；旧06；Q1–Q18组合。 读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖是完整交付的前置，不代表这些前置已完成；本票尚未实现。
+[正式规格](../spec.md)；旧06；Q1–Q18组合。读取[工作流](../../../docs/agents/workflow.md)、[工程要求](../../../docs/agents/engineering.md)、[领域路由](../../../docs/agents/domain.md)、[领域语言](../../../CONTEXT.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)。依赖是完整交付的前置；本票合成交叉验收已完成，原生接续与剩余见Answer，不以自动通过替代真实App结果。
 
 ## What to build
 
@@ -55,3 +55,15 @@ Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](
 最后页面的精确自有库1份经Root新连接SQL确认不存在，12个PID／PPID／PGID三元身份均无存活；页面与App租约随后分别查询absent。日志和清理回执仅保存在忽略目录 `desktop/artifacts/assistant-session-closeout-20261012/`，无私人资料或截图提交。
 
 原生用例[assistant-native-lifecycle.spec.ts](../../../desktop/tests/assistant-native-lifecycle.spec.ts)及[运行入口](../../../desktop/README.md)已准备并通过类型检查，默认跳过；预计源App两次启动、同一隔离userData／随机库，单场180秒，验证真实小窗close继续、公开菜单quit停止、可靠完成保留、迟到不复活、重开只读及显式重试。当前没有新约定的有限test:app窗口，真正App未启动，第3条仍未勾选，17／19不关闭。源App即使通过也不代签最终签名包／Finder交付、真实微信或模型语义质量；OCR、外部模型、发送、push、发布及部署均未执行。
+
+### 原生接续实录（2026-10-12）
+
+固定自动增量 `a9821b3d → e32027b4` 两轴只读审查：Standards硬违反0／重要possible0，Spec新增missing／wrong／creep均0；不代替运行证据。用户随后明确批准台北时间09:59:34–10:09:34的有限原生窗口，最初最多2次启动；首次失败后另批准本窗口总计3次。
+
+第一轮实际1次源App启动、13.1秒、exit1：真正BrowserWindow.close由生产close事件隐藏，小窗隐藏期间第二轮生成已HTTP可靠completed、旧完成保留；用例随后错误要求旧编辑框被后台新候选直接覆盖而失败。改为公开“查看已保存讨论”重读新候选，符合原16的不覆盖当前视图边界；补充Spec只读0及类型通过，没有生产改动。该失败保留，不算整个原生场通过。
+
+第二轮实际又1次源App启动、8.7秒、exit1：上述公开重读及真正菜单quit均达到，App进程正常exit0；测试随后向已关闭的原HTTP读取而ECONNRESET。既有BackendHost.shutdown允许成功后服务关闭，测试修为先释放旧模型、原夹具restart同库HTTP，再严格核对failed／app_quit、旧完成和迟到，再实际App重开。补充Spec只读0及类型通过；不直接改写turn或伪造中断。
+
+两轮自有App PID、测试库、userData均由Root精确核验无剩余，第二轮夹具目录也不存在；App租约分别为absent。日志、失败上下文和仅合成的清理回执保留于忽略产物目录。本段累计用了2次启动，真正App重开仍未执行，原第3条不勾、整票claimed；不以两个部分结果制造一次原生全绿。后续启动须同时满足尚有效的截止及用户明确批准的累计次数。
+
+窗口于10:09:34到期，申请总预算4次的询问未获回复，没有再启动。原生用例的两处观察修正、两次失败及部分检查点均保留；修正后完整TypeScript、diff及两次补充Spec审查通过，尚未取得修正后整场运行结果。需要新的有限窗口才能继续真实重开／零自动模型／显式重试；19仍claimed／ready-for-human，第3条不勾。

@@ -176,3 +176,5 @@ fresh Standards本两文件硬0／重要0，仅新陈旧注释P3已修；原两�
 用户明确要求先做可自行验证的收尾、OCR继续暂停。原公开Main→HTTP／隔离PG最小四场退出等待、运行后只读恢复／显式重试、可靠完成保留及来源删除守卫再次实际4／4、16.267秒、skip0，模型0＋2＋1＋0；四份真实001–055迁移／repeat0／库0。19的双联系人／多会话页面交叉及两来源后继／携入删除已通过，详见[19结果](19-combined-native-acceptance.md#answer)。本轮未改生产生命周期或新增功能。
 
 真实App用例 `desktop/tests/assistant-native-lifecycle.spec.ts` 已准备、类型通过、默认跳过：同一自有userData内最多两次源App启动，公开菜单退出，验证小窗close继续、quit中断、重开只读和明确重试；CLI／OCR路径为本轮不存在路径，无外部模型。真正App尚未运行，仍保留原第1、3条未勾选和claimed，Triage改为ready-for-human仅等待工程要求的有限时段确认，不要求用户亲自实施测试；通过后按实际证据收口。
+
+随后用户明确授权09:59:34–10:09:34的有限原生窗口，最初总预算2次、再批准总预算3次，实际用了2次源App启动：小窗真实close后生成可靠完成，两次第二轮completed均已核对；第二场真正菜单quit和App exit0达到。新用例分别在“误要求覆盖旧编辑框”及“向已关闭HTTP立即回读”处失败，已按原16视图保留及BackendHost既有shutdown协议最窄修正测试，完整类型和补充Spec均通过，无生产修改。精确自有App PID、测试库和userData无剩余，App租约absent；原窗口到期时追加预算询问未获回复，未再启动。真实App重开、原退出记录的重建读取及零自动模型／明确重试尚未完成，原第1、3条继续未勾、State claimed，详见[19原生实录](19-combined-native-acceptance.md#原生接续实录2026-10-12)。

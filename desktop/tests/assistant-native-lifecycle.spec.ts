@@ -1,6 +1,5 @@
 import { expect, type ElectronApplication, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import { test } from './rewrite-fixture';
 import { selectMenu, isolatedAppEnvironment } from './app-fixture';
 import { launchApp, verifyAppTestLease } from './app-test-gate';
@@ -63,8 +62,9 @@ test('真实小窗关闭继续、正常退出停止，原目录重开只恢复�
       await manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
       await expect.poll(() => helperWindow.evaluate((window) => window.isVisible())).toBe(true);
       await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
-      await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true }))
-        .toHaveValue('关小窗后可靠完成的合成候选（说法1）。');
+      await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+      await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })
+        .getByText('关小窗后可靠完成的合成候选（说法1）。', { exact: true })).toBeVisible();
 
       await rewriteBackend.plan({ count: 1, prefix: '退出后禁止复活的合成迟到候选' });
       await rewriteBackend.command('hold');
@@ -75,14 +75,14 @@ test('真实小窗关闭继续、正常退出停止，原目录重开只恢复�
       // 真实公开菜单退出，不以Playwright清理、杀进程或模拟事件代签。
       await selectMenu(app, 'NotAlone', '退出 NotAlone');
       await expect.poll(() => appProcess.exitCode).toBe(0);
+      // 正常退出允许认证HTTP随服务关闭；先释放旧模型并重建同库读取入口。
+      await rewriteBackend.command('release');
+      await expect.poll(() => modelCalls(rewriteBackend)).toBe(3);
+      await rewriteBackend.command('restart');
       const stopped = await read();
       expect(stopped.turns.map((turn) => turn.state)).toEqual(['completed', 'completed', 'failed']);
       expect(stopped.turns[2]).toMatchObject({ interruption_reason: 'app_quit', reply: null });
-      await rewriteBackend.command('release');
-      await expect.poll(() => modelCalls(rewriteBackend)).toBe(3);
       expect(JSON.stringify(await read())).not.toContain('退出后禁止复活的合成迟到候选');
-
-      await rewriteBackend.command('restart');
       const beforeReopen = await modelCalls(rewriteBackend);
       reopened = await launchApp({ cwd: appWorkingDirectory,
         executablePath: process.env.NOTALONE_TEST_APP_EXECUTABLE,
