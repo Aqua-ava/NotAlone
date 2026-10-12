@@ -1,0 +1,144 @@
+import { expect, type Browser, type Page } from '@playwright/test';
+import { confirmHelperContact } from '../foreground-confirmation-actions';
+import { withEventPages, type EventPages } from './message-events';
+
+async function chooseContact(pages: EventPages, helper: Page, index: 0 | 1) {
+  await pages.manager.getByRole('button', { name: `选择合成联系人${index ? '乙' : '甲'}`, exact: true }).click();
+  await confirmHelperContact(helper, pages.fixture.data.contact_ids[index]);
+  await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.phase))
+    .toBe('ready');
+}
+
+async function selectSession(helper: Page, sessionId: string) {
+  await helper.getByRole('button', { name: '刷新会话列表', exact: true }).click();
+  await helper.getByRole('button', { name: `查看会话 ${sessionId}`, exact: true }).click();
+  await expect.poll(() => helper.evaluate(async () => { const state = await window.notalone.replies.getState();
+    return { sessionId: state.savedSession?.sessionId, phase: state.savedSession?.phase,
+      selection: state.explicitCandidateSelection?.phase }; }))
+    .toEqual({ sessionId, phase: 'ready', selection: 'ready' });
+}
+
+// 只增加跨票交叉场景；真实App停止／重开在独立有限窗口验收。
+export async function assistantSessionCombination(browser: Browser, origin: string) {
+  const name = '双联系人多会话：版本续改、新消息采用、恢复、预算与携入删除互不串扰';
+  process.stdout.write(`page_test_scenario: ${name}\n`);
+  await withEventPages(browser, origin, async (pages) => {
+    const { fixture } = pages;
+    let helper = pages.helper;
+    const contactA = fixture.data.contact_ids[0], contactB = fixture.data.contact_ids[1];
+    await chooseContact(pages, helper, 0);
+    await helper.getByRole('button', { name: '回应消息', exact: true }).click();
+    await helper.getByRole('radio', { name: /甲的原始合成消息/ }).click();
+    await helper.getByRole('textbox', { name: '表达方向', exact: true }).fill('感谢邀请，本次不参加。');
+    await helper.getByRole('textbox', { name: '本次策略要求', exact: true }).fill('自然一点');
+    await fixture.plan({ count: 1, message_groups: [['甲的合成感谢。', '甲本次不参加。']] });
+    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    const group = helper.getByRole('group', { name: '说法1消息组', exact: true });
+    await expect(group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('甲本次不参加。');
+    const sessionA = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId!;
+    const pathA = `/api/contacts/${contactA}/assistant-sessions/${sessionA}`;
+    await group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true }).fill('甲明确保存的拒绝。');
+    await group.getByRole('textbox', { name: '说法1修改要求', exact: true }).fill('不要承诺');
+    await group.getByRole('button', { name: '保存本组修改', exact: true }).click();
+    await expect(group.getByRole('combobox', { name: '说法1版本', exact: true }).getByRole('option')).toHaveCount(2);
+    await fixture.plan({ count: 1, message_groups: [['甲简短感谢。', '甲明确不参加。']] });
+    await helper.getByRole('textbox', { name: '继续修改要求', exact: true }).fill('第一条简短一点');
+    await helper.getByRole('button', { name: '继续修改', exact: true }).click();
+    await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).continuation?.phase))
+      .toBe('completed');
+    const beforeMessage = (await fixture.request(pathA)).data;
+    expect(beforeMessage.turns).toHaveLength(2);
+    await fixture.command('append_other_contact');
+    await pages.awaitPendingCommands();
+    expect((await helper.evaluate(() => window.notalone.replies.getState())).messageNotice.changed).toBe(false);
+    const arrived = await fixture.command('append_message');
+    await expect(helper.getByRole('status').filter({ hasText: '当前联系人有新消息' })).toBeVisible();
+    expect((await fixture.command('observations')).model_calls).toBe(2);
+    await expect(group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('甲明确不参加。');
+    await fixture.plan({ count: 1, message_groups: [['甲新消息后的感谢。', '甲仍不参加。']] });
+    await helper.getByRole('button', { name: '结合新消息继续', exact: true }).click();
+    await expect(group.getByRole('textbox', { name: '说法1第2条编辑文本', exact: true })).toHaveValue('甲仍不参加。');
+    const adopted = (await fixture.request(pathA)).data;
+    const turns = adopted.turns as Array<{ input: { content: { target_message_id: string; direction: string; user_instruction: string } } }>;
+    expect(turns).toHaveLength(3);
+    expect(turns[2].input.content).toMatchObject({ target_message_id: arrived.message_id,
+      direction: '感谢邀请，本次不参加。', user_instruction: '自然一点；不要承诺；简短一点' });
+    await group.getByRole('radio', { name: '选择说法1当前版本', exact: true }).click();
+    await expect(helper.getByRole('button', { name: '携已选版本新开', exact: true })).toBeEnabled();
+    const selectedA = (await helper.evaluate(() => window.notalone.replies.getState())).explicitCandidateSelection!.selection;
+    expect(selectedA).not.toBeNull();
+
+    await chooseContact(pages, helper, 1);
+    await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('乙的独立合成草稿。');
+    await fixture.plan({ count: 1, prefix: '乙的独立合成候选' });
+    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveValue('乙的独立合成候选（说法1）。');
+    const sessionB = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId!;
+    const pathB = `/api/contacts/${contactB}/assistant-sessions/${sessionB}`;
+    const keptB = (await fixture.request(pathB)).data;
+    await helper.getByRole('button', { name: '新开助手会话', exact: true }).click();
+    expect((await helper.evaluate(() => window.notalone.replies.getState())).savedSession).toMatchObject({
+      inputs: [], turns: [], currentInputVersionId: null });
+    await selectSession(helper, sessionB);
+    expect((await fixture.command('observations')).model_calls).toBe(4);
+    expect((await fixture.request(`/api/contacts/${contactB}/assistant-sessions/${sessionA}`)).status).toBe(404);
+    expect((await fixture.request(`/api/contacts/${fixture.data.other_contact_id}/assistant-sessions/${sessionA}`)).status).toBe(404);
+
+    // 重建公开页面后只从权威存储恢复，未保存的草稿不参与恢复。
+    await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('未提交且不应恢复的乙草稿。');
+    await helper.close();
+    const opened = pages.manager.context().waitForEvent('page');
+    await pages.manager.getByRole('button', { name: '打开输入小窗', exact: true }).click();
+    helper = await opened;
+    await chooseContact(pages, helper, 0);
+    await selectSession(helper, sessionA);
+    expect((await helper.evaluate(() => window.notalone.replies.getState())).explicitCandidateSelection!.selection).toEqual(selectedA);
+    await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
+    expect((await fixture.command('observations')).model_calls).toBe(4);
+
+    // 合法完整历史经公开HTTP保存，真实预算守卫必须拒绝而非截断。
+    const large = '甲'.repeat(100000);
+    const input = await fixture.request(`${pathA}/inputs`, { content: {
+      type: 'purpose_exploration', purpose_hint: large }, expected_input_version_id: adopted.current_input_version_id });
+    expect(input.status).toBe(200);
+    await selectSession(helper, sessionA);
+    await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
+    await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).savedSession?.currentInputVersionId))
+      .toBe(input.data.input_version_id);
+    await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('甲超限后保留的合成草稿。');
+    await expect.poll(() => helper.evaluate(async () => (await window.notalone.contacts.getState()).draft))
+      .toBe('甲超限后保留的合成草稿。');
+    await helper.getByRole('button', { name: '生成候选', exact: true }).click();
+    await pages.awaitPendingCommands();
+    const budgetState = await helper.evaluate(() => window.notalone.replies.getState());
+    expect(budgetState.errorCode).toBe('input_budget_exceeded');
+    process.stdout.write(`page_test_combination_budget: phase=${budgetState.phase} code=${budgetState.errorCode} calls=4\n`);
+    await expect(helper.getByRole('alert', { name: '模型输入预算', exact: true })).toBeVisible();
+    expect((await fixture.command('observations')).model_calls).toBe(4);
+    expect(((await fixture.request(pathA)).data.inputs as Array<{ content: { purpose_hint?: string } }>)
+      .some((item) => item.content?.purpose_hint === large)).toBe(true);
+    await helper.getByRole('button', { name: '携已选版本新开', exact: true }).click();
+    await expect(helper.getByRole('article', { name: '携入的已选版本', exact: true })).toBeVisible();
+    const childA = (await helper.evaluate(() => window.notalone.replies.getState())).savedSession!.sessionId!;
+    expect(childA).not.toBe(sessionA);
+    const childPath = `/api/contacts/${contactA}/assistant-sessions/${childA}`;
+    const carry = (await fixture.request(childPath)).data;
+    expect(carry.turns).toEqual([]);
+    expect((carry.inputs as Array<{ content: { messages: Array<{ text: string }> } }>)[0].content.messages.map((m) => m.text))
+      .toEqual(['甲新消息后的感谢。', '甲仍不参加。']);
+    await selectSession(helper, sessionA);
+    await helper.getByRole('button', { name: '删除当前助手会话', exact: true }).click();
+    await helper.getByRole('group', { name: '确认删除助手会话', exact: true })
+      .getByRole('button', { name: '确认删除会话', exact: true }).click();
+    await expect.poll(async () => (await fixture.request(pathA)).status).toBe(404);
+    await selectSession(helper, childA);
+    const redacted = (await fixture.request(childPath)).data;
+    expect(redacted.current_input_version_id).toBeNull();
+    expect((redacted.inputs as Array<{ state: string; content: unknown }>)[0]).toMatchObject({ state: 'redacted', content: null });
+    expect(JSON.stringify(await helper.evaluate(() => window.notalone.replies.getState()))).not.toContain('甲仍不参加。');
+    expect((await fixture.request(pathB)).data).toEqual(keptB);
+    expect((await fixture.command('observations')).model_calls).toBe(4);
+    process.stdout.write('page_test_combination: contacts=2 models=4 recovery_delta=0 budget_delta=0 carry_delta=0 cross_scope=404 parent_deleted=true carry_redacted=true other_contact_unchanged=true\n');
+  });
+  process.stdout.write(`page_test_scenario_passed: ${name}\n`);
+}

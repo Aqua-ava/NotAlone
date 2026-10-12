@@ -205,6 +205,18 @@ npm run test:app:status  # 只读租约归属线索，App 不运行，不自动�
 
 `tests/app-test-expiry.spec.ts` 只在 `NOTALONE_APP_TEST_EXPIRY_ACCEPTANCE=1` 时执行，默认全量跳过。该场景故意等待短预约到期，命令截止须在 60 秒内且位于用户认可时段；预期 runner 返回 124，Playwright 的 interrupted 不是普通 PASS。收口须同时核验窗口 ready、自有 PID／userData 回收及租约 absent。2026-10-10 已用保留的严格签名候选 App 完成上述到期检查；这不证明产品认证停读或完整 App 交付。
 
+持续会话19／17收尾入口：普通页面用 `npm run test:pages -- --case assistant-session-combination --timeout-seconds 240`，串联双合成联系人、版本续改、新消息显式采用、权威恢复、硬预算、携入和会话删除；不运行Electron或OCR。多来源及后继／携入删除另由后端 `tests.integration.server.test_assistant_combination` 验证。
+
+`tests/assistant-native-lifecycle.spec.ts` 默认跳过，只有显式设置 `NOTALONE_ASSISTANT_LIFECYCLE_ACCEPTANCE=1` 并经有限 `test:app` 门禁才运行。原生场景使用同一隔离userData与随机测试库，最多两次App启动、单场180秒：真实小窗关闭后生成继续，公开菜单退出停止未完成生成，迟到结果不得复活，重开只读显示中断，明确重试才生成。测试源App默认不等同最终签名包／Finder交付；微信CLI和OCR路径固定为本轮不存在路径，无外部模型或消息发送。仅准备用例不代表原生验收通过，实际状态见持续会话17／19。
+
+先激活Conda `NotAlone`，在用户认可的有限时段内使用以下入口；起止时间必须填写实际已认可的值，不以示例作为授权：
+
+```bash
+NOTALONE_ASSISTANT_LIFECYCLE_ACCEPTANCE=1 npm run test:app -- --interactive --coordinator main-agent \
+  --from <已认可的ISO起始时间> --until <已认可的ISO截止时间> --max-launches 2 \
+  tests/assistant-native-lifecycle.spec.ts --output artifacts/assistant-native-closeout
+```
+
 `tests/native-desktop-acceptance.spec.ts` 只在 `NOTALONE_NATIVE_DESKTOP_ACCEPTANCE=1` 时执行，默认全量跳过；必须通过上述预约门禁，并以 `NOTALONE_TEST_APP_EXECUTABLE` 指定实际签名包可执行文件。沿用隔离导入夹具的真实 HTTP/PG 与合成资料，等待现场操作真实系统文件选择器和两次物理快捷键，不替换文件选择结果或调用快捷键回调。单场最多 8 分钟，文件选择与每次按键各最多等待 3 分钟，每次用户反馈最多等待 90 秒，预约截止仍优先。程序观察到状态后保留 App，等待主 Agent 收到用户对本次操作的明确反馈；两次都确认后才正常菜单退出，退出后系统快捷键注销。缺失、否定或非法反馈均不算通过，失败或预约到期仍按门禁收尾。
 
 协调者从日志所列 `human-show-request.json`／`human-hide-request.json` 读取本轮 `requestId`、操作与随机 `responsePath`，只在收到对应用户反馈后向该自有路径原子写入 `0600` 收据：`{"requestId":"本次请求标识","confirmed":true}` 或 `false`。只存布尔结论，不存用户原话；未答、含糊回答或机器窗口状态不得写成 `true`。不同操作各有随机请求，旧收据不能复用；不允许符号链接、非普通文件或超过 1 KiB 的响应。本次仅准备流程，尚未再次运行真实 App，因此下方旧版实机结果不会更新为新版或人工隐藏通过。

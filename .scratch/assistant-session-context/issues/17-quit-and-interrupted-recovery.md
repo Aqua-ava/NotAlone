@@ -1,7 +1,7 @@
 # 17：退出停止与重开后的中断恢复
 
 State: claimed
-Triage: ready-for-agent
+Triage: ready-for-human
 Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](08-saved-session-recovery.md)；[assistant-session-context/14 生成中替换请求与迟到结果失效](14-replace-running-generation.md)
 
 拆分标识：C10（第三版映射；执行时以本文件为准）。
@@ -170,3 +170,9 @@ fresh Standards本两文件硬0／重要0，仅新陈旧注释P3已修；原两�
 剩余：原第1、3条要求真正App停止／重开；本轮只实际执行受控宿主和具名公开页面窗口，真正App停启未执行，保留原文和未勾选、State claimed。工程要求原生运行使用用户认可的有限时段与显式test:app入口；本轮没有这项实际验收记录，受控结果不代替原生证据，不请求用户实施验收。
 
 证据：[29票逐项结果与实际命令](../../unfinished-work/round29-autonomous-results-20261011.md)、[固定源码、自动验证及清理回执](../../unfinished-work/round29-autonomous-verification-20261011.json)。各次不同来源的计量分列，未把静态审查、合成模型或受控宿主冒为原生／真人通过。原验收文本逐行对共同基线保留；只更新实际可验收的勾选和State。
+
+### 冻结新增功能后的19／17收尾（2026-10-12）
+
+用户明确要求先做可自行验证的收尾、OCR继续暂停。原公开Main→HTTP／隔离PG最小四场退出等待、运行后只读恢复／显式重试、可靠完成保留及来源删除守卫再次实际4／4、16.267秒、skip0，模型0＋2＋1＋0；四份真实001–055迁移／repeat0／库0。19的双联系人／多会话页面交叉及两来源后继／携入删除已通过，详见[19结果](19-combined-native-acceptance.md#answer)。本轮未改生产生命周期或新增功能。
+
+真实App用例 `desktop/tests/assistant-native-lifecycle.spec.ts` 已准备、类型通过、默认跳过：同一自有userData内最多两次源App启动，公开菜单退出，验证小窗close继续、quit中断、重开只读和明确重试；CLI／OCR路径为本轮不存在路径，无外部模型。真正App尚未运行，仍保留原第1、3条未勾选和claimed，Triage改为ready-for-human仅等待工程要求的有限时段确认，不要求用户亲自实施测试；通过后按实际证据收口。
