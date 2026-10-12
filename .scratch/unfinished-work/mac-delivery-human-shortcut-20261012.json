@@ -133,5 +133,33 @@
     "missing": 0,
     "originalAcceptanceAndStateUnchanged": true,
     "onlyDocumentationChanged": true
+  },
+  "lateUserFeedback": {
+    "displayResult": "没有出现",
+    "receivedAfterRunnerCompleted": true,
+    "timingClarification": "已经退出了",
+    "keypressAfterAppExitConfirmedByUser": true,
+    "doesNotVerifyRunningShortcut": true,
+    "originalFailedStageOrReceiptsNotRewritten": true
+  },
+  "humanWaitCoordinationUpdate": {
+    "humanObservationMinutes": 7,
+    "humanReceiptMinutes": 4,
+    "humanWholeTestMinutes": 18,
+    "agentLimitsUnchanged": true,
+    "runnerDeadlineTakesPriority": true,
+    "stageDeadlineInRequest": true,
+    "typecheckPassed": true,
+    "receiptProtocolPassed": 3,
+    "receiptProtocolTotal": 3,
+    "receiptProtocolSeconds": 0.126238208,
+    "productCodeAndPackageChanged": false,
+    "reviewBase": "736bb65c",
+    "standardsRemainingHardViolations": 0,
+    "standardsRemainingSuggestions": 0,
+    "specRemainingNewFindings": 0,
+    "readmeLimitMismatchFoundAndFixed": true,
+    "localRelativeLinksChecked": 87,
+    "actualRetryNotYetCountedAsPassed": true
   }
 }

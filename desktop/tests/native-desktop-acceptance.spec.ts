@@ -8,10 +8,12 @@ import { readNativeShortcutReceipt, shortcutAcceptanceMode, type ShortcutAccepta
 
 // 真实文件选择和系统按键由现场操作；默认套件不启动此人工验收。
 const acceptanceMode = shortcutAcceptanceMode(process.env);
+// 人工聊天反馈需要留出切回桌面的时间；测试总时限和runner预约仍是最终上限。
+const shortcutObservationTimeout = acceptanceMode === 'human' ? 7 * 60_000 : 180_000;
 test.skip(!acceptanceMode, '只在主 Agent 的有限现场预约中执行');
 
 test('签名包使用真实文件选择器导入合成资料，系统快捷键唤起和隐藏同一小窗', async ({ runningApp: { app, appProcess, userData }, importBackend }) => {
-  test.setTimeout(8 * 60_000);
+  test.setTimeout(acceptanceMode === 'human' ? 18 * 60_000 : 8 * 60_000);
   const manager = await app.firstWindow();
   await expect(manager.getByRole('button', { name: '选择合成联系人甲', exact: true })).toBeVisible({ timeout: 20_000 });
   expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true);
@@ -49,13 +51,13 @@ test('签名包使用真实文件选择器导入合成资料，系统快捷键�
   await expect.poll(() => helperWindow.evaluate((window) => window.isVisible())).toBe(false);
   console.log('native_acceptance_stage: 请实际按 Command+Shift+Y，唤起输入小窗。');
   await confirmShortcutFeedback('show', acceptanceMode!, async () => {
-    await expect.poll(() => helperWindow.evaluate((window) => window.isVisible()), { timeout: 180_000 }).toBe(true);
+    await expect.poll(() => helperWindow.evaluate((window) => window.isVisible()), { timeout: shortcutObservationTimeout }).toBe(true);
   });
   console.log(acceptanceMode === 'human'
     ? 'native_acceptance_stage: 请再次实际按 Command+Shift+Y，隐藏同一输入小窗；收到你的明确确认后本轮测试才正常退出 App，退出后快捷键不再可用。'
     : 'native_acceptance_stage: 主Agent再次实际按 Command+Shift+Y并核对同一小窗隐藏，收据通过后正常退出。');
   await confirmShortcutFeedback('hide', acceptanceMode!, async () => {
-    await expect.poll(() => helperWindow.evaluate((window) => window.isVisible()), { timeout: 180_000 }).toBe(false);
+    await expect.poll(() => helperWindow.evaluate((window) => window.isVisible()), { timeout: shortcutObservationTimeout }).toBe(false);
   });
   expect(app.windows()).toHaveLength(2);
   await writeFile(test.info().outputPath('native-results.json'), JSON.stringify({
@@ -77,13 +79,15 @@ async function confirmShortcutFeedback(operation: 'show' | 'hide', mode: Shortcu
   const requestId = randomUUID();
   const responsePath = test.info().outputPath(`${mode}-${operation}-${requestId}.json`);
   const requestPath = test.info().outputPath(`${mode}-${operation}-request.json`);
-  await writeFile(requestPath, JSON.stringify({ requestId, operation, responsePath, actor: mode }), { mode: 0o600 });
+  await writeFile(requestPath, JSON.stringify({ requestId, operation, responsePath, actor: mode,
+    observationUntil: Date.now() + shortcutObservationTimeout }), { mode: 0o600 });
   console.log(`native_acceptance_feedback: ${operation} 等待${mode === 'human' ? '用户明确确认' : 'Agent实际系统按键和观察'}；协调者请求文件 ${requestPath}`);
   await observe();
   let responseState = 'pending';
   await expect.poll(async () => {
     await verifyAppTestLease();
     return responseState = await readNativeShortcutReceipt(responsePath, requestId, mode);
-  }, { timeout: 90_000, message: '等待本次对应actor的收据；缺失、失效或否定不算通过。' }).not.toBe('pending');
+  }, { timeout: mode === 'human' ? 4 * 60_000 : 90_000,
+    message: '等待本次对应actor的收据；缺失、失效或否定不算通过。' }).not.toBe('pending');
   expect(responseState, '本次快捷键操作必须有对应actor的真实收据').toBe('confirmed');
 }
