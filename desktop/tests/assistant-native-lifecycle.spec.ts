@@ -1,5 +1,6 @@
 import { expect, type ElectronApplication, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
+import type { ChildProcess } from 'node:child_process';
 import { test } from './rewrite-fixture';
 import { selectMenu, isolatedAppEnvironment } from './app-fixture';
 import { launchApp, verifyAppTestLease } from './app-test-gate';
@@ -44,6 +45,7 @@ test('真实小窗关闭继续、正常退出停止，原目录重开只恢复�
     }), { mode: 0o600 });
 
     let reopened: ElectronApplication | undefined;
+    let reopenedProcess: ChildProcess | undefined;
     try {
       await rewriteBackend.plan({ count: 1, prefix: '关小窗后可靠完成的合成候选' });
       await rewriteBackend.command('hold');
@@ -89,8 +91,11 @@ test('真实小窗关闭继续、正常退出停止，原目录重开只恢复�
         args: [...(process.env.NOTALONE_TEST_APP_EXECUTABLE ? [] : [appDirectory]), `--user-data-dir=${userData}`],
         env: isolatedAppEnvironment(userData, rewriteBackend.environment()),
       });
+      // 退出后Playwright会释放通道；启动时保留拥有的进程用于退出断言及清理。
+      const nextProcess = reopened.process();
+      reopenedProcess = nextProcess;
       await writeFile(test.info().outputPath('owned-reopened-app.json'), JSON.stringify({
-        pid: reopened.process().pid, userData, fixtureDirectory: rewriteBackend.directory,
+        pid: nextProcess.pid, userData, fixtureDirectory: rewriteBackend.directory,
       }), { mode: 0o600 });
       const next = await openRewriteAppPages(reopened);
       await chooseContact(next.manager, next.helper, rewriteBackend);
@@ -106,7 +111,7 @@ test('真实小窗关闭继续、正常退出停止，原目录重开只恢复�
       expect((await read()).turns.map((turn) => turn.state)).toEqual(['completed', 'completed', 'failed', 'completed']);
       expect(await modelCalls(rewriteBackend)).toBe(beforeReopen + 1);
       await selectMenu(reopened, 'NotAlone', '退出 NotAlone');
-      await expect.poll(() => reopened!.process().exitCode).toBe(0);
+      await expect.poll(() => nextProcess.exitCode).toBe(0);
       await writeFile(test.info().outputPath('assistant-native-acceptance.json'), JSON.stringify({
         helperClosedGenerationCompleted: true, menuQuitInterrupted: true, savedCompletionsPreserved: true,
         lateResultNotRevived: true, reopenModelDelta: 0, explicitRetryModelDelta: 1,
@@ -116,6 +121,6 @@ test('真实小窗关闭继续、正常退出停止，原目录重开只恢复�
     } finally {
       await rewriteBackend.command('release');
       // 仅回收本轮持有的App；失败后的兜底关闭不算产品验收通过。
-      if (reopened && reopened.process().exitCode === null && reopened.process().signalCode === null) await reopened.close();
+      if (reopened && reopenedProcess?.exitCode === null && reopenedProcess.signalCode === null) await reopened.close();
     }
   });

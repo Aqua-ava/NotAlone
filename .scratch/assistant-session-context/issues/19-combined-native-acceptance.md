@@ -67,3 +67,10 @@ Blocked by: [assistant-session-context/08 重新连接后恢复已保存会话](
 两轮自有App PID、测试库、userData均由Root精确核验无剩余，第二轮夹具目录也不存在；App租约分别为absent。日志、失败上下文和仅合成的清理回执保留于忽略产物目录。本段累计用了2次启动，真正App重开仍未执行，原第3条不勾、整票claimed；不以两个部分结果制造一次原生全绿。后续启动须同时满足尚有效的截止及用户明确批准的累计次数。
 
 窗口于10:09:34到期时，申请总预算4次的询问尚未获回复，没有再启动。用户随后明确批准累计4次启动，目前已用2次、还余2次；预算确认不延长已到期时段，已只补问新的10分钟窗口，尚未收到时段确认。原生用例的两处观察修正、两次失败及部分检查点均保留；修正后完整TypeScript、diff及两次补充Spec审查通过，尚未取得修正后整场运行结果。需要新的有限窗口才能继续真实重开／零自动模型／显式重试；19仍claimed／ready-for-human，第3条不勾。
+
+
+新窗口10:15:52–10:25:52由用户明确确认，剩余2次启动于固定源码`7bcbee1c`实际运行 `NOTALONE_ASSISTANT_LIFECYCLE_ACCEPTANCE=1 npm run test:app -- --interactive --coordinator main-agent --from 2026-10-12T02:15:52.000Z --until 2026-10-12T02:25:52.000Z --max-launches 2 tests/assistant-native-lifecycle.spec.ts --output artifacts/assistant-native-closeout-final`。第三场12.9秒、exit1，实际2次源App启动，累计已用4次；同目录真实重开已发生，但finally在已关闭ElectronApplication上调用`process()`抛出`_object`错误，覆盖原失败，不能据此认定重开后全部断言及最终退出通过。未产生`assistant-native-acceptance.json`，原生整场继续未完成。
+
+仅测试最窄修正：受限启动后立即保留自有ChildProcess，真实菜单退出的exit0轮询与finally清理复用它，沿用既有app-fixture模式，不在已关闭的Playwright通道重新索取进程。已核对实际安装Playwright 1.64.0及[官方process接口](https://playwright.dev/docs/api/class-electronapplication#electron-application-process)；完整TypeScript、diff检查通过，Standards硬性／重要判断0，Spec新增偏差／缺失0。严格退出、中断、迟到、重开模型delta0及显式重试delta1断言均保留，无生产改动；修正后尚未重新执行原生。
+
+Root以第三场owned-app和owned-reopened-app记录精确核对：两个自有PID均不存在，随机隔离数据库剩余0，userData与夹具目录均不存在，App租约absent。日志及`native-third-cleanup.json`只保留在忽略产物目录。累计4次预算用尽，未再启动；已向用户申请当前窗口内再2次（累计6次、截止不延长），等待回复。OCR、真实微信、外部模型和外部发送均未运行。19／17继续claimed／ready-for-human，原生AC保持未勾。

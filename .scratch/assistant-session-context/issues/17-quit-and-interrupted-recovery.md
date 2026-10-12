@@ -178,3 +178,6 @@ fresh Standards本两文件硬0／重要0，仅新陈旧注释P3已修；原两�
 真实App用例 `desktop/tests/assistant-native-lifecycle.spec.ts` 已准备、类型通过、默认跳过：同一自有userData内最多两次源App启动，公开菜单退出，验证小窗close继续、quit中断、重开只读和明确重试；CLI／OCR路径为本轮不存在路径，无外部模型。真正App尚未运行，仍保留原第1、3条未勾选和claimed，Triage改为ready-for-human仅等待工程要求的有限时段确认，不要求用户亲自实施测试；通过后按实际证据收口。
 
 随后用户明确授权09:59:34–10:09:34的有限原生窗口，最初总预算2次、再批准总预算3次，实际用了2次源App启动：小窗真实close后生成可靠完成，两次第二轮completed均已核对；第二场真正菜单quit和App exit0达到。新用例分别在“误要求覆盖旧编辑框”及“向已关闭HTTP立即回读”处失败，已按原16视图保留及BackendHost既有shutdown协议最窄修正测试，完整类型和补充Spec均通过，无生产修改。精确自有App PID、测试库和userData无剩余，App租约absent；原窗口到期时追加预算询问未获回复，未再启动。真实App重开、原退出记录的重建读取及零自动模型／明确重试尚未完成，原第1、3条继续未勾、State claimed，详见[19原生实录](19-combined-native-acceptance.md#原生接续实录2026-10-12)。
+
+
+随后用户确认10:15:52–10:25:52新窗口，第三场实际两次源App启动，累计4次已用尽，12.9秒／exit1。同目录真实重开发生，但退出后的测试清理在已关闭Playwright通道重新调用process()而报错，覆盖原失败；无整场验收回执，不认定全部恢复／重试及最终退出通过。仅修正测试为启动时保留自有ChildProcess，类型／diff与两轴审查通过，无生产修改。精确核对两PID、测试库、userData和夹具目录均无剩余，租约absent。当前只等待累计6次预算是否批准，原截止仍10:25:52；原第1、3条继续未勾，完整原生结果未取得，详见[19实录](19-combined-native-acceptance.md#原生接续实录2026-10-12)。

@@ -9,7 +9,7 @@
 
 2026-10-12当前决定：**冻结新增功能，优先收尾持续会话19／17；OCR继续暂停。** 最近29票的最新结果为28张resolved、17保持claimed，见[逐项实际结果](round29-autonomous-results-20261011.md)。19现已领取，先补原规格的合成交叉验证，再按有限test:app窗口核对原生生命周期。下文“30票未开工”及任务统计保留为2026-10-11发布时盘点，不作为最新完成度；原任务的State／Answer为权威结果。
 
-19自动交叉验收已完成；两次真实源App的close继续及菜单quit部分检查达到，新测试两处观察假设失败并已修正。09:59:34–10:09:34窗口到期时未取得完整重开结果，17／19均保持claimed／ready-for-human，OCR继续暂停；最新运行、失败及精确清理见[19实录](../assistant-session-context/issues/19-combined-native-acceptance.md#answer)。
+19自动交叉验收已完成；前两场真实源App的close继续及菜单quit部分检查达到。新窗口10:15:52–10:25:52的第三场实际重开，但测试退出观察报错、无整场通过回执；累计4次启动已用尽，最窄测试修正已通过类型及两轴审查，只等待是否追加预算。17／19均保持claimed／ready-for-human，OCR继续暂停；最新运行、失败及精确清理见[19实录](../assistant-session-context/issues/19-combined-native-acceptance.md#answer)。
 
 **最新进度：用户认可复审修订，[第三版30票](resplit-20261011.md)已发布（持续会话13、聊天策略11、真实表达6），全部未开工。持续会话旧六票仅拆分替代，保留历史和继任链接；当前从新07票开始。**
 
