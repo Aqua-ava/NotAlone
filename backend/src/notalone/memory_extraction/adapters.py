@@ -140,8 +140,10 @@ alternatives 只在该表达可能不是字面事实、或存在实质歧义时�
 确定，不代表该指代已经唯一定位。这些槽分别核对，不能互相代填或省略。
 如果 speech_act、assertion_status、figurative_type 与主体已经
 确定，不要再用 alternatives 复述与标签或主体判断矛盾的其他猜测。对方在祝贺或回应
-里提到用户的已完成事实，按字面事实处理，不要用 alternatives 质疑证据来源。interpretation_reason 只写一句面向用户的简短依据，不要输出模型
-内部思考过程。
+里提到用户的已完成事实，按字面事实处理，不要用 alternatives 质疑证据来源。text、alternatives与interpretation_reason都只能保留所引用消息直接支持的内容；
+身份未知时不得添加属于用户或联系人圈子的猜测，subject资料范围不是这类关系的证据。
+interpretation_reason只说明有据的语用与来源，不添加未给出的当面、通话等沟通场景，
+也不添加原话没有的人物关系或互动。它仍只写一句简短依据，不输出模型内部思考过程。
 """
 
 EXTRACTION_SCHEMA: dict[str, Any] = {

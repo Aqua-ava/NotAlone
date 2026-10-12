@@ -39,6 +39,12 @@ SOURCE_VERIFICATION_SYSTEM_PROMPT = """逐条比较记忆候选与同一联系�
 候选的对应人物。已说明归第三人所有，也不能把原来被否定的一方换成另一方；替换后的
 子句即使逻辑上也能成立，仍不是忠实保留原否定命题，应unsupported/subject或negation。
 valid_at和invalid_at必须由原话支持，提前截断或延长同一状态的结束时间均不受支持。
+来源支持与直接参与者判断是两项独立判断：某条主张的直接参与者是谁，不决定它是否被
+原话支持。report与reported只说明这是明确转述，本身不构成uncertain理由；当候选正文、
+subject、语用字段与来源证据都被原话支持时，verdict应为supported且issues=[]，不能仅因
+report/reported、第三人转述或候选subject不是直接参与者就判uncertain。只有来源支持不足、
+真实歧义或与原话矛盾才用uncertain/unsupported；report/reported标记本身被丢掉或
+升级为本人事实，仍属pragmatics问题，仍须uncertain。
 第三人的事不能归给说话人，转述不能升级为本人事实。计划不能升级为已发生，
 已发生或当前状态也不能改成未来计划；省略回答应沿相连问题恢复物品、人物与事件阶段，
 原话没有打算就不能补打算。撤回或取消已经完成是一件已发生事实，不是计划取消。
@@ -63,16 +69,12 @@ shared只用于双方共同主张；正文明确是双方共同经历而subject�
 暂时关系请求的正文须保留来源日期与暂时限定；valid_at已填观察点不能替正文补日期。
 先逐项审查正文、subject、期间/条件、valid_at/invalid_at、speech_act/assertion_status/figurative_type，
 不能只看正文和证据。按各项分别核对，不能因其他项正确掩盖人物字段或事实阶段错误。
-确定的打算用plan，不因未发生就标hypothetical；hypothetical需原话是假设，conditional
-需原话有条件。明确转述的report和reported都须保留，不能只保留其中一个。
+先核候选主要动作：已发出、收到或转述邀请是邀约行为；其内容里的未来活动不是
+同一个主张阶段，不能仅凭未来时间词把已发生邀约的report/reported判为标签错误。
+只有候选本身主张尚未发生的打算或安排，才要求plan；hypothetical需原话是假设，
+conditional需原话有条件。明确转述的report和reported都须保留，不能只保留其中一个。
 所有项目都吻合才supported。正文忠实但标签把第三人转述或计划
 升级成确定本人事实，应uncertain并标pragmatics；日期字段没有充分支持也应uncertain并标time。
-来源支持与直接参与者判断是两项独立判断：某条主张的直接参与者是谁，不决定它是否被
-原话支持。report与reported只说明这是明确转述，本身不构成uncertain理由；当候选正文、
-subject、语用字段与来源证据都被原话支持时，verdict应为supported且issues=[]，不能仅因
-report/reported、第三人转述或候选subject不是直接参与者就判uncertain。只有来源支持不足、
-真实歧义或与原话矛盾才用uncertain/unsupported；report/reported标记本身被丢掉或
-升级为本人事实，仍属pragmatics问题，仍须uncertain。
 下面是审稿原则示例，与实际输入没有身份或时间关联：
 - 原话“上周一至周五在甲地值班”，候选只留“上周一在甲地值班”，或invalid_at设到上周二，
   都是unsupported/time。一天确实包含在原期间中，也不能删去同一状态其余期间。
