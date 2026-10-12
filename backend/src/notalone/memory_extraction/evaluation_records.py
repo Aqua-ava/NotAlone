@@ -12,7 +12,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, NoReturn
 from uuid import UUID
 
 import httpx
@@ -23,6 +23,7 @@ from .evaluation_http_budget import EvaluationBudget, EvaluationBudgetAbort, _en
 _EVENT_KINDS = frozenset({
     "case_started", "adapter_output", "case_result", "case_failed",
     "provider_request", "provider_response", "provider_failure",
+    "semantic_audit",
 })
 _PURPOSES = frozenset({"case", "extraction", "verification"})
 _MAX_RECORD_BYTES = 8 * 1024 * 1024
@@ -39,6 +40,9 @@ _CONFIG_FIELDS = frozenset({
     "plan_sha256", "public_cases_sha256", "extraction_prompt_sha256",
     "extraction_schema_sha256", "verification_prompt_sha256",
     "verification_schema_sha256", "versions", "omitted_parameters",
+    "deadline_utc", "source_hashes", "gold_sha256", "stage",
+    "response_identity_policy", "request_contract_version", "tool_choice",
+    "fallback", "baseline_commit",
 })
 
 
@@ -75,7 +79,7 @@ def _redact(
 ) -> tuple[Any, list[str]]:
     removed: list[str] = []
     if isinstance(value, dict):
-        result = {}
+        result: Any = {}
         for key, item in value.items():
             location = f"{path}.{key}"
             if key.lower() in _PRIVATE_FIELDS and not (
@@ -170,7 +174,7 @@ class EvaluationRecordStore:
         finally:
             os.close(descriptor)
 
-    def _stop(self, reason: str) -> None:
+    def _stop(self, reason: str) -> NoReturn:
         self._failed = True
         try:
             self._budget.close()

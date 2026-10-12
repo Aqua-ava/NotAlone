@@ -3,7 +3,7 @@
 更新日期：2026-10-12；本次账本核对基点：`4e82176f`。本页汇总原票当前字段及已有验收记录，不代表本次重新执行历史测试。原任务单保留权威状态；历史开发过程由原票与 Git 保存。
 
 - [各功能的工作流入口](work-breakdown-20261011.md)：链接到对应目录的规划/媒体提案，区分已发布任务与待确认提案。
-- [全部202张已发布任务当前索引](ticket-inventory-20261012.md)：逐票标题、状态与来源，包含已关闭和未关闭项。
+- [原202张已发布任务盘点索引](ticket-inventory-20261012.md)：逐票标题、状态与来源，包含已关闭和未关闭项。
 - [2026-10-11历史快照](ticket-inventory-20261011.md)：保留发布时的166张关闭、36张未关闭，不用于判断当前进度。
 - [本次账本对账范围与验证](ledger-reconciliation-20261012.md)：标签修正、旧票承接和验证边界。
 
@@ -11,11 +11,11 @@
 
 2026-10-12当前决定：**冻结新增功能，完成持续会话19／17收尾；OCR继续暂停。** 最近29票均resolved（原验收166／166），另补原不在29票范围的19（6／6），第三版30张原票现全部resolved／172条均勾选；这是逐票规格的验收完成，不代表完整Mac产品、真实模型质量或微信渠道全部交付。当前任务State／Answer与[29票结果索引](round29-autonomous-results-20261011.md)为权威结果。
 
-当前共 **202张原票：196 resolved、6 claimed、0 open，未关闭6张**。resolved中11张为wontfix，包含持续会话旧六票的拆分替代，不计作功能实现。另有两张已关闭旧票保留未交付的规格条目，见下方承接核对；关闭数不能代替完整产品完成度。
+当前共 **203张已发布任务：196 resolved、7 claimed、0 open，未关闭7张**。原202张的六张未关闭任务继续保留；并行新增[真实 ECNU 回复估算预算接入](../ecnu-reply-budget-adaptation/issues/01-production-estimated-budget.md)为claimed／ready-for-agent，由其原任务单记录实施，本片没有领取或修改该票。resolved中11张为wontfix，包含持续会话旧六票的拆分替代，不计作功能实现。另有两张已关闭旧票保留未交付的规格条目，见下方承接核对；关闭数不能代替完整产品完成度。
 
 同一新候选包的非OCR完整App场景累计23个通过。快捷键／Finder焦点场保留；最新独立场在Root实际置前空Finder并写收据后，正式线程新的真实有界tail启动并完成，正常菜单退出、原认证stopped、后端／CLI退场及5秒无新增调用通过。完整Mac20仍claimed／needs-info，WCDB精确构建／二进制许可、真实来信与双联系人、模型质量和OCR18依赖保留。
 
-三张记忆质量原票的[评测准备方案](memory-quality-plan-20261012.md)及[继续预检](memory-quality-preflight-20261012.md)已核对指代主集16条、补充3条及核心公开两窗。[预算／SDK接缝](memory-budget-integration-20261012.md)之后补[私有记录与P0整场](memory-offline-records-result-20261012.md)：新增26项、完整相关受守卫172／172，响应先保存再解析、思考排除／不可安全保存缺口停批、真正闭合／全计划对账均有证据。用户继续ECNU，已补[官方配置复核](ecnu-model-config-20261012.md)，但服务名称不是固定权重身份；[初版审查包](memory-gold-review-packet-20261012.md)的全21窗逐字段人工要求已按原规格撤回，改为[Agent技术核对](memory-gold-agent-annotations-20261012.md)与用户抽查A14一次性发地址的纳入取舍。A05亲自参与借车不一概转述，A06当日失效已有用户决定，时效旧文档已同步；[真实接线前置](memory-ecnu-driver-readiness-20261012.md)列明尚缺的期限／请求漂移／响应观测门。P0仍只固定假端点Mock，真实ECNU driver／完整可执行Gold／真实基线未完成；不改答案凑分。42／84仍未激活，供应商／真实HTTP／业务库操作0，旧预算关闭、模型执行未开放、默认空表不变；原状态与全部模型验收保持。
+三张记忆质量原票的[评测准备方案](memory-quality-plan-20261012.md)及[继续预检](memory-quality-preflight-20261012.md)已核对指代主集16条、补充3条及核心公开两窗。[预算／SDK接缝](memory-budget-integration-20261012.md)之后补[私有记录与P0整场](memory-offline-records-result-20261012.md)：新增26项、完整相关受守卫172／172，响应先保存再解析、思考排除／不可安全保存缺口停批、真正闭合／全计划对账均有证据。用户继续ECNU，已补[官方配置复核](ecnu-model-config-20261012.md)，但服务名称不是固定权重身份；[初版审查包](memory-gold-review-packet-20261012.md)的全21窗逐字段人工要求已按原规格撤回，改为[Agent技术核对](memory-gold-agent-annotations-20261012.md)；用户已答A14一次性发地址不存成关系资料，窗口保留。A05亲自参与借车不一概转述，A06当日失效已有用户决定，时效旧文档已同步；[真实接线前置](memory-ecnu-driver-readiness-20261012.md)列明期限／请求漂移／响应观测门；已按[受限实施规格](memory-ecnu-driver-spec-20261012.md)补工具：[本片结果](memory-ecnu-driver-result-20261012.md)新增31项、完整相关203／203，5源码类型与7文件AST通过，仍只Mock验证。P0仍只固定假端点Mock，ECNU driver已完成离线接线；完整结构化Gold／逐字段评分装配、运行冻结及真实基线未完成；不改答案凑分。42／84仍未激活，供应商／真实HTTP／业务库操作0，旧预算关闭、模型执行未开放、默认空表不变；原状态与全部模型验收保持。
 
 其他App前台小窗分项已 **1／1通过、585.149秒／exit0**，见[焦点最终摘要](mac-focus-final-20261012.json)。两场各在有限窗口启动1次：首场用户用按钮／关窗隐藏，按键验收拒绝并保留失败；复验由用户实际两次快捷键及分别明确反馈完成。20个已记录自有进程、两场隔离目录、自有空Finder窗口／目录及租约均收尾；复验前后默认目录身份、包签名及字节保持。首场默认目录的原基线没有记录路径，不能代签该场默认目录身份未变；配置正文均未读。没有独立认证系统必然恢复原外部App焦点。锁屏准备场启动0的[摘要](mac-focus-preparation-20261012.json)及旧21场结果保持，完整Mac20原条件不改。
 
@@ -70,7 +70,7 @@
 | [mac-desktop-app/18 前台定位](../mac-desktop-app/issues/18-foreground-locator.md) | claimed / ready-for-human；用户暂停 | 最小选区、多窗口极小辅助窗排除、安全失败分类已修；真实前台和采集路径越过前序门禁，名称完整与一致性通过 | 最低OCR置信度低于0.90，无verified profile；仍需定位采用/失效、焦点保护及宿主权限验证。**先不动，不降低门槛** |
 | [mac-desktop-app/20 完整交付](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed / needs-info | 9份材料随新包静态核验；新包Finder1／1、非OCR完整App场景23个通过；人工快捷键／系统导入／Finder小窗及真实CLI后台／App正常退出已验；意外默认实例已正常退出并单列记录 | 当前库精确源码／补丁／构建及BOM许可覆盖、真实来信／双联系人和模型质量及原18依赖；OCR继续暂停 |
 | [memory-core-claim-retention/01 核心事实](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed / ready-for-human | 提示局部修正及多轮受控实验已记录；部分安全和保真检查通过 | 既有真实资料严格覆盖6/12、可选2/6，目标未达成；新预注册对照或目标范围决定。旧预算已关闭，不是缺凭据 |
-| [memory-extraction-accuracy/07 指代](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed / needs-info | 现行16条及3补充已核对；预算／SDK＋私有记录／P0整场完整相关172／172合成通过，ECNU公开参数已复核 | A14纳入取舍的用户抽查、完整Agent标注复核／冻结、真实ECNU装配及期限／请求漂移／响应观测门、当前基线；历史13/15不算当前16条成绩，模型执行仍关闭 |
+| [memory-extraction-accuracy/07 指代](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed / needs-info | 现行16条及3补充已核对；预算／SDK＋私有记录／P0及ECNU接线完整相关203／203合成通过，技术参考已补E14／V4并独审，ECNU公开参数已复核 | A14取舍已确认none；结构化Gold／逐字段审核对账和完整运行冻结、当前真实基线；接线及期限／请求漂移／响应观测门已离线验证；历史13/15不算当前16条成绩，模型执行仍关闭 |
 | [memory-accuracy-next/03 维度放行](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed / ready-for-human | 空放行表、回退开关、工具计算门槛已实现；可推导subject/time/truth_intent | 其余维度缺结构化字段；既有评测未达标。先决定字段和质量路线，再取得可推导维度的达标证据及逐类批准；不自动放行 |
 
 ## 已关闭旧票中的验收条目承接
@@ -112,7 +112,7 @@
 
 1. 新增功能继续冻结，OCR继续暂停。既有真实微信04的最终包运行／退出子项已通过，接下来只补来信事件、第二联系人连续性；依原票固定数据和人工配合条件。
 2. Mac20继续核查WCDB精确源码／补丁／构建输入、BOM及当前二进制许可覆盖；已通过的同包Finder、23个非OCR完整场景和签名核验保留原结果；当前公开精确源码／Actions端点451，缺项详见来源补核。
-3. 记忆三票的预算、SDK、允许原始记录与P0整场已验；Agent继续技术标注／复核，用户只抽查真正未定的A14纳入取舍；再冻结完整答案、补真实ECNU driver的期限／请求漂移／响应观测门及离线验证后，才执行模型基线。
+3. 记忆三票的预算、SDK、允许原始记录与P0整场已验；Agent继续技术标注／复核，A14已由用户确认none，其他技术字段由Agent独立复核；ECNU接线及期限／请求漂移／响应观测门已离线验证203／203，接下来完成结构化参考／逐字段审核对账与完整运行冻结，再执行模型基线。
 4. 两张已关闭旧票的未交付条目保持可见，待冻结解除及原规格收束后再按工作流接续；媒体、Agent运行时、云端和Windows仍是后续方向。
 5. 最终完整Mac交付保留原18依赖；若要先交付“不含自动定位”的版本，需要另作范围决定，不能静默删掉原验收。
 

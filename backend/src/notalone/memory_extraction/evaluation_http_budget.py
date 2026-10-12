@@ -17,6 +17,7 @@ from uuid import UUID
 import httpx
 
 if TYPE_CHECKING:
+    from .evaluation_provider_contract import ECNUEvaluationContract
     from .evaluation_records import EvaluationRecordStore
 
 
@@ -396,6 +397,21 @@ def _transport_failure_kind(error: httpx.TransportError) -> str:
     return "transport_error"
 
 
+def _check_provider_request(
+    budget: EvaluationBudget, contract: ECNUEvaluationContract | None,
+    request: httpx.Request,
+) -> None:
+    if contract is not None:
+        try:
+            contract.check_request(request)
+        except EvaluationBudgetAbort:
+            try:
+                budget.close()
+            except EvaluationBudgetAbort:
+                pass
+            raise
+
+
 class EvaluationTransport(httpx.BaseTransport):
     """单次网络 transport 固定 retries=0；合成测试只能注入 MockTransport。"""
 
@@ -405,6 +421,7 @@ class EvaluationTransport(httpx.BaseTransport):
         *,
         synthetic_transport: httpx.MockTransport | None = None,
         records: EvaluationRecordStore | None = None,
+        contract: ECNUEvaluationContract | None = None,
     ):
         if (
             synthetic_transport is not None
@@ -415,9 +432,11 @@ class EvaluationTransport(httpx.BaseTransport):
         if records is not None and not records.belongs_to(budget):
             raise EvaluationBudgetAbort("records_bound_to_another_budget")
         self._records = records
+        self._contract = contract
         self._transport = synthetic_transport or httpx.HTTPTransport(retries=0)
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
+        _check_provider_request(self._budget, self._contract, request)
         with self._budget.attempt(request) as sequence:
             try:
                 if self._records is not None:
@@ -427,6 +446,8 @@ class EvaluationTransport(httpx.BaseTransport):
                     response.read()
                     if self._records is not None:
                         self._records.capture_response(sequence, response)
+                    if self._contract is not None:
+                        self._contract.observe_response(response)
                     return response
                 finally:
                     response.close()
@@ -437,6 +458,10 @@ class EvaluationTransport(httpx.BaseTransport):
                     )
                 raise
             except EvaluationBudgetAbort:
+                try:
+                    self._budget.close()
+                except EvaluationBudgetAbort:
+                    pass
                 raise
             except Exception:
                 if self._records is not None:
@@ -457,6 +482,7 @@ class EvaluationAsyncTransport(httpx.AsyncBaseTransport):
         *,
         synthetic_transport: httpx.MockTransport | None = None,
         records: EvaluationRecordStore | None = None,
+        contract: ECNUEvaluationContract | None = None,
     ):
         if (
             synthetic_transport is not None
@@ -467,9 +493,11 @@ class EvaluationAsyncTransport(httpx.AsyncBaseTransport):
         if records is not None and not records.belongs_to(budget):
             raise EvaluationBudgetAbort("records_bound_to_another_budget")
         self._records = records
+        self._contract = contract
         self._transport = synthetic_transport or httpx.AsyncHTTPTransport(retries=0)
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        _check_provider_request(self._budget, self._contract, request)
         with self._budget.attempt(request) as sequence:
             try:
                 if self._records is not None:
@@ -479,6 +507,8 @@ class EvaluationAsyncTransport(httpx.AsyncBaseTransport):
                     await response.aread()
                     if self._records is not None:
                         self._records.capture_response(sequence, response)
+                    if self._contract is not None:
+                        self._contract.observe_response(response)
                     return response
                 finally:
                     await response.aclose()
@@ -489,6 +519,10 @@ class EvaluationAsyncTransport(httpx.AsyncBaseTransport):
                     )
                 raise
             except EvaluationBudgetAbort:
+                try:
+                    self._budget.close()
+                except EvaluationBudgetAbort:
+                    pass
                 raise
             except Exception:
                 if self._records is not None:

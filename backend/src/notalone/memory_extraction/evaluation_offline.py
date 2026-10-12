@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import asdict
 from importlib.metadata import version
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import httpx
@@ -55,18 +57,40 @@ class _BatchStopped(Exception):
     """已保存的明确失败或安全结果结束后续位置。"""
 
 
+def _check_json_fact_types(payload: dict, schema: dict) -> None:
+    """评测不让产品外壳的float/UUID/date转换掩盖原JSON类型错误。"""
+    for name in ("text", "category", "subject", "topic", "speech_act",
+                 "assertion_status", "figurative_type", "interpretation_reason"):
+        if not isinstance(payload[name], str):
+            raise ExtractionInvalidOutputError("评测候选字符串类型非法。")
+        allowed = schema["properties"][name].get("enum")
+        if allowed is not None and payload[name] not in allowed:
+            raise ExtractionInvalidOutputError("评测候选枚举非法。")
+    for name in ("source_message_ids", "risk_flags", "alternatives"):
+        if (not isinstance(payload[name], list)
+                or any(not isinstance(item, str) for item in payload[name])):
+            raise ExtractionInvalidOutputError("评测候选数组类型非法。")
+    for name in ("valid_at", "invalid_at"):
+        if payload[name] is not None and not isinstance(payload[name], str):
+            raise ExtractionInvalidOutputError("评测候选日期类型非法。")
+    confidence = payload["confidence"]
+    if type(confidence) not in (int, float) or not 0 <= confidence <= 1:
+        raise ExtractionInvalidOutputError("评测候选置信度类型或范围非法。")
+
+
 class _RecordedModel:
     """在 E/V 原解析器消费之前保存完整允许的适配器响应。"""
 
     def __init__(self, model: Any, store: EvaluationRecordStore, position: int,
                  window: ExtractionWindow, call_state: dict,
-                 purpose: str | None = None):
+                 purpose: str | None = None, invocation_scope: Callable | None = None):
         self._model = model
         self._store = store
         self._position = position
         self._window = window
         self._call_state = call_state
         self._purpose = purpose
+        self._invocation_scope = invocation_scope
 
     def bind_tools(self, tools: list[dict], **options: Any) -> _RecordedModel:
         purpose = {
@@ -78,12 +102,15 @@ class _RecordedModel:
         return _RecordedModel(
             self._model.bind_tools(tools, **options), self._store,
             self._position, self._window, self._call_state, purpose,
+            self._invocation_scope,
         )
 
     def invoke(self, messages: list[dict]) -> Any:
         if self._purpose is None:
             raise EvaluationBudgetAbort("offline_unbound_model")
-        with self._store.stage(self._position, self._purpose):
+        scope = (self._invocation_scope(self._purpose, messages)
+                 if self._invocation_scope is not None else nullcontext())
+        with self._store.stage(self._position, self._purpose), scope:
             try:
                 message = self._model.invoke(messages)
             except Exception as error:
@@ -117,6 +144,7 @@ class _RecordedModel:
                     or not set(schema["required"]) <= set(payload)
                     or not set(payload) <= set(schema["properties"])):
                 raise ExtractionInvalidOutputError("离线候选结构不符合原契约。")
+            _check_json_fact_types(payload, schema)
             try:
                 fact = _to_fact(payload)
             except Exception:
@@ -182,8 +210,28 @@ def run_offline_evaluation(
         allowed_endpoints=(_ENDPOINT,), config_sha256=canonical_sha256(config),
     )
     store = EvaluationRecordStore(budget=budget, frozen_config=config, plan=plan)
+    return _run_evaluation_batch(
+        cases=cases, windows=windows, plan=plan, budget=budget, store=store,
+        base_url=_BASE_URL, request_model=_REQUEST_MODEL,
+        api_key="synthetic-not-a-real-key", synthetic_transport=synthetic_transport,
+        provider="synthetic-provider",
+    )
+
+
+def _run_evaluation_batch(
+    *, cases: tuple[EvaluationCase, ...], windows: tuple[ExtractionWindow, ...],
+    plan: tuple[dict, ...], budget: EvaluationBudget, store: EvaluationRecordStore,
+    base_url: str, request_model: str, api_key: str,
+    synthetic_transport: httpx.MockTransport | None, provider: str,
+    contract: Any = None, invocation_scope: Callable | None = None,
+    semantic_audit: Callable[[dict], dict] | None = None,
+    gold_reference: dict | None = None, code_prefix: str = "offline",
+    credential_loader: Callable[[], str] | None = None,
+) -> dict:
+    """P0/P1共用记录与收尾；真实配置与独审验证由各入口负责。"""
     outcomes = [{**item, "status": "unrun"} for item in plan]
     results: list[EvaluationResult] = []
+    audits: list[dict] = []
     current_position: int | None = None
     stopped_code: str | None = None
     sync_client = None
@@ -193,21 +241,33 @@ def run_offline_evaluation(
         from langsmith import tracing_context
 
         with budget.batch(), tracing_context(enabled=False, parent=False):
+            if credential_loader is not None:
+                try:
+                    api_key = credential_loader()
+                    if not isinstance(api_key, str) or not api_key.strip():
+                        raise ValueError("empty_credential")
+                except BaseException:
+                    raise _BatchStopped("ecnu_credential_unavailable") from None
+            transport_options = {"contract": contract} if contract is not None else {}
             sync_client = httpx.Client(
                 transport=EvaluationTransport(
                     budget, synthetic_transport=synthetic_transport, records=store,
+                    **transport_options,
                 ), trust_env=False, follow_redirects=False,
             )
             async_client = httpx.AsyncClient(
                 transport=EvaluationAsyncTransport(
                     budget, synthetic_transport=synthetic_transport, records=store,
+                    **transport_options,
                 ), trust_env=False, follow_redirects=False,
             )
             from langchain_deepseek import ChatDeepSeek
+            from langchain_core.language_models import BaseChatModel
+            from pydantic import SecretStr
 
             model = ChatDeepSeek(
-                api_key="synthetic-not-a-real-key", base_url=_BASE_URL,
-                model=_REQUEST_MODEL, temperature=0.0, timeout=60.0, max_retries=2,
+                api_key=SecretStr(api_key), base_url=base_url,
+                model=request_model, temperature=0.0, timeout=60.0, max_retries=2,
                 extra_body={"thinking": {"type": "enabled"}},
                 http_client=sync_client, http_async_client=async_client,
             )
@@ -215,17 +275,22 @@ def run_offline_evaluation(
                 current_position = position
                 outcomes[position]["status"] = "unknown"
                 with store.stage(position, "case"):
-                    store.record(kind="case_started", payload={"window": window})
+                    started = store.record(kind="case_started", payload={"window": window})
                 call_state: dict = {}
-                recorded_model = _RecordedModel(model, store, position, window, call_state)
+                recorded_model = _RecordedModel(
+                    model, store, position, window, call_state,
+                    invocation_scope=invocation_scope,
+                )
+                # 原adapter只消费bind_tools/invoke；评测代理不成为产品模型实现。
+                adapter_model = cast(BaseChatModel, recorded_model)
                 result = evaluate_case(
-                    case, window, LangChainExtractionRuntime(model=recorded_model),
+                    case, window, LangChainExtractionRuntime(model=adapter_model),
                     verification_runtime=LangChainSourceVerificationRuntime(
-                        model=recorded_model, provider="synthetic-provider",
+                        model=adapter_model, provider=provider,
                     ),
                 )
                 with store.stage(position, "case"):
-                    store.record(kind="case_result", payload=asdict(result))
+                    recorded_result = store.record(kind="case_result", payload=asdict(result))
                 results.append(result)
                 outcomes[position]["result"] = asdict(result)
                 if result.failure_reason is not None:
@@ -234,18 +299,36 @@ def run_offline_evaluation(
                 outcomes[position]["status"] = (
                     "empty" if call_state.get("extraction_empty") else "completed"
                 )
-                if (result.false_fact_count or result.wrong_subject_count
+                if semantic_audit is not None:
+                    current_events = tuple(event for event in store.events()
+                                           if event["case_position"] == position)
+                    audited = semantic_audit({
+                        "case_position": position, "case_name": case.name,
+                        "window": started["payload"]["window"],
+                        "original_result": recorded_result["payload"],
+                        "adapter_outputs": tuple(event["payload"] for event in current_events
+                                                 if event["kind"] == "adapter_output"),
+                        "provider_responses": tuple(event["payload"] for event in current_events
+                                                    if event["kind"] == "provider_response"),
+                        "gold_reference": dict(gold_reference or {}),
+                    })
+                    with store.stage(position, "case"):
+                        store.record(kind="semantic_audit", payload=audited)
+                    audits.append(audited)
+                    if audited["decision"] in {"safety_error", "unknown"}:
+                        raise _BatchStopped("case_semantic_audit_" + audited["decision"])
+                elif (result.false_fact_count or result.wrong_subject_count
                         or result.error_kind in (ERROR_FALSE_FACT, ERROR_WRONG_SUBJECT)):
                     raise _BatchStopped("case_safety_error")
                 current_position = None
     except _BatchStopped as error:
         stopped_code = str(error)
     except EvaluationBudgetAbort:
-        stopped_code = "offline_hard_stop"
+        stopped_code = f"{code_prefix}_hard_stop"
         if current_position is not None:
             outcomes[current_position]["status"] = "unknown"
     except Exception:
-        stopped_code = "offline_result_unknown"
+        stopped_code = f"{code_prefix}_result_unknown"
         if current_position is not None:
             outcomes[current_position]["status"] = "unknown"
     finally:
@@ -253,17 +336,24 @@ def run_offline_evaluation(
             try:
                 sync_client.close()
             except Exception:
-                cleanup_error_codes.append("offline_sync_client_close_failed")
+                cleanup_error_codes.append(f"{code_prefix}_sync_client_close_failed")
         if async_client is not None:
             try:
                 asyncio.run(async_client.aclose())
             except Exception:
-                cleanup_error_codes.append("offline_async_client_close_failed")
+                cleanup_error_codes.append(f"{code_prefix}_async_client_close_failed")
     summary = _summary(outcomes, results)
+    if semantic_audit is not None:
+        summary["semantic_audit"] = {
+            "audited": len(audits),
+            **{decision: sum(item["decision"] == decision for item in audits)
+               for decision in ("safe", "general_error", "safety_error", "unknown")},
+            "quality_certified": False,
+        }
     receipt = None
     receipt_error_code = None
     if cleanup_error_codes:
-        receipt_error_code = "offline_completion_receipt_unavailable"
+        receipt_error_code = f"{code_prefix}_completion_receipt_unavailable"
     else:
         try:
             budget.closed_receipt()
@@ -271,19 +361,20 @@ def run_offline_evaluation(
                 outcomes=tuple(outcomes), budget_closed=True,
             )
         except EvaluationBudgetAbort:
-            receipt_error_code = "offline_completion_receipt_unavailable"
+            receipt_error_code = f"{code_prefix}_completion_receipt_unavailable"
     records_error_code = None
     try:
         events = store.events()
     except EvaluationBudgetAbort:
         events = ()
-        records_error_code = "offline_records_unavailable"
+        records_error_code = f"{code_prefix}_records_unavailable"
         receipt = None
-        receipt_error_code = "offline_completion_receipt_unavailable"
+        receipt_error_code = f"{code_prefix}_completion_receipt_unavailable"
     return {
         "synthetic_only": True, "quality_certified": False,
         "summary": summary, "outcomes": tuple(outcomes), "receipt": receipt,
         "receipt_error_code": receipt_error_code, "stopped_code": stopped_code,
         "cleanup_error_codes": tuple(cleanup_error_codes),
         "records_error_code": records_error_code, "events": events,
+        **({"audits": tuple(audits)} if semantic_audit is not None else {}),
     }

@@ -108,3 +108,7 @@ A06 的日期规则须明确记录采用的契约：[domain-data](../../architec
 判据：[领域数据与有效期](../../architecture/current/domain-data.md)、[语用规格](../../architecture/current/pragmatic-interpretation.md)、[E 提示／schema](../../backend/src/notalone/memory_extraction/adapters.py)、[确定性语用门](../../backend/src/notalone/memory_extraction/pragmatics.py)、[ADR-024](../../architecture/adr/024-memory-adoption-risk-gate-and-versioning.md)、[ADR-026](../../architecture/adr/026-pragmatic-interpretation-before-memory-adoption.md)、[ADR-027](../../architecture/adr/027-memory-accuracy-evaluation-gate.md)、[ADR-033](../../architecture/adr/033-source-semantic-verification-before-adoption.md)、[ADR-036](../../architecture/adr/036-per-dimension-adoption-release.md)。架构约束仅证明核定口径，不证明模型已遵守。
 
 本轮只用文件读取、标准库 AST／哈希／链接核对及 Git 差异检查；供应商／HTTP／SDK／App／OCR／业务数据库调用均0。后续人工字段、二轴审查与提交由主 Agent 承接，子 Agent 不创建提交。本包不改原票状态或验收勾选。
+
+## A14实际抽查答复后的承接
+
+用户对“我等下把地址发你”明确选择“不存成关系资料（推荐）”。本窗采用none且保留21窗分母；答复只覆盖此纳入取舍，不是全窗字段认证。其余技术候选已由Agent继续收束并独立复核，新的工具仍只以Mock验证，真实调用未开放。初版待核定要求保留作历史，不再作为当前未答问题。
