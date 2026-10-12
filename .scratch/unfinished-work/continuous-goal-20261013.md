@@ -8,11 +8,12 @@
 
 ## 最新继续入口（优先于下列历史快照）
 
-- 此入口最近已核本地HEAD `e2d41c8b`：完整21窗新有限预算；`9803fabc`：单V真实终态与三原票底部证据；`966c583c`：普通页面React控制及quiet诊断五path；`dfb7bbc6`：单V有限预注册；`4c939d96`：来源／邀约窄提示两常量。主Agent独占Index，目前全140三模块工具片及设计、联系人测试UI准备条件与本总账收口中；无远端操作。
+- 此入口最近已核本地HEAD `c8d0a5ed`：全140受限工具七path；`88e2ffbc`：联系人选择UI准备条件与真实C回归；`c9b3387b`：前次总账；`e2d41c8b`：完整21窗新有限预算；`9803fabc`：单V真实终态与三原票底部证据；`966c583c`：普通页面React控制及quiet诊断。主Agent独占Index；全140工具和联系人验收修补已分别本地提交，无远端操作。
 - 当前持久真实HTTP预约 **43／522**：九个stage全部closed，39个200／4旧timeout远端未知。[单V真实终态](goal-memory-20261013-single-V-control-result.md)只证固定A02 V4和来源支持，1/1、79.530892167秒；原四窗4general_error、必需raw3/5／accepted3/5／full1/5与qualityfalse不变。145关闭未用＋12退役永不复用；全140专属280未注册，另据用户既有“可以随便调用”授权追加新的有限42，合计分配上限522，不借关闭余额、不挪full280，无后续HTTP自动授权。Root核closed／锁无持有／精确runner退出后已解除模型60及Git冻结。
-- 当前可执行：memory实现已批准的全140三模块／三测试接缝（0HTTP），随后准备一次固定完整21当前观察；mac实际装配来源独立119候选Gold，7项旧oracle／现行规则冲突先原文独审、不改旧答案；ocr复核有限语义分支。Agent均无桌面／新模型／Index权限，任何新真实调用均等两轴、source冻结及Root末核。内部工具与语义差距继续推进，未据此称外部阻塞。
+- 当前可执行：全140三模块／三测试及设计已提交，最终59相关通过（unittest15.317秒／外层15.564968041秒）、mypy3通过（0.73480725秒）、双轴0；日期倒序区间和False／0.0伪装整数的实际负控失败已最小修复，不改Gold、scorer或默认21。新的完整21观察已唯一prepare，run `8d0460a1-56c6-4226-842b-2c383929c539`、台北07:30–11:30固定、最晚10:59:15起发、cap42、300／0及raw/full各600；25Mock及mypy通过，Root07:21:47实际核60现字节／c8d blob、8版本、原21输入／Gold和九个只读SQLite closed43，新注册及HTTP0。见[新场预注册](goal-memory-20261013-complete21-observation-plan.md)。source60从prepare已冻结，最终两轴及公共文档本地提交后Root才唯一激活；未启full280，也不追加第二场。
+- 来源独立119候选参考实际装配v4于私有`/private/tmp/notalone-full140-projection-20261013-4zlbqm5j/candidate119-v4/`：119全部保留、91retain／28none、112required／0optional／115有限variant、标准库结构断言0.064411458秒通过。R007／R115拆当前和未来，R024移除混阶段分支，R010按现规则保留hypothetical／conditional完整分支，R011拆两金额且不向贷款继承明天；五窗修补独立来源复核0。旧source/oracle/input/target/date与原21Gold未变；11项字段或旧oracle兼容未决仍保留，whole_ready=false，尚未完成119整体中文语义独审。Agent继续来源核验，不据结构green认证119质量或借旧余额调用。
 - 当前微信发送 **8/12**、来信 **0**，只有一位显式授权；60分钟自发分时场已实跑3601.276秒、7条各一次／重复0、关闭补齐及故障恢复独立记录，真实来信及双人仍未验。最终C真实CLI正常退出已实跑71.309497秒、自有认证停读／后台退出／0新读通过；非前台正向仍未认证。
-- 当前App累计 **283**，无App在跑／共享租约absent。C最新一次见证1pass／7.126580917秒，2actual guard+returned对及DOM传播、C280／链接hash不变；原间歇原因unknown，React精确提交版本false。[实际见证](goal-contact-confirmation-witness-20261013.md)。普通页面另实际Chrome2／17.457992792秒，首quiet技术失败、第二原共享流与受控React gap通过，非原C复现；[控制记录](goal-contact-render-gap-20261013.md)。历史独立backend／精确库收尾覆盖不足保留，唯一未知旧测试库未动。
+- 当前App累计 **284**，无App在跑／共享租约absent。C最新公开UI准备条件场实际1次／1pass／7.078829959秒，原联系人切换、草稿和生成门断言均保留并通过，额外诊断Inspector见证关闭；原Playwright控制仍使用Inspector。C280常规文件＋14链接字节／权限一致、deep strict0；实际记录的3个PID及userData gone、租约absent，但个体后端／精确库收据覆盖false，不补造。原间歇原因unknown、React精确提交版本false；[准备条件实际结果](goal-contact-picker-readiness-20261013.md)、[前次见证](goal-contact-confirmation-witness-20261013.md)。普通页面另实际Chrome2／17.457992792秒，首quiet技术失败、第二原共享流与受控React gap通过；[控制记录](goal-contact-render-gap-20261013.md)。未知旧测试库未动。
 - OCR实际capture／verified profile **0**，两正式场都被实际OS前台条件拒绝；人手切微信约20秒与四typed维度重大字段/合取决策此前async无答，不重演相同focus失败或自行降门。WCDB精确来源／补丁／构建输入／二进制许可覆盖false，C已归档不代签Mac整票。ECNU原预算适配01已resolved（`1a3aee22`），不重复加入新条件。
 
 ## 本轮明确授权及资源上限
