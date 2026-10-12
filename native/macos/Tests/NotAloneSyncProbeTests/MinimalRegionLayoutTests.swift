@@ -21,6 +21,29 @@ final class MinimalRegionLayoutTests: XCTestCase {
                                   row: Name(text: "测试", confidence: 1)).validate())
     }
 
+    func testRepeatedNameConfidenceRemainsRequiredAndDiagnosticsContainOnlyNumbers() throws {
+        let names = Names(
+            header: Name(text: "合成名称", confidence: 0.98, pixelSize: CGSize(width: 160, height: 48)),
+            row: Name(text: "合成名称", confidence: 0.97, pixelSize: CGSize(width: 160, height: 40)),
+            repeatedHeader: Name(text: "合成名称", confidence: 0.89, pixelSize: CGSize(width: 160, height: 48))
+        )
+        XCTAssertThrowsError(try names.validate()) { error in
+            XCTAssertEqual(error as? MinimalSessionError, .nameConfidenceLow)
+        }
+        XCTAssertEqual(names.displayNameConfidence, 0.89)
+        XCTAssertEqual(names.confidence, 0.89)
+        let data = try JSONSerialization.data(withJSONObject: names.qualityDiagnostics(scale: 2, durationMs: 487))
+        let quality = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Double])
+        XCTAssertEqual(quality, [
+            "display_name_confidence": 0.98, "selected_row_name_confidence": 0.97,
+            "repeated_display_name_confidence": 0.89,
+            "display_name_width": 160, "display_name_height": 48,
+            "selected_row_name_width": 160, "selected_row_name_height": 40,
+            "pixel_scale": 2, "names_duration_ms": 487,
+        ])
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("合成名称"))
+    }
+
     private func window(_ id: Int, _ width: Double, _ height: Double) -> [String: Any] {
         [kCGWindowNumber as String: id,
          kCGWindowBounds as String: CGRect(x: 0, y: 0, width: width, height: height).dictionaryRepresentation]

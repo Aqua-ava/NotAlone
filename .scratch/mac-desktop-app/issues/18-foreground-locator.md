@@ -2,7 +2,7 @@
 
 Type: task
 State: claimed
-Triage: ready-for-human
+Triage: ready-for-agent
 Blocked by: 09, 16
 Spec: ../spec.md
 
@@ -113,3 +113,5 @@ Spec: ../spec.md
 - 2026-10-10 23:34：用户亲自切微信前台，有限轮次23:34:28–23:44:28最多1次实际运行34.9秒。选区成功，原生已越过context/capture-setup/sentinels-before，停于names / quality_unverified。前台操作问题已在此轮排除；屏幕录制静默预检及最小区域采集执行，没有新权限申请、原始帧持久化或verified profile。runner退出1、租约absent。待区分名称单行/边界检查、两名称一致性或置信度原因，不降低阈值、不提前勾验收。
 
 - 2026-10-10 23:39：新增四种固定名称失败码，原完整单行/双名称一致/0.90门槛不变，无识别正文或图像日志。原生分类red→green，布局安全10/10、桌面类型与安全40/40，独立Standards/Spec均0，签名包通过。用户明确同意23:39:06–23:49:06最多1次，保持原五区、手动前台，25.0秒明确names/session_name_confidence_low：完整名称及一致性通过，最低OCR置信度不足0.90。尚未区分图像采样与短名称评分原因，不能降低门槛；无profile，实际定位验收继续未完成，租约absent。
+
+- 2026-10-13（持续目标诊断准备）：用户本轮解除OCR暂停，允许必要代码与验收工具修复，主Agent拥有串行桌面验收权；子Agent只准备代码与合成回归。最新已知现场失败仍是`names/session_name_confidence_low`，没有新的真实采集或profile。校验JSON及0600安全结果新增严格9字段的纯数值`name_quality`：三次OCR置信度、两处实际小帧宽高、像素缩放与名称采集/识别耗时；未知字段、字符串、非法/过量数值被拒绝。数值不进入profile、身份匹配或采纳门；session继续使用顶部与复读最低分及选中行0.90门槛，采集矩形、次数、前台与权限预检、OCR参数和内存帧政策保持。安全保存实际red缺分项→green3/3；Swift新增接缝编译red→相关11/11，Python probe/host39/39，完整桌面类型/安全47/47通过。尚未运行真实App/probe/微信、浏览器或模型，不宣称低置信度根因已修复。记录与下轮最小入口见`.scratch/unfinished-work/goal-ocr-20261013-diagnosis.md`；两轴、实际轮次与清理随后追加，所有验收与Answer仍未完成。

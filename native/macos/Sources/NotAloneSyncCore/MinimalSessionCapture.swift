@@ -11,6 +11,7 @@ import Vision
 public enum MinimalSessionCapture {
     public static func verifySelection(_ data: Data) async -> [String: Any] {
         var stage = "selection"
+        var nameQuality: [String: Any]?
         func entering(_ name: String) {
             stage = name
             FileHandle.standardError.write(Data("notalone_verification_stage:\(name)\n".utf8))
@@ -34,17 +35,23 @@ public enum MinimalSessionCapture {
             entering("sentinels-before")
             let digests = try await capture.sentinels()
             entering("names")
+            let namesStarted = ContinuousClock.now
             let names = try await capture.names()
+            let elapsed = namesStarted.duration(to: .now).components
+            let durationMs = Int(elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000)
+            nameQuality = names.qualityDiagnostics(scale: capture.scale, durationMs: durationMs)
             try names.validate()
             entering("sentinels-after")
             guard try await capture.sentinels() == digests else { throw MinimalSessionError.qualityUnverified }
             entering("profile")
             return ["ok": true, "profile": try layout.verified(scale: capture.scale, digests: digests),
                     "verification": ["capture_version": "minimal-region-v1", "names_consistent": true,
-                                     "minimum_confidence": names.confidence, "region_count": 5]]
+                                     "minimum_confidence": names.confidence, "region_count": 5],
+                    "name_quality": nameQuality ?? [:]]
         } catch {
             var result = failure(error)
             result["verification_stage"] = stage
+            if let nameQuality { result["name_quality"] = nameQuality }
             return result
         }
     }
@@ -65,7 +72,7 @@ public enum MinimalSessionCapture {
             guard try await capture.sentinels() == layout.sentinelDigests else { throw MinimalSessionError.layoutChanged }
             return ["ok": true, "wechat_in_front": true, "capture_version": "minimal-region-v1",
                     "display_name": names.header.text ?? NSNull(), "selected_row_name": names.row.text ?? NSNull(),
-                    "quality": ["layout_verified": true, "display_name_confidence": names.header.confidence,
+                    "quality": ["layout_verified": true, "display_name_confidence": names.displayNameConfidence,
                                 "selected_row_name_confidence": names.row.confidence]]
         } catch { return failure(error) }
     }
@@ -116,7 +123,7 @@ private final class Capture {
         // 两个小帧分别采集；再读一次顶部名字，防止跨会话变化被写成同一次可信观察。
         let repeated = try recognize(await image("displayName"))
         guard header.text == repeated.text else { throw MinimalSessionError.layoutChanged }
-        return Names(header: Name(text: header.text, confidence: min(header.confidence, repeated.confidence)), row: row)
+        return Names(header: header, row: row, repeatedHeader: repeated)
     }
 
     private func image(_ field: String) async throws -> CGImage {
@@ -144,22 +151,42 @@ private final class Capture {
 struct Name {
     let text: String?
     let confidence: Double
+    let pixelSize: CGSize
+
+    init(text: String?, confidence: Double, pixelSize: CGSize = .zero) {
+        self.text = text; self.confidence = confidence; self.pixelSize = pixelSize
+    }
 }
 
 struct Names {
     let header: Name
     let row: Name
+    let repeatedHeader: Name
+
+    init(header: Name, row: Name, repeatedHeader: Name? = nil) {
+        self.header = header; self.row = row; self.repeatedHeader = repeatedHeader ?? header
+    }
     var consistent: Bool { header.text != nil && header.text == row.text }
-    var confidence: Double { min(header.confidence, row.confidence) }
+    var displayNameConfidence: Double { min(header.confidence, repeatedHeader.confidence) }
+    var confidence: Double { min(displayNameConfidence, row.confidence) }
     func validate() throws {
         guard header.text != nil else { throw MinimalSessionError.headerNameUnreadable }
         guard row.text != nil else { throw MinimalSessionError.rowNameUnreadable }
         guard consistent else { throw MinimalSessionError.namesMismatch }
         guard confidence >= 0.90 else { throw MinimalSessionError.nameConfidenceLow }
     }
+
+    func qualityDiagnostics(scale: Double, durationMs: Int) -> [String: Any] {
+        ["display_name_confidence": header.confidence, "selected_row_name_confidence": row.confidence,
+         "repeated_display_name_confidence": repeatedHeader.confidence,
+         "display_name_width": Int(header.pixelSize.width), "display_name_height": Int(header.pixelSize.height),
+         "selected_row_name_width": Int(row.pixelSize.width), "selected_row_name_height": Int(row.pixelSize.height),
+         "pixel_scale": scale, "names_duration_ms": durationMs]
+    }
 }
 
 private func recognize(_ image: CGImage) throws -> Name {
+    let pixelSize = CGSize(width: image.width, height: image.height)
     let request = VNRecognizeTextRequest()
     request.recognitionLevel = .accurate; request.recognitionLanguages = ["zh-Hans", "en-US"]
     request.usesLanguageCorrection = false
@@ -168,10 +195,10 @@ private func recognize(_ image: CGImage) throws -> Name {
     guard let results = request.results, results.count == 1,
           let observation = results.first, let candidate = observation.topCandidates(1).first,
           observation.boundingBox.minX > 0.01, observation.boundingBox.maxX < 0.99 else {
-        return Name(text: nil, confidence: 0)
+        return Name(text: nil, confidence: 0, pixelSize: pixelSize)
     }
     let text = candidate.string.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
-    return Name(text: text.isEmpty ? nil : text, confidence: Double(candidate.confidence))
+    return Name(text: text.isEmpty ? nil : text, confidence: Double(candidate.confidence), pixelSize: pixelSize)
 }
 
 private func digest(_ image: CGImage) throws -> String {

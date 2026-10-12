@@ -37,6 +37,33 @@ export const layoutVerificationErrors = [
 ] as const;
 export const layoutVerificationStages = ['selection', 'context', 'capture-setup', 'sentinels-before', 'names', 'sentinels-after', 'profile', 'host'] as const;
 
+export type LayoutNameQuality = {
+  display_name_confidence: number; selected_row_name_confidence: number; repeated_display_name_confidence: number;
+  display_name_width: number; display_name_height: number; selected_row_name_width: number; selected_row_name_height: number;
+  pixel_scale: number; names_duration_ms: number;
+};
+
+// 诊断只接受固定数值，不接受识别名称、原生原文、图像或任意扩展字段。
+export function validatedNameQuality(value: unknown): LayoutNameQuality {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('calibration_result_invalid');
+  const quality = value as Record<string, unknown>;
+  const confidences = ['display_name_confidence', 'selected_row_name_confidence', 'repeated_display_name_confidence'];
+  const sizes = ['display_name_width', 'display_name_height', 'selected_row_name_width', 'selected_row_name_height'];
+  const keys = [...confidences, ...sizes, 'pixel_scale', 'names_duration_ms'];
+  const finiteNumber = (key: string): boolean => typeof quality[key] === 'number' && Number.isFinite(quality[key]);
+  if (Object.keys(quality).length !== keys.length || !Object.keys(quality).every(key => keys.includes(key))
+    || !keys.every(finiteNumber)
+    || !confidences.every(key => (quality[key] as number) >= 0 && (quality[key] as number) <= 1)
+    || !sizes.every(key => Number.isInteger(quality[key]) && (quality[key] as number) >= 1 && (quality[key] as number) <= 160_000)
+    || (quality.display_name_width as number) * (quality.display_name_height as number) > 160_000
+    || (quality.selected_row_name_width as number) * (quality.selected_row_name_height as number) > 160_000
+    || (quality.pixel_scale as number) < 1 || (quality.pixel_scale as number) > 3
+    || !Number.isInteger(quality.names_duration_ms) || (quality.names_duration_ms as number) < 0 || (quality.names_duration_ms as number) > 400_000) {
+    throw new Error('calibration_result_invalid');
+  }
+  return { ...quality } as LayoutNameQuality;
+}
+
 export function verificationProgressReceiver(onStage: (stage: typeof layoutVerificationStages[number]) => void): (chunk: Buffer) => boolean {
   let bytes = 0, pending = '';
   const seen = new Set<string>();
@@ -66,13 +93,15 @@ export async function saveVerificationProgress(userData: string, stage: unknown,
   } finally { await rm(temporary, { force: true }); }
 }
 
-// 仅保存固定阶段和安全错误码，不能夹带原生输出、会话名或图像。
-export async function saveLayoutVerificationResult(userData: string, state: 'failed' | 'verified', error: unknown, stage: unknown, isCurrent: () => boolean): Promise<void> {
+// 仅保存固定阶段、安全错误码及经过白名单校验的数值，不授予采集资格。
+export async function saveLayoutVerificationResult(userData: string, state: 'failed' | 'verified', error: unknown, stage: unknown, isCurrent: () => boolean, nameQuality?: unknown): Promise<void> {
   if (!['failed', 'verified'].includes(state) || !layoutVerificationStages.includes(stage as typeof layoutVerificationStages[number]) || (state === 'verified' ? error !== null
     : !layoutVerificationErrors.includes(error as typeof layoutVerificationErrors[number]))) throw new Error('calibration_result_invalid');
+  if (nameQuality !== undefined && !['names', 'sentinels-after', 'profile'].includes(stage as string)) throw new Error('calibration_result_invalid');
+  const result = { state, error, stage, ...(nameQuality === undefined ? {} : { name_quality: validatedNameQuality(nameQuality) }) };
   const temporary = path.join(userData, `.foreground-verification-${randomUUID()}.tmp`);
   try {
-    await writeFile(temporary, JSON.stringify({ state, error, stage }), { flag: 'wx', mode: 0o600 });
+    await writeFile(temporary, JSON.stringify(result), { flag: 'wx', mode: 0o600 });
     if (isCurrent()) await rename(temporary, path.join(userData, 'foreground-layout-verification.json'));
   } finally { await rm(temporary, { force: true }); }
 }

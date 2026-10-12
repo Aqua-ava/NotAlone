@@ -52,3 +52,39 @@ test('选区失败保存固定错误码且拒绝原生私密原文', async () =>
     assert.equal((await stat(path.join(owned, 'foreground-layout-verification.json'))).mode & 0o777, 0o600);
   } finally { await rm(owned, { recursive: true, force: true }); }
 });
+
+test('名称质量诊断只保留有限分项数值，拒绝名字和图像且不授权profile', async () => {
+  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-calibration-quality-'));
+  try {
+    const modulePath = path.join(owned, 'profile.mjs');
+    await build({ entryPoints: ['src/main/foreground/calibration-profile.ts'], outfile: modulePath,
+      bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+    const profile = await import(pathToFileURL(modulePath).href);
+    const quality = {
+      display_name_confidence: 0.95, selected_row_name_confidence: 0.74, repeated_display_name_confidence: 0.96,
+      display_name_width: 160, display_name_height: 48, selected_row_name_width: 160, selected_row_name_height: 40,
+      pixel_scale: 2, names_duration_ms: 487,
+    };
+    await profile.saveLayoutVerificationResult(owned, 'failed', 'session_name_confidence_low', 'names', () => true, quality);
+    const resultPath = path.join(owned, 'foreground-layout-verification.json');
+    assert.deepEqual(JSON.parse(await readFile(resultPath, 'utf8')), {
+      state: 'failed', error: 'session_name_confidence_low', stage: 'names', name_quality: quality,
+    });
+    assert.equal((await stat(resultPath)).mode & 0o777, 0o600);
+    await assert.rejects(readFile(path.join(owned, 'foreground-layout-profile.json')), { code: 'ENOENT' });
+    for (const invalid of [
+      { ...quality, display_name: '合成拒绝字段' }, { ...quality, image: '合成拒绝图像' },
+      { ...quality, selected_row_name_confidence: '0.74' }, { ...quality, display_name_confidence: true },
+      { ...quality, repeated_display_name_confidence: NaN }, { ...quality, display_name_confidence: 1.01 },
+      { ...quality, selected_row_name_width: 0 }, { ...quality, display_name_height: 1.5 },
+      { ...quality, display_name_width: 160_001 }, { ...quality, pixel_scale: 4 },
+      { ...quality, names_duration_ms: Infinity }, { ...quality, names_duration_ms: 400_001 },
+    ]) {
+      await assert.rejects(profile.saveLayoutVerificationResult(owned, 'failed', 'session_name_confidence_low', 'names', () => true, invalid));
+      assert.deepEqual(JSON.parse(await readFile(resultPath, 'utf8')).name_quality, quality);
+    }
+    await assert.rejects(profile.saveLayoutVerificationResult(owned, 'failed', 'session_name_confidence_low', 'context', () => true, quality));
+    await profile.saveLayoutVerificationResult(owned, 'verified', null, 'profile', () => false, quality);
+    assert.equal(JSON.parse(await readFile(resultPath, 'utf8')).state, 'failed');
+  } finally { await rm(owned, { recursive: true, force: true }); }
+});
