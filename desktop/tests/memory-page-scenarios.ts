@@ -255,5 +255,10 @@ export async function memoryIndependentFailures(manager: Page, memoryBackend: Me
   await expect(manager.getByText('当前联系人来源读取失败，请重试。', { exact: true })).toBeVisible();
   await manager.getByRole('button', { name: '重新读取当前联系人来源', exact: true }).click();
   await expect(manager.getByRole('region', { name: '当前联系人来源' }).getByText('synthetic.jsonl', { exact: true })).toBeVisible();
+  const deletion = manager.getByRole('region', { name: '来源删除管理', exact: true });
+  await deletion.getByRole('button', { name: '刷新删除状态', exact: true }).click();
+  const source = deletion.getByRole('listitem').filter({ hasText: 'synthetic.jsonl' });
+  await expect(source.getByText('synthetic.jsonl', { exact: true })).toBeVisible();
+  await expect(source.getByRole('status')).toHaveText('有效来源');
   await expect(manager.getByRole('alert')).toHaveCount(0);
 }

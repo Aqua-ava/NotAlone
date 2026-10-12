@@ -25,3 +25,13 @@ Root登记02:10:40.225–02:20:40.225、最多且实际1次，以同一B包执�
 Root核原场90份owned记录、104个记录PID均不存在、所有记录目录及失败fixture目录不存在；B当前进程0、14个记录随机库不存在，限定测试库命名空间当次为空。runner保留的自有租约原UUID／PID／project／SHA／0700／dev/ino复核一致后，归档到本轮私有`retired-owned-lease/`，共享锁复查absent；未杀未知进程、删除业务资料或把兜底回收当产品退出成功。首轮清理断言误要求已由server.close移除的socket存在，未执行任何mutation；核实只剩lease.json后按真实身份安全归档，原cleanup_unconfirmed失败仍保留。
 
 剩余71场会按原清单明确文件组继续，源码稳定及新有限场次登记之后才启动；不重复此前已通过部分。Finder、真实系统导入／快捷键、OCR、真实CLI退出及WCDB精确构建许可另列，普通合成App绿灯不代签这些缺项。原票claimed／needs-info、原四AC继续保持，不认证完整交付。
+
+## 剩余组第二个实证失败与独立面板恢复
+
+Root另登记02:33:07.468–03:18:07.468、max80，原第92–162项共71，不重跑已通过部分。同一B包、外部后端源码`52d17fa1`（含日期缺槽修复）、调用HEAD`f1c87f4f`，产品源码保持稳定。实际 **9通过／1失败／61未运行，47.9秒、10次App启动、runner exit1**；失败是`memory-stale.spec.ts`的独立分栏重读场。原场日志及错误上下文保留在`desktop/artifacts/goal-final-remainder-20261013-b/`。
+
+记忆资料的来源目录已经恢复，但独立的“来源删除管理”由另一controller读同一来源端点，仍保留原读取错误。它需要自己的公开刷新；自动消除错误会丢掉尚未核实删除结果的提示。最小验收协调修复只点击该面板的“刷新删除状态”，等待实际`synthetic.jsonl`来源及其“有效来源”状态，再执行原全局`alert=0`；没有删除动作、绕过状态或缩小原断言范围。
+
+同包最小回归登记02:41:13.601–02:51:13.601、max1/actual1，命令为`test:app tests/memory-stale.spec.ts --grep 某栏失败`。实际 **1/1通过，5.1秒（报告5.5秒），runner exit0**；类型检查通过，独立Standards硬违规／启发式0、Spec遗漏／范围增加／错误0。私有计划／日志／终态在`desktop/artifacts/goal-memory-panel-replay-20261013-b/`。只验证原失败场，剩余61项仍未运行；不能把分场累计结果改写成单次全量通过。
+
+Root补核第二场10份及最小回归1份App PID／userData均gone、租约absent；当前`/tmp` PG的联系人测试库命名空间为空，280个常规包文件摘要与首场before完全相同，deep strict签名通过。两目录各有`root-resource-package-check.json`。本场夹具没有持久保存逐个外部后端PID及库名，命名空间核查不能补造这些收据；未杀未知进程或把夹具回收称为产品正常退出。
