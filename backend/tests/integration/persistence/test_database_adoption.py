@@ -172,6 +172,14 @@ class DatabaseAdoptionTest(unittest.TestCase):
             "045_observation_background_task.sql",
             "046_background_step_lease_generation.sql",
             "047_observation_memory_enqueue_receipt.sql",
+            "048_assistant_sessions.sql",
+            "049_style_samples.sql",
+            "050_reply_purpose_evidence.sql",
+            "051_assistant_session_inputs.sql",
+            "052_reply_exploration.sql",
+            "053_assistant_candidate_versions.sql",
+            "054_assistant_generation_interruption.sql",
+            "055_assistant_candidate_carry_input.sql",
         ))
         self.assertEqual(migrate(self.url, MIGRATIONS), ())
         self.assertFalse(adopt_legacy_database(self.url, MIGRATIONS, self.backup).adopted)
@@ -191,6 +199,14 @@ class DatabaseAdoptionTest(unittest.TestCase):
                 ("045_observation_background_task.sql",),
                 ("046_background_step_lease_generation.sql",),
                 ("047_observation_memory_enqueue_receipt.sql",),
+                ("048_assistant_sessions.sql",),
+                ("049_style_samples.sql",),
+                ("050_reply_purpose_evidence.sql",),
+                ("051_assistant_session_inputs.sql",),
+                ("052_reply_exploration.sql",),
+                ("053_assistant_candidate_versions.sql",),
+                ("054_assistant_generation_interruption.sql",),
+                ("055_assistant_candidate_carry_input.sql",),
             ])
 
     def test_full_035_needs_no_repair_and_preserves_ids_pause_and_message_evidence(self) -> None:
