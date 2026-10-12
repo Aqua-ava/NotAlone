@@ -19,6 +19,8 @@
 
 2026-10-12第二场人工复验已由程序观察小窗显示，用户后来也确认显示；4分钟收据等待先超时、App于14:48:40退场，隐藏未运行，旧失败和nonce不改写。显示分项与完整验收分开，见[第二场人工摘要](mac-delivery-human-shortcut-retry-20261012.json)。下一最小场改为两次操作及反馈共用固定25分钟交互截止，有限30分钟runner／最多1次启动，产品与包未改，完整20票仍未收口。
 
+2026-10-12最新人工整场已 **1／1通过、610.520秒／exit0、1次启动**：同一新包真实文件选择导入6条、用户实际快捷键显示／隐藏同一小窗及明确反馈、公开菜单正常退出；Root确认自有资源清理、包签名／4helper／9材料／ASAR／ZIP保持。用户确认第二次按后小窗消失，管理后台是验收开始已打开的窗口；其他App前台时焦点返回未独立验。同包非OCR完整App场景累计21个，旧失败与迟到反馈不覆盖，见[最终人工验收摘要](mac-delivery-human-shortcut-final-20261012.json)。完整20票仍有WCDB精确构建／二进制许可、真实渠道与原18依赖，功能冻结、OCR暂停保持。
+
 **2026-10-11发布时的历史进度：用户认可复审修订，[第三版30票](resplit-20261011.md)已发布（持续会话13、聊天策略11、真实表达6），全部未开工。持续会话旧六票仅拆分替代，保留历史和继任链接；当前从新07票开始。**
 
 2026-10-11发布时盘点共 **202 张**：`resolved` 166、`claimed` 4、`open` 32，未关闭36张。其中11张标记`wontfix`，含本次6张仅拆分替代、未实现验收；因此166是关闭数，不能等同于166项生产功能成功。Mac二十张任务中18张已关闭，18、20仍未关闭。
@@ -35,7 +37,7 @@
 | 导入到回复的后端闭环 | [核心闭环](../core-business-flow/spec.md)、[导入自动处理](../import-memory-auto/spec.md)、[观察自动处理](../observation-memory-auto/spec.md)、[回复模块](../reply-module-flow/spec.md)的已发布任务已关闭；公开HTTP、正式PG/Worker、来源、幂等、恢复和删除有合成验收 | 脚本模型通过不等于真实模型质量通过，独立CLI入口也不代表App整合完成 |
 | 记忆与可追踪依据 | 提取/来源核验、本人和联系人记忆、待确认候选、时效、追踪和删除链路已有实现；[追踪三票](../memory-extraction-trace/spec.md)已关闭 | 整体事实覆盖和指代质量仍未达标；[自动采纳放行表](../../docs/memory-adoption-dimension-release-ledger.md)仍为空 |
 | 检索与Skill管理 | [词法召回](../memory-recall/spec.md)、[上下文/Skill](../memory-skill-context/spec.md)、[Skill库](../skill-library/spec.md)已有实现与原票验证 | 不把未上线的向量试验或新聊天策略算成产品能力 |
-| 打包与部分原生能力 | [任务20](../mac-desktop-app/issues/20-mac-app-delivery.md)记录helper核验/随包、仓库探针构建、候选包签名；同一新包Finder、20个完整非OCR场景和系统导入分项补验 | 当前仅本机ad-hoc；实际键盘快捷键、WCDB精确构建/二进制许可、真实同步退出及OCR仍缺，不宣称完整交付 |
+| 打包与部分原生能力 | [任务20](../mac-desktop-app/issues/20-mac-app-delivery.md)记录helper核验/随包、仓库探针构建、候选包签名；同一新包Finder、20个完整非OCR场景和系统导入分项补验 | 当前仅本机ad-hoc；WCDB精确构建/二进制许可、真实同步退出及OCR仍缺，不宣称完整交付 |
 | 真实微信单联系人同步 | [任务04](../native-app-backend/issues/04-real-wechat-follow-smoke.md)：新消息读取/入库/去重、故障自动恢复、关闭期间补齐、故障期间补齐均有实际记录 | 只覆盖已授权单联系人及记录中的测试条件，未覆盖双联系人和最终App退出 |
 | 10分钟持续同步 | `977bd93`：Computer Use分时发送3条测试消息；后台运行601.5秒，120次采样均活跃，三条各入库一次，无重启，关闭零读取且临时资源清理 | 选定会话新增全局事件为0，消息由安全对账读取；不能称全局事件通知或小时级/高负载稳定性通过 |
 | 研究、原型和官网 | [聊天路径原型](../conversation-paths-prototype/report.md)、[DSH探测](../dsh-session-probe/report.md)、Hindsight/pgvector对照已结束；[官网](../../website/README.md)已实现 | 实验结束可得“不采用”结论；聊天原型不等于新会话流程已接入产品，向量仍未默认启用 |
@@ -48,7 +50,7 @@
 | --- | --- | --- | --- |
 | [native-app-backend/04 真实微信follow](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed / ready-for-human | 单联系人实际读取、入库、去重、自动恢复、两类缺口补齐、10分钟分时同步已验证 | 对方来信的全局事件触发；双联系人独立游标和切回；最终App退出停读；视觉边界等OCR恢复后再验。后台持续同步通过不替代严格的follow事件条件 |
 | [mac-desktop-app/18 前台定位](../mac-desktop-app/issues/18-foreground-locator.md) | claimed / ready-for-human；用户暂停 | 最小选区、多窗口极小辅助窗排除、安全失败分类已修；真实前台和采集路径越过前序门禁，名称完整与一致性通过 | 最低OCR置信度低于0.90，无verified profile；仍需定位采用/失效、焦点保护及宿主权限验证。**先不动，不降低门槛** |
-| [mac-desktop-app/20 完整交付](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed / needs-info | 9份材料随新包静态核验；新包Finder1／1及非OCR完整App场景20个通过，合成同步开启时退出停读通过，系统导入6条分项通过；意外默认实例已正常退出并单列记录 | 当前库精确源码／补丁／构建及BOM许可覆盖、实际键盘快捷键、真实同步退出及原18依赖；OCR继续暂停 |
+| [mac-desktop-app/20 完整交付](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed / needs-info | 9份材料随新包静态核验；新包Finder1／1、非OCR完整App场景21个通过，含人工快捷键同小窗显示／隐藏／正常退出与系统导入6条整场，合成同步开启时退出停读通过；意外默认实例已正常退出并单列记录 | 当前库精确源码／补丁／构建及BOM许可覆盖、其他App前台时焦点体验、真实同步退出及原18依赖；OCR继续暂停 |
 | [memory-core-claim-retention/01 核心事实](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed / ready-for-human | 提示局部修正及多轮受控实验已记录；部分安全和保真检查通过 | 既有真实资料严格覆盖6/12、可选2/6，目标未达成；新预注册对照或目标范围决定。旧预算已关闭，不是缺凭据 |
 | [memory-extraction-accuracy/07 指代](../memory-extraction-accuracy/issues/07-reference-resolution.md) | open / needs-info | 现行16条用例、门槛和保守去向已核对；110项确定性/追踪回归有记录 | 固定当前模型/配置与基线，针对实际失败修复，再评原门槛；需新对照与调用预算。历史13/15不能沿用为当前16条结果 |
 | [memory-accuracy-next/03 维度放行](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed / ready-for-human | 空放行表、回退开关、工具计算门槛已实现；可推导subject/time/truth_intent | 其余维度缺结构化字段；既有评测未达标。先决定字段和质量路线，再取得可推导维度的达标证据及逐类批准；不自动放行 |
