@@ -1,0 +1,247 @@
+"""评测审核先封存 raw 视图，再揭示 V／程序层；不认证盲标或模型质量。"""
+
+from __future__ import annotations
+
+import json
+from typing import Callable
+
+from .evaluation_http_budget import EvaluationBudgetAbort
+from .evaluation_records import canonical_sha256
+from .evaluation_reference import validate_public_reference
+from .evaluation_review import prepare_case_review, score_case_review
+
+
+_E_TOOL = "MemoryExtractionOutput"
+_V_TOOL = "SourceVerificationOutput"
+_RAW_CHECKS = ("raw_meaning", "coherence", "branch", "source", "time")
+
+
+def _copy(value: dict) -> dict:
+    return json.loads(json.dumps(value, ensure_ascii=False, allow_nan=False))
+
+
+def _exact(value: dict, fields: set[str]) -> None:
+    if not isinstance(value, dict) or set(value) != fields:
+        raise EvaluationBudgetAbort("phased_review_fields_invalid")
+
+
+def _save(
+    persist: Callable[[dict], dict], payload: dict, position: int, case_name: str,
+) -> dict:
+    receipt = _copy(persist(_copy(payload)))
+    digest = canonical_sha256(payload)
+    if (receipt.get("kind") != "semantic_audit" or receipt.get("purpose") != "case"
+            or type(receipt.get("case_position")) is not int
+            or receipt["case_position"] != position or receipt.get("case_name") != case_name
+            or type(receipt.get("event_sequence")) is not int or receipt["event_sequence"] < 1
+            or receipt.get("removed_paths") != [] or receipt.get("payload") != payload
+            or receipt.get("payload_sha256") != digest
+            or canonical_sha256(receipt["payload"]) != digest):
+        raise EvaluationBudgetAbort("phased_audit_receipt_invalid")
+    return receipt
+
+
+def _validate_raw(reference: dict, view: dict, review: dict) -> None:
+    _exact(review, {"reviewer", "case_id", "reference_sha256", "raw_evidence_sha256",
+                    "e_rows", "claims", "window_checks"})
+    if (review["case_id"] != view["case_id"]
+            or review["reference_sha256"] != view["reference_sha256"]
+            or review["raw_evidence_sha256"] != view["raw_evidence_sha256"]):
+        raise EvaluationBudgetAbort("phased_raw_binding_changed")
+    _exact(review["window_checks"], {"inclusion", "forbidden_meanings"})
+    for row in review["e_rows"]:
+        _exact(row, {"raw_index", "payload_sha256", "fields", "meaning", "inclusion",
+                     "safety", "classification", "basis"})
+    for claim in review["claims"]:
+        for group in claim["groups"]:
+            _exact(group, {"raw_indices", "variant_id", *_RAW_CHECKS})
+    # unknown 只作 raw 字段校验的有界占位；不伪造或揭示实际 V／程序结果。
+    packet = prepare_case_review(reference, view["case_id"], {
+        "run_status": "unknown", "extraction": [item["payload"] for item in view["extraction"]],
+        "verification_inputs": [], "verification": [], "final_facts": [], "original_result": {},
+    })
+    completed = _copy(review)
+    completed.pop("raw_evidence_sha256")
+    completed.update(run_status="unknown", evidence_sha256=packet["evidence_sha256"], v_rows=[])
+    for row in completed["e_rows"]:
+        row["lineage"] = {"v_input_indices": [], "final_indices": [], "status": "unresolved"}
+    for claim in completed["claims"]:
+        for group in claim["groups"]:
+            group.update(final_indices=[], lineage="unresolved", destination="unresolved")
+    completed["window_checks"]["lineage"] = "unresolved"
+    score_case_review(packet, completed)
+
+
+def _check_sealed_raw(raw: dict, full: dict) -> None:
+    keys = ("case_id", "reference_sha256", "e_rows", "claims", "window_checks")
+    original = _copy({key: raw[key] for key in keys})
+    projected = _copy({key: full[key] for key in keys})
+    for row in projected["e_rows"]:
+        row.pop("lineage")
+    for claim in projected["claims"]:
+        for group in claim["groups"]:
+            for key in ("final_indices", "lineage", "destination"):
+                group.pop(key)
+    projected["window_checks"].pop("lineage")
+    if projected != original:
+        raise EvaluationBudgetAbort("phased_sealed_raw_changed")
+
+
+def _decision(report: dict, review: dict, reference_case: dict) -> tuple[str, str]:
+    safety = report["safety"]
+    if safety["raw_wrong_person"] or safety["wrong_person"]:
+        return "safety_error", "wrong_subject"
+    if safety["raw_false_fact"] or safety["false_fact"]:
+        return "safety_error", "false_fact"
+    if safety["bad_auto"] or safety["ambiguous_auto"]:
+        return "safety_error", "contract_mismatch"
+    if (report["review_unresolved"] or report["unmapped_v_inputs"]
+            or report["unmapped_final_facts"] or safety["unresolved_auto"] or safety["unmapped_auto"]):
+        return "unknown", "audit_unresolved"
+    if report["required"]["full"] != report["required"]["total"]:
+        return "general_error", "coverage_miss"
+    checks = list(review["window_checks"].values())
+    for row in review["e_rows"]:
+        checks.extend((*row["fields"].values(), row["meaning"], row["inclusion"], row["lineage"]["status"]))
+    for row in review["v_rows"]:
+        checks.extend((*row["fields"].values(), row["semantic"], row["lineage"]))
+    for claim in review["claims"]:
+        for group in claim["groups"]:
+            checks.extend(group[key] for key in (*_RAW_CHECKS, "lineage", "destination"))
+    if ("fail" in checks or report["classifications"]["extra"] or report["classifications"]["excluded"]
+            or (reference_case["inclusion"] == "none" and not report["none_correct"])):
+        return "general_error", "contract_mismatch"
+    return "safe", "supported"
+
+
+def _arguments(outputs: list[dict], tool: str, key: str) -> list[dict]:
+    for output in outputs:
+        calls = output["tool_calls"]
+        if (not isinstance(calls, list) or len(calls) != 1
+                or calls[0].get("name") not in {_E_TOOL, _V_TOOL}):
+            raise EvaluationBudgetAbort("phased_adapter_output_unreliable")
+        expected_key = "facts" if calls[0]["name"] == _E_TOOL else "results"
+        _exact(calls[0]["args"], {expected_key})
+    matches = [call["args"][key] for output in outputs for call in output["tool_calls"]
+               if call["name"] == tool]
+    if len(matches) != 1 or not isinstance(matches[0], list):
+        raise EvaluationBudgetAbort("phased_adapter_output_unreliable")
+    return matches[0]
+
+
+def _verification_inputs(requests: list[dict]) -> list[dict]:
+    matches = []
+    bodies = []
+    for request in requests:
+        body = request["body"]
+        if not isinstance(body["tools"], list) or len(body["tools"]) != 1:
+            raise EvaluationBudgetAbort("phased_verification_request_unreliable")
+        tool = body["tools"][0]
+        name = tool["function"]["name"]
+        if (tool.get("type") != "function" or name not in {_E_TOOL, _V_TOOL}
+                or body["tool_choice"] != {"type": "function", "function": {"name": name}}):
+            raise EvaluationBudgetAbort("phased_verification_request_unreliable")
+        if name != _V_TOOL:
+            continue
+        user = [message["content"] for message in body["messages"] if message["role"] == "user"]
+        if len(user) != 1:
+            raise EvaluationBudgetAbort("phased_verification_request_unreliable")
+        matches.append(json.loads(user[0])["candidates"])
+        bodies.append(canonical_sha256(body))
+    if not matches or any(value != bodies[0] for value in bodies):
+        raise EvaluationBudgetAbort("phased_verification_request_unreliable")
+    return matches[0]
+
+
+class PhasedEvaluationAudit:
+    """两个显式审核回调及当前case保存能力；没有文件、模型或业务入口。"""
+
+    def __init__(
+        self, *, reference: dict, expected_reference_sha256: str,
+        annotation_sha256: str, criteria_sha256: str,
+        raw_reviewer: Callable[[dict], dict], full_reviewer: Callable[[dict], dict],
+    ):
+        validate_public_reference(
+            reference, expected_reference_sha256=expected_reference_sha256,
+            annotation_sha256=annotation_sha256,
+        )
+        self._reference = _copy(reference)
+        if (not isinstance(criteria_sha256, str) or len(criteria_sha256) != 64
+                or any(char not in "0123456789abcdef" for char in criteria_sha256)
+                or not callable(raw_reviewer) or not callable(full_reviewer)):
+            raise ValueError("两阶段审核需要明确摘要与两个审核回调。")
+        self._reference_sha256 = expected_reference_sha256
+        self._criteria_sha256 = criteria_sha256
+        self._raw_reviewer = raw_reviewer
+        self._full_reviewer = full_reviewer
+
+    @property
+    def criteria_sha256(self) -> str:
+        """独立的criteria文件字节摘要，不与规范reference摘要混用。"""
+        return self._criteria_sha256
+
+    def __call__(self, bundle: dict) -> dict:
+        try:
+            return self._run(bundle)
+        except EvaluationBudgetAbort:
+            raise
+        except Exception:
+            raise EvaluationBudgetAbort("phased_audit_unreliable") from None
+
+    def _run(self, bundle: dict) -> dict:
+        # 回调只编辑审核结果；已保存case证据在本次调用内固定。
+        evidence_bundle = _copy({key: bundle[key] for key in (
+            "case_position", "case_name", "window", "gold_reference", "adapter_outputs",
+            "provider_requests", "original_result",
+        )})
+        bundle = {**evidence_bundle, "persist_audit": bundle["persist_audit"]}
+        position = bundle["case_position"]
+        if type(position) is not int or not 0 <= position < len(self._reference["windows"]):
+            raise EvaluationBudgetAbort("phased_case_position_invalid")
+        reference_case = self._reference["windows"][position]
+        if (bundle["case_name"] != reference_case["case_name"]
+                or canonical_sha256(bundle["window"]) != reference_case["input_sha256"]
+                or bundle["gold_reference"]["criteria_sha256"] != self._criteria_sha256):
+            raise EvaluationBudgetAbort("phased_case_binding_changed")
+        extraction = _arguments(list(bundle["adapter_outputs"]), _E_TOOL, "facts")
+        raw_view = _copy({
+            "case_id": reference_case["id"], "case_position": position,
+            "case_name": reference_case["case_name"], "window": bundle["window"],
+            "reference_case": reference_case, "common_rules": self._reference["common_rules"],
+            "e_fields": self._reference["e_fields"], "reference_sha256": self._reference_sha256,
+            "extraction": [{"index": index, "payload": fact, "payload_sha256": canonical_sha256(fact)}
+                           for index, fact in enumerate(extraction)],
+        })
+        raw_view["raw_evidence_sha256"] = canonical_sha256(raw_view)
+        raw_review = _copy(self._raw_reviewer(_copy(raw_view)))
+        _validate_raw(self._reference, raw_view, raw_review)
+        receipt = _save(bundle["persist_audit"], {"phase": "raw", "review": raw_review},
+                        position, reference_case["case_name"])
+        if not extraction and (
+            any(output["tool_calls"][0]["name"] == _V_TOOL for output in bundle["adapter_outputs"])
+            or any(request["body"]["tools"][0]["function"]["name"] == _V_TOOL
+                   for request in bundle["provider_requests"])
+        ):
+            raise EvaluationBudgetAbort("phased_empty_extraction_has_verification")
+        evidence = {
+            "run_status": "completed" if extraction else "empty", "extraction": extraction,
+            "verification_inputs": _verification_inputs(list(bundle["provider_requests"])) if extraction else [],
+            "verification": _arguments(list(bundle["adapter_outputs"]), _V_TOOL, "results") if extraction else [],
+            "final_facts": bundle["original_result"]["facts"], "original_result": bundle["original_result"],
+        }
+        packet = prepare_case_review(self._reference, reference_case["id"], _copy(evidence))
+        receipt_ref = {key: receipt[key] for key in (
+            "case_position", "case_name", "kind", "purpose", "event_sequence", "payload_sha256",
+        )}
+        full_view = {"packet": packet, "sealed_raw_review": raw_review, "raw_receipt": receipt_ref}
+        full_review = _copy(self._full_reviewer(_copy(full_view)))
+        _check_sealed_raw(raw_review, full_review)
+        report = score_case_review(packet, full_review)
+        final_receipt = _save(bundle["persist_audit"], {
+            "phase": "final", "review": full_review, "report": report, "raw_receipt": receipt_ref,
+        }, position, reference_case["case_name"])
+        if final_receipt["event_sequence"] <= receipt["event_sequence"]:
+            raise EvaluationBudgetAbort("phased_audit_receipt_order_invalid")
+        decision, reason = _decision(report, full_review, reference_case)
+        return {"case_position": position, "decision": decision, "reason_code": reason,
+                "criteria_sha256": self._criteria_sha256}

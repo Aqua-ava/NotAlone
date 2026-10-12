@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
 import re
+from typing import cast
 from uuid import UUID
 
 import httpx
@@ -103,7 +104,18 @@ def run_ecnu_evaluation(
             or (synthetic_transport is not None
                 and type(synthetic_transport) is not httpx.MockTransport)):
         raise EvaluationBudgetAbort("ecnu_explicit_protocol_required")
+    if synthetic_transport is None:
+        from .evaluation_phased_audit import PhasedEvaluationAudit
+
+        if type(audit_case) is not PhasedEvaluationAudit:
+            raise EvaluationBudgetAbort("ecnu_phased_audit_required")
     reference = _gold_reference(frozen_gold, source_hashes)
+    if synthetic_transport is None:
+        if (frozen_gold.get("criteria_path") !=
+                ".scratch/unfinished-work/memory-gold-reference-20261012.json"
+                or cast(PhasedEvaluationAudit, audit_case).criteria_sha256 !=
+                reference["criteria_sha256"]):
+            raise EvaluationBudgetAbort("ecnu_phased_reference_mismatch")
     if (synthetic_transport is None
             and repo_root.resolve() != Path(__file__).resolve().parents[4]):
         raise EvaluationBudgetAbort("ecnu_actual_source_root_required")

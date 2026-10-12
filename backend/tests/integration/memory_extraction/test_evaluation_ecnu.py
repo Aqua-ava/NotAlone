@@ -439,6 +439,133 @@ class EvaluationECNUTest(unittest.TestCase):
                 self.assertEqual(result["summary"]["unknown"], 1)
                 self.assertEqual(len(result["audits"]), 1)
 
+    def test_phased_audit_uses_actual_store_receipts_before_the_final_decision(self):
+        from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
+
+        actual_repo = Path(__file__).resolve().parents[4]
+        criterion = ".scratch/unfinished-work/memory-gold-reference-20261012.json"
+        content = (actual_repo / criterion).read_bytes()
+        reference = json.loads(content)
+        criteria_sha = hashlib.sha256(content).hexdigest()
+        hashes, gold = self.preparation()
+        copied = self.repo / criterion
+        copied.parent.mkdir(parents=True, exist_ok=True)
+        copied.write_bytes(content)
+        hashes[criterion] = criteria_sha
+        gold.update(criteria_path=criterion, criteria_sha256=criteria_sha)
+
+        def raw_review(view):
+            self.assertEqual(view["extraction"], [])
+            self.assertNotIn("packet", view)
+            self.assertNotIn("original_result", view)
+            return {
+                "reviewer": "synthetic-raw-reviewer", "case_id": view["case_id"],
+                "reference_sha256": view["reference_sha256"],
+                "raw_evidence_sha256": view["raw_evidence_sha256"], "e_rows": [],
+                "claims": [{"claim_id": claim["id"], "groups": []}
+                           for claim in view["reference_case"]["claims"]],
+                "window_checks": {"inclusion": "unresolved", "forbidden_meanings": "pass"},
+            }
+
+        def full_review(view):
+            packet = view["packet"]
+            sealed = view["sealed_raw_review"]
+            return {
+                "reviewer": "synthetic-full-reviewer", "case_id": packet["case_id"],
+                "reference_sha256": packet["reference_sha256"],
+                "evidence_sha256": packet["evidence_sha256"],
+                "run_status": packet["evidence"]["run_status"], "e_rows": [], "v_rows": [],
+                "claims": sealed["claims"],
+                "window_checks": {**sealed["window_checks"], "lineage": "pass"},
+            }
+
+        audit = PhasedEvaluationAudit(
+            reference=reference,
+            expected_reference_sha256="5fb8d53b90a1a96c5987ac7b825bb233cc3e9f196f976e4851c40b0243b77b32",
+            annotation_sha256=reference["annotation_sha256"], criteria_sha256=criteria_sha,
+            raw_reviewer=raw_review, full_reviewer=full_review,
+        )
+        result = self.run_ready(hashes=hashes, gold=gold, audit=audit)
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(result["audits"][0]["decision"], "unknown")
+        events = [event for event in result["events"] if event["kind"] == "semantic_audit"]
+        self.assertEqual(len(events), 3)
+        self.assertEqual([event["payload"].get("phase") for event in events],
+                         ["raw", "final", None])
+        self.assertLess(events[0]["event_sequence"], events[1]["event_sequence"])
+        self.assertLess(events[1]["event_sequence"], events[2]["event_sequence"])
+
+    def test_audit_persist_is_attributed_and_expires_after_the_current_callback(self):
+        receipts = []
+        capability = []
+
+        def persist_and_stop(bundle):
+            capability.append(bundle["persist_audit"])
+            receipts.append(capability[0]({"phase": "raw", "review": {
+                "synthetic_status": "unresolved",
+            }}))
+            return self.audit(bundle, "unknown", "audit_unresolved")
+
+        result = self.run_ready(audit=persist_and_stop)
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(len(receipts), 1)
+        receipt = receipts[0]
+        self.assertEqual(receipt["case_position"], 0)
+        self.assertEqual(receipt["purpose"], "case")
+        self.assertEqual(receipt["kind"], "semantic_audit")
+        self.assertEqual(receipt["payload"]["phase"], "raw")
+        with self.assertRaises(EvaluationBudgetAbort):
+            capability[0]({"phase": "final", "review": {}, "report": {},
+                           "raw_receipt": {}})
+        self.assertEqual(result["summary"]["semantic_audit"]["audited"], 1)
+
+    def test_audit_persist_refuses_overridden_position_and_state(self):
+        capabilities = []
+
+        def refuse_override(bundle):
+            capability = bundle["persist_audit"]
+            capabilities.append(capability)
+            with self.assertRaises(TypeError):
+                capability({"phase": "raw", "review": {}}, case_position=1,
+                           state={"active": True, "phase": None})
+            return self.audit(bundle, "unknown", "audit_unresolved")
+
+        result = self.run_ready(audit=refuse_override)
+        self.assertEqual(result["summary"]["semantic_audit"]["audited"], 1)
+        with self.assertRaises(TypeError):
+            capabilities[0]({"phase": "raw", "review": {}}, case_position=1,
+                            state={"active": True, "phase": None})
+        with self.assertRaises(EvaluationBudgetAbort):
+            capabilities[0]({"phase": "raw", "review": {}})
+        audit_events = [event for event in result["events"]
+                        if event["kind"] == "semantic_audit"]
+        self.assertEqual(len(audit_events), 1)
+        self.assertEqual(audit_events[0]["case_position"], 0)
+
+    def test_real_mode_rejects_unsealed_legacy_audit_before_credential_loading(self):
+        from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
+
+        actual_repo = Path(__file__).resolve().parents[4]
+        hashes, gold = self.preparation()
+        hashes = {relative: hashlib.sha256((actual_repo / relative).read_bytes()).hexdigest()
+                  for relative in hashes}
+        gold["criteria_sha256"] = hashes[
+            ".scratch/unfinished-work/memory-gold-agent-annotations-20261012.md"]
+
+        def forbidden_credential():
+            self.credentials.append("unexpected")
+            raise RuntimeError("合成真实模式门测试，不允许读取凭据。")
+
+        with self.assertRaises(EvaluationBudgetAbort):
+            run_ecnu_evaluation(
+                output_directory=self.output, run_id=uuid4(),
+                deadline=datetime.now(timezone.utc) + timedelta(minutes=10),
+                repo_root=actual_repo, source_hashes=hashes, frozen_gold=gold,
+                credential_loader=forbidden_credential, audit_case=self.audit,
+            )
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+
     def test_audit_receives_saved_requests_for_actual_verification_input(self):
         window = build_window(PLAN[0])
         source = str(window.target_message_ids[0])

@@ -187,6 +187,30 @@ def _summary(outcomes: list[dict], results: list[EvaluationResult]) -> dict:
     }
 
 
+def _audit_persist_capability(store: EvaluationRecordStore, case_position: int,
+                              state: dict) -> Callable[[dict], dict]:
+    """把窗口归属和失效状态固定在闭包中，不作为调用方可覆盖的参数。"""
+    def persist_audit(payload: dict) -> dict:
+        if not state["active"] or not isinstance(payload, dict):
+            raise EvaluationBudgetAbort("audit_persist_capability_expired")
+        phase = payload.get("phase")
+        keys = ({"phase", "review"} if phase == "raw" else
+                {"phase", "review", "report", "raw_receipt"})
+        if (phase not in {"raw", "final"} or set(payload) != keys
+                or (phase == "raw" and state["phase"] is not None)
+                or (phase == "final" and state["phase"] != "raw")):
+            raise EvaluationBudgetAbort("audit_persist_phase_invalid")
+        with store.stage(case_position, "case"):
+            receipt = store.record(kind="semantic_audit", payload=payload)
+        if (receipt["removed_paths"] or receipt["payload"] != payload
+                or receipt["payload_sha256"] != canonical_sha256(payload)):
+            raise EvaluationBudgetAbort("audit_persist_payload_changed")
+        state["phase"] = phase
+        return receipt
+
+    return persist_audit
+
+
 def run_offline_evaluation(
     *, cases: tuple[EvaluationCase, ...], output_directory: Path, run_id: UUID,
     request_limit: int, synthetic_transport: httpx.MockTransport,
@@ -302,7 +326,10 @@ def _run_evaluation_batch(
                 if semantic_audit is not None:
                     current_events = tuple(event for event in store.events()
                                            if event["case_position"] == position)
-                    audited = semantic_audit({
+                    audit_state = {"active": True, "phase": None}
+                    persist_audit = _audit_persist_capability(store, position, audit_state)
+
+                    bundle = {
                         "case_position": position, "case_name": case.name,
                         "window": started["payload"]["window"],
                         "original_result": recorded_result["payload"],
@@ -313,7 +340,12 @@ def _run_evaluation_batch(
                         "provider_requests": tuple(event["payload"] for event in current_events
                                                    if event["kind"] == "provider_request"),
                         "gold_reference": dict(gold_reference or {}),
-                    })
+                        "persist_audit": persist_audit,
+                    }
+                    try:
+                        audited = semantic_audit(bundle)
+                    finally:
+                        audit_state["active"] = False
                     with store.stage(position, "case"):
                         store.record(kind="semantic_audit", payload=audited)
                     audits.append(audited)
