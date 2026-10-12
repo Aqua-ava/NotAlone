@@ -302,6 +302,10 @@ NOTALONE_TEST_APP_EXECUTABLE="$PWD/out/NotAlone-darwin-arm64/NotAlone.app/Conten
 
 这个最小场景不重复系统导入，不代签真实微信／后端停读，也不把“没有NotAlone窗口取得焦点”写成系统必然恢复原外部App。人工模式两次操作及反馈仍共用25分钟交互截止、整场28分钟，实际运行由主Agent声明有限窗口／启动数；准备的类型检查和纯收据3／3不证明真实焦点分项通过。协议协调从原native场抽为共享测试辅助，产品、当前包和原native验收行为保持。接口核对依据官方[BrowserWindow](https://www.electronjs.org/docs/latest/api/browser-window)及[Playwright ElectronApplication](https://playwright.dev/docs/api/class-electronapplication)，与安装Electron44.7.0／Playwright1.64.0类型核对；实机仍待本场结果。
 
+2026-10-12焦点分项实机收口：同一签名包复验在16:50:47–17:20:47有限`test:app`窗口实际1次启动，**1／1、585.149秒／exit0**。管理后台先隐藏，主Agent实际置前自有空白Finder；用户实际两次Command+Shift+Y及分别明确反馈，程序确认同一小窗显示且focused、第二次隐藏、后台保持隐藏和两个窗口身份，公开菜单正常退出。三组Agent／真人nonce分开，机器状态不代签；系统是否恢复原外部App焦点未认证。首场实际1次启动，用户用按钮／关窗隐藏，收据拒绝、exit1／767.591秒，失败独立保留。
+
+Root核对两场20个记录进程、隔离目录及自有Finder窗口／目录清理，两租约absent；复验默认目录身份、主包strict／4helper strict与SHA／9材料集合／ASAR／ZIP保持。首场默认目录基线缺对应路径，未认证该场默认身份前后不变，后场重新录基线且不读正文。没有后端、业务库、微信／官方helper／OCR、模型、权限／TCC或退场后的NotAlone CUA操作。当前同包非OCR完整场景累计22个，见[焦点最终摘要](../.scratch/unfinished-work/mac-focus-final-20261012.json)；准备与旧失败不覆盖，完整20票及来源／渠道／OCR条件保持，新功能冻结。
+
 主进程读取当前 userData 中的 `backend-launch.json`。在“应用配置 → 机器环境”可查看、修正和保存下列非秘密绝对路径。Python 和项目目录必须同时提供；没有可核验的项目环境时阻止启动和复用，显示恢复说明：
 
 ```json
