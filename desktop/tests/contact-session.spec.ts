@@ -71,6 +71,8 @@ test('两个窗口共享本次联系人，隐藏恢复保留草稿，A→B→A �
   let originalFailed = false;
   try {
     const draft = helper.getByRole('textbox', { name: '草稿' });
+    const helperFocusPause = helper.getByRole('region', { name: '前台会话定位', exact: true })
+      .getByText('小窗在前台，暂停新的前台定位；已确认范围的后台同步独立运行。', { exact: true });
     await expect(draft).toBeEnabled();
     await draft.fill('只给甲的本次草稿。');
     await helper.getByRole('button', { name: '隐藏输入小窗' }).click();
@@ -78,6 +80,7 @@ test('两个窗口共享本次联系人，隐藏恢复保留草稿，A→B→A �
     await manager.getByRole('button', { name: '打开输入小窗' }).click();
     await expect(draft).toBeVisible();
     await expect(draft).toHaveValue('只给甲的本次草稿。');
+    await expect(helperFocusPause).toBeVisible();
     await (await app.browserWindow(manager)).evaluate((window) => window.close());
     await helper.getByRole('button', { name: '打开管理后台' }).click();
     await expect(manager.getByRole('button', { name: '选择合成联系人甲', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -91,6 +94,7 @@ test('两个窗口共享本次联系人，隐藏恢复保留草稿，A→B→A �
         suspendedByHelperFocus: foreground.suspendedByHelperFocus };
     }, contactBackend.data.contact_ids);
     try {
+      await expect(helperFocusPause).toHaveCount(0);
       await helper.getByRole('combobox', { name: '本次联系人' }).selectOption(contactBackend.data.contact_ids[1]);
       await expect(manager.getByText('本次联系人：合成联系人乙', { exact: true })).toBeVisible();
     } finally {
