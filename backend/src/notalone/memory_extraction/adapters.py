@@ -48,6 +48,11 @@ topic 只能取 health、work、family、travel、finance、study、emotion、ot
 topic 的词（如 family、health、travel）填进 category。分类示例：习惯与口味用
 preference，禁忌用 taboo，共同经历用 common_fact，近况与未来安排用 recent_state，
 家人、朋友与关系动态用 relationship_note。
+已收到邀约、本人参与的亲友借用或赠予等已发生关系经历用 relationship_note，不从
+结果可能延续推断当前仍持续，也不证明已接受邀约或所有权转移。保存未来安排时用
+recent_state + plan + asserted；保存已发生邀约的经历或转述时分别沿本人参与或
+report + reported 标注，不把历史经历、未来期间和不同标签拼成一个字段分支。
+值得保留的暂时关系要求须保留“先／暂时”，用 relationship_note，不升级为长期 taboo。
 示例：对方帮倒忙后说"你太厉害了，真是帮了我大忙"是 sarcasm；"你可真行，又给我添乱"这类挖苦抱怨只表达情绪，是 sarcasm，不要提取其中的字面事实；
 "累死了"是 hyperbole；"我妈让我…"是 report + reported；反问句（如"我什么时候骗过你"）不要提取事实；一次性邀约（如"要不要一起去看展"）
 同样不提取，无论标为 question 还是 request；被点破的吹牛（"你又开始吹了"）标 figurative_type=unknown。
@@ -85,7 +90,11 @@ confidence 反映你对事实与标签的把握，而不是事实的重要性：
 无法核实的日期留空。valid_at 表示事实或安排的生效时间：未来计划、未来约定与
 有时效的状态，在时间可核实时必须填写，按 occurred_at 推算带时区的 ISO 8601 时间，
 例如“2026-10-01T09:00:00+08:00”，不能只写日期；已经发生
-且没有明确时限的事实留空。当前临时状态的 valid_at 使用该状态证据的 occurred_at，
+且没有明确时限的事实留空。
+已发生且无明确期限的关系经历 valid_at、invalid_at 都为 null；正文可保留来源日期，
+但消息观察日不是历史事件生效起点。暂时关系请求的 valid_at 取提出请求的来源观察点，
+正文同时保留来源日期和暂时限定；持续期限无法推算时 invalid_at 留 null。
+当前临时状态的 valid_at 使用该状态证据的 occurred_at，
 这是观察时间，不得臆测更早的开始时间。临时状态的文本要带消息日期或明确期间，
 不要让跨期检索仍把消息中的“现在”“本周”理解成查询当天的现状。
 invalid_at 表示失效时间，格式相同。短期信息仍要入库，但必须带可推算的失效时间：
@@ -107,11 +116,16 @@ JSON null，不能输出空字符串或字符串“null”。取消或撤回的�
 的事实，不要用 valid_at、invalid_at 表达取消。
 只有标记为 target 的消息可以作为该候选的主证据；上下文消息只能辅助理解，不要只凭
 上下文消息提取事实，候选必须由 target 消息直接支持。每条事实的 source_message_ids
-只能填写输入中标注的 message_id，且至少包含一个 target 消息 ID。一条候选只能由
+只能填写输入中标注的 message_id，且至少包含一个 target 消息 ID。
+恢复人物、物品、事项或必要限定确实用到上下文时，也必须引用对应上下文消息 ID，
+不能只引用省略回答的 target；不将无关上下文全加进来源作为兜底。一条候选只能由
 语义相连的消息支撑：不得把窗口里不同话题的人、地点、事件或结论拼成同一条事实；
 无法由相连消息说明来源时，宁可不提取。
 alternatives 只在该表达可能不是字面事实、或存在实质歧义时填写少量其他解释；语气明确、
-证据直接时留空数组。如果 speech_act、assertion_status、figurative_type 与主体已经
+证据直接时留空数组。
+指代目标无法唯一定位时只说明该身份或事项在本窗无法确定，不猜职业、亲友角色或
+事项类型；即使写成“可能”，无来源的角色或故事也不能作为备选解释。
+如果 speech_act、assertion_status、figurative_type 与主体已经
 确定，不要再用 alternatives 复述与标签或主体判断矛盾的其他猜测。对方在祝贺或回应
 里提到用户的已完成事实，按字面事实处理，不要用 alternatives 质疑证据来源。interpretation_reason 只写一句面向用户的简短依据，不要输出模型
 内部思考过程。
