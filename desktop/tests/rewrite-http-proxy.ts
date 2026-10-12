@@ -7,6 +7,7 @@ export class RewriteHttpProxy {
   readonly requests: Array<Record<string, unknown>> = [];
   readonly results: Array<{ status: number; data: Record<string, unknown> }> = [];
   readonly replyPreparations: Array<{ kind: 'replies' | 'replace'; status: number; error: string | null; reason: string | null }> = [];
+  readonly defaultSessionResults: Array<{ contactId: string; status: number; data: Record<string, unknown> }> = [];
   readonly explorationRequests: Array<Record<string, unknown>> = [];
   readonly explorationResults: Array<{ status: number; data: Record<string, unknown> }> = [];
   nextExploration: 'normal' | 'drop' | 'hold' = 'normal';
@@ -40,6 +41,8 @@ export class RewriteHttpProxy {
         || /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+\/replies$/.test(incoming.url ?? '');
       const preparingReply = incoming.method === 'POST'
         && /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+\/(?:replies|replace)\/prepare$/.test(incoming.url ?? '');
+      const defaultSession = incoming.method === 'POST'
+        ? /^\/api\/contacts\/([a-f0-9-]+)\/assistant-session\/default$/.exec(incoming.url ?? '') : null;
       const exploring = incoming.url === '/api/reply/explore'
         || /^\/api\/contacts\/[a-f0-9-]+\/assistant-sessions\/[a-f0-9-]+\/explorations(?:\/[a-f0-9-]+\/(?:confirm|answer|stop))?$/.test(incoming.url ?? '') && incoming.method === 'POST';
       const preparingExploration = incoming.method === 'POST'
@@ -100,6 +103,8 @@ export class RewriteHttpProxy {
           result.on('data', (chunk: Buffer) => chunks.push(chunk));
           result.on('end', () => {
             const value = Buffer.concat(chunks);
+            if (defaultSession) this.defaultSessionResults.push({ contactId: defaultSession[1],
+              status: result.statusCode ?? 500, data: JSON.parse(value.toString('utf8')) as Record<string, unknown> });
             if (preparingReply) {
               const data = JSON.parse(value.toString('utf8')) as Record<string, unknown>;
               const safeCode = (code: unknown) => typeof code === 'string' && /^[a-z][a-z0-9_]{0,79}$/.test(code) ? code : null;

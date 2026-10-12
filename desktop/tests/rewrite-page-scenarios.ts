@@ -84,9 +84,17 @@ export async function unboundRejection({ manager, helper, rewriteBackend, replyT
   await confirmHelperContact(helper, rewriteBackend.data.contact_ids[0]);
   await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('今晚我会晚一点回复你。');
   await helper.getByRole('button', { name: '生成候选', exact: true }).click();
-  await expect(helper.getByRole('alert')).toContainText('确认联系人及有效会话绑定');
+  await expect(helper.getByRole('alert').filter({ hasText: '确认联系人及有效会话绑定' }))
+    .toHaveText('本次生成被拒绝，请在管理后台确认联系人及有效会话绑定。');
   await expect(helper.getByRole('textbox', { name: '候选1编辑文本', exact: true })).toHaveCount(0);
-  expect(replyTransport.results).toEqual([{ status: 409, data: { error: 'reply_rejected', reason: 'no_active_binding' } }]);
+  // 当前助手会话入口在取得default会话前拒绝；必须实证当前联系人409且没有进入生成请求。
+  expect(replyTransport.defaultSessionResults.length).toBeGreaterThan(0);
+  expect(replyTransport.defaultSessionResults).toEqual(replyTransport.defaultSessionResults.map(() => ({
+    contactId: rewriteBackend.data.contact_ids[0], status: 409,
+    data: { error: 'assistant_session_rejected', reason: 'no_active_binding' },
+  })));
+  expect(replyTransport.requests).toEqual([]);
+  expect(replyTransport.results).toEqual([]);
   expect((await rewriteBackend.command('observations')).payloads).toEqual([]);
 }
 

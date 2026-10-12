@@ -1,6 +1,7 @@
 import { confirmHelperContact } from './foreground-confirmation-actions';
 import { expect } from '@playwright/test';
 import { readContactHttp, test } from './contact-fixture';
+import { writeFile } from 'node:fs/promises';
 
 test('真实目录只显示当前用户的联系人及消息与来源摘要', async ({ runningApp: { app }, contactBackend }) => {
   const manager = await app.firstWindow();
@@ -27,6 +28,35 @@ test('两个窗口共享本次联系人，隐藏恢复保留草稿，A→B→A �
   const helper = await opened;
   await expect(helper.getByRole('combobox', { name: '本次联系人' })).toHaveValue(contactBackend.data.contact_ids[0]);
   await expect(helper.getByText('本次联系人：合成联系人甲', { exact: true })).toBeVisible();
+  // 提前订阅有限状态，关键切换间隙不追加RPC；收到的版本不冒充实际提交版本。
+  await helper.evaluate((contactIds) => {
+    const history: Array<Record<string, unknown>> = [];
+    const record = (value: Record<string, unknown>) => {
+      history.push({ at: performance.now(), ...value });
+      if (history.length > 24) history.shift();
+    };
+    let deliveredForegroundRevision: number | null = null;
+    const stopForeground = window.notalone.foreground.onStateChanged((state) => {
+      deliveredForegroundRevision = state.foregroundRevision;
+      record({ kind: 'foreground', revision: state.revision, foregroundRevision: state.foregroundRevision,
+        phase: state.phase, confirmation: state.confirmation, suspendedByHelperFocus: state.suspendedByHelperFocus });
+    });
+    const stopContacts = window.notalone.contacts.onStateChanged((state) => {
+      record({ kind: 'contacts', revision: state.revision, scopeRevision: state.scopeRevision,
+        selectedFixtureIndex: contactIds.indexOf(state.selectedContactId ?? ''), directoryPhase: state.directoryPhase });
+    });
+    const changed = (event: Event) => {
+      const target = event.target;
+      if (target instanceof HTMLSelectElement && target.getAttribute('aria-label') === '本次联系人') {
+        record({ kind: 'picker-change', selectedFixtureIndex: contactIds.indexOf(target.value), deliveredForegroundRevision });
+      }
+    };
+    document.addEventListener('change', changed, true);
+    (window as Window & { selectionDiagnostic?: () => Array<Record<string, unknown>> }).selectionDiagnostic = () => {
+      stopForeground(); stopContacts(); document.removeEventListener('change', changed, true);
+      return history;
+    };
+  }, contactBackend.data.contact_ids);
   const draft = helper.getByRole('textbox', { name: '草稿' });
   await expect(draft).toBeEnabled();
   await draft.fill('只给甲的本次草稿。');
@@ -38,8 +68,26 @@ test('两个窗口共享本次联系人，隐藏恢复保留草稿，A→B→A �
   await (await app.browserWindow(manager)).evaluate((window) => window.close());
   await helper.getByRole('button', { name: '打开管理后台' }).click();
   await expect(manager.getByRole('button', { name: '选择合成联系人甲', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await helper.getByRole('combobox', { name: '本次联系人' }).selectOption(contactBackend.data.contact_ids[1]);
-  await expect(manager.getByText('本次联系人：合成联系人乙', { exact: true })).toBeVisible();
+  const selectionState = () => helper.evaluate(async (contactIds) => {
+    const contacts = await window.notalone.contacts.getState();
+    const foreground = await window.notalone.foreground.getState();
+    return { selectedFixtureIndex: contactIds.indexOf(contacts.selectedContactId ?? ''),
+      scopeRevision: contacts.scopeRevision, directoryPhase: contacts.directoryPhase,
+      foregroundRevision: foreground.foregroundRevision, stateRevision: foreground.revision,
+      phase: foreground.phase, confirmation: foreground.confirmation,
+      suspendedByHelperFocus: foreground.suspendedByHelperFocus };
+  }, contactBackend.data.contact_ids);
+  try {
+    await helper.getByRole('combobox', { name: '本次联系人' }).selectOption(contactBackend.data.contact_ids[1]);
+    await expect(manager.getByText('本次联系人：合成联系人乙', { exact: true })).toBeVisible();
+  } finally {
+    await writeFile(test.info().outputPath('selection-observations.json'), JSON.stringify({
+      history: await helper.evaluate(() => (window as Window & { selectionDiagnostic?: () => Array<Record<string, unknown>> }).selectionDiagnostic?.() ?? []),
+      afterSelection: await selectionState(),
+      confirmationRejectedPresent: await helper.getByText('联系人确认已失效，请重新选择本次联系人。', { exact: true }).count() > 0,
+      submittedReactRevisionCertified: false,
+    }), { mode: 0o600 });
+  }
   await expect(draft).toHaveValue('');
   await draft.fill('只给乙的本次草稿。');
   await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
