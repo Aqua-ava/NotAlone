@@ -477,3 +477,9 @@ JSON 导入使用用户主动打开的文件选择器，只读取用户选择的
 主Agent沿持续授权串行两场，各有限窗口最多1次、实际1次启动。首场16:35:35–17:05:35显示分项通过，用户明确以按钮／关窗隐藏；按键收据拒绝，runner exit1／767.591秒，不算完整场通过，也不证明产品快捷键故障。复验16:50:47–17:20:47，管理后台先隐藏，主Agent实际置前自有空白Finder，用户两次实际Command+Shift+Y先显示同一小窗，再确认“小窗消失，管理后台没出现”；三组独立nonce、存活实例和共同截止核对，机器观察与真人反馈分开。程序确认同一helper显示且focused、最后两窗hidden／unfocused、两个窗口身份保持，公开菜单退出且App exit0，**1／1、585.149秒／runner exit0**。没有独立认证系统恢复原外部App焦点。
 
 Root确认两场20个已记录自有进程、两个隔离userData及自有Finder窗口／目录收尾，两租约absent；复验启动前正确记录默认目录身份，退场后相同，正文未读。首场原默认目录基线未保存路径，不能代签该场身份前后不变；旧记录保留、复验另录。主包deep strict、4helper strict与SHA、15资源文件集合／SHA（含9份材料）、ASAR／ZIP原SHA及归档大小不变。Finder预备导航所见其他文件名与原始UI不提交，未打开其他文件；没有业务库、微信／官方CLI／探针、OCR、外部模型、聊天发送、权限／TCC修改或退场后的NotAlone CUA操作。见[焦点最终摘要](../.scratch/unfinished-work/mac-focus-final-20261012.json)；同包非OCR完整场景由21增至22，锁屏准备启动0和旧失败独立保留。完整20票claimed／needs-info、AC1／4、WCDB精确构建／二进制许可、真实渠道／模型质量与原18依赖保持，新功能冻结、OCR暂停。
+
+## 2026-10-12 真实CLI后台与退出分项
+
+同一arm64 ad-hoc候选包在最终独立test:app场1／1、报告1.2m／exit0，Root实际置前自有空Finder后，正式线程新的真实有界tail启动并完成；菜单正常退出及原认证stopped后，自有后端／CLI退出、5秒无新增启动。首两场脚本失败保留，不认证新来信、双联系人或整个间隔Finder持续前台。scope拒绝管理页列表请求，列表执行0；OCR／probe／模型／外部发送／TCC变更0。
+
+三场20个自有进程、测试库和临时目录／空Finder已清理，两租约absent。主包deep strict、4helper strict、15资源文件及ASAR／ZIP原字节保持；默认目录仅身份前后核对，不读取配置正文、不认证缓存全文不变。原包来源／许可、Developer ID／公证和OCR18缺项不变，见[分项摘要](../.scratch/unfinished-work/mac-real-sync-quit-final-20261012.json)及[WCDB补核](../.scratch/unfinished-work/wcdb-provenance-followup-20261012.md)。

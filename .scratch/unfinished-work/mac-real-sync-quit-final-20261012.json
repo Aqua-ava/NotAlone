@@ -1,0 +1,188 @@
+{
+  "date": "2026-10-12",
+  "timezone": "Asia/Taipei",
+  "preparationFixedPoint": "bf675ba6",
+  "result": "passed_with_declared_boundaries",
+  "sourceTickets": [
+    ".scratch/native-app-backend/issues/04-real-wechat-follow-smoke.md",
+    ".scratch/mac-desktop-app/issues/20-mac-app-delivery.md"
+  ],
+  "scope": {
+    "newFeaturesFrozen": true,
+    "ocrPaused": true,
+    "uniquePreviouslyConfirmedContact": true,
+    "database": "three_independent_random_test_databases",
+    "baseline": "ceil(current_window_start)_utc",
+    "modelCalls": 0,
+    "externalMessagesSent": 0,
+    "businessDatabaseUsed": false,
+    "dotenvRead": false,
+    "tccOrPermissionChanged": false,
+    "upstreamContacted": false
+  },
+  "attempts": [
+    {
+      "windowFrom": "2026-10-12T09:34:07Z",
+      "windowUntil": "2026-10-12T09:49:07Z",
+      "maxLaunches": 1,
+      "actualLaunches": 1,
+      "passed": false,
+      "runnerExit": 1,
+      "durationReported": "10.0s",
+      "failure": "末尾管理窗失焦，验收脚本重复要求管理窗保持focused；不推断微信已在前台",
+      "validTailAccepted": 1,
+      "globalStreamObserved": true,
+      "cleanupVerified": true,
+      "ownedProcessCount": 6,
+      "evidenceDirectory": "desktop/artifacts/real-sync-quit-20261012/"
+    },
+    {
+      "windowFrom": "2026-10-12T09:45:10Z",
+      "windowUntil": "2026-10-12T10:00:10Z",
+      "maxLaunches": 1,
+      "actualLaunches": 1,
+      "passed": false,
+      "runnerExit": 1,
+      "durationReported": "1.1m",
+      "failure": "管理页自动会话列表请求被验收边界拒绝，旧日志错误统称tail／generic code，使拒绝分类断言失败",
+      "freshExternalActorReceipt": true,
+      "newTailAfterExternalReceiptObserved": true,
+      "validTailAccepted": 2,
+      "cleanupVerified": true,
+      "ownedProcessCount": 7,
+      "evidenceDirectory": "desktop/artifacts/real-sync-quit-retry-20261012/"
+    },
+    {
+      "windowFrom": "2026-10-12T09:51:14Z",
+      "windowUntil": "2026-10-12T10:06:14Z",
+      "maxLaunches": 1,
+      "actualLaunches": 1,
+      "passed": true,
+      "runnerExit": 0,
+      "scenarioResult": "1/1",
+      "durationReported": "1.2m",
+      "appResult": {
+        "packaged": true,
+        "uniqueConfirmedContact": true,
+        "realCliTailCompleted": true,
+        "globalStreamActiveBeforeQuit": true,
+        "externalFinderForegroundConfirmedByAgent": true,
+        "automaticReadStartedAndCompletedAfterExternalReceipt": true,
+        "notAloneWindowsUnfocusedAtReadChecks": true,
+        "continuousExternalAppFocusCertified": false,
+        "blockedSessionListingRequests": 1,
+        "normalQuit": true,
+        "authenticatedStopped": true,
+        "backendGone": true,
+        "ownedCliGone": true,
+        "readsAtConfirmedStop": 5,
+        "readsAfterConfirmedStop": 5,
+        "actualCliStarts": 2,
+        "globalStreamStarts": 1,
+        "newMessageArrivalCertified": false,
+        "twoContactContinuityCertified": false,
+        "sessionListingCertified": false,
+        "ocrRun": false,
+        "modelCalls": 0
+      },
+      "cleanupVerified": true,
+      "ownedProcessCount": 7,
+      "evidenceDirectory": "desktop/artifacts/real-sync-quit-final-20261012/"
+    }
+  ],
+  "evidenceCorrections": {
+    "oldFailuresPreserved": true,
+    "oldAuditNotRewritten": true,
+    "earlierHistoryProbeAttributionWasIncorrect": true,
+    "finalClassificationConfirmed": "sessions / acceptance_session_listing_blocked",
+    "sessionListingRequestsExecuted": 0,
+    "sourceFreshnessMustBeConfirmed": true,
+    "oldReadsCannotSatisfyAfterReceiptCheck": true,
+    "programObservationDoesNotReplaceActorReceipt": true
+  },
+  "actualCliCounts": {
+    "versionStarts": 2,
+    "boundedTailStarts": 2,
+    "globalMetadataStreamStarts": 1,
+    "allStartsAtConfirmedStop": 5,
+    "allStartsAfterFiveSeconds": 5,
+    "blockedSessionListingRequests": 1,
+    "allOwnedCliGone": true
+  },
+  "cleanup": {
+    "threeAttemptsOwnedProcessCount": 20,
+    "allRecordedOwnedGone": true,
+    "isolatedDirectoriesAbsent": true,
+    "allThreeTestDatabasesRemoved": true,
+    "ownedFinderWindowClosed": true,
+    "ownedFinderDirectoryRemoved": true,
+    "finderMetadataFilesRemoved": 0,
+    "appLease": "absent",
+    "pageLease": "absent",
+    "defaultDirectoryIdentityUnchangedAcrossAttempts": true,
+    "defaultConfigurationContentsRead": false,
+    "defaultContentsUnchangedCertified": false
+  },
+  "candidate": {
+    "app": "desktop/artifacts/wcdb-notice-package-20261012.iecln6/packaged/NotAlone-darwin-arm64/NotAlone.app",
+    "productBuildSource": "b6fed39f2e555986d438d522693a9112adeb99e5",
+    "signing": "local_arm64_ad_hoc",
+    "developerIdOrNotarization": false,
+    "mainAndFourHelpersStrictVerified": true,
+    "resourceFileCount": 15,
+    "resourceBytesUnchanged": true,
+    "asarSha256": "27cc230aee9c979dcd88e0b3eecb2e08bc677e6d072bba44183cb8fca591e1c7",
+    "zipSha256": "05307269a90a450265a4416947929d27fc5c97ae5f3ba4bd554433d7da4841d3",
+    "zipBytes": 140277674,
+    "packageRebuilt": false
+  },
+  "counters": {
+    "sameCandidateCompleteNonOcrScenariosBefore": 22,
+    "sameCandidateCompleteNonOcrScenariosAfter": 23,
+    "currentControlledLaunches": 3,
+    "currentUnexpectedLaunches": 0,
+    "controlledLaunchesSinceInitialNonOcrWindow": 34,
+    "previousUnexpectedDefaultInstanceLaunches": 1,
+    "totalLaunchesSinceInitialNonOcrWindow": 35,
+    "notOneBatch23Of23": true
+  },
+  "verification": {
+    "typescript": "passed",
+    "scopeAndAdapterUnittests": "62/62",
+    "realScopeGuardUnittests": "13/13",
+    "sourceProofRedThenGreen": true,
+    "sessionListingClassificationRedThenGreen": true,
+    "preflightStandardsFinalFindings": 0,
+    "preflightSpecFinalFindings": 0,
+    "finalDocumentationReview": "passed",
+    "standards": {
+      "hardViolations": 0,
+      "importantJudgmentFindings": 0,
+      "evidenceOverreach": 0
+    },
+    "spec": {
+      "missing": 0,
+      "errors": 0,
+      "scopeOverreach": 0
+    },
+    "documentValidation": {
+      "markdownFiles": 7,
+      "localLinks": 136,
+      "originalPrefixesAndAcPreserved": true,
+      "privateLocatorNotCommitted": true
+    }
+  },
+  "remaining": {
+    "native04": "真实对方来信事件与双联系人连续性未认证；OCR视觉边界仍暂停，组合AC保持未勾",
+    "mac20": "精确WCDB源码／补丁／构建／BOM许可、真实来信与双联系人及OCR18依赖仍缺，State claimed／needs-info、AC1/4",
+    "continuousExternalAppFocusCertified": false,
+    "newMessageArrivalCertified": false,
+    "twoContactContinuityCertified": false,
+    "sessionListingCertified": false,
+    "modelQualityCertified": false
+  },
+  "relatedPublicEvidence": [
+    ".scratch/unfinished-work/wcdb-provenance-followup-20261012.md",
+    ".scratch/unfinished-work/memory-quality-preflight-20261012.md"
+  ]
+}

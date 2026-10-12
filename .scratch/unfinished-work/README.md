@@ -13,7 +13,7 @@
 
 当前共 **202张原票：196 resolved、6 claimed、0 open，未关闭6张**。resolved中11张为wontfix，包含持续会话旧六票的拆分替代，不计作功能实现。另有两张已关闭旧票保留未交付的规格条目，见下方承接核对；关闭数不能代替完整产品完成度。
 
-同一新候选包的非OCR完整App场景累计22个通过，含人工快捷键显示／第二次按键隐藏小窗及正常退出；最新独立场已确认Finder在前台、管理后台先隐藏时，只显示同一小窗，第二次按键后小窗消失且后台没有出现。完整Mac20仍claimed／needs-info，WCDB精确构建与二进制许可、真实渠道和OCR18依赖保留。
+同一新候选包的非OCR完整App场景累计23个通过。快捷键／Finder焦点场保留；最新独立场在Root实际置前空Finder并写收据后，正式线程新的真实有界tail启动并完成，正常菜单退出、原认证stopped、后端／CLI退场及5秒无新增调用通过。完整Mac20仍claimed／needs-info，WCDB精确构建／二进制许可、真实来信与双联系人、模型质量和OCR18依赖保留。
 
 三张记忆质量原票的[评测准备方案](memory-quality-plan-20261012.md)和[继续预检](memory-quality-preflight-20261012.md)已完成可自主准备部分：指代主集16条、补充3条及核心公开两窗分别核对；评测专用HTTP预约工具纯合成12／12通过，成功持久关闭后不可重开，生产和完整runner未接。真实SDK重试、未知存储故障闭环、最终配置及人工Gold仍缺；独立Agent输入核对发现转述／瞬时时间的期望冲突及借用方向歧义，未改答案或跑到通过。42／84仍是拟议上限，模型／真实HTTP／业务库操作0，旧预算关闭、执行未开放、默认空放行表不变；仅指代07领取前置改为claimed，其余状态和全部模型验收保持。
 
@@ -35,6 +35,8 @@
 
 2026-10-12其他App前台独立场完成：复验16:50:47–17:20:47有限`test:app`窗口、最多1次且实际1次，用户确认“小窗出现，保持显示”后，再实际按一次并确认“小窗消失，管理后台没出现”；程序核对同一helper显示且focused、两窗最终hidden／unfocused、保持两个窗口，公开菜单退出且App exit0。整场1／1、585.149秒，同包完整非OCR场景由21增至22。首场16:35:35–17:05:35实际1次启动，显示分项通过，但用户澄清以按钮／关窗隐藏，human-hide收据明确拒绝，runner exit1／767.591秒；不是产品快捷键故障证据，不覆盖为通过。见[焦点最终摘要](mac-focus-final-20261012.json)，新增功能冻结、OCR暂停，完整票的来源／渠道及原18依赖保留。
 
+2026-10-12最终包真实CLI后台与退出独立场已1／1、报告1.2m／exit0，通过Root空Finder实际置前／独立收据后正式线程新的tail启动与有效来源读取、原token stopped和App／后端／CLI退场、5秒无新增调用。三场各有限max1／actual1；前两场脚本失败保留，三场20自有进程、测试库／隔离目录／空Finder／两租约均清理，包及默认目录身份保持。管理页会话列表请求被scope拒绝、不执行；不认证新来信、双联系人或整个间隔Finder持续前台。同包完整场景22→23，当前新增意外启动0，见[真实同步退出摘要](mac-real-sync-quit-final-20261012.json)。[WCDB本轮补核](wcdb-provenance-followup-20261012.md)仍缺精确构建及BOM许可，不改原20／18验收；新增功能冻结、OCR暂停。
+
 ### 2026-10-11发布时的历史快照
 
 用户认可复审修订，[第三版30票](resplit-20261011.md)当时已发布（持续会话13、聊天策略11、真实表达6），全部未开工。持续会话旧六票仅拆分替代，保留历史和继任链接；当时从新07票开始。上述30张当前已全部关闭。
@@ -53,8 +55,8 @@
 | 导入到回复的后端闭环 | [核心闭环](../core-business-flow/spec.md)、[导入自动处理](../import-memory-auto/spec.md)、[观察自动处理](../observation-memory-auto/spec.md)、[回复模块](../reply-module-flow/spec.md)的已发布任务已关闭；公开HTTP、正式PG/Worker、来源、幂等、恢复和删除有合成验收 | 脚本模型通过不等于真实模型质量通过，独立CLI入口也不代表App整合完成 |
 | 记忆与可追踪依据 | 提取/来源核验、本人和联系人记忆、待确认候选、时效、追踪和删除链路已有实现；[追踪三票](../memory-extraction-trace/spec.md)已关闭 | 整体事实覆盖和指代质量仍未达标；[自动采纳放行表](../../docs/memory-adoption-dimension-release-ledger.md)仍为空 |
 | 检索与Skill管理 | [词法召回](../memory-recall/spec.md)、[上下文/Skill](../memory-skill-context/spec.md)、[Skill库](../skill-library/spec.md)已有实现与原票验证；聊天策略11票也已关闭 | 向量试验未默认启用，受控模型策略验收不代签真实模型语义质量 |
-| 打包与部分原生能力 | [任务20](../mac-desktop-app/issues/20-mac-app-delivery.md)记录helper核验/随包、仓库探针构建、候选包签名；同一新包Finder及22个完整非OCR场景通过，含系统导入、人工小窗显示／隐藏、其他App前台时后台保持隐藏和正常退出 | 当前仅本机ad-hoc；WCDB精确构建/二进制许可、真实微信同步退出及OCR仍缺，不宣称完整交付 |
-| 真实微信单联系人同步 | [任务04](../native-app-backend/issues/04-real-wechat-follow-smoke.md)：新消息读取/入库/去重、故障自动恢复、关闭期间补齐、故障期间补齐均有实际记录 | 只覆盖已授权单联系人及记录中的测试条件，未覆盖双联系人和最终App退出 |
+| 打包与部分原生能力 | [任务20](../mac-desktop-app/issues/20-mac-app-delivery.md)记录helper核验/随包、仓库探针构建、候选包签名；同一新包Finder及23个完整非OCR场景通过，含系统导入、人工小窗显示／隐藏、Finder前台小窗及真实CLI后台／正常退出 | 当前仅本机ad-hoc；WCDB精确构建/二进制许可、真实来信事件、双联系人及OCR仍缺，不宣称完整交付 |
+| 真实微信单联系人同步 | [任务04](../native-app-backend/issues/04-real-wechat-follow-smoke.md)：新消息读取/入库/去重、故障自动恢复、关闭期间补齐、故障期间补齐均有实际记录 | 只覆盖已授权单联系人及记录中的测试条件，未覆盖双联系人；后续最终App运行／退出分项见下方独立记录 |
 | 10分钟持续同步 | `977bd93`：Computer Use分时发送3条测试消息；后台运行601.5秒，120次采样均活跃，三条各入库一次，无重启，关闭零读取且临时资源清理 | 选定会话新增全局事件为0，消息由安全对账读取；不能称全局事件通知或小时级/高负载稳定性通过 |
 | 研究、原型和官网 | [聊天路径原型](../conversation-paths-prototype/report.md)、[DSH探测](../dsh-session-probe/report.md)、Hindsight/pgvector对照已结束；[官网](../../website/README.md)已实现 | 实验结束可得“不采用”结论；聊天原型不等于新会话流程已接入产品，向量仍未默认启用 |
 
@@ -64,9 +66,9 @@
 
 | 原任务 | 状态 | 已到的进度 | 尚缺 / 下一步 |
 | --- | --- | --- | --- |
-| [native-app-backend/04 真实微信follow](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed / ready-for-human | 单联系人实际读取、入库、去重、自动恢复、两类缺口补齐、10分钟分时同步已验证 | 对方来信的全局事件触发；双联系人独立游标和切回；最终App退出停读；视觉边界等OCR恢复后再验。后台持续同步通过不替代严格的follow事件条件 |
+| [native-app-backend/04 真实微信follow](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed / ready-for-human | 单联系人读取／去重／恢复／补齐及10分钟同步已有记录；最终包真实后台与正常退出分项新增1／1 | 对方来信的全局事件触发；双联系人独立游标和切回；最终App退出子项已补，视觉边界等OCR恢复后再验。后台持续同步通过不替代严格的follow事件条件 |
 | [mac-desktop-app/18 前台定位](../mac-desktop-app/issues/18-foreground-locator.md) | claimed / ready-for-human；用户暂停 | 最小选区、多窗口极小辅助窗排除、安全失败分类已修；真实前台和采集路径越过前序门禁，名称完整与一致性通过 | 最低OCR置信度低于0.90，无verified profile；仍需定位采用/失效、焦点保护及宿主权限验证。**先不动，不降低门槛** |
-| [mac-desktop-app/20 完整交付](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed / needs-info | 9份材料随新包静态核验；新包Finder1／1、非OCR完整App场景22个通过，含人工快捷键、系统导入6条及独立Finder前台同窗显示／隐藏、后台保持隐藏／正常退出，合成同步开启时退出停读通过；意外默认实例已正常退出并单列记录 | 当前库精确源码／补丁／构建及BOM许可覆盖、真实同步退出及原18依赖；OCR继续暂停 |
+| [mac-desktop-app/20 完整交付](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed / needs-info | 9份材料随新包静态核验；新包Finder1／1、非OCR完整App场景23个通过；人工快捷键／系统导入／Finder小窗及真实CLI后台／App正常退出已验；意外默认实例已正常退出并单列记录 | 当前库精确源码／补丁／构建及BOM许可覆盖、真实来信／双联系人和模型质量及原18依赖；OCR继续暂停 |
 | [memory-core-claim-retention/01 核心事实](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed / ready-for-human | 提示局部修正及多轮受控实验已记录；部分安全和保真检查通过 | 既有真实资料严格覆盖6/12、可选2/6，目标未达成；新预注册对照或目标范围决定。旧预算已关闭，不是缺凭据 |
 | [memory-extraction-accuracy/07 指代](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed / needs-info | 现行16条用例、门槛和保守去向已核对；已领取评测前置，HTTP预约工具12／12合成通过 | 独立核定转述／时间／借用方向期望，完成SDK与未知故障闭环、实际配置和基线；历史13/15不能沿用为当前16条结果，模型执行仍关闭 |
 | [memory-accuracy-next/03 维度放行](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed / ready-for-human | 空放行表、回退开关、工具计算门槛已实现；可推导subject/time/truth_intent | 其余维度缺结构化字段；既有评测未达标。先决定字段和质量路线，再取得可推导维度的达标证据及逐类批准；不自动放行 |
@@ -108,8 +110,8 @@
 
 ## 建议执行顺序
 
-1. 新增功能继续冻结，OCR继续暂停。既有真实微信04保留来信事件、第二联系人连续性与最终App退出检查，按原票中的测试范围和条件接续。
-2. Mac20继续核查WCDB精确源码／补丁／构建输入、BOM及当前二进制许可覆盖；已通过的同包Finder、22个非OCR完整场景和签名核验保留原结果。
+1. 新增功能继续冻结，OCR继续暂停。既有真实微信04的最终包运行／退出子项已通过，接下来只补来信事件、第二联系人连续性；依原票固定数据和人工配合条件。
+2. Mac20继续核查WCDB精确源码／补丁／构建输入、BOM及当前二进制许可覆盖；已通过的同包Finder、23个非OCR完整场景和签名核验保留原结果；当前公开精确源码／Actions端点451，缺项详见来源补核。
 3. 记忆三票离线方案及HTTP工具组件已完成；补真实SDK重试／未知故障闭环，核定已发现的Gold冲突并固定实际配置及新实验范围后，才执行模型实验。
 4. 两张已关闭旧票的未交付条目保持可见，待冻结解除及原规格收束后再按工作流接续；媒体、Agent运行时、云端和Windows仍是后续方向。
 5. 最终完整Mac交付保留原18依赖；若要先交付“不含自动定位”的版本，需要另作范围决定，不能静默删掉原验收。
