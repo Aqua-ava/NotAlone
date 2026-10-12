@@ -11,10 +11,13 @@ import stat
 import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import TYPE_CHECKING, Iterator
 from uuid import UUID
 
 import httpx
+
+if TYPE_CHECKING:
+    from .evaluation_records import EvaluationRecordStore
 
 
 class EvaluationBudgetAbort(BaseException):
@@ -308,8 +311,36 @@ class EvaluationBudget:
         except Exception:
             raise EvaluationBudgetAbort("budget_close_failed") from None
 
+    def closed_receipt(self) -> dict:
+        """只从原句柄核对持久关闭与计数；不恢复发送能力。"""
+        try:
+            _private_path(self._path / "closed", directory=False)
+            with self._connection() as database:
+                rows = database.execute("SELECT manifest, closed FROM state").fetchall()
+                attempts = database.execute(
+                    "SELECT sequence, endpoint FROM requests ORDER BY sequence"
+                ).fetchall()
+                if (
+                    rows != [(json.dumps(self._manifest, sort_keys=True), 1)]
+                    or len(attempts) > self._manifest["request_limit"]
+                    or any(
+                        sequence != index
+                        or endpoint not in self._manifest["allowed_endpoints"]
+                        for index, (sequence, endpoint) in enumerate(attempts, 1)
+                    )
+                ):
+                    raise EvaluationBudgetAbort("budget_not_durably_closed")
+                return {
+                    **self._manifest, "reserved_requests": len(attempts),
+                    "closed": True,
+                }
+        except EvaluationBudgetAbort:
+            raise
+        except Exception:
+            raise EvaluationBudgetAbort("budget_closed_receipt_unavailable") from None
+
     @contextmanager
-    def attempt(self, request: httpx.Request) -> Iterator[None]:
+    def attempt(self, request: httpx.Request) -> Iterator[int]:
         """持久提交预约后才进入 transport；全部结果都占用一次。"""
         acquired = self._gate.acquire(blocking=False)
         descriptor = None
@@ -343,12 +374,26 @@ class EvaluationBudget:
             self._stop()
             raise EvaluationBudgetAbort("reservation_failed") from None
         else:
-            yield
+            yield count + 1
         finally:
             if descriptor is not None:
                 os.close(descriptor)
             if acquired:
                 self._gate.release()
+
+
+def _transport_failure_kind(error: httpx.TransportError) -> str:
+    for kind, code in (
+        (httpx.ConnectTimeout, "connect_timeout"),
+        (httpx.ReadTimeout, "read_timeout"),
+        (httpx.TimeoutException, "timeout"),
+        (httpx.ConnectError, "connect_error"),
+        (httpx.ReadError, "read_error"),
+        (httpx.WriteError, "write_error"),
+    ):
+        if isinstance(error, kind):
+            return code
+    return "transport_error"
 
 
 class EvaluationTransport(httpx.BaseTransport):
@@ -359,6 +404,7 @@ class EvaluationTransport(httpx.BaseTransport):
         budget: EvaluationBudget,
         *,
         synthetic_transport: httpx.MockTransport | None = None,
+        records: EvaluationRecordStore | None = None,
     ):
         if (
             synthetic_transport is not None
@@ -366,20 +412,35 @@ class EvaluationTransport(httpx.BaseTransport):
         ):
             raise EvaluationBudgetAbort("only_mock_transport_may_be_injected")
         self._budget = budget
+        if records is not None and not records.belongs_to(budget):
+            raise EvaluationBudgetAbort("records_bound_to_another_budget")
+        self._records = records
         self._transport = synthetic_transport or httpx.HTTPTransport(retries=0)
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
-        with self._budget.attempt(request):
+        with self._budget.attempt(request) as sequence:
             try:
+                if self._records is not None:
+                    self._records.capture_request(sequence, request)
                 response = self._transport.handle_request(request)
                 try:
                     response.read()
+                    if self._records is not None:
+                        self._records.capture_response(sequence, response)
                     return response
                 finally:
                     response.close()
-            except (httpx.TransportError, EvaluationBudgetAbort):
+            except httpx.TransportError as error:
+                if self._records is not None:
+                    self._records.capture_failure(
+                        sequence, _transport_failure_kind(error)
+                    )
+                raise
+            except EvaluationBudgetAbort:
                 raise
             except Exception:
+                if self._records is not None:
+                    self._records.capture_failure(sequence, "unknown_transport_error")
                 self._budget.close()
                 raise EvaluationBudgetAbort("transport_result_unknown") from None
 
@@ -395,6 +456,7 @@ class EvaluationAsyncTransport(httpx.AsyncBaseTransport):
         budget: EvaluationBudget,
         *,
         synthetic_transport: httpx.MockTransport | None = None,
+        records: EvaluationRecordStore | None = None,
     ):
         if (
             synthetic_transport is not None
@@ -402,20 +464,35 @@ class EvaluationAsyncTransport(httpx.AsyncBaseTransport):
         ):
             raise EvaluationBudgetAbort("only_mock_transport_may_be_injected")
         self._budget = budget
+        if records is not None and not records.belongs_to(budget):
+            raise EvaluationBudgetAbort("records_bound_to_another_budget")
+        self._records = records
         self._transport = synthetic_transport or httpx.AsyncHTTPTransport(retries=0)
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        with self._budget.attempt(request):
+        with self._budget.attempt(request) as sequence:
             try:
+                if self._records is not None:
+                    self._records.capture_request(sequence, request)
                 response = await self._transport.handle_async_request(request)
                 try:
                     await response.aread()
+                    if self._records is not None:
+                        self._records.capture_response(sequence, response)
                     return response
                 finally:
                     await response.aclose()
-            except (httpx.TransportError, EvaluationBudgetAbort):
+            except httpx.TransportError as error:
+                if self._records is not None:
+                    self._records.capture_failure(
+                        sequence, _transport_failure_kind(error)
+                    )
+                raise
+            except EvaluationBudgetAbort:
                 raise
             except Exception:
+                if self._records is not None:
+                    self._records.capture_failure(sequence, "unknown_transport_error")
                 self._budget.close()
                 raise EvaluationBudgetAbort("transport_result_unknown") from None
 

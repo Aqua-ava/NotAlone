@@ -32,3 +32,5 @@
 - 2026-10-12（前置结果）：[预检与HTTP组件交付](../../unfinished-work/memory-quality-preflight-20261012.md)已形成；组件12／12纯合成通过，独立Agent输入核对发现转述auto、瞬时时间空字段及借用方向等需核定项，未改答案或启动模型。源码／版本快照不证明实际供应商配置；真实SDK、未知故障闭环和完整runner仍待。State保持claimed／Triage needs-info，原五条模型验收0/5，默认空放行表和旧成绩保持。
 
 - 2026-10-12（工具接缝续验）：[预算与最终请求验收](../../unfinished-work/memory-budget-integration-20261012.md)补实际SDK同步／异步重试、单次持久批次领取与未知故障停发，以及合成E/V最终请求契约；30项接缝及完整相关146／146受守卫回归通过。OpenAI3.3.1默认HTTPX2，本轮只认证官方legacy HTTPX注入，不认证factory整条装配；已领取run拒绝重开，成功响应后保存故障逃出batch即停发。本轮供应商／真实HTTP0，App／微信／OCR0，未读密钥／私有资料／业务库；人工Gold、实际供应商配置、完整原始结果保存与runner仍缺。State／Triage及原模型验收0/5不改，旧成绩与空放行表保持。
+
+- 2026-10-12（继续ECNU与P0工具）：用户答“继续使用”确认沿用ECNU，公开官方参数已形成[配置复核](../../unfinished-work/ecnu-model-config-20261012.md)。[私有记录与P0整场](../../unfinished-work/memory-offline-records-result-20261012.md)完成26项新验证、完整相关172／172；允许请求／响应及解析前原消息先持久，内部思考无原文旁路，不能安全脱敏时留缺口停批，闭合／全计划对账后才返回收据。仅固定假端点Mock执行，无真实ECNU入口、供应商调用或业务库；[21窗人工审查包](../../unfinished-work/memory-gold-review-packet-20261012.md)仍未认证，真实ECNU装配／身份漂移判据及模型质量待验。State claimed／Triage needs-info与原模型0/5不改，旧预算关闭、空放行表、新功能冻结及OCR暂停保持。
