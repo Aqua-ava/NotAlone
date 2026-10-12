@@ -2,7 +2,7 @@
 
 范围：`.scratch/*/issues/*.md`，共202张、44个任务目录。核查基点`4e82176f`，每行State／Triage按当前原票读取，兼容普通、加粗和引用格式；规格、提案、实验报告及本次对账记录不计为任务。
 
-统计：**196 resolved、5 claimed、1 open；未关闭6张。** resolved中11张wontfix，包含持续会话旧六票的拆分替代；这些是结论关闭，不等于196项产品能力。第三版持续会话13票／策略11票／真实表达6票共30票已关闭，172条验收均勾选。
+统计：**196 resolved、6 claimed、0 open；未关闭6张。** resolved中11张wontfix，包含持续会话旧六票的拆分替代；这些是结论关闭，不等于196项产品能力。第三版持续会话13票／策略11票／真实表达6票共30票已关闭，172条验收均勾选。
 
 原票为权威来源，当前总览见[README](README.md)。[2026-10-11索引](ticket-inventory-20261011.md)保留发布时快照；[本次对账记录](ledger-reconciliation-20261012.md)说明4张Skill票Triage纠正、CLI历史勾选回填及两张旧票的未交付条目。两项冻结保留的规格差距不因历史票resolved变成已实现。
 
@@ -226,7 +226,7 @@
 | [04 — 真假与意图维度补全](../memory-extraction-accuracy/issues/04-intent-truthfulness.md) | resolved | ready-for-agent | 原票范围已结清；完成证据、历史失败及未验边界见原票 |
 | [05 — 时间与时效维度评测与修复](../memory-extraction-accuracy/issues/05-time-and-validity.md) | resolved | ready-for-agent | 原票范围已结清；完成证据、历史失败及未验边界见原票 |
 | [06 — 转述与本人维度评测与修复](../memory-extraction-accuracy/issues/06-reported-vs-self.md) | resolved | ready-for-agent | 原票范围已结清；完成证据、历史失败及未验边界见原票 |
-| [07 — 指代消解维度评测与修复](../memory-extraction-accuracy/issues/07-reference-resolution.md) | open | needs-info | 原票未关闭；剩余检查、暂停及所需信息见原票和总览 |
+| [07 — 指代消解维度评测与修复](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed | needs-info | 原票未关闭；剩余检查、暂停及所需信息见原票和总览 |
 | [08 — 改写保真维度评测与修复](../memory-extraction-accuracy/issues/08-paraphrase-fidelity.md) | resolved | ready-for-agent | 原票范围已结清；完成证据、历史失败及未验边界见原票 |
 | [09 — 媒体占位维度评测与修复](../memory-extraction-accuracy/issues/09-media-placeholder.md) | resolved | ready-for-agent | 原票范围已结清；完成证据、历史失败及未验边界见原票 |
 | [10 — 模型对照实验与生产配置定案](../memory-extraction-accuracy/issues/10-model-comparison.md) | resolved | ready-for-agent | 原票范围已结清；完成证据、历史失败及未验边界见原票 |
