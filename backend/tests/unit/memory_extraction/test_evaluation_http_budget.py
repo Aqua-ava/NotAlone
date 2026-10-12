@@ -219,7 +219,7 @@ class EvaluationHttpBudgetTest(unittest.TestCase):
         with self.assertRaises(EvaluationBudgetAbort):
             EvaluationTransport(None, synthetic_transport=HiddenRetryTransport())
 
-    def test_async_timeout_consumes_attempt_and_survives_reopen(self):
+    def test_async_timeout_consumes_attempt_and_refuses_reopen(self):
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
             output = home / "output"
@@ -252,12 +252,9 @@ class EvaluationHttpBudgetTest(unittest.TestCase):
 
                 asyncio.run(perform())
                 self.assertEqual(len(sent), 1)
-                self.assertEqual(
-                    EvaluationBudget.open(run_id=run_id).snapshot()[
-                        "reserved_requests"
-                    ],
-                    1,
-                )
+                self.assertEqual(budget.snapshot()["reserved_requests"], 1)
+                with self.assertRaises(EvaluationBudgetAbort):
+                    EvaluationBudget.open(run_id=run_id)
 
     def test_async_success_and_concurrent_send_hard_stops(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -327,7 +324,7 @@ class EvaluationHttpBudgetTest(unittest.TestCase):
                 with self.assertRaises(EvaluationBudgetAbort):
                     EvaluationBudget.open(run_id=run_id)
 
-    def test_one_attempt_survives_reopen_and_refuses_another_send(self):
+    def test_one_attempt_is_not_refunded_and_refuses_reopen_or_another_send(self):
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
             output = home / "output"
@@ -357,11 +354,12 @@ class EvaluationHttpBudgetTest(unittest.TestCase):
                         client.post("https://synthetic.invalid/v1/chat").status_code,
                         200,
                     )
-                reopened = EvaluationBudget.open(run_id=run_id)
-                self.assertEqual(reopened.snapshot()["reserved_requests"], 1)
+                self.assertEqual(budget.snapshot()["reserved_requests"], 1)
+                with self.assertRaises(EvaluationBudgetAbort):
+                    EvaluationBudget.open(run_id=run_id)
                 with httpx.Client(
                     transport=EvaluationTransport(
-                        reopened,
+                        budget,
                         synthetic_transport=httpx.MockTransport(synthetic),
                     ),
                     trust_env=False,

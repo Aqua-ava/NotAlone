@@ -15,7 +15,7 @@
 
 同一新候选包的非OCR完整App场景累计23个通过。快捷键／Finder焦点场保留；最新独立场在Root实际置前空Finder并写收据后，正式线程新的真实有界tail启动并完成，正常菜单退出、原认证stopped、后端／CLI退场及5秒无新增调用通过。完整Mac20仍claimed／needs-info，WCDB精确构建／二进制许可、真实来信与双联系人、模型质量和OCR18依赖保留。
 
-三张记忆质量原票的[评测准备方案](memory-quality-plan-20261012.md)和[继续预检](memory-quality-preflight-20261012.md)已完成可自主准备部分：指代主集16条、补充3条及核心公开两窗分别核对；评测专用HTTP预约工具纯合成12／12通过，成功持久关闭后不可重开，生产和完整runner未接。真实SDK重试、未知存储故障闭环、最终配置及人工Gold仍缺；独立Agent输入核对发现转述／瞬时时间的期望冲突及借用方向歧义，未改答案或跑到通过。42／84仍是拟议上限，模型／真实HTTP／业务库操作0，旧预算关闭、执行未开放、默认空放行表不变；仅指代07领取前置改为claimed，其余状态和全部模型验收保持。
+三张记忆质量原票的[评测准备方案](memory-quality-plan-20261012.md)和[继续预检](memory-quality-preflight-20261012.md)已完成公开输入核对：指代主集16条、补充3条及核心公开两窗分别核对。后续[预算与最终请求接缝](memory-budget-integration-20261012.md)30项通过，完整相关受守卫回归146／146：SDK同步／异步重试、持久领取后拒绝续开、未知故障及结果保存异常停发、合成E/V最终JSON已验；本轮认证临时legacy HTTPX注入，生产factory与完整runner未接。实际供应商配置、人工Gold、完整原始结果保存器与最终runner仍缺；输入核对发现转述／瞬时时间期望冲突及借用方向歧义，未改答案或跑到通过。42／84仍为拟议上限，供应商／真实HTTP／业务库操作0，旧预算关闭、执行未开放、默认空表不变；仅指代07领取前置改为claimed，其余状态和全部模型验收保持。
 
 其他App前台小窗分项已 **1／1通过、585.149秒／exit0**，见[焦点最终摘要](mac-focus-final-20261012.json)。两场各在有限窗口启动1次：首场用户用按钮／关窗隐藏，按键验收拒绝并保留失败；复验由用户实际两次快捷键及分别明确反馈完成。20个已记录自有进程、两场隔离目录、自有空Finder窗口／目录及租约均收尾；复验前后默认目录身份、包签名及字节保持。首场默认目录的原基线没有记录路径，不能代签该场默认目录身份未变；配置正文均未读。没有独立认证系统必然恢复原外部App焦点。锁屏准备场启动0的[摘要](mac-focus-preparation-20261012.json)及旧21场结果保持，完整Mac20原条件不改。
 
@@ -70,7 +70,7 @@
 | [mac-desktop-app/18 前台定位](../mac-desktop-app/issues/18-foreground-locator.md) | claimed / ready-for-human；用户暂停 | 最小选区、多窗口极小辅助窗排除、安全失败分类已修；真实前台和采集路径越过前序门禁，名称完整与一致性通过 | 最低OCR置信度低于0.90，无verified profile；仍需定位采用/失效、焦点保护及宿主权限验证。**先不动，不降低门槛** |
 | [mac-desktop-app/20 完整交付](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed / needs-info | 9份材料随新包静态核验；新包Finder1／1、非OCR完整App场景23个通过；人工快捷键／系统导入／Finder小窗及真实CLI后台／App正常退出已验；意外默认实例已正常退出并单列记录 | 当前库精确源码／补丁／构建及BOM许可覆盖、真实来信／双联系人和模型质量及原18依赖；OCR继续暂停 |
 | [memory-core-claim-retention/01 核心事实](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed / ready-for-human | 提示局部修正及多轮受控实验已记录；部分安全和保真检查通过 | 既有真实资料严格覆盖6/12、可选2/6，目标未达成；新预注册对照或目标范围决定。旧预算已关闭，不是缺凭据 |
-| [memory-extraction-accuracy/07 指代](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed / needs-info | 现行16条用例、门槛和保守去向已核对；已领取评测前置，HTTP预约工具12／12合成通过 | 独立核定转述／时间／借用方向期望，完成SDK与未知故障闭环、实际配置和基线；历史13/15不能沿用为当前16条结果，模型执行仍关闭 |
+| [memory-extraction-accuracy/07 指代](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed / needs-info | 现行16条用例、门槛和保守去向已核对；预算／SDK／批次故障／最终请求30项，相关146／146合成通过 | 独立核定转述／时间／借用方向期望、实际供应商配置、完整结果保存与runner／当前基线；历史13/15不能沿用为当前16条结果，模型执行仍关闭 |
 | [memory-accuracy-next/03 维度放行](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed / ready-for-human | 空放行表、回退开关、工具计算门槛已实现；可推导subject/time/truth_intent | 其余维度缺结构化字段；既有评测未达标。先决定字段和质量路线，再取得可推导维度的达标证据及逐类批准；不自动放行 |
 
 ## 已关闭旧票中的验收条目承接
@@ -112,7 +112,7 @@
 
 1. 新增功能继续冻结，OCR继续暂停。既有真实微信04的最终包运行／退出子项已通过，接下来只补来信事件、第二联系人连续性；依原票固定数据和人工配合条件。
 2. Mac20继续核查WCDB精确源码／补丁／构建输入、BOM及当前二进制许可覆盖；已通过的同包Finder、23个非OCR完整场景和签名核验保留原结果；当前公开精确源码／Actions端点451，缺项详见来源补核。
-3. 记忆三票离线方案及HTTP工具组件已完成；补真实SDK重试／未知故障闭环，核定已发现的Gold冲突并固定实际配置及新实验范围后，才执行模型实验。
+3. 记忆三票的预算、SDK重试、批次故障及合成最终请求接缝已验；继续补完整原始结果保存／最终runner，核定Gold冲突、实际供应商配置及新实验范围后，才执行模型实验。
 4. 两张已关闭旧票的未交付条目保持可见，待冻结解除及原规格收束后再按工作流接续；媒体、Agent运行时、云端和Windows仍是后续方向。
 5. 最终完整Mac交付保留原18依赖；若要先交付“不含自动定位”的版本，需要另作范围决定，不能静默删掉原验收。
 

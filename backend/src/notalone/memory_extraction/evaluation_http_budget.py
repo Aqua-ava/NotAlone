@@ -56,7 +56,7 @@ def _sync_directory(path: Path) -> None:
 
 
 class EvaluationBudget:
-    """固定用户级 run 注册；重新 open 只承接余额，close 后不能续开。"""
+    """固定用户级 run 注册；首次领取后只准原句柄使用，不恢复批次。"""
 
     def __init__(self, path: Path, manifest: dict):
         self._path = path
@@ -65,6 +65,7 @@ class EvaluationBudget:
         self._identity = (identity.st_dev, identity.st_ino)
         self._gate = threading.Lock()
         self._blocked = False
+        self._claim_identity: tuple[int, int] | None = None
 
     @classmethod
     def create(
@@ -133,7 +134,7 @@ class EvaluationBudget:
 
     @classmethod
     def open(cls, *, run_id: UUID) -> EvaluationBudget:
-        """固定 run 目录缺失或损坏时硬停，不自动重建。"""
+        """仅承接尚未领取、零预约的准备运行；未知运行不恢复。"""
         try:
             if not isinstance(run_id, UUID):
                 raise EvaluationBudgetAbort("invalid_run_id")
@@ -143,16 +144,21 @@ class EvaluationBudget:
             _private_path(path, directory=True)
             if os.path.lexists(path / "closed"):
                 raise EvaluationBudgetAbort("budget_closed")
+            if os.path.lexists(path / "claimed"):
+                raise EvaluationBudgetAbort("batch_already_claimed")
             _private_path(path / "budget.sqlite3", directory=False)
             database = sqlite3.connect(
                 f"file:{path / 'budget.sqlite3'}?mode=rw", uri=True
             )
             try:
                 rows = database.execute("SELECT manifest, closed FROM state").fetchall()
+                count = database.execute("SELECT COUNT(*) FROM requests").fetchone()[0]
             finally:
                 database.close()
             if len(rows) != 1 or rows[0][1] != 0:
                 raise EvaluationBudgetAbort("budget_closed_or_invalid")
+            if count != 0:
+                raise EvaluationBudgetAbort("unknown_batch_cannot_resume")
             manifest = json.loads(rows[0][0])
             if manifest["run_id"] != str(run_id):
                 raise EvaluationBudgetAbort("budget_identity_changed")
@@ -192,6 +198,13 @@ class EvaluationBudget:
             or rows[0] != (json.dumps(self._manifest, sort_keys=True), 0)
         ):
             raise EvaluationBudgetAbort("budget_closed_or_changed")
+        claimed = self._path / "claimed"
+        if os.path.lexists(claimed):
+            identity = _private_path(claimed, directory=False)
+            if (identity.st_dev, identity.st_ino) != self._claim_identity:
+                raise EvaluationBudgetAbort("batch_claim_not_owned")
+        elif self._claim_identity is not None:
+            raise EvaluationBudgetAbort("batch_claim_missing")
         output = Path(self._manifest["output_directory"])
         identity = _private_path(output, directory=True)
         if [identity.st_dev, identity.st_ino] != self._manifest["output_identity"]:
@@ -209,6 +222,48 @@ class EvaluationBudget:
         ):
             raise EvaluationBudgetAbort("budget_records_invalid")
         return len(attempts)
+
+    def _claim(self) -> None:
+        with self._connection() as database:
+            self._validate(database)
+            if self._claim_identity is not None:
+                return
+            descriptor = os.open(
+                self._path / "claimed",
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o600,
+            )
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            _sync_directory(self._path)
+            identity = _private_path(self._path / "claimed", directory=False)
+            self._claim_identity = (identity.st_dev, identity.st_ino)
+
+    @contextmanager
+    def batch(self) -> Iterator[None]:
+        """首次发送前持久领取；正常或异常退场都关闭，保留原始异常。"""
+        try:
+            if self._claim_identity is not None:
+                raise EvaluationBudgetAbort("batch_already_claimed")
+            self._claim()
+        except EvaluationBudgetAbort:
+            self._stop()
+            raise
+        except Exception:
+            self._stop()
+            raise EvaluationBudgetAbort("batch_claim_failed") from None
+        try:
+            yield
+        except BaseException as error:
+            try:
+                self.close()
+            except EvaluationBudgetAbort as closing_error:
+                error.add_note(f"evaluation_close_failed:{closing_error}")
+            raise
+        else:
+            self.close()
 
     def snapshot(self) -> dict:
         """只有冻结元数据和预约次数；不包含正文、headers 或秘密。"""
@@ -266,6 +321,8 @@ class EvaluationBudget:
                 self._path / "in-flight.lock", os.O_RDWR | os.O_NOFOLLOW
             )
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # 兼容单 transport 调用；未来评测 runner 必须显式包住整个 batch。
+            self._claim()
             endpoint = _endpoint(request.url)
             with self._connection() as database:
                 count = self._validate(database)
@@ -313,12 +370,18 @@ class EvaluationTransport(httpx.BaseTransport):
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         with self._budget.attempt(request):
-            response = self._transport.handle_request(request)
             try:
-                response.read()
-                return response
-            finally:
-                response.close()
+                response = self._transport.handle_request(request)
+                try:
+                    response.read()
+                    return response
+                finally:
+                    response.close()
+            except (httpx.TransportError, EvaluationBudgetAbort):
+                raise
+            except Exception:
+                self._budget.close()
+                raise EvaluationBudgetAbort("transport_result_unknown") from None
 
     def close(self) -> None:
         self._transport.close()
@@ -343,12 +406,18 @@ class EvaluationAsyncTransport(httpx.AsyncBaseTransport):
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         with self._budget.attempt(request):
-            response = await self._transport.handle_async_request(request)
             try:
-                await response.aread()
-                return response
-            finally:
-                await response.aclose()
+                response = await self._transport.handle_async_request(request)
+                try:
+                    await response.aread()
+                    return response
+                finally:
+                    await response.aclose()
+            except (httpx.TransportError, EvaluationBudgetAbort):
+                raise
+            except Exception:
+                self._budget.close()
+                raise EvaluationBudgetAbort("transport_result_unknown") from None
 
     async def aclose(self) -> None:
         await self._transport.aclose()
