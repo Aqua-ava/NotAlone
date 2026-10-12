@@ -78,3 +78,65 @@ test('最终签名包在微信非前台时保持真实CLI读取，正常退出�
       ocrRun: false, modelCalls: 0,
     }), { mode: 0o600 });
   });
+
+// 与外部前台验收分项记录；本项不认证微信非前台或持续焦点。
+test('最终签名包真实同步入库后正常退出，认证停读且五秒内无新读取',
+  async ({ runningApp: { app, appProcess, userData }, realSyncBackend, realSyncProxy }) => {
+    test.setTimeout(120_000);
+    expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true);
+    const backendPid = realSyncBackend.cleanupOwnership().childPid!;
+    await writeFile(test.info().outputPath('owned-runtime.json'), JSON.stringify({
+      appPid: appProcess.pid, backendPid, userData, fixtureDirectory: realSyncBackend.directory,
+      databaseName: realSyncBackend.data.database_name,
+    }), { mode: 0o600 });
+    const manager = await app.firstWindow();
+    await manager.getByRole('button', { name: '同步设置', exact: true }).click();
+    await manager.getByRole('button', { name: '开启后台同步', exact: true }).click();
+    await expect.poll(async () => (await realSyncBackend.audit()).filter((row) =>
+      row.event === 'accepted' && row.kind === 'tail').length, { timeout: 70_000 }).toBeGreaterThanOrEqual(2);
+    let snapshot: Record<string, unknown> | undefined;
+    await expect.poll(async () => {
+      const result = await realSyncBackend.request('/api/sync/follow-smoke/status');
+      expect(result.status).toBe(200);
+      expect(result.data.follow_stream_active).toBe(true);
+      if (!Array.isArray(result.data.contacts)) throw new Error('同步计数快照形状不符合契约。');
+      expect(result.data.contacts).toHaveLength(1);
+      const contact = result.data.contacts[0];
+      expect(contact.contact_id).toBe(realSyncBackend.data.contact_ids[0]);
+      expect(contact.bound).toBe(true);
+      expect(contact.duplicate_identities).toBe(0);
+      snapshot = {
+        messageCount: contact.message_count, observationReferenceCount: contact.observation_ref_count,
+        duplicateIdentities: contact.duplicate_identities, latestMode: contact.latest_mode,
+      };
+      return contact.message_count;
+    }, { timeout: 15_000 }).toBe(1);
+    expect((await realSyncBackend.request('/api/sync/status')).data.cli_bound_count).toBe(1);
+    await writeFile(test.info().outputPath('real-sync-before-quit.json'), JSON.stringify(snapshot), { mode: 0o600 });
+    await selectMenu(app, 'NotAlone', '退出 NotAlone');
+    await expect.poll(() => appProcess.exitCode, { timeout: 15_000 }).toBe(0);
+    expect(realSyncProxy.authenticatedRuntimeStopped).toBe(true);
+    await expect.poll(() => {
+      try { process.kill(backendPid, 0); return false; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true; throw error; }
+    }, { timeout: 15_000 }).toBe(true);
+    const stopped = await realSyncBackend.audit();
+    const startedPids = stopped.filter((row) => row.event === 'started' && Number.isInteger(row.pid));
+    for (const row of startedPids) {
+      try { process.kill(row.pid!, 0); throw new Error('本轮自有CLI进程仍存活。'); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    const after = await realSyncBackend.audit();
+    expect(after.filter((row) => row.event === 'started' && Number.isInteger(row.pid))).toHaveLength(startedPids.length);
+    expect(after.filter((row: CliAudit & { code?: string }) => row.event === 'scope_rejected'
+      && !(row.kind === 'sessions' && row.code === 'acceptance_session_listing_blocked'))).toEqual([]);
+    await writeFile(test.info().outputPath('real-sync-normal-quit-results.json'), JSON.stringify({
+      packaged: true, uniqueConfirmedContact: true, ...snapshot,
+      atLeastTwoActualTailAcceptances: true, globalStreamActiveBeforeQuit: true,
+      normalQuitExitZero: true, authenticatedStopped: true, backendGone: true, ownedCliGone: true,
+      cliStartsAtStop: startedPids.length, cliStartsFiveSecondsAfterStop: startedPids.length,
+      externalForegroundCertified: false, newIncomingMessageCertified: false,
+      twoContactContinuityCertified: false, sessionListingCertified: false, ocrRun: false, modelCalls: 0,
+    }), { mode: 0o600 });
+  });
