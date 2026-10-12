@@ -2,6 +2,47 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { eventually, withMessageOptInFixture } from './fixtures/reply-message-opt-in-public.mjs';
 
+test('同键恢复完成后的版本读取仍在等待时，新生成不替换已完成任务', { timeout: 15_000 }, async () => {
+  await withMessageOptInFixture(async (f) => {
+    const scope = await f.connect();
+    f.contacts.setDraft({ ...scope, text: '合成草稿：稍后回复。' });
+    await f.fixture.plan({ fault: 'timeout' });
+    await f.bridge.generate({ ...scope, newRequest: true });
+    assert.equal((await f.bridge.getState()).errorCode, 'timeout');
+
+    let held = false;
+    let release;
+    const released = new Promise((resolve) => { release = resolve; });
+    f.delivery.after = async (request) => {
+      if (!held && request.method === 'GET' && /\/candidates\/[a-f0-9-]+\/versions/.test(request.path)) {
+        held = true;
+        await released;
+      }
+    };
+    let recovering;
+    try {
+      await f.fixture.plan({ count: 1, text: '同键恢复后的合成候选。' });
+      recovering = f.bridge.generate({ ...scope, newRequest: false });
+      await eventually(() => f.bridge.getState(), (state) => state.phase === 'ready' && held,
+        '恢复后的实际候选须已可见，版本读取仍由接缝持有。');
+      const before = f.requests.length;
+      await f.fixture.plan({ count: 1, text: '新的合成候选。' });
+      await f.bridge.generate({ ...scope, newRequest: true });
+      const requests = f.requests.slice(before);
+      assert(!requests.some((request) => request.path.endsWith('/replace/prepare')),
+        '已经可靠完成的旧生成不能被当作在途替换目标。');
+      assert(requests.some((request) => request.path.endsWith('/replies/prepare') && !request.failure));
+      const ready = await f.bridge.getState();
+      assert.equal(ready.phase, 'ready');
+      assert.equal(ready.result.candidates[0].editedText, '新的合成候选。');
+      assert.equal((await f.fixture.command('observations')).model_calls, 3);
+    } finally {
+      release();
+      await recovering;
+    }
+  });
+});
+
 async function stopFailedIdentity(f, scope, sessionId, failed, currentInputVersionId) {
   const pending = f.replies.pendingGenerationReceipts();
   assert.equal(pending.length, 1, '失败响应不得丢失原认证停止身份。');

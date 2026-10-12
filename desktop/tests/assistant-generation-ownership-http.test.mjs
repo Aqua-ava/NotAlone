@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
@@ -1014,15 +1014,25 @@ test('首轮模型失败后的同键重试已实际运行时，显式新请求�
       const rejected = f.requests.slice(beforeEarlyReplace).find((request) => request.path.endsWith('/replace/prepare'));
       assert(rejected); assert.equal(rejected.runningKey, earlyFailedPrepare.requestKey);
       assert.equal(rejected.failure.status, 409); assert.equal(rejected.failure.code, 'assistant_session_rejected');
-      // JsonClient保留既有reason白名单；用相同实际正文公开重读后端稳定拒绝，不扩大UI字段。
+      // 首次拒绝已封禁新键；同键重读须返回事务正证明，独立新键仍验证原在途守卫。
+      const noGeneration = (requestKey) => ({ contact_id: f.contactA, session_id: original.session_id,
+        request_key: requestKey, state: 'not_reserved' });
       assert.deepEqual(await f.fixture.request(rejected.path, earlyReplacementBody), { status: 409,
-        data: { error: 'assistant_session_rejected', reason: 'generation_not_running' } });
+        data: { error: 'assistant_session_rejected', reason: 'request_deleted',
+          no_generation: noGeneration(earlyReplacementBody.replacement.idempotency_key) } });
+      const freshReplacementBody = { ...earlyReplacementBody,
+        replacement: { ...earlyReplacementBody.replacement, idempotency_key: randomUUID() } };
+      const freshProof = noGeneration(freshReplacementBody.replacement.idempotency_key);
+      assert.deepEqual(await f.fixture.request(rejected.path, freshReplacementBody), { status: 409,
+        data: { error: 'assistant_session_rejected', reason: 'generation_not_running', no_generation: freshProof } });
+      assert.deepEqual(await f.fixture.request(rejected.path, freshReplacementBody), { status: 409,
+        data: { error: 'assistant_session_rejected', reason: 'request_deleted', no_generation: freshProof } });
       assert.deepEqual(await f.rawSession(f.contactA, original.session_id), beforeEarly,
         '尚未领取重试租约时，canonical替换必须关闭且不能追加输入或倒退CURRENT。');
       dispatchGate.release.resolve(); await earlyRetry;
       f.backend.requestJson = originalRequestJson; originalRequestJson = undefined;
       assert.equal((await f.fixture.command('counts')).actual_calls, 5, '过早替换与尚未发送的旧重试均不能进入额外模型。');
-      console.log('A16 early retry dispatch canonical replace HTTP409 generation_not_running, session unchanged, extra models=0');
+      console.log('A16 early retry dispatch first refusal generation_not_running, sealed replay request_deleted, strict proof, session unchanged, extra models=0');
     } finally {
       firstPrepare.release.resolve(); retryPrepare?.release.resolve(); replacementPrepare?.release.resolve();
       completedPrepare?.release.resolve(); cachedResult?.release.resolve();

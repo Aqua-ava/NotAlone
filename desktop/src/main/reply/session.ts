@@ -1158,6 +1158,9 @@ export class ReplySession {
         if (!current() || !acceptLatestRead()) return;
       }
       this.savedRead?.abort(); this.savedRead = undefined;
+      // 已核实的完成结果先更新回执；后续版本读取不能让它仍成为在途替换目标。
+      this.generationJobs.receiveReceipt(ownedJob, { sessionId, requestKey: attempt.requestKey,
+        turnId: completed.turnId, inputVersionId: result.inputVersionId, state: 'completed' });
       const inputBudgetNotice = result.inputBudget ? { contactId: selection.contactId,
         scopeRevision: selection.scopeRevision, sessionId: result.assistantSessionId, requestKey: attempt.requestKey,
         inputVersionId: result.inputVersionId, connectionGeneration: generation, operation, decision: result.inputBudget } : undefined;
