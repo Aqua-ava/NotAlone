@@ -25,6 +25,7 @@ from langgraph.errors import GraphRecursionError
 
 from notalone.reply.adapters.async_runner import run_with_timeout
 from notalone.reply.adapters.input_budget_middleware import InputBudgetMiddleware
+from notalone.reply.adapters.provider_errors import is_provider_context_limit
 
 from notalone.reply.context import ReplyContext, allows_history
 from notalone.reply.fidelity import FIDELITY_SYSTEM_PROMPT, factual_role, generation_contract
@@ -44,7 +45,8 @@ from notalone.reply.runtime import (
     RuntimeUsage,
 )
 from notalone.reply.errors import (
-    ReplyBudgetError, ReplyError, ReplyInvariantError, ReplyRunError, ReplyTimeoutError,
+    ReplyBudgetError, ReplyError, ReplyInvariantError, ReplyProviderContextLimitError,
+    ReplyRunError, ReplyTimeoutError,
 )
 from notalone.reply.interface import (
     AutoSkill,
@@ -763,7 +765,9 @@ class LangChainReplyRuntime:
             raise
         except (PermissionError, TypeError, ValueError, KeyError, AttributeError):
             raise ReplyInvariantError("Skill 读取或模型输出验证失败。") from None
-        except Exception:
+        except Exception as error:
+            if is_provider_context_limit(error):
+                raise ReplyProviderContextLimitError() from None
             raise ReplyRunError("候选回复框架运行失败。") from None
 
 

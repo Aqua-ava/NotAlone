@@ -17,6 +17,8 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import psycopg
+import httpx
+from openai import BadRequestError
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from fixture_cleanup import cleanup_fixture
 
@@ -64,6 +66,16 @@ class DesktopRewriteModel(ScriptedCoreModel):
         if not self.plans:
             raise AssertionError("桌面模型脚本耗尽，禁止外部调用。")
         plan = self.plans.pop(0)
+        if plan.get("provider_context_limit"):
+            self.record_model_payload(messages, kwargs)
+            self.seen_calls.append(messages)
+            raise BadRequestError(
+                "合成供应商私密错误正文不得回显。",
+                response=httpx.Response(400, request=httpx.Request(
+                    "POST", "https://synthetic.provider.invalid/chat/completions",
+                )),
+                body={"code": "context_length_exceeded", "message": "合成私密响应不得回显。"},
+            )
         if plan.get("read_skill"):
             self.responses.append(tool_response("read_file", {
                 "file_path": f"/notalone/reply-skills/{plan["read_skill"]}/SKILL.md",

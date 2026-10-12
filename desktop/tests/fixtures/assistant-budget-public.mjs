@@ -17,6 +17,7 @@ export async function budgetPublicFixture(t, { toolHistory = false } = {}) {
     export { JsonClient, BackendRequestFailure } from './src/main/backend/json-client';
     export { AssistantSessionPanel } from './src/renderer/AssistantSessionPanel';
     export { ReplyCandidates } from './src/renderer/RewritePanel';
+    export { StrategyControls } from './src/renderer/StrategyControls';
     export { createElement } from 'react';
     export { renderToStaticMarkup } from 'react-dom/server';
   `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false, loader: { '.css': 'empty' },
@@ -113,6 +114,8 @@ export async function budgetPublicFixture(t, { toolHistory = false } = {}) {
   return { data, command, bridge, contacts, replies, request, connect, configure, handlers, backend, delivery,
     BackendRequestFailure: ports.BackendRequestFailure,
     renderSession: (state) => ports.renderToStaticMarkup(ports.createElement(ports.AssistantSessionPanel,
+      { replies: { state, error: '' } })),
+    renderStrategy: (state) => ports.renderToStaticMarkup(ports.createElement(ports.StrategyControls,
       { replies: { state, error: '' } })),
     renderCandidates: (state) => {
       const previousWindow = globalThis.window;

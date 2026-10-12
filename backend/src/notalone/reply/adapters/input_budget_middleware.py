@@ -50,7 +50,7 @@ class InputBudgetMiddleware(AgentMiddleware):
     与 create_agent 传入同一份显式 response_format。LangChain 1.3.15 的
     factory 在 handler 内按最初注册的 schema 追加输出工具；本适配器计入
     那份注册快照，不只统计 request.tools。版本变更后须重新核对并验证。
-    计量器仍须核实实际配置模型的完整协议 framing；这里不提供供应商估算。
+    供应商适配器须绑定实际模型，并明确计量或估算方式；这里不猜模型容量。
     """
 
     trace_policy = TracePolicy(
@@ -227,7 +227,7 @@ class InputBudgetMiddleware(AgentMiddleware):
         通用消息 converter 会丢 invalid_tool_calls 并合并 system list，
         故复用实际模型的 SDK 序列化；该私有接口升级后须重新核对和验证。
         SDK transport 的 extra_body 合并与 Responses API 尚未核实，明确拒绝。
-        token 与传输 framing 仍由绑定实际对象的已核实计量器负责。
+        token 计量或含 framing 的输入估算由绑定实际对象的适配器负责。
         """
 
         if isinstance(request.response_format, ProviderStrategy):
@@ -313,4 +313,5 @@ class InputBudgetMiddleware(AgentMiddleware):
             measurement_kind=self._profile.measurement_kind,
             measurement_id=self._profile.measurement_id,
             reason=reason,
+            safety_margin_tokens=self._profile.safety_margin_tokens,
         )

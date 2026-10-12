@@ -6,8 +6,9 @@ export interface AssistantInputBudget {
   contextWindowTokens: number | null;
   inputTokens: number | null;
   outputReserveTokens: number | null;
+  safetyMarginTokens: number;
   totalTokens: number | null;
-  measurementKind: 'exact' | 'verified_upper_bound' | null;
+  measurementKind: 'exact' | 'verified_upper_bound' | 'approximate' | null;
   measurementId: string | null;
   reason: string | null;
 }

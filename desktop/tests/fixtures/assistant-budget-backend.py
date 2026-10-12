@@ -17,9 +17,10 @@ from psycopg import sql
 
 from fixture_cleanup import cleanup_fixture
 from notalone.application.model_priority import ModelPriorityControl
+from notalone.reply.input_budget import TokenMeasurementKind
 from notalone.server.app import create_app
 from notalone.server.reply_wiring import build_reply_service
-from tests.input_budget_support import synthetic_budget_kwargs
+from tests.input_budget_support import SyntheticModelCounter, synthetic_budget_kwargs
 from tests.integration.server.core_business_flow_support import HttpBackend
 
 
@@ -31,11 +32,21 @@ sys.modules[spec.name] = rewrite
 spec.loader.exec_module(rewrite)
 
 
+class SyntheticEstimateCounter(SyntheticModelCounter):
+    """复用完整合成协议，只把显式测试配置标成带余量的估算。"""
+
+    def measure(self, request):
+        return replace(super().measure(request), kind=TokenMeasurementKind.APPROXIMATE,
+                       measurement_id="synthetic-json-estimate-v1")
+
+
 class AssistantBudgetFixture(rewrite.DesktopRewriteFixture):
     """预算配置只存在于测试进程，产品 HTTP 无模型能力写入口。"""
 
     capacity = 100000
     unknown = False
+    approximate = False
+    safety_margin = 0
 
     def __init__(self) -> None:
         super().__init__()
@@ -64,6 +75,12 @@ class AssistantBudgetFixture(rewrite.DesktopRewriteFixture):
     def _backend(self, owner_id):
         priority = ModelPriorityControl()
         configuration = synthetic_budget_kwargs(self.reply_model, capacity=self.capacity, output_reserve=100)
+        if self.approximate:
+            configuration["input_budget_profile"] = replace(
+                configuration["input_budget_profile"], measurement_kind=TokenMeasurementKind.APPROXIMATE,
+                measurement_id="synthetic-json-estimate-v1", safety_margin_tokens=self.safety_margin,
+            )
+            configuration["input_token_counter"] = SyntheticEstimateCounter(self.reply_model)
         if self.unknown:
             configuration["input_budget_profile"] = replace(
                 configuration["input_budget_profile"], context_window_tokens=None,
@@ -110,8 +127,14 @@ def main() -> None:
                 capacity = command.get("capacity", 100000)
                 if type(capacity) is not int or capacity < 101 or capacity > 100000:
                     raise ValueError("合成配置范围无效。")
+                approximate = command.get("approximate", False) is True
+                margin = command.get("safety_margin", 200 if approximate else 0)
+                if type(margin) is not int or margin < 0 or margin + 100 >= capacity or approximate and margin == 0:
+                    raise ValueError("合成估算余量范围无效。")
                 fixture.capacity = capacity
                 fixture.unknown = command.get("unknown", False) is True
+                fixture.approximate = approximate
+                fixture.safety_margin = margin
                 fixture.reply_model.plans.clear()
                 fixture.backend.close()
                 fixture.backend = fixture._backend(fixture.owner_id)

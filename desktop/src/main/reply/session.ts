@@ -305,12 +305,14 @@ export class ReplySession {
         && error.kind === 'response') await this.recordFailedGenerationResponse(job, receivedPreparation, pending.signal);
       if (!current()) return;
       const failure = error instanceof BackendRequestFailure ? error : undefined;
+      const providerLimit = failure?.status === 409 && failure.code === 'provider_context_limit';
       const canRetry = failure?.kind === 'connection' || failure?.code === 'reply_timeout'
         || failure?.code === 'assistant_session_save_failed' || Boolean(failure?.status && failure.status >= 500);
       if (!canRetry) this.continuationAttempt = undefined;
       this.publish({ phase: this.state.result ? 'ready' : 'idle',
         continuation: { ...identity, phase: 'failed', canRetry,
-          message: canRetry ? '本次继续的结果尚未确认，请用原请求重试。' : '本次继续尚未可靠确认，请重新读取讨论。' } });
+          message: providerLimit ? '模型提示这次内容过长，请新开助手会话。'
+            : canRetry ? '本次继续的结果尚未确认，请用原请求重试。' : '本次继续尚未可靠确认，请重新读取讨论。' } });
       if (!canRetry && failure) await this.readSavedSession(update);
     } finally { if (job) this.generationJobs.finish(job, generationTerminal); if (this.pending === pending) this.pending = undefined; }
   }
@@ -934,10 +936,17 @@ export class ReplySession {
         && error.kind === 'response') await this.recordFailedGenerationResponse(ownedGeneration, generationReceipt, pending.signal);
       if (current()) {
         const automatic = job.type === 'open' && Boolean(job.request.automatic);
-        this.publish({ ...(ownedGeneration ? { phase: this.state.result ? 'ready' as const : 'failed' as const } : {}),
-          exploration: { phase: 'failed', result: null, canRetry: !automatic,
+        const providerLimit = error instanceof BackendRequestFailure
+          && error.status === 409 && error.code === 'provider_context_limit';
+        this.publish({ ...(providerLimit ? { phase: 'failed' as const, errorCode: 'provider_context_limit' as const,
+          canRetry: false, inputBudgetNotice: undefined }
+          : ownedGeneration ? { phase: this.state.result ? 'ready' as const : 'failed' as const } : {}),
+          exploration: { phase: 'failed', result: null, canRetry: !automatic && !providerLimit,
           automaticUpdatesPaused: automatic } });
-        if (automatic) this.stopAutomaticExploration(true);
+        if (providerLimit) {
+          this.stopAutomaticExploration();
+          this.strategyJob = undefined; this.currentExploration = undefined; this.explorationPurpose = undefined;
+        } else if (automatic) this.stopAutomaticExploration(true);
       }
     } finally {
       if (ownedGeneration) this.generationJobs.finish(ownedGeneration, generationTerminal);
@@ -1172,6 +1181,7 @@ export class ReplySession {
       const failure = error instanceof BackendRequestFailure ? error : undefined;
       // 无实际回执时，泛HTTP拒绝不能证明同key既有或在途领取已结束。
       const budgetFailure = failure?.code === 'input_budget_exceeded' || failure?.code === 'input_budget_unavailable';
+      const providerLimit = failure?.status === 409 && failure.code === 'provider_context_limit';
       const receipt = budgetReceipt;
       const beforeRead = this.state.savedSession;
       let saved: Awaited<ReturnType<typeof readAssistantSession>> | undefined;
@@ -1246,13 +1256,14 @@ export class ReplySession {
         }
         const errorCode = failure?.kind === 'connection' ? 'connection'
           : budgetFailure ? failure.inputBudget?.state === 'exceeded' ? 'input_budget_exceeded' : 'input_budget_unavailable'
+          : providerLimit ? 'provider_context_limit'
           : failure?.code === 'reply_timeout' ? 'timeout'
           : failure?.code === 'assistant_session_save_failed' ? 'save_failed'
           : failure?.reason === 'target_message_unavailable' ? 'target_unavailable'
           : failure?.reason === 'source_unavailable' ? 'source_unavailable'
           : ['reply_rejected', 'assistant_session_rejected'].includes(failure?.code ?? '') ? 'rejected'
           : ['reply_unavailable', 'runtime_stopping'].includes(failure?.code ?? '') ? 'unavailable' : 'generation_failed';
-        this.publish({ phase: 'failed', errorCode, ...(budgetFailure ? { canRetry: false } : {}),
+        this.publish({ phase: 'failed', errorCode, ...(budgetFailure || providerLimit ? { canRetry: false } : {}),
           inputBudgetNotice: budgetReceipt && failure?.inputBudget && generation !== undefined ? {
             contactId: selection.contactId, scopeRevision: selection.scopeRevision, sessionId: budgetReceipt.sessionId,
             requestKey: budgetReceipt.requestKey, inputVersionId: budgetReceipt.inputVersionId,

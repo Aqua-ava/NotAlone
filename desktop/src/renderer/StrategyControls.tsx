@@ -24,9 +24,11 @@ export function StrategyControls({ replies }: { replies: ReplySessionView }) {
       {state.skillChoices.map((skill) => <option key={skill.versionId} value={skill.versionId}>{skill.name} · 版本 {skill.versionNumber}</option>)}
     </select></label>
     <button disabled={!available} onClick={() => void replies.explore()}>更新理解</button>
-    {state.exploration.automaticUpdatesPaused && <p role="status">本次自动更新已暂停，请点“更新理解”继续。</p>}
+    {state.exploration.automaticUpdatesPaused && state.errorCode !== 'provider_context_limit'
+      && <p role="status">本次自动更新已暂停，请点“更新理解”继续。</p>}
     {state.exploration.phase === 'waiting' && <p role="status">正在理解本次情境…</p>}
-    {state.exploration.phase === 'failed' && <p role="alert">方向建议暂不可用，请核对输入或更新策略后明确重试。</p>}
+    {state.exploration.phase === 'failed' && state.errorCode !== 'provider_context_limit'
+      && <p role="alert">方向建议暂不可用，请核对输入或更新策略后明确重试。</p>}
     {state.exploration.phase === 'paused' && <p role="status">本次已暂停。需要继续时，请明确开启新的探索。</p>}
     {result && <>
       <p>{result.understanding}</p>

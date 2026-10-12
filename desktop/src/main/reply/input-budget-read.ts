@@ -11,30 +11,35 @@ const positive = (value: unknown): value is number => Number.isSafeInteger(value
 
 export function readInputBudget(value: unknown, successOnly = false): AssistantInputBudget {
   const invalid = () => new Error('模型预算元数据格式无效。');
-  if (!value || typeof value !== 'object' || Array.isArray(value)
-    || Object.keys(value).length !== fields.length || !Object.keys(value).every((key) => fields.includes(key))) throw invalid();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid();
+  const keys = Object.keys(value), hasMargin = keys.includes('safety_margin_tokens');
+  if (keys.length !== fields.length + (hasMargin ? 1 : 0)
+    || !keys.every((key) => fields.includes(key) || key === 'safety_margin_tokens')) throw invalid();
   const receipt = value as Record<string, unknown>, state = receipt.state;
+  const margin = hasMargin ? receipt.safety_margin_tokens : 0;
   if (!['ready', 'warning', 'exceeded', 'unavailable'].includes(state as string)
     || !identifier(receipt.model_id) || typeof receipt.allowed !== 'boolean'
     || receipt.allowed !== (state === 'ready' || state === 'warning')
     || successOnly && !receipt.allowed
     || !(receipt.context_window_tokens === null || positive(receipt.context_window_tokens))
     || !(receipt.output_reserve_tokens === null || positive(receipt.output_reserve_tokens))
-    || !(receipt.measurement_kind === null || ['exact', 'verified_upper_bound'].includes(receipt.measurement_kind as string))
+    || !(receipt.measurement_kind === null || ['exact', 'verified_upper_bound', 'approximate'].includes(receipt.measurement_kind as string))
+    || !Number.isSafeInteger(margin) || (margin as number) < 0
     || !(receipt.measurement_id === null || identifier(receipt.measurement_id))) throw invalid();
   const capacity = receipt.context_window_tokens as number | null, reserve = receipt.output_reserve_tokens as number | null;
-  if (capacity !== null && reserve !== null && reserve >= capacity) throw invalid();
+  if (capacity !== null && reserve !== null && reserve + (margin as number) >= capacity) throw invalid();
   if (state === 'unavailable') {
     if (receipt.input_tokens !== null || receipt.total_tokens !== null
       || !unavailableReasons.has(receipt.reason as string)) throw invalid();
   } else if (capacity === null || reserve === null || receipt.measurement_kind === null || receipt.measurement_id === null
+    || receipt.measurement_kind === 'approximate' && (margin as number) === 0
     || !Number.isSafeInteger(receipt.input_tokens) || (receipt.input_tokens as number) < 0
-    || !Number.isSafeInteger(receipt.total_tokens) || receipt.total_tokens !== (receipt.input_tokens as number) + reserve
+    || !Number.isSafeInteger(receipt.total_tokens) || receipt.total_tokens !== (receipt.input_tokens as number) + reserve + (margin as number)
     || (state === 'exceeded' ? (receipt.total_tokens as number) <= capacity || receipt.reason !== 'context_window_exceeded'
       : (receipt.total_tokens as number) > capacity || receipt.reason !== null)) throw invalid();
   return { state: state as AssistantInputBudget['state'], allowed: receipt.allowed,
     modelId: receipt.model_id, contextWindowTokens: capacity, inputTokens: receipt.input_tokens as number | null,
-    outputReserveTokens: reserve, totalTokens: receipt.total_tokens as number | null,
+    outputReserveTokens: reserve, safetyMarginTokens: margin as number, totalTokens: receipt.total_tokens as number | null,
     measurementKind: receipt.measurement_kind as AssistantInputBudget['measurementKind'],
     measurementId: receipt.measurement_id as string | null, reason: receipt.reason as string | null };
 }
