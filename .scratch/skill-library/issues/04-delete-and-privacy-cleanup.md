@@ -2,7 +2,7 @@
 
 Type: task
 
-**Triage:** resolved
+**Triage:** ready-for-agent
 **State:** resolved
 
 **What to build:** 用户明确删除一个 Skill 后，系统清除该 Skill 的全部版本、正文、辅助资源、来源定位和可恢复运行数据，并使目录与 Reply Runtime 立即无法重新加载；只保留最小不可恢复的删除凭证。
@@ -17,11 +17,6 @@ Type: task
 - [x] 删除使 Owner 的 `skill_library_revision` 原子递增一次，并使相关目录、资源和运行时缓存失效。
 - [x] 使用合成 PostgreSQL 数据覆盖单版本、多版本、删除竞态、缓存失效、失败回滚、重复删除和 Owner/Skill 隔离；断言正文、资源和来源不可检索。
 
-## Comments
-
-- 来源规格：`.scratch/skill-library/spec.md`。
-- 本票遵守现有删除边界，不删除联系人、聊天、Relationship Memory 或 Style Sample。
-
 ## Answer
 
 已完成 Ticket 04：`PostgresSkillLibrary.delete` 在单个事务中清除一个 Owner 全局 Skill 的全部可恢复数据。
@@ -31,3 +26,8 @@ Type: task
 3、重复删除幂等并返回稳定删除凭证；删除一个 Owner 的 Skill 不影响其他 Owner 或其他 Skill；`skill_library_revision` 只在真实删除时递增一次。
 4、真实验证：新增 6 个 PostgreSQL 删除集成测试（含删除竞态/回滚注入、多版本清洗、隔离断言）全部通过；全仓 457 个测试通过、2 个跳过，`git diff --check` 干净。
 
+## Comments
+
+- 来源规格：`.scratch/skill-library/spec.md`。
+- 本票遵守现有删除边界，不删除联系人、聊天、Relationship Memory 或 Style Sample。
+- 2026-10-12账本对账：按仓库五种Triage角色将误写的`resolved`纠正为`ready-for-agent`，完成状态仍由`State: resolved`表达。原验收勾选、Answer及历史验证结果保持；本次未重跑产品测试。对账见[记录](../../unfinished-work/ledger-reconciliation-20261012.md)。

@@ -10,6 +10,8 @@ Triage: ready-for-agent
 
 **Status:** PostgreSQL SkillPort 已完成；回复 Skill 选择审计字段保留为后续公共合同工作。
 
+2026-10-12现行核对：选择方式和原因已由Skill库02承接，可空选择置信度仍缺；下列未勾选条目保留发布时合同说明，当前差距以末尾Comments为准。
+
 - [x] 目录只返回当前 owner 的全局 Skill 和当前 contact 的专属 Skill，并排除禁用或已删除版本。
 - [x] Skill 正文按不可变版本读取；目录读取同时返回 owner 级 revision，现有 Runtime 会拒绝与上下文 revision 不一致的旧目录。
 - [x] 跨 owner/contact、未知、禁用、删除或版本不一致的请求统一安全失败，不泄漏存在性细节。
@@ -43,3 +45,12 @@ Triage: ready-for-agent
 剩余边界：当前 Reply public contract 只有 `AutoSkill` 和 `SkillUse(skill_id, version_id, name)`，
 尚未表达用户显式选择、选择原因或置信度；该字段扩展应在明确 Reply 审计合同后单独实现，不由只读
 SkillPort adapter 推断。
+
+## Comments
+
+### 2026-10-12承接核对
+
+- [Skill库02](../../skill-library/issues/02-runtime-resource-loading.md)已承接实际选择方式、简短原因及加载摘要；原Answer记录437项历史测试，其中PostgreSQL资源读取和运行记录写入／读回检查已通过。[SkillUse](../../../backend/src/notalone/reply/interface.py)当前具有`selection_method`／`selection_reason`，[迁移024](../../../backend/database/migrations/024_skill_run_record.sql)及[ReplyStore](../../../backend/src/notalone/persistence/reply_store.py)持久化并恢复这些字段，[公开HTTP投影](../../../backend/src/notalone/server/app.py)也返回它们。
+- 原条目中的「可空置信度」尚未承接：当前SkillUse、Skill运行记录迁移及HTTP的used_skill投影均无此字段；对全部202张任务的核对未找到覆盖此字段的独立承接票。不能把选择原因、记忆置信度或加载状态当作选择置信度，也不凭空写入null伪装合同已实现。
+- 原验收条目仍不勾选，State保持原Answer限定的只读PostgreSQL适配器完成状态。剩余字段作为冻结期间的规格差距保留在[总览承接表](../../unfinished-work/README.md#已关闭旧票中的验收条目承接)，后续先收束回复审计合同，再按工作流处理；本次不删除要求或扩展公共接口。
+- 本次核查基点`4e82176f`，只核对代码、迁移和原票证据；没有重新执行40／97／437项历史测试或读写业务数据库。

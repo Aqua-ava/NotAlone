@@ -2,7 +2,7 @@
 
 Type: task
 
-**Triage:** resolved
+**Triage:** ready-for-agent
 **State:** resolved
 
 **What to build:** 用户可以明确更新、启用、停用或回滚 Owner 全局 Skill；每次更新产生新的不可变版本，目录和 Reply Runtime 始终使用明确的 current 版本，并能解释实际使用的版本。
@@ -17,11 +17,6 @@ Type: task
 - [x] 历史 Reply Task 仍能关联当时实际使用的版本；新候选显示切换后的 Skill 版本和选择原因。
 - [x] 使用合成 PostgreSQL 数据覆盖多版本、重复更新、停用、启用、回滚、并发或重复操作、revision 和 Owner 隔离。
 
-## Comments
-
-- 来源规格：`.scratch/skill-library/spec.md`。
-- 本票不负责删除历史版本；删除全部正文、资源和运行期缓存由第 04 票负责。
-
 ## Answer
 
 已完成 Ticket 03：`PostgresSkillLibrary` 新增 `update_package`、`enable`、`disable` 和 `rollback` 四个 Owner 范围管理操作。
@@ -32,3 +27,8 @@ Type: task
 4、所有操作都在事务中递增 Owner 级 `skill_library_revision` 一次，越权或不存在统一安全失败、不泄漏其他 Owner 的存在性。
 5、真实验证：新增 8 个 PostgreSQL 生命周期集成测试全部通过；全仓 445 个测试通过、2 个跳过，`git diff --check` 干净。
 
+## Comments
+
+- 来源规格：`.scratch/skill-library/spec.md`。
+- 本票不负责删除历史版本；删除全部正文、资源和运行期缓存由第 04 票负责。
+- 2026-10-12账本对账：按仓库五种Triage角色将误写的`resolved`纠正为`ready-for-agent`，完成状态仍由`State: resolved`表达。原验收勾选、Answer及历史验证结果保持；本次未重跑产品测试。对账见[记录](../../unfinished-work/ledger-reconciliation-20261012.md)。

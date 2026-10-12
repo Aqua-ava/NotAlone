@@ -11,11 +11,11 @@ Blocked by: None
 
 ## Acceptance criteria
 
-- [ ] 所有调用显式使用严格只读模式，不安装、初始化、刷新或导出 CLI 数据。
-- [ ] `display_name` 候选按精确、模糊、私聊/群聊类型保留结构化结果。
-- [ ] `tail` 事件只接受 v1 文字消息；消息 ID、sender/from_me、时间和 cursor 可读取。
-- [ ] 非零退出、无效 JSON、缺少会话标识或缺少消息 ID 映射为稳定错误。
-- [ ] 错误和日志不包含消息正文、完整会话 ID、数据库路径或凭据。
+- [x] 所有调用显式使用严格只读模式，不安装、初始化、刷新或导出 CLI 数据。
+- [x] `display_name` 候选按精确、模糊、私聊/群聊类型保留结构化结果。
+- [x] `tail` 事件只接受 v1 文字消息；消息 ID、sender/from_me、时间和 cursor 可读取。
+- [x] 非零退出、无效 JSON、缺少会话标识或缺少消息 ID 映射为稳定错误。
+- [x] 错误和日志不包含消息正文、完整会话 ID、数据库路径或凭据。
 
 ## Verification
 
@@ -43,3 +43,7 @@ Blocked by: None
 - `conda run -n NotAlone python -m compileall -q src/notalone/wechat_cli tests/unit/wechat_cli`：通过。
 - `conda run -n NotAlone python -m unittest discover -s tests -q`：289 通过，2 跳过。
 - 当前本机 `wechat-cli` v1.6.20 严格只读冒烟：候选 6、精确候选 2、读取 5 个事件，其中 4 个文字事件，cursor 存在；未输出聊天正文。
+
+## Comments
+
+- 2026-10-12账本对账：以上五项依据本票已有Answer逐条回填勾选，证据为当时14／14适配器测试、289项回归及v1.6.20严格只读冒烟；不将历史命令写成本次执行。原State及范围不变，本次未启动CLI或读取微信。现行渠道端到端仍以[真实微信04](../../native-app-backend/issues/04-real-wechat-follow-smoke.md)为准，见[对账记录](../../unfinished-work/ledger-reconciliation-20261012.md)。

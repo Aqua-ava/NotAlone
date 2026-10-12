@@ -5,6 +5,8 @@ Type: task
 **Triage:** ready-for-agent
 **State:** resolved
 
+**Status:** 原Answer限定的历史回复闭环已结清；逐项移除／补充上下文材料未交付，仍保留未勾选条目。2026-10-12的现行实现及承接核对见Comments。
+
 **What to build:** 用户在主窗口右栏回复工作区完成候选回复全流程：选中一条联系人消息并填写表达方向，或提交自己的原句与改写要求；系统经已验证会话范围检查后生成候选回复，界面展示生成依据与本次使用的 Skill；候选可编辑、可复制到剪贴板，用户可显式选择一条历史候选继续生成。全程不存在任何外部发送能力。
 
 **Blocked by:** 06（消息流展示与实时更新）、07（绑定确认界面化）
@@ -15,11 +17,6 @@ Type: task
 - [x] 候选可编辑与复制；改写要求与表达方向只约束本次生成，不静默成为长期偏好。
 - [x] 基于历史候选的显式继续可用；系统不自动推断"最近未发送候选"。
 - [x] 回复 API 与既有测试共用同一应用层候选回复流程；集成测试覆盖两种输入形态、范围校验与幂等。
-
-## Comments
-
-- 来源规格：`.scratch/native-app-backend/spec.md`。架构依据：ADR-009、ADR-012、ADR-020。
-- 出站台账经既有台账 port 写入，真实模型调用三态记录语义不变。
 
 ## Answer
 
@@ -33,3 +30,16 @@ Type: task
 - 双轴 code-review（Standards + Spec）修复：生成阶段异常不再折叠为 409（基础设施故障回 5xx）；Swift 409 reason 解码展示（新增 `replyRejected(reason:)` 与原因标签映射）；改写默认不自动检索关系资料（ADR-012，UI 加「结合联系人背景资料」开关，默认关）；手动指定 Skill 版本补齐两种输入形态；删除生产不可达的 `binding_not_active` 分支（lookup 只返回 active）；删除死参数与双真相字段；Skill 目录锁定改为纯函数并补失败关闭测试。
 - 数据影响：测试使用合成 UUID/`_test` 库；不触碰生产数据。
 - 剩余风险：清单第 3 项「材料可移除或补充」未在本票交付（界面已展示 Skill 摘要与上下文依据数量；材料的按项移除/补充需要回复模块的上下文材料管理扩展，涉及检索扩展与独立 UI，记为后续工作）；真实模型候选的端到端冒烟依赖真实凭据环境（既有冒烟惯例）。
+
+## Comments
+
+- 来源规格：`.scratch/native-app-backend/spec.md`。架构依据：ADR-009、ADR-012、ADR-020。
+- 出站台账经既有台账 port 写入，真实模型调用三态记录语义不变。
+
+### 2026-10-12承接核对
+
+- 手动Skill选择已在本票交付；当前公开输入继续通过[ReplyServiceRequest](../../../backend/src/notalone/application/reply_service.py)和[GenerateReply](../../../backend/src/notalone/reply/interface.py)表达手动版本或不使用Skill。实际依据展示由[Mac12](../../mac-desktop-app/issues/12-reply-evidence.md)承接，原票记录公开页面／HTTP九场依据验收；现行[ReplyEvidenceCommands](../../../desktop/src/shared/reply-evidence.ts)只提供读取、关闭及状态订阅。
+- 「重新生成前逐项移除／补充上下文材料」仍未交付。已核对现行生成公开输入、回复依据桥接及全部202张任务，未找到承接该要求的独立票；[Mac规格](../../mac-desktop-app/spec.md)的Out of Scope也明确排除逐项生成前上下文编辑。
+- [原规格用户故事15](../spec.md)和[现行核心流程](../../../architecture/current/core-flows.md)仍保留此要求。输入本次说明、查看依据、删除来源或关闭依据面板均不能替代逐项上下文编辑；本次不勾选该条、不删除要求、不实现新功能。
+- 将此条作为冻结期间可见的规格差距保留在[总览承接表](../../unfinished-work/README.md#已关闭旧票中的验收条目承接)。后续先从原规格收束范围和公开接缝，再按工作流形成独立承接工作；当前没有承接票可宣称已完成。
+- 核查基点`4e82176f`，本次只读代码与已有测试／Answer；未重新运行历史567项或启动旧Swift／新Electron，完整Mac20状态不变。

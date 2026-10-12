@@ -2,7 +2,7 @@
 
 Type: task
 
-**Triage:** resolved
+**Triage:** ready-for-agent
 **State:** resolved
 
 **What to build:** Reply Runtime 通过现有 `SkillPort` 只读发现当前范围内已启用的 Skill，并在用户或系统选择后按需加载一个 Skill 及其受控辅助资源；没有合适 Skill 或加载失败时，候选回复继续走无 Skill 路径。
@@ -18,11 +18,6 @@ Type: task
 - [x] 候选结果能向用户说明实际使用的 Skill、版本和加载状态，且现有人工编辑与手动发送边界保持不变。
 - [x] 使用 fake model、合成 Owner/Contact/Reply Task 和 PostgreSQL 覆盖元数据目录、按需读取、路径越界、联系人隔离、最多一个 Skill、失败回退和无外部发送。
 
-## Comments
-
-- 来源规格：`.scratch/skill-library/spec.md`。
-- 本票不新增联系人识别、Retrieval、ReplyContext 或 Style Sample 逻辑；Skill 只消费已验证的当前 Reply Context。
-
 ## Answer
 
 已完成 Ticket 02：Reply Runtime 现在可以按需读取一个已选中 Skill 的 `SKILL.md` 以及该不可变版本列出的受控 `references/` / `assets/` 辅助资源。
@@ -32,3 +27,8 @@ Type: task
 3、`SkillUse` 扩展记录选择方式、选择原因、已加载资源路径和加载状态；migration 024 新增 `reply_request` 的四个非正文审计列并写入/读回。
 4、真实验证：`python -m unittest discover -s tests` 全仓 437 个测试通过、2 个跳过，`git diff --check` 干净；新增长案/路径越界/联系人隔离/失败回退/无外发单元测试与 PostgreSQL 资源读取集成测试。
 
+## Comments
+
+- 来源规格：`.scratch/skill-library/spec.md`。
+- 本票不新增联系人识别、Retrieval、ReplyContext 或 Style Sample 逻辑；Skill 只消费已验证的当前 Reply Context。
+- 2026-10-12账本对账：按仓库五种Triage角色将误写的`resolved`纠正为`ready-for-agent`，完成状态仍由`State: resolved`表达。原验收勾选、Answer及历史验证结果保持；本次未重跑产品测试。对账见[记录](../../unfinished-work/ledger-reconciliation-20261012.md)。

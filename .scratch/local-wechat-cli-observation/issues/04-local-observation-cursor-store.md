@@ -11,11 +11,11 @@ Blocked by: 01, 03
 
 ## Acceptance criteria
 
-- [ ] 同一 `owner_id + contact_id` 的 cursor 独立保存，重启后可恢复。
-- [ ] 首次读取不使用非法 `since_local_id=0`；后续使用成功返回的 cursor/local_id。
-- [ ] 同一来源批次重试幂等，不重复创建来源记录或移动水位。
-- [ ] 手动关闭同步期间不创建补读来源；切回联系人时可标记 `cli_catchup`。
-- [ ] 来源删除、绑定撤销和联系人删除遵循来源级删除路径。
+- [x] 同一 `owner_id + contact_id` 的 cursor 独立保存，重启后可恢复。
+- [x] 首次读取不使用非法 `since_local_id=0`；后续使用成功返回的 cursor/local_id。
+- [x] 同一来源批次重试幂等，不重复创建来源记录或移动水位。
+- [x] 手动关闭同步期间不创建补读来源；切回联系人时可标记 `cli_catchup`。
+- [x] 来源删除、绑定撤销和联系人删除遵循来源级删除路径。
 
 ## Verification
 
@@ -40,3 +40,8 @@ Blocked by: 01, 03
 空批次、范围删除与级联；全量 317 个测试通过；迁移在两个库重复执行幂等。
 4、剩余：「手动关闭同步期间不创建补读来源」属于同步开关状态，由任务 06 的 tail
 生命周期编排实现；存储层已提供 `cli_catchup` 模式标记。
+
+## Comments
+
+- 2026-10-12账本对账：第1／2／3／5项依据本票提交`0cdfdb2`／`502f232`、9项存储集成及317项历史回归回填；第4项由[任务06](06-tail-lifecycle-catchup.md)承接，原Answer记录13／13生命周期检查，包括关闭停读、A→B→A补读标记、重启与重复事件。只回填已有证据，不声称本次重跑或真实微信端到端通过。
+- 本票和06保留当时前台同步语义；当前后台同步及重新开启后恢复可检测缺口沿后续[后台补齐规格](../../cli-background-sync-backfill/spec.md)与ADR-025处理，不以此回填覆盖现行渠道验收。[真实微信04](../../native-app-backend/issues/04-real-wechat-follow-smoke.md)状态保持。新增功能冻结、OCR暂停，本次无CLI、App或数据库运行，见[对账记录](../../unfinished-work/ledger-reconciliation-20261012.md)。

@@ -2,7 +2,7 @@
 
 Type: task
 
-**Triage:** resolved
+**Triage:** ready-for-agent
 **State:** resolved
 
 **What to build:** 用户可以导出一个可移植的 Skill 包，也可以在选定的 Reply Task 上试用指定 Skill；导出不带走联系人资料，试用只生成应用内候选预览，不改变长期数据或发送消息。
@@ -17,11 +17,6 @@ Type: task
 - [x] 试用中的 Skill 或资源加载失败时返回无 Skill 预览或受控错误，不泄漏路径、聊天正文、其他 Owner 数据或 Skill 私密正文。
 - [x] 使用合成 Skill、Owner、Contact 和 Reply Task 覆盖导出完整性、资料排除、试用成功、试用回退、无持久化副作用和人工发送边界。
 
-## Comments
-
-- 来源规格：`.scratch/skill-library/spec.md`。
-- 网络安装、自动导出、自动发送和视频清洗流程不在本票范围内。
-
 ## Answer
 
 已完成 Ticket 05：`PostgresSkillLibrary` 新增 `export_package` 与 `preview`，并新增试用执行器 seam。
@@ -31,3 +26,8 @@ Type: task
 3、试用既不写记忆、也不创建或修改 Skill 版本/状态/`skill_library_revision`；Skill 不可用或引擎失败时返回不含正文与路径的无 Skill 受控预览。
 4、真实验证：新增 export 集成测试 3 个、preview 管理集成测试 4 个、preview 执行器单元测试 3 个全部通过；全仓 468 个测试通过、2 个跳过，`git diff --check` 干净。
 
+## Comments
+
+- 来源规格：`.scratch/skill-library/spec.md`。
+- 网络安装、自动导出、自动发送和视频清洗流程不在本票范围内。
+- 2026-10-12账本对账：按仓库五种Triage角色将误写的`resolved`纠正为`ready-for-agent`，完成状态仍由`State: resolved`表达。原验收勾选、Answer及历史验证结果保持；本次未重跑产品测试。对账见[记录](../../unfinished-work/ledger-reconciliation-20261012.md)。
