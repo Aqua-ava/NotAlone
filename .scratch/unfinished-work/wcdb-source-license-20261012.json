@@ -1,0 +1,248 @@
+{
+  "date": "2026-10-12",
+  "scope": "WCDB公开来源与许可材料补齐，功能冻结、OCR暂停",
+  "status": "self_verifiable_work_completed_upstream_build_evidence_missing",
+  "reviewBase": "e7eb9998135d24e9c1c448e6550269d3db20d963",
+  "productionSourceCommit": "b6fed39f2e555986d438d522693a9112adeb99e5",
+  "productionCodeChanged": false,
+  "provenance": {
+    "publisherRelease": {
+      "version": "1.6.25",
+      "url": "https://github.com/r266-tech/wechat-cli-releases/releases/tag/v1.6.25",
+      "archiveSha256": "0d54554c3ae0a8d55fc72e1b943b09f55a5010cf0f91c0bbc7094d777a180908",
+      "manifestSha256": "9e5f50b201e6d1cf83ab30dd1367f3102ff28498472b9fc64561d7a537abe89d",
+      "wcdbVersionDeclaration": "unknown",
+      "cliSha256": "59de512a52d7960aef70da6b42d199358429662919f5b4baababc5132a660355"
+    },
+    "librarySha256": "279ac6855ff2865caafa9718ae660e6e30a9667e4748ab064189ae633fd35fc3",
+    "sourceCandidate": {
+      "repository": "https://github.com/Tencent/wcdb",
+      "tag": "v2.1.15",
+      "commit": "a62d7f12191843e1f095e3c37f46785ed04ebde8",
+      "archiveSha256": "5b7294459f7f8b85ce373fcd5f3d7a3c004743feb9d51d3c39096a0815834c56",
+      "dependencies": [
+        {
+          "name": "SQLCipher",
+          "repository": "https://github.com/Tencent/sqlcipher",
+          "commit": "f049bed66ca26741f09a6e4f0603ed3af195ac96",
+          "version": "4.1.0",
+          "sqliteVersion": "3.27.2"
+        },
+        {
+          "name": "Zstandard",
+          "repository": "https://github.com/facebook/zstd",
+          "commit": "69036dffe50f385bd3b7b187e3fd230f4b2ef97e",
+          "version": "1.5.5"
+        },
+        {
+          "name": "OpenSSL",
+          "repository": "https://github.com/openssl/openssl",
+          "commit": "081314d07705aa58912845c213a48414d8f616a9",
+          "version": "1.0.2k"
+        }
+      ]
+    },
+    "customBuildIsDefaultMacroFallback": true,
+    "stableSourceRevision": "7b387ac76da6439c9ecb5f741a400d14ae9fa423",
+    "currentPublicQueries": {
+      "releaseRepositoryActionsRuns": 0,
+      "releaseRepositoryArtifacts": 0,
+      "newSourceRepositoryRuns": 48,
+      "newSourceRepositoryArtifacts": 4,
+      "matchingStableBuildObtained": false,
+      "digestAttestationQueries": 4,
+      "digestAttestationHttpStatus": 404,
+      "scope": "公开官方端点的有限查询；不宣称所有历史证明均不存在"
+    },
+    "exactBuildSourceVerified": false
+  },
+  "licenseMaterials": {
+    "directory": "desktop/third-party-notices/wcdb-v2.1.15/",
+    "fileCount": 9,
+    "files": [
+      {
+        "name": "WCDB-LICENSE.txt",
+        "bytes": 22752,
+        "sha256": "a4f22734425182c5937bdcf0dd317ba5039088599464a1f9bd9ba284621f2719"
+      },
+      {
+        "name": "SQLCipher-LICENSE.txt",
+        "bytes": 1463,
+        "sha256": "3eee3c7964a9becc94d747bd36703d31fc86eb994680b06a61bfd4f2661eaac8"
+      },
+      {
+        "name": "ZSTD-LICENSE.txt",
+        "bytes": 1549,
+        "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8"
+      },
+      {
+        "name": "ZSTD-COPYING.txt",
+        "bytes": 18091,
+        "sha256": "f9c375a1be4a41f7b70301dd83c91cb89e41567478859b77eef375a52d782505"
+      },
+      {
+        "name": "OpenSSL-LICENSE.txt",
+        "bytes": 6279,
+        "sha256": "0885ecb3437fc1178a62ee58ba3030e48cafab77dc31607e91208476338e0222"
+      },
+      {
+        "name": "wechat-cli-LICENSE.txt",
+        "bytes": 1066,
+        "sha256": "27bb479513ef65b019bceb80b2a9614df19687e80ac650b815e1a18d97657710"
+      },
+      {
+        "name": "wechat-cli-THIRD-PARTY-NOTICES.md",
+        "bytes": 794,
+        "sha256": "d96086f2c9a8aa38790892f0b88503a2972b0c929ea9e139a0e452483c76f274"
+      },
+      {
+        "name": "README.md",
+        "bytes": 2367,
+        "sha256": "09ab531c1e367f0f76cfa352091724b6df9b4f23f44e0d27d59888177a9222bf"
+      },
+      {
+        "name": "manifest.json",
+        "bytes": 4303,
+        "sha256": "cd393ffb38a6741b886e0bf524ef94e1451c6d954100a7426609cd5e816427bb"
+      }
+    ],
+    "manifestSha256": "cd393ffb38a6741b886e0bf524ef94e1451c6d954100a7426609cd5e816427bb",
+    "sourceBytesVerified": true,
+    "cliAndLibraryDigestBinding": true,
+    "rawLicensesPreserved": true,
+    "originalWhitespacePreserved": true,
+    "licenseMaterialsCollected": true,
+    "binaryLicenseCoverageVerified": false,
+    "zstdLicenseAlternatives": "BSD OR GPLv2，保留两份原文不表示必须GPL",
+    "candidateDependenciesNotActualBinaryBom": true
+  },
+  "candidatePackage": {
+    "appPath": "/Users/local-user/learn/NotAlone/desktop/artifacts/wcdb-notice-package-20261012.iecln6/packaged/NotAlone-darwin-arm64/NotAlone.app",
+    "archivePath": "/Users/local-user/learn/NotAlone/desktop/artifacts/wcdb-notice-package-20261012.iecln6/NotAlone-macOS-arm64-with-notices.zip",
+    "archiveSha256": "05307269a90a450265a4416947929d27fc5c97ae5f3ba4bd554433d7da4841d3",
+    "archiveBytes": 140277674,
+    "archiveIntegrityVerified": true,
+    "signature": "ad-hoc",
+    "strictSignatureVerified": true,
+    "developerIdOrNotarization": false,
+    "noticesInsideApp": true,
+    "noticeFilesVerified": 9,
+    "components": [
+      {
+        "name": "notalone-helpers/wechat-cli",
+        "sha256": "59de512a52d7960aef70da6b42d199358429662919f5b4baababc5132a660355",
+        "architecture": "arm64",
+        "strictSignature": true,
+        "unchangedFromFinderAcceptedPackage": true
+      },
+      {
+        "name": "notalone-helpers/libWCDB.dylib",
+        "sha256": "279ac6855ff2865caafa9718ae660e6e30a9667e4748ab064189ae633fd35fc3",
+        "architecture": "arm64",
+        "strictSignature": true,
+        "unchangedFromFinderAcceptedPackage": true
+      },
+      {
+        "name": "notalone-probe/libNotAloneSyncCore.dylib",
+        "sha256": "e9f8ed9b786909e3fae5b38b26d72eeaab89a7c14b3341c54bf3a3f26bc8cc7f",
+        "architecture": "arm64",
+        "strictSignature": true,
+        "unchangedFromFinderAcceptedPackage": true
+      },
+      {
+        "name": "notalone-probe/notalone-sync-probe",
+        "sha256": "e10512d1c287986c4eda2690f2853248d042ac2cb4e1914f714952c109e7605c",
+        "architecture": "arm64",
+        "strictSignature": true,
+        "unchangedFromFinderAcceptedPackage": true
+      }
+    ],
+    "asarSha256": "27cc230aee9c979dcd88e0b3eecb2e08bc677e6d072bba44183cb8fca591e1c7",
+    "asarUnchangedFromPreviouslyFinderAcceptedPackage": true,
+    "distFilesMatched": 6,
+    "onlyAllowJit": true,
+    "atsArbitraryLoads": false,
+    "extraPermissionDeclarations": false,
+    "actualAppRun": false,
+    "finderRun": false,
+    "previousFinderEvidence": "final-package-finder-20261012.json；只属于原包，此资源候选包未启动"
+  },
+  "verification": {
+    "red": "缺少许可搬运模块，ERR_MODULE_NOT_FOUND，exit1",
+    "green": {
+      "command": "node --test tests/helpers/third-party-notices.test.mjs",
+      "passed": 3,
+      "total": 3,
+      "exitCode": 0
+    },
+    "safety": {
+      "command": "npm test",
+      "passed": 43,
+      "total": 43,
+      "typecheckPassed": true,
+      "seconds": 11.986650125,
+      "actualAppRun": false
+    },
+    "dualDigestFollowup": {
+      "command": "node --test tests/helpers/third-party-notices.test.mjs",
+      "passed": 3,
+      "total": 3,
+      "seconds": 0.081948583,
+      "exitCode": 0
+    },
+    "syntheticPackaging": {
+      "command": "npm run test:package",
+      "passed": 1,
+      "total": 1,
+      "seconds": 32.438014292,
+      "exitCode": 0,
+      "actualAppRun": false
+    },
+    "fixedReleasePackaging": {
+      "command": "npm run package -- --helper-directory <此前固定v1.6.25发行runtime> --helper-version 1.6.25 --helper-source https://github.com/r266-tech/wechat-cli-releases/releases/tag/v1.6.25 --with-probe --output-directory <本轮独立packaged> --electron-zip-directory <本轮离线归档>",
+      "exitCode": 0,
+      "actualAppRun": false
+    },
+    "review": {
+      "standardsHard": 0,
+      "standardsImportantJudgement": 0,
+      "specMissing": 0,
+      "specScopeCreep": 0,
+      "specWrong": 0,
+      "readOnly": true,
+      "finalEvidenceReviewed": true
+    },
+    "diffCheck": "自有代码和文档通过；第三方原文空白原样保留，不为通过格式检查改写原文",
+    "localLinksChecked": 75
+  },
+  "cleanup": {
+    "temporaryOfflineElectronArchiveRemoved": true,
+    "ownedBuildTemporaryAndNodeCompileCacheRemoved": true,
+    "existingAppNotOverwritten": true,
+    "existingUserDataNotReadOrChanged": true,
+    "retainedAppArchiveAndEvidenceIgnored": true
+  },
+  "dataProcessing": {
+    "publicSourcesAndSyntheticFixturesOnly": true,
+    "appLaunches": 0,
+    "wechatRead": false,
+    "ocrRun": false,
+    "externalModelCalls": 0,
+    "privateChatRead": false,
+    "vendorContact": false,
+    "chatSend": false,
+    "gitPush": false,
+    "deployment": false
+  },
+  "remaining": {
+    "exactStableCliSource": true,
+    "librarySourceTreeAndPatches": true,
+    "buildCommandsOptionsAndToolchain": true,
+    "dependencyBomAndExactBinaryLicenseStatement": true,
+    "requiredBinding": "将上述材料关联当前库SHA-256及稳定CLI revision；不能以v2构建或候选源码替代",
+    "mac20State": "claimed",
+    "mac20Triage": "needs-info",
+    "originalAcceptanceChanged": false,
+    "ocrPaused": true
+  }
+}

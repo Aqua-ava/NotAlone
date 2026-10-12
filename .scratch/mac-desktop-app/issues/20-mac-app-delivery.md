@@ -142,6 +142,22 @@ Spec: ../spec.md
 
 ## Answer
 
+### 2026-10-12 WCDB来源与许可材料补查收口
+
+用户要求补齐能独立核查的来源／许可缺项，新增功能冻结、OCR暂停，沿用本轮本地核查授权。范围仅公开固定发行与候选源码、完整许可原文、随App保留来源索引；不换WCDB、迁移CLI或新增产品能力，不联系发行者、不读取微信、运行OCR或调用模型。当前固定CLI与库两项SHA均匹配时，打包资源才纳入`notalone-third-party`；未知字节不套用当前材料。
+
+Testing Decisions：沿独立许可搬运／复核接缝验证完整9文件、未知CLI／库拒绝套用、已有目标保留、篡改／符号链接／额外文件拒绝；公开`test:package`继续验证合成输入离线签名打包和精确清理。最后用真实固定发行字节做离线候选包并静态核对原文／哈希、原二进制及严格签名，不运行产物。此前Finder／生命周期证据仍只属于此前包，不迁移到此次资源变化的新包。
+
+已完成官方release／源码／CI／attestation补查：固定v1.6.25发行身份与Tencent v2.1.15候选源码及gitlinks确认；`Custom build`是版本宏未定义的默认值，不证明私改或微信提取。候选SQLCipher 4.1.0／SQLite 3.27.2、zstd 1.5.5、OpenSSL 1.0.2k不等于实际完整BOM，Tencent根LICENSE旧版本标注不能替代组件原文。稳定构建日志／digest证明未取得，精确源码／补丁／构建命令和二进制许可覆盖仍未确认。
+
+材料原文与哈希固定在`desktop/third-party-notices/wcdb-v2.1.15/`；新增3项检查由缺模块red至green，默认类型／安全43／43（11.987秒）与显式`test:package`1／1（32.438秒）通过。随后双字节绑定增量3／3通过（81.95毫秒）。真实固定发行输入的离线`npm run package`成功，主包ad-hoc deep strict、9份资源原文／SHA、4个helper原字节／arm64／严格签名、主包仅allow-jit／ATS false／无额外权限声明全部核对。6份dist及整个ASAR与此前已Finder验收包完全同字节；新资源候选包本轮未启动，不借用旧包Finder结果。
+
+候选App：`desktop/artifacts/wcdb-notice-package-20261012.iecln6/packaged/NotAlone-darwin-arm64/NotAlone.app`；归档`desktop/artifacts/wcdb-notice-package-20261012.iecln6/NotAlone-macOS-arm64-with-notices.zip`，140277674 bytes、SHA-256 `05307269a90a450265a4416947929d27fc5c97ae5f3ba4bd554433d7da4841d3`，ZIP完整性通过。App内9份材料随拖动保留；源码／许可收集完成，不宣称精确构建和当前二进制许可覆盖已关闭。此前已实机验收的原包及所有失败历史仍保留。
+
+Standards硬违规／重要判断0／0、Spec新增缺失／越界／错误0／0／0，两轴仅只读。自有代码／文档diff检查通过；上游许可中的原空白原样保留，按来源SHA复核，不为格式检查改写原文。离线Electron归档与自有构建临时目录（含Node编译缓存）精确清理；包、日志和静态证据仅保留在忽略产物目录，研究笔记保持忽略，不强制提交。本轮实际App启动0，未执行CLI、库或探针，无真实微信／OCR／私人配置／外部模型／消息发送／push／部署。
+
+[无敏感来源／许可摘要](../../unfinished-work/wcdb-source-license-20261012.json)记录固定公开来源、候选gitlinks、材料及新包哈希、实际命令／范围和剩余条件。能独立核查的本轮工作已完成；还缺绑定当前库SHA与稳定CLI revision的精确source tree／补丁、构建命令／工具链／宏、完整依赖BOM及对应许可声明。完整交付票继续claimed／needs-info，原验收勾选与OCR依赖不变，不重复查询相同失败路径或靠替换版本消除缺口。
+
 ### 2026-10-12 当前签名包与Finder启动收口
 
 用户本轮指定的当前签名包与Finder启动两项已完成，原第1条据实勾选，State改为claimed，Triage仍needs-info。原四条验收文字及依赖图保持；完整交付票还缺WCDB精确构建／许可、18定位以及剩余渠道／原生链路，不把本次两项通过写成整票resolved。新增功能冻结，OCR继续暂停，后续操作沿用用户本轮授权，没有再逐次询问。

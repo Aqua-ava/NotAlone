@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { prepareHelpers } from './prepare-helpers.mjs';
 import { prepareRepositoryProbe } from './prepare-probe.mjs';
+import { prepareThirdPartyNotices, verifyThirdPartyNotices } from './third-party-notices.mjs';
 import { argumentsFor, inspectRuntime, requireUnchangedFiles, runtimeLayout } from './helper-runtime.mjs';
 
 if (process.platform !== 'darwin') throw new Error('本机 App 打包需要 macOS。');
@@ -54,12 +55,20 @@ try {
   const probeDirectory = path.join(staging, 'notalone-probe');
   const preparedProbe = withProbe ? await prepareRepositoryProbe(probeDirectory) : undefined;
   const groups = [prepared, preparedProbe].filter(Boolean);
+  const noticesDirectory = path.join(staging, 'notalone-third-party');
+  const preparedNotices = prepared ? await prepareThirdPartyNotices({
+    librarySha256: prepared.files.find((file) => file.name === 'libWCDB.dylib')?.sha256,
+    cliSha256: prepared.files.find((file) => file.name === 'wechat-cli')?.sha256,
+  }, noticesDirectory) : undefined;
+  const resources = groups.map((group) => path.join(staging, runtimeLayout(group.runtimeKind).directory));
+  if (preparedNotices) resources.push(noticesDirectory);
   const verifyResources = async (resources) => {
     for (const group of groups) {
       const copied = await inspectRuntime({ directory: path.join(resources, runtimeLayout(group.runtimeKind).directory),
         arch: group.architecture, version: group.versionDeclaration, runtimeKind: group.runtimeKind });
       requireUnchangedFiles(group.files, copied.files);
     }
+    if (preparedNotices) await verifyThirdPartyNotices(preparedNotices, path.join(resources, 'notalone-third-party'));
   };
   const source = path.join(staging, 'app');
   await mkdir(source);
@@ -105,8 +114,8 @@ try {
     tmpdir: path.join(staging, 'electron'),
     asar: true,
     icon,
-    extraResource: groups.length ? groups.map((group) => path.join(staging, runtimeLayout(group.runtimeKind).directory)) : undefined,
-    afterCopyExtraResources: groups.length ? [async ({ buildPath }) => {
+    extraResource: resources.length ? resources : undefined,
+    afterCopyExtraResources: resources.length ? [async ({ buildPath }) => {
       await verifyResources(path.join(buildPath, 'NotAlone.app/Contents/Resources'));
     }] : undefined,
     afterExtract: [async ({ buildPath }) => {
@@ -140,6 +149,7 @@ try {
     console.log(`本机 App 已构建并通过 ad-hoc 签名校验：${app}`);
     console.log(prepared ? 'CLI/WCDB 静态核查与随包字节复核通过；来源、运行和原生验收仍未验证。' : '此包未包含 CLI/WCDB，完整 helper 交付仍待补齐。');
     if (preparedProbe) console.log('仓库探针/核心库静态构建与随包复核通过；未运行探针，不证明定位或权限验收。');
+    if (preparedNotices) console.log('许可原文及来源索引已随包复核；精确构建来源和二进制许可覆盖仍未确认。');
   }
   completed = true;
 } finally {

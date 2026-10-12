@@ -11,6 +11,8 @@
 
 19双联系人／多会话及多来源传递删除自动交叉通过；有限源App整场1／1、11.3秒（runner11.7秒）／exit0，核对真实小窗关闭继续、退出中断、同目录重开零自动模型及显式重试。累计6次启动，前三场验收脚本失败独立保留，所有自有进程、测试库及临时目录清理确认，两租约absent。最新证据见[19最终收口](../assistant-session-context/issues/19-combined-native-acceptance.md#最终收口2026-10-12)及[结果摘要](assistant-session-closeout-20261012.json)。后续同一当前产品源码的本机arm64 ad-hoc包及真实Finder启动已完成，见[最终包／Finder摘要](final-package-finder-20261012.json)：包内生命周期1／1、真实Finder1／1，原目录恢复与资源清理确认。完整微信同步扩展、OCR、WCDB精确构建／许可及真实模型语义质量仍按既有未完成事项处理，冻结期间不追加功能。
 
+2026-10-12 WCDB补查已完成可独立核查部分：官方稳定发行身份、候选Tencent源码／gitlinks及完整许可原文固定，9份材料已放进新资源候选App并通过离线打包／签名／字节复核，见[来源与许可摘要](wcdb-source-license-20261012.json)。新包ASAR及4个helper与此前已Finder验收包同字节，本轮未启动新包；旧Finder结果仍只属于原包。精确source tree／补丁、构建输入／日志、实际BOM及当前二进制许可覆盖仍缺上游关联证据，20票继续claimed／needs-info；不换库、不迁移CLI，功能冻结和OCR暂停保持。
+
 **2026-10-11发布时的历史进度：用户认可复审修订，[第三版30票](resplit-20261011.md)已发布（持续会话13、聊天策略11、真实表达6），全部未开工。持续会话旧六票仅拆分替代，保留历史和继任链接；当前从新07票开始。**
 
 2026-10-11发布时盘点共 **202 张**：`resolved` 166、`claimed` 4、`open` 32，未关闭36张。其中11张标记`wontfix`，含本次6张仅拆分替代、未实现验收；因此166是关闭数，不能等同于166项生产功能成功。Mac二十张任务中18张已关闭，18、20仍未关闭。
@@ -40,7 +42,7 @@
 | --- | --- | --- | --- |
 | [native-app-backend/04 真实微信follow](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed / ready-for-human | 单联系人实际读取、入库、去重、自动恢复、两类缺口补齐、10分钟分时同步已验证 | 对方来信的全局事件触发；双联系人独立游标和切回；最终App退出停读；视觉边界等OCR恢复后再验。后台持续同步通过不替代严格的follow事件条件 |
 | [mac-desktop-app/18 前台定位](../mac-desktop-app/issues/18-foreground-locator.md) | claimed / ready-for-human；用户暂停 | 最小选区、多窗口极小辅助窗排除、安全失败分类已修；真实前台和采集路径越过前序门禁，名称完整与一致性通过 | 最低OCR置信度低于0.90，无verified profile；仍需定位采用/失效、焦点保护及宿主权限验证。**先不动，不降低门槛** |
-| [mac-desktop-app/20 完整交付](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed / needs-info | 当前源码的本机ad-hoc完整helper包及真实Finder隔离启动已通过，包内生命周期复验通过；历史剪贴板／文件选择证据保留 | WCDB Custom build精确来源/许可、剩余快捷键体验、真实同步退出及原18依赖；OCR继续暂停 |
+| [mac-desktop-app/20 完整交付](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed / needs-info | 原本机ad-hoc完整helper包及真实Finder／生命周期已通过；候选源码与许可原文已收集，9份材料随新资源候选App静态验证，新包本轮未启动；历史剪贴板／文件选择证据保留 | 当前库精确源码／补丁／构建及BOM许可覆盖、剩余快捷键体验、真实同步退出及原18依赖；OCR继续暂停 |
 | [memory-core-claim-retention/01 核心事实](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed / ready-for-human | 提示局部修正及多轮受控实验已记录；部分安全和保真检查通过 | 既有真实资料严格覆盖6/12、可选2/6，目标未达成；新预注册对照或目标范围决定。旧预算已关闭，不是缺凭据 |
 | [memory-extraction-accuracy/07 指代](../memory-extraction-accuracy/issues/07-reference-resolution.md) | open / needs-info | 现行16条用例、门槛和保守去向已核对；110项确定性/追踪回归有记录 | 固定当前模型/配置与基线，针对实际失败修复，再评原门槛；需新对照与调用预算。历史13/15不能沿用为当前16条结果 |
 | [memory-accuracy-next/03 维度放行](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed / ready-for-human | 空放行表、回退开关、工具计算门槛已实现；可推导subject/time/truth_intent | 其余维度缺结构化字段；既有评测未达标。先决定字段和质量路线，再取得可推导维度的达标证据及逐类批准；不自动放行 |
