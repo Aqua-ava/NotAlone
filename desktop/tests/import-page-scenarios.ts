@@ -254,6 +254,7 @@ export async function lostImportResponse(pages: ImportStalePages): Promise<void>
 
 export async function firstImportBootstrap(manager: Page, contactBackend: ContactFixture,
   chooseFile: (filePath: string) => Promise<void>): Promise<void> {
+  await expect(manager.getByText('本机服务已连接', { exact: true })).toBeVisible({ timeout: 20_000 });
   const request = (endpoint: string) => requestFixtureHttp(contactBackend.infoPath, endpoint);
   expect((await request('/api/sync/status')).status).toBe(503);
   const filePath = path.join(contactBackend.directory, 'first-owner.jsonl');
