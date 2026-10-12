@@ -118,7 +118,7 @@ class EvaluationECNUTest(unittest.TestCase):
         })
 
     def run_ready(self, *, transport=None, audit=None, gold=None, hashes=None,
-                  credential=None, run_id=None):
+                  credential=None, run_id=None, **request_parameters):
         from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
 
         if hashes is None or gold is None:
@@ -131,7 +131,76 @@ class EvaluationECNUTest(unittest.TestCase):
             repo_root=self.repo, source_hashes=hashes, frozen_gold=gold,
             credential_loader=credential or self.credential, audit_case=audit or self.audit,
             synthetic_transport=transport or httpx.MockTransport(self.response),
+            **request_parameters,
         )
+
+    def test_explicit_timeout_and_zero_retries_match_frozen_E_and_V_requests(
+        self,
+    ):
+        window = build_window(PLAN[0])
+        source = str(window.target_message_ids[0])
+        fact = {
+            "text": "未知第三人不是仓库管理员，在采购部。",
+            "category": "relationship_note", "subject": "contact", "topic": "work",
+            "source_message_ids": [source], "confidence": 0.9,
+            "risk_flags": [], "valid_at": None, "invalid_at": None,
+            "speech_act": "report", "assertion_status": "reported",
+            "figurative_type": "literal", "alternatives": ["第三人身份未知。"],
+            "interpretation_reason": "合成第三人原话。",
+        }
+        timeouts = []
+
+        def response(request):
+            timeouts.append(request.extensions["timeout"])
+            payload = json.loads(request.content)
+            if payload["tool_choice"]["function"]["name"] == "MemoryExtractionOutput":
+                return self.response(request, arguments={"facts": [fact]})
+            self.requests.append(payload)
+            raise httpx.ReadTimeout("合成V读取超时。", request=request)
+
+        result = self.run_ready(
+            transport=httpx.MockTransport(response),
+            request_timeout_seconds=180, max_retries=0,
+        )
+
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(
+            timeouts,
+            [dict.fromkeys(("connect", "read", "write", "pool"), 180.0)] * 2,
+        )
+        manifest = json.loads((self.output / "manifest.json").read_text())
+        self.assertEqual(manifest["frozen_config"]["timeout"], 180.0)
+        self.assertEqual(manifest["frozen_config"]["max_retries"], 0)
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 2)
+        self.assertEqual(result["summary"]["unknown"], 1)
+        self.assertEqual(result["summary"]["unrun"], 20)
+        self.assertFalse(result["receipt"]["quality_certified"])
+
+    def test_invalid_request_limits_are_rejected_before_budget_or_credentials(
+        self,
+    ):
+        invalid = (
+            {"request_timeout_seconds": value} for value in (
+                0, -1, 301, 10 ** 1000, True, "180", None,
+                float("nan"), float("inf"), -float("inf"),
+            )
+        )
+        retry_limits = ({"max_retries": value} for value in (
+            -1, 3, True, 0.0, "0", None, float("nan"),
+        ))
+        with patch.object(
+            EvaluationBudget, "create",
+            side_effect=AssertionError("无效参数不得建预算。"),
+        ):
+            for position, parameters in enumerate((*invalid, *retry_limits)):
+                with self.subTest(position=position):
+                    with self.assertRaisesRegex(
+                        EvaluationBudgetAbort, "ecnu_invalid_request_limits",
+                    ):
+                        self.run_ready(**parameters)
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+        self.assertEqual(tuple(self.output.iterdir()), ())
 
     def test_unfrozen_gold_is_rejected_before_credentials_or_dispatch(self) -> None:
         from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
@@ -165,6 +234,9 @@ class EvaluationECNUTest(unittest.TestCase):
         self.assertFalse(result["quality_certified"])
         self.assertEqual(result["receipt"]["budget"]["request_limit"], 42)
         self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 21)
+        config = json.loads((self.output / "manifest.json").read_text())["frozen_config"]
+        self.assertEqual(config["timeout"], 60.0)
+        self.assertEqual(config["max_retries"], 2)
         audits = [event for event in result["events"] if event["kind"] == "semantic_audit"]
         self.assertEqual(len(audits), 21)
         for bundle in self.audits:

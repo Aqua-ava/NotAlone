@@ -6,6 +6,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from datetime import datetime, timezone
 from importlib.metadata import version
+from math import isfinite
 from pathlib import Path
 import re
 from typing import cast
@@ -97,8 +98,15 @@ def run_ecnu_evaluation(
     source_hashes: dict[str, str], frozen_gold: dict,
     credential_loader: Callable[[], str], audit_case: Callable[[dict], dict],
     synthetic_transport: httpx.MockTransport | None = None,
+    request_timeout_seconds: float = 60.0, max_retries: int = 2,
 ) -> dict:
     """固定P1；每个成功位置须保存独审决策，不自动执行P2或认证质量。"""
+    if (type(request_timeout_seconds) not in (int, float)
+            or not 0 < request_timeout_seconds <= 300
+            or not isfinite(request_timeout_seconds)
+            or type(max_retries) is not int or not 0 <= max_retries <= 2):
+        raise EvaluationBudgetAbort("ecnu_invalid_request_limits")
+    request_timeout_seconds = float(request_timeout_seconds)
     if (current_trace() is not None or not callable(credential_loader)
             or not callable(audit_case)
             or (synthetic_transport is not None
@@ -143,7 +151,9 @@ def run_ecnu_evaluation(
         "input_sha256": canonical_sha256(window),
     } for index, (case, window) in enumerate(zip(_PLAN_CASES, windows)))
     config = {
-        **_frozen_config(plan), "mode": "ecnu_bounded_evaluation", "stage": "P1",
+        **_frozen_config(plan, request_timeout_seconds=request_timeout_seconds,
+                         max_retries=max_retries),
+        "mode": "ecnu_bounded_evaluation", "stage": "P1",
         "base_url": _BASE_URL, "endpoint": _ENDPOINT, "request_model": "ecnu-max",
         "deadline_utc": deadline.astimezone(timezone.utc).isoformat(),
         "source_hashes": dict(source_hashes),
@@ -203,4 +213,5 @@ def run_ecnu_evaluation(
         invocation_scope=invocation_scope,
         semantic_audit=_audit_callback(audit_case, reference), gold_reference=reference,
         code_prefix="ecnu", credential_loader=credential_loader,
+        request_timeout_seconds=request_timeout_seconds, max_retries=max_retries,
     )

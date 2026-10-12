@@ -155,12 +155,15 @@ class _RecordedModel:
                 raise ExtractionInvalidOutputError("离线候选来源不符合原契约。")
 
 
-def _frozen_config(plan: tuple[dict, ...]) -> dict:
+def _frozen_config(
+    plan: tuple[dict, ...], *, request_timeout_seconds: float = 60.0,
+    max_retries: int = 2,
+) -> dict:
     return {
         "mode": "offline_mock", "synthetic_only": True,
         "base_url": _BASE_URL, "endpoint": _ENDPOINT,
         "request_model": _REQUEST_MODEL, "temperature": 0.0,
-        "timeout": 60.0, "max_retries": 2,
+        "timeout": request_timeout_seconds, "max_retries": max_retries,
         "thinking": {"type": "enabled"}, "stream": False,
         "plan_sha256": canonical_sha256(plan),
         "extraction_prompt_sha256": canonical_sha256(EXTRACTION_SYSTEM_PROMPT),
@@ -251,6 +254,7 @@ def _run_evaluation_batch(
     semantic_audit: Callable[[dict], dict] | None = None,
     gold_reference: dict | None = None, code_prefix: str = "offline",
     credential_loader: Callable[[], str] | None = None,
+    request_timeout_seconds: float = 60.0, max_retries: int = 2,
 ) -> dict:
     """P0/P1共用记录与收尾；真实配置与独审验证由各入口负责。"""
     outcomes = [{**item, "status": "unrun"} for item in plan]
@@ -278,12 +282,14 @@ def _run_evaluation_batch(
                     budget, synthetic_transport=synthetic_transport, records=store,
                     **transport_options,
                 ), trust_env=False, follow_redirects=False,
+                timeout=request_timeout_seconds,
             )
             async_client = httpx.AsyncClient(
                 transport=EvaluationAsyncTransport(
                     budget, synthetic_transport=synthetic_transport, records=store,
                     **transport_options,
                 ), trust_env=False, follow_redirects=False,
+                timeout=request_timeout_seconds,
             )
             from langchain_deepseek import ChatDeepSeek
             from langchain_core.language_models import BaseChatModel
@@ -291,7 +297,8 @@ def _run_evaluation_batch(
 
             model = ChatDeepSeek(
                 api_key=SecretStr(api_key), base_url=base_url,
-                model=request_model, temperature=0.0, timeout=60.0, max_retries=2,
+                model=request_model, temperature=0.0,
+                timeout=request_timeout_seconds, max_retries=max_retries,
                 extra_body={"thinking": {"type": "enabled"}},
                 http_client=sync_client, http_async_client=async_client,
             )
