@@ -244,5 +244,11 @@
     "mac20Triage": "needs-info",
     "originalAcceptanceChanged": false,
     "ocrPaused": true
+  },
+  "followupFinderAcceptance": {
+    "summary": "wcdb-notice-finder-20261012.json",
+    "status": "passed",
+    "sameArtifactArchiveSha256": "05307269a90a450265a4416947929d27fc5c97ae5f3ba4bd554433d7da4841d3",
+    "note": "本文件保留此前静态材料阶段的actualAppRun/finderRun=false；后续真实新包验收见独立摘要，不改写旧证据。"
   }
 }

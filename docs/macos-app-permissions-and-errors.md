@@ -135,6 +135,12 @@ Electron 44.7.0 原始 `Info.plist` 自带英文的相机、麦克风、音频�
 
 公开资料确认`Custom build`是未定义`WCDB_VERSION`时的默认值；Tencent根LICENSE的旧组件版本标注不能当作当前库BOM。材料收集与精确构建／二进制许可覆盖分开记录，后两项仍未确认。没有新增权限、读取范围、TCC或签名策略；本轮静态核查与构建不等于新增Finder／渠道验收。实际离线候选包的9份材料／4个helper原字节与严格签名、主包deep strict／仅allow-jit／ATS false／无额外权限声明通过；ASAR同此前Finder验收包。本轮App启动0，临时Electron归档与构建临时目录已精确清理，候选App与ZIP保留；旧包验收不移用于新包，详见[任务20](../.scratch/mac-desktop-app/issues/20-mac-app-delivery.md#2026-10-12-wcdb来源与许可材料补查收口)。
 
+## 2026-10-12 新许可资源候选包Finder验收
+
+用户要求补完新资源候选包Finder启动／退出，沿用本轮连续授权。首轮12:03–12:13因Mac锁屏未能操作Finder，实际App启动0、等待场未通过／runner exit2；未确认备份／测试库／租约由Root按本轮精确归属核验清理，原目录身份恢复，不读取原配置。解锁确认后重设13:34–13:44有限`test:app`时段、最多2次，既有Finder场实际1／1、100.115秒／exit0、真实1次启动。CUA双击同一新包，公开管理／配置就绪，打开／隐藏小窗，菜单正常退出；认证running、App／后端／握手退场、原目录恢复及精确库／暂存／租约清理均确认。
+
+运行后ad-hoc主包deep strict、4helper原字节／严格签名、9份许可材料及ASAR／ZIP哈希通过。仅合成配置／隔离PG，CLI／探针路径仍不可用，未读取微信／原配置／私人剪贴板、申请或修改TCC／权限、执行OCR、调用外部模型或发送消息；没有重建包或改变权限声明。新包Finder证据独立记录，旧原包与静态阶段结果保留，不代替重开生命周期／真实渠道验收；详见[新包Finder摘要](../.scratch/unfinished-work/wcdb-notice-finder-20261012.json)。完整交付缺项、功能冻结与OCR暂停保持。
+
 ## 1. 产品边界
 
 NotAlone 的本地读取必须满足以下条件：

@@ -142,6 +142,16 @@ Spec: ../spec.md
 
 ## Answer
 
+### 2026-10-12 新许可资源候选包Finder启动与退出收口
+
+用户明确要求补完新候选包Finder启动／退出，功能冻结、OCR暂停，并沿用本轮连续授权。主Agent使用原`finder-package-acceptance.spec.ts`和受限`test:app`，测试与产品代码均未改。12:03:27–12:13:27首轮因Mac锁屏、CUA自动解锁失败，**实际App启动0**；等待场未通过、runner exit2及未确认清理历史保留，不能算App运行失败或验收通过。Root只中断核对过命令／cwd／租约的自有runner，随后确认无App、无本轮后端、无握手、自有worker组退出，按目录／租约身份恢复原目录并清理精确测试库、临时目录及该轮锁；未读取原配置正文。
+
+用户回复“已解锁”后，主Agent确认Finder可操作，重设13:34:20–13:44:20（UTC+8）有限时段、最多2次启动，未重复索要授权。相同新候选包实际完成 **1／1、场景约1.6分钟／runner约1.7分钟（100.115秒）／exit0，实际1次启动**。真实CUA在已核对的新候选目录双击`.app`；管理页面显示`notalone://app/`资源与本机服务已连接，配置页机器环境已就绪、绝对Python可见；打开／隐藏输入小窗后从“NotAlone → 退出NotAlone”退出，观察到正在停读。测试先验证认证HTTP running，Root核对App／后端PID与握手退场后写入实际操作收据，夹具再恢复原目录、删除测试库并释放租约。
+
+验收对象：`desktop/artifacts/wcdb-notice-package-20261012.iecln6/packaged/NotAlone-darwin-arm64/NotAlone.app`；归档仍为`NotAlone-macOS-arm64-with-notices.zip`，140277674 bytes、SHA-256 `05307269a90a450265a4416947929d27fc5c97ae5f3ba4bd554433d7da4841d3`。运行后主包deep strict、4个helper原SHA／严格签名、9份许可材料集合／SHA、ASAR及归档哈希再次通过，没有重建包或修改资源。Root使用新PG连接确认本轮精确自有库不存在；原userData目录dev/ino恢复，自有App／后端／runner／worker均退出，握手与暂存目录不存在，App及页面租约absent。前一锁屏场的清理已另证，失败记录不改写。
+
+[新候选包Finder验收摘要](../../unfinished-work/wcdb-notice-finder-20261012.json)保存实际有限命令、同包身份、两场区别、运行后复核与清理结果；原始CUA状态、PID、测试库及临时目录只留在忽略产物目录。此次仅执行既有Finder场，不重跑或借用原包的生命周期／重开、微信渠道、快捷键、定位或权限验收；没有外部模型、私人配置／剪贴板读取、聊天发送、TCC／权限修改、push或部署。新包Finder启动与正常退出已完成；WCDB精确构建／二进制许可覆盖及原18／剩余渠道依赖继续未确认，完整票仍claimed／needs-info，原4条验收仅第1条已勾选。新增功能冻结、OCR暂停保持；79条本地链接与diff检查通过，Standards硬违规／重要判断0／0、Spec新增缺失／越界／错误0／0／0；两轴只读，未新增执行。
+
 ### 2026-10-12 WCDB来源与许可材料补查收口
 
 用户要求补齐能独立核查的来源／许可缺项，新增功能冻结、OCR暂停，沿用本轮本地核查授权。范围仅公开固定发行与候选源码、完整许可原文、随App保留来源索引；不换WCDB、迁移CLI或新增产品能力，不联系发行者、不读取微信、运行OCR或调用模型。当前固定CLI与库两项SHA均匹配时，打包资源才纳入`notalone-third-party`；未知字节不套用当前材料。
