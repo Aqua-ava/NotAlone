@@ -1,0 +1,137 @@
+{
+  "date": "2026-10-12",
+  "scope": "同一新候选包的实际键盘快捷键最小复验；新增功能冻结、OCR暂停",
+  "status": "show_observation_timed_out_human_keypress_unconfirmed",
+  "reviewBase": "f9c55805",
+  "userAvailabilityConfirmed": true,
+  "newAuthorizationRequested": false,
+  "window": {
+    "from": "2026-10-12T06:25:34.210Z",
+    "until": "2026-10-12T06:35:34.210Z",
+    "maxLaunches": 1,
+    "actualAppLaunches": 1,
+    "unexpectedAppLaunches": 0
+  },
+  "command": [
+    "npm",
+    "run",
+    "test:app",
+    "--",
+    "--interactive",
+    "--coordinator",
+    "main-agent",
+    "--from",
+    "2026-10-12T06:25:34.210Z",
+    "--until",
+    "2026-10-12T06:35:34.210Z",
+    "--max-launches",
+    "1",
+    "tests/native-desktop-acceptance.spec.ts",
+    "--output",
+    "artifacts/mac-delivery-human-shortcut-20261012/results"
+  ],
+  "runner": {
+    "exitCode": 1,
+    "processSeconds": 235.66279825000674,
+    "completedAt": "2026-10-12T06:29:29.889Z"
+  },
+  "observations": {
+    "nativeSystemFileDialogSelectedSyntheticFile": true,
+    "messagesImported": 6,
+    "allImportTaskStepsAndFinalCheckPassed": true,
+    "shortcutRegistrationPublicUiPassed": true,
+    "sameHelperMenuOpenedAndButtonHiddenBeforeKeyboard": true,
+    "showPromptPresented": true,
+    "showObservationSeconds": 180,
+    "helperShowObserved": false,
+    "userShowFeedbackReceivedBeforeDeadline": false,
+    "physicalKeypressPerformedConfirmed": false,
+    "humanShowReceiptWritten": false,
+    "hideStageRun": false,
+    "humanHideReceiptWritten": false,
+    "nativeWholeScenarioPassed": false,
+    "agentPressedShortcutThisAttempt": false,
+    "productShortcutFailureProven": false
+  },
+  "cleanup": {
+    "actualAppLaunches": 1,
+    "unexpectedAppLaunches": 0,
+    "runnerExitCode": 1,
+    "appAndRecordedCoordinatorPidsGone": true,
+    "knownProcessCount": 4,
+    "ownedPathsAbsent": 4,
+    "exactDatabaseAbsent": true,
+    "limitedTestDatabaseNamespaceUnchanged": true,
+    "bothLeasesAbsent": true,
+    "defaultDirectoryIdentityMatched": true,
+    "defaultConfigurationContentsNotInspected": true,
+    "matchingOwnedAppAndFixtureProcessesAbsent": true,
+    "humanShowReceiptWritten": false,
+    "humanHideRequestOrReceiptWritten": false,
+    "nativeWholeResultsAbsent": true,
+    "archiveHashUnchanged": true,
+    "asarHashUnchanged": true,
+    "strictSignatureAfterRun": true,
+    "at": "2026-10-12T06:30:21.782750+00:00"
+  },
+  "artifact": {
+    "appPath": "/Users/local-user/learn/NotAlone/desktop/artifacts/wcdb-notice-package-20261012.iecln6/packaged/NotAlone-darwin-arm64/NotAlone.app",
+    "archiveSha256": "05307269a90a450265a4416947929d27fc5c97ae5f3ba4bd554433d7da4841d3",
+    "signature": "ad-hoc",
+    "developerIdOrNotarization": false,
+    "packageRebuilt": false,
+    "productionCodeChanged": false
+  },
+  "dataProcessing": {
+    "controlledSyntheticOnly": true,
+    "systemDialogInitiallyListedUnrelatedFileNames": true,
+    "unrelatedFilesNotOpened": true,
+    "rawUiOrPrivateFileNamesNotCommitted": true,
+    "realWechatRead": false,
+    "officialCliExecuted": false,
+    "ocrRun": false,
+    "externalModelCalls": 0,
+    "systemPermissionsOrTccChanged": false,
+    "chatSent": false,
+    "push": false
+  },
+  "remaining": {
+    "globalShortcutShowHideStillPending": true,
+    "exactWcdbBuildAndBinaryLicenseCoverageStillPending": true,
+    "realChannelAndModelQualityNotCertified": true,
+    "originalOcr18DependencyStillPending": true,
+    "mac20State": "claimed",
+    "mac20Triage": "needs-info",
+    "originalAcceptanceChecked": 1,
+    "originalAcceptancePending": 3
+  },
+  "interpretation": "阶段180秒未观察到小窗，结束前没有明确按键反馈；不能确认用户实际按键已送达本机，也不能由此确定产品故障。未写成功收据，退出后的迟到回复不能沿用为本场通过。",
+  "finalReview": {
+    "base": "f9c55805",
+    "mode": "independent_readonly_two_axis",
+    "standards": {
+      "newCodeOrDocumentHardViolations": 0,
+      "importantSuggestions": 0,
+      "evidenceOverreach": 0
+    },
+    "spec": {
+      "newErrors": 0,
+      "scopeOverreach": 0,
+      "retainedMissing": [
+        "原AC2实际快捷键显示／隐藏",
+        "WCDB精确构建及二进制许可",
+        "真实渠道与模型质量",
+        "原18的OCR依赖"
+      ]
+    },
+    "reviewersRanAppOrTests": false,
+    "notes": "两轴确认本轮只记录超时和按键未确认，不代签人工收据，不判断产品故障，旧成功／失败／事故保持。"
+  },
+  "localLinks": {
+    "changedMarkdownFilesChecked": 4,
+    "relativeLinksChecked": 87,
+    "missing": 0,
+    "originalAcceptanceAndStateUnchanged": true,
+    "onlyDocumentationChanged": true
+  }
+}
