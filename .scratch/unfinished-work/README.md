@@ -15,9 +15,9 @@
 
 同一新候选包的非OCR完整App场景累计23个通过。快捷键／Finder焦点场保留；最新独立场在Root实际置前空Finder并写收据后，正式线程新的真实有界tail启动并完成，正常菜单退出、原认证stopped、后端／CLI退场及5秒无新增调用通过。完整Mac20仍claimed／needs-info，WCDB精确构建／二进制许可、真实来信与双联系人、模型质量和OCR18依赖保留。
 
-三张记忆质量原票的[评测准备方案](memory-quality-plan-20261012.md)及[继续预检](memory-quality-preflight-20261012.md)已核对指代主集16条、补充3条及核心公开两窗。[预算／SDK接缝](memory-budget-integration-20261012.md)之后补[私有记录与P0整场](memory-offline-records-result-20261012.md)：新增26项、完整相关受守卫172／172，响应先保存再解析、思考排除／不可安全保存缺口停批、真正闭合／全计划对账均有证据。用户继续ECNU，已补[官方配置复核](ecnu-model-config-20261012.md)，但服务名称不是固定权重身份；[初版审查包](memory-gold-review-packet-20261012.md)的全21窗逐字段人工要求已按原规格撤回，改为[Agent技术核对](memory-gold-agent-annotations-20261012.md)；用户已答A14一次性发地址不存成关系资料，窗口保留。A05亲自参与借车不一概转述，A06当日失效已有用户决定，时效旧文档已同步；[真实接线前置](memory-ecnu-driver-readiness-20261012.md)列明期限／请求漂移／响应观测门；已按[受限实施规格](memory-ecnu-driver-spec-20261012.md)补工具：[本片结果](memory-ecnu-driver-result-20261012.md)新增31项、完整相关203／203，5源码类型与7文件AST通过，仍只Mock验证。P0仍只固定假端点Mock，ECNU driver已完成离线接线；结构化Gold／逐字段审核装配已完成离线验证，两轴独审已收束；[raw先审封存接点](memory-phased-audit-result-20261013.md)已完成242／242离线验证；用户已明确指定根.env现有密钥，完整运行冻结及真实基线仍待；不改答案凑分。42／84仍未激活，供应商／真实HTTP／业务库操作0，旧预算关闭、模型执行未开放、默认空表不变；原状态与全部模型验收保持。
+三张记忆质量原票的[评测准备方案](memory-quality-plan-20261012.md)及[继续预检](memory-quality-preflight-20261012.md)已核对指代主集16条、补充3条及核心公开两窗。[预算／SDK接缝](memory-budget-integration-20261012.md)之后补[私有记录与P0整场](memory-offline-records-result-20261012.md)：新增26项、完整相关受守卫172／172，响应先保存再解析、思考排除／不可安全保存缺口停批、真正闭合／全计划对账均有证据。用户继续ECNU，已补[官方配置复核](ecnu-model-config-20261012.md)，但服务名称不是固定权重身份；[初版审查包](memory-gold-review-packet-20261012.md)的全21窗逐字段人工要求已按原规格撤回，改为[Agent技术核对](memory-gold-agent-annotations-20261012.md)；用户已答A14一次性发地址不存成关系资料，窗口保留。A05亲自参与借车不一概转述，A06当日失效已有用户决定，时效旧文档已同步；[真实接线前置](memory-ecnu-driver-readiness-20261012.md)列明期限／请求漂移／响应观测门；已按[受限实施规格](memory-ecnu-driver-spec-20261012.md)补工具：[本片结果](memory-ecnu-driver-result-20261012.md)新增31项、完整相关203／203，5源码类型与7文件AST通过，仍只Mock验证。P0仍只固定假端点Mock，ECNU driver已完成离线接线；结构化Gold／逐字段审核装配已完成离线验证，两轴独审已收束；[raw先审封存接点](memory-phased-audit-result-20261013.md)已完成242／242离线验证；用户指定根.env后，完整冻结和唯一[公开P1](memory-p1-execution-result-20261013.md)已执行，但首请求HTTP500／摘要保存而停，1／42尝试、unknown1／unrun20，预算闭合但正式completion收据缺；当前真实基线未形成。P2未启动、余41关闭、业务库操作0、旧预算关闭、默认空表不变；原状态与全部模型验收保持。
 
-[结构化答案与显式审核](memory-structured-gold-result-20261012.md)在上一203项工具片后新增22项，完整相关225／225、3源码类型与6文件AST通过；固定21窗、28必需＋1可选、34绑定variant和40来源选择已独立核对，无需用户填写技术表。机械工具只核审核完整性、来源绑定与计数；有效E后V失败保留raw覆盖，接受／完整分开，额外坏auto不能被正确输出遮住。最终两轴未解决发现0项，未把参考文件称为一次真实运行冻结或模型成绩，42／84仍未激活。
+上一工具阶段的[结构化答案与显式审核](memory-structured-gold-result-20261012.md)在203项之后新增22项，完整相关225／225、3源码类型与6文件AST通过；固定21窗、28必需＋1可选、34绑定variant和40来源选择已独立核对，无需用户填写技术表。机械工具只核审核完整性、来源绑定与计数；有效E后V失败保留raw覆盖，接受／完整分开，额外坏auto不能被正确输出遮住。最终两轴未解决发现0项，未把参考文件称为一次真实运行冻结或模型成绩，42／84仍未激活。
 
 其他App前台小窗分项已 **1／1通过、585.149秒／exit0**，见[焦点最终摘要](mac-focus-final-20261012.json)。两场各在有限窗口启动1次：首场用户用按钮／关窗隐藏，按键验收拒绝并保留失败；复验由用户实际两次快捷键及分别明确反馈完成。20个已记录自有进程、两场隔离目录、自有空Finder窗口／目录及租约均收尾；复验前后默认目录身份、包签名及字节保持。首场默认目录的原基线没有记录路径，不能代签该场默认目录身份未变；配置正文均未读。没有独立认证系统必然恢复原外部App焦点。锁屏准备场启动0的[摘要](mac-focus-preparation-20261012.json)及旧21场结果保持，完整Mac20原条件不改。
 
@@ -72,7 +72,7 @@
 | [mac-desktop-app/18 前台定位](../mac-desktop-app/issues/18-foreground-locator.md) | claimed / ready-for-human；用户暂停 | 最小选区、多窗口极小辅助窗排除、安全失败分类已修；真实前台和采集路径越过前序门禁，名称完整与一致性通过 | 最低OCR置信度低于0.90，无verified profile；仍需定位采用/失效、焦点保护及宿主权限验证。**先不动，不降低门槛** |
 | [mac-desktop-app/20 完整交付](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed / needs-info | 9份材料随新包静态核验；新包Finder1／1、非OCR完整App场景23个通过；人工快捷键／系统导入／Finder小窗及真实CLI后台／App正常退出已验；意外默认实例已正常退出并单列记录 | 当前库精确源码／补丁／构建及BOM许可覆盖、真实来信／双联系人和模型质量及原18依赖；OCR继续暂停 |
 | [memory-core-claim-retention/01 核心事实](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed / ready-for-human | 提示局部修正及多轮受控实验已记录；部分安全和保真检查通过 | 既有真实资料严格覆盖6/12、可选2/6，目标未达成；新预注册对照或目标范围决定。旧预算已关闭，不是缺凭据 |
-| [memory-extraction-accuracy/07 指代](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed / needs-info | 现行16条及3补充已核对；预算／SDK＋私有记录／P0及ECNU接线完整相关203／203合成通过，技术参考已补E14／V4并独审，ECNU公开参数已复核 | A14取舍已确认none；结构化Gold／审核及raw封存接点完整相关242／242离线通过；用户已明确指定根.env现有密钥，待完整运行冻结及当前真实基线；接线及期限／请求漂移／响应观测门已离线验证；历史13/15不算当前16条成绩，模型执行仍关闭 |
+| [memory-extraction-accuracy/07 指代](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed / needs-info | 现行16条及3补充已核对；预算／SDK＋私有记录／P0及ECNU接线完整相关203／203合成通过，技术参考已补E14／V4并独审，ECNU公开参数已复核 | A14取舍已确认none；结构化Gold／审核及raw封存接点完整相关242／242离线通过；用户指定根.env后，唯一公开P1首请求HTTP500停，1／42尝试、unknown1／unrun20，预算闭合但completion收据缺；当前真实基线未形成，原模型0/5保持；接线及期限／请求漂移／响应观测门已离线验证，历史13/15不算当前16条成绩 |
 | [memory-accuracy-next/03 维度放行](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed / ready-for-human | 空放行表、回退开关、工具计算门槛已实现；可推导subject/time/truth_intent | 其余维度缺结构化字段；既有评测未达标。先决定字段和质量路线，再取得可推导维度的达标证据及逐类批准；不自动放行 |
 
 ## 已关闭旧票中的验收条目承接
@@ -114,7 +114,7 @@
 
 1. 新增功能继续冻结，OCR继续暂停。既有真实微信04的最终包运行／退出子项已通过，接下来只补来信事件、第二联系人连续性；依原票固定数据和人工配合条件。
 2. Mac20继续核查WCDB精确源码／补丁／构建输入、BOM及当前二进制许可覆盖；已通过的同包Finder、23个非OCR完整场景和签名核验保留原结果；当前公开精确源码／Actions端点451，缺项详见来源补核。
-3. 记忆三票的预算、SDK、允许原始记录与P0整场已验；A14已由用户确认none，其余技术判据及结构化装配已由Agent独立复核；[raw先审封存接点](memory-phased-audit-result-20261013.md)完整相关242／242离线通过。用户已明确指定根.env现有密钥，依[完整运行规格](memory-p1-execution-spec-20261013.md)固定唯一P1、源码／期限及回调退场后执行有限公开合成基线，不需要重新录入。
+3. 记忆三票工具完整相关242／242离线通过，A14按用户确认none、结构化Gold及raw封存桥保持。用户指定根.env密钥后已执行一次[公开P1](memory-p1-execution-result-20261013.md)：首请求HTTP500，响应仅摘要而硬停，1／42真实尝试，unknown1／unrun20，预算持久关闭但正式completion收据缺。当前缺安全可解析响应及完整基线，不需要用户重新录入；失败P1不补位、不换UUID续跑，也不放行或改模型验收。
 4. 两张已关闭旧票的未交付条目保持可见，待冻结解除及原规格收束后再按工作流接续；媒体、Agent运行时、云端和Windows仍是后续方向。
 5. 最终完整Mac交付保留原18依赖；若要先交付“不含自动定位”的版本，需要另作范围决定，不能静默删掉原验收。
 
