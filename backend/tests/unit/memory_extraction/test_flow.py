@@ -10,7 +10,12 @@ from uuid import uuid4
 from notalone.memory_extraction.adoption import can_auto_adopt
 from notalone.memory import InMemoryMemoryStore
 from notalone.memory_extraction.adoption import MemoryAdoption
-from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
+from notalone.memory_extraction.dimensions import (
+    DEFAULT_DIMENSION_RELEASE,
+    RELEASE_ALL_DIMENSIONS,
+    MemoryDimension,
+    dimension_key,
+)
 from notalone.scopes import ContactScope
 from notalone.memory_extraction.errors import (
     ExtractionInvalidOutputError,
@@ -25,7 +30,10 @@ from notalone.memory_extraction.models import (
     FigurativeType,
     SpeechAct,
 )
-from notalone.memory_extraction.pragmatics import PragmaticInterpreter
+from notalone.memory_extraction.pragmatics import (
+    MemoryDisposition,
+    PragmaticInterpreter,
+)
 from notalone.memory_extraction.runtime import ExtractionPayload
 from tests.unit.memory_extraction.test_models import _window
 from tests.unit.memory_extraction.verification_helpers import SyntheticSupportingVerifier
@@ -344,6 +352,65 @@ class ExtractionFlowTest(unittest.TestCase):
 
         self.assertEqual(outcome.accepted, ())
         self.assertEqual(outcome.rejected_count, 3)
+
+    def test_missing_required_validity_fields_are_structure_rejected(self) -> None:
+        message_id = uuid4()
+        for missing in (
+            ("valid_at",),
+            ("invalid_at",),
+            ("valid_at", "invalid_at"),
+        ):
+            with self.subTest(missing=missing):
+                payload = _payload(message_id)
+                for field in missing:
+                    del payload[field]
+
+                outcome = self._run_flow(
+                    RecordingRuntime((payload,)), message_id
+                )
+
+                self.assertEqual(outcome.accepted, ())
+                self.assertEqual(outcome.rejected_count, 1)
+                self.assertTrue(outcome.extraction_completed)
+
+    def test_explicit_validity_slots_preserve_labels_and_closed_default(
+        self,
+    ) -> None:
+        message_id = uuid4()
+        cases = (
+            ({}, MemoryDimension.SUBJECT, MemoryDisposition.CONFIRMABLE),
+            (
+                {"speech_act": "correction", "alternatives": ["合成歧义"]},
+                None,
+                MemoryDisposition.PENDING,
+            ),
+            (
+                {
+                    "valid_at": "2026-01-01T00:00:00+08:00",
+                    "speech_act": "report",
+                    "assertion_status": "reported",
+                },
+                MemoryDimension.TIME,
+                MemoryDisposition.PENDING,
+            ),
+        )
+        for overrides, expected_dimension, expected_disposition in cases:
+            with self.subTest(overrides=overrides):
+                outcome = self._run_flow(
+                    RecordingRuntime((_payload(message_id, **overrides),)),
+                    message_id,
+                )
+
+                self.assertEqual(len(outcome.accepted), 1)
+                self.assertEqual(outcome.rejected_count, 0)
+                fact = outcome.accepted[0]
+                self.assertIs(dimension_key(fact), expected_dimension)
+                self.assertIs(
+                    PragmaticInterpreter().interpret(fact).disposition,
+                    expected_disposition,
+                )
+                self.assertTrue(DEFAULT_DIMENSION_RELEASE.gate_enabled)
+                self.assertFalse(DEFAULT_DIMENSION_RELEASE.allows(fact))
 
 
 if __name__ == "__main__":
