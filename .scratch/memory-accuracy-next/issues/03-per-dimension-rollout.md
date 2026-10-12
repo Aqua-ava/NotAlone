@@ -51,3 +51,6 @@
 - 2026-10-12（继续离线前置）：[21窗预检及工具交付](../../unfinished-work/memory-quality-preflight-20261012.md)补独立Agent输入候选、oracle冲突与可从代码确定的配置指纹。HTTP预约组件12／12纯合成通过，未知写关闭故障只能停当前句柄，外层禁恢复、真实SDK及完整runner仍待。Agent盲读不是人工Gold；未改期望、结构化字段、维度键或默认空放行表。模型／真实HTTP／本票业务库调用0，原State、Triage、验收与旧成绩保持，不自动放行。
 
 - 2026-10-13（本持续目标的公开四窗终态）：[固定四窗结果](../../unfinished-work/goal-memory-20261013-diagnostic4-result.md)唯一run86b6已closed8/8、8个真实200、44事件、driver857.171293708秒、CLI exit0；正式4completed但四份semantic audit均general_error，必需raw／accepted／完整3/5、3/5、1/5，原21窗／28命题及未选17窗保留。matcher4passed不替代语义质量，本次不满足≥15／零假事／零记错人／一般错误≤1的新增放行证据。A05两个auto仅是benchmark理想三门，生产第4道维度门、默认空表、0.7与风险语义未改，无业务写库或用户逐类批准。运行时仍仅subject／time／truth_intent三键，paraphrase／reference／media／reported缺typed依据，质量及字段缺口分别保留；原AC3/4、State／Triage不改。八个本目标run持久closed合42尝试／38个200／4旧read_timeout远端未知，关闭余额不复用、全量280与余1不启；继续最小修复设计和完整公开回归接线，不能由这四窗自行放行。
+
+
+- 2026-10-13：新单V控制 `472f5c0d-7a7e-4620-9586-1698f76b7d97` 实际1请求/1个HTTP200，driver单调79.530892167秒、显式Agent V4 4/4与语义支持通过；固定公开A02旧E14/window/source/双null不变，仅V system换4c939d96。实际closed1/cap1、六event/capture_gaps空、lock无持有、本机入口exit0；全目标九stage累计43（39次200、四次旧ReadTimeout远端未知），关闭未用145与退役12不可借用，全量280尚未激活。详情见 [单V控制真实结果](../../unfinished-work/goal-memory-20261013-single-V-control-result.md)。 单V不认证任一维≥15例、typed运行时依据或自动采纳效果；默认空放行表、门槛和用户逐类批准保持，没有生产放行或业务库写入，原AC/State不变。

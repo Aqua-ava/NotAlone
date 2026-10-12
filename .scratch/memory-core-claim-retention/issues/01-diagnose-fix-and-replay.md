@@ -174,3 +174,6 @@ Blocked by: none
 - 2026-10-12（继续离线前置）：[21窗预检及工具交付](../../unfinished-work/memory-quality-preflight-20261012.md)记录独立Agent输入候选与旧oracle对照、非秘密源码／版本指纹，核心两窗的5条有限命题仍不能代替完整人工Gold。HTTP预约组件12／12纯合成通过，真实SDK重试及未知存储故障闭环尚待；生产和完整runner未接，模型／真实HTTP／本票业务库调用0。真实严格6/12、可选2/6不改写，原State、Triage和验收保持；42／84仍未开放。
 
 - 2026-10-13（本持续目标的公开四窗终态）：[固定四窗结果](../../unfinished-work/goal-memory-20261013-diagnostic4-result.md)已实际closed8/8、8个真实200、44事件、driver857.171293708秒、CLI exit0；本轮A01／A02／A04／A05共4窗／5必需命题，正式raw／accepted／完整3/5、3/5、1/5，四份审核均general_error。A05历史借车的主体、方向、双null、来源和lineage完整正确，但另有来源支持的额外家庭事实，原Gold不增optional、不删输出救分；原A05旧迟到unknown保持。本票公开B01／B02本次未选，真实聊天未读或上传，历史真实严格6/12／可选2/6及原AC不改；四窗不能代替核心全量回放。新有限目标八run全部持久closed，累计42尝试／38个200／4旧read_timeout远端未知，关闭余额不复用、全量280与余1未启；原State／Triage、默认空放行表保持。后继最小来源／语用修复与完整公开回归装配继续准备，尚未获新调用或生产放行授权。
+
+
+- 2026-10-13：新单V控制 `472f5c0d-7a7e-4620-9586-1698f76b7d97` 实际1请求/1个HTTP200，driver单调79.530892167秒、显式Agent V4 4/4与语义支持通过；固定公开A02旧E14/window/source/双null不变，仅V system换4c939d96。实际closed1/cap1、六event/capture_gaps空、lock无持有、本机入口exit0；全目标九stage累计43（39次200、四次旧ReadTimeout远端未知），关闭未用145与退役12不可借用，全量280尚未激活。详情见 [单V控制真实结果](../../unfinished-work/goal-memory-20261013-single-V-control-result.md)。 本次无新E调用或核心命题全量回归，不能以V支持替E14、原命题分母与source/lineage/完整质量；下一步严格拒未完整参考的140工具及公开119独审，原AC/State不变。
