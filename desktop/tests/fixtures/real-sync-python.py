@@ -35,6 +35,8 @@ class AcceptanceScope:
     approved_texts: tuple[str, ...]
     not_before: float
     until: float
+    long_running: bool = False
+    allow_incoming_test_text: bool = False
 
 
 def _fail(code: str = "acceptance_scope_exceeded") -> CliCommandError:
@@ -71,7 +73,13 @@ def load_scope(path: str | Path | None = None) -> AcceptanceScope:
         value = json.loads(text)
         expected = {"locator", "real_cli", "real_wcdb", "sandbox_profile", "audit_path",
                     "pid_audit_path", "approved_texts", "not_before", "until"}
-        if not isinstance(value, dict) or set(value) != expected:
+        optional = {"long_running", "allow_incoming_test_text"}
+        if (not isinstance(value, dict) or not expected <= set(value)
+                or not set(value) <= expected | optional):
+            raise _fail("acceptance_scope_invalid")
+        long_running = value.get("long_running", False)
+        allow_incoming = value.get("allow_incoming_test_text", False)
+        if not isinstance(long_running, bool) or not isinstance(allow_incoming, bool):
             raise _fail("acceptance_scope_invalid")
         locator = value["locator"]
         texts = value["approved_texts"]
@@ -83,7 +91,8 @@ def load_scope(path: str | Path | None = None) -> AcceptanceScope:
         times = (value["not_before"], value["until"])
         if (any(isinstance(item, bool) or not isinstance(item, (int, float))
                 or not math.isfinite(item) for item in times)
-                or not 0 < times[0] < times[1] or times[1] - times[0] > 1800):
+                or not 0 < times[0] < times[1]
+                or times[1] - times[0] > (4500 if long_running else 1800)):
             raise _fail("acceptance_scope_invalid")
         paths = {key: Path(value[key]) for key in
                  ("real_cli", "real_wcdb", "sandbox_profile", "audit_path", "pid_audit_path")}
@@ -108,7 +117,9 @@ def load_scope(path: str | Path | None = None) -> AcceptanceScope:
                 audit_fd = _private_fd(paths[key])
                 os.close(audit_fd)
         return AcceptanceScope(locator=locator, approved_texts=tuple(texts),
-                               not_before=float(times[0]), until=float(times[1]), **paths)
+                               not_before=float(times[0]), until=float(times[1]),
+                               long_running=long_running,
+                               allow_incoming_test_text=allow_incoming, **paths)
     except (OSError, TypeError, ValueError, json.JSONDecodeError):
         raise _fail("acceptance_scope_invalid") from None
 
@@ -219,7 +230,9 @@ class ScopedCli:
             raise _fail() from None
         scope = self.guard.scope
         if (result.non_text_count or any(
-                item.speaker != "user" or item.text_content not in scope.approved_texts
+                item.speaker not in ({"user", "contact"}
+                                     if scope.allow_incoming_test_text else {"user"})
+                or item.text_content not in scope.approved_texts
                 or item.occurred_at is None
                 or not scope.not_before <= item.occurred_at.timestamp() < scope.until
                 for item in normalized)):

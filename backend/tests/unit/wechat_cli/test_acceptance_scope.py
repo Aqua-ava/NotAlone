@@ -121,6 +121,26 @@ class AcceptanceScopeTest(unittest.TestCase):
             cli.tail("synthetic-selected", since_time="2026-10-12T16:00:00")
         self.assertEqual(runner.calls, [])
 
+    def test_explicit_incoming_test_text_keeps_the_actual_direction(self) -> None:
+        runner = SyntheticRunner(FakeResult(stdout=json.dumps({
+            "type": "message", "cursor": "synthetic-cursor:12",
+            "message": {"id": {"talker": "synthetic-selected", "local_id": 12},
+                        "kind": "text", "text": "合成验收文字", "is_from_me": False,
+                        "create_time": 1791782460},
+        })))
+        scope = replace(self.scope, allow_incoming_test_text=True)
+        cli = fixture.build_scoped_cli(scope, runner=runner,
+                                       clock=lambda: 1791782460.0)
+        result = cli.tail("synthetic-selected", since_time="2026-10-12T13:20:01")
+        self.assertFalse(result.events[0].is_from_me)
+        self.assertEqual(result.events[0].text, "合成验收文字")
+
+        invalid = json.loads(runner.result.stdout)
+        invalid["message"]["text"] = "未约定来信"
+        runner.result = FakeResult(stdout=json.dumps(invalid))
+        with self.assertRaises(CliCommandError):
+            cli.tail("synthetic-selected", cursor=result.cursor)
+
     def test_session_listing_is_explicitly_blocked_without_reading(self) -> None:
         runner = SyntheticRunner(FakeResult())
         cli = fixture.build_scoped_cli(self.scope, runner=runner,
@@ -253,6 +273,20 @@ class AcceptanceScopeTest(unittest.TestCase):
             selected.write_text(json.dumps(value))
             selected.chmod(0o600)
             self.assertEqual(fixture.load_scope(selected).locator, "synthetic-selected")
+            extended = {**value, "until": value["not_before"] + 4500,
+                        "long_running": True, "allow_incoming_test_text": True}
+            selected.write_text(json.dumps(extended))
+            loaded = fixture.load_scope(selected)
+            self.assertTrue(loaded.long_running)
+            self.assertTrue(loaded.allow_incoming_test_text)
+            for invalid in ({**extended, "long_running": False},
+                            {**extended, "until": extended["until"] + 1},
+                            {**extended, "long_running": 1},
+                            {**extended, "allow_incoming_test_text": "true"}):
+                selected.write_text(json.dumps(invalid))
+                with self.assertRaises(CliCommandError):
+                    fixture.load_scope(selected)
+            selected.write_text(json.dumps(value))
             link = directory / "scope-link.json"
             link.symlink_to(selected)
             with self.assertRaises(CliCommandError):
