@@ -61,3 +61,8 @@
 - [本场结果](../../unfinished-work/goal-memory-20261013-complete21-observation-result.md)：8d0460a1真实16次均200且closed，正式7completed／1unknown／13unrun，七窗9必需raw8／accepted8／完整4，E失败7/98、V失败4/28及语义2/7；≥15质量门及21／140完整语义观察未满足。A08实际评测auto与旧matcher false_fact1作为风险保留，但其full审核缺失，不补签正式bad_auto或签安全0。评测理想三门auto不等于生产放行；本场未改运行时字段、默认空表、原Gold／审核／AC／State，维度字段及合取门另轨核验，质量证据仍待达原门后逐类批准。累计59真实HTTP与171关闭未用／12退役／280未启在总522中分列，不复用或自动激活。
 
 - 2026-10-13（用户批准字段切片）：[实施合同与隔离证据](../../unfinished-work/goal-dimension-evidence-contract-20261013.md)已独立提交`5552f9f1`，36文件当前SHA与提交blob核对、两轴未解决均0。108相关unit／API、12个自有隔离PG及18源码mypy通过；跨时区两subcase真红→绿，来源实际晚1秒仍拒绝，12库全部清理。nullable JSONB与候选／来源摘要、保存和AUTO事务二次复核、候选上下文来源删除清proof、所有相关维度依据及批准的AND门已接通；旧NULL未知且不回填，原三门和默认空表不变。生产指代／转述锚点仍None，5–7维是保守超集而非完整分类器，已采纳confirmed／owner上下文删除只给待决方案；业务迁移、App投影验收及至少15例真实语义质量未签。原AC保持3/4、claimed，运行结构不代替质量或逐类批准。
+
+
+## Comments（本持续目标四窗V技术停止 2026-10-13）
+
+- [本场结果](../../unfinished-work/goal-memory-20261013-stage-priority-diagnostic4-result.md)：原03运行字段、窗口投影兼容及两SYSTEM提示共同冻结后，唯一e910bd79实际E200／V500、CLOSED2/8，driver单调7.821042375秒／exit1；正式审核0，A05 unknown／其余三窗unrun。0网络真实formatter重构核非空dimension_evidence不进入V正文，候选仍十一槽；这是字段投影接线证据，不能签任何维度≥15／假事0／记错人0／一般错误≤1或自动放行。响应21字节非JSON仅存摘要，V内部500根因未知，余6永久关闭。11stage全closed，累计61尝试（56个200、1个500、旧4timeout远端未知）／177永闭未用，退役12／full280未启；实际默认空表、原三门及AND门、Gold／旧sealed／AC／State保持，字段与语义仍分别验收且逐类批准。

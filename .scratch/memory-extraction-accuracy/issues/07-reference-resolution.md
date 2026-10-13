@@ -58,3 +58,8 @@
 ## Comments（本持续目标完整21窗中断终态 2026-10-13）
 
 - [本场结果](../../unfinished-work/goal-memory-20261013-complete21-observation-result.md)：唯一8d0460a1已closed16/42、16真实HTTP200、86事件、driver单调2229.922556秒／入口exit1；A01–A07正式完成，A08 full审核未提交达到原600秒而unknown，A09–A19及B01/B02共13unrun。原raw封存、Gold21／28必需和全部分母不改，不补签或resume，余26永久关闭。七窗9必需机械raw8／accepted8／完整4，四general_error；旧matcher另报8程序结果中的false_fact1，不以未完成的安全审核签假事0。指代至少15、一般错误≤1及全量回归仍缺，State／AC和默认空放行表保持；累计本目标59真实HTTP（55个200＋旧4次timeout远端未知）。
+
+
+## Comments（本持续目标四窗V技术停止 2026-10-13）
+
+- [本场结果](../../unfinished-work/goal-memory-20261013-stage-priority-diagnostic4-result.md)：唯一e910bd79已CLOSED2/8，实际E200／V500、六事件、driver单调7.821042375秒／exit1；正式审核0，A05 unknown、A06–A08三窗unrun，无raw/full补签。V的21字节非JSON错误只存摘要，具体停止为响应脱敏不可用而闭账；合法构造请求收到服务500，内部根因未明。离线重构证明新维度字段未进入真实V正文，旧成功V的非模型参数相同，但SYSTEM／正文变化，不能当语义修复或指代≥15通过。余6永久关闭；本目标11closed、61真实尝试（56个200／1个500／旧4timeout远端未知）、177永闭未用、12退役／full280未启。原Gold、旧sealed、AC／State及默认空表保持，不借余额、不重启，尚无新prepare／HTTP授权。
