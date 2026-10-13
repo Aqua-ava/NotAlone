@@ -11,11 +11,14 @@ from .evaluation_reference import (
     public_window_projection, validate_full_public_reference, validate_public_reference,
 )
 from .evaluation_review import prepare_case_review, score_case_review
+from .verification import SourceVerificationMode
+from .source_proof import parse_proposal
 
 
 _E_TOOL = "MemoryExtractionOutput"
 _V_TOOL = "SourceVerificationOutput"
 _RAW_CHECKS = ("raw_meaning", "coherence", "branch", "source", "time")
+_V_FIELDS = {"candidate_index", "verdict", "issues", "evidence"}
 
 
 def _copy(value: dict) -> dict:
@@ -155,6 +158,21 @@ def _verification_inputs(requests: list[dict]) -> list[dict]:
     return matches[0]
 
 
+def _verification_projection(results: list[dict], mode: SourceVerificationMode) -> list[dict]:
+    """原四槽评分不掺程序判定；完整proof仍在已保存输出与完整审核视图。"""
+    projected = []
+    for result in results:
+        if (not isinstance(result, dict) or not (
+            set(result) == _V_FIELDS or mode is SourceVerificationMode.NULLABLE_PROOF_V1
+            and set(result) == _V_FIELDS | {"proof"}
+        )):
+            raise EvaluationBudgetAbort("phased_verification_fields_invalid")
+        if "proof" in result:
+            parse_proposal(result["proof"])
+        projected.append(_copy({key: result[key] for key in _V_FIELDS}))
+    return projected
+
+
 class PhasedEvaluationAudit:
     """两个显式审核回调及当前case保存能力；没有文件、模型或业务入口。"""
 
@@ -164,7 +182,9 @@ class PhasedEvaluationAudit:
         raw_reviewer: Callable[[dict], dict], full_reviewer: Callable[[dict], dict],
         case_positions: tuple[int, ...] | None = None,
         case_set: str = "reference21",
+        verification_mode: SourceVerificationMode | str = SourceVerificationMode.LEGACY_V4,
     ):
+        self._verification_mode = SourceVerificationMode(verification_mode)
         if (type(case_set) is not str or case_set not in {"reference21", "full140"}
                 or (case_set == "full140" and case_positions is not None)):
             raise ValueError("审核只接受原21或固定完整140，不允许完整集合缩减。")
@@ -216,6 +236,11 @@ class PhasedEvaluationAudit:
         """完整装配对象摘要；选定case的原21投影另保留原摘要。"""
         return self._reference_sha256
 
+    @property
+    def verification_mode(self) -> str:
+        """原评分四槽固定，实际V协议须与受限入口显式一致。"""
+        return self._verification_mode.value
+
     def __call__(self, bundle: dict) -> dict:
         try:
             return self._run(bundle)
@@ -225,11 +250,16 @@ class PhasedEvaluationAudit:
             raise EvaluationBudgetAbort("phased_audit_unreliable") from None
 
     def _run(self, bundle: dict) -> dict:
+        if bundle.get("verification_mode", "legacy-v4") != self.verification_mode:
+            raise EvaluationBudgetAbort("phased_verification_mode_changed")
         # 回调只编辑审核结果；已保存case证据在本次调用内固定。
         evidence_bundle = _copy({key: bundle[key] for key in (
             "case_position", "case_name", "window", "gold_reference", "adapter_outputs",
             "provider_requests", "original_result",
         )})
+        evidence_bundle["verification_program"] = _copy({
+            "items": bundle.get("verification_program", []),
+        })["items"]
         bundle = {**evidence_bundle, "persist_audit": bundle["persist_audit"]}
         position = bundle["case_position"]
         if type(position) is not int or not 0 <= position < len(self._case_positions):
@@ -266,10 +296,12 @@ class PhasedEvaluationAudit:
                    for request in bundle["provider_requests"])
         ):
             raise EvaluationBudgetAbort("phased_empty_extraction_has_verification")
+        verification = (_arguments(list(bundle["adapter_outputs"]), _V_TOOL, "results")
+                        if extraction else [])
         evidence = {
             "run_status": "completed" if extraction else "empty", "extraction": extraction,
             "verification_inputs": _verification_inputs(list(bundle["provider_requests"])) if extraction else [],
-            "verification": _arguments(list(bundle["adapter_outputs"]), _V_TOOL, "results") if extraction else [],
+            "verification": _verification_projection(verification, self._verification_mode),
             "final_facts": bundle["original_result"]["facts"], "original_result": bundle["original_result"],
         }
         packet = prepare_case_review(reference, reference_case["id"], _copy(evidence))
@@ -277,11 +309,23 @@ class PhasedEvaluationAudit:
             "case_position", "case_name", "kind", "purpose", "event_sequence", "payload_sha256",
         )}
         full_view = {"packet": packet, "sealed_raw_review": raw_review, "raw_receipt": receipt_ref}
+        protocol = None
+        if self._verification_mode is SourceVerificationMode.NULLABLE_PROOF_V1:
+            protocol = {
+                "verification_mode": self.verification_mode,
+                "model_results": verification,
+                "program_results": bundle["verification_program"],
+                "final_dimension_evidence": [{
+                    "final_index": index, "dimension_evidence": fact.get("dimension_evidence"),
+                } for index, fact in enumerate(bundle["original_result"]["facts"])],
+            }
+            full_view["verification_protocol"] = protocol
         full_review = _copy(self._full_reviewer(_copy(full_view)))
         _check_sealed_raw(raw_review, full_review)
         report = score_case_review(packet, full_review)
         final_receipt = _save(bundle["persist_audit"], {
             "phase": "final", "review": full_review, "report": report, "raw_receipt": receipt_ref,
+            **({"verification_protocol": protocol} if protocol is not None else {}),
         }, position, reference_case["case_name"])
         if final_receipt["event_sequence"] <= receipt["event_sequence"]:
             raise EvaluationBudgetAbort("phased_audit_receipt_order_invalid")

@@ -23,7 +23,7 @@ from .evaluation_http_budget import EvaluationBudget, EvaluationBudgetAbort, _en
 _EVENT_KINDS = frozenset({
     "case_started", "adapter_output", "case_result", "case_failed",
     "provider_request", "provider_response", "provider_failure",
-    "semantic_audit",
+    "semantic_audit", "verification_program",
 })
 _PURPOSES = frozenset({"case", "extraction", "verification"})
 _MAX_RECORD_BYTES = 8 * 1024 * 1024
@@ -42,7 +42,7 @@ _CONFIG_FIELDS = frozenset({
     "verification_schema_sha256", "versions", "omitted_parameters",
     "deadline_utc", "source_hashes", "gold_sha256", "stage",
     "response_identity_policy", "request_contract_version", "tool_choice",
-    "fallback", "baseline_commit", "selected_case_positions",
+    "fallback", "baseline_commit", "selected_case_positions", "verification_mode",
 })
 
 
@@ -131,6 +131,12 @@ class EvaluationRecordStore:
             or not plan
             or forbidden_config
             or not set(frozen_config) <= _CONFIG_FIELDS
+            or ("verification_mode" in frozen_config and (
+                type(frozen_config["verification_mode"]) is not str
+                or frozen_config["verification_mode"] not in {
+                    "legacy-v4", "nullable-proof-v1",
+                }
+            ))
             or any(
                 item.get("case_position") != index
                 or not isinstance(item.get("case_name"), str)

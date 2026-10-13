@@ -291,6 +291,35 @@ class EvaluationPhasedAuditTest(unittest.TestCase):
         self.assertEqual(self.events[-1]["payload"]["report"]["required"]["full"], 1)
         self.assertFalse(self.events[-1]["payload"]["report"]["quality_certified"])
 
+    def test_nullable_proof_is_preserved_after_raw_and_only_four_model_slots_are_scored(self):
+        self.bundle["verification_mode"] = "nullable-proof-v1"
+        self.bundle["verification_program"] = [{
+            "verification_mode": "nullable-proof-v1",
+            "results": [{"candidate_index": 0, "model_verdict": "supported",
+                         "model_issues": [], "verdict": "unsupported", "issues": ["meaning"],
+                         "proof_verification": {"status": "unsupported", "reason": "known_graph_difference",
+                                                "semantic_basis": None}}],
+        }]
+        raw_v = self.bundle["adapter_outputs"][1]["tool_calls"][0]["args"]["results"][0]
+        raw_v["proof"] = None
+
+        def full(view):
+            protocol = view["verification_protocol"]
+            self.assertEqual(protocol["verification_mode"], "nullable-proof-v1")
+            self.assertEqual(protocol["model_results"], [raw_v])
+            self.assertEqual(protocol["program_results"], self.bundle["verification_program"])
+            projected = view["packet"]["evidence"]["verification"][0]
+            self.assertEqual(set(projected), {"candidate_index", "verdict", "issues", "evidence"})
+            self.assertEqual(projected["verdict"], "supported")
+            self.assertEqual(projected["issues"], [])
+            return self.full_review(view)
+
+        audit = self.audit(full=full, verification_mode="nullable-proof-v1")
+        self.assertEqual(audit.verification_mode, "nullable-proof-v1")
+        self.assertEqual(audit(self.bundle)["decision"], "safe")
+        self.assertEqual(self.order, ["raw", "persist:raw", "full", "persist:final"])
+        self.assertEqual(self.events[-1]["payload"]["verification_protocol"]["model_results"], [raw_v])
+
     def test_runtime_message_metadata_remains_in_raw_but_cannot_bypass_gold_binding(self):
         def raw(view):
             self.assertEqual(view["window"], self.window)

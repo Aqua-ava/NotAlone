@@ -17,12 +17,12 @@ from uuid import UUID
 import httpx
 
 from notalone.memory_extraction import adapters as extraction_adapters
-from notalone.memory_extraction import verification_adapters
-from notalone.memory_extraction.adapters import EXTRACTION_SCHEMA
 from notalone.memory_extraction.evaluation import build_window
 from notalone.memory_extraction.evaluation_cases import CASES
 from notalone.memory_extraction.evaluation_http_budget import EvaluationBudget, EvaluationBudgetAbort
-from notalone.memory_extraction.evaluation_offline import _frozen_config, _run_evaluation_batch
+from notalone.memory_extraction.evaluation_offline import (
+    _frozen_config, _run_evaluation_batch, _verification_contract,
+)
 from notalone.memory_extraction.evaluation_records import EvaluationRecordStore, canonical_sha256
 from notalone.memory_extraction.evaluation_reference import (
     FULL_ANNOTATION_PATH, FULL_REFERENCE_PATH, PUBLIC_REFERENCE_PATH,
@@ -30,7 +30,7 @@ from notalone.memory_extraction.evaluation_reference import (
     validate_full_public_reference,
 )
 from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
-from notalone.memory_extraction.verification_adapters import SOURCE_VERIFICATION_SCHEMA
+from notalone.memory_extraction.verification import SourceVerificationMode
 from notalone.memory_trace.context import current_trace
 
 
@@ -58,6 +58,11 @@ _REQUIRED_SOURCES = frozenset(
     *(f"backend/src/notalone/ledger/{name}.py" for name in
       ("__init__", "models", "ports")),
 })
+# 新证明入口还执行这三个共享模块；旧四槽准入集合保持原合同。
+_NULLABLE_REQUIRED_SOURCES = _REQUIRED_SOURCES | frozenset(
+    f"backend/src/notalone/memory/{name}.py"
+    for name in ("dimension_evidence", "evidence_binding", "pragmatics")
+)
 _AUDIT_REASONS = {
     "safe": {"supported"}, "general_error": {"coverage_miss", "contract_mismatch"},
     "safety_error": {"false_fact", "wrong_subject", "contract_mismatch"},
@@ -67,6 +72,7 @@ _AUDIT_REASONS = {
 
 def _gold_reference(
     frozen_gold: dict, source_hashes: dict[str, str], *, case_set: str = "reference21",
+    verification_mode: SourceVerificationMode = SourceVerificationMode.LEGACY_V4,
 ) -> dict:
     """这里只核对准备协议，不把 Agent 标记认证为真实语义质量。"""
     cases = _FULL_CASES if case_set == "full140" else _PLAN_CASES
@@ -78,11 +84,14 @@ def _gold_reference(
         raise EvaluationBudgetAbort("ecnu_gold_not_frozen")
     criterion = frozen_gold.get("criteria_path", _CRITERIA_PATH)
     digest = frozen_gold.get("criteria_sha256")
+    required_sources = (_NULLABLE_REQUIRED_SOURCES
+                        if verification_mode is SourceVerificationMode.NULLABLE_PROOF_V1
+                        else _REQUIRED_SOURCES)
     if (not isinstance(criterion, str) or not isinstance(digest, str)
             or re.fullmatch(r"[0-9a-f]{64}", digest) is None
             or not isinstance(source_hashes, dict)
             or source_hashes.get(criterion) != digest
-            or not (_REQUIRED_SOURCES | {criterion}) <= set(source_hashes)):
+            or not (required_sources | {criterion}) <= set(source_hashes)):
         raise EvaluationBudgetAbort("ecnu_source_freeze_incomplete")
     if case_set == "full140" and (
         criterion != FULL_REFERENCE_PATH or not {
@@ -145,14 +154,22 @@ def run_ecnu_evaluation(
     request_timeout_seconds: float = 60.0, max_retries: int = 2,
     case_positions: tuple[int, ...] | None = None,
     case_set: str = "reference21",
+    verification_mode: SourceVerificationMode | str = SourceVerificationMode.LEGACY_V4,
 ) -> dict:
     """默认固定P1；显式最多四窗诊断仍须独审，不自动后继或认证质量。"""
+    try:
+        selected = SourceVerificationMode(verification_mode)
+    except (TypeError, ValueError):
+        raise EvaluationBudgetAbort("ecnu_invalid_verification_mode") from None
     if (type(request_timeout_seconds) not in (int, float)
             or not 0 < request_timeout_seconds <= 300
             or not isfinite(request_timeout_seconds)
             or type(max_retries) is not int or not 0 <= max_retries <= 2):
         raise EvaluationBudgetAbort("ecnu_invalid_request_limits")
     request_timeout_seconds = float(request_timeout_seconds)
+    if (selected is SourceVerificationMode.NULLABLE_PROOF_V1
+            and (request_timeout_seconds != 300.0 or max_retries != 0)):
+        raise EvaluationBudgetAbort("ecnu_nullable_fixed_request_limits")
     if type(case_set) is not str or case_set not in {"reference21", "full140"}:
         raise EvaluationBudgetAbort("ecnu_invalid_case_set")
     if case_set == "full140":
@@ -177,12 +194,17 @@ def run_ecnu_evaluation(
             or (synthetic_transport is not None
                 and type(synthetic_transport) is not httpx.MockTransport)):
         raise EvaluationBudgetAbort("ecnu_explicit_protocol_required")
-    if synthetic_transport is None:
-        from .evaluation_phased_audit import PhasedEvaluationAudit
+    from .evaluation_phased_audit import PhasedEvaluationAudit
 
+    if (type(audit_case) is PhasedEvaluationAudit
+            and audit_case.verification_mode != selected.value):
+        raise EvaluationBudgetAbort("ecnu_phased_verification_mode_mismatch")
+    if synthetic_transport is None:
         if type(audit_case) is not PhasedEvaluationAudit:
             raise EvaluationBudgetAbort("ecnu_phased_audit_required")
-    reference = _gold_reference(frozen_gold, source_hashes, case_set=case_set)
+    reference = _gold_reference(
+        frozen_gold, source_hashes, case_set=case_set, verification_mode=selected,
+    )
     if synthetic_transport is None:
         if (frozen_gold.get("criteria_path") !=
                 (FULL_REFERENCE_PATH if case_set == "full140" else PUBLIC_REFERENCE_PATH)
@@ -212,10 +234,7 @@ def run_ecnu_evaluation(
             extraction_adapters.EXTRACTION_SYSTEM_PROMPT,
             deepcopy(extraction_adapters.EXTRACTION_SCHEMA),
         ),
-        "verification": (
-            verification_adapters.SOURCE_VERIFICATION_SYSTEM_PROMPT,
-            deepcopy(verification_adapters.SOURCE_VERIFICATION_SCHEMA),
-        ),
+        "verification": deepcopy(_verification_contract(selected)),
     }
     tools = {purpose: convert_to_openai_tool(schema)
              for purpose, (_, schema) in runtime_contracts.items()}
@@ -226,7 +245,7 @@ def run_ecnu_evaluation(
     } for index, (case, window) in enumerate(zip(cases, windows)))
     config = {
         **_frozen_config(plan, request_timeout_seconds=request_timeout_seconds,
-                         max_retries=max_retries),
+                         max_retries=max_retries, verification_mode=selected),
         "mode": ("ecnu_bounded_full140" if case_set == "full140" else
                  "ecnu_bounded_evaluation" if case_positions is None
                  else "ecnu_bounded_diagnostic"),
@@ -243,7 +262,7 @@ def run_ecnu_evaluation(
            if case_set == "full140" or case_positions is not None else {}),
         "response_identity_policy": "first_valid_completion_observation_stop_on_change",
         "request_contract_version": 1,
-        "tool_choice": [EXTRACTION_SCHEMA["title"], SOURCE_VERIFICATION_SCHEMA["title"]],
+        "tool_choice": [schema["title"] for _, schema in runtime_contracts.values()],
         "fallback": False,
         "versions": {name: version(name) for name in (
             "openai", "langchain-core", "langchain-deepseek", "langchain-openai",
@@ -271,8 +290,7 @@ def run_ecnu_evaluation(
         live_contracts = {
             "extraction": (extraction_adapters.EXTRACTION_SYSTEM_PROMPT,
                            extraction_adapters.EXTRACTION_SCHEMA),
-            "verification": (verification_adapters.SOURCE_VERIFICATION_SYSTEM_PROMPT,
-                             verification_adapters.SOURCE_VERIFICATION_SCHEMA),
+            "verification": _verification_contract(selected),
         }
         if any(canonical_sha256(live_contracts[stage]) != canonical_sha256(frozen)
                for stage, frozen in runtime_contracts.items()):
@@ -296,4 +314,5 @@ def run_ecnu_evaluation(
         semantic_audit=_audit_callback(audit_case, reference), gold_reference=reference,
         code_prefix="ecnu", credential_loader=credential_loader,
         request_timeout_seconds=request_timeout_seconds, max_retries=max_retries,
+        verification_mode=selected,
     )

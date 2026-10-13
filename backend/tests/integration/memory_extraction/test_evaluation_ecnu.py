@@ -61,7 +61,7 @@ class EvaluationECNUTest(unittest.TestCase):
         self.credentials = []
         self.audits = []
 
-    def preparation(self):
+    def preparation(self, *, nullable=False):
         actual_repo = Path(__file__).resolve().parents[4]
         relatives = [str(path.relative_to(actual_repo)) for path in
                      (actual_repo / "backend/src/notalone/memory_extraction").rglob("*.py")]
@@ -76,6 +76,10 @@ class EvaluationECNUTest(unittest.TestCase):
               ("__init__", "models", "ports")),
             ".scratch/unfinished-work/memory-gold-agent-annotations-20261012.md",
         ]
+        if nullable:
+            relatives += [f"backend/src/notalone/memory/{name}.py" for name in (
+                "dimension_evidence", "evidence_binding", "pragmatics",
+            )]
         hashes = {}
         for relative in relatives:
             path = self.repo / relative
@@ -154,7 +158,9 @@ class EvaluationECNUTest(unittest.TestCase):
         from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
 
         if hashes is None or gold is None:
-            prepared_hashes, prepared_gold = self.preparation()
+            prepared_hashes, prepared_gold = self.preparation(
+                nullable=request_parameters.get("verification_mode") == "nullable-proof-v1",
+            )
             hashes = prepared_hashes if hashes is None else hashes
             gold = prepared_gold if gold is None else gold
         return run_ecnu_evaluation(
@@ -207,6 +213,312 @@ class EvaluationECNUTest(unittest.TestCase):
         self.assertEqual(result["summary"]["unknown"], 1)
         self.assertEqual(result["summary"]["unrun"], 20)
         self.assertFalse(result["receipt"]["quality_certified"])
+
+    def test_nullable_mode_runs_actual_adapter_and_preserves_model_and_program_separately(self):
+        window = build_window(PLAN[7])
+        source = str(window.target_message_ids[0])
+        fact = {
+            "text": "联系人刚读完《活着》。", "category": "common_fact",
+            "subject": "contact", "topic": "study", "source_message_ids": [source],
+            "confidence": 0.99, "risk_flags": [], "valid_at": None, "invalid_at": None,
+            "speech_act": "assertion", "assertion_status": "asserted", "figurative_type": "literal",
+            "alternatives": [], "interpretation_reason": "合成直接阅读状态。",
+        }
+        raw_v = {"candidate_index": 0, "verdict": "supported", "issues": [],
+                 "evidence": [{"message_id": source, "quote": window.messages[1].text}],
+                 "proof": None}
+
+        def response(request):
+            body = json.loads(request.content)
+            name = body["tool_choice"]["function"]["name"]
+            return self.response(request, arguments={"facts": [fact]} if
+                                 name == "MemoryExtractionOutput" else {"results": [raw_v]})
+
+        result = self.run_ready(
+            transport=httpx.MockTransport(response), case_positions=(7,),
+            request_timeout_seconds=300, max_retries=0,
+            verification_mode="nullable-proof-v1",
+            audit=lambda bundle: self.audit(bundle, "unknown", "audit_unresolved"),
+        )
+        self.assertEqual(len(self.requests), 2)
+        manifest = json.loads((self.output / "manifest.json").read_text())
+        self.assertEqual(manifest["frozen_config"]["verification_mode"], "nullable-proof-v1")
+        v_request = self.requests[1]
+        self.assertIn("nullable-proof-v1", v_request["messages"][0]["content"])
+        self.assertIn("proof", v_request["tools"][0]["function"]["parameters"]
+                      ["properties"]["results"]["items"]["properties"])
+        self.assertEqual(self.audits[0]["verification_mode"], "nullable-proof-v1")
+        self.assertEqual(self.audits[0]["adapter_outputs"][1]["tool_calls"][0]
+                         ["args"]["results"], [raw_v])
+        program = self.audits[0]["verification_program"][0]["results"][0]
+        self.assertEqual(program["model_verdict"], "supported")
+        self.assertEqual(program["model_issues"], [])
+        self.assertEqual(program["proof_verification"]["status"], "UNKNOWN")
+        final = result["outcomes"][0]["result"]["facts"][0]
+        # 原评分保留ADR-036的理想去向，不代签空放行表下的实际产品采纳。
+        self.assertEqual(final["destination"], "auto")
+        self.assertEqual(final["dimension_evidence"]["version"], 2)
+        self.assertFalse(final["dimension_evidence"]["source_bound"])
+        self.assertIsNone(final["dimension_evidence"]["semantic_basis"])
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 2)
+        self.assertFalse(result["quality_certified"])
+
+    def test_invalid_or_mismatched_verification_mode_stops_before_registration(self):
+        from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
+        from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
+        from notalone.memory_extraction.evaluation_reference import PUBLIC_REFERENCE_PATH
+
+        hashes, gold = self.preparation()
+        root = Path(__file__).resolve().parents[4]
+        content = (root / PUBLIC_REFERENCE_PATH).read_bytes()
+        reference = json.loads(content)
+        criterion = hashlib.sha256(content).hexdigest()
+        hashes[PUBLIC_REFERENCE_PATH] = criterion
+        gold.update(criteria_path=PUBLIC_REFERENCE_PATH, criteria_sha256=criterion)
+        audit = PhasedEvaluationAudit(
+            reference=reference,
+            expected_reference_sha256="5fb8d53b90a1a96c5987ac7b825bb233cc3e9f196f976e4851c40b0243b77b32",
+            annotation_sha256=reference["annotation_sha256"], criteria_sha256=criterion,
+            raw_reviewer=lambda view: {}, full_reviewer=lambda view: {},
+        )
+        with patch.object(EvaluationBudget, "create", side_effect=AssertionError("不得登记预算。")):
+            protocols = ((None, None), (True, None), ("unknown", None),
+                         ("nullable-proof-v1", None),
+                         ("nullable-proof-v1", httpx.MockTransport(self.response)))
+            for mode, transport in protocols:
+                with self.subTest(mode=mode, synthetic=transport is not None), self.assertRaisesRegex(
+                    EvaluationBudgetAbort, "ecnu_(invalid_verification_mode|phased_verification_mode_mismatch)",
+                ):
+                    run_ecnu_evaluation(
+                        output_directory=self.output, run_id=uuid4(),
+                        deadline=datetime.now(timezone.utc) + timedelta(minutes=10),
+                        repo_root=root, source_hashes=hashes, frozen_gold=gold,
+                        credential_loader=self.credential, audit_case=audit,
+                        verification_mode=mode,
+                        request_timeout_seconds=300, max_retries=0,
+                        synthetic_transport=transport,
+                    )
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+
+    def test_nullable_live_contract_drift_stops_before_first_mock_http(self):
+        from notalone.memory_extraction import verification_adapters
+
+        for mutation in ("schema", "prompt"):
+            with self.subTest(mutation=mutation):
+                self.output = self.home / ("proof-drift-" + mutation)
+                self.output.mkdir(mode=0o700)
+                original_schema = deepcopy(verification_adapters.SOURCE_VERIFICATION_PROOF_SCHEMA)
+                original_prompt = verification_adapters.SOURCE_PROOF_PROMPT
+
+                def credential():
+                    if mutation == "schema":
+                        verification_adapters.SOURCE_VERIFICATION_PROOF_SCHEMA["description"] = "合成漂移。"
+                    else:
+                        verification_adapters.SOURCE_PROOF_PROMPT += "合成漂移。"
+                    return self.credential()
+
+                try:
+                    result = self.run_ready(
+                        credential=credential, verification_mode="nullable-proof-v1",
+                        request_timeout_seconds=300, max_retries=0,
+                    )
+                finally:
+                    verification_adapters.SOURCE_VERIFICATION_PROOF_SCHEMA.clear()
+                    verification_adapters.SOURCE_VERIFICATION_PROOF_SCHEMA.update(original_schema)
+                    verification_adapters.SOURCE_PROOF_PROMPT = original_prompt
+                self.assertEqual(self.requests, [])
+                self.assertEqual(self.audits, [])
+                self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 0)
+                self.assertEqual(result["stopped_code"], "ecnu_hard_stop")
+
+    def test_nullable_mode_keeps_fixed_300_seconds_and_zero_retries_before_registration(self):
+        with patch.object(EvaluationBudget, "create", side_effect=AssertionError("不得登记预算。")):
+            for parameters in ({}, {"request_timeout_seconds": 180, "max_retries": 0},
+                               {"request_timeout_seconds": 300, "max_retries": 1}):
+                with self.subTest(parameters=parameters), self.assertRaisesRegex(
+                    EvaluationBudgetAbort, "ecnu_nullable_fixed_request_limits",
+                ):
+                    self.run_ready(verification_mode="nullable-proof-v1", **parameters)
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+
+    def test_nullable_requires_all_actual_semantic_dependencies_before_registration(self):
+        hashes, gold = self.preparation(nullable=True)
+        required = (
+            "backend/src/notalone/memory/dimension_evidence.py",
+            "backend/src/notalone/memory/evidence_binding.py",
+            "backend/src/notalone/memory/pragmatics.py",
+            "backend/src/notalone/memory_extraction/source_proof.py",
+            "backend/src/notalone/memory_extraction/pragmatics.py",
+        )
+        with patch.object(EvaluationBudget, "create", side_effect=AssertionError("缺源码不得登记。")):
+            for missing in required:
+                with self.subTest(missing=missing), self.assertRaisesRegex(
+                    EvaluationBudgetAbort, "ecnu_source_freeze_incomplete",
+                ):
+                    self.run_ready(
+                        hashes={path: digest for path, digest in hashes.items() if path != missing},
+                        gold=gold, case_positions=(0,), verification_mode="nullable-proof-v1",
+                        request_timeout_seconds=300, max_retries=0,
+                    )
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+        self.assertEqual(tuple(self.output.iterdir()), ())
+
+    def test_nullable_semantic_source_drift_stops_before_first_mock_http(self):
+        for name in ("dimension_evidence", "evidence_binding", "pragmatics"):
+            with self.subTest(source=name):
+                self.output = self.home / ("semantic-source-drift-" + name)
+                self.output.mkdir(mode=0o700)
+                hashes, gold = self.preparation(nullable=True)
+                path = self.repo / f"backend/src/notalone/memory/{name}.py"
+
+                def credential():
+                    path.write_text("合成源码在冻结后发生变化。\n", encoding="utf-8")
+                    return self.credential()
+
+                result = self.run_ready(
+                    hashes=hashes, gold=gold, credential=credential,
+                    case_positions=(0,), verification_mode="nullable-proof-v1",
+                    request_timeout_seconds=300, max_retries=0,
+                )
+                self.assertEqual(self.requests, [])
+                self.assertEqual(self.audits, [])
+                self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 0)
+                self.assertEqual(result["stopped_code"], "ecnu_hard_stop")
+        self.assertEqual(self.credentials, ["loaded"] * 3)
+
+    def test_legacy_admission_keeps_original_source_set_without_nullable_dependencies(self):
+        hashes, gold = self.preparation()
+        self.assertFalse(any(f"backend/src/notalone/memory/{name}.py" in hashes
+                             for name in ("dimension_evidence", "evidence_binding", "pragmatics")))
+        result = self.run_ready(
+            hashes=hashes, gold=gold, case_positions=(0,),
+            request_timeout_seconds=300, max_retries=0,
+            audit=lambda bundle: self.audit(bundle, "unknown", "audit_unresolved"),
+        )
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(self.credentials, ["loaded"])
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 1)
+        manifest = json.loads((self.output / "manifest.json").read_text())
+        self.assertEqual(manifest["frozen_config"]["verification_mode"], "legacy-v4")
+
+    def test_nullable_phased_audit_seals_actual_sdk_proof_and_program_receipts(self):
+        from tests.unit.memory_extraction.test_evaluation_phased_audit import EvaluationPhasedAuditTest
+        from notalone.memory_extraction.evaluation_reference import PUBLIC_REFERENCE_PATH
+
+        phase = EvaluationPhasedAuditTest()
+        phase.setUp()
+        self.addCleanup(phase.doCleanups)
+        phase.bundle["case_position"] = 0
+        raw_v = deepcopy(phase.bundle["adapter_outputs"][1]["tool_calls"][0]["args"]["results"][0])
+        raw_v["proof"] = None
+        hashes, gold = self.preparation(nullable=True)
+        content = (phase.root / PUBLIC_REFERENCE_PATH).read_bytes()
+        copied = self.repo / PUBLIC_REFERENCE_PATH
+        copied.parent.mkdir(parents=True, exist_ok=True)
+        copied.write_bytes(content)
+        hashes[PUBLIC_REFERENCE_PATH] = hashlib.sha256(content).hexdigest()
+        gold.update(criteria_path=PUBLIC_REFERENCE_PATH, criteria_sha256=hashes[PUBLIC_REFERENCE_PATH])
+
+        def response(request):
+            name = json.loads(request.content)["tool_choice"]["function"]["name"]
+            return self.response(request, arguments={"facts": [phase.fact]} if
+                                 name == "MemoryExtractionOutput" else {"results": [raw_v]})
+
+        def full_review(view):
+            phase.order.append("full")
+            receipt = view["raw_receipt"]
+            saved = json.loads((self.output / f"event-{receipt['event_sequence']:06d}.json").read_text())
+            self.assertEqual(saved["payload"]["review"], view["sealed_raw_review"])
+            packet = view["packet"]
+            answer = deepcopy(view["sealed_raw_review"])
+            answer.pop("raw_evidence_sha256")
+            answer.update(evidence_sha256=packet["evidence_sha256"],
+                          run_status=packet["evidence"]["run_status"])
+            for row in answer["e_rows"]:
+                row["lineage"] = {"v_input_indices": [0], "final_indices": [0], "status": "pass"}
+            for claim in answer["claims"]:
+                for group in claim["groups"]:
+                    group.update(final_indices=[0], lineage="pass", destination="pass")
+            answer["v_rows"] = [{
+                "result_index": 0, "payload_sha256": packet["layers"]["verification"][0]["payload_sha256"],
+                "fields": {field: "pass" for field in ("candidate_index", "verdict", "issues", "evidence")},
+                "semantic": "pass", "e_indices": [0], "lineage": "pass", "basis": "合成阅读状态核对。",
+            }]
+            answer["window_checks"]["lineage"] = "pass"
+            return answer
+
+        result = self.run_ready(
+            hashes=hashes, gold=gold, transport=httpx.MockTransport(response),
+            audit=phase.audit(full=full_review, case_positions=(7,), verification_mode="nullable-proof-v1"),
+            case_positions=(7,), verification_mode="nullable-proof-v1",
+            request_timeout_seconds=300, max_retries=0,
+        )
+        self.assertEqual(result["summary"]["completed"], 1)
+        self.assertEqual(result["audits"][0]["decision"], "safe")
+        self.assertEqual(phase.order, ["raw", "full"])
+        events = [event for event in result["events"] if event["kind"] == "semantic_audit"]
+        self.assertEqual([event["payload"].get("phase") for event in events], ["raw", "final", None])
+        protocol = events[1]["payload"]["verification_protocol"]
+        self.assertEqual(protocol["model_results"], [raw_v])
+        program = next(event for event in result["events"] if event["kind"] == "verification_program")
+        self.assertEqual(protocol["program_results"], [program["payload"]])
+        self.assertEqual(protocol["final_dimension_evidence"][0]["dimension_evidence"]["version"], 2)
+        self.assertLess(program["event_sequence"], events[0]["event_sequence"])
+        self.assertLess(events[0]["event_sequence"], events[1]["event_sequence"])
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 2)
+        self.assertFalse(result["quality_certified"])
+
+    def test_nullable_missing_and_null_proof_are_bounded_but_malformed_proof_stops(self):
+        window = build_window(PLAN[7])
+        source = str(window.target_message_ids[0])
+        fact = {
+            "text": "联系人刚读完《活着》。", "category": "common_fact",
+            "subject": "contact", "topic": "study", "source_message_ids": [source],
+            "confidence": 0.99, "risk_flags": [], "valid_at": None, "invalid_at": None,
+            "speech_act": "assertion", "assertion_status": "asserted", "figurative_type": "literal",
+            "alternatives": [], "interpretation_reason": "合成直接阅读状态。",
+        }
+        for mode in ("missing", "null", "malformed"):
+            with self.subTest(proof=mode):
+                self.output = self.home / ("proof-shape-" + mode)
+                self.output.mkdir(mode=0o700)
+                self.requests.clear()
+                self.audits.clear()
+                raw_v = {"candidate_index": 0, "verdict": "supported", "issues": [],
+                         "evidence": [{"message_id": source, "quote": window.messages[1].text}]}
+                if mode != "missing":
+                    raw_v["proof"] = None if mode == "null" else {
+                        "version": 1, "atom_links": None, "reference": None,
+                        "reported": None, "valid": True,
+                    }
+
+                def response(request):
+                    name = json.loads(request.content)["tool_choice"]["function"]["name"]
+                    return self.response(request, arguments={"facts": [fact]} if
+                                         name == "MemoryExtractionOutput" else {"results": [raw_v]})
+
+                result = self.run_ready(
+                    transport=httpx.MockTransport(response), case_positions=(7, 4),
+                    verification_mode="nullable-proof-v1", request_timeout_seconds=300, max_retries=0,
+                    audit=lambda bundle: self.audit(bundle, "unknown", "audit_unresolved"),
+                )
+                self.assertEqual(len(self.requests), 2)
+                self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 2)
+                self.assertEqual(result["summary"]["unrun"], 1)
+                v_output = [event for event in result["events"] if event["kind"] == "adapter_output"][1]
+                self.assertEqual(v_output["payload"]["tool_calls"][0]["args"]["results"], [raw_v])
+                program = [event for event in result["events"] if event["kind"] == "verification_program"]
+                if mode == "malformed":
+                    self.assertEqual(result["outcomes"][0]["status"], "failed")
+                    self.assertEqual(self.audits, [])
+                    self.assertEqual(program, [])
+                else:
+                    self.assertEqual(program[0]["payload"]["results"][0]["proof_verification"]["status"], "UNKNOWN")
+                    self.assertEqual(self.audits[0]["adapter_outputs"][1]["tool_calls"][0]
+                                     ["args"]["results"], [raw_v])
 
     def test_invalid_request_limits_are_rejected_before_budget_or_credentials(
         self,
