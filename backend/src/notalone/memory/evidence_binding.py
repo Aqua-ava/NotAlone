@@ -6,7 +6,7 @@ from dataclasses import replace
 import hashlib
 import json
 import re
-from typing import Iterable, Mapping, TYPE_CHECKING
+from typing import Any, Iterable, Mapping, TYPE_CHECKING
 
 from notalone.memory.dimension_evidence import (
     DimensionEvidence, EvidenceMessage, evidence_timestamp,
@@ -111,6 +111,7 @@ def bind_dimension_evidence(
     candidate: MemoryCandidate | ExtractedFact,
     messages: tuple[EvidenceMessage, ...],
     texts: Mapping[UUID, str],
+    source_snapshots: Mapping[UUID, tuple[dict[str, Any], ...]] | None = None,
 ) -> DimensionEvidence:
     """纯校验当前来源；任何摘要、片段、引用或范围变化保留未知。"""
 
@@ -151,6 +152,62 @@ def bind_dimension_evidence(
             span.end > len(candidate.text)
             or content_digest(candidate.text[span.start:span.end]) != span.sha256
         ):
+            return result
+    if evidence.semantic_basis is not None:
+        from notalone.memory_extraction.source_proof import reverify_basis
+        from notalone.memory_extraction.models import (
+            ExtractedFact, ExtractionWindow, MessageRef, MessageSender,
+        )
+
+        basis = evidence.semantic_basis
+        source_ids = (
+            candidate.source_ids if isinstance(candidate, MemoryCandidate)
+            else candidate.source_message_ids
+        )
+        if (
+            evidence.pragmatics is None
+            or source_snapshots is None
+            or set(source_snapshots) != set(texts)
+            or any(anchor.message_id not in source_ids for anchor in basis.message_spans)
+        ):
+            return result
+        assert source_snapshots is not None
+        if any(
+            source_state_digest(source_snapshots[item.message_id])
+            != item.source_state_sha256 for item in messages
+        ):
+            return result
+        for span in basis.candidate_spans:
+            if (
+                span.end > len(candidate.text)
+                or content_digest(candidate.text[span.start:span.end]) != span.sha256
+            ):
+                return result
+        try:
+            window = ExtractionWindow(scope.owner_id, scope.contact_id, tuple(
+                MessageRef(
+                    item.message_id, texts[item.message_id], MessageSender(item.sender),
+                    item.occurred_at, source_snapshots[item.message_id],
+                    message_type=item.message_type,
+                    text_representation=item.text_representation,
+                ) for item in messages
+            ))
+            fact = candidate if isinstance(candidate, ExtractedFact) else ExtractedFact(
+                text=candidate.text, category=candidate.category,
+                subject=candidate.subject, topic=candidate.topic,
+                source_message_ids=candidate.source_ids,
+                confidence=candidate.confidence if candidate.confidence is not None else 0.0,
+                risk_flags=candidate.risk_flags, valid_at=candidate.valid_at,
+                invalid_at=candidate.invalid_at, alternatives=candidate.alternatives,
+                interpretation_reason=candidate.interpretation_reason,
+                speech_act=evidence.pragmatics.speech_act,
+                assertion_status=evidence.pragmatics.assertion_status,
+                figurative_type=evidence.pragmatics.figurative_type,
+            )
+            checked = reverify_basis(basis.to_payload(), window, fact, texts)
+        except (TypeError, ValueError):
+            return result
+        if checked.status != "verified" or checked.semantic_basis != basis.to_payload():
             return result
     object.__setattr__(result, "source_bound", True)
     return result

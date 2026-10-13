@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import re
+import json
 from typing import Any
 from uuid import UUID
 
@@ -324,6 +325,283 @@ class ReportedAttribution:
         )
 
 
+SEMANTIC_RULE_IDS = frozenset({
+    "AUTHOR_ARRIVAL_H1", "KIN_LEND_BA_H1", "REQUEST_ROLE_H1",
+    "SOURCE_IDENTITY_H1", "COND_PLAN_RUN_V1",
+})
+_ROLE_KINDS = frozenset({
+    "author", "elder_sister", "elder_brother", "colleague",
+    "vehicle", "book", "umbrella",
+})
+_ROLE_SLOTS = frozenset({
+    "agent", "recipient", "object", "property_owner", "beneficiary", "actor",
+})
+_ATOM_PHASES = {
+    "arrive_home": "completed", "lend": "completed", "request": "historical",
+    "receive_request": "historical", "cover_shift": "requested",
+    "run": "planned", "clear_weather": "condition",
+}
+
+
+def _number(value: object, limit: int) -> int:
+    if type(value) is not int or not 0 <= value < limit:
+        raise ValueError("语义依据编号必须是范围内的整数。")
+    return value
+
+
+def _bounded_rows(value: object, limit: int) -> list[Any]:
+    rows = _array(value)
+    if len(rows) > limit:
+        raise ValueError("语义依据条目超过有限合同。")
+    return rows
+
+
+def _source_and_candidate(row: dict[str, Any]) -> None:
+    MessageSpan.from_payload(row["source"])
+    TextSpan.from_payload(row["candidate"])
+
+
+def _semantic_rules(
+    value: object,
+) -> None:
+    rules = []
+    for item in _bounded_rows(value, 8):
+        row = _fields(item, {"rule_id", "rule_version"})
+        if (
+            row["rule_id"] not in SEMANTIC_RULE_IDS
+            or type(row["rule_version"]) is not int or row["rule_version"] != 1
+        ):
+            raise ValueError("语义依据规则未受支持。")
+        rules.append(row["rule_id"])
+    if len(set(rules)) != len(rules):
+        raise ValueError("语义依据规则重复。")
+
+
+def _semantic_roles(
+    value: object,
+) -> dict[int, dict[str, Any]]:
+    roles: dict[int, dict[str, Any]] = {}
+    for item in _bounded_rows(value, 16):
+        row = _fields(item, {"role_id", "kind", "sender", "source"})
+        identifier = _number(row["role_id"], 16)
+        if identifier in roles or row["kind"] not in _ROLE_KINDS:
+            raise ValueError("语义依据角色重复或类型无效。")
+        if (
+            row["kind"] == "author" and row["sender"] not in {"self", "contact"}
+            or row["kind"] != "author" and row["sender"] is not None
+        ):
+            raise ValueError("只有作者可绑定受控发送者。")
+        MessageSpan.from_payload(row["source"])
+        roles[identifier] = row
+    return roles
+
+
+def _semantic_atoms(
+    value: object, roles: dict[int, dict[str, Any]],
+) -> dict[int, dict[str, Any]]:
+    atoms: dict[int, dict[str, Any]] = {}
+    for item in _bounded_rows(value, 16):
+        row = _fields(item, {"atom_id", "predicate", "phase", "roles", "source", "candidate"})
+        identifier = _number(row["atom_id"], 16)
+        if identifier in atoms or _ATOM_PHASES.get(row["predicate"]) != row["phase"]:
+            raise ValueError("语义依据命题重复或阶段无效。")
+        slots = _fields(row["roles"], set(_ROLE_SLOTS))
+        for slot, role in slots.items():
+            if role is None:
+                continue
+            role_id = _number(role, 16)
+            if role_id not in roles:
+                raise ValueError("命题引用了本图以外的角色。")
+            is_object = roles[role_id]["kind"] in {"vehicle", "book", "umbrella"}
+            if (slot == "object") != is_object:
+                raise ValueError("命题角色槽与人物或物件类型不符。")
+        _source_and_candidate(row)
+        atoms[identifier] = row
+    return atoms
+
+
+def _semantic_qualifiers(
+    value: object, atoms: dict[int, dict[str, Any]],
+) -> None:
+    qualifiers: dict[int, dict[str, Any]] = {}
+    edges: set[tuple[object, ...]] = set()
+    for item in _bounded_rows(value, 32):
+        if not isinstance(item, dict):
+            raise ValueError("限定条目必须是对象。")
+        kind = item.get("kind")
+        common = {"qualifier_id", "kind", "source", "candidate"}
+        names = {
+            "polarity": {"atom_id", "slot", "value_sha256"},
+            "quantity": {"atom_id", "slot", "value_sha256"},
+            "degree": {"quantity_qualifier_id", "modifier", "value_sha256"},
+            "condition": {"condition_atom_id", "action_atom_id", "relation"},
+            "time": {"atom_id", "slot", "value_sha256"},
+        }
+        if kind not in names:
+            raise ValueError("限定类型未受支持。")
+        row = _fields(item, common | names[kind])
+        identifier = _number(row["qualifier_id"], 32)
+        if identifier in qualifiers:
+            raise ValueError("限定编号重复。")
+        _source_and_candidate(row)
+        if kind != "condition":
+            _digest(row["value_sha256"])
+        if kind in {"polarity", "quantity", "time"}:
+            atom_id = _number(row["atom_id"], 16)
+            atom = atoms.get(atom_id)
+            if atom is None:
+                raise ValueError("限定引用了本图以外的命题。")
+            predicate = atom["predicate"]
+            slot = row["slot"]
+            if (
+                kind == "polarity" and (predicate != "lend" or slot != "predicate")
+                or kind == "quantity" and (predicate != "run" or slot != "distance")
+                or kind == "time" and (
+                    slot == "event_time" and predicate not in {"arrive_home", "lend", "run"}
+                    or slot == "requested_time" and predicate != "cover_shift"
+                    or slot not in {"event_time", "requested_time", "observation_time"}
+                )
+            ):
+                raise ValueError("限定槽与命题类型不符。")
+            edge = (kind, atom_id, slot)
+        elif kind == "degree":
+            quantity_id = _number(row["quantity_qualifier_id"], 32)
+            if row["modifier"] not in {"only", "approx"}:
+                raise ValueError("程度修饰未受支持。")
+            edge = (kind, quantity_id, row["modifier"])
+        else:
+            condition_id = _number(row["condition_atom_id"], 16)
+            action_id = _number(row["action_atom_id"], 16)
+            condition, action = atoms.get(condition_id), atoms.get(action_id)
+            if (
+                row["relation"] != "requires" or condition_id == action_id
+                or condition is None or condition["predicate"] != "clear_weather"
+                or action is None or action["predicate"] != "run"
+            ):
+                raise ValueError("条件必须由本图计划行动指向天气条件。")
+            edge = (kind, condition_id, action_id)
+        if edge in edges:
+            raise ValueError("限定关系重复。")
+        edges.add(edge)
+        qualifiers[identifier] = row
+    for row in qualifiers.values():
+        if row["kind"] == "degree":
+            quantity = qualifiers.get(row["quantity_qualifier_id"])
+            if quantity is None or quantity["kind"] != "quantity":
+                raise ValueError("程度修饰必须指向本图距离数量。")
+
+
+def _semantic_bindings(
+    value: object, roles: dict[int, dict[str, Any]],
+) -> None:
+    bindings = set()
+    for item in _bounded_rows(value, 8):
+        row = _fields(item, {"role_id", "method", "mention", "target", "binding"})
+        role_id = _number(row["role_id"], 16)
+        role = roles.get(role_id)
+        mention = MessageSpan.from_payload(row["mention"])
+        target = MessageSpan.from_payload(row["target"])
+        if role is None or role_id in bindings or mention.message_id != target.message_id:
+            raise ValueError("指称必须绑定本图唯一角色和同消息三锚。")
+        if row["method"] == "actual_sender":
+            if role["kind"] != "author" or row["binding"] is not None or mention != target:
+                raise ValueError("作者自指必须由受控发送者及同一我锚支持。")
+        elif row["method"] == "source_identity":
+            binding = MessageSpan.from_payload(row["binding"])
+            if role["kind"] == "author" or binding.message_id != mention.message_id:
+                raise ValueError("第三方指称必须带同消息的来源指称句。")
+        else:
+            raise ValueError("指称方法未受支持。")
+        bindings.add(role_id)
+
+
+def _semantic_unresolved(
+    value: object, atoms: dict[int, dict[str, Any]],
+) -> None:
+    unresolved = set()
+    for item in _bounded_rows(value, 32):
+        row = _fields(item, {"atom_id", "slot", "source", "reason"})
+        atom_id = _number(row["atom_id"], 16)
+        if (
+            atom_id not in atoms or row["slot"] not in _ROLE_SLOTS
+            or atoms[atom_id]["roles"][row["slot"]] is not None
+            or row["reason"] not in {
+                "missing_source_identity", "ambiguous_source", "unsupported_grammar",
+            }
+            or (atom_id, row["slot"]) in unresolved
+        ):
+            raise ValueError("未解关系不属于本图的未解角色槽。")
+        MessageSpan.from_payload(row["source"])
+        unresolved.add((atom_id, row["slot"]))
+    required_slots = {
+        "arrive_home": {"actor"}, "lend": {"agent", "recipient", "object", "property_owner"},
+        "request": {"agent", "recipient"}, "receive_request": {"agent", "recipient"},
+        "cover_shift": {"actor", "beneficiary"}, "run": {"actor"}, "clear_weather": set(),
+    }
+    for atom_id, atom in atoms.items():
+        for slot in required_slots[atom["predicate"]]:
+            if atom["roles"][slot] is None and (atom_id, slot) not in unresolved:
+                raise ValueError("应适用而未解的角色槽必须显式登记。")
+
+
+def _validate_semantic_basis(value: object) -> dict[str, Any]:
+    data = _fields(value, {
+        "version", "rule_set_sha256", "rules", "roles", "atoms", "qualifiers",
+        "reference_bindings", "frame", "unresolved", "source_graph_sha256",
+        "candidate_graph_sha256",
+    })
+    if type(data["version"]) is not int or data["version"] != 1:
+        raise ValueError("语义依据版本未受支持。")
+    for name in ("rule_set_sha256", "source_graph_sha256", "candidate_graph_sha256"):
+        _digest(data[name])
+    if data["frame"] not in {"direct", "quoted_request_h", "received_request_h"}:
+        raise ValueError("语义依据转述框架无效。")
+    _semantic_rules(data["rules"])
+    roles = _semantic_roles(data["roles"])
+    atoms = _semantic_atoms(data["atoms"], roles)
+    _semantic_qualifiers(data["qualifiers"], atoms)
+    _semantic_bindings(data["reference_bindings"], roles)
+    _semantic_unresolved(data["unresolved"], atoms)
+    return data
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class SemanticBasis:
+    """服务端规范关系的不可变无正文快照；结构合法不表示语义正确。"""
+
+    _canonical_json: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self._canonical_json, str):
+            raise TypeError("语义依据必须是受控版本化对象。")
+        _validate_semantic_basis(json.loads(self._canonical_json))
+
+    @classmethod
+    def from_payload(cls, value: object) -> SemanticBasis:
+        _validate_semantic_basis(value)
+        return cls(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                              separators=(",", ":"), allow_nan=False))
+
+    def to_payload(self) -> dict[str, Any]:
+        return json.loads(self._canonical_json)
+
+    @property
+    def message_spans(self) -> tuple[MessageSpan, ...]:
+        data = self.to_payload()
+        rows = [row["source"] for name in ("roles", "atoms", "qualifiers", "unresolved") for row in data[name]]
+        for binding in data["reference_bindings"]:
+            rows.extend((binding["mention"], binding["target"]))
+            if binding["binding"] is not None:
+                rows.append(binding["binding"])
+        return tuple(MessageSpan.from_payload(row) for row in rows)
+
+    @property
+    def candidate_spans(self) -> tuple[TextSpan, ...]:
+        data = self.to_payload()
+        return tuple(TextSpan.from_payload(row["candidate"])
+                     for name in ("atoms", "qualifiers") for row in data[name])
+
+
 @dataclass(frozen=True, slots=True, repr=False)
 class DimensionEvidence:
     """候选依据快照；NULL 是未知，存在快照也不代表已通过质量门。"""
@@ -338,12 +616,17 @@ class DimensionEvidence:
     media: tuple[MediaOrigin, ...] | None = None
     reported: tuple[ReportedAttribution, ...] | None = None
     version: int = 1
+    semantic_basis: SemanticBasis | None = None
     # 仅实际来源校验设置；JSON 往返不带这一运行状态。
     source_bound: bool = field(default=False, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        if type(self.version) is not int or self.version != 1:
+        if type(self.version) is not int or self.version not in {1, 2}:
             raise ValueError("维度依据版本未受支持。")
+        if self.semantic_basis is not None and (
+            self.version != 2 or not isinstance(self.semantic_basis, SemanticBasis)
+        ):
+            raise TypeError("语义依据必须使用版本2的受控合同。")
         if not isinstance(self.scope, ContactScope):
             raise TypeError("维度依据必须带联系人范围。")
         _digest(self.candidate_sha256)
@@ -389,6 +672,7 @@ class DimensionEvidence:
                 span for item in self.reported or ()
                 for span in (item.speaker, item.reported_subject)
             ),
+            *(self.semantic_basis.message_spans if self.semantic_basis else ()),
         )
 
     @property
@@ -404,7 +688,7 @@ class DimensionEvidence:
         def rows(value: tuple | None) -> object:
             return None if value is None else [item.to_payload() for item in value]
 
-        return {
+        payload: dict[str, object] = {
             "version": self.version,
             "scope": {
                 "owner_id": str(self.scope.owner_id),
@@ -420,13 +704,22 @@ class DimensionEvidence:
             "paraphrase": rows(self.paraphrase), "reference": rows(self.reference),
             "media": rows(self.media), "reported": rows(self.reported),
         }
+        if self.version == 2:
+            payload["semantic_basis"] = (
+                self.semantic_basis.to_payload()
+                if self.semantic_basis is not None else None
+            )
+        return payload
 
     @classmethod
     def from_payload(cls, value: object) -> DimensionEvidence:
-        data = _fields(value, {
+        names = {
             "version", "scope", "candidate_sha256", "window_sha256", "messages",
             "pragmatics", "paraphrase", "reference", "media", "reported",
-        })
+        }
+        if isinstance(value, dict) and type(value.get("version")) is int and value["version"] == 2:
+            names.add("semantic_basis")
+        data = _fields(value, names)
         scope = _fields(data["scope"], {"owner_id", "contact_id"})
         kwargs: dict[str, Any] = {}
         for name, kind in (
@@ -449,5 +742,9 @@ class DimensionEvidence:
                 EvidenceMessage.from_payload(item)
                 for item in _array(data["messages"])
             ),
-            version=data["version"], **kwargs,
+            version=data["version"],
+            semantic_basis=(
+                SemanticBasis.from_payload(data["semantic_basis"])
+                if data.get("semantic_basis") is not None else None
+            ), **kwargs,
         )

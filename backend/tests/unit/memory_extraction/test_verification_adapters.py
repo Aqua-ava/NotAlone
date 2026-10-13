@@ -20,9 +20,11 @@ from notalone.memory_extraction.errors import (
 from notalone.memory_extraction.verification_adapters import (
     LangChainSourceVerificationRuntime,
 )
+from notalone.memory_extraction.verification import SourceVerificationMode
 from tests.unit.memory_extraction.test_adapters import ExplicitToolChoiceModel
 from tests.unit.memory_extraction.test_flow import RecordingRuntime, _payload
 from tests.unit.memory_extraction.test_models import _window
+from tests.unit.memory_extraction.test_dimension_evidence_flow import _arrival_fixture
 from tests.unit.memory_extraction.verification_helpers import verification_result
 from tests.unit.reply.test_langchain_vertical_slice import ToolCallingFakeModel
 
@@ -41,6 +43,147 @@ def structured_verification(results: tuple[dict, ...]) -> AIMessage:
 
 class SourceVerificationAdapterTest(unittest.TestCase):
     """只在模型 I/O 边界使用 fake，不调用外部服务。"""
+
+    def test_existing_default_adapter_preserves_v1_before_business_migration(self):
+        window, payload, _ = _arrival_fixture()
+        raw = verification_result(
+            evidence=((window.messages[0].message_id, window.messages[0].text),),
+        )
+        model = ToolCallingFakeModel(responses=[structured_verification((raw,))])
+        runtime = LangChainSourceVerificationRuntime(model=model)
+        outcome = ExtractionFlow(
+            runtime=RecordingRuntime((payload,)), verification_runtime=runtime,
+        ).run(window)
+
+        self.assertIsNone(outcome.failure_kind)
+        self.assertEqual(runtime.verification_mode, SourceVerificationMode.LEGACY_V4)
+        self.assertEqual(outcome.accepted[0].dimension_evidence.version, 1)
+        self.assertIsNone(outcome.accepted[0].dimension_evidence.semantic_basis)
+        self.assertEqual(len(model.seen_calls), 1)
+
+    def test_single_adapter_call_reaches_actual_v2_producer_and_keeps_empty_gate(self):
+        from notalone.memory import InMemoryMemoryStore
+        from notalone.memory_extraction.adoption import MemoryAdoption
+        from notalone.scopes import ContactScope
+
+        window, payload, proof = _arrival_fixture()
+        raw = {**verification_result(
+            evidence=((window.messages[0].message_id, window.messages[0].text),),
+        ), "proof": proof}
+        model = ToolCallingFakeModel(responses=[structured_verification((raw,))])
+        ledger = InMemoryOutboundLedger()
+        store = InMemoryMemoryStore()
+        scope = ContactScope(window.owner_id, window.contact_id)
+        outcome = ExtractionFlow(
+            runtime=RecordingRuntime((payload,)),
+            verification_runtime=LangChainSourceVerificationRuntime(
+                model=model, ledger=ledger,
+                verification_mode=SourceVerificationMode.NULLABLE_PROOF_V1,
+            ),
+        ).run(window)
+        stats = MemoryAdoption(memory_port=store).adopt(scope, outcome)
+
+        self.assertIsNone(outcome.failure_kind)
+        self.assertEqual(len(model.seen_calls), 1)
+        self.assertEqual(len(ledger.list_by_owner(window.owner_id)), 1)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(stats.adopted, 0)
+        saved = store.list_pending_candidates(scope)[0]
+        self.assertEqual(saved.dimension_evidence.version, 2)
+        self.assertIsNotNone(saved.dimension_evidence.semantic_basis)
+        self.assertEqual(saved.text, payload["text"])
+        self.assertEqual(raw["verdict"], "supported")
+
+    def test_new_protocol_rejects_legacy_missing_null_and_illegal_proof_once(self):
+        message_id = uuid4()
+        window = _window((message_id,))
+        facts = ExtractionFlow(runtime=RecordingRuntime((
+            _payload(message_id),
+        ))).run(window).accepted
+        base = verification_result(evidence=((message_id, window.messages[0].text),))
+        cases = []
+        for key in ("candidate_index", "verdict", "issues", "evidence"):
+            cases.extend([
+                {name: value for name, value in base.items() if name != key},
+                {**base, key: None},
+            ])
+        for proof in (
+            True, {}, {"version": True, "atom_links": None, "reference": None,
+                       "reported": None},
+            {"version": 1, "atom_links": None, "reference": None, "reported": None,
+             "source_bound": True},
+            {"version": 1, "atom_links": [{"rule_id": "AUTHOR_ARRIVAL_H1",
+             "variant_id": "direct_h", "source": {
+                 "message_id": str(message_id), "start": False, "end": 1,
+             }, "candidate": {"start": 0, "end": 1}}],
+             "reference": None, "reported": None},
+            {"version": 1, "atom_links": [{"rule_id": "AUTHOR_ARRIVAL_H1",
+             "variant_id": "direct_h", "source": {
+                 "message_id": str(message_id), "start": 0,
+                 "end": len(window.messages[0].text) + 1,
+             }, "candidate": {"start": 0, "end": 1}}],
+             "reference": None, "reported": None},
+            {"version": 1, "atom_links": [{"rule_id": "AUTHOR_ARRIVAL_H1",
+             "variant_id": "direct_h", "source": {
+                 "message_id": str(uuid4()), "start": 0, "end": 1,
+             }, "candidate": {"start": 0, "end": 1}}],
+             "reference": None, "reported": None},
+        ):
+            cases.append({**base, "proof": proof})
+        for index, result in enumerate(cases):
+            with self.subTest(case=index):
+                model = ToolCallingFakeModel(responses=[structured_verification((result,))])
+                ledger = InMemoryOutboundLedger()
+                runtime = LangChainSourceVerificationRuntime(
+                    model=model, ledger=ledger,
+                    verification_mode=SourceVerificationMode.NULLABLE_PROOF_V1,
+                )
+                with self.assertRaises(ExtractionInvalidOutputError):
+                    runtime.verify(window=window, facts=facts)
+                self.assertEqual(len(model.seen_calls), 1)
+                self.assertEqual(ledger.list_by_owner(window.owner_id)[0].outcome,
+                                 LedgerOutcome.REJECTED_BY_VALIDATION)
+
+    def test_nullable_proof_uses_one_call_and_distinct_schema_from_legacy(self):
+        class SchemaRecordingModel(ToolCallingFakeModel):
+            seen_schemas: list[dict] = []
+
+            def bind_tools(self, tools, **kwargs):
+                self.seen_schemas.extend(tools)
+                return super().bind_tools(tools, **kwargs)
+
+        message_id = uuid4()
+        window = _window((message_id,))
+        facts = ExtractionFlow(runtime=RecordingRuntime((
+            _payload(message_id),
+        ))).run(window).accepted
+        result = {**verification_result(
+            evidence=((message_id, window.messages[0].text),),
+        ), "proof": None}
+        model = SchemaRecordingModel(responses=[structured_verification((result,))])
+        runtime = LangChainSourceVerificationRuntime(
+            model=model, verification_mode=SourceVerificationMode.NULLABLE_PROOF_V1,
+        )
+
+        self.assertEqual(runtime.verify(window=window, facts=facts), (result,))
+        self.assertEqual(runtime.verification_mode,
+                         SourceVerificationMode.NULLABLE_PROOF_V1)
+        self.assertEqual(len(model.seen_calls), 1)
+        schema = model.seen_schemas[0]["properties"]["results"]["items"]
+        self.assertEqual(set(schema["required"]),
+                         {"candidate_index", "verdict", "issues", "evidence"})
+        self.assertEqual(schema["properties"]["proof"]["type"], ["object", "null"])
+        self.assertNotIn("source_bound", schema["properties"]["proof"]["properties"])
+
+        legacy_model = SchemaRecordingModel(responses=[structured_verification((result,))])
+        legacy = LangChainSourceVerificationRuntime(
+            model=legacy_model, verification_mode=SourceVerificationMode.LEGACY_V4,
+        )
+        with self.assertRaises(ExtractionInvalidOutputError):
+            legacy.verify(window=window, facts=facts)
+        self.assertEqual(len(legacy_model.seen_calls), 1)
+        legacy_schema = legacy_model.seen_schemas[0]["properties"]["results"]["items"]
+        self.assertNotIn("proof", legacy_schema["properties"])
 
     def test_explicit_result_tool_returns_verdict_when_auto_would_return_only_text(self):
         message_id = uuid4()

@@ -13,9 +13,11 @@ from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
 from notalone.memory_extraction.flow import ExtractionFlow
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.models import ExtractionFailureKind
+from notalone.memory_extraction.verification import validate_source_verification
 from notalone.scopes import ContactScope
 from tests.unit.memory_extraction.test_flow import RecordingRuntime, _payload
 from tests.unit.memory_extraction.test_models import _window
+from tests.unit.memory_extraction.test_dimension_evidence_flow import _arrival_fixture
 from tests.unit.memory_extraction.verification_helpers import (
     FixedSourceVerifier,
     SyntheticSupportingVerifier,
@@ -25,6 +27,83 @@ from tests.unit.memory_extraction.verification_helpers import (
 
 class SourceVerificationFlowTest(unittest.TestCase):
     """模型边界返回预置结果，记忆生命周期由实际领域端口执行。"""
+
+    def test_verified_new_basis_never_upgrades_the_original_model_verdict(self):
+        window, payload, proof = _arrival_fixture()
+        facts = ExtractionFlow(runtime=RecordingRuntime((payload,))).run(window).accepted
+        message_id = window.messages[0].message_id
+        for model_verdict in ("uncertain", "unsupported"):
+            with self.subTest(model_verdict=model_verdict):
+                raw = {**verification_result(
+                    verdict=model_verdict, issues=("meaning",),
+                    evidence=((message_id, window.messages[0].text),),
+                ), "proof": proof}
+                result = validate_source_verification(
+                    (raw,), window=window, facts=facts, mode="nullable-proof-v1",
+                )[0]
+                self.assertEqual(result.verdict.value, model_verdict)
+                self.assertEqual(result.model_verdict.value, model_verdict)
+                self.assertEqual(result.proof_verification.status, "verified")
+                verifier = FixedSourceVerifier((raw,))
+                verifier.verification_mode = "nullable-proof-v1"
+                outcome = ExtractionFlow(
+                    runtime=RecordingRuntime((payload,)), verification_runtime=verifier,
+                ).run(window)
+                if model_verdict == "unsupported":
+                    self.assertEqual(outcome.accepted, ())
+                    self.assertEqual(outcome.rejected_count, 1)
+                else:
+                    self.assertEqual(len(outcome.accepted), 1)
+                    self.assertIn("semantic:meaning", outcome.accepted[0].risk_flags)
+                    self.assertIsNone(outcome.accepted[0].dimension_evidence.semantic_basis)
+
+
+    def test_server_graph_difference_only_downgrades_and_keeps_model_verdict(self):
+        window, payload, _ = _arrival_fixture()
+        payload = {**payload, "text": "用户刚到家。"}
+        facts = ExtractionFlow(runtime=RecordingRuntime((payload,))).run(window).accepted
+        message_id = window.messages[0].message_id
+        result = {**verification_result(
+            evidence=((message_id, window.messages[0].text),),
+        ), "proof": None}
+        checked = validate_source_verification(
+            (result,), window=window, facts=facts, mode="nullable-proof-v1",
+        )[0]
+
+        self.assertEqual(checked.verdict.value, "unsupported")
+        self.assertEqual(checked.model_verdict.value, "supported")
+        self.assertEqual(checked.model_issues, ())
+        self.assertEqual(checked.proof_verification.reason, "known_graph_difference")
+        verifier = FixedSourceVerifier((result,))
+        verifier.verification_mode = "nullable-proof-v1"
+        outcome = ExtractionFlow(
+            runtime=RecordingRuntime((payload,)), verification_runtime=verifier,
+        ).run(window)
+        self.assertEqual(outcome.accepted, ())
+        self.assertEqual(outcome.rejected_count, 1)
+        self.assertEqual(result["verdict"], "supported")
+
+
+    def test_nullable_proof_preserves_required_legacy_verdict_slots(self) -> None:
+        message_id = uuid4()
+        window = _window((message_id,))
+        base = verification_result(
+            evidence=((message_id, window.messages[0].text),),
+        )
+        for proof_fields in ({}, {"proof": None}):
+            with self.subTest(proof_fields=proof_fields):
+                verifier = FixedSourceVerifier(({**base, **proof_fields},))
+                verifier.verification_mode = "nullable-proof-v1"
+                outcome = ExtractionFlow(
+                    runtime=RecordingRuntime((_payload(message_id),)),
+                    verification_runtime=verifier,
+                ).run(window)
+                self.assertIsNone(outcome.failure_kind)
+                self.assertEqual(len(outcome.accepted), 1)
+                self.assertEqual(outcome.accepted[0].text,
+                                 "他不爱发语音，有事爱直接打电话")
+                self.assertIsNone(outcome.accepted[0].dimension_evidence.reference)
+
 
     def test_unverified_negation_reversal_never_becomes_auto_memory(self) -> None:
         message_id = uuid4()

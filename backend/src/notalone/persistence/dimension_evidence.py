@@ -32,6 +32,30 @@ def has_dimension_evidence(connection: psycopg.Connection[Any]) -> bool:
     return bool(row["present"] if isinstance(row, dict) else row[0])
 
 
+def supports_dimension_evidence_version(
+    connection: psycopg.Connection[Any], version: int,
+) -> bool:
+    """只核已有前向约束；旧055/056不能借列存在写入版本2。"""
+
+    if type(version) is not int or version not in {1, 2}:
+        return False
+    if not has_dimension_evidence(connection):
+        return False
+    if version == 1:
+        return True
+    row = connection.execute("""
+        SELECT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conrelid='public.memory_candidate'::regclass
+              AND conname='memory_candidate_dimension_evidence_version2_check'
+              AND contype='c' AND convalidated
+        ) AS present
+    """).fetchone()
+    if row is None:
+        raise ValueError("无法核对维度依据版本结构。")
+    return bool(row["present"] if isinstance(row, dict) else row[0])
+
+
 def residual_source_evidence_sql(source_alias: str) -> str:
     """删除复核包含所有状态候选的上下文依据；旧列缺席时为空。"""
 
@@ -120,12 +144,14 @@ def bind_stored_dimension_evidence(
     by_id = {row["message_id"]: row for row in rows}
     messages = []
     texts = {}
+    snapshots = {}
     for original in evidence.messages:
         row = by_id.get(original.message_id)
         if row is None:
             continue
         text = row["text_content"] or row["media_placeholder"] or ""
         texts[original.message_id] = text
+        snapshots[original.message_id] = tuple(row["source_refs"])
         messages.append(EvidenceMessage(
             original.message_id, content_digest(text), len(text),
             "self" if row["speaker"] == "user" else row["speaker"],
@@ -143,5 +169,5 @@ def bind_stored_dimension_evidence(
         ))
     return bind_dimension_evidence(
         evidence, scope=candidate.scope, candidate=candidate,
-        messages=tuple(messages), texts=texts,
+        messages=tuple(messages), texts=texts, source_snapshots=snapshots,
     )

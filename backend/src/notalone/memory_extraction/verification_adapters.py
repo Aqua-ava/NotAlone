@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -21,6 +22,7 @@ from notalone.memory_extraction.verification import (
     MAX_SOURCE_VERIFICATION_CANDIDATES,
     SourceVerificationIssue,
     SourceVerificationVerdict,
+    SourceVerificationMode,
     validate_source_verification,
 )
 from notalone.memory_trace import TraceWriteError
@@ -145,10 +147,99 @@ SOURCE_VERIFICATION_SCHEMA: dict[str, Any] = {
 }
 
 
+SOURCE_PROOF_PROMPT = """
+本次协议为nullable-proof-v1，原candidate_index/verdict/issues/evidence四槽仍必填且不能null。
+只多允许可空proof提案，缺失或null不会触发重试；不知道时留null，不能填认证布尔、摘要、身份或媒体状态。
+proof非null时四键齐全：version=1、atom_links、reference、reported，后三键可为null或数组。
+数组上限分别16、8、8，总链接不超过32。所有位置用Python Unicode码点半开区间，整数且start<end，
+source必须带本候选原来源message_id，candidate只能定位候选全文。只提位置，不宣称唯一性或完整性。
+atom_links固定rule_id/variant_id/source/candidate，rule与variant仅可用：
+AUTHOR_ARRIVAL_H1/direct_h（我刚／刚刚到家→受控作者到家）；
+KIN_LEND_BA_H1/completed_h或negative_h（我姐／我哥借物把字句，完整人物、物件、否定和时间）；
+REQUEST_ROLE_H1/quoted_request_h或received_request_h（完整顶班请托的转引／历史接收两个框架）；
+SOURCE_IDENTITY_H1/explicit_role_identity（来源明示“这里的‘她／他’指我姐／我哥／我同事”，只能定位，不能补造）；
+COND_PLAN_RUN_V1/conditional_plan（如果天晴，我计划明天／后天只跑约距离，完整保留条件、阶段、时间和程度，距离可精确换算米／公里）。
+reference固定rule_id/mention/target/binding。直接作者“我”可用AUTHOR_ARRIVAL_H1，mention与target相同，binding=null；
+借物和请托中作者“我”也可按实际作者位置提案，不能把作者锚用于证明第三人。第三人代词只可用SOURCE_IDENTITY_H1，
+mention定位行动句代词，target定位来源指称句角色，binding定位完整指称句。没有指称句就null，不以性别／施事位置猜所有人或受益人。
+reported固定rule_id/frame/source/candidate，frame仅direct、quoted_request_h、received_request_h，必须与同一完整主命题对应。
+来源或候选超出上述有限完整语法、多个上下文或未解指称时proof留null；这些限制不改变原四槽的独立来源判断。
+"""
+
+
+def _proof_schema() -> dict[str, Any]:
+    from notalone.memory_extraction.source_proof import RULE_VARIANTS
+
+    source = {
+        "type": "object", "additionalProperties": False,
+        "properties": {
+            "message_id": {"type": "string", "format": "uuid"},
+            "start": {"type": "integer", "minimum": 0},
+            "end": {"type": "integer", "minimum": 1},
+        }, "required": ["message_id", "start", "end"],
+    }
+    candidate = {
+        "type": "object", "additionalProperties": False,
+        "properties": {
+            "start": {"type": "integer", "minimum": 0},
+            "end": {"type": "integer", "minimum": 1},
+        }, "required": ["start", "end"],
+    }
+    rules = {rule: list(variants) for rule, variants in RULE_VARIANTS.items()}
+    atom = {
+        "type": "object", "additionalProperties": False,
+        "properties": {
+            "rule_id": {"type": "string", "enum": list(rules)},
+            "variant_id": {"type": "string", "enum": [
+                item for variants in rules.values() for item in variants
+            ]}, "source": source, "candidate": candidate,
+        }, "required": ["rule_id", "variant_id", "source", "candidate"],
+        "oneOf": [{"properties": {
+            "rule_id": {"const": rule}, "variant_id": {"enum": variants},
+        }} for rule, variants in rules.items()],
+    }
+    reference = {
+        "type": "object", "additionalProperties": False,
+        "properties": {
+            "rule_id": {"type": "string", "enum": list(rules)},
+            "mention": source, "target": source,
+            "binding": {**source, "type": ["object", "null"]},
+        }, "required": ["rule_id", "mention", "target", "binding"],
+    }
+    reported = {
+        "type": "object", "additionalProperties": False,
+        "properties": {
+            "rule_id": {"type": "string", "enum": list(rules)},
+            "frame": {"type": "string", "enum": [
+                "direct", "quoted_request_h", "received_request_h",
+            ]}, "source": source, "candidate": candidate,
+        }, "required": ["rule_id", "frame", "source", "candidate"],
+    }
+    return {
+        "type": ["object", "null"], "additionalProperties": False,
+        "properties": {
+            "version": {"type": "integer", "const": 1},
+            "atom_links": {"type": ["array", "null"], "maxItems": 16,
+                           "items": atom},
+            "reference": {"type": ["array", "null"], "maxItems": 8,
+                          "items": reference},
+            "reported": {"type": ["array", "null"], "maxItems": 8,
+                         "items": reported},
+        }, "required": ["version", "atom_links", "reference", "reported"],
+    }
+
+
+# 旧四槽保留为未迁移业务入口；隔离新入口显式选择获批证明协议。
+SOURCE_VERIFICATION_PROOF_SCHEMA = deepcopy(SOURCE_VERIFICATION_SCHEMA)
+SOURCE_VERIFICATION_PROOF_SCHEMA["properties"]["results"]["items"][
+    "properties"
+]["proof"] = _proof_schema()
+
+
 class LangChainSourceVerificationRuntime:
     """同一有界窗口内至多一次核验模型调用，不产生可执行工具能力。"""
 
-    __slots__ = ("_model", "_ledger", "_provider")
+    __slots__ = ("_model", "_ledger", "_provider", "_verification_mode")
 
     def __init__(
         self,
@@ -156,6 +247,9 @@ class LangChainSourceVerificationRuntime:
         model: BaseChatModel,
         ledger: OutboundLedgerPort | None = None,
         provider: str = "deepseek",
+        verification_mode: SourceVerificationMode | str = (
+            SourceVerificationMode.LEGACY_V4
+        ),
     ) -> None:
         if model is None:
             raise TypeError("必须显式注入来源核验模型。")
@@ -164,6 +258,12 @@ class LangChainSourceVerificationRuntime:
         self._model = model
         self._ledger = ledger
         self._provider = provider
+        self._verification_mode = SourceVerificationMode(verification_mode)
+
+    @property
+    def verification_mode(self) -> SourceVerificationMode:
+        """Flow显式接入受控模式，不按响应里是否有proof推断。"""
+        return self._verification_mode
 
     def verify(
         self,
@@ -177,18 +277,22 @@ class LangChainSourceVerificationRuntime:
             return ()
         called_at = datetime.now(timezone.utc)
         started = time.perf_counter()
+        use_proof = self._verification_mode is SourceVerificationMode.NULLABLE_PROOF_V1
+        schema = SOURCE_VERIFICATION_PROOF_SCHEMA if use_proof else SOURCE_VERIFICATION_SCHEMA
         try:
             message = invoke_traced_model(
                 self._model,
                 purpose="verification",
-                schema=SOURCE_VERIFICATION_SCHEMA,
+                schema=schema,
                 tool_options={
                     "tool_choice": SOURCE_VERIFICATION_SCHEMA["title"]
                 },
                 messages=[
                     {
                         "role": "system",
-                        "content": SOURCE_VERIFICATION_SYSTEM_PROMPT,
+                        "content": SOURCE_VERIFICATION_SYSTEM_PROMPT + (
+                            SOURCE_PROOF_PROMPT if use_proof else ""
+                        ),
                     },
                     {
                         "role": "user",
@@ -205,7 +309,9 @@ class LangChainSourceVerificationRuntime:
             raise ExtractionRuntimeError("来源核验模型调用失败。") from None
         try:
             payloads = _verification_payloads(message)
-            validate_source_verification(payloads, window=window, facts=facts)
+            validate_source_verification(
+                payloads, window=window, facts=facts, mode=self._verification_mode,
+            )
         except ExtractionInvalidOutputError:
             self._record_call(
                 window, called_at, started,

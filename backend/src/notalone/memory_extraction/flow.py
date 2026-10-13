@@ -30,6 +30,7 @@ from notalone.memory_extraction.verification import (
     SourceVerificationRuntime,
     SourceVerificationVerdict,
     SourceVerificationResult,
+    SourceVerificationMode,
     validate_source_verification,
 )
 from notalone.memory_trace.context import current_trace, record, snapshot
@@ -331,6 +332,10 @@ class ExtractionFlow:
                     payloads,
                     window=window,
                     facts=reviewable,
+                    mode=getattr(
+                        self._verification_runtime, "verification_mode",
+                        SourceVerificationMode.LEGACY_V4,
+                    ),
                 )
             except ExtractionRuntimeError as error:
                 record(

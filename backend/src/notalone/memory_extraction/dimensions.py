@@ -20,10 +20,10 @@
    ``reported`` 这些未确认陈述。``None`` 表示"当前字段不足以判定该候选
    属于哪个评测维度"，按 fail-closed 一律视为未放行。
 
-四类新定位字段保存为版本化依据。当前生产核验不能证明唯一指代目标或
-不存在转述，因此这两项保持相关且未知，不凭缺字段将它们排除。文字保真
-仅接受完整逐字对齐；受控纯文字来源可排除媒体项，时间项不能遮蔽其他项。
-这些运行字段校验不构成模型语义质量资格。
+四类定位字段保存为版本化依据。v1保真仍用完整逐字对齐；显式v2入口只在
+获批有限全文语法、实际来源及所有角色关系重核通过后承认新增语义依据，
+超范围保持未知。指代和转述始终留在相关集合，不凭缺字段排除；v2还保守
+加入time，即使H日期为空。这不是精确相关性分类器，不能据此认定模型质量。
 
 放行表默认**空集**（:data:`DEFAULT_DIMENSION_RELEASE`），因此未放行维度一律
 安静待确认；运维回退把 ``NOTALONE_MEMORY_DIMENSION_GATE`` 显式设为 ``0``，
@@ -105,7 +105,7 @@ def dimension_key(fact: ExtractedFact) -> MemoryDimension | None:
 
 
 def required_dimensions(fact: ExtractedFact) -> frozenset[str]:
-    """返回保守超集；现有 V 契约不足以排除指代或转述相关性。"""
+    """返回只收紧的保守超集；缺提案不能排除指代、转述或v2时间关系。"""
 
     if not isinstance(fact, ExtractedFact):
         raise TypeError("维度判定输入必须是 ExtractedFact。")
@@ -116,6 +116,9 @@ def required_dimensions(fact: ExtractedFact) -> frozenset[str]:
     ):
         required.add("time")
     evidence = fact.dimension_evidence
+    if evidence is not None and evidence.version == 2:
+        # v2不能因H日期为空或提案未知省掉潜在时间关系；保守集合只增加。
+        required.add("time")
     if evidence is None or any(
         item.message_type != "text" or item.text_representation != "text"
         for item in evidence.messages
@@ -186,7 +189,7 @@ def valid_evidence_dimensions(
         )
     )
     if (
-        references and not fact.alternatives
+        evidence.version == 1 and references and not fact.alternatives
         and all(item.subject == fact.subject.value for item in references)
         and subject_matches
         and len(targets) == (2 if fact.subject is FactSubject.SHARED else 1)
@@ -197,8 +200,19 @@ def valid_evidence_dimensions(
         "reported" if fact.speech_act is SpeechAct.REPORT
         or fact.assertion_status is AssertionStatus.REPORTED else "direct"
     )
-    if reported and all(item.relationship == relationship for item in reported):
+    if (
+        evidence.version == 1 and reported
+        and all(item.relationship == relationship for item in reported)
+    ):
         valid.add("reported")
+    if evidence.version == 2 and evidence.semantic_basis is not None:
+        # v2由绑定器对实际全文重解析后才source_bound；不借v1锚点数量签新关系。
+        valid.update({"paraphrase", "reference", "subject", "reported"})
+        if any(
+            item["kind"] == "time"
+            for item in evidence.semantic_basis.to_payload()["qualifiers"]
+        ):
+            valid.add("time")
     media = evidence.media or ()
     if {item.message_id for item in media} == set(fact.source_message_ids) and all(
         item.representation == (

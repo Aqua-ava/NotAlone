@@ -18,6 +18,7 @@ from notalone.memory.dimension_evidence import (
 )
 from notalone.persistence.dimension_evidence import (
     bind_stored_dimension_evidence, has_dimension_evidence,
+    supports_dimension_evidence_version,
 )
 
 from notalone.memory.models import (
@@ -136,9 +137,18 @@ class PostgresMemoryStore:
                 evidence_value = ""
                 evidence_params: tuple[Any, ...] = ()
                 if candidate.dimension_evidence is not None:
-                    if not has_dimension_evidence(connection):
+                    if not supports_dimension_evidence_version(
+                        connection, candidate.dimension_evidence.version,
+                    ):
                         raise MemoryPersistenceError(
                             "数据库尚未启用维度依据；须先批准并完成迁移。"
+                        )
+                    if candidate.dimension_evidence.version == 2:
+                        current = bind_stored_dimension_evidence(
+                            connection, candidate, lock_sources=True,
+                        )
+                        require_current_dimension_evidence(
+                            current, candidate.dimension_evidence,
                         )
                     evidence_column = ", dimension_evidence"
                     evidence_value = ", %s"

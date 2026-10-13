@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, Protocol
+from typing import Any, Protocol, TYPE_CHECKING
 from uuid import UUID
 
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError
@@ -13,6 +13,16 @@ from notalone.memory_extraction.models import ExtractedFact, ExtractionWindow
 from notalone.memory_trace.context import current_trace, record
 
 MAX_SOURCE_VERIFICATION_CANDIDATES = 60
+
+if TYPE_CHECKING:
+    from notalone.memory_extraction.source_proof import ProofProposal, ProofVerification
+
+
+class SourceVerificationMode(StrEnum):
+    """旧四槽与获批可空提案使用明确入口，不从模型载荷猜测模式。"""
+
+    LEGACY_V4 = "legacy-v4"
+    NULLABLE_PROOF_V1 = "nullable-proof-v1"
 
 
 class SourceVerificationVerdict(StrEnum):
@@ -54,6 +64,11 @@ class SourceVerificationResult:
     verdict: SourceVerificationVerdict
     issues: tuple[SourceVerificationIssue, ...]
     evidence: tuple[EvidenceQuote, ...]
+    proof: ProofProposal | None = None
+    verification_mode: SourceVerificationMode = SourceVerificationMode.LEGACY_V4
+    model_verdict: SourceVerificationVerdict | None = None
+    model_issues: tuple[SourceVerificationIssue, ...] = ()
+    proof_verification: ProofVerification | None = None
 
 
 class SourceVerificationRuntime(Protocol):
@@ -72,9 +87,14 @@ def validate_source_verification(
     *,
     window: ExtractionWindow,
     facts: tuple[ExtractedFact, ...],
+    mode: SourceVerificationMode | str = SourceVerificationMode.LEGACY_V4,
 ) -> tuple[SourceVerificationResult, ...]:
     """整批校验覆盖、受控结果与真实来源片段，任何非法输出都安全停止。"""
 
+    try:
+        mode = SourceVerificationMode(mode)
+    except (TypeError, ValueError):
+        raise ExtractionInvalidOutputError("来源核验协议模式未受支持。") from None
     started_at = datetime.now(timezone.utc)
     coverage_valid = isinstance(payloads, tuple) and len(payloads) == len(
         facts
@@ -95,12 +115,17 @@ def validate_source_verification(
         for position, payload in enumerate(payloads):
             check = "payload_fields"
             started_at = datetime.now(timezone.utc)
-            fields_valid = isinstance(payload, dict) and set(payload) == {
+            required_fields = {
                 "candidate_index",
                 "verdict",
                 "issues",
                 "evidence",
             }
+            fields_valid = isinstance(payload, dict) and (
+                set(payload) == required_fields
+                or mode is SourceVerificationMode.NULLABLE_PROOF_V1
+                and set(payload) == required_fields | {"proof"}
+            )
             _record_contract(
                 check,
                 fields_valid,
@@ -109,6 +134,14 @@ def validate_source_verification(
             )
             if not fields_valid:
                 raise ValueError
+            check = "proof_structure"
+            proof = None
+            if (
+                mode is SourceVerificationMode.NULLABLE_PROOF_V1
+                and payload.get("proof") is not None
+            ):
+                from notalone.memory_extraction.source_proof import parse_proposal
+                proof = parse_proposal(payload.get("proof"))
             index = payload["candidate_index"]
             check = "candidate_index"
             started_at = datetime.now(timezone.utc)
@@ -242,9 +275,35 @@ def validate_source_verification(
             )
             if not target_valid:
                 raise ValueError
+            model_verdict, model_issues = verdict, issues
+            proof_verification = None
+            if mode is SourceVerificationMode.NULLABLE_PROOF_V1:
+                check = "proof_semantics"
+                from notalone.memory_extraction.source_proof import verify_proposal
+                proof_verification = verify_proposal(
+                    proof, window=window, fact=fact,
+                    trusted_sources={
+                        item.message_id: item.text for item in window.messages
+                    },
+                )
+                if proof_verification.status == "unsupported":
+                    verdict = SourceVerificationVerdict.UNSUPPORTED
+                    issues = tuple(dict.fromkeys((
+                        *issues, SourceVerificationIssue.MEANING,
+                    )))
+                _record_contract(
+                    check, True, candidate_index=index, started_at=started_at,
+                    model_verdict=model_verdict, model_issues=model_issues,
+                    verdict=verdict, issues=issues,
+                    proof_status=proof_verification.status,
+                    program_reason=proof_verification.reason,
+                )
             results[index] = SourceVerificationResult(
                 candidate_index=index, verdict=verdict,
                 issues=issues, evidence=tuple(evidence),
+                proof=proof, verification_mode=mode,
+                model_verdict=model_verdict, model_issues=model_issues,
+                proof_verification=proof_verification,
             )
     except (TypeError, ValueError, KeyError, AttributeError):
         _record_contract(
