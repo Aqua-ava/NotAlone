@@ -11,13 +11,12 @@
   },
   "queryTotals": {
     "searchQueries": 12,
-    "anonymousGets": 35,
-    "responseBodyBytes": 1470647,
-    "requestSeconds": 27.630683128,
+    "anonymousGets": 40,
+    "responseBodyBytes": 1745584,
+    "requestSeconds": 30.15718246,
     "startedUtc": "2026-10-13T07:12:33.316Z",
-    "endedUtc": "2026-10-13T08:59:42.192Z",
+    "endedUtc": "2026-10-13T09:19:26.524Z",
     "retries": 0,
-    "redirects": 0,
     "firstBatch": {
       "anonymousGets": 13,
       "responseBodyBytes": 131556,
@@ -39,6 +38,16 @@
       "requestSeconds": 6.76313346,
       "startedUtc": "2026-10-13T08:52:28.743Z",
       "endedUtc": "2026-10-13T08:59:42.192Z"
+    },
+    "redirectResponses": 1,
+    "redirectsFollowed": 0,
+    "dependencySourceSlice": {
+      "anonymousGets": 5,
+      "searchQueries": 0,
+      "responseBodyBytes": 274937,
+      "requestSeconds": 2.526499332,
+      "startedUtc": "2026-10-13T09:18:23.416Z",
+      "endedUtc": "2026-10-13T09:19:26.524Z"
     }
   },
   "queries": [
@@ -357,6 +366,52 @@
       "sha256": "8909dedef378b9b50b49e17d08b8bbcffa6eca272a56dfedf61bcead1e7ebe0c",
       "bodyPath": "34-canonical-rc5-release_lib-py.body",
       "limitExceeded": false
+    },
+    {
+      "name": "go-dirhash-official-docs",
+      "url": "https://pkg.go.dev/golang.org/x/mod/sumdb/dirhash",
+      "status": 200,
+      "bytes": 55521,
+      "sha256": "8cf14a86a0df0e95e93c9b3fafa2643d2cacdd2dc1828c19a69b5f62b3e211d8",
+      "bodyPath": "35-go-dirhash-official-docs.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "go-purego-exact-info",
+      "url": "https://proxy.golang.org/github.com/ebitengine/purego/@v/v0.10.0.info",
+      "status": 200,
+      "bytes": 195,
+      "sha256": "434011f7ad290eb0d2eff5bd5dded2dd2a41be6942e60b8bec37c3a6373513b5",
+      "bodyPath": "36-go-purego-exact-info.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "go-compress-exact-info",
+      "url": "https://proxy.golang.org/github.com/klauspost/compress/@v/v1.18.5.info",
+      "status": 200,
+      "bytes": 196,
+      "sha256": "0a3299081c169106cdc26343326ccd58e11018ca07b5a9084da309d9fa3bdd5e",
+      "bodyPath": "37-go-compress-exact-info.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "go-purego-exact-source-zip",
+      "url": "https://proxy.golang.org/github.com/ebitengine/purego/@v/v0.10.0.zip",
+      "status": 200,
+      "bytes": 219025,
+      "sha256": "df60829d7715bf609e78ebb6c945bdb865ccdfec56a71603d6e12346f98065c9",
+      "bodyPath": "38-go-purego-exact-source-zip.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "go-compress-exact-source-zip",
+      "url": "https://proxy.golang.org/github.com/klauspost/compress/@v/v1.18.5.zip",
+      "status": 302,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bodyPath": "39-go-compress-exact-source-zip.body",
+      "limitExceeded": false,
+      "redirectNotFollowed": true
     }
   ],
   "newImmutableBlobs": [
@@ -518,7 +573,7 @@
     "externalMessages": 0
   },
   "commit": {
-    "status": "first_slice_commit_and_public_history_verified_followup_pending",
+    "status": "initial_and_35_slice_commits_verified_final_dependency_followup_pending",
     "firstSlice": {
       "commit": "a6bae6b49853295226dfd22a5166742818f3b825",
       "committedAtTaipei": "2026-10-13T15:53:07+08:00",
@@ -551,10 +606,18 @@
       ".scratch/wcdb-exact-provenance-parallel-20261013/issues/01-exact-provenance.md",
       ".scratch/wcdb-exact-provenance-parallel-20261013/evidence-summary.json",
       ".scratch/wcdb-exact-provenance-parallel-20261013/checkpoint.md",
-      ".scratch/wcdb-exact-provenance-parallel-20261013/handoff.md",
-      ".scratch/wcdb-exact-provenance-parallel-20261013/upstream-material-request.md"
+      ".scratch/wcdb-exact-provenance-parallel-20261013/handoff.md"
     ],
-    "followupCommitObserved": false
+    "followupCommitObserved": false,
+    "completedSupplement35": {
+      "commit": "8c9ff9e6b079f6ac07b1b463570bebdc52438633",
+      "committedAtTaipei": "2026-10-13T17:17:49+08:00",
+      "exactSixFiles": true,
+      "allMatchFrozen35Snapshot": true,
+      "publicHistoryBoundToThisCommitObserved": false,
+      "existingReceiptStillBoundToFirstSlice": true
+    },
+    "currentPendingSlice": "最后5GET声明依赖源码核验造成的五文件变更；索取稿已在35切片提交，未再改"
   },
   "review": {
     "standards": {
@@ -626,6 +689,30 @@
       "sourceProofNotPassed": true,
       "upstreamPublicationDeclined": true,
       "externalMessagesSent": 0
+    },
+    "dependencySourceSlice": {
+      "baseline": "a6bae6b49853295226dfd22a5166742818f3b825",
+      "standards": {
+        "hardViolationsAfterFix": 0,
+        "fowlerJudgementSmells": 0,
+        "evidenceBoundaryFindings": 0,
+        "reviewer": "local_static",
+        "puregoH1IndependentlyRecomputed": true
+      },
+      "spec": {
+        "missing": 0,
+        "scope": 0,
+        "error": 0,
+        "reviewer": "historical_research"
+      },
+      "staticValidation": {
+        "ownedFilesIncludingIgnoredResearch": 7,
+        "localMarkdownLinks": 30,
+        "responseBodies": 40
+      },
+      "sourceProofNotPassed": true,
+      "upstreamPublicationDeclined": true,
+      "externalMessagesSent": 0
     }
   },
   "additionalTencentAssets": {
@@ -659,13 +746,14 @@
       "nextStateCall": "blocked",
       "reason": "需要新的固定digest绑定源树/修改/构建/BOM材料；现有有限新路径均无此证明，禁止猜测、重复失败URL、上游联系或代行共享Git"
     },
-    "currentRequest": "用户要求继续，在不联系上游的约束内执行新公开证明与发行脚本核查",
+    "currentRequest": "再次继续；核固定CLI声明依赖的官方源缓存并验证h1",
     "oldCountNotInherited": true,
     "resumedAuditTurn": 1,
     "sourceRequirementsRemainFalse": true,
     "toolStatusNotClaimedResumed": true,
     "continuedAuditTurn": 1,
-    "noNewBlockedToolCall": true
+    "noNewBlockedToolCall": true,
+    "dependencyAuditTurn": 1
   },
   "resumedQueryLimits": {
     "githubCommitSearch": {
@@ -788,5 +876,78 @@
       "decodedPath": "decoded-canonical-rc5-release_lib-py",
       "fixedIdentityMatches": []
     }
-  ]
+  ],
+  "dependencySources": {
+    "fixedCliSha256": "59de512a52d7960aef70da6b42d199358429662919f5b4baababc5132a660355",
+    "scope": "官方依赖源码与CLI嵌入声明的内容一致性；不证明实际编译选入文件或WCDB来源/BOM",
+    "modules": [
+      {
+        "module": "github.com/ebitengine/purego",
+        "version": "v0.10.0",
+        "expectedEmbeddedH1": "h1:QIw4xfpWT6GWTzaW5XEKy3HXoqrJGx1ijYHzTF0/ISU=",
+        "origin": {
+          "VCS": "git",
+          "URL": "https://github.com/ebitengine/purego",
+          "Hash": "bb9b1f4a53d96a474537a6f1a25bf304b95450a7",
+          "Ref": "refs/tags/v0.10.0"
+        },
+        "infoResponseSha256": "434011f7ad290eb0d2eff5bd5dded2dd2a41be6942e60b8bec37c3a6373513b5",
+        "h1Verified": true,
+        "provesActualCompilationOrWcdbBom": false,
+        "sourceNotExecutedOrExtracted": true,
+        "zipRequestStatus": 200,
+        "zipRequestBodySha256": "df60829d7715bf609e78ebb6c945bdb865ccdfec56a71603d6e12346f98065c9",
+        "zipRequestBodyBytes": 219025,
+        "sourceZipAcquired": true,
+        "sourceZipSha256": "df60829d7715bf609e78ebb6c945bdb865ccdfec56a71603d6e12346f98065c9",
+        "sourceZipBytes": 219025,
+        "fileEntries": 153,
+        "expandedBytesRead": 1045715,
+        "computedH1": "h1:QIw4xfpWT6GWTzaW5XEKy3HXoqrJGx1ijYHzTF0/ISU=",
+        "licenseMembers": [
+          {
+            "path": "github.com/ebitengine/purego@v0.10.0/LICENSE",
+            "bytes": 11357,
+            "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+          }
+        ],
+        "checksumAlgorithmSource": "35-go-dirhash-official-docs.body:Hash1/HashZip"
+      },
+      {
+        "module": "github.com/klauspost/compress",
+        "version": "v1.18.5",
+        "expectedEmbeddedH1": "h1:/h1gH5Ce+VWNLSWqPzOVn6XBO+vJbCNGvjoaGBFW2IE=",
+        "origin": {
+          "VCS": "git",
+          "URL": "https://github.com/klauspost/compress",
+          "Hash": "c5e0077f50a3268a27b02816adc48ebfb535c65e",
+          "Ref": "refs/tags/v1.18.5"
+        },
+        "infoResponseSha256": "0a3299081c169106cdc26343326ccd58e11018ca07b5a9084da309d9fa3bdd5e",
+        "h1Verified": false,
+        "provesActualCompilationOrWcdbBom": false,
+        "sourceNotExecutedOrExtracted": true,
+        "zipRequestStatus": 302,
+        "zipRequestBodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "zipRequestBodyBytes": 0,
+        "sourceZipAcquired": false,
+        "stopReason": "HTTP重定向未跟随，预算不重置"
+      }
+    ],
+    "sourceExecution": false,
+    "fileExtraction": false,
+    "credentialsRead": false,
+    "upstreamMessages": 0,
+    "algorithmDocument": {
+      "url": "https://pkg.go.dev/golang.org/x/mod/sumdb/dirhash",
+      "body": "35-go-dirhash-official-docs.body",
+      "sha256": "8cf14a86a0df0e95e93c9b3fafa2643d2cacdd2dc1828c19a69b5f62b3e211d8",
+      "HashZipAndHash1ContractVerified": true
+    },
+    "infoOriginIsProxyDeclarationNotGitObjectVerification": true,
+    "remainingGetBudget": 0,
+    "remainingSearchBudget": 0,
+    "budgetNotReset": true,
+    "noFurtherPublicGetOrSearchWithinThisPlan": true
+  }
 }

@@ -22,6 +22,8 @@
 
 - 后续明确要求继续时，在原总预算内执行最后4次全球精确身份／官方API文档搜索，读取按固定CLI／ZIP digest的repo attestation、官方文档明确的User GET及rc.5实际索引给出的三份不可变发布脚本；不请求已失败库repo端点。User入口401后停止整个User证明路径，不登录／读凭据或请求其他digest；组织入口因owner.type=User不适用，POST／DELETE不执行。相近v2脚本只用于查旧证据入口，不代签旧库。
 
+- 最后5个GET沿固定CLI buildinfo实际给出的两module/version/h1读取Go官方checksum文档、精确proxy info及成功info后的源ZIP。源归档只标准库静态核HashZip/Hash1，不安装、提取目录或执行；128MiB累计展开／16MiB单成员／20000条限额。重定向不跟随，预算不重置；40GET／12搜索耗尽后不再查询。源h1匹配只关联CLI嵌入依赖声明，不能证明实际编译／链接或WCDB BOM。
+
 ## Testing Decisions
 
 验收只使用静态文件接缝：SHA-256、字节数、ZIP 条目与发行 manifest；Git blob／commit 适用时核对；证据收据与原始响应相互绑定；本地 Markdown 链接、字段、格式、路径隔离和资源计数。纯文档核查无需产品测试。另做独立 Standards 和 Spec 两轴评审。
