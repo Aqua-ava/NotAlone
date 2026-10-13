@@ -125,3 +125,73 @@ test('前台上下文诊断只保存固定分类和PID，拒绝路径、标题�
     await assert.rejects(profile.saveLayoutVerificationResult(owned, 'failed', 'wechat_not_in_front', 'selection', () => true, undefined, context));
   } finally { await rm(owned, { recursive: true, force: true }); }
 });
+
+test('身份差项只接受四布尔且与上下文码一致，旧七字段继续兼容', async () => {
+  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-calibration-identity-'));
+  try {
+    const modulePath = path.join(owned, 'profile.mjs');
+    await build({ entryPoints: ['src/main/foreground/calibration-profile.ts'], outfile: modulePath,
+      bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+    const profile = await import(pathToFileURL(modulePath).href);
+    const checks = { process_id_matches: true, window_id_matches: false,
+      window_origin_matches: true, window_size_matches: true };
+    const context = {
+      front_app_code: 'wechat_primary', front_process_id: 123, selected_process_id: 123,
+      wechat_instance_count: 1, sole_wechat_process_id: 123, sole_wechat_app_code: 'wechat_primary',
+      context_code: 'identity_changed', identity_checks: checks,
+    };
+    await profile.saveLayoutVerificationResult(owned, 'failed', 'minimal_region_layout_changed', 'context', () => true, undefined, context);
+    const resultPath = path.join(owned, 'foreground-layout-verification.json');
+    assert.deepEqual(JSON.parse(await readFile(resultPath, 'utf8')).context_diagnostics, context);
+    assert.equal((await stat(resultPath)).mode & 0o777, 0o600);
+    await assert.rejects(readFile(path.join(owned, 'foreground-layout-profile.json')), { code: 'ENOENT' });
+    const allMatches = { ...checks, window_id_matches: true };
+    assert.deepEqual(profile.validatedContextDiagnostics({ ...context, context_code: 'matched', identity_checks: allMatches }).identity_checks, allMatches);
+    for (const key of Object.keys(checks)) {
+      assert.equal(profile.validatedContextDiagnostics({ ...context, identity_checks: { ...allMatches, [key]: false } }).identity_checks[key], false);
+    }
+    for (const invalid of [
+      { ...context, identity_checks: null }, { ...context, identity_checks: [] },
+      { ...context, identity_checks: { ...checks, window_title: '合成拒绝标题' } },
+      { ...context, identity_checks: { ...checks, window_frame: { x: 1 } } },
+      { ...context, identity_checks: { ...checks, window_id_matches: 0 } },
+      { ...context, identity_checks: { ...checks, window_id_matches: 'false' } },
+      { ...context, identity_checks: { process_id_matches: true } },
+      { ...context, identity_checks: allMatches }, { ...context, context_code: 'matched' },
+      { ...context, context_code: 'calibration_context_unavailable' },
+      { ...context, context_code: 'calibration_windows_ambiguous' },
+    ]) {
+      await assert.rejects(profile.saveLayoutVerificationResult(owned, 'failed', 'minimal_region_layout_changed', 'context', () => true, undefined, invalid));
+      assert.deepEqual(JSON.parse(await readFile(resultPath, 'utf8')).context_diagnostics, context);
+    }
+    const legacy = { ...context }; delete legacy.identity_checks;
+    assert.deepEqual(profile.validatedContextDiagnostics(legacy), legacy);
+    await profile.saveLayoutVerificationResult(owned, 'failed', 'minimal_region_layout_changed', 'context', () => false, undefined,
+      { ...context, context_code: 'matched', identity_checks: allMatches });
+    assert.deepEqual(JSON.parse(await readFile(resultPath, 'utf8')).context_diagnostics, context);
+    await assert.rejects(profile.saveLayoutVerificationResult(owned, 'verified', null, 'context', () => true, undefined, context));
+    await assert.rejects(profile.saveLayoutVerificationResult(owned, 'failed', 'minimal_region_layout_changed', 'names', () => true, undefined, context));
+  } finally { await rm(owned, { recursive: true, force: true }); }
+});
+
+test('输入后续修改不能更改已校验的身份差项', async () => {
+  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-calibration-identity-copy-'));
+  try {
+    const modulePath = path.join(owned, 'profile.mjs');
+    await build({ entryPoints: ['src/main/foreground/calibration-profile.ts'], outfile: modulePath,
+      bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+    const profile = await import(pathToFileURL(modulePath).href);
+    const context = {
+      front_app_code: 'wechat_primary', front_process_id: 123, selected_process_id: 123,
+      wechat_instance_count: 1, sole_wechat_process_id: 123, sole_wechat_app_code: 'wechat_primary',
+      context_code: 'identity_changed', identity_checks: { process_id_matches: true, window_id_matches: false,
+        window_origin_matches: true, window_size_matches: true },
+    };
+    const expected = structuredClone(context);
+    const validated = profile.validatedContextDiagnostics(context);
+    context.context_code = 'matched';
+    context.identity_checks.window_id_matches = true;
+    context.identity_checks.window_title = '合成后续污染';
+    assert.deepEqual(validated, expected);
+  } finally { await rm(owned, { recursive: true, force: true }); }
+});

@@ -48,7 +48,7 @@ final class MinimalRegionLayoutTests: XCTestCase {
         let diagnostics = CalibrationContextDiagnostics(
             frontmostProcessId: 321, frontmostBundleIdentifier: "com.notalone.desktop", frontmostBundlePath: nil,
             wechatProcessIds: [123], soleWechatBundlePath: "/synthetic/private/WeChat-shadow.app",
-            selectedProcessId: 123, contextCode: "calibration_context_unavailable"
+            selectedProcessId: 123, contextCode: "calibration_context_unavailable", identityChecks: nil
         ).jsonObject()
         XCTAssertEqual(diagnostics["front_app_code"] as? String, "notalone")
         XCTAssertEqual(diagnostics["front_process_id"] as? Int32, 321)
@@ -61,12 +61,53 @@ final class MinimalRegionLayoutTests: XCTestCase {
         let multiple = CalibrationContextDiagnostics(
             frontmostProcessId: 123, frontmostBundleIdentifier: "com.tencent.xinWeChat", frontmostBundlePath: "/Applications/WeChat.app",
             wechatProcessIds: [123, 456], soleWechatBundlePath: nil,
-            selectedProcessId: 123, contextCode: "calibration_wechat_instances_ambiguous"
+            selectedProcessId: 123, contextCode: "calibration_wechat_instances_ambiguous", identityChecks: nil
         ).jsonObject()
         XCTAssertEqual(multiple["front_app_code"] as? String, "wechat_primary")
         XCTAssertEqual(multiple["wechat_instance_count"] as? Int, 2)
         XCTAssertEqual(multiple["sole_wechat_process_id"] as? Int32, 0)
         XCTAssertEqual(multiple["sole_wechat_app_code"] as? String, "none")
+    }
+
+    func testIdentityDiagnosticsDistinguishExactDifferencesWithoutPersistingGeometry() throws {
+        let frame = CGRect(x: 10, y: 20, width: 800, height: 600)
+        let cases: [(pid_t, CGWindowID, CGRect, [String: Bool])] = [
+            (123, 456, frame, ["process_id_matches": true, "window_id_matches": true,
+                               "window_origin_matches": true, "window_size_matches": true]),
+            (124, 456, frame, ["process_id_matches": false, "window_id_matches": true,
+                               "window_origin_matches": true, "window_size_matches": true]),
+            (123, 457, frame, ["process_id_matches": true, "window_id_matches": false,
+                               "window_origin_matches": true, "window_size_matches": true]),
+            (123, 456, CGRect(x: 10.25, y: 20, width: 800, height: 600),
+             ["process_id_matches": true, "window_id_matches": true,
+              "window_origin_matches": false, "window_size_matches": true]),
+            (123, 456, CGRect(x: 10, y: 20.25, width: 800, height: 600),
+             ["process_id_matches": true, "window_id_matches": true,
+              "window_origin_matches": false, "window_size_matches": true]),
+            (123, 456, CGRect(x: 10, y: 20, width: 800.25, height: 600),
+             ["process_id_matches": true, "window_id_matches": true,
+              "window_origin_matches": true, "window_size_matches": false]),
+            (123, 456, CGRect(x: 10, y: 20, width: 800, height: 600.25),
+             ["process_id_matches": true, "window_id_matches": true,
+              "window_origin_matches": true, "window_size_matches": false]),
+        ]
+        for (pid, windowId, currentFrame, expected) in cases {
+            let current = CalibrationContext(processId: pid, windowId: windowId, frame: currentFrame,
+                                             version: "4.0.6", build: "29387")
+            let checks = current.identityChecks(selectedProcessId: 123, windowId: 456, frame: frame)
+            XCTAssertEqual(checks, expected)
+            let code = expected.values.allSatisfy { $0 } ? "matched" : "identity_changed"
+            let diagnostics = CalibrationContextDiagnostics(
+                frontmostProcessId: pid, frontmostBundleIdentifier: "com.tencent.xinWeChat", frontmostBundlePath: "/Applications/WeChat.app",
+                wechatProcessIds: [pid], soleWechatBundlePath: "/Applications/WeChat.app",
+                selectedProcessId: 123, contextCode: code, identityChecks: checks
+            ).jsonObject()
+            XCTAssertEqual(diagnostics["identity_checks"] as? [String: Bool], expected)
+            XCTAssertEqual(diagnostics.count, 8)
+            let encoded = try JSONSerialization.data(withJSONObject: diagnostics)
+            let roundTrip = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+            XCTAssertEqual(roundTrip["identity_checks"] as? [String: Bool], expected)
+        }
     }
 
     private func window(_ id: Int, _ width: Double, _ height: Double) -> [String: Any] {

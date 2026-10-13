@@ -163,10 +163,12 @@ struct CalibrationContext: Equatable {
         let front = NSWorkspace.shared.frontmostApplication
         let instances = NSRunningApplication.runningApplications(withBundleIdentifier: "com.tencent.xinWeChat")
         let code: String
+        var identityChecks: [String: Bool]?
         do {
             let current = try resolve(requireForeground: true)
             code = current.processId == selectedProcessId && current.windowId == windowId && current.frame == frame
                 ? "matched" : "identity_changed"
+            identityChecks = current.identityChecks(selectedProcessId: selectedProcessId, windowId: windowId, frame: frame)
         } catch let error as CalibrationContextFailure {
             code = error.rawValue
         } catch {
@@ -176,8 +178,14 @@ struct CalibrationContext: Equatable {
             frontmostProcessId: front?.processIdentifier, frontmostBundleIdentifier: front?.bundleIdentifier,
             frontmostBundlePath: front?.bundleURL?.path, wechatProcessIds: instances.map(\.processIdentifier),
             soleWechatBundlePath: instances.count == 1 ? instances.first?.bundleURL?.path : nil,
-            selectedProcessId: selectedProcessId, contextCode: code
+            selectedProcessId: selectedProcessId, contextCode: code, identityChecks: identityChecks
         ).jsonObject()
+    }
+
+    // 只比较同一次resolve已有的身份，不新增OS查询或保存窗口几何。
+    func identityChecks(selectedProcessId: pid_t, windowId: CGWindowID, frame: CGRect) -> [String: Bool] {
+        ["process_id_matches": processId == selectedProcessId, "window_id_matches": self.windowId == windowId,
+         "window_origin_matches": self.frame.origin == frame.origin, "window_size_matches": self.frame.size == frame.size]
     }
 
     func selection(_ regions: [String: CGRect]) -> [String: Any] {
@@ -196,14 +204,17 @@ struct CalibrationContextDiagnostics {
     let soleWechatBundlePath: String?
     let selectedProcessId: pid_t
     let contextCode: String
+    let identityChecks: [String: Bool]?
 
     func jsonObject() -> [String: Any] {
         let sole = wechatProcessIds.count == 1 ? wechatProcessIds[0] : 0
-        return ["front_app_code": applicationCode(frontmostBundleIdentifier, path: frontmostBundlePath, pid: frontmostProcessId),
+        var result: [String: Any] = ["front_app_code": applicationCode(frontmostBundleIdentifier, path: frontmostBundlePath, pid: frontmostProcessId),
                 "front_process_id": frontmostProcessId ?? 0, "selected_process_id": selectedProcessId,
                 "wechat_instance_count": wechatProcessIds.count, "sole_wechat_process_id": sole,
                 "sole_wechat_app_code": applicationCode(sole == 0 ? nil : "com.tencent.xinWeChat", path: soleWechatBundlePath, pid: sole),
                 "context_code": contextCode]
+        if let identityChecks { result["identity_checks"] = identityChecks }
+        return result
     }
 
     private func applicationCode(_ identifier: String?, path: String?, pid: pid_t?) -> String {

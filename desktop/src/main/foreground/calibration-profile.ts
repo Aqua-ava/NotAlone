@@ -64,17 +64,23 @@ export function validatedNameQuality(value: unknown): LayoutNameQuality {
   return { ...quality } as LayoutNameQuality;
 }
 
+export type LayoutIdentityChecks = {
+  process_id_matches: boolean; window_id_matches: boolean; window_origin_matches: boolean; window_size_matches: boolean;
+};
+
 export type LayoutContextDiagnostics = {
   front_app_code: string; front_process_id: number; selected_process_id: number;
   wechat_instance_count: number; sole_wechat_process_id: number; sole_wechat_app_code: string; context_code: string;
+  identity_checks?: LayoutIdentityChecks;
 };
 
 // 来源分类只说明末次元数据观察，不代替前台、布局或身份门禁。
 export function validatedContextDiagnostics(value: unknown): LayoutContextDiagnostics {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('calibration_result_invalid');
   const context = value as Record<string, unknown>;
+  const hasIdentityChecks = Object.hasOwn(context, 'identity_checks');
   const keys = ['front_app_code', 'front_process_id', 'selected_process_id', 'wechat_instance_count',
-    'sole_wechat_process_id', 'sole_wechat_app_code', 'context_code'];
+    'sole_wechat_process_id', 'sole_wechat_app_code', 'context_code', ...(hasIdentityChecks ? ['identity_checks'] : [])];
   const wechatCodes = ['wechat_primary', 'wechat_other', 'wechat_unknown'];
   const contextCodes = ['matched', 'identity_changed', 'calibration_wechat_instances_ambiguous',
     'calibration_wechat_version_unsupported', 'calibration_window_not_visible', 'calibration_windows_ambiguous',
@@ -92,7 +98,18 @@ export function validatedContextDiagnostics(value: unknown): LayoutContextDiagno
       : context.sole_wechat_process_id !== 0 || context.sole_wechat_app_code !== 'none')) {
     throw new Error('calibration_result_invalid');
   }
-  return { ...context } as LayoutContextDiagnostics;
+  if (hasIdentityChecks) {
+    const checks = context.identity_checks as Record<string, unknown>;
+    const checkKeys = ['process_id_matches', 'window_id_matches', 'window_origin_matches', 'window_size_matches'];
+    if (!checks || typeof checks !== 'object' || Array.isArray(checks)
+      || Object.keys(checks).length !== checkKeys.length || !Object.keys(checks).every(key => checkKeys.includes(key))
+      || !checkKeys.every(key => typeof checks[key] === 'boolean')
+      || !['matched', 'identity_changed'].includes(context.context_code as string)
+      || (context.context_code === 'matched') !== checkKeys.every(key => checks[key] === true)) {
+      throw new Error('calibration_result_invalid');
+    }
+  }
+  return { ...context, ...(hasIdentityChecks ? { identity_checks: { ...(context.identity_checks as LayoutIdentityChecks) } } : {}) } as LayoutContextDiagnostics;
 }
 
 export function verificationProgressReceiver(onStage: (stage: typeof layoutVerificationStages[number]) => void): (chunk: Buffer) => boolean {

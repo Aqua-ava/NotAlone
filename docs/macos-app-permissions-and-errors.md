@@ -507,3 +507,11 @@ Root使用上述数值诊断新包实际场次a：公开选择保存成功，但
 只为下一有限场新增failed/context的严格7字段元数据：前台固定App分类/PID、选区PID、微信运行实例数、唯一实例PID/固定分类及安全上下文码。安装位置只归为primary/other/unknown，不保存真实路径、bundle原文、窗口标题、联系人或图帧，不把primary当签名认证；非唯一实例不选取。查询不是原子焦点证据。Host校验固定集合、PID/计数和一致性后0600原子保存，不进入profile或授予采集/身份资格；原门禁、TCC、签名策略与0.90质量不变。
 
 新增保存边界实际red→green4/4；Swift纯分类接缝编译red→布局/参数12/12；桌面类型与安全48/48、构建通过。子Agent没有实际App/probe/微信、权限或模型运行。当前包签名、实际helper/父进程及系统权限归属仍由Root新场次验证；不能用固定分类或合成通过替代。
+
+## 2026-10-13 窗口身份差项诊断准备
+
+Root有限场次D实际138.708860125秒、exit1；已保存选择，末次安全上下文码为`identity_changed`，前台／选择／唯一微信PID在旧七字段中相同，前台分类为正式安装位置。仍停在context，未进入Capture.setup、权限预检或视觉采集，没有OCR/profile；已记录helper父子与Resources归属不等于TCC归属已验证。旧七字段无法区分窗口编号、位置或尺寸变化，且多次元数据查询不是原子快照，不能从相同PID补造精确原因。
+
+本片只在诊断中已有的末次`resolve`成功返回时附可选`identity_checks`，固定四布尔：`process_id_matches`、`window_id_matches`、`window_origin_matches`、`window_size_matches`。四项来自该同一个current与原选择的精确比较，不保存新坐标、尺寸、窗口标题、名称、路径、图帧或原始异常；`resolve`失败则不填，不编造false。旧七字段格式继续可读，附项只允许`matched`／`identity_changed`，分别要求四项全true／至少一项false。先前front／sole字段来自各自查询，Host不把它们和四项强制拼成原子证据。诊断不进入profile，不选择或认证联系人，也不改变任何运行资格。
+
+Swift新增纯比较接缝先因缺符号／参数编译失败，再单项七组比较通过；Host旧白名单拒绝附项的实际red→green及后续输入修改污染浅复制的实际red→嵌套复制green均保留。原布局与session参数13/13、Host保存6/6及类型检查通过；具体命令、耗时和完整安全组以[本片证据](../.scratch/unfinished-work/goal-ocr-identity-checks-20261013.md)为准。没有新增OS查询、observer、CLI开关、捕获调用或前台操作，严格PID／窗口编号／CGRect门、五处最小区域、0.90、内存帧与签名／TCC策略保持。子Agent实际App、真实helper、微信、TCC、CLI与模型调用0；Root新签名候选包和实际场次另验，旧D失败与原18／20验收保持。
