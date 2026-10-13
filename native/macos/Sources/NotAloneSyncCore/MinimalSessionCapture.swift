@@ -188,11 +188,13 @@ struct Names {
     }
 }
 
-private func recognize(_ image: CGImage) throws -> Name {
+// 内部测试可持有同次请求；生产仍使用新请求和原有固定策略，不提供运行开关。
+func recognize(_ image: CGImage, automaticallyDetectsLanguage: Bool = false,
+               request: VNRecognizeTextRequest = VNRecognizeTextRequest()) throws -> Name {
     let pixelSize = CGSize(width: image.width, height: image.height)
-    let request = VNRecognizeTextRequest()
     request.recognitionLevel = .accurate; request.recognitionLanguages = ["zh-Hans", "en-US"]
     request.usesLanguageCorrection = false
+    request.automaticallyDetectsLanguage = automaticallyDetectsLanguage
     try VNImageRequestHandler(cgImage: image).perform([request])
     // 多行、贴边或缺候选不能证明完整名字；不把截断的高置信度前缀当作完整联系人名。
     guard let results = request.results, results.count == 1,
