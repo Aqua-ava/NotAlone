@@ -24,7 +24,7 @@
 
 聊天辅助产品讨论分别记录在[聊天回复策略草图](drafts/conversation-reply-strategy.md)和[持续会话与上下文管理草图](drafts/assistant-session-context.md)：前者讨论回应与主动联系两条路径，后者从 Q1 独立记录助手会话连续性及新开边界，均未替代现行规格。
 
-记忆持续更新、纠错、概览、回复检索及自动 Skill 学习等 8 个完整功能，记录在[记忆与 Skill 演进草图](drafts/memory-skill-evolution.md)；其中区分已确认的产品方向、集中审核规则与待验证的 DSH 选型，尚未形成正式实现规格。
+记忆持续更新、纠错、概览、回复检索及自动 Skill 学习等 8 个完整功能，已从[草图](drafts/memory-skill-evolution.md)整理为[正式规格](../.scratch/memory-skill-evolution/spec.md)；[任务拆分提案](../.scratch/memory-skill-evolution/ticket-proposal.md)待确认。DSH 选型搁置，不阻塞本轮交付；目标规则已记录，功能尚未据此实现。
 
 ## ADR 索引
 
@@ -77,6 +77,7 @@
 45. [ADR-045：ECNU 回复输入预算采用明确标注的估算与余量](adr/045-explicit-estimated-ecnu-input-budget.md)
 46. [ADR-046：维度依据绑定当前来源，第四门采用合取](adr/046-source-bound-dimension-evidence.md)
 47. [ADR-047：同次来源核验的有界提案与版本二语义依据](adr/047-bounded-source-semantic-proof.md)
+48. [ADR-048：记忆演进与自动 Skill 的受控生命周期](adr/048-memory-skill-evolution-lifecycle.md)
 
 ## 当前架构决策
 
@@ -91,6 +92,7 @@
 - 关系记忆与本人记忆不设置固定常驻模式；记忆召回第一期按当前正文做确定性中文词法评分，使用独立双预算和相关性阈值；联系人记忆目录只保留版本复验职责。
 - 待确认候选可以参与候选回复，但只能用独立证据类型和独立预算、带强制「未确认」标注作为参考，不得写成确定事实，也不进入已确认记忆集合；用户否决后永久不再参与（见 ADR-035）。
 - 候选回复只在应用内展示，最终由用户修改并亲自发送。
+- 记忆与 Skill 后续演进按 ADR-048 和正式规格推进：历史状态与当前核实分开，自动学习先形成草稿、集中审核后发布；DSH 选型搁置。此项是待实现的目标约束，不表示当前已有自动 Skill 学习、长期概览或方法级停用。
 
 ## 状态规则
 

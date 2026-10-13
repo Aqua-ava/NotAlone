@@ -2,6 +2,8 @@
 
 > 状态：草案。2026-10-14 保存已确认的产品方向；数据契约、接口、验证方案和 DSH 选型尚未定稿。本文不替代现行规格或 ADR，也不表示相关功能已经实现。
 
+> 后续状态：用户要求搁置 DSH、先形成正式规则与任务，已整理为[正式规格](../../.scratch/memory-skill-evolution/spec.md)和[任务拆分提案](../../.scratch/memory-skill-evolution/ticket-proposal.md)，目标约束见[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)。后续开发以正式规格为准；下方 DSH 比较保留为搁置的设计记录。
+
 ## 目标与阅读方式
 
 让 NotAlone 在用户授权的资料范围内持续整理记忆，从回复经验中提出可复用的表达方法，并由用户集中审核后使用。设计持续参考腾讯 TencentDB Agent Memory、Hermes 和其他有一手证据的方案，逐项说明借鉴机制、产品适配和验证结果。
@@ -127,7 +129,7 @@ Q19 确认的是分析触发边界；独立分析入口和完整分析功能是�
 
 ### 当前结论
 
-DSH 指 DeepSeek Harness。**目前只确定要仔细比较，尚未选择或切换。**当前候选回复仍是 `LangChain create_agent + Deep Agents SkillsMiddleware`；DSH 是可替换 AI 执行层的备选。
+DSH 指 DeepSeek Harness。**现已搁置选型，尚未选择或切换，也不作为本轮任务的前置。**当前候选回复仍是 `LangChain create_agent + Deep Agents SkillsMiddleware`；DSH 是未来可重新讨论的备选。
 
 NotAlone 继续负责联系人身份、`owner_id + contact_id` 隔离、来源和时间、候选校验、审核、任务状态、删除和人工发送。PostgreSQL 继续保存权威业务状态；运行时会话或日志不能代替它。
 
@@ -185,11 +187,10 @@ NotAlone 继续负责联系人身份、`owner_id + contact_id` 隔离、来源�
 
 ## 按工作流继续
 
-当前处于[仓库工作流](../../docs/agents/workflow.md)的“处理设计不确定性”阶段。产品方向足以保存草图，运行时选型和几个关键数据、接口边界尚未达到实现条件。
+目前已按[仓库工作流](../../docs/agents/workflow.md)形成正式规格，进入“拆分 tickets”的粒度确认阶段。沿用现有基座，测试从公开 HTTP、隔离 PostgreSQL 与当前 React 控制器验证完整用户行为，DSH 不再阻塞此路径。
 
-1. **先明确 DSH 比较和模块接口。**按 `codebase-design` 确定运行时替换点，以及草稿、审核发布、来源删除与恢复分别由谁负责。需要可运行答案时，再按 `handoff → prototype → handoff` 做隔离原型。
-2. **形成正式规格。**设计收敛后用 `to-spec` 写入 `.scratch/`，明确问题、行为、实现决定、测试接口和排除项；同步复审受影响的 ADR。
-3. **提出完整交付任务。**用 `to-tickets` 展示任务粒度和真实依赖，用户认可后再发布；不把讨论编号或每个例外机械转换成任务。
-4. **逐项实现和验证。**按已约定接口进行 TDD、相关验证和代码评审，完成本地提交。远端发布仍需单独授权。
+1. 查看正式规格与15项完整交付提案，确认粒度和真实依赖。
+2. 确认后按本地 tracker 约定逐张发布任务；不把讨论编号或每个例外机械变成任务。
+3. 用户要求实现时，按任务范围推进 TDD、相关验证、代码评审和本地提交。
 
-本次保存草图不创建实现任务、不更换基座、不执行旧资料升级。运行时前次讨论保留在[运行时草案](agent-runtime.md)和[规划记录](../../.scratch/agent-runtime/planning.md)；后续以本草图新增问题做比较，不把先前暂定方向当作已经采纳。
+当前仅形成文档与拆分方案，尚未发布或实现任务，不执行旧资料升级。运行时历史讨论保留在[运行时草案](agent-runtime.md)和[规划记录](../../.scratch/agent-runtime/planning.md)，不把先前暂定方向当作已经采纳。

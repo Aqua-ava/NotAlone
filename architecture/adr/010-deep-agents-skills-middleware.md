@@ -61,3 +61,5 @@ Deep Agents 类型不得进入领域对象或公开 port。`skills` 模块继续
 - 不再自行维护 Skill 目录扫描，但仍需实现 `SkillPort`、Skill 库管理、scope-aware backend adapter、NotAlone 专用目录提示词和受控 `read_file`。
 - 测试必须覆盖 owner/contact 目录隔离、scope 或目录修订变化后的缓存失效、禁用或删除 Skill 不可恢复、一次最多一个版本、`read_file` schema、网络 Skill 不能扩权、路径遍历拒绝、历史版本记录和不存在发送 Tool。
 - 引入 `deepagents` 依赖前先做最小合成 POC；POC 通过后才能宣称该组合可运行。
+
+后续局部修订：[ADR-048](048-memory-skill-evolution-lifecycle.md)扩展自动经验草稿、集中审核和方法级范围反馈的目标生命周期，尚未实现；本 ADR 的只读加载、受控资源和不可扩权继续有效。用户本地包导入仍保留原路径，不能把该路径的直接发布规则用于自动学习草稿。

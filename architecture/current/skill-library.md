@@ -5,6 +5,8 @@
 > [tests](../../backend/tests/unit/reply)，以 在 `backend/` 运行 `python -m unittest discover -s tests` 的真实验证为准。
 > 日期：2026-08-24
 
+> 后续目标：[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)和[正式规格](../../.scratch/memory-skill-evolution/spec.md)扩展自动经验草稿、集中审核及方法级范围反馈，尚未实现。下方 v1 本地包导入路径保持，不能以其直接发布行为替代自动草稿的用户审核。
+
 ## 1. 目标与范围
 
 Skill Library 管理用户可用于候选回复的 Reply Skill。Reply Skill 是一种可独立安装、启用、停用、更新和删除的回复策略；它只影响当前候选回复的表达方式，不是联系人事实、关系记忆、Style Sample 或 Tool。

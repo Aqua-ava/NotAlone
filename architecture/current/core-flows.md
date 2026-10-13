@@ -2,6 +2,8 @@
 
 > 状态：已采纳的流程边界；UI 形态和 API 路径尚未设计。
 
+> 后续目标：记忆时效、纠错、可追溯概览、自动 Skill 草稿/审核和明确范围反馈按[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)及[正式规格](../../.scratch/memory-skill-evolution/spec.md)扩展，尚未实现。DSH 搁置，现有回复运行时、质量放行、授权和人工发送边界保持。
+
 ## 1. 导入与关系资料采纳
 
 ```text
