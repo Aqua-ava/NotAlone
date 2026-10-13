@@ -145,7 +145,7 @@ class EvaluationECNUTest(unittest.TestCase):
             "choices": [{"index": 0, "message": {
                 "role": "assistant", "content": None, "tool_calls": [{
                     "id": "synthetic-call", "type": "function", "function": {
-                        "name": payload["tool_choice"]["function"]["name"],
+                        "name": payload["tools"][0]["function"]["name"],
                         "arguments": json.dumps({"facts": []} if arguments is None else arguments),
                     },
                 }],
@@ -262,6 +262,195 @@ class EvaluationECNUTest(unittest.TestCase):
         self.assertIsNone(final["dimension_evidence"]["semantic_basis"])
         self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 2)
         self.assertFalse(result["quality_certified"])
+
+    def test_omitted_verification_preserves_wire_capture_and_known_ecnu_labels(self):
+        window = build_window(PLAN[7])
+        source = str(window.target_message_ids[0])
+        fact = {
+            "text": "联系人刚读完《活着》。", "category": "common_fact", "subject": "contact",
+            "topic": "study", "source_message_ids": [source], "confidence": 0.99,
+            "risk_flags": [], "valid_at": None, "invalid_at": None,
+            "speech_act": "assertion", "assertion_status": "asserted", "figurative_type": "literal",
+            "alternatives": [], "interpretation_reason": "合成阅读完成状态。",
+        }
+        raw_v = {"candidate_index": 0, "verdict": "supported", "issues": [],
+                 "evidence": [{"message_id": source, "quote": window.messages[1].text}], "proof": None}
+
+        def response(request):
+            body = json.loads(request.content)
+            self.requests.append(body)
+            name = body["tools"][0]["function"]["name"]
+            recorded = [json.loads(path.read_text()) for path in self.output.glob("event-*.json")]
+            saved = next(event["payload"] for event in recorded if event["kind"] == "provider_request"
+                         and event["request_sequence"] == len(self.requests))
+            self.assertEqual(saved["body"], body)
+            self.assertEqual(saved["capture_layer"], "sdk_http_body")
+            self.assertEqual(saved["original_bytes_sha256"], hashlib.sha256(request.content).hexdigest())
+            self.assertEqual(saved["original_bytes_length"], len(request.content))
+            self.assertEqual(request.extensions["timeout"],
+                             dict.fromkeys(("connect", "read", "write", "pool"), 300.0))
+            return httpx.Response(200, request=request, json={
+                "id": "synthetic-completion", "object": "chat.completion", "created": 1,
+                "model": "deepseek-v4-flash" if name == "MemoryExtractionOutput" else "deepseek-flash",
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": None,
+                    "tool_calls": [{"id": "synthetic-call", "type": "function", "function": {
+                        "name": name, "arguments": json.dumps({"facts": [fact]} if
+                         name == "MemoryExtractionOutput" else {"results": [raw_v]})}}]},
+                    "finish_reason": "tool_calls"}],
+            })
+
+        result = self.run_ready(
+            transport=httpx.MockTransport(response), case_positions=(7,),
+            request_timeout_seconds=300, max_retries=0, verification_mode="nullable-proof-v1",
+            verification_tool_choice="omitted", response_identity_policy="ecnu_configured_route_known_labels_v1",
+            audit=lambda bundle: self.audit(bundle, "unknown", "audit_unresolved"),
+        )
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(set(self.requests[0]), {"model", "temperature", "stream", "thinking", "messages", "tools", "tool_choice"})
+        self.assertEqual(set(self.requests[1]), set(self.requests[0]) - {"tool_choice"})
+        candidate = json.loads(self.requests[1]["messages"][1]["content"])["candidates"][0]
+        self.assertEqual(candidate, {"candidate_index": 0, **{key: fact[key] for key in (
+            "text", "subject", "category", "topic", "source_message_ids", "valid_at", "invalid_at",
+            "speech_act", "assertion_status", "figurative_type")}})
+        self.assertEqual(self.audits[0]["verification_tool_choice"], "omitted")
+        self.assertEqual(self.audits[0]["adapter_outputs"][1]["tool_calls"][0]["args"]["results"], [raw_v])
+        self.assertEqual([item["body"]["model"] for item in self.audits[0]["provider_responses"]],
+                         ["deepseek-v4-flash", "deepseek-flash"])
+        config = json.loads((self.output / "manifest.json").read_text())["frozen_config"]
+        self.assertEqual(config["tool_choice"]["verification"]["mode"], "omitted")
+        self.assertEqual(config["response_identity_policy"]["known_labels"], ["deepseek-flash", "deepseek-v4-flash"])
+        self.assertFalse(config["response_identity_policy"]["weights_identity_verified"])
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 2)
+        self.assertFalse(result["quality_certified"])
+
+    def test_unknown_wire_and_route_policy_reject_before_registration_and_key(self):
+        from notalone.memory_extraction.evaluation_http_budget import EvaluationBudget
+
+        for policy in ({"verification_tool_choice": "auto"},
+                       {"response_identity_policy": "accept_every_label"},
+                       {"verification_tool_choice": "omitted"}):
+            with self.subTest(policy=policy), patch.object(EvaluationBudget, "create") as create:
+                with self.assertRaises(EvaluationBudgetAbort):
+                    self.run_ready(**policy)
+                create.assert_not_called()
+        self.assertEqual(self.requests, [])
+        self.assertEqual(self.credentials, [])
+
+    def test_late_claimed_budget_stops_before_credentials(self):
+        from notalone.memory_extraction.evaluation_provider_contract import ECNUEvaluationContract
+        from notalone.memory_extraction.evaluation_http_budget import EvaluationBudget
+
+        create_budget = EvaluationBudget.create
+        now = [datetime.now(timezone.utc)]
+        deadline = []
+
+        def contract(**parameters):
+            deadline.append(parameters["deadline"])
+            return ECNUEvaluationContract(**parameters, clock=lambda: now[0])
+
+        def create(**parameters):
+            budget = create_budget(**parameters)
+            now[0] = deadline[0]
+            return budget
+
+        with patch("notalone.memory_extraction.evaluation_provider_contract.ECNUEvaluationContract", side_effect=contract), \
+                patch.object(EvaluationBudget, "create", side_effect=create):
+            result = self.run_ready(verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+                                    response_identity_policy="ecnu_configured_route_known_labels_v1",
+                                    request_timeout_seconds=300, max_retries=0)
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 0)
+        self.assertTrue(result["receipt"]["budget"]["closed"])
+
+    def test_omitted_policy_with_unknown_or_missing_label_stops_and_closes(self):
+        for label in ("unapproved-label", None):
+            with self.subTest(label=label):
+                self.output = self.home / ("output-unknown" if label else "output-missing")
+                self.output.mkdir(mode=0o700)
+                def response(request):
+                    result = self.response(request, reported_model=label)
+                    value = json.loads(result.content)
+                    if label is None:
+                        del value["model"]
+                    return httpx.Response(200, request=request, json=value)
+                result = self.run_ready(
+                    transport=httpx.MockTransport(response), case_positions=(7,),
+                    verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+                    response_identity_policy="ecnu_configured_route_known_labels_v1",
+                    request_timeout_seconds=300, max_retries=0,
+                )
+                self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 1)
+                self.assertTrue(result["receipt"]["budget"]["closed"])
+                self.assertFalse(result["quality_certified"])
+                self.assertEqual(self.audits, [])
+
+    def test_new_policy_external_trace_is_rejected_before_registration(self):
+        with patch("langsmith.get_tracing_context", return_value={"enabled": True}), \
+                patch.object(EvaluationBudget, "create") as create:
+            with self.assertRaises(EvaluationBudgetAbort):
+                self.run_ready(verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+                               response_identity_policy="ecnu_configured_route_known_labels_v1",
+                               request_timeout_seconds=300, max_retries=0)
+            create.assert_not_called()
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+
+    def test_new_policy_actual_request_model_change_reserves_zero(self):
+        from langchain_deepseek import ChatDeepSeek
+        original_payload = ChatDeepSeek._get_request_payload
+
+        def changed_payload(model, *args, **kwargs):
+            value = original_payload(model, *args, **kwargs)
+            value["model"] = "different-model"
+            return value
+
+        with patch.object(ChatDeepSeek, "_get_request_payload", changed_payload):
+            result = self.run_ready(verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+                                   response_identity_policy="ecnu_configured_route_known_labels_v1",
+                                   request_timeout_seconds=300, max_retries=0)
+        self.assertEqual(self.requests, [])
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 0)
+        self.assertTrue(result["receipt"]["budget"]["closed"])
+
+    def test_new_policy_source_changes_after_claim_before_key_are_rejected(self):
+        create_budget = EvaluationBudget.create
+
+        def create(**parameters):
+            budget = create_budget(**parameters)
+            source = self.repo / "backend/src/notalone/memory/evidence_binding.py"
+            source.write_text("变更的合成源码。")
+            return budget
+
+        with patch.object(EvaluationBudget, "create", side_effect=create):
+            result = self.run_ready(verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+                                   response_identity_policy="ecnu_configured_route_known_labels_v1",
+                                   request_timeout_seconds=300, max_retries=0)
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 0)
+        self.assertTrue(result["receipt"]["budget"]["closed"])
+
+    def test_phased_omitted_policy_mismatch_rejects_before_registration(self):
+        from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
+        from notalone.memory_extraction.evaluation_reference import PUBLIC_REFERENCE_PATH
+
+        root = Path(__file__).resolve().parents[4]
+        raw_reference = (root / PUBLIC_REFERENCE_PATH).read_bytes()
+        reference = json.loads(raw_reference)
+        audit = PhasedEvaluationAudit(
+            reference=reference, expected_reference_sha256="5fb8d53b90a1a96c5987ac7b825bb233cc3e9f196f976e4851c40b0243b77b32",
+            annotation_sha256=reference["annotation_sha256"], criteria_sha256=hashlib.sha256(raw_reference).hexdigest(),
+            raw_reviewer=lambda view: {}, full_reviewer=lambda view: {},
+            verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+        )
+        with patch.object(EvaluationBudget, "create") as create:
+            with self.assertRaises(EvaluationBudgetAbort):
+                self.run_ready(verification_mode="nullable-proof-v1", audit=audit,
+                               request_timeout_seconds=300, max_retries=0)
+            create.assert_not_called()
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
 
     def test_invalid_or_mismatched_verification_mode_stops_before_registration(self):
         from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
@@ -405,6 +594,12 @@ class EvaluationECNUTest(unittest.TestCase):
         self.assertEqual(manifest["frozen_config"]["verification_mode"], "legacy-v4")
 
     def test_nullable_phased_audit_seals_actual_sdk_proof_and_program_receipts(self):
+        self._exercise_nullable_phased_audit(verification_tool_choice="forced")
+
+    def test_omitted_actual_sdk_phased_audit_keeps_raw_full_and_original_gold(self):
+        self._exercise_nullable_phased_audit(verification_tool_choice="omitted")
+
+    def _exercise_nullable_phased_audit(self, *, verification_tool_choice):
         from tests.unit.memory_extraction.test_evaluation_phased_audit import EvaluationPhasedAuditTest
         from notalone.memory_extraction.evaluation_reference import PUBLIC_REFERENCE_PATH
 
@@ -423,7 +618,7 @@ class EvaluationECNUTest(unittest.TestCase):
         gold.update(criteria_path=PUBLIC_REFERENCE_PATH, criteria_sha256=hashes[PUBLIC_REFERENCE_PATH])
 
         def response(request):
-            name = json.loads(request.content)["tool_choice"]["function"]["name"]
+            name = json.loads(request.content)["tools"][0]["function"]["name"]
             return self.response(request, arguments={"facts": [phase.fact]} if
                                  name == "MemoryExtractionOutput" else {"results": [raw_v]})
 
@@ -452,8 +647,10 @@ class EvaluationECNUTest(unittest.TestCase):
 
         result = self.run_ready(
             hashes=hashes, gold=gold, transport=httpx.MockTransport(response),
-            audit=phase.audit(full=full_review, case_positions=(7,), verification_mode="nullable-proof-v1"),
+            audit=phase.audit(full=full_review, case_positions=(7,), verification_mode="nullable-proof-v1",
+                              verification_tool_choice=verification_tool_choice),
             case_positions=(7,), verification_mode="nullable-proof-v1",
+            verification_tool_choice=verification_tool_choice,
             request_timeout_seconds=300, max_retries=0,
         )
         self.assertEqual(result["summary"]["completed"], 1)
@@ -481,9 +678,11 @@ class EvaluationECNUTest(unittest.TestCase):
             "speech_act": "assertion", "assertion_status": "asserted", "figurative_type": "literal",
             "alternatives": [], "interpretation_reason": "合成直接阅读状态。",
         }
-        for mode in ("missing", "null", "malformed"):
-            with self.subTest(proof=mode):
-                self.output = self.home / ("proof-shape-" + mode)
+        for tool_choice, mode in (("forced", "missing"), ("forced", "null"), ("forced", "malformed"),
+                                  ("omitted", "missing"), ("omitted", "null"),
+                                  ("omitted", "malformed"), ("omitted", "plain")):
+            with self.subTest(proof=mode, tool_choice=tool_choice):
+                self.output = self.home / ("proof-shape-" + tool_choice + "-" + mode)
                 self.output.mkdir(mode=0o700)
                 self.requests.clear()
                 self.audits.clear()
@@ -496,22 +695,34 @@ class EvaluationECNUTest(unittest.TestCase):
                     }
 
                 def response(request):
-                    name = json.loads(request.content)["tool_choice"]["function"]["name"]
+                    name = json.loads(request.content)["tools"][0]["function"]["name"]
+                    if mode == "plain" and name == "SourceVerificationOutput":
+                        self.requests.append(json.loads(request.content))
+                        return httpx.Response(200, request=request, json={
+                            "id": "synthetic-completion", "object": "chat.completion", "created": 1,
+                            "model": "synthetic-reported-model", "choices": [{"index": 0,
+                            "message": {"role": "assistant", "content": "合成普通文字未按工具返回。"},
+                            "finish_reason": "stop"}],
+                        })
                     return self.response(request, arguments={"facts": [fact]} if
                                          name == "MemoryExtractionOutput" else {"results": [raw_v]})
 
                 result = self.run_ready(
                     transport=httpx.MockTransport(response), case_positions=(7, 4),
                     verification_mode="nullable-proof-v1", request_timeout_seconds=300, max_retries=0,
+                    verification_tool_choice=tool_choice,
                     audit=lambda bundle: self.audit(bundle, "unknown", "audit_unresolved"),
                 )
                 self.assertEqual(len(self.requests), 2)
                 self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 2)
                 self.assertEqual(result["summary"]["unrun"], 1)
                 v_output = [event for event in result["events"] if event["kind"] == "adapter_output"][1]
-                self.assertEqual(v_output["payload"]["tool_calls"][0]["args"]["results"], [raw_v])
+                if mode != "plain":
+                    self.assertEqual(v_output["payload"]["tool_calls"][0]["args"]["results"], [raw_v])
+                else:
+                    self.assertEqual(v_output["payload"]["tool_calls"], [])
                 program = [event for event in result["events"] if event["kind"] == "verification_program"]
-                if mode == "malformed":
+                if mode in {"malformed", "plain"}:
                     self.assertEqual(result["outcomes"][0]["status"], "failed")
                     self.assertEqual(self.audits, [])
                     self.assertEqual(program, [])

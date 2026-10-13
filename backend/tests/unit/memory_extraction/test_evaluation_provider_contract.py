@@ -97,12 +97,60 @@ class EvaluationProviderContractTest(unittest.TestCase):
         }
         self.now = [NOW]
 
-    def _contract(self, *, deadline: datetime | None = None):
+    def _contract(self, *, deadline: datetime | None = None, **policy):
         return ECNUEvaluationContract(
             deadline=deadline or NOW + timedelta(minutes=10),
             repo_root=self.root, source_hashes=self.source_hashes,
             clock=lambda: self.now[0],
+            **policy,
         )
+
+    def test_explicit_omitted_policy_accepts_only_verification_six_keys(self):
+        contract = self._contract(verification_tool_choice="omitted")
+        verification = _payload()
+        verification["tools"][0]["function"]["name"] = "SourceVerificationOutput"
+        del verification["tool_choice"]
+        with contract.expect_request(verification):
+            contract.check_request(httpx.Request("POST", ENDPOINT, json=verification))
+            for key, value in (("model", "different-model"), ("temperature", 1), ("stream", True),
+                               ("thinking", {"type": "disabled"}), ("extra_body", {})):
+                with self.subTest(key=key):
+                    changed = {**verification, key: value}
+                    with self.assertRaises(EvaluationBudgetAbort):
+                        contract.check_request(httpx.Request("POST", ENDPOINT, json=changed))
+        with contract.expect_request(_payload()):
+            contract.check_request(httpx.Request("POST", ENDPOINT, json=_payload()))
+        wrong_purpose = _payload()
+        del wrong_purpose["tool_choice"]
+        forced_v = dict(verification, tool_choice={
+            "type": "function", "function": {"name": "SourceVerificationOutput"},
+        })
+        for payload in (wrong_purpose, forced_v):
+            with self.subTest(payload=payload):
+                with self.assertRaises(EvaluationBudgetAbort):
+                    with contract.expect_request(payload):
+                        self.fail("显式省略只允许V六键，E仍必须具名强制。")
+        with self.assertRaises(EvaluationBudgetAbort):
+            with self._contract().expect_request(verification):
+                self.fail("默认七键合同不能接受省略V。")
+
+    def test_known_ecnu_labels_require_explicit_bound_route_policy(self):
+        contract = self._contract(
+            response_identity_policy="ecnu_configured_route_known_labels_v1",
+        )
+        for label in ("deepseek-v4-flash", "deepseek-flash", "deepseek-v4-flash"):
+            with contract.expect_request(_payload()):
+                contract.observe_response(httpx.Response(200, json=_completion(label)))
+        for label in ("unknown-provider-model", None):
+            with self.subTest(label=label), contract.expect_request(_payload()):
+                with self.assertRaises(EvaluationBudgetAbort):
+                    contract.observe_response(httpx.Response(200, json=_completion(label)))
+        with self.assertRaises(EvaluationBudgetAbort):
+            contract.observe_response(httpx.Response(200, json=_completion("deepseek-flash")))
+        strict = self._contract()
+        strict.observe_response(httpx.Response(200, json=_completion("deepseek-v4-flash")))
+        with self.assertRaisesRegex(EvaluationBudgetAbort, "identity_changed"):
+            strict.observe_response(httpx.Response(200, json=_completion("deepseek-flash")))
 
     def _budget(self):
         output = self.root / "output"

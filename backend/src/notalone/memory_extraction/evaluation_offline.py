@@ -135,7 +135,8 @@ class _RecordedModel:
 
     def __init__(self, model: Any, store: EvaluationRecordStore, position: int,
                  window: ExtractionWindow, call_state: dict,
-                 purpose: str | None = None, invocation_scope: Callable | None = None):
+                 purpose: str | None = None, invocation_scope: Callable | None = None,
+                 verification_tool_choice: str = "forced"):
         self._model = model
         self._store = store
         self._position = position
@@ -143,6 +144,7 @@ class _RecordedModel:
         self._call_state = call_state
         self._purpose = purpose
         self._invocation_scope = invocation_scope
+        self._verification_tool_choice = verification_tool_choice
 
     def bind_tools(self, tools: list[dict], **options: Any) -> _RecordedModel:
         purpose = {
@@ -151,10 +153,14 @@ class _RecordedModel:
         }.get(options.get("tool_choice"))
         if purpose is None or len(tools) != 1:
             raise EvaluationBudgetAbort("offline_tool_contract_changed")
+        if purpose == "verification" and self._verification_tool_choice == "omitted":
+            # 只在评测代理删除V的实际SDK绑定选项；原生产adapter仍要求具名工具。
+            options = {key: value for key, value in options.items() if key != "tool_choice"}
         return _RecordedModel(
             self._model.bind_tools(tools, **options), self._store,
             self._position, self._window, self._call_state, purpose,
             self._invocation_scope,
+            self._verification_tool_choice,
         )
 
     def invoke(self, messages: list[dict]) -> Any:
@@ -322,6 +328,7 @@ def _run_evaluation_batch(
     credential_loader: Callable[[], str] | None = None,
     request_timeout_seconds: float = 60.0, max_retries: int = 2,
     verification_mode: SourceVerificationMode | str = SourceVerificationMode.LEGACY_V4,
+    verification_tool_choice: str = "forced",
 ) -> dict:
     """P0/P1共用记录与收尾；真实配置与独审验证由各入口负责。"""
     selected = SourceVerificationMode(verification_mode)
@@ -338,6 +345,8 @@ def _run_evaluation_batch(
 
         with budget.batch(), tracing_context(enabled=False, parent=False):
             if credential_loader is not None:
+                if contract is not None:
+                    contract.check_preflight()
                 try:
                     api_key = credential_loader()
                     if not isinstance(api_key, str) or not api_key.strip():
@@ -379,6 +388,7 @@ def _run_evaluation_batch(
                 recorded_model = _RecordedModel(
                     model, store, position, window, call_state,
                     invocation_scope=invocation_scope,
+                    verification_tool_choice=verification_tool_choice,
                 )
                 # 原adapter只消费bind_tools/invoke；评测代理不成为产品模型实现。
                 adapter_model = cast(BaseChatModel, recorded_model)
@@ -420,6 +430,7 @@ def _run_evaluation_batch(
                                                    if event["kind"] == "provider_request"),
                         "gold_reference": dict(gold_reference or {}),
                         "verification_mode": selected.value,
+                        "verification_tool_choice": verification_tool_choice,
                         "verification_program": tuple(
                             event["payload"] for event in current_events
                             if event["kind"] == "verification_program"

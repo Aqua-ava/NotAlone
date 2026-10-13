@@ -21,6 +21,23 @@ ANNOTATION_SHA = "7039a302f64d6a14761ae448e425597c5ef46e0fbb3d7bc41c95c6d9a9b91e
 
 
 class EvaluationPhasedAuditTest(unittest.TestCase):
+    def test_omitted_verification_reaches_full_only_with_matching_explicit_policy(self):
+        self.bundle["verification_mode"] = "nullable-proof-v1"
+        self.bundle["verification_tool_choice"] = "omitted"
+        del self.bundle["provider_requests"][0]["body"]["tool_choice"]
+        audit = self.audit(verification_mode="nullable-proof-v1", verification_tool_choice="omitted")
+        result = audit(self.bundle)
+        self.assertEqual(self.order, ["raw", "persist:raw", "full", "persist:final"])
+        self.assertEqual(result["decision"], "safe")
+        self.assertEqual(audit.verification_tool_choice, "omitted")
+
+    def test_phased_wire_policy_mismatch_stops_before_raw_reviewer(self):
+        self.bundle["verification_mode"] = "nullable-proof-v1"
+        self.bundle["verification_tool_choice"] = "omitted"
+        with self.assertRaises(EvaluationBudgetAbort):
+            self.audit(verification_mode="nullable-proof-v1")(self.bundle)
+        self.assertEqual(self.order, [])
+
     def setUp(self):
         guard = patch.object(os, "environ", {"NOTALONE_DISABLE_DOTENV": "1"})
         guard.start()

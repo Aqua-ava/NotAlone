@@ -6,6 +6,7 @@ import json
 from typing import Callable
 
 from .evaluation_http_budget import EvaluationBudgetAbort
+from .evaluation_provider_contract import validate_evaluation_policy
 from .evaluation_records import canonical_sha256
 from .evaluation_reference import (
     public_window_projection, validate_full_public_reference, validate_public_reference,
@@ -134,7 +135,7 @@ def _arguments(outputs: list[dict], tool: str, key: str) -> list[dict]:
     return matches[0]
 
 
-def _verification_inputs(requests: list[dict]) -> list[dict]:
+def _verification_inputs(requests: list[dict], *, verification_tool_choice: str = "forced") -> list[dict]:
     matches = []
     bodies = []
     for request in requests:
@@ -143,8 +144,11 @@ def _verification_inputs(requests: list[dict]) -> list[dict]:
             raise EvaluationBudgetAbort("phased_verification_request_unreliable")
         tool = body["tools"][0]
         name = tool["function"]["name"]
+        omitted = name == _V_TOOL and verification_tool_choice == "omitted"
         if (tool.get("type") != "function" or name not in {_E_TOOL, _V_TOOL}
-                or body["tool_choice"] != {"type": "function", "function": {"name": name}}):
+                or (omitted and "tool_choice" in body)
+                or (not omitted and body.get("tool_choice") != {
+                    "type": "function", "function": {"name": name}})):
             raise EvaluationBudgetAbort("phased_verification_request_unreliable")
         if name != _V_TOOL:
             continue
@@ -183,8 +187,13 @@ class PhasedEvaluationAudit:
         case_positions: tuple[int, ...] | None = None,
         case_set: str = "reference21",
         verification_mode: SourceVerificationMode | str = SourceVerificationMode.LEGACY_V4,
+        verification_tool_choice: str = "forced",
     ):
         self._verification_mode = SourceVerificationMode(verification_mode)
+        validate_evaluation_policy(verification_tool_choice)
+        if verification_tool_choice == "omitted" and self._verification_mode is not SourceVerificationMode.NULLABLE_PROOF_V1:
+            raise ValueError("省略V工具选择只用于可空证明评测。")
+        self._verification_tool_choice = verification_tool_choice
         if (type(case_set) is not str or case_set not in {"reference21", "full140"}
                 or (case_set == "full140" and case_positions is not None)):
             raise ValueError("审核只接受原21或固定完整140，不允许完整集合缩减。")
@@ -241,6 +250,11 @@ class PhasedEvaluationAudit:
         """原评分四槽固定，实际V协议须与受限入口显式一致。"""
         return self._verification_mode.value
 
+    @property
+    def verification_tool_choice(self) -> str:
+        """审核与HTTP入口必须显式使用同一V请求策略。"""
+        return self._verification_tool_choice
+
     def __call__(self, bundle: dict) -> dict:
         try:
             return self._run(bundle)
@@ -252,6 +266,8 @@ class PhasedEvaluationAudit:
     def _run(self, bundle: dict) -> dict:
         if bundle.get("verification_mode", "legacy-v4") != self.verification_mode:
             raise EvaluationBudgetAbort("phased_verification_mode_changed")
+        if bundle.get("verification_tool_choice", "forced") != self.verification_tool_choice:
+            raise EvaluationBudgetAbort("phased_tool_choice_changed")
         # 回调只编辑审核结果；已保存case证据在本次调用内固定。
         evidence_bundle = _copy({key: bundle[key] for key in (
             "case_position", "case_name", "window", "gold_reference", "adapter_outputs",
@@ -300,7 +316,9 @@ class PhasedEvaluationAudit:
                         if extraction else [])
         evidence = {
             "run_status": "completed" if extraction else "empty", "extraction": extraction,
-            "verification_inputs": _verification_inputs(list(bundle["provider_requests"])) if extraction else [],
+            "verification_inputs": _verification_inputs(
+                list(bundle["provider_requests"]), verification_tool_choice=self.verification_tool_choice,
+            ) if extraction else [],
             "verification": _verification_projection(verification, self._verification_mode),
             "final_facts": bundle["original_result"]["facts"], "original_result": bundle["original_result"],
         }

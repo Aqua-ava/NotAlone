@@ -155,12 +155,29 @@ def run_ecnu_evaluation(
     case_positions: tuple[int, ...] | None = None,
     case_set: str = "reference21",
     verification_mode: SourceVerificationMode | str = SourceVerificationMode.LEGACY_V4,
+    verification_tool_choice: str = "forced",
+    response_identity_policy: str = "first_valid_completion_observation_stop_on_change",
 ) -> dict:
     """默认固定P1；显式最多四窗诊断仍须独审，不自动后继或认证质量。"""
     try:
         selected = SourceVerificationMode(verification_mode)
     except (TypeError, ValueError):
         raise EvaluationBudgetAbort("ecnu_invalid_verification_mode") from None
+    from .evaluation_provider_contract import (
+        KNOWN_ECNU_RESPONSE_IDENTITY_POLICY, KNOWN_ECNU_RESPONSE_LABELS,
+        validate_evaluation_policy,
+    )
+
+    validate_evaluation_policy(verification_tool_choice, response_identity_policy)
+    if (verification_tool_choice == "omitted"
+            and selected is not SourceVerificationMode.NULLABLE_PROOF_V1):
+        raise EvaluationBudgetAbort("ecnu_omitted_verification_requires_nullable")
+    if (verification_tool_choice == "omitted"
+            or response_identity_policy == KNOWN_ECNU_RESPONSE_IDENTITY_POLICY):
+        from langsmith import get_tracing_context
+
+        if get_tracing_context().get("enabled") is True:
+            raise EvaluationBudgetAbort("ecnu_external_tracing_enabled")
     if (type(request_timeout_seconds) not in (int, float)
             or not 0 < request_timeout_seconds <= 300
             or not isfinite(request_timeout_seconds)
@@ -199,6 +216,9 @@ def run_ecnu_evaluation(
     if (type(audit_case) is PhasedEvaluationAudit
             and audit_case.verification_mode != selected.value):
         raise EvaluationBudgetAbort("ecnu_phased_verification_mode_mismatch")
+    if (type(audit_case) is PhasedEvaluationAudit
+            and audit_case.verification_tool_choice != verification_tool_choice):
+        raise EvaluationBudgetAbort("ecnu_phased_tool_choice_mismatch")
     if synthetic_transport is None:
         if type(audit_case) is not PhasedEvaluationAudit:
             raise EvaluationBudgetAbort("ecnu_phased_audit_required")
@@ -222,6 +242,8 @@ def run_ecnu_evaluation(
 
     contract = ECNUEvaluationContract(
         deadline=deadline, repo_root=repo_root, source_hashes=dict(source_hashes),
+        verification_tool_choice=verification_tool_choice,
+        response_identity_policy=response_identity_policy,
     )
     if case_set == "full140":
         validation = _load_full_reference(repo_root, source_hashes)
@@ -260,9 +282,16 @@ def run_ecnu_evaluation(
         ),
         **({"selected_case_positions": list(positions)}
            if case_set == "full140" or case_positions is not None else {}),
-        "response_identity_policy": "first_valid_completion_observation_stop_on_change",
+        "response_identity_policy": ({
+            "mode": response_identity_policy, "known_labels": sorted(KNOWN_ECNU_RESPONSE_LABELS),
+            "endpoint": _ENDPOINT, "request_model": "ecnu-max", "weights_identity_verified": False,
+        } if response_identity_policy == KNOWN_ECNU_RESPONSE_IDENTITY_POLICY else response_identity_policy),
         "request_contract_version": 1,
-        "tool_choice": [schema["title"] for _, schema in runtime_contracts.values()],
+        "tool_choice": ({
+            "extraction": {"mode": "forced", "name": runtime_contracts["extraction"][1]["title"]},
+            "verification": {"mode": "omitted", "name": runtime_contracts["verification"][1]["title"]},
+        } if verification_tool_choice == "omitted" else
+            [schema["title"] for _, schema in runtime_contracts.values()]),
         "fallback": False,
         "versions": {name: version(name) for name in (
             "openai", "langchain-core", "langchain-deepseek", "langchain-openai",
@@ -304,6 +333,8 @@ def run_ecnu_evaluation(
             "tools": [deepcopy(tools[purpose])],
             "tool_choice": {"type": "function", "function": {"name": schema["title"]}},
         }
+        if purpose == "verification" and verification_tool_choice == "omitted":
+            del expected["tool_choice"]
         return contract.expect_request(expected)
 
     return _run_evaluation_batch(
@@ -315,4 +346,5 @@ def run_ecnu_evaluation(
         code_prefix="ecnu", credential_loader=credential_loader,
         request_timeout_seconds=request_timeout_seconds, max_retries=max_retries,
         verification_mode=selected,
+        verification_tool_choice=verification_tool_choice,
     )

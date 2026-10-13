@@ -23,6 +23,22 @@ _PAYLOAD_FIELDS = frozenset({
     "model", "temperature", "stream", "thinking", "messages", "tools", "tool_choice",
 })
 _TOOL_NAMES = frozenset({"MemoryExtractionOutput", "SourceVerificationOutput"})
+STRICT_RESPONSE_IDENTITY_POLICY = "first_valid_completion_observation_stop_on_change"
+KNOWN_ECNU_RESPONSE_IDENTITY_POLICY = "ecnu_configured_route_known_labels_v1"
+KNOWN_ECNU_RESPONSE_LABELS = frozenset({"deepseek-v4-flash", "deepseek-flash"})
+
+
+def validate_evaluation_policy(
+    verification_tool_choice: str, response_identity_policy: str = STRICT_RESPONSE_IDENTITY_POLICY,
+) -> None:
+    """只认可显式评测策略；未知策略在登记与凭据之前拒绝。"""
+    if (type(verification_tool_choice) is not str
+            or verification_tool_choice not in {"forced", "omitted"}
+            or type(response_identity_policy) is not str
+            or response_identity_policy not in {
+                STRICT_RESPONSE_IDENTITY_POLICY, KNOWN_ECNU_RESPONSE_IDENTITY_POLICY,
+            }):
+        raise EvaluationBudgetAbort("evaluation_policy_invalid")
 
 
 class ECNUEvaluationContract:
@@ -32,7 +48,12 @@ class ECNUEvaluationContract:
         self, *, deadline: datetime, repo_root: Path,
         source_hashes: dict[str, str],
         clock: Callable[[], datetime] | None = None,
+        verification_tool_choice: str = "forced",
+        response_identity_policy: str = STRICT_RESPONSE_IDENTITY_POLICY,
     ):
+        validate_evaluation_policy(verification_tool_choice, response_identity_policy)
+        self._verification_tool_choice = verification_tool_choice
+        self._response_identity_policy = response_identity_policy
         self._deadline = deadline
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._source_hashes = dict(source_hashes)
@@ -118,7 +139,7 @@ class ECNUEvaluationContract:
     @contextmanager
     def expect_request(self, expected_payload: dict) -> Iterator[None]:
         """为一次 E/V 调用及其 SDK 重试绑定原定请求正文。"""
-        _validate_payload(expected_payload)
+        _validate_payload(expected_payload, verification_tool_choice=self._verification_tool_choice)
         token = self._expected.set(_canonical(expected_payload))
         try:
             yield
@@ -126,8 +147,7 @@ class ECNUEvaluationContract:
             self._expected.reset(token)
 
     def check_request(self, request: httpx.Request) -> None:
-        self._check_deadline()
-        self._check_sources()
+        self.check_preflight()
         if self._expected.get() is None:
             raise EvaluationBudgetAbort("evaluation_request_unbound")
         if request.method != "POST" or str(request.url) != _ENDPOINT:
@@ -138,6 +158,11 @@ class ECNUEvaluationContract:
             raise EvaluationBudgetAbort("evaluation_request_body_invalid") from None
         if actual != self._expected.get():
             raise EvaluationBudgetAbort("evaluation_request_body_changed")
+
+    def check_preflight(self) -> None:
+        """领取后、凭据读取前与每个真实请求前复核同一时效和来源。"""
+        self._check_deadline()
+        self._check_sources()
 
     def observe_response(self, response: httpx.Response) -> None:
         """仅成功 Completion 参与服务报告字段比较，不认证权重身份。"""
@@ -171,6 +196,12 @@ class ECNUEvaluationContract:
                 raise ValueError("invalid_completion")
         except (ValueError, TypeError, KeyError, UnicodeError, AttributeError):
             raise EvaluationBudgetAbort("evaluation_completion_invalid") from None
+        if self._response_identity_policy == KNOWN_ECNU_RESPONSE_IDENTITY_POLICY:
+            # 请求已绑定既有ECNU端点/ecnu-max；已授权标签只作实际观测。
+            # 已知集合内变化不能推定相同权重或供应商变化。
+            if self._expected.get() is None or identity not in KNOWN_ECNU_RESPONSE_LABELS:
+                raise EvaluationBudgetAbort("evaluation_ecnu_reported_label_unapproved")
+            return
         if self._identity_observed and identity != self._response_identity:
             raise EvaluationBudgetAbort("evaluation_response_identity_changed")
         self._identity_observed = True
@@ -201,10 +232,14 @@ def _decode_json(content: bytes) -> dict:
     )
 
 
-def _validate_payload(value: dict) -> None:
+def _validate_payload(value: dict, *, verification_tool_choice: str = "forced") -> None:
     try:
+        function = value["tools"][0]["function"]
+        forced = not (verification_tool_choice == "omitted"
+                      and function["name"] == "SourceVerificationOutput")
+        fields = _PAYLOAD_FIELDS if forced else _PAYLOAD_FIELDS - {"tool_choice"}
         if (
-            not isinstance(value, dict) or set(value) != _PAYLOAD_FIELDS
+            not isinstance(value, dict) or set(value) != fields
             or value["model"] != "ecnu-max"
             or type(value["temperature"]) not in (float, int)
             or value["temperature"] != 0
@@ -230,13 +265,13 @@ def _validate_payload(value: dict) -> None:
             or not set(function) <= {"name", "description", "parameters"}
             or function["name"] not in _TOOL_NAMES
             or not isinstance(function["parameters"], dict)
-            or value["tool_choice"] != {
+            or (forced and value["tool_choice"] != {
                 "type": "function", "function": {"name": function["name"]},
-            }
+            })
         ):
             raise ValueError("invalid_named_tool")
         _canonical(value)
-    except (ValueError, TypeError, KeyError, UnicodeError):
+    except (ValueError, TypeError, KeyError, IndexError, UnicodeError):
         raise EvaluationBudgetAbort("evaluation_expected_payload_invalid") from None
 
 
