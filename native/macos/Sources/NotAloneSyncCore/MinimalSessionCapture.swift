@@ -55,6 +55,11 @@ public enum MinimalSessionCapture {
             result["verification_stage"] = stage
             if let nameQuality { result["name_quality"] = nameQuality }
             if let contextDiagnostics { result["context_diagnostics"] = contextDiagnostics }
+            if stage == "names" {
+                let diagnostics = (error as? NameCaptureFailure)?.jsonObject()
+                    ?? ["failure_branch": NSNull(), "name_slot": NSNull()]
+                result.merge(diagnostics) { _, new in new }
+            }
             return result
         }
     }
@@ -81,7 +86,8 @@ public enum MinimalSessionCapture {
     }
 
     private static func failure(_ error: Error) -> [String: Any] {
-        ["ok": false, "error": (error as? MinimalSessionError)?.rawValue ?? MinimalSessionError.captureFailed.rawValue]
+        let sessionError = error is NameCaptureFailure ? MinimalSessionError.layoutChanged : error as? MinimalSessionError
+        return ["ok": false, "error": sessionError?.rawValue ?? MinimalSessionError.captureFailed.rawValue]
     }
 }
 
@@ -121,16 +127,17 @@ private final class Capture {
     }
 
     func names() async throws -> Names {
-        let header = try recognizeName(await image("displayName"), policy: .conditionalASCIIRecheck)
-        let row = try recognizeName(await image("selectedRowName"), policy: .conditionalASCIIRecheck)
+        let header = try recognizeName(await image("displayName", nameSlot: .header), policy: .conditionalASCIIRecheck)
+        let row = try recognizeName(await image("selectedRowName", nameSlot: .row), policy: .conditionalASCIIRecheck)
         // 两个小帧分别采集；再读一次顶部名字，防止跨会话变化被写成同一次可信观察。
-        let repeated = try recognizeName(await image("displayName"), policy: .conditionalASCIIRecheck)
-        guard header.text == repeated.text else { throw MinimalSessionError.layoutChanged }
+        let repeated = try recognizeName(await image("displayName", nameSlot: .repeatedHeader), policy: .conditionalASCIIRecheck)
+        try NameCaptureGuards.repeatedHeader(header.text, repeated.text)
         return Names(header: header, row: row, repeatedHeader: repeated)
     }
 
-    private func image(_ field: String) async throws -> CGImage {
-        guard layout.contextMatches(), let region = layout.regions[field] else { throw MinimalSessionError.layoutChanged }
+    private func image(_ field: String, nameSlot: NameCaptureSlot? = nil) async throws -> CGImage {
+        try NameCaptureGuards.context(matches: layout.contextMatches(), afterCapture: false, slot: nameSlot)
+        guard let region = layout.regions[field] else { throw MinimalSessionError.layoutChanged }
         let width = region.width * scale, height = region.height * scale
         guard width.rounded() == width, height.rounded() == height,
               width >= 1, height >= 1, width * height <= 160_000 else { throw MinimalSessionError.layoutChanged }
@@ -144,10 +151,67 @@ private final class Capture {
         configuration.includeChildWindows = false; configuration.ignoreShadowsDisplay = true
         configuration.preservesAspectRatio = false; configuration.captureResolution = .best
         let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
-        guard layout.contextMatches(), image.width == Int(width), image.height == Int(height) else {
-            throw MinimalSessionError.layoutChanged
-        }
+        try NameCaptureGuards.context(matches: layout.contextMatches(), afterCapture: true, slot: nameSlot)
+        try NameCaptureGuards.outputSize(actual: CGSize(width: image.width, height: image.height),
+                                        expected: CGSize(width: Int(width), height: Int(height)), slot: nameSlot)
         return image
+    }
+}
+
+enum NameCaptureSlot: String {
+    case header, row
+    case repeatedHeader = "repeated_header"
+}
+
+enum NameCaptureFailureBranch: String {
+    case contextBeforeCapture = "context_before_capture"
+    case contextAfterCapture = "context_after_capture"
+    case outputSizeMismatch = "output_size_mismatch"
+    case repeatedHeaderMismatch = "repeated_header_mismatch"
+}
+
+struct NameCaptureFailure: Error {
+    let branch: NameCaptureFailureBranch
+    let slot: NameCaptureSlot
+    let repeatedChecks: (headerPresent: Bool, repeatedPresent: Bool, equal: Bool)?
+
+    init(branch: NameCaptureFailureBranch, slot: NameCaptureSlot,
+         repeatedChecks: (headerPresent: Bool, repeatedPresent: Bool, equal: Bool)? = nil) {
+        self.branch = branch; self.slot = slot; self.repeatedChecks = repeatedChecks
+    }
+
+    func jsonObject() -> [String: Any] {
+        var result: [String: Any] = ["failure_branch": branch.rawValue, "name_slot": slot.rawValue]
+        if let repeatedChecks {
+            result["header_present"] = repeatedChecks.headerPresent
+            result["repeated_present"] = repeatedChecks.repeatedPresent
+            result["header_repeated_equal"] = repeatedChecks.equal
+        }
+        return result
+    }
+}
+
+// 使用原检查点已经取得的值，不增加OS查询或采集；细条错误仍保持原错误格式。
+enum NameCaptureGuards {
+    static func context(matches: Bool, afterCapture: Bool, slot: NameCaptureSlot?) throws {
+        guard matches else {
+            guard let slot else { throw MinimalSessionError.layoutChanged }
+            throw NameCaptureFailure(branch: afterCapture ? .contextAfterCapture : .contextBeforeCapture, slot: slot)
+        }
+    }
+
+    static func outputSize(actual: CGSize, expected: CGSize, slot: NameCaptureSlot?) throws {
+        guard actual == expected else {
+            guard let slot else { throw MinimalSessionError.layoutChanged }
+            throw NameCaptureFailure(branch: .outputSizeMismatch, slot: slot)
+        }
+    }
+
+    static func repeatedHeader(_ header: String?, _ repeated: String?) throws {
+        guard header == repeated else {
+            throw NameCaptureFailure(branch: .repeatedHeaderMismatch, slot: .repeatedHeader,
+                                     repeatedChecks: (header != nil, repeated != nil, false))
+        }
     }
 }
 

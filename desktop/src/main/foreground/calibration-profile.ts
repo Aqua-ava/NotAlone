@@ -43,6 +43,45 @@ export type LayoutNameQuality = {
   pixel_scale: number; names_duration_ms: number;
 };
 
+export type LayoutNameFailureDiagnostics = {
+  failure_branch: 'context_before_capture' | 'context_after_capture' | 'output_size_mismatch' | 'repeated_header_mismatch' | null;
+  name_slot: 'header' | 'row' | 'repeated_header' | null;
+  header_present?: boolean; repeated_present?: boolean; header_repeated_equal?: boolean;
+};
+
+// 只保留原失败点的固定分类；空值表示未知，不能附带姓名、摘要或事后OS观察。
+export function validatedNameFailureDiagnostics(value: unknown): LayoutNameFailureDiagnostics {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('calibration_result_invalid');
+  const diagnostics = value as Record<string, unknown>;
+  const repeated = diagnostics.failure_branch === 'repeated_header_mismatch';
+  const repeatedKeys = ['header_present', 'repeated_present', 'header_repeated_equal'];
+  const keys = ['failure_branch', 'name_slot', ...(repeated ? repeatedKeys : [])];
+  const branches = ['context_before_capture', 'context_after_capture', 'output_size_mismatch', 'repeated_header_mismatch'];
+  const slots = ['header', 'row', 'repeated_header'];
+  if (Object.keys(diagnostics).length !== keys.length || !Object.keys(diagnostics).every(key => keys.includes(key))
+    || !(diagnostics.failure_branch === null || branches.includes(diagnostics.failure_branch as string))
+    || (diagnostics.failure_branch === null ? diagnostics.name_slot !== null : !slots.includes(diagnostics.name_slot as string))
+    || (repeated && (diagnostics.name_slot !== 'repeated_header' || !repeatedKeys.every(key => typeof diagnostics[key] === 'boolean')
+      || diagnostics.header_repeated_equal !== false || !(diagnostics.header_present || diagnostics.repeated_present)))) {
+    throw new Error('calibration_result_invalid');
+  }
+  return { ...diagnostics } as LayoutNameFailureDiagnostics;
+}
+
+export function nameFailureDiagnosticsFromResult(result: Record<string, unknown>): LayoutNameFailureDiagnostics | undefined {
+  const keys = ['failure_branch', 'name_slot', 'header_present', 'repeated_present', 'header_repeated_equal'];
+  if (!keys.some(key => Object.hasOwn(result, key))) return undefined;
+  const envelopeKeys = ['ok', 'error', 'verification_stage', 'name_quality', ...keys];
+  if (!Object.keys(result).every(key => envelopeKeys.includes(key))
+    || result.ok !== false || result.verification_stage !== 'names') throw new Error('calibration_result_invalid');
+  const diagnostics = validatedNameFailureDiagnostics(Object.fromEntries(keys.filter(key => Object.hasOwn(result, key))
+    .map(key => [key, result[key]])));
+  if (diagnostics.failure_branch !== null && (result.error !== 'minimal_region_layout_changed' || result.name_quality !== undefined)) {
+    throw new Error('calibration_result_invalid');
+  }
+  return diagnostics;
+}
+
 // 诊断只接受固定数值，不接受识别名称、原生原文、图像或任意扩展字段。
 export function validatedNameQuality(value: unknown): LayoutNameQuality {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('calibration_result_invalid');
@@ -142,13 +181,18 @@ export async function saveVerificationProgress(userData: string, stage: unknown,
 }
 
 // 仅保存固定阶段、安全错误码及经过白名单校验的数值，不授予采集资格。
-export async function saveLayoutVerificationResult(userData: string, state: 'failed' | 'verified', error: unknown, stage: unknown, isCurrent: () => boolean, nameQuality?: unknown, contextDiagnostics?: unknown): Promise<void> {
+export async function saveLayoutVerificationResult(userData: string, state: 'failed' | 'verified', error: unknown, stage: unknown, isCurrent: () => boolean, nameQuality?: unknown, contextDiagnostics?: unknown, nameFailureDiagnostics?: unknown): Promise<void> {
   if (!['failed', 'verified'].includes(state) || !layoutVerificationStages.includes(stage as typeof layoutVerificationStages[number]) || (state === 'verified' ? error !== null
     : !layoutVerificationErrors.includes(error as typeof layoutVerificationErrors[number]))) throw new Error('calibration_result_invalid');
   if (nameQuality !== undefined && !['names', 'sentinels-after', 'profile'].includes(stage as string)) throw new Error('calibration_result_invalid');
   if (contextDiagnostics !== undefined && (state !== 'failed' || stage !== 'context')) throw new Error('calibration_result_invalid');
+  const nameFailure = nameFailureDiagnostics === undefined ? undefined : validatedNameFailureDiagnostics(nameFailureDiagnostics);
+  if (nameFailure !== undefined && (state !== 'failed' || stage !== 'names'
+    || (nameFailure.failure_branch !== null && error !== 'minimal_region_layout_changed')
+    || (nameFailure.failure_branch !== null && nameQuality !== undefined))) throw new Error('calibration_result_invalid');
   const result = { state, error, stage, ...(nameQuality === undefined ? {} : { name_quality: validatedNameQuality(nameQuality) }),
-    ...(contextDiagnostics === undefined ? {} : { context_diagnostics: validatedContextDiagnostics(contextDiagnostics) }) };
+    ...(contextDiagnostics === undefined ? {} : { context_diagnostics: validatedContextDiagnostics(contextDiagnostics) }),
+    ...(nameFailure ?? {}) };
   const temporary = path.join(userData, `.foreground-verification-${randomUUID()}.tmp`);
   try {
     await writeFile(temporary, JSON.stringify(result), { flag: 'wx', mode: 0o600 });

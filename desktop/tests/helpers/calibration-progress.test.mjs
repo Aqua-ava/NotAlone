@@ -6,6 +6,140 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 
+test('名称采集失败分支保留原错误及位置而不生成质量或profile', async () => {
+  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-calibration-name-branch-'));
+  try {
+    const modulePath = path.join(owned, 'profile.mjs');
+    await build({ entryPoints: ['src/main/foreground/calibration-profile.ts'], outfile: modulePath,
+      bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+    const profile = await import(pathToFileURL(modulePath).href);
+    const diagnostics = { failure_branch: 'context_before_capture', name_slot: 'row' };
+    await profile.saveLayoutVerificationResult(owned, 'failed', 'minimal_region_layout_changed', 'names', () => true,
+      undefined, undefined, diagnostics);
+    const resultPath = path.join(owned, 'foreground-layout-verification.json');
+    assert.deepEqual(JSON.parse(await readFile(resultPath, 'utf8')), {
+      state: 'failed', error: 'minimal_region_layout_changed', stage: 'names', ...diagnostics,
+    });
+    assert.equal((await stat(resultPath)).mode & 0o777, 0o600);
+    await assert.rejects(readFile(path.join(owned, 'foreground-layout-profile.json')), { code: 'ENOENT' });
+  } finally { await rm(owned, { recursive: true, force: true }); }
+});
+
+test('原生名称失败桥接只接受四分支、可空未知及复读三布尔', async () => {
+  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-calibration-name-contract-'));
+  try {
+    const modulePath = path.join(owned, 'profile.mjs');
+    await build({ entryPoints: ['src/main/foreground/calibration-profile.ts'], outfile: modulePath,
+      bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+    const profile = await import(pathToFileURL(modulePath).href);
+    const envelope = { ok: false, error: 'minimal_region_layout_changed', verification_stage: 'names' };
+    assert.equal(profile.nameFailureDiagnosticsFromResult(envelope), undefined);
+    const unknown = { failure_branch: null, name_slot: null };
+    assert.deepEqual(profile.nameFailureDiagnosticsFromResult({ ...envelope, ...unknown }), unknown);
+    for (const failure_branch of ['context_before_capture', 'context_after_capture', 'output_size_mismatch']) {
+      for (const name_slot of ['header', 'row', 'repeated_header']) {
+        const diagnostic = { failure_branch, name_slot };
+        assert.deepEqual(profile.nameFailureDiagnosticsFromResult({ ...envelope, ...diagnostic }), diagnostic);
+      }
+    }
+    for (const [header_present, repeated_present] of [[true, true], [false, true], [true, false]]) {
+      const diagnostic = { failure_branch: 'repeated_header_mismatch', name_slot: 'repeated_header',
+        header_present, repeated_present, header_repeated_equal: false };
+      assert.deepEqual(profile.nameFailureDiagnosticsFromResult({ ...envelope, ...diagnostic }), diagnostic);
+    }
+  } finally { await rm(owned, { recursive: true, force: true }); }
+});
+
+test('原生名称失败桥接拒绝新失败envelope的额外根字段并保留旧格式', async () => {
+  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-calibration-envelope-negative-'));
+  try {
+    const modulePath = path.join(owned, 'profile.mjs');
+    await build({ entryPoints: ['src/main/foreground/calibration-profile.ts'], outfile: modulePath,
+      bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+    const profile = await import(pathToFileURL(modulePath).href);
+    const envelope = { ok: false, error: 'minimal_region_layout_changed', verification_stage: 'names' };
+    const known = { failure_branch: 'output_size_mismatch', name_slot: 'header' };
+    const unknown = { failure_branch: null, name_slot: null };
+    assert.deepEqual(profile.nameFailureDiagnosticsFromResult({ ...envelope, ...known }), known);
+    for (const extra of [
+      { name_hash: 'a'.repeat(64) }, { display_name: '合成禁止名称' }, { image: '合成禁止帧' },
+      { context_diagnostics: { context_code: 'matched' } }, { arbitrary: false },
+    ]) {
+      assert.throws(() => profile.nameFailureDiagnosticsFromResult({ ...envelope, ...known, ...extra }));
+      assert.throws(() => profile.nameFailureDiagnosticsFromResult({ ...envelope, ...unknown, ...extra }));
+      assert.equal(profile.nameFailureDiagnosticsFromResult({ ...envelope, ...extra }), undefined);
+    }
+    const quality = { display_name_confidence: 0.8, selected_row_name_confidence: 0.8,
+      repeated_display_name_confidence: 0.8, display_name_width: 180, display_name_height: 50,
+      selected_row_name_width: 160, selected_row_name_height: 40, pixel_scale: 2, names_duration_ms: 600 };
+    assert.deepEqual(profile.nameFailureDiagnosticsFromResult({ ...envelope, error: 'session_name_confidence_low',
+      ...unknown, name_quality: quality }), unknown);
+  } finally { await rm(owned, { recursive: true, force: true }); }
+});
+
+test('名称失败诊断拒绝原文、摘要、非法组合并保留原已保存结果', async () => {
+  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-calibration-name-negative-'));
+  try {
+    const modulePath = path.join(owned, 'profile.mjs');
+    await build({ entryPoints: ['src/main/foreground/calibration-profile.ts'], outfile: modulePath,
+      bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+    const profile = await import(pathToFileURL(modulePath).href);
+    const diagnostic = { failure_branch: 'repeated_header_mismatch', name_slot: 'repeated_header',
+      header_present: true, repeated_present: true, header_repeated_equal: false };
+    const resultPath = path.join(owned, 'foreground-layout-verification.json');
+    await profile.saveLayoutVerificationResult(owned, 'failed', 'minimal_region_layout_changed', 'names', () => true,
+      undefined, undefined, diagnostic);
+    const original = await readFile(resultPath, 'utf8');
+    const invalids = [
+      null, [], '合成拒绝原文',
+      { ...diagnostic, display_name: '合成拒绝名称' }, { ...diagnostic, name_hash: 'a'.repeat(64) },
+      { ...diagnostic, image: '合成拒绝图帧' }, { ...diagnostic, context_code: 'matched' },
+      { ...diagnostic, failure_branch: 'unknown' }, { ...diagnostic, failure_branch: true },
+      { ...diagnostic, name_slot: 'displayName' }, { ...diagnostic, name_slot: 'header' },
+      { ...diagnostic, name_slot: null }, { ...diagnostic, header_present: 'true' },
+      { ...diagnostic, repeated_present: 1 }, { ...diagnostic, header_repeated_equal: true },
+      { ...diagnostic, header_present: false, repeated_present: false },
+      { ...diagnostic, failure_branch: 'context_after_capture' },
+      { failure_branch: 'context_before_capture' }, { name_slot: 'header' },
+      { failure_branch: 'repeated_header_mismatch', name_slot: 'repeated_header' },
+      { failure_branch: null, name_slot: 'row' }, { failure_branch: 'output_size_mismatch', name_slot: null },
+      { failure_branch: null, name_slot: null, header_present: false },
+    ];
+    for (const invalid of invalids) {
+      assert.throws(() => profile.validatedNameFailureDiagnostics(invalid));
+      await assert.rejects(profile.saveLayoutVerificationResult(owned, 'failed', 'minimal_region_layout_changed', 'names', () => true,
+        undefined, undefined, invalid));
+      assert.equal(await readFile(resultPath, 'utf8'), original);
+    }
+    for (const [state, error, stage] of [
+      ['verified', null, 'names'], ['failed', 'minimal_region_layout_changed', 'context'],
+      ['failed', 'minimal_region_layout_changed', 'sentinels-before'], ['failed', 'minimal_region_layout_changed', 'sentinels-after'],
+      ['failed', 'minimal_region_capture_failed', 'names'], ['failed', 'session_name_confidence_low', 'names'],
+    ]) {
+      await assert.rejects(profile.saveLayoutVerificationResult(owned, state, error, stage, () => true,
+        undefined, undefined, diagnostic));
+      assert.equal(await readFile(resultPath, 'utf8'), original);
+      assert.throws(() => profile.nameFailureDiagnosticsFromResult({ ok: state === 'verified', error, verification_stage: stage, ...diagnostic }));
+    }
+    await assert.rejects(profile.saveLayoutVerificationResult(owned, 'failed', 'minimal_region_layout_changed', 'names', () => true,
+      {}, undefined, diagnostic));
+    assert.throws(() => profile.nameFailureDiagnosticsFromResult({ ok: false, error: 'minimal_region_layout_changed',
+      verification_stage: 'names', name_quality: {}, ...diagnostic }));
+    await profile.saveLayoutVerificationResult(owned, 'failed', 'minimal_region_layout_changed', 'names', () => false,
+      undefined, undefined, { failure_branch: null, name_slot: null });
+    assert.equal(await readFile(resultPath, 'utf8'), original);
+    const copy = profile.validatedNameFailureDiagnostics(diagnostic);
+    diagnostic.header_present = false;
+    assert.equal(copy.header_present, true);
+    await profile.saveLayoutVerificationResult(owned, 'failed', 'session_name_confidence_low', 'names', () => true,
+      undefined, undefined, { failure_branch: null, name_slot: null });
+    assert.deepEqual(JSON.parse(await readFile(resultPath, 'utf8')), { state: 'failed', error: 'session_name_confidence_low',
+      stage: 'names', failure_branch: null, name_slot: null });
+    assert.equal((await stat(resultPath)).mode & 0o777, 0o600);
+    await assert.rejects(readFile(path.join(owned, 'foreground-layout-profile.json')), { code: 'ENOENT' });
+  } finally { await rm(owned, { recursive: true, force: true }); }
+});
+
 test('校验尚未返回时保留固定阶段，拆包和未知原文不会进入诊断文件', async () => {
   const owned = await mkdtemp(path.join(tmpdir(), 'notalone-calibration-progress-'));
   try {

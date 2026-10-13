@@ -3,6 +3,63 @@ import CoreGraphics
 @testable import NotAloneSyncCore
 
 final class MinimalRegionLayoutTests: XCTestCase {
+    func testNameCaptureContextFailuresKeepExactCheckpointAndSlotWithoutNewObservation() throws {
+        for slot in [NameCaptureSlot.header, .row, .repeatedHeader] {
+            for afterCapture in [false, true] {
+                XCTAssertNoThrow(try NameCaptureGuards.context(matches: true, afterCapture: afterCapture, slot: slot))
+                XCTAssertThrowsError(try NameCaptureGuards.context(matches: false, afterCapture: afterCapture, slot: slot)) { error in
+                    let failure = error as? NameCaptureFailure
+                    XCTAssertEqual(failure?.jsonObject()["failure_branch"] as? String,
+                                   afterCapture ? "context_after_capture" : "context_before_capture")
+                    XCTAssertEqual(failure?.jsonObject()["name_slot"] as? String, slot.rawValue)
+                    XCTAssertEqual(failure?.jsonObject().count, 2)
+                }
+            }
+        }
+        XCTAssertThrowsError(try NameCaptureGuards.context(matches: false, afterCapture: false, slot: nil)) { error in
+            XCTAssertEqual(error as? MinimalSessionError, .layoutChanged)
+        }
+    }
+
+    func testNameCaptureOutputMismatchKeepsPixelGateAndSafeSlot() throws {
+        XCTAssertNoThrow(try NameCaptureGuards.outputSize(actual: CGSize(width: 180, height: 50),
+                                                        expected: CGSize(width: 180, height: 50), slot: .header))
+        for actual in [CGSize(width: 179, height: 50), CGSize(width: 180, height: 51)] {
+            XCTAssertThrowsError(try NameCaptureGuards.outputSize(actual: actual,
+                                                                 expected: CGSize(width: 180, height: 50), slot: .header)) { error in
+                XCTAssertEqual((error as? NameCaptureFailure)?.jsonObject()["failure_branch"] as? String, "output_size_mismatch")
+                XCTAssertEqual((error as? NameCaptureFailure)?.jsonObject()["name_slot"] as? String, "header")
+                XCTAssertEqual((error as? NameCaptureFailure)?.jsonObject().count, 2)
+            }
+        }
+        XCTAssertThrowsError(try NameCaptureGuards.outputSize(actual: CGSize(width: 4, height: 39),
+                                                             expected: CGSize(width: 4, height: 40), slot: nil)) { error in
+            XCTAssertEqual(error as? MinimalSessionError, .layoutChanged)
+        }
+    }
+
+    func testRepeatedHeaderMismatchOnlyReportsPresenceAndEquality() throws {
+        for equal: String? in [nil, "合成名称"] {
+            XCTAssertNoThrow(try NameCaptureGuards.repeatedHeader(equal, equal))
+        }
+        for (header, repeated, headerPresent, repeatedPresent) in [
+            ("合成名称" as String?, "另一个合成名称" as String?, true, true),
+            (nil, "合成名称", false, true), ("合成名称", nil, true, false),
+        ] {
+            XCTAssertThrowsError(try NameCaptureGuards.repeatedHeader(header, repeated)) { error in
+                let diagnostics = (error as? NameCaptureFailure)?.jsonObject() ?? [:]
+                XCTAssertEqual(diagnostics["failure_branch"] as? String, "repeated_header_mismatch")
+                XCTAssertEqual(diagnostics["name_slot"] as? String, "repeated_header")
+                XCTAssertEqual(diagnostics["header_present"] as? Bool, headerPresent)
+                XCTAssertEqual(diagnostics["repeated_present"] as? Bool, repeatedPresent)
+                XCTAssertEqual(diagnostics["header_repeated_equal"] as? Bool, false)
+                XCTAssertEqual(diagnostics.count, 5)
+                let encoded = try? JSONSerialization.data(withJSONObject: diagnostics)
+                XCTAssertFalse(String(decoding: encoded ?? Data(), as: UTF8.self).contains("合成名称"))
+            }
+        }
+    }
+
     func testNameValidationReportsSafeFailureCategoryWithoutLoweringQuality() throws {
         let cases: [(String?, Double, String?, Double, String)] = [
             (nil, 0, "测试", 1, "header_name_unreadable"),

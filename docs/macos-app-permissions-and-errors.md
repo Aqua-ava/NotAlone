@@ -533,3 +533,15 @@ Root只读检查系统设置录屏页，已开启的NotAloneApp条目通过“�
 Root新建独立E包，固定构建材料源码点`79573503`；十一原生输入摘要`7f4fed1e…`／`MinimalSessionCapture.swift`为`9bfd83b1…`，三个现有名称路径显式接入已批准的条件ASCII复核policy，同RAM小图至多补1次、完整UTF-8姓名和至少0.90门保持。ASAR`376c9a53…`、280文件＋14链接／294项；Root主包deep strict0，identifier `com.notalone.desktop`／ad-hoc／无Team，四helper verified。Info.plist ATS arbitrary loads为false、无UsageDescription；这些静态记录不认证TCC责任、Developer ID或公证。E尚未实际启动／预检／Capture／形成profile，包名E与此前D包场次E/F分别记录，不移用原场结果。
 
 首次guard因旧离线Electron ZIP已不存在在build前失败；之后同安装runtime重建输入ZIP8.855598208秒／新`cefff4cd…`，package18.786353458秒／exit0。新ZIP不是旧`0dfd…`或官方archive，583条目／AppleDouble0；xattrs／ACL／resource fork全覆盖未知。九份材料集合与C字节同，但固定WCDB精确source／patch／build与binary license仍false，后端外置。完整E目录另实际归档13.774257334秒，ZIP`7db9cebb…`／140293431字节，全部Unix属性／直接解压完整快照及三组15次签名verify通过，链接模式修复0；六自有ditto命令／临时目录已核收尾，xattrs／ACL／resource fork／quarantine及全OS清理不认证。仅构建、静态签名归档和标准库复核，没有新App／Vision／微信／CLI／模型HTTP／PG／`.env`读取／权限修改／Git操作；旧归属检查及D/F失败保留。完整SHA、收据和实际同包待验范围见[候选包E静态记录](../.scratch/unfinished-work/goal-final-package-e-static-20261013.md)，原18／20验收状态不变。
+
+## 2026-10-13 H场名称阶段失败分支诊断准备
+
+Root提供的H场固定结果只有`failed / names / minimal_region_layout_changed`，没有`name_quality`；整场76.800秒不能改记为名称采集耗时或低置信度结果。当前名称路径的采集前上下文、采集后上下文、CGImage输出尺寸和首末顶部可空字符串比较四处都会返回此同一错误，旧结果无法追认具体分支。
+
+本片仅扩展现有校准结果桥接：在失败发生的原检查点记录可空的固定`failure_branch`和`name_slot`，已知分支为`context_before_capture`、`context_after_capture`、`output_size_mismatch`、`repeated_header_mismatch`，位置为`header`、`row`、`repeated_header`。首末顶部比较最多保留`header_present`、`repeated_present`、`header_repeated_equal`三个布尔，未知分支仍未知。禁止名称、名称摘要、原始异常、图帧及额外OS查询；不改原stage/error、0.90、条件ASCII策略、几何／RAM／前台门、TCC或签名。诊断不进入profile或身份匹配，不扩大后台CLI同步范围。
+
+子Agent只进行纯Swift、TypeScript和Node接缝验证；不启动App、探针、Vision对照、CLI、模型或数据库，不读取密钥、聊天或截图，不构建签名包。H真实失败保持；新诊断是否辨别下一现场根因仍需Root有限场次实测。证据和冻结交接见[独立记录](../.scratch/unfinished-work/goal-ocr-name-failure-branches-20261013.md)。
+
+Node保存边界实际红为缺branch／slot→7/7绿；生产桥接缺函数红→8/8绿，最终严格字段及组合负控9/9。Swift三纯guard接缝首红均是缺符号编译失败，非H的实机回放；随后16/16，加入六个纯ASCII协议测试最终22/22，未执行真实Vision请求。TypeScript与范围diff检查通过。原错误／阶段、0.90、ASCII、points×scale、最小几何、前台／RAM政策和权限／签名保持；未知两null不回填旧H。仅桥接准备通过，Root两轴、新候选包与现场诊断仍待，原18／20状态及验收不变。
+
+初次冻结的Spec P2随后指出生产提取函数会先挑已知键，根层额外名字／摘要／图像被静默丢弃，原9项未覆盖此路径。已用生产函数直接注入的实际red（Missing expected exception）锁定问题；仅带新诊断的失败envelope新增完整根键白名单，旧无诊断格式仍兼容，原生与其单测不改。最小修复后纯Node整文件10/10、TypeScript与diff通过；初次freeze/P2保留，新的freeze-v2待Root复核。实际App、真实Vision、权限变更及打包／签名仍0，不以拒绝字段回归认证现场定位或TCC。
