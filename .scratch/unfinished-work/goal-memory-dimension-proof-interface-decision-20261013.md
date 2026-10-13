@@ -1,6 +1,6 @@
 # 原03：同一次V证明协议与受限语义合同决策草案
 
-状态：**待用户架构批准，尚未实现或激活**。本片只准备一份公共可审合同，代码／项目测试／PG／模型HTTP／App／Git均为0，以下正负控全部为`planned_not_run`。已有可空JSONB、来源绑定和相关维度AND门的批准继续有效，不重复请求；本次新决定仅为同一次V的扩展协议、可独立验证的窄语义规则及其持久版本。[原03](../memory-accuracy-next/issues/03-per-dimension-rollout.md)、[已采纳字段合同ADR-046](../../architecture/adr/046-source-bound-dimension-evidence.md)
+状态：**用户已明确批准D1–D3实施及隔离验证，实施中**。下文提案阶段的未批准、代码／运行均0及`planned_not_run`表述保留原时点；最新批准及精确所有权登记见文末，后续实际结果另记。已有可空JSONB、来源绑定和相关维度AND门的批准继续有效，不重复请求；新决定仅为同一次V扩展协议、可独立验证的窄语义规则及其持久版本。业务迁移、旧回填／重采纳与维度放行继续未授权。[原03](../memory-accuracy-next/issues/03-per-dimension-rollout.md)、[已采纳字段合同ADR-046](../../architecture/adr/046-source-bound-dimension-evidence.md)
 
 ## 建议一次批准的具体范围
 
@@ -208,3 +208,9 @@ Root可集中请求的批准表述为：是否批准按D1–D3上述同一次V�
 本地仅用Node标准库校验本文14个相对链接均存在、无尾随空白及末尾换行，并核候选校验产生式、负控族和持久正例枚举的文档对应；私有v3冻结保存在`desktop/artifacts/goal-resume-proof-decision-20261013/`，保留v1／v2原件。此静态校验不属于项目／producer回归；所有控制`planned_not_run`，产品代码／项目测试／模型HTTP／App／PG／凭据读取／Git操作均0。修订后必须另由独立Standards／Spec两轴评审，作者不自签P2已关闭；接口、version2合同及实施仍待用户架构批准。
 
 Root后续复核：v3冻结摘要为`55a3be6f3aa9122922d786008716b8f31f18cf02ddf4de30fe43c22d11cd9291`。独立Standards增量复审hard0／smell0，独立Spec复审missing0／scope0／error0；此前P2在**方案层面**解决。私有报告分别为`standards-v3-review.md`与`spec-v3-review.md`，均保留带行号证据。Root核对冻结与工作稿一致后，仅追加本复核记录并提交方案；这不是批准或运行控制，也不关闭原三票。
+
+## 批准后的最新状态
+
+用户随后明确答复“批准 D1–D3 实施及隔离验证”。本合同架构许可已到位，[ADR-047](../../architecture/adr/047-bounded-source-semantic-proof.md)记录该局部修订；上文未批准／planned_not_run表述保留其提案时点，不再据此重复请求许可。实际producer、隔离验证及质量结果另存，不把批准或新测试回写成旧预注册控制已运行。业务库迁移、旧回填／重采纳和任何维度放行继续未授权。
+
+实际文件所有权预先登记：纯模块`memory_extraction/source_proof.py`及新`tests/unit/memory_extraction/test_source_proof.py`；同次V／producer为`memory_extraction/verification.py`、`verification_adapters.py`、`evidence.py`、`dimensions.py`、`flow.py`，测试为该目录的`test_source_verification.py`、`test_verification_adapters.py`、`test_dimension_evidence_flow.py`、`test_dimensions.py`、`test_verification_prompt_contract.py`；存储为`memory/dimension_evidence.py`、`memory/evidence_binding.py`、`persistence/dimension_evidence.py`、`persistence/memory_store.py`及新`database/migrations/057_memory_candidate_semantic_basis.sql`、`tests/unit/memory/test_dimension_evidence_v2.py`、`tests/integration/persistence/test_dimension_evidence_v2.py`。路径均以`backend/src/notalone/`或`backend/`对应根为准；超出精确清单时先核真实必要接缝和并行所有权，不修改Gold或评测驱动。Root串行运行隔离PG与共享Git，子Agent不操作桌面、模型或业务库。
