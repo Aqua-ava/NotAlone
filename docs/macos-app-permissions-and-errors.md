@@ -526,3 +526,10 @@ Root将d166a0f3身份诊断构建为独立D包（31.963362084秒、exit0），AS
 ## 2026-10-13 录屏权限条目与当前包身份不同
 
 Root只读检查系统设置录屏页，已开启的NotAloneApp条目通过“在访达中显示”指向旧`macos_app/build/NotAloneApp.app`，identifier `com.notalone.app`，具有开发证书。当前D候选`desktop/artifacts/goal-final-package-20261013-d/NotAlone-darwin-arm64/NotAlone.app`为`com.notalone.desktop`、ad-hoc／无Team，路径与身份不同。旧条目不能认证新Electron或其Resources探针的TCC责任归属，F成功预检／最小采集也不代签该项。没有修改权限或签名，没有新App／采集／模型／正文读取／发送；未保存图像、证书主体或账号信息。首次过时UI操作被拒绝后已重新读取，失败保留。独立时长未认证，Finder窗口缺场前归属因而未关闭。完整最小收据、SHA和边界见[归属核查](../.scratch/unfinished-work/goal-ocr-permission-attribution-20261013.md)。原18第三项保持未验，后续新包须单独实测并记录实际归属。
+
+
+## 2026-10-13 条件ASCII策略候选包E：静态签名与权限未验
+
+Root新建独立E包，固定构建材料源码点`79573503`；十一原生输入摘要`7f4fed1e…`／`MinimalSessionCapture.swift`为`9bfd83b1…`，三个现有名称路径显式接入已批准的条件ASCII复核policy，同RAM小图至多补1次、完整UTF-8姓名和至少0.90门保持。ASAR`376c9a53…`、280文件＋14链接／294项；Root主包deep strict0，identifier `com.notalone.desktop`／ad-hoc／无Team，四helper verified。Info.plist ATS arbitrary loads为false、无UsageDescription；这些静态记录不认证TCC责任、Developer ID或公证。E尚未实际启动／预检／Capture／形成profile，包名E与此前D包场次E/F分别记录，不移用原场结果。
+
+首次guard因旧离线Electron ZIP已不存在在build前失败；之后同安装runtime重建输入ZIP8.855598208秒／新`cefff4cd…`，package18.786353458秒／exit0。新ZIP不是旧`0dfd…`或官方archive，583条目／AppleDouble0；xattrs／ACL／resource fork全覆盖未知。九份材料集合与C字节同，但固定WCDB精确source／patch／build与binary license仍false，后端外置。完整E目录另实际归档13.774257334秒，ZIP`7db9cebb…`／140293431字节，全部Unix属性／直接解压完整快照及三组15次签名verify通过，链接模式修复0；六自有ditto命令／临时目录已核收尾，xattrs／ACL／resource fork／quarantine及全OS清理不认证。仅构建、静态签名归档和标准库复核，没有新App／Vision／微信／CLI／模型HTTP／PG／`.env`读取／权限修改／Git操作；旧归属检查及D/F失败保留。完整SHA、收据和实际同包待验范围见[候选包E静态记录](../.scratch/unfinished-work/goal-final-package-e-static-20261013.md)，原18／20验收状态不变。
