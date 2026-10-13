@@ -3,7 +3,7 @@
 > Triage: ready-for-agent
 > State: open
 > 日期：2026-10-14
-> 状态说明：产品规则与实现规格已形成；任务拆分待用户确认，尚未发布实现任务或实施本规格。DSH 选型搁置，沿用现行回复运行时。
+> 状态说明：产品规则与实现规格已形成；15项任务粒度与依赖已确认并逐张发布，尚未领取或实施本规格。实际进度见[任务索引](planning.md)。DSH 选型搁置，沿用现行回复运行时。
 
 ## Problem Statement（用户问题）
 
@@ -186,7 +186,7 @@
 - [原 pgvector 评估](../pgvector-memory-recall/spec.md)已完成但未过质量门；本规格只承接其明确缺口，不重建同一实验，不修改其原结论。
 - 已有[来源语义支持](../memory-semantic-support/spec.md)、[主体与状态保真](../memory-subject-state-fidelity/spec.md)、[来源范围保真](../memory-source-scope-fidelity/spec.md)、[核心主张保留](../memory-core-claim-retention/spec.md)等工作继续各自归属。新任务不接管其状态、预算和模型质量批准，未解决的语义缺口继续阻止相关自动采纳。
 - 交付优先级沿用三批：先时效/更新/纠错，再事件/概览及回复，最后自动 Skill 全周期；明确偏好可独立交付，旧资料升级在基础规则具备后交付。语义评估独立，不阻塞上述生产功能。
-- [任务拆分提案](ticket-proposal.md)记录粒度、验收和真实依赖；用户确认后才发布单独实现任务。本次不实施产品，也不执行数据升级。
+- [已确认任务拆分](ticket-proposal.md)记录粒度、验收和真实依赖；15张独立任务已发布，见[任务索引](planning.md)。本次不实施产品，也不执行数据升级。
 
 ### Q1～Q19 覆盖
 

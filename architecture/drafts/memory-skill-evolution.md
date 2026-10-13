@@ -2,7 +2,7 @@
 
 > 状态：草案。2026-10-14 保存已确认的产品方向；数据契约、接口、验证方案和 DSH 选型尚未定稿。本文不替代现行规格或 ADR，也不表示相关功能已经实现。
 
-> 后续状态：用户要求搁置 DSH、先形成正式规则与任务，已整理为[正式规格](../../.scratch/memory-skill-evolution/spec.md)和[任务拆分提案](../../.scratch/memory-skill-evolution/ticket-proposal.md)，目标约束见[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)。后续开发以正式规格为准；下方 DSH 比较保留为搁置的设计记录。
+> 后续状态：DSH 已搁置，已整理为[正式规格](../../.scratch/memory-skill-evolution/spec.md)和[已确认的15项拆分](../../.scratch/memory-skill-evolution/ticket-proposal.md)，独立任务已发布，实际进度见[任务索引](../../.scratch/memory-skill-evolution/planning.md)，目标约束见[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)。后续开发以正式规格和独立任务为准；下方 DSH 比较保留为搁置的设计记录。
 
 ## 目标与阅读方式
 
@@ -187,10 +187,9 @@ NotAlone 继续负责联系人身份、`owner_id + contact_id` 隔离、来源�
 
 ## 按工作流继续
 
-目前已按[仓库工作流](../../docs/agents/workflow.md)形成正式规格，进入“拆分 tickets”的粒度确认阶段。沿用现有基座，测试从公开 HTTP、隔离 PostgreSQL 与当前 React 控制器验证完整用户行为，DSH 不再阻塞此路径。
+目前已按[仓库工作流](../../docs/agents/workflow.md)形成正式规格并发布15张已确认任务，下一阶段是按票实现。沿用现有基座，测试从公开 HTTP、隔离 PostgreSQL 与当前 React 控制器验证完整用户行为，DSH 不再阻塞此路径。
 
-1. 查看正式规格与15项完整交付提案，确认粒度和真实依赖。
-2. 确认后按本地 tracker 约定逐张发布任务；不把讨论编号或每个例外机械变成任务。
-3. 用户要求实现时，按任务范围推进 TDD、相关验证、代码评审和本地提交。
+1. 阅读正式规格、任务索引及具体任务，按真实依赖选择未开始的一票。
+2. 用户要求实现时，按任务范围推进 TDD、相关验证、代码评审和本地提交；每票独立记录实际验收与未验范围。
 
-当前仅形成文档与拆分方案，尚未发布或实现任务，不执行旧资料升级。运行时历史讨论保留在[运行时草案](agent-runtime.md)和[规划记录](../../.scratch/agent-runtime/planning.md)，不把先前暂定方向当作已经采纳。
+当前仅发布文档与任务，尚未领取或实现，不执行旧资料升级。运行时历史讨论保留在[运行时草案](agent-runtime.md)和[规划记录](../../.scratch/agent-runtime/planning.md)，不把先前暂定方向当作已经采纳。
