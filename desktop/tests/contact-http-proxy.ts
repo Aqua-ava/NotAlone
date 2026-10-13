@@ -1,5 +1,18 @@
 import { createServer, request as httpRequest, type Server } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
+import { foregroundObservation } from '../src/main/foreground/observation';
+
+export function foregroundAcceptanceProjection(status: number | undefined, bytes: Buffer, contactId: string): Record<string, string | boolean> {
+  if (status !== 200 || bytes.length > 4096) throw new Error('foreground_observation_invalid');
+  const value = foregroundObservation(JSON.parse(bytes.toString('utf8')));
+  const reasons = ['confirmed_active_binding', 'sync_disabled', 'wechat_not_in_front', 'quality_unverified',
+    'session_candidates_truncated', 'ambiguous_requires_selection', 'unmatched_requires_selection',
+    'binding_verification_unavailable', 'observation_timeout', 'minimal_region_unavailable',
+    'probe_not_found', 'probe_timeout', 'probe_output_invalid', 'screen_capture_permission_missing', 'probe_failed'];
+  if (!reasons.includes(value.reason) || (value.contactId !== null && value.contactId !== contactId)) throw new Error('foreground_observation_invalid');
+  return { phase: value.phase, reason: value.reason, wechatInFront: value.wechatInFront, probeAvailable: value.probeAvailable,
+    expectedContactMatched: value.contactId === contactId, hasBinding: value.phase === 'confirmed' };
+}
 
 // 仅在本轮回环传输边界延迟真实目录响应，业务仍进入当前后端与随机 PG 库。
 export class ContactHttpProxy {
@@ -10,6 +23,7 @@ export class ContactHttpProxy {
   failRuntimeStatus = false;
   heldCount = 0;
   private runtimeStopped = false;
+  private foregroundObservation: { contactId: string; requests: number; received: number; invalid: boolean; observations: Array<Record<string, string | boolean>> } | undefined;
   private readonly held: Array<(failure: boolean) => void> = [];
   private readonly pending = new Set<ReturnType<typeof httpRequest>>();
 
@@ -20,10 +34,24 @@ export class ContactHttpProxy {
         response.end('{"error":"synthetic_transport_unavailable"}'); return;
       }
       const forward = () => {
+        if (this.foregroundObservation && incoming.method === 'POST' && incoming.url === '/api/sync/foreground/observe'
+          && incoming.headers.authorization === `Bearer ${this.runtimeToken}`) {
+          ++this.foregroundObservation.requests;
+          if (this.foregroundObservation.requests > 4) this.foregroundObservation.invalid = true;
+        }
         const outgoing = httpRequest(`http://${address}${incoming.url}`, { method: incoming.method, headers: incoming.headers }, (result) => {
           const chunks: Buffer[] = [];
           result.on('data', (chunk: Buffer) => chunks.push(chunk));
           result.on('end', () => {
+            if (this.foregroundObservation && incoming.method === 'POST' && incoming.url === '/api/sync/foreground/observe'
+              && incoming.headers.authorization === `Bearer ${this.runtimeToken}`) {
+              const target = this.foregroundObservation;
+              ++target.received;
+              try {
+                if (target.received > 4) throw new Error();
+                target.observations.push(foregroundAcceptanceProjection(result.statusCode, Buffer.concat(chunks), target.contactId));
+              } catch { target.invalid = true; }
+            }
             // 只见证本轮原认证请求的真实停读响应，不从响应迟到、断线或进程退出推定停读。
             if (this.runtimeToken && incoming.method === 'POST' && incoming.url === '/api/runtime/shutdown'
               && incoming.headers.authorization === `Bearer ${this.runtimeToken}` && result.statusCode === 200) {
@@ -69,6 +97,15 @@ export class ContactHttpProxy {
     return proxy;
   }
   get authenticatedRuntimeStopped(): boolean { return this.runtimeStopped; }
+  // 显式单联系人验收才打开；不持久原响应，不改变正式传输或 Promise 时序。
+  observeForeground(contactId: string): void {
+    if (!this.runtimeToken || this.foregroundObservation) throw new Error('foreground_observer_unavailable');
+    this.foregroundObservation = { contactId, requests: 0, received: 0, invalid: false, observations: [] };
+  }
+  foregroundReport() {
+    const value = this.foregroundObservation;
+    return value ? { requests: value.requests, received: value.received, invalid: value.invalid, observations: value.observations.map(item => ({ ...item })) } : null;
+  }
   release(failure = false): void { for (const deliver of this.held.splice(0)) deliver(failure); }
   async close(): Promise<void> {
     this.release();

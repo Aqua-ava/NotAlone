@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import importlib.util
 import math
 import os
 from pathlib import Path
@@ -34,6 +35,18 @@ def drop(name: str, marker: Path) -> None:
 
 def create(marker: Path) -> dict:
     scope = json.loads(Path(os.environ["NOTALONE_REAL_SYNC_SCOPE"]).read_text())
+    display_name = "已确认测试联系人"
+    if os.environ.get("NOTALONE_REAL_FOREGROUND_MODE") == "1":
+        spec = importlib.util.spec_from_file_location(
+            "real_foreground_scope", ROOT / "desktop/tests/fixtures/real-sync-python.py")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        target = module.load_foreground_target()
+        if target is None:
+            raise ValueError("本轮前台目标凭据缺失。")
+        display_name = target["displayName"]
     name = f"notalone_real_sync_{uuid4().hex}_test"
     marker.write_text(json.dumps({"database_name": name, "phase": "reserved"}))
     marker.chmod(0o600)
@@ -56,7 +69,7 @@ def create(marker: Path) -> dict:
             connection.execute("INSERT INTO public.owner_channel_identity (owner_id, channel, external_id, observed_name) VALUES (%s, 'wechat', %s, '合成本人')", (owner, ACCOUNT))
         binding = PostgresConversationBindingRepository(url).create_binding(
             owner_id=owner, contact_id=contact, channel="wechat", account_scope=ACCOUNT,
-            conversation_locator=scope["locator"], display_name="已确认测试联系人",
+            conversation_locator=scope["locator"], display_name=display_name,
         )
         # CLI 的 since-time 仅精确到秒；向前取整，避免回读验收窗口之前正文。
         baseline = datetime.fromtimestamp(math.ceil(scope["not_before"]), tz=timezone.utc)

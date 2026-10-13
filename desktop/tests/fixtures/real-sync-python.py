@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import atexit
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
+import hashlib
 import json
 import math
 import os
@@ -37,6 +38,7 @@ class AcceptanceScope:
     until: float
     long_running: bool = False
     allow_incoming_test_text: bool = False
+    metadata_name: str | None = None
 
 
 def _fail(code: str = "acceptance_scope_exceeded") -> CliCommandError:
@@ -55,6 +57,40 @@ def _private_fd(path: Path, *, append: bool = False) -> int:
         return fd
     except OSError:
         raise _fail("acceptance_private_file_invalid") from None
+
+
+def load_foreground_target() -> dict[str, Any] | None:
+    """仅显式新模式读取 Node 已核验的 G/E 私有投影，不将身份传进日志。"""
+
+    if os.environ.get("NOTALONE_REAL_FOREGROUND_MODE") != "1":
+        return None
+    selected = Path(os.environ.get("NOTALONE_REAL_FOREGROUND_TARGET", ""))
+    if not selected.is_absolute():
+        raise _fail("acceptance_foreground_target_invalid")
+    try:
+        with os.fdopen(_private_fd(selected), "r", encoding="utf-8") as file:
+            raw = file.read(8193)
+        value = json.loads(raw)
+        keys = {"schemaVersion", "purpose", "scopePath", "scopeSha256", "displayName", "probePath", "profilePath"}
+        if (len(raw) > 8192 or not isinstance(value, dict) or set(value) != keys
+                or type(value["schemaVersion"]) is not int or value["schemaVersion"] != 1
+                or value["purpose"] != "real-foreground-locator-acceptance"
+                or any(not isinstance(value[key], str) for key in keys - {"schemaVersion"})
+                or value["scopePath"] != os.environ.get("NOTALONE_REAL_SYNC_SCOPE")
+                or not value["displayName"].strip() or value["displayName"] != value["displayName"].strip()
+                or len(value["displayName"]) > 256
+                or any(char in value["displayName"] for char in "\0\r\n")
+                or any(not Path(value[key]).is_absolute() for key in ("scopePath", "probePath", "profilePath"))):
+            raise _fail("acceptance_foreground_target_invalid")
+        if hashlib.sha256(raw.encode()).hexdigest() != os.environ.get("NOTALONE_REAL_FOREGROUND_TARGET_SHA256"):
+            raise _fail("acceptance_foreground_target_invalid")
+        with os.fdopen(_private_fd(Path(value["scopePath"])), "rb") as file:
+            scope_raw = file.read(65537)
+        if len(scope_raw) > 65536 or hashlib.sha256(scope_raw).hexdigest() != value["scopeSha256"]:
+            raise _fail("acceptance_foreground_target_invalid")
+        return value
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        raise _fail("acceptance_foreground_target_invalid") from None
 
 
 def load_scope(path: str | Path | None = None) -> AcceptanceScope:
@@ -119,7 +155,10 @@ def load_scope(path: str | Path | None = None) -> AcceptanceScope:
         return AcceptanceScope(locator=locator, approved_texts=tuple(texts),
                                not_before=float(times[0]), until=float(times[1]),
                                long_running=long_running,
-                               allow_incoming_test_text=allow_incoming, **paths)
+                               allow_incoming_test_text=allow_incoming,
+                               real_cli=paths["real_cli"], real_wcdb=paths["real_wcdb"],
+                               sandbox_profile=paths["sandbox_profile"], audit_path=paths["audit_path"],
+                               pid_audit_path=paths["pid_audit_path"])
     except (OSError, TypeError, ValueError, json.JSONDecodeError):
         raise _fail("acceptance_scope_invalid") from None
 
@@ -144,6 +183,14 @@ class ScopeGuard:
             raise _fail()
         if not follow and command[1:] == ("--version",):
             return "version"
+        if (not follow and self.scope.metadata_name is not None
+                and command[1:] in {
+                    ("sessions", "--keyword", self.scope.metadata_name,
+                     "--type-filter", "all", "--limit", "51", "--strict-read-only"),
+                    ("resolve-chat", self.scope.metadata_name, "--strict-read-only"),
+                    ("resolve-chat", self.scope.metadata_name, "--type-filter", "all", "--strict-read-only"),
+                }):
+            return "foreground_metadata"
         if follow:
             remainder = command[2:]
             if command[1:2] != ("tail",):
@@ -207,12 +254,14 @@ class ScopedCli:
     def __init__(self, actual: LocalWechatCli, guard: ScopeGuard,
                  close_runner: Callable[[], None],
                  reject: Callable[[str, str], None],
-                 accepted: Callable[[], None]) -> None:
+                 accepted: Callable[[], None],
+                 metadata: Callable[[tuple[Any, ...]], None]) -> None:
         self.actual = actual
         self.guard = guard
         self.close_runner = close_runner
         self.reject = reject
         self.accepted = accepted
+        self.metadata = metadata
 
     def tail(self, target: str, **kwargs: Any) -> Any:
         try:
@@ -259,10 +308,29 @@ class ScopedCli:
         self.close_runner()
 
     def resolve_chat(self, *args: Any, **kwargs: Any) -> Any:
+        if self.guard.scope.metadata_name is not None:
+            result = self.actual.resolve_chat(*args, **kwargs)
+            self.guard.check_time()
+            candidates = tuple(
+                replace(item, summary=None, last_sender_display_name=None)
+                for item in result.candidates)
+            self.metadata(candidates)
+            return replace(result, candidates=candidates)
         self.reject("tail", "acceptance_scope_exceeded")
         raise _fail()
 
     def sessions(self, *args: Any, **kwargs: Any) -> Any:
+        if self.guard.scope.metadata_name is not None:
+            # 不按正文授权 locator 过滤；所有同名私聊、群聊和重复条目保留给正式定位器。
+            if args or kwargs.get("keyword") != self.guard.scope.metadata_name:
+                self.reject("sessions", "acceptance_session_listing_blocked")
+                raise _fail("acceptance_session_listing_blocked")
+            candidates = self.actual.sessions(**kwargs)
+            self.guard.check_time()
+            candidates = tuple(replace(item, summary=None, last_sender_display_name=None)
+                               for item in candidates)
+            self.metadata(candidates)
+            return candidates
         # 管理页会加载会话列表；本场沿既有绑定验收，不执行列表读取。
         self.reject("sessions", "acceptance_session_listing_blocked")
         raise _fail("acceptance_session_listing_blocked")
@@ -352,15 +420,20 @@ class AuditedProcesses:
     def reject(self, kind: str, code: str) -> None:
         self.record("scope_rejected", kind, None, status="rejected", code=code)
 
-    def _spawn(self, command: tuple[str, ...], kind: str) -> ManagedProcess:
+    def _spawn(self, command: tuple[str, ...], kind: str,
+               *, deadline: float | None = None) -> ManagedProcess:
         with self._process_lock:
             if self._fatal or self._stop.is_set():
                 raise _fail("acceptance_window_expired")
             if not self.scope.not_before <= self.clock() < self.scope.until:
                 raise _fail("acceptance_window_expired")
+            if deadline is not None and time.monotonic() >= deadline:
+                raise _fail("acceptance_cli_timeout")
             self.record("started", kind, None, status="reserved")
             if not self.scope.not_before <= self.clock() < self.scope.until:
                 raise _fail("acceptance_window_expired")
+            if deadline is not None and time.monotonic() >= deadline:
+                raise _fail("acceptance_cli_timeout")
             environment = {key: os.environ[key] for key in ("HOME", "USER", "LOGNAME", "TMPDIR")
                            if key in os.environ}
             environment.update(PATH="/usr/bin:/bin", TZ="Asia/Taipei",
@@ -380,9 +453,14 @@ class AuditedProcesses:
                 raise _fail("acceptance_cli_start_failed") from None
 
     def command(self, command: tuple[str, ...], kind: str) -> Any:
-        managed = self._spawn(command, kind)
+        metadata_deadline = time.monotonic() + 0.25 if kind == "foreground_metadata" else None
+        managed = self._spawn(command, kind, deadline=metadata_deadline)
         try:
-            timeout = min(30.0, max(0.001, self.scope.until - self.clock()))
+            # 自定义 runner 不接收适配器的 timeout；在实际自有进程边界兑现定位预算。
+            limit = 0.25 if kind == "foreground_metadata" else 30.0
+            if metadata_deadline is not None:
+                limit = max(0.000001, metadata_deadline - time.monotonic())
+            timeout = min(limit, max(0.001, self.scope.until - self.clock()))
             try:
                 stdout, _ = managed.process.communicate(timeout=timeout)
             except subprocess.TimeoutExpired:
@@ -391,6 +469,8 @@ class AuditedProcesses:
                 managed.wait(timeout=1)
                 raise _fail("acceptance_cli_timeout") from None
             managed.record_finished(managed.process.returncode)
+            if metadata_deadline is not None and time.monotonic() >= metadata_deadline:
+                raise _fail("acceptance_cli_timeout")
             return subprocess.CompletedProcess(command, managed.process.returncode, stdout, "")
         except (OSError, subprocess.TimeoutExpired):
             self.close()
@@ -453,7 +533,10 @@ def build_scoped_cli(scope: AcceptanceScope, *, runner: Any = None,
             if real is not None:
                 real.reject("version" if command[1:] == ("--version",) else "tail", error.code)
             raise
-        return runner(command) if runner is not None else real.command(command, kind)
+        if runner is not None:
+            return runner(command)
+        assert real is not None
+        return real.command(command, kind)
 
     def follow(command: tuple[str, ...]) -> Any:
         try:
@@ -469,10 +552,18 @@ def build_scoped_cli(scope: AcceptanceScope, *, runner: Any = None,
         return real.follow(command, kind)
 
     actual = LocalWechatCli(executable=str(scope.real_cli), runner=command, follow_runner=follow)
+    def metadata(candidates: tuple[Any, ...]) -> None:
+        if real is not None:
+            from notalone.conversation.matcher import normalize_display_text
+            real.record("metadata", "foreground_metadata", None, status="validated",
+                candidate_count=len(candidates), private_count=sum(item.chat_type == "private" for item in candidates),
+                group_count=sum(item.chat_type == "group" for item in candidates),
+                other_type_count=sum(item.chat_type not in {"private", "group"} for item in candidates),
+                exact_name_count=sum(normalize_display_text(item.display_name) == scope.metadata_name for item in candidates))
     return ScopedCli(actual, guard, real.close if real is not None else lambda: None,
                      real.reject if real is not None else lambda kind, code: None,
                      (lambda: real.record("accepted", "tail", None, status="validated"))
-                     if real is not None else lambda: None)
+                     if real is not None else lambda: None, metadata)
 
 
 def main() -> int:
@@ -488,6 +579,13 @@ def main() -> int:
     try:
         if module == "notalone.server.command":
             scope = load_scope()
+            target = load_foreground_target()
+            if target is not None:
+                from notalone.conversation.matcher import normalize_display_text
+                if (os.environ.get("NOTALONE_SYNC_PROBE") != target["probePath"]
+                        or os.environ.get("NOTALONE_FOREGROUND_LAYOUT") != target["profilePath"]):
+                    raise _fail("acceptance_foreground_target_invalid")
+                scope = replace(scope, metadata_name=normalize_display_text(target["displayName"]))
             from notalone.front_sync import factory
 
             def construct(*, executable: str) -> ScopedCli:
@@ -497,7 +595,8 @@ def main() -> int:
                 owned.append(cli)
                 return cli
 
-            factory.LocalWechatCli = construct
+            # 验收解释器动态接入受审计构造器，产品模块的类声明保持原样。
+            setattr(factory, "LocalWechatCli", construct)
         sys.argv = [module, *sys.argv[3:]]
         runpy.run_module(module, run_name="__main__")
         return 0

@@ -7,10 +7,14 @@ import io
 import json
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import threading
 import unittest
 from dataclasses import dataclass, replace
+from types import SimpleNamespace
+from uuid import UUID
+from unittest.mock import patch
 
 from notalone.wechat_cli import CliCommandError
 
@@ -149,6 +153,149 @@ class AcceptanceScopeTest(unittest.TestCase):
             cli.sessions()
         self.assertEqual(raised.exception.code, "acceptance_session_listing_blocked")
         self.assertEqual(runner.calls, [])
+
+    def test_foreground_metadata_preserves_same_name_candidates_without_previews(self) -> None:
+        runner = SyntheticRunner(FakeResult(stdout=json.dumps({
+            "ok": True, "data": {"sessions": [
+                {"username": "synthetic-selected", "display_name": "合成测试名",
+                 "chat_type": "private", "summary": "合成不应转交的预览",
+                 "last_sender_display_name": "合成不应转交的发送者"},
+                {"username": "synthetic-other", "display_name": "合成测试名",
+                 "chat_type": "group", "summary": "另一份合成预览"},
+            ]},
+        })))
+        cli = fixture.build_scoped_cli(replace(self.scope, metadata_name="合成测试名"),
+                                       runner=runner, clock=lambda: 1791782460.0)
+        candidates = cli.sessions(keyword="合成测试名", type_filter="all", limit=51,
+                                  timeout_seconds=0.25)
+        self.assertEqual([(item.username, item.chat_type) for item in candidates],
+                         [("synthetic-selected", "private"), ("synthetic-other", "group")])
+        self.assertTrue(all(item.summary is None and item.last_sender_display_name is None
+                            for item in candidates))
+        self.assertEqual(len(runner.calls), 1)
+        from notalone.front_sync.foreground_locator import ForegroundLocator
+        locator = ForegroundLocator(owner_id=UUID("00000000-0000-4000-8000-000000000001"),
+            channel="wechat", account_scope="synthetic-account", cli=cli,
+            probe=SimpleNamespace(observe_fresh=lambda **kwargs: SimpleNamespace(
+                wechat_in_front=True, qualified_evidence=SimpleNamespace(display_name="合成测试名"))),
+            bindings=SimpleNamespace(list_active_bindings=lambda **kwargs: self.fail("歧义不应读取绑定目录")))
+        import time
+        result = locator.observe_fresh(enabled=True, deadline=time.monotonic() + 1.3)
+        self.assertEqual(result.reason, "ambiguous_requires_selection")
+        self.assertEqual(result.phase, "manual-required")
+        self.assertIsNone(result.contact_id)
+
+    def test_foreground_metadata_does_not_authorize_other_keywords_or_wide_lists(self) -> None:
+        runner = SyntheticRunner(FakeResult())
+        cli = fixture.build_scoped_cli(replace(self.scope, metadata_name="合成测试名"),
+                                       runner=runner, clock=lambda: 1791782460.0)
+        for operation in (lambda: cli.sessions(type_filter="private", limit=5000),
+                          lambda: cli.sessions(keyword="其它合成名", type_filter="all", limit=51),
+                          lambda: cli.sessions(keyword="合成测试名", type_filter="private", limit=51),
+                          lambda: cli.sessions(keyword="合成测试名", type_filter="all", limit=50),
+                          lambda: cli.resolve_chat("其它合成名"),
+                          lambda: cli.tail("synthetic-other", since_time="2026-10-12T13:20:01")):
+            with self.subTest(operation=operation), self.assertRaises(CliCommandError):
+                operation()
+        self.assertEqual(runner.calls, [])
+
+    def test_foreground_resolver_keeps_all_types_without_preview_text(self) -> None:
+        runner = SyntheticRunner(FakeResult(stdout=json.dumps({"ok": True, "data": {"candidates": [
+            {"username": "synthetic-selected", "display_name": "合成测试名", "chat_type": "private", "summary": "合成预览"},
+            {"username": "synthetic-duplicate", "display_name": "合成测试名", "chat_type": "group", "last_sender_display_name": "合成发送者"},
+        ]}})))
+        cli = fixture.build_scoped_cli(replace(self.scope, metadata_name="合成测试名"),
+                                       runner=runner, clock=lambda: 1791782460.0)
+        result = cli.resolve_chat("合成测试名")
+        self.assertEqual([item.chat_type for item in result.candidates], ["private", "group"])
+        self.assertTrue(all(item.summary is None and item.last_sender_display_name is None for item in result.candidates))
+        self.assertEqual(len(runner.calls), 1)
+
+    def test_foreground_target_requires_private_original_scope_and_unchanged_projection(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary).resolve()
+            scope_path = directory / "scope.json"
+            scope_path.write_text('{"synthetic":"scope"}')
+            scope_path.chmod(0o600)
+            target_path = directory / "target.json"
+            value = {"schemaVersion": 1, "purpose": "real-foreground-locator-acceptance", "scopePath": str(scope_path),
+                "scopeSha256": fixture.hashlib.sha256(scope_path.read_bytes()).hexdigest(), "displayName": "合成测试名",
+                "probePath": "/synthetic/Resources/notalone-sync-probe", "profilePath": str(directory / "profile.json")}
+            target_path.write_text(json.dumps(value))
+            target_path.chmod(0o600)
+            environment = {"NOTALONE_REAL_FOREGROUND_MODE": "1", "NOTALONE_REAL_FOREGROUND_TARGET": str(target_path),
+                "NOTALONE_REAL_SYNC_SCOPE": str(scope_path),
+                "NOTALONE_REAL_FOREGROUND_TARGET_SHA256": fixture.hashlib.sha256(target_path.read_bytes()).hexdigest()}
+            with patch.dict(fixture.os.environ, environment, clear=True):
+                self.assertEqual(fixture.load_foreground_target()["displayName"], "合成测试名")
+                target_path.write_text(json.dumps({**value, "displayName": "未认可合成名"}))
+                with self.assertRaises(CliCommandError):
+                    fixture.load_foreground_target()
+                target_path.write_text(json.dumps(value))
+                scope_path.write_text('{"synthetic":"changed"}')
+                with self.assertRaises(CliCommandError):
+                    fixture.load_foreground_target()
+            with patch.dict(fixture.os.environ, {"NOTALONE_REAL_FOREGROUND_MODE": "0"}, clear=True):
+                self.assertIsNone(fixture.load_foreground_target())
+
+    def test_foreground_metadata_timeout_reaps_only_its_owned_query(self) -> None:
+        class SlowMetadata(SyntheticProcess):
+            timeouts: list[float | None] = []
+
+            def communicate(self, timeout: float | None = None) -> tuple[str, str]:
+                self.timeouts.append(timeout)
+                if self.returncode is not None:
+                    return "", ""
+                if timeout is not None and timeout <= 0.25:
+                    raise subprocess.TimeoutExpired("synthetic-metadata", timeout)
+                self.returncode = 0
+                return json.dumps({"ok": True, "data": {"sessions": []}}), ""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary).resolve()
+            scope = replace(self.scope, metadata_name="合成测试名",
+                            audit_path=directory / "audit.jsonl",
+                            pid_audit_path=directory / "pids.jsonl")
+            owned = SlowMetadata()
+            cli = fixture.build_scoped_cli(scope, process_factory=lambda *args, **kwargs: owned,
+                                           clock=lambda: 1791782460.0)
+            try:
+                with self.assertRaises(CliCommandError) as raised:
+                    cli.sessions(keyword="合成测试名", type_filter="all", limit=51,
+                                 timeout_seconds=0.25)
+                self.assertEqual(raised.exception.code, "acceptance_cli_timeout")
+                self.assertLessEqual(owned.timeouts[0], 0.25)
+                self.assertEqual(owned.returncode, -9)
+                events = [json.loads(line) for line in scope.audit_path.read_text().splitlines()]
+                self.assertEqual(events[-1]["event"], "finished")
+                self.assertEqual(events[-1]["kind"], "foreground_metadata")
+                self.assertEqual(events[-1]["returncode"], -9)
+                self.assertFalse(any(key in item for item in events
+                                     for key in ("argv", "summary", "display_name", "locator")))
+            finally:
+                cli.close()
+
+    def test_foreground_metadata_completed_after_monotonic_deadline_is_rejected(self) -> None:
+        now = [0.0]
+
+        class LateMetadata(SyntheticProcess):
+            def communicate(self, timeout: float | None = None) -> tuple[str, str]:
+                now[0] = 0.26
+                self.returncode = 0
+                return json.dumps({"ok": True, "data": {"sessions": []}}), ""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary).resolve()
+            scope = replace(self.scope, metadata_name="合成测试名", audit_path=directory / "audit.jsonl",
+                            pid_audit_path=directory / "pids.jsonl")
+            cli = fixture.build_scoped_cli(scope, process_factory=lambda *args, **kwargs: LateMetadata(),
+                                           clock=lambda: 1791782460.0)
+            try:
+                with patch.object(fixture.time, "monotonic", side_effect=lambda: now[0]), self.assertRaises(CliCommandError) as raised:
+                    cli.sessions(keyword="合成测试名", type_filter="all", limit=51, timeout_seconds=0.25)
+                self.assertEqual(raised.exception.code, "acceptance_cli_timeout")
+            finally:
+                cli.close()
 
     def test_empty_jsonl_without_live_source_proof_is_rejected(self) -> None:
         runner = SyntheticRunner(FakeResult(stdout=""))
