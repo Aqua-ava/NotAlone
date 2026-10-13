@@ -23,3 +23,7 @@
 唯一响应须为安全可记录的成功JSON及同名V工具，严格验证V4、nullable proof DTO和同一个candidate／来源关系；普通content、缺工具／字段、不合法proof、非2xx、超时、别名变化、来源漂移、迟到或错nonce审核、记录／收尾失败均停，不fallback、不重试、不追加。没有有效proof时只记UNKNOWN，不能补产权或自动采纳。显式技术审核600秒内完成也不签任何原质量门；`quality_certified=false`、默认空表、原三门及AND门保持，业务迁移／旧回填／重采纳0。
 
 只在实际单次响应、严格技术核对、及时显式技术审核和完整闭账收据均具备时才记技术完成。任何终态均保留HTTP、失败／unknown、闭账、PID与锁清理及证据；独立本地中文提交和公开历史检查完成后再报告。微信、OCR、App、Finder现场验收按用户选择暂缓，本探针不读取真实会话或发送消息。
+
+## 实际终态与后继授权
+
+唯一run5e292cb1实际HTTP200、40.72790824999902秒、CLOSED1/1，响应别名deepseek-flash触发本场预登记身份门停止，技术未完成／正式审核0。随后用户明确接受该别名并要求继续只用给定ECNU配置；[授权](goal-ecnu-model-authorization-20261014.md)适用于后继独立计划，本场保持原终态。详细[实际结果](goal-memory-nullable-V-tool-choice-probe-result-20261013.md)与总计64／183分账保留，不重开、不补签、不自动追加。

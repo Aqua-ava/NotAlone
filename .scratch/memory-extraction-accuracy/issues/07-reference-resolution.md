@@ -68,3 +68,8 @@
 ## Comments（新证明协议有限技术停止 2026-10-13）
 
 - [本场实际结果](../../unfinished-work/goal-memory-nullable-diagnostic4-result-20261013.md)：新run665225c9实际E200／V500、CLOSED2/8、8.084218832998886秒；正式审核0、A05 unknown／A06–A08 unrun。剩余6永久关闭，本目标12阶段全closed、累计63真实HTTP预约（57个200、2个500、4旧ReadTimeout远端未知）／183永闭未用／56未登记退役／280全140未启，工程分配582。根.env仅预算领取后读取一次既有ECNU三键，无真实聊天、App、微信、OCR、业务库、发送；默认空表、旧Gold／sealed／原AC和State保持。 实际E保留姐姐出借、联系人接收及已发生行动，未声称产权；旧Gold要求的车主属性覆盖不足，但获批D3明确未名“她”不能凭模板认定产权。事后公开来源诊断非盲性、非正式审核，不补签假事0／错人0／一般错误≤1。两个schema离线合法不能证明ECNU兼容或V500原因；现行完整指代集和全量回归仍缺。
+
+
+## Comments（单V真实响应与ECNU授权续记 2026-10-14）
+
+- [实际结果](../../unfinished-work/goal-memory-nullable-V-tool-choice-probe-result-20261013.md)：唯一单V run5e292cb1实际HTTP200、CLOSED1/1、40.72790824999902秒；reported deepseek-flash与原预登记别名不同而停止，formal0／techfalse／proof=null UNKNOWN。事后禁网络严格DTO与来源核对不补签原审核。用户在终结后明确接受deepseek-flash，继续只用根.env给定ECNU配置并要求记住，不再把此别名授权列待决；新授权用于后继独立计划，旧闭账保持。全目标13closed／64真实预约（58个200、2个500、4旧timeout远端未知）／183永闭未用／56未登记退役／280未启，分配583；当前无active模型场、App612／发送8/12／来信0／现场暂缓保持。 完整指代集与全量既有质量仍缺，A05产权UNKNOWN不凭模板或旧Gold补出；原5AC不变。
