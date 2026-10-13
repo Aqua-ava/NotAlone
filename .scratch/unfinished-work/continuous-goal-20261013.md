@@ -2,11 +2,13 @@
 
 ## 继续入口
 
-本目标由用户在本聊天明确要求建立并执行，目标工具已创建且为 `active`。起始源码基点 `0ddc93175d8225243084de7e499cf776b4e5ee8e`，起始工作区干净。上下文压缩后先读本页、下列分工结果和原票最新记录，再继续实际运行；不得把历史结果重复记为本次运行。
+本目标由用户明确要求建立并执行，目标工具已创建；台北13:38:28依用户暂停要求返回 `paused`。起始源码基点 `0ddc93175d8225243084de7e499cf776b4e5ee8e`，起始工作区干净。上下文压缩后先读[暂停与恢复点](goal-pause-20261013.md)、本页和原票最新记录；只有用户明确恢复后才继续，不得把历史结果重复记为本次运行。
 
 用户解除 OCR 暂停；其他新产品功能冻结。允许现有范围必要代码、测试、配置、打包及主 Agent 串行 Computer Use。普通编辑与有限验收连续执行，远端 Git、正式部署、真实业务数据删除未授权。所有实际 App 启动必须通过 `test:app` 和共享租约，场次起止、启动上限与检查点在运行前登记。
 
 ## 最新继续入口（优先于下列历史快照）
+
+- 台北13:38:28当前目标为`paused`，三个子Agent停止；已核无确认在途自有模型／验收执行器，App共享租约absent，不杀未知进程。61次真实HTTP／11旧阶段closed／177永闭未用、发送8／12／来信0、App288／E启动0保持。新cap2最终26Mock／5type／两轴0与Root178源码＋11private＋8版本＋11只读SQLite核验完成，预注册已独立提交`d2ca8033`，但Root没有实际派发、登记或读取密钥。13–15时窗不顺延；未提交定位工具九路径的旧私有日志已缺失、最终回归／两轴未做，proof草案仍有Spec P2歧义且未修未批。所有暂停收尾、十份文件SHA和恢复依赖见[暂停记录](goal-pause-20261013.md)，新增工作等待明确恢复；下列时点不改写。
 
 - 台北12:55：H3生产窄修复两path已独立提交`79573503`：三个实际Capture.names调用显式使用conditionalASCIIRecheck，baseline默认、0.90、最小几何／前台门及RAM原帧保持。最小21方法为19通过／H1和H3关闭实验2跳过，0新Vision；生产三个调用真实集成尚未认证。[生产接线](goal-ocr-conditional-ascii-wiring-20261013.md)。新E包实际构建18.786353458秒、此前自有Electron ZIP准备8.855598208秒；E原生11输入digest `7f4fed1ef4edeb310f69897e9e007d6a8314a727606d956b2ebeb785b3288934`，Core `9235a1e91850d58fd6e63aa05bf8866458145f38224c08f3ba11ba0ebf2f2570`，ASAR `376c9a53920c4b7e5c927383e1b170ec755033ca5a96aa6573707204c48449ab`。E完整四项归档实际13.774257334秒／exit0，ZIP `7db9cebb43c4a741a131bf05e13aef35f81f5cf416852b7e9722403fd058561c`／140293431bytes／620条；283文件／14链接／323目录，全部Unix属性和解压snapshot exact、15签名0、6自有ditto PID gone／自有临时已移除。私有静态入口`desktop/artifacts/goal-final-e-archive-20261013/`，Root终态SHA`c02f282a83641bd52ff551b399f218393add97d660a4f0a95d8d178e9f167d7c`；E实际App0、TCC／WCDB精确输入和二进制许可／xattrs／ACL／quarantine仍未认证，不继承C153或旧D/F。Mac锁定、CUA无法解锁，已一次请求用户解锁；尚未开G场。目标App288、发送8／12、来信0、实际HTTP61均保持。
 - 新固定2次V技术对照已由Root依据本目标既有模型授权划为新的有限准备额度，总工程分配532＝61实际＋177永闭未用＋12退役＋280未启full＋2新准备。13:00–15:00绝对窗口不顺延，只A旧成功system与B当前system两臂，固定当前500 V候选／窗口，其他最终请求字段相同，SDK重试0；A失败即关1／B不执行，证据或V4失败即停，无补位。当前SOURCE_COMMIT未冻结、正式registry／activation／HTTP0；工具负控、两轴和Root最后核验未完成前不能派发，不复用任何旧余额。Root对公开固定字面`Internal Server Error`21字节的SHA与封存V500摘要精确匹配（0HTTP／未读原始响应），只确认通用服务错误文本，内部根因仍未知；私有收据`stage-priority-diagnostic4/known-generic-500-digest-check-v1.json` SHA`e68e2d85ad997bb8fe114a0c4a961999154d5001414b3e04d34b16ce32f75192`。
