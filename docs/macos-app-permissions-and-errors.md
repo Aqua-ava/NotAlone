@@ -521,3 +521,8 @@ Swift新增纯比较接缝先因缺符号／参数编译失败，再单项七组
 Root将d166a0f3身份诊断构建为独立D包（31.963362084秒、exit0），ASAR376c9a53…、11native输入摘要32315b3e…、280文件／14链接、六dist、四helper及九notice完整核同，App deep strict0；E／F各有限max1／actual1，末次E非前台停context，F实际通过前台／PID／windowId／CGRect精确门、静默CGPreflightScreenCaptureAccess及单微信窗口filter后到names。F顶部180×50／0.5、行160×40／0.3000000119、复读0.5、scale2、634ms，因不足0.90安全失败；只持久安全数值、无图帧／姓名／profile。3细条＋3名字的6成功采集调用是按冻结路径推断，并无独立计数器。
 
 实际probe在本包Resources、父进程为本场App，签名ad-hoc、无Team；父子及安装位置不能代签TCC责任归属。已有权限预检／捕获成功只认证当前可用，独立launchctl procinfo需要root而本轮未提权，责任归属仍未知。F14已记录PID／userData gone、leaseabsent、294项包及strict保持；原D历史identity_changed具体差项无法追认。E／F失败和未进入profile／后续绑定段保留。详细原始证据、各场时间和未覆盖项见[实测记录](../.scratch/unfinished-work/goal-ocr-front-context-20261013.md)；首AC采集分项不替代绑定／重名／失效／焦点／CLI独立及最终组合。
+
+
+## 2026-10-13 录屏权限条目与当前包身份不同
+
+Root只读检查系统设置录屏页，已开启的NotAloneApp条目通过“在访达中显示”指向旧`macos_app/build/NotAloneApp.app`，identifier `com.notalone.app`，具有开发证书。当前D候选`desktop/artifacts/goal-final-package-20261013-d/NotAlone-darwin-arm64/NotAlone.app`为`com.notalone.desktop`、ad-hoc／无Team，路径与身份不同。旧条目不能认证新Electron或其Resources探针的TCC责任归属，F成功预检／最小采集也不代签该项。没有修改权限或签名，没有新App／采集／模型／正文读取／发送；未保存图像、证书主体或账号信息。首次过时UI操作被拒绝后已重新读取，失败保留。独立时长未认证，Finder窗口缺场前归属因而未关闭。完整最小收据、SHA和边界见[归属核查](../.scratch/unfinished-work/goal-ocr-permission-attribution-20261013.md)。原18第三项保持未验，后续新包须单独实测并记录实际归属。
