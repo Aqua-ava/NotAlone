@@ -109,10 +109,7 @@ def canonical_json_sha256(value: object) -> str:
 
 
 def _git_blob(commit: str, path: str) -> str:
-    return subprocess.run(
-        ["git", "show", f"{commit}:{path}"],
-        cwd=REPO, check=True, capture_output=True, text=True,
-    ).stdout
+    return RUNNER_MODULE._git_source(commit, path)
 
 
 def _prompt_from_source(source: str) -> str:
@@ -219,7 +216,7 @@ def compute_windows() -> list[dict[str, Any]]:
     for index, (entry, expected) in enumerate(
         zip(entries, EXPECTED_WINDOW_SHA256), start=1
     ):
-        path = Path(entry["input_path"]).expanduser()
+        path = RUNNER_MODULE._resolve_private_path(entry["input_path"])
         if not path.is_file():
             raise RuntimeError(f"窗口 {index} 的冻结输入不存在：{path}")
         digest = _sha256_file(path)
@@ -229,7 +226,7 @@ def compute_windows() -> list[dict[str, Any]]:
             raise RuntimeError(f"窗口 {index} 的 v1 登记 SHA 与提案不一致。")
         windows.append({
             "window_id": f"W{index}",
-            "input_path": str(path),
+            "input_path": entry["input_path"],
             "input_sha256": digest,
             "input_bytes": path.stat().st_size,
             "fixture_origin": "已批准匿名 C4 合成材料，正文留在仓库外私有目录，仓库内只登记路径与哈希",

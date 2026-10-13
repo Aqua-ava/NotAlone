@@ -16,23 +16,26 @@ python -m http.server 4174 --bind 127.0.0.1 --directory website
 
 ## 部署与同步
 
-正式站点由 nginx 托管服务器 `example.invalid` 上的 `/var/www/notalone`，访问
-<http://example.invalid/notalone/>（注意结尾斜杠）。服务器根路径 `/` 返回 404，留给后续服务，
+站点由 nginx 托管在已授权服务器的 `/var/www/notalone`，URL 路径为 `/notalone/`
+（注意结尾斜杠）。服务器根路径 `/` 返回 404，留给后续服务，
 不占用。nginx 站点配置为 `/etc/nginx/sites-available/notalone`：`root /var/www` 配合目录名
 `notalone` 映射 URL 前缀，无需 alias；`/notalone` 会 301 到 `/notalone/`，静态资源缓存 7 天，
 HTML 不缓存，启用 gzip。配置已启用并随系统启动。
 
 页面内引用一律使用相对路径（如 `assets/logo.png`），这样在 `/notalone/` 前缀下才能正确解析。
 
+部署前必须显式设置 `NOTALONE_WEB_HOST` 为已授权的 SSH 目标。以下主机仅为占位示例，
+执行前替换为自己的用户名和主机；未设置或为空时脚本会在本地报错退出，不发起同步。
 在仓库根目录执行：
 
 ```bash
+export NOTALONE_WEB_HOST="user@example.invalid"
 scripts/deploy_website.sh          # 同步一次
 scripts/deploy_website.sh watch    # 监听 website/ 改动并自动同步（需要 fswatch）
 ```
 
-脚本用 `rsync -az --delete` 覆盖远端目录，剔除 `.DS_Store` 与 `README.md`。服务器与远端
-路径可用 `NOTALONE_WEB_HOST`、`NOTALONE_WEB_PATH` 覆盖。脚本只传输静态文件，不写入密钥、
+脚本用 `rsync -az --delete` 覆盖远端目录，剔除 `.DS_Store` 与 `README.md`。远端路径由
+`NOTALONE_WEB_PATH` 配置，默认 `/var/www/notalone`。脚本只传输静态文件，不写入密钥、
 不重启服务；改动里新增的资源必须保持相对路径，否则在 `/notalone/` 前缀下会 404。
 
 修改 nginx 配置后需要执行 `systemctl reload nginx` 才会生效；仅 `nginx -t` 只校验语法。

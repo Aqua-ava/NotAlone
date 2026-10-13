@@ -5,15 +5,20 @@
 #   scripts/deploy_website.sh              同步一次
 #   scripts/deploy_website.sh watch        监听本地改动并自动同步（需要 fswatch）
 #
-# 服务器与远端目录可用环境变量覆盖：
-#   NOTALONE_WEB_HOST（默认 root@example.invalid）
+# 服务器必须显式配置，远端目录可用环境变量覆盖：
+#   NOTALONE_WEB_HOST（必填，例如 user@example.invalid）
 #   NOTALONE_WEB_PATH（默认 /var/www/notalone）
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$REPO_ROOT/website"
-HOST="${NOTALONE_WEB_HOST:-root@example.invalid}"
+HOST="${NOTALONE_WEB_HOST:-}"
 DEST="${NOTALONE_WEB_PATH:-/var/www/notalone}"
+
+if [[ -z "$HOST" ]]; then
+  echo "请先设置 NOTALONE_WEB_HOST 为已授权的 SSH 部署目标，例如 user@example.invalid。" >&2
+  exit 2
+fi
 
 SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10)
 RSYNC_OPTS=(-az --delete --exclude '.DS_Store' --exclude 'README.md')

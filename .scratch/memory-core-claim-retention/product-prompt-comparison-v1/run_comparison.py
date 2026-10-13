@@ -23,16 +23,40 @@ BASELINE_PROMPT_COMMIT = "e015b96"  # 产品提示加入单叶前的提交
 PRIVATE_OUTPUT = Path("~/.notalone/audits/product-prompt-comparison-20261004").expanduser()
 
 
+def _git_source(commit: str, path: str) -> str:
+    """优先读原提交；公开历史重写后只读映射对应的清理版本。"""
+
+    original = subprocess.run(
+        ["git", "show", f"{commit}:{path}"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    if original.returncode == 0:
+        return original.stdout
+    mapping_path = REPO / "docs" / "publication-commit-map.tsv"
+    if not mapping_path.is_file():
+        original.check_returncode()
+    mapped = [
+        new
+        for line in mapping_path.read_text(encoding="utf-8").splitlines()
+        if len(parts := line.split("\t")) == 2
+        for old, new in [parts]
+        if old.startswith(commit)
+    ]
+    if len(mapped) != 1:
+        raise RuntimeError(f"历史提交映射缺失或不唯一：{commit}")
+    return subprocess.run(
+        ["git", "show", f"{mapped[0]}:{path}"],
+        cwd=REPO, check=True, capture_output=True, text=True,
+    ).stdout
+
+
 def _load_baseline_prompt() -> str:
     """从 git 取改动前的产品提示，避免在材料里留一份会漂移的副本。"""
 
-    source = subprocess.run(
-        [
-            "git", "show",
-            f"{BASELINE_PROMPT_COMMIT}:src/notalone/memory_extraction/verification_adapters.py",
-        ],
-        cwd=REPO, check=True, capture_output=True, text=True,
-    ).stdout
+    source = _git_source(
+        BASELINE_PROMPT_COMMIT,
+        "src/notalone/memory_extraction/verification_adapters.py",
+    )
     namespace: dict[str, Any] = {}
     exec(compile(source, "baseline", "exec"), namespace)  # noqa: S102 - 只读仓库内源码
     prompt = namespace["SOURCE_VERIFICATION_SYSTEM_PROMPT"]
@@ -70,6 +94,9 @@ def main() -> int:
     parser.add_argument("--output", type=Path, default=PRIVATE_OUTPUT)
     parser.add_argument("--dry-run", action="store_true", help="只检查前提，不联网")
     args = parser.parse_args()
+    args.output = args.output.expanduser().resolve()
+    if args.output.is_relative_to(REPO.resolve()):
+        parser.error("原始返回目录不得位于仓库内。")
 
     plan = json.loads(PLAN.read_text(encoding="utf-8"))
     baseline = _load_baseline_prompt()

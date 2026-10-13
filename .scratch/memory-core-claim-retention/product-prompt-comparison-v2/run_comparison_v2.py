@@ -161,8 +161,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
             window["input_sha256"]
         ) != 64:
             raise PlanError("窗口输入 SHA 缺失或格式不符。")
-        if Path(str(window.get("input_path", ""))).is_relative_to(REPO):
-            raise PlanError("冻结输入不得位于仓库内。")
+        _resolve_private_path(str(window.get("input_path", "")))
 
     arms_detail = ((scope.get("arms_detail") or {}))
     for arm in ARMS:
@@ -274,13 +273,37 @@ def _validate_schedule(plan: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _git_source(commit: str, path: str) -> str:
+    """优先读原提交；公开历史重写后只读映射对应的清理版本。"""
+
+    original = subprocess.run(
+        ["git", "show", f"{commit}:{path}"],
+        cwd=REPO, capture_output=True, text=True,
+    )
+    if original.returncode == 0:
+        return original.stdout
+    mapping_path = REPO / "docs" / "publication-commit-map.tsv"
+    if not mapping_path.is_file():
+        original.check_returncode()
+    mapped = [
+        new
+        for line in mapping_path.read_text(encoding="utf-8").splitlines()
+        if len(parts := line.split("\t")) == 2
+        for old, new in [parts]
+        if old.startswith(commit)
+    ]
+    if len(mapped) != 1:
+        raise PlanError(f"历史提交映射缺失或不唯一：{commit}")
+    return subprocess.run(
+        ["git", "show", f"{mapped[0]}:{path}"],
+        cwd=REPO, check=True, capture_output=True, text=True,
+    ).stdout
+
+
 def _load_baseline_prompt() -> str:
     """从 git 取改动前的产品提示，避免在材料里留一份会漂移的副本。"""
 
-    source = subprocess.run(
-        ["git", "show", f"{BASELINE_PROMPT_COMMIT}:{PROMPT_SOURCE_PATH}"],
-        cwd=REPO, check=True, capture_output=True, text=True,
-    ).stdout
+    source = _git_source(BASELINE_PROMPT_COMMIT, PROMPT_SOURCE_PATH)
     namespace: dict[str, Any] = {}
     exec(compile(source, "baseline", "exec"), namespace)  # noqa: S102 - 只读仓库内源码
     prompt = namespace["SOURCE_VERIFICATION_SYSTEM_PROMPT"]
@@ -290,12 +313,19 @@ def _load_baseline_prompt() -> str:
 
 
 def _candidate_prompt() -> str:
-    sys.path.insert(0, str(REPO / "src"))
-    from notalone.memory_extraction.verification_adapters import (
-        SOURCE_VERIFICATION_SYSTEM_PROMPT,
-    )
+    """读取实际登记文件里的提示常量，避免复用其他工作树的模块缓存。"""
 
-    return SOURCE_VERIFICATION_SYSTEM_PROMPT
+    source = (REPO / PROMPT_SOURCE_PATH).read_text(encoding="utf-8")
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name)
+            and target.id == "SOURCE_VERIFICATION_SYSTEM_PROMPT"
+            for target in node.targets
+        ):
+            prompt = ast.literal_eval(node.value)
+            if isinstance(prompt, str) and prompt.strip():
+                return prompt
+    raise PlanError("候选提示文件缺少可直接读取的字符串常量。")
 
 
 def arm_prompts(plan: dict[str, Any]) -> dict[str, str]:
@@ -314,10 +344,9 @@ def check_prompt_integrity(plan: dict[str, Any]) -> dict[str, dict[str, str]]:
         raise PlanError("基线提示与候选提示相同，无法形成对照。")
 
     candidate_file_sha = _sha256_bytes((REPO / PROMPT_SOURCE_PATH).read_bytes())
-    baseline_file_sha = _sha256_text(subprocess.run(
-        ["git", "show", f"{BASELINE_PROMPT_COMMIT}:{PROMPT_SOURCE_PATH}"],
-        cwd=REPO, check=True, capture_output=True, text=True,
-    ).stdout)
+    baseline_file_sha = _sha256_text(
+        _git_source(BASELINE_PROMPT_COMMIT, PROMPT_SOURCE_PATH)
+    )
     result: dict[str, dict[str, str]] = {
         "baseline": {
             "prompt_file_sha256": baseline_file_sha,
@@ -415,12 +444,21 @@ def check_schema_integrity(plan: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_private_path(recorded: str | Path) -> Path:
+    """先展开用户目录和符号链接，再验证私有资料仍在仓库外。"""
+
+    path = Path(recorded).expanduser().resolve()
+    if path.is_relative_to(REPO.resolve()):
+        raise PlanError("冻结输入与原始返回目录不得位于仓库内。")
+    return path
+
+
 def check_window_inputs(plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """核对两个窗口的冻结输入哈希；只哈希，不落正文。"""
 
     observed: dict[str, dict[str, Any]] = {}
     for window in plan["windows"]:
-        path = Path(window["input_path"]).expanduser()
+        path = _resolve_private_path(window["input_path"])
         if not path.is_file():
             raise PlanError(f"窗口 {window['window_id']} 的冻结输入不存在：{path}")
         digest = _sha256_bytes(path.read_bytes())
@@ -446,7 +484,7 @@ def build_requests(
     for entry in plan["schedule"]["invocations"]:
         window = windows[entry["window_id"]]
         source = json.loads(
-            Path(window["input_path"]).expanduser().read_text(encoding="utf-8")
+            _resolve_private_path(window["input_path"]).read_text(encoding="utf-8")
         )
         messages = source.get("public_invoke_messages")
         if not isinstance(messages, list) or len(messages) != 2:
@@ -935,6 +973,7 @@ def assert_within_budget(plan: dict[str, Any], *, attempted_invokes: int) -> Non
 
 
 def _prepare_private_dir(output_root: Path) -> None:
+    output_root = _resolve_private_path(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     try:
         output_root.chmod(PRIVATE_DIR_MODE)
@@ -1084,6 +1123,7 @@ def main(argv: list[str] | None = None) -> int:
         help="走完除真实调用外的全流程：不读凭据、不联网",
     )
     args = parser.parse_args(argv)
+    args.output = _resolve_private_path(args.output)
 
     plan = load_plan()
     source_integrity = check_source_integrity(plan)

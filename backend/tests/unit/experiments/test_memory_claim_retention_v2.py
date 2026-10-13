@@ -129,18 +129,16 @@ class FrozenRunnerBackedTest(RunnerBackedTest):
             text=True,
         ).stdout.strip()
         (root / ".git").write_text(f"gitdir: {git_dir}\n", encoding="utf-8")
+        mapping = REPO / "docs" / "publication-commit-map.tsv"
+        if mapping.is_file():
+            target = root / "docs" / mapping.name
+            target.parent.mkdir()
+            shutil.copyfile(mapping, target)
         plan = _plan()
         candidate = plan["scope"]["arms_detail"]["candidate"]
-        source = subprocess.run(
-            [
-                "git",
-                "show",
-                f"{candidate['take_from']['commit']}:{candidate['prompt_file_path']}",
-            ],
-            cwd=REPO,
-            check=True,
-            capture_output=True,
-        ).stdout
+        source = cls.runner._git_source(
+            candidate["take_from"]["commit"], candidate["prompt_file_path"]
+        ).encode("utf-8")
         fixture = root / candidate["prompt_file_path"]
         fixture.parent.mkdir(parents=True)
         fixture.write_bytes(source)
@@ -152,14 +150,10 @@ class FrozenRunnerBackedTest(RunnerBackedTest):
 
 
 def _baseline_prompt_text() -> str:
-    source = subprocess.run(
-        [
-            "git", "show",
-            f"{BASELINE_PROMPT_COMMIT}:src/notalone/memory_extraction/"
-            "verification_adapters.py",
-        ],
-        cwd=REPO, check=True, capture_output=True, text=True,
-    ).stdout
+    source = _load_runner()._git_source(
+        BASELINE_PROMPT_COMMIT,
+        "src/notalone/memory_extraction/verification_adapters.py",
+    )
     namespace: dict = {}
     exec(compile(source, "<test-baseline>", "exec"), namespace)  # noqa: S102
     return namespace["SOURCE_VERIFICATION_SYSTEM_PROMPT"]
@@ -333,6 +327,28 @@ class FrozenPlanV2Test(RunnerBackedTest):
         plan["budget"]["phase2_closes_permanently_if_phase1_fails"] = False
         with self.assertRaises(self.runner.PlanError):
             self.runner.validate_plan(plan)
+
+    def test_tilde_input_is_checked_after_expansion(self) -> None:
+        plan = _plan()
+        plan["windows"][0]["input_path"] = "~/.scratch/synthetic.json"
+        with mock.patch.dict(os.environ, {"HOME": str(REPO)}):
+            with self.assertRaises(self.runner.PlanError):
+                self.runner.validate_plan(plan)
+
+    def test_relative_input_cannot_bypass_the_repository_boundary(self) -> None:
+        plan = _plan()
+        plan["windows"][0]["input_path"] = "synthetic.json"
+        with self.assertRaises(self.runner.PlanError):
+            self.runner.validate_plan(plan)
+
+    def test_symlink_input_cannot_bypass_the_repository_boundary(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="notalone-private-path-") as temporary:
+            alias = Path(temporary) / "repository"
+            alias.symlink_to(REPO, target_is_directory=True)
+            plan = _plan()
+            plan["windows"][0]["input_path"] = str(alias / "synthetic.json")
+            with self.assertRaises(self.runner.PlanError):
+                self.runner.validate_plan(plan)
 
 
 class ScheduleRotationTest(RunnerBackedTest):
@@ -594,9 +610,27 @@ class WindowHashTest(RunnerBackedTest):
     def test_input_paths_stay_outside_the_repository(self) -> None:
         for window in _plan()["windows"]:
             self.assertFalse(
-                Path(window["input_path"]).expanduser().is_relative_to(REPO),
+                Path(window["input_path"]).expanduser().resolve().is_relative_to(
+                    REPO.resolve()
+                ),
                 f"{window['input_path']} 不应位于仓库内",
             )
+
+    def test_portable_input_resolves_under_the_current_users_home(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="notalone-private-home-") as temporary:
+            root = Path(temporary)
+            path = root / "inputs" / "synthetic.json"
+            path.parent.mkdir()
+            path.write_text('{"synthetic": true}', encoding="utf-8")
+            plan = _plan()
+            plan["windows"] = [{
+                "window_id": "W1",
+                "input_path": "~/inputs/synthetic.json",
+                "input_sha256": _sha256_file(path),
+            }]
+            with mock.patch.dict(os.environ, {"HOME": temporary}):
+                checked = self.runner.check_window_inputs(plan)
+            self.assertEqual(checked["W1"]["input_path"], str(path.resolve()))
 
 
 class PhaseOneGateTest(RunnerBackedTest):
@@ -885,6 +919,22 @@ class BudgetCountTest(RunnerBackedTest):
 
 class DryRunCredentialTest(FrozenRunnerBackedTest):
     """dry-run 必须在读凭据之前返回，且不写任何真实运行记录。"""
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory(prefix="notalone-dry-run-input-")
+        self.addCleanup(temporary.cleanup)
+        plan = _plan()
+        for index, window in enumerate(plan["windows"], start=1):
+            path = Path(temporary.name) / f"W{index}.json"
+            path.write_text(json.dumps({"public_invoke_messages": [
+                {"role": "system", "content": "合成系统输入"},
+                {"role": "user", "content": f"合成窗口 {index}"},
+            ]}, ensure_ascii=False), encoding="utf-8")
+            window["input_path"] = str(path)
+            window["input_sha256"] = _sha256_file(path)
+        loader = mock.patch.object(self.runner, "load_plan", return_value=plan)
+        loader.start()
+        self.addCleanup(loader.stop)
 
     def test_dry_run_never_reads_credentials(self) -> None:
         runtime_config = importlib.import_module("notalone.runtime_config")
@@ -1200,6 +1250,22 @@ class RunnerSourceBoundaryTest(RunnerBackedTest):
         self.assertEqual(plan["isolation"]["private_dir_mode"], "0700")
         self.assertEqual(plan["isolation"]["private_file_mode"], "0600")
         self.assertFalse(plan["isolation"]["in_git"])
+
+    def test_default_private_output_uses_the_current_users_home(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="notalone-private-home-") as temporary:
+            with mock.patch.dict(os.environ, {"HOME": temporary}):
+                runner = _load_runner()
+            self.assertEqual(
+                runner.DEFAULT_OUTPUT,
+                Path(temporary) / ".notalone" / "audits"
+                / "memory-claim-retention-repetition-20261005",
+            )
+
+    def test_private_output_rejects_a_tilde_path_inside_the_repository(self) -> None:
+        with mock.patch.dict(os.environ, {"HOME": str(REPO)}):
+            with self.assertRaises(self.runner.PlanError):
+                self.runner._prepare_private_dir(Path("~/synthetic-output"))
+        self.assertFalse((REPO / "synthetic-output").exists())
 
 
 RUNNER_DEPENDENT_TEST_CLASSES = (

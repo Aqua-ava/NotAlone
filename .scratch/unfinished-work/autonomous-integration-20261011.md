@@ -22,7 +22,7 @@
 | B | `/Users/local-user/.codex/worktrees/reply-strategy-completion/NotAlone` | `codex/reply-strategy-completion` | 用户创建的唯一接续B会话`local-chat-id`；原B因系统错误冻结备份，仍同一B角色负责11票 |
 | C | `/Users/local-user/.codex/worktrees/authentic-expression/NotAlone` | `codex/authentic-expression-integration` | 既有用户会话`local-chat-id`，唯一负责6票接续；旧主题提交仍可引用 |
 
-本账户工具不能读取／投递跨账户会话，未绕过账户访问；既有 B/C 通过本地交付文件确认接收。公共指令与回执见`coordinator-cross-account-handoff-20261011.md`。每张任务只有上表对应负责人。
+详细跨账号协调过程和机器回执保存在端侧；公开技术结果见 [逐项集成结果](round29-autonomous-results-20261011.md)，页面预约与迁移约束继续按原规格执行。
 
 备用B工作树`/Users/local-user/.codex-account2/worktrees/reply-strategy-b/NotAlone`已冻结47份未提交文件，交付`50fd205`及`/private/tmp/notalone-b-handoff-20261011/`。备用C工作树`/Users/local-user/.codex-account2/worktrees/authentic-expression-c/NotAlone`不扩新票，仅在总协调划定的集成助手范围闭合公共来源守卫。两侧正式提交／失败证据保留；只集成一套探索与样本存储。
 

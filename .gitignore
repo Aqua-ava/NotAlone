@@ -31,3 +31,7 @@ native/macos/build/
 uv.lock
 macos_app/.build/
 macos_app/build/
+
+# 私人协调日志与一次性真实模型验收脚本只保存在端侧。
+.scratch/unfinished-work/coordinator-cross-account-handoff-*.md
+desktop/tests/manual-real-ecnu-*.spec.ts

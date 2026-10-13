@@ -24,9 +24,9 @@
     "baseline_verification_adapters_file_sha256": "9a48913f23a95ea57339a16b514629819a57595261142e902b03d7f7e933848c",
     "schema_sha256": "ec92479140e3c6945efee42115af25e69686fdfdf851bae2dce994eb393344b2",
     "runner_script": ".scratch/memory-core-claim-retention/product-prompt-comparison-v2/run_comparison_v2.py",
-    "runner_script_sha256": "739c6d161f82c4412950e81a180a551371c155c5f62c8875f02e8bf960b16d83",
+    "runner_script_sha256": "ee5ad6a3eae18870bdc6675be6fb891d81850b0ed39978a2338d20cbab65fb73",
     "prepare_script": ".scratch/memory-core-claim-retention/product-prompt-comparison-v2/prepare_comparison_v2.py",
-    "prepare_script_sha256": "b8a79bd567f2d7b55222853b8fd1972fc4094d07c1826925d0e434224158ad3a",
+    "prepare_script_sha256": "b64699513951fc2cd3993bad245be4908d37c3853eb3dc7cc12c4232169a86fd",
     "source_sha256_note": "运行源码按文件原始字节取 SHA256（与编码无关）；schema_sha256 用 canonical_json_sha256 规范化后取 SHA256（ensure_ascii=False、sort_keys=True、无多余空白）。",
     "schema_sha256_method": "json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(\",\", \":\")) 后按 UTF-8 取 sha256",
     "type_check": {
@@ -598,5 +598,12 @@
     "不写业务数据：不写业务记忆、水位、旧五条资料、产品默认或远端 Git。",
     "不宣称修复覆盖：不把本轮结果等同于 6/12 改善或整体记忆准确率修复；本轮不含 E。",
     "不引入新协议：不新增字段、不新增模型阶段、不改公开 Seam。"
-  ]
+  ],
+  "publication_sanitization": {
+    "historical_source_sha256": {
+      "runner_script_sha256": "739c6d161f82c4412950e81a180a551371c155c5f62c8875f02e8bf960b16d83",
+      "prepare_script_sha256": "b8a79bd567f2d7b55222853b8fd1972fc4094d07c1826925d0e434224158ad3a"
+    },
+    "note": "公开清理把本机用户名路径改为当前用户的 ~ 路径，先解析路径后验证仓库外隔离，为原历史提交引用添加只读映射解析，并从登记文件直接读取候选提示以隔离其他工作树的模块缓存；sources 中两个脚本摘要只针对清理后的文件原始字节重算。原输入、提示、schema 摘要与历史提交引用保持原始记录；未重新读取私有输入、冻结试点或调用模型，不据此新增历史运行证据。"
+  }
 }

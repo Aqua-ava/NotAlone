@@ -24,6 +24,12 @@ def _load(path: Path) -> object:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _portable_private_path(path: Path) -> str:
+    """计划保存当前用户的可移植路径，不重新写入本机用户名。"""
+
+    return str(Path("~") / path.relative_to(Path.home()))
+
+
 def extract_windows() -> list[dict[str, object]]:
     windows: list[dict[str, object]] = []
     seen: set[str] = set()
@@ -35,7 +41,7 @@ def extract_windows() -> list[dict[str, object]]:
         payload = _load(path)
         windows.append({
             "input_sha256": digest,
-            "input_path": str(path),
+            "input_path": _portable_private_path(path),
             "usable": isinstance(payload, dict)
             and isinstance(payload.get("public_invoke_messages"), list),
         })
@@ -73,7 +79,7 @@ def main() -> int:
             "reads_real_chat_or_holdout": False,
         },
         "seed": {
-            "path": str(SEED),
+            "path": _portable_private_path(SEED),
             "sha256": _sha256(SEED),
             "case_id": seed.get("case_id"),
             "fixture_origin": seed.get("fixture_origin"),
