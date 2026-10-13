@@ -121,10 +121,10 @@ private final class Capture {
     }
 
     func names() async throws -> Names {
-        let header = try recognize(await image("displayName"))
-        let row = try recognize(await image("selectedRowName"))
+        let header = try recognizeName(await image("displayName"), policy: .conditionalASCIIRecheck)
+        let row = try recognizeName(await image("selectedRowName"), policy: .conditionalASCIIRecheck)
         // 两个小帧分别采集；再读一次顶部名字，防止跨会话变化被写成同一次可信观察。
-        let repeated = try recognize(await image("displayName"))
+        let repeated = try recognizeName(await image("displayName"), policy: .conditionalASCIIRecheck)
         guard header.text == repeated.text else { throw MinimalSessionError.layoutChanged }
         return Names(header: header, row: row, repeatedHeader: repeated)
     }
@@ -188,7 +188,7 @@ struct Names {
     }
 }
 
-// 内部测试可持有同次请求；生产仍使用新请求和原有固定策略，不提供运行开关。
+// 内部测试可持有同次请求；每次识别使用固定配置的新请求，不提供运行开关。
 func recognize(_ image: CGImage, automaticallyDetectsLanguage: Bool = false,
                request: VNRecognizeTextRequest = VNRecognizeTextRequest()) throws -> Name {
     let pixelSize = CGSize(width: image.width, height: image.height)
@@ -209,7 +209,7 @@ func recognize(_ image: CGImage, automaticallyDetectsLanguage: Bool = false,
 enum NameRecognitionPolicy { case baseline, conditionalASCIIRecheck }
 enum NameRecognitionError: Error { case confidenceInvalid, imageSizeChanged }
 
-// 内部对照复用同一个识别器；三个生产调用继续使用原策略。
+// 会话采集显式选择有界ASCII同字复核；内部默认保留baseline，不开放运行开关。
 func recognizeName(_ image: CGImage, policy: NameRecognitionPolicy = .baseline,
                    recognizing: (CGImage, Bool) throws -> Name = {
                        try recognize($0, automaticallyDetectsLanguage: $1)
