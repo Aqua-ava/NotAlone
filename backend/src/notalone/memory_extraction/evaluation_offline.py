@@ -38,6 +38,7 @@ from notalone.memory_extraction.evaluation_records import (
     EvaluationRecordStore,
     canonical_sha256,
 )
+from notalone.memory_extraction.evaluation_reference import public_window_projection
 from notalone.memory_extraction.flow import _to_fact
 from notalone.memory_extraction.models import ExtractionWindow
 from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
@@ -229,7 +230,7 @@ def run_offline_evaluation(
     windows = tuple(build_window(case) for case in cases)
     plan = tuple({
         "case_position": position, "case_name": case.name,
-        "input_sha256": canonical_sha256(window),
+        "input_sha256": canonical_sha256(public_window_projection(window)),
     } for position, (case, window) in enumerate(zip(cases, windows)))
     config = {**_frozen_config(plan), "public_cases_sha256": canonical_sha256(cases)}
     budget = EvaluationBudget.create(

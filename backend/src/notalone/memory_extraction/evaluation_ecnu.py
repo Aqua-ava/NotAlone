@@ -26,7 +26,8 @@ from notalone.memory_extraction.evaluation_offline import _frozen_config, _run_e
 from notalone.memory_extraction.evaluation_records import EvaluationRecordStore, canonical_sha256
 from notalone.memory_extraction.evaluation_reference import (
     FULL_ANNOTATION_PATH, FULL_REFERENCE_PATH, PUBLIC_REFERENCE_PATH,
-    full_case_reference_positions, validate_full_public_reference,
+    full_case_reference_positions, public_window_projection,
+    validate_full_public_reference,
 )
 from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
 from notalone.memory_extraction.verification_adapters import SOURCE_VERIFICATION_SCHEMA
@@ -221,7 +222,7 @@ def run_ecnu_evaluation(
     windows = tuple(build_window(case) for case in cases)
     plan = tuple({
         "case_position": index, "case_name": case.name,
-        "input_sha256": canonical_sha256(window),
+        "input_sha256": canonical_sha256(public_window_projection(window)),
     } for index, (case, window) in enumerate(zip(cases, windows)))
     config = {
         **_frozen_config(plan, request_timeout_seconds=request_timeout_seconds,

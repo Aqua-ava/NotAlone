@@ -7,7 +7,9 @@ from typing import Callable
 
 from .evaluation_http_budget import EvaluationBudgetAbort
 from .evaluation_records import canonical_sha256
-from .evaluation_reference import validate_full_public_reference, validate_public_reference
+from .evaluation_reference import (
+    public_window_projection, validate_full_public_reference, validate_public_reference,
+)
 from .evaluation_review import prepare_case_review, score_case_review
 
 
@@ -240,7 +242,8 @@ class PhasedEvaluationAudit:
                          else self._reference_sha256)
         reference_case = reference["windows"][reference_position]
         if (bundle["case_name"] != reference_case["case_name"]
-                or canonical_sha256(bundle["window"]) != reference_case["input_sha256"]
+                or canonical_sha256(public_window_projection(bundle["window"])) !=
+                reference_case["input_sha256"]
                 or bundle["gold_reference"]["criteria_sha256"] != self._criteria_sha256):
             raise EvaluationBudgetAbort("phased_case_binding_changed")
         extraction = _arguments(list(bundle["adapter_outputs"]), _E_TOOL, "facts")

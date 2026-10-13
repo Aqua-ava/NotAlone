@@ -291,6 +291,28 @@ class EvaluationPhasedAuditTest(unittest.TestCase):
         self.assertEqual(self.events[-1]["payload"]["report"]["required"]["full"], 1)
         self.assertFalse(self.events[-1]["payload"]["report"]["quality_certified"])
 
+    def test_runtime_message_metadata_remains_in_raw_but_cannot_bypass_gold_binding(self):
+        def raw(view):
+            self.assertEqual(view["window"], self.window)
+            self.assertTrue(all(message["message_type"] == "unknown" and
+                                message["text_representation"] == "unknown"
+                                for message in view["window"]["messages"]))
+            return self.raw_review(view)
+
+        self.audit(raw=raw)(self.bundle)
+        self.assertEqual(self.order, ["raw", "persist:raw", "full", "persist:final"])
+        for field in ("message_type", "text_representation", "text", "sender",
+                      "occurred_at", "source_snapshots", "message_snapshot"):
+            changed = {**self.bundle, "window": copy.deepcopy(self.window)}
+            value = ({"changed": True} if field == "message_snapshot" else
+                     [{"changed": True}] if field == "source_snapshots" else "changed")
+            changed["window"]["messages"][0][field] = value
+            with self.subTest(field=field):
+                self.order.clear()
+                with self.assertRaises(EvaluationBudgetAbort):
+                    self.audit()(changed)
+                self.assertEqual(self.order, [])
+
     def test_raw_save_failure_or_bad_receipt_never_reveals_full_view(self):
         for fault in ("raise", "digest", "payload", "removed", "position", "sequence"):
             with self.subTest(fault=fault):

@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 from datetime import datetime
+from typing import Any
 
 
 _ANNOTATION_PATH = ".scratch/unfinished-work/memory-gold-agent-annotations-20261012.md"
@@ -16,6 +17,30 @@ FULL_ANNOTATION_PATH = (
 )
 _PARENT_SHA = "5fb8d53b90a1a96c5987ac7b825bb233cc3e9f196f976e4851c40b0243b77b32"
 _PARENT_FILE_SHA = "5ab68ad8fbb48348231b27ae600ca011e47bf7fc2c1aa2f4e5b417bfa392d5a6"
+
+
+def public_window_projection(window: object) -> dict[str, Any]:
+    """固定公开输入的旧摘要形状；运行时窗口保留新增的类型元数据。"""
+    from .evaluation_records import _json_value
+
+    value = _json_value(window)
+    if not isinstance(value, dict) or not isinstance(value.get("messages"), list):
+        raise ValueError("公开窗口必须保留原消息集合。")
+    fields = {"message_type", "text_representation"}
+    for message in value["messages"]:
+        if not isinstance(message, dict):
+            raise ValueError("公开窗口消息必须是对象。")
+        present = fields & message.keys()
+        if not present:
+            continue
+        if present != fields or any(
+            type(message[field]) is not str or message[field] != "unknown"
+            for field in fields
+        ):
+            raise ValueError("公开输入不能静默丢弃非默认或不完整的类型元数据。")
+        for field in fields:
+            del message[field]
+    return value
 
 
 def _sha(reference: dict) -> str:
@@ -92,7 +117,9 @@ def validate_public_reference(
                 or window.get("id") != identity
                 or window.get("position") != position
                 or window.get("case_name") != case.name
-                or window.get("input_sha256") != canonical_sha256(build_window(case))
+                or window.get("input_sha256") != canonical_sha256(
+                    public_window_projection(build_window(case)),
+                )
                 or window.get("target_indices") != list(case.targets)
                 or window.get("inclusion") != ("none" if identity in {"A12", "A14"}
                                                 else "retain")):
@@ -261,7 +288,9 @@ def validate_full_public_reference(
     for case, position in zip(cases, positions):
         window = windows[position]
         if (window["case_name"] != case.name
-                or window["input_sha256"] != canonical_sha256(build_window(case))
+                or window["input_sha256"] != canonical_sha256(
+                    public_window_projection(build_window(case)),
+                )
                 or type(window["target_indices"]) is not list
                 or window["target_indices"] != list(case.targets)
                 or any(type(index) is not int for index in window["target_indices"])):

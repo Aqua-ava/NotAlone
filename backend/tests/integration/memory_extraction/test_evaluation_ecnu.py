@@ -292,6 +292,7 @@ class EvaluationECNUTest(unittest.TestCase):
         self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 140)
         self.assertTrue(result["summary"]["plan_complete"])
         self.assertFalse(result["quality_certified"])
+
         self.assertEqual(timeouts,
                          [dict.fromkeys(("connect", "read", "write", "pool"), 300.0)] * 140)
         manifest = json.loads((self.output / "manifest.json").read_text())
@@ -303,6 +304,42 @@ class EvaluationECNUTest(unittest.TestCase):
         self.assertEqual(config["selected_case_positions"],
                          reference["provenance"]["local_to_reference_positions"])
         self.assertEqual([item["case_position"] for item in manifest["plan"]], list(range(140)))
+
+    def test_fixed_21_plan_keeps_original_input_hashes_and_runtime_metadata(self):
+        from notalone.memory_extraction.evaluation_records import canonical_sha256
+
+        root = Path(__file__).resolve().parents[4]
+        reference = json.loads((root /
+            ".scratch/unfinished-work/memory-gold-reference-20261012.json").read_bytes())
+        result = self.run_ready(request_timeout_seconds=300, max_retries=0)
+        expected = tuple({"case_position": index, "case_name": item["case_name"],
+                          "input_sha256": item["input_sha256"]}
+                         for index, item in enumerate(reference["windows"]))
+        self.assertEqual(result["receipt"]["plan_sha256"], canonical_sha256(expected))
+        self.assertEqual(len(self.audits), 21)
+        self.assertTrue(all(message["message_type"] == "unknown" and
+                            message["text_representation"] == "unknown"
+                            for audit in self.audits for message in audit["window"]["messages"]))
+        self.assertFalse(result["quality_certified"])
+
+    def test_nondefault_public_metadata_is_rejected_before_budget_or_credentials(self):
+        from dataclasses import replace
+        from notalone.memory_extraction import evaluation_ecnu
+
+        original = build_window(PLAN[0])
+        for field, value in (("message_type", "image"),
+                             ("text_representation", "processed_text")):
+            window = replace(original, messages=(replace(original.messages[0], **{field: value}),
+                                                *original.messages[1:]))
+            with self.subTest(field=field), patch.object(
+                evaluation_ecnu, "build_window", return_value=window,
+            ), patch.object(EvaluationBudget, "create", side_effect=AssertionError(
+                "非默认元数据不能先创建预算。",
+            )) as create, self.assertRaises(ValueError):
+                self.run_ready()
+            create.assert_not_called()
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
 
     def test_full_phased_scopes_are_sealed_and_unresolved_stops_without_losing_140(self):
         from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit

@@ -16,6 +16,7 @@ def full_reference_fixture():
     from notalone.memory_extraction.evaluation import build_window
     from notalone.memory_extraction.evaluation_cases import CASES
     from notalone.memory_extraction.evaluation_records import canonical_sha256
+    from notalone.memory_extraction.evaluation_reference import public_window_projection
     from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
 
     root = Path(__file__).resolve().parents[4]
@@ -47,7 +48,7 @@ def full_reference_fixture():
             claims = [claim]
         reference["windows"].append({
             "id": identity, "position": 20 + index, "case_name": case.name,
-            "input_sha256": canonical_sha256(build_window(case)),
+            "input_sha256": canonical_sha256(public_window_projection(build_window(case))),
             "target_indices": list(case.targets),
             "inclusion": "none" if case.expect == "none" else "retain",
             "claims": claims, "forbidden_meanings": ["不得把结构夹具当实际Gold。"],
@@ -215,6 +216,111 @@ class EvaluationReferenceTest(unittest.TestCase):
         self.assertEqual(result["required_claims"], 28)
         self.assertEqual(result["optional_claims"], 1)
         self.assertFalse(result["quality_certified"])
+
+    def test_public_projection_keeps_all_21_inputs_and_actual_E_V_text(self):
+        from types import SimpleNamespace
+        from notalone.memory import FactSubject, MemoryCategory, MemoryTopic
+        from notalone.memory_extraction.adapters import _window_text
+        from notalone.memory_extraction.evaluation import build_window
+        from notalone.memory_extraction.evaluation_ecnu import _PLAN_CASES
+        from notalone.memory_extraction.evaluation_records import canonical_sha256, _json_value
+        from notalone.memory_extraction.evaluation_reference import public_window_projection
+        from notalone.memory_extraction.models import ExtractedFact
+        from notalone.memory_extraction.verification_adapters import _verification_text
+
+        for case, expected in zip(_PLAN_CASES, self.reference["windows"]):
+            window = build_window(case)
+            current = _json_value(window)
+            legacy = SimpleNamespace(
+                messages=tuple(SimpleNamespace(
+                    message_id=message.message_id, text=message.text,
+                    sender=message.sender, occurred_at=message.occurred_at,
+                    source_snapshots=message.source_snapshots,
+                    message_snapshot=message.message_snapshot,
+                ) for message in window.messages),
+                target_message_id_set=window.target_message_id_set,
+            )
+            fact = ExtractedFact(
+                text="公开协议正文控制。", category=MemoryCategory.COMMON_FACT,
+                subject=FactSubject.CONTACT, topic=MemoryTopic.OTHER,
+                source_message_ids=(window.target_message_ids[0],), confidence=0.8,
+            )
+            with self.subTest(case=case.name):
+                projected = public_window_projection(window)
+                self.assertEqual(canonical_sha256(projected), expected["input_sha256"])
+                self.assertEqual(_window_text(window), _window_text(legacy))
+                self.assertEqual(_verification_text(window, (fact,)),
+                                 _verification_text(legacy, (fact,)))
+                self.assertEqual(_json_value(window), current)
+                self.assertTrue(all(message["message_type"] == "unknown" and
+                                    message["text_representation"] == "unknown"
+                                    for message in current["messages"]))
+
+    def test_public_projection_preserves_old_snapshots_and_cannot_hide_core_drift(self):
+        from notalone.memory_extraction.evaluation import build_window
+        from notalone.memory_extraction.evaluation_ecnu import _PLAN_CASES
+        from notalone.memory_extraction.evaluation_records import _json_value, canonical_sha256
+        from notalone.memory_extraction.evaluation_reference import public_window_projection
+
+        original = _json_value(build_window(_PLAN_CASES[0]))
+        expected = self.reference["windows"][0]["input_sha256"]
+        changes = (
+            ("text", "另一份公开正文。"), ("sender", "self"),
+            ("message_id", "00000000-0000-0000-0000-000000000001"),
+            ("occurred_at", "2026-09-16T00:00:00+00:00"),
+            ("source_snapshots", [{"source_type": "synthetic_changed"}]),
+            ("message_snapshot", {"message_type": "synthetic_changed"}),
+        )
+        for field, value in changes:
+            changed = deepcopy(original)
+            changed["messages"][0][field] = value
+            with self.subTest(field=field):
+                projected = public_window_projection(changed)
+                self.assertEqual(projected["messages"][0][field], value)
+                self.assertNotEqual(canonical_sha256(projected), expected)
+        for field in ("owner_id", "contact_id", "target_message_ids"):
+            changed = deepcopy(original)
+            changed[field] = [] if field == "target_message_ids" else "changed"
+            with self.subTest(field=field):
+                self.assertNotEqual(canonical_sha256(public_window_projection(changed)), expected)
+
+    def test_public_projection_rejects_nondefault_or_partial_new_metadata(self):
+        from notalone.memory_extraction.evaluation import build_window
+        from notalone.memory_extraction.evaluation_ecnu import _PLAN_CASES
+        from notalone.memory_extraction.evaluation_records import _json_value
+        from notalone.memory_extraction.evaluation_reference import public_window_projection
+
+        original = _json_value(build_window(_PLAN_CASES[0]))
+        for field, value in (("message_type", "text"), ("message_type", "image"),
+                             ("message_type", None), ("message_type", True),
+                             ("text_representation", "text"),
+                             ("text_representation", "processed_text")):
+            changed = deepcopy(original)
+            changed["messages"][0][field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                public_window_projection(changed)
+        for missing in ("message_type", "text_representation"):
+            changed = deepcopy(original)
+            del changed["messages"][0][missing]
+            with self.subTest(missing=missing), self.assertRaises(ValueError):
+                public_window_projection(changed)
+
+    def test_public_projection_accepts_old_serialized_shape_without_mutating_runtime(self):
+        from notalone.memory_extraction.evaluation import build_window
+        from notalone.memory_extraction.evaluation_ecnu import _PLAN_CASES
+        from notalone.memory_extraction.evaluation_records import _json_value
+        from notalone.memory_extraction.evaluation_reference import public_window_projection
+
+        current = _json_value(build_window(_PLAN_CASES[0]))
+        before = deepcopy(current)
+        legacy = deepcopy(current)
+        for message in legacy["messages"]:
+            del message["message_type"], message["text_representation"]
+        self.assertEqual(public_window_projection(current), legacy)
+        self.assertEqual(public_window_projection(legacy), legacy)
+        self.assertEqual(current, before)
+        self.assertTrue(all("source_snapshots" in message and "message_snapshot" in message
+                            for message in legacy["messages"]))
 
     def test_changed_public_plan_or_denominator_is_rejected_even_with_new_digest(self):
         changed = []

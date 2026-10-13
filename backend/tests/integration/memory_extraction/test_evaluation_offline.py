@@ -123,6 +123,37 @@ class EvaluationOfflineTest(unittest.TestCase):
         with self.assertRaises(EvaluationBudgetAbort):
             EvaluationBudget.open(run_id=self.run_id)
 
+    def test_public_plan_keeps_old_input_hash_and_persisted_runtime_metadata(self):
+        from notalone.memory_extraction.evaluation_records import canonical_sha256
+
+        case = next(case for case in CASES if case.name == "指代：那本书")
+        root = Path(__file__).resolve().parents[4]
+        reference = json.loads((root /
+            ".scratch/unfinished-work/memory-gold-reference-20261012.json").read_bytes())
+        item = next(item for item in reference["windows"] if item["case_name"] == case.name)
+        result = self.run_cases((case,), httpx.MockTransport(self.response))
+        expected = ({"case_position": 0, "case_name": case.name,
+                     "input_sha256": item["input_sha256"]},)
+        self.assertEqual(result["receipt"]["plan_sha256"], canonical_sha256(expected))
+        started = next(event for event in result["events"] if event["kind"] == "case_started")
+        self.assertTrue(all(message["message_type"] == "unknown" and
+                            message["text_representation"] == "unknown"
+                            for message in started["payload"]["window"]["messages"]))
+
+    def test_nondefault_public_metadata_is_rejected_before_mock_budget(self):
+        from dataclasses import replace
+        from notalone.memory_extraction import evaluation_offline
+
+        original = build_window(self.none_case)
+        window = replace(original, messages=(replace(original.messages[0], message_type="image"),
+                                            *original.messages[1:]))
+        with patch.object(evaluation_offline, "build_window", return_value=window), patch.object(
+            EvaluationBudget, "create", side_effect=AssertionError("非默认元数据不能注册。"),
+        ) as create, self.assertRaises(ValueError):
+            self.run_cases((self.none_case,), httpx.MockTransport(self.response))
+        create.assert_not_called()
+        self.assertEqual(self.requests, [])
+
     def test_nonempty_extraction_runs_verification_and_keeps_raw_and_original_score(self):
         case = next(case for case in CASES if case.name == "否定事实")
         fact = self.fact(case, text="联系人不喝酒。")
