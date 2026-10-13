@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from uuid import UUID
 
+from notalone.memory.dimension_evidence import DimensionEvidence
+
 from notalone.memory.timing import MemoryTiming
 from notalone.scopes import ContactScope
 
@@ -103,8 +105,14 @@ class MemoryCandidate:
     interpretation_reason: str = ""
     failure_reason: str | None = None
     timing: MemoryTiming = MemoryTiming()
+    dimension_evidence: DimensionEvidence | None = None
 
     def __post_init__(self) -> None:
+        if self.dimension_evidence is not None and (
+            not isinstance(self.dimension_evidence, DimensionEvidence)
+            or self.dimension_evidence.scope != self.scope
+        ):
+            raise ValueError("候选维度依据必须属于同一联系人范围。")
         if not isinstance(self.candidate_id, UUID):
             raise TypeError("memory_candidate_id 必须是 UUID。")
         if not isinstance(self.scope, ContactScope):

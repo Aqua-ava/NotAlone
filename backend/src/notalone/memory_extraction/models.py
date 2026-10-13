@@ -8,6 +8,11 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
+from notalone.memory.dimension_evidence import DimensionEvidence
+from notalone.memory.pragmatics import (
+    AssertionStatus, FigurativeType, SpeechAct,
+)
+
 from notalone.memory.models import (
     FactSubject,
     MemoryCategory,
@@ -47,38 +52,6 @@ class ExtractionFailureKind(StrEnum):
     INVALID_OUTPUT = "invalid_output"
 
 
-class SpeechAct(StrEnum):
-    """消息在对话中执行的说话行为。"""
-
-    ASSERTION = "assertion"
-    PLAN = "plan"
-    QUESTION = "question"
-    REQUEST = "request"
-    REPORT = "report"
-    CORRECTION = "correction"
-    UNKNOWN = "unknown"
-
-
-class AssertionStatus(StrEnum):
-    """消息对其主张的承诺程度。"""
-
-    ASSERTED = "asserted"
-    HYPOTHETICAL = "hypothetical"
-    CONDITIONAL = "conditional"
-    REPORTED = "reported"
-    UNKNOWN = "unknown"
-
-
-class FigurativeType(StrEnum):
-    """消息是否使用玩笑、讽刺或夸张等非字面表达。"""
-
-    LITERAL = "literal"
-    JOKE = "joke"
-    SARCASM = "sarcasm"
-    HYPERBOLE = "hyperbole"
-    UNKNOWN = "unknown"
-
-
 def _validate_datetime(value: datetime | None, label: str) -> None:
     if value is not None and (
         not isinstance(value, datetime) or value.tzinfo is None
@@ -105,8 +78,13 @@ class ExtractedFact:
     alternatives: tuple[str, ...] = ()
     interpretation_reason: str = ""
     timing: MemoryTiming = MemoryTiming()
+    dimension_evidence: DimensionEvidence | None = None
 
     def __post_init__(self) -> None:
+        if self.dimension_evidence is not None and not isinstance(
+            self.dimension_evidence, DimensionEvidence
+        ):
+            raise TypeError("事实维度依据必须使用版本化定位字段。")
         if not isinstance(self.text, str) or not self.text.strip():
             raise ValueError("事实文本不能为空。")
         if not isinstance(self.category, MemoryCategory):
@@ -166,8 +144,16 @@ class MessageRef:
     # 早于提取保存的来源处理快照；空集合表示真实缺口，不补造原始记录。
     source_snapshots: tuple[dict[str, Any], ...] = ()
     message_snapshot: dict[str, Any] = field(default_factory=dict)
+    message_type: str = "unknown"
+    text_representation: str = "unknown"
 
     def __post_init__(self) -> None:
+        if not isinstance(self.message_type, str) or not self.message_type.strip():
+            raise ValueError("消息类型必须来自受控来源或保持未知。")
+        if self.text_representation not in {
+            "text", "processed_text", "placeholder", "unknown"
+        }:
+            raise ValueError("消息文字表示无效。")
         if not isinstance(self.message_id, UUID):
             raise ValueError("消息引用必须携带消息 ID。")
         if not isinstance(self.text, str) or not self.text:

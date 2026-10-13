@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
 import psycopg
 from psycopg.rows import dict_row
+
+from notalone.memory.dimension_evidence import (
+    DimensionEvidence,
+    require_current_dimension_evidence,
+)
+from notalone.persistence.dimension_evidence import bind_stored_dimension_evidence
 
 from notalone.memory.models import (
     AdoptionMethod,
@@ -138,14 +145,23 @@ class PostgresOwnerMemoryStore:
                     """
                     SELECT id, owner_id, contact_id, text_content, category,
                            topic, subject, source_ids, status, valid_at,
-                           invalid_at, confidence, risk_flags
+                           invalid_at, confidence, risk_flags, alternatives,
+                           interpretation_reason,
+                           to_jsonb(memory_candidate)->'dimension_evidence'
+                               AS dimension_evidence
                     FROM public.memory_candidate
-                    WHERE id = %s
+                    WHERE owner_id = %s AND contact_id = %s AND id = %s
                     FOR UPDATE
                     """,
-                    (candidate_id,),
+                    (scope.owner_id, scope.contact_id, candidate_id),
                 ).fetchone()
                 if candidate_row is None:
+                    exists = connection.execute(
+                        "SELECT 1 FROM public.memory_candidate WHERE id=%s",
+                        (candidate_id,),
+                    ).fetchone()
+                    if exists is not None:
+                        raise PermissionError("关系记忆范围校验失败。")
                     raise LookupError("关系记忆候选不存在。")
                 if (
                     candidate_row["owner_id"] != scope.owner_id
@@ -173,6 +189,35 @@ class PostgresOwnerMemoryStore:
                     return _from_row(_timed_rows(connection, [existing])[0])
                 if status is not MemoryCandidateStatus.PENDING:
                     raise RuntimeError("关系记忆候选当前不可确认。")
+
+                if adoption_method is AdoptionMethod.AUTO:
+                    raw = candidate_row["dimension_evidence"]
+                    stored = replace(
+                        candidate,
+                        text=candidate_row["text_content"],
+                        category=MemoryCategory(candidate_row["category"]),
+                        topic=MemoryTopic(candidate_row["topic"]),
+                        subject=FactSubject(candidate_row["subject"]),
+                        source_ids=tuple(candidate_row["source_ids"]),
+                        valid_at=candidate_row["valid_at"],
+                        invalid_at=candidate_row["invalid_at"],
+                        confidence=candidate_row["confidence"],
+                        risk_flags=tuple(candidate_row["risk_flags"] or ()),
+                        alternatives=tuple(candidate_row["alternatives"] or ()),
+                        interpretation_reason=(
+                            candidate_row["interpretation_reason"] or ""
+                        ),
+                        dimension_evidence=(
+                            DimensionEvidence.from_payload(raw)
+                            if raw is not None else None
+                        ),
+                    )
+                    current = bind_stored_dimension_evidence(
+                        connection, stored, lock_sources=True
+                    )
+                    require_current_dimension_evidence(
+                        current, candidate.dimension_evidence
+                    )
 
                 memory = OwnerMemory(
                     memory_id=uuid4(),

@@ -8,6 +8,40 @@ active，CLI 观察来源存在即有效（删除路径为硬删除）。
 from __future__ import annotations
 
 
+def source_ref_content_sha_sql(ref_alias: str = "ref") -> str:
+    """读取同范围历史来源的既有指纹，不读取文件或新增业务字段。"""
+
+    return f"""
+    SELECT source.content_sha256 FROM public.source_document AS source
+    WHERE source.id={ref_alias}.source_document_id
+      AND source.owner_id={ref_alias}.owner_id
+      AND source.contact_id={ref_alias}.contact_id
+      AND source.status='active'
+    """
+
+
+def active_source_ref_sql(ref_alias: str = "ref") -> str:
+    """单一引用须仍有效；同消息另一有效引用不能恢复旧定位。"""
+
+    return f"""
+    (
+        EXISTS (
+            SELECT 1 FROM public.local_wechat_observation AS observation
+            WHERE observation.id={ref_alias}.observation_id
+              AND observation.owner_id={ref_alias}.owner_id
+              AND observation.contact_id={ref_alias}.contact_id
+        )
+        OR EXISTS (
+            SELECT 1 FROM public.source_document AS active_source
+            WHERE active_source.id = {ref_alias}.source_document_id
+              AND active_source.owner_id = {ref_alias}.owner_id
+              AND active_source.contact_id = {ref_alias}.contact_id
+              AND active_source.status = 'active'
+        )
+    )
+    """
+
+
 def valid_source_ref_exists_sql(message_alias: str) -> str:
     """返回 ``EXISTS`` 片段：该消息至少有一个有效来源引用。
 

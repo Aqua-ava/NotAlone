@@ -4,6 +4,18 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from uuid import UUID
+from uuid import uuid4
+from dataclasses import replace
+
+from notalone.memory.dimension_evidence import (
+    DimensionEvidence, EvidenceMessage, MediaOrigin, MessageSpan,
+    ReferenceAnchor, ReportedAttribution, TextAlignment, TextSpan,
+)
+from notalone.memory.evidence_binding import (
+    bind_dimension_evidence, candidate_digest, content_digest, fact_pragmatics,
+    window_digest,
+)
+from notalone.scopes import ContactScope
 
 from notalone.memory import MemoryCategory, MemoryTopic
 from notalone.memory_extraction.models import (
@@ -50,6 +62,39 @@ def synthetic_time_fact(**overrides: object) -> ExtractedFact:
     }
     values.update(overrides)
     return synthetic_fact(**values)
+
+
+def synthetic_complete_evidence(
+    fact: ExtractedFact, *, scope: ContactScope | None = None,
+    sender: str | None = None,
+) -> ExtractedFact:
+    """显式注入已约定正确的合成定位，仅测门逻辑，不签生产模型能力。"""
+
+    scope = scope or ContactScope(OWNER_ID, CONTACT_ID)
+    source = fact.source_message_ids[0]
+    whole = TextSpan(0, len(fact.text), content_digest(fact.text))
+    first = TextSpan(0, 1, content_digest(fact.text[:1]))
+    anchor = MessageSpan(source, first)
+    metadata = EvidenceMessage(
+        source, content_digest(fact.text), len(fact.text),
+        sender or ("self" if fact.subject is FactSubject.SELF else "contact"),
+        "text", datetime.now(timezone.utc), ((uuid4(), uuid4()),),
+        "text",
+        content_digest("固定合成来源指纹"),
+    )
+    evidence = DimensionEvidence(
+        scope, candidate_digest(fact), window_digest(scope, (metadata,)),
+        (metadata,),
+        pragmatics=fact_pragmatics(fact),
+        paraphrase=(TextAlignment(whole, MessageSpan(source, whole)),),
+        reference=(ReferenceAnchor(anchor, anchor, fact.subject.value),),
+        media=(MediaOrigin(source, "text", "text"),),
+        reported=(ReportedAttribution(anchor, anchor, "direct"),),
+    )
+    return replace(fact, dimension_evidence=bind_dimension_evidence(
+        evidence, scope=scope, candidate=fact, messages=(metadata,),
+        texts={source: fact.text},
+    ))
 
 
 __all__ = [

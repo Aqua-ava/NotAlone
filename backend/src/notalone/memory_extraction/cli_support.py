@@ -23,7 +23,10 @@ from notalone.persistence import (
     PostgresWatermarkStore,
 )
 from notalone.persistence.extraction_trace import PostgresExtractionTraceStore
-from notalone.persistence.message_sources import valid_source_ref_exists_sql
+from notalone.persistence.message_sources import (
+    source_ref_content_sha_sql,
+    active_source_ref_sql, valid_source_ref_exists_sql,
+)
 from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from notalone.scopes import ContactScope
 
@@ -70,6 +73,7 @@ def load_contact_messages(
             f"""
             SELECT message.id AS message_id,
                    message.speaker,
+                   message.message_type,
                    message.text_content,
                    message.media_placeholder,
                    message.occurred_at,
@@ -78,6 +82,7 @@ def load_contact_messages(
                        'source_kind', ref.source_kind, 'locator', ref.source_locator,
                        'capture_layer', COALESCE(processing.payload->>'capture_layer', 'legacy_projection'),
                        'raw_payload', ref.raw_payload,
+                       'source_content_sha256', ({source_ref_content_sha_sql()}),
                        'processing_status', CASE
                            WHEN processing.status='recorded'
                              AND processing.payload->>'capture_layer'='parsed_only' THEN 'partial'
@@ -94,7 +99,8 @@ def load_contact_messages(
                        ORDER BY batch.recorded_at DESC,batch.batch_id DESC LIMIT 1
                    ) AS processing ON true
                    WHERE ref.message_id=message.id AND ref.owner_id=message.owner_id
-                     AND ref.contact_id=message.contact_id), '[]'::jsonb) AS source_snapshots
+                     AND ref.contact_id=message.contact_id
+                     AND {active_source_ref_sql()}), '[]'::jsonb) AS source_snapshots
             FROM public.message AS message
             WHERE message.owner_id = %s
               AND message.contact_id = %s
@@ -156,9 +162,16 @@ def load_contact_messages(
                 sender=sender,
                 occurred_at=occurred,
                 source_snapshots=tuple(row["source_snapshots"]),
+                message_type=row["message_type"],
+                text_representation=(
+                    "placeholder" if not row["text_content"]
+                    else "text" if row["message_type"] == "text"
+                    else "unknown"
+                ),
                 message_snapshot={
                     "capture_layer": "normalized_message_row",
                     "speaker": row["speaker"],
+                    "message_type": row["message_type"],
                     "text_content": row["text_content"],
                     "media_placeholder": row["media_placeholder"],
                     "occurred_at": snapshot(occurred),

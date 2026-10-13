@@ -3039,4 +3039,9 @@ def _memory_candidate_payload(candidate: MemoryCandidate) -> dict[str, object]:
         payload["alternatives"] = list(candidate.alternatives)
     if candidate.interpretation_reason.strip():
         payload["interpretation_reason"] = candidate.interpretation_reason
+    if candidate.dimension_evidence is not None:
+        payload["dimension_evidence"] = candidate.dimension_evidence.to_payload()
+        payload["dimension_evidence_source_current"] = (
+            candidate.dimension_evidence.source_bound
+        )
     return payload

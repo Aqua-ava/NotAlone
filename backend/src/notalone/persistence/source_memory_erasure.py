@@ -6,6 +6,8 @@ from uuid import UUID
 import psycopg
 from psycopg import sql
 
+from notalone.persistence.dimension_evidence import erase_dimension_evidence
+
 
 def erase_source_memories(
     connection: psycopg.Connection[Any],
@@ -19,8 +21,12 @@ def erase_source_memories(
     调用方持有联系人和 owner 锁，先清理回复与索引，再进入这里。
     此规则只用于来源删除，不改变单条记忆撤销的防复活语义。
     """
+    erase_dimension_evidence(
+        connection, owner_id=owner_id, contact_id=contact_id,
+        removed_ids=removed_ids,
+    )
     for table in ("confirmed_memory", "owner_memory", "memory_candidate"):
-        scope_sql = sql.SQL("owner_id = %s")
+        scope_sql: sql.Composable = sql.SQL("owner_id = %s")
         scope_args = [owner_id]
         if table != "owner_memory":
             scope_sql += sql.SQL(" AND contact_id = %s")

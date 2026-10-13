@@ -10,6 +10,15 @@ from uuid import UUID, uuid4
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
+
+from notalone.memory.dimension_evidence import (
+    DimensionEvidence,
+    require_current_dimension_evidence,
+)
+from notalone.persistence.dimension_evidence import (
+    bind_stored_dimension_evidence, has_dimension_evidence,
+)
 
 from notalone.memory.models import (
     AdoptionMethod,
@@ -56,6 +65,7 @@ _CANDIDATE_COLUMNS = """
     alternatives AS candidate_alternatives,
     interpretation_reason AS candidate_interpretation_reason,
     failure_reason AS candidate_failure_reason,
+    to_jsonb(memory_candidate)->'dimension_evidence' AS candidate_dimension_evidence,
     created_at AS recorded_at
 """
 
@@ -122,17 +132,28 @@ class PostgresMemoryStore:
                     candidate.scope,
                     candidate.source_ids,
                 )
+                evidence_column = ""
+                evidence_value = ""
+                evidence_params: tuple[Any, ...] = ()
+                if candidate.dimension_evidence is not None:
+                    if not has_dimension_evidence(connection):
+                        raise MemoryPersistenceError(
+                            "数据库尚未启用维度依据；须先批准并完成迁移。"
+                        )
+                    evidence_column = ", dimension_evidence"
+                    evidence_value = ", %s"
+                    evidence_params = (Jsonb(candidate.dimension_evidence.to_payload()),)
                 row = connection.execute(
                     f"""
                     INSERT INTO public.memory_candidate (
                         id, owner_id, contact_id, text_content, category,
                         topic, subject, source_ids, status, valid_at, invalid_at,
                         confidence, risk_flags, alternatives,
-                        interpretation_reason, failure_reason
+                        interpretation_reason, failure_reason{evidence_column}
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s{evidence_value}
                     )
                     RETURNING {_CANDIDATE_COLUMNS}
                     """,
@@ -153,7 +174,7 @@ class PostgresMemoryStore:
                         list(candidate.alternatives),
                         candidate.interpretation_reason or None,
                         candidate.failure_reason,
-                    ),
+                    ) + evidence_params,
                 ).fetchone()
                 if row is None:
                     raise MemoryInvariantError(
@@ -300,11 +321,17 @@ class PostgresMemoryStore:
                     f"""
                     SELECT {_CANDIDATE_COLUMNS}
                     FROM public.memory_candidate
-                    WHERE id = %s
+                    WHERE owner_id = %s AND contact_id = %s AND id = %s
                     """,
-                    (candidate_id,),
+                    (scope.owner_id, scope.contact_id, candidate_id),
                 ).fetchone()
                 if row is None:
+                    exists = connection.execute(
+                        "SELECT 1 FROM public.memory_candidate WHERE id = %s",
+                        (candidate_id,),
+                    ).fetchone()
+                    if exists is not None:
+                        raise PermissionError("关系记忆范围校验失败。")
                     raise LookupError("关系记忆候选不存在。")
                 self._ensure_scope(row, scope)
                 return self._candidate_from_row(
@@ -323,6 +350,7 @@ class PostgresMemoryStore:
         scope: ContactScope,
         candidate_id: UUID,
         adoption_method: AdoptionMethod = AdoptionMethod.AUTO,
+        expected_dimension_evidence: DimensionEvidence | None = None,
     ) -> ConfirmedMemory:
         """在同一事务中确认候选并创建已确认记忆。"""
 
@@ -338,8 +366,7 @@ class PostgresMemoryStore:
                     contact_id=scope.contact_id,
                 )
                 candidate_row = self._candidate_for_update(
-                    connection,
-                    candidate_id,
+                    connection, candidate_id, scope
                 )
                 if candidate_row is None:
                     raise LookupError("关系记忆候选不存在。")
@@ -367,6 +394,14 @@ class PostgresMemoryStore:
                     raise RuntimeError("关系记忆候选当前不可确认。")
                 source_ids = self._source_ids(candidate_row["candidate_source_ids"])
                 self._ensure_active_sources(connection, scope, source_ids)
+
+                candidate = self._candidate_from_row(self._timed_candidates(
+                    connection, [candidate_row], lock_sources=True
+                )[0])
+                if adoption_method is AdoptionMethod.AUTO:
+                    require_current_dimension_evidence(
+                        candidate.dimension_evidence, expected_dimension_evidence
+                    )
 
                 memory_id = self._new_uuid()
                 memory_row = connection.execute(
@@ -590,7 +625,7 @@ class PostgresMemoryStore:
                     owner_id=scope.owner_id,
                     contact_id=scope.contact_id,
                 )
-                row = self._candidate_for_update(connection, candidate_id)
+                row = self._candidate_for_update(connection, candidate_id, scope)
                 if row is None:
                     raise LookupError("关系记忆候选不存在。")
                 self._ensure_scope(row, scope)
@@ -603,10 +638,14 @@ class PostgresMemoryStore:
                     record_kind="candidate",
                     record_id=candidate_id,
                 )
+                clear_evidence = (
+                    ", dimension_evidence = NULL"
+                    if row.get("candidate_dimension_evidence") is not None else ""
+                )
                 updated = connection.execute(
                     f"""
                     UPDATE public.memory_candidate
-                    SET status = 'rejected', updated_at = now()
+                    SET status = 'rejected', updated_at = now(){clear_evidence}
                     WHERE owner_id = %s AND contact_id = %s AND id = %s
                     RETURNING {_CANDIDATE_COLUMNS}
                     """,
@@ -813,16 +852,20 @@ class PostgresMemoryStore:
                     owner_id=scope.owner_id,
                     contact_id=scope.contact_id,
                 )
-                row = self._candidate_for_update(connection, candidate_id)
+                row = self._candidate_for_update(connection, candidate_id, scope)
                 if row is None:
                     raise LookupError("关系记忆候选不存在。")
                 self._ensure_scope(row, scope)
                 if row["candidate_status"] != MemoryCandidateStatus.PENDING.value:
                     raise RuntimeError(error_message)
+                clear_evidence = (
+                    ", dimension_evidence = NULL"
+                    if row.get("candidate_dimension_evidence") is not None else ""
+                )
                 updated = connection.execute(
                     f"""
                     UPDATE public.memory_candidate
-                    SET status = %s, updated_at = now()
+                    SET status = %s, updated_at = now(){clear_evidence}
                     WHERE owner_id = %s AND contact_id = %s AND id = %s
                     RETURNING {_CANDIDATE_COLUMNS}
                     """,
@@ -927,16 +970,23 @@ class PostgresMemoryStore:
         self,
         connection: psycopg.Connection[Any],
         candidate_id: UUID,
+        scope: ContactScope,
     ) -> dict[str, Any] | None:
-        return connection.execute(
+        row = connection.execute(
             f"""
             SELECT {_CANDIDATE_COLUMNS}
             FROM public.memory_candidate
-            WHERE id = %s
+            WHERE owner_id = %s AND contact_id = %s AND id = %s
             FOR UPDATE
             """,
-            (candidate_id,),
+            (scope.owner_id, scope.contact_id, candidate_id),
         ).fetchone()
+        if row is None and connection.execute(
+            "SELECT 1 FROM public.memory_candidate WHERE id = %s",
+            (candidate_id,),
+        ).fetchone() is not None:
+            raise PermissionError("关系记忆范围校验失败。")
+        return row
 
     def _memory_for_update(
         self,
@@ -1083,6 +1133,10 @@ class PostgresMemoryStore:
 
     @classmethod
     def _candidate_from_row(cls, row: dict[str, Any]) -> MemoryCandidate:
+        evidence = row.get("_bound_dimension_evidence")
+        if "_bound_dimension_evidence" not in row:
+            raw = row.get("candidate_dimension_evidence")
+            evidence = DimensionEvidence.from_payload(raw) if raw is not None else None
         return MemoryCandidate(
             candidate_id=row["candidate_id"],
             scope=ContactScope(row["owner_id"], row["contact_id"]),
@@ -1100,6 +1154,7 @@ class PostgresMemoryStore:
             interpretation_reason=row["candidate_interpretation_reason"] or "",
             failure_reason=row["candidate_failure_reason"],
             timing=row["timing"],
+            dimension_evidence=evidence,
         )
 
     @classmethod
@@ -1123,11 +1178,17 @@ class PostgresMemoryStore:
             timing=row["timing"],
         )
 
-    @staticmethod
+    @classmethod
     def _timed_candidates(
-        connection: psycopg.Connection[Any], rows: Sequence[dict[str, Any]],
+        cls, connection: psycopg.Connection[Any], rows: Sequence[dict[str, Any]],
+        *, lock_sources: bool = False,
     ) -> list[dict[str, Any]]:
-        return timed_memory_rows(connection, rows, source_ids_key="candidate_source_ids")
+        timed = timed_memory_rows(connection, rows, source_ids_key="candidate_source_ids")
+        for row in timed:
+            row["_bound_dimension_evidence"] = bind_stored_dimension_evidence(
+                connection, cls._candidate_from_row(row), lock_sources=lock_sources,
+            )
+        return timed
 
     @staticmethod
     def _timed_memories(

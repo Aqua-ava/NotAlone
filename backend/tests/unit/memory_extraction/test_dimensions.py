@@ -197,11 +197,11 @@ class DimensionReleaseTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     DimensionRelease(names)
 
-    def test_allows_only_released_dimensions(self) -> None:
+    def test_one_release_does_not_replace_other_proofs(self) -> None:
         release = DimensionRelease(("subject",))
 
         self.assertEqual(release.released, frozenset({"subject"}))
-        self.assertTrue(release.allows(synthetic_fact()))
+        self.assertFalse(release.allows(synthetic_fact()))
         self.assertFalse(release.allows(synthetic_fact(
             valid_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
         )))
@@ -211,7 +211,7 @@ class DimensionReleaseTest(unittest.TestCase):
             frozenset(dimension.value for dimension in MemoryDimension)
         )
 
-        self.assertTrue(release.allows(synthetic_fact()))
+        self.assertFalse(release.allows(synthetic_fact()))
         self.assertFalse(
             release.allows(synthetic_fact(speech_act=SpeechAct.UNKNOWN))
         )
@@ -257,11 +257,12 @@ class DimensionReleaseTest(unittest.TestCase):
             valid_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
         )))
 
-    def test_explicit_release_wins_over_a_disabled_gate(self) -> None:
+    def test_explicit_single_release_keeps_the_full_gate_enabled(self) -> None:
         release = DimensionRelease(("subject",))
 
         self.assertEqual(release.allowed, frozenset({"subject"}))
-        self.assertTrue(release.allows(synthetic_fact()))
+        self.assertTrue(release.gate_enabled)
+        self.assertFalse(release.allows(synthetic_fact()))
         self.assertFalse(release.allows(synthetic_fact(
             valid_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
         )))
@@ -278,7 +279,7 @@ class DimensionReleaseTest(unittest.TestCase):
 
         self.assertEqual(release.released, frozenset({"subject"}))
         self.assertTrue(release.gate_enabled)
-        self.assertTrue(release.allows(synthetic_fact()))
+        self.assertFalse(release.allows(synthetic_fact()))
         self.assertFalse(release.allows(synthetic_fact(
             valid_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
         )))

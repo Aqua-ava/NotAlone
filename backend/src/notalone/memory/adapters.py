@@ -6,6 +6,11 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
+from notalone.memory.dimension_evidence import (
+    DimensionEvidence,
+    require_current_dimension_evidence,
+)
+
 from notalone.memory.models import (
     AdoptionMethod,
     ConfirmedMemory,
@@ -47,6 +52,7 @@ class InMemoryMemoryStore:
         scope: ContactScope,
         candidate_id: UUID,
         adoption_method: AdoptionMethod = AdoptionMethod.AUTO,
+        expected_dimension_evidence: DimensionEvidence | None = None,
     ) -> ConfirmedMemory:
         candidate = self._candidate(scope=scope, candidate_id=candidate_id)
         if candidate.status is MemoryCandidateStatus.CONFIRMED:
@@ -57,6 +63,10 @@ class InMemoryMemoryStore:
             raise RuntimeError("关系记忆候选当前不可确认。")
         if not isinstance(adoption_method, AdoptionMethod):
             raise TypeError("关系记忆采纳方式无效。")
+        if expected_dimension_evidence is not None:
+            require_current_dimension_evidence(
+                candidate.dimension_evidence, expected_dimension_evidence
+            )
         memory = ConfirmedMemory(
             memory_id=uuid4(),
             scope=scope,
@@ -133,7 +143,10 @@ class InMemoryMemoryStore:
         candidate = self._candidate(scope=scope, candidate_id=candidate_id)
         if candidate.status is not MemoryCandidateStatus.PENDING:
             raise RuntimeError("当前关系记忆候选不能拒绝。")
-        rejected = replace(candidate, status=MemoryCandidateStatus.REJECTED)
+        rejected = replace(
+            candidate, status=MemoryCandidateStatus.REJECTED,
+            dimension_evidence=None,
+        )
         self._candidates[candidate_id] = rejected
         return rejected
 
@@ -176,7 +189,10 @@ class InMemoryMemoryStore:
         candidate = self._candidate(scope=scope, candidate_id=candidate_id)
         if candidate.status is not MemoryCandidateStatus.PENDING:
             raise RuntimeError("当前关系记忆候选不能失效。")
-        invalidated = replace(candidate, status=MemoryCandidateStatus.INVALIDATED)
+        invalidated = replace(
+            candidate, status=MemoryCandidateStatus.INVALIDATED,
+            dimension_evidence=None,
+        )
         self._candidates[candidate_id] = invalidated
         return invalidated
 

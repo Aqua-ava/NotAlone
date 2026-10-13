@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 from notalone.memory.models import MemoryCategory
 from notalone.memory.timing import MemoryTiming
 from notalone.memory_extraction.errors import ExtractionRuntimeError
+from notalone.memory_extraction.evidence import build_dimension_evidence
 from notalone.memory_extraction.models import (
     AssertionStatus,
     ExtractedFact,
@@ -28,6 +29,7 @@ from notalone.memory_extraction.verification import (
     MAX_SOURCE_VERIFICATION_CANDIDATES,
     SourceVerificationRuntime,
     SourceVerificationVerdict,
+    SourceVerificationResult,
     validate_source_verification,
 )
 from notalone.memory_trace.context import current_trace, record, snapshot
@@ -126,6 +128,7 @@ class ExtractionFlow:
         window_ids = window.message_id_set
         target_ids = window.target_message_id_set
         accepted: list[ExtractedFact] = []
+        verified_results: dict[int, SourceVerificationResult] = {}
         trace_ids: dict[int, UUID] = {}
         rejected = 0
         for index, payload in enumerate(payloads):
@@ -371,6 +374,7 @@ class ExtractionFlow:
             for result in results:
                 original = reviewable[result.candidate_index]
                 changed = uncertain_facts.get(id(original), original)
+                verified_results[id(changed)] = result
                 trace_ids[id(changed)] = trace_ids[id(original)]
                 record(
                     "verification",
@@ -402,12 +406,19 @@ class ExtractionFlow:
                     "reason": "no_reviewable_candidates",
                 },
             )
+        evidenced = []
+        for fact in accepted:
+            changed = replace(fact, dimension_evidence=build_dimension_evidence(
+                window, fact, verified_results.get(id(fact)),
+            ))
+            trace_ids[id(changed)] = trace_ids[id(fact)]
+            evidenced.append(changed)
         return ExtractionOutcome(
-            accepted=tuple(accepted),
+            accepted=tuple(evidenced),
             rejected_count=rejected,
             extraction_completed=True,
             candidate_trace_ids=tuple(
-                trace_ids[id(fact)] for fact in accepted
+                trace_ids[id(fact)] for fact in evidenced
             ),
         )
 

@@ -1,10 +1,10 @@
-"""记忆候选的维度判定键与按维度放行表。
+"""记忆候选的相关维度合取与按维度放行表。
 
 本模块把一条 :class:`~notalone.memory_extraction.models.ExtractedFact`
 映射到评测维度名（ADR-027、ADR-036），并给出"哪些维度允许自动采纳"的
 放行表。判定只用提取结果里的受控字段，不调用模型、不按句子特判。
 
-规则表（自上而下，先命中先返回）：
+下列单键规则仅保留为旧诊断接口；实际门使用所有相关维度的合取：
 
 1. 带生效或失效时间 → ``time``。有效期是结构化字段，可以逐条判定；
    该维度的放行只影响带时间边界、且已通过语用与风险门槛的候选。
@@ -20,19 +20,10 @@
    ``reported`` 这些未确认陈述。``None`` 表示"当前字段不足以判定该候选
    属于哪个评测维度"，按 fail-closed 一律视为未放行。
 
-当前**不可推导**的评测维度（因此这些维度即使日后达标也不可能被放行，
-不要用兜底规则假装可推导，也不要按句子特判）：
-
-- ``paraphrase``：改写保真取决于原始来源正文，而
-  :class:`~notalone.memory_extraction.models.ExtractedFact` 只引用来源
-  消息 ID、不携带来源正文，也没有保真字段。
-- ``reference``：指代消解是否正确取决于候选正文与被引用消息的对齐，
-  提取结果里没有指代目标或引用关系字段。
-- ``media``：媒体占位取决于来源消息类型，而提取结果只有消息 ID，
-  没有来源消息类型字段。
-- ``reported``：评测里的"第三方转述"维度与 ``truth_intent`` 的
-  ``reported`` 断言状态重叠，而运行时没有独立的转述来源字段，因此不
-  单独放行；带 ``assertion_status = reported`` 的候选一律返回 ``None``。
+四类新定位字段保存为版本化依据。当前生产核验不能证明唯一指代目标或
+不存在转述，因此这两项保持相关且未知，不凭缺字段将它们排除。文字保真
+仅接受完整逐字对齐；受控纯文字来源可排除媒体项，时间项不能遮蔽其他项。
+这些运行字段校验不构成模型语义质量资格。
 
 放行表默认**空集**（:data:`DEFAULT_DIMENSION_RELEASE`），因此未放行维度一律
 安静待确认；运维回退把 ``NOTALONE_MEMORY_DIMENSION_GATE`` 显式设为 ``0``，
@@ -46,13 +37,19 @@ import os
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from datetime import datetime, timezone
 from typing import cast
 
-from notalone.memory.models import FactSubject
+from notalone.memory.models import FactSubject, MemoryCategory
+from notalone.memory.evidence_binding import (
+    candidate_digest, content_digest, fact_pragmatics,
+)
+from notalone.scopes import ContactScope
 from notalone.memory_extraction.models import (
     AssertionStatus,
     ExtractedFact,
     SpeechAct,
+    FigurativeType,
 )
 
 __all__ = [
@@ -62,6 +59,8 @@ __all__ = [
     "DimensionRelease",
     "MemoryDimension",
     "dimension_key",
+    "required_dimensions",
+    "valid_evidence_dimensions",
 ]
 
 
@@ -105,6 +104,113 @@ def dimension_key(fact: ExtractedFact) -> MemoryDimension | None:
     return None
 
 
+def required_dimensions(fact: ExtractedFact) -> frozenset[str]:
+    """返回保守超集；现有 V 契约不足以排除指代或转述相关性。"""
+
+    if not isinstance(fact, ExtractedFact):
+        raise TypeError("维度判定输入必须是 ExtractedFact。")
+    required = {"subject", "truth_intent", "paraphrase", "reference", "reported"}
+    if (
+        fact.valid_at is not None or fact.invalid_at is not None
+        or fact.category is MemoryCategory.RECENT_STATE
+    ):
+        required.add("time")
+    evidence = fact.dimension_evidence
+    if evidence is None or any(
+        item.message_type != "text" or item.text_representation != "text"
+        for item in evidence.messages
+        if item.message_id in fact.source_message_ids
+    ) or any(item.representation != "text" for item in evidence.media or ()):
+        required.add("media")
+    return frozenset(required)
+
+
+def valid_evidence_dimensions(
+    fact: ExtractedFact, *, now: datetime | None = None,
+) -> frozenset[str]:
+    """只报告当前来源与完整定位通过的项；不是语义正确性或放行表。"""
+
+    evidence = fact.dimension_evidence
+    if (
+        evidence is None or not evidence.source_bound
+        or evidence.candidate_sha256 != candidate_digest(fact)
+        or evidence.pragmatics != fact_pragmatics(fact)
+    ):
+        return frozenset()
+    at = datetime.now(timezone.utc) if now is None else now
+    if at.tzinfo is None or at.utcoffset() is None:
+        raise ValueError("维度依据核验时间必须带时区。")
+    if fact.invalid_at is not None and fact.invalid_at <= at:
+        return frozenset()
+    valid: set[str] = set()
+    if (
+        fact.speech_act is SpeechAct.ASSERTION
+        and fact.assertion_status is AssertionStatus.ASSERTED
+        and fact.figurative_type is FigurativeType.LITERAL
+        and not fact.alternatives
+    ):
+        valid.add("truth_intent")
+    if fact.invalid_at is not None and all(
+        item.occurred_at is not None for item in evidence.messages
+        if item.message_id in fact.source_message_ids
+    ):
+        valid.add("time")
+    messages = {item.message_id: item for item in evidence.messages}
+    alignments = evidence.paraphrase or ()
+    if (
+        alignments
+        and {item.source.message_id for item in alignments}
+        == set(fact.source_message_ids)
+        and all(
+            item.candidate.start == 0 and item.candidate.end == len(fact.text)
+            and item.source.span.start == 0
+            and item.source.span.end
+            == messages[item.source.message_id].text_length
+            and item.candidate.sha256 == item.source.span.sha256
+            == content_digest(fact.text)
+            for item in alignments
+        )
+    ):
+        valid.add("paraphrase")
+    references = evidence.reference or ()
+    targets = {
+        (item.target.message_id, item.target.span.start, item.target.span.end)
+        for item in references
+    }
+    subject_matches = (
+        {messages[item.target.message_id].sender for item in references}
+        == {"self", "contact"}
+        if fact.subject is FactSubject.SHARED else all(
+            messages[item.target.message_id].sender == fact.subject.value
+            for item in references
+        )
+    )
+    if (
+        references and not fact.alternatives
+        and all(item.subject == fact.subject.value for item in references)
+        and subject_matches
+        and len(targets) == (2 if fact.subject is FactSubject.SHARED else 1)
+    ):
+        valid.update({"reference", "subject"})
+    reported = evidence.reported or ()
+    relationship = (
+        "reported" if fact.speech_act is SpeechAct.REPORT
+        or fact.assertion_status is AssertionStatus.REPORTED else "direct"
+    )
+    if reported and all(item.relationship == relationship for item in reported):
+        valid.add("reported")
+    media = evidence.media or ()
+    if {item.message_id for item in media} == set(fact.source_message_ids) and all(
+        item.representation == (
+            "text" if item.message_type == "text" else "processed_text"
+        )
+        and item.representation == messages[item.message_id].text_representation
+        for item in media
+    ):
+        valid.add("media")
+    return frozenset(valid)
+
+
 @dataclass(frozen=True, slots=True)
 class DimensionRelease:
     """允许自动采纳的维度集合；默认空集，未放行维度安静待确认。
@@ -142,11 +248,23 @@ class DimensionRelease:
             return _ALL_DIMENSION_NAMES
         return self.allowed
 
-    def allows(self, fact: ExtractedFact) -> bool:
-        """只有明确判定且已放行的维度允许进入自动采纳。"""
+    def allows(
+        self, fact: ExtractedFact, *, scope: ContactScope | None = None,
+        now: datetime | None = None,
+    ) -> bool:
+        """相关维度全部有当前依据、且全部逐类获批，才能通过第四门。"""
 
         key = dimension_key(fact)
-        return key is not None and key.value in self.released
+        if not self.gate_enabled:
+            return key is not None
+        evidence = fact.dimension_evidence
+        if scope is not None and (evidence is None or evidence.scope != scope):
+            return False
+        required = required_dimensions(fact)
+        return (
+            required <= self.released
+            and required <= valid_evidence_dimensions(fact, now=now)
+        )
 
     @classmethod
     def resolve(cls, value: "DimensionRelease | None") -> "DimensionRelease":

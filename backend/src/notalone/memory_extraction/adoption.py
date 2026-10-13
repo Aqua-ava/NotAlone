@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -21,6 +21,7 @@ from notalone.memory.models import (
     OwnerMemory,
 )
 from notalone.memory.ports import MemoryPort, OwnerMemoryPort
+from notalone.memory.dimension_evidence import DimensionEvidenceChangedError
 from notalone.memory_extraction.adjudication import (
     AdjudicationAction,
     AdjudicationRuntime,
@@ -30,6 +31,8 @@ from notalone.memory_extraction.adjudication import (
 from notalone.memory_extraction.dimensions import (
     DimensionRelease,
     dimension_key,
+    required_dimensions,
+    valid_evidence_dimensions,
 )
 from notalone.memory_extraction.errors import ExtractionRuntimeError
 from notalone.memory_extraction.flow import ExtractionOutcome
@@ -269,6 +272,7 @@ class MemoryAdoption:
             passed = self._passes_all_adoption_gates(
                 fact,
                 pragmatic_decision=pragmatic_decision,
+                scope=scope,
             )
             record(
                 "adoption_gates",
@@ -294,10 +298,12 @@ class MemoryAdoption:
                     },
                     "dimension": {
                         "key": dimension_key(fact),
+                        "required": sorted(required_dimensions(fact)),
+                        "evidence_valid": sorted(valid_evidence_dimensions(fact)),
                         "gate_enabled": self._dimension_release.gate_enabled,
                         "allowed": sorted(self._dimension_release.allowed),
                         "released": sorted(self._dimension_release.released),
-                        "passed": self._dimension_release.allows(fact),
+                        "passed": self._dimension_release.allows(fact, scope=scope),
                     },
                     "passed": passed,
                 },
@@ -341,10 +347,7 @@ class MemoryAdoption:
                 record("candidate_result", {"disposition": "noop"})
                 duplicate += 1
                 continue
-            if action is AdjudicationAction.UPDATE and replaced_id is not None:
-                self._invalidate_replaced(scope, fact, replaced_id, pool)
-                updated += 1
-            elif action is AdjudicationAction.UPDATE:
+            if action is AdjudicationAction.UPDATE and replaced_id is None:
                 # 裁决要求更新但缺少有效的被取代记忆（结构化输出丢字
                 # 段或指向范围外）：不能静默按 ADD 落库，否则被取代的
                 # 旧记忆保持 active，与新事实并存。降级为待定候选，
@@ -356,13 +359,23 @@ class MemoryAdoption:
                 )
                 pending += 1
                 continue
-            else:
-                adopted += 1
             persisted_memory = (
                 self._create_owner_memory(scope, fact)
                 if fact.subject is FactSubject.SELF
                 else self._confirm_contact_memory(scope, fact)
             )
+            if persisted_memory is None:
+                pending += 1
+                record(
+                    "candidate_result",
+                    {"disposition": "pending_source_changed"},
+                )
+                continue
+            if action is AdjudicationAction.UPDATE and replaced_id is not None:
+                self._invalidate_replaced(scope, fact, replaced_id, pool)
+                updated += 1
+            else:
+                adopted += 1
             pool.append(
                 _PoolItem(
                     memory_id=persisted_memory.memory_id,
@@ -639,6 +652,7 @@ class MemoryAdoption:
         fact,
         *,
         pragmatic_decision=None,
+        scope: ContactScope | None = None,
     ) -> bool:
         """四道合取项：语用、置信度、风险白名单，以及维度放行。
 
@@ -649,7 +663,7 @@ class MemoryAdoption:
         decision = pragmatic_decision or self._pragmatic_interpreter.interpret(fact)
         return can_auto_adopt(
             fact, decision, confidence_threshold=self._threshold
-        ) and self._dimension_release.allows(fact)
+        ) and self._dimension_release.allows(fact, scope=scope)
 
     def _pending_exists(self, scope: ContactScope, fact) -> bool:
         duplicate_started_at = datetime.now(timezone.utc)
@@ -706,24 +720,10 @@ class MemoryAdoption:
         )
         return bool(matches)
 
-    def _create_pending_candidate(self, scope: ContactScope, fact) -> None:
-        candidate = MemoryCandidate(
-            candidate_id=uuid4(),
-            scope=scope,
-            text=fact.text,
-            category=fact.category,
-            source_ids=fact.source_message_ids,
-            topic=fact.topic,
-            subject=fact.subject,
-            status=MemoryCandidateStatus.PENDING,
-            valid_at=fact.valid_at,
-            invalid_at=fact.invalid_at,
-            confidence=fact.confidence,
-            risk_flags=fact.risk_flags,
-            alternatives=fact.alternatives,
-            interpretation_reason=fact.interpretation_reason,
-            timing=fact.timing,
-        )
+    def _create_pending_candidate(
+        self, scope: ContactScope, fact: ExtractedFact
+    ) -> MemoryCandidate:
+        candidate = _candidate_from_fact(scope, fact)
         link = {
             "record_kind": "candidate",
             "record_id": candidate.candidate_id,
@@ -747,10 +747,35 @@ class MemoryAdoption:
             started_at=write_started_at,
             status="committed",
         )
+        return actual
 
-    def _create_owner_memory(self, scope: ContactScope, fact) -> OwnerMemory:
+    def _create_owner_memory(
+        self, scope: ContactScope, fact: ExtractedFact
+    ) -> OwnerMemory | None:
         if self._owner_memory_port is None:
             raise TypeError("self 主体事实需要注入 owner 级记忆 port。")
+        if self._dimension_release.gate_enabled:
+            candidate = self._create_pending_candidate(scope, fact)
+            current = replace(fact, dimension_evidence=candidate.dimension_evidence)
+            if not self._dimension_release.allows(current, scope=scope):
+                return None
+            started = datetime.now(timezone.utc)
+            try:
+                actual = self._owner_memory_port.confirm_candidate(
+                    candidate=candidate, adoption_method=AdoptionMethod.AUTO
+                )
+            except DimensionEvidenceChangedError:
+                return None
+            record(
+                "write_result",
+                {"operation": "confirm_owner", "actual": actual,
+                 "commit_status": "committed"},
+                started_at=started, status="committed",
+                links=({"record_kind": "owner_memory",
+                        "record_id": actual.memory_id,
+                        "commit_status": "committed"},),
+            )
+            return actual
         memory = OwnerMemory(
             memory_id=uuid4(),
             owner_id=scope.owner_id,
@@ -792,24 +817,9 @@ class MemoryAdoption:
         return actual
 
     def _confirm_contact_memory(
-        self, scope: ContactScope, fact
-    ) -> ConfirmedMemory:
-        planned = MemoryCandidate(
-            candidate_id=uuid4(),
-            scope=scope,
-            text=fact.text,
-            category=fact.category,
-            source_ids=fact.source_message_ids,
-            topic=fact.topic,
-            subject=fact.subject,
-            valid_at=fact.valid_at,
-            invalid_at=fact.invalid_at,
-            confidence=fact.confidence,
-            risk_flags=fact.risk_flags,
-            alternatives=fact.alternatives,
-            interpretation_reason=fact.interpretation_reason,
-            timing=fact.timing,
-        )
+        self, scope: ContactScope, fact: ExtractedFact
+    ) -> ConfirmedMemory | None:
+        planned = _candidate_from_fact(scope, fact)
         link = {
             "record_kind": "candidate",
             "record_id": planned.candidate_id,
@@ -833,6 +843,11 @@ class MemoryAdoption:
             started_at=write_started_at,
             status="committed",
         )
+        current_fact = replace(
+            fact, dimension_evidence=candidate.dimension_evidence
+        )
+        if not self._dimension_release.allows(current_fact, scope=scope):
+            return None
         record(
             "write_plan",
             {
@@ -842,11 +857,22 @@ class MemoryAdoption:
             },
         )
         write_started_at = datetime.now(timezone.utc)
-        actual = self._memory_port.confirm(
-            scope=scope,
-            candidate_id=candidate.candidate_id,
-            adoption_method=AdoptionMethod.AUTO,
-        )
+        try:
+            if self._dimension_release.gate_enabled:
+                actual = self._memory_port.confirm(
+                    scope=scope,
+                    candidate_id=candidate.candidate_id,
+                    adoption_method=AdoptionMethod.AUTO,
+                    expected_dimension_evidence=candidate.dimension_evidence,
+                )
+            else:
+                actual = self._memory_port.confirm(
+                    scope=scope,
+                    candidate_id=candidate.candidate_id,
+                    adoption_method=AdoptionMethod.AUTO,
+                )
+        except DimensionEvidenceChangedError:
+            return None
         record(
             "write_result",
             {
@@ -865,6 +891,22 @@ class MemoryAdoption:
             status="committed",
         )
         return actual
+
+
+def _candidate_from_fact(
+    scope: ContactScope, fact: ExtractedFact,
+) -> MemoryCandidate:
+    return MemoryCandidate(
+        candidate_id=uuid4(), scope=scope, text=fact.text,
+        category=fact.category, source_ids=fact.source_message_ids,
+        topic=fact.topic, subject=fact.subject,
+        status=MemoryCandidateStatus.PENDING,
+        valid_at=fact.valid_at, invalid_at=fact.invalid_at,
+        confidence=fact.confidence, risk_flags=fact.risk_flags,
+        alternatives=fact.alternatives,
+        interpretation_reason=fact.interpretation_reason,
+        timing=fact.timing, dimension_evidence=fact.dimension_evidence,
+    )
 
 
 def _normalize(text: str) -> str:

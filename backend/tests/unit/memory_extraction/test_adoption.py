@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 from uuid import UUID
@@ -25,6 +26,7 @@ from notalone.memory_extraction.dimensions import (
     DEFAULT_DIMENSION_RELEASE,
     RELEASE_ALL_DIMENSIONS,
     DimensionRelease,
+    MemoryDimension,
 )
 from notalone.memory_extraction.flow import ExtractionOutcome
 from notalone.memory_extraction.models import ExtractedFact, FactSubject
@@ -34,6 +36,10 @@ from notalone.memory_extraction.models import (
     SpeechAct,
 )
 from notalone.scopes import ContactScope
+from tests.unit.memory_extraction.dimension_helpers import (
+    synthetic_complete_evidence,
+)
+from tests.integration.server.test_memory_api import FakeOwnerMemory
 
 
 OWNER_ID = UUID("aaaaaaaa-1111-1111-1111-111111111111")
@@ -71,6 +77,16 @@ class RecordingMemoryStore(InMemoryMemoryStore):
     def create_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
         self.created.append(candidate)
         return super().create_candidate(candidate)
+
+
+class SourceChangedStore(InMemoryMemoryStore):
+    """模拟存储端在当前来源复核时降级依据，候选本身仍保存。"""
+
+    def create_candidate(self, candidate):
+        evidence = replace(candidate.dimension_evidence)
+        return super().create_candidate(replace(
+            candidate, dimension_evidence=evidence
+        ))
 
 
 class MemoryAdoptionTest(unittest.TestCase):
@@ -341,19 +357,18 @@ class DimensionReleaseGateTest(unittest.TestCase):
         self.assertEqual(stats.pending, 1)
         self.assertEqual(self.store.list_confirmed(self.scope), ())
 
-    def test_released_dimension_is_auto_adopted(self) -> None:
+    def test_single_release_keeps_missing_proof_pending(self) -> None:
         stats = self._adoption(DimensionRelease(("subject",))).adopt(
             self.scope,
             ExtractionOutcome(accepted=(_fact(),)),
         )
 
-        self.assertEqual(stats.adopted, 1)
-        memories = self.store.list_confirmed(self.scope)
-        self.assertEqual(len(memories), 1)
-        self.assertEqual(memories[0].adoption_method, AdoptionMethod.AUTO)
+        self.assertEqual(stats.adopted, 0)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(self.store.list_confirmed(self.scope), ())
 
-    def test_editing_the_compiled_release_table_actually_releases(self) -> None:
-        """放行台账的权威步骤就是改 DEFAULT_DIMENSION_RELEASE：必须端到端生效。"""
+    def test_compiled_single_release_does_not_skip_other_dimensions(self) -> None:
+        """台账生效，但单一维度放行不再跳过其他相关依据。"""
 
         with patch.dict(os.environ, {}, clear=True), patch.object(
             dimensions,
@@ -365,9 +380,63 @@ class DimensionReleaseGateTest(unittest.TestCase):
                 ExtractionOutcome(accepted=(_fact(),)),
             )
 
+        self.assertEqual(stats.adopted, 0)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(self.store.list_confirmed(self.scope), ())
+
+    def test_complete_current_proofs_and_releases_preserve_auto_label(self) -> None:
+        fact = synthetic_complete_evidence(
+            _fact(text="我喜欢咖啡", category=MemoryCategory.PREFERENCE),
+            scope=self.scope,
+        )
+        stats = self._adoption(DimensionRelease(tuple(MemoryDimension))).adopt(
+            self.scope, ExtractionOutcome(accepted=(fact,))
+        )
+
         self.assertEqual(stats.adopted, 1)
         self.assertEqual(stats.pending, 0)
-        self.assertEqual(len(self.store.list_confirmed(self.scope)), 1)
+        memories = self.store.list_confirmed(self.scope)
+        self.assertEqual(len(memories), 1)
+        self.assertEqual(memories[0].adoption_method, AdoptionMethod.AUTO)
+        candidate = self.store.get_candidate(
+            scope=self.scope, candidate_id=memories[0].source_candidate_id
+        )
+        self.assertEqual(candidate.dimension_evidence, fact.dimension_evidence)
+
+    def test_source_change_during_save_keeps_candidate_pending(self) -> None:
+        store = SourceChangedStore()
+        fact = synthetic_complete_evidence(
+            _fact(text="我喜欢咖啡", category=MemoryCategory.PREFERENCE),
+            scope=self.scope,
+        )
+        stats = MemoryAdoption(
+            memory_port=store,
+            dimension_release=DimensionRelease(tuple(MemoryDimension)),
+        ).adopt(self.scope, ExtractionOutcome(accepted=(fact,)))
+
+        self.assertEqual(stats.adopted, 0)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(store.list_confirmed(self.scope), ())
+        self.assertEqual(len(store.list_pending_candidates(self.scope)), 1)
+
+    def test_self_fact_uses_the_same_current_candidate_evidence_gate(self) -> None:
+        store, owner = SourceChangedStore(), FakeOwnerMemory()
+        fact = synthetic_complete_evidence(
+            _fact(
+                text="我喜欢咖啡", category=MemoryCategory.PREFERENCE,
+                subject=FactSubject.SELF,
+            ),
+            scope=self.scope,
+        )
+        stats = MemoryAdoption(
+            memory_port=store, owner_memory_port=owner,
+            dimension_release=DimensionRelease(tuple(MemoryDimension)),
+        ).adopt(self.scope, ExtractionOutcome(accepted=(fact,)))
+
+        self.assertEqual(stats.adopted, 0)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(owner.memories, [])
+        self.assertEqual(len(store.list_pending_candidates(self.scope)), 1)
 
     def test_releasing_one_dimension_does_not_release_another(self) -> None:
         adoption = self._adoption(DimensionRelease(("time",)))
@@ -380,23 +449,25 @@ class DimensionReleaseGateTest(unittest.TestCase):
         self.assertEqual(subject_stats.pending, 1)
         self.assertEqual(self.store.list_confirmed(self.scope), ())
 
-    def test_time_dimension_is_auto_adopted_when_released(self) -> None:
+    def test_time_release_alone_keeps_candidate_pending(self) -> None:
         stats = self._adoption(DimensionRelease(("time",))).adopt(
             self.scope,
             ExtractionOutcome(accepted=(self._time_fact(),)),
         )
 
-        self.assertEqual(stats.adopted, 1)
-        self.assertEqual(len(self.store.list_confirmed(self.scope)), 1)
+        self.assertEqual(stats.adopted, 0)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(self.store.list_confirmed(self.scope), ())
 
-    def test_truth_intent_dimension_is_auto_adopted_when_released(self) -> None:
+    def test_truth_release_alone_keeps_candidate_pending(self) -> None:
         stats = self._adoption(DimensionRelease(("truth_intent",))).adopt(
             self.scope,
             ExtractionOutcome(accepted=(self._truth_intent_fact(),)),
         )
 
-        self.assertEqual(stats.adopted, 1)
-        self.assertEqual(len(self.store.list_confirmed(self.scope)), 1)
+        self.assertEqual(stats.adopted, 0)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(self.store.list_confirmed(self.scope), ())
 
     def test_undecidable_dimension_is_never_auto_adopted(self) -> None:
         for overrides in (

@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID
 
+from notalone.memory.dimension_evidence import DimensionEvidence
+
 from notalone.memory.models import (
     OwnerMemory,
     AdoptionMethod,
@@ -42,8 +44,9 @@ class MemoryPort(Protocol):
         scope: ContactScope,
         candidate_id: UUID,
         adoption_method: AdoptionMethod = AdoptionMethod.AUTO,
+        expected_dimension_evidence: DimensionEvidence | None = None,
     ) -> ConfirmedMemory:
-        """把同一联系人范围内的候选采纳为可检索记忆。"""
+        """确认候选；提供当前依据时须在写入事务复核且不得丢失。"""
 
     def correct(
         self,

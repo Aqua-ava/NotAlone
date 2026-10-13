@@ -27,6 +27,10 @@ from notalone.memory.timing import MemoryTiming
 from notalone.scopes import ContactScope
 from notalone.server.app import create_app
 from notalone.server.testing import InProcessClient
+from tests.unit.memory_extraction.dimension_helpers import (
+    synthetic_complete_evidence,
+    synthetic_fact,
+)
 
 
 OWNER_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -333,6 +337,34 @@ class MemoryApiContractTest(unittest.TestCase):
         self.assertEqual(item["category"], "recent_state")
         self.assertEqual(item["status"], "pending")
         self.assertEqual(item["subject"], "contact")
+
+    def test_candidate_exports_evidence_without_fabricating_legacy_proof(self) -> None:
+        fact = synthetic_complete_evidence(
+            synthetic_fact(text="我喜欢咖啡", category=MemoryCategory.PREFERENCE),
+            scope=_scope(),
+        )
+        evidenced = MemoryCandidate(
+            candidate_id=uuid4(), scope=_scope(), text=fact.text,
+            category=fact.category, topic=fact.topic, subject=fact.subject,
+            source_ids=fact.source_message_ids, confidence=fact.confidence,
+            interpretation_reason=fact.interpretation_reason,
+            dimension_evidence=fact.dimension_evidence,
+        )
+        self.contact.pending.extend((evidenced, _candidate()))
+
+        response = self.client.get(
+            f"/api/contacts/{CONTACT_ID}/memory-candidates", headers=self.headers
+        )
+
+        self.assertEqual(response.status_code, 200)
+        new, legacy = response.json()["candidates"]
+        self.assertEqual(
+            new["dimension_evidence"], fact.dimension_evidence.to_payload()
+        )
+        self.assertTrue(new["dimension_evidence_source_current"])
+        self.assertNotIn("dimension_evidence", legacy)
+        self.assertNotIn("dimension_evidence_source_current", legacy)
+        self.assertNotIn(fact.text, json.dumps(new["dimension_evidence"]))
 
     def test_pending_candidate_exposes_interpretation_details_without_empty_shells(self) -> None:
         explained = _candidate()

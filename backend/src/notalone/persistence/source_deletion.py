@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 import psycopg
 
 from notalone.persistence.extraction_trace import erase_source_traces
+from notalone.persistence.dimension_evidence import residual_source_evidence_sql
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.message_cleanup import (
     cleanup_derived_data,
@@ -310,11 +311,12 @@ class PostgresSourceDeletionRepository:
         try:
             with psycopg.connect(self._database_url) as connection:
                 row = connection.execute(
-                    """
+                    f"""
                     SELECT status, file_name, content_sha256, record_count, deleted_at,
                            EXISTS (SELECT 1 FROM public.message_source_ref AS ref
                              WHERE ref.owner_id = source.owner_id AND ref.contact_id = source.contact_id
-                               AND ref.source_document_id = source.id)
+                               AND ref.source_document_id = source.id),
+                           {residual_source_evidence_sql('source')}
                     FROM public.source_document AS source
                     WHERE owner_id = %s AND contact_id = %s AND id = %s
                     """,
@@ -326,6 +328,7 @@ class PostgresSourceDeletionRepository:
                     row[:4] != ("deleted", None, None, 0)
                     or row[4] is None
                     or row[5]
+                    or row[6]
                 ):
                     raise SourceDeletionVerificationError(
                         "来源删除尚未验证完成。"
