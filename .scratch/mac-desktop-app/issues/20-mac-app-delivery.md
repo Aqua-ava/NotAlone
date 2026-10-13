@@ -247,3 +247,8 @@ Standards硬违规／重要判断0／0、Spec新增缺失／越界／错误0／0
 
 
 - 2026-10-13（条件ASCII策略候选包E，静态记录）：Root按构建材料固定源码点`79573503`，沿既有package入口新建独立E包；旧离线Electron ZIP消失令首guard在build前失败，事实保留。随后从同一安装runtime重建输入ZIP8.855598208秒／exit0，新摘要`cefff4cd…`，不冒旧`0dfd…`或官方archive；正式package18.786353458秒／exit0。E包280文件＋14链接／294项、ASAR`376c9a53…`、十一原生输入摘要`7f4fed1e…`，包含`9bfd83b1…`条件ASCIIpolicy；Root主包deep strict0、四helper verified，子Agent仅静态字节复核。九份材料与C相同，但WCDB精确source／patch／build及binary license两项仍false；Python／PG后端外置。完整四项目录另实际归档13.774257334秒：交付ZIP`7db9cebb…`／140293431字节／620条目，属性、直接解压完整快照及15次签名verify全0，六自有ditto命令／临时目录已核收尾，不认证全OS。E实际App启动0，未用C组合或D包场次E／F代签当前包，无真实CLI／Capture／TCC／模型／业务库／发送／Git操作。完整三路径记录、原始收据摘要、失败与未验边界见[候选包E静态记录](../../unfinished-work/goal-final-package-e-static-20261013.md)；原claimed／needs-info、四AC和所有历史保持，两轴及Root本地主题提交另安排。
+
+
+## Comments（当前外置模式候选G静态结果 2026-10-14）
+
+- [G包静态记录](../../unfinished-work/goal-final-package-g-static-20261014.md)：依据当前取消第三方随包的授权，公开package实际20.949966875秒／exit0，271文件＋14链接＋321目录，完整ZIP134699612bytes／SHA f5d8bc405b773eeb1857487a9f19691a06094d960ed8fa3e5a54d2c454832ca6。全部6dist、仅两自研probe资源、完整直接解压快照及6次严格签名检查通过，自有输入／解压清理；实际App／微信／CLI／探针执行／OCR／模型／PG／发送0，不继承旧包成绩。现场暂缓及claimed／needs-info、原4AC保持，当前G组合与真实外置工具配置尚未验收。
