@@ -24,6 +24,8 @@
 
 聊天辅助产品讨论分别记录在[聊天回复策略草图](drafts/conversation-reply-strategy.md)和[持续会话与上下文管理草图](drafts/assistant-session-context.md)：前者讨论回应与主动联系两条路径，后者从 Q1 独立记录助手会话连续性及新开边界，均未替代现行规格。
 
+记忆持续更新、纠错、概览、回复检索及自动 Skill 学习等 8 个完整功能，记录在[记忆与 Skill 演进草图](drafts/memory-skill-evolution.md)；其中区分已确认的产品方向、集中审核规则与待验证的 DSH 选型，尚未形成正式实现规格。
+
 ## ADR 索引
 
 1. [ADR-001：Mac 微信前台会话同步](adr/001-macos-wechat-active-session-sync.md)
