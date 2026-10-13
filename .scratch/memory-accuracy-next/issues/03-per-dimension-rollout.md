@@ -66,3 +66,8 @@
 ## Comments（本持续目标四窗V技术停止 2026-10-13）
 
 - [本场结果](../../unfinished-work/goal-memory-20261013-stage-priority-diagnostic4-result.md)：原03运行字段、窗口投影兼容及两SYSTEM提示共同冻结后，唯一e910bd79实际E200／V500、CLOSED2/8，driver单调7.821042375秒／exit1；正式审核0，A05 unknown／其余三窗unrun。0网络真实formatter重构核非空dimension_evidence不进入V正文，候选仍十一槽；这是字段投影接线证据，不能签任何维度≥15／假事0／记错人0／一般错误≤1或自动放行。响应21字节非JSON仅存摘要，V内部500根因未知，余6永久关闭。11stage全closed，累计61尝试（56个200、1个500、旧4timeout远端未知）／177永闭未用，退役12／full280未启；实际默认空表、原三门及AND门、Gold／旧sealed／AC／State保持，字段与语义仍分别验收且逐类批准。
+
+
+## Comments（新证明协议有限技术停止 2026-10-13）
+
+- [本场实际结果](../../unfinished-work/goal-memory-nullable-diagnostic4-result-20261013.md)：新run665225c9实际E200／V500、CLOSED2/8、8.084218832998886秒；正式审核0、A05 unknown／A06–A08 unrun。剩余6永久关闭，本目标12阶段全closed、累计63真实HTTP预约（57个200、2个500、4旧ReadTimeout远端未知）／183永闭未用／56未登记退役／280全140未启，工程分配582。根.env仅预算领取后读取一次既有ECNU三键，无真实聊天、App、微信、OCR、业务库、发送；默认空表、旧Gold／sealed／原AC和State保持。 D1–D3已批准实现及隔离验证；新增结构不等于真实有效proof或任一维度达标签。本场V500没有proof，原A05未名“她”的产权UNKNOWN，旧Gold不是新reference依据的正向例。所有相关维度有效依据＋逐类批准的AND门继续有效，旧候选不回填或重采纳，业务迁移0；原AC仍3/4，不自行放行。

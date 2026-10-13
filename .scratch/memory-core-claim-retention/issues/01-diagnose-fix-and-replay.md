@@ -187,3 +187,8 @@ Blocked by: none
 ## Comments（本持续目标四窗V技术停止 2026-10-13）
 
 - [本场结果](../../unfinished-work/goal-memory-20261013-stage-priority-diagnostic4-result.md)：唯一e910bd79实际2请求（E200／V500）、CLOSED2/8、driver单调7.821042375秒／exit1；0正式审核、A05 unknown／其余三窗unrun，B01/B02仍未运行。本次E14合法工具输出不替代命题语义／source／lineage／完整回放；V服务500后响应只能存摘要而停，内部根因未知。0网络重构核新维度证据没有进入V正文，旧成功请求非模型参数相同，不签核心质量改善或真实6/12、可选2/6成绩变动。余6永闭；累计11closed／61尝试（56×200、1×500、旧4timeout远端未知），177关闭未用及退役12不可借，全140专属280未启。原AC／State、Gold／sealed和默认空放行不改，无重启／新模型授权。
+
+
+## Comments（新证明协议有限技术停止 2026-10-13）
+
+- [本场实际结果](../../unfinished-work/goal-memory-nullable-diagnostic4-result-20261013.md)：新run665225c9实际E200／V500、CLOSED2/8、8.084218832998886秒；正式审核0、A05 unknown／A06–A08 unrun。剩余6永久关闭，本目标12阶段全closed、累计63真实HTTP预约（57个200、2个500、4旧ReadTimeout远端未知）／183永闭未用／56未登记退役／280全140未启，工程分配582。根.env仅预算领取后读取一次既有ECNU三键，无真实聊天、App、微信、OCR、业务库、发送；默认空表、旧Gold／sealed／原AC和State保持。 本场没有形成V4/proof或完整命题审核，不能更新原六窗6/12、可选2/6、留出及完整回放结论。公开A05事后来源诊断只记旧Gold产权属性覆盖不足，不凭无指称原文补车主、不变Gold，也不能据此判错人／假事。原真实核心私有六窗输入及范围缺失继续保留；公开四窗不能替代原核心验收。

@@ -63,3 +63,8 @@
 ## Comments（本持续目标四窗V技术停止 2026-10-13）
 
 - [本场结果](../../unfinished-work/goal-memory-20261013-stage-priority-diagnostic4-result.md)：唯一e910bd79已CLOSED2/8，实际E200／V500、六事件、driver单调7.821042375秒／exit1；正式审核0，A05 unknown、A06–A08三窗unrun，无raw/full补签。V的21字节非JSON错误只存摘要，具体停止为响应脱敏不可用而闭账；合法构造请求收到服务500，内部根因未明。离线重构证明新维度字段未进入真实V正文，旧成功V的非模型参数相同，但SYSTEM／正文变化，不能当语义修复或指代≥15通过。余6永久关闭；本目标11closed、61真实尝试（56个200／1个500／旧4timeout远端未知）、177永闭未用、12退役／full280未启。原Gold、旧sealed、AC／State及默认空表保持，不借余额、不重启，尚无新prepare／HTTP授权。
+
+
+## Comments（新证明协议有限技术停止 2026-10-13）
+
+- [本场实际结果](../../unfinished-work/goal-memory-nullable-diagnostic4-result-20261013.md)：新run665225c9实际E200／V500、CLOSED2/8、8.084218832998886秒；正式审核0、A05 unknown／A06–A08 unrun。剩余6永久关闭，本目标12阶段全closed、累计63真实HTTP预约（57个200、2个500、4旧ReadTimeout远端未知）／183永闭未用／56未登记退役／280全140未启，工程分配582。根.env仅预算领取后读取一次既有ECNU三键，无真实聊天、App、微信、OCR、业务库、发送；默认空表、旧Gold／sealed／原AC和State保持。 实际E保留姐姐出借、联系人接收及已发生行动，未声称产权；旧Gold要求的车主属性覆盖不足，但获批D3明确未名“她”不能凭模板认定产权。事后公开来源诊断非盲性、非正式审核，不补签假事0／错人0／一般错误≤1。两个schema离线合法不能证明ECNU兼容或V500原因；现行完整指代集和全量回归仍缺。
