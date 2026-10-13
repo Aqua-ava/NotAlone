@@ -9,13 +9,128 @@ import XCTest
 
 // 此观察场只接受一次专属端侧公开合成计划；普通测试没有激活收据时不运行 Vision。
 final class VisionLanguageControlTests: XCTestCase {
-    private let root = URL(fileURLWithPath: "/private/tmp/notalone-ocr-vision-language-20261013-df6ab753-1eae-4d1b-a870-304689750ed3")
-    private let runId = "df6ab753-1eae-4d1b-a870-304689750ed3"
-    private let revision = 3
-    private let limit = 72
-    private let seconds = 180
+    func testConditionalASCIIRecheckUsesOneSameImageExactHighConfidenceResult() throws {
+        let image = protocolImage()
+        var calls: [Bool] = []
+        let result = try recognizeName(image, policy: .conditionalASCIIRecheck) { actualImage, auto in
+            XCTAssertTrue(actualImage === image)
+            calls.append(auto)
+            return Name(text: "Nora", confidence: auto ? 1 : 0.5, pixelSize: CGSize(width: 1, height: 1))
+        }
+        XCTAssertEqual(calls, [false, true])
+        XCTAssertEqual(result.text, "Nora")
+        XCTAssertEqual(result.confidence, 1)
+        XCTAssertEqual(result.pixelSize, CGSize(width: 1, height: 1))
+    }
+
+    func testConditionalASCIIRecheckPreservesFastPathsAndDefaultWithoutAnOptionalRequest() throws {
+        let image = protocolImage(), size = CGSize(width: 1, height: 1)
+        let values: [(String?, Double)] = [("Nora", 0.90), ("AB", 1), ("朋友甲", 0.3), ("甲A1", 0.5),
+            (nil, 0), ("", 0.5), ("Nora.", 0.5), ("two  words", 0.5), (" Nora", 0.5), ("Nora ", 0.5)]
+        for (text, confidence) in values {
+            var calls: [Bool] = []
+            let baseline = Name(text: text, confidence: confidence, pixelSize: size)
+            let result = try recognizeName(image, policy: .conditionalASCIIRecheck) { _, auto in
+                calls.append(auto); return baseline
+            }
+            XCTAssertEqual(calls, [false]); XCTAssertEqual(result.text, text)
+            XCTAssertEqual(result.confidence, confidence); XCTAssertEqual(result.pixelSize, size)
+        }
+        var calls: [Bool] = []
+        let result = try recognizeName(image) { _, auto in
+            calls.append(auto); return Name(text: "Nora", confidence: 0.5, pixelSize: size)
+        }
+        XCTAssertEqual(calls, [false]); XCTAssertEqual(result.confidence, 0.5)
+    }
+
+    func testConditionalASCIIRecheckKeepsBaselineForDifferentLowOrIncompleteResults() throws {
+        let image = protocolImage(), size = CGSize(width: 1, height: 1)
+        for (text, confidence) in [("Ray", 1.0), ("Nora", 0.89), (nil, 1), ("nora", 1), ("Nora ", 1)] {
+            var calls: [Bool] = []
+            let result = try recognizeName(image, policy: .conditionalASCIIRecheck) { _, auto in
+                calls.append(auto)
+                return Name(text: auto ? text : "Nora", confidence: auto ? confidence : 0.5, pixelSize: size)
+            }
+            XCTAssertEqual(calls, [false, true]); XCTAssertEqual(result.text, "Nora")
+            XCTAssertEqual(result.confidence, 0.5); XCTAssertEqual(result.pixelSize, size)
+        }
+    }
+
+    func testConditionalASCIIRecheckRejectsCanonicallyEquivalentDifferentUTF8Name() throws {
+        let image = protocolImage()
+        var calls: [Bool] = []
+        let result = try recognizeName(image, policy: .conditionalASCIIRecheck) { _, auto in
+            calls.append(auto)
+            return Name(text: auto ? "\u{212A}" : "K", confidence: auto ? 1 : 0.5)
+        }
+        XCTAssertEqual(calls, [false, true])
+        XCTAssertEqual(Array(result.text!.utf8), [75])
+        XCTAssertEqual(result.confidence, 0.5)
+    }
+
+    func testConditionalASCIIRecheckRejectsInvalidConfidenceAndChangedImageSizeWithoutRetry() throws {
+        let image = protocolImage(), size = CGSize(width: 1, height: 1)
+        for invalid in [Double.nan, .infinity, -0.1, 1.1] {
+            var calls: [Bool] = []
+            XCTAssertThrowsError(try recognizeName(image, policy: .conditionalASCIIRecheck) { _, auto in
+                calls.append(auto); return Name(text: "Nora", confidence: invalid, pixelSize: size)
+            }) { XCTAssertTrue($0 is NameRecognitionError) }
+            XCTAssertEqual(calls, [false])
+            calls = []
+            XCTAssertThrowsError(try recognizeName(image, policy: .conditionalASCIIRecheck) { _, auto in
+                calls.append(auto); return Name(text: "Nora", confidence: auto ? invalid : 0.5, pixelSize: size)
+            }) { XCTAssertTrue($0 is NameRecognitionError) }
+            XCTAssertEqual(calls, [false, true])
+        }
+        var calls: [Bool] = []
+        XCTAssertThrowsError(try recognizeName(image, policy: .conditionalASCIIRecheck) { _, auto in
+            calls.append(auto)
+            return Name(text: "Nora", confidence: auto ? 1 : 0.5,
+                        pixelSize: auto ? CGSize(width: 2, height: 1) : size)
+        }) { XCTAssertTrue($0 is NameRecognitionError) }
+        XCTAssertEqual(calls, [false, true])
+    }
+
+    func testConditionalASCIIRecheckPropagatesRequestFailureWithoutRetryOrFallbackSuccess() throws {
+        enum Expected: Error { case requestFailed }
+        let image = protocolImage()
+        var calls: [Bool] = []
+        XCTAssertThrowsError(try recognizeName(image, policy: .conditionalASCIIRecheck) { _, auto in
+            calls.append(auto)
+            if auto { throw Expected.requestFailed }
+            return Name(text: "Nora", confidence: 0.5)
+        }) { XCTAssertTrue($0 is Expected) }
+        XCTAssertEqual(calls, [false, true])
+    }
+
+    private func protocolImage() -> CGImage {
+        CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!.makeImage()!
+    }
 
     func testFixedPublicSyntheticLanguageControl() throws {
+        try VisionControlSession(root: URL(fileURLWithPath: "/private/tmp/notalone-ocr-vision-language-20261013-df6ab753-1eae-4d1b-a870-304689750ed3"),
+            runId: "df6ab753-1eae-4d1b-a870-304689750ed3", conditional: false).run()
+    }
+
+    func testFixedPublicSyntheticASCIIRecheckControl() throws {
+        try VisionControlSession(root: URL(fileURLWithPath: "/private/tmp/notalone-ocr-ascii-recheck-20261013-c8f4319c-9a3b-44ff-a738-6103c16bef43"),
+            runId: "c8f4319c-9a3b-44ff-a738-6103c16bef43", conditional: true).run()
+    }
+}
+
+// 两个独立run共用固定公开绘图、计数与收尾；H1的有效closed分支先于当前源码核验。
+private final class VisionControlSession {
+    private let root: URL, runId: String, conditional: Bool
+    private let revision = 3, seconds = 180
+    private var limit: Int { conditional ? 108 : 72 }
+
+    init(root: URL, runId: String, conditional: Bool) {
+        self.root = root; self.runId = runId; self.conditional = conditional
+    }
+
+    func run() throws {
         guard FileManager.default.fileExists(atPath: root.appendingPathComponent("plan.json").path) else {
             throw XCTSkip("finite_control_not_preregistered")
         }
@@ -34,7 +149,7 @@ final class VisionLanguageControlTests: XCTestCase {
                     && (0...1).contains($0.baselineMin) && (0...1).contains($0.candidateMin) }),
                   !closed.realCapture, !closed.rawImagesPersisted, !closed.productionPolicyChanged,
                   !closed.causeCertified, Set(ids).count == ids.count, Set(ids) == Set(plan.caseIds),
-                  closed.status != "completed" || (closed.reason == "none" && closed.reservedPerform == closed.limit
+                  closed.status != "completed" || (closed.reason == "none" && (conditional || closed.reservedPerform == closed.limit)
                     && closed.completedCases.count == plan.caseIds.count) else { throw Failure.storageInvalid }
             throw XCTSkip("finite_control_closed_no_new_perform")
         }
@@ -46,6 +161,8 @@ final class VisionLanguageControlTests: XCTestCase {
         guard plan.runId == runId, plan.requestLimit == limit, plan.sceneSeconds == seconds,
               plan.revision == revision, plan.caseIds == cases.map(\.id),
               plan.baselineAuto == false, plan.candidateAuto == true,
+              plan.sourcePath == "native/macos/Sources/NotAloneSyncCore/MinimalSessionCapture.swift",
+              !conditional || plan.candidatePolicy == "conditional_ascii_same_text",
               plan.sourceSHA == sha(try Data(contentsOf: repository.appendingPathComponent(plan.sourcePath))),
               plan.testSHA == sha(try Data(contentsOf: URL(fileURLWithPath: #filePath))) else {
             throw Failure.freezeChanged
@@ -59,6 +176,7 @@ final class VisionLanguageControlTests: XCTestCase {
         FileHandle.standardError.write(Data("notalone_synthetic_test_pid:\(getpid())\n".utf8))
         let runtime = try runtimeConfiguration()
         let fixtures = try cases.map(prepare)
+        if conditional { try validateParentFixtures(plan, runtime: runtime, fixtures: fixtures) }
         let manifest: [String: Any] = ["run_id": runId, "plan_sha256": sha(planData),
             "runtime": runtime, "cases": fixtures.map(\.metadata), "Vision_perform": 0,
             "raw_images_persisted": false, "real_capture": false]
@@ -86,45 +204,23 @@ final class VisionLanguageControlTests: XCTestCase {
             for fixture in fixtures {
                 var baseline: [Name] = [], candidate: [Name] = []
                 for (index, frame) in fixture.frames.enumerated() {
-                    for auto in [false, true] {
-                        let request = VNRecognizeTextRequest()
-                        request.revision = revision
-                        try log.reserve(caseId: fixture.control.id, frame: index, auto: auto)
-                        let name: Name
-                        do { name = try recognize(frame.image, automaticallyDetectsLanguage: auto, request: request) }
-                        catch { try log.record(["event": "request_failed", "error": "vision_request_failed"]); throw Failure.visionFailed }
-                        try log.checkDeadline()
-                        guard request.revision == revision, request.recognitionLevel == .accurate,
-                              request.recognitionLanguages == ["zh-Hans", "en-US"],
-                              request.usesLanguageCorrection == false,
-                              request.automaticallyDetectsLanguage == auto,
-                              request.minimumTextHeight == 0, request.customWords.isEmpty else {
-                            throw Failure.requestChanged
+                    if conditional {
+                        baseline.append(try perform(frame, caseId: fixture.control.id, index: index,
+                            auto: false, arm: "independent_baseline", log: log))
+                        candidate.append(try conditionalResult(frame, caseId: fixture.control.id, index: index, log: log))
+                    } else {
+                        for auto in [false, true] {
+                            let name = try perform(frame, caseId: fixture.control.id, index: index, auto: auto, log: log)
+                            if auto {
+                                let exact = name.text == frame.expected.first && frame.expected.count == 1
+                                if fixture.control.family != "latin", fixture.control.positive,
+                                   baseline[index].text == frame.expected.first,
+                                   !exact || (baseline[index].confidence >= 0.90 && name.confidence < 0.90) {
+                                    throw Failure.nonLatinRegression
+                                }
+                                candidate.append(name)
+                            } else { baseline.append(name) }
                         }
-                        let observations = request.results ?? []
-                        let raw = observations.compactMap { $0.topCandidates(1).first }
-                        guard name.confidence.isFinite, (0...1).contains(name.confidence),
-                              raw.allSatisfy({ $0.confidence.isFinite && (0...1).contains($0.confidence) }) else {
-                            throw Failure.confidenceInvalid
-                        }
-                        let exact = name.text == frame.expected.first && frame.expected.count == 1
-                        try log.record(["event": "returned", "case_id": fixture.control.id,
-                            "frame": index, "auto": auto, "observation_count": observations.count,
-                            "raw_confidences": raw.map { Double($0.confidence) },
-                            "raw_exact": raw.map { frame.expected.contains($0.string) },
-                            "name_present": name.text != nil, "name_exact": exact,
-                            "gate_input_confidence": name.confidence])
-                        guard !raw.contains(where: { $0.confidence >= 0.90 && !frame.expected.contains($0.string) }) else {
-                            throw Failure.wrongHighConfidence
-                        }
-                        if auto {
-                            if fixture.control.family != "latin", fixture.control.positive,
-                               baseline[index].text == frame.expected.first,
-                               !exact || (baseline[index].confidence >= 0.90 && name.confidence < 0.90) {
-                                throw Failure.nonLatinRegression
-                            }
-                            candidate.append(name)
-                        } else { baseline.append(name) }
                     }
                 }
                 let before = gate(baseline), after = gate(candidate)
@@ -133,6 +229,8 @@ final class VisionLanguageControlTests: XCTestCase {
                    before.accepted && !after.accepted { throw Failure.nonLatinRegression }
                 let allBeforeExact = zip(baseline, fixture.frames).allSatisfy { $0.text == $1.expected.first }
                 let allAfterExact = zip(candidate, fixture.frames).allSatisfy { $0.text == $1.expected.first }
+                if conditional, fixture.control.positive, before.accepted,
+                   !after.accepted || !allAfterExact { throw Failure.positiveRegression }
                 summaries.append(["case_id": fixture.control.id, "positive": fixture.control.positive,
                     "family": fixture.control.family, "baseline_exact": allBeforeExact,
                     "candidate_exact": allAfterExact, "baseline_accepted": before.accepted,
@@ -142,6 +240,13 @@ final class VisionLanguageControlTests: XCTestCase {
                 try log.record(["event": "case_completed", "case_id": fixture.control.id])
             }
             try log.checkDeadline()
+            if conditional {
+                let symptoms = summaries.filter { ["L01", "L02"].contains($0["case_id"] as? String ?? "") }
+                guard symptoms.count == 2, symptoms.allSatisfy({
+                    $0["baseline_exact"] as? Bool == true && $0["baseline_accepted"] as? Bool == false
+                        && $0["candidate_exact"] as? Bool == true && $0["candidate_accepted"] as? Bool == true
+                }) else { throw Failure.hypothesisNotSupported }
+            }
             try finish(log, summaries: summaries, status: "completed", reason: "none")
         } catch {
             let reason = (error as? Failure)?.rawValue ?? "storage_or_unknown_failure"
@@ -155,6 +260,7 @@ final class VisionLanguageControlTests: XCTestCase {
         let runId: String, sourcePath: String, sourceSHA: String, testSHA: String
         let requestLimit: Int, sceneSeconds: Int, revision: Int
         let caseIds: [String], baselineAuto: Bool, candidateAuto: Bool
+        let candidatePolicy: String?, fixtureParentSHA: String?
     }
     private struct Activation: Decodable {
         let runId: String, planSHA: String, fixtureSHA: String, sourceSHA: String, testSHA: String
@@ -206,6 +312,83 @@ final class VisionLanguageControlTests: XCTestCase {
     ] }
     private struct Frame { let image: CGImage, expected: [String], metadata: [String: Any] }
     private struct Fixture { let control: Control, frames: [Frame], metadata: [String: Any] }
+
+    private func perform(_ frame: Frame, caseId: String, index: Int, auto: Bool,
+                         arm: String? = nil, log: Journal) throws -> Name {
+        let request = VNRecognizeTextRequest()
+        request.revision = revision
+        let sequence = try log.reserve(caseId: caseId, frame: index, auto: auto, arm: arm)
+        let name: Name
+        do { name = try recognize(frame.image, automaticallyDetectsLanguage: auto, request: request) }
+        catch {
+            try log.record(["event": "request_failed", "sequence": sequence, "error": "vision_request_failed"])
+            throw Failure.visionFailed
+        }
+        try log.checkDeadline()
+        guard request.revision == revision, request.recognitionLevel == .accurate,
+              request.recognitionLanguages == ["zh-Hans", "en-US"], request.usesLanguageCorrection == false,
+              request.automaticallyDetectsLanguage == auto, request.minimumTextHeight == 0,
+              request.customWords.isEmpty else { throw Failure.requestChanged }
+        let observations = request.results ?? []
+        let raw = observations.compactMap { $0.topCandidates(1).first }
+        guard name.confidence.isFinite, (0...1).contains(name.confidence),
+              raw.allSatisfy({ $0.confidence.isFinite && (0...1).contains($0.confidence) }) else {
+            throw Failure.confidenceInvalid
+        }
+        var record: [String: Any] = ["event": "returned", "case_id": caseId, "frame": index, "auto": auto,
+            "observation_count": observations.count, "raw_confidences": raw.map { Double($0.confidence) },
+            "raw_exact": raw.map { frame.expected.contains($0.string) }, "name_present": name.text != nil,
+            "name_exact": name.text == frame.expected.first && frame.expected.count == 1,
+            "gate_input_confidence": name.confidence]
+        if let arm { record["arm"] = arm; record["sequence"] = sequence }
+        try log.record(record)
+        guard !raw.contains(where: { $0.confidence >= 0.90 && !frame.expected.contains($0.string) }) else {
+            throw Failure.wrongHighConfidence
+        }
+        return name
+    }
+
+    private func conditionalResult(_ frame: Frame, caseId: String, index: Int, log: Journal) throws -> Name {
+        var calls = 0, initial: Name?
+        let result: Name
+        do {
+            result = try recognizeName(frame.image, policy: .conditionalASCIIRecheck) { image, auto in
+                calls += 1
+                guard image === frame.image, calls <= 2, auto == (calls == 2) else { throw Failure.requestChanged }
+                let value = try self.perform(frame, caseId: caseId, index: index, auto: auto,
+                    arm: auto ? "conditional_optional_auto" : "conditional_baseline", log: log)
+                if !auto { initial = value }
+                return value
+            }
+        } catch NameRecognitionError.confidenceInvalid { throw Failure.confidenceInvalid }
+        catch NameRecognitionError.imageSizeChanged { throw Failure.fixtureChanged }
+        guard let initial, calls >= 1 else { throw Failure.requestChanged }
+        let same = result.text == initial.text && result.confidence == initial.confidence && result.pixelSize == initial.pixelSize
+        let fastPath = initial.confidence >= 0.90 || initial.text == nil || initial.text!.utf8.contains { $0 > 127 }
+        guard (calls != 1 || same), (!fastPath || (calls == 1 && same)) else { throw Failure.fastPathChanged }
+        try log.record(["event": "arm_result", "case_id": caseId, "frame": index,
+            "performed": calls, "optional_auto_performed": calls == 2, "baseline_unchanged": same,
+            "fast_path": fastPath, "name_present": result.text != nil,
+            "name_exact": result.text == frame.expected.first && frame.expected.count == 1,
+            "gate_input_confidence": result.confidence])
+        return result
+    }
+
+    private func validateParentFixtures(_ plan: Plan, runtime: [String: Any], fixtures: [Fixture]) throws {
+        let parent = URL(fileURLWithPath: "/private/tmp/notalone-ocr-vision-language-20261013-df6ab753-1eae-4d1b-a870-304689750ed3/fixture-manifest.json")
+        try privateDirectory(parent.deletingLastPathComponent())
+        let attributes = try FileManager.default.attributesOfItem(atPath: parent.path)
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              attributes[.posixPermissions] as? Int == 0o600,
+              attributes[.ownerAccountID] as? Int == Int(getuid()) else { throw Failure.storageInvalid }
+        let data = try Data(contentsOf: parent)
+        guard plan.fixtureParentSHA == "17166c5eb96e3c928a4200aa25286740633fba133510b968acf88da9e6bd1cfc",
+              sha(data) == plan.fixtureParentSHA,
+              let value = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let parentRuntime = value["runtime"], let parentCases = value["cases"],
+              try json(parentRuntime) == json(runtime),
+              try json(parentCases) == json(fixtures.map(\.metadata)) else { throw Failure.fixtureChanged }
+    }
 
     private func prepare(_ control: Control) throws -> Fixture {
         var frames: [Frame] = []
@@ -316,6 +499,7 @@ final class VisionLanguageControlTests: XCTestCase {
         case freezeChanged, fixtureChanged, activationInvalid, runtimeUnsupported, fontInvalid, fixtureInvalid
         case storageInvalid, deadline, budgetLimit, visionFailed, confidenceInvalid
         case wrongHighConfidence, negativeAccepted, nonLatinRegression, requestChanged
+        case positiveRegression, fastPathChanged, hypothesisNotSupported
     }
     private final class Journal {
         let limit: Int, started: ContinuousClock.Instant, remaining: Double
@@ -333,11 +517,14 @@ final class VisionLanguageControlTests: XCTestCase {
             file = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
         }
         func checkDeadline() throws { guard elapsed < remaining else { throw Failure.deadline } }
-        func reserve(caseId: String, frame: Int, auto: Bool) throws {
+        func reserve(caseId: String, frame: Int, auto: Bool, arm: String? = nil) throws -> Int {
             try checkDeadline(); guard count < limit else { throw Failure.budgetLimit }
-            try record(["event": "reserved", "sequence": count + 1, "case_id": caseId, "frame": frame, "auto": auto])
+            var item: [String: Any] = ["event": "reserved", "sequence": count + 1, "case_id": caseId, "frame": frame, "auto": auto]
+            if let arm { item["arm"] = arm }
+            try record(item)
             count += 1
             startedCaseIds.insert(caseId)
+            return count
         }
         func record(_ record: [String: Any]) throws {
             var item = record; item["elapsed_seconds"] = elapsed

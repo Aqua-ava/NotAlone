@@ -206,6 +206,34 @@ func recognize(_ image: CGImage, automaticallyDetectsLanguage: Bool = false,
     return Name(text: text.isEmpty ? nil : text, confidence: Double(candidate.confidence), pixelSize: pixelSize)
 }
 
+enum NameRecognitionPolicy { case baseline, conditionalASCIIRecheck }
+enum NameRecognitionError: Error { case confidenceInvalid, imageSizeChanged }
+
+// 内部对照复用同一个识别器；三个生产调用继续使用原策略。
+func recognizeName(_ image: CGImage, policy: NameRecognitionPolicy = .baseline,
+                   recognizing: (CGImage, Bool) throws -> Name = {
+                       try recognize($0, automaticallyDetectsLanguage: $1)
+                   }) throws -> Name {
+    let baseline = try recognizing(image, false)
+    guard policy == .conditionalASCIIRecheck else { return baseline }
+    guard baseline.confidence.isFinite, (0...1).contains(baseline.confidence) else {
+        throw NameRecognitionError.confidenceInvalid
+    }
+    guard baseline.confidence < 0.90, let text = baseline.text else { return baseline }
+    let words = text.split(separator: " ", omittingEmptySubsequences: false)
+    guard words.allSatisfy({ !$0.isEmpty && $0.utf8.allSatisfy {
+        (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0)
+    } }) else { return baseline }
+    let candidate = try recognizing(image, true)
+    guard candidate.confidence.isFinite, (0...1).contains(candidate.confidence) else {
+        throw NameRecognitionError.confidenceInvalid
+    }
+    guard candidate.pixelSize == baseline.pixelSize else { throw NameRecognitionError.imageSizeChanged }
+    guard let candidateText = candidate.text, candidateText.utf8.elementsEqual(text.utf8),
+          candidate.confidence >= 0.90 else { return baseline }
+    return candidate
+}
+
 private func digest(_ image: CGImage) throws -> String {
     let count = image.width * image.height * 4
     var bytes = [UInt8](repeating: 0, count: count)
