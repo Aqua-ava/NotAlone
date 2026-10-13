@@ -515,3 +515,9 @@ Root有限场次D实际138.708860125秒、exit1；已保存选择，末次安全
 本片只在诊断中已有的末次`resolve`成功返回时附可选`identity_checks`，固定四布尔：`process_id_matches`、`window_id_matches`、`window_origin_matches`、`window_size_matches`。四项来自该同一个current与原选择的精确比较，不保存新坐标、尺寸、窗口标题、名称、路径、图帧或原始异常；`resolve`失败则不填，不编造false。旧七字段格式继续可读，附项只允许`matched`／`identity_changed`，分别要求四项全true／至少一项false。先前front／sole字段来自各自查询，Host不把它们和四项强制拼成原子证据。诊断不进入profile，不选择或认证联系人，也不改变任何运行资格。
 
 Swift新增纯比较接缝先因缺符号／参数编译失败，再单项七组比较通过；Host旧白名单拒绝附项的实际red→green及后续输入修改污染浅复制的实际red→嵌套复制green均保留。原布局与session参数13/13、Host保存6/6及类型检查通过；具体命令、耗时和完整安全组以[本片证据](../.scratch/unfinished-work/goal-ocr-identity-checks-20261013.md)为准。没有新增OS查询、observer、CLI开关、捕获调用或前台操作，严格PID／窗口编号／CGRect门、五处最小区域、0.90、内存帧与签名／TCC策略保持。子Agent实际App、真实helper、微信、TCC、CLI与模型调用0；Root新签名候选包和实际场次另验，旧D失败与原18／20验收保持。
+
+## 2026-10-13 新D包实际最小采集与低置信停止
+
+Root将d166a0f3身份诊断构建为独立D包（31.963362084秒、exit0），ASAR376c9a53…、11native输入摘要32315b3e…、280文件／14链接、六dist、四helper及九notice完整核同，App deep strict0；E／F各有限max1／actual1，末次E非前台停context，F实际通过前台／PID／windowId／CGRect精确门、静默CGPreflightScreenCaptureAccess及单微信窗口filter后到names。F顶部180×50／0.5、行160×40／0.3000000119、复读0.5、scale2、634ms，因不足0.90安全失败；只持久安全数值、无图帧／姓名／profile。3细条＋3名字的6成功采集调用是按冻结路径推断，并无独立计数器。
+
+实际probe在本包Resources、父进程为本场App，签名ad-hoc、无Team；父子及安装位置不能代签TCC责任归属。已有权限预检／捕获成功只认证当前可用，独立launchctl procinfo需要root而本轮未提权，责任归属仍未知。F14已记录PID／userData gone、leaseabsent、294项包及strict保持；原D历史identity_changed具体差项无法追认。E／F失败和未进入profile／后续绑定段保留。详细原始证据、各场时间和未覆盖项见[实测记录](../.scratch/unfinished-work/goal-ocr-front-context-20261013.md)；首AC采集分项不替代绑定／重名／失效／焦点／CLI独立及最终组合。
