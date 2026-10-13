@@ -1,0 +1,374 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-13",
+  "fixed": {
+    "librarySha256": "279ac6855ff2865caafa9718ae660e6e30a9667e4748ab064189ae633fd35fc3",
+    "cliSha256": "59de512a52d7960aef70da6b42d199358429662919f5b4baababc5132a660355",
+    "cliRevision": "7b387ac76da6439c9ecb5f741a400d14ae9fa423",
+    "release": "v1.6.25",
+    "archiveSha256": "0d54554c3ae0a8d55fc72e1b943b09f55a5010cf0f91c0bbc7094d777a180908",
+    "releaseManifestSha256": "9e5f50b201e6d1cf83ab30dd1367f3102ff28498472b9fc64561d7a537abe89d"
+  },
+  "queryTotals": {
+    "searchQueries": 4,
+    "anonymousGets": 14,
+    "responseBodyBytes": 135086,
+    "requestSeconds": 11.144782543,
+    "startedUtc": "2026-10-13T07:12:33.316Z",
+    "endedUtc": "2026-10-13T07:31:19.094Z",
+    "retries": 0,
+    "redirects": 0,
+    "firstBatch": {
+      "anonymousGets": 13,
+      "responseBodyBytes": 131556,
+      "requestSeconds": 10.367425876,
+      "endedUtc": "2026-10-13T07:15:00.915Z"
+    }
+  },
+  "queries": [
+    {
+      "name": "publisher-tags",
+      "url": "https://api.github.com/repos/r266-tech/wechat-cli-releases/tags?per_page=100",
+      "status": 200,
+      "bytes": 1793,
+      "sha256": "8e445d72577a5ded88dd4680ed949cf2473416d526920a131b00c002bbd59280",
+      "bodyPath": "00-publisher-tags.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "publisher-stable-commit",
+      "url": "https://api.github.com/repos/r266-tech/wechat-cli-releases/commits/7b387ac76da6439c9ecb5f741a400d14ae9fa423",
+      "status": 422,
+      "bytes": 174,
+      "sha256": "ba4357e4a8d13bfac2929332a8bdbcb65b1a222904806c3d06f769052b6e3bf7",
+      "bodyPath": "01-publisher-stable-commit.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "canonical-tags",
+      "url": "https://api.github.com/repos/r266-tech/wx-cli/tags?per_page=100",
+      "status": 200,
+      "bytes": 1257,
+      "sha256": "27e5ed02e32cce4cd854522e445b1edf40ab597efbaef6be2f6365ffcb069677",
+      "bodyPath": "02-canonical-tags.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "publisher-history",
+      "url": "https://api.github.com/repos/r266-tech/wechat-cli-releases/commits?per_page=100",
+      "status": 200,
+      "bytes": 6468,
+      "sha256": "16808873188b6b4f3d9836e3d2de620a2afc645da5ede8b89a5e55ad7f0a9ee1",
+      "bodyPath": "03-publisher-history.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "swh-exact-revision",
+      "url": "https://archive.softwareheritage.org/api/1/revision/7b387ac76da6439c9ecb5f741a400d14ae9fa423/",
+      "status": 404,
+      "bytes": 113,
+      "sha256": "0649a7098f89e70feb699605a676b3a8166f1a26ce2a736bd395d06ad0122ac3",
+      "bodyPath": "04-swh-exact-revision.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "publisher-initial-tree",
+      "url": "https://api.github.com/repos/r266-tech/wechat-cli-releases/git/trees/d1ae32d1e6a2074b10fe334bb91dc8be7f277da4?recursive=1",
+      "status": 200,
+      "bytes": 424,
+      "sha256": "f07d223a5a43a62d33b599f39de4724da12a36365bcfdb3793f90aba776e51de",
+      "bodyPath": "05-publisher-initial-tree.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "canonical-rc5-tree",
+      "url": "https://api.github.com/repos/r266-tech/wx-cli/git/trees/795071fa0591da5fc2c6ab94a70f22ccd93ef06c?recursive=1",
+      "status": 200,
+      "bytes": 33719,
+      "sha256": "b45f65e11770e85faae80f277acb4386751edd8516bdbd87846f12803b424192",
+      "bodyPath": "06-canonical-rc5-tree.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "go-revision-info",
+      "url": "https://proxy.golang.org/github.com/r266-tech/wechat-cli/@v/7b387ac76da6439c9ecb5f741a400d14ae9fa423.info",
+      "status": 404,
+      "bytes": 520,
+      "sha256": "1678a914002dc777b3d6829fe2ebc6ffd63f23ec74e85ac72d9e5b65277a4528",
+      "bodyPath": "07-go-revision-info.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "go-tag-info",
+      "url": "https://proxy.golang.org/github.com/r266-tech/wechat-cli/@v/v1.6.25.info",
+      "status": 404,
+      "bytes": 487,
+      "sha256": "7a6865ed76d04535ce5e6c5ed3bb4ca275d456a16713bdd2adc464a7c90ce2ec",
+      "bodyPath": "08-go-tag-info.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "canonical-initial-source-tree",
+      "url": "https://api.github.com/repos/r266-tech/wx-cli/git/trees/cdf15e8c6ce30189a791bdc8cf5e810490d5f0e8?recursive=1",
+      "status": 200,
+      "bytes": 26872,
+      "sha256": "ec20439bd0a01e6606acb8c4f8cd824ef6c45a48f470017ad6b858f57bec1f94",
+      "bodyPath": "09-canonical-initial-source-tree.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "canonical-history",
+      "url": "https://api.github.com/repos/r266-tech/wx-cli/commits?per_page=100",
+      "status": 200,
+      "bytes": 48645,
+      "sha256": "56fef7cef97692e8cce6f26368b0c348fb0979a32b85659adc9921806fac87c5",
+      "bodyPath": "10-canonical-history.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "initial-release-workflow",
+      "url": "https://api.github.com/repos/r266-tech/wx-cli/git/blobs/582d41315a73b953eeac8d33a303fbecd8fe03d3",
+      "status": 200,
+      "bytes": 6970,
+      "sha256": "ef2b201cd20159d9cadc4cab11b73ba7194b0739b402e323c1d52d05ff62a2b3",
+      "bodyPath": "11-initial-release-workflow.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "initial-release-manifest-script",
+      "url": "https://api.github.com/repos/r266-tech/wx-cli/git/blobs/7250efb9670637a701ebb2584d52649f44a2385c",
+      "status": 200,
+      "bytes": 4114,
+      "sha256": "a2977d663564dd49d14b6780bb8802cf03ab5a17564deb1fa42d366e5e5e4ab7",
+      "bodyPath": "12-initial-release-manifest-script.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "tencent-fixed-version-release-assets",
+      "url": "https://api.github.com/repos/Tencent/wcdb/releases/tags/v2.1.15",
+      "status": 200,
+      "bytes": 3530,
+      "sha256": "3f68ae9ee6e5b26bd8adeff306950388277588e02259af0ed6a2008d70ac320c",
+      "bodyPath": "13-tencent-fixed-version-release-assets.body",
+      "limitExceeded": false
+    }
+  ],
+  "newImmutableBlobs": [
+    {
+      "name": "11-initial-release-workflow",
+      "blob": "582d41315a73b953eeac8d33a303fbecd8fe03d3",
+      "path": "desktop/artifacts/wcdb-exact-provenance-parallel-20261013/11-initial-release-workflow.txt",
+      "bytes": 4854,
+      "sha256": "02e41a943cd0c29230e5a340fab2e734b6d208624b7abffb26cd30066a48157b"
+    },
+    {
+      "name": "12-initial-release-manifest-script",
+      "blob": "7250efb9670637a701ebb2584d52649f44a2385c",
+      "path": "desktop/artifacts/wcdb-exact-provenance-parallel-20261013/12-initial-release-manifest-script.txt",
+      "bytes": 2781,
+      "sha256": "2d144e365d4571fcfbc579672374d06dc384de2c8d5448916d57bf2d1d016de7"
+    }
+  ],
+  "existingRc5Materials": [
+    {
+      "oldReceipt": "canonical-material-1",
+      "blob": "4ecab014c73518dce0141ebf46152aeb18313ca1",
+      "sha256": "4ca29a7211ca94a4b6c75cab749cabe9255f4e09165e1da00fccb05a2fdc073d",
+      "bytes": 11983,
+      "rc5Paths": [
+        "README.md"
+      ]
+    },
+    {
+      "oldReceipt": "canonical-material-2",
+      "blob": "a6e3382b5b40b00894943ff1a21d146fdc2b9e98",
+      "sha256": "ad9b3ae3ef20472789f1eb0ae602a53c5ce7592a0f2c353d812ee53372d99589",
+      "bytes": 754,
+      "rc5Paths": [
+        "release-dependencies.json"
+      ]
+    },
+    {
+      "oldReceipt": "canonical-material-3",
+      "blob": "2bec577aecaac8bf8c0343d2fe08383ac6266f1a",
+      "sha256": "d96086f2c9a8aa38790892f0b88503a2972b0c929ea9e139a0e452483c76f274",
+      "bytes": 794,
+      "rc5Paths": [
+        "THIRD_PARTY_NOTICES.md"
+      ]
+    },
+    {
+      "oldReceipt": "canonical-material-4",
+      "blob": "54e8c8022036f591849113751f125369caaf82e3",
+      "sha256": "9c4d9c636ee1e1b9ab17ec2d708138c9dd12294ddaadbfef80db64ab8ae8a495",
+      "bytes": 3979,
+      "rc5Paths": [
+        "scripts/prepare-release-inputs.py"
+      ]
+    },
+    {
+      "oldReceipt": "canonical-material-5",
+      "blob": "975ffa0ccb111955c1a8dba76d14cfe3ddaa449b",
+      "sha256": "feca5d2b8f1d27b2d3e5c50806f152fd3bba67e046931cf7ee43ea721973fea1",
+      "bytes": 2617,
+      "rc5Paths": [
+        ".github/workflows/release-macos.yml"
+      ]
+    },
+    {
+      "oldReceipt": "canonical-material-6",
+      "blob": "8acc1d186185656b5853fcb6c6c391c5b0f24385",
+      "sha256": "3cdced4bf2eceb57cff56ef41ee6fe7fa9aa2facd1a8b6b4645ffb42723f3e0b",
+      "bytes": 5404,
+      "rc5Paths": [
+        "docs/RELEASE_GOVERNANCE.md"
+      ]
+    },
+    {
+      "oldReceipt": "canonical-material-7",
+      "blob": "604df01974399343995435e06aecec79c21b45e6",
+      "sha256": "fd6ac2d9d10808e1a1720a091111840b5c0e3404601183569b9cb2f14d71de1b",
+      "bytes": 2767,
+      "rc5Paths": [
+        "scripts/release-manifest.py"
+      ]
+    }
+  ],
+  "local": {
+    "zipBytes": 7142650,
+    "members": 16,
+    "artifactChecks": 13,
+    "manifestExternalEqual": true,
+    "efHelpers": 4,
+    "efMaterials": 18,
+    "goBuildInfo": {
+      "source": "desktop/artifacts/helper-upstream-20261010.onrvwc/runtime/wechat-cli",
+      "cliSha256": "59de512a52d7960aef70da6b42d199358429662919f5b4baababc5132a660355",
+      "offset": 8699904,
+      "version": "go1.27.1",
+      "rawBytes": 649,
+      "rawSha256": "cd10a2b4f7c202e5b723e0fd61955fb958e5933928ee94032a3ac1154a2ed9e0",
+      "textBytes": 617,
+      "textSha256": "ceb2c805696abe268fa33d219a7b4e134bea9fda655b134e367aea41fdd6069c",
+      "text": "path\tgithub.com/r266-tech/wechat-cli/cmd/wechat-cli\nmod\tgithub.com/r266-tech/wechat-cli\tv1.6.25\t\ndep\tgithub.com/ebitengine/purego\tv0.10.0\th1:QIw4xfpWT6GWTzaW5XEKy3HXoqrJGx1ijYHzTF0/ISU=\ndep\tgithub.com/klauspost/compress\tv1.18.5\th1:/h1gH5Ce+VWNLSWqPzOVn6XBO+vJbCNGvjoaGBFW2IE=\nbuild\t-buildmode=exe\nbuild\t-compiler=gc\nbuild\t-trimpath=true\nbuild\tDefaultGODEBUG=tracebacklabels=0,x509sslcertoverrideplatform=0\nbuild\tCGO_ENABLED=1\nbuild\tGOARCH=arm64\nbuild\tGOOS=darwin\nbuild\tGOARM64=v8.0\nbuild\tvcs=git\nbuild\tvcs.revision=7b387ac76da6439c9ecb5f741a400d14ae9fa423\nbuild\tvcs.time=2026-09-11T07:38:03Z\nbuild\tvcs.modified=false\n",
+      "scope": "二进制嵌入声明；vcs.modified=false只指CLI，不证明WCDB未修改；vcs.time不是构建时间"
+    },
+    "wcdbMachODeclarations": {
+      "minos": "15.0",
+      "sdk": "15.5",
+      "tool": 3,
+      "toolVersion": "1167.5",
+      "sourceVersion": "0.0",
+      "installName": "@rpath/WCDB.framework/Versions/2.1.15/WCDB",
+      "notFullBuildInputs": true
+    },
+    "staticSourceDigests": [
+      {
+        "path": "desktop/scripts/third-party-notices.mjs",
+        "bytes": 5351,
+        "sha256": "3890f6269624645fa97009043eaa805a11a2810c318932018bf8b1586835a338"
+      },
+      {
+        "path": "desktop/tests/helpers/third-party-notices.test.mjs",
+        "bytes": 3311,
+        "sha256": "a22959c182dced00b82a83ff18a2e16be6a93fe67396ec5a941a4c27f6de9e32"
+      },
+      {
+        "path": "desktop/artifacts/goal-final-package-20261013-f-build/root-static-baseline.json",
+        "bytes": 67412,
+        "sha256": "29838986edaf3798ffb97a8d8e1d3cd8cf489c786ac4a8d9f03d4a2c07389c76"
+      },
+      {
+        "path": "desktop/artifacts/goal-final-f-archive-20261013/static-report.json",
+        "bytes": 12650,
+        "sha256": "8fa7889abc50962f9f4187a4f93d8e77cb9d6d68e133246beb3a3636260133b0"
+      },
+      {
+        "path": "desktop/artifacts/goal-final-f-archive-20261013/root-terminal-v1.json",
+        "bytes": 208,
+        "sha256": "d072e92e80bcb617e61b8d521475029ece4c9de0f459a9d71682535fbe1eeaa2"
+      }
+    ]
+  },
+  "completion": {
+    "stableCliSource": false,
+    "actualWcdbSourceAndPatches": false,
+    "exactBuildInputsAndOutputProof": false,
+    "actualBinaryBomAndLicenseCoverage": false,
+    "exactBuildSourceVerified": false,
+    "binaryLicenseCoverageVerified": false
+  },
+  "resourceImpact": {
+    "appStarts": 0,
+    "helperExecutionOrLibraryLoad": 0,
+    "computerUse": 0,
+    "wechatReads": 0,
+    "testMessages": 0,
+    "modelHttp": 0,
+    "businessDatabaseReadsWrites": 0,
+    "credentialReads": 0,
+    "dependencyInstalls": 0,
+    "gitMutation": 0,
+    "externalMessages": 0
+  },
+  "commit": {
+    "status": "pending_original_chat_serial_commit",
+    "trackedFiles": [
+      ".scratch/wcdb-exact-provenance-parallel-20261013/spec.md",
+      ".scratch/wcdb-exact-provenance-parallel-20261013/issues/01-exact-provenance.md",
+      ".scratch/wcdb-exact-provenance-parallel-20261013/evidence-summary.json",
+      ".scratch/wcdb-exact-provenance-parallel-20261013/checkpoint.md",
+      ".scratch/wcdb-exact-provenance-parallel-20261013/handoff.md"
+    ]
+  },
+  "review": {
+    "standards": {
+      "hardViolationsAfterFix": 0,
+      "fowlerJudgementSmells": 0,
+      "evidenceBoundaryFindings": 0,
+      "fixed": "公开checkpoint本机用户名路径移到忽略收据"
+    },
+    "spec": {
+      "missing": 0,
+      "scope": 0,
+      "error": 0
+    },
+    "productTestsRun": false,
+    "additionalAssetSlice": {
+      "standards": 0,
+      "spec": 0,
+      "bodySummaryRechecked": true,
+      "derivedIndexBoundaryRechecked": true
+    }
+  },
+  "additionalTencentAssets": {
+    "requestCount": 14,
+    "totalBodyBytes": 135086,
+    "requestSeconds": 11.144782543,
+    "newOfficialReleaseResponseSha256": "3f68ae9ee6e5b26bd8adeff306950388277588e02259af0ed6a2008d70ac320c",
+    "listedAssets": 1,
+    "sourceCandidateArchiveDigestSame": true,
+    "advertisedAssetSize": 83197863,
+    "over16MiBArchiveCap": true,
+    "notDownloaded": true,
+    "existingArchiveIndex": {
+      "path": "desktop/artifacts/wcdb-license-20261012.ymbvqe6n/archive-path-index.txt",
+      "bytes": 755283,
+      "sha256": "1cf9df635627355f5548ccd23596233574796234b2b384ba9325416eff795041",
+      "nonEmptyLines": 12771,
+      "matchingCommonWcdbBinaryPaths": []
+    },
+    "indexIsExistingDerivedEvidenceNotZipReverification": true,
+    "binaryExactMatchProved": false
+  },
+  "blockedAudit": {
+    "consecutiveEquivalentMissingMaterialGoalTurns": 3,
+    "thresholdSatisfied": true,
+    "completion": false,
+    "knownAuthorizedSourceAdvancingActionRemaining": false,
+    "originalThreadOverallExecutionStillActive": true,
+    "taskSpecificCommitOrRunnerNotObserved": true,
+    "nextStateCall": "blocked",
+    "reason": "需要新的固定digest绑定源树/修改/构建/BOM材料；现有有限新路径均无此证明，禁止猜测、重复失败URL、上游联系或代行共享Git"
+  }
+}
