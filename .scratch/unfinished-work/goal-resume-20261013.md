@@ -129,3 +129,14 @@ Root末核299来源／278提交blob／8版本及旧12目标＋1外账，运行�
 [新原21有限计划](goal-memory-nullable-reference21-plan-20261014.md)固定台北10-14 01:05–04:05、last03:34:15／1845秒余量，原21／28必需＋1可选、nullable-proof-v1＋E7/V6＋ECNU固定路由known labels；独立cap42，新工程分配625。此时实际目标仍13closed／64HTTP／183永闭未用／56未登记退役／280全140未激活，Root真实只读14目录与锁均核同，P1外账不混；新场实际UUID／nonce／登记／密钥／HTTP0，私有控制与计划两轴审查尚在收口。新prepare为`desktop/artifacts/goal-nullable-reference21-prepare-20261014/`；Root最终激活计划／源表及实际输出目录索引只留其私有600收据，恢复先核实际注册终态和时间，过期不顺延，闭账不再开。
 
 现场仍暂缓，App612(E160/F164)、发送8/12下条9／来信0、第二联系人未授权、原597.957秒监听与全部缺项保留。只有ECNU预算01完整关闭，其他六票未达全部原AC；业务迁移／旧回填／维度放行0，默认空表与有效依据AND／逐类批准不变。
+
+
+## 2026-10-14：新原21实际安全停止与最小E修复恢复点
+
+[新21真实结果](goal-memory-nullable-reference21-result-20261014.md)：582d73f8固定台北01:05–04:05/last03:34:15，实际01:10:19.846331–01:17:47.283611／447.437282875秒；E/V两200均v4-flash，正式A01 raw/full1窗，正文2命题保留但备选／理由新增前情，raw false_fact1、12/14字段pass、完整0/2，安全停后20unrun。旧matcher passed不代签；proofnull/programUNKNOWN、source_boundfalse／semantic_basisnull和pending，自动0。CLOSED2/42余40永闭，不能借未到时窗或余额续跑。
+
+目标14closed66＝60确认200＋2确认500＋4旧timeout远端未知；223永闭未用＋56未登记退役＋280全140未启，工程分配625，P1另账不混。Root独立15目录／旧13不变／所有锁free、PID28366gone、12events/capturegap/cleanup错误空、74source/66blob/8version/HEAD085e0edc运行前后保持后明确释放源码/Git冻结；本窗口模型loader累计3、秘密不落盘。实际唯一入口和终态在`desktop/artifacts/goal-nullable-reference21-prepare-20261014/`，实际输出`desktop/artifacts/goal-nullable-reference21-real-20261014-582d73f8/`；只从真实closed状态恢复，不补签。
+
+Root已让worker只在E adapters.py做通用源忠实性提示澄清，原提示已有相关禁令，本次是违反原规则，不宣称历史完全没规则；不硬编码A01/答案，不改schema/Gold/门。独立最小现有测试、两轴与本地提交后另立A01新cap2诊断；目前未定其固定窗/UUID/登记/key/HTTP，不能借旧40或自动启动全140。真实语义成绩和合成17控制6.054513709秒／前104合成分别报告。
+
+当前G静态376d81fc及旧包历史分别保留，G启动0；现场仍暂缓，App612／发送8/12下条9／来信0、第二联系人缺项、原597.957秒未满60分钟保持。只有ECNU预算01完整关闭，六票仍未达全部验收；核心原六私有输入／留出范围及逐维度有效证明／逐类批准仍缺，业务迁移／旧回填／放行0、空表/AND不变。
