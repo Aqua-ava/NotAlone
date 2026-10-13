@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { BackendFailure } from './connection';
 import type { StartupPaths } from '../../shared/startup-bridge';
-import { resolveSyncProbePath, resolveWechatCliRuntime } from './bundled-helpers';
+import { resolveSyncProbePath } from './bundled-helpers';
 
 const startupPathKeys = ['pythonExecutable', 'projectDirectory', 'envFilePath', 'backendInfoPath', 'wechatCliPath', 'syncProbePath'] as const;
 const startupPathKeySet = new Set<string>(startupPathKeys);
@@ -21,7 +21,6 @@ export interface BackendConfiguration {
   pythonExecutable?: string;
   projectDirectory?: string;
   wechatCliPath?: string;
-  bundledWechatRuntime?: { wcdbLibraryPath?: string };
   syncProbePath?: string;
 }
 
@@ -54,13 +53,11 @@ export async function loadBackendConfiguration(userData: string, resourcesDirect
   const infoPath = value.backendInfoPath as string | undefined || process.env.NOTALONE_BACKEND_INFO || path.join(os.homedir(), '.notalone/backend.info');
   const envFilePath = value.envFilePath as string | undefined || process.env.NOTALONE_ENV_FILE;
   if (!path.isAbsolute(infoPath) || (envFilePath && !path.isAbsolute(envFilePath))) throw new BackendFailure('backend_connection_failed');
-  const wechatRuntime = await resolveWechatCliRuntime(resourcesDirectory, value.wechatCliPath as string | undefined || process.env.NOTALONE_WECHAT_CLI);
   return {
     infoPath, envFilePath,
     pythonExecutable: value.pythonExecutable as string | undefined,
     projectDirectory: value.projectDirectory as string | undefined,
-    wechatCliPath: wechatRuntime.path,
-    bundledWechatRuntime: wechatRuntime.bundled ? { wcdbLibraryPath: wechatRuntime.wcdbLibraryPath } : undefined,
+    wechatCliPath: value.wechatCliPath as string | undefined || process.env.NOTALONE_WECHAT_CLI,
     syncProbePath: await resolveSyncProbePath(resourcesDirectory, value.syncProbePath as string | undefined || process.env.NOTALONE_SYNC_PROBE),
   };
 }
@@ -99,11 +96,6 @@ export function backendEnvironment(config: BackendConfiguration, userData: strin
     NOTALONE_WECHAT_CLI: config.wechatCliPath || path.join(userData, 'unconfigured-cli'),
     NOTALONE_SYNC_PROBE: config.syncProbePath || path.join(userData, 'unconfigured-probe'),
     NOTALONE_FOREGROUND_LAYOUT: path.join(userData, 'foreground-layout-profile.json') };
-  if (config.bundledWechatRuntime) {
-    // 包内组只加载已核验WCDB，继承的显式库覆盖不能转向包外文件。
-    for (const key of ['WECHAT_CLI_WCDB_LIB', 'WECHAT_CLI_WCDB_DYLIB', 'WX_MCP_WCDB_LIB', 'WX_MCP_WCDB_DYLIB']) delete environment[key];
-    if (config.bundledWechatRuntime.wcdbLibraryPath) environment.WECHAT_CLI_WCDB_LIB = config.bundledWechatRuntime.wcdbLibraryPath;
-  }
   return environment;
 }
 

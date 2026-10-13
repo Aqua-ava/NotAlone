@@ -1,8 +1,8 @@
 # 01：核验固定 WCDB 来源、构建与实际许可覆盖
 
 Type: research
-State: claimed
-Triage: needs-info
+State: resolved
+Triage: wontfix
 Blocked by: 无新增内部依赖；精确构建材料是否公开待核
 Spec: ../spec.md
 Parent scope: ../../mac-desktop-app/issues/20-mac-app-delivery.md（既有子项，原图不改）
@@ -20,6 +20,8 @@ Parent scope: ../../mac-desktop-app/issues/20-mac-app-delivery.md（既有子项
 - [ ] 原聊天完成只含本任务文件的中文本地提交及公开历史检查，结果已回收。
 
 ## Answer
+
+2026-10-14：用户明确停止本项，并选择 App 不再附带 wechat-cli／WCDB，只调用本机外置工具。本项按取消关闭（wontfix），不再获取来源、查询或联系上游；原证据、缺项及未勾验收条件保留，关闭不表示来源／构建／许可已证明。后续分发清理见[外置工具规格](../../external-wechat-tools/spec.md)。
 
 四项完整来源条件均未满足，两个证明字段继续 false；独立核查证据已交付到本目录，见 [交接](../handoff.md) 与 [摘要](../evidence-summary.json)。首片4次搜索、14个新匿名GET及ZIP／manifest／E/F固定字节已实际验证。首片25条Markdown链接、格式和原响应摘要校验通过；Standards修后硬违规／判断气味／证据越界均0，Spec可行动问题0，追加官方资产片两轴补审也均0。
 

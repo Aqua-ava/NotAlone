@@ -6,8 +6,8 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { acceptanceFlags, failureReport } from './helper-runtime.mjs';
-import { prepareHelpers } from './prepare-helpers.mjs';
+import { acceptanceFlags, failureReport } from './probe-runtime.mjs';
+import { prepareProbeRuntime } from './prepare-probe-runtime.mjs';
 
 const run = promisify(execFile);
 const sourceNames = [
@@ -63,7 +63,7 @@ export async function prepareRepositoryProbe(destination) {
       const invocation = repositoryBuildInvocation(path.join(snapshot, 'scripts/build_cli.sh'), owned);
       await run(invocation.program, invocation.arguments, invocation.options);
     } catch { throw new Error('helper_probe_build_failed'); }
-    return await prepareHelpers({ directory: path.join(snapshot, 'build/cli'), destination,
+    return await prepareProbeRuntime({ directory: path.join(snapshot, 'build/cli'), destination,
       runtimeKind: 'repository-probe', arch: process.arch === 'x64' ? 'x86_64' : process.arch,
       version: `repo-${buildSourceDigest.slice(0, 16)}`, source: `repository:${buildSourceDigest}`, buildSourceDigest, buildSources });
   } finally { await rm(owned, { recursive: true, force: true }); }

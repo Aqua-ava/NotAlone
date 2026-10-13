@@ -60,32 +60,30 @@ cd desktop
 npm ci
 npx install-electron     # 首次显式准备锁定版本的 Electron 运行时
 npm run typecheck
-npm test                # 类型检查、安全调度和helper静态核查，真实 App 不运行
+npm test                # 类型检查、安全调度、自研探针及外置路径配置，真实 App 不运行
 npm start
 npm run package
 ```
 
 本机 arm64 产物为 `out/NotAlone-darwin-arm64/NotAlone.app`。可在 Finder 双击打开；包只包含编译后的本地资源和最小启动清单，不依赖开发服务器、原型目录或仓库绝对路径。打包只替换本目录的 `out/` 产物，不覆盖历史 App。当前为 ad-hoc 本机签名，未做 Developer ID 分发、公证或 DMG；权限与签名边界见[台账](../docs/macos-app-permissions-and-errors.md)。
 
-## 完整 helper 输入的静态核查
+## 外置微信工具
 
-拿到完整、可追溯的微信 CLI/WCDB 目录后，在 `desktop/` 执行以下命令；路径、版本与公开来源须替换为实际声明，不运行样例未知二进制：
+App 与本仓库不提供第三方 `wechat-cli`、WCDB 二进制或独立 CLI 源码。微信同步使用用户自行准备的本机工具；在“应用配置 → 机器环境”填写外置 CLI 的绝对路径，或显式设置 `NOTALONE_WECHAT_CLI`。已保存路径优先于环境变量；未配置时不自动搜索 PATH 或旧包内 CLI，同步不可用不妨碍独立后端配置。外置工具所需 WCDB 库由该工具自己的安装及环境负责，NotAlone 不注入包内库。
 
-```bash
-npm run check:helpers -- --directory /绝对路径/cli-runtime --version v1.2.3 --source https://example.org/public-runtime
-```
+第三方工具的 `check:helpers`、`prepare:helpers` 与 `--helper-directory/version/source` 打包入口已移除，旧打包参数在读取输入或创建输出前拒绝。CLI 只读适配器、联系人确认、总开关及停读行为保留。自研探针可按下文 `--with-probe` 附带。
 
-仅 macOS 支持。目录至少含 `wechat-cli` 和 `libWCDB.dylib`；默认检查本机架构，可显式选 `--arch arm64` 或 `--arch x86_64`。命令只读取必需文件和 Mach-O 声明的目录内依赖，不扫描其他目录、不加载 WCDB、不运行 CLI/探针；只调用系统 `lipo`、`otool` 和 `codesign --verify --strict`。符号链接、目录外非系统依赖、缺文件、错误架构/文件类型、签名失败或核查中变化都拒绝。只支持可明确解析的 `@loader_path`、`@executable_path` 与 `@rpath`；依赖使用 `@rpath` 时，搜索目录须全部明确落在所选目录内，外部/未知搜索项即使后面存在内部副本也拒绝，不推测系统缓存或跳过潜在优先副本。不可解析的布局须先整理输入，不猜测其他路径。
+### 已退役分发路径的历史记录
 
-JSON 输出只有状态、安全错误码、声明版本、相对文件名、架构、大小和 SHA-256；不回显绝对目录、原始工具输出或来源 URL。退出 0 表示 `static_checks_passed`，退出 2 表示拒绝。版本/来源仍是声明而非核验；`provenanceVerified`、`runtimeValidated`、`helperExecuted` 和 `nativeAcceptance` 均为 false。签名通过不证明可信发行者、Developer ID、公证、权限或完整动态加载行为；WCDB 作为已知动态加载依赖单独检查，其他未写入 Mach-O 的动态加载依赖仍需按实际 CLI 版本核对。目录内最多检查 64 个文件，单文件最多 256 MiB，整体核查预算 60 秒。
+以下日期段只描述此前包含第三方工具的候选包与来源核查。2026-10-14 用户决定取消该分发路径，专用许可材料及复制代码已从当前树移除，旧内容可从本地 Git 提交 `40a5f054` 查看。来源获取任务停止，已取得的证据及未证明结论保留；旧包的 Finder、快捷键与权限结果不认证当前新包。
 
 静态核查、搬运和默认启动接线属于任务 20 的实现，不授权渠道读取。2026-10-10 用户授权自行查找后，已从维护者现行[发行仓库 v1.6.25](https://github.com/r266-tech/wechat-cli-releases/releases/tag/v1.6.25)取得固定 arm64 ZIP、checksum 和 manifest，匹配 API 与组件哈希并通过严格静态检查；已用该输入实际构建未启动的候选 App。上游 WCDB 版本、构建时间声明为 unknown，同版本原源码目前不可取得，运行兼容与最终原生/微信验收继续待办；不以 v2 RC 源码代替稳定包证据。产物及实测记录见任务 20。
 
 2026-10-10 后续来源补查：WCDB install name 为 `2.1.15`，库内 SQLite `3.27.2`、SQLCipher `4.1.0` 与腾讯固定 tag/子模块相容；版本函数静态指向 `Custom build`。腾讯官方源码 ZIP 的 API digest 已匹配，但无对应 WCDB 成品库，精确构建来源和完整许可组合仍未证明。稳定 CLI 已在 OS 默认拒绝的临时隔离中运行 version/tools/schema/help，返回 `1.6.25`、38 项 schema；隔离先用自有 canary 证实范围外读写、联网、其他 exec 和 Keychain 服务查找被拒绝。只取得契约声明；合成 tail 因未定义 HOME 失败，数据初始化、事件及媒体查询行为未验证。后端三个文字同步入口显式关闭媒体路径补齐，75 项合成回归通过。原始 JSON 与材料保留于 `artifacts/helper-provenance-20261010.GT1GQm/`，详见[任务 20](../.scratch/mac-desktop-app/issues/20-mac-app-delivery.md)；候选 App、安装器、wxkey、真实微信和原生权限均未运行或验收。
 
-### 核查后的搬运与随包接线
+### 旧包许可材料与人工验收
 
-2026-10-12 许可材料补查：固定发行CLI与WCDB字节同时匹配时，`package`自动把[完整许可原文与来源索引](third-party-notices/wcdb-v2.1.15/README.md)放入`.app/Contents/Resources/notalone-third-party`，共9文件，复制后及签名后核对集合和哈希；拖动App仍保留这些材料。未知CLI／库字节不套用这组材料，已有目标不覆盖。候选Tencent源码及子模块许可已收集，精确构建来源和二进制完整许可覆盖仍未确认；不把`Custom build`默认值认作私有修改证明。只补交付材料，不新增权限或读取行为，不恢复OCR；旧Finder与生命周期验收仍只属于原包，后续资源候选包的静态检查另行记录在任务20。
+2026-10-12 许可材料补查：固定发行CLI与WCDB字节同时匹配时，`package`自动把完整许可原文与来源索引（当前树已移除，历史见 `40a5f054`）放入`.app/Contents/Resources/notalone-third-party`，共9文件，复制后及签名后核对集合和哈希；拖动App仍保留这些材料。未知CLI／库字节不套用这组材料，已有目标不覆盖。候选Tencent源码及子模块许可已收集，精确构建来源和二进制完整许可覆盖仍未确认；不把`Custom build`默认值认作私有修改证明。只补交付材料，不新增权限或读取行为，不恢复OCR；旧Finder与生命周期验收仍只属于原包，后续资源候选包的静态检查另行记录在任务20。
 
 2026-10-12 新资源候选包后续Finder场已通过：主Agent在13:34–13:44有限`test:app`窗口真实Finder双击，认证后端／配置就绪，输入小窗打开／隐藏，公开菜单正常退出，实际1场／1次启动、100.115秒、exit0。Root确认原默认目录身份恢复、自有库／进程／握手／临时目录及租约收尾；运行后签名、9份材料与4个helper／ASAR／归档哈希不变。首个锁屏等待场未启动App且未通过，失败与精确清理记录保留；[新包验收摘要](../.scratch/unfinished-work/wcdb-notice-finder-20261012.json)不代替生命周期重开、真实微信、快捷键或OCR验收。新功能冻结、OCR暂停，WCDB精确构建／二进制许可覆盖缺口保持。
 
@@ -95,33 +93,16 @@ JSON 输出只有状态、安全错误码、声明版本、相对文件名、架
 
 2026-10-12最终人工场在14:59:01–15:29:01有限窗口实际1次启动，**1／1通过、610.520秒／exit0**。同一新包系统选入合成文件、6条导入及任务核验、用户实际Cmd+Shift+Y显示／隐藏同一小窗和两次明确确认、公开菜单正常退出通过；Root核对6个记录进程、4路径、精确库、两租约及原目录身份，4helper／9材料／ASAR／ZIP／strict保持。第二次按键早于hide-request，但用户后续明确确认隐藏，收据只在同场存活及nonce／截止核验后写入；不使用机器观察代签。管理后台是本场已打开的窗口，其他App前台焦点返回未独立验。当前同包非OCR完整场景累计21个，原失败与迟到反馈分列，见[最终人工摘要](../.scratch/unfinished-work/mac-delivery-human-shortcut-final-20261012.json)。完整20票、WCDB精确构建／二进制许可及真实渠道／OCR边界保持；产品与包未改。
 
-可先独立准备一个不存在的目标目录；父目录须已存在，目标与输入不得重叠。只复制核查过的 CLI/WCDB 和声明依赖，保留相对布局；不复制配置、聊天、C 源码或目录中其他文件，不覆盖已有目标。搬运前、复制字节及搬运后复核哈希；绝对依赖仍指向旧目录时拒绝，失败只清理本次创建的目标，不自动改链接或重签 helper。
-
-```bash
-npm run prepare:helpers -- --directory /绝对路径/cli-runtime --version v1.2.3 --source https://example.org/public-runtime --destination /已有父目录/notalone-helpers
-npm run package -- --helper-directory /绝对路径/cli-runtime --helper-version v1.2.3 --helper-source https://example.org/public-runtime
-```
-
-`prepare:helpers` 退出 0 为 `prepared`，2 为安全拒绝；JSON 不回显绝对路径或 URL。`manifest.json` 仅保存相对文件名、字节数、架构、SHA-256、签名核查结果和版本/公开来源声明，保留未核验来源/运行/原生状态。准备核查前后各最多 60 秒，复制最多 60 秒；不运行生成文件、不访问网络。
-
-显式打包参数全部齐备时，通过 Packager `extraResource` 放到 `Contents/Resources/notalone-helpers`，ASAR 外保留可执行文件和动态库；缺一项或未知参数直接拒绝。未提供参数仍是前端包。复制后及最终签名后再次核对文件集合与原哈希；已核验 helper 跳过 Electron 重签，保留原字节和签名，不给它添加 JIT entitlement，主包继续 ad-hoc 签名并严格验证。包内 manifest 随主包签名保护，但哈希/签名仍不能证明发行者或真实渠道可用。
-
-仅打包 App 的主进程以 `process.resourcesPath` 提供资源目录；开发与普通页面不自动寻找包内 helper。没有明确路径配置/环境值时，启动诊断和受控后端启动共用包内默认值；每次加载核对 manifest、架构、全部文件哈希及非符号链接路径，缺失/变化/越界时该组不可用，不退回 PATH 或未知探针。设置保存或环境变量指向当前包内 helper 时仍执行整组核验，不能把默认路径写入配置后绕过。外部显式配置优先，绑定和总开关语义不变；包内探针只接受下面的仓库构建清单，未知最小布局继续采集前拒绝。
-
-包内 CLI 选择还会固定 `WECHAT_CLI_WCDB_LIB` 为同组已核验库，清理继承的 `WECHAT_CLI_WCDB_DYLIB`、`WX_MCP_WCDB_LIB`、`WX_MCP_WCDB_DYLIB`；保存包内路径后仍执行整组核验。包内组失效时停用 CLI 并清理这四个覆盖，外部显式 CLI 配置继续保持原环境优先级。该兼容层沿用旧依赖修复的库注入要求，公开 Node 回归验证配置/环境，不加载库或证明某版 CLI 的实际动态行为。
-
-CLI 侧初次实现只用公开准备命令、Node 启动诊断与自有合成 Mach-O 验证搬运、脱离源目录、损坏/缺库/越界拒绝及配置优先；后续实际 Packager 构建证据见“离线检查包”和任务 20 的发行输入候选包记录。没有运行 Electron、Python、微信或探针，不据此宣称 Finder/权限/同步/退出验收通过。Context7 不可用，官方 [Packager extraResource](https://electron.github.io/packager/main/interfaces/Options.html#extraResource)、[Electron resourcesPath](https://www.electronjs.org/docs/latest/api/process#processresourcespath-readonly)与[签名 ignore](https://github.com/electron/osx-sign/blob/main/src/types.ts)已与安装版本 Packager 20.3.0、Electron 44.7.0 及 osx-sign 类型/源码核对。
-
 ### 仓库探针与核心库
 
 ```bash
 npm run prepare:probe -- --destination /已有父目录/notalone-probe
-npm run package -- --with-probe --helper-directory /绝对路径/cli-runtime --helper-version v1.2.3 --helper-source https://example.org/public-runtime
+npm run package -- --with-probe
 ```
 
-`prepare:probe` 不接收外部二进制或探针目录。只读取仓库固定 7 份 Swift 源码与 `build_cli.sh`，拒绝源码符号链接/变化，在自有临时目录保存快照并执行该构建脚本；使用 `zsh -f` 禁用用户启动文件，`ZDOTDIR` 指向本轮临时目录，不改变用户 HOME。明确 ad-hoc 签名，不继承证书选择或用户配置。编译最多 120 秒，模块缓存和编译产物留在本轮临时目录，完成后清理；生成的 CLI 和动态库从不执行或加载。随后复用完整性、架构、签名和相对依赖检查，搬运到不存在的目标，只保留 `notalone-sync-probe`、`libNotAloneSyncCore.dylib` 与 manifest。已有目录拒绝且不覆盖，JSON 不回显绝对路径或编译输出。
+`prepare:probe` 不接收外部二进制或探针目录。只读取仓库固定 10 份 Swift 源码与 `build_cli.sh`，拒绝源码符号链接/变化，在自有临时目录保存快照并执行该构建脚本；使用 `zsh -f` 禁用用户启动文件，`ZDOTDIR` 指向本轮临时目录，不改变用户 HOME。明确 ad-hoc 签名，不继承证书选择或用户配置。编译最多 120 秒，模块缓存和编译产物留在本轮临时目录，完成后清理；生成的 CLI 和动态库从不执行或加载。随后复用完整性、架构、签名和相对依赖检查，搬运到不存在的目标，只保留 `notalone-sync-probe`、`libNotAloneSyncCore.dylib` 与 manifest。已有目录拒绝且不覆盖，JSON 不回显绝对路径或编译输出。
 
-探针 manifest 使用 `runtimeKind=repository-probe`，记录固定源码集合及 SHA-256 总摘要、`repository:` 来源声明，保留来源发行者/实际运行/原生验收未验证。仅显式 `--with-probe` 才构建并复制到 `Contents/Resources/notalone-probe`；可以单独包含探针，但缺 CLI/WCDB 的包仍不是完整交付。两组逐一在 Packager 复制后和最终包复核，保留各自签名，不给探针注入 Electron JIT entitlement。主进程核对源码清单摘要和运行时文件后投影 `syncProbePath`，保存值及环境变量指向它时继续核验；一组失效不阻塞另一组或独立首启配置。
+探针 manifest 使用 `runtimeKind=repository-probe`，记录固定源码集合及 SHA-256 总摘要、`repository:` 来源声明，保留来源发行者/实际运行/原生验收未验证。仅显式 `--with-probe` 才构建并复制到 `Contents/Resources/notalone-probe`；第三方微信工具始终外置。探针在 Packager 复制后和最终包复核，保留原签名，不给探针注入 Electron JIT entitlement。主进程核对源码清单摘要和运行时文件后投影 `syncProbePath`，保存值及环境变量指向它时继续核验；探针失效不阻塞外置 CLI 或独立首启配置。
 
 现行 `--session --json`（含 `--minimal-region`）在缺少0600已校验布局profile时于OS动作前返回 `minimal_region_layout_unverified`；有效profile路径才允许逐最小区域采集并重验。当前真实校验失败，没有可用profile或真实自动定位结果。公开Node回归实际编译、签名和搬运仓库探针，验证包内默认值、保存后损坏停用和配置优先；离线检查包验证了Packager拷贝/签名流程，权限及动态运行仍须现场验收。
 
@@ -132,19 +113,19 @@ npm run build
 npm run test:package
 ```
 
-显式 `test:package` 在自有临时目录复制当前编译资源和 logo，从已安装 Electron 生成不含 AppleDouble 元数据的离线 ZIP，再用合成 CLI/WCDB 和仓库探针调用生产打包命令。实际检查两组资源、原字节/SHA-256、严格签名、helper 未获 JIT entitlement，以及实际包 Resources 下的 Node 启动诊断/后端环境；不执行 Electron、CLI 或探针，不覆盖既有 `out/`，最后精确清理检查包、ZIP 和缓存。合成 CLI 不是正式渠道输入，该结果不能关闭 Finder、权限或微信验收。
+显式 `test:package` 在自有临时目录复制当前编译资源和 logo，从已安装 Electron 生成不含 AppleDouble 元数据的离线 ZIP，使用仓库探针调用生产打包命令。实际检查包内没有第三方 CLI/WCDB 或专用许可目录、自研探针原字节/SHA-256、严格签名、未获 JIT entitlement，以及实际包 Resources 下的 Node 启动诊断/后端环境；不执行 Electron、CLI 或探针，不覆盖既有 `out/`，最后精确清理检查包、ZIP 和缓存。该结果不能关闭 Finder、权限或微信验收。
 
 签名所需的 plist 在本轮 staging 内生成一次，再以文件路径传给 osx-sign；内容仍只有 `com.apple.security.cs.allow-jit=true`，helper 保留原签名。此前数组参数会逐文件生成 staging 外的临时目录，2026-10-10 的公开构建检查实际复现 250 份残留；修复后命令返回时本轮临时目录清空，调用者既有哨兵保留，主 App entitlement 精确等于原单项。旧候选构建的 250 份自有普通 plist 经哈希/目录身份核对后逐项清理，候选包四个运行时哈希未变；不扫描或批量删除系统临时目录。`test:package` 的 red/green 与清理证据见[任务 20](../.scratch/mac-desktop-app/issues/20-mac-app-delivery.md)。
 
-需要把真实输入构建到独立目录时，公开 `package` 可附加以下选项：
+需要把 App 与自研探针构建到独立目录时，公开 `package` 可附加以下选项：
 
 ```bash
-npm run package -- --output-directory /已有父目录/新的输出目录 --electron-zip-directory /绝对路径/离线ElectronZIP目录 --with-probe --helper-directory /绝对路径/cli-runtime --helper-version v1.2.3 --helper-source https://example.org/public-runtime
+npm run package -- --output-directory /已有父目录/新的输出目录 --electron-zip-directory /绝对路径/离线ElectronZIP目录 --with-probe
 ```
 
 两项路径必须为绝对路径且不重复。显式输出目录必须不存在，先独占创建，失败时只按目录身份清理本次自有目标；已有目录保留并拒绝，不允许覆盖。离线目录须含 `electron-v版本-darwin-架构.zip` 普通文件，版本来自锁定配置、架构来自本机；缺档拒绝，不回退下载。Packager 临时树留在本轮 staging 下，随本轮清理。未给这些选项时保留原 `out/` 构建方式。SDK 的 [electronZipDir](https://electron.github.io/packager/main/interfaces/Options.html#electronZipDir)、[out/tmpdir](https://electron.github.io/packager/main/interfaces/Options.html#out)已与安装 20.3.0 源码核对。
 
-构建检查位于独立 `tests/packaging/`，默认 `npm test` 的具名文件列表不包含它。实际离线构建 1/1 通过；默认类型/安全组仍为 38/38，不构建 App 包。已有输出保留、缺 ZIP 后自有输出清理均验证通过；签名是 ad-hoc，不证明可信发行者或权限身份稳定。
+实际构建检查位于独立 `tests/packaging/command.test.mjs`，不加入默认 `npm test`；轻量的第三方参数拒绝回归加入默认测试。2026-10-14 外置模式离线构建 1/1、默认类型检查及安全组 44/44 通过；默认组不构建 App 包。已有输出保留、缺 ZIP 后自有输出清理均验证通过；签名是 ad-hoc，不证明可信发行者或权限身份稳定。
 
 ## 轻量无头页面验证
 
@@ -193,7 +174,7 @@ node tests/headless/rewrite-lifecycle-check.mjs          # 实际未知命令故
 
 ## 安全检查与预约 App 验收
 
-`npm test` 默认执行 TypeScript 检查、测试 CLI 的合成回归（`tests/scheduling/`、`tests/headless/command.test.mjs`）及 helper 静态核查/搬运与 Node 启动配置（`tests/helpers/command.test.mjs`）：未协调调用拒绝、跨独立命令副本/TMPDIR 互斥、启动预算、到期、Ctrl+C/SIGTERM、崩溃与损坏租约，以及 Playwright 门禁和限定文件发现。调度的合成孩子固定为 Node；helper 核查在 macOS 只构建和 ad-hoc 签名临时合成 C 文件，检查格式、架构、依赖和签名，不执行生成的二进制。原始 Electron API 的拒绝检查也显式使用 Node 可执行文件，避免门禁回归时打开桌面。命令明确报告真实 App 未运行。这些结果不能证明窗口、业务 UI、后端 HTTP 接线、签名包或实机验收通过；安全目录从真实 App 全量中排除。
+`npm test` 默认执行 TypeScript 检查、测试 CLI 的合成回归（`tests/scheduling/`、`tests/headless/command.test.mjs`）及自研探针静态构建/搬运与外置 CLI 的 Node 启动配置（`tests/helpers/probe.test.mjs`、`tests/helpers/external-cli.test.mjs`）：未协调调用拒绝、跨独立命令副本/TMPDIR 互斥、启动预算、到期、Ctrl+C/SIGTERM、崩溃与损坏租约，以及 Playwright 门禁和限定文件发现。调度的合成孩子固定为 Node；自研探针核查在 macOS 只编译和 ad-hoc 签名仓库源码，检查格式、架构、依赖和签名；外置 CLI 测试只加载合成配置，不执行工具。原始 Electron API 的拒绝检查也显式使用 Node 可执行文件，避免门禁回归时打开桌面。命令明确报告真实 App 未运行。这些结果不能证明窗口、业务 UI、后端 HTTP 接线、签名包或实机验收通过；安全目录从真实 App 全量中排除。
 
 真实 App 验收会显示窗口并使用桌面焦点。必须由主 Agent 先协调用户认可的有限时段，再执行下面的显式命令。参数只是实施门禁，不能代替用户对该时段的认可；每轮真实 App 验收须单独取得有限时段认可，过去的预约不自动延续。`npm start` 是用户正常打开 App 的入口，不能当作绕过测试门禁的自动验收方式。
 

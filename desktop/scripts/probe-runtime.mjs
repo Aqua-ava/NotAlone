@@ -9,8 +9,7 @@ const run = promisify(execFile);
 const inside = (root, file) => file.startsWith(`${root}${path.sep}`);
 const identity = (metadata) => `${metadata.dev}:${metadata.ino}:${metadata.size}:${metadata.mtimeMs}:${metadata.ctimeMs}`;
 
-export function runtimeLayout(kind = 'wechat-cli') {
-  if (kind === 'wechat-cli') return { entry: 'wechat-cli', library: 'libWCDB.dylib', directory: 'notalone-helpers' };
+export function runtimeLayout(kind = 'repository-probe') {
   if (kind === 'repository-probe') return { entry: 'notalone-sync-probe', library: 'libNotAloneSyncCore.dylib', directory: 'notalone-probe' };
   throw new Error('helper_check_arguments');
 }
@@ -117,26 +116,9 @@ export async function inspectRuntime(input) {
   }
   await access(path.join(root, layout.entry), constants.X_OK);
   await inspect(path.join(root, layout.entry));
-  // WCDB可由程序动态加载，必须独立检查，不能只依赖Mach-O的链接表。
+  // 自研核心库独立核验，不能只依赖可执行文件的链接表。
   await inspect(path.join(root, layout.library));
-  return { state: 'static_checks_passed', runtimeKind: input.runtimeKind ?? 'wechat-cli', versionDeclaration: input.version, architecture: input.arch, files };
-}
-
-export function argumentsFor(values) {
-  const fields = {};
-  for (let index = 0; index < values.length; index += 2) {
-    const key = values[index]; const value = values[index + 1];
-    if (!['--directory', '--version', '--source', '--arch'].includes(key) || key in fields
-      || typeof value !== 'string' || !value || /[\0\r\n]/.test(value)) throw new Error('helper_check_arguments');
-    fields[key] = value;
-  }
-  if (!path.isAbsolute(fields['--directory'] ?? '') || !/^[a-zA-Z0-9._+-]{1,64}$/.test(fields['--version'] ?? '')) throw new Error('helper_check_arguments');
-  let source;
-  try { source = new URL(fields['--source']); } catch { throw new Error('helper_check_arguments'); }
-  if (source.protocol !== 'https:' || source.username || source.password || source.search || source.hash) throw new Error('helper_check_arguments');
-  const arch = fields['--arch'] ?? (process.arch === 'x64' ? 'x86_64' : process.arch);
-  if (!['arm64', 'x86_64'].includes(arch)) throw new Error('helper_check_arguments');
-  return { directory: fields['--directory'], version: fields['--version'], source: source.href, arch };
+  return { state: 'static_checks_passed', runtimeKind: input.runtimeKind ?? 'repository-probe', versionDeclaration: input.version, architecture: input.arch, files };
 }
 
 export function failureReport(error) {

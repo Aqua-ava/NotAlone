@@ -64,7 +64,7 @@ NotAlone 面向你真实认识的联系人：在你确认联系人、导入历�
 | 微信桌面版、外置 WeChat CLI / WCDB | 使用微信文字同步时需要自行准备。 |
 | DeepSeek API Key | 使用真实模型时配置；未配置则模型入口失败关闭。 |
 
-**关于 WeChat CLI：** 本仓库包含适配代码、测试、打包辅助脚本与第三方许可材料。`wechat-cli` 可执行文件、`libWCDB.dylib` 和独立 CLI 源码未随仓库提供；运行时输入与核查方式见 [桌面端说明](desktop/README.md#完整-helper-输入的静态核查)。
+**关于 WeChat CLI：** 本仓库只保留调用外置工具的适配代码、配置接口和相关测试。`wechat-cli` 可执行文件、`libWCDB.dylib` 和独立 CLI 源码不随仓库或 App 提供；本机外置配置见 [桌面端说明](desktop/README.md#外置微信工具)。
 
 ### 2. 安装后端与原生探针
 
@@ -86,7 +86,7 @@ npx install-electron  # 首次显式准备锁定版本的 Electron 运行时
 npm start
 ```
 
-`npm start` 先构建再启动 Electron。仅构建可在 `desktop/` 执行 `npm run build`，本机打包使用 `npm run package`。默认包只含前端；CLI / WCDB 与探针需要显式打包输入，完整步骤见 [本机运行与构建](desktop/README.md#本机运行与构建)。
+`npm start` 先构建再启动 Electron。仅构建可在 `desktop/` 执行 `npm run build`，本机打包使用 `npm run package`。默认包只含前端；可用 `--with-probe` 附带 NotAlone 自研探针，微信 CLI / WCDB 始终由用户在本机另行准备，完整步骤见 [本机运行与构建](desktop/README.md#本机运行与构建)。
 
 ### 4. 首次连接与使用
 

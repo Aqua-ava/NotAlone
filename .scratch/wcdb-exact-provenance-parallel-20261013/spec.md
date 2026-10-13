@@ -43,4 +43,4 @@
 
 ## 来源与边界
 
-基线：[来源摘要](../unfinished-work/wcdb-source-license-20261012.json)、[缺件清单](../unfinished-work/wcdb-provenance-followup-20261012.md)、[本日来源检查点](../unfinished-work/goal-mac-20261013-provenance.md)、[最新恢复记录](../unfinished-work/goal-resume-20261013.md)、[材料 manifest](../../desktop/third-party-notices/wcdb-v2.1.15/manifest.json)。仓库规则优先，工程提交的执行者由本轮明确分工指定。
+基线：[来源摘要](../unfinished-work/wcdb-source-license-20261012.json)、[缺件清单](../unfinished-work/wcdb-provenance-followup-20261012.md)、[本日来源检查点](../unfinished-work/goal-mac-20261013-provenance.md)、[最新恢复记录](../unfinished-work/goal-resume-20261013.md)、材料 manifest（原路径 `desktop/third-party-notices/wcdb-v2.1.15/manifest.json` 已退役，原文件见本地 Git `40a5f054`）。仓库规则优先，工程提交的执行者由本轮明确分工指定。

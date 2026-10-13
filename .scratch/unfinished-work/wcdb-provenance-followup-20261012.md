@@ -22,7 +22,7 @@
 
 ## 本地独立字节复核
 
-本轮以 Conda `NotAlone` 中的 Python 标准库读取文件、计算 SHA-256；没有装载或执行库。候选包路径来自原来源摘要，未查找其他包。当前资源与[材料 manifest](../../desktop/third-party-notices/wcdb-v2.1.15/manifest.json)匹配：
+本轮以 Conda `NotAlone` 中的 Python 标准库读取文件、计算 SHA-256；没有装载或执行库。候选包路径来自原来源摘要，未查找其他包。当前资源与材料 manifest（原路径 `desktop/third-party-notices/wcdb-v2.1.15/manifest.json` 已退役，原文件见本地 Git `40a5f054`）匹配：
 
 | 资源 | 当前 SHA-256 | 结果 |
 | --- | --- | --- |
@@ -36,8 +36,8 @@
 
 1. 发行 manifest 的 CLI commit 为 `7b387ac76da6439c9ecb5f741a400d14ae9fa423`，但 `wcdb_version` 声明为 `unknown`。CLI 的嵌入 Go revision 和 manifest 相同，是 CLI 发行身份线索，不能据此推出配套库的源树。过去静态结果及原发行 manifest 见[来源摘要](wcdb-source-license-20261012.json)及自有 `desktop/artifacts/helper-upstream-20261010.onrvwc/release-manifest.json`。
 2. Tencent 候选源码固定在 `v2.1.15`／`a62d7f12191843e1f095e3c37f46785ed04ebde8`。候选的版本宏在未定义 `WCDB_VERSION` 时返回 `Custom build`；本轮重新读取该固定官方文件确认了这一默认行为。此字符串不能证明当前库有私有补丁或来自微信提取，也不能证明采用候选 commit。[固定版本宏](https://github.com/Tencent/wcdb/blob/a62d7f12191843e1f095e3c37f46785ed04ebde8/src/common/utility/WCDBVersion.h)
-3. 过去静态记录中的 install name、SQLite／SQLCipher 版本字符串、Zstandard 导出和 CommonCrypto 导入，是组件与版本线索；不能识别全部编译输入、静态链接对象、裁剪范围或补丁。该边界已写在[材料说明](../../desktop/third-party-notices/wcdb-v2.1.15/README.md)，本轮未执行这些函数来推定版本。
-4. 现有许可原文和候选 gitlinks 已固定、随包保存，但候选依赖集合不是当前库实际 BOM。保留原文不自动确认当前二进制的全部许可覆盖；不因 Zstandard 保存了两份原文，就把许可选择推定为必须采用 GPL。来源与明确边界见[材料 manifest](../../desktop/third-party-notices/wcdb-v2.1.15/manifest.json)和[原来源摘要](wcdb-source-license-20261012.json)。
+3. 过去静态记录中的 install name、SQLite／SQLCipher 版本字符串、Zstandard 导出和 CommonCrypto 导入，是组件与版本线索；不能识别全部编译输入、静态链接对象、裁剪范围或补丁。该边界已写在材料说明（原路径 `desktop/third-party-notices/wcdb-v2.1.15/README.md` 已退役，原文件见本地 Git `40a5f054`），本轮未执行这些函数来推定版本。
+4. 现有许可原文和候选 gitlinks 已固定、随包保存，但候选依赖集合不是当前库实际 BOM。保留原文不自动确认当前二进制的全部许可覆盖；不因 Zstandard 保存了两份原文，就把许可选择推定为必须采用 GPL。来源与明确边界见材料 manifest（原路径 `desktop/third-party-notices/wcdb-v2.1.15/manifest.json` 已退役，原文件见本地 Git `40a5f054`）和[原来源摘要](wcdb-source-license-20261012.json)。
 
 ## 最小所需上游材料
 

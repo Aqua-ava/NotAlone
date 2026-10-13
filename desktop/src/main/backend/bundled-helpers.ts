@@ -3,43 +3,27 @@ import { access, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 
-type RuntimeKind = 'wechat-cli' | 'repository-probe';
-const layouts = {
-  'wechat-cli': { directory: 'notalone-helpers', entry: 'wechat-cli', library: 'libWCDB.dylib' },
-  'repository-probe': { directory: 'notalone-probe', entry: 'notalone-sync-probe', library: 'libNotAloneSyncCore.dylib' },
-} as const;
-
-export async function resolveWechatCliRuntime(resourcesDirectory: string | undefined, configuredPath?: string): Promise<{ path?: string; bundled: boolean; wcdbLibraryPath?: string }> {
-  const runtime = await resolveRuntimePath(resourcesDirectory, configuredPath, 'wechat-cli');
-  return { ...runtime, wcdbLibraryPath: runtime.bundled && runtime.path
-    ? path.join(path.dirname(runtime.path), layouts['wechat-cli'].library) : undefined };
-}
+const layout = { directory: 'notalone-probe', entry: 'notalone-sync-probe', library: 'libNotAloneSyncCore.dylib' } as const;
 
 export async function resolveSyncProbePath(resourcesDirectory: string | undefined, configuredPath?: string): Promise<string | undefined> {
-  return (await resolveRuntimePath(resourcesDirectory, configuredPath, 'repository-probe')).path;
-}
-
-async function resolveRuntimePath(resourcesDirectory: string | undefined, configuredPath: string | undefined, kind: RuntimeKind): Promise<{ path?: string; bundled: boolean }> {
-  const hasResources = Boolean(resourcesDirectory && path.isAbsolute(resourcesDirectory));
-  const bundledRuntime = async () => ({ path: await verifiedBundledRuntime(resourcesDirectory, kind), bundled: hasResources });
+  const bundledRuntime = () => verifiedBundledRuntime(resourcesDirectory);
   if (!configuredPath) return bundledRuntime();
-  if (!resourcesDirectory || !path.isAbsolute(resourcesDirectory)) return { path: configuredPath, bundled: false };
+  if (!resourcesDirectory || !path.isAbsolute(resourcesDirectory)) return configuredPath;
   const resources = [path.resolve(resourcesDirectory)];
   try { resources.push(await realpath(resourcesDirectory)); } catch { /* 已知包路径失效时仍按声明路径停用。 */ }
   const selected = path.normalize(configuredPath);
-  const roots = resources.map((directory) => path.join(directory, layouts[kind].directory));
-  if (!roots.some((root) => selected === root || selected.startsWith(`${root}${path.sep}`))) return { path: configuredPath, bundled: false };
+  const roots = resources.map((directory) => path.join(directory, layout.directory));
+  if (!roots.some((root) => selected === root || selected.startsWith(`${root}${path.sep}`))) return configuredPath;
   // 设置表单保存后的默认路径和环境变量仍属于包内文件，不能绕过整组核验。
-  if (!roots.some((root) => selected === path.join(root, layouts[kind].entry))) return { bundled: true };
+  if (!roots.some((root) => selected === path.join(root, layout.entry))) return undefined;
   return bundledRuntime();
 }
 
 // 仅核对包内清单和字节完整性，不运行输入、加载动态库或宣称发行者可信。
-async function verifiedBundledRuntime(resourcesDirectory: string | undefined, kind: RuntimeKind): Promise<string | undefined> {
+async function verifiedBundledRuntime(resourcesDirectory: string | undefined): Promise<string | undefined> {
   if (!resourcesDirectory || !path.isAbsolute(resourcesDirectory)) return undefined;
   try {
     const resources = await realpath(resourcesDirectory);
-    const layout = layouts[kind];
     const root = path.join(resources, layout.directory);
     if (await realpath(root) !== root) return undefined;
     const file = await open(path.join(root, 'manifest.json'), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -55,11 +39,11 @@ async function verifiedBundledRuntime(resourcesDirectory: string | undefined, ki
     if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return undefined;
     const value = manifest as Record<string, unknown>;
     const architecture = process.arch === 'x64' ? 'x86_64' : process.arch;
-    if (value.schemaVersion !== 1 || (value.runtimeKind ?? 'wechat-cli') !== kind || value.architecture !== architecture
+    if (value.schemaVersion !== 1 || value.runtimeKind !== 'repository-probe' || value.architecture !== architecture
       || typeof value.versionDeclaration !== 'string' || !/^[a-zA-Z0-9._+-]{1,64}$/.test(value.versionDeclaration)
       || value.provenanceVerified !== false || value.runtimeValidated !== false || value.helperExecuted !== false || value.nativeAcceptance !== false
       || !Array.isArray(value.files) || value.files.length < 2 || value.files.length > 64) return undefined;
-    if (kind === 'repository-probe' && !validRepositoryBuild(value)) return undefined;
+    if (!validRepositoryBuild(value)) return undefined;
     const names = new Set<string>(); const deadline = Date.now() + 5000;
     for (const entry of value.files) {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return undefined;

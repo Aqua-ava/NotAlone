@@ -2,16 +2,7 @@ import { constants } from 'node:fs';
 import { lstat, mkdir, open, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { pathToFileURL } from 'node:url';
-import { acceptanceFlags, argumentsFor, failureReport, inspectRuntime, requireUnchangedFiles, runtimeLayout } from './helper-runtime.mjs';
-
-export function preparationArguments(values) {
-  const index = values.indexOf('--destination');
-  const destination = values[index + 1];
-  if (index < 0 || index % 2 || typeof destination !== 'string' || !path.isAbsolute(destination)
-    || /[\0\r\n]/.test(destination) || values.indexOf('--destination', index + 1) >= 0) throw new Error('helper_prepare_destination');
-  return { ...argumentsFor([...values.slice(0, index), ...values.slice(index + 2)]), destination };
-}
+import { acceptanceFlags, inspectRuntime, requireUnchangedFiles, runtimeLayout } from './probe-runtime.mjs';
 
 async function copyCheckedFile(source, destination, expected, entry, deadline) {
   if (await realpath(source) !== source) throw new Error('helper_prepare_input_changed');
@@ -42,7 +33,7 @@ async function copyCheckedFile(source, destination, expected, entry, deadline) {
   } finally { await output?.close(); await input.close(); }
 }
 
-export async function prepareHelpers(input) {
+export async function prepareProbeRuntime(input) {
   const layout = runtimeLayout(input.runtimeKind);
   const root = await realpath(input.directory);
   const parent = await realpath(path.dirname(input.destination));
@@ -72,11 +63,4 @@ export async function prepareHelpers(input) {
     if (error.code === 'EEXIST') throw new Error('helper_prepare_destination');
     throw error;
   }
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  let result;
-  try { result = await prepareHelpers(preparationArguments(process.argv.slice(2))); }
-  catch (error) { result = failureReport(error); process.exitCode = 2; }
-  process.stdout.write(`${JSON.stringify({ ...result, ...acceptanceFlags })}\n`);
 }

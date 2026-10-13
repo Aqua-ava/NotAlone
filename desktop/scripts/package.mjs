@@ -4,33 +4,28 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { prepareHelpers } from './prepare-helpers.mjs';
 import { prepareRepositoryProbe } from './prepare-probe.mjs';
-import { prepareThirdPartyNotices, verifyThirdPartyNotices } from './third-party-notices.mjs';
-import { argumentsFor, inspectRuntime, requireUnchangedFiles, runtimeLayout } from './helper-runtime.mjs';
+import { inspectRuntime, requireUnchangedFiles, runtimeLayout } from './probe-runtime.mjs';
 
 if (process.platform !== 'darwin') throw new Error('本机 App 打包需要 macOS。');
 const run = promisify(execFile);
-const helperArguments = process.argv.slice(2);
+const packageArguments = process.argv.slice(2);
 let withProbe = false;
-const packagePaths = {}; const cliArguments = [];
-for (let index = 0; index < helperArguments.length; index++) {
-  const key = helperArguments[index];
+const packagePaths = {};
+for (let index = 0; index < packageArguments.length; index++) {
+  const key = packageArguments[index];
+  if (['--helper-directory', '--helper-version', '--helper-source'].includes(key)) throw new Error('package_external_tools_only');
   if (key === '--with-probe') {
     if (withProbe) throw new Error('helper_check_arguments');
     withProbe = true; continue;
   }
-  const value = helperArguments[++index];
+  const value = packageArguments[++index];
   if (typeof value !== 'string' || !value || /[\0\r\n]/.test(value)) throw new Error('helper_check_arguments');
   if (key === '--output-directory' || key === '--electron-zip-directory') {
     if (key in packagePaths || !path.isAbsolute(value)) throw new Error('helper_check_arguments');
     packagePaths[key] = path.resolve(value);
-  } else { cliArguments.push(key, value); }
+  } else { throw new Error('helper_check_arguments'); }
 }
-const helperInput = cliArguments.length ? argumentsFor(cliArguments.map((value, index) => {
-  if (index % 2 === 0 && !['--helper-directory', '--helper-version', '--helper-source'].includes(value)) throw new Error('helper_check_arguments');
-  return index % 2 === 0 ? value.replace('--helper-', '--') : value;
-})) : undefined;
 const manifest = JSON.parse(await readFile('package.json', 'utf8'));
 let staging; let outputDirectory; let ownedOutput; let completed = false;
 try {
@@ -50,25 +45,14 @@ try {
     } catch { throw new Error('package_offline_archive_unavailable'); }
   }
   staging = await mkdtemp(path.join(tmpdir(), 'notalone-package-'));
-  const helperDirectory = path.join(staging, 'notalone-helpers');
-  const prepared = helperInput ? await prepareHelpers({ ...helperInput, destination: helperDirectory }) : undefined;
   const probeDirectory = path.join(staging, 'notalone-probe');
   const preparedProbe = withProbe ? await prepareRepositoryProbe(probeDirectory) : undefined;
-  const groups = [prepared, preparedProbe].filter(Boolean);
-  const noticesDirectory = path.join(staging, 'notalone-third-party');
-  const preparedNotices = prepared ? await prepareThirdPartyNotices({
-    librarySha256: prepared.files.find((file) => file.name === 'libWCDB.dylib')?.sha256,
-    cliSha256: prepared.files.find((file) => file.name === 'wechat-cli')?.sha256,
-  }, noticesDirectory) : undefined;
-  const resources = groups.map((group) => path.join(staging, runtimeLayout(group.runtimeKind).directory));
-  if (preparedNotices) resources.push(noticesDirectory);
+  const resources = preparedProbe ? [probeDirectory] : [];
   const verifyResources = async (resources) => {
-    for (const group of groups) {
-      const copied = await inspectRuntime({ directory: path.join(resources, runtimeLayout(group.runtimeKind).directory),
-        arch: group.architecture, version: group.versionDeclaration, runtimeKind: group.runtimeKind });
-      requireUnchangedFiles(group.files, copied.files);
-    }
-    if (preparedNotices) await verifyThirdPartyNotices(preparedNotices, path.join(resources, 'notalone-third-party'));
+    if (!preparedProbe) return;
+    const copied = await inspectRuntime({ directory: path.join(resources, runtimeLayout().directory),
+      arch: preparedProbe.architecture, version: preparedProbe.versionDeclaration, runtimeKind: preparedProbe.runtimeKind });
+    requireUnchangedFiles(preparedProbe.files, copied.files);
   };
   const source = path.join(staging, 'app');
   await mkdir(source);
@@ -132,8 +116,8 @@ try {
       identityValidation: false,
       preAutoEntitlements: false,
       preEmbedProvisioningProfile: false,
-      // helper 已带核查过的签名，保留字节与权限，不注入 Electron 的 JIT entitlement。
-      ignore: (file) => groups.some((group) => file.includes(`${path.sep}Contents${path.sep}Resources${path.sep}${runtimeLayout(group.runtimeKind).directory}${path.sep}`)),
+      // 自研探针保留已核查的签名，不注入 Electron 的 JIT entitlement。
+      ignore: (file) => Boolean(preparedProbe && file.includes(`${path.sep}Contents${path.sep}Resources${path.sep}${runtimeLayout().directory}${path.sep}`)),
       optionsForFile: () => ({
         entitlements,
         hardenedRuntime: false,
@@ -147,9 +131,8 @@ try {
     await verifyResources(path.join(app, 'Contents/Resources'));
     await run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', app]);
     console.log(`本机 App 已构建并通过 ad-hoc 签名校验：${app}`);
-    console.log(prepared ? 'CLI/WCDB 静态核查与随包字节复核通过；来源、运行和原生验收仍未验证。' : '此包未包含 CLI/WCDB，完整 helper 交付仍待补齐。');
+    console.log('微信同步使用用户本机外置工具，请在机器环境中配置 CLI 路径。');
     if (preparedProbe) console.log('仓库探针/核心库静态构建与随包复核通过；未运行探针，不证明定位或权限验收。');
-    if (preparedNotices) console.log('许可原文及来源索引已随包复核；精确构建来源和二进制许可覆盖仍未确认。');
   }
   completed = true;
 } finally {

@@ -6,7 +6,7 @@
 
 本轮没有取得新的精确源码、补丁、构建日志或实际 BOM。以下清单记录现有材料能证明的范围和具体缺件，不将“整理完成”写成“来源验证完成”。生产材料中的 `exactBuildSourceVerified=false`、`binaryLicenseCoverageVerified=false` 保持；[Mac20](../mac-desktop-app/issues/20-mac-app-delivery.md)的状态、依赖和验收条件未改。
 
-唯一对象为 `libWCDB.dylib`，**5,120,912 bytes**，SHA-256 **`279ac6855ff2865caafa9718ae660e6e30a9667e4748ab064189ae633fd35fc3`**。本轮读取固定发行 runtime 中的文件，摘要与实际发行 manifest 的 `artifacts.libWCDB.dylib` 项一致；没有读取或修改 App。发行 manifest 为 2,076 bytes、SHA-256 `9e5f50b201e6d1cf83ab30dd1367f3102ff28498472b9fc64561d7a537abe89d`，声明 `wcdb_version=unknown`、`build_timestamp_utc=unknown`。[本轮静态收据](../../desktop/artifacts/wcdb-current-binary-audit-20261013/receipt.json)、[固定发行身份](../../desktop/third-party-notices/wcdb-v2.1.15/manifest.json)
+唯一对象为 `libWCDB.dylib`，**5,120,912 bytes**，SHA-256 **`279ac6855ff2865caafa9718ae660e6e30a9667e4748ab064189ae633fd35fc3`**。本轮读取固定发行 runtime 中的文件，摘要与实际发行 manifest 的 `artifacts.libWCDB.dylib` 项一致；没有读取或修改 App。发行 manifest 为 2,076 bytes、SHA-256 `9e5f50b201e6d1cf83ab30dd1367f3102ff28498472b9fc64561d7a537abe89d`，声明 `wcdb_version=unknown`、`build_timestamp_utc=unknown`。[本轮静态收据](../../desktop/artifacts/wcdb-current-binary-audit-20261013/receipt.json)、固定发行身份（原路径 `desktop/third-party-notices/wcdb-v2.1.15/manifest.json` 已退役，原文件见本地 Git `40a5f054`）
 
 精确源码 revision 仍为未知。CLI 内嵌的 `7b387ac76da6439c9ecb5f741a400d14ae9fa423` 只属于 CLI 声明，不能写成 WCDB revision。Mach-O install name 为 `@rpath/WCDB.framework/Versions/2.1.15/WCDB`，UUID 为 `5E040183-C782-3A87-A975-EB7B0F450844`；版本路径、UUID 和 `Custom build` 均不能证明 source tree 或是否修改。[此前证据边界](wcdb-provenance-followup-20261012.md)、[本轮静态收据](../../desktop/artifacts/wcdb-current-binary-audit-20261013/receipt.json)
 
@@ -38,7 +38,7 @@
 
 本轮从固定字节重读的六条 `LC_LOAD_DYLIB` 为 Security、Foundation、CoreFoundation frameworks，以及 `/usr/lib/libz.1.dylib`、`/usr/lib/libc++.1.dylib`、`/usr/lib/libSystem.B.dylib`。完整 install path、current／compatibility version 已在收据逐项保存；这些字段是库的链接声明，不证明本机实际加载文件、系统组件源码版本或完整静态链接清单。未读取系统库文件或进行运行验证。
 
-九份已保存材料为 `WCDB-LICENSE.txt`、`SQLCipher-LICENSE.txt`、`ZSTD-LICENSE.txt`、`ZSTD-COPYING.txt`、`OpenSSL-LICENSE.txt`、`wechat-cli-LICENSE.txt`、`wechat-cli-THIRD-PARTY-NOTICES.md`、`README.md`、`manifest.json`。外部原文的来源 URL／scope 见[既有材料 manifest](../../desktop/third-party-notices/wcdb-v2.1.15/manifest.json)；九份文件本轮的字节数／SHA 全部见收据，manifest 不列自身摘要，README也不具有独立外部来源URL。前五份仍属候选源码材料，CLI许可／说明属于发行材料，不能将它们合并声明为 WCDB 的逐组件覆盖。[材料范围说明](../../desktop/third-party-notices/wcdb-v2.1.15/README.md)
+九份已保存材料为 `WCDB-LICENSE.txt`、`SQLCipher-LICENSE.txt`、`ZSTD-LICENSE.txt`、`ZSTD-COPYING.txt`、`OpenSSL-LICENSE.txt`、`wechat-cli-LICENSE.txt`、`wechat-cli-THIRD-PARTY-NOTICES.md`、`README.md`、`manifest.json`。外部原文的来源 URL／scope 见既有材料 manifest（原路径 `desktop/third-party-notices/wcdb-v2.1.15/manifest.json` 已退役，原文件见本地 Git `40a5f054`）；九份文件本轮的字节数／SHA 全部见收据，manifest 不列自身摘要，README也不具有独立外部来源URL。前五份仍属候选源码材料，CLI许可／说明属于发行材料，不能将它们合并声明为 WCDB 的逐组件覆盖。材料范围说明（原路径 `desktop/third-party-notices/wcdb-v2.1.15/README.md` 已退役，原文件见本地 Git `40a5f054`）
 
 ## 已查路径与最新提交结果
 
