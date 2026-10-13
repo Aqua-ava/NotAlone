@@ -54,3 +54,8 @@
 
 
 - 2026-10-13：新单V控制 `472f5c0d-7a7e-4620-9586-1698f76b7d97` 实际1请求/1个HTTP200，driver单调79.530892167秒、显式Agent V4 4/4与语义支持通过；固定公开A02旧E14/window/source/双null不变，仅V system换4c939d96。实际closed1/cap1、六event/capture_gaps空、lock无持有、本机入口exit0；全目标九stage累计43（39次200、四次旧ReadTimeout远端未知），关闭未用145与退役12不可借用，全量280尚未激活。详情见 [单V控制真实结果](../../unfinished-work/goal-memory-20261013-single-V-control-result.md)。 单V不认证任一维≥15例、typed运行时依据或自动采纳效果；默认空放行表、门槛和用户逐类批准保持，没有生产放行或业务库写入，原AC/State不变。
+
+
+## Comments（本持续目标完整21窗中断终态 2026-10-13）
+
+- [本场结果](../../unfinished-work/goal-memory-20261013-complete21-observation-result.md)：8d0460a1真实16次均200且closed，正式7completed／1unknown／13unrun，七窗9必需raw8／accepted8／完整4，E失败7/98、V失败4/28及语义2/7；≥15质量门及21／140完整语义观察未满足。A08实际评测auto与旧matcher false_fact1作为风险保留，但其full审核缺失，不补签正式bad_auto或签安全0。评测理想三门auto不等于生产放行；本场未改运行时字段、默认空表、原Gold／审核／AC／State，维度字段及合取门另轨核验，质量证据仍待达原门后逐类批准。累计59真实HTTP与171关闭未用／12退役／280未启在总522中分列，不复用或自动激活。

@@ -53,3 +53,8 @@
 
 
 - 2026-10-13：新单V控制 `472f5c0d-7a7e-4620-9586-1698f76b7d97` 实际1请求/1个HTTP200，driver单调79.530892167秒、显式Agent V4 4/4与语义支持通过；固定公开A02旧E14/window/source/双null不变，仅V system换4c939d96。实际closed1/cap1、六event/capture_gaps空、lock无持有、本机入口exit0；全目标九stage累计43（39次200、四次旧ReadTimeout远端未知），关闭未用145与退役12不可借用，全量280尚未激活。详情见 [单V控制真实结果](../../unfinished-work/goal-memory-20261013-single-V-control-result.md)。 本次只证固定A02核验结果；原86b该窗uncertain/pragmatics及full0、全部Gold/旧sealed/未运行保持，未建立完整21窗或≥15例质量通过，原AC/State不变。
+
+
+## Comments（本持续目标完整21窗中断终态 2026-10-13）
+
+- [本场结果](../../unfinished-work/goal-memory-20261013-complete21-observation-result.md)：唯一8d0460a1已closed16/42、16真实HTTP200、86事件、driver单调2229.922556秒／入口exit1；A01–A07正式完成，A08 full审核未提交达到原600秒而unknown，A09–A19及B01/B02共13unrun。原raw封存、Gold21／28必需和全部分母不改，不补签或resume，余26永久关闭。七窗9必需机械raw8／accepted8／完整4，四general_error；旧matcher另报8程序结果中的false_fact1，不以未完成的安全审核签假事0。指代至少15、一般错误≤1及全量回归仍缺，State／AC和默认空放行表保持；累计本目标59真实HTTP（55个200＋旧4次timeout远端未知）。
