@@ -13,9 +13,17 @@
 
 最少解除条件：新公开可核查的稳定源快照，以及绑定库 `279ac6855ff2865caafa9718ae660e6e30a9667e4748ab064189ae633fd35fc3` 的实际源树／修改、全构建输入和日志或发布证明、编译链接 BOM／适用许可及完整原文。不要重查已知失败路径、用当前2.1.16／ZSTD OFF替代或将字符串声明写成验证通过。
 
-## 精确提交清单
+## 本轮继续核查补充
 
-仅以下五个文件属于本次可提交交付：
+新增10 GET／4搜索后累计35 GET／12搜索。四条repo CLI／ZIP证明查询均404，User固定库证明GET返回401后停止，无登录／凭据／POST／DELETE；组织入口因owner.type=User不适用。三份此前未读的rc.5发布脚本已核Git blob与正文摘要，只含v2发布及schema2验证，无固定旧构建证明；未执行。剩5 GET不重置预算，搜索已到顶。
+
+最新补充仍只提交下列同一六文件；用户拒绝发布索取稿的决定保持，没有待确认对外动作。14GET／4搜索及25GET／8搜索分别对应首片和上一次恢复，按所属切片保留，本轮最小验证通过七文件格式、30本地链接、35响应摘要，两轴修后均0；来源四条件和生产两false不放行。
+
+## 首片实际提交与最新补充清单
+
+首片五文件已由原聊天在15:53:07提交 `a6bae6b49853295226dfd22a5166742818f3b825`，逐字节复核与评审快照相符。真实公开历史命令completed／exit0，报告6085历史blob、1102commit、1751当前文件、issues0；收据已回收。此项等待已解除，完整来源仍未满足。
+
+首片已提交以下五个文件：
 
 1. `.scratch/wcdb-exact-provenance-parallel-20261013/spec.md`
 2. `.scratch/wcdb-exact-provenance-parallel-20261013/issues/01-exact-provenance.md`
@@ -23,25 +31,36 @@
 4. `.scratch/wcdb-exact-provenance-parallel-20261013/checkpoint.md`
 5. `.scratch/wcdb-exact-provenance-parallel-20261013/handoff.md`
 
-`research/wcdb-exact-provenance-parallel-20261013.md` 和 `desktop/artifacts/wcdb-exact-provenance-parallel-20261013/` 已被忽略，只在端侧保留，不强行加入提交。其他未提交变更归原聊天或其他 Agent。本聊天未触碰共享 index／Git 状态。
+本次恢复追记修改以上五文件，并新增第六文件 `.scratch/wcdb-exact-provenance-parallel-20261013/upstream-material-request.md`。最新补充提交清单为这六文件；第六文件是未发布的公开材料索取稿；用户已明确拒绝发布，仅端侧保留，不主动再次提议或请求发布。research及artifacts仍忽略。
 
-中文提交建议：`记录固定WCDB精确来源限定补核证据`。
+`research/wcdb-exact-provenance-parallel-20261013.md` 和 `desktop/artifacts/wcdb-exact-provenance-parallel-20261013/` 已被忽略，只在端侧保留，不强行加入提交。其他未提交变更归原聊天或其他 Agent。本聊天未执行共享 index 写入或 Git 修改命令。
 
-补充公开资产路径：[Tencent官方发行API](https://api.github.com/repos/Tencent/wcdb/releases/tags/v2.1.15)只列既有候选源码ZIP摘要，83,197,863 bytes超过本轮16MiB上限，未重下；旧路径索引未匹配常见WCDB二进制路径，但未重新核归档，不宣称精确二进制对应。累计14 GET／135,086 bytes／11.144782543秒请求计时，无重试。
+首片提交标题：`记录固定WCDB精确来源限定补核证据`。补充提交建议：`补记WCDB历史索引核查与未发送材料索取稿`。
 
-正文建议：
+首片补充公开资产路径：[Tencent官方发行API](https://api.github.com/repos/Tencent/wcdb/releases/tags/v2.1.15)只列既有候选源码ZIP摘要，83,197,863 bytes超过本轮16MiB上限，未重下；旧路径索引未匹配常见WCDB二进制路径，但未重新核归档，不宣称精确二进制对应。首片累计14 GET／135,086 bytes／11.144782543秒请求计时，无重试。
+
+首片正文（已实际提交）：
 
 ```text
 1、发布Mac20既有来源子项的单一核查规格、任务与交接
 2、记录14个限定新公开GET、4个搜索及两份不可变历史构建材料
 3、核对固定ZIP、manifest、E/F helper和许可字节，保留四项精确来源缺件及两个false
-4、记录静态摘要、链接格式检查和独立两轴结果；未运行App/helper或处理私人数据
+4、完成25条链接、14份响应摘要与两轴静态核查；本次App、helper、私人数据处理均为0
+```
+
+补充提交正文建议：
+
+```text
+1、回收首片a6bae6b4五文件及真实公开历史issues0，明确旧提交等待已解除
+2、累计追加21个新公开GET与8搜索，总35GET与12搜索，保留搜索不完整、归档429及用户证明401的停止边界
+3、保留仅含公开身份和摘要的未发送材料索取稿，记录用户拒绝发布及不主动再次请求的决定
+4、核对新追记格式、链接、响应摘要及独立两轴；未运行App/helper或处理私人业务数据
 ```
 
 ## 验证与提交状态
 
-静态字节、Markdown／摘要一致性验证已通过。独立Standards发现一处本机用户名路径并已移到端侧，修后硬违规／判断气味／证据边界问题均0；Spec可行动missing／scope／error均0。25条本地Markdown链接及14份原响应摘要通过，原始两份blob也通过Git SHA-1／bytes与SHA-256校验；追加Tencent资产片两轴补审均0，现可由原聊天串行提交。
+首片静态字节、Markdown／摘要一致性验证已通过。独立Standards发现一处本机用户名路径并已移到端侧，修后硬违规／判断气味／证据边界问题均0；Spec可行动missing／scope／error均0。25条本地Markdown链接及14份原响应摘要通过，原始两份blob也通过Git SHA-1／bytes与SHA-256校验；追加Tencent资产片两轴补审均0，首片已由原聊天串行提交。
 
-原聊天随后只stage上述五文件，执行staged diff检查、本地中文提交和 `node scripts/check_public_history.mjs --ref main --working-tree`。本聊天不代替该提交；未回收commit与公开历史结果前，任务保持claimed／needs-info，整体交付未完成。即使证据文档提交成功，四项精确来源验收仍单独保持未满足。
+首片五文件提交和公开历史已回收。上一次恢复后追加11新GET／4搜索，累计25 GET／8搜索；额外索引均未提供固定旧源或构建证明，精确commit搜索不完整、归档429均如实保留。新追记两轴补审修后均0，两处交接P3文案已修复；七文件格式、30条本地链接、25份响应正文摘要验证通过。最新六文件由原聊天串行提交并跑公开历史；不让旧issues0认证新未提交文件。整体交付及四项精确来源仍未完成。
 
-同一外部来源缺件已连续三目标轮核对，第三轮独立审计确认无已知授权内动作可解除；本聊天将调用目标工具标blocked，等待新可核材料，不因原聊天仍active而伪造本任务提交执行。原聊天可继续上述串行提交；最新五文件只增加阻塞审计元数据，来源证据与两项false未改变。
+旧运行已按三轮缺件调用blocked；用户再次要求推进后从新的有限路径及真实提交结果继续，不继承旧阻塞计数。用户已明确拒绝发布[索取稿](upstream-material-request.md)，当前publication_declined_not_sent；不联系上游，不主动再次提议或请求发布，取消待确认状态。只有用户日后主动明确要求时才重新核对范围。原Mac20、二进制、两个false和原任务图未由本聊天修改。

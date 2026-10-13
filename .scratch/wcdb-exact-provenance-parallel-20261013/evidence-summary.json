@@ -10,12 +10,12 @@
     "releaseManifestSha256": "9e5f50b201e6d1cf83ab30dd1367f3102ff28498472b9fc64561d7a537abe89d"
   },
   "queryTotals": {
-    "searchQueries": 4,
-    "anonymousGets": 14,
-    "responseBodyBytes": 135086,
-    "requestSeconds": 11.144782543,
+    "searchQueries": 12,
+    "anonymousGets": 35,
+    "responseBodyBytes": 1470647,
+    "requestSeconds": 27.630683128,
     "startedUtc": "2026-10-13T07:12:33.316Z",
-    "endedUtc": "2026-10-13T07:31:19.094Z",
+    "endedUtc": "2026-10-13T08:59:42.192Z",
     "retries": 0,
     "redirects": 0,
     "firstBatch": {
@@ -23,6 +23,22 @@
       "responseBodyBytes": 131556,
       "requestSeconds": 10.367425876,
       "endedUtc": "2026-10-13T07:15:00.915Z"
+    },
+    "resumedSlice": {
+      "anonymousGets": 11,
+      "searchQueries": 4,
+      "responseBodyBytes": 632200,
+      "requestSeconds": 9.722767125,
+      "startedUtc": "2026-10-13T07:57:08.326Z",
+      "endedUtc": "2026-10-13T08:05:34.411Z"
+    },
+    "continuedSlice": {
+      "anonymousGets": 10,
+      "searchQueries": 4,
+      "responseBodyBytes": 703361,
+      "requestSeconds": 6.76313346,
+      "startedUtc": "2026-10-13T08:52:28.743Z",
+      "endedUtc": "2026-10-13T08:59:42.192Z"
     }
   },
   "queries": [
@@ -150,6 +166,196 @@
       "bytes": 3530,
       "sha256": "3f68ae9ee6e5b26bd8adeff306950388277588e02259af0ed6a2008d70ac320c",
       "bodyPath": "13-tencent-fixed-version-release-assets.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "github-public-exact-commit-search",
+      "url": "https://api.github.com/search/commits?q=7b387ac76da6439c9ecb5f741a400d14ae9fa423&per_page=20",
+      "status": 200,
+      "bytes": 54,
+      "sha256": "715c8ec822e91115573715cd88b7104d3f672a3dc7a97450663bfa88ef2ecc21",
+      "bodyPath": "14-github-public-exact-commit-search.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "github-public-old-module-repositories",
+      "url": "https://api.github.com/search/repositories?q=wechat-cli+fork%3Atrue&per_page=100",
+      "status": 200,
+      "bytes": 550260,
+      "sha256": "698c92ecc26aa51ee34164a93a82f9116a4301f561e822952648977fbcb094c6",
+      "bodyPath": "15-github-public-old-module-repositories.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "github-public-exact-old-module-readme-search",
+      "url": "https://api.github.com/search/repositories?q=%22github.com%2Fr266-tech%2Fwechat-cli%22+in%3Areadme+fork%3Atrue&per_page=50",
+      "status": 200,
+      "bytes": 47029,
+      "sha256": "49e088c359fbf568464488e0cbcbfd6ad7e0bcece1a0ea5f86bbe1d6fc2dbdd5",
+      "bodyPath": "16-github-public-exact-old-module-readme-search.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "candidate-huohuoer-module-file",
+      "url": "https://api.github.com/repos/huohuoer/wechat-cli/contents/go.mod",
+      "status": 404,
+      "bytes": 127,
+      "sha256": "e45906ce02e79f16fb87a838d86bb4e497e37a9591f97608fa013bbcd8b9cbc2",
+      "bodyPath": "17-candidate-huohuoer-module-file.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "candidate-crisjing-fork-identity",
+      "url": "https://api.github.com/repos/CrisJing/wechat-cli-r266",
+      "status": 200,
+      "bytes": 15513,
+      "sha256": "7eb1d6125a49db0c8105d2fa107e489322eeac34e633b3add19d0521e05b8a76",
+      "bodyPath": "18-candidate-crisjing-fork-identity.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "candidate-gogoswift-fork-identity",
+      "url": "https://api.github.com/repos/gogoswift/wx-cli",
+      "status": 200,
+      "bytes": 15174,
+      "sha256": "e53c8c9987b578e53b82f0fb1de40001c64d0ea2db821377698a9616c85d29a7",
+      "bodyPath": "19-candidate-gogoswift-fork-identity.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "candidate-crisjing-exact-revision",
+      "url": "https://api.github.com/repos/CrisJing/wechat-cli-r266/commits/7b387ac76da6439c9ecb5f741a400d14ae9fa423",
+      "status": 422,
+      "bytes": 174,
+      "sha256": "ba4357e4a8d13bfac2929332a8bdbcb65b1a222904806c3d06f769052b6e3bf7",
+      "bodyPath": "20-candidate-crisjing-exact-revision.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "internet-archive-exact-revision-availability",
+      "url": "https://archive.org/wayback/available?url=https%3A%2F%2Fgithub.com%2Fr266-tech%2Fwechat-cli%2Ftree%2F7b387ac76da6439c9ecb5f741a400d14ae9fa423&timestamp=20260911",
+      "status": 429,
+      "bytes": 117,
+      "sha256": "ae138caf8767f7be2fe6f47f1663b0e2e28d903264707aa9b6f73bb7b223902c",
+      "bodyPath": "21-internet-archive-exact-revision-availability.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "internet-archive-source-root-availability",
+      "url": "https://archive.org/wayback/available?url=https%3A%2F%2Fgithub.com%2Fr266-tech%2Fwechat-cli&timestamp=20260911",
+      "status": 429,
+      "bytes": 117,
+      "sha256": "ae138caf8767f7be2fe6f47f1663b0e2e28d903264707aa9b6f73bb7b223902c",
+      "bodyPath": "22-internet-archive-source-root-availability.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "canonical-official-wcdb-issues-index",
+      "url": "https://api.github.com/search/issues?q=repo%3Ar266-tech%2Fwx-cli+WCDB&per_page=20",
+      "status": 200,
+      "bytes": 3556,
+      "sha256": "b66f8660f583d480ce11af212cadb615a1a579b17c0db9c7f0baf6a10226dc27",
+      "bodyPath": "23-canonical-official-wcdb-issues-index.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "publisher-official-stable-release-issues-index",
+      "url": "https://api.github.com/search/issues?q=repo%3Ar266-tech%2Fwechat-cli-releases+1.6.25&per_page=20",
+      "status": 200,
+      "bytes": 79,
+      "sha256": "c9938edecb99d754b2d039ac9eec320a94c769b6a6417921e2dcbef9e2fe01a0",
+      "bodyPath": "24-publisher-official-stable-release-issues-index.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "github-repo-attestations-official-docs",
+      "url": "https://docs.github.com/en/rest/repos/attestations?apiVersion=2022-11-28",
+      "status": 200,
+      "bytes": 316248,
+      "sha256": "19ecc9f71629922b62c908a1d479048fec3cae4f1e42f20958bd945695b91262",
+      "bodyPath": "25-github-repo-attestations-official-docs.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "github-user-attestations-official-docs",
+      "url": "https://docs.github.com/en/rest/users/attestations?apiVersion=2026-03-10",
+      "status": 200,
+      "bytes": 371354,
+      "sha256": "57de0929cd3111c2ee3bbdeb9616e578d55b4595d79bc56c0d0818692660744d",
+      "bodyPath": "26-github-user-attestations-official-docs.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "publisher-fixed-cli-attestation",
+      "url": "https://api.github.com/repos/r266-tech/wechat-cli-releases/attestations/sha256:59de512a52d7960aef70da6b42d199358429662919f5b4baababc5132a660355",
+      "status": 404,
+      "bytes": 126,
+      "sha256": "8ecae33333826db91507fbc9512eabf6e8e7c9be3c43f6681ca70bff4c028a6d",
+      "bodyPath": "27-publisher-fixed-cli-attestation.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "publisher-fixed-zip-attestation",
+      "url": "https://api.github.com/repos/r266-tech/wechat-cli-releases/attestations/sha256:0d54554c3ae0a8d55fc72e1b943b09f55a5010cf0f91c0bbc7094d777a180908",
+      "status": 404,
+      "bytes": 126,
+      "sha256": "8ecae33333826db91507fbc9512eabf6e8e7c9be3c43f6681ca70bff4c028a6d",
+      "bodyPath": "28-publisher-fixed-zip-attestation.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "canonical-fixed-cli-attestation",
+      "url": "https://api.github.com/repos/r266-tech/wx-cli/attestations/sha256:59de512a52d7960aef70da6b42d199358429662919f5b4baababc5132a660355",
+      "status": 404,
+      "bytes": 126,
+      "sha256": "8ecae33333826db91507fbc9512eabf6e8e7c9be3c43f6681ca70bff4c028a6d",
+      "bodyPath": "29-canonical-fixed-cli-attestation.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "canonical-fixed-zip-attestation",
+      "url": "https://api.github.com/repos/r266-tech/wx-cli/attestations/sha256:0d54554c3ae0a8d55fc72e1b943b09f55a5010cf0f91c0bbc7094d777a180908",
+      "status": 404,
+      "bytes": 126,
+      "sha256": "8ecae33333826db91507fbc9512eabf6e8e7c9be3c43f6681ca70bff4c028a6d",
+      "bodyPath": "30-canonical-fixed-zip-attestation.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "user-fixed-library-attestation",
+      "url": "https://api.github.com/users/r266-tech/attestations/sha256:279ac6855ff2865caafa9718ae660e6e30a9667e4748ab064189ae633fd35fc3",
+      "status": 401,
+      "bytes": 159,
+      "sha256": "2d77fff2ba5ce13a66c10e9e6d7afee5864511287f1387c3f3f6643ccd7aceb0",
+      "bodyPath": "31-user-fixed-library-attestation.body",
+      "limitExceeded": false,
+      "apiVersion": "2026-03-10"
+    },
+    {
+      "name": "canonical-rc5-promote-release-yml",
+      "url": "https://api.github.com/repos/r266-tech/wx-cli/git/blobs/8a5664006c48494562605e4b533ea2b261fdb047",
+      "status": 200,
+      "bytes": 1974,
+      "sha256": "e6566f01c04ff1caebf43c2027c44381634a9387189bfc1bcfdbc05035190032",
+      "bodyPath": "32-canonical-rc5-promote-release-yml.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "canonical-rc5-publish-release-py",
+      "url": "https://api.github.com/repos/r266-tech/wx-cli/git/blobs/9a1e87ee90f972ab31cbbe394d4d0e2b93660cc1",
+      "status": 200,
+      "bytes": 7098,
+      "sha256": "31434eea0a5a61af437507324bb608924c8f3286d0d98a0a7c9a0dff865ce0cf",
+      "bodyPath": "33-canonical-rc5-publish-release-py.body",
+      "limitExceeded": false
+    },
+    {
+      "name": "canonical-rc5-release_lib-py",
+      "url": "https://api.github.com/repos/r266-tech/wx-cli/git/blobs/72233d4a7a4929bb4ebb761e9836b09786cef6f7",
+      "status": 200,
+      "bytes": 6024,
+      "sha256": "8909dedef378b9b50b49e17d08b8bbcffa6eca272a56dfedf61bcead1e7ebe0c",
+      "bodyPath": "34-canonical-rc5-release_lib-py.body",
       "limitExceeded": false
     }
   ],
@@ -312,14 +518,43 @@
     "externalMessages": 0
   },
   "commit": {
-    "status": "pending_original_chat_serial_commit",
+    "status": "first_slice_commit_and_public_history_verified_followup_pending",
+    "firstSlice": {
+      "commit": "a6bae6b49853295226dfd22a5166742818f3b825",
+      "committedAtTaipei": "2026-10-13T15:53:07+08:00",
+      "exactFiveFiles": true,
+      "bytesMatchFrozenSnapshot": true,
+      "publicHistory": {
+        "exitCode": 0,
+        "ref": "main",
+        "workingTree": true,
+        "historicalBlobs": 6085,
+        "historicalCommits": 1102,
+        "currentFiles": 1751,
+        "issues": 0,
+        "receiptFiles": [
+          {
+            "path": "desktop/artifacts/goal-wcdb-parallel-handoff-20261013/commit-result.json",
+            "bytes": 499,
+            "sha256": "45b2d79176397d05d66f81e2c60aec74dd03aa3861822e598315e64af7de6d31"
+          },
+          {
+            "path": "desktop/artifacts/goal-wcdb-parallel-handoff-20261013/public-history-result.json",
+            "bytes": 204,
+            "sha256": "db975fbc09bb1765f7859b88eb0ab97165e54744f0f7048406acc07e147ae526"
+          }
+        ]
+      }
+    },
     "trackedFiles": [
       ".scratch/wcdb-exact-provenance-parallel-20261013/spec.md",
       ".scratch/wcdb-exact-provenance-parallel-20261013/issues/01-exact-provenance.md",
       ".scratch/wcdb-exact-provenance-parallel-20261013/evidence-summary.json",
       ".scratch/wcdb-exact-provenance-parallel-20261013/checkpoint.md",
-      ".scratch/wcdb-exact-provenance-parallel-20261013/handoff.md"
-    ]
+      ".scratch/wcdb-exact-provenance-parallel-20261013/handoff.md",
+      ".scratch/wcdb-exact-provenance-parallel-20261013/upstream-material-request.md"
+    ],
+    "followupCommitObserved": false
   },
   "review": {
     "standards": {
@@ -339,6 +574,58 @@
       "spec": 0,
       "bodySummaryRechecked": true,
       "derivedIndexBoundaryRechecked": true
+    },
+    "resumedSlice": {
+      "baseline": "a6bae6b49853295226dfd22a5166742818f3b825",
+      "standards": {
+        "hardViolationsAfterFix": 0,
+        "fowlerJudgementSmells": 0,
+        "evidenceBoundaryFindings": 0,
+        "p3DocumentationFindingsFixed": 2,
+        "reviewer": "local_static"
+      },
+      "spec": {
+        "missing": 0,
+        "scope": 0,
+        "error": 0,
+        "reviewer": "historical_research"
+      },
+      "staticValidation": {
+        "ownedFilesIncludingIgnoredResearch": 7,
+        "localMarkdownLinks": 30,
+        "responseBodies": 25
+      },
+      "sourceProofNotPassed": true,
+      "publicDraftNotSent": true
+    },
+    "userPreferenceOnlyFollowup": {
+      "change": "记录用户明确拒绝发送，正文和证据结论不变",
+      "independentReviewNotRepeated": true,
+      "staticValidationRequired": true
+    },
+    "continuedSlice": {
+      "baseline": "a6bae6b49853295226dfd22a5166742818f3b825",
+      "standards": {
+        "hardViolationsAfterFix": 0,
+        "fowlerJudgementSmells": 0,
+        "evidenceBoundaryFindings": 0,
+        "historySliceLabelsClarified": true,
+        "reviewer": "local_static"
+      },
+      "spec": {
+        "missing": 0,
+        "scope": 0,
+        "error": 0,
+        "reviewer": "historical_research"
+      },
+      "staticValidation": {
+        "ownedFilesIncludingIgnoredResearch": 7,
+        "localMarkdownLinks": 30,
+        "responseBodies": 35
+      },
+      "sourceProofNotPassed": true,
+      "upstreamPublicationDeclined": true,
+      "externalMessagesSent": 0
     }
   },
   "additionalTencentAssets": {
@@ -362,13 +649,144 @@
     "binaryExactMatchProved": false
   },
   "blockedAudit": {
-    "consecutiveEquivalentMissingMaterialGoalTurns": 3,
-    "thresholdSatisfied": true,
-    "completion": false,
-    "knownAuthorizedSourceAdvancingActionRemaining": false,
-    "originalThreadOverallExecutionStillActive": true,
-    "taskSpecificCommitOrRunnerNotObserved": true,
-    "nextStateCall": "blocked",
-    "reason": "需要新的固定digest绑定源树/修改/构建/BOM材料；现有有限新路径均无此证明，禁止猜测、重复失败URL、上游联系或代行共享Git"
-  }
+    "previousRun": {
+      "consecutiveEquivalentMissingMaterialGoalTurns": 3,
+      "thresholdSatisfied": true,
+      "completion": false,
+      "knownAuthorizedSourceAdvancingActionRemaining": false,
+      "originalThreadOverallExecutionStillActive": true,
+      "taskSpecificCommitOrRunnerNotObserved": true,
+      "nextStateCall": "blocked",
+      "reason": "需要新的固定digest绑定源树/修改/构建/BOM材料；现有有限新路径均无此证明，禁止猜测、重复失败URL、上游联系或代行共享Git"
+    },
+    "currentRequest": "用户要求继续，在不联系上游的约束内执行新公开证明与发行脚本核查",
+    "oldCountNotInherited": true,
+    "resumedAuditTurn": 1,
+    "sourceRequirementsRemainFalse": true,
+    "toolStatusNotClaimedResumed": true,
+    "continuedAuditTurn": 1,
+    "noNewBlockedToolCall": true
+  },
+  "resumedQueryLimits": {
+    "githubCommitSearch": {
+      "reportedMatches": 0,
+      "incomplete": true,
+      "cannotProveRevisionAbsent": true
+    },
+    "wideRepositorySearch": {
+      "reportedTotal": 11314,
+      "onePageOnly": 100,
+      "noPagination": true
+    },
+    "exactOldModuleReadmeSearch": {
+      "reportedTotal": 9,
+      "incomplete": false
+    },
+    "forkSamples": {
+      "count": 2,
+      "source": "r266-tech/wx-cli",
+      "exactRevisionChecks": 1,
+      "exactRevisionStatus": 422,
+      "noInferenceAllForksEmpty": true
+    },
+    "internetArchive": {
+      "queries": 2,
+      "statuses": [
+        429,
+        429
+      ],
+      "notRetried": true,
+      "pathStopped": true,
+      "noInferenceSnapshotAbsent": true
+    },
+    "officialIssueSearch": {
+      "wcdbResults": 1,
+      "v2PullRequestOnly": true,
+      "stableReleaseResults": 0,
+      "noFixedBuildProof": true
+    }
+  },
+  "upstreamRequest": {
+    "draft": ".scratch/wcdb-exact-provenance-parallel-20261013/upstream-material-request.md",
+    "status": "publication_declined_not_sent",
+    "target": "https://github.com/r266-tech/wx-cli/issues",
+    "explicitPublicationAuthorizationReceived": false,
+    "noPrivateProjectOrRuntimeData": true,
+    "userDecision": "declined",
+    "userDecisionSource": "本聊天用户对单条公开issue发布问题的明确回复",
+    "publicationQuestionPending": false,
+    "doNotProactivelyReproposeOrAsk": true,
+    "futureChangeRequiresUserInitiatedExplicitRequest": true,
+    "externalMessagesSent": 0
+  },
+  "continuedQueryLimits": {
+    "newGlobalExactSearches": 3,
+    "noExactSourceProofFound": true,
+    "searchMissNotUniversalAbsence": true,
+    "officialDocsGets": 2,
+    "repoCliAndZipAttestations": {
+      "queries": 4,
+      "statuses": [
+        404,
+        404,
+        404,
+        404
+      ],
+      "noProofRetrieved": true,
+      "noInferenceAllProofsAbsent": true
+    },
+    "userLibraryAttestation": {
+      "queries": 1,
+      "status": 401,
+      "apiVersion": "2026-03-10",
+      "requiresAuthentication": true,
+      "namespaceStopped": true,
+      "noCredentialRead": true,
+      "noOtherSubjectQueryInThisNamespace": true
+    },
+    "ownerType": "User",
+    "organizationRouteNotApplicable": true,
+    "bulkPostAndDeleteNotUsed": true,
+    "immutableV2PublishBlobs": {
+      "count": 3,
+      "gitBlobSha1AndBytesVerified": true,
+      "noFixedIdentitiesFound": true,
+      "noOldBuildProofRetrieved": true,
+      "notExecuted": true,
+      "v2SchemaCannotSubstituteOldManifest": true
+    },
+    "remainingGetBudget": 5,
+    "remainingSearchBudget": 0,
+    "budgetNotReset": true,
+    "externalMessagesSent": 0
+  },
+  "continuedPublishBlobs": [
+    {
+      "url": "https://api.github.com/repos/r266-tech/wx-cli/git/blobs/8a5664006c48494562605e4b533ea2b261fdb047",
+      "sourceTree": "06-canonical-rc5-tree.body.tree[path=.github/workflows/promote-release.yml]",
+      "blob": "8a5664006c48494562605e4b533ea2b261fdb047",
+      "bytes": 1225,
+      "sha256": "8edfc600e61440a7183f3844ded56ec18394346ff31041e92dcbeec66b41adc2",
+      "decodedPath": "decoded-canonical-rc5-promote-release-yml",
+      "fixedIdentityMatches": []
+    },
+    {
+      "url": "https://api.github.com/repos/r266-tech/wx-cli/git/blobs/9a1e87ee90f972ab31cbbe394d4d0e2b93660cc1",
+      "sourceTree": "06-canonical-rc5-tree.body.tree[path=scripts/publish-release.py]",
+      "blob": "9a1e87ee90f972ab31cbbe394d4d0e2b93660cc1",
+      "bytes": 4947,
+      "sha256": "b8b2bd6c079a7168393f9c86115452d7d132f347dfdc3cd48e254b7b3eb746c4",
+      "decodedPath": "decoded-canonical-rc5-publish-release-py",
+      "fixedIdentityMatches": []
+    },
+    {
+      "url": "https://api.github.com/repos/r266-tech/wx-cli/git/blobs/72233d4a7a4929bb4ebb761e9836b09786cef6f7",
+      "sourceTree": "06-canonical-rc5-tree.body.tree[path=scripts/release_lib.py]",
+      "blob": "72233d4a7a4929bb4ebb761e9836b09786cef6f7",
+      "bytes": 4167,
+      "sha256": "43f0df53157385601161418fc785eb3e7c76dd4301aed4c73e855f4c71130392",
+      "decodedPath": "decoded-canonical-rc5-release_lib-py",
+      "fixedIdentityMatches": []
+    }
+  ]
 }

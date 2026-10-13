@@ -17,6 +17,10 @@
 - 遇 HTTP 451／404／认证要求、大小或超时上限即停止该路径；不以换域名反复绕过已知失败，不猜测候选 tag。达到预算、查明无精确对应、或所有新路径耗尽后记录最少解除条件。
 - 既有源材料索引未覆盖官方预编译资产时，可追加 Tencent/wcdb v2.1.15 发行资产查询；该版本来自现有候选 manifest及固定install name，只供资产字节对照，不代签来源。最多跟随3个实际返回的macOS相关资产，超过16MiB不下载，不遍历其他版本；预算沿用本轮总量。
 - 不改现有 `exactBuildSourceVerified=false`、`binaryLicenseCoverageVerified=false`，也不改 Mac20 的状态、依赖和 AC。新证据先交原聊天实施。
+- 用户再次要求推进时，可沿原总预算查官方GitHub public commit/repository/issues索引中实际出现的候选历史镜像，以及Internet Archive官方availability入口；不靠名称、fork或搜索零命中认证旧源。最多取一页索引、两个代表性fork、一个精确revision对照；归档精确revision和根各一次，429后不再追加该服务请求。真实捕获URL出现后才读取快照，不遍历日期／其他tag。
+- 用户已明确拒绝发布本次对外索取稿。状态为publication_declined_not_sent，仅端侧保留；不联系上游，不主动再次提议或请求发布。只有用户日后主动明确要求这一对外动作时，才重新核对范围；恢复核查不是发送授权。
+
+- 后续明确要求继续时，在原总预算内执行最后4次全球精确身份／官方API文档搜索，读取按固定CLI／ZIP digest的repo attestation、官方文档明确的User GET及rc.5实际索引给出的三份不可变发布脚本；不请求已失败库repo端点。User入口401后停止整个User证明路径，不登录／读凭据或请求其他digest；组织入口因owner.type=User不适用，POST／DELETE不执行。相近v2脚本只用于查旧证据入口，不代签旧库。
 
 ## Testing Decisions
 
