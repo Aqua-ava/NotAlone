@@ -17,6 +17,8 @@ from psycopg import sql
 
 from fixture_cleanup import cleanup_fixture
 from notalone.application.model_priority import ModelPriorityControl
+from notalone.application.skill_service import SkillService
+from notalone.persistence.skill_library import PostgresSkillLibrary
 from notalone.reply.input_budget import TokenMeasurementKind
 from notalone.server.app import create_app
 from notalone.server.reply_wiring import build_reply_service
@@ -61,8 +63,8 @@ class AssistantBudgetFixture(rewrite.DesktopRewriteFixture):
             ).fetchall()]
         root = Path(__file__).resolve().parents[3]
         expected = sorted(path.name for path in (root / "backend/database/migrations").glob("*.sql"))
-        if recorded != expected or len(recorded) != 55 or not recorded[-1].startswith("055_"):
-            raise RuntimeError("本轮预算夹具必须只应用正式001–055迁移。")
+        if recorded != expected or len(recorded) != 57 or not recorded[-1].startswith("057_"):
+            raise RuntimeError("本轮预算夹具必须只应用正式001–057迁移。")
         repeated = subprocess.run(
             [sys.executable, "-m", "notalone.database_migrations", "--migrations",
              str(root / "backend/database/migrations")],
@@ -96,6 +98,7 @@ class AssistantBudgetFixture(rewrite.DesktopRewriteFixture):
             database_url=self.database_url, owner_id=owner_id,
             token=f"synthetic-budget-public-{owner_id}", reply_service=service,
             runtime_shutdown=priority.stop,
+            skill_service=SkillService(management=PostgresSkillLibrary(self.database_url)),
         ), owner_id)
         self.addCleanup(backend.close)
         return backend
@@ -116,12 +119,21 @@ def main() -> None:
             return {"port": int(fixture.backend.base_url.rsplit(":", 1)[1]), "token": fixture.backend.token}
         print(json.dumps({"ready": {**connection(), "contact_ids": contacts,
                                     "foreign_contact_id": foreign_contact,
-                                    "migration_count": 55, "migration_repeat": 0}}), flush=True)
+                                    "migration_count": 57, "migration_repeat": 0}}), flush=True)
         for line in sys.stdin:
             command = json.loads(line)
             operation = command["operation"]
             if operation == "plan":
                 fixture.reply_model.plans.append(command["plan"])
+                result = {}
+            elif operation == "strategy_skills":
+                result = fixture.prepare_strategy_skills(contacts, foreign_contact)
+            elif operation == "same_names":
+                with psycopg.connect(fixture.database_url) as connection_db:
+                    connection_db.execute(
+                        "UPDATE public.contact SET display_name=%s WHERE owner_id=%s AND id=ANY(%s)",
+                        ("同名合成联系人", fixture.owner_id, [UUID(value) for value in contacts]),
+                    )
                 result = {}
             elif operation == "configure":
                 capacity = command.get("capacity", 100000)
@@ -141,6 +153,7 @@ def main() -> None:
                 result = connection()
             elif operation == "metrics":
                 result = {"model_calls": len(fixture.reply_model.seen_model_payloads),
+                          "model_entered": fixture.reply_model.entered.is_set(),
                           "payloads": fixture.reply_model.payloads,
                           "decisions": [decision.to_payload() for decision in fixture.decisions]}
             elif operation == "invalidate_exploration":

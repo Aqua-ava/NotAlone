@@ -8,7 +8,7 @@ import { ReplyEvidence, useReplyEvidence } from './ReplyEvidence';
 import { AssistantSessionPanel } from './AssistantSessionPanel';
 import { StyleSamples } from './StyleSamples';
 import { CandidateVersionEditor } from './CandidateVersionEditor';
-import type { ReplyCandidateVersionRead, ReplyCandidateVersionEdit, ReplyCandidateVersionDisplay, ReplyCandidateVersionSelection } from '../shared/assistant-candidate-versions';
+import type { ReplyCandidateDraftUpdate, ReplyCandidateVersionRead, ReplyCandidateVersionEdit, ReplyCandidateVersionDisplay, ReplyCandidateVersionSelection } from '../shared/assistant-candidate-versions';
 import type { RequirementChange } from '../shared/assistant-continuation-clarification';
 import { AssistantContinuationControls } from './AssistantContinuationControls';
 import { AssistantMessageNoticeActions } from './AssistantMessageNoticeActions';
@@ -37,6 +37,7 @@ export function useReplySession() {
     }
   }
   return { state, error,
+    updateCandidateVersionDraft: (request: ReplyCandidateDraftUpdate) => versionOperation(() => window.notalone.replies.updateCandidateVersionDraft(request)),
     beginCandidateVersionEdit: (request: ReplyCandidateVersionDisplay) => versionOperation(() => window.notalone.replies.beginCandidateVersionEdit(request)),
     readCandidateVersions: (request: ReplyCandidateVersionRead) => versionOperation(() => window.notalone.replies.readCandidateVersions(request)),
     saveCandidateVersion: (request: ReplyCandidateVersionEdit) => versionOperation(() => window.notalone.replies.saveCandidateVersion(request)),
@@ -200,6 +201,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
       replyRequestId, candidateId, text }).catch(() => {});
   }
   return <section className="reply-candidates" aria-label="候选回复">
+    {state.contentRestoreNotice && <p role="status">{state.contentRestoreNotice}</p>}
     <AssistantSessionPanel replies={replies} />
     {state.sourceAvailability === 'checking' && <p role="status">正在核对删除后的依据…</p>}
     {state.sourceAvailability === 'failed' && <p role="alert">删除后的依据尚未确认，原候选暂不可用。<button onClick={() => void replies.retrySourceValidation()}>重新核对依据</button></p>}

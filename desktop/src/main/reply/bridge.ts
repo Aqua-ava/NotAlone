@@ -7,7 +7,7 @@ import type { ContactSession } from '../contacts/session';
 import { ReplySession } from './session';
 import { ReplyEvidenceSession } from './evidence-session';
 import type { AssistantInterruptedRetry, AssistantSessionSelection } from '../../shared/reply-bridge';
-import type { ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from '../../shared/assistant-candidate-versions';
+import type { ReplyCandidateDraftUpdate, ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from '../../shared/assistant-candidate-versions';
 import type { ReplyContinuation, ReplyContinuationConfirmation } from '../../shared/reply-bridge';
 import { ASSISTANT_CONTINUATION_RESPONSE_LIMIT } from '../../shared/assistant-continuation-clarification';
 const continuationText = (item: unknown) => typeof item === 'string' && Boolean(item.trim()) && Array.from(item).length <= 4096;
@@ -39,8 +39,8 @@ function requirementChanges(value: unknown): void {
     }
 }
 
-function candidateVersion(args: unknown[], operation: 'read' | 'display' | 'select' | 'edit'): ReplyCandidateVersionRead {
-  const additions = operation === 'read' ? [] : operation === 'edit'
+function candidateVersion(args: unknown[], operation: 'read' | 'display' | 'select' | 'edit' | 'draft'): ReplyCandidateVersionRead {
+  const additions = operation === 'draft' ? ['versionId', 'messages', 'requirements'] : operation === 'read' ? [] : operation === 'edit'
     ? ['editKey', 'parentVersionId', 'messages', 'requirements']
     : ['versionId', ...(operation === 'select' ? ['selectionKey'] : [])];
   const value = fields(args, ['contactId', 'scopeRevision', 'sessionId', 'candidateId', ...additions]);
@@ -48,11 +48,12 @@ function candidateVersion(args: unknown[], operation: 'read' | 'display' | 'sele
     : operation === 'read' ? [] : ['versionId', ...(operation === 'select' ? ['selectionKey'] : [])])];
   if (!identifiers.every((key) => isUuid(value[key]))) throw new Error('候选版本操作不可用。');
   for (const key of identifiers) value[key] = (value[key] as string).toLowerCase();
-  if (operation === 'edit') {
+  if (operation === 'edit' || operation === 'draft') {
     const messages = value.messages;
     if (!Array.isArray(messages) || messages.length < 1 || messages.length > 8
+      || operation === 'draft' && typeof value.requirements !== 'string'
       || (value.requirements !== null && (typeof value.requirements !== 'string'
-        || !value.requirements.trim() || value.requirements.length > 4096))) throw new Error('候选版本操作不可用。');
+        || operation === 'edit' && !value.requirements.trim() || value.requirements.length > 4096))) throw new Error('候选版本操作不可用。');
     const known = new Set<string>();
     value.messages = messages.map((message) => {
       if (!message || typeof message !== 'object' || Array.isArray(message)
@@ -60,7 +61,7 @@ function candidateVersion(args: unknown[], operation: 'read' | 'display' | 'sele
         throw new Error('候选版本操作不可用。');
       }
       const item = message as Record<string, unknown>;
-      if (!isUuid(item.messageId) || typeof item.text !== 'string' || !item.text.trim()
+      if (!isUuid(item.messageId) || typeof item.text !== 'string' || operation === 'edit' && !item.text.trim()
         || item.text.length > (messages.length === 1 ? 65_536 : 8192)
         || known.has(item.messageId.toLowerCase())) throw new Error('候选版本操作不可用。');
       const messageId = item.messageId.toLowerCase(); known.add(messageId);
@@ -234,6 +235,8 @@ export function installReplyBridge(commands: PageCommands, backend: BackendHost,
   }, 'helper');
   commands.handle('reply:select-candidate', (...args: unknown[]) => { return replies.selectCandidate(candidate(args)); }, 'helper');
   commands.handle('reply:edit-candidate', (...args: unknown[]) => { return replies.editCandidate(candidate(args, true) as ReplyCandidateEdit); }, 'helper');
+  commands.handle('reply:update-candidate-version-draft', (...args: unknown[]) =>
+    replies.updateCandidateVersionDraft(candidateVersion(args, 'draft') as ReplyCandidateDraftUpdate), 'helper');
   commands.handle('reply:begin-candidate-version-edit', (...args: unknown[]) =>
     replies.beginCandidateVersionEdit(candidateVersion(args, 'display') as ReplyCandidateVersionDisplay), 'helper');
   commands.handle('reply:read-candidate-versions', (...args: unknown[]) =>

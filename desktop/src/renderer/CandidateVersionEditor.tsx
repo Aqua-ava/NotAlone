@@ -3,7 +3,7 @@ import type { AssistantCandidateMessage, AssistantCandidateVersionView } from '.
 import type { ReplySessionView } from './RewritePanel';
 import { CandidateMessageGroup } from './CandidateMessageGroup';
 
-// 编辑稿只在当前组件内保留；保存和采用版本分别调用既有公开接口。
+// 未保存编辑同步到主进程会话内存；保存和采用版本仍由用户明确操作。
 export function CandidateVersionEditor({ replies, view, candidateId, replyRequestId, number, restored, noteCopy, onDirtyChange }: {
   replies: ReplySessionView;
   view: AssistantCandidateVersionView | undefined;
@@ -17,7 +17,9 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   const { state } = replies;
   const history = view?.history;
   const version = history?.versions.find((item) => item.versionId === view?.displayVersionId);
-  const [draft, setDraft] = useState<{ versionId: string; messages: AssistantCandidateMessage[]; requirements: string } | null>(null);
+  const retained = state.candidateDrafts?.find((item) => item.candidateId === candidateId && item.versionId === version?.versionId);
+  const [draft, setDraft] = useState<{ versionId: string; messages: AssistantCandidateMessage[]; requirements: string } | null>(() => retained ?? (version ? {
+    versionId: version.versionId, messages: version.messages.map((message) => ({ ...message })), requirements: version.requirements ?? '' } : null));
   const messages = draft?.messages ?? [];
   const requirements = draft?.requirements ?? '';
   const [error, setError] = useState('');
@@ -29,9 +31,10 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   const selectionKey = useRef<{ versionId: string; key: string } | null>(null);
   useEffect(() => {
     if (!version) return;
-    setDraft((previous) => previous?.versionId === version.versionId ? previous
-      : { versionId: version.versionId, messages: version.messages.map((message) => ({ ...message })), requirements: version.requirements ?? '' });
-  }, [version]);
+    if (draft?.versionId !== version.versionId) editRevision.current = 0;
+    setDraft((previous) => previous?.versionId === version.versionId && editRevision.current > 0 ? previous
+      : retained ?? { versionId: version.versionId, messages: version.messages.map((message) => ({ ...message })), requirements: version.requirements ?? '' });
+  }, [version, retained]);
   const dirty = messages.some((message, index) => message.text !== version?.messages[index].text)
     || requirements !== (version?.requirements ?? '');
   useEffect(() => { onDirtyChange?.(candidateId, Boolean(draft && dirty)); }, [candidateId, draft?.versionId, dirty, onDirtyChange]);
@@ -53,11 +56,17 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
     void replies.beginCandidateVersionEdit({ ...scope, versionId: version.versionId })
       .catch(() => setError('本组编辑身份尚未确认，请保留文字并重新读取。'));
   }
+  function retainDraft(messages: AssistantCandidateMessage[], requirements: string) {
+    if (!version) return;
+    void replies.updateCandidateVersionDraft({ ...scope, versionId: version.versionId, messages, requirements })
+      .catch(() => setError('本组编辑暂未保留，请勿切换并重新读取版本。'));
+  }
   function editMessage(messageId: string, text: string) {
     beginEdit();
     editRevision.current++;
     const next = messages.map((message) => message.messageId === messageId ? { ...message, text } : message);
     setDraft((previous) => previous ? { ...previous, messages: next } : null); setError('');
+    retainDraft(next, requirements);
     if (state.result?.replyRequestId === replyRequestId) void replies.editCandidate(candidateId,
       next.map((message) => message.text).join('\n\n'));
   }
@@ -104,7 +113,7 @@ export function CandidateVersionEditor({ replies, view, candidateId, replyReques
   return <>
     <CandidateMessageGroup identity={identity} number={number} messages={messages} requirements={requirements}
       restored={restored} disabled={disabled || sampleSaving} dirty={dirty} canCopy={Boolean(chosen)}
-      edit={editMessage} editRequirements={(text) => { beginEdit(); editRevision.current++; setDraft({ ...draft, requirements: text }); setError(''); }}
+      edit={editMessage} editRequirements={(text) => { beginEdit(); editRevision.current++; setDraft({ ...draft, requirements: text }); setError(''); retainDraft(messages, text); }}
       save={save} noteTextCopy={noteCopy}
       validatePaste={(text) => window.notalone.styleSamples.validateCandidatePaste({ ...scope, replyRequestId,
         versionId: version.versionId, text })}

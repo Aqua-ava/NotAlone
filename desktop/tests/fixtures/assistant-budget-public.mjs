@@ -63,10 +63,10 @@ export async function budgetPublicFixture(t, { toolHistory = false } = {}) {
     if (child.exitCode === null) await new Promise((resolve) => child.once('exit', resolve));
     assert.equal(child.exitCode, 0); assert.deepEqual(cleanup, { instance_ok: true, class_ok: true, database_remaining: false });
     await rm(directory, { recursive: true, force: true });
-    process.stdout.write('budget_public_cleanup: 001–055 repeat=0 owned_database_remaining=0\n');
+    process.stdout.write('budget_public_cleanup: 001–057 repeat=0 owned_database_remaining=0\n');
   });
   data = await ready;
-  assert.equal(data.migration_count, 55); assert.equal(data.migration_repeat, 0);
+  assert.equal(data.migration_count, 57); assert.equal(data.migration_repeat, 0);
   client = new ports.JsonClient(data);
   let generation = 7; const backendListeners = new Set(), delivery = {};
   const backend = { getConnectionGeneration: () => generation,

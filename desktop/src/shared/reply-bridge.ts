@@ -3,7 +3,7 @@ import type { ReplyEvidenceCommands } from './reply-evidence';
 import type { AssistantSessionCatalog, SavedAssistantSession } from './assistant-session';
 import type { AssistantInputBudget, AssistantInputBudgetNotice } from './assistant-input-budget';
 import type { ConfirmedAssistantSessionDeletion } from './assistant-session-deletion-events';
-import type { AssistantCandidateVersionsState, ExplicitAssistantCandidateSelection, ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from './assistant-candidate-versions';
+import type { AssistantCandidateDraft, ReplyCandidateDraftUpdate, AssistantCandidateVersionsState, ExplicitAssistantCandidateSelection, ReplyCandidateVersionDisplay, ReplyCandidateVersionEdit, ReplyCandidateVersionRead, ReplyCandidateVersionSelection } from './assistant-candidate-versions';
 import type { AssistantContinuationClarification, RequirementChange } from './assistant-continuation-clarification';
 
 export type RewriteTone = 'original' | 'warm' | 'concise' | 'polite';
@@ -154,6 +154,8 @@ export interface ReplySessionState {
   result: ReplyResult | null;
   selectedCandidateId: string | null;
   candidateVersions?: AssistantCandidateVersionsState;
+  candidateDrafts?: AssistantCandidateDraft[];
+  contentRestoreNotice?: string;
   explicitCandidateSelection?: ExplicitAssistantCandidateSelection;
   canRetry: boolean;
   savedSession?: SavedAssistantSession;
@@ -198,6 +200,7 @@ export interface ReplyBridge extends ReplyEvidenceCommands {
   retryInterruptedGeneration(request: AssistantInterruptedRetry): Promise<void>;
   selectCandidate(selection: ReplyCandidateSelection): Promise<ReplySessionState>;
   editCandidate(edit: ReplyCandidateEdit): Promise<ReplySessionState>;
+  updateCandidateVersionDraft(update: ReplyCandidateDraftUpdate): Promise<ReplySessionState>;
   beginCandidateVersionEdit(selection: ReplyCandidateVersionDisplay): Promise<ReplySessionState>;
   readCandidateVersions(request: ReplyCandidateVersionRead): Promise<ReplySessionState>;
   saveCandidateVersion(edit: ReplyCandidateVersionEdit): Promise<ReplySessionState>;

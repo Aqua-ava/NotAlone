@@ -46,6 +46,7 @@ export function createReplyBridge(ipcRenderer: PageTransport): ReplyBridge {
     retryContinuation: (...args: unknown[]) => ipcRenderer.invoke('reply:retry-continuation', ...args),
     selectCandidate: (selection: ReplyCandidateSelection) => ipcRenderer.invoke('reply:select-candidate', selection),
     editCandidate: (edit: ReplyCandidateEdit) => ipcRenderer.invoke('reply:edit-candidate', edit),
+    updateCandidateVersionDraft: (...args: unknown[]) => ipcRenderer.invoke('reply:update-candidate-version-draft', ...args),
     beginCandidateVersionEdit: (...args: unknown[]) => ipcRenderer.invoke('reply:begin-candidate-version-edit', ...args),
     readCandidateVersions: (...args: unknown[]) => ipcRenderer.invoke('reply:read-candidate-versions', ...args),
     saveCandidateVersion: (...args: unknown[]) => ipcRenderer.invoke('reply:save-candidate-version', ...args),

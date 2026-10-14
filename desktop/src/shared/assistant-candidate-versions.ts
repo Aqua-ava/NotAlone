@@ -54,3 +54,7 @@ export interface ReplyCandidateVersionEdit extends ReplyCandidateVersionRead {
 }
 export interface ReplyCandidateVersionDisplay extends ReplyCandidateVersionRead { versionId: string; }
 export interface ReplyCandidateVersionSelection extends ReplyCandidateVersionDisplay { selectionKey: string; }
+
+// 未保存编辑只属于当前连接中的一个助手会话，不产生版本写入。
+export interface AssistantCandidateDraft { candidateId: string; versionId: string; messages: AssistantCandidateMessage[]; requirements: string; }
+export interface ReplyCandidateDraftUpdate extends ReplyCandidateVersionDisplay { messages: AssistantCandidateMessage[]; requirements: string; }

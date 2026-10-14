@@ -7,7 +7,7 @@
 | 编号 | 任务 | Blocked by | State | Triage |
 | --- | --- | --- | --- | --- |
 | 01 | [单帧定位贯通现有入口](issues/01-single-frame-locator.md) | None | resolved | ready-for-agent |
-| 02 | [按联系人恢复输入和候选编辑](issues/02-contact-content-restore.md) | None | open | ready-for-agent |
+| 02 | [按联系人恢复输入和候选编辑](issues/02-contact-content-restore.md) | None | resolved | ready-for-agent |
 | 03 | [显式生成与固定上下文](issues/03-explicit-generation-context.md) | None | open | ready-for-agent |
 | 04 | [持续识别与自动跟随联系人](issues/04-continuous-contact-follow.md) | 01, 02 | open | ready-for-agent |
 | 05 | [多联系人后台任务与状态恢复](issues/05-contact-generation-jobs.md) | 02, 03 | open | ready-for-agent |
