@@ -1,4 +1,4 @@
-"""ECNU 评测专用请求契约；生产提取路径不引用此门。"""
+"""ECNU与官方Flash最高思考的评测请求契约；生产提取路径不引用此门。"""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import stat
 from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
+from enum import StrEnum
 from pathlib import Path
 from typing import Callable, Iterator
 
@@ -26,6 +27,26 @@ _TOOL_NAMES = frozenset({"MemoryExtractionOutput", "SourceVerificationOutput"})
 STRICT_RESPONSE_IDENTITY_POLICY = "first_valid_completion_observation_stop_on_change"
 KNOWN_ECNU_RESPONSE_IDENTITY_POLICY = "ecnu_configured_route_known_labels_v1"
 KNOWN_ECNU_RESPONSE_LABELS = frozenset({"deepseek-v4-flash", "deepseek-flash"})
+
+
+class EvaluationProviderProfile(StrEnum):
+    """仅两个显式评测配置；不接受任意端点或生产配置覆盖。"""
+
+    ECNU = "ecnu"
+    DEEPSEEK_FLASH_MAX = "deepseek-flash-max"
+
+    @property
+    def base_url(self) -> str:
+        return ("https://api.deepseek.com" if self is self.DEEPSEEK_FLASH_MAX
+                else "https://chat.ecnu.edu.cn/open/api/v1")
+
+    @property
+    def endpoint(self) -> str:
+        return self.base_url + "/chat/completions"
+
+    @property
+    def model(self) -> str:
+        return "deepseek-flash" if self is self.DEEPSEEK_FLASH_MAX else "ecnu-max"
 
 
 def validate_evaluation_policy(
@@ -50,8 +71,16 @@ class ECNUEvaluationContract:
         clock: Callable[[], datetime] | None = None,
         verification_tool_choice: str = "forced",
         response_identity_policy: str = STRICT_RESPONSE_IDENTITY_POLICY,
+        provider_profile: EvaluationProviderProfile | str = EvaluationProviderProfile.ECNU,
     ):
         validate_evaluation_policy(verification_tool_choice, response_identity_policy)
+        try:
+            self._profile = EvaluationProviderProfile(provider_profile)
+        except (TypeError, ValueError):
+            raise EvaluationBudgetAbort("evaluation_provider_profile_invalid") from None
+        if (self._profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
+                and response_identity_policy != STRICT_RESPONSE_IDENTITY_POLICY):
+            raise EvaluationBudgetAbort("evaluation_official_identity_policy_invalid")
         self._verification_tool_choice = verification_tool_choice
         self._response_identity_policy = response_identity_policy
         self._deadline = deadline
@@ -139,7 +168,8 @@ class ECNUEvaluationContract:
     @contextmanager
     def expect_request(self, expected_payload: dict) -> Iterator[None]:
         """为一次 E/V 调用及其 SDK 重试绑定原定请求正文。"""
-        _validate_payload(expected_payload, verification_tool_choice=self._verification_tool_choice)
+        _validate_payload(expected_payload, verification_tool_choice=self._verification_tool_choice,
+                          provider_profile=self._profile)
         token = self._expected.set(_canonical(expected_payload))
         try:
             yield
@@ -150,7 +180,7 @@ class ECNUEvaluationContract:
         self.check_preflight()
         if self._expected.get() is None:
             raise EvaluationBudgetAbort("evaluation_request_unbound")
-        if request.method != "POST" or str(request.url) != _ENDPOINT:
+        if request.method != "POST" or str(request.url) != self._profile.endpoint:
             raise EvaluationBudgetAbort("evaluation_endpoint_changed")
         try:
             actual = _canonical(_decode_json(request.content))
@@ -196,6 +226,9 @@ class ECNUEvaluationContract:
                 raise ValueError("invalid_completion")
         except (ValueError, TypeError, KeyError, UnicodeError, AttributeError):
             raise EvaluationBudgetAbort("evaluation_completion_invalid") from None
+        if (self._profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
+                and identity != "deepseek-flash"):
+            raise EvaluationBudgetAbort("evaluation_official_reported_model_changed")
         if self._response_identity_policy == KNOWN_ECNU_RESPONSE_IDENTITY_POLICY:
             # 请求已绑定既有ECNU端点/ecnu-max；已授权标签只作实际观测。
             # 已知集合内变化不能推定相同权重或供应商变化。
@@ -232,15 +265,20 @@ def _decode_json(content: bytes) -> dict:
     )
 
 
-def _validate_payload(value: dict, *, verification_tool_choice: str = "forced") -> None:
+def _validate_payload(value: dict, *, verification_tool_choice: str = "forced",
+                      provider_profile: EvaluationProviderProfile = EvaluationProviderProfile.ECNU) -> None:
     try:
         function = value["tools"][0]["function"]
         forced = not (verification_tool_choice == "omitted"
                       and function["name"] == "SourceVerificationOutput")
         fields = _PAYLOAD_FIELDS if forced else _PAYLOAD_FIELDS - {"tool_choice"}
+        official = provider_profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
+        if official:
+            fields = fields | {"reasoning_effort"}
         if (
             not isinstance(value, dict) or set(value) != fields
-            or value["model"] != "ecnu-max"
+            or value["model"] != provider_profile.model
+            or (official and value.get("reasoning_effort") != "max")
             or type(value["temperature"]) not in (float, int)
             or value["temperature"] != 0
             or value["stream"] is not False

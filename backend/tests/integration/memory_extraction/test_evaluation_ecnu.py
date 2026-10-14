@@ -32,6 +32,46 @@ PLAN = tuple(case for case in CASES if case.dimension == "reference") + tuple(
 
 
 class EvaluationECNUTest(unittest.TestCase):
+    def test_official_flash_max_reaches_both_sdk_requests_and_stops_on_safety(self):
+        hashes, gold, _ = self.full_preparation()
+        window = build_window(PLAN[0])
+        source = str(window.target_message_ids[0])
+        fact = {
+            "text": "未知第三人不是仓库管理员，在采购部。",
+            "category": "relationship_note", "subject": "contact", "topic": "work",
+            "source_message_ids": [source], "confidence": 0.9, "risk_flags": [],
+            "valid_at": None, "invalid_at": None, "speech_act": "report",
+            "assertion_status": "reported", "figurative_type": "literal",
+            "alternatives": ["第三人身份未知。"], "interpretation_reason": "来源明确说明部门。",
+        }
+
+        def respond(request):
+            self.assertEqual(str(request.url), "https://api.deepseek.com/chat/completions")
+            body = json.loads(request.content)
+            self.assertEqual(body["model"], "deepseek-flash")
+            self.assertEqual(body["thinking"], {"type": "enabled"})
+            self.assertEqual(body["reasoning_effort"], "max")
+            extraction = body["tools"][0]["function"]["name"] == "MemoryExtractionOutput"
+            args = {"facts": [fact]} if extraction else {"results": [{
+                "candidate_index": 0, "verdict": "supported", "issues": [],
+                "evidence": [{"message_id": source, "quote": window.messages[0].text}],
+            }]}
+            return self.response(request, arguments=args, reported_model="deepseek-flash")
+
+        result = self.run_ready(
+            hashes=hashes, gold=gold, case_set="full140", provider_profile="deepseek-flash-max",
+            request_timeout_seconds=300, max_retries=0, transport=httpx.MockTransport(respond),
+            audit=lambda bundle: self.audit(bundle, "safety_error", "false_fact"),
+        )
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(result["stopped_code"], "case_semantic_audit_safety_error")
+        self.assertEqual(result["summary"]["unrun"], 139)
+        self.assertEqual(result["receipt"]["budget"]["request_limit"], 280)
+        self.assertTrue(result["receipt"]["budget"]["closed"])
+        config = json.loads((self.output / "manifest.json").read_text())["frozen_config"]
+        self.assertEqual(config["reasoning_effort"], "max")
+        self.assertNotIn("reasoning_effort", config["omitted_parameters"])
+
     def setUp(self) -> None:
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)

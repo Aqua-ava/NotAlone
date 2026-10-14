@@ -329,6 +329,7 @@ def _run_evaluation_batch(
     request_timeout_seconds: float = 60.0, max_retries: int = 2,
     verification_mode: SourceVerificationMode | str = SourceVerificationMode.LEGACY_V4,
     verification_tool_choice: str = "forced",
+    reasoning_effort: str | None = None,
 ) -> dict:
     """P0/P1共用记录与收尾；真实配置与独审验证由各入口负责。"""
     selected = SourceVerificationMode(verification_mode)
@@ -376,7 +377,8 @@ def _run_evaluation_batch(
                 api_key=SecretStr(api_key), base_url=base_url,
                 model=request_model, temperature=0.0,
                 timeout=request_timeout_seconds, max_retries=max_retries,
-                extra_body={"thinking": {"type": "enabled"}},
+                extra_body={"thinking": {"type": "enabled"},
+                            **({"reasoning_effort": reasoning_effort} if reasoning_effort else {})},
                 http_client=sync_client, http_async_client=async_client,
             )
             for position, (case, window) in enumerate(zip(cases, windows)):

@@ -36,7 +36,7 @@ _PRIVATE_FIELDS = frozenset({
 })
 _CONFIG_FIELDS = frozenset({
     "mode", "synthetic_only", "base_url", "endpoint", "request_model",
-    "temperature", "timeout", "max_retries", "thinking", "stream",
+    "temperature", "timeout", "max_retries", "thinking", "stream", "reasoning_effort",
     "plan_sha256", "public_cases_sha256", "extraction_prompt_sha256",
     "extraction_schema_sha256", "verification_prompt_sha256",
     "verification_schema_sha256", "versions", "omitted_parameters",

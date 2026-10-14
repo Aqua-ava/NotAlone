@@ -105,6 +105,30 @@ class EvaluationProviderContractTest(unittest.TestCase):
             **policy,
         )
 
+    def test_official_max_cannot_downgrade_or_send_to_ecnu(self):
+        contract = self._contract(provider_profile="deepseek-flash-max")
+        body = {**_payload(), "model": "deepseek-flash", "reasoning_effort": "max"}
+        official = "https://api.deepseek.com/chat/completions"
+        with contract.expect_request(body):
+            contract.check_request(httpx.Request("POST", official, json=body))
+            with self.assertRaises(EvaluationBudgetAbort):
+                contract.check_request(httpx.Request("POST", ENDPOINT, json=body))
+            with self.assertRaises(EvaluationBudgetAbort):
+                contract.check_request(httpx.Request("POST", official, json={**body, "reasoning_effort": "high"}))
+        for effort in (None, "high", "ultra"):
+            changed = {**body, "reasoning_effort": effort}
+            with self.subTest(effort=effort), self.assertRaises(EvaluationBudgetAbort):
+                with contract.expect_request(changed):
+                    self.fail("降档或别名不应通过冻结的max合同")
+        with self.assertRaises(EvaluationBudgetAbort):
+            contract.observe_response(httpx.Response(200, json=_completion("deepseek-v4-pro")))
+        contract.observe_response(httpx.Response(200, json=_completion("deepseek-flash")))
+
+    def test_official_profile_rejects_ecnu_label_policy(self):
+        with self.assertRaises(EvaluationBudgetAbort):
+            self._contract(provider_profile="deepseek-flash-max",
+                           response_identity_policy="ecnu_configured_route_known_labels_v1")
+
     def test_explicit_omitted_policy_accepts_only_verification_six_keys(self):
         contract = self._contract(verification_tool_choice="omitted")
         verification = _payload()

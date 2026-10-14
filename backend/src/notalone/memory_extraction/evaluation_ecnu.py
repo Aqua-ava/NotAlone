@@ -157,8 +157,19 @@ def run_ecnu_evaluation(
     verification_mode: SourceVerificationMode | str = SourceVerificationMode.LEGACY_V4,
     verification_tool_choice: str = "forced",
     response_identity_policy: str = "first_valid_completion_observation_stop_on_change",
+    provider_profile: str = "ecnu",
 ) -> dict:
-    """默认固定P1；显式最多四窗诊断仍须独审，不自动后继或认证质量。"""
+    """保留ECNU入口名；显式官方Flash最高思考只接受完整140及原独审。"""
+    from .evaluation_provider_contract import EvaluationProviderProfile
+
+    try:
+        profile = EvaluationProviderProfile(provider_profile)
+    except (TypeError, ValueError):
+        raise EvaluationBudgetAbort("evaluation_provider_profile_invalid") from None
+    official = profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
+    if official and case_set != "full140":
+        raise EvaluationBudgetAbort("evaluation_official_full140_required")
+    base_url, endpoint, request_model = profile.base_url, profile.endpoint, profile.model
     try:
         selected = SourceVerificationMode(verification_mode)
     except (TypeError, ValueError):
@@ -244,6 +255,7 @@ def run_ecnu_evaluation(
         deadline=deadline, repo_root=repo_root, source_hashes=dict(source_hashes),
         verification_tool_choice=verification_tool_choice,
         response_identity_policy=response_identity_policy,
+        provider_profile=profile,
     )
     if case_set == "full140":
         validation = _load_full_reference(repo_root, source_hashes)
@@ -268,12 +280,14 @@ def run_ecnu_evaluation(
     config = {
         **_frozen_config(plan, request_timeout_seconds=request_timeout_seconds,
                          max_retries=max_retries, verification_mode=selected),
-        "mode": ("ecnu_bounded_full140" if case_set == "full140" else
+        "mode": ("deepseek_bounded_full140" if official else
+                 "ecnu_bounded_full140" if case_set == "full140" else
                  "ecnu_bounded_evaluation" if case_positions is None
                  else "ecnu_bounded_diagnostic"),
         "stage": ("full140" if case_set == "full140" else
                   "P1" if case_positions is None else "diagnostic"),
-        "base_url": _BASE_URL, "endpoint": _ENDPOINT, "request_model": "ecnu-max",
+        "base_url": base_url, "endpoint": endpoint, "request_model": request_model,
+        **({"reasoning_effort": "max"} if official else {}),
         "deadline_utc": deadline.astimezone(timezone.utc).isoformat(),
         "source_hashes": dict(source_hashes),
         "gold_sha256": reference["gold_sha256"],
@@ -302,9 +316,13 @@ def run_ecnu_evaluation(
         **{f"{purpose}_schema_sha256": canonical_sha256(schema)
            for purpose, (_, schema) in runtime_contracts.items()},
     }
+    if official:
+        config["omitted_parameters"] = [
+            item for item in config["omitted_parameters"] if item != "reasoning_effort"
+        ]
     budget = EvaluationBudget.create(
         run_id=run_id, output_directory=output_directory, request_limit=2 * len(cases),
-        allowed_endpoints=(_ENDPOINT,), config_sha256=canonical_sha256(config),
+        allowed_endpoints=(endpoint,), config_sha256=canonical_sha256(config),
     )
     try:
         store = EvaluationRecordStore(budget=budget, frozen_config=config, plan=plan)
@@ -328,7 +346,8 @@ def run_ecnu_evaluation(
         if not messages or messages[0] != {"role": "system", "content": prompt}:
             raise EvaluationBudgetAbort("ecnu_runtime_prompt_changed")
         expected = {
-            "model": "ecnu-max", "temperature": 0.0, "stream": False,
+            "model": request_model, "temperature": 0.0, "stream": False,
+            **({"reasoning_effort": "max"} if official else {}),
             "thinking": {"type": "enabled"}, "messages": messages,
             "tools": [deepcopy(tools[purpose])],
             "tool_choice": {"type": "function", "function": {"name": schema["title"]}},
@@ -339,12 +358,13 @@ def run_ecnu_evaluation(
 
     return _run_evaluation_batch(
         cases=cases, windows=windows, plan=plan, budget=budget, store=store,
-        base_url=_BASE_URL, request_model="ecnu-max", api_key="",
-        synthetic_transport=synthetic_transport, provider="ECNU", contract=contract,
+        base_url=base_url, request_model=request_model, api_key="",
+        synthetic_transport=synthetic_transport, provider="DeepSeek" if official else "ECNU", contract=contract,
         invocation_scope=invocation_scope,
         semantic_audit=_audit_callback(audit_case, reference), gold_reference=reference,
-        code_prefix="ecnu", credential_loader=credential_loader,
+        code_prefix="deepseek" if official else "ecnu", credential_loader=credential_loader,
         request_timeout_seconds=request_timeout_seconds, max_retries=max_retries,
         verification_mode=selected,
         verification_tool_choice=verification_tool_choice,
+        reasoning_effort="max" if official else None,
     )
