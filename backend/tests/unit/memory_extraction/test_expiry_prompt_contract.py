@@ -1,7 +1,7 @@
 """短期时效记忆的提示词与 schema 契约测试。
 
 提示文本无法在离线环境里证明模型行为，因此这里只固定可验证的部分：
-提示确实写明"短期信息必须有可推算的失效时间、只有真正长期有效的事实才留空"
+提示确实写明"短期信息填写可推算的失效时间，历史事实及不可推算的边界留空"
 的泛化规则与时区口径，且结构化 schema 的描述与提示词不自相矛盾。
 真实模型的遵守率必须由另批模型评测验证，本文件不涉及。
 
@@ -59,10 +59,11 @@ class ExpiryPromptContractTest(unittest.TestCase):
         self.assertIn("occurred_at 当天结束", prompt)
         self.assertNotIn("该日当地时间", prompt)
 
-    def test_prompt_keeps_empty_expiry_only_for_long_lived_facts(self) -> None:
+    def test_prompt_preserves_history_and_unknown_expiry_exceptions(self) -> None:
         prompt = EXTRACTION_SYSTEM_PROMPT
-        self.assertIn("只有真正长期有效的事实", prompt)
-        self.assertIn("才留空", prompt)
+        self.assertIn("没有明示资料期限的已发生历史事实或经历也留双null", prompt)
+        self.assertIn("结束时间无法按上述规则推算时也留空", prompt)
+        self.assertIn("不能为历史动作套临时状态有效期", prompt)
 
     def test_prompt_pins_relative_dates_to_the_source_offset(self) -> None:
         prompt = EXTRACTION_SYSTEM_PROMPT
@@ -78,6 +79,15 @@ class ExpiryPromptContractTest(unittest.TestCase):
 
 class ExpirySchemaContractTest(unittest.TestCase):
     """schema 描述也进入模型输入，必须与提示词口径一致。"""
+
+    def test_expiry_schema_preserves_history_and_unknown_end(self) -> None:
+        """工具字段不能诱导模型给历史经历或未知期限编造结束日期。"""
+
+        description = _field_description("invalid_at")
+        self.assertNotIn("只有真正长期有效的事实才用 JSON null", description)
+        self.assertIn("没有明示资料期限的已发生历史事实或经历", description)
+        self.assertIn("结束时间无法按上述规则推算", description)
+        self.assertIn("JSON null", description)
 
     def test_invalid_at_description_states_the_same_rule(self) -> None:
         description = _field_description("invalid_at")
