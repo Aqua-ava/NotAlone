@@ -32,8 +32,16 @@ PLAN = tuple(case for case in CASES if case.dimension == "reference") + tuple(
 
 
 class EvaluationECNUTest(unittest.TestCase):
+    def test_official_remaining_budget_cannot_exceed_full_round(self):
+        for limit in (0, 281, True):
+            with self.subTest(limit=limit), self.assertRaises(EvaluationBudgetAbort):
+                self.run_ready(provider_profile="deepseek-flash-max", case_set="full140",
+                               verification_tool_choice="omitted", request_limit=limit)
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+
     def test_official_flash_max_reaches_both_sdk_requests_and_stops_on_safety(self):
-        hashes, gold, _ = self.full_preparation()
+        hashes, gold, _ = self.full_preparation(nullable=True)
         window = build_window(PLAN[0])
         source = str(window.target_message_ids[0])
         fact = {
@@ -51,6 +59,7 @@ class EvaluationECNUTest(unittest.TestCase):
             self.assertEqual(body["model"], "deepseek-flash")
             self.assertEqual(body["thinking"], {"type": "enabled"})
             self.assertEqual(body["reasoning_effort"], "max")
+            self.assertNotIn("tool_choice", body)
             extraction = body["tools"][0]["function"]["name"] == "MemoryExtractionOutput"
             args = {"facts": [fact]} if extraction else {"results": [{
                 "candidate_index": 0, "verdict": "supported", "issues": [],
@@ -61,12 +70,13 @@ class EvaluationECNUTest(unittest.TestCase):
         result = self.run_ready(
             hashes=hashes, gold=gold, case_set="full140", provider_profile="deepseek-flash-max",
             request_timeout_seconds=300, max_retries=0, transport=httpx.MockTransport(respond),
+            verification_mode="nullable-proof-v1", verification_tool_choice="omitted", request_limit=279,
             audit=lambda bundle: self.audit(bundle, "safety_error", "false_fact"),
         )
         self.assertEqual(len(self.requests), 2)
         self.assertEqual(result["stopped_code"], "case_semantic_audit_safety_error")
         self.assertEqual(result["summary"]["unrun"], 139)
-        self.assertEqual(result["receipt"]["budget"]["request_limit"], 280)
+        self.assertEqual(result["receipt"]["budget"]["request_limit"], 279)
         self.assertTrue(result["receipt"]["budget"]["closed"])
         config = json.loads((self.output / "manifest.json").read_text())["frozen_config"]
         self.assertEqual(config["reasoning_effort"], "max")
@@ -136,13 +146,13 @@ class EvaluationECNUTest(unittest.TestCase):
         self.credentials.append("loaded")
         return "synthetic-not-a-real-key"
 
-    def full_preparation(self, *, change=None):
+    def full_preparation(self, *, change=None, nullable=False):
         from tests.unit.memory_extraction.test_evaluation_reference import full_reference_fixture
         from notalone.memory_extraction.evaluation_reference import (
             FULL_ANNOTATION_PATH, FULL_REFERENCE_PATH, PUBLIC_REFERENCE_PATH,
         )
 
-        hashes, _ = self.preparation()
+        hashes, _ = self.preparation(nullable=nullable)
         reference = full_reference_fixture()
         if change is not None:
             change(reference)

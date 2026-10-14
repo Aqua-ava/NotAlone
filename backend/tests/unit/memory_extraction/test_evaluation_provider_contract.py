@@ -108,6 +108,7 @@ class EvaluationProviderContractTest(unittest.TestCase):
     def test_official_max_cannot_downgrade_or_send_to_ecnu(self):
         contract = self._contract(provider_profile="deepseek-flash-max")
         body = {**_payload(), "model": "deepseek-flash", "reasoning_effort": "max"}
+        del body["tool_choice"]
         official = "https://api.deepseek.com/chat/completions"
         with contract.expect_request(body):
             contract.check_request(httpx.Request("POST", official, json=body))

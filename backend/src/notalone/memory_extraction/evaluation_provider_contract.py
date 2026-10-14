@@ -269,10 +269,10 @@ def _validate_payload(value: dict, *, verification_tool_choice: str = "forced",
                       provider_profile: EvaluationProviderProfile = EvaluationProviderProfile.ECNU) -> None:
     try:
         function = value["tools"][0]["function"]
-        forced = not (verification_tool_choice == "omitted"
+        official = provider_profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
+        forced = not (official or verification_tool_choice == "omitted"
                       and function["name"] == "SourceVerificationOutput")
         fields = _PAYLOAD_FIELDS if forced else _PAYLOAD_FIELDS - {"tool_choice"}
-        official = provider_profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
         if official:
             fields = fields | {"reasoning_effort"}
         if (

@@ -158,6 +158,7 @@ def run_ecnu_evaluation(
     verification_tool_choice: str = "forced",
     response_identity_policy: str = "first_valid_completion_observation_stop_on_change",
     provider_profile: str = "ecnu",
+    request_limit: int | None = None,
 ) -> dict:
     """保留ECNU入口名；显式官方Flash最高思考只接受完整140及原独审。"""
     from .evaluation_provider_contract import EvaluationProviderProfile
@@ -169,6 +170,12 @@ def run_ecnu_evaluation(
     official = profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
     if official and case_set != "full140":
         raise EvaluationBudgetAbort("evaluation_official_full140_required")
+    if official and verification_tool_choice != "omitted":
+        raise EvaluationBudgetAbort("evaluation_official_tools_must_be_omitted")
+    if request_limit is not None and (
+        not official or type(request_limit) is not int or not 1 <= request_limit <= 280
+    ):
+        raise EvaluationBudgetAbort("evaluation_request_limit_invalid")
     base_url, endpoint, request_model = profile.base_url, profile.endpoint, profile.model
     try:
         selected = SourceVerificationMode(verification_mode)
@@ -230,6 +237,9 @@ def run_ecnu_evaluation(
     if (type(audit_case) is PhasedEvaluationAudit
             and audit_case.verification_tool_choice != verification_tool_choice):
         raise EvaluationBudgetAbort("ecnu_phased_tool_choice_mismatch")
+    if (type(audit_case) is PhasedEvaluationAudit
+            and audit_case.extraction_tool_choice != ("omitted" if official else "forced")):
+        raise EvaluationBudgetAbort("evaluation_phased_extraction_tool_choice_mismatch")
     if synthetic_transport is None:
         if type(audit_case) is not PhasedEvaluationAudit:
             raise EvaluationBudgetAbort("ecnu_phased_audit_required")
@@ -302,7 +312,7 @@ def run_ecnu_evaluation(
         } if response_identity_policy == KNOWN_ECNU_RESPONSE_IDENTITY_POLICY else response_identity_policy),
         "request_contract_version": 1,
         "tool_choice": ({
-            "extraction": {"mode": "forced", "name": runtime_contracts["extraction"][1]["title"]},
+            "extraction": {"mode": "omitted" if official else "forced", "name": runtime_contracts["extraction"][1]["title"]},
             "verification": {"mode": "omitted", "name": runtime_contracts["verification"][1]["title"]},
         } if verification_tool_choice == "omitted" else
             [schema["title"] for _, schema in runtime_contracts.values()]),
@@ -321,7 +331,8 @@ def run_ecnu_evaluation(
             item for item in config["omitted_parameters"] if item != "reasoning_effort"
         ]
     budget = EvaluationBudget.create(
-        run_id=run_id, output_directory=output_directory, request_limit=2 * len(cases),
+        run_id=run_id, output_directory=output_directory,
+        request_limit=2 * len(cases) if request_limit is None else request_limit,
         allowed_endpoints=(endpoint,), config_sha256=canonical_sha256(config),
     )
     try:
@@ -352,7 +363,7 @@ def run_ecnu_evaluation(
             "tools": [deepcopy(tools[purpose])],
             "tool_choice": {"type": "function", "function": {"name": schema["title"]}},
         }
-        if purpose == "verification" and verification_tool_choice == "omitted":
+        if official or purpose == "verification" and verification_tool_choice == "omitted":
             del expected["tool_choice"]
         return contract.expect_request(expected)
 
@@ -367,4 +378,5 @@ def run_ecnu_evaluation(
         verification_mode=selected,
         verification_tool_choice=verification_tool_choice,
         reasoning_effort="max" if official else None,
+        extraction_tool_choice="omitted" if official else "forced",
     )

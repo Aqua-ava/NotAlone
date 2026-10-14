@@ -21,6 +21,22 @@ ANNOTATION_SHA = "7039a302f64d6a14761ae448e425597c5ef46e0fbb3d7bc41c95c6d9a9b91e
 
 
 class EvaluationPhasedAuditTest(unittest.TestCase):
+    def test_official_extraction_omission_preserves_explicit_review_order(self):
+        self.bundle["extraction_tool_choice"] = "omitted"
+        self.bundle["provider_requests"].insert(0, {"body": {
+            "tools": [{"type": "function", "function": {"name": "MemoryExtractionOutput"}}],
+            "messages": [],
+        }})
+        result = self.audit(extraction_tool_choice="omitted")(self.bundle)
+        self.assertEqual(result["decision"], "safe")
+        self.assertEqual(self.order, ["raw", "persist:raw", "full", "persist:final"])
+
+    def test_extraction_policy_mismatch_stops_before_raw_review(self):
+        self.bundle["extraction_tool_choice"] = "omitted"
+        with self.assertRaises(EvaluationBudgetAbort):
+            self.audit()(self.bundle)
+        self.assertEqual(self.order, [])
+
     def test_omitted_verification_reaches_full_only_with_matching_explicit_policy(self):
         self.bundle["verification_mode"] = "nullable-proof-v1"
         self.bundle["verification_tool_choice"] = "omitted"
