@@ -61,9 +61,36 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
         const contacts = await window.notalone.contacts.getState();
         return { matched: contacts.selectedContactId === expected && foreground.confirmedContactId === expected
           && foreground.confirmation === 'verified-binding' && Date.parse(foreground.observedAt ?? '') >= since,
-          phase: foreground.phase, reason: foreground.reason };
+          selectedExpected: contacts.selectedContactId === expected,
+          confirmedExpected: foreground.confirmedContactId === expected,
+          suggestedExpected: foreground.suggestedContactId === expected,
+          verifiedBinding: foreground.confirmation === 'verified-binding',
+          freshObservation: Date.parse(foreground.observedAt ?? '') >= since,
+          helperFocused: foreground.suspendedByHelperFocus === true,
+          wechatInFront: foreground.wechatInFront === true,
+          probeAvailable: foreground.probeAvailable === true,
+          observing: foreground.phase === 'observing',
+          manualRequired: foreground.phase === 'manual-required',
+          paused: foreground.phase === 'paused',
+          unavailable: foreground.phase === 'unavailable',
+          observationTimeout: foreground.reason === 'observation_timeout',
+          syncDisabled: foreground.reason === 'sync_disabled',
+          connectionUnavailable: foreground.reason === 'connection_unavailable' };
       }, { expected: bindingBackend.data.contact_ids[index], since: started });
-      await expect.poll(async () => (await matched()).matched, { timeout: 30000 }).toBe(true);
+      // 失败也保留最后一次布尔诊断；不写入原始reason、名称、ID或原生载荷。
+      let lastObservation: Awaited<ReturnType<typeof matched>> | undefined;
+      let samples = 0;
+      try {
+        await expect.poll(async () => {
+          lastObservation = await matched();
+          samples += 1;
+          return lastObservation.matched;
+        }, { timeout: 30000 }).toBe(true);
+      } catch (error) {
+        reports.push({ phase, matched: false, samples, elapsedMs: Date.now() - started,
+          observationSampled: lastObservation !== undefined, ...lastObservation });
+        throw error;
+      }
       reports.push({ phase, matched: true, displayedAfterTriggerMs: Date.now() - started });
       await writeFile(path.join(directory, `${phase}.result.json`), JSON.stringify(reports.at(-1)), { mode: 0o600, flag: 'wx' });
     }
