@@ -86,12 +86,11 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
           samples += 1;
           return lastObservation.matched;
         }, { timeout: 30000 }).toBe(true);
-      } catch (error) {
+      } catch {
         reports.push({ phase, matched: false, samples, elapsedMs: Date.now() - started,
           observationSampled: lastObservation !== undefined, ...lastObservation });
-        throw error;
       }
-      reports.push({ phase, matched: true, displayedAfterTriggerMs: Date.now() - started });
+      if (lastObservation?.matched) reports.push({ phase, matched: true, displayedAfterTriggerMs: Date.now() - started });
       await writeFile(path.join(directory, `${phase}.result.json`), JSON.stringify(reports.at(-1)), { mode: 0o600, flag: 'wx' });
     }
     await ready('other-app');
@@ -101,6 +100,10 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
     }), { timeout: 30000 }).toBe(true);
     reports.push({ phase: 'other-app', paused: true });
     await selectMenu(app, '窗口', '输入小窗');
+    if (!(await helper.getByRole('textbox', { name: '草稿', exact: true }).isEnabled())) {
+      reports.push({ phase: 'helper-pause', blocked: true, draftDisabled: true });
+      throw new Error('草稿尚不可编辑，不能验收输入暂停及恢复；保留前序匹配诊断。');
+    }
     await helper.getByRole('textbox', { name: '草稿', exact: true }).fill('持续跟随验收合成草稿（不发送）');
     const paused = await helper.evaluate(async () => window.notalone.foreground.getState());
     expect(paused.suspendedByHelperFocus).toBe(true);
@@ -118,6 +121,7 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
     await selectMenu(app, 'NotAlone', '退出 NotAlone');
     await expect.poll(() => appProcess.exitCode, { timeout: 15000 }).toBe(0);
     normalQuit = true;
+    expect(reports.filter(report => report.matched === false), '实机匹配阶段不得静默跳过失败').toEqual([]);
   } finally {
     // 只输出阶段/布尔/耗时；不输出联系人身份、名称或原生原始输出。
     await writeFile(test.info().outputPath('continuous-follow-results.json'), JSON.stringify({ reports, normalQuit,
