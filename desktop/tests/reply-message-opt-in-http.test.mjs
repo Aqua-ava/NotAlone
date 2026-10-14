@@ -60,7 +60,7 @@ test('A15主动路径提供显式采用公开控件，保持原目的且实际�
     await f.fixture.command('append_message');
     const noticed = await eventually(() => f.bridge.getState(), (state) => state.messageNotice.changed, '主动路径认证SSE须只提醒。');
     assert.equal((await f.fixture.command('observations')).model_calls, 1);
-    assert.match(f.renderCandidates(noticed), /结合新消息继续/);
+    assert.match(f.renderCandidates(noticed), /结合新消息重新生成/);
     await f.fixture.plan({ count: 1, message_groups: [['结合新近况问候。', '没有约定。']] });
     await f.bridge.combineNewMessages(scope);
     const after = await f.bridge.getState();

@@ -79,7 +79,7 @@ test('实际prepare的同身份未领取证明才交显式回调，不伪造领�
   const { backend } = await clarificationBackend(t, noGenerationResponse);
   const events: string[] = [], proofs: unknown[] = [];
   await assert.rejects(continueAssistantSession(backend, contactId, sessionId, continuationCommand(),
-    new AbortController().signal, () => events.push('prepared'), () => events.push('requested'),
+    new AbortController().signal, () => { events.push('prepared'); }, () => events.push('requested'),
     () => events.push('preparing'), (proof: unknown) => { events.push('no_generation'); proofs.push(proof); }),
   (error: unknown) => error instanceof BackendRequestFailure && error.code === 'assistant_session_input_conflict');
   assert.deepEqual(events, ['preparing', 'no_generation']);
@@ -120,7 +120,7 @@ test('实际准备HTTP发出时报告准备阶段，合法澄清不伪造领取�
   const requestJson = backend.requestJson.bind(backend);
   backend.requestJson = async (options) => { requests.push(options.path); return requestJson(options); };
   const result = await continueAssistantSession(backend, contactId, sessionId, continuationCommand(),
-    new AbortController().signal, () => phases.push('prepared'), () => phases.push('requested'), () => {
+    new AbortController().signal, () => { phases.push('prepared'); }, () => phases.push('requested'), () => {
       assert.deepEqual(requests, [continuePath + '/prepare']);
       phases.push('preparing');
     });

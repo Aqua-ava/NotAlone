@@ -79,7 +79,7 @@ function requestBody(command: AssistantContinuationCommand, sessionId: string) {
 // 复用唯一认证传输；结果归属、候选版本与生效要求均由后端同事务确定。
 export async function continueAssistantSession(backend: BackendHost, contactId: string, sessionId: string,
   command: AssistantContinuationCommand, signal: AbortSignal,
-  onPrepared?: (receipt: AssistantGenerationReceipt) => void, onRequested?: () => void,
+  onPrepared?: (receipt: AssistantGenerationReceipt) => void | Promise<void>, onRequested?: () => void,
   onPrepareRequest?: () => void, onNoGeneration?: (proof: AssistantNoGenerationProof) => void) {
   if (!isUuid(contactId) || !isUuid(sessionId)) throw new Error('当前助手会话身份无效。');
   const body = requestBody(command, sessionId.toLowerCase());
@@ -125,7 +125,7 @@ export async function continueAssistantSession(backend: BackendHost, contactId: 
   if (generation === undefined || preparation.generation !== generation
     || backend.getConnectionGeneration() !== generation) throw new Error('本次生成连接已变化。');
   const receipt = readAssistantGenerationReceipt(preparation.data, sessionId.toLowerCase(), body.idempotency_key);
-  onPrepared?.(receipt);
+  await onPrepared?.(receipt);
   if (signal.aborted) throw new BackendRequestFailure('cancelled');
   const execution = perform(request.path);
   onRequested?.();

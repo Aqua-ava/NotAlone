@@ -68,10 +68,13 @@ export async function budgetPublicFixture(t, { toolHistory = false } = {}) {
   data = await ready;
   assert.equal(data.migration_count, 58); assert.equal(data.migration_repeat, 0);
   client = new ports.JsonClient(data);
+  const messageObservers = new Set();
   let generation = 7; const backendListeners = new Set(), delivery = {};
   const backend = { getConnectionGeneration: () => generation,
     onStateChanged: (listener) => { backendListeners.add(listener); return () => backendListeners.delete(listener); },
-    subscribeMessages: (observer) => { observer.connected(); },
+    subscribeMessages: (observer, signal) => {
+      messageObservers.add(observer); signal?.addEventListener('abort', () => messageObservers.delete(observer), { once: true }); observer.connected();
+    },
     requestJson: async (options) => {
       const captured = generation;
       let response;
@@ -112,6 +115,7 @@ export async function budgetPublicFixture(t, { toolHistory = false } = {}) {
     generation += 1; for (const listener of backendListeners) listener();
   };
   return { data, command, bridge, contacts, replies, request, connect, configure, handlers, backend, delivery,
+    message: event => { for (const observer of messageObservers) observer.message(event); },
     BackendRequestFailure: ports.BackendRequestFailure,
     renderSession: (state) => ports.renderToStaticMarkup(ports.createElement(ports.AssistantSessionPanel,
       { replies: { state, error: '' } })),

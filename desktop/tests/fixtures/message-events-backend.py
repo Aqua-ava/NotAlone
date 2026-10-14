@@ -92,8 +92,8 @@ class MessageEventsFixture(rewrite.DesktopRewriteFixture):
                 "SELECT name FROM public.notalone_schema_migration ORDER BY name",
             ).fetchall()]
         expected = sorted(path.name for path in migrations.glob("*.sql"))
-        if recorded != expected or len(recorded) != 55 or not recorded[-1].startswith("055_"):
-            raise RuntimeError("本轮新消息夹具必须只应用正式001–055迁移。")
+        if recorded != expected or len(recorded) != 58 or not recorded[-1].startswith("058_"):
+            raise RuntimeError("本轮新消息夹具必须只应用正式001–058迁移。")
         repeated = subprocess.run(
             [sys.executable, "-m", "notalone.database_migrations", "--migrations", str(migrations)],
             cwd=root / "backend", capture_output=True, text=True, timeout=60,
@@ -174,7 +174,7 @@ def main() -> None:
             "database_url": fixture.database_url, "owner_id": str(fixture.owner_id),
             "contact_ids": contact_ids, "other_contact_id": other_contact_id,
             "empty_contact_id": str(empty_contact_id),
-            "migration_count": 55, "migration_repeat": 0,
+            "migration_count": 58, "migration_repeat": 0,
         }}), flush=True)
         for line in sys.stdin:
             command = json.loads(line)

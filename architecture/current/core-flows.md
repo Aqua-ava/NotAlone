@@ -4,7 +4,7 @@
 
 > 后续目标：记忆时效、纠错、可追溯概览、自动 Skill 草稿/审核和明确范围反馈按[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)及[正式规格](../../.scratch/memory-skill-evolution/spec.md)扩展，尚未实现。DSH 搁置，现有回复运行时、质量放行、授权和人工发送边界保持。
 
-> 前台跟随目标：按[ADR-050](../adr/050-continuous-single-frame-contact-follow.md)采用持续单帧识别及按联系人保留内容、任务；[正式规格](../../.scratch/foreground-contact-follow/spec.md)已发布，[任务01](../../.scratch/foreground-contact-follow/issues/01-single-frame-locator.md)已完成现有单次单帧链路的代码及合成验证，[任务02](../../.scratch/foreground-contact-follow/issues/02-contact-content-restore.md)已完成手动切换的输入、候选编辑恢复及 HTTP/PG 合成验证；持续流程与实机验收仍待完成。下方相关流程描述目标约束，实际现状仍须从代码和测试核对。
+> 前台跟随目标：按[ADR-050](../adr/050-continuous-single-frame-contact-follow.md)采用持续单帧识别及按联系人保留内容、任务；[正式规格](../../.scratch/foreground-contact-follow/spec.md)已发布，[任务01](../../.scratch/foreground-contact-follow/issues/01-single-frame-locator.md)已完成现有单次单帧链路的代码及合成验证，[任务02](../../.scratch/foreground-contact-follow/issues/02-contact-content-restore.md)已完成手动切换的输入、候选编辑恢复及 HTTP/PG 合成验证；[任务05](../../.scratch/foreground-contact-follow/issues/05-contact-generation-jobs.md)已接入多联系人有界派发、只读状态恢复与原协议显式重试；持续流程与实机验收仍待完成。下方相关流程描述目标约束，实际现状仍须从代码和测试核对。
 
 ## 1. 导入与关系资料采纳
 

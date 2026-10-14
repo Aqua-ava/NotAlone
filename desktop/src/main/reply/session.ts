@@ -81,8 +81,11 @@ export class ReplySession {
   private draft = '';
   private operation = 0;
   private pending: AbortController | undefined;
-  private readonly generationJobs = new AssistantGenerationJobs();
+  private readonly generationJobs = new AssistantGenerationJobs(() => this.publish({}));
   private helperHidden = false;
+  // 复用原操作已捕获的命令引用供显式重试；不向作业元数据复制正文，也不自动执行。
+  private readonly retainedRetries = new Map<string, { contactId: string; sessionId: string; run: () => Promise<void> }>();
+  private restoredRetry: string | undefined;
   private lastAttempt: { input: ReplyInputSnapshot; requestKey: string; expectedInputVersionId?: string; interrupted?: InterruptedReplyOrigin; adoptNewMessageId?: string } | undefined;
   private continuationAttempt: { scope: ContactSelection; generation: number; command: AssistantContinuationCommand } | undefined;
   private messageOperation = 0;
@@ -90,6 +93,8 @@ export class ReplySession {
   private noticeStream: AbortController | undefined;
   private noticeVerification: AbortController | undefined;
   private noticeRevision = 0;
+  // 只保留消息标识；切回后经认证读取确认，最多保存32个会话提示。
+  private readonly retainedNotices = new Map<string, { contactId: string; sessionId: string; messageId: string }>();
   private noticedMessage: { generation: number; contactId: string; scopeRevision: number;
     sessionId: string; messageId: string; revision: number } | undefined;
   private savedRead: AbortController | undefined;
@@ -118,7 +123,7 @@ export class ReplySession {
       const generation = backend.getConnectionGeneration();
       if (generation !== versionGeneration) {
         versionGeneration = generation;
-        this.retainedContent.clear(); this.pendingContent = undefined; this.retainedSourceValidation = undefined; this.contentGeneration = undefined;
+        this.retainedContent.clear(); this.retainedNotices.clear(); this.retainedRetries.clear(); this.restoredRetry = undefined; this.pendingContent = undefined; this.retainedSourceValidation = undefined; this.contentGeneration = undefined;
         this.publish({ inputBudgetNotice: undefined });
         this.generationJobs.cancelAll();
         this.cancelPending();
@@ -131,6 +136,8 @@ export class ReplySession {
   }
   getState(): ReplySessionState {
     const state = structuredClone(this.state);
+    state.generationJobs = this.generationJobs.states(this.backend.getConnectionGeneration());
+    state.generationRecoveryPending = this.generationJobs.recoveryPending(this.backend.getConnectionGeneration());
     state.candidateDrafts = state.sourceAvailability || state.savedSession?.phase !== 'ready' ? []
       : state.candidateDrafts?.filter((draft) => state.candidateVersions?.items.some((view) => view.phase === 'ready'
         && view.candidateId === draft.candidateId && view.history?.versions.some((version) => version.versionId === draft.versionId)));
@@ -260,14 +267,18 @@ export class ReplySession {
         captureAssistantGenerationStopping(this.backend, { connectionGeneration: generation,
           contactId: update.contactId, sessionId: update.sessionId }));
       const ownedJob = job;
+      this.retainRetry(command.requestKey, update.contactId, update.sessionId, () => this.runContinuation(
+        { contactId: update.contactId, scopeRevision: this.state.scopeRevision, sessionId: update.sessionId }, command, contactDisplayName, generation));
       const result = await continueAssistantSession(this.backend, update.contactId, update.sessionId, command, pending.signal,
-        (receipt) => { this.generationJobs.receiveReceipt(ownedJob, receipt); receivedPreparation = receipt; },
+        async (receipt) => { this.generationJobs.receiveReceipt(ownedJob, receipt); receivedPreparation = receipt;
+          await this.generationJobs.acquire(ownedJob); },
         () => this.generationJobs.requestStarted(ownedJob), () => this.generationJobs.prepareStarted(ownedJob),
         (proof) => {
           this.generationJobs.receiveNoGenerationProof(ownedJob, proof, this.backend.getConnectionGeneration());
           generationTerminal = true;
         });
       generationTerminal = result.phase === 'completed';
+      if (generationTerminal) this.generationJobs.completed(ownedJob);
       if (result.phase === 'clarification' && result.generation === generation) {
         if (receivedPreparation) throw new Error('本次澄清与实际领取状态不一致，请重新读取讨论。');
         this.generationJobs.completePreparationWithoutGeneration(ownedJob); job = undefined;
@@ -311,7 +322,7 @@ export class ReplySession {
       await this.restoreCandidateVersions(update, update.sessionId, result.candidates.map((candidate) => candidate.candidateId));
     } catch (error) {
       if (job && receivedPreparation && !generationTerminal && error instanceof BackendRequestFailure
-        && error.kind === 'response') await this.recordFailedGenerationResponse(job, receivedPreparation, pending.signal);
+        && error.kind === 'response') await this.recordFailedGenerationResponse(job, receivedPreparation, pending.signal, error);
       if (!current()) return;
       const failure = error instanceof BackendRequestFailure ? error : undefined;
       const providerLimit = failure?.status === 409 && failure.code === 'provider_context_limit';
@@ -323,11 +334,75 @@ export class ReplySession {
           message: providerLimit ? '模型提示这次内容过长，请新开助手会话。'
             : canRetry ? '本次继续的结果尚未确认，请用原请求重试。' : '本次继续尚未可靠确认，请重新读取讨论。' } });
       if (!canRetry && failure) await this.readSavedSession(update);
-    } finally { if (job) this.generationJobs.finish(job, generationTerminal); if (this.pending === pending) this.pending = undefined; }
+    } finally { if (job) await this.finishGeneration(job, generationTerminal); if (this.pending === pending) this.pending = undefined; }
+  }
+
+  private async restoreGenerationView(selection: ContactSelection,
+    saved: Awaited<ReturnType<typeof readAssistantSession>>, signal: AbortSignal, current: () => boolean): Promise<void> {
+    const turn = saved.turns.find((item) => item.inputVersionId === saved.currentInputVersionId);
+    const job = this.generationJobs.states(saved.generation).find((item) => item.contactId === selection.contactId
+      && item.sessionId === saved.sessionId && item.turnId === turn?.turnId && item.requestKey === turn?.requestKey);
+    if (!turn || !job || !turn.input || !saved.inputs.some((item) => item.inputVersionId === turn.inputVersionId && item.state === 'active')) return;
+    const retry = turn.state === 'failed' && job.phase === 'failed' && job.canRetry;
+    const restoreResult = turn.state === 'completed' && turn.reply && !this.state.result;
+    if (!retry && !restoreResult) return;
+    const operation = this.operation;
+    const input = await interruptedReplyInput(this.backend, turn, {
+      contactId: selection.contactId,
+      displayName: this.contacts.getState().contacts.find((item) => item.contactId === selection.contactId)!.displayName,
+    }, signal, current);
+    if (!current() || operation !== this.operation || this.candidateSourceCheck) return;
+    if (retry) {
+      this.restoredRetry = this.retainedRetries.has(turn.requestKey) ? turn.requestKey : undefined;
+      this.lastAttempt = { input, requestKey: turn.requestKey };
+      this.publish({ phase: 'failed', errorCode: 'generation_failed', canRetry: true });
+    } else if (turn.reply) {
+      this.publish({ phase: 'ready', canRetry: false, errorCode: undefined, selectedCandidateId: null,
+        result: { ...turn.reply, assistantSessionId: saved.sessionId, inputVersionId: turn.inputVersionId, input,
+          candidates: turn.reply.candidates.map((original) => ({ original, editedText: original.text })) } });
+    }
+  }
+
+  private pruneRetries(contactId: string, sessionId: string, turns: import('../../shared/assistant-session').SavedAssistantTurn[]): void {
+    for (const [key, retry] of this.retainedRetries) if (retry.contactId === contactId && retry.sessionId === sessionId
+      && !turns.some((turn) => turn.requestKey === key && turn.input && ['running', 'failed'].includes(turn.state))) {
+      this.retainedRetries.delete(key);
+    }
+  }
+  private async revalidateRetryInputs(): Promise<void> {
+    const generation = this.backend.getConnectionGeneration();
+    const owners = new Map([...this.retainedRetries.values()].map((retry) => [`${retry.contactId}:${retry.sessionId}`, retry]));
+    await Promise.all([...owners.values()].map(async (owner) => {
+      try {
+        const saved = await readAssistantSession(this.backend, owner.contactId, owner.sessionId, new AbortController().signal);
+        if (generation === this.backend.getConnectionGeneration() && saved.generation === generation) {
+          this.pruneRetries(owner.contactId, owner.sessionId, saved.turns);
+        }
+      } catch {
+        // 删除核验失败时放弃旧命令引用；重读只能恢复仍获权威认可的内容。
+        if (generation === this.backend.getConnectionGeneration()) this.pruneRetries(owner.contactId, owner.sessionId, []);
+      }
+    }));
+  }
+
+  private retainRetry(requestKey: string, contactId: string, sessionId: string, run: () => Promise<void>): void {
+    this.retainedRetries.delete(requestKey); this.retainedRetries.set(requestKey, { contactId, sessionId, run });
+    while (this.retainedRetries.size > 32) this.retainedRetries.delete(this.retainedRetries.keys().next().value!);
+  }
+
+  private async finishGeneration(job: OwnedAssistantGeneration, terminal: boolean): Promise<void> {
+    const owner = job.identity;
+    const selected = owner.connectionGeneration === this.backend.getConnectionGeneration()
+      && owner.contactId === this.state.contactId && owner.sessionId === this.state.savedSession?.sessionId;
+    const returned = selected && !this.helperHidden && !this.generationJobs.canPublish(job, owner) && !job.signal.aborted;
+    this.generationJobs.finish(job, terminal);
+    if (terminal) this.retainedRetries.delete(owner.requestKey);
+    // 返回原会话后晚到的结果仅触发权威读取，不复用旧视图或重新发起生成。
+    if (returned) await this.readSavedSession({ contactId: owner.contactId, scopeRevision: this.state.scopeRevision });
   }
 
   private async recordFailedGenerationResponse(job: OwnedAssistantGeneration, receipt: AssistantGenerationReceipt,
-    signal: AbortSignal): Promise<void> {
+    signal: AbortSignal, failure: BackendRequestFailure): Promise<void> {
     if (signal.aborted || job.identity.connectionGeneration !== this.backend.getConnectionGeneration()) return;
     try {
       const saved = await readAssistantSession(this.backend, job.identity.contactId, job.identity.sessionId, signal);
@@ -335,7 +410,7 @@ export class ReplySession {
         && saved.generation === this.backend.getConnectionGeneration() && saved.turns.some((turn) =>
           turn.turnId === receipt.turnId && turn.inputVersionId === receipt.inputVersionId
           && turn.requestKey === receipt.requestKey && turn.state === 'failed')) {
-        this.generationJobs.failedResponseReceived(job);
+        this.generationJobs.failedResponseReceived(job, failure.code === 'reply_timeout' || failure.code === 'assistant_session_save_failed' || (failure.status ?? 0) >= 500);
       }
     } catch { /* 未知读取不能证明失败；原停止身份仍由实际中断裁定。 */ }
   }
@@ -358,6 +433,8 @@ export class ReplySession {
       if (!current()) return;
       let saved = await readAssistantSession(this.backend, selection.contactId, sessionId, pending.signal);
       if (current() && saved.generation === generation) {
+        this.generationJobs.reconcile({ connectionGeneration: saved.generation, contactId: selection.contactId, sessionId }, saved.turns);
+        this.pruneRetries(selection.contactId, sessionId, saved.turns);
         if (this.candidateSourceCheck) {
           const verified = await this.acceptCandidateSourceSnapshot(saved, this.candidateSourceCheck, pending.signal, current);
           if (!verified || !current()) return;
@@ -400,11 +477,16 @@ export class ReplySession {
           this.directionDerived = content.directionDerived && Boolean(restoredInput.direction || restoredInput.purpose);
           this.publish({ ...restoredInput, candidateDrafts, inputClearRevision: (this.state.inputClearRevision ?? 0) + 1 });
         }
+        if (current() && inputOperation === this.operation) {
+          await this.restoreGenerationView(selection, saved, pending.signal, current);
+          if (current()) await this.restoreMessageNotice(selection, saved.sessionId, pending.signal, current);
+        }
       }
     } catch (error) {
       if (current()) {
         const unavailable = error instanceof BackendRequestFailure && (error.status === 404 || error.reason === 'source_unavailable');
         if (unavailable) {
+          if (heldSessionId) this.pruneRetries(selection.contactId, heldSessionId, []);
           this.retainedContent.delete(selection.contactId); this.pendingContent = undefined;
           if (heldSessionId) {
             this.candidateVersions.setScope({ ...selection, sessionId: heldSessionId });
@@ -543,6 +625,9 @@ export class ReplySession {
     try {
       const result = await deleteAssistantSession(this.backend, selection.contactId, selection.sessionId, pending.signal);
       if (!current() || result.generation !== generation) return;
+      this.generationJobs.forget({ connectionGeneration: result.generation, contactId: selection.contactId, sessionId: selection.sessionId });
+      this.retainedNotices.delete(`${selection.contactId}:${selection.sessionId}`);
+      for (const [key, retry] of this.retainedRetries) if (retry.contactId === selection.contactId && retry.sessionId === selection.sessionId) this.retainedRetries.delete(key);
       this.retainedContent.delete(selection.contactId); this.pendingContent = undefined;
       this.contacts.clearDraft(selection);
       this.publish({ sessionDeletion: result.phase, savedSession: { phase: 'idle', sessionId: null, turns: [], inputs: [], currentInputVersionId: null },
@@ -596,6 +681,8 @@ export class ReplySession {
 
   // 删除检查点只接收主进程已确认的联系人；跨联系人本人资料也可能影响当前依据。
   async revalidateDeletedSource(contactId: string): Promise<void> {
+    for (const [key, retry] of this.retainedRetries) if (retry.contactId === contactId) this.retainedRetries.delete(key);
+    for (const [key, notice] of this.retainedNotices) if (notice.contactId === contactId) this.retainedNotices.delete(key);
     const owningGeneration = this.backend.getConnectionGeneration();
     if (owningGeneration !== undefined) this.generationJobs.cancelContact(owningGeneration, contactId);
     const activeContact = this.state.contactId, activeScope = this.state.scopeRevision;
@@ -606,7 +693,7 @@ export class ReplySession {
     const validation = { checking: true }; this.retainedSourceValidation = validation;
     this.pendingContent = undefined; this.savedRead?.abort();
     this.publish({ candidateDrafts: [] });
-    const retainedValidation = this.revalidateRetainedContents().finally(() => {
+    const retainedValidation = Promise.all([this.revalidateRetainedContents(), this.revalidateRetryInputs()]).finally(() => {
       if (this.retainedSourceValidation === validation) {
         validation.checking = false;
         this.publish({});
@@ -974,6 +1061,9 @@ export class ReplySession {
         if (!ownedPreparation || prepared.generation !== generation) throw new Error('本次候选准备归属尚未确认。');
         ownedGeneration = this.generationJobs.receivePrepared(ownedPreparation, prepared.receipt);
         generationReceipt = prepared.receipt;
+        if (!pending.signal.aborted && generation === this.backend.getConnectionGeneration()) {
+          this.retainRetry(prepared.receipt.requestKey, job.request.contactId, job.request.sessionId, () => { this.strategyJob = job; return this.runStrategy(job); });
+        }
         ownedPreparation = undefined;
         if (current()) this.publish({ phase: 'waiting', canRetry: false,
           exploration: { phase: 'ready', result: null, canRetry: true } });
@@ -981,6 +1071,7 @@ export class ReplySession {
         this.generationJobs.completePreparationWithoutGeneration(ownedPreparation); ownedPreparation = undefined;
       }
       if (pending.signal.aborted || generation === undefined || generation !== this.backend.getConnectionGeneration()) return;
+      if (ownedGeneration) await this.generationJobs.acquire(ownedGeneration);
       const result = job.type === 'open' ? await openExploration(this.backend, job.request, pending.signal)
         : prepared?.kind === 'prepared' ? await (() => {
           if (!ownedGeneration) throw new Error('本次候选生成尚未登记。');
@@ -991,6 +1082,7 @@ export class ReplySession {
         throw new Error('本次确认结果不属于原准备任务。');
       }
       generationTerminal = result.kind === 'generated';
+      if (generationTerminal && ownedGeneration) this.generationJobs.completed(ownedGeneration);
       if (!current() || result.generation !== generation) return;
       const actualInputVersionId = result.kind === 'exploration' ? result.result.inputVersion
         : result.kind === 'generated' ? result.reply.inputVersionId : undefined;
@@ -1043,7 +1135,7 @@ export class ReplySession {
         generationTerminal = true;
       }
       if (ownedGeneration && generationReceipt && !generationTerminal && error instanceof BackendRequestFailure
-        && error.kind === 'response') await this.recordFailedGenerationResponse(ownedGeneration, generationReceipt, pending.signal);
+        && error.kind === 'response') await this.recordFailedGenerationResponse(ownedGeneration, generationReceipt, pending.signal, error);
       if (current()) {
         const automatic = job.type === 'open' && Boolean(job.request.automatic);
         const providerLimit = error instanceof BackendRequestFailure
@@ -1059,7 +1151,7 @@ export class ReplySession {
         } else if (automatic) this.stopAutomaticExploration(true);
       }
     } finally {
-      if (ownedGeneration) this.generationJobs.finish(ownedGeneration, generationTerminal);
+      if (ownedGeneration) await this.finishGeneration(ownedGeneration, generationTerminal);
       if (ownedPreparation) this.generationJobs.finish(ownedPreparation);
       if (this.strategyCandidatePending === pending) this.strategyCandidatePending = undefined;
       if (this.explorationPending === pending) this.explorationPending = undefined;
@@ -1104,6 +1196,12 @@ export class ReplySession {
     this.refreshGenerationEligibility();
     if (this.state.generationBlock) throw new Error('请先确认本次联系人。');
     this.stopAutomaticExploration();
+    if (!selection.newRequest && this.restoredRetry && this.state.canRetry) {
+      const retry = this.retainedRetries.get(this.restoredRetry);
+      if (retry?.contactId === selection.contactId && retry.sessionId === this.state.savedSession?.sessionId) {
+        await retry.run(); return;
+      }
+    }
     if (this.state.mode !== 'rewrite_draft' && this.state.exploration.result) {
       const result = this.state.exploration.result;
       const intent = this.state.mode === 'reply_to_message' ? this.state.direction : this.state.purpose;
@@ -1122,7 +1220,9 @@ export class ReplySession {
     const activeReceipt = generation !== undefined && currentSessionId ? this.generationJobs.requestReceipt({
       connectionGeneration: generation, contactId: selection.contactId, sessionId: currentSessionId,
     }) : undefined;
-    if (this.state.phase === 'waiting' && (!selection.newRequest || !activeReceipt)) return;
+    if ((!selection.newRequest && generation !== undefined && currentSessionId && this.generationJobs.hasPending({
+      connectionGeneration: generation, contactId: selection.contactId, sessionId: currentSessionId,
+    })) || this.state.phase === 'waiting' && (!selection.newRequest || !activeReceipt)) return;
     const replaceable = activeReceipt?.state === 'completed' ? undefined : activeReceipt;
     const contact = contactState.contacts.find((item) => item.contactId === selection.contactId)!;
     const options = this.state.options;
@@ -1208,9 +1308,10 @@ export class ReplySession {
         sessionId, requestKey: attempt.requestKey }, pending,
         captureAssistantGenerationStopping(this.backend, { connectionGeneration: generation, contactId: selection.contactId, sessionId }));
       const ownedJob = job;
-      const prepared = (receipt: Parameters<AssistantGenerationJobs['receiveReceipt']>[1]) => {
+      const prepared = async (receipt: Parameters<AssistantGenerationJobs['receiveReceipt']>[1]) => {
         this.generationJobs.receiveReceipt(ownedJob, receipt); budgetReceipt = receipt;
         if (replaceable && selection.newRequest) this.generationJobs.confirmReplacement(replaceable);
+        await this.generationJobs.acquire(ownedJob);
       };
       const requested = () => this.generationJobs.requestStarted(ownedJob);
       const prepareRequested = () => this.generationJobs.prepareStarted(ownedJob);
@@ -1227,6 +1328,7 @@ export class ReplySession {
         ? await replaceReply(this.backend, attempt.input, attempt.requestKey, replaceable.requestKey, pending.signal, sessionId, prepared, requested, prepareRequested, notReserved, adoptionOptions)
         : await generateReply(this.backend, attempt.input, attempt.requestKey, pending.signal, sessionId, prepared, requested, attempt.expectedInputVersionId, prepareRequested, notReserved, adoptionOptions);
       generationTerminal = true;
+      this.generationJobs.completed(ownedJob);
       if (!current() || result.generation !== generation) return;
       // 可靠完成可作为历史读取；只有仍属当前输入且来源有效的结果才可成为当前候选。
       const beforeRead = this.state.savedSession;
@@ -1329,7 +1431,8 @@ export class ReplySession {
             if (verified.generation === generation && terminal) {
               generationTerminal = terminal.state === 'completed'
                 || ['redacted', 'unavailable'].includes(terminal.state) && terminal.input === null && terminal.reply === null;
-              if (terminal.state === 'failed' && job) this.generationJobs.failedResponseReceived(job);
+              if (terminal.state === 'failed' && job) this.generationJobs.failedResponseReceived(job,
+                !budgetFailure && !providerLimit && (failure?.code === 'reply_timeout' || failure?.code === 'assistant_session_save_failed' || (failure?.status ?? 0) >= 500));
             }
           }
         } catch (readError) {
@@ -1397,7 +1500,7 @@ export class ReplySession {
             connectionGeneration: generation, operation, decision: failure.inputBudget,
           } : undefined });
       }
-    } finally { if (job) this.generationJobs.finish(job, generationTerminal); if (this.pending === pending) this.pending = undefined; }
+    } finally { if (job) await this.finishGeneration(job, generationTerminal); if (this.pending === pending) this.pending = undefined; }
   }
 
   selectCandidate(selection: ReplyCandidateSelection): ReplySessionState {
@@ -1719,6 +1822,13 @@ export class ReplySession {
   }
   private receiveContact(state: ContactSessionState): void {
     if (state.directoryPhase === 'ready') {
+      for (const [key, retry] of this.retainedRetries) if (!state.contacts.some((contact) => contact.contactId === retry.contactId)) this.retainedRetries.delete(key);
+      for (const [key, notice] of this.retainedNotices) if (!state.contacts.some((contact) => contact.contactId === notice.contactId)) this.retainedNotices.delete(key);
+      const generation = this.backend.getConnectionGeneration();
+      if (generation !== undefined) for (const job of this.generationJobs.states(generation)) {
+        if (!state.contacts.some((contact) => contact.contactId === job.contactId)) this.generationJobs.forget({
+          connectionGeneration: generation, contactId: job.contactId, sessionId: job.sessionId });
+      }
       for (const id of this.retainedContent.keys()) {
         if (!state.contacts.some((contact) => contact.contactId === id)) this.retainedContent.delete(id);
       }
@@ -1766,7 +1876,7 @@ export class ReplySession {
       this.draft = state.draft;
       if (this.pendingContent && this.state.contactId) this.retainedContent.delete(this.state.contactId);
       this.pendingContent = undefined;
-      this.cancelPending();
+      this.leaveGenerationView();
       this.lastAttempt = undefined;
       this.publish({ phase: this.state.result ? 'ready' : 'idle', errorCode: undefined, canRetry: false });
     }
@@ -1841,8 +1951,27 @@ export class ReplySession {
           && result.input.purpose === input.purpose)
       && this.state.phase === 'ready') {
       this.noticedMessage = undefined;
+      this.retainedNotices.delete(`${selection.contactId}:${sessionId}`);
       this.publish({ messageNotice: { ...this.state.messageNotice, changed: false } });
     }
+  }
+  private retainMessageNotice(contactId: string, sessionId: string, messageId: string): void {
+    const key = `${contactId}:${sessionId}`;
+    this.retainedNotices.delete(key); this.retainedNotices.set(key, { contactId, sessionId, messageId });
+    while (this.retainedNotices.size > 32) this.retainedNotices.delete(this.retainedNotices.keys().next().value!);
+  }
+  private async restoreMessageNotice(selection: ContactSelection, sessionId: string, signal: AbortSignal,
+    current: () => boolean): Promise<void> {
+    const key = `${selection.contactId}:${sessionId}`, notice = this.retainedNotices.get(key);
+    if (!notice) return;
+    const page = await readReplyMessages(this.backend, selection.contactId, null, signal);
+    if (!current() || this.retainedNotices.get(key) !== notice || sessionId !== this.state.savedSession?.sessionId
+      || page.generation !== this.backend.getConnectionGeneration()) return;
+    if (!page.messages.some((message) => message.messageId === notice.messageId)) {
+      this.retainedNotices.delete(key); return;
+    }
+    this.noticedMessage = { ...notice, generation: page.generation, scopeRevision: selection.scopeRevision, revision: ++this.noticeRevision };
+    this.publish({ messageNotice: { ...this.state.messageNotice, changed: true } });
   }
   private beginMessageNotice(recovered = false): void {
     const contactId = this.state.contactId;
@@ -1863,7 +1992,15 @@ export class ReplySession {
         this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'interrupted' } });
       } },
       message: (event) => {
-        if (!current() || event.contactId !== contactId) return;
+        if (!current()) return;
+        if (event.contactId !== contactId) {
+          const sessions = new Set(this.generationJobs.states(generation)
+            .filter((job) => job.contactId === event.contactId).map((job) => job.sessionId));
+          const retained = this.retainedContent.get(event.contactId)?.sessionId;
+          if (retained) sessions.add(retained);
+          for (const session of sessions) this.retainMessageNotice(event.contactId, session, event.messageId);
+          return;
+        }
         const sessionId = this.state.savedSession?.sessionId;
         const revision = ++this.noticeRevision;
         this.noticeVerification?.abort();
@@ -1874,6 +2011,7 @@ export class ReplySession {
           if (!current() || verification.signal.aborted || revision !== this.noticeRevision || page.generation !== generation
             || sessionId !== this.state.savedSession?.sessionId) return;
           if (page.messages.some((message) => message.messageId === event.messageId)) {
+            if (sessionId) this.retainMessageNotice(contactId, sessionId, event.messageId);
             this.noticedMessage = sessionId ? { generation, contactId, scopeRevision, sessionId,
               messageId: event.messageId, revision } : undefined;
             this.publish({ messageNotice: { ...this.state.messageNotice, phase: 'connected', changed: true } });
@@ -1925,9 +2063,10 @@ export class ReplySession {
     }, 150);
   }
   private invalidateInput(preserveExploration = false): void {
+    this.leaveGenerationView();
     this.invalidateExploration(preserveExploration);
     this.notifyInputChanged();
-    this.cancelPending(); this.lastAttempt = undefined;
+    this.lastAttempt = undefined;
     this.publish({ phase: this.state.result ? 'ready' : 'idle', errorCode: undefined, canRetry: false });
   }
   private invalidateExploration(preserve = false): void {
@@ -1941,6 +2080,7 @@ export class ReplySession {
   private notifyInputChanged(preserveAutomatic = false): void {
     if (this.pendingContent && this.state.contactId) this.retainedContent.delete(this.state.contactId);
     this.pendingContent = undefined;
+    this.restoredRetry = undefined;
     if (!preserveAutomatic) this.stopAutomaticExploration();
     this.continuationAttempt = undefined;
     if (this.state.continuation) this.publish({ continuation: undefined });

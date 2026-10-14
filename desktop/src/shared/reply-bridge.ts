@@ -127,7 +127,15 @@ export interface ReplyResult {
 export type ReplyFailureCode = 'generation_failed' | 'save_failed' | 'timeout' | 'unavailable' | 'rejected' | 'target_unavailable' | 'source_unavailable' | 'connection' | 'input_budget_exceeded' | 'input_budget_unavailable' | 'provider_context_limit';
 export type ReplyGenerationBlock = 'foreground-confirmation-required' | null;
 export interface ReplyMessageNotice { phase: 'idle' | 'connecting' | 'connected' | 'interrupted'; changed: boolean; needsRefresh: boolean; }
+export interface ReplyGenerationJobState {
+  contactId: string; sessionId: string; requestKey: string; turnId: string; inputVersionId: string;
+  phase: 'queued' | 'generating' | 'completed' | 'failed' | 'unconfirmed';
+  canRetry?: boolean;
+}
 export interface ReplySessionState {
+  generationJobs?: ReplyGenerationJobState[];
+  generationRecoveryPending?: number;
+
   revision: number;
   confirmedSessionDeletion?: ConfirmedAssistantSessionDeletion;
   scopeRevision: number;

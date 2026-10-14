@@ -128,6 +128,17 @@ def main() -> None:
                 result = {}
             elif operation == "strategy_skills":
                 result = fixture.prepare_strategy_skills(contacts, foreign_contact)
+            elif operation == "delete_contact":
+                with psycopg.connect(fixture.database_url) as connection_db:
+                    connection_db.execute("DELETE FROM public.contact WHERE owner_id=%s AND id=%s",
+                                          (fixture.owner_id, UUID(command["contact_id"])))
+                result = {}
+            elif operation == "revoke":
+                binding = next(item for item in fixture.bindings.list_active_bindings(owner_id=fixture.owner_id)
+                               if str(item.scope.contact_id) == command["contact_id"])
+                fixture.bindings.revoke_binding(owner_id=fixture.owner_id,
+                                               contact_id=binding.scope.contact_id, binding_id=binding.binding_id)
+                result = {}
             elif operation == "older_messages":
                 fixture.add_older_messages(command["contact_id"])
                 result = {"added": True}

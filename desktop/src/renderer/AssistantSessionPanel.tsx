@@ -127,6 +127,12 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     </p>}
     {replies.state.sessionDeletion === 'deleted' && <p role="status">当前助手会话已删除。</p>}
     {replies.state.sessionDeletion === 'missing' && <p role="status">当前助手会话已不存在。</p>}
+    {Boolean(replies.state.generationRecoveryPending) && <p>旧连接有 {replies.state.generationRecoveryPending} 项结果待核对，退出时会通过原连接完成核对。累计未核对任务达到 32 项时暂停接纳，请先完成退出核对。</p>}
+    {replies.state.generationJobs?.filter(job => job.contactId === replies.state.contactId
+      && job.sessionId === saved?.sessionId).map(job => <p role="status" key={job.requestKey}>
+      {{ queued: '已准备，排队等待生成。', generating: '正在生成。', completed: '生成已完成。',
+        failed: '生成失败，可核对原请求后重试。', unconfirmed: '任务结果待核对，请读取已保存讨论。' }[job.phase]}
+    </p>)}
     {saved?.phase === 'loading' && <p role="status">正在读取已保存讨论…</p>}
     {saved?.phase === 'failed' && <p role="alert">已保存讨论暂不可用，请重试读取。</p>}
     {copyError && <p role="alert">复制来源暂不可确认，请重新读取讨论后核对。</p>}

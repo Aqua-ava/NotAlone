@@ -51,7 +51,7 @@ export function matchesReplyAdoption(input: unknown, submission: unknown): boole
 
 // 输入仍经现有生成应用边界；返回前须已可靠保存到所属助手会话。
 export async function generateReply(backend: BackendHost, input: ReplyInputSnapshot, requestKey: string,
-  signal: AbortSignal, sessionId?: string, onPrepared?: (receipt: AssistantGenerationReceipt) => void,
+  signal: AbortSignal, sessionId?: string, onPrepared?: (receipt: AssistantGenerationReceipt) => void | Promise<void>,
   onRequested?: () => void, expectedInputVersionId?: string, onPrepareRequest?: () => void, onNoGeneration?: (proof: AssistantNoGenerationProof) => void, options?: ReplyRequestOptions) {
   const selected = sessionId ?? (await defaultAssistantSession(backend, input.contactId, signal)).sessionId;
   const generation = backend.getConnectionGeneration();
@@ -66,13 +66,13 @@ export async function generateReply(backend: BackendHost, input: ReplyInputSnaps
     requestKey }, onNoGeneration);
   if (prepared.generation !== generation || backend.getConnectionGeneration() !== generation) throw new Error('本次生成连接已变化。');
   const receipt = readAssistantGenerationReceipt(prepared.data, selected, requestKey);
-  onPrepared?.(receipt);
+  await onPrepared?.(receipt);
   return completePreparedReply(backend, input.contactId, body, selected, receipt, signal, onRequested);
 }
 
 export async function replaceReply(backend: BackendHost, input: ReplyInputSnapshot, newRequestKey: string,
   runningRequestKey: string, signal: AbortSignal, sessionId: string,
-  onPrepared?: (receipt: AssistantGenerationReceipt) => void, onRequested?: () => void, onPrepareRequest?: () => void,
+  onPrepared?: (receipt: AssistantGenerationReceipt) => void | Promise<void>, onRequested?: () => void, onPrepareRequest?: () => void,
   onNoGeneration?: (proof: AssistantNoGenerationProof) => void, options?: ReplyRequestOptions) {
   if (!isUuid(runningRequestKey) || runningRequestKey === newRequestKey) throw new Error('本次替换请求归属无效。');
   const generation = backend.getConnectionGeneration();
@@ -85,7 +85,7 @@ export async function replaceReply(backend: BackendHost, input: ReplyInputSnapsh
     requestKey: newRequestKey }, onNoGeneration);
   if (prepared.generation !== generation || backend.getConnectionGeneration() !== generation) throw new Error('本次生成连接已变化。');
   const receipt = readAssistantGenerationReceipt(prepared.data, sessionId, newRequestKey);
-  onPrepared?.(receipt);
+  await onPrepared?.(receipt);
   return completePreparedReply(backend, input.contactId, body, sessionId, receipt, signal, onRequested);
 }
 
@@ -94,7 +94,7 @@ export interface InterruptedReplyOrigin { readonly turnId: string; readonly inpu
 // 恢复只提交严格原身份和新key；原正文、编号版本及策略仍由同一后端authority提供。
 export async function retryInterruptedReply(backend: BackendHost, contactId: string, sessionId: string,
   origin: InterruptedReplyOrigin, requestKey: string, signal: AbortSignal,
-  onPrepared?: (receipt: AssistantGenerationReceipt) => void, onRequested?: () => void,
+  onPrepared?: (receipt: AssistantGenerationReceipt) => void | Promise<void>, onRequested?: () => void,
   onPrepareRequest?: () => void, onNoGeneration?: (proof: AssistantNoGenerationProof) => void) {
   if (![contactId, sessionId, origin.turnId, origin.inputVersionId, requestKey].every(isUuid)) {
     throw new Error('中断恢复身份无效。');
@@ -107,7 +107,7 @@ export async function retryInterruptedReply(backend: BackendHost, contactId: str
   const prepared = await ownedPreparation(backend, preparing, { generation, contactId, sessionId, requestKey }, onNoGeneration);
   if (prepared.generation !== generation || backend.getConnectionGeneration() !== generation) throw new Error('本次生成连接已变化。');
   const receipt = readAssistantGenerationReceipt(prepared.data, sessionId, requestKey);
-  onPrepared?.(receipt);
+  await onPrepared?.(receipt);
   if (signal.aborted) throw new BackendRequestFailure('cancelled');
   const executing = backend.requestJson({ method: 'POST', path, body, signal, timeoutMs: 25_000 });
   onRequested?.();

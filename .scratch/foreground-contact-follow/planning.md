@@ -10,7 +10,7 @@
 | 02 | [按联系人恢复输入和候选编辑](issues/02-contact-content-restore.md) | None | resolved | ready-for-agent |
 | 03 | [显式生成与固定上下文](issues/03-explicit-generation-context.md) | None | resolved | ready-for-agent |
 | 04 | [持续识别与自动跟随联系人](issues/04-continuous-contact-follow.md) | 01, 02 | open | ready-for-agent |
-| 05 | [多联系人后台任务与状态恢复](issues/05-contact-generation-jobs.md) | 02, 03 | open | ready-for-agent |
+| 05 | [多联系人后台任务与状态恢复](issues/05-contact-generation-jobs.md) | 02, 03 | resolved | ready-for-agent |
 | 06 | [组合回归与正式 App 验收](issues/06-combined-app-acceptance.md) | 04, 05 | open | ready-for-agent |
 
 ```mermaid
@@ -54,3 +54,5 @@ flowchart LR
 - [任务格式](../../docs/agents/issue-tracker.md)、[triage 标签](../../docs/agents/triage-labels.md)。
 
 2026-10-14：03 显式生成与固定上下文完成，验证与数据边界见该票 Answer；02、03 均已 resolved，05 的实现依赖已解除。04、05、06 继续按各自任务验收，本轮未运行真实 App 或微信。
+
+2026-10-14：05 多联系人有界后台任务与状态恢复完成，81个不同公开HTTP/PG相关用例及44项安全测试通过，双轴评审无未解决项。实现、调度上限、失败重试、数据清理与实机边界见该票 Answer；06仍按自身依赖及授权进行组合验收。
