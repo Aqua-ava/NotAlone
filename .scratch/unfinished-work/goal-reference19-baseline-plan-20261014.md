@@ -165,3 +165,19 @@
 **唯一能产出真成绩的路径**是第10节路径C：经用户批准修改评测协议，让审核层能合法落地`meaning`／`safety`（例如引入明确非确定性的审核人并相应重写安全性论证，或定义可机械判定的语义代理指标）。那属于产品代码与安全边界改动，须单独立项、重跑受守卫回归与两轴审查；且当前`evaluation_*.py`正被另一条工作流修改中，不宜同时改。
 
 **本轮复核附带确认**：并发工作流已把`provider_profile`（ECNU／官方Flash-max）加入`run_ecnu_evaluation`，但ECNU档案的`base_url`／`endpoint`／`request_model`与配置形状**未变**（`provider_profile`只用于请求体校验），故四窗工具与42项私有控制仍全绿；材料数仍为77、无缺失。这与第11节一样只说明"接口暂时兼容"，不改变上面的结论。
+
+## 12. 更正：任务07的门槛指标本来就不走审核路径（2026-10-14 复核）
+
+第10／11.2节的结论"不产出维度成绩"只对**带审核的受限入口**成立。复核任务07自身定义后必须更正：
+
+- 任务07的验收原文是"该维度达标签：至少15条中假事0、记错人0、一般错误≤1"，口径即`evaluation.py`的`summarize()`（`GATE_MIN_CASES=15`、`GATE_MAX_GENERAL_ERRORS=1`）。该函数docstring明写：**语义标注覆盖只作单独字段报告，不参与达标签判定**，也不要求`PhasedEvaluationAudit`。
+- 通用评测入口`evaluation.py`（任务01迁入的正式工具）正是产出该指标的工具：`evaluate_case`→`summarize()`，线路是"窗口→结构化候选→外壳校验→语用分流→最终去向"（[spec](spec.md)第4条），**全程没有审核人**。历史13/15就是这么跑出来的。
+- 因此"必须有人逐窗做14字段语义审核"是**受限入口`evaluation_ecnu`特有的**（ADR-033／046／047的来源证明工作流），不是任务07门槛的必要条件。第10／11.2节把两者混为一谈，此处更正。
+
+### 12.1 该路径仍需要的两件实事（未做）
+
+1. **来源核验V不能省**：离线实测，本dimension的AUTO用例在只跑E（`verification_runtime=None`）时，事实会带`semantic:unverified`风险标记→去向被压成`pending`，期望`auto`的6条会全判一般错误（实测`指代：机场等行李`：expected `auto`→actual `pending`、`error_kind=general`、`risk_flags=('semantic:unverified',)`）。所以必须E＋V，**16条成本≤32次请求**。
+2. **该入口没有硬计数门**：`EvaluationTransport`（`evaluation_http_budget.py:415`）已支持"发送前原子预约"，且`build_deepseek_model`接受`http_client`注入；但通用CLI没接它。要把32上限变成真实硬门，需一个私有包装：自建`EvaluationBudget`（cap32）→`httpx.Client(transport=EvaluationTransport(budget))`→传给`build_deepseek_model(http_client=...)`→跑16条→`summarize()`。此包装**尚未编写或验证**。
+3. 另外需要：冻结通用入口所需的源码SHA、只读一次根`.env`取`NOTALONE_DEEPSEEK_API_KEY`（该CLI另需`NOTALONE_EVALUATION_API_KEY`或改为显式注入）、以及如实声明"本结果由来源核验V支持，**不含**ADR-033／047要求的独立来源证明语义审核，故不能替代`quality_certified`或typed证明"。
+
+**结论**：任务07的门槛指标**可以**在不改产品代码、不引入审核人的前提下取得，成本≤32次请求；代价是证据强度低于受限入口（无逐窗语义审核、无来源指纹）。这条路是否走，属用户的取舍，本文件不代为决定，也未开始实现该包装。
