@@ -1,7 +1,7 @@
 # 06：组合回归与正式 App 验收
 
-State: open
-Triage: ready-for-agent
+State: claimed
+Triage: needs-info
 Blocked by: 04, 05
 
 ## 交付行为
@@ -41,3 +41,9 @@ Blocked by: 04, 05
 - [工程工作流](../../../docs/agents/engineering.md)、[桌面测试与运行说明](../../../desktop/README.md)、[macOS 权限与启动记录](../../../docs/macos-app-permissions-and-errors.md)。
 
 ## Comments
+
+## Answer（进行中）
+
+2026-10-14：已按04→06顺序推进。04基线8b4709e9已合入main；本轮80个不同公开HTTP/PG用例最终有通过记录、75项前台同步单元测试通过，原生67项中65通过/2默认跳过，44项安全检查通过。正式arm64候选包及随包探针构建和严格ad-hoc签名核验成功，真实App未运行。新增受限正式App场景并通过类型检查，未复用旧profile场景作为新证据。
+
+详细版本hash、命令、合成/实机证据边界、场景配置及尚未满足项见[06验收记录](../acceptance-06.md)。缺少本轮有限时段、两位测试会话及操作范围；真实帧数、分段耗时、资源开销、App任务恢复和退出尚待实测。当前State保持claimed、Triage改为needs-info，不标记resolved。

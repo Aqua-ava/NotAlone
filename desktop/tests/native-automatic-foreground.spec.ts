@@ -21,7 +21,7 @@ test('真实窗口原位移动缩放均自动识别', async () => {
       { timeout: 300_000 }).toBe(true);
     const started = performance.now();
     const child = await spawnApp(path.resolve('../native/macos/build/cli/notalone-sync-probe'),
-      ['--session', '--json', '--minimal-region'], { stdio: ['ignore', 'pipe', 'pipe'] });
+      ['--session', '--json', '--minimal-region', '--single-frame'], { stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
     child.stdout!.on('data', value => { if (output.length < 65_536) output += value.toString(); });
     // 不回显原生标准错误或名称，超时仅终止本次拥有的子进程。
