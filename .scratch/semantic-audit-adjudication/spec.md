@@ -38,6 +38,22 @@
 6. **治理**：ADR-046／047 均"已采纳、实施与隔离验证进行中"，本变更触及它们定义的来源证明义务，须先出**ADR修订或新ADR**，再动代码。
 7. **并发顺序**：另一条工作流正在改 `evaluation_ecnu.py`、`evaluation_offline.py`、`evaluation_provider_contract.py`、`evaluation_records.py`（近期提交 `8d56c4a7`、`98c6b9d4`）。**先冻结文件所有权再改**，避免与其最高思考／预算限制作业冲突。
 
+### 可行性复核：本维度的语义层确实可机械判定（2026-10-14）
+
+对指代维度19条用例逐条统计其期望来源：
+
+| 期望种类 | 条数 | 是否已被机械判定覆盖 |
+| --- | ---: | --- |
+| `expected_claims`（严格主张：谓词／主体／标签／有效期／去向） | 8 | 是，`evaluation.py:172-200` |
+| `expect_text_excludes`（禁义） | 1 | 是，`evaluation.py:272` 逐个候选正文正则扫描 |
+| `expected_labels` | 1 | 是，`evaluation.py:160-165` |
+| `expect_subject` | 1 | 是，`evaluation.py:157-159` |
+| 无严格主张（仅按最终去向判） | 11 | 是，`destination_ok = actual == case.expect`（`evaluation.py:171`） |
+
+**结论**：指代维度**全部19条**的语义期望都已有确定性判定路径，包括唯一的禁义用例（`复核：未知第三人部门`，禁"联系人在采购／不在仓库／负责采购"）。因此让审核层的 `meaning`／`safety` 由"来源绑定＋Gold谓词判定"推出，在本维度**不需要新增任何语义分类机制**。
+
+**如实边界**：这只证明**指代维度**可行，不等于对其他维度（或 full140）同样成立；在其他维度落地前须各自复核其期望种类是否都有机械判据。
+
 ## Testing Decisions
 
 - 只测外部行为：从窗口到最终去向与 `summarize()` 计数，不测内部函数或提示字面。
