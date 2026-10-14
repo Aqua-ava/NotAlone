@@ -12,7 +12,7 @@ import { prepareProbeRuntime } from './prepare-probe-runtime.mjs';
 const run = promisify(execFile);
 const sourceNames = [
   'scripts/build_cli.sh',
-  ...['ProbeCore', 'SessionCaptureSafety', 'RegionCalibration', 'MinimalRegionLayout', 'MinimalSessionCapture', 'AutomaticSessionCapture', 'CaptureSupport', 'SelectedSession', 'FrontSyncStatusReport', 'BackendStatusPolling']
+  ...['ProbeCore', 'SessionCaptureSafety', 'RegionCalibration', 'MinimalRegionLayout', 'MinimalSessionCapture', 'AutomaticSessionCapture', 'SessionCapturePreview', 'CaptureSupport', 'SelectedSession', 'FrontSyncStatusReport', 'BackendStatusPolling']
     .map((name) => `Sources/NotAloneSyncCore/${name}.swift`),
   'Sources/NotAloneSyncCLI/main.swift',
 ];

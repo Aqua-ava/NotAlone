@@ -40,6 +40,7 @@ final class AutomaticSessionCaptureTests: XCTestCase {
             let result = await AutomaticSessionCapture.observe(context: { reads += 1; return reads == 1 ? initial : next },
                 capture: { _ in self.window() }, recognize: { _ in recognized += 1; return Name(text: "合成", confidence: 1) })
             XCTAssertEqual(result["error"] as? String, "minimal_region_layout_changed")
+            XCTAssertEqual(result["stage"] as? String, "context_after_capture")
         }
         XCTAssertEqual(recognized, 0)
     }
@@ -53,12 +54,15 @@ final class AutomaticSessionCaptureTests: XCTestCase {
             let result = await AutomaticSessionCapture.observe(context: { context }, capture: { _ in self.window(rows: rows) },
                 recognize: { _ in calls += 1; return Name(text: "合成", confidence: 1) })
             XCTAssertEqual(result["ok"] as? Bool, false)
+            XCTAssertEqual(result["stage"] as? String, "layout")
+            XCTAssertEqual(result["error"] as? String, "automatic_layout_selection_ambiguous")
             XCTAssertEqual(calls, 0)
         }
         for confidence in [0.3, Double.nan, 1.1] {
             let result = await AutomaticSessionCapture.observe(context: { context }, capture: { _ in self.window(dark: true) },
                 recognize: { _ in Name(text: "合成", confidence: confidence) })
             XCTAssertEqual(result["ok"] as? Bool, false)
+            XCTAssertEqual(result["stage"] as? String, "names")
         }
         var calls = 0
         let mismatch = await AutomaticSessionCapture.observe(context: { context }, capture: { _ in self.window() },

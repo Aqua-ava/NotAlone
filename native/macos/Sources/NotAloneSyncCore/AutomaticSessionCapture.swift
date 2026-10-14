@@ -16,21 +16,30 @@ public enum AutomaticSessionCapture {
     static func observe(context: () throws -> CalibrationContext?,
                         capture: (CalibrationContext) async throws -> CGImage,
                         recognize: (CGImage) throws -> Name) async -> [String: Any] {
+        var stage = "context"
         do {
             guard let current = try context() else { return ["ok": true, "wechat_in_front": false] }
+            stage = "capture"
             let image = try await capture(current)
+            stage = "context_after_capture"
             guard try context() == current else { throw MinimalSessionError.layoutChanged }
+            stage = "layout"
             let regions = try AutomaticSessionRegions.detect(image, windowSize: current.frame.size)
             guard let headerImage = image.cropping(to: regions.header),
                   let rowImage = image.cropping(to: regions.row) else { throw MinimalSessionError.captureFailed }
+            stage = "names"
             let names = Names(header: try recognize(headerImage), row: try recognize(rowImage))
             guard [names.header.confidence, names.row.confidence].allSatisfy({ $0.isFinite && (0...1).contains($0) }) else { throw MinimalSessionError.qualityUnverified }
             try names.validate()
+            stage = "context_after_names"
             guard try context() == current else { throw MinimalSessionError.layoutChanged }
             // 第二帧仅拒绝过期结果，不把跨帧名称拼接为联系人依据。
+            stage = "fresh_capture"
             let fresh = try await capture(current)
             guard try context() == current else { throw MinimalSessionError.layoutChanged }
+            stage = "fresh_layout"
             let freshRegions = try AutomaticSessionRegions.detect(fresh, windowSize: current.frame.size)
+            stage = "fresh_names"
             guard freshRegions.header == regions.header, freshRegions.row == regions.row,
                   let freshHeader = fresh.cropping(to: regions.header),
                   let freshRow = fresh.cropping(to: regions.row),
@@ -42,26 +51,28 @@ public enum AutomaticSessionCapture {
                     "quality": ["layout_verified": true, "display_name_confidence": names.header.confidence,
                                 "selected_row_name_confidence": names.row.confidence]]
         } catch {
-            return ["ok": false, "error": (error as? MinimalSessionError)?.rawValue
+            return ["ok": false, "stage": stage, "error": (error as? MinimalSessionError)?.rawValue
+                    ?? (error as? AutomaticCaptureFailure)?.rawValue
+                    ?? (error as? AutomaticLayoutFailure)?.rawValue
                     ?? (error as? CalibrationContextFailure)?.rawValue ?? MinimalSessionError.captureFailed.rawValue]
         }
     }
 
-    private static func captureWindow(_ current: CalibrationContext) async throws -> CGImage {
+    static func captureWindow(_ current: CalibrationContext) async throws -> CGImage {
         guard CGPreflightScreenCaptureAccess() else { throw MinimalSessionError.permissionMissing }
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard CalibrationContext.read(requireForeground: true) == current,
-              let window = content.windows.first(where: { $0.windowID == current.windowId
+        guard CalibrationContext.read(requireForeground: true) == current else { throw AutomaticCaptureFailure.context }
+        guard let window = content.windows.first(where: { $0.windowID == current.windowId
                   && $0.owningApplication?.processID == current.processId && $0.frame == current.frame
                   && $0.owningApplication?.bundleIdentifier == "com.tencent.xinWeChat" }) else {
-            throw MinimalSessionError.layoutChanged
+            throw AutomaticCaptureFailure.metadata
         }
         // 独立窗口过滤器不捕获其他App；不使用旧诊断的“最大窗口”选择或全屏采集。
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let scale = CGFloat(filter.pointPixelScale)
         let width = current.frame.width * scale, height = current.frame.height * scale
         guard (1...3).contains(scale), width.isFinite, height.isFinite,
-              width * height <= 24_000_000 else { throw MinimalSessionError.layoutChanged }
+              width * height <= 24_000_000 else { throw AutomaticCaptureFailure.scale }
         let configuration = SCStreamConfiguration()
         configuration.width = Int(width.rounded()); configuration.height = Int(height.rounded())
         configuration.showsCursor = false; configuration.showMouseClicks = false
@@ -70,10 +81,24 @@ public enum AutomaticSessionCapture {
         configuration.preservesAspectRatio = false
         let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
         guard image.width == configuration.width, image.height == configuration.height else {
-            throw MinimalSessionError.layoutChanged
+            throw AutomaticCaptureFailure.dimensions
         }
         return image
     }
+}
+
+private enum AutomaticCaptureFailure: String, Error {
+    case context = "automatic_capture_context_changed"
+    case metadata = "automatic_capture_window_metadata_changed"
+    case scale = "automatic_capture_scale_invalid"
+    case dimensions = "automatic_capture_dimensions_changed"
+}
+
+enum AutomaticLayoutFailure: String, Error {
+    case vertical = "automatic_layout_vertical_boundary"
+    case header = "automatic_layout_header_boundary"
+    case selection = "automatic_layout_selection_ambiguous"
+    case rail = "automatic_layout_sidebar_boundary"
 }
 
 // 微信4.0.6桌面布局的可拒绝检测器。尺寸以当帧比例转换，屏幕原点不参与推导。
@@ -97,13 +122,13 @@ struct AutomaticSessionRegions {
                 return abs(Int(pixels[y*w+x-1]) - Int(pixels[y*w+x+1]))
             })
         }
-        let divider = try uniqueBoundary(range: px(180)...min(px(600), w-px(280)), score: vertical, tolerance: px(3))
+        let divider = try uniqueBoundary(range: px(180)...min(px(600), w-px(280)), score: vertical, tolerance: px(3), failure: .vertical)
         let headerY = try uniqueBoundary(range: px(45)...px(85), score: { y in
             median((0..<21).map { i in
                 let x = divider + px(20) + (w-divider-px(60))*i/20
                 return abs(Int(pixels[(y-1)*w+x]) - Int(pixels[(y+1)*w+x]))
             })
-        }, tolerance: px(3))
+        }, tolerance: px(3), failure: .header)
         // 左边无文字窄条只用于找唯一高亮行，避免头像、时间、预览污染均值。
         let stripe = divider - px(5)
         let start = headerY + px(2), end = h - px(12)
@@ -118,7 +143,7 @@ struct AutomaticSessionRegions {
         if let begin { bands.append((start+begin)..<end) }
         let candidates = bands.filter { (px(40)...px(100)).contains($0.count) }
         guard candidates.count == 1, let selected = candidates.first,
-              bands.allSatisfy({ $0.count < px(4) || $0 == selected }) else { throw MinimalSessionError.layoutUnverified }
+              bands.allSatisfy({ $0.count < px(4) || $0 == selected }) else { throw AutomaticLayoutFailure.selection }
         // 高亮的左边界从该行与其他行的差异取得；侧栏不要求有可见竖线。
         let leftCandidates = (px(40)...px(100)).filter { x in
             let base = median((0..<31).map { i in Int(pixels[(start+(end-start-1)*i/30)*w+x]) })
@@ -127,7 +152,7 @@ struct AutomaticSessionRegions {
             }
         }
         guard let rail = leftCandidates.first, leftCandidates.last! - rail >= px(15) else {
-            throw MinimalSessionError.layoutUnverified
+            throw AutomaticLayoutFailure.rail
         }
         let title = CGRect(x: divider+px(10), y: px(12),
                            width: min(px(400), w-divider-px(120)), height: min(px(36), headerY-px(16)))
@@ -140,11 +165,11 @@ struct AutomaticSessionRegions {
         return Self(header: title, row: name)
     }
 
-    private static func uniqueBoundary(range: ClosedRange<Int>, score: (Int) -> Int, tolerance: Int) throws -> Int {
+    private static func uniqueBoundary(range: ClosedRange<Int>, score: (Int) -> Int, tolerance: Int, failure: AutomaticLayoutFailure) throws -> Int {
         let scores = range.map { ($0, score($0)) }
-        guard let peak = scores.max(by: { $0.1 < $1.1 }), peak.1 >= 8 else { throw MinimalSessionError.layoutUnverified }
+        guard let peak = scores.max(by: { $0.1 < $1.1 }), peak.1 >= 8 else { throw failure }
         let strong = scores.filter { $0.1 >= max(8, peak.1 * 3 / 4) }
-        guard strong.allSatisfy({ abs($0.0-peak.0) <= tolerance }) else { throw MinimalSessionError.layoutUnverified }
+        guard strong.allSatisfy({ abs($0.0-peak.0) <= tolerance }) else { throw failure }
         return peak.0
     }
 }
