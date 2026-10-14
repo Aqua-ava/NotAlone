@@ -11,24 +11,25 @@ const test = bindingTest.extend({
   bindingBackend: async ({}, use) => {
     await verifyAppTestLease();
     const executable = process.env.NOTALONE_TEST_APP_EXECUTABLE;
-    const names = [process.env.NOTALONE_FOLLOW_TEST_NAME_A, process.env.NOTALONE_FOLLOW_TEST_NAME_B];
-    if (!executable || !path.isAbsolute(executable) || names.some(name => !name?.trim()) || names[0] === names[1]) {
-      throw new Error('缺少正式包或本轮两位不同测试会话的明确范围。');
+    const names = [process.env.NOTALONE_FOLLOW_TEST_NAME_A, process.env.NOTALONE_FOLLOW_TEST_NAME_B].filter((name): name is string => Boolean(name?.trim()));
+    if (!executable || !path.isAbsolute(executable) || !process.env.NOTALONE_FOLLOW_TEST_NAME_A?.trim()
+      || new Set(names).size !== names.length) {
+      throw new Error('缺少正式包或本轮已确认测试会话的明确范围。');
     }
     const probe = path.resolve(path.dirname(executable), '../Resources/notalone-probe/notalone-sync-probe');
     await withBindingFixture('notalone-follow-app-', 'single-account', async fixture => {
       const environment = fixture.environment.bind(fixture);
       fixture.environment = owner => ({ ...environment(owner), NOTALONE_SYNC_PROBE: probe });
       await fixture.setCli({ sessions: names.map((name, index) => ({ username: `wxid_synthetic_${index ? 'b' : 'a'}`,
-        display_name: name!, chat_type: 'private', last_timestamp: 1700000000 })), messages: {} });
+        display_name: name, chat_type: 'private', last_timestamp: 1700000000 })), messages: {} });
       await fixture.startBackend();
-      expect((await fixture.request('/api/sync/cli-bindings/confirm', { selections: fixture.data.contact_ids.map((id, index) =>
+      expect((await fixture.request('/api/sync/cli-bindings/confirm', { selections: fixture.data.contact_ids.slice(0, names.length).map((id, index) =>
         ({ locator: `wxid_synthetic_${index ? 'b' : 'a'}`, contact_id: id })) })).status).toBe(200);
       await use(fixture);
     });
   },
 });
-test.skip(process.env.NOTALONE_CONTINUOUS_APP_ACCEPTANCE !== '1', '须明确本轮时段、正式包和两位测试联系人');
+test.skip(process.env.NOTALONE_CONTINUOUS_APP_ACCEPTANCE !== '1', '须明确本轮时段、正式包和测试联系人');
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 
 test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢复', async ({ runningApp: { app, appProcess }, bindingBackend }) => {
@@ -50,7 +51,9 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
     const helper = app.windows().find(page => page.url().endsWith('#helper'))!;
     await expect.poll(() => helper.evaluate(async () => (await window.notalone.contacts.getState()).directoryPhase)).toBe('ready');
     expect((await bindingBackend.request('/api/sync/enable', {})).status).toBe(200);
-    for (const [phase, index] of [['baseline', 0], ['moved', 0], ['resized', 0], ['switch-b', 1], ['return-a', 0]] as const) {
+    const phases: Array<[string, number]> = [['baseline', 0], ['moved', 0], ['resized', 0]];
+    if (process.env.NOTALONE_FOLLOW_TEST_NAME_B?.trim()) phases.push(['switch-b', 1], ['return-a', 0]);
+    for (const [phase, index] of phases) {
       await ready(phase);
       const started = Date.now();
       const matched = () => helper.evaluate(async ({ expected, since }) => {
