@@ -15,7 +15,7 @@ private struct ProbeOptions {
       swift run notalone-sync-probe [--watch] [--interval seconds]
         [--crop x,y,width,height] [--show-text]
       swift run notalone-sync-probe --session [--show-text]
-      swift run notalone-sync-probe --session --json [--minimal-region]
+      swift run notalone-sync-probe --session --json [--minimal-region] [--single-frame]
       swift run notalone-sync-probe --calibrate-minimal-region --json [--coordinates]
       swift run notalone-sync-probe --verify-minimal-region --json
 
@@ -27,7 +27,8 @@ private struct ProbeOptions {
       --session            自动定位当前前台微信窗口；内存分析布局，仅OCR两处会话名称。
       --preview-session    显式本机可视化预览，由用户点击观察；图帧与文字不保存，8分钟退出。
       --json               与 --session 配合输出机器可读 JSON，供本机同步驱动解析。
-      --minimal-region     仅与 --session --json 配合；兼容参数；新输出automatic-window-v1表示整窗内存布局分析。
+      --minimal-region     仅与 --session --json 配合；保留兼容参数，不使用人工坐标。
+      --single-frame       仅与 --session --json 配合；显式要求单帧，输出automatic-window-v2及UTC采集时点。
       --calibrate-minimal-region  用户框选五处最小区域，只输出待校验几何，不截图。
       --coordinates        仅与校准配合，从stdin读取最多4096字节的明确坐标，仅核对元数据。
       --self-test          运行合成数据自检，不截取屏幕。

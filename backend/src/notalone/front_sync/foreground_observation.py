@@ -33,9 +33,11 @@ class FreshForegroundObservation:
         cls, *, phase: Literal["confirmed", "paused", "manual-required", "unavailable"],
         reason: str, probe_available: bool, wechat_in_front: bool,
         binding_id: UUID | None = None, contact_id: UUID | None = None,
+        observed_at: datetime | None = None,
     ) -> FreshForegroundObservation:
         return cls(
-            observation_id=uuid4(), observed_at=datetime.now(timezone.utc),
+            observation_id=uuid4(),
+            observed_at=observed_at if observed_at is not None else datetime.now(timezone.utc),
             phase=phase, reason=reason, probe_available=probe_available,
             wechat_in_front=wechat_in_front,
             binding_id=binding_id, contact_id=contact_id,

@@ -15,12 +15,14 @@ public enum AutomaticSessionCapture {
 
     static func observe(context: () throws -> CalibrationContext?,
                         capture: (CalibrationContext) async throws -> CGImage,
-                        recognize: (CGImage) throws -> Name) async -> [String: Any] {
+                        recognize: (CGImage) throws -> Name,
+                        clock: () -> Date = Date.init) async -> [String: Any] {
         var stage = "context"
         do {
             guard let current = try context() else { return ["ok": true, "wechat_in_front": false] }
             stage = "capture"
             let image = try await capture(current)
+            let capturedAt = clock()
             stage = "context_after_capture"
             guard try context() == current else { throw MinimalSessionError.layoutChanged }
             stage = "layout"
@@ -33,20 +35,11 @@ public enum AutomaticSessionCapture {
             try names.validate()
             stage = "context_after_names"
             guard try context() == current else { throw MinimalSessionError.layoutChanged }
-            // 第二帧仅拒绝过期结果，不把跨帧名称拼接为联系人依据。
-            stage = "fresh_capture"
-            let fresh = try await capture(current)
-            guard try context() == current else { throw MinimalSessionError.layoutChanged }
-            stage = "fresh_layout"
-            let freshRegions = try AutomaticSessionRegions.detect(fresh, windowSize: current.frame.size)
-            stage = "fresh_names"
-            guard freshRegions.header == regions.header, freshRegions.row == regions.row,
-                  let freshHeader = fresh.cropping(to: regions.header),
-                  let freshRow = fresh.cropping(to: regions.row),
-                  try sessionImageDigest(headerImage) == sessionImageDigest(freshHeader),
-                  try sessionImageDigest(rowImage) == sessionImageDigest(freshRow),
-                  try context() == current else { throw MinimalSessionError.layoutChanged }
-            return ["ok": true, "wechat_in_front": true, "capture_version": "automatic-window-v1",
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            return ["ok": true, "wechat_in_front": true, "capture_version": "automatic-window-v2",
+                    "captured_at": formatter.string(from: capturedAt),
                     "display_name": names.header.text!, "selected_row_name": names.row.text!,
                     "quality": ["layout_verified": true, "display_name_confidence": names.header.confidence,
                                 "selected_row_name_confidence": names.row.confidence]]

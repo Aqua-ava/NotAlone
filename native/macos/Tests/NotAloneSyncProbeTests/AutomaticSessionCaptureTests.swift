@@ -18,10 +18,27 @@ final class AutomaticSessionCaptureTests: XCTestCase {
                 return Name(text: "合成测试", confidence: 0.99)
             })
             XCTAssertEqual(result["ok"] as? Bool, true)
-            XCTAssertEqual(result["capture_version"] as? String, "automatic-window-v1")
+            XCTAssertEqual(result["capture_version"] as? String, "automatic-window-v2")
             XCTAssertEqual(ocrSizes.count, 2)
             XCTAssertTrue(ocrSizes.allSatisfy { $0.width <= 400 * CGFloat(scale) && $0.height <= 44 * CGFloat(scale) })
         }
+    }
+
+    @MainActor
+    func testCaptureTimeStaysAtFrameAcquisitionWhileOCRRuns() async {
+        let context = CalibrationContext(processId: 7, windowId: 9,
+            frame: CGRect(x: 0, y: 0, width: 900, height: 700), version: "4.0.6", build: "29387")
+        var instant = Date(timeIntervalSince1970: 0)
+        let result = await AutomaticSessionCapture.observe(context: { context }, capture: { _ in
+            instant = Date(timeIntervalSince1970: 100)
+            return self.window()
+        }, recognize: { _ in
+            instant.addTimeInterval(20)
+            return Name(text: "合成", confidence: 1)
+        }, clock: { instant })
+        XCTAssertEqual(result["ok"] as? Bool, true)
+        XCTAssertEqual(result["capture_version"] as? String, "automatic-window-v2")
+        XCTAssertEqual(result["captured_at"] as? String, "1970-01-01T00:01:40.000Z")
     }
 
     @MainActor
@@ -109,7 +126,7 @@ final class AutomaticSessionCaptureTests: XCTestCase {
     }
 
     @MainActor
-    func testSameWindowSessionChangeDiscardsOldNames() async {
+    func testSingleFrameRepresentsCapturedSessionWithoutSecondCapture() async {
         let context = CalibrationContext(processId: 7, windowId: 9,
             frame: CGRect(x: 0, y: 0, width: 900, height: 700), version: "4.0.6", build: "29387")
         for movesRow in [false, true] {
@@ -118,8 +135,9 @@ final class AutomaticSessionCaptureTests: XCTestCase {
                 captures += 1
                 return self.window(rows: [movesRow && captures > 1 ? 266 : 130], markers: captures == 1)
             }, recognize: { _ in Name(text: "旧会话", confidence: 1) })
-            XCTAssertEqual(result["error"] as? String, "minimal_region_layout_changed")
-            XCTAssertNil(result["display_name"])
+            XCTAssertEqual(captures, 1, "一次观察只能采集一帧")
+            XCTAssertEqual(result["ok"] as? Bool, true)
+            XCTAssertEqual(result["display_name"] as? String, "旧会话")
         }
     }
 

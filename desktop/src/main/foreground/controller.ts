@@ -101,6 +101,7 @@ export class ForegroundController {
       signal: abort.signal, timeoutMs: 1500, maxResponseBytes: 4096 }).then((response) => {
       if (!current() || response.generation !== generation) return;
       const observation = foregroundObservation(response.data);
+      if (observation.phase === 'manual-required' || observation.phase === 'unavailable') this.qualification = undefined;
       // 消费前先废弃flight，内部选择不能把已消费的观察当异步旧结果。
       ++this.epoch;
       if (observation.contactId) {
@@ -134,14 +135,14 @@ export class ForegroundController {
   }
   notifyHelperLifecycle(event: 'focused' | 'blurred' | 'hidden' | 'closed'): void {
     if (this.disposed) return;
-    this.invalidatePending(); ++this.epoch;
+    this.invalidatePending('paused'); ++this.epoch;
     this.publish({ suspendedByHelperFocus: event === 'focused', foregroundRevision: this.state.foregroundRevision + 1 });
     if (event === 'closed') this.clearObservation('idle', 'helper_closed');
   }
-  invalidatePending(): void {
+  invalidatePending(phase: 'paused' | 'unavailable' = 'unavailable'): void {
     if (!this.flight || this.flight.abort.signal.aborted) return;
     ++this.epoch; this.flight.abort.abort();
-    this.clearObservation('unavailable', 'observation_cancelled');
+    this.clearObservation(phase, 'observation_cancelled');
   }
   beginReadingScopeChange(): () => void {
     ++this.readingScopeChanges;
@@ -165,6 +166,7 @@ export class ForegroundController {
     this.listeners.clear();
   }
   private clearObservation(phase: ForegroundState['phase'], reason: string | null): void {
+    if (phase === 'manual-required' || phase === 'unavailable') this.qualification = undefined;
     this.publish({ phase, reason, observedAt: null, probeAvailable: null, wechatInFront: null,
       foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null });
   }

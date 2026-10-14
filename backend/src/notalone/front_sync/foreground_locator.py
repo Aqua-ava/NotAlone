@@ -109,16 +109,20 @@ class ForegroundLocator:
                 probe_available=True, wechat_in_front=False,
             )
         evidence = observation.qualified_evidence
-        if evidence is None:
+        if (evidence is None or observation.quality is None
+                or observation.quality.capture_version != "automatic-window-v2"
+                or observation.captured_at is None):
             return FreshForegroundObservation.create(
                 phase="manual-required", reason="quality_unverified",
                 probe_available=True, wechat_in_front=True,
+                observed_at=observation.captured_at,
             )
         remaining = deadline - monotonic()
         if remaining <= 0:
             return FreshForegroundObservation.create(
                 phase="unavailable", reason="observation_timeout",
                 probe_available=False, wechat_in_front=True,
+                observed_at=observation.captured_at,
             )
         name = normalize_display_text(evidence.display_name)
         try:
@@ -133,6 +137,7 @@ class ForegroundLocator:
                 return FreshForegroundObservation.create(
                     phase="manual-required", reason="session_candidates_truncated",
                     probe_available=True, wechat_in_front=True,
+                    observed_at=observation.captured_at,
                 )
             exact = tuple(item for item in candidates
                           if normalize_display_text(item.display_name) == name)
@@ -140,6 +145,7 @@ class ForegroundLocator:
                 return FreshForegroundObservation.create(
                     phase="manual-required", reason="ambiguous_requires_selection",
                     probe_available=True, wechat_in_front=True,
+                    observed_at=observation.captured_at,
                 )
             bindings = self._bindings.list_active_bindings(
                 owner_id=self._owner_id, channel=self._channel,
@@ -151,11 +157,13 @@ class ForegroundLocator:
             return FreshForegroundObservation.create(
                 phase="unavailable", reason="observation_timeout",
                 probe_available=False, wechat_in_front=True,
+                observed_at=observation.captured_at,
             )
         except (CliAdapterError, ConversationBindingPersistenceError):
             return FreshForegroundObservation.create(
                 phase="unavailable", reason="binding_verification_unavailable",
                 probe_available=False, wechat_in_front=True,
+                observed_at=observation.captured_at,
             )
         matching = tuple(item for item in bindings
                          if item.conversation_locator == exact[0].username)
@@ -166,10 +174,12 @@ class ForegroundLocator:
                     phase="confirmed", reason="confirmed_active_binding",
                     probe_available=True, wechat_in_front=True,
                     binding_id=binding.binding_id, contact_id=binding.scope.contact_id,
+                    observed_at=observation.captured_at,
                 )
         return FreshForegroundObservation.create(
             phase="manual-required", reason="unmatched_requires_selection",
             probe_available=True, wechat_in_front=True,
+            observed_at=observation.captured_at,
         )
 
     def observe(self, *, enabled: bool) -> ForegroundLocatorStatus:

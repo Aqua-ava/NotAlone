@@ -6,7 +6,7 @@
 
 | 编号 | 任务 | Blocked by | State | Triage |
 | --- | --- | --- | --- | --- |
-| 01 | [单帧定位贯通现有入口](issues/01-single-frame-locator.md) | None | open | ready-for-agent |
+| 01 | [单帧定位贯通现有入口](issues/01-single-frame-locator.md) | None | resolved | ready-for-agent |
 | 02 | [按联系人恢复输入和候选编辑](issues/02-contact-content-restore.md) | None | open | ready-for-agent |
 | 03 | [显式生成与固定上下文](issues/03-explicit-generation-context.md) | None | open | ready-for-agent |
 | 04 | [持续识别与自动跟随联系人](issues/04-continuous-contact-follow.md) | 01, 02 | open | ready-for-agent |
@@ -45,7 +45,7 @@ flowchart LR
 3. 按[工作流](../../docs/agents/workflow.md)在约定公开接缝上推进单票，完成相关测试和 Standards/Spec 评审；将真实结果、命令、数据影响及剩余风险写入 `## Answer` 后才能改为 `resolved`，同步本索引。
 4. 文件编辑与本地提交遵循[工程工作流](../../docs/agents/engineering.md)。需要人类信息或有限实机时段时，按[triage 标签](../../docs/agents/triage-labels.md)如实记录等待原因；不把当前发布解释为实际 App 或微信操作已获本轮测试授权。
 
-当前在本地 `main` 发布任务文档，尚未创建实现集成分支；实施分支按用户后续选择及仓库规则确定。运行产品测试、读取微信、外部模型调用、发送消息或 push 均不属于本次任务发布动作。
+2026-10-14：01 已在本地实现分支 `codex/single-frame-locator` 完成原生合成、认证 HTTP/隔离 PG 和安全桌面验证，结果见该票 `Answer`。02、03 仍可独立开始；04 的 01 阻塞已解除，仍等待 02；05 等待 02/03，06 等待 04/05。持续跟随和新版实机性能尚未通过验收，本次实现未运行真实 App 或微信、未外调模型、发送消息或 push。
 
 ## 依据
 

@@ -12,11 +12,14 @@ import tempfile
 import threading
 import unittest
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import UUID
 from unittest.mock import patch
 
 from notalone.wechat_cli import CliCommandError
+from notalone.conversation.matcher import FrontSessionEvidence
+from notalone.front_sync.probe_adapter import FrontSessionProbeObservation, FrontSessionQuality
 
 
 FIXTURE_PATH = (Path(__file__).resolve().parents[4]
@@ -176,8 +179,10 @@ class AcceptanceScopeTest(unittest.TestCase):
         from notalone.front_sync.foreground_locator import ForegroundLocator
         locator = ForegroundLocator(owner_id=UUID("00000000-0000-4000-8000-000000000001"),
             channel="wechat", account_scope="synthetic-account", cli=cli,
-            probe=SimpleNamespace(observe_fresh=lambda **kwargs: SimpleNamespace(
-                wechat_in_front=True, qualified_evidence=SimpleNamespace(display_name="合成测试名"))),
+            probe=SimpleNamespace(observe_fresh=lambda **kwargs: FrontSessionProbeObservation(
+                wechat_in_front=True, evidence=FrontSessionEvidence(display_name="合成测试名"),
+                selected_row_name="合成测试名", quality=FrontSessionQuality("automatic-window-v2", 1, 1),
+                captured_at=datetime.now(timezone.utc))),
             bindings=SimpleNamespace(list_active_bindings=lambda **kwargs: self.fail("歧义不应读取绑定目录")))
         import time
         result = locator.observe_fresh(enabled=True, deadline=time.monotonic() + 1.3)

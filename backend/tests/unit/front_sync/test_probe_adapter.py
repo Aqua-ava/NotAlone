@@ -9,6 +9,7 @@ import json
 import subprocess
 import unittest
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from notalone.front_sync.probe_adapter import (
     FrontSessionProbeObservation,
@@ -27,6 +28,48 @@ class FakeCommandResult:
 class MacosFrontSessionProbeTest(unittest.TestCase):
     def _probe(self, runner) -> MacosFrontSessionProbe:
         return MacosFrontSessionProbe(runner=runner)
+
+    def test_single_frame_protocol_retains_capture_time_and_quality(self) -> None:
+        stdout = json.dumps({
+            "ok": True, "wechat_in_front": True,
+            "display_name": "合成甲", "selected_row_name": "合成甲",
+            "capture_version": "automatic-window-v2",
+            "captured_at": "2026-10-14T06:30:00.123Z",
+            "quality": {"layout_verified": True,
+                        "display_name_confidence": 0.96,
+                        "selected_row_name_confidence": 0.91},
+        })
+        observation = self._probe(
+            lambda command: FakeCommandResult(returncode=0, stdout=stdout)
+        ).observe_fresh(timeout_seconds=0.9)
+        self.assertIsNotNone(observation.qualified_evidence)
+        self.assertEqual(
+            observation.captured_at,
+            datetime(2026, 10, 14, 6, 30, 0, 123000, tzinfo=timezone.utc),
+        )
+        self.assertEqual(observation.quality.capture_version, "automatic-window-v2")
+
+    def test_fresh_invocation_requires_single_frame_before_legacy_capture(self) -> None:
+        captured: list[str] = []
+        commands: list[tuple[str, ...]] = []
+
+        def legacy_runner(command: tuple[str, ...]) -> FakeCommandResult:
+            commands.append(command)
+            if "--single-frame" in command:
+                return FakeCommandResult(1, json.dumps({
+                    "ok": False, "error": "unsupported_single_frame",
+                }))
+            captured.append("legacy_frame")
+            return FakeCommandResult(0, json.dumps({
+                "ok": True, "wechat_in_front": True, "display_name": "合成旧会话",
+            }))
+        with self.assertRaises(ProbeAdapterError) as caught:
+            self._probe(legacy_runner).observe_fresh(timeout_seconds=0.9)
+        self.assertEqual(caught.exception.code, "unsupported_single_frame")
+        self.assertEqual(captured, [])
+        self.assertEqual(commands, [
+            ("notalone-sync-probe", "--session", "--json", "--minimal-region", "--single-frame"),
+        ])
 
     def test_parses_full_evidence_from_front_session(self) -> None:
         stdout = json.dumps(

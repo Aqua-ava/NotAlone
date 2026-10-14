@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 if __name__ == "__main__":
-    if sys.argv[1:] != ["--session", "--json", "--minimal-region"]:
+    if sys.argv[1:] != ["--session", "--json", "--minimal-region", "--single-frame"]:
         raise ValueError("合成定位探针只允许最小区域观察协议。")
     state = json.loads((Path(__file__).parent / "probe-state.json").read_text())
     if set(state) != {"wechat_in_front"} or not isinstance(state["wechat_in_front"], bool):

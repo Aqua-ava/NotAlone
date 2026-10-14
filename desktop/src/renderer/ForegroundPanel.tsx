@@ -20,6 +20,7 @@ export function useForegroundState(bridge: ForegroundBridge, enabled: boolean): 
 export function ForegroundPanel({ state, session }: { state: ForegroundState; session?: ContactSessionView }) {
   const paused = state.phase === 'paused' || state.suspendedByHelperFocus;
   const message = paused ? '前台定位已暂停' : state.phase === 'observing' ? '正在定位前台会话'
+    : state.phase === 'confirmed' ? '已识别采集时的微信会话'
     : state.phase === 'manual-required' ? '请手动确认本次联系人'
     : state.phase === 'unavailable' ? '前台定位暂不可用，请手动选择联系人' : '前台定位尚未观察';
   return <section aria-label="前台会话定位">
@@ -30,8 +31,11 @@ export function ForegroundPanel({ state, session }: { state: ForegroundState; se
     </button>}
     {state.confirmation === 'manual-confirmed' && <p>本次联系人已由你确认。</p>}
     {state.confirmation === 'verified-binding' && <p>本次联系人已通过微信会话绑定确认。</p>}
+    {(state.phase === 'confirmed' || state.suggestedContactId) && state.observedAt && <p>
+      识别结果对应 <time dateTime={state.observedAt}>{new Date(state.observedAt).toLocaleTimeString('zh-CN', { hour12: false })}</time> 采集时的会话；之后的切换可能尚未反映。
+    </p>}
     {session && state.suggestedContactId && <p>
-      当前微信会话对应{session.state.contacts.find((item) => item.contactId === state.suggestedContactId)?.displayName}，已有编辑已保留。
+      采集时的微信会话对应{session.state.contacts.find((item) => item.contactId === state.suggestedContactId)?.displayName}，已有编辑已保留。
       <button onClick={() => void session.confirmContact(state.suggestedContactId!, state.foregroundRevision)}>
         确认微信会话对应联系人
       </button>

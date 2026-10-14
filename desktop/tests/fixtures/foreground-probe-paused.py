@@ -5,6 +5,6 @@ import sys
 
 
 if __name__ == "__main__":
-    if sys.argv[1:] != ["--session", "--json", "--minimal-region"]:
+    if sys.argv[1:] != ["--session", "--json", "--minimal-region", "--single-frame"]:
         raise ValueError("合成定位探针只允许一次会话元数据观察。")
     print(json.dumps({"ok": True, "wechat_in_front": False}))

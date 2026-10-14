@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import subprocess
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable, Protocol
 
 from notalone.conversation.matcher import FrontSessionEvidence, normalize_display_text
@@ -38,14 +40,14 @@ CommandRunner = Callable[[tuple[str, ...]], CommandResult]
 
 @dataclass(frozen=True, slots=True)
 class FrontSessionQuality:
-    """已声明最小区域与布局校验的两处OCR质量；不等于绑定已确认。"""
+    """已校验布局的两处名称 OCR 质量；不等于绑定已确认。"""
 
     capture_version: str
     display_name_confidence: float
     selected_row_name_confidence: float
 
     def __post_init__(self) -> None:
-        if self.capture_version not in ("minimal-region-v1", "automatic-window-v1") or any(
+        if self.capture_version not in ("minimal-region-v1", "automatic-window-v1", "automatic-window-v2") or any(
             isinstance(value, bool)
             or not isinstance(value, (int, float))
             or not math.isfinite(value)
@@ -71,6 +73,7 @@ class FrontSessionProbeObservation:
     evidence: FrontSessionEvidence | None
     selected_row_name: str | None = None
     quality: FrontSessionQuality | None = None
+    captured_at: datetime | None = None
 
     @property
     def qualified_evidence(self) -> FrontSessionEvidence | None:
@@ -138,7 +141,7 @@ class MacosFrontSessionProbe:
         return self._observe((self._executable, "--session", "--json"), self._runner)
 
     def observe_fresh(self, *, timeout_seconds: float) -> FrontSessionProbeObservation:
-        """新宿主只允许最小采集协议；旧二进制须在采集前拒绝新参数。"""
+        """要求显式单帧入口；旧二进制在采集前拒绝未知参数。"""
 
         if (
             isinstance(timeout_seconds, bool)
@@ -152,7 +155,7 @@ class MacosFrontSessionProbe:
             else self._runner
         )
         return self._observe(
-            (self._executable, "--session", "--json", "--minimal-region"), runner,
+            (self._executable, "--session", "--json", "--minimal-region", "--single-frame"), runner,
         )
 
     def _observe(
@@ -205,6 +208,7 @@ class MacosFrontSessionProbe:
             wechat_in_front=True,
             selected_row_name=_optional_text(envelope.get("selected_row_name")),
             quality=_quality(envelope),
+            captured_at=_captured_at(envelope),
             evidence=FrontSessionEvidence(
                 display_name=_optional_text(envelope.get("display_name")),
                 last_time_text=_optional_text(envelope.get("last_time_text")),
@@ -264,10 +268,29 @@ def _optional_text(value: object) -> str | None:
     return value
 
 
+def _captured_at(envelope: dict[str, Any]) -> datetime | None:
+    """单帧协议必须给出 UTC 采集时点；旧协议不补造采集时间。"""
+
+    if envelope.get("capture_version") != "automatic-window-v2":
+        return None
+    value = envelope.get("captured_at")
+    try:
+        if not isinstance(value, str) or not re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)",
+            value,
+        ):
+            raise ValueError
+        return datetime.fromisoformat(value).astimezone(timezone.utc)
+    except ValueError as error:
+        raise ProbeAdapterError(
+            "probe_output_invalid", "前台定位采集时间无效。",
+        ) from error
+
+
 def _quality(envelope: dict[str, Any]) -> FrontSessionQuality | None:
     """旧协议、未校验布局或缺必要证据不获得质量资格。"""
 
-    if envelope.get("capture_version") not in ("minimal-region-v1", "automatic-window-v1"):
+    if envelope.get("capture_version") not in ("minimal-region-v1", "automatic-window-v1", "automatic-window-v2"):
         return None
     quality = envelope.get("quality")
     if quality is None:

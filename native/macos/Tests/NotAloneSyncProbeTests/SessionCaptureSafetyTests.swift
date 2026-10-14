@@ -2,6 +2,16 @@ import XCTest
 @testable import NotAloneSyncCore
 
 final class SessionCaptureSafetyTests: XCTestCase {
+    func testSingleFrameCapabilityRequiresJSONSession() throws {
+        XCTAssertEqual(try SessionInvocation.parse(
+            arguments: ["--session", "--json", "--minimal-region", "--single-frame"])?.json, true)
+        for arguments in [["--single-frame"], ["--session", "--single-frame"],
+                          ["--session", "--json", "--single-frame", "--watch"],
+                          ["--session", "--json", "--single-frame", "--single-frame"]] {
+            XCTAssertThrowsError(try SessionInvocation.parse(arguments: arguments))
+        }
+    }
+
     func testDefaultAndMinimalSessionShareUnavailablePolicy() throws {
         for arguments in [["--session", "--json"], ["--session", "--json", "--minimal-region"],
                           ["--minimal-region", "--json", "--session"]] {
