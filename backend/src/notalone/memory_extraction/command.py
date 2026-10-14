@@ -602,7 +602,7 @@ def _extract_main(argv: list[str] | None = None) -> int:
     except OwnerConfigError as error:
         return _fail(str(error))
 
-    from notalone.memory_extraction.adapters import LangChainExtractionRuntime
+    from notalone.memory_extraction.grounded_adapter import GroundedExtractionRuntime
     from notalone.memory_extraction.adjudication_adapters import (
         LangChainAdjudicationRuntime,
     )
@@ -634,7 +634,7 @@ def _extract_main(argv: list[str] | None = None) -> int:
         scope=scope,
         messages=messages,
         watermark_message_id=watermark_message_id,
-        runtime=LangChainExtractionRuntime(model=components.model),
+        runtime=GroundedExtractionRuntime(model=components.model),
         verification_runtime=LangChainSourceVerificationRuntime(
             model=components.model,
             ledger=components.ledger,

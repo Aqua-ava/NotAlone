@@ -81,6 +81,8 @@
 49. [ADR-049：前台微信窗口自动布局与局部名称 OCR](adr/049-automatic-foreground-window-layout.md)
 50. [ADR-050：持续单帧前台定位与联系人内容、任务归属](adr/050-continuous-single-frame-contact-follow.md)
 
+51. [ADR-051：原文分句结构提取与确定性候选编译](adr/051-grounded-memory-extraction.md)
+
 ## 当前架构决策
 
 - 旧 Swift 主界面已按 ADR-039 退役；共享前端采用 TypeScript + React，由 ADR-040 的 Electron 双窗口宿主承载；已接通业务页面，完整原生验收仍未完成。Python 后台与 Mac 原生探针保留。

@@ -212,3 +212,79 @@ MYPYPATH=backend/src:backend python -m mypy --follow-imports=silent scripts/comp
 
 Standards 独审未发现代码标准问题；Spec 独审发现上述未完成项，结果没有被单元测试
 或宽松的信息出现数覆盖。此次只验证提取层与计划保护，不重跑数据库或 App 验收。
+
+## 后续：原文结构提取与程序校验（grounded-v1）
+
+本轮按用户确认的方案替换提取协议：模型只标注原文分句的类型、归属、主题与依赖，
+程序检查每个目标分句是否完整交代、编号是否存在及依赖是否成环，再使用带作者的
+原话和必要上下文编译原14字段。模型不能直接编造候选正文、理由、日期或任意风险词。
+时间从来源时区计算；不支持的期间、否定或修饰保持未知。条件、前缀合并时保留依赖、
+最低置信度和风险。未知第三人的同消息同类资料合并保存原句，不强行猜测具体身份。
+
+CLI、后台 Worker 和服务端优先级入口均已接入，原 V 核验、默认空放行表及删除链不变。
+新适配器经真实 SDK 加本地 HTTP 替身验证：一次提取请求、原始标注与编译结果分别追踪、
+追踪写入失败时不写候选、默认仍待确认。旧适配器保留供历史评测。相关决策与能力边界
+见 [ADR-051](../architecture/adr/051-grounded-memory-extraction.md)。
+
+程序校验不等于中文语义证明：模型仍可能标错类型、错误选择省略原因、漏标指代来源。
+本轮独审还发现按问答邻接自动补来源会错误关联无关问句，已删除该行为并补回归：
+缺少明确依赖的第三人指代保留未知，不为通过某个案例而补一个未经证明的身份。
+
+### 同一六例的实际结果
+
+新增两场各六次真实请求，共12次返回、零重试，每场收据均为6次已执行、0次未用；
+公开输入与原 Gold 未修改，仍使用既有 ECNU 配置，响应标签包含 `deepseek-flash` 和
+`deepseek-v4-flash`。没有向腾讯新增外发；本轮是借鉴原文保留机制后的 NotAlone 修复，
+腾讯对照仍是上文同批实测，不能宣称运行了腾讯完整产品。
+
+第一场用于暴露结构兼容和确定性编译缺陷；第二场独立重跑全部六窗。第二场发出请求后，
+依独审删除自动邻接关联，并对这两场的**原始返回**离线重编译，新增模型调用为0。
+初始输出与各版本重放均保留，不用第一场正确项替换第二场失败项。曾暂时得到的“六窗
+可编译”包含不可靠邻接补来源，已撤回，不能算最终语义结果。
+
+最终代码作用于第二场返回，Spec 独审按完整原 Gold 核对结果如下：
+
+| 原窗口 | 完整核心命题 | 最终结果 |
+| --- | --- | --- |
+| A01 未知第三人 | 0/2 | 模型返回编号 `0`、`1`，与输入 `0:0`、`0:1` 不符，整窗明确失败；不猜测映射 |
+| A02 老李邀约 | 1/1 | 保留收到邀请，包含必要背景，无额外参与计划 |
+| A05 姐姐借车 | 1/1 | 人物、所有权、接收者与阶段保留，无“借用”伪风险 |
+| A06 机场 | 2/2 | 到达与等待分开，来源及各自期限正确 |
+| B01 课程 | 3/3 | 评价、未定状态、条件咨询分别保留；周末区间由程序计算 |
+| B02 表弟 | 1/2 | 历史通过；当前“不知道”虽保留，但模型漏标表弟来源，程序保留未知，不能计通过 |
+
+因此最终为 **4/6整窗、8/11完整核心命题通过**；5窗成功编译出9条候选，8条完整匹配、
+1条安全降级，另1窗结构失败。未发现额外计划、人物身份或日期扩写。**尚未全部修好**：
+剩余是模型遵守原文编号与明确输出必要指代依赖，不能以“失败被拦住”冒充提取成功。
+这是已知失败集的开发回归，仍不证明泛化质量、V实模效果或最终业务入库可用。
+
+### 验证与数据范围
+
+本轮只处理公开合成窗口，没有读取私人聊天、启动 App、迁移或写入业务库、回填旧候选，
+也没有改变自动采纳放行。请求、返回和收据保留在被忽略的
+`desktop/artifacts/grounded-memory-extraction-20261014/round1` 与 `round2`。
+
+实际命令（Python 均在 Conda `NotAlone` 中执行）：
+
+```bash
+python scripts/replay_grounded_extraction.py prepare --output desktop/artifacts/grounded-memory-extraction-20261014/round2
+python scripts/compare_tencent_extraction.py run --output desktop/artifacts/grounded-memory-extraction-20261014/round2
+python scripts/replay_grounded_extraction.py compile --output desktop/artifacts/grounded-memory-extraction-20261014/round2
+python scripts/replay_grounded_extraction.py compile --output desktop/artifacts/grounded-memory-extraction-20261014/round2 --recompile
+python -m unittest discover -s backend/tests/unit/memory_extraction -t backend -q
+python -m unittest discover -s backend/tests/unit/tasks -t backend -q
+python -m unittest discover -s backend/tests/unit/server -t backend -q
+MYPYPATH=backend/src:backend python -m mypy --follow-imports=silent backend/src/notalone/memory_extraction/grounded.py backend/src/notalone/memory_extraction/grounded_adapter.py scripts/replay_grounded_extraction.py backend/tests/unit/memory_extraction/test_grounded_extraction.py backend/tests/unit/memory_extraction/test_grounded_runtime.py
+```
+
+413个记忆提取、11个任务入口、44个服务端测试通过，共468个；5个新增文件的类型检查
+通过。任务入口旧测试“只放行subject就自动采纳”与既有全部相关维度证据门不符，更新为
+验证单项放行仍待确认；生产采纳代码未变。Standards复审通过，Spec复审保留上述两项缺口。
+测试没有替代真实 App、数据库或线上 V 的验收。
+
+证据摘要：
+
+- round1计划：`1d3be2dfc37820272410c46a1188a24e4c1648ce16b49ee4eed9c2468fe08636`
+- round2计划：`ad9bafc1c986c0f507cbc70854f565d5b99291d41bea39ba8a5ed65e79a49d21`
+- 最终编译器：`16fd7f79667877352ffff35d330040ffa2eae5748536a76b58be03978f35a93a`
+- 最终离线输出文件：两场各自的 `recompiled-16fd7f7966787735.json`；旧输出未覆盖。

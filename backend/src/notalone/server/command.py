@@ -281,7 +281,7 @@ def _build_task_host(
     )
     from notalone.persistence.source_deletion import PostgresSourceDeletionRepository
     from notalone.scopes import ContactScope
-    from notalone.memory_extraction.adapters import LangChainExtractionRuntime
+    from notalone.memory_extraction.grounded_adapter import GroundedExtractionRuntime
     from notalone.memory_extraction.adjudication_adapters import LangChainAdjudicationRuntime
     from notalone.memory_extraction.cli_support import build_extraction_components
     from notalone.memory_extraction.verification_adapters import LangChainSourceVerificationRuntime
@@ -300,7 +300,7 @@ def _build_task_host(
             extraction = AccountedExtractionRunner(PostgresMemoryExtractionRunner(
                 database_url,
                 runtime=PriorityExtractionRuntime(
-                    LangChainExtractionRuntime(model=components.model), model_priority,
+                    GroundedExtractionRuntime(model=components.model), model_priority,
                     accounting=accounting,
                 ),
                 verification_runtime=PriorityVerificationRuntime(

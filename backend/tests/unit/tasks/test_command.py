@@ -34,7 +34,6 @@ from tests.unit.memory_extraction.test_command import (
     RecordingOwnerPort,
     RecordingWatermark,
     _messages,
-    _payload,
 )
 from tests.unit.memory_extraction.verification_helpers import (
     verification_result,
@@ -251,16 +250,17 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
     def test_default_runner_verification_rejects_unsupported_claim(self) -> None:
         scope = ContactScope(uuid4(), uuid4())
         message = replace(_messages(1)[0], text="我不喝酒")
-        payload = {**_payload(message.message_id), "text": "他喜欢喝酒"}
+        payload = {"unit": "0:0", "kind": "preference", "subject": "self", "topic": "other",
+                   "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none"}
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
-                "name": "MemoryExtractionOutput", "id": "extract-1",
-                "args": {"facts": [payload]},
+                "name": "GroundedMemoryDraft", "id": "extract-1",
+                "args": {"units": [payload]},
             }]),
             AIMessage(content="", tool_calls=[{
                 "name": "SourceVerificationOutput", "id": "verify-1",
                 "args": {"results": [verification_result(
-                    verdict="unsupported", issues=("negation",),
+                    verdict="unsupported", issues=("subject",),
                     evidence=((message.message_id, "不喝酒"),),
                 )]},
             }]),
@@ -302,11 +302,12 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
 
         scope = ContactScope(uuid4(), uuid4())
         message = replace(_messages(1)[0], text="我平时喜欢喝茶")
-        payload = {**_payload(message.message_id), "text": "联系人喜欢喝茶"}
+        payload = {"unit": "0:0", "kind": "preference", "subject": "contact", "topic": "other",
+                   "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none"}
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
-                "name": "MemoryExtractionOutput", "id": "extract-default",
-                "args": {"facts": [payload]},
+                "name": "GroundedMemoryDraft", "id": "extract-default",
+                "args": {"units": [payload]},
             }]),
             AIMessage(content="", tool_calls=[{
                 "name": "SourceVerificationOutput", "id": "verify-default",
@@ -338,21 +339,22 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
         self.assertEqual(store.list_confirmed(scope), ())
         self.assertEqual(
             [candidate.text for candidate in store.list_pending_candidates(scope)],
-            ["联系人喜欢喝茶"],
+            ["联系人原话：“我平时喜欢喝茶”"],
         )
 
-    def test_runner_accepts_an_explicit_release_table(self) -> None:
-        """显式注入放行表时该维度恢复原有自动采纳。"""
+    def test_subject_release_alone_cannot_bypass_required_evidence(self) -> None:
+        """只放行主体不能绕过既有全部相关维度与来源证明要求。"""
 
         from notalone.memory_extraction.dimensions import DimensionRelease
 
         scope = ContactScope(uuid4(), uuid4())
         message = replace(_messages(1)[0], text="我平时喜欢喝茶")
-        payload = {**_payload(message.message_id), "text": "联系人喜欢喝茶"}
+        payload = {"unit": "0:0", "kind": "preference", "subject": "contact", "topic": "other",
+                   "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none"}
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
-                "name": "MemoryExtractionOutput", "id": "extract-released",
-                "args": {"facts": [payload]},
+                "name": "GroundedMemoryDraft", "id": "extract-released",
+                "args": {"units": [payload]},
             }]),
             AIMessage(content="", tool_calls=[{
                 "name": "SourceVerificationOutput", "id": "verify-released",
@@ -380,8 +382,9 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
             )
             stats = runner.run(scope=scope)
 
-        self.assertEqual(stats.adopted, 1)
-        self.assertEqual(len(store.list_confirmed(scope)), 1)
+        self.assertEqual(stats.adopted, 0)
+        self.assertEqual(stats.pending, 1)
+        self.assertEqual(store.list_confirmed(scope), ())
 
 
 if __name__ == "__main__":

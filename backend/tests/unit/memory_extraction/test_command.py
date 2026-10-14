@@ -1061,19 +1061,20 @@ class RunExtractionTest(unittest.TestCase):
 
 
 class ExtractMainTest(unittest.TestCase):
-    def test_default_cli_verification_rejects_reversed_claim_and_records_both_calls(self) -> None:
+    def test_default_cli_verification_rejects_wrong_subject_and_records_both_calls(self) -> None:
         message = replace(_messages(1)[0], text="我不喝酒")
-        payload = {**_payload(message.message_id), "text": "他喜欢喝酒"}
+        payload = {"unit": "0:0", "kind": "preference", "subject": "self", "topic": "other",
+                   "dependency": None, "unresolved": False, "confidence": 0.9, "sensitivity": "none"}
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
-                "name": "MemoryExtractionOutput", "id": "extract-1",
-                "args": {"facts": [payload]},
+                "name": "GroundedMemoryDraft", "id": "extract-1",
+                "args": {"units": [payload]},
             }]),
             AIMessage(content="", tool_calls=[{
                 "name": "SourceVerificationOutput", "id": "verify-1",
                 "args": {"results": [verification_result(
-                    verdict="unsupported", issues=("negation",),
-                    evidence=((message.message_id, "不喝酒"),),
+                    verdict="unsupported", issues=("subject",),
+                    evidence=((message.message_id, "我不喝酒"),),
                 )]},
             }]),
         ])

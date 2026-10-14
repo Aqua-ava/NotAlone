@@ -1,0 +1,243 @@
+"""原文分句的纯编译器；验证结构与定位，不认证模型的语义判断。"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+import math
+import re
+from typing import Any
+
+from notalone.memory_extraction.errors import ExtractionInvalidOutputError
+from notalone.memory_extraction.models import ExtractionWindow, MessageRef, MemoryTopic
+from notalone.memory_extraction.runtime import ExtractionPayload
+
+# 类型决定相容的字段组合；不从案例名或参考答案生成事实。
+KINDS = {
+    "event": ("common_fact", "assertion", "asserted"),
+    "relationship_event": ("relationship_note", "assertion", "asserted"),
+    "reported_event": ("relationship_note", "report", "reported"),
+    "third_party_fact": ("relationship_note", "report", "reported"),
+    "assessment": ("relationship_note", "assertion", "asserted"),
+    "preference": ("preference", "assertion", "asserted"),
+    "taboo": ("taboo", "assertion", "asserted"),
+    "state": ("recent_state", "assertion", "asserted"),
+    "momentary_state": ("recent_state", "assertion", "asserted"),
+    "plan": ("recent_state", "plan", "asserted"),
+    "hypothesis": ("recent_state", "plan", "hypothetical"),
+    "request": ("relationship_note", "request", "asserted"),
+    "correction": ("relationship_note", "correction", "asserted"),
+    "unknown": ("relationship_note", "unknown", "unknown"),
+}
+OMISSIONS = {"question", "greeting", "nonliteral", "not_memory"}
+ROW_KEYS = {"unit", "kind", "subject", "topic", "dependency", "unresolved", "confidence", "sensitivity"}
+SENSITIVITY = {"none", "financial", "health", "commitment", "other"}
+_CONDITION = re.compile(r"^(?:如果|假如|要是|倘若|若)")
+
+
+@dataclass(frozen=True)
+class SourceUnit:
+    id: str
+    message: MessageRef
+    start: int
+    end: int
+    target: bool
+
+    @property
+    def text(self) -> str:
+        return self.message.text[self.start:self.end]
+
+
+def source_units(window: ExtractionWindow) -> tuple[SourceUnit, ...]:
+    """只按可见标点定位；不把标点切分当作语义已经解释。"""
+    units = []
+    for index, message in enumerate(window.messages):
+        for ordinal, match in enumerate(re.finditer(r"[^，；;。！？!?\n]+[，；;。！？!?\n]*", message.text)):
+            if match.group().strip():
+                units.append(SourceUnit(f"{index}:{ordinal}", message, match.start(), match.end(),
+                                        message.message_id in window.target_message_id_set))
+    if len(units) > 512:
+        raise ExtractionInvalidOutputError("原文分句超出单窗口结构预算。")
+    return tuple(units)
+
+
+def _period(text: str, anchor: datetime | None) -> tuple[datetime | None, datetime | None]:
+    if anchor is None or anchor.utcoffset() is None:
+        return None, None
+    # 只计算受支持的完整日/周期间，不能从否定或更长时间词中截取子串。
+    if re.search(r"不|没|非|除|别|勿|取消|改期", text):
+        return None, None
+    day = anchor.replace(hour=0, minute=0, second=0, microsecond=0)
+    # 先取得含修饰语的最大时间短语，再做整词表匹配；不在失败后退回较短子串。
+    tokens = set(re.findall(
+        r"(?:[上下前后本这每大小]+个?)?(?:周末|周[一二三四五六日天]?|今天|明天|后天)"
+        r"(?:之前|之后|以前|以后|前|后|起|左右|期间|内)?", text,
+    ))
+    supported = {"下周末", "本周末", "这周末", "周末", "下周", "本周", "这周", "今天", "明天", "后天"}
+    if len(tokens) != 1 or not tokens <= supported:
+        return None, None
+    token = tokens.pop()
+    if token.endswith("周末"):
+        start = day - timedelta(days=day.weekday()) + timedelta(days=5 + (7 if token == "下周末" else 0))
+        return start, start + timedelta(days=2)
+    if token.endswith("周"):
+        start = day - timedelta(days=day.weekday()) + timedelta(days=7 if token == "下周" else 0)
+        return start, start + timedelta(days=7)
+    start = day + timedelta(days={"今天": 0, "明天": 1, "后天": 2}[token])
+    return start, start + timedelta(days=1)
+
+
+def _unit_id(raw: object) -> str:
+    if not isinstance(raw, str):
+        raise ValueError("分句编号必须是字符串。")
+    match = re.fullmatch(r"(?:\[([0-9]+:[0-9]+)\]|([0-9]+:[0-9]+))", raw)
+    if match is None:
+        raise ValueError("分句编号格式错误。")
+    return match[1] or match[2]
+
+
+def _dependencies(
+    members: list[SourceUnit], rows: dict[str, dict[str, Any]],
+    by_id: dict[str, SourceUnit],
+) -> list[SourceUnit]:
+    """合并分句的依赖取并集；内部互指不新增来源，外部环拒绝。"""
+    internal = {unit.id for unit in members}
+    result: dict[str, SourceUnit] = {}
+
+    def visit(key: str | None, path: frozenset[str]) -> None:
+        if key is None or key in internal:
+            return
+        if key in path or len(path) >= 8:
+            raise ValueError("上下文依赖成环或超出深度预算。")
+        result[key] = by_id[key]
+        if key in rows:
+            visit(rows[key]["dependency"], path | {key})
+
+    for member in members:
+        visit(rows[member.id]["dependency"], frozenset())
+    return list(result.values())
+
+
+def compile_draft(window: ExtractionWindow, draft: object) -> ExtractionPayload:
+    """从完整分句标签编译原14槽；任何结构缺口停止整批而非静默漏记。"""
+    try:
+        return _compile(window, draft)
+    except (ValueError, TypeError, KeyError) as error:
+        raise ExtractionInvalidOutputError("原文结构提取不符合契约：" + str(error)) from None
+
+
+def _compile(window: ExtractionWindow, draft: object) -> ExtractionPayload:
+    if not isinstance(draft, dict) or set(draft) != {"units"} or not isinstance(draft["units"], list):
+        raise ValueError("必须返回分句结构。")
+    units = source_units(window)
+    by_id = {unit.id: unit for unit in units}
+    target_ids = {unit.id for unit in units if unit.target}
+    rows: dict[str, dict[str, Any]] = {}
+    for row in draft["units"]:
+        if not isinstance(row, dict) or set(row) != ROW_KEYS:
+            raise ValueError("分句字段不完整或包含自由改写字段。")
+        row = dict(row)
+        key = _unit_id(row["unit"])
+        row["unit"] = key
+        if row["dependency"] is not None:
+            row["dependency"] = _unit_id(row["dependency"])
+        if not isinstance(key, str) or key not in target_ids or key in rows:
+            raise ValueError("分句越界、非目标或重复。")
+        if row["kind"] not in {*KINDS, *OMISSIONS, "condition", "prefix"}:
+            raise ValueError("未知事实类型。")
+        if row["subject"] not in {"self", "contact", "shared"}:
+            raise ValueError("未知资料归属。")
+        if row["topic"] not in {topic.value for topic in MemoryTopic}:
+            raise ValueError("未知主题。")
+        if row["sensitivity"] not in SENSITIVITY or type(row["unresolved"]) is not bool:
+            raise ValueError("风险或指代结构无效。")
+        confidence = row["confidence"]
+        if type(confidence) not in (int, float) or not math.isfinite(confidence) or not 0 <= confidence <= 1:
+            raise ValueError("置信度无效。")
+        dep = row["dependency"]
+        if dep is not None and (not isinstance(dep, str) or dep not in by_id or dep == key):
+            raise ValueError("上下文依赖不存在或自引用。")
+        rows[key] = row
+    if set(rows) != target_ids:
+        raise ValueError("目标分句未完整交代。")
+
+    results: list[dict[str, Any]] = []
+    pending_condition: SourceUnit | None = None
+    unknown_groups: dict[tuple, dict[str, Any]] = {}
+    for unit in units:
+        if not unit.target:
+            continue
+        row = rows[unit.id]
+        kind = row["kind"]
+        if kind in {"condition", "prefix"}:
+            if pending_condition is not None or (kind == "condition" and not _CONDITION.match(unit.text)):
+                raise ValueError("条件分句不能定位。")
+            pending_condition = unit
+            continue
+        condition = pending_condition
+        if condition is not None and (condition.message.message_id != unit.message.message_id or (rows[condition.id]["kind"] == "condition" and kind not in {"plan", "hypothesis"}) or kind in OMISSIONS):
+            raise ValueError("条件必须绑定同一消息的下一计划分句。")
+        pending_condition = None
+        if kind in OMISSIONS:
+            continue
+        members = ([condition] if condition else []) + [unit]
+        dependencies = _dependencies(members, rows, by_id)
+        sources = [unit.message.message_id]
+        for dep in dependencies:
+            if dep.message.message_id not in sources:
+                sources.append(dep.message.message_id)
+        quote = (condition.text if condition else "") + unit.text
+        author = "用户" if unit.message.sender.value == "self" else "联系人"
+        category, speech, assertion = KINDS[kind]
+        flags = [] if row["sensitivity"] == "none" else ["sensitivity:" + row["sensitivity"]]
+        if condition is not None and rows[condition.id]["sensitivity"] != "none":
+            flags.append("sensitivity:" + rows[condition.id]["sensitivity"])
+        valid: datetime | None = None
+        invalid: datetime | None = None
+        anchor = unit.message.occurred_at
+        if kind in {"state", "momentary_state", "request"}:
+            valid = anchor
+            if kind == "momentary_state" and anchor is not None:
+                invalid = anchor.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        if kind in {"plan", "hypothesis"}:
+            valid, invalid = _period(quote, anchor)
+            if valid is None:
+                flags.append("grounded:unresolved_period")
+            if (condition is not None and rows[condition.id]["kind"] == "condition") or _CONDITION.match(quote):
+                assertion = "conditional"
+        observed = f"截至{anchor.date().isoformat()}，" if anchor is not None and kind in {"state", "momentary_state", "request"} else ""
+        contexts = []
+        for dep in dependencies:
+            dep_author = "用户" if dep.message.sender.value == "self" else "联系人"
+            contexts.append(f"{dep_author}说“{dep.text}”")
+        context = "（相关原文：" + "；".join(contexts) + "）" if contexts else ""
+        unresolved = any(rows[member.id]["unresolved"] for member in members)
+        # 可见第三人指代缺少外部定位时不能因模型标 false 就宣称消歧。
+        if re.match(r"^(?:现在|目前)?[他她它](?!们)", quote) and not dependencies:
+            unresolved = True
+        alternatives = ["原文指代在本窗口无法唯一确定，保留原句。"] if unresolved else []
+        if kind == "unknown":
+            flags.append("grounded:unresolved_kind")
+        fact = {
+            "text": f"{observed}{author}原话：“{quote}”{context}",
+            "category": category, "subject": row["subject"], "topic": row["topic"],
+            "source_message_ids": [str(value) for value in sources], "confidence": min(rows[member.id]["confidence"] for member in members),
+            "risk_flags": flags, "valid_at": valid.isoformat() if valid else None,
+            "invalid_at": invalid.isoformat() if invalid else None,
+            "speech_act": speech, "assertion_status": assertion, "figurative_type": "literal",
+            "alternatives": alternatives,
+            "interpretation_reason": "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。",
+        }
+        # 同一消息的未知第三人资料保留原文连续关系，不制造新的具体人物身份。
+        group = (unit.message.message_id, kind, row["topic"], row["subject"], tuple(str(value) for value in sources))
+        if kind == "third_party_fact" and row["unresolved"] and group in unknown_groups:
+            previous = unknown_groups[group]
+            previous["text"] += f" 同一原消息续句：“{quote}”"
+            previous["confidence"] = min(previous["confidence"], fact["confidence"])
+            previous["risk_flags"] = list(dict.fromkeys(previous["risk_flags"] + flags))
+        else:
+            results.append(fact)
+            if kind == "third_party_fact" and row["unresolved"]:
+                unknown_groups[group] = fact
+    if pending_condition is not None:
+        raise ValueError("条件分句缺少对应计划。")
+    return tuple(results)

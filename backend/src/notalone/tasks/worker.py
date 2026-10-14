@@ -219,8 +219,8 @@ class PostgresMemoryExtractionRunner:
         self._dimension_release = dimension_release
         self._database_url = database_url
         if runtime is None:
-            from notalone.memory_extraction.adapters import (
-                LangChainExtractionRuntime,
+            from notalone.memory_extraction.grounded_adapter import (
+                GroundedExtractionRuntime,
             )
             from notalone.memory_extraction.cli_support import (
                 build_extraction_components,
@@ -230,7 +230,7 @@ class PostgresMemoryExtractionRunner:
             )
 
             components = build_extraction_components(database_url)
-            runtime = LangChainExtractionRuntime(model=components.model)
+            runtime = GroundedExtractionRuntime(model=components.model)
             if adjudication_runtime is None:
                 adjudication_runtime = LangChainAdjudicationRuntime(
                     model=components.model
