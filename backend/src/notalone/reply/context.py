@@ -225,6 +225,8 @@ class ReplyContext:
     style_references: tuple[StyleReference, ...] = ()
     assistant_discussion: DiscussionContext | None = None
 
+    history_message_ids: tuple[UUID, ...] | None = None
+
     def has_unauthorized_history(self) -> bool:
         """草稿和显式继续候选之外的历史证据是否超出本次请求权限。"""
 

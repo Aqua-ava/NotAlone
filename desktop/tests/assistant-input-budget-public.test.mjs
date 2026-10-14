@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { budgetPublicFixture } from './fixtures/assistant-budget-public.mjs';
 import { withoutExternalTracing } from '../scripts/test-environment.mjs';
 
-const enabled = process.env.CONDA_DEFAULT_ENV === 'NotAlone' && process.env.PGPORT === '55441';
+const enabled = process.env.CONDA_DEFAULT_ENV === 'NotAlone';
 const draft = '合成预算讨论：' + '今晚不参加，感谢邀请。'.repeat(60);
 
 for (const kind of ['connection', 'response']) {
@@ -17,7 +17,7 @@ for (const kind of ['connection', 'response']) {
     f.contacts.setDraft({ ...scope, text }); await f.bridge.updateOptions({ ...scope, options });
     let rejected = false, interruptedReads = 0;
     f.delivery.after = (request) => {
-      if (request.method === 'POST' && request.path.endsWith('/replies')) rejected = true;
+      if (request.method === 'POST' && request.path.endsWith('/replies/prepare')) rejected = true;
       else if (rejected && request.method === 'GET' && request.path === endpoint) {
         interruptedReads += 1;
         throw new f.BackendRequestFailure(kind, kind === 'response' ? 503 : undefined);
@@ -54,7 +54,7 @@ test('预算拒绝后实际删除会话的复验404仍废弃旧输入和同次�
   const text = '会话删除后仍独立保留的合成草稿。'; f.contacts.setDraft({ ...scope, text });
   let deleted = false;
   f.delivery.after = async (request) => {
-    if (request.method === 'POST' && request.path.endsWith('/replies')) {
+    if (request.method === 'POST' && request.path.endsWith('/replies/prepare')) {
       const receipt = await f.request(endpoint, { confirmed: true }, 'DELETE');
       assert.equal(receipt.state, 'deleted'); deleted = true;
     }
@@ -101,7 +101,7 @@ for (const delayedHistoryRead of [false, true]) {
     const entered = new Promise((resolve) => { enteredRead = resolve; });
     const gate = new Promise((resolve) => { releaseRead = resolve; });
     f.delivery.after = async (request) => {
-      if (request.method === 'POST' && request.path.endsWith('/replies')) {
+      if (request.method === 'POST' && request.path.endsWith('/replies/prepare')) {
         assert.equal((await f.command('metrics')).decisions.at(-1).state, 'exceeded');
         if (delayedHistoryRead) {
           historyRead = f.bridge.readSavedSession(f.scope);
@@ -213,7 +213,7 @@ for (const newRequest of [false, true]) {
     assert.equal(first.state, 'failed'); assert.equal(first.input.content.draft_text, text);
     assert.equal(budgetFailed.savedSession.currentInputVersionId, first.inputVersionId);
     assert.equal(toolMetrics.model_calls, start.model_calls + 1);
-    assert.deepEqual(toolMetrics.decisions.slice(start.decisions.length).map((decision) => decision.allowed), [true, false]);
+    assert.deepEqual(toolMetrics.decisions.slice(start.decisions.length).map((decision) => decision.allowed), [true, true, false]);
     process.stdout.write(`budget_retry_counterexample: new_request=${newRequest} initial=${calibrated.decisions[0].total_tokens} tool=${calibrated.decisions[1].total_tokens} capacity=${capacity} rejected_model_calls=${toolMetrics.model_calls - start.model_calls}\n`);
     assert.equal(f.contacts.getState().draft, text); assert.deepEqual(budgetFailed.options, options);
 
@@ -374,7 +374,7 @@ test('跨联系人迟到的实际预算拒绝不覆盖新范围，越权和旧sc
   const gate = new Promise((resolve) => { release = resolve; });
   const delivered = new Promise((resolve) => { entered = resolve; });
   f.delivery.after = async (options) => {
-    if (options.path.endsWith('/replies')) { entered(); await gate; }
+    if (options.path.endsWith('/replies/prepare')) { entered(); await gate; }
   };
   f.contacts.setDraft({ ...scope, text: '甲的迟到预算合成草稿。' });
   const pending = f.bridge.generate({ ...scope, newRequest: true });
@@ -538,7 +538,7 @@ for (const failure of [
     const gate = new Promise((resolve) => { release = resolve; });
     const delivered = new Promise((resolve) => { entered = resolve; });
     f.delivery.after = async (request) => {
-      if (request.method === 'POST' && request.path.endsWith('/replies')) { entered(); await gate; }
+      if (request.method === 'POST' && request.path.endsWith('/replies/prepare')) { entered(); await gate; }
     };
     const pending = f.bridge.generate({ ...scope, newRequest: true });
     try {
@@ -601,7 +601,7 @@ for (const failure of [
     const gate = new Promise((resolve) => { release = resolve; });
     const delivered = new Promise((resolve) => { entered = resolve; });
     f.delivery.after = async (request) => {
-      if (request.method === 'POST' && request.path.endsWith('/replies')) catchRead = true;
+      if (request.method === 'POST' && request.path.endsWith('/replies/prepare')) catchRead = true;
       else if (catchRead && request.method === 'GET' && request.path === endpoint) {
         catchRead = false; entered(); await gate;
       }
@@ -664,7 +664,7 @@ async function heldBudgetVerification(t) {
   const gate = new Promise((resolve) => { release = resolve; });
   const delivered = new Promise((resolve) => { entered = resolve; });
   f.delivery.after = async (request) => {
-    if (request.method === 'POST' && request.path.endsWith('/replies')) catchRead = true;
+    if (request.method === 'POST' && request.path.endsWith('/replies/prepare')) catchRead = true;
     else if (catchRead && request.method === 'GET' && request.path === endpoint) {
       catchRead = false; entered(); await gate;
     }

@@ -40,6 +40,8 @@ if TYPE_CHECKING:
 class ReplyPort(Protocol):
     """应用层调用 Reply 入口的框架无关边界。"""
 
+    def prepare(self, command: GenerateReply, *, verified_scope: VerifiedConversationScope) -> None: ...
+
     def generate(
         self,
         command: GenerateReply,
@@ -93,6 +95,7 @@ class ReplyService:
         owner_id: UUID,
         contact_id: UUID,
         request: ReplyServiceRequest,
+        prepare_only: bool = False,
     ) -> ReplyServiceResult:
         """按绑定目录解析真实会话范围后生成候选。"""
 
@@ -141,6 +144,9 @@ class ReplyService:
                 return ReplyServiceResult(reply=None, reason="invalid_reply_input")
         # 生成阶段的异常（含持久层/基础设施故障）不折叠为业务拒绝：
         # 由调用方映射为 5xx，避免把服务端故障伪装成客户端冲突。
+        if prepare_only:
+            self._reply.prepare(command=command, verified_scope=verification.scope)
+            return ReplyServiceResult(reply=None, reason=None)
         outcome = self._reply.generate(
             command=command,
             verified_scope=verification.scope,

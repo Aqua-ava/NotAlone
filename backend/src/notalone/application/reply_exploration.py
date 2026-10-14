@@ -151,19 +151,21 @@ class ReplyExplorationService:
         suggestion_id: UUID | None = None, direct_intent: str | None = None,
         session_id: UUID | None = None,
         prepare_only: bool = False,
+        selection_only: bool = False,
     ) -> dict[str, Any]:
         if (suggestion_id is None) == (direct_intent is None):
             raise ExplorationError("请明确选择一个方向或输入本次意愿。")
         if direct_intent is not None and (not isinstance(direct_intent, str)
                                          or not 0 < len(direct_intent.strip()) <= 4096):
             raise ExplorationError("本次意愿文字无效。")
-        if session_id is not None:
+        if session_id is not None and not selection_only:
             completed = self._store.replay_confirmation(scope, session_id, exploration_id, input_version_id,
                                                         suggestion_id=suggestion_id, direct_intent=direct_intent)
             if completed is not None:
                 if prepare_only:
                     return self._prepare_completed(scope, session_id, completed)
                 return self._completed(scope, session_id, completed)
+        if session_id is not None:
             self.require_session(scope=scope, session_id=session_id, exploration_id=exploration_id)
         task = self._store.read(scope, exploration_id)
         self._validate_task(scope, task)
@@ -173,7 +175,7 @@ class ReplyExplorationService:
         if task.state == "paused":
             return {"kind": "paused", "exploration_id": str(exploration_id),
                     "input_version_id": str(input_version_id), "confirmed_intent": task.selected_intent}
-        if not self._clear_intent(task):
+        if selection_only or not self._clear_intent(task):
             return self._public(task)
         return self._prepare(task) if prepare_only else self._generate(task)
 
@@ -182,16 +184,18 @@ class ReplyExplorationService:
         question_id: UUID, answer: str, operation_key: UUID,
         session_id: UUID | None = None,
         prepare_only: bool = False,
+        selection_only: bool = False,
     ) -> dict[str, Any]:
         if not isinstance(answer, str) or not 0 < len(answer.strip()) <= 4096:
             raise ExplorationError("关键问题的回答无效。")
-        if session_id is not None:
+        if session_id is not None and not selection_only:
             completed = self._store.replay_answer(scope, session_id, exploration_id, input_version_id,
                                                   question_id=question_id, answer=answer, operation_key=operation_key)
             if completed is not None:
                 if prepare_only:
                     return self._prepare_completed(scope, session_id, completed)
                 return self._completed(scope, session_id, completed)
+        if session_id is not None:
             self.require_session(scope=scope, session_id=session_id, exploration_id=exploration_id)
         task = self._store.read(scope, exploration_id, purpose=ExplorationReadPurpose.HISTORY)
         if task.state == "paused":
@@ -207,7 +211,7 @@ class ReplyExplorationService:
         ))
         next_task = self._store.read(scope, UUID(result["exploration_id"]))
         # 回答不是确认；只沿已存在的服务器选择继续，未明时保留探索。
-        if task.has_confirmed_intent and self._clear_intent(next_task):
+        if not selection_only and task.has_confirmed_intent and self._clear_intent(next_task):
             return self._prepare(next_task) if prepare_only else self._generate(next_task)
         return result
 

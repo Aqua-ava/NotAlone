@@ -56,7 +56,7 @@ async function withPublicFixture(use) {
         const captured = generation;
         const observed = { path: request.path, method: request.method, signal: request.signal,
           requestKey: request.body?.idempotency_key ?? request.body?.replacement?.idempotency_key,
-          runningKey: request.body?.running_request_key,
+          runningKey: request.body?.running_request_key, explicitGeneration: request.body?.generate === true,
           bodyHash: request.body === undefined ? null : createHash('sha256').update(JSON.stringify(request.body.replacement ?? request.body)).digest('hex') };
         requests.push(observed);
         let response;
@@ -260,7 +260,7 @@ for (const mode of ['reply_to_message', 'initiate_conversation']) {
   });
 }
 
-test('B09确认方向的候选领取实际回执，关闭后只保存原SID且重显零追加模型', async () => {
+test('B09确认方向后显式生成领取实际回执，关闭后只保存原SID且重显零追加模型', async () => {
   await withPublicFixture(async (f) => {
     const scope = await f.selectContact(f.contactA);
     await f.bridge.setMode({ ...scope, mode: 'initiate_conversation' });
@@ -272,7 +272,7 @@ test('B09确认方向的候选领取实际回执，关闭后只保存原SID且�
     await f.fixture.plan({ count: 1, message_groups: [['只归原已确认会话。', '不增加其他安排。']] });
     await f.fixture.command('hold');
     const confirming = f.bridge.selectDirection({ ...scope, suggestionId: exploration.directions[0].suggestionId,
-      inputVersion: exploration.inputVersion });
+      inputVersion: exploration.inputVersion }).then(() => f.bridge.generate({ ...scope, newRequest: true }));
     try {
       await eventually(() => f.fixture.command('counts'), (counts) => counts.entered,
         '方向确认的候选未到达实际模型。');
@@ -311,6 +311,7 @@ test('B09已确认候选实际执行失败后结束等待，同输入明确重�
     await f.fixture.plan({ fault: 'failure' });
     await f.bridge.selectDirection({ ...scope, suggestionId: exploration.directions[0].suggestionId,
       inputVersion: exploration.inputVersion });
+    await f.bridge.generate({ ...scope, newRequest: true });
     const failed = await f.bridge.getState();
     const saved = await f.rawSession(f.contactA, exploration.sessionId);
     assert.equal(saved.turns.length, 1);
@@ -319,7 +320,7 @@ test('B09已确认候选实际执行失败后结束等待，同输入明确重�
     assert.equal(failed.exploration.canRetry, true);
     assert.notEqual(failed.phase, 'waiting', '实际失败后公开页面须允许手动重试与更新理解。');
     assert.equal(failed.savedSession.sessionId, exploration.sessionId);
-    const first = f.requests.find((request) => request.path.endsWith('/confirm'));
+    const first = f.requests.find((request) => request.path.endsWith('/confirm') && request.explicitGeneration);
     assert(first?.failure, '原候选执行须真实收到失败 HTTP。');
     await f.fixture.plan({ count: 1, message_groups: [['明确重试后的原会话说法。', '不增加承诺。']] });
     await f.bridge.retryExploration(scope);
@@ -330,7 +331,7 @@ test('B09已确认候选实际执行失败后结束等待，同输入明确重�
     assert.equal(completed.turns[0].request_key, saved.turns[0].request_key);
     assert.equal(completed.turns[0].state, 'completed');
     assert.equal((await f.bridge.getState()).phase, 'ready');
-    const attempts = f.requests.filter((request) => request.path === first.path);
+    const attempts = f.requests.filter((request) => request.path === first.path && request.explicitGeneration);
     assert.equal(attempts.length, 2);
     assert.equal(attempts[1].bodyHash, first.bodyHash);
     assert.equal((await f.fixture.command('counts')).actual_calls, 3);
@@ -361,14 +362,15 @@ async function preparedStrategyCandidate(f, action, mode) {
     await f.fixture.plan({ explore: { understanding: '回答只补足本次承诺信息。', question: null } });
   }
   await f.fixture.plan({ count: 1, message_groups: [['本次合成已确认说法。', '不增加其他安排。']] });
-  const gate = action === 'answer' ? f.gateResponse((request) => request.path.endsWith('/prepare-answer')) : null;
+  const gate = action === 'answer' ? f.gateResponse((request) => request.path.endsWith('/prepare-confirm')) : null;
   if (!gate) await f.fixture.command('hold');
   const before = f.requests.length;
-  const executing = action === 'answer'
+  const preparingInput = action === 'answer'
     ? f.bridge.answerClarification({ ...scope, answer: '不增加其他承诺。',
       questionId: exploration.question.questionId, inputVersion: exploration.inputVersion })
     : f.bridge.selectDirection({ ...scope, suggestionId: exploration.directions[0].suggestionId,
       inputVersion: exploration.inputVersion });
+  const executing = preparingInput.then(() => f.bridge.generate({ ...scope, newRequest: true }));
   if (gate) {
     await gate.arrived.promise;
     await f.fixture.command('hold'); gate.release.resolve();
@@ -388,7 +390,7 @@ test('B09晚准备回执必须在原唯一作业退出等待中绑定并实际�
     assert(explored);
     const gate = f.gateResponse((request) => request.path.endsWith('/prepare-confirm'));
     const confirming = f.bridge.selectDirection({ ...scope, suggestionId: explored.directions[0].suggestionId,
-      inputVersion: explored.inputVersion });
+      inputVersion: explored.inputVersion }).then(() => f.bridge.generate({ ...scope, newRequest: true }));
     const prepared = await gate.arrived.promise;
     assert.equal(prepared.kind, 'prepared');
     assert.equal((await f.fixture.command('counts')).actual_calls, 1);
@@ -435,8 +437,8 @@ for (const mode of ['reply_to_message', 'initiate_conversation']) {
             assert.equal(receipt.turnId, running.turns[0].turn_id);
             assert.equal(receipt.inputVersionId, running.turns[0].input_version_id);
             assert.equal(receipt.requestKey, running.turns[0].request_key);
-            const execution = f.requests.slice(before).find((request) => request.path.endsWith('/' + action));
-            const prepare = f.requests.slice(before).find((request) => request.path.endsWith('/prepare-' + action));
+            const execution = f.requests.slice(before).find((request) => request.path.endsWith('/confirm') && request.explicitGeneration);
+            const prepare = f.requests.slice(before).find((request) => request.path.endsWith('/prepare-confirm') && request.explicitGeneration);
             assert.equal(prepare.bodyHash, execution.bodyHash, '准备与执行保持同一原输入和操作键。');
             assert.equal((await f.bridge.getState()).exploration.phase, 'ready');
             let newSession;

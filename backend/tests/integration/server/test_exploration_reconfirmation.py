@@ -39,7 +39,7 @@ class ExplorationReconfirmationHttpTest(FidelityHttpFixture, unittest.TestCase):
             "operation_key": str(uuid4()), "content": content,
         })
         self.assertEqual(status, 200, parent)
-        confirmation = {"input_version_id": parent["input_version_id"],
+        confirmation = {"generate": True, "input_version_id": parent["input_version_id"],
                         **({"direct_intent": "只关心合成近况，不增加安排承诺。"} if direct else
                            {"suggestion_id": parent["options"][0]["suggestion_id"]})}
         confirm_path = path + f"/explorations/{parent['exploration_id']}/confirm"
@@ -51,7 +51,7 @@ class ExplorationReconfirmationHttpTest(FidelityHttpFixture, unittest.TestCase):
             if clarified:
                 self.assertEqual(status, 200, selected)
                 self.assertEqual(selected["kind"], "clarification")
-                self.assertEqual(self.backend.request(path + f"/explorations/{parent['exploration_id']}/answer", {
+                self.assertEqual(self.backend.request(path + f"/explorations/{parent['exploration_id']}/answer", {"generate": True,
                     "input_version_id": parent["input_version_id"], "question_id": selected["question_id"],
                     "answer": "不承诺见面。", "operation_key": str(uuid4()),
                 })[0], 503)
@@ -68,7 +68,7 @@ class ExplorationReconfirmationHttpTest(FidelityHttpFixture, unittest.TestCase):
             self.assertEqual(status, 200, parent)
             self.assertEqual(reference["suggestion_id"], original_selection)
             self.assertNotIn(original_selection, {option["suggestion_id"] for option in parent["options"]})
-            confirmation = {"input_version_id": reference["input_version"], "suggestion_id": original_selection}
+            confirmation = {"generate": True, "input_version_id": reference["input_version"], "suggestion_id": original_selection}
         # A17 正式中断接口尚未消费；仅适配合成宿主的旧键失效事件，不改正文或输入指针。
         if invalidate:
             with psycopg.connect(self.database_url) as connection:
@@ -78,7 +78,7 @@ class ExplorationReconfirmationHttpTest(FidelityHttpFixture, unittest.TestCase):
 
     @staticmethod
     def _request(turn, confirmation):
-        return {**confirmation, "request_key": str(uuid4()), "expected_input_version_id": turn["input_version_id"]}
+        return {**{key: value for key, value in confirmation.items() if key != "generate"}, "request_key": str(uuid4()), "expected_input_version_id": turn["input_version_id"]}
 
     def _unchanged(self, path, endpoint, request, expected=409):
         before = self.backend.request(path)[1]
@@ -92,7 +92,7 @@ class ExplorationReconfirmationHttpTest(FidelityHttpFixture, unittest.TestCase):
         for scene in ("reply_to_message", "initiate_conversation"):
             with self.subTest(scene=scene):
                 path, parent, old_turn, confirmation, _ = self._interrupted(scene)
-                request = {**confirmation, "request_key": str(uuid4()),
+                request = {**{key: value for key, value in confirmation.items() if key != "generate"}, "request_key": str(uuid4()),
                            "expected_input_version_id": old_turn["input_version_id"]}
                 endpoint = path + f"/explorations/{parent['exploration_id']}/reconfirm"
                 before = len(self.reply_model.payloads)

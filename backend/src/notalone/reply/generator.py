@@ -76,6 +76,10 @@ class ReplyGenerator:
         self._context = context
         self._ledger = ledger
 
+    def prepare(self, command: GenerateReply, *, verified_scope: VerifiedConversationScope) -> None:
+        self._context.prepare(command=command, verified_scope=verified_scope,
+                              validate=self._runtime.validate_prepared)
+
     def generate(
         self,
         command: GenerateReply,

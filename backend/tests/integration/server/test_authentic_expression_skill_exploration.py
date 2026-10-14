@@ -90,14 +90,14 @@ class AuthenticExpressionSkillExplorationTests(FidelityHttpFixture, unittest.Tes
         self.assertEqual(opened["skill_version_id"], str(version))
         self.assertIsNone(opened["confirmed_intent"])
         self.assertEqual(len(self.reply_model.payloads), 1)
-        status, selected = self.backend.request(path + f"/explorations/{opened['exploration_id']}/confirm", {
+        status, selected = self.backend.request(path + f"/explorations/{opened['exploration_id']}/confirm", {"generate": True,
             "input_version_id": opened["input_version_id"], "suggestion_id": opened["options"][0]["suggestion_id"],
         })
         self.assertEqual(status, 200, selected)
         self.assertEqual(selected["kind"], "clarification")
         self.assertEqual(selected["confirmed_intent"], intent)
         self.assertEqual(len(self.reply_model.payloads), 1)
-        answer = {"input_version_id": selected["input_version_id"], "question_id": selected["question_id"],
+        answer = {"generate": True, "input_version_id": selected["input_version_id"], "question_id": selected["question_id"],
                   "answer": "不陪同，不承诺见面、时间或地点。", "operation_key": str(uuid4())}
         answer_path = path + f"/explorations/{selected['exploration_id']}/answer"
         status, generated = self.backend.request(answer_path, answer)

@@ -28,7 +28,7 @@ class ExplorationPreparationRejectionHttpTests(FidelityHttpFixture, unittest.Tes
         return contact, path, explored, operation
 
     def _confirmation(self, explored):
-        return {"input_version_id": explored["input_version_id"], "suggestion_id": explored["options"][0]["suggestion_id"]}
+        return {"generate": True, "input_version_id": explored["input_version_id"], "suggestion_id": explored["options"][0]["suggestion_id"]}
 
     def test_confirm_prepare_rejection_proves_actual_key_and_binds_original_command(self):
         contact, path, explored, operation = self._open()
@@ -105,7 +105,7 @@ class ExplorationPreparationRejectionHttpTests(FidelityHttpFixture, unittest.Tes
                 END $$""").format(sql.Literal(UUID(operation))))
             connection.execute("CREATE TRIGGER synthetic_answer_barrier AFTER INSERT ON public.reply_exploration "
                                "FOR EACH ROW EXECUTE FUNCTION synthetic_answer_barrier()")
-        body = {"input_version_id": explored["input_version_id"], "question_id": explored["question_id"],
+        body = {"generate": True, "input_version_id": explored["input_version_id"], "question_id": explored["question_id"],
                 "answer": "本次不安排见面。", "operation_key": operation}
         self.reply_model.plans.append({"explore": {}})
         status, rejected = self.backend.request(action + "/prepare-answer", body)

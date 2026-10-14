@@ -42,7 +42,7 @@ export function StrategyControls({ replies }: { replies: ReplySessionView }) {
       {result.directions.map((option) => <div key={option.suggestionId}>
         <button aria-label={`确认方向：${option.title}`} disabled={!available}
           onClick={() => void replies.selectDirection(option.suggestionId, result.inputVersion)}>
-          {option.title} · {option.pause ? '暂停' : result.question || result.ambiguities.length ? '确认方向，继续澄清' : '确认并生成'}
+          {option.title} · {option.pause ? '暂停' : result.question || result.ambiguities.length ? '确认方向，继续澄清' : '确认方向'}
         </button>
         <p>{option.direction} {option.reason}{option.recommended ? ' 推荐依据见当前引用。' : ''}</p>
         {result.evidence.filter((item) => option.citationIds.includes(item.evidenceId)).map((item) => <small key={item.evidenceId}>{item.text}</small>)}
@@ -66,6 +66,6 @@ export function StrategyControls({ replies }: { replies: ReplySessionView }) {
       <button disabled={!available} onClick={() => void replies.stopExploration()}>暂停本次探索</button>
     </>}
     {state.exploration.canRetry && <button disabled={!available} onClick={() => void replies.retryExploration()}>重试策略操作</button>}
-    <p>纠正理解只更新建议，回答只补充信息。确认本次意愿后才生成候选，最终由你亲自发送。</p>
+    <p>纠正理解只更新建议，回答只补充信息。确认本次意愿后，点击生成才创建候选，最终由你亲自发送。</p>
   </section>;
 }

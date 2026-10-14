@@ -659,7 +659,15 @@ class LangChainReplyRuntime:
             self._catalog_cache.put(catalog)
         return catalog
 
-    def generate(self, prepared: ReplyContext) -> ReplyRuntimeResult:
+    def validate_prepared(self, prepared: ReplyContext) -> None:
+        from notalone.reply.adapters.input_budget_middleware import PreparedInputBudget
+        try:
+            self.generate(prepared, preflight=True)
+        except PreparedInputBudget:
+            return
+        raise ReplyInvariantError("准备预检未在模型调用前停止。")
+
+    def generate(self, prepared: ReplyContext, *, preflight: bool = False) -> ReplyRuntimeResult:
         if prepared.has_unauthorized_history():
             raise ReplyInvariantError("当前改写不能使用历史资料。")
         catalog = self._discover_catalog(prepared)
@@ -698,7 +706,8 @@ class LangChainReplyRuntime:
             ]
             if self._retrieval is not None and allows_history(prepared.command):
                 history = HistoryToolAccess(
-                    retrieval=self._retrieval,
+                    retrieval=(self._retrieval.restrict_messages(prepared.history_message_ids)
+                               if prepared.history_message_ids is not None else self._retrieval),
                     scope=prepared.scope,
                     conversation_binding_id=prepared.command.conversation_binding_id,
                     initial_evidence_ids=tuple(
@@ -729,6 +738,7 @@ class LangChainReplyRuntime:
                         counter=self._input_token_counter,
                         response_format=output_strategy,
                         on_decision=collect_input_budget,
+                        preflight=preflight,
                     ),
                 ],
                 response_format=output_strategy,

@@ -83,6 +83,10 @@ class AssistantSessionCatalogPort(Protocol):
 
 
 class AssistantSessionStore(Protocol):
+    def has_prepared_context(self, scope: ContactScope, receipt: AssistantGenerationReceipt) -> bool: ...
+
+    def prepared_request(self, scope: ContactScope, receipt: AssistantGenerationReceipt) -> ReplyServiceRequest: ...
+
     def default(self, scope: ContactScope) -> UUID: ...
 
     def read(self, scope: ContactScope, session_id: UUID) -> tuple[AssistantTurn, ...]: ...
@@ -213,9 +217,28 @@ class AssistantSessionService:
 
         if self._reply is None:
             raise AssistantSessionRejected("reply_unavailable")
+        scope = ContactScope(owner_id, contact_id)
         if isinstance(request, AssistantMessageAdoptionRequest):
-            return self._store.prepare_message_adoption(ContactScope(owner_id, contact_id), session_id, request)
-        return self._store.reserve_prepared(ContactScope(owner_id, contact_id), session_id, request)
+            receipt = self._store.prepare_message_adoption(scope, session_id, request)
+        else:
+            receipt = self._store.reserve_prepared(scope, session_id, request)
+        return self._fixed_receipt(scope, receipt)
+
+    def _fixed_receipt(self, scope: ContactScope, receipt: AssistantGenerationReceipt) -> AssistantGenerationReceipt:
+        # 已完成或已有固定材料的失败回执只重放身份；预检失败但无材料时仍须补齐准备。
+        if receipt.state == "completed" or (receipt.state == "failed"
+                and self._store.has_prepared_context(scope, receipt)):
+            return receipt
+        try:
+            request = self._store.prepared_request(scope, receipt)
+            result = self._reply.generate(owner_id=scope.owner_id, contact_id=scope.contact_id,
+                                          request=request, prepare_only=True)
+            if result.reason is not None:
+                raise AssistantSessionRejected(result.reason)
+        except Exception:
+            self._store.fail(scope, receipt.turn_id)
+            raise
+        return receipt
 
     def interrupt(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
@@ -250,14 +273,16 @@ class AssistantSessionService:
     ) -> AssistantGenerationReceipt:
         if self._reply is None or self._continuation_store is None:
             raise AssistantSessionRejected("reply_unavailable")
-        return self._continuation_store.prepare_continuation(ContactScope(owner_id, contact_id), session_id, command)
+        scope = ContactScope(owner_id, contact_id)
+        return self._fixed_receipt(scope, self._continuation_store.prepare_continuation(scope, session_id, command))
 
     def prepare_interrupted(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID, command: RecoverInterruptedAssistantGeneration,
     ) -> AssistantGenerationReceipt:
         if self._reply is None:
             raise AssistantSessionRejected("reply_unavailable")
-        return self._store.prepare_interrupted(ContactScope(owner_id, contact_id), session_id, command)
+        scope = ContactScope(owner_id, contact_id)
+        return self._fixed_receipt(scope, self._store.prepare_interrupted(scope, session_id, command))
 
     def recover_interrupted(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID, command: RecoverInterruptedAssistantGeneration,
@@ -276,12 +301,12 @@ class AssistantSessionService:
 
         if self._reply is None:
             raise AssistantSessionRejected("reply_unavailable")
+        scope = ContactScope(owner_id, contact_id)
         if isinstance(request, AssistantMessageAdoptionRequest):
-            return self._store.prepare_message_adoption(
-                ContactScope(owner_id, contact_id), session_id, request, running_request_key)
-        return self._store.reserve_replacement_prepared(
-            ContactScope(owner_id, contact_id), session_id, running_request_key, request,
-        )
+            receipt = self._store.prepare_message_adoption(scope, session_id, request, running_request_key)
+        else:
+            receipt = self._store.reserve_replacement_prepared(scope, session_id, running_request_key, request)
+        return self._fixed_receipt(scope, receipt)
 
     def replace(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,

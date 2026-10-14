@@ -474,6 +474,30 @@ class PostgresAssistantSessionStore:
         with self._transaction(scope) as connection:
             return self._reserve_in_transaction(connection, scope, session_id, request)
 
+    def has_prepared_context(self, scope: ContactScope, receipt: AssistantGenerationReceipt) -> bool:
+        with self._transaction(scope) as connection:
+            row = connection.execute(
+                "SELECT prepared_context IS NOT NULL AS fixed FROM public.assistant_session_turn "
+                "WHERE owner_id=%s AND contact_id=%s AND session_id=%s AND id=%s "
+                "AND input_version_id=%s AND idempotency_key=%s",
+                (scope.owner_id, scope.contact_id, receipt.session_id, receipt.turn_id,
+                 receipt.input_version_id, receipt.request_key),
+            ).fetchone()
+            return row is not None and row["fixed"]
+
+    def prepared_request(self, scope: ContactScope, receipt: AssistantGenerationReceipt) -> ReplyServiceRequest:
+        from notalone.persistence.assistant_continuation import _request_from_input
+        with self._transaction(scope) as connection:
+            row = connection.execute(
+                "SELECT input_payload FROM public.assistant_session_turn WHERE owner_id=%s AND contact_id=%s "
+                "AND session_id=%s AND id=%s AND input_version_id=%s AND idempotency_key=%s",
+                (scope.owner_id, scope.contact_id, receipt.session_id, receipt.turn_id,
+                 receipt.input_version_id, receipt.request_key),
+            ).fetchone()
+            if row is None or row["input_payload"] is None:
+                raise AssistantSessionRejected("source_unavailable")
+            return _request_from_input(scope, receipt.request_key, row["input_payload"])
+
     def reserve_prepared(
         self, scope: ContactScope, session_id: UUID, request: ReplyServiceRequest,
     ) -> AssistantGenerationReceipt:

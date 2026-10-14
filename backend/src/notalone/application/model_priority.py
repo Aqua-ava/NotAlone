@@ -268,6 +268,9 @@ class PriorityAdjudicationRuntime:
 
 
 class PriorityReplyPort:
+    def prepare(self, command: GenerateReply, verified_scope: VerifiedConversationScope) -> None:
+        self._reply.prepare(command=command, verified_scope=verified_scope)
+
     def __init__(self, reply: ReplyPort, control: ModelPriorityControl) -> None:
         self._reply, self._control = reply, control
 

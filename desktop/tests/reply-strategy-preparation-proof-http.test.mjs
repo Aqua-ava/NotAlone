@@ -12,47 +12,36 @@ for (const action of ['confirm', 'answer']) {
     await f.bridge.explore(scope);
     let explored = (await f.bridge.getState()).exploration.result;
     assert(explored);
+    await f.bridge.selectDirection({ ...scope, suggestionId: explored.directions[0].suggestionId,
+      inputVersion: explored.inputVersion });
+    explored = (await f.bridge.getState()).exploration.result;
     if (action === 'answer') {
-      await f.bridge.selectDirection({ ...scope, suggestionId: explored.directions[0].suggestionId,
-        inputVersion: explored.inputVersion });
-      explored = (await f.bridge.getState()).exploration.result;
       assert(explored?.confirmedIntent); assert(explored.question);
       assert.deepEqual(f.replies.pendingGenerationReceipts(), []);
       await f.command('plan', { plan: { explore: { question: null } } });
-    } else await f.command('invalidate_exploration', { contact_id: scope.contactId, task_id: explored.taskId });
+      await f.bridge.answerClarification({ ...scope, answer: '不增加其他承诺。',
+        questionId: explored.question.questionId, inputVersion: explored.inputVersion });
+      explored = (await f.bridge.getState()).exploration.result;
+    }
+    await f.command('invalidate_exploration', { contact_id: scope.contactId, task_id: explored.taskId });
     const sessionPath = `/api/contacts/${scope.contactId}/assistant-sessions/${explored.sessionId}`;
     const before = await f.request(sessionPath), originalRequest = f.backend.requestJson;
-    let actualCommand, arranged = false;
+    let actualCommand;
     f.backend.requestJson = async (request) => {
-      if (request.path.endsWith(`/prepare-${action}`)) {
+      if (request.path.endsWith("/prepare-confirm")) {
         actualCommand = { path: request.path, body: structuredClone(request.body) };
-        if (action === 'answer' && !arranged) {
-          arranged = true;
-          await f.command('invalidate_next_exploration', { contact_id: scope.contactId,
-            operation_key: request.body.operation_key });
-        }
+
       }
       return originalRequest(request);
     };
-    if (action === 'answer') await f.bridge.answerClarification({ ...scope, answer: '不增加其他承诺。',
-      questionId: explored.question.questionId, inputVersion: explored.inputVersion });
-    else await f.bridge.selectDirection({ ...scope, suggestionId: explored.directions[0].suggestionId,
-      inputVersion: explored.inputVersion });
+    await f.bridge.generate({ ...scope, newRequest: true });
     assert(actualCommand);
     const failed = await f.bridge.getState(), saved = await f.request(sessionPath);
     assert.equal(failed.exploration.phase, 'failed');
     assert.equal(failed.exploration.canRetry, true);
     assert.equal(failed.result, null);
-    if (action === 'confirm') assert.deepEqual(saved, before);
-    else {
-      assert.deepEqual(saved.inputs.slice(0, before.inputs.length), before.inputs);
-      assert.equal(saved.inputs.length, before.inputs.length + 1, '只保存真实第二次B探索输入。');
-      const answered = saved.inputs.at(-1);
-      assert.equal(answered.content.type, 'purpose_exploration');
-      assert.equal(answered.content.answer, '不增加其他承诺。');
-      assert.equal(answered.content.purpose_hint, '合成目的：只了解近况，不增加其他承诺。');
-      assert.equal(saved.current_input_version_id, answered.input_version_id);
-    }
+    assert.deepEqual(saved, before);
+    if (action === 'answer') assert.equal(before.inputs.at(-1).content.answer, '不增加其他承诺。');
     assert.equal(saved.turns.length, 0);
     let actualProof;
     await assert.rejects(f.backend.requestJson({ method: 'POST', ...actualCommand,

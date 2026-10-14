@@ -164,8 +164,7 @@ export class ReplySession {
   notifyHelperLifecycle(event: 'focused' | 'blurred' | 'hidden' | 'closed'): void {
     if (event === 'hidden' || event === 'closed') {
       this.stopAutomaticExploration();
-      const generating = this.strategyJob?.type === 'action' && (this.strategyJob.request.action === 'confirm'
-        || this.strategyJob.request.action === 'answer' && Boolean(this.currentExploration?.confirmedIntent));
+      const generating = this.strategyJob?.type === 'action' && this.strategyJob.request.generate === true;
       if (!generating) this.invalidateExploration();
       this.helperHidden = true; this.leaveGenerationView();
       this.lastAttempt = undefined;
@@ -935,8 +934,7 @@ export class ReplySession {
     let ownedPreparation: OwnedAssistantPreparation | undefined;
     let generationReceipt: AssistantGenerationReceipt | undefined;
     let generationTerminal = false;
-    const candidateRequest = job.type === 'action' && (job.request.action === 'confirm'
-      || job.request.action === 'answer' && Boolean(this.currentExploration?.confirmedIntent));
+    const candidateRequest = job.type === 'action' && job.request.generate === true;
     if (candidateRequest) {
       this.strategyCandidatePending = pending;
     }
@@ -970,7 +968,7 @@ export class ReplySession {
             operationKey: job.request.action === 'answer' ? job.request.operationKey
               : (job.confirmationOperationKey ??= randomUUID()) } : undefined);
       }
-      const prepared = job.type === 'action' && job.request.action !== 'stop'
+      const prepared = job.type === 'action' && candidateRequest && job.request.action !== 'stop'
         ? await prepareExplorationAction(this.backend, job.request, pending.signal) : undefined;
       if (prepared?.kind === 'prepared') {
         if (!ownedPreparation || prepared.generation !== generation) throw new Error('本次候选准备归属尚未确认。');
@@ -1110,8 +1108,11 @@ export class ReplySession {
       const result = this.state.exploration.result;
       const intent = this.state.mode === 'reply_to_message' ? this.state.direction : this.state.purpose;
       if (!intent.trim() || this.state.exploration.phase !== 'ready') return;
+      const selected = result.confirmedIntent === intent.trim()
+        ? result.directions.find((item) => item.direction === result.confirmedIntent) : undefined;
       this.strategyJob = { type: 'action', request: { contactId: selection.contactId, sessionId: result.sessionId,
-        taskId: result.taskId, inputVersion: result.inputVersion, action: 'confirm', directIntent: intent.trim() },
+        taskId: result.taskId, inputVersion: result.inputVersion, action: 'confirm', generate: true,
+        ...(selected ? { suggestionId: selected.suggestionId } : { directIntent: intent.trim() }) },
         input: this.strategySnapshot(selection) };
       await this.runStrategy(this.strategyJob); return;
     }
@@ -1297,23 +1298,34 @@ export class ReplySession {
       // 无实际回执时，泛HTTP拒绝不能证明同key既有或在途领取已结束。
       const budgetFailure = failure?.code === 'input_budget_exceeded' || failure?.code === 'input_budget_unavailable';
       const providerLimit = failure?.status === 409 && failure.code === 'provider_context_limit';
-      const receipt = budgetReceipt;
+      let receipt = budgetReceipt;
       const beforeRead = this.state.savedSession;
       let saved: Awaited<ReturnType<typeof readAssistantSession>> | undefined;
       let readFailure: BackendRequestFailure | 'unavailable' | undefined;
       // 明确业务响应还须核验原实际身份的终态；断开/取消不能以历史failed快照推断重试租约已结束。
-      const terminalProofRequired = Boolean(job && receipt && failure?.kind === 'response' && failure.status !== undefined
+      const terminalProofRequired = Boolean(job && (receipt || budgetFailure) && failure?.kind === 'response' && failure.status !== undefined
         && failure.code && failure.code !== 'assistant_session_in_progress'
         && generation === this.backend.getConnectionGeneration());
       // 同一次实际读取同时证明作业终态和预算归属；离开视图只停止发布，不跳过终态核验。
-      if (receipt && (terminalProofRequired || current() && budgetFailure && failure?.inputBudget)) {
+      const receiptSessionId = receipt?.sessionId ?? (budgetFailure ? job?.identity.sessionId : undefined);
+      if (receiptSessionId && (terminalProofRequired || current() && budgetFailure && failure?.inputBudget)) {
         try {
-          const verified = await readAssistantSession(this.backend, selection.contactId, receipt.sessionId,
+          const verified = await readAssistantSession(this.backend, selection.contactId, receiptSessionId,
             new AbortController().signal);
+          if (!receipt && budgetFailure && job && verified.generation === generation) {
+            const rejected = verified.turns.find((turn) => turn.requestKey === attempt.requestKey && turn.state === 'failed');
+            if (rejected) {
+              receipt = { sessionId: receiptSessionId, requestKey: attempt.requestKey,
+                turnId: rejected.turnId, inputVersionId: rejected.inputVersionId, state: 'failed' };
+              budgetReceipt = receipt;
+              this.generationJobs.receiveReceipt(job, receipt);
+            }
+          }
           if (budgetFailure && failure?.inputBudget) saved = verified;
-          if (terminalProofRequired) {
-            const terminal = verified.turns.find((turn) => turn.turnId === receipt.turnId
-              && turn.requestKey === attempt.requestKey && turn.inputVersionId === receipt.inputVersionId);
+          if (terminalProofRequired && receipt) {
+            const terminalReceipt = receipt;
+            const terminal = verified.turns.find((turn) => turn.turnId === terminalReceipt.turnId
+              && turn.requestKey === attempt.requestKey && turn.inputVersionId === terminalReceipt.inputVersionId);
             if (verified.generation === generation && terminal) {
               generationTerminal = terminal.state === 'completed'
                 || ['redacted', 'unavailable'].includes(terminal.state) && terminal.input === null && terminal.reply === null;
@@ -1342,18 +1354,18 @@ export class ReplySession {
               && input.turnId === receipt?.turnId && input.state === 'active'));
           const sourceUnavailable = readFailure instanceof BackendRequestFailure
             && (readFailure.status === 404 || readFailure.reason === 'source_unavailable');
-          if (sourceUnavailable && receipt) {
+          if (sourceUnavailable && receiptSessionId) {
             // 已确认同会话不可读时清除既有正文；迟到完整读取不能恢复旧投影。
             this.savedRead?.abort(); this.savedRead = undefined;
-            const scope = { contactId: selection.contactId, scopeRevision: selection.scopeRevision, sessionId: receipt.sessionId };
+            const scope = { contactId: selection.contactId, scopeRevision: selection.scopeRevision, sessionId: receiptSessionId };
             this.candidateVersions.setScope(scope); this.clearUnavailableCandidateSource(scope);
             this.candidateVersions.setScope(null); this.heldResult = undefined; this.candidateSourceCheck = undefined;
-            this.publish({ savedSession: { phase: 'failed', sessionId: receipt.sessionId, turns: [], inputs: [], currentInputVersionId: null },
+            this.publish({ savedSession: { phase: 'failed', sessionId: receiptSessionId, turns: [], inputs: [], currentInputVersionId: null },
               sourceAvailability: undefined, result: null, selectedCandidateId: null, phase: 'idle', canRetry: false,
               errorCode: undefined, inputBudgetNotice: undefined });
             return;
           }
-          if (!saved && readFailure && receipt && failure?.inputBudget && !superseded && !sourceUnavailable) {
+          if (!saved && readFailure && receiptSessionId && failure?.inputBudget && !superseded && !sourceUnavailable) {
             // 无法复验不等于输入已失效；隐藏预算结论，保留本次身份供后端守卫重试。
             this.publish({ phase: 'failed', canRetry: true, inputBudgetNotice: undefined,
               errorCode: readFailure instanceof BackendRequestFailure && readFailure.kind === 'connection'

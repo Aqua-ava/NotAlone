@@ -86,6 +86,7 @@ def build_reply_service(
         ),
     )
     evidence = ExplorationEvidence(retrieval)
+    from notalone.persistence.assistant_prepared_context import PreparedAssistantContext
     generator = ReplyGenerator(
         store=PostgresReplyStore(database_url),
         runtime=LangChainReplyRuntime(
@@ -96,10 +97,10 @@ def build_reply_service(
             input_token_counter=input_token_counter,
             on_input_budget=on_input_budget,
         ),
-        context=PostgresAssistantDiscussionContext(
+        context=PreparedAssistantContext(PostgresAssistantDiscussionContext(
             ExploredReplyContext(context, database_url=database_url, evidence=evidence),
             database_url=database_url,
-        ),
+        ), database_url),
         ledger=PostgresOutboundLedger(database_url),
     )
     exploration = ReplyExplorationService(

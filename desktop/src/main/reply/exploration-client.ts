@@ -11,7 +11,7 @@ export interface ExplorationRequest {
   targetMessageId: string | null; purposeHint: string; correction: string; requirements: string;
   skill: ReplySkillChoice; changeGroup: boolean; automatic?: boolean;
 }
-export type ExplorationAction = { contactId: string; sessionId: string; taskId: string; inputVersion: string } & (
+export type ExplorationAction = { contactId: string; sessionId: string; taskId: string; inputVersion: string; generate?: boolean } & (
   { action: 'confirm'; suggestionId: string; directIntent?: never }
   | { action: 'confirm'; directIntent: string; suggestionId?: never }
   | { action: 'answer'; questionId: string; answer: string; operationKey: string }
@@ -101,7 +101,7 @@ export async function openExploration(backend: BackendHost, input: ExplorationRe
   return { ...readOutcome(response.data, input.sessionId), generation: response.generation };
 }
 function actionBody(input: ExplorationAction) {
-  return { input_version_id: input.inputVersion, ...(input.action === 'confirm' ? input.suggestionId
+  return { input_version_id: input.inputVersion, ...(input.generate ? { generate: true } : {}), ...(input.action === 'confirm' ? input.suggestionId
     ? { suggestion_id: input.suggestionId } : { direct_intent: input.directIntent }
     : input.action === 'answer' ? { question_id: input.questionId, answer: input.answer, operation_key: input.operationKey } : {}) };
 }

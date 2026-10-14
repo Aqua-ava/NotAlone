@@ -272,7 +272,7 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         })
         self.assertEqual(status, 200, explored)
         self.assertEqual(explored["kind"], "directions")
-        confirmation = {"input_version_id": explored["input_version_id"],
+        confirmation = {"generate": True, "input_version_id": explored["input_version_id"],
                         "suggestion_id": explored["options"][0]["suggestion_id"]}
         self.model.plans.append({"text": "合成近况询问候选", "basis": "只表达本次已确认意愿。"})
         self.model.entered.clear()
@@ -679,7 +679,7 @@ class AssistantGenerationPrepareHttpTest(unittest.TestCase):
         self.model.plans.append({"text": "合成已保存近况候选", "basis": "只表达已确认意愿。"})
         with ThreadPoolExecutor(max_workers=1) as generation_pool:
             generation = generation_pool.submit(self.backend.request,
-                path + f"/explorations/{explored['exploration_id']}/confirm", {
+                path + f"/explorations/{explored['exploration_id']}/confirm", {"generate": True,
                     "input_version_id": explored["input_version_id"],
                     "suggestion_id": explored["options"][0]["suggestion_id"],
                 })

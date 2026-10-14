@@ -16,11 +16,13 @@ export function readExplorationNoGenerationProof(value: unknown, status: number,
     || !uuid(parts[7]) || !['prepare-confirm', 'prepare-answer'].includes(parts[8])
     || !record(body) || !uuid(body.input_version_id) || !record(value)
     || !record(value.exploration_preparation) || !record(value.no_generation)) return undefined;
+  if (body.generate !== true) return undefined;
+  const { generate: _generate, ...command } = body;
   const action = parts[8];
   if (action === 'prepare-confirm' ? !(
-    exact(body, ['input_version_id', 'suggestion_id']) && uuid(body.suggestion_id)
-    || exact(body, ['input_version_id', 'direct_intent']) && text(body.direct_intent)
-  ) : !(exact(body, ['input_version_id', 'question_id', 'answer', 'operation_key'])
+    exact(command, ['input_version_id', 'suggestion_id']) && uuid(body.suggestion_id)
+    || exact(command, ['input_version_id', 'direct_intent']) && text(body.direct_intent)
+  ) : !(exact(command, ['input_version_id', 'question_id', 'answer', 'operation_key'])
     && uuid(body.question_id) && uuid(body.operation_key) && text(body.answer))) return undefined;
   const binding = value.exploration_preparation;
   if (!exact(binding, ['exploration_id', 'input_version_id', 'action', 'operation_key'])

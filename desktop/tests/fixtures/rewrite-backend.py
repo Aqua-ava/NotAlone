@@ -83,7 +83,7 @@ class DesktopRewriteModel(ScriptedCoreModel):
             return super()._generate(messages, stop, run_manager, **kwargs)
         if plan.get("probe_history"):
             self.plans.insert(0, {**plan, "probe_history": False, "cite_history": True})
-            self.responses.append(tool_response("conversation_search", {"query": "私密合成历史", "top_k": 8}))
+            self.responses.append(tool_response("conversation_search", {"query": plan.get("probe_query", "私密合成历史"), "top_k": 8}))
             return super()._generate(messages, stop, run_manager, **kwargs)
         if plan.get("fault"):
             self.responses.append(AIMessage(content=""))

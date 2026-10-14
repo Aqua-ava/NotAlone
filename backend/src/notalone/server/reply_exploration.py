@@ -93,13 +93,19 @@ def handle_exploration(
         elif len(parts) == 8 and method == "POST":
             exploration_id = UUID(parts[6])
             action = parts[7]
+            raw = _json(body, {"input_version_id", "suggestion_id", "direct_intent", "question_id", "answer", "operation_key", "expected_input_version_id", "request_key", "generate"})
+            if "generate" in raw and not isinstance(raw["generate"], bool):
+                raise ValueError
+            explicit_generation = raw.get("generate", False)
+            if action.startswith("prepare-") and not explicit_generation:
+                raise ValueError
             if action in ("confirm", "prepare-confirm"):
-                request = _json(body, {"input_version_id", "suggestion_id", "direct_intent"})
+                request = _json(body, {"input_version_id", "suggestion_id", "direct_intent", "generate"})
                 result = service.confirm(scope=scope, session_id=session_id, exploration_id=exploration_id,
                                          input_version_id=_uuid(request, "input_version_id"),
                                          suggestion_id=_uuid(request, "suggestion_id", optional=True),
                                          direct_intent=_text(request, "direct_intent") if "direct_intent" in request else None,
-                                         prepare_only=action == "prepare-confirm")
+                                         prepare_only=action == "prepare-confirm", selection_only=not explicit_generation)
             elif action == "reconfirm":
                 request = _json(body, {"input_version_id", "expected_input_version_id", "request_key", "suggestion_id", "direct_intent"})
                 result = service.reconfirm(scope=scope, session_id=session_id, exploration_id=exploration_id,
@@ -109,11 +115,11 @@ def handle_exploration(
                                            suggestion_id=_uuid(request, "suggestion_id", optional=True),
                                            direct_intent=_text(request, "direct_intent") if "direct_intent" in request else None)
             elif action in ("answer", "prepare-answer"):
-                request = _json(body, {"input_version_id", "question_id", "answer", "operation_key"})
+                request = _json(body, {"input_version_id", "question_id", "answer", "operation_key", "generate"})
                 result = service.answer(scope=scope, session_id=session_id, exploration_id=exploration_id,
                                         input_version_id=_uuid(request, "input_version_id"), question_id=_uuid(request, "question_id"),
                                         answer=_text(request, "answer"), operation_key=_uuid(request, "operation_key"),
-                                        prepare_only=action == "prepare-answer")
+                                        prepare_only=action == "prepare-answer", selection_only=not explicit_generation)
             elif action == "stop":
                 request = _json(body, {"input_version_id"})
                 service.require_session(scope=scope, session_id=session_id, exploration_id=exploration_id)

@@ -19,12 +19,15 @@ for (const { action, outcome, calls } of scenarios) {
     await f.bridge.explore(scope);
     let explored = (await f.bridge.getState()).exploration.result;
     assert(explored);
+    await f.bridge.selectDirection({ ...scope, suggestionId: explored.directions[0].suggestionId,
+      inputVersion: explored.inputVersion });
+    explored = (await f.bridge.getState()).exploration.result;
     if (action === 'answer') {
-      await f.bridge.selectDirection({ ...scope, suggestionId: explored.directions[0].suggestionId,
-        inputVersion: explored.inputVersion });
-      explored = (await f.bridge.getState()).exploration.result;
       assert(explored?.confirmedIntent); assert(explored.question);
       await f.command('plan', { plan: { explore: { question: null } } });
+      await f.bridge.answerClarification({ ...scope, answer: '不增加其他承诺。',
+        questionId: explored.question.questionId, inputVersion: explored.inputVersion });
+      explored = (await f.bridge.getState()).exploration.result;
     }
     if (outcome === 'proof') await f.command('invalidate_exploration', {
       contact_id: scope.contactId, task_id: explored.taskId,
@@ -35,7 +38,7 @@ for (const { action, outcome, calls } of scenarios) {
     const commands = [], receipts = [], proofs = [];
     let dropped = false;
     f.backend.requestJson = async (request) => {
-      const preparing = request.path.endsWith(`/prepare-${action}`);
+      const preparing = request.path.endsWith("/prepare-confirm");
       if (preparing) commands.push({ path: request.path, body: structuredClone(request.body),
         bodyHash: createHash('sha256').update(JSON.stringify(request.body)).digest('hex') });
       let response;
@@ -53,10 +56,7 @@ for (const { action, outcome, calls } of scenarios) {
       }
       return response;
     };
-    if (action === 'answer') await f.bridge.answerClarification({ ...scope, answer: '不增加其他承诺。',
-      questionId: explored.question.questionId, inputVersion: explored.inputVersion });
-    else await f.bridge.selectDirection({ ...scope, suggestionId: explored.directions[0].suggestionId,
-      inputVersion: explored.inputVersion });
+    await f.bridge.generate({ ...scope, newRequest: true });
     assert.equal(dropped, true, '只在真实provider准备完成后丢一次ACK。');
     assert.equal(commands.length, 1);
     const failed = await f.bridge.getState(), prepared = await f.request(sessionPath);

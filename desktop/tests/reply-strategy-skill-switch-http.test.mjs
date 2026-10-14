@@ -63,6 +63,7 @@ for (const scene of ['reply_to_message', 'initiate_conversation']) {
             const result = (await bridge.getState()).exploration.result;
             const option = result.directions.find((item) => item.title === '愿意等待'); assert(option);
             await bridge.selectDirection({ ...scope, inputVersion: result.inputVersion, suggestionId: option.suggestionId });
+            await bridge.generate({ ...scope, newRequest: true });
           };
           const generate = async (prefix, skill) => {
             if (skill) await fixture.plan({ read_skill: skill.name });

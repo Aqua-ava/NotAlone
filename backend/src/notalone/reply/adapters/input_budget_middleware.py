@@ -21,6 +21,7 @@ from langchain_core.messages import convert_to_openai_messages
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_openai.chat_models.base import BaseChatOpenAI
 
+from notalone.reply.errors import ReplyError
 from notalone.reply.input_budget import (
     BudgetState,
     InputBudgetDecision,
@@ -44,6 +45,10 @@ def _output_tool_schemas(strategy: ToolStrategy[Any]) -> dict[str, dict[str, Any
     }
 
 
+class PreparedInputBudget(ReplyError):
+    """预检已在实际模型 handler 前完成；不会调用模型。"""
+
+
 class InputBudgetMiddleware(AgentMiddleware):
     """每次实际模型 handler 前复用同一守卫，须放在中间件列表最后。
 
@@ -65,6 +70,7 @@ class InputBudgetMiddleware(AgentMiddleware):
         counter: ModelBoundInputTokenCounter | None,
         response_format: ToolStrategy[Any] | ProviderStrategy[Any] | None = None,
         on_decision: Callable[[InputBudgetDecision], None] | None = None,
+        preflight: bool = False,
     ) -> None:
         super().__init__()
         self._profile = profile
@@ -84,6 +90,7 @@ class InputBudgetMiddleware(AgentMiddleware):
             else {}
         )
         self._on_decision = on_decision
+        self._preflight = preflight
 
     def require_request(self, request: ModelRequest) -> ModelRequest:
         """绑定输出上限并检查完整请求；供 Agent 与单次模型适配器共用。"""
@@ -293,14 +300,20 @@ class InputBudgetMiddleware(AgentMiddleware):
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
-        return await handler(self.require_request(request))
+        prepared = self.require_request(request)
+        if self._preflight:
+            raise PreparedInputBudget("输入预算预检完成。")
+        return await handler(prepared)
 
     def wrap_model_call(
         self,
         request: ModelRequest,
         handler: Callable[[ModelRequest], ModelResponse],
     ) -> ModelResponse:
-        return handler(self.require_request(request))
+        prepared = self.require_request(request)
+        if self._preflight:
+            raise PreparedInputBudget("输入预算预检完成。")
+        return handler(prepared)
 
     def _unavailable(self, reason: str) -> InputBudgetDecision:
         return InputBudgetDecision(

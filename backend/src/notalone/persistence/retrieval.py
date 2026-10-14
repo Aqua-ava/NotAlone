@@ -86,7 +86,7 @@ def _validate_window(
 class PostgresRetrieval:
     """按联系人范围只读检索规范化消息。"""
 
-    __slots__ = ("_database_url", "_memory_store", "_owner_memory_store")
+    __slots__ = ("_database_url", "_memory_store", "_owner_memory_store", "_message_ids")
 
     def __init__(
         self,
@@ -97,6 +97,7 @@ class PostgresRetrieval:
     ) -> None:
         if not isinstance(database_url, str) or not database_url.strip():
             raise ValueError("database_url 不能为空。")
+        self._message_ids = None
         self._database_url = database_url
         self._owner_memory_store = owner_memory_store
         self._memory_store = (
@@ -104,6 +105,17 @@ class PostgresRetrieval:
             if memory_store is not None
             else PostgresMemoryStore(database_url)
         )
+
+    def restrict_messages(self, message_ids: tuple[UUID, ...]):
+        scoped = PostgresRetrieval(self._database_url, memory_store=self._memory_store,
+                                   owner_memory_store=self._owner_memory_store)
+        scoped._message_ids = tuple(message_ids)
+        return scoped
+
+    def _restrict_messages(self, conditions, parameters):
+        if self._message_ids is not None:
+            conditions.append("m.id = ANY(%s::uuid[])")
+            parameters.append(list(self._message_ids))
 
     def search_messages(
         self,
@@ -443,6 +455,7 @@ class PostgresRetrieval:
             scope.contact_id,
             target_message_id,
         ]
+        self._restrict_messages(conditions, parameters)
         if occurred_after is not None:
             conditions.append("m.occurred_at >= %s")
             parameters.append(occurred_after)
@@ -489,6 +502,7 @@ class PostgresRetrieval:
                 f"position(lower(%s) in lower({_MESSAGE_TEXT_SQL})) > 0"
             )
             parameters.append(token)
+        self._restrict_messages(conditions, parameters)
         if occurred_after is not None:
             conditions.append("m.occurred_at >= %s")
             parameters.append(occurred_after)
@@ -647,6 +661,7 @@ class PostgresRetrieval:
                 "(m.occurred_at = %s AND m.id > %s)))"
             )
             parameters.extend((anchor_time, anchor_time, anchor_message_id))
+        self._restrict_messages(conditions, parameters)
         if occurred_after is not None:
             conditions.append("m.occurred_at >= %s")
             parameters.append(occurred_after)

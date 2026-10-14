@@ -71,12 +71,12 @@ class PersistentExplorationHttpTest(FidelityHttpFixture, unittest.TestCase):
         return result
 
     def _confirm(self, path, result, index=0):
-        return self.backend.request(path + f"/explorations/{result['exploration_id']}/confirm", {
+        return self.backend.request(path + f"/explorations/{result['exploration_id']}/confirm", {"generate": True,
             "input_version_id": result["input_version_id"], "suggestion_id": result["options"][index]["suggestion_id"],
         })
 
     def _answer(self, path, result, answer="不承诺见面。", *, operation=None):
-        return self.backend.request(path + f"/explorations/{result['exploration_id']}/answer", {
+        return self.backend.request(path + f"/explorations/{result['exploration_id']}/answer", {"generate": True,
             "input_version_id": result["input_version_id"], "question_id": result["question_id"],
             "answer": answer, "operation_key": operation or str(uuid4()),
         })
@@ -339,7 +339,7 @@ class PersistentExplorationHttpTest(FidelityHttpFixture, unittest.TestCase):
         self.assertIsNone(refreshed["used_skill"])
         self.assertEqual(self.reply_model.payloads[-1]["confirmed_intent"], intent)
         self.reply_model.plans.append({"text": "最近还好吗？", "basis": "只表达原确认意愿。"})
-        status, generated = self.backend.request(path + f"/explorations/{refreshed['exploration_id']}/confirm", {
+        status, generated = self.backend.request(path + f"/explorations/{refreshed['exploration_id']}/confirm", {"generate": True,
             "input_version_id": refreshed["input_version_id"], "direct_intent": intent,
         })
         self.assertEqual(status, 200, generated)
@@ -413,7 +413,7 @@ class PersistentExplorationHttpTest(FidelityHttpFixture, unittest.TestCase):
         self.reply_model.plans.extend([{"explore": {}}, {"text": "这次我先不约了。", "basis": "保留用户明确拒绝的目的。"}])
         result = self._open(path, body)
         intent = "明确拒绝，不因模型建议而改变。"
-        status, generated = self.backend.request(path + f"/explorations/{result['exploration_id']}/confirm", {
+        status, generated = self.backend.request(path + f"/explorations/{result['exploration_id']}/confirm", {"generate": True,
             "input_version_id": result["input_version_id"], "direct_intent": intent,
         })
         self.assertEqual(status, 200, generated)

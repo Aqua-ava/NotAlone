@@ -38,14 +38,14 @@ class OwnershipFixture(DesktopRewriteFixture):
             recorded = [row[0] for row in connection.execute(
                 "SELECT name FROM public.notalone_schema_migration ORDER BY name",
             ).fetchall()]
-        assert len(expected) == 57 and expected == recorded
+        assert len(expected) == 58 and expected == recorded
         env = dict(os.environ, NOTALONE_DISABLE_DOTENV="1", NOTALONE_DATABASE_URL=cls.database_url)
         repeated = subprocess.run(
             [sys.executable, "-m", "notalone.database_migrations", "--migrations", str(migrations)],
             env=env, capture_output=True, text=True, timeout=60,
         )
         assert repeated.returncode == 0 and json.loads(repeated.stdout)["applied"] == []
-        print(json.dumps({"migration": {"count": 57, "repeat": 0,
+        print(json.dumps({"migration": {"count": 58, "repeat": 0,
             "first": recorded[0], "last": recorded[-1]}}), flush=True)
 
 
@@ -59,7 +59,7 @@ def main() -> None:
         write_backend_info(address=fixture.backend.base_url.removeprefix("http://"), token=fixture.backend.token)
         print(json.dumps({"ready": {"database_url": fixture.database_url,
             "owner_id": str(fixture.owner_id), "contact_ids": contact_ids,
-            "other_contact_id": "", "empty_contact_id": "", "migration_count": 57,
+            "other_contact_id": "", "empty_contact_id": "", "migration_count": 58,
             "migration_repeat": 0}}), flush=True)
         for line in sys.stdin:
             command = json.loads(line)

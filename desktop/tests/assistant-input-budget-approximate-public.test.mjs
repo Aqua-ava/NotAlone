@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { budgetPublicFixture } from './fixtures/assistant-budget-public.mjs';
 
-const enabled = process.env.CONDA_DEFAULT_ENV === 'NotAlone' && process.env.PGPORT === '55441';
+const enabled = process.env.CONDA_DEFAULT_ENV === 'NotAlone';
 
 test('公开估算生成显示完整预算与余量，重建服务后历史回执仍如实显示', { skip: !enabled }, async (t) => {
   const f = await budgetPublicFixture(t);

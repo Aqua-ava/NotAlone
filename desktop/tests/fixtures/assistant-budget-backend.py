@@ -63,8 +63,8 @@ class AssistantBudgetFixture(rewrite.DesktopRewriteFixture):
             ).fetchall()]
         root = Path(__file__).resolve().parents[3]
         expected = sorted(path.name for path in (root / "backend/database/migrations").glob("*.sql"))
-        if recorded != expected or len(recorded) != 57 or not recorded[-1].startswith("057_"):
-            raise RuntimeError("本轮预算夹具必须只应用正式001–057迁移。")
+        if recorded != expected or len(recorded) != 58 or not recorded[-1].startswith("058_"):
+            raise RuntimeError("本轮预算夹具必须只应用正式001–058迁移。")
         repeated = subprocess.run(
             [sys.executable, "-m", "notalone.database_migrations", "--migrations",
              str(root / "backend/database/migrations")],
@@ -119,7 +119,7 @@ def main() -> None:
             return {"port": int(fixture.backend.base_url.rsplit(":", 1)[1]), "token": fixture.backend.token}
         print(json.dumps({"ready": {**connection(), "contact_ids": contacts,
                                     "foreign_contact_id": foreign_contact,
-                                    "migration_count": 57, "migration_repeat": 0}}), flush=True)
+                                    "migration_count": 58, "migration_repeat": 0}}), flush=True)
         for line in sys.stdin:
             command = json.loads(line)
             operation = command["operation"]
@@ -128,6 +128,9 @@ def main() -> None:
                 result = {}
             elif operation == "strategy_skills":
                 result = fixture.prepare_strategy_skills(contacts, foreign_contact)
+            elif operation == "older_messages":
+                fixture.add_older_messages(command["contact_id"])
+                result = {"added": True}
             elif operation == "same_names":
                 with psycopg.connect(fixture.database_url) as connection_db:
                     connection_db.execute(
@@ -189,6 +192,8 @@ def main() -> None:
                     database.execute("CREATE TRIGGER synthetic_answer_barrier AFTER INSERT ON public.reply_exploration "
                                      "FOR EACH ROW EXECUTE FUNCTION synthetic_answer_barrier()")
                 result = {}
+            elif operation == "model-wire-inputs":
+                result = fixture.reply_model.seen_model_payloads
             elif operation == "model-inputs":
                 result = fixture.reply_model.payloads
             elif operation == "hold":

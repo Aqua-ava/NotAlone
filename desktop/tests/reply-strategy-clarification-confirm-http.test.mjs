@@ -61,7 +61,7 @@ async function withDialogueHost(use, manySources = false) {
   assert.equal(cleaned, true);
 }
 
-test('B05原21来源澄清回答和确认通过真实BackendHost与代理保留四次探索结果', async () => {
+test('B05原21来源澄清回答和确认通过真实BackendHost与代理保留探索与确认结果', async () => {
   const target = process.env.NOTALONE_B_CLARIFICATION_CONFIRM_CAPTURE;
   await withDialogueHost(async ({ bridge, scope, proxy, requests, fixture, material, request }) => {
     assert.equal(material.source_ids.length, 21);
@@ -88,6 +88,9 @@ test('B05原21来源澄清回答和确认通过真实BackendHost与代理保留�
     await fixture.plan({ count: 1, prefix: '本次已确认合成意愿' });
     const before = requests.length, started = performance.now();
     await bridge.selectDirection({ ...scope, suggestionId: chosen.suggestionId, inputVersion: answered.exploration.result.inputVersion });
+    assert.equal((await bridge.getState()).result, null);
+    assert.equal((await fixture.command('observations')).payloads.length, 3);
+    await bridge.generate({ ...scope, newRequest: true });
     const completedMs = performance.now() - started, state = await bridge.getState();
     const observations = await fixture.command('observations');
     const saved = await request(`/api/contacts/${scope.contactId}/assistant-sessions/${answered.exploration.result.sessionId}`);
@@ -98,8 +101,8 @@ test('B05原21来源澄清回答和确认通过真实BackendHost与代理保留�
       confirm_completed_ms: completedMs, control_contract_completed: false };
     if (target) await writeFile(target, JSON.stringify(capture, null, 2) + '\n');
     assert.equal(requests.slice(before).filter((item) => item.path.endsWith('/prepare-confirm')).length, 1);
-    assert.equal(requests.slice(before).filter((item) => item.path.endsWith('/confirm')).length, 1);
-    assert.equal(requests.slice(before)[0].response.kind, 'prepared');
+    assert.equal(requests.slice(before).filter((item) => item.path.endsWith('/confirm')).length, 2);
+    assert.equal(requests.slice(before)[1].response.kind, 'prepared');
     assert.equal(state.phase, 'ready'); assert.equal(state.result.candidates[0].original.text, '本次已确认合成意愿（说法1）。');
     assert.equal(observations.payloads.length, 4); assert.equal(saved.turns.length, 1);
     assert.equal(saved.current_input_version_id, state.result.inputVersionId);
@@ -107,15 +110,15 @@ test('B05原21来源澄清回答和确认通过真实BackendHost与代理保留�
     assert.equal(observations.payloads[3].understanding_correction, '这次只是了解近况，没有安排承诺。');
     assert.equal(observations.payloads[3].clarification_answer, '只了解近况。');
     assert(completedMs < 5000, '真实确认完整返回应在原页面五秒观察门禁内');
-    assert.equal(proxy.explorationResults.length, 4, '同一真实代理必须记录四次实际探索结果；准备回执不计作模型结果');
-    assert.deepEqual(proxy.explorationResults.map((item) => item.status), [200, 200, 200, 200]);
+    assert.equal(proxy.explorationResults.length, 5, '同一真实代理记录三次探索、一次确认与一次生成响应；准备回执不计入');
+    assert.deepEqual(proxy.explorationResults.map((item) => item.status), [200, 200, 200, 200, 200]);
     capture.control_contract_completed = true;
     if (target) await writeFile(target, JSON.stringify(capture, null, 2) + '\n');
   }, true);
 });
 
 for (const delivery of ['drop', 'hold']) {
-  test(`未确认回答的真实准备结果保留${delivery}门禁与同命令零额外模型重放`, async () => {
+  test(`未确认回答的真实探索结果保留${delivery}门禁与同命令零额外模型重放`, async () => {
     await withDialogueHost(async ({ bridge, scope, proxy, requests, fixture }) => {
       await fixture.plan({ explore: { question: { text: '是否只了解近况？', impact: 'ambiguity' } } });
       await bridge.explore(scope);
@@ -140,7 +143,7 @@ for (const delivery of ['drop', 'hold']) {
         const failed = await bridge.getState(); assert.equal(failed.exploration.phase, 'failed');
         assert.equal(failed.exploration.canRetry, true);
       }
-      const frozen = requests.at(-1); assert(frozen.path.endsWith('/prepare-answer'));
+      const frozen = requests.at(-1); assert(frozen.path.endsWith('/answer'));
       await bridge.retryExploration(scope);
       assert.deepEqual(requests.at(-1).body, frozen.body); assert.equal(requests.at(-1).path, frozen.path);
       assert.equal((await fixture.command('observations')).payloads.length, 2);

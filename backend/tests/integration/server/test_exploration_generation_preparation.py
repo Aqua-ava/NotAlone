@@ -1,6 +1,8 @@
 """方向确认的准备回执沿公开 HTTP 和 A 唯一生成领取，不提前调用候选模型。"""
 
 import unittest
+from unittest.mock import patch
+from notalone.application.reply_service import ReplyServiceResult
 from uuid import uuid4
 
 from tests.fidelity_http_support import FidelityHttpFixture
@@ -29,8 +31,19 @@ class ExplorationGenerationPreparationHttpTest(FidelityHttpFixture, unittest.Tes
 
     @staticmethod
     def _confirmation(explored, index=0):
-        return {"input_version_id": explored["input_version_id"],
+        return {"generate": True, "input_version_id": explored["input_version_id"],
                 "suggestion_id": explored["options"][index]["suggestion_id"]}
+
+    def test_preparation_authorization_failure_does_not_leave_running_turn(self):
+        path, explored, _ = self._open("initiate_conversation")
+        action = path + f"/explorations/{explored['exploration_id']}/prepare-confirm"
+        with patch("notalone.application.reply_service.ReplyService.generate",
+                   return_value=ReplyServiceResult(reply=None, reason="binding_revoked")):
+            status, rejected = self.backend.request(action, self._confirmation(explored))
+        self.assertEqual(status, 409, rejected)
+        saved = self.backend.request(path)[1]
+        self.assertEqual([turn["state"] for turn in saved["turns"]], ["failed"])
+        self.assertEqual(len(self.reply_model.payloads), 1)
 
     def test_both_scene_confirmations_prepare_actual_identity_before_the_candidate_model(self):
         for scene in ("reply_to_message", "initiate_conversation"):
@@ -87,7 +100,7 @@ class ExplorationGenerationPreparationHttpTest(FidelityHttpFixture, unittest.Tes
                         self.assertEqual(status, 200, pending)
                         self.assertEqual(pending["kind"], "clarification")
                         self.assertEqual(self.backend.request(path)[1]["turns"], [])
-                    request = {"input_version_id": explored["input_version_id"], "question_id": explored["question_id"],
+                    request = {"generate": True, "input_version_id": explored["input_version_id"], "question_id": explored["question_id"],
                                "answer": "不安排见面，只了解近况。", "operation_key": str(uuid4())}
                     plan = {} if clear else {"question": question, "ambiguities": ["尚未确定联系的具体目的。"]}
                     self.reply_model.plans.append({"explore": plan})
@@ -133,7 +146,7 @@ class ExplorationGenerationPreparationHttpTest(FidelityHttpFixture, unittest.Tes
             with self.subTest(source_deleted=source_deleted):
                 path, explored, source = self._open("reply_to_message")
                 action = path + f"/explorations/{explored['exploration_id']}"
-                confirmation = {"input_version_id": explored["input_version_id"], "direct_intent": "只了解近况，不安排见面。"}
+                confirmation = {"generate": True, "input_version_id": explored["input_version_id"], "direct_intent": "只了解近况，不安排见面。"}
                 status, prepared = self.backend.request(action + "/prepare-confirm", confirmation)
                 self.assertEqual(status, 200, prepared)
                 receipt = prepared["generation"]
@@ -154,11 +167,11 @@ class ExplorationGenerationPreparationHttpTest(FidelityHttpFixture, unittest.Tes
                 if source_deleted:
                     continue
                 status, reconfirmed = self.backend.request(action + "/reconfirm", {
-                    **confirmation, "expected_input_version_id": receipt["input_version_id"], "request_key": str(uuid4()),
+                    **{key: value for key, value in confirmation.items() if key != "generate"}, "expected_input_version_id": receipt["input_version_id"], "request_key": str(uuid4()),
                 })
                 self.assertEqual(status, 200, reconfirmed)
                 retry_action = path + f"/explorations/{reconfirmed['exploration_id']}"
-                retry_confirmation = {"input_version_id": reconfirmed["input_version_id"],
+                retry_confirmation = {"generate": True, "input_version_id": reconfirmed["input_version_id"],
                                       "direct_intent": confirmation["direct_intent"]}
                 status, retry = self.backend.request(retry_action + "/prepare-confirm", retry_confirmation)
                 self.assertEqual(status, 200, retry)
