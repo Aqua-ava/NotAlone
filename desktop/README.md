@@ -354,3 +354,17 @@ Root核对两场20个记录进程、隔离目录及自有Finder窗口／目录�
 显式开发入口为仓库探针 `--preview-session`，由主 Agent 在认可的有限时段经 `test:app` 的 `tests/native-session-preview.spec.ts` 启动（环境开关 `NOTALONE_SESSION_PREVIEW_ACCEPTANCE=1`）。窗口不会自动采集；用户点击按钮后有5秒切回已确认的微信测试会话，随后只观察一次。预览仅在本机内存显示第一帧、红色顶部名称框、蓝色选中行名称框及实际 OCR 文字/置信度；失败显示固定阶段和原因，未执行 OCR 时不伪造文字。每次重新识别清空旧图，关闭即释放，最长8分钟自动退出。不保存、不上传、不发送消息，不代表联系人绑定通过。
 
 `tests/native-automatic-foreground.spec.ts` 是原位/移动/缩放的受限实机反馈入口，需 `NOTALONE_AUTOMATIC_FOREGROUND_ACCEPTANCE=1`、本轮隔离协调目录和已确认会话名环境变量。窗口动作由操作者完成，触发文件不提供坐标；落盘只保留匹配布尔、固定错误和耗时。阶段标签不能证明窗口实际移动/缩放，须另记操作证据。当前用户改为先看预览再迭代，尚未完成移动/缩放验收。
+
+### 持续联系人实机协调（失败留窗）
+
+`tests/continuous-contact-follow-acceptance.spec.ts`只通过受限`test:app`运行。预约、正式包和单联系人范围继续沿用[06验收记录](../.scratch/foreground-contact-follow/acceptance-06.md)，普通`npm test`不启动App。
+
+每轮使用新建的私有协调目录。夹具启动成功后，目录内的`control-state.json`包含本轮随机`runId`、精确`pid`、协调状态和阶段。主Agent必须先核对自有PID仍存活、租约有效且状态不是`closing`，才能选取既有App窗口；不能通过Computer Use的打开应用能力启动测试。进程退出、租约到期、状态文件缺失或不可读时停止UI调用，不能读取已退出App以尝试恢复。该检查不能消除所有外部工具竞态，工具仍无法可靠绑定既有实例时应停止，不用重启补救。
+
+实际操作完成后，将当前`runId`原样写入对应`<stage>.trigger`，不加换行；旧的`ready`字串不再有效。阶段为`baseline`、`moved`、`resized`、可选`switch-b`/`return-a`、`other-app`、`resume-a`及最后的`finish`。触发信号只表示操作者已完成约定动作，不能替代移动位置或前台切换的独立证据。真实姓名不得写入信号或报告。
+
+原位、移动、缩放和恢复阶段先等待前台前置条件，最多15秒：Electron小窗实际失焦、控制器不再标记助手获焦，以及触发后的新观察报告微信在前台。全部满足后才进入匹配计时；该检查采用宿主焦点及产品探针投影，不能独立证明OS前台判断正确。15秒内未满足时进入`waiting-user`，停止后续阶段，不冒充识别测试已经开始。用户点击既有微信后，操作者将本轮`runId`写入`<stage>-retry.trigger`，同一实例重新检查前台，并要求恢复信号后的新观察；重试信号消费后删除，不自动重复。仍未满足则继续等待用户或finish/租约结束。`control-state.json`保留前置条件的三个布尔值供检查。若工具无法完成前台切换，只请求用户点击已经确认的测试会话窗口，不要求提供聊天正文。
+
+断言失败会先保存匿名报告并进入`failed-held`，同一实例保留供检查；不会自动重试或重启。向`finish.trigger`写入本轮`runId`结束检查，原失败仍向测试框架抛出。正常场景完成也等待`finish`，随后标记`closing`并通过公开菜单退出。预约到期、租约失效或自有进程退出都会结束等待；原有租约监控及夹具负责回收，不因留窗延长授权。失败留窗期间产品的已授权观察可能继续，仍受原数据范围及总时限约束。`closing`不可逆，退出失败也不重新开放检查；收到该状态后禁止再调用该App的Computer Use接口。
+
+安全验证：`node --test tests/scheduling/acceptance-coordinator.test.mjs`仅使用临时信号文件及合成时钟/进程状态；已并入`npm test`。它验证协调行为，不证明真实App、OS焦点或原生识别通过。

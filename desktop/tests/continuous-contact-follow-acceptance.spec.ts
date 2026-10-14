@@ -1,10 +1,11 @@
 import { expect } from '@playwright/test';
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test as bindingTest } from './binding-fixture';
 import { withBindingFixture } from './binding-backend-fixture';
 import { selectMenu } from './app-fixture';
 import { verifyAppTestLease } from './app-test-gate';
+import { createAcceptanceCoordinator } from './acceptance-coordinator.mjs';
 
 // 仅正式包、真实原生名称识别；CLI正文和业务数据均为合成输入。
 const test = bindingTest.extend({
@@ -33,28 +34,49 @@ test.skip(process.env.NOTALONE_CONTINUOUS_APP_ACCEPTANCE !== '1', '须明确本�
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 
 test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢复', async ({ runningApp: { app, appProcess }, bindingBackend }) => {
-  test.setTimeout(1_100_000);
+  const lease = await verifyAppTestLease();
+  // 失败留窗不超出租约；额外时间只用于夹具回收，watchApp到期仍会关闭实例。
+  test.setTimeout(Math.max(1000, lease.until - Date.now() + 10000));
   const directory = process.env.NOTALONE_AUTOMATIC_CONTROL_DIRECTORY;
   if (!directory || !path.isAbsolute(directory)) throw new Error('缺少本轮私有协调目录。');
-  expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true);
   const reports: Array<Record<string, unknown>> = [];
+  const coordinator = await createAcceptanceCoordinator({ directory, pid: appProcess.pid!,
+    checkLease: verifyAppTestLease,
+    isAlive: () => appProcess.exitCode === null && appProcess.signalCode === null });
+  let currentStage = 'setup';
   const ready = async (phase: string) => {
-    await verifyAppTestLease();
+    currentStage = phase;
     process.stdout.write(`continuous_ready:${phase}\n`);
-    await expect.poll(async () => readFile(path.join(directory, `${phase}.trigger`), 'utf8')
-      .then(value => value === 'ready').catch(() => false), { timeout: 120000 }).toBe(true);
+    await coordinator.waitFor(phase);
   };
+  const saveReport = () => writeFile(test.info().outputPath('continuous-follow-results.json'), JSON.stringify({ reports, normalQuit,
+    privateBodyRead: false, sentMessages: 0, modelCalls: 0, runtimeFrameCountVerified: false,
+    nativeDurationMeasured: false, backendDurationMeasured: false }), { mode: 0o600 });
   let normalQuit = false;
   try {
+    expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true);
     await selectMenu(app, '窗口', '输入小窗');
     await expect.poll(() => app.windows().find(page => page.url().endsWith('#helper')) !== undefined).toBe(true);
     const helper = app.windows().find(page => page.url().endsWith('#helper'))!;
+    const requireForeground = async (phase: string) => {
+      await coordinator.waitForForeground(phase, async since => {
+        const foreground = await helper.evaluate(() => window.notalone.foreground.getState());
+        const helperBlurred = await app.evaluate(({ BrowserWindow }) => {
+          const window = BrowserWindow.getAllWindows().find(item => item.webContents.getURL().endsWith('#helper'));
+          return window !== undefined && !window.isFocused();
+        });
+        return { helperBlurred: helperBlurred && !foreground.suspendedByHelperFocus,
+          wechatInFront: foreground.wechatInFront === true,
+          freshObservation: Date.parse(foreground.observedAt ?? '') >= since };
+      });
+    };
     await expect.poll(() => helper.evaluate(async () => (await window.notalone.contacts.getState()).directoryPhase)).toBe('ready');
     expect((await bindingBackend.request('/api/sync/enable', {})).status).toBe(200);
     const phases: Array<[string, number]> = [['baseline', 0], ['moved', 0], ['resized', 0]];
     if (process.env.NOTALONE_FOLLOW_TEST_NAME_B?.trim()) phases.push(['switch-b', 1], ['return-a', 0]);
     for (const [phase, index] of phases) {
       await ready(phase);
+      await requireForeground(phase);
       const started = Date.now();
       const matched = () => helper.evaluate(async ({ expected, since }) => {
         const foreground = await window.notalone.foreground.getState();
@@ -86,9 +108,10 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
           samples += 1;
           return lastObservation.matched;
         }, { timeout: 30000 }).toBe(true);
-      } catch {
+      } catch (error) {
         reports.push({ phase, matched: false, samples, elapsedMs: Date.now() - started,
           observationSampled: lastObservation !== undefined, ...lastObservation });
+        throw error;
       }
       if (lastObservation?.matched) reports.push({ phase, matched: true, displayedAfterTriggerMs: Date.now() - started });
       await writeFile(path.join(directory, `${phase}.result.json`), JSON.stringify(reports.at(-1)), { mode: 0o600, flag: 'wx' });
@@ -114,18 +137,26 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
     expect(await helper.getByRole('textbox', { name: '草稿', exact: true }).inputValue()).toBe('持续跟随验收合成草稿（不发送）');
     reports.push({ phase: 'helper-pause', noNewObservation: true, draftPreserved: true });
     await ready('resume-a');
+    await requireForeground('resume-a');
     await expect.poll(async () => helper.evaluate(async expected => {
       const state = await window.notalone.foreground.getState();
       return !state.suspendedByHelperFocus && state.confirmedContactId === expected && state.phase === 'confirmed';
     }, bindingBackend.data.contact_ids[0]), { timeout: 30000 }).toBe(true);
+    await ready('finish');
+    await coordinator.close();
     await selectMenu(app, 'NotAlone', '退出 NotAlone');
     await expect.poll(() => appProcess.exitCode, { timeout: 15000 }).toBe(0);
     normalQuit = true;
     expect(reports.filter(report => report.matched === false), '实机匹配阶段不得静默跳过失败').toEqual([]);
+  } catch (error) {
+    reports.push({ phase: currentStage, failed: true });
+    await saveReport();
+    process.stdout.write('continuous_failed_held: inspect control-state.json; finish signal or lease expiry ends inspection\n');
+    await coordinator.holdFailure();
+    throw error;
   } finally {
+    await coordinator.close();
     // 只输出阶段/布尔/耗时；不输出联系人身份、名称或原生原始输出。
-    await writeFile(test.info().outputPath('continuous-follow-results.json'), JSON.stringify({ reports, normalQuit,
-      privateBodyRead: false, sentMessages: 0, modelCalls: 0, runtimeFrameCountVerified: false,
-      nativeDurationMeasured: false, backendDurationMeasured: false }), { mode: 0o600, flag: 'wx' });
+    await saveReport();
   }
 });
