@@ -197,6 +197,59 @@ def compatible_baseline(output: Path) -> None:
     run(variant)
 
 
+def _without_descriptions(value: object) -> object:
+    """字段说明可改，工具的结构合同不得在复测中静默变化。"""
+    if isinstance(value, dict):
+        return {key: _without_descriptions(item) for key, item in value.items()
+                if key != "description"}
+    if isinstance(value, list):
+        return [_without_descriptions(item) for item in value]
+    return value
+
+
+def prepare_repair(output: Path, baseline: Path) -> None:
+    """沿冻结公开六窗准备修复复测；只改提示与字段说明，不发送请求。"""
+    plan_bytes = (baseline / "plan.json").read_bytes()
+    plan = json.loads(plan_bytes)
+    reference_bytes = (ROOT / ".scratch/unfinished-work/memory-gold-reference-20261012.json").read_bytes()
+    reference = json.loads(reference_bytes)
+    if (plan.get("reference_sha256") != digest(reference_bytes)
+            or plan.get("endpoint") != ENDPOINT
+            or [job["case_id"] for job in plan["jobs"]] != list(CASE_IDS)):
+        raise ValueError("只允许原公开六窗及未变更的参考")
+    schema = dict(EXTRACTION_SCHEMA)
+    title = schema.pop("title")
+    description = schema.pop("description", "")
+    jobs = []
+    for job in plan["jobs"]:
+        gold = next(item for item in reference["windows"] if item["id"] == job["case_id"])
+        case = next(item for item in _PLAN_CASES if item.name == gold["case_name"])
+        user_message = {"role": "user", "content": _window_text(build_window(case))}
+        request = job["request"]
+        expected = {
+            "temperature": 0.0, "stream": False, "thinking": {"type": "enabled"},
+            "messages": [request["messages"][0], user_message],
+            "tools": [{"type": "function", "function": {
+                "name": title, "description": description, "parameters": schema,
+            }}],
+        }
+        if _without_descriptions(request) != _without_descriptions(expected):
+            raise ValueError("基线输入、schema或兼容协议不一致")
+        jobs.append({**job, "arm": "notalone_repair", "request": {
+            **expected, "messages": [
+                {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT}, user_message,
+            ],
+        }})
+    output.mkdir(mode=0o700, parents=True, exist_ok=False)
+    save(output / "plan.json", {
+        **plan, "jobs": jobs, "cap": 6,
+        "scope": "原六公开窗口与判据；仅替换提取提示与字段说明；兼容工具协议，非完整入库验收",
+        "parent_plan_sha256": digest(plan_bytes),
+        "runner_sha256": digest(Path(__file__).read_bytes()),
+    })
+    print("prepared: 6 public windows, 6 requests, 0 model calls", flush=True)
+
+
 def corrected_tencent(output: Path) -> None:
     """独立修正输入身份说明；不改变消息内容、目标或腾讯系统提示。"""
     plan_bytes = (output / "plan.json").read_bytes()
@@ -225,14 +278,19 @@ def corrected_tencent(output: Path) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("prepare", "run", "continue-unattempted", "compatible", "corrected-tencent"))
+    parser.add_argument("mode", choices=("prepare", "prepare-repair", "run", "continue-unattempted", "compatible", "corrected-tencent"))
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--upstream", type=Path)
+    parser.add_argument("--baseline", type=Path)
     args = parser.parse_args()
     if args.mode == "prepare":
         if args.upstream is None:
             parser.error("prepare 需要 --upstream")
         prepare(args.output, args.upstream)
+    elif args.mode == "prepare-repair":
+        if args.baseline is None:
+            parser.error("prepare-repair 需要 --baseline")
+        prepare_repair(args.output, args.baseline)
     elif args.mode == "run":
         run(args.output)
     elif args.mode == "continue-unattempted":
