@@ -103,3 +103,13 @@ Computer Use实际操作：核对原单联系人；坐标拖动返回AXError.not
 评审补齐：前台15秒未确认进入waiting-user，用户点击既有测试会话后通过本轮stage-retry信号重新检查，要求恢复之后的新观察，同实例继续且不重启。closing不可逆，退出异常不再重新开放检查。两个分支均先观察回归失败再修复，9项协调安全回归通过。
 
 最终验证：`node --test desktop/tests/scheduling/acceptance-coordinator.test.mjs`9项通过；`npm --prefix desktop test`类型检查及53项安全测试通过；`git diff --check`通过。Standards与Spec各修复1项评审发现后复核均无待修项。实机未运行，旧失败记录保留。
+
+## 第四轮：人工确认前台后仍判非前台（本地日期2026-10-15）
+
+用户同意新的20分钟窗口内最多启动1次。按新版协调流程启动正式包1次，未误开其他实例。初次前置检查helperBlurred=false、wechatInFront=false、freshObservation=false，进入waiting-user而不关闭App。用户先回复准备完成后点击原已授权测试会话；同一实例通过本轮retry信号再次观察，得到helperBlurred=true、wechatInFront=false、freshObservation=true，仍停在waiting-user。用户随后明确确认：测试会话在该20秒期间一直位于最前面。该用户观察与产品探针投影不一致，不再归因于用户没有切换或仅因助手焦点未释放；尚不能确定是原生检测、进程运行环境还是其他边界问题。
+
+由于前台门未通过，本轮没有进入联系人匹配计时，也没有执行移动/缩放或完整暂停恢复。主Agent通过当前runId的finish信号明确结束，测试以acceptance_finished失败退出（约9.0分钟），normalQuit=false；此状态表示未通过验收，不是产品正常菜单退出证据。新协调流程的同实例等待、用户操作后重新检查和显式结束已有本轮运行证据；不能据此宣称全部异常生命周期或原生前台识别通过。
+
+收尾证据：认证HTTP停读成功、自有后端exit 0、随机隔离库已删除、未确认资源为空；自有App PID不存在，独立用户目录已删除，租约absent，control-state为不可逆closing。无重启、真实CLI正文读取、外部模型调用或消息发送。未保存联系人身份或截图到仓库。
+
+下一步先做原生前台判定的最小诊断设计与安全回归：区分未取得前台应用、前台应用不是微信，以及从探针到后端/助手的状态传递；只保留有限分类/布尔，不记录应用标题、联系人或聊天内容。要检验真实根因仍需新的受限实机证据，不能从源代码阅读直接宣布修复。06暂转ready-for-agent处理诊断准备，仍claimed且所有相关实机条件未勾选。

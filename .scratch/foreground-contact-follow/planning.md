@@ -11,7 +11,7 @@
 | 03 | [显式生成与固定上下文](issues/03-explicit-generation-context.md) | None | resolved | ready-for-agent |
 | 04 | [持续识别与自动跟随联系人](issues/04-continuous-contact-follow.md) | 01, 02 | resolved | ready-for-agent |
 | 05 | [多联系人后台任务与状态恢复](issues/05-contact-generation-jobs.md) | 02, 03 | resolved | ready-for-agent |
-| 06 | [组合回归与正式 App 验收](issues/06-combined-app-acceptance.md) | 04, 05 | claimed | needs-info |
+| 06 | [组合回归与正式 App 验收](issues/06-combined-app-acceptance.md) | 04, 05 | claimed | ready-for-agent |
 
 ```mermaid
 flowchart LR
@@ -66,3 +66,5 @@ flowchart LR
 第二轮单联系人实机：新的1次启动已执行，基线信号及时处理，但匹配断言30秒超时。已完成失败清理并补充匿名状态诊断；移动缩放和暂停恢复仍待验。06继续claimed/needs-info，根因未确定，未将产品标为修复。
 
 第三轮已按用户授权使用Computer Use，实际3次启动均已结束；完成窗口菜单操作并取得焦点/观察状态诊断，但三项实机目标尚未通过。工具误启动及前台确认问题已记录，继续实机前先解决验收工具协调，06保持claimed/needs-info。
+
+2026-10-15：第四轮人工确认微信前台与新探针投影出现矛盾；仅1次App启动，已明确结束并完成清理。下一步先准备原生前台判定诊断，06转ready-for-agent，未标记任何实机目标通过。
