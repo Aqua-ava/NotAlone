@@ -119,13 +119,21 @@ def _dependencies(
 
 def compile_draft(window: ExtractionWindow, draft: object) -> ExtractionPayload:
     """从完整分句标签编译原14槽；任何结构缺口停止整批而非静默漏记。"""
+    return _checked_compile(window, draft, completed_answers=False)
+
+
+def _checked_compile(
+    window: ExtractionWindow, draft: object, *, completed_answers: bool,
+) -> ExtractionPayload:
     try:
-        return _compile(window, draft)
+        return _compile(window, draft, completed_answers=completed_answers)
     except (ValueError, TypeError, KeyError) as error:
         raise ExtractionInvalidOutputError("原文结构提取不符合契约：" + str(error)) from None
 
 
-def _compile(window: ExtractionWindow, draft: object) -> ExtractionPayload:
+def _compile(
+    window: ExtractionWindow, draft: object, *, completed_answers: bool = False,
+) -> ExtractionPayload:
     if not isinstance(draft, dict) or set(draft) != {"units"} or not isinstance(draft["units"], list):
         raise ValueError("必须返回分句结构。")
     units = source_units(window)
@@ -187,6 +195,11 @@ def _compile(window: ExtractionWindow, draft: object) -> ExtractionPayload:
                 sources.append(dep.message.message_id)
         quote = (condition.text if condition else "") + unit.text
         author = "用户" if unit.message.sender.value == "self" else "联系人"
+        completed = (completed_answers and condition is None
+                     and kind in {"state", "momentary_state"}
+                     and _is_completed_answer(unit, dependencies))
+        if completed:
+            kind = "event"
         category, speech, assertion = KINDS[kind]
         flags = [] if row["sensitivity"] == "none" else ["sensitivity:" + row["sensitivity"]]
         if condition is not None and rows[condition.id]["sensitivity"] != "none":
@@ -225,7 +238,10 @@ def _compile(window: ExtractionWindow, draft: object) -> ExtractionPayload:
             "invalid_at": invalid.isoformat() if invalid else None,
             "speech_act": speech, "assertion_status": assertion, "figurative_type": "literal",
             "alternatives": alternatives,
-            "interpretation_reason": "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。",
+            "interpretation_reason": (
+                "原文完成问答明确表示动作已完成，程序据此保留历史动作，不设置当天失效。"
+                if completed else "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
+            ),
         }
         # 同一消息的未知第三人资料保留原文连续关系，不制造新的具体人物身份。
         group = (unit.message.message_id, kind, row["topic"], row["subject"], tuple(str(value) for value in sources))
@@ -241,3 +257,84 @@ def _compile(window: ExtractionWindow, draft: object) -> ExtractionPayload:
     if pending_condition is not None:
         raise ValueError("条件分句缺少对应计划。")
     return tuple(results)
+
+
+
+def needs_reference(unit: SourceUnit) -> bool:
+    """仅识别有界的句首第三人指代；不是通用中文实体识别器。"""
+    return re.match(r"^(?:现在|目前)?[他她它]", unit.text) is not None
+
+
+def reference_choices(unit: SourceUnit, units: tuple[SourceUnit, ...]) -> tuple[str, ...]:
+    """依据必须先出现且能独立定位，不能拿后面的回答或另一个裸指代作身份依据。"""
+    choices = []
+    for other in units:
+        if other.id == unit.id:
+            break
+        if not needs_reference(other):
+            choices.append(other.id)
+    return tuple(choices)
+
+
+def compile_labels(window: ExtractionWindow, draft: object) -> ExtractionPayload:
+    """v2按程序给定的对象键绑定原文；禁止按输出顺序猜测编号。"""
+    if not isinstance(draft, dict) or set(draft) != {"units"} or not isinstance(draft["units"], dict):
+        raise ExtractionInvalidOutputError("原文标签必须按指定字段返回。")
+    units = source_units(window)
+    target_ids = {unit.id for unit in units if unit.target}
+    labels = draft["units"]
+    if set(labels) != target_ids:
+        raise ExtractionInvalidOutputError("原文标签字段缺失或越界。")
+    rows = []
+    for unit in units:
+        if not unit.target:
+            continue
+        label = labels[unit.id]
+        if not isinstance(label, dict) or set(label) != ROW_KEYS - {"unit"}:
+            raise ExtractionInvalidOutputError("标签字段不完整或含自由编号。")
+        rows.append({"unit": unit.id, **label})
+    payloads = _checked_compile(window, {"units": rows}, completed_answers=True)
+    all_ids = {unit.id for unit in units}
+    for unit in units:
+        if not unit.target:
+            continue
+        label = labels[unit.id]
+        dep = label["dependency"]
+        if dep is not None and dep not in all_ids:
+            raise ExtractionInvalidOutputError("依赖必须是窗口提供的精确字段名。")
+        if needs_reference(unit) and label["kind"] not in OMISSIONS and not label["unresolved"]:
+            if dep not in reference_choices(unit, units):
+                raise ExtractionInvalidOutputError("已消歧的第三人指代缺少独立前文依据。")
+            if dep in labels and labels[dep]["unresolved"]:
+                raise ExtractionInvalidOutputError("未决前文不能作为已消歧依据。")
+    return payloads
+
+
+def _is_completed_answer(unit: SourceUnit, dependencies: list[SourceUnit]) -> bool:
+    """只承认明确动作问答的完成短答，不借模型主题或时间到期语境推断抵达。"""
+    if unit.start != 0 or len(dependencies) != 1:
+        return False
+    answer = re.fullmatch(
+        r"(?:我)?(?:已经|已)?(?P<verb>抵达|到达|到|签收|办完|取到|送达|交完|完成)了[，。！!]*",
+        unit.text,
+    )
+    question = dependencies[0]
+    if answer is None or question.message.sender == unit.message.sender or question.start != 0:
+        return False
+    if int(question.id.split(":")[0]) >= int(unit.id.split(":")[0]):
+        return False
+    verb = answer["verb"]
+    match = re.fullmatch(
+        r"你(?:已经|已)?" + re.escape(verb) + r"(?P<object>[^，。！？!?]{0,32})了吗[？?]",
+        question.text,
+    )
+    if match is None:
+        return False
+    obj = match["object"]
+    if verb in {"到", "到达", "抵达"} and re.fullmatch(
+        r"[\u4e00-\u9fffA-Za-z0-9]{0,20}(?:机场|车站|码头|公司|学校|医院|酒店|宾馆|场馆|办公室|目的地|家)",
+        obj,
+    ) is None:
+        return False
+    # 有时间、否定、将来或条件限定时不在这套有界完成语法内。
+    return re.search(r"不|没|别|勿|如果|假如|明天|后天|将|打算|计划|时间|时候|期限|截止|到期|年龄|岁|点|日|周|月|年", obj) is None

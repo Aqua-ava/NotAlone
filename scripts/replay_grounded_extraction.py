@@ -1,4 +1,4 @@
-"""冻结原公开六窗的 grounded-v1 请求，并复用生产编译器检查真实返回。"""
+"""冻结原公开六窗的 结构化提取请求，并复用生产编译器检查真实返回。"""
 from __future__ import annotations
 import argparse
 import json
@@ -8,8 +8,8 @@ from typing import Any
 from compare_tencent_extraction import CASE_IDS, ROOT, ENDPOINT, digest, save
 from notalone.memory_extraction.evaluation import build_window
 from notalone.memory_extraction.evaluation_ecnu import _PLAN_CASES
-from notalone.memory_extraction.grounded import compile_draft
-from notalone.memory_extraction.grounded_adapter import GROUNDED_PROMPT, GROUNDED_SCHEMA, grounded_input
+from notalone.memory_extraction.grounded import compile_draft, compile_labels
+from notalone.memory_extraction.grounded_adapter import GROUNDED_PROMPT, grounded_schema, grounded_input
 
 
 def cases() -> tuple[bytes, list[tuple[dict[str, Any], Any]]]:
@@ -25,12 +25,12 @@ def cases() -> tuple[bytes, list[tuple[dict[str, Any], Any]]]:
 
 def prepare(output: Path) -> None:
     raw, selected = cases()
-    schema = dict(GROUNDED_SCHEMA)
-    title = schema.pop("title")
-    description = schema.pop("description")
     jobs = []
     for gold, window in selected:
-        jobs.append({"case_id": gold["id"], "arm": "grounded-v1", "request": {
+        schema = grounded_schema(window)
+        title = schema.pop("title")
+        description = schema.pop("description")
+        jobs.append({"case_id": gold["id"], "arm": "grounded-v2", "request": {
             "temperature": 0.0, "stream": False, "thinking": {"type": "enabled"},
             "messages": [{"role": "system", "content": GROUNDED_PROMPT},
                          {"role": "user", "content": grounded_input(window)}],
@@ -41,7 +41,7 @@ def prepare(output: Path) -> None:
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     save(output / "plan.json", {
         "scope": "同一公开六窗、原Gold；一次结构提取；无V与业务写入；零重试",
-        "cap": 6, "retry": 0, "endpoint": ENDPOINT,
+        "cap": 6, "retry": 0, "endpoint": ENDPOINT, "protocol": "grounded-v2",
         "reference_sha256": digest(raw), "reference": [gold for gold, _ in selected],
         "runner_sha256": digest((ROOT / "scripts/compare_tencent_extraction.py").read_bytes()),
         "compiler_sha256": digest((ROOT / "backend/src/notalone/memory_extraction/grounded.py").read_bytes()),
@@ -56,6 +56,11 @@ def compile_results(output: Path, *, recompile: bool = False) -> None:
     if (plan["reference_sha256"] != digest(raw)
             or (not recompile and plan["compiler_sha256"] != compiler_sha)):
         raise ValueError("参考或编译器已改变，不能覆盖原场结果")
+    protocol = plan.get("protocol", "grounded-v1")
+    if protocol not in {"grounded-v1", "grounded-v2"}:
+        raise ValueError("未知提取协议")
+    tool_name = "GroundedMemoryLabels" if protocol == "grounded-v2" else "GroundedMemoryDraft"
+    compiler = compile_labels if protocol == "grounded-v2" else compile_draft
     results = []
     for index, (gold, window) in enumerate(selected):
         path = output / f"{index:02}-response.json"
@@ -65,10 +70,10 @@ def compile_results(output: Path, *, recompile: bool = False) -> None:
         response = json.loads(path.read_text())
         try:
             calls = response["choices"][0]["message"].get("tool_calls", [])
-            if len(calls) != 1 or calls[0]["function"]["name"] != GROUNDED_SCHEMA["title"]:
+            if len(calls) != 1 or calls[0]["function"]["name"] != tool_name:
                 raise ValueError("结构工具不匹配")
             draft = json.loads(calls[0]["function"]["arguments"])
-            facts = compile_draft(window, draft)
+            facts = compiler(window, draft)
             results.append({"case_id": gold["id"], "status": "compiled", "facts": facts})
         except (ValueError, RuntimeError, KeyError, TypeError) as error:
             results.append({"case_id": gold["id"], "status": "invalid", "error": str(error)})

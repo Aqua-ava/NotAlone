@@ -4,7 +4,7 @@ import unittest
 from uuid import uuid4
 
 from notalone.memory_extraction.models import ExtractionWindow, MessageRef, MessageSender
-from notalone.memory_extraction.grounded import compile_draft, source_units
+from notalone.memory_extraction.grounded import compile_draft, compile_labels, source_units
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError
 
 
@@ -162,3 +162,94 @@ class GroundedCompilerTest(unittest.TestCase):
         self.assertNotIn("午饭", fact["text"])
         self.assertEqual(fact["source_message_ids"], [str(source.messages[1].message_id)])
         self.assertTrue(fact["alternatives"])
+
+    def test_resolved_pronoun_requires_independent_earlier_evidence(self):
+        from dataclasses import replace
+        source = window("现在她住在哪里，我不清楚。")
+        context = MessageRef(uuid4(), "你妹妹现在住在哪里？", MessageSender.SELF, source.messages[0].occurred_at)
+        source = replace(source, messages=(context, *source.messages))
+        def draft(dep):
+            items = [row("1:0", "prefix", dependency=dep), row("1:1", "state")]
+            return {"units": {item["unit"]: {k: v for k, v in item.items() if k != "unit"} for item in items}}
+        for dep in (None, "1:1"):
+            with self.subTest(dep=dep), self.assertRaises(ExtractionInvalidOutputError):
+                compile_labels(source, draft(dep))
+        fact = compile_labels(source, draft("0:0"))[0]
+        self.assertIn("你妹妹现在住在哪里", fact["text"])
+        self.assertEqual(set(fact["source_message_ids"]), {str(m.message_id) for m in source.messages})
+        self.assertEqual(fact["alternatives"], [])
+
+    def test_labels_never_guess_missing_or_replaced_field_names(self):
+        source = window("她不是会计，她在研发部。")
+        label = {k: v for k, v in row("0:0", "third_party_fact", unresolved=True).items() if k != "unit"}
+        for invalid in ({"0": label, "1": label}, {"0:0": label}, {"[0:0]": label, "0:1": label}):
+            with self.subTest(invalid=invalid), self.assertRaises(ExtractionInvalidOutputError):
+                compile_labels(source, {"units": invalid})
+        facts = compile_labels(source, {"units": {"0:1": label, "0:0": label}})
+        self.assertEqual(len(facts), 1)
+        self.assertLess(facts[0]["text"].index("不是会计"), facts[0]["text"].index("研发部"))
+        self.assertTrue(facts[0]["alternatives"])
+
+    def test_unsupported_identity_cannot_be_resolved_by_a_pronoun_chain(self):
+        source = window("他不是司机，他在商场。")
+        first = row("0:0", "third_party_fact", unresolved=True)
+        second = row("0:1", "third_party_fact", dependency="0:0")
+        draft = {"units": {item["unit"]: {k: v for k, v in item.items() if k != "unit"} for item in (first, second)}}
+        with self.assertRaises(ExtractionInvalidOutputError):
+            compile_labels(source, draft)
+
+    def test_completed_action_answer_cannot_expire_as_a_momentary_state(self):
+        from dataclasses import replace
+        source = window("签收了，正在检查包装。")
+        question = MessageRef(uuid4(), "你签收包裹了吗？", MessageSender.SELF, source.messages[0].occurred_at)
+        source = replace(source, messages=(question, *source.messages))
+        items = [row("1:0", "momentary_state", dependency="0:0"), row("1:1", "momentary_state")]
+        draft = {"units": {item["unit"]: {k: v for k, v in item.items() if k != "unit"} for item in items}}
+        facts = compile_labels(source, draft)
+        self.assertEqual(facts[0]["category"], "common_fact")
+        self.assertIsNone(facts[0]["valid_at"])
+        self.assertIsNone(facts[0]["invalid_at"])
+        self.assertEqual(facts[1]["category"], "recent_state")
+        self.assertIn("完成问答", facts[0]["interpretation_reason"])
+
+    def test_completion_rule_rejects_deadlines_future_and_unrelated_questions(self):
+        from dataclasses import replace
+        for question_text, answer_text in (
+            ("截止时间到了吗？", "到了。"),
+            ("你到极限了吗？", "到了。"),
+            ("你到崩溃边缘了吗？", "到了。"),
+            ("你的交租日到了吗？", "到了。"),
+            ("你到明天了吗？", "到了。"),
+            ("你吃午饭了吗？", "到了。"),
+            ("你到公司了吗？", "明天就到了。"),
+            ("你到公司了吗？", "还没到。"),
+            ("你到公司了吗？", "到了就告诉你。"),
+        ):
+            with self.subTest(question=question_text, answer=answer_text):
+                source = window(answer_text)
+                question = MessageRef(uuid4(), question_text, MessageSender.SELF, source.messages[0].occurred_at)
+                source = replace(source, messages=(question, *source.messages))
+                label = {k: v for k, v in row("1:0", "momentary_state", dependency="0:0", topic="travel").items() if k != "unit"}
+                fact = compile_labels(source, {"units": {"1:0": label}})[0]
+                self.assertEqual(fact["category"], "recent_state")
+                self.assertNotIn("完成问答", fact["interpretation_reason"])
+
+    def test_future_question_cannot_certify_an_earlier_completion(self):
+        from dataclasses import replace
+        source = window("到了。")
+        question = MessageRef(uuid4(), "你到学校了吗？", MessageSender.SELF, source.messages[0].occurred_at)
+        source = replace(source, messages=(*source.messages, question))
+        label = {k: v for k, v in row("0:0", "momentary_state", dependency="1:0").items() if k != "unit"}
+        fact = compile_labels(source, {"units": {"0:0": label}})[0]
+        self.assertEqual(fact["category"], "recent_state")
+
+    def test_arrival_answer_requires_a_supported_place_in_the_question(self):
+        from dataclasses import replace
+        source = window("抵达了。")
+        question = MessageRef(uuid4(), "你抵达东侧码头了吗？", MessageSender.SELF, source.messages[0].occurred_at)
+        source = replace(source, messages=(question, *source.messages))
+        label = {k: v for k, v in row("1:0", "momentary_state", dependency="0:0").items() if k != "unit"}
+        fact = compile_labels(source, {"units": {"1:0": label}})[0]
+        self.assertEqual(fact["category"], "common_fact")
+        self.assertIsNone(fact["valid_at"])
+        self.assertIsNone(fact["invalid_at"])

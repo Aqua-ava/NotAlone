@@ -254,8 +254,8 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
                    "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none"}
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
-                "name": "GroundedMemoryDraft", "id": "extract-1",
-                "args": {"units": [payload]},
+                "name": "GroundedMemoryLabels", "id": "extract-1",
+                "args": {"units": {payload["unit"]: {k: v for k, v in payload.items() if k != "unit"}}},
             }]),
             AIMessage(content="", tool_calls=[{
                 "name": "SourceVerificationOutput", "id": "verify-1",
@@ -306,8 +306,8 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
                    "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none"}
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
-                "name": "GroundedMemoryDraft", "id": "extract-default",
-                "args": {"units": [payload]},
+                "name": "GroundedMemoryLabels", "id": "extract-default",
+                "args": {"units": {payload["unit"]: {k: v for k, v in payload.items() if k != "unit"}}},
             }]),
             AIMessage(content="", tool_calls=[{
                 "name": "SourceVerificationOutput", "id": "verify-default",
@@ -353,8 +353,8 @@ class PostgresMemoryExtractionRunnerTest(unittest.TestCase):
                    "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none"}
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
-                "name": "GroundedMemoryDraft", "id": "extract-released",
-                "args": {"units": [payload]},
+                "name": "GroundedMemoryLabels", "id": "extract-released",
+                "args": {"units": {payload["unit"]: {k: v for k, v in payload.items() if k != "unit"}}},
             }]),
             AIMessage(content="", tool_calls=[{
                 "name": "SourceVerificationOutput", "id": "verify-released",

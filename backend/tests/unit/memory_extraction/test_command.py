@@ -1067,8 +1067,8 @@ class ExtractMainTest(unittest.TestCase):
                    "dependency": None, "unresolved": False, "confidence": 0.9, "sensitivity": "none"}
         model = ToolCallingFakeModel(responses=[
             AIMessage(content="", tool_calls=[{
-                "name": "GroundedMemoryDraft", "id": "extract-1",
-                "args": {"units": [payload]},
+                "name": "GroundedMemoryLabels", "id": "extract-1",
+                "args": {"units": {payload["unit"]: {k: v for k, v in payload.items() if k != "unit"}}},
             }]),
             AIMessage(content="", tool_calls=[{
                 "name": "SourceVerificationOutput", "id": "verify-1",
