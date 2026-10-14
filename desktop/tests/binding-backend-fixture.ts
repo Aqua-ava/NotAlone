@@ -9,7 +9,7 @@ import { isolatedAppEnvironment } from './isolated-environment';
 const execute = promisify(execFile);
 const project = path.resolve('..');
 const databaseScript = path.join(project, 'backend/tests/integration/server/binding_consent_support.py');
-export type BindingMode = 'ready' | 'no-channel';
+export type BindingMode = 'ready' | 'no-channel' | 'single-account';
 export type BindingData = ContactDatabase & { foreign_bindings: { contact_id: string; binding_id: string }[] };
 export type CliState = { sessions: { username: string; display_name: string; chat_type: string; last_timestamp: number }[];
   messages: Record<string, { local_id: number; text: string; create_time: number }[]> };

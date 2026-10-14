@@ -4,7 +4,7 @@ import path from 'node:path';
 import { PageHost } from './page-host';
 import { withControllerEnvironment } from './backend-fixture';
 import { ownResource } from './cleanup';
-import { withPausedForegroundFixture, withManualForegroundFixture, withVerifiedForegroundFixture } from '../foreground-backend-fixture';
+import { withPausedForegroundFixture, withManualForegroundFixture, withContinuousForegroundFixture } from '../foreground-backend-fixture';
 import { initialCliState, type BindingFixture } from '../binding-backend-fixture';
 import { ContactHttpProxy } from '../contact-http-proxy';
 import { foregroundObservationPaused, foregroundPausedWithManualDraft, foregroundManualConfirmation } from '../foreground-page-scenarios';
@@ -63,7 +63,7 @@ export async function foregroundVerified(browser: Browser, origin: string): Prom
   const name = '合格新观察返回唯一已确认绑定且不读取正文';
   process.stdout.write(`page_test_scenario: ${name}\n`);
   const released = ownResource();
-  await withVerifiedForegroundFixture(async (backend) => {
+  await withContinuousForegroundFixture(async (backend) => {
     const state = initialCliState();
     state.sessions[0].display_name = '唯一合成会话';
     await backend.setCli(state);
@@ -119,8 +119,7 @@ export async function foregroundVerified(browser: Browser, origin: string): Prom
         const editor = restored.getByRole('textbox', { name: '草稿', exact: true });
         await expect(picker).toHaveValue(contactId);
         await expect(editor).toHaveValue('唯一绑定下的合成草稿');
-        await restored.getByRole('button', { name: '确认微信会话对应联系人', exact: true }).click();
-        await expect(restored.getByText('本次联系人已由你确认。', { exact: true })).toBeVisible();
+        await expect(restored.getByText('本次联系人已通过微信会话绑定确认。', { exact: true })).toBeVisible();
         await expect(editor).toHaveValue('唯一绑定下的合成草稿');
         const otherContact = backend.data.contact_ids[1];
         await picker.selectOption(otherContact);
@@ -131,12 +130,9 @@ export async function foregroundVerified(browser: Browser, origin: string): Prom
           (await window.notalone.contacts.getState()).draft)).toBe('另一联系人的合成草稿');
         await restored.close();
         const different = await openHelper();
-        await expect(different.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue(otherContact);
-        await expect(different.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('另一联系人的合成草稿');
-        await expect(different.getByRole('button', { name: '生成候选', exact: true })).toBeDisabled();
-        await different.getByRole('button', { name: '确认微信会话对应联系人', exact: true }).click();
         await expect(different.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveValue(contactId);
-        await expect(different.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('');
+        await expect(different.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('唯一绑定下的合成草稿');
+        await expect(different.getByRole('button', { name: '生成候选', exact: true })).toBeEnabled();
         expect(await backend.tails()).toEqual(tails);
         const instruction = different.getByRole('textbox', { name: '本次要求', exact: true });
         await instruction.fill('正在编辑的合成要求');
@@ -159,8 +155,7 @@ export async function foregroundVerified(browser: Browser, origin: string): Prom
         const late = await nextHelper;
         const lateState = await late.evaluate(async () => window.notalone.foreground.getState());
         expect(lateState.phase).not.toBe('confirmed');
-        expect(lateState.confirmation).not.toBe('verified-binding');
-        expect(lateState.reason).toBe('observation_cancelled');
+        expect(lateState.suspendedByHelperFocus).toBe(true);
         proxy.holdRequestPaths.add('/api/sync/disable');
         const disable = manager.evaluate(async () => {
           await window.notalone.syncControl.refresh();
@@ -172,8 +167,7 @@ export async function foregroundVerified(browser: Browser, origin: string): Prom
           await late.close();
           const duringChange = await openHelper();
           const readingScope = await duringChange.evaluate(async () => window.notalone.foreground.getState());
-          expect(readingScope.phase).toBe('manual-required');
-          expect(readingScope.reason).toBe('reading_scope_changed');
+          expect(readingScope.suspendedByHelperFocus).toBe(true);
           expect(readingScope.generationBlock).toBe('foreground-confirmation-required');
           await duringChange.close();
         } finally { proxy.holdRequestPaths.clear(); proxy.release(); }

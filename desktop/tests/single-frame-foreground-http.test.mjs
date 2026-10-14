@@ -72,7 +72,6 @@ test('单帧采集时点经认证观察传到助手，定位不读取正文或�
     contacts.setConnection(1);
     await contacts.refreshContacts();
     const foreground = new ports.ForegroundController(backend, contacts);
-    foreground.setReplyEditGuard(() => false);
     try {
       const controllerStartedAt = performance.now();
       await foreground.observeBeforeShow();
@@ -90,17 +89,15 @@ test('单帧采集时点经认证观察传到助手，定位不读取正文或�
         routeElapsedMs: Math.round(routeElapsedMs), controllerElapsedMs: Math.round(controllerElapsedMs),
         realAppVerified: false,
       })}\n`);
-      foreground.setReplyEditGuard(() => true);
       await foreground.observeBeforeShow();
       const suggested = foreground.getState();
-      assert.equal(suggested.suggestedContactId, contactId);
+      assert.equal(suggested.confirmedContactId, contactId);
+      assert.equal(suggested.confirmation, 'verified-binding', '已有编辑不阻止可信绑定自动跟随');
       assert.equal(Date.parse(suggested.observedAt), Date.parse(capturedAt));
       const suggestionHtml = ports.renderToStaticMarkup(ports.createElement(ports.ForegroundPanel,
         { state: suggested, session: { state: contacts.getState() } }));
       assert.ok(suggestionHtml.includes(suggested.observedAt), '保留编辑时仍展示建议的采集时点');
-      assert.ok(suggestionHtml.includes('采集时的微信会话对应'));
       assert.ok(suggestionHtml.includes('之后的切换可能尚未反映'));
-      foreground.setReplyEditGuard(() => false);
       foreground.confirm({ contactId, contactScopeRevision: contacts.getState().scopeRevision,
         foregroundRevision: foreground.getState().foregroundRevision });
       const delivery = { received: deferred(), released: deferred() };

@@ -74,8 +74,6 @@ export class PageHost implements PageCommands {
     const replies = this.replies = installReplyBridge(this, this.backend, contacts, () => this.foreground.getGenerationBlock());
     const styleSamples = installStyleSampleBridge(this, this.backend, contacts, replies);
     this.foreground.onStateChanged(() => replies.refreshGenerationEligibility());
-    this.foreground.setReplyEditGuard(() => replies.hasEdits());
-    replies.onInputChanged(() => this.foreground.invalidatePending());
     installSourceDeletionBridge(this, this.backend, contacts, async (contactId) => {
       traces.invalidateSource();
       const styleChecking = styleSamples.invalidateSource(contactId);

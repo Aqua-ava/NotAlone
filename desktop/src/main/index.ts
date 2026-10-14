@@ -65,8 +65,6 @@ void app.whenReady().then(async () => {
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
   const styleSamples = installStyleSampleBridge(commands, backend, contacts, replies);
   foreground.onStateChanged(() => replies.refreshGenerationEligibility());
-  foreground.setReplyEditGuard(() => replies.hasEdits());
-  replies.onInputChanged(() => foreground.invalidatePending());
   installSourceDeletionBridge(commands, backend, contacts, async (contactId) => {
     traces.invalidateSource();
     const styleChecking = styleSamples.invalidateSource(contactId);
@@ -79,10 +77,11 @@ void app.whenReady().then(async () => {
   installSetupBridge(windows, new SetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());
   installStartupBridge(windows, diagnostics, backend);
-  app.on('before-quit', () => diagnostics.cancel());
+  app.on('before-quit', () => { foreground.stopContinuous(); diagnostics.cancel(); });
   installQuitLifecycle(backend, windows, () => replies.beginGenerationClosing(
     (receipt) => interruptAssistantGeneration(backend, receipt),
     (identity) => recoverAssistantGenerationReceipt(backend, identity)));
+  foreground.startContinuous();
   void backend.connect();
   const desktopControls = installDesktopControls(windows);
   app.on('will-quit', () => desktopControls.dispose());

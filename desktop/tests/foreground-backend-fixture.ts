@@ -1,11 +1,11 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { withBindingFixture, type BindingFixture } from './binding-backend-fixture';
+import { withBindingFixture, type BindingFixture, type BindingMode } from './binding-backend-fixture';
 
 type ProbeMode = 'paused' | 'manual' | 'verified';
 // 复用真实授权库、认证后端及原精确收尾；只替换外部probe可执行文件。
-async function withForegroundFixture(mode: ProbeMode, use: (fixture: BindingFixture) => Promise<void>, cleanupConfirmed?: () => void) {
-  await withBindingFixture(`notalone-foreground-${mode}-`, 'ready', async (fixture) => {
+async function withForegroundFixture(mode: ProbeMode, use: (fixture: BindingFixture) => Promise<void>, cleanupConfirmed?: () => void, bindingMode: BindingMode = 'ready') {
+  await withBindingFixture(`notalone-foreground-${mode}-`, bindingMode, async (fixture) => {
     const probe = fixture.environment().NOTALONE_SYNC_PROBE;
     if (probe !== path.join(fixture.directory, 'unavailable-probe')) throw new Error('本轮合成探针归属未确认。');
     const source = await readFile(path.resolve(`tests/fixtures/foreground-probe-${mode}.py`), 'utf8');
@@ -31,4 +31,8 @@ export async function withManualForegroundFixture(use: (fixture: ManualForegroun
       await writeFile(path.join(backend.directory, 'probe-state.json'), JSON.stringify({ wechat_in_front: visible }), { mode: 0o600 });
     } });
   }, cleanupConfirmed);
+}
+
+export async function withContinuousForegroundFixture(use: (fixture: BindingFixture) => Promise<void>, cleanupConfirmed?: () => void) {
+  await withForegroundFixture('verified', use, cleanupConfirmed, 'single-account');
 }

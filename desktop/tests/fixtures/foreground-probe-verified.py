@@ -12,7 +12,7 @@ if __name__ == "__main__":
     state_path = Path(__file__).parent / "probe-state.json"
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
     print(json.dumps({
-        "ok": True, "wechat_in_front": True,
+        "ok": True, "wechat_in_front": state.get("wechat_in_front", True),
         "display_name": state.get("display_name", "唯一合成会话"),
         "selected_row_name": state.get("selected_row_name", "唯一合成会话"),
         "capture_version": state.get("capture_version", "automatic-window-v2"),

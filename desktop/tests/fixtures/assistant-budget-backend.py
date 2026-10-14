@@ -94,10 +94,16 @@ class AssistantBudgetFixture(rewrite.DesktopRewriteFixture):
                 database_url=self.database_url, owner_id=owner_id, model_priority=priority,
                 on_input_budget=self.decisions.append, **configuration,
             )
+        sync_control = None
+        if os.environ.get("NOTALONE_CONTINUOUS_COMBINATION") == "1":
+            support_spec = importlib.util.spec_from_file_location("continuous_sync_support", Path(__file__).with_name("continuous-sync-support.py"))
+            self.continuous_support = importlib.util.module_from_spec(support_spec)
+            support_spec.loader.exec_module(self.continuous_support)
+            sync_control = self.continuous_support.build_sync(self, owner_id)
         backend = HttpBackend(create_app(
             database_url=self.database_url, owner_id=owner_id,
             token=f"synthetic-budget-public-{owner_id}", reply_service=service,
-            runtime_shutdown=priority.stop,
+            runtime_shutdown=priority.stop, sync_control=sync_control,
             skill_service=SkillService(management=PostgresSkillLibrary(self.database_url)),
         ), owner_id)
         self.addCleanup(backend.close)
@@ -115,6 +121,8 @@ def main() -> None:
         contacts = [fixture.prepare_contact(fixture.owner_id, "预算合成联系人甲", history),
                     fixture.prepare_contact(fixture.owner_id, "预算合成联系人乙", "乙的合成历史。")]
         foreign_contact = fixture.prepare_contact(fixture.other_owner_id, "另一合成用户", "另一用户的合成历史。")
+        if hasattr(fixture, "continuous_support"):
+            fixture.continuous_support.prepare_inputs(fixture, contacts)
         def connection():
             return {"port": int(fixture.backend.base_url.rsplit(":", 1)[1]), "token": fixture.backend.token}
         print(json.dumps({"ready": {**connection(), "contact_ids": contacts,
@@ -123,7 +131,10 @@ def main() -> None:
         for line in sys.stdin:
             command = json.loads(line)
             operation = command["operation"]
-            if operation == "plan":
+            if operation == "foreground":
+                fixture.continuous_support.observe(command["index"])
+                result = {}
+            elif operation == "plan":
                 fixture.reply_model.plans.append(command["plan"])
                 result = {}
             elif operation == "strategy_skills":

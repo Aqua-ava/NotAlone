@@ -53,6 +53,8 @@ def create_database(mode: str = "ready") -> dict:
             (other_owner, other_contact, "wechat", "other-owner-account", "outside-owner"),
             (owner, contact_a, "wechat", "other-account", "outside-account"),
         ):
+            if mode == "single-account" and parent == owner:
+                continue
             binding = repository.create_binding(owner_id=parent, contact_id=contact, channel=channel, account_scope=account, conversation_locator=locator, display_name="范围外绑定")
             foreign.append({"binding_id": str(binding.binding_id), "contact_id": str(contact)})
         return {"database_name": database_name, "database_url": database_url, "owner_id": str(owner),

@@ -25,6 +25,9 @@ export function ForegroundPanel({ state, session }: { state: ForegroundState; se
     : state.phase === 'unavailable' ? '前台定位暂不可用，请手动选择联系人' : '前台定位尚未观察';
   return <section aria-label="前台会话定位">
     <p role="status">{message}</p>
+    {state.generationBlock !== null && session?.state.selectedContactId && <p>
+      当前联系人未确认；以下保留内容属于{session.state.contacts.find((item) => item.contactId === session.state.selectedContactId)?.displayName}，请明确选择后再生成。
+    </p>}
     {session?.state.selectedContactId && state.generationBlock !== null && <button
       onClick={() => void session.confirmContact(session.state.selectedContactId!, state.foregroundRevision)}>
       确认本次联系人

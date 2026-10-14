@@ -8,9 +8,10 @@ import { build } from 'esbuild';
 import { withoutExternalTracing } from '../../scripts/test-environment.mjs';
 
 // 复用生产 Main/preload 公开操作；该夹具不会启动 App、页面或原生助手。
-export async function budgetPublicFixture(t, { toolHistory = false } = {}) {
+export async function budgetPublicFixture(t, { toolHistory = false, continuous = false } = {}) {
   assert.equal(process.env.CONDA_DEFAULT_ENV, 'NotAlone');
   const output = await build({ stdin: { contents: `
+    export { ForegroundController } from './src/main/foreground/controller';
     export { ContactSession } from './src/main/contacts/session';
     export { installReplyBridge } from './src/main/reply/bridge';
     export { createReplyBridge } from './src/preload/reply';
@@ -27,6 +28,8 @@ export async function budgetPublicFixture(t, { toolHistory = false } = {}) {
   const child = spawn(path.join(process.env.CONDA_PREFIX, 'bin/python'), ['tests/fixtures/assistant-budget-backend.py'], {
     cwd: process.cwd(), stdio: ['pipe', 'pipe', 'ignore'], env: withoutExternalTracing({ ...process.env,
       NOTALONE_DISABLE_DOTENV: '1',
+      NOTALONE_TEST_BINDING_DIRECTORY: directory,
+      NOTALONE_CONTINUOUS_COMBINATION: continuous ? '1' : '',
       NOTALONE_BUDGET_TOOL_HISTORY: toolHistory ? '1' : '',
       NOTALONE_ENV_FILE: path.join(directory, 'synthetic.env'), NOTALONE_BACKEND_INFO: path.join(directory, 'backend.info'),
       NOTALONE_DATABASE_URL: '', NOTALONE_OWNER_ID: '', NOTALONE_DEEPSEEK_API_KEY: '',
@@ -95,10 +98,12 @@ export async function budgetPublicFixture(t, { toolHistory = false } = {}) {
       sourceCount: contact.source_count,
     })) };
   });
+  const foreground = continuous ? new ports.ForegroundController(backend, contacts) : undefined;
+  t.after(() => foreground?.dispose());
   const replies = ports.installReplyBridge({
     handle: (channel, handler, role) => handlers.set(channel, { handler, role }),
     publish: (channel, state) => { for (const listener of listeners.get(channel) ?? []) listener(undefined, state); },
-  }, backend, contacts);
+  }, backend, contacts, () => foreground?.getGenerationBlock() ?? null);
   const bridge = ports.createReplyBridge({
     invoke: (channel, ...args) => Promise.resolve().then(() => handlers.get(channel).handler(...args)),
     on: (channel, listener) => { const set = listeners.get(channel) ?? new Set(); set.add(listener); listeners.set(channel, set); },
@@ -114,7 +119,7 @@ export async function budgetPublicFixture(t, { toolHistory = false } = {}) {
     const next = await command('configure', configuration); client.cancelPending(); client = new ports.JsonClient(next);
     generation += 1; for (const listener of backendListeners) listener();
   };
-  return { data, command, bridge, contacts, replies, request, connect, configure, handlers, backend, delivery,
+  return { data, command, bridge, contacts, replies, foreground, request, connect, configure, handlers, backend, delivery,
     message: event => { for (const observer of messageObservers) observer.message(event); },
     BackendRequestFailure: ports.BackendRequestFailure,
     renderSession: (state) => ports.renderToStaticMarkup(ports.createElement(ports.AssistantSessionPanel,
