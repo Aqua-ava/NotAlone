@@ -180,4 +180,16 @@
 2. **该入口没有硬计数门**：`EvaluationTransport`（`evaluation_http_budget.py:415`）已支持"发送前原子预约"，且`build_deepseek_model`接受`http_client`注入；但通用CLI没接它。要把32上限变成真实硬门，需一个私有包装：自建`EvaluationBudget`（cap32）→`httpx.Client(transport=EvaluationTransport(budget))`→传给`build_deepseek_model(http_client=...)`→跑16条→`summarize()`。此包装**尚未编写或验证**。
 3. 另外需要：冻结通用入口所需的源码SHA、只读一次根`.env`取`NOTALONE_DEEPSEEK_API_KEY`（该CLI另需`NOTALONE_EVALUATION_API_KEY`或改为显式注入）、以及如实声明"本结果由来源核验V支持，**不含**ADR-033／047要求的独立来源证明语义审核，故不能替代`quality_certified`或typed证明"。
 
-**结论**：任务07的门槛指标**可以**在不改产品代码、不引入审核人的前提下取得，成本≤32次请求；代价是证据强度低于受限入口（无逐窗语义审核、无来源指纹）。这条路是否走，属用户的取舍，本文件不代为决定，也未开始实现该包装。
+**结论**：任务07的门槛指标**可以**在不改产品代码、不引入审核人的前提下取得，成本≤32次请求；代价是证据强度低于受限入口（无逐窗语义审核、无来源指纹）。这条路是否走，属用户的取舍，本文件不代为决定。
+
+### 12.2 cap32 包装已完成并离线验证（2026-10-14，仍未执行）
+
+第12.1节第2点的包装已写好并验证：`capped_evaluator.py`（私有，0700／0600）。
+
+- 做法：自建`EvaluationBudget`（`request_limit`由调用方给出）→`httpx.Client/AsyncClient(transport=EvaluationTransport/EvaluationAsyncTransport)`→`ChatDeepSeek(http_client=..., http_async_client=...)`→`LangChainExtractionRuntime`＋`LangChainSourceVerificationRuntime`→逐条`evaluate_case`→`summarize()`。
+- 请求上限成为**真实硬门**：由`EvaluationTransport.handle_request`在每次发送前`budget.attempt()`原子预约；`EvaluationBudgetAbort`继承`BaseException`，SDK重试不能吞掉。
+- 离线控制**4／4通过**：上限2时三次用例最多只发出≤2次尝试且预算持久关闭（`budget_closed=True`）、缺凭据／非法上限拒绝、维度选择正好19条（16主集＋3补充）、无真实`.env`读取。
+- 全私有控制合计**46／46通过**；全部预算登记只落在临时HOME，**真实注册库仍为20个目录、未被本包装触碰**。
+- 仍**未执行**：真实场需要一次显式激活（真实凭据只读一次根`.env`、冻结通用入口所需源码SHA、写结果文档）。
+
+**如实边界**：本包装产出的是任务07自己的门槛指标；它**不**提供`quality_certified`、`typed_positive_certified`、来源指纹或逐窗语义审核，报告里必须照此声明。
