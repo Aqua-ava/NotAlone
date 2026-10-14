@@ -10,7 +10,7 @@ mkdir -p "${build_dir}"
 mkdir -p "${module_cache_dir}"
 
 env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
-    swiftc -parse-as-library \
+    swiftc -O -parse-as-library \
     -emit-library \
     -emit-module \
     -module-name NotAloneSyncCore \
@@ -35,7 +35,7 @@ env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
     -o "${build_dir}/libNotAloneSyncCore.dylib"
 
 env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
-    swiftc -parse-as-library \
+    swiftc -O -parse-as-library \
     "${probe_dir}/Sources/NotAloneSyncCLI/main.swift" \
     -I "${build_dir}" \
     -L "${build_dir}" \
