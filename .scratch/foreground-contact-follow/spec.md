@@ -132,4 +132,4 @@ ADR-042 的助手会话持久化、输入预算、显式替换、退出中断和
 - [持续助手会话规格](../assistant-session-context/spec.md)及[任务索引](../assistant-session-context/planning.md)：复用现有生成、保存、恢复和删除能力；本规格只补增量缺口。
 - [已有自动窗口定位规格与验证记录](../automatic-foreground-locator/spec.md)：原生预览移动/缩放获用户确认，正式 App 匹配仍有超时缺口。本次双帧改为单帧后必须重新验证相关行为。
 - 代码依据：[前台公开控制器](../../desktop/src/main/foreground/controller.ts)、[联系人选择](../../desktop/src/main/contacts/session.ts)、[回复状态](../../desktop/src/main/reply/session.ts)、[已有生成归属测试](../../desktop/tests/assistant-generation-ownership-http.test.mjs)、[原生观察](../../native/macos/Sources/NotAloneSyncCore/AutomaticSessionCapture.swift)。这些指针用于核对基线，不把内部文件位置固化为实施设计。
-- 待实施时测量观察间隔、超时、调度上限及资源开销；不静默放宽名称质量、联系人唯一性或来源有效性门槛。文档发布后进入 `to-tickets`，先确认粒度和真实阻塞关系，再发布逐张实现任务。
+- 待实施时测量观察间隔、超时、调度上限及资源开销；不静默放宽名称质量、联系人唯一性或来源有效性门槛。六项拆分及依赖已确认并逐张发布，见[任务索引](planning.md)；01、02、03 可独立开始，04 依赖 01/02，05 依赖 02/03，06 依赖 04/05。任务发布不表示功能已实施或验收通过。
