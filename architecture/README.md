@@ -78,6 +78,7 @@
 46. [ADR-046：维度依据绑定当前来源，第四门采用合取](adr/046-source-bound-dimension-evidence.md)
 47. [ADR-047：同次来源核验的有界提案与版本二语义依据](adr/047-bounded-source-semantic-proof.md)
 48. [ADR-048：记忆演进与自动 Skill 的受控生命周期](adr/048-memory-skill-evolution-lifecycle.md)
+49. [ADR-049：前台微信窗口自动布局与局部名称 OCR](adr/049-automatic-foreground-window-layout.md)
 
 ## 当前架构决策
 

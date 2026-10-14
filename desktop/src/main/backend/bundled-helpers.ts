@@ -82,18 +82,19 @@ async function verifiedBundledRuntime(resourcesDirectory: string | undefined): P
 function validRepositoryBuild(value: Record<string, unknown>): boolean {
   if (typeof value.buildSourceDigest !== 'string' || !/^[a-f0-9]{64}$/.test(value.buildSourceDigest)
     || value.sourceDeclaration !== `repository:${value.buildSourceDigest}` || !Array.isArray(value.buildSources)
-    || ![8, 9, 11].includes(value.buildSources.length)) return false;
+    || ![8, 9, 11, 12].includes(value.buildSources.length)) return false;
   const names = new Set<string>();
   for (const record of value.buildSources) {
     if (!record || typeof record !== 'object' || Array.isArray(record)
       || typeof record.name !== 'string' || names.has(record.name)
-      || !/^(scripts\/build_cli\.sh|Sources\/NotAloneSyncCore\/(ProbeCore|SessionCaptureSafety|RegionCalibration|MinimalRegionLayout|MinimalSessionCapture|CaptureSupport|SelectedSession|FrontSyncStatusReport|BackendStatusPolling)\.swift|Sources\/NotAloneSyncCLI\/main\.swift)$/.test(record.name)
+      || !/^(scripts\/build_cli\.sh|Sources\/NotAloneSyncCore\/(ProbeCore|SessionCaptureSafety|RegionCalibration|MinimalRegionLayout|MinimalSessionCapture|AutomaticSessionCapture|CaptureSupport|SelectedSession|FrontSyncStatusReport|BackendStatusPolling)\.swift|Sources\/NotAloneSyncCLI\/main\.swift)$/.test(record.name)
       || typeof record.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(record.sha256)) return false;
     names.add(record.name);
   }
   const minimalLayout = names.has('Sources/NotAloneSyncCore/MinimalRegionLayout.swift');
   if (minimalLayout !== names.has('Sources/NotAloneSyncCore/MinimalSessionCapture.swift')
     || (minimalLayout && !names.has('Sources/NotAloneSyncCore/RegionCalibration.swift'))
-    || names.size !== (minimalLayout ? 11 : names.has('Sources/NotAloneSyncCore/RegionCalibration.swift') ? 9 : 8)) return false;
+    || (names.has('Sources/NotAloneSyncCore/AutomaticSessionCapture.swift') && !minimalLayout)
+    || names.size !== (minimalLayout ? (names.has('Sources/NotAloneSyncCore/AutomaticSessionCapture.swift') ? 12 : 11) : names.has('Sources/NotAloneSyncCore/RegionCalibration.swift') ? 9 : 8)) return false;
   return createHash('sha256').update(JSON.stringify(value.buildSources)).digest('hex') === value.buildSourceDigest;
 }

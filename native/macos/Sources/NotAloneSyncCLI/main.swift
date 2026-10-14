@@ -24,9 +24,9 @@ private struct ProbeOptions {
       --interval seconds   观察间隔，默认 1.0 秒，最小 0.5 秒。
       --crop value         相对微信窗口的聊天区域，默认 0.34,0.10,0.66,0.80。
       --show-text          明确要求后才在终端显示短预览等文本；默认只输出字段有无。
-      --session            只做一次会话定位；当前没有已验证最小区域，安全暂停且不采集。
+      --session            自动定位当前前台微信窗口；内存分析布局，仅OCR两处会话名称。
       --json               与 --session 配合输出机器可读 JSON，供本机同步驱动解析。
-      --minimal-region     仅与 --session --json 配合；不能绕过最小区域安全政策。
+      --minimal-region     仅与 --session --json 配合；兼容参数；新输出automatic-window-v1表示整窗内存布局分析。
       --calibrate-minimal-region  用户框选五处最小区域，只输出待校验几何，不截图。
       --coordinates        仅与校准配合，从stdin读取最多4096字节的明确坐标，仅核对元数据。
       --self-test          运行合成数据自检，不截取屏幕。
@@ -112,7 +112,7 @@ struct NotAloneSyncCLI {
                 return
             }
             if let session = try SessionInvocation.parse(arguments: arguments) {
-                let result = await MinimalSessionCapture.observe(profilePath: ProcessInfo.processInfo.environment["NOTALONE_FOREGROUND_LAYOUT"])
+                let result = await AutomaticSessionCapture.observe()
                 if session.json {
                     printJsonLine(result)
                 } else {

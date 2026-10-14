@@ -57,7 +57,7 @@ export function BindingConsentPage({ contacts, navigate }: { contacts: ContactSe
       <div className="bindings-toolbar"><h2>由你确认后台读取范围</h2><button className="button" disabled={!!state.busy || state.phase === 'offline' || state.phase === 'loading'} onClick={() => void refresh()}>刷新会话与授权</button></div>
       <p>这里只查看一对一会话元数据。勾选会话、核对对应联系人并最终确认后，才授予该会话的后台文字读取权限。</p>
       <p>{state.syncEnabled === true ? '当前总开关已开启：新确认范围会立即允许后台读取。' : state.syncEnabled === false ? '当前总开关已关闭：确认只追加授权，开启总开关后才读取正文。' : '当前总开关状态未确认；若它已开启，新确认范围会立即允许后台读取。'}</p>
-      <p>应用运行且总开关开启时，可在微信不在前台时读取已确认范围。关闭同步或正常退出会停读；重新开启只在有效授权及基线之后补齐。前台定位需屏幕录制权限，只处理微信可见的最小区域。候选由你修改并亲自发送。</p>
+      <p>应用运行且总开关开启时，可在微信不在前台时读取已确认范围。关闭同步或正常退出会停读；重新开启只在有效授权及基线之后补齐。前台定位需屏幕录制权限，在本机内存分析当前微信窗口布局，仅识别会话名称；画面不保存、不上传，不识别聊天正文。候选由你修改并亲自发送。</p>
       <p>取消勾选只改变本次未提交选择。撤销后台读取授权须另行明确操作；已有历史资料仍保留，清除来源使用独立删除流程。</p>
     </section>
     {state.phase === 'loading' && <p role="status">正在读取会话与授权…</p>}

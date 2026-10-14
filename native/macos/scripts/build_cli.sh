@@ -20,6 +20,7 @@ env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
     "${probe_dir}/Sources/NotAloneSyncCore/RegionCalibration.swift" \
     "${probe_dir}/Sources/NotAloneSyncCore/MinimalRegionLayout.swift" \
     "${probe_dir}/Sources/NotAloneSyncCore/MinimalSessionCapture.swift" \
+    "${probe_dir}/Sources/NotAloneSyncCore/AutomaticSessionCapture.swift" \
     "${probe_dir}/Sources/NotAloneSyncCore/CaptureSupport.swift" \
     "${probe_dir}/Sources/NotAloneSyncCore/SelectedSession.swift" \
     "${probe_dir}/Sources/NotAloneSyncCore/FrontSyncStatusReport.swift" \

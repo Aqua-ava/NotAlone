@@ -3,7 +3,7 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test, selectMenu } from './app-fixture';
 
-test.skip(process.env.NOTALONE_FOREGROUND_LAYOUT_ACCEPTANCE !== '1', '须由主协调者安排有限的最小区域采集现场轮次');
+test.skip(true, 'ADR-049 已移除人工校准菜单；此历史用例停用，不作为自动定位验收入口');
 // 签名包清除隔离占位值，沿生产Resources完整性接线；开发验收指定仓库探针。
 test.use({ appEnvironment: process.env.NOTALONE_TEST_APP_EXECUTABLE ? { NOTALONE_SYNC_PROBE: '' }
   : { NOTALONE_SYNC_PROBE: path.resolve('../native/macos/build/cli/notalone-sync-probe') } });

@@ -338,3 +338,7 @@ Root核对两场20个记录进程、隔离目录及自有Finder窗口／目录�
 `tests/real-sync-quit-acceptance.spec.ts`默认跳过，仅显式`NOTALONE_REAL_SYNC_QUIT_ACCEPTANCE=1`、私有`NOTALONE_TEST_REAL_SYNC_SCOPE`与有限`test:app`运行。只由主Agent协调既有唯一联系人，隔离随机_test库、userData／握手和合成身份，明确关闭dotenv／模型／追踪，probe为不存在路径。解释器夹具复用真实生产服务与认证HTTP，只在CLI进程接缝拒绝越界参数／输出；sandbox仅devNull可写，真实CLI/WCDB固定同包字节。管理页会话列表请求拒绝且不执行，不能代签列表或新绑定。
 
 整场1／1、报告1.2m／exit0：Root实际置前空Finder及独立收据之后，正式后台线程新的tail启动并完成有效来源读取；正常菜单退出、原token stopped、自有后端和CLI退场、5秒无新增启动。类型与相关62／62合成检查通过。首两场脚本失败保留，三次受控启动、自有资源全部清理，包／签名／默认目录身份保持，见[独立摘要](../.scratch/unfinished-work/mac-real-sync-quit-final-20261012.json)。同包完整非OCR场景累计23，不认证新消息来信、双联系人、整个间隔外部App持续前台、模型质量或OCR；完整Mac20仍未收口。
+
+## 2026-10-14 自动前台定位
+
+按 ADR-049，正式 session 每轮分析当前前台唯一微信窗口的内存画面，仅将自动定位的顶部/选中行名称送入本机 OCR。移除用户校准与校验坐标菜单，不再依赖 `foreground-layout-profile.json`；旧 CLI 校准仅保留历史诊断，不能代替新入口验收。输出 `automatic-window-v1`，失焦、移动发生在采集中、布局不唯一或名称质量不足时拒绝本轮，下一轮重新定位。当前适配微信4.0.6/29387，未知版本失败关闭。上述原生能力需新版实机验证，合成测试不代表真实微信成功。

@@ -1,4 +1,4 @@
-// 缺少可追溯的最小定位区域profile时，session在任何OS动作前失败关闭。
+// 保留旧校准诊断错误码；正式session已按ADR-049自动定位，不再要求profile。
 public enum SessionCaptureSafety {
     public static let failureCode = "minimal_region_layout_unverified"
 }

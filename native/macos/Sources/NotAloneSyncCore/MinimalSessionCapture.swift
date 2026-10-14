@@ -121,7 +121,7 @@ private final class Capture {
     func sentinels() async throws -> [String: String] {
         var result: [String: String] = [:]
         for field in MinimalRegionLayout.sentinelFields {
-            result[field] = try digest(await image(field))
+            result[field] = try sessionImageDigest(await image(field))
         }
         return result
     }
@@ -298,7 +298,7 @@ func recognizeName(_ image: CGImage, policy: NameRecognitionPolicy = .baseline,
     return candidate
 }
 
-private func digest(_ image: CGImage) throws -> String {
+func sessionImageDigest(_ image: CGImage) throws -> String {
     let count = image.width * image.height * 4
     var bytes = [UInt8](repeating: 0, count: count)
     let valid = bytes.withUnsafeMutableBytes { buffer -> Bool in

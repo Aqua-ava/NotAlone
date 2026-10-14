@@ -86,6 +86,26 @@ class MacosFrontSessionProbeTest(unittest.TestCase):
         self.assertEqual(observation.quality.display_name_confidence, 0.96)
         self.assertEqual(observation.quality.selected_row_name_confidence, 0.91)
 
+    def test_automatic_window_capture_keeps_quality_contract(self) -> None:
+        stdout = json.dumps({
+            "ok": True, "wechat_in_front": True,
+            "display_name": "合成甲", "selected_row_name": "合成甲",
+            "capture_version": "automatic-window-v1",
+            "quality": {"layout_verified": True,
+                        "display_name_confidence": 0.96,
+                        "selected_row_name_confidence": 0.91},
+        })
+        observation = self._probe(
+            lambda command: FakeCommandResult(returncode=0, stdout=stdout)
+        ).observe_fresh(timeout_seconds=0.9)
+
+        self.assertEqual(observation.selected_row_name, "合成甲")
+        self.assertIsNotNone(observation.quality)
+        assert observation.quality is not None
+        self.assertEqual(observation.quality.capture_version, "automatic-window-v1")
+        self.assertEqual(observation.quality.display_name_confidence, 0.96)
+        self.assertEqual(observation.quality.selected_row_name_confidence, 0.91)
+
     def test_invalid_confidence_is_rejected_without_echoing_names(self) -> None:
         for value in [True, "0.99", -0.01, 1.01, float("nan"), float("inf")]:
             with self.subTest(value=value):

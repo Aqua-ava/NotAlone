@@ -45,7 +45,7 @@ class FrontSessionQuality:
     selected_row_name_confidence: float
 
     def __post_init__(self) -> None:
-        if self.capture_version != "minimal-region-v1" or any(
+        if self.capture_version not in ("minimal-region-v1", "automatic-window-v1") or any(
             isinstance(value, bool)
             or not isinstance(value, (int, float))
             or not math.isfinite(value)
@@ -267,7 +267,7 @@ def _optional_text(value: object) -> str | None:
 def _quality(envelope: dict[str, Any]) -> FrontSessionQuality | None:
     """旧协议、未校验布局或缺必要证据不获得质量资格。"""
 
-    if envelope.get("capture_version") != "minimal-region-v1":
+    if envelope.get("capture_version") not in ("minimal-region-v1", "automatic-window-v1"):
         return None
     quality = envelope.get("quality")
     if quality is None:
@@ -284,7 +284,7 @@ def _quality(envelope: dict[str, Any]) -> FrontSessionQuality | None:
         raise ProbeAdapterError("probe_output_invalid", "前台定位质量无效。")
     try:
         result = FrontSessionQuality(
-            capture_version="minimal-region-v1",
+            capture_version=envelope["capture_version"],
             display_name_confidence=quality["display_name_confidence"],
             selected_row_name_confidence=quality["selected_row_name_confidence"],
         )
