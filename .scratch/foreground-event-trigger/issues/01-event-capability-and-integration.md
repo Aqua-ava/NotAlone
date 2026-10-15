@@ -19,3 +19,9 @@ Blocked by: 无
 - 已创建仅元数据开发诊断 `native/macos/Diagnostics/SessionEventCapabilities.swift` 和有限入口 `desktop/tests/native-session-events.spec.ts`。这不修改正式 App，也不能证明事件触发已实现。
 - Swift 编译、独立 ad-hoc 签名严格检查、TypeScript 检查及差异空白检查通过，尚未运行新诊断。诊断进程的辅助功能准入不等于正式 App 的准入；无通知也不能在缺失手动切换记录时解释为微信不支持。
 - 双轴评审：Spec 0；Standards 曾发现窗口 AX 超时未继承应用对象设置，已逐对象设置 50ms、登记/注销各设 2 秒预算并复核为 0。结束定时器扣除准备耗时，外层仅终止本次子进程作有限收尾兜底。
+
+### 2026-10-15 用户要求可视化人工验收
+
+用户明确要求由Agent制作可视窗口，再由用户切换会话、自行核对。现有独立诊断增加非激活悬浮窗：显示权限／注册状态、最近五条内部通知、进出微信计数及90秒倒计时，提供“这次切换有提示／无提示”和结束按钮；点击立即反馈。缺辅助功能准入明确记未验证，不申请权限。通知相对时间不当作切换延迟，人工反馈不自动认证覆盖率。
+
+自动验证以诊断事件和人工反馈到可视状态／匿名摘要的边界执行；分类分离、未知输入拒绝、历史有界、关闭后停记及反馈不冒充证明已逐片red→green。`swift test --package-path native/macos`共87项，85通过、2项既有有限Vision实验跳过，耗时6.722秒；其中本主题3项通过。`npm test`类型检查及63项安全测试通过，安全组21.209秒，未运行真实App／浏览器／微信。`zsh -f native/macos/scripts/build_session_event_diagnostic.sh`构建和严格ad-hoc签名核验通过，`zsh -n`及`git diff --check`通过。独立Standards／Spec评审各0项发现。当前没有新的现场启动证据，不勾原验收，也没有把通知接入正式产品识别调度。

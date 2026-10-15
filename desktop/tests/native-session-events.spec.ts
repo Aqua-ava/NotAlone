@@ -3,7 +3,9 @@ import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { spawnApp, verifyAppTestLease } from './app-test-gate';
 
-test.skip(process.env.NOTALONE_SESSION_EVENT_DIAGNOSTIC !== '1', '仅主 Agent 在明确有限场次检查界面通知能力');
+const preview = process.env.NOTALONE_SESSION_EVENT_PREVIEW === '1';
+test.skip(process.env.NOTALONE_SESSION_EVENT_DIAGNOSTIC !== '1' && !preview,
+  '仅主 Agent 在明确有限场次检查界面通知能力或打开可视验收窗口');
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 
 test('统计微信界面通知能力，结果不代表联系人切换覆盖率已通过', async () => {
@@ -12,7 +14,8 @@ test('统计微信界面通知能力，结果不代表联系人切换覆盖率�
   expect(seconds).toBeGreaterThanOrEqual(5);
   test.setTimeout(seconds * 1000 + 15000);
   const executable = path.resolve('../native/macos/build/diagnostics/session-event-capabilities');
-  const child = await spawnApp(executable, ['--seconds', String(seconds)], { stdio: ['ignore', 'pipe', 'ignore'] });
+  const child = await spawnApp(executable, [...(preview ? ['--preview'] : []), '--seconds', String(seconds)],
+    { stdio: ['ignore', 'pipe', 'ignore'] });
   await writeFile(test.info().outputPath('session-events-owned.json'), JSON.stringify({ pid: child.pid, executable }),
     { mode: 0o600, flag: 'wx' });
   let pending = '';
@@ -49,6 +52,14 @@ test('统计微信界面通知能力，结果不代表联系人切换覆盖率�
             || !Number.isSafeInteger(value.foreground_transitions) || value.foreground_transitions < 0
             || value.images !== 0 || value.text_reads !== 0) throw new Error();
           events.push(value);
+        } else if (preview && value.event === 'session_events_preview_closed') {
+          if (events.length !== 2 || Object.keys(value).length !== 9
+            || value.received_events !== observed || value.foreground_transitions !== events[1].foreground_transitions
+            || !Number.isSafeInteger(value.human_with_prompt) || value.human_with_prompt < 0
+            || !Number.isSafeInteger(value.human_without_prompt) || value.human_without_prompt < 0
+            || value.contact_switch_coverage_verified !== false || value.captures !== 0
+            || value.ocr_calls !== 0 || value.text_reads !== 0) throw new Error();
+          events.push(value);
         } else throw new Error();
       } catch { invalid = true; }
     }
@@ -63,9 +74,9 @@ test('统计微信界面通知能力，结果不代表联系人切换覆盖率�
   expect(code).toBe(0);
   expect(invalid).toBe(false);
   expect(pending).toBe('');
-  expect(events).toHaveLength(2);
+  expect(events).toHaveLength(preview ? 3 : 2);
   await writeFile(test.info().outputPath('session-events-summary.json'), JSON.stringify({
-    events, receivedEvents: observed, contactSwitchCoverageVerified: false,
+    events, preview, receivedEvents: observed, contactSwitchCoverageVerified: false,
   }), { mode: 0o600 });
   process.stdout.write(`session_events_summary:${JSON.stringify(events[1])}\n`);
 });

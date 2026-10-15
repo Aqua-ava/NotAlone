@@ -5,6 +5,12 @@ import Foundation
 
 @MainActor
 final class SessionEventCapabilities {
+    var onUpdate: (() -> Void)?
+    var onFinish: (() -> Void)?
+    private(set) var accessibilityTrusted = false
+    private(set) var uniqueWechat = false
+    private(set) var registeredCategories: [String] = []
+    private(set) var evidence = SessionEventEvidence()
     private var observer: AXObserver?
     private var registrations: [(AXUIElement, CFString)] = []
     private var workspaceTokens: [NSObjectProtocol] = []
@@ -13,7 +19,8 @@ final class SessionEventCapabilities {
     private var rejected = 0
     private var foregroundTransitions = 0
     private var timer: Timer?
-    private var started = Date()
+    private var startedUptime: TimeInterval = 0
+    private var deadlineUptime: TimeInterval = 0
     private var processId: pid_t?
 
     private static let notifications: [(String, String)] = [
@@ -27,10 +34,13 @@ final class SessionEventCapabilities {
     ]
 
     func start(seconds: TimeInterval) {
-        started = Date()
+        startedUptime = ProcessInfo.processInfo.systemUptime
+        deadlineUptime = startedUptime + seconds
         let trusted = AXIsProcessTrusted()
         let applications = NSRunningApplication.runningApplications(withBundleIdentifier: "com.tencent.xinWeChat")
         let unique = applications.count == 1
+        accessibilityTrusted = trusted
+        uniqueWechat = unique
         if trusted, unique, let application = applications.first {
             processId = application.processIdentifier
             register(processId: application.processIdentifier)
@@ -40,15 +50,35 @@ final class SessionEventCapabilities {
             workspaceTokens.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
                 guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                       application.bundleIdentifier == "com.tencent.xinWeChat" else { return }
-                MainActor.assumeIsolated { self?.foregroundTransitions += 1 }
+                MainActor.assumeIsolated {
+                    guard let self, !self.evidence.closed else { return }
+                    self.foregroundTransitions += 1
+                    self.evidence.recordForegroundTransition()
+                    self.onUpdate?()
+                }
             })
         }
         emit(["event": "session_event_capabilities_ready", "accessibility_trusted": trusted,
               "unique_wechat": unique, "registered": supported, "rejected": rejected,
               "duration_seconds": Int(seconds), "images": 0, "text_reads": 0])
-        timer = Timer.scheduledTimer(withTimeInterval: max(0.01, seconds - Date().timeIntervalSince(started)), repeats: false) { [weak self] _ in
+        registeredCategories = supported.keys.sorted()
+        onUpdate?()
+        timer = Timer(timeInterval: max(0.01, remainingSeconds), repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.finish() }
         }
+        RunLoop.main.add(timer!, forMode: .common)
+    }
+
+    var remainingSeconds: TimeInterval { max(0, deadlineUptime - ProcessInfo.processInfo.systemUptime) }
+
+    var wechatIsForeground: Bool {
+        guard let processId else { return false }
+        return NSWorkspace.shared.frontmostApplication?.processIdentifier == processId
+    }
+
+    func recordHumanObservation(hadPrompt: Bool) {
+        evidence.recordHumanObservation(hadPrompt: hadPrompt)
+        onUpdate?()
     }
 
     private func register(processId: pid_t) {
@@ -89,16 +119,21 @@ final class SessionEventCapabilities {
     }
 
     private func received(_ notification: String) {
-        guard let processId,
+        guard !evidence.closed, let processId,
               NSWorkspace.shared.frontmostApplication?.processIdentifier == processId,
               let category = Self.notifications.first(where: { $0.0 == notification })?.1 else { return }
         counts[category, default: 0] += 1
+        let elapsed = Int((ProcessInfo.processInfo.systemUptime - startedUptime) * 1000)
+        evidence.recordNotification(category: category, elapsedMilliseconds: elapsed)
+        onUpdate?()
         // 每类只报告计数和相对时间；不输出事件对象、窗口身份或 AX 属性。
         emit(["event": "session_event_capability", "category": category,
-              "count": counts[category]!, "elapsed_ms": Int(Date().timeIntervalSince(started) * 1000)])
+              "count": counts[category]!, "elapsed_ms": elapsed])
     }
 
-    private func finish() {
+    func finish() {
+        guard !evidence.closed else { return }
+        evidence.close()
         timer?.invalidate()
         for token in workspaceTokens { NSWorkspace.shared.notificationCenter.removeObserver(token) }
         workspaceTokens.removeAll()
@@ -114,7 +149,7 @@ final class SessionEventCapabilities {
         observer = nil
         emit(["event": "session_event_capabilities_closed", "counts": counts,
               "foreground_transitions": foregroundTransitions, "images": 0, "text_reads": 0])
-        exit(EXIT_SUCCESS)
+        if let onFinish { onFinish() } else { exit(EXIT_SUCCESS) }
     }
 
     private func emit(_ object: [String: Any]) {
@@ -128,10 +163,17 @@ struct SessionEventDiagnostic {
     @MainActor
     static func main() {
         let arguments = Array(CommandLine.arguments.dropFirst())
-        guard arguments.count == 2, arguments[0] == "--seconds",
-              let seconds = Double(arguments[1]), seconds.isFinite, (5...120).contains(seconds) else {
-            fputs("只接受 --seconds 5..120；诊断未开始。\n", stderr)
+        let preview = arguments.first == "--preview"
+        let options = preview ? Array(arguments.dropFirst()) : arguments
+        guard options.count == 2, options[0] == "--seconds",
+              let seconds = Double(options[1]), seconds.isFinite,
+              (5...(preview ? 90.0 : 120.0)).contains(seconds) else {
+            fputs("只接受 --seconds 5..120 或 --preview --seconds 5..90；诊断未开始。\n", stderr)
             exit(EXIT_FAILURE)
+        }
+        if preview {
+            SessionEventPreview.run(seconds: seconds)
+            return
         }
         NSApplication.shared.setActivationPolicy(.prohibited)
         let diagnostic = SessionEventCapabilities()

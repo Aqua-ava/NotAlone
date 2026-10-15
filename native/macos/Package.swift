@@ -34,6 +34,16 @@ let package = Package(
             name: "NotAloneSyncApp",
             dependencies: ["NotAloneSyncCore"]
         ),
+        .target(
+            name: "SessionEventDiagnostics",
+            path: "Diagnostics",
+            exclude: ["SessionEventCapabilities.swift", "SessionEventPreview.swift"],
+            sources: ["SessionEventEvidence.swift"]
+        ),
+        .testTarget(
+            name: "SessionEventDiagnosticsTests",
+            dependencies: ["SessionEventDiagnostics"]
+        ),
         .testTarget(
             name: "NotAloneSyncProbeTests",
             dependencies: ["NotAloneSyncCore"]
