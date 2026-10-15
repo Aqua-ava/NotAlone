@@ -612,3 +612,9 @@ Apple指出独立窗口流不应用sourceRect，因此实现使用display仅包�
 构建新增 `notalone-header-change-source`，签名 identifier 为 `com.notalone.sync-probe.header-change`；正式 `notalone-sync-probe` 的 `com.notalone.sync-probe.cli` 和共享核心库身份保持。两可执行文件复用同一编译代码并分别签名，构建搬运仅作静态验证，不运行产物。新清单显式绑定两身份及各文件摘要；包内解析校验完整组、执行权限及固定系统 `codesign` 的静态签名／identifier结果，原始签名信息不进入日志。
 
 宿主仅从当前有效包的Resources读取独立helper；旧两文件包保留正式观察、停用事件源，外部正式probe也不触发兄弟文件搜索或同体回退。没有新增用户配置、Info.plist键、权限申请或TCC修改，正式观察和辅助源的原门禁、租约、stdout协议均不变。独立identifier可能对应不同系统权限责任，仍须新候选包同路径实测；本次代码和合成验证不移用上述对照作为新包验收通过。
+
+## 2026-10-15 当前Electron包Finder独立启动的预检缺口
+
+主Agent实际在Finder双击v5签名包，使用整体隔离的默认userData、合成空授权范围和隔离PG，未从Codex子进程启动App。45秒进程采样未见正式探针/独立源，测试保留失败，不能以采样未见证明绝对零尝试。失败后同一存活实例的两次鉴权公共前台观察均返回固定 `screen_capture_permission_missing`，当前独立启动的录屏预检未通过。本轮TCC日志未取得可认证归属，不将该结果归因于具体身份或签名机制，也不移用Codex祖进程准入。
+
+没有请求/接受新权限、修改TCC或系统开关；主Agent随后公开菜单正常退出、核对自有进程/握手退场、精确删测试库并恢复原userData身份。正式录屏、独立源和最终交付仍未认证；详见[本轮独立启动核验](../.scratch/mac-desktop-app/finder-native-permission-20261015.md)。
