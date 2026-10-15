@@ -10,7 +10,11 @@ const inside = (root, file) => file.startsWith(`${root}${path.sep}`);
 const identity = (metadata) => `${metadata.dev}:${metadata.ino}:${metadata.size}:${metadata.mtimeMs}:${metadata.ctimeMs}`;
 
 export function runtimeLayout(kind = 'repository-probe') {
-  if (kind === 'repository-probe') return { entry: 'notalone-sync-probe', library: 'libNotAloneSyncCore.dylib', directory: 'notalone-probe' };
+  if (kind === 'repository-probe') return { entry: 'notalone-sync-probe', headerChange: 'notalone-header-change-source',
+    library: 'libNotAloneSyncCore.dylib', directory: 'notalone-probe', executableIdentifiers: {
+      'notalone-sync-probe': 'com.notalone.sync-probe.cli',
+      'notalone-header-change-source': 'com.notalone.sync-probe.header-change',
+    } };
   throw new Error('helper_check_arguments');
 }
 
@@ -40,10 +44,10 @@ async function readBinary(file, deadline) {
   } finally { await handle.close(); }
 }
 
-async function tool(program, values, code, deadline) {
+async function tool(program, values, code, deadline, output = 'stdout') {
   const remaining = deadline - Date.now();
   if (remaining <= 0) throw new Error('helper_check_timeout');
-  try { return (await run(program, values, { timeout: Math.min(5000, remaining), maxBuffer: 1_048_576, env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } })).stdout; }
+  try { return (await run(program, values, { timeout: Math.min(5000, remaining), maxBuffer: 1_048_576, env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } }))[output]; }
   catch { throw new Error(code); }
 }
 
@@ -85,9 +89,16 @@ export async function inspectRuntime(input) {
     const arches = (await tool('/usr/bin/lipo', ['-archs', file], 'helper_check_not_macho', deadline)).trim().split(/\s+/);
     if (!arches.includes(input.arch)) throw new Error('helper_check_architecture');
     const header = await tool('/usr/bin/otool', ['-arch', input.arch, '-hv', file], 'helper_check_binary_type', deadline);
-    const type = file === path.join(root, layout.entry) ? 'EXECUTE' : 'DYLIB';
+    const signingIdentifier = layout.executableIdentifiers[path.relative(root, file)];
+    const type = signingIdentifier ? 'EXECUTE' : 'DYLIB';
     if (!new RegExp(`\\b${type}\\b`).test(header.split('\n').slice(1).join('\n'))) throw new Error('helper_check_binary_type');
     await tool('/usr/bin/codesign', ['--verify', '--strict', file], 'helper_check_signature', deadline);
+    if (signingIdentifier) {
+      await access(file, constants.X_OK);
+      const details = await tool('/usr/bin/codesign', ['--display', '--verbose=2', file], 'helper_check_signature', deadline, 'stderr');
+      const identifiers = details.split(/\r?\n/).filter(line => line.startsWith('Identifier='));
+      if (identifiers.length !== 1 || identifiers[0] !== `Identifier=${signingIdentifier}`) throw new Error('helper_check_signature');
+    }
     const commands = loadCommands(await tool('/usr/bin/otool', ['-arch', input.arch, '-l', file], 'helper_check_dependency_unresolved', deadline));
     const rpaths = [...commands.rpaths.map((value) => localPath(value, path.dirname(file), root)), ...inheritedRpaths];
     for (const dependency of commands.dependencies) {
@@ -112,12 +123,14 @@ export async function inspectRuntime(input) {
     }
     const final = await readBinary(file, deadline);
     if (snapshot.sha256 !== final.sha256 || snapshot.identity !== final.identity) throw new Error('helper_check_input_changed');
-    files.push({ name: path.relative(root, file), sha256: snapshot.sha256, bytes: snapshot.bytes, architectures: arches, signature: 'verified' });
+    files.push({ name: path.relative(root, file), sha256: snapshot.sha256, bytes: snapshot.bytes, architectures: arches,
+      signature: 'verified', ...(signingIdentifier ? { signingIdentifier } : {}) });
   }
   await access(path.join(root, layout.entry), constants.X_OK);
   await inspect(path.join(root, layout.entry));
   // 自研核心库独立核验，不能只依赖可执行文件的链接表。
   await inspect(path.join(root, layout.library));
+  await inspect(path.join(root, layout.headerChange));
   return { state: 'static_checks_passed', runtimeKind: input.runtimeKind ?? 'repository-probe', versionDeclaration: input.version, architecture: input.arch, files };
 }
 

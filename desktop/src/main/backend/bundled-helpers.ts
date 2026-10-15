@@ -2,11 +2,18 @@ import { constants } from 'node:fs';
 import { access, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
-const layout = { directory: 'notalone-probe', entry: 'notalone-sync-probe', library: 'libNotAloneSyncCore.dylib' } as const;
+const execute = promisify(execFile);
+const layout = { directory: 'notalone-probe', entry: 'notalone-sync-probe',
+  headerChange: 'notalone-header-change-source', library: 'libNotAloneSyncCore.dylib' } as const;
+const executableIdentifiers = { 'notalone-sync-probe': 'com.notalone.sync-probe.cli',
+  'notalone-header-change-source': 'com.notalone.sync-probe.header-change' } as const;
+type BundledRuntime = { probe: string; headerChange?: string };
 
 export async function resolveSyncProbePath(resourcesDirectory: string | undefined, configuredPath?: string): Promise<string | undefined> {
-  const bundledRuntime = () => verifiedBundledRuntime(resourcesDirectory);
+  const bundledRuntime = async () => (await verifiedBundledRuntime(resourcesDirectory))?.probe;
   if (!configuredPath) return bundledRuntime();
   if (!resourcesDirectory || !path.isAbsolute(resourcesDirectory)) return configuredPath;
   const resources = [path.resolve(resourcesDirectory)];
@@ -19,8 +26,13 @@ export async function resolveSyncProbePath(resourcesDirectory: string | undefine
   return bundledRuntime();
 }
 
+// 辅助流只使用当前有效包的独立身份，绝不从配置的外部探针旁猜测兄弟文件。
+export async function resolveHeaderChangeSourcePath(resourcesDirectory: string | undefined): Promise<string | undefined> {
+  return (await verifiedBundledRuntime(resourcesDirectory))?.headerChange;
+}
+
 // 仅核对包内清单和字节完整性，不运行输入、加载动态库或宣称发行者可信。
-async function verifiedBundledRuntime(resourcesDirectory: string | undefined): Promise<string | undefined> {
+async function verifiedBundledRuntime(resourcesDirectory: string | undefined): Promise<BundledRuntime | undefined> {
   if (!resourcesDirectory || !path.isAbsolute(resourcesDirectory)) return undefined;
   try {
     const resources = await realpath(resourcesDirectory);
@@ -44,7 +56,7 @@ async function verifiedBundledRuntime(resourcesDirectory: string | undefined): P
       || value.provenanceVerified !== false || value.runtimeValidated !== false || value.helperExecuted !== false || value.nativeAcceptance !== false
       || !Array.isArray(value.files) || value.files.length < 2 || value.files.length > 64) return undefined;
     if (!validRepositoryBuild(value)) return undefined;
-    const names = new Set<string>(); const deadline = Date.now() + 5000;
+    const names = new Set<string>(); const identifiers = new Map<string, unknown>(); const deadline = Date.now() + 5000;
     for (const entry of value.files) {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return undefined;
       const record = entry as Record<string, unknown>;
@@ -54,6 +66,7 @@ async function verifiedBundledRuntime(resourcesDirectory: string | undefined): P
         || typeof record.bytes !== 'number' || !Number.isSafeInteger(record.bytes) || record.bytes < 4 || record.bytes > 268_435_456
         || record.signature !== 'verified' || !Array.isArray(record.architectures) || !record.architectures.includes(architecture)) return undefined;
       names.add(record.name);
+      identifiers.set(record.name, record.signingIdentifier);
       const selected = path.join(root, record.name);
       if (await realpath(selected) !== selected) return undefined;
       const input = await open(selected, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -75,7 +88,19 @@ async function verifiedBundledRuntime(resourcesDirectory: string | undefined): P
     }
     if (!names.has(layout.entry) || !names.has(layout.library)) return undefined;
     const cli = path.join(root, layout.entry); await access(cli, constants.X_OK);
-    return cli;
+    if (!names.has(layout.headerChange)) return { probe: cli };
+    const helper = path.join(root, layout.headerChange); await access(helper, constants.X_OK);
+    for (const name of [layout.entry, layout.headerChange]) {
+      if (identifiers.get(name) !== executableIdentifiers[name]) return undefined;
+      const options = { timeout: Math.max(1, Math.min(2000, deadline - Date.now())), maxBuffer: 32_768,
+        env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } };
+      if (Date.now() >= deadline) return undefined;
+      await execute('/usr/bin/codesign', ['--verify', '--strict', path.join(root, name)], options);
+      const { stderr } = await execute('/usr/bin/codesign', ['--display', '--verbose=2', path.join(root, name)], options);
+      const declared = stderr.split(/\r?\n/).filter(line => line.startsWith('Identifier='));
+      if (declared.length !== 1 || declared[0] !== `Identifier=${executableIdentifiers[name]}`) return undefined;
+    }
+    return { probe: cli, headerChange: helper };
   } catch { return undefined; }
 }
 

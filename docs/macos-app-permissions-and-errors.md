@@ -604,3 +604,11 @@ Node保存边界实际红为缺branch／slot→7/7绿；生产桥接缺函数红
 Apple指出独立窗口流不应用sourceRect，因此实现使用display仅包含唯一目标窗过滤器与顶部sourceRect，首版仅支持原点显示器上的完整窗口；未知布局、多屏／离屏或尺寸异常停源，原周期观察保留。初始整窗布局帧与最多4Hz局部帧是额外开销，最长60秒一租，失败不循环重启。编译、签名及合成验证不证明实际局部裁剪、正式宿主权限、资源或延迟；这些仍须同版正式包实机记录，不据此变更既有权限验收结论。详见[ADR-057](../architecture/adr/057-header-change-triggered-foreground-observation.md)。
 
 同日主Agent用Computer Use只读核查系统设置录屏列表：已有已启用的“NotAloneApp”经“在访达中显示”指向旧Swift包`macos_app/build/NotAloneApp.app`，未看到当前Electron `com.notalone.desktop`条目。未改开关或添加权限；预检成功或祖先进程准入均不能据此证明当前签名包TCC归属，须由当前正式包与其包内探针实机单独核验。
+
+## 2026-10-15 持续顶部源与正式短探针分离签名身份
+
+主Agent正式包诊断显示，源初始化、布局、窗口／显示器／区域门、stream启动和首帧均通过；随后约2.5秒的下一轮正式单帧观察附近，持续流以固定 `connectionInterrupted` 分类终止。将下一轮观察延后800ms，中断也延后约806ms；仅复制相同原生代码到独立路径并改 identifier 的对照连续三次55秒完整到期、exit0，正式OCR继续。该对照支持身份隔离候选，不将底层系统机制、实际变化覆盖、TCC责任归属或性能一并标通过。
+
+构建新增 `notalone-header-change-source`，签名 identifier 为 `com.notalone.sync-probe.header-change`；正式 `notalone-sync-probe` 的 `com.notalone.sync-probe.cli` 和共享核心库身份保持。两可执行文件复用同一编译代码并分别签名，构建搬运仅作静态验证，不运行产物。新清单显式绑定两身份及各文件摘要；包内解析校验完整组、执行权限及固定系统 `codesign` 的静态签名／identifier结果，原始签名信息不进入日志。
+
+宿主仅从当前有效包的Resources读取独立helper；旧两文件包保留正式观察、停用事件源，外部正式probe也不触发兄弟文件搜索或同体回退。没有新增用户配置、Info.plist键、权限申请或TCC修改，正式观察和辅助源的原门禁、租约、stdout协议均不变。独立identifier可能对应不同系统权限责任，仍须新候选包同路径实测；本次代码和合成验证不移用上述对照作为新包验收通过。

@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { access, mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { build } from 'esbuild';
 import { repositoryBuildInvocation } from '../../scripts/prepare-probe.mjs';
+import { inspectRuntime } from '../../scripts/probe-runtime.mjs';
 
 test('仓库构建 shell 不执行合成启动配置，配置目录隔离于用户目录', { skip: process.platform !== 'darwin' }, async () => {
   const owned = await mkdtemp(path.join(tmpdir(), 'notalone-build-shell-'));
@@ -38,7 +39,7 @@ test('仓库探针公开准备入口仅构建搬运，现场隔离配置沿包�
     const report = JSON.parse(prepared.stdout);
     assert.equal(report.helperExecuted, false); assert.equal(report.nativeAcceptance, false);
     assert.equal(report.state, 'prepared'); assert.equal(report.runtimeKind, 'repository-probe');
-    assert.deepEqual((await readdir(destination)).sort(), ['libNotAloneSyncCore.dylib', 'manifest.json', 'notalone-sync-probe']);
+    assert.deepEqual((await readdir(destination)).sort(), ['libNotAloneSyncCore.dylib', 'manifest.json', 'notalone-header-change-source', 'notalone-sync-probe']);
     const manifest = JSON.parse(await readFile(path.join(destination, 'manifest.json'), 'utf8'));
     assert.match(manifest.buildSourceDigest, /^[a-f0-9]{64}$/);
     assert.equal(manifest.sourceDeclaration, `repository:${manifest.buildSourceDigest}`);
@@ -47,13 +48,20 @@ test('仓库探针公开准备入口仅构建搬运，现场隔离配置沿包�
     assert.ok(manifest.buildSources.some((source) => source.name === 'Sources/NotAloneSyncCore/ForegroundStatusPreview.swift'));
     assert.ok(manifest.buildSources.some((source) => source.name === 'Sources/NotAloneSyncCore/HeaderChangeDiagnostics.swift'));
     assert.equal(manifest.runtimeValidated, false); assert.equal(manifest.provenanceVerified, false);
+    const helper = path.join(destination, 'notalone-header-change-source');
+    const identifiers = Object.fromEntries(manifest.files.filter(file => file.signingIdentifier)
+      .map(file => [file.name, file.signingIdentifier]));
+    assert.deepEqual(identifiers, { 'notalone-sync-probe': 'com.notalone.sync-probe.cli',
+      'notalone-header-change-source': 'com.notalone.sync-probe.header-change' });
+    await access(helper, 1);
     assert.ok(!prepared.stdout.includes(owned));
     const occupied = spawnSync(process.execPath, [command, '--destination', destination], { encoding: 'utf8', timeout: 10_000 });
     assert.equal(occupied.status, 2); assert.equal(JSON.parse(occupied.stdout).code, 'helper_prepare_destination');
     const runner = path.join(owned, 'startup.mjs');
     await build({ stdin: { contents: `import { StartupDiagnostics } from './src/main/startup/diagnostics';
 import { loadBackendConfiguration, backendEnvironment } from './src/main/backend/config';
-const resources = process.argv[2], userData = process.argv[3];
+import { resolveHeaderChangeSourcePath } from './src/main/backend/bundled-helpers';
+const resources = process.env.NOTALONE_SYNTHETIC_NO_RESOURCES === '1' ? undefined : process.argv[2], userData = process.argv[3];
 const diagnostics = new StartupDiagnostics(userData, resources);
 let paths = await diagnostics.getPaths();
 if (process.argv[4] === 'save') {
@@ -62,7 +70,8 @@ if (process.argv[4] === 'save') {
 }
 const config = await loadBackendConfiguration(userData, resources);
 config.projectDirectory = userData;
-process.stdout.write(JSON.stringify({ paths, probe: backendEnvironment(config, userData).NOTALONE_SYNC_PROBE }));`, resolveDir: process.cwd(), sourcefile: 'probe-startup.ts', loader: 'ts' }, outfile: runner, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+process.stdout.write(JSON.stringify({ paths, probe: backendEnvironment(config, userData).NOTALONE_SYNC_PROBE,
+  headerChange: await resolveHeaderChangeSourcePath(resources) }));`, resolveDir: process.cwd(), sourcefile: 'probe-startup.ts', loader: 'ts' }, outfile: runner, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
     const startup = (mode = 'read', extra = {}) => spawnSync(process.execPath, [runner, resources, userData, mode], {
       encoding: 'utf8', timeout: 10_000, env: { PATH: '/usr/bin:/bin', NOTALONE_BACKEND_INFO: path.join(userData, 'backend.info'), ...extra },
     });
@@ -70,9 +79,56 @@ process.stdout.write(JSON.stringify({ paths, probe: backendEnvironment(config, u
     const initial = startup(); assert.equal(initial.status, 0);
     assert.equal(JSON.parse(initial.stdout).paths.syncProbePath, probe);
     assert.equal(JSON.parse(initial.stdout).probe, probe);
+    assert.equal(JSON.parse(initial.stdout).headerChange, helper);
     assert.equal(JSON.parse(initial.stdout).paths.wechatCliPath, '');
     // 新来源必须完整成组，不能以局部源清单通过包内核验。
     const manifestPath = path.join(destination, 'manifest.json');
+    const external = startup('read', { NOTALONE_SYNC_PROBE: path.join(userData, 'external-probe') });
+    assert.equal(JSON.parse(external.stdout).probe, path.join(userData, 'external-probe'));
+    assert.equal(JSON.parse(external.stdout).headerChange, helper, '外部正式probe也只用当前有效包内的独立helper。');
+    const unbundled = startup('read', { NOTALONE_SYNC_PROBE: path.join(userData, 'external-probe'), NOTALONE_SYNTHETIC_NO_RESOURCES: '1' });
+    assert.equal(JSON.parse(unbundled.stdout).headerChange, undefined, '无有效包时不查外部probe的兄弟文件。');
+
+    const helperBytes = await readFile(helper);
+    await chmod(helper, 0o644);
+    assert.equal(JSON.parse(startup().stdout).paths.syncProbePath, '');
+    assert.equal(JSON.parse(startup().stdout).headerChange, undefined, 'helper没有X位时整组停用。');
+    await chmod(helper, 0o755);
+    await rm(helper);
+    assert.equal(JSON.parse(startup().stdout).paths.syncProbePath, '');
+    assert.equal(JSON.parse(startup().stdout).headerChange, undefined, '清单声明的helper缺失时不得回退短probe。');
+    await writeFile(helper, helperBytes, { mode: 0o755 });
+
+    const wrongDeclaration = structuredClone(manifest);
+    wrongDeclaration.files.find(file => file.name === 'notalone-header-change-source').signingIdentifier = 'com.notalone.sync-probe.cli';
+    await writeFile(manifestPath, JSON.stringify(wrongDeclaration));
+    assert.equal(JSON.parse(startup().stdout).headerChange, undefined, '清单中的helper身份必须明确独立。');
+    await writeFile(manifestPath, JSON.stringify(manifest));
+
+    // 即使清单摘要同步更新并自报独立身份，也不能把同一签名的短probe冒充持续源。
+    const probeBytes = await readFile(probe);
+    await writeFile(helper, probeBytes);
+    const sameIdentity = structuredClone(manifest);
+    Object.assign(sameIdentity.files.find(file => file.name === 'notalone-header-change-source'), {
+      sha256: createHash('sha256').update(probeBytes).digest('hex'), bytes: probeBytes.length,
+    });
+    await writeFile(manifestPath, JSON.stringify(sameIdentity));
+    assert.equal(JSON.parse(startup().stdout).headerChange, undefined);
+    await assert.rejects(inspectRuntime({ directory: destination, runtimeKind: 'repository-probe',
+      arch: manifest.architecture, version: manifest.versionDeclaration }), /helper_check_signature/);
+    await writeFile(helper, helperBytes);
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    assert.equal(JSON.parse(startup().stdout).headerChange, helper);
+
+    const oldFiles = structuredClone(manifest);
+    oldFiles.files = oldFiles.files.filter(file => file.name !== 'notalone-header-change-source');
+    for (const file of oldFiles.files) delete file.signingIdentifier;
+    await writeFile(manifestPath, JSON.stringify(oldFiles));
+    const oldReport = JSON.parse(startup().stdout);
+    assert.equal(oldReport.paths.syncProbePath, probe, '旧两文件包仍可执行正式观察。');
+    assert.equal(oldReport.headerChange, undefined, '未声明的兄弟文件不能成为辅助源，绝不复用正式probe。');
+    await writeFile(manifestPath, JSON.stringify(manifest));
+
     const incomplete = structuredClone(manifest);
     incomplete.buildSources = incomplete.buildSources.filter((source) => !source.name.endsWith('/HeaderChangeGeometry.swift'));
     incomplete.buildSourceDigest = createHash('sha256').update(JSON.stringify(incomplete.buildSources)).digest('hex');

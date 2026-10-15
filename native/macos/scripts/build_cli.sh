@@ -51,6 +51,9 @@ env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
     -Xlinker "@executable_path" \
     -o "${build_dir}/notalone-sync-probe"
 
+# 代码相同但进程签名身份独立，避免正式短截图结束时打断持续顶部流。
+cp "${build_dir}/notalone-sync-probe" "${build_dir}/notalone-header-change-source"
+
 # 签名身份只接受显式配置；缺省使用ad-hoc，不查询或选择钥匙串中的证书。
 signing_identity="${NOTALONE_PROBE_SIGNING_IDENTITY:--}"
 codesign --force --sign "${signing_identity}" \
@@ -59,6 +62,9 @@ codesign --force --sign "${signing_identity}" \
 codesign --force --sign "${signing_identity}" \
     --identifier "com.notalone.sync-probe.cli" \
     "${build_dir}/notalone-sync-probe"
+codesign --force --sign "${signing_identity}" \
+    --identifier "com.notalone.sync-probe.header-change" \
+    "${build_dir}/notalone-header-change-source"
 if [[ "${signing_identity}" == "-" ]]; then
     echo "签名方式：ad-hoc；不代表屏幕录制权限身份稳定或已验证。"
 else
@@ -66,3 +72,4 @@ else
 fi
 
 echo "已构建：${build_dir}/notalone-sync-probe"
+echo "已构建：${build_dir}/notalone-header-change-source"
