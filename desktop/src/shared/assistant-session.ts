@@ -11,6 +11,7 @@ export interface SavedAssistantTurn {
   reply: { replyRequestId: string; candidates: ReplyCandidate[]; contextEvidenceIds: string[]; usedSkill?: ReplyUsedSkill | null; inputBudget?: AssistantInputBudget } | null;
   placeholder: string | null;
   interruptionReason: 'app_quit' | null;
+  generationActive?: boolean;
 }
 export interface SavedAssistantSession {
   phase: 'idle' | 'loading' | 'ready' | 'failed';

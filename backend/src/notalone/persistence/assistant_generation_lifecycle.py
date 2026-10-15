@@ -127,6 +127,14 @@ def interrupt_generation_in_transaction(
                     or request is not None and (request["state"] != "failed" or attempt is None)):
                 raise AssistantSessionPersistenceError("退出中断凭证不完整。")
             return _receipt(turn)
+        if turn["state"] == "failed" and request is None:
+            # 预检可已保存失败输入但尚未领取 C；同 owner 锁下封键后才确认零租约。
+            cursor.execute(
+                "INSERT INTO public.reply_invalidated_key (owner_id, contact_id, idempotency_key) "
+                "VALUES (%s, %s, %s) ON CONFLICT (owner_id, contact_id, idempotency_key) DO NOTHING",
+                (scope.owner_id, scope.contact_id, request_key),
+            )
+            return _receipt(turn)
         if turn["state"] == "failed" and request is not None and request["state"] == "failed":
             # 历史 failed 不足以证明任务停止；同事务复验 C 最新 attempt 且没有运行租约。
             terminal = cursor.execute(

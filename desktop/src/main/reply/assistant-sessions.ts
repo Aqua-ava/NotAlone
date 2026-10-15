@@ -108,6 +108,7 @@ export async function readAssistantSession(backend: Pick<BackendHost, 'getConnec
     if (!isRecord(item) || !isUuid(item.turn_id) || !isUuid(item.input_version_id) || !isUuid(item.request_key)
       || !['running', 'completed', 'failed', 'redacted', 'unavailable'].includes(item.state as string)
       || !(item.interruption_reason === null || item.state === 'failed' && item.interruption_reason === 'app_quit')
+      || (item.generation_active !== undefined && typeof item.generation_active !== 'boolean')
       || (item.input !== null && (!isRecord(item.input) || !isRecord(item.input.content)))
       || (item.placeholder !== null && !['相关来源已删除', '相关来源不可用'].includes(item.placeholder as string))) throw new Error('已保存讨论格式无效。');
     const turnId = item.turn_id.toLowerCase();
@@ -116,7 +117,8 @@ export async function readAssistantSession(backend: Pick<BackendHost, 'getConnec
     known.add(turnId);
     return { turnId, inputVersionId: item.input_version_id.toLowerCase(), requestKey: item.request_key.toLowerCase(),
       state: item.state as SavedAssistantTurn['state'], input: item.input as SavedAssistantTurn['input'],
-      reply: item.reply === null ? null : readReplyResult(item.reply), interruptionReason: item.interruption_reason as 'app_quit' | null, placeholder: item.placeholder as string | null };
+      reply: item.reply === null ? null : readReplyResult(item.reply), interruptionReason: item.interruption_reason as 'app_quit' | null, placeholder: item.placeholder as string | null,
+      ...(typeof item.generation_active === 'boolean' ? { generationActive: item.generation_active } : {}) };
   });
   const versions = new Set<string>();
   const inputs: SavedAssistantInput[] = value.inputs.map((item: unknown) => {

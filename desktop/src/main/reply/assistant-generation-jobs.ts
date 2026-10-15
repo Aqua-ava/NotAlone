@@ -27,7 +27,7 @@ export type OwnedAssistantGeneration = Readonly<{ identity: AssistantGenerationI
 export type PendingAssistantGenerationReceipt = AssistantGenerationIdentity & AssistantGenerationReceipt;
 type ActiveJob = { controller: AbortController; viewRevision: number; stage: 'created' | 'preparing' | 'prepared' | 'queued' | 'requesting';
   receipt?: AssistantGenerationReceipt; preparationSettled: Promise<void>; settlePreparation: () => void;
-  preparationCommand?: AssistantPreparationCommandIdentity; transportEnded?: boolean; failedResponseReceived?: true; canRetry?: boolean; terminal?: boolean; settledWithoutGeneration?: true; closingTask?: Promise<void>; stopping?: AssistantGenerationStopping };
+  preparationCommand?: AssistantPreparationCommandIdentity; transportEnded?: boolean; failedResponseReceived?: true; failedLeaseSettled?: true; canRetry?: boolean; terminal?: boolean; settledWithoutGeneration?: true; closingTask?: Promise<void>; stopping?: AssistantGenerationStopping };
 
 const sameOwner = (left: AssistantGenerationOwner, right: AssistantGenerationOwner) =>
   left.connectionGeneration === right.connectionGeneration && left.contactId === right.contactId && left.sessionId === right.sessionId;
@@ -264,9 +264,12 @@ export class AssistantGenerationJobs {
     if (this.closing) this.deliverClosingReceipt(job, active);
   }
   // 业务失败可结束本地等待，但历史 failed 不能证明 C 当前没有运行租约。
-  failedResponseReceived(job: OwnedAssistantGeneration, canRetry = false): void {
+  failedResponseReceived(job: OwnedAssistantGeneration, canRetry = false, generationActive?: boolean): void {
     const active = this.jobs.get(job);
-    if (active) { active.failedResponseReceived = true; active.canRetry = canRetry; }
+    if (active) {
+      active.failedResponseReceived = true; active.canRetry = canRetry;
+      if (generationActive === false) active.failedLeaseSettled = true;
+    }
   }
   requestStarted(job: OwnedAssistantGeneration): void {
     const active = this.jobs.get(job);
@@ -372,9 +375,8 @@ export class AssistantGenerationJobs {
     this.executing.delete(job as OwnedAssistantGeneration);
     this.waiting.get(job as OwnedAssistantGeneration)?.reject();
     if (active) { active.transportEnded = true; active.settlePreparation(); }
-    // 客户端结束不等于后端结束；只有实际完成或未重新发起的终态回执可释放身份。
-    if (terminal || active?.failedResponseReceived || active?.terminal || active?.settledWithoutGeneration || active?.stage === 'created' || active?.receipt?.state === 'completed'
-      || active?.receipt?.state === 'failed' && active.stage === 'prepared') {
+    // 失败响应和历史 failed 不足以结算；只有当前实际租约复验终止，才释放失败身份。
+    if (terminal || active?.failedLeaseSettled || active?.terminal || active?.settledWithoutGeneration || active?.stage === 'created' || active?.receipt?.state === 'completed') {
       if (active) active.terminal = true;
       this.jobs.delete(job);
     }

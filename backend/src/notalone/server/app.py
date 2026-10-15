@@ -2725,6 +2725,7 @@ def _assistant_turn_payload(turn: AssistantTurn) -> dict[str, object]:
         "turn_id": str(turn.turn_id), "input_version_id": str(turn.input_version_id),
         "request_key": str(turn.request_key), "state": turn.state, "input": turn.input,
         "interruption_reason": turn.interruption_reason,
+        **({"generation_active": turn.generation_active} if turn.generation_active is not None else {}),
         "reply": _reply_payload(turn.reply) if turn.reply is not None else None,
         "placeholder": (
             "相关来源已删除" if turn.state == "redacted"

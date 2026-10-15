@@ -406,11 +406,13 @@ export class ReplySession {
     if (signal.aborted || job.identity.connectionGeneration !== this.backend.getConnectionGeneration()) return;
     try {
       const saved = await readAssistantSession(this.backend, job.identity.contactId, job.identity.sessionId, signal);
-      if (saved.generation === job.identity.connectionGeneration
-        && saved.generation === this.backend.getConnectionGeneration() && saved.turns.some((turn) =>
+      const failed = saved.turns.find((turn) =>
           turn.turnId === receipt.turnId && turn.inputVersionId === receipt.inputVersionId
-          && turn.requestKey === receipt.requestKey && turn.state === 'failed')) {
-        this.generationJobs.failedResponseReceived(job, failure.code === 'reply_timeout' || failure.code === 'assistant_session_save_failed' || (failure.status ?? 0) >= 500);
+          && turn.requestKey === receipt.requestKey && turn.state === 'failed');
+      if (saved.generation === job.identity.connectionGeneration
+        && saved.generation === this.backend.getConnectionGeneration() && !signal.aborted
+        && this.generationJobs.isActive(job) && failed) {
+        this.generationJobs.failedResponseReceived(job, failure.code === 'reply_timeout' || failure.code === 'assistant_session_save_failed' || (failure.status ?? 0) >= 500, failed.generationActive);
       }
     } catch { /* 未知读取不能证明失败；原停止身份仍由实际中断裁定。 */ }
   }
@@ -1428,11 +1430,12 @@ export class ReplySession {
             const terminalReceipt = receipt;
             const terminal = verified.turns.find((turn) => turn.turnId === terminalReceipt.turnId
               && turn.requestKey === attempt.requestKey && turn.inputVersionId === terminalReceipt.inputVersionId);
-            if (verified.generation === generation && terminal) {
+            if (job && verified.generation === generation && generation === this.backend.getConnectionGeneration()
+              && this.generationJobs.isActive(job) && terminal) {
               generationTerminal = terminal.state === 'completed'
                 || ['redacted', 'unavailable'].includes(terminal.state) && terminal.input === null && terminal.reply === null;
               if (terminal.state === 'failed' && job) this.generationJobs.failedResponseReceived(job,
-                !budgetFailure && !providerLimit && (failure?.code === 'reply_timeout' || failure?.code === 'assistant_session_save_failed' || (failure?.status ?? 0) >= 500));
+                !budgetFailure && !providerLimit && (failure?.code === 'reply_timeout' || failure?.code === 'assistant_session_save_failed' || (failure?.status ?? 0) >= 500), terminal.generationActive);
             }
           }
         } catch (readError) {

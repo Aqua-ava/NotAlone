@@ -870,8 +870,19 @@ class PostgresAssistantSessionStore:
         self, connection: Any, scope: ContactScope, session_id: UUID,
     ) -> tuple[AssistantTurn, ...]:
         rows = connection.execute(
-            "SELECT * FROM public.assistant_session_turn WHERE owner_id = %s "
-            "AND contact_id = %s AND session_id = %s ORDER BY created_at, id",
+            "SELECT turn.*, CASE WHEN EXISTS (SELECT 1 FROM public.reply_attempt AS attempt "
+            "WHERE attempt.reply_request_id = request.id AND attempt.state = 'running') THEN true "
+            "WHEN request.state IN ('failed', 'completed', 'expired') AND EXISTS ("
+            "SELECT 1 FROM public.reply_attempt AS attempt WHERE attempt.reply_request_id = request.id "
+            "AND attempt.number = request.attempt AND attempt.state IN ('failed', 'completed', 'expired')) "
+            "THEN false ELSE NULL END AS generation_active "
+            "FROM public.assistant_session_turn AS turn LEFT JOIN public.reply_request AS request "
+            "ON request.owner_id = turn.owner_id AND request.contact_id = turn.contact_id "
+            "AND request.idempotency_key = turn.idempotency_key "
+            "AND request.conversation_binding_id = turn.conversation_binding_id "
+            "AND (turn.reply_request_id IS NULL OR request.id = turn.reply_request_id) "
+            "WHERE turn.owner_id = %s AND turn.contact_id = %s AND turn.session_id = %s "
+            "ORDER BY turn.created_at, turn.id",
             (scope.owner_id, scope.contact_id, session_id),
         ).fetchall()
         from notalone.persistence.reply_store import PostgresReplyStore
@@ -920,4 +931,6 @@ class PostgresAssistantSessionStore:
             input_version_id=row["input_version_id"], request_key=row["idempotency_key"],
             state=row["state"], input=row["input_payload"], reply=reply,
             interruption_reason=row.get("interruption_reason") if row["state"] == "failed" else None,
+            generation_active=(row.get("generation_active")
+                               if row["state"] not in ("redacted", "unavailable") else None),
         )

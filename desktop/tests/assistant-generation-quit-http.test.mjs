@@ -85,9 +85,15 @@ async function withPublicFixture(use) {
         response.on('data', (chunk) => chunks.push(chunk));
         response.on('end', () => {
           const body = Buffer.concat(chunks); item.completed = true;
-          gate.arrived.resolve(JSON.parse(body.toString('utf8')));
+          const payload = JSON.parse(body.toString('utf8'));
+          gate.arrived.resolve(payload);
           void gate.release.promise.then(() => { if (gate.failResponse) outgoing.destroy();
-            else { outgoing.writeHead(response.statusCode, response.headers); outgoing.end(body); } });
+            else if (gate.project) {
+              const projected = Buffer.from(JSON.stringify(gate.project(payload)));
+              const headers = { ...response.headers, 'content-length': projected.length };
+              delete headers['transfer-encoding'];
+              outgoing.writeHead(response.statusCode, headers); outgoing.end(projected);
+            } else { outgoing.writeHead(response.statusCode, response.headers); outgoing.end(body); } });
         });
       });
       upstream.on('error', () => { if (!outgoing.headersSent) outgoing.writeHead(502, { 'content-type': 'application/json' }); outgoing.end('{"error":"synthetic_proxy_failure"}'); });
@@ -126,7 +132,7 @@ async function withPublicFixture(use) {
         removeListener: (channel, listener) => listeners.get(channel)?.delete(listener) });
       return { contacts, replies, bridge };
     };
-    const gateResponse = (matches, failResponse = false) => { const gate = { matches, failResponse, entered: false, arrived: deferred(), release: deferred() }; gates.push(gate); return gate; };
+    const gateResponse = (matches, failResponse = false, project) => { const gate = { matches, failResponse, project, entered: false, arrived: deferred(), release: deferred() }; gates.push(gate); return gate; };
     const gateRequest = (matches) => { const gate = { matches, entered: false, arrived: deferred(), release: deferred() }; requestGates.push(gate); return gate; };
     try {
       await host.connect(); assert.notEqual(host.getConnectionGeneration(), undefined);
@@ -291,34 +297,50 @@ test('合法最大改写要求加语气说明后中断重试完整保留权威�
 });
 
 
-for (const specimen of [
-  { label: '大草稿', content: { type: 'rewrite_draft', draft_text: '甲'.repeat(100000), user_instruction: null,
-    include_relationship_context: false }, calls: 0, phase: 'failed' },
-  { label: 'Unicode声明', content: { type: 'initiate_conversation', purpose: '🚲'.repeat(4096),
-    user_instruction: '🕊'.repeat(4096) }, calls: 1, phase: 'ready' },
-]) test(`已保存合法${specimen.label}中断输入可经公开重试完整提交，保留原字符合同及预算`, async () => {
+test('字符合同允许的大草稿在prepare预算超限时保存失败输入，不启动模型或留下运行身份', async () => {
+  await withPublicFixture(async (f) => {
+    const sessionId = (await f.bridge.getState()).savedSession.sessionId;
+    const path = `/api/contacts/${f.scope.contactId}/assistant-sessions/${sessionId}`;
+    await assert.rejects(f.host.requestJson({ method: 'POST', path: `${path}/replies/prepare`,
+      body: { contact_id: f.scope.contactId, idempotency_key: randomUUID(), content: {
+        type: 'rewrite_draft', draft_text: '甲'.repeat(100000), user_instruction: null,
+        include_relationship_context: false } } }),
+    (error) => error.status === 409 && error.code === 'input_budget_exceeded');
+    const saved = (await f.host.requestJson({ method: 'GET', path })).data;
+    assert.equal(saved.turns.length, 1); assert.equal(saved.turns[0].state, 'failed');
+    assert.equal(saved.turns[0].input.content.draft_text, '甲'.repeat(100000));
+    assert.equal(saved.current_input_version_id, saved.turns[0].input_version_id);
+    assert.deepEqual(f.replies.pendingGenerationReceipts(), []);
+    f.installQuit(); f.event.application.quit();
+    await eventually(() => f.event.counts(), (value) => value.confirmed === 1, '预算早拒绝后正常退出未完成。');
+    assert(!f.observed.some((item) => item.path.endsWith('/interrupt')));
+    assert.equal((await f.fixture.command('counts')).actual_calls, 0);
+  });
+});
+
+test('已保存合法Unicode声明中断输入可经公开重试完整提交，保留原字符合同及预算', async () => {
+  const content = { type: 'initiate_conversation', purpose: '🚲'.repeat(4096), user_instruction: '🕊'.repeat(4096) };
   await withPublicFixture(async (f) => {
     const sessionId = (await f.bridge.getState()).savedSession.sessionId;
     const path = `/api/contacts/${f.scope.contactId}/assistant-sessions/${sessionId}`;
     const actual = (await f.host.requestJson({ method: 'POST', path: `${path}/replies/prepare`,
-      body: { contact_id: f.scope.contactId, idempotency_key: randomUUID(), content: specimen.content } })).data;
+      body: { contact_id: f.scope.contactId, idempotency_key: randomUUID(), content } })).data;
     await f.host.requestJson({ method: 'POST', path: `${path}/interrupt`,
       body: { request_key: actual.request_key, input_version_id: actual.input_version_id } });
     f.installQuit(); f.event.application.quit();
     await eventually(() => f.event.counts(), (value) => value.confirmed === 1, '合法输入退出未完成。');
     const scope = await f.reopen();
     assert.equal((await f.fixture.command('counts')).actual_calls, 0);
-    if (specimen.calls) await f.fixture.plan({ text: '合法Unicode原输入明确重试后的候选。', count: 1 });
+    await f.fixture.plan({ text: '合法Unicode原输入明确重试后的候选。', count: 1 });
     f.contacts.setDraft({ ...scope, text: '不覆盖独立新草稿。' });
     await f.bridge.retryInterruptedGeneration({ ...scope, sessionId, turnId: actual.turn_id, inputVersionId: actual.input_version_id });
-    const result = await f.bridge.getState(); assert.equal(result.phase, specimen.phase);
-    if (!specimen.calls) assert.equal(result.errorCode, 'input_budget_exceeded');
+    const result = await f.bridge.getState(); assert.equal(result.phase, 'ready');
     await f.bridge.readSavedSession(scope);
     const turns = (await f.bridge.getState()).savedSession.turns;
     assert.equal(turns.length, 2); assert.notEqual(turns[1].requestKey, actual.request_key);
-    for (const [key, value] of Object.entries(specimen.content)) assert.equal(turns[1].input.content[key], value);
+    for (const [key, value] of Object.entries(content)) assert.equal(turns[1].input.content[key], value);
     assert.equal(f.contacts.getState().draft, '不覆盖独立新草稿。');
-    assert.equal((await f.fixture.command('counts')).actual_calls, specimen.calls);
+    assert.equal((await f.fixture.command('counts')).actual_calls, 1);
   });
 });
 
@@ -711,6 +733,8 @@ test('实际模型failed允许普通新请求并保留已完成结果，退出�
     const path = `/api/contacts/${f.scope.contactId}/assistant-sessions/${sessionId}`;
     const failed = (await f.host.requestJson({ method: 'GET', path })).data;
     assert.equal(failed.turns[0].state, 'failed'); assert.equal(failed.turns[0].interruption_reason, null);
+    assert.equal(failed.turns[0].generation_active, false, '实际请求及最新 attempt 均已终止。');
+    assert.deepEqual(f.replies.pendingGenerationReceipts(), [], '实际终态复验成功后释放退出身份。');
     f.contacts.setDraft({ ...f.scope, text: '用户明确新请求不替换已failed任务。' });
     await f.fixture.plan({ text: '正常失败后新请求的唯一完成候选。', count: 1 });
     const beforeNew = f.observed.length;
@@ -725,7 +749,7 @@ test('实际模型failed允许普通新请求并保留已完成结果，退出�
     f.installQuit(); f.event.application.quit();
     await eventually(() => f.event.counts(), (value) => value.confirmed === 1 || value.manager > 0, '终态退出未完成。');
     assert.equal(f.event.counts().confirmed, 1); assert.equal(f.event.counts().manager, 0);
-    assert.equal(f.observed.filter((item) => item.path.endsWith('/interrupt')).length, 1, '历史failed必须保留原身份至实际租约裁定。');
+    assert.equal(f.observed.filter((item) => item.path.endsWith('/interrupt')).length, 0, '已可靠复验的终态无需再中断。');
     assert.equal((await f.fixture.command('counts')).actual_calls, 2);
     await f.reopen(); const saved = (await f.bridge.getState()).savedSession;
     assert.equal(saved.turns[0].interruptionReason, null); assert.equal(saved.turns[1].state, 'completed');
@@ -733,6 +757,101 @@ test('实际模型failed允许普通新请求并保留已完成结果，退出�
     assert.equal((await f.fixture.command('counts')).actual_calls, 2);
   });
 });
+
+test('连续三十三次正常失败实际复验后释放身份，仍可显式新请求', { timeout: 120000 }, async () => {
+  await withPublicFixture(async (f) => {
+    for (let attempt = 1; attempt <= 33; attempt++) {
+      if (attempt > 1) await f.bridge.newSavedSession(f.scope);
+      f.contacts.setDraft({ ...f.scope, text: `第${attempt}次明确发起的合成失败输入。` });
+      await f.fixture.plan({ fault: 'failure' });
+      await f.bridge.generate({ ...f.scope, newRequest: true });
+      assert.equal((await f.bridge.getState()).phase, 'failed');
+      assert.equal((await f.fixture.command('counts')).actual_calls, attempt,
+        '已结束的失败身份不能占用八项执行及排队额度。');
+      const state = await f.bridge.getState();
+      assert.deepEqual(f.replies.pendingGenerationReceipts(), [],
+        `第${attempt}次已结束的实际租约不能累积；当前错误=${state.errorCode ?? 'none'}。`);
+    }
+    f.contacts.setDraft({ ...f.scope, text: '失败之后明确新发起的独立合成输入。' });
+    await f.fixture.plan({ text: '连续失败后仍可正常完成。', count: 1 });
+    await f.bridge.generate({ ...f.scope, newRequest: true });
+    assert.equal((await f.bridge.getState()).result.candidates[0].original.text, '连续失败后仍可正常完成。');
+    f.installQuit(); f.event.application.quit();
+    await eventually(() => f.event.counts(), (value) => value.confirmed === 1, '保留的失败身份退出尚未核对完成。');
+    assert.equal(f.observed.filter((item) => item.path.endsWith('/interrupt')).length, 0);
+    assert.deepEqual(f.replies.pendingGenerationReceipts(), []);
+    assert.equal((await f.fixture.command('counts')).actual_calls, 34);
+  });
+});
+
+test('旧后端缺少实际租约状态时保留失败退出身份，退出才复验', async () => {
+  await withPublicFixture(async (f) => {
+    const endpoint = `/api/contacts/${f.scope.contactId}/assistant-sessions/${(await f.bridge.getState()).savedSession.sessionId}`;
+    const reading = f.gateResponse((item) => item.method === 'GET' && item.path === endpoint, false,
+      (payload) => ({ ...payload, turns: payload.turns.map(({ generation_active, ...turn }) => turn) }));
+    f.contacts.setDraft({ ...f.scope, text: '旧协议失败响应的合成输入。' });
+    await f.fixture.plan({ fault: 'failure' });
+    const generating = f.bridge.generate({ ...f.scope, newRequest: true });
+    try {
+      const actual = await reading.arrived.promise;
+      assert.equal(actual.turns[0].generation_active, false);
+      reading.release.resolve(); await generating;
+      assert.equal(f.replies.pendingGenerationReceipts().length, 1, '字段缺失不能猜测实际租约已终止。');
+      f.installQuit(); f.event.application.quit();
+      await eventually(() => f.event.counts(), (value) => value.confirmed === 1, '旧协议退出复验尚未完成。');
+      assert.equal(f.observed.filter((item) => item.path.endsWith('/interrupt')).length, 1);
+      assert.equal((await f.fixture.command('counts')).actual_calls, 1);
+    } finally { reading.release.resolve(); await generating; }
+  });
+});
+
+for (const invalidation of ['connection', 'source']) {
+  test(`实际终态复验回包在${invalidation}变化后不能释放旧身份或恢复失效正文`, async (t) => {
+    const f = await budgetPublicFixture(t), scope = await f.connect();
+    await f.bridge.setMode({ ...scope, mode: 'reply_to_message' });
+    const message = (await f.bridge.getState()).messages.items[0];
+    await f.bridge.selectMessage({ ...scope, messageId: message.messageId });
+    await f.bridge.updateDirection({ ...scope, direction: '只回应本次合成消息。' });
+    const endpoint = `/api/contacts/${scope.contactId}/assistant-sessions/${(await f.bridge.getState()).savedSession.sessionId}`;
+    const arrived = deferred(), released = deferred(); let held = false;
+    f.delivery.after = async (request) => {
+      if (!held && request.method === 'GET' && request.path === endpoint) {
+        held = true; arrived.resolve(); await released.promise;
+      }
+    };
+    await f.command('plan', { plan: { fault: 'failure' } });
+    const generating = f.bridge.generate({ ...scope, newRequest: true });
+    try {
+      await arrived.promise;
+      if (invalidation === 'connection') f.disconnect();
+      else {
+        const sources = await f.request(`/api/contacts/${scope.contactId}/sources`);
+        const id = sources.sources[0].source_id;
+        await f.request(`/api/contacts/${scope.contactId}/sources/${id}`, undefined, 'DELETE');
+        await eventually(() => f.request(`/api/contacts/${scope.contactId}/sources`),
+          (value) => value.sources.find((source) => source.source_id === id)?.status === 'deleted', '合成来源删除未完成。');
+        await f.replies.revalidateDeletedSource(scope.contactId);
+      }
+      released.resolve(); await generating; f.delivery.after = undefined;
+      assert.equal((await f.bridge.getState()).result, null);
+      if (invalidation === 'connection') {
+        assert.equal(f.replies.pendingGenerationReceipts().length, 1, '旧认证响应不能结算新连接中的停止归属。');
+        let interrupts = 0;
+        await f.replies.beginGenerationClosing(async (receipt) => {
+          interrupts += 1;
+          await f.request(`${endpoint}/interrupt`, { request_key: receipt.requestKey, input_version_id: receipt.inputVersionId });
+        });
+        assert.equal(interrupts, 1);
+      } else {
+        const saved = await f.request(endpoint);
+        assert.ok(saved.turns.every((turn) => turn.state === 'redacted' && turn.input === null && turn.reply === null));
+        await f.bridge.readSavedSession(scope);
+        assert.ok((await f.bridge.getState()).savedSession.turns.every((turn) => turn.input === null && turn.reply === null));
+      }
+      assert.equal((await f.command('metrics')).model_calls, 1);
+    } finally { released.resolve(); await generating; f.delivery.after = undefined; }
+  });
+}
 
 test('prepare ACK丢失后同key取得实际回执可清除旧未知归属，唯一完成后正常退出', async () => {
   await withPublicFixture(async (f) => {
@@ -881,85 +1000,134 @@ for (const mode of ['rewrite_draft', 'initiate_conversation', 'reply_to_message'
   });
 });
 
-async function budgetVerificationFailureRetainsIdentity(t, kind) {
-  const f = await budgetPublicFixture(t); await f.configure({ capacity: 101 });
+async function prepareBudgetRejectionHasNoModelLease(t, unknown) {
+  const f = await budgetPublicFixture(t); await f.configure({ capacity: 101, unknown });
   const scope = await f.connect(), initial = await f.bridge.getState();
   const endpoint = `/api/contacts/${scope.contactId}/assistant-sessions/${initial.savedSession.sessionId}`;
   const text = '预算复验故障后同键重试的合成草稿。';
   const options = { tone: 'concise', instruction: '保留本次合成要求。', includeRelationshipContext: false };
   f.contacts.setDraft({ ...scope, text }); await f.bridge.updateOptions({ ...scope, options });
-  let rejected = false, verificationReads = 0;
+  let preparations = 0, longRequests = 0, verificationReads = 0;
   f.delivery.after = (request) => {
-    if (request.method === 'POST' && request.path.endsWith('/replies')) rejected = true;
-    else if (rejected && request.method === 'GET' && request.path === endpoint) {
-      verificationReads += 1;
-      if (verificationReads === 1) throw new f.BackendRequestFailure(kind, kind === 'response' ? 503 : undefined);
-    }
+    if (request.method === 'POST' && request.path.endsWith('/replies/prepare')) preparations += 1;
+    else if (request.method === 'POST' && request.path.endsWith('/replies')) longRequests += 1;
+    else if (request.method === 'GET' && request.path === endpoint) verificationReads += 1;
   };
   try { await f.bridge.generate({ ...scope, newRequest: true }); }
   finally { f.delivery.after = undefined; }
-  assert.equal(verificationReads, 1, '本次业务拒绝只复验一次，不能再读取掩盖首个故障。');
+  assert.equal(preparations, 1); assert.equal(longRequests, 0);
+  assert.equal(verificationReads, 1, 'prepare预算拒绝仍须读取真实保存的失败输入。');
   const failed = await f.bridge.getState(), persisted = await f.request(endpoint);
-  assert.equal(failed.phase, 'failed'); assert.equal(failed.canRetry, true);
-  assert.equal(failed.errorCode, kind === 'connection' ? 'connection' : 'unavailable');
-  assert.equal(failed.inputBudgetNotice, undefined);
+  assert.equal(failed.phase, 'failed'); assert.equal(failed.canRetry, false);
+  assert.equal(failed.errorCode, unknown ? 'input_budget_unavailable' : 'input_budget_exceeded');
+  assert.equal(failed.inputBudgetNotice.decision.state, unknown ? 'unavailable' : 'exceeded');
+  assert.equal(persisted.turns.length, 1); assert.equal(persisted.turns[0].state, 'failed');
+  const actual = persisted.turns[0];
+  assert.equal(persisted.current_input_version_id, actual.input_version_id);
   const receipts = f.replies.pendingGenerationReceipts(); assert.equal(receipts.length, 1);
-  const receipt = receipts[0], actual = persisted.turns[0];
-  assert.equal(receipt.sessionId, persisted.session_id); assert.equal(receipt.turnId, actual.turn_id);
-  assert.equal(receipt.requestKey, actual.request_key); assert.equal(receipt.inputVersionId, actual.input_version_id);
-  assert.equal(actual.state, 'failed'); assert.equal(receipt.state, 'running');
+  assert.equal(receipts[0].turnId, actual.turn_id); assert.equal(receipts[0].requestKey, actual.request_key);
   assert.equal(f.contacts.getState().draft, text); assert.deepEqual(failed.options, options);
 
   await f.bridge.generate({ ...scope, newRequest: false });
   const retried = await f.bridge.getState(), after = await f.request(endpoint);
-  assert.equal(retried.phase, 'failed'); assert.equal(retried.errorCode, 'input_budget_exceeded');
-  assert.equal(retried.canRetry, false); assert.equal(retried.inputBudgetNotice.decision.state, 'exceeded');
-  assert.equal(after.turns.length, 1); assert.equal(after.turns[0].turn_id, actual.turn_id);
-  assert.equal(after.turns[0].request_key, actual.request_key);
+  assert.equal(retried.phase, 'failed'); assert.equal(retried.errorCode, failed.errorCode);
+  assert.equal(retried.canRetry, false); assert.equal(after.turns.length, 1);
+  assert.equal(after.turns[0].turn_id, actual.turn_id); assert.equal(after.turns[0].request_key, actual.request_key);
   assert.equal(after.current_input_version_id, actual.input_version_id);
-  assert.equal(f.replies.pendingGenerationReceipts().length, 1, '历史failed不提供当前C租约终态证明。');
   let interrupts = 0; await f.replies.beginGenerationClosing(async (actual) => {
     interrupts += 1; await ports.interruptAssistantGeneration(f.backend, actual);
   });
-  assert.equal(interrupts, 1, '退出只按原实际身份复验当前租约，可靠budget失败保持原分类。');
+  assert.equal(interrupts, 1, '没有当前租约证明时，退出仍按实际保存身份核对。');
   assert.deepEqual(f.replies.pendingGenerationReceipts(), []);
   assert.equal(f.contacts.getState().draft, text); assert.deepEqual(retried.options, options);
   assert.equal((await f.command('metrics')).model_calls, 0);
 }
 
-test('预算409唯一复验connection故障保留实际退出身份，同键终态复验后排空', async (t) => {
-  await budgetVerificationFailureRetainsIdentity(t, 'connection');
+test('prepare预算超限保留真实失败输入，同键显式再试及退出保持零模型', async (t) => {
+  await prepareBudgetRejectionHasNoModelLease(t, false);
 });
 
-test('预算409唯一复验response故障保留实际退出身份，同键终态复验后排空', async (t) => {
-  await budgetVerificationFailureRetainsIdentity(t, 'response');
+test('prepare预算能力未知保留真实失败输入，同键显式再试及退出保持零模型', async (t) => {
+  await prepareBudgetRejectionHasNoModelLease(t, true);
+});
+
+for (const kind of ['connection', 'response']) test(`prepare预算拒绝后的唯一复验${kind}故障保持未知身份，首次退出失败后明确重试恢复原实际身份`, async (t) => {
+  const f = await budgetPublicFixture(t); await f.configure({ capacity: 101 });
+  const scope = await f.connect(), initial = await f.bridge.getState();
+  const endpoint = `/api/contacts/${scope.contactId}/assistant-sessions/${initial.savedSession.sessionId}`;
+  const text = '预算复验故障仍可可靠退出的合成草稿。';
+  f.contacts.setDraft({ ...scope, text });
+  let rejected = false, reads = 0;
+  f.delivery.after = (request) => {
+    if (request.method === 'POST' && request.path.endsWith('/replies/prepare')) rejected = true;
+    else if (rejected && request.method === 'GET' && request.path === endpoint && ++reads === 1) {
+      throw new f.BackendRequestFailure(kind, kind === 'response' ? 503 : undefined);
+    }
+  };
+  try { await f.bridge.generate({ ...scope, newRequest: true }); }
+  finally { f.delivery.after = undefined; }
+  const failed = await f.bridge.getState();
+  assert.equal(reads, 1); assert.equal(failed.phase, 'failed');
+  assert.equal(failed.errorCode, kind === 'connection' ? 'connection' : 'unavailable');
+  assert.equal(failed.inputBudgetNotice, undefined);
+  assert.deepEqual(f.replies.pendingGenerationReceipts(), []);
+  const persisted = await f.request(endpoint); assert.equal(persisted.turns.length, 1);
+  let interrupts = 0, recoveries = 0; const closingRequests = [];
+  const interrupt = async (actual) => {
+    interrupts += 1; assert.equal(actual.turnId, persisted.turns[0].turn_id);
+    assert.equal(actual.requestKey, persisted.turns[0].request_key);
+    assert.equal(actual.inputVersionId, persisted.turns[0].input_version_id);
+    await ports.interruptAssistantGeneration(f.backend, actual);
+  };
+  const recover = (identity) => { recoveries += 1; return ports.recoverAssistantGenerationReceipt(f.backend, identity); };
+  f.delivery.after = (request) => closingRequests.push({ method: request.method, path: request.path });
+  try {
+    await assert.rejects(f.replies.beginGenerationClosing(interrupt, recover), /本次生成身份尚未确认/);
+    assert.equal(interrupts, 0); assert.equal(recoveries, 0, '首次退出仍须保留未知准备身份。');
+    assert.deepEqual(f.replies.pendingGenerationReceipts(), []);
+
+    await f.replies.beginGenerationClosing(interrupt, recover);
+
+    assert.equal(recoveries, 1);
+    assert(closingRequests.some((request) => request.method === 'GET' && request.path === endpoint));
+    assert.equal(closingRequests.filter((request) => request.method === 'POST' && request.path === endpoint + '/interrupt').length, 1);
+    assert(!closingRequests.some((request) => request.path.endsWith('/replies/prepare') || request.path.endsWith('/replies')),
+      '明确退出重试只读原身份再中断，不能重新准备或生成。');
+  } finally { f.delivery.after = undefined; }
+  assert.equal(interrupts, 1); assert.deepEqual(f.replies.pendingGenerationReceipts(), []);
+  assert.deepEqual(await f.request(endpoint), persisted, '退出确认保留原预算失败输入、分类和 CURRENT。');
+  assert.equal(f.contacts.getState().draft, text); assert.equal((await f.command('metrics')).model_calls, 0);
 });
 
 for (const leave of ['hidden', 'new_session']) {
-  test(`预算409在${leave}离开视图后仍核验实际终态，不发布到当前SID`, async (t) => {
+  test(`prepare预算409在${leave}离开视图后晚到，核对实际失败身份但不发布到当前SID`, async (t) => {
     const f = await budgetPublicFixture(t); await f.configure({ capacity: 101 });
     const scope = await f.connect(), initial = await f.bridge.getState();
     const endpoint = `/api/contacts/${scope.contactId}/assistant-sessions/${initial.savedSession.sessionId}`;
     f.contacts.setDraft({ ...scope, text: '离开视图后预算拒绝的合成草稿。' });
     const rejected = deferred(), release = deferred(); let verificationReads = 0;
     f.delivery.after = async (request) => {
-      if (request.method === 'POST' && request.path.endsWith('/replies')) { rejected.resolve(); await release.promise; }
+      if (request.method === 'POST' && request.path.endsWith('/replies/prepare')) { rejected.resolve(); await release.promise; }
       else if (request.method === 'GET' && request.path === endpoint) verificationReads += 1;
     };
     const generating = f.bridge.generate({ ...scope, newRequest: true });
     try {
       await rejected.promise;
-      const actual = await f.request(endpoint), receipt = f.replies.pendingGenerationReceipts()[0];
-      assert.equal(actual.turns[0].state, 'failed'); assert.equal(receipt.turnId, actual.turns[0].turn_id);
-      assert.equal(receipt.inputVersionId, actual.current_input_version_id);
+      const actual = await f.request(endpoint);
+      assert.equal(actual.turns.length, 1); assert.equal(actual.turns[0].state, 'failed');
+      assert.equal(actual.current_input_version_id, actual.turns[0].input_version_id);
+      assert.deepEqual(f.replies.pendingGenerationReceipts(), []);
       if (leave === 'hidden') f.replies.notifyHelperLifecycle('hidden');
       else await f.bridge.newSavedSession(scope);
       const before = await f.bridge.getState();
       if (leave === 'new_session') assert.notEqual(before.savedSession.sessionId, actual.session_id);
       release.resolve(); await generating;
-      assert.equal(verificationReads, 1, '离开视图仍只读取一次复验预算，不能凭历史failed终结原停止身份。');
-      assert.deepEqual(await f.bridge.getState(), before);
-      assert.equal(f.replies.pendingGenerationReceipts().length, 1, '离开视图也保留真实失败的停止身份。');
+      assert.equal(verificationReads, 1, '离开视图后仍只复验一次原失败输入。');
+      const { revision: beforeRevision, generationJobs: beforeJobs, ...beforeView } = before;
+      const { revision: afterRevision, generationJobs: afterJobs, ...afterView } = await f.bridge.getState();
+      assert.deepEqual(afterView, beforeView, '只允许更新后台作业元数据，不回写已离开的业务视图。');
+      const receipt = f.replies.pendingGenerationReceipts()[0]; assert(receipt);
+      assert.equal(receipt.turnId, actual.turns[0].turn_id);
       let interrupts = 0; await f.replies.beginGenerationClosing(async (actual) => {
         interrupts += 1; await ports.interruptAssistantGeneration(f.backend, actual);
       });
@@ -995,6 +1163,7 @@ test('旧业务失败已送达而同key实际C重试仍运行，历史failed不�
         (value) => value.actual_calls === 2 && value.entered, '同key第二次C模型没有实际进入。');
       const historical = (await f.host.requestJson({ method: 'GET', path })).data;
       assert.equal(historical.turns[0].state, 'failed', '实际重试已运行，A历史仍可保持failed。');
+      assert.equal(historical.turns[0].generation_active, true, '历史 failed 必须同时报告实际 C 运行租约。');
       assert.equal(historical.turns[0].request_key, receipt.requestKey);
       failed.release.resolve(); await original;
       assert.equal((await f.bridge.getState()).phase, 'failed');

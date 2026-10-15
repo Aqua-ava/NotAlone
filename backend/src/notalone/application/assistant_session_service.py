@@ -54,6 +54,7 @@ class AssistantTurn:
     input: dict[str, Any] | None
     reply: ReplyGenerated | None
     interruption_reason: str | None = None
+    generation_active: bool | None = None
 
 
 @dataclass(frozen=True, slots=True, repr=False)

@@ -6,6 +6,7 @@ import os
 import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
@@ -17,6 +18,7 @@ from notalone.application.skill_service import LedgerService
 from notalone.persistence.assistant_session_catalog import PostgresAssistantSessionCatalog
 from notalone.persistence.conversation_repository import PostgresConversationBindingRepository
 from notalone.persistence.outbound_ledger import PostgresOutboundLedger
+from notalone.persistence.reply_store import PostgresReplyStore
 from notalone.server.app import create_app
 from notalone.server.reply_wiring import build_reply_service
 from tests.fidelity_http_support import FidelityControlledModel
@@ -147,6 +149,104 @@ class AssistantGenerationInterruptionHttpTest(unittest.TestCase):
         self.assertEqual(limited.request(path + "/replies/prepare", body), (200, actual_failed))
         self.assertEqual(self.model.seen_calls, [])
 
+    def test_prepare_budget_failure_can_retry_same_key_before_quit(self) -> None:
+        path = self._session_path()
+        body = self._body("合成预算恢复前保留的原草稿")
+        limited = self._backend(capacity=1000, output_reserve=100)
+        status, rejected = limited.request(path + "/replies/prepare", body)
+        self.assertEqual(status, 409, rejected)
+        self.assertEqual(rejected["error"], "input_budget_exceeded")
+        failed = self.backend.request(path)[1]["turns"][0]
+        self.assertEqual(failed["state"], "failed")
+        self.assertEqual(self.model.seen_calls, [])
+
+        prepared = self._prepare(path, body)
+        self.assertEqual(prepared["turn_id"], failed["turn_id"])
+        self.assertEqual(prepared["input_version_id"], failed["input_version_id"])
+        self.assertEqual(prepared["request_key"], body["idempotency_key"])
+        self.model.plans.append({"text": "合成预算恢复后同键完成", "basis": "保留合成原草稿原意。"})
+        status, completed = self.backend.request(path + "/replies", body)
+        self.assertEqual(status, 200, completed)
+        self.assertEqual(completed["turn_id"], failed["turn_id"])
+        self.assertEqual(len(self.model.seen_calls), 1)
+
+    def test_prepare_budget_failure_without_request_quit_preserves_failure_and_fences_key(self) -> None:
+        path = self._session_path()
+        body = self._body("合成预算失败退出后不可迟到执行的原草稿")
+        limited = self._backend(capacity=1000, output_reserve=100)
+        status, rejected = limited.request(path + "/replies/prepare", body)
+        self.assertEqual(status, 409, rejected)
+        self.assertEqual(rejected["error"], "input_budget_exceeded")
+        before = self.backend.request(path)[1]
+        failed = before["turns"][0]
+        self.assertEqual(failed["state"], "failed")
+        self.assertIsNone(failed["interruption_reason"])
+        self.assertNotIn("generation_active", failed, "缺少 C 请求不能冒充普遍的无租约读取证明。")
+        interruption = {"request_key": failed["request_key"], "input_version_id": failed["input_version_id"]}
+        self.assertEqual(self.backend.request(path + "/interrupt", {
+            **interruption, "input_version_id": str(uuid4()),
+        }), (409, {"error": "assistant_session_rejected", "reason": "input_version_stale"}))
+        self.assertEqual(self._backend(owner_id=self.other_owner_id).request(path + "/interrupt", interruption),
+                         (404, {"error": "not_found"}))
+        with psycopg.connect(DATABASE_URL) as connection:
+            self.assertEqual(connection.execute(
+                "SELECT (SELECT count(*) FROM public.reply_request WHERE owner_id=%s AND contact_id=%s "
+                "AND idempotency_key=%s), (SELECT count(*) FROM public.reply_invalidated_key WHERE owner_id=%s "
+                "AND contact_id=%s AND idempotency_key=%s)",
+                (self.owner_id, self.contact_id, UUID(body["idempotency_key"]),
+                 self.owner_id, self.contact_id, UUID(body["idempotency_key"])),
+            ).fetchone(), (0, 0))
+
+        status, terminal = self.backend.request(path + "/interrupt", interruption)
+
+        self.assertEqual(status, 200, terminal)
+        self.assertEqual(terminal, {"session_id": before["session_id"], "turn_id": failed["turn_id"],
+                         **interruption, "state": "failed", "interruption_reason": None})
+        self.assertEqual(self.backend.request(path + "/interrupt", interruption), (200, terminal))
+        self.assertEqual(self.backend.request(path)[1], before)
+        for suffix in ("/replies/prepare", "/replies"):
+            self.assertEqual(self.backend.request(path + suffix, body),
+                             (409, {"error": "assistant_session_rejected", "reason": "request_deleted"}))
+        self.assertEqual(self.model.seen_calls, [])
+        self.assertEqual(self.backend.request("/api/ledger/summary")[1]["total_calls"], 0)
+        with psycopg.connect(DATABASE_URL) as connection:
+            self.assertEqual(connection.execute(
+                "SELECT (SELECT count(*) FROM public.reply_request WHERE owner_id=%s AND contact_id=%s "
+                "AND idempotency_key=%s), (SELECT count(*) FROM public.reply_invalidated_key WHERE owner_id=%s "
+                "AND contact_id=%s AND idempotency_key=%s)",
+                (self.owner_id, self.contact_id, UUID(body["idempotency_key"]),
+                 self.owner_id, self.contact_id, UUID(body["idempotency_key"])),
+            ).fetchone(), (0, 1))
+        fresh_body = self._body("合成退出后显式新键草稿")
+        fresh = self._prepare(path, fresh_body)
+        self.assertNotEqual(fresh["request_key"], failed["request_key"])
+        self.model.plans.append({"text": "合成退出后新键完成", "basis": "保留合成新草稿原意。"})
+        self.assertEqual(self.backend.request(path + "/replies", fresh_body)[0], 200)
+        self.assertEqual(self.backend.request(path + "/interrupt", interruption), (200, terminal))
+        self.assertEqual(self.backend.request(path)[1]["current_input_version_id"], fresh["input_version_id"])
+        self.assertEqual(len(self.model.seen_calls), 1)
+
+    def test_expired_request_reports_no_running_generation(self) -> None:
+        moment = [datetime.now(timezone.utc)]
+        self.model = LatePreparedModel()
+        with patch("notalone.server.reply_wiring.PostgresReplyStore", side_effect=lambda url:
+                   PostgresReplyStore(url, clock=lambda: moment[0])):
+            self.backend = self._backend()
+        path = self._session_path()
+        body = self._body()
+        self._prepare(path, body)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            running = pool.submit(self.backend.request, path + "/replies", body, timeout=20)
+            try:
+                self.assertTrue(self.model.response_entered.wait(5), "合成请求必须实际进入模型。")
+                moment[0] += timedelta(minutes=2)
+            finally:
+                self.model.release_first_response.set()
+            self.assertNotEqual(running.result(timeout=10)[0], 200)
+        turn = self.backend.request(path)[1]["turns"][0]
+        self.assertEqual(turn["state"], "failed")
+        self.assertIs(turn.get("generation_active"), False, "当前 expired 请求与 attempt 已无运行租约。")
+
     def test_historical_failed_turn_with_actual_running_retry_is_interrupted_as_app_quit(self) -> None:
         self.model = LatePreparedModel()
         self.backend = self._backend()
@@ -163,6 +263,7 @@ class AssistantGenerationInterruptionHttpTest(unittest.TestCase):
                 self.assertTrue(self.model.response_entered.wait(5), "同键重试须实际进入模型。")
                 old_turn = self.backend.request(path)[1]["turns"][0]
                 self.assertEqual(old_turn["state"], "failed")
+                self.assertIs(old_turn.get("generation_active"), True)
                 self.assertIsNone(old_turn["interruption_reason"])
                 self.assertEqual(self.backend.request(path + "/replies/prepare", body), (200, prepared))
 
