@@ -276,3 +276,8 @@ Standards硬违规／重要判断0／0、Spec新增缺失／越界／错误0／0
 ## Comments（当前外置模式候选G静态结果 2026-10-14）
 
 - [G包静态记录](../../unfinished-work/goal-final-package-g-static-20261014.md)：依据当前取消第三方随包的授权，公开package实际20.949966875秒／exit0，271文件＋14链接＋321目录，完整ZIP134699612bytes／SHA f5d8bc405b773eeb1857487a9f19691a06094d960ed8fa3e5a54d2c454832ca6。全部6dist、仅两自研probe资源、完整直接解压快照及6次严格签名检查通过，自有输入／解压清理；实际App／微信／CLI／探针执行／OCR／模型／PG／发送0，不继承旧包成绩。现场暂缓及claimed／needs-info、原4AC保持，当前G组合与真实外置工具配置尚未验收。
+
+
+### 2026-10-16 v9纯快捷键两场复验
+
+[新结果](../native-shortcut-v9-20261016.md)分列两次各一启动：首场空Finder准备时独立操作收据90秒先超时、按键0；次场空配置无后端，Agent实际两次Command+Shift+Y（第二保持150ms）后仍未取得helper显示／获焦，程序观察180秒超时，隐藏未运行、正常菜单退出未验。独立负收据留存，但程序先在show观察失败，尚未读取它；不把收据拒绝或投递／回调原因当已证。exit1／2和第二场cleanup-unconfirmed原样保留；核实3／5记录PID、自有组、userData及v9路径进程gone后，只将精确本场租约归档，关闭清理自有空Finder，当前租约absent。签名与ASAR一致、结果双轴均0，无微信／探针／CLI／模型／权限。当前系统快捷键和独立Finder录屏仍缺，不迁移旧包真人成绩，State及未勾AC保持。
