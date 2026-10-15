@@ -76,6 +76,74 @@ test('顶部识别准确但尚未绑定时按正常间隔刷新，不退避八�
  });
 });
 
+test('窗口上下文变化拒绝当前帧，新鲜已有绑定可自动恢复且不解除既有人工门', async () => {
+ await ports.withContinuousForegroundFixture(async fixture => {
+  const [a,b] = fixture.data.contact_ids;
+  const names = ['合成窗口甲', '合成窗口乙'];
+  await fixture.setCli({ sessions: [a,b].map((id,i) => ({ username: `wxid_synthetic_${i ? 'b':'a'}`,
+   display_name: names[i], chat_type: 'private', last_timestamp: 1700000000 })), messages: {} });
+  assert.equal((await fixture.request('/api/sync/cli-bindings/confirm', { selections: [a,b].map((id,i) =>
+   ({ locator: `wxid_synthetic_${i ? 'b':'a'}`, contact_id:id })) })).status, 200);
+  assert.equal((await fixture.request('/api/sync/enable', {})).status, 200);
+  const client = new ports.JsonClient(await ports.readConnection(fixture.infoPath));
+  const requests = [];
+  const backend = { getConnectionGeneration: () => 1, onStateChanged: () => () => {},
+   async requestJson(request) { requests.push(request.path); return { ...await client.perform(request), generation:1 }; } };
+  const contacts = new ports.ContactSession(() => ports.readContactDirectory(backend));
+  contacts.setConnection(1); await contacts.refreshContacts();
+  const scheduled = new Map(); let token = 0;
+  const clock = { schedule(callback,delay) { const id = ++token; scheduled.set(id,{callback,delay}); return id; },
+   cancel(id) { scheduled.delete(id); } };
+  const foreground = new ports.ForegroundController(backend,contacts,clock);
+  const observe = async (state) => {
+   await writeFile(path.join(fixture.directory,'probe-state.json'),JSON.stringify({ capture_version:'automatic-header-v3',
+    display_name:names[0], ...state }));
+   assert.equal(scheduled.size,1);
+   const [id,task] = scheduled.entries().next().value; scheduled.delete(id); await task.callback();
+  };
+  const confirm = () => foreground.confirm({ contactId:a,contactScopeRevision:contacts.getState().scopeRevision,
+   foregroundRevision:foreground.getState().foregroundRevision });
+  const render = () => ports.renderToStaticMarkup(ports.createElement(ports.ForegroundPanel,{state:foreground.getState()}));
+  try {
+   foreground.startContinuous(); await observe({});
+   assert.equal(foreground.getState().confirmation,'verified-binding');
+   contacts.setDraft({contactId:a,scopeRevision:contacts.getState().scopeRevision,text:'窗口验收合成草稿'});
+   for (const error of ['automatic_capture_context_changed',
+    'automatic_capture_window_metadata_changed','automatic_capture_dimensions_changed']) {
+    await observe({error});
+    assert.equal(foreground.getGenerationBlock(),'foreground-confirmation-required','变化帧不能保留生成资格');
+    assert.equal(foreground.getState().recognizedName,null);
+    assert.equal(contacts.getState().draft,'窗口验收合成草稿');
+    assert.equal(scheduled.values().next().value.delay,4000,'临时采集失败仍有技术退避');
+    await observe({});
+    assert.equal(foreground.getState().confirmation,'verified-binding','新的可靠绑定应自动恢复');
+    assert.equal(foreground.getGenerationBlock(),null);
+   }
+   await observe({error:'automatic_capture_context_changed'});
+   await observe({display_name:names[1]});
+   assert.equal(contacts.getState().selectedContactId,b,'恢复须使用新观察对应的已有绑定');
+   assert.equal(foreground.getState().confirmation,'verified-binding');
+   await observe({display_name:names[0]});
+   for (const failure of [{display_name_confidence:0.5},{name_complete:false},
+    {display_name:'未绑定合成窗口'},{error:'automatic_layout_header_boundary'},
+    {error:'minimal_region_layout_changed'}]) {
+    await observe(failure);
+    assert.equal(foreground.getGenerationBlock(),'foreground-confirmation-required');
+    await observe({error:'automatic_capture_context_changed'});
+    await observe({});
+    assert.equal(foreground.getState().reason,'manual_confirmation_required','窗口恢复不能解除更早的人工门');
+    assert.equal(foreground.getGenerationBlock(),'foreground-confirmation-required');
+    confirm(); await observe({});
+   }
+   await observe({error:'automatic_capture_context_changed'});
+   assert.ok(render().includes('微信前台或窗口发生变化，等待重新识别'));
+   await observe({error:'screen_capture_permission_missing'});
+   assert.equal(foreground.getGenerationBlock(),'foreground-confirmation-required');
+   assert.equal(requests.some(p=>/\/(generate|prepare|rewrite)$/.test(p)),false);
+  } finally { foreground.dispose(); client.cancelPending(); }
+ });
+});
+
 // 时钟只控制下一轮；观察仍经过认证 HTTP、真实绑定判断和隔离 PG。
 test('持续观察自动 A → B → A，保留输入且不生成；同联系人不重建范围', async () => {
  await ports.withContinuousForegroundFixture(async fixture => {

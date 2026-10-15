@@ -1,7 +1,7 @@
 import type { ContactSessionView } from './contact-session';
 import { useEffect, useState } from 'react';
 import { initialForegroundState, type ForegroundBridge, type ForegroundState } from '../shared/foreground-bridge';
-import { foregroundFailureReason } from '../shared/foreground-failure.mjs';
+import { foregroundFailureReason, isTransientForegroundContextChange } from '../shared/foreground-failure.mjs';
 
 export function useForegroundState(bridge: ForegroundBridge, enabled: boolean): ForegroundState {
   const [state, setState] = useState<ForegroundState>(initialForegroundState);
@@ -24,6 +24,8 @@ export function ForegroundPanel({ state, session }: { state: ForegroundState; se
   const message = paused ? '前台定位已暂停' : state.phase === 'observing' ? '正在定位前台会话'
     : state.phase === 'confirmed' ? '已识别采集时的微信会话'
     : state.phase === 'manual-required' ? (state.recognizedName ? '已读到微信会话，请选择对应联系人' : '请手动确认本次联系人')
+    : state.phase === 'unavailable' && isTransientForegroundContextChange(state.reason)
+      ? '微信前台或窗口发生变化，等待重新识别'
     : state.phase === 'unavailable' && state.reason === 'foreground_application_unavailable'
       ? '系统前台状态未知，请手动选择本次联系人'
     : state.phase === 'unavailable' && failure ? `${failure.message}，请手动选择本次联系人`

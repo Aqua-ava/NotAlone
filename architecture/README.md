@@ -84,6 +84,7 @@
 51. [ADR-051：原文分句结构提取与确定性候选编译](adr/051-grounded-memory-extraction.md)
 52. [ADR-052：顶部名称 OCR 接入正式前台定位](adr/052-header-ocr-foreground-locator.md)
 53. [ADR-053：前台定位刷新与稳定结果展示](adr/053-stable-foreground-refresh.md)
+54. [ADR-054：前台采集上下文变化后的可靠绑定恢复](adr/054-foreground-context-recovery.md)
 
 ## 当前架构决策
 

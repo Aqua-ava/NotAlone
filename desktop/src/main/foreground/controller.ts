@@ -2,6 +2,7 @@ import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { initialForegroundState, type ForegroundState, type ForegroundConfirmation, type GenerationBlock } from '../../shared/foreground-bridge';
 import { foregroundObservation } from './observation';
+import { isTransientForegroundContextChange } from '../../shared/foreground-failure.mjs';
 
 type Flight = { abort: AbortController; promise: Promise<void> };
 
@@ -144,8 +145,9 @@ export class ForegroundController {
       signal: abort.signal, timeoutMs: 1500, maxResponseBytes: 4096 }).then((response) => {
       if (!current() || response.generation !== generation) return;
       const observation = foregroundObservation(response.data);
-      if (observation.phase === 'manual-required' || observation.phase === 'unavailable') this.manualRequired = true;
-      if (this.manualRequired || observation.reason === 'sync_disabled') this.qualification = undefined;
+      if (observation.phase === 'manual-required' || (observation.phase === 'unavailable'
+        && !isTransientForegroundContextChange(observation.reason))) this.manualRequired = true;
+      if (this.manualRequired || observation.phase === 'unavailable' || observation.reason === 'sync_disabled') this.qualification = undefined;
       // 消费前先废弃flight，内部选择不能把已消费的观察当异步旧结果。
       ++this.epoch;
       if (observation.contactId) {

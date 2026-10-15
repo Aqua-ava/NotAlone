@@ -1,3 +1,12 @@
+// 当前帧上下文变化不证明联系人匹配失败；必须由下一轮重新取得完整的已有绑定证据。
+const transientContextChanges = new Set([
+  'automatic_capture_context_changed',
+  'automatic_capture_window_metadata_changed', 'automatic_capture_dimensions_changed',
+]);
+export function isTransientForegroundContextChange(code) {
+  return transientContextChanges.has(code);
+}
+
 // 固定协议原因的中文说明；不显示原生原文、会话名称或任意reason字符串。
 const reasons = Object.freeze({
   foreground_application_unavailable: ['前台检查', '系统未返回前台应用'],

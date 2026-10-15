@@ -73,16 +73,23 @@ final class AutomaticSessionCaptureTests: XCTestCase {
             XCTAssertEqual(result["ok"] as? Bool, !failUnknown)
             XCTAssertNil(result["display_name"])
         }
-        var contextCalls = 0
-        let changed = await AutomaticSessionCapture.observeHeader(context: {
-            contextCalls += 1
-            return contextCalls == 1 ? context : nil
-        }, capture: { _ in self.window() }, recognize: { _ in
-            XCTFail("采图后前台改变不得继续OCR"); return HeaderOcrResult(fragments: [])
-        })
-        XCTAssertEqual(changed["ok"] as? Bool, false)
-        XCTAssertEqual(changed["error"] as? String, "minimal_region_layout_changed")
-        XCTAssertNil(changed["display_name"])
+        for changedAt in [2, 3] {
+            var contextCalls = 0, captures = 0, ocrCalls = 0
+            let changed = await AutomaticSessionCapture.observeHeader(context: {
+                contextCalls += 1
+                return contextCalls < changedAt ? context : nil
+            }, capture: { _ in captures += 1; return self.window() }, recognize: { _ in
+                ocrCalls += 1
+                return HeaderOcrResult(fragments: [(RecognizedLine(text: "合成窗口", speaker: .unknown, confidence: 0.99),
+                    CGRect(x: 0.1, y: 0.2, width: 0.3, height: 0.6))])
+            })
+            XCTAssertEqual(changed["ok"] as? Bool, false)
+            XCTAssertEqual(changed["error"] as? String, "automatic_capture_context_changed")
+            XCTAssertEqual(changed["stage"] as? String, changedAt == 2 ? "context_after_capture" : "context_after_names")
+            XCTAssertEqual(captures, 1)
+            XCTAssertEqual(ocrCalls, changedAt == 2 ? 0 : 1)
+            XCTAssertNil(changed["display_name"])
+        }
     }
 
     @MainActor

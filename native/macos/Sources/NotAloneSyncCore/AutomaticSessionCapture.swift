@@ -85,7 +85,7 @@ public enum AutomaticSessionCapture {
             let image = try await capture(current)
             let capturedAt = clock()
             stage = "context_after_capture"
-            guard try context() == current else { throw MinimalSessionError.layoutChanged }
+            guard try context() == current else { throw AutomaticCaptureFailure.context }
             stage = "layout"
             let rectangle = try AutomaticSessionRegions.headerLayout(image, windowSize: current.frame.size).rectangle
             guard let header = image.cropping(to: rectangle) else { throw MinimalSessionError.captureFailed }
@@ -96,7 +96,7 @@ public enum AutomaticSessionCapture {
                 throw MinimalSessionError.qualityUnverified
             }
             stage = "context_after_names"
-            guard try context() == current else { throw MinimalSessionError.layoutChanged }
+            guard try context() == current else { throw AutomaticCaptureFailure.context }
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             return ["ok": true, "wechat_in_front": true, "capture_version": "automatic-header-v3",
