@@ -15,6 +15,72 @@ from tests.unit.memory_extraction.test_grounded_v3 import labels
 
 
 class GroundedV4CompilerTest(unittest.TestCase):
+    def test_object_ownership_keeps_known_lending_roles_and_historical_assertion(self):
+        from notalone.memory_extraction.grounded import compile_labels_v4
+
+        source = window("我姐把她的车借给我了。")
+        fact, = compile_labels_v4(source, labels(row(
+            "0:0", "relationship_event", topic="family", unresolved=True,
+            ambiguity_codes=["object_ownership"], confidence=1.0,
+        )))
+        self.assertEqual(fact["text"], "联系人原话：“我姐把她的车借给我了。”")
+        self.assertEqual((fact["subject"], fact["category"], fact["speech_act"], fact["assertion_status"],
+                          fact["figurative_type"]),
+                         ("contact", "relationship_note", "assertion", "asserted", "literal"))
+        self.assertEqual((fact["valid_at"], fact["invalid_at"]), (None, None))
+        self.assertEqual(fact["source_message_ids"], [str(source.messages[0].message_id)])
+        self.assertEqual(fact["risk_flags"], [])
+        self.assertEqual(fact["alternatives"], [
+            "所引原句中的物品所有者在本窗口无法唯一确定；不因出借或接收认定所有者，保留原句。"
+            " 所附原引句及上下文：联系人原话：“我姐把她的车借给我了。”",
+        ])
+        # 标签人为给定；既不按借用词补码，也不认证模型会判断所有权。
+        for text in ("我姐把她的车借给我了。", "我姐把她自己所有的伞借给我了。"):
+            with self.subTest(text=text):
+                known, = compile_labels_v4(window(text), labels(row(
+                    "0:0", "relationship_event", ambiguity_codes=[], confidence=1.0,
+                )))
+                self.assertEqual(known["alternatives"], [])
+                self.assertEqual((known["speech_act"], known["assertion_status"]), ("assertion", "asserted"))
+                self.assertIn(text, known["text"])
+
+    def test_object_ownership_source_binding_survives_prefix_and_unknown_person_merges(self):
+        from notalone.memory_extraction.grounded import compile_labels_v4
+        from notalone.memory_extraction.models import MessageRef, MessageSender
+        from uuid import uuid4
+
+        source = window("说到那辆车，我已经接过钥匙了。")
+        context = MessageRef(uuid4(), "我承诺把车借给你。", MessageSender.SELF, source.messages[0].occurred_at)
+        source = replace(source, messages=(context, *source.messages))
+        fact, = compile_labels_v4(source, labels(
+            row("1:0", "prefix", dependency="0:0", unresolved=True, confidence=0.4,
+                sensitivity="commitment", ambiguity_codes=["object_ownership"]),
+            row("1:1", "relationship_event", ambiguity_codes=[], confidence=1.0),
+        ))
+        self.assertEqual(fact["confidence"], 0.4)
+        self.assertEqual(fact["risk_flags"], ["sensitivity:commitment"])
+        self.assertEqual(set(fact["source_message_ids"]), {str(m.message_id) for m in source.messages})
+        explanation, = fact["alternatives"]
+        self.assertIn("说到那辆车，我已经接过钥匙了。", explanation)
+        self.assertIn("我承诺把车借给你。", explanation)
+
+        source = window("她不是车主，她只是借用人。")
+        context = MessageRef(uuid4(), "同事送来了车，登记资料没有提供。", MessageSender.SELF,
+                             source.messages[0].occurred_at)
+        source = replace(source, messages=(context, *source.messages))
+        fact, = compile_labels_v4(source, labels(
+            row("1:0", "third_party_fact", dependency="0:0", unresolved=True,
+                ambiguity_codes=["entity_identity"]),
+            row("1:1", "third_party_fact", dependency="0:1", unresolved=True, confidence=0.6,
+                ambiguity_codes=["object_ownership", "entity_identity"]),
+        ))
+        self.assertEqual(len(fact["alternatives"]), 2)
+        self.assertEqual(fact["confidence"], 0.6)
+        self.assertEqual((fact["speech_act"], fact["assertion_status"]), ("report", "reported"))
+        self.assertEqual(set(fact["source_message_ids"]), {str(m.message_id) for m in source.messages})
+        for text in ("她不是车主，", "她只是借用人。", "同事送来了车，", "登记资料没有提供。"):
+            self.assertIn(text, fact["alternatives"][1])
+
     def test_reviewed_eight_month_branches_remain_expressible_with_given_labels(self):
         from notalone.memory_extraction.evaluation import build_window
         from notalone.memory_extraction.evaluation_cases import CASES
@@ -113,7 +179,7 @@ class GroundedV4CompilerTest(unittest.TestCase):
             fact, = compiler(source, labels(row("0:0", "plan", **({"ambiguity_codes": []} if v3 else {}))))
             self.assertEqual((fact["valid_at"], fact["invalid_at"]), (None, None))
             self.assertIn("grounded:unresolved_period", fact["risk_flags"])
-        for code in ("clock_period", "event_stage"):
+        for code in ("clock_period", "event_stage", "object_ownership"):
             with self.subTest(code=code), self.assertRaises(ExtractionInvalidOutputError):
                 compile_labels_v3(source, labels(row("0:0", "unknown", unresolved=True, ambiguity_codes=[code])))
 
@@ -203,18 +269,24 @@ class GroundedV4CompilerTest(unittest.TestCase):
         from notalone.memory_extraction.errors import ExtractionInvalidOutputError
         from notalone.memory_extraction.grounded import compile_labels_v4
 
-        codes = ["event_stage", "clock_period", "other_unresolved", "borrowing_direction",
+        codes = ["object_ownership", "event_stage", "clock_period", "other_unresolved", "borrowing_direction",
                  "place_ownership", "entity_identity"]
         source = window("我没有借那件物品。")
         fact, = compile_labels_v4(source, labels(row("0:0", "stage_unknown_state", unresolved=True,
                                                   ambiguity_codes=codes)))
-        self.assertEqual(len(fact["alternatives"]), 7)
+        self.assertEqual(len(fact["alternatives"]), 8)
         for alternative in fact["alternatives"][2:4] + fact["alternatives"][5:]:
             self.assertIn("我没有借那件物品。", alternative)
-        with self.assertRaisesRegex(ExtractionInvalidOutputError, "8400"):
-            compile_labels_v4(window("我没有" + "甲" * 8400 + "。"), labels(row(
-                "0:0", "stage_unknown_state", unresolved=True, ambiguity_codes=["event_stage"],
-            )))
+        within, = compile_labels_v4(window("甲" * 8100 + "没有确认车主。"), labels(row(
+            "0:0", "relationship_event", unresolved=True, ambiguity_codes=["object_ownership"],
+        )))
+        self.assertIn("没有确认车主。", within["alternatives"][0])
+        self.assertLessEqual(len(within["alternatives"][0]), 8400)
+        for code in ("event_stage", "object_ownership"):
+            with self.subTest(code=code), self.assertRaisesRegex(ExtractionInvalidOutputError, "8400"):
+                compile_labels_v4(window("我没有" + "甲" * 8400 + "。"), labels(row(
+                    "0:0", "stage_unknown_state", unresolved=True, ambiguity_codes=[code],
+                )))
 
     def test_historical_correction_keeps_full_original_content_and_null_dates(self):
         from notalone.memory_extraction.grounded import compile_labels_v4
