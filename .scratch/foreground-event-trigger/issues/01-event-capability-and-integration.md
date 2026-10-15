@@ -59,3 +59,8 @@ SyncControl已确认enabled、有效连接／联系人目录范围与正式微�
 ### 2026-10-16 当前v6 App完整租期与续期通过
 
 新有限空CLI授权诊断场约3.8分钟正常exit0；实际宿主与native完整trace确认前三源分别完整55秒正常lease_expired，code0后23／67／33ms续起下一源，第四源context_changed保守停止且连续许可锁住。changed为0；CUA坐标切换两次AXError.notImplemented，未认证切群、名称或显示延迟。结合已通过的鉴权公共HTTP两项和真实合成子进程控制，AC3勾选；其余接入／实机AC保留。资源100样本、精确库／自有进程／目录／租约退场已核；无真实CLI、模型、发送或权限修改。详见[当前App生命周期实测](../app-source-lifecycle-v6-20261016.md)。
+
+
+### 2026-10-16 v7可见切群与事件观察
+
+[同版正式实机](../app-fast-switch-v7-20261016.md)实际看到A→测试群→A的助手暂停及恢复画面，96轮正式观察均单帧／单OCR；动作到首状态样本上界673／1088ms，不是精准绘制耗时。宿主changed=1，第二源约48.1秒instances_ambiguous后code1安全锁定，缺event→HTTP锚点，不认证提速或根因。首准备App0失败保留；六个已记录PID、两个自有组和精确库／目录／租约清理，双轴均0。State及未勾AC保持，下一包仅细分既有实例数诊断及一次私有时钟锚点，不改变门禁。
