@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { chmod, lstat, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -10,6 +10,8 @@ import { BindingFixture, type BindingData } from './binding-backend-fixture';
 import { ContactHttpProxy } from './contact-http-proxy';
 import { readAcceptanceFile, readForegroundAudit, readForegroundCredential, verifyForegroundAuditAppend,
   type ForegroundAuditSnapshot, type ForegroundCredential } from './real-foreground-credential';
+import { resolveSyncProbePath } from '../src/main/backend/bundled-helpers';
+import { prepareObservationMeasurements, readObservationMeasurements } from './observation-measurements-fixture';
 
 const execute = promisify(execFile);
 const project = path.resolve('..');
@@ -17,9 +19,34 @@ const databaseScript = path.join(project, 'backend/tests/integration/server/real
 type Scope = { real_cli: string; audit_path: string; pid_audit_path: string; not_before: number; until: number };
 export type CliAudit = { event: string; kind: string; pid?: number | null; returncode?: number };
 
+export function visualObservationResources(environment: NodeJS.ProcessEnv, scope: Pick<Scope, 'not_before' | 'until'>,
+  leaseUntil: number, now = Date.now()): string {
+  const executable = environment.NOTALONE_TEST_APP_EXECUTABLE;
+  if (environment.NOTALONE_REAL_SYNC_VISUAL_ACCEPTANCE !== '1'
+    || ['NOTALONE_REAL_FOREGROUND_LOCATOR_ACCEPTANCE', 'NOTALONE_TEST_FOREGROUND_CREDENTIAL',
+      'NOTALONE_REAL_FOREGROUND_MODE', 'NOTALONE_REAL_FOREGROUND_TARGET', 'NOTALONE_REAL_FOREGROUND_TARGET_SHA256']
+      .some(key => Boolean(environment[key]))) throw new Error('视觉独立性验收不得混用旧前台凭据。');
+  if (!executable || !path.isAbsolute(executable) || path.normalize(executable) !== executable
+    || !executable.endsWith('.app/Contents/MacOS/NotAlone')) throw new Error('须指定本轮最终包的绝对可执行路径。');
+  if (!Number.isFinite(scope.not_before) || !Number.isFinite(scope.until) || now < scope.not_before * 1000
+    || now >= scope.until * 1000 || scope.until - scope.not_before > 600 || scope.until * 1000 > leaseUntil
+    || leaseUntil - now > 600_000 || now - scope.not_before * 1000 > 120_000) {
+    throw new Error('视觉独立性验收须使用本轮新基线与有限范围。');
+  }
+  return path.join(path.dirname(path.dirname(executable)), 'Resources');
+}
+
+export async function prepareVisualObservationMeasurements(fixture: BindingFixture, probe: string): Promise<void> {
+  await prepareObservationMeasurements(fixture, probe);
+  // 只适配本轮临时受控启动器；既有测量源和普通 Python 入口保持原样。
+  await writeFile(path.join(fixture.directory, 'sitecustomize.py'),
+    `import sys\nif sys.orig_argv[1:4] == [${JSON.stringify(fixture.pythonExecutable)}, "-m", "notalone.server.command"]:\n` +
+    '    from observation_measurements import install\n    install()\n', { mode: 0o600 });
+}
+
 class RealSyncFixture extends BindingFixture {
   constructor(directory: string, python: string, data: BindingData, readonly scopePath: string, readonly scope: Scope,
-    readonly foreground?: ForegroundCredential) {
+    readonly foreground?: ForegroundCredential, readonly visualProbePath?: string) {
     super(directory, python, data);
   }
   override environment(ownerId = this.data.owner_id): NodeJS.ProcessEnv {
@@ -27,6 +54,7 @@ class RealSyncFixture extends BindingFixture {
       NOTALONE_REAL_SYNC_SCOPE: this.scopePath, NOTALONE_TEST_BINDING_DIRECTORY: undefined,
       NOTALONE_REAL_FOREGROUND_MODE: undefined, NOTALONE_REAL_FOREGROUND_TARGET: undefined,
       NOTALONE_REAL_FOREGROUND_TARGET_SHA256: undefined,
+      ...(this.visualProbePath ? { NOTALONE_SYNC_PROBE: this.visualProbePath } : {}),
       ...(this.foreground ? { NOTALONE_REAL_FOREGROUND_MODE: '1',
         NOTALONE_REAL_FOREGROUND_TARGET: path.join(this.directory, 'foreground-target.json'),
         NOTALONE_REAL_FOREGROUND_TARGET_SHA256: this.foregroundTargetSha,
@@ -37,20 +65,25 @@ class RealSyncFixture extends BindingFixture {
   private foregroundSnapshot?: ForegroundAuditSnapshot;
   async foregroundAudit(): Promise<ForegroundAuditSnapshot> {
     if (!this.foreground) throw new Error('real_foreground_audit_invalid');
+    return this.readAppendOnlyAudit();
+  }
+  private async readAppendOnlyAudit(): Promise<ForegroundAuditSnapshot> {
     const snapshot = await readForegroundAudit(this.scope.audit_path);
     if (this.foregroundSnapshot) verifyForegroundAuditAppend(this.foregroundSnapshot, snapshot);
     this.foregroundSnapshot = snapshot;
     return snapshot;
   }
   async audit(): Promise<CliAudit[]> {
-    if (this.foreground) return [...(await this.foregroundAudit()).rows];
+    if (this.foreground || this.visualProbePath) return [...(await this.readAppendOnlyAudit()).rows];
     try { return (await readFile(this.scope.audit_path, 'utf8')).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line)); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error; }
   }
 }
 
-export const test = appTest.extend<{ realSyncBackend: RealSyncFixture; realSyncProxy: ContactHttpProxy }>({
-  realSyncBackend: async ({}, use) => {
+export const test = appTest.extend<{ realSyncBackend: RealSyncFixture; realSyncProxy: ContactHttpProxy;
+  realSyncVisualObservation: boolean }>({
+  realSyncVisualObservation: [false, { option: true }],
+  realSyncBackend: async ({ realSyncVisualObservation }, use) => {
     const lease = await verifyAppTestLease();
     if (process.env.CONDA_DEFAULT_ENV !== 'NotAlone' || !process.env.CONDA_PREFIX) throw new Error('真实同步验收须激活 NotAlone。');
     const scopePath = process.env.NOTALONE_TEST_REAL_SYNC_SCOPE;
@@ -59,13 +92,20 @@ export const test = appTest.extend<{ realSyncBackend: RealSyncFixture; realSyncP
     if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.uid !== process.getuid?.() || (metadata.mode & 0o077)) throw new Error('私有验收范围权限不合格。');
     const scope = JSON.parse(await readFile(scopePath, 'utf8')) as Scope;
     if (Date.now() >= scope.until * 1000 || scope.until * 1000 > lease.until) throw new Error('验收范围超出有限时段。');
+    let visualProbePath: string | undefined;
+    if (realSyncVisualObservation) {
+      const resources = visualObservationResources(process.env, scope, lease.until);
+      const expected = path.join(await realpath(resources), 'notalone-probe', 'notalone-sync-probe');
+      visualProbePath = await resolveSyncProbePath(resources);
+      if (visualProbePath !== expected) throw new Error('本轮包内原生探针完整性核验失败。');
+    }
     const foreground = process.env.NOTALONE_REAL_FOREGROUND_LOCATOR_ACCEPTANCE === '1'
       ? await readForegroundCredential(process.env.NOTALONE_TEST_FOREGROUND_CREDENTIAL ?? '',
         process.env.NOTALONE_TEST_APP_EXECUTABLE ?? '', scopePath) : undefined;
     if (foreground && (!Number.isFinite(scope.not_before) || !Number.isFinite(scope.until)
       || Date.now() < scope.not_before * 1000 || scope.until - scope.not_before > 600
       || lease.until - Date.now() > 600_000)) throw new Error('前台定位范围超出有限时段。');
-    if (foreground) for (const selected of [scope.audit_path, scope.pid_audit_path]) {
+    if (foreground || realSyncVisualObservation) for (const selected of [scope.audit_path, scope.pid_audit_path]) {
       try {
         await lstat(selected);
         if ((await readAcceptanceFile(selected, 1, true)).length !== 0) throw new Error('本场须使用新的自有审计文件。');
@@ -100,10 +140,14 @@ export const test = appTest.extend<{ realSyncBackend: RealSyncFixture; realSyncP
     let dropped = false;
     try {
       data = JSON.parse((await execute(originalPython, [databaseScript, 'create', marker], { env, timeout: 70_000 })).stdout) as BindingData;
-      fixture = new RealSyncFixture(directory, python, data, scopePath, scope, foreground);
+      fixture = new RealSyncFixture(directory, python, data, scopePath, scope, foreground, visualProbePath);
       fixture.foregroundTargetSha = foregroundTargetSha;
+      if (visualProbePath) await prepareVisualObservationMeasurements(fixture, visualProbePath);
       await writeFile(appTest.info().outputPath('real-sync-owned.json'), JSON.stringify({ fixtureDirectory: directory, databaseName: data.database_name }), { mode: 0o600 });
       await fixture.startBackend();
+      if (visualProbePath && JSON.stringify(await readObservationMeasurements(fixture)) !== '[{"kind":"installed"}]') {
+        throw new Error('本轮正式原生测量未安装或启动前已有观察。');
+      }
       await writeFile(appTest.info().outputPath('real-sync-backend-owned.json'), JSON.stringify(fixture.cleanupOwnership()), { mode: 0o600 });
       await use(fixture);
     } catch (error) { failure = error; }
@@ -135,7 +179,8 @@ export const test = appTest.extend<{ realSyncBackend: RealSyncFixture; realSyncP
   launchConfiguration: async ({ realSyncBackend }, use) => { await use({
     pythonExecutable: realSyncBackend.pythonExecutable, projectDirectory: project,
     envFilePath: realSyncBackend.envPath, backendInfoPath: realSyncBackend.infoPath,
-    wechatCliPath: realSyncBackend.scope.real_cli, syncProbePath: realSyncBackend.foreground?.probePath ?? path.join(realSyncBackend.directory, 'unavailable-probe'),
+    wechatCliPath: realSyncBackend.scope.real_cli,
+    syncProbePath: realSyncBackend.visualProbePath ?? realSyncBackend.foreground?.probePath ?? path.join(realSyncBackend.directory, 'unavailable-probe'),
   }); },
   appWorkingDirectory: '/',
 });
