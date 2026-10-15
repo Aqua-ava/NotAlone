@@ -626,3 +626,11 @@ Apple指出独立窗口流不应用sourceRect，因此实现使用display仅包�
 下一包仅在原有查询和上下文比较处，输出固定拒绝分类及process／window／origin／size／version／build六位匹配布尔；不输出原值、名称、几何、版本字符串、路径或画面。原生附加stderr与旧诊断共享32行／3840字节，宿主默认关闭、显式私有双限额sink及strict decoder保持；不增加采图、OS轮询、权限请求或日志外传。原停止码、许可、失败锁、55秒续租、正式单帧OCR与签名identifier不变。
 
 Swift完整101项含2个既有实验跳过、0失败；宿主相关9项、桌面类型及完整安全68项通过。新候选仍须构建、严格签名及Computer Use实测；这些离线结果不认证上下文根因、切换速度或当前包Finder录屏责任身份。没有修改Info.plist、entitlements或TCC，独立启动权限缺口保持。具体协议与红绿证据见[最小诊断方案](../.scratch/foreground-event-trigger/context-stop-diagnostic-plan-20261016.md)。
+
+## 2026-10-16 顶部源实例数分类与私有时钟锚点
+
+v7同版实机已看到私聊→测试群→私聊的助手画面，宿主记录一次changed，第二源仍因instances_ambiguous安全停止；原分类无法区分0个与多个。下一包在同一次既有进程查询中投影为固定instances_zero／instances_multiple，旧instances_ambiguous保留兼容，不增加查询或记录PID／数量原值，不解除失败锁。
+
+显式私有诊断sink新增最多一条纯数值clock-anchor：宿主单调elapsedMs、Date.now的epochMs及夹取跨度sampleSpanMs；中点投影仅用于后继场近似对齐既有时序，不认证事件因果、精准绘制耗时，也不以wall clock参与调度。默认关闭、0600／独占创建、512行／256KiB限额及strict白名单保持。18源集合、权限／签名身份、正式单帧与原停止门不变。
+
+Swift完整102项含2个既有跳过、0失败，宿主相关13项、类型及完整安全70项通过；本片双轴均0。仍待新签名候选实机，不将旧v7归因或Finder独立录屏预检缺口补签。没有修改Info.plist、entitlements或TCC，详见[最小诊断方案](../.scratch/foreground-event-trigger/instance-count-clock-diagnostic-plan-20261016.md)。

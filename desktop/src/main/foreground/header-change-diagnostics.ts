@@ -17,7 +17,7 @@ const nativeReasons = ['begin', 'permission_missing', 'context_unavailable', 'co
   'stream_context_missing', 'stream_system_stopped', 'stream_user_stopped',
   'stream_permission_declined', 'stream_missing_entitlements', 'stream_internal',
   'stream_invalid_parameter', 'stream_start_failed', 'operation_failed', 'lease_expired', 'stopped'] as const;
-const contextReasons = ['instances_ambiguous', 'foreground_unknown', 'not_wechat_foreground',
+const contextReasons = ['instances_ambiguous', 'instances_zero', 'instances_multiple', 'foreground_unknown', 'not_wechat_foreground',
   'version_unsupported', 'window_list_unavailable', 'window_not_visible', 'windows_ambiguous',
   'window_geometry_invalid', 'context_unavailable', 'identity_mismatch'] as const;
 const contextMatchKeys = ['processMatches', 'windowMatches', 'originMatches', 'sizeMatches',
@@ -30,6 +30,8 @@ type NativeContextDiagnosticRecord = {
 export type HeaderChangeHostReason = typeof hostReasons[number];
 export type HeaderChangeDiagnosticSignal = typeof signals[number];
 export type HeaderChangeDiagnosticRecord = {
+  kind: 'clock-anchor'; elapsedMs: number; epochMs: number; sampleSpanMs: number;
+} | {
   kind: 'host'; event: typeof hostEvents[number]; reason: HeaderChangeHostReason;
   ordinal: number; elapsedMs: number; leaseElapsedMs: number | null; permitPresent: boolean; childPresent: boolean;
   resolving: boolean; blocked: boolean; freshProof: boolean; epochCurrent: boolean;
@@ -51,8 +53,12 @@ const contextValuesValid = (reason: unknown, values: unknown[]): boolean => valu
 
 // 再核白名单，避免未来调用处意外把原始范围或错误塞入诊断对象。
 function validRecord(record: HeaderChangeDiagnosticRecord): boolean {
-  if (!record || !ordinal(record.ordinal) || !elapsed(record.elapsedMs)) return false;
+  if (!record || !elapsed(record.elapsedMs)) return false;
   const keys = Object.keys(record).sort().join(',');
+  if (record.kind === 'clock-anchor') return keys === 'elapsedMs,epochMs,kind,sampleSpanMs'
+    && Number.isSafeInteger(record.epochMs) && record.epochMs >= 0 && elapsed(record.sampleSpanMs)
+    && record.sampleSpanMs / 2 <= record.elapsedMs;
+  if (!ordinal(record.ordinal)) return false;
   if (record.kind === 'native') return keys === 'elapsedMs,kind,nativeElapsedMs,ordinal,reason,stage'
     && includes(nativeStages, record.stage) && includes(nativeReasons, record.reason) && elapsed(record.nativeElapsedMs);
   if (record.kind === 'native-context') return keys === 'buildMatches,elapsedMs,kind,nativeElapsedMs,ordinal,originMatches,processMatches,reason,sizeMatches,versionMatches,windowMatches'
@@ -82,14 +88,16 @@ export function openHeaderChangeDiagnostics(environment: NodeJS.ProcessEnv): Hea
     if (!info.isFile() || info.uid !== owner || (info.mode & 0o777) !== 0o600) { closeSync(descriptor); return; }
   } catch { if (descriptor !== undefined) { try { closeSync(descriptor); } catch {} } return; }
   const ownedDescriptor = descriptor;
-  let records = 0, bytes = 0, closed = false;
+  let records = 0, bytes = 0, closed = false, anchored = false;
   const close = () => { if (closed) return; closed = true; try { closeSync(ownedDescriptor); } catch {} };
   return { close, record(record) {
     if (closed) return;
     try {
       if (!validRecord(record)) return;
+      if (record.kind === 'clock-anchor' && anchored) return;
       const line = Buffer.from(`${JSON.stringify(record)}\n`);
       if (records >= 512 || bytes + line.length > 256 * 1024) { close(); return; }
+      if (record.kind === 'clock-anchor') anchored = true;
       ++records; bytes += line.length;
       let written = 0;
       while (written < line.length) {

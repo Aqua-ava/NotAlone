@@ -14,6 +14,23 @@ const wait=async(test)=>{const end=performance.now()+3000;while(!await test()&&p
 
 async function script(name,body){const executable=path.join(directory,name);await writeFile(executable,`#!${process.execPath}\n${body}`,{mode:0o700});return executable;}
 
+test('source时钟锚点与原elapsed同基准，仅显式sink取样一次且默认不读墙钟', (t) => {
+ let ticks=[100,104,108],epochCalls=0;
+ t.mock.method(performance,'now',()=>ticks.shift()??110);
+ t.mock.method(Date,'now',()=>{epochCalls++;return 1792000000000;});
+ const records=[];
+ const source=new NativeHeaderChangeSource(async()=>undefined,{record:record=>records.push(record),close(){}});
+ assert.deepEqual(records,[{kind:'clock-anchor',elapsedMs:6,epochMs:1792000000000,sampleSpanMs:4}]);
+ source.update(undefined,()=>{});source.update(undefined,()=>{});source.dispose();
+ assert.equal(records.filter(record=>record.kind==='clock-anchor').length,1);
+ assert.equal(epochCalls,1);
+ assert.ok(records.filter(record=>record.kind==='host').every(record=>record.elapsedMs===10));
+ epochCalls=0;
+ const disabled=new NativeHeaderChangeSource(async()=>undefined);
+ disabled.dispose();
+ assert.equal(epochCalls,0);
+});
+
 test('真实合成子进程只收固定枚举，停用拒绝晚事件且确认旧子退出后替换',async()=>{
  const trace=path.join(directory,'owned-trace.jsonl');
  const executable=await script('events',`
@@ -90,6 +107,36 @@ test('上下文诊断不进入stdout事件，原code1暂停与同scope新proof�
   const closed=records.find(record=>record.event==='close');
   assert.equal(closed.code,1);assert.equal(closed.paused,true);assert.equal(closed.stopping,false);
   assert.equal(closed.renewalEligible,false);assert.equal(closed.blocked,true);
+  assert.equal(records.filter(record=>record.event==='launch').length,1);
+  assert.ok(records.some(record=>record.reason==='scope_blocked'&&record.freshProof));
+ }finally{await source.shutdown();}
+});
+
+test('实例分类仍走原code1失败锁，锚点不随墙钟跳变或fresh proof重复写入', async (t) => {
+ let epoch=1792000000000;
+ t.mock.method(Date,'now',()=>epoch);
+ const executable=await script('instance-clock',`
+ process.stderr.write('notalone-header-context-v1 instances_multiple ------ 12.5\\n');
+ process.stdout.write('{"event":"paused"}\\n');
+ setTimeout(()=>process.exit(1),30);
+ `);
+ const records=[],events=[];
+ const source=new NativeHeaderChangeSource(async()=>executable,{record:record=>records.push(record),close(){}});
+ try{
+  source.update({scope:'instance-scope',observation:'first'},event=>events.push(event));
+  await wait(()=>records.some(record=>record.event==='close'));
+  for(const now of [1792086400000,1791913600000]){
+   epoch=now;
+   source.update({scope:'instance-scope',observation:String(now)},event=>events.push(event));
+  }
+  assert.deepEqual(events,['paused']);
+  assert.equal(records.filter(record=>record.kind==='clock-anchor').length,1);
+  assert.equal(records.find(record=>record.kind==='clock-anchor').epochMs,1792000000000);
+  const context=records.find(record=>record.kind==='native-context');
+  assert.equal(context.reason,'instances_multiple');assert.equal(context.processMatches,null);
+  assert.equal(context.windowMatches,null);
+  const closed=records.find(record=>record.event==='close');
+  assert.equal(closed.code,1);assert.equal(closed.blocked,true);assert.equal(closed.renewalEligible,false);
   assert.equal(records.filter(record=>record.event==='launch').length,1);
   assert.ok(records.some(record=>record.reason==='scope_blocked'&&record.freshProof));
  }finally{await source.shutdown();}

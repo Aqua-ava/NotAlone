@@ -47,6 +47,8 @@ enum HeaderChangeDiagnosticReason: String, Sendable {
 
 enum HeaderChangeContextReason: String, Sendable {
     case instancesAmbiguous = "instances_ambiguous"
+    case instancesZero = "instances_zero"
+    case instancesMultiple = "instances_multiple"
     case foregroundUnknown = "foreground_unknown"
     case notWechatForeground = "not_wechat_foreground"
     case versionUnsupported = "version_unsupported"
@@ -59,8 +61,17 @@ enum HeaderChangeContextReason: String, Sendable {
 }
 
 enum HeaderChangeContextReadFailure: Error, Equatable, Sendable {
-    case instancesAmbiguous, foregroundUnknown, notWechatForeground, versionUnsupported
+    case instancesAmbiguous, instancesZero, instancesMultiple, foregroundUnknown, notWechatForeground, versionUnsupported
     case windowListUnavailable, windowNotVisible, windowsAmbiguous, windowGeometryInvalid, contextUnavailable
+
+    static func instanceCount(_ count: Int) -> Self? {
+        switch count {
+        case 0: return .instancesZero
+        case 1: return nil
+        case 2...: return .instancesMultiple
+        default: return .instancesAmbiguous
+        }
+    }
 
     static func classify(_ failure: CalibrationContextFailure) -> Self {
         switch failure {
@@ -88,6 +99,8 @@ struct HeaderChangeContextDiagnosis: Sendable {
         let reason: HeaderChangeContextReason
         switch failure {
         case .instancesAmbiguous: reason = .instancesAmbiguous
+        case .instancesZero: reason = .instancesZero
+        case .instancesMultiple: reason = .instancesMultiple
         case .foregroundUnknown: reason = .foregroundUnknown
         case .notWechatForeground: reason = .notWechatForeground
         case .versionUnsupported: reason = .versionUnsupported

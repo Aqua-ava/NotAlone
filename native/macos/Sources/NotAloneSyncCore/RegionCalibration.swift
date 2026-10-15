@@ -160,6 +160,7 @@ struct CalibrationContext: Equatable {
                                 rejection: inout HeaderChangeContextReadFailure?) throws -> CalibrationContext {
         let instances = NSRunningApplication.runningApplications(withBundleIdentifier: "com.tencent.xinWeChat")
         guard instances.count == 1, let application = instances.first else {
+            rejection = .instanceCount(instances.count)
             throw CalibrationContextFailure.instances
         }
         if requireForeground {

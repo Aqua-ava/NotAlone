@@ -2,6 +2,27 @@ import XCTest
 @testable import NotAloneSyncCore
 
 final class HeaderChangeDiagnosticsTests: XCTestCase {
+    @MainActor
+    func testNonUniqueInstanceCountProjectsOnlyZeroOrMultipleWithoutAnotherResolution() {
+        XCTAssertNil(HeaderChangeContextReadFailure.instanceCount(1))
+        XCTAssertEqual(HeaderChangeContextReadFailure.classify(.instances), .instancesAmbiguous)
+        let cases = [(0, "instances_zero"), (2, "instances_multiple"), (Int.max, "instances_multiple")]
+        for (count, reason) in cases {
+            var calls = 0
+            let denied = CalibrationContext.readForHeaderChange { rejection in
+                calls += 1
+                rejection = HeaderChangeContextReadFailure.instanceCount(count)
+                throw CalibrationContextFailure.instances
+            }
+            guard case .failure(let failure) = denied else { return XCTFail("非唯一实例必须仍然拒绝") }
+            var diagnostics = HeaderChangeDiagnostics(
+                environment: ["NOTALONE_HEADER_CHANGE_DIAGNOSTICS": "1"], beganAt: 0)
+            XCTAssertEqual(diagnostics.contextLine(.unreadable(failure), at: 1),
+                "notalone-header-context-v1 \(reason) ------ 1000.0\n")
+            XCTAssertEqual(calls, 1)
+        }
+    }
+
     func testContextDifferencesOnlySerializeFixedMatchingBits() {
         let expected = CalibrationContext(processId: 770001, windowId: 880002,
             frame: CGRect(x: 123456, y: 234567, width: 1000, height: 800),

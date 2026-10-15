@@ -16,6 +16,31 @@ const record = { kind: 'host', event: 'reconcile', reason: 'no_permit', ordinal:
   permitPresent: false, childPresent: false, resolving: false, blocked: false, freshProof: false,
   epochCurrent: true, paused: false, stopping: false, renewalEligible: false, code: null, signal: 'none' };
 
+test('实例零与多个仅接受固定不可读分类，旧ambiguous兼容且不接受数量或匹配位', async () => {
+  const accepted = [], failures = [];
+  const decoder = new NativeHeaderChangeDiagnosticDecoder(value => accepted.push(value), () => failures.push(true));
+  decoder.push(Buffer.from('notalone-header-context-v1 instances_zero ------ 1\n'
+    + 'notalone-header-context-v1 instances_multiple ------ 2\n'
+    + 'notalone-header-context-v1 instances_ambiguous ------ 3\n'));
+  decoder.finish();
+  assert.deepEqual(accepted.map(value => value.reason), ['instances_zero', 'instances_multiple', 'instances_ambiguous']);
+  assert.ok(accepted.every(value => value.processMatches === null && value.windowMatches === null));
+  assert.deepEqual(failures, []);
+  const output = path.join(directory, 'instances.jsonl');
+  const sink = openHeaderChangeDiagnostics({ NOTALONE_HEADER_CHANGE_HOST_DIAGNOSTICS_FILE: output });
+  for (const value of accepted) sink.record({ ordinal: 1, elapsedMs: 4, ...value });
+  sink.record({ ordinal: 1, elapsedMs: 4, ...accepted[0], count: 770001 });
+  sink.close();
+  assert.equal((await readFile(output, 'utf8')).trim().split('\n').length, 3);
+  assert.doesNotMatch(await readFile(output, 'utf8'), /770001|count/);
+  for (const raw of ['instances_zero 111111', 'instances_multiple 000000', 'instances_770001 ------']) {
+    const values = [], invalid = [];
+    const rejected = new NativeHeaderChangeDiagnosticDecoder(value => values.push(value), () => invalid.push(true));
+    rejected.push(Buffer.from(`notalone-header-context-v1 ${raw} 1\n`)); rejected.finish();
+    assert.equal(values.length, 0); assert.equal(invalid.length, 1);
+  }
+});
+
 test('上下文诊断仅接受固定拒绝分类及六个匹配布尔，私有sink不落身份原值', async () => {
   const accepted = [], invalid = [];
   const decoder = new NativeHeaderChangeDiagnosticDecoder(value => accepted.push(value), () => invalid.push(true));
@@ -71,6 +96,28 @@ test('诊断默认关闭；显式新文件仅记录固定字段并拒覆盖、sy
   const parentLink = path.join(directory, 'parent-link');
   await symlink(directory, parentLink);
   assert.equal(openHeaderChangeDiagnostics({ NOTALONE_HEADER_CHANGE_HOST_DIAGNOSTICS_FILE: path.join(parentLink, 'new.jsonl') }), undefined);
+});
+
+test('私有时钟锚点仅一条有限数值，非法范围不占首次且计入原共享限额', async () => {
+  assert.equal(openHeaderChangeDiagnostics({}), undefined);
+  const anchor = { kind: 'clock-anchor', elapsedMs: 2.5, epochMs: 1792000000000, sampleSpanMs: 0.5 };
+  const output = path.join(directory, 'clock.jsonl');
+  const sink = openHeaderChangeDiagnostics({ NOTALONE_HEADER_CHANGE_HOST_DIAGNOSTICS_FILE: output });
+  for (const invalid of [{ ...anchor, epochMs: NaN }, { ...anchor, epochMs: Infinity },
+    { ...anchor, epochMs: -1 }, { ...anchor, epochMs: 1.25 }, { ...anchor, epochMs: Number.MAX_SAFE_INTEGER + 1 },
+    { ...anchor, elapsedMs: -1 }, { ...anchor, sampleSpanMs: -1 }, { ...anchor, sampleSpanMs: Infinity },
+    { ...anchor, elapsedMs: 0.1, sampleSpanMs: 1 }, { ...anchor, name: 'private-clock-value' }]) sink.record(invalid);
+  sink.record(anchor);
+  sink.record({ ...anchor, epochMs: 1792000001000 });
+  for (let ordinal = 0; ordinal < 1000; ordinal++) sink.record({ ...record, ordinal });
+  sink.close(); sink.record(anchor);
+  const text = await readFile(output, 'utf8'), rows = text.trim().split('\n').map(JSON.parse);
+  assert.deepEqual(rows[0], anchor);
+  assert.equal(rows.filter(row => row.kind === 'clock-anchor').length, 1);
+  assert.equal(rows.length, 512);
+  assert.ok(Buffer.byteLength(text) <= 256 * 1024);
+  assert.equal((await stat(output)).mode & 0o777, 0o600);
+  assert.doesNotMatch(text, /private-clock-value|NaN|Infinity/);
 });
 
 test('宿主诊断行数与字节有界，关闭后无写入，非有限耗时和未知字段不落盘', async () => {

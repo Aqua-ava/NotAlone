@@ -26,7 +26,16 @@ export class NativeHeaderChangeSource implements ForegroundChangeSource {
   private readonly diagnosticBegan = performance.now();
 
   constructor(private readonly executable: () => Promise<string | undefined>,
-    private readonly diagnostics?: HeaderChangeDiagnosticSink) {}
+    private readonly diagnostics?: HeaderChangeDiagnosticSink) {
+    if (!diagnostics) return;
+    try {
+      const before = performance.now();
+      const epochMs = Date.now();
+      const after = performance.now();
+      diagnostics.record({ kind: 'clock-anchor', elapsedMs: before + (after - before) / 2 - this.diagnosticBegan,
+        epochMs, sampleSpanMs: after - before });
+    } catch { /* 单次诊断锚点不参与调度或采集许可。 */ }
+  }
 
   private record(event: Extract<HeaderChangeDiagnosticRecord, { kind: 'host' }>['event'],
     reason: HeaderChangeHostReason,
