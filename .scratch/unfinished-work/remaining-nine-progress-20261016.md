@@ -1,12 +1,12 @@
 # 本轮未完成任务推进记录
 
-日期：2026-10-16。按用户要求不推进 `memory-skill-evolution` 的15张任务；其余原9张逐项处理。当前任务文件扫描共230张：208张resolved、7张claimed，以及上述排除的15张open。状态以各原票为准；resolved也可能包含历史替代或不采用结论，不能据数量推导产品能力。
+日期：2026-10-16。按用户要求不推进 `memory-skill-evolution` 的15张任务；其余原9张逐项处理。当前任务文件扫描共230张：209张resolved、6张claimed，以及上述排除的15张open。状态以各原票为准；resolved也可能包含历史替代或不采用结论，不能据数量推导产品能力。
 
 | 原任务 | 本轮状态及证据 | 下一项 |
 | --- | --- | --- |
 | [前台跟随06组合验收](../foreground-contact-follow/issues/06-combined-app-acceptance.md) | 已resolved；[单联系人实机及组合结果](../foreground-contact-follow/acceptance-06-final-20261015.md) | 本票范围完成，后续新包分项不倒填旧包 |
 | [群聊暂停人工验收01](../foreground-group-manual-acceptance/issues/01-group-pause-and-live-checklist.md) | 已resolved；实际群聊暂停与返回私聊核验已记录 | 本票范围完成 |
-| [事件优先触发01](../foreground-event-trigger/issues/01-event-capability-and-integration.md) | claimed；[v8同版实机](../foreground-event-trigger/app-instance-clock-v8-20261016.md)changed后约1.666ms进入HTTP，较正常空等保守边界早230.628ms，结合合成覆盖完成AC2；实际群暂停画面上界810ms | AC4仍缺辅助源实际帧数；返A2703ms是首状态、65.987秒是晚图，非精准paint；第三源instances_zero保守锁定且不认定OS根因 |
+| [事件优先触发01](../foreground-event-trigger/issues/01-event-capability-and-integration.md) | 已resolved；[v9最终同版实机](../foreground-event-trigger/app-frame-counts-v9-20261016.md)A→群→A画面上界1078／2782ms、辅助1初始化／154回调／84处理分账，36正式单帧，代码及报告双轴均0项 | 单A范围完成；源保守停止及周期恢复如实保留，不认证所有切换SLA、独立Finder/TCC或双联系人来信 |
 | [前台定位18](../mac-desktop-app/issues/18-foreground-locator.md) | claimed；单联系人绑定/暂停恢复已有实机；[真实CLI与正式视觉独立场](../foreground-contact-follow/real-cli-visual-20261015.md)通过 | 当前包独立启动权限和持续源边界 |
 | [本机交付20](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed；当前签名包Finder启动、真实选择/导入等分项已有证据；[真实DeepSeek合成App冒烟](../mac-desktop-app/reply-model-smoke-result-20261016.md)1／1通过，模型AC完成；[快捷键复验](../mac-desktop-app/native-shortcut-current-20261016.md)未观察到显示 | 独立启动权限、系统快捷键 |
 | [真实微信follow04](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed；单联系人有界读取、退出及视觉独立性已有证据；[v7同App总开关重开](../native-app-backend/real-sync-reenable-result-20261016.md)1／1通过，关闭65.926秒零新读取 | 空窗补读状态及去重通过，不认证正向消息恢复；双联系人和真实来信依用户决定保留未验证 |
