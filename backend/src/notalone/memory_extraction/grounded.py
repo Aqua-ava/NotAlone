@@ -30,6 +30,17 @@ KINDS = {
 }
 OMISSIONS = {"question", "greeting", "nonliteral", "not_memory"}
 ROW_KEYS = {"unit", "kind", "subject", "topic", "dependency", "unresolved", "confidence", "sensitivity"}
+AMBIGUITY_CODES = ("entity_identity", "place_ownership", "borrowing_direction", "other_unresolved")
+MAX_V3_ALTERNATIVE_CHARS = 8400
+_AMBIGUITY_TEMPLATES = {
+    "entity_identity": ("原句所指人物身份在本窗口无法唯一确定，保留原句。",),
+    "place_ownership": ("原句所指地点／家里归属在本窗口无法唯一确定，保留原句。",),
+    "borrowing_direction": (
+        "所引原句中的“借”，一种可能的方向是向对方借入；人物与是否发生均以同条原引句为准，本窗不确认此方向。",
+        "所引原句中的“借”，另一种可能的方向是借给对方；人物与是否发生均以同条原引句为准，本窗不确认此方向。",
+    ),
+    "other_unresolved": ("原句在本窗口仍有其他未决解释，保留原句。",),
+}
 SENSITIVITY = {"none", "financial", "health", "commitment", "other"}
 _CONDITION = re.compile(r"^(?:如果|假如|要是|倘若|若)")
 
@@ -45,6 +56,12 @@ class SourceUnit:
     @property
     def text(self) -> str:
         return self.message.text[self.start:self.end]
+
+
+@dataclass
+class _CompiledAmbiguity:
+    codes: set[str]
+    original_texts: list[str]
 
 
 def source_units(window: ExtractionWindow) -> tuple[SourceUnit, ...]:
@@ -124,15 +141,17 @@ def compile_draft(window: ExtractionWindow, draft: object) -> ExtractionPayload:
 
 def _checked_compile(
     window: ExtractionWindow, draft: object, *, completed_answers: bool,
+    ambiguity_codes: dict[str, frozenset[str]] | None = None,
 ) -> ExtractionPayload:
     try:
-        return _compile(window, draft, completed_answers=completed_answers)
+        return _compile(window, draft, completed_answers=completed_answers, ambiguity_codes=ambiguity_codes)
     except (ValueError, TypeError, KeyError) as error:
         raise ExtractionInvalidOutputError("原文结构提取不符合契约：" + str(error)) from None
 
 
 def _compile(
     window: ExtractionWindow, draft: object, *, completed_answers: bool = False,
+    ambiguity_codes: dict[str, frozenset[str]] | None = None,
 ) -> ExtractionPayload:
     if not isinstance(draft, dict) or set(draft) != {"units"} or not isinstance(draft["units"], list):
         raise ValueError("必须返回分句结构。")
@@ -171,6 +190,7 @@ def _compile(
     results: list[dict[str, Any]] = []
     pending_condition: SourceUnit | None = None
     unknown_groups: dict[tuple, dict[str, Any]] = {}
+    compiled_ambiguities: dict[int, _CompiledAmbiguity] = {}
     for unit in units:
         if not unit.target:
             continue
@@ -224,9 +244,12 @@ def _compile(
             contexts.append(f"{dep_author}说“{dep.text}”")
         context = "（相关原文：" + "；".join(contexts) + "）" if contexts else ""
         unresolved = any(rows[member.id]["unresolved"] for member in members)
+        codes = (set().union(*(ambiguity_codes[member.id] for member in members))
+                 if ambiguity_codes is not None else set())
         # 可见第三人指代缺少外部定位时不能因模型标 false 就宣称消歧。
         if re.match(r"^(?:现在|目前)?[他她它](?!们)", quote) and not dependencies:
             unresolved = True
+            codes.add("entity_identity")
         alternatives = ["原文指代在本窗口无法唯一确定，保留原句。"] if unresolved else []
         if kind == "unknown":
             flags.append("grounded:unresolved_kind")
@@ -250,12 +273,29 @@ def _compile(
             previous["text"] += f" 同一原消息续句：“{quote}”"
             previous["confidence"] = min(previous["confidence"], fact["confidence"])
             previous["risk_flags"] = list(dict.fromkeys(previous["risk_flags"] + flags))
+            if ambiguity_codes is not None:
+                previous_ambiguity = compiled_ambiguities[id(previous)]
+                previous_ambiguity.codes.update(codes)
+                previous_ambiguity.original_texts.append(fact["text"])
         else:
             results.append(fact)
+            if ambiguity_codes is not None:
+                compiled_ambiguities[id(fact)] = _CompiledAmbiguity(codes, [fact["text"]])
             if kind == "third_party_fact" and row["unresolved"]:
                 unknown_groups[group] = fact
     if pending_condition is not None:
         raise ValueError("条件分句缺少对应计划。")
+    if ambiguity_codes is not None:
+        for fact in results:
+            compiled = compiled_ambiguities[id(fact)]
+            originals = "；".join(compiled.original_texts)
+            fact["alternatives"] = [
+                text + (" 所附原引句及上下文：" + originals if code == "borrowing_direction" else "")
+                for code in AMBIGUITY_CODES if code in compiled.codes
+                for text in _AMBIGUITY_TEMPLATES[code]
+            ]
+            if any(len(text) > MAX_V3_ALTERNATIVE_CHARS for text in fact["alternatives"]):
+                raise ValueError("v3歧义说明超出单条8400字符预算，不能截断原句。")
     return tuple(results)
 
 
@@ -278,6 +318,34 @@ def reference_choices(unit: SourceUnit, units: tuple[SourceUnit, ...]) -> tuple[
 
 def compile_labels(window: ExtractionWindow, draft: object) -> ExtractionPayload:
     """v2按程序给定的对象键绑定原文；禁止按输出顺序猜测编号。"""
+    return _compile_named_labels(window, draft)
+
+
+def compile_labels_v3(window: ExtractionWindow, draft: object) -> ExtractionPayload:
+    """v3只新增受控歧义标签，不接收模型编写的替代解释。"""
+    if not isinstance(draft, dict) or set(draft) != {"units"} or not isinstance(draft["units"], dict):
+        raise ExtractionInvalidOutputError("原文标签必须按指定字段返回。")
+    labels = {}
+    codes = {}
+    for key, label in draft["units"].items():
+        if not isinstance(label, dict) or set(label) != (ROW_KEYS - {"unit"}) | {"ambiguity_codes"}:
+            raise ExtractionInvalidOutputError("v3标签字段不完整或包含自由文本。")
+        raw_codes = label["ambiguity_codes"]
+        if (not isinstance(raw_codes, list) or len(raw_codes) > len(AMBIGUITY_CODES)
+                or any(type(code) is not str or code not in AMBIGUITY_CODES for code in raw_codes)
+                or len(set(raw_codes)) != len(raw_codes)
+                or type(label["unresolved"]) is not bool
+                or label["unresolved"] != bool(raw_codes)):
+            raise ExtractionInvalidOutputError("v3歧义类别无效或与未决标记矛盾。")
+        labels[key] = {name: value for name, value in label.items() if name != "ambiguity_codes"}
+        codes[key] = frozenset(raw_codes)
+    return _compile_named_labels(window, {"units": labels}, ambiguity_codes=codes)
+
+
+def _compile_named_labels(
+    window: ExtractionWindow, draft: object, *,
+    ambiguity_codes: dict[str, frozenset[str]] | None = None,
+) -> ExtractionPayload:
     if not isinstance(draft, dict) or set(draft) != {"units"} or not isinstance(draft["units"], dict):
         raise ExtractionInvalidOutputError("原文标签必须按指定字段返回。")
     units = source_units(window)
@@ -293,7 +361,8 @@ def compile_labels(window: ExtractionWindow, draft: object) -> ExtractionPayload
         if not isinstance(label, dict) or set(label) != ROW_KEYS - {"unit"}:
             raise ExtractionInvalidOutputError("标签字段不完整或含自由编号。")
         rows.append({"unit": unit.id, **label})
-    payloads = _checked_compile(window, {"units": rows}, completed_answers=True)
+    payloads = _checked_compile(window, {"units": rows}, completed_answers=True,
+                                ambiguity_codes=ambiguity_codes)
     all_ids = {unit.id for unit in units}
     for unit in units:
         if not unit.target:

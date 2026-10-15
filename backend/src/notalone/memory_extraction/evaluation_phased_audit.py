@@ -128,7 +128,7 @@ def _arguments(outputs: list[dict], tool: str, key: str, *, e_tool: str = _E_TOO
                 or calls[0].get("name") not in {e_tool, _V_TOOL}):
             raise EvaluationBudgetAbort("phased_adapter_output_unreliable")
         expected_key = ("results" if calls[0]["name"] == _V_TOOL else
-                        "units" if e_tool == "GroundedMemoryLabels" else "facts")
+                        "units" if e_tool in {"GroundedMemoryLabels", "GroundedMemoryLabelsV3"} else "facts")
         _exact(calls[0]["args"], {expected_key})
     matches = [call["args"][key] for output in outputs for call in output["tool_calls"]
                if call["name"] == tool]
@@ -321,7 +321,7 @@ class PhasedEvaluationAudit:
             raise EvaluationBudgetAbort("phased_case_binding_changed")
         e_tool = extraction_tool_name(self._extraction_mode)
         extraction_protocol = None
-        if self._extraction_mode is EvaluationExtractionMode.GROUNDED_V2:
+        if self._extraction_mode.is_grounded:
             labels = _arguments(list(bundle["adapter_outputs"]), e_tool, "units", e_tool=e_tool)
             programs = bundle["extraction_program"]
             if (not labels or not isinstance(programs, list) or len(programs) != 1

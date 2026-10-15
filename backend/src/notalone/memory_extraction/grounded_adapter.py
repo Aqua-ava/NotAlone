@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from langchain_core.language_models import BaseChatModel
 
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError, ExtractionRuntimeError
-from notalone.memory_extraction.grounded import KINDS, OMISSIONS, SENSITIVITY, compile_labels, source_units, needs_reference, reference_choices
+from notalone.memory_extraction.grounded import AMBIGUITY_CODES, KINDS, OMISSIONS, SENSITIVITY, compile_labels, compile_labels_v3, source_units, needs_reference, reference_choices
 from notalone.memory_extraction.models import ExtractionWindow, MemoryTopic
 from notalone.memory_extraction.runtime import ExtractionPayload
 from notalone.memory_trace import TraceWriteError
@@ -34,6 +34,16 @@ dependency只选一条理解本句不可缺少的原文分句编号；可以是c
 sensitivity只标原文实际的敏感风险：financial=真实金钱风险，health=健康，commitment=明确承诺，other=其他明确敏感性。
 普通借用物品、报价判断、收到娱乐邀请本身不是敏感性，取none。不要增加原文没有的风险。
 confidence是模型对标签的把握，不能代替证据。程序只保证定位、引用、字段组合与时间计算，不认证你的语义判断。
+"""
+
+GROUNDED_V3_PROMPT = GROUNDED_PROMPT + """
+本次为grounded-v3，每个target还须填写ambiguity_codes数组，只能选择以下受控类别：
+entity_identity=原句所指人物或群体身份未明；place_ownership=所指地点／家里归属未明；
+borrowing_direction=“向对方借”与“借给对方”两种方向无法唯一确定；other_unresolved=其他实质未知。
+同时存在的类别必须列全；其他未知不能替代应列的具体类别。不能因为人物已知就忽略借贷方向未知。
+unresolved=false时必须为空数组；unresolved=true时必须至少一类，不重复，不生成解释正文。
+方向说明只解释原句的两种读法，不改变人物、肯定／否定、条件或完成程度，不断定交易发生。
+来源已明确方向时不要增添两读。程序固定渲染解释，不提供消歧或来源语义证明。
 """
 
 
@@ -102,6 +112,23 @@ def grounded_schema(window: ExtractionWindow) -> dict[str, Any]:
     }
 
 
+def grounded_schema_v3(window: ExtractionWindow) -> dict[str, Any]:
+    """v3复用精确位置与依赖约束，仅增加封闭的歧义类别。"""
+    schema = grounded_schema(window)
+    schema["title"] = "GroundedMemoryLabelsV3"
+    for label in schema["properties"]["units"]["properties"].values():
+        label["properties"]["ambiguity_codes"] = {
+            "type": "array", "items": _enum(AMBIGUITY_CODES),
+            "maxItems": len(AMBIGUITY_CODES), "uniqueItems": True,
+        }
+        label["required"].append("ambiguity_codes")
+        label["allOf"] = [{"anyOf": [
+            {"properties": {"unresolved": {"const": False}, "ambiguity_codes": {"maxItems": 0}}},
+            {"properties": {"unresolved": {"const": True}, "ambiguity_codes": {"minItems": 1}}},
+        ]}]
+    return schema
+
+
 def grounded_input(window: ExtractionWindow) -> str:
     lines = []
     for unit in source_units(window):
@@ -118,25 +145,41 @@ class GroundedExtractionRuntime:
         self._model = model
 
     def extract(self, window: ExtractionWindow) -> ExtractionPayload:
-        try:
-            response = invoke_traced_model(
-                self._model, purpose="extraction", schema=grounded_schema(window),
-                messages=[{"role": "system", "content": GROUNDED_PROMPT},
-                          {"role": "user", "content": grounded_input(window)}],
-            )
-        except (ExtractionRuntimeError, TraceWriteError):
-            raise
-        except Exception:
-            raise ExtractionRuntimeError("原文结构提取调用失败。") from None
-        calls = getattr(response, "tool_calls", None)
-        if not isinstance(calls, list) or len(calls) != 1 or calls[0].get("name") != "GroundedMemoryLabels":
-            raise ExtractionInvalidOutputError("原文结构提取必须返回唯一的指定工具。")
-        draft = calls[0].get("args")
-        record("grounded_draft", {"protocol": "grounded-v2", "units": source_units(window), "draft": draft})
-        try:
-            payloads = compile_labels(window, draft)
-        except ExtractionInvalidOutputError:
-            record("grounded_compile", {"status": "rejected", "protocol": "grounded-v2"}, status="rejected")
-            raise
-        record("grounded_compile", {"protocol": "grounded-v2", "status": "compiled", "payloads": payloads})
-        return payloads
+        return _extract_grounded(self._model, window, version3=False)
+
+
+class GroundedV3ExtractionRuntime:
+    """仅供显式选择的v3入口；生产默认仍使用v2。"""
+
+    def __init__(self, *, model: BaseChatModel) -> None:
+        self._model = model
+
+    def extract(self, window: ExtractionWindow) -> ExtractionPayload:
+        return _extract_grounded(self._model, window, version3=True)
+
+
+def _extract_grounded(model: BaseChatModel, window: ExtractionWindow, *, version3: bool) -> ExtractionPayload:
+    protocol = "grounded-v3" if version3 else "grounded-v2"
+    try:
+        schema = grounded_schema_v3(window) if version3 else grounded_schema(window)
+        response = invoke_traced_model(
+            model, purpose="extraction", schema=schema,
+            messages=[{"role": "system", "content": GROUNDED_V3_PROMPT if version3 else GROUNDED_PROMPT},
+                      {"role": "user", "content": grounded_input(window)}],
+        )
+    except (ExtractionRuntimeError, TraceWriteError):
+        raise
+    except Exception:
+        raise ExtractionRuntimeError("原文结构提取调用失败。") from None
+    calls = getattr(response, "tool_calls", None)
+    if not isinstance(calls, list) or len(calls) != 1 or calls[0].get("name") != schema["title"]:
+        raise ExtractionInvalidOutputError("原文结构提取必须返回唯一的指定工具。")
+    draft = calls[0].get("args")
+    record("grounded_draft", {"protocol": protocol, "units": source_units(window), "draft": draft})
+    try:
+        payloads = compile_labels_v3(window, draft) if version3 else compile_labels(window, draft)
+    except ExtractionInvalidOutputError:
+        record("grounded_compile", {"status": "rejected", "protocol": protocol}, status="rejected")
+        raise
+    record("grounded_compile", {"protocol": protocol, "status": "compiled", "payloads": payloads})
+    return payloads

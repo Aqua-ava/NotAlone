@@ -345,8 +345,7 @@ def run_ecnu_evaluation(
             "mode": response_identity_policy, "known_labels": sorted(KNOWN_ECNU_RESPONSE_LABELS),
             "endpoint": _ENDPOINT, "request_model": "ecnu-max", "weights_identity_verified": False,
         } if response_identity_policy == KNOWN_ECNU_RESPONSE_IDENTITY_POLICY else response_identity_policy),
-        "request_contract_version": (2 if extraction_selected is
-                                     EvaluationExtractionMode.GROUNDED_V2 else 1),
+        "request_contract_version": 2 if extraction_selected.is_grounded else 1,
         "tool_choice": ({
             "extraction": {"mode": "omitted" if official else "forced", "name": runtime_contracts["extraction"][1]["title"]},
             "verification": {"mode": "omitted", "name": runtime_contracts["verification"][1]["title"]},

@@ -124,13 +124,13 @@ class _RecordedExtractionRuntime:
         try:
             facts = self._runtime.extract(window)
         except ExtractionInvalidOutputError:
-            if self._mode is EvaluationExtractionMode.GROUNDED_V2:
+            if self._mode.is_grounded:
                 with self._store.stage(self._position, "extraction"):
                     self._store.record(kind="extraction_program", payload={
                         "extraction_mode": self._mode.value, "status": "rejected",
                     })
             raise
-        if self._mode is EvaluationExtractionMode.GROUNDED_V2:
+        if self._mode.is_grounded:
             with self._store.stage(self._position, "extraction"):
                 self._store.record(kind="extraction_program", payload={
                     "extraction_mode": self._mode.value, "status": "compiled", "facts": facts,
@@ -277,7 +277,7 @@ def _frozen_config(
     verification_prompt, verification_schema = _verification_contract(selected)
     extraction_selected = EvaluationExtractionMode(extraction_mode)
     extraction_frozen: dict = {"extraction_mode": extraction_selected.value}
-    if extraction_selected is EvaluationExtractionMode.GROUNDED_V2:
+    if extraction_selected.is_grounded:
         if not windows or len(windows) != len(plan):
             raise EvaluationBudgetAbort("evaluation_grounded_windows_required")
         contracts = tuple(extraction_contract(extraction_selected, window) for window in windows)
@@ -334,7 +334,7 @@ def _audit_persist_capability(store: EvaluationRecordStore, case_position: int,
         if (phase == "final" and "verification_protocol" in payload
                 and state.get("verification_mode") == "nullable-proof-v1"):
             keys = keys | {"verification_protocol"}
-        if state.get("extraction_mode") == "grounded-v2":
+        if state.get("extraction_mode") in {"grounded-v2", "grounded-v3"}:
             keys = keys | {"extraction_protocol"}
         if (phase not in {"raw", "final"} or set(payload) != keys
                 or (phase == "raw" and state["phase"] is not None)

@@ -32,6 +32,56 @@ PLAN = tuple(case for case in CASES if case.dimension == "reference") + tuple(
 
 
 class EvaluationECNUTest(unittest.TestCase):
+    def test_explicit_v3_freezes_dynamic_contract_and_records_program_without_changing_default(self):
+        def respond(request):
+            body = json.loads(request.content)
+            function = body["tools"][0]["function"]
+            self.assertEqual(function["name"], "GroundedMemoryLabelsV3")
+            names = function["parameters"]["properties"]["units"]["required"]
+            label = {"kind": "not_memory", "subject": "contact", "topic": "other",
+                     "dependency": None, "unresolved": False, "confidence": 0.9,
+                     "sensitivity": "none", "ambiguity_codes": []}
+            return self.response(request, arguments={"units": {name: dict(label) for name in names}})
+
+        result = self.run_ready(extraction_mode="grounded-v3", case_positions=(7, 0),
+                                transport=httpx.MockTransport(respond))
+
+        self.assertEqual(result["extraction_mode"], "grounded-v3")
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(self.audits[0]["extraction_program"][0], {
+            "extraction_mode": "grounded-v3", "status": "compiled", "facts": [],
+        })
+        config = json.loads((self.output / "manifest.json").read_text())["frozen_config"]
+        self.assertEqual(config["extraction_mode"], "grounded-v3")
+        self.assertEqual(config["request_contract_version"], 2)
+        self.assertEqual(len(config["extraction_window_contracts"]), 2)
+        self.assertFalse(result["quality_certified"])
+
+    def test_v3_dynamic_prompt_drift_stops_before_second_dispatch(self):
+        from notalone.memory_extraction import grounded_adapter
+
+        original = grounded_adapter.GROUNDED_V3_PROMPT
+
+        def respond(request):
+            body = json.loads(request.content)
+            names = body["tools"][0]["function"]["parameters"]["properties"]["units"]["required"]
+            label = {"kind": "not_memory", "subject": "contact", "topic": "other",
+                     "dependency": None, "unresolved": False, "confidence": 0.9,
+                     "sensitivity": "none", "ambiguity_codes": []}
+            grounded_adapter.GROUNDED_V3_PROMPT += "合成提示漂移。"
+            return self.response(request, arguments={"units": {name: dict(label) for name in names}})
+
+        try:
+            result = self.run_ready(extraction_mode="grounded-v3", case_positions=(7, 0),
+                                    transport=httpx.MockTransport(respond))
+        finally:
+            grounded_adapter.GROUNDED_V3_PROMPT = original
+
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(result["stopped_code"], "ecnu_hard_stop")
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 1)
+
+
     def test_remaining8_rejects_any_changed_selection_budget_mode_or_protocol_before_claim(self):
         fixed = {"provider_profile": "deepseek-flash-max", "request_timeout_seconds": 300,
             "max_retries": 0, "verification_mode": "nullable-proof-v1", "verification_tool_choice": "omitted",
@@ -41,7 +91,8 @@ class EvaluationECNUTest(unittest.TestCase):
             {"case_positions": (20, 19, 13, 14, 15, 16, 17, 18)}, {"case_positions": tuple(range(13, 21))},
             {"request_limit": 15}, {"request_limit": 17}, {"request_limit": 16.0}, {"execution_plan": "remaining8"},
             {"provider_profile": "ecnu"}, {"case_set": "full140"}, {"verification_mode": "legacy-v4"},
-            {"extraction_mode": "legacy-e14"}, {"verification_tool_choice": "forced"},
+            {"extraction_mode": "legacy-e14"}, {"extraction_mode": "grounded-v3"},
+            {"verification_tool_choice": "forced"},
             {"max_retries": 1}, {"request_timeout_seconds": 600}]
         for variant in variants:
             with self.subTest(variant=variant), self.assertRaises(EvaluationBudgetAbort):
@@ -190,6 +241,12 @@ class EvaluationECNUTest(unittest.TestCase):
         self.assertEqual(self.audits, [])
 
     def test_grounded_actual_e_compile_v_and_phased_unknown_do_not_certify_quality(self):
+        self._assert_grounded_actual_e_compile_v_and_phased_unknown("grounded-v2")
+
+    def test_v3_actual_e_compile_v_and_sealed_phased_unknown_do_not_certify_quality(self):
+        self._assert_grounded_actual_e_compile_v_and_phased_unknown("grounded-v3")
+
+    def _assert_grounded_actual_e_compile_v_and_phased_unknown(self, mode):
         from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
         from notalone.memory_extraction.evaluation_records import canonical_sha256
 
@@ -236,16 +293,20 @@ class EvaluationECNUTest(unittest.TestCase):
         audit = PhasedEvaluationAudit(
             reference=reference, expected_reference_sha256=canonical_sha256(reference),
             annotation_sha256=reference["annotation_sha256"], criteria_sha256=gold["criteria_sha256"],
-            raw_reviewer=raw, full_reviewer=full, case_positions=(7, 0), extraction_mode="grounded-v2",
+            raw_reviewer=raw, full_reviewer=full, case_positions=(7, 0), extraction_mode=mode,
         )
         label = {"kind": "event", "subject": "contact", "topic": "study", "dependency": None,
                  "unresolved": False, "confidence": 0.9, "sensitivity": "none"}
         draft = {"units": {"1:0": {**label, "kind": "prefix"}, "1:1": label}}
+        if mode == "grounded-v3":
+            for item in draft["units"].values():
+                item["ambiguity_codes"] = []
+        tool_name = "GroundedMemoryLabelsV3" if mode == "grounded-v3" else "GroundedMemoryLabels"
         window = build_window(PLAN[7])
 
         def respond(request):
             body = json.loads(request.content)
-            args = draft if body["tools"][0]["function"]["name"] == "GroundedMemoryLabels" else {
+            args = draft if body["tools"][0]["function"]["name"] == tool_name else {
                 "results": [{"candidate_index": 0, "verdict": "supported", "issues": [],
                              "evidence": [{"message_id": str(window.target_message_ids[0]),
                                            "quote": "《活着》，我刚看完。"}]}],
@@ -253,7 +314,7 @@ class EvaluationECNUTest(unittest.TestCase):
             return self.response(request, arguments=args)
 
         result = self.run_ready(
-            hashes=hashes, gold=gold, audit=audit, extraction_mode="grounded-v2",
+            hashes=hashes, gold=gold, audit=audit, extraction_mode=mode,
             case_positions=(7, 0), transport=httpx.MockTransport(respond),
         )
         self.assertEqual(len(self.requests), 2)
@@ -314,6 +375,12 @@ class EvaluationECNUTest(unittest.TestCase):
         self.assertFalse(result["quality_certified"])
 
     def test_grounded_official_max_keeps_omitted_tools_and_fixed_budget(self):
+        self._assert_grounded_official_max_keeps_omitted_tools_and_fixed_budget("grounded-v2")
+
+    def test_v3_official_max_keeps_omitted_tools_and_fixed_budget(self):
+        self._assert_grounded_official_max_keeps_omitted_tools_and_fixed_budget("grounded-v3")
+
+    def _assert_grounded_official_max_keeps_omitted_tools_and_fixed_budget(self, mode):
         hashes, gold, _ = self.full_preparation(nullable=True)
 
         def respond(request):
@@ -321,10 +388,12 @@ class EvaluationECNUTest(unittest.TestCase):
             self.assertEqual(body["reasoning_effort"], "max")
             self.assertNotIn("tool_choice", body)
             function = body["tools"][0]["function"]
-            self.assertEqual(function["name"], "GroundedMemoryLabels")
+            self.assertEqual(function["name"], "GroundedMemoryLabelsV3" if mode == "grounded-v3" else "GroundedMemoryLabels")
             names = function["parameters"]["properties"]["units"]["required"]
             label = {"kind": "not_memory", "subject": "contact", "topic": "other",
                      "dependency": None, "unresolved": False, "confidence": 0.9, "sensitivity": "none"}
+            if mode == "grounded-v3":
+                label["ambiguity_codes"] = []
             return self.response(request, reported_model="deepseek-flash", arguments={
                 "units": {name: dict(label) for name in names},
             })
@@ -332,7 +401,7 @@ class EvaluationECNUTest(unittest.TestCase):
         result = self.run_ready(
             hashes=hashes, gold=gold, case_set="full140", provider_profile="deepseek-flash-max",
             request_timeout_seconds=300, max_retries=0, verification_mode="nullable-proof-v1",
-            verification_tool_choice="omitted", request_limit=1, extraction_mode="grounded-v2",
+            verification_tool_choice="omitted", request_limit=1, extraction_mode=mode,
             transport=httpx.MockTransport(respond),
             audit=lambda bundle: self.audit(bundle, "unknown", "audit_unresolved"),
         )

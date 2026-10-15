@@ -133,7 +133,7 @@ class EvaluationRecordStore:
             or forbidden_config
             or not set(frozen_config) <= _CONFIG_FIELDS
             or frozen_config.get("extraction_mode", "legacy-e14") not in {
-                "legacy-e14", "grounded-v2",
+                "legacy-e14", "grounded-v2", "grounded-v3",
             }
             or ("verification_mode" in frozen_config and (
                 type(frozen_config["verification_mode"]) is not str
@@ -151,7 +151,7 @@ class EvaluationRecordStore:
             raise EvaluationBudgetAbort("invalid_record_freeze")
         self._extraction_mode = frozen_config.get("extraction_mode", "legacy-e14")
         contracts = frozen_config.get("extraction_window_contracts")
-        if self._extraction_mode == "grounded-v2":
+        if self._extraction_mode in {"grounded-v2", "grounded-v3"}:
             if (not isinstance(contracts, (tuple, list)) or len(contracts) != len(plan)
                     or any(not isinstance(item, dict)
                            or set(item) != {"input_sha256", "prompt_sha256", "schema_sha256"}
