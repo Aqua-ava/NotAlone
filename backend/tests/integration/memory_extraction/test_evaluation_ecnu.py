@@ -32,6 +32,76 @@ PLAN = tuple(case for case in CASES if case.dimension == "reference") + tuple(
 
 
 class EvaluationECNUTest(unittest.TestCase):
+    def test_official_reference21_uses_fixed42_and_max_without_tool_choice(self):
+        def respond(request):
+            body = json.loads(request.content)
+            self.assertEqual(str(request.url), "https://api.deepseek.com/chat/completions")
+            self.assertEqual(body["model"], "deepseek-flash")
+            self.assertEqual(body["reasoning_effort"], "max")
+            self.assertEqual(body["thinking"], {"type": "enabled"})
+            self.assertNotIn("tool_choice", body)
+            function = body["tools"][0]["function"]
+            self.assertEqual(function["name"], "GroundedMemoryLabels")
+            slots = function["parameters"]["properties"]["units"]["required"]
+            label = {"kind": "not_memory", "subject": "contact", "topic": "other", "dependency": None,
+                     "unresolved": False, "confidence": 0.9, "sensitivity": "none"}
+            return self.response(request, reported_model="deepseek-flash", arguments={
+                "units": {slot: dict(label) for slot in slots},
+            })
+
+        result = self.run_ready(
+            provider_profile="deepseek-flash-max", case_set="reference21", request_limit=42,
+            request_timeout_seconds=300, max_retries=0, verification_mode="nullable-proof-v1",
+            verification_tool_choice="omitted", extraction_mode="grounded-v2", transport=httpx.MockTransport(respond),
+        )
+        self.assertEqual(len(self.requests), 21)
+        self.assertTrue(result["summary"]["plan_complete"])
+        self.assertEqual(result["receipt"]["budget"]["request_limit"], 42)
+        config = json.loads((self.output / "manifest.json").read_text())["frozen_config"]
+        self.assertEqual(config["mode"], "deepseek_bounded_evaluation")
+        self.assertEqual(config["response_identity_policy"], "first_valid_completion_observation_stop_on_change")
+
+    def test_official_reference21_rejects_subset_and_any_non42_budget_before_credential(self):
+        variants = [{"case_positions": (0,)}, {"case_positions": tuple(range(21))}]
+        variants += [{"request_limit": value} for value in (0, 1, 41, 43, 280, 42.0, True)]
+        for variant in variants:
+            with self.subTest(variant=variant), self.assertRaises(EvaluationBudgetAbort):
+                self.run_ready(provider_profile="deepseek-flash-max", request_timeout_seconds=300,
+                    max_retries=0, verification_mode="nullable-proof-v1", verification_tool_choice="omitted", **variant)
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+        self.assertFalse((self.home / ".notalone-memory-evaluations").exists())
+
+    def test_official_reference21_default42_reaches_v_and_rejects_ecnu_response_alias(self):
+        def respond(request):
+            body = json.loads(request.content)
+            self.assertEqual(body["reasoning_effort"], "max")
+            self.assertNotIn("tool_choice", body)
+            if not self.requests:
+                self.assertEqual(body["tools"][0]["function"]["name"], "GroundedMemoryLabels")
+                label = {"kind": "state", "subject": "contact", "topic": "work", "dependency": None,
+                         "unresolved": True, "confidence": 0.9, "sensitivity": "none"}
+                args = {"units": {"0:0": dict(label), "0:1": dict(label)}}
+                identity = "deepseek-flash"
+            else:
+                self.assertEqual(body["tools"][0]["function"]["name"], "SourceVerificationOutput")
+                candidates = json.loads(body["messages"][1]["content"])["candidates"]
+                args = {"results": [{"candidate_index": index, "verdict": "uncertain",
+                    "issues": ["insufficient_evidence"], "evidence": [], "proof": None}
+                    for index, _ in enumerate(candidates)]}
+                identity = "deepseek-v4-flash"
+            return self.response(request, arguments=args, reported_model=identity)
+
+        result = self.run_ready(provider_profile="deepseek-flash-max", request_timeout_seconds=300,
+            max_retries=0, verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+            extraction_mode="grounded-v2", transport=httpx.MockTransport(respond))
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(result["stopped_code"], "deepseek_hard_stop")
+        self.assertEqual(result["summary"]["unrun"], 20)
+        self.assertEqual(result["receipt"]["budget"]["request_limit"], 42)
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 2)
+        self.assertEqual(self.audits, [])
+
     def test_grounded_actual_e_compile_v_and_phased_unknown_do_not_certify_quality(self):
         from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
         from notalone.memory_extraction.evaluation_records import canonical_sha256

@@ -163,7 +163,7 @@ def run_ecnu_evaluation(
     request_limit: int | None = None,
     extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
 ) -> dict:
-    """保留ECNU入口名；显式官方Flash最高思考只接受完整140及原独审。"""
+    """保留ECNU入口名；官方最高思考只接受固定完整21或140及原独审。"""
     from .evaluation_provider_contract import EvaluationProviderProfile
 
     try:
@@ -175,8 +175,10 @@ def run_ecnu_evaluation(
     except (TypeError, ValueError):
         raise EvaluationBudgetAbort("evaluation_provider_profile_invalid") from None
     official = profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
-    if official and case_set != "full140":
-        raise EvaluationBudgetAbort("evaluation_official_full140_required")
+    if official and case_set == "reference21" and (
+        case_positions is not None or request_limit not in (None, 42)
+    ):
+        raise EvaluationBudgetAbort("evaluation_official_fixed_reference21_required")
     if official and verification_tool_choice != "omitted":
         raise EvaluationBudgetAbort("evaluation_official_tools_must_be_omitted")
     if request_limit is not None and (
@@ -299,7 +301,8 @@ def run_ecnu_evaluation(
         **_frozen_config(plan, request_timeout_seconds=request_timeout_seconds,
                          max_retries=max_retries, verification_mode=selected,
                          extraction_mode=extraction_selected, windows=windows),
-        "mode": ("deepseek_bounded_full140" if official else
+        "mode": ("deepseek_bounded_full140" if official and case_set == "full140" else
+                 "deepseek_bounded_evaluation" if official else
                  "ecnu_bounded_full140" if case_set == "full140" else
                  "ecnu_bounded_evaluation" if case_positions is None
                  else "ecnu_bounded_diagnostic"),
