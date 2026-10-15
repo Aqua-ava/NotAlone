@@ -58,7 +58,7 @@ export function CurrentContactLabel({ state }: { state: ContactSessionState }) {
 
 export function HelperContactPicker({ session, foreground }: { session: ContactSessionView; foreground?: ForegroundState }) {
   return <select className="contact-picker" aria-label="本次联系人"
-    value={session.state.selectedContactId ?? ''} disabled={session.state.contacts.length === 0 || !foreground}
+    value={session.state.selectedContactId ?? ''} disabled={session.state.contacts.length === 0 || !foreground || foreground.unsupportedConversation}
     onChange={(event) => foreground && void session.confirmContact(event.target.value, foreground.foregroundRevision)}>
     <option value="" disabled>联系人未确认</option>
     {session.state.contacts.map((contact) => <option key={contact.contactId} value={contact.contactId}>{contact.displayName}</option>)}

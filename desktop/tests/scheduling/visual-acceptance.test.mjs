@@ -76,3 +76,37 @@ test('离开微信只显示正常暂停，不累计识别失败；关闭同步�
   assert.equal(disabled.classification, 'unknown');
   assert.equal(disabled.failure, null);
 });
+
+test('人工验收显示短时名称和联系人槽位，群聊暂停不展示标题且不冒充绑定通过', () => {
+  const view = projectVisualAcceptance({ foreground: { ...confirmed, recognizedName: '合成私聊甲',
+    recognitionConfidence: 0.96, generationBlock: null }, selectedContactId: 'contact-a',
+    expectedContactId: 'contact-a', alternateContactId: 'contact-b', draftLength: 5 }, now);
+  assert.equal(view.recognizedName, '合成私聊甲');
+  assert.equal(view.confidencePercent, 96);
+  assert.equal(view.selectedLabel, '测试联系人 A');
+  assert.equal(view.generationAllowed, true);
+  assert.equal(view.draftLength, 5);
+  assert.equal(projectVisualAcceptance({ foreground: { ...confirmed, confirmedContactId: 'contact-b',
+    generationBlock: null }, selectedContactId: 'contact-b', expectedContactId: 'contact-a',
+    alternateContactId: 'contact-b' }, now).matched, true);
+  const paused = project({ ...confirmed, phase: 'paused', reason: 'group_chat_suspected',
+    unsupportedConversation: true, recognizedName: '不应展示的合成群 (8)', confirmation: 'required',
+    confirmedContactId: null, generationBlock: 'foreground-confirmation-required' });
+  assert.match(paused.headline, /群聊.*暂停/);
+  assert.equal(paused.recognizedName, null);
+  assert.equal(paused.generationAllowed, false);
+  assert.equal(paused.matched, false);
+  assert.equal(project({ ...confirmed, recognizedName: '已过期合成姓名',
+    observedAt: '2026-10-15T03:59:30Z' }).recognizedName, null);
+});
+
+test('人工清单只接受本轮固定检查项和反馈结果，不能伪造结束或自动通过', () => {
+  const current = { runId: 'current-run', stage: 'finish', state: 'waiting-trigger' };
+  const feedback = { runId: 'current-run', stage: 'finish', type: 'checklist',
+    checkId: 'draft-restore', outcome: 'matches' };
+  assert.equal(visualPreviewAction(current, feedback), 'checklist');
+  assert.equal(visualPreviewAction(current, { ...feedback, checkId: '../private' }), null);
+  assert.equal(visualPreviewAction(current, { ...feedback, outcome: 'automatic-pass' }), null);
+  assert.equal(visualPreviewAction(current, { ...feedback, runId: 'old-run' }), null);
+  assert.equal(visualPreviewAction({ ...current, state: 'closing' }, feedback), null);
+});

@@ -28,6 +28,110 @@ function deferred() {
   return { promise, resolve };
 }
 
+test('群聊暂停撤销生成资格且不能手动绕过，返回私聊恢复而授权后台同步继续', async () => {
+  await ports.withVerifiedForegroundFixture(async fixture => {
+    const [a, b] = fixture.data.contact_ids;
+    const sessions = [
+      { username: 'wxid_synthetic_a', display_name: '合成私聊甲', chat_type: 'private', last_timestamp: 1700000000 },
+      { username: 'wxid_synthetic_b', display_name: '合成私聊乙 (8)', chat_type: 'private', last_timestamp: 1700000000 },
+      { username: 'synthetic_group', display_name: '合成讨论', chat_type: 'group', last_timestamp: 1700000000 },
+    ];
+    await fixture.setCli({ sessions, messages: {} });
+    assert.equal((await fixture.request('/api/sync/cli-bindings/confirm', { selections: [
+      { locator: 'wxid_synthetic_a', contact_id: a }, { locator: 'wxid_synthetic_b', contact_id: b },
+    ] })).status, 200);
+    assert.equal((await fixture.request('/api/sync/enable', {})).status, 200);
+    const client = new ports.JsonClient(await ports.readConnection(fixture.infoPath));
+    const requests = [];
+    const backend = { getConnectionGeneration: () => 1, onStateChanged: () => () => {},
+      async requestJson(request) { requests.push(request.path); return { ...await client.perform(request), generation: 1 }; } };
+    const contacts = new ports.ContactSession(() => ports.readContactDirectory(backend));
+    contacts.setConnection(1); await contacts.refreshContacts();
+    const foreground = new ports.ForegroundController(backend, contacts);
+    const observe = async (name, extra = {}) => {
+      await writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify({
+        capture_version: 'automatic-header-v3', display_name: name, ...extra }));
+      await foreground.observeBeforeShow();
+      return foreground.getState();
+    };
+    const confirm = () => foreground.confirm({ contactId: a, contactScopeRevision: contacts.getState().scopeRevision,
+      foregroundRevision: foreground.getState().foregroundRevision });
+    try {
+      await observe('合成私聊甲');
+      contacts.setDraft({ contactId: a, scopeRevision: contacts.getState().scopeRevision, text: '甲的合成未发送草稿' });
+      for (const name of ['合成讨论 (23)', '合成讨论（２３）', '合成讨论', '未知会话 (8)']) {
+        const state = await observe(name);
+        assert.equal(state.phase, 'paused');
+        assert.equal(state.unsupportedConversation, true);
+        assert.equal(state.recognizedName, null, '群聊标题不能继续作为联系人名称展示');
+        assert.equal(state.confirmedContactId, null);
+        assert.equal(foreground.getGenerationBlock(), 'foreground-confirmation-required');
+        assert.equal(contacts.getState().selectedContactId, a);
+        assert.equal(contacts.getState().draft, '甲的合成未发送草稿');
+        assert.throws(confirm, '群聊状态不能用人工确认沿用上一私聊');
+        const html = ports.renderToStaticMarkup(ports.createElement(ports.ForegroundPanel, { state }));
+        assert.ok(html.includes('群聊暂不支持'));
+        assert.ok(!html.includes(name));
+        foreground.notifyHelperLifecycle('focused');
+        assert.throws(confirm, '打开助手不能解除群聊暂停');
+        foreground.notifyHelperLifecycle('blurred');
+        await observe('合成私聊甲', { wechat_in_front: false });
+        assert.throws(confirm, '离开微信不能解除群聊暂停');
+        await observe('合成私聊甲');
+        assert.equal(foreground.getState().unsupportedConversation, false);
+        assert.equal(foreground.getState().confirmation, 'verified-binding');
+      }
+      const tails = (await fixture.tails()).length;
+      await observe('合成讨论 (23)', { display_name_confidence: 0.5 });
+      assert.equal(foreground.getState().phase, 'paused', '疑似群标题仅用于保守暂停，不授予身份');
+      assert.equal((await fixture.request('/api/sync/status')).data.sync_enabled, true);
+      assert.equal((await fixture.request('/api/sync/check', {})).status, 200);
+      const after = await fixture.tails();
+      assert.ok(after.length > tails, '群聊前台期间授权私聊仍可同步');
+      assert.ok(after.every(locator => ['wxid_synthetic_a', 'wxid_synthetic_b'].includes(locator)));
+      assert.equal(requests.some(value => /\/(generate|prepare|rewrite)$/.test(value)), false);
+      await observe('合成私聊甲');
+      await observe('合成私聊甲', { display_name_confidence: 0.5 });
+      await observe('合成讨论 (23)');
+      await observe('合成私聊甲');
+      assert.equal(foreground.getState().reason, 'manual_confirmation_required', '群聊往返不能解除既有低分人工门');
+      assert.equal(foreground.getGenerationBlock(), 'foreground-confirmation-required');
+      confirm();
+      await observe('合成私聊乙 (8)');
+      assert.equal(foreground.getState().confirmedContactId, b, '完整名称本身带数字括号的唯一已绑定私聊仍可核验');
+      assert.equal(foreground.getState().unsupportedConversation, false);
+    } finally { foreground.dispose(); client.cancelPending(); }
+  });
+});
+
+test('首次无人数群标题即使候选截断或识别低分也按群元数据暂停', async () => {
+  await ports.withVerifiedForegroundFixture(async fixture => {
+    const name = '合成首次讨论';
+    const group = { username: 'synthetic_first_group', display_name: name,
+      chat_type: 'group', last_timestamp: 1700000000 };
+    await fixture.setCli({ sessions: [group, ...Array.from({ length: 50 }, (_, index) => ({
+      username: `synthetic_group_${index}`, display_name: `${name}${index}`,
+      chat_type: 'group', last_timestamp: 1700000000,
+    }))], messages: {} });
+    assert.equal((await fixture.request('/api/sync/enable', {})).status, 200);
+    const observe = async extra => {
+      await writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify({
+        capture_version: 'automatic-header-v3', display_name: name, ...extra,
+      }));
+      const result = await fixture.request('/api/sync/foreground/observe', {});
+      assert.equal(result.status, 200);
+      assert.equal(result.data.phase, 'paused');
+      assert.equal(result.data.reason, 'group_chat_unsupported');
+      assert.equal(Object.hasOwn(result.data, 'recognized_name'), false);
+      assert.equal(result.data.contact_id, null);
+    };
+    await observe({});
+    await fixture.setCli({ sessions: [group], messages: {} });
+    await observe({ display_name_confidence: 0.5 });
+    await observe({ name_complete: false });
+  });
+});
+
 test('顶部单名称经正式HTTP自动跟随已确认A与B，低分或截断不能获得生成资格', async () => {
   await ports.withVerifiedForegroundFixture(async fixture => {
     const [a, b] = fixture.data.contact_ids;

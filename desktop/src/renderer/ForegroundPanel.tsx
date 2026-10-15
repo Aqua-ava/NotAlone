@@ -21,7 +21,8 @@ export function useForegroundState(bridge: ForegroundBridge, enabled: boolean): 
 export function ForegroundPanel({ state, session }: { state: ForegroundState; session?: ContactSessionView }) {
   const failure = foregroundFailureReason(state.reason);
   const paused = state.phase === 'paused' || state.suspendedByHelperFocus;
-  const message = paused ? '前台定位已暂停' : state.phase === 'observing' ? '正在定位前台会话'
+  const message = state.unsupportedConversation ? '群聊暂不支持，前台联系人匹配与新生成已暂停'
+    : paused ? '前台定位已暂停' : state.phase === 'observing' ? '正在定位前台会话'
     : state.phase === 'confirmed' ? '已识别采集时的微信会话'
     : state.phase === 'manual-required' ? (state.recognizedName ? '已读到微信会话，请选择对应联系人' : '请手动确认本次联系人')
     : state.phase === 'unavailable' && isTransientForegroundContextChange(state.reason)
@@ -32,14 +33,15 @@ export function ForegroundPanel({ state, session }: { state: ForegroundState; se
     : state.phase === 'unavailable' ? '前台定位暂不可用，请手动选择联系人' : '前台定位尚未观察';
   return <section aria-label="前台会话定位">
     <p role="status">{message}</p>
-    {!paused && state.recognizedName && <p>
+    {!paused && !state.unsupportedConversation && state.recognizedName && <p>
       微信会话：{state.recognizedName}
       {state.recognitionConfidence !== null && <small> · 识别置信度 {Math.round(state.recognitionConfidence * 100)}%</small>}
     </p>}
-    {state.generationBlock !== null && session?.state.selectedContactId && <p>
+    {state.unsupportedConversation && <p>原私聊内容已保留，已授权联系人的后台同步继续；回到已确认私聊后重新识别。</p>}
+    {!state.unsupportedConversation && state.generationBlock !== null && session?.state.selectedContactId && <p>
       当前联系人未确认；以下保留内容属于{session.state.contacts.find((item) => item.contactId === session.state.selectedContactId)?.displayName}，请明确选择后再生成。
     </p>}
-    {session?.state.selectedContactId && state.generationBlock !== null && <button
+    {!state.unsupportedConversation && session?.state.selectedContactId && state.generationBlock !== null && <button
       onClick={() => void session.confirmContact(session.state.selectedContactId!, state.foregroundRevision)}>
       确认本次联系人
     </button>}

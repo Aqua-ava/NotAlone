@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from uuid import UUID
 from time import monotonic
 
@@ -120,6 +121,16 @@ class ForegroundLocator:
                 phase="paused", reason="wechat_not_in_front",
                 probe_available=True, wechat_in_front=False,
             )
+        raw_title = observation.evidence.display_name if observation.evidence else ""
+        # 人数尾缀仅用于查找群元数据；私聊资格仍要求完整原名精确匹配。
+        member_suffix = re.search(r"[（(]\s*[0-9０-９]+\s*[）)]\s*$", raw_title or "")
+
+        def pause_group(reason: str = "group_chat_suspected") -> FreshForegroundObservation:
+            return FreshForegroundObservation.create(
+                phase="paused", reason=reason, probe_available=True,
+                wechat_in_front=True, observed_at=observation.captured_at,
+            )
+
         recognized = {}
         if (observation.quality is not None
                 and observation.quality.capture_version == "automatic-header-v3"
@@ -130,41 +141,63 @@ class ForegroundLocator:
                 recognized = {"recognized_name": raw_name,
                               "recognition_confidence": observation.quality.display_name_confidence}
         evidence = observation.qualified_evidence
+        quality_failure = None
         if (evidence is None or observation.quality is None
                 or observation.quality.capture_version not in ("automatic-window-v2", "automatic-header-v3")
                 or observation.captured_at is None):
-            return FreshForegroundObservation.create(
+            if member_suffix:
+                return pause_group()
+            quality_failure = FreshForegroundObservation.create(
                 phase="manual-required", reason="quality_unverified",
                 probe_available=True, wechat_in_front=True,
                 observed_at=observation.captured_at,
                 **recognized,
             )
+            if not recognized:
+                return quality_failure
         remaining = deadline - monotonic()
         if remaining <= 0:
+            if member_suffix:
+                return pause_group()
+            if quality_failure is not None:
+                return quality_failure
             return FreshForegroundObservation.create(
                 phase="unavailable", reason="observation_timeout",
                 probe_available=False, wechat_in_front=True,
                 observed_at=observation.captured_at,
             )
-        name = normalize_display_text(evidence.display_name)
+        name = normalize_display_text(raw_title)
+        group_name = normalize_display_text(raw_title[:member_suffix.start()]) if member_suffix else name
         try:
             # all包含同名群聊及未绑定会话；达到上限即不能证明唯一。
             candidates = self._cli.sessions(
-                keyword=name, type_filter="all", limit=51,
+                keyword=group_name or name, type_filter="all", limit=51,
                 timeout_seconds=min(0.25, remaining),
             )
             if monotonic() >= deadline:
                 raise TimeoutError
+            exact = tuple(item for item in candidates
+                          if normalize_display_text(item.display_name) == name)
+            groups = tuple(item for item in candidates if item.chat_type == "group"
+                           and normalize_display_text(item.display_name) in (name, group_name))
+            if groups:
+                return pause_group("group_chat_suspected" if any(item.chat_type == "private" for item in exact)
+                                   else "group_chat_unsupported")
+            # 低质量文字只允许保守判群，不能据此查询绑定或授予私聊身份。
+            if quality_failure is not None:
+                return quality_failure
             if len(candidates) >= 51:
+                if member_suffix:
+                    return pause_group()
                 return FreshForegroundObservation.create(
                     phase="manual-required", reason="session_candidates_truncated",
                     probe_available=True, wechat_in_front=True,
                     observed_at=observation.captured_at,
                     **recognized,
                 )
-            exact = tuple(item for item in candidates
-                          if normalize_display_text(item.display_name) == name)
             if len(exact) != 1 or exact[0].chat_type != "private":
+                if member_suffix:
+                    return pause_group()
                 return FreshForegroundObservation.create(
                     phase="manual-required", reason="ambiguous_requires_selection",
                     probe_available=True, wechat_in_front=True,
@@ -178,12 +211,20 @@ class ForegroundLocator:
             if monotonic() >= deadline:
                 raise TimeoutError
         except TimeoutError:
+            if member_suffix:
+                return pause_group()
+            if quality_failure is not None:
+                return quality_failure
             return FreshForegroundObservation.create(
                 phase="unavailable", reason="observation_timeout",
                 probe_available=False, wechat_in_front=True,
                 observed_at=observation.captured_at,
             )
         except (CliAdapterError, ConversationBindingPersistenceError):
+            if member_suffix:
+                return pause_group()
+            if quality_failure is not None:
+                return quality_failure
             return FreshForegroundObservation.create(
                 phase="unavailable", reason="binding_verification_unavailable",
                 probe_available=False, wechat_in_front=True,

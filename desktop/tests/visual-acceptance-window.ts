@@ -7,15 +7,15 @@ import { visualAcceptanceHtml, renderVisualAcceptance } from './visual-acceptanc
 export { visualAcceptanceHtml } from './visual-acceptance-html.mjs';
 import { verifyAppTestLease } from './app-test-gate';
 
-type ControlWindow = Window & { acceptance: { begun: boolean; name: string; events: VisualAction[];
+type ControlWindow = Window & { acceptance: { begun: boolean; names: string[]; events: VisualAction[];
   classification: string; displayedAt: number; coordination: VisualCoordination | null } };
 const pause = () => new Promise(resolve => setTimeout(resolve, 500));
 export async function openVisualAcceptance(app: ElectronApplication) {
   const opened = app.waitForEvent('window');
   const id = await app.evaluate(async ({ BrowserWindow, screen }, html) => {
     const area = screen.getPrimaryDisplay().workArea;
-    const window = new BrowserWindow({ title: '正式App定位 · 实时可视验收', width: 460, height: 740,
-      x: area.x + area.width - 480, y: area.y + 20, type: 'panel', alwaysOnTop: true,
+    const window = new BrowserWindow({ title: '正式App定位 · 实时可视验收', width: 500, height: Math.min(920, area.height - 40),
+      x: area.x + area.width - 520, y: area.y + 20, type: 'panel', alwaysOnTop: true,
       acceptFirstMouse: true, show: false, minimizable: false, maximizable: false,
       webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, partition: 'visual-acceptance' } });
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -27,23 +27,25 @@ export async function openVisualAcceptance(app: ElectronApplication) {
   const page = await opened;
   return {
     page,
-    async waitForName() {
+    async waitForNames() {
       try {
         while (!page.isClosed()) {
           await verifyAppTestLease();
-          const name = await page.evaluate(() => {
+          const names = await page.evaluate(() => {
             const state = (window as unknown as ControlWindow).acceptance;
-            return state.begun ? state.name : null;
+            return state.begun ? state.names : null;
           });
-          if (name && name.length <= 256 && !/[\r\n]/.test(name)) {
-            await page.evaluate(() => { (window as unknown as ControlWindow).acceptance.name = ''; document.getElementById('name')?.remove(); });
+          if (names && names.length >= 1 && names.length <= 2 && new Set(names).size === names.length
+            && names.every(name => name.trim() && name.length <= 256 && !/[\r\n]/.test(name))) {
+            await page.evaluate(() => { (window as unknown as ControlWindow).acceptance.names = [];
+              document.getElementById('name')?.remove(); document.getElementById('name-b')?.remove(); });
             await app.evaluate(({ BrowserWindow }, id) => {
               const window = BrowserWindow.fromId(id);
               if (!window) throw new Error('visual_window_closed');
               // macOS仅setFocusable(false)不会释放现有焦点，因此先hide再showInactive。
               window.hide(); window.setFocusable(false); window.showInactive();
             }, id);
-            return name;
+            return names;
           }
           await pause();
         }
@@ -55,14 +57,15 @@ export async function openVisualAcceptance(app: ElectronApplication) {
   };
 }
 
-export async function monitorVisualAcceptance({ page, helper, directory, expectedContactId, requestFinish, openHelper }: {
+export async function monitorVisualAcceptance({ page, helper, directory, expectedContactId, alternateContactId, requestFinish, openHelper }: {
   page: Page; helper: Page; directory: string; expectedContactId: string; requestFinish: () => Promise<boolean>;
+  alternateContactId?: string;
   openHelper: () => Promise<void>;
 }) {
   let stopped = false;
   let lastRevision: number | undefined;
   const counts: VisualCounts = { matches: 0, mismatches: 0, unverified: 0, monitorFailed: false,
-    stateUpdates: 0, matchedSamples: 0, helperPausedSamples: 0, otherPausedSamples: 0, failures: {} };
+    stateUpdates: 0, matchedSamples: 0, helperPausedSamples: 0, otherPausedSamples: 0, failures: {}, checks: {} };
   const done = (async () => {
     try {
       while (!stopped) {
@@ -73,9 +76,12 @@ export async function monitorVisualAcceptance({ page, helper, directory, expecte
           await requestFinish();
           return;
         }
-        const input = await helper.evaluate(async () => ({ foreground: await window.notalone.foreground.getState(),
-          selectedContactId: (await window.notalone.contacts.getState()).selectedContactId }));
-        const view = projectVisualAcceptance({ ...input, expectedContactId });
+        const input = await helper.evaluate(async () => {
+          const contacts = await window.notalone.contacts.getState();
+          return { foreground: await window.notalone.foreground.getState(),
+            selectedContactId: contacts.selectedContactId, draftLength: contacts.draft.length };
+        });
+        const view = projectVisualAcceptance({ ...input, expectedContactId, alternateContactId });
         if (input.foreground.revision !== lastRevision) {
           lastRevision = input.foreground.revision;
           counts.stateUpdates += 1;
@@ -93,6 +99,10 @@ export async function monitorVisualAcceptance({ page, helper, directory, expecte
             if (age < 0 || age > 2000 || !['wechat', 'other'].includes(event.classification ?? '')) counts.unverified += 1;
             else if (event.classification === event.type) counts.matches += 1;
             else counts.mismatches += 1;
+          } else if (action === 'checklist') {
+            const age = Date.now() - (event.displayedAt ?? 0);
+            const configured = !['contact-switch', 'result-scope'].includes(event.checkId!) || Boolean(alternateContactId);
+            counts.checks![event.checkId!] = age >= 0 && age <= 2000 && configured ? event.outcome! : 'unverified';
           } else if (action === 'finish') {
             await requestFinish();
             return;

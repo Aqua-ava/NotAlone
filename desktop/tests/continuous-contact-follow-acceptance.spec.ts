@@ -113,14 +113,15 @@ test('正式App持续单帧名称跟随及可视诊断生命周期', async ({ ru
       const viewer = await openVisualAcceptance(app);
       viewer.page.once('close', () => { void coordinator.requestFinish().catch(() => {}); });
       process.stdout.write('continuous_visual_ready: waiting for user to confirm one session name in the window\n');
-      const name = await viewer.waitForName();
-      await bindingBackend.setCli({ sessions: [{ username: 'wxid_synthetic_a', display_name: name,
-        chat_type: 'private', last_timestamp: 1700000000 }], messages: {} });
-      expect((await bindingBackend.request('/api/sync/cli-bindings/confirm', { selections: [{ locator: 'wxid_synthetic_a',
-        contact_id: bindingBackend.data.contact_ids[0] }] })).status).toBe(200);
+      const names = await viewer.waitForNames();
+      await bindingBackend.setCli({ sessions: names.map((name, index) => ({ username: `wxid_synthetic_${index ? 'b' : 'a'}`,
+        display_name: name, chat_type: 'private', last_timestamp: 1700000000 })), messages: {} });
+      expect((await bindingBackend.request('/api/sync/cli-bindings/confirm', { selections: names.map((_, index) => ({
+        locator: `wxid_synthetic_${index ? 'b' : 'a'}`, contact_id: bindingBackend.data.contact_ids[index] })) })).status).toBe(200);
       await helper.evaluate(() => window.notalone.hideWindow());
       visualMonitor = await monitorVisualAcceptance({ page: viewer.page, helper, directory,
-        expectedContactId: bindingBackend.data.contact_ids[0], requestFinish: () => coordinator.requestFinish(),
+        expectedContactId: bindingBackend.data.contact_ids[0], alternateContactId: names.length === 2 ? bindingBackend.data.contact_ids[1] : undefined,
+        requestFinish: () => coordinator.requestFinish(),
         openHelper: () => selectMenu(app, '窗口', '输入小窗') });
     }
     expect((await bindingBackend.request('/api/sync/enable', {})).status).toBe(200);

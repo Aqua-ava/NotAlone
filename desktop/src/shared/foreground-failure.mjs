@@ -7,6 +7,10 @@ export function isTransientForegroundContextChange(code) {
   return transientContextChanges.has(code);
 }
 
+export function isUnsupportedForegroundConversation(code) {
+  return code === 'group_chat_unsupported' || code === 'group_chat_suspected';
+}
+
 // 固定协议原因的中文说明；不显示原生原文、会话名称或任意reason字符串。
 const reasons = Object.freeze({
   foreground_application_unavailable: ['前台检查', '系统未返回前台应用'],

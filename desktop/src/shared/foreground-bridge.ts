@@ -18,6 +18,7 @@ export interface ForegroundState {
   probeAvailable: boolean | null;
   wechatInFront: boolean | null;
   suspendedByHelperFocus: boolean;
+  unsupportedConversation: boolean;
   confirmation: 'required' | 'manual-confirmed' | 'verified-binding';
   confirmedContactId: string | null;
   suggestedContactId: string | null;
@@ -27,6 +28,7 @@ export const initialForegroundState: ForegroundState = Object.freeze({
   revision: 0, foregroundRevision: 0, phase: 'idle', reason: null,
   observedAt: null, recognizedName: null, recognitionConfidence: null,
   probeAvailable: null, wechatInFront: null, suspendedByHelperFocus: false,
+  unsupportedConversation: false,
   confirmation: 'required', confirmedContactId: null, suggestedContactId: null, generationBlock: 'foreground-confirmation-required',
 });
 export interface ForegroundBridge {

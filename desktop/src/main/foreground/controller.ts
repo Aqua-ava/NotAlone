@@ -2,7 +2,7 @@ import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { initialForegroundState, type ForegroundState, type ForegroundConfirmation, type GenerationBlock } from '../../shared/foreground-bridge';
 import { foregroundObservation } from './observation';
-import { isTransientForegroundContextChange } from '../../shared/foreground-failure.mjs';
+import { isTransientForegroundContextChange, isUnsupportedForegroundConversation } from '../../shared/foreground-failure.mjs';
 
 type Flight = { abort: AbortController; promise: Promise<void> };
 
@@ -58,7 +58,7 @@ export class ForegroundController {
   getGenerationBlock(): GenerationBlock {
     const contact = this.contacts.getState();
     const qualified = this.qualification;
-    return !this.disposed && !this.stopped && this.readingScopeChanges === 0 && qualified && qualified.generation === this.backend.getConnectionGeneration()
+    return !this.disposed && !this.stopped && !this.state.unsupportedConversation && this.readingScopeChanges === 0 && qualified && qualified.generation === this.backend.getConnectionGeneration()
       && qualified.scopeRevision === contact.scopeRevision && qualified.contactId === contact.selectedContactId
       && (contact.directoryPhase === 'ready' || contact.directoryPhase === 'loading')
       ? null : 'foreground-confirmation-required';
@@ -67,7 +67,7 @@ export class ForegroundController {
   confirm(selection: ForegroundConfirmation) {
     const generation = this.backend.getConnectionGeneration();
     const contact = this.contacts.getState();
-    if (this.disposed || this.stopped || this.readingScopeChanges > 0 || generation === undefined || generation !== this.generation
+    if (this.disposed || this.stopped || this.state.unsupportedConversation || this.readingScopeChanges > 0 || generation === undefined || generation !== this.generation
       || selection.foregroundRevision !== this.state.foregroundRevision
       || selection.contactScopeRevision !== contact.scopeRevision
       || !contact.contacts.some((item) => item.contactId === selection.contactId)
@@ -145,9 +145,15 @@ export class ForegroundController {
       signal: abort.signal, timeoutMs: 1500, maxResponseBytes: 4096 }).then((response) => {
       if (!current() || response.generation !== generation) return;
       const observation = foregroundObservation(response.data);
+      // 群聊暂停跨助手获焦/失败保留，只有新的完整私聊证据才能解除。
+      const privateVerified = observation.phase === 'confirmed'
+        || (observation.phase === 'manual-required' && observation.reason === 'unmatched_requires_selection');
+      const unsupportedConversation = isUnsupportedForegroundConversation(observation.reason)
+        || (this.state.unsupportedConversation && !privateVerified);
       if (observation.phase === 'manual-required' || (observation.phase === 'unavailable'
         && !isTransientForegroundContextChange(observation.reason))) this.manualRequired = true;
-      if (this.manualRequired || observation.phase === 'unavailable' || observation.reason === 'sync_disabled') this.qualification = undefined;
+      if (unsupportedConversation || this.manualRequired || observation.phase === 'unavailable' || observation.reason === 'sync_disabled') this.qualification = undefined;
+      this.state = { ...this.state, unsupportedConversation };
       // 消费前先废弃flight，内部选择不能把已消费的观察当异步旧结果。
       ++this.epoch;
       if (observation.contactId) {
@@ -168,7 +174,8 @@ export class ForegroundController {
           contactId: observation.contactId, kind: 'verified-binding' };
       }
       this.publish({ phase: observation.phase, reason: observation.reason, observedAt: observation.observedAt,
-        recognizedName: observation.recognizedName, recognitionConfidence: observation.recognitionConfidence,
+        recognizedName: unsupportedConversation ? null : observation.recognizedName,
+        recognitionConfidence: unsupportedConversation ? null : observation.recognitionConfidence,
         probeAvailable: observation.probeAvailable, wechatInFront: observation.wechatInFront, suggestedContactId: null });
     }).catch(() => {
       if (current()) this.clearObservation('unavailable', 'observation_unavailable');

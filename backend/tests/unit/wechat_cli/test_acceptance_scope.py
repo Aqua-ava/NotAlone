@@ -186,8 +186,8 @@ class AcceptanceScopeTest(unittest.TestCase):
             bindings=SimpleNamespace(list_active_bindings=lambda **kwargs: self.fail("歧义不应读取绑定目录")))
         import time
         result = locator.observe_fresh(enabled=True, deadline=time.monotonic() + 1.3)
-        self.assertEqual(result.reason, "ambiguous_requires_selection")
-        self.assertEqual(result.phase, "manual-required")
+        self.assertEqual(result.reason, "group_chat_suspected")
+        self.assertEqual(result.phase, "paused")
         self.assertIsNone(result.contact_id)
 
     def test_foreground_metadata_does_not_authorize_other_keywords_or_wide_lists(self) -> None:
