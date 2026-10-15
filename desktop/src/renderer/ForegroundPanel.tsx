@@ -27,6 +27,8 @@ export function ForegroundPanel({ state, session }: { state: ForegroundState; se
     : state.phase === 'manual-required' ? (state.recognizedName ? '已读到微信会话，请选择对应联系人' : '请手动确认本次联系人')
     : state.phase === 'unavailable' && isTransientForegroundContextChange(state.reason)
       ? '微信前台或窗口发生变化，等待重新识别'
+    : state.phase === 'unavailable' && state.reason === 'foreground_observation_busy'
+      ? '本轮观察繁忙，等待重新识别'
     : state.phase === 'unavailable' && state.reason === 'foreground_application_unavailable'
       ? '系统前台状态未知，请手动选择本次联系人'
     : state.phase === 'unavailable' && failure ? `${failure.message}，请手动选择本次联系人`

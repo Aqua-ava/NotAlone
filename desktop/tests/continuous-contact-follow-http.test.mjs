@@ -246,7 +246,7 @@ test('持续观察自动 A → B → A，保留输入且不生成；同联系人
    await observe(names[1]);
    const timed = { received: deferred(), release: deferred() }; delivery = timed;
    const delayed = observe(names[0]); await timed.received.promise;
-   await delayed; // UI 1.5 秒到期，传输仍未交付。
+   await delayed; // UI有限等待到期，传输仍未交付。
    assert.equal(foreground.getState().reason, 'observation_timeout');
    assert.equal(scheduled.size, 0);
    const count = requests.filter(p => p.endsWith('/observe')).length;

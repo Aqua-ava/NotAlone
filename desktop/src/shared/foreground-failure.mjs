@@ -44,6 +44,7 @@ const reasons = Object.freeze({
   probe_failed: ['探针执行', '正式探针失败，尚无分项原因'],
   observation_timeout: ['后端观察', '本轮观察超时'],
   observation_unavailable: ['后端观察', '本轮观察传输失败'],
+  foreground_observation_busy: ['后端观察', '本轮观察繁忙，等待重新识别'],
   binding_verification_unavailable: ['联系人匹配', '会话绑定校验暂不可用'],
   ambiguous_requires_selection: ['联系人匹配', '同名或会话不唯一，需要手动选择'],
   unmatched_requires_selection: ['联系人匹配', '未找到当前已确认的唯一绑定'],

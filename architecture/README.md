@@ -86,6 +86,7 @@
 53. [ADR-053：前台定位刷新与稳定结果展示](adr/053-stable-foreground-refresh.md)
 54. [ADR-054：前台采集上下文变化后的可靠绑定恢复](adr/054-foreground-context-recovery.md)
 55. [ADR-055：群聊前台暂停与私聊恢复](adr/055-group-foreground-pause.md)
+56. [ADR-056：前台观察繁忙恢复与有限执行预算](adr/056-foreground-busy-and-observation-budget.md)
 
 ## 当前架构决策
 

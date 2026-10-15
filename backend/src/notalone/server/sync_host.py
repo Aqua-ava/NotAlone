@@ -18,6 +18,7 @@ from typing import Protocol
 from uuid import UUID
 
 from notalone.front_sync.foreground_observation import FreshForegroundObservation
+from notalone.front_sync.observation_budget import FOREGROUND_OBSERVATION_SECONDS
 from notalone.front_sync.cli_binding import (
     CliBindingCandidateView,
     CliBindingSelection,
@@ -283,9 +284,9 @@ class SyncHost:
     # ------------------------------------------------------------------
 
     def observe_foreground(self) -> FreshForegroundObservation:
-        """锁预算200ms、probe预算900ms，停读后的排队调用失败关闭。"""
+        """锁预算200ms、单轮预算3.2秒，停读后的排队调用失败关闭。"""
 
-        deadline = monotonic() + 1.3
+        deadline = monotonic() + FOREGROUND_OBSERVATION_SECONDS
         with self._active_engine(timeout=0.2):
             if monotonic() >= deadline:
                 raise SyncHostBusy("本次前台观察预算已过期。")

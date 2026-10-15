@@ -248,10 +248,12 @@ struct AutomaticSessionRegions {
         let divider = try uniqueBoundary(range: px(180)...min(px(600), w-px(280)), score: vertical, tolerance: px(3), failure: .vertical)
         // 单行置顶/公告提示会将下缘推至约96pt；仍要求整个有界范围内只有一处强边界。
         let headerY = try uniqueBoundary(range: px(45)...px(110), score: { y in
-            median((0..<21).map { i in
+            let differences = (0..<21).map { i in
                 let x = divider + px(20) + (w-divider-px(60))*i/20
                 return abs(Int(pixels[(y-1)*w+x]) - Int(pixels[(y+1)*w+x]))
-            })
+            }.sorted()
+            // 顶部下缘须覆盖至少四分之三采样点；窄窗正文气泡的局部边缘不参与竞争。
+            return differences[differences.count / 4]
         }, tolerance: px(3), failure: .header)
         let title = CGRect(x: divider+px(10), y: px(12),
                            width: min(px(400), w-divider-px(120)), height: min(px(36), headerY-px(16)))

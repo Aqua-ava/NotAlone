@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Protocol
 
 from notalone.conversation.matcher import FrontSessionEvidence, normalize_display_text
+from notalone.front_sync.observation_budget import FRESH_PROBE_SECONDS
 
 
 class ProbeAdapterError(RuntimeError):
@@ -164,9 +165,9 @@ class MacosFrontSessionProbe:
         if (
             isinstance(timeout_seconds, bool)
             or not math.isfinite(timeout_seconds)
-            or not 0 < timeout_seconds <= 1.0
+            or not 0 < timeout_seconds <= FRESH_PROBE_SECONDS
         ):
-            raise ValueError("新观察的探针预算须在一秒以内。")
+            raise ValueError("新观察的探针预算超出有界范围。")
         runner = (
             (lambda command: self._run_command(command, timeout_seconds=timeout_seconds))
             if self._default_runner

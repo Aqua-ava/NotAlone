@@ -1,4 +1,5 @@
 import type { BackendHost } from '../backend/host';
+import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
 import { initialForegroundState, type ForegroundState, type ForegroundConfirmation, type GenerationBlock } from '../../shared/foreground-bridge';
 import { foregroundObservation } from './observation';
@@ -102,7 +103,7 @@ export class ForegroundController {
   private scheduleNext(): void {
     if (!this.continuous || this.disposed || this.flight || this.state.suspendedByHelperFocus
       || this.readingScopeChanges > 0 || this.scheduled !== undefined) return;
-    // 后端每轮预算 1.3 秒，完成后至少休息 2 秒；失败退避至最多 8 秒。
+    // 后端每轮预算 3.2 秒，完成后至少休息 2 秒；失败退避至最多 8 秒。
     const delay = Math.min(8000, 2000 * 2 ** this.failures);
     const handle = this.clock.schedule(async () => {
       if (this.scheduled !== handle) return;
@@ -139,10 +140,10 @@ export class ForegroundController {
           ++this.epoch; abort.abort(); this.clearObservation('unavailable', 'observation_timeout');
         }
         resolve();
-      }, 1500);
+      }, 3500);
     });
     const request = this.backend.requestJson({ method: 'POST', path: '/api/sync/foreground/observe', body: {},
-      signal: abort.signal, timeoutMs: 1500, maxResponseBytes: 4096 }).then((response) => {
+      signal: abort.signal, timeoutMs: 3500, maxResponseBytes: 4096 }).then((response) => {
       if (!current() || response.generation !== generation) return;
       const observation = foregroundObservation(response.data);
       // 群聊暂停跨助手获焦/失败保留，只有新的完整私聊证据才能解除。
@@ -177,8 +178,12 @@ export class ForegroundController {
         recognizedName: unsupportedConversation ? null : observation.recognizedName,
         recognitionConfidence: unsupportedConversation ? null : observation.recognitionConfidence,
         probeAvailable: observation.probeAvailable, wechatInFront: observation.wechatInFront, suggestedContactId: null });
-    }).catch(() => {
-      if (current()) this.clearObservation('unavailable', 'observation_unavailable');
+    }).catch((error: unknown) => {
+      if (!current()) return;
+      // 认证接口明确繁忙时撤销当轮资格；不改变此前已触发的人工确认门。
+      const busy = error instanceof BackendRequestFailure && error.kind === 'response'
+        && error.status === 409 && error.code === 'foreground_observation_busy';
+      this.clearObservation('unavailable', busy ? 'foreground_observation_busy' : 'observation_unavailable');
     });
     // UI 超时可以结束等待，但底层传输未结算时仍占有唯一观察许可。
     const settled = request.finally(() => {

@@ -15,6 +15,7 @@ from notalone.conversation.matcher import (
     normalize_display_text,
 )
 from notalone.front_sync.foreground_observation import FreshForegroundObservation
+from notalone.front_sync.observation_budget import FRESH_PROBE_SECONDS
 from notalone.front_sync.probe_adapter import (
     FrontSessionProbeObservation,
     ProbeAdapterError,
@@ -94,7 +95,7 @@ class ForegroundLocator:
                 probe_available=False, wechat_in_front=False,
             )
         try:
-            observation = observe(timeout_seconds=min(0.9, remaining))
+            observation = observe(timeout_seconds=min(FRESH_PROBE_SECONDS, remaining))
         except ProbeAdapterError as error:
             reason = error.code if error.code in {
                 "probe_not_found", "probe_timeout", "probe_output_invalid",

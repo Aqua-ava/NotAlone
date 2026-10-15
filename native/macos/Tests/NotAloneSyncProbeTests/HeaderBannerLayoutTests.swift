@@ -38,12 +38,33 @@ final class HeaderBannerLayoutTests: XCTestCase {
     }
 
     @MainActor
-    func testMissingAmbiguousOrOutOfRangeHeaderEdgesNeverReachOCR() async {
-        let context = CalibrationContext(processId: 7, windowId: 9,
-            frame: CGRect(x: 0, y: 0, width: 900, height: 700), version: "4.0.6", build: "29387")
-        for boundaries in [[], [62, 96], [125]] {
+    func testNarrowWindowBodyBubbleEdgeCannotReplaceTheFullWidthHeaderEdge() async {
+        for scale in [1, 2] { for dark in [false, true] {
+            let size = CGSize(width: 726, height: 841)
+            let context = CalibrationContext(processId: 7, windowId: 9,
+                frame: CGRect(origin: .zero, size: size), version: "4.0.6", build: "29387")
+            var calls = 0
             let result = await AutomaticSessionCapture.observeHeader(context: { context },
-                capture: { _ in self.window(boundaries: boundaries) }, recognize: { _ in
+                capture: { _ in self.window(boundaries: [62], size: size, scale: scale,
+                                           dark: dark, bodyBubble: true) }, recognize: { header in
+                    calls += 1
+                    self.assertOnlyTitle(header, scale: scale)
+                    return HeaderOcrResult(fragments: [(RecognizedLine(text: "合成私聊", speaker: .unknown, confidence: 0.99),
+                        CGRect(x: 0.1, y: 0.2, width: 0.6, height: 0.6))])
+                })
+            XCTAssertEqual(result["ok"] as? Bool, true, "\(result["error"] ?? "unknown")")
+            XCTAssertEqual(calls, 1)
+        } }
+    }
+
+    @MainActor
+    func testMissingAmbiguousOrOutOfRangeHeaderEdgesNeverReachOCR() async {
+        for (boundaries, bubble) in [([], false), ([], true), ([62, 96], false), ([125], false)] {
+            let size = bubble ? CGSize(width: 726, height: 841) : CGSize(width: 900, height: 700)
+            let context = CalibrationContext(processId: 7, windowId: 9,
+                frame: CGRect(origin: .zero, size: size), version: "4.0.6", build: "29387")
+            let result = await AutomaticSessionCapture.observeHeader(context: { context },
+                capture: { _ in self.window(boundaries: boundaries, size: size, bodyBubble: bubble) }, recognize: { _ in
                     XCTFail("缺失、歧义或范围外边界不能进入OCR")
                     return HeaderOcrResult(fragments: [])
                 })
@@ -70,7 +91,7 @@ final class HeaderBannerLayoutTests: XCTestCase {
 
     // 仅合成亮度边界及颜色哨兵，不包含真实界面或调用Vision。
     private func window(boundaries: [Int], size: CGSize = CGSize(width: 900, height: 700),
-                        scale: Int = 1, dark: Bool = false) -> CGImage {
+                        scale: Int = 1, dark: Bool = false, bodyBubble: Bool = false) -> CGImage {
         let w = Int(size.width) * scale, h = Int(size.height) * scale
         var bytes = [UInt8](repeating: 255, count: w * h * 4)
         for y in 0..<h { for x in 0..<w {
@@ -80,6 +101,11 @@ final class HeaderBannerLayoutTests: XCTestCase {
             let edge = px == 270 || (px >= 270 && boundaries.contains(py))
             bytes[i] = edge ? (dark ? 95 : 180) : value
             bytes[i + 1] = bytes[i]; bytes[i + 2] = bytes[i]
+            // 窄窗气泡覆盖聊天区过半，但不能作为贯穿聊天区的顶部边界。
+            if bodyBubble && (Int(size.width)-310..<Int(size.width)-40).contains(px)
+                && (75..<98).contains(py) {
+                bytes[i] = dark ? 180 : 100; bytes[i + 1] = bytes[i]; bytes[i + 2] = bytes[i]
+            }
             if (290..<295).contains(px) && (24..<29).contains(py) {
                 bytes[i] = 255; bytes[i + 1] = 0; bytes[i + 2] = 0
             }
