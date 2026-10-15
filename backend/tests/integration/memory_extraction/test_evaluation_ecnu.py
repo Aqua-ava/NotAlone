@@ -32,6 +32,93 @@ PLAN = tuple(case for case in CASES if case.dimension == "reference") + tuple(
 
 
 class EvaluationECNUTest(unittest.TestCase):
+    def test_remaining8_rejects_any_changed_selection_budget_mode_or_protocol_before_claim(self):
+        fixed = {"provider_profile": "deepseek-flash-max", "request_timeout_seconds": 300,
+            "max_retries": 0, "verification_mode": "nullable-proof-v1", "verification_tool_choice": "omitted",
+            "extraction_mode": "grounded-v2", "execution_plan": "reference21-remaining8-v1",
+            "case_positions": (19, 20, 13, 14, 15, 16, 17, 18), "request_limit": 16}
+        variants = [{"case_positions": None}, {"case_positions": (19, 20)},
+            {"case_positions": (20, 19, 13, 14, 15, 16, 17, 18)}, {"case_positions": tuple(range(13, 21))},
+            {"request_limit": 15}, {"request_limit": 17}, {"request_limit": 16.0}, {"execution_plan": "remaining8"},
+            {"provider_profile": "ecnu"}, {"case_set": "full140"}, {"verification_mode": "legacy-v4"},
+            {"extraction_mode": "legacy-e14"}, {"verification_tool_choice": "forced"},
+            {"max_retries": 1}, {"request_timeout_seconds": 600}]
+        for variant in variants:
+            with self.subTest(variant=variant), self.assertRaises(EvaluationBudgetAbort):
+                self.run_ready(**{**fixed, **variant})
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+        self.assertFalse((self.home / ".notalone-memory-evaluations").exists())
+
+    def test_remaining8_real_sdk_e_and_v_keep16_and_stop_before_next_window_on_safety(self):
+        def respond(request):
+            body = json.loads(request.content)
+            function = body["tools"][0]["function"]
+            if function["name"] == "GroundedMemoryLabels":
+                label = {"kind": "state", "subject": "self", "topic": "study", "dependency": None,
+                         "unresolved": True, "confidence": 0.9, "sensitivity": "none"}
+                args = {"units": {slot: dict(label) for slot in function["parameters"]["properties"]["units"]["required"]}}
+            else:
+                candidates = json.loads(body["messages"][1]["content"])["candidates"]
+                args = {"results": [{"candidate_index": index, "verdict": "uncertain",
+                    "issues": ["insufficient_evidence"], "evidence": [], "proof": None} for index in range(len(candidates))]}
+            self.assertNotIn("tool_choice", body)
+            return self.response(request, arguments=args, reported_model="deepseek-flash")
+        result = self.run_ready(provider_profile="deepseek-flash-max", request_timeout_seconds=300,
+            max_retries=0, verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+            extraction_mode="grounded-v2", execution_plan="reference21-remaining8-v1",
+            case_positions=(19, 20, 13, 14, 15, 16, 17, 18), request_limit=16,
+            audit=lambda bundle: self.audit(bundle, "safety_error", "false_fact"), transport=httpx.MockTransport(respond))
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(result["stopped_code"], "case_semantic_audit_safety_error")
+        self.assertEqual(result["summary"]["unrun"], 7)
+        self.assertEqual(result["receipt"]["budget"]["request_limit"], 16)
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 2)
+        self.assertTrue(result["receipt"]["budget"]["closed"])
+
+    def test_live_remaining8_requires_owned_deadline_before_budget_or_credential(self):
+        from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
+        hashes, gold = self.preparation(nullable=True)
+        with self.assertRaisesRegex(EvaluationBudgetAbort, "remaining8_owned_deadline_required"):
+            run_ecnu_evaluation(output_directory=self.output, run_id=uuid4(),
+                deadline=datetime.now(timezone.utc) + timedelta(minutes=10), repo_root=self.repo,
+                source_hashes=hashes, frozen_gold=gold, credential_loader=self.credential,
+                audit_case=self.audit, provider_profile="deepseek-flash-max", request_timeout_seconds=300,
+                max_retries=0, verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+                extraction_mode="grounded-v2", execution_plan="reference21-remaining8-v1",
+                case_positions=(19, 20, 13, 14, 15, 16, 17, 18), request_limit=16)
+        self.assertEqual(self.credentials, [])
+        self.assertFalse((self.home / ".notalone-memory-evaluations").exists())
+
+    def test_official_remaining8_has_fixed_core_first_order_and_separate16_budget(self):
+        def respond(request):
+            body = json.loads(request.content)
+            self.assertEqual(str(request.url), "https://api.deepseek.com/chat/completions")
+            self.assertEqual(body["model"], "deepseek-flash")
+            self.assertEqual(body["reasoning_effort"], "max")
+            self.assertNotIn("tool_choice", body)
+            slots = body["tools"][0]["function"]["parameters"]["properties"]["units"]["required"]
+            label = {"kind": "not_memory", "subject": "contact", "topic": "other", "dependency": None,
+                     "unresolved": False, "confidence": 0.9, "sensitivity": "none"}
+            return self.response(request, reported_model="deepseek-flash", arguments={
+                "units": {slot: dict(label) for slot in slots},
+            })
+
+        result = self.run_ready(provider_profile="deepseek-flash-max", request_timeout_seconds=300,
+            max_retries=0, verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+            extraction_mode="grounded-v2", execution_plan="reference21-remaining8-v1",
+            case_positions=(19, 20, 13, 14, 15, 16, 17, 18), request_limit=16,
+            transport=httpx.MockTransport(respond))
+        self.assertEqual(len(self.requests), 8)
+        self.assertEqual([row["case_name"] for row in result["outcomes"]],
+                         [PLAN[index].name for index in (19, 20, 13, 14, 15, 16, 17, 18)])
+        self.assertTrue(result["receipt"]["budget"]["closed"])
+        self.assertEqual(result["receipt"]["budget"]["request_limit"], 16)
+        config = json.loads((self.output / "manifest.json").read_text())["frozen_config"]
+        self.assertEqual(config["mode"], "deepseek_bounded_remaining8")
+        self.assertEqual(config["stage"], "remaining8")
+        self.assertEqual(config["selected_case_positions"], [19, 20, 13, 14, 15, 16, 17, 18])
+
     def test_official_reference21_uses_fixed42_and_max_without_tool_choice(self):
         def respond(request):
             body = json.loads(request.content)

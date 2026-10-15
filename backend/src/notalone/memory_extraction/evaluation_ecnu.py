@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from copy import deepcopy
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 import hashlib
 from importlib.metadata import version
@@ -45,6 +46,7 @@ _PLAN_CASES = tuple(case for case in CASES if case.dimension == "reference") + t
     "严格：报价判断与条件咨询", "严格：第三人历史经历与当前未知",
 })
 _FULL_CASES = (*CASES, *SEMANTIC_CASES)
+_REMAINING8_POSITIONS = (19, 20, 13, 14, 15, 16, 17, 18)
 _GOLD_FIELDS = {"status", "case_names", "criteria_sha256", "criteria_path"}
 _SOURCE_DIRECTORY = Path(__file__).resolve().parent
 _REQUIRED_SOURCES = frozenset(
@@ -162,8 +164,10 @@ def run_ecnu_evaluation(
     provider_profile: str = "ecnu",
     request_limit: int | None = None,
     extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
+    execution_plan: str = "original",
+    remaining8_deadline: object | None = None,
 ) -> dict:
-    """保留ECNU入口名；官方最高思考只接受固定完整21或140及原独审。"""
+    """保留原固定计划；剩余8窗须显式选择独立版本，不提供任意子集。"""
     from .evaluation_provider_contract import EvaluationProviderProfile
 
     try:
@@ -175,7 +179,25 @@ def run_ecnu_evaluation(
     except (TypeError, ValueError):
         raise EvaluationBudgetAbort("evaluation_provider_profile_invalid") from None
     official = profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
-    if official and case_set == "reference21" and (
+    remaining8 = execution_plan == "reference21-remaining8-v1"
+    if (type(execution_plan) is not str or execution_plan not in {"original", "reference21-remaining8-v1"}
+            or remaining8 and (not official or case_set != "reference21"
+                or type(case_positions) is not tuple or case_positions != _REMAINING8_POSITIONS
+                or any(type(position) is not int for position in case_positions)
+                or type(request_limit) is not int or request_limit != 16
+                or extraction_selected is not EvaluationExtractionMode.GROUNDED_V2
+                or verification_mode != SourceVerificationMode.NULLABLE_PROOF_V1
+                or verification_tool_choice != "omitted"
+                or request_timeout_seconds != 300 or type(max_retries) is not int or max_retries != 0)):
+        raise EvaluationBudgetAbort("evaluation_remaining8_fixed_plan_required")
+    from .evaluation_remaining8_deadline import Remaining8Deadline
+
+    if ((remaining8_deadline is not None and (not remaining8 or type(remaining8_deadline) is not Remaining8Deadline))
+            or remaining8 and synthetic_transport is None and (
+                type(remaining8_deadline) is not Remaining8Deadline or not remaining8_deadline.live_worker)):
+        raise EvaluationBudgetAbort("remaining8_owned_deadline_required")
+    bounded = cast(Remaining8Deadline | None, remaining8_deadline)
+    if official and case_set == "reference21" and not remaining8 and (
         case_positions is not None or request_limit not in (None, 42)
     ):
         raise EvaluationBudgetAbort("evaluation_official_fixed_reference21_required")
@@ -227,7 +249,7 @@ def run_ecnu_evaluation(
     else:
         positions = tuple(range(len(_PLAN_CASES))) if case_positions is None else case_positions
         if (type(positions) is not tuple or not positions
-                or (case_positions is not None and len(positions) > 4)
+                or (case_positions is not None and len(positions) > 4 and not remaining8)
                 or any(type(position) is not int or not 0 <= position < len(_PLAN_CASES)
                        for position in positions)
                 or len(set(positions)) != len(positions)):
@@ -301,12 +323,13 @@ def run_ecnu_evaluation(
         **_frozen_config(plan, request_timeout_seconds=request_timeout_seconds,
                          max_retries=max_retries, verification_mode=selected,
                          extraction_mode=extraction_selected, windows=windows),
-        "mode": ("deepseek_bounded_full140" if official and case_set == "full140" else
+        "mode": ("deepseek_bounded_remaining8" if remaining8 else
+                 "deepseek_bounded_full140" if official and case_set == "full140" else
                  "deepseek_bounded_evaluation" if official else
                  "ecnu_bounded_full140" if case_set == "full140" else
                  "ecnu_bounded_evaluation" if case_positions is None
                  else "ecnu_bounded_diagnostic"),
-        "stage": ("full140" if case_set == "full140" else
+        "stage": ("remaining8" if remaining8 else "full140" if case_set == "full140" else
                   "P1" if case_positions is None else "diagnostic"),
         "base_url": base_url, "endpoint": endpoint, "request_model": request_model,
         **({"reasoning_effort": "max"} if official else {}),
@@ -357,6 +380,7 @@ def run_ecnu_evaluation(
             pass
         raise
 
+    @contextmanager
     def invocation_scope(purpose: str, messages: list[dict], window):
         position = windows.index(window)
         frozen_contracts = {**runtime_contracts, "extraction": extraction_contracts[position]}
@@ -379,19 +403,41 @@ def run_ecnu_evaluation(
         }
         if official or purpose == "verification" and verification_tool_choice == "omitted":
             del expected["tool_choice"]
-        return contract.expect_request(expected)
+        with (bounded.invocation() if bounded is not None else nullcontext()), contract.expect_request(expected):
+            yield
 
-    return _run_evaluation_batch(
-        cases=cases, windows=windows, plan=plan, budget=budget, store=store,
-        base_url=base_url, request_model=request_model, api_key="",
-        synthetic_transport=synthetic_transport, provider="DeepSeek" if official else "ECNU", contract=contract,
-        invocation_scope=invocation_scope,
-        semantic_audit=_audit_callback(audit_case, reference), gold_reference=reference,
-        code_prefix="deepseek" if official else "ecnu", credential_loader=credential_loader,
-        request_timeout_seconds=request_timeout_seconds, max_retries=max_retries,
-        verification_mode=selected,
-        verification_tool_choice=verification_tool_choice,
-        reasoning_effort="max" if official else None,
-        extraction_tool_choice="omitted" if official else "forced",
-        extraction_mode=extraction_selected,
-    )
+    def bounded_loader():
+        if bounded is not None:
+            bounded.start(budget, synthetic=synthetic_transport is not None)
+        return credential_loader()
+
+    try:
+        result = _run_evaluation_batch(
+            cases=cases, windows=windows, plan=plan, budget=budget, store=store,
+            base_url=base_url, request_model=request_model, api_key="",
+            synthetic_transport=synthetic_transport, provider="DeepSeek" if official else "ECNU", contract=contract,
+            invocation_scope=invocation_scope,
+            semantic_audit=_audit_callback(audit_case, reference), gold_reference=reference,
+            code_prefix="deepseek" if official else "ecnu", credential_loader=bounded_loader if bounded else credential_loader,
+            request_timeout_seconds=request_timeout_seconds, max_retries=max_retries,
+            verification_mode=selected,
+            verification_tool_choice=verification_tool_choice,
+            reasoning_effort="max" if official else None,
+            extraction_tool_choice="omitted" if official else "forced",
+            extraction_mode=extraction_selected,
+        )
+    except BaseException as error:
+        if bounded is not None:
+            try:
+                bounded.finish()
+            except BaseException:
+                error.add_note("remaining8_deadline_cleanup_unknown")
+        raise
+    if bounded is not None:
+        try:
+            bounded.finish()
+        except BaseException:
+            result["cleanup_error_codes"] = (*result["cleanup_error_codes"], "remaining8_deadline_cleanup_unknown")
+            result["receipt"] = None
+            result["receipt_error_code"] = "remaining8_completion_receipt_unavailable"
+    return result

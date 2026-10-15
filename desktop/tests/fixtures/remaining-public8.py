@@ -1,0 +1,313 @@
+"""固定剩余8窗的准备与独占worker；默认无模型、预算或凭据操作。"""
+
+from datetime import datetime, timedelta, timezone
+import importlib.util
+from importlib.metadata import version
+import json
+import os
+from pathlib import Path
+import signal
+import sqlite3
+import subprocess
+import sys
+import time
+from uuid import UUID, uuid4
+
+
+ROOT = Path(__file__).resolve().parents[3]
+LEGACY = ROOT / "desktop/artifacts/grounded-public21-prepare-20261015/grounded_public21.py"
+REFERENCE = ".scratch/unfinished-work/memory-gold-reference-20261012.json"
+ANNOTATION = ".scratch/unfinished-work/memory-gold-agent-annotations-20261012.md"
+PLAN = ".scratch/grounded-evaluation/remaining-public8-plan-20261016.md"
+POSITIONS = (19, 20, 13, 14, 15, 16, 17, 18)
+FIXED = {"execution_plan": "reference21-remaining8-v1", "case_set": "reference21",
+         "case_positions": list(POSITIONS), "request_limit": 16, "request_timeout_seconds": 300,
+         "max_retries": 0, "extraction_mode": "grounded-v2", "verification_mode": "nullable-proof-v1",
+         "verification_tool_choice": "omitted", "extraction_tool_choice": "omitted",
+         "provider_profile": "deepseek-flash-max", "call_wall_seconds": 600,
+         "batch_work_seconds": 2380, "outer_wall_seconds": 2400}
+
+
+def helpers():
+    # 复用已审私有工具的纯函数／显式审核桥，不调用其prepare或registry_snapshot。
+    parent = str(LEGACY.parent)
+    if parent not in sys.path:
+        sys.path.insert(0, parent)
+    spec = importlib.util.spec_from_file_location("remaining8_preparation_helpers", LEGACY)
+    if spec is None or spec.loader is None:
+        raise ValueError("reviewed_helper_required")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def now():
+    return datetime.now(timezone.utc)
+
+
+def prepare(*, directory: Path, absolute_start: datetime) -> dict:
+    if os.environ.get("NOTALONE_DISABLE_DOTENV") != "1" or absolute_start.utcoffset() is None:
+        raise ValueError("disabled_dotenv_and_aware_start_required")
+    from notalone.memory_extraction.evaluation_ecnu import _NULLABLE_REQUIRED_SOURCES
+    from notalone.memory_extraction.evaluation_offline import _verification_contract
+    from notalone.memory_extraction.evaluation_reference import validate_public_reference
+
+    helper = helpers()
+    directory = directory.resolve()
+    directory.mkdir(mode=0o700)
+    for name in ("evaluation", "audit"):
+        (directory / name).mkdir(mode=0o700)
+    source_names = _NULLABLE_REQUIRED_SOURCES | {
+        REFERENCE, ANNOTATION, PLAN, "backend/src/notalone/runtime_config.py",
+        "desktop/tests/fixtures/remaining-public8.py", LEGACY.relative_to(ROOT).as_posix(),
+        (LEGACY.parent / "explicit_review_bridge.py").relative_to(ROOT).as_posix(),
+    }
+    sources = {name: helper.file_digest(ROOT / name) for name in sorted(source_names)}
+    reference = json.loads((ROOT / REFERENCE).read_bytes())
+    validate_public_reference(reference, expected_reference_sha256=helper.digest(reference),
+                              annotation_sha256=sources[ANNOTATION])
+    original_plan, rows, _ = helper.contracts()
+    plan = [{**original_plan[position], "case_position": index} for index, position in enumerate(POSITIONS)]
+    prompt, schema = _verification_contract("nullable-proof-v1")
+    frozen = {"state": "prepared_only", "run_id": str(uuid4()), "nonce": str(uuid4()), "fixed": FIXED,
+        "repo_root": str(ROOT), "directory": str(directory), "absolute_start": absolute_start.isoformat(),
+        "work_end": (absolute_start + timedelta(seconds=2380)).isoformat(),
+        "absolute_end": (absolute_start + timedelta(seconds=2400)).isoformat(),
+        "source_hashes": sources, "installed_versions": {name: version(name) for name in helper.PACKAGES},
+        "reference_canonical_sha256": helper.digest(reference), "plan": plan, "plan_sha256": helper.digest(plan),
+        "selection": [{"case_id": reference["windows"][position]["id"], "gold_position": position}
+                      for position in POSITIONS],
+        "extraction_window_contracts": [rows[position] for position in POSITIONS],
+        "verification_prompt_sha256": helper.digest(prompt), "verification_schema_sha256": helper.digest(schema),
+        "quality_certified": False}
+    helper.publish(directory / "freeze.json", frozen)
+    return frozen
+
+
+def validate(frozen: dict) -> tuple[datetime, datetime]:
+    helper = helpers()
+    start, work_end, end = (datetime.fromisoformat(frozen[name]) for name in ("absolute_start", "work_end", "absolute_end"))
+    if (frozen["state"] != "prepared_only" or frozen["fixed"] != FIXED or frozen["repo_root"] != str(ROOT)
+            or frozen["quality_certified"] is not False or any(item.utcoffset() is None for item in (start, work_end, end))
+            or work_end - start != timedelta(seconds=2380) or end - start != timedelta(seconds=2400)
+            or not start <= now() < work_end):
+        raise ValueError("remaining8_fixed_window_required")
+    for name, expected in frozen["source_hashes"].items():
+        if helper.file_digest(ROOT / name) != expected:
+            raise ValueError("remaining8_source_drift")
+    if frozen["installed_versions"] != {name: version(name) for name in helper.PACKAGES}:
+        raise ValueError("remaining8_version_drift")
+    full_plan, rows, _ = helper.contracts()
+    expected_plan = [{**full_plan[position], "case_position": index} for index, position in enumerate(POSITIONS)]
+    from notalone.memory_extraction.evaluation_offline import _verification_contract
+    prompt, schema = _verification_contract("nullable-proof-v1")
+    if (frozen["plan"] != expected_plan or frozen["plan_sha256"] != helper.digest(expected_plan)
+            or frozen["extraction_window_contracts"] != [rows[position] for position in POSITIONS]
+            or frozen["verification_prompt_sha256"] != helper.digest(prompt)
+            or frozen["verification_schema_sha256"] != helper.digest(schema)):
+        raise ValueError("remaining8_contract_drift")
+    reference = json.loads((ROOT / REFERENCE).read_bytes())
+    if (frozen["reference_canonical_sha256"] != helper.digest(reference)
+            or frozen["selection"] != [{"case_id": reference["windows"][position]["id"], "gold_position": position}
+                                       for position in POSITIONS]):
+        raise ValueError("remaining8_reference_drift")
+    directory = Path(frozen["directory"])
+    helper.private_directory(directory)
+    return work_end, end
+
+
+def verify_claim(frozen: dict) -> None:
+    helper = helpers()
+    run = Path.home() / ".notalone-memory-evaluations" / frozen["run_id"]
+    helper.private_directory(run)
+    if not (run / "claimed").is_file() or os.path.lexists(run / "closed"):
+        raise ValueError("remaining8_fresh_claim_required")
+    record = helper.read_private(Path(frozen["directory"]) / "evaluation/manifest.json")
+    with sqlite3.connect((run / "budget.sqlite3").as_uri() + "?mode=ro", uri=True) as connection:
+        states = connection.execute("SELECT manifest, closed FROM state").fetchall()
+        count = connection.execute("SELECT count(*) FROM requests").fetchone()[0]
+    config = record["frozen_config"]
+    budget = json.loads(states[0][0]) if len(states) == 1 else {}
+    if (len(states) != 1 or states[0][1] != 0 or count != 0
+            or budget.get("run_id") != frozen["run_id"] or budget.get("request_limit") != 16
+            or budget.get("allowed_endpoints") != ["https://api.deepseek.com/chat/completions"]
+            or budget.get("config_sha256") != helper.digest(config)
+            or budget.get("output_directory") != str(Path(frozen["directory"]) / "evaluation")
+            or config.get("mode") != "deepseek_bounded_remaining8" or config.get("stage") != "remaining8"
+            or config.get("selected_case_positions") != list(POSITIONS)
+            or config.get("source_hashes") != frozen["source_hashes"]
+            or config.get("extraction_window_contracts") != frozen["extraction_window_contracts"]):
+        raise ValueError("remaining8_claim_manifest_changed")
+
+
+def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
+           synthetic_transport=None, credential_loader=None, bridge=None) -> dict:
+    helper = helpers()
+    if os.environ.get("NOTALONE_DISABLE_DOTENV") != "1" or helper.file_digest(freeze_path) != expected_sha256:
+        raise ValueError("remaining8_exact_freeze_required")
+    frozen = helper.read_private(freeze_path)
+    if approval != {"user_authorized": True, "run_id": frozen["run_id"], "freeze_sha256": expected_sha256}:
+        raise ValueError("remaining8_bound_authorization_required")
+    import httpx
+    if (synthetic_transport is not None and type(synthetic_transport) is not httpx.MockTransport
+            or synthetic_transport is None and (credential_loader is not None or bridge is not None)):
+        raise ValueError("remaining8_exact_mock_only")
+    work_end, _ = validate(frozen)
+    from notalone.memory_extraction.evaluation_ecnu import _PLAN_CASES, run_ecnu_evaluation
+    from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
+    from notalone.memory_extraction.evaluation_records import _json_value
+    from notalone.memory_extraction.evaluation_remaining8_deadline import Remaining8Deadline
+    from langsmith import get_tracing_context
+    if get_tracing_context().get("enabled") is True:
+        raise ValueError("remaining8_external_tracing_enabled")
+    directory = Path(frozen["directory"])
+    if freeze_path.resolve() != directory / "freeze.json":
+        raise ValueError("remaining8_directory_binding_changed")
+    control = Remaining8Deadline(receipt=directory / "deadline-receipt.json",
+        remaining_batch_seconds=min(2380, (work_end - now()).total_seconds()))
+    if synthetic_transport is None and not control.live_worker:
+        raise ValueError("remaining8_dedicated_worker_required")
+    bridge = bridge or helper.ExplicitReviewBridge(directory=directory / "audit", run_id=frozen["run_id"], deadline=work_end)
+    reference = json.loads((ROOT / REFERENCE).read_bytes())
+    audit = PhasedEvaluationAudit(reference=reference, expected_reference_sha256=frozen["reference_canonical_sha256"],
+        annotation_sha256=frozen["source_hashes"][ANNOTATION], criteria_sha256=frozen["source_hashes"][REFERENCE],
+        raw_reviewer=lambda view: bridge.review("raw", view), full_reviewer=lambda view: bridge.review("full", view),
+        case_positions=POSITIONS, extraction_mode="grounded-v2", verification_mode="nullable-proof-v1",
+        verification_tool_choice="omitted", extraction_tool_choice="omitted")
+    loaded = False
+    def loader():
+        nonlocal loaded
+        if loaded:
+            raise ValueError("remaining8_single_loader_required")
+        loaded = True
+        verify_claim(frozen)
+        return (credential_loader or helper.read_credential)()
+    helper.publish(directory / "activation.json", {"run_id": frozen["run_id"], "pid": os.getpid(),
+        "process_group": os.getpgrp(), "synthetic": synthetic_transport is not None, "started_utc": now().isoformat()})
+    result = run_ecnu_evaluation(output_directory=directory / "evaluation", run_id=UUID(frozen["run_id"]),
+        deadline=work_end, repo_root=ROOT, source_hashes=frozen["source_hashes"],
+        frozen_gold={"status": "frozen_agent_review", "case_names": [case.name for case in _PLAN_CASES],
+                     "criteria_path": REFERENCE, "criteria_sha256": frozen["source_hashes"][REFERENCE]},
+        credential_loader=loader, audit_case=audit, synthetic_transport=synthetic_transport,
+        provider_profile="deepseek-flash-max", request_timeout_seconds=300, max_retries=0,
+        case_positions=POSITIONS, case_set="reference21", request_limit=16,
+        verification_mode="nullable-proof-v1", verification_tool_choice="omitted", extraction_mode="grounded-v2",
+        execution_plan="reference21-remaining8-v1", remaining8_deadline=control)
+    helper.publish(directory / "result.json", _json_value(result))
+    return result
+
+
+def owned_group_exists(child: subprocess.Popen) -> bool:
+    child.poll()
+    try:
+        os.killpg(child.pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+
+
+def reap_owned_group(child: subprocess.Popen) -> None:
+    # leader已退出也须收尾同组后代；仅操作本轮start_new_session创建的组。
+    for kind in (signal.SIGTERM, signal.SIGKILL):
+        if not owned_group_exists(child):
+            return
+        try:
+            os.killpg(child.pid, kind)
+        except ProcessLookupError:
+            return
+        end = time.monotonic() + 1
+        while owned_group_exists(child) and time.monotonic() < end:
+            time.sleep(.01)
+
+
+def launch(*, freeze_path: Path, expected_sha256: str, approval_path: Path) -> dict:
+    helper = helpers()
+    if helper.file_digest(freeze_path) != expected_sha256:
+        raise ValueError("remaining8_exact_freeze_required")
+    frozen = helper.read_private(freeze_path)
+    _, end = validate(frozen)
+    approval = helper.read_private(approval_path)
+    if approval != {"user_authorized": True, "run_id": frozen["run_id"], "freeze_sha256": expected_sha256}:
+        raise ValueError("remaining8_bound_authorization_required")
+    directory = Path(frozen["directory"])
+    # 环境不传任何真实凭据；只有worker领取后读取既有显式三字段来源。
+    environment = {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C", "NOTALONE_DISABLE_DOTENV": "1",
+                   "PYTHONPATH": str(ROOT / "backend/src")}
+    began = time.monotonic()
+    child = subprocess.Popen([sys.executable, "-B", str(Path(__file__).resolve()), "worker",
+        str(freeze_path), expected_sha256, str(approval_path)], cwd=ROOT, env=environment,
+        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    owner = {"pid": child.pid, "process_group": child.pid, "run_id": frozen["run_id"]}
+    try:
+        helper.publish(directory / "owned-worker.json", owner)
+        assert child.stdin is not None
+        child.stdin.write(b"start\n"); child.stdin.flush(); child.stdin.close()
+        remaining = min(2390, max(0, (end - now()).total_seconds() - 10))
+        try:
+            code = child.wait(timeout=remaining)
+        except subprocess.TimeoutExpired:
+            code = None
+    finally:
+        if child.stdin is not None and not child.stdin.closed:
+            try:
+                child.stdin.close()
+            except BrokenPipeError:
+                pass
+        reap_owned_group(child)
+    result_path, deadline_path = directory / "result.json", directory / "deadline-receipt.json"
+    records = []
+    for record_path in (result_path, deadline_path):
+        try:
+            records.append(helper.read_private(record_path) if record_path.exists() else {})
+        except (OSError, ValueError):
+            records.append({})
+    result, deadline = records
+    budget = (result.get("receipt") or {}).get("budget") or {}
+    def closed_receipt(value):
+        return (value.get("run_id") == frozen["run_id"] and value.get("closed") is True
+                and value.get("request_limit") == 16 and type(value.get("reserved_requests")) is int
+                and 0 <= value["reserved_requests"] <= 16)
+    closed = closed_receipt(budget) or (deadline.get("worker_pid") == child.pid and closed_receipt(deadline))
+    states = ["unrun"] * 8
+    if isinstance(result.get("outcomes"), list) and len(result["outcomes"]) == 8:
+        states = [row["status"] if row.get("status") in {"unrun", "unknown", "completed", "empty", "failed"}
+                  else "unknown" for row in result["outcomes"]]
+    else:
+        for event_path in sorted((directory / "evaluation").glob("event-??????.json"))[:2048]:
+            try:
+                event = helper.read_private(event_path)
+                position = event.get("case_position")
+                if event.get("kind") == "case_started" and type(position) is int and 0 <= position < 8:
+                    states[position] = "unknown"
+            except (OSError, ValueError):
+                states = ["unknown"] * 8
+                break
+    receipt = {**owner, "exit_code": child.returncode, "outer_timed_out": code is None,
+               "stopped_code": "outer_wall_deadline" if code is None else (result or {}).get("stopped_code"),
+               "worker_gone": child.poll() is not None and not owned_group_exists(child), "closed": closed,
+               "close_unknown": not closed, "elapsed_seconds": time.monotonic() - began,
+               "planned_windows": 8, "required_claims": 13,
+               "case_statuses": [{**selection, "status": status} for selection, status in zip(frozen["selection"], states)],
+               "quality_certified": False, "automatic_successor": False}
+    helper.publish(directory / "finish.json", receipt)
+    return receipt
+
+
+if __name__ == "__main__":
+    try:
+        if len(sys.argv) == 4 and sys.argv[1] == "prepare":
+            freeze = prepare(directory=Path(sys.argv[2]), absolute_start=datetime.fromisoformat(sys.argv[3]))
+            print(json.dumps({"run_id": freeze["run_id"], "freeze_sha256": helpers().file_digest(Path(freeze["directory"]) / "freeze.json")}))
+        elif len(sys.argv) == 5 and sys.argv[1] in {"launch", "worker"}:
+            if sys.argv[1] == "launch":
+                value = launch(freeze_path=Path(sys.argv[2]), expected_sha256=sys.argv[3], approval_path=Path(sys.argv[4]))
+            else:
+                if sys.stdin.buffer.readline(7) != b"start\n":
+                    raise ValueError("remaining8_owned_parent_release_required")
+                value = worker(freeze_path=Path(sys.argv[2]), expected_sha256=sys.argv[3], approval=helpers().read_private(Path(sys.argv[4])))
+            print(json.dumps({"quality_certified": False, "stopped_code": value.get("stopped_code"), "closed": value.get("closed")}))
+        else:
+            raise ValueError("remaining8_explicit_command_required")
+    except BaseException as error:
+        print(json.dumps({"error_type": type(error).__name__}))
+        raise SystemExit(1) from None
