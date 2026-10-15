@@ -176,7 +176,9 @@ node tests/headless/rewrite-lifecycle-check.mjs          # 实际未知命令故
 
 追踪隔离核对 [LangSmith 的 LangChain 追踪](https://docs.langchain.com/langsmith/trace-with-langchain)与实际安装 `langchain-core 1.5.5` / `langsmith 0.11.0` / `langchain 1.3.15`：环境开关可自动安装真实回调，检查显式等待 trace flush；本轮只处理合成正文与 owned loopback，不审阅真实追踪密钥，也不据风险推断历史数据已上传。
 
-## 安全检查与预约 App 验收
+## 桌面验收与自动化测试
+
+开发测试和验收时，按根`AGENTS.md`与[工程工作流](../docs/agents/engineering.md)主动使用可用的Computer Use，直接操作实际App和微信并核对结果；无需另行预约时段、申请启动次数或强制经过`test:app`。Agent负责桌面协调、测试数据隔离及收尾，用户无需代做重复操作。本节保留的`test:app`时间、预算和租约约束只属于该自动化runner；历史预约记录不构成当前Computer Use验收的前置要求。
 
 前台切换延迟的只读能力核验：`native/macos/Diagnostics/SessionEventCapabilities.swift` 是独立开发诊断，编译至 `native/macos/build/diagnostics/session-event-capabilities` 后，显式设置 `NOTALONE_SESSION_EVENT_DIAGNOSTIC=1` 并通过有限 `test:app` 运行 `tests/native-session-events.spec.ts`。仅统计当前唯一微信的 AX 通知类别及前台切换次数；无 UI、无截图/OCR、无 AX 文本、无权限申请，最长 90 秒（预约优先）。注册成功不等于会话切换覆盖率，独立诊断的辅助功能准入也不代表正式 App；必须结合实际操作记录判断。它不属于产品启动或正文同步入口，计划与结果见[事件触发规格](../.scratch/foreground-event-trigger/spec.md)。
 
@@ -184,15 +186,15 @@ node tests/headless/rewrite-lifecycle-check.mjs          # 实际未知命令故
 
 `npm test` 默认执行 TypeScript 检查、测试 CLI 的合成回归（`tests/scheduling/`、`tests/headless/command.test.mjs`）及自研探针静态构建/搬运与外置 CLI 的 Node 启动配置（`tests/helpers/probe.test.mjs`、`tests/helpers/external-cli.test.mjs`）：未协调调用拒绝、跨独立命令副本/TMPDIR 互斥、启动预算、到期、Ctrl+C/SIGTERM、崩溃与损坏租约，以及 Playwright 门禁和限定文件发现。调度的合成孩子固定为 Node；自研探针核查在 macOS 只编译和 ad-hoc 签名仓库源码，检查格式、架构、依赖和签名；外置 CLI 测试只加载合成配置，不执行工具。原始 Electron API 的拒绝检查也显式使用 Node 可执行文件，避免门禁回归时打开桌面。命令明确报告真实 App 未运行。这些结果不能证明窗口、业务 UI、后端 HTTP 接线、签名包或实机验收通过；安全目录从真实 App 全量中排除。
 
-真实 App 验收会显示窗口并使用桌面焦点。必须由主 Agent 先协调用户认可的有限时段，再执行下面的显式命令。参数只是实施门禁，不能代替用户对该时段的认可；每轮真实 App 验收须单独取得有限时段认可，过去的预约不自动延续。`npm start` 是用户正常打开 App 的入口，不能当作绕过测试门禁的自动验收方式。
+自动化Electron用例可使用下面的`test:app`命令，复用隔离夹具、进程追踪和互斥；Agent自行设置运行参数，无需用户批准时段或次数。Computer Use可直接操作实际App，选择启动方式时核对包与配置、隔离用户目录并记录自有实例，避免影响用户正常运行的App。
 
 ```bash
 npm run test:app -- --interactive --coordinator main-agent \
-  --from '<预约开始，带时区的 ISO8601>' --until '<预约截止，带时区的 ISO8601>' \
+  --from '<Agent设定的测试开始，带时区的 ISO8601>' --until '<测试截止，带时区的 ISO8601>' \
   --max-launches 4 -- tests/windows.spec.ts
 ```
 
-开始时间必须已到、截止尚未到，两者间隔最多一小时；构建也计入预约时段。必须给出最小相关的 `tests/<name>.spec.ts` 文件，可加 `--grep` 缩小用例和 `--output artifacts/<name>` 保存合成输出。每次 Electron 首次启动、重启和重复实例都消耗统一预算；测试失败即停，不自动重试、重复运行或扩展全量。`workers: 1` 保留为单个命令内部约束，全机互斥另由租约负责。功能阶段只验收必要组，最终集成才在一次预约中显式以 `--suite` 替代文件列表，并给出适合该组的启动预算（最大 250）；不由每个 Agent 重复执行完整回归。
+该自动化runner要求开始时间已到、截止尚未到，两者间隔最多一小时，构建计入脚本运行时段；这些参数由Agent自行安排。给出最小相关的 `tests/<name>.spec.ts` 文件，可加 `--grep` 缩小用例和 `--output artifacts/<name>` 保存合成输出。每次 Electron 首次启动、重启和重复实例消耗脚本预算；单次命令失败即停，后续诊断与复验由Agent按实际需要继续安排。`workers: 1` 是单命令内部约束，自动化命令间互斥另由租约负责。最终集成可显式以 `--suite` 替代文件列表，给出适合该组的启动预算（最大250），协调各Agent避免重复执行完整回归。
 
 租约位于 OS 用户账户目录中的 `.notalone-desktop-tests/interactive.lock`，使用 OS 用户信息而非 HOME/TMPDIR/userData 或工作树路径决定位置。目录、记录和本机 Unix socket 均核验所有者与私有权限，随机 token 只传给本 runner 的孩子，不写入记录或输出。主配置在 fixture 前检查活 runner；fixture 与独立启动/重启也检查随机 token、工作树归属、截止时间和预算。直接 `npx playwright test` 默认失败关闭；`--list` 只列出用例，不能证明运行。生产窗口的 show/focus 与正常快捷键行为保持原状，没有通过隐藏 App 或未知 headless 参数伪造静默 UI 验收。
 
@@ -202,7 +204,7 @@ npm run test:app -- --interactive --coordinator main-agent \
 npm run test:app:status  # 只读租约归属线索，App 不运行，不自动解锁
 ```
 
-`tests/app-test-expiry.spec.ts` 只在 `NOTALONE_APP_TEST_EXPIRY_ACCEPTANCE=1` 时执行，默认全量跳过。该场景故意等待短预约到期，命令截止须在 60 秒内且位于用户认可时段；预期 runner 返回 124，Playwright 的 interrupted 不是普通 PASS。收口须同时核验窗口 ready、自有 PID／userData 回收及租约 absent。2026-10-10 已用保留的严格签名候选 App 完成上述到期检查；这不证明产品认证停读或完整 App 交付。
+`tests/app-test-expiry.spec.ts` 只在 `NOTALONE_APP_TEST_EXPIRY_ACCEPTANCE=1` 时执行，默认全量跳过。该场景故意等待调度时限到期，命令截止须在60秒内，由Agent设置；预期runner返回124，Playwright的interrupted不是普通PASS。收口须同时核验窗口ready、自有PID／userData回收及租约absent。2026-10-10已用保留的严格签名候选App完成上述到期检查；这不证明产品认证停读或完整App交付。
 
 持续会话19／17收尾入口：普通页面用 `npm run test:pages -- --case assistant-session-combination --timeout-seconds 240`，串联双合成联系人、版本续改、新消息显式采用、权威恢复、硬预算、携入和会话删除；不运行Electron或OCR。多来源及后继／携入删除另由后端 `tests.integration.server.test_assistant_combination` 验证。
 
@@ -228,7 +230,7 @@ NOTALONE_ASSISTANT_LIFECYCLE_ACCEPTANCE=1 npm run test:app -- --interactive --co
 
 状态文件和 PID 只提供线索。出现 `app_test_locked`、`app_test_lease_unsafe` 或 `app_test_cleanup_unconfirmed` 时，主 Agent 必须先核验上轮自己创建的资源已收尾；未知归属时继续暂停，不能以删除锁或按进程名 kill 继续测试。恢复旧工作树之前必须先合入最新集成提交并审计新增启动路径；尚未合入门禁的旧脚本不会被机器租约自动拦截，暂停/恢复由主 Agent 协调，不新增常驻监控。
 
-原 [App/HTTP 测试接缝](../.scratch/mac-desktop-app/spec.md)继续保留。没有可靠独立桌面 runner 时将真实 UI 项列为预约验收，不用 DOM 检查替代原证据。以下测试组说明的是既有约定和已实现夹具范围，本轮安全 CLI 通过不会更新其实际 App 验收结果。
+原 [App/HTTP 测试接缝](../.scratch/mac-desktop-app/spec.md)继续保留。真实UI项优先由可用Computer Use实测；能力不可用时说明具体缺口并保留未验证，不用DOM检查替代原生证据。以下测试组说明的是既有约定和已实现夹具范围，安全CLI通过不会更新其实际App验收结果。
 
 包含真实 Python 宿主的测试需先激活 Conda `NotAlone`。测试使用当前工作树的 `backend/src`，隔离 dotenv 的读取和写回、握手、owner、模型、CLI/探针和 App 配置。测试准备阶段只对自己随机新建的 `_test` 库显式迁移，App 始终运行真实只读诊断；完成后只清理本轮拥有的库。数据库不可用场景使用受控回环端口，其他生命周期场景使用已迁移的隔离库，不连接已有数据库。
 

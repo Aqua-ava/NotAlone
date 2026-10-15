@@ -330,6 +330,6 @@ NOTALONE_DISABLE_DOTENV=1 python -m unittest discover -s backend/tests -t backen
 swift test --package-path native/macos
 ```
 
-真实 App、普通页面与权限验收遵循 [工程工作流](docs/agents/engineering.md)及 [桌面端受限验收入口](desktop/README.md)。
+真实 App、普通页面与权限验收遵循 [工程工作流](docs/agents/engineering.md)及 [桌面验收与自动化测试说明](desktop/README.md)。
 
 </details>
