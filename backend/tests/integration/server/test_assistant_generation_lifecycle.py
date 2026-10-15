@@ -504,7 +504,16 @@ class AssistantGenerationInterruptionHttpTest(unittest.TestCase):
                 "target_message_id": str(target_id), "direction": "合成退出前回应来源消息。"}}
         prepared = self._prepare(path, body)
         self.assertEqual(self.backend.request(path + "/interrupt", self._interruption_body(prepared))[0], 200)
-        unrelated = self._prepare(path, self._body("合成无关可保留的独立草稿"))
+        # 同一会话的 prepare 已固定旧讨论，新的草稿也继承其来源依赖。
+        dependent = self._prepare(path, self._body("合成同会话继承旧讨论的草稿"))
+        self.assertEqual(self.backend.request(path)[1]["current_input_version_id"], dependent["input_version_id"])
+        status, independent_session = self.backend.request(f"/api/contacts/{self.contact_id}/assistant-sessions", {})
+        self.assertEqual(status, 200, independent_session)
+        independent_path = path.rsplit("/", 1)[0] + "/" + independent_session["session_id"]
+        self.assertNotEqual(independent_path, path)
+        unrelated = self._prepare(independent_path, self._body("合成新会话无关可保留的独立草稿"))
+        independent_before = self.backend.request(independent_path)[1]
+        self.assertEqual(independent_before["current_input_version_id"], unrelated["input_version_id"])
         status, deleting = self.backend.request(f"/api/contacts/{self.contact_id}/sources/{source_id}", method="DELETE")
         self.assertEqual(status, 202, deleting)
         deadline = time.monotonic() + 10
@@ -522,18 +531,21 @@ class AssistantGenerationInterruptionHttpTest(unittest.TestCase):
             409, {"error": "assistant_session_rejected", "reason": "source_deleted"},
         ))
         saved = self.backend.request(path)[1]
-        self.assertEqual(saved["current_input_version_id"], unrelated["input_version_id"])
+        self.assertIsNone(saved["current_input_version_id"])
         turns = {turn["request_key"]: turn for turn in saved["turns"]}
-        erased = turns[prepared["request_key"]]
-        self.assertEqual(erased["state"], "redacted")
-        self.assertIsNone(erased["interruption_reason"])
-        self.assertIsNone(erased["input"])
-        self.assertIsNone(erased["reply"])
-        self.assertEqual(turns[unrelated["request_key"]]["input"]["content"]["draft_text"],
-                         "合成无关可保留的独立草稿")
+        for receipt in (prepared, dependent):
+            erased = turns[receipt["request_key"]]
+            self.assertEqual(erased["state"], "redacted")
+            self.assertIsNone(erased["interruption_reason"])
+            self.assertIsNone(erased["input"])
+            self.assertIsNone(erased["reply"])
+        self.assertEqual(self.backend.request(independent_path), (200, independent_before))
+        self.assertEqual(independent_before["turns"][0]["input"]["content"]["draft_text"],
+                         "合成新会话无关可保留的独立草稿")
         self.assertEqual(self.backend.request(path, {"confirmed": True}, method="DELETE")[0], 200)
         reopened = self._backend()
         self.assertEqual(reopened.request(path), (404, {"error": "not_found"}))
+        self.assertEqual(reopened.request(independent_path), (200, independent_before))
         self.assertEqual(reopened.request(path + "/interrupt", self._interruption_body(prepared)),
                          (404, {"error": "not_found"}))
         self.assertNotEqual(reopened.request("/api/reply/generate", body)[0], 200)
