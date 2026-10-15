@@ -42,6 +42,10 @@ GROUNDED_V3_PROMPT = GROUNDED_PROMPT.replace(
     "health=健康，commitment=明确承诺，other=其他明确敏感性。\n"
     "即使原文否定发生借贷、负债或还款，financial也保留；它不表示已有负债或交易发生。",
 ) + """
+relationship_event用于原文明示本人已参与的关系经历，已收到邀请、实际接收或借用有据时仍可使用。
+reported_event可用于保存第三人行动的陈述；“我”仅作关系对象，不自动证明交易已完成或实际交付，也不能据此升级为本人已参与经历。
+人物身份未知本身不要求一律转述；若本人参与已明确，仍可relationship_event。kind不能按“我”、未知人物或借钱等词语强转。
+保留原文的否定、条件、引语及未证交付，不把提及行动自动当成已完成的本人经历。
 本次为grounded-v3，每个target还须填写ambiguity_codes数组，只能选择以下受控类别：
 entity_identity=原句所指人物或群体身份未明；place_ownership=所指地点／家里归属未明；
 borrowing_direction=“向对方借”与“借给对方”两种方向无法唯一确定；other_unresolved=其他实质未知。

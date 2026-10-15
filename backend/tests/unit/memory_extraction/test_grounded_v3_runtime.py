@@ -8,9 +8,12 @@ import unittest
 import httpx
 
 from notalone.memory.adapters import InMemoryMemoryStore
+from notalone.memory_extraction.cases.reference import CASES as REFERENCE_CASES
 from notalone.memory_extraction.command import run_extraction
+from notalone.memory_extraction.evaluation import build_window
 from notalone.memory_extraction.flow import ExtractionFlow
-from notalone.memory_extraction.grounded_adapter import GroundedExtractionRuntime, GroundedV3ExtractionRuntime
+from notalone.memory_extraction.grounded_adapter import GroundedExtractionRuntime, GroundedV3ExtractionRuntime, grounded_schema
+from notalone.memory_extraction.pragmatics import PragmaticInterpreter
 from notalone.memory_trace import TraceWriteError
 from notalone.memory_trace.adapters import InMemoryTraceStore
 from notalone.memory_trace.transport import build_trace_http_client
@@ -58,6 +61,9 @@ class GroundedV3RuntimeTest(unittest.TestCase):
         self.assertNotIn("tool_choice", requests[0])
         prompt = requests[0]["messages"][0]["content"]
         for guidance in ("非互斥", "逐类核对", "全部选择", "词语命中"):
+            self.assertIn(guidance, prompt)
+        for guidance in ("原文明示本人已参与", "第三人行动的陈述", "我”仅作关系对象", "人物身份未知本身不要求一律转述",
+                         "否定、条件、引语及未证交付"):
             self.assertIn(guidance, prompt)
         tool = requests[0]["tools"][0]["function"]
         self.assertEqual(tool["name"], "GroundedMemoryLabelsV3")
@@ -130,6 +136,94 @@ class GroundedV3RuntimeTest(unittest.TestCase):
         # 来自本次变更前8171d7c0的v2提示字节，不从当前实现派生预期值。
         self.assertEqual(hashlib.sha256(prompt.encode()).hexdigest(),
                          "8580e630bbc4d600b08beb8a607cfcc05dc3efeb7daacc98a9f95bcb6164a01b")
+
+    def test_given_kind_labels_keep_participation_report_negation_condition_and_quote_boundaries(self):
+        # 每项kind是合成输入标签；这些通过不代表模型能正确分类或增加质量样本数。
+        cases = (
+            ("A02已收到邀请", build_window(REFERENCE_CASES[1]),
+             labels(row("1:0", "relationship_event", dependency="0:0", ambiguity_codes=[])),
+             "assertion", "asserted", "他约我周末去钓鱼。"),
+            ("A05姐姐借车", build_window(REFERENCE_CASES[4]),
+             labels(row("0:0", "relationship_event", ambiguity_codes=[])),
+             "assertion", "asserted", "我姐把她的车借给我了。"),
+            ("明确本人接收", window("我已经收到同事交给我的资料了。"),
+             labels(row("0:0", "relationship_event", ambiguity_codes=[])),
+             "assertion", "asserted", "我已经收到同事交给我的资料了。"),
+            ("未知人但参与明确", window("有个陌生人把雨伞交到我手上了。"),
+             labels(row("0:0", "relationship_event", unresolved=True, ambiguity_codes=["entity_identity"])),
+             "assertion", "asserted", "有个陌生人把雨伞交到我手上了。"),
+            ("纯第三方历史", window("小林去年完成了搬家。"),
+             labels(row("0:0", "reported_event", ambiguity_codes=[])),
+             "report", "reported", "小林去年完成了搬家。"),
+            ("否定未变完成", window("小林没有向我借钱。"),
+             labels(row("0:0", "reported_event", sensitivity="financial", ambiguity_codes=[])),
+             "report", "reported", "小林没有向我借钱。"),
+            ("条件未变完成", window("如果小林向我借钱，我再考虑。"),
+             labels(row("0:0", "condition", sensitivity="financial", ambiguity_codes=[]),
+                    row("0:1", "hypothesis", ambiguity_codes=[])),
+             "plan", "conditional", "如果小林向我借钱，我再考虑。"),
+            ("引语保留", window("小林原话是“我没有向同事借钱”。"),
+             labels(row("0:0", "reported_event", sensitivity="financial", ambiguity_codes=[])),
+             "report", "reported", "小林原话是“我没有向同事借钱”。"),
+        )
+        for name, source, draft, speech, assertion, quote in cases:
+            with self.subTest(name=name):
+                requests = []
+
+                def handler(request):
+                    requests.append(json.loads(request.content))
+                    return response(draft)
+
+                with build_trace_http_client(transport=httpx.MockTransport(handler)) as client:
+                    model = build_deepseek_model(api_key="synthetic-secret", base_url="http://127.0.0.1/v1",
+                                                 http_client=client)
+                    outcome = ExtractionFlow(runtime=GroundedV3ExtractionRuntime(model=model)).run(source)
+                self.assertIsNone(outcome.failure_reason)
+                fact, = outcome.accepted
+                self.assertEqual((fact.speech_act.value, fact.assertion_status.value), (speech, assertion))
+                self.assertIn(quote, fact.text)
+                self.assertEqual(len(requests), 1)
+                choices = requests[0]["tools"][0]["function"]["parameters"]["properties"]["units"]["properties"]
+                self.assertNotIn("report", next(iter(choices.values()))["properties"]["kind"]["enum"])
+
+    def test_a03_given_v3_kind_changes_only_existing_mapping_and_remains_pending(self):
+        source = build_window(REFERENCE_CASES[2])
+        for kind, speech, assertion in (("relationship_event", "assertion", "asserted"),
+                                        ("reported_event", "report", "reported")):
+            with self.subTest(kind=kind):
+                draft = labels(row("0:0", kind, topic="finance", confidence=0.8, sensitivity="financial",
+                                   unresolved=True, ambiguity_codes=["entity_identity"]))
+                with build_trace_http_client(transport=httpx.MockTransport(lambda _: response(draft))) as client:
+                    model = build_deepseek_model(api_key="synthetic-secret", base_url="http://127.0.0.1/v1",
+                                                 http_client=client)
+                    outcome = ExtractionFlow(runtime=GroundedV3ExtractionRuntime(model=model)).run(source)
+                self.assertIsNone(outcome.failure_reason)
+                fact, = outcome.accepted
+                self.assertEqual((fact.speech_act.value, fact.assertion_status.value), (speech, assertion))
+                self.assertEqual(fact.text, "联系人原话：“他昨天又跟我借钱了。”")
+                self.assertIsNone(fact.valid_at)
+                self.assertIsNone(fact.invalid_at)
+                self.assertIn("sensitivity:financial", fact.risk_flags)
+                self.assertEqual(fact.alternatives,
+                                 ("原句所指人物身份在本窗口无法唯一确定，保留原句。",))
+                self.assertEqual(PragmaticInterpreter().interpret(fact).disposition.value, "pending")
+
+    def test_a03_old_v2_labels_reproduce_original_full_output_and_schema(self):
+        source = build_window(REFERENCE_CASES[2])
+        draft = labels(row("0:0", "relationship_event", topic="finance", confidence=0.8,
+                           sensitivity="financial", unresolved=True))
+        with build_trace_http_client(transport=httpx.MockTransport(
+                lambda _: response(draft, name="GroundedMemoryLabels"))) as client:
+            model = build_deepseek_model(api_key="synthetic-secret", base_url="http://127.0.0.1/v1",
+                                         http_client=client)
+            payload = GroundedExtractionRuntime(model=model).extract(source)
+        # 完整E14摘要来自原A03封存输出；schema摘要来自变更前85ca9ea7。
+        for value, expected in (
+            (payload, "b4c25153f4aac09f74718d82597f12b39ca6cc352873e293e9a04009bb86d9a3"),
+            (grounded_schema(source), "46d3cfb96ddecbff0c653b1200e0261c16e5de0ab0acff97060d5ca5f6eb57a7"),
+        ):
+            encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+            self.assertEqual(hashlib.sha256(encoded).hexdigest(), expected)
 
     def test_old_tool_or_missing_codes_fail_without_fallback_or_repair_request(self):
         source = window("我已取件。")
