@@ -353,6 +353,8 @@ Root核对两场20个记录进程、隔离目录及自有Finder窗口／目录�
 
 ### OCR 本机可视化验收
 
+直接在正式助手核对顶部名称时，用最终签名包、`NOTALONE_CONTINUOUS_APP_ACCEPTANCE=1` 与 `NOTALONE_FORMAL_HEADER_PREVIEW=1` 经有限 `test:app` 执行 `tests/continuous-contact-follow-acceptance.spec.ts`。该模式不提供预期姓名，不建绑定，不弹验收浮窗；正式助手自动显示当前OCR文字及置信度，业务库和userData隔离，CLI／消息为空合成输入。退出或预约截止前自动正常收尾，只记录匿名生命周期，不代替已确认联系人绑定验收。
+
 只核对“实际读出了什么名字”时，使用 `NOTALONE_SESSION_NAME_PREVIEW=1` 和 `tests/native-session-name-preview.spec.ts`，经有限 `test:app` 启动仓库探针 `--preview-session-name`。不提前输入姓名、不经过联系人确认或业务库；“微信会话名称 · 自动识别”浮窗直接显示顶部名称区域的原始 OCR 文字和置信度，失败或离开微信清名，后续读到文字即可展示。无分步检查、不抢焦点，结束或20分钟内退出；外部预约截止优先，生命周期未完整收口时不标通过。当前微信窗口仅在本机内存作布局分析，仅顶部名称区域执行OCR，不识别左侧选中行或正文；预览不以0.90或两处名称一致性过滤文字，姓名、图像不进入日志或文件。`preview-header-v1`仅供此开发窗口，正式定位的质量及联系人绑定门保持；此项不能代签正式App绑定或生成资格。
 
 显式开发入口为仓库探针 `--preview-session`，由主 Agent 在认可的有限时段经 `test:app` 的 `tests/native-session-preview.spec.ts` 启动（环境开关 `NOTALONE_SESSION_PREVIEW_ACCEPTANCE=1`）。窗口不会自动采集；用户点击按钮后有5秒切回已确认的微信测试会话，随后只观察一次。预览仅在本机内存显示第一帧、红色顶部名称框、蓝色选中行名称框及实际 OCR 文字/置信度；失败显示固定阶段和原因，未执行 OCR 时不伪造文字。每次重新识别清空旧图，关闭即释放，最长8分钟自动退出。不保存、不上传、不发送消息，不代表联系人绑定通过。

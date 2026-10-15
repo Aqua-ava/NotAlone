@@ -9,6 +9,7 @@ import { createAcceptanceCoordinator } from './acceptance-coordinator.mjs';
 import { openVisualAcceptance, monitorVisualAcceptance } from './visual-acceptance-window';
 
 const visualAcceptance = process.env.NOTALONE_CONTINUOUS_VISUAL_ACCEPTANCE === '1';
+const headerAcceptance = process.env.NOTALONE_FORMAL_HEADER_PREVIEW === '1';
 
 // 仅正式包、真实原生名称识别；CLI正文和业务数据均为合成输入。
 const test = bindingTest.extend({
@@ -16,8 +17,9 @@ const test = bindingTest.extend({
     await verifyAppTestLease();
     const executable = process.env.NOTALONE_TEST_APP_EXECUTABLE;
     const names = [process.env.NOTALONE_FOLLOW_TEST_NAME_A, process.env.NOTALONE_FOLLOW_TEST_NAME_B].filter((name): name is string => Boolean(name?.trim()));
-    if (!executable || !path.isAbsolute(executable) || (!visualAcceptance && !process.env.NOTALONE_FOLLOW_TEST_NAME_A?.trim())
+    if (!executable || !path.isAbsolute(executable) || (!visualAcceptance && !headerAcceptance && !process.env.NOTALONE_FOLLOW_TEST_NAME_A?.trim())
       || (visualAcceptance && names.length > 0)
+      || (headerAcceptance && (visualAcceptance || names.length > 0))
       || new Set(names).size !== names.length) {
       throw new Error('缺少正式包或本轮已确认测试会话的明确范围。');
     }
@@ -45,6 +47,7 @@ test('正式App持续单帧名称跟随及可视诊断生命周期', async ({ ru
   if (!directory || !path.isAbsolute(directory)) throw new Error('缺少本轮私有协调目录。');
   const reports: Array<Record<string, unknown>> = [];
   let visualMonitor: Awaited<ReturnType<typeof monitorVisualAcceptance>> | undefined;
+  let headerExpiry: ReturnType<typeof setTimeout> | undefined;
   const coordinator = await createAcceptanceCoordinator({ directory, pid: appProcess.pid!,
     checkLease: verifyAppTestLease,
     isAlive: () => appProcess.exitCode === null && appProcess.signalCode === null });
@@ -81,6 +84,30 @@ test('正式App持续单帧名称跟随及可视诊断生命周期', async ({ ru
       });
     };
     await expect.poll(() => helper.evaluate(async () => (await window.notalone.contacts.getState()).directoryPhase)).toBe('ready');
+    if (headerAcceptance) {
+      // 正式助手展示原始顶部名称；本轮不预填姓名或建立身份绑定。
+      expect((await bindingBackend.request('/api/sync/status')).data.sync_enabled).toBe(false);
+      await expect(helper.getByRole('region', { name: '前台会话定位', exact: true })).toBeVisible();
+      const pin = helper.getByRole('button', { name: '置顶输入小窗', exact: true });
+      await expect(pin).toBeEnabled();
+      if ((await pin.getAttribute('aria-pressed')) !== 'true') await pin.click();
+      await expect(pin).toHaveAttribute('aria-pressed', 'true');
+      expect((await bindingBackend.request('/api/sync/enable', {})).status).toBe(200);
+      process.stdout.write('formal_header_preview_ready: 正式助手已打开，切换微信会话即可核对名称与置信度。\n');
+      headerExpiry = setTimeout(() => { void coordinator.requestFinish().catch(() => {}); },
+        Math.max(1, lease.until - Date.now() - 15000));
+      try { await ready('finish'); }
+      catch (error) { if (appProcess.exitCode !== 0) throw error; }
+      await coordinator.close();
+      if (appProcess.exitCode === null) {
+        await selectMenu(app, 'NotAlone', '退出 NotAlone');
+        await expect.poll(() => appProcess.exitCode, { timeout: 15000 }).toBe(0);
+      }
+      normalQuit = true;
+      reports.push({ phase: 'formal-header-preview', diagnosticOnly: true,
+        manualAcceptanceRequired: true, verifiedBindingTested: false });
+      return;
+    }
     if (visualAcceptance) {
       expect((await bindingBackend.request('/api/sync/status')).data.sync_enabled).toBe(false);
       const viewer = await openVisualAcceptance(app);
@@ -200,6 +227,7 @@ test('正式App持续单帧名称跟随及可视诊断生命周期', async ({ ru
     await coordinator.holdFailure();
     throw error;
   } finally {
+    clearTimeout(headerExpiry);
     await visualMonitor?.stop();
     await coordinator.close();
     // 只输出阶段/布尔/耗时；不输出联系人身份、名称或原生原始输出。
