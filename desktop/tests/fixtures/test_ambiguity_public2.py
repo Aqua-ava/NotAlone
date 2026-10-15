@@ -55,6 +55,12 @@ class AmbiguityPublic2Test(unittest.TestCase):
         self.assertEqual(frozen["fixed"]["request_limit"], 4)
         self.assertEqual(frozen["fixed"]["extraction_mode"], "grounded-v3")
         self.assertEqual(frozen["fixed"]["batch_work_seconds"], 5380)
+        self.assertEqual(frozen["fixed"].get("label_policy"), "v3-guidance-v1")
+        self.assertEqual(runner.PLAN, ".scratch/grounded-evaluation/v3-label-guidance-public2-plan-20261016.md")
+        self.assertEqual(len(frozen["source_hashes"]), 79)
+        self.assertIn(runner.PLAN, frozen["source_hashes"])
+        self.assertIn(".scratch/grounded-evaluation/v3-label-guidance-plan-20261016.md", frozen["source_hashes"])
+        self.assertNotIn(".scratch/grounded-evaluation/typed-ambiguity-v3-pilot-plan-20261016.md", frozen["source_hashes"])
         self.assertEqual([item["case_id"] for item in frozen["selection"]], ["A07", "A10"])
         old_plan, old_rows, _ = runner.helpers().contracts()
         for index, position in enumerate((6, 9)):
@@ -103,6 +109,12 @@ class AmbiguityPublic2Test(unittest.TestCase):
             function = body["tools"][0]["function"]
             if function["name"] == "GroundedMemoryLabelsV3":
                 slots = function["parameters"]["properties"]["units"]["required"]
+                index = 0 if slots == ["0:0"] else 1
+                prompt = body["messages"][0]["content"]
+                self.assertEqual(runner.helpers().digest(prompt),
+                                 frozen["extraction_window_contracts"][index]["prompt_sha256"])
+                for guidance in ("非互斥", "金融敏感事项", "financial也保留"):
+                    self.assertIn(guidance, prompt)
                 label = {"kind": "plan" if slots == ["0:0"] else "relationship_event", "subject": "contact",
                     "topic": "other", "dependency": None if slots == ["0:0"] else "0:0", "unresolved": True,
                     "confidence": 0.9, "sensitivity": "none" if slots == ["0:0"] else "financial",
@@ -139,6 +151,40 @@ class AmbiguityPublic2Test(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "source_closure"):
             runner.validate(frozen)
         self.assertFalse((self.home / ".notalone-memory-evaluations").exists())
+
+    def test_old_label_policy_missing_plan_dependencies_or_old_prompt_fail_before_budget(self):
+        frozen, path, _, _ = self.prepared()
+        variants = []
+        missing_policy = deepcopy(frozen)
+        missing_policy["fixed"].pop("label_policy")
+        variants.append(("old_pilot_without_policy", missing_policy, "fixed_window"))
+        wrong_policy = deepcopy(frozen)
+        wrong_policy["fixed"]["label_policy"] = "v3-guidance-v2"
+        variants.append(("wrong_policy", wrong_policy, "fixed_window"))
+        for name in (".scratch/grounded-evaluation/v3-label-guidance-public2-plan-20261016.md",
+                     ".scratch/grounded-evaluation/v3-label-guidance-plan-20261016.md"):
+            missing_plan = deepcopy(frozen)
+            missing_plan["source_hashes"].pop(name)
+            variants.append((name, missing_plan, "source_closure"))
+        old_prompt = deepcopy(frozen)
+        # 来自8171d7c0的v3提示canonical摘要，独立于当前extraction_contract。
+        old_prompt["extraction_window_contracts"][0]["prompt_sha256"] = (
+            "549da1ec0a0cfb4c276055cfccc0ec5f8a60eee110dd0d3ed8931ec2ae609e40")
+        variants.append(("old_prompt_contract", old_prompt, "contract_drift"))
+
+        def forbidden(*args):
+            self.fail("不匹配的冻结不得读取凭据或发送请求")
+
+        for index, (name, candidate, code) in enumerate(variants):
+            with self.subTest(name=name):
+                candidate_path = path.with_name(f"invalid-freeze-{index}.json")
+                runner.helpers().publish(candidate_path, candidate)
+                expected = runner.helpers().file_digest(candidate_path)
+                approval = {"user_authorized": True, "run_id": frozen["run_id"], "freeze_sha256": expected}
+                with self.assertRaisesRegex(ValueError, code):
+                    runner.worker(freeze_path=candidate_path, expected_sha256=expected, approval=approval,
+                                  synthetic_transport=httpx.MockTransport(forbidden), credential_loader=forbidden)
+                self.assertFalse((self.home / ".notalone-memory-evaluations").exists())
 
     def test_claim_receipt_with_remaining8_limit_cannot_authorize_v3_credential_read(self):
         frozen, path, _, _ = self.prepared()

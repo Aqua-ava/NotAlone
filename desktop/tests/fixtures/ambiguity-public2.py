@@ -1,4 +1,4 @@
-"""固定受控歧义v3两窗的准备与独占worker；默认无模型、预算或凭据操作。"""
+"""固定v3标签指导两窗的准备与独占worker；默认无模型、预算或凭据操作。"""
 
 from datetime import datetime, timedelta, timezone
 import importlib.util
@@ -15,14 +15,15 @@ ROOT = Path(__file__).resolve().parents[3]
 LEGACY = ROOT / "desktop/artifacts/grounded-public21-prepare-20261015/grounded_public21.py"
 REFERENCE = ".scratch/unfinished-work/memory-gold-reference-20261012.json"
 ANNOTATION = ".scratch/unfinished-work/memory-gold-agent-annotations-20261012.md"
-PLAN = ".scratch/grounded-evaluation/typed-ambiguity-v3-pilot-plan-20261016.md"
+PLAN = ".scratch/grounded-evaluation/v3-label-guidance-public2-plan-20261016.md"
+LABEL_GUIDANCE_PLAN = ".scratch/grounded-evaluation/v3-label-guidance-plan-20261016.md"
 POSITIONS = (6, 9)
 FIXED = {"execution_plan": "reference21-ambiguity2-v3", "case_set": "reference21",
          "case_positions": list(POSITIONS), "request_limit": 4, "request_timeout_seconds": 300,
          "max_retries": 0, "extraction_mode": "grounded-v3", "verification_mode": "nullable-proof-v1",
          "verification_tool_choice": "omitted", "extraction_tool_choice": "omitted",
          "provider_profile": "deepseek-flash-max", "call_wall_seconds": 600,
-         "phase_wall_seconds": 600,
+         "phase_wall_seconds": 600, "label_policy": "v3-guidance-v1",
          "batch_work_seconds": 5380, "outer_wall_seconds": 5400}
 
 
@@ -64,7 +65,7 @@ def contracts():
 def _source_names():
     from notalone.memory_extraction.evaluation_ecnu import _NULLABLE_REQUIRED_SOURCES
     return _NULLABLE_REQUIRED_SOURCES | {
-        REFERENCE, ANNOTATION, PLAN, "backend/src/notalone/runtime_config.py",
+        REFERENCE, ANNOTATION, PLAN, LABEL_GUIDANCE_PLAN, "backend/src/notalone/runtime_config.py",
         "desktop/tests/fixtures/remaining-public8.py", "desktop/tests/fixtures/ambiguity-public2.py",
         ".scratch/grounded-evaluation/remaining-public8-plan-20261016.md", LEGACY.relative_to(ROOT).as_posix(),
         (LEGACY.parent / "explicit_review_bridge.py").relative_to(ROOT).as_posix(),
