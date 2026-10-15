@@ -7,14 +7,19 @@ import Foundation
 @MainActor
 public enum AutomaticSessionCapture {
     public static func observe() async -> [String: Any] {
-        await observe(context: foregroundContext, capture: captureWindow,
+        await observe(context: { try foregroundContext() }, capture: captureWindow,
                       recognize: { try recognizeName($0, policy: .conditionalASCIIRecheck) })
     }
 
     // 正式观察与可视验收共用采集前门禁；调用此方法不会截图或识别。
-    static func foregroundContext() throws -> CalibrationContext? {
-        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.tencent.xinWeChat" else { return nil }
-        return try CalibrationContext.resolve(requireForeground: true)
+    static func foregroundContext(
+        frontmost: @MainActor () -> ForegroundApplication = ForegroundApplication.current,
+        resolve: @MainActor () throws -> CalibrationContext = { try CalibrationContext.resolve(requireForeground: true) }
+    ) throws -> CalibrationContext? {
+        let application = frontmost()
+        guard application != .unknown else { throw CalibrationContextFailure.foregroundApplicationUnavailable }
+        guard application == .wechat else { return nil }
+        return try resolve()
     }
 
     static func observe(context: () throws -> CalibrationContext?,

@@ -59,7 +59,10 @@ export async function createAcceptanceCoordinator({ directory, pid, checkLease, 
         }
         const sample = await read(started);
         foreground = { stage, helperBlurred: sample.helperBlurred === true,
-          wechatInFront: sample.wechatInFront === true, freshObservation: sample.freshObservation === true };
+          wechatInFront: sample.wechatInFront === true, freshObservation: sample.freshObservation === true,
+          probeAvailable: typeof sample.probeAvailable === 'boolean' ? sample.probeAvailable : null,
+          unavailable: sample.unavailable === true, foregroundUnknown: sample.foregroundUnknown === true,
+          probeTimedOut: sample.probeTimedOut === true };
         await publish('waiting-foreground', stage);
         if (foreground.helperBlurred && foreground.wechatInFront && foreground.freshObservation) {
           await publish('measuring', stage);

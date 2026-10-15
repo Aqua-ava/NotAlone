@@ -355,6 +355,8 @@ Root核对两场20个记录进程、隔离目录及自有Finder窗口／目录�
 
 前台状态另有 `--preview-foreground`：环境开关 `NOTALONE_FOREGROUND_STATUS_PREVIEW=1`，仍经有限 `test:app` / `tests/native-foreground-status-preview.spec.ts` 单实例启动。悬浮窗不主动激活或成为键盘窗口，每0.5秒显示系统前台分类和正式观察共用的采集前检查；用户记录“微信/其他应用在前台”，过期和未知状态保持未验证。只读元数据，零截图/OCR/正文/CLI/模型；关闭或8分钟到期退出，只输出固定事件和聚合计数。生命周期用例通过不代表人工核对通过，也不证明正式App端到端状态正常。
 
+无窗口的 `--foreground-status --json` 对照入口为 `tests/native-foreground-runtime.spec.ts`，环境开关 `NOTALONE_FOREGROUND_RUNTIME_DIAGNOSTIC=1`；仍通过有限 `test:app` 和 `spawnApp`，不截图或读取正文。短生命周期探针退出后须等待 `waitForTestCleanup()`，避免worker退出截断原异步释放。正式观察区分未知前台和确定其他应用，未知原因经认证HTTP显示为“系统前台状态未知”；有限实机协调只保存探针可用、未知和超时等固定布尔，不输出原始错误或标题。
+
 `tests/native-automatic-foreground.spec.ts` 是原位/移动/缩放的受限实机反馈入口，需 `NOTALONE_AUTOMATIC_FOREGROUND_ACCEPTANCE=1`、本轮隔离协调目录和已确认会话名环境变量。窗口动作由操作者完成，触发文件不提供坐标；落盘只保留匹配布尔、固定错误和耗时。阶段标签不能证明窗口实际移动/缩放，须另记操作证据。当前用户改为先看预览再迭代，尚未完成移动/缩放验收。
 
 ### 持续联系人实机协调（失败留窗）

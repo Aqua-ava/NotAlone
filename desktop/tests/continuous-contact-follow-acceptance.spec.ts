@@ -67,7 +67,11 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
         });
         return { helperBlurred: helperBlurred && !foreground.suspendedByHelperFocus,
           wechatInFront: foreground.wechatInFront === true,
-          freshObservation: Date.parse(foreground.observedAt ?? '') >= since };
+          freshObservation: Date.parse(foreground.observedAt ?? '') >= since,
+          probeAvailable: foreground.probeAvailable,
+          unavailable: foreground.phase === 'unavailable',
+          foregroundUnknown: foreground.reason === 'foreground_application_unavailable',
+          probeTimedOut: foreground.reason === 'probe_timeout' };
       });
     };
     await expect.poll(() => helper.evaluate(async () => (await window.notalone.contacts.getState()).directoryPhase)).toBe('ready');

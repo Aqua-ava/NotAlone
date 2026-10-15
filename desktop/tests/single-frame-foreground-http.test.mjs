@@ -28,6 +28,37 @@ function deferred() {
   return { promise, resolve };
 }
 
+test('系统前台未知经认证观察保留原因，助手不得显示为普通非前台暂停', async () => {
+  await ports.withVerifiedForegroundFixture(async fixture => {
+    assert.equal((await fixture.request('/api/sync/enable', {})).status, 200);
+    await writeFile(path.join(fixture.directory, 'probe-state.json'),
+      JSON.stringify({ error: 'foreground_application_unavailable' }));
+    const tails = await fixture.tails();
+    const observed = await fixture.request('/api/sync/foreground/observe', {});
+    assert.equal(observed.status, 200);
+    assert.equal(observed.data.phase, 'unavailable');
+    assert.equal(observed.data.reason, 'foreground_application_unavailable');
+    assert.equal(observed.data.contact_id, null);
+    const client = new ports.JsonClient(await ports.readConnection(fixture.infoPath));
+    const backend = { getConnectionGeneration: () => 1, onStateChanged: () => () => {},
+      async requestJson(request) { return { ...await client.perform(request), generation: 1 }; } };
+    const contacts = new ports.ContactSession(() => ports.readContactDirectory(backend));
+    contacts.setConnection(1); await contacts.refreshContacts();
+    const foreground = new ports.ForegroundController(backend, contacts);
+    try {
+      await foreground.observeBeforeShow();
+      const state = foreground.getState();
+      assert.equal(state.phase, 'unavailable');
+      assert.equal(state.confirmation, 'required');
+      assert.equal(state.generationBlock, 'foreground-confirmation-required');
+      const html = ports.renderToStaticMarkup(ports.createElement(ports.ForegroundPanel, { state }));
+      assert.ok(html.includes('系统前台状态未知'));
+      assert.ok(!html.includes('前台定位已暂停'));
+      assert.deepEqual(await fixture.tails(), tails);
+    } finally { foreground.dispose(); }
+  });
+});
+
 // 真实认证 HTTP/隔离 PG 与生产控制器；仅探针、CLI 为合成输入，不启动 App。
 test('单帧采集时点经认证观察传到助手，定位不读取正文或发起生成', async () => {
   await ports.withVerifiedForegroundFixture(async (fixture) => {

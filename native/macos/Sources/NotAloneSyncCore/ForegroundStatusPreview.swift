@@ -53,9 +53,19 @@ struct ForegroundStatusReading {
         return preflight == .ready ? "微信在前台" : "微信在前台 · 前置检查未通过"
     }
 
+    func jsonObject() -> [String: Any] {
+        let code: String
+        switch preflight {
+        case .ready: code = "ready"
+        case .notForeground: code = "not_foreground"
+        case .blocked(let failure): code = failure
+        }
+        return ["ok": true, "system_front_app": frontmost.rawValue, "probe_preflight": code]
+    }
+
     @MainActor
     static func observe(frontmost: @MainActor () -> ForegroundApplication = ForegroundApplication.current,
-                        context: @MainActor () throws -> CalibrationContext? = AutomaticSessionCapture.foregroundContext) -> Self {
+                        context: @MainActor () throws -> CalibrationContext? = { try AutomaticSessionCapture.foregroundContext() }) -> Self {
         let application = frontmost()
         do {
             return Self(frontmost: application, preflight: try context() == nil ? .notForeground : .ready)
@@ -63,6 +73,21 @@ struct ForegroundStatusReading {
             return Self(frontmost: application, preflight: .blocked(
                 (error as? CalibrationContextFailure)?.rawValue ?? CalibrationContextFailure.unavailable.rawValue))
         }
+    }
+}
+
+@MainActor
+public enum ForegroundStatusProbe {
+    public static func observe() async -> [String: Any] {
+        runtimeSnapshot()
+    }
+
+    // 线程布尔只描述同一同步采样点，不把它当后续异步工作的执行保证。
+    private static func runtimeSnapshot() -> [String: Any] {
+        var report = ForegroundStatusReading.observe().jsonObject()
+        report["main_thread"] = Thread.isMainThread
+        report["application_initialized"] = NSApp != nil
+        return report
     }
 }
 

@@ -49,6 +49,20 @@ test('前台一直未确认时停在前置检查，不进入识别阶段', () =>
   assert.equal((await state()).state, 'waiting-user');
 }));
 
+test('前台未知及探针超时分开记录，不写入原始错误或标题', () => scenario(async ({ coordinator, state }) => {
+  await assert.rejects(coordinator.waitForForeground('baseline', async () => ({
+    helperBlurred: true, wechatInFront: false, freshObservation: true,
+    probeAvailable: false, unavailable: true, foregroundUnknown: true, probeTimedOut: false,
+    reason: 'PRIVATE_WINDOW_TITLE',
+  }), 500), /acceptance_lease_ended/);
+  const snapshot = await state();
+  assert.equal(snapshot.foreground.foregroundUnknown, true);
+  assert.equal(snapshot.foreground.probeAvailable, false);
+  assert.equal(snapshot.foreground.unavailable, true);
+  assert.equal(snapshot.foreground.probeTimedOut, false);
+  assert.ok(!JSON.stringify(snapshot).includes('PRIVATE_WINDOW_TITLE'));
+}));
+
 test('保留检查期间进程退出，不重新创建实例', () => scenario(async ({ coordinator, exit, setWait, state }) => {
   setWait(async () => exit());
   assert.equal(await coordinator.holdFailure(), 'exited');

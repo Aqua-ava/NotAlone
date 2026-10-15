@@ -98,6 +98,7 @@ class ForegroundLocator:
             reason = error.code if error.code in {
                 "probe_not_found", "probe_timeout", "probe_output_invalid",
                 "screen_capture_permission_missing", "probe_failed",
+                "foreground_application_unavailable",
             } else "probe_failed"
             return FreshForegroundObservation.create(
                 phase="unavailable", reason=reason,

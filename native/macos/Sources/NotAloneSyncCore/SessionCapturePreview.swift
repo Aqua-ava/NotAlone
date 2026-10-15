@@ -56,8 +56,7 @@ private final class SessionPreviewController: NSObject, NSWindowDelegate {
             var regions: AutomaticSessionRegions?
             var names: [Name] = []
             let result = await AutomaticSessionCapture.observe(context: {
-                guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.tencent.xinWeChat" else { return nil }
-                return try CalibrationContext.resolve(requireForeground: true)
+                try AutomaticSessionCapture.foregroundContext()
             }, capture: { context in
                 let image = try await AutomaticSessionCapture.captureWindow(context)
                 if firstImage == nil {

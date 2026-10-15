@@ -27,6 +27,7 @@ private struct ProbeOptions {
       --session            自动定位当前前台微信窗口；内存分析布局，仅OCR两处会话名称。
       --preview-session    显式本机可视化预览，由用户点击观察；图帧与文字不保存，8分钟退出。
       --preview-foreground 前台状态悬浮验收，仅查询元数据、不截图或OCR，8分钟退出。
+      --foreground-status --json  开发诊断：只输出前台分类及前置检查，不创建窗口或采集图像。
       --json               与 --session 配合输出机器可读 JSON，供本机同步驱动解析。
       --minimal-region     仅与 --session --json 配合；保留兼容参数，不使用人工坐标。
       --single-frame       仅与 --session --json 配合；显式要求单帧，输出automatic-window-v2及UTC采集时点。
@@ -98,6 +99,10 @@ struct NotAloneSyncCLI {
     static func main() async {
         do {
             let arguments = Array(CommandLine.arguments.dropFirst())
+            if arguments == ["--foreground-status", "--json"] {
+                printJsonLine(await ForegroundStatusProbe.observe())
+                return
+            }
             if arguments == ["--preview-foreground"] {
                 ForegroundStatusPreview.run()
                 return

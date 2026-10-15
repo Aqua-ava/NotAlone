@@ -11,6 +11,9 @@ if __name__ == "__main__":
         raise ValueError("合成定位探针只允许一次最小区域观察。")
     state_path = Path(__file__).parent / "probe-state.json"
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    if state.get("error"):
+        print(json.dumps({"ok": False, "stage": "context", "error": state["error"]}))
+        sys.exit(0)
     print(json.dumps({
         "ok": True, "wechat_in_front": state.get("wechat_in_front", True),
         "display_name": state.get("display_name", "唯一合成会话"),

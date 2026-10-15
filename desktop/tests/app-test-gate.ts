@@ -80,15 +80,21 @@ if (!protectedElectron.notaloneLaunchGate) {
 
 export const launchApp = (options: Parameters<typeof electron.launch>[0]) => electron.launch(options);
 
-export async function spawnApp(executable: string, args: string[], options: SpawnOptions): Promise<ChildProcess> {
+type SpawnedAppProcess = ChildProcess & { waitForTestCleanup(): Promise<void> };
+
+export async function spawnApp(executable: string, args: string[], options: SpawnOptions): Promise<SpawnedAppProcess> {
   const permit = await requestAppTestLease('launch');
   if (Date.now() >= permit.until) throw new Error('app_test_expired: 验收时段已到期，禁止启动 App');
   const child = spawn(executable, args, { ...options, detached: true });
-  child.once('exit', () => { void releaseAfterExit(child, permit.launchId!); });
+  let settlement: Promise<void> | undefined;
+  const waitForTestCleanup = () => settlement ??= releaseAfterExit(child, permit.launchId!);
+  child.once('exit', () => { void waitForTestCleanup(); });
+  child.once('error', () => { void waitForTestCleanup(); });
   monitorLease(child, permit.until, {
     gracefulStop: () => { if (alive(child)) child.kill('SIGTERM'); }, killAfterMs: 3000,
   });
-  return child;
+  // 快速探针的worker必须等本次释放尝试完成，不能退出时截断异步收尾。
+  return Object.assign(child, { waitForTestCleanup });
 }
 
 export default async function appTestGlobalSetup(): Promise<void> { await verifyAppTestLease(); }

@@ -4,6 +4,25 @@ import XCTest
 
 final class AutomaticSessionCaptureTests: XCTestCase {
     @MainActor
+    func testMissingSystemForegroundCannotClaimWeChatIsNotInFront() async {
+        let result = await AutomaticSessionCapture.observe(context: {
+            try AutomaticSessionCapture.foregroundContext(frontmost: { .unknown }, resolve: {
+                XCTFail("前台未知时不得读取微信窗口")
+                throw CalibrationContextFailure.unavailable
+            })
+        }, capture: { _ in
+            XCTFail("前台未知时不得截图")
+            return self.window()
+        }, recognize: { _ in
+            XCTFail("前台未知时不得OCR")
+            return Name(text: "合成", confidence: 1)
+        })
+        XCTAssertEqual(result["ok"] as? Bool, false)
+        XCTAssertNil(result["wechat_in_front"])
+        XCTAssertEqual(result["error"] as? String, "foreground_application_unavailable")
+    }
+
+    @MainActor
     func testObservesWithoutProfileAfterMoveResizeAndScaleChange() async throws {
         for (width, height, scale, origin, divider, row) in [
             (900, 700, 1, 0, 270, 62), (1200, 900, 2, 230, 330, 198),

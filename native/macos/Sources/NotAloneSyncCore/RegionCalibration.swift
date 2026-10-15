@@ -89,6 +89,7 @@ func allowedCalibrationRegion(_ rectangle: CGRect, field: String, bounds: CGRect
 }
 
 enum CalibrationContextFailure: String, Error {
+    case foregroundApplicationUnavailable = "foreground_application_unavailable"
     case instances = "calibration_wechat_instances_ambiguous"
     case version = "calibration_wechat_version_unsupported"
     case notVisible = "calibration_window_not_visible"

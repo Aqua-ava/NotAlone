@@ -41,4 +41,12 @@ final class ForegroundStatusPreviewTests: XCTestCase {
         XCTAssertEqual(reading.headline, "前台状态未知")
         XCTAssertEqual(reading.preflight, .blocked("calibration_context_unavailable"))
     }
+
+    func testMetadataDiagnosticPreservesUnknownRatherThanClaimingOtherApp() {
+        let reading = ForegroundStatusReading(frontmost: .unknown, preflight: .notForeground)
+        let report = reading.jsonObject()
+        XCTAssertEqual(report["system_front_app"] as? String, "unknown")
+        XCTAssertEqual(report["probe_preflight"] as? String, "not_foreground")
+        XCTAssertEqual(Set(report.keys), ["ok", "system_front_app", "probe_preflight"])
+    }
 }

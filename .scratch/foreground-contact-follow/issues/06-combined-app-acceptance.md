@@ -1,7 +1,7 @@
 # 06：组合回归与正式 App 验收
 
 State: claimed
-Triage: ready-for-agent
+Triage: ready-for-human
 Blocked by: 04, 05
 
 ## 交付行为
@@ -41,6 +41,8 @@ Blocked by: 04, 05
 - [工程工作流](../../../docs/agents/engineering.md)、[桌面测试与运行说明](../../../desktop/README.md)、[macOS 权限与启动记录](../../../docs/macos-app-permissions-and-errors.md)。
 
 ## Comments
+
+- 2026-10-15（正式包待签收）：可视预览已由用户签收并完成退出清理；继续正式App集成时，补齐未知前台分类、HTTP原因及助手文案回归，保留原质量、绑定和采集门。新正式候选包构建、严格签名与14项源码摘要核对通过，Standards/Spec评审无待修项，本轮正式App启动0次。自动验证及包摘要见[本轮集成记录](../app-integration-18.md)。现场矛盾根因和正式匹配、移动缩放、暂停恢复仍需同包实测；转ready-for-human，State保持claimed，原实机条件不勾选。
 
 ## Answer（进行中）
 
