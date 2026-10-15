@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | [前台跟随06组合验收](../foreground-contact-follow/issues/06-combined-app-acceptance.md) | 已resolved；[单联系人实机及组合结果](../foreground-contact-follow/acceptance-06-final-20261015.md) | 本票范围完成，后续新包分项不倒填旧包 |
 | [群聊暂停人工验收01](../foreground-group-manual-acceptance/issues/01-group-pause-and-live-checklist.md) | 已resolved；实际群聊暂停与返回私聊核验已记录 | 本票范围完成 |
-| [事件优先触发01](../foreground-event-trigger/issues/01-event-capability-and-integration.md) | claimed；[v7可见切群与返A](../foreground-event-trigger/app-fast-switch-v7-20261016.md)实际画面通过，状态样本上界673／1088ms，96单帧观察及1次changed | 第二源约48秒instances_ambiguous锁定；事件因果／提速与精准绘制延迟未认证，细分诊断待v8实机 |
+| [事件优先触发01](../foreground-event-trigger/issues/01-event-capability-and-integration.md) | claimed；[v8同版实机](../foreground-event-trigger/app-instance-clock-v8-20261016.md)changed后约1.666ms进入HTTP，较正常空等保守边界早230.628ms，结合合成覆盖完成AC2；实际群暂停画面上界810ms | AC4仍缺辅助源实际帧数；返A2703ms是首状态、65.987秒是晚图，非精准paint；第三源instances_zero保守锁定且不认定OS根因 |
 | [前台定位18](../mac-desktop-app/issues/18-foreground-locator.md) | claimed；单联系人绑定/暂停恢复已有实机；[真实CLI与正式视觉独立场](../foreground-contact-follow/real-cli-visual-20261015.md)通过 | 当前包独立启动权限和持续源边界 |
 | [本机交付20](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed；当前签名包Finder启动、真实选择/导入等分项已有证据；[真实DeepSeek合成App冒烟](../mac-desktop-app/reply-model-smoke-result-20261016.md)1／1通过，模型AC完成；[快捷键复验](../mac-desktop-app/native-shortcut-current-20261016.md)未观察到显示 | 独立启动权限、系统快捷键 |
 | [真实微信follow04](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed；单联系人有界读取、退出及视觉独立性已有证据；[v7同App总开关重开](../native-app-backend/real-sync-reenable-result-20261016.md)1／1通过，关闭65.926秒零新读取 | 空窗补读状态及去重通过，不认证正向消息恢复；双联系人和真实来信依用户决定保留未验证 |
@@ -20,4 +20,4 @@
 
 数据边界：桌面模型新场仅使用合成草稿，实际1次官方HTTP200且已独立闭账；真实CLI只在既有单联系人范围和新鲜有限基线内运行。截图/正文/联系人身份及凭据不提交；没有外部聊天发送或远端Git操作。用户进入本轮前已有dirty文件保留，本地提交只收本任务变更。具体命令、原失败、资源清理和两轴审查见各证据报告。
 
-受控歧义v3的新两窗小试已closed4／4、四HTTP200、零重试，两窗均completed／general_error：必需raw3／接受3／完整1，E14字段40／42。A07漏地点归属歧义，A10否定借款漏风险；三条pending、proof全UNKNOWN。仅结构合同可运行，不认证语义质量或放行，不与旧场拼总集；四phase审核及独立双轴复核均已记录，当前没有活跃模型场。
+受控歧义v3的新两窗小试已closed4／4、四HTTP200、零重试，两窗均completed／general_error：必需raw3／接受3／完整1，E14字段40／42。A07漏地点归属歧义，A10否定借款漏风险；三条pending、proof全UNKNOWN。仅结构合同可运行，不认证语义质量或放行，不与旧场拼总集；四phase审核及独立双轴复核均已记录。其后已按独立新台账启动[标签指导两窗检验](../grounded-evaluation/v3-label-guidance-public2-plan-20261016.md)，上限四次、零重试、官方DeepSeek；当前尚在执行，不预写结果。
