@@ -89,6 +89,7 @@
 56. [ADR-056：前台观察繁忙恢复与有限执行预算](adr/056-foreground-busy-and-observation-budget.md)
 57. [ADR-057：顶部局部变化提示优先触发正式前台观察](adr/057-header-change-triggered-foreground-observation.md)
 58. [ADR-058：显式受控歧义标签与程序固定解释](adr/058-controlled-ambiguity-labels.md)
+59. [ADR-059：显式未知类型与完整日历月的离线编译](adr/059-closed-unknown-kinds-and-calendar-month.md)
 
 ## 当前架构决策
 

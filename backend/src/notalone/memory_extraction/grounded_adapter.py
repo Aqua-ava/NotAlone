@@ -7,7 +7,10 @@ from collections.abc import Iterable
 from langchain_core.language_models import BaseChatModel
 
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError, ExtractionRuntimeError
-from notalone.memory_extraction.grounded import AMBIGUITY_CODES, KINDS, OMISSIONS, SENSITIVITY, compile_labels, compile_labels_v3, source_units, needs_reference, reference_choices
+from notalone.memory_extraction.grounded import (
+    AMBIGUITY_CODES, KINDS, OMISSIONS, SENSITIVITY, V4_AMBIGUITY_CODES, V4_KIND_EXTENSIONS,
+    compile_labels, compile_labels_v3, compile_labels_v4, source_units, needs_reference, reference_choices,
+)
 from notalone.memory_extraction.models import ExtractionWindow, MemoryTopic
 from notalone.memory_extraction.runtime import ExtractionPayload
 from notalone.memory_trace import TraceWriteError
@@ -54,6 +57,21 @@ ambiguity_codes是非互斥多选，须逐类核对已有来源；身份、地�
 unresolved=false时必须为空数组；unresolved=true时必须至少一类，不重复，不生成解释正文。
 方向说明只解释原句的两种读法，不改变人物、肯定／否定、条件或完成程度，不断定交易发生。
 来源已明确方向时不要增添两读。程序固定渲染解释，不提供消歧或来源语义证明。
+"""
+
+GROUNDED_V4_PROMPT = GROUNDED_V3_PROMPT.replace("本次为grounded-v3", "本次为grounded-v4") + """
+仅本显式离线v4增加四个完整封闭kind；仍不填写正文、日期、理由或独立语用字段：
+figurative_unknown_plan=保留计划型原话，但来源语境使修辞真伪未定；原话仍是陈述，不认证其现实发生。
+已明确玩笑、反讽或夸张仍用nonliteral省略；不能把确定的非字面内容降成修辞未知来保留。
+uncertain_plan=是否会实现尚未知的未来可能性，不是已决定计划或纯条件；具体期间有据时仍保留原期间。
+uncertain_state=当前状况是否成立尚未知，保存原文程度与可能性；不是已确认事实，也不推断结束时间。
+stage_unknown_state=近况活动究竟已完成还是尚待安排未定，保留原句，不能因来源日期或时钟时间选定阶段。
+单纯可能性未知不制造第二种指代解释；不能把上述kind与条件前件拼成另一个任意字段组合。
+v4的ambiguity_codes另允许clock_period=原句时钟时制未定；event_stage=原句活动完成或安排阶段未定。
+它们非互斥，逐类按已有来源选择，不靠时间词或动作词命中补猜；单纯未来、条件或可能性不自动需要这两类。
+程序固定渲染并附实际原句，不补具体时刻、完成事实或另一身份。
+下个月/下月只计算完整来源时区日历月的检索期间；否定、额外期间或未支持修饰仍保持未知，不由模型填日期。
+correction保留已发生的更正动作及完整原定/更正内容；被更正的未来日期不是更正动作的生效或失效时间。
 """
 
 
@@ -139,6 +157,18 @@ def grounded_schema_v3(window: ExtractionWindow) -> dict[str, Any]:
     return schema
 
 
+def grounded_schema_v4(window: ExtractionWindow) -> dict[str, Any]:
+    """独立v4开发合同；旧v3的实际枚举、提示和工具名保持原样。"""
+    schema = grounded_schema_v3(window)
+    schema["title"] = "GroundedMemoryLabelsV4"
+    for label in schema["properties"]["units"]["properties"].values():
+        label["properties"]["kind"] = _enum({*KINDS, *V4_KIND_EXTENSIONS, *OMISSIONS, "condition", "prefix"})
+        codes = label["properties"]["ambiguity_codes"]
+        codes["items"] = _enum(V4_AMBIGUITY_CODES)
+        codes["maxItems"] = len(V4_AMBIGUITY_CODES)
+    return schema
+
+
 def grounded_input(window: ExtractionWindow) -> str:
     lines = []
     for unit in source_units(window):
@@ -168,13 +198,36 @@ class GroundedV3ExtractionRuntime:
         return _extract_grounded(self._model, window, version3=True)
 
 
-def _extract_grounded(model: BaseChatModel, window: ExtractionWindow, *, version3: bool) -> ExtractionPayload:
-    protocol = "grounded-v3" if version3 else "grounded-v2"
+class GroundedV4ExtractionRuntime:
+    """仅供显式开发/Mock构造，未注册生产选择或真实评测执行合同。"""
+
+    def __init__(self, *, model: BaseChatModel) -> None:
+        self._model = model
+
+    def extract(self, window: ExtractionWindow) -> ExtractionPayload:
+        return _extract_grounded(self._model, window, version3=False, version4=True)
+
+
+def _extract_grounded(
+    model: BaseChatModel, window: ExtractionWindow, *, version3: bool, version4: bool = False,
+) -> ExtractionPayload:
+    if version4:
+        protocol, prompt, schema_factory, compiler = (
+            "grounded-v4", GROUNDED_V4_PROMPT, grounded_schema_v4, compile_labels_v4,
+        )
+    elif version3:
+        protocol, prompt, schema_factory, compiler = (
+            "grounded-v3", GROUNDED_V3_PROMPT, grounded_schema_v3, compile_labels_v3,
+        )
+    else:
+        protocol, prompt, schema_factory, compiler = (
+            "grounded-v2", GROUNDED_PROMPT, grounded_schema, compile_labels,
+        )
     try:
-        schema = grounded_schema_v3(window) if version3 else grounded_schema(window)
+        schema = schema_factory(window)
         response = invoke_traced_model(
             model, purpose="extraction", schema=schema,
-            messages=[{"role": "system", "content": GROUNDED_V3_PROMPT if version3 else GROUNDED_PROMPT},
+            messages=[{"role": "system", "content": prompt},
                       {"role": "user", "content": grounded_input(window)}],
         )
     except (ExtractionRuntimeError, TraceWriteError):
@@ -187,7 +240,7 @@ def _extract_grounded(model: BaseChatModel, window: ExtractionWindow, *, version
     draft = calls[0].get("args")
     record("grounded_draft", {"protocol": protocol, "units": source_units(window), "draft": draft})
     try:
-        payloads = compile_labels_v3(window, draft) if version3 else compile_labels(window, draft)
+        payloads = compiler(window, draft)
     except ExtractionInvalidOutputError:
         record("grounded_compile", {"status": "rejected", "protocol": protocol}, status="rejected")
         raise
