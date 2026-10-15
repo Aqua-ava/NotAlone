@@ -41,8 +41,9 @@ test('仓库探针公开准备入口仅构建搬运，现场隔离配置沿包�
     const manifest = JSON.parse(await readFile(path.join(destination, 'manifest.json'), 'utf8'));
     assert.match(manifest.buildSourceDigest, /^[a-f0-9]{64}$/);
     assert.equal(manifest.sourceDeclaration, `repository:${manifest.buildSourceDigest}`);
-    assert.equal(manifest.buildSources.length, 13);
+    assert.equal(manifest.buildSources.length, 14);
     assert.ok(manifest.buildSources.some((source) => source.name === 'Sources/NotAloneSyncCore/RegionCalibration.swift'));
+    assert.ok(manifest.buildSources.some((source) => source.name === 'Sources/NotAloneSyncCore/ForegroundStatusPreview.swift'));
     assert.equal(manifest.runtimeValidated, false); assert.equal(manifest.provenanceVerified, false);
     assert.ok(!prepared.stdout.includes(owned));
     const occupied = spawnSync(process.execPath, [command, '--destination', destination], { encoding: 'utf8', timeout: 10_000 });

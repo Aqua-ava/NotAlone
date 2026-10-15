@@ -104,7 +104,7 @@ npm run prepare:probe -- --destination /已有父目录/notalone-probe
 npm run package -- --with-probe
 ```
 
-`prepare:probe` 不接收外部二进制或探针目录。只读取仓库固定 10 份 Swift 源码与 `build_cli.sh`，拒绝源码符号链接/变化，在自有临时目录保存快照并执行该构建脚本；使用 `zsh -f` 禁用用户启动文件，`ZDOTDIR` 指向本轮临时目录，不改变用户 HOME。明确 ad-hoc 签名，不继承证书选择或用户配置。编译最多 120 秒，模块缓存和编译产物留在本轮临时目录，完成后清理；生成的 CLI 和动态库从不执行或加载。随后复用完整性、架构、签名和相对依赖检查，搬运到不存在的目标，只保留 `notalone-sync-probe`、`libNotAloneSyncCore.dylib` 与 manifest。已有目录拒绝且不覆盖，JSON 不回显绝对路径或编译输出。
+`prepare:probe` 不接收外部二进制或探针目录。只读取仓库固定 Swift 源码清单与 `build_cli.sh`，拒绝源码符号链接/变化，在自有临时目录保存快照并执行该构建脚本；使用 `zsh -f` 禁用用户启动文件，`ZDOTDIR` 指向本轮临时目录，不改变用户 HOME。明确 ad-hoc 签名，不继承证书选择或用户配置。编译最多 120 秒，模块缓存和编译产物留在本轮临时目录，完成后清理；生成的 CLI 和动态库从不执行或加载。随后复用完整性、架构、签名和相对依赖检查，搬运到不存在的目标，只保留 `notalone-sync-probe`、`libNotAloneSyncCore.dylib` 与 manifest。已有目录拒绝且不覆盖，JSON 不回显绝对路径或编译输出。
 
 探针 manifest 使用 `runtimeKind=repository-probe`，记录固定源码集合及 SHA-256 总摘要、`repository:` 来源声明，保留来源发行者/实际运行/原生验收未验证。仅显式 `--with-probe` 才构建并复制到 `Contents/Resources/notalone-probe`；第三方微信工具始终外置。探针在 Packager 复制后和最终包复核，保留原签名，不给探针注入 Electron JIT entitlement。主进程核对源码清单摘要和运行时文件后投影 `syncProbePath`，保存值及环境变量指向它时继续核验；探针失效不阻塞外置 CLI 或独立首启配置。
 
@@ -352,6 +352,8 @@ Root核对两场20个记录进程、隔离目录及自有Finder窗口／目录�
 ### OCR 本机可视化验收
 
 显式开发入口为仓库探针 `--preview-session`，由主 Agent 在认可的有限时段经 `test:app` 的 `tests/native-session-preview.spec.ts` 启动（环境开关 `NOTALONE_SESSION_PREVIEW_ACCEPTANCE=1`）。窗口不会自动采集；用户点击按钮后有5秒切回已确认的微信测试会话，随后只观察一次。预览仅在本机内存显示第一帧、红色顶部名称框、蓝色选中行名称框及实际 OCR 文字/置信度；失败显示固定阶段和原因，未执行 OCR 时不伪造文字。每次重新识别清空旧图，关闭即释放，最长8分钟自动退出。不保存、不上传、不发送消息，不代表联系人绑定通过。
+
+前台状态另有 `--preview-foreground`：环境开关 `NOTALONE_FOREGROUND_STATUS_PREVIEW=1`，仍经有限 `test:app` / `tests/native-foreground-status-preview.spec.ts` 单实例启动。悬浮窗不主动激活或成为键盘窗口，每0.5秒显示系统前台分类和正式观察共用的采集前检查；用户记录“微信/其他应用在前台”，过期和未知状态保持未验证。只读元数据，零截图/OCR/正文/CLI/模型；关闭或8分钟到期退出，只输出固定事件和聚合计数。生命周期用例通过不代表人工核对通过，也不证明正式App端到端状态正常。
 
 `tests/native-automatic-foreground.spec.ts` 是原位/移动/缩放的受限实机反馈入口，需 `NOTALONE_AUTOMATIC_FOREGROUND_ACCEPTANCE=1`、本轮隔离协调目录和已确认会话名环境变量。窗口动作由操作者完成，触发文件不提供坐标；落盘只保留匹配布尔、固定错误和耗时。阶段标签不能证明窗口实际移动/缩放，须另记操作证据。当前用户改为先看预览再迭代，尚未完成移动/缩放验收。
 

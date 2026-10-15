@@ -82,12 +82,12 @@ async function verifiedBundledRuntime(resourcesDirectory: string | undefined): P
 function validRepositoryBuild(value: Record<string, unknown>): boolean {
   if (typeof value.buildSourceDigest !== 'string' || !/^[a-f0-9]{64}$/.test(value.buildSourceDigest)
     || value.sourceDeclaration !== `repository:${value.buildSourceDigest}` || !Array.isArray(value.buildSources)
-    || ![8, 9, 11, 12, 13].includes(value.buildSources.length)) return false;
+    || ![8, 9, 11, 12, 13, 14].includes(value.buildSources.length)) return false;
   const names = new Set<string>();
   for (const record of value.buildSources) {
     if (!record || typeof record !== 'object' || Array.isArray(record)
       || typeof record.name !== 'string' || names.has(record.name)
-      || !/^(scripts\/build_cli\.sh|Sources\/NotAloneSyncCore\/(ProbeCore|SessionCaptureSafety|RegionCalibration|MinimalRegionLayout|MinimalSessionCapture|AutomaticSessionCapture|SessionCapturePreview|CaptureSupport|SelectedSession|FrontSyncStatusReport|BackendStatusPolling)\.swift|Sources\/NotAloneSyncCLI\/main\.swift)$/.test(record.name)
+      || !/^(scripts\/build_cli\.sh|Sources\/NotAloneSyncCore\/(ProbeCore|SessionCaptureSafety|RegionCalibration|MinimalRegionLayout|MinimalSessionCapture|AutomaticSessionCapture|SessionCapturePreview|ForegroundStatusPreview|CaptureSupport|SelectedSession|FrontSyncStatusReport|BackendStatusPolling)\.swift|Sources\/NotAloneSyncCLI\/main\.swift)$/.test(record.name)
       || typeof record.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(record.sha256)) return false;
     names.add(record.name);
   }
@@ -96,6 +96,7 @@ function validRepositoryBuild(value: Record<string, unknown>): boolean {
     || (minimalLayout && !names.has('Sources/NotAloneSyncCore/RegionCalibration.swift'))
     || (names.has('Sources/NotAloneSyncCore/AutomaticSessionCapture.swift') && !minimalLayout)
     || (names.has('Sources/NotAloneSyncCore/SessionCapturePreview.swift') && !names.has('Sources/NotAloneSyncCore/AutomaticSessionCapture.swift'))
-    || names.size !== (minimalLayout ? (names.has('Sources/NotAloneSyncCore/AutomaticSessionCapture.swift') ? (names.has('Sources/NotAloneSyncCore/SessionCapturePreview.swift') ? 13 : 12) : 11) : names.has('Sources/NotAloneSyncCore/RegionCalibration.swift') ? 9 : 8)) return false;
+    || (names.has('Sources/NotAloneSyncCore/ForegroundStatusPreview.swift') && !names.has('Sources/NotAloneSyncCore/SessionCapturePreview.swift'))
+    || names.size !== (minimalLayout ? (names.has('Sources/NotAloneSyncCore/AutomaticSessionCapture.swift') ? (names.has('Sources/NotAloneSyncCore/SessionCapturePreview.swift') ? (names.has('Sources/NotAloneSyncCore/ForegroundStatusPreview.swift') ? 14 : 13) : 12) : 11) : names.has('Sources/NotAloneSyncCore/RegionCalibration.swift') ? 9 : 8)) return false;
   return createHash('sha256').update(JSON.stringify(value.buildSources)).digest('hex') === value.buildSourceDigest;
 }

@@ -8,6 +8,12 @@
 
 单次入口的实现及合成证据见[任务01](../../.scratch/foreground-contact-follow/issues/01-single-frame-locator.md)。连续跟随由任务04实施，真实 App、权限归属及耗时由任务06验收；此 README 和合成测试不证明实机集成已通过。
 
+## 前台状态可视验收（无图像采集）
+
+显式开发入口 `--preview-foreground` 打开不主动激活的悬浮窗，每0.5秒显示系统前台分类与正式观察共用的采集前检查。用户切换微信/其他应用后，可记录自己的观察；过期或未知采样计为未验证，人工计数与机器采样分别报告。只查询前台及微信窗口元数据，不读取窗口标题，不截图、OCR、访问正文、CLI、数据库或模型；关闭即退出，最长8分钟。
+
+启动仍由主Agent经桌面 `test:app` 的 `tests/native-foreground-status-preview.spec.ts` 和环境开关 `NOTALONE_FOREGROUND_STATUS_PREVIEW=1` 执行。该窗口只说明独立原生预览的前台检查，不认证正式Electron/HTTP状态传递或联系人匹配，也不授予视觉采集资格。实际显示和人工核对仍按本轮有限场次记录。
+
 ## 历史校准与验证记录
 
 以下保留旧 profile、正文诊断及菜单栏试验的历史说明，不能作为现行正式 session 的采集约束或运行证据；现行入口以上述说明及[桌面说明](../../desktop/README.md)为准。
