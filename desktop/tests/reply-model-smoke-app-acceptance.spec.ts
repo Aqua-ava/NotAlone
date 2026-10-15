@@ -3,13 +3,15 @@ import { writeFile } from 'node:fs/promises';
 import { test } from './reply-model-smoke-fixture';
 import { selectMenu } from './app-fixture';
 import { confirmHelperContact } from './foreground-confirmation-actions';
+import { createAcceptanceCoordinator } from './acceptance-coordinator.mjs';
+import { verifyAppTestLease } from './app-test-gate';
 
 // 默认skip；即使已有key，也必须先取得独立新run的1次HTTP预算。
 test.skip(process.env.NOTALONE_REPLY_MODEL_SMOKE_APP_ACCEPTANCE !== '1', '仅执行单独批准的官方DeepSeek合成回复App冒烟');
 test.use({ appWorkingDirectory: '/' });
 
 test('当前签名App显式生成一次合成草稿候选、保存依据并正常退出', async ({ runningApp: { app, appProcess }, smokeBackend }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true);
   const manager = await app.firstWindow();
   await manager.getByRole('button', { name: '选择合成模型冒烟联系人', exact: true }).click();
@@ -68,6 +70,13 @@ test('当前签名App显式生成一次合成草稿候选、保存依据并正�
   expect(inspection.counts).toMatchObject({ message: 0, source_document: 0, confirmed_memory: 0, memory_candidate: 0, background_task: 0 });
   const closed = await smokeBackend.command('finish');
   expect(closed.budget).toMatchObject({ request_limit: 1, reserved_requests: 1, closed: true });
+  // 预算已经关闭；保留同一真实小窗供主Agent用Computer Use核对与本地编辑。
+  const coordinator = await createAcceptanceCoordinator({ directory: smokeBackend.directory, pid: appProcess.pid!,
+    checkLease: verifyAppTestLease, isAlive: () => appProcess.exitCode === null && appProcess.signalCode === null });
+  try {
+    console.log(`reply_model_smoke_stage: computer-use-review ${smokeBackend.directory}/control-state.json`);
+    await coordinator.waitFor('review');
+  } finally { await coordinator.close(); }
   // 只验证本地编辑，不调用复制或任何外部发送接口。
   await first.fill('合成本地编辑，未复制或发送。');
   await expect(first).toHaveValue('合成本地编辑，未复制或发送。');
@@ -76,6 +85,7 @@ test('当前签名App显式生成一次合成草稿候选、保存依据并正�
   await writeFile(test.info().outputPath('reply-model-smoke-app-results.json'), JSON.stringify({
     packaged: true, explicitGenerations: 1, providerHttpResponses: 1, reservedRequests: 1, requestLimit: 1,
     persistentBudgetClosed: true, responseModelMatches: true, savedSessionCompleted: true, userDraftEvidenceOnly: true,
+    computerUseReviewCoordinated: true,
     localEdit: true, menuQuitExitZero: true, relationshipContext: false, modelRetryCount: 0,
     wechatRead: false, nativeProbeRun: false, realCliRun: false, copied: false, messagesSent: 0,
     defaultProductionModelConfigurationCertified: false, relationshipOrMultiTurnCertified: false,
