@@ -26,6 +26,7 @@ private struct ProbeOptions {
       --show-text          明确要求后才在终端显示短预览等文本；默认只输出字段有无。
       --session            自动定位当前前台微信窗口；内存分析布局，仅OCR两处会话名称。
       --preview-session    显式本机可视化预览，由用户点击观察；图帧与文字不保存，8分钟退出。
+      --preview-session-name 自动显示当前微信会话名称；仅本机内存处理，20分钟退出。
       --preview-foreground 前台状态悬浮验收，仅查询元数据、不截图或OCR，8分钟退出。
       --foreground-status --json  开发诊断：只输出前台分类及前置检查，不创建窗口或采集图像。
       --json               与 --session 配合输出机器可读 JSON，供本机同步驱动解析。
@@ -109,6 +110,10 @@ struct NotAloneSyncCLI {
             }
             if arguments == ["--preview-session"] {
                 SessionCapturePreview.run()
+                return
+            }
+            if arguments == ["--preview-session-name"] {
+                SessionCapturePreview.runNames()
                 return
             }
             if arguments == ["--verify-minimal-region", "--json"] {

@@ -351,6 +351,8 @@ Root核对两场20个记录进程、隔离目录及自有Finder窗口／目录�
 
 ### OCR 本机可视化验收
 
+只核对“实际读出了什么名字”时，使用 `NOTALONE_SESSION_NAME_PREVIEW=1` 和 `tests/native-session-name-preview.spec.ts`，经有限 `test:app` 启动仓库探针 `--preview-session-name`。不提前输入姓名、不经过联系人确认或业务库；“微信会话名称 · 自动识别”浮窗直接显示正式单帧观察得到的名称，失败或离开微信清名，后续识别恢复可继续展示。无分步检查、不抢焦点，结束或20分钟内退出；外部预约截止优先，生命周期未完整收口时不标通过。只在本机内存处理当前微信窗口及同帧两处名称，保留0.90和一致性门；姓名、图像不进入日志或文件。此项先验证名称识别，不能代签正式App绑定或生成资格。
+
 显式开发入口为仓库探针 `--preview-session`，由主 Agent 在认可的有限时段经 `test:app` 的 `tests/native-session-preview.spec.ts` 启动（环境开关 `NOTALONE_SESSION_PREVIEW_ACCEPTANCE=1`）。窗口不会自动采集；用户点击按钮后有5秒切回已确认的微信测试会话，随后只观察一次。预览仅在本机内存显示第一帧、红色顶部名称框、蓝色选中行名称框及实际 OCR 文字/置信度；失败显示固定阶段和原因，未执行 OCR 时不伪造文字。每次重新识别清空旧图，关闭即释放，最长8分钟自动退出。不保存、不上传、不发送消息，不代表联系人绑定通过。
 
 前台状态另有 `--preview-foreground`：环境开关 `NOTALONE_FOREGROUND_STATUS_PREVIEW=1`，仍经有限 `test:app` / `tests/native-foreground-status-preview.spec.ts` 单实例启动。悬浮窗不主动激活或成为键盘窗口，每0.5秒显示系统前台分类和正式观察共用的采集前检查；用户记录“微信/其他应用在前台”，过期和未知状态保持未验证。只读元数据，零截图/OCR/正文/CLI/模型；关闭或8分钟到期退出，只输出固定事件和聚合计数。生命周期用例通过不代表人工核对通过，也不证明正式App端到端状态正常。
