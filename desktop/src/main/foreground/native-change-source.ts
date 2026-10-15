@@ -128,8 +128,9 @@ export class NativeHeaderChangeSource implements ForegroundChangeSource {
     const watchdog = setTimeout(() => stop('watchdog'), 65_000);
     const invalid = (reason: HeaderChangeHostReason) => { this.blockedScope = permit.scope; stop(reason); };
     const decoder = this.diagnostics ? new NativeHeaderChangeDiagnosticDecoder((record) => {
-      try { this.diagnostics?.record({ kind: 'native', ordinal,
-        elapsedMs: performance.now() - this.diagnosticBegan, ...record }); } catch {}
+      const value = 'kind' in record ? record : { kind: 'native' as const, ...record };
+      try { this.diagnostics?.record({ ordinal,
+        elapsedMs: performance.now() - this.diagnosticBegan, ...value }); } catch {}
     }, () => this.record('reconcile', 'native_diagnostic_rejected', details())) : undefined;
     if (decoder) child.stderr!.on('data', (chunk: Buffer) => decoder.push(chunk));
     child.stdout!.on('data', (chunk: Buffer) => {

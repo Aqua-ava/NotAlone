@@ -55,20 +55,20 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
                 throw HeaderChangeFailure.contextChanged
             }
             enter(.context)
-            guard let current = CalibrationContext.read(requireForeground: true) else {
+            guard let current = readContext() else {
                 failure(.contextUnavailable)
                 throw HeaderChangeFailure.contextChanged
             }
             context = current
             // 初始整窗帧仅用来复用可拒绝布局定位；辅助源另计一次，绝非正式观察帧。
             let geometry = try await locateHeader(current)
-            guard active, CalibrationContext.read(requireForeground: true) == current else {
+            guard active, readContext(comparedTo: current) == current else {
                 failure(.contextChanged)
                 throw HeaderChangeFailure.contextChanged
             }
             enter(.shareableContent)
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-            guard active, CalibrationContext.read(requireForeground: true) == current else {
+            guard active, readContext(comparedTo: current) == current else {
                 failure(.contextChanged)
                 throw HeaderChangeFailure.unsupportedGeometry
             }
@@ -105,7 +105,7 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
             let capture = SCStream(filter: filter, configuration: configuration, delegate: self)
             stream = capture
             try capture.addStreamOutput(self, type: .screen, sampleHandlerQueue: .main)
-            guard active, CalibrationContext.read(requireForeground: true) == current else {
+            guard active, readContext(comparedTo: current) == current else {
                 failure(.contextChanged)
                 throw HeaderChangeFailure.contextChanged
             }
@@ -142,9 +142,25 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
 
     private func invalidateIfContextChanged() {
         guard active, let context else { return }
-        if CalibrationContext.read(requireForeground: true) != context {
+        if readContext(comparedTo: context) != context {
             failure(.contextChanged); active = false; detector.reset()
         }
+    }
+
+    private func readContext(comparedTo expected: CalibrationContext? = nil) -> CalibrationContext? {
+        let diagnosis: HeaderChangeContextDiagnosis?
+        let current: CalibrationContext?
+        switch CalibrationContext.readForHeaderChange() {
+        case .success(let value):
+            current = value
+            diagnosis = expected.flatMap { HeaderChangeContextDiagnosis.comparing($0, to: value) }
+        case .failure(let failure):
+            current = nil; diagnosis = .unreadable(failure)
+        }
+        if let diagnosis, let line = diagnostics?.contextLine(diagnosis, at: ProcessInfo.processInfo.systemUptime) {
+            FileHandle.standardError.write(Data(line.utf8))
+        }
+        return current
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer,

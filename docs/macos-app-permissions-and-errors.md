@@ -618,3 +618,11 @@ Apple指出独立窗口流不应用sourceRect，因此实现使用display仅包�
 主Agent实际在Finder双击v5签名包，使用整体隔离的默认userData、合成空授权范围和隔离PG，未从Codex子进程启动App。45秒进程采样未见正式探针/独立源，测试保留失败，不能以采样未见证明绝对零尝试。失败后同一存活实例的两次鉴权公共前台观察均返回固定 `screen_capture_permission_missing`，当前独立启动的录屏预检未通过。本轮TCC日志未取得可认证归属，不将该结果归因于具体身份或签名机制，也不移用Codex祖进程准入。
 
 没有请求/接受新权限、修改TCC或系统开关；主Agent随后公开菜单正常退出、核对自有进程/握手退场、精确删测试库并恢复原userData身份。正式录屏、独立源和最终交付仍未认证；详见[本轮独立启动核验](../.scratch/mac-desktop-app/finder-native-permission-20261015.md)。
+
+## 2026-10-16 顶部源上下文停止分类诊断
+
+当前v6实机菜单切群及返私聊时，正式定位状态恢复，但辅助源`changed=0`并以`context_changed/code1`停止。现有固定原因无法区分上下文不可读与身份字段变化；同连续许可失败锁符合ADR-057，不能直接据此解除锁或认定OS菜单是根因。
+
+下一包仅在原有查询和上下文比较处，输出固定拒绝分类及process／window／origin／size／version／build六位匹配布尔；不输出原值、名称、几何、版本字符串、路径或画面。原生附加stderr与旧诊断共享32行／3840字节，宿主默认关闭、显式私有双限额sink及strict decoder保持；不增加采图、OS轮询、权限请求或日志外传。原停止码、许可、失败锁、55秒续租、正式单帧OCR与签名identifier不变。
+
+Swift完整101项含2个既有实验跳过、0失败；宿主相关9项、桌面类型及完整安全68项通过。新候选仍须构建、严格签名及Computer Use实测；这些离线结果不认证上下文根因、切换速度或当前包Finder录屏责任身份。没有修改Info.plist、entitlements或TCC，独立启动权限缺口保持。具体协议与红绿证据见[最小诊断方案](../.scratch/foreground-event-trigger/context-stop-diagnostic-plan-20261016.md)。

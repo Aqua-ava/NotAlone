@@ -16,6 +16,40 @@ const record = { kind: 'host', event: 'reconcile', reason: 'no_permit', ordinal:
   permitPresent: false, childPresent: false, resolving: false, blocked: false, freshProof: false,
   epochCurrent: true, paused: false, stopping: false, renewalEligible: false, code: null, signal: 'none' };
 
+test('上下文诊断仅接受固定拒绝分类及六个匹配布尔，私有sink不落身份原值', async () => {
+  const accepted = [], invalid = [];
+  const decoder = new NativeHeaderChangeDiagnosticDecoder(value => accepted.push(value), () => invalid.push(true));
+  decoder.push(Buffer.from('notalone-header-context-v1 identity_mismatch 10'));
+  decoder.push(Buffer.from('1111 12.5\nnotalone-header-context-v1 windows_ambiguous ------ 13\n'));
+  decoder.finish();
+  const mismatch = { kind: 'native-context', reason: 'identity_mismatch', nativeElapsedMs: 12.5,
+    processMatches: true, windowMatches: false, originMatches: true, sizeMatches: true,
+    versionMatches: true, buildMatches: true };
+  const unavailable = { kind: 'native-context', reason: 'windows_ambiguous', nativeElapsedMs: 13,
+    processMatches: null, windowMatches: null, originMatches: null, sizeMatches: null,
+    versionMatches: null, buildMatches: null };
+  assert.deepEqual(accepted, [mismatch, unavailable]);
+  assert.equal(invalid.length, 0);
+  const output = path.join(directory, 'context.jsonl');
+  const sink = openHeaderChangeDiagnostics({ NOTALONE_HEADER_CHANGE_HOST_DIAGNOSTICS_FILE: output });
+  for (const value of accepted) sink.record({ ordinal: 1, elapsedMs: 20, ...value });
+  for (const value of [{ ...mismatch, processId: 770001 }, { ...mismatch, windowMatches: true },
+    { ...mismatch, processMatches: 770001 }, { ...unavailable, windowMatches: false },
+    { ...unavailable, reason: 'private-window-title' }]) sink.record({ ordinal: 1, elapsedMs: 20, ...value });
+  sink.close();
+  assert.deepEqual((await readFile(output, 'utf8')).trim().split('\n').map(JSON.parse),
+    accepted.map(value => ({ ordinal: 1, elapsedMs: 20, ...value })));
+  assert.doesNotMatch(await readFile(output, 'utf8'), /770001|private-window-title/);
+  for (const raw of ['identity_mismatch 111111', 'identity_mismatch ------',
+    'windows_ambiguous 101111', 'private_window ------', 'identity_mismatch 770001',
+    'identity_mismatch 101111 pid=7']) {
+    const records = [], failures = [];
+    const rejected = new NativeHeaderChangeDiagnosticDecoder(value => records.push(value), () => failures.push(true));
+    rejected.push(Buffer.from(`notalone-header-context-v1 ${raw} 1\n`)); rejected.finish();
+    assert.equal(records.length, 0, raw); assert.equal(failures.length, 1, raw);
+  }
+});
+
 test('诊断默认关闭；显式新文件仅记录固定字段并拒覆盖、symlink和不私有父目录', async () => {
   assert.equal(openHeaderChangeDiagnostics({}), undefined);
   const output = path.join(directory, 'events.jsonl');

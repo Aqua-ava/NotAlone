@@ -70,6 +70,31 @@ test('显式诊断仅透传固定原生行和生命周期，stderr拒绝不改�
  }finally{await source.shutdown();}
 });
 
+test('上下文诊断不进入stdout事件，原code1暂停与同scope新proof失败锁保持', async () => {
+ const executable=await script('context-diagnostic',`
+ process.stderr.write('notalone-header-context-v1 identity_mismatch 111011 12.5\\n');
+ process.stdout.write('{"event":"paused"}\\n');
+ setTimeout(()=>process.exit(1),30);
+ `);
+ const records=[],events=[];
+ const source=new NativeHeaderChangeSource(async()=>executable,{record:record=>records.push(record),close(){}});
+ try{
+  source.update({scope:'context-scope',observation:'first'},event=>events.push(event));
+  await wait(()=>records.some(record=>record.event==='close'));
+  source.update({scope:'context-scope',observation:'fresh'},event=>events.push(event));
+  assert.deepEqual(events,['paused']);
+  assert.deepEqual(records.find(record=>record.kind==='native-context'),{
+   kind:'native-context',ordinal:1,elapsedMs:records.find(record=>record.kind==='native-context').elapsedMs,
+   reason:'identity_mismatch',nativeElapsedMs:12.5,processMatches:true,windowMatches:true,
+   originMatches:true,sizeMatches:false,versionMatches:true,buildMatches:true});
+  const closed=records.find(record=>record.event==='close');
+  assert.equal(closed.code,1);assert.equal(closed.paused,true);assert.equal(closed.stopping,false);
+  assert.equal(closed.renewalEligible,false);assert.equal(closed.blocked,true);
+  assert.equal(records.filter(record=>record.event==='launch').length,1);
+  assert.ok(records.some(record=>record.reason==='scope_blocked'&&record.freshProof));
+ }finally{await source.shutdown();}
+});
+
 test('完整合成租期仅凭新鲜正式proof续租；复用proof保留门禁，诊断回调失败不影响停源', async (t) => {
  const originalNow=Date.now;
  let offset=0;

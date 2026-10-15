@@ -134,12 +134,43 @@ struct CalibrationContext: Equatable {
 
     @MainActor
     static func resolve(requireForeground: Bool) throws -> CalibrationContext {
+        var rejection: HeaderChangeContextReadFailure?
+        return try resolve(requireForeground: requireForeground, rejection: &rejection)
+    }
+
+    // 同一次既有查询的失败投影；不因诊断再读一次OS状态。
+    @MainActor
+    static func readForHeaderChange(
+        resolving: ((inout HeaderChangeContextReadFailure?) throws -> CalibrationContext)? = nil
+    ) -> Result<CalibrationContext, HeaderChangeContextReadFailure> {
+        var rejection: HeaderChangeContextReadFailure?
+        do {
+            let current = try resolving?(&rejection)
+                ?? resolve(requireForeground: true, rejection: &rejection)
+            return .success(current)
+        } catch let failure as CalibrationContextFailure {
+            return .failure(rejection ?? .classify(failure))
+        } catch {
+            return .failure(rejection ?? .contextUnavailable)
+        }
+    }
+
+    @MainActor
+    private static func resolve(requireForeground: Bool,
+                                rejection: inout HeaderChangeContextReadFailure?) throws -> CalibrationContext {
         let instances = NSRunningApplication.runningApplications(withBundleIdentifier: "com.tencent.xinWeChat")
         guard instances.count == 1, let application = instances.first else {
             throw CalibrationContextFailure.instances
         }
-        guard !requireForeground || NSWorkspace.shared.frontmostApplication?.processIdentifier == application.processIdentifier else {
-            throw CalibrationContextFailure.unavailable
+        if requireForeground {
+            guard let foreground = NSWorkspace.shared.frontmostApplication else {
+                rejection = .foregroundUnknown
+                throw CalibrationContextFailure.unavailable
+            }
+            guard foreground.processIdentifier == application.processIdentifier else {
+                rejection = .notWechatForeground
+                throw CalibrationContextFailure.unavailable
+            }
         }
         guard let bundleURL = application.bundleURL, let bundle = Bundle(url: bundleURL),
               bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String == "4.0.6",
@@ -147,6 +178,7 @@ struct CalibrationContext: Equatable {
             throw CalibrationContextFailure.version
         }
         guard let information = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            rejection = .windowListUnavailable
             throw CalibrationContextFailure.unavailable
         }
         // 只取微信PID的窗口编号与几何；不访问窗口名称或其他App的属性。
