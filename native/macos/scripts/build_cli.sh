@@ -23,6 +23,7 @@ env CLANG_MODULE_CACHE_PATH="${module_cache_dir}" \
     "${probe_dir}/Sources/NotAloneSyncCore/AutomaticSessionCapture.swift" \
     "${probe_dir}/Sources/NotAloneSyncCore/HeaderChangeDetector.swift" \
     "${probe_dir}/Sources/NotAloneSyncCore/HeaderChangeGeometry.swift" \
+    "${probe_dir}/Sources/NotAloneSyncCore/HeaderChangeDiagnostics.swift" \
     "${probe_dir}/Sources/NotAloneSyncCore/HeaderChangeSource.swift" \
     "${probe_dir}/Sources/NotAloneSyncCore/SessionCapturePreview.swift" \
     "${probe_dir}/Sources/NotAloneSyncCore/ForegroundStatusPreview.swift" \

@@ -42,9 +42,10 @@ test('仓库探针公开准备入口仅构建搬运，现场隔离配置沿包�
     const manifest = JSON.parse(await readFile(path.join(destination, 'manifest.json'), 'utf8'));
     assert.match(manifest.buildSourceDigest, /^[a-f0-9]{64}$/);
     assert.equal(manifest.sourceDeclaration, `repository:${manifest.buildSourceDigest}`);
-    assert.equal(manifest.buildSources.length, 17);
+    assert.equal(manifest.buildSources.length, 18);
     assert.ok(manifest.buildSources.some((source) => source.name === 'Sources/NotAloneSyncCore/RegionCalibration.swift'));
     assert.ok(manifest.buildSources.some((source) => source.name === 'Sources/NotAloneSyncCore/ForegroundStatusPreview.swift'));
+    assert.ok(manifest.buildSources.some((source) => source.name === 'Sources/NotAloneSyncCore/HeaderChangeDiagnostics.swift'));
     assert.equal(manifest.runtimeValidated, false); assert.equal(manifest.provenanceVerified, false);
     assert.ok(!prepared.stdout.includes(owned));
     const occupied = spawnSync(process.execPath, [command, '--destination', destination], { encoding: 'utf8', timeout: 10_000 });
@@ -78,6 +79,24 @@ process.stdout.write(JSON.stringify({ paths, probe: backendEnvironment(config, u
     incomplete.sourceDeclaration = `repository:${incomplete.buildSourceDigest}`;
     await writeFile(manifestPath, JSON.stringify(incomplete));
     assert.equal(JSON.parse(startup().stdout).paths.syncProbePath, '');
+    const orphan = structuredClone(manifest);
+    orphan.buildSources = orphan.buildSources.filter((source) => !/\/HeaderChange(Detector|Geometry|Source)\.swift$/.test(source.name));
+    orphan.buildSourceDigest = createHash('sha256').update(JSON.stringify(orphan.buildSources)).digest('hex');
+    orphan.sourceDeclaration = `repository:${orphan.buildSourceDigest}`;
+    await writeFile(manifestPath, JSON.stringify(orphan));
+    assert.equal(JSON.parse(startup().stdout).paths.syncProbePath, '', '诊断文件不能脱离完整变化源组单独通过。');
+    const unknown = structuredClone(manifest);
+    unknown.buildSources.find((source) => source.name.endsWith('/HeaderChangeDiagnostics.swift')).name = 'Sources/NotAloneSyncCore/UnknownDiagnostics.swift';
+    unknown.buildSourceDigest = createHash('sha256').update(JSON.stringify(unknown.buildSources)).digest('hex');
+    unknown.sourceDeclaration = `repository:${unknown.buildSourceDigest}`;
+    await writeFile(manifestPath, JSON.stringify(unknown));
+    assert.equal(JSON.parse(startup().stdout).paths.syncProbePath, '', '18项总数不能绕过来源名白名单。');
+    const legacy = structuredClone(manifest);
+    legacy.buildSources = legacy.buildSources.filter((source) => !source.name.endsWith('/HeaderChangeDiagnostics.swift'));
+    legacy.buildSourceDigest = createHash('sha256').update(JSON.stringify(legacy.buildSources)).digest('hex');
+    legacy.sourceDeclaration = `repository:${legacy.buildSourceDigest}`;
+    await writeFile(manifestPath, JSON.stringify(legacy));
+    assert.equal(JSON.parse(startup().stdout).paths.syncProbePath, probe, '原17源完整包仍沿既有校验读取。');
     await writeFile(manifestPath, JSON.stringify(manifest));
     // 加载实际现场用例的选项，替换测试注册器，绝不执行用例或启动App。
     const layoutConfiguration = path.join(owned, 'layout-configuration.mjs');

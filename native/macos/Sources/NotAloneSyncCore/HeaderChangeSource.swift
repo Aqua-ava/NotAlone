@@ -22,14 +22,19 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
     private var width = 0
     private var height = 0
     private var lastFrameAt: TimeInterval = -.infinity
+    private var diagnostics: HeaderChangeDiagnostics?
+    private var diagnosticStage: HeaderChangeDiagnosticStage = .run
+    private var stopReason: HeaderChangeDiagnosticReason?
 
     func run() async -> Bool {
         let began = ProcessInfo.processInfo.systemUptime
+        diagnostics = HeaderChangeDiagnostics(environment: ProcessInfo.processInfo.environment, beganAt: began)
         // 全局队列兜底包含权限/布局/系统异步调用挂起；不依赖宿主仍存活或主队列可运行。
         let deadline = DispatchSource.makeTimerSource(queue: .global())
         deadline.schedule(deadline: .now() + 60)
         deadline.setEventHandler { _exit(EXIT_FAILURE) }
         deadline.resume()
+        enter(.run)
         var stream: SCStream?
         let workspace = NSWorkspace.shared.notificationCenter
         let activation = workspace.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
@@ -37,32 +42,52 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
                 MainActor.assumeIsolated { self?.invalidateIfContextChanged() }
             }
         defer {
-            deadline.cancel()
             workspace.removeObserver(activation)
             active = false; detector.reset(); context = nil
+            record(stage: .finished, reason: stopReason ?? .stopped)
+            deadline.cancel()
             emit("paused")
         }
         do {
-            guard CGPreflightScreenCaptureAccess(),
-                  let current = CalibrationContext.read(requireForeground: true) else {
+            enter(.permission)
+            guard CGPreflightScreenCaptureAccess() else {
+                failure(.permissionMissing)
+                throw HeaderChangeFailure.contextChanged
+            }
+            enter(.context)
+            guard let current = CalibrationContext.read(requireForeground: true) else {
+                failure(.contextUnavailable)
                 throw HeaderChangeFailure.contextChanged
             }
             context = current
             // 初始整窗帧仅用来复用可拒绝布局定位；辅助源另计一次，绝非正式观察帧。
             let geometry = try await locateHeader(current)
             guard active, CalibrationContext.read(requireForeground: true) == current else {
+                failure(.contextChanged)
                 throw HeaderChangeFailure.contextChanged
             }
+            enter(.shareableContent)
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-            guard active, CalibrationContext.read(requireForeground: true) == current,
-                  let window = content.windows.first(where: { $0.windowID == current.windowId
-                      && $0.owningApplication?.processID == current.processId && $0.frame == current.frame
-                      && $0.owningApplication?.bundleIdentifier == "com.tencent.xinWeChat" }),
-                  let display = content.displays.first(where: { $0.frame.origin == .zero && $0.frame.contains(current.frame) }) else {
+            guard active, CalibrationContext.read(requireForeground: true) == current else {
+                failure(.contextChanged)
                 throw HeaderChangeFailure.unsupportedGeometry
             }
+            enter(.window)
+            guard let window = content.windows.first(where: { $0.windowID == current.windowId
+                      && $0.owningApplication?.processID == current.processId && $0.frame == current.frame
+                      && $0.owningApplication?.bundleIdentifier == "com.tencent.xinWeChat" }) else {
+                failure(.windowUnavailable)
+                throw HeaderChangeFailure.unsupportedGeometry
+            }
+            enter(.display)
+            guard let display = content.displays.first(where: { $0.frame.origin == .zero && $0.frame.contains(current.frame) }) else {
+                failure(.displayUnsupported)
+                throw HeaderChangeFailure.unsupportedGeometry
+            }
+            enter(.sourceRect)
             let sourceRect = try HeaderChangeGeometry.sourceRect(headerPixels: geometry.rectangle,
                 scale: geometry.scale, window: current.frame, display: display.frame)
+            enter(.streamSetup)
             // 单窗独立过滤器的sourceRect被Apple文档说明为无效；必须用显示器仅含该窗过滤器。
             let filter = SCContentFilter(display: display, including: [window])
             filter.includeMenuBar = false
@@ -81,9 +106,12 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
             stream = capture
             try capture.addStreamOutput(self, type: .screen, sampleHandlerQueue: .main)
             guard active, CalibrationContext.read(requireForeground: true) == current else {
+                failure(.contextChanged)
                 throw HeaderChangeFailure.contextChanged
             }
+            enter(.streamStart)
             try await capture.startCapture()
+            enter(.streaming)
             // 给stopCapture留出五秒，正常续租与最终强制退出边界分开。
             while active && ProcessInfo.processInfo.systemUptime - began < 55 {
                 try await Task.sleep(for: .milliseconds(100))
@@ -91,9 +119,12 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
             }
             let expired = active && ProcessInfo.processInfo.systemUptime - began >= 55
             active = false; detector.reset()
+            enter(.streamStop)
             try await capture.stopCapture()
+            if expired { stopReason = .leaseExpired }
             return expired
         } catch {
+            failure(diagnosticStage == .sourceRect ? .sourceRectInvalid : .operationFailed)
             active = false; detector.reset()
             try? await stream?.stopCapture()
             return false
@@ -102,14 +133,18 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
 
     private func locateHeader(_ current: CalibrationContext) async throws -> (rectangle: CGRect, scale: CGFloat) {
         // 不让整窗CGImage或布局的整窗亮度数组跨越初始化保存。
+        enter(.initialCapture)
         let image = try await AutomaticSessionCapture.captureWindow(current)
+        enter(.initialLayout)
         let layout = try AutomaticSessionRegions.headerLayout(image, windowSize: current.frame.size)
         return (layout.rectangle, layout.scale)
     }
 
     private func invalidateIfContextChanged() {
         guard active, let context else { return }
-        if CalibrationContext.read(requireForeground: true) != context { active = false; detector.reset() }
+        if CalibrationContext.read(requireForeground: true) != context {
+            failure(.contextChanged); active = false; detector.reset()
+        }
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
@@ -128,15 +163,27 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
         guard now - lastFrameAt >= 0.25 else { return }
         lastFrameAt = now
         // 输出尺寸不匹配即停，不在内存二次裁整屏来掩盖sourceRect无效。
-        guard frames < 240, let image = sample.imageBuffer,
-              (try? HeaderChangeGeometry.validateOutput(width: CVPixelBufferGetWidth(image),
-                  height: CVPixelBufferGetHeight(image), expectedWidth: width, expectedHeight: height)) != nil,
-              CVPixelBufferGetPixelFormatType(image) == kCVPixelFormatType_32BGRA,
-              CVPixelBufferLockBaseAddress(image, .readOnly) == kCVReturnSuccess else {
+        guard frames < 240 else {
+            failure(.frameLimit); active = false; detector.reset(); return
+        }
+        guard let image = sample.imageBuffer else {
+            failure(.missingBuffer); active = false; detector.reset(); return
+        }
+        guard (try? HeaderChangeGeometry.validateOutput(width: CVPixelBufferGetWidth(image),
+            height: CVPixelBufferGetHeight(image), expectedWidth: width, expectedHeight: height)) != nil else {
+            failure(.outputDimensions); active = false; detector.reset(); return
+        }
+        guard CVPixelBufferGetPixelFormatType(image) == kCVPixelFormatType_32BGRA else {
+            failure(.pixelFormat); active = false; detector.reset(); return
+        }
+        guard CVPixelBufferLockBaseAddress(image, .readOnly) == kCVReturnSuccess else {
+            failure(.bufferLock)
             active = false; detector.reset(); return
         }
         defer { CVPixelBufferUnlockBaseAddress(image, .readOnly) }
-        guard let base = CVPixelBufferGetBaseAddress(image) else { active = false; detector.reset(); return }
+        guard let base = CVPixelBufferGetBaseAddress(image) else {
+            failure(.missingBuffer); active = false; detector.reset(); return
+        }
         frames += 1
         let stride = CVPixelBufferGetBytesPerRow(image)
         let bytes = base.assumingMemoryBound(to: UInt8.self)
@@ -147,11 +194,32 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
         } }
         do {
             if try detector.accept(pixels, width: width, height: height) { emit("changed") }
-        } catch { active = false; detector.reset() }
+            if frames == 1 { record(stage: .streaming, reason: .firstFrame) }
+        } catch { failure(.detectorFailed); active = false; detector.reset() }
     }
 
     nonisolated func stream(_ stream: SCStream, didStopWithError error: any Error) {
-        Task { @MainActor [weak self] in self?.active = false; self?.detector.reset() }
+        Task { @MainActor [weak self] in
+            self?.failure(.streamError); self?.active = false; self?.detector.reset()
+        }
+    }
+
+    private func enter(_ stage: HeaderChangeDiagnosticStage) {
+        diagnosticStage = stage
+        record(stage: stage, reason: .begin)
+    }
+
+    private func failure(_ reason: HeaderChangeDiagnosticReason) {
+        guard stopReason == nil else { return }
+        stopReason = reason
+        record(stage: diagnosticStage, reason: reason)
+    }
+
+    private func record(stage: HeaderChangeDiagnosticStage, reason: HeaderChangeDiagnosticReason) {
+        if let line = diagnostics?.line(stage: stage, reason: reason, at: ProcessInfo.processInfo.systemUptime) {
+            // 仅显式启用，最多32行、每行120字节；硬截止不依赖诊断I/O。
+            FileHandle.standardError.write(Data(line.utf8))
+        }
     }
 
     private func emit(_ event: String) {
