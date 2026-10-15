@@ -74,6 +74,8 @@ test('当前签名包的正式视觉观察在助手与Finder阶段暂停，已�
     const coordinator = await createAcceptanceCoordinator({ directory, pid: appProcess.pid!, checkLease,
       isAlive: () => appProcess.exitCode === null && appProcess.signalCode === null });
     const phases: Partial<Record<VisualPhase, ReturnType<typeof visualPhaseEvidence>>> = {};
+    const lastFocus: Partial<Record<VisualPhase, { helperFocused: boolean; managerFocused: boolean;
+      helperVisible: boolean; managerVisible: boolean; allUnfocused: boolean }>> = {};
     const phaseStartedAt: Partial<Record<VisualPhase, number>> = {};
     const tailCompleted = { helper: false, finder: false };
     let stage: VisualPhase | 'setup' | 'quit' = 'setup';
@@ -87,8 +89,14 @@ test('当前签名包的正式视觉观察在助手与Finder阶段暂停，已�
     let scopeRejectedRequests = 0;
     const actualStarts = (rows: readonly CliAudit[]) => rows.filter(row => row.event === 'started'
       && Number.isSafeInteger(row.pid) && row.pid! > 0);
-    const allWindowsUnfocused = () => app.evaluate(({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows().every(window => !window.isFocused()));
+    const windowFocus = () => app.evaluate(({ BrowserWindow }) => {
+      const windows = BrowserWindow.getAllWindows();
+      const helper = windows.find(window => window.webContents.getURL().endsWith('#helper'));
+      const manager = windows.find(window => window.webContents.getURL().endsWith('#manager'));
+      return { helperFocused: helper?.isFocused() ?? false, managerFocused: manager?.isFocused() ?? false,
+        helperVisible: helper?.isVisible() ?? false, managerVisible: manager?.isVisible() ?? false,
+        allUnfocused: windows.every(window => !window.isFocused()) };
+    });
     try {
       const manager = await app.firstWindow();
       await manager.getByRole('button', { name: '同步设置', exact: true }).click();
@@ -98,7 +106,6 @@ test('当前签名包的正式视觉观察在助手与Finder阶段暂停，已�
       await selectMenu(app, '窗口', '输入小窗');
       await expect.poll(() => app.windows().some(page => page.url().endsWith('#helper'))).toBe(true);
       const helper = app.windows().find(page => page.url().endsWith('#helper'))!;
-      const helperWindow = await app.browserWindow(helper);
       await helper.getByRole('button', { name: '隐藏输入小窗', exact: true }).click();
       await (await app.browserWindow(manager)).evaluate(window => window.close());
 
@@ -112,8 +119,10 @@ test('当前签名包的正式视觉观察在助手与Finder阶段暂停，已�
         const checkpoint = (await realSyncBackend.audit()).length;
         await expect.poll(async () => {
           await checkLease();
-          if (next === 'helper') expect(await helperWindow.evaluate(window => window.isFocused())).toBe(true);
-          else expect(await allWindowsUnfocused()).toBe(true);
+          const focus = await windowFocus();
+          lastFocus[next] = focus;
+          // 原生激活和blur异步交接；未达要求仍在原有限窗口内等待，不能以菜单操作代签焦点。
+          if (next === 'helper' ? !focus.helperFocused : !focus.allUnfocused) return false;
           const evidence = visualPhaseEvidence(await readObservationMeasurements(realSyncBackend), since, next);
           phases[next] = evidence;
           expect(evidence.invalid, '本阶段正式原生观察出现不合规或未知结果').toBe(false);
@@ -170,7 +179,7 @@ test('当前签名包的正式视觉观察在助手与Finder阶段暂停，已�
         phaseStartedAt, rows: await readObservationMeasurements(realSyncBackend),
       }), { mode: 0o600 });
       await writeFile(test.info().outputPath('real-sync-visual-results.json'), JSON.stringify({
-        passed, stage, phases, normalQuit, authenticatedStopped, ownedProcessesGone, emptyContactConfirmed,
+        passed, stage, phases, lastFocus, normalQuit, authenticatedStopped, ownedProcessesGone, emptyContactConfirmed,
         newReadsAfterStop, newFormalProbesAfterStop, scopeRejectedRequests,
         formalSingleFrameMeasurementsOnly: true, auxiliaryStreamIncluded: false,
         helperTailStartedFinishedAccepted: tailCompleted.helper,
