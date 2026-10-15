@@ -20,4 +20,7 @@
 
 数据边界：桌面模型新场仅使用合成草稿，实际1次官方HTTP200且已独立闭账；真实CLI只在既有单联系人范围和新鲜有限基线内运行。截图/正文/联系人身份及凭据不提交；没有外部聊天发送或远端Git操作。用户进入本轮前已有dirty文件保留，本地提交只收本任务变更。具体命令、原失败、资源清理和两轴审查见各证据报告。
 
-受控歧义v3的新两窗小试已closed4／4、四HTTP200、零重试，两窗均completed／general_error：必需raw3／接受3／完整1，E14字段40／42。A07漏地点归属歧义，A10否定借款漏风险；三条pending、proof全UNKNOWN。仅结构合同可运行，不认证语义质量或放行，不与旧场拼总集；四phase审核及独立双轴复核均已记录。其后已按独立新台账启动[标签指导两窗检验](../grounded-evaluation/v3-label-guidance-public2-plan-20261016.md)，closed四次、四HTTP200、零重试、官方DeepSeek；[结果](../grounded-evaluation/v3-label-guidance-public2-result-20261016.md)E14为42／42、必需完整3／3，两窗safe，三proof仍UNKNOWN、全pending。旧小试与新指导各自分报，不认证总体质量或放行；当前已闭账，无自动后继。
+受控歧义v3的新两窗小试已closed4／4、四HTTP200、零重试，两窗均completed／general_error：必需raw3／接受3／完整1，E14字段40／42。A07漏地点归属歧义，A10否定借款漏风险；三条pending、proof全UNKNOWN。仅结构合同可运行，不认证语义质量或放行，不与旧场拼总集；四phase审核及独立双轴复核均已记录。其后已按独立新台账启动[标签指导两窗检验](../grounded-evaluation/v3-label-guidance-public2-plan-20261016.md)，closed四次、四HTTP200、零重试、官方DeepSeek；[结果](../grounded-evaluation/v3-label-guidance-public2-result-20261016.md)E14为42／42、必需完整3／3，两窗safe，三proof仍UNKNOWN、全pending。旧小试与新指导各自分报，不认证总体质量或放行；该场已闭账，无自动后继。
+
+
+2026-10-16后继独立主集场已启动：run `d3305dd4-e427-4263-87a4-565aa92e9ce7`，按[固定16窗计划](../grounded-evaluation/v3-main16-run-plan-20261016.md)仅A01–A16、18必需＋A15可选1，最多32次、零重试、官方DeepSeek，显式v3包含kind指导。新79源冻结与原输入、原v2提示及V合同均独立核验；旧四场均closed，新预算在绑定授权前不存在。单调用／raw／full各600秒，工作截止2026-10-16 17:19:25台北时间、绝对截止17:19:45，完成或硬停即退出。只记录运行已开始，不预写字段、语义或达标结果；排除A17–A19及B01／B02，旧未知不补发，不拼旧两窗凑15，也不改变空放行表。
