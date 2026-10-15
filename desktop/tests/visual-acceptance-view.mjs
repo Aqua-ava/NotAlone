@@ -1,3 +1,5 @@
+import { foregroundFailureReason } from '../src/shared/foreground-failure.mjs';
+
 const stages = new Set(['baseline', 'moved', 'resized', 'switch-b', 'return-a', 'other-app', 'helper-pause', 'resume-a', 'finish']);
 
 // 仅投影正式公开状态；姓名、ID和原始错误不会进入可视状态。
@@ -5,6 +7,8 @@ export function projectVisualAcceptance({ foreground: state, selectedContactId, 
   const observed = Date.parse(state.observedAt ?? '');
   const age = Number.isFinite(observed) ? now - observed : NaN;
   const fresh = age >= 0 && age <= 5000;
+  const failure = state.phase === 'unavailable' || state.phase === 'manual-required'
+    ? foregroundFailureReason(state.reason) : null;
   let headline = '等待新的正式观察';
   let classification = 'unknown';
   if (state.suspendedByHelperFocus) {
@@ -16,15 +20,17 @@ export function projectVisualAcceptance({ foreground: state, selectedContactId, 
   else if (fresh && state.wechatInFront === true) {
     headline = '正式 App 报告：微信在前台';
     classification = 'wechat';
-  } else if (fresh && state.wechatInFront === false) {
+  } else if (fresh && state.wechatInFront === false && state.phase === 'paused'
+    && state.reason === 'wechat_not_in_front' && state.probeAvailable === true) {
     headline = '正式 App 报告：微信非前台';
     classification = 'other';
   }
   const matched = classification === 'wechat' && state.confirmation === 'verified-binding'
     && Boolean(expectedContactId) && state.confirmedContactId === expectedContactId && selectedContactId === expectedContactId;
-  return { headline, classification, matched,
+  return { headline, classification, matched, failure,
     ageSeconds: Number.isFinite(age) && age >= 0 ? Math.round(age / 1000) : null,
     detail: matched ? '已通过正式绑定匹配测试联系人' : state.suspendedByHelperFocus ? '进入助手时暂停新观察，保留联系人内容'
+      : classification === 'other' && state.phase === 'paused' ? '微信离开前台，定位暂停；返回微信后自动恢复'
       : state.phase === 'manual-required' ? '名称或绑定未通过，保留人工确认门' : '尚未取得新鲜的正式绑定匹配' };
 }
 
@@ -36,4 +42,10 @@ export function visualAcceptanceAction(current, event) {
   if (current.state === 'waiting-trigger') return `${current.stage}.trigger`;
   if (current.state === 'waiting-user' && !['finish', 'other-app'].includes(current.stage)) return `${current.stage}-retry.trigger`;
   return null;
+}
+
+// 持续预览不推进验收步骤；动作只属于当前存活场次，结束仍走协调器的租约检查。
+export function visualPreviewAction(current, event) {
+  if (!current?.runId || current.state === 'closing' || event?.runId !== current.runId) return null;
+  return ['wechat', 'other', 'open-helper', 'finish'].includes(event.type) ? event.type : null;
 }

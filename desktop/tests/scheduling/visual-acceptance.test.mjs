@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { projectVisualAcceptance, visualAcceptanceAction } from '../visual-acceptance-view.mjs';
+import { projectVisualAcceptance, visualAcceptanceAction, visualPreviewAction } from '../visual-acceptance-view.mjs';
 
 const now = Date.parse('2026-10-15T04:00:00Z');
 const confirmed = { phase: 'confirmed', observedAt: '2026-10-15T03:59:59Z', wechatInFront: true,
@@ -44,4 +44,35 @@ test('失败留窗没有当前步骤时，仍可用本轮结束按钮退出且�
   assert.equal(visualAcceptanceAction(current, finish), 'finish.trigger');
   assert.equal(visualAcceptanceAction(current, { ...finish, runId: 'old-run' }), null);
   assert.equal(visualAcceptanceAction(current, { ...finish, type: 'check' }), null);
+});
+
+test('名称识别失败显示固定环节和原因，不把失败投影的false当成微信非前台', () => {
+  const failed = project({ ...confirmed, phase: 'unavailable', reason: 'session_name_confidence_low',
+    probeAvailable: false, wechatInFront: false, confirmation: 'required', confirmedContactId: null });
+  assert.deepEqual(failed.failure, { code: 'session_name_confidence_low', layer: '名称识别', message: '名称识别置信度不足' });
+  assert.equal(failed.classification, 'unknown');
+  assert.equal(failed.matched, false);
+  assert.equal(project({ ...confirmed, phase: 'unavailable', reason: 'PRIVATE_RAW_ERROR' }).failure, null);
+});
+
+test('持续预览无需步骤推进，协调状态变化后仍可结束，旧轮次和关闭状态无效', () => {
+  const current = { runId: 'current-run', stage: 'finish', state: 'waiting-trigger' };
+  const finish = { runId: 'current-run', stage: null, type: 'finish' };
+  assert.equal(visualPreviewAction(current, finish), 'finish');
+  assert.equal(visualPreviewAction(current, { ...finish, type: 'open-helper' }), 'open-helper');
+  assert.equal(visualPreviewAction(current, { ...finish, type: 'check' }), null);
+  assert.equal(visualPreviewAction(current, { ...finish, runId: 'old-run' }), null);
+  assert.equal(visualPreviewAction({ ...current, state: 'closing' }, finish), null);
+});
+
+test('离开微信只显示正常暂停，不累计识别失败；关闭同步不推断其他应用前台', () => {
+  const paused = project({ ...confirmed, phase: 'paused', reason: 'wechat_not_in_front',
+    wechatInFront: false, confirmation: 'required', confirmedContactId: null });
+  assert.equal(paused.classification, 'other');
+  assert.equal(paused.failure, null);
+  assert.match(paused.detail, /定位暂停/);
+  const disabled = project({ ...confirmed, phase: 'paused', reason: 'sync_disabled',
+    wechatInFront: false, probeAvailable: false });
+  assert.equal(disabled.classification, 'unknown');
+  assert.equal(disabled.failure, null);
 });

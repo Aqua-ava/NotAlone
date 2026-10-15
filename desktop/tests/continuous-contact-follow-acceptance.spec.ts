@@ -37,7 +37,7 @@ const test = bindingTest.extend({
 test.skip(process.env.NOTALONE_CONTINUOUS_APP_ACCEPTANCE !== '1', '须明确本轮时段、正式包和测试联系人');
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 
-test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢复', async ({ runningApp: { app, appProcess }, bindingBackend }) => {
+test('正式App持续单帧名称跟随及可视诊断生命周期', async ({ runningApp: { app, appProcess }, bindingBackend }) => {
   const lease = await verifyAppTestLease();
   // 失败留窗不超出租约；额外时间只用于夹具回收，watchApp到期仍会关闭实例。
   test.setTimeout(Math.max(1000, lease.until - Date.now() + 10000));
@@ -93,9 +93,24 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
         contact_id: bindingBackend.data.contact_ids[0] }] })).status).toBe(200);
       await helper.evaluate(() => window.notalone.hideWindow());
       visualMonitor = await monitorVisualAcceptance({ page: viewer.page, helper, directory,
-        expectedContactId: bindingBackend.data.contact_ids[0], requestFinish: () => coordinator.requestFinish() });
+        expectedContactId: bindingBackend.data.contact_ids[0], requestFinish: () => coordinator.requestFinish(),
+        openHelper: () => selectMenu(app, '窗口', '输入小窗') });
     }
     expect((await bindingBackend.request('/api/sync/enable', {})).status).toBe(200);
+    if (visualAcceptance) {
+      // 此模式只持续展示正式状态；结束不再依赖某一步先匹配成功。
+      await ready('finish');
+      await visualMonitor!.stop();
+      reports.push({ phase: 'visual-preview', diagnosticOnly: true, manualAcceptanceRequired: true,
+        observedVerifiedBinding: visualMonitor!.counts.matchedSamples > 0 });
+      await coordinator.close();
+      await selectMenu(app, 'NotAlone', '退出 NotAlone');
+      await expect.poll(() => appProcess.exitCode, { timeout: 15000 }).toBe(0);
+      normalQuit = true;
+      expect(visualMonitor!.counts.monitorFailed, '可视监控不得静默失败').toBe(false);
+      expect(visualMonitor!.counts.mismatches, '人工核对存在不一致，保留诊断结果').toBe(0);
+      return;
+    }
     const phases: Array<[string, number]> = [['baseline', 0], ['moved', 0], ['resized', 0]];
     if (process.env.NOTALONE_FOLLOW_TEST_NAME_B?.trim()) phases.push(['switch-b', 1], ['return-a', 0]);
     for (const [phase, index] of phases) {
@@ -146,7 +161,6 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
       return state.phase === 'paused' && state.wechatInFront === false;
     }), { timeout: 30000 }).toBe(true);
     reports.push({ phase: 'other-app', paused: true });
-    if (visualAcceptance) await ready('helper-pause');
     await selectMenu(app, '窗口', '输入小窗');
     if (!(await helper.getByRole('textbox', { name: '草稿', exact: true }).isEnabled())) {
       reports.push({ phase: 'helper-pause', blocked: true, draftDisabled: true });

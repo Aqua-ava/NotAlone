@@ -373,4 +373,6 @@ Root核对两场20个记录进程、隔离目录及自有Finder窗口／目录�
 
 安全验证：`node --test tests/scheduling/acceptance-coordinator.test.mjs`仅使用临时信号文件及合成时钟/进程状态；已并入`npm test`。它验证协调行为，不证明真实App、OS焦点或原生识别通过。
 
-用户可视验收模式：在同一入口增加 `NOTALONE_CONTINUOUS_VISUAL_ACCEPTANCE=1`，不提供会话名环境变量。正式包启动后先显示“前台定位18 · 正式App可视验收”；用户填写一位准确会话名并确认开始后，才配置本轮临时合成CLI绑定和开启观察。浮窗随后隐藏、关闭获焦能力再 `showInactive`，使用macOS非激活panel；显示助手公开状态的固定投影，不自行调用探针。用户完成窗口动作后点击“本步检查”，仍由原协调前置门及正式绑定断言决定结果；“我看到微信/其他应用在前台”仅累计人工核对，不能把失败改成通过。旧轮次、旧步骤、过期观察和closing继续拒绝。结束或关闭浮窗只释放本轮实例，预约到期仍强制收尾，不自动重启。会话名仅存本轮临时夹具，报告只保留阶段、布尔、耗时和聚合计数；不截屏、不读私人正文或发送消息。安全投影及按钮回归为 `tests/scheduling/visual-acceptance.test.mjs`，普通 `npm test` 仍不运行App。
+用户可视验收模式：在同一入口增加 `NOTALONE_CONTINUOUS_VISUAL_ACCEPTANCE=1`，不提供会话名环境变量。正式包启动后先显示“正式App定位 · 实时可视验收”；用户填写一位准确会话名并确认开始后，才配置本轮临时合成CLI绑定和开启观察。浮窗随后隐藏、关闭获焦能力再 `showInactive`，使用macOS非激活panel；自动刷新助手公开状态，不自行调用探针，也不等待分步检查。窗口显示固定失败环节及原因、观察新鲜度、状态更新与绑定成功计数；未知原生错误仍泛化，不显示原始错误。人工核对按钮立即反馈，“打开正式助手”沿公开菜单检查暂停体验，“结束验收并退出”及关闭窗都只结束当前实例；识别失败不会阻塞结束，预约到期仍强制收尾，不自动重启。旧轮次、过期观察及closing继续拒绝。
+
+持续预览的报告标记 `diagnosticOnly`、`manualAcceptanceRequired`，正常退出或测试生命周期通过不能代替联系人匹配、移动/缩放及暂停恢复签收。会话名仅存本轮临时夹具，报告只保留固定失败码、布尔和聚合计数；无截图落盘、私人正文读取或消息发送。安全投影和按钮边界由 `tests/scheduling/visual-acceptance.test.mjs` 验证；`test:pages -- --case foreground-visual-preview --timeout-seconds 90` 复用实际窗口的HTML及状态渲染，覆盖点击反馈、失败原因与结束按钮，只运行单实例无头Chrome。普通 `npm test` 仍不运行App或浏览器。

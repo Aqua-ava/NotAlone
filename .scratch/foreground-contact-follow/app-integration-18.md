@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-已修复“前台未知被误写为微信非前台”的分类问题，并贯通正式HTTP及助手文案；尚不能认定它就是原实机场次的全部根因。最新正式候选包和自动验证已就绪，原18和06保持claimed、转ready-for-human，等待有限实机验收。
+已修复“前台未知被误写为微信非前台”的分类问题，并贯通正式HTTP及助手文案。首轮正式可视窗未获签收；后续已完成持续预览、具体失败原因及点击反馈修复和自动验证，新候选包准备完成。原现场匹配故障根因仍待实测，18和06保持claimed／ready-for-human。
 
 ## 诊断与修复
 
@@ -57,4 +57,37 @@
 
 修复后的Standards和Spec增量复核均无待修项；实机尚未启动，浮窗非激活体验及正式匹配只按下一实际场次记录。
 
+## 首轮可视正式App实测与用户否定反馈
+
+2026-10-15 10:35:16–10:55:16有限预约、最多1次，实际启动1次，约10.3分钟后退出。用户在窗内确认会话并启动，baseline触发文件存在；前置门曾同时满足助手失焦、微信前台及新观察，说明按钮并非未接线，也不证明已匹配。随后匹配32次采样/约29.4秒未通过，末次为unavailable、probeAvailable=false，无已确认或建议联系人；该时点wechatInFront=false属于失败投影，不能作为系统实际非微信证据。后续移动缩放等步骤未运行。
+
+人工按钮16次均记未验证，监控自身未失败。用户明确反馈窗口没用、点击没效果；本轮可视体验不签收。原界面只给泛化不可用状态，且分步检查后进入失败留窗，未提供足够直接反馈。具体原生失败原因未保存，不能从本轮报告补造。真实CLI正文0、模型0、发送0；正常菜单退出未通过。认证停读、自有后端exit0、随机库已删除、自有App与独立用户目录消失，租约absent。
+
+改进范围：改为持续自动更新的正式状态预览，不再要求分步“本步检查”；人工点击即时显示收到及能否核对，固定原生失败原因必须经HTTP保留并显示所属层。未知码继续泛化，不透传原始错误。先以合成原生错误→真实认证HTTP→正式公开状态的回归及实际预览HTML的无头点击回归锁定反馈，再交下一有限实机；本轮已消耗的1次额度不复用。
+
 接口资料核对：[Apple frontmostApplication](https://developer.apple.com/documentation/appkit/nsworkspace/frontmostapplication)、[NSApplication](https://developer.apple.com/documentation/AppKit/NSApplication)。文档只说明接口，不证明现场根因；实际Swift6/Xcode SDK及本轮反馈以上述运行记录为准。
+
+## 2026-10-15 持续预览与反馈修复
+
+从前轮未完成改动续接，保留用户否定反馈。实际复现命令为 `npm run test:pages -- --case foreground-visual-preview --timeout-seconds 90`：旧窗口点击后找不到“已收到”反馈，且仍有“本步检查”；新HTML尚未接入实际窗口。修复后实际窗口和无头页面共用同一HTML及渲染函数，可视模式持续显示正式公开状态，不再等待匹配成功或阶段信号才继续展示。
+
+固定原生错误经认证HTTP保留，并在助手和浮窗显示固定中文原因；浮窗同时显示失败环节。未知原文继续折叠，不显示或持久化私密错误；失败结果中的 `wechat_in_front=false` 不被当作确定的其他应用前台。首轮原生原因已经丢失，此次合成低置信度用例不证明旧现场就是低置信度。
+
+新增页面回归又复现“状态尚未接通时结束按钮可点击，动作可能因没有场次标识而丢失”。现仅在首个正式状态投影到达后启用按钮，点击立即反馈；结束不依赖步骤，优先进入有界动作队列，经当前场次协调器结束，重绘不会重新启用已点击的结束按钮。进入正式助手沿原菜单实现，失败继续显示且可关闭；场次、租约、默认间隔和失败退避保持。仅聚合正式状态变化、绑定成功、暂停、白名单失败及人工核对计数。
+
+自动验证：
+
+- `npm test`：末次类型及61项安全检查通过；未运行App、浏览器或探针。
+- Conda NotAlone、禁用dotenv的 `python -m unittest discover -s tests/unit/front_sync -q`：75项通过。
+- 同环境 `node --test --test-concurrency=1 tests/single-frame-foreground-http.test.mjs`：3/3通过，包括固定原因、未知原文屏蔽、无联系人资格及无正文读取；自有后端退出0、认证停读、3个随机隔离库删除已确认。
+- 扩展后的 `test:pages -- --case foreground-visual-preview --timeout-seconds 90`：1/1通过；同一实际HTML覆盖填写确认、即时反馈、具体失败、成功状态、助手暂停、未知原文屏蔽和结束后不再启用。最终一场1个无头Chrome，2次静默采样、前台激活0、屏上窗口0、清理确认；Electron及原生验收均未运行。中途一次被其他工作树租约拒绝，未抢占或解除他方锁，待其释放后复验。
+
+新候选包位于 `desktop/artifacts/foreground-live-preview-20261015/NotAlone-darwin-arm64/NotAlone.app`；通过既有离线Electron44.7.0运行时构建，严格签名校验通过，14项原生构建源码摘要与当前文件相同。`app.asar=46c6777da9f69ce31a3af830c62412b3a997eb4a8d9cf8e82e8d8eb977efc6c6`；原生probe／Core及`buildSourceDigest`与前述正式候选一致。构建没有启动App或探针。
+
+本轮正式App启动0、私人正文读取0、外部模型0、消息发送0；未新增图像持久化、数据迁移或后台能力。持续预览报告显式标记 `diagnosticOnly`、`manualAcceptanceRequired`，生命周期通过不代替18／06联系人匹配、移动缩放、暂停恢复、帧数、耗时及权限归属签收。前轮20分钟／1次额度已消耗，下一实测仍须新的有限时段；会话名称沿窗口输入确认，不要求在聊天中提供身份。
+
+接口核对：无可用Context7，回退核对[Playwright Page.evaluate](https://playwright.dev/docs/api/class-page#page-evaluate)、[Electron BaseWindow](https://www.electronjs.org/docs/latest/api/base-window)与安装的Playwright1.64.0／Electron44.7.0类型；文档和页面验证不能代替实际非激活浮窗及原生识别证据。
+
+Standards独立评审0项；Spec独立评审发现正常离开微信被记为识别失败，已补实际失败回归后修复：仅unavailable／manual-required投影失败，正常暂停不累计失败，关闭同步不据false推断其他应用前台。针对性安全6/6、类型及含正常暂停的同HTML页面1/1复验通过，Spec增量复核遗留0。该修复仅影响验收脚本，不改变候选包生产资源；包内main／preload／renderer入口3项与当前构建逐字一致。
+
+末次完整安全复验61/61通过。此前一次完整复验60/61，唯一失败为全局页面状态用例在其他工作树持有租约时要求absent；未修改该测试或他方锁，待其释放后整套复验通过。未将此并发干扰解释成产品故障。

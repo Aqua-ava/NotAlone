@@ -99,6 +99,17 @@ class ForegroundLocator:
                 "probe_not_found", "probe_timeout", "probe_output_invalid",
                 "screen_capture_permission_missing", "probe_failed",
                 "foreground_application_unavailable",
+                "calibration_wechat_instances_ambiguous", "calibration_wechat_version_unsupported",
+                "calibration_window_not_visible", "calibration_windows_ambiguous",
+                "calibration_window_geometry_invalid", "calibration_context_unavailable",
+                "automatic_capture_context_changed", "automatic_capture_window_metadata_changed",
+                "automatic_capture_scale_invalid", "automatic_capture_dimensions_changed",
+                "automatic_layout_vertical_boundary", "automatic_layout_header_boundary",
+                "automatic_layout_selection_ambiguous", "automatic_layout_sidebar_boundary",
+                "minimal_region_layout_unverified", "minimal_region_layout_changed",
+                "quality_unverified", "header_name_unreadable", "row_name_unreadable",
+                "session_names_mismatch", "session_name_confidence_low", "minimal_region_capture_failed",
+                "wechat_not_in_front",
             } else "probe_failed"
             return FreshForegroundObservation.create(
                 phase="unavailable", reason=reason,

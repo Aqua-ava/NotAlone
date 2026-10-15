@@ -59,6 +59,37 @@ test('系统前台未知经认证观察保留原因，助手不得显示为普�
   });
 });
 
+test('固定原生名称失败经认证HTTP显示具体原因，未知错误不泄露且不能获得联系人资格', async () => {
+  await ports.withVerifiedForegroundFixture(async fixture => {
+    assert.equal((await fixture.request('/api/sync/enable', {})).status, 200);
+    const tails = await fixture.tails();
+    await writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify({ error: 'session_name_confidence_low' }));
+    const observed = await fixture.request('/api/sync/foreground/observe', {});
+    assert.equal(observed.data.reason, 'session_name_confidence_low');
+    assert.equal(observed.data.phase, 'unavailable');
+    assert.equal(observed.data.contact_id, null);
+    const client = new ports.JsonClient(await ports.readConnection(fixture.infoPath));
+    const backend = { getConnectionGeneration: () => 1, onStateChanged: () => () => {},
+      async requestJson(request) { return { ...await client.perform(request), generation: 1 }; } };
+    const contacts = new ports.ContactSession(() => ports.readContactDirectory(backend));
+    contacts.setConnection(1); await contacts.refreshContacts();
+    const foreground = new ports.ForegroundController(backend, contacts);
+    try {
+      await foreground.observeBeforeShow();
+      const state = foreground.getState();
+      assert.equal(state.generationBlock, 'foreground-confirmation-required');
+      assert.equal(state.confirmedContactId, null);
+      const html = ports.renderToStaticMarkup(ports.createElement(ports.ForegroundPanel, { state }));
+      assert.ok(html.includes('名称识别置信度不足'));
+      await writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify({ error: 'PRIVATE_RAW_ERROR' }));
+      const unknown = await fixture.request('/api/sync/foreground/observe', {});
+      assert.equal(unknown.data.reason, 'probe_failed');
+      assert.ok(!JSON.stringify(unknown.data).includes('PRIVATE'));
+      assert.deepEqual(await fixture.tails(), tails);
+    } finally { foreground.dispose(); client.cancelPending(); }
+  });
+});
+
 // 真实认证 HTTP/隔离 PG 与生产控制器；仅探针、CLI 为合成输入，不启动 App。
 test('单帧采集时点经认证观察传到助手，定位不读取正文或发起生成', async () => {
   await ports.withVerifiedForegroundFixture(async (fixture) => {
