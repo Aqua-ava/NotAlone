@@ -178,6 +178,8 @@ node tests/headless/rewrite-lifecycle-check.mjs          # 实际未知命令故
 
 ## 安全检查与预约 App 验收
 
+前台切换延迟的只读能力核验：`native/macos/Diagnostics/SessionEventCapabilities.swift` 是独立开发诊断，编译至 `native/macos/build/diagnostics/session-event-capabilities` 后，显式设置 `NOTALONE_SESSION_EVENT_DIAGNOSTIC=1` 并通过有限 `test:app` 运行 `tests/native-session-events.spec.ts`。仅统计当前唯一微信的 AX 通知类别及前台切换次数；无 UI、无截图/OCR、无 AX 文本、无权限申请，最长 90 秒（预约优先）。注册成功不等于会话切换覆盖率，独立诊断的辅助功能准入也不代表正式 App；必须结合实际操作记录判断。它不属于产品启动或正文同步入口，计划与结果见[事件触发规格](../.scratch/foreground-event-trigger/spec.md)。
+
 `npm test` 默认执行 TypeScript 检查、测试 CLI 的合成回归（`tests/scheduling/`、`tests/headless/command.test.mjs`）及自研探针静态构建/搬运与外置 CLI 的 Node 启动配置（`tests/helpers/probe.test.mjs`、`tests/helpers/external-cli.test.mjs`）：未协调调用拒绝、跨独立命令副本/TMPDIR 互斥、启动预算、到期、Ctrl+C/SIGTERM、崩溃与损坏租约，以及 Playwright 门禁和限定文件发现。调度的合成孩子固定为 Node；自研探针核查在 macOS 只编译和 ad-hoc 签名仓库源码，检查格式、架构、依赖和签名；外置 CLI 测试只加载合成配置，不执行工具。原始 Electron API 的拒绝检查也显式使用 Node 可执行文件，避免门禁回归时打开桌面。命令明确报告真实 App 未运行。这些结果不能证明窗口、业务 UI、后端 HTTP 接线、签名包或实机验收通过；安全目录从真实 App 全量中排除。
 
 真实 App 验收会显示窗口并使用桌面焦点。必须由主 Agent 先协调用户认可的有限时段，再执行下面的显式命令。参数只是实施门禁，不能代替用户对该时段的认可；每轮真实 App 验收须单独取得有限时段认可，过去的预约不自动延续。`npm start` 是用户正常打开 App 的入口，不能当作绕过测试门禁的自动验收方式。
