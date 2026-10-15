@@ -37,20 +37,17 @@ struct SessionNamePreviewReading {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         guard result["wechat_in_front"] as? Bool == true,
-              result["capture_version"] as? String == "automatic-window-v2",
+              result["capture_version"] as? String == "preview-header-v1",
               let timestamp = result["captured_at"] as? String, let captured = formatter.date(from: timestamp),
               (0...5).contains(now.timeIntervalSince(captured)),
-              let name = result["display_name"] as? String, !name.isEmpty, name.count <= 256,
+              let name = result["header_text"] as? String, !name.isEmpty, name.count <= 256,
               !name.contains("\n"), !name.contains("\r"),
-              result["selected_row_name"] as? String == name,
-              let quality = result["quality"] as? [String: Any], quality["layout_verified"] as? Bool == true,
-              let header = quality["display_name_confidence"] as? Double,
-              let row = quality["selected_row_name_confidence"] as? Double,
-              header.isFinite, row.isFinite, (0.90...1).contains(header), (0.90...1).contains(row) else {
-            self.init(kind: .failed, detail: "本次名称质量、时效或一致性未通过，等待下一次识别。")
+              let confidence = result["header_confidence"] as? Double,
+              confidence.isFinite, (0...1).contains(confidence) else {
+            self.init(kind: .failed, detail: "本次 OCR 没有有效文字，等待下一次识别。")
             return
         }
-        self.init(kind: .recognized, name: name, detail: "请直接核对这是否是当前微信会话的名称。",
+        self.init(kind: .recognized, name: name, detail: "OCR 置信度：\(Int((confidence * 100).rounded()))% · 微信顶部会话名",
                   expiresAt: captured.addingTimeInterval(5))
     }
 
@@ -69,7 +66,7 @@ struct SessionNamePreviewReading {
         case "screen_capture_permission_missing": return "缺少屏幕录制权限。"
         case "session_name_confidence_low": return "名称识别置信度不足，等待下一次识别。"
         case "session_names_mismatch": return "顶部和选中行名称不一致，等待下一次识别。"
-        case "header_name_unreadable", "row_name_unreadable": return "未读出完整会话名称。"
+        case "header_name_unreadable": return "顶部名称区域没有读到文字。"
         case "automatic_layout_vertical_boundary", "automatic_layout_header_boundary",
              "automatic_layout_selection_ambiguous", "automatic_layout_sidebar_boundary",
              "minimal_region_layout_unverified": return "暂未定位到唯一的会话名称区域。"
@@ -84,7 +81,7 @@ struct SessionNamePreviewReading {
     }
 }
 
-// 显式开发预览：复用正式观察，只在本机窗口展示；关闭即释放帧和名称。
+// 显式开发预览：名称模式只读顶部局部 OCR，不向正式联系人绑定提供观察结果。
 @MainActor
 public enum SessionCapturePreview {
     public static func runNames() {
@@ -115,11 +112,37 @@ private final class SessionNamePreviewPanel: NSPanel {
 }
 
 @MainActor
+final class SessionNamePreviewTextView: NSView {
+    private var headline = "等待微信会话…"
+    private var detail = "打开微信，这里会自动显示顶部实际读到的文字。"
+    override var isFlipped: Bool { true }
+
+    func update(headline: String, detail: String) {
+        self.headline = headline; self.detail = detail
+        setAccessibilityLabel("\(headline)。\(detail)")
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.windowBackgroundColor.setFill(); bounds.fill()
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        (headline as NSString).draw(with: NSRect(x: 0, y: 0, width: bounds.width, height: 82),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: NSFont.systemFont(ofSize: 24, weight: .semibold),
+                         .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph])
+        (detail as NSString).draw(with: NSRect(x: 0, y: 90, width: bounds.width, height: 58),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: NSFont.systemFont(ofSize: 15), .foregroundColor: NSColor.secondaryLabelColor,
+                         .paragraphStyle: paragraph])
+    }
+}
+
+@MainActor
 private final class SessionNamePreviewController: NSObject, NSWindowDelegate {
     private let window = SessionNamePreviewPanel(contentRect: NSRect(x: 0, y: 0, width: 540, height: 310),
         styleMask: [.titled, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
-    private let headline = NSTextField(wrappingLabelWithString: "等待微信会话…")
-    private let detail = NSTextField(wrappingLabelWithString: "打开微信测试会话，这里会自动显示实际读到的名称。")
+    private let resultView = SessionNamePreviewTextView(frame: NSRect(x: 24, y: 127, width: 492, height: 150))
     private let timing = NSTextField(labelWithString: "")
     private let deadline = Date().addingTimeInterval(1200)
     private let uptimeDeadline = ProcessInfo.processInfo.systemUptime + 1200
@@ -140,16 +163,13 @@ private final class SessionNamePreviewController: NSObject, NSWindowDelegate {
         window.hidesOnDeactivate = false
         window.isFloatingPanel = true
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        headline.frame = NSRect(x: 24, y: 193, width: 492, height: 82)
-        headline.font = .systemFont(ofSize: 27, weight: .semibold)
-        detail.frame = NSRect(x: 24, y: 127, width: 492, height: 58)
-        detail.font = .systemFont(ofSize: 15)
         timing.frame = NSRect(x: 24, y: 96, width: 492, height: 24)
         timing.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-        let instructions = NSTextField(wrappingLabelWithString: "只核对当前微信会话名称。结果仅在本窗口显示；切到其他应用后暂停。")
+        let instructions = NSTextField(wrappingLabelWithString: "切换微信会话即可。只读顶部名称，结果仅在本窗口显示。")
         instructions.frame = NSRect(x: 24, y: 39, width: 350, height: 48)
         instructions.textColor = .secondaryLabelColor
-        for label in [headline, detail, timing, instructions] { window.contentView?.addSubview(label) }
+        window.contentView?.addSubview(resultView)
+        for label in [timing, instructions] { window.contentView?.addSubview(label) }
         let finish = NSButton(title: "结束", target: self, action: #selector(closePreview))
         finish.frame = NSRect(x: 400, y: 43, width: 116, height: 36)
         finish.bezelStyle = .rounded
@@ -173,7 +193,7 @@ private final class SessionNamePreviewController: NSObject, NSWindowDelegate {
         guard !finished else { return }
         let remaining = min(deadline.timeIntervalSinceNow, uptimeDeadline - ProcessInfo.processInfo.systemUptime)
         guard remaining > 0 else { closePreview(); return }
-        timing.stringValue = "识别成功\(recognized)次 · 未识别\(failed)次 · 剩余\(Int(ceil(remaining)))秒"
+        timing.stringValue = "读到文字\(recognized)次 · 未读到\(failed)次 · 剩余\(Int(ceil(remaining)))秒"
         let frontmost = ForegroundApplication.current()
         if frontmost != .wechat {
             reading = SessionNamePreviewReading(result: [:], frontmost: frontmost)
@@ -181,12 +201,10 @@ private final class SessionNamePreviewController: NSObject, NSWindowDelegate {
         if let reading { render(reading.current(at: Date())) }
         guard flight == nil, ProcessInfo.processInfo.systemUptime >= nextObservation else { return }
         reading = nil
-        headline.stringValue = "正在识别…"
-        headline.textColor = .secondaryLabelColor
-        detail.stringValue = "等待当前窗口的本次识别结果。"
+        resultView.update(headline: "正在识别…", detail: "等待顶部名称的本次 OCR 结果。")
         flight = Task { @MainActor [weak self] in
             guard let self else { return }
-            let result = await AutomaticSessionCapture.observe()
+            let result = await AutomaticSessionCapture.observeHeaderPreview()
             guard !Task.isCancelled, !finished else { return }
             // 原生已核对采集前后上下文；显示前再检查前台，避免保留离开微信后的名称。
             let reading = SessionNamePreviewReading(result: result, frontmost: ForegroundApplication.current())
@@ -203,10 +221,7 @@ private final class SessionNamePreviewController: NSObject, NSWindowDelegate {
 
     private func render(_ value: SessionNamePreviewReading) {
         reading = value
-        headline.stringValue = value.headline
-        detail.stringValue = value.detail
-        headline.textColor = value.kind == .recognized ? .systemGreen
-            : value.kind == .paused ? .secondaryLabelColor : .systemOrange
+        resultView.update(headline: value.headline, detail: value.detail)
     }
 
     @objc private func closePreview() {
@@ -215,7 +230,7 @@ private final class SessionNamePreviewController: NSObject, NSWindowDelegate {
         timer?.invalidate(); timer = nil
         flight?.cancel(); flight = nil
         reading = nil
-        headline.stringValue = ""; detail.stringValue = ""
+        resultView.update(headline: "", detail: "")
         let summary: [String: Any] = ["event": "session_name_preview_closed",
             "observations": recognized + paused + failed, "recognized_samples": recognized,
             "paused_samples": paused, "failed_samples": failed, "saved_images": 0,

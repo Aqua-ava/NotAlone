@@ -4,6 +4,56 @@ import XCTest
 
 final class AutomaticSessionCaptureTests: XCTestCase {
     @MainActor
+    func testHeaderPreviewReadsOnlyTitleWithoutRequiringASelectedRowOrQualityConfirmation() async {
+        let context = CalibrationContext(processId: 7, windowId: 9,
+            frame: CGRect(x: 0, y: 0, width: 900, height: 700), version: "4.0.6", build: "29387")
+        var captures = 0
+        var ocrSizes: [CGSize] = []
+        let result = await AutomaticSessionCapture.observeHeaderPreview(context: { context }, capture: { _ in
+            captures += 1
+            return self.window(rows: [])
+        }, recognize: { image in
+            ocrSizes.append(CGSize(width: image.width, height: image.height))
+            return [RecognizedLine(text: "合成甲", speaker: .unknown, confidence: 0.65)]
+        })
+        XCTAssertEqual(captures, 1)
+        XCTAssertEqual(ocrSizes.count, 1)
+        XCTAssertLessThanOrEqual(ocrSizes[0].height, 36)
+        XCTAssertEqual(result["header_text"] as? String, "合成甲")
+        XCTAssertEqual(result["header_confidence"] as? Double, Double(Float(0.65)))
+        XCTAssertEqual(result["capture_version"] as? String, "preview-header-v1")
+        XCTAssertNil(result["display_name"])
+        XCTAssertNil(result["selected_row_name"])
+    }
+
+    @MainActor
+    func testHeaderPreviewNeverCapturesOtherAppsOrRecognizesAfterContextChanges() async {
+        let context = CalibrationContext(processId: 7, windowId: 9,
+            frame: CGRect(x: 0, y: 0, width: 900, height: 700), version: "4.0.6", build: "29387")
+        for failUnknown in [false, true] {
+            let result = await AutomaticSessionCapture.observeHeaderPreview(context: {
+                if failUnknown { throw CalibrationContextFailure.foregroundApplicationUnavailable }
+                return nil
+            }, capture: { _ in
+                XCTFail("非微信或未知前台不得采图")
+                return self.window()
+            }, recognize: { _ in XCTFail("非微信或未知前台不得OCR"); return [] })
+            XCTAssertEqual(result["ok"] as? Bool, !failUnknown)
+            XCTAssertNil(result["header_text"])
+        }
+        var contextCalls = 0
+        let changed = await AutomaticSessionCapture.observeHeaderPreview(context: {
+            contextCalls += 1
+            return contextCalls == 1 ? context : nil
+        }, capture: { _ in self.window() }, recognize: { _ in
+            XCTFail("采图后前台改变不得继续OCR"); return []
+        })
+        XCTAssertEqual(changed["ok"] as? Bool, false)
+        XCTAssertEqual(changed["error"] as? String, "minimal_region_layout_changed")
+        XCTAssertNil(changed["header_text"])
+    }
+
+    @MainActor
     func testMissingSystemForegroundCannotClaimWeChatIsNotInFront() async {
         let result = await AutomaticSessionCapture.observe(context: {
             try AutomaticSessionCapture.foregroundContext(frontmost: { .unknown }, resolve: {

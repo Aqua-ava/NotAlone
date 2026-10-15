@@ -3,7 +3,7 @@ import CoreGraphics
 import Foundation
 @preconcurrency import ScreenCaptureKit
 
-// 每轮重新定位当前窗口；整窗只作内存布局分析，OCR只接收同帧的两处名称。
+// 每轮重新定位当前窗口；整窗只作内存布局分析，OCR只接收名称区域。
 @MainActor
 public enum AutomaticSessionCapture {
     public static func observe() async -> [String: Any] {
@@ -52,6 +52,51 @@ public enum AutomaticSessionCapture {
                     "display_name": names.header.text!, "selected_row_name": names.row.text!,
                     "quality": ["layout_verified": true, "display_name_confidence": names.header.confidence,
                                 "selected_row_name_confidence": names.row.confidence]]
+        } catch {
+            return ["ok": false, "stage": stage, "error": (error as? MinimalSessionError)?.rawValue
+                    ?? (error as? AutomaticCaptureFailure)?.rawValue
+                    ?? (error as? AutomaticLayoutFailure)?.rawValue
+                    ?? (error as? CalibrationContextFailure)?.rawValue ?? MinimalSessionError.captureFailed.rawValue]
+        }
+    }
+
+    // 仅开发预览读取顶部名称的原始OCR，不产生正式会话或联系人资格。
+    static func observeHeaderPreview() async -> [String: Any] {
+        await observeHeaderPreview(context: { try foregroundContext() }, capture: captureWindow,
+                                   recognize: LocalOcr.recognize)
+    }
+
+    static func observeHeaderPreview(
+        context: () throws -> CalibrationContext?,
+        capture: (CalibrationContext) async throws -> CGImage,
+        recognize: (CGImage) throws -> [RecognizedLine],
+        clock: () -> Date = Date.init
+    ) async -> [String: Any] {
+        var stage = "context"
+        do {
+            guard let current = try context() else { return ["ok": true, "wechat_in_front": false] }
+            stage = "capture"
+            let image = try await capture(current)
+            let capturedAt = clock()
+            stage = "context_after_capture"
+            guard try context() == current else { throw MinimalSessionError.layoutChanged }
+            stage = "layout"
+            let rectangle = try AutomaticSessionRegions.headerLayout(image, windowSize: current.frame.size).rectangle
+            guard let header = image.cropping(to: rectangle) else { throw MinimalSessionError.captureFailed }
+            stage = "header_ocr"
+            let lines = try recognize(header)
+            let text = lines.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { throw MinimalSessionError.headerNameUnreadable }
+            guard !lines.isEmpty, lines.allSatisfy({ $0.confidence.isFinite && (0...1).contains($0.confidence) }) else {
+                throw MinimalSessionError.qualityUnverified
+            }
+            stage = "context_after_names"
+            guard try context() == current else { throw MinimalSessionError.layoutChanged }
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return ["ok": true, "wechat_in_front": true, "capture_version": "preview-header-v1",
+                    "captured_at": formatter.string(from: capturedAt), "header_text": text,
+                    "header_confidence": Double(lines.map(\.confidence).min()!)]
         } catch {
             return ["ok": false, "stage": stage, "error": (error as? MinimalSessionError)?.rawValue
                     ?? (error as? AutomaticCaptureFailure)?.rawValue
@@ -110,27 +155,12 @@ struct AutomaticSessionRegions {
     let row: CGRect
 
     static func detect(_ image: CGImage, windowSize: CGSize) throws -> Self {
-        guard windowSize.width >= 600, windowSize.height >= 400,
-              image.width * image.height <= 24_000_000 else { throw MinimalSessionError.layoutUnverified }
-        let scale = CGFloat(image.width) / windowSize.width
-        guard (1...3).contains(scale), abs(CGFloat(image.height) / windowSize.height - scale) < 0.001,
-              let pixels = ChatRegionDetector.luminancePixels(from: image) else { throw MinimalSessionError.layoutUnverified }
+        let geometry = try headerLayout(image, windowSize: windowSize)
+        let scale = geometry.scale, pixels = geometry.pixels
+        let divider = geometry.divider, headerY = geometry.headerY
         let w = image.width, h = image.height
         func px(_ points: CGFloat) -> Int { Int((points * scale).rounded()) }
         func median(_ values: [Int]) -> Int { ChatRegionDetector.medianOf(values) }
-        func vertical(_ x: Int) -> Int {
-            median((0..<31).map { i in
-                let y = px(100) + (h - px(120)) * i / 30
-                return abs(Int(pixels[y*w+x-1]) - Int(pixels[y*w+x+1]))
-            })
-        }
-        let divider = try uniqueBoundary(range: px(180)...min(px(600), w-px(280)), score: vertical, tolerance: px(3), failure: .vertical)
-        let headerY = try uniqueBoundary(range: px(45)...px(85), score: { y in
-            median((0..<21).map { i in
-                let x = divider + px(20) + (w-divider-px(60))*i/20
-                return abs(Int(pixels[(y-1)*w+x]) - Int(pixels[(y+1)*w+x]))
-            })
-        }, tolerance: px(3), failure: .header)
         // 左边无文字窄条只用于找唯一高亮行，避免头像、时间、预览污染均值。
         let stripe = divider - px(5)
         let start = headerY + px(2), end = h - px(12)
@@ -156,8 +186,7 @@ struct AutomaticSessionRegions {
         guard let rail = leftCandidates.first, leftCandidates.last! - rail >= px(15) else {
             throw AutomaticLayoutFailure.rail
         }
-        let title = CGRect(x: divider+px(10), y: px(12),
-                           width: min(px(400), w-divider-px(120)), height: min(px(36), headerY-px(16)))
+        let title = geometry.rectangle
         let name = CGRect(x: rail+px(54), y: selected.lowerBound+px(6),
                           width: divider-rail-px(118), height: px(25))
         guard title.width >= CGFloat(px(30)), name.width >= CGFloat(px(25)), title.height >= CGFloat(px(18)),
@@ -165,6 +194,45 @@ struct AutomaticSessionRegions {
               CGRect(x: 0, y: 0, width: w, height: h).contains(title),
               CGRect(x: 0, y: 0, width: w, height: h).contains(name) else { throw MinimalSessionError.layoutUnverified }
         return Self(header: title, row: name)
+    }
+
+    struct HeaderLayout {
+        let rectangle: CGRect
+        let pixels: [UInt8]
+        let scale: CGFloat
+        let divider: Int
+        let headerY: Int
+    }
+
+    static func headerLayout(_ image: CGImage, windowSize: CGSize) throws -> HeaderLayout {
+        guard windowSize.width >= 600, windowSize.height >= 400,
+              image.width * image.height <= 24_000_000 else { throw MinimalSessionError.layoutUnverified }
+        let scale = CGFloat(image.width) / windowSize.width
+        guard (1...3).contains(scale), abs(CGFloat(image.height) / windowSize.height - scale) < 0.001,
+              let pixels = ChatRegionDetector.luminancePixels(from: image) else { throw MinimalSessionError.layoutUnverified }
+        let w = image.width, h = image.height
+        func px(_ points: CGFloat) -> Int { Int((points * scale).rounded()) }
+        func median(_ values: [Int]) -> Int { ChatRegionDetector.medianOf(values) }
+        func vertical(_ x: Int) -> Int {
+            median((0..<31).map { i in
+                let y = px(100) + (h - px(120)) * i / 30
+                return abs(Int(pixels[y*w+x-1]) - Int(pixels[y*w+x+1]))
+            })
+        }
+        let divider = try uniqueBoundary(range: px(180)...min(px(600), w-px(280)), score: vertical, tolerance: px(3), failure: .vertical)
+        let headerY = try uniqueBoundary(range: px(45)...px(85), score: { y in
+            median((0..<21).map { i in
+                let x = divider + px(20) + (w-divider-px(60))*i/20
+                return abs(Int(pixels[(y-1)*w+x]) - Int(pixels[(y+1)*w+x]))
+            })
+        }, tolerance: px(3), failure: .header)
+        let title = CGRect(x: divider+px(10), y: px(12),
+                           width: min(px(400), w-divider-px(120)), height: min(px(36), headerY-px(16)))
+        guard title.width >= CGFloat(px(30)), title.height >= CGFloat(px(18)),
+              CGRect(x: 0, y: 0, width: w, height: h).contains(title) else {
+            throw MinimalSessionError.layoutUnverified
+        }
+        return HeaderLayout(rectangle: title, pixels: pixels, scale: scale, divider: divider, headerY: headerY)
     }
 
     private static func uniqueBoundary(range: ClosedRange<Int>, score: (Int) -> Int, tolerance: Int, failure: AutomaticLayoutFailure) throws -> Int {
