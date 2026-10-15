@@ -6,11 +6,8 @@ from importlib.metadata import version
 import json
 import os
 from pathlib import Path
-import signal
-import sqlite3
 import subprocess
 import sys
-import time
 from uuid import UUID, uuid4
 
 
@@ -117,27 +114,8 @@ def validate(frozen: dict) -> tuple[datetime, datetime]:
 
 
 def verify_claim(frozen: dict) -> None:
-    helper = helpers()
-    run = Path.home() / ".notalone-memory-evaluations" / frozen["run_id"]
-    helper.private_directory(run)
-    if not (run / "claimed").is_file() or os.path.lexists(run / "closed"):
-        raise ValueError("remaining8_fresh_claim_required")
-    record = helper.read_private(Path(frozen["directory"]) / "evaluation/manifest.json")
-    with sqlite3.connect((run / "budget.sqlite3").as_uri() + "?mode=ro", uri=True) as connection:
-        states = connection.execute("SELECT manifest, closed FROM state").fetchall()
-        count = connection.execute("SELECT count(*) FROM requests").fetchone()[0]
-    config = record["frozen_config"]
-    budget = json.loads(states[0][0]) if len(states) == 1 else {}
-    if (len(states) != 1 or states[0][1] != 0 or count != 0
-            or budget.get("run_id") != frozen["run_id"] or budget.get("request_limit") != 16
-            or budget.get("allowed_endpoints") != ["https://api.deepseek.com/chat/completions"]
-            or budget.get("config_sha256") != helper.digest(config)
-            or budget.get("output_directory") != str(Path(frozen["directory"]) / "evaluation")
-            or config.get("mode") != "deepseek_bounded_remaining8" or config.get("stage") != "remaining8"
-            or config.get("selected_case_positions") != list(POSITIONS)
-            or config.get("source_hashes") != frozen["source_hashes"]
-            or config.get("extraction_window_contracts") != frozen["extraction_window_contracts"]):
-        raise ValueError("remaining8_claim_manifest_changed")
+    from notalone.memory_extraction.evaluation_owned_process import _verify_owned_public_claim
+    _verify_owned_public_claim(frozen=frozen, helper=helpers(), kind="remaining8")
 
 
 def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
@@ -197,29 +175,6 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
     return result
 
 
-def owned_group_exists(child: subprocess.Popen) -> bool:
-    child.poll()
-    try:
-        os.killpg(child.pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-
-
-def reap_owned_group(child: subprocess.Popen) -> None:
-    # leader已退出也须收尾同组后代；仅操作本轮start_new_session创建的组。
-    for kind in (signal.SIGTERM, signal.SIGKILL):
-        if not owned_group_exists(child):
-            return
-        try:
-            os.killpg(child.pid, kind)
-        except ProcessLookupError:
-            return
-        end = time.monotonic() + 1
-        while owned_group_exists(child) and time.monotonic() < end:
-            time.sleep(.01)
-
-
 def launch(*, freeze_path: Path, expected_sha256: str, approval_path: Path) -> dict:
     helper = helpers()
     if helper.file_digest(freeze_path) != expected_sha256:
@@ -229,68 +184,10 @@ def launch(*, freeze_path: Path, expected_sha256: str, approval_path: Path) -> d
     approval = helper.read_private(approval_path)
     if approval != {"user_authorized": True, "run_id": frozen["run_id"], "freeze_sha256": expected_sha256}:
         raise ValueError("remaining8_bound_authorization_required")
-    directory = Path(frozen["directory"])
-    # 环境不传任何真实凭据；只有worker领取后读取既有显式三字段来源。
-    environment = {"PATH": "/usr/bin:/bin", "LANG": "C", "LC_ALL": "C", "NOTALONE_DISABLE_DOTENV": "1",
-                   "PYTHONPATH": str(ROOT / "backend/src")}
-    began = time.monotonic()
-    child = subprocess.Popen([sys.executable, "-B", str(Path(__file__).resolve()), "worker",
-        str(freeze_path), expected_sha256, str(approval_path)], cwd=ROOT, env=environment,
-        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-    owner = {"pid": child.pid, "process_group": child.pid, "run_id": frozen["run_id"]}
-    try:
-        helper.publish(directory / "owned-worker.json", owner)
-        assert child.stdin is not None
-        child.stdin.write(b"start\n"); child.stdin.flush(); child.stdin.close()
-        remaining = min(2390, max(0, (end - now()).total_seconds() - 10))
-        try:
-            code = child.wait(timeout=remaining)
-        except subprocess.TimeoutExpired:
-            code = None
-    finally:
-        if child.stdin is not None and not child.stdin.closed:
-            try:
-                child.stdin.close()
-            except BrokenPipeError:
-                pass
-        reap_owned_group(child)
-    result_path, deadline_path = directory / "result.json", directory / "deadline-receipt.json"
-    records = []
-    for record_path in (result_path, deadline_path):
-        try:
-            records.append(helper.read_private(record_path) if record_path.exists() else {})
-        except (OSError, ValueError):
-            records.append({})
-    result, deadline = records
-    budget = (result.get("receipt") or {}).get("budget") or {}
-    def closed_receipt(value):
-        return (value.get("run_id") == frozen["run_id"] and value.get("closed") is True
-                and value.get("request_limit") == 16 and type(value.get("reserved_requests")) is int
-                and 0 <= value["reserved_requests"] <= 16)
-    closed = closed_receipt(budget) or (deadline.get("worker_pid") == child.pid and closed_receipt(deadline))
-    states = ["unrun"] * 8
-    if isinstance(result.get("outcomes"), list) and len(result["outcomes"]) == 8:
-        states = [row["status"] if row.get("status") in {"unrun", "unknown", "completed", "empty", "failed"}
-                  else "unknown" for row in result["outcomes"]]
-    else:
-        for event_path in sorted((directory / "evaluation").glob("event-??????.json"))[:2048]:
-            try:
-                event = helper.read_private(event_path)
-                position = event.get("case_position")
-                if event.get("kind") == "case_started" and type(position) is int and 0 <= position < 8:
-                    states[position] = "unknown"
-            except (OSError, ValueError):
-                states = ["unknown"] * 8
-                break
-    receipt = {**owner, "exit_code": child.returncode, "outer_timed_out": code is None,
-               "stopped_code": "outer_wall_deadline" if code is None else (result or {}).get("stopped_code"),
-               "worker_gone": child.poll() is not None and not owned_group_exists(child), "closed": closed,
-               "close_unknown": not closed, "elapsed_seconds": time.monotonic() - began,
-               "planned_windows": 8, "required_claims": 13,
-               "case_statuses": [{**selection, "status": status} for selection, status in zip(frozen["selection"], states)],
-               "quality_certified": False, "automatic_successor": False}
-    helper.publish(directory / "finish.json", receipt)
-    return receipt
+    from notalone.memory_extraction.evaluation_owned_process import _launch_owned_public_worker
+    return _launch_owned_public_worker(frozen=frozen, script=Path(__file__).resolve(), root=ROOT,
+        helper=helper, freeze_path=freeze_path, expected_sha256=expected_sha256, approval_path=approval_path, end=end,
+        clock=now, kind="remaining8")
 
 
 if __name__ == "__main__":

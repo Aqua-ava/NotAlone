@@ -47,6 +47,7 @@ _PLAN_CASES = tuple(case for case in CASES if case.dimension == "reference") + t
 })
 _FULL_CASES = (*CASES, *SEMANTIC_CASES)
 _REMAINING8_POSITIONS = (19, 20, 13, 14, 15, 16, 17, 18)
+_AMBIGUITY2_POSITIONS = (6, 9)
 _GOLD_FIELDS = {"status", "case_names", "criteria_sha256", "criteria_path"}
 _SOURCE_DIRECTORY = Path(__file__).resolve().parent
 _REQUIRED_SOURCES = frozenset(
@@ -166,6 +167,7 @@ def run_ecnu_evaluation(
     extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
     execution_plan: str = "original",
     remaining8_deadline: object | None = None,
+    ambiguity2_deadline: object | None = None,
 ) -> dict:
     """保留原固定计划；剩余8窗须显式选择独立版本，不提供任意子集。"""
     from .evaluation_provider_contract import EvaluationProviderProfile
@@ -180,7 +182,8 @@ def run_ecnu_evaluation(
         raise EvaluationBudgetAbort("evaluation_provider_profile_invalid") from None
     official = profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
     remaining8 = execution_plan == "reference21-remaining8-v1"
-    if (type(execution_plan) is not str or execution_plan not in {"original", "reference21-remaining8-v1"}
+    ambiguity2 = execution_plan == "reference21-ambiguity2-v3"
+    if (type(execution_plan) is not str or execution_plan not in {"original", "reference21-remaining8-v1", "reference21-ambiguity2-v3"}
             or remaining8 and (not official or case_set != "reference21"
                 or type(case_positions) is not tuple or case_positions != _REMAINING8_POSITIONS
                 or any(type(position) is not int for position in case_positions)
@@ -190,14 +193,28 @@ def run_ecnu_evaluation(
                 or verification_tool_choice != "omitted"
                 or request_timeout_seconds != 300 or type(max_retries) is not int or max_retries != 0)):
         raise EvaluationBudgetAbort("evaluation_remaining8_fixed_plan_required")
+    if ambiguity2 and (not official or case_set != "reference21"
+            or type(case_positions) is not tuple or case_positions != _AMBIGUITY2_POSITIONS
+            or any(type(position) is not int for position in case_positions)
+            or type(request_limit) is not int or request_limit != 4
+            or extraction_selected is not EvaluationExtractionMode.GROUNDED_V3
+            or verification_mode != SourceVerificationMode.NULLABLE_PROOF_V1
+            or verification_tool_choice != "omitted"
+            or request_timeout_seconds != 300 or type(max_retries) is not int or max_retries != 0):
+        raise EvaluationBudgetAbort("evaluation_ambiguity2_fixed_plan_required")
+    from .evaluation_ambiguity2_deadline import Ambiguity2Deadline
     from .evaluation_remaining8_deadline import Remaining8Deadline
 
     if ((remaining8_deadline is not None and (not remaining8 or type(remaining8_deadline) is not Remaining8Deadline))
             or remaining8 and synthetic_transport is None and (
                 type(remaining8_deadline) is not Remaining8Deadline or not remaining8_deadline.live_worker)):
         raise EvaluationBudgetAbort("remaining8_owned_deadline_required")
-    bounded = cast(Remaining8Deadline | None, remaining8_deadline)
-    if official and case_set == "reference21" and not remaining8 and (
+    if ((ambiguity2_deadline is not None and (not ambiguity2 or type(ambiguity2_deadline) is not Ambiguity2Deadline))
+            or ambiguity2 and synthetic_transport is None and (
+                type(ambiguity2_deadline) is not Ambiguity2Deadline or not ambiguity2_deadline.live_worker)):
+        raise EvaluationBudgetAbort("ambiguity2_owned_deadline_required")
+    bounded = cast(Remaining8Deadline | Ambiguity2Deadline | None, remaining8_deadline or ambiguity2_deadline)
+    if official and case_set == "reference21" and not remaining8 and not ambiguity2 and (
         case_positions is not None or request_limit not in (None, 42)
     ):
         raise EvaluationBudgetAbort("evaluation_official_fixed_reference21_required")
@@ -323,13 +340,14 @@ def run_ecnu_evaluation(
         **_frozen_config(plan, request_timeout_seconds=request_timeout_seconds,
                          max_retries=max_retries, verification_mode=selected,
                          extraction_mode=extraction_selected, windows=windows),
-        "mode": ("deepseek_bounded_remaining8" if remaining8 else
+        "mode": ("deepseek_bounded_ambiguity2_v3" if ambiguity2 else
+                 "deepseek_bounded_remaining8" if remaining8 else
                  "deepseek_bounded_full140" if official and case_set == "full140" else
                  "deepseek_bounded_evaluation" if official else
                  "ecnu_bounded_full140" if case_set == "full140" else
                  "ecnu_bounded_evaluation" if case_positions is None
                  else "ecnu_bounded_diagnostic"),
-        "stage": ("remaining8" if remaining8 else "full140" if case_set == "full140" else
+        "stage": ("ambiguity2-v3" if ambiguity2 else "remaining8" if remaining8 else "full140" if case_set == "full140" else
                   "P1" if case_positions is None else "diagnostic"),
         "base_url": base_url, "endpoint": endpoint, "request_model": request_model,
         **({"reasoning_effort": "max"} if official else {}),
@@ -430,13 +448,13 @@ def run_ecnu_evaluation(
             try:
                 bounded.finish()
             except BaseException:
-                error.add_note("remaining8_deadline_cleanup_unknown")
+                error.add_note(bounded.CODE_PREFIX + "_deadline_cleanup_unknown")
         raise
     if bounded is not None:
         try:
             bounded.finish()
         except BaseException:
-            result["cleanup_error_codes"] = (*result["cleanup_error_codes"], "remaining8_deadline_cleanup_unknown")
+            result["cleanup_error_codes"] = (*result["cleanup_error_codes"], bounded.CODE_PREFIX + "_deadline_cleanup_unknown")
             result["receipt"] = None
-            result["receipt_error_code"] = "remaining8_completion_receipt_unavailable"
+            result["receipt_error_code"] = bounded.CODE_PREFIX + "_completion_receipt_unavailable"
     return result

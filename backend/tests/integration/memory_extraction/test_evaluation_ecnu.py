@@ -32,6 +32,90 @@ PLAN = tuple(case for case in CASES if case.dimension == "reference") + tuple(
 
 
 class EvaluationECNUTest(unittest.TestCase):
+    def test_ambiguity2_fixed_v3_official_plan_uses_four_budget_and_original_two_positions(self):
+        def respond(request):
+            body = json.loads(request.content)
+            self.assertEqual(body["model"], "deepseek-flash")
+            self.assertEqual(body["reasoning_effort"], "max")
+            self.assertNotIn("tool_choice", body)
+            function = body["tools"][0]["function"]
+            self.assertEqual(function["name"], "GroundedMemoryLabelsV3")
+            label = {"kind": "not_memory", "subject": "contact", "topic": "other", "dependency": None,
+                     "unresolved": False, "ambiguity_codes": [], "confidence": 0.9, "sensitivity": "none"}
+            return self.response(request, reported_model="deepseek-flash", arguments={"units": {
+                slot: dict(label) for slot in function["parameters"]["properties"]["units"]["required"]}})
+
+        result = self.run_ready(provider_profile="deepseek-flash-max", request_timeout_seconds=300,
+            max_retries=0, verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+            extraction_mode="grounded-v3", execution_plan="reference21-ambiguity2-v3",
+            case_positions=(6, 9), request_limit=4, transport=httpx.MockTransport(respond))
+
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual([item["case_name"] for item in result["outcomes"]], [PLAN[6].name, PLAN[9].name])
+        self.assertEqual(result["receipt"]["budget"]["request_limit"], 4)
+        self.assertTrue(result["receipt"]["budget"]["closed"])
+        config = json.loads((self.output / "manifest.json").read_text())["frozen_config"]
+        self.assertEqual(config["mode"], "deepseek_bounded_ambiguity2_v3")
+        self.assertEqual(config["stage"], "ambiguity2-v3")
+
+    def test_ambiguity2_rejects_wrong_selection_protocol_budget_deadline_or_profile_before_claim(self):
+        fixed = {"provider_profile": "deepseek-flash-max", "request_timeout_seconds": 300,
+            "max_retries": 0, "verification_mode": "nullable-proof-v1", "verification_tool_choice": "omitted",
+            "extraction_mode": "grounded-v3", "execution_plan": "reference21-ambiguity2-v3",
+            "case_positions": (6, 9), "request_limit": 4}
+        for variant in (
+            {"case_positions": None}, {"case_positions": (9, 6)}, {"case_positions": (6,)},
+            {"case_positions": (6, 10)}, {"case_positions": (6.0, 9)},
+            {"request_limit": None}, {"request_limit": 3}, {"request_limit": 5}, {"request_limit": 4.0},
+            {"case_set": "full140"}, {"provider_profile": "ecnu"}, {"max_retries": 1},
+            {"extraction_mode": "grounded-v2"}, {"verification_mode": "legacy-v4"},
+            {"verification_tool_choice": "forced"}, {"request_timeout_seconds": 600},
+            {"ambiguity2_deadline": object()}, {"remaining8_deadline": object()},
+            {"execution_plan": "original"}, {"execution_plan": "reference21-remaining8-v1"},
+        ):
+            with self.subTest(variant=variant), self.assertRaises(EvaluationBudgetAbort):
+                self.run_ready(**{**fixed, **variant})
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+        self.assertFalse((self.home / ".notalone-memory-evaluations").exists())
+
+    def test_ambiguity2_unknown_audit_stops_before_second_window_without_refund(self):
+        def respond(request):
+            body = json.loads(request.content)
+            function = body["tools"][0]["function"]
+            label = {"kind": "not_memory", "subject": "contact", "topic": "other", "dependency": None,
+                     "unresolved": False, "ambiguity_codes": [], "confidence": 0.9, "sensitivity": "none"}
+            return self.response(request, reported_model="deepseek-flash", arguments={"units": {
+                slot: dict(label) for slot in function["parameters"]["properties"]["units"]["required"]}})
+
+        result = self.run_ready(provider_profile="deepseek-flash-max", request_timeout_seconds=300,
+            max_retries=0, verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+            extraction_mode="grounded-v3", execution_plan="reference21-ambiguity2-v3",
+            case_positions=(6, 9), request_limit=4, transport=httpx.MockTransport(respond),
+            audit=lambda bundle: self.audit(bundle, "unknown", "audit_unresolved"))
+
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(result["stopped_code"], "case_semantic_audit_unknown")
+        self.assertEqual(result["outcomes"][1]["status"], "unrun")
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 1)
+        self.assertTrue(result["receipt"]["budget"]["closed"])
+
+    def test_live_ambiguity2_requires_exact_owned_deadline_before_budget_or_credential(self):
+        from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
+
+        hashes, gold = self.preparation(nullable=True)
+        with self.assertRaisesRegex(EvaluationBudgetAbort, "ambiguity2_owned_deadline_required"):
+            run_ecnu_evaluation(output_directory=self.output, run_id=uuid4(),
+                deadline=datetime.now(timezone.utc) + timedelta(minutes=10), repo_root=self.repo,
+                source_hashes=hashes, frozen_gold=gold, credential_loader=self.credential,
+                audit_case=self.audit, provider_profile="deepseek-flash-max", request_timeout_seconds=300,
+                max_retries=0, verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+                extraction_mode="grounded-v3", execution_plan="reference21-ambiguity2-v3",
+                case_positions=(6, 9), request_limit=4)
+        self.assertEqual(self.credentials, [])
+        self.assertFalse((self.home / ".notalone-memory-evaluations").exists())
+
+
     def test_explicit_v3_freezes_dynamic_contract_and_records_program_without_changing_default(self):
         def respond(request):
             body = json.loads(request.content)
