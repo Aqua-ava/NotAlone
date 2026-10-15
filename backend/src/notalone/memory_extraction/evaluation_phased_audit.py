@@ -128,7 +128,9 @@ def _arguments(outputs: list[dict], tool: str, key: str, *, e_tool: str = _E_TOO
                 or calls[0].get("name") not in {e_tool, _V_TOOL}):
             raise EvaluationBudgetAbort("phased_adapter_output_unreliable")
         expected_key = ("results" if calls[0]["name"] == _V_TOOL else
-                        "units" if e_tool in {"GroundedMemoryLabels", "GroundedMemoryLabelsV3"} else "facts")
+                        "units" if e_tool in {
+                            "GroundedMemoryLabels", "GroundedMemoryLabelsV3", "GroundedMemoryLabelsV4",
+                        } else "facts")
         _exact(calls[0]["args"], {expected_key})
     matches = [call["args"][key] for output in outputs for call in output["tool_calls"]
                if call["name"] == tool]
@@ -194,6 +196,7 @@ class PhasedEvaluationAudit:
         verification_tool_choice: str = "forced",
         extraction_tool_choice: str = "forced",
         extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
+        reference_version: str = "legacy-v1",
     ):
         self._verification_mode = SourceVerificationMode(verification_mode)
         self._extraction_mode = EvaluationExtractionMode(extraction_mode)
@@ -207,11 +210,26 @@ class PhasedEvaluationAudit:
         if (type(case_set) is not str or case_set not in {"reference21", "full140"}
                 or (case_set == "full140" and case_positions is not None)):
             raise ValueError("审核只接受原21或固定完整140，不允许完整集合缩减。")
+        if type(reference_version) is not str or reference_version not in {
+            "legacy-v1", "source-fidelity-v2",
+        }:
+            raise ValueError("审核参考版本须为已注册封闭值。")
+        if (reference_version == "source-fidelity-v2"
+                or self._extraction_mode is EvaluationExtractionMode.GROUNDED_V4):
+            if (reference_version != "source-fidelity-v2"
+                    or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V4
+                    or case_set != "full140" or case_positions is not None
+                    or self._verification_mode is not SourceVerificationMode.NULLABLE_PROOF_V1
+                    or extraction_tool_choice != "omitted" or verification_tool_choice != "omitted"):
+                raise ValueError("来源保真v2审核仅用于完整140的v4／可空证明／E与V省略策略。")
+        self._reference_version = reference_version
         validation = (validate_full_public_reference if case_set == "full140"
                       else validate_public_reference)(
             reference, expected_reference_sha256=expected_reference_sha256,
-            annotation_sha256=annotation_sha256,
+            annotation_sha256=annotation_sha256, reference_version=reference_version,
         )
+        if reference_version == "source-fidelity-v2" and validation.get("execution_ready") is not True:
+            raise ValueError("来源保真v2参考尚未执行就绪。")
         self._reference = _copy(reference)
         if case_set == "full140":
             positions = validation["case_positions"]
@@ -234,6 +252,11 @@ class PhasedEvaluationAudit:
         self._criteria_sha256 = criteria_sha256
         self._raw_reviewer = raw_reviewer
         self._full_reviewer = full_reviewer
+
+    @property
+    def reference_version(self) -> str:
+        """冻结参考版本须与实际case bundle一致。"""
+        return self._reference_version
 
     @property
     def criteria_sha256(self) -> str:
@@ -284,6 +307,8 @@ class PhasedEvaluationAudit:
             raise EvaluationBudgetAbort("phased_audit_unreliable") from None
 
     def _run(self, bundle: dict) -> dict:
+        if bundle.get("reference_version", "legacy-v1") != self.reference_version:
+            raise EvaluationBudgetAbort("phased_reference_version_changed")
         if bundle.get("extraction_mode", "legacy-e14") != self.extraction_mode:
             raise EvaluationBudgetAbort("phased_extraction_mode_changed")
         if bundle.get("verification_mode", "legacy-v4") != self.verification_mode:

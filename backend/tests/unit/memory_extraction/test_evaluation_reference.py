@@ -106,7 +106,7 @@ class EvaluationReferenceTest(unittest.TestCase):
                     annotation_sha256=self.annotation, reference_version=version,
                 )
 
-    def test_source_fidelity_public_binds_pending_revision_without_changing_inputs(self):
+    def test_source_fidelity_public_binds_reviewed_revision_without_changing_inputs(self):
         from notalone.memory_extraction.evaluation_records import canonical_sha256
         from notalone.memory_extraction.evaluation_reference import validate_public_reference
 
@@ -120,8 +120,8 @@ class EvaluationReferenceTest(unittest.TestCase):
         )
         self.assertEqual((result["planned_windows"], result["required_claims"],
                           result["optional_claims"]), (21, 28, 1))
-        self.assertTrue(result["review_pending"])
-        self.assertIs(result["execution_ready"], False)
+        self.assertFalse(result["review_pending"])
+        self.assertIs(result["execution_ready"], True)
         self.assertIs(result["quality_certified"], False)
         for before, after in zip(self.reference["windows"], reference["windows"]):
             if before["id"] != "A05":
@@ -166,8 +166,8 @@ class EvaluationReferenceTest(unittest.TestCase):
         )
         self.assertEqual(result["planned_windows"], 140)
         self.assertEqual(sorted(result["case_positions"]), list(range(140)))
-        self.assertTrue(result["review_pending"])
-        self.assertIs(result["execution_ready"], False)
+        self.assertFalse(result["review_pending"])
+        self.assertIs(result["execution_ready"], True)
         self.assertEqual(reference["windows"][:21], parent["windows"])
         self.assertEqual(reference["provenance"]["parent21"], {
             "reference_path": ".scratch/unfinished-work/memory-gold-reference-v2-20261016.json",
@@ -224,7 +224,7 @@ class EvaluationReferenceTest(unittest.TestCase):
                 elif fault == "review":
                     changed["provenance"]["structured_review"] = {"status": "passed", "reviewer": "自称已审"}
                 elif fault == "independent":
-                    changed["provenance"]["independent_review"]["status"] = "passed"
+                    changed["provenance"]["independent_review"]["status"] = "pending"
                 elif fault == "blind":
                     changed["provenance"]["blind_annotation"] = True
                 else:
@@ -270,7 +270,7 @@ class EvaluationReferenceTest(unittest.TestCase):
                     annotation_sha256=reference["annotation_sha256"], reference_version="source-fidelity-v2",
                 )
 
-    def test_actual_pending_v2_materials_cannot_generate_review_packets(self):
+    def test_pending_v2_mutation_cannot_gain_ready_or_generate_review_packets(self):
         from notalone.memory_extraction.evaluation_review import (
             prepare_case_review, validate_reference_structure,
         )
@@ -280,11 +280,32 @@ class EvaluationReferenceTest(unittest.TestCase):
         for name in ("memory-gold-reference-v2-20261016.json",
                      "memory-gold-full140-reference-v2-20261016.json"):
             reference = json.loads((self.root / ".scratch/unfinished-work" / name).read_bytes())
+            reference["status"] = "agent_reference_pending_review"
+            reference["provenance"]["structured_review"] = {"status": "pending", "reviewer": None}
+            reference["provenance"]["independent_review"] = {
+                "status": "pending", "standards": "pending", "spec": "pending",
+            }
             before = deepcopy(reference)
             self.assertIsNone(validate_reference_structure(reference, "A05"))
             with self.subTest(name=name), self.assertRaisesRegex(ValueError, "review_reference_invalid"):
                 prepare_case_review(reference, "A05", empty)
             self.assertEqual(reference, before)
+            from notalone.memory_extraction.evaluation_records import canonical_sha256
+            from notalone.memory_extraction.evaluation_reference import (
+                validate_public_reference, validate_full_public_reference,
+            )
+            validate = validate_full_public_reference if "full140" in name else validate_public_reference
+            for forged in (False, True):
+                if forged:
+                    reference["status"] = "agent_reviewed_reference"
+                    reference["provenance"]["structured_review"] = {"status": "passed", "reviewer": "自行声明"}
+                    reference["provenance"]["independent_review"] = {
+                        "status": "passed", "standards": "passed", "spec": "passed",
+                    }
+                with self.subTest(name=name, forged=forged), self.assertRaises(ValueError):
+                    validate(reference, expected_reference_sha256=canonical_sha256(reference),
+                             annotation_sha256=reference["annotation_sha256"],
+                             reference_version="source-fidelity-v2")
 
     def test_legacy_reference_material_bytes_are_not_rewritten(self):
         expected = {

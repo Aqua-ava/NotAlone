@@ -1,8 +1,8 @@
 {
   "format_version": 1,
-  "status": "agent_reference_pending_review",
+  "status": "agent_reviewed_reference",
   "annotation_path": ".scratch/unfinished-work/memory-gold-agent-annotations-v2-20261016.md",
-  "annotation_sha256": "08ef4653f776ee1b998715eedc3bbe7f3887fe991b7e4ada2fc6041b95ee65e1",
+  "annotation_sha256": "99efaae24d8d4175a2006ae8442e8ea8635728c3eef3d9c9bc8357d382683977",
   "provenance": {
     "oracle_aware": true,
     "blind_annotation": false,
@@ -19,13 +19,25 @@
       }
     ],
     "independent_review": {
-      "status": "pending",
-      "standards": "pending",
-      "spec": "pending"
+      "status": "passed",
+      "standards": {
+        "status": "passed",
+        "reviewer": "grounded_eval_standards",
+        "findings": 0,
+        "scope": "9文件绑定、工程规则与不变性。"
+      },
+      "spec": {
+        "status": "passed",
+        "reviewer": "grounded_eval_spec",
+        "findings": 0,
+        "scope": "独立核实际合成source、contact sender、target 0、D2第87行、A05语义；其它139/R105不动。"
+      },
+      "not_certified": "本次语义复审仅A05及直接通则；full140核装配与不变性，其余139及R105延续旧独审。不是新盲标、现实真伪、模型质量、运行冻结或维度放行。"
     },
     "structured_review": {
-      "status": "pending",
-      "reviewer": null
+      "status": "passed",
+      "reviewer": "grounded_eval_spec",
+      "scope": "本次语义复审仅A05及直接通则；full140核装配与不变性，其余139及R105延续旧独审。不是新盲标、现实真伪、模型质量、运行冻结或维度放行。"
     },
     "quality_certified": false,
     "scope": "仅当前21个已提交公开合成窗口，28必需与A15可选1；旧holdout作回归，不认证真实分布、真实6/12、生产放行或模型成绩。",
@@ -60,7 +72,15 @@
         "annotation_sha256": "7039a302f64d6a14761ae448e425597c5ef46e0fbb3d7bc41c95c6d9a9b91e91"
       },
       "old_results_seen": true,
-      "old_results_recomputed": false
+      "old_results_recomputed": false,
+      "pending_slice_history": {
+        "commit": "9d44e5fb",
+        "reference_path": ".scratch/unfinished-work/memory-gold-reference-v2-20261016.json",
+        "file_sha256": "10a9e6ff5222c9c7a2b9776584fd560bc7344853c56becd77c7646bd65191d48",
+        "reference_sha256": "d4b6b2de9f23a442af6f2ef49d22e09911446c00bc46436eb940c71cad102091",
+        "annotation_sha256": "08ef4653f776ee1b998715eedc3bbe7f3887fe991b7e4ada2fc6041b95ee65e1",
+        "status": "agent_reference_pending_review"
+      }
     },
     "reference_version": "source-fidelity-v2",
     "reference_path": ".scratch/unfinished-work/memory-gold-reference-v2-20261016.json"

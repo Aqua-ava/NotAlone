@@ -1,10 +1,10 @@
 # 全140来源保真修订 v2（2026-10-16）
 
-> 状态：source-fidelity revision v2；独立Standards／Spec审查待Root组织，未预标passed。Agent已见旧oracle和旧结果，非盲标；quality_certified=false。结构验证不等于中文独审、模型质量、执行就绪或维度放行。
+> 状态：source-fidelity revision v2；Root已完成独立Standards／Spec审查，均0项。已见旧oracle及旧结果，非盲标，quality_certified=false。仅参考装配具备固定协议接入资格，不认证模型质量或维度放行。
 
 基底是已修正R025／R031承诺风险与R024历史更正分支的[原full140判据](memory-gold-full140-agent-annotations-20261013.md)及配套JSON；这些既有修正逐值保留，不宣称为本版新增结果。仅将首21及嵌入parent21更新为[来源保真v2判据](memory-gold-agent-annotations-v2-20261016.md)：A05保留姐姐出借、联系人接收、已发生经历、contact／relationship_note／assertion／asserted／literal／H双null；物品车主未知、“她”缺唯一指称，非空说明且理想pending，不补Identity或反向产权。依据[D2合同](goal-memory-dimension-proof-interface-decision-20261013.md)第87行；typed proof范围不足不能一概否定普通字段已有角色。
 
-旧21／140文件、旧annotation、所有freeze／封存审核／成绩保持，不按本版重算旧结果。本版独立审查尚未发生；旧passed只作历史。新增119全部窗口（包括已正确保留受益人未知的R105）、来源档案、映射、公共oracle和输入均不改，不开放真实入口或预算。
+旧21／140文件、旧annotation、所有freeze／封存审核／成绩保持，不按本版重算旧结果。本次独审仅覆盖A05及直接规则、140装配与不变性；其余139及R105延续旧独审，旧passed保留其原范围。新增119全部窗口（包括已正确保留受益人未知的R105）、来源档案、映射、公共oracle和输入均不改，不开放真实入口或预算。
 
 ## 固定集合与来源
 
@@ -12,8 +12,8 @@
 
 | 绑定 | 值 |
 | --- | --- |
-| v2 21文件SHA | `10a9e6ff5222c9c7a2b9776584fd560bc7344853c56becd77c7646bd65191d48` |
-| v2 21规范对象SHA | `d4b6b2de9f23a442af6f2ef49d22e09911446c00bc46436eb940c71cad102091` |
+| v2 21文件SHA | `6ec7ee70a47b94d0cdf667be6478b8fe7cbe33e91bc3d4ec5e49ee340914f738` |
+| v2 21规范对象SHA | `823d680bfa9e4c62024e570de0dddd2eb06e27d6fe05ba757e88e6dfb08f2635` |
 | 固定140 case/oracle规范SHA | `ac73b6fc232ae5c93bfbd70126843294fa5de51f1532f511ff6ed70ba4037e62` |
 | 119完整source/oracle档案规范SHA | `e76f7bab405d075c368097e57b476be2abc92acee69990b3724d8c691152de76` |
 | v2 21 common_rules规范SHA | `7924580fc64d0b39598ada3db1f5d764d24a80d229858a3ff0f7894e5da8a39a` |
@@ -2333,6 +2333,12 @@ provenance.public_source_manifest中的旧完整case对象不改；旧正则/pre
 
 ## 装配验证和数据影响
 
-本版仅处理公开合成来源与既有D2合同，不读取dotenv／凭据，不调用模型／socket／DNS／HTTP、App、微信、PG或业务写入；Git只读状态和diff核对，不提交。没有导入模型输出或按新参考重算旧成绩。实际离线验证见`.scratch/grounded-evaluation/reference-source-fidelity-v2-spec-20261016.md`；独立两轴仍待Root组织，最终运行合同与冻结另接。
+待审切片（提交`9d44e5fb`）仅处理公开合成来源与既有D2合同，不读取dotenv／凭据，不调用模型／socket／DNS／HTTP、App、微信、PG或业务写入；Git只读状态和diff核对，不提交。没有导入模型输出或按新参考重算旧成绩。实际离线验证见`.scratch/grounded-evaluation/reference-source-fidelity-v2-spec-20261016.md`；该切片交付时独立两轴仍待Root组织，后继实际审查见下节，最终运行合同与冻结另接。
 
-`validate_full_public_reference`显式v2只核固定路径／摘要、parent21、E14／V4、日期／来源／映射／规则作用域及结构，返回review_pending与execution_ready=false；纯结构Seam不生成审核packet，也不改真实pending状态。旧默认校验、评分及已审准入门保持。本文件不嵌自身或配套JSON最终SHA，避免循环摘要；JSON只绑定本文字节SHA。
+提交`9d44e5fb`中的`validate_full_public_reference`显式v2只核固定路径／摘要、parent21、E14／V4、日期／来源／映射／规则作用域及结构，当时返回review_pending=true与execution_ready=false；纯结构Seam不生成审核packet，也不改真实pending状态。旧默认校验、评分及已审准入门保持。本文件不嵌自身或配套JSON最终SHA，避免循环摘要；JSON只绑定本文字节SHA。
+
+## 2026-10-16 后继审核资格记录
+
+Standards `grounded_eval_standards` 核9文件、绑定与不变性0项；Spec `grounded_eval_spec` 独立核实际source、contact sender／target 0、D2第87行及A05语义0项。本次语义复审仅A05及直接通则；full140核装配与不变性，其余139及R105延续旧独审。不是新盲标、现实真伪、模型质量、运行冻结或维度放行。
+
+待审切片原件在本地提交`9d44e5fb`完整可达，其pending状态与旧摘要不作追溯改写。本次只如实更新审核元数据和固定绑定，窗口、输入、命题、分母、来源选择不变；旧成绩不重算。后继完整140固定协议另见[装配记录](../grounded-evaluation/full140-v4-reference-integration-20261016.md)。

@@ -34,3 +34,5 @@
 结果独审另发现A05冻结Gold／sealed审查与已批准D2的产权UNKNOWN冲突；原full11／safe8仅为封存机械汇总，A05撤出无争议完整／安全样本，其余完整10可引用，不重签或改旧成绩。完整140沿用该A05，也须先明确修正未来参考；先前Gold复核记录不能覆盖这一新发现。
 
 2026-10-16后继离线准备：[初版v4](../grounded-v4-protocol-readiness/spec.md)与[物品归属修订](../grounded-v4-object-ownership/spec.md)均已完成独立双轴审查并集成主树，后者124项相关合成测试通过；旧v2／v3及生产默认不变，尚未注册真实v4入口。[来源参考v2](../grounded-evaluation/reference-source-fidelity-v2-spec-20261016.md)的576项离线测试及独立两轴审查通过，只修未来A05与直接规则，其他139窗、全部输入与原分母不变；此次语义独审限A05修订，非全新盲标。材料暂保留pending／execution_ready=false，真实审核元数据和新固定入口另接；未创建新真实预算或调用模型，默认空放行表与原票状态保持。
+
+后继[参考与协议装配](../grounded-evaluation/full140-v4-reference-integration-20261016.md)已如实记录上述独审，更新四份材料与固定摘要／parent绑定，材料资格现在`execution_ready=true`、质量仍false。新增v4显式选择、records固定计划版本配对、phased同版核对与实际保存；初审两轴各1项位置类型问题已修，四种负控真红→绿、111项相关回归及增审剩余0。此资格只适用于已审参考材料，完整140固定控制仍在准备，真实预算未创建，旧运行与默认放行不变。

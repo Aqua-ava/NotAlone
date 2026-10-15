@@ -21,7 +21,7 @@ PUBLIC_REFERENCE_V2_PATH = ".scratch/unfinished-work/memory-gold-reference-v2-20
 PUBLIC_ANNOTATION_V2_PATH = ".scratch/unfinished-work/memory-gold-agent-annotations-v2-20261016.md"
 FULL_REFERENCE_V2_PATH = ".scratch/unfinished-work/memory-gold-full140-reference-v2-20261016.json"
 FULL_ANNOTATION_V2_PATH = ".scratch/unfinished-work/memory-gold-full140-agent-annotations-v2-20261016.md"
-_PUBLIC_V2_FILE_SHA = "10a9e6ff5222c9c7a2b9776584fd560bc7344853c56becd77c7646bd65191d48"
+_PUBLIC_V2_FILE_SHA = "6ec7ee70a47b94d0cdf667be6478b8fe7cbe33e91bc3d4ec5e49ee340914f738"
 
 
 class _ReferenceBinding(NamedTuple):
@@ -33,15 +33,15 @@ class _ReferenceBinding(NamedTuple):
 
 _PUBLIC_V2 = _ReferenceBinding(
     PUBLIC_REFERENCE_V2_PATH,
-    "d4b6b2de9f23a442af6f2ef49d22e09911446c00bc46436eb940c71cad102091",
+    "823d680bfa9e4c62024e570de0dddd2eb06e27d6fe05ba757e88e6dfb08f2635",
     PUBLIC_ANNOTATION_V2_PATH,
-    "08ef4653f776ee1b998715eedc3bbe7f3887fe991b7e4ada2fc6041b95ee65e1",
+    "99efaae24d8d4175a2006ae8442e8ea8635728c3eef3d9c9bc8357d382683977",
 )
 _FULL_V2 = _ReferenceBinding(
     FULL_REFERENCE_V2_PATH,
-    "f79ba7ef8b32e7d6ff47df55d724ddf6e3c8dd4c9eae17aac9b7161fcee19d2e",
+    "e0edd5d6badafc23e63bd85375a21e126c962d4b0758bbf721786d58fa254040",
     FULL_ANNOTATION_V2_PATH,
-    "d90a49ba22d65eeb61b25f518b9045eac5866fafd627d9863c683c47f6fb8c95",
+    "df79166517ed9196d8f9011aeb59b2b496b5ce233a45df85a98ae1029a4e5560",
 )
 
 
@@ -57,10 +57,10 @@ def _validate_v2_binding(
     reference: dict, expected_reference_sha256: str, annotation_sha256: str,
     binding: _ReferenceBinding,
 ) -> None:
-    """v2只核固定待独审材料；当前状态不授予执行就绪资格。"""
+    """v2只接受实际两轴复审后的固定材料；不由调用方自填状态授予资格。"""
     provenance = reference.get("provenance")
     if (
-        reference.get("status") != "agent_reference_pending_review"
+        reference.get("status") != "agent_reviewed_reference"
         or reference.get("annotation_path") != binding.annotation_path
         or reference.get("annotation_sha256") != binding.annotation_sha256
         or expected_reference_sha256 != binding.reference_sha256
@@ -68,12 +68,12 @@ def _validate_v2_binding(
         or type(provenance) is not dict
         or provenance.get("reference_version") != "source-fidelity-v2"
         or provenance.get("reference_path") != binding.reference_path
-        or provenance.get("structured_review") != {"status": "pending", "reviewer": None}
-        or provenance.get("independent_review") != {
-            "status": "pending", "standards": "pending", "spec": "pending",
-        }
+        or not isinstance(provenance.get("structured_review"), dict)
+        or provenance["structured_review"].get("status") != "passed"
+        or not isinstance(provenance.get("independent_review"), dict)
+        or provenance["independent_review"].get("status") != "passed"
     ):
-        raise ValueError("来源保真v2须绑定固定路径、摘要与真实待独审状态。")
+        raise ValueError("来源保真v2须绑定固定路径、摘要与实际已复审状态。")
 
 
 def public_window_projection(window: object) -> dict[str, Any]:
@@ -209,8 +209,8 @@ def validate_public_reference(
         "required_claims": required,
         "optional_claims": optional,
         "quality_certified": False,
-        **({"reference_version": reference_version, "review_pending": True,
-            "execution_ready": False} if source_fidelity else {}),
+        **({"reference_version": reference_version, "review_pending": False,
+            "execution_ready": True} if source_fidelity else {}),
     }
 
 
@@ -401,6 +401,6 @@ def validate_full_public_reference(
         "reference_sha256": expected_reference_sha256,
         "annotation_sha256": annotation_sha256, "planned_windows": 140,
         "case_positions": positions, "quality_certified": False,
-        **({"reference_version": reference_version, "review_pending": True,
-            "execution_ready": False} if source_fidelity else {}),
+        **({"reference_version": reference_version, "review_pending": False,
+            "execution_ready": True} if source_fidelity else {}),
     }

@@ -123,6 +123,64 @@ class EvaluationOfflineTest(unittest.TestCase):
         with self.assertRaises(EvaluationBudgetAbort):
             EvaluationBudget.open(run_id=self.run_id)
 
+    def test_registered_full140_v4_bundle_and_persist_use_frozen_reference_version(self):
+        from notalone.memory_extraction.evaluation_offline import _run_evaluation_batch
+        from notalone.memory_extraction.evaluation_records import EvaluationRecordStore, canonical_sha256
+        from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
+        from tests.unit.memory_extraction.test_evaluation_records import Full140V4RecordContractTest
+        from tests.unit.memory_extraction.test_grounded_extraction import row
+        from tests.unit.memory_extraction.test_grounded_v3 import labels
+
+        config, plan = Full140V4RecordContractTest().config_plan()
+        cases = (*CASES, *SEMANTIC_CASES)
+        windows = tuple(build_window(case) for case in cases)
+        budget = EvaluationBudget.create(
+            run_id=self.run_id, output_directory=self.output, request_limit=280,
+            allowed_endpoints=("https://evaluation.invalid/v1/chat/completions",),
+            config_sha256=canonical_sha256(config),
+        )
+        store = EvaluationRecordStore(budget=budget, frozen_config=config, plan=plan)
+        observed = []
+
+        def handler(request):
+            body = json.loads(request.content)
+            self.assertNotIn("tool_choice", body)
+            tool = body["tools"][0]["function"]
+            self.assertEqual(tool["name"], "GroundedMemoryLabelsV4")
+            units = tool["parameters"]["properties"]["units"]["properties"]
+            draft = labels(*(row(unit, "not_memory", ambiguity_codes=[]) for unit in units))
+            return self.response(request, arguments=draft, tool_name="GroundedMemoryLabelsV4")
+
+        def audit(bundle):
+            self.assertEqual(bundle["reference_version"], "source-fidelity-v2")
+            self.assertEqual(bundle["extraction_mode"], "grounded-v4")
+            self.assertEqual(bundle["extraction_program"], ({
+                "extraction_mode": "grounded-v4", "status": "compiled", "facts": [],
+            },))
+            protocol = {"extraction_mode": "grounded-v4", "program_result": bundle["extraction_program"][0]}
+            receipt = bundle["persist_audit"]({"phase": "raw", "review": {}, "extraction_protocol": protocol})
+            bundle["persist_audit"]({"phase": "final", "review": {}, "report": {},
+                                     "raw_receipt": receipt, "extraction_protocol": protocol})
+            observed.append(bundle)
+            return {"case_position": 0, "decision": "unknown", "reason_code": "synthetic_stop"}
+
+        result = _run_evaluation_batch(
+            cases=cases, windows=windows, plan=plan, budget=budget, store=store,
+            base_url="https://evaluation.invalid/v1", request_model="synthetic-request-alias",
+            api_key="synthetic-not-a-real-key", synthetic_transport=httpx.MockTransport(handler),
+            provider="synthetic-provider", semantic_audit=audit,
+            verification_mode="nullable-proof-v1", extraction_mode="grounded-v4",
+            extraction_tool_choice="omitted", verification_tool_choice="omitted", max_retries=0,
+        )
+        self.assertEqual(len(observed), 1, result["stopped_code"])
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(result["summary"]["semantic_audit"]["unknown"], 1)
+        self.assertEqual(result["summary"]["unrun"], 139)
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 1)
+        self.assertTrue(result["receipt"]["budget"]["closed"])
+        with self.assertRaisesRegex(EvaluationBudgetAbort, "audit_persist_capability_expired"):
+            observed[0]["persist_audit"]({"phase": "raw"})
+
     def test_grounded_mode_preserves_labels_and_compilation_without_forging_e14_response(self):
         label = {
             "kind": "not_memory", "subject": "self", "topic": "other",

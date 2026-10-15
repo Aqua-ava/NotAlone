@@ -21,6 +21,89 @@ ANNOTATION_SHA = "7039a302f64d6a14761ae448e425597c5ef46e0fbb3d7bc41c95c6d9a9b91e
 
 
 class EvaluationPhasedAuditTest(unittest.TestCase):
+    def v4_audit(self, **changes):
+        from notalone.memory_extraction.evaluation_reference import FULL_REFERENCE_V2_PATH
+        reference = json.loads((self.root / FULL_REFERENCE_V2_PATH).read_bytes())
+        parameters = {
+            "reference": reference, "expected_reference_sha256": canonical_sha256(reference),
+            "annotation_sha256": reference["annotation_sha256"], "criteria_sha256": self.criteria_sha,
+            "case_set": "full140", "extraction_mode": "grounded-v4",
+            "reference_version": "source-fidelity-v2", "verification_mode": "nullable-proof-v1",
+            "extraction_tool_choice": "omitted", "verification_tool_choice": "omitted",
+            "raw_reviewer": self.raw_review, "full_reviewer": self.full_review,
+        }
+        parameters.update(changes)
+        return PhasedEvaluationAudit(**parameters)
+
+    def test_v4_source_revision_requires_the_complete_matching_protocol(self):
+        audit = self.v4_audit()
+        self.assertEqual(audit.reference_version, "source-fidelity-v2")
+        self.assertEqual(audit.case_set, "full140")
+        self.assertEqual(len(audit.case_positions), 140)
+        with self.assertRaises(AttributeError):
+            audit.reference_version = "legacy-v1"
+        faults = {
+            "reference_version": ["legacy-v1", "arbitrary", None, True],
+            "extraction_mode": ["grounded-v3", "legacy-e14"],
+            "verification_mode": ["legacy-v4"], "case_set": ["reference21"],
+            "case_positions": [(0,)], "extraction_tool_choice": ["forced"],
+            "verification_tool_choice": ["forced"],
+        }
+        for key, values in faults.items():
+            for value in values:
+                with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                    self.v4_audit(**{key: value})
+
+    def test_v4_bundle_version_is_checked_before_any_raw_evidence_access(self):
+        audit = self.v4_audit()
+        for version in (None, "legacy-v1", "arbitrary", True):
+            bundle = {"extraction_mode": "grounded-v4"}
+            if version is not None:
+                bundle["reference_version"] = version
+            with self.subTest(version=version), self.assertRaisesRegex(
+                EvaluationBudgetAbort, "phased_reference_version_changed",
+            ):
+                audit(bundle)
+        self.assertEqual(self.order, [])
+
+    def test_v4_full140_old_window_uses_reviewed_v2_parent_and_seals_program(self):
+        from notalone.memory_extraction.evaluation_cases import CASES
+        from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
+        from notalone.memory_extraction.evaluation_reference import PUBLIC_REFERENCE_V2_PATH
+
+        parent = json.loads((self.root / PUBLIC_REFERENCE_V2_PATH).read_bytes())
+        self.bundle.update(
+            case_position=(*CASES, *SEMANTIC_CASES).index(self.case),
+            reference_version="source-fidelity-v2", extraction_mode="grounded-v4",
+            verification_mode="nullable-proof-v1", extraction_tool_choice="omitted",
+            verification_tool_choice="omitted",
+            extraction_program=[{"extraction_mode": "grounded-v4", "status": "compiled", "facts": [self.fact]}],
+        )
+        labels = {"units": {"1:0": {"kind": "event"}}}
+        self.bundle["adapter_outputs"][0] = {"tool_calls": [{"name": "GroundedMemoryLabelsV4", "args": labels}]}
+        self.bundle["adapter_outputs"][1]["tool_calls"][0]["args"]["results"][0]["proof"] = None
+        self.bundle["provider_requests"][0]["body"].pop("tool_choice")
+        self.bundle["provider_requests"].insert(0, {"body": {
+            "tools": [{"type": "function", "function": {"name": "GroundedMemoryLabelsV4"}}], "messages": [],
+        }})
+
+        def raw(view):
+            self.assertEqual(view.pop("extraction_protocol")["extraction_mode"], "grounded-v4")
+            self.assertEqual(view["reference_sha256"], canonical_sha256(parent))
+            self.assertEqual(view["common_rules"], parent["common_rules"])
+            return self.raw_review(view)
+
+        def full(view):
+            self.assertEqual(view["packet"]["reference"], parent)
+            self.assertEqual(view["extraction_protocol"]["model_labels"], labels)
+            self.assertEqual(view["verification_protocol"]["model_results"][0]["proof"], None)
+            return self.full_review(view)
+
+        audit = self.v4_audit(raw_reviewer=raw, full_reviewer=full)
+        self.assertEqual(audit(self.bundle)["decision"], "safe")
+        self.assertEqual(self.order, ["raw", "persist:raw", "full", "persist:final"])
+        self.assertEqual(self.events[-1]["payload"]["extraction_protocol"]["extraction_mode"], "grounded-v4")
+
     def test_grounded_labels_and_compiled_e14_are_separate_and_unresolved_meaning_still_stops(self):
         label = {
             "kind": "event", "subject": "contact", "topic": "study",

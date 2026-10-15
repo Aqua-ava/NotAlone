@@ -334,7 +334,7 @@ def _audit_persist_capability(store: EvaluationRecordStore, case_position: int,
         if (phase == "final" and "verification_protocol" in payload
                 and state.get("verification_mode") == "nullable-proof-v1"):
             keys = keys | {"verification_protocol"}
-        if state.get("extraction_mode") in {"grounded-v2", "grounded-v3"}:
+        if state.get("extraction_mode") in {"grounded-v2", "grounded-v3", "grounded-v4"}:
             keys = keys | {"extraction_protocol"}
         if (phase not in {"raw", "final"} or set(payload) != keys
                 or (phase == "raw" and state["phase"] is not None)
@@ -366,6 +366,8 @@ def run_offline_evaluation(
         extraction_selected = EvaluationExtractionMode(extraction_mode)
     except (TypeError, ValueError):
         raise EvaluationBudgetAbort("offline_invalid_extraction_mode") from None
+    if extraction_selected is EvaluationExtractionMode.GROUNDED_V4:
+        raise EvaluationBudgetAbort("offline_v4_fixed_plan_required")
     public_cases = (*CASES, *SEMANTIC_CASES)
     if (current_trace() is not None
             or type(synthetic_transport) is not httpx.MockTransport
@@ -417,6 +419,14 @@ def _run_evaluation_batch(
     extraction_selected = EvaluationExtractionMode(extraction_mode)
     if store.extraction_mode != extraction_selected.value:
         raise EvaluationBudgetAbort("evaluation_frozen_extraction_mode_mismatch")
+    if extraction_selected is EvaluationExtractionMode.GROUNDED_V4 and (
+        store.reference_version != "source-fidelity-v2"
+        or cases != (*CASES, *SEMANTIC_CASES) or len(windows) != 140 or len(plan) != 140
+        or selected is not SourceVerificationMode.NULLABLE_PROOF_V1
+        or extraction_tool_choice != "omitted" or verification_tool_choice != "omitted"
+        or type(max_retries) is not int or max_retries != 0 or semantic_audit is None
+    ):
+        raise EvaluationBudgetAbort("evaluation_full140_v4_fixed_plan_required")
     outcomes = [{**item, "status": "unrun"} for item in plan]
     results: list[EvaluationResult] = []
     audits: list[dict] = []
@@ -525,6 +535,8 @@ def _run_evaluation_batch(
                         "verification_tool_choice": verification_tool_choice,
                         "extraction_tool_choice": extraction_tool_choice,
                         "extraction_mode": extraction_selected.value,
+                        **({"reference_version": store.reference_version}
+                           if store.reference_version == "source-fidelity-v2" else {}),
                         "extraction_program": tuple(
                             event["payload"] for event in current_events
                             if event["kind"] == "extraction_program"

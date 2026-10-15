@@ -543,5 +543,113 @@ class EvaluationRecordsTest(unittest.TestCase):
                 self.assertTrue(receipt["plan_complete"])
 
 
+class Full140V4RecordContractTest(unittest.TestCase):
+    def config_plan(self):
+        from notalone.memory_extraction.evaluation import build_window
+        from notalone.memory_extraction.evaluation_cases import CASES
+        from notalone.memory_extraction.evaluation_extraction import extraction_contract
+        from notalone.memory_extraction.evaluation_reference import public_window_projection
+        from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
+
+        cases = (*CASES, *SEMANTIC_CASES)
+        windows = tuple(build_window(case) for case in cases)
+        plan = tuple({"case_position": i, "case_name": case.name,
+                      "input_sha256": canonical_sha256(public_window_projection(window))}
+                     for i, (case, window) in enumerate(zip(cases, windows)))
+        contracts = [extraction_contract("grounded-v4", window) for window in windows]
+        config = {
+            "mode": "deepseek_bounded_full140_v4_source_v2", "stage": "full140-v4-source-v2",
+            "execution_plan": "full140-grounded-v4-source-v2", "reference_version": "source-fidelity-v2",
+            "extraction_mode": "grounded-v4", "verification_mode": "nullable-proof-v1",
+            "tool_choice": {
+                "extraction": {"mode": "omitted", "name": "GroundedMemoryLabelsV4"},
+                "verification": {"mode": "omitted", "name": "SourceVerificationOutput"},
+            }, "max_retries": 0,
+            "selected_case_positions": list(range(140)), "plan_sha256": canonical_sha256(plan),
+            "extraction_window_contracts": [
+                {"input_sha256": item["input_sha256"], "prompt_sha256": canonical_sha256(prompt),
+                 "schema_sha256": canonical_sha256(schema)}
+                for item, (prompt, schema) in zip(plan, contracts)
+            ],
+        }
+        return config, plan
+
+    def store(self, folder, config, plan, cap=280):
+        output = folder / "output"
+        output.mkdir(mode=0o700)
+        budget = EvaluationBudget.create(
+            run_id=uuid4(), output_directory=output, request_limit=cap,
+            allowed_endpoints=(ENDPOINT,), config_sha256=canonical_sha256(config),
+        )
+        return budget, EvaluationRecordStore(budget=budget, frozen_config=config, plan=plan)
+
+    def test_v4_complete_plan_exposes_frozen_reference_version(self):
+        config, plan = self.config_plan()
+        with tempfile.TemporaryDirectory() as temporary, patch.object(Path, "home", return_value=Path(temporary)):
+            _, store = self.store(Path(temporary), config, plan)
+            self.assertEqual(store.reference_version, "source-fidelity-v2")
+            self.assertEqual(store.extraction_mode, "grounded-v4")
+            for position in (0, 139):
+                self.assertEqual(store.extraction_contract_hashes(position), {
+                    key: config["extraction_window_contracts"][position][key]
+                    for key in ("prompt_sha256", "schema_sha256")
+                })
+
+    def test_fixed_v4_registration_rejects_scope_and_version_drift(self):
+        from copy import deepcopy
+
+        original, original_plan = self.config_plan()
+        changes = (
+            ("execution_plan", None), ("reference_version", None),
+            ("execution_plan", "reference21-main16-v3"), ("reference_version", "legacy-v1"),
+            ("mode", "offline_mock"), ("stage", "full140"), ("extraction_mode", "grounded-v3"),
+            ("verification_mode", "legacy-v4"), ("tool_choice", "forced"), ("max_retries", 1),
+            ("selected_case_positions", list(range(139))), ("cap", 281), ("partial", True),
+            ("swapped", True), ("contracts", True),
+        )
+        for key, value in changes:
+            config, plan, cap = deepcopy(original), original_plan, 280
+            if key == "cap":
+                cap = value
+            elif key == "partial":
+                plan = plan[:-1]
+                config["plan_sha256"] = canonical_sha256(plan)
+                config["extraction_window_contracts"] = config["extraction_window_contracts"][:-1]
+            elif key == "swapped":
+                plan = tuple({**item, "case_position": i} for i, item in enumerate((*plan[1:2], *plan[:1], *plan[2:])))
+                config["plan_sha256"] = canonical_sha256(plan)
+                config["extraction_window_contracts"][0:2] = list(reversed(config["extraction_window_contracts"][0:2]))
+            elif key == "contracts":
+                config["extraction_window_contracts"][-1]["input_sha256"] = "f" * 64
+            elif value is None:
+                del config[key]
+            else:
+                config[key] = value
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as temporary, \
+                    patch.object(Path, "home", return_value=Path(temporary)), self.assertRaises(EvaluationBudgetAbort):
+                self.store(Path(temporary), config, plan, cap=cap)
+
+    def test_legacy_records_omitted_reference_fields_keep_legacy_property(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(Path, "home", return_value=Path(temporary)):
+            _, store = EvaluationRecordsTest()._store(Path(temporary))
+            self.assertEqual(store.reference_version, "legacy-v1")
+
+    def test_fixed_v4_plan_rejects_boolean_and_float_positions_even_with_fresh_hashes(self):
+        from copy import deepcopy
+
+        original, original_plan = self.config_plan()
+        for position, impostor in ((0, False), (0, 0.0), (1, True), (1, 1.0)):
+            config = deepcopy(original)
+            plan = tuple({**item, **({"case_position": impostor} if index == position else {})}
+                         for index, item in enumerate(original_plan))
+            config["plan_sha256"] = canonical_sha256(plan)
+            with self.subTest(position=position, impostor=impostor), \
+                    tempfile.TemporaryDirectory() as temporary, \
+                    patch.object(Path, "home", return_value=Path(temporary)):
+                with self.assertRaisesRegex(EvaluationBudgetAbort, "invalid_record_full140_v4_registration"):
+                    self.store(Path(temporary), config, plan)
+                self.assertFalse((Path(temporary) / "output/manifest.json").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

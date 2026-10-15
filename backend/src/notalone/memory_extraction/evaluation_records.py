@@ -43,7 +43,7 @@ _CONFIG_FIELDS = frozenset({
     "deadline_utc", "source_hashes", "gold_sha256", "stage",
     "response_identity_policy", "request_contract_version", "tool_choice",
     "fallback", "baseline_commit", "selected_case_positions", "verification_mode",
-    "extraction_mode", "extraction_window_contracts",
+    "extraction_mode", "extraction_window_contracts", "execution_plan", "reference_version",
 })
 
 
@@ -133,7 +133,7 @@ class EvaluationRecordStore:
             or forbidden_config
             or not set(frozen_config) <= _CONFIG_FIELDS
             or frozen_config.get("extraction_mode", "legacy-e14") not in {
-                "legacy-e14", "grounded-v2", "grounded-v3",
+                "legacy-e14", "grounded-v2", "grounded-v3", "grounded-v4",
             }
             or ("verification_mode" in frozen_config and (
                 type(frozen_config["verification_mode"]) is not str
@@ -150,8 +150,15 @@ class EvaluationRecordStore:
         ):
             raise EvaluationBudgetAbort("invalid_record_freeze")
         self._extraction_mode = frozen_config.get("extraction_mode", "legacy-e14")
+        self._reference_version = "legacy-v1"
+        if (self._extraction_mode == "grounded-v4"
+                or "execution_plan" in frozen_config or "reference_version" in frozen_config
+                or frozen_config.get("mode") == "deepseek_bounded_full140_v4_source_v2"
+                or frozen_config.get("stage") == "full140-v4-source-v2"):
+            self._validate_full140_v4_registration(frozen_config, plan)
+            self._reference_version = "source-fidelity-v2"
         contracts = frozen_config.get("extraction_window_contracts")
-        if self._extraction_mode in {"grounded-v2", "grounded-v3"}:
+        if self._extraction_mode in {"grounded-v2", "grounded-v3", "grounded-v4"}:
             if (not isinstance(contracts, (tuple, list)) or len(contracts) != len(plan)
                     or any(not isinstance(item, dict)
                            or set(item) != {"input_sha256", "prompt_sha256", "schema_sha256"}
@@ -180,6 +187,43 @@ class EvaluationRecordStore:
             "budget": self._manifest, "frozen_config": frozen_config,
             "plan": self._plan, "synthetic_quality_certified": False,
         })
+
+    def _validate_full140_v4_registration(self, config: dict, plan: tuple[dict, ...]) -> None:
+        """新版本只注册一个完整公开计划；不能从通用记录字段扩成任意运行。"""
+        from .evaluation import build_window
+        from .evaluation_cases import CASES
+        from .evaluation_reference import public_window_projection
+        from .semantic_evaluation_cases import SEMANTIC_CASES
+
+        cases = (*CASES, *SEMANTIC_CASES)
+        expected = tuple({
+            "case_position": position, "case_name": case.name,
+            "input_sha256": canonical_sha256(public_window_projection(build_window(case))),
+        } for position, case in enumerate(cases))
+        positions = config.get("selected_case_positions")
+        if (config.get("execution_plan") != "full140-grounded-v4-source-v2"
+                or config.get("reference_version") != "source-fidelity-v2"
+                or config.get("mode") != "deepseek_bounded_full140_v4_source_v2"
+                or config.get("stage") != "full140-v4-source-v2"
+                or self._extraction_mode != "grounded-v4"
+                or config.get("verification_mode") != "nullable-proof-v1"
+                or config.get("tool_choice") != {
+                    "extraction": {"mode": "omitted", "name": "GroundedMemoryLabelsV4"},
+                    "verification": {"mode": "omitted", "name": "SourceVerificationOutput"},
+                }
+                or type(config.get("max_retries")) is not int or config["max_retries"] != 0
+                or self._manifest["request_limit"] != 280
+                or not isinstance(positions, (list, tuple))
+                or any(type(position) is not int for position in positions)
+                or tuple(positions) != tuple(range(140))
+                or any(type(item["case_position"]) is not int for item in plan)
+                or len(cases) != 140 or plan != expected):
+            raise EvaluationBudgetAbort("invalid_record_full140_v4_registration")
+
+    @property
+    def reference_version(self) -> str:
+        """省略新计划／版本字段的旧记录仍按legacy解释。"""
+        return self._reference_version
 
     def belongs_to(self, budget: EvaluationBudget) -> bool:
         return self._budget is budget

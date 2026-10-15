@@ -1,8 +1,8 @@
 {
   "format_version": 1,
-  "status": "agent_reference_pending_review",
+  "status": "agent_reviewed_reference",
   "annotation_path": ".scratch/unfinished-work/memory-gold-full140-agent-annotations-v2-20261016.md",
-  "annotation_sha256": "d90a49ba22d65eeb61b25f518b9045eac5866fafd627d9863c683c47f6fb8c95",
+  "annotation_sha256": "df79166517ed9196d8f9011aeb59b2b496b5ce233a45df85a98ae1029a4e5560",
   "provenance": {
     "oracle_aware": true,
     "blind_annotation": false,
@@ -11,23 +11,35 @@
     "reference_complete": true,
     "unresolved_cases": [],
     "structured_review": {
-      "status": "pending",
-      "reviewer": null
+      "status": "passed",
+      "reviewer": "grounded_eval_spec",
+      "scope": "本次语义复审仅A05及直接通则；full140核装配与不变性，其余139及R105延续旧独审。不是新盲标、现实真伪、模型质量、运行冻结或维度放行。"
     },
     "independent_review": {
-      "status": "pending",
-      "standards": "pending",
-      "spec": "pending"
+      "status": "passed",
+      "standards": {
+        "status": "passed",
+        "reviewer": "grounded_eval_standards",
+        "findings": 0,
+        "scope": "9文件绑定、工程规则与不变性。"
+      },
+      "spec": {
+        "status": "passed",
+        "reviewer": "grounded_eval_spec",
+        "findings": 0,
+        "scope": "独立核实际合成source、contact sender、target 0、D2第87行、A05语义；其它139/R105不动。"
+      },
+      "not_certified": "本次语义复审仅A05及直接通则；full140核装配与不变性，其余139及R105延续旧独审。不是新盲标、现实真伪、模型质量、运行冻结或维度放行。"
     },
     "parent21": {
       "reference_path": ".scratch/unfinished-work/memory-gold-reference-v2-20261016.json",
-      "reference_file_sha256": "10a9e6ff5222c9c7a2b9776584fd560bc7344853c56becd77c7646bd65191d48",
-      "reference_sha256": "d4b6b2de9f23a442af6f2ef49d22e09911446c00bc46436eb940c71cad102091",
+      "reference_file_sha256": "6ec7ee70a47b94d0cdf667be6478b8fe7cbe33e91bc3d4ec5e49ee340914f738",
+      "reference_sha256": "823d680bfa9e4c62024e570de0dddd2eb06e27d6fe05ba757e88e6dfb08f2635",
       "reference": {
         "format_version": 1,
-        "status": "agent_reference_pending_review",
+        "status": "agent_reviewed_reference",
         "annotation_path": ".scratch/unfinished-work/memory-gold-agent-annotations-v2-20261016.md",
-        "annotation_sha256": "08ef4653f776ee1b998715eedc3bbe7f3887fe991b7e4ada2fc6041b95ee65e1",
+        "annotation_sha256": "99efaae24d8d4175a2006ae8442e8ea8635728c3eef3d9c9bc8357d382683977",
         "provenance": {
           "oracle_aware": true,
           "blind_annotation": false,
@@ -44,13 +56,25 @@
             }
           ],
           "independent_review": {
-            "status": "pending",
-            "standards": "pending",
-            "spec": "pending"
+            "status": "passed",
+            "standards": {
+              "status": "passed",
+              "reviewer": "grounded_eval_standards",
+              "findings": 0,
+              "scope": "9文件绑定、工程规则与不变性。"
+            },
+            "spec": {
+              "status": "passed",
+              "reviewer": "grounded_eval_spec",
+              "findings": 0,
+              "scope": "独立核实际合成source、contact sender、target 0、D2第87行、A05语义；其它139/R105不动。"
+            },
+            "not_certified": "本次语义复审仅A05及直接通则；full140核装配与不变性，其余139及R105延续旧独审。不是新盲标、现实真伪、模型质量、运行冻结或维度放行。"
           },
           "structured_review": {
-            "status": "pending",
-            "reviewer": null
+            "status": "passed",
+            "reviewer": "grounded_eval_spec",
+            "scope": "本次语义复审仅A05及直接通则；full140核装配与不变性，其余139及R105延续旧独审。不是新盲标、现实真伪、模型质量、运行冻结或维度放行。"
           },
           "quality_certified": false,
           "scope": "仅当前21个已提交公开合成窗口，28必需与A15可选1；旧holdout作回归，不认证真实分布、真实6/12、生产放行或模型成绩。",
@@ -85,7 +109,15 @@
               "annotation_sha256": "7039a302f64d6a14761ae448e425597c5ef46e0fbb3d7bc41c95c6d9a9b91e91"
             },
             "old_results_seen": true,
-            "old_results_recomputed": false
+            "old_results_recomputed": false,
+            "pending_slice_history": {
+              "commit": "9d44e5fb",
+              "reference_path": ".scratch/unfinished-work/memory-gold-reference-v2-20261016.json",
+              "file_sha256": "10a9e6ff5222c9c7a2b9776584fd560bc7344853c56becd77c7646bd65191d48",
+              "reference_sha256": "d4b6b2de9f23a442af6f2ef49d22e09911446c00bc46436eb940c71cad102091",
+              "annotation_sha256": "08ef4653f776ee1b998715eedc3bbe7f3887fe991b7e4ada2fc6041b95ee65e1",
+              "status": "agent_reference_pending_review"
+            }
           },
           "reference_version": "source-fidelity-v2",
           "reference_path": ".scratch/unfinished-work/memory-gold-reference-v2-20261016.json"
@@ -9198,7 +9230,15 @@
         "annotation_sha256": "ac6455813d8218506684c886d32b34bcda3617c1a85342398c0c9fea50e2b111"
       },
       "old_results_seen": true,
-      "old_results_recomputed": false
+      "old_results_recomputed": false,
+      "pending_slice_history": {
+        "commit": "9d44e5fb",
+        "reference_path": ".scratch/unfinished-work/memory-gold-full140-reference-v2-20261016.json",
+        "file_sha256": "01e3b2c79ef03b28053ad234586940a93f705231d5a4062ce99e0005b0baaf92",
+        "reference_sha256": "f79ba7ef8b32e7d6ff47df55d724ddf6e3c8dd4c9eae17aac9b7161fcee19d2e",
+        "annotation_sha256": "d90a49ba22d65eeb61b25f518b9045eac5866fafd627d9863c683c47f6fb8c95",
+        "status": "agent_reference_pending_review"
+      }
     },
     "reference_version": "source-fidelity-v2",
     "reference_path": ".scratch/unfinished-work/memory-gold-full140-reference-v2-20261016.json"

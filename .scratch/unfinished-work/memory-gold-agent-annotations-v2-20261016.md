@@ -1,6 +1,6 @@
 # 21窗来源保真修订 v2（2026-10-16）
 
-> 状态：source-fidelity revision v2；独立Standards／Spec审查待Root组织，尚未最终冻结。Agent已见旧oracle及旧结果，非盲标；不宣称本版passed、模型质量、执行就绪或用户逐类放行。
+> 状态：source-fidelity revision v2；Root已完成独立Standards／Spec审查，均0项。已见旧oracle及旧结果，非盲标，quality_certified=false。仅参考装配具备固定协议接入资格，不认证模型质量或维度放行。
 
 本版基于[原21判据](memory-gold-agent-annotations-20261012.md)与原JSON，旧材料、freeze、审核及成绩原件不改，不按新参考重算旧结果。仅A05产权、直接相关歧义通则及版本来源说明变化；其余窗口、全部输入／target／来源选择、28必需＋A15可选1不变。A14原有人类none仅覆盖其纳入性，不扩大人工认证。
 
@@ -9,7 +9,7 @@
 ## 核对方法和统一字段
 
 - 固定21窗：A01–A16为现行 reference 主集，A17–A19为公开语义补充，B01–B02为核心公开观察。窗口不删、不补位。旧公开 holdout 只作回归，不当作新留出。
-- 下文每个 `P` 为一个必需独立命题；语义相同的重复输出不增加覆盖。A15借书关系只作可选审计；A14依实际用户答复无必需命题，窗口仍保留。当前整理为**28个已列必需命题＋A15可选1个**，此数字仍需全量技术复核及最终结构化装配核对，不因用户回答A14就变成终冻主张分母。
+- 下文每个 `P` 为一个必需独立命题；语义相同的重复输出不增加覆盖。A15借书关系只作可选审计；A14依实际用户答复无必需命题，窗口仍保留。当前整理为**28个已列必需命题＋A15可选1个**，该数字经装配核对保留；A14用户回答仍只覆盖其纳入性，不扩大逐字段人工认证。
 - `source` 为窗内零起始索引。每个实际消息ID为 `uuid5(NAMESPACE_URL, f'notalone-evaluation/{case.name}/{i}')`，时间 `T(i)=2026-09-15T00:00:00+00:00+i分钟`；至少有一条 target，不可用 context 单独制造事实。来源集合无顺序要求，可接受集合在各窗注明；无关额外来源仍是引用缺陷，不靠堆来源获得信用。[build_window](../../backend/src/notalone/memory_extraction/evaluation.py)第81–98行、[E来源规则](../../backend/src/notalone/memory_extraction/adapters.py)第108–112行。
 - `subject` 表示资料归属：`self` 是 owner 本人范围，`contact/shared` 为当前联系人范围；第三人的称呼必须写在命题中，不能因 subject=contact 把第三人写成联系人。合成 owner/contact 分别为 `uuid5(NAMESPACE_URL, 'notalone-evaluation/owner')` 和 `uuid5(NAMESPACE_URL, 'notalone-evaluation/contact')`，不是实际身份或联系人授权。
 - 来源保真修订：出借施事不证明物品产权；来源没有明确唯一指称句时，保留可核行动角色与已发生阶段，物品归属保持未知，非空alternatives须明确具体未解关系，不补Identity、反向产权或现实认证。typed proof的范围／可信前提UNKNOWN不一概否定普通正文中已有来源的角色和阶段。
@@ -286,4 +286,10 @@ V只降不升：supported继续原语用／风险／置信度门，reported、�
 
 ## v1审核记录与本版边界
 
-原独审经过和历史通过记录保留在[原21判据](memory-gold-agent-annotations-20261012.md)，不复制为v2通过。本版仅完成作者来源修订，独立审查待Root组织；结构检查不认证中文语义、模型输出、完整质量或执行就绪。配套JSON只绑定本中文字节SHA，本文件不嵌自身或配套JSON最终摘要，避免循环。
+原独审经过和历史通过记录保留在[原21判据](memory-gold-agent-annotations-20261012.md)，不扩大为v2新语义复审范围。提交`9d44e5fb`时本版仅完成作者来源修订，独立审查待Root组织；该切片的结构检查不认证中文语义、模型输出、完整质量或执行就绪。配套JSON只绑定本中文字节SHA，本文件不嵌自身或配套JSON最终摘要，避免循环。
+
+## 2026-10-16 后继审核资格记录
+
+Standards `grounded_eval_standards` 核9文件、绑定与不变性0项；Spec `grounded_eval_spec` 独立核实际source、contact sender／target 0、D2第87行及A05语义0项。本次语义复审仅A05及直接通则；full140核装配与不变性，其余139及R105延续旧独审。不是新盲标、现实真伪、模型质量、运行冻结或维度放行。
+
+待审切片原件在本地提交`9d44e5fb`完整可达，其pending状态与旧摘要不作追溯改写。本次只如实更新审核元数据和固定绑定，窗口、输入、命题、分母、来源选择不变；旧成绩不重算。后继完整140固定协议另见[装配记录](../grounded-evaluation/full140-v4-reference-integration-20261016.md)。
