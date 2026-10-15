@@ -128,7 +128,9 @@ export class ForegroundController {
     const current = () => !this.disposed && !abort.signal.aborted && epoch === this.epoch
       && !this.state.suspendedByHelperFocus && generation === this.backend.getConnectionGeneration()
       && scope === this.contacts.getState().scopeRevision;
-    this.clearObservation('observing', null);
+    // 例行刷新保留上次结果；旧人工确认请求仍随新观察作废，名称另受五秒期限约束。
+    if (this.state.phase === 'idle') this.clearObservation('observing', null);
+    else this.publish({ foregroundRevision: this.state.foregroundRevision + 1 });
     let timer: ReturnType<typeof setTimeout>;
     const deadline = new Promise<void>((resolve) => {
       timer = setTimeout(() => {
@@ -173,7 +175,11 @@ export class ForegroundController {
     const settled = request.finally(() => {
       if (this.flight?.abort === abort) {
         this.flight = undefined;
-        this.failures = this.state.phase === 'unavailable' || this.state.phase === 'manual-required'
+        const awaitingContact = this.state.phase === 'manual-required' && [
+          'ambiguous_requires_selection', 'unmatched_requires_selection',
+          'session_candidates_truncated', 'manual_confirmation_required',
+        ].includes(this.state.reason ?? '');
+        this.failures = this.state.phase === 'unavailable' || (this.state.phase === 'manual-required' && !awaitingContact)
           ? Math.min(2, this.failures + 1) : 0;
         this.scheduleNext();
       }

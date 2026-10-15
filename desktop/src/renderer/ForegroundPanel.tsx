@@ -43,7 +43,7 @@ export function ForegroundPanel({ state, session }: { state: ForegroundState; se
     </button>}
     {state.confirmation === 'manual-confirmed' && <p>本次联系人已由你确认。</p>}
     {state.confirmation === 'verified-binding' && <p>本次联系人已通过微信会话绑定确认。</p>}
-    {(state.phase === 'confirmed' || state.suggestedContactId) && state.observedAt && <p>
+    {(state.phase === 'confirmed' || state.suggestedContactId || state.recognizedName) && state.observedAt && <p>
       识别结果对应 <time dateTime={state.observedAt}>{new Date(state.observedAt).toLocaleTimeString('zh-CN', { hour12: false })}</time> 采集时的会话；之后的切换可能尚未反映。
     </p>}
     {session && state.suggestedContactId && <p>

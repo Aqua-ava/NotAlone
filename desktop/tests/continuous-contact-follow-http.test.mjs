@@ -12,6 +12,9 @@ const built = await build({ stdin: { contents: `
  export { installReplyBridge } from './src/main/reply/bridge';
  export { JsonClient } from './src/main/backend/json-client';
  export { readConnection } from './src/main/backend/connection';
+ export { ForegroundPanel } from './src/renderer/ForegroundPanel';
+ export { createElement } from 'react';
+ export { renderToStaticMarkup } from 'react-dom/server';
  export { withContinuousForegroundFixture } from './tests/foreground-backend-fixture';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false,
  banner: { js: `import { createRequire } from 'node:module'; const require = createRequire(${JSON.stringify(path.join(process.cwd(), 'package.json'))});` } });
@@ -20,6 +23,58 @@ await writeFile(path.join(directory, 'production.mjs'), built.outputFiles[0].tex
 const ports = await import(path.join(directory, 'production.mjs'));
 after(() => rm(directory, { recursive: true, force: true }));
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
+
+test('顶部识别准确但尚未绑定时按正常间隔刷新，不退避八秒', async () => {
+ await ports.withContinuousForegroundFixture(async fixture => {
+  await fixture.setCli({ sessions: [], messages: {} });
+  assert.equal((await fixture.request('/api/sync/enable', {})).status, 200);
+  const client = new ports.JsonClient(await ports.readConnection(fixture.infoPath));
+  const backend = { getConnectionGeneration: () => 1, onStateChanged: () => () => {},
+   async requestJson(request) { return { ...await client.perform(request), generation: 1 }; } };
+  const contacts = new ports.ContactSession(() => ports.readContactDirectory(backend));
+  contacts.setConnection(1); await contacts.refreshContacts();
+  const scheduled = new Map(); let token = 0;
+  const clock = { schedule(callback, delay) { const id = ++token; scheduled.set(id, { callback, delay }); return id; },
+   cancel(id) { scheduled.delete(id); } };
+  const foreground = new ports.ForegroundController(backend, contacts, clock);
+  const next = async () => {
+   assert.equal(scheduled.size, 1);
+   const [id, task] = scheduled.entries().next().value; scheduled.delete(id);
+   await task.callback();
+  };
+  try {
+   await writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify({
+    capture_version: 'automatic-header-v3', display_name: '准确合成会话' }));
+   foreground.startContinuous();
+   for (let sample = 0; sample < 3; sample++) {
+    await next();
+    assert.equal(foreground.getState().recognizedName, '准确合成会话');
+    assert.equal(foreground.getGenerationBlock(), 'foreground-confirmation-required');
+    assert.equal(scheduled.values().next().value.delay, 2000, '识别成功不应因尚未绑定而退避');
+   }
+   const render = () => ports.renderToStaticMarkup(ports.createElement(ports.ForegroundPanel,
+    { state: foreground.getState() }));
+   await writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify({ wechat_in_front: false }));
+   await next();
+   const paused = render();
+   assert.ok(paused.includes('前台定位已暂停'));
+   const pausedRevision = foreground.getState().foregroundRevision;
+   const checkingPause = next();
+   try {
+    assert.equal(render(), paused, '例行检查不能把暂停文字切成正在定位');
+    assert.ok(foreground.getState().foregroundRevision > pausedRevision, '界面稳定仍须作废旧人工确认凭据');
+   } finally { await checkingPause; }
+   await writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify({
+    capture_version: 'automatic-header-v3', display_name: '准确合成会话' }));
+   await next();
+   const recognized = render();
+   assert.ok(recognized.includes('准确合成会话'));
+   const checkingName = next();
+   try { assert.equal(render(), recognized, '例行识别期间保留未过期的上次名称与提示'); }
+   finally { await checkingName; }
+  } finally { foreground.dispose(); client.cancelPending(); }
+ });
+});
 
 // 时钟只控制下一轮；观察仍经过认证 HTTP、真实绑定判断和隔离 PG。
 test('持续观察自动 A → B → A，保留输入且不生成；同联系人不重建范围', async () => {
