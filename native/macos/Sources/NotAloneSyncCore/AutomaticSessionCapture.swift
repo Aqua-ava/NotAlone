@@ -7,8 +7,8 @@ import Foundation
 @MainActor
 public enum AutomaticSessionCapture {
     public static func observe() async -> [String: Any] {
-        await observe(context: { try foregroundContext() }, capture: captureWindow,
-                      recognize: { try recognizeName($0, policy: .conditionalASCIIRecheck) })
+        await observeHeader(context: { try foregroundContext() }, capture: captureWindow,
+                            recognize: LocalOcr.recognizeHeader)
     }
 
     // 正式观察与可视验收共用采集前门禁；调用此方法不会截图或识别。
@@ -22,6 +22,7 @@ public enum AutomaticSessionCapture {
         return try resolve()
     }
 
+    // 旧双名称协议仅用于原有裁剪诊断及兼容回归，正式入口使用顶部OCR。
     static func observe(context: () throws -> CalibrationContext?,
                         capture: (CalibrationContext) async throws -> CGImage,
                         recognize: (CGImage) throws -> Name,
@@ -60,16 +61,21 @@ public enum AutomaticSessionCapture {
         }
     }
 
-    // 仅开发预览读取顶部名称的原始OCR，不产生正式会话或联系人资格。
+    // 预览与正式入口消费同一次顶部识别；预览投影不进入联系人协议。
     static func observeHeaderPreview() async -> [String: Any] {
-        await observeHeaderPreview(context: { try foregroundContext() }, capture: captureWindow,
-                                   recognize: LocalOcr.recognize)
+        let result = await observe()
+        guard result["ok"] as? Bool == true, result["wechat_in_front"] as? Bool == true,
+              let quality = result["quality"] as? [String: Any],
+              let captured = result["captured_at"], let text = result["display_name"],
+              let confidence = quality["display_name_confidence"] else { return result }
+        return ["ok": true, "wechat_in_front": true, "capture_version": "preview-header-v1",
+                "captured_at": captured, "header_text": text, "header_confidence": confidence]
     }
 
-    static func observeHeaderPreview(
+    static func observeHeader(
         context: () throws -> CalibrationContext?,
         capture: (CalibrationContext) async throws -> CGImage,
-        recognize: (CGImage) throws -> [RecognizedLine],
+        recognize: (CGImage) throws -> HeaderOcrResult,
         clock: () -> Date = Date.init
     ) async -> [String: Any] {
         var stage = "context"
@@ -84,19 +90,19 @@ public enum AutomaticSessionCapture {
             let rectangle = try AutomaticSessionRegions.headerLayout(image, windowSize: current.frame.size).rectangle
             guard let header = image.cropping(to: rectangle) else { throw MinimalSessionError.captureFailed }
             stage = "header_ocr"
-            let lines = try recognize(header)
-            let text = lines.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { throw MinimalSessionError.headerNameUnreadable }
-            guard !lines.isEmpty, lines.allSatisfy({ $0.confidence.isFinite && (0...1).contains($0.confidence) }) else {
+            let name = try recognize(header)
+            guard !name.text.isEmpty else { throw MinimalSessionError.headerNameUnreadable }
+            guard name.confidence.isFinite, (0...1).contains(name.confidence) else {
                 throw MinimalSessionError.qualityUnverified
             }
             stage = "context_after_names"
             guard try context() == current else { throw MinimalSessionError.layoutChanged }
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            return ["ok": true, "wechat_in_front": true, "capture_version": "preview-header-v1",
-                    "captured_at": formatter.string(from: capturedAt), "header_text": text,
-                    "header_confidence": Double(lines.map(\.confidence).min()!)]
+            return ["ok": true, "wechat_in_front": true, "capture_version": "automatic-header-v3",
+                    "captured_at": formatter.string(from: capturedAt), "display_name": name.text,
+                    "quality": ["layout_verified": true, "display_name_confidence": name.confidence,
+                                "name_complete": name.isComplete]]
         } catch {
             return ["ok": false, "stage": stage, "error": (error as? MinimalSessionError)?.rawValue
                     ?? (error as? AutomaticCaptureFailure)?.rawValue
@@ -139,6 +145,26 @@ private enum AutomaticCaptureFailure: String, Error {
     case metadata = "automatic_capture_window_metadata_changed"
     case scale = "automatic_capture_scale_invalid"
     case dimensions = "automatic_capture_dimensions_changed"
+}
+
+struct HeaderOcrResult {
+    let text: String
+    let confidence: Double
+    let isComplete: Bool
+
+    init(fragments: [(RecognizedLine, CGRect)]) {
+        text = fragments.map { $0.0.text }.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        confidence = fragments.allSatisfy({ $0.0.confidence.isFinite && (0...1).contains($0.0.confidence) })
+            ? Double(fragments.map { $0.0.confidence }.min() ?? 0) : .nan
+        // 原始文字照常展示；边界截断或省略名称只能作为未确认线索。
+        isComplete = !text.isEmpty && text.count <= 256 && !text.contains("\n") && !text.contains("\r")
+            && !text.contains("…") && !text.contains("...") && fragments.allSatisfy {
+                let box = $0.1
+                return box.minX.isFinite && box.maxX.isFinite && box.minY.isFinite && box.maxY.isFinite
+                    && box.width > 0 && box.height > 0 && box.minX > 0.01 && box.maxX < 0.99
+                    && box.minY > 0.01 && box.maxY < 0.99
+            }
+    }
 }
 
 enum AutomaticLayoutFailure: String, Error {

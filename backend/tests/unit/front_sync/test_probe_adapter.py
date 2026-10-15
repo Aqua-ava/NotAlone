@@ -29,6 +29,50 @@ class MacosFrontSessionProbeTest(unittest.TestCase):
     def _probe(self, runner) -> MacosFrontSessionProbe:
         return MacosFrontSessionProbe(runner=runner)
 
+    def test_header_only_protocol_qualifies_actual_top_name_without_a_row(self) -> None:
+        envelope = {
+            "ok": True, "wechat_in_front": True,
+            "display_name": "合成甲", "capture_version": "automatic-header-v3",
+            "captured_at": "2026-10-15T04:00:00.123Z",
+            "quality": {"layout_verified": True, "display_name_confidence": 0.95,
+                        "name_complete": True},
+        }
+        observation = self._probe(
+            lambda command: FakeCommandResult(0, json.dumps(envelope)),
+        ).observe_fresh(timeout_seconds=0.9)
+        self.assertIsNotNone(observation.qualified_evidence)
+        self.assertEqual(observation.qualified_evidence.display_name, "合成甲")
+        self.assertIsNone(observation.selected_row_name)
+        self.assertIsNone(observation.quality.selected_row_name_confidence)
+        self.assertEqual(observation.captured_at,
+                         datetime(2026, 10, 15, 4, 0, 0, 123000, tzinfo=timezone.utc))
+
+    def test_header_quality_rejects_low_incomplete_and_fabricated_row_evidence(self) -> None:
+        for confidence, complete, layout, allowed in [
+            (0.9, True, True, True), (0.89, True, True, False),
+            (1, False, True, False), (1, True, False, False),
+        ]:
+            envelope = {
+                "ok": True, "wechat_in_front": True, "display_name": "合成甲",
+                "capture_version": "automatic-header-v3", "captured_at": "2026-10-15T04:00:00Z",
+                "quality": {"layout_verified": layout, "display_name_confidence": confidence,
+                            "name_complete": complete},
+            }
+            observation = self._probe(lambda command: FakeCommandResult(0, json.dumps(envelope))).observe_fresh(timeout_seconds=0.9)
+            self.assertEqual(observation.qualified_evidence is not None, allowed)
+        for invalid in [
+            {"quality": {"layout_verified": True, "display_name_confidence": 1, "name_complete": 1}},
+            {"quality": {"layout_verified": True, "display_name_confidence": True, "name_complete": True}},
+            {"quality": {"layout_verified": True, "display_name_confidence": float("nan"), "name_complete": True}},
+            {"quality": {"layout_verified": True, "display_name_confidence": 1, "name_complete": True,
+                         "selected_row_name_confidence": 1}},
+            {"selected_row_name": "合成保密标记"}, {"captured_at": "无效时间"},
+        ]:
+            envelope.update({"quality": {"layout_verified": True, "display_name_confidence": 1, "name_complete": True}})
+            with self.subTest(invalid=invalid), self.assertRaises(ProbeAdapterError) as caught:
+                self._probe(lambda command: FakeCommandResult(0, json.dumps({**envelope, **invalid}))).observe_fresh(timeout_seconds=0.9)
+            self.assertNotIn("合成保密标记", str(caught.exception))
+
     def test_single_frame_protocol_retains_capture_time_and_quality(self) -> None:
         stdout = json.dumps({
             "ok": True, "wechat_in_front": True,

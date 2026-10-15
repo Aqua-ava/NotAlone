@@ -32,8 +32,13 @@ test('真实窗口原位移动缩放均自动识别', async () => {
     let value: Record<string, any> = {};
     try { value = JSON.parse(output); } catch { /* 固定失败投影。 */ }
     const report = { phase, exit, elapsedMs: Math.round(performance.now() - started), ok: value.ok === true,
-      front: value.wechat_in_front === true, versionValid: value.capture_version === 'automatic-window-v2',
-      namesMatch: value.display_name === expected && value.selected_row_name === expected,
+      front: value.wechat_in_front === true, versionValid: value.capture_version === 'automatic-header-v3',
+      namesMatch: value.display_name === expected && value.selected_row_name === undefined,
+      headerQuality: value.quality?.name_complete === true && value.quality?.layout_verified === true
+        && typeof value.quality?.display_name_confidence === 'number'
+        && Number.isFinite(value.quality.display_name_confidence)
+        && value.quality.display_name_confidence >= 0.90 && value.quality.display_name_confidence <= 1
+        && value.quality.selected_row_name_confidence === undefined,
       stage: typeof value.stage === 'string' && /^[a-z_]{1,80}$/.test(value.stage) ? value.stage : null,
       error: typeof value.error === 'string' && /^[a-z_]{1,80}$/.test(value.error) ? value.error : null };
     reports.push(report);
@@ -42,7 +47,7 @@ test('真实窗口原位移动缩放均自动识别', async () => {
   }
   for (const report of reports) {
     expect(report.ok).toBe(true); expect(report.front).toBe(true);
-    expect(report.namesMatch).toBe(true); expect(report.versionValid).toBe(true);
+    expect(report.namesMatch).toBe(true); expect(report.versionValid).toBe(true); expect(report.headerQuality).toBe(true);
     expect(report.elapsedMs as number, '正式 fresh 入口最多1秒').toBeLessThanOrEqual(1000);
   }
 });

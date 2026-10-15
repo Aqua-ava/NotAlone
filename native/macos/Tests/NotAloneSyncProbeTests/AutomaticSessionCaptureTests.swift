@@ -4,26 +4,58 @@ import XCTest
 
 final class AutomaticSessionCaptureTests: XCTestCase {
     @MainActor
-    func testHeaderPreviewReadsOnlyTitleWithoutRequiringASelectedRowOrQualityConfirmation() async {
+    func testProductionHeaderUsesPreviewOCRWithoutASelectedRow() async throws {
         let context = CalibrationContext(processId: 7, windowId: 9,
             frame: CGRect(x: 0, y: 0, width: 900, height: 700), version: "4.0.6", build: "29387")
         var captures = 0
         var ocrSizes: [CGSize] = []
-        let result = await AutomaticSessionCapture.observeHeaderPreview(context: { context }, capture: { _ in
+        let result = await AutomaticSessionCapture.observeHeader(context: { context }, capture: { _ in
             captures += 1
             return self.window(rows: [])
         }, recognize: { image in
             ocrSizes.append(CGSize(width: image.width, height: image.height))
-            return [RecognizedLine(text: "合成甲", speaker: .unknown, confidence: 0.65)]
+            return HeaderOcrResult(fragments: [(RecognizedLine(text: "合成甲", speaker: .unknown, confidence: 0.65),
+                CGRect(x: 0.1, y: 0.2, width: 0.3, height: 0.6))])
         })
         XCTAssertEqual(captures, 1)
         XCTAssertEqual(ocrSizes.count, 1)
-        XCTAssertLessThanOrEqual(ocrSizes[0].height, 36)
-        XCTAssertEqual(result["header_text"] as? String, "合成甲")
-        XCTAssertEqual(result["header_confidence"] as? Double, Double(Float(0.65)))
-        XCTAssertEqual(result["capture_version"] as? String, "preview-header-v1")
-        XCTAssertNil(result["display_name"])
+        XCTAssertLessThanOrEqual(try XCTUnwrap(ocrSizes.first).height, 36)
+        XCTAssertEqual(result["display_name"] as? String, "合成甲")
+        let quality = try XCTUnwrap(result["quality"] as? [String: Any])
+        XCTAssertEqual(quality["display_name_confidence"] as? Double, Double(Float(0.65)))
+        XCTAssertEqual(quality["name_complete"] as? Bool, true)
+        XCTAssertEqual(result["capture_version"] as? String, "automatic-header-v3")
+        XCTAssertNil(quality["selected_row_name_confidence"])
         XCTAssertNil(result["selected_row_name"])
+    }
+
+    @MainActor
+    func testHeaderRetainsRawClippedTextButDoesNotClaimCompleteOrValidConfidence() async throws {
+        let context = CalibrationContext(processId: 7, windowId: 9,
+            frame: CGRect(x: 0, y: 0, width: 900, height: 700), version: "4.0.6", build: "29387")
+        for (text, box) in [("合成甲", CGRect(x: 0, y: 0.2, width: 0.3, height: 0.6)),
+                            ("合成甲", CGRect(x: 0.1, y: 0, width: 0.3, height: 0.6)),
+                            ("合成甲", CGRect(x: 0.1, y: 0.4, width: 0.3, height: 0.6)),
+                            ("合成…", CGRect(x: 0.1, y: 0.2, width: 0.3, height: 0.6))] {
+            let result = await AutomaticSessionCapture.observeHeader(context: { context },
+                capture: { _ in self.window(rows: []) }, recognize: { _ in
+                    HeaderOcrResult(fragments: [(RecognizedLine(text: text, speaker: .unknown, confidence: 0.99), box)])
+                })
+            XCTAssertEqual(result["display_name"] as? String, text)
+            let quality = try XCTUnwrap(result["quality"] as? [String: Any])
+            XCTAssertEqual(quality["name_complete"] as? Bool, false)
+        }
+        let invalid = await AutomaticSessionCapture.observeHeader(context: { context },
+            capture: { _ in self.window(rows: []) }, recognize: { _ in
+                HeaderOcrResult(fragments: [
+                    (RecognizedLine(text: "合成", speaker: .unknown, confidence: 0.99),
+                     CGRect(x: 0.1, y: 0.2, width: 0.3, height: 0.6)),
+                    (RecognizedLine(text: "甲", speaker: .unknown, confidence: .infinity),
+                     CGRect(x: 0.5, y: 0.2, width: 0.1, height: 0.6)),
+                ])
+            })
+        XCTAssertEqual(invalid["ok"] as? Bool, false)
+        XCTAssertNil(invalid["display_name"])
     }
 
     @MainActor
@@ -31,26 +63,26 @@ final class AutomaticSessionCaptureTests: XCTestCase {
         let context = CalibrationContext(processId: 7, windowId: 9,
             frame: CGRect(x: 0, y: 0, width: 900, height: 700), version: "4.0.6", build: "29387")
         for failUnknown in [false, true] {
-            let result = await AutomaticSessionCapture.observeHeaderPreview(context: {
+            let result = await AutomaticSessionCapture.observeHeader(context: {
                 if failUnknown { throw CalibrationContextFailure.foregroundApplicationUnavailable }
                 return nil
             }, capture: { _ in
                 XCTFail("非微信或未知前台不得采图")
                 return self.window()
-            }, recognize: { _ in XCTFail("非微信或未知前台不得OCR"); return [] })
+            }, recognize: { _ in XCTFail("非微信或未知前台不得OCR"); return HeaderOcrResult(fragments: []) })
             XCTAssertEqual(result["ok"] as? Bool, !failUnknown)
-            XCTAssertNil(result["header_text"])
+            XCTAssertNil(result["display_name"])
         }
         var contextCalls = 0
-        let changed = await AutomaticSessionCapture.observeHeaderPreview(context: {
+        let changed = await AutomaticSessionCapture.observeHeader(context: {
             contextCalls += 1
             return contextCalls == 1 ? context : nil
         }, capture: { _ in self.window() }, recognize: { _ in
-            XCTFail("采图后前台改变不得继续OCR"); return []
+            XCTFail("采图后前台改变不得继续OCR"); return HeaderOcrResult(fragments: [])
         })
         XCTAssertEqual(changed["ok"] as? Bool, false)
         XCTAssertEqual(changed["error"] as? String, "minimal_region_layout_changed")
-        XCTAssertNil(changed["header_text"])
+        XCTAssertNil(changed["display_name"])
     }
 
     @MainActor

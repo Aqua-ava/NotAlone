@@ -232,6 +232,14 @@ test('真实观察投影保留固定结果但不保存身份，并拒绝跨联�
     const encode = value => Buffer.from(JSON.stringify(value));
     assert.deepEqual(foregroundAcceptanceProjection(200, encode(value), contact), { phase: 'confirmed', reason: 'confirmed_active_binding',
       wechatInFront: true, probeAvailable: true, expectedContactMatched: true, hasBinding: true });
+    const named = { ...value, recognized_name: '合成保密标记', recognition_confidence: 0.65 };
+    assert.deepEqual(foregroundAcceptanceProjection(200, encode(named), contact),
+      foregroundAcceptanceProjection(200, encode(value), contact), '验收报告不能保存识别名称或置信度');
+    for (const invalid of [{ ...named, recognition_confidence: 2 },
+      { ...named, phase: 'paused', wechat_in_front: false, binding_id: null, contact_id: null },
+      { ...named, recognized_name: '合成\n正文' }]) {
+      assert.throws(() => foregroundAcceptanceProjection(200, encode(invalid), contact));
+    }
     for (const invalid of [{ ...value, contact_id: '00000000-0000-4000-8000-000000000004' },
       { ...value, summary: '不得保存的合成正文' }, { ...value, reason: '合成名字' },
       { ...value, wechat_in_front: false }, { ...value, contact_id: null }]) {

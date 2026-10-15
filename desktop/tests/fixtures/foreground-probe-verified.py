@@ -14,14 +14,20 @@ if __name__ == "__main__":
     if state.get("error"):
         print(json.dumps({"ok": False, "stage": "context", "error": state["error"]}))
         sys.exit(0)
-    print(json.dumps({
+    version = state.get("capture_version", "automatic-window-v2")
+    payload = {
         "ok": True, "wechat_in_front": state.get("wechat_in_front", True),
         "display_name": state.get("display_name", "唯一合成会话"),
-        "selected_row_name": state.get("selected_row_name", "唯一合成会话"),
-        "capture_version": state.get("capture_version", "automatic-window-v2"),
+        "capture_version": version,
         "captured_at": state.get("captured_at", datetime.now(timezone.utc).isoformat()),
         "quality": {
-            "layout_verified": True, "display_name_confidence": 0.95,
-            "selected_row_name_confidence": state.get("selected_row_name_confidence", 0.96),
+            "layout_verified": True,
+            "display_name_confidence": state.get("display_name_confidence", 0.95),
         },
-    }))
+    }
+    if version == "automatic-header-v3":
+        payload["quality"]["name_complete"] = state.get("name_complete", True)
+    else:
+        payload["selected_row_name"] = state.get("selected_row_name", "唯一合成会话")
+        payload["quality"]["selected_row_name_confidence"] = state.get("selected_row_name_confidence", 0.96)
+    print(json.dumps(payload))

@@ -3,6 +3,8 @@ import { isUuid } from '../uuid';
 type Observation = {
   observationId: string;
   observedAt: string;
+  recognizedName: string | null;
+  recognitionConfidence: number | null;
   phase: 'confirmed' | 'paused' | 'manual-required' | 'unavailable';
   reason: string;
   probeAvailable: boolean;
@@ -15,6 +17,8 @@ export function foregroundObservation(value: unknown): Observation {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('前台观察不可用。');
   const result = value as Record<string, unknown>;
   const keys = ['observation_id', 'observed_at', 'phase', 'reason', 'probe_available', 'wechat_in_front', 'binding_id', 'contact_id'];
+  const hasName = Object.hasOwn(result, 'recognized_name');
+  if (hasName) keys.push('recognized_name', 'recognition_confidence');
   if (Object.keys(result).length !== keys.length || !Object.keys(result).every((key) => keys.includes(key))
     || !isUuid(result.observation_id) || typeof result.observed_at !== 'string'
     || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)$/.test(result.observed_at)
@@ -27,8 +31,16 @@ export function foregroundObservation(value: unknown): Observation {
         || !result.wechat_in_front || result.reason !== 'confirmed_active_binding')
       : (result.binding_id !== null || result.contact_id !== null))
     || (result.phase === 'manual-required' && (!result.probe_available || !result.wechat_in_front))
-    || (result.phase === 'unavailable' && result.probe_available)) throw new Error('前台观察不可用。');
+    || (result.phase === 'unavailable' && result.probe_available)
+    || (hasName && (typeof result.recognized_name !== 'string' || !result.recognized_name.trim()
+      || result.recognized_name.length > 256 || /[\r\n]/.test(result.recognized_name)
+      || typeof result.recognition_confidence !== 'number' || !Number.isFinite(result.recognition_confidence)
+      || result.recognition_confidence < 0 || result.recognition_confidence > 1
+      || !result.wechat_in_front || !result.probe_available
+      || !['confirmed', 'manual-required'].includes(result.phase as string)))) throw new Error('前台观察不可用。');
   return { observationId: (result.observation_id as string).toLowerCase(), observedAt: result.observed_at,
+    recognizedName: hasName ? result.recognized_name as string : null,
+    recognitionConfidence: hasName ? result.recognition_confidence as number : null,
     phase: result.phase as Observation['phase'], reason: result.reason,
     probeAvailable: result.probe_available, wechatInFront: result.wechat_in_front,
     contactId: result.phase === 'confirmed' ? (result.contact_id as string).toLowerCase() : null };

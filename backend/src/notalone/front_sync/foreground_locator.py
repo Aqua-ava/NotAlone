@@ -120,14 +120,24 @@ class ForegroundLocator:
                 phase="paused", reason="wechat_not_in_front",
                 probe_available=True, wechat_in_front=False,
             )
+        recognized = {}
+        if (observation.quality is not None
+                and observation.quality.capture_version == "automatic-header-v3"
+                and observation.captured_at is not None and observation.evidence is not None):
+            raw_name = observation.evidence.display_name
+            if (isinstance(raw_name, str) and raw_name.strip() and len(raw_name) <= 256
+                    and "\n" not in raw_name and "\r" not in raw_name):
+                recognized = {"recognized_name": raw_name,
+                              "recognition_confidence": observation.quality.display_name_confidence}
         evidence = observation.qualified_evidence
         if (evidence is None or observation.quality is None
-                or observation.quality.capture_version != "automatic-window-v2"
+                or observation.quality.capture_version not in ("automatic-window-v2", "automatic-header-v3")
                 or observation.captured_at is None):
             return FreshForegroundObservation.create(
                 phase="manual-required", reason="quality_unverified",
                 probe_available=True, wechat_in_front=True,
                 observed_at=observation.captured_at,
+                **recognized,
             )
         remaining = deadline - monotonic()
         if remaining <= 0:
@@ -150,6 +160,7 @@ class ForegroundLocator:
                     phase="manual-required", reason="session_candidates_truncated",
                     probe_available=True, wechat_in_front=True,
                     observed_at=observation.captured_at,
+                    **recognized,
                 )
             exact = tuple(item for item in candidates
                           if normalize_display_text(item.display_name) == name)
@@ -158,6 +169,7 @@ class ForegroundLocator:
                     phase="manual-required", reason="ambiguous_requires_selection",
                     probe_available=True, wechat_in_front=True,
                     observed_at=observation.captured_at,
+                    **recognized,
                 )
             bindings = self._bindings.list_active_bindings(
                 owner_id=self._owner_id, channel=self._channel,
@@ -187,11 +199,13 @@ class ForegroundLocator:
                     probe_available=True, wechat_in_front=True,
                     binding_id=binding.binding_id, contact_id=binding.scope.contact_id,
                     observed_at=observation.captured_at,
+                    **recognized,
                 )
         return FreshForegroundObservation.create(
             phase="manual-required", reason="unmatched_requires_selection",
             probe_available=True, wechat_in_front=True,
             observed_at=observation.captured_at,
+            **recognized,
         )
 
     def observe(self, *, enabled: bool) -> ForegroundLocatorStatus:

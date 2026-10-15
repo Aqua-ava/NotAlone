@@ -48,7 +48,8 @@ test('持续观察自动 A → B → A，保留输入且不生成；同联系人
   const foreground = new ports.ForegroundController(backend, contacts, clock);
   const replies = ports.installReplyBridge({ handle() {}, publish() {} }, backend, contacts, () => foreground.getGenerationBlock());
   const observe = async (name, extra = {}) => {
-   await writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify({ display_name: name, selected_row_name: name, ...extra }));
+   await writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify({
+    capture_version: 'automatic-header-v3', display_name: name, ...extra }));
    assert.equal(scheduled.size, 1, '每轮结束仅一个定时任务');
    const [id, task] = scheduled.entries().next().value; scheduled.delete(id);
    await task.callback();
@@ -90,7 +91,7 @@ test('持续观察自动 A → B → A，保留输入且不生成；同联系人
    await observe(names[1], { wechat_in_front: false });
    assert.equal(foreground.getState().phase, 'paused');
    assert.equal(foreground.getGenerationBlock(), null, '其他 App 前台正常暂停保留确认');
-   await observe(names[1], { selected_row_name_confidence: 0.5 });
+   await observe(names[1], { display_name_confidence: 0.5 });
    assert.equal(foreground.getState().phase, 'manual-required');
    assert.equal(foreground.getGenerationBlock(), 'foreground-confirmation-required');
    assert.equal(contacts.getState().draft, '乙未提交草稿');
@@ -100,10 +101,14 @@ test('持续观察自动 A → B → A，保留输入且不生成；同联系人
    const stale = { contactId:b, contactScopeRevision:contacts.getState().scopeRevision,
     foregroundRevision:foreground.getState().foregroundRevision };
    foreground.confirm(stale);
-   await observe(names[1], { selected_row_name_confidence: 0.5 });
+   await observe(names[1], { display_name_confidence: 0.5 });
    assert.equal(foreground.getGenerationBlock(), 'foreground-confirmation-required');
    assert.throws(() => foreground.confirm(stale));
    assert.equal(scheduled.values().next().value.delay, 8000, '重复失败有界退避');
+   assert.equal(foreground.getState().recognizedName, names[1]);
+   await new Promise(resolve => setTimeout(resolve, 5100));
+   assert.equal(foreground.getState().recognizedName, null, '八秒退避期间五秒旧名称必须清除');
+   assert.equal(foreground.getState().recognitionConfidence, null);
    await observe(names[1]);
    assert.equal(foreground.getGenerationBlock(), 'foreground-confirmation-required', '可靠新观察也不能替代失败后的人工选择');
    foreground.confirm({ contactId:b, contactScopeRevision:contacts.getState().scopeRevision, foregroundRevision:foreground.getState().foregroundRevision });

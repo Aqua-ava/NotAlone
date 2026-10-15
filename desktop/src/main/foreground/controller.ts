@@ -25,6 +25,7 @@ export class ForegroundController {
   private failures = 0;
   private manualRequired = false;
   private flight: Flight | undefined;
+  private nameExpiry: ReturnType<typeof setTimeout> | undefined;
   private generation: number | undefined;
   private scopeRevision: number;
   private readingScopeChanges = 0;
@@ -155,6 +156,7 @@ export class ForegroundController {
         if (this.manualRequired) {
           this.publish({ phase: 'manual-required', reason: 'manual_confirmation_required',
             observedAt: observation.observedAt, probeAvailable: true, wechatInFront: true,
+            recognizedName: observation.recognizedName, recognitionConfidence: observation.recognitionConfidence,
             suggestedContactId: observation.contactId }); return;
         }
         const selected = this.contacts.selectContact({ contactId: observation.contactId, scopeRevision: scope });
@@ -162,6 +164,7 @@ export class ForegroundController {
           contactId: observation.contactId, kind: 'verified-binding' };
       }
       this.publish({ phase: observation.phase, reason: observation.reason, observedAt: observation.observedAt,
+        recognizedName: observation.recognizedName, recognitionConfidence: observation.recognitionConfidence,
         probeAvailable: observation.probeAvailable, wechatInFront: observation.wechatInFront, suggestedContactId: null });
     }).catch(() => {
       if (current()) this.clearObservation('unavailable', 'observation_unavailable');
@@ -209,6 +212,8 @@ export class ForegroundController {
   dispose(): void {
     if (this.disposed) return;
     this.cancelScheduled(); this.disposed = true; ++this.epoch; this.flight?.abort.abort();
+    clearTimeout(this.nameExpiry); this.nameExpiry = undefined;
+    this.state = { ...this.state, recognizedName: null, recognitionConfidence: null };
     for (const unsubscribe of this.unsubscribe) unsubscribe();
     this.listeners.clear();
   }
@@ -216,6 +221,7 @@ export class ForegroundController {
     if (phase === 'manual-required' || phase === 'unavailable') this.qualification = undefined;
     if (reason === 'observation_timeout' || reason === 'observation_unavailable' || reason === 'contact_unavailable') this.manualRequired = true;
     this.publish({ phase, reason, observedAt: null, probeAvailable: null, wechatInFront: null,
+      recognizedName: null, recognitionConfidence: null,
       foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null });
   }
   private publish(update: Partial<ForegroundState>): void {
@@ -224,6 +230,20 @@ export class ForegroundController {
     this.state = { ...this.state, ...update, revision: this.state.revision + 1,
       generationBlock, confirmation: generationBlock === null ? this.qualification!.kind : 'required',
       confirmedContactId: generationBlock === null ? this.qualification!.contactId : null };
+    if (Object.hasOwn(update, 'recognizedName')) {
+      clearTimeout(this.nameExpiry); this.nameExpiry = undefined;
+      if (this.state.recognizedName) {
+        const remaining = Date.parse(this.state.observedAt ?? '') + 5000 - Date.now();
+        if (!Number.isFinite(remaining) || remaining <= 0 || remaining > 5000) {
+          this.state = { ...this.state, recognizedName: null, recognitionConfidence: null };
+        } else {
+          this.nameExpiry = setTimeout(() => {
+            this.nameExpiry = undefined;
+            this.publish({ recognizedName: null, recognitionConfidence: null });
+          }, remaining);
+        }
+      }
+    }
     for (const listener of this.listeners) listener(this.getState());
   }
 }

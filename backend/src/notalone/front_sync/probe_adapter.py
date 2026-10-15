@@ -1,7 +1,7 @@
 """macOS 前台定位探针的只读适配层。
 
 探针是 ``native/macos/`` 工程的本地二进制，负责判断微信是否在前台并
-给出顶部 display name 与左侧选中会话行的最小元数据。本适配器只解析
+给出顶部 display name；旧协议另含选中行的最小元数据。本适配器只解析
 ``--session --json`` 的机器可读输出；任何无法解析或无法运行的情况都
 失败关闭，不猜测前台状态。
 """
@@ -40,27 +40,41 @@ CommandRunner = Callable[[tuple[str, ...]], CommandResult]
 
 @dataclass(frozen=True, slots=True)
 class FrontSessionQuality:
-    """已校验布局的两处名称 OCR 质量；不等于绑定已确认。"""
+    """已校验布局的名称 OCR 质量；不等于绑定已确认。"""
 
     capture_version: str
     display_name_confidence: float
-    selected_row_name_confidence: float
+    selected_row_name_confidence: float | None = None
+    name_complete: bool | None = None
 
     def __post_init__(self) -> None:
-        if self.capture_version not in ("minimal-region-v1", "automatic-window-v1", "automatic-window-v2") or any(
+        if self.capture_version not in (
+            "minimal-region-v1", "automatic-window-v1", "automatic-window-v2", "automatic-header-v3",
+        ):
+            raise ValueError("前台定位质量无效。")
+        header_only = self.capture_version == "automatic-header-v3"
+        if header_only:
+            if type(self.name_complete) is not bool or self.selected_row_name_confidence is not None:
+                raise ValueError("前台定位质量无效。")
+        elif self.name_complete is not None:
+            raise ValueError("前台定位质量无效。")
+        confidences = (self.display_name_confidence,) if header_only else (
+            self.display_name_confidence, self.selected_row_name_confidence,
+        )
+        if any(
             isinstance(value, bool)
             or not isinstance(value, (int, float))
             or not math.isfinite(value)
             or not 0 <= value <= 1
-            for value in (
-                self.display_name_confidence, self.selected_row_name_confidence,
-            )
+            for value in confidences
         ):
             raise ValueError("前台定位质量无效。")
 
     @property
     def meets_minimum_confidence(self) -> bool:
-        return min(
+        if self.capture_version == "automatic-header-v3":
+            return self.name_complete is True and self.display_name_confidence >= 0.90
+        return self.selected_row_name_confidence is not None and min(
             self.display_name_confidence, self.selected_row_name_confidence,
         ) >= 0.90
 
@@ -77,7 +91,7 @@ class FrontSessionProbeObservation:
 
     @property
     def qualified_evidence(self) -> FrontSessionEvidence | None:
-        """只有已校验布局、两处高质量同名才可交给身份匹配。"""
+        """顶部协议要求完整高质量名称；旧协议仍要求两处同名。"""
 
         if (
             not self.wechat_in_front
@@ -87,7 +101,11 @@ class FrontSessionProbeObservation:
         ):
             return None
         name = normalize_display_text(self.evidence.display_name)
-        if not name or name != normalize_display_text(self.selected_row_name):
+        if not name:
+            return None
+        if self.quality.capture_version == "automatic-header-v3":
+            return self.evidence if self.selected_row_name is None else None
+        if name != normalize_display_text(self.selected_row_name):
             return None
         return self.evidence
 
@@ -271,7 +289,7 @@ def _optional_text(value: object) -> str | None:
 def _captured_at(envelope: dict[str, Any]) -> datetime | None:
     """单帧协议必须给出 UTC 采集时点；旧协议不补造采集时间。"""
 
-    if envelope.get("capture_version") != "automatic-window-v2":
+    if envelope.get("capture_version") not in ("automatic-window-v2", "automatic-header-v3"):
         return None
     value = envelope.get("captured_at")
     try:
@@ -290,14 +308,20 @@ def _captured_at(envelope: dict[str, Any]) -> datetime | None:
 def _quality(envelope: dict[str, Any]) -> FrontSessionQuality | None:
     """旧协议、未校验布局或缺必要证据不获得质量资格。"""
 
-    if envelope.get("capture_version") not in ("minimal-region-v1", "automatic-window-v1", "automatic-window-v2"):
+    version = envelope.get("capture_version")
+    if version not in ("minimal-region-v1", "automatic-window-v1", "automatic-window-v2", "automatic-header-v3"):
         return None
+    header_only = version == "automatic-header-v3"
+    if header_only and set(envelope) != {
+        "ok", "wechat_in_front", "display_name", "capture_version", "captured_at", "quality",
+    }:
+        raise ProbeAdapterError("probe_output_invalid", "前台定位协议字段无效。")
     quality = envelope.get("quality")
     if quality is None:
         return None
     fields = {
         "layout_verified", "display_name_confidence",
-        "selected_row_name_confidence",
+        "name_complete" if header_only else "selected_row_name_confidence",
     }
     if not isinstance(quality, dict) or set(quality) - fields:
         raise ProbeAdapterError("probe_output_invalid", "前台定位质量无效。")
@@ -309,7 +333,8 @@ def _quality(envelope: dict[str, Any]) -> FrontSessionQuality | None:
         result = FrontSessionQuality(
             capture_version=envelope["capture_version"],
             display_name_confidence=quality["display_name_confidence"],
-            selected_row_name_confidence=quality["selected_row_name_confidence"],
+            selected_row_name_confidence=quality.get("selected_row_name_confidence"),
+            name_complete=quality.get("name_complete"),
         )
     except ValueError as error:
         raise ProbeAdapterError(

@@ -755,7 +755,7 @@ class BackendApp:
                 HTTPStatus.SERVICE_UNAVAILABLE,
                 {"error": "foreground_observation_unavailable"},
             )
-        return _json_response(HTTPStatus.OK, {
+        result = {
             "observation_id": str(observation.observation_id),
             "observed_at": observation.observed_at.isoformat(),
             "phase": observation.phase,
@@ -764,7 +764,11 @@ class BackendApp:
             "wechat_in_front": observation.wechat_in_front,
             "binding_id": str(observation.binding_id) if observation.binding_id else None,
             "contact_id": str(observation.contact_id) if observation.contact_id else None,
-        })
+        }
+        if observation.recognized_name is not None:
+            result.update(recognized_name=observation.recognized_name,
+                          recognition_confidence=observation.recognition_confidence)
+        return _json_response(HTTPStatus.OK, result)
 
     def _handle_cli_binding_revoke(
         self, *, sync: SyncControlPort, body: bytes,

@@ -556,6 +556,14 @@ public final class WeChatCaptureProbe {
 // Vision 是 macOS 自带的文字识别框架；这里完全在本地运行，没有把图片传到网络。
 public enum LocalOcr {
     public static func recognize(_ image: CGImage) throws -> [RecognizedLine] {
+        try recognizeFragments(image).map(\.0)
+    }
+
+    static func recognizeHeader(_ image: CGImage) throws -> HeaderOcrResult {
+        HeaderOcrResult(fragments: try recognizeFragments(image))
+    }
+
+    private static func recognizeFragments(_ image: CGImage) throws -> [(RecognizedLine, CGRect)] {
         let request = VNRecognizeTextRequest()
         // 准确模式比速度模式慢一些，但更适合中文聊天文本。
         request.recognitionLevel = .accurate
@@ -597,7 +605,6 @@ public enum LocalOcr {
                 }
                 return lhs.1.minX < rhs.1.minX
             }
-            .map(\.0)
     }
 
     // 只拼接纯文本，不判断说话人；用于顶部标题和选中行元数据这类短区域。

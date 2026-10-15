@@ -31,7 +31,7 @@ private struct ProbeOptions {
       --foreground-status --json  开发诊断：只输出前台分类及前置检查，不创建窗口或采集图像。
       --json               与 --session 配合输出机器可读 JSON，供本机同步驱动解析。
       --minimal-region     仅与 --session --json 配合；保留兼容参数，不使用人工坐标。
-      --single-frame       仅与 --session --json 配合；显式要求单帧，输出automatic-window-v2及UTC采集时点。
+      --single-frame       仅与 --session --json 配合；显式要求单帧，输出automatic-header-v3及UTC采集时点。
       --calibrate-minimal-region  用户框选五处最小区域，只输出待校验几何，不截图。
       --coordinates        仅与校准配合，从stdin读取最多4096字节的明确坐标，仅核对元数据。
       --self-test          运行合成数据自检，不截取屏幕。

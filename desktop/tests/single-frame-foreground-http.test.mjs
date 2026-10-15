@@ -28,6 +28,69 @@ function deferred() {
   return { promise, resolve };
 }
 
+test('顶部单名称经正式HTTP自动跟随已确认A与B，低分或截断不能获得生成资格', async () => {
+  await ports.withVerifiedForegroundFixture(async fixture => {
+    const [a, b] = fixture.data.contact_ids;
+    const names = ['唯一合成会话', '另一合成会话'];
+    await fixture.setCli({ sessions: names.map((display_name, index) => ({
+      username: `wxid_synthetic_${index ? 'b' : 'a'}`, display_name,
+      chat_type: 'private', last_timestamp: 1_700_000_000,
+    })), messages: {} });
+    assert.equal((await fixture.request('/api/sync/cli-bindings/confirm', { selections: [
+      { locator: 'wxid_synthetic_a', contact_id: a }, { locator: 'wxid_synthetic_b', contact_id: b },
+    ] })).status, 200);
+    assert.equal((await fixture.request('/api/sync/enable', {})).status, 200);
+    const client = new ports.JsonClient(await ports.readConnection(fixture.infoPath));
+    const requests = [];
+    const backend = { getConnectionGeneration: () => 1, onStateChanged: () => () => {},
+      async requestJson(request) {
+        requests.push(request.path);
+        return { ...await client.perform(request), generation: 1 };
+      } };
+    const contacts = new ports.ContactSession(() => ports.readContactDirectory(backend));
+    contacts.setConnection(1); await contacts.refreshContacts();
+    const foreground = new ports.ForegroundController(backend, contacts);
+    const observe = async (name, extra = {}) => {
+      await writeFile(path.join(fixture.directory, 'probe-state.json'), JSON.stringify({
+        capture_version: 'automatic-header-v3', display_name: name, ...extra,
+      }));
+      await foreground.observeBeforeShow();
+      return foreground.getState();
+    };
+    try {
+      const tails = await fixture.tails();
+      let state = await observe(names[0]);
+      assert.equal(state.confirmation, 'verified-binding');
+      assert.equal(state.confirmedContactId, a);
+      assert.equal(state.recognizedName, names[0]);
+      state = await observe(names[1]);
+      assert.equal(state.confirmedContactId, b);
+      assert.equal(contacts.getState().selectedContactId, b);
+      state = await observe(names[0]);
+      assert.equal(state.generationBlock, null);
+      assert.deepEqual(await fixture.tails(), tails);
+      assert.equal(requests.some(value => /\/(generate|prepare|rewrite)$/.test(value)), false);
+      for (const extra of [{ display_name_confidence: 0.65 }, { name_complete: false }]) {
+        state = await observe(names[0], extra);
+        assert.equal(state.phase, 'manual-required');
+        assert.equal(state.confirmedContactId, null);
+        assert.equal(state.generationBlock, 'foreground-confirmation-required');
+        assert.equal(state.recognizedName, names[0], '未确认身份时也显示实际顶部OCR文字');
+        const html = ports.renderToStaticMarkup(ports.createElement(ports.ForegroundPanel, { state }));
+        assert.ok(html.includes(names[0]));
+        if (extra.display_name_confidence) assert.ok(html.includes('65%'));
+      }
+      state = await observe('尚未绑定的合成会话');
+      assert.equal(state.recognizedName, '尚未绑定的合成会话');
+      assert.equal(state.confirmedContactId, null);
+      assert.equal(state.generationBlock, 'foreground-confirmation-required');
+      state = await observe(names[0], { wechat_in_front: false });
+      assert.equal(state.recognizedName, null, '微信离开前台后清除名称预览');
+      assert.equal(state.recognitionConfidence, null);
+    } finally { foreground.dispose(); client.cancelPending(); }
+  });
+});
+
 test('系统前台未知经认证观察保留原因，助手不得显示为普通非前台暂停', async () => {
   await ports.withVerifiedForegroundFixture(async fixture => {
     assert.equal((await fixture.request('/api/sync/enable', {})).status, 200);

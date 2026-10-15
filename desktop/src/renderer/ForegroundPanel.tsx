@@ -23,13 +23,17 @@ export function ForegroundPanel({ state, session }: { state: ForegroundState; se
   const paused = state.phase === 'paused' || state.suspendedByHelperFocus;
   const message = paused ? '前台定位已暂停' : state.phase === 'observing' ? '正在定位前台会话'
     : state.phase === 'confirmed' ? '已识别采集时的微信会话'
-    : state.phase === 'manual-required' ? '请手动确认本次联系人'
+    : state.phase === 'manual-required' ? (state.recognizedName ? '已读到微信会话，请选择对应联系人' : '请手动确认本次联系人')
     : state.phase === 'unavailable' && state.reason === 'foreground_application_unavailable'
       ? '系统前台状态未知，请手动选择本次联系人'
     : state.phase === 'unavailable' && failure ? `${failure.message}，请手动选择本次联系人`
     : state.phase === 'unavailable' ? '前台定位暂不可用，请手动选择联系人' : '前台定位尚未观察';
   return <section aria-label="前台会话定位">
     <p role="status">{message}</p>
+    {!paused && state.recognizedName && <p>
+      微信会话：{state.recognizedName}
+      {state.recognitionConfidence !== null && <small> · 识别置信度 {Math.round(state.recognitionConfidence * 100)}%</small>}
+    </p>}
     {state.generationBlock !== null && session?.state.selectedContactId && <p>
       当前联系人未确认；以下保留内容属于{session.state.contacts.find((item) => item.contactId === session.state.selectedContactId)?.displayName}，请明确选择后再生成。
     </p>}
