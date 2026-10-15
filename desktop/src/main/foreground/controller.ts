@@ -3,6 +3,8 @@ import { BackendRequestFailure } from '../backend/json-client';
 import type { ContactSession } from '../contacts/session';
 import { initialForegroundState, type ForegroundState, type ForegroundConfirmation, type GenerationBlock } from '../../shared/foreground-bridge';
 import { foregroundObservation } from './observation';
+import type { SyncControlState } from '../../shared/sync-control-bridge';
+import type { ForegroundChangeSource, HeaderChangePermit } from './native-change-source';
 import { isTransientForegroundContextChange, isUnsupportedForegroundConversation } from '../../shared/foreground-failure.mjs';
 
 type Flight = { abort: AbortController; promise: Promise<void> };
@@ -25,6 +27,9 @@ export class ForegroundController {
   private stopped = false;
   private scheduled: unknown;
   private failures = 0;
+  private changePending = false;
+  private changeSource: ForegroundChangeSource | undefined;
+  private syncPermit: { generation: number; scopeRevision: number } | undefined;
   private manualRequired = false;
   private flight: Flight | undefined;
   private nameExpiry: ReturnType<typeof setTimeout> | undefined;
@@ -43,7 +48,7 @@ export class ForegroundController {
     this.unsubscribe = [backend.onStateChanged(() => {
       const generation = backend.getConnectionGeneration();
       if (generation === this.generation) return;
-      this.generation = generation;
+      this.generation = generation; this.syncPermit = undefined;
       this.qualification = undefined;
       this.invalidatePending();
       this.clearObservation('unavailable', 'connection_changed'); this.scheduleNext();
@@ -53,9 +58,44 @@ export class ForegroundController {
         this.qualification = undefined;
         this.invalidatePending(); this.clearObservation('idle', 'contact_changed');
       }
+      this.updateChangeSource();
     })];
   }
   getState(): ForegroundState { return { ...this.state }; }
+  attachChangeSource(source: ForegroundChangeSource): void {
+    this.changeSource?.dispose();
+    if (this.disposed) { source.dispose(); return; }
+    this.changeSource = source; this.updateChangeSource();
+  }
+  setSyncControlState(state: SyncControlState): void {
+    const generation = this.backend.getConnectionGeneration();
+    this.syncPermit = state.phase === 'ready' && state.report?.enabled === true && state.busy === null
+      && state.scopeRevision === this.contacts.getState().scopeRevision && generation !== undefined
+      ? { generation, scopeRevision: state.scopeRevision } : undefined;
+    if (!this.syncPermit) this.changePending = false;
+    this.updateChangeSource();
+  }
+  private changePermit(): HeaderChangePermit | undefined {
+    const contact = this.contacts.getState();
+    const generation = this.backend.getConnectionGeneration();
+    const observed = this.state.observedAt;
+    const capturedAt = Date.parse(observed ?? '');
+    if (!this.continuous || this.disposed || this.stopped || this.state.suspendedByHelperFocus
+      || this.readingScopeChanges > 0 || generation === undefined || !this.syncPermit
+      || this.syncPermit.generation !== generation || this.syncPermit.scopeRevision !== contact.scopeRevision
+      || !['ready', 'loading'].includes(contact.directoryPhase) || this.state.wechatInFront !== true
+      || !observed || !Number.isFinite(capturedAt) || capturedAt > Date.now() || Date.now() - capturedAt >= 5000) return;
+    return { scope: `${generation}:${contact.scopeRevision}`, observation: observed };
+  }
+  private updateChangeSource(): void {
+    const permit = this.changePermit();
+    if (this.state.wechatInFront !== true || this.changeSource && !permit) this.changePending = false;
+    this.changeSource?.update(permit, (event) => {
+      if (!permit || this.changePermit()?.scope !== permit.scope) return;
+      if (event === 'changed') this.notifyForegroundChange();
+      else this.changePending = false;
+    });
+  }
   getGenerationBlock(): GenerationBlock {
     const contact = this.contacts.getState();
     const qualified = this.qualification;
@@ -88,7 +128,16 @@ export class ForegroundController {
   startContinuous(): void {
     if (this.disposed || this.continuous) return;
     this.stopped = false; this.continuous = true; this.failures = 0;
-    this.scheduleNext();
+    this.scheduleNext(); this.updateChangeSource();
+  }
+  // 仅可信宿主的无身份变化提示；真实失败的退避不受事件风暴影响。
+  notifyForegroundChange(): void {
+    if (!this.continuous || this.disposed || this.stopped || this.state.suspendedByHelperFocus
+      || this.readingScopeChanges > 0 || this.backend.getConnectionGeneration() === undefined) return;
+    if (this.flight) { this.changePending = true; return; }
+    if (this.failures > 0) return;
+    this.cancelScheduled();
+    void this.observeBeforeShow();
   }
   stopContinuous(): void {
     this.continuous = false; this.stopped = true;
@@ -195,7 +244,10 @@ export class ForegroundController {
         ].includes(this.state.reason ?? '');
         this.failures = this.state.phase === 'unavailable' || (this.state.phase === 'manual-required' && !awaitingContact)
           ? Math.min(2, this.failures + 1) : 0;
-        this.scheduleNext();
+        const repeat = this.changePending && this.failures === 0;
+        this.changePending = false;
+        if (repeat) this.notifyForegroundChange();
+        else this.scheduleNext();
       }
     });
     const promise = Promise.race([settled, deadline]).finally(() => { clearTimeout(timer); });
@@ -210,6 +262,7 @@ export class ForegroundController {
     else this.scheduleNext();
   }
   invalidatePending(phase: 'paused' | 'unavailable' = 'unavailable'): void {
+    this.changePending = false;
     if (!this.flight || this.flight.abort.signal.aborted) return;
     ++this.epoch; this.flight.abort.abort();
     this.clearObservation(phase, 'observation_cancelled');
@@ -231,6 +284,7 @@ export class ForegroundController {
   }
   dispose(): void {
     if (this.disposed) return;
+    this.changeSource?.dispose(); this.changeSource = undefined; this.changePending = false;
     this.cancelScheduled(); this.disposed = true; ++this.epoch; this.flight?.abort.abort();
     clearTimeout(this.nameExpiry); this.nameExpiry = undefined;
     this.state = { ...this.state, recognizedName: null, recognitionConfidence: null };
@@ -264,6 +318,7 @@ export class ForegroundController {
         }
       }
     }
+    this.updateChangeSource();
     for (const listener of this.listeners) listener(this.getState());
   }
 }

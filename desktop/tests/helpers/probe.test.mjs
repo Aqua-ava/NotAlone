@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { access, mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { build } from 'esbuild';
 import { repositoryBuildInvocation } from '../../scripts/prepare-probe.mjs';
@@ -41,7 +42,7 @@ test('仓库探针公开准备入口仅构建搬运，现场隔离配置沿包�
     const manifest = JSON.parse(await readFile(path.join(destination, 'manifest.json'), 'utf8'));
     assert.match(manifest.buildSourceDigest, /^[a-f0-9]{64}$/);
     assert.equal(manifest.sourceDeclaration, `repository:${manifest.buildSourceDigest}`);
-    assert.equal(manifest.buildSources.length, 14);
+    assert.equal(manifest.buildSources.length, 17);
     assert.ok(manifest.buildSources.some((source) => source.name === 'Sources/NotAloneSyncCore/RegionCalibration.swift'));
     assert.ok(manifest.buildSources.some((source) => source.name === 'Sources/NotAloneSyncCore/ForegroundStatusPreview.swift'));
     assert.equal(manifest.runtimeValidated, false); assert.equal(manifest.provenanceVerified, false);
@@ -69,6 +70,15 @@ process.stdout.write(JSON.stringify({ paths, probe: backendEnvironment(config, u
     assert.equal(JSON.parse(initial.stdout).paths.syncProbePath, probe);
     assert.equal(JSON.parse(initial.stdout).probe, probe);
     assert.equal(JSON.parse(initial.stdout).paths.wechatCliPath, '');
+    // 新来源必须完整成组，不能以局部源清单通过包内核验。
+    const manifestPath = path.join(destination, 'manifest.json');
+    const incomplete = structuredClone(manifest);
+    incomplete.buildSources = incomplete.buildSources.filter((source) => !source.name.endsWith('/HeaderChangeGeometry.swift'));
+    incomplete.buildSourceDigest = createHash('sha256').update(JSON.stringify(incomplete.buildSources)).digest('hex');
+    incomplete.sourceDeclaration = `repository:${incomplete.buildSourceDigest}`;
+    await writeFile(manifestPath, JSON.stringify(incomplete));
+    assert.equal(JSON.parse(startup().stdout).paths.syncProbePath, '');
+    await writeFile(manifestPath, JSON.stringify(manifest));
     // 加载实际现场用例的选项，替换测试注册器，绝不执行用例或启动App。
     const layoutConfiguration = path.join(owned, 'layout-configuration.mjs');
     await build({ stdin: { contents: `import './tests/native-foreground-layout.spec';

@@ -1,4 +1,6 @@
 import { installForegroundBridge } from './foreground/bridge';
+import { NativeHeaderChangeSource } from './foreground/native-change-source';
+import { loadBackendConfiguration } from './backend/config';
 import { CandidateCopyController } from './candidate-copy/controller';
 import { installElectronCandidateCopy } from './candidate-copy/electron';
 import { app, dialog, ipcMain, Menu, protocol, session } from 'electron';
@@ -51,6 +53,9 @@ void app.whenReady().then(async () => {
   const commands = electronPageCommands(windows);
   const contacts = installContactSessionBridge(commands, backend);
   const foreground = installForegroundBridge(commands, backend, contacts);
+  const headerChanges = new NativeHeaderChangeSource(async () =>
+    (await loadBackendConfiguration(app.getPath('userData'), resourcesDirectory)).syncProbePath);
+  foreground.attachChangeSource(headerChanges);
   windows.setHelperObservation({ beforeShow: () => foreground.observeBeforeShow(),
     onLifecycle: (event) => { foreground.notifyHelperLifecycle(event); replies.notifyHelperLifecycle(event); } });
   app.on('will-quit', () => foreground.dispose());
@@ -61,7 +66,9 @@ void app.whenReady().then(async () => {
   const traces = installTraceBridge(commands, backend, contacts);
   memory.onRecordDeletion((phase) => traces.recordDeletionChanged(phase));
   installBindingConsentBridge(commands, backend, contacts, () => foreground.beginReadingScopeChange());
-  installSyncControlBridge(commands, backend, contacts, () => foreground.beginReadingScopeChange());
+  const sync = installSyncControlBridge(commands, backend, contacts, () => foreground.beginReadingScopeChange());
+  sync.onStateChanged((state) => foreground.setSyncControlState(state));
+  foreground.setSyncControlState(sync.getState());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
   const styleSamples = installStyleSampleBridge(commands, backend, contacts, replies);
   foreground.onStateChanged(() => replies.refreshGenerationEligibility());
@@ -78,9 +85,12 @@ void app.whenReady().then(async () => {
   installBackendBridge(windows, backend, () => app.quit());
   installStartupBridge(windows, diagnostics, backend);
   app.on('before-quit', () => { foreground.stopContinuous(); diagnostics.cancel(); });
-  installQuitLifecycle(backend, windows, () => replies.beginGenerationClosing(
-    (receipt) => interruptAssistantGeneration(backend, receipt),
-    (identity) => recoverAssistantGenerationReceipt(backend, identity)));
+  installQuitLifecycle(backend, windows, async () => {
+    await headerChanges.shutdown();
+    await replies.beginGenerationClosing(
+      (receipt) => interruptAssistantGeneration(backend, receipt),
+      (identity) => recoverAssistantGenerationReceipt(backend, identity));
+  });
   foreground.startContinuous();
   void backend.connect();
   const desktopControls = installDesktopControls(windows);

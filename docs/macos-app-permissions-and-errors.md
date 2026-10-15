@@ -596,3 +596,11 @@ Node保存边界实际红为缺branch／slot→7/7绿；生产桥接缺函数红
 原生受控回归复现：取不到前台应用时被旧guard当作微信非前台。现正式观察、OCR预览与元数据预览共用分类门；未知返回固定 `foreground_application_unavailable`，不读取微信窗口或采集图像。后端保留该原因，正式助手显示未知并要求手动选择；已确定其他应用时仍正常暂停。质量、唯一窗口/绑定、权限预检、Info.plist、ad-hoc身份及TCC均不变。
 
 严格 `--foreground-status --json` 仅作开发元数据诊断，不创建窗口、不调用权限或图像API。两次受限短探针对照均在无GUI初始化时取得其他应用前台，不能据此认定旧实机问题由缺少NSApplication初始化导致。首场短进程释放竞态保留失败及独立核验，第二场等待原收尾Promise后正常退场；实际正式包及屏幕录制责任归属仍待本轮验收。详见[18集成续接](../.scratch/foreground-contact-follow/app-integration-18.md)。
+
+## 2026-10-15 顶部局部变化辅助源
+
+新增宿主专用 `--header-change-source --json`，复用现有录屏权限，不申请辅助功能或新权限。只有已确认总开关开启、连接／范围有效且正式观察证实微信在前台时启动；助手获焦、关闭开始、未知或断连即终止自有子进程，退出前确认close，不能默默遗留采集源。固定changed／paused输出不包含权限原始错误、名称、图像、几何或像素摘要。
+
+Apple指出独立窗口流不应用sourceRect，因此实现使用display仅包含唯一目标窗过滤器与顶部sourceRect，首版仅支持原点显示器上的完整窗口；未知布局、多屏／离屏或尺寸异常停源，原周期观察保留。初始整窗布局帧与最多4Hz局部帧是额外开销，最长60秒一租，失败不循环重启。编译、签名及合成验证不证明实际局部裁剪、正式宿主权限、资源或延迟；这些仍须同版正式包实机记录，不据此变更既有权限验收结论。详见[ADR-057](../architecture/adr/057-header-change-triggered-foreground-observation.md)。
+
+同日主Agent用Computer Use只读核查系统设置录屏列表：已有已启用的“NotAloneApp”经“在访达中显示”指向旧Swift包`macos_app/build/NotAloneApp.app`，未看到当前Electron `com.notalone.desktop`条目。未改开关或添加权限；预检成功或祖先进程准入均不能据此证明当前签名包TCC归属，须由当前正式包与其包内探针实机单独核验。

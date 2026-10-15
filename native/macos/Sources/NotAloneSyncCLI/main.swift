@@ -28,6 +28,7 @@ private struct ProbeOptions {
       --preview-session    显式本机可视化预览，由用户点击观察；图帧与文字不保存，8分钟退出。
       --preview-session-name 自动显示当前微信会话名称；仅本机内存处理，20分钟退出。
       --preview-foreground 前台状态悬浮验收，仅查询元数据、不截图或OCR，8分钟退出。
+      --header-change-source --json  宿主专用：最多60秒，只发顶部局部变化/暂停事件，不OCR或保存帧。
       --foreground-status --json  开发诊断：只输出前台分类及前置检查，不创建窗口或采集图像。
       --json               与 --session 配合输出机器可读 JSON，供本机同步驱动解析。
       --minimal-region     仅与 --session --json 配合；保留兼容参数，不使用人工坐标。
@@ -100,6 +101,9 @@ struct NotAloneSyncCLI {
     static func main() async {
         do {
             let arguments = Array(CommandLine.arguments.dropFirst())
+            if arguments == ["--header-change-source", "--json"] {
+                exit(await HeaderChangeSource.run() ? EXIT_SUCCESS : EXIT_FAILURE)
+            }
             if arguments == ["--foreground-status", "--json"] {
                 printJsonLine(await ForegroundStatusProbe.observe())
                 return

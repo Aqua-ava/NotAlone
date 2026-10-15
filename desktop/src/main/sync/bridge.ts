@@ -14,7 +14,7 @@ function controlRequest(args: unknown[]): SyncControlRequest {
   return { scopeRevision: fields.scopeRevision };
 }
 export function installSyncControlBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession,
-  beginReadingScopeChange?: () => (() => void)): void {
+  beginReadingScopeChange?: () => (() => void)): SyncControlController {
   const sync = new SyncControlController(backend, contacts, beginReadingScopeChange);
   sync.onStateChanged((state) => commands.publish('sync-control:state-changed', state));
   commands.handle('sync-control:get-state', (...args: unknown[]) => { noArguments(args); return sync.getState(); }, 'manager');
@@ -23,4 +23,5 @@ export function installSyncControlBridge(commands: PageCommands, backend: Backen
   commands.handle('sync-control:disable', (...args: unknown[]) => sync.disable(controlRequest(args)), 'manager');
   commands.handle('sync-control:pause', (...args: unknown[]) => sync.pause(controlRequest(args)), 'manager');
   commands.handle('sync-control:retry', (...args: unknown[]) => sync.retry(controlRequest(args)), 'manager');
+  return sync;
 }

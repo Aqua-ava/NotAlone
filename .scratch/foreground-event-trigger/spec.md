@@ -42,3 +42,9 @@
 - https://developer.apple.com/documentation/screencapturekit/scstreamframeinfo/dirtyrects
 
 Context7 未提供可调用工具，已核对 Apple 官方文档和本机 SDK；API 存在不证明微信提供对应通知。
+
+## 顶部局部变化来源的实施决定（2026-10-15）
+
+按 [ADR-057](../../architecture/adr/057-header-change-triggered-foreground-observation.md) 局部修订 ADR-050／053：辅助源初始化另用一张整窗内存布局帧，随后仅以4Hz上限采顶部窗口区域，不OCR，不输出图／摘要／坐标／名称。独立单窗过滤器忽略sourceRect，改用显示器仅包含目标窗口过滤器；首版拒绝非原点显示器、跨屏／离屏和未知布局。每源最长60秒、最多240次局部比较；同连接一源，停止确认退出后才允许替代。失败／提前暂停在连续许可内锁住，不能每轮观察重复初始化；正常到期仅在新鲜观察仍允许时续租。
+
+宿主由SyncControlController已确认enabled状态及有效连接／范围门控，关闭开始或状态未知即停。变化只取消正常2秒空等，单轮在途最多合并一次；真实失败保留4／8秒退避，暂停／旧代际／停止清pending。周期复验、五秒名称时效及原认证HTTP和身份门保持。纯顶部像素、坐标拒绝、固定枚举子进程和公共控制器／认证HTTP用合成数据验证；实际窗口裁剪、额外帧数、资源和端到端延迟仍须同版正式包实机，不以编译或合成耗时勾验收。
