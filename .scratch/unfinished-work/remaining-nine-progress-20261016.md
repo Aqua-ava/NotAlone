@@ -11,8 +11,8 @@
 | [本机交付20](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed；当前签名包Finder启动、真实选择/导入等分项已有证据；[真实DeepSeek合成App冒烟](../mac-desktop-app/reply-model-smoke-result-20261016.md)1／1通过，模型AC完成；[v9快捷键两场](../mac-desktop-app/native-shortcut-v9-20261016.md)保留准备超时及两次按键后未观察到显示；[后两场观察方式对照](../mac-desktop-app/native-shortcut-v9-observation-control-20261016.md)仍未通过 | 独立启动权限、系统快捷键；新增1次按键及另1场按键0，观察干扰未排除，物理键盘意愿问题未答、不预启动人工场 |
 | [真实微信follow04](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed；单联系人有界读取、退出及视觉独立性已有证据；[v7同App总开关重开](../native-app-backend/real-sync-reenable-result-20261016.md)1／1通过，关闭65.926秒零新读取 | 第四AC空窗关停重开控制流及第五Answer记录已完成；第一／二AC持续到达与切换仍缺，不认证正向消息恢复，双联系人和真实来信保留未验证 |
 | [核心事实保留01](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed／ready-for-agent；[新独立8窗场](../grounded-evaluation/remaining-public8-result-20261016.md)B01单窗封存raw3／接受3／完整3，B02核验未知 | 无完整batch result，外层两窗仍unknown；不代签核心5命题整体，旧真实/留出不读不改 |
-| [指代消解07](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed／ready-for-agent；原场13/21窗，其中指代主集13/16窗，必需完整9/15；新场主集剩余3窗仍unrun | [新标签指导两窗](../grounded-evaluation/v3-label-guidance-public2-result-20261016.md)closed4／4、完整3／3、E14为42／42；仅局部通过，旧小试失败和≥15主集分母保持 |
-| [按维度放行03](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed／ready-for-agent；结构和合取门已有实现，默认放行表仍为空 | v3三条proof仍UNKNOWN、全pending；真实质量与typed依据分别验收，不用V支持补签放行 |
+| [指代消解07](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed／ready-for-agent；[新固定16窗场](../grounded-evaluation/v3-main16-result-20261016.md)closed22／32，前10窗原封存raw13／接受13／完整11（A05产权争议不作质量证据），A11契约失败、后5窗unrun | 不足≥15且2一般错误；完整140离线v4准备另在隔离树审查，不与旧部分场拼成绩 |
+| [按维度放行03](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed／ready-for-agent；结构和合取门已有实现，默认放行表仍为空 | 主集12条proof仍UNKNOWN；[有限包装决策稿](../grounded-evaluation/typed-proof-representation-decision-20261016.md)待决定，真实质量、typed依据与逐类放行分别验收 |
 
 本轮官方DeepSeek公开基线实际25次HTTP、零重试，13窗完成、8窗未运行；A13整组去向合同触发停止，剩余17次永久关闭。[完整结果](../grounded-evaluation/deepseek-public21-result-20261015.md)区分内容事实错误与整组auto/pending合同，不覆盖原Gold、旧失败或分母。未使用ECNU，没有上传真实聊天或放开自动采纳。
 
@@ -27,3 +27,8 @@
 
 
 2026-10-16完整140来源参考已完成[独立全量复核](../grounded-evaluation/full140-gold-review-result-20261016.md)：R025/R031承诺风险及R024历史更正分支最小修正后，两轴0项，140窗／138必需＋1可选不变，156分支／162来源选择；56项既有Gold测试通过。这里只确认Gold，未启动140模型场；当前v3表达与专属owned控制仍待准备，不能拼16窗成绩充数。两参考文件不在当前main16的79份冻结内，Root并发范围核验全匹配；默认空表及三票State／AC保持。
+
+2026-10-16固定16窗场现已[契约停止并闭账](../grounded-evaluation/v3-main16-result-20261016.md)：22／32预约、22次HTTP200、零重试，A01–A10 completed，A11 V仅残缺工具文本且无结构参数而failed，A12–A16 unrun，余10永久关闭。前10窗13必需raw13／接受13／完整11，E14为167／168、V字段48／48，8 safe／2 general_error；不能因HTTP200、保守pending或旧matcher补完整信用。12条proof全UNKNOWN，评测auto4／pending8无业务采纳。关闭时79源、139事件副本／摘要、20份审核收据、SQLite及自有worker／组退场核验；本场整体未达质量门、无自动后继。有限包装决策已整理为独立待决定稿；隔离v4的月期间审查问题仍在修复，未集成主树、未启动140模型场。原9张仍3 resolved／6 claimed，排除15张保持。
+
+
+结果独审另发现A05冻结Gold／sealed审查与已批准D2的产权UNKNOWN冲突；原full11／safe8仅为封存机械汇总，A05撤出无争议完整／安全样本，其余完整10可引用，不重签或改旧成绩。完整140沿用该A05，也须先明确修正未来参考；先前Gold复核记录不能覆盖这一新发现。

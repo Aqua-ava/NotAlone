@@ -96,3 +96,8 @@
 ### 2026-10-16 v3标签指导两窗完整审核通过
 
 [独立新场结果](../../grounded-evaluation/v3-label-guidance-public2-result-20261016.md)closed4／4、四官方DeepSeek HTTP200、零重试；A07同时保留人物身份／地点归属未定，A10两条保留方向及否定项financial，E14为42／42，必需raw3／接受3／完整3，两窗safe。A10-P1的V uncertain/pragmatics依冻结真实歧义判据显式通过，不改原E合法分支，不强求V supported。三条均pending、typed proof仍UNKNOWN，未达到≥15用例质量门或完成既有全量回归。原v3小试40／42、完整1／3与全部旧失败分列，不认证提示因果或稳定率；关闭时79源／台账／四phase收据及worker清理核实，结果双轴均0。本票State及原五AC保持。
+
+
+### 2026-10-16 固定16窗主集契约停止
+
+[独立主集结果](../../grounded-evaluation/v3-main16-result-20261016.md)已closed22／32、22次官方DeepSeek HTTP200、零重试，余10永久关闭；A01–A10完成raw／full，A11的V没有结构化工具参数而failed，A12–A16 unrun。已审核13个必需raw13／接受13／完整11、E14为167／168，8窗safe、2窗general_error（A04空事项歧义、A08实际0.65导致pending）；不因HTTP200或V supported补分。12条proof均UNKNOWN，最终评测auto4／pending8，无业务采纳。关闭时79源一致、139事件与20份审核收据核验、worker／组gone；仅10窗不足≥15，原票State／五AC、旧失败及空放行表保持，不拼旧场。另经结果Spec复审发现A05冻结Gold及sealed审查将未解车主认作姐姐，与已批准D2冲突；上述raw／完整／safe为原封存机械计数，不将A05作为无争议质量或安全证据。原完整11中其余10可引用，原记录不改，未来参考另行显式修正。

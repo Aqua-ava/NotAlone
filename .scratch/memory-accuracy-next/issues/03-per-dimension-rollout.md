@@ -99,3 +99,8 @@
 ### 2026-10-16 指导场局部质量与typed依据分开
 
 [新公开两窗指导场](../../grounded-evaluation/v3-label-guidance-public2-result-20261016.md)已closed4／4、E14为42／42、必需完整3／3，两个整窗safe，旧失败不改。三条proof=null、程序UNKNOWN（untrusted_source1／scope_not_supported2）、source_bound=false及semantic_basis=null，最终pending3／auto0；该局部审核不构成≥15达标、typed指代／转述依据或新增放行资格。默认表仍空、门槛不放宽；闭账和源码关闭checkpoint及结果双轴0已记录，第一AC与State保持。
+
+
+### 2026-10-16 主集质量与来源证明继续分账
+
+[独立16窗场](../../grounded-evaluation/v3-main16-result-20261016.md)已closed22／32：10窗显式审核、13必需raw13／接受13／完整11，2一般错误；A11工具契约失败、其余5窗unrun，不满足≥15或质量门。12条proof为null11／非null提案1，但程序全部UNKNOWN（untrusted_source6／scope_not_supported6），source_bound=false／semantic_basis=null；A05提案不证明产权。评测auto4／pending8无业务写入，默认空表、AND门、第一AC及State不变。[有限包装决策稿](../../grounded-evaluation/typed-proof-representation-decision-20261016.md)仅待用户决定是否扩展D2候选表示，尚未实现或生成新依据，不把模型范围授权当逐类放行。另经结果Spec复审发现A05冻结Gold及sealed审查将未解车主认作姐姐，与已批准D2冲突；上述raw／完整／safe为原封存机械计数，不将A05作为无争议质量或安全证据。原完整11中其余10可引用，原记录不改，未来参考另行显式修正。
