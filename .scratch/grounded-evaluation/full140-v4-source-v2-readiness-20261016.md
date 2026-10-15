@@ -19,6 +19,8 @@ State: claimed
 
 E/V均只省略 `tool_choice` 字段，保留实际工具schema和严格唯一具名工具返回校验。模型请求及响应必须为 `deepseek-flash`，唯一官方端点 `https://api.deepseek.com/chat/completions`，thinking开启、reasoning_effort=max；不跟重定向、不继承代理、不fallback、不额外探测。不解析普通content中的XML，不修复／重试缺工具或非法响应。
 
+官方API在省略tool_choice时默认auto，允许普通message；这不保证满足本地必需工具合同。上一场已核实原message缺tool_calls，未发现SDK漏读或已知不兼容，内部原因仍未知。因此本场继续严格检验实际具名工具，不能把HTTP200或普通文本当结构成功，也不借此声称供应商违反HTTP协议。[官方接口说明](https://api-docs.deepseek.com/api/create-chat-completion/)。
+
 新参考先接受独立Standards／Spec语义及结构审查，再由主Agent明确记录真实审核来源、日期和范围，更新固定规范／文件／中文摘要及full140的parent21绑定。不能提前标passed或临时伪造已审视图。版本验证器可识别明确的待审材料，但 `execution_ready=false` 必须阻断真实入口；本计划仅接受固定已审装配及 `execution_ready=true`。纯结构函数不授资格；原packet入口的已审门与原评分不变。旧参考、中文判据及历史成绩原件不改。
 
 `EvaluationExtractionMode`显式接v4合同／工具名／runtime，records与offline实际程序追踪接同版本。新config绑定execution_plan与reference_version；缺省旧合同保持，新增字段必须成对、精确匹配。PhasedEvaluationAudit显式选同一参考版本，与入口、config、参考规范摘要和逐窗合同交叉核对。执行的140位置与Gold存储位置沿 `full_case_reference_positions()` 映射，不能把该映射替换为 `range(140)`；原21投影仍按同版本parent作用域评分。
