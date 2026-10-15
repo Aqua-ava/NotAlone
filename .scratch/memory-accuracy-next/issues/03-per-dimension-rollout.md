@@ -2,7 +2,7 @@
 
 **What to build:** 把评测达标签接入自动采纳：只有评测证明可靠的维度（如本轮的主体、改写保真）允许该类事实自动采纳，其余安静待确认；放行记录可追溯，回退简单。前置：任务 10 的模型对照与提示词整合结果。
 
-**Triage:** ready-for-human
+**Triage:** ready-for-agent
 **State:** claimed
 **Blocked by:** 无（10、01 已结）
 
@@ -12,6 +12,10 @@
 - [x] 放宽门槛的准则文档化：达到"至少 15 条、假事 0、记错人 0、一般错误 ≤1"才允许新增一类
 
 ## Comments
+
+### 2026-10-16 剩余公开8窗有界退场
+
+[独立本场结果](../../grounded-evaluation/remaining-public8-result-20261016.md)：closed4／16、三200与一个V远端未知、零重试，余12永久关闭。B01 raw/full封存且safe／supported、单窗必需raw3／接受3／完整3；因无完整batch result，外层仍保守将B01及B02列unknown，此单窗证据不覆盖原收据。B02无正式审核，其余六窗unrun；本场13必需、核心5必需分母保留，不签核心整体、原21完整、≥15用例门或逐类放行。proof仍null／UNKNOWN、默认空表不变。当前持续授权已足够推进离线修复与必要有界官方合成验证，Triage改ready-for-agent，历史等待新预算说明仅作历史；State／AC及旧失败保持，真实聊天、业务与ECNU均未处理。
 
 ### 2026-10-15 官方DeepSeek公开部分基线已关闭
 

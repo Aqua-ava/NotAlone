@@ -1,6 +1,6 @@
 # 修复核心事实被扩写与阶段标签丢失
 
-Triage: ready-for-human
+Triage: ready-for-agent
 State: claimed
 Type: task
 Blocked by: none
@@ -25,6 +25,10 @@ Blocked by: none
 **未完成**：产品提示未经真实模型对照，4/4 试点数字来自带 `described_party` 的变体提示，不能算作产品提示成绩；规格要求的“原始必需主张完整保留”这一整体目标尚未达成，spec 级验收（raw、接受与完整契约覆盖，正例损失与坏 auto 独立统计）保持未勾选。本任务整体仍为 `claimed`，下一步需要用户决定是否为真实模型匿名对照批新预算；未读真实聊天与留出、未写业务记忆与水位、未改默认采纳、无远端 Git。
 
 ## Comments
+
+### 2026-10-16 剩余公开8窗有界退场
+
+[独立本场结果](../../grounded-evaluation/remaining-public8-result-20261016.md)：closed4／16、三200与一个V远端未知、零重试，余12永久关闭。B01 raw/full封存且safe／supported、单窗必需raw3／接受3／完整3；因无完整batch result，外层仍保守将B01及B02列unknown，此单窗证据不覆盖原收据。B02无正式审核，其余六窗unrun；本场13必需、核心5必需分母保留，不签核心整体、原21完整、≥15用例门或逐类放行。proof仍null／UNKNOWN、默认空表不变。当前持续授权已足够推进离线修复与必要有界官方合成验证，Triage改ready-for-agent，历史等待新预算说明仅作历史；State／AC及旧失败保持，真实聊天、业务与ECNU均未处理。
 
 ### 2026-10-15 官方DeepSeek公开部分基线已关闭
 
