@@ -2,7 +2,7 @@
   "format_version": 1,
   "status": "agent_reviewed_reference",
   "annotation_path": ".scratch/unfinished-work/memory-gold-full140-agent-annotations-20261013.md",
-  "annotation_sha256": "c80168bcde5e9ea0feaaea9c686e0707c49ea1cf6a2dcff91f6b743ef79dd2df",
+  "annotation_sha256": "ac6455813d8218506684c886d32b34bcda3617c1a85342398c0c9fea50e2b111",
   "provenance": {
     "oracle_aware": true,
     "blind_annotation": false,
@@ -13,17 +13,28 @@
     "structured_review": {
       "status": "passed",
       "reviewer": "full140_gold_source_rebuild",
-      "scope": "逐119来源和全部有限字段的作者装配复核；非独立两轴，不是模型质量或最终冻结。"
+      "scope": "逐119来源和全部有限字段的作者装配复核；补R025/R031承诺风险与R024历史更正有限分支，独立全量初审及最小增审已由Root另行核定；不是模型质量或运行冻结。",
+      "assembly_counts": {
+        "windows": 140,
+        "required_claims": 138,
+        "optional_claims": 1,
+        "variants": 156,
+        "source_choices": 162
+      }
     },
     "independent_review": {
-      "status": "pending",
+      "status": "passed",
       "round": "v3",
-      "scope": "Root另行逐命题Standards/Spec；通过前不激活预算或称最终Gold冻结。",
+      "scope": "2026-10-16独立全量结构及新增119逐命题语义、原21桥接复核，R025/R031承诺风险与R024历史更正分支修正后增审均0项；只认证Gold来源参考，不是模型质量、真实HTTP授权、运行冻结或维度放行。",
       "standards": {
-        "status": "pending"
+        "status": "passed",
+        "reviewer": "grounded_eval_standards",
+        "scope": "140窗及全部输入摘要、138必需+1可选、156分支/162来源选择、119来源档案与中文规则；全量初审和三窗修正增审。"
       },
       "spec": {
-        "status": "pending"
+        "status": "passed",
+        "reviewer": "grounded_eval_spec",
+        "scope": "新增119窗110必需命题/121原分支的逐来源语义初审、原21桥接；R025/R031风险及R024新增更正分支增审，全部P2已关闭。"
       },
       "previous_round": {
         "round": "v1",
@@ -37,7 +48,11 @@
         "standards_findings": [
           "relative_repository_source_links"
         ]
-      }
+      },
+      "resolved_findings": [
+        "R025_R031_commitment_risk",
+        "R024_historical_correction_variant"
+      ]
     },
     "parent21": {
       "reference_path": ".scratch/unfinished-work/memory-gold-reference-20261012.json",
@@ -12063,6 +12078,36 @@
               "risk_rule": "来源未给敏感风险，允许[]或合法低风险标记；不能补财务、健康、身份认证或虚构后果。",
               "alternatives_rule": "该完整命题的人物与限定可确定，alternatives须为空；未来、条件或本人不知道本身不制造第二种现实猜测。",
               "reason_rule": "target1更正星期，相连context0给北京去向；仅保存更正后的未来安排。"
+            },
+            {
+              "id": "R024-P1-V2",
+              "body_requirements": [
+                "联系人已自我更正赴北京安排为下周三、不是下周一，并说明自己记错了；保存已发生更正及其安排内容，不证明行程已执行或现今在北京。"
+              ],
+              "subject": "contact",
+              "category": "relationship_note",
+              "allowed_topics": [
+                "travel"
+              ],
+              "source_choices": [
+                {
+                  "indices": [
+                    0,
+                    1
+                  ],
+                  "when": "target1给下周三而非下周一及自我更正，context0给联系人赴北京安排；两条合用才覆盖完整命题。"
+                }
+              ],
+              "speech_act": "correction",
+              "assertion_status": "asserted",
+              "figurative_type": "literal",
+              "valid_at": null,
+              "invalid_at": null,
+              "time_rule": "保存已发生更正动作的H框架，双null；下周三/下周一仅为更正中保留/否定的安排内容，不是更正动作的生效/失效时间。",
+              "ideal_destination": "pending",
+              "risk_rule": "来源未给敏感风险，允许[]或合法低风险标记；不能补财务、健康、身份认证或虚构后果。",
+              "alternatives_rule": "该完整命题的人物与限定可确定，alternatives须为空；未来、条件或本人不知道本身不制造第二种现实猜测。",
+              "reason_rule": "target1明示已发生自我更正与记错，相连context0给赴北京安排；保存更正动作及完整内容，不认定行程已执行。"
             }
           ]
         }
@@ -12114,7 +12159,7 @@
               "invalid_at": null,
               "time_rule": "无明确期限的已完成动作、历史经历或长期事实，双null；原文相对发生时间留正文，不用来源日当发生日。",
               "ideal_destination": "pending",
-              "risk_rule": "来源未给敏感风险，允许[]或合法低风险标记；不能补财务、健康、身份认证或虚构后果。",
+              "risk_rule": "来源含明确承诺，risk_flags须保留至少一个原低风险白名单外的承诺风险标记（如sensitivity:commitment）；不能用[]或仅低风险标记洗去承诺风险，不新增已履行、财务、健康或其他虚构后果。",
               "alternatives_rule": "该完整命题的人物与限定可确定，alternatives须为空；未来、条件或本人不知道本身不制造第二种现实猜测。",
               "reason_rule": "简短指出本窗直接来源与所保留限定；不新增执行者、因果、地点、永久认证、此前行为或内部推理。"
             }
@@ -12438,7 +12483,7 @@
               "invalid_at": "2026-09-21T00:00:00+00:00",
               "time_rule": "字段仅为来源时区可推算的观察点或资料检索期间，正文须保留原期间；不声称事件在边界精确开始或结束。",
               "ideal_destination": "pending",
-              "risk_rule": "来源未给敏感风险，允许[]或合法低风险标记；不能补财务、健康、身份认证或虚构后果。",
+              "risk_rule": "来源含明确承诺，risk_flags须保留至少一个原低风险白名单外的承诺风险标记（如sensitivity:commitment）；不能用[]或仅低风险标记洗去承诺风险，不新增已履行、财务、健康或其他虚构后果。",
               "alternatives_rule": "该完整命题的人物与限定可确定，alternatives须为空；未来、条件或本人不知道本身不制造第二种现实猜测。",
               "reason_rule": "简短指出本窗直接来源与所保留限定；不新增执行者、因果、地点、永久认证、此前行为或内部推理。"
             }
