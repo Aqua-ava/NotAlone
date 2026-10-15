@@ -23,7 +23,7 @@ from .evaluation_http_budget import EvaluationBudget, EvaluationBudgetAbort, _en
 _EVENT_KINDS = frozenset({
     "case_started", "adapter_output", "case_result", "case_failed",
     "provider_request", "provider_response", "provider_failure",
-    "semantic_audit", "verification_program",
+    "semantic_audit", "verification_program", "extraction_program",
 })
 _PURPOSES = frozenset({"case", "extraction", "verification"})
 _MAX_RECORD_BYTES = 8 * 1024 * 1024
@@ -43,6 +43,7 @@ _CONFIG_FIELDS = frozenset({
     "deadline_utc", "source_hashes", "gold_sha256", "stage",
     "response_identity_policy", "request_contract_version", "tool_choice",
     "fallback", "baseline_commit", "selected_case_positions", "verification_mode",
+    "extraction_mode", "extraction_window_contracts",
 })
 
 
@@ -131,6 +132,9 @@ class EvaluationRecordStore:
             or not plan
             or forbidden_config
             or not set(frozen_config) <= _CONFIG_FIELDS
+            or frozen_config.get("extraction_mode", "legacy-e14") not in {
+                "legacy-e14", "grounded-v2",
+            }
             or ("verification_mode" in frozen_config and (
                 type(frozen_config["verification_mode"]) is not str
                 or frozen_config["verification_mode"] not in {
@@ -145,6 +149,24 @@ class EvaluationRecordStore:
             )
         ):
             raise EvaluationBudgetAbort("invalid_record_freeze")
+        self._extraction_mode = frozen_config.get("extraction_mode", "legacy-e14")
+        contracts = frozen_config.get("extraction_window_contracts")
+        if self._extraction_mode == "grounded-v2":
+            if (not isinstance(contracts, (tuple, list)) or len(contracts) != len(plan)
+                    or any(not isinstance(item, dict)
+                           or set(item) != {"input_sha256", "prompt_sha256", "schema_sha256"}
+                           or item["input_sha256"] != position["input_sha256"]
+                           or any(not isinstance(value, str) or len(value) != 64
+                                  or any(char not in "0123456789abcdef" for char in value)
+                                  for value in item.values())
+                           for item, position in zip(contracts, plan))):
+                raise EvaluationBudgetAbort("invalid_record_extraction_freeze")
+        elif contracts is not None:
+            raise EvaluationBudgetAbort("invalid_record_extraction_freeze")
+        self._extraction_contracts = json.loads(_canonical(contracts if contracts is not None else [{
+            "prompt_sha256": frozen_config.get("extraction_prompt_sha256"),
+            "schema_sha256": frozen_config.get("extraction_schema_sha256"),
+        } for _ in plan]))
         self._plan = json.loads(_canonical(plan))
         self._output = Path(self._manifest["output_directory"])
         self._failed = False
@@ -161,6 +183,23 @@ class EvaluationRecordStore:
 
     def belongs_to(self, budget: EvaluationBudget) -> bool:
         return self._budget is budget
+
+    @property
+    def extraction_mode(self) -> str:
+        """无版本字段的旧冻结文件只表示旧十四槽。"""
+        return self._extraction_mode
+
+    def extraction_contract_hashes(self, case_position: int) -> dict[str, str]:
+        """返回注册时复制的逐窗合同；不得由当前运行时重新定义冻结值。"""
+        if type(case_position) is not int or not 0 <= case_position < len(self._extraction_contracts):
+            raise EvaluationBudgetAbort("invalid_record_extraction_position")
+        frozen = {key: self._extraction_contracts[case_position][key]
+                  for key in ("prompt_sha256", "schema_sha256")}
+        if any(not isinstance(value, str) or len(value) != 64
+               or any(char not in "0123456789abcdef" for char in value)
+               for value in frozen.values()):
+            raise EvaluationBudgetAbort("invalid_record_extraction_freeze")
+        return frozen
 
     @contextmanager
     def _directory(self) -> Iterator[int]:

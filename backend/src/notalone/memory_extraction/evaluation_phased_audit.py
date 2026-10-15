@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-from typing import Callable
+from typing import Any, Callable
 
 from .evaluation_http_budget import EvaluationBudgetAbort
+from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_name
 from .evaluation_provider_contract import validate_evaluation_policy
 from .evaluation_records import canonical_sha256
 from .evaluation_reference import (
@@ -120,23 +121,24 @@ def _decision(report: dict, review: dict, reference_case: dict) -> tuple[str, st
     return "safe", "supported"
 
 
-def _arguments(outputs: list[dict], tool: str, key: str) -> list[dict]:
+def _arguments(outputs: list[dict], tool: str, key: str, *, e_tool: str = _E_TOOL) -> Any:
     for output in outputs:
         calls = output["tool_calls"]
         if (not isinstance(calls, list) or len(calls) != 1
-                or calls[0].get("name") not in {_E_TOOL, _V_TOOL}):
+                or calls[0].get("name") not in {e_tool, _V_TOOL}):
             raise EvaluationBudgetAbort("phased_adapter_output_unreliable")
-        expected_key = "facts" if calls[0]["name"] == _E_TOOL else "results"
+        expected_key = ("results" if calls[0]["name"] == _V_TOOL else
+                        "units" if e_tool == "GroundedMemoryLabels" else "facts")
         _exact(calls[0]["args"], {expected_key})
     matches = [call["args"][key] for output in outputs for call in output["tool_calls"]
                if call["name"] == tool]
-    if len(matches) != 1 or not isinstance(matches[0], list):
+    if len(matches) != 1 or not isinstance(matches[0], dict if key == "units" else list):
         raise EvaluationBudgetAbort("phased_adapter_output_unreliable")
     return matches[0]
 
 
 def _verification_inputs(requests: list[dict], *, verification_tool_choice: str = "forced",
-                         extraction_tool_choice: str = "forced") -> list[dict]:
+                         extraction_tool_choice: str = "forced", e_tool: str = _E_TOOL) -> list[dict]:
     matches = []
     bodies = []
     for request in requests:
@@ -146,8 +148,8 @@ def _verification_inputs(requests: list[dict], *, verification_tool_choice: str 
         tool = body["tools"][0]
         name = tool["function"]["name"]
         omitted = (name == _V_TOOL and verification_tool_choice == "omitted"
-                   or name == _E_TOOL and extraction_tool_choice == "omitted")
-        if (tool.get("type") != "function" or name not in {_E_TOOL, _V_TOOL}
+                   or name == e_tool and extraction_tool_choice == "omitted")
+        if (tool.get("type") != "function" or name not in {e_tool, _V_TOOL}
                 or (omitted and "tool_choice" in body)
                 or (not omitted and body.get("tool_choice") != {
                     "type": "function", "function": {"name": name}})):
@@ -191,8 +193,10 @@ class PhasedEvaluationAudit:
         verification_mode: SourceVerificationMode | str = SourceVerificationMode.LEGACY_V4,
         verification_tool_choice: str = "forced",
         extraction_tool_choice: str = "forced",
+        extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
     ):
         self._verification_mode = SourceVerificationMode(verification_mode)
+        self._extraction_mode = EvaluationExtractionMode(extraction_mode)
         validate_evaluation_policy(verification_tool_choice)
         if verification_tool_choice == "omitted" and self._verification_mode is not SourceVerificationMode.NULLABLE_PROOF_V1:
             raise ValueError("省略V工具选择只用于可空证明评测。")
@@ -266,6 +270,11 @@ class PhasedEvaluationAudit:
         """提取请求的显式绑定策略；返回仍按唯一具名工具核对。"""
         return self._extraction_tool_choice
 
+    @property
+    def extraction_mode(self) -> str:
+        """模型标签与程序十四槽须使用显式同版本审核。"""
+        return self._extraction_mode.value
+
     def __call__(self, bundle: dict) -> dict:
         try:
             return self._run(bundle)
@@ -275,6 +284,8 @@ class PhasedEvaluationAudit:
             raise EvaluationBudgetAbort("phased_audit_unreliable") from None
 
     def _run(self, bundle: dict) -> dict:
+        if bundle.get("extraction_mode", "legacy-e14") != self.extraction_mode:
+            raise EvaluationBudgetAbort("phased_extraction_mode_changed")
         if bundle.get("verification_mode", "legacy-v4") != self.verification_mode:
             raise EvaluationBudgetAbort("phased_verification_mode_changed")
         if bundle.get("verification_tool_choice", "forced") != self.verification_tool_choice:
@@ -288,6 +299,9 @@ class PhasedEvaluationAudit:
         )})
         evidence_bundle["verification_program"] = _copy({
             "items": bundle.get("verification_program", []),
+        })["items"]
+        evidence_bundle["extraction_program"] = _copy({
+            "items": bundle.get("extraction_program", []),
         })["items"]
         bundle = {**evidence_bundle, "persist_audit": bundle["persist_audit"]}
         position = bundle["case_position"]
@@ -305,7 +319,27 @@ class PhasedEvaluationAudit:
                 reference_case["input_sha256"]
                 or bundle["gold_reference"]["criteria_sha256"] != self._criteria_sha256):
             raise EvaluationBudgetAbort("phased_case_binding_changed")
-        extraction = _arguments(list(bundle["adapter_outputs"]), _E_TOOL, "facts")
+        e_tool = extraction_tool_name(self._extraction_mode)
+        extraction_protocol = None
+        if self._extraction_mode is EvaluationExtractionMode.GROUNDED_V2:
+            labels = _arguments(list(bundle["adapter_outputs"]), e_tool, "units", e_tool=e_tool)
+            programs = bundle["extraction_program"]
+            if (not labels or not isinstance(programs, list) or len(programs) != 1
+                    or not isinstance(programs[0], dict)
+                    or set(programs[0]) != {"extraction_mode", "status", "facts"}
+                    or programs[0]["extraction_mode"] != self.extraction_mode
+                    or programs[0]["status"] != "compiled"
+                    or not isinstance(programs[0]["facts"], list)):
+                raise EvaluationBudgetAbort("phased_grounded_compilation_unreliable")
+            extraction = programs[0]["facts"]
+            extraction_protocol = {
+                "extraction_mode": self.extraction_mode, "e14_origin": "grounded_compiler",
+                "model_labels": {"units": labels}, "program_result": programs[0],
+            }
+        else:
+            if bundle["extraction_program"]:
+                raise EvaluationBudgetAbort("phased_legacy_compilation_unexpected")
+            extraction = _arguments(list(bundle["adapter_outputs"]), _E_TOOL, "facts")
         raw_view = _copy({
             "case_id": reference_case["id"], "case_position": position,
             "case_name": reference_case["case_name"], "window": bundle["window"],
@@ -313,11 +347,14 @@ class PhasedEvaluationAudit:
             "e_fields": reference["e_fields"], "reference_sha256": reference_sha,
             "extraction": [{"index": index, "payload": fact, "payload_sha256": canonical_sha256(fact)}
                            for index, fact in enumerate(extraction)],
+            **({"extraction_protocol": extraction_protocol} if extraction_protocol is not None else {}),
         })
         raw_view["raw_evidence_sha256"] = canonical_sha256(raw_view)
         raw_review = _copy(self._raw_reviewer(_copy(raw_view)))
         _validate_raw(reference, raw_view, raw_review)
-        receipt = _save(bundle["persist_audit"], {"phase": "raw", "review": raw_review},
+        protocol_fields = ({"extraction_protocol": extraction_protocol}
+                           if extraction_protocol is not None else {})
+        receipt = _save(bundle["persist_audit"], {"phase": "raw", "review": raw_review, **protocol_fields},
                         position, reference_case["case_name"])
         if not extraction and (
             any(output["tool_calls"][0]["name"] == _V_TOOL for output in bundle["adapter_outputs"])
@@ -325,13 +362,14 @@ class PhasedEvaluationAudit:
                    for request in bundle["provider_requests"])
         ):
             raise EvaluationBudgetAbort("phased_empty_extraction_has_verification")
-        verification = (_arguments(list(bundle["adapter_outputs"]), _V_TOOL, "results")
+        verification = (_arguments(list(bundle["adapter_outputs"]), _V_TOOL, "results", e_tool=e_tool)
                         if extraction else [])
         evidence = {
             "run_status": "completed" if extraction else "empty", "extraction": extraction,
             "verification_inputs": _verification_inputs(
                 list(bundle["provider_requests"]), verification_tool_choice=self.verification_tool_choice,
                 extraction_tool_choice=self.extraction_tool_choice,
+                e_tool=e_tool,
             ) if extraction else [],
             "verification": _verification_projection(verification, self._verification_mode),
             "final_facts": bundle["original_result"]["facts"], "original_result": bundle["original_result"],
@@ -340,7 +378,8 @@ class PhasedEvaluationAudit:
         receipt_ref = {key: receipt[key] for key in (
             "case_position", "case_name", "kind", "purpose", "event_sequence", "payload_sha256",
         )}
-        full_view = {"packet": packet, "sealed_raw_review": raw_review, "raw_receipt": receipt_ref}
+        full_view = {"packet": packet, "sealed_raw_review": raw_review,
+                     "raw_receipt": receipt_ref, **protocol_fields}
         protocol = None
         if self._verification_mode is SourceVerificationMode.NULLABLE_PROOF_V1:
             protocol = {
@@ -358,6 +397,7 @@ class PhasedEvaluationAudit:
         final_receipt = _save(bundle["persist_audit"], {
             "phase": "final", "review": full_review, "report": report, "raw_receipt": receipt_ref,
             **({"verification_protocol": protocol} if protocol is not None else {}),
+            **protocol_fields,
         }, position, reference_case["case_name"])
         if final_receipt["event_sequence"] <= receipt["event_sequence"]:
             raise EvaluationBudgetAbort("phased_audit_receipt_order_invalid")

@@ -16,8 +16,10 @@ from uuid import UUID
 
 import httpx
 
-from notalone.memory_extraction import adapters as extraction_adapters
 from notalone.memory_extraction.evaluation import build_window
+from notalone.memory_extraction.evaluation_extraction import (
+    EvaluationExtractionMode, extraction_contract,
+)
 from notalone.memory_extraction.evaluation_cases import CASES
 from notalone.memory_extraction.evaluation_http_budget import EvaluationBudget, EvaluationBudgetAbort
 from notalone.memory_extraction.evaluation_offline import (
@@ -159,10 +161,15 @@ def run_ecnu_evaluation(
     response_identity_policy: str = "first_valid_completion_observation_stop_on_change",
     provider_profile: str = "ecnu",
     request_limit: int | None = None,
+    extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
 ) -> dict:
     """保留ECNU入口名；显式官方Flash最高思考只接受完整140及原独审。"""
     from .evaluation_provider_contract import EvaluationProviderProfile
 
+    try:
+        extraction_selected = EvaluationExtractionMode(extraction_mode)
+    except (TypeError, ValueError):
+        raise EvaluationBudgetAbort("evaluation_extraction_mode_invalid") from None
     try:
         profile = EvaluationProviderProfile(provider_profile)
     except (TypeError, ValueError):
@@ -232,6 +239,9 @@ def run_ecnu_evaluation(
     from .evaluation_phased_audit import PhasedEvaluationAudit
 
     if (type(audit_case) is PhasedEvaluationAudit
+            and audit_case.extraction_mode != extraction_selected.value):
+        raise EvaluationBudgetAbort("evaluation_phased_extraction_mode_mismatch")
+    if (type(audit_case) is PhasedEvaluationAudit
             and audit_case.verification_mode != selected.value):
         raise EvaluationBudgetAbort("ecnu_phased_verification_mode_mismatch")
     if (type(audit_case) is PhasedEvaluationAudit
@@ -266,6 +276,7 @@ def run_ecnu_evaluation(
         verification_tool_choice=verification_tool_choice,
         response_identity_policy=response_identity_policy,
         provider_profile=profile,
+        extraction_mode=extraction_selected,
     )
     if case_set == "full140":
         validation = _load_full_reference(repo_root, source_hashes)
@@ -273,23 +284,21 @@ def run_ecnu_evaluation(
                 cast(PhasedEvaluationAudit, audit_case).reference_sha256 !=
                 validation["reference_sha256"]):
             raise EvaluationBudgetAbort("ecnu_phased_reference_mismatch")
+    windows = tuple(build_window(case) for case in cases)
+    extraction_contracts = tuple(deepcopy(extraction_contract(extraction_selected, window))
+                                 for window in windows)
     runtime_contracts = {
-        "extraction": (
-            extraction_adapters.EXTRACTION_SYSTEM_PROMPT,
-            deepcopy(extraction_adapters.EXTRACTION_SCHEMA),
-        ),
+        "extraction": extraction_contracts[0],
         "verification": deepcopy(_verification_contract(selected)),
     }
-    tools = {purpose: convert_to_openai_tool(schema)
-             for purpose, (_, schema) in runtime_contracts.items()}
-    windows = tuple(build_window(case) for case in cases)
     plan = tuple({
         "case_position": index, "case_name": case.name,
         "input_sha256": canonical_sha256(public_window_projection(window)),
     } for index, (case, window) in enumerate(zip(cases, windows)))
     config = {
         **_frozen_config(plan, request_timeout_seconds=request_timeout_seconds,
-                         max_retries=max_retries, verification_mode=selected),
+                         max_retries=max_retries, verification_mode=selected,
+                         extraction_mode=extraction_selected, windows=windows),
         "mode": ("deepseek_bounded_full140" if official else
                  "ecnu_bounded_full140" if case_set == "full140" else
                  "ecnu_bounded_evaluation" if case_positions is None
@@ -310,7 +319,8 @@ def run_ecnu_evaluation(
             "mode": response_identity_policy, "known_labels": sorted(KNOWN_ECNU_RESPONSE_LABELS),
             "endpoint": _ENDPOINT, "request_model": "ecnu-max", "weights_identity_verified": False,
         } if response_identity_policy == KNOWN_ECNU_RESPONSE_IDENTITY_POLICY else response_identity_policy),
-        "request_contract_version": 1,
+        "request_contract_version": (2 if extraction_selected is
+                                     EvaluationExtractionMode.GROUNDED_V2 else 1),
         "tool_choice": ({
             "extraction": {"mode": "omitted" if official else "forced", "name": runtime_contracts["extraction"][1]["title"]},
             "verification": {"mode": "omitted", "name": runtime_contracts["verification"][1]["title"]},
@@ -322,9 +332,9 @@ def run_ecnu_evaluation(
             "httpx", "httpx2", "langsmith", "pydantic",
         )},
         **{f"{purpose}_prompt_sha256": canonical_sha256(prompt)
-           for purpose, (prompt, _) in runtime_contracts.items()},
+           for purpose, (prompt, _) in runtime_contracts.items() if purpose == "verification"},
         **{f"{purpose}_schema_sha256": canonical_sha256(schema)
-           for purpose, (_, schema) in runtime_contracts.items()},
+           for purpose, (_, schema) in runtime_contracts.items() if purpose == "verification"},
     }
     if official:
         config["omitted_parameters"] = [
@@ -344,23 +354,24 @@ def run_ecnu_evaluation(
             pass
         raise
 
-    def invocation_scope(purpose: str, messages: list[dict]):
+    def invocation_scope(purpose: str, messages: list[dict], window):
+        position = windows.index(window)
+        frozen_contracts = {**runtime_contracts, "extraction": extraction_contracts[position]}
         live_contracts = {
-            "extraction": (extraction_adapters.EXTRACTION_SYSTEM_PROMPT,
-                           extraction_adapters.EXTRACTION_SCHEMA),
+            "extraction": extraction_contract(extraction_selected, window),
             "verification": _verification_contract(selected),
         }
         if any(canonical_sha256(live_contracts[stage]) != canonical_sha256(frozen)
-               for stage, frozen in runtime_contracts.items()):
+               for stage, frozen in frozen_contracts.items()):
             raise EvaluationBudgetAbort("ecnu_runtime_contract_changed")
-        prompt, schema = runtime_contracts[purpose]
+        prompt, schema = frozen_contracts[purpose]
         if not messages or messages[0] != {"role": "system", "content": prompt}:
             raise EvaluationBudgetAbort("ecnu_runtime_prompt_changed")
         expected = {
             "model": request_model, "temperature": 0.0, "stream": False,
             **({"reasoning_effort": "max"} if official else {}),
             "thinking": {"type": "enabled"}, "messages": messages,
-            "tools": [deepcopy(tools[purpose])],
+            "tools": [deepcopy(convert_to_openai_tool(schema))],
             "tool_choice": {"type": "function", "function": {"name": schema["title"]}},
         }
         if official or purpose == "verification" and verification_tool_choice == "omitted":
@@ -379,4 +390,5 @@ def run_ecnu_evaluation(
         verification_tool_choice=verification_tool_choice,
         reasoning_effort="max" if official else None,
         extraction_tool_choice="omitted" if official else "forced",
+        extraction_mode=extraction_selected,
     )

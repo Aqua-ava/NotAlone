@@ -32,6 +32,201 @@ PLAN = tuple(case for case in CASES if case.dimension == "reference") + tuple(
 
 
 class EvaluationECNUTest(unittest.TestCase):
+    def test_grounded_actual_e_compile_v_and_phased_unknown_do_not_certify_quality(self):
+        from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
+        from notalone.memory_extraction.evaluation_records import canonical_sha256
+
+        root = Path(__file__).resolve().parents[4]
+        reference = json.loads((root / ".scratch/unfinished-work/memory-gold-reference-20261012.json").read_bytes())
+        hashes, gold = self.preparation()
+        observed = []
+
+        def raw(view):
+            observed.append(view)
+            return {
+                "reviewer": "合成未决审核者", "case_id": view["case_id"],
+                "reference_sha256": view["reference_sha256"],
+                "raw_evidence_sha256": view["raw_evidence_sha256"],
+                "e_rows": [{
+                    "raw_index": item["index"], "payload_sha256": item["payload_sha256"],
+                    "fields": {field: "unresolved" for field in view["e_fields"]},
+                    "meaning": "unresolved", "inclusion": "unresolved", "safety": "unresolved",
+                    "classification": "required", "basis": "合成审核没有语义证明。",
+                } for item in view["extraction"]],
+                "claims": [{"claim_id": claim["id"], "groups": []}
+                           for claim in view["reference_case"]["claims"]],
+                "window_checks": {"inclusion": "unresolved", "forbidden_meanings": "unresolved"},
+            }
+
+        def full(view):
+            observed.append(view)
+            answer = deepcopy(view["sealed_raw_review"])
+            answer.pop("raw_evidence_sha256")
+            packet = view["packet"]
+            answer.update(evidence_sha256=packet["evidence_sha256"],
+                          run_status=packet["evidence"]["run_status"])
+            for row in answer["e_rows"]:
+                row["lineage"] = {"v_input_indices": [], "final_indices": [], "status": "unresolved"}
+            answer["v_rows"] = [{
+                "result_index": item["index"], "payload_sha256": item["payload_sha256"],
+                "fields": {field: "unresolved" for field in reference["v_fields"]},
+                "semantic": "unresolved", "e_indices": [], "lineage": "unresolved",
+                "basis": "合成审核没有来源语义证明。",
+            } for item in packet["layers"]["verification"]]
+            answer["window_checks"]["lineage"] = "unresolved"
+            return answer
+
+        audit = PhasedEvaluationAudit(
+            reference=reference, expected_reference_sha256=canonical_sha256(reference),
+            annotation_sha256=reference["annotation_sha256"], criteria_sha256=gold["criteria_sha256"],
+            raw_reviewer=raw, full_reviewer=full, case_positions=(7, 0), extraction_mode="grounded-v2",
+        )
+        label = {"kind": "event", "subject": "contact", "topic": "study", "dependency": None,
+                 "unresolved": False, "confidence": 0.9, "sensitivity": "none"}
+        draft = {"units": {"1:0": {**label, "kind": "prefix"}, "1:1": label}}
+        window = build_window(PLAN[7])
+
+        def respond(request):
+            body = json.loads(request.content)
+            args = draft if body["tools"][0]["function"]["name"] == "GroundedMemoryLabels" else {
+                "results": [{"candidate_index": 0, "verdict": "supported", "issues": [],
+                             "evidence": [{"message_id": str(window.target_message_ids[0]),
+                                           "quote": "《活着》，我刚看完。"}]}],
+            }
+            return self.response(request, arguments=args)
+
+        result = self.run_ready(
+            hashes=hashes, gold=gold, audit=audit, extraction_mode="grounded-v2",
+            case_positions=(7, 0), transport=httpx.MockTransport(respond),
+        )
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(result["stopped_code"], "case_semantic_audit_unknown")
+        self.assertEqual(result["outcomes"][1]["status"], "unrun")
+        self.assertFalse(result["summary"]["semantic_audit"]["quality_certified"])
+        self.assertEqual(observed[0]["extraction_protocol"]["model_labels"], draft)
+        self.assertIn("《活着》", observed[0]["extraction"][0]["payload"]["text"])
+        self.assertEqual(observed[1]["packet"]["evidence"]["verification"][0]["verdict"], "supported")
+        phases = [event["payload"] for event in result["events"]
+                  if event["kind"] == "semantic_audit" and "phase" in event["payload"]]
+        self.assertEqual([phase["phase"] for phase in phases], ["raw", "final"])
+        self.assertTrue(all(phase["extraction_protocol"]["e14_origin"] == "grounded_compiler" for phase in phases))
+
+    def test_grounded_mode_cannot_reinterpret_a_default_legacy_phased_audit(self):
+        from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
+        from notalone.memory_extraction.evaluation_records import canonical_sha256
+
+        root = Path(__file__).resolve().parents[4]
+        reference = json.loads((root / ".scratch/unfinished-work/memory-gold-reference-20261012.json").read_bytes())
+        audit = PhasedEvaluationAudit(
+            reference=reference, expected_reference_sha256=canonical_sha256(reference),
+            annotation_sha256=reference["annotation_sha256"], criteria_sha256="a" * 64,
+            raw_reviewer=lambda view: {}, full_reviewer=lambda view: {},
+        )
+        with self.assertRaises(EvaluationBudgetAbort):
+            self.run_ready(audit=audit, extraction_mode="grounded-v2")
+        self.assertEqual(self.requests, [])
+        self.assertEqual(self.credentials, [])
+
+    def test_grounded_dynamic_requests_are_explicitly_frozen_and_still_use_original_audit(self):
+        def respond(request):
+            body = json.loads(request.content)
+            function = body["tools"][0]["function"]
+            self.assertEqual(function["name"], "GroundedMemoryLabels")
+            names = function["parameters"]["properties"]["units"]["required"]
+            label = {
+                "kind": "not_memory", "subject": "contact", "topic": "other",
+                "dependency": None, "unresolved": False, "confidence": 0.9,
+                "sensitivity": "none",
+            }
+            return self.response(request, arguments={"units": {name: dict(label) for name in names}})
+
+        result = self.run_ready(
+            extraction_mode="grounded-v2", case_positions=(7, 0),
+            transport=httpx.MockTransport(respond),
+        )
+        self.assertEqual(result["extraction_mode"], "grounded-v2")
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(len(self.audits), 2)
+        self.assertEqual(self.audits[0]["extraction_mode"], "grounded-v2")
+        self.assertEqual(self.audits[0]["extraction_program"][0]["facts"], [])
+        config = json.loads((self.output / "manifest.json").read_text())["frozen_config"]
+        self.assertEqual(config["extraction_mode"], "grounded-v2")
+        contracts = config["extraction_window_contracts"]
+        self.assertEqual(len(contracts), 2)
+        self.assertNotEqual(contracts[0]["schema_sha256"], contracts[1]["schema_sha256"])
+        self.assertFalse(result["quality_certified"])
+
+    def test_grounded_official_max_keeps_omitted_tools_and_fixed_budget(self):
+        hashes, gold, _ = self.full_preparation(nullable=True)
+
+        def respond(request):
+            body = json.loads(request.content)
+            self.assertEqual(body["reasoning_effort"], "max")
+            self.assertNotIn("tool_choice", body)
+            function = body["tools"][0]["function"]
+            self.assertEqual(function["name"], "GroundedMemoryLabels")
+            names = function["parameters"]["properties"]["units"]["required"]
+            label = {"kind": "not_memory", "subject": "contact", "topic": "other",
+                     "dependency": None, "unresolved": False, "confidence": 0.9, "sensitivity": "none"}
+            return self.response(request, reported_model="deepseek-flash", arguments={
+                "units": {name: dict(label) for name in names},
+            })
+
+        result = self.run_ready(
+            hashes=hashes, gold=gold, case_set="full140", provider_profile="deepseek-flash-max",
+            request_timeout_seconds=300, max_retries=0, verification_mode="nullable-proof-v1",
+            verification_tool_choice="omitted", request_limit=1, extraction_mode="grounded-v2",
+            transport=httpx.MockTransport(respond),
+            audit=lambda bundle: self.audit(bundle, "unknown", "audit_unresolved"),
+        )
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(result["stopped_code"], "case_semantic_audit_unknown")
+        self.assertEqual(result["summary"]["unrun"], 139)
+        self.assertEqual(result["receipt"]["budget"]["request_limit"], 1)
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 1)
+
+    def test_grounded_dynamic_schema_change_stops_before_second_dispatch(self):
+        from notalone.memory_extraction import grounded_adapter
+
+        original = deepcopy(grounded_adapter.GROUNDED_SCHEMA)
+
+        def respond(request):
+            body = json.loads(request.content)
+            names = body["tools"][0]["function"]["parameters"]["properties"]["units"]["required"]
+            label = {"kind": "not_memory", "subject": "contact", "topic": "other",
+                     "dependency": None, "unresolved": False, "confidence": 0.9, "sensitivity": "none"}
+            grounded_adapter.GROUNDED_SCHEMA["properties"]["units"]["items"]["properties"]["confidence"]["description"] = "合成schema漂移"
+            return self.response(request, arguments={"units": {name: dict(label) for name in names}})
+
+        try:
+            result = self.run_ready(
+                extraction_mode="grounded-v2", case_positions=(7, 0),
+                transport=httpx.MockTransport(respond),
+            )
+        finally:
+            grounded_adapter.GROUNDED_SCHEMA.clear()
+            grounded_adapter.GROUNDED_SCHEMA.update(original)
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(result["stopped_code"], "ecnu_hard_stop")
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 1)
+        self.assertEqual(result["outcomes"][1]["status"], "unknown")
+
+    def test_grounded_never_falls_back_to_an_old_e14_tool_response(self):
+        def respond(request):
+            body = self.response(request).json()
+            body["choices"][0]["message"]["tool_calls"][0]["function"]["name"] = "MemoryExtractionOutput"
+            return httpx.Response(200, request=request, json=body)
+
+        result = self.run_ready(extraction_mode="grounded-v2", case_positions=(7, 0),
+                                transport=httpx.MockTransport(respond))
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(result["stopped_code"], "case_contract_or_runtime_failed")
+        self.assertEqual(result["outcomes"][1]["status"], "unrun")
+        self.assertEqual(self.audits, [])
+        self.assertFalse(any(event["kind"] == "extraction_program" and
+                             event["payload"].get("status") == "compiled"
+                             for event in result["events"]))
+
     def test_official_remaining_budget_cannot_exceed_full_round(self):
         for limit in (0, 281, True):
             with self.subTest(limit=limit), self.assertRaises(EvaluationBudgetAbort):

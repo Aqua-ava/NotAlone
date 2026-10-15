@@ -21,6 +21,42 @@ ANNOTATION_SHA = "7039a302f64d6a14761ae448e425597c5ef46e0fbb3d7bc41c95c6d9a9b91e
 
 
 class EvaluationPhasedAuditTest(unittest.TestCase):
+    def test_grounded_labels_and_compiled_e14_are_separate_and_unresolved_meaning_still_stops(self):
+        label = {
+            "kind": "event", "subject": "contact", "topic": "study",
+            "dependency": None, "unresolved": False, "confidence": 0.9,
+            "sensitivity": "none",
+        }
+        draft = {"units": {"1:0": {**label, "kind": "prefix"}, "1:1": label}}
+        self.bundle["extraction_mode"] = "grounded-v2"
+        self.bundle["adapter_outputs"][0] = {"tool_calls": [{
+            "name": "GroundedMemoryLabels", "args": draft,
+        }]}
+        self.bundle["extraction_program"] = [{
+            "extraction_mode": "grounded-v2", "status": "compiled", "facts": [self.fact],
+        }]
+        observed = []
+
+        def raw(view):
+            protocol = view.pop("extraction_protocol")
+            observed.append(protocol)
+            self.assertEqual(protocol["model_labels"], draft)
+            self.assertEqual(protocol["e14_origin"], "grounded_compiler")
+            self.assertEqual(view["extraction"][0]["payload"], self.fact)
+            review = self.raw_review(view)
+            review["e_rows"][0].update(meaning="unresolved", safety="unresolved")
+            return review
+
+        def full(view):
+            self.assertEqual(view["extraction_protocol"], observed[0])
+            return self.full_review(view)
+
+        result = self.audit(extraction_mode="grounded-v2", raw=raw, full=full)(self.bundle)
+        self.assertEqual(result["decision"], "unknown")
+        self.assertEqual(result["reason_code"], "audit_unresolved")
+        self.assertEqual(self.events[0]["payload"]["extraction_protocol"], observed[0])
+        self.assertEqual(self.events[1]["payload"]["extraction_protocol"], observed[0])
+
     def test_official_extraction_omission_preserves_explicit_review_order(self):
         self.bundle["extraction_tool_choice"] = "omitted"
         self.bundle["provider_requests"].insert(0, {"body": {

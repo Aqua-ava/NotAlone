@@ -123,6 +123,104 @@ class EvaluationOfflineTest(unittest.TestCase):
         with self.assertRaises(EvaluationBudgetAbort):
             EvaluationBudget.open(run_id=self.run_id)
 
+    def test_grounded_mode_preserves_labels_and_compilation_without_forging_e14_response(self):
+        label = {
+            "kind": "not_memory", "subject": "self", "topic": "other",
+            "dependency": None, "unresolved": False, "confidence": 0.9,
+            "sensitivity": "none",
+        }
+        draft = {"units": {"0:0": dict(label), "0:1": dict(label)}}
+        result = run_offline_evaluation(
+            cases=(self.none_case,), output_directory=self.output, run_id=self.run_id,
+            request_limit=2, extraction_mode="grounded-v2",
+            synthetic_transport=httpx.MockTransport(
+                lambda request: self.response(request, arguments=draft)),
+        )
+        self.assertEqual(result["outcomes"][0]["status"], "empty")
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(self.requests[0]["tools"][0]["function"]["name"], "GroundedMemoryLabels")
+        outputs = [event for event in result["events"] if event["kind"] == "adapter_output"]
+        self.assertEqual(outputs[0]["payload"]["tool_calls"][0]["args"], draft)
+        compiled = next(event for event in result["events"] if event["kind"] == "extraction_program")
+        self.assertEqual(compiled["payload"], {
+            "extraction_mode": "grounded-v2", "status": "compiled", "facts": [],
+        })
+        config = json.loads((self.output / "manifest.json").read_text())["frozen_config"]
+        self.assertEqual(config["extraction_mode"], "grounded-v2")
+        self.assertEqual(len(config["extraction_window_contracts"]), 1)
+        self.assertFalse(result["quality_certified"])
+
+    def test_grounded_missing_label_preserves_response_and_stops_before_v_and_later_window(self):
+        label = {"kind": "not_memory", "subject": "self", "topic": "other", "dependency": None,
+                 "unresolved": False, "confidence": 0.9, "sensitivity": "none"}
+        draft = {"units": {"0:0": label}}
+        later = next(case for case in CASES if case.name == "主体：联系人自述状态")
+        result = run_offline_evaluation(
+            cases=(self.none_case, later), output_directory=self.output, run_id=self.run_id,
+            request_limit=4, extraction_mode="grounded-v2",
+            synthetic_transport=httpx.MockTransport(lambda request: self.response(request, arguments=draft)),
+        )
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual([item["status"] for item in result["outcomes"]], ["failed", "unrun"])
+        outputs = [event for event in result["events"] if event["kind"] == "adapter_output"]
+        self.assertEqual(outputs[0]["payload"]["tool_calls"][0]["args"], draft)
+        program = next(event["payload"] for event in result["events"] if event["kind"] == "extraction_program")
+        self.assertEqual(program, {"extraction_mode": "grounded-v2", "status": "rejected"})
+        self.assertEqual(result["outcomes"][0]["result"]["facts"], ())
+        self.assertIsNotNone(result["receipt"])
+
+    def test_grounded_frozen_schema_change_stops_before_later_dispatch(self):
+        from copy import deepcopy
+        from notalone.memory_extraction import grounded_adapter
+
+        original = deepcopy(grounded_adapter.GROUNDED_SCHEMA)
+        later = next(case for case in CASES if case.name == "主体：联系人自述状态")
+
+        def respond(request):
+            body = json.loads(request.content)
+            slots = body["tools"][0]["function"]["parameters"]["properties"]["units"]["required"]
+            label = {"kind": "not_memory", "subject": "self", "topic": "other", "dependency": None,
+                     "unresolved": False, "confidence": 0.9, "sensitivity": "none"}
+            response = self.response(request, arguments={"units": {slot: dict(label) for slot in slots}})
+            grounded_adapter.GROUNDED_SCHEMA["properties"]["units"]["items"]["properties"]["confidence"]["description"] = "合成冻结后漂移"
+            return response
+
+        try:
+            result = run_offline_evaluation(
+                cases=(self.none_case, later), output_directory=self.output, run_id=self.run_id,
+                request_limit=4, extraction_mode="grounded-v2",
+                synthetic_transport=httpx.MockTransport(respond),
+            )
+        finally:
+            grounded_adapter.GROUNDED_SCHEMA.clear()
+            grounded_adapter.GROUNDED_SCHEMA.update(original)
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(result["stopped_code"], "offline_hard_stop")
+        self.assertEqual([item["status"] for item in result["outcomes"]], ["empty", "unknown"])
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 1)
+
+    def test_grounded_frozen_prompt_change_stops_before_later_dispatch(self):
+        from notalone.memory_extraction import grounded_adapter
+
+        later = next(case for case in CASES if case.name == "主体：联系人自述状态")
+        label = {"kind": "not_memory", "subject": "self", "topic": "other", "dependency": None,
+                 "unresolved": False, "confidence": 0.9, "sensitivity": "none"}
+
+        def respond(request):
+            grounded_adapter.GROUNDED_PROMPT += "合成冻结后提示漂移。"
+            return self.response(request, arguments={"units": {"0:0": dict(label), "0:1": dict(label)}})
+
+        with patch.object(grounded_adapter, "GROUNDED_PROMPT", grounded_adapter.GROUNDED_PROMPT):
+            result = run_offline_evaluation(
+                cases=(self.none_case, later), output_directory=self.output, run_id=self.run_id,
+                request_limit=4, extraction_mode="grounded-v2",
+                synthetic_transport=httpx.MockTransport(respond),
+            )
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(result["stopped_code"], "offline_hard_stop")
+        self.assertEqual([item["status"] for item in result["outcomes"]], ["empty", "unknown"])
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 1)
+
     def test_public_plan_keeps_old_input_hash_and_persisted_runtime_metadata(self):
         from notalone.memory_extraction.evaluation_records import canonical_sha256
 

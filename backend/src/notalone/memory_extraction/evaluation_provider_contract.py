@@ -17,13 +17,13 @@ from typing import Callable, Iterator
 import httpx
 
 from .evaluation_http_budget import EvaluationBudgetAbort
+from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_name
 
 
 _ENDPOINT = "https://chat.ecnu.edu.cn/open/api/v1/chat/completions"
 _PAYLOAD_FIELDS = frozenset({
     "model", "temperature", "stream", "thinking", "messages", "tools", "tool_choice",
 })
-_TOOL_NAMES = frozenset({"MemoryExtractionOutput", "SourceVerificationOutput"})
 STRICT_RESPONSE_IDENTITY_POLICY = "first_valid_completion_observation_stop_on_change"
 KNOWN_ECNU_RESPONSE_IDENTITY_POLICY = "ecnu_configured_route_known_labels_v1"
 KNOWN_ECNU_RESPONSE_LABELS = frozenset({"deepseek-v4-flash", "deepseek-flash"})
@@ -72,8 +72,13 @@ class ECNUEvaluationContract:
         verification_tool_choice: str = "forced",
         response_identity_policy: str = STRICT_RESPONSE_IDENTITY_POLICY,
         provider_profile: EvaluationProviderProfile | str = EvaluationProviderProfile.ECNU,
+        extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
     ):
         validate_evaluation_policy(verification_tool_choice, response_identity_policy)
+        try:
+            self._extraction_mode = EvaluationExtractionMode(extraction_mode)
+        except (TypeError, ValueError):
+            raise EvaluationBudgetAbort("evaluation_extraction_mode_invalid") from None
         try:
             self._profile = EvaluationProviderProfile(provider_profile)
         except (TypeError, ValueError):
@@ -169,7 +174,7 @@ class ECNUEvaluationContract:
     def expect_request(self, expected_payload: dict) -> Iterator[None]:
         """为一次 E/V 调用及其 SDK 重试绑定原定请求正文。"""
         _validate_payload(expected_payload, verification_tool_choice=self._verification_tool_choice,
-                          provider_profile=self._profile)
+                          provider_profile=self._profile, extraction_mode=self._extraction_mode)
         token = self._expected.set(_canonical(expected_payload))
         try:
             yield
@@ -266,7 +271,8 @@ def _decode_json(content: bytes) -> dict:
 
 
 def _validate_payload(value: dict, *, verification_tool_choice: str = "forced",
-                      provider_profile: EvaluationProviderProfile = EvaluationProviderProfile.ECNU) -> None:
+                      provider_profile: EvaluationProviderProfile = EvaluationProviderProfile.ECNU,
+                      extraction_mode: EvaluationExtractionMode = EvaluationExtractionMode.LEGACY_E14) -> None:
     try:
         function = value["tools"][0]["function"]
         official = provider_profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
@@ -301,7 +307,7 @@ def _validate_payload(value: dict, *, verification_tool_choice: str = "forced",
             set(tool) != {"type", "function"} or tool["type"] != "function"
             or not isinstance(function, dict)
             or not set(function) <= {"name", "description", "parameters"}
-            or function["name"] not in _TOOL_NAMES
+            or function["name"] not in {extraction_tool_name(extraction_mode), "SourceVerificationOutput"}
             or not isinstance(function["parameters"], dict)
             or (forced and value["tool_choice"] != {
                 "type": "function", "function": {"name": function["name"]},

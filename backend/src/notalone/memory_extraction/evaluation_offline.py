@@ -17,7 +17,6 @@ from notalone.memory_extraction import verification_adapters
 from notalone.memory_extraction.adapters import (
     EXTRACTION_SCHEMA,
     EXTRACTION_SYSTEM_PROMPT,
-    LangChainExtractionRuntime,
 )
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError
 from notalone.memory_extraction.evaluation import (
@@ -29,6 +28,9 @@ from notalone.memory_extraction.evaluation import (
     summarize,
 )
 from notalone.memory_extraction.evaluation_cases import CASES, EvaluationCase
+from notalone.memory_extraction.evaluation_extraction import (
+    EvaluationExtractionMode, extraction_contract, extraction_runtime, extraction_tool_name,
+)
 from notalone.memory_extraction.evaluation_http_budget import (
     EvaluationAsyncTransport,
     EvaluationBudget,
@@ -42,6 +44,7 @@ from notalone.memory_extraction.evaluation_records import (
 from notalone.memory_extraction.evaluation_reference import public_window_projection
 from notalone.memory_extraction.flow import _to_fact
 from notalone.memory_extraction.models import ExtractedFact, ExtractionWindow
+from notalone.memory_extraction.runtime import MemoryExtractionRuntime, ExtractionPayload
 from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
 from notalone.memory_extraction.verification_adapters import (
     SOURCE_VERIFICATION_SCHEMA,
@@ -109,6 +112,33 @@ class _RecordedVerificationRuntime:
         return payloads
 
 
+class _RecordedExtractionRuntime:
+    """模型标签与编译十四槽分开保存；失败不生成替代候选。"""
+
+    def __init__(self, runtime: MemoryExtractionRuntime, store: EvaluationRecordStore,
+                 position: int, mode: EvaluationExtractionMode, state: dict):
+        self._runtime, self._store, self._position = runtime, store, position
+        self._mode, self._state = mode, state
+
+    def extract(self, window: ExtractionWindow) -> ExtractionPayload:
+        try:
+            facts = self._runtime.extract(window)
+        except ExtractionInvalidOutputError:
+            if self._mode is EvaluationExtractionMode.GROUNDED_V2:
+                with self._store.stage(self._position, "extraction"):
+                    self._store.record(kind="extraction_program", payload={
+                        "extraction_mode": self._mode.value, "status": "rejected",
+                    })
+            raise
+        if self._mode is EvaluationExtractionMode.GROUNDED_V2:
+            with self._store.stage(self._position, "extraction"):
+                self._store.record(kind="extraction_program", payload={
+                    "extraction_mode": self._mode.value, "status": "compiled", "facts": facts,
+                })
+        self._state["extraction_empty"] = not facts
+        return facts
+
+
 def _check_json_fact_types(payload: dict, schema: dict) -> None:
     """评测不让产品外壳的float/UUID/date转换掩盖原JSON类型错误。"""
     for name in ("text", "category", "subject", "topic", "speech_act",
@@ -136,7 +166,8 @@ class _RecordedModel:
     def __init__(self, model: Any, store: EvaluationRecordStore, position: int,
                  window: ExtractionWindow, call_state: dict,
                  purpose: str | None = None, invocation_scope: Callable | None = None,
-                 verification_tool_choice: str = "forced", extraction_tool_choice: str = "forced"):
+                 verification_tool_choice: str = "forced", extraction_tool_choice: str = "forced",
+                 extraction_mode: EvaluationExtractionMode = EvaluationExtractionMode.LEGACY_E14):
         self._model = model
         self._store = store
         self._position = position
@@ -146,30 +177,48 @@ class _RecordedModel:
         self._invocation_scope = invocation_scope
         self._verification_tool_choice = verification_tool_choice
         self._extraction_tool_choice = extraction_tool_choice
+        self._extraction_mode = extraction_mode
 
     def bind_tools(self, tools: list[dict], **options: Any) -> _RecordedModel:
         purpose = {
-            EXTRACTION_SCHEMA["title"]: "extraction",
+            extraction_tool_name(self._extraction_mode): "extraction",
             SOURCE_VERIFICATION_SCHEMA["title"]: "verification",
-        }.get(options.get("tool_choice"))
+        }.get(tools[0].get("title") if len(tools) == 1 else None)
         if purpose is None or len(tools) != 1:
+            raise EvaluationBudgetAbort("offline_tool_contract_changed")
+        if (purpose == "extraction"
+                and (tools[0] != extraction_contract(self._extraction_mode, self._window)[1]
+                     or canonical_sha256(tools[0]) !=
+                     self._store.extraction_contract_hashes(self._position)["schema_sha256"])):
+            raise EvaluationBudgetAbort("offline_tool_contract_changed")
+        if options.get("tool_choice", tools[0]["title"]) != tools[0]["title"]:
             raise EvaluationBudgetAbort("offline_tool_contract_changed")
         if (purpose == "verification" and self._verification_tool_choice == "omitted"
                 or purpose == "extraction" and self._extraction_tool_choice == "omitted"):
             # 仅评测代理省略绑定选项；返回仍须唯一具名工具，缺失不重试。
             options = {key: value for key, value in options.items() if key != "tool_choice"}
+        else:
+            options = {**options, "tool_choice": tools[0]["title"]}
         return _RecordedModel(
             self._model.bind_tools(tools, **options), self._store,
             self._position, self._window, self._call_state, purpose,
             self._invocation_scope,
             self._verification_tool_choice,
             self._extraction_tool_choice,
+            self._extraction_mode,
         )
 
     def invoke(self, messages: list[dict]) -> Any:
         if self._purpose is None:
             raise EvaluationBudgetAbort("offline_unbound_model")
-        scope = (self._invocation_scope(self._purpose, messages)
+        if self._purpose == "extraction" and (
+            not messages or set(messages[0]) != {"role", "content"}
+            or messages[0]["role"] != "system"
+            or canonical_sha256(messages[0]["content"]) !=
+            self._store.extraction_contract_hashes(self._position)["prompt_sha256"]
+        ):
+            raise EvaluationBudgetAbort("offline_frozen_extraction_prompt_changed")
+        scope = (self._invocation_scope(self._purpose, messages, self._window)
                  if self._invocation_scope is not None else nullcontext())
         with self._store.stage(self._position, self._purpose), scope:
             try:
@@ -184,12 +233,13 @@ class _RecordedModel:
                 raise
             self._store.record(kind="adapter_output", payload=message.model_dump())
             calls = getattr(message, "tool_calls", None)
-            expected = (EXTRACTION_SCHEMA if self._purpose == "extraction"
-                        else SOURCE_VERIFICATION_SCHEMA)["title"]
+            expected = (extraction_tool_name(self._extraction_mode) if self._purpose == "extraction"
+                        else SOURCE_VERIFICATION_SCHEMA["title"])
             if (not isinstance(calls, list) or len(calls) != 1
                     or calls[0].get("name") != expected):
                 raise ExtractionInvalidOutputError("离线模型未返回唯一具名工具结果。")
-            if self._purpose == "extraction":
+            if (self._purpose == "extraction" and
+                    self._extraction_mode is EvaluationExtractionMode.LEGACY_E14):
                 self._check_extraction(calls[0].get("args"))
                 self._call_state["extraction_empty"] = not calls[0]["args"]["facts"]
             return message
@@ -220,9 +270,25 @@ def _frozen_config(
     plan: tuple[dict, ...], *, request_timeout_seconds: float = 60.0,
     max_retries: int = 2,
     verification_mode: SourceVerificationMode | str = SourceVerificationMode.LEGACY_V4,
+    extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
+    windows: tuple[ExtractionWindow, ...] = (),
 ) -> dict:
     selected = SourceVerificationMode(verification_mode)
     verification_prompt, verification_schema = _verification_contract(selected)
+    extraction_selected = EvaluationExtractionMode(extraction_mode)
+    extraction_frozen: dict = {"extraction_mode": extraction_selected.value}
+    if extraction_selected is EvaluationExtractionMode.GROUNDED_V2:
+        if not windows or len(windows) != len(plan):
+            raise EvaluationBudgetAbort("evaluation_grounded_windows_required")
+        contracts = tuple(extraction_contract(extraction_selected, window) for window in windows)
+        extraction_frozen.update({
+            "extraction_prompt_sha256": canonical_sha256(contracts[0][0]),
+            "extraction_schema_sha256": canonical_sha256(tuple(schema for _, schema in contracts)),
+            "extraction_window_contracts": [{
+                "input_sha256": item["input_sha256"], "prompt_sha256": canonical_sha256(prompt),
+                "schema_sha256": canonical_sha256(schema),
+            } for item, (prompt, schema) in zip(plan, contracts)],
+        })
     return {
         "mode": "offline_mock", "synthetic_only": True,
         "base_url": _BASE_URL, "endpoint": _ENDPOINT,
@@ -241,6 +307,7 @@ def _frozen_config(
             "reasoning_effort", "response_format", "strict", "parallel_tool_calls",
             "max_tokens", "max_completion_tokens",
         ],
+        **extraction_frozen,
     }
 
 
@@ -267,6 +334,8 @@ def _audit_persist_capability(store: EvaluationRecordStore, case_position: int,
         if (phase == "final" and "verification_protocol" in payload
                 and state.get("verification_mode") == "nullable-proof-v1"):
             keys = keys | {"verification_protocol"}
+        if state.get("extraction_mode") == "grounded-v2":
+            keys = keys | {"extraction_protocol"}
         if (phase not in {"raw", "final"} or set(payload) != keys
                 or (phase == "raw" and state["phase"] is not None)
                 or (phase == "final" and state["phase"] != "raw")):
@@ -286,12 +355,17 @@ def run_offline_evaluation(
     *, cases: tuple[EvaluationCase, ...], output_directory: Path, run_id: UUID,
     request_limit: int, synthetic_transport: httpx.MockTransport,
     verification_mode: SourceVerificationMode | str = SourceVerificationMode.LEGACY_V4,
+    extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
 ) -> dict:
     """串行执行 Mock E/V、原评分与可靠退场；不接受真实端点或模型配置。"""
     try:
         selected = SourceVerificationMode(verification_mode)
     except (TypeError, ValueError):
         raise EvaluationBudgetAbort("offline_invalid_verification_mode") from None
+    try:
+        extraction_selected = EvaluationExtractionMode(extraction_mode)
+    except (TypeError, ValueError):
+        raise EvaluationBudgetAbort("offline_invalid_extraction_mode") from None
     public_cases = (*CASES, *SEMANTIC_CASES)
     if (current_trace() is not None
             or type(synthetic_transport) is not httpx.MockTransport
@@ -304,7 +378,8 @@ def run_offline_evaluation(
         "case_position": position, "case_name": case.name,
         "input_sha256": canonical_sha256(public_window_projection(window)),
     } for position, (case, window) in enumerate(zip(cases, windows)))
-    config = {**_frozen_config(plan, verification_mode=selected),
+    config = {**_frozen_config(plan, verification_mode=selected,
+                             extraction_mode=extraction_selected, windows=windows),
               "public_cases_sha256": canonical_sha256(cases)}
     budget = EvaluationBudget.create(
         run_id=run_id, output_directory=output_directory, request_limit=request_limit,
@@ -317,6 +392,7 @@ def run_offline_evaluation(
         api_key="synthetic-not-a-real-key", synthetic_transport=synthetic_transport,
         provider="synthetic-provider",
         verification_mode=selected,
+        extraction_mode=extraction_selected,
     )
 
 
@@ -334,9 +410,13 @@ def _run_evaluation_batch(
     verification_tool_choice: str = "forced",
     reasoning_effort: str | None = None,
     extraction_tool_choice: str = "forced",
+    extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
 ) -> dict:
     """P0/P1共用记录与收尾；真实配置与独审验证由各入口负责。"""
     selected = SourceVerificationMode(verification_mode)
+    extraction_selected = EvaluationExtractionMode(extraction_mode)
+    if store.extraction_mode != extraction_selected.value:
+        raise EvaluationBudgetAbort("evaluation_frozen_extraction_mode_mismatch")
     outcomes = [{**item, "status": "unrun"} for item in plan]
     results: list[EvaluationResult] = []
     audits: list[dict] = []
@@ -396,11 +476,15 @@ def _run_evaluation_batch(
                     invocation_scope=invocation_scope,
                     verification_tool_choice=verification_tool_choice,
                     extraction_tool_choice=extraction_tool_choice,
+                    extraction_mode=extraction_selected,
                 )
                 # 原adapter只消费bind_tools/invoke；评测代理不成为产品模型实现。
                 adapter_model = cast(BaseChatModel, recorded_model)
                 result = evaluate_case(
-                    case, window, LangChainExtractionRuntime(model=adapter_model),
+                    case, window, _RecordedExtractionRuntime(
+                        extraction_runtime(extraction_selected, adapter_model),
+                        store, position, extraction_selected, call_state,
+                    ),
                     verification_runtime=_RecordedVerificationRuntime(
                         LangChainSourceVerificationRuntime(
                             model=adapter_model, provider=provider,
@@ -422,7 +506,8 @@ def _run_evaluation_batch(
                     current_events = tuple(event for event in store.events()
                                            if event["case_position"] == position)
                     audit_state = {"active": True, "phase": None,
-                                   "verification_mode": selected.value}
+                                   "verification_mode": selected.value,
+                                   "extraction_mode": extraction_selected.value}
                     persist_audit = _audit_persist_capability(store, position, audit_state)
 
                     bundle = {
@@ -439,6 +524,11 @@ def _run_evaluation_batch(
                         "verification_mode": selected.value,
                         "verification_tool_choice": verification_tool_choice,
                         "extraction_tool_choice": extraction_tool_choice,
+                        "extraction_mode": extraction_selected.value,
+                        "extraction_program": tuple(
+                            event["payload"] for event in current_events
+                            if event["kind"] == "extraction_program"
+                        ),
                         "verification_program": tuple(
                             event["payload"] for event in current_events
                             if event["kind"] == "verification_program"
@@ -509,6 +599,7 @@ def _run_evaluation_batch(
         receipt_error_code = f"{code_prefix}_completion_receipt_unavailable"
     return {
         "synthetic_only": True, "quality_certified": False,
+        "extraction_mode": extraction_selected.value,
         "summary": summary, "outcomes": tuple(outcomes), "receipt": receipt,
         "receipt_error_code": receipt_error_code, "stopped_code": stopped_code,
         "cleanup_error_codes": tuple(cleanup_error_codes),
