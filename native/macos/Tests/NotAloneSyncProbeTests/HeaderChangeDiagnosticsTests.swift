@@ -2,6 +2,50 @@ import XCTest
 @testable import NotAloneSyncCore
 
 final class HeaderChangeDiagnosticsTests: XCTestCase {
+    func testFinalCaptureCountsSeparateReturnedImageCallbacksAndProcessedFrames() {
+        var counts = HeaderChangeCaptureCounts()
+        var diagnostics = HeaderChangeDiagnostics(
+            environment: ["NOTALONE_HEADER_CHANGE_DIAGNOSTICS": "1"], beganAt: 0)
+        XCTAssertEqual(diagnostics.countsLine(counts, processedFrames: 0, at: 1),
+            "notalone-header-counts-v1 final 0 0 0 1000.0\n")
+        counts.initialImageReturned()
+        counts.initialImageReturned()
+        for _ in 0..<5 { counts.screenSampleReceived() }
+        var active = HeaderChangeDiagnostics(
+            environment: ["NOTALONE_HEADER_CHANGE_DIAGNOSTICS": "1"], beganAt: 0)
+        XCTAssertEqual(active.countsLine(counts, processedFrames: 2, at: 2),
+            "notalone-header-counts-v1 final 1 5 2 2000.0\n")
+        XCTAssertNil(active.countsLine(counts, processedFrames: 2, at: 3))
+        var saturated = HeaderChangeCaptureCounts(initialImages: 1, screenCallbacks: UInt32.max)
+        saturated.screenSampleReceived()
+        var bounded = HeaderChangeDiagnostics(
+            environment: ["NOTALONE_HEADER_CHANGE_DIAGNOSTICS": "1"], beganAt: 0)
+        XCTAssertEqual(bounded.countsLine(saturated, processedFrames: 240, at: 1),
+            "notalone-header-counts-v1 saturated 1 4294967295 240 1000.0\n")
+    }
+
+    func testCaptureCountsKeepDefaultOffInvalidRangesAndOriginalSharedBudget() {
+        let counts = HeaderChangeCaptureCounts(initialImages: 1, screenCallbacks: 240)
+        for value in [nil, "", "0", "true"] as [String?] {
+            var disabled = HeaderChangeDiagnostics(
+                environment: value.map { ["NOTALONE_HEADER_CHANGE_DIAGNOSTICS": $0] } ?? [:], beganAt: 0)
+            XCTAssertNil(disabled.countsLine(counts, processedFrames: 240, at: 1))
+        }
+        var enabled = HeaderChangeDiagnostics(
+            environment: ["NOTALONE_HEADER_CHANGE_DIAGNOSTICS": "1"], beganAt: 0)
+        for processed in [-1, 241] { XCTAssertNil(enabled.countsLine(counts, processedFrames: processed, at: 1)) }
+        XCTAssertNil(enabled.countsLine(.init(), processedFrames: 1, at: 1))
+        XCTAssertNil(enabled.countsLine(.init(initialImages: 2), processedFrames: 0, at: 1))
+        XCTAssertNil(enabled.countsLine(.init(screenCallbacks: 1, saturated: true), processedFrames: 0, at: 1))
+        XCTAssertNil(enabled.countsLine(counts, processedFrames: 240, at: .nan))
+        var bytes = 0
+        for _ in 0..<31 { bytes += enabled.line(stage: .run, reason: .begin, at: 1)!.utf8.count }
+        bytes += enabled.countsLine(counts, processedFrames: 240, at: 1)!.utf8.count
+        XCTAssertLessThanOrEqual(bytes, 3840)
+        XCTAssertNil(enabled.line(stage: .finished, reason: .stopped, at: 1))
+        XCTAssertNil(enabled.countsLine(counts, processedFrames: 240, at: 1))
+    }
+
     @MainActor
     func testNonUniqueInstanceCountProjectsOnlyZeroOrMultipleWithoutAnotherResolution() {
         XCTAssertNil(HeaderChangeContextReadFailure.instanceCount(1))

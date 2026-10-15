@@ -26,6 +26,10 @@ type NativeContextDiagnosticRecord = {
   kind: 'native-context'; ordinal: number; elapsedMs: number; nativeElapsedMs: number;
   reason: typeof contextReasons[number];
 } & Record<typeof contextMatchKeys[number], boolean | null>;
+type NativeCountsDiagnosticRecord = {
+  kind: 'native-counts'; ordinal: number; elapsedMs: number; nativeElapsedMs: number;
+  status: 'final' | 'saturated'; initialImages: number; screenCallbacks: number; processedFrames: number;
+};
 
 export type HeaderChangeHostReason = typeof hostReasons[number];
 export type HeaderChangeDiagnosticSignal = typeof signals[number];
@@ -37,7 +41,7 @@ export type HeaderChangeDiagnosticRecord = {
   resolving: boolean; blocked: boolean; freshProof: boolean; epochCurrent: boolean;
   paused: boolean; stopping: boolean; renewalEligible: boolean; code: number | null; signal: HeaderChangeDiagnosticSignal;
 } | { kind: 'native'; ordinal: number; elapsedMs: number; stage: typeof nativeStages[number];
-  reason: typeof nativeReasons[number]; nativeElapsedMs: number } | NativeContextDiagnosticRecord;
+  reason: typeof nativeReasons[number]; nativeElapsedMs: number } | NativeContextDiagnosticRecord | NativeCountsDiagnosticRecord;
 export interface HeaderChangeDiagnosticSink {
   record(record: HeaderChangeDiagnosticRecord): void;
   close(): void;
@@ -46,6 +50,11 @@ export interface HeaderChangeDiagnosticSink {
 const includes = (items: readonly string[], value: unknown): boolean => typeof value === 'string' && items.includes(value);
 const elapsed = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
 const ordinal = (value: unknown): boolean => Number.isSafeInteger(value) && Number(value) >= 0;
+const countsValid = (status: unknown, initial: number, callbacks: number, processed: number): boolean =>
+  (status === 'final' || status === 'saturated') && Number.isInteger(initial) && initial >= 0 && initial <= 1
+  && Number.isSafeInteger(callbacks) && callbacks >= 0 && callbacks <= 0xffff_ffff
+  && Number.isInteger(processed) && processed >= 0 && processed <= 240 && processed <= callbacks
+  && (status !== 'saturated' || callbacks === 0xffff_ffff);
 const contextValuesValid = (reason: unknown, values: unknown[]): boolean => values.length === 6
   && includes(contextReasons, reason) && (reason === 'identity_mismatch'
     ? values.every(value => typeof value === 'boolean') && values.some(value => value === false)
@@ -59,6 +68,8 @@ function validRecord(record: HeaderChangeDiagnosticRecord): boolean {
     && Number.isSafeInteger(record.epochMs) && record.epochMs >= 0 && elapsed(record.sampleSpanMs)
     && record.sampleSpanMs / 2 <= record.elapsedMs;
   if (!ordinal(record.ordinal)) return false;
+  if (record.kind === 'native-counts') return keys === 'elapsedMs,initialImages,kind,nativeElapsedMs,ordinal,processedFrames,screenCallbacks,status'
+    && elapsed(record.nativeElapsedMs) && countsValid(record.status, record.initialImages, record.screenCallbacks, record.processedFrames);
   if (record.kind === 'native') return keys === 'elapsedMs,kind,nativeElapsedMs,ordinal,reason,stage'
     && includes(nativeStages, record.stage) && includes(nativeReasons, record.reason) && elapsed(record.nativeElapsedMs);
   if (record.kind === 'native-context') return keys === 'buildMatches,elapsedMs,kind,nativeElapsedMs,ordinal,originMatches,processMatches,reason,sizeMatches,versionMatches,windowMatches'
@@ -114,7 +125,8 @@ export function diagnosticSignal(signal: string | null): HeaderChangeDiagnosticS
 }
 
 export type NativeHeaderChangeDiagnostic = Pick<Extract<HeaderChangeDiagnosticRecord, { kind: 'native' }>,
-  'stage' | 'reason' | 'nativeElapsedMs'> | Omit<NativeContextDiagnosticRecord, 'ordinal' | 'elapsedMs'>;
+  'stage' | 'reason' | 'nativeElapsedMs'> | Omit<NativeContextDiagnosticRecord, 'ordinal' | 'elapsedMs'>
+  | Omit<NativeCountsDiagnosticRecord, 'ordinal' | 'elapsedMs'>;
 
 // 每个源最多32行／3840字节；未知原文不进入任何回调或文件。
 export class NativeHeaderChangeDiagnosticDecoder {
@@ -122,6 +134,7 @@ export class NativeHeaderChangeDiagnosticDecoder {
   private lines = 0;
   private pending = '';
   private rejected = false;
+  private countsSeen = false;
   constructor(private readonly accept: (record: NativeHeaderChangeDiagnostic) => void,
     private readonly invalid: () => void) {}
   push(chunk: Buffer): void {
@@ -134,6 +147,16 @@ export class NativeHeaderChangeDiagnosticDecoder {
       if (end < 0) break;
       if (++this.lines > 32 || end + 1 > 120) { this.reject(); return; }
       const line = this.pending.slice(0, end); this.pending = this.pending.slice(end + 1);
+      const counts = /^notalone-header-counts-v1 (final|saturated) ([01]) (\d+) (\d+) (\d+(?:\.\d+)?(?:e[+-]?\d+)?)$/.exec(line);
+      if (counts) {
+        const initialImages = Number(counts[2]), screenCallbacks = Number(counts[3]), processedFrames = Number(counts[4]);
+        if (this.countsSeen || !countsValid(counts[1], initialImages, screenCallbacks, processedFrames)
+          || !elapsed(Number(counts[5]))) { this.reject(); return; }
+        this.countsSeen = true;
+        this.accept({ kind: 'native-counts', status: counts[1] as 'final' | 'saturated', initialImages,
+          screenCallbacks, processedFrames, nativeElapsedMs: Number(counts[5]) });
+        continue;
+      }
       const context = /^notalone-header-context-v1 ([a-z_]+) ([01]{6}|------) (\d+(?:\.\d+)?(?:e[+-]?\d+)?)$/.exec(line);
       if (context) {
         const values = [...context[2]].map(value => value === '-' ? null : value === '1');

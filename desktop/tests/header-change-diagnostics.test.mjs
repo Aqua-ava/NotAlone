@@ -16,6 +16,38 @@ const record = { kind: 'host', event: 'reconcile', reason: 'no_permit', ordinal:
   permitPresent: false, childPresent: false, resolving: false, blocked: false, freshProof: false,
   epochCurrent: true, paused: false, stopping: false, renewalEligible: false, code: null, signal: 'none' };
 
+test('最终帧分账只接受三个有界计数，饱和显式标记且每源仅一次', async () => {
+  const accepted=[],invalid=[];
+  const decoder=new NativeHeaderChangeDiagnosticDecoder(value=>accepted.push(value),()=>invalid.push(true));
+  decoder.push(Buffer.from('notalone-header-counts-v1 final 1 5 2 1000\n'));
+  decoder.push(Buffer.from('notalone-header-counts-v1 final 1 6 3 1001\n'));decoder.finish();
+  assert.deepEqual(accepted,[{kind:'native-counts',status:'final',initialImages:1,screenCallbacks:5,
+    processedFrames:2,nativeElapsedMs:1000}]);
+  assert.equal(invalid.length,1);
+  const saturated=[];
+  const maximum=new NativeHeaderChangeDiagnosticDecoder(value=>saturated.push(value),()=>assert.fail('合法饱和计数被拒绝'));
+  maximum.push(Buffer.from('notalone-header-counts-v1 saturated 1 4294967295 240 1000\n'));maximum.finish();
+  assert.equal(saturated[0].status,'saturated');assert.equal(saturated[0].screenCallbacks,4294967295);
+  const output=path.join(directory,'counts.jsonl');
+  const sink=openHeaderChangeDiagnostics({NOTALONE_HEADER_CHANGE_HOST_DIAGNOSTICS_FILE:output});
+  sink.record({ordinal:1,elapsedMs:10,...accepted[0]});
+  for(const value of [{...accepted[0],processedFrames:241},{...accepted[0],screenCallbacks:1},
+    {...accepted[0],initialImages:2},{...accepted[0],status:'saturated'},
+    {...accepted[0],privateImage:'private-pixels'}, {...accepted[0],screenCallbacks:Infinity}]) {
+    sink.record({ordinal:1,elapsedMs:10,...value});
+  }
+  sink.close();
+  assert.deepEqual((await readFile(output,'utf8')).trim().split('\n').map(JSON.parse),
+    [{ordinal:1,elapsedMs:10,...accepted[0]}]);
+  for(const raw of ['final 2 5 2 1','final 1 4294967296 240 1','final 1 1 2 1',
+    'final 1 250 241 1','saturated 1 5 2 1','final 1 5 2 NaN','final 1 5 2 1 name=private']){
+    const values=[],failures=[];
+    const rejected=new NativeHeaderChangeDiagnosticDecoder(value=>values.push(value),()=>failures.push(true));
+    rejected.push(Buffer.from(`notalone-header-counts-v1 ${raw}\n`));rejected.finish();
+    assert.equal(values.length,0,raw);assert.equal(failures.length,1,raw);
+  }
+});
+
 test('实例零与多个仅接受固定不可读分类，旧ambiguous兼容且不接受数量或匹配位', async () => {
   const accepted = [], failures = [];
   const decoder = new NativeHeaderChangeDiagnosticDecoder(value => accepted.push(value), () => failures.push(true));

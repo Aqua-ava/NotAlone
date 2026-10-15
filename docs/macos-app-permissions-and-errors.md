@@ -634,3 +634,11 @@ v7同版实机已看到私聊→测试群→私聊的助手画面，宿主记录
 显式私有诊断sink新增最多一条纯数值clock-anchor：宿主单调elapsedMs、Date.now的epochMs及夹取跨度sampleSpanMs；中点投影仅用于后继场近似对齐既有时序，不认证事件因果、精准绘制耗时，也不以wall clock参与调度。默认关闭、0600／独占创建、512行／256KiB限额及strict白名单保持。18源集合、权限／签名身份、正式单帧与原停止门不变。
 
 Swift完整102项含2个既有跳过、0失败，宿主相关13项、类型及完整安全70项通过；本片双轴均0。仍待新签名候选实机，不将旧v7归因或Finder独立录屏预检缺口补签。没有修改Info.plist、entitlements或TCC，详见[最小诊断方案](../.scratch/foreground-event-trigger/instance-count-clock-diagnostic-plan-20261016.md)。
+
+## 2026-10-16 辅助源额外帧分账诊断
+
+v8记录了实际变化提示及提前正式HTTP的时序，宿主日志达到512行上限；该场只有正式轮次单帧计数，不能据租期／4Hz上限补算辅助帧。后继候选只在既有成功capture返回、screen回调入口和原顶部处理帧数上记账：成功返回的初始化CGImage为0或1，screen回调包含收尾前收到但未处理的样本，顶部处理帧为原0..240计数。回调不是OS内部全部物理采帧数，首个detector基线也算顶部处理帧。
+
+显式native诊断在原stopCapture收尾后最多输出一条固定final／saturated计数；回调超过UInt32上界时标为饱和下界。原32行／3840字节／120字节及宿主512行／256KiB不变；硬退出或cap缺记录即未获最终计数，不补0。strict decoder只接受固定状态和有界整数，不输出图、像素、名称、PID或坐标。默认关闭，不新增采图／OCR／OS查询、权限或签名身份，不修改原唯一实例门、失败锁、采样频率或续租行为。
+
+本片Swift完整104项含2个既有实验skip、0失败，宿主相关15项、类型及完整安全71项通过。仅为新包准备离线验证，不能补签旧v8实际分账、Finder录屏责任身份或TCC权限。没有修改Info.plist、entitlements或TCC；协议、实际命令及验证结果见[额外帧分账方案](../.scratch/foreground-event-trigger/header-frame-counts-plan-20261016.md)。

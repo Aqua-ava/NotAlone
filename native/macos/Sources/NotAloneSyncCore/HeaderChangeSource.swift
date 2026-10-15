@@ -19,6 +19,7 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
     private var detector = HeaderChangeDetector()
     private var active = true
     private var frames = 0
+    private var captureCounts = HeaderChangeCaptureCounts()
     private var width = 0
     private var height = 0
     private var lastFrameAt: TimeInterval = -.infinity
@@ -45,6 +46,10 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
             workspace.removeObserver(activation)
             active = false; detector.reset(); context = nil
             record(stage: .finished, reason: stopReason ?? .stopped)
+            if let line = diagnostics?.countsLine(captureCounts, processedFrames: frames,
+                at: ProcessInfo.processInfo.systemUptime) {
+                FileHandle.standardError.write(Data(line.utf8))
+            }
             deadline.cancel()
             emit("paused")
         }
@@ -135,6 +140,7 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
         // 不让整窗CGImage或布局的整窗亮度数组跨越初始化保存。
         enter(.initialCapture)
         let image = try await AutomaticSessionCapture.captureWindow(current)
+        captureCounts.initialImageReturned()
         enter(.initialLayout)
         let layout = try AutomaticSessionRegions.headerLayout(image, windowSize: current.frame.size)
         return (layout.rectangle, layout.scale)
@@ -165,6 +171,7 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
                             of type: SCStreamOutputType) {
+        if type == .screen { captureCounts.screenSampleReceived() }
         // 采集回调显式注册到主队列，先核对前台上下文，后访问局部像素。
         receive(sampleBuffer, type: type)
     }

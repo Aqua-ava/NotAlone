@@ -142,6 +142,29 @@ test('实例分类仍走原code1失败锁，锚点不随墙钟跳变或fresh pro
  }finally{await source.shutdown();}
 });
 
+test('最终帧分账经真实合成子进程转发，计数不是stdout事件且code1仍锁住连续许可', async () => {
+ const executable=await script('capture-counts',`
+ process.stderr.write('notalone-header-counts-v1 final 1 5 2 1000\\n');
+ process.stdout.write('{"event":"paused"}\\n');
+ setTimeout(()=>process.exit(1),30);
+ `);
+ const records=[],events=[];
+ const source=new NativeHeaderChangeSource(async()=>executable,{record:record=>records.push(record),close(){}});
+ try{
+  source.update({scope:'capture-counts',observation:'first'},event=>events.push(event));
+  await wait(()=>records.some(record=>record.event==='close'));
+  source.update({scope:'capture-counts',observation:'fresh'},event=>events.push(event));
+  assert.deepEqual(events,['paused']);
+  const counts=records.find(record=>record.kind==='native-counts');
+  assert.deepEqual(counts,{kind:'native-counts',ordinal:1,elapsedMs:counts.elapsedMs,
+   status:'final',initialImages:1,screenCallbacks:5,processedFrames:2,nativeElapsedMs:1000});
+  const closed=records.find(record=>record.event==='close');
+  assert.equal(closed.code,1);assert.equal(closed.blocked,true);assert.equal(closed.renewalEligible,false);
+  assert.equal(records.filter(record=>record.event==='launch').length,1);
+  assert.ok(records.some(record=>record.reason==='scope_blocked'&&record.freshProof));
+ }finally{await source.shutdown();}
+});
+
 test('完整合成租期仅凭新鲜正式proof续租；复用proof保留门禁，诊断回调失败不影响停源', async (t) => {
  const originalNow=Date.now;
  let offset=0;

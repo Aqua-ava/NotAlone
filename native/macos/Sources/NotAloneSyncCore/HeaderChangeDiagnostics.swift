@@ -122,11 +122,25 @@ struct HeaderChangeContextDiagnosis: Sendable {
     }
 }
 
+struct HeaderChangeCaptureCounts: Sendable {
+    private(set) var initialImages = 0
+    private(set) var screenCallbacks: UInt32 = 0
+    private(set) var saturated = false
+
+    mutating func initialImageReturned() { initialImages = 1 }
+
+    mutating func screenSampleReceived() {
+        if screenCallbacks == .max { saturated = true }
+        else { screenCallbacks += 1 }
+    }
+}
+
 // 只接受固定枚举和单调时间；不接收原始错误、几何、像素或名称。
 struct HeaderChangeDiagnostics: Sendable {
     private let enabled: Bool
     private let beganAt: TimeInterval
     private var remaining = 32
+    private var finalCountsEmitted = false
 
     init(environment: [String: String], beganAt: TimeInterval) {
         enabled = environment["NOTALONE_HEADER_CHANGE_DIAGNOSTICS"] == "1"
@@ -158,6 +172,18 @@ struct HeaderChangeDiagnostics: Sendable {
 
     mutating func contextLine(_ diagnosis: HeaderChangeContextDiagnosis, at now: TimeInterval) -> String? {
         emit(prefix: "notalone-header-context-v1", body: "\(diagnosis.reason.rawValue) \(diagnosis.matches)", at: now)
+    }
+
+    mutating func countsLine(_ counts: HeaderChangeCaptureCounts, processedFrames: Int,
+                             at now: TimeInterval) -> String? {
+        guard !finalCountsEmitted, (0...1).contains(counts.initialImages),
+              (0...240).contains(processedFrames), processedFrames <= Int(counts.screenCallbacks),
+              !counts.saturated || counts.screenCallbacks == .max else { return nil }
+        let status = counts.saturated ? "saturated" : "final"
+        let line = emit(prefix: "notalone-header-counts-v1",
+            body: "\(status) \(counts.initialImages) \(counts.screenCallbacks) \(processedFrames)", at: now)
+        if line != nil { finalCountsEmitted = true }
+        return line
     }
 
     private mutating func emit(prefix: String, body: String, at now: TimeInterval) -> String? {
