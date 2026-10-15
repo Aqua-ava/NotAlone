@@ -62,7 +62,7 @@ class LegacyForegroundEnginePort(Protocol):
 
 
 class CliFullSyncEngine:
-    """面向 HTTP/App 的同步接口；正常 cycle 不调用旧前台 tail。"""
+    """面向 HTTP/App 的同步接口；后台 cycle 不触发视觉观察。"""
 
     __slots__ = (
         "_owner_id",
@@ -77,7 +77,6 @@ class CliFullSyncEngine:
         "_clock",
         "_cli_status",
         "_cli_last_checked_at",
-        "_last_foreground_status",
         "_priority_contact_id",
     )
 
@@ -109,7 +108,6 @@ class CliFullSyncEngine:
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._cli_status: tuple[bool, str | None] | None = None
         self._cli_last_checked_at: datetime | None = None
-        self._last_foreground_status: ForegroundLocatorStatus | None = None
         self._priority_contact_id: UUID | None = None
 
     def enable_sync(self) -> None:
@@ -202,21 +200,14 @@ class CliFullSyncEngine:
 
     def cycle(self) -> FrontSyncCycleReport:
         enabled = self.sync_enabled()
-        foreground: ForegroundLocatorStatus = self._foreground.observe(enabled=enabled)
-        self._last_foreground_status = foreground
-        priority_contact_id = (
-            self._priority_contact_id
-            if self._priority_contact_id is not None
-            else foreground.active_contact_id
-        )
         background: CliSyncCycleResult = self._background.cycle(
             enabled=enabled,
-            priority_contact_id=priority_contact_id,
+            priority_contact_id=self._priority_contact_id,
         )
         return self._build_report(
             enabled=enabled,
             background=background,
-            foreground=foreground,
+            foreground=_unknown_foreground_status(enabled),
         )
 
     def _build_report(
@@ -319,21 +310,16 @@ class CliFullSyncEngine:
         else:
             self._background.request_safety_sweep()
         # 批量绑定在 NotAlone 界面完成，不应为了返回状态再次触发
-        # 屏幕录制/OCR；沿用最近一次前台状态，后台通道立即刷新。
+        # 屏幕录制/OCR，也不以旧前台身份刷新当前联系人。
         enabled = self.sync_enabled()
         background = self._background.cycle(
             enabled=enabled,
-            priority_contact_id=(
-                None
-                if self._last_foreground_status is None
-                else self._last_foreground_status.active_contact_id
-            ),
+            priority_contact_id=self._priority_contact_id,
         )
-        foreground = self._last_foreground_status or _unknown_foreground_status(enabled)
         return self._build_report(
             enabled=enabled,
             background=background,
-            foreground=foreground,
+            foreground=_unknown_foreground_status(enabled),
         )
 
     # ------------------------------------------------------------------
@@ -366,7 +352,7 @@ class CliFullSyncEngine:
         return self._build_report(
             enabled=enabled,
             background=background,
-            foreground=self._last_foreground_status or _unknown_foreground_status(enabled),
+            foreground=_unknown_foreground_status(enabled),
         )
 
     def confirm_binding(self, *, contact_id: UUID, locator: str) -> FrontSyncCycleReport:
@@ -402,15 +388,16 @@ class CliFullSyncEngine:
 
 
 def _unknown_foreground_status(enabled: bool) -> ForegroundLocatorStatus:
+    # 兼容布尔字段仅表示没有有效观察；固定原因明确区分未观察与实测非前台。
     return ForegroundLocatorStatus(
         phase=(
-            FrontSyncPhase.WAITING_FOREGROUND
+            FrontSyncPhase.UNAVAILABLE
             if enabled
             else FrontSyncPhase.SYNC_DISABLED
         ),
-        probe_available=True,
+        probe_available=False,
         wechat_in_front=False,
-        failure_code=None,
+        failure_code="foreground_not_observed",
         active_contact_id=None,
         active_binding_display_name=None,
         decision_reason=None,

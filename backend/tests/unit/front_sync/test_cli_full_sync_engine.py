@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from time import monotonic
 from uuid import UUID
 
 from notalone.front_sync.cli_binding import CliBindingCandidateView, CliBindingSelection
@@ -14,6 +15,7 @@ from notalone.front_sync.cli_sync import (
     CliSyncStatus,
 )
 from notalone.front_sync.foreground_locator import ForegroundLocatorStatus
+from notalone.front_sync.foreground_observation import FreshForegroundObservation
 from notalone.front_sync.sync_engine import FrontSyncCycleReport
 from notalone.front_sync.tail_lifecycle import FrontSyncPhase, FollowRuntimeStatus
 from notalone.wechat_cli import CliCommandError
@@ -31,6 +33,9 @@ class FakeState:
         del kwargs
         return type("State", (), {"enabled": self.enabled})()
 
+    def read_bounded(self, **kwargs):
+        return self.read(**kwargs)
+
     def enable(self, **kwargs):
         del kwargs
         object.__setattr__(self, "enabled", True)
@@ -47,6 +52,8 @@ class FakeBackground:
         self.safety_sweep_requests = 0
         self.smoke_enabled = False
         self.interruptions = 0
+        self.backfill_pauses = 0
+        self.backfill_retries = 0
         self.result = CliSyncCycleResult(
             status=CliSyncStatus(
                 phase=CliSyncPhase.ACTIVE,
@@ -74,6 +81,12 @@ class FakeBackground:
     def request_safety_sweep(self) -> None:
         self.safety_sweep_requests += 1
 
+    def pause_backfill(self) -> None:
+        self.backfill_pauses += 1
+
+    def retry_backfill(self) -> None:
+        self.backfill_retries += 1
+
     def enable_follow_smoke(self):
         self.smoke_enabled = True
 
@@ -90,6 +103,7 @@ class FakeBackground:
 class FakeForeground:
     def __init__(self) -> None:
         self.calls: list[bool] = []
+        self.fresh_calls: list[bool] = []
         self.result = ForegroundLocatorStatus(
             phase=FrontSyncPhase.FAILED,
             probe_available=False,
@@ -104,6 +118,14 @@ class FakeForeground:
     def observe(self, *, enabled: bool) -> ForegroundLocatorStatus:
         self.calls.append(enabled)
         return self.result
+
+    def observe_fresh(self, *, enabled: bool, deadline: float) -> FreshForegroundObservation:
+        self.fresh_calls.append(enabled)
+        return FreshForegroundObservation.create(
+            phase="confirmed", reason="confirmed_active_binding",
+            probe_available=True, wechat_in_front=True,
+            contact_id=CONTACT_ID, binding_id=OWNER_ID,
+        )
 
 
 class FakeCli:
@@ -206,7 +228,7 @@ class CliFullSyncEngineTest(unittest.TestCase):
             clock=lambda: datetime(2026, 9, 1, 10, 0, tzinfo=timezone.utc),
         )
 
-    def test_frontend_probe_failure_does_not_block_cli_background_report(self) -> None:
+    def test_background_cycle_does_not_observe_or_claim_foreground(self) -> None:
         report = self.engine.cycle()
 
         self.assertEqual(report.sync_mode, "cli_background")
@@ -215,10 +237,15 @@ class CliFullSyncEngineTest(unittest.TestCase):
         self.assertTrue(report.cli_stream_active)
         self.assertEqual(report.cli_batch_message_count, 3)
         self.assertFalse(report.probe_available)
-        self.assertEqual(report.foreground_phase, "failed")
-        self.assertEqual(report.foreground_failure_code, "screen_capture_permission_missing")
+        self.assertEqual(report.foreground_phase, "unavailable")
+        self.assertEqual(report.foreground_failure_code, "foreground_not_observed")
+        self.assertFalse(report.wechat_in_front)
+        self.assertIsNone(report.active_contact_id)
+        self.assertIsNone(report.active_binding_display_name)
+        self.assertIsNone(report.decision_reason)
+        self.assertEqual(report.candidates, ())
         self.assertEqual(self.background.calls, [True])
-        self.assertEqual(self.foreground.calls, [True])
+        self.assertEqual(self.foreground.calls, [])
 
     def test_selected_contact_is_prioritized_for_background_cycle(self) -> None:
         self.engine.set_priority_contact(CONTACT_ID)
@@ -226,6 +253,60 @@ class CliFullSyncEngineTest(unittest.TestCase):
         self.engine.cycle()
 
         self.assertEqual(self.background.priority_calls, [CONTACT_ID])
+
+    def test_cycles_switches_and_backfill_controls_never_launch_visual_reads(self) -> None:
+        # 即使视觉端口有可用身份，后台也不能据此授予身份或隐式优先级。
+        self.foreground.result = ForegroundLocatorStatus(
+            phase=FrontSyncPhase.ACTIVE, probe_available=True, wechat_in_front=True,
+            failure_code=None, active_contact_id=CONTACT_ID,
+            active_binding_display_name="甲", decision_reason=None, candidates=(),
+        )
+        reports = [self.engine.cycle(), self.engine.cycle()]
+        self.engine.disable_sync()
+        reports.append(self.engine.cycle())
+        self.engine.enable_sync()
+        self.engine.request_sync_check()
+        reports.append(self.engine.cycle())
+        self.engine.pause_backfill()
+        reports.append(self.engine.cycle())
+        self.engine.retry_backfill()
+        reports.append(self.engine.cycle())
+
+        self.assertEqual(self.background.calls, [True, True, False, True, True, True])
+        self.assertEqual(self.background.priority_calls, [None] * 6)
+        self.assertEqual(self.background.backfill_pauses, 1)
+        self.assertEqual(self.background.backfill_retries, 1)
+        self.assertEqual(self.foreground.calls, [])
+        self.assertEqual(self.foreground.fresh_calls, [])
+        self.assertTrue(all(report.active_contact_id is None for report in reports))
+        self.assertTrue(all(report.foreground_failure_code == "foreground_not_observed"
+                            for report in reports))
+
+    def test_explicit_fresh_observation_does_not_become_background_identity(self) -> None:
+        fresh = self.engine.observe_foreground(deadline=monotonic() + 2)
+        report = self.engine.cycle()
+
+        self.assertEqual(fresh.contact_id, CONTACT_ID)
+        self.assertEqual(self.foreground.fresh_calls, [True])
+        self.assertEqual(self.foreground.calls, [])
+        self.assertIsNone(report.active_contact_id)
+        self.assertEqual(self.background.priority_calls, [None])
+
+    def test_batch_binding_honors_only_explicit_background_priority(self) -> None:
+        self.engine.set_priority_contact(CONTACT_ID)
+        self.engine.confirm_cli_bindings((CliBindingSelection(locator="wxid_a"),))
+        self.engine.set_priority_contact(None)
+        self.engine.cycle()
+
+        self.assertEqual(self.background.priority_calls, [CONTACT_ID, None])
+        self.assertEqual(self.foreground.calls, [])
+
+    def test_explicit_legacy_binding_confirmation_remains_available(self) -> None:
+        report = self.engine.confirm_binding(contact_id=CONTACT_ID, locator="wxid_a")
+        pending = self.engine.confirm_pending_binding(contact_id=CONTACT_ID, locator="wxid_a")
+
+        self.assertEqual(report.active_contact_id, CONTACT_ID)
+        self.assertEqual(pending.active_contact_id, CONTACT_ID)
 
     def test_batch_binding_is_exposed_without_using_foreground_probe(self) -> None:
         candidates = self.engine.list_cli_sessions()
