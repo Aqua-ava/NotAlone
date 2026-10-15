@@ -96,12 +96,12 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         assert pending.dimension_evidence is not None
         self.assertIsNone(pending.dimension_evidence.semantic_basis)
 
-    def test_unregistered_v4_evaluation_rejects_before_credentials_budget_audit_or_transport(self):
+    def test_old_plans_reject_v4_before_credentials_budget_audit_or_transport(self):
         from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
         from notalone.memory_extraction.evaluation_http_budget import EvaluationBudget, EvaluationBudgetAbort
 
         def forbidden(*args, **kwargs):
-            self.fail("v4没有真实执行合同，不能读取凭据、建预算、审核或进入传输。")
+            self.fail("旧计划不接受v4，不能读取凭据、建预算、审核或进入传输。")
 
         repo = Path(__file__).resolve().parents[4]
         output = repo / ".scratch/v4-unregistered-output-must-not-exist"
@@ -112,7 +112,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                 for case_set in ("reference21", "full140"):
                     for transport in (None, httpx.MockTransport(forbidden)):
                         with self.subTest(profile=profile, case_set=case_set, mock=transport is not None):
-                            with self.assertRaisesRegex(EvaluationBudgetAbort, "evaluation_extraction_mode_invalid"):
+                            with self.assertRaisesRegex(EvaluationBudgetAbort, "evaluation_full140_v4_fixed_plan_required"):
                                 run_ecnu_evaluation(
                                     output_directory=output, run_id=uuid4(),
                                     deadline=datetime(2030, 1, 1, tzinfo=timezone.utc), repo_root=repo,

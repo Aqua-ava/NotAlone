@@ -29,6 +29,7 @@ from notalone.memory_extraction.evaluation_offline import (
 from notalone.memory_extraction.evaluation_records import EvaluationRecordStore, canonical_sha256
 from notalone.memory_extraction.evaluation_reference import (
     FULL_ANNOTATION_PATH, FULL_REFERENCE_PATH, PUBLIC_REFERENCE_PATH,
+    FULL_ANNOTATION_V2_PATH, FULL_REFERENCE_V2_PATH, PUBLIC_ANNOTATION_V2_PATH, PUBLIC_REFERENCE_V2_PATH,
     full_case_reference_positions, public_window_projection,
     validate_full_public_reference,
 )
@@ -69,6 +70,17 @@ _NULLABLE_REQUIRED_SOURCES = _REQUIRED_SOURCES | frozenset(
     f"backend/src/notalone/memory/{name}.py"
     for name in ("dimension_evidence", "evidence_binding", "pragmatics")
 )
+_FULL140_V4_REQUIRED_SOURCES = _NULLABLE_REQUIRED_SOURCES | frozenset({
+    FULL_REFERENCE_V2_PATH, FULL_ANNOTATION_V2_PATH, PUBLIC_REFERENCE_V2_PATH, PUBLIC_ANNOTATION_V2_PATH,
+    "backend/src/notalone/runtime_config.py", "desktop/tests/fixtures/full140-v4-public.py",
+    ".scratch/grounded-evaluation/full140-v4-source-v2-readiness-20261016.md",
+    ".scratch/grounded-evaluation/full140-v4-control-implementation-20261016.md",
+    ".scratch/grounded-evaluation/full140-v4-reference-integration-20261016.md",
+    ".scratch/grounded-evaluation/reference-source-fidelity-v2-spec-20261016.md",
+    ".scratch/grounded-v4-protocol-readiness/spec.md", ".scratch/grounded-v4-object-ownership/spec.md",
+    "desktop/artifacts/grounded-public21-prepare-20261015/grounded_public21.py",
+    "desktop/artifacts/grounded-public21-prepare-20261015/explicit_review_bridge.py",
+})
 _AUDIT_REASONS = {
     "safe": {"supported"}, "general_error": {"coverage_miss", "contract_mismatch"},
     "safety_error": {"false_fact", "wrong_subject", "contract_mismatch"},
@@ -76,9 +88,16 @@ _AUDIT_REASONS = {
 }
 
 
+def _reference_paths(reference_version: str) -> tuple[str, str, str, str]:
+    return ((FULL_REFERENCE_V2_PATH, FULL_ANNOTATION_V2_PATH, PUBLIC_REFERENCE_V2_PATH, PUBLIC_ANNOTATION_V2_PATH)
+            if reference_version == "source-fidelity-v2" else
+            (FULL_REFERENCE_PATH, FULL_ANNOTATION_PATH, PUBLIC_REFERENCE_PATH, _CRITERIA_PATH))
+
+
 def _gold_reference(
     frozen_gold: dict, source_hashes: dict[str, str], *, case_set: str = "reference21",
     verification_mode: SourceVerificationMode = SourceVerificationMode.LEGACY_V4,
+    reference_version: str = "legacy-v1",
 ) -> dict:
     """这里只核对准备协议，不把 Agent 标记认证为真实语义质量。"""
     cases = _FULL_CASES if case_set == "full140" else _PLAN_CASES
@@ -90,7 +109,8 @@ def _gold_reference(
         raise EvaluationBudgetAbort("ecnu_gold_not_frozen")
     criterion = frozen_gold.get("criteria_path", _CRITERIA_PATH)
     digest = frozen_gold.get("criteria_sha256")
-    required_sources = (_NULLABLE_REQUIRED_SOURCES
+    required_sources = (_FULL140_V4_REQUIRED_SOURCES if reference_version == "source-fidelity-v2" else
+                        _NULLABLE_REQUIRED_SOURCES
                         if verification_mode is SourceVerificationMode.NULLABLE_PROOF_V1
                         else _REQUIRED_SOURCES)
     if (not isinstance(criterion, str) or not isinstance(digest, str)
@@ -99,16 +119,17 @@ def _gold_reference(
             or source_hashes.get(criterion) != digest
             or not (required_sources | {criterion}) <= set(source_hashes)):
         raise EvaluationBudgetAbort("ecnu_source_freeze_incomplete")
+    full_path, annotation_path, parent_path, parent_annotation = _reference_paths(reference_version)
     if case_set == "full140" and (
-        criterion != FULL_REFERENCE_PATH or not {
-            FULL_REFERENCE_PATH, FULL_ANNOTATION_PATH, PUBLIC_REFERENCE_PATH, _CRITERIA_PATH,
+        criterion != full_path or not {
+            full_path, annotation_path, parent_path, parent_annotation,
         } <= set(source_hashes)
     ):
         raise EvaluationBudgetAbort("ecnu_full_reference_freeze_incomplete")
     return {"criteria_sha256": digest, "gold_sha256": canonical_sha256(frozen_gold)}
 
 
-def _load_full_reference(repo_root: Path, source_hashes: dict[str, str]) -> dict:
+def _load_full_reference(repo_root: Path, source_hashes: dict[str, str], *, reference_version: str = "legacy-v1") -> dict:
     def unique_object(pairs: list[tuple[str, object]]) -> dict:
         value: dict = {}
         for key, item in pairs:
@@ -118,17 +139,19 @@ def _load_full_reference(repo_root: Path, source_hashes: dict[str, str]) -> dict
         return value
 
     try:
-        content = (repo_root / FULL_REFERENCE_PATH).read_bytes()
-        if hashlib.sha256(content).hexdigest() != source_hashes[FULL_REFERENCE_PATH]:
+        full_path, annotation_path, parent_path, parent_annotation = _reference_paths(reference_version)
+        content = (repo_root / full_path).read_bytes()
+        if hashlib.sha256(content).hexdigest() != source_hashes[full_path]:
             raise ValueError("changed_reference_bytes")
         reference = json.loads(content, object_pairs_hook=unique_object)
         validation = validate_full_public_reference(
             reference, expected_reference_sha256=canonical_sha256(reference),
-            annotation_sha256=source_hashes[FULL_ANNOTATION_PATH],
+            annotation_sha256=source_hashes[annotation_path], reference_version=reference_version,
         )
         parent = reference["provenance"]["parent21"]
-        if (source_hashes[PUBLIC_REFERENCE_PATH] != parent["reference_file_sha256"]
-                or source_hashes[_CRITERIA_PATH] != parent["reference"]["annotation_sha256"]):
+        if (source_hashes[parent_path] != parent["reference_file_sha256"]
+                or source_hashes[parent_annotation] != parent["reference"]["annotation_sha256"]
+                or reference_version == "source-fidelity-v2" and validation.get("execution_ready") is not True):
             raise ValueError("changed_parent_file_binding")
         return validation
     except (OSError, UnicodeError, ValueError, TypeError, KeyError, EvaluationBudgetAbort):
@@ -170,10 +193,16 @@ def run_ecnu_evaluation(
     remaining8_deadline: object | None = None,
     ambiguity2_deadline: object | None = None,
     main16_deadline: object | None = None,
+    reference_version: str = "legacy-v1",
+    full140_v4_deadline: object | None = None,
 ) -> dict:
     """保留原固定计划；剩余8窗须显式选择独立版本，不提供任意子集。"""
     from .evaluation_provider_contract import EvaluationProviderProfile
 
+    full140_v4 = execution_plan == "full140-grounded-v4-source-v2"
+    if (type(reference_version) is not str or reference_version not in {"legacy-v1", "source-fidelity-v2"}
+            or not full140_v4 and (reference_version != "legacy-v1" or extraction_mode == "grounded-v4")):
+        raise EvaluationBudgetAbort("evaluation_full140_v4_fixed_plan_required")
     try:
         extraction_selected = EvaluationExtractionMode(extraction_mode)
     except (TypeError, ValueError):
@@ -186,7 +215,7 @@ def run_ecnu_evaluation(
     remaining8 = execution_plan == "reference21-remaining8-v1"
     ambiguity2 = execution_plan == "reference21-ambiguity2-v3"
     main16 = execution_plan == "reference21-main16-v3"
-    if (type(execution_plan) is not str or execution_plan not in {"original", "reference21-remaining8-v1", "reference21-ambiguity2-v3", "reference21-main16-v3"}
+    if (type(execution_plan) is not str or execution_plan not in {"original", "reference21-remaining8-v1", "reference21-ambiguity2-v3", "reference21-main16-v3", "full140-grounded-v4-source-v2"}
             or remaining8 and (not official or case_set != "reference21"
                 or type(case_positions) is not tuple or case_positions != _REMAINING8_POSITIONS
                 or any(type(position) is not int for position in case_positions)
@@ -214,9 +243,18 @@ def run_ecnu_evaluation(
             or verification_tool_choice != "omitted"
             or request_timeout_seconds != 300 or type(max_retries) is not int or max_retries != 0):
         raise EvaluationBudgetAbort("evaluation_main16_fixed_plan_required")
+    if full140_v4 and (not official or type(case_set) is not str or case_set != "full140"
+            or case_positions is not None or type(request_limit) is not int or request_limit != 280
+            or extraction_selected.value != "grounded-v4" or reference_version != "source-fidelity-v2"
+            or verification_mode != SourceVerificationMode.NULLABLE_PROOF_V1
+            or verification_tool_choice != "omitted"
+            or type(request_timeout_seconds) is not int or request_timeout_seconds != 300
+            or type(max_retries) is not int or max_retries != 0):
+        raise EvaluationBudgetAbort("evaluation_full140_v4_fixed_plan_required")
     from .evaluation_ambiguity2_deadline import Ambiguity2Deadline
     from .evaluation_main16_deadline import Main16Deadline
     from .evaluation_remaining8_deadline import Remaining8Deadline
+    from .evaluation_full140_v4_deadline import Full140V4Deadline
 
     if ((remaining8_deadline is not None and (not remaining8 or type(remaining8_deadline) is not Remaining8Deadline))
             or remaining8 and synthetic_transport is None and (
@@ -230,8 +268,12 @@ def run_ecnu_evaluation(
             or main16 and synthetic_transport is None and (
                 type(main16_deadline) is not Main16Deadline or not main16_deadline.live_worker)):
         raise EvaluationBudgetAbort("main16_owned_deadline_required")
-    bounded = cast(Remaining8Deadline | Ambiguity2Deadline | Main16Deadline | None,
-                   remaining8_deadline or ambiguity2_deadline or main16_deadline)
+    if ((full140_v4_deadline is not None and (not full140_v4 or type(full140_v4_deadline) is not Full140V4Deadline))
+            or full140_v4 and (type(full140_v4_deadline) is not Full140V4Deadline
+                or synthetic_transport is None and not full140_v4_deadline.live_worker)):
+        raise EvaluationBudgetAbort("full140_v4_owned_deadline_required")
+    bounded = cast(Remaining8Deadline | Ambiguity2Deadline | Main16Deadline | Full140V4Deadline | None,
+                   remaining8_deadline or ambiguity2_deadline or main16_deadline or full140_v4_deadline)
     if official and case_set == "reference21" and not remaining8 and not ambiguity2 and not main16 and (
         case_positions is not None or request_limit not in (None, 42)
     ):
@@ -297,6 +339,10 @@ def run_ecnu_evaluation(
         raise EvaluationBudgetAbort("ecnu_explicit_protocol_required")
     from .evaluation_phased_audit import PhasedEvaluationAudit
 
+    if full140_v4 and type(audit_case) is not PhasedEvaluationAudit:
+        raise EvaluationBudgetAbort("ecnu_phased_audit_required")
+    if type(audit_case) is PhasedEvaluationAudit and audit_case.reference_version != reference_version:
+        raise EvaluationBudgetAbort("evaluation_phased_reference_version_mismatch")
     if (type(audit_case) is PhasedEvaluationAudit
             and audit_case.extraction_mode != extraction_selected.value):
         raise EvaluationBudgetAbort("evaluation_phased_extraction_mode_mismatch")
@@ -314,10 +360,12 @@ def run_ecnu_evaluation(
             raise EvaluationBudgetAbort("ecnu_phased_audit_required")
     reference = _gold_reference(
         frozen_gold, source_hashes, case_set=case_set, verification_mode=selected,
+        reference_version=reference_version,
     )
-    if synthetic_transport is None:
+    if synthetic_transport is None or full140_v4:
         if (frozen_gold.get("criteria_path") !=
-                (FULL_REFERENCE_PATH if case_set == "full140" else PUBLIC_REFERENCE_PATH)
+                (FULL_REFERENCE_V2_PATH if full140_v4 else
+                 FULL_REFERENCE_PATH if case_set == "full140" else PUBLIC_REFERENCE_PATH)
                 or cast(PhasedEvaluationAudit, audit_case).criteria_sha256 !=
                 reference["criteria_sha256"]):
             raise EvaluationBudgetAbort("ecnu_phased_reference_mismatch")
@@ -338,8 +386,8 @@ def run_ecnu_evaluation(
         extraction_mode=extraction_selected,
     )
     if case_set == "full140":
-        validation = _load_full_reference(repo_root, source_hashes)
-        if (synthetic_transport is None and
+        validation = _load_full_reference(repo_root, source_hashes, reference_version=reference_version)
+        if ((synthetic_transport is None or full140_v4) and
                 cast(PhasedEvaluationAudit, audit_case).reference_sha256 !=
                 validation["reference_sha256"]):
             raise EvaluationBudgetAbort("ecnu_phased_reference_mismatch")
@@ -358,7 +406,8 @@ def run_ecnu_evaluation(
         **_frozen_config(plan, request_timeout_seconds=request_timeout_seconds,
                          max_retries=max_retries, verification_mode=selected,
                          extraction_mode=extraction_selected, windows=windows),
-        "mode": ("deepseek_bounded_main16_v3" if main16 else
+        "mode": ("deepseek_bounded_full140_v4_source_v2" if full140_v4 else
+                 "deepseek_bounded_main16_v3" if main16 else
                  "deepseek_bounded_ambiguity2_v3" if ambiguity2 else
                  "deepseek_bounded_remaining8" if remaining8 else
                  "deepseek_bounded_full140" if official and case_set == "full140" else
@@ -366,7 +415,7 @@ def run_ecnu_evaluation(
                  "ecnu_bounded_full140" if case_set == "full140" else
                  "ecnu_bounded_evaluation" if case_positions is None
                  else "ecnu_bounded_diagnostic"),
-        "stage": ("main16-v3" if main16 else "ambiguity2-v3" if ambiguity2 else "remaining8" if remaining8 else "full140" if case_set == "full140" else
+        "stage": ("full140-v4-source-v2" if full140_v4 else "main16-v3" if main16 else "ambiguity2-v3" if ambiguity2 else "remaining8" if remaining8 else "full140" if case_set == "full140" else
                   "P1" if case_positions is None else "diagnostic"),
         "base_url": base_url, "endpoint": endpoint, "request_model": request_model,
         **({"reasoning_effort": "max"} if official else {}),
@@ -376,8 +425,9 @@ def run_ecnu_evaluation(
         "public_cases_sha256": canonical_sha256(
             _FULL_CASES if case_set == "full140" else _PLAN_CASES,
         ),
-        **({"selected_case_positions": list(positions)}
+        **({"selected_case_positions": list(range(140)) if full140_v4 else list(positions)}
            if case_set == "full140" or case_positions is not None else {}),
+        **({"execution_plan": execution_plan, "reference_version": reference_version} if full140_v4 else {}),
         "response_identity_policy": ({
             "mode": response_identity_policy, "known_labels": sorted(KNOWN_ECNU_RESPONSE_LABELS),
             "endpoint": _ENDPOINT, "request_model": "ecnu-max", "weights_identity_verified": False,

@@ -21,6 +21,9 @@ class _FixedPublicControl:
     mode: str
     stage: str
     positions: tuple[int, ...]
+    fallback_event_limit: int = 2048
+    execution_plan: str | None = None
+    reference_version: str | None = None
 
 
 _PROFILES = {
@@ -29,6 +32,9 @@ _PROFILES = {
     "ambiguity2": _FixedPublicControl(4, 5400, 2, 3, "deepseek_bounded_ambiguity2_v3", "ambiguity2-v3", (6, 9)),
     "main16": _FixedPublicControl(32, 43200, 16, 18, "deepseek_bounded_main16_v3", "main16-v3",
                                  tuple(range(16))),
+    "full140-v4": _FixedPublicControl(280, 86400, 140, 138, "deepseek_bounded_full140_v4_source_v2",
+                                     "full140-v4-source-v2", tuple(range(140)), 16384,
+                                     "full140-grounded-v4-source-v2", "source-fidelity-v2"),
 }
 
 
@@ -90,24 +96,35 @@ def _launch_owned_public_worker(*, frozen: dict, script: Path, root: Path, helpe
     records = []
     for record_path in (result_path, deadline_path):
         try:
-            records.append(helper.read_private(record_path) if record_path.exists() else {})
+            value = helper.read_private(record_path) if record_path.exists() else {}
+            records.append(value if type(value) is dict else {})
         except (OSError, ValueError):
             records.append({})
     result, deadline = records
-    budget = (result.get("receipt") or {}).get("budget") or {}
+    completion = result.get("receipt")
+    budget = completion.get("budget") if type(completion) is dict else {}
     def closed_receipt(value):
-        return (value.get("run_id") == frozen["run_id"] and value.get("closed") is True
-                and value.get("request_limit") == request_limit and type(value.get("reserved_requests")) is int
+        return (type(value) is dict and value.get("run_id") == frozen["run_id"] and value.get("closed") is True
+                and type(value.get("request_limit")) is int and value["request_limit"] == request_limit
+                and type(value.get("reserved_requests")) is int
                 and 0 <= value["reserved_requests"] <= request_limit)
-    closed = closed_receipt(budget) or (deadline.get("worker_pid") == child.pid and closed_receipt(deadline))
+    closed = closed_receipt(budget) or (type(deadline.get("worker_pid")) is int
+                                       and deadline["worker_pid"] == child.pid and closed_receipt(deadline))
     states = ["unrun"] * planned_windows
     if isinstance(result.get("outcomes"), list) and len(result["outcomes"]) == planned_windows:
-        states = [row["status"] if row.get("status") in {"unrun", "unknown", "completed", "empty", "failed"}
+        states = [row["status"] if type(row) is dict and row.get("status") in {"unrun", "unknown", "completed", "empty", "failed"}
                   else "unknown" for row in result["outcomes"]]
     else:
-        for event_path in sorted((directory / "evaluation").glob("event-??????.json"))[:2048]:
+        event_paths = sorted((directory / "evaluation").glob("event-??????.json"))
+        if len(event_paths) > profile.fallback_event_limit:
+            # 超出已支持日志边界时整批未知，不能把截断后已开始的窗口称为unrun。
+            states = ["unknown"] * planned_windows
+            event_paths = []
+        for event_path in event_paths:
             try:
                 event = helper.read_private(event_path)
+                if type(event) is not dict:
+                    raise ValueError("invalid_event_record")
                 position = event.get("case_position")
                 if event.get("kind") == "case_started" and type(position) is int and 0 <= position < planned_windows:
                     states[position] = "unknown"
@@ -139,12 +156,17 @@ def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str) -> None:
     config = record["frozen_config"]
     budget = json.loads(states[0][0]) if len(states) == 1 else {}
     if (len(states) != 1 or states[0][1] != 0 or count != 0
-            or budget.get("run_id") != frozen["run_id"] or budget.get("request_limit") != profile.request_limit
+            or budget.get("run_id") != frozen["run_id"] or type(budget.get("request_limit")) is not int
+            or budget["request_limit"] != profile.request_limit
             or budget.get("allowed_endpoints") != ["https://api.deepseek.com/chat/completions"]
             or budget.get("config_sha256") != helper.digest(config)
             or budget.get("output_directory") != str(Path(frozen["directory"]) / "evaluation")
             or config.get("mode") != profile.mode or config.get("stage") != profile.stage
             or config.get("selected_case_positions") != list(profile.positions)
+            or any(type(position) is not int for position in config.get("selected_case_positions", []))
+            or profile.execution_plan is not None and (
+                config.get("execution_plan") != profile.execution_plan
+                or config.get("reference_version") != profile.reference_version)
             or config.get("source_hashes") != frozen["source_hashes"]
             or config.get("extraction_window_contracts") != frozen["extraction_window_contracts"]):
         raise ValueError(kind + "_claim_manifest_changed")

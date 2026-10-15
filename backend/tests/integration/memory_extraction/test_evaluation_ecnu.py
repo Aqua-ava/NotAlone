@@ -13,6 +13,7 @@ from contextlib import ExitStack
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import NoReturn
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -32,6 +33,57 @@ PLAN = tuple(case for case in CASES if case.dimension == "reference") + tuple(
 
 
 class EvaluationECNUTest(unittest.TestCase):
+    def test_old_plan_cannot_mix_source_v2_before_budget_credentials_or_audit(self):
+        with self.assertRaisesRegex(EvaluationBudgetAbort, "full140_v4_fixed_plan_required"):
+            self.run_ready(reference_version="source-fidelity-v2")
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.audits, [])
+        self.assertEqual(self.requests, [])
+        self.assertFalse((self.home / ".notalone-memory-evaluations").exists())
+
+    def test_full140_v4_rejects_every_changed_fixed_scope_or_type_before_claim(self):
+        from notalone.memory_extraction.evaluation_full140_v4_deadline import Full140V4Deadline
+
+        control = Full140V4Deadline(receipt=(self.output / "deadline.json").resolve(), clock=lambda: 0, exit_worker=lambda _: None)
+        fixed = {"provider_profile": "deepseek-flash-max", "request_timeout_seconds": 300,
+            "max_retries": 0, "verification_mode": "nullable-proof-v1", "verification_tool_choice": "omitted",
+            "extraction_mode": "grounded-v4", "execution_plan": "full140-grounded-v4-source-v2",
+            "reference_version": "source-fidelity-v2", "case_set": "full140", "case_positions": None,
+            "request_limit": 280, "full140_v4_deadline": control}
+        for variant in (
+            {"case_positions": tuple(range(140))}, {"case_positions": (0,)}, {"case_positions": []},
+            {"request_limit": None}, {"request_limit": 279}, {"request_limit": 281},
+            {"request_limit": 280.0}, {"request_limit": True}, {"reference_version": "legacy-v1"},
+            {"case_set": "reference21"}, {"provider_profile": "ecnu"}, {"max_retries": 1},
+            {"max_retries": False}, {"extraction_mode": "grounded-v3"}, {"verification_mode": "legacy-v4"},
+            {"verification_tool_choice": "forced"}, {"request_timeout_seconds": 300.0},
+            {"request_timeout_seconds": True}, {"execution_plan": "original"},
+        ):
+            with self.subTest(variant=variant), self.assertRaisesRegex(EvaluationBudgetAbort, "full140_v4_fixed_plan_required"):
+                self.run_ready(**{**fixed, **variant})
+        for name in ("remaining8_deadline", "ambiguity2_deadline", "main16_deadline", "full140_v4_deadline"):
+            with self.subTest(name=name), self.assertRaisesRegex(EvaluationBudgetAbort, "owned_deadline_required"):
+                self.run_ready(**{**fixed, name: object()})
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.audits, [])
+        self.assertEqual(self.requests, [])
+        self.assertFalse((self.home / ".notalone-memory-evaluations").exists())
+
+    def test_live_full140_v4_requires_exact_owned_deadline_before_claim(self):
+        from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
+
+        hashes, gold = self.preparation(nullable=True)
+        with self.assertRaisesRegex(EvaluationBudgetAbort, "full140_v4_owned_deadline_required"):
+            run_ecnu_evaluation(output_directory=self.output, run_id=uuid4(),
+                deadline=datetime.now(timezone.utc) + timedelta(hours=24), repo_root=self.repo,
+                source_hashes=hashes, frozen_gold=gold, credential_loader=self.credential, audit_case=self.audit,
+                provider_profile="deepseek-flash-max", request_timeout_seconds=300, max_retries=0,
+                verification_mode="nullable-proof-v1", verification_tool_choice="omitted", extraction_mode="grounded-v4",
+                execution_plan="full140-grounded-v4-source-v2", reference_version="source-fidelity-v2",
+                case_positions=None, case_set="full140", request_limit=280)
+        self.assertEqual(self.credentials, [])
+        self.assertFalse((self.home / ".notalone-memory-evaluations").exists())
+
     def test_main16_semantic_safety_and_unknown_stop_without_starting_next_window(self):
         for index, (decision, reason) in enumerate((("safety_error", "false_fact"), ("unknown", "audit_unresolved"))):
             with self.subTest(decision=decision):
@@ -717,9 +769,9 @@ class EvaluationECNUTest(unittest.TestCase):
         self.output.mkdir(mode=0o700)
         self.repo = self.home / "repo"
         self.repo.mkdir()
-        self.requests = []
-        self.credentials = []
-        self.audits = []
+        self.requests: list[dict] = []
+        self.credentials: list[str] = []
+        self.audits: list[dict] = []
 
     def preparation(self, *, nullable=False):
         actual_repo = Path(__file__).resolve().parents[4]
@@ -1421,17 +1473,18 @@ class EvaluationECNUTest(unittest.TestCase):
         from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
 
         calls = []
+        def forbidden(*args, **kwargs) -> NoReturn:
+            calls.append("forbidden")
+            raise AssertionError("未冻结参考不得触达凭据、审核或传输。")
         with self.assertRaises(EvaluationBudgetAbort):
             run_ecnu_evaluation(
                 output_directory=self.output, run_id=uuid4(),
                 deadline=datetime.now(timezone.utc) + timedelta(minutes=10),
                 repo_root=self.home, source_hashes={},
                 frozen_gold={"status": "pending"},
-                credential_loader=lambda: calls.append("credential"),
-                audit_case=lambda bundle: calls.append("audit"),
-                synthetic_transport=httpx.MockTransport(
-                    lambda request: calls.append("dispatch"),
-                ),
+                credential_loader=forbidden,
+                audit_case=forbidden,
+                synthetic_transport=httpx.MockTransport(forbidden),
             )
         self.assertEqual(calls, [])
         self.assertEqual(tuple(self.output.iterdir()), ())

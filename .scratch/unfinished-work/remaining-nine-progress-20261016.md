@@ -36,3 +36,5 @@
 2026-10-16后继离线准备：[初版v4](../grounded-v4-protocol-readiness/spec.md)与[物品归属修订](../grounded-v4-object-ownership/spec.md)均已完成独立双轴审查并集成主树，后者124项相关合成测试通过；旧v2／v3及生产默认不变，尚未注册真实v4入口。[来源参考v2](../grounded-evaluation/reference-source-fidelity-v2-spec-20261016.md)的576项离线测试及独立两轴审查通过，只修未来A05与直接规则，其他139窗、全部输入与原分母不变；此次语义独审限A05修订，非全新盲标。材料暂保留pending／execution_ready=false，真实审核元数据和新固定入口另接；未创建新真实预算或调用模型，默认空放行表与原票状态保持。
 
 后继[参考与协议装配](../grounded-evaluation/full140-v4-reference-integration-20261016.md)已如实记录上述独审，更新四份材料与固定摘要／parent绑定，材料资格现在`execution_ready=true`、质量仍false。新增v4显式选择、records固定计划版本配对、phased同版核对与实际保存；初审两轴各1项位置类型问题已修，四种负控真红→绿、111项相关回归及增审剩余0。此资格只适用于已审参考材料，完整140固定控制仍在准备，真实预算未创建，旧运行与默认放行不变。
+
+[完整140固定准备](../grounded-evaluation/full140-v4-source-v2-readiness-20261016.md)现已完成：Root整合unit500／500、集成112／112通过，新旧四runner29项通过（与前述组分别记录，不反复累加）。完整SDK Mock为140E＋138V共278次，末窗及cap280关闭通过；最终文档后的纯prepare1项通过。控制初审两轴各1项“审核前核冻结”过述已据实际收窄，增审剩余0；ADR与旧spec历史指针均已复核。当前实际闭包85份，真实新预算和请求仍未创建，下一步仅由Root按现有授权核冻结和闭账状态后唯一启动；准备不认证真实质量、typed可用或三票完成。
