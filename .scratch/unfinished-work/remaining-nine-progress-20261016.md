@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | [前台跟随06组合验收](../foreground-contact-follow/issues/06-combined-app-acceptance.md) | 已resolved；[单联系人实机及组合结果](../foreground-contact-follow/acceptance-06-final-20261015.md) | 本票范围完成，后续新包分项不倒填旧包 |
 | [群聊暂停人工验收01](../foreground-group-manual-acceptance/issues/01-group-pause-and-live-checklist.md) | 已resolved；实际群聊暂停与返回私聊核验已记录 | 本票范围完成 |
-| [事件优先触发01](../foreground-event-trigger/issues/01-event-capability-and-integration.md) | claimed；独立源与正式探针并行完整55秒通过；[App内采样](../foreground-event-trigger/app-source-observation-20261016.md)不足以认证续租或名称显示 | 补最小生命周期观测，实测完整租期、下一轮启动与事件触发 |
+| [事件优先触发01](../foreground-event-trigger/issues/01-event-capability-and-integration.md) | claimed；[v6 App生命周期](../foreground-event-trigger/app-source-lifecycle-v6-20261016.md)确认三个完整55秒租期及续起，公共接口AC3完成 | 实测会话变化触发及正确名称显示延迟；CUA坐标切换实际未完成 |
 | [前台定位18](../mac-desktop-app/issues/18-foreground-locator.md) | claimed；单联系人绑定/暂停恢复已有实机；[真实CLI与正式视觉独立场](../foreground-contact-follow/real-cli-visual-20261015.md)通过 | 当前包独立启动权限和持续源边界 |
 | [本机交付20](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed；当前签名包Finder启动、真实选择/导入等分项已有证据；[真实DeepSeek合成App冒烟](../mac-desktop-app/reply-model-smoke-result-20261016.md)1／1通过，模型AC完成；[快捷键复验](../mac-desktop-app/native-shortcut-current-20261016.md)未观察到显示 | 独立启动权限、系统快捷键 |
 | [真实微信follow04](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed；单联系人有界读取、退出停读及视觉独立性已有证据 | 新包重开补齐；双联系人和真实来信依用户决定保留未验证 |
