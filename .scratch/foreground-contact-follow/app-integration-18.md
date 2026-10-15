@@ -193,3 +193,11 @@ Standards独立评审0项；Spec独立评审发现正常离开微信被记为识
 最终验证：Conda NotAlone、禁用dotenv的认证HTTP／PG组合命令`node --test --test-concurrency=1 tests/single-frame-foreground-http.test.mjs tests/continuous-contact-follow-http.test.mjs tests/continuous-generation-combination-http.test.mjs`8/8；`npm test`类型及安全61/61；`swift test --package-path native/macos`83项，81通过、2项默认有限Vision实验跳过。所有随机HTTP库／进程确认清理；组合2次模型调用均为合成适配器。Standards／Spec最后增量复核各0项。验证过程未追加App／浏览器／真实探针启动，未读取微信正文、调用外部模型或发送消息；仅修改错误分类和恢复规则，无数据库迁移或新增私密持久化。
 
 最终恢复候选为`desktop/artifacts/foreground-recovery-app-20261015/NotAlone-darwin-arm64/NotAlone.app`。离线`npm run package -- --with-probe --output-directory … --electron-zip-directory …`与独立`codesign --verify --deep --strict`通过；原生14项源码摘要及主进程／preload／前端6文件逐字核对一致。`buildSourceDigest=a9933a855d4d4d52383deea8957980ad9c429db8a5502df25249fb685379e1e5`，`app.asar=08aa42c64b355f5f0825e2914cb3c685b550a53f1591e7cb1808d40a735c42ec`，probe=`0cc44130a6f6be42c284587402db4d12139e4127a0167bd8c6fe4dac2294d7ae`，Core=`c08ee06d6a7b55329ce310ed797bf401c63d3aaf7b54addac4a93eedbb5883a2`。旧场20分钟／一次预算已消耗且收尾完成，已请求新一轮相同上限的明确认可，未自动续期或启动新包；18／06保持待实机签收。
+
+## 13:36 恢复候选场次：按用户要求暂停
+
+用户明确认可新一轮20分钟／最多一次，预约13:36:01–13:56:01，以同一受限入口启动上述恢复候选1次，签名与ASAR核对一致。CUA只操作既有微信窗口的菜单入口，未切换其他联系人；无法可靠设置系统前台，用户随后报告测试会话在前台，但公开投影仍为非微信暂停，基线触发条件未满足。没有进入绑定匹配计时、移动／缩放或草稿阶段，不推断产品匹配失败。
+
+用户随后明确要求暂停并询问验收范围。主Agent立即写当前runId的finish，停止操作及采集；用例3.3分钟、`acceptance_finished`取消退出，框架1失败属于人工停止，不作为产品失败或验收通过。13:40:10已确认认证停读、后端exit0、随机库删除、App／后端／worker不存在、userData删除、租约absent；自有自动错误AX上下文删除且未读原文。没有重启、生成、正文读取或消息发送；不继续实现或自动开展新场次。
+
+当前暂停。用户关注的是正式App随微信切换自动读名、速度与提示稳定，主Agent承认将验收扩展到绑定、窗口缩放、草稿保持使范围复杂。恢复前应先围绕用户希望验证的范围重新对齐，原有失败和未验项目保留，18／06不标完成。
