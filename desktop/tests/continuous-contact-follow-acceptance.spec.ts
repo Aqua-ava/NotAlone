@@ -6,6 +6,9 @@ import { withBindingFixture } from './binding-backend-fixture';
 import { selectMenu } from './app-fixture';
 import { verifyAppTestLease } from './app-test-gate';
 import { createAcceptanceCoordinator } from './acceptance-coordinator.mjs';
+import { openVisualAcceptance, monitorVisualAcceptance } from './visual-acceptance-window';
+
+const visualAcceptance = process.env.NOTALONE_CONTINUOUS_VISUAL_ACCEPTANCE === '1';
 
 // 仅正式包、真实原生名称识别；CLI正文和业务数据均为合成输入。
 const test = bindingTest.extend({
@@ -13,7 +16,8 @@ const test = bindingTest.extend({
     await verifyAppTestLease();
     const executable = process.env.NOTALONE_TEST_APP_EXECUTABLE;
     const names = [process.env.NOTALONE_FOLLOW_TEST_NAME_A, process.env.NOTALONE_FOLLOW_TEST_NAME_B].filter((name): name is string => Boolean(name?.trim()));
-    if (!executable || !path.isAbsolute(executable) || !process.env.NOTALONE_FOLLOW_TEST_NAME_A?.trim()
+    if (!executable || !path.isAbsolute(executable) || (!visualAcceptance && !process.env.NOTALONE_FOLLOW_TEST_NAME_A?.trim())
+      || (visualAcceptance && names.length > 0)
       || new Set(names).size !== names.length) {
       throw new Error('缺少正式包或本轮已确认测试会话的明确范围。');
     }
@@ -24,7 +28,7 @@ const test = bindingTest.extend({
       await fixture.setCli({ sessions: names.map((name, index) => ({ username: `wxid_synthetic_${index ? 'b' : 'a'}`,
         display_name: name, chat_type: 'private', last_timestamp: 1700000000 })), messages: {} });
       await fixture.startBackend();
-      expect((await fixture.request('/api/sync/cli-bindings/confirm', { selections: fixture.data.contact_ids.slice(0, names.length).map((id, index) =>
+      if (names.length) expect((await fixture.request('/api/sync/cli-bindings/confirm', { selections: fixture.data.contact_ids.slice(0, names.length).map((id, index) =>
         ({ locator: `wxid_synthetic_${index ? 'b' : 'a'}`, contact_id: id })) })).status).toBe(200);
       await use(fixture);
     });
@@ -40,6 +44,7 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
   const directory = process.env.NOTALONE_AUTOMATIC_CONTROL_DIRECTORY;
   if (!directory || !path.isAbsolute(directory)) throw new Error('缺少本轮私有协调目录。');
   const reports: Array<Record<string, unknown>> = [];
+  let visualMonitor: Awaited<ReturnType<typeof monitorVisualAcceptance>> | undefined;
   const coordinator = await createAcceptanceCoordinator({ directory, pid: appProcess.pid!,
     checkLease: verifyAppTestLease,
     isAlive: () => appProcess.exitCode === null && appProcess.signalCode === null });
@@ -50,6 +55,7 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
     await coordinator.waitFor(phase);
   };
   const saveReport = () => writeFile(test.info().outputPath('continuous-follow-results.json'), JSON.stringify({ reports, normalQuit,
+    visualChecks: visualMonitor?.counts ?? null,
     privateBodyRead: false, sentMessages: 0, modelCalls: 0, runtimeFrameCountVerified: false,
     nativeDurationMeasured: false, backendDurationMeasured: false }), { mode: 0o600 });
   let normalQuit = false;
@@ -75,6 +81,20 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
       });
     };
     await expect.poll(() => helper.evaluate(async () => (await window.notalone.contacts.getState()).directoryPhase)).toBe('ready');
+    if (visualAcceptance) {
+      expect((await bindingBackend.request('/api/sync/status')).data.sync_enabled).toBe(false);
+      const viewer = await openVisualAcceptance(app);
+      viewer.page.once('close', () => { void coordinator.requestFinish().catch(() => {}); });
+      process.stdout.write('continuous_visual_ready: waiting for user to confirm one session name in the window\n');
+      const name = await viewer.waitForName();
+      await bindingBackend.setCli({ sessions: [{ username: 'wxid_synthetic_a', display_name: name,
+        chat_type: 'private', last_timestamp: 1700000000 }], messages: {} });
+      expect((await bindingBackend.request('/api/sync/cli-bindings/confirm', { selections: [{ locator: 'wxid_synthetic_a',
+        contact_id: bindingBackend.data.contact_ids[0] }] })).status).toBe(200);
+      await helper.evaluate(() => window.notalone.hideWindow());
+      visualMonitor = await monitorVisualAcceptance({ page: viewer.page, helper, directory,
+        expectedContactId: bindingBackend.data.contact_ids[0], requestFinish: () => coordinator.requestFinish() });
+    }
     expect((await bindingBackend.request('/api/sync/enable', {})).status).toBe(200);
     const phases: Array<[string, number]> = [['baseline', 0], ['moved', 0], ['resized', 0]];
     if (process.env.NOTALONE_FOLLOW_TEST_NAME_B?.trim()) phases.push(['switch-b', 1], ['return-a', 0]);
@@ -126,6 +146,7 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
       return state.phase === 'paused' && state.wechatInFront === false;
     }), { timeout: 30000 }).toBe(true);
     reports.push({ phase: 'other-app', paused: true });
+    if (visualAcceptance) await ready('helper-pause');
     await selectMenu(app, '窗口', '输入小窗');
     if (!(await helper.getByRole('textbox', { name: '草稿', exact: true }).isEnabled())) {
       reports.push({ phase: 'helper-pause', blocked: true, draftDisabled: true });
@@ -147,6 +168,9 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
       return !state.suspendedByHelperFocus && state.confirmedContactId === expected && state.phase === 'confirmed';
     }, bindingBackend.data.contact_ids[0]), { timeout: 30000 }).toBe(true);
     await ready('finish');
+    expect(visualMonitor?.counts.monitorFailed ?? false, '可视验收监控不得静默失败').toBe(false);
+    expect(visualMonitor?.counts.mismatches ?? 0, '人工前台核对存在不一致，不能标记整轮通过').toBe(0);
+    await visualMonitor?.stop();
     await coordinator.close();
     await selectMenu(app, 'NotAlone', '退出 NotAlone');
     await expect.poll(() => appProcess.exitCode, { timeout: 15000 }).toBe(0);
@@ -155,10 +179,14 @@ test('正式App持续单帧名称跟随及原位移动缩放、助手暂停恢�
   } catch (error) {
     reports.push({ phase: currentStage, failed: true });
     await saveReport();
+    if (error instanceof Error && error.message === 'visual_acceptance_cancelled') {
+      await coordinator.requestFinish();
+    }
     process.stdout.write('continuous_failed_held: inspect control-state.json; finish signal or lease expiry ends inspection\n');
     await coordinator.holdFailure();
     throw error;
   } finally {
+    await visualMonitor?.stop();
     await coordinator.close();
     // 只输出阶段/布尔/耗时；不输出联系人身份、名称或原生原始输出。
     await saveReport();

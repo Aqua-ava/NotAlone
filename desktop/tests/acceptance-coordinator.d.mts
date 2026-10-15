@@ -1,6 +1,7 @@
 export interface AcceptanceCoordinator {
   readonly runId: string;
   close(): Promise<void>;
+  requestFinish(): Promise<boolean>;
   waitFor(stage: string): Promise<void>;
   waitForForeground(stage: string, read: (since: number) => Promise<{
     helperBlurred: boolean; wechatInFront: boolean; freshObservation: boolean;

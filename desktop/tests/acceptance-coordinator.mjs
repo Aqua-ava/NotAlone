@@ -29,6 +29,13 @@ export async function createAcceptanceCoordinator({ directory, pid, checkLease, 
   return {
     runId,
     close,
+    async requestFinish() {
+      if (closing) return false;
+      try { await check(); } catch { return false; }
+      if (closing) return false;
+      await writeFile(path.join(directory, 'finish.trigger'), runId, { mode: 0o600 });
+      return true;
+    },
     async waitFor(stage) {
       await publish('waiting-trigger', stage);
       while (true) {

@@ -16,7 +16,8 @@ async function scenario(run) {
     wait: async () => { tick += 250; await onWait(); } });
   const state = async () => JSON.parse(await readFile(path.join(directory, 'control-state.json'), 'utf8'));
   const signal = async (stage, token = coordinator.runId) => writeFile(path.join(directory, `${stage}.trigger`), token);
-  try { await run({ coordinator, state, signal, setWait: fn => { onWait = fn; },
+  const readSignal = stage => readFile(path.join(directory, `${stage}.trigger`), 'utf8');
+  try { await run({ coordinator, state, signal, readSignal, setWait: fn => { onWait = fn; },
     exit: () => { alive = false; }, time: () => tick }); }
   finally { await rm(directory, { recursive: true, force: true }); }
 }
@@ -87,6 +88,18 @@ test('正常完成也等待明确finish，不把结束信号当成失败', () =>
   setWait(async () => signal('finish'));
   await coordinator.waitFor('finish');
   assert.equal(time(), 250);
+}));
+
+test('可视窗口失联可请求本轮结束，closing之后不再写入信号', () => scenario(async ({ coordinator, signal, readSignal, time }) => {
+  await signal('finish', 'old-run');
+  assert.equal(await coordinator.requestFinish(), true);
+  await assert.rejects(coordinator.waitFor('baseline'), /acceptance_finished/);
+  assert.equal(time(), 0);
+  await coordinator.close();
+  await signal('finish', 'after-close');
+  assert.equal(await coordinator.requestFinish(), false);
+  assert.equal(await readSignal('finish'), 'after-close');
+  await assert.rejects(coordinator.waitFor('baseline'), /acceptance_closing/);
 }));
 
 test('关闭状态不可逆，退出失败也不得重新开放检查', () => scenario(async ({ coordinator, state, time }) => {
