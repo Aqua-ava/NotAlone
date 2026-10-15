@@ -1,4 +1,4 @@
-"""两个固定公开评测runner共用的领取证据与自有进程组控制，不创建预算或读取凭据。"""
+"""固定公开评测runner共用的领取证据与自有进程组控制，不创建预算或读取凭据。"""
 from dataclasses import dataclass
 from datetime import datetime
 import os
@@ -27,6 +27,8 @@ _PROFILES = {
     "remaining8": _FixedPublicControl(16, 2400, 8, 13, "deepseek_bounded_remaining8", "remaining8",
                                      (19, 20, 13, 14, 15, 16, 17, 18)),
     "ambiguity2": _FixedPublicControl(4, 5400, 2, 3, "deepseek_bounded_ambiguity2_v3", "ambiguity2-v3", (6, 9)),
+    "main16": _FixedPublicControl(32, 43200, 16, 18, "deepseek_bounded_main16_v3", "main16-v3",
+                                 tuple(range(16))),
 }
 
 

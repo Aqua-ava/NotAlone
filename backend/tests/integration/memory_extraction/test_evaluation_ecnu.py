@@ -32,6 +32,111 @@ PLAN = tuple(case for case in CASES if case.dimension == "reference") + tuple(
 
 
 class EvaluationECNUTest(unittest.TestCase):
+    def test_main16_semantic_safety_and_unknown_stop_without_starting_next_window(self):
+        for index, (decision, reason) in enumerate((("safety_error", "false_fact"), ("unknown", "audit_unresolved"))):
+            with self.subTest(decision=decision):
+                self.output = self.home / f"stop-{index}"
+                self.output.mkdir(mode=0o700)
+                self.requests.clear()
+                def respond(request):
+                    body = json.loads(request.content)
+                    function = body["tools"][0]["function"]
+                    label = {"kind": "not_memory", "subject": "contact", "topic": "other", "dependency": None,
+                        "unresolved": False, "ambiguity_codes": [], "confidence": 0.9, "sensitivity": "none"}
+                    return self.response(request, reported_model="deepseek-flash", arguments={"units": {
+                        slot: dict(label) for slot in function["parameters"]["properties"]["units"]["required"]}})
+                result = self.run_ready(provider_profile="deepseek-flash-max", request_timeout_seconds=300,
+                    max_retries=0, verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+                    extraction_mode="grounded-v3", execution_plan="reference21-main16-v3",
+                    case_positions=tuple(range(16)), request_limit=32, transport=httpx.MockTransport(respond),
+                    audit=lambda bundle: self.audit(bundle, decision, reason))
+                self.assertEqual(len(self.requests), 1)
+                self.assertEqual(result["stopped_code"], "case_semantic_audit_" + decision)
+                self.assertEqual(result["summary"]["unrun"], 15)
+                self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 1)
+                self.assertTrue(result["receipt"]["budget"]["closed"])
+
+    def test_main16_transport_failure_counts_once_and_never_retries_or_starts_next_window(self):
+        requests = []
+        def fail(request):
+            requests.append(request)
+            raise httpx.ReadTimeout("合成远端未知", request=request)
+        result = self.run_ready(provider_profile="deepseek-flash-max", request_timeout_seconds=300,
+            max_retries=0, verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+            extraction_mode="grounded-v3", execution_plan="reference21-main16-v3",
+            case_positions=tuple(range(16)), request_limit=32, transport=httpx.MockTransport(fail))
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(result["summary"]["unrun"], 15)
+        self.assertNotEqual(result["outcomes"][0]["status"], "completed")
+        self.assertEqual(result["receipt"]["budget"]["request_limit"], 32)
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 1)
+        self.assertTrue(result["receipt"]["budget"]["closed"])
+
+    def test_main16_rejects_changed_scope_budget_model_protocol_or_old_plan_before_claim(self):
+        fixed = {"provider_profile": "deepseek-flash-max", "request_timeout_seconds": 300,
+            "max_retries": 0, "verification_mode": "nullable-proof-v1", "verification_tool_choice": "omitted",
+            "extraction_mode": "grounded-v3", "execution_plan": "reference21-main16-v3",
+            "case_positions": tuple(range(16)), "request_limit": 32}
+        for variant in (
+            {"case_positions": None}, {"case_positions": tuple(range(15))},
+            {"case_positions": tuple(reversed(range(16)))}, {"case_positions": (*range(15), 19)},
+            {"case_positions": (False, *range(1, 16))}, {"request_limit": None},
+            {"request_limit": 31}, {"request_limit": 33}, {"request_limit": 32.0},
+            {"provider_profile": "ecnu"}, {"case_set": "full140"}, {"max_retries": 1},
+            {"extraction_mode": "grounded-v2"}, {"verification_mode": "legacy-v4"},
+            {"verification_tool_choice": "forced"}, {"request_timeout_seconds": 600},
+            {"execution_plan": "original"}, {"execution_plan": "reference21-remaining8-v1"},
+            {"execution_plan": "reference21-ambiguity2-v3"}, {"main16_deadline": object()},
+            {"ambiguity2_deadline": object()}, {"remaining8_deadline": object()},
+        ):
+            with self.subTest(variant=variant), self.assertRaises(EvaluationBudgetAbort):
+                self.run_ready(**{**fixed, **variant})
+        self.assertEqual(self.credentials, [])
+        self.assertEqual(self.requests, [])
+        self.assertFalse((self.home / ".notalone-memory-evaluations").exists())
+
+    def test_live_main16_requires_exact_owned_deadline_before_budget_or_credentials(self):
+        from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
+
+        hashes, gold = self.preparation(nullable=True)
+        with self.assertRaisesRegex(EvaluationBudgetAbort, "main16_owned_deadline_required"):
+            run_ecnu_evaluation(output_directory=self.output, run_id=uuid4(),
+                deadline=datetime.now(timezone.utc) + timedelta(hours=12), repo_root=self.repo,
+                source_hashes=hashes, frozen_gold=gold, credential_loader=self.credential,
+                audit_case=self.audit, provider_profile="deepseek-flash-max", request_timeout_seconds=300,
+                max_retries=0, verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+                extraction_mode="grounded-v3", execution_plan="reference21-main16-v3",
+                case_positions=tuple(range(16)), request_limit=32)
+        self.assertEqual(self.credentials, [])
+        self.assertFalse((self.home / ".notalone-memory-evaluations").exists())
+
+    def test_main16_fixed_official_v3_plan_keeps_all_original_main_windows_and_32_cap(self):
+        def respond(request):
+            body = json.loads(request.content)
+            self.assertEqual(body["model"], "deepseek-flash")
+            self.assertEqual(body["reasoning_effort"], "max")
+            self.assertNotIn("tool_choice", body)
+            function = body["tools"][0]["function"]
+            self.assertEqual(function["name"], "GroundedMemoryLabelsV3")
+            label = {"kind": "not_memory", "subject": "contact", "topic": "other", "dependency": None,
+                     "unresolved": False, "ambiguity_codes": [], "confidence": 0.9, "sensitivity": "none"}
+            return self.response(request, reported_model="deepseek-flash", arguments={"units": {
+                slot: dict(label) for slot in function["parameters"]["properties"]["units"]["required"]}})
+
+        result = self.run_ready(provider_profile="deepseek-flash-max", request_timeout_seconds=300,
+            max_retries=0, verification_mode="nullable-proof-v1", verification_tool_choice="omitted",
+            extraction_mode="grounded-v3", execution_plan="reference21-main16-v3",
+            case_positions=tuple(range(16)), request_limit=32, transport=httpx.MockTransport(respond))
+
+        self.assertEqual(len(self.requests), 16)
+        self.assertEqual([item["case_name"] for item in result["outcomes"]], [case.name for case in PLAN[:16]])
+        self.assertEqual(result["receipt"]["budget"]["request_limit"], 32)
+        self.assertTrue(result["receipt"]["budget"]["closed"])
+        config = json.loads((self.output / "manifest.json").read_text())["frozen_config"]
+        self.assertEqual(config["mode"], "deepseek_bounded_main16_v3")
+        self.assertEqual(config["stage"], "main16-v3")
+        self.assertEqual(config["selected_case_positions"], list(range(16)))
+
     def test_ambiguity2_fixed_v3_official_plan_uses_four_budget_and_original_two_positions(self):
         def respond(request):
             body = json.loads(request.content)
