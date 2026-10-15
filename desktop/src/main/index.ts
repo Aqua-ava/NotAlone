@@ -1,5 +1,6 @@
 import { installForegroundBridge } from './foreground/bridge';
 import { NativeHeaderChangeSource } from './foreground/native-change-source';
+import { openHeaderChangeDiagnostics } from './foreground/header-change-diagnostics';
 import { resolveHeaderChangeSourcePath } from './backend/bundled-helpers';
 import { CandidateCopyController } from './candidate-copy/controller';
 import { installElectronCandidateCopy } from './candidate-copy/electron';
@@ -53,8 +54,10 @@ void app.whenReady().then(async () => {
   const commands = electronPageCommands(windows);
   const contacts = installContactSessionBridge(commands, backend);
   const foreground = installForegroundBridge(commands, backend, contacts);
+  const headerChangeDiagnostics = openHeaderChangeDiagnostics(process.env);
   const headerChanges = new NativeHeaderChangeSource(async () =>
-    resolveHeaderChangeSourcePath(resourcesDirectory));
+    resolveHeaderChangeSourcePath(resourcesDirectory), headerChangeDiagnostics);
+  app.on('will-quit', () => headerChangeDiagnostics?.close());
   foreground.attachChangeSource(headerChanges);
   windows.setHelperObservation({ beforeShow: () => foreground.observeBeforeShow(),
     onLifecycle: (event) => { foreground.notifyHelperLifecycle(event); replies.notifyHelperLifecycle(event); } });

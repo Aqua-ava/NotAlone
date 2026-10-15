@@ -1,0 +1,123 @@
+import { constants, closeSync, fstatSync, openSync, realpathSync, statSync, writeSync } from 'node:fs';
+import path from 'node:path';
+
+const hostEvents = ['permit', 'reconcile', 'launch', 'changed', 'paused', 'stop', 'close', 'dispose'] as const;
+const hostReasons = ['permit_present', 'permit_absent', 'disposed', 'no_permit', 'child_running',
+  'resolving', 'scope_blocked', 'proof_reused', 'resolve', 'resolve_stale', 'executable_unavailable',
+  'resolve_failed', 'started', 'stdout_changed', 'stdout_paused', 'scope_changed', 'watchdog',
+  'invalid_stdout', 'child_error', 'shutdown', 'closed', 'native_diagnostic_rejected'] as const;
+const signals = ['none', 'SIGTERM', 'SIGKILL', 'SIGINT', 'SIGABRT', 'SIGSEGV', 'SIGHUP', 'other'] as const;
+const nativeStages = ['run', 'permission', 'context', 'initial_capture', 'initial_layout',
+  'shareable_content', 'window', 'display', 'source_rect', 'stream_setup', 'stream_start',
+  'streaming', 'stream_stop', 'finished'] as const;
+const nativeReasons = ['begin', 'permission_missing', 'context_unavailable', 'context_changed',
+  'window_unavailable', 'display_unsupported', 'source_rect_invalid', 'first_frame',
+  'output_dimensions', 'pixel_format', 'buffer_lock', 'missing_buffer', 'frame_limit',
+  'detector_failed', 'stream_error', 'stream_connection_invalid', 'stream_connection_interrupted',
+  'stream_context_missing', 'stream_system_stopped', 'stream_user_stopped',
+  'stream_permission_declined', 'stream_missing_entitlements', 'stream_internal',
+  'stream_invalid_parameter', 'stream_start_failed', 'operation_failed', 'lease_expired', 'stopped'] as const;
+
+export type HeaderChangeHostReason = typeof hostReasons[number];
+export type HeaderChangeDiagnosticSignal = typeof signals[number];
+export type HeaderChangeDiagnosticRecord = {
+  kind: 'host'; event: typeof hostEvents[number]; reason: HeaderChangeHostReason;
+  ordinal: number; elapsedMs: number; leaseElapsedMs: number | null; permitPresent: boolean; childPresent: boolean;
+  resolving: boolean; blocked: boolean; freshProof: boolean; epochCurrent: boolean;
+  paused: boolean; stopping: boolean; renewalEligible: boolean; code: number | null; signal: HeaderChangeDiagnosticSignal;
+} | { kind: 'native'; ordinal: number; elapsedMs: number; stage: typeof nativeStages[number];
+  reason: typeof nativeReasons[number]; nativeElapsedMs: number };
+export interface HeaderChangeDiagnosticSink {
+  record(record: HeaderChangeDiagnosticRecord): void;
+  close(): void;
+}
+
+const includes = (items: readonly string[], value: unknown): boolean => typeof value === 'string' && items.includes(value);
+const elapsed = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+const ordinal = (value: unknown): boolean => Number.isSafeInteger(value) && Number(value) >= 0;
+
+// 再核白名单，避免未来调用处意外把原始范围或错误塞入诊断对象。
+function validRecord(record: HeaderChangeDiagnosticRecord): boolean {
+  if (!record || !ordinal(record.ordinal) || !elapsed(record.elapsedMs)) return false;
+  const keys = Object.keys(record).sort().join(',');
+  if (record.kind === 'native') return keys === 'elapsedMs,kind,nativeElapsedMs,ordinal,reason,stage'
+    && includes(nativeStages, record.stage) && includes(nativeReasons, record.reason) && elapsed(record.nativeElapsedMs);
+  if (record.kind !== 'host' || keys !== 'blocked,childPresent,code,elapsedMs,epochCurrent,event,freshProof,kind,leaseElapsedMs,ordinal,paused,permitPresent,reason,renewalEligible,resolving,signal,stopping') return false;
+  return includes(hostEvents, record.event) && includes(hostReasons, record.reason) && includes(signals, record.signal)
+    && (record.code === null || Number.isSafeInteger(record.code))
+    && (record.leaseElapsedMs === null || elapsed(record.leaseElapsedMs))
+    && [record.permitPresent, record.childPresent, record.resolving, record.blocked, record.freshProof,
+      record.epochCurrent, record.paused, record.stopping, record.renewalEligible].every((value) => typeof value === 'boolean');
+}
+
+// 只在明确指定私有新文件时打开；失败仅停诊断，不更改采集许可。
+export function openHeaderChangeDiagnostics(environment: NodeJS.ProcessEnv): HeaderChangeDiagnosticSink | undefined {
+  const destination = environment.NOTALONE_HEADER_CHANGE_HOST_DIAGNOSTICS_FILE;
+  if (!destination || !path.isAbsolute(destination) || destination !== path.resolve(destination)
+    || destination.length > 4096 || /[\0\r\n]/.test(destination)) return;
+  let descriptor: number | undefined;
+  try {
+    const parent = path.dirname(destination);
+    const owner = process.getuid?.();
+    const parentInfo = statSync(parent);
+    if (owner === undefined || realpathSync(parent) !== parent || !parentInfo.isDirectory()
+      || parentInfo.uid !== owner || (parentInfo.mode & 0o777) !== 0o700) return;
+    descriptor = openSync(destination, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    const info = fstatSync(descriptor);
+    if (!info.isFile() || info.uid !== owner || (info.mode & 0o777) !== 0o600) { closeSync(descriptor); return; }
+  } catch { if (descriptor !== undefined) { try { closeSync(descriptor); } catch {} } return; }
+  const ownedDescriptor = descriptor;
+  let records = 0, bytes = 0, closed = false;
+  const close = () => { if (closed) return; closed = true; try { closeSync(ownedDescriptor); } catch {} };
+  return { close, record(record) {
+    if (closed) return;
+    try {
+      if (!validRecord(record)) return;
+      const line = Buffer.from(`${JSON.stringify(record)}\n`);
+      if (records >= 512 || bytes + line.length > 256 * 1024) { close(); return; }
+      ++records; bytes += line.length;
+      let written = 0;
+      while (written < line.length) {
+        const count = writeSync(ownedDescriptor, line, written, line.length - written);
+        if (count <= 0) { close(); return; }
+        written += count;
+      }
+    } catch { close(); }
+  } };
+}
+
+export function diagnosticSignal(signal: string | null): HeaderChangeDiagnosticSignal {
+  return signal === null ? 'none' : includes(signals, signal) ? signal as HeaderChangeDiagnosticSignal : 'other';
+}
+
+export type NativeHeaderChangeDiagnostic = Pick<Extract<HeaderChangeDiagnosticRecord, { kind: 'native' }>,
+  'stage' | 'reason' | 'nativeElapsedMs'>;
+
+// 每个源最多32行／3840字节；未知原文不进入任何回调或文件。
+export class NativeHeaderChangeDiagnosticDecoder {
+  private bytes = 0;
+  private lines = 0;
+  private pending = '';
+  private rejected = false;
+  constructor(private readonly accept: (record: NativeHeaderChangeDiagnostic) => void,
+    private readonly invalid: () => void) {}
+  push(chunk: Buffer): void {
+    if (this.rejected) return;
+    this.bytes += chunk.length;
+    if (this.bytes > 3840 || chunk.some((byte) => byte !== 10 && (byte < 32 || byte > 126))) { this.reject(); return; }
+    this.pending += chunk.toString('ascii');
+    for (;;) {
+      const end = this.pending.indexOf('\n');
+      if (end < 0) break;
+      if (++this.lines > 32 || end + 1 > 120) { this.reject(); return; }
+      const line = this.pending.slice(0, end); this.pending = this.pending.slice(end + 1);
+      const match = /^notalone-header-change-v1 ([a-z_]+) ([a-z_]+) (\d+(?:\.\d+)?(?:e[+-]?\d+)?)$/.exec(line);
+      if (!match || !includes(nativeStages, match[1]) || !includes(nativeReasons, match[2]) || !elapsed(Number(match[3]))) { this.reject(); return; }
+      this.accept({ stage: match[1] as NativeHeaderChangeDiagnostic['stage'],
+        reason: match[2] as NativeHeaderChangeDiagnostic['reason'], nativeElapsedMs: Number(match[3]) });
+    }
+    if (this.pending.length >= 120) this.reject();
+  }
+  finish(): void { if (this.pending) this.reject(); }
+  private reject(): void { this.rejected = true; this.pending = ''; this.invalid(); }
+}
