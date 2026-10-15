@@ -36,11 +36,17 @@ sensitivity只标原文实际的敏感风险：financial=真实金钱风险，he
 confidence是模型对标签的把握，不能代替证据。程序只保证定位、引用、字段组合与时间计算，不认证你的语义判断。
 """
 
-GROUNDED_V3_PROMPT = GROUNDED_PROMPT + """
+GROUNDED_V3_PROMPT = GROUNDED_PROMPT.replace(
+    "sensitivity只标原文实际的敏感风险：financial=真实金钱风险，health=健康，commitment=明确承诺，other=其他明确敏感性。",
+    "sensitivity按原文涉及的敏感事项标注：financial=借贷、负债、还款等金融敏感事项，"
+    "health=健康，commitment=明确承诺，other=其他明确敏感性。\n"
+    "即使原文否定发生借贷、负债或还款，financial也保留；它不表示已有负债或交易发生。",
+) + """
 本次为grounded-v3，每个target还须填写ambiguity_codes数组，只能选择以下受控类别：
 entity_identity=原句所指人物或群体身份未明；place_ownership=所指地点／家里归属未明；
 borrowing_direction=“向对方借”与“借给对方”两种方向无法唯一确定；other_unresolved=其他实质未知。
-同时存在的类别必须列全；其他未知不能替代应列的具体类别。不能因为人物已知就忽略借贷方向未知。
+ambiguity_codes是非互斥多选，须逐类核对已有来源；身份、地点归属、借贷方向同时未定时全部选择。
+只选择已有来源支持的未知，不能凭词语命中补猜；其他未知不能替代应列的具体类别。不能因为人物已知就忽略借贷方向未知。
 unresolved=false时必须为空数组；unresolved=true时必须至少一类，不重复，不生成解释正文。
 方向说明只解释原句的两种读法，不改变人物、肯定／否定、条件或完成程度，不断定交易发生。
 来源已明确方向时不要增添两读。程序固定渲染解释，不提供消歧或来源语义证明。
