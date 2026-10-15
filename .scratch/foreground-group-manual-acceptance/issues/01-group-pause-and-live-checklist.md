@@ -4,7 +4,7 @@
 
 Type: task
 Category: enhancement
-Triage: ready-for-human
+Triage: ready-for-agent
 State: claimed
 Blocked by: 无
 
@@ -52,3 +52,7 @@ Blocked by: 无
 收尾：认证HTTP停读，自有后端退出0、随机隔离PG库删除、未确认资源为空；核对自有App／后端／runner PID均不存在，独立userData已删除，租约absent。无私人正文读取、模型调用或发送；未保存图帧／截图。真实原生观察已有本轮运行，不回写之前“未运行”的历史结论。
 
 用户随后明确反馈测试项目过多、操作复杂。后续不再要求用户逐项填写完整清单，改为日常使用中的少量直接反馈，Agent负责必要证据与记录；未反馈项目仍保持未验证。当前复杂浮窗本轮已退出，不声称界面已完成简化，不追加启动额度或重开。
+
+## 2026-10-15 Agent直接实机复验
+
+用户要求直接Computer Use验收后，Agent已自行完成真实微信切群聊、回私聊、进出助手、输入合成草稿及移动缩放，用户无需填写清单。使用顶部提示条修复包，单联系人群聊暂停、人工无法绕过、返回私聊自动恢复及草稿逐字保留通过，详见[本轮记录](../../foreground-header-layout/computer-use-acceptance-20261015.md)。移动/缩放组合操作后未自动恢复，另有探针超时，见[待分诊任务](../../foreground-header-layout/issues/02-window-change-manual-gate.md)；本票继续claimed，不签收18/06。反馈由Agent依据实际界面记录，不冒充用户体验判断。
