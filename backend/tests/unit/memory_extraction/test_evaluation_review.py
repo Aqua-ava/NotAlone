@@ -109,6 +109,43 @@ def _review(packet: dict) -> dict:
 
 
 class EvaluationReviewTest(unittest.TestCase):
+    def test_pending_structure_validation_does_not_grant_review_or_execution(self):
+        from notalone.memory_extraction.evaluation_review import validate_reference_structure
+
+        reference = _reference()
+        reference["status"] = "agent_reference_pending_review"
+        reference["provenance"]["structured_review"] = {"status": "pending", "reviewer": None}
+        before = copy.deepcopy(reference)
+        self.assertIsNone(validate_reference_structure(reference, "W1"))
+        self.assertEqual(reference, before)
+        self.assertNotIn("execution_ready", reference)
+        with self.assertRaisesRegex(ValueError, "review_reference_invalid"):
+            prepare_case_review(reference, "W1", _evidence())
+
+    def test_structure_seam_keeps_exact_fields_ids_and_required_content(self):
+        from notalone.memory_extraction.evaluation_review import validate_reference_structure
+
+        for fault in ("extra", "missing", "order", "claim", "variant", "duplicate", "case"):
+            reference = _reference()
+            reference["status"] = "agent_reference_pending_review"
+            case_id = "W1"
+            if fault == "extra":
+                reference["execution_ready"] = True
+            elif fault == "missing":
+                reference.pop("status")
+            elif fault == "order":
+                reference["windows"][0]["position"] = True
+            elif fault == "claim":
+                reference["windows"][0]["claims"][0]["required"] = 1
+            elif fault == "variant":
+                reference["windows"][0]["claims"][0]["variants"][0].pop("alternatives_rule")
+            elif fault == "duplicate":
+                reference["windows"][0]["claims"] *= 2
+            else:
+                case_id = "W2"
+            with self.subTest(fault=fault), self.assertRaises(ValueError):
+                validate_reference_structure(reference, case_id)
+
     def test_correct_raw_claim_rejected_by_verification_has_no_accepted_credit(self):
         evidence = _evidence()
         evidence["verification"][0].update(verdict="unsupported", issues=["meaning"], evidence=[])

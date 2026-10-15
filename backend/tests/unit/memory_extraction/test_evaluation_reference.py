@@ -96,6 +96,209 @@ class EvaluationReferenceTest(unittest.TestCase):
             annotation_sha256=self.annotation if annotation is None else annotation,
         )
 
+    def test_public_reference_version_is_a_closed_explicit_selection(self):
+        from notalone.memory_extraction.evaluation_reference import validate_public_reference
+
+        for version in (None, True, 2, "v2", "../任意参考.json"):
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                validate_public_reference(
+                    self.reference, expected_reference_sha256=self.expected,
+                    annotation_sha256=self.annotation, reference_version=version,
+                )
+
+    def test_source_fidelity_public_binds_pending_revision_without_changing_inputs(self):
+        from notalone.memory_extraction.evaluation_records import canonical_sha256
+        from notalone.memory_extraction.evaluation_reference import validate_public_reference
+
+        path = self.root / ".scratch/unfinished-work/memory-gold-reference-v2-20261016.json"
+        reference = json.loads(path.read_text())
+        result = validate_public_reference(
+            reference, expected_reference_sha256=canonical_sha256(reference),
+            annotation_sha256=hashlib.sha256(
+                (self.root / reference["annotation_path"]).read_bytes(),
+            ).hexdigest(), reference_version="source-fidelity-v2",
+        )
+        self.assertEqual((result["planned_windows"], result["required_claims"],
+                          result["optional_claims"]), (21, 28, 1))
+        self.assertTrue(result["review_pending"])
+        self.assertIs(result["execution_ready"], False)
+        self.assertIs(result["quality_certified"], False)
+        for before, after in zip(self.reference["windows"], reference["windows"]):
+            if before["id"] != "A05":
+                self.assertEqual(before, after)
+            else:
+                for field in ("id", "position", "case_name", "input_sha256",
+                              "target_indices", "inclusion"):
+                    self.assertEqual(before[field], after[field])
+        claim = reference["windows"][4]["claims"][0]
+        variant = claim["variants"][0]
+        self.assertEqual(
+            {field: variant[field] for field in (
+                "subject", "category", "speech_act", "assertion_status",
+                "figurative_type", "valid_at", "invalid_at", "ideal_destination",
+            )},
+            {"subject": "contact", "category": "relationship_note",
+             "speech_act": "assertion", "assertion_status": "asserted",
+             "figurative_type": "literal", "valid_at": None, "invalid_at": None,
+             "ideal_destination": "pending"},
+        )
+        self.assertEqual(variant["source_choices"], self.reference["windows"][4][
+            "claims"][0]["variants"][0]["source_choices"])
+        self.assertIn("姐姐为出借施事、联系人为接收方，借用已发生", claim["meaning_requirements"][0])
+        self.assertIn("物品车主／归属未知", claim["meaning_requirements"][1])
+        self.assertIn("“她”缺明确唯一指称", variant["alternatives_rule"])
+        self.assertIn("反向断言不属于姐姐", claim["meaning_requirements"][1])
+
+    def test_source_fidelity_full_keeps_exact_new_parent_and_original_119(self):
+        from notalone.memory_extraction.evaluation_records import canonical_sha256
+        from notalone.memory_extraction.evaluation_reference import validate_full_public_reference
+
+        folder = self.root / ".scratch/unfinished-work"
+        reference = json.loads((folder / "memory-gold-full140-reference-v2-20261016.json").read_bytes())
+        parent_bytes = (folder / "memory-gold-reference-v2-20261016.json").read_bytes()
+        parent = json.loads(parent_bytes)
+        previous = json.loads((folder / "memory-gold-full140-reference-20261013.json").read_bytes())
+        result = validate_full_public_reference(
+            reference, expected_reference_sha256=canonical_sha256(reference),
+            annotation_sha256=hashlib.sha256(
+                (self.root / reference["annotation_path"]).read_bytes(),
+            ).hexdigest(), reference_version="source-fidelity-v2",
+        )
+        self.assertEqual(result["planned_windows"], 140)
+        self.assertEqual(sorted(result["case_positions"]), list(range(140)))
+        self.assertTrue(result["review_pending"])
+        self.assertIs(result["execution_ready"], False)
+        self.assertEqual(reference["windows"][:21], parent["windows"])
+        self.assertEqual(reference["provenance"]["parent21"], {
+            "reference_path": ".scratch/unfinished-work/memory-gold-reference-v2-20261016.json",
+            "reference_file_sha256": hashlib.sha256(parent_bytes).hexdigest(),
+            "reference_sha256": canonical_sha256(parent), "reference": parent,
+        })
+        self.assertEqual(reference["windows"][21:], previous["windows"][21:])
+        for field in ("public_source_manifest", "public_cases_sha256", "local_to_reference_positions"):
+            self.assertEqual(reference["provenance"][field], previous["provenance"][field])
+        claims = [claim for window in reference["windows"] for claim in window["claims"]]
+        self.assertEqual((sum(claim["required"] for claim in claims),
+                          sum(not claim["required"] for claim in claims),
+                          sum(len(claim["variants"]) for claim in claims),
+                          sum(len(variant["source_choices"]) for claim in claims
+                              for variant in claim["variants"])), (138, 1, 156, 162))
+
+    def test_source_fidelity_versions_cannot_impersonate_each_other_or_arbitrary_paths(self):
+        from notalone.memory_extraction.evaluation_records import canonical_sha256
+        from notalone.memory_extraction.evaluation_reference import (
+            validate_full_public_reference, validate_public_reference,
+        )
+
+        folder = self.root / ".scratch/unfinished-work"
+        pairs = (
+            (validate_public_reference, self.reference,
+             json.loads((folder / "memory-gold-reference-v2-20261016.json").read_bytes())),
+            (validate_full_public_reference,
+             json.loads((folder / "memory-gold-full140-reference-20261013.json").read_bytes()),
+             json.loads((folder / "memory-gold-full140-reference-v2-20261016.json").read_bytes())),
+        )
+        for validate, legacy, revision in pairs:
+            with self.subTest(validate=validate.__name__, mode="explicit_legacy"):
+                default = validate(
+                    legacy, expected_reference_sha256=canonical_sha256(legacy),
+                    annotation_sha256=legacy["annotation_sha256"],
+                )
+                self.assertEqual(default, validate(
+                    legacy, expected_reference_sha256=canonical_sha256(legacy),
+                    annotation_sha256=legacy["annotation_sha256"], reference_version="legacy-v1",
+                ))
+                self.assertNotIn("execution_ready", default)
+            for value, version in ((legacy, "source-fidelity-v2"),
+                                   (revision, "legacy-v1"), (revision, None),
+                                   (revision, True), (revision, "../参考.json")):
+                with self.subTest(validate=validate.__name__, version=version), self.assertRaises(ValueError):
+                    validate(value, expected_reference_sha256=canonical_sha256(value),
+                             annotation_sha256=value["annotation_sha256"], reference_version=version)
+            for fault in ("reference_path", "annotation_path", "review", "independent", "blind", "seen"):
+                changed = deepcopy(revision)
+                if fault == "reference_path":
+                    changed["provenance"]["reference_path"] = legacy["annotation_path"]
+                elif fault == "annotation_path":
+                    changed["annotation_path"] = ".scratch/任意判据.md"
+                elif fault == "review":
+                    changed["provenance"]["structured_review"] = {"status": "passed", "reviewer": "自称已审"}
+                elif fault == "independent":
+                    changed["provenance"]["independent_review"]["status"] = "passed"
+                elif fault == "blind":
+                    changed["provenance"]["blind_annotation"] = True
+                else:
+                    changed["provenance"]["source_fidelity_revision"]["old_results_seen"] = False
+                with self.subTest(validate=validate.__name__, fault=fault), self.assertRaises(ValueError):
+                    validate(changed, expected_reference_sha256=canonical_sha256(changed),
+                             annotation_sha256=changed["annotation_sha256"],
+                             reference_version="source-fidelity-v2")
+
+    def test_source_fidelity_full_rejects_parent_or_prefix_replacement_after_rehash(self):
+        from notalone.memory_extraction.evaluation_records import canonical_sha256
+        from notalone.memory_extraction.evaluation_reference import validate_full_public_reference
+
+        folder = self.root / ".scratch/unfinished-work"
+        original = json.loads((folder / "memory-gold-full140-reference-v2-20261016.json").read_bytes())
+        for fault in ("parent_path", "parent_file", "parent_object_hash", "legacy_parent",
+                      "parent_annotation", "prefix", "target", "input", "required", "source"):
+            reference = deepcopy(original)
+            parent = reference["provenance"]["parent21"]
+            if fault == "parent_path":
+                parent["reference_path"] = ".scratch/unfinished-work/memory-gold-reference-20261012.json"
+            elif fault == "parent_file":
+                parent["reference_file_sha256"] = "5ab68ad8fbb48348231b27ae600ca011e47bf7fc2c1aa2f4e5b417bfa392d5a6"
+            elif fault == "parent_object_hash":
+                parent["reference_sha256"] = self.expected
+            elif fault == "legacy_parent":
+                parent["reference"] = deepcopy(self.reference)
+            elif fault == "parent_annotation":
+                parent["reference"]["annotation_path"] = self.reference["annotation_path"]
+            elif fault == "prefix":
+                reference["windows"][4]["claims"][0]["variants"][0]["ideal_destination"] = "auto"
+            elif fault == "target":
+                reference["windows"][4]["target_indices"] = [True]
+            elif fault == "input":
+                reference["windows"][4]["input_sha256"] = "f" * 64
+            elif fault == "required":
+                reference["windows"][4]["claims"][0]["required"] = False
+            else:
+                reference["windows"][4]["claims"][0]["variants"][0]["source_choices"][0]["indices"] = [1]
+            with self.subTest(fault=fault), self.assertRaises(ValueError):
+                validate_full_public_reference(
+                    reference, expected_reference_sha256=canonical_sha256(reference),
+                    annotation_sha256=reference["annotation_sha256"], reference_version="source-fidelity-v2",
+                )
+
+    def test_actual_pending_v2_materials_cannot_generate_review_packets(self):
+        from notalone.memory_extraction.evaluation_review import (
+            prepare_case_review, validate_reference_structure,
+        )
+
+        empty = {"run_status": "unrun", "extraction": [], "verification_inputs": [],
+                 "verification": [], "final_facts": [], "original_result": {}}
+        for name in ("memory-gold-reference-v2-20261016.json",
+                     "memory-gold-full140-reference-v2-20261016.json"):
+            reference = json.loads((self.root / ".scratch/unfinished-work" / name).read_bytes())
+            before = deepcopy(reference)
+            self.assertIsNone(validate_reference_structure(reference, "A05"))
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "review_reference_invalid"):
+                prepare_case_review(reference, "A05", empty)
+            self.assertEqual(reference, before)
+
+    def test_legacy_reference_material_bytes_are_not_rewritten(self):
+        expected = {
+            "memory-gold-reference-20261012.json": "5ab68ad8fbb48348231b27ae600ca011e47bf7fc2c1aa2f4e5b417bfa392d5a6",
+            "memory-gold-agent-annotations-20261012.md": "7039a302f64d6a14761ae448e425597c5ef46e0fbb3d7bc41c95c6d9a9b91e91",
+            "memory-gold-full140-reference-20261013.json": "c768da83d39d7b103cec924a5b55dadb82eb9c308f84635c545ef8fe8f4897cf",
+            "memory-gold-full140-agent-annotations-20261013.md": "ac6455813d8218506684c886d32b34bcda3617c1a85342398c0c9fea50e2b111",
+        }
+        for name, digest in expected.items():
+            with self.subTest(name=name):
+                self.assertEqual(hashlib.sha256(
+                    (self.root / ".scratch/unfinished-work" / name).read_bytes(),
+                ).hexdigest(), digest)
+
     def test_full_reference_keeps_parent_exact_and_has_original_order_mapping(self):
         from notalone.memory_extraction.evaluation_reference import (
             validate_full_public_reference,

@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, NamedTuple
 
 
 _ANNOTATION_PATH = ".scratch/unfinished-work/memory-gold-agent-annotations-20261012.md"
@@ -17,6 +17,63 @@ FULL_ANNOTATION_PATH = (
 )
 _PARENT_SHA = "5fb8d53b90a1a96c5987ac7b825bb233cc3e9f196f976e4851c40b0243b77b32"
 _PARENT_FILE_SHA = "5ab68ad8fbb48348231b27ae600ca011e47bf7fc2c1aa2f4e5b417bfa392d5a6"
+PUBLIC_REFERENCE_V2_PATH = ".scratch/unfinished-work/memory-gold-reference-v2-20261016.json"
+PUBLIC_ANNOTATION_V2_PATH = ".scratch/unfinished-work/memory-gold-agent-annotations-v2-20261016.md"
+FULL_REFERENCE_V2_PATH = ".scratch/unfinished-work/memory-gold-full140-reference-v2-20261016.json"
+FULL_ANNOTATION_V2_PATH = ".scratch/unfinished-work/memory-gold-full140-agent-annotations-v2-20261016.md"
+_PUBLIC_V2_FILE_SHA = "10a9e6ff5222c9c7a2b9776584fd560bc7344853c56becd77c7646bd65191d48"
+
+
+class _ReferenceBinding(NamedTuple):
+    reference_path: str
+    reference_sha256: str
+    annotation_path: str
+    annotation_sha256: str
+
+
+_PUBLIC_V2 = _ReferenceBinding(
+    PUBLIC_REFERENCE_V2_PATH,
+    "d4b6b2de9f23a442af6f2ef49d22e09911446c00bc46436eb940c71cad102091",
+    PUBLIC_ANNOTATION_V2_PATH,
+    "08ef4653f776ee1b998715eedc3bbe7f3887fe991b7e4ada2fc6041b95ee65e1",
+)
+_FULL_V2 = _ReferenceBinding(
+    FULL_REFERENCE_V2_PATH,
+    "f79ba7ef8b32e7d6ff47df55d724ddf6e3c8dd4c9eae17aac9b7161fcee19d2e",
+    FULL_ANNOTATION_V2_PATH,
+    "d90a49ba22d65eeb61b25f518b9045eac5866fafd627d9863c683c47f6fb8c95",
+)
+
+
+def _is_source_fidelity_v2(reference_version: str) -> bool:
+    if type(reference_version) is not str or reference_version not in {
+        "legacy-v1", "source-fidelity-v2",
+    }:
+        raise ValueError("公开参考版本必须显式选择已支持的封闭值。")
+    return reference_version == "source-fidelity-v2"
+
+
+def _validate_v2_binding(
+    reference: dict, expected_reference_sha256: str, annotation_sha256: str,
+    binding: _ReferenceBinding,
+) -> None:
+    """v2只核固定待独审材料；当前状态不授予执行就绪资格。"""
+    provenance = reference.get("provenance")
+    if (
+        reference.get("status") != "agent_reference_pending_review"
+        or reference.get("annotation_path") != binding.annotation_path
+        or reference.get("annotation_sha256") != binding.annotation_sha256
+        or expected_reference_sha256 != binding.reference_sha256
+        or annotation_sha256 != binding.annotation_sha256
+        or type(provenance) is not dict
+        or provenance.get("reference_version") != "source-fidelity-v2"
+        or provenance.get("reference_path") != binding.reference_path
+        or provenance.get("structured_review") != {"status": "pending", "reviewer": None}
+        or provenance.get("independent_review") != {
+            "status": "pending", "standards": "pending", "spec": "pending",
+        }
+    ):
+        raise ValueError("来源保真v2须绑定固定路径、摘要与真实待独审状态。")
 
 
 def public_window_projection(window: object) -> dict[str, Any]:
@@ -52,10 +109,18 @@ def _sha(reference: dict) -> str:
 
 def validate_public_reference(
     reference: dict, *, expected_reference_sha256: str, annotation_sha256: str,
+    reference_version: str = "legacy-v1",
 ) -> dict:
     """期望摘要由调用方沿实际独审固定；不是由所加载材料自填证明。"""
+    source_fidelity = _is_source_fidelity_v2(reference_version)
     if not isinstance(reference, dict):
         raise ValueError("公开参考必须是JSON对象。")
+    if source_fidelity:
+        _validate_v2_binding(reference, expected_reference_sha256, annotation_sha256, _PUBLIC_V2)
+    elif isinstance(reference.get("provenance"), dict) and reference["provenance"].get(
+        "reference_version", "legacy-v1",
+    ) != "legacy-v1":
+        raise ValueError("来源保真v2不能冒充默认旧参考。")
     if any(not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None
            for value in (expected_reference_sha256, annotation_sha256)):
         raise ValueError("公开参考需要明确的独审和中文判据摘要。")
@@ -67,7 +132,8 @@ def validate_public_reference(
             or reference.get("annotation_sha256") != annotation_sha256):
         raise ValueError("公开参考或中文判据摘要不一致。")
     provenance = reference.get("provenance")
-    if (reference.get("annotation_path") != _ANNOTATION_PATH
+    annotation_path = PUBLIC_ANNOTATION_V2_PATH if source_fidelity else _ANNOTATION_PATH
+    if (reference.get("annotation_path") != annotation_path
             or not isinstance(provenance, dict)
             or provenance.get("oracle_aware") is not True
             or provenance.get("blind_annotation") is not False
@@ -75,9 +141,10 @@ def validate_public_reference(
         raise ValueError("公开参考的来源与认证边界不一致。")
     structured = provenance.get("structured_review")
     human = provenance.get("human_review")
-    if (not isinstance(structured, dict) or structured.get("status") != "passed"
+    if ((not source_fidelity and (
+            not isinstance(structured, dict) or structured.get("status") != "passed"
             or not isinstance(structured.get("reviewer"), str)
-            or not structured["reviewer"].strip()
+            or not structured["reviewer"].strip()))
             or not isinstance(human, list) or len(human) != 1
             or not isinstance(human[0], dict) or human[0].get("case_id") != "A14"
             or human[0].get("decision") != "none"
@@ -90,7 +157,7 @@ def validate_public_reference(
     from .evaluation import build_window
     from .evaluation_cases import CASES
     from .evaluation_records import canonical_sha256
-    from .evaluation_review import prepare_case_review
+    from .evaluation_review import prepare_case_review, validate_reference_structure
     from .semantic_evaluation_cases import SEMANTIC_CASES
     from .verification_adapters import SOURCE_VERIFICATION_SCHEMA
 
@@ -124,7 +191,10 @@ def validate_public_reference(
                 or window.get("inclusion") != ("none" if identity in {"A12", "A14"}
                                                 else "retain")):
             raise ValueError("公开参考窗口与固定输入、顺序或纳入范围不一致。")
-        prepare_case_review(reference, identity, empty_evidence)
+        if source_fidelity:
+            validate_reference_structure(reference, identity)
+        else:
+            prepare_case_review(reference, identity, empty_evidence)
     claims = [claim for window in windows for claim in window["claims"]]
     required = sum(claim["required"] is True for claim in claims)
     optional = sum(claim["required"] is False for claim in claims)
@@ -139,6 +209,8 @@ def validate_public_reference(
         "required_claims": required,
         "optional_claims": optional,
         "quality_certified": False,
+        **({"reference_version": reference_version, "review_pending": True,
+            "execution_ready": False} if source_fidelity else {}),
     }
 
 
@@ -214,18 +286,27 @@ def _full_variant(variant: dict, message_count: int, targets: tuple[int, ...]) -
 
 def validate_full_public_reference(
     reference: dict, *, expected_reference_sha256: str, annotation_sha256: str,
+    reference_version: str = "legacy-v1",
 ) -> dict:
     """只核固定140装配与独审绑定，不认证119中文判据或模型质量。"""
+    source_fidelity = _is_source_fidelity_v2(reference_version)
     if (type(reference) is not dict
             or any(type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None
                    for value in (expected_reference_sha256, annotation_sha256))):
         raise ValueError("完整公开参考需要明确的独审摘要。")
+    if source_fidelity:
+        _validate_v2_binding(reference, expected_reference_sha256, annotation_sha256, _FULL_V2)
+    elif isinstance(reference.get("provenance"), dict) and reference["provenance"].get(
+        "reference_version", "legacy-v1",
+    ) != "legacy-v1":
+        raise ValueError("来源保真v2不能冒充默认旧参考。")
     try:
         actual_sha = _sha(reference)
     except (TypeError, ValueError) as error:
         raise ValueError("完整公开参考必须能够安全规范化。") from error
+    annotation_path = FULL_ANNOTATION_V2_PATH if source_fidelity else FULL_ANNOTATION_PATH
     if (actual_sha != expected_reference_sha256
-            or reference.get("annotation_path") != FULL_ANNOTATION_PATH
+            or reference.get("annotation_path") != annotation_path
             or reference.get("annotation_sha256") != annotation_sha256):
         raise ValueError("完整公开参考或中文判据绑定不一致。")
     provenance = reference.get("provenance")
@@ -237,15 +318,18 @@ def validate_full_public_reference(
             or provenance.get("unresolved_cases") != []):
         raise ValueError("完整参考不能含未决项或扩大人工确认。")
     review = provenance.get("structured_review")
-    if (type(review) is not dict or review.get("status") != "passed"
+    if not source_fidelity and (type(review) is not dict or review.get("status") != "passed"
             or type(review.get("reviewer")) is not str or not review["reviewer"].strip()):
         raise ValueError("完整参考必须经过显式装配复审。")
     parent = provenance.get("parent21")
+    parent_path = PUBLIC_REFERENCE_V2_PATH if source_fidelity else PUBLIC_REFERENCE_PATH
+    parent_file_sha = _PUBLIC_V2_FILE_SHA if source_fidelity else _PARENT_FILE_SHA
+    parent_sha = _PUBLIC_V2.reference_sha256 if source_fidelity else _PARENT_SHA
     if (type(parent) is not dict or set(parent) != {
         "reference_path", "reference_file_sha256", "reference_sha256", "reference",
-    } or parent["reference_path"] != PUBLIC_REFERENCE_PATH
-            or parent["reference_file_sha256"] != _PARENT_FILE_SHA
-            or parent["reference_sha256"] != _PARENT_SHA
+    } or parent["reference_path"] != parent_path
+            or parent["reference_file_sha256"] != parent_file_sha
+            or parent["reference_sha256"] != parent_sha
             or type(parent["reference"]) is not dict):
         raise ValueError("完整参考须保留原21完整对象和文件绑定。")
     original = parent["reference"]
@@ -253,12 +337,12 @@ def validate_full_public_reference(
     if type(parent_annotation) is not str:
         raise ValueError("原21判据摘要必须明确保留。")
     validate_public_reference(
-        original, expected_reference_sha256=_PARENT_SHA,
-        annotation_sha256=parent_annotation,
+        original, expected_reference_sha256=parent_sha,
+        annotation_sha256=parent_annotation, reference_version=reference_version,
     )
     from .evaluation import build_window
     from .evaluation_records import canonical_sha256
-    from .evaluation_review import prepare_case_review
+    from .evaluation_review import prepare_case_review, validate_reference_structure
 
     _, cases = _fixed_case_sets()
     positions = full_case_reference_positions()
@@ -284,7 +368,10 @@ def validate_full_public_reference(
         raise ValueError("原21与扩展119判据必须分范围绑定。")
     empty = {"run_status": "unrun", "extraction": [], "verification_inputs": [],
              "verification": [], "final_facts": [], "original_result": {}}
-    prepare_case_review(reference, "R001", empty)
+    if source_fidelity:
+        validate_reference_structure(reference, "R001")
+    else:
+        prepare_case_review(reference, "R001", empty)
     for case, position in zip(cases, positions):
         window = windows[position]
         if (window["case_name"] != case.name
@@ -314,4 +401,6 @@ def validate_full_public_reference(
         "reference_sha256": expected_reference_sha256,
         "annotation_sha256": annotation_sha256, "planned_windows": 140,
         "case_positions": positions, "quality_certified": False,
+        **({"reference_version": reference_version, "review_pending": True,
+            "execution_ready": False} if source_fidelity else {}),
     }

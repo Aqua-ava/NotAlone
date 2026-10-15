@@ -24,6 +24,10 @@ _WINDOW_CHECKS = frozenset({"inclusion", "forbidden_meanings", "lineage"})
 _CLASSIFICATIONS = frozenset({"required", "optional", "extra", "duplicate", "excluded"})
 # safety描述输出的忠实与风险；输入身份未知不等于输出不安全，safe也不授权auto。
 _SAFETY = frozenset({"safe", "false_fact", "wrong_person", "ambiguous", "unresolved"})
+_REFERENCE_FIELDS = frozenset({
+    "format_version", "status", "annotation_path", "annotation_sha256",
+    "provenance", "e_fields", "v_fields", "common_rules", "windows",
+})
 
 
 def _json_copy(value: Any) -> Any:
@@ -88,19 +92,17 @@ def _field_statuses(value: Any, fields: tuple[str, ...] | frozenset[str]) -> Non
         _enum(status, _STATUSES)
 
 
-def _validate_reference(reference: dict, case_id: str) -> dict:
-    _keys(reference, {
-        "format_version", "status", "annotation_path", "annotation_sha256",
-        "provenance", "e_fields", "v_fields", "common_rules", "windows",
-    })
+def validate_reference_structure(reference: dict, case_id: str) -> None:
+    """只核九键参考及窗口结构；不生成审核packet或授予执行资格。"""
+    _keys(reference, _REFERENCE_FIELDS)
     if (type(reference["format_version"]) is not int or reference["format_version"] != 1
-            or reference["status"] != "agent_reviewed_reference"
             or reference["e_fields"] != list(_E_FIELDS)
             or reference["v_fields"] != list(_V_FIELDS)
             or type(reference["provenance"]) is not dict
             or type(reference["common_rules"]) is not dict
             or type(reference["windows"]) is not list):
         raise ValueError("review_reference_invalid")
+    _nonempty(reference["status"])
     _nonempty(reference["annotation_path"])
     window_ids: list[str] = []
     for position, window in enumerate(reference["windows"]):
@@ -142,6 +144,14 @@ def _validate_reference(reference: dict, case_id: str) -> dict:
             raise ValueError("review_duplicate_claim")
     if len(set(window_ids)) != len(window_ids):
         raise ValueError("review_duplicate_case")
+    _case(reference, case_id)
+
+
+def _validate_reference(reference: dict, case_id: str) -> dict:
+    _keys(reference, _REFERENCE_FIELDS)
+    if reference["status"] != "agent_reviewed_reference":
+        raise ValueError("review_reference_invalid")
+    validate_reference_structure(reference, case_id)
     return _case(reference, case_id)
 
 

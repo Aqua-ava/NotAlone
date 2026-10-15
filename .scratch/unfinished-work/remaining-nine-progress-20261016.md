@@ -11,7 +11,7 @@
 | [本机交付20](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed；当前签名包Finder启动、真实选择/导入等分项已有证据；[真实DeepSeek合成App冒烟](../mac-desktop-app/reply-model-smoke-result-20261016.md)1／1通过，模型AC完成；[v9快捷键两场](../mac-desktop-app/native-shortcut-v9-20261016.md)保留准备超时及两次按键后未观察到显示；[后两场观察方式对照](../mac-desktop-app/native-shortcut-v9-observation-control-20261016.md)仍未通过 | 独立启动权限、系统快捷键；新增1次按键及另1场按键0，观察干扰未排除，物理键盘意愿问题未答、不预启动人工场 |
 | [真实微信follow04](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed；单联系人有界读取、退出及视觉独立性已有证据；[v7同App总开关重开](../native-app-backend/real-sync-reenable-result-20261016.md)1／1通过，关闭65.926秒零新读取 | 第四AC空窗关停重开控制流及第五Answer记录已完成；第一／二AC持续到达与切换仍缺，不认证正向消息恢复，双联系人和真实来信保留未验证 |
 | [核心事实保留01](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed／ready-for-agent；[新独立8窗场](../grounded-evaluation/remaining-public8-result-20261016.md)B01单窗封存raw3／接受3／完整3，B02核验未知 | 无完整batch result，外层两窗仍unknown；不代签核心5命题整体，旧真实/留出不读不改 |
-| [指代消解07](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed／ready-for-agent；[新固定16窗场](../grounded-evaluation/v3-main16-result-20261016.md)closed22／32，前10窗原封存raw13／接受13／完整11（A05产权争议不作质量证据），A11契约失败、后5窗unrun | 不足≥15且2一般错误；完整140离线v4准备另在隔离树审查，不与旧部分场拼成绩 |
+| [指代消解07](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed／ready-for-agent；[新固定16窗场](../grounded-evaluation/v3-main16-result-20261016.md)closed22／32，前10窗原封存raw13／接受13／完整11（A05产权争议不作质量证据），A11契约失败、后5窗unrun | 不足≥15且2一般错误；v4封闭类型／月份及物品归属修订已集成，来源参考v2两轴通过，完整140固定入口准备中，不与旧部分场拼成绩 |
 | [按维度放行03](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed／ready-for-agent；结构和合取门已有实现，默认放行表仍为空 | 主集12条proof仍UNKNOWN；[有限包装决策稿](../grounded-evaluation/typed-proof-representation-decision-20261016.md)待决定，真实质量、typed依据与逐类放行分别验收 |
 
 本轮官方DeepSeek公开基线实际25次HTTP、零重试，13窗完成、8窗未运行；A13整组去向合同触发停止，剩余17次永久关闭。[完整结果](../grounded-evaluation/deepseek-public21-result-20261015.md)区分内容事实错误与整组auto/pending合同，不覆盖原Gold、旧失败或分母。未使用ECNU，没有上传真实聊天或放开自动采纳。
@@ -32,3 +32,5 @@
 
 
 结果独审另发现A05冻结Gold／sealed审查与已批准D2的产权UNKNOWN冲突；原full11／safe8仅为封存机械汇总，A05撤出无争议完整／安全样本，其余完整10可引用，不重签或改旧成绩。完整140沿用该A05，也须先明确修正未来参考；先前Gold复核记录不能覆盖这一新发现。
+
+2026-10-16后继离线准备：[初版v4](../grounded-v4-protocol-readiness/spec.md)与[物品归属修订](../grounded-v4-object-ownership/spec.md)均已完成独立双轴审查并集成主树，后者124项相关合成测试通过；旧v2／v3及生产默认不变，尚未注册真实v4入口。[来源参考v2](../grounded-evaluation/reference-source-fidelity-v2-spec-20261016.md)的576项离线测试及独立两轴审查通过，只修未来A05与直接规则，其他139窗、全部输入与原分母不变；此次语义独审限A05修订，非全新盲标。材料暂保留pending／execution_ready=false，真实审核元数据和新固定入口另接；未创建新真实预算或调用模型，默认空放行表与原票状态保持。
