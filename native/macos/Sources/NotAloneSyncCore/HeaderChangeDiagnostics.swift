@@ -30,6 +30,16 @@ enum HeaderChangeDiagnosticReason: String, Sendable {
     case frameLimit = "frame_limit"
     case detectorFailed = "detector_failed"
     case streamError = "stream_error"
+    case streamConnectionInvalid = "stream_connection_invalid"
+    case streamConnectionInterrupted = "stream_connection_interrupted"
+    case streamContextMissing = "stream_context_missing"
+    case streamSystemStopped = "stream_system_stopped"
+    case streamUserStopped = "stream_user_stopped"
+    case streamPermissionDeclined = "stream_permission_declined"
+    case streamMissingEntitlements = "stream_missing_entitlements"
+    case streamInternal = "stream_internal"
+    case streamInvalidParameter = "stream_invalid_parameter"
+    case streamStartFailed = "stream_start_failed"
     case operationFailed = "operation_failed"
     case leaseExpired = "lease_expired"
     case stopped
@@ -44,6 +54,24 @@ struct HeaderChangeDiagnostics: Sendable {
     init(environment: [String: String], beganAt: TimeInterval) {
         enabled = environment["NOTALONE_HEADER_CHANGE_DIAGNOSTICS"] == "1"
         self.beganAt = beganAt
+    }
+
+    // 对照本机SCError.h和Apple公开错误码；不转发域、数值或原始错误描述。
+    static func streamFailure(isScreenCaptureKit: Bool, code: Int) -> HeaderChangeDiagnosticReason {
+        guard isScreenCaptureKit else { return .streamError }
+        switch code {
+        case -3801: return .streamPermissionDeclined
+        case -3802: return .streamStartFailed
+        case -3803: return .streamMissingEntitlements
+        case -3804: return .streamConnectionInvalid
+        case -3805: return .streamConnectionInterrupted
+        case -3806: return .streamContextMissing
+        case -3811: return .streamInternal
+        case -3812: return .streamInvalidParameter
+        case -3817: return .streamUserStopped
+        case -3821: return .streamSystemStopped
+        default: return .streamError
+        }
     }
 
     mutating func line(stage: HeaderChangeDiagnosticStage, reason: HeaderChangeDiagnosticReason,

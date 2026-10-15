@@ -199,8 +199,11 @@ private final class HeaderChangeStream: NSObject, @preconcurrency SCStreamOutput
     }
 
     nonisolated func stream(_ stream: SCStream, didStopWithError error: any Error) {
+        let value = error as NSError
+        let reason = HeaderChangeDiagnostics.streamFailure(
+            isScreenCaptureKit: value.domain == SCStreamErrorDomain, code: value.code)
         Task { @MainActor [weak self] in
-            self?.failure(.streamError); self?.active = false; self?.detector.reset()
+            self?.failure(reason); self?.active = false; self?.detector.reset()
         }
     }
 

@@ -2,6 +2,17 @@ import XCTest
 @testable import NotAloneSyncCore
 
 final class HeaderChangeDiagnosticsTests: XCTestCase {
+    func testStreamErrorsUseOnlyKnownDomainAndFixedPublicCategories() {
+        XCTAssertEqual(HeaderChangeDiagnostics.streamFailure(isScreenCaptureKit: true, code: -3805),
+            .streamConnectionInterrupted)
+        XCTAssertEqual(HeaderChangeDiagnostics.streamFailure(isScreenCaptureKit: true, code: -3821),
+            .streamSystemStopped)
+        XCTAssertEqual(HeaderChangeDiagnostics.streamFailure(isScreenCaptureKit: false, code: -3805),
+            .streamError)
+        XCTAssertEqual(HeaderChangeDiagnostics.streamFailure(isScreenCaptureKit: true, code: 999_999),
+            .streamError)
+    }
+
     func testOnlyExactOptInEmitsTheFixedNumericProtocol() {
         for value in [nil, "", "0", "true", "01"] as [String?] {
             let environment = value.map { ["NOTALONE_HEADER_CHANGE_DIAGNOSTICS": $0] } ?? [:]
