@@ -91,3 +91,8 @@
 ### 2026-10-16 受控歧义v3两窗正式小试
 
 [独立v3结果](../../grounded-evaluation/typed-ambiguity-v3-pilot-result-20261016.md)：原公开A07／A10新run closed4／4，四次官方DeepSeek HTTP200、零重试，两窗completed但均general_error。E14逐字段40／42、必需raw3／接受3／完整1；A07缺地点归属歧义，A10否定借款缺敏感风险，两方向说明本次均保留原人物及肯定／否定。三条最终pending，proof全null／UNKNOWN，source_bound=false、semantic_basis=null；旧matcher两窗passed不当作完整质量。原Gold、旧失败／闭账、默认空表及State／AC保持，不与旧v2拼成完整21或≥15用例。本场未测B01／B02、私有实际或留出，不补签核心整体；下一步只读封存证据做离线标签诊断，无自动后继。
+
+
+### 2026-10-16 v3标签指导两窗完整审核通过
+
+[独立新场结果](../../grounded-evaluation/v3-label-guidance-public2-result-20261016.md)closed4／4、四官方DeepSeek HTTP200、零重试；A07同时保留人物身份／地点归属未定，A10两条保留方向及否定项financial，E14为42／42，必需raw3／接受3／完整3，两窗safe。A10-P1的V uncertain/pragmatics依冻结真实歧义判据显式通过，不改原E合法分支，不强求V supported。三条均pending、typed proof仍UNKNOWN，未达到≥15用例质量门或完成既有全量回归。原v3小试40／42、完整1／3与全部旧失败分列，不认证提示因果或稳定率；关闭时79源／台账／四phase收据及worker清理核实，结果双轴均0。本票State及原五AC保持。
