@@ -246,7 +246,8 @@ struct AutomaticSessionRegions {
             })
         }
         let divider = try uniqueBoundary(range: px(180)...min(px(600), w-px(280)), score: vertical, tolerance: px(3), failure: .vertical)
-        let headerY = try uniqueBoundary(range: px(45)...px(85), score: { y in
+        // 单行置顶/公告提示会将下缘推至约96pt；仍要求整个有界范围内只有一处强边界。
+        let headerY = try uniqueBoundary(range: px(45)...px(110), score: { y in
             median((0..<21).map { i in
                 let x = divider + px(20) + (w-divider-px(60))*i/20
                 return abs(Int(pixels[(y-1)*w+x]) - Int(pixels[(y+1)*w+x]))
