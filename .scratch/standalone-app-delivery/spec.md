@@ -2,7 +2,7 @@
 
 Triage: ready-for-agent
 
-状态：用户体验、数据位置、安全边界和公开 App 验收路径已确认；任务拆分待确认，产品尚未实现。
+状态：用户体验、数据位置、安全边界和公开 App 验收路径已确认；用户已批准五项任务并要求持续实现，见[实现索引](planning.md)。产品尚未完成。
 
 ## Problem Statement
 
@@ -81,5 +81,5 @@ Triage: ready-for-agent
 
 - [ADR-061](../../architecture/adr/061-standalone-local-app-onboarding-and-updates.md)记录已采纳的产品与安全边界。
 - [决策及只读证据](decision-notes.md)记录本轮用户确认与现有缺口。
-- [任务粒度与依赖提案](ticket-proposal.md)待用户确认后再发布逐张实现任务。
+- [任务粒度与依赖提案](ticket-proposal.md)已获用户确认，逐张实现任务见[索引](planning.md)。
 - 当前产品仍采用外置环境；历史构建、签名和测试不代表本规格已实现。微信一次性授权适配、可取得组件来源及无开发工具初始化仍需工程验证，失败时不得用放宽边界或降级验收代替。

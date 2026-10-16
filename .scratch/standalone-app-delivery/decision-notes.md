@@ -2,7 +2,7 @@
 
 日期：2026-10-16
 
-当前阶段：产品决策已确认并形成[规格](spec.md)和[ADR-061](../../architecture/adr/061-standalone-local-app-onboarding-and-updates.md)；[任务粒度与依赖](ticket-proposal.md)待用户确认。产品尚未实现。
+当前阶段：产品决策与[任务粒度和依赖](ticket-proposal.md)均已确认；用户要求持续实现。按[任务索引](planning.md)推进，产品尚未完成。
 
 ## 已确认目标
 
@@ -26,7 +26,7 @@
 
 ## 当前阶段边界
 
-- 产品体验与公开 App 测试路径已明确。当前等待的是任务粒度及依赖确认，不再重复询问已经确认的产品选择。
+- 产品体验、公开 App 测试路径、任务粒度与依赖已明确，不再重复询问已经确认的选择。
 - 微信组件、特权适配及无开发环境的真实可用性须按任务验证，不能把已确认目标写成已实现能力。
 
 ## 微信接入的只读核验
@@ -52,5 +52,5 @@
 ## 架构及工作流衔接
 
 - 独立交付目标对 [ADR-021](../../architecture/adr/021-source-distribution-and-first-run-setup.md)及 [ADR-040](../../architecture/adr/040-electron-dual-window-host.md)的修订已由 ADR-061 记录；旧实现与历史验收事实保留。
-- 按 `to-spec` → `to-tickets` → `implement`（TDD、两轴审查）→ `retro` 推进；任务拆分确认后再发布逐张任务。
+- 任务已发布，按 `implement-spec` 调度依赖，在同一集成分支以 TDD、独立两轴审查和真实验证推进，完成后做 `retro`。
 - 本文件只保存匿名产品决策和代码证据，不包含私人配置、身份、聊天、截图或凭据；本轮决策记录不授权修改已有业务库或发布远端产物。
