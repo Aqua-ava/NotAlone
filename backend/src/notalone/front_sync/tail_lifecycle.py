@@ -122,7 +122,6 @@ class _ActiveTailSession:
 
 
 _MAX_BACKOFF_SECONDS = 30.0
-_FAILURE_NORMALIZATION = "cli_normalization_failed"
 _FAILURE_PERSISTENCE = "observation_persistence_failed"
 # 连续 follow 失败且从未送达任何流事件时，达到阈值即永久降级一次性轮询；
 # 已送达过事件的流崩溃仍按"崩溃退避重启"处理，不累计降级。
@@ -266,7 +265,10 @@ class TailLifecycle:
         if not wechat_in_front or evidence is None:
             self._stop_session(FrontSyncPhase.WAITING_FOREGROUND)
             return FrontObserveOutcome(phase=FrontSyncPhase.WAITING_FOREGROUND)
-        if not normalize_display_text(evidence.display_name):
+        # 证据里的 display name 允许缺失；先归一，缺失与空白都按不可读处理，
+        # 避免把 None 直接交给要求非空 query 的 CLI 适配器。
+        observed_name = normalize_display_text(evidence.display_name)
+        if not observed_name:
             # display name 暂时不可读：跳过当前帧，不沿用旧联系人写入。
             self._stop_session(FrontSyncPhase.UNAVAILABLE)
             return FrontObserveOutcome(
@@ -275,7 +277,7 @@ class TailLifecycle:
 
         try:
             candidates = self._cli.resolve_chat(
-                evidence.display_name,
+                observed_name,
             ).candidates
         except CliAdapterError as error:
             self._stop_session(FrontSyncPhase.FAILED)
@@ -471,7 +473,10 @@ class TailLifecycle:
         session: _ActiveTailSession,
         item: TailFollowItem,
     ) -> int:
-        events = () if item.event is None else (item.event,)
+        # 显式标注：空元组字面量会把变量推断成 tuple[()]，无法承接筛选后的多事件元组。
+        events: tuple[CliMessageEvent, ...] = (
+            () if item.event is None else (item.event,)
+        )
         events, filtered_records = _select_events(events, session.skip_window)
         try:
             processing_receipts: list[ProcessingRecord] = []

@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from notalone.reply.context import ContextEvidence, ToolCallTrace
+from notalone.reply.context import ContextEvidence, ToolCallStatus, ToolCallTrace
 from notalone.memory.timing import MemoryTiming
 from notalone.reply.errors import ReplyContextError, ReplyContextInvariantError
 from notalone.reply.fidelity import factual_role
@@ -354,7 +354,7 @@ class HistoryToolAccess:
     def _finish_call(
         self,
         tool_name: str,
-        status: str,
+        status: ToolCallStatus,
         evidence_ids: tuple[UUID, ...],
         started: float,
     ) -> None:
@@ -362,7 +362,7 @@ class HistoryToolAccess:
         self._tool_calls.append(
             ToolCallTrace(
                 tool_name=tool_name,
-                status=status,  # type: ignore[arg-type]
+                status=status,
                 evidence_ids=evidence_ids,
                 latency_ms=latency_ms,
             )

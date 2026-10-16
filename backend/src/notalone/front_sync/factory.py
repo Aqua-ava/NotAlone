@@ -36,58 +36,6 @@ from notalone.wechat_cli import LocalWechatCli
 CHANNEL = "wechat"
 
 
-def build_front_sync_engine(
-    *,
-    database_url: str,
-    owner_id: UUID,
-    account_scope: str,
-    cli_executable: str | None = None,
-    probe_executable: str | None = None,
-    message_events: MessageEventPublisher | None = None,
-    follow_enabled: bool = False,
-    clock: Callable[[], float] | None = None,
-) -> FrontSyncEngine:
-    """按受控配置装配一个面向 owner/账号范围的前台同步引擎。"""
-
-    cli = LocalWechatCli(
-        executable=cli_executable
-        or os.environ.get("NOTALONE_WECHAT_CLI", "").strip()
-        or "wechat-cli"
-    )
-    probe = MacosFrontSessionProbe(
-        executable=probe_executable
-        or os.environ.get("NOTALONE_SYNC_PROBE", "").strip()
-        or "notalone-sync-probe"
-    )
-    bindings = PostgresConversationBindingRepository(database_url)
-    sync_state = PostgresFrontSyncStateStore(database_url)
-    lifecycle_kwargs: dict[str, object] = {
-        "owner_id": owner_id,
-        "channel": CHANNEL,
-        "account_scope": account_scope,
-        "cli": cli,
-        "bindings": bindings,
-        "observation_store": PostgresObservationStore(database_url),
-        "sync_state": sync_state,
-        "message_events": message_events,
-        "follow_enabled": follow_enabled,
-    }
-    if clock is not None:
-        # TailLifecycle 默认使用 time.time；只有显式传入时钟时才覆盖。
-        lifecycle_kwargs["clock"] = clock
-    lifecycle = TailLifecycle(**lifecycle_kwargs)
-    return FrontSyncEngine(
-        owner_id=owner_id,
-        channel=CHANNEL,
-        account_scope=account_scope,
-        probe=probe,
-        lifecycle=lifecycle,
-        bindings=bindings,
-        sync_state=sync_state,
-        cli=cli,
-    )
-
-
 def build_cli_full_sync_engine(
     *,
     database_url: str,

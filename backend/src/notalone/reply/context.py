@@ -173,18 +173,21 @@ class ContextEvidence:
             raise TypeError("回复依据模型可见标记必须为布尔值。")
 
 
+ToolCallStatus = Literal[
+    "succeeded",
+    "empty",
+    "failed",
+    "timeout",
+    "budget_exceeded",
+]
+
+
 @dataclass(frozen=True, slots=True, repr=False)
 class ToolCallTrace:
     """本轮只读 Tool 的最小审计摘要，不保存 Tool 原始返回全文。"""
 
     tool_name: str
-    status: Literal[
-        "succeeded",
-        "empty",
-        "failed",
-        "timeout",
-        "budget_exceeded",
-    ]
+    status: ToolCallStatus
     evidence_ids: tuple[UUID, ...] = ()
     latency_ms: int | None = None
 

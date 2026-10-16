@@ -327,6 +327,3 @@ REPLICA_CASES: tuple[ReplicaCase, ...] = (
     ),
 )
 
-
-DEVELOPMENT_CASES = tuple(case for case in REPLICA_CASES if case.split == "development")
-HOLDOUT_CASES = tuple(case for case in REPLICA_CASES if case.split == "holdout")
