@@ -2,6 +2,7 @@
 
 > 状态：已采纳的安全边界；云端部署已确定，具体供应商、保留期和密钥管理方案需在接入前补全。
 > 2026-10-07 补充：按 [ADR-037](../adr/037-complete-memory-extraction-trace.md) 采纳独立含正文的记忆提取追踪要求，功能尚未实现；普通日志与最小出站台账仍不得保存正文。
+> 状态更新：2026-10-16。上条的追踪功能已在后端与 React 管理页实现（迁移 `039`–`043`，[追踪服务](../../backend/src/notalone/application/trace_service.py)、[管理页](../../desktop/src/renderer/TracePanel.tsx)），契约与实现状态以[记忆提取完整追踪](memory-extraction-trace.md)为准；本节隐私边界不变——追踪仍是独立的含正文敏感资料，普通日志与最小出站台账继续不得保存正文。原生 App、最终签名包与真实模型质量不因此条获得验收。
 
 > 后续目标：[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)扩展授权经验到 Skill 草稿、审核与发布的独立数据流，尚未实现。学习产物、对照和执行视图完整继承来源删除，无表达样本独立留存例外；候选回复 Agent 仍无 Skill 管理或发布权限，新增模型用途不自动获得出站授权。
 
