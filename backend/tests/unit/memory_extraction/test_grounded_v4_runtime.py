@@ -33,6 +33,155 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                             (socket, "getaddrinfo")):
             guards.enter_context(patch.object(owner, name, side_effect=AssertionError("禁止真实网络")))
 
+    def test_sdk_reference_uniqueness_profile_keeps_captured_unlabelled_a05_auto(self):
+        import hashlib
+        from notalone.memory_extraction.evaluation import build_window, evaluate_case
+        from notalone.memory_extraction.evaluation_cases import CASES
+        from notalone.memory_extraction.grounded_adapter import GroundedV4ExtractionRuntime
+        from tests.unit.memory_extraction.verification_helpers import SyntheticSupportingVerifier
+
+        case = next(case for case in CASES if case.name == "指代：姐借车")
+        source = build_window(case)
+        # 同值于已封040b场A05原参数；不依赖ignored原件，也不替模型补码。
+        draft = labels(row("0:0", "relationship_event", topic="family", confidence=0.95,
+                           ambiguity_codes=[]))
+        requests, results = [], []
+
+        def handler(request):
+            requests.append(json.loads(request.content))
+            return response(draft, name="GroundedMemoryLabelsV4")
+
+        with build_trace_http_client(transport=httpx.MockTransport(handler)) as client:
+            model = build_deepseek_model(api_key="synthetic-secret", base_url="http://127.0.0.1/v1",
+                                         http_client=client)
+            for profile in ("default", "reference-uniqueness-v1"):
+                result = evaluate_case(
+                    case, source, GroundedV4ExtractionRuntime(model=model, prompt_profile=profile),
+                    verification_runtime=SyntheticSupportingVerifier(),
+                )
+                self.assertEqual(result.actual, "auto")
+                self.assertEqual(result.facts[0]["alternatives"], ())
+                self.assertEqual(result.facts[0]["confidence"], 0.95)
+                results.append(result)
+
+        self.assertEqual(len(requests), 2)
+        original = requests[0]["messages"][0]["content"]
+        self.assertEqual(hashlib.sha256(original.encode()).hexdigest(),
+                         "253d66bc5687a8e83f5da31e13cc1f63af07e54d6e61c0800d300dacdddb4ca2")
+        guidance = (
+            "将第三人代词所称物品的所有权归到某个已知人物前，单独核对来源是否明确支持这条归属关系。"
+            "最近出现的先行词、窗口只提及一个候选人、亲属称呼或代词性别本身，不能单独构成归属依据；"
+            "出借、接收等已知行动角色也不能替代它。来源未明确该关系时，保留代词原字，并按实际未知选择物品归属及必要的人物指称类别；"
+            "不补另一个所有者，也不反向断言不属于该人物。直接明示的所有者或有明确来源关系的指称不额外标未知。"
+            "只核所保存主张实际依赖的关系，独立明确的动作、对象、数量、否定和历史性质继续保留。"
+            "此处不要求每条消息另有固定 Identity 模板句，也不取消完整相连问答中已有的指称依据。"
+        )
+        self.assertEqual(requests[1]["messages"][0]["content"], original + "\n" + guidance + "\n")
+        self.assertEqual(requests[0]["tools"], requests[1]["tools"])
+        self.assertEqual(requests[0]["messages"][1:], requests[1]["messages"][1:])
+        self.assertEqual(results[0].facts, results[1].facts)
+
+    def test_reference_uniqueness_profile_rejects_unknown_and_old_runtime_pairings_before_transport(self):
+        from notalone.memory_extraction.grounded_adapter import (
+            GroundedExtractionRuntime, GroundedV3ExtractionRuntime, GroundedV4ExtractionRuntime,
+        )
+
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            raise AssertionError("非法profile不应发出请求")
+
+        class ProfileSubclass(str):
+            pass
+
+        with build_trace_http_client(transport=httpx.MockTransport(handler)) as client:
+            model = build_deepseek_model(api_key="synthetic-secret", base_url="http://127.0.0.1/v1",
+                                         http_client=client)
+            for profile in (None, False, 1, "", "unknown", "reference-uniqueness-v2",
+                            "reference-uniqueness-v1 ", ProfileSubclass("reference-uniqueness-v1")):
+                with self.subTest(profile=profile), self.assertRaises(ValueError):
+                    GroundedV4ExtractionRuntime(model=model, prompt_profile=profile)
+            for runtime in (GroundedExtractionRuntime, GroundedV3ExtractionRuntime):
+                with self.subTest(runtime=runtime.__name__), self.assertRaises(TypeError):
+                    runtime(model=model, prompt_profile="reference-uniqueness-v1")
+        self.assertEqual(requests, [])
+
+    def test_reference_uniqueness_given_labels_keep_unknown_pending_and_independent_claims_clear(self):
+        from notalone.memory_extraction.adoption import can_auto_adopt
+        from notalone.memory_extraction.evaluation import build_window
+        from notalone.memory_extraction.evaluation_cases import CASES
+        from notalone.memory_extraction.flow import ExtractionFlow
+        from notalone.memory_extraction.grounded_adapter import GroundedV4ExtractionRuntime
+        from notalone.memory_extraction.pragmatics import PragmaticInterpreter
+        from tests.unit.memory_extraction.verification_helpers import SyntheticSupportingVerifier
+
+        by_name = {case.name: case for case in CASES}
+        # 所有码及类型均人为给定；只证明提示选择不改编译、不按词补码。
+        controls = (
+            (build_window(by_name["指代：姐借车"]), labels(row(
+                "0:0", "relationship_event", topic="family", confidence=1.0, unresolved=True,
+                ambiguity_codes=["object_ownership", "entity_identity"],
+            )), False),
+            (build_window(by_name["指代：借书看完"]), labels(
+                row("0:0", "event", confidence=0.95, ambiguity_codes=[]),
+                row("0:1", "greeting", ambiguity_codes=[]),
+            ), True),
+            (build_window(by_name["指代：跨消息老李"]), labels(row(
+                "1:0", "relationship_event", dependency="0:0", confidence=0.95, ambiguity_codes=[],
+            )), True),
+            (window("这辆车是我自己的。"), labels(row(
+                "0:0", "stable_fact", confidence=0.95, ambiguity_codes=[],
+            )), True),
+        )
+        for source, draft, expected_auto in controls:
+            with self.subTest(text=source.messages[-1].text):
+                facts = []
+                for profile in ("default", "reference-uniqueness-v1"):
+                    with build_trace_http_client(transport=httpx.MockTransport(
+                        lambda _: response(draft, name="GroundedMemoryLabelsV4"),
+                    )) as client:
+                        model = build_deepseek_model(api_key="synthetic-secret", base_url="http://127.0.0.1/v1",
+                                                     http_client=client)
+                        outcome = ExtractionFlow(
+                            runtime=GroundedV4ExtractionRuntime(model=model, prompt_profile=profile),
+                            verification_runtime=SyntheticSupportingVerifier(),
+                        ).run(source)
+                    self.assertIsNone(outcome.failure_reason)
+                    fact, = outcome.accepted
+                    self.assertEqual(can_auto_adopt(fact, PragmaticInterpreter().interpret(fact)), expected_auto)
+                    self.assertEqual(bool(fact.alternatives), not expected_auto)
+                    facts.append(fact)
+                self.assertEqual(facts[0], facts[1])
+
+    def test_default_v2_v3_v4_prompts_and_full140_schemas_keep_prechange_bytes(self):
+        import hashlib
+        from notalone.memory_extraction.evaluation import build_window
+        from notalone.memory_extraction.evaluation_cases import CASES
+        from notalone.memory_extraction.evaluation_records import canonical_sha256
+        from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
+        from notalone.memory_extraction.grounded_adapter import (
+            GROUNDED_PROMPT, GROUNDED_V3_PROMPT, GROUNDED_V4_PROMPT,
+            grounded_schema, grounded_schema_v3, grounded_schema_v4,
+        )
+
+        # 先于本次源码变更取得的摘要；固定默认合同，不代表给定标签的模型质量。
+        windows = [build_window(case) for case in (*CASES, *SEMANTIC_CASES)]
+        for prompt, schema, prompt_sha, schemas_sha in (
+            (GROUNDED_PROMPT, grounded_schema,
+             "8580e630bbc4d600b08beb8a607cfcc05dc3efeb7daacc98a9f95bcb6164a01b",
+             "c55322ae1480541222fdb03285b29613e47be0089d1692c57d30d36d27c2d10d"),
+            (GROUNDED_V3_PROMPT, grounded_schema_v3,
+             "3a73e81e83b500d4f4293622f23bfaa681b38d33883e25193ddbccb3225fba91",
+             "7a76206ef4316e7489a1cc43308da3495685e87e30fe9ccbaf3891e8e60bbb0a"),
+            (GROUNDED_V4_PROMPT, grounded_schema_v4,
+             "253d66bc5687a8e83f5da31e13cc1f63af07e54d6e61c0800d300dacdddb4ca2",
+             "3dd4a405494abe201396e9cfde6143337c929186657df55fa569e255ff49b524"),
+        ):
+            with self.subTest(title=schema(windows[0])["title"]):
+                self.assertEqual(hashlib.sha256(prompt.encode()).hexdigest(), prompt_sha)
+                self.assertEqual(canonical_sha256([schema(source) for source in windows]), schemas_sha)
+
     def test_sdk_matter_reference_guidance_keeps_supported_confident_request_pending(self):
         from notalone.memory_extraction.grounded_adapter import (
             GroundedV4ExtractionRuntime, GROUNDED_PROMPT, GROUNDED_V3_PROMPT,

@@ -95,6 +95,21 @@ stable_fact仍只是模型类型判断，不认证永久有效、现实身份或
 所需指称或物品归属未被本窗来源唯一明确时，按实际未知分别选择entity_identity与object_ownership；角色已明确不因此变成未知，不因借用一概补码。
 """
 
+DEFAULT_PROMPT_PROFILE = "default"
+REFERENCE_UNIQUENESS_PROFILE = "reference-uniqueness-v1"
+GROUNDED_V4_REFERENCE_UNIQUENESS_PROMPT = GROUNDED_V4_PROMPT + """
+将第三人代词所称物品的所有权归到某个已知人物前，单独核对来源是否明确支持这条归属关系。最近出现的先行词、窗口只提及一个候选人、亲属称呼或代词性别本身，不能单独构成归属依据；出借、接收等已知行动角色也不能替代它。来源未明确该关系时，保留代词原字，并按实际未知选择物品归属及必要的人物指称类别；不补另一个所有者，也不反向断言不属于该人物。直接明示的所有者或有明确来源关系的指称不额外标未知。只核所保存主张实际依赖的关系，独立明确的动作、对象、数量、否定和历史性质继续保留。此处不要求每条消息另有固定 Identity 模板句，也不取消完整相连问答中已有的指称依据。
+"""
+
+
+def _grounded_v4_prompt(profile: str) -> str:
+    if type(profile) is str:
+        if profile == DEFAULT_PROMPT_PROFILE:
+            return GROUNDED_V4_PROMPT
+        if profile == REFERENCE_UNIQUENESS_PROFILE:
+            return GROUNDED_V4_REFERENCE_UNIQUENESS_PROMPT
+    raise ValueError("未知的v4提取提示profile。")
+
 
 def _enum(values: Iterable[str]) -> dict[str, Any]:
     return {"type": "string", "enum": sorted(values)}
@@ -222,21 +237,27 @@ class GroundedV3ExtractionRuntime:
 
 
 class GroundedV4ExtractionRuntime:
-    """仅供显式开发/Mock构造，未注册生产选择或真实评测执行合同。"""
+    """显式v4提取；新增提示profile尚未绑定真实评测合同。"""
 
-    def __init__(self, *, model: BaseChatModel) -> None:
+    def __init__(self, *, model: BaseChatModel, prompt_profile: str = DEFAULT_PROMPT_PROFILE) -> None:
+        _grounded_v4_prompt(prompt_profile)
         self._model = model
+        self._prompt_profile = prompt_profile
 
     def extract(self, window: ExtractionWindow) -> ExtractionPayload:
-        return _extract_grounded(self._model, window, version3=False, version4=True)
+        return _extract_grounded(self._model, window, version3=False, version4=True,
+                                 prompt_profile=self._prompt_profile)
 
 
 def _extract_grounded(
     model: BaseChatModel, window: ExtractionWindow, *, version3: bool, version4: bool = False,
+    prompt_profile: str = DEFAULT_PROMPT_PROFILE,
 ) -> ExtractionPayload:
+    if not version4 and prompt_profile != DEFAULT_PROMPT_PROFILE:
+        raise ValueError("提取提示profile仅可用于显式v4。")
     if version4:
         protocol, prompt, schema_factory, compiler = (
-            "grounded-v4", GROUNDED_V4_PROMPT, grounded_schema_v4, compile_labels_v4,
+            "grounded-v4", _grounded_v4_prompt(prompt_profile), grounded_schema_v4, compile_labels_v4,
         )
     elif version3:
         protocol, prompt, schema_factory, compiler = (
