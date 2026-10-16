@@ -1,5 +1,7 @@
 # 本轮未完成任务推进记录
 
+接续最新检查：同v9 [Finder／原生责任分项](../mac-desktop-app/finder-v9-immediate-result-20261016.md)1／1、[导入及复制](../mac-desktop-app/mac20-v9-import-copy-20261016.md)2／2通过；[真实CLI视觉组合](../foreground-contact-follow/real-cli-visual-v9-20261016.md)在helper原生焦点门失败，正在准备同包只读诊断区分原因。记忆[既有码未决理由](../grounded-v4-ownership-reason/result-20261016.md)已完成离线修复，567项单元、两源类型及双轴通过；无码A05仍保留原auto失败，未启动后继模型场。下表和下方旧段落为各阶段记录，当前原9张仍3 resolved／6 claimed，15张排除保持。
+
 日期：2026-10-16。按用户要求不推进 `memory-skill-evolution` 的15张任务；其余原9张逐项处理。当前任务文件扫描共230张：209张resolved、6张claimed，以及上述排除的15张open。状态以各原票为准；resolved也可能包含历史替代或不采用结论，不能据数量推导产品能力。
 
 | 原任务 | 本轮状态及证据 | 下一项 |
