@@ -41,8 +41,21 @@ SEMANTIC4_MODE = "deepseek_bounded_reference21_v4_source_v2_semantic4"
 SEMANTIC4_STAGE = "reference21-v4-source-v2-semantic4"
 SEMANTIC4_KIND = "reference21-v4-semantic4"
 SEMANTIC4_PROMPT_PROFILE = "public-author-quote-v1"
-REFERENCE21_PLANS = frozenset({REFERENCE21_V4_PLAN, SEMANTIC4_PLAN})
+UNIQUENESS_PLAN = "reference21-grounded-v4-source-v2-uniqueness-v-off-forced"
+UNIQUENESS_MODE = "deepseek_bounded_reference21_v4_source_v2_uniqueness"
+UNIQUENESS_STAGE = "reference21-v4-source-v2-uniqueness"
+UNIQUENESS_KIND = "reference21-v4-uniqueness"
+UNIQUENESS_E_PROFILE = "reference-uniqueness-v1"
+PUBLIC_QUALITY_PLANS = frozenset({SEMANTIC4_PLAN, UNIQUENESS_PLAN})
+REFERENCE21_PLANS = frozenset({REFERENCE21_V4_PLAN, *PUBLIC_QUALITY_PLANS})
 PHASE_SPLIT_PLANS = frozenset({MIXED_PLAN, *REFERENCE21_PLANS})
+
+
+def validate_extraction_prompt_profile(execution_plan: str, prompt_profile: str) -> None:
+    """新提示须与唯一新身份绑定，旧身份只允许原默认。"""
+    expected = UNIQUENESS_E_PROFILE if execution_plan == UNIQUENESS_PLAN else "default"
+    if type(prompt_profile) is not str or prompt_profile != expected:
+        raise EvaluationBudgetAbort("evaluation_extraction_prompt_profile_mismatch")
 
 
 def validate_semantic4_windows(windows: tuple) -> None:
@@ -114,8 +127,11 @@ class ECNUEvaluationContract:
         provider_profile: EvaluationProviderProfile | str = EvaluationProviderProfile.ECNU,
         extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
         execution_plan: str = "original",
+        extraction_prompt_profile: str = "default",
     ):
         validate_evaluation_policy(verification_tool_choice, response_identity_policy)
+        validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
+        self._extraction_prompt_profile = extraction_prompt_profile
         try:
             self._extraction_mode = EvaluationExtractionMode(extraction_mode)
         except (TypeError, ValueError):
@@ -222,6 +238,12 @@ class ECNUEvaluationContract:
         """为一次 E/V 调用及其 SDK 重试绑定原定请求正文。"""
         _validate_payload(expected_payload, verification_tool_choice=self._verification_tool_choice,
                           provider_profile=self._profile, extraction_mode=self._extraction_mode)
+        if (self._extraction_prompt_profile != "default"
+                and self._extraction_mode is EvaluationExtractionMode.GROUNDED_V4
+                and expected_payload["tools"][0]["function"]["name"] == "GroundedMemoryLabelsV4"):
+            from .grounded_adapter import grounded_v4_prompt
+            if expected_payload["messages"][0]["content"] != grounded_v4_prompt(self._extraction_prompt_profile):
+                raise EvaluationBudgetAbort("evaluation_extraction_prompt_changed")
         token = self._expected.set(_canonical(expected_payload))
         try:
             yield

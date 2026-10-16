@@ -9,7 +9,8 @@ from .evaluation_http_budget import EvaluationBudgetAbort
 from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_name
 from .evaluation_provider_contract import (
     validate_evaluation_policy, MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy,
-    PHASE_SPLIT_PLANS, REFERENCE21_PLANS, SEMANTIC4_PLAN,
+    PHASE_SPLIT_PLANS, REFERENCE21_PLANS, PUBLIC_QUALITY_PLANS, UNIQUENESS_PLAN,
+    validate_extraction_prompt_profile,
 )
 from .evaluation_records import canonical_sha256
 from .evaluation_reference import (
@@ -201,13 +202,19 @@ class PhasedEvaluationAudit:
         extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
         reference_version: str = "legacy-v1",
         execution_plan: str = "original",
+        extraction_prompt_profile: str = "default",
     ):
         if type(execution_plan) is not str or execution_plan not in {"original", *PHASE_SPLIT_PLANS}:
             raise ValueError("审核执行身份非法。")
         self._execution_plan = execution_plan
         mixed = execution_plan in PHASE_SPLIT_PLANS
         reference21_v4 = execution_plan in REFERENCE21_PLANS
-        semantic4 = execution_plan == SEMANTIC4_PLAN
+        public_quality = execution_plan in PUBLIC_QUALITY_PLANS
+        try:
+            validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
+        except EvaluationBudgetAbort:
+            raise ValueError("审核提取提示profile与身份不符。") from None
+        self._extraction_prompt_profile = extraction_prompt_profile
         self._verification_mode = SourceVerificationMode(verification_mode)
         self._extraction_mode = EvaluationExtractionMode(extraction_mode)
         validate_evaluation_policy(verification_tool_choice)
@@ -229,7 +236,7 @@ class PhasedEvaluationAudit:
             if (reference_version != "source-fidelity-v2"
                     or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V4
                     or case_set != ("reference21" if reference21_v4 else "full140") or case_positions is not None
-                    or self._verification_mode is not (SourceVerificationMode.LEGACY_V4 if semantic4 else SourceVerificationMode.NULLABLE_PROOF_V1)
+                    or self._verification_mode is not (SourceVerificationMode.LEGACY_V4 if public_quality else SourceVerificationMode.NULLABLE_PROOF_V1)
                     or extraction_tool_choice != "omitted" or verification_tool_choice != ("forced" if mixed else "omitted")):
                 raise ValueError("来源保真v2审核须匹配已注册的完整140协议。")
         if mixed and (reference_version != "source-fidelity-v2" or self._extraction_mode.value != "grounded-v4"):
@@ -314,6 +321,10 @@ class PhasedEvaluationAudit:
         """模型标签与程序十四槽须使用显式同版本审核。"""
         return self._extraction_mode.value
 
+    @property
+    def extraction_prompt_profile(self) -> str:
+        return self._extraction_prompt_profile
+
     def __call__(self, bundle: dict) -> dict:
         try:
             return self._run(bundle)
@@ -334,6 +345,9 @@ class PhasedEvaluationAudit:
             raise EvaluationBudgetAbort("phased_reference_version_changed")
         if bundle.get("extraction_mode", "legacy-e14") != self.extraction_mode:
             raise EvaluationBudgetAbort("phased_extraction_mode_changed")
+        if (bundle.get("extraction_prompt_profile", "default") != self.extraction_prompt_profile
+                or self.execution_plan != UNIQUENESS_PLAN and "extraction_prompt_profile" in bundle):
+            raise EvaluationBudgetAbort("phased_extraction_prompt_profile_changed")
         if bundle.get("verification_mode", "legacy-v4") != self.verification_mode:
             raise EvaluationBudgetAbort("phased_verification_mode_changed")
         if bundle.get("verification_tool_choice", "forced") != self.verification_tool_choice:

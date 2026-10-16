@@ -14,6 +14,34 @@ from notalone.memory_extraction.evaluation_http_budget import EvaluationBudget, 
 
 
 class Reference21V4AdmissionTest(unittest.TestCase):
+    def test_uniqueness_profile_plan_and_scope_mismatches_reject_before_budget_or_key(self):
+        from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
+        from notalone.memory_extraction.evaluation_provider_contract import UNIQUENESS_PLAN, SEMANTIC4_PLAN
+        from notalone.memory_extraction.evaluation_reference21_v4_deadline import Reference21V4Deadline
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            control = Reference21V4Deadline(receipt=root / "receipt.json", clock=lambda: 0, exit_worker=lambda _: None)
+            def forbidden(*args, **kwargs):
+                self.fail("错配新合同不得领取预算或读key")
+            fixed = dict(output_directory=root, run_id=uuid4(), deadline=datetime(2030, 1, 1, tzinfo=timezone.utc),
+                repo_root=root, source_hashes={}, frozen_gold={}, credential_loader=forbidden, audit_case=forbidden,
+                provider_profile="deepseek-phase-split-v1", execution_plan=UNIQUENESS_PLAN, case_set="reference21",
+                case_positions=None, request_limit=42, request_timeout_seconds=300, max_retries=0,
+                extraction_mode="grounded-v4", extraction_prompt_profile="reference-uniqueness-v1",
+                reference_version="source-fidelity-v2", verification_mode="legacy-v4",
+                verification_tool_choice="forced", reference21_v4_deadline=control)
+            for change in ({"extraction_prompt_profile": "default"}, {"extraction_prompt_profile": None},
+                           {"extraction_prompt_profile": False}, {"extraction_prompt_profile": "reference-uniqueness-v2"},
+                           {"execution_plan": SEMANTIC4_PLAN}, {"verification_mode": "nullable-proof-v1"},
+                           {"verification_mode": "nullable-proof-v2"}, {"request_limit": 43}, {"request_limit": 42.0},
+                           {"case_positions": (0,)}, {"case_set": "full140"}, {"max_retries": 1},
+                           {"provider_profile": "deepseek-flash-max"}, {"extraction_mode": "grounded-v3"},
+                           {"reference_version": "legacy-v1"}, {"verification_tool_choice": "omitted"}):
+                with self.subTest(change=change), patch.object(EvaluationBudget, "create", side_effect=forbidden), \
+                        self.assertRaises(EvaluationBudgetAbort):
+                    run_ecnu_evaluation(**{**fixed, **change})
+
     def test_semantic4_rejects_mode_scope_and_provider_mismatch_before_budget_or_key(self):
         from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
         from notalone.memory_extraction.evaluation_provider_contract import SEMANTIC4_PLAN
@@ -104,6 +132,45 @@ class Reference21V4AdmissionTest(unittest.TestCase):
 
 
 class Reference21V4RecordsTest(unittest.TestCase):
+    def test_uniqueness_records_bind_both_profiles_and_actual_new_prompt_hashes(self):
+        from notalone.memory_extraction.evaluation_provider_contract import (
+            UNIQUENESS_PLAN, UNIQUENESS_MODE, UNIQUENESS_STAGE, SEMANTIC4_PLAN, SEMANTIC4_PROMPT_PROFILE,
+        )
+        from notalone.memory_extraction.evaluation_records import EvaluationRecordStore, canonical_sha256
+        from notalone.memory_extraction.grounded_adapter import grounded_v4_prompt
+
+        for fault in ("valid", "missing", "default", "old_plan", "old_prompt_hash", "wrong_v"):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temporary, \
+                    patch.object(Path, "home", return_value=Path(temporary)):
+                config, plan = self.config_plan()
+                config.update(execution_plan=UNIQUENESS_PLAN, mode=UNIQUENESS_MODE, stage=UNIQUENESS_STAGE,
+                    verification_mode="legacy-v4", verification_prompt_profile=SEMANTIC4_PROMPT_PROFILE,
+                    extraction_prompt_profile="reference-uniqueness-v1")
+                if fault != "old_prompt_hash":
+                    for item in config["extraction_window_contracts"]:
+                        item["prompt_sha256"] = canonical_sha256(grounded_v4_prompt("reference-uniqueness-v1"))
+                if fault == "missing":
+                    config.pop("extraction_prompt_profile")
+                elif fault == "default":
+                    config["extraction_prompt_profile"] = "default"
+                elif fault == "old_plan":
+                    config["execution_plan"] = SEMANTIC4_PLAN
+                elif fault == "wrong_v":
+                    config["verification_mode"] = "nullable-proof-v1"
+                output = Path(temporary) / "output"
+                output.mkdir(mode=0o700)
+                budget = EvaluationBudget.create(run_id=uuid4(), output_directory=output, request_limit=42,
+                    allowed_endpoints=("https://api.deepseek.com/chat/completions",), config_sha256=canonical_sha256(config))
+                try:
+                    if fault == "valid":
+                        store = EvaluationRecordStore(budget=budget, frozen_config=config, plan=plan)
+                        self.assertEqual(store.extraction_prompt_profile, "reference-uniqueness-v1")
+                    else:
+                        with self.assertRaises(EvaluationBudgetAbort):
+                            EvaluationRecordStore(budget=budget, frozen_config=config, plan=plan)
+                finally:
+                    budget.close()
+
     def test_semantic4_records_bind_legacy_and_explicit_prompt_without_relaxing_old_identity(self):
         from notalone.memory_extraction.evaluation_provider_contract import (
             SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_PROMPT_PROFILE, REFERENCE21_V4_PLAN,

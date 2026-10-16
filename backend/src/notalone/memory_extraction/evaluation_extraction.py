@@ -24,10 +24,14 @@ class EvaluationExtractionMode(StrEnum):
 
 def extraction_contract(
     mode: EvaluationExtractionMode | str, window: ExtractionWindow,
+    *, prompt_profile: str = "default",
 ) -> tuple[str, dict]:
     selected = EvaluationExtractionMode(mode)
+    if (type(prompt_profile) is not str
+            or selected is not EvaluationExtractionMode.GROUNDED_V4 and prompt_profile != "default"):
+        raise ValueError("提取提示profile只适用于显式v4。")
     if selected is EvaluationExtractionMode.GROUNDED_V4:
-        return grounded_adapter.GROUNDED_V4_PROMPT, grounded_adapter.grounded_schema_v4(window)
+        return grounded_adapter.grounded_v4_prompt(prompt_profile), grounded_adapter.grounded_schema_v4(window)
     if selected is EvaluationExtractionMode.GROUNDED_V3:
         return grounded_adapter.GROUNDED_V3_PROMPT, grounded_adapter.grounded_schema_v3(window)
     if selected is EvaluationExtractionMode.GROUNDED_V2:
@@ -46,11 +50,16 @@ def extraction_tool_name(mode: EvaluationExtractionMode | str) -> str:
 
 def extraction_runtime(
     mode: EvaluationExtractionMode | str, model: BaseChatModel,
+    *, prompt_profile: str = "default",
 ) -> MemoryExtractionRuntime:
-    if EvaluationExtractionMode(mode) is EvaluationExtractionMode.GROUNDED_V4:
-        return grounded_adapter.GroundedV4ExtractionRuntime(model=model)
-    if EvaluationExtractionMode(mode) is EvaluationExtractionMode.GROUNDED_V3:
+    selected = EvaluationExtractionMode(mode)
+    if (type(prompt_profile) is not str
+            or selected is not EvaluationExtractionMode.GROUNDED_V4 and prompt_profile != "default"):
+        raise ValueError("提取提示profile只适用于显式v4。")
+    if selected is EvaluationExtractionMode.GROUNDED_V4:
+        return grounded_adapter.GroundedV4ExtractionRuntime(model=model, prompt_profile=prompt_profile)
+    if selected is EvaluationExtractionMode.GROUNDED_V3:
         return grounded_adapter.GroundedV3ExtractionRuntime(model=model)
-    if EvaluationExtractionMode(mode) is EvaluationExtractionMode.GROUNDED_V2:
+    if selected is EvaluationExtractionMode.GROUNDED_V2:
         return grounded_adapter.GroundedExtractionRuntime(model=model)
     return adapters.LangChainExtractionRuntime(model=model)

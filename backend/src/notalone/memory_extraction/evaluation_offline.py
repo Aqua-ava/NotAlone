@@ -56,7 +56,8 @@ from notalone.memory_extraction.verification import (
 from notalone.memory_trace.context import current_trace
 from .evaluation_provider_contract import (
     MIXED_REQUEST_VERSION, mixed_phase_policy, PHASE_SPLIT_PLANS, REFERENCE21_PLANS,
-    SEMANTIC4_PLAN, SEMANTIC4_PROMPT_PROFILE, validate_semantic4_windows,
+    SEMANTIC4_PROMPT_PROFILE, validate_semantic4_windows,
+    PUBLIC_QUALITY_PLANS, validate_extraction_prompt_profile,
 )
 
 _BASE_URL = "https://evaluation.invalid/v1"
@@ -270,6 +271,7 @@ def _frozen_config(
     extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
     windows: tuple[ExtractionWindow, ...] = (),
     prompt_profile: str = "default",
+    extraction_prompt_profile: str = "default",
 ) -> dict:
     selected = SourceVerificationMode(verification_mode)
     verification_prompt, verification_schema = _verification_contract(selected, prompt_profile=prompt_profile)
@@ -278,7 +280,7 @@ def _frozen_config(
     if extraction_selected.is_grounded:
         if not windows or len(windows) != len(plan):
             raise EvaluationBudgetAbort("evaluation_grounded_windows_required")
-        contracts = tuple(extraction_contract(extraction_selected, window) for window in windows)
+        contracts = tuple(extraction_contract(extraction_selected, window, prompt_profile=extraction_prompt_profile) for window in windows)
         extraction_frozen.update({
             "extraction_prompt_sha256": canonical_sha256(contracts[0][0]),
             "extraction_schema_sha256": canonical_sha256(tuple(schema for _, schema in contracts)),
@@ -292,6 +294,7 @@ def _frozen_config(
         "base_url": _BASE_URL, "endpoint": _ENDPOINT,
         "request_model": _REQUEST_MODEL, "temperature": 0.0,
         "verification_mode": selected.value,
+        **({"extraction_prompt_profile": extraction_prompt_profile} if extraction_prompt_profile != "default" else {}),
         **({"verification_prompt_profile": prompt_profile} if prompt_profile != "default" else {}),
         "timeout": request_timeout_seconds, "max_retries": max_retries,
         "thinking": {"type": "enabled"}, "stream": False,
@@ -413,14 +416,18 @@ def _run_evaluation_batch(
     extraction_tool_choice: str = "forced",
     extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
     execution_plan: str = "original",
+    extraction_prompt_profile: str = "default",
 ) -> dict:
     """P0/P1共用记录与收尾；真实配置与独审验证由各入口负责。"""
     selected = SourceVerificationMode(verification_mode)
     extraction_selected = EvaluationExtractionMode(extraction_mode)
     mixed = execution_plan in PHASE_SPLIT_PLANS
     reference21_v4 = execution_plan in REFERENCE21_PLANS
-    semantic4 = execution_plan == SEMANTIC4_PLAN
-    prompt_profile = SEMANTIC4_PROMPT_PROFILE if semantic4 else "default"
+    public_quality = execution_plan in PUBLIC_QUALITY_PLANS
+    prompt_profile = SEMANTIC4_PROMPT_PROFILE if public_quality else "default"
+    validate_extraction_prompt_profile(execution_plan, extraction_prompt_profile)
+    if store.extraction_prompt_profile != extraction_prompt_profile:
+        raise EvaluationBudgetAbort("evaluation_frozen_extraction_prompt_profile_mismatch")
     if mixed != (store.execution_plan in PHASE_SPLIT_PLANS) or mixed and execution_plan != store.execution_plan:
         raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
     if store.extraction_mode != extraction_selected.value:
@@ -429,12 +436,12 @@ def _run_evaluation_batch(
         store.reference_version != "source-fidelity-v2"
         or cases != (_fixed_case_sets()[0] if reference21_v4 else (*CASES, *SEMANTIC_CASES))
         or len(windows) != (21 if reference21_v4 else 140) or len(plan) != (21 if reference21_v4 else 140)
-        or selected is not (SourceVerificationMode.LEGACY_V4 if semantic4 else SourceVerificationMode.NULLABLE_PROOF_V1)
+        or selected is not (SourceVerificationMode.LEGACY_V4 if public_quality else SourceVerificationMode.NULLABLE_PROOF_V1)
         or extraction_tool_choice != "omitted" or verification_tool_choice != ("forced" if mixed else "omitted")
         or type(max_retries) is not int or max_retries != 0 or semantic_audit is None
     ):
         raise EvaluationBudgetAbort("evaluation_full140_v4_fixed_plan_required")
-    if semantic4:
+    if public_quality:
         validate_semantic4_windows(windows)
     outcomes = [{**item, "status": "unrun"} for item in plan]
     results: list[EvaluationResult] = []
@@ -512,7 +519,7 @@ def _run_evaluation_batch(
                 )) if mixed else adapter_model
                 result = evaluate_case(
                     case, window, _RecordedExtractionRuntime(
-                        extraction_runtime(extraction_selected, adapter_model),
+                        extraction_runtime(extraction_selected, adapter_model, prompt_profile=extraction_prompt_profile),
                         store, position, extraction_selected, call_state,
                     ),
                     verification_runtime=_RecordedVerificationRuntime(
@@ -556,6 +563,7 @@ def _run_evaluation_batch(
                         "verification_tool_choice": verification_tool_choice,
                         "extraction_tool_choice": extraction_tool_choice,
                         "extraction_mode": extraction_selected.value,
+                        **({"extraction_prompt_profile": extraction_prompt_profile} if extraction_prompt_profile != "default" else {}),
                         **({"execution_plan": execution_plan, "phase_request_version": MIXED_REQUEST_VERSION,
                             "phase_request_policy": mixed_phase_policy()} if mixed else {}),
                         **({"reference_version": store.reference_version}

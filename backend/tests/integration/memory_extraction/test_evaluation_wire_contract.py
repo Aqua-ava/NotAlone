@@ -79,6 +79,28 @@ def synthetic_fact_payload() -> dict[str, Any]:
 
 
 class EvaluationWireContractTest(unittest.TestCase):
+    def test_v4_uniqueness_factory_uses_explicit_prompt_without_changing_schema_or_old_defaults(self):
+        from notalone.memory_extraction.evaluation_extraction import extraction_contract, extraction_runtime
+        from notalone.memory_extraction.grounded_adapter import GROUNDED_V4_REFERENCE_UNIQUENESS_PROMPT
+
+        window = synthetic_window()
+        prompt, schema = extraction_contract("grounded-v4", window, prompt_profile="reference-uniqueness-v1")
+        self.assertEqual(prompt, GROUNDED_V4_REFERENCE_UNIQUENESS_PROMPT)
+        self.assertEqual(schema, extraction_contract("grounded-v4", window)[1])
+        model = self.model(tool_name="GroundedMemoryLabelsV4", arguments={"units": {"1:0": {
+            "kind": "preference", "subject": "contact", "topic": "other", "dependency": None,
+            "unresolved": False, "ambiguity_codes": [], "confidence": 0.95, "sensitivity": "none",
+        }}})
+        facts = extraction_runtime("grounded-v4", model, prompt_profile="reference-uniqueness-v1").extract(window)
+        self.assertEqual(self.requests[0][2]["messages"][0]["content"], prompt)
+        self.assertEqual(facts[0]["alternatives"], [])
+        for mode in ("legacy-e14", "grounded-v2", "grounded-v3"):
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                extraction_contract(mode, window, prompt_profile="reference-uniqueness-v1")
+            with self.subTest(runtime=mode), self.assertRaises(ValueError):
+                extraction_runtime(mode, model, prompt_profile="reference-uniqueness-v1")
+        self.assertEqual(len(self.requests), 1)
+
     def setUp(self) -> None:
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)

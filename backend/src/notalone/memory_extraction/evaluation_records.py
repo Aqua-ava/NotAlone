@@ -22,6 +22,8 @@ from .evaluation_provider_contract import (
     MIXED_PLAN, MIXED_MODE, MIXED_STAGE, MIXED_REQUEST_VERSION, mixed_phase_policy,
     REFERENCE21_V4_PLAN, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE, PHASE_SPLIT_PLANS, REFERENCE21_PLANS,
     SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_PROMPT_PROFILE,
+    UNIQUENESS_PLAN, UNIQUENESS_MODE, UNIQUENESS_STAGE, PUBLIC_QUALITY_PLANS,
+    validate_extraction_prompt_profile,
 )
 
 
@@ -48,7 +50,7 @@ _CONFIG_FIELDS = frozenset({
     "deadline_utc", "source_hashes", "gold_sha256", "stage",
     "response_identity_policy", "request_contract_version", "tool_choice",
     "fallback", "baseline_commit", "selected_case_positions", "verification_mode", "verification_prompt_profile",
-    "extraction_mode", "extraction_window_contracts", "execution_plan", "reference_version",
+    "extraction_mode", "extraction_window_contracts", "execution_plan", "reference_version", "extraction_prompt_profile",
     "phase_request_version", "phase_request_policy",
 })
 
@@ -159,9 +161,13 @@ class EvaluationRecordStore:
         self._execution_plan = frozen_config.get("execution_plan", "original")
         if type(self._execution_plan) is not str:
             raise EvaluationBudgetAbort("invalid_record_execution_plan")
-        if ((self._execution_plan == SEMANTIC4_PLAN) != (frozen_config.get("verification_prompt_profile") == SEMANTIC4_PROMPT_PROFILE)
-                or self._execution_plan != SEMANTIC4_PLAN and "verification_prompt_profile" in frozen_config):
+        if ((self._execution_plan in PUBLIC_QUALITY_PLANS) != (frozen_config.get("verification_prompt_profile") == SEMANTIC4_PROMPT_PROFILE)
+                or self._execution_plan not in PUBLIC_QUALITY_PLANS and "verification_prompt_profile" in frozen_config):
             raise EvaluationBudgetAbort("invalid_record_verification_prompt_profile")
+        self._extraction_prompt_profile = frozen_config.get("extraction_prompt_profile", "default")
+        validate_extraction_prompt_profile(self._execution_plan, self._extraction_prompt_profile)
+        if self._execution_plan != UNIQUENESS_PLAN and "extraction_prompt_profile" in frozen_config:
+            raise EvaluationBudgetAbort("invalid_record_extraction_prompt_profile")
         self._mixed = type(self._execution_plan) is str and self._execution_plan in PHASE_SPLIT_PLANS
         if not self._mixed and {"phase_request_version", "phase_request_policy"} & set(frozen_config):
             raise EvaluationBudgetAbort("invalid_record_mixed_registration")
@@ -212,7 +218,8 @@ class EvaluationRecordStore:
         from .semantic_evaluation_cases import SEMANTIC_CASES
 
         reference21 = self._execution_plan in REFERENCE21_PLANS
-        semantic4 = self._execution_plan == SEMANTIC4_PLAN
+        public_quality = self._execution_plan in PUBLIC_QUALITY_PLANS
+        uniqueness = self._execution_plan == UNIQUENESS_PLAN
         cases = _fixed_case_sets()[0] if reference21 else (*CASES, *SEMANTIC_CASES)
         count, cap = (21, 42) if reference21 else (140, 280)
         expected = tuple({
@@ -230,12 +237,12 @@ class EvaluationRecordStore:
                 or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 2
                 or self._manifest["allowed_endpoints"] != ["https://api.deepseek.com/chat/completions"]):
             raise EvaluationBudgetAbort("invalid_record_mixed_registration")
-        if (config.get("execution_plan") != (SEMANTIC4_PLAN if semantic4 else REFERENCE21_V4_PLAN if reference21 else MIXED_PLAN if self._mixed else "full140-grounded-v4-source-v2")
+        if (config.get("execution_plan") != (UNIQUENESS_PLAN if uniqueness else SEMANTIC4_PLAN if public_quality else REFERENCE21_V4_PLAN if reference21 else MIXED_PLAN if self._mixed else "full140-grounded-v4-source-v2")
                 or config.get("reference_version") != "source-fidelity-v2"
-                or config.get("mode") != (SEMANTIC4_MODE if semantic4 else REFERENCE21_V4_MODE if reference21 else MIXED_MODE if self._mixed else "deepseek_bounded_full140_v4_source_v2")
-                or config.get("stage") != (SEMANTIC4_STAGE if semantic4 else REFERENCE21_V4_STAGE if reference21 else MIXED_STAGE if self._mixed else "full140-v4-source-v2")
+                or config.get("mode") != (UNIQUENESS_MODE if uniqueness else SEMANTIC4_MODE if public_quality else REFERENCE21_V4_MODE if reference21 else MIXED_MODE if self._mixed else "deepseek_bounded_full140_v4_source_v2")
+                or config.get("stage") != (UNIQUENESS_STAGE if uniqueness else SEMANTIC4_STAGE if public_quality else REFERENCE21_V4_STAGE if reference21 else MIXED_STAGE if self._mixed else "full140-v4-source-v2")
                 or self._extraction_mode != "grounded-v4"
-                or config.get("verification_mode") != ("legacy-v4" if semantic4 else "nullable-proof-v1")
+                or config.get("verification_mode") != ("legacy-v4" if public_quality else "nullable-proof-v1")
                 or config.get("tool_choice") != {
                     "extraction": {"mode": "omitted", "name": "GroundedMemoryLabelsV4"},
                     "verification": {"mode": "forced" if self._mixed else "omitted", "name": "SourceVerificationOutput"},
@@ -248,6 +255,15 @@ class EvaluationRecordStore:
                 or any(type(item["case_position"]) is not int for item in plan)
                 or len(cases) != count or plan != expected):
             raise EvaluationBudgetAbort("invalid_record_full140_v4_registration")
+        if uniqueness:
+            from .evaluation_extraction import extraction_contract
+            contracts = [extraction_contract("grounded-v4", build_window(case), prompt_profile=self._extraction_prompt_profile)
+                         for case in cases]
+            if config.get("extraction_window_contracts") != [
+                {"input_sha256": item["input_sha256"], "prompt_sha256": canonical_sha256(prompt),
+                 "schema_sha256": canonical_sha256(schema)} for item, (prompt, schema) in zip(expected, contracts)
+            ]:
+                raise EvaluationBudgetAbort("invalid_record_extraction_prompt_contract")
 
     @property
     def execution_plan(self) -> str:
@@ -265,6 +281,10 @@ class EvaluationRecordStore:
     def extraction_mode(self) -> str:
         """无版本字段的旧冻结文件只表示旧十四槽。"""
         return self._extraction_mode
+
+    @property
+    def extraction_prompt_profile(self) -> str:
+        return self._extraction_prompt_profile
 
     def extraction_contract_hashes(self, case_position: int) -> dict[str, str]:
         """返回注册时复制的逐窗合同；不得由当前运行时重新定义冻结值。"""

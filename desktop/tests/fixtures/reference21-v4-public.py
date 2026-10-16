@@ -20,7 +20,7 @@ from notalone.memory_extraction.evaluation_provider_contract import (
     REFERENCE21_V4_PLAN, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE, REFERENCE21_V4_KIND,
     MIXED_REQUEST_VERSION, mixed_phase_policy,
     SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_KIND, SEMANTIC4_PROMPT_PROFILE,
-    validate_semantic4_windows,
+    UNIQUENESS_PLAN, UNIQUENESS_KIND, UNIQUENESS_E_PROFILE, PUBLIC_QUALITY_PLANS, validate_semantic4_windows,
 )
 FIXED = {"execution_plan": REFERENCE21_V4_PLAN, "case_set": "reference21", "case_positions": None,
          "reference_version": "source-fidelity-v2", "request_limit": 42, "request_timeout_seconds": 300,
@@ -33,6 +33,9 @@ FIXED = {"execution_plan": REFERENCE21_V4_PLAN, "case_set": "reference21", "case
 PROFILES: dict[str, dict] = {"baseline": FIXED, "semantic4": {
     **FIXED, "execution_plan": SEMANTIC4_PLAN, "verification_mode": "legacy-v4",
     "prompt_profile": SEMANTIC4_PROMPT_PROFILE,
+}, "uniqueness": {
+    **FIXED, "execution_plan": UNIQUENESS_PLAN, "verification_mode": "legacy-v4",
+    "prompt_profile": SEMANTIC4_PROMPT_PROFILE, "extraction_prompt_profile": UNIQUENESS_E_PROFILE,
 }}
 
 
@@ -47,7 +50,8 @@ def fixed_contract(frozen: dict) -> dict:
 
 
 def owned_kind(frozen: dict) -> str:
-    return SEMANTIC4_KIND if fixed_contract(frozen)["execution_plan"] == SEMANTIC4_PLAN else REFERENCE21_V4_KIND
+    return {REFERENCE21_V4_PLAN: REFERENCE21_V4_KIND, SEMANTIC4_PLAN: SEMANTIC4_KIND,
+            UNIQUENESS_PLAN: UNIQUENESS_KIND}[fixed_contract(frozen)["execution_plan"]]
 
 
 def helpers():
@@ -67,7 +71,7 @@ def now():
     return datetime.now(timezone.utc)
 
 
-def contracts():
+def contracts(*, prompt_profile="default"):
     """公开原输入沿原投影，E合同直接取当前显式v4，不沿用旧v2行。"""
     from notalone.memory_extraction.evaluation import build_window
     from notalone.memory_extraction.evaluation_ecnu import _PLAN_CASES
@@ -77,7 +81,7 @@ def contracts():
     plan, rows = [], []
     for index, case in enumerate(_PLAN_CASES):
         window = build_window(case)
-        prompt, schema = extraction_contract("grounded-v4", window)
+        prompt, schema = extraction_contract("grounded-v4", window, prompt_profile=prompt_profile)
         input_sha = helper.digest(public_window_projection(window))
         plan.append({"case_position": index, "case_name": case.name, "input_sha256": input_sha})
         rows.append({"input_sha256": input_sha, "prompt_sha256": helper.digest(prompt),
@@ -86,7 +90,11 @@ def contracts():
 
 
 def _source_names(fixed=None):
-    from notalone.memory_extraction.evaluation_ecnu import _REFERENCE21_V4_REQUIRED_SOURCES, _SEMANTIC4_REQUIRED_SOURCES
+    from notalone.memory_extraction.evaluation_ecnu import (
+        _REFERENCE21_V4_REQUIRED_SOURCES, _SEMANTIC4_REQUIRED_SOURCES, _UNIQUENESS_REQUIRED_SOURCES,
+    )
+    if fixed is not None and fixed["execution_plan"] == UNIQUENESS_PLAN:
+        return _UNIQUENESS_REQUIRED_SOURCES
     return _SEMANTIC4_REQUIRED_SOURCES if fixed is not None and fixed["execution_plan"] == SEMANTIC4_PLAN else _REFERENCE21_V4_REQUIRED_SOURCES
 
 
@@ -98,7 +106,7 @@ def prepare(*, directory: Path, absolute_start: datetime, profile: str = "baseli
     if type(profile) is not str or profile not in PROFILES:
         raise ValueError("reference21_v4_fixed_profile_required")
     fixed = PROFILES[profile]
-    if profile == "semantic4":
+    if fixed["execution_plan"] in PUBLIC_QUALITY_PLANS:
         from notalone.memory_extraction.evaluation import build_window
         from notalone.memory_extraction.evaluation_ecnu import _PLAN_CASES
         validate_semantic4_windows(tuple(build_window(case) for case in _PLAN_CASES))
@@ -114,7 +122,7 @@ def prepare(*, directory: Path, absolute_start: datetime, profile: str = "baseli
                               annotation_sha256=sources[ANNOTATION], reference_version="source-fidelity-v2")
     if validation.get("execution_ready") is not True:
         raise ValueError("reference21_v4_reference_not_ready")
-    original_plan, rows = contracts()
+    original_plan, rows = contracts(prompt_profile=fixed.get("extraction_prompt_profile", "default"))
     plan = [{**original_plan[position], "case_position": index} for index, position in enumerate(POSITIONS)]
     prompt, schema = _verification_contract(fixed["verification_mode"], prompt_profile=fixed.get("prompt_profile", "default"))
     frozen = {"state": "prepared_only", "run_id": str(uuid4()), "nonce": str(uuid4()), "fixed": json.loads(json.dumps(fixed)),
@@ -148,7 +156,7 @@ def validate(frozen: dict) -> tuple[datetime, datetime]:
             raise ValueError("reference21_v4_source_drift")
     if frozen["installed_versions"] != {name: version(name) for name in helper.PACKAGES}:
         raise ValueError("reference21_v4_version_drift")
-    full_plan, rows = contracts()
+    full_plan, rows = contracts(prompt_profile=fixed.get("extraction_prompt_profile", "default"))
     expected_plan = [{**full_plan[position], "case_position": index} for index, position in enumerate(POSITIONS)]
     from notalone.memory_extraction.evaluation_offline import _verification_contract
     prompt, schema = _verification_contract(fixed["verification_mode"], prompt_profile=fixed.get("prompt_profile", "default"))
@@ -214,7 +222,8 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
         raw_reviewer=lambda view: bridge.review("raw", view), full_reviewer=lambda view: bridge.review("full", view),
         case_positions=None, case_set="reference21", reference_version="source-fidelity-v2",
         execution_plan=fixed["execution_plan"], extraction_mode="grounded-v4", verification_mode=fixed["verification_mode"],
-        verification_tool_choice="forced", extraction_tool_choice="omitted")
+        verification_tool_choice="forced", extraction_tool_choice="omitted",
+        extraction_prompt_profile=fixed.get("extraction_prompt_profile", "default"))
     loaded = False
     def loader():
         nonlocal loaded
@@ -233,9 +242,10 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
         provider_profile="deepseek-phase-split-v1", request_timeout_seconds=300, max_retries=0,
         case_positions=None, case_set="reference21", request_limit=42, reference_version="source-fidelity-v2",
         verification_mode=fixed["verification_mode"], verification_tool_choice="forced", extraction_mode="grounded-v4",
-        execution_plan=fixed["execution_plan"], reference21_v4_deadline=control)
+        execution_plan=fixed["execution_plan"], reference21_v4_deadline=control,
+        extraction_prompt_profile=fixed.get("extraction_prompt_profile", "default"))
     result.update(worker_pid=os.getpid(), execution_plan=fixed["execution_plan"])
-    if fixed["execution_plan"] == SEMANTIC4_PLAN:
+    if fixed["execution_plan"] in PUBLIC_QUALITY_PLANS:
         result.update(typed_evaluated=False, typed_credit=False)
     helper.publish(directory / "result.json", _json_value(result))
     return result
@@ -259,9 +269,9 @@ def launch(*, freeze_path: Path, expected_sha256: str, approval_path: Path) -> d
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) == 4 and sys.argv[1] in {"prepare", "prepare-semantic4"}:
+        if len(sys.argv) == 4 and sys.argv[1] in {"prepare", "prepare-semantic4", "prepare-uniqueness"}:
             freeze = prepare(directory=Path(sys.argv[2]), absolute_start=datetime.fromisoformat(sys.argv[3]),
-                             profile="semantic4" if sys.argv[1] == "prepare-semantic4" else "baseline")
+                             profile={"prepare": "baseline", "prepare-semantic4": "semantic4", "prepare-uniqueness": "uniqueness"}[sys.argv[1]])
             print(json.dumps({"run_id": freeze["run_id"], "freeze_sha256": helpers().file_digest(Path(freeze["directory"]) / "freeze.json")}))
         elif len(sys.argv) == 5 and sys.argv[1] in {"launch", "worker"}:
             if sys.argv[1] == "launch":

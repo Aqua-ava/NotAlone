@@ -1,5 +1,6 @@
 """原21固定v4基线；仅临时home、合成审核与真实SDK的精确Mock。"""
 from datetime import datetime, timedelta, timezone
+from contextlib import nullcontext
 from copy import deepcopy
 import importlib.util
 import json
@@ -70,6 +71,147 @@ class Reference21V4PublicTest(unittest.TestCase):
         self.assertFalse(any(event["kind"] == "verification_program" for event in result["events"]))
         self.assertEqual(frozen["fixed"]["verification_mode"], "legacy-v4")
         self.assertEqual(frozen["fixed"]["prompt_profile"], "public-author-quote-v1")
+
+    def test_uniqueness_complete_mock_freezes_new_e_reaches_b02_and_closes40_of42(self):
+        runner, frozen, path, expected, approval = self.prepared("uniqueness", profile="uniqueness")
+        self.semantic4, self.uniqueness = True, True
+        bridge = original.SyntheticBridge()
+        result = runner.worker(freeze_path=path, expected_sha256=expected, approval=approval,
+            synthetic_transport=httpx.MockTransport(self.respond), credential_loader=lambda: "synthetic-key", bridge=bridge)
+        self.assertIsNone(result["stopped_code"], str(result["outcomes"][0]))
+        self.assertEqual(self.extraction_positions, list(range(21)))
+        self.assertEqual(len(self.requests), 40)
+        self.assertEqual(sum(body["tools"][0]["function"]["name"] == "SourceVerificationOutput" for body in self.requests), 19)
+        self.assertEqual(result["outcomes"][-1]["case_position"], 20)
+        self.assertEqual((result["receipt"]["budget"]["request_limit"], result["receipt"]["budget"]["reserved_requests"]), (42, 40))
+        self.assertTrue(result["receipt"]["budget"]["closed"])
+        self.assertEqual(bridge.phases[-2:], [("B02", "raw"), ("B02", "full")])
+        self.assertFalse(result["typed_evaluated"])
+        self.assertFalse(result["typed_credit"])
+        self.assertFalse(any(event["kind"] == "verification_program" for event in result["events"]))
+        config = runner.helpers().read_private(path.parent / "evaluation/manifest.json")["frozen_config"]
+        self.assertEqual((config["mode"], config["stage"], config["execution_plan"]),
+                         ("deepseek_bounded_reference21_v4_source_v2_uniqueness", "reference21-v4-source-v2-uniqueness",
+                          "reference21-grounded-v4-source-v2-uniqueness-v-off-forced"))
+        self.assertEqual(config["extraction_prompt_profile"], "reference-uniqueness-v1")
+        self.assertEqual(config["verification_prompt_profile"], "public-author-quote-v1")
+        self.assertEqual(config["verification_mode"], "legacy-v4")
+        self.assertEqual(config["extraction_window_contracts"], frozen["extraction_window_contracts"])
+
+    def test_uniqueness_fixed_profile_and_frozen_prompt_mismatch_reject_before_budget_or_key(self):
+        from notalone.memory_extraction.evaluation_http_budget import EvaluationBudget
+        from notalone.memory_extraction import grounded_adapter
+
+        runner, frozen, path, _, _ = self.prepared("uniqueness-drift", profile="uniqueness")
+        self.assertEqual(len(frozen["source_hashes"]), 93)
+        self.assertEqual(runner.owned_kind(frozen), "reference21-v4-uniqueness")
+        for fault in ("missing_profile", "default_profile", "old_plan", "old_contracts", "live_prompt"):
+            with self.subTest(fault=fault), patch.object(EvaluationBudget, "create", side_effect=AssertionError("错配不得领预算")):
+                current = deepcopy(frozen)
+                if fault == "missing_profile":
+                    current["fixed"].pop("extraction_prompt_profile")
+                elif fault == "default_profile":
+                    current["fixed"]["extraction_prompt_profile"] = "default"
+                elif fault == "old_plan":
+                    current["fixed"]["execution_plan"] = runner.SEMANTIC4_PLAN
+                elif fault == "old_contracts":
+                    current["extraction_window_contracts"] = runner.contracts()[1]
+                # 仅故意破坏临时freeze；正式publish的不可覆盖语义保持。
+                path.write_text(json.dumps(current))
+                digest = runner.helpers().file_digest(path)
+                approval = {"user_authorized": True, "run_id": current["run_id"], "freeze_sha256": digest}
+                target = patch.object(grounded_adapter, "GROUNDED_V4_REFERENCE_UNIQUENESS_PROMPT", "changed")
+                with target if fault == "live_prompt" else nullcontext():
+                    with self.assertRaises(ValueError):
+                        runner.worker(freeze_path=path, expected_sha256=digest, approval=approval,
+                            synthetic_transport=httpx.MockTransport(lambda _: self.fail("不得发送")),
+                            credential_loader=lambda: self.fail("不得读key"), bridge=original.SyntheticBridge())
+
+    def test_uniqueness_captured_a05_without_codes_still_auto_and_stops_on_sealed_safety(self):
+        from notalone.memory_extraction.evaluation import build_window
+        from notalone.memory_extraction.evaluation_ecnu import _PLAN_CASES
+
+        runner, _, path, expected, approval = self.prepared("uniqueness-a05", profile="uniqueness")
+        self.semantic4, self.uniqueness = True, True
+        a05_message = build_window(_PLAN_CASES[4]).messages[0]
+
+        class A05Bridge(original.SyntheticBridge):
+            def review(self, phase, view):
+                answer = super().review(phase, view)
+                if phase == "raw" and view["case_id"] == "A05":
+                    row, = answer["e_rows"]
+                    row["fields"].update(alternatives="fail", interpretation_reason="fail")
+                    row["safety"] = "ambiguous"
+                return answer
+
+        def respond(request):
+            captured = self.respond(request)
+            body = captured.json()
+            name = json.loads(request.content)["tools"][0]["function"]["name"]
+            if self.extraction_positions[-1] == 4:
+                function = body["choices"][0]["message"]["tool_calls"][0]["function"]
+                if name == "GroundedMemoryLabelsV4":
+                    args = {"units": {"0:0": {"kind": "relationship_event", "subject": "contact", "topic": "family",
+                        "dependency": None, "unresolved": False, "ambiguity_codes": [], "confidence": 0.95,
+                        "sensitivity": "none"}}}
+                else:
+                    args = {"results": [{"candidate_index": 0, "verdict": "supported", "issues": [],
+                        "evidence": [{"message_id": str(a05_message.message_id), "quote": a05_message.text}]}]}
+                function["arguments"] = json.dumps(args)
+            return httpx.Response(200, request=request, json=body)
+
+        result = runner.worker(freeze_path=path, expected_sha256=expected, approval=approval,
+            synthetic_transport=httpx.MockTransport(respond), credential_loader=lambda: "synthetic-key", bridge=A05Bridge())
+        self.assertEqual(result["stopped_code"], "case_semantic_audit_safety_error")
+        self.assertEqual(result["outcomes"][4]["result"]["actual"], "auto")
+        self.assertEqual((len(self.requests), self.extraction_positions), (10, list(range(5))))
+        self.assertEqual(result["receipt"]["budget"]["reserved_requests"], 10)
+        self.assertTrue(result["receipt"]["budget"]["closed"])
+        self.assertTrue(all(row["status"] == "unrun" for row in result["outcomes"][5:]))
+        final = next(event["payload"]["report"] for event in result["events"]
+            if event["kind"] == "semantic_audit" and event["case_position"] == 4 and event["payload"].get("phase") == "final")
+        self.assertEqual((final["safety"]["ambiguous_auto"], final["safety"]["bad_auto"]), (1, 1))
+
+    def test_uniqueness_extra_proof_is_preserved_and_public_sources_are_required(self):
+        from dataclasses import replace
+        from notalone.memory_extraction import evaluation_ecnu
+        from notalone.memory_extraction.evaluation_http_budget import EvaluationBudget, EvaluationBudgetAbort
+
+        self.semantic4, self.uniqueness = True, True
+        for index, proof in enumerate((None, {})):
+            self.requests, self.extraction_positions = [], []
+            runner, _, path, expected, approval = self.prepared(f"uniqueness-proof-{index}", profile="uniqueness")
+            bridge = original.SyntheticBridge()
+            def respond(request):
+                response = self.respond(request)
+                body = response.json()
+                if json.loads(request.content)["tools"][0]["function"]["name"] == "SourceVerificationOutput":
+                    function = body["choices"][0]["message"]["tool_calls"][0]["function"]
+                    args = json.loads(function["arguments"])
+                    args["results"][0]["proof"] = proof
+                    function["arguments"] = json.dumps(args)
+                return httpx.Response(200, request=request, json=body)
+            result = runner.worker(freeze_path=path, expected_sha256=expected, approval=approval,
+                synthetic_transport=httpx.MockTransport(respond), credential_loader=lambda: "synthetic-key", bridge=bridge)
+            self.assertEqual(result["stopped_code"], "case_contract_or_runtime_failed")
+            self.assertEqual((len(self.requests), bridge.phases), (2, []))
+            saved = next(event for event in result["events"] if event["kind"] == "adapter_output" and event["purpose"] == "verification")
+            self.assertEqual(saved["payload"]["tool_calls"][0]["args"]["results"][0]["proof"], proof)
+            self.assertTrue(result["receipt"]["budget"]["closed"])
+        base_build = evaluation_ecnu.build_window
+        for index, changes in enumerate(({"source_snapshots": ({"synthetic": True},)},
+                                        {"message_snapshot": {"synthetic": True}},
+                                        {"message_type": "text"}, {"text_representation": "text"})):
+            runner, _, path, expected, approval = self.prepared(f"uniqueness-source-{index}", profile="uniqueness")
+            def changed(case):
+                window = base_build(case)
+                return replace(window, messages=(replace(window.messages[0], **changes), *window.messages[1:]))
+            with patch.object(evaluation_ecnu, "build_window", side_effect=changed), \
+                    patch.object(EvaluationBudget, "create", side_effect=AssertionError("错误来源不得领预算")), \
+                    self.assertRaisesRegex(EvaluationBudgetAbort, "semantic4_public_sources_required"):
+                runner.worker(freeze_path=path, expected_sha256=expected, approval=approval,
+                    synthetic_transport=httpx.MockTransport(lambda _: self.fail("不得发送")),
+                    credential_loader=lambda: self.fail("不得读key"), bridge=original.SyntheticBridge())
 
     def test_semantic4_prepare_freezes_exact_public_contract_without_registry_budget_or_key(self):
         from notalone.memory_extraction.evaluation_http_budget import EvaluationBudget
@@ -167,7 +309,8 @@ class Reference21V4PublicTest(unittest.TestCase):
             self.assertNotIn("tool_choice", body)
             position = len(self.extraction_positions)
             self.extraction_positions.append(position)
-            prompt, schema = extraction_contract("grounded-v4", build_window(_PLAN_CASES[position]))
+            prompt, schema = extraction_contract("grounded-v4", build_window(_PLAN_CASES[position]),
+                prompt_profile="reference-uniqueness-v1" if getattr(self, "uniqueness", False) else "default")
             self.assertEqual(body["messages"][0]["content"], prompt)
             self.assertEqual(function, convert_to_openai_tool(schema)["function"])
             self.assertIn("stable_fact", function["parameters"]["properties"]["units"]["properties"][

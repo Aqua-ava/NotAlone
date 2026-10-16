@@ -102,7 +102,8 @@ GROUNDED_V4_REFERENCE_UNIQUENESS_PROMPT = GROUNDED_V4_PROMPT + """
 """
 
 
-def _grounded_v4_prompt(profile: str) -> str:
+def grounded_v4_prompt(profile: str) -> str:
+    """运行时与评测冻结复用同一封闭提示选择。"""
     if type(profile) is str:
         if profile == DEFAULT_PROMPT_PROFILE:
             return GROUNDED_V4_PROMPT
@@ -240,7 +241,7 @@ class GroundedV4ExtractionRuntime:
     """显式v4提取；新增提示profile尚未绑定真实评测合同。"""
 
     def __init__(self, *, model: BaseChatModel, prompt_profile: str = DEFAULT_PROMPT_PROFILE) -> None:
-        _grounded_v4_prompt(prompt_profile)
+        grounded_v4_prompt(prompt_profile)
         self._model = model
         self._prompt_profile = prompt_profile
 
@@ -257,7 +258,7 @@ def _extract_grounded(
         raise ValueError("提取提示profile仅可用于显式v4。")
     if version4:
         protocol, prompt, schema_factory, compiler = (
-            "grounded-v4", _grounded_v4_prompt(prompt_profile), grounded_schema_v4, compile_labels_v4,
+            "grounded-v4", grounded_v4_prompt(prompt_profile), grounded_schema_v4, compile_labels_v4,
         )
     elif version3:
         protocol, prompt, schema_factory, compiler = (
