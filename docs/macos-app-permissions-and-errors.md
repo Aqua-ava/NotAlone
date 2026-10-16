@@ -670,3 +670,9 @@ v8记录了实际变化提示及提前正式HTTP的时序，宿主日志达到51
 按本场精确App PID查询取得18条TCC归属行：正式探针10条／5 PID、辅助源8条／4 PID，responsible全部为当前Finder实例的 `com.notalone.desktop`。其时段早于45秒阶段，不能移入后续零样本阶段；归属行不是采图次数或授权决策，只补齐本场formal／aux宿主责任分项。runner仍exit2、未进入用例helper／quit，原失败保留。
 
 主Agent随后实际菜单退出；4个controller记录PID及9个追加TCC native PID共13个不同已记录PID全部gone，握手消失，原userData按身份整体恢复且配置未读，精确随机库只读确认不存在，自有目录和失败lease按归属收尾，最终租约absent。没有新启动、真实CLI、模型、发送或原票AC变更。本轮有明确权限列表操作，不写成零权限变化；详细时间、命令和资源指针见[本场独立结果](../.scratch/mac-desktop-app/finder-v9-after-permission-20261016.md)。
+
+## 2026-10-16 v9即时协调的Finder分项通过
+
+同一冻结v9包从Finder独立启动，主Agent完成微信前置后直接写动作收据并调用新公共观察，4ms后开始请求，677ms取得HTTP200／unavailable／binding_verification_unavailable。按该固定码源码路径，新原生观察和名称处理已经返回，随后在CLI／绑定核对异常且无质量失败时停止；与本场不可用CLI配置一致，但不据此区分具体异常、认证私聊身份或推导成功帧数。没有修改产品、fixture、签名、原包字节或系统权限，也不把通过归因于已证唯一原因。
+
+现有Finder用例1／1、runner exit0：累计287次进程快照为初始1＋45秒阶段286，采到6个正式single-frame与6个辅助PID；小窗实际获焦显示定位暂停，已采辅助PID停止后正常菜单退出并恢复目录。独立TCC固定投影共52条，正式28条／14个不同PID、辅助24条／12个不同PID，responsible均为本场com.notalone.desktop；行数、PID与成功采图／调用次数分开，fixture的capture／TCC／identity／coverage认证旗保持false。独立复核30个不同记录PID及精确库、目录、握手和租约全部收尾；原18／20仍待同v9真实CLI组合及快捷键等缺项。原三个失败不覆盖，详见[即时协调结果](../.scratch/mac-desktop-app/finder-v9-immediate-result-20261016.md)。
