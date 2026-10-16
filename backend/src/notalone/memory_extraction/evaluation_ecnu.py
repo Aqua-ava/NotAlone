@@ -36,6 +36,9 @@ from notalone.memory_extraction.evaluation_reference import (
 from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES
 from notalone.memory_extraction.verification import SourceVerificationMode
 from notalone.memory_trace.context import current_trace
+from .evaluation_provider_contract import (
+    MIXED_PLAN, MIXED_REQUEST_VERSION, MIXED_MODE, MIXED_STAGE, mixed_phase_policy,
+)
 
 
 _BASE_URL = "https://chat.ecnu.edu.cn/open/api/v1"
@@ -81,6 +84,12 @@ _FULL140_V4_REQUIRED_SOURCES = _NULLABLE_REQUIRED_SOURCES | frozenset({
     "desktop/artifacts/grounded-public21-prepare-20261015/grounded_public21.py",
     "desktop/artifacts/grounded-public21-prepare-20261015/explicit_review_bridge.py",
 })
+_FULL140_MIXED_REQUIRED_SOURCES = _FULL140_V4_REQUIRED_SOURCES | frozenset({
+    "desktop/tests/fixtures/full140-mixed-v-off-public.py",
+    ".scratch/grounded-evaluation/full140-mixed-v-off-plan-20261016.md",
+    ".scratch/grounded-evaluation/full140-mixed-v-off-implementation-20261016.md",
+    "architecture/adr/059-closed-unknown-kinds-and-calendar-month.md",
+})
 _AUDIT_REASONS = {
     "safe": {"supported"}, "general_error": {"coverage_miss", "contract_mismatch"},
     "safety_error": {"false_fact", "wrong_subject", "contract_mismatch"},
@@ -98,6 +107,7 @@ def _gold_reference(
     frozen_gold: dict, source_hashes: dict[str, str], *, case_set: str = "reference21",
     verification_mode: SourceVerificationMode = SourceVerificationMode.LEGACY_V4,
     reference_version: str = "legacy-v1",
+    execution_plan: str = "original",
 ) -> dict:
     """这里只核对准备协议，不把 Agent 标记认证为真实语义质量。"""
     cases = _FULL_CASES if case_set == "full140" else _PLAN_CASES
@@ -109,7 +119,8 @@ def _gold_reference(
         raise EvaluationBudgetAbort("ecnu_gold_not_frozen")
     criterion = frozen_gold.get("criteria_path", _CRITERIA_PATH)
     digest = frozen_gold.get("criteria_sha256")
-    required_sources = (_FULL140_V4_REQUIRED_SOURCES if reference_version == "source-fidelity-v2" else
+    required_sources = (_FULL140_MIXED_REQUIRED_SOURCES if execution_plan == MIXED_PLAN else
+                        _FULL140_V4_REQUIRED_SOURCES if reference_version == "source-fidelity-v2" else
                         _NULLABLE_REQUIRED_SOURCES
                         if verification_mode is SourceVerificationMode.NULLABLE_PROOF_V1
                         else _REQUIRED_SOURCES)
@@ -199,7 +210,8 @@ def run_ecnu_evaluation(
     """保留原固定计划；剩余8窗须显式选择独立版本，不提供任意子集。"""
     from .evaluation_provider_contract import EvaluationProviderProfile
 
-    full140_v4 = execution_plan == "full140-grounded-v4-source-v2"
+    mixed = execution_plan == MIXED_PLAN
+    full140_v4 = execution_plan in ("full140-grounded-v4-source-v2", MIXED_PLAN)
     if (type(reference_version) is not str or reference_version not in {"legacy-v1", "source-fidelity-v2"}
             or not full140_v4 and (reference_version != "legacy-v1" or extraction_mode == "grounded-v4")):
         raise EvaluationBudgetAbort("evaluation_full140_v4_fixed_plan_required")
@@ -211,11 +223,13 @@ def run_ecnu_evaluation(
         profile = EvaluationProviderProfile(provider_profile)
     except (TypeError, ValueError):
         raise EvaluationBudgetAbort("evaluation_provider_profile_invalid") from None
-    official = profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
+    official = profile.is_official
+    if mixed != (profile is EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT):
+        raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
     remaining8 = execution_plan == "reference21-remaining8-v1"
     ambiguity2 = execution_plan == "reference21-ambiguity2-v3"
     main16 = execution_plan == "reference21-main16-v3"
-    if (type(execution_plan) is not str or execution_plan not in {"original", "reference21-remaining8-v1", "reference21-ambiguity2-v3", "reference21-main16-v3", "full140-grounded-v4-source-v2"}
+    if (type(execution_plan) is not str or execution_plan not in {"original", "reference21-remaining8-v1", "reference21-ambiguity2-v3", "reference21-main16-v3", "full140-grounded-v4-source-v2", MIXED_PLAN}
             or remaining8 and (not official or case_set != "reference21"
                 or type(case_positions) is not tuple or case_positions != _REMAINING8_POSITIONS
                 or any(type(position) is not int for position in case_positions)
@@ -247,7 +261,7 @@ def run_ecnu_evaluation(
             or case_positions is not None or type(request_limit) is not int or request_limit != 280
             or extraction_selected.value != "grounded-v4" or reference_version != "source-fidelity-v2"
             or verification_mode != SourceVerificationMode.NULLABLE_PROOF_V1
-            or verification_tool_choice != "omitted"
+            or verification_tool_choice != ("forced" if mixed else "omitted")
             or type(request_timeout_seconds) is not int or request_timeout_seconds != 300
             or type(max_retries) is not int or max_retries != 0):
         raise EvaluationBudgetAbort("evaluation_full140_v4_fixed_plan_required")
@@ -278,7 +292,7 @@ def run_ecnu_evaluation(
         case_positions is not None or request_limit not in (None, 42)
     ):
         raise EvaluationBudgetAbort("evaluation_official_fixed_reference21_required")
-    if official and verification_tool_choice != "omitted":
+    if official and not mixed and verification_tool_choice != "omitted":
         raise EvaluationBudgetAbort("evaluation_official_tools_must_be_omitted")
     if request_limit is not None and (
         not official or type(request_limit) is not int or not 1 <= request_limit <= 280
@@ -343,6 +357,8 @@ def run_ecnu_evaluation(
         raise EvaluationBudgetAbort("ecnu_phased_audit_required")
     if type(audit_case) is PhasedEvaluationAudit and audit_case.reference_version != reference_version:
         raise EvaluationBudgetAbort("evaluation_phased_reference_version_mismatch")
+    if type(audit_case) is PhasedEvaluationAudit and mixed != (audit_case.execution_plan == MIXED_PLAN):
+        raise EvaluationBudgetAbort("evaluation_phased_execution_plan_mismatch")
     if (type(audit_case) is PhasedEvaluationAudit
             and audit_case.extraction_mode != extraction_selected.value):
         raise EvaluationBudgetAbort("evaluation_phased_extraction_mode_mismatch")
@@ -360,7 +376,7 @@ def run_ecnu_evaluation(
             raise EvaluationBudgetAbort("ecnu_phased_audit_required")
     reference = _gold_reference(
         frozen_gold, source_hashes, case_set=case_set, verification_mode=selected,
-        reference_version=reference_version,
+        reference_version=reference_version, execution_plan=execution_plan,
     )
     if synthetic_transport is None or full140_v4:
         if (frozen_gold.get("criteria_path") !=
@@ -384,6 +400,7 @@ def run_ecnu_evaluation(
         response_identity_policy=response_identity_policy,
         provider_profile=profile,
         extraction_mode=extraction_selected,
+        execution_plan=execution_plan,
     )
     if case_set == "full140":
         validation = _load_full_reference(repo_root, source_hashes, reference_version=reference_version)
@@ -406,7 +423,7 @@ def run_ecnu_evaluation(
         **_frozen_config(plan, request_timeout_seconds=request_timeout_seconds,
                          max_retries=max_retries, verification_mode=selected,
                          extraction_mode=extraction_selected, windows=windows),
-        "mode": ("deepseek_bounded_full140_v4_source_v2" if full140_v4 else
+        "mode": (MIXED_MODE if mixed else "deepseek_bounded_full140_v4_source_v2" if full140_v4 else
                  "deepseek_bounded_main16_v3" if main16 else
                  "deepseek_bounded_ambiguity2_v3" if ambiguity2 else
                  "deepseek_bounded_remaining8" if remaining8 else
@@ -415,7 +432,7 @@ def run_ecnu_evaluation(
                  "ecnu_bounded_full140" if case_set == "full140" else
                  "ecnu_bounded_evaluation" if case_positions is None
                  else "ecnu_bounded_diagnostic"),
-        "stage": ("full140-v4-source-v2" if full140_v4 else "main16-v3" if main16 else "ambiguity2-v3" if ambiguity2 else "remaining8" if remaining8 else "full140" if case_set == "full140" else
+        "stage": (MIXED_STAGE if mixed else "full140-v4-source-v2" if full140_v4 else "main16-v3" if main16 else "ambiguity2-v3" if ambiguity2 else "remaining8" if remaining8 else "full140" if case_set == "full140" else
                   "P1" if case_positions is None else "diagnostic"),
         "base_url": base_url, "endpoint": endpoint, "request_model": request_model,
         **({"reasoning_effort": "max"} if official else {}),
@@ -434,6 +451,9 @@ def run_ecnu_evaluation(
         } if response_identity_policy == KNOWN_ECNU_RESPONSE_IDENTITY_POLICY else response_identity_policy),
         "request_contract_version": 2 if extraction_selected.is_grounded else 1,
         "tool_choice": ({
+            "extraction": {"mode": "omitted", "name": runtime_contracts["extraction"][1]["title"]},
+            "verification": {"mode": "forced", "name": runtime_contracts["verification"][1]["title"]},
+        } if mixed else {
             "extraction": {"mode": "omitted" if official else "forced", "name": runtime_contracts["extraction"][1]["title"]},
             "verification": {"mode": "omitted", "name": runtime_contracts["verification"][1]["title"]},
         } if verification_tool_choice == "omitted" else
@@ -448,6 +468,10 @@ def run_ecnu_evaluation(
         **{f"{purpose}_schema_sha256": canonical_sha256(schema)
            for purpose, (_, schema) in runtime_contracts.items() if purpose == "verification"},
     }
+    if mixed:
+        config.pop("thinking")
+        config.pop("reasoning_effort")
+        config.update(phase_request_version=MIXED_REQUEST_VERSION, phase_request_policy=mixed_phase_policy())
     if official:
         config["omitted_parameters"] = [
             item for item in config["omitted_parameters"] if item != "reasoning_effort"
@@ -480,14 +504,15 @@ def run_ecnu_evaluation(
         prompt, schema = frozen_contracts[purpose]
         if not messages or messages[0] != {"role": "system", "content": prompt}:
             raise EvaluationBudgetAbort("ecnu_runtime_prompt_changed")
+        mixed_v = mixed and purpose == "verification"
         expected = {
             "model": request_model, "temperature": 0.0, "stream": False,
-            **({"reasoning_effort": "max"} if official else {}),
-            "thinking": {"type": "enabled"}, "messages": messages,
+            **({"reasoning_effort": "none" if mixed_v else "max"} if official else {}),
+            "thinking": {"type": "disabled" if mixed_v else "enabled"}, "messages": messages,
             "tools": [deepcopy(convert_to_openai_tool(schema))],
             "tool_choice": {"type": "function", "function": {"name": schema["title"]}},
         }
-        if official or purpose == "verification" and verification_tool_choice == "omitted":
+        if official and not mixed_v or purpose == "verification" and verification_tool_choice == "omitted":
             del expected["tool_choice"]
         with (bounded.invocation() if bounded is not None else nullcontext()), contract.expect_request(expected):
             yield
@@ -511,6 +536,7 @@ def run_ecnu_evaluation(
             reasoning_effort="max" if official else None,
             extraction_tool_choice="omitted" if official else "forced",
             extraction_mode=extraction_selected,
+            execution_plan=execution_plan,
         )
     except BaseException as error:
         if bounded is not None:

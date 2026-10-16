@@ -46,3 +46,5 @@
 [独立单V关闭思考／强制具名探针](../grounded-evaluation/deepseek-v-off-forced-pilot-result-20261016.md)现已closed1／1、零重试，外层3.329秒、自有组gone，verification空。只有request及unknown_transport_error事件；响应保存缺口使false字段不足以证明没取得响应，不能判定HTTP200、具体arguments或根因。纯Mock3项／5反例（含503）复现可达缺口，未补造旧响应或授予质量信用。82源／2事件／只读SQLite关闭已核，封存报告两轴0；后继只按独立v2计划修最小安全观测，当前没有新真实台账／请求。原9张仍3 resolved／6 claimed，15张排除保持。
 
 后继[安全观测v2](../grounded-evaluation/deepseek-v-off-forced-v2-result-20261016.md)已实际closed1／1、HTTP200、零重试，取得唯一合法具名工具，外层3.146秒且自有组gone；82源／2摘要／SQL收据均核。模型supported及非空proof仍只为提案，适配器内部有proof程序调用但本探针未封存其判定／可信链／semantic_basis，不认证typed、E、质量或放行。离线17项、最小共享2项与mypy通过、准备两轴0；结果报告初审1项调用链错述已纠正、增审0。旧场保持封存，当前只读规划E保持max、V关闭思考并强制具名的新固定混合合同，未创建完整场新预算或自动后继。
+
+[固定分阶段完整140离线合同](../grounded-evaluation/full140-mixed-v-off-implementation-20261016.md)现已实现：E max／省略工具选择、V off／强制具名，在新执行身份／请求版本／source-fidelity-v2及89源下闭合准入。完整Mock为140E＋138V＝278、末窗与cap280闭账，旧runner9项通过；Root评测单元193／集成112分别通过、类型10文件通过、两轴15文件初审均0、最终纯prepare1项通过。新profile安全响应观测覆盖NaN／孤立代理，旧profile保留；首次Mock自改闭包硬停已如实记录。A13旧输出条件重现仍按bad_auto停止，没有放宽整组规则；本准备不认证质量或typed。当前尚未创建新真实预算，下一步仅Root按现有授权最终核freeze后唯一启动，原票／默认空表保持。

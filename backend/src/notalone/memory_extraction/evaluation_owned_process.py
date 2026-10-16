@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 from typing import Any, Callable
+from .evaluation_provider_contract import MIXED_PLAN, MIXED_MODE, MIXED_STAGE, MIXED_KIND, MIXED_REQUEST_VERSION, mixed_phase_policy
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,8 @@ class _FixedPublicControl:
 
 
 _PROFILES = {
+    MIXED_KIND: _FixedPublicControl(280, 86400, 140, 138, MIXED_MODE, MIXED_STAGE,
+                                  tuple(range(140)), 16384, MIXED_PLAN, "source-fidelity-v2"),
     "remaining8": _FixedPublicControl(16, 2400, 8, 13, "deepseek_bounded_remaining8", "remaining8",
                                      (19, 20, 13, 14, 15, 16, 17, 18)),
     "ambiguity2": _FixedPublicControl(4, 5400, 2, 3, "deepseek_bounded_ambiguity2_v3", "ambiguity2-v3", (6, 9)),
@@ -108,7 +111,9 @@ def _launch_owned_public_worker(*, frozen: dict, script: Path, root: Path, helpe
                 and type(value.get("request_limit")) is int and value["request_limit"] == request_limit
                 and type(value.get("reserved_requests")) is int
                 and 0 <= value["reserved_requests"] <= request_limit)
-    closed = closed_receipt(budget) or (type(deadline.get("worker_pid")) is int
+    closed = (closed_receipt(budget) and (kind != MIXED_KIND or (
+        type(result.get("worker_pid")) is int and result["worker_pid"] == child.pid
+        and result.get("execution_plan") == MIXED_PLAN))) or (type(deadline.get("worker_pid")) is int
                                        and deadline["worker_pid"] == child.pid and closed_receipt(deadline))
     states = ["unrun"] * planned_windows
     if isinstance(result.get("outcomes"), list) and len(result["outcomes"]) == planned_windows:
@@ -167,6 +172,12 @@ def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str) -> None:
             or profile.execution_plan is not None and (
                 config.get("execution_plan") != profile.execution_plan
                 or config.get("reference_version") != profile.reference_version)
+            or kind == MIXED_KIND and (
+                config.get("phase_request_version") != MIXED_REQUEST_VERSION
+                or config.get("phase_request_policy") != mixed_phase_policy()
+                or config.get("tool_choice") != {
+                    "extraction": {"mode": "omitted", "name": "GroundedMemoryLabelsV4"},
+                    "verification": {"mode": "forced", "name": "SourceVerificationOutput"}})
             or config.get("source_hashes") != frozen["source_hashes"]
             or config.get("extraction_window_contracts") != frozen["extraction_window_contracts"]):
         raise ValueError(kind + "_claim_manifest_changed")

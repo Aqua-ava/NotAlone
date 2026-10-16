@@ -32,6 +32,24 @@ FIXED = {"execution_plan": "full140-grounded-v4-source-v2", "case_set": "full140
          "batch_work_seconds": 86380, "outer_wall_seconds": 86400}
 
 
+def _fixed(plan: str) -> dict:
+    from notalone.memory_extraction.evaluation_provider_contract import MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy
+    if type(plan) is not str or plan not in (FIXED["execution_plan"], MIXED_PLAN):
+        raise ValueError("full140_registered_variant_required")
+    fixed = json.loads(json.dumps(FIXED))
+    if plan == MIXED_PLAN:
+        fixed.update(execution_plan=MIXED_PLAN, provider_profile="deepseek-phase-split-v1",
+                     verification_tool_choice="forced", phase_request_version=MIXED_REQUEST_VERSION,
+                     phase_request_policy=mixed_phase_policy())
+    return fixed
+
+
+def _kind(plan: str) -> str:
+    from notalone.memory_extraction.evaluation_provider_contract import MIXED_PLAN, MIXED_KIND
+    _fixed(plan)
+    return MIXED_KIND if plan == MIXED_PLAN else "full140-v4"
+
+
 def helpers():
     # 复用已审私有工具的纯函数／显式审核桥，不调用其prepare或registry_snapshot。
     parent = str(LEGACY.parent)
@@ -67,12 +85,14 @@ def contracts():
     return plan, rows
 
 
-def _source_names():
-    from notalone.memory_extraction.evaluation_ecnu import _FULL140_V4_REQUIRED_SOURCES
-    return _FULL140_V4_REQUIRED_SOURCES
+def _source_names(plan=FIXED["execution_plan"]):
+    from notalone.memory_extraction.evaluation_ecnu import _FULL140_V4_REQUIRED_SOURCES, _FULL140_MIXED_REQUIRED_SOURCES
+    _fixed(plan)
+    return _FULL140_MIXED_REQUIRED_SOURCES if _kind(plan) != "full140-v4" else _FULL140_V4_REQUIRED_SOURCES
 
 
-def prepare(*, directory: Path, absolute_start: datetime) -> dict:
+def prepare(*, directory: Path, absolute_start: datetime, _plan=FIXED["execution_plan"]) -> dict:
+    fixed = _fixed(_plan)
     if os.environ.get("NOTALONE_DISABLE_DOTENV") != "1" or absolute_start.utcoffset() is None:
         raise ValueError("disabled_dotenv_and_aware_start_required")
     from notalone.memory_extraction.evaluation_offline import _verification_contract
@@ -83,7 +103,7 @@ def prepare(*, directory: Path, absolute_start: datetime) -> dict:
     directory.mkdir(mode=0o700)
     for name in ("evaluation", "audit"):
         (directory / name).mkdir(mode=0o700)
-    sources = {name: helper.file_digest(ROOT / name) for name in sorted(_source_names())}
+    sources = {name: helper.file_digest(ROOT / name) for name in sorted(_source_names(_plan))}
     reference = json.loads((ROOT / REFERENCE).read_bytes())
     validation = validate_full_public_reference(reference, expected_reference_sha256=helper.digest(reference),
                               annotation_sha256=sources[ANNOTATION], reference_version="source-fidelity-v2")
@@ -93,7 +113,7 @@ def prepare(*, directory: Path, absolute_start: datetime) -> dict:
     original_plan, rows = contracts()
     plan = [{**original_plan[position], "case_position": index} for index, position in enumerate(POSITIONS)]
     prompt, schema = _verification_contract("nullable-proof-v1")
-    frozen = {"state": "prepared_only", "run_id": str(uuid4()), "nonce": str(uuid4()), "fixed": dict(FIXED),
+    frozen = {"state": "prepared_only", "run_id": str(uuid4()), "nonce": str(uuid4()), "fixed": fixed,
         "repo_root": str(ROOT), "directory": str(directory), "absolute_start": absolute_start.isoformat(),
         "work_end": (absolute_start + timedelta(seconds=86380)).isoformat(),
         "absolute_end": (absolute_start + timedelta(seconds=86400)).isoformat(),
@@ -108,15 +128,16 @@ def prepare(*, directory: Path, absolute_start: datetime) -> dict:
     return frozen
 
 
-def validate(frozen: dict) -> tuple[datetime, datetime]:
+def validate(frozen: dict, *, _plan=FIXED["execution_plan"]) -> tuple[datetime, datetime]:
+    fixed = _fixed(_plan)
     helper = helpers()
     start, work_end, end = (datetime.fromisoformat(frozen[name]) for name in ("absolute_start", "work_end", "absolute_end"))
-    if (frozen["state"] != "prepared_only" or helper.digest(frozen["fixed"]) != helper.digest(FIXED) or frozen["repo_root"] != str(ROOT)
+    if (frozen["state"] != "prepared_only" or helper.digest(frozen["fixed"]) != helper.digest(fixed) or frozen["repo_root"] != str(ROOT)
             or frozen["quality_certified"] is not False or any(item.utcoffset() is None for item in (start, work_end, end))
             or work_end - start != timedelta(seconds=86380) or end - start != timedelta(seconds=86400)
             or not start <= now() < work_end):
         raise ValueError("full140_v4_fixed_window_required")
-    if set(frozen["source_hashes"]) != _source_names():
+    if set(frozen["source_hashes"]) != _source_names(_plan):
         raise ValueError("full140_v4_source_closure_changed")
     for name, expected in frozen["source_hashes"].items():
         if helper.file_digest(ROOT / name) != expected:
@@ -148,9 +169,9 @@ def validate(frozen: dict) -> tuple[datetime, datetime]:
     return work_end, end
 
 
-def verify_claim(frozen: dict) -> None:
+def verify_claim(frozen: dict, *, _plan=FIXED["execution_plan"]) -> None:
     from notalone.memory_extraction.evaluation_owned_process import _verify_owned_public_claim
-    _verify_owned_public_claim(frozen=frozen, helper=helpers(), kind="full140-v4")
+    _verify_owned_public_claim(frozen=frozen, helper=helpers(), kind=_kind(_plan))
 
 
 def _check_authorization(approval: dict, frozen: dict, expected_sha256: str) -> None:
@@ -160,7 +181,8 @@ def _check_authorization(approval: dict, frozen: dict, expected_sha256: str) -> 
 
 
 def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
-           synthetic_transport=None, credential_loader=None, bridge=None) -> dict:
+           synthetic_transport=None, credential_loader=None, bridge=None, _plan=FIXED["execution_plan"]) -> dict:
+    fixed = _fixed(_plan)
     helper = helpers()
     if os.environ.get("NOTALONE_DISABLE_DOTENV") != "1" or helper.file_digest(freeze_path) != expected_sha256:
         raise ValueError("full140_v4_exact_freeze_required")
@@ -170,7 +192,7 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
     if (synthetic_transport is not None and type(synthetic_transport) is not httpx.MockTransport
             or synthetic_transport is None and (credential_loader is not None or bridge is not None)):
         raise ValueError("full140_v4_exact_mock_only")
-    work_end, _ = validate(frozen)
+    work_end, _ = validate(frozen, _plan=_plan)
     from notalone.memory_extraction.evaluation_ecnu import _FULL_CASES, run_ecnu_evaluation
     from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
     from notalone.memory_extraction.evaluation_records import _json_value
@@ -192,14 +214,15 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
         raw_reviewer=lambda view: bridge.review("raw", view), full_reviewer=lambda view: bridge.review("full", view),
         case_positions=None, case_set="full140", reference_version="source-fidelity-v2",
         extraction_mode="grounded-v4", verification_mode="nullable-proof-v1",
-        verification_tool_choice="omitted", extraction_tool_choice="omitted")
+        verification_tool_choice=fixed["verification_tool_choice"], extraction_tool_choice="omitted",
+        **({"execution_plan": _plan} if _kind(_plan) != "full140-v4" else {}))
     loaded = False
     def loader():
         nonlocal loaded
         if loaded:
             raise ValueError("full140_v4_single_loader_required")
         loaded = True
-        verify_claim(frozen)
+        verify_claim(frozen, _plan=_plan)
         return (credential_loader or helper.read_credential)()
     helper.publish(directory / "activation.json", {"run_id": frozen["run_id"], "pid": os.getpid(),
         "process_group": os.getpgrp(), "synthetic": synthetic_transport is not None, "started_utc": now().isoformat()})
@@ -208,43 +231,50 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
         frozen_gold={"status": "frozen_agent_review", "case_names": [case.name for case in _FULL_CASES],
                      "criteria_path": REFERENCE, "criteria_sha256": frozen["source_hashes"][REFERENCE]},
         credential_loader=loader, audit_case=audit, synthetic_transport=synthetic_transport,
-        provider_profile="deepseek-flash-max", request_timeout_seconds=300, max_retries=0,
+        provider_profile=fixed["provider_profile"], request_timeout_seconds=300, max_retries=0,
         case_positions=None, case_set="full140", reference_version="source-fidelity-v2", request_limit=280,
-        verification_mode="nullable-proof-v1", verification_tool_choice="omitted", extraction_mode="grounded-v4",
-        execution_plan="full140-grounded-v4-source-v2", full140_v4_deadline=control)
+        verification_mode="nullable-proof-v1", verification_tool_choice=fixed["verification_tool_choice"], extraction_mode="grounded-v4",
+        execution_plan=_plan, full140_v4_deadline=control)
+    if _kind(_plan) != "full140-v4":
+        result.update(worker_pid=os.getpid(), execution_plan=_plan)
     helper.publish(directory / "result.json", _json_value(result))
     return result
 
 
-def launch(*, freeze_path: Path, expected_sha256: str, approval_path: Path) -> dict:
+def launch(*, freeze_path: Path, expected_sha256: str, approval_path: Path, _plan=FIXED["execution_plan"]) -> dict:
     helper = helpers()
     if helper.file_digest(freeze_path) != expected_sha256:
         raise ValueError("full140_v4_exact_freeze_required")
     frozen = helper.read_private(freeze_path)
-    _, end = validate(frozen)
+    _, end = validate(frozen, _plan=_plan)
     approval = helper.read_private(approval_path)
     _check_authorization(approval, frozen, expected_sha256)
     from notalone.memory_extraction.evaluation_owned_process import _launch_owned_public_worker
-    return _launch_owned_public_worker(frozen=frozen, script=Path(__file__).resolve(), root=ROOT,
+    script = ROOT / "desktop/tests/fixtures/full140-mixed-v-off-public.py" if _kind(_plan) != "full140-v4" else Path(__file__).resolve()
+    return _launch_owned_public_worker(frozen=frozen, script=script, root=ROOT,
         helper=helper, freeze_path=freeze_path, expected_sha256=expected_sha256, approval_path=approval_path, end=end,
-        clock=now, kind="full140-v4")
+        clock=now, kind=_kind(_plan))
 
 
-if __name__ == "__main__":
+def main(plan=FIXED["execution_plan"]):
     try:
         if len(sys.argv) == 4 and sys.argv[1] == "prepare":
-            freeze = prepare(directory=Path(sys.argv[2]), absolute_start=datetime.fromisoformat(sys.argv[3]))
+            freeze = prepare(directory=Path(sys.argv[2]), absolute_start=datetime.fromisoformat(sys.argv[3]), _plan=plan)
             print(json.dumps({"run_id": freeze["run_id"], "freeze_sha256": helpers().file_digest(Path(freeze["directory"]) / "freeze.json")}))
         elif len(sys.argv) == 5 and sys.argv[1] in {"launch", "worker"}:
             if sys.argv[1] == "launch":
-                value = launch(freeze_path=Path(sys.argv[2]), expected_sha256=sys.argv[3], approval_path=Path(sys.argv[4]))
+                value = launch(freeze_path=Path(sys.argv[2]), expected_sha256=sys.argv[3], approval_path=Path(sys.argv[4]), _plan=plan)
             else:
                 if sys.stdin.buffer.readline(7) != b"start\n":
                     raise ValueError("full140_v4_owned_parent_release_required")
-                value = worker(freeze_path=Path(sys.argv[2]), expected_sha256=sys.argv[3], approval=helpers().read_private(Path(sys.argv[4])))
+                value = worker(freeze_path=Path(sys.argv[2]), expected_sha256=sys.argv[3], approval=helpers().read_private(Path(sys.argv[4])), _plan=plan)
             print(json.dumps({"quality_certified": False, "stopped_code": value.get("stopped_code"), "closed": value.get("closed")}))
         else:
             raise ValueError("full140_v4_explicit_command_required")
     except BaseException as error:
         print(json.dumps({"error_type": type(error).__name__}))
         raise SystemExit(1) from None
+
+
+if __name__ == "__main__":
+    main()

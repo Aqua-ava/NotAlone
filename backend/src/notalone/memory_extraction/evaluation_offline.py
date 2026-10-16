@@ -54,6 +54,7 @@ from notalone.memory_extraction.verification import (
     SourceVerificationMode, validate_source_verification,
 )
 from notalone.memory_trace.context import current_trace
+from .evaluation_provider_contract import MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy
 
 _BASE_URL = "https://evaluation.invalid/v1"
 _ENDPOINT = f"{_BASE_URL}/chat/completions"
@@ -413,17 +414,21 @@ def _run_evaluation_batch(
     reasoning_effort: str | None = None,
     extraction_tool_choice: str = "forced",
     extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
+    execution_plan: str = "original",
 ) -> dict:
     """P0/P1共用记录与收尾；真实配置与独审验证由各入口负责。"""
     selected = SourceVerificationMode(verification_mode)
     extraction_selected = EvaluationExtractionMode(extraction_mode)
+    mixed = execution_plan == MIXED_PLAN
+    if mixed != (store.execution_plan == MIXED_PLAN):
+        raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
     if store.extraction_mode != extraction_selected.value:
         raise EvaluationBudgetAbort("evaluation_frozen_extraction_mode_mismatch")
     if extraction_selected is EvaluationExtractionMode.GROUNDED_V4 and (
         store.reference_version != "source-fidelity-v2"
         or cases != (*CASES, *SEMANTIC_CASES) or len(windows) != 140 or len(plan) != 140
         or selected is not SourceVerificationMode.NULLABLE_PROOF_V1
-        or extraction_tool_choice != "omitted" or verification_tool_choice != "omitted"
+        or extraction_tool_choice != "omitted" or verification_tool_choice != ("forced" if mixed else "omitted")
         or type(max_retries) is not int or max_retries != 0 or semantic_audit is None
     ):
         raise EvaluationBudgetAbort("evaluation_full140_v4_fixed_plan_required")
@@ -475,6 +480,12 @@ def _run_evaluation_batch(
                             **({"reasoning_effort": reasoning_effort} if reasoning_effort else {})},
                 http_client=sync_client, http_async_client=async_client,
             )
+            verification_model = ChatDeepSeek(
+                api_key=SecretStr(api_key), base_url=base_url, model=request_model, temperature=0.0,
+                timeout=request_timeout_seconds, max_retries=max_retries,
+                extra_body={"thinking": {"type": "disabled"}, "reasoning_effort": "none"},
+                http_client=sync_client, http_async_client=async_client,
+            ) if mixed else model
             for position, (case, window) in enumerate(zip(cases, windows)):
                 current_position = position
                 outcomes[position]["status"] = "unknown"
@@ -490,6 +501,11 @@ def _run_evaluation_batch(
                 )
                 # 原adapter只消费bind_tools/invoke；评测代理不成为产品模型实现。
                 adapter_model = cast(BaseChatModel, recorded_model)
+                verification_adapter_model = cast(BaseChatModel, _RecordedModel(
+                    verification_model, store, position, window, call_state,
+                    invocation_scope=invocation_scope, verification_tool_choice=verification_tool_choice,
+                    extraction_tool_choice=extraction_tool_choice, extraction_mode=extraction_selected,
+                )) if mixed else adapter_model
                 result = evaluate_case(
                     case, window, _RecordedExtractionRuntime(
                         extraction_runtime(extraction_selected, adapter_model),
@@ -497,7 +513,7 @@ def _run_evaluation_batch(
                     ),
                     verification_runtime=_RecordedVerificationRuntime(
                         LangChainSourceVerificationRuntime(
-                            model=adapter_model, provider=provider,
+                            model=verification_adapter_model, provider=provider,
                             verification_mode=selected,
                         ), store, position,
                     ),
@@ -535,6 +551,8 @@ def _run_evaluation_batch(
                         "verification_tool_choice": verification_tool_choice,
                         "extraction_tool_choice": extraction_tool_choice,
                         "extraction_mode": extraction_selected.value,
+                        **({"execution_plan": MIXED_PLAN, "phase_request_version": MIXED_REQUEST_VERSION,
+                            "phase_request_policy": mixed_phase_policy()} if mixed else {}),
                         **({"reference_version": store.reference_version}
                            if store.reference_version == "source-fidelity-v2" else {}),
                         "extraction_program": tuple(

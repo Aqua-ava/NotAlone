@@ -113,3 +113,37 @@ time.sleep(30)
         self.assertTrue(receipt["outer_timed_out"])
         self.assertTrue(receipt["close_unknown"])
         self.assertLess(receipt["elapsed_seconds"], 3)
+
+    def test_mixed_normal_and_deadline_receipts_require_integer_pid_and_counts(self):
+        from notalone.memory_extraction.evaluation_provider_contract import MIXED_KIND, MIXED_PLAN
+        for form in ("normal", "deadline"):
+            for change in ("valid", "float_pid", "bool_pid", "wrong_pid", "float_cap", "bool_count"):
+                with self.subTest(form=form, change=change):
+                    receipt = self.launch(kind=MIXED_KIND, windows=140, script_body=f'''
+pid=os.getpid()
+if {change!r}=="float_pid":pid=float(pid)
+if {change!r}=="bool_pid":pid=True
+if {change!r}=="wrong_pid":pid+=1
+value={{"run_id":run_id,"worker_pid":pid,"closed":True,"request_limit":280,"reserved_requests":1}}
+if {change!r}=="float_cap":value["request_limit"]=280.0
+if {change!r}=="bool_count":value["reserved_requests"]=True
+if {form!r}=="normal":
+    value={{"worker_pid":pid,"execution_plan":{MIXED_PLAN!r},"receipt":{{"budget":value}}}}
+    path=directory/"result.json"
+else:path=directory/"deadline-receipt.json"
+path.write_text(json.dumps(value))
+''')
+                    self.assertEqual(receipt["closed"], change == "valid")
+                    self.assertEqual(receipt["close_unknown"], change != "valid")
+
+    def test_mixed_fallback_keeps_16384_limit_and_last_window_mapping(self):
+        from notalone.memory_extraction.evaluation_provider_contract import MIXED_KIND
+        for count in (3001, 16385):
+            with self.subTest(count=count):
+                receipt = self.launch(kind=MIXED_KIND, windows=140, script_body=f'''
+for i in range(1,{count + 1}):
+    (directory/"evaluation"/f"event-{{i:06}}.json").write_text(json.dumps(
+        {{"kind":"case_started","case_position":139}} if i=={count} else {{"kind":"synthetic"}}))
+''')
+                states = [row["status"] for row in receipt["case_statuses"]]
+                self.assertEqual(states, ["unknown"] * 140 if count > 16384 else ["unrun"] * 139 + ["unknown"])

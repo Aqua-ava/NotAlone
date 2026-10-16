@@ -18,6 +18,7 @@ from uuid import UUID
 import httpx
 
 from .evaluation_http_budget import EvaluationBudget, EvaluationBudgetAbort, _endpoint
+from .evaluation_provider_contract import MIXED_PLAN, MIXED_MODE, MIXED_STAGE, MIXED_REQUEST_VERSION, mixed_phase_policy
 
 
 _EVENT_KINDS = frozenset({
@@ -44,6 +45,7 @@ _CONFIG_FIELDS = frozenset({
     "response_identity_policy", "request_contract_version", "tool_choice",
     "fallback", "baseline_commit", "selected_case_positions", "verification_mode",
     "extraction_mode", "extraction_window_contracts", "execution_plan", "reference_version",
+    "phase_request_version", "phase_request_policy",
 })
 
 
@@ -150,6 +152,11 @@ class EvaluationRecordStore:
         ):
             raise EvaluationBudgetAbort("invalid_record_freeze")
         self._extraction_mode = frozen_config.get("extraction_mode", "legacy-e14")
+        self._execution_plan = frozen_config.get("execution_plan", "original")
+        self._mixed = self._execution_plan == MIXED_PLAN
+        if not self._mixed and {"phase_request_version", "phase_request_policy"} & set(frozen_config):
+            raise EvaluationBudgetAbort("invalid_record_mixed_registration")
+        self._response_sequences: set[int] = set()
         self._reference_version = "legacy-v1"
         if (self._extraction_mode == "grounded-v4"
                 or "execution_plan" in frozen_config or "reference_version" in frozen_config
@@ -201,15 +208,25 @@ class EvaluationRecordStore:
             "input_sha256": canonical_sha256(public_window_projection(build_window(case))),
         } for position, case in enumerate(cases))
         positions = config.get("selected_case_positions")
-        if (config.get("execution_plan") != "full140-grounded-v4-source-v2"
+        if self._mixed and (config.get("phase_request_version") != MIXED_REQUEST_VERSION
+                or config.get("phase_request_policy") != mixed_phase_policy()
+                or "thinking" in config or "reasoning_effort" in config
+                or config.get("base_url") != "https://api.deepseek.com"
+                or config.get("endpoint") != "https://api.deepseek.com/chat/completions"
+                or config.get("request_model") != "deepseek-flash"
+                or config.get("timeout") != 300.0
+                or type(config.get("request_contract_version")) is not int or config["request_contract_version"] != 2
+                or self._manifest["allowed_endpoints"] != ["https://api.deepseek.com/chat/completions"]):
+            raise EvaluationBudgetAbort("invalid_record_mixed_registration")
+        if (config.get("execution_plan") != (MIXED_PLAN if self._mixed else "full140-grounded-v4-source-v2")
                 or config.get("reference_version") != "source-fidelity-v2"
-                or config.get("mode") != "deepseek_bounded_full140_v4_source_v2"
-                or config.get("stage") != "full140-v4-source-v2"
+                or config.get("mode") != (MIXED_MODE if self._mixed else "deepseek_bounded_full140_v4_source_v2")
+                or config.get("stage") != (MIXED_STAGE if self._mixed else "full140-v4-source-v2")
                 or self._extraction_mode != "grounded-v4"
                 or config.get("verification_mode") != "nullable-proof-v1"
                 or config.get("tool_choice") != {
                     "extraction": {"mode": "omitted", "name": "GroundedMemoryLabelsV4"},
-                    "verification": {"mode": "omitted", "name": "SourceVerificationOutput"},
+                    "verification": {"mode": "forced" if self._mixed else "omitted", "name": "SourceVerificationOutput"},
                 }
                 or type(config.get("max_retries")) is not int or config["max_retries"] != 0
                 or self._manifest["request_limit"] != 280
@@ -219,6 +236,10 @@ class EvaluationRecordStore:
                 or any(type(item["case_position"]) is not int for item in plan)
                 or len(cases) != 140 or plan != expected):
             raise EvaluationBudgetAbort("invalid_record_full140_v4_registration")
+
+    @property
+    def execution_plan(self) -> str:
+        return self._execution_plan
 
     @property
     def reference_version(self) -> str:
@@ -315,7 +336,7 @@ class EvaluationRecordStore:
         finally:
             self._stage.reset(token)
 
-    def record(
+    def _event(
         self, *, kind: str, payload: Any, request_sequence: int | None = None,
     ) -> dict:
         stage = self._stage.get()
@@ -336,10 +357,23 @@ class EvaluationRecordStore:
             "payload": sanitized, "removed_paths": removed,
         }
         event["payload_sha256"] = canonical_sha256(event["payload"])
+        return event
+
+    def record(
+        self, *, kind: str, payload: Any, request_sequence: int | None = None,
+    ) -> dict:
+        event = self._event(kind=kind, payload=payload, request_sequence=request_sequence)
+        return self._persist(event)
+
+    def _persist(self, event: dict) -> dict:
         filename = f"event-{event['event_sequence']:06d}.json"
         receipt = self._write(filename, event)
         self._files.append((filename, canonical_sha256(receipt)))
         return receipt
+
+    def _check_response_sequence(self, sequence: int) -> None:
+        if self._mixed and (type(sequence) is not int or not 1 <= sequence <= 280):
+            self._stop("invalid_mixed_request_sequence")
 
     def _capture(self, body: bytes) -> dict:
         metadata = {
@@ -361,6 +395,7 @@ class EvaluationRecordStore:
             }
 
     def capture_request(self, sequence: int, request: httpx.Request) -> dict:
+        self._check_response_sequence(sequence)
         captured = self._capture(request.content)
         receipt = self.record(
             kind="provider_request", request_sequence=sequence,
@@ -374,6 +409,28 @@ class EvaluationRecordStore:
         return receipt
 
     def capture_response(self, sequence: int, response: httpx.Response) -> dict:
+        self._check_response_sequence(sequence)
+        if self._mixed:
+            self._response_sequences.add(sequence)
+            metadata = {
+                "capture_layer": "sdk_http_body", "capture_form": "digest_only", "redaction_version": 1,
+                "original_bytes_sha256": hashlib.sha256(response.content).hexdigest(),
+                "original_bytes_length": len(response.content), "status_code": response.status_code,
+                "response_obtained": True,
+            }
+            try:
+                captured = self._capture(response.content)
+                payload = {**captured, "status_code": response.status_code, "response_obtained": True}
+                event = self._event(kind="provider_response", request_sequence=sequence, payload=payload)
+                _canonical(event)
+            except Exception:
+                payload = {**metadata, "body_not_saved": "redaction_unavailable"}
+                event = self._event(kind="provider_response", request_sequence=sequence, payload=payload)
+            # I/O发布在保护之外；落盘失败不得补写同一终态。
+            receipt = self._persist(event)
+            if "body_not_saved" in payload:
+                self._stop("response_redaction_unavailable")
+            return receipt
         captured = self._capture(response.content)
         receipt = self.record(
             kind="provider_response", request_sequence=sequence,
@@ -384,9 +441,10 @@ class EvaluationRecordStore:
         return receipt
 
     def capture_failure(self, sequence: int, kind: str) -> dict:
+        self._check_response_sequence(sequence)
         return self.record(
             kind="provider_failure", request_sequence=sequence,
-            payload={"failure_kind": kind, "response_obtained": False},
+            payload={"failure_kind": kind, "response_obtained": self._mixed and sequence in self._response_sequences},
         )
 
     def events(self) -> tuple[dict, ...]:
@@ -507,7 +565,7 @@ class EvaluationRecordStore:
                     "kind": event["kind"],
                     **{key: event["payload"][key] for key in (
                         "capture_form", "body_not_saved", "original_bytes_sha256",
-                        "original_bytes_length", "status_code",
+                        "original_bytes_length", "status_code", "response_obtained",
                     ) if key in event["payload"]},
                 } for event in events
                     if event["kind"] in {"provider_request", "provider_response"}

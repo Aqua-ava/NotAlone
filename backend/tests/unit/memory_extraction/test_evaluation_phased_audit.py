@@ -66,6 +66,27 @@ class EvaluationPhasedAuditTest(unittest.TestCase):
                 audit(bundle)
         self.assertEqual(self.order, [])
 
+    def test_mixed_phased_identity_and_policy_are_checked_before_raw_access(self):
+        from notalone.memory_extraction.evaluation_provider_contract import MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy
+        audit = self.v4_audit(execution_plan=MIXED_PLAN, verification_tool_choice="forced")
+        self.assertEqual(audit.execution_plan, MIXED_PLAN)
+        for bundle in ({}, {"execution_plan": MIXED_PLAN},
+                       {"execution_plan": MIXED_PLAN, "phase_request_version": "other", "phase_request_policy": mixed_phase_policy()},
+                       {"execution_plan": MIXED_PLAN, "phase_request_version": MIXED_REQUEST_VERSION, "phase_request_policy": {}}):
+            with self.subTest(bundle=bundle), self.assertRaisesRegex(EvaluationBudgetAbort, "phased_execution_plan_changed"):
+                audit(bundle)
+        self.assertEqual(self.order, [])
+
+    def test_old_phased_identity_cannot_accept_mixed_policy(self):
+        from notalone.memory_extraction.evaluation_provider_contract import MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy
+        audit = self.v4_audit()
+        with self.assertRaisesRegex(EvaluationBudgetAbort, "phased_execution_plan_changed"):
+            audit({"execution_plan": MIXED_PLAN, "phase_request_version": MIXED_REQUEST_VERSION,
+                   "phase_request_policy": mixed_phase_policy()})
+        with self.assertRaises(ValueError):
+            self.v4_audit(execution_plan=MIXED_PLAN)
+        self.assertEqual(self.order, [])
+
     def test_v4_full140_old_window_uses_reviewed_v2_parent_and_seals_program(self):
         from notalone.memory_extraction.evaluation_cases import CASES
         from notalone.memory_extraction.semantic_evaluation_cases import SEMANTIC_CASES

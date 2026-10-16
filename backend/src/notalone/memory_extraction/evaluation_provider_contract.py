@@ -1,4 +1,4 @@
-"""ECNU与官方Flash最高思考的评测请求契约；生产提取路径不引用此门。"""
+"""ECNU、官方最高思考及固定分阶段评测契约；生产路径不引用此门。"""
 
 from __future__ import annotations
 
@@ -27,17 +27,35 @@ _PAYLOAD_FIELDS = frozenset({
 STRICT_RESPONSE_IDENTITY_POLICY = "first_valid_completion_observation_stop_on_change"
 KNOWN_ECNU_RESPONSE_IDENTITY_POLICY = "ecnu_configured_route_known_labels_v1"
 KNOWN_ECNU_RESPONSE_LABELS = frozenset({"deepseek-v4-flash", "deepseek-flash"})
+MIXED_PLAN = "full140-grounded-v4-source-v2-v-off-forced"
+MIXED_REQUEST_VERSION = "deepseek-phase-split-v1"
+MIXED_MODE = "deepseek_bounded_full140_v4_source_v2_v_off_forced"
+MIXED_STAGE = "full140-v4-source-v2-v-off-forced"
+MIXED_KIND = "full140-v4-v-off-forced"
+
+
+def mixed_phase_policy() -> dict:
+    """返回唯一新配对的副本；不是调用者可配置的策略表。"""
+    return {
+        "extraction": {"thinking_mode": "enabled", "reasoning_effort": "max", "tool_choice_mode": "omitted"},
+        "verification": {"thinking_mode": "disabled", "reasoning_effort": "none", "tool_choice_mode": "forced"},
+    }
 
 
 class EvaluationProviderProfile(StrEnum):
-    """仅两个显式评测配置；不接受任意端点或生产配置覆盖。"""
+    """仅已注册的封闭评测配置；不接受任意端点或生产配置覆盖。"""
 
     ECNU = "ecnu"
     DEEPSEEK_FLASH_MAX = "deepseek-flash-max"
+    DEEPSEEK_PHASE_SPLIT = "deepseek-phase-split-v1"
+
+    @property
+    def is_official(self) -> bool:
+        return self in {self.DEEPSEEK_FLASH_MAX, self.DEEPSEEK_PHASE_SPLIT}
 
     @property
     def base_url(self) -> str:
-        return ("https://api.deepseek.com" if self is self.DEEPSEEK_FLASH_MAX
+        return ("https://api.deepseek.com" if self.is_official
                 else "https://chat.ecnu.edu.cn/open/api/v1")
 
     @property
@@ -46,7 +64,7 @@ class EvaluationProviderProfile(StrEnum):
 
     @property
     def model(self) -> str:
-        return "deepseek-flash" if self is self.DEEPSEEK_FLASH_MAX else "ecnu-max"
+        return "deepseek-flash" if self.is_official else "ecnu-max"
 
 
 def validate_evaluation_policy(
@@ -73,6 +91,7 @@ class ECNUEvaluationContract:
         response_identity_policy: str = STRICT_RESPONSE_IDENTITY_POLICY,
         provider_profile: EvaluationProviderProfile | str = EvaluationProviderProfile.ECNU,
         extraction_mode: EvaluationExtractionMode | str = EvaluationExtractionMode.LEGACY_E14,
+        execution_plan: str = "original",
     ):
         validate_evaluation_policy(verification_tool_choice, response_identity_policy)
         try:
@@ -83,7 +102,12 @@ class ECNUEvaluationContract:
             self._profile = EvaluationProviderProfile(provider_profile)
         except (TypeError, ValueError):
             raise EvaluationBudgetAbort("evaluation_provider_profile_invalid") from None
-        if (self._profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
+        if ((self._profile is EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT) != (execution_plan == MIXED_PLAN)):
+            raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
+        if self._profile is EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT and (
+                verification_tool_choice != "forced" or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V4):
+            raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
+        if (self._profile.is_official
                 and response_identity_policy != STRICT_RESPONSE_IDENTITY_POLICY):
             raise EvaluationBudgetAbort("evaluation_official_identity_policy_invalid")
         self._verification_tool_choice = verification_tool_choice
@@ -231,9 +255,12 @@ class ECNUEvaluationContract:
                 raise ValueError("invalid_completion")
         except (ValueError, TypeError, KeyError, UnicodeError, AttributeError):
             raise EvaluationBudgetAbort("evaluation_completion_invalid") from None
-        if (self._profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
+        if (self._profile.is_official
                 and identity != "deepseek-flash"):
             raise EvaluationBudgetAbort("evaluation_official_reported_model_changed")
+        if self._profile is EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT and (
+                len(choices) != 1 or choices[0]["index"] != 0):
+            raise EvaluationBudgetAbort("evaluation_completion_invalid")
         if self._response_identity_policy == KNOWN_ECNU_RESPONSE_IDENTITY_POLICY:
             # 请求已绑定既有ECNU端点/ecnu-max；已授权标签只作实际观测。
             # 已知集合内变化不能推定相同权重或供应商变化。
@@ -275,8 +302,9 @@ def _validate_payload(value: dict, *, verification_tool_choice: str = "forced",
                       extraction_mode: EvaluationExtractionMode = EvaluationExtractionMode.LEGACY_E14) -> None:
     try:
         function = value["tools"][0]["function"]
-        official = provider_profile is EvaluationProviderProfile.DEEPSEEK_FLASH_MAX
-        forced = not (official or verification_tool_choice == "omitted"
+        official = provider_profile.is_official
+        mixed_v = provider_profile is EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT and function["name"] == "SourceVerificationOutput"
+        forced = mixed_v or not (official or verification_tool_choice == "omitted"
                       and function["name"] == "SourceVerificationOutput")
         fields = _PAYLOAD_FIELDS if forced else _PAYLOAD_FIELDS - {"tool_choice"}
         if official:
@@ -284,11 +312,11 @@ def _validate_payload(value: dict, *, verification_tool_choice: str = "forced",
         if (
             not isinstance(value, dict) or set(value) != fields
             or value["model"] != provider_profile.model
-            or (official and value.get("reasoning_effort") != "max")
+            or (official and value.get("reasoning_effort") != ("none" if mixed_v else "max"))
             or type(value["temperature"]) not in (float, int)
             or value["temperature"] != 0
             or value["stream"] is not False
-            or value["thinking"] != {"type": "enabled"}
+            or value["thinking"] != {"type": "disabled" if mixed_v else "enabled"}
             or not isinstance(value["messages"], list)
             or len(value["messages"]) != 2
             or any(
