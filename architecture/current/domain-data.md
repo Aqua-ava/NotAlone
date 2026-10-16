@@ -88,7 +88,7 @@ background_task
 
 - `memory_candidate` 必须有 `pending`、`confirmed`、`rejected` 或 `invalidated` 等明确状态，且候选正文、`self/contact/shared` 主体与证据范围可复核；人工确认不得丢失主体，`self` 候选必须进入 owner 级记忆。
 - 按[ADR-046](../adr/046-source-bound-dimension-evidence.md)，候选可保存带版本的 `dimension_evidence`，包含完整同范围窗口、活动来源、无正文定位／摘要、语用标签快照与四类可空依据。旧 NULL 保持未知，不重建标签、回填或重新采纳。读取时复核当前来源；来源、正文、范围、有效期或语用状态变化均不能复用旧依据。来源当前不等于语义正确或维度获批。
-- [ADR-047](../adr/047-bounded-source-semantic-proof.md)已批准版本二的可空语义依据合同，实施与隔离验证进行中；由服务端独立核完整关系，未名指称不能靠模板推归属。版本1／旧NULL不升级，业务迁移与真实质量资格分别验证。
+- [ADR-047](../adr/047-bounded-source-semantic-proof.md)已批准版本二的可空语义依据合同，现已实现并完成隔离验证；由服务端独立核完整关系，未名指称不能靠模板推归属。另按[ADR-060](../adr/060-author-arrival-quote-representation.md)增加可信单消息完整作者引句的有限包装分支，该分支单独保存无正文的来源全文／包装全文与内外层作者定位，能力由服务端逐项核定，不因依据非空或引句对齐即签全部维度。版本1／旧NULL不升级，业务迁移与真实质量资格分别验证。
 - `confirmed_memory` 默认允许满足置信度与风险门槛、并落在**已放行维度**上的模型提取记忆自动写入（见 ADR-002、ADR-024、ADR-036）：必须带来源证据、标记 `auto`、可一键撤销；带敏感或未知风险标签的候选必须先留在 `pending`，用户手动录入或修正时标记 `manual`。模型不能未经来源证据直接写入。
 - `confirmed_memory` 保留候选来源链：记录从哪个 `memory_candidate` 采纳而来（`source_candidate_id`，手动创建时为空），同时保留来源证据列表；采纳后仍可回看候选证据与采纳方式。
 - 语用解释先于记忆采纳：模型必须在有限的同联系人窗口中结构化标记说话行为、断言状态和修辞状态；确定性规则只允许“确定、字面、非歧义陈述”进入自动采纳门，计划、假设、条件、转述、纠正和未知状态只能留在 `pending`，问题、玩笑、讽刺和夸张默认不生成长期候选（见 [语用解释规格](pragmatic-interpretation.md) 与 ADR-026）。
