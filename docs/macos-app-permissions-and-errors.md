@@ -652,3 +652,11 @@ v8记录了实际变化提示及提前正式HTTP的时序，宿主日志达到51
 另一次v9空后端、独立userData的实体快捷键场首次收到用户“小窗出现了”并有瞬时visible／focused轮询通过，但紧随快照已经hidden，不能解释为已证失焦自动隐藏。旧hidden快照也不能签第二次实体隐藏。原截止内追加的同实例只读窗口监听有5752次有效轮询，未捕获新显示→隐藏序列；未收到hide真人收据，原25分钟场1项失败、runner exit1，未运行末尾正常菜单退出认证。没有延长、重启、改产品或把缺失反馈改为通过。
 
 18个已记录自有PID、2个runner组、测试目录／握手／精确随机库均已核退场，默认userData身份恢复，自有租约正常释放。v6权限、v9按键及历史CLI／模型分项分别记证，不能拼为同一版本完整交付。版本、命令、失败保留、清理及原18／20 AC边界见[独立结果](../.scratch/mac-desktop-app/finder-tcc-v6-and-keyboard-v9-result-20261016.md)。
+
+## 2026-10-16 v9独立Finder复验的权限缺口
+
+同一冻结v9包新执行两场Finder独立启动，均使用整体隔离的默认userData、随机PG、空读取授权与不可用真实CLI／模型。首场未形成微信前置的有效动作收据，180秒阶段等待结束；仅1次初始进程快照，未进入45秒微信采样，同实例新公共观察为 `paused / wechat_not_in_front`，不能判断录屏权限。第二场实际完成App菜单隐藏及微信“隐藏其他”，45秒取得301次进程快照，但未采到正式／辅助PID；不能将采样0扩称零次极短尝试或唯一根因已知。
+
+第二场runner失败后、同一Finder App及其后端仍存活且在原租期内，鉴权 `POST /api/sync/foreground/observe {}` 返回HTTP200／`unavailable / screen_capture_permission_missing`。当前v9独立启动的录屏预检未通过；只保存phase／reason／固定键，不保存身份或名称。按精确App PID过滤的TCC归属查询没有取得匹配行，responsible／accessing仍未知，不将错误响应、PID存在或v6旧许可当作当前归属认证。
+
+两场各实际启动1次、runner均exit2，失败保留；未进入用例helper／quit认证。首场还有一次20秒失败的inline Swift前台元数据诊断和一次CGWindowList只读窗口元数据查询，未取图像／名称、不属于Computer Use证据，之后停止这类查询。主Agent随后分别实际公开菜单退出，精确核对首场7个、第二场4个已记录PID及握手退场，原userData按原dev／ino整体恢复且配置正文未读，两个精确随机测试库各自删除并只读确认不存在；本场自有临时目录移除、失败lease核对身份后归档，最终租约absent。未修改权限／TCC、签名或包字节，未运行真实CLI、模型或发送消息。后继获精确v9许可后仍须新的完整实机场，不补签18／20；版本、命令和自有资源指针见[两场匿名记录](../.scratch/mac-desktop-app/finder-v9-two-attempts-20261016.md)。

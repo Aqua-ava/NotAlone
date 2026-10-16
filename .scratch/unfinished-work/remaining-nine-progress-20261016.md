@@ -79,3 +79,5 @@
 [事项指称表达切片](../grounded-v4-matter-reference/result-20261016.md)已完成：仅显式v4增加matter_reference固定未知说明和模型显式归属指导，程序不按词补码。两片红绿、grounded88、proof/V52及两源码类型检查通过，主Agent完整提取单元560通过，两轴最终0；组间覆盖不累加。原A01误拒、A05漏码及非法proof仍需新模型场检验，原21/140/Gold/质量门不改。证明策略仅设计，后继采用已有严格四槽的公开质量新合同另行准备，不给typed信用、不改生产默认。
 
 原03另完成[真实导入来源桥接](../author-quote-proof-b/import-source-bridge-result-20261016.md)：JSONL经实际导入／规范化／来源存储到loader、有限producer、待确认保存／API及来源删除闭环，37相关检查通过、8个不同随机库精确清理为0，双轴最终0。正控明确采用单消息窗口，完整多消息、首部空白及缺proof负控不缩窗或补依据；默认空表、生产默认及原03第一AC保持，不把AUTO确认分支误称MANUAL API。
+
+桌面18／20新完成[同v9两场Finder独立失败核验](../mac-desktop-app/finder-v9-two-attempts-20261016.md)：各启动1次且runner均exit2。首场未进入45秒采样，第二场301次快照未捕获原生PID；不推断绝对零尝试。第二场runner结束后、同实例存活且原租期内的公共观察明确为screen_capture_permission_missing，TCC归属仍未知；不迁移v6许可。已核两场7／4个记录PID退场、精确库及自有资源清理、默认目录身份恢复、租约absent，原18／20AC保持；新增权限和后继复验另场记录。
