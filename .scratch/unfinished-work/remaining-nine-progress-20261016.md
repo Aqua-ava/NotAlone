@@ -8,11 +8,11 @@
 | [群聊暂停人工验收01](../foreground-group-manual-acceptance/issues/01-group-pause-and-live-checklist.md) | 已resolved；实际群聊暂停与返回私聊核验已记录 | 本票范围完成 |
 | [事件优先触发01](../foreground-event-trigger/issues/01-event-capability-and-integration.md) | 已resolved；[v9最终同版实机](../foreground-event-trigger/app-frame-counts-v9-20261016.md)A→群→A画面上界1078／2782ms、辅助1初始化／154回调／84处理分账，36正式单帧，代码及报告双轴均0项 | 单A范围完成；源保守停止及周期恢复如实保留，不认证所有切换SLA、独立Finder/TCC或双联系人来信 |
 | [前台定位18](../mac-desktop-app/issues/18-foreground-locator.md) | claimed；单联系人绑定/暂停恢复已有实机；[真实CLI与正式视觉独立场](../foreground-contact-follow/real-cli-visual-20261015.md)通过 | 当前包独立启动权限和持续源边界 |
-| [本机交付20](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed；当前签名包Finder启动、真实选择/导入等分项已有证据；[真实DeepSeek合成App冒烟](../mac-desktop-app/reply-model-smoke-result-20261016.md)1／1通过，模型AC完成；[v9快捷键两场](../mac-desktop-app/native-shortcut-v9-20261016.md)保留准备超时及两次按键后未观察到显示；[后两场观察方式对照](../mac-desktop-app/native-shortcut-v9-observation-control-20261016.md)仍未通过 | 独立启动权限、系统快捷键；新增1次按键及另1场按键0，观察干扰未排除，物理键盘意愿问题未答、不预启动人工场 |
+| [本机交付20](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed；当前签名包Finder启动、真实选择/导入等分项已有证据；[真实DeepSeek合成App冒烟](../mac-desktop-app/reply-model-smoke-result-20261016.md)1／1通过，模型AC完成；[v9快捷键两场](../mac-desktop-app/native-shortcut-v9-20261016.md)及[观察方式对照](../mac-desktop-app/native-shortcut-v9-observation-control-20261016.md)旧失败保留 | 用户已完成v6新增录屏本机认证，Finder独立场收尾；用户已答实体键盘方便，v9模型上限0的新场已就绪并提示一次显示键，尚待实际反馈，不能提前签通过 |
 | [真实微信follow04](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed；单联系人有界读取、退出及视觉独立性已有证据；[v7同App总开关重开](../native-app-backend/real-sync-reenable-result-20261016.md)1／1通过，关闭65.926秒零新读取 | 第四AC空窗关停重开控制流及第五Answer记录已完成；第一／二AC持续到达与切换仍缺，不认证正向消息恢复，双联系人和真实来信保留未验证 |
 | [核心事实保留01](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed／ready-for-agent；[新独立8窗场](../grounded-evaluation/remaining-public8-result-20261016.md)B01单窗封存raw3／接受3／完整3，B02核验未知 | 无完整batch result，外层两窗仍unknown；不代签核心5命题整体，旧真实/留出不读不改 |
 | [指代消解07](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed／ready-for-agent；[main16](../grounded-evaluation/v3-main16-result-20261016.md)原封存完整11仅机械计数，A05争议撤出；[完整140旧场](../grounded-evaluation/full140-v4-result-20261016.md)首窗V未知；[新混合场](../grounded-evaluation/full140-mixed-v-off-result-20261016.md)closed6／280，3窗已审、137未跑，R002字段bad_auto硬停 | 不足≥15；旧场无审核，混合场仅3窗已审、137未跑且未达质量门；不拼旧场，旧未知V不补发 |
-| [按维度放行03](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed／ready-for-agent；结构和合取门已有实现，默认放行表仍为空 | 主集12条proof仍UNKNOWN；[有限包装决策稿](../grounded-evaluation/typed-proof-representation-decision-20261016.md)待决定，真实质量、typed依据与逐类放行分别验收 |
+| [按维度放行03](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed／ready-for-agent；结构和合取门已有实现，默认放行表仍为空 | 用户已明确采纳有限包装B；当前原21场关闭审计后已在独立工作树实施，尚未验证或整合，真实质量、typed依据与逐类放行分别验收 |
 
 本轮官方DeepSeek公开基线实际25次HTTP、零重试，13窗完成、8窗未运行；A13整组去向合同触发停止，剩余17次永久关闭。[完整结果](../grounded-evaluation/deepseek-public21-result-20261015.md)区分内容事实错误与整组auto/pending合同，不覆盖原Gold、旧失败或分母。未使用ECNU，没有上传真实聊天或放开自动采纳。
 
@@ -63,3 +63,7 @@
 下一步已预注册[原公开21窗当前v4基线](../grounded-evaluation/reference21-complete-v4-plan-20261016.md)：原21／28必需＋1可选、当前两项补全、已审来源参考v2、E max／V off具名、官方DeepSeek，独立42次零重试、从prepare绝对4小时。正在实现专属固定入口及离线控制；尚未创建新真实预算或请求，不预写模型标签、审核或质量成绩。Root已只读核九旧场均持久关闭，请求序列均为官方端点；闭账、未知及未跑不补发。三张记忆原票、原9张状态、默认空表和15张排除范围保持。
 
 该固定21入口现已完成[离线实施](../grounded-evaluation/reference21-complete-v4-implementation-20261016.md)：完整SDK Mock21E＋19V＝40／42、末窗B02到达，公开runner57、完整评测集成112通过；Root最终评测单元208及8源码类型通过，两轴17文件及owned增量均0。原回收代码的真实EPERM探针红6／20，首修后Root206仍1个fork错误，最终以原每信号1秒绝对截止修复嵌套100毫秒先停的结构缺口；真实fork200毫秒控制先红后绿、owned14及新旧fork10次实际ESRCH均通过。OS仍可返回EPERM、四个早期无PID及重建preSHA限制保留，不补签历史退出或宣称其原因已全证。现在只完成准备，尚无新真实预算、模型质量、typed或放行；Root最终文档窄核、prepare、本地提交扫描后另行唯一启动。原9仍3 resolved／6 claimed，三记忆票及15排除保持。
+
+## 原21当前基线已关闭，有限包装B进入实施
+
+[新原21场](../grounded-evaluation/reference21-complete-v4-result-20261016.md)已closed10／42、十200、零重试，A01–A04已审、A05 proof来源11码点却提交[0,12)而严格失败、其余16未跑。必需raw5／接受3／完整2、E55／56、V14／16，两safe／两general_error；A01误拒绝、A04未知事项说明不具体。已审安全项0不代签未审A05；旧matcher的A02 false_fact差异原样保留。原21／28＋1、主集≥15、B01／B02核心与私人严格/留出分母不变，四条已审proof仍UNKNOWN。Root关闭后且后继源码改动前86源／61事件／8正式收据／只读SQL／PID及PG94146实际ESRCH核验完成，余32永久关闭，无自动后继。用户已采纳B，在独立工作树按完整作者到家规则做版本化表示/能力及隔离验证，生产默认空表保持；三原记忆票及15排除不结。
