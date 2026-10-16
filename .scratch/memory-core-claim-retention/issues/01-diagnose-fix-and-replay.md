@@ -228,3 +228,6 @@ Blocked by: none
 
 
 2026-10-16：完整140新场`fd4d9056-1eb8-4848-8122-da7f7747e7d0`已closed2／280，首窗A01 E取得HTTP200、V读取超时且无响应，unknown1／unrun139，raw及full均0；B01/B02没有新场信用。余278永久关闭，85源与8事件及自有退场已核；[结果](../../grounded-evaluation/full140-v4-result-20261016.md)不替代旧部分场、真实／留出或核心整体门，原State／AC保持。
+
+
+2026-10-16：完整140混合合同真实场已独立closed6／280、六HTTP200、零重试，三窗已审／137窗未跑；[实际结果](../../grounded-evaluation/full140-mixed-v-off-result-20261016.md)必需raw4／接受4／完整2，R002分类与有效起点错误进入评测auto，bad_auto2触发硬停（新增现实假事／错人0）。五proof均UNKNOWN/untrusted_source，余274关闭，资源退场核验完成；不拼旧样本凑≥15、不认证完整140、typed或逐类放行，默认空表及本票State／AC保持。后继只先离线定位，无自动补发或新批次。

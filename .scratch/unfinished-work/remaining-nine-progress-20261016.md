@@ -50,3 +50,6 @@
 [固定分阶段完整140离线合同](../grounded-evaluation/full140-mixed-v-off-implementation-20261016.md)现已实现：E max／省略工具选择、V off／强制具名，在新执行身份／请求版本／source-fidelity-v2及89源下闭合准入。完整Mock为140E＋138V＝278、末窗与cap280闭账，旧runner9项通过；Root评测单元193／集成112分别通过、类型10文件通过、两轴15文件初审均0、最终纯prepare1项通过。新profile安全响应观测覆盖NaN／孤立代理，旧profile保留；首次Mock自改闭包硬停已如实记录。A13旧输出条件重现仍按bad_auto停止，没有放宽整组规则；本准备不认证质量或typed。当前尚未创建新真实预算，下一步仅Root按现有授权最终核freeze后唯一启动，原票／默认空表保持。
 
 随后完整混合新场已唯一启动：run `5a6c08fa-c123-4fb7-8acd-cd2dccdd7acc`、基线`4fca308e`，freeze字节SHA`28be25143809cd43b30a34b732920d6bd4255b93116fec32dc76e47ef9e8ad8f`。Root核89源／原140映射／参考v2／实际阶段策略及零dirty交集，旧八场closed、新registry在绑定授权前不存在；自有worker／PG18352已activation、synthetic=false。cap280、零重试、600秒调用／审核，工作截止2026-10-17 10:27:02、外层10:27:22（台北时间）；完成／错误即停。RAW Agent只看前层、Root只做FULL，当前尚无完成窗或质量成绩，不预签、不拼旧场。冻结源码／计划／实施／ADR从此不再编辑；本进度文件已核不在闭包内。没有业务PG、真实聊天、GUI或外部发送。
+
+
+完整混合场现已[第三窗安全停止并闭账](../grounded-evaluation/full140-mixed-v-off-result-20261016.md)：6／280、六HTTP200、零重试，A01 safe、R001 general_error、R002 safety_error，completed3／unrun137，余274永久关闭。三RAW及三FULL均先后封存并received，实际必需raw4／接受4／完整2、E字段65／70、V字段13／20、V语义1／5。R002保留学生及专业正文但category与valid_at各错，V漏检后两条进入评测auto形成bad_auto2；人工新增假事／错人均0，不把原维度聚合false_facts=2冒充现实假事。五proof均UNKNOWN/untrusted_source、无typed或业务采纳信用。关闭后、后继源码改动前89源／39事件／摘要／只读SQL／六审核收据已核，1022.230秒受控退出、自有worker／组gone且无清理错误；无自动后继。原9张仍3 resolved／6 claimed，后继先离线定位稳定本人事实类型和时间契约，默认空表／原Gold／未跑分母不变。
