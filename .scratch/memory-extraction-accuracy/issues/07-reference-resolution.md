@@ -101,3 +101,6 @@
 ### 2026-10-16 固定16窗主集契约停止
 
 [独立主集结果](../../grounded-evaluation/v3-main16-result-20261016.md)已closed22／32、22次官方DeepSeek HTTP200、零重试，余10永久关闭；A01–A10完成raw／full，A11的V没有结构化工具参数而failed，A12–A16 unrun。已审核13个必需raw13／接受13／完整11、E14为167／168，8窗safe、2窗general_error（A04空事项歧义、A08实际0.65导致pending）；不因HTTP200或V supported补分。12条proof均UNKNOWN，最终评测auto4／pending8，无业务采纳。关闭时79源一致、139事件与20份审核收据核验、worker／组gone；仅10窗不足≥15，原票State／五AC、旧失败及空放行表保持，不拼旧场。另经结果Spec复审发现A05冻结Gold及sealed审查将未解车主认作姐姐，与已批准D2冲突；上述raw／完整／safe为原封存机械计数，不将A05作为无争议质量或安全证据。原完整11中其余10可引用，原记录不改，未来参考另行显式修正。
+
+
+2026-10-16：已审来源v2与v4固定完整140入口完成离线装配；真实新场`fd4d9056-1eb8-4848-8122-da7f7747e7d0`closed2／280，首窗V读取超时远端未知、后139未跑，raw／full0。没有新场完成或≥15质量信用，旧A05争议不由此覆盖；余278永久关闭、不补发未知V。[结果](../../grounded-evaluation/full140-v4-result-20261016.md)保留140／138＋1分母及原State／AC。

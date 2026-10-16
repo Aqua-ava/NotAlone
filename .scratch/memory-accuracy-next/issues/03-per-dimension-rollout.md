@@ -104,3 +104,6 @@
 ### 2026-10-16 主集质量与来源证明继续分账
 
 [独立16窗场](../../grounded-evaluation/v3-main16-result-20261016.md)已closed22／32：10窗显式审核、13必需raw13／接受13／完整11，2一般错误；A11工具契约失败、其余5窗unrun，不满足≥15或质量门。12条proof为null11／非null提案1，但程序全部UNKNOWN（untrusted_source6／scope_not_supported6），source_bound=false／semantic_basis=null；A05提案不证明产权。评测auto4／pending8无业务写入，默认空表、AND门、第一AC及State不变。[有限包装决策稿](../../grounded-evaluation/typed-proof-representation-decision-20261016.md)仅待用户决定是否扩展D2候选表示，尚未实现或生成新依据，不把模型范围授权当逐类放行。另经结果Spec复审发现A05冻结Gold及sealed审查将未解车主认作姐姐，与已批准D2冲突；上述raw／完整／safe为原封存机械计数，不将A05作为无争议质量或安全证据。原完整11中其余10可引用，原记录不改，未来参考另行显式修正。
+
+
+2026-10-16：完整140新场`fd4d9056-1eb8-4848-8122-da7f7747e7d0`closed2／280，首窗V读取超时未取得响应，raw／full0、无本场V判定或typed程序信用，后139未运行；不能把未执行写成模型主动给null或全部proof已审UNKNOWN。余278永久关闭，[结果](../../grounded-evaluation/full140-v4-result-20261016.md)不构成质量／逐类批准，默认空表、原State及AC保持。
