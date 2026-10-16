@@ -1163,7 +1163,7 @@ class SyntheticCredentialBindingTest(RunnerBackedTest):
             )
 
     def test_runner_binding_path_uses_the_same_named_tool_shape(self) -> None:
-        """runner 的 `_invoke` 与产品核验共用同一具名工具绑定形状。"""
+        """runner 与产品非官方 Flash 路由保留同一具名工具形状。"""
 
         source = RUNNER_PATH.read_text(encoding="utf-8")
         tree = ast.parse(source)
@@ -1199,6 +1199,11 @@ class SyntheticCredentialBindingTest(RunnerBackedTest):
             for keyword in traced_calls[0].keywords
             if keyword.arg == "tool_options"
         )
+        # 官方 Flash 思考模式改用默认 auto；本实验的 ECNU 具名绑定保持。
+        self.assertIsInstance(options, ast.IfExp)
+        self.assertEqual(ast.unparse(options.test), "is_official_deepseek_flash(self._model)")
+        self.assertEqual(ast.literal_eval(options.body), {})
+        options = options.orelse
         self.assertEqual(ast.literal_eval(options.keys[0]), "tool_choice")
         self.assertEqual(
             ast.unparse(options.values[0]),

@@ -28,6 +28,7 @@ from notalone.memory_extraction.verification import (
 from notalone.memory_trace import TraceWriteError
 from notalone.memory_trace.context import record_ledger_entry
 from notalone.memory_trace.transport import invoke_traced_model
+from notalone.reply.adapters.deepseek_provider import is_official_deepseek_flash
 
 SOURCE_VERIFICATION_SYSTEM_PROMPT = """逐条比较记忆候选与同一联系人窗口中的原话，
 只判断候选是否忠实保留原话，不证明现实世界真假；这不是只判断某个子句在逻辑上是否成立。
@@ -332,7 +333,8 @@ class LangChainSourceVerificationRuntime:
                 self._model,
                 purpose="verification",
                 schema=schema,
-                tool_options={
+                # 官方 Flash 的思考模式不支持强制工具；保留默认 auto 和原返回校验。
+                tool_options={} if is_official_deepseek_flash(self._model) else {
                     "tool_choice": SOURCE_VERIFICATION_SCHEMA["title"]
                 },
                 messages=[
