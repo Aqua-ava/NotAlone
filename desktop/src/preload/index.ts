@@ -6,6 +6,7 @@ import type { AppBridge } from '../shared/app-bridge';
 import { createBackendBridge } from './backend';
 import { createSetupBridge } from './setup';
 import { createStartupBridge } from './startup';
+import { createScreenPermissionBridge } from './screen-permission';
 import { createContactSessionBridge } from './contact-session';
 import { createImportBridge } from './imports';
 import { createReplyBridge } from './reply';
@@ -19,6 +20,7 @@ const bridge: AppBridge = {
   backend: createBackendBridge(ipcRenderer),
   setup: createSetupBridge(),
   startup: createStartupBridge(ipcRenderer),
+  screenPermission: createScreenPermissionBridge(ipcRenderer),
   contacts: createContactSessionBridge(ipcRenderer),
   imports: createImportBridge(ipcRenderer),
   replies: createReplyBridge(ipcRenderer),

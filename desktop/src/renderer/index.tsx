@@ -1,4 +1,5 @@
 import { ForegroundPanel, useForegroundState } from './ForegroundPanel';
+import { ScreenPermissionPanel, useScreenPermission } from './ScreenPermissionPanel';
 import { CandidateCopyControls } from './CandidateCopyControls';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -26,6 +27,7 @@ document.title = helper ? 'NotAlone · 输入小窗' : 'NotAlone · 管理后台
 function App() {
   const backend = useBackendState();
   const startup = useStartupState();
+  const permission = useScreenPermission();
   const contactSession = useContactSession();
   const replies = useReplySession();
   const foreground = useForegroundState(window.notalone.foreground, helper);
@@ -46,7 +48,7 @@ function App() {
       <button className="icon-button" aria-label="隐藏输入小窗" title="隐藏输入小窗"
         onClick={() => void operate(window.notalone.hideWindow)}><Icon name="close" size={16} /></button>
     </header>
-    <ForegroundPanel state={foreground} session={contactSession} />
+    <ForegroundPanel state={foreground} session={contactSession} permission={permission} />
     {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} />
       : replies.state.mode === 'initiate_conversation' ? <ProactiveReplyInput replies={replies} /> : <DirectedReplyInput replies={replies} />}
     {replies.state.messageNotice.phase === 'connected' && <p role="status">{replies.state.messageNotice.needsRefresh
@@ -89,7 +91,7 @@ function App() {
         <BackendConnectionNote state={backend} />
         {page === 'config' ? <StartupSettings state={startup} backend={backend} />
           : startup.phase !== 'ready' && <StartupReadiness state={startup} onConfigure={() => setPage('config')} />}
-        {page === 'config' && <><SetupPanel /><DesktopControls /></>}
+        {page === 'config' && <><ScreenPermissionPanel view={permission} /><SetupPanel /><DesktopControls /></>}
         {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} />}
         {page === 'import' && <ImportPage session={contactSession} />}
         {page === 'memory' && <MemoryPage session={contactSession} navigate={setPage} />}

@@ -1,5 +1,13 @@
 # macOS App 权限与启动错误记录
 
+## 2026-10-16 屏幕录制权限启动引导
+
+用户实机截图显示正式小窗只提示缺少屏幕录制权限，没有授权入口。当前正式采集调用 `CGPreflightScreenCaptureAccess` 静默预检；旧菜单栏验证 App 的请求入口不属于正式 Electron App。此次补充启动时的只读检查和用途提示，只有用户明确点击授权才由当前包内同身份探针调用 `CGRequestScreenCaptureAccess`，拒绝或未生效时提供固定系统设置及重新检测入口。
+
+授权流程不采图、OCR、读取微信元数据或正文，不直接改 TCC、Info.plist、entitlements、签名身份、联系人绑定及同步开关；普通观察继续静默。系统可能保留旧拒绝而不再次显示请求，不能承诺每次点击都重新弹出系统对话框。测试边界为原生严格命令、可信宿主具名 IPC 与生产页面；实际授权仍由用户决定，离线测试不证明已授权。
+
+验证：`npm test` 的类型及83项安全回归通过；完整Swift108项、2项既有实验跳过、0失败；构建、附带自研探针的v2包及递归严格签名通过。Computer Use在独立userData实际看到启动用途提示，选择“稍后”进入App、配置页／小窗恢复按钮及静默复查已见；中途实际运行路径切换，后续系统请求／设置跳转不认证为同包闭环。原userData按device／inode核对恢复后，将v2更新至默认输出，ASAR摘要一致；正常菜单退出旧进程后重新打开该输出，再次看到用途提示，留给用户亲自授权。本轮没有接受系统权限或TCC重置，尚不认证授权生效、TCC责任归属或自动联系人识别。Standards问题修复后0项、Spec0项，见[本轮任务](../.scratch/screen-recording-onboarding/issues/01-startup-permission-recovery.md)。
+
 ## 2026-10-16 Dock 图标形状与可见尺寸
 
 原打包脚本把横向 Logo 补成 1024×1024 的实色直角画布，导致 macOS 15 Dock 中的外框明显大于相邻 App。现使用独立的 1024×1024、sRGB、透明 PNG 母版：824×824 圆角底板、每边 100 留白、185 圆角半径、轻阴影，原 Logo 等比居中；传统 `.icns` 的十种普通／Retina 表示继续由 `sips` 和 `iconutil` 生成。开发生成器使用系统 CoreGraphics／ImageIO，普通打包只读取母版，不修改权限、entitlements、bundle identifier 或签名策略。

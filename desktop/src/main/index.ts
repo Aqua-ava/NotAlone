@@ -4,7 +4,11 @@ import { openHeaderChangeDiagnostics } from './foreground/header-change-diagnost
 import { resolveHeaderChangeSourcePath } from './backend/bundled-helpers';
 import { CandidateCopyController } from './candidate-copy/controller';
 import { installElectronCandidateCopy } from './candidate-copy/electron';
-import { app, dialog, ipcMain, Menu, protocol, session } from 'electron';
+import { app, dialog, ipcMain, Menu, protocol, session, shell } from 'electron';
+import { ScreenPermissionController } from './screen-permission/controller';
+import { inspectScreenPermission } from './screen-permission/native';
+import { installScreenPermissionBridge } from './screen-permission/bridge';
+import { resolveSyncProbePath } from './backend/bundled-helpers';
 import path from 'node:path';
 import { electronPageCommands } from './electron-page-commands';
 import { installResources } from './resources';
@@ -54,6 +58,22 @@ void app.whenReady().then(async () => {
   const commands = electronPageCommands(windows);
   const contacts = installContactSessionBridge(commands, backend);
   const foreground = installForegroundBridge(commands, backend, contacts);
+  const screenPermission = new ScreenPermissionController({
+    inspect: async (request, signal) => inspectScreenPermission(
+      await resolveSyncProbePath(resourcesDirectory), request, signal),
+    prompt: async () => (await dialog.showMessageBox({ type: 'info',
+      title: '开启微信会话自动识别', message: 'NotAlone 需要屏幕录制权限来识别当前微信会话',
+      detail: '仅在本机分析前台微信窗口并识别会话名称，不保存或上传画面，不识别聊天正文。点击“前往授权”后由系统请求许可；若系统没有再次弹窗，可在系统设置中允许当前 NotAlone。暂不授权时仍可手动选择联系人，已授权范围的后台文字同步独立运行。',
+      buttons: ['前往授权', '稍后'], defaultId: 0, cancelId: 1,
+    })).response === 0,
+    openSettings: () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'),
+    onGranted: () => foreground.observeBeforeShow(),
+  });
+  installScreenPermissionBridge(commands, screenPermission);
+  foreground.onStateChanged((state) => {
+    if (state.reason === 'screen_capture_permission_missing') screenPermission.noteMissing();
+  });
+  app.on('before-quit', () => screenPermission.dispose());
   const headerChangeDiagnostics = openHeaderChangeDiagnostics(process.env);
   const headerChanges = new NativeHeaderChangeSource(async () =>
     resolveHeaderChangeSourcePath(resourcesDirectory), headerChangeDiagnostics);
@@ -143,7 +163,9 @@ void app.whenReady().then(async () => {
       { label: '关闭窗口', role: 'close' },
     ] },
   ]));
-  openWindow('manager');
+  void windows.open('manager').then(() => screenPermission.startup()).catch(() => {
+    if (!quitting) dialog.showErrorBox('NotAlone', '窗口暂时无法打开，请从“窗口”菜单重试。');
+  });
 }).catch(() => {
   dialog.showErrorBox('NotAlone', '应用暂时无法启动，请关闭后重试。');
 });

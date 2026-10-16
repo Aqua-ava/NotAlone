@@ -1,6 +1,27 @@
 import CoreGraphics
 import Foundation
 
+// 权限入口独立于窗口与图像采集；系统 API 可注入，以合成测试约束静默预检。
+public enum ScreenCapturePermissionCommand {
+    public static func run(
+        arguments: [String],
+        preflight: () -> Bool = { CGPreflightScreenCaptureAccess() },
+        request: () -> Bool = { CGRequestScreenCaptureAccess() }
+    ) throws -> [String: Any]? {
+        guard arguments.contains("--screen-capture-permission") || arguments.contains("--request") else {
+            return nil
+        }
+        let shouldRequest = arguments == ["--screen-capture-permission", "--json", "--request"]
+        guard arguments == ["--screen-capture-permission", "--json"] || shouldRequest else {
+            throw ProbeError.invalidArguments("屏幕录制权限参数无效，未检查或请求权限。")
+        }
+        if shouldRequest {
+            _ = request()
+        }
+        return ["ok": true, "granted": preflight()]
+    }
+}
+
 // 用 0 到 1 的比例描述聊天区域，方便适配不同尺寸的微信窗口。
 public struct CropRect: Equatable {
     public let x: Double

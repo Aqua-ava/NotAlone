@@ -11,6 +11,7 @@ import { createBindingConsentBridge } from '../../src/preload/binding-consent';
 import { createSyncControlBridge } from '../../src/preload/sync-control';
 import { createBackendBridge } from '../../src/preload/backend';
 import { createStartupBridge } from '../../src/preload/startup';
+import { createScreenPermissionBridge } from '../../src/preload/screen-permission';
 import type { AppBridge } from '../../src/shared/app-bridge';
 
 // 默认关闭；仅本轮普通页面的公开传输控制观察事件与原Promise，不替换业务处理器。
@@ -44,6 +45,7 @@ const bridge: AppBridge = {
   sources: createSourceDeletionBridge(transport),
   traces: createTraceBridge(transport),
   backend: createBackendBridge(transport), startup: createStartupBridge(transport),
+  screenPermission: createScreenPermissionBridge(transport),
   contacts: createContactSessionBridge(transport), memory: createMemoryBridge(transport), replies: createReplyBridge(transport),
   styleSamples: createStyleSampleBridge(transport),
   openManager: () => transport.invoke('page:open-manager'), openHelper: () => transport.invoke('page:open-helper'), hideWindow: unsupported,

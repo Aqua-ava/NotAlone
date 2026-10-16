@@ -16,6 +16,7 @@ private struct ProbeOptions {
         [--crop x,y,width,height] [--show-text]
       swift run notalone-sync-probe --session [--show-text]
       swift run notalone-sync-probe --session --json [--minimal-region] [--single-frame]
+      swift run notalone-sync-probe --screen-capture-permission --json [--request]
       swift run notalone-sync-probe --calibrate-minimal-region --json [--coordinates]
       swift run notalone-sync-probe --verify-minimal-region --json
 
@@ -30,7 +31,9 @@ private struct ProbeOptions {
       --preview-foreground 前台状态悬浮验收，仅查询元数据、不截图或OCR，8分钟退出。
       --header-change-source --json  宿主专用：最多60秒，只发顶部局部变化/暂停事件，不OCR或保存帧。
       --foreground-status --json  开发诊断：只输出前台分类及前置检查，不创建窗口或采集图像。
-      --json               与 --session 配合输出机器可读 JSON，供本机同步驱动解析。
+      --screen-capture-permission --json  仅静默检查屏幕录制权限，不读取窗口或采集图像。
+      --request            仅可追加到权限入口；显式请求后重新检查，不采集图像或OCR。
+      --json               与专用入口配合输出机器可读 JSON，供本机宿主解析。
       --minimal-region     仅与 --session --json 配合；保留兼容参数，不使用人工坐标。
       --single-frame       仅与 --session --json 配合；显式要求单帧，输出automatic-header-v3及UTC采集时点。
       --calibrate-minimal-region  用户框选五处最小区域，只输出待校验几何，不截图。
@@ -101,6 +104,10 @@ struct NotAloneSyncCLI {
     static func main() async {
         do {
             let arguments = Array(CommandLine.arguments.dropFirst())
+            if let permission = try ScreenCapturePermissionCommand.run(arguments: arguments) {
+                printJsonLine(permission)
+                return
+            }
             if arguments == ["--header-change-source", "--json"] {
                 exit(await HeaderChangeSource.run() ? EXIT_SUCCESS : EXIT_FAILURE)
             }

@@ -2,6 +2,7 @@ import type { ContactSessionView } from './contact-session';
 import { useEffect, useState } from 'react';
 import { initialForegroundState, type ForegroundBridge, type ForegroundState } from '../shared/foreground-bridge';
 import { foregroundFailureReason, isTransientForegroundContextChange } from '../shared/foreground-failure.mjs';
+import { ScreenPermissionPanel, type ScreenPermissionView } from './ScreenPermissionPanel';
 
 export function useForegroundState(bridge: ForegroundBridge, enabled: boolean): ForegroundState {
   const [state, setState] = useState<ForegroundState>(initialForegroundState);
@@ -18,7 +19,7 @@ export function useForegroundState(bridge: ForegroundBridge, enabled: boolean): 
   return state;
 }
 
-export function ForegroundPanel({ state, session }: { state: ForegroundState; session?: ContactSessionView }) {
+export function ForegroundPanel({ state, session, permission }: { state: ForegroundState; session?: ContactSessionView; permission?: ScreenPermissionView }) {
   const failure = foregroundFailureReason(state.reason);
   const paused = state.phase === 'paused' || state.suspendedByHelperFocus;
   const message = state.unsupportedConversation ? '群聊暂不支持，前台联系人匹配与新生成已暂停'
@@ -31,10 +32,14 @@ export function ForegroundPanel({ state, session }: { state: ForegroundState; se
       ? '本轮观察繁忙，等待重新识别'
     : state.phase === 'unavailable' && state.reason === 'foreground_application_unavailable'
       ? '系统前台状态未知，请手动选择本次联系人'
+    : state.phase === 'unavailable' && state.reason === 'screen_capture_permission_missing'
+      ? '缺少屏幕录制权限，授权后可重新识别微信会话'
     : state.phase === 'unavailable' && failure ? `${failure.message}，请手动选择本次联系人`
     : state.phase === 'unavailable' ? '前台定位暂不可用，请手动选择联系人' : '前台定位尚未观察';
   return <section aria-label="前台会话定位">
     <p role="status">{message}</p>
+    {permission && (state.reason === 'screen_capture_permission_missing' || permission.state.phase === 'missing')
+      && <ScreenPermissionPanel view={permission} compact />}
     {!paused && !state.unsupportedConversation && state.recognizedName && <p>
       微信会话：{state.recognizedName}
       {state.recognitionConfidence !== null && <small> · 识别置信度 {Math.round(state.recognitionConfidence * 100)}%</small>}
