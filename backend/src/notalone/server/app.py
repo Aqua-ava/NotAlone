@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Callable, Mapping
+from typing import Any, Callable, Mapping
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 

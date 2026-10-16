@@ -8,7 +8,15 @@ import signal
 import sys
 import threading
 import time
+from typing import TYPE_CHECKING
 from uuid import UUID
+
+if TYPE_CHECKING:
+    # 装配函数内仍按需局部导入，避免启动路径拉起全部应用服务；
+    # 这里只为注解提供名字，运行时不求值。
+    from notalone.application.import_service import ImportService
+    from notalone.application.memory_service import MemoryService
+    from notalone.application.skill_service import LedgerService, SkillService
 
 from notalone.front_sync.factory import (
     build_cli_full_sync_engine,
