@@ -19,11 +19,15 @@ from notalone.persistence.locks import (
     release_global_worker_lock, try_acquire_global_worker_lock,
 )
 from notalone.application.import_service import ImportService
+from notalone.memory_extraction.dimensions import DimensionRelease
 from notalone.persistence.postgres_repository import PostgresIngestRepository
 from notalone.server.app import create_app
 
 from tests.integration.server.core_business_flow_support import (
     CoreBusinessFlowFixture, HttpBackend, ScriptedCoreModel, tool_response,
+)
+from tests.integration.server.background_task_wait import (
+    BACKGROUND_TASK_WAIT_SECONDS, wait_for_task,
 )
 
 
@@ -50,7 +54,9 @@ class AutoMemoryModel(ScriptedCoreModel):
         return gate
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        del stop, run_manager, kwargs
+        del stop, run_manager
+        # 协议来自本次Runnable参数，其他线程重新绑定工具不能改写本次调用。
+        requested = tuple(tool["function"]["name"] for tool in kwargs.get("tools", ()))
         with self.call_lock:
             index = len(self.seen_calls)
             self.seen_calls.append(messages)
@@ -62,26 +68,48 @@ class AutoMemoryModel(ScriptedCoreModel):
         if index in self.errors:
             raise self.errors[index]
         content = str(messages[-1].content)
-        if "MemoryAdjudicationOutput" in self.bound_tool_names:
+        if requested == ("GroundedMemoryLabels",):
+            labels = {}
+            unit_schemas = kwargs["tools"][0]["function"]["parameters"]["properties"]["units"]["properties"]
+            for unit, sender, raw in re.findall(
+                r"^\[([0-9]+:[0-9]+)\] \[target\] sender=(contact|self) .*? 原文=(.*)$",
+                content, re.MULTILINE,
+            ):
+                preference = re.fullmatch(
+                    r"(?:核心验收[^：\n]+：)?我平时喜欢[^。！？!?]+。?", raw,
+                )
+                label = {
+                    "kind": "preference" if preference else "not_memory",
+                    "subject": sender, "topic": "other", "dependency": None,
+                    "unresolved": False, "confidence": 0.95, "sensitivity": "none",
+                }
+                # 只在本次协议包含事件字段时返回，兼容独立主线装配。
+                if "event" in unit_schemas[unit]["properties"]:
+                    label["event"] = None
+                labels[unit] = label
+            response = tool_response("GroundedMemoryLabels", {"units": labels})
+        elif requested == ("MemoryAdjudicationOutput",):
             response = tool_response("MemoryAdjudicationOutput", {
                 "action": "add", "replaced_memory_id": None,
             })
-        elif content.startswith("{"):
+        elif requested == ("SourceVerificationOutput",):
             payload = json.loads(content)
-            if "candidates" in payload:
-                response = tool_response("SourceVerificationOutput", {"results": [{
-                    "candidate_index": candidate["candidate_index"],
-                    "verdict": "supported", "issues": [],
-                    "evidence": [{"message_id": candidate["source_message_ids"][0],
-                                  "quote": next(row["text"].split("：", 1)[-1]
-                                                for row in payload["messages"]
-                                                if row["message_id"] == candidate["source_message_ids"][0])}],
-                } for candidate in payload["candidates"]]})
-            else:
-                response = tool_response("MemoryAdjudicationOutput", {
-                    "action": "add", "replaced_memory_id": None,
-                })
-        else:
+            parameters = kwargs["tools"][0]["function"]["parameters"]
+            result_properties = parameters["properties"]["results"]["items"]["properties"]
+            results = [{
+                "candidate_index": candidate["candidate_index"],
+                "verdict": "supported", "issues": [],
+                "evidence": [{"message_id": candidate["source_message_ids"][0],
+                              "quote": next(row["text"]
+                                            for row in payload["messages"]
+                                            if row["message_id"] == candidate["source_message_ids"][0])}],
+            } for candidate in payload["candidates"]]
+            if "proof" in result_properties:
+                # 本合成偏好不属于有限全文改写证明语法，不能伪造证明。
+                for result in results:
+                    result["proof"] = None
+            response = tool_response("SourceVerificationOutput", {"results": results})
+        elif requested == ("MemoryExtractionOutput",):
             matches = re.findall(
                 r"\[target\] \[message_id=([0-9a-f-]+)\].*?我平时喜欢([^。]+)。",
                 content,
@@ -95,12 +123,16 @@ class AutoMemoryModel(ScriptedCoreModel):
                 "figurative_type": "literal", "alternatives": [],
                 "interpretation_reason": "联系人直接陈述自己的口味。",
             } for message_id, tea in matches]})
+        else:
+            raise AssertionError("合成自动导入模型只接受提取、来源核验和裁决协议。")
         return ChatResult(generations=[ChatGeneration(message=response)])
 
 
 class ImportAutoFlowHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
     extraction_model_factory = AutoMemoryModel
     production_model_wiring = True
+    # 本组合核对自动写入后的事务与调度；默认门另沿None装配验证待确认。
+    dimension_release = DimensionRelease(gate_enabled=False)
 
     def setUp(self):
         super().setUp()
@@ -158,19 +190,14 @@ class ImportAutoFlowHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         return self._get(backend, f"/api/tasks/status?contact_id={imported['contact_id']}"
                         f"&task_id={imported['task_id']}")
 
-    def _wait_task(self, backend, imported, expected, *, timeout=10):
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            task = self._task(backend, imported)
-            if task["status"] == expected:
-                return task
-            threading.Event().wait(0.02)
-        self.fail(f"原任务未进入 {expected}：{task}")
+    def _wait_task(self, backend, imported, expected, *, timeout=BACKGROUND_TASK_WAIT_SECONDS):
+        return wait_for_task(backend, imported, expected, timeout=timeout)
 
     def _memory(self, backend, imported):
         self._wait_task(backend, imported, "succeeded")
         memories = self._get(backend, f"/api/contacts/{imported['contact_id']}/memories")["memories"]
-        imported["memory"] = next(row for row in memories if row["text"] == f"联系人喜欢{imported['tea']}。")
+        expected = f"联系人原话：“{imported['fact_message']['text']}”"
+        imported["memory"] = next(row for row in memories if row["text"] == expected)
         self.assertEqual(imported["memory"]["adoption_method"], "auto")
         self.assertEqual(imported["memory"]["source_ids"], [imported["fact_message"]["message_id"]])
 
@@ -198,7 +225,7 @@ class ImportAutoFlowHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
             backend, f"/api/contacts/{contact_id}/memory-candidates",
         )["candidates"]
         self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0]["text"], "联系人喜欢茉莉茶。")
+        self.assertEqual(candidates[0]["text"], f"联系人原话：“{imported['fact_message']['text']}”")
         self.assertEqual(candidates[0]["status"], "pending")
         self.assertEqual(
             candidates[0]["source_ids"], [imported["fact_message"]["message_id"]],
@@ -390,6 +417,37 @@ class ImportAutoFlowHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self._memory(self.backend, imported)
         self.assertEqual(self._task(self.backend, imported)["retry_count"], 0)
 
+    def test_worker_contention_can_outlast_short_wait_without_failing_task(self):
+        with psycopg.connect(self.database_url, autocommit=True) as connection:
+            self.assertTrue(try_acquire_global_worker_lock(connection))
+            released = False
+            try:
+                imported = self._import_auto(self.backend, "后台排队后完成", "茉莉茶")
+                queued = self._task(self.backend, imported)
+                self.assertEqual(queued["status"], "queued", queued)
+                self.assertEqual(queued["retry_count"], 0)
+                # 跨过旧10秒截止；在测试线程释放锁，不跨线程共享PG连接。
+                release_at = time.monotonic() + 11
+                original_request = self.backend.request
+
+                def request(*args, **options):
+                    nonlocal released
+                    if not released and time.monotonic() >= release_at:
+                        release_global_worker_lock(connection)
+                        released = True
+                    return original_request(*args, **options)
+
+                with patch.object(self.backend, "request", request):
+                    completed = self._wait_task(self.backend, imported, "succeeded")
+                self.assertEqual(completed["task_id"], imported["task_id"])
+                self.assertEqual(completed["retry_count"], 0)
+                self.assertTrue(released, "合成Worker锁没有按计划释放。")
+                self.assertTrue(all(step["status"] == "succeeded" for step in completed["steps"]))
+                self.assertTrue(all(step["attempt_count"] == 1 for step in completed["steps"]))
+            finally:
+                if not released:
+                    release_global_worker_lock(connection)
+
     def test_missing_execution_resources_stops_before_claim_with_persistent_reason(self):
         with patch("notalone.memory_extraction.cli_support.build_deepseek_model",
                    side_effect=RuntimeError("合成模型执行资源暂缺")):
@@ -454,7 +512,7 @@ class ImportAutoFlowHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         # 调度固定新任务；既有联系人执行器仍可覆盖同范围有效历史消息。
         self.assertEqual({row["text"] for row in self._get(
             reopened, f"/api/contacts/{old['contact_id']}/memories",
-        )["memories"]}, {"联系人喜欢茉莉茶。", "联系人喜欢乌龙茶。"})
+        )["memories"]}, {f"联系人原话：“{item['fact_message']['text']}”" for item in (old, current)})
 
     def test_shutdown_ends_global_lock_wait_and_restart_does_not_resume_it(self):
         with psycopg.connect(self.database_url, autocommit=True) as connection:
