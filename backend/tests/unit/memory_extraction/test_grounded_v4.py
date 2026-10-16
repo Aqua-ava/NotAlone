@@ -15,6 +15,91 @@ from tests.unit.memory_extraction.test_grounded_v3 import labels
 
 
 class GroundedV4CompilerTest(unittest.TestCase):
+    def test_explicit_ownership_unknown_is_visible_in_reason_without_rewriting_source(self):
+        from notalone.memory_extraction.grounded import compile_labels_v4
+
+        source = window("我姐把她的车借给我了。")
+        clear, = compile_labels_v4(source, labels(row(
+            "0:0", "relationship_event", topic="family", confidence=0.95, ambiguity_codes=[],
+        )))
+        unresolved, = compile_labels_v4(source, labels(row(
+            "0:0", "relationship_event", topic="family", confidence=0.95, unresolved=True,
+            ambiguity_codes=["object_ownership"],
+        )))
+        self.assertEqual(unresolved["interpretation_reason"],
+                         "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
+                         " 当前未决说明：所引原句中的物品所有者在本窗口无法唯一确定；"
+                         "不因出借或接收认定所有者，保留原句。")
+        self.assertEqual(unresolved["alternatives"], [
+            "所引原句中的物品所有者在本窗口无法唯一确定；不因出借或接收认定所有者，保留原句。"
+            " 所附原引句及上下文：联系人原话：“我姐把她的车借给我了。”",
+        ])
+        self.assertEqual({key: value for key, value in unresolved.items()
+                          if key not in {"alternatives", "interpretation_reason"}},
+                         {key: value for key, value in clear.items()
+                          if key not in {"alternatives", "interpretation_reason"}})
+
+    def test_ownership_and_identity_reasons_are_independent_and_canonically_ordered(self):
+        from notalone.memory_extraction.grounded import compile_labels_v4
+
+        fact, = compile_labels_v4(window("我姐把她的车借给我了。"), labels(row(
+            "0:0", "relationship_event", topic="family", confidence=0.95, unresolved=True,
+            ambiguity_codes=["object_ownership", "entity_identity"],
+        )))
+        self.assertEqual(fact["interpretation_reason"],
+                         "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
+                         " 当前未决说明：原句所指人物身份在本窗口无法唯一确定，保留原句。"
+                         "所引原句中的物品所有者在本窗口无法唯一确定；不因出借或接收认定所有者，保留原句。")
+        self.assertNotIn("我姐", fact["interpretation_reason"])
+        self.assertEqual((fact["assertion_status"], fact["figurative_type"]), ("asserted", "literal"))
+
+    def test_unlabelled_a05_keeps_original_auto_and_does_not_gain_unknowns(self):
+        from notalone.memory_extraction.evaluation import build_window, evaluate_case
+        from notalone.memory_extraction.evaluation_cases import CASES
+        from notalone.memory_extraction.grounded import compile_labels_v4
+        from tests.unit.memory_extraction.test_flow import RecordingRuntime
+        from tests.unit.memory_extraction.verification_helpers import SyntheticSupportingVerifier
+
+        # 同值于已封公开A05原标签；保留其auto失败，不用旧matcher判分救回。
+        case = next(case for case in CASES if case.name == "指代：姐借车")
+        source = build_window(case)
+        payloads = compile_labels_v4(source, labels(row(
+            "0:0", "relationship_event", topic="family", confidence=0.95, ambiguity_codes=[],
+        )))
+        self.assertEqual(payloads[0], {
+            "text": "联系人原话：“我姐把她的车借给我了。”",
+            "category": "relationship_note", "subject": "contact", "topic": "family",
+            "source_message_ids": [str(source.messages[0].message_id)], "confidence": 0.95,
+            "risk_flags": [], "valid_at": None, "invalid_at": None,
+            "speech_act": "assertion", "assertion_status": "asserted", "figurative_type": "literal",
+            "alternatives": [],
+            "interpretation_reason": "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。",
+        })
+        result = evaluate_case(case, source, RecordingRuntime(payloads),
+                               verification_runtime=SyntheticSupportingVerifier())
+        self.assertEqual(result.actual, "auto")
+        self.assertTrue(result.verification_enabled)
+        self.assertNotIn("semantic_basis", payloads[0])
+
+    def test_completed_answer_reason_keeps_program_basis_before_explicit_unknown(self):
+        from notalone.memory_extraction.grounded import compile_labels_v4
+        from notalone.memory_extraction.models import MessageRef, MessageSender
+        from uuid import uuid4
+
+        source = window("到了。")
+        prior = MessageRef(uuid4(), "你到公司了吗？", MessageSender.SELF, source.messages[0].occurred_at)
+        source = replace(source, messages=(prior, *source.messages))
+        # 人为给定未决码，仅核已有完成问答理由不会被替换；不认证语义选码。
+        fact, = compile_labels_v4(source, labels(row(
+            "1:0", "momentary_state", dependency="0:0", unresolved=True,
+            ambiguity_codes=["entity_identity"],
+        )))
+        self.assertEqual(fact["interpretation_reason"],
+                         "原文完成问答明确表示动作已完成，程序据此保留历史动作，不设置当天失效。"
+                         " 当前未决说明：原句所指人物身份在本窗口无法唯一确定，保留原句。")
+        self.assertEqual((fact["category"], fact["valid_at"], fact["invalid_at"]),
+                         ("common_fact", None, None))
+
     def test_matter_reference_explicitly_preserves_unknown_matter_and_full_quote(self):
         from notalone.memory_extraction.grounded import compile_labels_v4
 
@@ -128,6 +213,9 @@ class GroundedV4CompilerTest(unittest.TestCase):
         self.assertIn("其他未决解释", fact["alternatives"][0])
         self.assertIn("物品所有者", fact["alternatives"][1])
         self.assertIn(fact["text"], fact["alternatives"][1])
+        self.assertIn("其他未决解释", fact["interpretation_reason"])
+        self.assertIn("物品所有者在本窗口无法唯一确定", fact["interpretation_reason"])
+        self.assertEqual(fact["interpretation_reason"].count("当前未决说明："), 1)
         self.assertEqual((fact["valid_at"], fact["invalid_at"]), (None, None))
 
     def test_continuation_supports_only_bounded_integers_and_closed_counting_units(self):
@@ -656,6 +744,12 @@ class GroundedV4CompilerTest(unittest.TestCase):
         fact, = compile_labels_v4(source, labels(row("0:0", "stage_unknown_state", unresolved=True,
                                                   ambiguity_codes=codes)))
         self.assertEqual(len(fact["alternatives"]), 9)
+        self.assertLessEqual(len(fact["interpretation_reason"]), 600)
+        self.assertEqual(fact["interpretation_reason"].count("当前未决说明："), 1)
+        self.assertIn("向对方借入", fact["interpretation_reason"])
+        self.assertIn("借给对方", fact["interpretation_reason"])
+        self.assertIn("事项指称", fact["interpretation_reason"])
+        self.assertNotIn("我没有借那件物品。", fact["interpretation_reason"])
         for alternative in fact["alternatives"][2:4] + fact["alternatives"][5:]:
             self.assertIn("我没有借那件物品。", alternative)
         within, = compile_labels_v4(window("甲" * 8100 + "没有确认车主。"), labels(row(
@@ -663,6 +757,12 @@ class GroundedV4CompilerTest(unittest.TestCase):
         )))
         self.assertIn("没有确认车主。", within["alternatives"][0])
         self.assertLessEqual(len(within["alternatives"][0]), 8400)
+        self.assertLessEqual(len(within["interpretation_reason"]), 100)
+        self.assertNotIn("甲", within["interpretation_reason"])
+        with self.assertRaisesRegex(ExtractionInvalidOutputError, "8400"):
+            compile_labels_v4(window("我没有" + "甲" * 8400 + "。"), labels(row(
+                "0:0", "stage_unknown_state", unresolved=True, ambiguity_codes=codes,
+            )))
         for code in ("event_stage", "object_ownership", "matter_reference"):
             with self.subTest(code=code), self.assertRaisesRegex(ExtractionInvalidOutputError, "8400"):
                 compile_labels_v4(window("我没有" + "甲" * 8400 + "。"), labels(row(

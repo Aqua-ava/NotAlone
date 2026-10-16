@@ -420,6 +420,11 @@ def _compile(
             ]
             if any(len(text) > MAX_V3_ALTERNATIVE_CHARS for text in fact["alternatives"]):
                 raise ValueError(("v4" if version4 else "v3") + "歧义说明超出单条8400字符预算，不能截断原句。")
+            if version4 and compiled.codes:
+                fact["interpretation_reason"] += " 当前未决说明：" + "".join(
+                    text for code in ordered_codes if code in compiled.codes
+                    for text in templates[code]
+                )
     return tuple(results)
 
 

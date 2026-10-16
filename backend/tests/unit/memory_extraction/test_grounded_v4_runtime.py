@@ -245,6 +245,10 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         pending, = store.list_pending_candidates(scope)
         self.assertEqual(pending.confidence, 1.0)
         self.assertEqual(pending.text, "联系人原话：“我姐把她的车借给我了。”")
+        self.assertEqual(pending.interpretation_reason,
+                         "按所引原文分句保留内容；类型为模型判断，来源定位和时间由程序校验。"
+                         " 当前未决说明：所引原句中的物品所有者在本窗口无法唯一确定；"
+                         "不因出借或接收认定所有者，保留原句。")
         self.assertEqual((pending.valid_at, pending.invalid_at), (None, None))
         self.assertIn("pragmatic:ambiguous", pending.risk_flags)
         self.assertNotIn("semantic:unverified", pending.risk_flags)
@@ -254,6 +258,8 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         self.assertEqual(events["grounded_draft"]["draft"], draft)
         self.assertEqual(events["grounded_compile"]["payloads"][0]["speech_act"], "assertion")
         self.assertEqual(events["grounded_compile"]["payloads"][0]["assertion_status"], "asserted")
+        self.assertEqual(events["grounded_compile"]["payloads"][0]["interpretation_reason"],
+                         pending.interpretation_reason)
         self.assertIsNotNone(pending.dimension_evidence)
         assert pending.dimension_evidence is not None
         self.assertIsNone(pending.dimension_evidence.semantic_basis)
