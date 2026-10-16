@@ -5,7 +5,7 @@ import { Icon } from './icons';
 import { useRevisionedSession } from './use-revisioned-session';
 import './rewrite.css';
 import { ReplyEvidence, useReplyEvidence } from './ReplyEvidence';
-import { AssistantSessionPanel } from './AssistantSessionPanel';
+import { AssistantSessionBudgetNotice, AssistantSessionPanel } from './AssistantSessionPanel';
 import { StyleSamples } from './StyleSamples';
 import { CandidateVersionEditor } from './CandidateVersionEditor';
 import type { ReplyCandidateDraftUpdate, ReplyCandidateVersionRead, ReplyCandidateVersionEdit, ReplyCandidateVersionDisplay, ReplyCandidateVersionSelection } from '../shared/assistant-candidate-versions';
@@ -178,6 +178,18 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
     ? state.savedSession.turns.filter((turn) => turn.state === 'completed' && turn.reply).at(-1) : undefined;
   const replyRequestId = state.result?.replyRequestId ?? recovered?.reply?.replyRequestId;
   const candidates = state.result?.candidates.map((item) => item.original) ?? recovered?.reply?.candidates ?? [];
+  const resultRegion = useRef<HTMLElement>(null);
+  const visibleResult = useRef('');
+  useEffect(() => {
+    if (!replyRequestId || !candidates.length || state.phase === 'waiting') return;
+    const identity = `${state.contactId}:${state.scopeRevision}:${replyRequestId}`;
+    if (visibleResult.current === identity) return;
+    visibleResult.current = identity;
+    resultRegion.current?.scrollIntoView({ block: 'start' });
+  }, [replyRequestId, candidates.length, state.phase, state.contactId, state.scopeRevision]);
+  useEffect(() => {
+    if (state.phase === 'failed') resultRegion.current?.scrollIntoView({ block: 'start' });
+  }, [state.phase, state.errorCode]);
   const [dirtyCandidates, setDirtyCandidates] = useState<Record<string, boolean>>({});
   const reportDirty = useCallback((candidateId: string, dirty: boolean) => {
     setDirtyCandidates((previous) => previous[candidateId] === dirty ? previous : { ...previous, [candidateId]: dirty });
@@ -200,9 +212,11 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
     void window.notalone.styleSamples.noteCandidateCopy({ contactId: state.contactId, scopeRevision: state.scopeRevision,
       replyRequestId, candidateId, text }).catch(() => {});
   }
-  return <section className="reply-candidates" aria-label="候选回复">
+  return <section ref={resultRegion} className="reply-candidates" aria-label="候选回复">
+    <header className="reply-results-heading"><h2>候选回复</h2>
+      {candidates.length > 0 && <span>共 {candidates.length} 种说法，可选择并修改</span>}</header>
     {state.contentRestoreNotice && <p role="status">{state.contentRestoreNotice}</p>}
-    <AssistantSessionPanel replies={replies} />
+    <AssistantSessionBudgetNotice replies={replies} />
     {state.sourceAvailability === 'checking' && <p role="status">正在核对删除后的依据…</p>}
     {state.sourceAvailability === 'failed' && <p role="alert">删除后的依据尚未确认，原候选暂不可用。<button onClick={() => void replies.retrySourceValidation()}>重新核对依据</button></p>}
     {state.phase === 'waiting' && <p className="reply-note" role="status">正在等待本次生成结果…</p>}
@@ -269,6 +283,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
     <AssistantContinuationControls key={`${state.contactId}:${state.scopeRevision}:${state.savedSession?.sessionId}:${state.inputClearRevision ?? 0}`}
       replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
     <AssistantMessageNoticeActions replies={replies} hasUnsavedEdits={hasUnsavedEdits} />
+    <AssistantSessionPanel replies={replies} />
     <StyleSamples replies={replies} />
   </section>;
 }

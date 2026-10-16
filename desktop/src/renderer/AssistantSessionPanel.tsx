@@ -41,6 +41,14 @@ function SavedDiscussion({ input }: { input: SavedAssistantInput }) {
   </article>;
 }
 
+export function AssistantSessionBudgetNotice({ replies }: { replies: ReplySessionView }) {
+  const { state } = replies;
+  const notice = state.inputBudgetNotice;
+  const budget = notice?.contactId === state.contactId && notice.scopeRevision === state.scopeRevision
+    && notice.sessionId === state.savedSession?.sessionId && !state.sourceAvailability ? notice.decision : undefined;
+  return budget ? <AssistantInputBudgetNotice budget={budget} /> : null;
+}
+
 export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }) {
   const saved = replies.state.savedSession;
   const [confirmation, setConfirmation] = useState<AssistantSessionDeletion | null>(null);
@@ -49,14 +57,10 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
   const currentCopyScope = useRef(copyScopeKey); currentCopyScope.current = copyScopeKey;
   const deleting = replies.state.sessionDeletion === 'deleting';
   const catalog = replies.state.sessionCatalog;
-  const budgetNotice = replies.state.inputBudgetNotice;
   const chosen = replies.state.explicitCandidateSelection;
   const chosenView = replies.state.candidateVersions?.items.find((item) => item.candidateId === chosen?.selection?.candidateId);
   const canCarry = chosen?.phase === 'ready' && chosen.selection?.sessionId === saved?.sessionId
     && chosenView?.phase === 'ready' && chosenView.displayVersionId === chosen.selection?.versionId;
-  const currentBudget = budgetNotice?.contactId === replies.state.contactId
-    && budgetNotice.scopeRevision === replies.state.scopeRevision && budgetNotice.sessionId === saved?.sessionId
-    && !replies.state.sourceAvailability ? budgetNotice.decision : undefined;
   const busy = deleting || catalog?.phase === 'loading' || saved?.phase === 'loading'
     || replies.state.exploration.phase === 'waiting'
     || replies.state.sessionDeletion === 'failed' || replies.state.sourceAvailability === 'checking';
@@ -86,8 +90,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
       .then(() => { if (currentCopyScope.current === copyScopeKey) setCopyError(false); })
       .catch(() => { if (currentCopyScope.current === copyScopeKey) setCopyError(true); });
   }
-  return <section aria-label="助手会话">
-    {currentBudget && <AssistantInputBudgetNotice budget={currentBudget} />}
+  return <section className="assistant-session-panel" aria-label="助手会话">
     <button disabled={!replies.state.contactId || busy} onClick={() => void replies.newSavedSession()}>
       新开助手会话
     </button>

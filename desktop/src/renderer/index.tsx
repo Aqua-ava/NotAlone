@@ -48,6 +48,7 @@ function App() {
       <button className="icon-button" aria-label="隐藏输入小窗" title="隐藏输入小窗"
         onClick={() => void operate(window.notalone.hideWindow)}><Icon name="close" size={16} /></button>
     </header>
+    <div className="ime-workspace">
     <ForegroundPanel state={foreground} session={contactSession} permission={permission} />
     {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} />
       : replies.state.mode === 'initiate_conversation' ? <ProactiveReplyInput replies={replies} /> : <DirectedReplyInput replies={replies} />}
@@ -61,6 +62,7 @@ function App() {
     <div className="ime-status-line"><BackendBadge state={backend} compact />
       <div className="ime-contact-note"><CurrentContactLabel state={contactSession.state} /></div></div>
     <ReplyCandidates replies={replies} />
+    </div>
     <footer className="ime-footer">
       <span>由你修改并亲自发送</span>
       <HelperPinControl />
