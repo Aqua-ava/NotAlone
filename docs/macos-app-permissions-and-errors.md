@@ -1,5 +1,15 @@
 # macOS App 权限与启动错误记录
 
+## 2026-10-16 Dock 图标形状与可见尺寸
+
+原打包脚本把横向 Logo 补成 1024×1024 的实色直角画布，导致 macOS 15 Dock 中的外框明显大于相邻 App。现使用独立的 1024×1024、sRGB、透明 PNG 母版：824×824 圆角底板、每边 100 留白、185 圆角半径、轻阴影，原 Logo 等比居中；传统 `.icns` 的十种普通／Retina 表示继续由 `sips` 和 `iconutil` 生成。开发生成器使用系统 CoreGraphics／ImageIO，普通打包只读取母版，不修改权限、entitlements、bundle identifier 或签名策略。
+
+验证：`npm run build`、`npm run typecheck`、`npm run test:package`（1／1）通过；通过 `node scripts/package.mjs --with-probe --output-directory <本轮目录> --electron-zip-directory <本机离线归档>` 生成完整包并完成递归严格 ad-hoc 签名校验。对包内实际 `CFBundleIconFile=electron.icns` 解包核对十种表示的尺寸与四角透明度，1024 像素表示的不透明主体为 824×824；本机 ChatGPT、微信对应主体分别为 822×822、818×818。这是本机视觉比例对照，不把 824 当作 Apple 强制像素值。
+
+实机先通过独立临时 userData 与显式隔离路径启动同一签名包；Computer Use 绑定 App 时额外唤起默认 userData 实例。两实例界面均为启动未配置／后端未连接，分别经原生“退出 NotAlone”收尾，原隔离进程 exit 0、精确包路径主进程及 helper 最终均不存在；临时 userData 已清理，默认目录保留。在 Finder 中并排查看三个 App 图标，圆角和可见大小基本一致。Dock 自动化目标直接取态超时，本轮不宣称取得 Dock 截图或逐像素实机验证。仅验证图标与打包显示，不认证微信同步、前台识别或既有渠道验收；不读写联系人、聊天、记忆或业务库。两轴独立审查 Standards 0／Spec 0。
+
+最后执行 `npm run package -- --with-probe --electron-zip-directory <本机离线归档>` 更新默认 `desktop/out/NotAlone-darwin-arm64/NotAlone.app`，同样通过严格签名校验；Computer Use 在 Finder 选中该正式输出并确认新圆角图标，保留供用户打开。
+
 2026-10-15 窗口恢复及预算修复（ADR-056）：实机确定认证观察409繁忙被误归为传输失败并开启永久人工门；仅该固定繁忙响应等待下一轮完整可靠绑定恢复，当轮撤销生成资格，既有人工门保持。原900ms探针预算改为2.5秒，后端3.2秒、UI／HTTP3.5秒；真实挂起仍超时，单帧、五秒新鲜度、200ms锁及250ms CLI预算不变。没有新增权限、TCC、Info.plist或签名策略调整。同时修复小屏窄窗气泡干扰顶部边界，仍只OCR原顶部名称区域。最终正式包Computer Use约10.7分钟完成移动、平铺、缩放还原及草稿恢复，未点人工确认；前场失败与完整范围限制见[窗口恢复验收记录](../.scratch/foreground-header-layout/window-recovery-acceptance-20261015.md)。
 
 2026-10-15 事件能力诊断准备：新增独立 `SessionEventCapabilities.swift`，严格接受 `--seconds 5..120`，仓库有限入口最多运行 90 秒。只以 `AXIsProcessTrusted()` 读取既有权限，不请求/接受权限；仅向唯一微信的应用和至多 8 个窗口对象登记固定类别通知，不读取标题、正文或联系人列表。输出匿名计数，没有截图/OCR或外发。诊断独立 ad-hoc 签名，未改变正式包、Info.plist或权限配置；其准入结果不能代替正式 App 的权限验证，通知注册成功不能证明会话切换覆盖率。当前仅编译与静态检查完成，尚未执行。

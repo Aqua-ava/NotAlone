@@ -1,5 +1,9 @@
 # 桌面端
 
+macOS App 图标使用独立的 `assets/app-icon.png` 母版（1024×1024、sRGB、透明通道），打包时生成 16、32、128、256、512 点的普通与 Retina `.icns` 表示。当前传统 `.icns` 为 macOS 15 显式保留圆角和透明留边：底板 824×824、每边留白 100、圆角半径 185，Logo 等比居中，避免在 Dock 中出现铺满画布、比邻近 App 更大的直角方块。这些留白数值是本项目的视觉对齐参数；Apple 的[图标规范](https://developer.apple.com/design/human-interface-guidelines/app-icons/)规定方形布局及 1024×1024 画布，[传统高分辨率规范](https://developer.apple.com/library/archive/documentation/GraphicsAnimation/Conceptual/HighResolutionOSX/Optimizing/Optimizing.html)列出 `.iconset` 尺寸。新分层图标的系统遮罩流程不直接套用到现有传统 `.icns`。
+
+修改品牌 Logo 后，在 `desktop/` 执行 `swift scripts/render-app-icon.swift src/renderer/assets/logo.png assets/app-icon.png` 重新生成 App 母版，再正常打包。生成器仅供开发使用，普通打包直接读取 PNG，不新增 Swift 编译依赖；界面与官网继续使用各自的原 Logo。
+
 2026-10-10 23:30 实机补记：同一微信 PID 的 52×20 辅助小窗口曾触发窗口歧义；现在仅排除极小辅助窗，未知尺寸与多个聊天窗口仍拒绝。纯原生布局和门禁测试 9/9，打包及严格 ad-hoc 签名通过，真实公开坐标保存已成功。此前两次校验停在 `context / wechat_not_in_front`；23:34 用户手动切前台后已进入真实最小区域采集/OCR，但在 `names / quality_unverified` 安全停止。23:39分项诊断进一步确认两处完整名称一致、最低OCR置信度不足0.90（`session_name_confidence_low`）；未降低门槛。尚无可信 profile，前台定位未通过；没有新权限申请或原始帧持久化。限定单联系人实际新事件读取已通过；生产后台有界轮询与独立 PostgreSQL 验收确认测试消息入库 1 条、重启/重开不重复、关闭时 CLI 调用为 0，空结果最新性修复后补齐无错误。相关后端 85/85；临时库已清理。全局流、异常恢复、双联系人切换及完整 App 退出仍待验证，见[验收台账](../docs/macos-app-permissions-and-errors.md)。
 
 任务 05 已接入应用运行期间的多联系人生成调度：用户显式生成先取得准备回执并固定上下文，再等待一个执行许可；当前连接最多接纳 8 个未结算任务。切换、编辑、隐藏不会改写已准备请求，切回从原会话只读恢复，失败重试复用原操作。原请求被替换的实际回执或连接失效会释放本地执行许可；旧传输可能仍在收尾，实际模型互斥仍由后端保证。

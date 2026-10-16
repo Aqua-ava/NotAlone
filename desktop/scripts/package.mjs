@@ -65,9 +65,8 @@ try {
 
   const iconset = path.join(staging, 'NotAlone.iconset');
   await mkdir(iconset);
-  const square = path.join(staging, 'square.png');
-  await run('sips', ['-Z', '1024', 'src/renderer/assets/logo.png', '--out', square]);
-  await run('sips', ['--padToHeightWidth', '1024', '1024', '--padColor', 'F3EEE3', square]);
+  // App 专用母版已包含圆角底板与透明留边；不可补成铺满画布的实色方块。
+  const square = 'assets/app-icon.png';
   for (const size of [16, 32, 128, 256, 512]) {
     for (const scale of [1, 2]) {
       const pixels = String(size * scale);

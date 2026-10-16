@@ -17,8 +17,8 @@ test('离线临时打包仅附带自研探针，外置CLI配置与探针签名�
     await mkdir(buildTemporary); await mkdir(path.join(buildTemporary, 'keep-existing'));
     await writeFile(path.join(buildTemporary, 'keep-existing/sentinel'), 'synthetic_existing_temporary');
     await cp(path.join(project, 'dist'), path.join(fixture, 'dist'), { recursive: true });
-    await mkdir(path.join(fixture, 'src/renderer/assets'), { recursive: true });
-    await copyFile(path.join(project, 'src/renderer/assets/logo.png'), path.join(fixture, 'src/renderer/assets/logo.png'));
+    await mkdir(path.join(fixture, 'assets'));
+    await copyFile(path.join(project, 'assets/app-icon.png'), path.join(fixture, 'assets/app-icon.png'));
     const packageJson = JSON.parse(await readFile(path.join(project, 'package.json'), 'utf8'));
     const version = (await readFile(path.join(project, 'node_modules/electron/dist/version'), 'utf8')).trim();
     assert.equal(version, packageJson.devDependencies.electron);
