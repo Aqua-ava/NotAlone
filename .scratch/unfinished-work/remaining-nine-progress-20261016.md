@@ -44,3 +44,5 @@
 该场现已[首窗核验未知并闭账](../grounded-evaluation/full140-v4-result-20261016.md)：2／280预约，E一次HTTP200、V一次read_timeout且未取得响应，completed0／unknown1／unrun139，raw／full视图及审核均0，余278永久关闭。404.758秒受控退出，close_unknown=false、自有worker／组已gone；关账后85源／8事件／SQLite与收据核验通过。没有真实质量或typed信用，不补发未知V、不启动自动后继；后继协议可用性只另行诊断。
 
 [独立单V关闭思考／强制具名探针](../grounded-evaluation/deepseek-v-off-forced-pilot-result-20261016.md)现已closed1／1、零重试，外层3.329秒、自有组gone，verification空。只有request及unknown_transport_error事件；响应保存缺口使false字段不足以证明没取得响应，不能判定HTTP200、具体arguments或根因。纯Mock3项／5反例（含503）复现可达缺口，未补造旧响应或授予质量信用。82源／2事件／只读SQLite关闭已核，封存报告两轴0；后继只按独立v2计划修最小安全观测，当前没有新真实台账／请求。原9张仍3 resolved／6 claimed，15张排除保持。
+
+后继[安全观测v2](../grounded-evaluation/deepseek-v-off-forced-v2-result-20261016.md)已实际closed1／1、HTTP200、零重试，取得唯一合法具名工具，外层3.146秒且自有组gone；82源／2摘要／SQL收据均核。模型supported及非空proof仍只为提案，适配器内部有proof程序调用但本探针未封存其判定／可信链／semantic_basis，不认证typed、E、质量或放行。离线17项、最小共享2项与mypy通过、准备两轴0；结果报告初审1项调用链错述已纠正、增审0。旧场保持封存，当前只读规划E保持max、V关闭思考并强制具名的新固定混合合同，未创建完整场新预算或自动后继。
