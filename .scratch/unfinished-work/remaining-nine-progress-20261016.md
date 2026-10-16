@@ -42,3 +42,5 @@
 随后按现有授权唯一启动完整140新场：run `fd4d9056-1eb8-4848-8122-da7f7747e7d0`，当前源码`8fa79622`，freeze字节SHA `5a5856974db73a71dd8cb48f815f56cea5ead38038556e9f9d982e5faee04884`。85份实际来源、140原输入／顺序／Gold映射、已审参考v2与逐窗v4合同已核；旧五场均closed，审批前新registry不存在，绑定授权后自有worker已实际启动，synthetic=false。请求上限280、零重试、仅官方DeepSeek，工作绝对截止2026-10-17 07:58:27、外层07:58:47（台北时间）；完成／硬停即闭账，无自动后继。独立Agent只看RAW，Root只承担FULL，不预填pass或拼接旧成绩；当前只记录已启动，没有预签完成窗、字段、proof、质量或放行。
 
 该场现已[首窗核验未知并闭账](../grounded-evaluation/full140-v4-result-20261016.md)：2／280预约，E一次HTTP200、V一次read_timeout且未取得响应，completed0／unknown1／unrun139，raw／full视图及审核均0，余278永久关闭。404.758秒受控退出，close_unknown=false、自有worker／组已gone；关账后85源／8事件／SQLite与收据核验通过。没有真实质量或typed信用，不补发未知V、不启动自动后继；后继协议可用性只另行诊断。
+
+[独立单V关闭思考／强制具名探针](../grounded-evaluation/deepseek-v-off-forced-pilot-result-20261016.md)现已closed1／1、零重试，外层3.329秒、自有组gone，verification空。只有request及unknown_transport_error事件；响应保存缺口使false字段不足以证明没取得响应，不能判定HTTP200、具体arguments或根因。纯Mock3项／5反例（含503）复现可达缺口，未补造旧响应或授予质量信用。82源／2事件／只读SQLite关闭已核，封存报告两轴0；后继只按独立v2计划修最小安全观测，当前没有新真实台账／请求。原9张仍3 resolved／6 claimed，15张排除保持。
