@@ -54,6 +54,13 @@ test('其他App在前台时只唤起同一小窗，第二次隐藏并保持管�
     ]);
     await recordState(app, 'shown');
   }, until);
+  // show 收据等待期间可能已被其他操作隐藏；旧 hidden 不能成为第二次按键的通过证据。
+  const hideBaseline = await windowState(app);
+  expect(hideBaseline, '发出隐藏请求前，同一小窗必须仍显示；已隐藏时立即失败。').toEqual([
+    { id: managerId, visible: false, focused: false },
+    expect.objectContaining({ id: helperId, visible: true }),
+  ]);
+  await recordState(app, 'before-hide', hideBaseline);
   console.log('focus_acceptance_stage: 现在请再次实际按Command+Shift+Y，只核对同一小窗消失，管理后台没有出现。');
   await confirmShortcutFeedback('hide', mode!, async (timeout) => {
     await expect.poll(() => windowState(app), { timeout }).toEqual([
@@ -80,8 +87,9 @@ async function windowState(app: ElectronApplication) {
   })).sort((a, b) => a.id - b.id));
 }
 
-async function recordState(app: ElectronApplication, stage: string) {
+async function recordState(app: ElectronApplication, stage: string,
+  windows?: Awaited<ReturnType<typeof windowState>>) {
   await writeFile(test.info().outputPath(`focus-${stage}-observed.json`), JSON.stringify({
-    stage, observedAt: Date.now(), windows: await windowState(app), userConfirmationRecorded: false,
+    stage, observedAt: Date.now(), windows: windows ?? await windowState(app), userConfirmationRecorded: false,
   }), { mode: 0o600, flag: 'wx' });
 }

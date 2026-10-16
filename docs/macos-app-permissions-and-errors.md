@@ -642,3 +642,13 @@ v8记录了实际变化提示及提前正式HTTP的时序，宿主日志达到51
 显式native诊断在原stopCapture收尾后最多输出一条固定final／saturated计数；回调超过UInt32上界时标为饱和下界。原32行／3840字节／120字节及宿主512行／256KiB不变；硬退出或cap缺记录即未获最终计数，不补0。strict decoder只接受固定状态和有界整数，不输出图、像素、名称、PID或坐标。默认关闭，不新增采图／OCR／OS查询、权限或签名身份，不修改原唯一实例门、失败锁、采样频率或续租行为。
 
 本片Swift完整104项含2个既有实验skip、0失败，宿主相关15项、类型及完整安全71项通过。仅为新包准备离线验证，不能补签旧v8实际分账、Finder录屏责任身份或TCC权限。没有修改Info.plist、entitlements或TCC；协议、实际命令及验证结果见[额外帧分账方案](../.scratch/foreground-event-trigger/header-frame-counts-plan-20261016.md)。
+
+## 2026-10-16 v6独立Finder权限与v9实体快捷键分项
+
+用户本人完成新认证表单后，Agent用Computer Use在系统设置选择精确已核v6包，实际看到新增Electron NotAlone录屏条目为on；本场确有权限变化，未输入密码，旧Swift条目未改。随后App从真实Finder独立打开、父进程为1，使用整体隔离的默认userData和随机PG、空读取授权、不可用CLI和模型。45秒取得10个正式单帧探针PID及1个独立源PID；准确匹配同一App的TCC归属行显示responsible为`com.notalone.desktop`，accessing为`com.notalone.sync-probe.cli`／`com.notalone.sync-probe.header-change`，不是Codex。归属行不是调用次数，PID存在也不自动认证采集成功或持续覆盖。
+
+同实例一次鉴权公共前台观察返回HTTP200／`paused / group_chat_suspected`，不再是旧独立Finder的`screen_capture_permission_missing`；实际群聊边界不签私聊A识别。小窗实际获焦时显示定位暂停、未确认联系人和生成禁用。公开菜单正常退出，场景1／1、runner exit0；未执行真实CLI或模型。旧v5独立启动失败保留，不以本场覆盖旧版本结果。
+
+另一次v9空后端、独立userData的实体快捷键场首次收到用户“小窗出现了”并有瞬时visible／focused轮询通过，但紧随快照已经hidden，不能解释为已证失焦自动隐藏。旧hidden快照也不能签第二次实体隐藏。原截止内追加的同实例只读窗口监听有5752次有效轮询，未捕获新显示→隐藏序列；未收到hide真人收据，原25分钟场1项失败、runner exit1，未运行末尾正常菜单退出认证。没有延长、重启、改产品或把缺失反馈改为通过。
+
+18个已记录自有PID、2个runner组、测试目录／握手／精确随机库均已核退场，默认userData身份恢复，自有租约正常释放。v6权限、v9按键及历史CLI／模型分项分别记证，不能拼为同一版本完整交付。版本、命令、失败保留、清理及原18／20 AC边界见[独立结果](../.scratch/mac-desktop-app/finder-tcc-v6-and-keyboard-v9-result-20261016.md)。
