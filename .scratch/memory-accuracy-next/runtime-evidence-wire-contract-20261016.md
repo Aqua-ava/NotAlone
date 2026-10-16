@@ -218,6 +218,8 @@ v4时间重核同时验证当前actual来源的时刻和用于本地日历计算
 
 新v4在proof缺失、范围不支持时可保存semantic_basis=null的未知快照，不因此成为自动采纳依据；包装来源及source_dependency_mode=all的必要消息检查仍须通过，不能以UNKNOWN接受来自未引用上下文的正文。无法核对完整包装或必要来源时拒绝保存该新记录，不能退回any。保存和确认前重建窗口必须原样传入target_message_ids，重新核对当前消息全文/作者/活动来源和basis3，不借先前valid/source_bound结果。
 
+若完整实际窗口超过4条、任一消息或整个候选超过4096码点，不能创建本节形状的v4；producer在独立正文复制/必需来源核对后返回整个依据为null，持久mode仍为all，完整原窗及target留既有window trace。此分支不裁剪输入、不伪装成basis为null的超限v4，也不回落旧依据。无正文复制核对能力仍拒绝保存，非法proof仍停止整批；无快照不能从trace恢复正向信用。正文复制核对涵盖现有E2完整输出表示，不扩充basis3的有限正向图或Representation文法。
+
 source_dependency_mode是三类资料独立持久闭集，不新增为模型字段或basis字段；all/any的传播、同message多source_ref的替代关系、删除前收集及独立manual保护严格沿实施规格“正文依赖与删除”。清proof后all仍保留，拒绝指纹和修正版不得丢失该模式。
 
 ## 受控API投影
@@ -226,7 +228,7 @@ source_dependency_mode是三类资料独立持久闭集，不新增为模型字�
 
 三类资料的查看/导出仅在持久mode=all时新增`source_dependency_mode:"all"`，旧any投影保持。候选继续保留既有dimension_evidence及dimension_evidence_source_current；新all候选另增加`dimension_evidence_dimensions`，其键固定为subject/time/truth_intent/paraphrase/reference/media/reported。每项精确三键`{required:bool,state:string,reason:string?}`：required来自既有保守相关集合；state闭集valid/unknown/stale。reason在valid时为null，在unknown时固定not_proven，在stale时固定source_changed_or_candidate_changed，不接受模型自由理由。
 
-有v4快照且source_current为true时，仅`valid_evidence_dimensions`实际输出的键为valid，其他为unknown；有v4快照但当前绑定失败时全部stale。mode=all但快照已清空时全部unknown，相关集合取保守七项，不凭缺语用快照缩小范围。物理删除导致资料不存在时仍沿原not-found，不用stale代替擦除。此投影只描述当前依据，未放行的valid项仍不能自动采纳。旧any/v1–3投影不增加该映射，也不重解释历史状态。
+有v4快照且source_current为true时，仅`valid_evidence_dimensions`实际输出的键为valid，其他为unknown；有v4快照但当前绑定失败时全部stale。mode=all但快照已清空、或首次即超限而未生成快照时，全部unknown，相关集合取保守七项，不凭缺语用快照缩小范围。物理删除导致资料不存在时仍沿原not-found，不用stale代替擦除。此投影只描述当前依据，未放行的valid项仍不能自动采纳。旧any/v1–3投影不增加该映射，也不重解释历史状态。
 
 ## 验收与已有编译器的不相容处理
 
