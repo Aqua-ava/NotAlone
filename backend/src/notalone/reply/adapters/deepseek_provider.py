@@ -9,13 +9,25 @@ import httpx
 from langchain_core.language_models import BaseChatModel
 from langchain_deepseek import ChatDeepSeek
 
-DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-flash"
+DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+_OFFICIAL_BASE_URLS = frozenset({DEFAULT_DEEPSEEK_BASE_URL, DEFAULT_DEEPSEEK_BASE_URL + "/v1"})
 DEFAULT_DEEPSEEK_TIMEOUT_SECONDS = 60.0
 # 结构化输出场景使用最低温度，降低候选回复格式漂移概率。
 DEFAULT_DEEPSEEK_TEMPERATURE = 0.0
 _API_KEY_ENV_VAR = "NOTALONE_DEEPSEEK_API_KEY"
 _MODEL_ENV_VAR = "NOTALONE_DEEPSEEK_MODEL"
 _BASE_URL_ENV_VAR = "NOTALONE_DEEPSEEK_BASE_URL"
+
+
+def is_official_deepseek_flash(model: object) -> bool:
+    """只认精确 SDK 类型、Flash 模型名和已核实官方路由。"""
+
+    return (
+        type(model) is ChatDeepSeek
+        and model.model_name == "deepseek-flash"
+        and str(model.root_client.base_url).rstrip("/") in _OFFICIAL_BASE_URLS
+    )
 
 
 def build_deepseek_model(
@@ -26,8 +38,9 @@ def build_deepseek_model(
     base_url: str | None = None,
     extra_body: dict[str, Any] | None = None,
     http_client: httpx.Client | None = None,
+    http_async_client: httpx.AsyncClient | None = None,
 ) -> BaseChatModel:
-    """构造 DeepSeek 模型；默认模型只选支持结构化输出的 deepseek-chat。"""
+    """构造 DeepSeek 模型；默认采用官方 Flash 的工具结构化输出。"""
 
     resolved_key = api_key if api_key is not None else os.environ.get(_API_KEY_ENV_VAR)
     if not isinstance(resolved_key, str) or not resolved_key.strip():
@@ -53,7 +66,7 @@ def build_deepseek_model(
         raise ValueError("DeepSeek 调用超时必须是正数秒。")
 
     resolved_base_url = (
-        base_url if base_url is not None else os.environ.get(_BASE_URL_ENV_VAR)
+        base_url if base_url is not None else os.environ.get(_BASE_URL_ENV_VAR, DEFAULT_DEEPSEEK_BASE_URL)
     )
     if resolved_base_url is not None and (
         not isinstance(resolved_base_url, str) or not resolved_base_url.strip()
@@ -76,4 +89,12 @@ def build_deepseek_model(
         options["extra_body"] = extra_body
     if http_client is not None:
         options["http_client"] = http_client
-    return ChatDeepSeek(**options)
+    if http_async_client is not None:
+        options["http_async_client"] = http_async_client
+    model = ChatDeepSeek(**options)
+    if is_official_deepseek_flash(model) and not (
+        extra_body and {"thinking", "reasoning_effort"} & extra_body.keys()
+    ):
+        # 官方默认思考模式拒绝强制输出 Tool；显式思考配置仍由调用者控制。
+        model.reasoning_effort = "none"
+    return model

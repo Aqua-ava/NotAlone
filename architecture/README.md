@@ -92,6 +92,7 @@
 59. [ADR-059：显式未知类型与完整日历月的离线编译](adr/059-closed-unknown-kinds-and-calendar-month.md)
 60. [ADR-060：作者到家原事件的有限引句表示](adr/060-author-arrival-quote-representation.md)
 61. [ADR-061：独立本机 App 的首启与兼容更新](adr/061-standalone-local-app-onboarding-and-updates.md)
+62. [ADR-062：官方 DeepSeek Flash 回复采用完整请求估算](adr/062-official-deepseek-reply-input-budget.md)
 
 ## 当前架构决策
 

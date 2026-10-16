@@ -150,10 +150,12 @@ Python、桌面端与原生探针分别管理依赖、构建和测试；领域�
 | `NOTALONE_ENV_FILE` | 指定受控配置文件路径。 |
 | `NOTALONE_WECHAT_CLI` / `NOTALONE_SYNC_PROBE` | 指定外置 CLI / 原生探针的可执行文件路径。 |
 | `NOTALONE_DEEPSEEK_API_KEY` | 模型凭据；缺失或为空时真实模型入口失败关闭。 |
-| `NOTALONE_DEEPSEEK_MODEL` | 模型名，默认 `deepseek-chat`。 |
+| `NOTALONE_DEEPSEEK_MODEL` | 模型名，默认官方 `deepseek-flash`。 |
 | `NOTALONE_DEEPSEEK_BASE_URL` | 模型服务地址；变更服务提供者前核对数据处理范围。 |
 | `NOTALONE_TEST_DATABASE_URL` | 隔离测试库，名称必须以 `_test` 结尾。 |
 | `NOTALONE_MEMORY_DIMENSION_GATE` | 默认开启维度放行门；只有显式 `0` 才回退到原有三道采纳门槛。 |
+
+官方 `deepseek-flash` 默认使用完整文字请求长度估算，并另留输出与安全余量；界面明确标记估算。`input_budget_unavailable` 表示本地无法核验当前模型的输入长度配置，不表示账户余额不足，详见 [ADR-062](architecture/adr/062-official-deepseek-reply-input-budget.md)。
 
 ```bash
 python -m pip install -e ./backend  # 已运行安装脚本时可省略

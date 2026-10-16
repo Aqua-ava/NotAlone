@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import psycopg
-from langchain_deepseek import ChatDeepSeek
+from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 
 from notalone.server.app import create_app
 from notalone.server.reply_wiring import build_reply_service
@@ -25,6 +25,11 @@ DRAFT = "合成原句：今晚不参加，祝活动顺利。"
 
 
 class EcnuInputBudgetHttpTest(FidelityHttpFixture, unittest.TestCase):
+    model_name = "ecnu-max"
+    base_url = ECNU_URL
+    context_window = 512000
+    long_draft_repeats = 18000
+
     @classmethod
     def setUpClass(cls) -> None:
         if not DATABASE_URL:
@@ -42,12 +47,12 @@ class EcnuInputBudgetHttpTest(FidelityHttpFixture, unittest.TestCase):
             async_client = httpx.AsyncClient(transport=httpx.MockTransport(self._respond))
             self.addCleanup(sync_client.close)
             self.addCleanup(lambda: asyncio.run(async_client.aclose()))
-            self.sdk_model = ChatDeepSeek(
-                model="ecnu-max", api_key="synthetic-never-sent-key",
-                base_url=ECNU_URL, temperature=0, max_retries=0,
+            self.sdk_model = build_deepseek_model(
+                model_name=self.model_name, api_key="synthetic-never-sent-key",
+                base_url=self.base_url,
                 http_client=sync_client, http_async_client=async_client,
-                use_responses_api=False,
             )
+            self.sdk_model.max_retries = 0
         # 只替换外部供应商构造边界，生产预算配置与业务存储均实际运行。
         with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=self.sdk_model):
             service = build_reply_service(database_url=self.database_url, owner_id=owner_id)
@@ -68,7 +73,7 @@ class EcnuInputBudgetHttpTest(FidelityHttpFixture, unittest.TestCase):
                   "used_skill_version_id": None}
         return httpx.Response(200, json={
             "id": "synthetic-ecnu-completion", "object": "chat.completion", "created": 0,
-            "model": "ecnu-max", "choices": [{"index": 0, "finish_reason": "tool_calls",
+            "model": self.model_name, "choices": [{"index": 0, "finish_reason": "tool_calls",
                 "message": {"role": "assistant", "content": None, "tool_calls": [{
                     "id": "synthetic-output-call", "type": "function",
                     "function": {"name": "ReplyRuntimeOutput", "arguments": json.dumps(output)},
@@ -76,7 +81,7 @@ class EcnuInputBudgetHttpTest(FidelityHttpFixture, unittest.TestCase):
             "usage": {"prompt_tokens": 42, "completion_tokens": 16, "total_tokens": 58},
         })
 
-    def test_short_production_ecnu_request_generates_and_reloads_approximate_receipt(self):
+    def test_short_production_request_generates_and_reloads_approximate_receipt(self):
         contact_id, _, _ = self.prepare_contact(self.owner_id, history=False)
         prefix = f"/api/contacts/{contact_id}"
         status, session = self.backend.request(prefix + "/assistant-session/default", {})
@@ -91,7 +96,7 @@ class EcnuInputBudgetHttpTest(FidelityHttpFixture, unittest.TestCase):
         self.assertEqual(budget["measurement_kind"], "approximate")
         self.assertEqual(budget["safety_margin_tokens"], 65536)
         self.assertEqual(budget["output_reserve_tokens"], 4096)
-        self.assertEqual(budget["context_window_tokens"], 512000)
+        self.assertEqual(budget["context_window_tokens"], self.context_window)
         self.assertEqual(len(self.sdk_payloads), 1)
         self.assertEqual(self.sdk_payloads[0]["max_tokens"], 4096)
         status, reloaded = self._backend(self.owner_id).request(path)
@@ -105,7 +110,7 @@ class EcnuInputBudgetHttpTest(FidelityHttpFixture, unittest.TestCase):
         status, session = self.backend.request(prefix + "/assistant-session/default", {})
         self.assertEqual(status, 200, session)
         path = prefix + f"/assistant-sessions/{session['session_id']}"
-        original = "合成完整讨论。" * 18000
+        original = "合成完整讨论。" * self.long_draft_repeats
         status, rejected = self.backend.request(path + "/replies", {
             "contact_id": contact_id, "idempotency_key": str(uuid4()),
             "content": {"type": "rewrite_draft", "draft_text": original},

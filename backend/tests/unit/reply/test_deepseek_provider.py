@@ -26,6 +26,8 @@ class BuildDeepSeekModelTest(unittest.TestCase):
         self.assertEqual(model.request_timeout, DEFAULT_DEEPSEEK_TIMEOUT_SECONDS)
         self.assertEqual(model.temperature, DEFAULT_DEEPSEEK_TEMPERATURE)
         self.assertEqual(DEFAULT_DEEPSEEK_TEMPERATURE, 0.0)
+        self.assertEqual(model.model_name, "deepseek-flash")
+        self.assertEqual(model.reasoning_effort, "none")
 
     def test_builds_model_with_custom_name_and_timeout(self) -> None:
         model = build_deepseek_model(
@@ -81,7 +83,7 @@ class BuildDeepSeekModelTest(unittest.TestCase):
     def test_default_base_url_stays_official(self) -> None:
         model = build_deepseek_model(api_key="test-key")
 
-        self.assertIsNone(model.model_dump()["openai_api_base"])
+        self.assertEqual(model.model_dump()["openai_api_base"], "https://api.deepseek.com")
 
     def test_base_url_reads_from_environment(self) -> None:
         with patch.dict(
@@ -109,6 +111,14 @@ class BuildDeepSeekModelTest(unittest.TestCase):
             model.model_dump()["extra_body"],
             {"thinking": {"type": "enabled"}},
         )
+        self.assertIsNone(model.reasoning_effort)
+
+    def test_explicit_ecnu_route_keeps_its_own_reasoning_default(self) -> None:
+        model = build_deepseek_model(
+            api_key="test-key", model_name="ecnu-max",
+            base_url="https://chat.ecnu.edu.cn/open/api/v1",
+        )
+        self.assertIsNone(model.reasoning_effort)
 
     def test_no_extra_body_by_default(self) -> None:
         model = build_deepseek_model(api_key="test-key")

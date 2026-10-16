@@ -28,6 +28,12 @@ ECNU_URL = "https://chat.ecnu.edu.cn/open/api/v1"
 
 
 class EcnuInputBudgetTest(unittest.TestCase):
+    model_name = "ecnu-max"
+    base_url = ECNU_URL
+    context_window = 512000
+    long_text_repeats = 30000
+    budget_builder = staticmethod(build_ecnu_input_budget)
+
     def model(self, responses=None, **overrides):
         payloads: list[bytes] = []
         scripted = list(responses or [reply_output()])
@@ -43,7 +49,7 @@ class EcnuInputBudgetTest(unittest.TestCase):
                 } for call in output.tool_calls]
             return httpx.Response(200, json={
                 "id": "synthetic-sdk-output", "object": "chat.completion", "created": 0,
-                "model": "ecnu-max", "choices": [{"index": 0, "message": message,
+                "model": self.model_name, "choices": [{"index": 0, "message": message,
                     "finish_reason": "tool_calls" if output.tool_calls else "stop"}],
                 "usage": {"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30},
             })
@@ -53,7 +59,7 @@ class EcnuInputBudgetTest(unittest.TestCase):
         self.addCleanup(sync_client.close)
         self.addCleanup(lambda: asyncio.run(async_client.aclose()))
         model = ChatDeepSeek(**{
-            "model": "ecnu-max", "base_url": ECNU_URL, "api_key": "synthetic-unused-key",
+            "model": self.model_name, "base_url": self.base_url, "api_key": "synthetic-unused-key",
             "temperature": 0, "max_retries": 0, "use_responses_api": False,
             "http_client": sync_client, "http_async_client": async_client,
             **overrides,
@@ -61,7 +67,7 @@ class EcnuInputBudgetTest(unittest.TestCase):
         return model, payloads
 
     def runtime(self, model, *, capacity=None, decisions=None, history=False):
-        configuration = build_ecnu_input_budget(model)
+        configuration = self.budget_builder(model)
         self.assertIsNotNone(configuration)
         profile, counter = configuration
         if capacity is not None:
@@ -85,9 +91,9 @@ class EcnuInputBudgetTest(unittest.TestCase):
 
     def test_non_text_content_does_not_receive_the_text_only_counter(self):
         model, _ = self.model()
-        _, counter = build_ecnu_input_budget(model)
+        _, counter = self.budget_builder(model)
         request = InputBudgetRequest(
-            model_id="ecnu-max", system_message=None,
+            model_id=self.model_name, system_message=None,
             messages=({"role": "user", "content": [{"type": "image_url",
                        "image_url": {"url": "data:image/png;base64,synthetic"}}]},),
             tool_schemas=(), response_schema=None,
@@ -99,11 +105,11 @@ class EcnuInputBudgetTest(unittest.TestCase):
     def test_unknown_model_or_endpoint_keeps_capability_unknown(self):
         for overrides in ({"model": "unverified-model"},
                           {"base_url": "https://chat.ecnu.edu.cn.example.test/open/api/v1"},
-                          {"base_url": ECNU_URL + "?different-route=1"},
+                          {"base_url": self.base_url + "?different-route=1"},
                           {"streaming": True}, {"use_responses_api": True}):
             with self.subTest(overrides=overrides):
                 model, payloads = self.model(**overrides)
-                self.assertIsNone(build_ecnu_input_budget(model))
+                self.assertIsNone(self.budget_builder(model))
                 with self.assertRaises(InputBudgetUnavailableError):
                     LangChainReplyRuntime(model=model, skill_port=EmptySkillPort(SCOPE, 0)).generate(prepared_context())
                 self.assertEqual(payloads, [])
@@ -111,7 +117,7 @@ class EcnuInputBudgetTest(unittest.TestCase):
     def test_same_name_other_instance_or_changed_sdk_endpoint_cannot_reuse_counter(self):
         model, payloads = self.model()
         other, _ = self.model()
-        profile, counter = build_ecnu_input_budget(model)
+        profile, counter = self.budget_builder(model)
         self.assertFalse(counter.is_bound_to(other))
         model.root_async_client.base_url = "http://127.0.0.1:1/unapproved"
         with self.assertRaises(InputBudgetUnavailableError):
@@ -130,7 +136,7 @@ class EcnuInputBudgetTest(unittest.TestCase):
         self.assertEqual(payloads, [])
         unpriced, _ = self.model()
         unpriced.model_kwargs = {"api_key": "synthetic-not-a-request-field"}
-        self.assertIsNone(build_ecnu_input_budget(unpriced))
+        self.assertIsNone(self.budget_builder(unpriced))
 
     def test_later_tool_round_is_rechecked_and_preserves_complete_history(self):
         prepared = prepared_context()
@@ -156,12 +162,12 @@ class EcnuInputBudgetTest(unittest.TestCase):
     def test_guard_rejects_full_long_context_without_truncation_or_model_call(self):
         model, payloads = self.model()
         original = prepared_context()
-        long_text = "合成完整资料。" * 30000
+        long_text = "合成完整资料。" * self.long_text_repeats
         prepared = replace(original, current_text=long_text,
                            evidence=(replace(original.evidence[0], text=long_text),))
         with self.assertRaises(InputBudgetExceededError) as caught:
             self.runtime(model).generate(prepared)
-        self.assertGreater(caught.exception.decision.total_tokens, 512000)
+        self.assertGreater(caught.exception.decision.total_tokens, self.context_window)
         self.assertEqual(prepared.current_text, long_text)
         self.assertEqual(payloads, [])
 
@@ -169,7 +175,7 @@ class EcnuInputBudgetTest(unittest.TestCase):
         model, payloads = self.model(responses=[reply_output(), AIMessage(content="", tool_calls=[{
             "id": "synthetic-exploration-call", "name": "ExplorationOutput", "args": output(),
         }])])
-        profile, counter = build_ecnu_input_budget(model)
+        profile, counter = self.budget_builder(model)
         decisions = []
         LangChainReplyRuntime(
             model=model, skill_port=EmptySkillPort(SCOPE, 0),
