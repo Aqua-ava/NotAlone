@@ -13,6 +13,8 @@
 .reply-results-heading h2 { margin: 0; font-size: 14px; font-weight: 600; }
 .reply-results-heading span { color: #6e797d; font-size: 11px; }
 .assistant-session-panel { margin-top: 16px; padding-top: 10px; border-top: 1px dashed #d8ceba; }
+.reply-generation-guidance { margin: 8px 4px; padding: 8px 10px; border-left: 3px solid #bd9852; background: #f6efdf; font-size: 12px; line-height: 1.6; }
+.reply-generation-guidance p { margin: 4px 0; }
 .reply-candidate-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 8px; }
 .reply-candidate { min-width: 0; border: 1px solid #c8d1cf; border-radius: 4px 7px 3px 5px; background: #fffdf6; padding: 8px; }
 .reply-choice { display: flex; align-items: center; gap: 5px; color: #456b87; font-size: 11px; margin-bottom: 8px; }

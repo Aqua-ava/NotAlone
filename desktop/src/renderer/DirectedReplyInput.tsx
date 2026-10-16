@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReplySessionView } from './RewritePanel';
 import { StrategyControls } from './StrategyControls';
 import { Icon } from './icons';
+import { DirectionGenerationNotice, needsDirectionClarification } from './ReplyGenerationGuidance';
 
 export function DirectedReplyInput({ replies }: { replies: ReplySessionView }) {
   const { state } = replies;
@@ -9,7 +10,7 @@ export function DirectedReplyInput({ replies }: { replies: ReplySessionView }) {
   useEffect(() => { setDirection(state.direction); }, [state.scopeRevision, state.direction]);
   const enabled = Boolean(state.contactId);
   const canGenerate = enabled && Boolean(state.targetMessageId) && Boolean(direction.trim()) && state.phase !== 'waiting' && !state.generationBlock
-    && state.exploration.phase !== 'waiting';
+    && state.exploration.phase !== 'waiting' && !needsDirectionClarification(state);
   return <section className="directed-input" aria-label="本次回复输入">
     <div className="message-heading"><b>选择待回复消息</b>
       <button disabled={!enabled || state.messages.phase === 'loading'} onClick={() => void replies.loadMessages()}>刷新消息</button></div>
@@ -32,6 +33,7 @@ export function DirectedReplyInput({ replies }: { replies: ReplySessionView }) {
       onChange={(event) => { setDirection(event.target.value); void replies.updateDirection(event.target.value); }} /></label>
       <button className="generate-button" aria-label="生成候选" title="生成候选" disabled={!canGenerate}
         onClick={() => void replies.generate()}><Icon name="sparkle" size={18} /></button></div>
+    <DirectionGenerationNotice state={state} />
     <p className="rewrite-privacy">本次回复使用选中消息、这位联系人的近期对话和相关资料。表达方向只作用于本次生成。</p>
     <div className="rewrite-retry">
       {state.canRetry && <button disabled={!canGenerate} onClick={() => void replies.generate()}>重试同一次生成</button>}

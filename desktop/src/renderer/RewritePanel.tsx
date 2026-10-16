@@ -6,6 +6,7 @@ import { useRevisionedSession } from './use-revisioned-session';
 import './rewrite.css';
 import { ReplyEvidence, useReplyEvidence } from './ReplyEvidence';
 import { AssistantSessionBudgetNotice, AssistantSessionPanel } from './AssistantSessionPanel';
+import { hasChangedReplyInput } from './ReplyGenerationGuidance';
 import { StyleSamples } from './StyleSamples';
 import { CandidateVersionEditor } from './CandidateVersionEditor';
 import type { ReplyCandidateDraftUpdate, ReplyCandidateVersionRead, ReplyCandidateVersionEdit, ReplyCandidateVersionDisplay, ReplyCandidateVersionSelection } from '../shared/assistant-candidate-versions';
@@ -215,6 +216,9 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
   return <section ref={resultRegion} className="reply-candidates" aria-label="候选回复">
     <header className="reply-results-heading"><h2>候选回复</h2>
       {candidates.length > 0 && <span>共 {candidates.length} 种说法，可选择并修改</span>}</header>
+    {candidates.length > 0 && (!state.result || state.exploration.result || state.exploration.phase === 'waiting' || state.exploration.phase === 'failed'
+      || state.phase === 'waiting' || state.phase === 'failed' || hasChangedReplyInput(state))
+      && <p className="reply-generation-guidance" role="status">上一组候选，尚未按当前输入重新生成。</p>}
     {state.contentRestoreNotice && <p role="status">{state.contentRestoreNotice}</p>}
     <AssistantSessionBudgetNotice replies={replies} />
     {state.sourceAvailability === 'checking' && <p role="status">正在核对删除后的依据…</p>}

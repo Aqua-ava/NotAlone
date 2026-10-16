@@ -49,7 +49,7 @@ export function StrategyControls({ replies }: { replies: ReplySessionView }) {
       </div>)}
       {result.question && <div role="group" aria-label="关键澄清">
         <p>{result.question.text}</p>
-        <label>关键问题回答<textarea aria-label="关键问题回答" maxLength={4096} value={answer} disabled={!available}
+        <label>关键问题回答<textarea id="reply-clarification-answer" aria-label="关键问题回答" maxLength={4096} value={answer} disabled={!available}
           onChange={(event) => {
             setAnswerDraft({ question, text: event.target.value });
             if (pausedQuestion.current !== question) {
