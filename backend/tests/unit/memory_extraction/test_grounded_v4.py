@@ -15,6 +15,205 @@ from tests.unit.memory_extraction.test_grounded_v3 import labels
 
 
 class GroundedV4CompilerTest(unittest.TestCase):
+    def test_continuation_keeps_completed_action_quantity_and_question_in_one_candidate(self):
+        from notalone.memory_extraction.evaluation import build_window
+        from notalone.memory_extraction.evaluation_cases import CASES
+        from notalone.memory_extraction.grounded import compile_labels_v4
+
+        source = build_window(next(case for case in CASES if case.name == "指代：门票"))
+        fact, = compile_labels_v4(source, labels(
+            row("1:0", "event", dependency="0:0", confidence=0.85, ambiguity_codes=[]),
+            row("1:1", "continuation", dependency="1:0", confidence=0.55, ambiguity_codes=[]),
+        ))
+        self.assertEqual(fact["text"], "联系人原话：“买好了，两张。”（相关原文：用户说“门票买好了吗？”）")
+        self.assertEqual(fact["confidence"], 0.55)
+        self.assertEqual(set(fact["source_message_ids"]), {str(message.message_id) for message in source.messages})
+        self.assertEqual((fact["category"], fact["speech_act"], fact["assertion_status"],
+                          fact["figurative_type"], fact["valid_at"], fact["invalid_at"]),
+                         ("common_fact", "assertion", "asserted", "literal", None, None))
+        self.assertEqual((fact["risk_flags"], fact["alternatives"]), ([], []))
+        self.assertNotIn("semantic_basis", fact)
+
+    def test_continuation_unions_both_dependencies_risks_and_ambiguities_at_minimum_confidence(self):
+        from notalone.memory_extraction.grounded import compile_labels_v4
+        from notalone.memory_extraction.models import MessageRef, MessageSender
+        from uuid import uuid4
+
+        # 风险和未知标签人为给定，只核成员传播，不认证分类正确。
+        source = window("材料送到了，二十份。")
+        contexts = tuple(MessageRef(uuid4(), text, MessageSender.SELF, source.messages[0].occurred_at)
+                         for text in ("你答应送来的材料呢？", "指的是尚未确认归属的资料吗？"))
+        source = replace(source, messages=(*contexts, *source.messages))
+        fact, = compile_labels_v4(source, labels(
+            row("2:0", "event", dependency="0:0", confidence=0.83, sensitivity="commitment",
+                unresolved=True, ambiguity_codes=["other_unresolved"]),
+            row("2:1", "continuation", dependency="1:0", confidence=0.46, sensitivity="other",
+                unresolved=True, ambiguity_codes=["object_ownership"]),
+        ))
+        self.assertEqual(fact["text"], "联系人原话：“材料送到了，二十份。”"
+                         "（相关原文：用户说“你答应送来的材料呢？”；用户说“指的是尚未确认归属的资料吗？”）")
+        self.assertEqual(set(fact["source_message_ids"]), {str(message.message_id) for message in source.messages})
+        self.assertEqual(fact["confidence"], 0.46)
+        self.assertEqual(fact["risk_flags"], ["sensitivity:commitment", "sensitivity:other"])
+        self.assertEqual(len(fact["alternatives"]), 2)
+        self.assertIn("其他未决解释", fact["alternatives"][0])
+        self.assertIn("物品所有者", fact["alternatives"][1])
+        self.assertIn(fact["text"], fact["alternatives"][1])
+        self.assertEqual((fact["valid_at"], fact["invalid_at"]), (None, None))
+
+    def test_continuation_supports_only_bounded_integers_and_closed_counting_units(self):
+        from notalone.memory_extraction.grounded import compile_labels_v4
+        from notalone.memory_extraction.models import MessageSender
+
+        draft = labels(
+            row("0:0", "event", subject="self", ambiguity_codes=[]),
+            row("0:1", "continuation", subject="self", ambiguity_codes=[]),
+        )
+        for number in ("0", "1", "12", "9999", "零", "〇", "一", "两", "十", "十一", "十九", "二十", "九十九"):
+            with self.subTest(number=number):
+                text = f"我归档好了，{number}份。"
+                source = window(text)
+                source = replace(source, messages=(replace(source.messages[0], sender=MessageSender.SELF),))
+                fact, = compile_labels_v4(source, draft)
+                self.assertEqual(fact["text"], f"用户原话：“{text}”")
+                self.assertEqual((fact["category"], fact["subject"], fact["valid_at"], fact["invalid_at"]),
+                                 ("common_fact", "self", None, None))
+        draft = labels(row("0:0", "event", ambiguity_codes=[]),
+                       row("0:1", "continuation", ambiguity_codes=[]))
+        for unit in ("个", "位", "名", "人", "张", "份", "本", "件", "台", "套", "把", "双", "只", "支",
+                     "瓶", "盒", "袋", "包", "辆", "枚", "颗", "条"):
+            with self.subTest(unit=unit):
+                text = f"处理完了；12{unit}！"
+                fact, = compile_labels_v4(window(text), draft)
+                self.assertEqual(fact["text"], f"联系人原话：“{text}”")
+        for ending in ("", "。", "！", "!"):
+            with self.subTest(ending=ending):
+                text = f"处理完了; 12份{ending}"
+                fact, = compile_labels_v4(window(text), draft)
+                self.assertEqual(fact["text"], f"联系人原话：“{text}”")
+        # 没有句末标点时，分句内部的首尾空白也保留；不改旧分句器的定位规则。
+        fact, = compile_labels_v4(window("处理完了; 12份 "), draft)
+        self.assertEqual(fact["text"], "联系人原话：“处理完了; 12份 ”")
+
+    def test_continuation_rejects_other_quantity_shapes_predicates_money_and_dates(self):
+        from notalone.memory_extraction.errors import ExtractionInvalidOutputError
+        from notalone.memory_extraction.grounded import compile_labels_v4
+
+        draft = labels(row("0:0", "event", ambiguity_codes=[]),
+                       row("0:1", "continuation", ambiguity_codes=[]))
+        for suffix in ("10000份。", "01份。", "一百份。", "两十份。", "一十份。", "十十份。",
+                       "-2份。", "1.5份。", "１份。", "二三份。", "几份。", "半份。", "约两份。",
+                       "两份左右。", "2至3份。", "2-3份。", "2 份。", "两份资料。", "共两份。",
+                       "两元。", "两块。", "2月。", "两天。", "十点。", "2026-10-16。",
+                       "2公斤。", "两。", "2。", "我取了两份。", "两份发出去了。", "两份？"):
+            with self.subTest(suffix=suffix), self.assertRaisesRegex(ExtractionInvalidOutputError, "有限整数"):
+                compile_labels_v4(window("处理完了，" + suffix), draft)
+
+    def test_continuation_rejects_orphans_other_anchors_sentence_boundaries_and_multiple_suffixes(self):
+        from notalone.memory_extraction.errors import ExtractionInvalidOutputError
+        from notalone.memory_extraction.grounded import compile_labels_v4, source_units
+
+        examples = (
+            ("两份。", ["continuation"]),
+            ("说到材料，两份。", ["prefix", "continuation"]),
+            ("如果已经备好，两份。", ["condition", "continuation"]),
+            ("你处理完了吗，两份。", ["question", "continuation"]),
+            ("你好，两份。", ["greeting", "continuation"]),
+            ("随口说说，两份。", ["nonliteral", "continuation"]),
+            ("无关的话，两份。", ["not_memory", "continuation"]),
+            ("已经收到了，两份。", ["relationship_event", "continuation"]),
+            ("现在还在处理，两份。", ["state", "continuation"]),
+            ("我准备明天去领，两份。", ["plan", "continuation"]),
+            ("他可能收到，两份。", ["reported_event", "continuation"]),
+            ("处理完了。两份。", ["event", "continuation"]),
+            ("处理完了！两份。", ["event", "continuation"]),
+            ("处理完了？两份。", ["event", "continuation"]),
+            ("处理完了\n两份。", ["event", "continuation"]),
+            ("处理完了。，两份。", ["event", "continuation"]),
+            ("处理完了，两份，三张。", ["event", "continuation", "continuation"]),
+            ("关于材料，处理完了，两份。", ["prefix", "event", "continuation"]),
+            ("如果备齐，处理完了，两份。", ["condition", "event", "continuation"]),
+        )
+        for text, kinds in examples:
+            source = window(text)
+            draft = labels(*(row(unit.id, kind, ambiguity_codes=[])
+                             for unit, kind in zip(source_units(source), kinds, strict=True)))
+            with self.subTest(text=text), self.assertRaises(ExtractionInvalidOutputError):
+                compile_labels_v4(source, draft)
+
+    def test_continuation_rejects_cross_message_context_and_conflicting_ownership_or_topic(self):
+        from notalone.memory_extraction.errors import ExtractionInvalidOutputError
+        from notalone.memory_extraction.grounded import compile_labels_v4
+        from notalone.memory_extraction.models import MessageRef, MessageSender
+        from uuid import uuid4
+
+        source = window("两份。")
+        prior = MessageRef(uuid4(), "处理完了，", MessageSender.CONTACT, source.messages[0].occurred_at)
+        for targets, draft in (
+            ((prior.message_id, source.messages[0].message_id), labels(
+                row("0:0", "event", ambiguity_codes=[]), row("1:0", "continuation", ambiguity_codes=[]),
+            )),
+            ((source.messages[0].message_id,), labels(row("1:0", "continuation", ambiguity_codes=[]))),
+        ):
+            with self.subTest(targets=len(targets)), self.assertRaises(ExtractionInvalidOutputError):
+                compile_labels_v4(replace(source, messages=(prior, *source.messages), target_message_ids=targets), draft)
+        for mismatch in ({"subject": "self"}, {"subject": "shared"}, {"topic": "study"}):
+            with self.subTest(mismatch=mismatch), self.assertRaisesRegex(ExtractionInvalidOutputError, "冲突"):
+                compile_labels_v4(window("处理完了，两份。"), labels(
+                    row("0:0", "event", ambiguity_codes=[]),
+                    row("0:1", "continuation", ambiguity_codes=[], **mismatch),
+                ))
+
+    def test_continuation_is_v4_only_and_never_changes_unlabelled_event_event(self):
+        from notalone.memory_extraction.errors import ExtractionInvalidOutputError
+        from notalone.memory_extraction.evaluation import build_window, evaluate_case
+        from notalone.memory_extraction.evaluation_cases import CASES
+        from notalone.memory_extraction.grounded import compile_draft, compile_labels, compile_labels_v3, compile_labels_v4
+        from notalone.memory_extraction.verification import SourceVerificationMode
+
+        source = window("处理完了，两份。")
+        rows = (row("0:0", "event"), row("0:1", "continuation"))
+        for compiler, draft in ((compile_draft, {"units": list(rows)}), (compile_labels, labels(*rows)),
+                                (compile_labels_v3, labels(*(dict(item, ambiguity_codes=[]) for item in rows)))):
+            with self.subTest(version=compiler.__name__), self.assertRaisesRegex(
+                ExtractionInvalidOutputError, "未知事实类型",
+            ):
+                compiler(source, draft)
+        for override in ({"kind": "continuation_extra"}, {"text": "改写"}, {"valid_at": "2026-10-16"},
+                         {"confidence": True}, {"confidence": float("nan")}, {"dependency": "0:1"},
+                         {"unresolved": True}, {"ambiguity_codes": ["not_a_code"]}):
+            with self.subTest(override=override), self.assertRaises(ExtractionInvalidOutputError):
+                compile_labels_v4(source, labels(row("0:0", "event", ambiguity_codes=[]),
+                                                {**row("0:1", "continuation", ambiguity_codes=[]), **override}))
+
+        case = next(case for case in CASES if case.name == "指代：门票")
+        source = build_window(case)
+        old = labels(row("1:0", "event", dependency="0:0", confidence=0.85, ambiguity_codes=[]),
+                     row("1:1", "event", dependency="1:0", confidence=0.55, ambiguity_codes=[]))
+        facts = compile_labels_v4(source, old)
+        self.assertEqual([fact["text"] for fact in facts], [
+            "联系人原话：“买好了，”（相关原文：用户说“门票买好了吗？”）",
+            "联系人原话：“两张。”（相关原文：联系人说“买好了，”；用户说“门票买好了吗？”）",
+        ])
+
+        class FixedExtraction:
+            def extract(self, window):
+                return deepcopy(facts)
+
+        class SupportingVerifier:
+            verification_mode = SourceVerificationMode.NULLABLE_PROOF_V1
+
+            def verify(self, *, window, facts):
+                return tuple({"candidate_index": index, "verdict": "supported", "issues": [], "proof": None,
+                              "evidence": [{"message_id": str(message.message_id), "quote": message.text}
+                                           for message in window.messages if message.message_id in fact.source_message_ids]}
+                             for index, fact in enumerate(facts))
+
+        result = evaluate_case(case, source, FixedExtraction(), verification_runtime=SupportingVerifier())
+        self.assertIsNone(result.failure_reason)
+        self.assertEqual([(fact["confidence"], fact["destination"]) for fact in result.facts],
+                         [(0.85, "auto"), (0.55, "pending")])
+
     def test_stable_fact_preserves_self_and_contact_sources_without_observation_dates(self):
         from notalone.memory_extraction.grounded import compile_labels_v4
         from notalone.memory_extraction.models import MessageSender

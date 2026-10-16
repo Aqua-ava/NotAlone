@@ -36,6 +36,7 @@ V4_KIND_EXTENSIONS = {
     "uncertain_state": ("recent_state", "assertion", "unknown", "literal"),
     "stage_unknown_state": ("recent_state", "unknown", "unknown", "literal"),
 }
+V4_STRUCTURAL_KINDS = {"continuation"}
 OMISSIONS = {"question", "greeting", "nonliteral", "not_memory"}
 ROW_KEYS = {"unit", "kind", "subject", "topic", "dependency", "unresolved", "confidence", "sensitivity"}
 AMBIGUITY_CODES = ("entity_identity", "place_ownership", "borrowing_direction", "other_unresolved")
@@ -58,6 +59,12 @@ _V4_AMBIGUITY_TEMPLATES = {
 }
 SENSITIVITY = {"none", "financial", "health", "commitment", "other"}
 _CONDITION = re.compile(r"^(?:如果|假如|要是|倘若|若)")
+# 仅校验显式附属标签：整数紧接计数单位，不解释数量或自动选择角色。
+_COUNT_CONTINUATION = re.compile(
+    r"(?:0|[1-9][0-9]{0,3}|零|〇|[一二两三四五六七八九]|十[一二三四五六七八九]?|"
+    r"[二三四五六七八九]十[一二三四五六七八九]?)"
+    r"(?:个|位|名|人|张|份|本|件|台|套|把|双|只|支|瓶|盒|袋|包|辆|枚|颗|条)[。！!]?"
+)
 
 
 @dataclass(frozen=True)
@@ -196,6 +203,29 @@ def _dependencies(
     return list(result.values())
 
 
+def _quantity_continuations(
+    units: tuple[SourceUnit, ...], rows: dict[str, dict[str, Any]],
+) -> dict[str, SourceUnit]:
+    """只为显式v4角色建立一个相邻附属项；共享后续事实构建。"""
+    result = {}
+    for index, unit in enumerate(units):
+        if not unit.target or rows[unit.id]["kind"] != "continuation":
+            continue
+        anchor = units[index - 1] if index else None
+        if (anchor is None or not anchor.target
+                or anchor.message.message_id != unit.message.message_id
+                or anchor.end != unit.start or rows[anchor.id]["kind"] != "event"
+                or not re.search(r"[，；;]+$", anchor.text)
+                or re.search(r"[。！？!?\n]", anchor.text)):
+            raise ValueError("附属数量必须紧邻同一目标消息中未结束整句的普通event。")
+        if any(rows[anchor.id][field] != rows[unit.id][field] for field in ("subject", "topic")):
+            raise ValueError("附属数量的归属或主题与主项冲突。")
+        if _COUNT_CONTINUATION.fullmatch(unit.text.strip()) is None:
+            raise ValueError("附属数量超出有限整数与计数单位语法。")
+        result[anchor.id] = unit
+    return result
+
+
 def compile_draft(window: ExtractionWindow, draft: object) -> ExtractionPayload:
     """从完整分句标签编译原14槽；任何结构缺口停止整批而非静默漏记。"""
     return _checked_compile(window, draft, completed_answers=False)
@@ -228,6 +258,7 @@ def _compile(
     period_kinds = {"plan", "hypothesis"}
     if version4:
         allowed_kinds.update(V4_KIND_EXTENSIONS)
+        allowed_kinds.update(V4_STRUCTURAL_KINDS)
         observed_kinds.add("uncertain_state")
         period_kinds.update({"uncertain_plan", "figurative_unknown_plan"})
     rows: dict[str, dict[str, Any]] = {}
@@ -259,6 +290,7 @@ def _compile(
     if set(rows) != target_ids:
         raise ValueError("目标分句未完整交代。")
 
+    continuations = _quantity_continuations(units, rows) if version4 else {}
     results: list[dict[str, Any]] = []
     pending_condition: SourceUnit | None = None
     unknown_groups: dict[tuple, dict[str, Any]] = {}
@@ -268,24 +300,31 @@ def _compile(
             continue
         row = rows[unit.id]
         kind = row["kind"]
+        if kind == "continuation":
+            continue
         if kind in {"condition", "prefix"}:
             if pending_condition is not None or (kind == "condition" and not _CONDITION.match(unit.text)):
                 raise ValueError("条件分句不能定位。")
             pending_condition = unit
             continue
         condition = pending_condition
+        continuation = continuations.get(unit.id)
+        if condition is not None and continuation is not None:
+            raise ValueError("附属数量不能再与前缀或条件合并。")
         if condition is not None and (condition.message.message_id != unit.message.message_id or (rows[condition.id]["kind"] == "condition" and kind not in {"plan", "hypothesis"}) or kind in OMISSIONS):
             raise ValueError("条件必须绑定同一消息的下一计划分句。")
         pending_condition = None
         if kind in OMISSIONS:
             continue
         members = ([condition] if condition else []) + [unit]
+        if continuation is not None:
+            members.append(continuation)
         dependencies = _dependencies(members, rows, by_id)
         sources = [unit.message.message_id]
         for dep in dependencies:
             if dep.message.message_id not in sources:
                 sources.append(dep.message.message_id)
-        quote = (condition.text if condition else "") + unit.text
+        quote = "".join(member.text for member in members)
         author = "用户" if unit.message.sender.value == "self" else "联系人"
         completed = (completed_answers and condition is None
                      and kind in {"state", "momentary_state"}
@@ -300,6 +339,8 @@ def _compile(
         flags = [] if row["sensitivity"] == "none" else ["sensitivity:" + row["sensitivity"]]
         if condition is not None and rows[condition.id]["sensitivity"] != "none":
             flags.append("sensitivity:" + rows[condition.id]["sensitivity"])
+        if continuation is not None and rows[continuation.id]["sensitivity"] != "none":
+            flags = list(dict.fromkeys([*flags, "sensitivity:" + rows[continuation.id]["sensitivity"]]))
         valid: datetime | None = None
         invalid: datetime | None = None
         anchor = unit.message.occurred_at
@@ -409,7 +450,7 @@ def compile_labels_v3(window: ExtractionWindow, draft: object) -> ExtractionPayl
 
 
 def compile_labels_v4(window: ExtractionWindow, draft: object) -> ExtractionPayload:
-    """显式离线v4复用原文结构，增加有限未知类型，不接收自由字段。"""
+    """显式离线v4增加封闭类型与附属角色，不接收自由字段。"""
     return _compile_typed_labels(window, draft, version4=True)
 
 

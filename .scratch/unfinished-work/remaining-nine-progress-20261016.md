@@ -11,7 +11,7 @@
 | [本机交付20](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed；当前签名包Finder启动、真实选择/导入等分项已有证据；[真实DeepSeek合成App冒烟](../mac-desktop-app/reply-model-smoke-result-20261016.md)1／1通过，模型AC完成；[v9快捷键两场](../mac-desktop-app/native-shortcut-v9-20261016.md)保留准备超时及两次按键后未观察到显示；[后两场观察方式对照](../mac-desktop-app/native-shortcut-v9-observation-control-20261016.md)仍未通过 | 独立启动权限、系统快捷键；新增1次按键及另1场按键0，观察干扰未排除，物理键盘意愿问题未答、不预启动人工场 |
 | [真实微信follow04](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed；单联系人有界读取、退出及视觉独立性已有证据；[v7同App总开关重开](../native-app-backend/real-sync-reenable-result-20261016.md)1／1通过，关闭65.926秒零新读取 | 第四AC空窗关停重开控制流及第五Answer记录已完成；第一／二AC持续到达与切换仍缺，不认证正向消息恢复，双联系人和真实来信保留未验证 |
 | [核心事实保留01](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed／ready-for-agent；[新独立8窗场](../grounded-evaluation/remaining-public8-result-20261016.md)B01单窗封存raw3／接受3／完整3，B02核验未知 | 无完整batch result，外层两窗仍unknown；不代签核心5命题整体，旧真实/留出不读不改 |
-| [指代消解07](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed／ready-for-agent；[main16](../grounded-evaluation/v3-main16-result-20261016.md)原封存完整11仅机械计数，A05争议撤出；[完整140新场](../grounded-evaluation/full140-v4-result-20261016.md)closed2／280，首窗V读取超时远端未知、后139未跑 | 不足≥15；新场没有审核／质量信用，不与旧部分场拼成绩，未知V不补发 |
+| [指代消解07](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed／ready-for-agent；[main16](../grounded-evaluation/v3-main16-result-20261016.md)原封存完整11仅机械计数，A05争议撤出；[完整140旧场](../grounded-evaluation/full140-v4-result-20261016.md)首窗V未知；[新混合场](../grounded-evaluation/full140-mixed-v-off-result-20261016.md)closed6／280，3窗已审、137未跑，R002字段bad_auto硬停 | 不足≥15；旧场无审核，混合场仅3窗已审、137未跑且未达质量门；不拼旧场，旧未知V不补发 |
 | [按维度放行03](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed／ready-for-agent；结构和合取门已有实现，默认放行表仍为空 | 主集12条proof仍UNKNOWN；[有限包装决策稿](../grounded-evaluation/typed-proof-representation-decision-20261016.md)待决定，真实质量、typed依据与逐类放行分别验收 |
 
 本轮官方DeepSeek公开基线实际25次HTTP、零重试，13窗完成、8窗未运行；A13整组去向合同触发停止，剩余17次永久关闭。[完整结果](../grounded-evaluation/deepseek-public21-result-20261015.md)区分内容事实错误与整组auto/pending合同，不覆盖原Gold、旧失败或分母。未使用ECNU，没有上传真实聊天或放开自动采纳。
@@ -56,3 +56,6 @@
 
 
 随后完成[稳定事实离线类型补全](../grounded-v4-stable-facts/result-20261016.md)：单一v4 stable_fact映射common_fact／双null，原state与旧v2／v3不变；真实编译和SDK Mock先红后绿。Root grounded75、评测单元193、集成逐条112通过（摘要Ran113，1测试及2个组环境准备跳过），两源码类型通过；代码独立双轴0。原R002标签回放仍bad_auto2，不覆盖旧失败或当作模型质量改善。未改V／typed／Gold／采纳门／空放行表，未启动新真实场；未来须修订合同与新freeze，三记忆票和原9张状态保持。
+
+
+另补[已完成动作的附属数量](../grounded-v4-quantity-continuation/result-20261016.md)：旧A13实际是门票完成及“两张”，并非条件计划；旧event／event仍重现0.85 auto＋0.55 pending及bad_auto1。新v4显式continuation在有限整数／计数单位范围内合并完整原引句和依赖，保留最低0.55、风险和歧义，给定V支持的SDK／Flow控制为pending1／auto0，Gold理想auto仍不达标。Root83项grounded、193项评测单元、集成逐条112项ok（1测试及2个组环境准备跳过），mypy两源码通过；所有session已结束，无新真实请求／预算，旧失败和原9张状态不变，两轴初审各1项索引旧／新场口径问题已纠正，增审各0、源码问题0。

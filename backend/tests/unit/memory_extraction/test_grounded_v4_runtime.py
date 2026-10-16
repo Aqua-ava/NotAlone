@@ -33,6 +33,64 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                             (socket, "getaddrinfo")):
             guards.enter_context(patch.object(owner, name, side_effect=AssertionError("禁止真实网络")))
 
+    def test_sdk_continuation_contract_keeps_supported_full_quote_pending_at_point_five_five(self):
+        from notalone.memory_extraction.evaluation import build_window, evaluate_case
+        from notalone.memory_extraction.evaluation_cases import CASES
+        from notalone.memory_extraction.grounded_adapter import (
+            GroundedV4ExtractionRuntime, GROUNDED_PROMPT, GROUNDED_V3_PROMPT,
+            grounded_schema, grounded_schema_v3,
+        )
+        from notalone.memory_extraction.verification import SourceVerificationMode
+        from tests.unit.memory_extraction.verification_helpers import FixedSourceVerifier, verification_result
+
+        class NullableVerifier(FixedSourceVerifier):
+            verification_mode = SourceVerificationMode.NULLABLE_PROOF_V1
+
+        case = next(case for case in CASES if case.name == "指代：门票")
+        source = build_window(case)
+        draft = labels(
+            row("1:0", "event", dependency="0:0", confidence=0.85, ambiguity_codes=[]),
+            row("1:1", "continuation", dependency="1:0", confidence=0.55, ambiguity_codes=[]),
+        )
+        verifier = NullableVerifier(({**verification_result(
+            evidence=tuple((message.message_id, message.text) for message in source.messages),
+        ), "proof": None},))
+        requests = []
+
+        def handler(request):
+            requests.append(json.loads(request.content))
+            return response(draft, name="GroundedMemoryLabelsV4")
+
+        with build_trace_http_client(transport=httpx.MockTransport(handler)) as client:
+            model = build_deepseek_model(api_key="synthetic-secret", base_url="http://127.0.0.1/v1",
+                                         http_client=client)
+            result = evaluate_case(case, source, GroundedV4ExtractionRuntime(model=model),
+                                   verification_runtime=verifier)
+
+        self.assertIsNone(result.failure_reason)
+        self.assertEqual([(fact["confidence"], fact["destination"]) for fact in result.facts], [(0.55, "pending")])
+        self.assertEqual(len(verifier.calls), 1)
+        self.assertEqual(result.facts[0]["text"], "联系人原话：“买好了，两张。”（相关原文：用户说“门票买好了吗？”）")
+        self.assertEqual(len(requests), 1)
+        prompt = requests[0]["messages"][0]["content"]
+        for guidance in ("continuation=已完成普通event的紧邻后置附属数量", "不是独立事件或前置prefix",
+                         "中文0至99", "半角阿拉伯整数0至9999", "不允许前导零", "金额、日期、谓词",
+                         "不按数字或量词自动选择continuation", "最低confidence"):
+            self.assertIn(guidance, prompt)
+        tool = requests[0]["tools"][0]["function"]
+        self.assertEqual(tool["name"], "GroundedMemoryLabelsV4")
+        slots = tool["parameters"]["properties"]["units"]["properties"]
+        self.assertEqual(set(slots), {"1:0", "1:1"})
+        self.assertIn("continuation", slots["1:1"]["properties"]["kind"]["enum"])
+        self.assertEqual(set(slots["1:1"]["required"]), {
+            "kind", "subject", "topic", "dependency", "unresolved", "confidence", "sensitivity", "ambiguity_codes",
+        })
+        self.assertFalse(slots["1:1"]["additionalProperties"])
+        for schema in (grounded_schema(source), grounded_schema_v3(source)):
+            self.assertNotIn("continuation", schema["properties"]["units"]["properties"]["1:1"]["properties"]["kind"]["enum"])
+        for old_prompt in (GROUNDED_PROMPT, GROUNDED_V3_PROMPT):
+            self.assertNotIn("continuation", old_prompt)
+
     def test_sdk_stable_fact_uses_v4_guidance_and_closed_schema_without_observation_date(self):
         from notalone.memory_extraction.grounded_adapter import (
             GroundedV4ExtractionRuntime, GROUNDED_PROMPT, GROUNDED_V3_PROMPT,

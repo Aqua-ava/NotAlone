@@ -9,6 +9,7 @@ from langchain_core.language_models import BaseChatModel
 from notalone.memory_extraction.errors import ExtractionInvalidOutputError, ExtractionRuntimeError
 from notalone.memory_extraction.grounded import (
     AMBIGUITY_CODES, KINDS, OMISSIONS, SENSITIVITY, V4_AMBIGUITY_CODES, V4_KIND_EXTENSIONS,
+    V4_STRUCTURAL_KINDS,
     compile_labels, compile_labels_v3, compile_labels_v4, source_units, needs_reference, reference_choices,
 )
 from notalone.memory_extraction.models import ExtractionWindow, MemoryTopic
@@ -80,6 +81,14 @@ correction保留已发生的更正动作及完整原定/更正内容；被更正
 知情、决策、近况、短期身体状况继续使用相应state／未知状态类型；瞬时状态和未来计划继续使用各自原类型。
 原文明示期间的短期资料仍按相应状态或计划保留期间，不能用stable_fact抹去时间限定。
 stable_fact仍只是模型类型判断，不认证永久有效、现实身份或来源可信，也不提供typed依据。
+另允许结构角色continuation=已完成普通event的紧邻后置附属数量，不是独立事件或前置prefix。
+先依原文判断附属关系，不按数字或量词自动选择continuation；独立动作继续event，不删除数量。
+主项须是同一target消息的前一相邻event，以中文逗号或中英文分号相连，不跨完整句末；context、省略项、其他kind、前置prefix或condition均不能作主项。
+只允许一个附属项，subject与topic须和主项完全一致；不能以连续附属项吞掉另一独立主张。
+仅支持半角阿拉伯整数0至9999（不允许前导零）或中文0至99（零／〇／一至九／两／十至十九／二十至九十九），数字紧接计数单位。
+计数单位仅个、位、名、人、张、份、本、件、台、套、把、双、只、支、瓶、盒、袋、包、辆、枚、颗、条；可无句末标点或以。／！／!结束，验证时忽略原分句首尾空白，引用保留原分句。
+金额、日期、谓词、小数、负数、范围、概数及其他尾句不在此有限语法内，不能标continuation。
+程序按原顺序合并完整原引句与双方依赖，传播风险和歧义，并取最低confidence；不升置信度，也不提供来源语义证明。
 """
 
 
@@ -170,7 +179,9 @@ def grounded_schema_v4(window: ExtractionWindow) -> dict[str, Any]:
     schema = grounded_schema_v3(window)
     schema["title"] = "GroundedMemoryLabelsV4"
     for label in schema["properties"]["units"]["properties"].values():
-        label["properties"]["kind"] = _enum({*KINDS, *V4_KIND_EXTENSIONS, *OMISSIONS, "condition", "prefix"})
+        label["properties"]["kind"] = _enum({
+            *KINDS, *V4_KIND_EXTENSIONS, *V4_STRUCTURAL_KINDS, *OMISSIONS, "condition", "prefix",
+        })
         codes = label["properties"]["ambiguity_codes"]
         codes["items"] = _enum(V4_AMBIGUITY_CODES)
         codes["maxItems"] = len(V4_AMBIGUITY_CODES)
