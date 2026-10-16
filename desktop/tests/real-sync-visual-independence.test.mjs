@@ -88,6 +88,135 @@ test('正式观察按阶段开始计数，助手零新调用，其他App须完�
   });
 });
 
+test('微信完整零采集暂停只等待，首个合法recognized才固定测量起点', async () => {
+  await acceptancePorts(({ wechatStageEvidence }) => {
+    const start = at => ({ kind: 'probe-start', started_at_ms: at });
+    const result = (at, status, count) => ({ kind: 'probe', started_at_ms: at,
+      outcome: 'returned', native_status: status, complete: true, valid: true, single_frame_requested: true,
+      capture_requests: count, capture_completions: count, frames_received: count, header_ocr_calls: count });
+    const paused = [start(101), result(101, 'paused', 0)];
+    const waiting = wechatStageEvidence(paused, 100);
+    assert.equal(waiting.invalid, false, '实际旧阶段会把合法零采集暂停误拒');
+    assert.equal(waiting.ready, false);
+    assert.equal(waiting.startedAt, null);
+    assert.equal(waiting.waitingCompleted, 1);
+    const positive = wechatStageEvidence([...paused, start(105), result(105, 'recognized', 1)], 100);
+    assert.equal(positive.invalid, false);
+    assert.equal(positive.ready, true);
+    assert.equal(positive.startedAt, 105);
+    assert.equal(positive.waitingCompleted, 1);
+  });
+});
+
+test('微信前置必须合法闭合，未知、坏计数、重复或逆序配对及正向后暂停均拒绝', async () => {
+  await acceptancePorts(({ wechatStageEvidence }) => {
+    const start = at => ({ kind: 'probe-start', started_at_ms: at });
+    const result = (at, status = 'paused', count = 0) => ({ kind: 'probe', started_at_ms: at,
+      outcome: 'returned', native_status: status, complete: true, valid: true, single_frame_requested: true,
+      capture_requests: count, capture_completions: count, frames_received: count, header_ocr_calls: count });
+    const pending = [start(101), start(105), result(105, 'recognized', 1)];
+    assert.equal(wechatStageEvidence(pending, 100).startedAt, null);
+    assert.equal(wechatStageEvidence(pending, 100).ready, false);
+    assert.equal(wechatStageEvidence([...pending, result(101)], 100).startedAt, 105);
+    for (const bad of [
+      result(101, 'unknown'), result(101, 'paused', 1), result(101, 'recognized', 0),
+      { ...result(101), outcome: 'timeout' }, { ...result(101), complete: false },
+      { ...result(101), valid: false }, { ...result(101), single_frame_requested: false },
+      { ...result(101), header_ocr_calls: 1 },
+    ]) assert.equal(wechatStageEvidence([start(101), bad], 100).invalid, true);
+    for (const rows of [[result(101)], [result(101), start(101)], [start(101), start(101)],
+      [start(101), result(101), result(101)], [{ kind: 'probe-start', started_at_ms: NaN }]]) {
+      assert.equal(wechatStageEvidence(rows, 100).invalid, true);
+    }
+    const positive = [start(105), result(105, 'recognized', 1)];
+    assert.equal(wechatStageEvidence([...positive, start(110)], 100, 105).ready, false);
+    const laterPaused = wechatStageEvidence([...positive, start(110), result(110)], 100, 105);
+    assert.equal(laterPaused.startedAt, 105);
+    assert.equal(laterPaused.invalid, true);
+  });
+});
+
+test('助手等真实获焦才固定一次起点和CLI边界，失焦重获焦不重置或延长70秒', async () => {
+  await acceptancePorts(({ helperStageEvidence }) => {
+    const oldTail = [{ event: 'started', kind: 'tail', pid: 11 },
+      { event: 'finished', kind: 'tail', pid: 11, returncode: 0 }, { event: 'accepted', kind: 'tail' }];
+    const frame = { triggeredAt: 100, observedAt: 150, checkedAt: 151, auditObservedAt: 151,
+      focused: false, rows: [{ kind: 'probe-start', started_at_ms: 110 }], audit: oldTail };
+    const waiting = helperStageEvidence(undefined, frame);
+    assert.equal(waiting.boundary.startedAt, null, 'Root信号不能代签首次原生获焦');
+    assert.equal(waiting.ready, false);
+    const focused = helperStageEvidence(waiting.boundary, { ...frame, focused: true, observedAt: 200,
+      checkedAt: 202, auditObservedAt: 201 });
+    assert.equal(focused.boundary.startedAt, 200);
+    assert.equal(focused.boundary.checkpoint, 3);
+    assert.equal(focused.boundary.checkpointObservedAt, 201);
+    assert.equal(focused.ready, false, '起点前完成的tail不得复用');
+    const fresh = [...oldTail, { event: 'started', kind: 'tail', pid: 12 },
+      { event: 'finished', kind: 'tail', pid: 12, returncode: 0 }, { event: 'accepted', kind: 'tail' }];
+    const blurred = helperStageEvidence(focused.boundary, { ...frame, observedAt: 300,
+      checkedAt: 301, audit: fresh });
+    assert.equal(blurred.ready, false);
+    const regained = helperStageEvidence(blurred.boundary, { ...frame, focused: true, observedAt: 400,
+      checkedAt: 401, audit: fresh });
+    assert.equal(regained.boundary.startedAt, 200);
+    assert.equal(regained.boundary.checkpoint, 3);
+    assert.equal(regained.ready, true);
+    const expired = helperStageEvidence(regained.boundary, { ...frame, focused: true, observedAt: 70_100,
+      checkedAt: 70_100, audit: fresh });
+    assert.equal(expired.boundary.deadlineAt, 70_100);
+    assert.equal(expired.expired, true);
+    assert.equal(expired.ready, false);
+  });
+});
+
+test('助手失焦不掩盖起点后的新probe，晚获焦不增加预算，坏或未accepted的tail不能通过', async () => {
+  await acceptancePorts(({ helperStageEvidence }) => {
+    const base = { triggeredAt: 100, observedAt: 70_090, checkedAt: 70_091, auditObservedAt: 70_091,
+      focused: true, rows: [], audit: [] };
+    const first = helperStageEvidence(undefined, base);
+    assert.equal(first.boundary.startedAt, 70_090);
+    assert.equal(first.boundary.deadlineAt, 70_100);
+    const started = { event: 'started', kind: 'tail', pid: 11 };
+    const finished = { event: 'finished', kind: 'tail', pid: 11, returncode: 0 };
+    const accepted = { event: 'accepted', kind: 'tail' };
+    for (const audit of [[started], [started, finished], [started, { ...finished, returncode: 1 }, accepted]]) {
+      assert.equal(helperStageEvidence(first.boundary, { ...base, audit }).ready, false);
+    }
+    const audit = [started, finished, accepted];
+    assert.equal(helperStageEvidence(first.boundary, { ...base, checkedAt: 70_099, audit }).ready, true);
+    assert.equal(helperStageEvidence(first.boundary, { ...base, checkedAt: 70_100, audit }).ready, false);
+    const rows = [{ kind: 'probe-start', started_at_ms: 70_095 }];
+    const blurred = helperStageEvidence(first.boundary, { ...base, focused: false, rows, audit });
+    assert.equal(blurred.invalid, true);
+    const regained = helperStageEvidence(blurred.boundary, { ...base, rows, audit });
+    assert.equal(regained.invalid, true);
+    assert.equal(regained.boundary.startedAt, 70_090);
+    assert.equal(regained.boundary.checkpoint, 0);
+    assert.equal(regained.ready, false);
+  });
+});
+
+test('边界前在途探针保留原件及后来配对，不能冒充阶段内成功或掩盖新启动', async () => {
+  await acceptancePorts(({ boundaryProbeEvidence, visualPhaseEvidence }) => {
+    const started = { kind: 'probe-start', started_at_ms: 150 };
+    const ended = { kind: 'probe', started_at_ms: 150, outcome: 'returned', native_status: 'recognized',
+      complete: true, valid: true, single_frame_requested: true,
+      capture_requests: 1, capture_completions: 1, frames_received: 1, header_ocr_calls: 1 };
+    const pending = boundaryProbeEvidence([started], 200, 1);
+    assert.deepEqual(pending.pendingBefore, [started]);
+    assert.deepEqual(pending.stillPending, [started]);
+    const completed = boundaryProbeEvidence([started, ended], 200, 1);
+    assert.deepEqual(completed.pendingBefore, [started]);
+    assert.deepEqual(completed.completedObservedLater, [ended]);
+    assert.deepEqual(completed.stillPending, []);
+    assert.equal(completed.completionWallClockCertified, false);
+    assert.deepEqual(visualPhaseEvidence([started, ended], 200, 'helper'), {
+      starts: 0, completed: 0, pending: 0, invalid: false, ready: true,
+    });
+    assert.equal(visualPhaseEvidence([started, ended, { ...started, started_at_ms: 201 }], 200, 'helper').invalid, true);
+  });
+});
+
 test('真实视觉选项默认关闭，旧入口仍用unavailable-probe，显式模式拒绝旧E凭据混用', async () => {
   await fixturePorts(async ({ test: fixtures, visualObservationResources }) => {
     assert.deepEqual(fixtures.realSyncVisualObservation, [false, { option: true }]);

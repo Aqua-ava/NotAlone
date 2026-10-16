@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import { writeFile } from 'node:fs/promises';
+import { stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { selectMenu } from './app-fixture';
 import { verifyAppTestLease } from './app-test-gate';
@@ -48,6 +48,76 @@ export function visualPhaseEvidence(rows: readonly Record<string, unknown>[], si
     invalid, ready: !invalid && (phase === 'helper' || starts.length > 0 && starts.length === completed.length) };
 }
 
+export function wechatStageEvidence(rows: readonly Record<string, unknown>[], triggeredAt: number,
+  fixedStartedAt: number | null = null) {
+  const formal = rows.filter(row => row.kind === 'probe-start' || row.kind === 'probe');
+  const started = new Set<number>();
+  const completed = new Map<number, 'paused' | 'recognized'>();
+  let invalid = !Number.isFinite(triggeredAt);
+  for (const row of formal) {
+    const at = row.started_at_ms;
+    if (typeof at !== 'number' || !Number.isFinite(at)) { invalid = true; continue; }
+    if (at < triggeredAt) continue;
+    if (row.kind === 'probe-start') {
+      if (started.has(at)) invalid = true;
+      started.add(at);
+    } else {
+      if (!started.has(at) || completed.has(at)) invalid = true;
+      const status = row.native_status;
+      if (status !== 'paused' && status !== 'recognized') { invalid = true; continue; }
+      const pair = [{ kind: 'probe-start', started_at_ms: at }, row];
+      if (visualPhaseEvidence(pair, at, status === 'paused' ? 'finder' : 'wechat').invalid) invalid = true;
+      completed.set(at, status);
+    }
+  }
+  const recognized = [...completed].filter(([, status]) => status === 'recognized').map(([at]) => at);
+  const firstPositive = recognized.length ? Math.min(...recognized) : null;
+  let startedAt = fixedStartedAt;
+  if (startedAt === null && firstPositive !== null
+    && [...started].filter(at => at < firstPositive).every(at => completed.get(at) === 'paused')) {
+    startedAt = firstPositive;
+  }
+  if (startedAt !== null && completed.get(startedAt) !== 'recognized') invalid = true;
+  const waitingCompleted = [...completed].filter(([at, status]) => status === 'paused'
+    && (startedAt === null || at < startedAt)).length;
+  if (startedAt !== null && [...completed].some(([at, status]) => at < startedAt && status !== 'paused')) invalid = true;
+  const evidence = startedAt === null ? null : visualPhaseEvidence(rows, startedAt, 'wechat');
+  // 正向边界前的合法暂停另账；边界固定后仍沿用原recognized严格检查。
+  if (evidence) invalid ||= evidence.invalid;
+  return { startedAt, waitingCompleted, invalid, evidence,
+    ready: !invalid && evidence?.ready === true };
+}
+
+type HelperStageBoundary = { triggeredAt: number; deadlineAt: number; startedAt: number | null;
+  checkpoint: number | null; checkpointObservedAt: number | null };
+export function helperStageEvidence(previous: HelperStageBoundary | undefined, frame: {
+  triggeredAt: number; observedAt: number; checkedAt: number; auditObservedAt: number; focused: boolean;
+  rows: readonly Record<string, unknown>[]; audit: readonly CliAudit[];
+}) {
+  let boundary: HelperStageBoundary = previous ?? { triggeredAt: frame.triggeredAt,
+    deadlineAt: frame.triggeredAt + 70_000, startedAt: null, checkpoint: null, checkpointObservedAt: null };
+  const expired = frame.checkedAt >= boundary.deadlineAt;
+  if (boundary.startedAt === null && frame.focused && !expired) boundary = { ...boundary,
+    startedAt: frame.observedAt, checkpoint: frame.audit.length, checkpointObservedAt: frame.auditObservedAt };
+  const evidence = boundary.startedAt === null ? null : visualPhaseEvidence(frame.rows, boundary.startedAt, 'helper');
+  return { boundary, evidence, invalid: evidence?.invalid === true, expired,
+    ready: !expired && frame.focused && evidence?.ready === true && boundary.checkpoint !== null
+      && completedTailAfter(frame.audit, boundary.checkpoint) };
+}
+
+export function boundaryProbeEvidence(rows: readonly Record<string, unknown>[], startedAt: number, snapshotRows: number) {
+  const snapshot = rows.slice(0, snapshotRows);
+  const completed = new Set(snapshot.filter(row => row.kind === 'probe').map(row => row.started_at_ms));
+  const pendingBefore = snapshot.filter(row => row.kind === 'probe-start'
+    && typeof row.started_at_ms === 'number' && row.started_at_ms < startedAt && !completed.has(row.started_at_ms));
+  const pendingStarts = new Set(pendingBefore.map(row => row.started_at_ms));
+  const completedObservedLater = rows.slice(snapshotRows).filter(row => row.kind === 'probe'
+    && pendingStarts.has(row.started_at_ms));
+  return { snapshotRows, pendingBefore, completedObservedLater,
+    stillPending: pendingBefore.filter(row => !completedObservedLater.some(end => end.started_at_ms === row.started_at_ms)),
+    completionWallClockCertified: false };
+}
+
 const enabled = process.env.NOTALONE_REAL_SYNC_VISUAL_ACCEPTANCE === '1';
 test.skip(!enabled, '仅主Agent协调的当前签名包单联系人视觉与真实CLI独立验收');
 test.use({ realSyncVisualObservation: enabled, trace: 'off', screenshot: 'off', video: 'off' });
@@ -74,9 +144,16 @@ test('当前签名包的正式视觉观察在助手与Finder阶段暂停，已�
     const coordinator = await createAcceptanceCoordinator({ directory, pid: appProcess.pid!, checkLease,
       isAlive: () => appProcess.exitCode === null && appProcess.signalCode === null });
     const phases: Partial<Record<VisualPhase, ReturnType<typeof visualPhaseEvidence>>> = {};
-    const lastFocus: Partial<Record<VisualPhase, { helperFocused: boolean; managerFocused: boolean;
+    const lastFocus: Partial<Record<VisualPhase, { observedAtMs: number; helperFocused: boolean; managerFocused: boolean;
       helperVisible: boolean; managerVisible: boolean; allUnfocused: boolean }>> = {};
+    const rootTriggerWrittenAt: Partial<Record<VisualPhase, number>> = {};
+    const phaseTriggeredAt: Partial<Record<VisualPhase, number>> = {};
+    const phaseDeadlineAt: Partial<Record<VisualPhase, number>> = {};
+    const firstNativeObservedAt: Partial<Record<VisualPhase, number>> = {};
     const phaseStartedAt: Partial<Record<VisualPhase, number>> = {};
+    const cliCheckpoints: Partial<Record<VisualPhase, { row: number; observedAtMs: number }>> = {};
+    const boundarySnapshots: Partial<Record<VisualPhase, { rows: number; observedAtMs: number }>> = {};
+    let wechatWaitingCompleted = 0;
     const tailCompleted = { helper: false, finder: false };
     let stage: VisualPhase | 'setup' | 'quit' = 'setup';
     let passed = false;
@@ -93,7 +170,7 @@ test('当前签名包的正式视觉观察在助手与Finder阶段暂停，已�
       const windows = BrowserWindow.getAllWindows();
       const helper = windows.find(window => window.webContents.getURL().endsWith('#helper'));
       const manager = windows.find(window => window.webContents.getURL().endsWith('#manager'));
-      return { helperFocused: helper?.isFocused() ?? false, managerFocused: manager?.isFocused() ?? false,
+      return { observedAtMs: Date.now(), helperFocused: helper?.isFocused() ?? false, managerFocused: manager?.isFocused() ?? false,
         helperVisible: helper?.isVisible() ?? false, managerVisible: manager?.isVisible() ?? false,
         allUnfocused: windows.every(window => !window.isFocused()) };
     });
@@ -114,20 +191,70 @@ test('当前签名包的正式视觉观察在助手与Finder阶段暂停，已�
         console.log(`real_sync_visual_stage: ${next}`);
         // runId信号只协调主Agent实际操作，不作为前台或联系人认证收据。
         await coordinator.waitFor(next);
-        const since = Date.now();
-        phaseStartedAt[next] = since;
-        const checkpoint = (await realSyncBackend.audit()).length;
+        const triggeredAt = Date.now();
+        phaseTriggeredAt[next] = triggeredAt;
+        // 文件修改时刻与runner收到信号的时刻分列；二者都不代签GUI或原生条件。
+        rootTriggerWrittenAt[next] = (await stat(path.join(directory, `${next}.trigger`))).mtimeMs;
+        const checkpoint = next === 'finder' ? (await realSyncBackend.audit()).length : null;
+        if (checkpoint !== null) {
+          phaseStartedAt[next] = triggeredAt;
+          cliCheckpoints[next] = { row: checkpoint, observedAtMs: Date.now() };
+        }
+        const deadlineAt = (next === 'finder' ? Date.now() : triggeredAt) + (next === 'wechat' ? 25_000 : 70_000);
+        phaseDeadlineAt[next] = deadlineAt;
+        let helperBoundary: HelperStageBoundary | undefined;
+        let rejected = false;
         await expect.poll(async () => {
           await checkLease();
           const focus = await windowFocus();
           lastFocus[next] = focus;
-          // 原生激活和blur异步交接；未达要求仍在原有限窗口内等待，不能以菜单操作代签焦点。
-          if (next === 'helper' ? !focus.helperFocused : !focus.allUnfocused) return false;
-          const evidence = visualPhaseEvidence(await readObservationMeasurements(realSyncBackend), since, next);
-          phases[next] = evidence;
-          expect(evidence.invalid, '本阶段正式原生观察出现不合规或未知结果').toBe(false);
-          return evidence.ready && (next === 'wechat' || completedTailAfter(await realSyncBackend.audit(), checkpoint));
-        }, { timeout: next === 'wechat' ? 25_000 : 70_000, intervals: [250] }).toBe(true);
+          if (next === 'finder') {
+            // Finder保持原合同：trigger起点、实际失焦、完整零采集暂停与新tail。
+            if (!focus.allUnfocused) return false;
+            firstNativeObservedAt[next] ??= focus.observedAtMs;
+            const rows = await readObservationMeasurements(realSyncBackend);
+            boundarySnapshots[next] ??= { rows: rows.length, observedAtMs: Date.now() };
+            const evidence = visualPhaseEvidence(rows, triggeredAt, next);
+            phases[next] = evidence;
+            expect(evidence.invalid, '本阶段正式原生观察出现不合规或未知结果').toBe(false);
+            return evidence.ready && completedTailAfter(await realSyncBackend.audit(), checkpoint!);
+          }
+          const rows = await readObservationMeasurements(realSyncBackend);
+          const rowsObservedAt = Date.now();
+          if (next === 'wechat') {
+            const progress = wechatStageEvidence(rows, triggeredAt, phaseStartedAt[next] ?? null);
+            wechatWaitingCompleted = progress.waitingCompleted;
+            if (progress.evidence) phases[next] = progress.evidence;
+            if (progress.invalid) { rejected = true; return true; }
+            if (progress.startedAt !== null && phaseStartedAt[next] === undefined) {
+              phaseStartedAt[next] = progress.startedAt;
+              firstNativeObservedAt[next] = rowsObservedAt;
+              boundarySnapshots[next] = { rows: rows.length, observedAtMs: rowsObservedAt };
+            }
+            return Date.now() < deadlineAt && focus.allUnfocused && progress.ready;
+          }
+          const alreadyStarted = helperBoundary?.startedAt !== null && helperBoundary?.startedAt !== undefined;
+          const audit = focus.helperFocused || alreadyStarted
+            ? await realSyncBackend.audit() : [];
+          const auditObservedAt = Date.now();
+          const progress = helperStageEvidence(helperBoundary, { triggeredAt, observedAt: focus.observedAtMs,
+            checkedAt: auditObservedAt, auditObservedAt, focused: focus.helperFocused, rows, audit });
+          helperBoundary = progress.boundary;
+          if (helperBoundary.startedAt !== null && phaseStartedAt[next] === undefined) {
+            phaseStartedAt[next] = helperBoundary.startedAt;
+            firstNativeObservedAt[next] = helperBoundary.startedAt;
+            cliCheckpoints[next] = { row: helperBoundary.checkpoint!, observedAtMs: helperBoundary.checkpointObservedAt! };
+            boundarySnapshots[next] = { rows: rows.length, observedAtMs: rowsObservedAt };
+          }
+          if (progress.evidence) phases[next] = progress.evidence;
+          // 已固定起点后，即使失焦仍检查零新probe，不清空或重置任何证据。
+          if (progress.invalid) { rejected = true; return true; }
+          if (!progress.ready) return false;
+          const terminalFocus = await windowFocus();
+          lastFocus[next] = terminalFocus;
+          return Date.now() < deadlineAt && terminalFocus.helperFocused;
+        }, { timeout: Math.max(1, deadlineAt - Date.now()), intervals: [250] }).toBe(true);
+        expect(rejected, '本阶段正式原生观察出现不合规或未知结果，停止而不重设边界。').toBe(false);
         if (next !== 'wechat') tailCompleted[next] = true;
       }
 
@@ -175,8 +302,12 @@ test('当前签名包的正式视觉观察在助手与Finder阶段暂停，已�
       passed = true;
     } finally {
       await coordinator.close();
+      const measurementRows = await readObservationMeasurements(realSyncBackend);
+      const boundaryInFlight = Object.fromEntries(Object.entries(boundarySnapshots).map(([phase, snapshot]) => [phase,
+        boundaryProbeEvidence(measurementRows, phaseStartedAt[phase as VisualPhase]!, snapshot.rows)]));
       await writeFile(test.info().outputPath('real-sync-visual-measurements.json'), JSON.stringify({
-        phaseStartedAt, rows: await readObservationMeasurements(realSyncBackend),
+        rootTriggerWrittenAt, phaseTriggeredAt, phaseDeadlineAt, firstNativeObservedAt, phaseStartedAt,
+        cliCheckpoints, boundarySnapshots, boundaryInFlight, wechatWaitingCompleted, rows: measurementRows,
       }), { mode: 0o600 });
       await writeFile(test.info().outputPath('real-sync-visual-results.json'), JSON.stringify({
         passed, stage, phases, lastFocus, normalQuit, authenticatedStopped, ownedProcessesGone, emptyContactConfirmed,
