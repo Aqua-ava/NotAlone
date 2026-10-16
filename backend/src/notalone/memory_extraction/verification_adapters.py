@@ -253,11 +253,39 @@ SOURCE_VERIFICATION_PROOF_SCHEMA["properties"]["results"]["items"][
 SOURCE_VERIFICATION_PROOF_V2_SCHEMA = deepcopy(SOURCE_VERIFICATION_SCHEMA)
 SOURCE_VERIFICATION_PROOF_V2_SCHEMA["properties"]["results"]["items"]["properties"]["proof"] = _proof_schema(2)
 
+DEFAULT_PROMPT_PROFILE = "default"
+PUBLIC_AUTHOR_QUOTE_PROFILE = "public-author-quote-v1"
+PUBLIC_AUTHOR_QUOTE_PROMPT = """
+“用户／联系人原话”及同一原消息续句只标注谁说了所引内容，不能把引文中的第三人改成作者。
+subject表示当前资料归属，正文仍须保留第三人称呼；未知身份、事项或所有者若原样保留，
+不因尚未消歧就把忠实陈述判为无来源。反之，原话包装不是通行证：人物、否定、数量、条件、
+阶段或语用标签与完整来源不符时，仍按实际问题uncertain或unsupported。
+只支持保存原有未知，不认证唯一身份或现实真伪。
+"""
+
+
+def source_verification_contract(
+    mode: SourceVerificationMode | str, *, prompt_profile: str = DEFAULT_PROMPT_PROFILE,
+) -> tuple[str, dict[str, Any]]:
+    """冻结和实际适配器共用封闭合同；新提示只配对原严格四槽。"""
+    selected = SourceVerificationMode(mode)
+    if type(prompt_profile) is not str or prompt_profile not in {DEFAULT_PROMPT_PROFILE, PUBLIC_AUTHOR_QUOTE_PROFILE}:
+        raise ValueError("来源核验提示profile未受支持。")
+    if prompt_profile == PUBLIC_AUTHOR_QUOTE_PROFILE and selected is not SourceVerificationMode.LEGACY_V4:
+        raise ValueError("公开作者引句提示仅用于原四槽核验。")
+    if selected is SourceVerificationMode.NULLABLE_PROOF_V2:
+        return SOURCE_VERIFICATION_SYSTEM_PROMPT + SOURCE_AUTHOR_QUOTE_PROOF_PROMPT, SOURCE_VERIFICATION_PROOF_V2_SCHEMA
+    if selected is SourceVerificationMode.NULLABLE_PROOF_V1:
+        return SOURCE_VERIFICATION_SYSTEM_PROMPT + SOURCE_PROOF_PROMPT, SOURCE_VERIFICATION_PROOF_SCHEMA
+    return (SOURCE_VERIFICATION_SYSTEM_PROMPT + (
+        PUBLIC_AUTHOR_QUOTE_PROMPT if prompt_profile == PUBLIC_AUTHOR_QUOTE_PROFILE else ""
+    ), SOURCE_VERIFICATION_SCHEMA)
+
 
 class LangChainSourceVerificationRuntime:
     """同一有界窗口内至多一次核验模型调用，不产生可执行工具能力。"""
 
-    __slots__ = ("_model", "_ledger", "_provider", "_verification_mode")
+    __slots__ = ("_model", "_ledger", "_provider", "_verification_mode", "_prompt_profile")
 
     def __init__(
         self,
@@ -268,6 +296,7 @@ class LangChainSourceVerificationRuntime:
         verification_mode: SourceVerificationMode | str = (
             SourceVerificationMode.LEGACY_V4
         ),
+        prompt_profile: str = DEFAULT_PROMPT_PROFILE,
     ) -> None:
         if model is None:
             raise TypeError("必须显式注入来源核验模型。")
@@ -277,6 +306,8 @@ class LangChainSourceVerificationRuntime:
         self._ledger = ledger
         self._provider = provider
         self._verification_mode = SourceVerificationMode(verification_mode)
+        source_verification_contract(self._verification_mode, prompt_profile=prompt_profile)
+        self._prompt_profile = prompt_profile
 
     @property
     def verification_mode(self) -> SourceVerificationMode:
@@ -295,11 +326,7 @@ class LangChainSourceVerificationRuntime:
             return ()
         called_at = datetime.now(timezone.utc)
         started = time.perf_counter()
-        use_proof = self._verification_mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2}
-        schema = (SOURCE_VERIFICATION_PROOF_V2_SCHEMA if self._verification_mode is SourceVerificationMode.NULLABLE_PROOF_V2
-                  else SOURCE_VERIFICATION_PROOF_SCHEMA if use_proof else SOURCE_VERIFICATION_SCHEMA)
-        proof_prompt = (SOURCE_AUTHOR_QUOTE_PROOF_PROMPT if self._verification_mode is SourceVerificationMode.NULLABLE_PROOF_V2
-                        else SOURCE_PROOF_PROMPT if use_proof else "")
+        prompt, schema = source_verification_contract(self._verification_mode, prompt_profile=self._prompt_profile)
         try:
             message = invoke_traced_model(
                 self._model,
@@ -311,7 +338,7 @@ class LangChainSourceVerificationRuntime:
                 messages=[
                     {
                         "role": "system",
-                        "content": SOURCE_VERIFICATION_SYSTEM_PROMPT + proof_prompt,
+                        "content": prompt,
                     },
                     {
                         "role": "user",

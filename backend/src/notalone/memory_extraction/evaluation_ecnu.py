@@ -38,7 +38,8 @@ from notalone.memory_extraction.verification import SourceVerificationMode
 from notalone.memory_trace.context import current_trace
 from .evaluation_provider_contract import (
     MIXED_PLAN, MIXED_REQUEST_VERSION, MIXED_MODE, MIXED_STAGE, mixed_phase_policy,
-    REFERENCE21_V4_PLAN, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE, PHASE_SPLIT_PLANS,
+    REFERENCE21_V4_PLAN, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE, PHASE_SPLIT_PLANS, REFERENCE21_PLANS,
+    SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_PROMPT_PROFILE, validate_semantic4_windows,
 )
 
 
@@ -103,6 +104,11 @@ _REFERENCE21_V4_REQUIRED_SOURCES = _NULLABLE_REQUIRED_SOURCES | frozenset({
     "desktop/artifacts/grounded-public21-prepare-20261015/grounded_public21.py",
     "desktop/artifacts/grounded-public21-prepare-20261015/explicit_review_bridge.py",
 })
+_SEMANTIC4_REQUIRED_SOURCES = _REFERENCE21_V4_REQUIRED_SOURCES | frozenset({
+    ".scratch/grounded-evaluation/reference21-semantic4-plan-20261016.md",
+    ".scratch/grounded-evaluation/reference21-semantic4-implementation-20261016.md",
+    ".scratch/grounded-v4-matter-reference/spec.md",
+})
 _AUDIT_REASONS = {
     "safe": {"supported"}, "general_error": {"coverage_miss", "contract_mismatch"},
     "safety_error": {"false_fact", "wrong_subject", "contract_mismatch"},
@@ -132,7 +138,8 @@ def _gold_reference(
         raise EvaluationBudgetAbort("ecnu_gold_not_frozen")
     criterion = frozen_gold.get("criteria_path", _CRITERIA_PATH)
     digest = frozen_gold.get("criteria_sha256")
-    required_sources = (_REFERENCE21_V4_REQUIRED_SOURCES if execution_plan == REFERENCE21_V4_PLAN else
+    required_sources = (_SEMANTIC4_REQUIRED_SOURCES if execution_plan == SEMANTIC4_PLAN else
+                        _REFERENCE21_V4_REQUIRED_SOURCES if execution_plan == REFERENCE21_V4_PLAN else
                         _FULL140_MIXED_REQUIRED_SOURCES if execution_plan == MIXED_PLAN else
                         _FULL140_V4_REQUIRED_SOURCES if reference_version == "source-fidelity-v2" else
                         _NULLABLE_REQUIRED_SOURCES
@@ -229,7 +236,9 @@ def run_ecnu_evaluation(
     from .evaluation_provider_contract import EvaluationProviderProfile
 
     mixed = type(execution_plan) is str and execution_plan in PHASE_SPLIT_PLANS
-    reference21_v4 = execution_plan == REFERENCE21_V4_PLAN
+    reference21_v4 = type(execution_plan) is str and execution_plan in REFERENCE21_PLANS
+    semantic4 = execution_plan == SEMANTIC4_PLAN
+    prompt_profile = SEMANTIC4_PROMPT_PROFILE if semantic4 else "default"
     full140_v4 = execution_plan in ("full140-grounded-v4-source-v2", MIXED_PLAN)
     fixed_v4 = full140_v4 or reference21_v4
     if (type(reference_version) is not str or reference_version not in {"legacy-v1", "source-fidelity-v2"}
@@ -288,7 +297,8 @@ def run_ecnu_evaluation(
     if reference21_v4 and (not official or type(case_set) is not str or case_set != "reference21"
             or case_positions is not None or type(request_limit) is not int or request_limit != 42
             or extraction_selected.value != "grounded-v4" or reference_version != "source-fidelity-v2"
-            or verification_mode != SourceVerificationMode.NULLABLE_PROOF_V1 or verification_tool_choice != "forced"
+            or verification_mode != (SourceVerificationMode.LEGACY_V4 if semantic4 else SourceVerificationMode.NULLABLE_PROOF_V1)
+            or verification_tool_choice != "forced"
             or type(request_timeout_seconds) is not int or request_timeout_seconds != 300
             or type(max_retries) is not int or max_retries != 0):
         raise EvaluationBudgetAbort("evaluation_reference21_v4_fixed_plan_required")
@@ -442,11 +452,13 @@ def run_ecnu_evaluation(
                 validation["reference_sha256"]):
             raise EvaluationBudgetAbort("ecnu_phased_reference_mismatch")
     windows = tuple(build_window(case) for case in cases)
+    if semantic4:
+        validate_semantic4_windows(windows)
     extraction_contracts = tuple(deepcopy(extraction_contract(extraction_selected, window))
                                  for window in windows)
     runtime_contracts = {
         "extraction": extraction_contracts[0],
-        "verification": deepcopy(_verification_contract(selected)),
+        "verification": deepcopy(_verification_contract(selected, prompt_profile=prompt_profile)),
     }
     plan = tuple({
         "case_position": index, "case_name": case.name,
@@ -455,8 +467,8 @@ def run_ecnu_evaluation(
     config = {
         **_frozen_config(plan, request_timeout_seconds=request_timeout_seconds,
                          max_retries=max_retries, verification_mode=selected,
-                         extraction_mode=extraction_selected, windows=windows),
-        "mode": (REFERENCE21_V4_MODE if reference21_v4 else MIXED_MODE if mixed else "deepseek_bounded_full140_v4_source_v2" if full140_v4 else
+                         extraction_mode=extraction_selected, windows=windows, prompt_profile=prompt_profile),
+        "mode": (SEMANTIC4_MODE if semantic4 else REFERENCE21_V4_MODE if reference21_v4 else MIXED_MODE if mixed else "deepseek_bounded_full140_v4_source_v2" if full140_v4 else
                  "deepseek_bounded_main16_v3" if main16 else
                  "deepseek_bounded_ambiguity2_v3" if ambiguity2 else
                  "deepseek_bounded_remaining8" if remaining8 else
@@ -465,7 +477,7 @@ def run_ecnu_evaluation(
                  "ecnu_bounded_full140" if case_set == "full140" else
                  "ecnu_bounded_evaluation" if case_positions is None
                  else "ecnu_bounded_diagnostic"),
-        "stage": (REFERENCE21_V4_STAGE if reference21_v4 else MIXED_STAGE if mixed else "full140-v4-source-v2" if full140_v4 else "main16-v3" if main16 else "ambiguity2-v3" if ambiguity2 else "remaining8" if remaining8 else "full140" if case_set == "full140" else
+        "stage": (SEMANTIC4_STAGE if semantic4 else REFERENCE21_V4_STAGE if reference21_v4 else MIXED_STAGE if mixed else "full140-v4-source-v2" if full140_v4 else "main16-v3" if main16 else "ambiguity2-v3" if ambiguity2 else "remaining8" if remaining8 else "full140" if case_set == "full140" else
                   "P1" if case_positions is None else "diagnostic"),
         "base_url": base_url, "endpoint": endpoint, "request_model": request_model,
         **({"reasoning_effort": "max"} if official else {}),
@@ -529,7 +541,7 @@ def run_ecnu_evaluation(
         frozen_contracts = {**runtime_contracts, "extraction": extraction_contracts[position]}
         live_contracts = {
             "extraction": extraction_contract(extraction_selected, window),
-            "verification": _verification_contract(selected),
+            "verification": _verification_contract(selected, prompt_profile=prompt_profile),
         }
         if any(canonical_sha256(live_contracts[stage]) != canonical_sha256(frozen)
                for stage, frozen in frozen_contracts.items()):

@@ -42,6 +42,31 @@ def structured_verification(results: tuple[dict, ...]) -> AIMessage:
 
 
 class SourceVerificationAdapterTest(unittest.TestCase):
+    def test_explicit_prompt_profile_keeps_all_existing_contract_bytes(self):
+        import hashlib
+        import json
+        from notalone.memory_extraction.verification_adapters import source_verification_contract
+
+        # 来自新profile实施前的真实提示／schema字节，不从当前实现生成预期。
+        for mode, prompt_sha, schema_sha in (
+            ("legacy-v4", "d39c48ea4451d6fd63661dfb62986b79dd8b0e1611acdc9b0c2f56c042db4dbb", "ec92479140e3c6945efee42115af25e69686fdfdf851bae2dce994eb393344b2"),
+            ("nullable-proof-v1", "4a86386f8c19f6be5b1c7fb2bb62ae51e87e912b4d5362742fe9afb82415f8ce", "5533c8c33be4047ac20f573f642596d87700309e0ca0e36b93923714981efaed"),
+            ("nullable-proof-v2", "5dad8e9af3e54c51f20596457d848143e1fb23b3bf0e5a0267e8d59a6f6638e7", "898d11f5d9410cd5104bbd67d29580f03041076a0e841d7ad2ee28c388a351d8"),
+        ):
+            with self.subTest(mode=mode):
+                prompt, schema = source_verification_contract(mode)
+                self.assertEqual(hashlib.sha256(prompt.encode()).hexdigest(), prompt_sha)
+                self.assertEqual(hashlib.sha256(json.dumps(schema, ensure_ascii=False, sort_keys=True,
+                    separators=(",", ":")).encode()).hexdigest(), schema_sha)
+        # 评测helper现与实际adapter同源；proof2仍未注册到任何评测profile。
+        from notalone.memory_extraction.evaluation_offline import _verification_contract
+        self.assertEqual(_verification_contract("nullable-proof-v2"), source_verification_contract("nullable-proof-v2"))
+        for mode, profile in (("nullable-proof-v1", "public-author-quote-v1"),
+                              ("nullable-proof-v2", "public-author-quote-v1"),
+                              ("legacy-v4", "invented"), ("legacy-v4", True)):
+            with self.subTest(mode=mode, profile=profile), self.assertRaises(ValueError):
+                source_verification_contract(mode, prompt_profile=profile)
+
     """只在模型 I/O 边界使用 fake，不调用外部服务。"""
 
     def test_existing_default_adapter_preserves_v1_before_business_migration(self):

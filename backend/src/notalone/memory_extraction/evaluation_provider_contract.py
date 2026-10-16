@@ -36,7 +36,24 @@ REFERENCE21_V4_PLAN = "reference21-grounded-v4-source-v2-v-off-forced"
 REFERENCE21_V4_MODE = "deepseek_bounded_reference21_v4_source_v2_v_off_forced"
 REFERENCE21_V4_STAGE = "reference21-v4-source-v2-v-off-forced"
 REFERENCE21_V4_KIND = "reference21-v4-v-off-forced"
-PHASE_SPLIT_PLANS = frozenset({MIXED_PLAN, REFERENCE21_V4_PLAN})
+SEMANTIC4_PLAN = "reference21-grounded-v4-source-v2-semantic4-v-off-forced"
+SEMANTIC4_MODE = "deepseek_bounded_reference21_v4_source_v2_semantic4"
+SEMANTIC4_STAGE = "reference21-v4-source-v2-semantic4"
+SEMANTIC4_KIND = "reference21-v4-semantic4"
+SEMANTIC4_PROMPT_PROFILE = "public-author-quote-v1"
+REFERENCE21_PLANS = frozenset({REFERENCE21_V4_PLAN, SEMANTIC4_PLAN})
+PHASE_SPLIT_PLANS = frozenset({MIXED_PLAN, *REFERENCE21_PLANS})
+
+
+def validate_semantic4_windows(windows: tuple) -> None:
+    """公开质量合同不接受受控或混合来源；在预算与凭据前核验。"""
+    from .models import ExtractionWindow, MessageRef
+    if (type(windows) is not tuple or len(windows) != 21
+            or any(type(window) is not ExtractionWindow or not window.messages or any(
+                type(message) is not MessageRef or message.source_snapshots != () or message.message_snapshot != {}
+                or message.message_type != "unknown" or message.text_representation != "unknown"
+                for message in window.messages) for window in windows)):
+        raise EvaluationBudgetAbort("evaluation_semantic4_public_sources_required")
 
 
 def mixed_phase_policy() -> dict:

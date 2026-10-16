@@ -19,6 +19,8 @@ POSITIONS = tuple(range(21))
 from notalone.memory_extraction.evaluation_provider_contract import (
     REFERENCE21_V4_PLAN, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE, REFERENCE21_V4_KIND,
     MIXED_REQUEST_VERSION, mixed_phase_policy,
+    SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_KIND, SEMANTIC4_PROMPT_PROFILE,
+    validate_semantic4_windows,
 )
 FIXED = {"execution_plan": REFERENCE21_V4_PLAN, "case_set": "reference21", "case_positions": None,
          "reference_version": "source-fidelity-v2", "request_limit": 42, "request_timeout_seconds": 300,
@@ -28,6 +30,24 @@ FIXED = {"execution_plan": REFERENCE21_V4_PLAN, "case_set": "reference21", "case
          "phase_request_version": MIXED_REQUEST_VERSION, "phase_request_policy": mixed_phase_policy(),
          "planned_windows": 21, "required_claims": 28, "optional_claims": 1,
          "batch_work_seconds": 14380, "outer_wall_seconds": 14400}
+PROFILES: dict[str, dict] = {"baseline": FIXED, "semantic4": {
+    **FIXED, "execution_plan": SEMANTIC4_PLAN, "verification_mode": "legacy-v4",
+    "prompt_profile": SEMANTIC4_PROMPT_PROFILE,
+}}
+
+
+def fixed_contract(frozen: dict) -> dict:
+    fixed = frozen.get("fixed")
+    if type(fixed) is not dict:
+        raise ValueError("reference21_v4_fixed_profile_required")
+    for expected in PROFILES.values():
+        if helpers().digest(fixed) == helpers().digest(expected):
+            return expected
+    raise ValueError("reference21_v4_fixed_profile_required")
+
+
+def owned_kind(frozen: dict) -> str:
+    return SEMANTIC4_KIND if fixed_contract(frozen)["execution_plan"] == SEMANTIC4_PLAN else REFERENCE21_V4_KIND
 
 
 def helpers():
@@ -65,23 +85,30 @@ def contracts():
     return plan, rows
 
 
-def _source_names():
-    from notalone.memory_extraction.evaluation_ecnu import _REFERENCE21_V4_REQUIRED_SOURCES
-    return _REFERENCE21_V4_REQUIRED_SOURCES
+def _source_names(fixed=None):
+    from notalone.memory_extraction.evaluation_ecnu import _REFERENCE21_V4_REQUIRED_SOURCES, _SEMANTIC4_REQUIRED_SOURCES
+    return _SEMANTIC4_REQUIRED_SOURCES if fixed is not None and fixed["execution_plan"] == SEMANTIC4_PLAN else _REFERENCE21_V4_REQUIRED_SOURCES
 
 
-def prepare(*, directory: Path, absolute_start: datetime) -> dict:
+def prepare(*, directory: Path, absolute_start: datetime, profile: str = "baseline") -> dict:
     if os.environ.get("NOTALONE_DISABLE_DOTENV") != "1" or absolute_start.utcoffset() is None:
         raise ValueError("disabled_dotenv_and_aware_start_required")
     from notalone.memory_extraction.evaluation_offline import _verification_contract
     from notalone.memory_extraction.evaluation_reference import validate_public_reference
+    if type(profile) is not str or profile not in PROFILES:
+        raise ValueError("reference21_v4_fixed_profile_required")
+    fixed = PROFILES[profile]
+    if profile == "semantic4":
+        from notalone.memory_extraction.evaluation import build_window
+        from notalone.memory_extraction.evaluation_ecnu import _PLAN_CASES
+        validate_semantic4_windows(tuple(build_window(case) for case in _PLAN_CASES))
 
     helper = helpers()
     directory = directory.resolve()
     directory.mkdir(mode=0o700)
     for name in ("evaluation", "audit"):
         (directory / name).mkdir(mode=0o700)
-    sources = {name: helper.file_digest(ROOT / name) for name in sorted(_source_names())}
+    sources = {name: helper.file_digest(ROOT / name) for name in sorted(_source_names(fixed))}
     reference = json.loads((ROOT / REFERENCE).read_bytes())
     validation = validate_public_reference(reference, expected_reference_sha256=helper.digest(reference),
                               annotation_sha256=sources[ANNOTATION], reference_version="source-fidelity-v2")
@@ -89,8 +116,8 @@ def prepare(*, directory: Path, absolute_start: datetime) -> dict:
         raise ValueError("reference21_v4_reference_not_ready")
     original_plan, rows = contracts()
     plan = [{**original_plan[position], "case_position": index} for index, position in enumerate(POSITIONS)]
-    prompt, schema = _verification_contract("nullable-proof-v1")
-    frozen = {"state": "prepared_only", "run_id": str(uuid4()), "nonce": str(uuid4()), "fixed": json.loads(json.dumps(FIXED)),
+    prompt, schema = _verification_contract(fixed["verification_mode"], prompt_profile=fixed.get("prompt_profile", "default"))
+    frozen = {"state": "prepared_only", "run_id": str(uuid4()), "nonce": str(uuid4()), "fixed": json.loads(json.dumps(fixed)),
         "repo_root": str(ROOT), "directory": str(directory), "absolute_start": absolute_start.isoformat(),
         "work_end": (absolute_start + timedelta(seconds=14380)).isoformat(),
         "absolute_end": (absolute_start + timedelta(seconds=14400)).isoformat(),
@@ -107,13 +134,14 @@ def prepare(*, directory: Path, absolute_start: datetime) -> dict:
 
 def validate(frozen: dict) -> tuple[datetime, datetime]:
     helper = helpers()
+    fixed = fixed_contract(frozen)
     start, work_end, end = (datetime.fromisoformat(frozen[name]) for name in ("absolute_start", "work_end", "absolute_end"))
-    if (frozen["state"] != "prepared_only" or helper.digest(frozen["fixed"]) != helper.digest(FIXED) or frozen["repo_root"] != str(ROOT)
+    if (frozen["state"] != "prepared_only" or frozen["repo_root"] != str(ROOT)
             or frozen["quality_certified"] is not False or any(item.utcoffset() is None for item in (start, work_end, end))
             or work_end - start != timedelta(seconds=14380) or end - start != timedelta(seconds=14400)
             or not start <= now() < work_end):
         raise ValueError("reference21_v4_fixed_window_required")
-    if set(frozen["source_hashes"]) != _source_names():
+    if set(frozen["source_hashes"]) != _source_names(fixed):
         raise ValueError("reference21_v4_source_closure_changed")
     for name, expected in frozen["source_hashes"].items():
         if helper.file_digest(ROOT / name) != expected:
@@ -123,7 +151,7 @@ def validate(frozen: dict) -> tuple[datetime, datetime]:
     full_plan, rows = contracts()
     expected_plan = [{**full_plan[position], "case_position": index} for index, position in enumerate(POSITIONS)]
     from notalone.memory_extraction.evaluation_offline import _verification_contract
-    prompt, schema = _verification_contract("nullable-proof-v1")
+    prompt, schema = _verification_contract(fixed["verification_mode"], prompt_profile=fixed.get("prompt_profile", "default"))
     if (helper.digest(frozen["plan"]) != helper.digest(expected_plan) or frozen["plan_sha256"] != helper.digest(expected_plan)
             or frozen["extraction_window_contracts"] != [rows[position] for position in POSITIONS]
             or frozen["verification_prompt_sha256"] != helper.digest(prompt)
@@ -147,7 +175,7 @@ def validate(frozen: dict) -> tuple[datetime, datetime]:
 
 def verify_claim(frozen: dict) -> None:
     from notalone.memory_extraction.evaluation_owned_process import _verify_owned_public_claim
-    _verify_owned_public_claim(frozen=frozen, helper=helpers(), kind=REFERENCE21_V4_KIND)
+    _verify_owned_public_claim(frozen=frozen, helper=helpers(), kind=owned_kind(frozen))
 
 
 def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
@@ -164,6 +192,7 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
             or synthetic_transport is None and (credential_loader is not None or bridge is not None)):
         raise ValueError("reference21_v4_exact_mock_only")
     work_end, _ = validate(frozen)
+    fixed = fixed_contract(frozen)
     from notalone.memory_extraction.evaluation_ecnu import _PLAN_CASES, run_ecnu_evaluation
     from notalone.memory_extraction.evaluation_phased_audit import PhasedEvaluationAudit
     from notalone.memory_extraction.evaluation_records import _json_value
@@ -184,7 +213,7 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
         annotation_sha256=frozen["source_hashes"][ANNOTATION], criteria_sha256=frozen["source_hashes"][REFERENCE],
         raw_reviewer=lambda view: bridge.review("raw", view), full_reviewer=lambda view: bridge.review("full", view),
         case_positions=None, case_set="reference21", reference_version="source-fidelity-v2",
-        execution_plan=REFERENCE21_V4_PLAN, extraction_mode="grounded-v4", verification_mode="nullable-proof-v1",
+        execution_plan=fixed["execution_plan"], extraction_mode="grounded-v4", verification_mode=fixed["verification_mode"],
         verification_tool_choice="forced", extraction_tool_choice="omitted")
     loaded = False
     def loader():
@@ -203,9 +232,11 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
         credential_loader=loader, audit_case=audit, synthetic_transport=synthetic_transport,
         provider_profile="deepseek-phase-split-v1", request_timeout_seconds=300, max_retries=0,
         case_positions=None, case_set="reference21", request_limit=42, reference_version="source-fidelity-v2",
-        verification_mode="nullable-proof-v1", verification_tool_choice="forced", extraction_mode="grounded-v4",
-        execution_plan=REFERENCE21_V4_PLAN, reference21_v4_deadline=control)
-    result.update(worker_pid=os.getpid(), execution_plan=REFERENCE21_V4_PLAN)
+        verification_mode=fixed["verification_mode"], verification_tool_choice="forced", extraction_mode="grounded-v4",
+        execution_plan=fixed["execution_plan"], reference21_v4_deadline=control)
+    result.update(worker_pid=os.getpid(), execution_plan=fixed["execution_plan"])
+    if fixed["execution_plan"] == SEMANTIC4_PLAN:
+        result.update(typed_evaluated=False, typed_credit=False)
     helper.publish(directory / "result.json", _json_value(result))
     return result
 
@@ -223,13 +254,14 @@ def launch(*, freeze_path: Path, expected_sha256: str, approval_path: Path) -> d
     from notalone.memory_extraction.evaluation_owned_process import _launch_owned_public_worker
     return _launch_owned_public_worker(frozen=frozen, script=Path(__file__).resolve(), root=ROOT,
         helper=helper, freeze_path=freeze_path, expected_sha256=expected_sha256, approval_path=approval_path, end=end,
-        clock=now, kind=REFERENCE21_V4_KIND)
+        clock=now, kind=owned_kind(frozen))
 
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) == 4 and sys.argv[1] == "prepare":
-            freeze = prepare(directory=Path(sys.argv[2]), absolute_start=datetime.fromisoformat(sys.argv[3]))
+        if len(sys.argv) == 4 and sys.argv[1] in {"prepare", "prepare-semantic4"}:
+            freeze = prepare(directory=Path(sys.argv[2]), absolute_start=datetime.fromisoformat(sys.argv[3]),
+                             profile="semantic4" if sys.argv[1] == "prepare-semantic4" else "baseline")
             print(json.dumps({"run_id": freeze["run_id"], "freeze_sha256": helpers().file_digest(Path(freeze["directory"]) / "freeze.json")}))
         elif len(sys.argv) == 5 and sys.argv[1] in {"launch", "worker"}:
             if sys.argv[1] == "launch":

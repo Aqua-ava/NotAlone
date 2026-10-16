@@ -305,6 +305,27 @@ class EvaluationWireContractTest(unittest.TestCase):
         self.assertEqual(entries[0].outcome, LedgerOutcome.SUCCEEDED)
         self.assertEqual((entries[0].input_tokens, entries[0].output_tokens), (10, 5))
 
+    def test_public_author_quote_profile_uses_existing_four_slots_with_explicit_prompt(self) -> None:
+        from notalone.memory_extraction.flow import _to_fact
+        from notalone.memory_extraction.verification_adapters import (
+            LangChainSourceVerificationRuntime, SOURCE_VERIFICATION_SYSTEM_PROMPT,
+        )
+
+        expected = {"candidate_index": 0, "verdict": "supported", "issues": [],
+                    "evidence": [{"message_id": str(TARGET_ID), "quote": TARGET_TEXT}]}
+        model = self.model(tool_name="SourceVerificationOutput", arguments={"results": [expected]})
+        result = LangChainSourceVerificationRuntime(
+            model=model, verification_mode="legacy-v4", prompt_profile="public-author-quote-v1",
+        ).verify(window=synthetic_window(), facts=(_to_fact(synthetic_fact_payload()),))
+        self.assertEqual(result, (expected,))
+        payload = self.wire_parameters(tool_name="SourceVerificationOutput")
+        self.assertTrue(payload["messages"][0]["content"].startswith(SOURCE_VERIFICATION_SYSTEM_PROMPT))
+        self.assertIn("不能把引文中的第三人改成作者", payload["messages"][0]["content"])
+        self.assertIn("原话包装不是通行证", payload["messages"][0]["content"])
+        item = payload["tools"][0]["function"]["parameters"]["properties"]["results"]["items"]
+        self.assertEqual(set(item["properties"]), {"candidate_index", "verdict", "issues", "evidence"})
+        self.assertFalse(item["additionalProperties"])
+
     def test_public_bound_model_parses_synthetic_response_metadata(self) -> None:
         from notalone.memory_extraction.adapters import EXTRACTION_SCHEMA
         from notalone.memory_extraction.verification_adapters import (

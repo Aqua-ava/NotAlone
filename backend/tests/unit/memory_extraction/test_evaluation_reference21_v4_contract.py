@@ -14,6 +14,33 @@ from notalone.memory_extraction.evaluation_http_budget import EvaluationBudget, 
 
 
 class Reference21V4AdmissionTest(unittest.TestCase):
+    def test_semantic4_rejects_mode_scope_and_provider_mismatch_before_budget_or_key(self):
+        from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
+        from notalone.memory_extraction.evaluation_provider_contract import SEMANTIC4_PLAN
+        from notalone.memory_extraction.evaluation_reference21_v4_deadline import Reference21V4Deadline
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            control = Reference21V4Deadline(receipt=root / "receipt.json", clock=lambda: 0, exit_worker=lambda _: None)
+            def forbidden(*args, **kwargs):
+                self.fail("错误semantic4合同不得领取预算、读key或审核")
+            fixed = dict(output_directory=root, run_id=uuid4(), deadline=datetime(2030, 1, 1, tzinfo=timezone.utc),
+                repo_root=root, source_hashes={}, frozen_gold={}, credential_loader=forbidden, audit_case=forbidden,
+                provider_profile="deepseek-phase-split-v1", execution_plan=SEMANTIC4_PLAN, case_set="reference21",
+                case_positions=None, request_limit=42, request_timeout_seconds=300, max_retries=0,
+                extraction_mode="grounded-v4", reference_version="source-fidelity-v2", verification_mode="legacy-v4",
+                verification_tool_choice="forced", reference21_v4_deadline=control)
+            for change in ({"verification_mode": "nullable-proof-v1"}, {"verification_mode": "nullable-proof-v2"},
+                           {"execution_plan": "reference21-grounded-v4-source-v2-v-off-forced"},
+                           {"request_limit": 42.0}, {"request_limit": 43}, {"request_limit": True},
+                           {"case_positions": (0,)}, {"case_set": "full140"}, {"max_retries": 1},
+                           {"provider_profile": "deepseek-flash-max"}, {"provider_profile": "ecnu"},
+                           {"verification_tool_choice": "omitted"}, {"reference_version": "legacy-v1"},
+                           {"extraction_mode": "grounded-v3"}, {"reference21_v4_deadline": None}):
+                with self.subTest(change=change), patch.object(EvaluationBudget, "create", side_effect=forbidden), \
+                        self.assertRaises(EvaluationBudgetAbort):
+                    run_ecnu_evaluation(**{**fixed, **change})
+
     def test_changed_scope_or_type_rejects_before_budget_credentials_or_audit(self):
         from notalone.memory_extraction.evaluation_ecnu import run_ecnu_evaluation
         from notalone.memory_extraction.evaluation_reference21_v4_deadline import Reference21V4Deadline
@@ -38,6 +65,7 @@ class Reference21V4AdmissionTest(unittest.TestCase):
                            {"request_limit": 42.0}, {"request_limit": True}, {"request_timeout_seconds": 300.0},
                            {"max_retries": 1}, {"max_retries": False}, {"extraction_mode": "grounded-v3"},
                            {"reference_version": "legacy-v1"}, {"verification_mode": "legacy-v4"},
+                           {"verification_mode": "nullable-proof-v2"},
                            {"verification_tool_choice": "omitted"}, {"reference21_v4_deadline": object()},
                            {"reference21_v4_deadline": None}, {"full140_v4_deadline": control}):
                 with self.subTest(change=change), patch.object(EvaluationBudget, "create", side_effect=forbidden), \
@@ -76,6 +104,41 @@ class Reference21V4AdmissionTest(unittest.TestCase):
 
 
 class Reference21V4RecordsTest(unittest.TestCase):
+    def test_semantic4_records_bind_legacy_and_explicit_prompt_without_relaxing_old_identity(self):
+        from notalone.memory_extraction.evaluation_provider_contract import (
+            SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_PROMPT_PROFILE, REFERENCE21_V4_PLAN,
+        )
+        from notalone.memory_extraction.evaluation_records import EvaluationRecordStore, canonical_sha256
+
+        for fault in ("valid", "proof_mode", "old_plan", "wrong_prompt", "missing_prompt", "old_stage"):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temporary, \
+                    patch.object(Path, "home", return_value=Path(temporary)):
+                config, plan = self.config_plan()
+                config.update(execution_plan=SEMANTIC4_PLAN, mode=SEMANTIC4_MODE, stage=SEMANTIC4_STAGE,
+                              verification_mode="legacy-v4", verification_prompt_profile=SEMANTIC4_PROMPT_PROFILE)
+                if fault == "proof_mode":
+                    config["verification_mode"] = "nullable-proof-v1"
+                elif fault == "old_plan":
+                    config["execution_plan"] = REFERENCE21_V4_PLAN
+                elif fault == "wrong_prompt":
+                    config["verification_prompt_profile"] = "default"
+                elif fault == "missing_prompt":
+                    config.pop("verification_prompt_profile")
+                elif fault == "old_stage":
+                    config["stage"] = "reference21-v4-source-v2-v-off-forced"
+                output = Path(temporary) / "output"
+                output.mkdir(mode=0o700)
+                budget = EvaluationBudget.create(run_id=uuid4(), output_directory=output, request_limit=42,
+                    allowed_endpoints=("https://api.deepseek.com/chat/completions",), config_sha256=canonical_sha256(config))
+                try:
+                    if fault == "valid":
+                        self.assertEqual(EvaluationRecordStore(budget=budget, frozen_config=config, plan=plan).execution_plan, SEMANTIC4_PLAN)
+                    else:
+                        with self.assertRaises(EvaluationBudgetAbort):
+                            EvaluationRecordStore(budget=budget, frozen_config=config, plan=plan)
+                finally:
+                    budget.close()
+
     def config_plan(self):
         from notalone.memory_extraction.evaluation import build_window
         from notalone.memory_extraction.evaluation_extraction import extraction_contract

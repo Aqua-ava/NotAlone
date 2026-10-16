@@ -13,6 +13,7 @@ from typing import Any, Callable
 from .evaluation_provider_contract import (
     MIXED_PLAN, MIXED_MODE, MIXED_STAGE, MIXED_KIND, MIXED_REQUEST_VERSION, mixed_phase_policy,
     REFERENCE21_V4_PLAN, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE, REFERENCE21_V4_KIND,
+    SEMANTIC4_PLAN, SEMANTIC4_MODE, SEMANTIC4_STAGE, SEMANTIC4_KIND, SEMANTIC4_PROMPT_PROFILE,
 )
 
 
@@ -31,6 +32,8 @@ class _FixedPublicControl:
 
 
 _PROFILES = {
+    SEMANTIC4_KIND: _FixedPublicControl(42, 14400, 21, 28, SEMANTIC4_MODE, SEMANTIC4_STAGE,
+                                      tuple(range(21)), 2048, SEMANTIC4_PLAN, "source-fidelity-v2"),
     REFERENCE21_V4_KIND: _FixedPublicControl(42, 14400, 21, 28, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE,
                                            tuple(range(21)), 2048, REFERENCE21_V4_PLAN, "source-fidelity-v2"),
     MIXED_KIND: _FixedPublicControl(280, 86400, 140, 138, MIXED_MODE, MIXED_STAGE,
@@ -128,7 +131,7 @@ def _launch_owned_public_worker(*, frozen: dict, script: Path, root: Path, helpe
                 and type(value.get("request_limit")) is int and value["request_limit"] == request_limit
                 and type(value.get("reserved_requests")) is int
                 and 0 <= value["reserved_requests"] <= request_limit)
-    closed = (closed_receipt(budget) and (kind not in {MIXED_KIND, REFERENCE21_V4_KIND} or (
+    closed = (closed_receipt(budget) and (kind not in {MIXED_KIND, REFERENCE21_V4_KIND, SEMANTIC4_KIND} or (
         type(result.get("worker_pid")) is int and result["worker_pid"] == child.pid
         and result.get("execution_plan") == profile.execution_plan))) or (type(deadline.get("worker_pid")) is int
                                        and deadline["worker_pid"] == child.pid and closed_receipt(deadline))
@@ -189,13 +192,15 @@ def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str) -> None:
             or profile.execution_plan is not None and (
                 config.get("execution_plan") != profile.execution_plan
                 or config.get("reference_version") != profile.reference_version)
-            or kind in {MIXED_KIND, REFERENCE21_V4_KIND} and (
+            or kind in {MIXED_KIND, REFERENCE21_V4_KIND, SEMANTIC4_KIND} and (
                 config.get("phase_request_version") != MIXED_REQUEST_VERSION
                 or config.get("phase_request_policy") != mixed_phase_policy()
                 or config.get("tool_choice") != {
                     "extraction": {"mode": "omitted", "name": "GroundedMemoryLabelsV4"},
                     "verification": {"mode": "forced", "name": "SourceVerificationOutput"}})
             or config.get("source_hashes") != frozen["source_hashes"]
+            or kind == SEMANTIC4_KIND and (config.get("verification_mode") != "legacy-v4"
+                or config.get("verification_prompt_profile") != SEMANTIC4_PROMPT_PROFILE)
             or config.get("extraction_window_contracts") != frozen["extraction_window_contracts"]):
         raise ValueError(kind + "_claim_manifest_changed")
 
