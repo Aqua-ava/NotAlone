@@ -25,9 +25,9 @@ from notalone.memory_extraction.evaluation_records import _json_value, _redact
 
 ROOT = Path(__file__).resolve().parents[3]
 LEGACY = ROOT / "desktop/artifacts/grounded-public21-prepare-20261015/grounded_public21.py"
-PLAN = ".scratch/grounded-evaluation/deepseek-v-off-forced-pilot-plan-20261016.md"
-IMPLEMENTATION = ".scratch/grounded-evaluation/deepseek-v-off-forced-pilot-implementation-20261016.md"
-PROTOCOL = "deepseek-v-off-forced-pilot-v1"
+PLAN = ".scratch/grounded-evaluation/deepseek-v-off-forced-v2-plan-20261016.md"
+IMPLEMENTATION = ".scratch/grounded-evaluation/deepseek-v-off-forced-v2-implementation-20261016.md"
+PROTOCOL = "deepseek-v-off-forced-pilot-v2"
 ENDPOINT = "https://api.deepseek.com/chat/completions"
 FIXED = {"protocol": PROTOCOL, "request_limit": 1, "max_retries": 0,
          "model": "deepseek-flash", "endpoint": ENDPOINT,
@@ -67,7 +67,7 @@ def contracts() -> tuple[Any, tuple[Any, ...], dict, dict]:
         SOURCE_PROOF_PROMPT, SOURCE_VERIFICATION_PROOF_SCHEMA, SOURCE_VERIFICATION_SYSTEM_PROMPT,
         _verification_text,
     )
-    message = MessageRef(UUID("33333333-3333-4333-8333-333333333333"), "我刚到家。", MessageSender.CONTACT,
+    message = MessageRef(UUID("33333333-3333-4333-8333-333333333333"), "我刚刚到家。", MessageSender.CONTACT,
                          datetime(2026, 10, 16, 0, tzinfo=timezone(timedelta(hours=8))))
     window = ExtractionWindow(UUID("11111111-1111-4111-8111-111111111111"),
                               UUID("22222222-2222-4222-8222-222222222222"), (message,), (message.message_id,))
@@ -220,17 +220,24 @@ class _PilotRecords:
 
     def capture_response(self, sequence: int, response: httpx.Response) -> None:
         self.responded = True
-        if len(response.content) > 8 * 1024 * 1024:
-            raise EvaluationBudgetAbort("pilot_response_too_large")
+        metadata = {"status_code": response.status_code, "body_bytes": len(response.content), "response_obtained": True}
+        failure = "response_too_large"
+        if len(response.content) <= 8 * 1024 * 1024:
+            try:
+                body = json.loads(response.content)
+                self.save("provider_response", sequence, {**metadata, "body": body})
+                return
+            except Exception:
+                failure = "response_processing_failed"
+        # 只有受控元数据可退回；发布I/O的BaseException硬停不进入此分支。
         try:
-            body = json.loads(response.content)
-        except (ValueError, UnicodeError):
-            self.save("provider_response", sequence, {"status_code": response.status_code, "body_not_saved": "invalid_json"})
-            raise EvaluationBudgetAbort("pilot_invalid_json") from None
-        self.save("provider_response", sequence, {"status_code": response.status_code, "body": body})
+            self.save("provider_response", sequence, {**metadata, "body_not_saved": failure})
+        except Exception:
+            raise EvaluationBudgetAbort("pilot_response_metadata_unavailable") from None
+        raise EvaluationBudgetAbort("pilot_response_body_unavailable")
 
     def capture_failure(self, sequence: int, kind: str) -> None:
-        self.save("provider_failure", sequence, {"failure_kind": kind, "response_obtained": False})
+        self.save("provider_failure", sequence, {"failure_kind": kind, "response_obtained": self.responded})
 
 
 class _PilotContract:
@@ -344,6 +351,7 @@ def worker(*, freeze_path: Path, expected_sha256: str, approval: dict,
         except BaseException:
             cleanup.append("deadline_finish_unknown")
     result = {"format": PROTOCOL, "run_id": frozen["run_id"], "worker_pid": os.getpid(), "status": status,
+              "response_obtained": records.responded,
               "stopped_code": stopped, "verification": _json_value(payloads), "budget": proof,
               "closed": proof is not None, "close_unknown": proof is None, "cleanup_codes": cleanup,
               "elapsed_seconds": time.monotonic() - began, "quality_certified": False, "automatic_successor": False}

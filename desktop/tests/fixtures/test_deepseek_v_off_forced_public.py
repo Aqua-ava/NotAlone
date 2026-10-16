@@ -48,7 +48,7 @@ class VOffForcedPublicTest(unittest.TestCase):
     def response(self, request, *, content=None, calls=True):
         result = {"results": [{"candidate_index": 0, "verdict": "supported", "issues": [],
                               "evidence": [{"message_id": "33333333-3333-4333-8333-333333333333",
-                                            "quote": "我刚到家。"}], "proof": None}]}
+                                            "quote": "我刚刚到家。"}], "proof": None}]}
         message = {"role": "assistant", "content": content}
         if calls:
             message["tool_calls"] = [{"id": "synthetic", "type": "function", "function": {
@@ -91,7 +91,7 @@ class VOffForcedPublicTest(unittest.TestCase):
         self.assertEqual(result["budget"]["reserved_requests"], 1)
         self.assertFalse(result["quality_certified"])
         self.assertFalse(result["automatic_successor"])
-        self.assertEqual(frozen["candidate"]["text"], "联系人原话：“我刚到家。”")
+        self.assertEqual(frozen["candidate"]["text"], "联系人原话：“我刚刚到家。”")
         manifest = runner.helpers().read_private(path.parent / "pilot-manifest.json")
         self.assertEqual(manifest["authorization_sha256"], runner.helpers().digest(approval))
 
@@ -113,8 +113,146 @@ class VOffForcedPublicTest(unittest.TestCase):
         self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
         self.assertFalse((self.home / ".notalone-memory-evaluations").exists())
 
+    def test_v2_binds_new_input_protocol_and_only_new_plan_documents(self):
+        runner, frozen, _, _, _ = self.prepared()
+        self.assertEqual(frozen["format"], "deepseek-v-off-forced-pilot-v2")
+        self.assertEqual(frozen["window"]["messages"][0]["text"], "我刚刚到家。")
+        self.assertEqual(frozen["candidate"]["text"], "联系人原话：“我刚刚到家。”")
+        self.assertEqual(runner.PLAN, ".scratch/grounded-evaluation/deepseek-v-off-forced-v2-plan-20261016.md")
+        self.assertEqual(runner.IMPLEMENTATION, ".scratch/grounded-evaluation/deepseek-v-off-forced-v2-implementation-20261016.md")
+        self.assertIn(runner.PLAN, frozen["source_hashes"])
+        self.assertIn(runner.IMPLEMENTATION, frozen["source_hashes"])
+        self.assertNotIn(".scratch/grounded-evaluation/deepseek-v-off-forced-pilot-plan-20261016.md", frozen["source_hashes"])
+        self.assertNotIn(".scratch/grounded-evaluation/deepseek-v-off-forced-pilot-implementation-20261016.md", frozen["source_hashes"])
+
+    def test_unrecordable_response_keeps_only_safe_actual_metadata_and_fails_closed(self):
+        for name, arguments, status in (("invalid-json", '{"x":"argument-marker"', 200),
+                                         ("nonobject", '["argument-marker"]', 200),
+                                         ("nonfinite-argument", '{"x":NaN,"extra":"argument-marker"}', 200),
+                                         ("nonfinite-body", None, 200),
+                                         ("non200", '{"x":"argument-marker"', 503)):
+            with self.subTest(name=name):
+                runner, _, path, expected, approval = self.prepared(name)
+                loaded, sizes = [], []
+
+                def handler(request):
+                    body = self.response(request).json()
+                    if arguments is not None:
+                        body["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] = arguments
+                    if name == "nonfinite-body":
+                        body["usage"] = {"prompt_tokens": float("nan")}
+                    body["choices"][0]["message"]["reasoning_content"] = "reasoning-marker"
+                    content = json.dumps(body).encode()
+                    sizes.append(len(content))
+                    return httpx.Response(status, content=content, request=request,
+                        headers={"authorization": "header-marker", "content-type": "application/json"})
+
+                result = runner.worker(freeze_path=path, expected_sha256=expected, approval=approval,
+                    synthetic_transport=httpx.MockTransport(handler),
+                    credential_loader=lambda: loaded.append(True) or "credential-marker")
+                events = [runner.helpers().read_private(record) for record in sorted(path.parent.glob("pilot-event-*.json"))]
+                self.assertEqual(loaded, [True])
+                self.assertEqual(len(sizes), 1)
+                self.assertEqual([event["kind"] for event in events], ["provider_request", "provider_response"])
+                self.assertEqual(events[1]["payload"], {"status_code": status, "body_bytes": sizes[0],
+                    "body_not_saved": "response_processing_failed", "response_obtained": True})
+                self.assertTrue(result["response_obtained"])
+                self.assertEqual(result["status"], "failed")
+                self.assertEqual(result["verification"], [])
+                self.assertTrue(result["closed"])
+                self.assertEqual(result["budget"]["reserved_requests"], 1)
+                for record in path.parent.glob("*.json"):
+                    for forbidden in ("argument-marker", "reasoning-marker", "header-marker", "credential-marker"):
+                        self.assertNotIn(forbidden, record.read_text())
+
+    def test_response_publication_failure_never_completes_or_claims_saved_response(self):
+        for name, arguments in (("valid", None), ("metadata", '["argument-marker"]')):
+            with self.subTest(name=name):
+                runner, _, path, expected, approval = self.prepared(name)
+                original_publish = runner.helpers().publish
+                bridge = sys.modules["explicit_review_bridge"]
+                requests = []
+
+                def publish(record_path, value):
+                    if value.get("kind") == "provider_response":
+                        raise OSError("error-text-marker")
+                    return original_publish(record_path, value)
+
+                def handler(request):
+                    requests.append(True)
+                    body = self.response(request).json()
+                    if arguments is not None:
+                        body["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] = arguments
+                    return httpx.Response(200, json=body, request=request)
+
+                with patch.object(bridge, "publish", side_effect=publish):
+                    result = runner.worker(freeze_path=path, expected_sha256=expected, approval=approval,
+                        synthetic_transport=httpx.MockTransport(handler), credential_loader=lambda: "credential-marker")
+                self.assertEqual(requests, [True])
+                self.assertEqual(result["status"], "failed")
+                self.assertTrue(result["response_obtained"])
+                self.assertTrue(result["closed"])
+                self.assertEqual(result["budget"]["reserved_requests"], 1)
+                events = [runner.helpers().read_private(record) for record in path.parent.glob("pilot-event-*.json")]
+                self.assertEqual([event["kind"] for event in events], ["provider_request"])
+                for record in path.parent.glob("*.json"):
+                    for forbidden in ("argument-marker", "error-text-marker", "credential-marker"):
+                        self.assertNotIn(forbidden, record.read_text())
+
+    def test_failure_event_uses_actual_response_capture_state(self):
+        for responded in (False, True):
+            with self.subTest(responded=responded):
+                runner, _, path, expected, approval = self.prepared(str(responded))
+
+                def handler(request):
+                    if not responded:
+                        raise RuntimeError("error-text-marker")
+                    return self.response(request)
+
+                original_observe = runner._PilotContract.observe_response
+
+                def observe(contract, response):
+                    original_observe(contract, response)
+                    raise RuntimeError("error-text-marker")
+
+                with patch.object(runner._PilotContract, "observe_response", observe):
+                    result = runner.worker(freeze_path=path, expected_sha256=expected, approval=approval,
+                        synthetic_transport=httpx.MockTransport(handler), credential_loader=lambda: "credential-marker")
+                events = [runner.helpers().read_private(record) for record in sorted(path.parent.glob("pilot-event-*.json"))]
+                self.assertEqual(events[-1]["kind"], "provider_failure")
+                self.assertEqual(events[-1]["payload"], {"failure_kind": "unknown_transport_error", "response_obtained": responded})
+                self.assertEqual(len(events), 3 if responded else 2)
+                self.assertIs(result["response_obtained"], responded)
+                self.assertEqual(result["status"], "failed" if responded else "unknown")
+                self.assertTrue(result["closed"])
+                self.assertEqual(result["budget"]["reserved_requests"], 1)
+                for record in path.parent.glob("*.json"):
+                    for forbidden in ("error-text-marker", "credential-marker"):
+                        self.assertNotIn(forbidden, record.read_text())
+
+    def test_valid_response_saves_redacted_body_and_actual_response_state(self):
+        runner, _, path, expected, approval = self.prepared()
+
+        def handler(request):
+            body = self.response(request).json()
+            body["choices"][0]["message"]["reasoning_content"] = "reasoning-marker"
+            body["api_key"] = "body-key-marker"
+            return httpx.Response(200, json=body, request=request, headers={"authorization": "header-marker"})
+
+        result = runner.worker(freeze_path=path, expected_sha256=expected, approval=approval,
+            synthetic_transport=httpx.MockTransport(handler), credential_loader=lambda: "credential-marker")
+        response = runner.helpers().read_private(path.parent / "pilot-event-000002.json")["payload"]
+        self.assertEqual(result["status"], "completed")
+        self.assertTrue(result["response_obtained"])
+        self.assertTrue(response["response_obtained"])
+        self.assertIn("body", response)
+        self.assertGreater(response["body_bytes"], 0)
+        for record in path.parent.glob("*.json"):
+            for forbidden in ("reasoning-marker", "body-key-marker", "header-marker", "credential-marker"):
+                self.assertNotIn(forbidden, record.read_text())
+
     def test_unauthorized_or_changed_freeze_scope_versions_wire_and_expiry_reject_before_claim(self):
-        for index, changed in enumerate(("authorization", "hash", "fixed", "source", "closure", "versions", "wire", "expired")):
+        for index, changed in enumerate(("authorization", "hash", "protocol", "fixed", "source", "closure", "versions", "wire", "expired")):
             with self.subTest(changed=changed):
                 runner, frozen, path, expected, approval = self.prepared(str(index))
                 candidate = deepcopy(frozen)
@@ -122,6 +260,8 @@ class VOffForcedPublicTest(unittest.TestCase):
                     approval["user_authorized"] = 1
                 elif changed == "hash":
                     expected = "0" * 64
+                elif changed == "protocol":
+                    candidate["format"] = "deepseek-v-off-forced-pilot-v1"
                 elif changed == "fixed":
                     candidate["fixed"]["request_limit"] = 2
                 elif changed == "source":
@@ -180,6 +320,7 @@ class VOffForcedPublicTest(unittest.TestCase):
                 self.assertEqual(len(requests), 1)
                 self.assertEqual(loaded, [True])
                 self.assertEqual(result["status"], "unknown" if kind == "timeout" else "failed")
+                self.assertIs(result["response_obtained"], kind != "timeout")
                 self.assertTrue(result["closed"])
                 self.assertEqual(result["budget"]["reserved_requests"], 1)
                 self.assertEqual(result["verification"], [])
