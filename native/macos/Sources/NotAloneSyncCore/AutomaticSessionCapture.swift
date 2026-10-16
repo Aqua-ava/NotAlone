@@ -7,8 +7,16 @@ import Foundation
 @MainActor
 public enum AutomaticSessionCapture {
     public static func observe() async -> [String: Any] {
-        await observeHeader(context: { try foregroundContext() }, capture: captureWindow,
-                            recognize: LocalOcr.recognizeHeader)
+        // 显式验收才输出固定事件与单调时间；不输出名称、坐标或图像。
+        let measurement: (AutomaticObservationEvent) -> Void =
+            ProcessInfo.processInfo.environment["NOTALONE_OBSERVATION_MEASUREMENTS"] == "1"
+            ? { event in
+                let line = "notalone-observation-v1 \(event.rawValue) \(ProcessInfo.processInfo.systemUptime)\n"
+                FileHandle.standardError.write(Data(line.utf8))
+            } : { _ in }
+        return await observeHeader(context: { try foregroundContext() },
+            capture: { try await captureWindow($0, measurement: measurement) },
+            recognize: LocalOcr.recognizeHeader, measurement: measurement)
     }
 
     // 正式观察与可视验收共用采集前门禁；调用此方法不会截图或识别。
@@ -76,13 +84,18 @@ public enum AutomaticSessionCapture {
         context: () throws -> CalibrationContext?,
         capture: (CalibrationContext) async throws -> CGImage,
         recognize: (CGImage) throws -> HeaderOcrResult,
-        clock: () -> Date = Date.init
+        clock: () -> Date = Date.init,
+        measurement: (AutomaticObservationEvent) -> Void = { _ in }
     ) async -> [String: Any] {
+        measurement(.started)
+        defer { measurement(.finished) }
         var stage = "context"
         do {
             guard let current = try context() else { return ["ok": true, "wechat_in_front": false] }
+            measurement(.foregroundAccepted)
             stage = "capture"
             let image = try await capture(current)
+            measurement(.frameReceived)
             let capturedAt = clock()
             stage = "context_after_capture"
             guard try context() == current else { throw AutomaticCaptureFailure.context }
@@ -90,7 +103,9 @@ public enum AutomaticSessionCapture {
             let rectangle = try AutomaticSessionRegions.headerLayout(image, windowSize: current.frame.size).rectangle
             guard let header = image.cropping(to: rectangle) else { throw MinimalSessionError.captureFailed }
             stage = "header_ocr"
+            measurement(.headerOcrStarted)
             let name = try recognize(header)
+            measurement(.headerOcrCompleted)
             guard !name.text.isEmpty else { throw MinimalSessionError.headerNameUnreadable }
             guard name.confidence.isFinite, (0...1).contains(name.confidence) else {
                 throw MinimalSessionError.qualityUnverified
@@ -111,7 +126,8 @@ public enum AutomaticSessionCapture {
         }
     }
 
-    static func captureWindow(_ current: CalibrationContext) async throws -> CGImage {
+    static func captureWindow(_ current: CalibrationContext,
+                              measurement: (AutomaticObservationEvent) -> Void = { _ in }) async throws -> CGImage {
         guard CGPreflightScreenCaptureAccess() else { throw MinimalSessionError.permissionMissing }
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         guard CalibrationContext.read(requireForeground: true) == current else { throw AutomaticCaptureFailure.context }
@@ -132,12 +148,19 @@ public enum AutomaticSessionCapture {
         configuration.capturesAudio = false; configuration.captureMicrophone = false
         configuration.includeChildWindows = false; configuration.ignoreShadowsSingleWindow = true
         configuration.preservesAspectRatio = false
+        measurement(.captureRequested)
         let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+        measurement(.captureCompleted)
         guard image.width == configuration.width, image.height == configuration.height else {
             throw AutomaticCaptureFailure.dimensions
         }
         return image
     }
+}
+
+enum AutomaticObservationEvent: String {
+    case started, foregroundAccepted, captureRequested, captureCompleted, frameReceived
+    case headerOcrStarted, headerOcrCompleted, finished
 }
 
 private enum AutomaticCaptureFailure: String, Error {

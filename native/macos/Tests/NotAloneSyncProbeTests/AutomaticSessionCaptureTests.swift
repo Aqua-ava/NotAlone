@@ -4,6 +4,33 @@ import XCTest
 
 final class AutomaticSessionCaptureTests: XCTestCase {
     @MainActor
+    func testAcceptanceEventsMeasureOnlyTheExecutedHeaderPath() async {
+        var events: [AutomaticObservationEvent] = []
+        let context = CalibrationContext(processId: 7, windowId: 9,
+            frame: CGRect(x: 0, y: 0, width: 900, height: 700), version: "4.0.6", build: "29387")
+        let result = await AutomaticSessionCapture.observeHeader(context: { context },
+            capture: { _ in self.window(rows: []) }, recognize: { _ in
+                HeaderOcrResult(fragments: [(RecognizedLine(text: "合成甲", speaker: .unknown, confidence: 0.99),
+                    CGRect(x: 0.1, y: 0.2, width: 0.3, height: 0.6))])
+            }, measurement: { events.append($0) })
+        XCTAssertEqual(result["ok"] as? Bool, true)
+        XCTAssertEqual(events, [.started, .foregroundAccepted, .frameReceived, .headerOcrStarted, .headerOcrCompleted, .finished])
+        XCTAssertNil(result["measurements"], "测量不能扩大身份协议")
+        events.removeAll()
+        _ = await AutomaticSessionCapture.observeHeader(context: { nil },
+            capture: { _ in XCTFail("非微信不得采集"); return self.window() },
+            recognize: { _ in XCTFail("非微信不得识别"); return HeaderOcrResult(fragments: []) },
+            measurement: { events.append($0) })
+        XCTAssertEqual(events, [.started, .finished])
+        events.removeAll()
+        _ = await AutomaticSessionCapture.observeHeader(context: { context },
+            capture: { _ in throw MinimalSessionError.captureFailed },
+            recognize: { _ in XCTFail("失败帧不得识别"); return HeaderOcrResult(fragments: []) },
+            measurement: { events.append($0) })
+        XCTAssertEqual(events, [.started, .foregroundAccepted, .finished])
+    }
+
+    @MainActor
     func testProductionHeaderUsesPreviewOCRWithoutASelectedRow() async throws {
         let context = CalibrationContext(processId: 7, windowId: 9,
             frame: CGRect(x: 0, y: 0, width: 900, height: 700), version: "4.0.6", build: "29387")
