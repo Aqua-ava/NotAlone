@@ -143,7 +143,7 @@ class PostgresMemoryStore:
                         raise MemoryPersistenceError(
                             "数据库尚未启用维度依据；须先批准并完成迁移。"
                         )
-                    if candidate.dimension_evidence.version == 2:
+                    if candidate.dimension_evidence.version in {2, 3}:
                         current = bind_stored_dimension_evidence(
                             connection, candidate, lock_sources=True,
                         )

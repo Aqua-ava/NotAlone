@@ -12,7 +12,7 @@
 | [真实微信follow04](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed；单联系人有界读取、退出及视觉独立性已有证据；[v7同App总开关重开](../native-app-backend/real-sync-reenable-result-20261016.md)1／1通过，关闭65.926秒零新读取 | 第四AC空窗关停重开控制流及第五Answer记录已完成；第一／二AC持续到达与切换仍缺，不认证正向消息恢复，双联系人和真实来信保留未验证 |
 | [核心事实保留01](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed／ready-for-agent；[新独立8窗场](../grounded-evaluation/remaining-public8-result-20261016.md)B01单窗封存raw3／接受3／完整3，B02核验未知 | 无完整batch result，外层两窗仍unknown；不代签核心5命题整体，旧真实/留出不读不改 |
 | [指代消解07](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed／ready-for-agent；[main16](../grounded-evaluation/v3-main16-result-20261016.md)原封存完整11仅机械计数，A05争议撤出；[完整140旧场](../grounded-evaluation/full140-v4-result-20261016.md)首窗V未知；[新混合场](../grounded-evaluation/full140-mixed-v-off-result-20261016.md)closed6／280，3窗已审、137未跑，R002字段bad_auto硬停 | 不足≥15；旧场无审核，混合场仅3窗已审、137未跑且未达质量门；不拼旧场，旧未知V不补发 |
-| [按维度放行03](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed／ready-for-agent；结构和合取门已有实现，默认放行表仍为空 | 用户已明确采纳有限包装B；当前原21场关闭审计后已在独立工作树实施，尚未验证或整合，真实质量、typed依据与逐类放行分别验收 |
+| [按维度放行03](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed／ready-for-agent；结构和合取门已有实现，默认放行表仍为空；[有限包装B](../author-quote-proof-b/result-20261016.md)已验证并整合 | 一种可信完整到家表示已通过实际 producer 及隔离保存／导出／删除控制；真实质量、广泛 typed 依据与逐类放行仍分别验收 |
 
 本轮官方DeepSeek公开基线实际25次HTTP、零重试，13窗完成、8窗未运行；A13整组去向合同触发停止，剩余17次永久关闭。[完整结果](../grounded-evaluation/deepseek-public21-result-20261015.md)区分内容事实错误与整组auto/pending合同，不覆盖原Gold、旧失败或分母。未使用ECNU，没有上传真实聊天或放开自动采纳。
 
@@ -67,3 +67,7 @@
 ## 原21当前基线已关闭，有限包装B进入实施
 
 [新原21场](../grounded-evaluation/reference21-complete-v4-result-20261016.md)已closed10／42、十200、零重试，A01–A04已审、A05 proof来源11码点却提交[0,12)而严格失败、其余16未跑。必需raw5／接受3／完整2、E55／56、V14／16，两safe／两general_error；A01误拒绝、A04未知事项说明不具体。已审安全项0不代签未审A05；旧matcher的A02 false_fact差异原样保留。原21／28＋1、主集≥15、B01／B02核心与私人严格/留出分母不变，四条已审proof仍UNKNOWN。Root关闭后且后继源码改动前86源／61事件／8正式收据／只读SQL／PID及PG94146实际ESRCH核验完成，余32永久关闭，无自动后继。用户已采纳B，在独立工作树按完整作者到家规则做版本化表示/能力及隔离验证，生产默认空表保持；三原记忆票及15排除不结。
+
+## 接续：有限包装B整合
+
+原会话因额度停止后，本次核对其本机记录与隔离工作树，接续已批准的B实现。新证明／producer／隔离持久29项、完整提取单元555项、旧依据兼容31项及8源码类型检查通过，两轴独审各0；组间存在覆盖，不累计为独立总数。新增059只在随机隔离库执行，14个本次v3测试库已清理；生产默认及空放行表保持，未启动新真实模型场。详见[实际结果](../author-quote-proof-b/result-20261016.md)。原9张仍3 resolved／6 claimed，15张排除不动。

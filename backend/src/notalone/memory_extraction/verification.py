@@ -23,6 +23,7 @@ class SourceVerificationMode(StrEnum):
 
     LEGACY_V4 = "legacy-v4"
     NULLABLE_PROOF_V1 = "nullable-proof-v1"
+    NULLABLE_PROOF_V2 = "nullable-proof-v2"
 
 
 class SourceVerificationVerdict(StrEnum):
@@ -123,7 +124,7 @@ def validate_source_verification(
             }
             fields_valid = isinstance(payload, dict) and (
                 set(payload) == required_fields
-                or mode is SourceVerificationMode.NULLABLE_PROOF_V1
+                or mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2}
                 and set(payload) == required_fields | {"proof"}
             )
             _record_contract(
@@ -137,11 +138,11 @@ def validate_source_verification(
             check = "proof_structure"
             proof = None
             if (
-                mode is SourceVerificationMode.NULLABLE_PROOF_V1
+                mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2}
                 and payload.get("proof") is not None
             ):
                 from notalone.memory_extraction.source_proof import parse_proposal
-                proof = parse_proposal(payload.get("proof"))
+                proof = parse_proposal(payload.get("proof"), version=2 if mode is SourceVerificationMode.NULLABLE_PROOF_V2 else 1)
             index = payload["candidate_index"]
             check = "candidate_index"
             started_at = datetime.now(timezone.utc)
@@ -277,7 +278,7 @@ def validate_source_verification(
                 raise ValueError
             model_verdict, model_issues = verdict, issues
             proof_verification = None
-            if mode is SourceVerificationMode.NULLABLE_PROOF_V1:
+            if mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2}:
                 check = "proof_semantics"
                 from notalone.memory_extraction.source_proof import verify_proposal
                 proof_verification = verify_proposal(
@@ -285,6 +286,7 @@ def validate_source_verification(
                     trusted_sources={
                         item.message_id: item.text for item in window.messages
                     },
+                    proof_version=2 if mode is SourceVerificationMode.NULLABLE_PROOF_V2 else 1,
                 )
                 if proof_verification.status == "unsupported":
                     verdict = SourceVerificationVerdict.UNSUPPORTED

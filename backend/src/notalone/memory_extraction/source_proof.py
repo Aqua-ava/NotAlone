@@ -16,6 +16,7 @@ from notalone.memory_extraction.models import (
     SpeechAct,
 )
 from notalone.memory import MemoryCategory
+from notalone.memory.dimension_evidence import AUTHOR_QUOTE_CAPABILITIES
 
 RULE_VARIANTS: Mapping[str, tuple[str, ...]] = MappingProxyType({
     "AUTHOR_ARRIVAL_H1": ("direct_h",),
@@ -23,6 +24,9 @@ RULE_VARIANTS: Mapping[str, tuple[str, ...]] = MappingProxyType({
     "REQUEST_ROLE_H1": ("quoted_request_h", "received_request_h"),
     "SOURCE_IDENTITY_H1": ("explicit_role_identity",),
     "COND_PLAN_RUN_V1": ("conditional_plan",),
+})
+AUTHOR_QUOTE_RULE_VARIANTS: Mapping[str, tuple[str, ...]] = MappingProxyType({
+    "AUTHOR_ARRIVAL_H1": ("author_quote_h1",),
 })
 FRAMES = frozenset({"direct", "quoted_request_h", "received_request_h"})
 MAX_TEXT_LENGTH = 4096
@@ -121,17 +125,17 @@ def _span(raw: object, *, source: bool) -> ProposalSpan:
     return ProposalSpan(start, end, message_id)
 
 
-def _rule(raw: object) -> str:
-    if type(raw) is not str or raw not in RULE_VARIANTS:
+def _rule(raw: object, rules: Mapping[str, tuple[str, ...]] = RULE_VARIANTS) -> str:
+    if type(raw) is not str or raw not in rules:
         raise ValueError("证明规则不在已批准集合。")
     return raw
 
 
-def _atom(raw: object) -> AtomLink:
+def _atom(raw: object, rules: Mapping[str, tuple[str, ...]] = RULE_VARIANTS) -> AtomLink:
     value = _object(raw, {"rule_id", "variant_id", "source", "candidate"})
-    rule = _rule(value["rule_id"])
+    rule = _rule(value["rule_id"], rules)
     variant = value["variant_id"]
-    if type(variant) is not str or variant not in RULE_VARIANTS[rule]:
+    if type(variant) is not str or variant not in rules[rule]:
         raise ValueError("证明变体不属于当前规则。")
     return AtomLink(
         rule, variant, _span(value["source"], source=True),
@@ -139,22 +143,23 @@ def _atom(raw: object) -> AtomLink:
     )
 
 
-def _reference(raw: object) -> ReferenceLink:
+def _reference(raw: object, rules: Mapping[str, tuple[str, ...]] = RULE_VARIANTS) -> ReferenceLink:
     value = _object(raw, {"rule_id", "mention", "target", "binding"})
     return ReferenceLink(
-        _rule(value["rule_id"]), _span(value["mention"], source=True),
+        _rule(value["rule_id"], rules), _span(value["mention"], source=True),
         _span(value["target"], source=True),
         None if value["binding"] is None else _span(value["binding"], source=True),
     )
 
 
-def _reported(raw: object) -> ReportedLink:
+def _reported(raw: object, rules: Mapping[str, tuple[str, ...]] = RULE_VARIANTS) -> ReportedLink:
     value = _object(raw, {"rule_id", "frame", "source", "candidate"})
     frame = value["frame"]
-    if type(frame) is not str or frame not in FRAMES:
+    frames = FRAMES if rules is RULE_VARIANTS else frozenset({"direct"})
+    if type(frame) is not str or frame not in frames:
         raise ValueError("证明转述框架不符合契约。")
     return ReportedLink(
-        _rule(value["rule_id"]), frame, _span(value["source"], source=True),
+        _rule(value["rule_id"], rules), frame, _span(value["source"], source=True),
         _span(value["candidate"], source=False),
     )
 
@@ -170,18 +175,21 @@ def _links(raw: object, maximum: int, parse: Callable[[object], _T]) -> tuple[_T
     return tuple(parse(item) for item in raw)
 
 
-def parse_proposal(raw: object) -> ProofProposal | None:
+def parse_proposal(raw: object, *, version: int = 1) -> ProofProposal | None:
     """只接收固定结构；缺失证明保留未知，非法证明不能被静默丢弃。"""
 
+    if type(version) is not int or version not in {1, 2}:
+        raise ValueError("来源证明协议未受支持。")
     if raw is None:
         return None
     value = _object(raw, {"version", "atom_links", "reference", "reported"})
-    if type(value["version"]) is not int or value["version"] != 1:
+    if type(value["version"]) is not int or value["version"] != version:
         raise ValueError("来源证明版本不符合契约。")
+    rules = RULE_VARIANTS if version == 1 else AUTHOR_QUOTE_RULE_VARIANTS
     return ProofProposal(
-        1, _links(value["atom_links"], 16, _atom),
-        _links(value["reference"], 8, _reference),
-        _links(value["reported"], 8, _reported),
+        version, _links(value["atom_links"], 16, lambda raw: _atom(raw, rules)),
+        _links(value["reference"], 8, lambda raw: _reference(raw, rules)),
+        _links(value["reported"], 8, lambda raw: _reported(raw, rules)),
     )
 
 
@@ -249,6 +257,56 @@ def _arrival(text: str, sender: str, *, source: bool) -> _Parsed | None:
          for key in ("author", "time")},
         (offset, offset + len(body)),
     )
+
+
+def _author_quote(text: str, source_text: str) -> _Parsed | None:
+    body = text.strip()
+    offset = len(text) - len(text.lstrip())
+    inner = source_text.strip()
+    for author, sender in (("用户", "self"), ("联系人", "contact")):
+        prefix = author + "原话：“"
+        if body != prefix + inner + "”":
+            continue
+        parsed = _arrival(inner, sender, source=True)
+        if parsed is None:
+            return None
+        inner_start = offset + len(prefix)
+        spans = {key: (inner_start + start, inner_start + end)
+                 for key, (start, end) in parsed.spans.items()}
+        spans.update(outer_author=(offset, offset + len(author)),
+                     inner=(inner_start, inner_start + len(inner)))
+        return replace(parsed, variant="author_quote_h1", spans=spans,
+                       whole=(offset, offset + len(body)))
+    return None
+
+
+def _author_quote_basis(source: _Parsed, candidate: _Parsed, message: MessageRef,
+                        fact: ExtractedFact) -> dict[str, Any]:
+    result = _basis(source, candidate, message, fact)
+    source_start = len(message.text) - len(message.text.lstrip())
+    result.update(
+        version=2,
+        rules=[{"rule_id": "AUTHOR_ARRIVAL_H1", "rule_version": 2}],
+        rule_set_sha256=_digest(_json({
+            "version": 2, "rules": dict(AUTHOR_QUOTE_RULE_VARIANTS),
+            "source_grammar": _GRAMMARS["arrival_source"],
+            "wrappers": {"self": ["用户原话：“", "”"], "contact": ["联系人原话：“", "”"]},
+            "representation": "author_quote_h1-v1-exact-complete-trimmed-source-no-extra-text",
+            "coordinates": "python-unicode-half-open-actual-source-and-candidate",
+            "pragmatics": "common-fact-actual-sender-outer-author-inner-I-subject-direct-asserted-literal-null-H",
+            "scope": "one-full-message-one-target-source-only-actual-text-complete-snapshots",
+            "capabilities": AUTHOR_QUOTE_CAPABILITIES,
+        })),
+        representation={
+            "version": 1, "kind": "author_quote_h1",
+            "source": _source_span(message, (source_start, source_start + len(message.text.strip()))),
+            "candidate": _text_span(fact.text, candidate.whole),
+            "author": _text_span(fact.text, candidate.spans["outer_author"]),
+            "inner": _text_span(fact.text, candidate.spans["inner"]),
+        },
+        capabilities=list(AUTHOR_QUOTE_CAPABILITIES),
+    )
+    return result
 
 
 def _person(token: str) -> tuple[str, str]:
@@ -742,15 +800,22 @@ def _basis(source: _Parsed, candidate: _Parsed, message: MessageRef, fact: Extra
 def verify_proposal(
     proposal: ProofProposal | None, window: ExtractionWindow, fact: ExtractedFact,
     trusted_sources: Mapping[UUID, str] | None = None,
+    *, proof_version: int = 1,
 ) -> ProofVerification:
     """独立解析完整源与候选，只核有界规则，不增加读取或写入副作用。"""
 
+    if type(proof_version) is not int or proof_version not in {1, 2} or (
+        proposal is not None and proposal.version != proof_version
+    ):
+        raise ValueError("来源证明与显式协议版本不一致。")
     _validate_positions(proposal, window, fact)
     message, reason = _trusted_message(window, fact, trusted_sources)
     if message is None:
         return ProofVerification("UNKNOWN", reason)
-    source = _parse_text(message.text, message.sender.value, source=True)
-    candidate = _parse_text(fact.text, message.sender.value, source=False)
+    source = (_arrival(message.text, message.sender.value, source=True) if proof_version == 2
+              else _parse_text(message.text, message.sender.value, source=True))
+    candidate = (_author_quote(fact.text, message.text) if proof_version == 2
+                 else _parse_text(fact.text, message.sender.value, source=False))
     if source is None or candidate is None:
         return ProofVerification("UNKNOWN", "unsupported_grammar")
     if source.rule_id == candidate.rule_id and "diagnostic" in candidate.values:
@@ -764,13 +829,16 @@ def verify_proposal(
         return ProofVerification("unsupported", "known_graph_difference")
     if any(value is None for key, value in source.values.items() if key in {"property_owner", "beneficiary"}):
         return ProofVerification("UNKNOWN", "missing_source_identity")
-    if not _pragmatics_match(fact, candidate):
+    if not _pragmatics_match(fact, candidate) or (
+        proof_version == 2 and fact.category is not MemoryCategory.COMMON_FACT
+    ):
         return ProofVerification("UNKNOWN", "pragmatics_not_supported")
     if proposal is None:
         return ProofVerification("UNKNOWN", "missing_proof")
     if not _proposal_matches(proposal, source, candidate, message, fact):
         return ProofVerification("UNKNOWN", "proposal_not_matching")
-    return ProofVerification("verified", "verified", _json(_basis(source, candidate, message, fact)))
+    build = _author_quote_basis if proof_version == 2 else _basis
+    return ProofVerification("verified", "verified", _json(build(source, candidate, message, fact)))
 
 
 def reverify_basis(
@@ -782,17 +850,24 @@ def reverify_basis(
     message, reason = _trusted_message(window, fact, trusted_sources)
     if message is None:
         return ProofVerification("UNKNOWN", reason)
-    source = _parse_text(message.text, message.sender.value, source=True)
-    candidate = _parse_text(fact.text, message.sender.value, source=False)
+    version = basis.get("version")
+    if type(version) is not int or version not in {1, 2}:
+        return ProofVerification("UNKNOWN", "basis_mismatch")
+    source = (_arrival(message.text, message.sender.value, source=True) if version == 2
+              else _parse_text(message.text, message.sender.value, source=True))
+    candidate = (_author_quote(fact.text, message.text) if version == 2
+                 else _parse_text(fact.text, message.sender.value, source=False))
     if source is not None and candidate is not None:
         source = _align_frame(source, candidate)
     if (
         source is None or candidate is None or source.rule_id != candidate.rule_id
         or source.values != candidate.values or not _pragmatics_match(fact, candidate)
+        or (version == 2 and fact.category is not MemoryCategory.COMMON_FACT)
         or any(source.values.get(key) is None for key in ("property_owner", "beneficiary") if key in source.values)
     ):
         return ProofVerification("UNKNOWN", "basis_mismatch")
-    expected = _basis(source, candidate, message, fact)
+    build = _author_quote_basis if version == 2 else _basis
+    expected = build(source, candidate, message, fact)
     try:
         # JSON规范比较保留bool/int、float/int差别，不让Python宽松相等绕过合同。
         if _json(dict(basis)) != _json(expected):

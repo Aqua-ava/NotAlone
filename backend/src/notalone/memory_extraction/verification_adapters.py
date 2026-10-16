@@ -167,8 +167,23 @@ reported固定rule_id/frame/source/candidate，frame仅direct、quoted_request_h
 """
 
 
-def _proof_schema() -> dict[str, Any]:
-    from notalone.memory_extraction.source_proof import RULE_VARIANTS
+SOURCE_AUTHOR_QUOTE_PROOF_PROMPT = """
+本次显式离线协议为nullable-proof-v2。原candidate_index/verdict/issues/evidence四槽仍必填；
+只增加可缺或null的proof。proof非null须四键齐全：version=2、atom_links、reference、reported。
+仅支持AUTHOR_ARRIVAL_H1/author_quote_h1：可信单消息、单target、唯一来源的完整我刚／刚刚到家[。]，
+候选为用户／联系人原话：“完整来源去除首尾空白后的正文”，内文逐字一致，不遗漏句末标点。
+这是同一原到达事件，不是通用“说过某文本”主张；actual sender、外层作者、内文我和subject须一致，
+分类common_fact、阶段completed、assertion/asserted/literal、H双null且frame=direct。额外上下文、日期前缀、尾句、嵌套引用、
+条件、否定和其他事件均超范围，proof留null，不改原四槽判断。
+proof只提Unicode码点半开整数位置，不提摘要、能力、身份布尔或认证。atom_links只用上述rule/variant，
+source覆盖完整来源事件，candidate覆盖完整包装；reference的mention/target均为来源我位置，binding=null；
+reported的source/candidate覆盖完整同一事件及包装，frame只能direct。缺必要链接不生成依据。
+数组上限沿16/8/8，所有message_id须来自候选原来源；非法proof不丢弃、不重试。
+"""
+
+
+def _proof_schema(version: int = 1) -> dict[str, Any]:
+    from notalone.memory_extraction.source_proof import RULE_VARIANTS, AUTHOR_QUOTE_RULE_VARIANTS
 
     source = {
         "type": "object", "additionalProperties": False,
@@ -185,7 +200,8 @@ def _proof_schema() -> dict[str, Any]:
             "end": {"type": "integer", "minimum": 1},
         }, "required": ["start", "end"],
     }
-    rules = {rule: list(variants) for rule, variants in RULE_VARIANTS.items()}
+    registry = RULE_VARIANTS if version == 1 else AUTHOR_QUOTE_RULE_VARIANTS
+    rules = {rule: list(variants) for rule, variants in registry.items()}
     atom = {
         "type": "object", "additionalProperties": False,
         "properties": {
@@ -210,7 +226,7 @@ def _proof_schema() -> dict[str, Any]:
         "type": "object", "additionalProperties": False,
         "properties": {
             "rule_id": {"type": "string", "enum": list(rules)},
-            "frame": {"type": "string", "enum": [
+            "frame": {"type": "string", "enum": ["direct"] if version == 2 else [
                 "direct", "quoted_request_h", "received_request_h",
             ]}, "source": source, "candidate": candidate,
         }, "required": ["rule_id", "frame", "source", "candidate"],
@@ -218,7 +234,7 @@ def _proof_schema() -> dict[str, Any]:
     return {
         "type": ["object", "null"], "additionalProperties": False,
         "properties": {
-            "version": {"type": "integer", "const": 1},
+            "version": {"type": "integer", "const": version},
             "atom_links": {"type": ["array", "null"], "maxItems": 16,
                            "items": atom},
             "reference": {"type": ["array", "null"], "maxItems": 8,
@@ -234,6 +250,8 @@ SOURCE_VERIFICATION_PROOF_SCHEMA = deepcopy(SOURCE_VERIFICATION_SCHEMA)
 SOURCE_VERIFICATION_PROOF_SCHEMA["properties"]["results"]["items"][
     "properties"
 ]["proof"] = _proof_schema()
+SOURCE_VERIFICATION_PROOF_V2_SCHEMA = deepcopy(SOURCE_VERIFICATION_SCHEMA)
+SOURCE_VERIFICATION_PROOF_V2_SCHEMA["properties"]["results"]["items"]["properties"]["proof"] = _proof_schema(2)
 
 
 class LangChainSourceVerificationRuntime:
@@ -277,8 +295,11 @@ class LangChainSourceVerificationRuntime:
             return ()
         called_at = datetime.now(timezone.utc)
         started = time.perf_counter()
-        use_proof = self._verification_mode is SourceVerificationMode.NULLABLE_PROOF_V1
-        schema = SOURCE_VERIFICATION_PROOF_SCHEMA if use_proof else SOURCE_VERIFICATION_SCHEMA
+        use_proof = self._verification_mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2}
+        schema = (SOURCE_VERIFICATION_PROOF_V2_SCHEMA if self._verification_mode is SourceVerificationMode.NULLABLE_PROOF_V2
+                  else SOURCE_VERIFICATION_PROOF_SCHEMA if use_proof else SOURCE_VERIFICATION_SCHEMA)
+        proof_prompt = (SOURCE_AUTHOR_QUOTE_PROOF_PROMPT if self._verification_mode is SourceVerificationMode.NULLABLE_PROOF_V2
+                        else SOURCE_PROOF_PROMPT if use_proof else "")
         try:
             message = invoke_traced_model(
                 self._model,
@@ -290,9 +311,7 @@ class LangChainSourceVerificationRuntime:
                 messages=[
                     {
                         "role": "system",
-                        "content": SOURCE_VERIFICATION_SYSTEM_PROMPT + (
-                            SOURCE_PROOF_PROMPT if use_proof else ""
-                        ),
+                        "content": SOURCE_VERIFICATION_SYSTEM_PROMPT + proof_prompt,
                     },
                     {
                         "role": "user",

@@ -71,8 +71,9 @@ def build_dimension_evidence(
     )
     use_proof = (
         verification is not None
-        and verification.verification_mode is SourceVerificationMode.NULLABLE_PROOF_V1
+        and verification.verification_mode in {SourceVerificationMode.NULLABLE_PROOF_V1, SourceVerificationMode.NULLABLE_PROOF_V2}
     )
+    proof_version = 2 if verification is not None and verification.verification_mode is SourceVerificationMode.NULLABLE_PROOF_V2 else 1
     semantic_basis = None
     if (
         use_proof and verification is not None
@@ -82,6 +83,7 @@ def build_dimension_evidence(
         checked = verify_proposal(
             verification.proof, window=window, fact=fact,
             trusted_sources={item.message_id: item.text for item in window.messages},
+            proof_version=proof_version,
         )
         if checked.status == "verified" and checked.semantic_basis is not None:
             semantic_basis = SemanticBasis.from_payload(checked.semantic_basis)
@@ -91,7 +93,7 @@ def build_dimension_evidence(
         pragmatics=fact_pragmatics(fact),
         paraphrase=tuple(alignments) if alignments else None,
         reference=None, media=media, reported=None,
-        version=2 if use_proof else 1, semantic_basis=semantic_basis,
+        version=proof_version + 1 if use_proof else 1, semantic_basis=semantic_basis,
     )
     return bind_dimension_evidence(
         evidence, scope=scope, candidate=fact, messages=metadata,

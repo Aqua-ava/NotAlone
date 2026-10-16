@@ -35,9 +35,9 @@ def has_dimension_evidence(connection: psycopg.Connection[Any]) -> bool:
 def supports_dimension_evidence_version(
     connection: psycopg.Connection[Any], version: int,
 ) -> bool:
-    """只核已有前向约束；旧055/056不能借列存在写入版本2。"""
+    """只核已有已验证约束；列存在不能代替对应版本的前向能力。"""
 
-    if type(version) is not int or version not in {1, 2}:
+    if type(version) is not int or version not in {1, 2, 3}:
         return False
     if not has_dimension_evidence(connection):
         return False
@@ -47,10 +47,13 @@ def supports_dimension_evidence_version(
         SELECT EXISTS (
             SELECT 1 FROM pg_constraint
             WHERE conrelid='public.memory_candidate'::regclass
-              AND conname='memory_candidate_dimension_evidence_version2_check'
+              AND conname=ANY(%s)
               AND contype='c' AND convalidated
         ) AS present
-    """).fetchone()
+    """, ([
+        "memory_candidate_dimension_evidence_version3_check",
+        *(["memory_candidate_dimension_evidence_version2_check"] if version == 2 else []),
+    ],)).fetchone()
     if row is None:
         raise ValueError("无法核对维度依据版本结构。")
     return bool(row["present"] if isinstance(row, dict) else row[0])

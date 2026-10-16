@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import re
 import json
+import hashlib
 from typing import Any
 from uuid import UUID
 
@@ -329,6 +330,10 @@ SEMANTIC_RULE_IDS = frozenset({
     "AUTHOR_ARRIVAL_H1", "KIN_LEND_BA_H1", "REQUEST_ROLE_H1",
     "SOURCE_IDENTITY_H1", "COND_PLAN_RUN_V1",
 })
+AUTHOR_QUOTE_CAPABILITIES = (
+    "author_binding", "arrival_event_preservation", "author_self_reference",
+    "direct_attribution", "recency_preservation",
+)
 _ROLE_KINDS = frozenset({
     "author", "elder_sister", "elder_brother", "colleague",
     "vehicle", "book", "umbrella",
@@ -545,6 +550,8 @@ def _semantic_unresolved(
 
 
 def _validate_semantic_basis(value: object) -> dict[str, Any]:
+    if isinstance(value, dict) and type(value.get("version")) is int and value["version"] == 2:
+        return _validate_author_quote_basis(value)
     data = _fields(value, {
         "version", "rule_set_sha256", "rules", "roles", "atoms", "qualifiers",
         "reference_bindings", "frame", "unresolved", "source_graph_sha256",
@@ -562,6 +569,70 @@ def _validate_semantic_basis(value: object) -> dict[str, Any]:
     _semantic_qualifiers(data["qualifiers"], atoms)
     _semantic_bindings(data["reference_bindings"], roles)
     _semantic_unresolved(data["unresolved"], atoms)
+    return data
+
+
+def _validate_author_quote_basis(value: object) -> dict[str, Any]:
+    data = _fields(value, {
+        "version", "rule_set_sha256", "rules", "roles", "atoms", "qualifiers",
+        "reference_bindings", "frame", "unresolved", "source_graph_sha256",
+        "candidate_graph_sha256", "representation", "capabilities",
+    })
+    for name in ("rule_set_sha256", "source_graph_sha256", "candidate_graph_sha256"):
+        _digest(data[name])
+    rules = _bounded_rows(data["rules"], 1)
+    if len(rules) != 1:
+        raise ValueError("作者引句只支持单一到达规则。")
+    rule = _fields(rules[0], {"rule_id", "rule_version"})
+    if rule["rule_id"] != "AUTHOR_ARRIVAL_H1" or type(rule["rule_version"]) is not int or rule["rule_version"] != 2:
+        raise ValueError("作者引句规则版本不匹配。")
+    roles = _semantic_roles(data["roles"])
+    atoms = _semantic_atoms(data["atoms"], roles)
+    _semantic_qualifiers(data["qualifiers"], atoms)
+    _semantic_bindings(data["reference_bindings"], roles)
+    if (set(roles) != {0} or roles[0]["kind"] != "author" or set(atoms) != {0}
+        or atoms[0]["predicate"] != "arrive_home" or data["frame"] != "direct"
+        or data["unresolved"] != [] or data["capabilities"] != list(AUTHOR_QUOTE_CAPABILITIES)
+        or data["source_graph_sha256"] != data["candidate_graph_sha256"]):
+        raise ValueError("作者引句的完整事件或封闭能力不匹配。")
+    atom = atoms[0]
+    if any(value != (0 if name == "actor" else None) for name, value in atom["roles"].items()):
+        raise ValueError("到达事件只能包含作者actor。")
+    qualifiers = _bounded_rows(data["qualifiers"], 1)
+    bindings = _bounded_rows(data["reference_bindings"], 1)
+    if len(qualifiers) != 1 or len(bindings) != 1:
+        raise ValueError("到达事件必须保留唯一recency与作者自指。")
+    qualifier, binding = qualifiers[0], bindings[0]
+    if (qualifier.get("qualifier_id") != 0 or qualifier.get("kind") != "time"
+        or qualifier.get("atom_id") != 0 or qualifier.get("slot") != "event_time"
+        or qualifier.get("value_sha256") != hashlib.sha256(b'{"event_time":"just"}').hexdigest()
+        or binding["role_id"] != 0 or binding["method"] != "actual_sender"
+        or binding["mention"] != roles[0]["source"] or binding["target"] != roles[0]["source"]):
+        raise ValueError("到达事件的限定或自指不完整。")
+    representation = _fields(data["representation"], {"version", "kind", "source", "candidate", "author", "inner"})
+    if type(representation["version"]) is not int or representation["version"] != 1 or representation["kind"] != "author_quote_h1":
+        raise ValueError("作者引句表示未受支持。")
+    source = MessageSpan.from_payload(representation["source"])
+    whole, author, inner = (TextSpan.from_payload(representation[name]) for name in ("candidate", "author", "inner"))
+    event = MessageSpan.from_payload(atom["source"])
+    source_author = MessageSpan.from_payload(roles[0]["source"])
+    time_source = MessageSpan.from_payload(qualifier["source"])
+    time_candidate = TextSpan.from_payload(qualifier["candidate"])
+    author_width = 2 if roles[0]["sender"] == "self" else 3
+    if (whole.start != author.start or author.end - author.start != author_width
+        or inner.start != author.end + 4 or whole.end != inner.end + 1
+        or inner.end - inner.start != source.span.end - source.span.start
+        or inner.sha256 != source.span.sha256
+        or atom["candidate"] != representation["candidate"]
+        or any(span.message_id != source.message_id for span in (event, source_author, time_source))
+        or event.span.start != source.span.start or source.span.end - event.span.end not in {0, 1}
+        or source_author.span.start != source.span.start or source_author.span.end != source.span.start + 1
+        or time_source.span.start != source_author.span.end or time_source.span.end - time_source.span.start not in {1, 2}
+        or event.span.end != time_source.span.end + 2
+        or time_candidate.start != inner.start + time_source.span.start - source.span.start
+        or time_candidate.end != inner.start + time_source.span.end - source.span.start
+        or time_candidate.sha256 != time_source.span.sha256):
+        raise ValueError("作者引句必须完整覆盖原事件并映射实际坐标。")
     return data
 
 
@@ -593,13 +664,17 @@ class SemanticBasis:
             rows.extend((binding["mention"], binding["target"]))
             if binding["binding"] is not None:
                 rows.append(binding["binding"])
+        if data["version"] == 2:
+            rows.append(data["representation"]["source"])
         return tuple(MessageSpan.from_payload(row) for row in rows)
 
     @property
     def candidate_spans(self) -> tuple[TextSpan, ...]:
         data = self.to_payload()
-        return tuple(TextSpan.from_payload(row["candidate"])
-                     for name in ("atoms", "qualifiers") for row in data[name])
+        rows = [row["candidate"] for name in ("atoms", "qualifiers") for row in data[name]]
+        if data["version"] == 2:
+            rows.extend(data["representation"][name] for name in ("candidate", "author", "inner"))
+        return tuple(TextSpan.from_payload(row) for row in rows)
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -621,12 +696,13 @@ class DimensionEvidence:
     source_bound: bool = field(default=False, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        if type(self.version) is not int or self.version not in {1, 2}:
+        if type(self.version) is not int or self.version not in {1, 2, 3}:
             raise ValueError("维度依据版本未受支持。")
         if self.semantic_basis is not None and (
-            self.version != 2 or not isinstance(self.semantic_basis, SemanticBasis)
+            self.version not in {2, 3} or not isinstance(self.semantic_basis, SemanticBasis)
+            or self.semantic_basis.to_payload()["version"] != self.version - 1
         ):
-            raise TypeError("语义依据必须使用版本2的受控合同。")
+            raise TypeError("语义依据必须与外层版本精确配对。")
         if not isinstance(self.scope, ContactScope):
             raise TypeError("维度依据必须带联系人范围。")
         _digest(self.candidate_sha256)
@@ -704,7 +780,7 @@ class DimensionEvidence:
             "paraphrase": rows(self.paraphrase), "reference": rows(self.reference),
             "media": rows(self.media), "reported": rows(self.reported),
         }
-        if self.version == 2:
+        if self.version in {2, 3}:
             payload["semantic_basis"] = (
                 self.semantic_basis.to_payload()
                 if self.semantic_basis is not None else None
@@ -717,7 +793,7 @@ class DimensionEvidence:
             "version", "scope", "candidate_sha256", "window_sha256", "messages",
             "pragmatics", "paraphrase", "reference", "media", "reported",
         }
-        if isinstance(value, dict) and type(value.get("version")) is int and value["version"] == 2:
+        if isinstance(value, dict) and type(value.get("version")) is int and value["version"] in {2, 3}:
             names.add("semantic_basis")
         data = _fields(value, names)
         scope = _fields(data["scope"], {"owner_id", "contact_id"})

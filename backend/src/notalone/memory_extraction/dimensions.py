@@ -20,9 +20,9 @@
    ``reported`` 这些未确认陈述。``None`` 表示"当前字段不足以判定该候选
    属于哪个评测维度"，按 fail-closed 一律视为未放行。
 
-四类定位字段保存为版本化依据。v1保真仍用完整逐字对齐；显式v2入口只在
+四类定位字段保存为版本化依据。v1保真仍用完整逐字对齐；显式proof入口只在
 获批有限全文语法、实际来源及所有角色关系重核通过后承认新增语义依据，
-超范围保持未知。指代和转述始终留在相关集合，不凭缺字段排除；v2还保守
+超范围保持未知。指代和转述始终留在相关集合，不凭缺字段排除；版本2/3还保守
 加入time，即使H日期为空。这不是精确相关性分类器，不能据此认定模型质量。
 
 放行表默认**空集**（:data:`DEFAULT_DIMENSION_RELEASE`），因此未放行维度一律
@@ -105,7 +105,7 @@ def dimension_key(fact: ExtractedFact) -> MemoryDimension | None:
 
 
 def required_dimensions(fact: ExtractedFact) -> frozenset[str]:
-    """返回只收紧的保守超集；缺提案不能排除指代、转述或v2时间关系。"""
+    """返回只收紧的保守超集；缺提案不能排除指代、转述或proof时间关系。"""
 
     if not isinstance(fact, ExtractedFact):
         raise TypeError("维度判定输入必须是 ExtractedFact。")
@@ -116,8 +116,8 @@ def required_dimensions(fact: ExtractedFact) -> frozenset[str]:
     ):
         required.add("time")
     evidence = fact.dimension_evidence
-    if evidence is not None and evidence.version == 2:
-        # v2不能因H日期为空或提案未知省掉潜在时间关系；保守集合只增加。
+    if evidence is not None and evidence.version in {2, 3}:
+        # proof版本不能因H日期为空或提案未知省掉潜在时间关系；保守集合只增加。
         required.add("time")
     if evidence is None or any(
         item.message_type != "text" or item.text_representation != "text"
@@ -213,6 +213,15 @@ def valid_evidence_dimensions(
             for item in evidence.semantic_basis.to_payload()["qualifiers"]
         ):
             valid.add("time")
+    if evidence.version == 3 and evidence.semantic_basis is not None:
+        # 此版本仅接受完整到达图；每项能力按独立合同贡献，不借旧v2全量映射。
+        capability_dimensions = {
+            "author_binding": "subject", "arrival_event_preservation": "paraphrase",
+            "author_self_reference": "reference", "direct_attribution": "reported",
+            "recency_preservation": "time",
+        }
+        for capability in evidence.semantic_basis.to_payload()["capabilities"]:
+            valid.add(capability_dimensions[capability])
     media = evidence.media or ()
     if {item.message_id for item in media} == set(fact.source_message_ids) and all(
         item.representation == (
