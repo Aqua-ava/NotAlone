@@ -41,7 +41,7 @@ from notalone.memory_extraction.evaluation_records import (
     EvaluationRecordStore,
     canonical_sha256,
 )
-from notalone.memory_extraction.evaluation_reference import public_window_projection
+from notalone.memory_extraction.evaluation_reference import public_window_projection, _fixed_case_sets
 from notalone.memory_extraction.flow import _to_fact
 from notalone.memory_extraction.models import ExtractedFact, ExtractionWindow
 from notalone.memory_extraction.runtime import MemoryExtractionRuntime, ExtractionPayload
@@ -54,7 +54,7 @@ from notalone.memory_extraction.verification import (
     SourceVerificationMode, validate_source_verification,
 )
 from notalone.memory_trace.context import current_trace
-from .evaluation_provider_contract import MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy
+from .evaluation_provider_contract import MIXED_REQUEST_VERSION, mixed_phase_policy, PHASE_SPLIT_PLANS, REFERENCE21_V4_PLAN
 
 _BASE_URL = "https://evaluation.invalid/v1"
 _ENDPOINT = f"{_BASE_URL}/chat/completions"
@@ -419,14 +419,16 @@ def _run_evaluation_batch(
     """P0/P1共用记录与收尾；真实配置与独审验证由各入口负责。"""
     selected = SourceVerificationMode(verification_mode)
     extraction_selected = EvaluationExtractionMode(extraction_mode)
-    mixed = execution_plan == MIXED_PLAN
-    if mixed != (store.execution_plan == MIXED_PLAN):
+    mixed = execution_plan in PHASE_SPLIT_PLANS
+    reference21_v4 = execution_plan == REFERENCE21_V4_PLAN
+    if mixed != (store.execution_plan in PHASE_SPLIT_PLANS) or mixed and execution_plan != store.execution_plan:
         raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
     if store.extraction_mode != extraction_selected.value:
         raise EvaluationBudgetAbort("evaluation_frozen_extraction_mode_mismatch")
     if extraction_selected is EvaluationExtractionMode.GROUNDED_V4 and (
         store.reference_version != "source-fidelity-v2"
-        or cases != (*CASES, *SEMANTIC_CASES) or len(windows) != 140 or len(plan) != 140
+        or cases != (_fixed_case_sets()[0] if reference21_v4 else (*CASES, *SEMANTIC_CASES))
+        or len(windows) != (21 if reference21_v4 else 140) or len(plan) != (21 if reference21_v4 else 140)
         or selected is not SourceVerificationMode.NULLABLE_PROOF_V1
         or extraction_tool_choice != "omitted" or verification_tool_choice != ("forced" if mixed else "omitted")
         or type(max_retries) is not int or max_retries != 0 or semantic_audit is None
@@ -551,7 +553,7 @@ def _run_evaluation_batch(
                         "verification_tool_choice": verification_tool_choice,
                         "extraction_tool_choice": extraction_tool_choice,
                         "extraction_mode": extraction_selected.value,
-                        **({"execution_plan": MIXED_PLAN, "phase_request_version": MIXED_REQUEST_VERSION,
+                        **({"execution_plan": execution_plan, "phase_request_version": MIXED_REQUEST_VERSION,
                             "phase_request_policy": mixed_phase_policy()} if mixed else {}),
                         **({"reference_version": store.reference_version}
                            if store.reference_version == "source-fidelity-v2" else {}),

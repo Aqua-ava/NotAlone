@@ -7,7 +7,10 @@ from typing import Any, Callable
 
 from .evaluation_http_budget import EvaluationBudgetAbort
 from .evaluation_extraction import EvaluationExtractionMode, extraction_tool_name
-from .evaluation_provider_contract import validate_evaluation_policy, MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy
+from .evaluation_provider_contract import (
+    validate_evaluation_policy, MIXED_PLAN, MIXED_REQUEST_VERSION, mixed_phase_policy,
+    PHASE_SPLIT_PLANS, REFERENCE21_V4_PLAN,
+)
 from .evaluation_records import canonical_sha256
 from .evaluation_reference import (
     public_window_projection, validate_full_public_reference, validate_public_reference,
@@ -199,10 +202,11 @@ class PhasedEvaluationAudit:
         reference_version: str = "legacy-v1",
         execution_plan: str = "original",
     ):
-        if type(execution_plan) is not str or execution_plan not in {"original", MIXED_PLAN}:
+        if type(execution_plan) is not str or execution_plan not in {"original", *PHASE_SPLIT_PLANS}:
             raise ValueError("审核执行身份非法。")
         self._execution_plan = execution_plan
-        mixed = execution_plan == MIXED_PLAN
+        mixed = execution_plan in PHASE_SPLIT_PLANS
+        reference21_v4 = execution_plan == REFERENCE21_V4_PLAN
         self._verification_mode = SourceVerificationMode(verification_mode)
         self._extraction_mode = EvaluationExtractionMode(extraction_mode)
         validate_evaluation_policy(verification_tool_choice)
@@ -223,7 +227,7 @@ class PhasedEvaluationAudit:
                 or self._extraction_mode is EvaluationExtractionMode.GROUNDED_V4):
             if (reference_version != "source-fidelity-v2"
                     or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V4
-                    or case_set != "full140" or case_positions is not None
+                    or case_set != ("reference21" if reference21_v4 else "full140") or case_positions is not None
                     or self._verification_mode is not SourceVerificationMode.NULLABLE_PROOF_V1
                     or extraction_tool_choice != "omitted" or verification_tool_choice != ("forced" if mixed else "omitted")):
                 raise ValueError("来源保真v2审核须匹配已注册的完整140协议。")
@@ -319,10 +323,10 @@ class PhasedEvaluationAudit:
 
     def _run(self, bundle: dict) -> dict:
         if (bundle.get("execution_plan", "original") != self.execution_plan
-                or self.execution_plan == MIXED_PLAN and (
+                or self.execution_plan in PHASE_SPLIT_PLANS and (
                     bundle.get("phase_request_version") != MIXED_REQUEST_VERSION
                     or bundle.get("phase_request_policy") != mixed_phase_policy())
-                or self.execution_plan != MIXED_PLAN and (
+                or self.execution_plan not in PHASE_SPLIT_PLANS and (
                     "phase_request_version" in bundle or "phase_request_policy" in bundle)):
             raise EvaluationBudgetAbort("phased_execution_plan_changed")
         if bundle.get("reference_version", "legacy-v1") != self.reference_version:

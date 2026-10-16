@@ -32,6 +32,11 @@ MIXED_REQUEST_VERSION = "deepseek-phase-split-v1"
 MIXED_MODE = "deepseek_bounded_full140_v4_source_v2_v_off_forced"
 MIXED_STAGE = "full140-v4-source-v2-v-off-forced"
 MIXED_KIND = "full140-v4-v-off-forced"
+REFERENCE21_V4_PLAN = "reference21-grounded-v4-source-v2-v-off-forced"
+REFERENCE21_V4_MODE = "deepseek_bounded_reference21_v4_source_v2_v_off_forced"
+REFERENCE21_V4_STAGE = "reference21-v4-source-v2-v-off-forced"
+REFERENCE21_V4_KIND = "reference21-v4-v-off-forced"
+PHASE_SPLIT_PLANS = frozenset({MIXED_PLAN, REFERENCE21_V4_PLAN})
 
 
 def mixed_phase_policy() -> dict:
@@ -102,7 +107,8 @@ class ECNUEvaluationContract:
             self._profile = EvaluationProviderProfile(provider_profile)
         except (TypeError, ValueError):
             raise EvaluationBudgetAbort("evaluation_provider_profile_invalid") from None
-        if ((self._profile is EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT) != (execution_plan == MIXED_PLAN)):
+        if (type(execution_plan) is not str or
+                (self._profile is EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT) != (execution_plan in PHASE_SPLIT_PLANS)):
             raise EvaluationBudgetAbort("evaluation_mixed_fixed_plan_required")
         if self._profile is EvaluationProviderProfile.DEEPSEEK_PHASE_SPLIT and (
                 verification_tool_choice != "forced" or self._extraction_mode is not EvaluationExtractionMode.GROUNDED_V4):

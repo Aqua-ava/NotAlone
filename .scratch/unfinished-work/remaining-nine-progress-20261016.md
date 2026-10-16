@@ -59,3 +59,7 @@
 
 
 另补[已完成动作的附属数量](../grounded-v4-quantity-continuation/result-20261016.md)：旧A13实际是门票完成及“两张”，并非条件计划；旧event／event仍重现0.85 auto＋0.55 pending及bad_auto1。新v4显式continuation在有限整数／计数单位范围内合并完整原引句和依赖，保留最低0.55、风险和歧义，给定V支持的SDK／Flow控制为pending1／auto0，Gold理想auto仍不达标。Root83项grounded、193项评测单元、集成逐条112项ok（1测试及2个组环境准备跳过），mypy两源码通过；所有session已结束，无新真实请求／预算，旧失败和原9张状态不变，两轴初审各1项索引旧／新场口径问题已纠正，增审各0、源码问题0。
+
+下一步已预注册[原公开21窗当前v4基线](../grounded-evaluation/reference21-complete-v4-plan-20261016.md)：原21／28必需＋1可选、当前两项补全、已审来源参考v2、E max／V off具名、官方DeepSeek，独立42次零重试、从prepare绝对4小时。正在实现专属固定入口及离线控制；尚未创建新真实预算或请求，不预写模型标签、审核或质量成绩。Root已只读核九旧场均持久关闭，请求序列均为官方端点；闭账、未知及未跑不补发。三张记忆原票、原9张状态、默认空表和15张排除范围保持。
+
+该固定21入口现已完成[离线实施](../grounded-evaluation/reference21-complete-v4-implementation-20261016.md)：完整SDK Mock21E＋19V＝40／42、末窗B02到达，公开runner57、完整评测集成112通过；Root最终评测单元208及8源码类型通过，两轴17文件及owned增量均0。原回收代码的真实EPERM探针红6／20，首修后Root206仍1个fork错误，最终以原每信号1秒绝对截止修复嵌套100毫秒先停的结构缺口；真实fork200毫秒控制先红后绿、owned14及新旧fork10次实际ESRCH均通过。OS仍可返回EPERM、四个早期无PID及重建preSHA限制保留，不补签历史退出或宣称其原因已全证。现在只完成准备，尚无新真实预算、模型质量、typed或放行；Root最终文档窄核、prepare、本地提交扫描后另行唯一启动。原9仍3 resolved／6 claimed，三记忆票及15排除保持。

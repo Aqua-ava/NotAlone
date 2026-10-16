@@ -10,7 +10,10 @@ import subprocess
 import sys
 import time
 from typing import Any, Callable
-from .evaluation_provider_contract import MIXED_PLAN, MIXED_MODE, MIXED_STAGE, MIXED_KIND, MIXED_REQUEST_VERSION, mixed_phase_policy
+from .evaluation_provider_contract import (
+    MIXED_PLAN, MIXED_MODE, MIXED_STAGE, MIXED_KIND, MIXED_REQUEST_VERSION, mixed_phase_policy,
+    REFERENCE21_V4_PLAN, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE, REFERENCE21_V4_KIND,
+)
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,8 @@ class _FixedPublicControl:
 
 
 _PROFILES = {
+    REFERENCE21_V4_KIND: _FixedPublicControl(42, 14400, 21, 28, REFERENCE21_V4_MODE, REFERENCE21_V4_STAGE,
+                                           tuple(range(21)), 2048, REFERENCE21_V4_PLAN, "source-fidelity-v2"),
     MIXED_KIND: _FixedPublicControl(280, 86400, 140, 138, MIXED_MODE, MIXED_STAGE,
                                   tuple(range(140)), 16384, MIXED_PLAN, "source-fidelity-v2"),
     "remaining8": _FixedPublicControl(16, 2400, 8, 13, "deepseek_bounded_remaining8", "remaining8",
@@ -41,13 +46,25 @@ _PROFILES = {
 }
 
 
-def owned_group_exists(child: subprocess.Popen) -> bool:
-    child.poll()
-    try:
-        os.killpg(child.pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
+def owned_group_exists(child: subprocess.Popen, *, permission_deadline: float | None = None) -> bool:
+    if permission_deadline is None:
+        permission_deadline = time.monotonic() + .1
+    permission_error: PermissionError | None = None
+    while True:
+        child.poll()
+        try:
+            os.killpg(child.pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError as error:
+            # 退出中的组可短暂不可查询；EPERM保持未知，仅实际ESRCH才判为消失。
+            if permission_error is None:
+                permission_error = error
+            remaining = permission_deadline - time.monotonic()
+            if remaining <= 0:
+                raise permission_error
+            time.sleep(min(.01, remaining))
 
 
 def reap_owned_group(child: subprocess.Popen) -> None:
@@ -60,7 +77,7 @@ def reap_owned_group(child: subprocess.Popen) -> None:
         except ProcessLookupError:
             return
         end = time.monotonic() + 1
-        while owned_group_exists(child) and time.monotonic() < end:
+        while owned_group_exists(child, permission_deadline=end) and time.monotonic() < end:
             time.sleep(.01)
 
 
@@ -111,9 +128,9 @@ def _launch_owned_public_worker(*, frozen: dict, script: Path, root: Path, helpe
                 and type(value.get("request_limit")) is int and value["request_limit"] == request_limit
                 and type(value.get("reserved_requests")) is int
                 and 0 <= value["reserved_requests"] <= request_limit)
-    closed = (closed_receipt(budget) and (kind != MIXED_KIND or (
+    closed = (closed_receipt(budget) and (kind not in {MIXED_KIND, REFERENCE21_V4_KIND} or (
         type(result.get("worker_pid")) is int and result["worker_pid"] == child.pid
-        and result.get("execution_plan") == MIXED_PLAN))) or (type(deadline.get("worker_pid")) is int
+        and result.get("execution_plan") == profile.execution_plan))) or (type(deadline.get("worker_pid")) is int
                                        and deadline["worker_pid"] == child.pid and closed_receipt(deadline))
     states = ["unrun"] * planned_windows
     if isinstance(result.get("outcomes"), list) and len(result["outcomes"]) == planned_windows:
@@ -172,7 +189,7 @@ def _verify_owned_public_claim(*, frozen: dict, helper: Any, kind: str) -> None:
             or profile.execution_plan is not None and (
                 config.get("execution_plan") != profile.execution_plan
                 or config.get("reference_version") != profile.reference_version)
-            or kind == MIXED_KIND and (
+            or kind in {MIXED_KIND, REFERENCE21_V4_KIND} and (
                 config.get("phase_request_version") != MIXED_REQUEST_VERSION
                 or config.get("phase_request_policy") != mixed_phase_policy()
                 or config.get("tool_choice") != {
