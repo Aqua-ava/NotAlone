@@ -2,7 +2,7 @@
 
 Type: task
 State: claimed
-Triage: ready-for-agent
+Triage: ready-for-human
 Blocked by: 03, 04, 10, 14, 15, 17, 18, 19
 Spec: ../spec.md
 
@@ -294,3 +294,11 @@ Standards硬违规／重要判断0／0、Spec新增缺失／越界／错误0／0
 ### 2026-10-16 同v9物理快捷键显示和收起已人工确认
 
 用户明确确认两次均为Command+Shift+Y，第一次显示、第二次收起，不再要求重做。[同包人工结果](../native-shortcut-human-v9-result-20261016.md)记录程序也捕到同helper原生获焦及manager隐藏，随后两窗均隐藏；第二次动作早于程序hide请求，原case因隐藏前置已不成立而失败，隐藏程序阶段及正常菜单退出未执行，人工结果与程序失败分账。3个自有PID、目录、租约已核清，默认目录及包不变；两轴0项需修。快捷键人工分项完成，不据此勾整个第二AC或关闭交付票，同v9真实CLI组合及完整检查仍由Agent推进。
+
+### 2026-10-16 模型分层失败、读取竞争修复与现场暂缓
+
+[新cap1实测](../reply-model-smoke-v9-observation-control-result-20261016.md)已closed1/1：后端public.reply_request completed，但UI waiting3/idle29且始终无result，原30秒谓词仍1失败。它不证明助手turn或候选显示完成；5个归属PID、准确测试库及租约等已清，真实默认目录本场metadata相等，未认证正文内容不变或正常菜单退出。旧失败与旧v6成功分别保留。
+
+[合成诊断](../reply-ui-idle-diagnosis-20261016.md)另复现迟到旧saved读取可丢新候选；[最小源码修复](../reply-completion-stale-read-spec-20261016.md)已本地提交9a2f42ff，真红到绿、相关101/101、主Agent独立10/10、typecheck及两轴0，原身份/当前输入/来源/hidden拒绝均保留。未改jobs容量组仍14/15，唯一基线失败定向复现，不称全绿。该机制不被冒认作b251已确认根因；未重包或纳入冻结v9，不签实机修复。
+
+真实CLI组合的[Tab30场](../../foreground-contact-follow/real-cli-visual-v9-tab30-result-20261016.md)在微信正向门失败，helper/Tab未执行。[后继计划](../real-cli-visual-v9-physical-front-plan-20261016.md)未创建资源；工具坐标缺口后用户明确“稍后再做桌面验收”，Triage改ready-for-human，原State及AC保持。快捷键两次物理显示/收起已确认，无须重做；恢复后由Agent接续其余整包验收，不自动开场。

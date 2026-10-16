@@ -1,8 +1,12 @@
 # 本轮未完成任务推进记录
 
-接续最新检查：同v9 Finder、导入／复制及用户两次物理快捷键分项已验证，不要求重做快捷键。实际原生边界已修正，[边界场](../foreground-contact-follow/real-cli-visual-v9-boundary-20261016.md)与[两次Tab未执行现场](../foreground-contact-follow/real-cli-visual-v9-tab40-20261016.md)均保留组合失败；自有App、CLI、测试库、租约和恢复依赖已清。当前v9[合成生成cap1](../mac-desktop-app/reply-model-smoke-v9-failure-result-20261016.md)也失败：HTTP200而原谓词未观察到结果或failed，具体phase缺失；[无正文观测](../mac-desktop-app/reply-model-smoke-failure-observation-spec-20261016.md)已离线验证，新对照仅准备，待本记忆场关闭后Root决定启动。原9张仍3 resolved／6 claimed，15张排除保持。
+接续最新检查：同v9 Finder、导入／复制及用户两次物理快捷键分项已验证，不要求重做快捷键。新[cap1实际观察](../mac-desktop-app/reply-model-smoke-v9-observation-control-result-20261016.md)已closed1/1：后端reply_request completed、UI waiting转idle且无result，仍原判失败；不宣助手turn或UI完成。[合成定位](../mac-desktop-app/reply-ui-idle-diagnosis-20261016.md)复现迟到旧空读取可丢新候选，但也有其他idle路径，实际场根因未唯一认证。[最小修复](../mac-desktop-app/reply-completion-stale-read-spec-20261016.md)已本地提交`9a2f42ff`：真红到绿、相关101/101、主Agent独立10/10、类型检查及两轴0；未改jobs容量组14/15另报，尚未重包，不当成已入冻结v9。
 
-**当前记忆运行中**：新独立run `0c190899-6891-4199-a9b1-f6a028b476ea` 按[原21归属来源提示合同](../grounded-evaluation/reference21-uniqueness-plan-20261016.md)唯一启动；freeze字节SHA `82e610a5a9211ad5fb625e1b25b291073c5753aeb2e81ec9b613b1cfa58c754d`，93来源／原输入／参考与旧registry关闭状态已核。cap42／零重试／官方DeepSeek，工作截止2026-10-16 20:26:24台北时间、外层20:26:44；独立RAW后由Root FULL，完成／硬停即闭账。原始产物在本机 `desktop/artifacts/reference21-uniqueness-real-20261016-ff1deadb-238a-4032-9714-e216130240f0/`。此处只登记已启动，不预签≥15、核心B01／B02或维度质量；没有同时运行GUI。
+**记忆最新终态**：[原21唯一性场](../grounded-evaluation/reference21-uniqueness-result-20261016.md)已closed28/42，27个HTTP200，A15 E在600秒调用墙钟退场、远端未知，余14永久关闭。A01–A14各有RAW/FULL封存，部分必需完整15/15、A14一般错误1；无完整batch result，外层仍15unknown/6unrun。93源/8版本/167事件/审核绑定及只读闭账已独立核，原PID/PG ESRCH；07仅勾四类覆盖/用例入库，≥15窗口、全量真实回归、核心整体及typed放行仍未签。原9张仍3 resolved/6 claimed，15张排除保持。
+
+**桌面最新终态**：[Tab30原场](../foreground-contact-follow/real-cli-visual-v9-tab30-result-20261016.md)在微信25秒门失败，12次完整paused、采集/OCR各0；没有进入helper/t0/Tab/Finder。原App及9个归属PID、随机库/租约/pair2文件6目录已清，未刷新重启。后继[置前计划](../mac-desktop-app/real-cli-visual-v9-physical-front-plan-20261016.md)已独立两轴0并提交`1413d8c4`，但执行前坐标路径实际不支持、目标未可靠选中，未创建新场资源。**用户明确“稍后再做桌面验收”，现场实测暂缓，无自动恢复**；事后画面不倒填旧场原因，工具缺口不称授权缺口。
+
+本次源码修复与最终票面／报告均完成独立Standards/Spec审查，未解决项各0；只作本地提交，无远端Git。原有他人dirty保留，三张记忆票使用选择性暂存，未把其旧修改带入提交。恢复桌面后仍需验证新包，真实来信／第二联系人与私人核心／留出资料不因本次继续指令而扩权。
 
 日期：2026-10-16。按用户要求不推进 `memory-skill-evolution` 的15张任务；其余原9张逐项处理。当前任务文件扫描共230张：209张resolved、6张claimed，以及上述排除的15张open。状态以各原票为准；resolved也可能包含历史替代或不采用结论，不能据数量推导产品能力。
 
@@ -11,12 +15,14 @@
 | [前台跟随06组合验收](../foreground-contact-follow/issues/06-combined-app-acceptance.md) | 已resolved；[单联系人实机及组合结果](../foreground-contact-follow/acceptance-06-final-20261015.md) | 本票范围完成，后续新包分项不倒填旧包 |
 | [群聊暂停人工验收01](../foreground-group-manual-acceptance/issues/01-group-pause-and-live-checklist.md) | 已resolved；实际群聊暂停与返回私聊核验已记录 | 本票范围完成 |
 | [事件优先触发01](../foreground-event-trigger/issues/01-event-capability-and-integration.md) | 已resolved；[v9最终同版实机](../foreground-event-trigger/app-frame-counts-v9-20261016.md)A→群→A画面上界1078／2782ms、辅助1初始化／154回调／84处理分账，36正式单帧，代码及报告双轴均0项 | 单A范围完成；源保守停止及周期恢复如实保留，不认证所有切换SLA、独立Finder/TCC或双联系人来信 |
-| [前台定位18](../mac-desktop-app/issues/18-foreground-locator.md) | claimed；同v9 Finder宿主及正式／辅助责任归属、helper源停止和退出通过；旧真实组合通过仍单列 | 同v9真实CLI组合未过；测量边界已修，后继原判及工具未发Tab分别保留，持续焦点仍待证 |
-| [本机交付20](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed；同v9 Finder、6条原生导入／复制通过；用户明确两次物理快捷键显示／收起已验证，程序时序失败另报；旧v6模型冒烟仍是旧版证据 | 不再重复快捷键；同v9真实CLI组合与合成生成尚未过，失败观测已补，不能合并不同版本签整包 |
-| [真实微信follow04](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed；单联系人有界读取、退出及视觉独立性已有证据；[v7同App总开关重开](../native-app-backend/real-sync-reenable-result-20261016.md)1／1通过，关闭65.926秒零新读取 | 第四AC空窗关停重开控制流及第五Answer记录已完成；第一／二AC持续到达与切换仍缺，不认证正向消息恢复，双联系人和真实来信保留未验证 |
-| [核心事实保留01](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed／ready-for-agent；[新独立8窗场](../grounded-evaluation/remaining-public8-result-20261016.md)B01单窗封存raw3／接受3／完整3，B02核验未知 | 无完整batch result，外层两窗仍unknown；不代签核心5命题整体，旧真实/留出不读不改 |
-| [指代消解07](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed／ready-for-agent；[main16](../grounded-evaluation/v3-main16-result-20261016.md)原封存完整11仅机械计数，A05争议撤出；[完整140旧场](../grounded-evaluation/full140-v4-result-20261016.md)首窗V未知；[新混合场](../grounded-evaluation/full140-mixed-v-off-result-20261016.md)closed6／280，3窗已审、137未跑，R002字段bad_auto硬停 | 不足≥15；旧场无审核，混合场仅3窗已审、137未跑且未达质量门；不拼旧场，旧未知V不补发 |
+| [前台定位18](../mac-desktop-app/issues/18-foreground-locator.md) | claimed／ready-for-human；同v9 Finder责任、helper源停止和退出分项通过；Tab30场未到helper | 用户已暂缓桌面；同v9持续焦点与新鲜自然CLI组合仍待证，原范围授权保持 |
+| [本机交付20](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed／ready-for-human；Finder、导入／复制与物理快捷键分项通过；新cap1失败及`9a2f42ff`源码修复均有独立证据 | 用户已暂缓；不重做快捷键，尚未将修复打包实机验证，整包验收未过 |
+| [真实微信follow04](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed／ready-for-human；既有单联系人读取及[v7同App关开](../native-app-backend/real-sync-reenable-result-20261016.md)分项保持，后三AC已勾 | 用户已暂缓；持续到达、切换/切回与正向消息恢复仍缺，第二联系人和真实来信未扩权 |
+| [核心事实保留01](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed／ready-for-agent；最新唯一性场14窗部分必需完整15/15，B01/B02未跑；旧8窗场B01封存3/3仍单列 | 没有新核心整体信用；公开核心5必需、真实6/12与可选2/6均保留，旧真实/留出不读不改 |
+| [指代消解07](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed／ready-for-agent；最新14/16主窗有分层审核，A14一般错误1，A15未知/A16未跑；**四类覆盖与用例入库已勾，2/5 AC** | 不足≥15窗口，歧义不auto与完整既有模型回归仍未签，不拼旧场；默认空表不变 |
 | [按维度放行03](../memory-accuracy-next/issues/03-per-dimension-rollout.md) | claimed／ready-for-agent；结构和合取门已有实现，默认放行表仍为空；[有限包装B](../author-quote-proof-b/result-20261016.md)已验证并整合 | 一种可信完整到家表示已通过实际 producer 及隔离保存／导出／删除控制；真实质量、广泛 typed 依据与逐类放行仍分别验收 |
+
+以下按时间保留各独立旧场的推进记录；旧“已启动”描述不代表当前仍活跃，当前状态以上方最新终态为准。
 
 本轮官方DeepSeek公开基线实际25次HTTP、零重试，13窗完成、8窗未运行；A13整组去向合同触发停止，剩余17次永久关闭。[完整结果](../grounded-evaluation/deepseek-public21-result-20261015.md)区分内容事实错误与整组auto/pending合同，不覆盖原Gold、旧失败或分母。未使用ECNU，没有上传真实聊天或放开自动采纳。
 
