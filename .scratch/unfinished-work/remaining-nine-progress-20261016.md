@@ -1,6 +1,8 @@
 # 本轮未完成任务推进记录
 
-接续最新检查：同v9 [Finder／原生责任分项](../mac-desktop-app/finder-v9-immediate-result-20261016.md)1／1、[导入及复制](../mac-desktop-app/mac20-v9-import-copy-20261016.md)2／2通过；用户已明确确认[两次物理快捷键显示／收起](../mac-desktop-app/native-shortcut-human-v9-result-20261016.md)，不再重复。程序隐藏阶段未发布的时序失败另留，不冒充程序全过。[只读焦点诊断](../mac-desktop-app/native-focus-diagnostic-result-20261016.md)捕到原生获焦后失焦；[CLI组合重试](../foreground-contact-follow/real-cli-visual-v9-retry-20261016.md)首观察合法暂停／零采集，未达微信正向，正修测量起点与实际原生条件的对应。恢复的外置依赖对及6空目录已精确清理，当前无自有App或租约。记忆[既有码未决理由](../grounded-v4-ownership-reason/result-20261016.md)567项单元、两源类型及双轴通过；实际A05漏标是模型原始输出，不能以该离线修复签质量。当前原9张仍3 resolved／6 claimed，15张排除保持。
+接续最新检查：同v9 Finder、导入／复制及用户两次物理快捷键分项已验证，不要求重做快捷键。实际原生边界已修正，[边界场](../foreground-contact-follow/real-cli-visual-v9-boundary-20261016.md)与[两次Tab未执行现场](../foreground-contact-follow/real-cli-visual-v9-tab40-20261016.md)均保留组合失败；自有App、CLI、测试库、租约和恢复依赖已清。当前v9[合成生成cap1](../mac-desktop-app/reply-model-smoke-v9-failure-result-20261016.md)也失败：HTTP200而原谓词未观察到结果或failed，具体phase缺失；[无正文观测](../mac-desktop-app/reply-model-smoke-failure-observation-spec-20261016.md)已离线验证，新对照仅准备，待本记忆场关闭后Root决定启动。原9张仍3 resolved／6 claimed，15张排除保持。
+
+**当前记忆运行中**：新独立run `0c190899-6891-4199-a9b1-f6a028b476ea` 按[原21归属来源提示合同](../grounded-evaluation/reference21-uniqueness-plan-20261016.md)唯一启动；freeze字节SHA `82e610a5a9211ad5fb625e1b25b291073c5753aeb2e81ec9b613b1cfa58c754d`，93来源／原输入／参考与旧registry关闭状态已核。cap42／零重试／官方DeepSeek，工作截止2026-10-16 20:26:24台北时间、外层20:26:44；独立RAW后由Root FULL，完成／硬停即闭账。原始产物在本机 `desktop/artifacts/reference21-uniqueness-real-20261016-ff1deadb-238a-4032-9714-e216130240f0/`。此处只登记已启动，不预签≥15、核心B01／B02或维度质量；没有同时运行GUI。
 
 日期：2026-10-16。按用户要求不推进 `memory-skill-evolution` 的15张任务；其余原9张逐项处理。当前任务文件扫描共230张：209张resolved、6张claimed，以及上述排除的15张open。状态以各原票为准；resolved也可能包含历史替代或不采用结论，不能据数量推导产品能力。
 
@@ -9,8 +11,8 @@
 | [前台跟随06组合验收](../foreground-contact-follow/issues/06-combined-app-acceptance.md) | 已resolved；[单联系人实机及组合结果](../foreground-contact-follow/acceptance-06-final-20261015.md) | 本票范围完成，后续新包分项不倒填旧包 |
 | [群聊暂停人工验收01](../foreground-group-manual-acceptance/issues/01-group-pause-and-live-checklist.md) | 已resolved；实际群聊暂停与返回私聊核验已记录 | 本票范围完成 |
 | [事件优先触发01](../foreground-event-trigger/issues/01-event-capability-and-integration.md) | 已resolved；[v9最终同版实机](../foreground-event-trigger/app-frame-counts-v9-20261016.md)A→群→A画面上界1078／2782ms、辅助1初始化／154回调／84处理分账，36正式单帧，代码及报告双轴均0项 | 单A范围完成；源保守停止及周期恢复如实保留，不认证所有切换SLA、独立Finder/TCC或双联系人来信 |
-| [前台定位18](../mac-desktop-app/issues/18-foreground-locator.md) | claimed；同v9 Finder宿主及正式／辅助责任归属、helper源停止和退出通过；旧真实组合通过仍单列 | 同v9真实CLI组合未过；两场失败及原生获焦／失焦诊断保留，正修阶段测量接缝 |
-| [本机交付20](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed；同v9 Finder、6条原生导入／复制通过；用户明确两次物理快捷键显示／收起已验证，程序时序失败另报；旧v6模型冒烟仍是旧版证据 | 不再重复快捷键；需同v9真实CLI组合及当前交付检查，不能合并不同版本签整包 |
+| [前台定位18](../mac-desktop-app/issues/18-foreground-locator.md) | claimed；同v9 Finder宿主及正式／辅助责任归属、helper源停止和退出通过；旧真实组合通过仍单列 | 同v9真实CLI组合未过；测量边界已修，后继原判及工具未发Tab分别保留，持续焦点仍待证 |
+| [本机交付20](../mac-desktop-app/issues/20-mac-app-delivery.md) | claimed；同v9 Finder、6条原生导入／复制通过；用户明确两次物理快捷键显示／收起已验证，程序时序失败另报；旧v6模型冒烟仍是旧版证据 | 不再重复快捷键；同v9真实CLI组合与合成生成尚未过，失败观测已补，不能合并不同版本签整包 |
 | [真实微信follow04](../native-app-backend/issues/04-real-wechat-follow-smoke.md) | claimed；单联系人有界读取、退出及视觉独立性已有证据；[v7同App总开关重开](../native-app-backend/real-sync-reenable-result-20261016.md)1／1通过，关闭65.926秒零新读取 | 第四AC空窗关停重开控制流及第五Answer记录已完成；第一／二AC持续到达与切换仍缺，不认证正向消息恢复，双联系人和真实来信保留未验证 |
 | [核心事实保留01](../memory-core-claim-retention/issues/01-diagnose-fix-and-replay.md) | claimed／ready-for-agent；[新独立8窗场](../grounded-evaluation/remaining-public8-result-20261016.md)B01单窗封存raw3／接受3／完整3，B02核验未知 | 无完整batch result，外层两窗仍unknown；不代签核心5命题整体，旧真实/留出不读不改 |
 | [指代消解07](../memory-extraction-accuracy/issues/07-reference-resolution.md) | claimed／ready-for-agent；[main16](../grounded-evaluation/v3-main16-result-20261016.md)原封存完整11仅机械计数，A05争议撤出；[完整140旧场](../grounded-evaluation/full140-v4-result-20261016.md)首窗V未知；[新混合场](../grounded-evaluation/full140-mixed-v-off-result-20261016.md)closed6／280，3窗已审、137未跑，R002字段bad_auto硬停 | 不足≥15；旧场无审核，混合场仅3窗已审、137未跑且未达质量门；不拼旧场，旧未知V不补发 |
