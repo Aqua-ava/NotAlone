@@ -1333,6 +1333,8 @@ export class ReplySession {
       this.generationJobs.completed(ownedJob);
       if (!current() || result.generation !== generation) return;
       // 可靠完成可作为历史读取；只有仍属当前输入且来源有效的结果才可成为当前候选。
+      // 完成确认接管此前在途读取，避免较旧快照仅因晚返回而覆盖本次确认。
+      this.savedRead?.abort();
       const beforeRead = this.state.savedSession;
       const saved = await readAssistantSession(this.backend, selection.contactId, sessionId, pending.signal);
       if (!current() || saved.generation !== generation) return;

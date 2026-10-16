@@ -1905,3 +1905,109 @@ test('开始编辑拒绝不属于当前显示版本的身份和未知正文', as
     assert.equal(notices, 0);
   } finally { stop(); }
 });
+
+for (const scenario of ['旧空读取', '旧非空读取', '权威current变化', '较新current变化', '来源不可用', '较新来源不可用', '其他联系人', '外来会话快照', '宿主隐藏', '操作取消']) {
+  test(`完成确认的新HTTP快照与${scenario}保持读取和范围优先级`, { timeout: 5000 }, async (t) => {
+    const f = await fixture();
+    const turn = structuredClone(f.records.saved.turns[0]), input = structuredClone(f.records.saved.inputs[0]);
+    const sessionId = randomUUID(), token = randomUUID();
+    const base = `/api/contacts/${f.scope.contactId}/assistant-sessions/${sessionId}`;
+    let authority = { session_id: sessionId, current_input_version_id: null, turns: [], inputs: [] };
+    let getCount = 0, preparedKey, formalCount = 0, holdReads = false;
+    const gate = () => { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; };
+    const oldCaptured = gate(), freshCaptured = gate(), releaseOld = gate(), releaseFresh = gate();
+    const changeCurrent = () => {
+      const other = { ...input, input_version_id: randomUUID(), turn_id: null, type: 'purpose_exploration',
+        content: { type: 'purpose_exploration', correction: '', requirements: '', answer: '', confirmed_intent: '',
+          skill_mode: 'auto', skill_version_id: null, purpose_hint: '本次独立合成讨论。' } };
+      authority = { ...authority, current_input_version_id: other.input_version_id, inputs: [...authority.inputs, other] };
+    };
+    const invalidateSource = () => {
+      authority = { ...authority,
+        turns: [{ ...turn, state: 'unavailable', input: null, reply: null, placeholder: '相关来源不可用' }],
+        inputs: [{ ...input, state: 'unavailable', content: null, placeholder: '相关来源不可用' }] };
+    };
+    const server = createServer(async (request, response) => {
+      try {
+        assert.equal(request.headers.authorization, `Bearer ${token}`);
+        const chunks = []; for await (const chunk of request) chunks.push(chunk);
+        const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
+        let payload;
+        if (request.method === 'POST' && request.url.endsWith('/assistant-sessions')) payload = { session_id: sessionId };
+        else if (request.method === 'POST' && request.url === `${base}/replies/prepare`) {
+          preparedKey = body.idempotency_key; turn.request_key = preparedKey;
+          payload = { session_id: sessionId, turn_id: turn.turn_id, request_key: preparedKey,
+            input_version_id: input.input_version_id, state: 'running' };
+        } else if (request.method === 'POST' && request.url === `${base}/replies`) {
+          formalCount += 1; assert.equal(body.idempotency_key, preparedKey);
+          authority = { session_id: sessionId, current_input_version_id: input.input_version_id,
+            turns: [turn], inputs: [input] };
+          payload = { ...turn.reply, session_id: sessionId, turn_id: turn.turn_id,
+            input_version_id: input.input_version_id, state: 'completed' };
+        } else if (request.method === 'GET' && request.url === base) {
+          if (holdReads && getCount === 1 && scenario === '权威current变化') changeCurrent();
+          if (holdReads && getCount === 1 && scenario === '来源不可用') invalidateSource();
+          if (holdReads && getCount === 1 && scenario === '外来会话快照') authority = { ...authority, session_id: randomUUID() };
+          payload = structuredClone(authority);
+          if (holdReads && ++getCount === 1) { oldCaptured.resolve(); await releaseOld.promise; }
+          else if (holdReads && getCount === 2) { freshCaptured.resolve(); await releaseFresh.promise; }
+        } else throw new Error('未声明的合成HTTP路由');
+        response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(payload));
+      } catch {
+        response.writeHead(500, { 'Content-Type': 'application/json' }); response.end(JSON.stringify({ error: 'synthetic_mock_failure' }));
+      }
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const client = new f.JsonClient({ port: server.address().port, token });
+    t.after(async () => {
+      releaseOld.resolve(); releaseFresh.resolve(); client.cancelPending();
+      server.closeAllConnections(); await new Promise((resolve) => server.close(resolve));
+    });
+    f.records.history.session_id = sessionId; f.records.selection = null;
+    f.records.transport = { client, matches: (request) => request.path === base || request.path.startsWith(`${base}/replies`)
+      || request.method === 'POST' && request.path.endsWith('/assistant-sessions') };
+    await f.bridge.newSavedSession(f.scope);
+    f.contacts.setDraft({ ...f.scope, text: '迟到读取回归的合成草稿。' });
+    if (scenario === '旧非空读取') changeCurrent();
+    holdReads = true;
+    const oldRead = f.bridge.readSavedSession(f.scope); await oldCaptured.promise;
+    const generating = f.bridge.generate({ ...f.scope, newRequest: true }); await freshCaptured.promise;
+    releaseOld.resolve(); await oldRead;
+    if (scenario === '较新current变化') {
+      changeCurrent(); await f.bridge.readSavedSession(f.scope);
+    } else if (scenario === '较新来源不可用') {
+      invalidateSource(); await f.bridge.readSavedSession(f.scope);
+    } else if (scenario === '其他联系人') {
+      const contactId = randomUUID();
+      f.records.saved = { session_id: randomUUID(), current_input_version_id: null, turns: [], inputs: [] };
+      f.records.contacts = [{ contactId, displayName: '另一位合成联系人', messageCount: 0, sourceCount: 0 }];
+      await f.contacts.refreshContacts();
+      f.contacts.selectContact({ contactId, scopeRevision: f.contacts.getState().scopeRevision });
+      await f.bridge.readSavedSession({ contactId, scopeRevision: f.contacts.getState().scopeRevision });
+    } else if (scenario === '宿主隐藏') f.replies.notifyHelperLifecycle('hidden');
+    else if (scenario === '操作取消') f.contacts.setDraft({ ...f.scope, text: '改为另一份合成草稿。' });
+    releaseFresh.resolve(); await generating;
+    const state = await f.bridge.getState();
+    assert.equal(formalCount, 1);
+    if (scenario === '旧空读取' || scenario === '旧非空读取') {
+      assert.equal(authority.current_input_version_id, input.input_version_id);
+      assert.equal(authority.turns[0].request_key, preparedKey);
+      assert.equal(authority.turns[0].state, 'completed');
+      assert.equal(authority.inputs[0].state, 'active');
+      assert.equal(state.phase, 'ready');
+      assert.equal(state.result.assistantSessionId, sessionId);
+      assert.equal(state.result.inputVersionId, input.input_version_id);
+      assert.equal(state.result.replyRequestId, turn.reply.reply_request_id);
+      assert.equal(state.result.candidates[0].original.candidateId, turn.reply.candidates[0].candidate_id);
+    } else {
+      if (scenario !== '较新来源不可用') assert.notEqual(state.phase, 'waiting');
+      assert.equal(state.result, null);
+      if (scenario === '较新current变化' || scenario === '权威current变化') {
+        assert.notEqual(authority.current_input_version_id, input.input_version_id);
+      }
+      if (scenario === '较新来源不可用' || scenario === '来源不可用') assert.equal(state.savedSession.turns[0].state, 'unavailable');
+      if (scenario === '其他联系人') assert.notEqual(state.contactId, f.scope.contactId);
+      if (scenario === '外来会话快照') assert.equal(state.phase, 'failed');
+    }
+  });
+}
