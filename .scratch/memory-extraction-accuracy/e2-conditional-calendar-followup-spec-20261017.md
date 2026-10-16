@@ -15,8 +15,8 @@ Triage: ready-for-agent
 
 ## 不变项与验证
 
-继续使用既有compile_labels／实际SourceUnits、成员及依赖／同一次renderer，不新增公开DTO、profile、规则DSL、模型字段或调用。仅本E2的最终期间及原grounded:unresolved_period派生标记可随这两项变化；正文、来源、类别、主体、其他语用、敏感性、置信度及其他风险保持。条件例外须先确认完整来源与plan，再计算场景期间；不得凭时间词命中给任意条件或动作填日期，不产生typed依据或放宽自动采纳。
+继续使用既有compile_labels／实际SourceUnits、成员及依赖／同一次renderer，不新增公开DTO、profile、规则DSL、模型字段或调用。两项新行为只改变本E2的最终期间及原grounded:unresolved_period派生标记。另修正首片已要求却漏实现的完整天气prefix条件性：最大时间词把“下周天晴”误切为“下周天”加“晴”时，应先按完整TC＋WEATHER识别；只有首片合法的完整condition／prefix＋plan才沿原规则将asserted降为conditional。此项单列原有缺口的assertion_status差异，不能扩为任意前缀改类。正文、来源、类别、主体、其他语用、敏感性、置信度及其他风险保持。条件例外须先确认完整来源与plan，再计算场景期间；不得凭时间词命中给任意条件或动作填日期，不产生typed依据或放宽自动采纳。
 
-正控至少覆盖非Gold的不同EVENT／PLACE／作者、不同容器与跨月年锚点、condition／prefix两种合法前件；反控分别只改变WEATHER、连接词“就”、TC截止归属、显式TA、锚点、作者／消息边界、终端语气及额外尾句。实际SDK控制核原draft→最终compile→candidate_raw及同一次V；模型响应只给旧标签，不代签真实分类质量。
+正控至少覆盖非Gold的不同EVENT／PLACE／作者、不同容器与跨月年锚点、condition／prefix两种合法前件；反控分别只改变WEATHER、连接词“就”、TC截止归属、显式TA、锚点、作者／消息边界、终端语气及额外尾句。天气词法勘误另核真正“下周天”日期、非天气和不完整条件不被吞并或取得新的语用信用。实际SDK控制核原draft→最终compile→candidate_raw及同一次V；模型响应只给旧标签，不代签真实分类质量。
 
 实现前先固定三项审查修复提交且完成其增审。两项各自红→绿，最小相关→完整相关及mypy；保留旧v1／v3／v4的2520份给定载荷、原prompt／schema字节，明确列E2各字段差异及仍未覆盖的完整质量义务。再以原140／138必要六字段口径复核，不把138见证冒称全量质量通过。独立Standards／Spec及本地中文提交完成前，不启动真实140；无凭据、DB、桌面、业务迁移、旧资料重算或远端Git。
