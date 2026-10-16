@@ -655,8 +655,18 @@ v8记录了实际变化提示及提前正式HTTP的时序，宿主日志达到51
 
 ## 2026-10-16 v9独立Finder复验的权限缺口
 
-同一冻结v9包新执行两场Finder独立启动，均使用整体隔离的默认userData、随机PG、空读取授权与不可用真实CLI／模型。首场未形成微信前置的有效动作收据，180秒阶段等待结束；仅1次初始进程快照，未进入45秒微信采样，同实例新公共观察为 `paused / wechat_not_in_front`，不能判断录屏权限。第二场实际完成App菜单隐藏及微信“隐藏其他”，45秒取得301次进程快照，但未采到正式／辅助PID；不能将采样0扩称零次极短尝试或唯一根因已知。
+同一冻结v9包新执行两场Finder独立启动，均使用整体隔离的默认userData、随机PG、空读取授权与不可用真实CLI／模型。首场未形成微信前置的有效动作收据，180秒阶段等待结束；仅1次初始进程快照，未进入45秒微信采样，同实例新公共观察为 `paused / wechat_not_in_front`，不能判断录屏权限。第二场实际完成App菜单隐藏及微信“隐藏其他”，累计301次进程快照含初始1次及45秒阶段300次，未采到正式／辅助PID；不能将采样0扩称零次极短尝试或唯一根因已知。
 
 第二场runner失败后、同一Finder App及其后端仍存活且在原租期内，鉴权 `POST /api/sync/foreground/observe {}` 返回HTTP200／`unavailable / screen_capture_permission_missing`。当前v9独立启动的录屏预检未通过；只保存phase／reason／固定键，不保存身份或名称。按精确App PID过滤的TCC归属查询没有取得匹配行，responsible／accessing仍未知，不将错误响应、PID存在或v6旧许可当作当前归属认证。
 
 两场各实际启动1次、runner均exit2，失败保留；未进入用例helper／quit认证。首场还有一次20秒失败的inline Swift前台元数据诊断和一次CGWindowList只读窗口元数据查询，未取图像／名称、不属于Computer Use证据，之后停止这类查询。主Agent随后分别实际公开菜单退出，精确核对首场7个、第二场4个已记录PID及握手退场，原userData按原dev／ino整体恢复且配置正文未读，两个精确随机测试库各自删除并只读确认不存在；本场自有临时目录移除、失败lease核对身份后归档，最终租约absent。未修改权限／TCC、签名或包字节，未运行真实CLI、模型或发送消息。后继获精确v9许可后仍须新的完整实机场，不补签18／20；版本、命令和自有资源指针见[两场匿名记录](../.scratch/mac-desktop-app/finder-v9-two-attempts-20261016.md)。
+
+## 2026-10-16 v9重新登记录屏后的前台暂停与责任归属
+
+用户同意后，主Agent用Computer Use仅替换Electron NotAlone录屏条目，旧NotAloneApp未动；系统选择器核对精确v9包URL后打开，列表为on，未出现密码／Touch ID表单。系统“在访达中显示”仍解析旧工作树路径，所以只记录实际选择与开关，不预签csreq或录屏可用。随后同一冻结v9从Finder新启动一次，隔离默认userData、随机PG、空读取授权、CLI／模型不可用。
+
+本场全场266次快照包含1次初始检查和45秒阶段265次检查，阶段内未采到正式／辅助PID。独立鉴权公共观察在该阶段开始后完成，HTTP200／`paused / wechat_not_in_front`，只保存固定投影。后续微信窗口纠正动作没有追加probe，不能覆盖原响应；重新登记后的录屏可用性未知，不能将登记前的 `permission_missing` 延用为当前结论。
+
+按本场精确App PID查询取得18条TCC归属行：正式探针10条／5 PID、辅助源8条／4 PID，responsible全部为当前Finder实例的 `com.notalone.desktop`。其时段早于45秒阶段，不能移入后续零样本阶段；归属行不是采图次数或授权决策，只补齐本场formal／aux宿主责任分项。runner仍exit2、未进入用例helper／quit，原失败保留。
+
+主Agent随后实际菜单退出；4个controller记录PID及9个追加TCC native PID共13个不同已记录PID全部gone，握手消失，原userData按身份整体恢复且配置未读，精确随机库只读确认不存在，自有目录和失败lease按归属收尾，最终租约absent。没有新启动、真实CLI、模型、发送或原票AC变更。本轮有明确权限列表操作，不写成零权限变化；详细时间、命令和资源指针见[本场独立结果](../.scratch/mac-desktop-app/finder-v9-after-permission-20261016.md)。
