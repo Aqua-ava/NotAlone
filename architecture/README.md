@@ -94,6 +94,7 @@
 61. [ADR-061：独立本机 App 的首启与兼容更新](adr/061-standalone-local-app-onboarding-and-updates.md)
 62. [ADR-062：官方 DeepSeek Flash 回复采用完整请求估算](adr/062-official-deepseek-reply-input-budget.md)
 63. [ADR-063：指定任务的有限运行依据与正文来源依赖](adr/063-bounded-runtime-evidence-and-source-dependencies.md)
+64. [ADR-064：E2有限负向指代说明保持未知](adr/064-bounded-negative-reference-notes.md)
 
 ## 当前架构决策
 
