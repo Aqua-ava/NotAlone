@@ -15,6 +15,75 @@ from tests.unit.memory_extraction.test_grounded_v3 import labels
 
 
 class GroundedV4CompilerTest(unittest.TestCase):
+    def test_matter_reference_explicitly_preserves_unknown_matter_and_full_quote(self):
+        from notalone.memory_extraction.grounded import compile_labels_v4
+
+        fact, = compile_labels_v4(window("那件事情你暂时不要透露。"), labels(row(
+            "0:0", "request", unresolved=True, ambiguity_codes=["matter_reference"],
+        )))
+        self.assertEqual(fact["text"], "截至2026-10-14，联系人原话：“那件事情你暂时不要透露。”")
+        self.assertEqual(fact["alternatives"], [
+            "所引原句中的事项指称在本窗口无法唯一识别；保留未知，不补事项内容或类型。"
+            " 所附原引句及上下文：截至2026-10-14，联系人原话：“那件事情你暂时不要透露。”",
+        ])
+        self.assertEqual((fact["category"], fact["speech_act"], fact["assertion_status"]),
+                         ("relationship_note", "request", "asserted"))
+        self.assertNotIn("semantic_basis", fact)
+
+    def test_matter_reference_unions_members_and_keeps_dependencies_risks_and_lowest_confidence(self):
+        from notalone.memory_extraction.grounded import compile_labels_v4
+        from notalone.memory_extraction.models import MessageRef, MessageSender
+        from uuid import uuid4
+
+        source = window("那件事，暂时不要向他们透露。")
+        context = MessageRef(uuid4(), "所指事项仍未说明。", MessageSender.SELF, source.messages[0].occurred_at)
+        source = replace(source, messages=(context, *source.messages))
+        fact, = compile_labels_v4(source, labels(
+            row("1:0", "prefix", dependency="0:0", unresolved=True, confidence=0.4,
+                sensitivity="other", ambiguity_codes=["matter_reference"]),
+            row("1:1", "request", unresolved=True, ambiguity_codes=["entity_identity", "matter_reference"]),
+        ))
+        self.assertEqual(fact["confidence"], 0.4)
+        self.assertEqual(fact["risk_flags"], ["sensitivity:other"])
+        self.assertEqual(set(fact["source_message_ids"]), {str(message.message_id) for message in source.messages})
+        self.assertEqual(len(fact["alternatives"]), 2)
+        self.assertIn("人物身份", fact["alternatives"][0])
+        self.assertIn("事项指称", fact["alternatives"][1])
+        self.assertIn("那件事，暂时不要向他们透露。", fact["alternatives"][1])
+        self.assertIn("所指事项仍未说明。", fact["alternatives"][1])
+
+    def test_matter_reference_is_never_filled_from_words_or_generic_unknown_code(self):
+        from notalone.memory_extraction.grounded import compile_labels_v4
+
+        for text in ("那个事你先别跟别人说。", "周一的值班安排先不要告诉别人。"):
+            with self.subTest(text=text):
+                source = window(text)
+                clear, = compile_labels_v4(source, labels(row("0:0", "request", ambiguity_codes=[])))
+                generic, = compile_labels_v4(source, labels(row(
+                    "0:0", "request", unresolved=True, ambiguity_codes=["other_unresolved"],
+                )))
+                self.assertEqual(clear["alternatives"], [])
+                self.assertEqual(generic["alternatives"], ["原句在本窗口仍有其他未决解释，保留原句。"])
+
+    def test_matter_reference_rejects_invalid_codes_and_stays_out_of_old_protocols(self):
+        from notalone.memory_extraction.errors import ExtractionInvalidOutputError
+        from notalone.memory_extraction.grounded import compile_labels, compile_labels_v3, compile_labels_v4
+
+        source = window("那项安排尚未说明。")
+        valid = labels(row("0:0", "state", unresolved=True, ambiguity_codes=["matter_reference"]))
+        for compile_old in (compile_labels, compile_labels_v3):
+            with self.subTest(old=compile_old.__name__), self.assertRaises(ExtractionInvalidOutputError):
+                compile_old(source, valid)
+        for override in (
+            {"unresolved": False}, {"ambiguity_codes": []},
+            {"ambiguity_codes": ["matter_reference", "matter_reference"]},
+            {"ambiguity_codes": ["invented_matter"]}, {"matter": "未给出的内容"},
+        ):
+            with self.subTest(override=override), self.assertRaises(ExtractionInvalidOutputError):
+                draft = deepcopy(valid)
+                draft["units"]["0:0"].update(override)
+                compile_labels_v4(source, draft)
+
     def test_continuation_keeps_completed_action_quantity_and_question_in_one_candidate(self):
         from notalone.memory_extraction.evaluation import build_window
         from notalone.memory_extraction.evaluation_cases import CASES
@@ -581,12 +650,12 @@ class GroundedV4CompilerTest(unittest.TestCase):
         from notalone.memory_extraction.errors import ExtractionInvalidOutputError
         from notalone.memory_extraction.grounded import compile_labels_v4
 
-        codes = ["object_ownership", "event_stage", "clock_period", "other_unresolved", "borrowing_direction",
+        codes = ["matter_reference", "object_ownership", "event_stage", "clock_period", "other_unresolved", "borrowing_direction",
                  "place_ownership", "entity_identity"]
         source = window("我没有借那件物品。")
         fact, = compile_labels_v4(source, labels(row("0:0", "stage_unknown_state", unresolved=True,
                                                   ambiguity_codes=codes)))
-        self.assertEqual(len(fact["alternatives"]), 8)
+        self.assertEqual(len(fact["alternatives"]), 9)
         for alternative in fact["alternatives"][2:4] + fact["alternatives"][5:]:
             self.assertIn("我没有借那件物品。", alternative)
         within, = compile_labels_v4(window("甲" * 8100 + "没有确认车主。"), labels(row(
@@ -594,7 +663,7 @@ class GroundedV4CompilerTest(unittest.TestCase):
         )))
         self.assertIn("没有确认车主。", within["alternatives"][0])
         self.assertLessEqual(len(within["alternatives"][0]), 8400)
-        for code in ("event_stage", "object_ownership"):
+        for code in ("event_stage", "object_ownership", "matter_reference"):
             with self.subTest(code=code), self.assertRaisesRegex(ExtractionInvalidOutputError, "8400"):
                 compile_labels_v4(window("我没有" + "甲" * 8400 + "。"), labels(row(
                     "0:0", "stage_unknown_state", unresolved=True, ambiguity_codes=[code],

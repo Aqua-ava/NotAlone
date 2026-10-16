@@ -40,7 +40,7 @@ V4_STRUCTURAL_KINDS = {"continuation"}
 OMISSIONS = {"question", "greeting", "nonliteral", "not_memory"}
 ROW_KEYS = {"unit", "kind", "subject", "topic", "dependency", "unresolved", "confidence", "sensitivity"}
 AMBIGUITY_CODES = ("entity_identity", "place_ownership", "borrowing_direction", "other_unresolved")
-V4_AMBIGUITY_CODES = (*AMBIGUITY_CODES, "clock_period", "event_stage", "object_ownership")
+V4_AMBIGUITY_CODES = (*AMBIGUITY_CODES, "clock_period", "event_stage", "object_ownership", "matter_reference")
 MAX_V3_ALTERNATIVE_CHARS = 8400
 _AMBIGUITY_TEMPLATES = {
     "entity_identity": ("原句所指人物身份在本窗口无法唯一确定，保留原句。",),
@@ -56,6 +56,7 @@ _V4_AMBIGUITY_TEMPLATES = {
     "clock_period": ("所引原句中的时钟时制在本窗口无法唯一确定，保留原句，不补唯一的24小时制时刻。",),
     "event_stage": ("所引原句描述的活动是已经完成还是尚待安排，在本窗口无法唯一确定；保留原句，不选择其中一种。",),
     "object_ownership": ("所引原句中的物品所有者在本窗口无法唯一确定；不因出借或接收认定所有者，保留原句。",),
+    "matter_reference": ("所引原句中的事项指称在本窗口无法唯一识别；保留未知，不补事项内容或类型。",),
 }
 SENSITIVITY = {"none", "financial", "health", "commitment", "other"}
 _CONDITION = re.compile(r"^(?:如果|假如|要是|倘若|若)")
@@ -407,7 +408,7 @@ def _compile(
     if ambiguity_codes is not None:
         ordered_codes = V4_AMBIGUITY_CODES if version4 else AMBIGUITY_CODES
         templates = _V4_AMBIGUITY_TEMPLATES if version4 else _AMBIGUITY_TEMPLATES
-        source_bound = ({"borrowing_direction", "clock_period", "event_stage", "object_ownership"}
+        source_bound = ({"borrowing_direction", "clock_period", "event_stage", "object_ownership", "matter_reference"}
                         if version4 else {"borrowing_direction"})
         for fact in results:
             compiled = compiled_ambiguities[id(fact)]

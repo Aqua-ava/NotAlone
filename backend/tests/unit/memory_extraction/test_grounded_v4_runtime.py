@@ -33,6 +33,69 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                             (socket, "getaddrinfo")):
             guards.enter_context(patch.object(owner, name, side_effect=AssertionError("禁止真实网络")))
 
+    def test_sdk_matter_reference_guidance_keeps_supported_confident_request_pending(self):
+        from notalone.memory_extraction.grounded_adapter import (
+            GroundedV4ExtractionRuntime, GROUNDED_PROMPT, GROUNDED_V3_PROMPT,
+            grounded_schema, grounded_schema_v3,
+        )
+        from tests.unit.memory_extraction.verification_helpers import FixedSourceVerifier, verification_result
+
+        source = window("那件事情你暂时不要透露。")
+        scope = ContactScope(source.owner_id, source.contact_id)
+        draft = labels(row("0:0", "request", unresolved=True,
+                           ambiguity_codes=["matter_reference"], confidence=1.0))
+        verifier = FixedSourceVerifier((verification_result(
+            evidence=((source.messages[0].message_id, source.messages[0].text),),
+        ),))
+        requests = []
+
+        def handler(request):
+            requests.append(json.loads(request.content))
+            return response(draft, name="GroundedMemoryLabelsV4")
+
+        store, traces = InMemoryMemoryStore(), InMemoryTraceStore()
+        with build_trace_http_client(transport=httpx.MockTransport(handler)) as client:
+            model = build_deepseek_model(api_key="synthetic-secret", base_url="http://127.0.0.1/v1",
+                                         http_client=client)
+            stats = run_extraction(
+                scope=scope, messages=source.messages, watermark_message_id=None,
+                runtime=GroundedV4ExtractionRuntime(model=model), memory_port=store,
+                owner_memory_port=None, verification_runtime=verifier, trace_store=traces,
+            )
+
+        self.assertEqual(len(requests), 1)
+        prompt = requests[0]["messages"][0]["content"]
+        for guidance in ("matter_reference=原句所指事项在本窗口无法唯一识别", "不补事项内容或类型",
+                         "不能用other_unresolved替代", "由模型逐项判断并显式选择",
+                         "出借施事、接收者、物品所有者和代词指称分别核对",
+                         "施事或接收角色不证明所有权", "不能按代词性别或亲属称呼认定唯一指称",
+                         "角色已明确不因此变成未知", "来源已唯一明确的事项或归属不额外标未知"):
+            self.assertIn(guidance, prompt)
+        tool = requests[0]["tools"][0]["function"]
+        self.assertEqual(tool["name"], "GroundedMemoryLabelsV4")
+        codes = tool["parameters"]["properties"]["units"]["properties"]["0:0"]["properties"]["ambiguity_codes"]
+        self.assertIn("matter_reference", codes["items"]["enum"])
+        self.assertEqual(codes["maxItems"], 8)
+        for schema in (grounded_schema(source), grounded_schema_v3(source)):
+            self.assertNotIn("matter_reference", json.dumps(schema))
+        for old_prompt in (GROUNDED_PROMPT, GROUNDED_V3_PROMPT):
+            self.assertNotIn("matter_reference", old_prompt)
+            self.assertNotIn("出借施事、接收者、物品所有者和代词指称分别核对", old_prompt)
+        self.assertEqual((stats.adopted, stats.pending), (0, 1))
+        self.assertEqual(store.list_confirmed(scope), ())
+        pending, = store.list_pending_candidates(scope)
+        self.assertEqual(pending.confidence, 1.0)
+        self.assertEqual(pending.text, "截至2026-10-14，联系人原话：“那件事情你暂时不要透露。”")
+        self.assertIn("pragmatic:ambiguous", pending.risk_flags)
+        self.assertIn("事项指称在本窗口无法唯一识别", pending.alternatives[0])
+        self.assertIsNotNone(pending.dimension_evidence)
+        assert pending.dimension_evidence is not None
+        self.assertIsNone(pending.dimension_evidence.semantic_basis)
+        detail = traces.get_batch(scope, traces.list_batches(scope)[0]["trace_id"])
+        events = {event["stage"]: event["payload"] for event in detail["events"]}
+        self.assertEqual(events["grounded_draft"]["draft"], draft)
+        self.assertEqual(events["verification"]["result"]["verdict"], "supported")
+
     def test_sdk_continuation_contract_keeps_supported_full_quote_pending_at_point_five_five(self):
         from notalone.memory_extraction.evaluation import build_window, evaluate_case
         from notalone.memory_extraction.evaluation_cases import CASES
@@ -171,9 +234,9 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         codes = slot["properties"]["ambiguity_codes"]
         self.assertEqual(set(codes["items"]["enum"]), {
             "entity_identity", "place_ownership", "borrowing_direction", "other_unresolved",
-            "clock_period", "event_stage", "object_ownership",
+            "clock_period", "event_stage", "object_ownership", "matter_reference",
         })
-        self.assertEqual(codes["maxItems"], 7)
+        self.assertEqual(codes["maxItems"], 8)
         self.assertTrue(codes["uniqueItems"])
         self.assertEqual(len(verifier.calls), 1)
         self.assertEqual(stats.adopted, 0)
@@ -311,7 +374,7 @@ class GroundedV4RuntimeTest(unittest.TestCase):
         tool = requests[0]["tools"][0]["function"]
         self.assertEqual(tool["name"], "GroundedMemoryLabelsV4")
         slot = tool["parameters"]["properties"]["units"]["properties"]["0:0"]
-        self.assertEqual(slot["properties"]["ambiguity_codes"]["maxItems"], 7)
+        self.assertEqual(slot["properties"]["ambiguity_codes"]["maxItems"], 8)
         for leaf in ("uncertain_plan", "uncertain_state", "stage_unknown_state", "figurative_unknown_plan"):
             self.assertIn(leaf, slot["properties"]["kind"]["enum"])
         for free_field in ("text", "alternatives", "valid_at", "invalid_at", "assertion_status", "figurative_type"):
