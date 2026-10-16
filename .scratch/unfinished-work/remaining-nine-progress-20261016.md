@@ -80,6 +80,10 @@
 
 原03另完成[真实导入来源桥接](../author-quote-proof-b/import-source-bridge-result-20261016.md)：JSONL经实际导入／规范化／来源存储到loader、有限producer、待确认保存／API及来源删除闭环，37相关检查通过、8个不同随机库精确清理为0，双轴最终0。正控明确采用单消息窗口，完整多消息、首部空白及缺proof负控不缩窗或补依据；默认空表、生产默认及原03第一AC保持，不把AUTO确认分支误称MANUAL API。
 
-桌面18／20新完成[同v9两场Finder独立失败核验](../mac-desktop-app/finder-v9-two-attempts-20261016.md)：各启动1次且runner均exit2。首场未进入45秒采样，第二场301次快照未捕获原生PID；不推断绝对零尝试。第二场runner结束后、同实例存活且原租期内的公共观察明确为screen_capture_permission_missing，TCC归属仍未知；不迁移v6许可。已核两场7／4个记录PID退场、精确库及自有资源清理、默认目录身份恢复、租约absent，原18／20AC保持；新增权限和后继复验另场记录。
+桌面18／20新完成[同v9两场Finder独立失败核验](../mac-desktop-app/finder-v9-two-attempts-20261016.md)：各启动1次且runner均exit2。首场未进入45秒采样，第二场累计301次快照（初始1＋阶段300）未捕获原生PID；不推断绝对零尝试。第二场runner结束后、同实例存活且原租期内的公共观察明确为screen_capture_permission_missing，TCC归属仍未知；不迁移v6许可。已核两场7／4个记录PID退场、精确库及自有资源清理、默认目录身份恢复、租约absent，原18／20AC保持；新增权限和后继复验另场记录。
 
 [原21严格四槽公开质量合同](../grounded-evaluation/reference21-semantic4-implementation-20261016.md)已完成离线实施：仅新semantic4身份复用legacy四槽、封闭作者引句提示及原phase-split策略；原21／28＋1、cap42、零重试和4小时绝对期限保持。完整SDK Mock到B02为40／42，额外proof含null先留原件后硬停，typed未评估且无信用；不补造verification_program。评测单元210、集成113、adapter／proof／wire57、同runner10、最终prepare1及窄核2分别通过，8源码类型通过；组间不累加。Root最终纯prepare1及两轴最终0；未注册proof2 helper的冻结对齐单列，旧已注册评测及三个adapter默认合同保持。实际新闭包89份，尚无新真实registry、凭据读取或请求；后继仅Root核新freeze及旧场闭账后唯一启动，原票和空放行表不变。
+
+随后唯一启动新独立semantic4场：run040b1621-542c-4f28-a150-a8d935add997，基线15b63c11、freeze字节SHA41a74c92db7f42a5e24db9f80e2820962b9e2f4a7ecb71f943796fae38c4f813。89源、原21映射、参考v2与实际合同核验；既有258个registry关闭标记均存在，新run绑定授权前不存在、冻结源与dirty交集0，不把258项当质量场数或逐库SQL认证。自有worker／PG79850于14:26:50实际activation，synthetic=false；cap42、零重试、只用官方DeepSeek。工作截止18:25:24、绝对截止18:25:44（台北时间），完成或硬停即退出，无自动后继。RAW由独立Agent只看前层先封存，Root做FULL；当前仅认证已启动，不预签完成窗、至少15门或质量成绩。冻结源码／计划／实施／ADR不再编辑，本进度已核不在闭包。
+
+该场现已[第五窗安全停止并闭账](../grounded-evaluation/reference21-semantic4-result-20261016.md)：10／42、十HTTP200、零重试，5completed／16unrun，余32永久关闭。前四窗safe，A05原引句虽忠实，但alternatives空及泛称理由漏具体产权／代词未知，最终0.95评测auto形成ambiguous_auto1／bad_auto1；独审未认定新增产权假事或错人。已处理必需raw6／接受6／完整5，E68／70、V20／20及可见语义5／5；V不见两隐藏E字段，不能给全部14字段背书。旧matcher的A02 false_fact与已审v2-v1独审safe分别保留。关闭后、后继改源前89源、60事件／摘要、只读SQL、10份received审核及自有worker／PG实际ESRCH均核验，869.171秒exit0、close_unknown=false；结果两轴最终0。本场未达主集至少15，核心B01／B02及私人／留出未跑，typed两旗false、业务采纳0和空放行表保持；没有自动后继。
