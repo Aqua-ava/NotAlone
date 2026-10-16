@@ -33,6 +33,47 @@ class GroundedV4RuntimeTest(unittest.TestCase):
                             (socket, "getaddrinfo")):
             guards.enter_context(patch.object(owner, name, side_effect=AssertionError("禁止真实网络")))
 
+    def test_sdk_stable_fact_uses_v4_guidance_and_closed_schema_without_observation_date(self):
+        from notalone.memory_extraction.grounded_adapter import (
+            GroundedV4ExtractionRuntime, GROUNDED_PROMPT, GROUNDED_V3_PROMPT,
+            grounded_schema, grounded_schema_v3,
+        )
+
+        source = window("我在市立图书馆担任管理员。")
+        draft = labels(row("0:0", "stable_fact", topic="work", ambiguity_codes=[], confidence=0.97))
+        requests = []
+
+        def handler(request):
+            requests.append(json.loads(request.content))
+            return response(draft, name="GroundedMemoryLabelsV4")
+
+        with build_trace_http_client(transport=httpx.MockTransport(handler)) as client:
+            model = build_deepseek_model(api_key="synthetic-secret", base_url="http://127.0.0.1/v1",
+                                         http_client=client)
+            fact, = GroundedV4ExtractionRuntime(model=model).extract(source)
+
+        self.assertEqual(len(requests), 1)
+        prompt = requests[0]["messages"][0]["content"]
+        for guidance in ("stable_fact=原文明示的稳定身份、职业、专业等客观事实", "不是已完成动作",
+                         "不能仅因“目前”或“现在”就改用临时state", "知情、决策、近况、短期身体状况",
+                         "不认证永久有效、现实身份或来源可信"):
+            self.assertIn(guidance, prompt)
+        tool = requests[0]["tools"][0]["function"]
+        self.assertEqual(tool["name"], "GroundedMemoryLabelsV4")
+        slot = tool["parameters"]["properties"]["units"]["properties"]["0:0"]
+        self.assertIn("stable_fact", slot["properties"]["kind"]["enum"])
+        self.assertEqual(set(slot["required"]), {
+            "kind", "subject", "topic", "dependency", "unresolved", "confidence", "sensitivity", "ambiguity_codes",
+        })
+        self.assertFalse(slot["additionalProperties"])
+        for schema in (grounded_schema(source), grounded_schema_v3(source)):
+            self.assertNotIn("stable_fact", schema["properties"]["units"]["properties"]["0:0"]["properties"]["kind"]["enum"])
+        for old_prompt in (GROUNDED_PROMPT, GROUNDED_V3_PROMPT):
+            self.assertNotIn("stable_fact", old_prompt)
+        self.assertEqual(fact["text"], "联系人原话：“我在市立图书馆担任管理员。”")
+        self.assertEqual((fact["category"], fact["valid_at"], fact["invalid_at"]), ("common_fact", None, None))
+        self.assertNotIn("semantic_basis", fact)
+
     def test_sdk_object_ownership_contract_keeps_confidence_one_supported_candidate_pending(self):
         from notalone.memory_extraction.grounded_adapter import GroundedV4ExtractionRuntime
         from tests.unit.memory_extraction.verification_helpers import FixedSourceVerifier, verification_result

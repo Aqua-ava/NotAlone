@@ -15,6 +15,119 @@ from tests.unit.memory_extraction.test_grounded_v3 import labels
 
 
 class GroundedV4CompilerTest(unittest.TestCase):
+    def test_stable_fact_preserves_self_and_contact_sources_without_observation_dates(self):
+        from notalone.memory_extraction.grounded import compile_labels_v4
+        from notalone.memory_extraction.models import MessageSender
+
+        for text, sender, subject, topic, author in (
+            ("我读应用统计专业。", MessageSender.SELF, "self", "study", "用户"),
+            ("我目前是社区图书馆的管理员。", MessageSender.CONTACT, "contact", "work", "联系人"),
+        ):
+            with self.subTest(subject=subject):
+                source = window(text)
+                source = replace(source, messages=(replace(source.messages[0], sender=sender),))
+                fact, = compile_labels_v4(source, labels(row(
+                    "0:0", "stable_fact", subject=subject, topic=topic, confidence=0.84,
+                    ambiguity_codes=[],
+                )))
+                self.assertEqual(set(fact), {
+                    "text", "category", "subject", "topic", "source_message_ids", "confidence",
+                    "risk_flags", "valid_at", "invalid_at", "speech_act", "assertion_status",
+                    "figurative_type", "alternatives", "interpretation_reason",
+                })
+                self.assertEqual(fact["text"], f"{author}原话：“{text}”")
+                self.assertEqual((fact["category"], fact["subject"], fact["topic"], fact["speech_act"],
+                                  fact["assertion_status"], fact["figurative_type"]),
+                                 ("common_fact", subject, topic, "assertion", "asserted", "literal"))
+                self.assertEqual((fact["valid_at"], fact["invalid_at"]), (None, None))
+                self.assertEqual(fact["source_message_ids"], [str(source.messages[0].message_id)])
+                self.assertEqual((fact["confidence"], fact["risk_flags"], fact["alternatives"]),
+                                 (0.84, [], []))
+                self.assertTrue(fact["interpretation_reason"].strip())
+                self.assertNotIn("semantic_basis", fact)
+
+    def test_stable_fact_never_uses_missing_or_non_utc_source_time(self):
+        from notalone.memory_extraction.grounded import compile_labels_v4
+
+        for at in (None, datetime.fromisoformat("2026-08-19T23:45:00-04:30")):
+            with self.subTest(at=at):
+                source = window("我在这里担任资料管理员。")
+                source = replace(source, messages=(replace(source.messages[0], occurred_at=at),))
+                fact, = compile_labels_v4(source, labels(row("0:0", "stable_fact", ambiguity_codes=[])))
+                self.assertEqual((fact["valid_at"], fact["invalid_at"]), (None, None))
+                self.assertEqual(fact["text"], "联系人原话：“我在这里担任资料管理员。”")
+
+    def test_stable_fact_preserves_prefix_dependencies_risk_ambiguity_and_low_confidence(self):
+        from notalone.memory_extraction.grounded import compile_labels_v4
+        from notalone.memory_extraction.models import MessageRef, MessageSender
+        from uuid import uuid4
+
+        # 标签人为给定，只核新叶不清除原风险／歧义；不认证标签的语义判断。
+        source = window("关于我的资料，我从事建筑设计。")
+        context = MessageRef(uuid4(), "你长期从事哪个行业？", MessageSender.SELF,
+                             source.messages[0].occurred_at)
+        source = replace(source, messages=(context, *source.messages))
+        fact, = compile_labels_v4(source, labels(
+            row("1:0", "prefix", dependency="0:0", unresolved=True, confidence=0.4,
+                sensitivity="commitment", ambiguity_codes=["other_unresolved"]),
+            row("1:1", "stable_fact", topic="work", ambiguity_codes=[], confidence=0.95),
+        ))
+        self.assertEqual(fact["text"], "联系人原话：“关于我的资料，我从事建筑设计。”"
+                         "（相关原文：用户说“你长期从事哪个行业？”）")
+        self.assertEqual(set(fact["source_message_ids"]), {str(message.message_id) for message in source.messages})
+        self.assertEqual(fact["confidence"], 0.4)
+        self.assertEqual(fact["risk_flags"], ["sensitivity:commitment"])
+        self.assertEqual(fact["alternatives"], ["原句在本窗口仍有其他未决解释，保留原句。"])
+        self.assertEqual((fact["category"], fact["valid_at"], fact["invalid_at"]), ("common_fact", None, None))
+
+    def test_stable_fact_stays_v4_only_and_does_not_relax_invalid_labels(self):
+        from notalone.memory_extraction.errors import ExtractionInvalidOutputError
+        from notalone.memory_extraction.grounded import compile_labels, compile_labels_v3, compile_labels_v4
+
+        source = window("我从事建筑设计。")
+        old = labels(row("0:0", "stable_fact"))
+        typed = labels(row("0:0", "stable_fact", ambiguity_codes=[]))
+        for compiler, draft in ((compile_labels, old), (compile_labels_v3, typed)):
+            with self.subTest(version=compiler.__name__), self.assertRaisesRegex(
+                ExtractionInvalidOutputError, "未知事实类型",
+            ):
+                compiler(source, draft)
+        for draft in (
+            labels(row("0:0", "stable_fact_extra", ambiguity_codes=[])),
+            labels(row("0:0", "stable_fact", ambiguity_codes=["entity_identity"])),
+            labels(row("0:0", "stable_fact", unresolved=True, ambiguity_codes=[])),
+            labels(row("0:0", "stable_fact", ambiguity_codes=[], valid_at="2026-08-19")),
+        ):
+            with self.subTest(draft=draft), self.assertRaises(ExtractionInvalidOutputError):
+                compile_labels_v4(source, draft)
+        with self.assertRaises(ExtractionInvalidOutputError):
+            compile_labels_v4(window("如果审核通过，我就在这里任职。"), labels(
+                row("0:0", "condition", ambiguity_codes=[]),
+                row("0:1", "stable_fact", ambiguity_codes=[]),
+            ))
+
+    def test_stable_fact_extension_keeps_existing_state_event_and_plan_fields(self):
+        from notalone.memory_extraction.grounded import compile_labels_v4
+
+        examples = (
+            ("是否参加还没决定。", "state", "recent_state", "assertion", "asserted", "literal",
+             "2026-10-14T18:00:00+08:00", None),
+            ("正在等电梯。", "momentary_state", "recent_state", "assertion", "asserted", "literal",
+             "2026-10-14T18:00:00+08:00", "2026-10-15T00:00:00+08:00"),
+            ("已经交完材料了。", "event", "common_fact", "assertion", "asserted", "literal", None, None),
+            ("我下周去参加培训。", "plan", "recent_state", "plan", "asserted", "literal",
+             "2026-10-19T00:00:00+08:00", "2026-10-26T00:00:00+08:00"),
+            ("我可能有点感冒。", "uncertain_state", "recent_state", "assertion", "unknown", "literal",
+             "2026-10-14T18:00:00+08:00", None),
+        )
+        for text, kind, category, speech, assertion, figurative, start, end in examples:
+            with self.subTest(kind=kind):
+                fact, = compile_labels_v4(window(text), labels(row("0:0", kind, ambiguity_codes=[])))
+                self.assertEqual((fact["category"], fact["speech_act"], fact["assertion_status"],
+                                  fact["figurative_type"], fact["valid_at"], fact["invalid_at"]),
+                                 (category, speech, assertion, figurative, start, end))
+                self.assertIn(text, fact["text"])
+
     def test_object_ownership_keeps_known_lending_roles_and_historical_assertion(self):
         from notalone.memory_extraction.grounded import compile_labels_v4
 

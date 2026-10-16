@@ -53,3 +53,6 @@
 
 
 完整混合场现已[第三窗安全停止并闭账](../grounded-evaluation/full140-mixed-v-off-result-20261016.md)：6／280、六HTTP200、零重试，A01 safe、R001 general_error、R002 safety_error，completed3／unrun137，余274永久关闭。三RAW及三FULL均先后封存并received，实际必需raw4／接受4／完整2、E字段65／70、V字段13／20、V语义1／5。R002保留学生及专业正文但category与valid_at各错，V漏检后两条进入评测auto形成bad_auto2；人工新增假事／错人均0，不把原维度聚合false_facts=2冒充现实假事。五proof均UNKNOWN/untrusted_source、无typed或业务采纳信用。关闭后、后继源码改动前89源／39事件／摘要／只读SQL／六审核收据已核，1022.230秒受控退出、自有worker／组gone且无清理错误；无自动后继。原9张仍3 resolved／6 claimed，后继先离线定位稳定本人事实类型和时间契约，默认空表／原Gold／未跑分母不变。
+
+
+随后完成[稳定事实离线类型补全](../grounded-v4-stable-facts/result-20261016.md)：单一v4 stable_fact映射common_fact／双null，原state与旧v2／v3不变；真实编译和SDK Mock先红后绿。Root grounded75、评测单元193、集成逐条112通过（摘要Ran113，1测试及2个组环境准备跳过），两源码类型通过；代码独立双轴0。原R002标签回放仍bad_auto2，不覆盖旧失败或当作模型质量改善。未改V／typed／Gold／采纳门／空放行表，未启动新真实场；未来须修订合同与新freeze，三记忆票和原9张状态保持。

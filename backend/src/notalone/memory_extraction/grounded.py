@@ -30,6 +30,7 @@ KINDS = {
 }
 # 仅显式v4使用完整封闭组合，不向模型开放任意语用字段笛卡尔积。
 V4_KIND_EXTENSIONS = {
+    "stable_fact": ("common_fact", "assertion", "asserted", "literal"),
     "figurative_unknown_plan": ("recent_state", "plan", "asserted", "unknown"),
     "uncertain_plan": ("recent_state", "plan", "unknown", "literal"),
     "uncertain_state": ("recent_state", "assertion", "unknown", "literal"),
