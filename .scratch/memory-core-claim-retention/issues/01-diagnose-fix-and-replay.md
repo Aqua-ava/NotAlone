@@ -231,3 +231,7 @@ Blocked by: none
 
 
 2026-10-16：完整140混合合同真实场已独立closed6／280、六HTTP200、零重试，三窗已审／137窗未跑；[实际结果](../../grounded-evaluation/full140-mixed-v-off-result-20261016.md)必需raw4／接受4／完整2，R002分类与有效起点错误进入评测auto，bad_auto2触发硬停（新增现实假事／错人0）。五proof均UNKNOWN/untrusted_source，余274关闭，资源退场核验完成；不拼旧样本凑≥15、不认证完整140、typed或逐类放行，默认空表及本票State／AC保持。后继只先离线定位，无自动补发或新批次。
+
+### 2026-10-16 唯一性对照实际停止，核心整体验收保持
+
+[新场结果](../../grounded-evaluation/reference21-uniqueness-result-20261016.md)已closed28/42：A01–A14独立分层审核的15个必需事实组raw/接受/完整均15/15，A14一次性发地址纳入为pending的一般错误如实保留。第28次A15 E未取得响应，600秒墙钟退场，余14永久关闭；没有完整batch result，外层15unknown/6unrun。B01/B02未跑，公开核心5必需、真实严格6/12、可选2/6与held-out均不获本场整体质量信用。未增加坏auto只属于已审部分，不外推未知窗；本票第3条仍未勾、State claimed，旧成绩/旧闭账、默认空放行表及业务数据均保持。

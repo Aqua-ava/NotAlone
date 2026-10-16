@@ -7,10 +7,10 @@
 **Blocked by:** 01（评测骨架）；02 的产出用例可并入
 
 - [ ] 该维度达标签：至少 15 条中假事 0、记错人 0、一般错误 ≤1
-- [ ] 覆盖跨消息指代、省略主语、多第三方、含糊指代
+- [x] 覆盖跨消息指代、省略主语、多第三方、含糊指代
 - [ ] 指代含糊的候选不得进入自动采纳
 - [ ] 修复只用允许手段；全量既有用例回归通过
-- [ ] 新增与修复对应用例入库
+- [x] 新增与修复对应用例入库
 
 ## Comments（实现记录 2026-09-15）
 
@@ -107,3 +107,9 @@
 
 
 2026-10-16：完整140混合合同真实场已独立closed6／280、六HTTP200、零重试，三窗已审／137窗未跑；[实际结果](../../grounded-evaluation/full140-mixed-v-off-result-20261016.md)必需raw4／接受4／完整2，R002分类与有效起点错误进入评测auto，bad_auto2触发硬停（新增现实假事／错人0）。五proof均UNKNOWN/untrusted_source，余274关闭，资源退场核验完成；不拼旧样本凑≥15、不认证完整140、typed或逐类放行，默认空表及本票State／AC保持。后继只先离线定位，无自动补发或新批次。
+
+### 2026-10-16 唯一性对照的部分证据与独立交付项
+
+[本场实际结果](../../grounded-evaluation/reference21-uniqueness-result-20261016.md)：新run closed28/42，27个HTTP200，第28次A15 E触发600秒墙钟退场且远端结果未知，余14永久关闭。A01–A14的RAW/FULL分别封存并收据匹配，部分必需raw/接受/完整15/15，A14为唯一一般错误；外层仍15unknown/6unrun，无完整batch result，不能用15个事实组充作至少15个窗口或拼接旧场。A15未知、A16未跑；第1/3/4条验收保持未勾，State仍claimed，默认放行表为空。
+
+独立核对后仅勾第2与第5条的范围/仓库交付信用：跨消息A02/08/13、省略A06/11、多第三方A10及含糊A01/03/04/05/07/09已覆盖；[现行16条指代用例](../../../backend/src/notalone/memory_extraction/cases/reference.py)、[事项码回归](../../../backend/tests/unit/memory_extraction/test_grounded_v4.py)、[给定码与原无码负控](../../../backend/tests/unit/memory_extraction/test_grounded_v4_runtime.py)及[原21窗helper合成回归](../../../desktop/tests/fixtures/test_reference21_v4_public.py)已入库。它们不替代未完成的全量真实模型回归或证明所有语义含糊都能被模型选码；原A05无码仍auto负控及全部历史失败保留。

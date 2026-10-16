@@ -110,3 +110,7 @@
 
 
 2026-10-16：完整140混合合同真实场已独立closed6／280、六HTTP200、零重试，三窗已审／137窗未跑；[实际结果](../../grounded-evaluation/full140-mixed-v-off-result-20261016.md)必需raw4／接受4／完整2，R002分类与有效起点错误进入评测auto，bad_auto2触发硬停（新增现实假事／错人0）。五proof均UNKNOWN/untrusted_source，余274关闭，资源退场核验完成；不拼旧样本凑≥15、不认证完整140、typed或逐类放行，默认空表及本票State／AC保持。后继只先离线定位，无自动补发或新批次。
+
+### 2026-10-16 唯一性对照不增加运行时维度放行信用
+
+[新场结果](../../grounded-evaluation/reference21-uniqueness-result-20261016.md)closed28/42，A01–A14部分审核、A15未知、其余6窗未跑；没有完整21/140真实回归或至少15窗门槛。15条实际evidence均version=1/source_bound=false/semantic_basis=null，typed_evaluated与typed_credit均false；不能把给定码的确定性正控、有限author quote可信完整到达切片或V supported推广为任意指代/转述/保真/媒体运行时分类。第一条验收仍未勾，原3/4与State claimed保持。默认空表、原0.7/风险语义、有效依据和逐类批准的合取门不变，未做业务迁移、回填或自动放行；所有旧run与本场余14额度永久关闭。
