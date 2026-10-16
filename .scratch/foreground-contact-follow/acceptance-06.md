@@ -1,5 +1,43 @@
 # 06 组合验收记录与待实机范围
 
+## 2026-10-15 同包测量与人工验收（进行中）
+
+本轮增加显式开启的原生固定事件计数和后端旁路计时，不改变识别协议、质量门或确认规则。默认关闭；仅记录事件枚举、数值时间和资源计数，不记录姓名、联系人ID、草稿正文、图像或原始协议。原生采集事件围绕实际截图API，顶部OCR事件围绕实际识别调用；超时保留部分计数，不补造完成。
+
+同包产物为本地忽略目录 `desktop/artifacts/contact-follow-06-measured-app-20261015/`。`npm run package -- --with-probe --output-directory <本轮绝对输出目录> --electron-zip-directory <已有缓存目录>` 成功，严格签名核验通过；没有改变权限和签名策略。SHA-256：
+
+| 文件 | SHA-256 |
+| --- | --- |
+| app.asar | `08aa42c64b355f5f0825e2914cb3c685b550a53f1591e7cb1808d40a735c42ec` |
+| notalone-sync-probe | `0cc44130a6f6be42c284587402db4d12139e4127a0167bd8c6fe4dac2294d7ae` |
+| libNotAloneSyncCore.dylib | `5bc05ab85254ade1d1c1282bc1ef17ce328d1c171c882ddf4ee3d3aefeb4c53a` |
+
+### 自动验证
+
+- `npm test`：类型与61项安全测试通过，不运行App。
+- `swift test --package-path native/macos`：84项、2跳过、0失败。
+- 前台同步Python测试77/77；`desktop/tests/fixtures/test_observation_measurements.py` 6/6。
+- `node --test tests/observation-measurements-http.test.mjs`：真实隔离HTTP/PG测量接入1/1通过，原生边界为合成输入。
+- `node --test tests/continuous-contact-follow-http.test.mjs tests/continuous-generation-combination-http.test.mjs tests/single-frame-foreground-http.test.mjs tests/contact-content-restore-http.test.mjs tests/explicit-generation-context-http.test.mjs tests/contact-generation-jobs-http.test.mjs tests/assistant-generation-ownership-http.test.mjs tests/reply-message-opt-in-http.test.mjs`：85项，84通过、1失败。失败为B09等待合成模型进入超时；同一用例未改代码单独重跑1/1通过。首次失败保留，未确认负载是否为原因，不称整组一次全绿。
+
+日志位于本地忽略产物 `desktop/artifacts/contact-follow-06-{current-regression,ownership-repro,safe,native-full,python,measurement-http-final,package-final}.log`。
+
+### 首次启动的实际结果
+
+本轮有限窗口最多3次启动。第一次经 `test:app --interactive --max-launches 1 tests/continuous-contact-follow-acceptance.spec.ts` 运行，同一实例保留到显式结束。实际读准顶部名称、建议目标联系人且微信前台为真，但基线仍要求人工确认，30秒匹配断言失败；移动、缩放和完整暂停恢复没有由该脚本执行，失败不追认通过。用户随后反馈已确认，工具检查仍为未确认；未据此断言用户操作错误或确认状态丢失的根因。
+
+最终274轮原生调用：273正常返回、1超时；固定结果为113识别、160非微信暂停、1超时未知。完整273轮，1轮仅有有效部分事件；114次实际采集、114帧、114次顶部OCR开始，每轮均不超过一次。超时轮已采集且进入OCR，不能计为零。采集耗时89.876–250.506ms，完成OCR耗时198.029–510.515ms；探针9.070–912.304ms、后端14.683–932.721ms包含暂停等不同场景，不能当成纯识别耗时。助手显示延迟未通过。
+
+资源仅为受控后端及其子进程累计计数、App主进程离散采样：后端最大RSS155975680字节，子进程最大RSS108396544字节；主进程样本RSS151896064字节。这不是整个App进程树峰值或持续CPU占用率。
+
+失败退出后认证停读、自有后端exit0、随机库删除、未知资源为空；自有App已退出，租约absent。只清理本轮自动生成的错误上下文，未读取或提交其中可能包含的身份；不保存截图、trace或视频。记录位于本地忽略目录 `desktop/artifacts/contact-follow-06-live-20261015-0618/`。
+
+### 第二次启动：真人协作验收
+
+用户要求亲自验证后，在原有限窗口内以同包新增 `NOTALONE_CONTINUOUS_MANUAL_ACCEPTANCE=1` 启动一次。此模式不因匹配失败提前回收，记录固定状态和布尔值，明确 `manualAcceptanceRequired:true` 与 `automaticAcceptance:false`；真人结论与机器状态分别记录，不以测试退出绿灯代签完整06。
+
+主Agent通过正式管理后台选择合成联系人，再在助手点击“确认本次联系人”，实际界面显示人工确认；输入合成草稿后显示暂停且草稿可编辑。已交由用户核对暂停、返回微信恢复和草稿保留，后续结果与清理待补。原位绑定匹配、移动/缩放和同包任务生命周期仍须实际证据，06暂不关闭。
+
 日期：2026-10-14。产品基线 `8b4709e9`，04已完成；本文件不表示06通过。准备阶段未启动真实App；本轮实机尝试结果见下方记录。
 
 ## 已有自动证据

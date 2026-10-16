@@ -154,6 +154,9 @@ class DesktopRewriteFixture(CoreBusinessFlowFixture, unittest.TestCase):
         """默认合成协议不变，预算页面夹具仅覆盖显式能力配置。"""
         return synthetic_budget_kwargs(self.reply_model)
 
+    def sync_control(self, owner_id):
+        return None
+
     def _backend(self, owner_id: UUID) -> HttpBackend:
         priority = ModelPriorityControl()
         with patch("notalone.server.reply_wiring.build_deepseek_model", return_value=self.reply_model):
@@ -174,7 +177,7 @@ class DesktopRewriteFixture(CoreBusinessFlowFixture, unittest.TestCase):
             setup_service=SetupService(
                 owner_directory=PostgresOwnerDirectory(self.database_url),
                 env_path=Path(os.environ["NOTALONE_ENV_FILE"]),
-            ), runtime_shutdown=priority.stop,
+            ), runtime_shutdown=priority.stop, sync_control=self.sync_control(owner_id),
         ), owner_id)
         self.addCleanup(backend.close)
         return backend

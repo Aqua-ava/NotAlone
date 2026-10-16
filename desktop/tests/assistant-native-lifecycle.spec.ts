@@ -1,12 +1,25 @@
 import { expect, type ElectronApplication, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import type { ChildProcess } from 'node:child_process';
-import { test } from './rewrite-fixture';
+import { test as rewriteTest } from './rewrite-fixture';
 import { selectMenu, isolatedAppEnvironment } from './app-fixture';
 import { launchApp, verifyAppTestLease } from './app-test-gate';
 import { openRewriteAppPages } from './rewrite-transport-fixture';
 import { confirmHelperContact } from './foreground-confirmation-actions';
-import type { RewriteFixture } from './rewrite-backend-fixture';
+import { withRewriteFixture, type RewriteFixture } from './rewrite-backend-fixture';
+
+const test = rewriteTest.extend({
+  rewriteBackend: async ({}, use) => {
+    await withRewriteFixture('notalone-lifecycle-', async fixture => {
+      await writeFile(rewriteTest.info().outputPath('rewrite-owned.json'), JSON.stringify({
+        childPid: fixture.child.pid, fixtureDirectory: fixture.directory,
+        databaseName: /(?:^|\s)dbname=(notalone_core_flow_[0-9a-f]{32}_test)(?:\s|$)/.exec(fixture.data.database_url)?.[1] ?? null,
+      }), { mode: 0o600, flag: 'wx' });
+      await use(fixture);
+    }, undefined, path.resolve('tests/fixtures/assistant-lifecycle-backend.py'));
+  },
+});
 
 // 只由主Agent在有限test:app窗口显式启动；默认测试不执行Electron。
 test.skip(process.env.NOTALONE_ASSISTANT_LIFECYCLE_ACCEPTANCE !== '1', '仅执行已约定的A19／A17原生生命周期验收');
@@ -120,6 +133,7 @@ test('真实小窗关闭继续、正常退出停止，原目录重开只恢复�
         lateResultNotRevived: true, reopenModelDelta: 0, explicitRetryModelDelta: 1,
         sourceApp: !process.env.NOTALONE_TEST_APP_EXECUTABLE, launches: 2,
         ocrRun: false, wechatRead: false, externalModelCalls: 0, externalMessagesSent: 0,
+        foregroundAdapter: 'synthetic-non-wechat',
       }), { mode: 0o600 });
     } finally {
       await rewriteBackend.command('release');

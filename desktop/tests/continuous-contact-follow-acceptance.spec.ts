@@ -7,6 +7,7 @@ import { selectMenu } from './app-fixture';
 import { verifyAppTestLease } from './app-test-gate';
 import { createAcceptanceCoordinator } from './acceptance-coordinator.mjs';
 import { openVisualAcceptance, monitorVisualAcceptance } from './visual-acceptance-window';
+import { prepareObservationMeasurements, readObservationMeasurements } from './observation-measurements-fixture';
 
 const visualAcceptance = process.env.NOTALONE_CONTINUOUS_VISUAL_ACCEPTANCE === '1';
 const headerAcceptance = process.env.NOTALONE_FORMAL_HEADER_PREVIEW === '1';
@@ -25,11 +26,11 @@ const test = bindingTest.extend({
     }
     const probe = path.resolve(path.dirname(executable), '../Resources/notalone-probe/notalone-sync-probe');
     await withBindingFixture('notalone-follow-app-', 'single-account', async fixture => {
-      const environment = fixture.environment.bind(fixture);
-      fixture.environment = owner => ({ ...environment(owner), NOTALONE_SYNC_PROBE: probe });
+      await prepareObservationMeasurements(fixture, probe);
       await fixture.setCli({ sessions: names.map((name, index) => ({ username: `wxid_synthetic_${index ? 'b' : 'a'}`,
         display_name: name, chat_type: 'private', last_timestamp: 1700000000 })), messages: {} });
       await fixture.startBackend();
+      expect(await readObservationMeasurements(fixture)).toEqual([{ kind: 'installed' }]);
       if (names.length) expect((await fixture.request('/api/sync/cli-bindings/confirm', { selections: fixture.data.contact_ids.slice(0, names.length).map((id, index) =>
         ({ locator: `wxid_synthetic_${index ? 'b' : 'a'}`, contact_id: id })) })).status).toBe(200);
       await use(fixture);
@@ -46,6 +47,14 @@ test('正式App持续单帧名称跟随及可视诊断生命周期', async ({ ru
   const directory = process.env.NOTALONE_AUTOMATIC_CONTROL_DIRECTORY;
   if (!directory || !path.isAbsolute(directory)) throw new Error('缺少本轮私有协调目录。');
   const reports: Array<Record<string, unknown>> = [];
+  const measurements = () => readObservationMeasurements(bindingBackend);
+  const appResourceSamples: Array<Record<string, number>> = [];
+  const pauseIntervals: Array<{ kind: 'other-app' | 'helper'; start: number; end: number }> = [];
+  const sampleResources = async () => {
+    const sample = await app.evaluate(() => ({ sampledAtMs: Date.now(), rssBytes: process.memoryUsage().rss,
+      cpuMicroseconds: process.cpuUsage().user + process.cpuUsage().system }));
+    appResourceSamples.push(sample);
+  };
   let visualMonitor: Awaited<ReturnType<typeof monitorVisualAcceptance>> | undefined;
   let headerExpiry: ReturnType<typeof setTimeout> | undefined;
   const coordinator = await createAcceptanceCoordinator({ directory, pid: appProcess.pid!,
@@ -55,12 +64,13 @@ test('正式App持续单帧名称跟随及可视诊断生命周期', async ({ ru
   const ready = async (phase: string) => {
     currentStage = phase;
     process.stdout.write(`continuous_ready:${phase}\n`);
+    await sampleResources();
     await coordinator.waitFor(phase);
   };
-  const saveReport = () => writeFile(test.info().outputPath('continuous-follow-results.json'), JSON.stringify({ reports, normalQuit,
+  const saveReport = async () => writeFile(test.info().outputPath('continuous-follow-results.json'), JSON.stringify({ reports, normalQuit,
     visualChecks: visualMonitor?.counts ?? null,
-    privateBodyRead: false, sentMessages: 0, modelCalls: 0, runtimeFrameCountVerified: false,
-    nativeDurationMeasured: false, backendDurationMeasured: false }), { mode: 0o600 });
+    privateBodyRead: false, sentMessages: 0, modelCalls: 0,
+    measurements: await measurements(), pauseIntervals, appMainProcessSamples: appResourceSamples }), { mode: 0o600 });
   let normalQuit = false;
   try {
     expect(await app.evaluate(({ app }) => app.isPackaged)).toBe(true);
@@ -125,6 +135,44 @@ test('正式App持续单帧名称跟随及可视诊断生命周期', async ({ ru
         openHelper: () => selectMenu(app, '窗口', '输入小窗') });
     }
     expect((await bindingBackend.request('/api/sync/enable', {})).status).toBe(200);
+    if (process.env.NOTALONE_CONTINUOUS_MANUAL_ACCEPTANCE === '1') {
+      // 真人操作正式助手；只保存匿名状态，不因匹配失败提前结束或追认为自动通过。
+      let stopped = false;
+      let verifiedSamples = 0;
+      reports.push({ phase: 'manual-review', manualAcceptanceRequired: true, automaticAcceptance: false });
+      const monitor = (async () => {
+        while (!stopped) {
+          const sample = await helper.evaluate(async expected => {
+            const foreground = await window.notalone.foreground.getState();
+            const contacts = await window.notalone.contacts.getState();
+            return { phase: 'manual-observation', sampledAtMs: Date.now(),
+              state: foreground.phase, helperFocused: foreground.suspendedByHelperFocus,
+              wechatInFront: foreground.wechatInFront,
+              selectedExpected: contacts.selectedContactId === expected,
+              confirmedExpected: foreground.confirmedContactId === expected,
+              verifiedBinding: foreground.confirmation === 'verified-binding',
+              draftPresent: Boolean(contacts.draft),
+              expectedDraft: contacts.draft === '持续跟随验收合成草稿（不发送）' };
+          }, bindingBackend.data.contact_ids[0]);
+          reports.push(sample);
+          if (sample.verifiedBinding && sample.selectedExpected && sample.confirmedExpected) verifiedSamples++;
+          await writeFile(path.join(directory, 'manual-state.json'), JSON.stringify({ ...sample, verifiedSamples }), { mode: 0o600 });
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      })().catch(() => { reports.push({ phase: 'manual-monitor', monitorFailed: true }); });
+      headerExpiry = setTimeout(() => { void coordinator.requestFinish().catch(() => {}); },
+        Math.max(1, lease.until - Date.now() - 15000));
+      try { await ready('finish'); }
+      catch (error) { if (appProcess.exitCode !== 0) throw error; }
+      finally { stopped = true; await monitor; }
+      await coordinator.close();
+      if (appProcess.exitCode === null) {
+        await selectMenu(app, 'NotAlone', '退出 NotAlone');
+        await expect.poll(() => appProcess.exitCode, { timeout: 15000 }).toBe(0);
+      }
+      normalQuit = true;
+      return;
+    }
     if (visualAcceptance) {
       // 此模式只持续展示正式状态；结束不再依赖某一步先匹配成功。
       await ready('finish');
@@ -189,6 +237,14 @@ test('正式App持续单帧名称跟随及可视诊断生命周期', async ({ ru
       return state.phase === 'paused' && state.wechatInFront === false;
     }), { timeout: 30000 }).toBe(true);
     reports.push({ phase: 'other-app', paused: true });
+    const nonWechatStart = Date.now();
+    await new Promise(resolve => setTimeout(resolve, 4500));
+    const nonWechat = (await measurements()).filter(item => item.kind === 'probe'
+      && Number(item.started_at_ms) >= nonWechatStart);
+    expect(nonWechat.length, '暂停期间仍须实际观察到非微信检查').toBeGreaterThan(0);
+    expect(nonWechat.every(item => item.complete === true && item.capture_requests === 0
+      && item.header_ocr_calls === 0), '其他App前台不得采图或OCR').toBe(true);
+    pauseIntervals.push({ kind: 'other-app', start: nonWechatStart, end: Date.now() });
     await selectMenu(app, '窗口', '输入小窗');
     if (!(await helper.getByRole('textbox', { name: '草稿', exact: true }).isEnabled())) {
       reports.push({ phase: 'helper-pause', blocked: true, draftDisabled: true });
@@ -198,9 +254,13 @@ test('正式App持续单帧名称跟随及可视诊断生命周期', async ({ ru
     const paused = await helper.evaluate(async () => window.notalone.foreground.getState());
     expect(paused.suspendedByHelperFocus).toBe(true);
     expect(paused.generationBlock).toBeNull();
+    const helperPauseStart = Date.now();
     await new Promise(resolve => setTimeout(resolve, 4500));
     const held = await helper.evaluate(async () => window.notalone.foreground.getState());
     expect(held.foregroundRevision).toBe(paused.foregroundRevision);
+    expect((await measurements()).filter(item => item.kind === 'probe-start'
+      && Number(item.started_at_ms) >= helperPauseStart)).toHaveLength(0);
+    pauseIntervals.push({ kind: 'helper', start: helperPauseStart, end: Date.now() });
     expect(await helper.getByRole('textbox', { name: '草稿', exact: true }).inputValue()).toBe('持续跟随验收合成草稿（不发送）');
     reports.push({ phase: 'helper-pause', noNewObservation: true, draftPreserved: true });
     await ready('resume-a');
@@ -209,6 +269,14 @@ test('正式App持续单帧名称跟随及可视诊断生命周期', async ({ ru
       const state = await window.notalone.foreground.getState();
       return !state.suspendedByHelperFocus && state.confirmedContactId === expected && state.phase === 'confirmed';
     }, bindingBackend.data.contact_ids[0]), { timeout: 30000 }).toBe(true);
+    await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('持续跟随验收合成草稿（不发送）');
+    reports.push({ phase: 'resume-a', matched: true, draftPreserved: true });
+    const observed = (await measurements()).filter(item => item.kind === 'probe');
+    expect(observed.length).toBeGreaterThan(0);
+    expect(observed.every(item => item.valid === true && Number(item.capture_requests) <= 1
+      && Number(item.frames_received) <= 1 && Number(item.header_ocr_calls) <= 1)).toBe(true);
+    expect(observed.some(item => item.complete === true && item.capture_completions === 1
+      && item.frames_received === 1 && item.header_ocr_calls === 1)).toBe(true);
     await ready('finish');
     expect(visualMonitor?.counts.monitorFailed ?? false, '可视验收监控不得静默失败').toBe(false);
     expect(visualMonitor?.counts.mismatches ?? 0, '人工前台核对存在不一致，不能标记整轮通过').toBe(0);
@@ -217,6 +285,17 @@ test('正式App持续单帧名称跟随及可视诊断生命周期', async ({ ru
     await selectMenu(app, 'NotAlone', '退出 NotAlone');
     await expect.poll(() => appProcess.exitCode, { timeout: 15000 }).toBe(0);
     normalQuit = true;
+    const finalMeasurements = await measurements();
+    const starts = finalMeasurements.filter(item => item.kind === 'probe-start');
+    const ends = finalMeasurements.filter(item => item.kind === 'probe');
+    expect(ends.map(item => item.started_at_ms).sort()).toEqual(starts.map(item => item.started_at_ms).sort());
+    for (const interval of pauseIntervals) {
+      const inInterval = (item: Record<string, unknown>) => Number(item.started_at_ms) >= interval.start
+        && Number(item.started_at_ms) <= interval.end;
+      if (interval.kind === 'helper') expect(starts.filter(inInterval)).toHaveLength(0);
+      else expect(ends.filter(inInterval).every(item => item.complete === true
+        && item.capture_requests === 0 && item.header_ocr_calls === 0)).toBe(true);
+    }
     expect(reports.filter(report => report.matched === false), '实机匹配阶段不得静默跳过失败').toEqual([]);
   } catch (error) {
     reports.push({ phase: currentStage, failed: true });
