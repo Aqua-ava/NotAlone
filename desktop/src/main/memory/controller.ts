@@ -6,6 +6,7 @@ import { activeMemories, memorySources, memoryVersions, pendingCandidates } from
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import { contactRelationshipOverview, ownerFactsPreferencesOverview } from './overview-read';
 import { layeredMemory } from './layered-read';
+import { currentCorrectionTarget, summaryErrorBody } from './layered-correction';
 
 const sections: MemorySectionName[] = ['contact', 'owner', 'pending', 'sources'];
 const empty = (): Pick<MemoryReadingState, MemorySectionName | 'history' | 'overview' | 'ownerOverview' | 'layeredMemory'> => ({
@@ -152,27 +153,31 @@ export class MemoryReadingController {
     this.synchronizeScope();
     const scope = this.scope, value = this.state.layeredMemory.value;
     const workAction = request.action === 'pause' || request.action === 'continue';
+    const correction = request.action === 'summary-error';
     if (!scope || request.contactId !== scope.contactId || request.scopeRevision !== scope.scopeRevision || this.mutation
       || this.sourceDeletionDepth || this.state.layeredMemory.phase !== 'ready' || !value || value.settingsGeneration !== request.settingsGeneration
-      || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile', 'pause', 'continue'].includes(request.action)
+      || !['enable', 'refresh', 'disable', 'delete', 'withdraw-profile', 'pause', 'continue', 'summary-error'].includes(request.action)
+      || (correction && !currentCorrectionTarget(value, request))
       || (workAction && (!value.workId || request.workRevision !== value.workRevision || value.workRevision < 1))
       || (!workAction && request.workRevision !== undefined)
       || (request.action === 'enable' && request.purposeConfirmed !== true)
       || (request.action === 'withdraw-profile' && (!value.profile || request.organizationGeneration !== value.organizationGeneration
         || request.profileVersionId !== value.profile.versionId))
-      || (request.action !== 'withdraw-profile' && (request.organizationGeneration !== undefined || request.profileVersionId !== undefined))) {
+      || (!correction && request.action !== 'withdraw-profile' && (request.organizationGeneration !== undefined || request.profileVersionId !== undefined))) {
       throw new Error('主题资料范围或设置已变化，请重新读取后操作。');
     }
     this.clearLayered();
     const operation = { revision: ++this.operationRevision, abort: new AbortController() };
     this.mutation = operation;
+    if (correction) for (const listener of this.deletionListeners) listener('started');
     const sourceDeletionRevision = this.sourceDeletionRevision;
     this.publish({ mutation: { phase: 'working', message: '正在处理并核对主题资料…' } });
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.mutation === operation && this.sourceDeletionRevision === sourceDeletionRevision; };
     try {
       const result = await this.backend.requestJson({ method: 'POST', path: `/api/contacts/${scope.contactId}/layered-memory/${request.action}`,
         body: { ...(workAction ? { work_revision: request.workRevision } : {}), settings_generation: request.settingsGeneration, ...(request.action === 'enable' ? { purpose_confirmed: true } : {}),
-          ...(request.action === 'withdraw-profile' ? { organization_generation: request.organizationGeneration, profile_version_id: request.profileVersionId } : {}) },
+          ...(request.action === 'withdraw-profile' ? { organization_generation: request.organizationGeneration, profile_version_id: request.profileVersionId } : {}),
+          ...(correction ? summaryErrorBody(request) : {}) },
         signal: operation.abort.signal });
       if (!current() || result.generation !== scope.generation) return;
       const value = layeredMemory(result.data, scope.contactId);
@@ -186,6 +191,7 @@ export class MemoryReadingController {
       this.publish({ mutation: { phase: 'error', message: error instanceof BackendRequestFailure && error.status === 409
         ? '主题资料设置已变化，已撤下旧缓存并重新读取，请核对后重试。' : '主题资料操作未完成，已重新读取当前状态，请核对后重试。' } });
     } finally {
+      if (correction) for (const listener of this.deletionListeners) listener('settled');
       if (this.mutation === operation) {
         this.mutation = undefined;
         this.scheduleLayered(scope);

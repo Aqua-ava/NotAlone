@@ -110,5 +110,15 @@ export function layeredMemory(value: unknown, contactId: string | null): Layered
     budget: { maxMemories: integer(budget.max_memories), maxScenarios: integer(budget.max_scenarios), maxParagraphs: integer(budget.max_paragraphs),
       maxCharacters: integer(budget.max_characters), maxModelCalls, modelCallsUsed, modelCallsRemaining,
       ...(budget.max_profile_entries === undefined ? {} : { maxProfileEntries: integer(budget.max_profile_entries) }) },
+    correctionRevision: entry.correction_revision === undefined ? 0 : integer(entry.correction_revision),
+    protectedCount: entry.protected_count === undefined ? 0 : integer(entry.protected_count),
+    feedback: entry.feedback === undefined ? [] : list(entry.feedback, value => {
+      const feedback = record(value);
+      const state = enumeration(feedback.state, ['active', 'erased_guard']);
+      if (state === 'active' ? feedback.reason === null || feedback.version_id === null : feedback.reason !== null || feedback.version_id !== null) throw invalid();
+      return { id: identifier(feedback.id), targetKind: enumeration(feedback.target_kind, ['scenario', 'profile']),
+        versionId: feedback.version_id === null ? null : identifier(feedback.version_id), itemIndex: integer(feedback.item_index),
+        reason: feedback.reason === null ? null : text(feedback.reason, 500), state };
+    }),
     scenarios, profile: currentProfile };
 }

@@ -157,16 +157,24 @@ export interface LayeredMemory {
   budget: { maxMemories: number; maxScenarios: number; maxParagraphs: number; maxCharacters: number; maxModelCalls: number; maxProfileEntries?: number; modelCallsUsed: number; modelCallsRemaining: number };
   scenarios: LayeredMemoryScenario[];
   profile: LayeredMemoryProfile | null;
+  correctionRevision: number;
+  protectedCount: number;
+  feedback: { id: string; targetKind: 'scenario' | 'profile'; versionId: string | null; itemIndex: number; reason: string | null; state: 'active' | 'erased_guard' }[];
 }
 export interface LayeredMemoryReadRequest extends ContactSelection { mappingCursor?: string | null }
 export interface LayeredMemoryManagementRequest extends ContactSelection {
-  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'withdraw-profile' | 'withdraw-scenario' | 'pause' | 'continue';
+  action: 'enable' | 'refresh' | 'disable' | 'delete' | 'withdraw-profile' | 'withdraw-scenario' | 'pause' | 'continue' | 'summary-error';
   settingsGeneration: number;
   organizationGeneration?: number;
   profileVersionId?: string;
   scenarioVersionId?: string;
   purposeConfirmed?: true;
   workRevision?: number;
+  targetKind?: 'scenario' | 'profile';
+  versionId?: string;
+  itemIndex?: number;
+  reason?: string;
+  operationId?: string;
 }
 export interface MemoryReadingState {
   revision: number;

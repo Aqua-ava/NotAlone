@@ -2,6 +2,7 @@ import { activeMemories } from './read';
 import type { MemoryAdditionRequest, OwnerLayeredMemoryManagementRequest, OwnerLayeredMemoryState } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import { layeredMemory } from './layered-read';
+import { currentCorrectionTarget, summaryErrorBody } from './layered-correction';
 
 // 本人范围仅绑定后端连接；联系人选择不参与本人请求和状态有效性。
 export class OwnerLayeredMemoryController {
@@ -96,12 +97,15 @@ export class OwnerLayeredMemoryController {
     this.synchronize();
     const value = this.state.value;
     const work = request.action === 'pause' || request.action === 'continue';
+    const correction = request.action === 'summary-error';
     if (this.generation === undefined || this.deleting || this.state.mutation.phase === 'working' || this.state.phase !== 'ready' || !value
       || request.settingsGeneration !== value.settingsGeneration
+      || (correction && !currentCorrectionTarget(value, request))
       || (work && (!value.workId || request.workRevision !== value.workRevision))
       || (request.action === 'withdraw-scenario' && (request.organizationGeneration !== value.organizationGeneration || !value.scenarios.some(item => item.versionId === request.scenarioVersionId)))
       || (request.action === 'withdraw-profile' && (!value.profile || request.profileVersionId !== value.profile.versionId || request.organizationGeneration !== value.organizationGeneration))) throw new Error('本人资料设置已变化，请重新读取。');
     this.clear();
+    if (correction) this.factsChanged('started');
     const operation = new AbortController(), generation = this.generation; this.operation = operation;
     this.update({ phase: 'loading', value: null, mutation: { phase: 'working', message: '正在处理本人资料…' } });
     try {
@@ -109,7 +113,8 @@ export class OwnerLayeredMemoryController {
         body: { settings_generation: request.settingsGeneration, ...(work ? { work_revision: request.workRevision } : {}),
           ...(request.action === 'enable' ? { purpose_confirmed: true } : {}),
           ...(request.action === 'withdraw-scenario' ? { organization_generation: request.organizationGeneration, scenario_version_id: request.scenarioVersionId } : {}),
-          ...(request.action === 'withdraw-profile' ? { organization_generation: request.organizationGeneration, profile_version_id: request.profileVersionId } : {}) } });
+          ...(request.action === 'withdraw-profile' ? { organization_generation: request.organizationGeneration, profile_version_id: request.profileVersionId } : {}),
+          ...(correction ? summaryErrorBody(request) : {}) } });
       this.synchronize();
       if (this.operation !== operation || result.generation !== generation) return;
       this.update({ phase: 'ready', value: layeredMemory(result.data, null), mutation: { phase: 'success', message: '本人资料操作已完成并核对。' } }); this.schedule();
@@ -117,6 +122,6 @@ export class OwnerLayeredMemoryController {
       if (this.operation !== operation) return;
       this.update({ phase: 'error', value: null, mutation: { phase: 'error', message: '本人资料操作未完成，请核对当前状态后重试。' } });
       await this.read({});
-    } finally { if (this.operation === operation) this.operation = undefined; }
+    } finally { if (correction) this.factsChanged('settled'); if (this.operation === operation) this.operation = undefined; }
   }
 }

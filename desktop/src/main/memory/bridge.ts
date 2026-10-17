@@ -180,6 +180,19 @@ function layeredMemoryArguments(args: unknown[], owner = false): OwnerLayeredMem
   const value = args[0];
   if (args.length !== 1 || !value || typeof value !== 'object' || Array.isArray(value)) throw new Error('主题资料操作不可用。');
   const fields = value as Record<string, unknown>;
+  if (fields.action === 'summary-error') {
+    const keys = [...(owner ? [] : ['contactId', 'scopeRevision']), 'action', 'settingsGeneration', 'organizationGeneration', 'targetKind', 'versionId', 'itemIndex', 'reason', 'operationId'];
+    if (Object.keys(fields).length !== keys.length || !Object.keys(fields).every(key => keys.includes(key))
+      || !Number.isSafeInteger(fields.settingsGeneration) || (fields.settingsGeneration as number) < 0
+      || !Number.isSafeInteger(fields.organizationGeneration) || (fields.organizationGeneration as number) < 0
+      || !['scenario', 'profile'].includes(fields.targetKind as string) || !isUuid(fields.versionId)
+      || !Number.isSafeInteger(fields.itemIndex) || (fields.itemIndex as number) < 0
+      || typeof fields.reason !== 'string' || !fields.reason.trim() || fields.reason.length > 500 || !isUuid(fields.operationId)) throw new Error('整理纠错操作不可用。');
+    return { ...(owner ? {} : requestArguments([{ contactId: fields.contactId, scopeRevision: fields.scopeRevision }])),
+      action: 'summary-error', settingsGeneration: fields.settingsGeneration as number, organizationGeneration: fields.organizationGeneration as number,
+      targetKind: fields.targetKind as 'scenario' | 'profile', versionId: (fields.versionId as string).toLowerCase(), itemIndex: fields.itemIndex as number,
+      reason: fields.reason, operationId: (fields.operationId as string).toLowerCase() };
+  }
   const enable = fields.action === 'enable', scenario = owner && fields.action === 'withdraw-scenario';
   const withdraw = fields.action === 'withdraw-profile' || scenario;
   const workAction = fields.action === 'pause' || fields.action === 'continue';
