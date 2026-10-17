@@ -64,7 +64,7 @@ async function runningDeletion(pages: RewritePages, host: PageHost, userData: st
     await expect(helper.getByText('删除后不可复活的合成候选（说法1）。', { exact: true })).toHaveCount(0);
     await expectDeletionCleared(helper);
     const oldRequest = replyTransport.requests[0];
-    expect(await rewriteBackend.request('/api/reply/generate', oldRequest)).toEqual({ status: 500, data: { error: 'reply_generation_failed' } });
+    expect(await rewriteBackend.request('/api/reply/generate', oldRequest)).toEqual({ status: 409, data: { error: 'reply_input_invalidated' } });
     expect(await Promise.all(retainedPaths.map((endpoint) => rewriteBackend.request(endpoint)))).toEqual(retained);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
 
@@ -131,7 +131,7 @@ async function completedResponseHeld(pages: RewritePages) {
     await expect(helper.getByRole('status').filter({ hasText: '当前助手会话已删除' })).toBeVisible();
     replyTransport.release();
     expect(await rewriteBackend.request(path)).toEqual({ status: 404, data: { error: 'not_found' } });
-    expect(await rewriteBackend.request('/api/reply/generate', oldRequest)).toEqual({ status: 500, data: { error: 'reply_generation_failed' } });
+    expect(await rewriteBackend.request('/api/reply/generate', oldRequest)).toEqual({ status: 409, data: { error: 'reply_input_invalidated' } });
     await expectDeletionCleared(helper);
     await expect(helper.getByText('已保存但迟到的合成候选（说法1）。', { exact: true })).toHaveCount(0);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);

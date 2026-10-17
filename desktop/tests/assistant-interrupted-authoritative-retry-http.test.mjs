@@ -46,7 +46,9 @@ async function exercise(mode, t, lateRead = false) {
       candidates: [{ number: history.candidateNumber, candidate_id: history.candidateId, version_id: selectedVersionId }] },
     requirement_changes: [{ action: 'keep', previous: selectedRequirement }] };
   const prepared = await f.request(path + '/continue/prepare', command);
-  assert.equal((await f.command('metrics')).model_calls, 1);
+  // 改写带显式要求时另有一次保真审校；准备本身不调用模型。
+  const initialModelCalls = mode === 'rewrite_draft' ? 2 : 1;
+  assert.equal((await f.command('metrics')).model_calls, initialModelCalls);
   const stopped = await f.request(path + '/interrupt', { request_key: prepared.request_key, input_version_id: prepared.input_version_id });
   assert.equal(stopped.interruption_reason, 'app_quit');
   const before = await f.request(path);
@@ -102,7 +104,7 @@ async function exercise(mode, t, lateRead = false) {
   if (mode === 'rewrite_draft') {
     const failed = await f.bridge.getState();
     assert.equal(failed.phase, 'failed'); assert.equal(failed.canRetry, true);
-    assert.equal((await f.command('metrics')).model_calls, 2);
+    assert.equal((await f.command('metrics')).model_calls, 4);
     await f.bridge.generate({ ...scope, newRequest: false });
   }
   const after = await f.bridge.getState();
@@ -135,5 +137,7 @@ async function exercise(mode, t, lateRead = false) {
   assert.equal(payload.continuation_reference.weight, 'low');
   assert.equal(payload.continuation_reference.is_current_draft, false);
   assert.deepEqual(payload.continuation_reference.messages.map((message) => message.text), messages.map((message) => message.text));
-  assert.equal((await f.command('metrics')).model_calls, 2);
+  const metrics = await f.command('metrics');
+  assert.equal(metrics.payloads.length, 2, '同键重放不得重复执行候选生成。');
+  assert.equal(metrics.model_calls, mode === 'rewrite_draft' ? 4 : 2);
 }

@@ -216,7 +216,8 @@ async function deletedSource(pages: RewritePages, host: PageHost, userData: stri
     await expect(discussion.getByText('相关来源已删除', { exact: true })).toBeVisible();
     await expect(discussion.getByText('不依赖来源的恢复讨论。', { exact: true })).toBeVisible();
     await expect(discussion.getByText('不依赖来源的恢复候选（说法1）。', { exact: true })).toBeVisible();
-    await expect(helper.getByText('依赖来源的恢复讨论。', { exact: true })).toHaveCount(0);
+    await expect(discussion.getByText('依赖来源的恢复讨论。', { exact: true })).toHaveCount(0);
+    await expect(helper.getByRole('textbox', { name: '表达方向', exact: true })).toHaveValue('依赖来源的恢复讨论。');
     await expect(helper.getByText('依赖来源的恢复候选（说法1）。', { exact: true })).toHaveCount(0);
     expect((await rewriteBackend.command('observations')).payloads).toHaveLength(2);
   } finally { replyTransport.release(); await pending; }
@@ -239,7 +240,7 @@ async function deletedSource(pages: RewritePages, host: PageHost, userData: stri
 }
 
 async function authorization(pages: RewritePages) {
-  const { manager, helper, rewriteBackend } = pages;
+  const { helper, rewriteBackend } = pages;
   await saveDraft(pages, '按真实联系人隔离的讨论。', '范围隔离的原候选');
   await readSavedDiscussion(helper);
   const state = await helper.evaluate(async () => window.notalone.replies.getState());
@@ -250,13 +251,19 @@ async function authorization(pages: RewritePages) {
   expect(foreign).toEqual({ status: 404, data: { error: 'not_found' } });
   await chooseContact(pages, 1);
   await rewriteBackend.command('revoke', { contact_id: rewriteBackend.data.contact_ids[0] });
-  await manager.getByRole('button', { name: '选择合成联系人甲', exact: true }).click();
-  await expect(helper.getByRole('alert').filter({ hasText: '已保存讨论暂不可用' })).toBeVisible();
-  await expect(helper.getByText('按真实联系人隔离的讨论。', { exact: true })).toHaveCount(0);
-  await expect(helper.getByText('范围隔离的原候选（说法1）。', { exact: true })).toHaveCount(0);
+  // 桌面绑定撤销后，按 ADR-065 显式确认手动范围；讨论读取仍按 owner/contact 隔离。
+  await chooseContact(pages);
+  await readSavedDiscussion(helper);
+  const discussion = helper.getByRole('region', { name: '已保存的讨论', exact: true });
+  await expect(discussion.getByText('按真实联系人隔离的讨论。', { exact: true })).toBeVisible();
+  await expect(discussion.getByText('范围隔离的原候选（说法1）。', { exact: true })).toBeVisible();
   expect(await helper.evaluate(async () => window.notalone.replies.getState())).toMatchObject({
-    result: null, savedSession: { phase: 'failed', sessionId: null, turns: [] },
+    contactId: rewriteBackend.data.contact_ids[0], savedSession: { phase: 'ready', sessionId },
   });
+  expect(await rewriteBackend.request(`/api/contacts/${rewriteBackend.data.contact_ids[1]}/assistant-sessions/${sessionId}`))
+    .toEqual(other);
+  expect(await rewriteBackend.request(`/api/contacts/${rewriteBackend.data.other_contact_id}/assistant-session/default`, {}))
+    .toEqual(foreign);
   expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
 }
 
@@ -267,14 +274,21 @@ async function readFailure(pages: RewritePages) {
   await chooseContact(pages);
   await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })
     .getByText('恢复读取失败不能沿用缓存。', { exact: true })).toBeVisible();
+  const candidate = helper.getByRole('textbox', { name: '候选1编辑文本', exact: true });
+  await candidate.fill('读取暂时失败也应保留的合成候选编辑。');
+  await expect.poll(() => helper.evaluate(async () => (await window.notalone.replies.getState()).result?.candidates[0].editedText))
+    .toBe('读取暂时失败也应保留的合成候选编辑。');
+  const beforeFailure = await helper.evaluate(async () => window.notalone.replies.getState());
   replyTransport.failSessionReads = true;
   await helper.getByRole('button', { name: '查看已保存讨论', exact: true }).click();
   await expect(helper.getByRole('alert').filter({ hasText: '已保存讨论暂不可用' })).toBeVisible();
   await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })).toHaveCount(0);
   await expect(helper.getByText('恢复读取失败不能沿用缓存。', { exact: true })).toHaveCount(0);
-  await expect(helper.getByText('恢复读取成功的原候选（说法1）。', { exact: true })).toHaveCount(0);
+  // 503 只证明本次讨论读取未知，不撤销仍有效的候选和用户编辑。
+  await expect(candidate).toHaveValue('读取暂时失败也应保留的合成候选编辑。');
   expect(await helper.evaluate(async () => window.notalone.replies.getState())).toMatchObject({
-    result: null, savedSession: { phase: 'failed', turns: [] },
+    result: { replyRequestId: beforeFailure.result!.replyRequestId },
+    savedSession: { phase: 'failed', turns: [], inputs: [], currentInputVersionId: null },
   });
   const attempts = replyTransport.sessionRequests.length;
   replyTransport.failSessionReads = false;
@@ -285,6 +299,7 @@ async function readFailure(pages: RewritePages) {
   await expect(helper.getByRole('region', { name: '已保存的讨论', exact: true })
     .getByText('恢复读取成功的原候选（说法1）。', { exact: true })).toBeVisible();
   await expect(helper.getByRole('textbox', { name: '草稿', exact: true })).toHaveValue('重试时保留的未提交草稿。');
+  await expect(candidate).toHaveValue('读取暂时失败也应保留的合成候选编辑。');
   expect(replyTransport.sessionRequests).toHaveLength(attempts + 1);
   expect((await rewriteBackend.command('observations')).payloads).toHaveLength(1);
 }
@@ -295,8 +310,8 @@ export async function assistantSessionRecoveryGuards(browser: Browser, origin: s
     ['断线前迟到读取不能复活来源已失效正文', staleConnection],
     ['恢复运行中记录不自动重试生成', runningRequest],
     ['来源删除后迟到读取与重开均保持无正文占位', (pages, host, userData) => deletedSource(pages, host, userData, browser, origin)],
-    ['重新选择联系人后默认恢复验证授权及范围', authorization],
-    ['读取失败清空缓存并只在用户重试时重新读取', readFailure],
+    ['手动确认恢复按用户与联系人隔离，撤销桌面绑定不触发生成', authorization],
+    ['读取失败隔离讨论并保留候选编辑，只在用户重试时重新读取', readFailure],
   ];
   for (const [name, scenario] of scenarios) {
     process.stdout.write(`page_test_scenario: ${name}\n`);
