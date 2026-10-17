@@ -157,6 +157,8 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
                 "version_id": str(row['version_id']) if row['version_id'] else None, "item_index": row['item_index'],
                 "reason": row['reason'], "state": row['state']} for row in self.feedback_rows(connection, scope)]
             state['protected_count'] = len(self.eligible(overview)) - len(self.unprotected(connection, scope, self.eligible(overview)))
+            state['pending_fact_count'] = connection.execute('SELECT count(*) AS count FROM public.layered_memory_fact_correction '
+                'WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s', (scope.owner_id, scope.contact_id)).fetchone()['count']
             return state, self.eligible(overview), [self._document(row) for row in rows], job
 
     @staticmethod

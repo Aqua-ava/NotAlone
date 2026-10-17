@@ -12,11 +12,13 @@ test('当前资料面板为每段及每项分别提供总结和实际事实纠�
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, packages: 'external', platform: 'node', format: 'cjs', jsx: 'automatic', write: false });
   const module = { exports: {} };
   new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(createRequire(import.meta.url), module, module.exports);
-  const f = await fixture(async () => ({ generation: 1, data: profilePayload() }));
+  const f = await fixture(async () => ({ generation: 1, data: profilePayload({ pending_fact_count: 1 }) }));
   await f.bridge.readLayeredMemory(f.selection());
   const html = module.exports.render((await f.bridge.getState()).layeredMemory);
   assert.equal((html.match(/>总结有误<\/button>/g) ?? []).length, 2);
   assert.equal((html.match(/>事实有误：修正此条<\/button>/g) ?? []).length, 2);
   assert.match(html, /补充背景请通过底层记忆的手动录入/);
+  assert.match(html, /有 1 条底层记忆等待修正/);
+  assert.match(html, /刷新或重新打开不会解除待修正状态/);
   f.disconnect();
 });

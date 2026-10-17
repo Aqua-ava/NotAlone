@@ -51,7 +51,7 @@ class _Verification:
 
 
 class LayeredCorrectionConcurrencyHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
-    def _new_feedback_during_call(self, scope_kind, phase):
+    def _new_feedback_during_call(self, scope_kind, phase, *, fact=False):
         contact, _, _ = self.import_contact("合成并发纠错范围。")
         owner = scope_kind == "owner"
         path = "/api/memories/owner/layered-memory" if owner else f"/api/contacts/{contact}/layered-memory"
@@ -90,7 +90,11 @@ class LayeredCorrectionConcurrencyHttpTest(MemoryOverviewHttpFixture, unittest.T
                 "organization_generation": current["organization_generation"],
                 "target_kind": "scenario", "version_id": target["version_id"], "item_index": 0,
                 "reason": "这项总结含义有误，正在执行的旧输入不得再发布。", "operation_id": str(uuid4())}
-            receipts.append((*backend.request(path + "/summary-error", command), target["version_id"]))
+            if fact:
+                command.pop("reason")
+                command.pop("operation_id")
+                command["memory_id"] = original["memory_id"]
+            receipts.append((*backend.request(path + ("/fact-error" if fact else "/summary-error"), command), target["version_id"]))
 
         adapters[phase].hook = feedback
         status, result = backend.request(path + "/refresh", {
@@ -100,7 +104,10 @@ class LayeredCorrectionConcurrencyHttpTest(MemoryOverviewHttpFixture, unittest.T
         self.assertEqual(receipts[0][0], 200, receipts)
         self.assertIsNotNone(receipts[0][2], receipts)
         current = self._get(backend, path)["layered_memory"]
-        self.assertEqual(current["protected_count"], 2 if phase.startswith("profile") else 1, current)
+        self.assertEqual(current["protected_count"], 1 if fact else 2 if phase.startswith("profile") else 1, current)
+        if fact:
+            self.assertEqual(current["pending_fact_count"], 1)
+            self.assertEqual(current["feedback"], [])
         self.assertNotIn(receipts[0][2], {doc["version_id"] for doc in current["scenarios"]})
         self.assertFalse(any(ref["memory_id"] == original["memory_id"]
             for doc in current["scenarios"] for item in doc["paragraphs"] for ref in item["references"]))
@@ -116,7 +123,7 @@ class LayeredCorrectionConcurrencyHttpTest(MemoryOverviewHttpFixture, unittest.T
         self.assertIn(fresh["memory_id"], references, published)
         self.assertLessEqual(references, {added["memory_id"], fresh["memory_id"]})
         self.assertIsNotNone(published["profile"], published)
-        self.assertTrue(adapters["scenario_propose"].inputs[-1][1])
+        self.assertEqual(bool(adapters["scenario_propose"].inputs[-1][1]), not fact)
         self.assertNotIn(original["memory_id"], {str(memory.memory_id)
             for memory in adapters["scenario_propose"].inputs[-1][0]})
 
@@ -143,3 +150,27 @@ class LayeredCorrectionConcurrencyHttpTest(MemoryOverviewHttpFixture, unittest.T
 
     def test_owner_feedback_after_profile_verification_rejects_late_publish(self):
         self._new_feedback_during_call("owner", "profile_verify")
+
+    def test_contact_fact_error_during_scenario_proposal_rejects_late_publish(self):
+        self._new_feedback_during_call("contact", "scenario_propose", fact=True)
+
+    def test_contact_fact_error_after_scenario_verification_rejects_late_publish(self):
+        self._new_feedback_during_call("contact", "scenario_verify", fact=True)
+
+    def test_contact_fact_error_during_profile_proposal_rejects_late_publish(self):
+        self._new_feedback_during_call("contact", "profile_propose", fact=True)
+
+    def test_contact_fact_error_after_profile_verification_rejects_late_publish(self):
+        self._new_feedback_during_call("contact", "profile_verify", fact=True)
+
+    def test_owner_fact_error_during_scenario_proposal_rejects_late_publish(self):
+        self._new_feedback_during_call("owner", "scenario_propose", fact=True)
+
+    def test_owner_fact_error_after_scenario_verification_rejects_late_publish(self):
+        self._new_feedback_during_call("owner", "scenario_verify", fact=True)
+
+    def test_owner_fact_error_during_profile_proposal_rejects_late_publish(self):
+        self._new_feedback_during_call("owner", "profile_propose", fact=True)
+
+    def test_owner_fact_error_after_profile_verification_rejects_late_publish(self):
+        self._new_feedback_during_call("owner", "profile_verify", fact=True)

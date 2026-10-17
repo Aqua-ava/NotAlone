@@ -64,6 +64,11 @@ class LayeredCorrectionMigrationTest(unittest.TestCase):
                         operation = uuid4()
                         for scoped_contact in (contact, None):
                             self._feedback(connection, owner, scoped_contact, operation, source)
+                            self._fact_receipt(connection, owner, scoped_contact, source)
+                        with self.assertRaises(psycopg.errors.UniqueViolation), connection.transaction():
+                            self._fact_receipt(connection, owner, None, source)
+                        with self.assertRaises(psycopg.errors.ForeignKeyViolation), connection.transaction():
+                            self._fact_receipt(connection, owner, uuid4(), source)
                         with self.assertRaises(psycopg.errors.UniqueViolation), connection.transaction():
                             self._feedback(connection, owner, None, operation, source)
                         with self.assertRaises(psycopg.errors.ForeignKeyViolation), connection.transaction():
@@ -71,14 +76,16 @@ class LayeredCorrectionMigrationTest(unittest.TestCase):
                         with self.assertRaises(psycopg.errors.CheckViolation), connection.transaction():
                             connection.execute("UPDATE public.layered_memory_feedback SET state='erased_guard'")
                         connection.execute("UPDATE public.source_document SET status='delete_requested' WHERE id=%s", (source,))
-                        for table in ('layered_memory_feedback', 'layered_memory_batch', 'scenario_document_version',
+                        for table in ('layered_memory_feedback', 'layered_memory_fact_correction', 'layered_memory_batch', 'scenario_document_version',
                                 'layered_profile_batch', 'layered_profile_version', 'layered_memory_generation'):
                             self.assertEqual(connection.execute(f'SELECT count(*) FROM public.{table}').fetchone()[0], 0, table)
                         self.assertEqual(connection.execute("SELECT count(*) FROM public.layered_memory_job WHERE state='invalidated'").fetchone()[0], 2)
                         # 新反馈的范围FK与删除级联同时生效，不借NULL绕过本人约束。
                         self._feedback(connection, owner, None, uuid4(), source)
+                        self._fact_receipt(connection, owner, None, source)
                         connection.execute('DELETE FROM public.layered_memory_state WHERE contact_id IS NULL')
                         self.assertEqual(connection.execute('SELECT count(*) FROM public.layered_memory_feedback').fetchone()[0], 0)
+                        self.assertEqual(connection.execute('SELECT count(*) FROM public.layered_memory_fact_correction').fetchone()[0], 0)
                 finally:
                     admin.execute(sql.SQL('DROP DATABASE {} WITH (FORCE)').format(sql.Identifier(name)))
                     self.assertFalse(admin.execute('SELECT 1 FROM pg_database WHERE datname=%s', (name,)).fetchone())
@@ -114,3 +121,10 @@ class LayeredCorrectionMigrationTest(unittest.TestCase):
     def _feedback(connection, owner, contact, operation, source):
         connection.execute("INSERT INTO public.layered_memory_feedback(id,owner_id,contact_id,operation_id,settings_generation,target_kind,item_index,reason,rejected_text,dependency_ids,protected_memory_ids,protected_message_ids) "
             "VALUES(%s,%s,%s,%s,1,'scenario',0,'合成说明','合成旧总结',%s,'{}','{}')", (uuid4(), owner, contact, operation, [source]))
+
+    @staticmethod
+    def _fact_receipt(connection, owner, contact, source):
+        connection.execute('INSERT INTO public.layered_memory_fact_correction('
+            'id,owner_id,contact_id,settings_generation,request_digest,memory_id,memory_revision,'
+            "source_dependency_mode,dependency_ids,protected_message_ids) VALUES(%s,%s,%s,1,'synthetic-digest',%s,1,'any',%s,'{}')",
+            (uuid4(), owner, contact, uuid4(), [source]))

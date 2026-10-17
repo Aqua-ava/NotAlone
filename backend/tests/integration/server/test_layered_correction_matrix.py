@@ -184,8 +184,9 @@ class LayeredCorrectionMatrixHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         selected = result["layered_memory"]["correction_target"]
         self.assertEqual(selected, {"memory_id": primary["memory_id"],
                                     "revision": primary["revision"]})
-        self._assert_retracted_target(
-            ready, result["layered_memory"], target_kind, command["version_id"])
+        self.assertEqual(result["layered_memory"]["scenarios"], [],
+            "两个主题来自同批完整事实输入，事实报错必须撤下实际参与闭包")
+        self.assertIsNone(result["layered_memory"]["profile"])
         self.assertEqual(self._memories(memories_path), before,
                          "选择事实纠错只能导向底层入口，不能先改写事实")
 

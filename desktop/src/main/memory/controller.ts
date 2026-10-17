@@ -6,7 +6,7 @@ import { activeMemories, memorySources, memoryVersions, pendingCandidates } from
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 import { contactRelationshipOverview, ownerFactsPreferencesOverview } from './overview-read';
 import { layeredMemory } from './layered-read';
-import { validCorrectionTarget, correctionBody } from './layered-correction';
+import { validCorrectionTarget, correctionBody, retryFactCorrection } from './layered-correction';
 
 const sections: MemorySectionName[] = ['contact', 'owner', 'pending', 'sources'];
 const empty = (): Pick<MemoryReadingState, MemorySectionName | 'history' | 'overview' | 'ownerOverview' | 'layeredMemory'> => ({
@@ -174,11 +174,12 @@ export class MemoryReadingController {
     this.publish({ mutation: { phase: 'working', message: '正在处理并核对主题资料…' } });
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.mutation === operation && this.sourceDeletionRevision === sourceDeletionRevision; };
     try {
-      const result = await this.backend.requestJson({ method: 'POST', path: `/api/contacts/${scope.contactId}/layered-memory/${request.action}`,
+      const command = { method: 'POST' as const, path: `/api/contacts/${scope.contactId}/layered-memory/${request.action}`,
         body: { ...(workAction ? { work_revision: request.workRevision } : {}), settings_generation: request.settingsGeneration, ...(request.action === 'enable' ? { purpose_confirmed: true } : {}),
           ...(request.action === 'withdraw-profile' ? { organization_generation: request.organizationGeneration, profile_version_id: request.profileVersionId } : {}),
           ...(correction ? correctionBody(request) : {}) },
-        signal: operation.abort.signal });
+        signal: operation.abort.signal };
+      const result = await retryFactCorrection(request.action === 'fact-error', current, () => this.backend.requestJson(command));
       if (!current() || result.generation !== scope.generation) return;
       const value = layeredMemory(result.data, scope.contactId);
       this.publish({ layeredMemory: { phase: 'ready', value }, mutation: { phase: 'success', message: request.action === 'delete'

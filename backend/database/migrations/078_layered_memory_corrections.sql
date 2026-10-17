@@ -28,6 +28,25 @@ CREATE TABLE public.layered_memory_feedback (
     CHECK(state='active' OR (reason IS NULL AND rejected_text IS NULL AND input_manifest='[]' AND cardinality(dependency_ids)=0))
 );
 
+-- 事实报错只等待精确叶版本的合法修正；不保存正文，也不沿新版本链形成长期偏好。
+CREATE TABLE public.layered_memory_fact_correction (
+    id uuid PRIMARY KEY,
+    owner_id uuid NOT NULL REFERENCES public.owner(id) ON DELETE CASCADE,
+    contact_id uuid,
+    scope_kind text GENERATED ALWAYS AS (CASE WHEN contact_id IS NULL THEN 'owner' ELSE 'contact' END) STORED NOT NULL,
+    scope_key uuid GENERATED ALWAYS AS (COALESCE(contact_id,owner_id)) STORED NOT NULL,
+    settings_generation bigint NOT NULL,
+    request_digest text,
+    memory_id uuid NOT NULL,
+    memory_revision bigint NOT NULL CHECK(memory_revision>0),
+    source_dependency_mode text NOT NULL CHECK(source_dependency_mode IN ('any','all')),
+    dependency_ids uuid[] NOT NULL,
+    protected_message_ids uuid[] NOT NULL,
+    UNIQUE(owner_id,scope_kind,scope_key,settings_generation,request_digest),
+    FOREIGN KEY(owner_id,scope_kind,scope_key) REFERENCES public.layered_memory_state(owner_id,scope_kind,scope_key) ON DELETE CASCADE,
+    FOREIGN KEY(contact_id,owner_id) REFERENCES public.contact(id,owner_id) ON DELETE CASCADE
+);
+
 -- 手录的共享source不构成错误身份；只保留仍有合法活动叶的原手录根。
 CREATE FUNCTION public.live_layered_manual_guard_ids(affected_owner uuid, affected_contact uuid, identifiers uuid[])
 RETURNS uuid[] LANGUAGE sql STABLE AS $$
@@ -63,8 +82,36 @@ END; $$;
 ALTER FUNCTION public.erase_layered_memory_dependencies(uuid,uuid[]) RENAME TO erase_layered_memory_dependencies_v77;
 CREATE FUNCTION public.erase_layered_memory_dependencies(affected_owner uuid, identifiers uuid[])
 RETURNS void LANGUAGE plpgsql AS $$
-DECLARE feedback record; messages uuid[]; memories uuid[]; erase_body boolean;
+DECLARE feedback record; receipt record; messages uuid[]; memories uuid[]; erase_body boolean; live_leaf boolean;
 BEGIN
+    -- 删除排队即清原请求身份；仍合法的同一规范消息只保留无正文待修正约束。
+    FOR receipt IN SELECT * FROM public.layered_memory_fact_correction WHERE owner_id=affected_owner LOOP
+        SELECT ARRAY(SELECT DISTINCT r.message_id FROM public.message_source_ref r WHERE r.owner_id=affected_owner
+          AND r.message_id=ANY(receipt.protected_message_ids) AND (
+            EXISTS(SELECT 1 FROM public.source_document d WHERE d.id=r.source_document_id AND d.status='active') OR
+            EXISTS(SELECT 1 FROM public.local_wechat_observation o WHERE o.id=r.observation_id))
+            ORDER BY r.message_id) INTO messages;
+        SELECT EXISTS(SELECT 1 FROM public.confirmed_memory m WHERE m.owner_id=affected_owner
+            AND m.contact_id=receipt.contact_id AND m.id=receipt.memory_id
+            AND m.revision=receipt.memory_revision AND m.status='active'
+            UNION ALL SELECT 1 FROM public.owner_memory m WHERE m.owner_id=affected_owner
+            AND receipt.contact_id IS NULL AND m.id=receipt.memory_id
+            AND m.revision=receipt.memory_revision AND m.status='active') INTO live_leaf;
+        live_leaf:=live_leaf AND CASE WHEN cardinality(receipt.protected_message_ids)>0 THEN
+            cardinality(messages)>0 AND (receipt.source_dependency_mode='any' OR cardinality(messages)=cardinality(receipt.protected_message_ids))
+            ELSE receipt.memory_id=ANY(public.live_layered_manual_guard_ids(
+                affected_owner,receipt.contact_id,ARRAY[receipt.memory_id])) END;
+        IF NOT live_leaf THEN
+            DELETE FROM public.layered_memory_fact_correction WHERE id=receipt.id;
+            PERFORM public.bump_layered_correction_revision(affected_owner,receipt.contact_id);
+        ELSIF receipt.request_digest IS NOT NULL AND EXISTS(SELECT 1 FROM public.source_document d
+            WHERE d.owner_id=affected_owner AND d.id=ANY(receipt.dependency_ids) AND d.status<>'active')
+            OR messages IS DISTINCT FROM receipt.protected_message_ids THEN
+            UPDATE public.layered_memory_fact_correction SET request_digest=NULL,dependency_ids='{}',protected_message_ids=messages
+            WHERE id=receipt.id;
+            PERFORM public.bump_layered_correction_revision(affected_owner,receipt.contact_id);
+        END IF;
+    END LOOP;
     FOR feedback IN SELECT * FROM public.layered_memory_feedback WHERE owner_id=affected_owner
         AND (state='erased_guard' OR dependency_ids && identifiers) LOOP
         erase_body:=feedback.state='active';

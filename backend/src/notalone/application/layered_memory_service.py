@@ -114,7 +114,7 @@ class LayeredMemoryService:
                 "updated_at": state["updated_at"].isoformat() if state["updated_at"] else None,
                 "error_code": state["error_code"], "scenarios": scenarios, "profile": state["profile"],
                 "correction_revision": state['correction_revision'], "feedback": state['feedback'],
-                "protected_count": state['protected_count'],
+                "protected_count": state['protected_count'], "pending_fact_count": state['pending_fact_count'],
                 "maintenance_pending": state["dirty_revision"] > state["consumed_revision"],
                 "scenario_mappings": state["scenario_mappings"],
                 "mapping_cursor": state["mapping_cursor"],

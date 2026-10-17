@@ -132,6 +132,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
       <p className="memory-section-note">来源聊天时间表示当时说过，不证明事件恰在当天发生，也不保证今天仍成立。事实有误请修正底层记忆，再刷新主题资料。</p>
       <p>补充背景请通过底层记忆的手动录入，整理结果会按合法资料更新。</p>
       <button className="button" disabled={waiting} onClick={() => facts()}>{owner ? '管理底层本人记忆' : '管理底层联系人记忆'}</button>
+      {value.pendingFactCount > 0 && <p role="status">有 {value.pendingFactCount} 条底层记忆等待修正。相关整理资料已停用；请完成底层修正后刷新，刷新或重新打开不会解除待修正状态。</p>}
       {value.feedback.length > 0 && <section aria-label="整理纠错反馈"><h3>整理纠错反馈</h3>
         <p>受保护的旧依据 {value.protectedCount} 条。无法核对的新概括不会自动生效。</p>
         {value.feedback.map(feedback => <article key={feedback.id}><p>{feedback.targetKind === 'scenario' ? '主题资料' : '长期背景'}第 {feedback.itemIndex + 1} 项：

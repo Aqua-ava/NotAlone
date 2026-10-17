@@ -1,4 +1,14 @@
 import type { LayeredMemory, LayeredMemoryManagementRequest } from '../../shared/memory-bridge';
+import { BackendRequestFailure } from '../backend/json-client';
+
+export async function retryFactCorrection<T>(fact: boolean, current: () => boolean, request: () => Promise<T>): Promise<T> {
+  try { return await request(); }
+  catch (error) {
+    // 首响应可能在提交后丢失；只对同一范围的连接中断重放一次原命令。
+    if (!fact || !(error instanceof BackendRequestFailure) || error.kind !== 'connection' || !current()) throw error;
+    return request();
+  }
+}
 
 export function currentCorrectionTarget(value: LayeredMemory, request: Pick<LayeredMemoryManagementRequest, 'organizationGeneration' | 'targetKind' | 'versionId' | 'itemIndex'>) {
   if (request.organizationGeneration !== value.organizationGeneration || request.itemIndex === undefined) return undefined;

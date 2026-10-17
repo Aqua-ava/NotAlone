@@ -159,6 +159,7 @@ export interface LayeredMemory {
   profile: LayeredMemoryProfile | null;
   correctionRevision: number;
   protectedCount: number;
+  pendingFactCount: number;
   feedback: { id: string; targetKind: 'scenario' | 'profile'; versionId: string | null; itemIndex: number; reason: string | null; state: 'active' | 'erased_guard' }[];
   correctionTarget: { memoryId: string; revision: number } | null;
 }

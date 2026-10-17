@@ -17,7 +17,7 @@ class LayeredCorrectionReplyCopiesHttpTest(OverviewReplyHttpFixture, unittest.Te
     enable = profiles.LayeredProfileHttpTest.enable
     use_tools = tools.ScenarioReadHttpTest.use_tools
 
-    def _used_reply_feedback(self, scope_kind, target_kind):
+    def _used_reply_feedback(self, scope_kind, target_kind, *, fact=False):
         from notalone.memory.layered import OrganizationBudget
         from notalone.reply.layered_context import LayeredReplyBudget
 
@@ -62,7 +62,12 @@ class LayeredCorrectionReplyCopiesHttpTest(OverviewReplyHttpFixture, unittest.Te
         prepared_body = self.rewrite_body(contact, '合成纠错前待生成的准备副本。')
         self.assertEqual(self.backend.request(reply_path + '/replies/prepare', prepared_body)[0], 200)
         command = corrections.LayeredMemoryCorrectionHttpTest.summary_command(self, ready, kind=target_kind)
-        status, result = management.request(management_path + '/summary-error', command)
+        if fact:
+            command.pop('reason')
+            command.pop('operation_id')
+            items = ready['scenarios'][0]['paragraphs'] if target_kind == 'scenario' else ready['profile']['entries']
+            command['memory_id'] = items[0]['references'][0]['memory_id']
+        status, result = management.request(management_path + ('/fact-error' if fact else '/summary-error'), command)
         self.assertEqual(status, 200, result)
         if scope_kind == 'owner':
             self.assertNotIn(ready['profile']['version_id'], str(saved))
@@ -89,6 +94,12 @@ class LayeredCorrectionReplyCopiesHttpTest(OverviewReplyHttpFixture, unittest.Te
 
     def test_contact_profile_feedback_erases_actual_tool_and_reply_copies(self):
         self._used_reply_feedback('contact', 'profile')
+
+    def test_contact_profile_fact_error_erases_actual_l2_tool_and_reply_copies(self):
+        self._used_reply_feedback('contact', 'profile', fact=True)
+
+    def test_contact_scenario_fact_error_erases_actual_tool_and_reply_copies(self):
+        self._used_reply_feedback('contact', 'scenario', fact=True)
 
     def test_owner_profile_feedback_keeps_unaffected_contact_tool_copies(self):
         self._used_reply_feedback('owner', 'profile')

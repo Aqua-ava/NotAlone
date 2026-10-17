@@ -2,7 +2,7 @@ import { activeMemories } from './read';
 import type { MemoryAdditionRequest, OwnerLayeredMemoryManagementRequest, OwnerLayeredMemoryState } from '../../shared/memory-bridge';
 import type { BackendHost } from '../backend/host';
 import { layeredMemory } from './layered-read';
-import { validCorrectionTarget, correctionBody } from './layered-correction';
+import { validCorrectionTarget, correctionBody, retryFactCorrection } from './layered-correction';
 
 // 本人范围仅绑定后端连接；联系人选择不参与本人请求和状态有效性。
 export class OwnerLayeredMemoryController {
@@ -109,12 +109,15 @@ export class OwnerLayeredMemoryController {
     const operation = new AbortController(), generation = this.generation; this.operation = operation;
     this.update({ phase: 'loading', value: null, mutation: { phase: 'working', message: '正在处理本人资料…' } });
     try {
-      const result = await this.backend.requestJson({ method: 'POST', path: `/api/memories/owner/layered-memory/${request.action}`, signal: operation.signal,
+      const command = { method: 'POST' as const, path: `/api/memories/owner/layered-memory/${request.action}`, signal: operation.signal,
         body: { settings_generation: request.settingsGeneration, ...(work ? { work_revision: request.workRevision } : {}),
           ...(request.action === 'enable' ? { purpose_confirmed: true } : {}),
           ...(request.action === 'withdraw-scenario' ? { organization_generation: request.organizationGeneration, scenario_version_id: request.scenarioVersionId } : {}),
           ...(request.action === 'withdraw-profile' ? { organization_generation: request.organizationGeneration, profile_version_id: request.profileVersionId } : {}),
-          ...(correction ? correctionBody(request) : {}) } });
+          ...(correction ? correctionBody(request) : {}) } };
+      const result = await retryFactCorrection(request.action === 'fact-error', () => {
+        this.synchronize(); return this.operation === operation && this.generation === generation && !this.deleting;
+      }, () => this.backend.requestJson(command));
       this.synchronize();
       if (this.operation !== operation || result.generation !== generation) return;
       this.update({ phase: 'ready', value: layeredMemory(result.data, null), mutation: { phase: 'success', message: '本人资料操作已完成并核对。' } }); this.schedule();

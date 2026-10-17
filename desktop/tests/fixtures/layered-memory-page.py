@@ -184,6 +184,7 @@ def main():
                 raise RuntimeError("主题资料夹具加载了其它工作树模块。")
             observed[module_name] = {"path": str(actual), "sha256": digest}
         proof.update(owner_only=owner_only, migrations=expected_migrations, migration_repeat=0, modules=observed,
+                     organization_dispatcher_type=type(service._dispatcher).__name__,
                      external_model_calls=0, quality="synthetic")
         write_backend_info(address=backend.base_url.removeprefix("http://"), token=backend.token)
         print(json.dumps({"ready": {"database_url": url, "owner_id": str(fixture.owner_id),

@@ -22,7 +22,20 @@ class LayeredCorrectionStore:
             for row in self.feedback_rows(connection, scope))
 
     def report_fact_error(self, scope, command):
+        from notalone.persistence.layered_memory import _digest
         with self.transaction(scope) as (connection, state, overview):
+            digest = _digest(command)
+            prior = connection.execute('SELECT * FROM public.layered_memory_fact_correction '
+                'WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s AND request_digest=%s '
+                'AND settings_generation=%s',
+                (scope.owner_id, scope.contact_id, digest, command['settings_generation'])).fetchone()
+            if prior and state['settings_generation'] == command['settings_generation']:
+                entry = next((entry for entry in self.eligible(overview)
+                    if entry.memory.memory_id == prior['memory_id']
+                    and entry.memory.revision == prior['memory_revision']), None)
+                if entry:
+                    return {'memory_id': str(prior['memory_id']), 'revision': prior['memory_revision']}
+                raise LayeredMemoryConflict('待修正的底层叶版本已变化。')
             if (state['settings_generation'] != command['settings_generation']
                     or state['organization_generation'] != command['organization_generation']):
                 raise LayeredMemoryConflict('整理版本或设置已变化。')
@@ -43,9 +56,39 @@ class LayeredCorrectionStore:
             entry = next((entry for entry in overview.entries if entry.memory.memory_id == selected), None)
             if not entry or not entry.current_leaf:
                 raise LayeredMemoryConflict('实际底层叶版本不可核对。')
-            self._retract_correction_target(connection, scope, command['target_kind'], version)
+            leaf = entry.current_leaf
+            leaf_entry = next((item for item in self.eligible(overview) if item.memory.memory_id == leaf.memory_id), None)
+            if leaf_entry is None:
+                raise LayeredMemoryConflict('实际底层叶版本不可核对。')
+            connection.execute('INSERT INTO public.layered_memory_fact_correction('
+                'id,owner_id,contact_id,settings_generation,request_digest,memory_id,memory_revision,'
+                'source_dependency_mode,dependency_ids,protected_message_ids) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+                (uuid4(), scope.owner_id, scope.contact_id, state['settings_generation'], digest,
+                 leaf.memory_id, leaf.revision, leaf_entry.memory.source_dependency_mode.value,
+                 sorted({leaf.memory_id, *leaf_entry.dependency_ids}),
+                 sorted({ref.message_id for ref in leaf_entry.references if ref.message_id})))
+            self._retract_fact_dependencies(connection, scope, leaf.memory_id)
             cancel_jobs(connection, scope)
-            return {'memory_id': str(entry.current_leaf.memory_id), 'revision': entry.current_leaf.revision}
+            connection.execute('SELECT public.bump_layered_correction_revision(%s,%s)', (scope.owner_id, scope.contact_id))
+            return {'memory_id': str(leaf.memory_id), 'revision': leaf.revision}
+
+    def _retract_fact_dependencies(self, connection, scope, memory_id):
+        # L1本身被报告有误：实际看过该叶的批次及递归画像全部受影响，不能只看直接引用。
+        versions = connection.execute('SELECT v.id FROM public.scenario_document_version v '
+            'JOIN public.layered_memory_batch b ON b.id=v.batch_id WHERE b.owner_id=%s '
+            'AND b.contact_id IS NOT DISTINCT FROM %s AND %s=ANY(b.dependency_ids) '
+            'UNION SELECT v.id FROM public.layered_profile_version v '
+            'JOIN public.layered_profile_batch b ON b.id=v.batch_id WHERE b.owner_id=%s '
+            'AND b.contact_id IS NOT DISTINCT FROM %s AND %s=ANY(b.dependency_ids)',
+            (scope.owner_id, scope.contact_id, memory_id) * 2).fetchall()
+        delete_source_replies(connection, owner_id=scope.owner_id, contact_id=scope.contact_id,
+            removed_ids={row['id'] for row in versions}, revoke_running_scope=False)
+        connection.execute('DELETE FROM public.scenario_document_version WHERE owner_id=%s '
+            'AND contact_id IS NOT DISTINCT FROM %s AND id=ANY(%s::uuid[])',
+            (scope.owner_id, scope.contact_id, [row['id'] for row in versions]))
+        connection.execute('UPDATE public.layered_profile_version SET withdrawn=true WHERE owner_id=%s '
+            'AND contact_id IS NOT DISTINCT FROM %s AND id=ANY(%s::uuid[])',
+            (scope.owner_id, scope.contact_id, [row['id'] for row in versions]))
 
     def feedback_rows(self, connection, scope):
         return connection.execute('SELECT * FROM public.layered_memory_feedback WHERE owner_id=%s '
@@ -54,11 +97,16 @@ class LayeredCorrectionStore:
 
     def unprotected(self, connection, scope, entries):
         feedback = self.feedback_rows(connection, scope)
+        pending = {(row['memory_id'], row['memory_revision']) for row in connection.execute(
+            'SELECT memory_id,memory_revision FROM public.layered_memory_fact_correction '
+            'WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s', (scope.owner_id, scope.contact_id))}
         memory_ids = {id for row in feedback for id in row['protected_memory_ids']}
         message_ids = {id for row in feedback for id in row['protected_message_ids']}
         result = []
         for entry in entries:
             memory = entry.memory
+            if (memory.memory_id, memory.revision) in pending:
+                continue
             # 共享的manual source身份不参与保护；实际版本链与规范消息才是证据身份。
             lineage = {memory.memory_id}
             previous = memory.supersedes_memory_id
