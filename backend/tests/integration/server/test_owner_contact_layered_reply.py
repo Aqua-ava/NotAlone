@@ -552,3 +552,16 @@ class OwnerContactLayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCa
             finally:
                 release.set()
         self.assertNotIn('排队来源不得提交', str(self._get(self.backend, path)))
+
+    def test_owner_only_omission_cannot_freeze_a_still_over_capacity_prepare(self):
+        contact, management, _, _, path = self.dual_scope()
+        state = self.read(management, contact)
+        status, disabled = management.request(f'/api/contacts/{contact}/layered-memory/disable',
+            {'settings_generation': state['settings_generation']})
+        self.assertEqual(status, 200, disabled)
+        self.reply_capacity = 5000
+        self.backend = self._backend(self.owner_id)
+        body = self.rewrite_body(contact, '完整用户输入不得被截断。' * 90)
+        status, prepared = self.backend.request(path + '/replies/prepare', body)
+        self.assertNotEqual(status, 200, prepared)
+        self.assertEqual(len(self.reply_model.seen_calls), 0)

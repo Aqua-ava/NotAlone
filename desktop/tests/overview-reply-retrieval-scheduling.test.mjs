@@ -54,3 +54,21 @@ test('概览回复页面子门保留自有nonce与范围限制，不直接执行
     assert.throws(() => runInNewContext(gate, { process }), /page_test_arguments/);
   }
 });
+
+test('双范围页面开关只透传，不把标志值当作证据目录或启动浏览器', async () => {
+  const source = await readFile('scripts/test-pages.mjs', 'utf8');
+  const start = source.indexOf('function parse('), end = source.lastIndexOf('\ntry {');
+  const paths = [], environment = { CONDA_DEFAULT_ENV: 'NotAlone', CONDA_PREFIX: '/synthetic/python',
+    NOTALONE_LAYERED_TEST_EVIDENCE_DIR: '/synthetic/evidence', NOTALONE_LAYERED_OWNER_CONTEXT: '1',
+    NOTALONE_LAYERED_SCENARIO_READS: '1' };
+  const { run, pageFixtureEnvironment } = runInNewContext(`${source.slice(start, end)}; ({run,pageFixtureEnvironment});`, {
+    path, desktop: process.cwd(), process: { env: environment },
+    realpath: async value => { paths.push(value); if (value === '1') throw new Error('ENOENT flag is not directory'); return value; },
+    stat: async () => ({ isDirectory: () => true, mode: 0o700 }),
+    acquireLease: async () => { throw new Error('SYNTHETIC_LEASE_STOP'); },
+  });
+  const options = { names: ['layered-reply'], mode: 'probe', id: 'synthetic-no-browser', timeout: 10 };
+  assert.equal(pageFixtureEnvironment(options, environment).NOTALONE_LAYERED_OWNER_CONTEXT, '1');
+  await assert.rejects(run(options), /SYNTHETIC_LEASE_STOP/);
+  assert.deepEqual(paths, ['/synthetic/evidence']);
+});

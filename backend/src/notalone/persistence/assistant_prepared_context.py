@@ -129,8 +129,9 @@ class PreparedAssistantContext:
         """仅新准备可省略新增层；已持久冻结的输入容量变化必须重新准备。"""
         try:
             validate(context)
-        except InputBudgetExceededError:
+        except InputBudgetExceededError as original_error:
             row = self._read(context.command)
+            last_error = original_error
             if (context.layered_context is None and context.owner_layered_context is None
                     or row and row["prepared_context"] is not None):
                 raise
@@ -142,10 +143,11 @@ class PreparedAssistantContext:
                     prefix + "layered_status": "budget_omitted"})
                 try:
                     validate(context)
-                    break
-                except InputBudgetExceededError:
-                    if prefix == "":
-                        raise
+                except InputBudgetExceededError as omitted_error:
+                    last_error = omitted_error
+                    continue
+                return context
+            raise last_error
         return context
 
     def validate_current(self, context: ReplyContext) -> None:
