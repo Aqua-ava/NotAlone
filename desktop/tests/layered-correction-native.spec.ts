@@ -29,6 +29,7 @@ test('实际 App 的双范围两层事实及总结纠错 CUA 验收', async ({ r
     await mkdir(stageDirectory, { mode: 0o700 });
     const checks = [step.name, 'precise_target_visible', 'old_body_retracted',
       step.action === 'summary' ? 'independent_topic_retained' : 'precise_leaf_corrected'];
+    if (index === 0) checks.push('feedback_basis_inspected');
     await writeFile(path.join(stageDirectory, 'ready.json'), JSON.stringify({ request_id: requestId,
       pid: runningApp.appProcess.pid, user_data: runningApp.userData, project, native_app: true,
       external_model_calls: 0, preparation: 'public-http-synthetic', contact_ids: layeredBackend.data.contact_ids,

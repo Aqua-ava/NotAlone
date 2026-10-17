@@ -7,7 +7,9 @@ type Item = { text: string; references: { memory_id: string; revision: number }[
 type Scenario = { version_id: string; paragraphs: Item[] };
 type Profile = { version_id: string; entries: Item[] };
 type State = { scope_kind: string; contact_id: string | null; settings_generation: number; organization_generation: number;
-  scenarios: Scenario[]; profile: Profile | null; feedback: { target_kind: string; version_id: string; item_index: number; reason: string }[] };
+  pending_fact_count: number; scenarios: Scenario[]; profile: Profile | null;
+  feedback: { target_kind: string; version_id: string; item_index: number; reason: string;
+    target_text: string | null; basis: { memory_id: string; revision: number }[] }[] };
 export type NativeCorrectionStep = { name: string; scope: 'contact' | 'owner'; kind: 'profile' | 'scenario'; action: 'summary' | 'fact';
   layeredPath: string; memoriesPath: string; before: State; memories: Memory[]; target: Item; memory: Memory;
   versionId: string; itemIndex: number; reason: string; replacement: string };
@@ -72,9 +74,14 @@ export async function checkNativeCorrection(fixture: RewriteFixture, step: Nativ
       : step.before.scenarios.filter(item => item.version_id !== step.versionId);
     assert.deepEqual(state.scenarios, expectedScenarios, '独立主题的原始版本必须保留。');
     assert.deepEqual(memories, step.memories, '总结反馈不得修改正确的底层记忆。');
-    assert.ok(state.feedback.some(item => item.target_kind === step.kind && item.version_id === step.versionId
-      && item.item_index === step.itemIndex && item.reason === step.reason), JSON.stringify(state));
+    const feedback = state.feedback.find(item => item.target_kind === step.kind && item.version_id === step.versionId
+      && item.item_index === step.itemIndex && item.reason === step.reason);
+    assert.ok(feedback, JSON.stringify(state));
+    assert.equal(feedback.target_text, step.target.text);
+    assert.ok(feedback.basis.some(item => item.memory_id === step.memory.memory_id && item.revision === step.memory.revision));
+    assert.ok(feedback.basis.every(item => step.memories.some(memory => memory.memory_id === item.memory_id && memory.revision === item.revision)));
   } else {
+    assert.equal(state.pending_fact_count, 0, '实际修正成功后不应残留旧叶待修约束。');
     assert.ok(state.scenarios.every(scenario => scenario.paragraphs.every(item =>
       item.references.every(reference => reference.memory_id !== step.memory.memory_id))), '旧事实的派生正文不得继续可读。');
     assert.ok(!memories.some(item => item.memory_id === step.memory.memory_id));
@@ -99,6 +106,7 @@ export async function simulateNativeCorrection(fixture: RewriteFixture, step: Na
   });
   assert.equal(result.status, 200, JSON.stringify(result.data));
   if (step.action === 'fact') {
+    assert.equal((result.data.layered_memory as State).pending_fact_count, 1);
     assert.deepEqual((result.data.layered_memory as { correction_target: unknown }).correction_target,
       { memory_id: step.memory.memory_id, revision: step.memory.revision });
     const corrected = await fixture.request(`${step.memoriesPath}/${step.memory.memory_id}/correct`, {
