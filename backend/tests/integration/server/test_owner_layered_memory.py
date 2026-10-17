@@ -4,6 +4,19 @@ from tests.integration.server.memory_overview_support import MemoryOverviewHttpF
 
 
 class OwnerLayeredMemoryHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
+    def test_owner_recent_state_and_relationship_note_are_eligible(self):
+        from tests.integration.server.test_layered_profile_management import LayeredProfileHttpTest
+        backend = LayeredProfileHttpTest.controlled(self)
+        for category in ('recent_state', 'relationship_note'):
+            status, result = self.backend.request('/api/memories/manual-owner',
+                {'text': '本人合成阶段资料：' + category, 'category': category})
+            self.assertEqual(status, 200, result)
+        status, result = backend.request('/api/memories/owner/layered-memory/enable',
+            {'settings_generation': 0, 'purpose_confirmed': True})
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result['layered_memory']['eligible_count'], 2)
+        self.assertTrue(result['layered_memory']['scenarios'])
+
     def test_owner_management_without_any_contact_keeps_unknown_quality_closed(self):
         self.assertEqual(self._get(self.backend, '/api/contacts')['contacts'], [])
         path = '/api/memories/owner/layered-memory'

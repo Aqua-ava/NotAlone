@@ -57,7 +57,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             if scope.contact_id is not None:
                 lock_contact_scope(connection, owner_id=scope.owner_id, contact_id=scope.contact_id)
             lock_owner_scope(connection, owner_id=scope.owner_id)
-            overview = (self._overview.read_owner_in_transaction(connection, scope.owner_id)
+            overview = (self._overview.read_owner_in_transaction(connection, scope.owner_id, organization=True)
                 if isinstance(scope, OwnerScope) else self._overview.read_contact_in_transaction(connection, scope))
             connection.execute("INSERT INTO public.layered_memory_state(owner_id,contact_id) VALUES(%s,%s) "
                                "ON CONFLICT DO NOTHING", (scope.owner_id, scope.contact_id))
@@ -436,7 +436,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
         if (not ids or len(set(ids)) != len(ids) or len(rows) != len(ids)
                 or len({r["scenario_id"] for r in rows}) != len(rows)):
             raise LayeredMemoryConflict("一致集合的主题版本无效。")
-        overview = (self._overview.read_owner_in_transaction(connection, scope.owner_id)
+        overview = (self._overview.read_owner_in_transaction(connection, scope.owner_id, organization=True)
                 if isinstance(scope, OwnerScope) else self._overview.read_contact_in_transaction(connection, scope))
         current = {item["memory_id"]: item for item in self._manifest(connection,scope,self.eligible(overview))}
         if any(current.get(item["memory_id"]) != item for row in rows for item in row["input_manifest"]):
@@ -626,7 +626,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
         if not isinstance(snapshot, LayeredMemorySnapshot) or snapshot.schema_version != 2:
             return False
         scope = snapshot.scope
-        overview = (self._overview.read_owner_in_transaction(connection, scope.owner_id)
+        overview = (self._overview.read_owner_in_transaction(connection, scope.owner_id, organization=True)
                 if isinstance(scope, OwnerScope) else self._overview.read_contact_in_transaction(connection, scope))
         state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                                    (scope.owner_id,scope.contact_id)).fetchone()

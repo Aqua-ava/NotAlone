@@ -112,3 +112,29 @@ test('本人底层查看修正删除无需联系人，未读取的版本不可�
   assert.equal(posts[1].path, `/api/memories/owner/${ids.memory}/delete`);
   f.disconnect();
 });
+
+for (const action of ['delete', 'correct', 'uncertain']) test(`新本人${action}必须撤下旧缓存及迟到读取`, async () => {
+  const memory = { memory_id: ids.memory, level: 'owner', text: '本人合成事实', category: 'common_fact', topic: 'other',
+    source_ids: [ids.memory], status: 'active', adoption_method: 'manual', confidence: 1, risk_flags: [], revision: 1,
+    supersedes_memory_id: null, source_candidate_id: null, valid_at: null, invalid_at: null,
+    timing: { recorded_at: null, source_started_at: null, source_ended_at: null, source_time_complete: false } };
+  let deleted = false, defer = false, finish;
+  const f = await fixture(async request => {
+    if (request.method === 'POST') { deleted = true; if (action === 'uncertain') throw new Error('合成保存结果未确认'); return { generation: 1, data: {} }; }
+    if (request.path === '/api/memories/owner') { if (defer) { defer = false; return new Promise(resolve => { finish = resolve; }); } return { generation: 1, data: { memories: deleted ? [] : [memory] } }; }
+    return { generation: 1, data: owner() };
+  });
+  await f.bridge.refresh({ ...f.selection(), section: 'owner' });
+  assert.equal((await f.bridge.getState()).owner.items.length, 1);
+  await f.bridge.readOwnerMemories();
+  defer = true;
+  const oldRead = f.bridge.refresh({ ...f.selection(), section: 'owner' });
+  await new Promise(resolve => setImmediate(resolve));
+  if (action === 'delete') await f.bridge.deleteOwnerMemory({ memoryId: ids.memory, revision: 1 });
+  else if (action === 'correct') await f.bridge.correctOwnerMemory({ memoryId: ids.memory, revision: 1, text: '合成修正', category: 'common_fact' });
+  else await assert.rejects(f.bridge.addOwnerMemory({ text: '合成新增', category: 'common_fact' }));
+  finish({ generation: 1, data: { memories: [memory] } }); await oldRead;
+  assert.equal((await f.bridge.getOwnerLayeredMemoryState()).memories.items.length, 0);
+  assert.equal((await f.bridge.getState()).owner.items.length, 0);
+  f.disconnect();
+});

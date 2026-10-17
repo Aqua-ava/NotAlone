@@ -23,7 +23,7 @@ function requestArguments(args: unknown[]): MemoryReadRequest {
 }
 export function installMemoryBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession): MemoryReadingController {
   const memory = new MemoryReadingController(backend, contacts);
-  const owner = new OwnerLayeredMemoryController(backend, state => commands.publish('memory:owner-layered-changed', state, 'manager'));
+  const owner = new OwnerLayeredMemoryController(backend, state => commands.publish('memory:owner-layered-changed', state, 'manager'), phase => memory.ownerFactsChanged(phase));
   backend.onStateChanged(() => owner.synchronize());
   memory.onRecordDeletion(phase => owner.sourceDeletionChanged(phase));
   memory.onOwnerDependenciesChanged(phase => owner.sourceDeletionChanged(phase));
