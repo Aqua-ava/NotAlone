@@ -17,6 +17,7 @@ from psycopg import sql
 
 from notalone.application.import_service import ImportService
 from notalone.memory_extraction.command import extract_main
+from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
 from notalone.memory_trace.command import memory_trace_main, source_trace_main
 from notalone.persistence.background_tasks import (
     BackgroundTaskPersistenceError,
@@ -38,6 +39,8 @@ from tests.integration.server.core_business_flow_support import (
 
 
 class MemoryTraceApiTest(CoreBusinessFlowFixture, unittest.TestCase):
+    # 此组验证自动采纳后的追踪／删除链，显式使用合成测试放行配置。
+    dimension_release = RELEASE_ALL_DIMENSIONS
     production_model_wiring = True
     extraction_model_factory = auto_support.AutoMemoryModel
     _import_auto = auto_support.ImportAutoFlowHttpTest._import_auto
@@ -173,6 +176,12 @@ class MemoryTraceApiTest(CoreBusinessFlowFixture, unittest.TestCase):
 
         def local_http(request):
             observed.append(request.content.decode())
+            wire = json.loads(request.content)
+            schema = wire["tools"][0]["function"]["parameters"]["properties"]["units"]["properties"]
+            labels = {unit: {"kind": "not_memory", "subject": "contact", "topic": "other",
+                "dependency": None, "unresolved": False, "confidence": 0.95, "sensitivity": "none",
+                **({"event": None} if "event" in item["properties"] else {})}
+                for unit, item in schema.items()}
             return httpx.Response(
                 200,
                 json={
@@ -191,8 +200,8 @@ class MemoryTraceApiTest(CoreBusinessFlowFixture, unittest.TestCase):
                                         "id": "synthetic-zero",
                                         "type": "function",
                                         "function": {
-                                            "name": "MemoryExtractionOutput",
-                                            "arguments": '{"facts":[]}',
+                                            "name": "GroundedMemoryLabels",
+                                            "arguments": json.dumps({"units": labels}),
                                         },
                                     }
                                 ],
@@ -255,7 +264,7 @@ class MemoryTraceApiTest(CoreBusinessFlowFixture, unittest.TestCase):
         )
         self.assertEqual(
             provider["parsed_body"]["tools"][0]["function"]["name"],
-            "MemoryExtractionOutput",
+            "GroundedMemoryLabels",
         )
         response = next(
             event["payload"]
@@ -339,6 +348,11 @@ class MemoryTraceApiTest(CoreBusinessFlowFixture, unittest.TestCase):
             len(self._get(self.backend, prefix + "/memories")["memories"]), 1
         )
         self.assertIn("自动提取前的本人手输合成资料", str(detail))
+        status, independent = self.backend.request("/api/memories/manual-contact", {
+            "contact_id": imported["contact_id"], "text": "独立手输合成资料，不依赖被删除上下文。",
+            "category": "common_fact", "topic": "other",
+        })
+        self.assertEqual(status, 200, independent)
         self.assertEqual(
             self.backend.request(
                 "/api/memories/owner/"
@@ -353,9 +367,9 @@ class MemoryTraceApiTest(CoreBusinessFlowFixture, unittest.TestCase):
         )
         self.assertEqual(deleted["status"], "deleted")
         self.assertNotIn("自动提取前的本人手输合成资料", str(deleted))
-        self.assertEqual(
-            len(self._get(self.backend, prefix + "/memories")["memories"]), 1
-        )
+        # 提取实际读取过被删本人资料，派生正文必须沿冻结依赖擦除；独立手输仍在。
+        retained = self._get(self.backend, prefix + "/memories")["memories"]
+        self.assertEqual([item["memory_id"] for item in retained], [independent["memory"]["memory_id"]])
 
     def test_message_lookup_is_public_scoped_and_keeps_failed_batches(self):
         remove_fault = self._install_fault(
