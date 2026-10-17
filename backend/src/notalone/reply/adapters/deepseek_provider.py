@@ -126,3 +126,32 @@ def build_deepseek_model(
         # 官方默认思考模式拒绝强制输出 Tool；显式思考配置仍由调用者控制。
         model.reasoning_effort = "none"
     return model
+
+
+def build_deepseek_review_model(model: BaseChatModel) -> BaseChatModel:
+    """官方严格复核使用Beta入口，保留原模型设置和实际HTTP传输。"""
+    from langchain_core.globals import get_llm_cache
+    from notalone.reply.adapters.deepseek_input_budget import (
+        DEEPSEEK_REVIEW_BASE_URL, build_deepseek_input_budget,
+    )
+
+    if not is_official_deepseek_flash(model):
+        return model
+    if build_deepseek_input_budget(model) is None:
+        raise ValueError("DeepSeek复核只接受已核验的官方生成模型。")
+    if (model.rate_limiter is not None or model.cache is not False
+            and (model.cache is not None or get_llm_cache() is not None)):
+        raise ValueError("逐次复核不接受缓存或本地限流模型。")
+    sync_client, async_client = model.root_client._client, model.root_async_client._client
+    if (model.http_client is not None and model.http_client is not sync_client
+            or model.http_async_client is not None and model.http_async_client is not async_client):
+        raise ValueError("DeepSeek复核无法核对原HTTP传输。")
+    replaced = {"client", "async_client", "root_client", "root_async_client",
+                "api_key", "openai_api_key", "api_base", "openai_api_base",
+                "http_client", "http_async_client"}
+    options = {name: getattr(model, name) for name in type(model).model_fields if name not in replaced}
+    review = ChatDeepSeek(**options, api_key=model.api_key, api_base=DEEPSEEK_REVIEW_BASE_URL,
+                          http_client=sync_client, http_async_client=async_client)
+    if model._get_request_payload([]) != review._get_request_payload([]):
+        raise ValueError("DeepSeek复核改变了已计量模型设置。")
+    return review

@@ -1,4 +1,4 @@
-"""审核的逐次模型调用台账；不保存callback中的正文或错误内容。"""
+"""逐次模型调用台账；不保存callback中的正文或错误内容。"""
 
 from datetime import datetime, timezone
 from threading import Lock
@@ -10,8 +10,8 @@ from langchain_core.callbacks import BaseCallbackHandler
 from notalone.ledger.models import LedgerEntry, LedgerOutcome
 
 
-class SkillReviewCallLedger(BaseCallbackHandler):
-    """每轮调用前复验审核租约，结束或异常后只写一条最小回执。"""
+class ModelCallLedger(BaseCallbackHandler):
+    """每轮调用前复验当前范围或审核租约，结束或异常后只写一条最小回执。"""
 
     raise_error = True
     run_inline = True
@@ -43,6 +43,13 @@ class SkillReviewCallLedger(BaseCallbackHandler):
 
     def on_llm_error(self, error, *, run_id, **kwargs):
         self._finish(run_id, LedgerOutcome.RUN_FAILED, {})
+
+    def finish_pending(self):
+        """取消路径可能没有终态回调；退出时补记，迟到回调仍按run_id去重。"""
+        with self.lock:
+            pending = tuple(self.pending)
+        for run_id in pending:
+            self._finish(run_id, LedgerOutcome.RUN_FAILED, {})
 
     def _finish(self, run_id, outcome, usage):
         with self.lock:

@@ -26,6 +26,7 @@ from langgraph.errors import GraphRecursionError
 from notalone.reply.adapters.async_runner import run_with_timeout
 from notalone.reply.adapters.input_budget_middleware import InputBudgetMiddleware
 from notalone.reply.adapters.provider_errors import is_provider_context_limit
+from notalone.reply.adapters.constraint_review import ReplyConstraintReview
 
 from notalone.reply.context import ReplyContext, allows_history
 from notalone.reply.fidelity import FIDELITY_SYSTEM_PROMPT, factual_role, generation_contract
@@ -155,6 +156,11 @@ evidence_id 字符串（UUID 格式），且每条候选至少引用一个。
 当 input_mode 为 rewrite_draft 时，draft_text 是用户的原句：必须保留用户原意，不能
 添加用户没有表达的事实、承诺或情绪；user_instruction 为空时只做基础润色。一次性
 user_instruction 只影响当前请求，不能成为长期偏好或关系记忆。
+改写要求详细时，展开已有意思的组织与表达层次，例如说明考虑的顺序、邀请对方表达
+赞同或不同看法；不要只增加“完整/认真”等修饰词。原句没有给出的具体原因仍然未知，
+不能用“担心误会”等新动机、过去聊过的经历或“随时找我/以后一起处理”等新承诺凑细节。
+邀请听取意见可以表达认真倾听或考虑的态度，但不能替用户承诺采纳、让对方决定或照做。
+宁可提供一个有依据且符合本次要求的候选，也不为凑满三个候选加入缺证内容。
 expression_preferences 是用户明确保存且本次适用的长期表达要求，只指导说法，
 不是联系人事实。当前原意、方向、目的和本次附加要求优先；冲突时不采用旧偏好。
 当 input_mode 为 reply_to_pasted_text 时，current_text 是用户为本次联系人粘贴的对方聊天文字，
@@ -588,6 +594,8 @@ class LangChainReplyRuntime:
         "_input_token_counter",
         "_on_input_budget",
         "_model_callbacks",
+        "_model_callback_factory",
+        "_constraint_review",
     )
 
     def __init__(
@@ -602,6 +610,8 @@ class LangChainReplyRuntime:
         input_token_counter: InputTokenCounter | None = None,
         on_input_budget: Callable[[InputBudgetDecision], None] | None = None,
         model_callbacks: tuple = (),
+        model_callback_factory: Callable[[ReplyContext], object] | None = None,
+        constraint_review: ReplyConstraintReview | None = None,
     ) -> None:
         if (
             isinstance(timeout_seconds, bool)
@@ -637,6 +647,8 @@ class LangChainReplyRuntime:
         self._input_token_counter = input_token_counter
         self._on_input_budget = on_input_budget
         self._model_callbacks = model_callbacks
+        self._model_callback_factory = model_callback_factory
+        self._constraint_review = constraint_review
 
     def _discover_catalog(self, prepared: ReplyContext) -> SkillCatalog:
         """读取当前目录；读取或结构失败时安全退化为空目录（无 Skill）。"""
@@ -702,6 +714,7 @@ class LangChainReplyRuntime:
 
         # 每次调用独立收集，不能在常驻 runtime 上缓存最后预算而串到并发请求。
         decisions: list[InputBudgetDecision] = []
+        callbacks: tuple = ()
 
         def collect_input_budget(decision: InputBudgetDecision) -> None:
             decisions.append(decision)
@@ -767,28 +780,35 @@ class LangChainReplyRuntime:
                 system_prompt=(BASE_SYSTEM_PROMPT + "\n" + DISCUSSION_HISTORY_NOTICE
                                if prepared.assistant_discussion is not None else BASE_SYSTEM_PROMPT),
             )
-            state = run_with_timeout(
-                graph.ainvoke(
+            request_text = _request_text(prepared)
+            callbacks = self._model_callbacks + ((self._model_callback_factory(prepared),)
+                if self._model_callback_factory is not None else ())
+
+            async def generate_and_review() -> ReplyRuntimeResult:
+                state = await graph.ainvoke(
                     {
                         "messages": [
-                            {"role": "user", "content": _request_text(prepared)}
+                            {"role": "user", "content": request_text}
                         ]
                     },
                     # 每个模型轮消耗 2 步（模型 + 工具节点）。历史工具 3 次预算
                     # 加一次 Skill 读取之后，必须仍留出最终结构化输出轮；
                     # 12 步会让预算反馈后的输出轮撞上递归上限（issue 02）。
-                    config={"recursion_limit": 16, **({'callbacks': list(self._model_callbacks)} if self._model_callbacks else {})},
+                    config={"recursion_limit": 16, **({'callbacks': list(callbacks)} if callbacks else {})},
                     context=context,
-                ),
-                seconds=self._timeout_seconds,
-            )
-            result = _validated_result(
-                state,
-                budget,
-                self._model_name,
-                history=history,
-                selection=prepared.command.skill,
-            )
+                )
+                result = _validated_result(state, budget, self._model_name,
+                                           history=history, selection=prepared.command.skill)
+                if self._constraint_review is not None:
+                    result = await self._constraint_review.review(
+                        model=self._model, prepared=prepared, result=result,
+                        request_text=request_text, callbacks=callbacks,
+                        budget=InputBudgetMiddleware(profile=self._input_budget_profile,
+                            counter=self._input_token_counter, on_decision=collect_input_budget),
+                    )
+                return result
+
+            result = run_with_timeout(generate_and_review(), seconds=self._timeout_seconds)
             if not decisions:
                 raise ReplyInvariantError("成功模型调用缺少完整预算回执。")
             receipt = validate_input_budget_receipt(decisions[-1])
@@ -805,6 +825,11 @@ class LangChainReplyRuntime:
             if is_provider_context_limit(error):
                 raise ReplyProviderContextLimitError() from None
             raise ReplyRunError("候选回复框架运行失败。") from None
+        finally:
+            from notalone.reply.adapters.model_call_ledger import ModelCallLedger
+            for callback in callbacks:
+                if isinstance(callback, ModelCallLedger):
+                    callback.finish_pending()
 
 
 def _request_text(prepared: ReplyContext) -> str:
@@ -1031,12 +1056,13 @@ def _runtime_candidate(item: object) -> RuntimeCandidate:
             not isinstance(item["messages"], list)
             or not 1 <= len(item["messages"]) <= 8
             or any(not isinstance(value, str) or not 0 < len(value.strip()) <= 8192 for value in item["messages"])
-            or item["text"] != "\n\n".join(item["messages"])
+            or item["text"] not in {separator.join(item["messages"]) for separator in ("", "\n", "\n\n")}
         ))
     ):
         raise ValueError("invalid runtime candidate")
     return RuntimeCandidate(
-        text=item["text"],
+        # 仅规范化整组分隔符；字词、条数和顺序必须逐字相同。
+        text="\n\n".join(item["messages"]) if "messages" in item else item["text"],
         basis=item["basis"],
         citation_ids=tuple(UUID(value) for value in item["citation_ids"]),
         risk_notes=tuple(item["risk_notes"]),

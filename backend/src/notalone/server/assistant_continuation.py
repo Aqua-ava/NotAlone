@@ -15,7 +15,7 @@ from notalone.application.assistant_session_service import (
     AssistantSessionPersistenceError, AssistantSessionRejected, AssistantTurn,
 )
 from notalone.reply.errors import (
-    ReplyIdempotencyConflictError, ReplyInProgressError, ReplyPersistenceError,
+    ReplyCandidatesRejectedError, ReplyIdempotencyConflictError, ReplyInProgressError, ReplyPersistenceError,
     ReplyProviderContextLimitError, ReplyTimeoutError,
 )
 from notalone.reply.input_budget import InputBudgetExceededError, InputBudgetUnavailableError
@@ -88,6 +88,8 @@ def handle_continuation(
         return 409, {"error": "input_budget_unavailable", "input_budget": error.decision.to_payload()}
     except ReplyProviderContextLimitError as error:
         return 409, {"error": "provider_context_limit", "message": str(error)}
+    except ReplyCandidatesRejectedError:
+        return 409, {"error": "reply_candidates_rejected"}
     except (AssistantSessionPersistenceError, ReplyPersistenceError):
         return 503, {"error": "assistant_session_save_failed"}
     except ReplyTimeoutError:

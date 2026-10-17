@@ -20,7 +20,7 @@ _REQUEST_FIELDS = frozenset({
     "max_completion_tokens", "max_output_tokens", "temperature", "top_p",
     "frequency_penalty", "presence_penalty", "seed", "stop", "stream",
     "stream_options", "parallel_tool_calls", "tool_choice", "n", "logprobs",
-    "top_logprobs", "reasoning_effort",
+    "top_logprobs", "reasoning_effort", "thinking",
 })
 
 
@@ -61,7 +61,12 @@ def _configuration(model: ChatDeepSeek, profile: InputBudgetProfile, base_url: s
     if any(endpoint._client is not root for endpoint, root in zip(endpoints, roots)):
         raise ValueError("输入估算未绑定实际 SDK 客户端。")
     # 只读 SDK 的请求默认字段；不使用 model_dump，避免把 API 凭据纳入计量。
-    defaults = model._get_request_payload([])
+    defaults = dict(model._get_request_payload([]))
+    extra = defaults.pop("extra_body", None)
+    if extra:
+        if extra != {"thinking": {"type": "disabled"}} or "thinking" in defaults:
+            raise ValueError("输入估算的附加正文尚未核实。")
+        defaults.update(extra)
     if not isinstance(defaults, Mapping) or set(defaults) - _REQUEST_FIELDS:
         raise ValueError("SDK 请求字段尚未纳入输入估算。")
     digest = hashlib.sha256(_json_bytes(defaults)).digest()

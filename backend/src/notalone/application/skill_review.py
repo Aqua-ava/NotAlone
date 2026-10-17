@@ -5,7 +5,7 @@ from dataclasses import asdict, replace
 from uuid import UUID
 
 from notalone.reply.adapters.skill_preview import ReplySkillPreviewEngine
-from notalone.reply.adapters.skill_review_calls import SkillReviewCallLedger
+from notalone.reply.adapters.model_call_ledger import ModelCallLedger
 from notalone.reply.interface import GenerateReply, NoSkill, RewriteDraft, UserSkillChoice
 from notalone.reply.errors import ReplyContextError
 from notalone.scopes import VerifiedConversationScope
@@ -115,7 +115,7 @@ class SkillReviewService:
             raise
 
     def _generate(self, scope, context, port, catalog, comparison, side, choice, validate):
-        accounting = SkillReviewCallLedger(scope=scope, ledger=self.ledger, model_name=self.model_name,
+        accounting = ModelCallLedger(scope=scope, ledger=self.ledger, model_name=self.model_name,
             validate=validate, record_call=lambda entry_id: self.store.record_call(scope, comparison['id'], side, entry_id))
         engine = ReplySkillPreviewEngine(port=port,
             runtime_factory=lambda single: self.runtime_factory(single, accounting))

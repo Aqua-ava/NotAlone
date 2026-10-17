@@ -122,6 +122,18 @@ class InputBudgetMiddleware(AgentMiddleware):
             self._on_decision(decision)
         return bound
 
+    def with_model_counter(self, *, original_model: object,
+                           counter: ModelBoundInputTokenCounter) -> InputBudgetMiddleware:
+        """复核仅换实际端点的计量绑定，保留本轮容量、输出预留和回执收集。"""
+        if (self._counter is None or not self._counter.is_bound_to(original_model)
+                or self._output_tools):
+            decision = self._unavailable("unmeasurable_model_request")
+            if self._on_decision is not None:
+                self._on_decision(decision)
+            raise InputBudgetUnavailableError(decision)
+        return InputBudgetMiddleware(profile=self._profile, counter=counter,
+                                     on_decision=self._on_decision)
+
     def _validate_output_overrides(self, request: ModelRequest) -> None:
         """SDK 附加正文或输出别名不得覆盖已计量输入与实际输出预留。"""
 

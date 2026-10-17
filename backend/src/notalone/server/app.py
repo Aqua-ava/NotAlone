@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from notalone.reply.errors import (
-    ReplyBudgetError, ReplyError, ReplyProviderContextLimitError, ReplyTimeoutError,
+    ReplyBudgetError, ReplyCandidatesRejectedError, ReplyError, ReplyProviderContextLimitError, ReplyTimeoutError,
 )
 from notalone.reply.input_budget import InputBudgetExceededError, InputBudgetUnavailableError
 
@@ -1288,6 +1288,8 @@ class BackendApp:
             return _json_response(HTTPStatus.CONFLICT, {
                 "error": "provider_context_limit", "message": str(error),
             })
+        except ReplyCandidatesRejectedError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "reply_candidates_rejected"})
         except Exception:
             # 生成/持久化阶段的基础设施异常：5xx，不用 409 伪装成冲突。
             return _json_response(
@@ -1537,6 +1539,8 @@ class BackendApp:
             return _json_response(HTTPStatus.CONFLICT, {
                 "error": "provider_context_limit", "message": str(error),
             })
+        except ReplyCandidatesRejectedError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "reply_candidates_rejected"})
         except ReplyTimeoutError:
             return _json_response(HTTPStatus.GATEWAY_TIMEOUT, {"error": "reply_timeout"})
         except ReplyBudgetError:

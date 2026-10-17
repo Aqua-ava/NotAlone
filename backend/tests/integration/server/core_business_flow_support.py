@@ -15,7 +15,7 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -26,7 +26,7 @@ from uuid import UUID, uuid4
 
 import psycopg
 from psycopg import sql
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import Runnable
 
 from notalone.application.import_service import ImportService, TaskHost
@@ -64,6 +64,7 @@ from notalone.server.event_bus import EventBus
 from notalone.server.event_models import BackendEvent
 from notalone.tasks.worker import BackgroundTaskWorker, PostgresMemoryExtractionRunner
 from tests.input_budget_support import SyntheticBudgetModel, synthetic_budget_kwargs
+from tests.reply_review_support import synthetic_review
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -75,6 +76,12 @@ class ScriptedCoreModel(SyntheticBudgetModel):
     bound_tool_names: list[str] = []
     seen_calls: list[list[BaseMessage]] = []
     response_gates: dict[int, threading.Event] = {}
+    review_calls: int = 0
+    review_verdicts: list[str] | None = None
+    review_requires_expansion: bool = False
+    review_changes: list[str] | None = None
+    review_numbers: list[int] | None = None
+    review_transform: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None
 
     def __init__(self) -> None:
         super().__init__(responses=[])
@@ -118,9 +125,24 @@ class ScriptedCoreModel(SyntheticBudgetModel):
         return super()._generate(messages, stop, run_manager, **kwargs)
 
     async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+        names = [item.get("function", {}).get("name") for item in kwargs.get("tools", [])]
+        if names == ["ReplyFidelityReview"]:
+            return await asyncio.to_thread(self._generate_review, messages, stop, run_manager, **kwargs)
         return await asyncio.to_thread(
             self._generate, messages, stop, run_manager, **kwargs,
         )
+
+    def _generate_review(self, messages, stop=None, run_manager=None, **kwargs):
+        """合成供应商复核响应；默认只验证装配，不证明候选的语义质量。"""
+        payload = next(json.loads(item.content) for item in messages if isinstance(item, HumanMessage))
+        report = synthetic_review(payload, verdicts=self.review_verdicts,
+                                  changes=self.review_changes, numbers=self.review_numbers,
+                                  requires_expansion=self.review_requires_expansion)
+        if self.review_transform is not None:
+            report = self.review_transform(payload, report)
+        self.review_calls += 1
+        self.responses.append(tool_response("ReplyFidelityReview", report))
+        return ScriptedCoreModel._generate(self, messages, stop, run_manager, **kwargs)
 
 
 def tool_response(name: str, args: dict[str, Any]) -> AIMessage:

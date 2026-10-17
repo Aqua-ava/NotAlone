@@ -249,6 +249,7 @@ export function ReplyCandidates({ replies }: { replies: ReplySessionView }) {
         ? '待回复消息或其来源已失效，请刷新消息重新选择，或使用草稿改写。'
         : '本次回复依据已失效，请重新读取后再试。')
       : state.errorCode === 'rejected' ? '本次生成被拒绝，请重新明确选择联系人，并核对本次输入。'
+      : state.errorCode === 'candidates_rejected' ? '本次候选未通过要求与内容核对。草稿已保留，请调整草稿或本次要求后重新生成。'
       : state.errorCode === 'unavailable' ? '回复服务暂不可用，请在管理后台补齐本人身份与模型设置，再重试。'
       : state.errorCode === 'input_budget_exceeded' ? '当前讨论超出模型输入预算，超限调用已停止。请查看已保存讨论或新开助手会话。'
       : state.errorCode === 'input_budget_unavailable' ? '当前模型或接收地址的完整输入预算暂不可核验，本次生成已停止。请在本人和模型设置中核对原配置；如需改用官方默认配置，须明确确认接收方并重新输入对应密钥。已填写内容和讨论仍会保留。'

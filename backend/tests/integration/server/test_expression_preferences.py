@@ -219,6 +219,8 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                          ["current_explicit_intent", "expression_instruction", "long_term_expression_preference"])
         current, payload, _ = self._generate(self.contact_id, instruction="这次详细说明，保留两句话。")
         self.assertEqual(current["candidates"][0]["text"], "好的，收到安排。我会再核对具体内容。")
+        self.assertEqual(current["context_receipt"]["expression_preference_ids"], [])
+        self.assertNotIn("expression_preferences", payload)
         self.assertEqual(payload["user_instruction"], "这次详细说明，保留两句话。")
         self.assertEqual(payload["fidelity_contract"]["current_intent"]["text"], "好的，收到安排，我会再核对具体内容。")
         other, payload, _ = self._generate(self.second_contact_id)
@@ -320,7 +322,7 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(restored.request("/api/reply/generate", body), (409, {"error": "reply_input_invalidated"}))
         self.assertEqual(self._get(restored, self.list_path)["preferences"], [])
 
-    def test_current_assistant_session_reply_reads_preferences_and_erases_prepared_history(self) -> None:
+    def test_current_assistant_requirement_skips_preferences_and_preserves_independent_history(self) -> None:
         self._bind(self.contact_id)
         preference = self._save("平时用短句，本次明确详细说明时服从本次要求。")
         status, session = self.backend.request(f"/api/contacts/{self.contact_id}/assistant-session/default", {})
@@ -335,24 +337,22 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 200, generated)
         self.assertEqual(generated["turn_id"], prepared["turn_id"])
         self.assertEqual(generated["candidates"][0]["text"], "好的，收到安排。我会再核对具体内容。")
-        self.assertEqual(generated["context_receipt"]["expression_preference_ids"], [preference["preference_id"]])
-        payload = next(json.loads(item.content) for item in self.reply_model.seen_calls[-1] if isinstance(item, HumanMessage))
-        self.assertEqual(payload["expression_preferences"][0]["text"], preference["text"])
+        self.assertEqual(generated["context_receipt"]["expression_preference_ids"], [])
+        payload = next(json.loads(item.content) for call in reversed(self.reply_model.seen_calls)
+                       for item in call if isinstance(item, HumanMessage)
+                       and json.loads(item.content).get("generation_stage") != "candidate_fidelity_review")
+        self.assertNotIn("expression_preferences", payload)
         self.assertEqual(payload["user_instruction"], body["content"]["user_instruction"])
         self.assertEqual(self._get(self.backend, path)["turns"][0]["reply"]["reply_request_id"], generated["reply_request_id"])
         deletion = {"operation_key": str(uuid4()), "expected_revision": preference["revision"]}
         self.assertEqual(self.backend.request(f"{self.path}/{preference['preference_id']}?contact_id={self.contact_id}", deletion, method="DELETE")[0], 200)
         snapshot = self._get(self.backend, path)
-        self.assertEqual(snapshot["turns"][0]["state"], "redacted")
-        self.assertIsNone(snapshot["turns"][0]["reply"])
-        self.assertIsNone(snapshot["turns"][0]["input"])
-        self.assertTrue(all(row["state"] == "redacted" and row["content"] is None for row in snapshot["inputs"]))
-        self.assertEqual(self.backend.request(path + "/replies", body),
-                         (409, {"error": "assistant_session_rejected", "reason": "source_deleted"}))
+        self.assertEqual(snapshot["turns"][0]["state"], "completed")
+        self.assertEqual(snapshot["turns"][0]["reply"]["reply_request_id"], generated["reply_request_id"])
+        self.assertEqual(self.backend.request(path + "/replies", body), (200, generated))
         restored = self._production_backend(self.owner_id)
         self.assertEqual(self._get(restored, path), snapshot)
-        self.assertEqual(restored.request(path + "/replies", body),
-                         (409, {"error": "assistant_session_rejected", "reason": "source_deleted"}))
+        self.assertEqual(restored.request(path + "/replies", body), (200, generated))
 
     def test_generation_preference_receipt_keeps_readable_original_snapshot_after_update_and_recovery(self) -> None:
         self._bind(self.contact_id)
@@ -788,6 +788,9 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(status, 200, generated)
         self.assertEqual(generated["turn_id"], receipt["turn_id"])
         self.assertEqual(generated["context_receipt"]["expression_preferences"][0]["text"], preference["text"])
+        calls_after_generation = len(self.reply_model.seen_calls)
+        self.assertEqual(calls_after_generation, 2)
+        self.assertEqual(self.reply_model.review_calls, 1)
         second_body = {**body, "idempotency_key": str(uuid4())}
         status, second = restarted.request(path + "/replies/prepare", second_body)
         self.assertEqual(status, 200, second)
@@ -798,7 +801,7 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         status, rejected = restarted.request(path + "/replies", second_body)
         self.assertEqual((status, rejected), (409, {"error": "assistant_session_rejected",
                                                    "reason": "prepared_context_reprepare_required"}))
-        self.assertEqual(len(self.reply_model.seen_calls), 1)
+        self.assertEqual(len(self.reply_model.seen_calls), calls_after_generation)
         fresh_body = {**body, "idempotency_key": str(uuid4())}
         self.assertEqual(restarted.request(path + "/replies/prepare", fresh_body)[0], 200)
         status, fresh = restarted.request(path + "/replies", fresh_body)
@@ -810,6 +813,9 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self._bind(self.contact_id)
         self._save("主动样本使用的明确长期合成偏好。")
         reply, _, _ = self._generate(self.contact_id)
+        calls_before_prepare = len(self.reply_model.seen_calls)
+        self.assertEqual(calls_before_prepare, 2)
+        self.assertEqual(self.reply_model.review_calls, 1)
         samples = f"/api/contacts/{self.contact_id}/style-samples"
         status, saved = self.backend.request(samples, {"idempotency_key": str(uuid4()),
             "text": reply["candidates"][0]["text"],
@@ -829,4 +835,4 @@ class ExpressionPreferencesHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
         self.assertEqual(self.backend.request(samples + "/" + saved["sample"]["sample_id"], method="DELETE")[0], 200)
         with psycopg.connect(self.database_url) as connection:
             self.assertEqual(connection.execute("SELECT prepared_context,input_payload FROM public.assistant_session_turn WHERE id=%s", (receipt['turn_id'],)).fetchone(), (None, None))
-        self.assertEqual(len(self.reply_model.seen_calls), 1)
+        self.assertEqual(len(self.reply_model.seen_calls), calls_before_prepare)

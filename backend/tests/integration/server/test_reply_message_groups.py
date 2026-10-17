@@ -14,13 +14,14 @@ from tests.integration.server.core_business_flow_support import CoreBusinessFlow
 
 class MessageGroupModel(ScriptedCoreModel):
     invalid_group: bool = False
+    group_separator: str = "\n\n"
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         payload = next(json.loads(message.content) for message in messages if isinstance(message, HumanMessage))
         parts = ["最近怎么样？", "方便时聊聊就好，不急着安排。"]
         self.responses.append(tool_response("ReplyRuntimeOutput", {
             "candidates": [{
-                "text": "不属于这组的额外承诺" if self.invalid_group else "\n\n".join(parts),
+                "text": "不属于这组的额外承诺" if self.invalid_group else self.group_separator.join(parts),
                 "messages": parts, "basis": "按当前意愿分两条表达，没有额外承诺。",
                 "citation_ids": [item["evidence_id"] for item in payload["evidence"]], "risk_notes": [],
             }], "used_skill_version_id": None,
@@ -66,6 +67,18 @@ class ReplyMessageGroupHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
                 self.assertEqual(len(self.reply_model.seen_calls), calls)
                 self.assertEqual(self.other_backend.request("/api/reply/generate", body)[0], 409)
                 self.assertEqual(len(self.reply_model.seen_calls), calls)
+
+    def test_lossless_group_separator_is_normalized_without_changing_words(self):
+        contact_id, _, _ = self._contact()
+        for separator in ("", "\n"):
+            with self.subTest(separator=repr(separator)):
+                self.reply_model.group_separator = separator
+                status, result = self.backend.request("/api/reply/generate", {
+                    "contact_id": str(contact_id), "idempotency_key": str(uuid4()),
+                    "content": {"type": "initiate_conversation", "purpose": "关心近况，不承诺安排"},
+                })
+                self.assertEqual(status, 200, result)
+                self.assertEqual(result["candidates"][0]["text"], "最近怎么样？\n\n方便时聊聊就好，不急着安排。")
 
     def test_group_text_cannot_add_content_outside_its_messages(self):
         self.reply_model.invalid_group = True

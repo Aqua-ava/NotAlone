@@ -5,6 +5,10 @@ class ReplyError(RuntimeError):
     """不携带私密正文或底层异常的候选回复错误。"""
 
 
+class ReplyCandidatesRejectedError(ReplyError):
+    """有效复核没有可交付候选；保留用户输入，不自动重生成。"""
+
+
 class ReplyInvariantError(ReplyError):
     """内部 adapter 返回越界或不一致数据时 fail closed。"""
 

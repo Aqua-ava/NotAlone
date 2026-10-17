@@ -46,6 +46,7 @@ from notalone.reply.adapters.deepseek_provider import build_deepseek_model
 from notalone.reply.adapters.deepseek_input_budget import build_deepseek_input_budget
 from notalone.reply.adapters.ecnu_input_budget import build_ecnu_input_budget, ECNU_BASE_URL, ECNU_MODEL
 from notalone.reply.adapters.langchain_runtime import LangChainReplyRuntime
+from notalone.reply.adapters.constraint_review import ReplyConstraintReview
 from notalone.reply.context import RetrievalReplyContext
 from notalone.reply.generator import ReplyGenerator
 from notalone.reply.exploration_context import ExplorationEvidence
@@ -99,6 +100,31 @@ def build_reply_service(
     )
     evidence = ExplorationEvidence(retrieval)
     from notalone.persistence.assistant_prepared_context import PreparedAssistantContext
+    reply_context = PreparedAssistantContext(PostgresAssistantDiscussionContext(
+        ExploredReplyContext(ExpressionPreferenceContext(context, PostgresExpressionPreferenceStore(database_url)),
+                             database_url=database_url, evidence=evidence),
+        database_url=database_url,
+    ), database_url)
+    from langchain_core.globals import get_llm_cache
+    from langchain_deepseek import ChatDeepSeek
+    from notalone.reply.adapters.model_call_ledger import ModelCallLedger
+    ledger = PostgresOutboundLedger(database_url)
+
+    def call_ledger(prepared):
+        def validate():
+            if (model.rate_limiter is not None or model.cache is not False
+                    and (model.cache is not None or get_llm_cache() is not None)):
+                raise ValueError("逐次台账不接受缓存或本地限流模型。")
+            if isinstance(model, ChatDeepSeek) and any(value != 0 for value in (
+                model.max_retries, model.root_client.max_retries, model.root_async_client.max_retries)):
+                raise ValueError("逐次台账不接受隐藏的供应商自动重试。")
+            reply_context.validate_current(prepared)
+            if model_priority is not None:
+                model_priority.check_running()
+        return ModelCallLedger(scope=prepared.scope, ledger=ledger,
+            model_name=getattr(model, 'model_name', None) or 'unreported',
+            validate=validate, record_call=lambda identifier: None)
+
     generator = ReplyGenerator(
         store=PostgresReplyStore(database_url),
         runtime=LangChainReplyRuntime(
@@ -108,13 +134,13 @@ def build_reply_service(
             input_budget_profile=input_budget_profile,
             input_token_counter=input_token_counter,
             on_input_budget=on_input_budget,
+            model_callback_factory=call_ledger,
+            constraint_review=ReplyConstraintReview(validate_current=reply_context.validate_current,
+                check_running=model_priority.check_running if model_priority is not None else None),
         ),
-        context=PreparedAssistantContext(PostgresAssistantDiscussionContext(
-            ExploredReplyContext(ExpressionPreferenceContext(context, PostgresExpressionPreferenceStore(database_url)),
-                                 database_url=database_url, evidence=evidence),
-            database_url=database_url,
-        ), database_url),
-        ledger=PostgresOutboundLedger(database_url),
+        context=reply_context,
+        # 实际模型轮已分别记账，外层不能再写一条汇总而重复计算。
+        ledger=None,
     )
     exploration = ReplyExplorationService(
         store=PostgresExplorationStore(database_url, evidence=evidence), evidence=evidence,

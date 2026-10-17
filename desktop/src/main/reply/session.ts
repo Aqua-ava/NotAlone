@@ -382,6 +382,7 @@ export class ReplySession {
       this.publish({ phase: this.state.result ? 'ready' : 'idle',
         continuation: { ...identity, phase: 'failed', canRetry,
           message: providerLimit ? '模型提示这次内容过长，请新开助手会话。'
+            : failure?.code === 'reply_candidates_rejected' ? '本次候选未通过要求与内容核对。请调整本次要求后继续。'
             : canRetry ? '本次继续的结果尚未确认，请用原请求重试。' : '本次继续尚未可靠确认，请重新读取讨论。' } });
       if (!canRetry && failure) await this.readSavedSession(update);
     } finally { if (job) await this.finishGeneration(job, generationTerminal); if (this.pending === pending) this.pending = undefined; }
@@ -1713,6 +1714,7 @@ export class ReplySession {
           }
         }
         const errorCode = failure?.kind === 'connection' ? 'connection'
+          : failure?.code === 'reply_candidates_rejected' ? 'candidates_rejected'
           : budgetFailure ? failure.inputBudget?.state === 'exceeded' ? 'input_budget_exceeded' : 'input_budget_unavailable'
           : providerLimit ? 'provider_context_limit'
           : formatFailure ? failure?.reason === 'prepared_context_generation_running' ? 'prepared_context_running'
@@ -1723,7 +1725,7 @@ export class ReplySession {
           : ['source_unavailable', 'source_deleted'].includes(failure?.reason ?? '') ? 'source_unavailable'
           : ['reply_rejected', 'assistant_session_rejected'].includes(failure?.code ?? '') ? 'rejected'
           : ['reply_unavailable', 'runtime_stopping'].includes(failure?.code ?? '') ? 'unavailable' : 'generation_failed';
-        this.publish({ phase: 'failed', errorCode, ...(budgetFailure || providerLimit || formatFailure ? { canRetry: false } : {}),
+        this.publish({ phase: 'failed', errorCode, ...(budgetFailure || providerLimit || formatFailure || errorCode === 'candidates_rejected' ? { canRetry: false } : {}),
           inputBudgetNotice: budgetReceipt && failure?.inputBudget && generation !== undefined ? {
             contactId: selection.contactId, scopeRevision: selection.scopeRevision, sessionId: budgetReceipt.sessionId,
             requestKey: budgetReceipt.requestKey, inputVersionId: budgetReceipt.inputVersionId,
