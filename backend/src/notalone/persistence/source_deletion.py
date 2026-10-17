@@ -27,6 +27,7 @@ from notalone.persistence.source_processing import erase_source_processing
 from notalone.persistence.style_sample_store import erase_source_style_samples
 from notalone.persistence.expression_preferences import erase_source_expression_preferences
 from notalone.scopes import ContactScope
+from notalone.managed_update_backups import erase_managed_update_backups, ManagedUpdateBackupError
 
 
 class SourceDeletionError(RuntimeError):
@@ -39,6 +40,17 @@ class SourceNotFoundError(SourceDeletionError):
 
 class SourceDeletionVerificationError(SourceDeletionError):
     """删除后仍能检索到来源内容。"""
+
+
+class SourceBackupCleanupError(SourceDeletionError):
+    """本App恢复点尚未清理，业务删除不能宣告完成。"""
+
+
+def _erase_update_backups(connection: psycopg.Connection) -> None:
+    try:
+        erase_managed_update_backups(connection)
+    except ManagedUpdateBackupError:
+        raise SourceBackupCleanupError("请查看本机更新备份恢复说明，核验后重试原删除。") from None
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +99,7 @@ class PostgresSourceDeletionRepository:
                 ).fetchone()
                 if source is None:
                     raise SourceNotFoundError("指定范围内不存在该来源。")
+                _erase_update_backups(connection)
                 if source[0] == "deleted":
                     return SourceDeletionResult(
                         source_document_id=source_document_id,
@@ -330,6 +343,7 @@ class PostgresSourceDeletionRepository:
                 ).fetchone()
                 if row is None:
                     raise SourceNotFoundError("指定范围内不存在该来源。")
+                _erase_update_backups(connection)
                 if (
                     row[:4] != ("deleted", None, None, 0)
                     or row[4] is None

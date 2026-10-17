@@ -418,6 +418,8 @@ class PostgresExpressionPreferenceStore:
             raise ExpressionPreferenceError("长期表达偏好修改失败。") from None
 
     def delete(self, owner_id: UUID, preference_id: UUID, command: DeleteExpressionPreference, *, contact_id: UUID | None = None) -> None:
+        from notalone.managed_update_backups import erase_managed_update_backups
+
         digest = sha256(json.dumps({"preference_id": str(preference_id), "expected_revision": command.expected_revision},
                                   sort_keys=True).encode()).hexdigest()
         try:
@@ -432,10 +434,12 @@ class PostgresExpressionPreferenceStore:
                 if existing is not None:
                     if (existing["kind"], existing["preference_id"], existing["input_digest"]) != ("delete", preference_id, digest):
                         raise ExpressionPreferenceConflict("用户操作键已用于其他操作。")
+                    erase_managed_update_backups(connection)
                     return
                 current = _as_preference(row)
                 if current.revision != command.expected_revision:
                     raise ExpressionPreferenceConflict("长期偏好已变化，请刷新后删除。")
+                erase_managed_update_backups(connection)
                 _erase_preferences(connection, owner_id=owner_id, identifiers=[preference_id])
                 connection.execute(
                     """INSERT INTO public.expression_preference_operation(

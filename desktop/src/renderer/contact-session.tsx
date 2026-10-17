@@ -46,7 +46,22 @@ export function useContactSession() {
     catch { if (active.current) setError('联系人目录暂时无法刷新，请重试。'); }
   }
 
-  return { state, error, selectContact, confirmContact, setDraft, refreshContacts };
+  async function createContact(displayName: string): Promise<boolean> {
+    try {
+      receive(await window.notalone.contacts.createContact({ displayName, scopeRevision: latest.current.scopeRevision }));
+      if (active.current) setError('');
+      return true;
+    } catch { if (active.current) setError('联系人未能确认创建，请刷新目录后重试。'); return false; }
+  }
+  async function confirmManualContact(contactId: string) {
+    try {
+      receive(await window.notalone.contacts.confirmManualContact({ contactId, scopeRevision: latest.current.scopeRevision }));
+      if (active.current) setError('');
+      return true;
+    } catch { if (active.current) setError('本次联系人未确认，请刷新目录后重新选择。'); return false; }
+  }
+
+  return { state, error, selectContact, confirmContact, confirmManualContact, createContact, setDraft, refreshContacts };
 }
 
 export type ContactSessionView = ReturnType<typeof useContactSession>;
@@ -56,21 +71,21 @@ export function CurrentContactLabel({ state }: { state: ContactSessionState }) {
   return <span className="current-contact">本次联系人：{selected?.displayName ?? '未确认'}</span>;
 }
 
-export function HelperContactPicker({ session, foreground }: { session: ContactSessionView; foreground?: ForegroundState }) {
+export function HelperContactPicker({ session, foreground, manualRelease = false }: { session: ContactSessionView; foreground?: ForegroundState; manualRelease?: boolean }) {
   return <select className="contact-picker" aria-label="本次联系人"
-    value={session.state.selectedContactId ?? ''} disabled={session.state.contacts.length === 0 || !foreground || foreground.unsupportedConversation}
-    onChange={(event) => foreground && void session.confirmContact(event.target.value, foreground.foregroundRevision)}>
+    value={session.state.selectedContactId ?? ''} disabled={session.state.contacts.length === 0 || !foreground || !manualRelease && !foreground.manualInput && foreground.unsupportedConversation}
+    onChange={(event) => foreground && void (manualRelease || foreground.manualInput ? session.confirmManualContact(event.target.value) : session.confirmContact(event.target.value, foreground.foregroundRevision))}>
     <option value="" disabled>联系人未确认</option>
     {session.state.contacts.map((contact) => <option key={contact.contactId} value={contact.contactId}>{contact.displayName}</option>)}
   </select>;
 }
 
-export function HelperDraft({ session }: { session: ContactSessionView }) {
+export function HelperDraft({ session, currentChat = false }: { session: ContactSessionView; currentChat?: boolean }) {
   const [text, setText] = useState(session.state.draft);
   // 切换范围或收到删除完成通知时清除本地输入；普通在途回显不覆盖新按键。
   useEffect(() => { setText(session.state.draft); }, [session.state.scopeRevision, session.state.draftClearRevision]);
-  return <textarea aria-label="草稿" rows={3} maxLength={65_536}
+  return <textarea aria-label={currentChat ? '当前聊天文字' : '草稿'} rows={3} maxLength={65_536}
     value={text} disabled={!session.state.selectedContactId}
-    placeholder="先确认联系人，再写下你的意思…"
+    placeholder={currentChat ? '仅粘贴这位联系人的当前聊天文字，再填写你想表达的方向…' : '先确认联系人，再写下你的意思…'}
     onChange={(event) => { setText(event.target.value); void session.setDraft(event.target.value); }} />;
 }

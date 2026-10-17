@@ -19,6 +19,7 @@ export interface ForegroundState {
   wechatInFront: boolean | null;
   suspendedByHelperFocus: boolean;
   unsupportedConversation: boolean;
+  manualInput?: boolean;
   confirmation: 'required' | 'manual-confirmed' | 'verified-binding';
   confirmedContactId: string | null;
   suggestedContactId: string | null;

@@ -69,6 +69,17 @@ def _active_binding(connection: Any, scope: ContactScope) -> UUID:
         (scope.owner_id, scope.contact_id),
     ).fetchone():
         raise AssistantSessionNotFound("指定范围内不存在联系人。")
+    from notalone.application.manual_input_scope import manual_input_contact
+    if manual_input_contact.get() is not None:
+        if manual_input_contact.get() != scope.contact_id:
+            raise AssistantSessionRejected("scope_mismatch")
+        manual = connection.execute(
+            "SELECT id FROM public.manual_contact_confirmation WHERE owner_id=%s AND contact_id=%s FOR SHARE",
+            (scope.owner_id, scope.contact_id),
+        ).fetchone()
+        if manual is None:
+            raise AssistantSessionRejected("manual_contact_unconfirmed")
+        return manual["id"]
     rows = connection.execute(
         "SELECT id FROM public.conversation_binding "
         "WHERE owner_id = %s AND contact_id = %s AND status = 'active' FOR SHARE",
@@ -177,7 +188,7 @@ def _evidence_dependencies(
         connection, owner_id=owner_id, evidence_id=evidence_id,
         kind=kind, source_ids=tuple(source_ids), historical=historical,
     )
-    if kind not in ("user_draft", "user_purpose", "continued_candidate"):
+    if kind not in ("user_draft", "user_current_chat", "user_purpose", "continued_candidate"):
         dependencies.add(evidence_id)
     return dependencies
 
@@ -537,13 +548,13 @@ class PostgresAssistantSessionStore:
             return row["id"]
 
     def interrupt(
-        self, scope: ContactScope, session_id: UUID, request_key: UUID, input_version_id: UUID,
+        self, scope: ContactScope, session_id: UUID, request_key: UUID, input_version_id: UUID, reason: str = "app_quit",
     ) -> AssistantGenerationReceipt:
         from notalone.persistence.assistant_generation_lifecycle import interrupt_generation_in_transaction
         with self._transaction(scope) as connection:
             return interrupt_generation_in_transaction(
                 connection, scope, session_id, request_key, input_version_id,
-                complete_saved=self._complete_saved_in_transaction,
+                complete_saved=self._complete_saved_in_transaction, reason=reason,
             )
 
     def reserve(
@@ -605,6 +616,16 @@ class PostgresAssistantSessionStore:
             if row is None or row["input_payload"] is None:
                 raise AssistantSessionRejected("source_unavailable")
             return _request_from_input(scope, receipt.request_key, row["input_payload"])
+
+    def reject_unavailable_preparation(self, scope: ContactScope, session_id: UUID, request_key: UUID) -> None:
+        """模型缺配置也须先持锁证实未领取，不能留下无法退出的未知作业。"""
+        from notalone.persistence.assistant_preparation_rejection import prove_preparation_rejected
+        failure = AssistantSessionRejected("reply_unavailable")
+        with self._transaction(scope) as connection:
+            rejected = prove_preparation_rejected(connection, scope, session_id, request_key, failure)
+        if rejected is not None:
+            raise rejected
+        raise failure
 
     def reserve_prepared(
         self, scope: ContactScope, session_id: UUID, request: ReplyServiceRequest,

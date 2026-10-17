@@ -1,0 +1,289 @@
+--- a/cmd/wechat-cli/product.go
++++ b/cmd/wechat-cli/product.go
+@@ -36,10 +36,8 @@
+ }
+ 
+ func strictReadOnlyMode() bool {
+-	if strings.TrimSpace(os.Getenv("WECHAT_CLI_STRICT_READ_ONLY")) != "" {
+-		return envBool("WECHAT_CLI_STRICT_READ_ONLY")
+-	}
+-	return envBool("WX_MCP_STRICT_READ_ONLY")
++	// 产品构建不可由参数或环境关闭严格只读。
++	return true
+ }
+ 
+ func appStateDir() (string, error) {
+--- a/cmd/wechat-cli/main.go
++++ b/cmd/wechat-cli/main.go
+@@ -73,17 +73,11 @@
+ 
+ // findWCDB locates the platform WCDB dynamic library.
+ func findWCDB() (string, error) {
+-	var candidates []string
+-	if p := envFirst("WECHAT_CLI_WCDB_LIB", "WECHAT_CLI_WCDB_DYLIB", "WX_MCP_WCDB_LIB", "WX_MCP_WCDB_DYLIB"); p != "" {
+-		candidates = append(candidates, p)
+-	}
+-	candidates = append(candidates, wcdbLibraryCandidates()...)
+-	for _, p := range candidates {
+-		if _, err := os.Stat(p); err == nil {
+-			return p, nil
+-		}
+-	}
+-	return "", errors.New(wcdbLibraryMissingMessage())
++	exe, err := os.Executable()
++	if err != nil { return "", err }
++	p := filepath.Join(filepath.Dir(exe), "..", "lib", "libWCDB.dylib")
++	if _, err := os.Stat(p); err != nil { return "", errors.New("notalone_wcdb_missing") }
++	return p, nil
+ }
+ 
+ /*
+@@ -520,6 +514,19 @@
+ // ──────────────────── main loop ────────────────────
+ 
+ func main() {
++	// 仅开放已确认联系人读取适配器需要的命令，不开放维护、Keychain 或通用调用。
++	if len(os.Args) > 1 {
++		switch os.Args[1] {
++		case "sessions", "resolve-chat", "tail", "watch", "help", "--help", "-h", "version", "--version", "-v":
++		default:
++			fmt.Fprintln(os.Stderr, "notalone_command_disabled")
++			os.Exit(2)
++		}
++	}
++	os.Setenv("WECHAT_CLI_STRICT_READ_ONLY", "1")
++	os.Setenv("WX_MCP_STRICT_READ_ONLY", "1")
++	os.Setenv("WECHAT_CLI_DISABLE_AUTO_REFRESH", "1")
++	os.Setenv("WX_MCP_DISABLE_AUTO_REFRESH", "1")
+ 	if maybeRunCLI(os.Args[1:]) {
+ 		return
+ 	}
+--- a/internal/wxkey/wxkey.go
++++ b/internal/wxkey/wxkey.go
+@@ -1,71 +1,8 @@
+-// Package wxkey is wechat-cli's thin client for the standalone `wxkey` CLI.
+-// The CLI handles task_for_pid + memory scan + SQLCipher verification;
+-// this package finds the binary,
+-// invokes `wxkey setup`, and parses the JSON it prints to stdout. First-run
+-// human/agent setup should usually call `wxkey bootstrap` explicitly; wechat-cli
+-// keeps runtime startup on the narrower setup path so it does not silently
+-// re-sign or restart WeChat.
++// 产品构建移除上游 wxkey 查找与执行；初始化只能使用独立受控授权协议。
+ package wxkey
+ 
+-import (
+-	"bytes"
+-	"encoding/json"
+-	"fmt"
+-	"os"
+-	"os/exec"
+-	"path/filepath"
++import ("encoding/json"; "fmt")
+ 
+-	"github.com/r266-tech/wx-cli/v2/internal/diagnostics"
+-)
+-
+-// FindBinary locates the wxkey CLI. Resolution order:
+-//  1. $WX_KEY_BIN — explicit override
+-//  2. next to the calling executable (the recommended distribution layout)
+-//  3. PATH lookup
+-func FindBinary() (string, error) {
+-	if p := os.Getenv("WX_KEY_BIN"); p != "" {
+-		if _, err := os.Stat(p); err == nil {
+-			return p, nil
+-		}
+-	}
+-	if exe, err := os.Executable(); err == nil {
+-		for _, dir := range executableSearchDirs(exe) {
+-			for _, name := range binaryNames() {
+-				cand := filepath.Join(dir, name)
+-				if _, err := os.Stat(cand); err == nil {
+-					return cand, nil
+-				}
+-			}
+-		}
+-	}
+-	for _, name := range binaryNames() {
+-		if p, err := exec.LookPath(name); err == nil {
+-			return p, nil
+-		}
+-	}
+-	return "", fmt.Errorf("wxkey binary not found — set $WX_KEY_BIN, install wxkey alongside wechat-cli, or put wxkey on PATH")
+-}
+-
+-func executableSearchDirs(exe string) []string {
+-	dirs := make([]string, 0, 2)
+-	add := func(path string) {
+-		dir := filepath.Dir(path)
+-		for _, existing := range dirs {
+-			if existing == dir {
+-				return
+-			}
+-		}
+-		dirs = append(dirs, dir)
+-	}
+-	add(exe)
+-	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+-		add(resolved)
+-	}
+-	return dirs
+-}
+-
+-// SetupResult mirrors what `wxkey setup` writes to stdout. We only consume
+-// the bits wechat-cli needs.
+ type SetupResult struct {
+ 	PID           int               `json:"pid"`
+ 	Root          string            `json:"scan_root"`
+@@ -104,76 +41,8 @@
+ 	ImageKey *ImageKeyResult `json:"image_key,omitempty"`
+ }
+ 
+-// RunSetup refreshes schema-2 per-DB keys. On macOS/Linux builds this invokes
+-// the standalone `wxkey setup` helper and parses its JSON output. On Windows it
+-// uses the in-process adapter in setup_windows.go.
+-//
+-// The macOS path intentionally does not run `wxkey bootstrap`, because
+-// bootstrap may quit, ad-hoc re-sign, and reopen WeChat.
+-// stderrText is also returned so wechat-cli can surface progress / errors.
+-func RunSetup() (*SetupResult, string, error) {
+-	return runSetup()
+-}
+ 
+-func RunImageKey(root string) (*ImageKeyResult, string, error) {
+-	bin, err := FindBinary()
+-	if err != nil {
+-		return nil, "", err
+-	}
+-	args := []string{"image-key", "--quiet"}
+-	if root != "" {
+-		args = append(args, "--root", root)
+-	}
+-	cmd := exec.Command(bin, args...)
+-	var stderr bytes.Buffer
+-	cmd.Stderr = &stderr
+-	stdout, runErr := cmd.Output()
+-	if runErr != nil {
+-		return nil, diagnostics.Redact(stderr.String()), fmt.Errorf("wxkey image-key failed: %w (stderr: %s)", runErr, diagnostics.Redact(stderr.String()))
+-	}
+-	payload := stdout
+-	if i := bytes.IndexByte(payload, '{'); i > 0 {
+-		payload = payload[i:]
+-	}
+-	var res ImageKeyCommandResult
+-	if err := json.Unmarshal(payload, &res); err != nil {
+-		return nil, diagnostics.Redact(stderr.String()), fmt.Errorf("parse wxkey image-key output: %w (stdout %d bytes)", err, len(stdout))
+-	}
+-	if res.ImageKey == nil || res.ImageKey.Key == "" {
+-		return nil, diagnostics.Redact(stderr.String()), fmt.Errorf("wxkey image-key completed without image_key")
+-	}
+-	return res.ImageKey, diagnostics.Redact(stderr.String()), nil
+-}
+-
+-func runSetupExternal() (*SetupResult, string, error) {
+-	bin, err := FindBinary()
+-	if err != nil {
+-		return nil, "", err
+-	}
+-	cmd := exec.Command(bin, "setup", "--quiet")
+-	var stderr bytes.Buffer
+-	cmd.Stderr = &stderr
+-	stdout, runErr := cmd.Output()
+-	if runErr != nil {
+-		return nil, diagnostics.Redact(stderr.String()), fmt.Errorf("wxkey setup failed: %w (stderr: %s)", runErr, diagnostics.Redact(stderr.String()))
+-	}
+-	// Elevated wxkey children can still write progress or sudo diagnostics ahead
+-	// of the JSON. Strip everything before the first '{' so the JSON object
+-	// parses cleanly.
+-	payload := stdout
+-	if i := bytes.IndexByte(payload, '{'); i > 0 {
+-		payload = payload[i:]
+-	}
+-	var res SetupResult
+-	if err := json.Unmarshal(payload, &res); err != nil {
+-		// stdout contains key_hex on the success path; never echo it back through
+-		// an error message that may surface to LLM clients. Diagnose by re-running
+-		// `wxkey setup` directly in a terminal.
+-		return nil, diagnostics.Redact(stderr.String()), fmt.Errorf("parse wxkey setup output: %w (stdout %d bytes; rerun `wxkey setup` directly to inspect)", err, len(stdout))
+-	}
+-	res.Keys = make(map[string]string, len(res.Results))
+-	for _, r := range res.Results {
+-		res.Keys[r.SaltHex] = r.KeyHex
+-	}
+-	return &res, diagnostics.Redact(stderr.String()), nil
+-}
++func FindBinary() (string,error) { return "",fmt.Errorf("notalone_wxkey_disabled") }
++func RunSetup() (*SetupResult,string,error) { return nil,"",fmt.Errorf("notalone_wxkey_disabled") }
++func RunImageKey(root string) (*ImageKeyResult,string,error) { return nil,"",fmt.Errorf("notalone_wxkey_disabled") }
++func runSetupExternal() (*SetupResult,string,error) { return nil,"",fmt.Errorf("notalone_wxkey_disabled") }
+--- a/internal/config/config.go
++++ b/internal/config/config.go
+@@ -568,7 +568,8 @@
+ var runtimeKeyAuthorize = keystore.LoadWithAuthorization
+ 
+ func hydrateRuntimeKeys(c *Config) error {
+-	return hydrateRuntimeKeysWith(c, runtimeKeyLoad)
++	if c.KeyStore == "keychain" { return errors.New("notalone_keychain_disabled") }
++	return nil
+ }
+ 
+ func hydrateRuntimeKeysWith(c *Config, load func(string, string) (*keystore.Record, error)) error {
+diff --git a/cmd/wechat-cli/sessions.go b/cmd/wechat-cli/sessions.go
+index d46df1a0..8a31dc33 100644
+--- a/cmd/wechat-cli/sessions.go
++++ b/cmd/wechat-cli/sessions.go
+@@ -8,7 +8,7 @@ import (
+ 	"github.com/r266-tech/wx-cli/v2/internal/wxkind"
+ )
+ 
+-// Session ordering, previews, and unread counts always come from the live DB.
++// 产品会话列表只读取可见会话的身份和时间；不读取未确认会话的正文预览。
+ func (s *server) toolSessions(a map[string]any) (any, error) {
+ 	db, err := s.openDB("session", "session.db")
+ 	if err != nil {
+@@ -40,9 +40,9 @@ func (s *server) toolSessions(a map[string]any) (any, error) {
+ 		// Cross-db: also include sessions whose talker matches display_name /
+ 		// nick_name / remark / alias in contact.db (fuzzy, case+space insensitive).
+ 		matched := s.findUsernamesByFuzzyName(kw)
+-		clauses := []string{"username LIKE ? COLLATE NOCASE", "summary LIKE ? COLLATE NOCASE"}
++		clauses := []string{"username LIKE ? COLLATE NOCASE"}
+ 		like := "%" + kw + "%"
+-		args = append(args, like, like)
++		args = append(args, like)
+ 		if len(matched) > 0 {
+ 			ph := make([]string, len(matched))
+ 			for i, u := range matched {
+@@ -53,10 +53,7 @@ func (s *server) toolSessions(a map[string]any) (any, error) {
+ 		}
+ 		where = append(where, "("+strings.Join(clauses, " OR ")+")")
+ 	}
+-	query := fmt.Sprintf(`SELECT username, unread_count, summary,
+-		last_timestamp, sort_timestamp,
+-		last_msg_sender AS last_sender_wxid, last_sender_display_name,
+-		last_msg_type, last_msg_sub_type
++	query := fmt.Sprintf(`SELECT username, last_timestamp, sort_timestamp
+ 		FROM SessionTable
+ 		WHERE %s
+ 		ORDER BY sort_timestamp DESC, username DESC
+@@ -74,22 +71,6 @@ func (s *server) toolSessions(a map[string]any) (any, error) {
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	for _, r := range rows {
+-		bk, _ := r["last_msg_type"].(int64)
+-		st, _ := r["last_msg_sub_type"].(int64)
+-		r["last_msg_kind_name"] = wxkind.Resolve(int32(bk), int32(st))
+-		// Aggregator sessions (brandsessionholder / brandservicesessionholder)
+-		// wrap the real sender in "_$_CUSTOM_USERNAME_PREFIX_$_<aggId>:<realId>".
+-		// The aggId is UI-internal noise; keep only the real wxid / gh_ id.
+-		if v, ok := r["last_sender_wxid"].(string); ok {
+-			r["last_sender_wxid"] = stripAggSenderPrefix(v)
+-		}
+-		for _, k := range []string{"last_sender_wxid", "last_sender_display_name"} {
+-			if v, ok := r[k].(string); ok && v == "" {
+-				delete(r, k)
+-			}
+-		}
+-	}
+ 	return sessionRowsResult(rows, "live_session_db", warnings), nil
+ }
+ 

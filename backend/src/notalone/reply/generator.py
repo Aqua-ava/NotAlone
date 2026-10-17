@@ -475,7 +475,7 @@ class ReplyGenerator:
             draft_evidence = tuple(
                 item
                 for item in context.evidence
-                if item.kind == "user_draft"
+                if item.kind == ("user_current_chat" if command.content.input_kind == "current_chat" else "user_draft")
                 and item.text == command.content.draft_text
             )
             if (

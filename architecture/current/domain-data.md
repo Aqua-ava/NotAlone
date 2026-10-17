@@ -14,6 +14,10 @@
 
 ## 数据对象
 
+独立 App 首版按 [ADR-065](../adr/065-manual-input-standalone-first-release.md)增加手动输入确认：用户明确选择既有联系人后，独立记录 `manual_contact_confirmation` 的内部执行标识，不创建 `channel_identity` 或 `conversation_binding`。昵称仍仅展示，同名联系人互相独立。旧 `conversation_binding_id` 存储槽在手动模式引用该标识；实际请求必须显式声明手动来源，且重新核验 `owner_id + contact_id` 与确认记录。渠道查找、CLI、前台定位和读取授权仍只认真实桌面绑定，不能查找或回退到手动确认。
+
+粘贴的对方当前文字通过 `input_kind=current_chat`、明确的 `pasted_direction` 和独立的 `user_current_chat` 依据保留来历；这是用户提供、未经渠道核验的文字，不冒充本人草稿或规范消息，不进入记忆提取。仅在显式生成后沿助手讨论与候选生命周期保存，并继承相同的删除路径。
+
 | 对象 | 必要职责 | 关键关联 |
 | --- | --- | --- |
 | `owner` | 资料所属用户。 | `owner_id` 是所有私密数据的第一层隔离键。 |

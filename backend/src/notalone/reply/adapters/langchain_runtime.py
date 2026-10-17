@@ -157,6 +157,10 @@ evidence_id 字符串（UUID 格式），且每条候选至少引用一个。
 user_instruction 只影响当前请求，不能成为长期偏好或关系记忆。
 expression_preferences 是用户明确保存且本次适用的长期表达要求，只指导说法，
 不是联系人事实。当前原意、方向、目的和本次附加要求优先；冲突时不采用旧偏好。
+当 input_mode 为 reply_to_pasted_text 时，current_text 是用户为本次联系人粘贴的对方聊天文字，
+不是用户的原句或已核验的渠道消息；根据 confirmed_direction 组织回应，不改写对方原文。
+confirmed_direction 是本次用户明确表达方向；不得把对方原文的立场当成本人的意愿，
+也不得推断这是完整历史或将粘贴内容采纳为长期记忆。
 回应和主动联系的 understanding_correction、user_instruction、clarification_answer
 都是本次用户说明。纠正只修正理解，回答只说明关键问题，不能据此替换已确认方向或目的；
 这些文字不是已核验的外部事实，也不能写成长期资料。冲突时保持当前已确认意图并说明。
@@ -830,6 +834,10 @@ def _request_text(prepared: ReplyContext) -> str:
                 prepared.command.content.include_relationship_context
             ),
         }
+        if prepared.command.content.input_kind == "current_chat":
+            payload.update(input_mode="reply_to_pasted_text", current_text=payload.pop("draft_text"),
+                           confirmed_direction=prepared.command.content.pasted_direction,
+                           direction_source="direct_input")
     else:
         raise ReplyInvariantError("回复输入模式无效。")
     if isinstance(prepared.command.content, (ReplyToMessage, InitiateConversation)):

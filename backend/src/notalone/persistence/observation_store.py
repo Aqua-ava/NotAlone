@@ -875,6 +875,13 @@ class PostgresObservationStore:
                     contact_id=contact_id,
                 )
                 lock_owner_scope(connection, owner_id=owner_id)
+                if connection.execute(
+                    "SELECT 1 FROM public.local_wechat_observation WHERE owner_id=%s AND contact_id=%s AND id=%s",
+                    (owner_id, contact_id, observation_id),
+                ).fetchone() is None:
+                    raise ObservationNotFoundError("指定范围内不存在该观察来源。")
+                from notalone.managed_update_backups import erase_managed_update_backups
+                erase_managed_update_backups(connection)
                 observed_message_ids = tuple(
                     row[0]
                     for row in connection.execute(

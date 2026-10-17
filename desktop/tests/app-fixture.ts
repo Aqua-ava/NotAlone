@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 type RunningApp = { app: ElectronApplication; appProcess: ChildProcess; userData: string };
-type AppOptions = { appEnvironment: NodeJS.ProcessEnv; launchConfiguration: object | undefined;
-  appWorkingDirectory: string | undefined; retainUserData: boolean };
+type AppOptions = { appEnvironment: NodeJS.ProcessEnv; launchConfiguration: object | undefined; appWorkingDirectory: string | undefined; retainUserData: boolean;
+  appExecutable: string | undefined; appDataPreparation: (directory: string) => Promise<void> };
 
 import { isolatedAppEnvironment } from './isolated-environment';
 export { isolatedAppEnvironment } from './isolated-environment';
@@ -18,23 +18,26 @@ export const test = base.extend<AppOptions & { runningApp: RunningApp; appDirect
   launchConfiguration: [undefined, { option: true }],
   appWorkingDirectory: [undefined, { option: true }],
   retainUserData: [false, { option: true }],
-  runningApp: async ({ appDirectory, appEnvironment, launchConfiguration, appWorkingDirectory, retainUserData }, use) => {
+  appExecutable: [process.env.NOTALONE_TEST_APP_EXECUTABLE, { option: true }],
+  appDataPreparation: [async ({}, use) => { await use(async () => {}); }, { option: true }],
+  runningApp: async ({ appDirectory, appExecutable, appEnvironment, launchConfiguration, appWorkingDirectory, appDataPreparation, retainUserData }, use) => {
     await verifyAppTestLease();
     const userData = await mkdtemp(path.join(tmpdir(), 'notalone-app-'));
     let app: ElectronApplication | undefined;
     let appProcess: ChildProcess | undefined;
     try {
       if (launchConfiguration) await writeFile(path.join(userData, 'backend-launch.json'), JSON.stringify(launchConfiguration));
+      await appDataPreparation(userData);
       app = await launchApp({
         cwd: appWorkingDirectory,
-        executablePath: process.env.NOTALONE_TEST_APP_EXECUTABLE,
-        args: [...(process.env.NOTALONE_TEST_APP_EXECUTABLE ? [] : [appDirectory]), `--user-data-dir=${userData}`],
+        executablePath: appExecutable,
+        args: [...(appExecutable ? [] : [appDirectory]), `--user-data-dir=${userData}`],
         env: isolatedAppEnvironment(userData, appEnvironment),
       });
       appProcess = app.process();
       // 在场景断言前记录自有实例，失败时仍可按精确PID／目录核验收尾。
       await writeFile(base.info().outputPath('app-test-owned.json'), JSON.stringify({
-        pid: appProcess.pid, userData, executable: process.env.NOTALONE_TEST_APP_EXECUTABLE ?? null,
+        pid: appProcess.pid, userData, executable: appExecutable ?? null,
       }), { mode: 0o600, flag: 'wx' });
       await use({ app, appProcess, userData });
     } finally {

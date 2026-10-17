@@ -3,6 +3,7 @@ export interface SetupState {
   phase: SetupPhase;
   ownerReady: boolean;
   credentialsConfigured: boolean;
+  officialDefaults?: boolean;
   revision: number;
   errorCode?: 'initialize-failed' | 'credentials-failed' | 'reload-failed';
 }
@@ -11,6 +12,7 @@ export interface SetupBridge {
   refresh(): Promise<void>;
   initializeOwner(displayName: string): Promise<void>;
   saveDeepSeekKey(apiKey: string): Promise<void>;
+  saveOfficialDeepSeekKey(apiKey: string, confirmed: true): Promise<void>;
   retryRestart(): Promise<void>;
   reloadControlledConfiguration(): Promise<void>;
   onStateChanged(listener: (state: SetupState) => void): () => void;

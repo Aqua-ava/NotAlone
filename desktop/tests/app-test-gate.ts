@@ -6,7 +6,8 @@ export const verifyAppTestLease = () => requestAppTestLease('check');
 const alive = (child: ChildProcess) => child.exitCode === null && child.signalCode === null;
 
 async function releaseAfterExit(child: ChildProcess, launchId: string): Promise<void> {
-  const limit = Date.now() + 1500;
+  // Main崩溃时本次后台/PG监督器仍须按顺序收尾；持有租约直到整组退场。
+  const limit = Date.now() + 20_000;
   while (Date.now() < limit && !ownedGroupGone(child)) await new Promise((resolve) => setTimeout(resolve, 50));
   if (ownedGroupGone(child)) await requestAppTestLease('release', launchId).catch(() => {});
 }

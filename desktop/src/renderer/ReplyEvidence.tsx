@@ -6,7 +6,7 @@ import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
 
 const subscription = { getState: () => window.notalone.replies.getEvidenceState(),
   onStateChanged: (listener: (state: ReplyEvidenceState) => void) => window.notalone.replies.onEvidenceChanged(listener) };
-const kindNames = { message: '消息', confirmed_memory: '关系资料', owner_memory: '本人资料', user_draft: '用户草稿', user_purpose: '本次主动目的', continued_candidate: '前序候选', pending_candidate: '未确认记忆候选' };
+const kindNames = { message: '消息', confirmed_memory: '关系资料', owner_memory: '本人资料', user_draft: '用户草稿', user_current_chat: '本次粘贴的对方文字（未经渠道核验）', user_purpose: '本次主动目的', continued_candidate: '前序候选', pending_candidate: '未确认记忆候选' };
 const statusNames: Record<string, string> = { active: '有效', user_input: '用户输入', candidate: '候选', pending: '待确认', confirmed: '已采纳', deleted: '已删除', invalidated: '已失效' };
 
 function RetrievalSummary({ receipt }: { receipt: ReplyRetrievalReceipt | null | undefined }) {

@@ -19,7 +19,11 @@ export function useForegroundState(bridge: ForegroundBridge, enabled: boolean): 
   return state;
 }
 
-export function ForegroundPanel({ state, session, permission }: { state: ForegroundState; session?: ContactSessionView; permission?: ScreenPermissionView }) {
+export function ForegroundPanel({ state, session, permission, manualRelease = false }: { state: ForegroundState; session?: ContactSessionView; permission?: ScreenPermissionView; manualRelease?: boolean }) {
+  if (state.manualInput || manualRelease) return <section aria-label="手动输入联系人确认"><p role="status">手动输入模式 · {state.confirmation === 'manual-confirmed' ? '本次联系人已由你确认' : '请明确选择本次联系人'}</p>
+    <p>粘贴内容只用于本次候选与助手讨论，不会自动成为长期关系记忆。消息由你亲自发送。</p>
+    {state.generationBlock && session?.state.selectedContactId && <button onClick={() => void session.confirmManualContact(session.state.selectedContactId!)}>确认手动输入联系人</button>}
+  </section>;
   const failure = foregroundFailureReason(state.reason);
   const paused = state.phase === 'paused' || state.suspendedByHelperFocus;
   const message = state.unsupportedConversation ? '群聊暂不支持，前台联系人匹配与新生成已暂停'

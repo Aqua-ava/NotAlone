@@ -18,14 +18,15 @@ export function useStartupState(): StartupState {
 }
 
 export function StartupReadiness({ state, onConfigure }: { state: StartupState; onConfigure?: () => void }) {
+  if (state.mode === 'managed') return <ManagedSetup state={state} />;
   return <section className="startup-readiness" aria-label="机器环境诊断">
     <h2>机器环境</h2>
     <p role={state.phase === 'blocked' ? 'alert' : undefined}>{state.phase === 'checking' ? '正在只读检查机器环境…'
-      : state.code ? startupMessages[state.code][0] : '请在应用配置中核对本机启动路径。'}</p>
+      : state.code ? startupMessages[state.code][0] : '正在检查本机服务…'}</p>
     {state.code && <p className="startup-guidance">{startupMessages[state.code][1]}</p>}
     {state.helperWarnings.includes('cli_unavailable') && <p className="startup-guidance">微信 CLI 未就绪。确认绝对路径后，才可使用已确认范围的文字同步。</p>}
     {state.helperWarnings.includes('probe_unavailable') && <p className="startup-guidance">前台定位探针未就绪。配置完整 helper 后，才可检查前台定位。</p>}
-    {onConfigure && state.phase !== 'ready' && <button className="button" onClick={onConfigure}>核对启动路径</button>}
+    {onConfigure && state.phase === 'blocked' && <button className="button" onClick={onConfigure}>核对启动路径</button>}
   </section>;
 }
 
@@ -64,6 +65,7 @@ export function StartupSettings({ state, backend }: { state: StartupState; backe
     try { setMessage(''); setError(''); await window.notalone.startup.retry(); }
     catch { setError('诊断暂时不可用，请稍后重试。'); }
   }
+  if (state.mode === 'managed') return <ManagedSetup state={state} />;
   return <section className="startup-settings" aria-label="本机启动配置">
     <StartupReadiness state={state} />
     <h2>本机启动路径</h2>
@@ -90,6 +92,15 @@ const pathFields: Array<[keyof StartupPaths, string]> = [
   ['wechatCliPath', '微信 CLI（可稍后配置）'], ['syncProbePath', '前台定位探针（可稍后配置）'],
 ];
 const startupMessages: Record<StartupCode, [string, string]> = {
+  runtime_import_incomplete: ['已有资料的接续尚未完成。', '请使用备份更新入口继续；原有资料和配置仍会保留。'],
+  local_setup_required: ['准备你的本机空间。', '联系人、聊天和关系资料保存在这台 Mac。点击开始即可准备，无需安装开发工具。'],
+  runtime_components_unavailable: ['App 运行组件缺失或校验未通过。', '请重新取得完整的 NotAlone App 后打开；已有本机资料会保留。'],
+  runtime_configuration_invalid: ['本机资料环境需要恢复。', '已有目录或配置无法安全核验。请保留本机资料，使用支持恢复的版本继续，勿删除资料目录。'],
+  runtime_cancelled: ['本次设置已取消。', '已保存的准备和资料会保留。可以继续设置，或从菜单退出 App。'],
+  runtime_stop_unconfirmed: ['本机服务停止尚未获确认。', '请使用连接状态中的停读入口重试。已有资料会保留。'],
+  database_prepare_failed: ['本机资料空间未能准备完成。', '请确认磁盘空间充足，然后重试设置。已经保存的准备会保留。'],
+  database_start_failed: ['本机资料服务未能启动。', '请稍后重试；已有资料会保留。仍失败时关闭 App 后重新打开。'],
+  database_already_running: ['已有资料服务尚未退出。', '请先正常退出旧版 NotAlone，再重新打开；不要删除资料或锁文件。'],
   ready: ['机器环境已就绪。', '机器检查通过后，继续核对本人身份和模型配置。'],
   launch_unconfigured: ['尚未配置本机启动路径。', '填写已安装的 NotAlone Python 与项目目录，然后保存并重试。'],
   configuration_invalid: ['本机启动路径配置无效。', '重新填写非秘密绝对路径并保存；已有业务资料不会被改动。'],
@@ -110,3 +121,41 @@ const startupMessages: Record<StartupCode, [string, string]> = {
   diagnostic_timeout: ['机器环境检查超时。', '检查本机服务和路径后重试；本次没有自动迁移或启动读取进程。'],
   diagnostic_failed: ['机器环境暂时无法核验。', '核对配置文件、数据库权限及必要结构后重新检查。'],
 };
+
+function ManagedSetup({ state }: { state: StartupState }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const preparing = state.phase === 'preparing' || state.phase === 'checking';
+  const ready = state.phase === 'ready';
+  const updateRequired = ['migration_pending', 'baseline_missing', 'baseline_invalid', 'migration_history_mismatch', 'schema_incomplete'].includes(state.code || '');
+  const steps = { 'checking-components': '正在检查 App 内的运行组件…', 'preparing-data': '正在准备仅保存在本机的资料空间…',
+    'starting-database': '正在启动本机资料服务…', 'preparing-database': '正在完成首次资料准备…', 'stopping': '正在停止本次设置与本机服务…' };
+  async function begin() {
+    if (busy || preparing) return;
+    setBusy(true); setError('');
+    try { await window.notalone.startup.beginLocalSetup(); }
+    catch { setError('设置尚未完成，请按当前提示处理后重试。'); }
+    finally { setBusy(false); }
+  }
+  async function cancel() {
+    setError('');
+    try { if (!await window.notalone.startup.cancelLocalSetup()) setError('停止尚未获确认，请使用连接状态中的停读入口。'); }
+    catch { setError('停止尚未获确认，请稍后重试。'); }
+  }
+  return <section className="startup-settings" aria-label="本机首次设置">
+    <h2>{ready ? '本机环境已就绪' : updateRequired ? '已有资料需要更新' : '欢迎使用 NotAlone'}</h2>
+    <p role={state.phase === 'blocked' ? 'alert' : 'status'}>{preparing ? (state.step ? steps[state.step] : '正在检查本机服务…')
+      : ready ? '本机服务已通过检查。继续确认本人身份与模型设置。'
+        : updateRequired ? '已有资料需要完成兼容更新。'
+          : state.code ? startupMessages[state.code][0] : '准备你的本机空间。'}</p>
+    {!ready && !preparing && <p>{updateRequired ? '已有资料会保留。通过备份更新入口继续，App 会先在本机验证恢复能力。'
+      : state.code ? startupMessages[state.code][1] : startupMessages.local_setup_required[1]}</p>}
+    {!ready && !updateRequired && <div className="startup-actions">
+      {preparing ? <button className="button" disabled={state.step === 'stopping'} onClick={() => void cancel()}>取消本次设置</button>
+        : <button className="button primary" disabled={busy} onClick={() => void begin()}>{busy ? '正在开始…'
+          : state.phase === 'first-run' ? '开始本机设置' : state.phase === 'cancelled' ? '继续本机设置' : '重试本机设置'}</button>}
+    </div>}
+    {state.phase === 'blocked' && <button className="button" onClick={() => void cancel()}>停止并返回</button>}
+    {error && <p role="alert">{error}</p>}
+  </section>;
+}

@@ -18,7 +18,7 @@ export type AssistantGenerationReceipt = Readonly<{
   state: 'running' | 'completed' | 'failed';
 }>;
 export type AssistantGenerationRecovery = (identity: AssistantGenerationIdentity) => Promise<AssistantGenerationReceipt | null>;
-export type AssistantGenerationStopping = Readonly<{ interrupt: (receipt: PendingAssistantGenerationReceipt) => Promise<void>; recover: AssistantGenerationRecovery }>;
+export type AssistantGenerationStopping = Readonly<{ interrupt: (receipt: PendingAssistantGenerationReceipt, reason?: 'app_quit' | 'configuration_reload') => Promise<void>; recover: AssistantGenerationRecovery }>;
 export type AssistantPreparationCommandIdentity = Readonly<{
   taskId: string; inputVersionId: string; action: 'confirm' | 'answer'; suggestionId: string | null; operationKey: string;
 }>;
@@ -59,6 +59,8 @@ export function readAssistantGenerationReceipt(value: unknown, sessionId: string
 export class AssistantGenerationJobs {
   private viewRevision = 0;
   private closing = false;
+  private connectionChange: Promise<void> | undefined;
+  private changingConnection = false;
   private closingReceipt: ((receipt: PendingAssistantGenerationReceipt) => void | Promise<void>) | undefined;
   private closingRecovery: AssistantGenerationRecovery | undefined;
   private closingJobs: [OwnedAssistantPreparation, ActiveJob][] | undefined;
@@ -141,7 +143,7 @@ export class AssistantGenerationJobs {
     });
   }
   private drain(): void {
-    if (this.closing || this.executing.size >= 1) return;
+    if (this.closing || this.changingConnection || this.executing.size >= 1) return;
     for (const [job, next] of this.waiting) {
       this.waiting.delete(job);
       if (!this.isActive(job)) { next.reject(); continue; }
@@ -168,7 +170,7 @@ export class AssistantGenerationJobs {
   private register(identity: AssistantGenerationOwner | AssistantGenerationIdentity,
     controller: AbortController, stopping?: AssistantGenerationStopping,
     preparationCommand?: AssistantPreparationCommandIdentity): OwnedAssistantPreparation {
-    if (this.closing) throw new Error('应用正在退出，请重开后再生成。');
+    if (this.closing || this.changingConnection) throw new Error('应用正在收尾本次生成，请稍后重试。');
     if (([...this.jobs.keys()].filter((job) => job.identity.connectionGeneration === identity.connectionGeneration).length >= 8
       || this.jobs.size >= 32) && ![...this.jobs].some(([job, active]) => active.transportEnded
       && sameOwner(job.identity, identity) && 'requestKey' in identity && 'requestKey' in job.identity
@@ -284,7 +286,7 @@ export class AssistantGenerationJobs {
   }
   leaveView(): void { this.viewRevision += 1; }
   isActive(job: OwnedAssistantPreparation): boolean {
-    return !this.closing && this.jobs.has(job) && !this.jobs.get(job)?.terminal && !job.signal.aborted;
+    return !this.closing && !this.changingConnection && this.jobs.has(job) && !this.jobs.get(job)?.terminal && !job.signal.aborted;
   }
   canPublish(job: OwnedAssistantGeneration, view: AssistantGenerationOwner): boolean {
     const active = this.jobs.get(job);
@@ -305,6 +307,32 @@ export class AssistantGenerationJobs {
   }
   pendingReceipts(): PendingAssistantGenerationReceipt[] {
     return [...this.jobs].flatMap(([job, active]) => active.receipt ? [{ ...job.identity, ...active.receipt }] : []);
+  }
+  prepareConnectionChange(): Promise<void> {
+    if (this.closing) return Promise.reject(new Error('退出尚未完成，不能重载配置。'));
+    if (this.connectionChange) return this.connectionChange;
+    this.changingConnection = true; this.leaveView();
+    const jobs = [...this.jobs];
+    for (const [, active] of jobs) active.controller.abort();
+    // 原认证目标仍在时结算接纳的身份；没有回执必须实际读回，不能把失败当未领取。
+    this.connectionChange = Promise.all(jobs.map(async ([job, active]) => {
+      await active.preparationSettled;
+      if (active.terminal || active.settledWithoutGeneration) return;
+      const stopping = active.stopping;
+      if (!stopping) throw new Error('原生成连接尚未确认，不能重载配置。');
+      if (!active.receipt) {
+        if (!('requestKey' in job.identity)) throw new Error('原准备身份尚未确认，不能重载配置。');
+        const recovered = await stopping.recover(job.identity as AssistantGenerationIdentity);
+        if (recovered === null) { active.terminal = true; this.jobs.delete(job); return; }
+        this.receiveReceipt(job as OwnedAssistantGeneration, recovered);
+      }
+      if (!active.receipt) throw new Error('原生成回执尚未确认，不能重载配置。');
+      await stopping.interrupt({ ...job.identity, ...active.receipt }, 'configuration_reload');
+      active.terminal = true; this.jobs.delete(job);
+    })).then(() => {}).finally(() => {
+      this.changingConnection = false; this.connectionChange = undefined; this.drain(); this.changed();
+    });
+    return this.connectionChange;
   }
   beginClosing(onReceipt: (receipt: PendingAssistantGenerationReceipt) => void | Promise<void>,
     recoverUnknown?: AssistantGenerationRecovery): Promise<void> {

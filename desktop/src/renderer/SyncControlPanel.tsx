@@ -14,7 +14,7 @@ const backfillLabels: Record<SyncBackfillPhase, string> = { not_required: '当�
 const backfillFailures: Record<string, string> = { cli_freshness_unknown: 'CLI未能确认覆盖到当前水位，请检查后显式重试。',
   cli_output_invalid: 'CLI返回的数据无法解析，本次补齐未完成，请检查后显式重试。' };
 
-export function SyncControlPanel({ bridge }: { bridge: SyncControlBridge }) {
+export function SyncControlPanel({ bridge, manualRelease = false }: { bridge: SyncControlBridge; manualRelease?: boolean }) {
   const { state, latest, active, error, setError } = useRevisionedSession(initial, bridge);
   useEffect(() => {
     // 连接时报告可能还未播种；进入页面只刷新一次缓存状态，不触发正文周期。
@@ -29,6 +29,18 @@ export function SyncControlPanel({ bridge }: { bridge: SyncControlBridge }) {
   const available = state.phase === 'ready' && report !== null && state.busy === null;
   const switchSync = () => operate(() => report?.enabled
     ? bridge.disable({ scopeRevision: state.scopeRevision }) : bridge.enable({ scopeRevision: state.scopeRevision }));
+  if (manualRelease) return <section className="bindings-explanation" aria-label="微信自动接入状态">
+    <h2>微信自动接入尚未提供</h2>
+    <p>首版请明确选择联系人，手动粘贴当前文字或导入已有单联系人 JSONL。无需配置微信工具、终端路径或系统权限。</p>
+    <p role="status">{report ? `已保存的同步总开关：${report.enabled ? '开启' : '关闭'}；已确认范围：${report.confirmedBindingCount}个会话。`
+      : '本次同步运行状态尚未核验；不能据此判断后台已停止。'}</p>
+    {report && <p>本次后台报告：{report.backgroundPhase === 'active' ? '正在运行' : report.backgroundPhase === 'disabled' ? '读取已关闭'
+      : report.backgroundPhase === 'waiting_bindings' ? '等待已有确认范围' : '读取不可用'}。现有授权与暂停状态继续保留。</p>}
+    {report?.enabled && <button className="button" disabled={!available} onClick={() => void switchSync()}>
+      {state.busy === 'disable' ? '正在关闭后台同步…' : '关闭后台同步'}</button>}
+    {state.errorCode && <p role="alert">同步运行状态暂未核验。请保留当前资料，重新打开 App 后查看；此状态不影响手动输入。</p>}
+    {error && <p role="alert">{error}</p>}
+  </section>;
   return <div className="bindings-page">
     <section className="bindings-explanation" aria-label="后台 CLI 同步">
       <div className="bindings-toolbar"><h2>后台文字同步</h2><button className="button"

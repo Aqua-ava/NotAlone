@@ -22,10 +22,22 @@ export class BackendHost {
   private generation = 0;
   private pollTimer: NodeJS.Timeout | undefined;
   private readonly listeners = new Set<(state: BackendState) => void>();
+  private readonly manualContacts = new Map<string, number>();
+  private connectionChangePreparation: (() => Promise<void>) | undefined;
+
+  setConnectionChangePreparation(prepare: () => Promise<void>): void { this.connectionChangePreparation = prepare; }
+
+  confirmManualInput(contactId: string, generation: number): void {
+    if (generation !== this.getConnectionGeneration()) throw new Error('手动联系人确认已失效。');
+    this.manualContacts.set(contactId, generation);
+  }
+
+  clearManualInput(contactId: string): void { this.manualContacts.delete(contactId); }
 
   constructor(private readonly userData: string,
     private readonly beforeConnect?: (config: BackendConfiguration, canStart: () => boolean) => Promise<void>,
-    private readonly resourcesDirectory?: string) {}
+    private readonly resourcesDirectory?: string,
+    private readonly afterShutdown?: () => Promise<boolean>) {}
 
   getState(): BackendState {
     return { ...this.state, canSaveStartupPaths: !this.configurationSave && this.configurationCanChange(),
@@ -59,7 +71,9 @@ export class BackendHost {
     const generation = this.getConnectionGeneration();
     if (!target || generation === undefined) throw new BackendRequestFailure('cancelled');
     let data: unknown;
-    try { data = await target.requestJson(options); }
+    const contactId = /^\/api\/contacts\/([a-f0-9-]+)\/assistant-session/.exec(options.path)?.[1];
+    const manual = contactId && this.manualContacts.get(contactId) === generation ? contactId : undefined;
+    try { data = await target.requestJson({ ...options, manualContactId: manual }); }
     catch (error) {
       if (target !== this.target || generation !== this.getConnectionGeneration()) throw new BackendRequestFailure('cancelled');
       throw error;
@@ -74,13 +88,15 @@ export class BackendHost {
     if (!target || scope.connectionGeneration !== this.getConnectionGeneration()) return undefined;
     const path = `/api/contacts/${scope.contactId}/assistant-sessions/${scope.sessionId}`;
     const generation = scope.connectionGeneration;
+    // 接纳时固定来源；旧连接只准读取原会话与中断原作业，不能据此重新生成。
+    const manualContactId = this.manualContacts.get(scope.contactId) === generation ? scope.contactId : undefined;
     return Object.freeze({ getConnectionGeneration: () => generation, requestJson: async (options: JsonRequest) => {
       const allowedRead = options.method === 'GET' && options.body === undefined
         && (options.path === path || options.path.startsWith(`${path}?read_part=`));
       if (!allowedRead && !(options.method === 'POST' && options.path === `${path}/interrupt`)) {
         throw new BackendRequestFailure('cancelled');
       }
-      return { generation, data: await target.requestJson(options) };
+      return { generation, data: await target.requestJson({ ...options, manualContactId }) };
     } });
   }
   onStateChanged(listener: (state: BackendState) => void): () => void {
@@ -156,6 +172,9 @@ export class BackendHost {
   }
 
   private async prepareRuntime(): Promise<boolean> {
+    if (this.quitting) return false;
+    // 仍持有原认证目标时结算接纳的作业；失败不停止或切换连接代际。
+    try { await this.connectionChangePreparation?.(); } catch { return false; }
     if (!await this.stopRuntime() || this.quitting) return false;
     // 连接中停读也可能在等待后获得目标；固定 shutdown 实际确认的那个实例。
     const previous = this.target;
@@ -208,7 +227,8 @@ export class BackendHost {
     if (this.ownedChild) throw new BackendFailure('backend_connection_failed');
     this.ownedChild = await OwnedBackendProcess.launch(config, canStart);
     // spawn 已完成的子进程仍须取得认证目标并收尾；取消检查只阻止新的 spawn。
-    const deadline = Date.now() + 12_000;
+    // 独立包冷导入的实测接近旧开发期预算，受管后台保留一次有界余量。
+    const deadline = Date.now() + (config.source === 'managed' ? 30_000 : 12_000);
     while (Date.now() < deadline && this.ownedChild.isRunning()) {
       const started = await readConnection(config.infoPath);
       if (started) {
@@ -227,7 +247,7 @@ export class BackendHost {
   private async shutdown(): Promise<boolean> {
     await this.initialization;
     if (!this.target) {
-      if (!this.ownedChild) return true;
+      if (!this.ownedChild) return this.finishShutdown();
       this.publish({ phase: 'shutdown-failed', errorCode: 'backend_shutdown_unconfirmed', canRetryShutdown: true });
       return false;
     }
@@ -243,7 +263,21 @@ export class BackendHost {
       }
     }
     if (this.ownedChild && this.target.connection.pid === this.ownedChild.pid) {
-      if (!await this.ownedChild.waitForExit(2500)) await this.ownedChild.terminate();
+      if (!await this.ownedChild.waitForExit(2500) && !await this.ownedChild.terminate()) {
+        this.publish({ phase: 'shutdown-failed', errorCode: 'backend_shutdown_unconfirmed', canRetryShutdown: true });
+        return false;
+      }
+    }
+    return this.finishShutdown();
+  }
+
+  private async finishShutdown(): Promise<boolean> {
+    let confirmed = true;
+    try { if (this.afterShutdown) confirmed = await this.afterShutdown(); }
+    catch { confirmed = false; }
+    if (!confirmed) {
+      this.publish({ phase: 'shutdown-failed', errorCode: 'backend_shutdown_unconfirmed', canRetryShutdown: true });
+      return false;
     }
     this.publish({ phase: 'stopped', errorCode: undefined, canRetryShutdown: false });
     return true;

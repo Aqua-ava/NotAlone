@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BackendState } from '../shared/backend-bridge';
 import { Icon } from './icons';
+import type { StartupState } from '../shared/startup-bridge';
 
 const initial: BackendState = { phase: 'disconnected', reused: false, revision: -1, canRetryConnection: false, canRetryShutdown: false,
   canSaveStartupPaths: false, canPrepareConfiguration: false };
@@ -25,7 +26,8 @@ export function BackendBadge({ state, compact = false }: { state: BackendState; 
   return <span className={compact ? 'ime-status' : 'connection-status'} role="status"><span className="status-dot" />{label}</span>;
 }
 
-export function BackendConnectionNote({ state }: { state: BackendState }) {
+export function BackendConnectionNote({ state, startup }: { state: BackendState; startup?: StartupState }) {
+  if (startup?.mode === 'managed' && startup.phase !== 'ready' && state.phase !== 'shutdown-failed' && !state.canRetryShutdown) return null;
   const connected = state.phase === 'connected';
   const failedStop = state.phase === 'shutdown-failed';
   const title = connected ? '本机服务已连接' : failedStop ? '后端关闭未获确认'

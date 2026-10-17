@@ -91,11 +91,13 @@ function candidate(args: unknown[], editing = false): ReplyCandidateSelection | 
 function options(args: unknown[]): RewriteOptionsUpdate {
   const value = fields(args, ['contactId', 'scopeRevision', 'options']);
   const settings = value.options as Record<string, unknown> | undefined;
-  if (!settings || typeof settings !== 'object' || Array.isArray(settings) || Object.keys(settings).length !== 3
-    || !Object.keys(settings).every((key) => ['tone', 'instruction', 'includeRelationshipContext'].includes(key))
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings) || Object.keys(settings).length < 3
+    || !Object.keys(settings).every((key) => ['tone', 'instruction', 'includeRelationshipContext', 'inputKind', 'pastedDirection'].includes(key))
     || !['original', 'warm', 'concise', 'polite'].includes(settings.tone as string)
     || typeof settings.instruction !== 'string' || settings.instruction.length > 4096
-    || typeof settings.includeRelationshipContext !== 'boolean') throw new Error('本次改写要求不可用。');
+    || typeof settings.includeRelationshipContext !== 'boolean'
+    || settings.inputKind !== undefined && !['draft', 'current_chat'].includes(settings.inputKind as string)
+    || settings.pastedDirection !== undefined && (typeof settings.pastedDirection !== 'string' || settings.pastedDirection.length > 4096)) throw new Error('本次改写要求不可用。');
   return { contactId: value.contactId as string, scopeRevision: value.scopeRevision as number, options: { ...settings } as unknown as RewriteOptions };
 }
 

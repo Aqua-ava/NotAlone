@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SourceDeletionState, DeletionSource } from '../shared/source-deletion-bridge';
 import type { ContactSessionView } from './contact-session';
+import { UpdateBackupDeletionNotice, UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
 const initial: SourceDeletionState = { revision: -1, contactId: null, scopeRevision: 0, phase: 'idle', sources: [], busySourceId: null, error: null };
 const stepNames = { mark_deleted: '标记删除', delete_derived: '清理派生资料', delete_index: '清理检索索引', clear_cache: '清理缓存', verify_not_retrievable: '不可检索校验' };
 function status(source: DeletionSource) {
   const task = source.task;
+  if (task?.backupCleanupRequired) return '更新备份尚未清理，删除未完成。请查看恢复说明并核验本机备份，再重试原删除。';
   if (task?.status === 'succeeded') return '已删除，已通过不可检索校验';
   if (task?.status === 'failed') return `删除失败：${stepNames[task.step]}，可重试原任务`;
   if (task?.status === 'cancelled') return '删除任务已取消，尚未确认删除完成';
@@ -46,9 +48,10 @@ export function SourceDeletionPanel({ session }: { session: ContactSessionView }
     {visible && state.phase === 'ready' && <ul className="memory-source-list">{state.sources.map((source) => <li key={source.sourceId}>
       <b>{source.fileName ?? '文件名已清除'}</b><p>来源标识：{source.sourceId}</p><p>{source.recordCount} 条记录</p><p role="status">{status(source)}</p>
       {source.task?.status !== 'succeeded' && <button className="button" disabled={!!state.busySourceId} onClick={() => setConfirmation(source.sourceId)}>{source.task ? '重试来源删除' : '删除来源'}</button>}
+      {source.task?.backupCleanupRequired && <UpdateBackupCleanupRecovery />}
     </li>)}</ul>}
     {confirmation && visible && <div role="dialog" aria-label="确认来源删除"><p>删除这份来源及失去有效来源支持的资料；其他有效来源支持的内容保留。</p>
-      <p>应用内删除不代表外部模型副本已删除。</p><button className="button" onClick={() => void remove()}>确认删除来源</button><button className="button" onClick={() => setConfirmation(null)}>取消删除</button></div>}
+      <UpdateBackupDeletionNotice /><button className="button" onClick={() => void remove()}>确认删除来源</button><button className="button" onClick={() => setConfirmation(null)}>取消删除</button></div>}
     {visible && state.error && <p role="alert">{state.error}</p>}{error && <p role="alert">{error}</p>}
   </section>;
 }

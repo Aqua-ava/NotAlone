@@ -64,7 +64,7 @@ def require_interruption_input(
 
 def interrupt_generation_in_transaction(
     connection: Any, scope: ContactScope, session_id: UUID,
-    request_key: UUID, input_version_id: UUID, *, complete_saved: CompleteSavedGeneration,
+    request_key: UUID, input_version_id: UUID, *, complete_saved: CompleteSavedGeneration, reason: str = "app_quit",
 ) -> AssistantGenerationReceipt:
     """退出凭证只有内部 UUID 和稳定分类；已可靠保存的 C 结果先赢。
 
@@ -72,7 +72,7 @@ def interrupt_generation_in_transaction(
     此模块既不创建候选，也不复制一套完成或 C attempt 写入逻辑。
     """
 
-    if (not isinstance(scope, ContactScope)
+    if (reason not in ("app_quit", "configuration_reload") or not isinstance(scope, ContactScope)
             or any(not isinstance(value, UUID) for value in (session_id, request_key, input_version_id))):
         raise AssistantSessionRejected("invalid_generation_interruption")
     lock_owner_scope(connection, owner_id=scope.owner_id)
@@ -112,7 +112,7 @@ def interrupt_generation_in_transaction(
                     or completed.reply.reply_request_id != request["id"]):
                 raise AssistantSessionPersistenceError("已保存回复未可靠恢复到原助手讨论。")
             return AssistantGenerationReceipt(session_id, turn["id"], request_key, input_version_id, "completed")
-        if turn["interruption_reason"] == "app_quit":
+        if turn["interruption_reason"] in ("app_quit", "configuration_reload"):
             invalidated = cursor.execute(
                 "SELECT 1 FROM public.reply_invalidated_key WHERE owner_id = %s "
                 "AND contact_id = %s AND idempotency_key = %s",
@@ -120,8 +120,8 @@ def interrupt_generation_in_transaction(
             ).fetchone()
             attempt = None if request is None else cursor.execute(
                 "SELECT 1 FROM public.reply_attempt WHERE reply_request_id = %s AND number = %s "
-                "AND state = 'failed' AND failure_reason = 'app_quit'",
-                (request["id"], request["attempt"]),
+                "AND state = 'failed' AND failure_reason = %s",
+                (request["id"], request["attempt"], turn["interruption_reason"]),
             ).fetchone()
             if (turn["state"] != "failed" or invalidated is None
                     or request is not None and (request["state"] != "failed" or attempt is None)):
@@ -141,7 +141,8 @@ def interrupt_generation_in_transaction(
                 "SELECT 1 FROM public.reply_attempt AS attempt "
                 "WHERE attempt.reply_request_id = %s AND attempt.number = %s "
                 "AND attempt.state IN ('failed', 'expired') "
-                "AND attempt.failure_reason IS DISTINCT FROM 'app_quit' AND NOT EXISTS ("
+                "AND attempt.failure_reason IS DISTINCT FROM 'app_quit' "
+                "AND attempt.failure_reason IS DISTINCT FROM 'configuration_reload' AND NOT EXISTS ("
                 "SELECT 1 FROM public.reply_attempt AS running "
                 "WHERE running.reply_request_id = attempt.reply_request_id AND running.state = 'running')",
                 (request["id"], request["attempt"]),
@@ -150,15 +151,15 @@ def interrupt_generation_in_transaction(
                 raise AssistantSessionPersistenceError("失败生成终态尚未可靠确认。")
             return _receipt(turn)
         invalidate_running_generation(
-            connection, scope, session_id, turn["id"], input_version_id, invalidation_reason="app_quit",
+            connection, scope, session_id, turn["id"], input_version_id, invalidation_reason=reason,
         )
         changed = cursor.execute(
-            "UPDATE public.assistant_session_turn SET interruption_reason = 'app_quit', updated_at = now() "
+            "UPDATE public.assistant_session_turn SET interruption_reason = %s, updated_at = now() "
             "WHERE owner_id = %s AND contact_id = %s AND session_id = %s AND id = %s "
             "AND state = 'failed' AND interruption_reason IS NULL",
-            (scope.owner_id, scope.contact_id, session_id, turn["id"]),
+            (reason, scope.owner_id, scope.contact_id, session_id, turn["id"]),
         ).rowcount
         if changed != 1:
             raise AssistantSessionPersistenceError("退出中断未可靠记录。")
-        turn["state"], turn["interruption_reason"] = "failed", "app_quit"
+        turn["state"], turn["interruption_reason"] = "failed", reason
         return _receipt(turn)

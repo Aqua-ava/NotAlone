@@ -7,6 +7,7 @@ import { SourceDeletionPanel } from './SourceDeletionPanel';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 import { TracePanel, useTraceReading } from './TracePanel';
 import type { TraceRecordKind } from '../shared/trace-bridge';
+import { UpdateBackupDeletionNotice, UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
 
 const initial: MemoryReadingState = { revision: -1, contactId: null, scopeRevision: 0, mutation: { phase: 'idle', message: '' },
   contact: { phase: 'idle', items: [] }, owner: { phase: 'idle', items: [] },
@@ -270,6 +271,7 @@ function MemoryCard({ content, memory, candidate, sources, correct, remove, open
       onClick={() => { setEditing(false); setRemoving(true); }}>{memory.adoptionMethod === 'auto' ? '撤销自动采纳' : '删除资料'}</button>}
     {removing && memory && remove && <div className="memory-edit-form" role="group" aria-label="确认删除资料">
       <p>{memory.adoptionMethod === 'auto' ? '撤销等同删除这条资料，不删除来源消息，也不提供恢复承诺。' : '删除这条资料，来源消息仍保留。'}</p>
+      <UpdateBackupDeletionNotice />
       <button className="button" disabled={busy} onClick={() => void remove(memory)}>{memory.adoptionMethod === 'auto' ? '确认撤销' : '确认删除'}</button>
       <button className="button" disabled={busy} onClick={() => setRemoving(false)}>取消删除</button>
     </div>}
@@ -281,6 +283,7 @@ function MemoryCard({ content, memory, candidate, sources, correct, remove, open
       aria-label={`丢弃候选：${content.text}`} onClick={() => setDiscarding(true)}>丢弃候选</button>}
     {discarding && candidate && discardCandidate && <div className="memory-edit-form" role="group" aria-label="确认丢弃候选">
       <p>丢弃这条待确认候选，不采纳为长期资料；来源消息仍保留。</p>
+      <UpdateBackupDeletionNotice />
       <button className="button" disabled={busy} onClick={() => void discardCandidate(candidate)}>确认丢弃</button>
       <button className="button" disabled={busy} onClick={() => setDiscarding(false)}>取消丢弃</button>
     </div>}
@@ -545,6 +548,7 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
     {contact && <SourceDeletionPanel session={session} />}
     {contact && <TracePanel key={session.state.scopeRevision} traces={traces} />}
     {state.mutation.phase !== 'idle' && <p className="memory-section-note" role={state.mutation.phase === 'error' ? 'alert' : 'status'}>{state.mutation.message}</p>}
+    {state.mutation.backupCleanupRequired && <UpdateBackupCleanupRecovery />}
     {memory.error && <p className="memory-section-note" role="alert">{memory.error}</p>}
     {session.error && <p className="memory-section-note" role="alert">{session.error}</p>}
   </div>;

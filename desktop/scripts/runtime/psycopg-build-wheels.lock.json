@@ -1,0 +1,23 @@
+[
+  {
+    "name": "setuptools",
+    "version": "83.0.0",
+    "filename": "setuptools-83.0.0-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/5d/40/e1e72872c6354b306daef1703549e8e83b4d43cfea356311bf722a043752/setuptools-83.0.0-py3-none-any.whl",
+    "sha256": "29b23c360f22f414dc7336bb39178cc7bcbf6021ed2733cde173f09dba19abb3"
+  },
+  {
+    "name": "wheel",
+    "version": "0.45.1",
+    "filename": "wheel-0.45.1-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/0b/2c/87f3254fd8ffd29e4c02732eee68a83a1d3c346ae39bc6822dcbcb697f2b/wheel-0.45.1-py3-none-any.whl",
+    "sha256": "708e7481cc80179af0e556bbf0cc00b8444c7321e2700b8d8580231d13017248"
+  },
+  {
+    "name": "Cython",
+    "version": "3.1.5",
+    "filename": "cython-3.1.5-cp312-cp312-macosx_11_0_arm64.whl",
+    "url": "https://files.pythonhosted.org/packages/3b/88/1e0df92588704503a863230fed61d95fc6e38c0db2537eaf6e5c140e5055/cython-3.1.5-cp312-cp312-macosx_11_0_arm64.whl",
+    "sha256": "61c42f881320a2b34a88806ddee6b424b3caa6fa193b008123704a2896b5bc37"
+  }
+]

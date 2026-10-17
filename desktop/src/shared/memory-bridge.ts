@@ -113,7 +113,7 @@ export interface MemoryReadingState {
   revision: number;
   contactId: string | null;
   scopeRevision: number;
-  mutation: { phase: 'idle' | 'working' | 'success' | 'error'; message: string };
+  mutation: { phase: 'idle' | 'working' | 'success' | 'error'; message: string; backupCleanupRequired?: boolean };
   contact: MemorySection<ActiveMemory>;
   owner: MemorySection<ActiveMemory>;
   pending: MemorySection<PendingMemoryCandidate>;

@@ -95,6 +95,44 @@ test('B10主动路径的冲突先澄清且零候选调用，明确替换后仍�
   assert.equal((await f.command('metrics')).model_calls, 2);
 });
 
+test('B10同一命令多步澄清保留已确认要求，并按来源覆盖本次选择', async (t) => {
+  const f = await budgetPublicFixture(t), scope = await f.connect();
+  await f.bridge.setMode({ ...scope, mode: 'initiate_conversation' });
+  await f.bridge.updatePurpose({ ...scope, purpose: '拒绝本次邀约。' });
+  await f.bridge.updateRequirements({ ...scope, requirements: '自然一点；不要承诺；保留称呼' });
+  await f.command('plan', { plan: { count: 1, message_groups: [['这次先不参加。', '只说明本次立场。']] } });
+  await f.bridge.generate({ ...scope, newRequest: true });
+  await f.bridge.readSavedSession(scope);
+  const initial = await f.bridge.getState(), sessionId = initial.savedSession.sessionId;
+  const path = `/api/contacts/${scope.contactId}/assistant-sessions/${sessionId}`;
+  const saved = await f.request(path), expectedInputVersionId = saved.current_input_version_id;
+  await f.bridge.continueSession({ ...scope, sessionId, instruction: '第一条正式一点',
+    requirementChanges: [{ action: 'keep', previous: ' \u0085 自然一点 \u0085 ' }] });
+  let clarification = (await f.bridge.getState()).continuation;
+  assert.equal(clarification.phase, 'clarification');
+  assert.deepEqual(clarification.clarification.requirement_options.map(item => item.requirement), ['保留称呼']);
+  await f.bridge.confirmContinuation({ ...scope, sessionId, expectedInputVersionId,
+    requirementChanges: [{ action: 'keep', previous: '保留称呼' }] });
+  clarification = (await f.bridge.getState()).continuation;
+  assert.equal(clarification.phase, 'clarification');
+  assert.equal(clarification.clarification.reason, 'requirements_conflict');
+  assert.deepEqual(clarification.clarification.requirement_options.map(item => item.requirement), ['自然一点']);
+  assert.deepEqual(await f.request(path), saved, '澄清不能领取新一轮或修改当前输入。');
+  assert.equal((await f.command('metrics')).model_calls, 1);
+  await f.command('plan', { plan: { count: 1, message_groups: [['本次无法参加。', '感谢这次邀请。']] } });
+  await f.bridge.confirmContinuation({ ...scope, sessionId, expectedInputVersionId,
+    requirementChanges: [{ action: 'replace', previous: '自然一点', replacement: '正式一点' }] });
+  const after = await f.bridge.getState(), persisted = await f.request(path);
+  assert.equal(after.continuation.phase, 'completed');
+  assert.deepEqual(after.continuation.effectiveRequirements, ['正式一点', '不要承诺', '保留称呼']);
+  assert.deepEqual(persisted.turns[1].input.continuation.submission.requirement_changes, [
+    { action: 'replace', previous: '自然一点', replacement: '正式一点' },
+    { action: 'keep', previous: '保留称呼' },
+  ]);
+  assert.equal(persisted.turns.length, 2);
+  assert.equal((await f.command('metrics')).model_calls, 2);
+});
+
 test('B10持续修改真实完成响应丢失后用原键原正文重试，不产生第三次模型', async (t) => {
   const f = await budgetPublicFixture(t);
   const scope = await f.connect();

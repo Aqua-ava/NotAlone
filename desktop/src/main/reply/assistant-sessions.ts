@@ -111,7 +111,7 @@ export async function readAssistantSession(backend: Pick<BackendHost, 'getConnec
   const turns: SavedAssistantTurn[] = value.turns.map((item: unknown) => {
     if (!isRecord(item) || !isUuid(item.turn_id) || !isUuid(item.input_version_id) || !isUuid(item.request_key)
       || !['running', 'completed', 'failed', 'redacted', 'unavailable'].includes(item.state as string)
-      || !(item.interruption_reason === null || item.state === 'failed' && item.interruption_reason === 'app_quit')
+      || !(item.interruption_reason === null || item.state === 'failed' && ['app_quit', 'configuration_reload'].includes(item.interruption_reason as string))
       || (item.generation_active !== undefined && typeof item.generation_active !== 'boolean')
       || (item.requires_reprepare !== undefined && typeof item.requires_reprepare !== 'boolean')
       || (item.input !== null && (!isRecord(item.input) || !isRecord(item.input.content)))
@@ -125,7 +125,7 @@ export async function readAssistantSession(backend: Pick<BackendHost, 'getConnec
     if (['redacted', 'unavailable'].includes(item.state as string) && basisChanges.length) throw invalidRead();
     return { turnId, inputVersionId: item.input_version_id.toLowerCase(), requestKey: item.request_key.toLowerCase(),
       state: item.state as SavedAssistantTurn['state'], input: item.input as SavedAssistantTurn['input'],
-      reply: item.reply === null ? null : readReplyResult(item.reply), interruptionReason: item.interruption_reason as 'app_quit' | null, placeholder: item.placeholder as string | null,
+      reply: item.reply === null ? null : readReplyResult(item.reply), interruptionReason: item.interruption_reason as 'app_quit' | 'configuration_reload' | null, placeholder: item.placeholder as string | null,
       ...(item.basis_changes === undefined ? {} : { basisChanges }),
       ...(typeof item.generation_active === 'boolean' ? { generationActive: item.generation_active } : {}),
       ...(item.requires_reprepare === true ? { requiresReprepare: true } : {}) };

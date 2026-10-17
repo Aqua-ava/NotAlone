@@ -79,6 +79,8 @@ class RewriteDraft:
     draft_text: str
     user_instruction: str | None = None
     include_relationship_context: bool = False
+    input_kind: Literal["draft", "current_chat"] = "draft"
+    pasted_direction: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.draft_text, str) or not self.draft_text.strip():
@@ -90,6 +92,10 @@ class RewriteDraft:
             raise ValueError("一次性改写要求不能为空字符串。")
         if not isinstance(self.include_relationship_context, bool):
             raise TypeError("是否使用联系人背景必须是布尔值。")
+        if self.input_kind not in ("draft", "current_chat") or self.input_kind == "current_chat" and (
+            not isinstance(self.pasted_direction, str) or not self.pasted_direction.strip() or len(self.pasted_direction) > 4096
+        ) or self.input_kind == "draft" and self.pasted_direction is not None:
+            raise ValueError("粘贴当前聊天须明确本次表达方向。")
 
     def is_valid(self) -> bool:
         """供应用边界重复校验不可信输入。"""
@@ -105,6 +111,8 @@ class RewriteDraft:
                 )
             )
             and isinstance(self.include_relationship_context, bool)
+            and self.input_kind in ("draft", "current_chat")
+            and (self.input_kind != "current_chat" or isinstance(self.pasted_direction, str) and bool(self.pasted_direction.strip()))
         )
 
 

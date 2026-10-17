@@ -11,7 +11,7 @@ export const managerPages = {
   },
   contacts: {
     title: '联系人与绑定', icon: 'contacts',
-    description: '先确认联系人与会话的对应关系，再决定哪些会话可以同步。',
+    description: '创建并明确选择本次联系人，再手动输入文字或导入单联系人资料。',
     emptyTitle: '联系人暂不可用',
     emptyDescription: '连接完成后，这里会显示你的联系人与消息、来源摘要。',
     action: '选择联系人',

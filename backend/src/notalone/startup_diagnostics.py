@@ -12,7 +12,7 @@ from typing import Any
 
 
 REQUIRED_TABLES = frozenset({
-    "owner", "contact", "channel_identity", "owner_channel_identity",
+    "owner", "contact", "channel_identity", "owner_channel_identity", "manual_contact_confirmation",
     "source_document", "import_confirmation", "message", "message_source_ref",
     "wechat_message_metadata", "conversation_binding", "front_sync_state",
     "local_wechat_observation", "wechat_observation_cursor",
@@ -26,6 +26,7 @@ REQUIRED_TABLES = frozenset({
 REQUIRED_COLUMNS = {
     "owner": {"id": "uuid", "display_name": "text", "created_at": "timestamp with time zone"},
     "contact": {"id": "uuid", "owner_id": "uuid", "display_name": "text"},
+    "manual_contact_confirmation": {"id": "uuid", "owner_id": "uuid", "contact_id": "uuid", "confirmed_at": "timestamp with time zone"},
     "message": {"id": "uuid", "owner_id": "uuid", "contact_id": "uuid", "text_content": "text"},
     "source_document": {"id": "uuid", "owner_id": "uuid", "contact_id": "uuid", "status": "text"},
     "conversation_binding": {"id": "uuid", "owner_id": "uuid", "contact_id": "uuid", "status": "text"},

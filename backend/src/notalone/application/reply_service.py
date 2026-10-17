@@ -71,6 +71,7 @@ class ReplyService:
         "_reply",
         "_exploration",
         "_skill_review",
+        "_manual_scope_lookup",
     )
 
     def __init__(
@@ -81,12 +82,14 @@ class ReplyService:
         reply: ReplyPort,
         exploration: ReplyExplorationService | None = None,
         skill_review=None,
+        manual_scope_lookup: Callable[[UUID, UUID], VerifiedConversationScope | None] | None = None,
     ) -> None:
         self._binding_lookup = binding_lookup
         self._conversation_factory = conversation_factory
         self._reply = reply
         self._exploration = exploration
         self._skill_review = skill_review
+        self._manual_scope_lookup = manual_scope_lookup
 
     @property
     def skill_review(self):
@@ -111,8 +114,12 @@ class ReplyService:
         if not isinstance(request, ReplyServiceRequest):
             raise TypeError("request 必须是 ReplyServiceRequest。")
 
-        binding = self._binding_lookup(owner_id, contact_id)
-        if binding is None:
+        manual_scope = self._manual_scope_lookup(owner_id, contact_id) if self._manual_scope_lookup else None
+        from notalone.application.manual_input_scope import manual_input_contact
+        if manual_input_contact.get() is not None and manual_scope is None:
+            return ReplyServiceResult(reply=None, reason="manual_contact_unconfirmed")
+        binding = None if manual_scope else self._binding_lookup(owner_id, contact_id)
+        if binding is None and manual_scope is None:
             # list_active_bindings 只返回 active 绑定：无绑定即不可用。
             return ReplyServiceResult(reply=None, reason="no_active_binding")
 
@@ -120,15 +127,15 @@ class ReplyService:
             command = request.build_command(
                 owner_id=owner_id,
                 contact_id=contact_id,
-                binding_id=binding.binding_id,
+                binding_id=manual_scope.conversation_binding_id if manual_scope else binding.binding_id,
             )
         except (TypeError, ValueError):
             return ReplyServiceResult(reply=None, reason="invalid_reply_input")
         if command is None or not command.has_valid_content():
             return ReplyServiceResult(reply=None, reason="invalid_reply_input")
 
-        conversation = self._conversation_factory(binding)
-        verification = conversation.verify_current()
+        verification = (ConversationResolution.ready(manual_scope) if manual_scope
+                        else self._conversation_factory(binding).verify_current())
         if verification.state is not ConversationResolutionState.READY:
             return ReplyServiceResult(
                 reply=None,

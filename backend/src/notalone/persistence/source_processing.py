@@ -235,6 +235,8 @@ class PostgresSourceProcessingStore:
                 ).fetchone()
                 if row is None:
                     raise LookupError("指定联系人范围内不存在该处理记录。")
+                from notalone.managed_update_backups import erase_managed_update_backups
+                erase_managed_update_backups(connection)
                 erase_processing_batches(
                     connection, scope=scope, batch_ids=[batch_id]
                 )

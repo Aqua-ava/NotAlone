@@ -731,6 +731,9 @@ def canonical_reply_input(command: GenerateReply) -> str:
             ),
             "include_relationship_context": content.include_relationship_context,
         }
+        if content.input_kind == "current_chat":
+            payload["input_kind"] = "current_chat"
+            payload["pasted_direction"] = content.pasted_direction.strip()
     else:
         raise ReplyStoreInvariantError("回复输入模式无效。")
     if isinstance(content, (ReplyToMessage, InitiateConversation)):

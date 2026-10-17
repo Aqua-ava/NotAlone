@@ -1,11 +1,12 @@
 import { constants } from 'node:fs';
-import { access, mkdir, open, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, open, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { BackendFailure } from './connection';
 import type { StartupPaths } from '../../shared/startup-bridge';
 import { resolveSyncProbePath } from './bundled-helpers';
+import { managedLayout } from '../startup/managed-manifest';
 
 const startupPathKeys = ['pythonExecutable', 'projectDirectory', 'envFilePath', 'backendInfoPath', 'wechatCliPath', 'syncProbePath'] as const;
 const startupPathKeySet = new Set<string>(startupPathKeys);
@@ -16,6 +17,9 @@ function validStartupPath(value: unknown, allowEmpty = false): value is string {
 }
 
 export interface BackendConfiguration {
+  // 仅本次受管 PG 监督器生成；不从磁盘配置或页面接受。
+  managedLifetimeLock?: string;
+  source?: 'external' | 'managed' | 'first-run';
   infoPath: string;
   envFilePath?: string;
   pythonExecutable?: string;
@@ -27,6 +31,7 @@ export interface BackendConfiguration {
 // 本文件只有非秘密路径，由主进程读取；具名机器诊断桥接负责展示和保存。
 export async function loadBackendConfiguration(userData: string, resourcesDirectory?: string): Promise<BackendConfiguration> {
   let value: Record<string, unknown> = {};
+  let external = false;
   try {
     const configPath = path.join(userData, 'backend-launch.json');
     const file = await open(configPath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -41,8 +46,20 @@ export async function loadBackendConfiguration(userData: string, resourcesDirect
     } finally { await file.close(); }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
     value = parsed as Record<string, unknown>;
+    external = true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new BackendFailure('backend_connection_failed');
+  }
+  if (!external && resourcesDirectory) {
+    let managed = false;
+    try { await lstat(path.join(userData, 'managed/state.json')); managed = true; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new BackendFailure('backend_connection_failed'); }
+    const root = path.join(resourcesDirectory, 'notalone-runtime');
+    return { source: managed ? 'managed' : 'first-run', infoPath: path.join(userData, 'managed/backend.info'),
+      envFilePath: path.join(userData, 'managed/runtime.env'),
+      ...(managed ? { pythonExecutable: path.join(root, managedLayout.python), projectDirectory: path.join(root, managedLayout.project) } : {}),
+      wechatCliPath: managed ? undefined : process.env.NOTALONE_WECHAT_CLI,
+      syncProbePath: await resolveSyncProbePath(resourcesDirectory, managed ? undefined : process.env.NOTALONE_SYNC_PROBE) };
   }
   for (const [key, selected] of Object.entries(value)) {
     if (!startupPathKeySet.has(key) || !validStartupPath(selected)) {
@@ -54,6 +71,7 @@ export async function loadBackendConfiguration(userData: string, resourcesDirect
   const envFilePath = value.envFilePath as string | undefined || process.env.NOTALONE_ENV_FILE;
   if (!path.isAbsolute(infoPath) || (envFilePath && !path.isAbsolute(envFilePath))) throw new BackendFailure('backend_connection_failed');
   return {
+    source: 'external',
     infoPath, envFilePath,
     pythonExecutable: value.pythonExecutable as string | undefined,
     projectDirectory: value.projectDirectory as string | undefined,
@@ -90,7 +108,20 @@ export async function saveBackendConfiguration(userData: string, paths: unknown,
 }
 
 export function backendEnvironment(config: BackendConfiguration, userData: string): NodeJS.ProcessEnv {
+  if (config.source === 'managed') {
+    // 只继承必要系统信息。开发机数据库、本人身份、模型密钥、代理和追踪不能抢过受管配置。
+    const environment: NodeJS.ProcessEnv = { PATH: '/usr/bin:/bin', LANG: 'en_US.UTF-8', LC_ALL: 'C',
+      HOME: userData, TMPDIR: process.env.TMPDIR || '/tmp', PYTHONDONTWRITEBYTECODE: '1', PYTHONNOUSERSITE: '1',
+      NOTALONE_BACKEND_INFO: config.infoPath, NOTALONE_ENV_FILE: config.envFilePath,
+      NOTALONE_MANAGED_USER_DATA: userData,
+      NOTALONE_WECHAT_CLI: path.join(userData, 'unconfigured-cli'),
+      NOTALONE_SYNC_PROBE: config.syncProbePath || path.join(userData, 'unconfigured-probe'),
+      NOTALONE_FOREGROUND_LAYOUT: path.join(userData, 'foreground-layout-profile.json') };
+    if (process.env.TZ) environment.TZ = process.env.TZ;
+    return environment;
+  }
   const environment: NodeJS.ProcessEnv = { ...process.env, PYTHONPATH: path.join(config.projectDirectory!, 'backend/src'), PYTHONNOUSERSITE: '1',
+    NOTALONE_MANAGED_USER_DATA: userData,
     NOTALONE_BACKEND_INFO: config.infoPath,
     NOTALONE_ENV_FILE: config.envFilePath || path.join(config.projectDirectory!, '.env'),
     NOTALONE_WECHAT_CLI: config.wechatCliPath || path.join(userData, 'unconfigured-cli'),

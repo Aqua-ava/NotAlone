@@ -4,6 +4,7 @@ export interface DeletionTask {
   taskId: string;
   status: 'queued' | 'running' | 'verifying' | 'succeeded' | 'failed' | 'cancelled';
   step: DeletionStepName;
+  backupCleanupRequired: boolean;
   steps: { name: DeletionStepName; status: 'pending' | 'running' | 'succeeded' | 'retryable' | 'failed' | 'cancelled' }[];
 }
 export interface DeletionSource {

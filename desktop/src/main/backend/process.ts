@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import path from 'node:path';
 import { BackendFailure } from './connection';
 import { backendEnvironment, validateLaunchConfiguration, type BackendConfiguration } from './config';
 
@@ -15,11 +16,13 @@ export class OwnedBackendProcess {
     // 路径核验含异步 I/O，最终 spawn 前再次检查退出/连接代际，不在退出后新建读取进程。
     if (!canStart()) throw new BackendFailure('backend_connection_failed');
     // 不用 shell 或 PATH，模块路径固定到所选项目，避免 editable install 指向另一个 checkout。
-    const child = spawn(pythonExecutable, ['-m', 'notalone.server.command', '--host', '127.0.0.1'], {
+    const managed = config.source === 'managed';
+    const child = spawn(pythonExecutable, [...(managed ? ['-I', '-B'] : []), '-m', 'notalone.server.command', '--host', '127.0.0.1',
+      ...(managed ? ['--parent-pid', String(process.pid), ...(config.managedLifetimeLock ? ['--lifetime-lock', config.managedLifetimeLock] : [])] : [])], {
       cwd: projectDirectory,
-      env: backendEnvironment({ ...config, projectDirectory }, projectDirectory),
+      env: backendEnvironment({ ...config, projectDirectory }, config.source === 'managed' ? path.dirname(path.dirname(config.infoPath)) : projectDirectory),
       // 后端 stdout 含 token；不用 stdout 发现连接，也不转发任何原始输出。
-      stdio: 'ignore',
+      stdio: managed ? ['pipe', 'ignore', 'ignore'] : 'ignore',
     });
     return new Promise((resolve, reject) => {
       child.once('error', () => reject(new BackendFailure('backend_connection_failed')));

@@ -34,14 +34,19 @@ def _uuid(value: Any) -> UUID:
         raise ReplyRequestInvalid() from None
 
 
-def parse_interruption_request(body: bytes) -> tuple[UUID, UUID]:
+def parse_interruption_request(body: bytes, *, allow_reason: bool = True) -> tuple[UUID, UUID, str]:
     try:
         payload = json.loads(body.decode("utf-8"))
     except (ValueError, UnicodeDecodeError):
         raise ReplyRequestInvalid() from None
-    if not isinstance(payload, dict) or set(payload) != {"request_key", "input_version_id"}:
+    if not isinstance(payload, dict) or set(payload) not in ({"request_key", "input_version_id"}, {"request_key", "input_version_id", "reason"}):
         raise ReplyRequestInvalid()
-    return _uuid(payload["request_key"]), _uuid(payload["input_version_id"])
+    if not allow_reason and "reason" in payload:
+        raise ReplyRequestInvalid()
+    reason = payload.get("reason", "app_quit")
+    if reason not in ("app_quit", "configuration_reload"):
+        raise ReplyRequestInvalid()
+    return _uuid(payload["request_key"]), _uuid(payload["input_version_id"]), reason
 
 
 def interruption_receipt_payload(receipt: AssistantGenerationReceipt) -> dict[str, Any]:
@@ -64,7 +69,7 @@ def handle_generation_lifecycle(
         return HTTPStatus.SERVICE_UNAVAILABLE, {"error": "assistant_session_unavailable"}
     try:
         contact_id, session_id = _uuid(parts[2]), _uuid(parts[4])
-        request_key, input_version_id = parse_interruption_request(body)
+        request_key, input_version_id, reason = parse_interruption_request(body, allow_reason=action != "preparation-format")
         if action == "preparation-format":
             checked = service.preparation_format(owner_id=owner_id, contact_id=contact_id, session_id=session_id,
                                                   request_key=request_key, input_version_id=input_version_id)
@@ -72,7 +77,7 @@ def handle_generation_lifecycle(
             payload.pop("interruption_reason")
             return HTTPStatus.OK, {**payload, "format_status": checked.format_status}
         receipt = service.interrupt(owner_id=owner_id, contact_id=contact_id, session_id=session_id,
-                                    request_key=request_key, input_version_id=input_version_id)
+                                    request_key=request_key, input_version_id=input_version_id, **({"reason": reason} if reason != "app_quit" else {}))
         return HTTPStatus.OK, interruption_receipt_payload(receipt)
     except ReplyRequestInvalid:
         return HTTPStatus.BAD_REQUEST, {"error": "assistant_session_request_invalid"}

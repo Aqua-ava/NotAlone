@@ -9,7 +9,7 @@ export class SetupController {
   private epoch = 0;
   private busy = false;
   private savedConfigPending = false;
-  private savedExpectation: 'owner' | 'credentials' = 'owner';
+  private savedExpectation: 'owner' | 'credentials' | 'official' = 'owner';
   private readonly listeners = new Set<(state: SetupState) => void>();
 
   constructor(private readonly backend: BackendHost) {
@@ -36,13 +36,14 @@ export class SetupController {
     this.publish({ phase: 'loading', ownerReady: false, credentialsConfigured: false, errorCode: undefined });
     try {
       const { data } = await this.backend.requestJson({ method: 'GET', path: '/api/setup/status', maxResponseBytes: 4096 });
-      const status = data as { initialized?: unknown; owner_configured?: unknown; credentials_configured?: unknown; runtime_owner_configured?: unknown };
+      const status = data as { initialized?: unknown; owner_configured?: unknown; credentials_configured?: unknown; runtime_owner_configured?: unknown; official_deepseek_defaults?: unknown };
       if (!status || typeof status.initialized !== 'boolean' || typeof status.owner_configured !== 'boolean'
         || typeof status.credentials_configured !== 'boolean' || typeof status.runtime_owner_configured !== 'boolean') throw new Error();
       const ownerReady = status.runtime_owner_configured;
       if (!this.isCurrent(operation)) return;
       this.publish({ phase: ownerReady ? 'ready' : status.owner_configured ? 'identity-unbound' : 'needs-owner',
-        ownerReady, credentialsConfigured: status.credentials_configured });
+        ownerReady, credentialsConfigured: status.credentials_configured,
+        officialDefaults: typeof status.official_deepseek_defaults === 'boolean' ? status.official_deepseek_defaults : undefined });
     } catch { if (this.isCurrent(operation)) this.publish({ phase: 'failed', ownerReady: false, credentialsConfigured: false }); }
   }
   async initializeOwner(displayName: string): Promise<void> {
@@ -66,7 +67,16 @@ export class SetupController {
       if (value?.provider !== 'deepseek' || value.configured !== true) throw new Error();
     });
   }
-  private async writeConfiguration(kind: 'owner' | 'credentials', write: () => Promise<void>): Promise<void> {
+  async saveOfficialDeepSeekKey(apiKey: string): Promise<void> {
+    if (this.state.phase !== 'ready') return;
+    await this.writeConfiguration('official', async () => {
+      const result = await this.backend.requestJson({ method: 'POST', path: '/api/setup/official-deepseek',
+        body: { api_key: apiKey, confirm_official_defaults: true }, maxResponseBytes: 4096 });
+      const value = result.data as { configured?: unknown; official_deepseek_defaults?: unknown };
+      if (value.configured !== true || value.official_deepseek_defaults !== true) throw new Error();
+    });
+  }
+  private async writeConfiguration(kind: 'owner' | 'credentials' | 'official', write: () => Promise<void>): Promise<void> {
     if (this.busy) return;
     const operation = this.beginOperation();
     if (!operation) return;
@@ -108,7 +118,8 @@ export class SetupController {
     if (!operation) { this.publish({ phase: 'restart-failed', errorCode: 'reload-failed' }); return; }
     await this.readStatus(operation);
     if (!this.isCurrent(operation)) return;
-    if (this.state.phase === 'ready' && (this.savedExpectation === 'owner' || this.state.credentialsConfigured)) this.savedConfigPending = false;
+    if (this.state.phase === 'ready' && (this.savedExpectation === 'owner' || this.state.credentialsConfigured
+      && (this.savedExpectation !== 'official' || this.state.officialDefaults === true))) this.savedConfigPending = false;
     else this.publish({ phase: 'restart-failed', errorCode: 'reload-failed' });
   }
   private beginOperation(): Operation | undefined {

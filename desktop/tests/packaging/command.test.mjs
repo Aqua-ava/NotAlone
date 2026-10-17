@@ -6,8 +6,9 @@ import { access, copyFile, cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, 
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { build as buildScript } from 'esbuild';
+import { verifyElectronNotices, verifyFrontendNotices } from '../../scripts/distribution-notices.mjs';
 
-test('离线临时打包仅附带自研探针，外置CLI配置与探针签名保持且从不执行产物', { skip: process.platform !== 'darwin' }, async () => {
+test('固定官方离线归档打包保留原始通知，自研探针签名保持且从不执行产物', { skip: process.platform !== 'darwin' }, async () => {
   const owned = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-package-check-')));
   try {
     const project = process.cwd(); const fixture = path.join(owned, 'fixture');
@@ -23,9 +24,9 @@ test('离线临时打包仅附带自研探针，外置CLI配置与探针签名�
     const version = (await readFile(path.join(project, 'node_modules/electron/dist/version'), 'utf8')).trim();
     assert.equal(version, packageJson.devDependencies.electron);
     await writeFile(path.join(fixture, 'package.json'), JSON.stringify(packageJson));
-    const zip = spawnSync('/usr/bin/ditto', ['-c', '-k', '--norsrc', path.join(project, 'node_modules/electron/dist'),
-      path.join(zipDirectory, `electron-v${version}-darwin-${process.arch}.zip`)], { encoding: 'utf8', timeout: 60_000 });
-    assert.equal(zip.status, 0, '只从已安装Electron生成本轮离线归档。');
+    const officialZipDirectory = process.env.NOTALONE_ELECTRON_ZIP_DIRECTORY;
+    assert.ok(officialZipDirectory && path.isAbsolute(officialZipDirectory), '设置NOTALONE_ELECTRON_ZIP_DIRECTORY为固定官方归档目录；不再重包已安装Electron。');
+    await copyFile(path.join(officialZipDirectory, `electron-v${version}-darwin-${process.arch}.zip`), path.join(zipDirectory, `electron-v${version}-darwin-${process.arch}.zip`));
     const values = [path.join(project, 'scripts/package.mjs'), '--output-directory', output, '--electron-zip-directory', zipDirectory,
       '--with-probe'];
     const packaged = spawnSync(process.execPath, values, { cwd: fixture, encoding: 'utf8', timeout: 180_000,
@@ -36,7 +37,13 @@ test('离线临时打包仅附带自研探针，外置CLI配置与探针签名�
       '打包返回后应清理本轮临时文件，不能只依赖测试夹具的最终清理。');
     assert.equal(await readFile(path.join(buildTemporary, 'keep-existing/sentinel'), 'utf8'), 'synthetic_existing_temporary');
     const app = path.join(output, `NotAlone-darwin-${process.arch}/NotAlone.app`);
+    const componentLock = JSON.parse(await readFile(path.join(project, 'scripts/runtime/component-sources.lock.json'), 'utf8'));
+    const minimumSystem = spawnSync('/usr/bin/plutil', ['-extract', 'LSMinimumSystemVersion', 'raw', path.join(app, 'Contents/Info.plist')], { encoding: 'utf8', timeout: 10_000 });
+    assert.equal(minimumSystem.status, 0);
+    assert.equal(minimumSystem.stdout.trim(), componentLock.minimumMacOS, 'Finder最低系统必须与固定运行时一致。');
     const resources = path.join(app, 'Contents/Resources');
+    await verifyFrontendNotices({ directory: path.join(resources, 'licenses/frontend') });
+    await verifyElectronNotices({ directory: path.join(resources, 'licenses/electron'), version });
     const appEntitlements = spawnSync('/usr/bin/codesign', ['-d', '--entitlements', ':-', app], { encoding: 'utf8', timeout: 10_000 });
     assert.equal(appEntitlements.status, 0);
     const entitlementJson = spawnSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', '--', '-'],

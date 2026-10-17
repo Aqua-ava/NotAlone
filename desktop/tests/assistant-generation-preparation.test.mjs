@@ -57,7 +57,7 @@ test('未知请求键的已确认操作先登记准备，退出时晚回执只�
   await jobs.beginClosing(async () => { throw new Error('不能重复交付成功中断。'); });
   assert.equal(received.length, 1);
   jobs.finish(job);
-  assert.throws(() => jobs.beginPreparation(owner), /退出/);
+  assert.throws(() => jobs.beginPreparation(owner), /收尾/);
 });
 
 test('正式准备明确不生成候选才可排空，不能伪造请求回执', async () => {

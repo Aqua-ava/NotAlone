@@ -53,6 +53,7 @@ from notalone.reply.adapters.exploration_runtime import LangChainExplorationRunt
 from notalone.reply.input_budget import (
     InputBudgetDecision, InputBudgetProfile, InputTokenCounter,
 )
+from notalone.scopes import VerifiedConversationScope
 
 
 def build_reply_service(
@@ -128,6 +129,7 @@ def build_reply_service(
         )),
     )
     reply_service = ReplyService(
+        manual_scope_lookup=_manual_scope_lookup(database_url),
         binding_lookup=_active_binding_lookup(database_url),
         conversation_factory=lambda binding: PostgresConversationPort(
             database_url,
@@ -178,6 +180,20 @@ def build_skill_review_service(*, database_url, model, context, model_priority,
         runtime_factory=review_runtime,
         ledger=PostgresOutboundLedger(database_url), model_name=getattr(model, 'model_name', None) or 'unreported',
         priority=model_priority)
+
+
+def _manual_scope_lookup(database_url: str):
+    def lookup(owner_id: UUID, contact_id: UUID) -> VerifiedConversationScope | None:
+        from notalone.application.manual_input_scope import manual_input_contact
+        if manual_input_contact.get() != contact_id:
+            return None
+        with psycopg.connect(database_url) as connection:
+            row = connection.execute(
+                "SELECT id FROM public.manual_contact_confirmation WHERE owner_id=%s AND contact_id=%s",
+                (owner_id, contact_id),
+            ).fetchone()
+        return VerifiedConversationScope(owner_id, contact_id, row[0]) if row else None
+    return lookup
 
 
 def _active_binding_lookup(database_url: str):

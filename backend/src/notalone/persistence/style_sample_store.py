@@ -659,6 +659,8 @@ class PostgresStyleSampleStore:
             with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
                 lock_owner_scope(connection, owner_id=scope.owner_id)
                 self._read(connection, scope, sample_id)
+                from notalone.managed_update_backups import erase_managed_update_backups
+                erase_managed_update_backups(connection)
                 _erase_samples(connection, owner_id=scope.owner_id, sample_ids=[sample_id])
         except psycopg.Error:
             raise StyleSampleError("表达样本删除失败，可重试。") from None

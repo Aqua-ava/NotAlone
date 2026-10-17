@@ -7,7 +7,7 @@ import { isUuid } from '../uuid';
 import { batchId, batches, document } from './read';
 
 type Scope = { generation: number; contactId: string; scopeRevision: number };
-const empty = (): Pick<TraceState, 'batches' | 'nextBefore' | 'availability' | 'detail'> => ({ batches: [], nextBefore: null, availability: null, detail: null });
+const empty = (): Pick<TraceState, 'batches' | 'nextBefore' | 'availability' | 'detail' | 'backupCleanupRequired'> => ({ batches: [], nextBefore: null, availability: null, detail: null, backupCleanupRequired: false });
 
 // 正文只停留在当前管理窗口的内存；范围、资料、来源与连接变化取消旧请求并清除快照。
 export class TraceController {
@@ -95,15 +95,16 @@ export class TraceController {
   private async run(scope: Scope, resource: TraceResource, method: 'GET' | 'DELETE', path: string, mutation: boolean, consume: (value: unknown) => void): Promise<void> {
     this.operation?.abort.abort();
     const operation = { abort: new AbortController(), mutation }; this.operation = operation;
-    this.publish({ resource, phase: 'loading', message: '', ...empty() });
+    this.publish({ resource, phase: 'loading', message: '', backupCleanupRequired: false, ...empty() });
     const current = () => { this.synchronizeScope(); return this.scope === scope && this.operation === operation; };
     try {
       const result = await this.backend.requestJson({ method, path, signal: operation.abort.signal, maxResponseBytes: 8_388_608 });
       if (!current() || result.generation !== scope.generation) return;
       consume(result.data); this.publish({ phase: 'ready' });
     } catch (error) {
-      if (current()) this.publish({ phase: 'error', ...empty(), message: mutation
-        ? '删除结果尚未核对，请重新读取后确认。'
+      const backupCleanupRequired = error instanceof BackendRequestFailure && error.code === 'update_backup_cleanup_required';
+      if (current()) this.publish({ phase: 'error', ...empty(), backupCleanupRequired, message: mutation
+        ? backupCleanupRequired ? '更新备份尚未清理，删除未完成。请查看恢复说明并核验本机备份，再重试原删除。' : '删除结果尚未核对，请重新读取后确认。'
         : error instanceof BackendRequestFailure && error.status === 404 ? '当前联系人范围内没有这项记录，或记录已不可用。' : '过程读取失败，请重试。' });
     } finally { if (this.operation === operation) this.operation = undefined; }
   }

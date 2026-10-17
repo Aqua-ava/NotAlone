@@ -13,7 +13,8 @@ def preparation_rejection_payload(error: AssistantPreparationRejected) -> tuple[
     if isinstance(failure, AssistantSessionNotFound):
         status, payload = 404, {"error": "not_found"}
     elif isinstance(failure, AssistantSessionRejected):
-        status, payload = 409, {"error": "assistant_session_rejected", "reason": failure.reason}
+        status, payload = ((503, {"error": "reply_unavailable"}) if failure.reason == "reply_unavailable" else
+                           (409, {"error": "assistant_session_rejected", "reason": failure.reason}))
     else:
         status, payload = 409, {"error": "assistant_session_input_conflict"}
     proof = error.proof

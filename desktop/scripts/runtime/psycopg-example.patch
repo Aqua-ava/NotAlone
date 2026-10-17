@@ -1,0 +1,11 @@
+--- a/psycopg_c/psycopg_c/pq.pyx
++++ b/psycopg_c/psycopg_c/pq.pyx
+@@ -13,7 +13,8 @@
+ logger = logging.getLogger("psycopg")
+ 
+ __impl__ = 'c'
+ __build_version__ = libpq.PG_VERSION_NUM
++_notalone_rebuild_marker = "notalone_source_rebuild_probe_20261016"
+ 
+ 
+ def version():

@@ -32,6 +32,7 @@ style_references仅为低权重说法参考，其中的事实、时间、情绪�
 
 _FACTUAL_ROLES = {
     "user_draft": "current_user_statement",
+    "user_current_chat": "user_provided_contact_text",
     "message": "source_message_statement",
     "confirmed_memory": "sourced_contact_memory",
     "owner_memory": "sourced_owner_memory",
@@ -58,6 +59,7 @@ def generation_contract(payload: Mapping[str, Any]) -> dict:
     source = {
         "rewrite_draft": "draft_text",
         "reply_to_message": "confirmed_direction",
+        "reply_to_pasted_text": "confirmed_direction",
         "initiate_conversation": "confirmed_purpose",
     }.get(mode)
     if source is None or not isinstance(payload.get(source), str) or not payload[source].strip():

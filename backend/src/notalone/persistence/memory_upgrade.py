@@ -186,6 +186,9 @@ class PostgresMemoryUpgradeStore:
             if receipt:
                 if receipt['job_id'] != job_id or receipt['action'] != action or receipt['request_digest'] != digest:
                     raise UpgradeConflict('动作身份已经用于不同批准。')
+                if action == 'delete':
+                    from notalone.managed_update_backups import erase_managed_update_backups
+                    erase_managed_update_backups(connection)
                 return self._payload(connection, job) if action == 'delete' else None
             if job['revision'] != expected_revision or job['state'] == 'deleted':
                 raise UpgradeConflict('升级工作已变化。')
@@ -238,6 +241,8 @@ class PostgresMemoryUpgradeStore:
                         connection.execute('UPDATE public.memory_upgrade_batch SET state=%s,error_code=NULL,revision=revision+1 WHERE id=%s', (state, row['id']))
                         _reset_task(connection, row['task_id'], step, preserve_succeeded=committed)
             elif action == 'delete':
+                from notalone.managed_update_backups import erase_managed_update_backups
+                erase_managed_update_backups(connection)
                 _invalidate(connection, selected.owner_id, [row['id'] for row in rows])
                 connection.execute("UPDATE public.memory_upgrade_job SET state='deleted' WHERE id=%s", (job_id,))
             else:

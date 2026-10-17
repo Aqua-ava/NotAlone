@@ -58,6 +58,7 @@ from notalone.persistence.owner_memory_store import (
 from notalone.persistence.source_deletion import (
     PostgresSourceDeletionRepository,
     SourceDeletionError,
+    SourceBackupCleanupError,
 )
 from notalone.persistence.watermark_store import (
     PostgresWatermarkStore,
@@ -415,8 +416,9 @@ class BackgroundTaskWorker:
                     self._deletion_repository.delete_source(**scope_args)
                 elif claim.name is not BackgroundTaskStepName.MARK_DELETED:
                     self._deletion_repository.verify_deleted(**scope_args)
-            except SourceDeletionError:
-                return self._record_failure(claim, "source_delete_failed", retryable=True)
+            except SourceDeletionError as error:
+                code = "update_backup_cleanup_required" if isinstance(error, SourceBackupCleanupError) else "source_delete_failed"
+                return self._record_failure(claim, code, retryable=True)
             if not self._complete_step(claim, processed_count=0, total_count=0):
                 return self._temporary_failure_result(claim)
             return WorkerRunResult(

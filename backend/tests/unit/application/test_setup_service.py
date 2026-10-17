@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 from notalone.application.setup_service import SetupService
@@ -110,6 +114,118 @@ class SetupServiceTest(unittest.TestCase):
     def test_write_credentials_rejects_empty(self) -> None:
         with self.assertRaises(ValueError):
             self.service.write_credentials(api_key="")
+
+    def reload_in_fresh_process(self, *keys: str) -> dict[str, str | None]:
+        # 子进程只读本例临时文件，没有继承模型配置或共享 editable 路径。
+        result = subprocess.run(
+            [sys.executable, "-B", "-c", (
+                "import json, os, sys; "
+                "from notalone.runtime_config import load_project_env; "
+                "load_project_env(); "
+                "print(json.dumps({key: os.environ.get(key) for key in sys.argv[1:]}))"
+            ), *keys],
+            env={
+                "NOTALONE_ENV_FILE": str(self.env_path),
+                "PYTHONPATH": str(Path(__file__).resolve().parents[3] / "src"),
+            },
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return json.loads(result.stdout)
+
+    def test_official_defaults_replace_all_loadable_assignments_on_fresh_reload(self) -> None:
+        preserved = (
+            "# NOTALONE_DEEPSEEK_BASE_URL=保留的说明\n"
+            "NOTALONE_SYNTHETIC_OTHER='保留其它设置'"
+        )
+        obsolete = (
+            "export NOTALONE_DEEPSEEK_BASE_URL = 'https://synthetic-old.invalid/v1'\n"
+            "NOTALONE_DEEPSEEK_BASE_URL=https://synthetic-duplicate.invalid\n"
+            "  export NOTALONE_DEEPSEEK_MODEL=deepseek-chat\n"
+            "NOTALONE_DEEPSEEK_MODEL = 'deepseek-reasoner'\n"
+            "export NOTALONE_DEEPSEEK_API_KEY=synthetic-old-export\n"
+            "NOTALONE_DEEPSEEK_API_KEY = synthetic-old-space\n"
+            "NOTALONE_DEEPSEEK_API_KEY=synthetic-old-plain\n"
+        )
+        self.env_path.write_text(obsolete + preserved, encoding="utf-8")
+
+        with patch.dict(os.environ, {}, clear=True):
+            result = self.service.use_official_deepseek(api_key="synthetic-official-new")
+
+        self.assertTrue(result["official_deepseek_defaults"])
+        expected = {
+            "NOTALONE_DEEPSEEK_API_KEY": "synthetic-official-new",
+            "NOTALONE_DEEPSEEK_MODEL": "deepseek-flash",
+            "NOTALONE_DEEPSEEK_BASE_URL": "https://api.deepseek.com",
+            "NOTALONE_SYNTHETIC_OTHER": "保留其它设置",
+        }
+        self.assertEqual(self.reload_in_fresh_process(*expected), expected)
+        output = self.env_path.read_text(encoding="utf-8")
+        self.assertIn(preserved + "\n", output)
+        for line in obsolete.splitlines():
+            self.assertNotIn(line, output)
+        self.assertEqual(self.env_path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(list(self.env_path.parent.iterdir()), [self.env_path])
+
+    def test_credentials_replace_export_and_spaced_duplicates_on_fresh_reload(self) -> None:
+        self.env_path.write_text(
+            "export NOTALONE_DEEPSEEK_API_KEY='synthetic-old-export'\n"
+            "NOTALONE_DEEPSEEK_API_KEY = synthetic-old-space\n"
+            "NOTALONE_DEEPSEEK_API_KEY=synthetic-old-plain\n"
+            "export NOTALONE_DEEPSEEK_BASE_URL=https://synthetic-custom.invalid/v1\n"
+            "NOTALONE_DEEPSEEK_MODEL=synthetic-custom-model\n"
+            "NOTALONE_SYNTHETIC_OTHER=preserved",
+            encoding="utf-8",
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            self.service.write_credentials(api_key="synthetic-credentials-new")
+
+        expected = {
+            "NOTALONE_DEEPSEEK_API_KEY": "synthetic-credentials-new",
+            "NOTALONE_DEEPSEEK_BASE_URL": "https://synthetic-custom.invalid/v1",
+            "NOTALONE_DEEPSEEK_MODEL": "synthetic-custom-model",
+            "NOTALONE_SYNTHETIC_OTHER": "preserved",
+        }
+        self.assertEqual(self.reload_in_fresh_process(*expected), expected)
+        self.assertNotIn("synthetic-old-", self.env_path.read_text(encoding="utf-8"))
+
+    def test_owner_write_replaces_export_and_spaced_duplicates_on_fresh_reload(self) -> None:
+        self.directory.create_owner(OWNER_ID, "合成本人")
+        self.env_path.write_text(
+            "export NOTALONE_OWNER_ID=22222222-2222-2222-2222-222222222222\n"
+            "NOTALONE_OWNER_ID = 33333333-3333-3333-3333-333333333333\n"
+            "NOTALONE_SYNTHETIC_OTHER=preserved",
+            encoding="utf-8",
+        )
+
+        self.service.initialize_owner(display_name="合成本人")
+
+        expected = {
+            "NOTALONE_OWNER_ID": str(OWNER_ID),
+            "NOTALONE_SYNTHETIC_OTHER": "preserved",
+        }
+        self.assertEqual(self.reload_in_fresh_process(*expected), expected)
+
+    def test_failed_atomic_save_keeps_existing_file_and_process_credentials(self) -> None:
+        original = "export NOTALONE_DEEPSEEK_API_KEY=synthetic-existing\n"
+        operations = (self.service.use_official_deepseek, self.service.write_credentials)
+        for operation in operations:
+            with self.subTest(operation=operation.__name__):
+                self.env_path.write_text(original, encoding="utf-8")
+                expected = {"NOTALONE_DEEPSEEK_API_KEY": "synthetic-existing"}
+                with patch.dict(os.environ, expected, clear=True):
+                    with patch(
+                        "notalone.runtime_config.os.replace",
+                        side_effect=OSError("synthetic_replace_failed"),
+                    ):
+                        with self.assertRaises(OSError):
+                            operation(api_key="synthetic-new")
+                    self.assertEqual(os.environ, expected)
+                self.assertEqual(self.env_path.read_text(encoding="utf-8"), original)
+                self.assertEqual(list(self.env_path.parent.iterdir()), [self.env_path])
 
 
 if __name__ == "__main__":

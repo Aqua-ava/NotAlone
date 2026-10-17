@@ -67,6 +67,7 @@ EvidenceKind = Literal[
     "confirmed_memory",
     "owner_memory",
     "user_draft",
+    "user_current_chat",
     "user_purpose",
     "continued_candidate",
     "pending_candidate",
@@ -80,6 +81,7 @@ EVIDENCE_STATUSES_BY_KIND: dict[EvidenceKind, frozenset[str]] = {
     "confirmed_memory": frozenset({"active", "invalidated"}),
     "owner_memory": frozenset({"active", "invalidated"}),
     "user_draft": frozenset({"active", "user_input"}),
+    "user_current_chat": frozenset({"user_input"}),
     "user_purpose": frozenset({"user_input"}),
     "continued_candidate": frozenset({"active", "candidate"}),
     # 待确认候选只能带 pending 状态进入模型和持久化边界；它不得被当成
@@ -481,11 +483,12 @@ class RetrievalReplyContext:
             evidence = [
                 ContextEvidence(
                     evidence_id=self._new_id(),
-                    kind="user_draft",
+                    kind="user_current_chat" if command.content.input_kind == "current_chat" else "user_draft",
                     text=command.content.draft_text,
                     scope=scope,
                     selection_reason=(
-                        "用户原句是改写模式的唯一默认输入。"
+                        "用户为这位联系人明确粘贴的当前聊天文字；未经渠道核验，不作为本人原句或长期记忆。"
+                        if command.content.input_kind == "current_chat" else "用户原句是改写模式的唯一默认输入。"
                     ),
                     status="user_input",
                 )

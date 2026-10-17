@@ -3,6 +3,7 @@ import { build as buildRenderer } from 'vite';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { requireBuildSpace } from './build-space.mjs';
+import { prepareFrontendNotices } from './distribution-notices.mjs';
 
 await requireBuildSpace([path.resolve('dist'), path.resolve('dist/renderer'), tmpdir()]);
 
@@ -21,3 +22,4 @@ await buildRenderer({
   base: '/',
   build: { outDir: path.resolve('dist/renderer'), emptyOutDir: true },
 });
+await prepareFrontendNotices({ projectDirectory: process.cwd(), outputDirectory: path.resolve('dist/licenses/frontend') });

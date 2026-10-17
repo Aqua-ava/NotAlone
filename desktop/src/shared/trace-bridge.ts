@@ -16,6 +16,7 @@ export interface TraceState {
   resource: TraceResource;
   phase: 'idle' | 'loading' | 'ready' | 'error';
   message: string;
+  backupCleanupRequired?: boolean;
   batches: TraceBatch[];
   nextBefore: string | null;
   availability: 'recorded' | 'deleted' | 'not_recorded' | 'not_applicable' | null;

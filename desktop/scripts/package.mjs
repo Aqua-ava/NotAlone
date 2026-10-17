@@ -7,6 +7,9 @@ import { promisify } from 'node:util';
 import { prepareRepositoryProbe } from './prepare-probe.mjs';
 import { inspectRuntime, requireUnchangedFiles, runtimeLayout } from './probe-runtime.mjs';
 import { requireBuildSpace } from './build-space.mjs';
+import { inspectManagedRuntime, runtimeDirectoryName } from './managed-runtime.mjs';
+import { prepareElectronNotices, verifyElectronArchive, verifyElectronNotices, verifyFrontendNotices } from './distribution-notices.mjs';
+import { runtimeMinimumMacOS } from './runtime-platform.mjs';
 
 if (process.platform !== 'darwin') throw new Error('本机 App 打包需要 macOS。');
 const run = promisify(execFile);
@@ -22,7 +25,7 @@ for (let index = 0; index < packageArguments.length; index++) {
   }
   const value = packageArguments[++index];
   if (typeof value !== 'string' || !value || /[\0\r\n]/.test(value)) throw new Error('helper_check_arguments');
-  if (key === '--output-directory' || key === '--electron-zip-directory') {
+  if (key === '--output-directory' || key === '--electron-zip-directory' || key === '--runtime-directory') {
     if (key in packagePaths || !path.isAbsolute(value)) throw new Error('helper_check_arguments');
     packagePaths[key] = path.resolve(value);
   } else { throw new Error('helper_check_arguments'); }
@@ -31,6 +34,7 @@ const electronCache = path.join(homedir(), 'Library/Caches/electron');
 await requireBuildSpace([packagePaths['--output-directory'] || path.resolve('out'), tmpdir(),
   ...(!packagePaths['--electron-zip-directory'] ? [electronCache] : [])]);
 const manifest = JSON.parse(await readFile('package.json', 'utf8'));
+const minimumMacOS = runtimeMinimumMacOS(JSON.parse(await readFile(new URL('./runtime/component-sources.lock.json', import.meta.url), 'utf8')));
 let staging; let outputDirectory; let ownedOutput; let completed = false;
 try {
   if (packagePaths['--output-directory']) {
@@ -44,15 +48,33 @@ try {
     try {
       electronZipDir = await realpath(packagePaths['--electron-zip-directory']);
       if (typeof manifest.devDependencies.electron !== 'string' || !/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.+-]+)?$/.test(manifest.devDependencies.electron)) throw new Error();
-      const archive = await lstat(path.join(electronZipDir, `electron-v${manifest.devDependencies.electron}-darwin-${process.arch}.zip`));
-      if (!archive.isFile() || archive.isSymbolicLink()) throw new Error();
     } catch { throw new Error('package_offline_archive_unavailable'); }
+    await verifyElectronArchive({ directory: electronZipDir, version: manifest.devDependencies.electron, arch: process.arch });
   }
   staging = await mkdtemp(path.join(tmpdir(), 'notalone-package-'));
+  const licensesDirectory = path.join(staging, 'licenses');
+  await verifyFrontendNotices({ directory: path.resolve('dist/licenses/frontend') });
+  await cp('dist/licenses/frontend', path.join(licensesDirectory, 'frontend'), { recursive: true });
   const probeDirectory = path.join(staging, 'notalone-probe');
   const preparedProbe = withProbe ? await prepareRepositoryProbe(probeDirectory) : undefined;
-  const resources = preparedProbe ? [probeDirectory] : [];
+  let preparedManaged;
+  let managedDirectory = packagePaths['--runtime-directory'];
+  if (managedDirectory) {
+    if (path.basename(managedDirectory) !== runtimeDirectoryName) throw new Error('package_runtime_directory_name');
+    preparedManaged = await inspectManagedRuntime(managedDirectory);
+    const stagedManaged = path.join(staging, runtimeDirectoryName);
+    // 仅对已核验的包内普通文件链接解引用，避免复制库改写为构建目录绝对链接。
+    await cp(managedDirectory, stagedManaged, { recursive: true, dereference: true });
+    await inspectManagedRuntime(stagedManaged); managedDirectory = stagedManaged;
+  }
+  const resources = [licensesDirectory, ...(preparedProbe ? [probeDirectory] : []), ...(preparedManaged ? [managedDirectory] : [])];
   const verifyResources = async (resources) => {
+    await verifyFrontendNotices({ directory: path.join(resources, 'licenses/frontend') });
+    await verifyElectronNotices({ directory: path.join(resources, 'licenses/electron'), version: manifest.devDependencies.electron });
+    if (preparedManaged) {
+      const copiedManaged = await inspectManagedRuntime(path.join(resources, runtimeDirectoryName));
+      if (JSON.stringify(copiedManaged) !== JSON.stringify(preparedManaged)) throw new Error('package_runtime_changed');
+    }
     if (!preparedProbe) return;
     const copied = await inspectRuntime({ directory: path.join(resources, runtimeLayout().directory),
       arch: preparedProbe.architecture, version: preparedProbe.versionDeclaration, runtimeKind: preparedProbe.runtimeKind });
@@ -103,11 +125,13 @@ try {
     asar: true,
     icon,
     extraResource: resources.length ? resources : undefined,
-    afterCopyExtraResources: resources.length ? [async ({ buildPath }) => {
+    afterCopyExtraResources: [async ({ buildPath }) => {
       await verifyResources(path.join(buildPath, 'NotAlone.app/Contents/Resources'));
-    }] : undefined,
+    }],
     afterExtract: [async ({ buildPath }) => {
+      await prepareElectronNotices({ extractedDirectory: buildPath, outputDirectory: path.join(licensesDirectory, 'electron'), version: manifest.devDependencies.electron });
       const plist = path.join(buildPath, 'Electron.app/Contents/Info.plist');
+      await run('plutil', ['-replace', 'LSMinimumSystemVersion', '-string', minimumMacOS, plist]);
       for (const key of ['NSCameraUsageDescription', 'NSMicrophoneUsageDescription',
         'NSAudioCaptureUsageDescription', 'NSBluetoothAlwaysUsageDescription',
         'NSBluetoothPeripheralUsageDescription']) {
@@ -121,7 +145,8 @@ try {
       preAutoEntitlements: false,
       preEmbedProvisioningProfile: false,
       // 自研探针保留已核查的签名，不注入 Electron 的 JIT entitlement。
-      ignore: (file) => Boolean(preparedProbe && file.includes(`${path.sep}Contents${path.sep}Resources${path.sep}${runtimeLayout().directory}${path.sep}`)),
+      ignore: (file) => Boolean((preparedProbe && file.includes(`${path.sep}Contents${path.sep}Resources${path.sep}${runtimeLayout().directory}${path.sep}`)) ||
+        (preparedManaged && file.includes(`${path.sep}Contents${path.sep}Resources${path.sep}${runtimeDirectoryName}${path.sep}`))),
       optionsForFile: () => ({
         entitlements,
         hardenedRuntime: false,
@@ -132,10 +157,14 @@ try {
   if (!outputs.length) throw new Error('package_output_unavailable');
   for (const output of outputs) {
     const app = path.join(output, 'NotAlone.app');
+    const minimumSystem = await run('plutil', ['-extract', 'LSMinimumSystemVersion', 'raw', path.join(app, 'Contents/Info.plist')]);
+    if (minimumSystem.stdout.trim() !== minimumMacOS) throw new Error('package_minimum_macos_changed');
     await verifyResources(path.join(app, 'Contents/Resources'));
     await run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', app]);
     console.log(`本机 App 已构建并通过 ad-hoc 签名校验：${app}`);
-    console.log('微信同步使用用户本机外置工具，请在机器环境中配置 CLI 路径。');
+    if (preparedManaged) console.log('包内提供受管Python、后台与PostgreSQL；首启与搬动可用性须另行实测。');
+    else console.log('当前包使用外置后台运行环境。');
+    console.log('微信工具与授权接入尚未通过独立交付验收。');
     if (preparedProbe) console.log('仓库探针/核心库静态构建与随包复核通过；未运行探针，不证明定位或权限验收。');
   }
   completed = true;

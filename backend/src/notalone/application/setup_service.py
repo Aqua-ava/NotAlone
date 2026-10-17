@@ -8,11 +8,12 @@ owner 初始化与导入命令的 --initialize-owner 保持同一事务语义与
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Protocol
 from uuid import UUID, uuid4
 
-from notalone.runtime_config import _writable_env_path
+from notalone.runtime_config import persist_env_values, persist_owner_id
 
 
 class OwnerAlreadyConfigured(RuntimeError):
@@ -54,6 +55,11 @@ class SetupService:
             "initialized": len(owners) > 0,
             "owner_configured": len(owners) > 0,
             "credentials_configured": configured,
+            "official_deepseek_defaults": (
+                os.environ.get("NOTALONE_DEEPSEEK_MODEL", "deepseek-flash") == "deepseek-flash"
+                and os.environ.get("NOTALONE_DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
+                in ("https://api.deepseek.com", "https://api.deepseek.com/v1")
+            ),
             # 由当前实例注入，不接受 HTTP 调用方指定；全库状态不是身份凭证。
             "runtime_owner_configured": (
                 runtime_owner_id is not None
@@ -95,39 +101,25 @@ class SetupService:
         key = api_key.strip()
         if not key:
             raise ValueError("模型凭据不能为空。")
-        self._write_env(
-            "NOTALONE_DEEPSEEK_API_KEY",
-            key,
-        )
+        persist_env_values({"NOTALONE_DEEPSEEK_API_KEY": key}, self._env_path)
         os.environ["NOTALONE_DEEPSEEK_API_KEY"] = key
         return {"provider": "deepseek", "configured": True}
+
+    def use_official_deepseek(self, *, api_key: str) -> dict[str, object]:
+        """用户确认官方接收方并亲输新密钥后，原子保存三项配置。"""
+
+        if not isinstance(api_key, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,4096}", api_key):
+            raise ValueError("请重新输入对应的官方模型密钥。")
+        values = {
+            "NOTALONE_DEEPSEEK_API_KEY": api_key,
+            "NOTALONE_DEEPSEEK_MODEL": "deepseek-flash",
+            "NOTALONE_DEEPSEEK_BASE_URL": "https://api.deepseek.com",
+        }
+        persist_env_values(values, self._env_path)
+        os.environ.update(values)
+        return {"provider": "deepseek", "configured": True, "official_deepseek_defaults": True}
 
     # -- 辅助 ----------------------------------------------------------
 
     def _persist_owner_id(self, owner_id: UUID) -> None:
-        self._write_env("NOTALONE_OWNER_ID", str(owner_id))
-
-    def _write_env(self, key: str, value: str) -> Path:
-        path = self._env_path or _writable_env_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        existing = path.read_text(encoding="utf-8") if path.exists() else ""
-        lines = existing.splitlines(keepends=True)
-        replacement = f"{key}={value}\n"
-        replaced = False
-        output: list[str] = []
-        for line in lines:
-            stripped = line.lstrip()
-            if stripped.startswith(f"{key}="):
-                if not replaced:
-                    output.append(replacement)
-                    replaced = True
-            else:
-                output.append(line)
-        if not replaced:
-            output.append(replacement)
-        path.write_text("".join(output), encoding="utf-8")
-        try:
-            path.chmod(0o600)
-        except OSError:
-            pass
-        return path
+        persist_owner_id(owner_id, self._env_path)

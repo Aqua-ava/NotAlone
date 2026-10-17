@@ -4,6 +4,7 @@ import type { BackendHost } from '../backend/host';
 import { isUuid } from '../uuid';
 import { readReplyMessages } from './messages';
 import { sceneSnapshot } from './scene';
+import { pastedInputFields } from './pasted-input';
 
 const text = (value: unknown, limit = 4096): value is string => typeof value === 'string' && Boolean(value.trim()) && Array.from(value).length <= limit;
 const optional = (value: unknown): value is string | null | undefined => value == null || typeof value === 'string' && Array.from(value).length <= 4096;
@@ -18,7 +19,8 @@ export async function interruptedReplyInput(backend: BackendHost, turn: SavedAss
     && (content.user_instruction == null || typeof content.user_instruction === 'string')
     && typeof content.include_relationship_context === 'boolean') {
     return { ...common, mode: 'rewrite_draft', draftText: content.draft_text,
-      userInstruction: content.user_instruction ?? null, includeRelationshipContext: content.include_relationship_context };
+      userInstruction: content.user_instruction ?? null, includeRelationshipContext: content.include_relationship_context,
+      ...pastedInputFields(content) };
   }
   if (!['understanding_correction', 'clarification_answer'].every((field) => optional(content[field]))
     || !(content.user_instruction == null || typeof content.user_instruction === 'string')) {

@@ -44,7 +44,7 @@ class FidelityControlledModel(ScriptedCoreModel):
             raise AssertionError("合成脚本耗尽，禁止额外模型调用。")
         plan = self.plans.pop(0)
         primary = next(item for item in payload["evidence"]
-                       if item["kind"] in {"user_draft", "user_purpose"} or
+                       if item["kind"] in {"user_draft", "user_current_chat", "user_purpose"} or
                        (item["kind"] == "message" and item["text"] == payload.get("current_text")))
         candidate = {"text": plan["text"], "basis": plan["basis"],
                      "citation_ids": plan.get("citation_ids", [primary["evidence_id"]]),

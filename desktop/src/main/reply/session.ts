@@ -193,6 +193,12 @@ export class ReplySession {
     }
   }
   pendingGenerationReceipts(): PendingAssistantGenerationReceipt[] { return this.generationJobs.pendingReceipts(); }
+  async prepareGenerationConnectionChange(): Promise<void> {
+    const settling = this.generationJobs.prepareConnectionChange();
+    this.leaveGenerationView();
+    await settling;
+  }
+
   // 退出调用方接收实际标识后走17的中断协议；hide/close不调用本接口。
   beginGenerationClosing(onReceipt: (receipt: PendingAssistantGenerationReceipt) => void | Promise<void>,
     recoverUnknown?: AssistantGenerationRecovery): Promise<void> {
@@ -241,7 +247,17 @@ export class ReplySession {
       seen.add(option.requirement);
       return requirementChangeFromClarification(option, change.action, change.action === 'replace' ? change.replacement : undefined);
     });
-    await this.runContinuation(update, Object.freeze({ ...attempt.command, requirementChanges: changes }),
+    // 同一冻结命令的多步澄清保留已确认项；当前选项覆盖同一来源的旧选择。
+    const confirmedChanges = new Map<string, (typeof changes)[number]>();
+    for (const change of [...(attempt.command.requirementChanges ?? []), ...changes]) {
+      const source = change.action === 'add' ? change.replacement : change.previous;
+      // 按后端 str.strip 的空白集合生成来源键，保持传输正文不变。
+      const normalizedSource = source.replace(/^[\p{White_Space}\u001c-\u001f]+|[\p{White_Space}\u001c-\u001f]+$/gu, '');
+      const key = (change.action === 'add' ? 'new:' : 'existing:') + normalizedSource;
+      confirmedChanges.set(key, change);
+    }
+    await this.runContinuation(update, Object.freeze({ ...attempt.command,
+      requirementChanges: Object.freeze([...confirmedChanges.values()]) }),
       contacts.contacts.find((contact) => contact.contactId === update.contactId)!.displayName, generation);
   }
   async retryContinuation(update: AssistantSessionSelection): Promise<void> {
@@ -1390,12 +1406,14 @@ export class ReplySession {
     const target = this.state.messages.items.find((item) => item.messageId === this.state.targetMessageId);
     if (this.state.mode === 'rewrite_draft' ? !contactState.draft.trim()
       : this.state.mode === 'initiate_conversation' ? !this.state.purpose.trim() : !target || !this.state.direction.trim()) return;
+    if (this.state.mode === 'rewrite_draft' && options.inputKind === 'current_chat' && !options.pastedDirection?.trim()) return;
     this.notifyInputChanged();
     const common = { contactId: selection.contactId, contactDisplayName: contact.displayName, ...sceneSnapshot(this.state.scene || null) };
     const input: ReplyInputSnapshot = this.state.mode === 'rewrite_draft'
       ? { ...common, mode: 'rewrite_draft', draftText: contactState.draft.trim(),
         userInstruction: [tones[options.tone], options.instruction.trim()].filter(Boolean).join('\n') || null,
-        includeRelationshipContext: options.includeRelationshipContext }
+        includeRelationshipContext: options.includeRelationshipContext,
+        ...(options.inputKind === 'current_chat' ? { inputKind: 'current_chat', pastedDirection: options.pastedDirection!.trim() } : {}) }
       : this.state.mode === 'initiate_conversation'
         ? { ...common, mode: 'initiate_conversation', purpose: this.state.purpose.trim(), correction: this.state.correction.trim(), userInstruction: this.state.requirements.trim(), clarificationAnswer: this.state.clarificationAnswer.trim(), skillChoice: { ...(this.generationSkillChoice ?? this.state.skillChoice) } }
         : { ...common, mode: 'reply_to_message', target: structuredClone(target!), direction: this.state.direction.trim(),
@@ -1423,7 +1441,7 @@ export class ReplySession {
     const saved = await readAssistantSession(this.backend, request.contactId, request.sessionId, pending.signal);
     const turn = saved.turns.find((item) => item.turnId === request.turnId && item.inputVersionId === request.inputVersionId);
     if (!current() || saved.generation !== generation || saved.currentInputVersionId !== request.inputVersionId
-      || turn?.state !== 'failed' || turn.interruptionReason !== 'app_quit' || !turn.input || turn.reply) {
+      || turn?.state !== 'failed' || !['app_quit', 'configuration_reload'].includes(turn.interruptionReason ?? '') || !turn.input || turn.reply) {
       throw new Error('中断生成或来源已失效，请重新读取。');
     }
     const input = await interruptedReplyInput(this.backend, turn, contact, pending.signal, current);

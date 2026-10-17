@@ -22,7 +22,9 @@ export class AppWindows {
 
   constructor(private readonly appSession: Session) {}
 
-  async open(role: WindowRole): Promise<void> {
+  open(role: WindowRole): Promise<void> { return this.present(role, true); }
+
+  private async present(role: WindowRole, focus: boolean): Promise<void> {
     if (this.quitting) return;
     let hosted = this.windows.get(role);
     if (hosted?.failed || hosted?.window.isDestroyed()) {
@@ -38,13 +40,14 @@ export class AppWindows {
     await hosted.ready;
     const window = hosted.window;
     if (this.quitting || window.isDestroyed()) return;
-    if (role === 'helper' && !hosted.failed) {
+    if (role === 'helper' && !hosted.failed && focus) {
       // 必须在 app.show、恢复窗口和取得焦点之前完成本次有界观察。
       // 定位不可用仍允许打开小窗，由具名定位状态要求人工确认。
       await this.helperObservation?.beforeShow().catch(() => {});
       if (this.quitting || window.isDestroyed()) return;
     }
-    if (app.isHidden()) {
+    const shortcutPanel = role === 'helper' && !focus && process.platform === 'darwin';
+    if (!shortcutPanel && app.isHidden()) {
       // app.show 会恢复整体隐藏前的窗口，先明确隐藏非目标窗口。
       for (const { window: other } of this.windows.values()) {
         if (other !== window && !other.isDestroyed()) other.hide();
@@ -52,8 +55,8 @@ export class AppWindows {
       app.show();
     }
     if (window.isMinimized()) window.restore();
-    window.show();
-    window.focus();
+    if (role === 'helper' && !focus) window.showInactive();
+    else { window.show(); window.focus(); }
   }
 
   setHelperObservation(hooks: HelperObservationHooks): void { this.helperObservation = hooks; }
@@ -79,7 +82,7 @@ export class AppWindows {
       const hosted = this.windows.get('helper');
       const window = hosted?.window;
       if (!window || hosted.failed || window.isDestroyed() || !window.isVisible()
-        || window.isMinimized() || app.isHidden()) await this.open('helper');
+        || window.isMinimized() || (process.platform !== 'darwin' && app.isHidden())) await this.present('helper', false);
       else window.hide();
     });
     return this.helperToggle;
@@ -141,6 +144,8 @@ export class AppWindows {
       minHeight: manager ? 580 : 520,
       resizable: manager,
       frame: manager,
+      // 快捷键仅显示非激活面板；显式打开仍允许用户取得键盘焦点。
+      type: !manager && process.platform === 'darwin' ? 'panel' : undefined,
       alwaysOnTop: !manager && this.helperPinned,
       show: false,
       backgroundColor: manager ? '#f3eee3' : '#fff9ed',
@@ -154,6 +159,7 @@ export class AppWindows {
         webviewTag: false,
       },
     });
+    if (!manager) window.setAlwaysOnTop(this.helperPinned);
     window.on('close', (event) => {
       if (!this.quitting) { event.preventDefault(); window.hide(); }
     });

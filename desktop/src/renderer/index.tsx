@@ -11,6 +11,7 @@ import './style.css';
 import { BackendBadge, BackendConnectionNote, useBackendState } from './backend-status';
 import { SetupPanel } from './SetupPanel';
 import { StartupReadiness, StartupSettings, useStartupState } from './StartupSettings';
+import { DataUpdatePanel, useDataUpdateState } from './DataUpdatePanel';
 import { CurrentContactLabel, HelperContactPicker, useContactSession } from './contact-session';
 import { ContactsPage } from './ContactsPage';
 import { ImportPage } from './ImportPage';
@@ -30,6 +31,8 @@ function App() {
   const backend = useBackendState();
   const startup = useStartupState();
   const permission = useScreenPermission();
+  const dataUpdate = useDataUpdateState();
+  const handlesDataUpdate = dataUpdate.phase !== 'idle';
   const contactSession = useContactSession();
   const replies = useReplySession();
   const foreground = useForegroundState(window.notalone.foreground, helper);
@@ -43,7 +46,7 @@ function App() {
   return helper ? <main className="ime-pane">
     <header className="ime-header">
       <img className="ime-logo" src={logo} alt="NotAlone" />
-      <HelperContactPicker session={contactSession} foreground={foreground} />
+      <HelperContactPicker session={contactSession} foreground={foreground} manualRelease={startup.mode === 'managed'} />
       <ReplyModePicker replies={replies} enabled={Boolean(contactSession.state.selectedContactId)} />
       <button className="icon-button" aria-label="打开管理后台" title="打开管理后台"
         onClick={() => void operate(window.notalone.openManager)}><Icon name="contacts" size={16} /></button>
@@ -51,7 +54,7 @@ function App() {
         onClick={() => void operate(window.notalone.hideWindow)}><Icon name="close" size={16} /></button>
     </header>
     <div className="ime-workspace">
-    <ForegroundPanel state={foreground} session={contactSession} permission={permission} />
+    <ForegroundPanel state={foreground} session={contactSession} permission={permission} manualRelease={startup.mode === 'managed'} />
     {replies.state.mode === 'rewrite_draft' ? <RewriteInput contacts={contactSession} replies={replies} />
       : replies.state.mode === 'initiate_conversation' ? <ProactiveReplyInput replies={replies} /> : <DirectedReplyInput replies={replies} />}
     {replies.state.messageNotice.phase === 'connected' && <p role="status">{replies.state.messageNotice.needsRefresh
@@ -92,16 +95,21 @@ function App() {
       <ShortcutWarning />
       <main className="manager-content">
         <div className="manager-title"><h1>{currentPage.title}</h1><p>{currentPage.description}</p></div>
-        <BackendConnectionNote state={backend} />
-        {page === 'config' ? <StartupSettings state={startup} backend={backend} />
-          : startup.phase !== 'ready' && <StartupReadiness state={startup} onConfigure={() => setPage('config')} />}
-        {page === 'config' && <><ScreenPermissionPanel view={permission} /><SetupPanel /><DesktopControls /></>}
-        {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} />}
+        {(!handlesDataUpdate || backend.phase === 'shutdown-failed') && <BackendConnectionNote state={backend} startup={startup} />}
+        <DataUpdatePanel state={dataUpdate} />
+        {!handlesDataUpdate && (page === 'config' ? <StartupSettings state={startup} backend={backend} />
+          : startup.phase !== 'ready' && <StartupReadiness state={startup} onConfigure={() => setPage('config')} />)}
+        {(page === 'config' || startup.mode === 'managed' && backend.phase === 'connected') && <SetupPanel />}
+        {page === 'config' && <><ScreenPermissionPanel view={permission} /><DesktopControls /></>}
+        {page === 'contacts' && <ContactsPage session={contactSession} navigate={setPage} manualRelease={startup.mode === 'managed'} />}
         {page === 'import' && <ImportPage session={contactSession} />}
         {page === 'memory' && <MemoryPage session={contactSession} navigate={setPage} />}
         {page === 'skillLearning' && <SkillLearningPage session={contactSession} />}
         {page === 'memoryUpgrade' && <MemoryUpgradePage session={contactSession} />}
-        {page === 'sync' && <><SyncControlPanel bridge={window.notalone.syncControl} /><BindingConsentPage contacts={contactSession} navigate={setPage} /></>}
+        {page === 'sync' && <><SyncControlPanel bridge={window.notalone.syncControl} manualRelease={startup.mode === 'managed'} />
+          {startup.mode === 'managed' ? <div><button className="button primary" onClick={() => setPage('contacts')}>选择联系人并手动输入</button>
+            <button className="button" onClick={() => setPage('import')}>导入单联系人资料</button></div>
+            : <BindingConsentPage contacts={contactSession} navigate={setPage} />}</>}
         {page !== 'config' && page !== 'contacts' && page !== 'import' && page !== 'memory' && page !== 'sync' && page !== 'skillLearning' && page !== 'memoryUpgrade' && <section className="empty-panel" aria-label={currentPage.title}>
           <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
           <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>

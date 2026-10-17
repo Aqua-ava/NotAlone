@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "frontend": [
+    {
+      "name": "react",
+      "version": "19.3.0",
+      "resolved": "https://registry.npmjs.org/react/-/react-19.3.0.tgz",
+      "integrity": "sha512-E8LUcbtBWt20bbl2YoHfx4ZDBdxVTfOKtCZn9cDSJ4l6/nuoApcpIBcj47t2wZoVX8g2ZHuMHbiShgCR1T5Sog==",
+      "archiveBytes": 26394,
+      "member": "package/LICENSE",
+      "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "bytes": 1088,
+      "output": "react/LICENSE"
+    },
+    {
+      "name": "react-dom",
+      "version": "19.3.0",
+      "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.3.0.tgz",
+      "integrity": "sha512-JDk8dgif51OjFoDE70+OT9ICyYr+69HlmihNwp1+Nsfbna3t5sIiCa9ZJktDmQ4/1b/rn26hIAR2uYXDMr5r0Q==",
+      "archiveBytes": 1409226,
+      "member": "package/LICENSE",
+      "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "bytes": 1088,
+      "output": "react-dom/LICENSE"
+    },
+    {
+      "name": "scheduler",
+      "version": "0.28.0",
+      "resolved": "https://registry.npmjs.org/scheduler/-/scheduler-0.28.0.tgz",
+      "integrity": "sha512-juorfCmIkIw8tT+p5BXSm6PJjQF/ycEYmKyzURCIt/RaZIhL+PulbQ9Yu2z1HdOJDdqDTlxA1+xKBmHXJsczAw==",
+      "archiveBytes": 10011,
+      "member": "package/LICENSE",
+      "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
+      "bytes": 1088,
+      "output": "scheduler/LICENSE"
+    },
+    {
+      "name": "vite",
+      "version": "8.3.3",
+      "resolved": "https://registry.npmjs.org/vite/-/vite-8.3.3.tgz",
+      "integrity": "sha512-cTAldKPImjg6c+gk48U19POPn3GCBzZwpdsN8ZMEEcbpes+6/wvfqUd0C2y3qYY4wsj8PwgFwrZ/1jBPVttMSg==",
+      "archiveBytes": 588097,
+      "member": "package/LICENSE.md",
+      "sha256": "a47172e44a86a7e2cd1c16282341f7726ec60caafe3a6166fe3e0602005b6fa6",
+      "bytes": 108786,
+      "output": "vite/LICENSE.md"
+    }
+  ],
+  "electron": {
+    "version": "44.7.0",
+    "checksumUrl": "https://github.com/electron/electron/releases/download/v44.7.0/SHASUMS256.txt",
+    "archives": [
+      {
+        "name": "electron-v44.7.0-darwin-arm64.zip",
+        "arch": "arm64",
+        "sha256": "e04e411b58a0a14375dd21b0ab4a378fd38930a702e4e20e322fee4849404c0b"
+      },
+      {
+        "name": "electron-v44.7.0-darwin-x64.zip",
+        "arch": "x64",
+        "sha256": "4fe494a7159b10a81e2098dab388719582065e99e604c4510bb117e282213566"
+      }
+    ],
+    "notices": [
+      {
+        "member": "LICENSE",
+        "sha256": "5154e165bd6c2cc0cfbcd8916498c7abab0497923bafcd5cb07673fe8480087d",
+        "bytes": 1096,
+        "output": "LICENSE"
+      },
+      {
+        "member": "LICENSES.chromium.html",
+        "sha256": "3375e2a9bd7bc631738fde10be6548a76efe8cf5e4b8826b8140ba8b0c4d6353",
+        "bytes": 20115518,
+        "output": "LICENSES.chromium.html"
+      }
+    ]
+  }
+}

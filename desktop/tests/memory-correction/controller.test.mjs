@@ -12,12 +12,46 @@ async function withController(run) {
   const owned = await mkdtemp(path.join(tmpdir(), 'notalone-correction-controller-'));
   try {
     const output = path.join(owned, 'controller.mjs');
-    await build({ entryPoints: ['src/main/memory/controller.ts'], outfile: output,
+    await build({ stdin: { contents: "export { MemoryReadingController } from './src/main/memory/controller'; export { BackendRequestFailure } from './src/main/backend/json-client';", resolveDir: process.cwd() }, outfile: output,
       bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
-    const { MemoryReadingController } = await import(pathToFileURL(output).href);
-    return await run(MemoryReadingController);
+    const { MemoryReadingController, BackendRequestFailure } = await import(pathToFileURL(output).href);
+    return await run(MemoryReadingController, BackendRequestFailure);
   } finally { await rm(owned, { recursive: true, force: true }); }
 }
+
+test('更新备份清理失败保留删除恢复说明，解除读取保护后可沿原范围重试', async () => withController(async (MemoryReadingController, BackendRequestFailure) => {
+  const contactId = '11111111-1111-4111-8111-111111111111';
+  const memoryId = '22222222-2222-4222-8222-222222222222';
+  const memory = { memory_id: memoryId, level: 'contact', contact_id: contactId, text: '合成待删除资料。',
+    category: 'common_fact', topic: 'other', source_ids: [memoryId], status: 'active', adoption_method: 'manual',
+    confidence: 1, risk_flags: [],
+    revision: 1, supersedes_memory_id: null, source_candidate_id: null, valid_at: null, invalid_at: null,
+    timing: { recorded_at: null, source_started_at: null, source_ended_at: null, source_time_complete: false } };
+  let writes = 0;
+  const backend = { getConnectionGeneration: () => 1, requestJson: async (request) => {
+    if (request.method === 'POST') {
+      if (++writes === 1) throw new BackendRequestFailure('response', 409, 'update_backup_cleanup_required');
+      return { generation: 1, data: {} };
+    }
+    return { generation: 1, data: request.path.endsWith('/memory-candidates') ? { candidates: [] }
+      : { memories: writes < 2 ? [memory] : [] } };
+  } };
+  const contacts = { getState: () => ({ selectedContactId: contactId, scopeRevision: 1,
+    directoryPhase: 'ready', contacts: [{ contactId }] }) };
+  const controller = new MemoryReadingController(backend, contacts);
+  const request = { contactId, scopeRevision: 1, memoryId, level: 'contact', revision: 1 };
+  await controller.refresh({ contactId, scopeRevision: 1, section: 'contact' });
+  await controller.remove(request);
+  assert.equal(controller.getState().mutation.phase, 'error');
+  assert.equal(controller.getState().mutation.backupCleanupRequired, true);
+  assert.match(controller.getState().mutation.message, /更新备份尚未清理/);
+  await controller.refresh({ contactId, scopeRevision: 1, section: 'contact' });
+  assert.equal(controller.getState().contact.phase, 'ready');
+  await controller.remove(request);
+  assert.equal(controller.getState().mutation.phase, 'success');
+  assert.deepEqual(controller.getState().contact.items, []);
+  assert.equal(writes, 2);
+}));
 
 test('生产资料控制器保留新证据与原人工决定的差异', async () => withController(async (MemoryReadingController) => {
   const contactId = '11111111-1111-4111-8111-111111111111';

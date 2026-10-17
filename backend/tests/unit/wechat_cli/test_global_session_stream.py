@@ -8,7 +8,7 @@ import unittest
 from collections import deque
 from dataclasses import dataclass
 
-from notalone.wechat_cli import LocalWechatCli, CliOutputError
+from notalone.wechat_cli import LocalWechatCli, CliCommandError, CliOutputError
 
 
 @dataclass(frozen=True)
@@ -67,6 +67,23 @@ class GlobalFollowRunner:
 
 
 class GlobalSessionStreamTest(unittest.TestCase):
+    def test_structured_failure_is_reported_instead_of_idle_stream(self) -> None:
+        process = SessionProcess([json.dumps({
+            "ok": False,
+            "error": {"code": "tool_error", "message": "合成私有诊断文字"},
+        })])
+        stream = LocalWechatCli(
+            follow_runner=GlobalFollowRunner(process)
+        ).session_events_follow()
+        try:
+            with self.assertRaises(CliCommandError) as caught:
+                stream.read(timeout=0.2)
+            self.assertEqual(caught.exception.code, "cli_command_failed")
+            self.assertNotIn("合成私有诊断文字", str(caught.exception))
+        finally:
+            stream.close()
+        self.assertTrue(process.terminated)
+
     def test_close_failure_can_be_retried_without_losing_process(self) -> None:
         class FailsOnce(SessionProcess):
             attempts = 0

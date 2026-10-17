@@ -43,6 +43,8 @@ def delete_assistant_session(
 
     from notalone.persistence.skill_learning import erase_skill_learning
     erase_skill_learning(connection, owner_id=scope.owner_id, removed_ids={session_id})
+    from notalone.managed_update_backups import erase_managed_update_backups
+    erase_managed_update_backups(connection)
 
     connection.execute(
         """

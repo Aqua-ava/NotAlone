@@ -55,7 +55,7 @@ const bridge: AppBridge = {
   memoryUpgrade: createMemoryUpgradeBridge(transport),
   openManager: () => transport.invoke('page:open-manager'), openHelper: () => transport.invoke('page:open-helper'), hideWindow: unsupported,
   getDesktopSettings: unsupported, setHelperShortcut: unsupported, setHelperPinned: unsupported, onDesktopSettingsChanged: noEvents,
-  setup: { getState: unsupported, refresh: unsupported, initializeOwner: unsupported, saveDeepSeekKey: unsupported,
+  setup: { getState: unsupported, refresh: unsupported, initializeOwner: unsupported, saveDeepSeekKey: unsupported, saveOfficialDeepSeekKey: unsupported,
     retryRestart: unsupported, reloadControlledConfiguration: unsupported, onStateChanged: noEvents },
   imports: createImportBridge(transport),
   bindings: createBindingConsentBridge(transport),

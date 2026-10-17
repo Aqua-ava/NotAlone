@@ -182,9 +182,10 @@ def reserve_continuation_in_transaction(
     payload = current["input_payload"]
     original = _request_from_input(scope, command.idempotency_key, payload)
     old_content = original.content
-    intent_field = "direction" if isinstance(old_content, ReplyToMessage) else "purpose" if isinstance(old_content, InitiateConversation) else "draft_text"
+    pasted = isinstance(old_content, RewriteDraft) and old_content.input_kind == "current_chat"
+    intent_field = "direction" if isinstance(old_content, ReplyToMessage) or pasted else "purpose" if isinstance(old_content, InitiateConversation) else "draft_text"
     prior_intent = (old_content.direction.text if isinstance(old_content, ReplyToMessage)
-                    else old_content.purpose.text if isinstance(old_content, InitiateConversation) else old_content.draft_text)
+                    else old_content.purpose.text if isinstance(old_content, InitiateConversation) else old_content.pasted_direction if pasted else old_content.draft_text)
     instruction_intention = _known_intention(instruction)
     if instruction_intention is not None and command.intention_update is not None:
         # 同次提交没有字段优先约定；仅核对既有明确语法，不推断未知方向。
@@ -215,7 +216,8 @@ def reserve_continuation_in_transaction(
             content = replace(old_content, purpose=ConfirmedDirection(intention, DirectionSource.DIRECT_INPUT),
                               user_instruction=user_instruction, clarification_answer=None)
         else:
-            content = RewriteDraft(intention, user_instruction, old_content.include_relationship_context)
+            content = (replace(old_content, pasted_direction=intention, user_instruction=user_instruction) if pasted else
+                       RewriteDraft(intention, user_instruction, old_content.include_relationship_context))
     else:
         # 编号只选择说法参考；旧候选不能替换本次明确意愿或用户原句。
         content = replace(old_content, user_instruction=user_instruction)

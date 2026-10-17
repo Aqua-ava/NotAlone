@@ -96,10 +96,13 @@
 63. [ADR-063：指定任务的有限运行依据与正文来源依赖](adr/063-bounded-runtime-evidence-and-source-dependencies.md)
 64. [ADR-064：E2有限负向指代说明保持未知](adr/064-bounded-negative-reference-notes.md)
 
+65. [ADR-065：独立 App 首版先交付手动输入路径](adr/065-manual-input-standalone-first-release.md)
+
 ## 当前架构决策
 
 - 旧 Swift 主界面已按 ADR-039 退役；共享前端采用 TypeScript + React，由 ADR-040 的 Electron 双窗口宿主承载；已接通业务页面，完整原生验收仍未完成。Python 后台与 Mac 原生探针保留。
 - 独立桌面版按 ADR-061 采用本机受管后台与 PostgreSQL，资料保存在本机；这是已采纳、尚待实现与验收的新交付目标。旧云端模块化单体目标不作为独立版的默认数据去向，PostgreSQL 仍是联系人、消息、关系资料、任务和删除状态的权威业务库。
+- 首版范围按 ADR-065 先交付手动粘贴聊天文字或单联系人导入的完整使用路径，明确创建／选择联系人后生成、查看依据及编辑候选。微信自动初始化与渠道验收保留未完成，不作为本次首版前提；受管后台、资料更新、隐私与人工发送要求保持。
 - 数据隔离键为 `owner_id + contact_id`；`contact_id` 由 NotAlone 创建，昵称、备注和微信来源标识不能替代它。
 - 文字是统一的检索与生成表示；前台 display name OCR、本地微信 CLI、截图和语音都是输入适配器。
 - Mac 前台 OCR 按 ADR-052 仅识别顶部 display name，再由唯一私聊元数据及已确认绑定定位联系人；CLI 独立同步用户主动选择并确认的联系人及我方文字增量，首次不预选会话。CLI 的外部会话标识不能替代 `contact_id`，同步范围与停止/恢复规则见 ADR-030。

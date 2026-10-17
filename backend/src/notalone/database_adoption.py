@@ -241,6 +241,7 @@ def _ensure_no_other_connections(connection: psycopg.Connection[Any]) -> None:
     if connection.execute("""
         SELECT count(*) FROM pg_catalog.pg_stat_activity
         WHERE datname = pg_catalog.current_database() AND pid <> pg_catalog.pg_backend_pid()
+          AND backend_type IS DISTINCT FROM 'autovacuum worker'
     """).fetchone()[0]:
         raise MigrationError("adoption_writers_present：请先停止 App、同步、Worker 和其他目标库连接。")
 

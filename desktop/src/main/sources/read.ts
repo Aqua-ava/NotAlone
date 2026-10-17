@@ -12,7 +12,9 @@ export function deletionTask(value: unknown, taskId: string): DeletionTask {
     return { name: names[index], status: step.status as DeletionTask['steps'][number]['status'] };
   });
   if (value.status === 'succeeded' && steps.some((step) => step.status !== 'succeeded')) throw invalid();
-  return { taskId, status: value.status as DeletionTask['status'], step: value.step as DeletionStepName, steps };
+  return { taskId, status: value.status as DeletionTask['status'], step: value.step as DeletionStepName, steps,
+    backupCleanupRequired: value.error_code === 'update_backup_cleanup_required'
+      || value.steps.some(step => record(step) && step.error_code === 'update_backup_cleanup_required') };
 }
 export function deletionSources(value: unknown): { source: DeletionSource; taskId: string | null }[] {
   if (!record(value) || !Array.isArray(value.sources)) throw invalid();

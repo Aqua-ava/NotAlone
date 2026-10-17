@@ -14,9 +14,13 @@
     "test:pages": "node scripts/test-pages.mjs",
     "test:package": "node --test tests/packaging/command.test.mjs",
     "prepare:probe": "node scripts/prepare-probe.mjs",
-    "package": "npm run build && node scripts/package.mjs"
+    "package": "npm run build && node scripts/package.mjs",
+    "prepare:runtime": "node scripts/prepare-runtime.mjs",
+    "verify:runtime": "node scripts/verify-runtime.mjs"
   },
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "dependencies": {
     "react": "19.3.0",
     "react-dom": "19.3.0"

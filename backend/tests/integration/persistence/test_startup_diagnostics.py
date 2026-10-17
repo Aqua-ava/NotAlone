@@ -137,3 +137,21 @@ class StartupDiagnosticCommandTest(unittest.TestCase):
         self.assertEqual(self._run(migrations=directory), {"code": "migration_pending"})
         with psycopg.connect(self.url) as connection:
             self.assertIsNone(connection.execute("SELECT to_regclass('public.unexecuted_probe')").fetchone()[0])
+
+    def test_pre_manual_schema_is_pending_without_creating_confirmation_table(self) -> None:
+        previous = Path(self.temp.name) / "previous-migrations"
+        previous.mkdir()
+        for migration in sorted(MIGRATIONS.glob("*.sql")):
+            if migration.name < "060_":
+                shutil.copy2(migration, previous / migration.name)
+        migrate(self.url, previous)
+        self.assertEqual(self._run(), {"code": "migration_pending"})
+        with psycopg.connect(self.url) as connection:
+            self.assertIsNone(connection.execute("SELECT to_regclass('public.manual_contact_confirmation')").fetchone()[0])
+            self.assertEqual(connection.execute("SELECT count(*) FROM public.notalone_schema_migration").fetchone()[0], 59)
+
+    def test_latest_ledger_without_manual_confirmation_table_fails_before_business_starts(self) -> None:
+        migrate(self.url, MIGRATIONS)
+        with psycopg.connect(self.url) as connection:
+            connection.execute("DROP TABLE public.manual_contact_confirmation")
+        self.assertEqual(self._run(), {"code": "schema_incomplete"})

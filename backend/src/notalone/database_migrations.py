@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from collections.abc import Callable
 import hashlib
 import json
 import os
@@ -56,77 +57,90 @@ def _load_migrations(directory: Path) -> tuple[Migration, ...]:
 def migrate(database_url: str, directory: Path) -> tuple[str, ...]:
     """按文件名执行未完成的版本；每个版本的 SQL 与账本原子提交。"""
 
+    with psycopg.connect(database_url, autocommit=True) as connection:
+        return migrate_connection(connection, directory)
+
+
+def migrate_connection(
+    connection: psycopg.Connection, directory: Path,
+    on_applied: Callable[[str], None] | None = None,
+) -> tuple[str, ...]:
+    """在调用者持有的连接上迁移；会话锁可连续覆盖更新前的备份与核验。"""
+
+    if not connection.autocommit or connection.info.transaction_status != psycopg.pq.TransactionStatus.IDLE:
+        raise MigrationError("migration_connection_invalid：迁移需要空闲的自动提交连接。")
     migrations = _load_migrations(directory)
     applied: list[str] = []
-    with psycopg.connect(database_url, autocommit=True) as connection:
-        connection.execute("SET search_path = pg_catalog, public")
-        # 会话锁覆盖所有逐版本事务，连接关闭（包括进程中断）时自动释放。
-        if not connection.execute(
-            "SELECT pg_catalog.pg_try_advisory_lock(1852798049, 1)"
-        ).fetchone()[0]:
-            raise MigrationError("migration_busy：另一个迁移命令正在执行，请稍后重试。")
-        connection.execute("SET lock_timeout = '10s'")
-        try:
-            offset = baseline_offset(connection, migrations)
-        except BaselineError as error:
-            raise MigrationError(str(error)) from None
-        if connection.execute(
-            "SELECT to_regclass('public.notalone_schema_migration')"
-        ).fetchone()[0] is None:
-            existing = connection.execute("""
-                SELECT EXISTS (
-                    SELECT 1 FROM pg_catalog.pg_class AS c
-                    JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
-                    WHERE n.nspname = 'public'
-                      AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
-                )
-            """).fetchone()[0]
-            if existing:
-                raise MigrationError(
-                    "legacy_database_untracked：旧库没有迁移记录，已停止且未修改；"
-                    "请先核验结构与历史迁移记录，不可根据 owner 表猜测基线。"
-                )
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS public.notalone_schema_migration (
-                name text PRIMARY KEY,
-                checksum text NOT NULL,
-                applied_at timestamptz NOT NULL DEFAULT now()
+    connection.execute("SET search_path = pg_catalog, public")
+    # 会话锁覆盖所有逐版本事务，连接关闭（包括进程中断）时自动释放。
+    if not connection.execute(
+        "SELECT pg_catalog.pg_try_advisory_lock(1852798049, 1)"
+    ).fetchone()[0]:
+        raise MigrationError("migration_busy：另一个迁移命令正在执行，请稍后重试。")
+    connection.execute("SET lock_timeout = '10s'")
+    try:
+        offset = baseline_offset(connection, migrations)
+    except BaselineError as error:
+        raise MigrationError(str(error)) from None
+    if connection.execute(
+        "SELECT to_regclass('public.notalone_schema_migration')"
+    ).fetchone()[0] is None:
+        existing = connection.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM pg_catalog.pg_class AS c
+                JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public'
+                  AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
             )
-        """)
-        completed = dict(connection.execute(
-            "SELECT name, checksum FROM public.notalone_schema_migration ORDER BY name"
-        ).fetchall())
-        expected_history = {
-            item.name: item.checksum
-            for item in migrations[offset:offset + len(completed)]
-        }
-        if completed != expected_history:
+        """).fetchone()[0]
+        if existing:
             raise MigrationError(
-                "migration_history_mismatch：已执行迁移缺失、内容改变或顺序不一致；"
-                "请恢复原始文件，新变更应增加新版本。"
+                "legacy_database_untracked：旧库没有迁移记录，已停止且未修改；"
+                "请先核验结构与历史迁移记录，不可根据 owner 表猜测基线。"
             )
-        for migration in migrations[offset:]:
-            if migration.name in completed:
-                continue
-            try:
-                with connection.transaction():
-                    # 在动态 SQL 块中执行，额外 COMMIT 等事务控制会被数据库拒绝，
-                    # 避免未来文件格式变化导致业务 SQL 提前提交、账本却未写入。
-                    tag = sql.SQL(f"$migration_{uuid4().hex}$")
-                    connection.execute(sql.SQL(
-                        "DO {tag} BEGIN EXECUTE {body}; END {tag};"
-                    ).format(tag=tag, body=sql.Literal(migration.body)))
-                    connection.execute(
-                        "INSERT INTO public.notalone_schema_migration (name, checksum) "
-                        "VALUES (%s, %s)",
-                        (migration.name, migration.checksum),
-                    )
-            except psycopg.Error:
-                raise MigrationError(
-                    f"migration_failed：{migration.name} 未完成，当前版本已回滚；"
-                    "修复后重跑将从该版本继续。"
-                ) from None
-            applied.append(migration.name)
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS public.notalone_schema_migration (
+            name text PRIMARY KEY,
+            checksum text NOT NULL,
+            applied_at timestamptz NOT NULL DEFAULT now()
+        )
+    """)
+    completed = dict(connection.execute(
+        "SELECT name, checksum FROM public.notalone_schema_migration ORDER BY name"
+    ).fetchall())
+    expected_history = {
+        item.name: item.checksum
+        for item in migrations[offset:offset + len(completed)]
+    }
+    if completed != expected_history:
+        raise MigrationError(
+            "migration_history_mismatch：已执行迁移缺失、内容改变或顺序不一致；"
+            "请恢复原始文件，新变更应增加新版本。"
+        )
+    for migration in migrations[offset:]:
+        if migration.name in completed:
+            continue
+        try:
+            with connection.transaction():
+                # 在动态 SQL 块中执行，额外 COMMIT 等事务控制会被数据库拒绝，
+                # 避免未来文件格式变化导致业务 SQL 提前提交、账本却未写入。
+                tag = sql.SQL(f"$migration_{uuid4().hex}$")
+                connection.execute(sql.SQL(
+                    "DO {tag} BEGIN EXECUTE {body}; END {tag};"
+                ).format(tag=tag, body=sql.Literal(migration.body)))
+                connection.execute(
+                    "INSERT INTO public.notalone_schema_migration (name, checksum) "
+                    "VALUES (%s, %s)",
+                    (migration.name, migration.checksum),
+                )
+        except psycopg.Error:
+            raise MigrationError(
+                f"migration_failed：{migration.name} 未完成，当前版本已回滚；"
+                "修复后重跑将从该版本继续。"
+            ) from None
+        applied.append(migration.name)
+        if on_applied is not None:
+            on_applied(migration.name)
     return tuple(applied)
 
 

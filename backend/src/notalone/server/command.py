@@ -8,6 +8,7 @@ import signal
 import sys
 import threading
 import time
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -31,6 +32,7 @@ from notalone.application.model_priority import (
 )
 from notalone.memory_extraction.dimensions import DimensionRelease
 from notalone.runtime_config import load_project_env
+from notalone.parent_lifetime import ParentLifetime
 from notalone.server.app import BackendServer, create_app
 from notalone.server.connection_info import (
     has_active_backend,
@@ -50,10 +52,11 @@ from notalone.server.sync_host import SyncHost
 def main(argv: list[str] | None = None) -> int:
     """启动只绑定回环地址的常驻后端。"""
 
-    load_project_env()
     parser = argparse.ArgumentParser(prog="notalone-server")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", default=0, type=int)
+    parser.add_argument("--parent-pid", type=int, help=argparse.SUPPRESS)
+    parser.add_argument("--lifetime-lock", help=argparse.SUPPRESS)
     parser.add_argument(
         "--sync-interval",
         default=3.0,
@@ -61,6 +64,16 @@ def main(argv: list[str] | None = None) -> int:
         help="同步心跳间隔（秒），默认 3.0。",
     )
     args = parser.parse_args(argv)
+    try:
+        with ParentLifetime(args.parent_pid, args.lifetime_lock) as lifetime:
+            return _run(args, lifetime)
+    except (OSError, ValueError):
+        print("本地后端启动者已经退出或寿命信息无效。", file=sys.stderr)
+        return 2
+
+
+def _run(args: argparse.Namespace, lifetime: ParentLifetime) -> int:
+    load_project_env()
     database_url = os.environ.get("NOTALONE_DATABASE_URL", "").strip()
     owner_value = os.environ.get("NOTALONE_OWNER_ID", "").strip()
     if not database_url:
@@ -156,11 +169,13 @@ def main(argv: list[str] | None = None) -> int:
         )
     assert server is not None
     try:
-        if sync_host is not None:
-            sync_host.start()
-        write_backend_info(address=f"{host}:{port}", token=app.token)
-        print(f"address={host}:{port} token={app.token}", flush=True)
-        _serve_until_stopped(server)
+        def start_reading() -> None:
+            if sync_host is not None:
+                sync_host.start()
+            write_backend_info(address=f"{host}:{port}", token=app.token)
+            print(f"address={host}:{port} token={app.token}", flush=True)
+
+        _serve_until_stopped(server, lifetime, start_reading)
         return 0
     except KeyboardInterrupt:
         return 0
@@ -169,7 +184,10 @@ def main(argv: list[str] | None = None) -> int:
         server.shutdown()
 
 
-def _serve_until_stopped(server: BackendServer) -> None:
+def _serve_until_stopped(
+    server: BackendServer, lifetime: ParentLifetime | None = None,
+    start_reading: Callable[[], None] | None = None,
+) -> None:
     """在子线程里 serve，主线程响应 SIGTERM/KeyboardInterrupt 后关停。
 
     BaseHTTPRequestHandler 的 shutdown() 必须在 serve_forever 之外的
@@ -185,6 +203,10 @@ def _serve_until_stopped(server: BackendServer) -> None:
     )
     server_thread.start()
     signal.signal(signal.SIGTERM, lambda _signum, _frame: server.request_shutdown())
+    if lifetime is not None:
+        lifetime.on_exit(server.request_shutdown)
+        if callable(start_reading) and not lifetime.start_if_alive(start_reading):
+            server.request_shutdown()
     # 主线程等待服务循环结束；SIGTERM 处理器调用 shutdown() 使其返回。
     server_thread.join()
 

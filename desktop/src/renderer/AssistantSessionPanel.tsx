@@ -5,6 +5,7 @@ import type { SavedAssistantInput, SavedAssistantTurn } from '../shared/assistan
 import { AssistantInputBudgetNotice } from './AssistantInputBudgetNotice';
 import { ReplyBasisChangeNotice } from './ReplyBasisChangeNotice';
 import { ExpressionPreferenceBasis } from './ExpressionPreferenceBasis';
+import { UpdateBackupDeletionNotice, UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
 
 function SavedTurn({ turn, index, retry, busy, showPreferences }: {
   turn: SavedAssistantTurn; index: number; retry?: () => void; busy: boolean; showPreferences: boolean;
@@ -15,14 +16,15 @@ function SavedTurn({ turn, index, retry, busy, showPreferences }: {
       <p>{typeof turn.input?.content.draft_text === 'string' ? turn.input.content.draft_text
         : typeof turn.input?.content.direction === 'string' ? turn.input.content.direction
         : typeof turn.input?.content.purpose === 'string' ? turn.input.content.purpose : '本轮回复输入'}</p>
+      {turn.input?.content.input_kind === 'current_chat' && <p>本次粘贴的对方文字，未经渠道核验。表达方向：{String(turn.input.content.pasted_direction ?? '')}</p>}
       {typeof turn.input?.content.user_instruction === 'string' && <p>{turn.input.content.user_instruction}</p>}
       <p>原精确场景：{turn.input?.scene ?? '未声明'}</p>
       {turn.reply?.usedSkill && <p>本轮实际 Skill：{turn.reply.usedSkill.name} · 版本 {turn.reply.usedSkill.versionNumber ?? turn.reply.usedSkill.versionId}
         {turn.reply.usedSkill.scope && ` · 范围：${turn.reply.usedSkill.scope.kind === 'scene' ? `精确场景「${turn.reply.usedSkill.scope.scene}」` : turn.reply.usedSkill.scope.kind === 'contact' ? '当前联系人' : '本人通用'}`}
         {!!turn.reply.usedSkill.executionView?.policyRevision && ` · 当时已排除本范围停用方法，允许${turn.reply.usedSkill.executionView.methodIds.length}种做法`}</p>}
       {turn.state === 'running' && <p>本轮生成尚未完成。</p>}
-      {turn.state === 'failed' && <p>{turn.interruptionReason === 'app_quit' ? '上次生成中断。' : '本轮生成未成功保存。'}</p>}
-      {turn.interruptionReason === 'app_quit' && retry && !turn.requiresReprepare && <button disabled={busy} onClick={retry}>重试上次中断生成</button>}
+      {turn.state === 'failed' && <p>{turn.interruptionReason === 'configuration_reload' ? '上次生成因设置重载中断。' : turn.interruptionReason === 'app_quit' ? '上次生成中断。' : '本轮生成未成功保存。'}</p>}
+      {turn.interruptionReason !== null && retry && !turn.requiresReprepare && <button disabled={busy} onClick={retry}>重试上次中断生成</button>}
       {turn.requiresReprepare && <p>这次准备格式已变化，已保存的输入会保留；请明确重新准备。</p>}
       {turn.reply?.inputBudget && <AssistantInputBudgetNotice budget={turn.reply.inputBudget} historical />}
       {showPreferences && <ExpressionPreferenceBasis preferences={turn.reply?.expressionPreferences ?? []} />}
@@ -132,6 +134,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
     {confirmation && <div role="group" aria-label="确认删除助手会话">
       <p>删除这段助手讨论、候选和使用痕迹后无法恢复。独立聊天来源、联系人关系记忆和本人记忆仍会保留。</p>
       <p>已主动保存的表达样本仍会保留，可在表达样本管理中单独删除。</p>
+      <UpdateBackupDeletionNotice />
       <button onClick={manageSamples}>管理表达样本</button>
       <button disabled={catalog?.phase === 'loading' || catalog?.selectionPending} onClick={confirmDelete}>确认删除会话</button>
       <button onClick={() => setConfirmation(null)}>取消删除会话</button>
@@ -142,6 +145,7 @@ export function AssistantSessionPanel({ replies }: { replies: ReplySessionView }
         scopeRevision: replies.state.scopeRevision, sessionId: saved!.sessionId!, confirmed: true })}>重试删除会话</button>
     </p>}
     {replies.state.sessionDeletion === 'deleted' && <p role="status">当前助手会话已删除。</p>}
+    {replies.state.sessionDeletion === 'failed' && <UpdateBackupCleanupRecovery />}
     {replies.state.sessionDeletion === 'missing' && <p role="status">当前助手会话已不存在。</p>}
     {Boolean(replies.state.generationRecoveryPending) && <p>旧连接有 {replies.state.generationRecoveryPending} 项结果待核对，退出时会通过原连接完成核对。累计未核对任务达到 32 项时暂停接纳，请先完成退出核对。</p>}
     {replies.state.generationJobs?.filter(job => job.contactId === replies.state.contactId

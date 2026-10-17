@@ -88,6 +88,7 @@ class AssistantSessionStore(Protocol):
     def preparation_format(self, scope: ContactScope, session_id: UUID, request_key: UUID,
                            input_version_id: UUID) -> AssistantPreparationFormatReceipt: ...
     def require_prepared_format(self, scope: ContactScope, session_id: UUID, request_key: UUID) -> None: ...
+    def reject_unavailable_preparation(self, scope: ContactScope, session_id: UUID, request_key: UUID) -> None: ...
     def has_prepared_context(self, scope: ContactScope, receipt: AssistantGenerationReceipt) -> bool: ...
 
     def prepared_request(self, scope: ContactScope, receipt: AssistantGenerationReceipt) -> ReplyServiceRequest: ...
@@ -109,7 +110,7 @@ class AssistantSessionStore(Protocol):
     def is_current_input(self, scope: ContactScope, session_id: UUID, input_version_id: UUID) -> bool: ...
 
     def interrupt(
-        self, scope: ContactScope, session_id: UUID, request_key: UUID, input_version_id: UUID,
+        self, scope: ContactScope, session_id: UUID, request_key: UUID, input_version_id: UUID, reason: str = "app_quit",
     ) -> AssistantGenerationReceipt: ...
 
     def reserve(
@@ -220,10 +221,11 @@ class AssistantSessionService:
     ) -> AssistantGenerationReceipt:
         """领取原生成输入并返回无正文身份，不启动模型或改写已有状态。"""
 
-        if self._reply is None:
-            raise AssistantSessionRejected("reply_unavailable")
         scope = ContactScope(owner_id, contact_id)
         self._store.require_prepared_format(scope, session_id, request.idempotency_key)
+        if self._reply is None:
+            self._store.reject_unavailable_preparation(scope, session_id, request.idempotency_key)
+            raise AssistantSessionRejected("reply_unavailable")
         if isinstance(request, AssistantMessageAdoptionRequest):
             receipt = self._store.prepare_message_adoption(scope, session_id, request)
         else:
@@ -249,9 +251,9 @@ class AssistantSessionService:
 
     def interrupt(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
-        request_key: UUID, input_version_id: UUID,
+        request_key: UUID, input_version_id: UUID, reason: str = "app_quit",
     ) -> AssistantGenerationReceipt:
-        return self._store.interrupt(ContactScope(owner_id, contact_id), session_id, request_key, input_version_id)
+        return self._store.interrupt(ContactScope(owner_id, contact_id), session_id, request_key, input_version_id, reason=reason)
 
     def preparation_format(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,

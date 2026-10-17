@@ -620,6 +620,8 @@ class PostgresSkillLibrary(SkillLibraryManagementPort):
                 ).fetchone()
                 if skill is None:
                     raise SkillNotFoundError("Skill 删除失败：Skill 不存在。")
+                from notalone.managed_update_backups import erase_managed_update_backups
+                erase_managed_update_backups(connection)
                 if skill["status"] == "deleted":
                     revision = self._current_revision(connection, owner_id)
                     return SkillDeletionResult(

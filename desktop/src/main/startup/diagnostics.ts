@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { StartupCode, StartupPaths, StartupState } from '../../shared/startup-bridge';
 import { backendEnvironment, configurationPaths, loadBackendConfiguration, saveBackendConfiguration, type BackendConfiguration } from '../backend/config';
 import { BackendFailure } from '../backend/connection';
+import { ManagedRuntime, ManagedRuntimeFailure } from './managed-runtime';
 
 const reportCodes = new Set<StartupCode>(['ready', 'python_version_unsupported', 'backend_package_missing',
   'database_unconfigured', 'database_unavailable', 'baseline_missing', 'baseline_invalid',
@@ -16,8 +17,37 @@ export class StartupDiagnostics {
   private cancelProbe: (() => void) | undefined;
   private saving: Promise<void> | undefined;
   private closing = false;
+  private localSetupEpoch = 0;
+  private readonly managed: ManagedRuntime;
 
-  constructor(private readonly userData: string, private readonly resourcesDirectory?: string) {}
+  constructor(private readonly userData: string, private readonly resourcesDirectory?: string) {
+    this.managed = new ManagedRuntime(userData, resourcesDirectory,
+      (step) => { if (!this.closing) this.publish({ phase: 'preparing', mode: 'managed', step, code: undefined }); });
+  }
+
+  async prepareLocalSetup(canStart: () => boolean): Promise<void> {
+    if (this.closing) throw new Error('本机设置已停止');
+    const epoch = this.localSetupEpoch;
+    const config = await loadBackendConfiguration(this.userData, this.resourcesDirectory);
+    if (config.source !== 'first-run' && config.source !== 'managed') throw new Error('已有资料需要接续');
+    try { await this.managed.prepare(() => epoch === this.localSetupEpoch && !this.closing && canStart()); }
+    catch (error) {
+      if (epoch === this.localSetupEpoch && !this.closing) this.publish({ phase: 'blocked', mode: 'managed', step: undefined,
+        code: error instanceof ManagedRuntimeFailure ? error.code : 'runtime_configuration_invalid' });
+      throw new BackendFailure('backend_connection_failed');
+    }
+  }
+  cancelLocalSetup(): void {
+    ++this.localSetupEpoch;
+    this.managed.cancel(); this.cancelProbe?.();
+    if (!this.closing) this.publish({ phase: 'preparing', mode: 'managed', code: undefined, step: 'stopping' });
+  }
+  completeLocalCancellation(confirmed: boolean): void {
+    if (!this.closing) this.publish({ phase: confirmed ? 'cancelled' : 'blocked', mode: 'managed', step: undefined,
+      code: confirmed ? 'runtime_cancelled' : 'runtime_stop_unconfirmed' });
+  }
+  stopManagedRuntime(): Promise<boolean> { return this.managed.stop(); }
+  getManagedRuntime(): ManagedRuntime { return this.managed; }
 
   getState(): StartupState { return { ...this.state, helperWarnings: [...this.state.helperWarnings] }; }
   onStateChanged(listener: (state: StartupState) => void): () => void {
@@ -36,6 +66,7 @@ export class StartupDiagnostics {
     }
   }
   savePaths(paths: unknown, canSave: () => boolean): Promise<void> {
+    if (this.state.mode === 'managed') return Promise.reject(new Error('受管本机设置不能改写为外置路径'));
     if (this.closing || this.saving || this.state.phase === 'checking' || !canSave()) return Promise.reject(new Error('启动路径暂时不可修改'));
     const revision = this.state.revision;
     this.saving = saveBackendConfiguration(this.userData, paths, () => !this.closing && canSave()).then(() => {
@@ -43,13 +74,26 @@ export class StartupDiagnostics {
     }).finally(() => { this.saving = undefined; });
     return this.saving;
   }
-  cancel(): void { this.closing = true; this.cancelProbe?.(); }
+  cancel(): void { this.closing = true; this.managed.cancel(); this.cancelProbe?.(); }
 
   async ensureReady(config: BackendConfiguration, canStart: () => boolean): Promise<void> {
     if (!canStart() || this.closing) throw new BackendFailure('backend_connection_failed');
     await this.saving?.catch(() => {});
     if (!canStart() || this.closing) return;
-    this.publish({ phase: 'checking', code: undefined, helperWarnings: [] });
+    if (config.source === 'first-run') {
+      this.publish({ phase: 'first-run', mode: 'managed', code: 'local_setup_required', helperWarnings: [], step: undefined });
+      throw new BackendFailure('backend_launch_unconfigured');
+    }
+    if (config.source === 'managed') {
+      try { await this.managed.start(config, () => canStart() && !this.closing); }
+      catch (error) {
+        if (!this.closing) this.publish({ phase: 'blocked', mode: 'managed', step: undefined,
+          code: error instanceof ManagedRuntimeFailure ? error.code : 'runtime_configuration_invalid' });
+        throw new BackendFailure('backend_connection_failed');
+      }
+      if (!canStart() || this.closing) return;
+    }
+    this.publish({ phase: 'checking', mode: config.source === 'managed' ? 'managed' : 'external', step: undefined, code: undefined, helperWarnings: [] });
     // 另一窗口可在保存的 await 期间重试；旧配置不能在保存成功后继续通过门禁。
     let current: BackendConfiguration;
     try { current = await loadBackendConfiguration(this.userData, this.resourcesDirectory); }
@@ -114,7 +158,7 @@ export class StartupDiagnostics {
     const project = await realpath(config.projectDirectory!);
     if (!canStart() || this.closing) return 'diagnostic_failed';
     return new Promise((resolve) => {
-      const child = spawn(python, ['-m', 'notalone.startup_diagnostics', '--migrations', path.join(project, 'backend/database/migrations')], {
+      const child = spawn(python, [...(config.source === 'managed' ? ['-I', '-B'] : []), '-m', 'notalone.startup_diagnostics', '--migrations', path.join(project, 'backend/database/migrations')], {
         cwd: project, env: backendEnvironment({ ...config, projectDirectory: project }, this.userData), stdio: ['ignore', 'pipe', 'ignore'],
       });
       let output = '';

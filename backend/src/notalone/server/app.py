@@ -87,6 +87,7 @@ from notalone.application.import_service import (
 )
 from notalone.application.task_service import TaskService
 from notalone.application.trace_service import TraceService
+from notalone.managed_update_backups import ManagedUpdateBackupError
 from notalone.application.model_priority import ModelWorkStopped
 from notalone.application.setup_service import OwnerAlreadyConfigured, SetupService
 from notalone.application.skill_service import (
@@ -376,6 +377,16 @@ class BackendApp:
         request_headers = headers or {}
         if not self._authorized(request_headers):
             return _json_response(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+        from notalone.application.manual_input_scope import manual_input_contact
+        manual_value = _header_value(request_headers, "X-NotAlone-Manual-Contact")
+        try:
+            manual_id = UUID(manual_value) if manual_value else None
+            # 只有具名回复／助手端点使用手动范围；同步端点始终要求真实渠道绑定。
+            if manual_id is not None and not urlsplit(path).path.startswith(f"/api/contacts/{manual_id}/assistant-session"):
+                raise ValueError()
+        except (ValueError, TypeError):
+            return _json_response(HTTPStatus.BAD_REQUEST, {"error": "manual_scope_invalid"})
+        manual_token = manual_input_contact.set(manual_id)
         try:
             return self._handle_authenticated(
                 method=method,
@@ -383,6 +394,8 @@ class BackendApp:
                 headers=request_headers,
                 body=request_body,
             )
+        except ManagedUpdateBackupError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "update_backup_cleanup_required"})
         except (SyncHostStopped, ModelWorkStopped):
             return _json_response(
                 HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_stopping"}
@@ -392,6 +405,8 @@ class BackendApp:
                 HTTPStatus.INTERNAL_SERVER_ERROR,
                 {"error": "internal_error"},
             )
+        finally:
+            manual_input_contact.reset(manual_token)
 
     def _handle_authenticated(
         self,
@@ -435,6 +450,25 @@ class BackendApp:
                 HTTPStatus.SERVICE_UNAVAILABLE,
                 {"error": "owner_uninitialized"},
             )
+        if method_upper == "POST" and (path_value == "/api/contacts" or path_value.endswith("/manual-confirmation")):
+            try:
+                payload = json.loads(request_body)
+                if path_value == "/api/contacts":
+                    if not isinstance(payload, dict) or set(payload) != {"request_id", "display_name"}:
+                        raise ValueError()
+                    contact = self._contact_directory.create_contact(
+                        self._owner_id, UUID(payload["request_id"]), payload["display_name"],
+                    )
+                    return _json_response(HTTPStatus.CREATED, {"contact": _contact_payload(contact)})
+                parts = path_value.split("/")
+                if len(parts) != 5 or parts[1:3] != ["api", "contacts"] or payload != {}:
+                    raise ValueError()
+                self._contact_directory.confirm_manual(self._owner_id, UUID(parts[3]))
+                return _json_response(HTTPStatus.OK, {"confirmed": True})
+            except (ValueError, TypeError, KeyError):
+                return _json_response(HTTPStatus.BAD_REQUEST, {"error": "contact_input_invalid"})
+            except ContactDirectoryError:
+                return _json_response(HTTPStatus.CONFLICT, {"error": "contact_operation_unavailable"})
         if method_upper == "GET" and path_value == "/api/contacts":
             try:
                 contacts = self._contact_directory.list_contacts(self._owner_id)
@@ -1139,6 +1173,8 @@ class BackendApp:
             return _json_response(
                 HTTPStatus.BAD_REQUEST, {"error": "trace_request_invalid"}
             )
+        except ManagedUpdateBackupError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "update_backup_cleanup_required"})
         except Exception:
             return _json_response(
                 HTTPStatus.INTERNAL_SERVER_ERROR,
@@ -1473,6 +1509,8 @@ class BackendApp:
         except AssistantSessionConflict:
             return _json_response(HTTPStatus.CONFLICT, {"error": "assistant_session_input_conflict"})
         except AssistantSessionRejected as error:
+            if error.reason == "reply_unavailable":
+                return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "reply_unavailable"})
             return _json_response(HTTPStatus.CONFLICT, {"error": "assistant_session_rejected", "reason": error.reason})
         except ReplyInProgressError:
             return _json_response(HTTPStatus.CONFLICT, {"error": "assistant_session_in_progress"})
@@ -1542,6 +1580,8 @@ class BackendApp:
             )
         try:
             return self._dispatch_memory(method=method, path=path, body=body)
+        except ManagedUpdateBackupError:
+            return _json_response(HTTPStatus.CONFLICT, {"error": "update_backup_cleanup_required"})
         except MemoryRequestInvalid:
             return _json_response(
                 HTTPStatus.BAD_REQUEST, {"error": "memory_request_invalid"}
@@ -2090,6 +2130,14 @@ class BackendApp:
                         HTTPStatus.OK,
                         service.initialize_owner(display_name=display_name, create_only=create_only),
                     )
+                except ValueError:
+                    raise SetupRequestInvalid() from None
+            if path == "/api/setup/official-deepseek" and method == "POST":
+                payload = _parse_setup_json(body)
+                if set(payload) != {"api_key", "confirm_official_defaults"} or payload["confirm_official_defaults"] is not True:
+                    raise SetupRequestInvalid()
+                try:
+                    return _json_response(HTTPStatus.OK, service.use_official_deepseek(api_key=payload["api_key"]))
                 except ValueError:
                     raise SetupRequestInvalid() from None
             if path == "/api/setup/credentials" and method == "POST":

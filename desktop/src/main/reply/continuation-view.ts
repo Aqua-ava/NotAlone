@@ -1,6 +1,7 @@
 import type { ReplyInputSnapshot, ReplySessionState } from '../../shared/reply-bridge';
 import { captureDisplayedCandidateGroup } from './assistant-continuation';
 import { sceneSnapshot } from './scene';
+import { pastedInputFields } from './pasted-input';
 
 // 与公开候选区显示同一组；只捕获已复验的版本身份，不从复制或默认选中推断引用。
 export function captureReplyContinuation(state: ReplySessionState, sessionId: string) {
@@ -41,7 +42,8 @@ export function continuationInputSnapshot(value: Record<string, unknown>, state:
   if (value.type === 'rewrite_draft' && typeof value.draft_text === 'string'
     && (value.user_instruction === null || typeof value.user_instruction === 'string')
     && typeof value.include_relationship_context === 'boolean') return { ...common, mode: 'rewrite_draft',
-    draftText: value.draft_text, userInstruction: value.user_instruction, includeRelationshipContext: value.include_relationship_context };
+    draftText: value.draft_text, userInstruction: value.user_instruction, includeRelationshipContext: value.include_relationship_context,
+    ...pastedInputFields(value) };
   const optionalText = (key: string) => value[key] === null || value[key] === undefined ? ''
     : typeof value[key] === 'string' ? value[key] as string : undefined;
   const correction = optionalText('understanding_correction'), userInstruction = optionalText('user_instruction');

@@ -14,6 +14,8 @@ export interface RewriteOptions {
   tone: RewriteTone;
   instruction: string;
   includeRelationshipContext: boolean;
+  inputKind?: 'draft' | 'current_chat';
+  pastedDirection?: string;
 }
 export interface RewriteOptionsUpdate extends ContactSelection { options: RewriteOptions; }
 export interface GenerateReply extends ContactSelection { newRequest: boolean; }
@@ -98,6 +100,8 @@ export interface RewriteSnapshot {
   userInstruction: string | null;
   includeRelationshipContext: boolean;
   scene?: string | null;
+  inputKind?: 'draft' | 'current_chat';
+  pastedDirection?: string;
 }
 export interface DirectedReplySnapshot {
   mode: 'reply_to_message';

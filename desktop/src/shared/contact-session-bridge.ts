@@ -25,11 +25,14 @@ export interface ContactSelection {
 }
 
 export interface ContactDraft extends ContactSelection { text: string; }
+export interface ContactCreation { displayName: string; scopeRevision: number; }
 
 export interface ContactSessionBridge {
   getState(): Promise<ContactSessionState>;
   refreshContacts(): Promise<void>;
   selectContact(selection: ContactSelection): Promise<ContactSessionState>;
+  createContact(creation: ContactCreation): Promise<ContactSessionState>;
+  confirmManualContact(selection: ContactSelection): Promise<ContactSessionState>;
   setDraft(draft: ContactDraft): Promise<ContactSessionState>;
   onStateChanged(listener: (state: ContactSessionState) => void): () => void;
 }

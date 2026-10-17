@@ -1,0 +1,33 @@
+{
+  "formatVersion": 1,
+  "architecture": "arm64",
+  "minimumMacOS": "15.0",
+  "python": {
+    "name": "cpython",
+    "version": "3.12.14+20260901",
+    "filename": "pbs.tar.gz",
+    "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-apple-darwin-install_only.tar.gz",
+    "sha256": "3ee3ee547cedfeb7c2b16b2b7156039f7b470bb8f857e226fd3d2eb11db83c76"
+  },
+  "pythonMetadata": {
+    "name": "cpython-build-metadata",
+    "version": "3.12.14+20260901",
+    "filename": "pbs-full.tar.zst",
+    "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+    "sha256": "dbefa04d4107b449e17022f9c78d3eacbd37a1aa8c166c6220dbd95addf3f318"
+  },
+  "postgres": {
+    "name": "postgresql",
+    "version": "16.15",
+    "filename": "source-postgresql-16.15.tar.bz2",
+    "source": "https://ftp.postgresql.org/pub/source/v16.15/postgresql-16.15.tar.bz2",
+    "sha256": "c1575341fa7bd40f5274ea465b34390f4dc64cdd0770af327005caaeb9f6b7ed"
+  },
+  "pythonLicenseSupplement": {
+    "name": "zlib-ng-license",
+    "version": "2.2.4",
+    "filename": "LICENSE.zlib-ng.txt",
+    "source": "https://raw.githubusercontent.com/python/cpython-source-deps/zlib-ng-2.2.4/LICENSE.md",
+    "sha256": "6c9f0d975b41afaa34d22f55bb8986ce69e5cb7ad327cb2b28820cd425edf5ee"
+  }
+}

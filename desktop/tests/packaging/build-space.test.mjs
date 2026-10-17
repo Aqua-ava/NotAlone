@@ -132,3 +132,50 @@ test('默认 out 在其他卷或在线缓存卷不足时，真实打包入口在
     }
   } finally { await rm(owned, { recursive: true, force: true }); }
 });
+
+test('运行时构建和副本公开入口在输出或缓存不足时不创建目录或下载', {
+  skip: process.platform !== 'darwin' || process.arch !== 'arm64',
+}, async () => {
+  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-runtime-space-'));
+  try {
+    const at = (name) => path.join(owned, name);
+    const commands = [
+      ['prepare-runtime.mjs', ['--source-cache', at('cache'), '--output-directory', at('output')], ['output', 'cache']],
+      ['install-runtime-copy.mjs', ['--app-directory', at('Original.app'), '--runtime-directory', at('runtime'),
+        '--output-app', at('Output.app'), '--receipt', at('receipts/receipt.json')], ['Output.app', 'receipts']],
+      ['rebuild-psycopg-runtime.mjs', ['--source-archive', at('source.tar.gz'), '--runtime-directory', at('runtime'),
+        '--output-directory', at('output'), '--work-directory', at('work'), '--source-cache', at('cache')], ['output', 'work']],
+      ['prepare-replacement-kit.mjs', ['--source-cache', at('cache'), '--licenses-directory', at('licenses'),
+        '--output-directory', at('output')], ['output']],
+      ['prepare-wechat.mjs', ['--source-cache', at('cache'), '--output-directory', at('output'), '--allow-download'], ['output', 'cache']],
+    ];
+    for (const [script, args, targets] of commands) for (const target of targets) {
+      const preload = `import fs from 'node:fs/promises'; import path from 'node:path';
+        fs.statfs = async (directory) => ({ bavail: path.basename(directory) === ${JSON.stringify(target)} ? 1n : 30n * 1024n ** 3n, bsize: 1n });
+        globalThis.fetch = async () => { throw new Error('unexpected_download'); };`;
+      const command = fileURLToPath(new URL(`../../scripts/${script}`, import.meta.url));
+      const result = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(preload)}`, command, ...args], {
+        cwd: owned, encoding: 'utf8', timeout: 10_000,
+      });
+      assert.ifError(result.error);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /build_disk_space_low|15 GiB/, `${script}: ${target}: ${result.stderr}`);
+      assert.doesNotMatch(result.stderr, /unexpected_download/);
+      assert.deepEqual(await readdir(owned), []);
+    }
+  } finally { await rm(owned, { recursive: true, force: true }); }
+});
+
+test('运行时只读完整性检查不受构建空间门禁影响', async () => {
+  const owned = await mkdtemp(path.join(tmpdir(), 'notalone-runtime-readonly-space-'));
+  try {
+    const preload = `import fs from 'node:fs/promises'; fs.statfs = async () => ({ bavail: 1n, bsize: 1n });`;
+    const command = fileURLToPath(new URL('../../scripts/prepare-runtime.mjs', import.meta.url));
+    const result = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(preload)}`,
+      command, '--check-directory', owned], { cwd: owned, encoding: 'utf8', timeout: 10_000 });
+    assert.ifError(result.error);
+    assert.match(result.stderr, /runtime_manifest_missing/);
+    assert.doesNotMatch(result.stderr, /build_disk_space_low/);
+    assert.deepEqual(await readdir(owned), []);
+  } finally { await rm(owned, { recursive: true, force: true }); }
+});

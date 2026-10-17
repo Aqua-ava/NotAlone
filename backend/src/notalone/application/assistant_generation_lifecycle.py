@@ -37,5 +37,5 @@ class AssistantGenerationLifecyclePort(Protocol):
 
     def interrupt(
         self, *, owner_id: UUID, contact_id: UUID, session_id: UUID,
-        request_key: UUID, input_version_id: UUID,
+        request_key: UUID, input_version_id: UUID, reason: str = "app_quit",
     ) -> AssistantGenerationReceipt: ...

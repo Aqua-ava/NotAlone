@@ -5,19 +5,19 @@ import { readAssistantSession } from './assistant-sessions';
 import { isRecord } from './result-read';
 
 // 只使用已认证连接与实际回执；退出不提交输入正文，也不创建新请求。
-export async function interruptAssistantGeneration(backend: Pick<BackendHost, 'getConnectionGeneration' | 'requestJson'>, receipt: PendingAssistantGenerationReceipt): Promise<void> {
+export async function interruptAssistantGeneration(backend: Pick<BackendHost, 'getConnectionGeneration' | 'requestJson'>, receipt: PendingAssistantGenerationReceipt, interruptionReason: 'app_quit' | 'configuration_reload' = 'app_quit'): Promise<void> {
   if (backend.getConnectionGeneration() !== receipt.connectionGeneration) throw new Error('退出生成归属尚未确认。');
   const path = `/api/contacts/${receipt.contactId}/assistant-sessions/${receipt.sessionId}`;
   try {
     const response = await backend.requestJson({ method: 'POST', path: `${path}/interrupt`,
-      body: { request_key: receipt.requestKey, input_version_id: receipt.inputVersionId }, maxResponseBytes: 4096 });
+      body: { request_key: receipt.requestKey, input_version_id: receipt.inputVersionId, ...(interruptionReason === 'configuration_reload' ? { reason: interruptionReason } : {}) }, maxResponseBytes: 4096 });
     const value = response.data;
     if (response.generation !== receipt.connectionGeneration || !isRecord(value)
       || Object.keys(value).length !== 6 || !Object.hasOwn(value, 'interruption_reason')) throw new Error('退出生成未获确认。');
     const { interruption_reason: reason, ...identity } = value;
     const stopped = readAssistantGenerationReceipt(identity, receipt.sessionId, receipt.requestKey);
     if (stopped.turnId !== receipt.turnId || stopped.inputVersionId !== receipt.inputVersionId
-      || !(stopped.state === 'completed' && reason === null || stopped.state === 'failed' && (reason === 'app_quit' || reason === null))) {
+      || !(stopped.state === 'completed' && reason === null || stopped.state === 'failed' && (reason === 'app_quit' || reason === 'configuration_reload' || reason === null))) {
       throw new Error('退出生成未获确认。');
     }
   } catch (error) {
@@ -64,6 +64,6 @@ export async function recoverAssistantGenerationReceipt(backend: Pick<BackendHos
 export function captureAssistantGenerationStopping(backend: BackendHost, owner: AssistantGenerationOwner):
   AssistantGenerationStopping | undefined {
   const original = backend.captureAssistantStoppingConnection?.(owner);
-  return original && { interrupt: (receipt) => interruptAssistantGeneration(original, receipt),
+  return original && { interrupt: (receipt, reason) => interruptAssistantGeneration(original, receipt, reason),
     recover: (identity) => recoverAssistantGenerationReceipt(original, identity) };
 }

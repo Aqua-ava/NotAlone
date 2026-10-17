@@ -17,7 +17,7 @@ import { BackendHost } from './backend/host';
 import { installBackendBridge } from './backend/bridge';
 import { installQuitLifecycle } from './backend/quit';
 import { interruptAssistantGeneration, recoverAssistantGenerationReceipt } from './reply/assistant-generation-interruption';
-import { installDesktopControls } from './desktop-controls';
+import { installDesktopControls, installWindowActivation } from './desktop-controls';
 import { installContactSessionBridge } from './contacts/bridge';
 import { installReplyBridge } from './reply/bridge';
 import { installStyleSampleBridge } from './style-samples/bridge';
@@ -35,6 +35,8 @@ import { SetupController } from './setup/controller';
 import { installSetupBridge } from './setup/bridge';
 import { StartupDiagnostics } from './startup/diagnostics';
 import { installStartupBridge } from './startup/bridge';
+import { LocalDataUpdates } from './startup/data-update';
+import { loadBackendConfiguration } from './backend/config';
 import { ImportController } from './imports/controller';
 import { installImportBridge } from './imports/bridge';
 import { installElectronImportFileSelection } from './imports/electron-file-selection';
@@ -60,7 +62,12 @@ void app.whenReady().then(async () => {
   const windows = new AppWindows(appSession);
   const resourcesDirectory = app.isPackaged ? process.resourcesPath : undefined;
   const diagnostics = new StartupDiagnostics(app.getPath('userData'), resourcesDirectory);
-  const backend = new BackendHost(app.getPath('userData'), (config, canStart) => diagnostics.ensureReady(config, canStart), resourcesDirectory);
+  let updates: LocalDataUpdates | undefined;
+  const backend = new BackendHost(app.getPath('userData'), (config, canStart) => {
+    if (updates?.isRecoveryBlocked()) return Promise.reject(new Error('资料需要恢复'));
+    return diagnostics.ensureReady(config, canStart);
+  }, resourcesDirectory,
+    () => diagnostics.stopManagedRuntime());
   const commands = electronPageCommands(windows);
   const contacts = installContactSessionBridge(commands, backend);
   const foreground = installForegroundBridge(commands, backend, contacts);
@@ -120,18 +127,23 @@ void app.whenReady().then(async () => {
   observeMemoryUpgradeDeletion(memory, memoryUpgrade, sources);
   installElectronCandidateCopy(windows, new CandidateCopyController(backend, contacts, replies,
     (selection, text) => styleSamples.recordCopied(selection, text)));
+  backend.setConnectionChangePreparation(() => replies.prepareGenerationConnectionChange());
   installSetupBridge(windows, new SetupController(backend));
   installBackendBridge(windows, backend, () => app.quit());
-  installStartupBridge(windows, diagnostics, backend);
+  updates = new LocalDataUpdates(app.getPath('userData'), resourcesDirectory, diagnostics.getManagedRuntime(), backend);
+  installStartupBridge(windows, diagnostics, backend, updates);
   app.on('before-quit', () => { foreground.stopContinuous(); diagnostics.cancel(); });
   installQuitLifecycle(backend, windows, async () => {
+    await updates?.stop();
     await headerChanges.shutdown();
     await replies.beginGenerationClosing(
       (receipt) => interruptAssistantGeneration(backend, receipt),
       (identity) => recoverAssistantGenerationReceipt(backend, identity));
   });
   foreground.startContinuous();
-  void backend.connect();
+  const localUpdates = updates;
+  void localUpdates.recoverInterruptedSwitch().then((ready) => ready ? backend.connect() : undefined)
+    .then(() => localUpdates.refresh()).catch(() => {});
   const desktopControls = installDesktopControls(windows);
   app.on('will-quit', () => desktopControls.dispose());
   let quitting = false;
@@ -142,7 +154,7 @@ void app.whenReady().then(async () => {
   };
   restoreManager = () => openWindow('manager');
   app.on('will-quit', () => { quitting = true; });
-  app.on('activate', () => openWindow('manager'));
+  installWindowActivation(() => openWindow('manager'));
 
   ipcMain.handle('window:open-manager', (event, ...args: unknown[]) => {
     windows.validateCaller(event, args);
@@ -179,7 +191,10 @@ void app.whenReady().then(async () => {
       { label: '关闭窗口', role: 'close' },
     ] },
   ]));
-  void windows.open('manager').then(() => screenPermission.startup()).catch(() => {
+  void windows.open('manager').then(async () => {
+    const config = await loadBackendConfiguration(app.getPath('userData'), resourcesDirectory).catch(() => undefined);
+    if (config?.source === 'external') await screenPermission.startup();
+  }).catch(() => {
     if (!quitting) dialog.showErrorBox('NotAlone', '窗口暂时无法打开，请从“窗口”菜单重试。');
   });
 }).catch(() => {

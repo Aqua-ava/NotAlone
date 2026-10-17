@@ -23,7 +23,7 @@ class ContactScope:
 
 @dataclass(frozen=True, slots=True)
 class VerifiedConversationScope:
-    """已经通过会话绑定验证的用户、联系人和会话范围。"""
+    """已验证的回复执行范围；兼容字段可引用显式手动确认，不能据此授权渠道读取。"""
 
     owner_id: UUID
     contact_id: UUID

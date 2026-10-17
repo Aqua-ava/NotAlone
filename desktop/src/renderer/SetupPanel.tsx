@@ -8,12 +8,13 @@ export function SetupPanel() {
   const [error, setError] = useState('');
   const [key, setKey] = useState('');
   const [editingKey, setEditingKey] = useState(false);
+  const [officialRecovery, setOfficialRecovery] = useState(false), [confirmedOfficial, setConfirmedOfficial] = useState(false);
   useEffect(() => {
     let active = true;
     const receive = (next: SetupState) => {
       if (active) {
         setState((previous) => next.revision >= previous.revision ? next : previous);
-        if (next.phase === 'offline') { setKey(''); setEditingKey(false); }
+        if (next.phase === 'offline') { setKey(''); setEditingKey(false); setOfficialRecovery(false); setConfirmedOfficial(false); }
       }
     };
     const unsubscribe = window.notalone.setup.onStateChanged(receive);
@@ -34,6 +35,9 @@ export function SetupPanel() {
             <p>{state.ownerReady ? '本次运行的本人身份已就绪' : state.phase === 'needs-owner' ? '本人身份尚未初始化'
               : '检测到既有本人资料，但本次运行尚未绑定本人身份。请检查受控配置后重新连接。'}</p>
             <p>{state.credentialsConfigured ? 'DeepSeek 已配置' : 'DeepSeek 尚未配置'}</p>
+            {state.officialDefaults === true && <p>模型接收方：DeepSeek 官方（https://api.deepseek.com），模型 deepseek-flash。</p>}
+            {state.officialDefaults === false && <><p>当前保留了自定义模型或接收地址。仅更新密钥会继续使用原配置；旧模型若无法核验输入预算，生成会停止。</p>
+              {state.phase === 'ready' && <button className="button" onClick={() => { setKey(''); setEditingKey(true); setOfficialRecovery(true); setConfirmedOfficial(false); }}>改用官方 DeepSeek 默认配置</button>}</>}
             {state.phase === 'identity-unbound' && <button className="button" onClick={() => {
               setError('');
               void window.notalone.setup.reloadControlledConfiguration().catch(() => setError('后端重启未获确认。请检查受控配置后重试加载。'));
@@ -51,12 +55,17 @@ export function SetupPanel() {
               : <form onSubmit={(event) => {
                 event.preventDefault();
                 const submitted = key.trim(); setKey(''); setEditingKey(false); setError('');
-                void window.notalone.setup.saveDeepSeekKey(submitted).catch(() => setError('DeepSeek 密钥未能保存，请重新输入后重试。'));
+                if (officialRecovery) {
+                  if (!confirmedOfficial) return;
+                  void window.notalone.setup.saveOfficialDeepSeekKey(submitted, true).catch(() => setError('官方模型配置未能保存，请重新确认并输入对应密钥。'));
+                } else void window.notalone.setup.saveDeepSeekKey(submitted).catch(() => setError('DeepSeek 密钥未能保存，请重新输入后重试。'));
               }}>
+                {officialRecovery && <><p>将模型与接收方改为 deepseek-flash／https://api.deepseek.com。请亲自输入此接收方对应的新密钥；原密钥不会被转发或自动复用。</p>
+                  <label><input type="checkbox" checked={confirmedOfficial} onChange={(event) => setConfirmedOfficial(event.target.checked)} />我确认改用上述官方接收方，并为它重新输入密钥</label></>}
                 <label htmlFor="deepseek-key">DeepSeek API Key</label>
                 <input id="deepseek-key" type="password" autoComplete="off" spellCheck={false} maxLength={4096}
                   value={key} onChange={(event) => setKey(event.target.value)} />
-                <button className="button primary" type="submit" disabled={!key.trim()}>保存 DeepSeek 密钥</button>
+                <button className="button primary" type="submit" disabled={!key.trim() || officialRecovery && !confirmedOfficial}>{officialRecovery ? '保存官方模型与新密钥' : '保存 DeepSeek 密钥'}</button>
                 <button className="button" type="button" onClick={() => setKey('')}>清空输入</button>
               </form>)}
           </>}

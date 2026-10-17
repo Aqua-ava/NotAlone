@@ -4,6 +4,13 @@ import { DesktopSettingsFile } from './desktop-settings';
 import type { AppWindows } from './windows';
 import type { DesktopSettings } from '../shared/desktop-bridge';
 
+export function installWindowActivation(openManager: () => void): void {
+  app.on('activate', (_event, hasVisibleWindows) => {
+    if (hasVisibleWindows || BrowserWindow.getAllWindows().some((window) => window.isVisible())) return;
+    openManager();
+  });
+}
+
 export function installDesktopControls(windows: AppWindows): HelperShortcut {
   const shortcut = new HelperShortcut(new DesktopSettingsFile(app.getPath('userData')), () => windows.toggleHelper(), () => {
     dialog.showErrorBox('NotAlone', '窗口暂时无法打开，请从“窗口”菜单重试。');

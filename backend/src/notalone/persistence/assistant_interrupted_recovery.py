@@ -33,7 +33,7 @@ def reserve_interrupted_generation_in_transaction(
     ).fetchone()
     if original is None:
         raise AssistantSessionNotFound("原中断输入不存在。")
-    if original["state"] != "failed" or original["interruption_reason"] != "app_quit":
+    if original["state"] != "failed" or original["interruption_reason"] not in ("app_quit", "configuration_reload"):
         raise AssistantSessionRejected("generation_not_interrupted")
     if command.request_key == original["idempotency_key"]:
         raise AssistantSessionRejected("generation_interrupted")
@@ -49,7 +49,7 @@ def reserve_interrupted_generation_in_transaction(
         connection, scope, session_id, original["idempotency_key"], original["input_version_id"],
         complete_saved=store._complete_saved_in_transaction,
     )
-    if terminal.state != "failed" or terminal.interruption_reason != "app_quit":
+    if terminal.state != "failed" or terminal.interruption_reason != original["interruption_reason"]:
         raise AssistantSessionRejected("generation_not_interrupted")
     # 原失败 turn 尚未填回 C 结果时，仍继承 C 模型前实际捕获的资料和样本。
     try:
@@ -76,7 +76,7 @@ def reserve_interrupted_generation_in_transaction(
         metadata = payload.get("continuation")
         if not isinstance(metadata, dict):
             content = payload["content"]
-            intent_field = "direction" if content["type"] == "reply_to_message" else (
+            intent_field = "direction" if content["type"] == "reply_to_message" or content.get("input_kind") == "current_chat" else (
                 "purpose" if content["type"] == "initiate_conversation" else "draft_text")
             metadata = {"version": 1, "submission": command.origin(), "candidate_group_id": None,
                         "candidate_number": None, "candidate_id": None, "version_id": None,

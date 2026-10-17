@@ -11,6 +11,8 @@ export function createSetupBridge(): SetupBridge {
       ? ipcRenderer.invoke('setup:initialize-owner', args[0]) : Promise.reject(new Error('首次配置操作不可用')),
     saveDeepSeekKey: (...args: unknown[]) => args.length === 1 && typeof args[0] === 'string'
       ? ipcRenderer.invoke('setup:save-deepseek-key', args[0]) : Promise.reject(new Error('首次配置操作不可用')),
+    saveOfficialDeepSeekKey: (...args: unknown[]) => args.length === 2 && typeof args[0] === 'string' && args[1] === true
+      ? ipcRenderer.invoke('setup:save-official-deepseek-key', args[0], true) : Promise.reject(new Error('官方模型配置尚未确认')),
     retryRestart: (...args: unknown[]) => invoke('setup:retry-restart', args),
     reloadControlledConfiguration: (...args: unknown[]) => invoke('setup:reload-controlled-configuration', args),
     onStateChanged: (listener: (state: SetupState) => void) => {

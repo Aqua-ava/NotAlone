@@ -360,7 +360,8 @@ export class MemoryReadingController {
       if (!current()) return;
       if (!refreshed.every(Boolean)) throw new Error('资料已提交，但当前列表核对失败，请刷新确认结果。');
       this.publish({ mutation: { phase: 'success', message: '资料操作已完成并重新核对。' } });
-    } catch {
+    } catch (error) {
+      const backupCleanupRequired = error instanceof BackendRequestFailure && error.code === 'update_backup_cleanup_required';
       if (current()) {
         if (!checked) await refreshAfterWrite();
         if (!current()) return;
@@ -373,7 +374,8 @@ export class MemoryReadingController {
         }
         // 提交冲突、来源失效或响应未知后，旧版本不能作为下次操作的依据。
         if (clearStaleVersions) for (const section of sections) this.publish({ [section]: { phase: 'error', items: [] } });
-        this.publish({ mutation: { phase: 'error', message: '未能完成资料操作与核对，请刷新确认后重试。' } });
+        this.publish({ mutation: { phase: 'error', backupCleanupRequired, message: backupCleanupRequired
+          ? '更新备份尚未清理，删除未完成。请查看恢复说明并核验本机备份，再重试原删除。' : '未能完成资料操作与核对，请刷新确认后重试。' } });
       }
     } finally {
       if (this.mutation === operation) this.mutation = undefined;

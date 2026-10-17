@@ -15,6 +15,7 @@ export function readAssistantNoGenerationProof(value: unknown, status: number,
   expected: { contactId: string; sessionId: string; requestKey: unknown }): AssistantNoGenerationProof | undefined {
   if (!record(value) || !uuid(expected.requestKey)
     || !(status === 404 && value.error === 'not_found' && exact(value, ['error', 'no_generation'])
+      || status === 503 && value.error === 'reply_unavailable' && exact(value, ['error', 'no_generation'])
       || status === 409 && value.error === 'assistant_session_input_conflict' && exact(value, ['error', 'no_generation'])
       || status === 409 && value.error === 'assistant_session_rejected' && exact(value, ['error', 'reason', 'no_generation'])
         && typeof value.reason === 'string' && /^[a-z][a-z0-9_]{0,79}$/.test(value.reason))

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { UpdateBackupDeletionNotice, UpdateBackupCleanupRecovery } from './UpdateBackupDeletionNotice';
 import type { TraceDocument, TraceRecordKind, TraceResource, TraceState } from '../shared/trace-bridge';
 import type { ContactSessionView } from './contact-session';
 import './traces.css';
@@ -99,6 +100,7 @@ export function TracePanel({ traces }: { traces: TraceReading }) {
     {busy && <p role="status">正在读取或删除过程记录…</p>}
     {state.message && <p role={state.phase === 'error' ? 'alert' : 'status'}>{state.message}</p>}
     {traces.error && <p role="alert">{traces.error}</p>}
+    {state.backupCleanupRequired && <UpdateBackupCleanupRecovery />}
     {state.phase === 'ready' && <>
       <p>当前结果：{resourceNames[state.resource]}</p>
       {state.availability === 'not_recorded' && <p>这条资料没有已保存的过程记录。</p>}
@@ -115,6 +117,7 @@ export function TracePanel({ traces }: { traces: TraceReading }) {
         {state.availability === 'recorded' && typeof detailId === 'string' && <>
           <button className="button" onClick={() => setConfirming(true)}>删除这份过程记录</button>
           {confirming && <div role="group" aria-label="确认删除过程"><p>清除这份敏感过程正文，权威记忆仍保留。删除后不能恢复原请求与返回。</p>
+            <UpdateBackupDeletionNotice />
             <button className="button" onClick={() => void traces.remove(state.resource, detailId)}>确认删除过程</button>
             <button className="button" onClick={() => setConfirming(false)}>取消删除过程</button></div>}
         </>}

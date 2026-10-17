@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from notalone.managed_update_backups import ManagedUpdateBackupError
 
 from notalone.memory.dimension_evidence import (
     DimensionEvidence,
@@ -565,6 +566,8 @@ class PostgresOwnerMemoryStore:
                     (owner_id, memory_id),
                 ).fetchone()["replaced"]:
                     raise MemoryCorrectionConflictError("资料版本已变化，请重新查看当前版本后删除。")
+                from notalone.managed_update_backups import erase_managed_update_backups
+                erase_managed_update_backups(connection)
                 source_candidate = None
                 if previous["source_candidate_id"] is not None:
                     raw_candidate = connection.execute(
@@ -605,7 +608,7 @@ class PostgresOwnerMemoryStore:
                 ).fetchone()
                 if row is not None:
                     row = _timed_rows(connection, [row])[0]
-        except (LookupError, MemoryCorrectionConflictError):
+        except (LookupError, MemoryCorrectionConflictError, ManagedUpdateBackupError):
             raise
         except Exception as error:
             raise OwnerMemoryPersistenceError(

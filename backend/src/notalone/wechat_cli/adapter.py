@@ -825,6 +825,9 @@ def _parse_session_line(line: str) -> CliSessionEvent | None:
         raise CliOutputError(
             "cli_output_invalid", "微信 CLI 返回了无效事件。"
         ) from error
+    # follow 仍可能返回命令失败 envelope，不能把它当作空闲通知忽略。
+    if isinstance(value, dict) and value.get("ok") is False:
+        raise _command_failure(_SubprocessResult(1, line, ""))
     if not isinstance(value, dict) or value.get("type") not in {
         "session",
         "unread",

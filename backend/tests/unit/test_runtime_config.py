@@ -65,6 +65,29 @@ class RuntimeConfigTest(unittest.TestCase):
             )
             self.assertEqual(stat.S_IMODE(env_path.stat().st_mode), 0o600)
 
+    def test_persist_owner_id_replaces_all_parseable_assignments(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            env_path = Path(directory) / ".env"
+            env_path.write_text(
+                "export NOTALONE_OWNER_ID='11111111-1111-1111-1111-111111111111'\n"
+                "NOTALONE_OWNER_ID = 22222222-2222-2222-2222-222222222222\n"
+                "NOTALONE_SYNTHETIC_OTHER=preserved",
+                encoding="utf-8",
+            )
+
+            persist_owner_id(UUID("33333333-3333-3333-3333-333333333333"), env_path)
+
+            with patch.dict(os.environ, {"NOTALONE_ENV_FILE": str(env_path)}, clear=True):
+                load_project_env()
+                self.assertEqual(
+                    os.environ["NOTALONE_OWNER_ID"],
+                    "33333333-3333-3333-3333-333333333333",
+                )
+                self.assertEqual(os.environ["NOTALONE_SYNTHETIC_OTHER"], "preserved")
+            self.assertEqual(
+                env_path.read_text(encoding="utf-8").count("NOTALONE_OWNER_ID"), 1
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

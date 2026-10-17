@@ -22,6 +22,11 @@
 .contacts-empty { padding: 25px 0; text-align: center; }
 .contacts-empty p { margin: 13px auto 21px; max-width: 440px; }
 .contacts-empty > div { display: flex; justify-content: center; gap: 12px; }
+.contact-create { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 16px 0 22px; }
+.contact-create label { display: grid; gap: 8px; color: #496e88; font-size: 13px; }
+.contact-create input { min-width: 240px; padding: 9px; border: 1px solid #c5cfcc; border-radius: 4px; background: #fffef7; }
+.contact-create p { flex-basis: 100%; margin: 0; color: #737e80; font-size: 12px; }
+.contact-summary button { margin: 8px 8px 0 0; }
 .current-contact { display: inline-block; color: #4e758a; font-size: 12px; overflow-wrap: anywhere; }
 .contact-picker { -webkit-app-region: no-drag; min-width: 125px; max-width: 250px; padding: 5px 6px; font: inherit; font-size: 12px; color: #496e88; background: #fffdf5; border: 1px solid #c5cfcc; border-radius: 4px; }
 .contact-picker:disabled { color: #808b8b; }

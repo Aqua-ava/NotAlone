@@ -10,6 +10,7 @@ from notalone.application.model_priority import ModelWorkStopped
 from notalone.memory.upgrade import UpgradeScope, UpgradeBudget, UpgradeConflict, UpgradeNotFound, UpgradeDeleted
 from notalone.memory.correction import MemoryCorrectionConflictError
 from notalone.memory.versions import MemoryVersionConflict
+from notalone.managed_update_backups import ManagedUpdateBackupError
 from notalone.server.sync_host import SyncHostStopped
 
 
@@ -68,6 +69,8 @@ def handle_memory_upgrade(service, *, owner_id, method, path, query, body):
         return 410, {'error': 'memory_upgrade_deleted'}
     except (UpgradeConflict, MemoryCorrectionConflictError, MemoryVersionConflict):
         return 409, {'error': 'memory_upgrade_stale_or_unavailable'}
+    except ManagedUpdateBackupError:
+        return 409, {'error': 'update_backup_cleanup_required'}
     except psycopg.Error:
         return 503, {'error': 'memory_upgrade_unavailable'}
     except (SyncHostStopped, ModelWorkStopped):

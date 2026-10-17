@@ -49,7 +49,7 @@ export function ImportPage({ session }: { session: ContactSessionView }) {
   return <section className="import-panel" aria-label="历史文件导入">
     <div className="import-intro"><h2>先核对，再保存</h2>
       <p>仅接受单联系人 JSONL；本次选择只用于预览，确认后再进行导入。NotAlone 不运行导出工具，也不读取其他文件。</p>
-      <p>外部导出工具可能读取微信数据库或进程内存，并保留密钥与缓存。它不是微信官方能力；NotAlone 不会取得这些密钥或原始数据库。</p></div>
+      <p>这里只导入你已持有的单联系人文件。微信自动接入尚未提供；没有文件时可返回联系人目录，选择联系人后手动粘贴文字。</p></div>
     {!available && <p className="import-note">请先连接本机服务并完成本次运行的本人配置，再选择历史文件。</p>}
     <div className="import-file"><button className="button" disabled={!available || busy}
       onClick={() => void operate(() => window.notalone.imports.chooseFile())}>选择历史文件</button>
@@ -87,7 +87,7 @@ export function ImportPage({ session }: { session: ContactSessionView }) {
       <h3>资料已保存，处理状态另行核验</h3>
       <p>{state.submission.targetName} · {state.submission.fileName}</p>
       <p role="status">新增 {state.submission.receipt.importedCount} 条消息，已存在 {state.submission.receipt.skippedDuplicates} 条消息。</p>
-      <p>后台关系提取失败不会回滚已保存的消息。处理期间可为已确认绑定的联系人发起候选回复。</p>
+      <p>后台关系提取失败不会回滚已保存的消息。处理期间可明确选择联系人，使用手动输入发起候选回复。</p>
       <p>重新提交须重新预览确认同一份文件和联系人；原新建名称与归属仍有效时会复用已保存结果。归属变化时请明确选择既有联系人。</p>
       <div className="import-task-toolbar"><h4>{state.submission.task ? taskStatusLabels[state.submission.task.status] : '处理状态待核验'}</h4>
         <button className="button" disabled={!available || !!state.submission.taskBusy} onClick={() => void operate(() => window.notalone.imports.refreshTask({ selectionRevision: latest.current.selectionRevision }))}>刷新处理状态</button></div>

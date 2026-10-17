@@ -1,0 +1,173 @@
+{
+  "formatVersion": 1,
+  "architecture": "arm64",
+  "minimumMacOS": "15.0",
+  "gitSources": [
+    {
+      "name": "wechat-cli",
+      "version": "2.0.1-rc.5",
+      "source": "https://github.com/r266-tech/wx-cli",
+      "commit": "795071fa0591da5fc2c6ab94a70f22ccd93ef06c",
+      "tree": "5d617ff3250c27fd9b33a60cb0182e153c521057",
+      "directory": "wx-cli",
+      "ref": "v2.0.1-rc.5"
+    },
+    {
+      "name": "wxkey",
+      "version": "1.4.8",
+      "source": "https://github.com/r266-tech/wxkey",
+      "commit": "9b70eecdde47a7172b19465c3f977c86b6050e8a",
+      "tree": "ba29a0b0aa9c5a2418c44a57eaf693ce85af8ce6",
+      "directory": "wxkey",
+      "ref": "v1.4.8",
+      "includedAsExecutable": false
+    },
+    {
+      "name": "debugserver",
+      "version": "22.1.8",
+      "source": "https://github.com/llvm/llvm-project",
+      "commit": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+      "tree": "1e4fdb95266974a0cbca9ec4c6f740488322f238",
+      "directory": "llvm-project",
+      "ref": "llvmorg-22.1.8",
+      "paths": [
+        "lldb/tools/debugserver",
+        "lldb/source/Host/common/SocketAddress.cpp",
+        "lldb/include/lldb",
+        "lldb/source/Utility",
+        "llvm/include/llvm",
+        "cmake",
+        "lldb/LICENSE.TXT",
+        "LICENSE.TXT"
+      ]
+    }
+  ],
+  "archives": [
+    {
+      "name": "go",
+      "version": "1.26.5",
+      "filename": "go.tar.gz",
+      "source": "https://go.dev/dl/go1.26.5.darwin-arm64.tar.gz",
+      "sha256": "efb87ff28af9a188d0536ef5d42e63dd52ba8263cd7344a993cc48dd11dedb6a"
+    },
+    {
+      "name": "wcdb",
+      "version": "2.1.16",
+      "filename": "wcdb.zip",
+      "source": "https://github.com/Tencent/wcdb/releases/download/v2.1.16/wcdb-2.1.16.zip",
+      "sha256": "260845053c5dedc4578570203a5ba235c3be1e74a671c2fc1aeb12c988dd5346",
+      "commit": "df808591b9f9a9ab42156006819c3550d5af13a3"
+    },
+    {
+      "name": "codelldb-lldb",
+      "version": "22.1.8-codelldb",
+      "filename": "lldb.zip",
+      "source": "https://github.com/vadimcn/lldb-build/releases/download/codelldb/22.x-74/lldb--aarch64-apple-darwin.zip",
+      "sha256": "a89e6ed97cdc36800bf1601a770a9550da26bcc8192c20168d42a3cf2ee029c8",
+      "buildCommit": "9a553c683609976a11129fe0991b9e85d51f638d",
+      "llvmCommit": "9e3f2b1076fd4a1bb75f4d78e9000d69949def13",
+      "libxml2Commit": "223cb03a5d27b1b2393b266a8657443d046139d6"
+    },
+    {
+      "name": "cpython",
+      "version": "3.12.14+20260901",
+      "filename": "pbs.tar.gz",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-apple-darwin-install_only.tar.gz",
+      "sha256": "3ee3ee547cedfeb7c2b16b2b7156039f7b470bb8f857e226fd3d2eb11db83c76"
+    },
+    {
+      "name": "cpython-build-metadata",
+      "version": "3.12.14+20260901",
+      "filename": "pbs-full.tar.zst",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-apple-darwin-pgo%2Blto-full.tar.zst",
+      "sha256": "dbefa04d4107b449e17022f9c78d3eacbd37a1aa8c166c6220dbd95addf3f318"
+    },
+    {
+      "name": "codelldb-LLVM-LICENSE.TXT",
+      "version": "source-notice",
+      "filename": "codelldb-LLVM-LICENSE.TXT",
+      "source": "https://raw.githubusercontent.com/vadimcn/llvm-project/9e3f2b1076fd4a1bb75f4d78e9000d69949def13/LICENSE.TXT",
+      "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee"
+    },
+    {
+      "name": "codelldb-LLDB-LICENSE.TXT",
+      "version": "source-notice",
+      "filename": "codelldb-LLDB-LICENSE.TXT",
+      "source": "https://raw.githubusercontent.com/vadimcn/llvm-project/9e3f2b1076fd4a1bb75f4d78e9000d69949def13/lldb/LICENSE.TXT",
+      "sha256": "76be4deddeef87f6fa9940f4992a9506c7bb222af60eb3b2a47cf65719528bbe"
+    },
+    {
+      "name": "libxml2-Copyright",
+      "version": "source-notice",
+      "filename": "libxml2-Copyright",
+      "source": "https://raw.githubusercontent.com/GNOME/libxml2/223cb03a5d27b1b2393b266a8657443d046139d6/Copyright",
+      "sha256": "c5c63674f8a83c4d2e385d96d1c670a03cb871ba2927755467017317878574bd"
+    },
+    {
+      "name": "LICENSE.zlib-ng.txt",
+      "version": "source-notice",
+      "filename": "LICENSE.zlib-ng.txt",
+      "source": "https://raw.githubusercontent.com/python/cpython-source-deps/zlib-ng-2.2.4/LICENSE.md",
+      "sha256": "6c9f0d975b41afaa34d22f55bb8986ce69e5cb7ad327cb2b28820cd425edf5ee"
+    }
+  ],
+  "cliPatch": {
+    "file": "wechat-patches/readonly-cli.patch",
+    "sha256": "91354432dedba9b932052d77824275e8b09cc3700c40624a51047ccf38436b38",
+    "testFile": "wechat-patches/readonly-cli-test.go",
+    "testSha256": "2a9b2e118b863e2d673835bb73830bf6a6719deed8833d11aaacd585ffb978bd"
+  },
+  "researchCache": {
+    "wcdb": {
+      "filename": "libWCDB.dylib",
+      "sha256": "5595799c6390b421f910cc3155859715ba02eb6ccdc47d80df73e847967abe82"
+    },
+    "debugger": {
+      "directory": "debugger-cache",
+      "inventorySha256": "57ce57e28dd0a95de922843993dfa17f9aad8da05e0b70319dd0ff76eab1fd5c",
+      "provenance": "public fixed-source local research build; relocated PBS/LLDB; ad-hoc signature; never a Developer ID or clean-machine acceptance"
+    }
+  },
+  "build": {
+    "jobs": 2,
+    "wcdbFlags": [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DCMAKE_OSX_ARCHITECTURES=arm64",
+      "-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0",
+      "-DBUILD_SHARED_LIBS=ON",
+      "-DWCDB_ZSTD=OFF",
+      "-DSKIP_WCONAN=ON"
+    ],
+    "lldbPythonChange": {
+      "from": "@rpath/libpython312.dylib",
+      "to": "@rpath/libpython3.12.dylib"
+    },
+    "wxkeyExecutable": false
+  },
+  "licenseCoverage": {
+    "state": "pending-transitive-review",
+    "description": "保留固定来源主许可、源码内各层notice和PBS完整许可；LLVM及WCDB编译来源的逐文件第三方条款覆盖仍需独立复核。"
+  },
+  "acceptance": {
+    "realWechat": false,
+    "cleanMachine": false,
+    "systemAuthorization": false
+  },
+  "limitations": [
+    "不包含上游wxkey可执行程序；不能执行首次初始化。",
+    "CLI只开放sessions、resolve-chat、tail/watch及帮助/版本；会话列表与全局事件只查询身份和时间元数据，不查询或搜索summary，不读取最近发送人及消息类型；严格只读恒开启，wxkey和Keychain硬禁用。",
+    "开发构建和合成派生证据不代表系统授权、真实微信、联系人同步或干净机器已验收。"
+  ],
+  "dependencies": [
+    {
+      "name": "github.com/ebitengine/purego",
+      "version": "v0.10.0",
+      "integrity": "upstream go.sum; go mod verify"
+    },
+    {
+      "name": "github.com/klauspost/compress",
+      "version": "v1.18.5",
+      "integrity": "upstream go.sum; go mod verify"
+    }
+  ]
+}

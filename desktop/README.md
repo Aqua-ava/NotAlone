@@ -1,5 +1,15 @@
 # 桌面端
 
+当前独立交付目标为 **macOS 15+、Apple Silicon（arm64）**。App 的 `LSMinimumSystemVersion` 和 PostgreSQL 编译部署目标统一读取 `scripts/runtime/component-sources.lock.json` 的 `minimumMacOS`；打包在签名前写入，并复查最终 App，避免外壳仍声明支持 macOS 13／14 而包内后台要求更高版本。2026-10-17 官方 ZIP 静态打包回归先实际复现 `13.0` 对 `15.0` 的失败，修复后为 `15.0` 且严格签名通过；本轮没有在旧系统运行或启动 GUI／数据库，不扩展 x86／universal 支持。
+
+## 手动首版使用
+
+双击受管版 `NotAlone.app` → “开始本机设置” → 填写本人展示名称并初始化 → 在 App 输入对应模型密钥。新安装使用 DeepSeek 官方 `https://api.deepseek.com` 与 `deepseek-flash`；旧自定义模型／地址不会因更新密钥被静默改写。如需恢复官方默认配置，页面会展示目标，并要求重新输入对应密钥和明确确认。
+
+打开“联系人”，填写展示名称并创建，再明确选择联系人，点击“手动输入本次聊天”。“回应粘贴文字”将对方当前文字与自己的表达方向分开；“改写”处理自己的草稿。生成后可查看依据、修改、复制候选，消息由用户亲自发送。手动输入默认仅使用本次文字，关系上下文需另行选择，表达要求不自动成为长期记忆。已有单联系人 JSONL 可先预览并确认归属，随后查看／删除来源；混杂或损坏资料会拒绝。
+
+普通使用不需要 Conda、单独 PostgreSQL、微信、CLI、终端路径或录屏权限。微信自动接入尚未交付，同步页保留实际授权／暂停状态和关闭动作，不引导新用户准备未完成渠道。以下源码、原生探针与历史实机记录用于研发，不能作为手动首版的前置步骤或最终组合包的证据。当前仍待最终组合包、真正无开发环境机器及正式分发签名／公证验收。
+
 macOS App 图标使用独立的 `assets/app-icon.png` 母版（1024×1024、sRGB、透明通道），打包时生成 16、32、128、256、512 点的普通与 Retina `.icns` 表示。当前传统 `.icns` 为 macOS 15 显式保留圆角和透明留边：底板 824×824、每边留白 100、圆角半径 185，Logo 等比居中，避免在 Dock 中出现铺满画布、比邻近 App 更大的直角方块。这些留白数值是本项目的视觉对齐参数；Apple 的[图标规范](https://developer.apple.com/design/human-interface-guidelines/app-icons/)规定方形布局及 1024×1024 画布，[传统高分辨率规范](https://developer.apple.com/library/archive/documentation/GraphicsAnimation/Conceptual/HighResolutionOSX/Optimizing/Optimizing.html)列出 `.iconset` 尺寸。新分层图标的系统遮罩流程不直接套用到现有传统 `.icns`。
 
 修改品牌 Logo 后，在 `desktop/` 执行 `swift scripts/render-app-icon.swift src/renderer/assets/logo.png assets/app-icon.png` 重新生成 App 母版，再正常打包。生成器仅供开发使用，普通打包直接读取 PNG，不新增 Swift 编译依赖；界面与官网继续使用各自的原 Logo。
@@ -67,7 +77,23 @@ B负责人工作树的 `reply-strategy-dialogue` 和 `reply-strategy-invalidatio
 
 2026-10-10 合成普通页面验证：基础缺口、完整查看/分页/删除、范围/断线/来源删除三个组通过；完整组使用正式提取产生的 21 个零候选、1 个有候选、1 个失败批次及独立来源处理记录。删除过程保留权威记忆；来源删除完成后，已清除事件不能恢复。仅处理随机隔离库中的合成资料，Electron、系统剪贴板、权限及真实微信均未运行，仍按原票保留实机验收。
 
+## 已有资料的兼容更新
+
+App 只读检查已配置的本机资料。支持正式版本记录的旧库，以及已核验035基线并具有后续真实版本记录的旧库。需要更新时，在管理窗口点击一次“备份并完成更新”：App 先停止自己的后台、确认没有其他连接，生成仅保存在本机的私人备份，并实际恢复到临时数据库核验，然后逐版本更新与重连。联系人、聊天、关系资料、来源、绑定、同步开关和暂停状态沿用原资料，不重新生成。
+
+旧版外置安装会在备份核验后复制到 App 管理的独立数据库，完成更新和资料保留核验后才切换；原数据库保持旧结构，原配置保留在备份目录。接续使用包内运行时，旧 Python 和项目目录不必继续存在。用户无需填写新开发路径。
+
+更新中断时保留已完成的真实版本和本机恢复点。可续接的情况显示“继续备份更新”；配置、历史或恢复点不一致时显示“重新检查资料”和“查看恢复说明”。其他程序仍连接时应先正常退出旧版 App，再重新检查。查看本机备份不会自动覆盖资料，损坏或未验证的归档不会被显示为可恢复备份。完成后的正常重开不依赖旧开发工具或备份文件继续存在。
+
+以后安装含新迁移的版本，App 为本次升级生成新的恢复点，保留以前的完整备份；仅未完成操作续接原检查点。升级已经完成而重连失败时，重试只重新连接，不重复备份。
+
+用户确认删除来源、过程、关系资料或助手会话时，同时清除本 App 管理的全部已完成更新快照，避免通过恢复找回已删除内容。外置安装留下的原数据库、自行导出的文件及模型供应商副本仍需用户另行处理，App 不擅自删除。未知、损坏或未完成的更新目录会阻止删除成功，并提供“查看备份目录”和“查看备份清理恢复说明”；先完成未结束的更新，或在 Finder 核对自己确认不再需要的损坏备份后再重试。归属不明的资料保留核验。快照清除后，完成状态不再提供已不存在的备份。
+
+此路径使用独立合成旧资料验证，不代表已更新使用者的私人数据库。实际覆盖、失败记录与正式发行缺项见[任务04验证记录](../.scratch/standalone-app-delivery/data-update-validation.md)。
+
 ## 本机运行与构建
+
+随包 `notalone-runtime/licenses/replacement-kit/README.md` 提供可选的离线组件修改与 App 新副本安装流程；接收者无需本仓库或 Conda。只有开发者重建才需要 Node／clang，普通用户双击流程不变。来源、签名边界与实际证据见[修改库说明](scripts/runtime/PSYCOPG-REBUILD.md)。
 
 任务18于2026-10-10 17:06–17:16（UTC+8）由主Agent直接操作当前微信与隔离App，公开坐标表单成功保存五处pending几何，但唯一布局校验未形成profile，实际1场失败，原因尚未定位。自有进程/目录及精确租约已核验收尾，未自动重启。现已补0600固定阶段/错误码结果和对应公开断言，原始画面不保存；新诊断未再实机验证，真实最小采集、成功自动定位和权限归属继续待验。后端两名质量解析及旧匹配入口的统一资格门禁在新建隔离库38/38通过，不能代替现场green。
 
@@ -134,10 +160,10 @@ npm run package -- --with-probe
 
 ```bash
 npm run build
-npm run test:package
+NOTALONE_ELECTRON_ZIP_DIRECTORY=/绝对路径/官方ElectronZIP目录 npm run test:package
 ```
 
-显式 `test:package` 在自有临时目录复制当前编译资源和 logo，从已安装 Electron 生成不含 AppleDouble 元数据的离线 ZIP，使用仓库探针调用生产打包命令。实际检查包内没有第三方 CLI/WCDB 或专用许可目录、自研探针原字节/SHA-256、严格签名、未获 JIT entitlement，以及实际包 Resources 下的 Node 启动诊断/后端环境；不执行 Electron、CLI 或探针，不覆盖既有 `out/`，最后精确清理检查包、ZIP 和缓存。该结果不能关闭 Finder、权限或微信验收。
+显式 `test:package` 在自有临时目录复制当前编译资源、logo 和指定的官方 Electron ZIP，使用仓库探针调用生产打包命令。实际核对包内没有第三方 CLI/WCDB，自研探针原字节／SHA256 保持、严格签名通过且未获 JIT entitlement；另核对原始分发许可及包 Resources 下的 Node 启动诊断／后端环境；不执行 Electron、CLI 或探针，不覆盖既有 `out/`，最后精确清理本轮复制品。测试必须提供官方 ZIP 目录，不再重包安装副本；该结果不能关闭 Finder、权限或微信验收。
 
 签名所需的 plist 在本轮 staging 内生成一次，再以文件路径传给 osx-sign；内容仍只有 `com.apple.security.cs.allow-jit=true`，helper 保留原签名。此前数组参数会逐文件生成 staging 外的临时目录，2026-10-10 的公开构建检查实际复现 250 份残留；修复后命令返回时本轮临时目录清空，调用者既有哨兵保留，主 App entitlement 精确等于原单项。旧候选构建的 250 份自有普通 plist 经哈希/目录身份核对后逐项清理，候选包四个运行时哈希未变；不扫描或批量删除系统临时目录。`test:package` 的 red/green 与清理证据见[任务 20](../.scratch/mac-desktop-app/issues/20-mac-app-delivery.md)。
 
@@ -147,7 +173,11 @@ npm run test:package
 npm run package -- --output-directory /已有父目录/新的输出目录 --electron-zip-directory /绝对路径/离线ElectronZIP目录 --with-probe
 ```
 
-两项路径必须为绝对路径且不重复。显式输出目录必须不存在，先独占创建，失败时只按目录身份清理本次自有目标；已有目录保留并拒绝，不允许覆盖。离线目录须含 `electron-v版本-darwin-架构.zip` 普通文件，版本来自锁定配置、架构来自本机；缺档拒绝，不回退下载。Packager 临时树留在本轮 staging 下，随本轮清理。未给这些选项时保留原 `out/` 构建方式。SDK 的 [electronZipDir](https://electron.github.io/packager/main/interfaces/Options.html#electronZipDir)、[out/tmpdir](https://electron.github.io/packager/main/interfaces/Options.html#out)已与安装 20.3.0 源码核对。
+两项路径必须为绝对路径且不重复。显式输出目录必须不存在，先独占创建，失败时只按目录身份清理本次自有目标；已有目录保留并拒绝，不允许覆盖。离线目录须含 `electron-v版本-darwin-架构.zip` 普通文件，版本来自锁定配置、架构来自本机；缺档或摘要不同均在 Packager 执行前拒绝，不回退下载。`distribution-notices.lock.json` 固定官方 44.7.0 SHASUMS 的 macOS arm64／x64 归档摘要；本轮实际构建覆盖 arm64。在线默认路径沿用已安装 `@electron/get` 5.1.0 的 SHASUMS 下载及 SHA256 校验（缓存命中也复核），没有启用跳过校验选项。Packager 临时树留在本轮 staging 下，随本轮清理。未给这些选项时保留原 `out/` 构建方式。SDK 的 [electronZipDir](https://electron.github.io/packager/main/interfaces/Options.html#electronZipDir)、[out/tmpdir](https://electron.github.io/packager/main/interfaces/Options.html#out)已与安装 20.3.0 源码核对。
+
+2026-10-17 补齐前端分发通知：构建先核对安装包名称／版本、package-lock 的版本／URL／完整性字段及原文 SHA256，再将 react 19.3.0、react-dom 19.3.0、scheduler 0.28.0 的三份 `LICENSE` 和 vite 8.3.3 完整 `LICENSE.md` 原样保存到 `dist/licenses/frontend/`，附固定来源收据。这四份原文已从官方 npm 归档按锁内 SHA512 核验，并与安装副本逐字节相同；没有只保存 MIT 名称或自行生成版权文字。打包进一步保留到 `Contents/Resources/licenses/frontend/`。Electron 官方 ZIP 原有 `LICENSE`（1096 字节）和 `LICENSES.chromium.html`（20115518 字节）也在签名前保留到 `Contents/Resources/licenses/electron/`，复制后与签名后复查原文摘要和文件集合，拖动单个 App 仍保留。两组共六份原文、两份来源收据，不扩大为全部 node_modules 通知闭包或法律认证。
+
+同日实际验证：同名重包 ZIP 因容器 SHA256 不同而被拒绝；独立对照记录确认其 583 个 member 的路径、原始内容和权限均与官方 ZIP 相同，拒绝不表示其中代码被修改。官方 arm64 ZIP 构建的静态 App 严格签名通过，六份通知保留；含自研探针的 `test:package` 1／1 通过，缺档／改字节／锁不匹配的轻量回归进入默认安全组。本轮没有启动 App、GUI、微信或访问用户资料。
 
 实际构建检查位于独立 `tests/packaging/command.test.mjs`，不加入默认 `npm test`；轻量的第三方参数拒绝回归加入默认测试。2026-10-14 外置模式离线构建 1/1、默认类型检查及安全组 44/44 通过；默认组不构建 App 包。已有输出保留、缺 ZIP 后自有输出清理均验证通过；签名是 ad-hoc，不证明可信发行者或权限身份稳定。
 

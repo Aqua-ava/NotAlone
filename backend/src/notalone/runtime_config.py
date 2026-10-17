@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import os
 import tempfile
 from pathlib import Path
@@ -30,25 +31,22 @@ def load_project_env() -> Path | None:
 def persist_owner_id(owner_id: UUID, env_path: Path | None = None) -> Path:
     """把生成的 owner UUID 原子写入受控本地 ``.env``。"""
 
+    return persist_env_values({"NOTALONE_OWNER_ID": str(owner_id)}, env_path)
+
+
+def persist_env_values(values: Mapping[str, str], env_path: Path | None = None) -> Path:
+    """按加载器的解析规则移除本次键的全部旧赋值，再原子保存。"""
+
     path = env_path or _writable_env_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     existing = path.read_text(encoding="utf-8") if path.exists() else ""
-    lines = existing.splitlines(keepends=True)
-    replacement = f"NOTALONE_OWNER_ID={owner_id}\n"
-    replaced = False
-    output: list[str] = []
-    for line in lines:
-        stripped = line.lstrip()
-        if stripped.startswith("NOTALONE_OWNER_ID="):
-            if not replaced:
-                output.append(replacement)
-                replaced = True
-            continue
-        output.append(line)
-    if not replaced:
-        if output and not output[-1].endswith("\n"):
-            output.append("\n")
-        output.append(replacement)
+    output = [
+        line for line in existing.splitlines(keepends=True)
+        if _parse_line(line)[0] not in values
+    ]
+    if output and not output[-1].endswith("\n"):
+        output.append("\n")
+    output.extend(f"{key}={value}\n" for key, value in values.items())
 
     temporary_path: str | None = None
     try:
@@ -66,14 +64,12 @@ def persist_owner_id(owner_id: UUID, env_path: Path | None = None) -> Path:
             temporary.flush()
             os.fsync(temporary.fileno())
         os.replace(temporary_path, path)
-        os.chmod(path, 0o600)
-    except OSError:
+    finally:
         if temporary_path is not None:
             try:
                 os.unlink(temporary_path)
             except OSError:
                 pass
-        raise
     return path
 
 

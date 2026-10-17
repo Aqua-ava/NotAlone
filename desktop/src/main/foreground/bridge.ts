@@ -4,6 +4,7 @@ import type { ContactSession } from '../contacts/session';
 import { normalizeUuid } from '../uuid';
 import type { ForegroundConfirmation } from '../../shared/foreground-bridge';
 import { ForegroundController } from './controller';
+import { selectionArguments } from '../contacts/bridge';
 
 function confirmationArguments(args: unknown[]): ForegroundConfirmation {
   const value = args[0];
@@ -25,6 +26,22 @@ export function installForegroundBridge(commands: PageCommands, backend: Backend
   commands.handle('foreground:get-state', (...args: unknown[]) => {
     noArguments(args); return controller.getState();
   }, 'helper');
-  commands.handle('foreground:confirm', (...args: unknown[]) => controller.confirm(confirmationArguments(args)), 'helper');
+  commands.handle('foreground:confirm', (...args: unknown[]) => {
+    const confirmation = confirmationArguments(args);
+    const selected = controller.confirm(confirmation);
+    backend.clearManualInput(confirmation.contactId);
+    return selected;
+  }, 'helper');
+  commands.handle('contacts:confirm-manual', async (...args: unknown[]) => {
+    const selection = selectionArguments(args);
+    const generation = backend.getConnectionGeneration(), state = contacts.getState();
+    if (generation === undefined || selection.scopeRevision !== state.scopeRevision
+      || state.directoryPhase !== 'ready' || !state.contacts.some(item => item.contactId === selection.contactId)) throw new Error('联系人选择已失效。');
+    const response = await backend.requestJson({ method: 'POST', path: `/api/contacts/${selection.contactId}/manual-confirmation`, body: {}, maxResponseBytes: 4096 });
+    if (response.generation !== generation || backend.getConnectionGeneration() !== generation
+      || selection.scopeRevision !== contacts.getState().scopeRevision) throw new Error('联系人选择已失效。');
+    backend.confirmManualInput(selection.contactId, generation);
+    return controller.confirmManual(selection);
+  });
   return controller;
 }

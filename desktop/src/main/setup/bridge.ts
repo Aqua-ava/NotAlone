@@ -33,5 +33,12 @@ export function installSetupBridge(windows: AppWindows, setup: SetupController):
       || !/^[A-Za-z0-9_-]{1,4096}$/.test(value)) throw new Error('首次配置操作不可用');
     return setup.saveDeepSeekKey(value);
   });
+  ipcMain.handle('setup:save-official-deepseek-key', (event, ...args: unknown[]) => {
+    const window = windows.validateCaller(event, []);
+    const value = args[0];
+    if (!window.webContents.getURL().endsWith('#manager') || args.length !== 2 || args[1] !== true
+      || typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,4096}$/.test(value)) throw new Error('官方模型配置尚未确认');
+    return setup.saveOfficialDeepSeekKey(value);
+  });
   setup.onStateChanged((state) => windows.publish('setup:state-changed', state));
 }

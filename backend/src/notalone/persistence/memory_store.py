@@ -833,6 +833,8 @@ class PostgresMemoryStore:
                     return self._candidate_from_row(self._timed_candidates(connection, [row])[0])
                 if row["candidate_status"] != MemoryCandidateStatus.PENDING.value:
                     raise MemoryCorrectionConflictError("当前关系记忆候选不能丢弃。")
+                from notalone.managed_update_backups import erase_managed_update_backups
+                erase_managed_update_backups(connection)
                 record_decision(
                     connection, scope=scope, record_kind="candidate",
                     record_id=candidate_id, rejected_text=row["candidate_text"],
@@ -1206,6 +1208,8 @@ class PostgresMemoryStore:
                         (scope.owner_id, scope.contact_id, memory_id),
                     ).fetchone()["replaced"]:
                         raise MemoryCorrectionConflictError("资料版本已变化，请重新查看当前版本后删除。")
+                    from notalone.managed_update_backups import erase_managed_update_backups
+                    erase_managed_update_backups(connection)
                     source_candidate = None
                     if row["source_candidate_id"] is not None:
                         candidate_row = self._candidate_for_update(connection, row["source_candidate_id"], scope)

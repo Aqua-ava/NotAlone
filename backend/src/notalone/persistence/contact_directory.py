@@ -71,3 +71,36 @@ class PostgresContactDirectory:
             )
             for row in rows
         )
+
+    def create_contact(self, owner_id: UUID, request_id: UUID, display_name: str) -> ContactSummary:
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                row = connection.execute(
+                    "INSERT INTO public.contact (id, owner_id, display_name) VALUES (%s,%s,%s) "
+                    "ON CONFLICT (owner_id,id) DO NOTHING RETURNING id,display_name",
+                    (request_id, owner_id, display_name),
+                ).fetchone()
+                if row is None:
+                    row = connection.execute(
+                        "SELECT id,display_name FROM public.contact WHERE owner_id=%s AND id=%s",
+                        (owner_id, request_id),
+                    ).fetchone()
+                if row is None or row[1] != display_name:
+                    raise ContactDirectoryError("本次创建未确认，请刷新联系人后重试。")
+        except psycopg.Error:
+            raise ContactDirectoryError("联系人创建失败。") from None
+        return ContactSummary(row[0], row[1], ContactDataStatus(0, 0))
+
+    def confirm_manual(self, owner_id: UUID, contact_id: UUID) -> None:
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                row = connection.execute(
+                    "INSERT INTO public.manual_contact_confirmation (owner_id,contact_id) "
+                    "SELECT owner_id,id FROM public.contact WHERE owner_id=%s AND id=%s "
+                    "ON CONFLICT (owner_id,contact_id) DO UPDATE SET confirmed_at=now() RETURNING id",
+                    (owner_id, contact_id),
+                ).fetchone()
+                if row is None:
+                    raise ContactDirectoryError("本次联系人不存在，请刷新后重新选择。")
+        except psycopg.Error:
+            raise ContactDirectoryError("手动输入联系人确认失败。") from None

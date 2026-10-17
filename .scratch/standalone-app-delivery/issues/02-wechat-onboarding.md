@@ -2,7 +2,7 @@
 
 Type: task
 State: open
-Triage: ready-for-agent
+Triage: needs-info
 Blocked by: 01
 Spec: ../spec.md
 
@@ -26,3 +26,4 @@ Spec: ../spec.md
 ## Comments
 
 - 2026-10-16：按用户批准拆分发布，依赖任务01。
+- 2026-10-16：特权初始化子任务被工具安全审查中止，相关实现已停止，尚未完成。用户明确接受先交付手动输入版；本任务递延，须先找到新的安全可行接入方案，不能重试被中止路线或以普通CLI合成验证代替初始化验收。

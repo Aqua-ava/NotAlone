@@ -139,10 +139,18 @@ def _parse_rewrite_draft(content: dict[str, Any]) -> RewriteDraft:
     include_context = content.get("include_relationship_context", False)
     if not isinstance(include_context, bool):
         raise ReplyRequestInvalid()
+    input_kind = content.get("input_kind", "draft")
+    direction = content.get("pasted_direction")
+    if input_kind not in ("draft", "current_chat") or input_kind == "current_chat" and (
+        not isinstance(direction, str) or not direction.strip() or len(direction) > 4096
+    ) or input_kind == "draft" and direction is not None:
+        raise ReplyRequestInvalid()
     draft = RewriteDraft(
         draft_text=draft_text,
         user_instruction=instruction,
         include_relationship_context=include_context,
+        input_kind=input_kind,
+        pasted_direction=direction,
     )
     if not draft.is_valid():
         raise ReplyRequestInvalid()

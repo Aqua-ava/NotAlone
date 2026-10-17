@@ -6,6 +6,7 @@ import { foregroundObservation } from './observation';
 import type { SyncControlState } from '../../shared/sync-control-bridge';
 import type { ForegroundChangeSource, HeaderChangePermit } from './native-change-source';
 import { isTransientForegroundContextChange, isUnsupportedForegroundConversation } from '../../shared/foreground-failure.mjs';
+import type { ContactSelection } from '../../shared/contact-session-bridge';
 
 type Flight = { abort: AbortController; promise: Promise<void> };
 
@@ -104,6 +105,17 @@ export class ForegroundController {
       && (contact.directoryPhase === 'ready' || contact.directoryPhase === 'loading')
       ? null : 'foreground-confirmation-required';
   }
+  confirmManual(selection: ContactSelection) {
+    const generation = this.backend.getConnectionGeneration();
+    if (this.disposed || this.stopped || generation === undefined) throw new Error('本次联系人确认不可用。');
+    this.cancelScheduled(); this.invalidatePending(); ++this.epoch;
+    const selected = this.contacts.selectContact(selection);
+    this.state = { ...this.state, manualInput: true, unsupportedConversation: false };
+    this.qualification = { generation, scopeRevision: selected.scopeRevision, contactId: selection.contactId, kind: 'manual-confirmed' };
+    this.publish({ phase: 'paused', reason: 'manual_input', recognizedName: null, recognitionConfidence: null,
+      observedAt: null, suggestedContactId: null, wechatInFront: null, probeAvailable: null });
+    return selected;
+  }
   // 仅由helper具名桥调用；同步校验并选择，异步旧观察不能在确认后覆盖资格。
   confirm(selection: ForegroundConfirmation) {
     const generation = this.backend.getConnectionGeneration();
@@ -118,6 +130,7 @@ export class ForegroundController {
     this.invalidatePending(); ++this.epoch;
     const selected = this.contacts.selectContact({ contactId: selection.contactId, scopeRevision: contact.scopeRevision });
     this.manualRequired = false;
+    this.state = { ...this.state, manualInput: false };
     this.qualification = { generation, scopeRevision: selected.scopeRevision, contactId: selection.contactId, kind: 'manual-confirmed' };
     this.publish({ foregroundRevision: this.state.foregroundRevision + 1, suggestedContactId: null });
     return selected;
@@ -150,7 +163,7 @@ export class ForegroundController {
     this.scheduled = undefined;
   }
   private scheduleNext(): void {
-    if (!this.continuous || this.disposed || this.flight || this.state.suspendedByHelperFocus
+    if (!this.continuous || this.disposed || this.flight || this.state.manualInput || this.state.suspendedByHelperFocus
       || this.readingScopeChanges > 0 || this.scheduled !== undefined) return;
     // 后端每轮预算 3.2 秒，完成后至少休息 2 秒；失败退避至最多 8 秒。
     const delay = Math.min(8000, 2000 * 2 ** this.failures);
@@ -163,7 +176,7 @@ export class ForegroundController {
     this.scheduled = handle;
   }
   observeBeforeShow(): Promise<void> {
-    if (this.disposed || this.stopped || this.state.suspendedByHelperFocus) return Promise.resolve();
+    if (this.disposed || this.stopped || this.state.manualInput || this.state.suspendedByHelperFocus) return Promise.resolve();
     if (this.readingScopeChanges > 0) {
       this.clearObservation('manual-required', 'reading_scope_changed'); return Promise.resolve();
     }

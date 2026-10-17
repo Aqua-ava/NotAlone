@@ -33,7 +33,7 @@ export interface ReplyRetrievalReceipt {
 }
 export interface ReplyEvidenceItem {
   evidenceId: string;
-  kind: 'message' | 'confirmed_memory' | 'owner_memory' | 'user_draft' | 'user_purpose' | 'continued_candidate' | 'pending_candidate';
+  kind: 'message' | 'confirmed_memory' | 'owner_memory' | 'user_draft' | 'user_current_chat' | 'user_purpose' | 'continued_candidate' | 'pending_candidate';
   text: string;
   selectionReason: string;
   snapshotStatus: string;

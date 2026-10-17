@@ -29,7 +29,7 @@ MIGRATION_PATH = (
     Path(__file__).resolve().parents[3]
     / "database"
     / "migrations"
-    / "050_reply_purpose_evidence.sql"
+    / "060_manual_contact_confirmation.sql"
 )
 
 
