@@ -1,9 +1,9 @@
 # 记忆与 Skill 演进：正式规格
 
 > Triage: ready-for-agent
-> State: open
+> State: resolved
 > 日期：2026-10-14
-> 状态说明：产品规则与实现规格已形成；15项任务粒度与依赖已确认并逐张发布，尚未领取或实施本规格。实际进度见[任务索引](planning.md)。DSH 选型搁置，沿用现行回复运行时。
+> 状态说明：产品规则与实现规格已形成，15 项粒度与依赖已确认并逐张发布。2026-10-17 收口：15 项交付由[集成票](../memory-skill-integration-preparation/planning.md)签收，并随 `memory-skill-integration@2f1880ae` 集成链经[本地 main 收敛](../main-consolidation/branch-audit.md)进入 main；本规格保留为行为约束，交付范围与证据以各集成票 Answer 和 main 实现为准。真实模型质量、实际 App／渠道与维度放行仍各自独立验收。DSH 选型搁置，沿用现行回复运行时。
 
 ## Problem Statement（用户问题）
 

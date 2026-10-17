@@ -1,7 +1,9 @@
 # 自动定位微信窗口与会话区域
 
-State: claimed
-Triage: ready-for-agent
+State: open
+Triage: needs-info
+
+> 2026-10-17 状态核对：正式 App 入口匹配、1 秒响应预算、新宿主权限归属与偶发布局失败仍未完成（见文末基线），本规格不关闭。桌面验收按用户要求暂缓、当前无活跃执行，按约定从 claimed 退回 open／needs-info；恢复真实微信前台时段与验收资源后继续，不因原生可视化通过而补签正式匹配。
 
 ## 用户问题与已确认范围
 

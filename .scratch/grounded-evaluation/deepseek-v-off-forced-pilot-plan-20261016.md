@@ -1,7 +1,9 @@
 # 单次V协议探针：关闭思考并强制具名返回
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
+
+> 2026-10-17 状态同步：本探针已按[结果](deepseek-v-off-forced-pilot-result-20261016.md) closed 1／1 并闭账；没有可用 verification，响应记录缺口未补造，本计划不再保留执行预算。
 
 日期：2026-10-16。承接[完整140结果](full140-v4-result-20261016.md)，仅形成一个独立、公开合成、有界的协议可用性探针。沿用户对必要官方DeepSeek合成验证的持续授权，不重发任何旧unknown请求，不使用ECNU。当前没有本探针真实预算或请求。
 

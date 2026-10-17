@@ -1,7 +1,9 @@
 # 单次V探针v2：安全保存响应失败元数据
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
+
+> 2026-10-17 状态同步：本探针已按[结果](deepseek-v-off-forced-v2-result-20261016.md) closed 1／1、取得 HTTP200；只证明本次协议与记录路径可运行，不认证 E、质量或 typed。
 
 日期：2026-10-16。承接[v1独立结果](deepseek-v-off-forced-pilot-result-20261016.md)与已复现的记录缺口，只修未来专用fixture，不覆盖v1材料或重新解释旧响应。沿用户对必要官方DeepSeek公开合成验证的持续授权；目前v2没有真实台账或请求。
 

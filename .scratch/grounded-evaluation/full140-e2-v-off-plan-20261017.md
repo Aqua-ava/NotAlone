@@ -1,5 +1,10 @@
 # 封闭 E2 全140评测执行身份
 
+Triage: ready-for-agent
+State: open
+
+> 2026-10-17 状态登记：合同、离线验证与公开入口已在 `ac194de2` 落盘并随 main 收敛；真实执行尚未开始。须先完成前置验收与独立审查，再以集成后的实际源码重新 prepare／freeze、领取独立新 run；完成或闭账后改 resolved。本文件作为该次真实执行的跟踪票，不认证任何已完成质量。
+
 本次只新增 `full140-grounded-v2-source-v2-v-off-forced` 评测身份，复用现有全140 runner、预算、records、RAW→FULL 审核、owned worker 和 `Full140V4Deadline`（名称沿用，280次及墙钟控制不变）。不修改产品或协议。旧 v4 身份不接受本次参数。
 
 - 固定官方 DeepSeek Flash，原140窗及原顺序，source-fidelity-v2 Gold，E grounded-v2、V legacy-v4、双方默认提示；reference 主16与补3各自报告，不合并替代其他维度。

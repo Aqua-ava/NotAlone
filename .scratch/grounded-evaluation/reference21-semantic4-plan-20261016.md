@@ -1,7 +1,9 @@
 # 原公开21窗的四槽来源语义质量合同
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
+
+> 2026-10-17 状态同步：本场已按[结果](reference21-semantic4-result-20261016.md) closed 10／42 后于 A05 安全停止，未达质量门、无自动后继；结论不补签其余窗口。
 
 ## 目标与固定范围
 

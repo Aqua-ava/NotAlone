@@ -1,6 +1,6 @@
 # 13：旧资料的差异比较与批次升级
 
-State: open
+State: resolved
 Triage: ready-for-agent
 Type: task
 Blocked by: 01, 02, 03
@@ -33,6 +33,14 @@ Blocked by: 01, 02, 03
 沿用当前基座，DSH 搁置且不作为前置。只交付本票完整行为；共享契约由首张承接票建立，后续复用，不新增纯接口或纯数据库任务。
 本票发布不授权读取真实聊天、调用外部模型、迁移业务库、重跑旧资料、启动真实 App/微信、外部发送、部署或 push。实现中的正常本地工程验证按既有工作流推进；真实数据、出站或原生验收沿用独立范围和有限时段。
 
+## Answer
+
+2026-10-17 索引收口：本票功能的交付与签收在[集成票 10「集成版本化Grounded资料比较与批次应用」](../../memory-skill-integration-preparation/issues/10-versioned-memory-upgrade.md)中完成（证据见该票 Answer 与 AC），并随 `memory-skill-integration@2f1880ae` 集成链经[本地 main 收敛](../../main-consolidation/branch-audit.md)进入 main：当前 HEAD 已包含迁移 063–070 及对应实现。
+
+本次只同步原发布后未更新的状态，不重跑实验、不新增真实模型或 App／渠道验收，也不回勾本文件历次 AC；产品默认行为、自动采纳放行表与语义检索开关均不因收口改变。索引与交付事实的对应关系见[任务索引](../planning.md)。
+
 ## Comments
 
 2026-10-14：按已确认的15项完整交付发布，验收与依赖继承批准方案；尚未领取、实现或执行产品验收。
+
+- 2026-10-17：按用户确认的任务收口，依据对应集成票签收与 main 整合记录将 State 改为 resolved；不新增实现或验收。
