@@ -135,6 +135,9 @@ export async function inspectRuntime(input) {
 }
 
 export function failureReport(error) {
+  if (['build_disk_space_low', 'build_disk_space_unavailable'].includes(error.code)) {
+    return { state: 'blocked', code: error.code };
+  }
   const codes = ['helper_check_arguments', 'helper_check_not_macho', 'helper_check_input_invalid', 'helper_check_input_changed',
     'helper_check_architecture', 'helper_check_binary_type', 'helper_check_signature', 'helper_check_dependency_unresolved', 'helper_check_timeout',
     'helper_prepare_destination', 'helper_prepare_input_changed', 'helper_probe_build_failed'];

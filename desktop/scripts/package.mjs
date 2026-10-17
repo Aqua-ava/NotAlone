@@ -1,11 +1,12 @@
 import { packager } from '@electron/packager';
 import { cp, lstat, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { prepareRepositoryProbe } from './prepare-probe.mjs';
 import { inspectRuntime, requireUnchangedFiles, runtimeLayout } from './probe-runtime.mjs';
+import { requireBuildSpace } from './build-space.mjs';
 
 if (process.platform !== 'darwin') throw new Error('本机 App 打包需要 macOS。');
 const run = promisify(execFile);
@@ -26,6 +27,9 @@ for (let index = 0; index < packageArguments.length; index++) {
     packagePaths[key] = path.resolve(value);
   } else { throw new Error('helper_check_arguments'); }
 }
+const electronCache = path.join(homedir(), 'Library/Caches/electron');
+await requireBuildSpace([packagePaths['--output-directory'] || path.resolve('out'), tmpdir(),
+  ...(!packagePaths['--electron-zip-directory'] ? [electronCache] : [])]);
 const manifest = JSON.parse(await readFile('package.json', 'utf8'));
 let staging; let outputDirectory; let ownedOutput; let completed = false;
 try {
@@ -92,6 +96,7 @@ try {
     arch: process.arch,
     electronVersion: manifest.devDependencies.electron,
     electronZipDir,
+    download: { cacheRoot: electronCache },
     out: outputDirectory || 'out',
     overwrite: !outputDirectory,
     tmpdir: path.join(staging, 'electron'),

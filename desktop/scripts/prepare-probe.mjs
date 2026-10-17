@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { acceptanceFlags, failureReport } from './probe-runtime.mjs';
 import { prepareProbeRuntime } from './prepare-probe-runtime.mjs';
+import { requireBuildSpace } from './build-space.mjs';
 
 const run = promisify(execFile);
 const sourceNames = [
@@ -50,6 +51,7 @@ export async function prepareRepositoryProbe(destination) {
   try { await lstat(destination); throw new Error('helper_prepare_destination'); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   const repositoryNative = await realpath(fileURLToPath(new URL('../../native/macos/', import.meta.url)));
+  await requireBuildSpace([path.dirname(destination), tmpdir()]);
   const owned = await mkdtemp(path.join(tmpdir(), 'notalone-probe-build-'));
   try {
     const snapshot = path.join(owned, 'native');

@@ -83,6 +83,8 @@ npm run package
 
 本机 arm64 产物为 `out/NotAlone-darwin-arm64/NotAlone.app`。可在 Finder 双击打开；包只包含编译后的本地资源和最小启动清单，不依赖开发服务器、原型目录或仓库绝对路径。打包只替换本目录的 `out/` 产物，不覆盖历史 App。当前为 ad-hoc 本机签名，未做 Developer ID 分发、公证或 DMG；权限与签名边界见[台账](../docs/macos-app-permissions-and-errors.md)。
 
+桌面资源构建、打包和仓库探针准备会在写入前核对实际输出卷与临时卷，任一可用空间不足 15 GiB 即停止；新输出按最近的已有祖先核验，已有目录的软链接按目标卷核验。在线打包还核对并复用 `~/Library/Caches/electron` 下载缓存，`download.cacheRoot` 已按[官方接口](https://electron.github.io/packager/main/interfaces/Options.html#download)与安装的 Packager 20.3.0 / Get 5.1.0 核对。开发时复用固定输出，验收后的旧 App、重复运行时与临时编译目录按[开发磁盘占用规则](../docs/agents/engineering.md#开发磁盘占用)清理；自定义 `--output-directory` 成功后由调用者负责收尾。
+
 ## 屏幕录制授权
 
 附带自研探针的App启动时静默检查屏幕录制权限；缺权限会先说明本机微信会话名称识别的用途。点击“前往授权”才请求系统许可，选择“稍后”可继续使用。应用配置和输入小窗提供“开启屏幕录制授权”“已授权，重新检测”。系统未再次弹窗时，在打开的“屏幕与系统音频录制”中允许当前NotAlone，再返回复查；系统要求重新打开时，先正常退出App再重开。权限检查与请求本身不采集画面或聊天内容，权限就绪也不代替联系人绑定核验。
