@@ -1,7 +1,7 @@
 # 03：记忆变化驱动主题持续更新
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 02
 
