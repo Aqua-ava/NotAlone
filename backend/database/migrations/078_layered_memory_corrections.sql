@@ -42,10 +42,28 @@ CREATE TABLE public.layered_memory_fact_correction (
     source_dependency_mode text NOT NULL CHECK(source_dependency_mode IN ('any','all')),
     dependency_ids uuid[] NOT NULL,
     protected_message_ids uuid[] NOT NULL,
+    observation_ids uuid[] NOT NULL DEFAULT '{}',
+    source_ref_ids uuid[] NOT NULL DEFAULT '{}',
     UNIQUE(owner_id,scope_kind,scope_key,settings_generation,request_digest),
     FOREIGN KEY(owner_id,scope_kind,scope_key) REFERENCES public.layered_memory_state(owner_id,scope_kind,scope_key) ON DELETE CASCADE,
-    FOREIGN KEY(contact_id,owner_id) REFERENCES public.contact(id,owner_id) ON DELETE CASCADE
+    FOREIGN KEY(contact_id,owner_id) REFERENCES public.contact(id,owner_id) ON DELETE CASCADE,
+    CHECK(request_digest IS NOT NULL OR cardinality(dependency_ids)+cardinality(observation_ids)+cardinality(source_ref_ids)=0)
 );
+
+-- 只核对原参与集合的类型及绑定；共享manual source或其他行的更新不等于来源失效。
+CREATE FUNCTION public.layered_fact_receipt_sources_live(receipt public.layered_memory_fact_correction)
+RETURNS boolean LANGUAGE sql AS $$
+    SELECT NOT EXISTS(SELECT 1 FROM public.source_document d WHERE d.owner_id=receipt.owner_id
+        AND d.id=ANY(receipt.dependency_ids) AND d.status<>'active')
+    AND NOT EXISTS(SELECT 1 FROM unnest(receipt.observation_ids) original(id) WHERE NOT EXISTS(
+        SELECT 1 FROM public.local_wechat_observation o WHERE o.id=original.id AND o.owner_id=receipt.owner_id
+        AND (receipt.contact_id IS NULL OR o.contact_id=receipt.contact_id)))
+    AND NOT EXISTS(SELECT 1 FROM unnest(receipt.source_ref_ids) original(id) WHERE NOT EXISTS(
+        SELECT 1 FROM public.message_source_ref r WHERE r.id=original.id AND r.owner_id=receipt.owner_id
+        AND (receipt.contact_id IS NULL OR r.contact_id=receipt.contact_id)
+        AND r.message_id=ANY(receipt.dependency_ids)
+        AND COALESCE(r.source_document_id,r.observation_id)=ANY(receipt.dependency_ids)));
+$$;
 
 -- 手录的共享source不构成错误身份；只保留仍有合法活动叶的原手录根。
 CREATE FUNCTION public.live_layered_manual_guard_ids(affected_owner uuid, affected_contact uuid, identifiers uuid[])
@@ -82,7 +100,8 @@ END; $$;
 ALTER FUNCTION public.erase_layered_memory_dependencies(uuid,uuid[]) RENAME TO erase_layered_memory_dependencies_v77;
 CREATE FUNCTION public.erase_layered_memory_dependencies(affected_owner uuid, identifiers uuid[])
 RETURNS void LANGUAGE plpgsql AS $$
-DECLARE feedback record; receipt record; messages uuid[]; memories uuid[]; erase_body boolean; live_leaf boolean;
+DECLARE feedback record; receipt public.layered_memory_fact_correction%ROWTYPE;
+    messages uuid[]; memories uuid[]; erase_body boolean; live_leaf boolean;
 BEGIN
     -- 删除排队即清原请求身份；仍合法的同一规范消息只保留无正文待修正约束。
     FOR receipt IN SELECT * FROM public.layered_memory_fact_correction WHERE owner_id=affected_owner LOOP
@@ -104,10 +123,10 @@ BEGIN
         IF NOT live_leaf THEN
             DELETE FROM public.layered_memory_fact_correction WHERE id=receipt.id;
             PERFORM public.bump_layered_correction_revision(affected_owner,receipt.contact_id);
-        ELSIF receipt.request_digest IS NOT NULL AND EXISTS(SELECT 1 FROM public.source_document d
-            WHERE d.owner_id=affected_owner AND d.id=ANY(receipt.dependency_ids) AND d.status<>'active')
+        ELSIF receipt.request_digest IS NOT NULL AND NOT public.layered_fact_receipt_sources_live(receipt)
             OR messages IS DISTINCT FROM receipt.protected_message_ids THEN
-            UPDATE public.layered_memory_fact_correction SET request_digest=NULL,dependency_ids='{}',protected_message_ids=messages
+            UPDATE public.layered_memory_fact_correction SET request_digest=NULL,dependency_ids='{}',
+                observation_ids='{}',source_ref_ids='{}',protected_message_ids=messages
             WHERE id=receipt.id;
             PERFORM public.bump_layered_correction_revision(affected_owner,receipt.contact_id);
         END IF;

@@ -9,6 +9,15 @@ from notalone.persistence.layered_coverage import cancel_jobs
 from notalone.persistence.reply_cleanup import delete_source_replies
 
 
+def has_fact_correction_dependencies(connection, *, owner_id, removed_ids):
+    identifiers = list(removed_ids)
+    return connection.execute('SELECT EXISTS(SELECT 1 FROM public.layered_memory_fact_correction receipt '
+        'WHERE owner_id=%s AND (dependency_ids && %s::uuid[] OR observation_ids && %s::uuid[] '
+        'OR source_ref_ids && %s::uuid[] OR protected_message_ids && %s::uuid[] OR memory_id=ANY(%s::uuid[]) '
+        'OR NOT public.layered_fact_receipt_sources_live(receipt)))',
+        (owner_id, identifiers, identifiers, identifiers, identifiers, identifiers)).fetchone()[0]
+
+
 class LayeredCorrectionStore:
     def correction_dependency_ids(self, connection, scope):
         # 无正文guard仍是真实输入；其最后合法身份消失时，旧对照副本也必须清除。
@@ -60,13 +69,19 @@ class LayeredCorrectionStore:
             leaf_entry = next((item for item in self.eligible(overview) if item.memory.memory_id == leaf.memory_id), None)
             if leaf_entry is None:
                 raise LayeredMemoryConflict('实际底层叶版本不可核对。')
+            dependencies = sorted({leaf.memory_id, *leaf_entry.dependency_ids})
+            source_refs = self._manifest(connection, scope, (leaf_entry,))[0]['source_refs']
+            observations = connection.execute('SELECT id FROM public.local_wechat_observation '
+                'WHERE owner_id=%s AND id=ANY(%s::uuid[]) AND (%s::uuid IS NULL OR contact_id=%s)',
+                (scope.owner_id, dependencies, scope.contact_id, scope.contact_id)).fetchall()
             connection.execute('INSERT INTO public.layered_memory_fact_correction('
                 'id,owner_id,contact_id,settings_generation,request_digest,memory_id,memory_revision,'
-                'source_dependency_mode,dependency_ids,protected_message_ids) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+                'source_dependency_mode,dependency_ids,protected_message_ids,observation_ids,source_ref_ids) '
+                'VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
                 (uuid4(), scope.owner_id, scope.contact_id, state['settings_generation'], digest,
                  leaf.memory_id, leaf.revision, leaf_entry.memory.source_dependency_mode.value,
-                 sorted({leaf.memory_id, *leaf_entry.dependency_ids}),
-                 sorted({ref.message_id for ref in leaf_entry.references if ref.message_id})))
+                 dependencies, sorted({ref.message_id for ref in leaf_entry.references if ref.message_id}),
+                 sorted({row['id'] for row in observations}), sorted({UUID(ref['ref_id']) for ref in source_refs})))
             self._retract_fact_dependencies(connection, scope, leaf.memory_id)
             cancel_jobs(connection, scope)
             connection.execute('SELECT public.bump_layered_correction_revision(%s,%s)', (scope.owner_id, scope.contact_id))

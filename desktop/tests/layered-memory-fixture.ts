@@ -18,6 +18,7 @@ const modules = {
   'notalone.persistence.owner_memory_store': 'backend/src/notalone/persistence/owner_memory_store.py',
   'notalone.persistence.source_tasks': 'backend/src/notalone/persistence/source_tasks.py',
   'notalone.persistence.source_deletion': 'backend/src/notalone/persistence/source_deletion.py',
+  'notalone.persistence.observation_store': 'backend/src/notalone/persistence/observation_store.py',
   'notalone.memory.layered_correction_validation': 'backend/src/notalone/memory/layered_correction_validation.py',
   'notalone.persistence.layered_coverage': 'backend/src/notalone/persistence/layered_coverage.py',
   'notalone.persistence.background_tasks': 'backend/src/notalone/persistence/background_tasks.py',

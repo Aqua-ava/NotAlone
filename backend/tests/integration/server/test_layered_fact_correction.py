@@ -246,3 +246,20 @@ class LayeredFactCorrectionHttpTest(MemoryOverviewHttpFixture, unittest.TestCase
 
     def test_owner_two_stage_source_erasure_preserves_only_the_legal_pending_leaf(self):
         self._source_erasure_invalidates_receipt_without_releasing_a_live_canonical_leaf("owner")
+
+    def _unrelated_manual_update_does_not_erase_the_pending_receipt(self, scope_kind):
+        backend, path, memories, ready, primary, unrelated = self._prepare_scope(scope_kind)
+        command = {**self._target_command(ready, "profile", primary["memory_id"]), "memory_id": primary["memory_id"]}
+        self.assertEqual(backend.request(path + "/fact-error", command)[0], 200)
+        self.assertEqual(self.backend.request(f"{memories}/{unrelated['memory_id']}/correct", {
+            "revision": unrelated["revision"], "text": "另一条手录事实的当前合成版本。", "category": "common_fact"})[0], 200)
+        status, replay = backend.request(path + "/fact-error", command)
+        self.assertEqual(status, 200, replay)
+        self.assertEqual(replay["layered_memory"]["correction_target"], {
+            "memory_id": primary["memory_id"], "revision": primary["revision"]})
+
+    def test_contact_unrelated_manual_update_keeps_pending_receipt(self):
+        self._unrelated_manual_update_does_not_erase_the_pending_receipt("contact")
+
+    def test_owner_unrelated_manual_update_keeps_pending_receipt(self):
+        self._unrelated_manual_update_does_not_erase_the_pending_receipt("owner")

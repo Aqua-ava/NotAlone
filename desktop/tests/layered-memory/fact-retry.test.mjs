@@ -32,13 +32,14 @@ for (const scope of ['contact', 'owner']) for (const kind of ['scenario', 'profi
   });
 }
 
-for (const scope of ['contact', 'owner']) for (const failure of ['http-conflict', 'cancelled', 'persistent-connection', 'scope-changed']) {
+for (const scope of ['contact', 'owner']) for (const failure of ['http-conflict', 'cancelled', 'persistent-connection', 'scope-changed', 'source-changed']) {
   test(`${scope} 事实纠错 ${failure} 不越过有限重试及范围门禁`, async () => {
     let writes = 0;
     const f = await fixture(async request => {
       if (request.method === 'POST') {
         writes++;
         if (failure === 'scope-changed') f.disconnect();
+        if (failure === 'source-changed') f.controller.sourceDeletionChanged('started');
         throw failure === 'http-conflict' ? new BackendRequestFailure('response', 409, 'layered_memory_changed')
           : new BackendRequestFailure(failure === 'cancelled' ? 'cancelled' : 'connection');
       }

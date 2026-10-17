@@ -959,6 +959,10 @@ class PostgresObservationStore:
                     contact_id=contact_id,
                     message_ids=orphan_message_ids,
                 )
+                from notalone.persistence.layered_corrections import has_fact_correction_dependencies
+                if has_fact_correction_dependencies(connection, owner_id=owner_id,
+                        removed_ids={observation_id, *orphan_message_ids, *all_memory_ids}):
+                    raise ObservationPersistenceError("观察来源删除后仍有待修正回执依赖。")
                 connection.commit()
         except ObservationNotFoundError:
             raise

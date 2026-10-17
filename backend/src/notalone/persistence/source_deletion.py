@@ -363,20 +363,21 @@ class PostgresSourceDeletionRepository:
                 if row is None:
                     raise SourceNotFoundError("指定范围内不存在该来源。")
                 _erase_update_backups(connection)
+                from notalone.persistence.layered_corrections import has_fact_correction_dependencies
                 if (
                     row[:4] != ("deleted", None, None, 0)
                     or row[4] is None
                     or row[5]
                     or row[6]
                     or has_correction_dependencies(connection, owner_id=owner_id, source_id=source_document_id)
+                    or has_fact_correction_dependencies(connection, owner_id=owner_id, removed_ids={source_document_id})
                     or connection.execute(
                         "SELECT EXISTS(SELECT 1 FROM public.layered_memory_batch "
                         "WHERE owner_id=%s AND dependency_ids @> ARRAY[%s]::uuid[]) OR "
                         "EXISTS(SELECT 1 FROM public.layered_memory_feedback WHERE owner_id=%s "
                         "AND dependency_ids @> ARRAY[%s]::uuid[]) OR EXISTS(SELECT 1 FROM public.layered_profile_batch "
-                        "WHERE owner_id=%s AND dependency_ids @> ARRAY[%s]::uuid[]) OR EXISTS(SELECT 1 FROM public.layered_memory_fact_correction "
                         "WHERE owner_id=%s AND dependency_ids @> ARRAY[%s]::uuid[])",
-                        (owner_id, source_document_id) * 4,
+                        (owner_id, source_document_id) * 3,
                     ).fetchone()[0]
                 ):
                     raise SourceDeletionVerificationError(

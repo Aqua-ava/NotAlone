@@ -69,6 +69,8 @@ class LayeredCorrectionMigrationTest(unittest.TestCase):
                             self._fact_receipt(connection, owner, None, source)
                         with self.assertRaises(psycopg.errors.ForeignKeyViolation), connection.transaction():
                             self._fact_receipt(connection, owner, uuid4(), source)
+                        with self.assertRaises(psycopg.errors.CheckViolation), connection.transaction():
+                            connection.execute('UPDATE public.layered_memory_fact_correction SET request_digest=NULL')
                         with self.assertRaises(psycopg.errors.UniqueViolation), connection.transaction():
                             self._feedback(connection, owner, None, operation, source)
                         with self.assertRaises(psycopg.errors.ForeignKeyViolation), connection.transaction():
