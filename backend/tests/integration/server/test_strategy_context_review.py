@@ -73,7 +73,7 @@ class StrategyContextReviewHttpTests(FidelityHttpFixture, unittest.TestCase):
             self.assertIsNone(explored["confirmed_intent"])
             self.assertEqual(len(self.backend.request(path)[1]["turns"]), 0)
             self.assertEqual(len(self.reply_model.seen_calls) - before, 1)
-            choice = {"input_version_id": explored["input_version_id"],
+            choice = {"generate": True, "input_version_id": explored["input_version_id"],
                       "suggestion_id": explored["options"][0]["suggestion_id"]}
             endpoint = path + f"/explorations/{explored['exploration_id']}/confirm"
             status, generated = self.backend.request(endpoint, choice)
