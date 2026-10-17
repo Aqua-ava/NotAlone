@@ -59,6 +59,22 @@ test('实际 App 的双范围两层事实及总结纠错 CUA 验收', async ({ r
   const empty = await layeredBackend.request(`/api/contacts/${layeredBackend.data.empty_contact_id}/layered-memory`);
   assert.equal(empty.status, 200);
   assert.deepEqual((empty.data.layered_memory as { scenarios: unknown[] }).scenarios, []);
+  await writeFile(path.join(directory, 'final-public-proof.json'), JSON.stringify({
+    memories: memories.data, empty_contact: empty.data }), { mode: 0o600, flag: 'wx' });
   await writeFile(path.join(directory, 'runtime-proof.json'), JSON.stringify(await layeredBackend.command('runtime_proof')),
     { mode: 0o600, flag: 'wx' });
+
+  // 公共退出会认证停止后端；先完成全部公开后验，再等待实际菜单退出，之后不再请求 HTTP。
+  const quitDirectory = path.join(directory, 'public-quit');
+  const quitChecks = ['public_app_quit'];
+  await mkdir(quitDirectory, { mode: 0o700 });
+  await writeFile(path.join(quitDirectory, 'ready.json'), JSON.stringify({ request_id: requestId,
+    pid: runningApp.appProcess.pid, user_data: runningApp.userData, native_app: true,
+    pre_quit_checks_completed: true, required_checks: quitChecks }), { mode: 0o600, flag: 'wx' });
+  await waitForCuaReceipt(quitDirectory, requestId, quitChecks, stageTimeout());
+  assert.equal(runningApp.appProcess.exitCode, 0, '实际公共退出必须使本轮 App 正常结束。');
+  assert.equal(runningApp.appProcess.signalCode, null, '终止信号不得替代公共菜单退出。');
+  await writeFile(path.join(quitDirectory, 'public-proof.json'), JSON.stringify({
+    pid: runningApp.appProcess.pid, exit_code: runningApp.appProcess.exitCode,
+    signal: runningApp.appProcess.signalCode }), { mode: 0o600, flag: 'wx' });
 });
