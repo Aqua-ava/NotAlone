@@ -1,7 +1,7 @@
 # 05：本人独立范围的主题资料与长期背景
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 03, 04
 
@@ -46,3 +46,5 @@ Blocked by: 03, 04
 ## Comments
 
 - 2026-10-17：用户认可11项粒度与依赖后逐张发布；本票为 open，尚未领取、实现或验收。
+
+- 2026-10-18：A 在独立工作树领取 05；基线 `1f85054381fba5a78ffec036bb443022c3c42bea`，实现本人独立范围完整闭环，最终签收由协调者处理。
