@@ -138,6 +138,7 @@ class ReplyConstraintReview:
             "factual_role": factual_role(item.kind), "text": item.text,
             "status": item.status, "timing": item.timing.to_payload(),
         } for item in result.additional_evidence if item.model_visible)
+        payload["layered_scenario_reads"] = list(result.layered_scenario_reads)
         payload["candidates"] = [{
             "candidate_number": number, "text": item.text, "messages": list(item.messages),
             "basis": item.basis, "risk_notes": list(item.risk_notes),

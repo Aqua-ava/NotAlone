@@ -136,7 +136,7 @@ def build_reply_service(
     generator = ReplyGenerator(
         store=PostgresReplyStore(database_url, layered_memory=layered_memory, layered_budget=layered_reply_budget),
         runtime=LangChainReplyRuntime(
-            model=model,
+            model=model, layered_memory=layered_memory,
             skill_port=PostgresSkillPort(database_url),
             retrieval=retrieval,
             input_budget_profile=input_budget_profile,
