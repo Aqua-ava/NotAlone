@@ -228,18 +228,25 @@ class PostgresRelationshipOverviewStore:
             raise MemoryCorrectionConflictError("本人资料的原主体关联已变化。")
         frozen = candidate["correction_evidence"] if candidate else None
         original_known = frozen is not None and frozen.get("kind") != "generation_unknown"
+        original_windows = [frozen] if original_known else []
         if original_known:
             windows.append(frozen)
         decisions = connection.execute(
-            "SELECT id,evidence FROM public.memory_correction_decision WHERE owner_id=%s "
+            "SELECT id,evidence,decision,replacement_memory_id FROM public.memory_correction_decision "
+            "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s::uuid "
             "AND record_kind=%s AND (record_id=%s OR replacement_memory_id=%s)",
-            (owner_id, record_kind, row["memory_id"], row["memory_id"]),
+            (owner_id, contact_id, record_kind, row["memory_id"], row["memory_id"]),
         ).fetchall()
         for decision in decisions:
             sources.add(str(decision["id"]))
             evidence = decision["evidence"]
             if evidence.get("kind") not in {"generation_unknown", "erased_guard"}:
                 windows.append(evidence)
+                # 只认本版本的人工更正冻结窗口，不把旧记录从当前来源补证。
+                if (decision["decision"] == "corrected"
+                        and decision["replacement_memory_id"] == row["memory_id"]):
+                    original_windows.append(evidence)
+        original_known = bool(original_windows)
         version = row.get("version_evidence")
         if version:
             windows.extend(window for window in (version.get("previous_window"), version.get("current_window"))
@@ -267,7 +274,7 @@ class PostgresRelationshipOverviewStore:
             sources.add(str(row["source_candidate_id"]))
         if not source_documents_available(connection, owner_id=owner_id, source_ids=list(sources)):
             raise MemoryCorrectionConflictError("概览完整参与来源正在删除。")
-        original_ref_ids = ({UUID(ref["ref_id"]) for ref in frozen["source_refs"]}
+        original_ref_ids = ({UUID(ref["ref_id"]) for window in original_windows for ref in window["source_refs"]}
                             if original_known else None)
         if contact_id is None and windows:
             original_ref_ids = {UUID(ref["ref_id"]) for window in windows for ref in window["source_refs"]}

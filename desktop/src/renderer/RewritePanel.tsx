@@ -121,7 +121,10 @@ export function RewriteInput({ contacts, replies }: { contacts: ContactSessionVi
     <div className="ime-input"><HelperDraft session={contacts} currentChat={currentChat} />
       <button className="generate-button" aria-label="生成候选" title="生成候选"
         disabled={!enabled || !contacts.state.draft.trim() || currentChat && !options.pastedDirection?.trim() || replies.state.phase === 'waiting' || Boolean(replies.state.generationBlock)}
-        onClick={() => void replies.generate()}><Icon name="sparkle" size={18} /></button></div>
+        onClick={() => void replies.generate()}><Icon name="sparkle" size={18} /><span>生成候选</span></button></div>
+    {enabled && replies.state.generationBlock && <p role="status" className="rewrite-privacy">
+      生成前，请先在上方确认本次联系人。
+    </p>}
     <div className="rewrite-options">
       {currentChat && <label>表达方向<textarea aria-label="粘贴文字的表达方向" maxLength={4096}
         value={options.pastedDirection ?? ''} disabled={!enabled} placeholder="明确说明你想如何回应，例如简短婉拒，不增加承诺"
