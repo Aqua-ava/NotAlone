@@ -8,10 +8,10 @@ const statusNames: Record<LayeredMemory['status'], string> = { disabled: '已停
 function time(value: string | null): string {
   return value ? `${new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Taipei', dateStyle: 'long', timeStyle: 'medium' }).format(new Date(value))}（UTC+8）` : '未知';
 }
-export function LayeredMemoryPanel({ state, contactName, busy, read, manage, facts }: {
+export function LayeredMemoryPanel({ state, contactName, busy, read, manage, facts, owner = false }: {
   state: MemoryOverviewState<LayeredMemory>; contactName: string; busy: boolean;
-  read: (mappingCursor?: string | null) => Promise<void>; manage: (action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, options?: Pick<LayeredMemoryManagementRequest, 'purposeConfirmed' | 'workRevision' | 'organizationGeneration' | 'profileVersionId'>) => Promise<void>;
-  facts: () => void;
+  read: (mappingCursor?: string | null) => Promise<void>; manage: (action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, options?: Pick<LayeredMemoryManagementRequest, 'purposeConfirmed' | 'workRevision' | 'organizationGeneration' | 'profileVersionId' | 'scenarioVersionId'>) => Promise<void>;
+  facts: () => void; owner?: boolean;
 }) {
   const [confirmed, setConfirmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -19,7 +19,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
   useEffect(() => { setConfirmed(false); setDeleting(false); }, [value?.contactId, value?.settingsGeneration]);
   const waiting = busy || state.phase === 'loading';
   return <section className="memory-section memory-overview layered-memory" aria-label="主题资料">
-    <header><div><h2>主题资料</h2><p>范围：仅当前联系人 {contactName}；不包含本人或其他联系人的资料。</p></div>
+    <header><div><h2>主题资料</h2><p>{owner ? '范围：仅当前本人；只整理合法本人记忆，不包含联系人的身份或多联系人原话。' : `范围：仅当前联系人 ${contactName}；不包含本人或其他联系人的资料。`}</p></div>
       <button className="button" disabled={waiting} onClick={() => void read()}>重新读取主题资料</button></header>
     {state.phase === 'loading' && <p role="status">正在核对当前范围的主题资料…</p>}
     {state.phase === 'error' && <p role="alert">主题资料读取失败或旧入口分页已过期，旧内容已撤下。请重新读取首屏。</p>}
@@ -44,7 +44,7 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
       {value.enabled && value.workId && <p className="memory-section-note">每次继续仅推进一批，并追加模型调用额度；已消耗调用不会因继续或重启清零。</p>}
       <p>本范围{value.enabled ? '已开启' : '已关闭'} · 更新时间：{time(value.updatedAt)}</p>
       {!value.enabled && <div className="layered-memory-confirm"><label><input type="checkbox" checked={confirmed} disabled={waiting}
-        onChange={(event) => setConfirmed(event.target.checked)} />确认仅整理这位联系人的合法已采纳记忆，并同意以上用途与模型接收范围</label>
+        onChange={(event) => setConfirmed(event.target.checked)} />{owner ? '确认仅整理本人的合法已采纳记忆，并同意以上用途与模型接收范围' : '确认仅整理这位联系人的合法已采纳记忆，并同意以上用途与模型接收范围'}</label>
         <p>仅合格的底层记忆及其时间、引用标识可用于整理；待确认候选与来历未知资料不参与。</p>
         <button className="button" disabled={waiting || !confirmed} onClick={() => void manage('enable', value.settingsGeneration, { purposeConfirmed: true })}>确认范围并开启</button></div>}
       {value.enabled && <>{value.workId && value.workRevision > 0 && <>
@@ -115,10 +115,13 @@ export function LayeredMemoryPanel({ state, contactName, busy, read, manage, fac
               <button className="button" onClick={facts}>查看或修正底层记忆</button>
             </div>)}
           </details></div>)}
+        {owner && <><button className="button" disabled={waiting} onClick={() => void manage('withdraw-scenario', value.settingsGeneration,
+          { organizationGeneration: value.organizationGeneration, scenarioVersionId: scenario.versionId })}>撤回本版主题资料：{scenario.title}</button>
+          <p>撤回仅移除本版主题及依赖它的长期背景，不自动恢复旧版。</p></>}
         <details className="memory-details"><summary>查看主题版本</summary><p>主题标识：{scenario.scenarioId}</p><p>版本标识：{scenario.versionId}</p></details>
       </article>)}</div>
       <p className="memory-section-note">来源聊天时间表示当时说过，不证明事件恰在当天发生，也不保证今天仍成立。事实有误请修正底层记忆，再刷新主题资料。</p>
-      <button className="button" onClick={facts}>管理底层联系人记忆</button>
+      <button className="button" onClick={facts}>{owner ? '管理底层本人记忆' : '管理底层联系人记忆'}</button>
     </>}
   </section>;
 }

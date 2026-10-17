@@ -5,6 +5,9 @@ import { withRewriteFixture, type RewriteFixture } from './rewrite-backend-fixtu
 
 const project = path.resolve('..');
 const modules = {
+  'notalone.memory.owner_organization_input': 'backend/src/notalone/memory/owner_organization_input.py',
+  'notalone.scopes': 'backend/src/notalone/scopes.py',
+  'notalone.tasks.models': 'backend/src/notalone/tasks/models.py',
   'notalone.application.layered_memory_service': 'backend/src/notalone/application/layered_memory_service.py',
   'notalone.memory.profile_validation': 'backend/src/notalone/memory/profile_validation.py',
   'notalone.persistence.layered_profile': 'backend/src/notalone/persistence/layered_profile.py',
@@ -19,7 +22,7 @@ const modules = {
 };
 
 // 页面和实际 Electron 共用同一生产 HTTP 与精确自有测试库。
-export async function withLayeredMemoryFixture(use: (fixture: RewriteFixture) => Promise<void>, cleanupConfirmed?: () => void) {
+export async function withLayeredMemoryFixture(use: (fixture: RewriteFixture) => Promise<void>, cleanupConfirmed?: () => void, options: { ownerOnly?: boolean } = {}) {
   const requested = process.env.NOTALONE_LAYERED_TEST_EVIDENCE_DIR;
   if (!requested || !path.isAbsolute(requested)) throw new Error('主题资料验收须指定仓库外证据目录。');
   const directory = await realpath(requested);
@@ -29,12 +32,16 @@ export async function withLayeredMemoryFixture(use: (fixture: RewriteFixture) =>
   }
   const expected = Object.fromEntries(await Promise.all(Object.entries(modules).map(async ([name, relative]) =>
     [name, { path: relative, sha256: createHash('sha256').update(await readFile(path.join(project, relative))).digest('hex') }])));
+  const previousOwnerOnly = process.env.NOTALONE_LAYERED_OWNER_ONLY;
+  process.env.NOTALONE_LAYERED_OWNER_ONLY = options.ownerOnly ? '1' : '0';
   const previous = process.env.NOTALONE_LAYERED_EXPECTED_MODULES;
   process.env.NOTALONE_LAYERED_EXPECTED_MODULES = JSON.stringify(expected);
   try {
     await withRewriteFixture('notalone-layered-page-', use, cleanupConfirmed,
       path.join(project, 'desktop/tests/fixtures/layered-memory-page.py'), path.join(project, 'backend'));
   } finally {
+    if (previousOwnerOnly === undefined) delete process.env.NOTALONE_LAYERED_OWNER_ONLY;
+    else process.env.NOTALONE_LAYERED_OWNER_ONLY = previousOwnerOnly;
     if (previous === undefined) delete process.env.NOTALONE_LAYERED_EXPECTED_MODULES;
     else process.env.NOTALONE_LAYERED_EXPECTED_MODULES = previous;
   }

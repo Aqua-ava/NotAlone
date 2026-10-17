@@ -101,6 +101,7 @@ def main():
                 and entry["temporal_status"] == "uncertain"
                 and entry["uncertainty"] == "是否持续共同学习尚未核实。" for entry in proposal["entries"])
 
+    owner_only = os.environ.get("NOTALONE_LAYERED_OWNER_ONLY") == "1"
     fixture = None
     created = False
     proof = {"database_name": name, "child_pid": os.getpid()}
@@ -116,14 +117,16 @@ def main():
         Fixture.setUpClass()
         fixture = Fixture(methodName="runTest")
         fixture.setUp()
-        contact, source, message = fixture.import_contact(
-            "双方共同参加合成学习课程。双方后来共同完成合成学习练习。")
-        fixture.confirm(contact, "双方共同参加合成学习课程。", message)
-        fixture.confirm(contact, "双方后来共同完成合成学习练习。", message)
-        status, created_contact = fixture.backend.request("/api/contacts", {
-            "request_id": str(uuid4()), "display_name": "空资料联系人"})
-        fixture.assertEqual(status, 201, created_contact)
-        empty = created_contact["contact"]["contact_id"]
+        contact = empty = source = None
+        if not owner_only:
+            contact, source, message = fixture.import_contact(
+                "双方共同参加合成学习课程。双方后来共同完成合成学习练习。")
+            fixture.confirm(contact, "双方共同参加合成学习课程。", message)
+            fixture.confirm(contact, "双方后来共同完成合成学习练习。", message)
+            status, created_contact = fixture.backend.request("/api/contacts", {
+                "request_id": str(uuid4()), "display_name": "空资料联系人"})
+            fixture.assertEqual(status, 201, created_contact)
+            empty = created_contact["contact"]["contact_id"]
         (directory / "synthetic.env").write_text(f"NOTALONE_DATABASE_URL={url}\nNOTALONE_OWNER_ID={fixture.owner_id}\n")
         (directory / "synthetic.env").chmod(0o600)
         proposal, verification = Proposal(), Verification()
@@ -149,15 +152,23 @@ def main():
             if actual != ROOT / value["path"] or digest != value["sha256"]:
                 raise RuntimeError("主题资料夹具加载了其它工作树模块。")
             observed[module_name] = {"path": str(actual), "sha256": digest}
-        proof.update(migrations=expected_migrations, migration_repeat=0, modules=observed,
+        proof.update(owner_only=owner_only, migrations=expected_migrations, migration_repeat=0, modules=observed,
                      external_model_calls=0, quality="synthetic")
         write_backend_info(address=backend.base_url.removeprefix("http://"), token=backend.token)
         print(json.dumps({"ready": {"database_url": url, "owner_id": str(fixture.owner_id),
-            "contact_ids": [contact, empty], "other_contact_id": empty, "empty_contact_id": empty}}), flush=True)
+            "contact_ids": [] if owner_only else [contact, empty], "other_contact_id": empty or "", "empty_contact_id": empty or ""}}), flush=True)
         for line in sys.stdin:
             command = json.loads(line)
             operation = command["operation"]
-            if operation == "delete_source":
+            if operation == "create_contact":
+                status, result = fixture.backend.request("/api/contacts", {
+                    "request_id": str(uuid4()), "display_name": "本人隔离合成联系人"})
+                fixture.assertEqual(status, 201, result)
+            elif operation == "add_owner_memory":
+                status, result = fixture.backend.request("/api/memories/manual-owner", {
+                    "text": "本人新近完成合成复习。", "category": "common_fact"})
+                fixture.assertEqual(status, 200, result)
+            elif operation == "delete_source":
                 result = fixture.delete_source(contact, source)
             elif operation == "add_memory":
                 status, result = fixture.backend.request("/api/memories/manual-contact", {

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
-from notalone.scopes import ContactScope
+from notalone.scopes import ContactScope, OwnerScope
 from notalone.memory.organization_deadline import OrganizationAdapterTimeoutContract, OrganizationCallDeadline
 
 
@@ -92,7 +92,7 @@ class ScenarioDirectoryEntry:
 @dataclass(frozen=True, slots=True, repr=False)
 class LayeredMemorySnapshot:
     schema_version: int
-    scope: ContactScope
+    scope: ContactScope | OwnerScope
     settings_generation: int
     organization_generation: int
     scenarios: tuple[ScenarioDirectoryEntry, ...]
@@ -102,7 +102,7 @@ class LayeredMemorySnapshot:
 
 
 class LayeredMemoryPort(Protocol):
-    def capture(self, scope: ContactScope) -> LayeredMemorySnapshot | None: ...
+    def capture(self, scope: ContactScope | OwnerScope) -> LayeredMemorySnapshot | None: ...
 
     def read_scenario(self, snapshot: LayeredMemorySnapshot, id: UUID,
                       range: tuple[int, int]) -> dict:

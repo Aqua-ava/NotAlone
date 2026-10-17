@@ -18,7 +18,7 @@ from notalone.memory.models import ConfirmedMemoryStatus
 from notalone.persistence.locks import lock_contact_scope, lock_owner_scope
 from notalone.persistence.layered_coverage import current_job, cancel_jobs, enqueue_coverage
 from notalone.persistence.memory_overview import PostgresRelationshipOverviewStore
-from notalone.scopes import ContactScope
+from notalone.scopes import ContactScope, OwnerScope, organization_scope
 from notalone.tasks.models import ClaimedBackgroundTaskStep
 from notalone.persistence.layered_profile import LayeredProfileStore, ProfileWork
 
@@ -31,7 +31,7 @@ def _digest(value):
 @dataclass(frozen=True, slots=True, repr=False)
 class OrganizationWork:
     id: UUID
-    scope: ContactScope
+    scope: ContactScope | OwnerScope
     settings_generation: int
     memories: tuple[OrganizationInput, ...]
     manifest: list
@@ -52,20 +52,22 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                 raise ValueError("受控整理只允许显式隔离测试库。")
 
     @contextmanager
-    def transaction(self, scope: ContactScope):
+    def transaction(self, scope: ContactScope | OwnerScope):
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
-            lock_contact_scope(connection, owner_id=scope.owner_id, contact_id=scope.contact_id)
+            if scope.contact_id is not None:
+                lock_contact_scope(connection, owner_id=scope.owner_id, contact_id=scope.contact_id)
             lock_owner_scope(connection, owner_id=scope.owner_id)
-            overview = self._overview.read_contact_in_transaction(connection, scope)
+            overview = (self._overview.read_owner_in_transaction(connection, scope.owner_id)
+                if isinstance(scope, OwnerScope) else self._overview.read_contact_in_transaction(connection, scope))
             connection.execute("INSERT INTO public.layered_memory_state(owner_id,contact_id) VALUES(%s,%s) "
                                "ON CONFLICT DO NOTHING", (scope.owner_id, scope.contact_id))
             state = connection.execute("SELECT * FROM public.layered_memory_state "
-                                       "WHERE owner_id=%s AND contact_id=%s FOR UPDATE",
+                                       "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s FOR UPDATE",
                                        (scope.owner_id, scope.contact_id)).fetchone()
             entries = self.eligible(overview)
             current = {item["memory_id"]: item for item in self._manifest(connection, scope, entries)}
             batches = connection.execute("SELECT id,input_manifest FROM public.layered_memory_batch "
-                "WHERE owner_id=%s AND contact_id=%s", (scope.owner_id,scope.contact_id)).fetchall()
+                "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (scope.owner_id,scope.contact_id)).fetchall()
             erased = False
             for batch in batches:
                 if any(current.get(item["memory_id"]) != item for item in batch["input_manifest"]):
@@ -82,8 +84,8 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             if erased:
                 connection.execute("UPDATE public.layered_memory_state SET status=CASE WHEN enabled THEN 'stale' "
                     "ELSE 'disabled' END "
-                    "WHERE owner_id=%s AND contact_id=%s", (scope.owner_id,scope.contact_id))
-                state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id=%s",
+                    "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (scope.owner_id,scope.contact_id))
+                state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                                            (scope.owner_id,scope.contact_id)).fetchone()
             boundary = min((value for entry in overview.entries
                 for value in (entry.memory.valid_at, entry.memory.invalid_at)
@@ -92,8 +94,8 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                 expired = state['next_boundary_at'] is not None and state['next_boundary_at'] <= self._clock()
                 connection.execute("UPDATE public.layered_memory_state SET next_boundary_at=%s,"
                     "dirty_revision=dirty_revision+%s,next_due_at=CASE WHEN %s THEN now() ELSE next_due_at END "
-                    "WHERE owner_id=%s AND contact_id=%s", (boundary, int(expired), expired, scope.owner_id, scope.contact_id))
-                state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id=%s",
+                    "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (boundary, int(expired), expired, scope.owner_id, scope.contact_id))
+                state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                                            (scope.owner_id, scope.contact_id)).fetchone()
             yield connection, state, overview
 
@@ -118,8 +120,8 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
     @staticmethod
     def _manifest(connection, scope, entries):
         manifest = connection.execute("SELECT manifest FROM public.relationship_overview_projection "
-            "WHERE owner_id=%s AND contact_id=%s AND scope_kind='contact'",
-            (scope.owner_id, scope.contact_id)).fetchone()["manifest"]
+            "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s AND scope_kind=%s",
+            (scope.owner_id, scope.contact_id, "owner" if isinstance(scope, OwnerScope) else "contact")).fetchone()["manifest"]
         by_id = {str(entry.memory.memory_id): entry for entry in entries}
         return [{**item, "organization_timing_sha256": _digest(by_id[item["memory_id"]].memory.timing.to_payload())}
                 for item in manifest["memories"] if item["memory_id"] in by_id]
@@ -152,10 +154,10 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
         # 传输边界按完整(source版本→当前target版本)分页；同一拆分的分支不会静默截掉。
         rows = connection.execute("WITH RECURSIVE lineage AS ("
             "SELECT source_scenario_id,source_version_id,target_version_id FROM public.scenario_document_mapping "
-            "WHERE owner_id=%s AND contact_id=%s UNION "
+            "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s UNION "
             "SELECT l.source_scenario_id,l.source_version_id,m.target_version_id FROM lineage l "
             "JOIN public.scenario_document_mapping m ON m.source_version_id=l.target_version_id "
-            "AND m.owner_id=%s AND m.contact_id=%s) "
+            "AND m.owner_id=%s AND m.contact_id IS NOT DISTINCT FROM %s) "
             "SELECT DISTINCT l.source_scenario_id,l.source_version_id,v.scenario_id,v.id AS target_version_id "
             "FROM lineage l JOIN public.scenario_document_version v ON v.id=l.target_version_id "
             "WHERE v.id=ANY(%s::uuid[]) ORDER BY l.source_version_id,v.id OFFSET %s LIMIT 101",
@@ -174,6 +176,17 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                 "title": row["title"], "hint": row["hint"], "system_generated": True,
                 "updated_at": row["created_at"].isoformat(), "paragraphs": row["paragraphs"]}
 
+    def withdraw_scenario(self, scope, settings_generation, organization_generation, scenario_version_id):
+        with self.transaction(scope) as (connection, state, _):
+            _, rows = self.generation_rows(connection, scope, state['organization_generation'])
+            if (state['settings_generation'] != settings_generation
+                    or state['organization_generation'] != organization_generation
+                    or scenario_version_id not in {row['id'] for row in rows}):
+                raise LayeredMemoryConflict('主题版本或设置已变化。')
+            cancel_jobs(connection, scope)
+            # 原级联同时撤下依赖画像及旧冻结集合；不启用任何旧版。
+            connection.execute('DELETE FROM public.scenario_document_version WHERE id=%s', (scenario_version_id,))
+
     def command(self, scope, action, expected_generation, *, quality_available):
         with self.transaction(scope) as (connection, state, _):
             if state["settings_generation"] != expected_generation:
@@ -187,24 +200,24 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                 return
             cancel_jobs(connection,scope,erase=action=='delete')
             if action=='delete':
-                connection.execute("DELETE FROM public.layered_memory_generation WHERE owner_id=%s AND contact_id=%s",
+                connection.execute("DELETE FROM public.layered_memory_generation WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                                    (scope.owner_id,scope.contact_id))
             enabled = action == "enable"
-            connection.execute("DELETE FROM public.layered_profile_batch WHERE owner_id=%s AND contact_id=%s "
+            connection.execute("DELETE FROM public.layered_profile_batch WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s "
                 "AND (%s OR status='running')", (scope.owner_id,scope.contact_id,action=='delete'))
             if action == "delete":
-                connection.execute("DELETE FROM public.layered_memory_batch WHERE owner_id=%s AND contact_id=%s",
+                connection.execute("DELETE FROM public.layered_memory_batch WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                                    (scope.owner_id, scope.contact_id))
             else:
                 # 停用清除未完成工作；合法已发布正文可继续人工查看。
-                connection.execute("DELETE FROM public.layered_memory_batch WHERE owner_id=%s AND contact_id=%s "
+                connection.execute("DELETE FROM public.layered_memory_batch WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s "
                                    "AND status='running'", (scope.owner_id, scope.contact_id))
             connection.execute("UPDATE public.layered_memory_state SET enabled=%s, "
                 "settings_generation=settings_generation+1,status=%s,error_code=NULL,last_action=%s,"
                 "covered_count=CASE WHEN %s THEN 0 ELSE covered_count END,"
                 "updated_at=CASE WHEN %s THEN NULL ELSE updated_at END,"
                 "organization_generation=organization_generation+CASE WHEN %s THEN 1 ELSE 0 END "
-                "WHERE owner_id=%s AND contact_id=%s", (enabled, "stale" if enabled and quality_available
+                "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (enabled, "stale" if enabled and quality_available
                     else "blocked" if enabled else "disabled", action, action == "delete", action == "delete",
                     action == "delete", scope.owner_id, scope.contact_id))
 
@@ -253,7 +266,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             if row['maintenance_allowed'] and row['next_due_at'] is not None:
                 deadlines.append((row['next_due_at']-wall_now).total_seconds())
             if min(deadlines, default=3600) <= 0:
-                due.append(ContactScope(owner_id, row['contact_id']))
+                due.append(organization_scope(owner_id, row['contact_id']))
             else:
                 delays.extend(deadlines)
         return tuple(due), max(0.01, min(delays, default=3600.0))
@@ -275,24 +288,24 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             self._revoke_previous_profile(connection, scope, state, task_id, execute)
             connection.execute("UPDATE public.layered_memory_job SET target_dirty_revision=%s WHERE task_id=%s",
                                (state['dirty_revision'], task_id))
-            connection.execute("UPDATE public.layered_memory_state SET next_due_at=NULL WHERE owner_id=%s AND contact_id=%s",
+            connection.execute("UPDATE public.layered_memory_state SET next_due_at=NULL WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                                (scope.owner_id, scope.contact_id))
             return task_id if execute else None
 
     def pending_scopes(self, owner_id):
         with psycopg.connect(self._database_url) as connection:
             rows=connection.execute("SELECT DISTINCT j.contact_id FROM public.layered_memory_job j "
-                "JOIN public.layered_memory_state s ON s.owner_id=j.owner_id AND s.contact_id=j.contact_id "
+                "JOIN public.layered_memory_state s ON s.owner_id=j.owner_id AND s.contact_id IS NOT DISTINCT FROM j.contact_id "
                 "WHERE j.owner_id=%s AND j.state='active' AND s.enabled AND j.settings_generation=s.settings_generation",
                 (owner_id,)).fetchall()
-            return tuple(ContactScope(owner_id,row[0]) for row in rows)
+            return tuple(organization_scope(owner_id,row[0]) for row in rows)
 
     def pending(self, scope, contract=None):
         with self.transaction(scope) as (connection,state,_):
             if not state['enabled']:
                 return None
             if contract is not None and not connection.execute(
-                    "SELECT 1 FROM public.layered_memory_job WHERE owner_id=%s AND contact_id=%s "
+                    "SELECT 1 FROM public.layered_memory_job WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s "
                     "AND settings_generation=%s AND state='active' AND contract=%s",
                     (scope.owner_id,scope.contact_id,state['settings_generation'],contract)).fetchone():
                 return None
@@ -300,25 +313,25 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             connection.execute("UPDATE public.background_task_step step SET status='pending',attempt_count=0,worker_id=NULL,"
                 "lease_expires_at=NULL,lease_generation=lease_generation+1 FROM public.layered_memory_job j "
                 "LEFT JOIN public.layered_memory_batch b ON b.id=j.receipt_batch_id AND b.task_id=j.task_id "
-                "WHERE step.task_id=j.task_id AND j.owner_id=%s AND j.contact_id=%s AND j.state='active' "
+                "WHERE step.task_id=j.task_id AND j.owner_id=%s AND j.contact_id IS NOT DISTINCT FROM %s AND j.state='active' "
                 "AND j.pending_receipt AND ((b.status='succeeded' AND b.settings_generation=j.settings_generation) OR (j.profile_required AND j.receipt_batch_id IS NULL)) "
                 "AND (step.status IN ('failed','retryable') OR step.status='running' AND step.lease_expires_at<=now())",
                 (scope.owner_id,scope.contact_id))
             connection.execute("UPDATE public.background_task t SET status='queued',last_error_code=NULL,finished_at=NULL "
-                "FROM public.layered_memory_job j WHERE t.id=j.task_id AND j.owner_id=%s AND j.contact_id=%s "
+                "FROM public.layered_memory_job j WHERE t.id=j.task_id AND j.owner_id=%s AND j.contact_id IS NOT DISTINCT FROM %s "
                 "AND j.state='active' AND j.pending_receipt AND EXISTS(SELECT 1 FROM public.background_task_step s "
                 "WHERE s.task_id=t.id AND s.status='pending')",(scope.owner_id,scope.contact_id))
             # 领取路径可能已把最后一次失联租约判失败；无发布证明时不能留在updating。
             connection.execute("UPDATE public.layered_memory_job j SET state='failed' FROM public.background_task t "
-                "WHERE t.id=j.task_id AND j.owner_id=%s AND j.contact_id=%s AND j.settings_generation=%s "
+                "WHERE t.id=j.task_id AND j.owner_id=%s AND j.contact_id IS NOT DISTINCT FROM %s AND j.settings_generation=%s "
                 "AND j.state='active' AND NOT j.pending_receipt AND t.status='failed'",
                 (scope.owner_id,scope.contact_id,state['settings_generation']))
             connection.execute("UPDATE public.layered_memory_state s SET status='failed',error_code=COALESCE(t.last_error_code,s.error_code) "
                 "FROM public.layered_memory_job j JOIN public.background_task t ON t.id=j.task_id "
-                "WHERE s.owner_id=j.owner_id AND s.contact_id=j.contact_id AND s.settings_generation=j.settings_generation "
-                "AND j.owner_id=%s AND j.contact_id=%s AND j.state='failed' AND t.status='failed' AND s.enabled",
+                "WHERE s.owner_id=j.owner_id AND s.contact_id IS NOT DISTINCT FROM j.contact_id AND s.settings_generation=j.settings_generation "
+                "AND j.owner_id=%s AND j.contact_id IS NOT DISTINCT FROM %s AND j.state='failed' AND t.status='failed' AND s.enabled",
                 (scope.owner_id,scope.contact_id))
-            row=connection.execute("SELECT task_id FROM public.layered_memory_job WHERE owner_id=%s AND contact_id=%s "
+            row=connection.execute("SELECT task_id FROM public.layered_memory_job WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s "
                 "AND settings_generation=%s AND state='active' AND (%s::text IS NULL OR contract=%s) LIMIT 1",
                 (scope.owner_id,scope.contact_id,state['settings_generation'],contract,contract)).fetchone()
             return row['task_id'] if row else None
@@ -344,8 +357,8 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             connection.execute("DELETE FROM public.layered_memory_batch WHERE task_id=%s AND status<>'succeeded'",(claim.task_id,))
             covered={item['memory_id'] for batch in connection.execute(
                 "SELECT b.input_manifest FROM public.layered_memory_generation g JOIN public.scenario_document_version v "
-                "ON v.id=ANY(g.scenario_version_ids) AND v.owner_id=g.owner_id AND v.contact_id=g.contact_id "
-                "JOIN public.layered_memory_batch b ON b.id=v.batch_id WHERE g.owner_id=%s AND g.contact_id=%s "
+                "ON v.id=ANY(g.scenario_version_ids) AND v.owner_id=g.owner_id AND v.contact_id IS NOT DISTINCT FROM g.contact_id "
+                "JOIN public.layered_memory_batch b ON b.id=v.batch_id WHERE g.owner_id=%s AND g.contact_id IS NOT DISTINCT FROM %s "
                 "AND g.organization_generation=%s",(scope.owner_id,scope.contact_id,state['organization_generation'])).fetchall()
                 for item in batch['input_manifest']}
             target={item['memory_id'] for item in job['target_manifest']}
@@ -359,7 +372,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             if not selected:
                 if entries:
                     connection.execute("UPDATE public.layered_memory_state SET status='failed',error_code='input_budget_exceeded' "
-                        "WHERE owner_id=%s AND contact_id=%s",(scope.owner_id,scope.contact_id))
+                        "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",(scope.owner_id,scope.contact_id))
                 else:
                     connection.execute("UPDATE public.layered_memory_job SET pending_receipt=true WHERE task_id=%s",(claim.task_id,))
                 return None
@@ -394,36 +407,37 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                  Jsonb([item.to_payload() for item in memories]),sorted(dependencies),self._clock(),claim.task_id))
             connection.execute("UPDATE public.layered_memory_batch SET scenario_input=%s,reused_version_ids=%s WHERE id=%s",
                                (Jsonb(contexts), [UUID(item['version_id']) for item in contexts], id))
-            connection.execute("UPDATE public.layered_memory_state SET status='updating',error_code=NULL WHERE owner_id=%s AND contact_id=%s",
+            connection.execute("UPDATE public.layered_memory_state SET status='updating',error_code=NULL WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                                (scope.owner_id,scope.contact_id))
             return OrganizationWork(id,scope,state['settings_generation'],memories,manifest,claim,
                                     tuple(contexts),state['organization_generation'])
 
     def generation_rows(self, connection, scope, generation):
         manifest = connection.execute("SELECT * FROM public.layered_memory_generation WHERE owner_id=%s "
-            "AND contact_id=%s AND organization_generation=%s", (scope.owner_id,scope.contact_id,generation)).fetchone()
+            "AND contact_id IS NOT DISTINCT FROM %s AND organization_generation=%s", (scope.owner_id,scope.contact_id,generation)).fetchone()
         if not manifest:
             return None, []
         rows = connection.execute("SELECT version.*,batch.input_manifest,batch.dependency_ids FROM "
             "public.scenario_document_version version JOIN public.layered_memory_batch batch ON batch.id=version.batch_id "
-            "WHERE version.owner_id=%s AND version.contact_id=%s AND version.id=ANY(%s) ORDER BY version.scenario_id",
+            "WHERE version.owner_id=%s AND version.contact_id IS NOT DISTINCT FROM %s AND version.id=ANY(%s) ORDER BY version.scenario_id",
             (scope.owner_id,scope.contact_id,manifest["scenario_version_ids"])).fetchall()
         return manifest, rows
 
     def publish_generation_in_transaction(self, connection, scope, *, expected_generation, scenario_version_ids, profile_version_id=None):
         """caller已持范围锁；从真实版本推导完整依赖并原子推进唯一集合。"""
-        state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id=%s",
+        state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
             (scope.owner_id,scope.contact_id)).fetchone()
         if not state or state["organization_generation"] != expected_generation:
             raise LayeredMemoryConflict("一致集合世代已变化。")
         ids = list(scenario_version_ids)
         rows = connection.execute("SELECT v.*,b.input_manifest,b.dependency_ids FROM public.scenario_document_version v "
-            "JOIN public.layered_memory_batch b ON b.id=v.batch_id WHERE v.owner_id=%s AND v.contact_id=%s AND v.id=ANY(%s)",
+            "JOIN public.layered_memory_batch b ON b.id=v.batch_id WHERE v.owner_id=%s AND v.contact_id IS NOT DISTINCT FROM %s AND v.id=ANY(%s)",
             (scope.owner_id,scope.contact_id,ids)).fetchall()
         if (not ids or len(set(ids)) != len(ids) or len(rows) != len(ids)
                 or len({r["scenario_id"] for r in rows}) != len(rows)):
             raise LayeredMemoryConflict("一致集合的主题版本无效。")
-        overview = self._overview.read_contact_in_transaction(connection, scope)
+        overview = (self._overview.read_owner_in_transaction(connection, scope.owner_id)
+                if isinstance(scope, OwnerScope) else self._overview.read_contact_in_transaction(connection, scope))
         current = {item["memory_id"]: item for item in self._manifest(connection,scope,self.eligible(overview))}
         if any(current.get(item["memory_id"]) != item for row in rows for item in row["input_manifest"]):
             raise LayeredMemoryConflict("一致集合的底层版本失效。")
@@ -437,13 +451,13 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
         generation = state["organization_generation"] + 1
         if profile_version_id is None:
             # L2集合推进后，旧集合上的未完成画像不得阻塞新工作或保留可迟到输出。
-            connection.execute("DELETE FROM public.layered_profile_batch WHERE owner_id=%s AND contact_id=%s AND status='running'",
+            connection.execute("DELETE FROM public.layered_profile_batch WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s AND status='running'",
                 (scope.owner_id,scope.contact_id))
         connection.execute("INSERT INTO public.layered_memory_generation(owner_id,contact_id,organization_generation,"
             "schema_version,scenario_version_ids,profile_version_id,dependency_ids,created_at) VALUES(%s,%s,%s,2,%s,%s,%s,%s)",
             (scope.owner_id,scope.contact_id,generation,ids,profile_version_id,sorted(dependencies),self._clock()))
         changed = connection.execute("UPDATE public.layered_memory_state SET organization_generation=%s "
-            "WHERE owner_id=%s AND contact_id=%s AND organization_generation=%s AND enabled=%s",
+            "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s AND organization_generation=%s AND enabled=%s",
             (generation,scope.owner_id,scope.contact_id,expected_generation,state["enabled"]))
         if changed.rowcount != 1:
             raise LayeredMemoryConflict("一致集合在发布前已变化。")
@@ -477,7 +491,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
         if not state["enabled"] or state["settings_generation"] != work.settings_generation:
             raise LayeredMemoryConflict("整理设置已变化。")
         batch = connection.execute("SELECT 1 FROM public.layered_memory_batch WHERE id=%s AND owner_id=%s "
-            "AND contact_id=%s AND status='running'", (work.id,work.scope.owner_id,work.scope.contact_id)).fetchone()
+            "AND contact_id IS NOT DISTINCT FROM %s AND status='running'", (work.id,work.scope.owner_id,work.scope.contact_id)).fetchone()
         ids = {item.memory_id for item in work.memories}
         entries = tuple(entry for entry in self.eligible(overview) if entry.memory.memory_id in ids)
         if not batch or self._manifest(connection, work.scope, entries) != work.manifest:
@@ -495,7 +509,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             else:
                 self._check(connection,state,overview,work)
             row = connection.execute("UPDATE public.layered_memory_job SET model_calls_used=model_calls_used+1 "
-                "WHERE task_id=%s AND owner_id=%s AND contact_id=%s AND state='active' "
+                "WHERE task_id=%s AND owner_id=%s AND contact_id IS NOT DISTINCT FROM %s AND state='active' "
                 "AND model_calls_used<model_call_limit RETURNING task_id",
                 (work.claim.task_id,work.scope.owner_id,work.scope.contact_id)).fetchone()
             if row is None:
@@ -523,14 +537,14 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             for scenario in proposal['scenarios']:
                 replaced = scenario.get('replaces', [])
                 scenario_id = UUID(scenario['scenario_id']) if scenario.get('scenario_id') else uuid5(
-                    work.scope.contact_id,str(work.scope.owner_id)+':'+scenario['topic_key'])
+                    (work.scope.contact_id or work.scope.owner_id),str(work.scope.owner_id)+':'+scenario['topic_key'])
                 if scenario_id in proposed_ids:
                     raise LayeredMemoryConflict('同批主题身份重复。')
                 proposed_ids.add(scenario_id)
                 if replaced and scenario_id in by_id and str(by_id[scenario_id]['id']) not in replaced:
                     raise LayeredMemoryConflict('主题归组不能覆盖未列为替换目标的旧主题。')
                 if scenario_id not in by_id and connection.execute(
-                    'SELECT 1 FROM public.scenario_document_version WHERE owner_id=%s AND contact_id=%s AND scenario_id=%s',
+                    'SELECT 1 FROM public.scenario_document_version WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s AND scenario_id=%s',
                     (work.scope.owner_id, work.scope.contact_id, scenario_id)).fetchone():
                     raise LayeredMemoryConflict('不能将退休主题身份赋给另一主题。')
                 paragraphs=list(scenario['paragraphs'])
@@ -563,11 +577,11 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             connection.execute("UPDATE public.layered_memory_batch SET status='succeeded' WHERE id=%s",(work.id,))
             covered=connection.execute("SELECT count(DISTINCT item->>'memory_id') AS count FROM public.layered_memory_batch b,"
                 "jsonb_array_elements(b.input_manifest) item WHERE b.id IN (SELECT batch_id FROM public.scenario_document_version "
-                "WHERE owner_id=%s AND contact_id=%s AND id=ANY(%s::uuid[]))",
+                "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s AND id=ANY(%s::uuid[]))",
                 (work.scope.owner_id,work.scope.contact_id,list(versions.values()))).fetchone()['count']
             connection.execute("UPDATE public.layered_memory_job SET pending_receipt=true,profile_status=CASE WHEN profile_required THEN 'pending' ELSE 'not_required' END,batch_number=batch_number+1,receipt_batch_id=%s,receipt_lease_generation=%s WHERE task_id=%s",(work.id,work.claim.lease_generation,work.claim.task_id,))
             connection.execute("UPDATE public.layered_memory_state SET status='ready',covered_count=%s,updated_at=%s,error_code=NULL "
-                "WHERE owner_id=%s AND contact_id=%s",(covered,now,work.scope.owner_id,work.scope.contact_id))
+                "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",(covered,now,work.scope.owner_id,work.scope.contact_id))
 
     def fail(self, work, code):
         with self.transaction(work.scope) as (connection, state, overview):
@@ -578,10 +592,10 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             connection.execute("UPDATE public.layered_memory_batch SET status='failed',error_code=%s WHERE id=%s",
                                (code, work.id))
             connection.execute("UPDATE public.layered_memory_state SET status=%s,error_code=%s "
-                "WHERE owner_id=%s AND contact_id=%s", ('paused' if code=='model_budget_exhausted' else 'failed',code,work.scope.owner_id,work.scope.contact_id))
+                "WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", ('paused' if code=='model_budget_exhausted' else 'failed',code,work.scope.owner_id,work.scope.contact_id))
 
     def worker_failed(self, claim):
-        scope=ContactScope(claim.owner_id,claim.contact_id)
+        scope=organization_scope(claim.owner_id,claim.contact_id)
         with self.transaction(scope) as (connection,state,_):
             row=connection.execute("SELECT t.status,t.last_error_code,s.lease_generation FROM public.background_task t "
                 "JOIN public.background_task_step s ON s.task_id=t.id WHERE t.id=%s AND s.id=%s",
@@ -591,7 +605,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             updated=connection.execute("UPDATE public.layered_memory_job SET state='failed' WHERE task_id=%s "
                 "AND state='active' AND settings_generation=%s",(claim.task_id,state['settings_generation'])).rowcount
             if updated and state['enabled']:
-                connection.execute("UPDATE public.layered_memory_state SET status='failed',error_code=%s WHERE owner_id=%s AND contact_id=%s",
+                connection.execute("UPDATE public.layered_memory_state SET status='failed',error_code=%s WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                     (row['last_error_code'],scope.owner_id,scope.contact_id))
 
     def capture(self, scope):
@@ -612,8 +626,9 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
         if not isinstance(snapshot, LayeredMemorySnapshot) or snapshot.schema_version != 2:
             return False
         scope = snapshot.scope
-        overview = self._overview.read_contact_in_transaction(connection, scope)
-        state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id=%s",
+        overview = (self._overview.read_owner_in_transaction(connection, scope.owner_id)
+                if isinstance(scope, OwnerScope) else self._overview.read_contact_in_transaction(connection, scope))
+        state = connection.execute("SELECT * FROM public.layered_memory_state WHERE owner_id=%s AND contact_id IS NOT DISTINCT FROM %s",
                                    (scope.owner_id,scope.contact_id)).fetchone()
         if (not state or not state["enabled"] or state["status"] not in {"ready","paused","failed","updating","stale"}
                 or state["settings_generation"] != snapshot.settings_generation
@@ -660,7 +675,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             if not self.validate_in_transaction(connection,snapshot):
                 raise LayeredMemoryConflict("主题资料快照已失效。")
             row = connection.execute("SELECT * FROM public.scenario_document_version WHERE id=%s "
-                "AND owner_id=%s AND contact_id=%s", (allowed.version_id,snapshot.scope.owner_id,
+                "AND owner_id=%s AND contact_id IS NOT DISTINCT FROM %s", (allowed.version_id,snapshot.scope.owner_id,
                                                      snapshot.scope.contact_id)).fetchone()
             document = self._document(row)
             return {**document, "paragraphs": document["paragraphs"][range[0]:range[1]],

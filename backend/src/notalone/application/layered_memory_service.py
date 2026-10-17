@@ -7,6 +7,7 @@ import inspect
 
 from notalone.memory.layered import OrganizationBudget, OrganizationBudgetExhausted, LayeredMemoryConflict
 from notalone.memory.scenario_validation import validate_proposal
+from notalone.memory.owner_organization_input import owner_model_memories, owner_model_scenarios
 from notalone.memory.profile_validation import validate_profile
 from notalone.application.model_priority import ModelPriorityControl, ModelWorkStopped
 from notalone.application.organization_call import (
@@ -54,6 +55,9 @@ class LayeredMemoryService:
             self._contract += ":profile-v1"
         self._priority = model_priority or ModelPriorityControl()
 
+    def _contract_for(self, scope):
+        return self._contract + (":owner-input-v1" if scope.contact_id is None else "")
+
     def attach_task_host(self, task_host):
         self._task_host=task_host
 
@@ -66,7 +70,7 @@ class LayeredMemoryService:
             def dispatch_due():
                 scopes, delay = self._store.maintenance_due(owner_id)
                 for scope in scopes:
-                    task_id = self._store.enqueue_maintenance(scope, self._budget, self._contract,
+                    task_id = self._store.enqueue_maintenance(scope, self._budget, self._contract_for(scope),
                         profile_required=self._profile_proposer is not None)
                     if task_id is not None:
                         self._dispatch(scope, task_id)
@@ -82,20 +86,20 @@ class LayeredMemoryService:
         if not self._synthetic or self._task_host is None or owner_id is None:
             return
         for scope in self._store.pending_scopes(owner_id):
-            task_id=self._store.pending(scope,self._contract)
+            task_id=self._store.pending(scope,self._contract_for(scope))
             if task_id is not None:
                 self._dispatch(scope,task_id)
 
     def read(self, scope, *, mapping_cursor=None):
         if self._synthetic:
-            task_id=self._store.pending(scope,self._contract)
+            task_id=self._store.pending(scope,self._contract_for(scope))
             if task_id is not None:
                 self._dispatch(scope,task_id)
         state, entries, scenarios, job = self._store.read(scope, mapping_cursor=mapping_cursor)
         covered = state["covered_count"]
         used = job["model_calls_used"] if job else 0
         limit = job["model_call_limit"] if job else self._budget.max_model_calls
-        return {"schema_version": 2, "scope_kind": "contact", "contact_id": str(scope.contact_id),
+        return {"schema_version": 2, "scope_kind": "owner" if scope.contact_id is None else "contact", "contact_id": str(scope.contact_id) if scope.contact_id is not None else None,
                 "settings_generation": state["settings_generation"], "enabled": state["enabled"],
                 "quality_status": "synthetic" if self._synthetic else "unknown",
                 "status": state["status"], "eligible_count": len(entries), "covered_count": covered,
@@ -112,7 +116,8 @@ class LayeredMemoryService:
                 "scenario_mappings": state["scenario_mappings"],
                 "mapping_cursor": state["mapping_cursor"],
                 "mapping_next_cursor": state["mapping_next_cursor"],
-                "purpose": "从本联系人已采纳且来历有效的记忆整理主题背景，供查看及后续受控回复使用。",
+                "purpose": ("从本人已采纳且来历有效的记忆整理主题背景，模型仅接收本人正文、时间与必要引用。" if scope.contact_id is None
+                    else "从本联系人已采纳且来历有效的记忆整理主题背景，供查看及后续受控回复使用。"),
                 "budget": {**self._budget.to_payload(), "max_model_calls": limit,
                     "model_calls_used": used, "model_calls_remaining": limit-used}}
 
@@ -126,7 +131,7 @@ class LayeredMemoryService:
         else:
             self._store.command(scope, action, expected_generation, quality_available=self._synthetic)
         if self._synthetic and action in {'enable','refresh','pause','continue'}:
-            task_id, execute = self._store.enqueue(scope,self._budget,self._contract,action=action,revision=expected_work_revision,profile_required=self._profile_proposer is not None)
+            task_id, execute = self._store.enqueue(scope,self._budget,self._contract_for(scope),action=action,revision=expected_work_revision,profile_required=self._profile_proposer is not None)
             if execute:
                 self._dispatch(scope,task_id)
         return self.read(scope)
@@ -135,7 +140,7 @@ class LayeredMemoryService:
         """统一变化通知入口；同范围L2及L3仍由正式Worker的一次有限批次执行。"""
         if not self._synthetic:
             return
-        task_id, execute = self._store.enqueue(scope,self._budget,self._contract,
+        task_id, execute = self._store.enqueue(scope,self._budget,self._contract_for(scope),
             profile_required=self._profile_proposer is not None)
         if execute:
             self._dispatch(scope,task_id)
@@ -149,31 +154,31 @@ class LayeredMemoryService:
         self._dispatcher(scope,task_id,runner=self,model_priority=self._priority)
 
     def run_batch(self, claim):
-        from notalone.scopes import ContactScope
+        from notalone.scopes import organization_scope
         if not self._synthetic:
             raise PermissionError('整理质量资格尚未获准。')
-        scope=ContactScope(claim.owner_id,claim.contact_id)
-        work = self._store.prepare(scope,self._budget,self._contract,claim, with_scenarios=self._scenario_context)
+        scope=organization_scope(claim.owner_id,claim.contact_id)
+        work = self._store.prepare(scope,self._budget,self._contract_for(scope),claim, with_scenarios=self._scenario_context)
         if work is None:
             if self._profile_proposer:
                 self._organize_profile(scope,claim)
             return 0
         try:
             raw = self._call(work, self._proposer, "propose", lambda deadline: self._proposer.propose(
-                memories=deepcopy(work.memories), budget=self._budget, deadline=deadline,
-                **({"scenarios": deepcopy(work.scenarios)} if self._scenario_context else {})))
+                memories=self._model_memories(work), budget=self._budget, deadline=deadline,
+                **({"scenarios": self._model_scenarios(work)} if self._scenario_context else {})))
             proposal = validate_proposal(raw, work.memories, self._budget, scenarios=work.scenarios)
             self._store.record_proposal(work, raw)
             # 核验实际接收全部记忆和完整提案，两者合计仍受单次输入上限约束。
-            verification_input = {"memories": [item.to_payload() for item in work.memories], "proposal": raw}
+            verification_input = {"memories": [item.to_payload() for item in self._model_memories(work)], "proposal": raw}
             if self._scenario_context:
-                verification_input["scenarios"] = work.scenarios
+                verification_input["scenarios"] = self._model_scenarios(work)
             if len(json.dumps(verification_input, ensure_ascii=False)) > self._budget.max_characters:
                 self._store.fail(work, "verification_input_budget_exceeded")
                 return 0
             supported = self._call(work, self._verifier, "verify", lambda deadline: self._verifier.verify(
-                memories=deepcopy(work.memories), proposal=deepcopy(raw), deadline=deadline,
-                **({"scenarios": deepcopy(work.scenarios)} if self._scenario_context else {})))
+                memories=self._model_memories(work), proposal=deepcopy(raw), deadline=deadline,
+                **({"scenarios": self._model_scenarios(work)} if self._scenario_context else {})))
             if supported is not True:
                 self._store.fail(work, "faithfulness_rejected")
                 return 0
@@ -195,6 +200,14 @@ class LayeredMemoryService:
         except Exception:
             self._store.fail(work, "model_call_failed")
         return 0
+
+    @staticmethod
+    def _model_memories(work):
+        return deepcopy(owner_model_memories(work.memories) if work.scope.contact_id is None else work.memories)
+
+    @staticmethod
+    def _model_scenarios(work):
+        return deepcopy(owner_model_scenarios(work.scenarios) if work.scope.contact_id is None else work.scenarios)
 
     def worker_failed(self, claim):
         self._store.worker_failed(claim)
@@ -228,27 +241,32 @@ class LayeredMemoryService:
         """最终 writer 已持有相同范围锁时使用，不开启第二条连接。"""
         return self._synthetic and self._store.validate_in_transaction(connection, snapshot)
 
+    def withdraw_scenario(self, scope, settings_generation, organization_generation, scenario_version_id):
+        self._store.withdraw_scenario(scope, settings_generation, organization_generation, scenario_version_id)
+        return self.read(scope)
+
     def withdraw_profile(self, scope, settings_generation, organization_generation, profile_version_id):
         self._store.withdraw_profile(scope,settings_generation,organization_generation,profile_version_id)
         return self.read(scope)
 
     def _organize_profile(self, scope, claim):
-        work = self._store.prepare_profile(scope,self._budget,"profile-v1:synthetic-only:deadline-v1",
+        work = self._store.prepare_profile(scope,self._budget,"profile-v1:synthetic-only:deadline-v1" +
+            (":owner-input-v1" if scope.contact_id is None else ""),
             lease_seconds=self._call_timeout_seconds * 2 + 5,claim=claim)
         if work is None:
             return
         try:
             raw = self._call(work,self._profile_proposer,"propose",lambda deadline: self._profile_proposer.propose(
-                scenarios=deepcopy(work.scenarios),memories=deepcopy(work.memories),budget=self._budget,deadline=deadline),
+                scenarios=self._model_scenarios(work),memories=self._model_memories(work),budget=self._budget,deadline=deadline),
                 guard=lambda: self._store.check_profile(work))
             proposal = validate_profile(raw,work.memories,self._budget)
             self._store.record_profile_proposal(work,raw)
-            payload = {"scenarios": list(work.scenarios),"memories": [item.to_payload() for item in work.memories],"proposal": raw}
+            payload = {"scenarios": list(self._model_scenarios(work)),"memories": [item.to_payload() for item in self._model_memories(work)],"proposal": raw}
             if len(json.dumps(payload,ensure_ascii=False)) > self._budget.max_characters:
                 self._store.fail_profile(work,"profile_verification_input_budget_exceeded")
                 return
             supported = self._call(work,self._profile_verifier,"verify",lambda deadline: self._profile_verifier.verify(
-                scenarios=deepcopy(work.scenarios),memories=deepcopy(work.memories),proposal=deepcopy(raw),deadline=deadline),
+                scenarios=self._model_scenarios(work),memories=self._model_memories(work),proposal=deepcopy(raw),deadline=deadline),
                 guard=lambda: self._store.check_profile(work))
             if supported is not True:
                 self._store.fail_profile(work,"profile_faithfulness_rejected")

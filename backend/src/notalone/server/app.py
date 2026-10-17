@@ -495,7 +495,8 @@ class BackendApp:
                 path=path_value,
                 query=urlsplit(path).query,
             )
-        if path_value.startswith("/api/contacts/") and "/layered-memory" in path_value:
+        if (path_value.startswith("/api/contacts/") and "/layered-memory" in path_value
+                or path_value.startswith("/api/memories/owner/layered-memory")):
             return self._handle_layered_memory(method=method_upper, path=path, body=body)
         if path_value.startswith("/api/contacts/") and "/relationship-overview" in path_value:
             return self._handle_overview(method=method_upper, path=path_value)
@@ -1563,12 +1564,13 @@ class BackendApp:
         parts = urlsplit(path).path.strip("/").split("/")
         if (len(parts) not in {4, 5} or parts[3] != "layered-memory"
                 or method != ("GET" if len(parts) == 4 else "POST")
-                or len(parts) == 5 and parts[4] not in {"enable", "refresh", "disable", "delete", "withdraw-profile", "pause", "continue"}):
+                or len(parts) == 5 and parts[4] not in {"enable", "refresh", "disable", "delete", "withdraw-profile", "withdraw-scenario", "pause", "continue"}):
             return _json_response(HTTPStatus.NOT_FOUND, {"error": "not_found"})
         if self._layered_memory is None:
             return _json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "layered_memory_unavailable"})
         try:
-            scope = ContactScope(self._owner_id, UUID(parts[2]))
+            from notalone.scopes import OwnerScope
+            scope = OwnerScope(self._owner_id) if parts[:3] == ["api", "memories", "owner"] else ContactScope(self._owner_id, UUID(parts[2]))
             if method == "GET":
                 query = parse_qs(urlsplit(path).query, keep_blank_values=True)
                 if set(query) - {'mapping_cursor'} or any(len(value) != 1 for value in query.values()):
@@ -1578,6 +1580,7 @@ class BackendApp:
                 payload = json.loads(body.decode("utf-8"))
                 allowed = ({"settings_generation", "purpose_confirmed"} if parts[4] == "enable"
                     else {"settings_generation", "organization_generation", "profile_version_id"} if parts[4] == "withdraw-profile"
+                    else {"settings_generation", "organization_generation", "scenario_version_id"} if parts[4] == "withdraw-scenario"
                     else {"settings_generation", "work_revision"} if parts[4] in {"pause", "continue"}
                     else {"settings_generation"})
                 if (not isinstance(payload, dict) or set(payload) != allowed
@@ -1587,7 +1590,12 @@ class BackendApp:
                     raise ValueError("整理命令无效。")
                 if parts[4] in {"pause", "continue"} and (type(payload["work_revision"]) is not int or payload["work_revision"] < 1):
                     raise ValueError("覆盖工作修订无效。")
-                if parts[4] == "withdraw-profile":
+                if parts[4] == "withdraw-scenario":
+                    if type(payload["organization_generation"]) is not int or payload["organization_generation"] < 0:
+                        raise ValueError("整理版本无效。")
+                    state = self._layered_memory.withdraw_scenario(scope,payload["settings_generation"],
+                        payload["organization_generation"],UUID(payload["scenario_version_id"]))
+                elif parts[4] == "withdraw-profile":
                     if type(payload["organization_generation"]) is not int or payload["organization_generation"] < 0:
                         raise ValueError("整理版本无效。")
                     state = self._layered_memory.withdraw_profile(scope,payload["settings_generation"],

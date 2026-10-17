@@ -182,11 +182,11 @@ class BackgroundTaskStep:
 
 @dataclass(frozen=True, slots=True)
 class BackgroundTask:
-    """联系人范围后台任务的非正文状态快照。"""
+    """后台任务非正文状态；本人范围只对资料整理开放。"""
 
     task_id: UUID
     owner_id: UUID
-    contact_id: UUID
+    contact_id: UUID | None
     source_document_id: UUID | None
     task_type: BackgroundTaskType
     status: BackgroundTaskStatus
@@ -202,7 +202,7 @@ class BackgroundTask:
     extraction_runtime_config: ExtractionRuntimeConfig | None = None
 
     def __post_init__(self) -> None:
-        ids = (self.task_id, self.owner_id, self.contact_id)
+        ids = (self.task_id, self.owner_id) + (() if self.task_type is BackgroundTaskType.LAYERED_MEMORY and self.contact_id is None else (self.contact_id,))
         if any(not isinstance(value, UUID) for value in ids):
             raise TypeError("后台任务范围必须使用内部 UUID。")
         if not isinstance(self.task_type, BackgroundTaskType):
@@ -224,6 +224,10 @@ class BackgroundTask:
                 and not isinstance(self.extraction_runtime_config, ExtractionRuntimeConfig)):
             raise ValueError("后台任务提取配置无效。")
 
+    @property
+    def scope_kind(self) -> str:
+        return "owner" if self.contact_id is None else "contact"
+
 
 @dataclass(frozen=True, slots=True)
 class ClaimedBackgroundTaskStep:
@@ -231,7 +235,7 @@ class ClaimedBackgroundTaskStep:
 
     task_id: UUID
     owner_id: UUID
-    contact_id: UUID
+    contact_id: UUID | None
     source_document_id: UUID | None
     step_id: UUID
     name: BackgroundTaskStepName
@@ -243,6 +247,12 @@ class ClaimedBackgroundTaskStep:
     extraction_runtime_config: ExtractionRuntimeConfig | None = None
 
     def __post_init__(self) -> None:
+        if self.contact_id is None and self.name is not BackgroundTaskStepName.ORGANIZE_MEMORY:
+            raise TypeError("只有资料整理步骤允许本人范围。")
         if (self.extraction_runtime_config is not None
                 and not isinstance(self.extraction_runtime_config, ExtractionRuntimeConfig)):
             raise ValueError("后台步骤提取配置无效。")
+
+    @property
+    def scope_kind(self) -> str:
+        return "owner" if self.contact_id is None else "contact"
