@@ -75,7 +75,8 @@ class LayeredCorrectionStore:
                           if row['operation_id'] == operation), None)
             digest = _digest(command)
             if prior:
-                if prior['request_digest'] != digest:
+                if (prior['request_digest'] != digest
+                        or state['settings_generation'] != command['settings_generation']):
                     raise LayeredMemoryConflict('纠错操作已变化或其内容已删除。')
                 return
             if (state['settings_generation'] != command['settings_generation']

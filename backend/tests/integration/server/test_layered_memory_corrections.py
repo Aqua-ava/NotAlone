@@ -203,3 +203,24 @@ class LayeredMemoryCorrectionHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertEqual(status, 200, response)
         self.assertIsNotNone(response['layered_memory']['profile'], response)
         self.assertEqual(response['layered_memory']['profile']['entries'][0]['text'], '本人另有独立合成背景。')
+
+    def test_old_feedback_operation_cannot_cross_disable_reenable_epoch(self):
+        contact, _, message = self.import_contact('合成旧反馈世代依据。')
+        self.confirm(contact, '双方共同参加合成课程。', message)
+        backend = self.controlled(proposer=CorrectionProposal(), verifier=CorrectionVerification())
+        ready = self.enable(backend, contact)
+        path = f'/api/contacts/{contact}/layered-memory'
+        command = self.summary_command(ready)
+        self.assertEqual(backend.request(path + '/summary-error', command)[0], 200)
+        self.assertEqual(backend.request(path + '/summary-error', command)[0], 200)
+        status, disabled = backend.request(path + '/disable', {'settings_generation': ready['settings_generation']})
+        self.assertEqual(status, 200, disabled)
+        status, enabled = backend.request(path + '/enable', {
+            'settings_generation': disabled['layered_memory']['settings_generation'], 'purpose_confirmed': True})
+        self.assertEqual(status, 200, enabled)
+        before = enabled['layered_memory']
+        status, replayed = backend.request(path + '/summary-error', command)
+        self.assertEqual(status, 409, replayed)
+        restored = self._get(backend, path)['layered_memory']
+        self.assertEqual(restored['feedback'], before['feedback'])
+        self.assertEqual(restored['scenarios'], [])
