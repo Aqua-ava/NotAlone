@@ -435,3 +435,57 @@ class LayeredReplyHttpTest(OverviewReplyHttpFixture, unittest.TestCase):
                 gate.set()
         self.assertEqual(len(self.reply_model.seen_calls), 1)
         self.assertEqual(self.reply_model.review_calls, 0)
+
+    def test_owner_lifecycle_is_isolated_from_contact_layered_reply(self):
+        contact, _, management, _, path = self.prepare_layered_reply()
+        status, _ = self.backend.request('/api/memories/manual-owner',
+            {'text': '本人近期合成计划。', 'category': 'recent_state'})
+        self.assertEqual(status, 200)
+        owner_path = '/api/memories/owner/layered-memory'
+        status, result = management.request(owner_path + '/enable',
+            {'settings_generation': 0, 'purpose_confirmed': True})
+        self.assertEqual(status, 200, result)
+        self.assertTrue(result['layered_memory']['scenarios'])
+        self.reply_model.plans.append({'text': '聊聊课程。', 'basis': '按本次草稿。'})
+        status, turn = self.backend.request(path + '/replies', self.rewrite_body(contact, '聊聊课程。'))
+        self.assertEqual(status, 200, turn)
+        saved = self._get(self.backend, self.evidence_path(contact, turn))
+        self.assertEqual(saved['layered_context']['scope_kind'], 'contact')
+        self.assertNotIn('本人近期合成计划', str(saved['layered_context']))
+        generation = result['layered_memory']['settings_generation']
+        for action in ('disable', 'enable', 'delete'):
+            command = {'settings_generation': generation}
+            if action == 'enable': command['purpose_confirmed'] = True
+            status, result = management.request(owner_path + '/' + action, command)
+            self.assertEqual(status, 200, result)
+            generation = result['layered_memory']['settings_generation']
+            self.assertEqual(self._get(self.backend, self.evidence_path(contact, turn)), saved)
+
+    def test_withdrawing_scenario_erases_dependent_layered_reply_copies(self):
+        contact, _, management, ready, path = self.prepare_layered_reply()
+        self.reply_model.plans.append({'text': '聊聊课程。', 'basis': '按本次草稿。'})
+        status, turn = self.backend.request(path + '/replies', self.rewrite_body(contact, '聊聊课程。'))
+        self.assertEqual(status, 200, turn)
+        status, result = management.request(f'/api/contacts/{contact}/layered-memory/withdraw-scenario',
+            {'settings_generation': ready['settings_generation'],
+             'organization_generation': ready['organization_generation'],
+             'scenario_version_id': ready['scenarios'][0]['version_id']})
+        self.assertEqual(status, 200, result)
+        self.assertNotEqual(self.backend.request(self.evidence_path(contact, turn))[0], 200)
+
+    def test_owner_fact_erasure_cleans_l1_reply_copy_without_erasing_contact_layers(self):
+        contact, _, management, ready, path = self.prepare_layered_reply()
+        status, memory = self.backend.request('/api/memories/manual-owner',
+            {'text': '本人也参加合成课程。', 'category': 'common_fact'})
+        self.assertEqual(status, 200, memory)
+        memory_id = memory['memory']['memory_id']
+        self.reply_model.plans.append({'text': '聊聊课程。', 'basis': '按本次草稿。'})
+        status, turn = self.backend.request(path + '/replies', self.rewrite_body(contact, '聊聊课程。'))
+        self.assertEqual(status, 200, turn)
+        evidence = self._get(self.backend, self.evidence_path(contact, turn))
+        self.assertIn(memory_id, [item['evidence_id'] for item in evidence['evidence']])
+        status, deleted = self.backend.request('/api/memories/owner/' + memory_id + '/delete', {})
+        self.assertEqual(status, 200, deleted)
+        self.assertNotEqual(self.backend.request(self.evidence_path(contact, turn))[0], 200)
+        current = self._get(management, f'/api/contacts/{contact}/layered-memory')['layered_memory']
+        self.assertEqual(current['profile']['version_id'], ready['profile']['version_id'])

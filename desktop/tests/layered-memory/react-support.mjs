@@ -1,25 +1,34 @@
 import { build } from 'esbuild';
 import { chromium } from '@playwright/test';
 
-export async function withMemoryPage(f, run) {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+export async function withMemoryPage(f, signal, run) {
+  const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 10000 });
+  const cancel = () => { void browser.close().catch(() => {}); };
+  signal.addEventListener('abort', cancel, { once: true });
   try {
+    if (signal.aborted) throw new Error('React 测试已取消。');
     const page = await browser.newPage();
+    page.setDefaultTimeout(5000);
     await page.exposeFunction('memoryCommand', (method, ...args) => f.bridge[method](...args));
     const compiled = await build({ stdin: { contents: `
       import React from 'react'; import { createRoot } from 'react-dom/client';
       import { MemoryPage } from './src/renderer/MemoryPage';
-      const listeners = new Set();
+      const listeners = new Set(), ownerListeners = new Set();
+      window.deliverOwnerMemory = state => { for (const listener of ownerListeners) listener(state); };
       window.deliverMemory = (state) => { for (const listener of listeners) listener(state); };
       window.notalone = { memory: new Proxy({}, { get: (_, method) => method === 'onStateChanged'
         ? (listener) => { listeners.add(listener); return () => listeners.delete(listener); }
+        : method === 'onOwnerLayeredMemoryChanged' ? (listener) => { ownerListeners.add(listener); return () => ownerListeners.delete(listener); }
         : (...args) => window.memoryCommand(method, ...args) }),
         traces: { onStateChanged: () => () => {}, getState: async () => ({ revision: 0, contactId: null, scopeRevision: 0 }) } };
       createRoot(document.getElementById('root')).render(<MemoryPage session={{ state: ${JSON.stringify(f.contacts.getState())}, error: '', selectContact: async () => {} }} navigate={() => {}} />);
     `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', loader: { '.css': 'empty' }, write: false });
     await page.setContent('<div id="root"></div>');
-    await page.addScriptTag({ content: compiled.outputFiles[0].text });
     const unsubscribe = f.bridge.onStateChanged((state) => { void page.evaluate((next) => window.deliverMemory(next), state).catch(() => {}); });
-    try { await run(page); } finally { unsubscribe(); }
-  } finally { f.disconnect(); await browser.close(); }
+    const unsubscribeOwner = f.bridge.onOwnerLayeredMemoryChanged(state => { void page.evaluate(next => window.deliverOwnerMemory(next), state).catch(() => {}); });
+    try {
+      await page.addScriptTag({ content: compiled.outputFiles[0].text });
+      await run(page);
+    } finally { unsubscribe(); unsubscribeOwner(); }
+  } finally { signal.removeEventListener('abort', cancel); f.disconnect(); await browser.close(); }
 }

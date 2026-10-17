@@ -67,9 +67,9 @@ function profile(value: unknown): LayeredMemoryProfile | null {
   if (!entries.length) throw invalid();
   return { versionId: identifier(entry.version_id), systemGenerated: true, updatedAt, entries };
 }
-export function layeredMemory(value: unknown, contactId: string): LayeredMemory {
+export function layeredMemory(value: unknown, contactId: string | null): LayeredMemory {
   const entry = record(record(value).layered_memory), budget = record(entry.budget);
-  if (entry.schema_version !== 2 || entry.scope_kind !== 'contact' || identifier(entry.contact_id) !== contactId
+  if (entry.schema_version !== 2 || entry.scope_kind !== (contactId === null ? 'owner' : 'contact') || (contactId === null ? entry.contact_id !== null : identifier(entry.contact_id) !== contactId)
     || typeof entry.enabled !== 'boolean' || typeof entry.maintenance_pending !== 'boolean') throw invalid();
   const maxModelCalls = integer(budget.max_model_calls), modelCallsUsed = integer(budget.model_calls_used),
     modelCallsRemaining = integer(budget.model_calls_remaining);
@@ -101,7 +101,7 @@ export function layeredMemory(value: unknown, contactId: string): LayeredMemory 
   if (integer(entry.model_calls_used) !== modelCallsUsed || modelCallLimit !== maxModelCalls
     || (workId === null && (workRevision !== 0 || currentBatch !== 0 || modelCallsUsed !== 0))
     || (workId !== null && workRevision === 0)) throw invalid();
-  return { schemaVersion: 2, scopeKind: 'contact', contactId, settingsGeneration: integer(entry.settings_generation), enabled: entry.enabled,
+  return { schemaVersion: 2, scopeKind: contactId === null ? 'owner' : 'contact', contactId, settingsGeneration: integer(entry.settings_generation), enabled: entry.enabled,
     mappingCursor, mappingNextCursor, maintenancePending: entry.maintenance_pending, scenarioMappings,
     qualityStatus, status: enumeration(entry.status, ['disabled', 'ready', 'empty', 'failed', 'updating', 'stale', 'blocked', 'paused']),
     workId, workRevision, currentBatch, modelCallsUsed, modelCallLimit,

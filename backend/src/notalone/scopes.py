@@ -37,3 +37,19 @@ class VerifiedConversationScope:
             raise TypeError(
                 "owner_id、contact_id 和 conversation_binding_id 必须是 UUID。",
             )
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerScope:
+    """本人整理范围；不授权任何联系人正文读取。"""
+
+    owner_id: UUID
+    contact_id: None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.owner_id, UUID) or self.contact_id is not None:
+            raise TypeError("本人范围只接受owner UUID。")
+
+
+def organization_scope(owner_id: UUID, contact_id: UUID | None) -> ContactScope | OwnerScope:
+    return OwnerScope(owner_id) if contact_id is None else ContactScope(owner_id, contact_id)

@@ -6,6 +6,7 @@ import './memory.css';
 import { SourceDeletionPanel } from './SourceDeletionPanel';
 import { MemoryTemporalStatus } from './MemoryTemporalStatus';
 import { MemoryList } from './MemoryList';
+import { OwnerLayeredMemoryPanel } from './OwnerLayeredMemoryPanel';
 import { LayeredMemoryPanel } from './LayeredMemoryPanel';
 import type { LayeredMemoryManagementRequest } from '../shared/memory-bridge';
 import { TracePanel, useTraceReading } from './TracePanel';
@@ -89,7 +90,7 @@ function useMemoryReading(session: ContactSessionView) {
       }
     }
   }
-  async function manageLayeredMemory(action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, options?: Pick<LayeredMemoryManagementRequest, 'purposeConfirmed' | 'workRevision' | 'organizationGeneration' | 'profileVersionId'>) {
+  async function manageLayeredMemory(action: LayeredMemoryManagementRequest['action'], settingsGeneration: number, options?: Pick<LayeredMemoryManagementRequest, 'purposeConfirmed' | 'workRevision' | 'organizationGeneration' | 'profileVersionId' | 'scenarioVersionId'>) {
     const { selectedContactId, scopeRevision } = scope.current;
     if (!selectedContactId) return;
     setError('');
@@ -530,7 +531,7 @@ export function OwnerFactsOverview({ overview, memories, contactId, refresh, ope
 }
 
 const memoryViews = { contact: '联系人记忆', owner: '本人记忆', pending: '待确认候选',
-  layeredMemory: '主题资料', overview: '联系人概览', ownerOverview: '本人概览', sources: '来源与过程' } as const;
+  ownerLayeredMemory: '本人主题资料', layeredMemory: '主题资料', overview: '联系人概览', ownerOverview: '本人概览', sources: '来源与过程' } as const;
 type MemoryView = keyof typeof memoryViews;
 
 export function MemoryPage({ session, navigate }: { session: ContactSessionView; navigate: (page: ManagerPage) => void }) {
@@ -540,7 +541,7 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
   const activeScope = useRef(scopeKey);
   activeScope.current = scopeKey;
   const [selection, setSelection] = useState<{ scope: string; view: MemoryView }>({ scope: scopeKey, view: 'contact' });
-  const view = selection.scope === scopeKey ? selection.view : 'contact';
+  const view = selection.view === 'ownerLayeredMemory' ? selection.view : selection.scope === scopeKey ? selection.view : 'contact';
   const tracePanel = useRef<HTMLDivElement>(null);
   const selectView = (next: MemoryView) => setSelection({ scope: scopeKey, view: next });
   const trace = (kind: TraceRecordKind, id: string) => {
@@ -557,10 +558,11 @@ export function MemoryPage({ session, navigate }: { session: ContactSessionView;
       <option value="" disabled>先确认联系人</option>{session.state.contacts.map((entry) => <option key={entry.contactId} value={entry.contactId}>{entry.displayName}</option>)}</select></label>
       <button className="button" disabled={!contact || [state.contact, state.owner, state.pending, state.sources].some((section) => section.phase === 'loading')}
         onClick={() => void memory.refresh()}>刷新记忆</button></div>
-      {contact && <nav className="memory-tabs" aria-label="记忆分类">{(Object.keys(memoryViews) as MemoryView[]).map((name) =>
-        <button key={name} aria-pressed={view === name} onClick={() => selectView(name)}>{memoryViews[name]}</button>)}</nav>}
+      <nav className="memory-tabs" aria-label="记忆分类">{(Object.keys(memoryViews) as MemoryView[]).filter(name => contact || name === 'ownerLayeredMemory').map((name) =>
+        <button key={name} aria-pressed={view === name} onClick={() => selectView(name)}>{memoryViews[name]}</button>)}</nav>
     </div>
-    {!contact ? <section className="memory-no-contact" aria-label="资料范围未确认"><h2>先确认本次联系人</h2>
+    {view === 'ownerLayeredMemory' && <OwnerLayeredMemoryPanel />}
+    {view === 'ownerLayeredMemory' ? null : !contact ? <section className="memory-no-contact" aria-label="资料范围未确认"><h2>先确认本次联系人</h2>
       <p>选择联系人后，查看该范围的关系记忆、待确认候选与来源，以及当前本人的共享资料。</p>
       <button className="button" onClick={() => navigate('contacts')}>前往联系人目录</button></section>
       : <>

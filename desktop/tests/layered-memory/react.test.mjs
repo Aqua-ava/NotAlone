@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { fixture, payload, readyPayload, profilePayload, ids } from './support.mjs';
 import { withMemoryPage } from './react-support.mjs';
 
-test('当前关系资料页面由用户确认用途后开启主题资料，未知质量不会当作成功', { timeout: 20000 }, async () => {
+test('当前关系资料页面由用户确认用途后开启主题资料，未知质量不会当作成功', { timeout: 20000 }, async (t) => {
   let saved = payload();
   const f = await fixture(async (request) => {
     if (request.path.includes('/layered-memory')) {
@@ -13,7 +13,7 @@ test('当前关系资料页面由用户确认用途后开启主题资料，未�
     return { generation: 1, data: request.path.endsWith('/sources') ? { sources: [] }
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
-  await withMemoryPage(f, async (page) => {
+  await withMemoryPage(f, t.signal, async (page) => {
       await page.getByRole('button', { name: '主题资料', exact: true }).click({ timeout: 3000 });
       const confirm = page.getByRole('checkbox', { name: /确认仅整理/ });
       await confirm.waitFor();
@@ -27,7 +27,7 @@ test('当前关系资料页面由用户确认用途后开启主题资料，未�
   });
 });
 
-test('用户查看系统整理的部分覆盖与段落时间依据，停用回看、重新读取和删除各自生效', { timeout: 20000 }, async () => {
+test('用户查看系统整理的部分覆盖与段落时间依据，停用回看、重新读取和删除各自生效', { timeout: 20000 }, async (t) => {
   let saved = readyPayload();
   const f = await fixture(async (request) => {
     if (request.path.includes('/layered-memory')) {
@@ -38,7 +38,7 @@ test('用户查看系统整理的部分覆盖与段落时间依据，停用回�
     return { generation: 1, data: request.path.endsWith('/sources') ? { sources: [] }
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
-  await withMemoryPage(f, async (page) => {
+  await withMemoryPage(f, t.signal, async (page) => {
     await page.getByRole('button', { name: '主题资料', exact: true }).click();
     await page.getByText('本批主题资料整理成功', { exact: true }).waitFor();
     await page.getByText('合格资料 3 条 · 已覆盖 2 条 · 剩余 1 条', { exact: true }).waitFor();
@@ -63,7 +63,7 @@ test('用户查看系统整理的部分覆盖与段落时间依据，停用回�
   });
 });
 
-test('用户刷新可分别观察空资料与整理失败，失败不会保留旧主题正文', { timeout: 20000 }, async () => {
+test('用户刷新可分别观察空资料与整理失败，失败不会保留旧主题正文', { timeout: 20000 }, async (t) => {
   let count = 0;
   const f = await fixture(async (request) => {
     if (request.path.includes('/layered-memory')) {
@@ -74,7 +74,7 @@ test('用户刷新可分别观察空资料与整理失败，失败不会保留�
     return { generation: 1, data: request.path.endsWith('/sources') ? { sources: [] }
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
-  await withMemoryPage(f, async (page) => {
+  await withMemoryPage(f, t.signal, async (page) => {
     await page.getByRole('button', { name: '主题资料', exact: true }).click();
     await page.getByText('暂无合格资料可整理', { exact: true }).waitFor();
     await page.getByRole('button', { name: '刷新主题资料' }).click();
@@ -87,7 +87,7 @@ test('用户刷新可分别观察空资料与整理失败，失败不会保留�
   });
 });
 
-test('用户逐项查看长期背景与依据，停用仍可回看，并可撤回当前版而不恢复旧版', { timeout: 20000 }, async () => {
+test('用户逐项查看长期背景与依据，停用仍可回看，并可撤回当前版而不恢复旧版', { timeout: 20000 }, async (t) => {
   let saved = profilePayload(), posted;
   const f = await fixture(async (request) => {
     if (request.path.includes('/layered-memory')) {
@@ -99,7 +99,7 @@ test('用户逐项查看长期背景与依据，停用仍可回看，并可撤�
     return { generation: 1, data: request.path.endsWith('/sources') ? { sources: [] }
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
-  await withMemoryPage(f, async (page) => {
+  await withMemoryPage(f, t.signal, async (page) => {
     await page.getByRole('button', { name: '主题资料', exact: true }).click();
     const profile = page.getByRole('region', { name: '长期背景', exact: true });
     await profile.getByText('系统整理', { exact: true }).waitFor({ timeout: 3000 });
@@ -124,7 +124,7 @@ test('用户逐项查看长期背景与依据，停用仍可回看，并可撤�
   });
 });
 
-test('模型调用额度耗尽时显示累计与剩余，刷新后仍暂停并解释额度范围', { timeout: 20000 }, async () => {
+test('模型调用额度耗尽时显示累计与剩余，刷新后仍暂停并解释额度范围', { timeout: 20000 }, async (t) => {
   let refreshed = false;
   const ready = profilePayload();
   const f = await fixture(async (request) => {
@@ -136,7 +136,7 @@ test('模型调用额度耗尽时显示累计与剩余，刷新后仍暂停并�
     return { generation: 1, data: request.path.endsWith('/sources') ? { sources: [] }
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
-  await withMemoryPage(f, async (page) => {
+  await withMemoryPage(f, t.signal, async (page) => {
     await page.getByRole('button', { name: '主题资料', exact: true }).click();
     const paused = page.getByText('当前工作模型调用预算已耗尽，整理已暂停。刷新不会重置预算。', { exact: true });
     await paused.waitFor({ timeout: 3000 });
@@ -151,7 +151,7 @@ test('模型调用额度耗尽时显示累计与剩余，刷新后仍暂停并�
   });
 });
 
-test('模型调用计数缺失或不合法时撤下旧正文，不能显示未经核对的额度', { timeout: 20000 }, async () => {
+test('模型调用计数缺失或不合法时撤下旧正文，不能显示未经核对的额度', { timeout: 20000 }, async (t) => {
   const valid = profilePayload(), budget = valid.layered_memory.budget;
   let saved = valid;
   const f = await fixture(async (request) => {
@@ -159,7 +159,7 @@ test('模型调用计数缺失或不合法时撤下旧正文，不能显示未�
     return { generation: 1, data: request.path.endsWith('/sources') ? { sources: [] }
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
-  await withMemoryPage(f, async (page) => {
+  await withMemoryPage(f, t.signal, async (page) => {
     await page.getByRole('button', { name: '主题资料', exact: true }).click();
     const wrong = [
       { model_calls_used: 3, model_calls_remaining: 0 },
@@ -183,7 +183,7 @@ test('模型调用计数缺失或不合法时撤下旧正文，不能显示未�
   });
 });
 
-test('用户暂停首次覆盖再继续同一工作，显示真实批次且保留先前主题正文', { timeout: 20000 }, async () => {
+test('用户暂停首次覆盖再继续同一工作，显示真实批次且保留先前主题正文', { timeout: 20000 }, async (t) => {
   const posted = [];
   let saved = readyPayload({ status: 'updating', eligible_count: 2, covered_count: 1, remaining_count: 1,
     work_id: ids.work, work_revision: 1, current_batch: 1 });
@@ -205,7 +205,7 @@ test('用户暂停首次覆盖再继续同一工作，显示真实批次且保�
     return { generation: 1, data: request.path.endsWith('/sources') ? { sources: [] }
       : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } };
   });
-  await withMemoryPage(f, async (page) => {
+  await withMemoryPage(f, t.signal, async (page) => {
     await page.getByRole('button', { name: '主题资料', exact: true }).click();
     await page.getByText('正在整理，尚未完成', { exact: true }).waitFor();
     await page.getByRole('button', { name: '暂停整理主题资料', exact: true }).click();
@@ -232,11 +232,11 @@ test('用户暂停首次覆盖再继续同一工作，显示真实批次且保�
   });
 });
 
-test('资料变化显示待更新与真实剩余，后台完成后自动展示新正文', { timeout: 20000 }, async () => {
+test('资料变化显示待更新与真实剩余，后台完成后自动展示新正文', { timeout: 20000 }, async (t) => {
   let saved = readyPayload({ maintenance_pending: true, status: 'stale', covered_count: 0, remaining_count: 3, scenarios: [] });
   const f = await fixture(async (request) => ({ generation: 1, data: request.path.includes('/layered-memory') ? saved
     : request.path.endsWith('/sources') ? { sources: [] } : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } }));
-  try { await withMemoryPage(f, async (page) => {
+  try { await withMemoryPage(f, t.signal, async (page) => {
     await page.getByRole('button', { name: '主题资料', exact: true }).click();
     await page.getByText('资料已变化，等待后台更新。', { exact: true }).waitFor({ timeout: 3000 });
     await page.getByText('合格资料 3 条 · 已覆盖 0 条 · 剩余 3 条', { exact: true }).waitFor();
@@ -246,14 +246,14 @@ test('资料变化显示待更新与真实剩余，后台完成后自动展示�
   }); } finally { f.disconnect(); }
 });
 
-test('旧主题入口展示拆分后的合法终端并导航到当前版本', { timeout: 20000 }, async () => {
+test('旧主题入口展示拆分后的合法终端并导航到当前版本', { timeout: 20000 }, async (t) => {
   const first = readyPayload().layered_memory.scenarios[0];
   const saved = readyPayload({ scenario_mappings: [{ source_scenario_id: ids.other, source_version_id: ids.work,
     targets: [{ scenario_id: ids.scenario, version_id: ids.version }, { scenario_id: ids.memory, version_id: ids.contact }] }],
     scenarios: [first, { ...first, scenario_id: ids.memory, version_id: ids.contact, title: '合成写作计划' }] });
   const f = await fixture(async (request) => ({ generation: 1, data: request.path.includes('/layered-memory') ? saved
     : request.path.endsWith('/sources') ? { sources: [] } : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } }));
-  try { await withMemoryPage(f, async (page) => {
+  try { await withMemoryPage(f, t.signal, async (page) => {
     await page.getByRole('button', { name: '主题资料', exact: true }).click();
     await page.getByText('查看旧主题入口的当前去向', { exact: true }).click({ timeout: 3000 });
     await page.getByText(`旧主题：${ids.other} · 旧版本：${ids.work}`, { exact: true }).waitFor();
@@ -264,7 +264,7 @@ test('旧主题入口展示拆分后的合法终端并导航到当前版本', { 
   }); } finally { f.disconnect(); }
 });
 
-test('旧入口分页只显示当前页，可查看最旧入口并返回首屏', { timeout: 20000 }, async () => {
+test('旧入口分页只显示当前页，可查看最旧入口并返回首屏', { timeout: 20000 }, async (t) => {
   const first = readyPayload({ mapping_cursor: null, mapping_next_cursor: '1:100' });
   const last = readyPayload({ mapping_cursor: '1:100', mapping_next_cursor: null,
     scenario_mappings: [{ source_scenario_id: ids.other, source_version_id: ids.work,
@@ -272,7 +272,7 @@ test('旧入口分页只显示当前页，可查看最旧入口并返回首屏',
   const f = await fixture(async (request) => ({ generation: 1, data: request.path.includes('/layered-memory')
     ? request.path.includes('mapping_cursor=') ? last : first
     : request.path.endsWith('/sources') ? { sources: [] } : request.path.endsWith('/memory-candidates') ? { candidates: [] } : { memories: [] } }));
-  await withMemoryPage(f, async (page) => {
+  await withMemoryPage(f, t.signal, async (page) => {
     await page.getByRole('button', { name: '主题资料', exact: true }).click();
     await page.getByRole('button', { name: '下一页旧入口', exact: true }).click({ timeout: 3000 });
     await page.getByText('查看旧主题入口的当前去向', { exact: true }).click();

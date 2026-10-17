@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { build } from 'esbuild';
 
 const compiled = await build({ stdin: { contents: `
+  export { TraceController } from './src/main/traces/controller';
   export { ContactSession } from './src/main/contacts/session';
   export { installMemoryBridge } from './src/main/memory/bridge';
   export { createMemoryBridge } from './src/preload/memory';
@@ -12,6 +13,7 @@ const compiledModule = { exports: {} };
 new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(createRequire(import.meta.url), compiledModule, compiledModule.exports);
 const ports = compiledModule.exports;
 export const BackendRequestFailure = ports.BackendRequestFailure;
+export const TraceController = ports.TraceController;
 export const ids = { work: '66666666-6666-4666-8666-666666666666', contact: '11111111-1111-4111-8111-111111111111', other: '99999999-9999-4999-8999-999999999999',
   scenario: '22222222-2222-4222-8222-222222222222', version: '33333333-3333-4333-8333-333333333333', memory: '44444444-4444-4444-8444-444444444444', profile: '55555555-5555-4555-8555-555555555555' };
 export function payload(overrides = {}) {
@@ -23,15 +25,15 @@ export function payload(overrides = {}) {
     updated_at: null, error_code: null, purpose: '从本联系人合法已采纳记忆整理主题背景，供核对及后续回复使用。',
     budget: { max_memories: 0, max_scenarios: 0, max_paragraphs: 0, max_characters: 0, max_model_calls: 0, model_calls_used: 0, model_calls_remaining: 0 }, scenarios: [], profile: null, ...overrides } };
 }
-export async function fixture(requestJson) {
+export async function fixture(requestJson, { noContact = false } = {}) {
   let generation = 1;
   const backendListeners = new Set();
   const backend = { getConnectionGeneration: () => generation, requestJson,
     onStateChanged: (listener) => { backendListeners.add(listener); return () => backendListeners.delete(listener); } };
   const contacts = new ports.ContactSession(async () => ({ generation,
-    contacts: [ids.contact, ids.other].map((contactId) => ({ contactId, displayName: '合成主题联系人', messageCount: 0, sourceCount: 0 })) }));
+    contacts: (noContact ? [] : [ids.contact, ids.other]).map((contactId) => ({ contactId, displayName: '合成主题联系人', messageCount: 0, sourceCount: 0 })) }));
   contacts.setConnection(generation); await contacts.refreshContacts();
-  contacts.selectContact({ contactId: ids.contact, scopeRevision: contacts.getState().scopeRevision });
+  if (!noContact) contacts.selectContact({ contactId: ids.contact, scopeRevision: contacts.getState().scopeRevision });
   const handlers = new Map(), listeners = new Map();
   const controller = ports.installMemoryBridge({ handle: (name, handler, role) => handlers.set(name, { handler, role }),
     publish: (channel, state) => { for (const listener of listeners.get(channel) ?? []) listener(null, state); } }, backend, contacts);
