@@ -154,7 +154,7 @@ class PostgresLayeredMemoryStore(LayeredProfileStore, LayeredCorrectionStore):
                 profile = self.profile_document(self.profile_row(connection,scope,manifest['profile_version_id']))
             state['profile'] = profile
             state['feedback'] = [{"id": str(row['id']), "target_kind": row['target_kind'],
-                "version_id": str(row['version_id']), "item_index": row['item_index'],
+                "version_id": str(row['version_id']) if row['version_id'] else None, "item_index": row['item_index'],
                 "reason": row['reason'], "state": row['state']} for row in self.feedback_rows(connection, scope)]
             state['protected_count'] = len(self.eligible(overview)) - len(self.unprotected(connection, scope, self.eligible(overview)))
             return state, self.eligible(overview), [self._document(row) for row in rows], job

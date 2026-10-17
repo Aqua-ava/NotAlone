@@ -371,8 +371,11 @@ class PostgresSourceDeletionRepository:
                     or has_correction_dependencies(connection, owner_id=owner_id, source_id=source_document_id)
                     or connection.execute(
                         "SELECT EXISTS(SELECT 1 FROM public.layered_memory_batch "
+                        "WHERE owner_id=%s AND dependency_ids @> ARRAY[%s]::uuid[]) OR "
+                        "EXISTS(SELECT 1 FROM public.layered_memory_feedback WHERE owner_id=%s "
+                        "AND dependency_ids @> ARRAY[%s]::uuid[]) OR EXISTS(SELECT 1 FROM public.layered_profile_batch "
                         "WHERE owner_id=%s AND dependency_ids @> ARRAY[%s]::uuid[])",
-                        (owner_id, source_document_id),
+                        (owner_id, source_document_id) * 3,
                     ).fetchone()[0]
                 ):
                     raise SourceDeletionVerificationError(

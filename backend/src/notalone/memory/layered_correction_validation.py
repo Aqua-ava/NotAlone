@@ -11,6 +11,9 @@ def validate_correction_proposal(work, proposal, *, profile=False):
         raise ValueError('反馈后未能机验的标题或目录含义不得自动发布。')
     for items in groups:
         for item in items:
+            if profile and (item['temporal_status'] != 'uncertain'
+                    or item['uncertainty'] != '当前状态按原资料保留，未额外核实。'):
+                raise ValueError('反馈后保守背景不得补写时间核实或新推断。')
             references = item['references']
             key = (references[0]['memory_id'], references[0]['revision']) if len(references) == 1 else None
             memory = memories.get(key)

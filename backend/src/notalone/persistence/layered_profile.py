@@ -60,14 +60,22 @@ class LayeredProfileStore:
             if not generation or not rows:
                 return None
             ids = tuple(row["id"] for row in rows)
+            allowed = self.unprotected(connection, scope, self.eligible(overview))
+            allowed_ids = {str(entry.memory.memory_id) for entry in allowed}
+            # 冻结集合仍绑定全部当前版本；实际语义输入只读取可证明独立的主题。
+            input_rows = [row for row in rows if all(ref['memory_id'] in allowed_ids
+                for paragraph in row['paragraphs'] for ref in paragraph['references'])]
+            if not input_rows:
+                connection.execute("UPDATE public.layered_memory_job SET profile_status='not_required' WHERE task_id=%s", (claim.task_id,))
+                return None
             # 全部实际读入L2批次的底层版本和隐藏依赖都继承，不能从直接引用反推。
-            by_id = {item["memory_id"]: item for row in rows for item in row["input_manifest"]}
-            entries = tuple(entry for entry in self.unprotected(connection, scope, self.eligible(overview)) if str(entry.memory.memory_id) in by_id)
+            by_id = {item["memory_id"]: item for row in input_rows for item in row["input_manifest"]}
+            entries = tuple(entry for entry in allowed if str(entry.memory.memory_id) in by_id)
             manifest = self._manifest(connection,scope,entries)
             if {item["memory_id"]: item for item in manifest} != by_id:
                 raise LayeredMemoryConflict("主题的底层实际版本已失效。")
             memories = tuple(self._input(entry) for entry in entries)
-            scenarios = tuple(self._document(row) for row in rows)
+            scenarios = tuple(self._document(row) for row in input_rows)
             corrections = self.correction_context(connection, scope)
             payload = {"scenarios": list(scenarios), "memories": [item.to_payload() for item in memories], 'corrections': corrections}
             if len(json.dumps(payload,ensure_ascii=False)) > budget.max_characters:
@@ -109,7 +117,7 @@ class LayeredProfileStore:
                     "AND status='running' AND lease_expires_at>%s AND work_key<>%s",
                     (scope.owner_id,scope.contact_id,now,key)).fetchone():
                 return None
-            dependencies = sorted({id for row in rows for id in row["dependency_ids"]})
+            dependencies = sorted({id for row in input_rows for id in row["dependency_ids"]})
             dependencies = sorted(set(dependencies) | {id for row in self.feedback_rows(connection, scope) for id in row['dependency_ids']})
             token, id = uuid4(), previous["id"] if previous else uuid4()
             if previous:

@@ -1,6 +1,7 @@
 """两类整理纠错走公开HTTP，使用正式迁移及自有合成资料。"""
 
 import unittest
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from notalone.scopes import ContactScope
@@ -18,7 +19,8 @@ class CorrectionProposal(scenario_support.EchoProposal):
         result = super().propose(memories=memories, budget=budget, deadline=deadline)
         self.corrections.append(corrections)
         if corrections:
-            result['scenarios'][0].update(title='已核对的补充资料', hint='独立资料的原文背景。')
+            result['scenarios'][0].update(topic_key='supplement-' + str(memories[0].memory_id),
+                title='已核对的补充资料', hint='独立资料的原文背景。')
         return result
 
 
@@ -26,6 +28,19 @@ class CorrectionVerification(scenario_support.ControlledVerification):
     def verify(self, *, memories, proposal, deadline, corrections=()):
         self.corrections = corrections
         return super().verify(memories=memories, proposal=proposal, deadline=deadline)
+
+
+class CorrectionProfileProposal(profile_support.ProfileProposal):
+    def propose(self, *, scenarios, memories, budget, deadline, corrections=()):
+        self.inputs.append((scenarios, memories))
+        return {'entries': [{'text': memories[0].text, 'temporal_status': 'uncertain',
+            'uncertainty': '当前状态按原资料保留，未额外核实。',
+            'references': [{'memory_id': str(memories[0].memory_id), 'revision': memories[0].revision}]}]}
+
+
+class CorrectionProfileVerification(profile_support.ProfileVerification):
+    def verify(self, *, scenarios, memories, proposal, deadline, corrections=()):
+        return super().verify(scenarios=scenarios, memories=memories, proposal=proposal, deadline=deadline)
 
 
 class LayeredMemoryCorrectionHttpTest(MemoryOverviewHttpFixture, unittest.TestCase):
@@ -132,3 +147,59 @@ class LayeredMemoryCorrectionHttpTest(MemoryOverviewHttpFixture, unittest.TestCa
         self.assertTrue(self.service.validate(snapshot))
         read = self.service.read_scenario(snapshot, UUID(kept['scenario_id']), (0, 1))
         self.assertEqual(read['paragraphs'][0]['text'], kept['paragraphs'][0]['text'])
+
+    def test_two_stage_source_erasure_prunes_guard_after_unreferenced_comparison_input(self):
+        from threading import Event
+        contact, source_a, message_a = self.import_contact('合成主要依据。')
+        self.confirm(contact, '双方共同参加合成课程。', message_a)
+        _, source_b, message_b = self.import_contact('合成未引用对照依据。', contact_id=contact,
+            when=datetime(2024, 2, 1, tzinfo=timezone.utc))
+        self.confirm(contact, '双方另有合成比较事实。', message_b)
+        backend = self.controlled(proposer=CorrectionProposal(), verifier=CorrectionVerification())
+        ready = self.enable(backend, contact)
+        path = f'/api/contacts/{contact}/layered-memory'
+        status, result = backend.request(path + '/summary-error', self.summary_command(ready))
+        self.assertEqual(status, 200, result)
+        correction_revision = result['layered_memory']['correction_revision']
+        for index, source in enumerate((source_b, source_a)):
+            status, result = self.backend.request(f'/api/contacts/{contact}/sources/{source}', method='DELETE')
+            self.assertEqual(status, 202, result)
+            for _ in range(60):
+                sources = self._get(self.backend, f'/api/contacts/{contact}/sources')['sources']
+                if next(row for row in sources if row['source_id'] == source)['status'] == 'deleted':
+                    break
+                Event().wait(.05)
+            else:
+                self.fail('自有合成来源物理删除未完成')
+            state = self._get(backend, path)['layered_memory']
+            if index == 0:
+                self.assertEqual(state['feedback'][0]['state'], 'erased_guard')
+                self.assertIsNone(state['feedback'][0]['reason'])
+                self.assertGreater(state['correction_revision'], correction_revision)
+                correction_revision = state['correction_revision']
+            else:
+                self.assertEqual(state['feedback'], [], '最后合法依据删除后不得留永久私密保护')
+                self.assertGreater(state['correction_revision'], correction_revision)
+
+    def test_owner_profile_feedback_keeps_l1_and_new_independent_profile_usable(self):
+        from notalone.memory.layered import OrganizationBudget
+        backend = profile_support.LayeredProfileHttpTest.controlled(self,
+            scenario_proposer=CorrectionProposal(), scenario_verifier=CorrectionVerification(),
+            profile_proposer=CorrectionProfileProposal(), profile_verifier=CorrectionProfileVerification(),
+            budget=OrganizationBudget(max_model_calls=4, max_characters=12000))
+        self.backend.request('/api/memories/manual-owner', {'text': '本人完成合成课程。', 'category': 'common_fact'})
+        path = '/api/memories/owner/layered-memory'
+        status, response = backend.request(path + '/enable', {'settings_generation': 0, 'purpose_confirmed': True})
+        self.assertEqual(status, 200, response)
+        ready = response['layered_memory']
+        self.assertIsNotNone(ready['profile'])
+        command = self.summary_command(ready, kind='profile')
+        status, response = backend.request(path + '/summary-error', command)
+        self.assertEqual(status, 200, response)
+        self.assertIsNone(response['layered_memory']['profile'])
+        self.assertEqual(response['layered_memory']['scenarios'], ready['scenarios'])
+        self.backend.request('/api/memories/manual-owner', {'text': '本人另有独立合成背景。', 'category': 'common_fact'})
+        status, response = backend.request(path + '/refresh', {'settings_generation': ready['settings_generation']})
+        self.assertEqual(status, 200, response)
+        self.assertIsNotNone(response['layered_memory']['profile'], response)
+        self.assertEqual(response['layered_memory']['profile']['entries'][0]['text'], '本人另有独立合成背景。')

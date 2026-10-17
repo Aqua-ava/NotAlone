@@ -12,7 +12,7 @@ CREATE TABLE public.layered_memory_feedback (
     request_digest text,
     settings_generation bigint NOT NULL,
     target_kind text NOT NULL CHECK(target_kind IN ('scenario','profile')),
-    version_id uuid NOT NULL,
+    version_id uuid,
     item_index integer NOT NULL CHECK(item_index>=0),
     reason text CHECK(length(reason)<=500),
     rejected_text text,
@@ -28,25 +28,61 @@ CREATE TABLE public.layered_memory_feedback (
     CHECK(state='active' OR (reason IS NULL AND rejected_text IS NULL AND input_manifest='[]' AND cardinality(dependency_ids)=0))
 );
 
--- 从产生时接入原事务：来源排队删除、旧资料变化都先清敏感反馈及对照。
+-- 手录的共享source不构成错误身份；只保留仍有合法活动叶的原手录根。
+CREATE FUNCTION public.live_layered_manual_guard_ids(affected_owner uuid, affected_contact uuid, identifiers uuid[])
+RETURNS uuid[] LANGUAGE sql STABLE AS $$
+    WITH RECURSIVE records AS (
+        SELECT id,supersedes_memory_id,status,source_ids FROM public.confirmed_memory
+        WHERE owner_id=affected_owner AND contact_id=affected_contact
+        UNION ALL SELECT id,supersedes_memory_id,status,source_ids FROM public.owner_memory
+        WHERE owner_id=affected_owner AND affected_contact IS NULL
+    ), chain AS (
+        SELECT r.id,r.id AS root FROM records r WHERE r.id=ANY(identifiers)
+          AND (r.source_ids=ARRAY[affected_owner] OR EXISTS(SELECT 1 FROM public.source_document d
+              WHERE d.id=ANY(r.source_ids) AND d.owner_id=affected_owner AND d.source_type='manual' AND d.status='active'))
+        UNION SELECT r.id,c.root FROM records r JOIN chain c ON r.supersedes_memory_id=c.id
+    ) SELECT ARRAY(SELECT DISTINCT c.root FROM chain c JOIN records r ON r.id=c.id WHERE r.status='active');
+$$;
+
+CREATE FUNCTION public.bump_layered_correction_revision(affected_owner uuid, affected_contact uuid)
+RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO public.layered_memory_generation(owner_id,contact_id,organization_generation,schema_version,
+        scenario_version_ids,profile_version_id,dependency_ids)
+    SELECT g.owner_id,g.contact_id,g.organization_generation+1,g.schema_version,g.scenario_version_ids,g.profile_version_id,g.dependency_ids
+    FROM public.layered_memory_generation g JOIN public.layered_memory_state s
+      ON s.owner_id=g.owner_id AND s.contact_id IS NOT DISTINCT FROM g.contact_id AND s.organization_generation=g.organization_generation
+    WHERE s.owner_id=affected_owner AND s.contact_id IS NOT DISTINCT FROM affected_contact;
+    UPDATE public.layered_memory_state SET correction_revision=correction_revision+1,
+        organization_generation=organization_generation+1,dirty_revision=dirty_revision+1,
+        next_due_at=COALESCE(next_due_at,clock_timestamp()+interval '350 milliseconds')
+    WHERE owner_id=affected_owner AND contact_id IS NOT DISTINCT FROM affected_contact;
+END; $$;
+
+-- 从产生时接入原事务；每轮重算所有旧guard，不能依赖已擦空的敏感依赖数组。
 ALTER FUNCTION public.erase_layered_memory_dependencies(uuid,uuid[]) RENAME TO erase_layered_memory_dependencies_v77;
 CREATE FUNCTION public.erase_layered_memory_dependencies(affected_owner uuid, identifiers uuid[])
 RETURNS void LANGUAGE plpgsql AS $$
+DECLARE feedback record; messages uuid[]; memories uuid[]; erase_body boolean;
 BEGIN
-    WITH erased AS (
-        UPDATE public.layered_memory_feedback SET reason=NULL,rejected_text=NULL,request_digest=NULL,
-            input_manifest='[]',dependency_ids='{}',state='erased_guard'
-        WHERE owner_id=affected_owner AND dependency_ids && identifiers RETURNING contact_id
-    ) UPDATE public.layered_memory_state s SET correction_revision=correction_revision+1,
-        organization_generation=organization_generation+1,dirty_revision=dirty_revision+1,
-        next_due_at=COALESCE(next_due_at,clock_timestamp()+interval '350 milliseconds')
-        WHERE s.owner_id=affected_owner AND EXISTS(SELECT 1 FROM erased e WHERE e.contact_id IS NOT DISTINCT FROM s.contact_id);
+    FOR feedback IN SELECT * FROM public.layered_memory_feedback WHERE owner_id=affected_owner
+        AND (state='erased_guard' OR dependency_ids && identifiers) LOOP
+        erase_body:=feedback.state='active';
+        SELECT ARRAY(SELECT DISTINCT r.message_id FROM public.message_source_ref r WHERE r.owner_id=affected_owner
+          AND r.message_id=ANY(feedback.protected_message_ids) AND (
+            EXISTS(SELECT 1 FROM public.source_document d WHERE d.id=r.source_document_id AND d.status='active') OR
+            EXISTS(SELECT 1 FROM public.local_wechat_observation o WHERE o.id=r.observation_id))) INTO messages;
+        memories:=public.live_layered_manual_guard_ids(affected_owner,feedback.contact_id,feedback.protected_memory_ids);
+        IF erase_body OR messages IS DISTINCT FROM feedback.protected_message_ids OR memories IS DISTINCT FROM feedback.protected_memory_ids THEN
+            PERFORM public.bump_layered_correction_revision(affected_owner,feedback.contact_id);
+            IF cardinality(messages)+cardinality(memories)=0 THEN
+                DELETE FROM public.layered_memory_feedback WHERE id=feedback.id;
+            ELSE
+                UPDATE public.layered_memory_feedback SET reason=NULL,rejected_text=NULL,request_digest=NULL,version_id=NULL,
+                    input_manifest='[]',dependency_ids='{}',state='erased_guard',protected_memory_ids=memories,protected_message_ids=messages
+                WHERE id=feedback.id;
+            END IF;
+        END IF;
+    END LOOP;
     PERFORM public.erase_layered_memory_dependencies_v77(affected_owner,identifiers);
-    DELETE FROM public.layered_memory_feedback f WHERE f.owner_id=affected_owner AND f.state='erased_guard'
-        AND NOT EXISTS(SELECT 1 FROM public.message_source_ref r WHERE r.owner_id=f.owner_id
-            AND r.message_id=ANY(f.protected_message_ids) AND (
-                EXISTS(SELECT 1 FROM public.source_document d WHERE d.id=r.source_document_id AND d.status='active') OR
-                EXISTS(SELECT 1 FROM public.local_wechat_observation o WHERE o.id=r.observation_id)))
-        AND NOT EXISTS(SELECT 1 FROM public.confirmed_memory m WHERE m.owner_id=f.owner_id AND m.id=ANY(f.protected_memory_ids))
-        AND NOT EXISTS(SELECT 1 FROM public.owner_memory m WHERE m.owner_id=f.owner_id AND m.id=ANY(f.protected_memory_ids));
 END; $$;
