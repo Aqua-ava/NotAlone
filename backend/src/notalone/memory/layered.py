@@ -110,6 +110,10 @@ class LayeredMemoryPort(Protocol):
 
     def validate(self, snapshot: LayeredMemorySnapshot) -> bool: ...
 
+    def validate_in_transaction(self, connection, snapshot: LayeredMemorySnapshot) -> bool:
+        """调用方已持owner锁；复用原连接复验，不另开连接或锁。"""
+        ...
+
 
 class ProfileProposalPort(Protocol):
     timeout_contract: OrganizationAdapterTimeoutContract

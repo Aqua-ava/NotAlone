@@ -31,6 +31,36 @@ function RetrievalSummary({ receipt }: { receipt: ReplyRetrievalReceipt | null |
   </section>;
 }
 
+function LayeredSummary({ state }: { state: ReplyEvidenceState }) {
+  const context = state.layeredContext;
+  if (!context) {
+    const reasons = { not_allowed: '本次未授权加载系统整理资料。', unavailable: '本次系统整理资料不可用，未加入生成。',
+      budget_omitted: '本次系统整理资料因预算限制未加入生成。', quality_closed: '本次系统整理资料未获质量资格，未加入生成。',
+      loaded: '本次分层依据缺失，不补填后来资料。' };
+    return <p>{state.layeredStatus ? reasons[state.layeredStatus] : '本次快照未记录分层资料，不补填后来资料。'}</p>;
+  }
+  const temporalNames = { stable: '稳定事实或明确偏好', historical: '历史资料', uncertain: '不确定' };
+  return <section aria-label="本次系统整理资料">
+    <h4>系统整理 · 本次实际加入的联系人背景与主题目录</h4>
+    <p>生成时设置版本：{context.settingsGeneration}；整理版本：{context.organizationGeneration}。</p>
+    <p>背景版本：{context.profileVersionId ?? '本次未加入长期背景'}。</p>
+    <p>独立预算上限：背景 {context.budget.profileEntries} 条，目录 {context.budget.directoryEntries} 项，{context.budget.characters} 字符。</p>
+    {context.profileEntries.map((entry, index) => <article key={index}>
+      <p>{entry.text}</p><p>生成时状态：{temporalNames[entry.temporalStatus]}</p>
+      {entry.uncertainty && <p>不确定性：{entry.uncertainty}</p>}
+      {entry.references.map((ref) => <div key={`${ref.memoryId}:${ref.revision}`}>
+        <p>底层资料：{ref.memoryId}；版本：{ref.revision}；{ref.provenanceKind === 'manual_entry' ? '手动录入' : '来源支持'}。</p>
+        <MemoryTemporalStatus timing={ref.timing} snapshot />
+        <p>保存时间：{ref.timing.recordedAt ?? '未知'}；来源时间：{ref.timing.sourceStartedAt ?? '未知'} 至 {ref.timing.sourceEndedAt ?? '未知'}{ref.timing.sourceTimeComplete ? '' : '（不完整）'}。</p>
+      </div>)}
+    </article>)}
+    <p>本次仅加载主题目录，未读取主题正文。</p>
+    {context.directory.map((entry) => <article key={entry.scenarioId}>
+      <strong>{entry.title}</strong><p>{entry.hint}</p><p>目录版本：{entry.versionId}；正文 {entry.paragraphCount} 段（未读取）。</p>
+    </article>)}
+  </section>;
+}
+
 export function useReplyEvidence() {
   return useRevisionedSession<ReplyEvidenceState>({ revision: -1, scopeRevision: 0, contactId: null,
     replyRequestId: null, candidateId: null, phase: 'idle', items: [] }, subscription);
@@ -58,6 +88,7 @@ export function ReplyEvidence({ evidence, selection, candidate, number, waiting 
       {state.phase === 'missing' && <p role="status">本次依据不存在或已删除，无法恢复原正文。</p>}
       {state.phase === 'ready' && <>
         <RetrievalSummary receipt={state.retrieval} />
+        <LayeredSummary state={state} />
         <ReplyBasisChangeNotice changes={state.basisChanges} />
         {candidate.citationIds.some((id) => !state.items.some((item) => item.evidenceId === id)) && <p>部分引用缺失，不补填后来资料。</p>}
         {!state.items.length && <p>本次没有可展示的依据。</p>}

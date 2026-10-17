@@ -31,6 +31,8 @@ class ReplyEvidenceService:
             raise ReplyStoreInvariantError("回复检索回执与保存依据不一致。") from None
         return {
             "reply_request_id": str(request_id),
+            "layered_context": stored.layered_context,
+            "layered_status": stored.layered_status,
             **({"retrieval": stored.retrieval.to_payload()} if stored.retrieval else {}),
             **({"basis_changes": [change.to_payload() for change in stored.result.basis_changes]}
                if stored.result.basis_changes else {}),

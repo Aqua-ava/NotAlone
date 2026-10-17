@@ -69,6 +69,9 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
             erased = False
             for batch in batches:
                 if any(current.get(item["memory_id"]) != item for item in batch["input_manifest"]):
+                    from notalone.persistence.reply_layered_cleanup import erase_layered_reply_dependencies
+                    erase_layered_reply_dependencies(connection, scope,
+                        [UUID(item["memory_id"]) for item in batch["input_manifest"]])
                     connection.execute("DELETE FROM public.layered_memory_batch WHERE id=%s", (batch["id"],))
                     erased = True
             for job in current_job(connection,scope):
@@ -185,6 +188,15 @@ class PostgresLayeredMemoryStore(LayeredProfileStore):
                 if not state["enabled"]:
                     raise LayeredMemoryConflict("本联系人尚未开启整理。")
                 return
+            # 删除整理结果清除实际使用副本；停用保留合法历史回看。
+            from notalone.persistence.reply_cleanup import delete_source_replies
+            version_rows = connection.execute(
+                "SELECT id FROM public.scenario_document_version WHERE owner_id=%s AND contact_id=%s "
+                "UNION SELECT id FROM public.layered_profile_version WHERE owner_id=%s AND contact_id=%s",
+                (scope.owner_id, scope.contact_id, scope.owner_id, scope.contact_id)).fetchall()
+            if action == "delete" and version_rows:
+                delete_source_replies(connection, owner_id=scope.owner_id, contact_id=scope.contact_id,
+                    removed_ids={row["id"] for row in version_rows}, revoke_running_scope=False)
             cancel_jobs(connection,scope,erase=action=='delete')
             if action=='delete':
                 connection.execute("DELETE FROM public.layered_memory_generation WHERE owner_id=%s AND contact_id=%s",

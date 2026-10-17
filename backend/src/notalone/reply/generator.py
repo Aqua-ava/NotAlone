@@ -130,6 +130,8 @@ class ReplyGenerator:
             self._mark_failed(request, "context_failed")
             raise ReplyContextError("候选回复上下文准备失败。") from None
         try:
+            if context.layered_context is not None:
+                context = self._context.fit_budget(context, validate=self._runtime.validate_prepared)
             self._validate_context(command, context)
             self._validate_current_context(context)
             self._store.prepare_context(request, context)
@@ -142,7 +144,11 @@ class ReplyGenerator:
         started_ns = time.perf_counter()
         called_at = datetime.now(timezone.utc)
         try:
-            with model_request_scope(lambda: self._store.require_current(request)):
+            def validate_request():
+                self._store.require_current(request)
+                self._validate_current_context(context)
+
+            with model_request_scope(validate_request):
                 runtime_result = self._runtime.generate(context)
         except ReplyRunError:
             self._mark_failed(request, "runtime_failed")

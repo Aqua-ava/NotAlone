@@ -9,6 +9,8 @@ from uuid import UUID, uuid4
 
 from notalone.reply.expression_preference_models import ExpressionPreference
 from notalone.reply.assistant_discussion import DiscussionContext
+from notalone.reply.layered_context import LayeredReplyMaterial, LayeredReplyBudget, select_material, require_material
+from notalone.memory.layered import LayeredMemoryPort
 from notalone.memory.timing import MemoryTiming
 from notalone.memory.models import ConfirmedMemory, OwnerMemory
 from notalone.memory.overview import OverviewEntry, RelationshipOverview, RelationshipOverviewPort
@@ -246,6 +248,8 @@ class ReplyContext:
     assistant_discussion: DiscussionContext | None = None
     continuation_basis: ContinuedReplyCandidate | None = None
     retrieval: ReplyRetrievalReceipt | None = None
+    layered_context: LayeredReplyMaterial | None = None
+    layered_status: str = "quality_closed"
 
     expression_preferences: tuple[ExpressionPreference, ...] = ()
     expression_preference_revision: int | None = None
@@ -268,6 +272,7 @@ class ReplyContext:
                 for item in self.evidence
             )
             or (not allows_history(self.command) and bool(self.style_references))
+            or (not allows_history(self.command) and self.layered_context is not None)
         )
 
 
@@ -322,6 +327,8 @@ class RetrievalReplyContext:
         "_skill_revision_reader",
         "_style_references",
         "_overview",
+        "_layered_memory",
+        "_layered_budget",
     )
 
     def __init__(
@@ -342,6 +349,8 @@ class RetrievalReplyContext:
         skill_revision_reader: Callable[[ContactScope], int] | None = None,
         style_references: StyleReferencePort | None = None,
         overview: RelationshipOverviewPort | None = None,
+        layered_memory: LayeredMemoryPort | None = None,
+        layered_budget: LayeredReplyBudget | None = None,
     ) -> None:
         if not isinstance(skill_library_revision, int) or skill_library_revision < 0:
             raise ValueError("Skill 库修订号无效。")
@@ -388,6 +397,7 @@ class RetrievalReplyContext:
         self._skill_revision_reader = skill_revision_reader
         self._style_references = style_references
         self._overview = overview
+        self._layered_memory, self._layered_budget = layered_memory, layered_budget
 
     def build(
         self,
@@ -525,6 +535,17 @@ class RetrievalReplyContext:
 
     def _with_source_windows(self, context: ReplyContext) -> ReplyContext:
         """仅补当前联系人的未核实或历史依据；沿现有原话窗口和运行预算。"""
+        if not allows_history(context.command):
+            context = replace(context, layered_status="not_allowed")
+        elif self._layered_memory is not None and self._layered_budget is not None:
+            try:
+                snapshot = self._layered_memory.capture(context.scope)
+            except Exception:
+                # 新准备不可用时省略；已冻结上下文的复验仍严格拒绝迟到。
+                snapshot = None
+            material = select_material(snapshot, self._layered_budget) if snapshot is not None else None
+            context = replace(context, layered_context=material,
+                              layered_status="loaded" if material else "unavailable")
         if context.history_message_ids is not None:
             context = replace(context, history_message_ids=tuple(sorted(set(context.history_message_ids)
                 | {item.evidence_id for item in context.evidence if item.kind == "message"})))
@@ -714,6 +735,7 @@ class RetrievalReplyContext:
         return references
 
     def validate_current(self, context: ReplyContext) -> None:
+        require_material(context, self._layered_memory, budget=self._layered_budget)
         """在生成前后重新读取依据，阻止删除或 revision 变化后的旧快照继续生效。"""
 
         if not isinstance(context, ReplyContext):

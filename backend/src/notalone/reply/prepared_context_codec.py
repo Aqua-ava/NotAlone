@@ -5,6 +5,8 @@ from uuid import UUID
 from types import UnionType
 from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
 
+from notalone.memory.layered import LayeredMemorySnapshot, ScenarioDirectoryEntry
+from notalone.reply.layered_context import LayeredReplyMaterial
 from notalone.memory.timing import MemoryTiming
 from notalone.reply.expression_preference_models import ExpressionPreferenceScope, ExpressionPreference
 from notalone.reply.errors import ReplyContextInvariantError
@@ -18,7 +20,7 @@ from notalone.reply.style_reference import StyleReference
 from notalone.reply.assistant_continuation_reference import ContinuationGenerateReply
 from notalone.scopes import ContactScope
 
-_TYPES = {cls.__name__: cls for cls in (MemoryTiming, DiscussionContext, DiscussionItem,
+_TYPES = {cls.__name__: cls for cls in (LayeredMemorySnapshot, ScenarioDirectoryEntry, LayeredReplyMaterial, MemoryTiming, DiscussionContext, DiscussionItem,
     DiscussionSnapshot, DiscussionIdentity, ContextEvidence, ToolCallTrace, ConfirmedDirection,
     SuggestionReference, StyleReference, ContactScope, ContinuedReplyCandidate, ReplyBasisChange,
     ExpressionPreferenceScope, ExpressionPreference, MemoryNavigation, OverviewRevision,
@@ -26,7 +28,7 @@ _TYPES = {cls.__name__: cls for cls in (MemoryTiming, DiscussionContext, Discuss
 
 CONTEXT_VERSION = 2
 # 结构字段每次演进必须提升修订；不为旧快照静默补字段。
-CONTEXT_SCHEMA_REVISION = 5
+CONTEXT_SCHEMA_REVISION = 6
 
 
 class PreparedContextFormatError(ValueError):
@@ -68,6 +70,10 @@ def _encode(value: Any) -> Any:
         return [_encode(item) for item in value]
     if is_dataclass(value) and type(value).__name__ in _TYPES:
         return {"type": type(value).__name__, "fields": {f.name: _encode(getattr(value, f.name)) for f in fields(value)}}
+    if type(value) is dict:
+        return {"mapping": {key: _encode(item) for key, item in value.items()}}
+    if type(value) is list:
+        return {"list": [_encode(item) for item in value]}
     if value is None or type(value) in (str, int, bool, float):
         return value
     raise ValueError("固定上下文包含不支持的结构。")
@@ -78,6 +84,10 @@ def _decode(value: Any) -> Any:
         return tuple(_decode(item) for item in value)
     if not isinstance(value, dict):
         return value
+    if set(value) == {"mapping"}:
+        return {key: _decode(item) for key, item in value["mapping"].items()}
+    if set(value) == {"list"}:
+        return [_decode(item) for item in value["list"]]
     if set(value) == {"uuid"}:
         return UUID(value["uuid"])
     if set(value) == {"datetime"}:
