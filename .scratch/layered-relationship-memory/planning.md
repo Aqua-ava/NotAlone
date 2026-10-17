@@ -1,6 +1,6 @@
 # 分层记忆：任务索引与工作流状态
 
-> 更新：2026-10-18。四会话按真实依赖推进；集成分支 `codex/layered-memory-integration`，本轮固定比较基线 `0702940`。本L2/L3工作不修改主仓main；01、02、03、04、05、07已通过独立审查和合并验证，06与10前置就绪，08由B继续最终兼容复核。
+> 更新：2026-10-18。四会话按真实依赖推进；集成分支 `codex/layered-memory-integration`，本轮固定比较基线 `0702940`。本L2/L3工作不修改主仓main；01、02、03、04、05、07已通过独立审查和合并验证，06已领取，10前置就绪，08由B继续最终兼容复核。
 > [正式规格](spec.md)、[已确认拆分](ticket-proposal.md)、[联合方案](../../architecture/drafts/layered-relationship-memory.md)、[ADR-067](../../architecture/adr/067-layered-scenario-and-profile-context.md)。
 
 ## 正式任务
@@ -12,7 +12,7 @@
 | 03 | [记忆变化驱动主题持续更新](issues/03-incremental-scenario-maintenance.md) | resolved | 02 |
 | 04 | [可追溯长期背景与一致版本集合](issues/04-contact-profile-generation.md) | resolved | 01 |
 | 05 | [本人独立范围的主题资料与长期背景](issues/05-owner-layered-organization.md) | resolved | 03, 04 |
-| 06 | [事实纠错与整理纠错分别生效](issues/06-layered-memory-corrections.md) | open | 05 |
+| 06 | [事实纠错与整理纠错分别生效](issues/06-layered-memory-corrections.md) | claimed | 05 |
 | 07 | [联系人背景和主题目录进入回复](issues/07-contact-layered-reply-context.md) | resolved | 04 |
 | 08 | [按需读取主题正文与实际依据回看](issues/08-scenario-read-tool.md) | claimed | 07 |
 | 09 | [本人背景与当前联系人回复组合](issues/09-owner-contact-reply-context.md) | open | 05, 08 |
@@ -21,7 +21,7 @@
 
 ## 当前可领取前沿
 
-01以`74cb9ea1`、02以`592b9916`、04以`64024f55`、03以`8276f707`、07以`9170069c`、05以`5c9a6954`集成并签收。06与10现可从正式集成基线在新独立上下文领取；08已完成十项原生实操与清理，仍须合入05并复核最终候选。
+01以`74cb9ea1`、02以`592b9916`、04以`64024f55`、03以`8276f707`、07以`9170069c`、05以`5c9a6954`集成并签收。06已由A从正式集成基线在新独立上下文领取，10前置就绪可领取；08已完成十项原生实操与清理，仍须合入05并复核最终候选。
 
 06与10可并行，迁移编号078预留06、079预留10，仅实际需要才新增；08最终合入05，09仍等待08签收后汇合。07仅已接联系人背景与目录，不冒称读取主题正文；08交付后才增加实际正文读取。10的真实质量验证不阻塞受控工程实现，11汇合工程与真实质量要求；未验真实质量保持关闭。
 

@@ -1,7 +1,7 @@
 # 06：事实纠错与整理纠错分别生效
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 05
 
@@ -45,3 +45,5 @@ Blocked by: 05
 ## Comments
 
 - 2026-10-17：用户认可11项粒度与依赖后逐张发布；本票为 open，尚未领取、实现或验收。
+
+- 2026-10-18：05正式签收后，A从集成基线`c7f64af7aba5426aebdd5932832dd080423516df`领取本票，使用独立分支`codex/layered-memory-06`与全新实现上下文。正式迁移078预留本票，仅实际需要时新增；当前仅开始实现，不宣称验收或真实模型质量已通过。
