@@ -24,6 +24,8 @@
 
 聊天辅助产品讨论分别记录在[聊天回复策略草图](drafts/conversation-reply-strategy.md)和[持续会话与上下文管理草图](drafts/assistant-session-context.md)：前者讨论回应与主动联系两条路径，后者从 Q1 独立记录助手会话连续性及新开边界，均未替代现行规格。
 
+L2 场景文档与 L3 长期画像的联合设计见[分层记忆草案](drafts/layered-relationship-memory.md)：已确认主题组织、有依据的长期背景及联系人／本人分开管理；整理生命周期和回复加载方式仍在讨论，不代表已有生成正文或已修改现行概览约束。
+
 记忆持续更新、纠错、概览、回复检索及自动 Skill 学习等 8 个完整功能，已从[草图](drafts/memory-skill-evolution.md)整理为[正式规格](../.scratch/memory-skill-evolution/spec.md)；[15项拆分](../.scratch/memory-skill-evolution/ticket-proposal.md)已确认并逐张发布，实际进度见[任务索引](../.scratch/memory-skill-evolution/planning.md)。DSH 选型搁置，不阻塞本轮交付；当前仅发布规格与任务，功能尚未据此实现。
 
 ## ADR 索引
