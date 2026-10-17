@@ -1,7 +1,7 @@
 # 09：本人背景与当前联系人回复组合
 
 Triage: ready-for-agent
-State: open
+State: claimed
 Type: task
 Blocked by: 05, 08
 
@@ -46,3 +46,5 @@ Blocked by: 05, 08
 ## Comments
 
 - 2026-10-17：用户认可11项粒度与依赖后逐张发布；本票为 open，尚未领取、实现或验收。
+
+- 2026-10-18：09 实现上下文从正式签收基线 `43ad53e` 领取，分支 `codex/layered-memory-09`；按已确认公开 HTTP／随机隔离 PostgreSQL／生产桌面协议执行 TDD，真实质量仍 closed。
