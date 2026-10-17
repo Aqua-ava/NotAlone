@@ -68,8 +68,8 @@ export async function checkNativeCorrection(fixture: RewriteFixture, step: Nativ
   const memories = await read<Memory[]>(fixture, step.memoriesPath, 'memories');
   assert.equal(state.scope_kind, step.scope);
   assert.equal(state.contact_id, step.scope === 'owner' ? null : fixture.data.contact_ids[0]);
-  assert.equal(state.profile, null, '受影响的长期背景必须撤下。');
   if (step.action === 'summary') {
+    assert.equal(state.profile, null, '受影响的长期背景必须撤下。');
     const expectedScenarios = step.kind === 'profile' ? step.before.scenarios
       : step.before.scenarios.filter(item => item.version_id !== step.versionId);
     assert.deepEqual(state.scenarios, expectedScenarios, '独立主题的原始版本必须保留。');
@@ -82,8 +82,16 @@ export async function checkNativeCorrection(fixture: RewriteFixture, step: Nativ
     assert.ok(feedback.basis.every(item => step.memories.some(memory => memory.memory_id === item.memory_id && memory.revision === item.revision)));
   } else {
     assert.equal(state.pending_fact_count, 0, '实际修正成功后不应残留旧叶待修约束。');
-    assert.ok(state.scenarios.every(scenario => scenario.paragraphs.every(item =>
-      item.references.every(reference => reference.memory_id !== step.memory.memory_id))), '旧事实的派生正文不得继续可读。');
+    // App 可在保存后完成合法重建；只允许空结果或已撤下旧版本的新合法正文。
+    if (state.profile) assert.notEqual(state.profile.version_id, step.before.profile?.version_id,
+      '旧长期背景版本不得因重建继续可读。');
+    if (step.kind === 'scenario') assert.ok(state.scenarios.every(item => item.version_id !== step.versionId),
+      '旧主题版本不得因重建继续可读。');
+    const derived = [...state.scenarios.flatMap(item => item.paragraphs), ...(state.profile?.entries ?? [])];
+    assert.ok(derived.every(item => item.text !== step.memory.text && item.references.length > 0
+      && item.references.every(reference => reference.memory_id !== step.memory.memory_id
+        && memories.some(memory => memory.memory_id === reference.memory_id && memory.revision === reference.revision))),
+    '当前派生正文必须排除旧事实正文及其引用，且全部引用本范围的有效当前版本。');
     assert.ok(!memories.some(item => item.memory_id === step.memory.memory_id));
     const corrected = memories.find(item => item.supersedes_memory_id === step.memory.memory_id);
     assert.ok(corrected, JSON.stringify(memories));
