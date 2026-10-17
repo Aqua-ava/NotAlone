@@ -1,0 +1,8 @@
+# 本机原型、诊断脚本与验收日志
+/notalone-website/prototype/
+/local-wechat-cli-observation/smoke/diagnose.py
+/local-wechat-cli-observation/smoke/repro_ingest.py
+/**/smoke/*.log
+
+# 私人协调记录
+/unfinished-work/coordinator-cross-account-handoff-*.md

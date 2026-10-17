@@ -1,10 +1,6 @@
 # 系统文件与编辑器本地配置
 .DS_Store
 .idea/
-.gitnexus/
-.swiftpm/
-xcuserdata/
-*.xcuserstate
 
 # 本机环境配置与数据库备份；保留可提交的配置示例
 .env
@@ -16,26 +12,12 @@ xcuserdata/
 
 # Python 环境、缓存与构建产物
 .venv/
-uv.lock
 __pycache__/
 *.py[cod]
 *.egg-info/
-backend/build/
-backend/dist/
 .coverage
 .pytest_cache/
-
-# 桌面端与原生探针的构建忽略规则分别维护在
-# desktop/.gitignore 和 native/macos/.gitignore。
 
 # 本机调研、聊天导出与临时实验资料
 /research/
 /chat_exports/
-.scratch/notalone-website/prototype/
-.scratch/local-wechat-cli-observation/smoke/diagnose.py
-.scratch/local-wechat-cli-observation/smoke/repro_ingest.py
-.scratch/**/smoke/*.log
-
-# 私人协调日志与一次性真实模型验收脚本
-.scratch/unfinished-work/coordinator-cross-account-handoff-*.md
-desktop/tests/manual-real-ecnu-*.spec.ts
