@@ -567,7 +567,7 @@ class CoreBusinessFlowFixture:
         self.assertEqual(imported["event_steps"],
                          ["parse", "normalize", "extract_memory", "index", "verify"])
         memories = self._get(backend, f"/api/contacts/{contact_id}/memories")["memories"]
-        self.assertEqual(len(memories), 1)
+        self.assertEqual(len(memories), 1, self._get(backend, f"/api/contacts/{contact_id}/memory-candidates"))
         self.assertEqual(memories[0]["text"], f"联系人喜欢{imported['tea']}。")
         self.assertEqual(memories[0]["adoption_method"], "auto")
         self.assertEqual(memories[0]["source_ids"], [imported["fact_message"]["message_id"]])

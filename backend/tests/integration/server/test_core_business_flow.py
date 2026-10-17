@@ -6,6 +6,7 @@ import unittest
 from uuid import uuid4
 
 from langchain_core.messages import ToolMessage
+from notalone.memory_extraction.dimensions import RELEASE_ALL_DIMENSIONS
 
 from tests.integration.server.core_business_flow_support import (
     CoreBusinessFlowFixture, tool_response,
@@ -13,6 +14,9 @@ from tests.integration.server.core_business_flow_support import (
 
 
 class CoreBusinessFlowHttpTest(CoreBusinessFlowFixture, unittest.TestCase):
+    # 此用例专测自动采纳后的业务闭环；维度门默认收紧由独立合同测试覆盖。
+    dimension_release = RELEASE_ALL_DIMENSIONS
+
     def test_import_reply_replay_isolation_and_source_deletion(self) -> None:
         a = self._import(self.backend, "A", "茉莉茶")
         self._run_import(self.backend, a)

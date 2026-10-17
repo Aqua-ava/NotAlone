@@ -48,6 +48,15 @@ class RecoverableModel(ScriptedCoreModel):
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         if self.unavailable:
             raise RuntimeError("合成模型暂时不可用。")
+        tools = kwargs.get("tools", [])
+        if tools and tools[0]["function"]["name"] == "GroundedMemoryLabels":
+            # 公开CLI使用默认定位协议；恢复夹具仍只返回明确的非记忆标签。
+            schema = tools[0]["function"]["parameters"]["properties"]["units"]["properties"]
+            labels = {unit: {"kind": "not_memory", "subject": "contact", "topic": "other",
+                "dependency": None, "unresolved": False, "confidence": 0.95,
+                "sensitivity": "none", **({"event": None} if "event" in item["properties"] else {})}
+                for unit, item in schema.items()}
+            self.responses[len(self.seen_calls)] = tool_response("GroundedMemoryLabels", {"units": labels})
         return super()._generate(messages, stop, run_manager, **kwargs)
 
 
@@ -307,7 +316,7 @@ class FailedTaskRecoveryHttpTest(unittest.TestCase):
         self.model.unavailable = False
         self.model.responses.append(tool_response("MemoryExtractionOutput", {"facts": []}))
         code, stdout, stderr = self._cli(imported)
-        self.assertEqual(code, 0, stderr)
+        self.assertEqual(code, 0, stdout + stderr)
         self.assertIn("status=succeeded", stdout)
         self.assertIn("steps=3", stdout)
         task = self._task(imported)

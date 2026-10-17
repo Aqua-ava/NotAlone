@@ -54,7 +54,7 @@ class AuthenticExpressionRepeatedConfirmedRecoveryTests(FidelityHttpFixture, uni
         explored = self._post(path + "/explorations", {"operation_key": str(uuid4()),
             "content": {**content, "skill_mode": "disabled", "requirements": "不要承诺"}})
         action = path + f"/explorations/{explored['exploration_id']}"
-        confirmation = {"input_version_id": explored["input_version_id"],
+        confirmation = {"generate": True, "input_version_id": explored["input_version_id"],
                         "suggestion_id": explored["options"][0]["suggestion_id"]}
         original = self._post(action + "/prepare-confirm", confirmation)["generation"]
         self.reply_model.entered.clear()

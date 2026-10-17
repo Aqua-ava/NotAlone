@@ -38,7 +38,7 @@ class AuthenticExpressionReconfirmationTests(FidelityHttpFixture, unittest.TestC
         gate = self.reply_model.pause_next_response()
         endpoint = path + f"/explorations/{parent['exploration_id']}/confirm"
         with ThreadPoolExecutor(max_workers=1) as pool:
-            pending = pool.submit(self.backend.request, endpoint, confirmation, timeout=20)
+            pending = pool.submit(self.backend.request, endpoint, {**confirmation, "generate": True}, timeout=20)
             try:
                 self.assertTrue(self.reply_model.entered.wait(5), "生成必须先真实进入受控模型。")
                 before = self._get(self.backend, path)

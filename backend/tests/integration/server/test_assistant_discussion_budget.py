@@ -148,7 +148,7 @@ class AssistantDiscussionBudgetHttpTest(unittest.TestCase):
             expected=first_input["input_version_id"], instruction=instruction,
         )
         self.assertEqual(status, 200, completed)
-        capacity = baseline_decisions[0].total_tokens + 100
+        capacity = max(item.total_tokens for item in baseline_decisions) + 100
         counters = []
         limited, decisions = self.fixture._budget_backend(
             self.fixture.owner_id, capacity=capacity, counters=counters,
@@ -162,10 +162,13 @@ class AssistantDiscussionBudgetHttpTest(unittest.TestCase):
         self.assertEqual(status, 200, first)
         self.assertEqual(first["input_budget"]["state"], "warning")
         calls_before = len(self.fixture.reply_model.seen_model_payloads)
+        # 首轮窗口同时容纳生成和复核；新增完整讨论使下一轮生成本身超过窗口。
+        added_text = "新增合成完整讨论：" + "继续保留原始要求。" * 1000
+        added = self._discussion(limited, path, added_text)
 
         status, blocked, new_body = self._generate(
             limited, contact_id, path, draft="合成新的简短原句。",
-            expected=first["input_version_id"], instruction="保留兼容要求。",
+            expected=added["input_version_id"], instruction="保留兼容要求。",
         )
 
         self.assertEqual(status, 409, blocked)
@@ -175,6 +178,7 @@ class AssistantDiscussionBudgetHttpTest(unittest.TestCase):
         self.assertGreater(decisions[-1].total_tokens, capacity)
         attempted = self._model_request(counters[0].seen_payloads[-1])
         self.assertIn(marker, attempted["assistant_discussion"]["items"][0]["text"])
+        self.assertIn(added_text, attempted["assistant_discussion"]["items"][-1]["text"])
         self.assertEqual(json.loads(attempted["assistant_discussion"]["items"][1]["text"])
                          ["content"]["draft_text"], old_draft)
         self.assertEqual(json.loads(attempted["assistant_discussion"]["items"][2]["text"])
@@ -212,7 +216,8 @@ class AssistantDiscussionBudgetHttpTest(unittest.TestCase):
         )
 
         self.assertEqual(status, 200, generated)
-        self.assertEqual(len(self.fixture.reply_model.seen_model_payloads), 1)
+        self.assertEqual(len(self.fixture.reply_model.seen_model_payloads), 2)
+        self.assertEqual(self.fixture.reply_model.review_calls, 1)
         self.assertEqual(counters[0].seen_payloads, self.fixture.reply_model.seen_model_payloads)
         items = self._model_request(counters[0].seen_payloads[0])["assistant_discussion"]["items"]
         self.assertEqual([item["kind"] for item in items], ["generation_input"])
