@@ -1,7 +1,7 @@
 # 09：本人背景与当前联系人回复组合
 
 Triage: ready-for-agent
-State: claimed
+State: resolved
 Type: task
 Blocked by: 05, 08
 
@@ -23,13 +23,13 @@ Blocked by: 05, 08
 
 ## Acceptance criteria（验收标准）
 
-- [ ] 本人与联系人 L3／L2 目录按真实 scope 分区，独立设置与预算；工具仅可读本次两类目录中的冻结版本。
-- [ ] 本人原来源联系人只参与后端证明，不成为跨关系原话读取入口；资料缺失时各自回退，不挤占另一侧 L1。
-- [ ] 本人资料更正、删除、停用及重新开启能失效全部实际受影响的跨联系人准备、工具结果及回复使用副本；无关内容不被整账户清除。
-- [ ] 来源未知、旧准备协议和重连不补证明，不把当前画像写回旧回复依据。
-- [ ] 新增内容只使用合法范围与已准入实际版本；来源、时间状态、人工决定和原有 L1／Skill 合同保持，真实质量未获资格时不自动开放真实资料使用。
-- [ ] 本票新增正文、旧版、反馈、任务输入输出、目录／工具结果及使用副本从产生时就有完整参与依赖；删除、停用、更正与提交的两种顺序、迟到结果、重复和恢复不能复活无效内容。
-- [ ] 记录实际命令、结果、数据处理影响和未验范围；工程合成验证、实际模型质量与真实 App 分别报告，不提前勾选或标记完成。
+- [x] 本人与联系人 L3／L2 目录按真实 scope 分区，独立设置与预算；工具仅可读本次两类目录中的冻结版本。
+- [x] 本人原来源联系人只参与后端证明，不成为跨关系原话读取入口；资料缺失时各自回退，不挤占另一侧 L1。
+- [x] 本人资料更正、删除、停用及重新开启能失效全部实际受影响的跨联系人准备、工具结果及回复使用副本；无关内容不被整账户清除。
+- [x] 来源未知、旧准备协议和重连不补证明，不把当前画像写回旧回复依据。
+- [x] 新增内容只使用合法范围与已准入实际版本；来源、时间状态、人工决定和原有 L1／Skill 合同保持，真实质量未获资格时不自动开放真实资料使用。
+- [x] 本票新增正文、旧版、反馈、任务输入输出、目录／工具结果及使用副本从产生时就有完整参与依赖；删除、停用、更正与提交的两种顺序、迟到结果、重复和恢复不能复活无效内容。
+- [x] 记录实际命令、结果、数据处理影响和未验范围；工程合成验证、实际模型质量与真实 App 分别报告，不提前勾选或标记完成。
 
 ## 验证与交付
 
@@ -48,3 +48,25 @@ Blocked by: 05, 08
 - 2026-10-17：用户认可11项粒度与依赖后逐张发布；本票为 open，尚未领取、实现或验收。
 
 - 2026-10-18：09 实现上下文从正式签收基线 `43ad53e` 领取，分支 `codex/layered-memory-09`；按已确认公开 HTTP／随机隔离 PostgreSQL／生产桌面协议执行 TDD，真实质量仍 closed。
+
+
+## Answer
+
+2026-10-18：已完成本人背景与当前联系人回复组合，固定工程候选 `78863520`；已含正式集成 `0be72a85`，05／08 的正式合同为前置。本人及联系人实际 L3／有限 L2 目录分别冻结、独立设置与预算，缺失／停用各自回到原 L1。工具只读取本次已提供目录中的冻结 ID 和范围，拒绝隐藏 collection、任意路径及模型自报身份；本人来源联系人仅作后端证明，不授权跨关系原话补查。
+
+prepared 显式升级 codec8 并严格拒旧；actual schema3／scoped-v3 与 owner 三字段经生产保存 GET、Main／preload／parser 到 React 贯通，合法 contact 历史 v1／v2 仍可展示而不补新授权。两侧实际出站前后、独立 constraint_review 和最终同连接 writer 均复验；本人正文仅作为事实／说明，不授权当前意愿、义务或承诺。用户全文、contact L1 5条／600字、owner L1 3条／240字、pending 3条／300字、原话3calls／16消息／2048估算tokens、Skill最多1version均保持原合同；owner-only 省略后仍超容量的 prepare 已经公开 HTTP 真实 red→green 修复，冻结 prepared 不静默降级。
+
+本人更正、替代、回退、删除、停用和重开按实际参与版本精确失效跨联系人的 prepared、工具、回复、编辑、carry 与后继副本，保留无关内容。queued 原来源在物理清理前即阻断历史 GET、编辑／carry／replay、下一次出站、独立 review 和 writer；来源通知用真实 GET 复验并撤下受影响缓存。删除与提交两种顺序、迟到／重复／恢复、ABA 和重连均不能复活；停用保留合法历史，来源删除清历史正文。
+
+实际验证及证据根目录为 `/tmp/notalone-layered-memory-1792230874218`：
+
+- 公开 HTTP／随机隔离 PG／受控 Adapter 按 TDD 最小 red→green 后回归：09 完整22＋source-generation1＋overview-lifecycle3 共26/26，102.585s，`B-09-final-isolated-http.log`；历史／编辑／carry 独立31/31，41.376s，`B-09-legacy-isolated.log`。由 `B-09-run.py` 白名单环境执行，每个随机测试库 finally 清理。
+- 串行、有界600s执行 `python -m unittest discover -s backend/tests/unit -t backend -v`：1883/1883，48.527s，`B-09-full-unit.log`。pureNode 真实保存 GET→生产 parser／Main／preload／React 及 foreign 来源通知／迟到／合法历史30/30；runner flags3/3；`npm run typecheck`、`git diff --check`通过。原样双scope保存 GET 及本人成功工具回执为 `B-09-actual-saved-evidence.json`，SHA256 `d058c34d9331b01ed3855415c299dbeefe0968f28f4ae8ddb425f487e6114c52`。
+- 固定6dea正式 `npm run test:pages -- --case layered-reply --timeout-seconds 300`：exit0／整例 PASS，`B-09-headless-retry/runner.log`、`result.json`、`cleanup-parent.json`；只证明生产页面／HTTP／PG，Electron未运行。正式判据是生成完成态＋新reply身份＋实际session GET完成候选与UI一致，按生产25s执行合同有界等待。788相对6dea仅修改native测试期限和注释，正式页面与产品代码不变。
+- 固定788新一轮 `npm run test:app -- --interactive --coordinator B09-agent --from 2026-10-17T20:15:47.443291+00:00 --until 2026-10-17T20:35:47.443291+00:00 --max-launches 1 --output artifacts/b09-layered-reply-cua-v2 -- tests/layered-reply-native.spec.ts`：父Agent按D授权实际 CUA 全16项重新核验，runner 1 passed（6.5m）／exit0。新nonce `8d5d5f22-78a8-4f55-84b1-6f4895e403d2` 的 ready／done 同实例且16项全true，未拼旧收据；`B-09-app-v2/{ready,done,runtime-proof,result,normal-quit-proof,cleanup-parent}.json`。已实际核全关系语境关闭新生成、双侧独立回退、冻结历史、来源删除及底层本人删除跨联系人缓存撤下／刷新不复活；公用 super+q 实际退出 App 后 PID 不存在。受控回复模型9次、外部真实model0。
+- 原生父清理证明：10个已登记自有PID含supervisor全无，userData无，唯一库 `notalone_core_flow_a8eea24f15044ba28deb7b987af55915_test` catalog0，两lease均无且桌面owner已精确归还。作者36个随机库清单／proof／hash另存 `B-09-db-catalog.json`，catalog_count0；父各官方轮次资源按各自精确cleanup收据核验，不混作作者清理。
+- 固定788父两轴 Standards hard0／heuristic0、Spec0。早先aac3正式页面5s pending超时、instrument启动失败、diagnostic-only、首轮native14/16 deadline FAIL及无done均原样保留；新轮全16独立重做才计PASS。旧106不是最终回归；53混组4个setUp污染失败已用独立31／26重验；helper违规185不计合规页面／原生验收，缺失记录不补造。
+
+数据处理仅限合成资料、随机*_test PG、loopback HTTP和受控模型；未读取业务数据库、.env或私聊，未发送外部消息，未push／PR，无新增迁移。**真实整理质量与真实回复读取质量资格均仍closed**；工程合成通过与实际 App 的合成验收不产生真实模型／渠道资格，不开放外部发送或自动使用真实资料，最终签名分发包不在本票已验范围。
+
+06／09后落地票必须合另一最新正式产品，实证本人 L2／L3 反馈／事实更正→跨contact prepared／tool／history／reply／edit／carry／后继精确失效并保留无关内容，不留给11。当前正式集成仍0be、06未签，不追06 WIP；09先签后，06作为后落地方承担该真实合同交叉验收，若正式顺序变化则由实际后落地方完成后再freeze。
